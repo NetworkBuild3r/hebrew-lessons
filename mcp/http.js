@@ -3,6 +3,7 @@ const http = require('http');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const { registerLessonTools } = require('./tools');
+const oauth = require('./oauth');
 
 const MAX_BODY = 1024 * 1024;
 
@@ -23,7 +24,8 @@ function authorized(req) {
     if (!match) return false;
     const given = crypto.createHash('sha256').update(match[1]).digest();
     const wanted = crypto.createHash('sha256').update(expected).digest();
-    return crypto.timingSafeEqual(given, wanted);
+    // The static token, or an access token this server issued through the OAuth flow.
+    return crypto.timingSafeEqual(given, wanted) || oauth.verifyAccessToken(match[1]);
 }
 
 function isLoopback(host) {
@@ -74,20 +76,32 @@ function listen() {
     }
     const httpServer = http.createServer(async (req, res) => {
         const url = new URL(req.url || '/', 'http://127.0.0.1');
-        if (url.pathname !== '/mcp') {
-            res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-            res.end('Not found');
-            return;
-        }
         if (!allowedHost(req.headers.host)) {
             res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
             res.end('Forbidden host');
             return;
         }
+        try {
+            if (await oauth.handle(req, res)) return;
+        } catch (err) {
+            console.error(err);
+            if (!res.headersSent) {
+                res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('OAuth request failed');
+            }
+            return;
+        }
+        if (url.pathname !== '/mcp') {
+            res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Not found');
+            return;
+        }
         if (!authorized(req)) {
             res.writeHead(401, {
                 'Content-Type': 'text/plain; charset=utf-8',
-                'WWW-Authenticate': 'Bearer realm="hebrew-lessons"'
+                'WWW-Authenticate': oauth.enabled()
+                    ? 'Bearer realm="hebrew-lessons", resource_metadata="' + oauth.resourceMetadataUrl() + '"'
+                    : 'Bearer realm="hebrew-lessons"'
             });
             res.end('Unauthorized');
             return;
