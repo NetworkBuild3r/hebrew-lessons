@@ -1,0 +1,218 @@
+window.WORKSHEET = {
+    id: 'shai-date-indirect-speech',
+    legacyStorageKey: 'hebrew_canvas_shays_date_progress',
+    title: 'המלצות 1 — הדייט של שי',
+    subtitle: 'מילים, משפטים, ודיבור • Level A1+ / A2',
+    footer: 'המלצות 1 — הדייט של שי',
+
+    vocab: {
+        items: [
+            { id: '1', word: 'עֵצָה', sound: 'ET-za', translit: 'etza', meaning: 'advice', pos: 'noun (f.)', trap: 'The first letter is ע (ayin). Say ET-za, not “atza.” Stress the first syllable.', sentence: 'בַּשָּׁבוּעַ שֶׁעָבַר חָבֵר שֶׁלִּי בִּיקֵּשׁ מִמֶּנִּי עֵצָה.' },
+            { id: '2', word: 'יוֹדֵעַ', sound: 'yo-DE-a', translit: "yode'a", meaning: 'knows (m. sg.)', pos: 'verb, present', infinitive: 'לָדַעַת — to know', trap: 'You hear the last א. This form means “knows.” The infinitive is לדעת.', sentence: 'שַׁי לֹא יוֹדֵעַ מָה כְּדַאי לָהֶם לַעֲשׂוֹת.' },
+            { id: '3', word: 'כְּדַאי', sound: 'ke-DAI', translit: 'kedai', meaning: "it's a good idea / should", pos: 'expression', trap: 'ke-DAI, not “kedar.” Stress DAI. In a sentence, כדאי likes to come first: כדאי לך…', sentence: 'כְּדַאי לְךָ לִרְאוֹת אֶת הַסֶּרֶט הַזֶּה.' },
+            { id: '4', word: 'טֶבַע', sound: 'TE-va', translit: 'teva', meaning: 'nature', pos: 'noun (m.)', trap: 'Stress the first syllable: TE-va. Not ta-VA.', sentence: 'בַּר אוֹהֶבֶת קָפֶה טוֹב וְטִיּוּלִים בַּטֶּבַע.' },
+            { id: '5', word: 'סֶרֶט', sound: 'SE-ret', translit: 'seret', meaning: 'movie', pos: 'noun (m.)', trap: 'SE-ret. Not Sarit (that is a name) and not “sarat.”', sentence: 'שַׁי אוֹהֵב לִרְאוֹת סְרָטִים בַּקּוֹלְנוֹעַ.' },
+            { id: '6', word: 'מְיוּחָד', sound: 'me-yu-KHAD', translit: 'meyuchad', meaning: 'special', pos: 'adjective (m.)', trap: 'ח is a raspy H from the throat. Not English “ch,” and not “sh.” me-yu-KHAD.', sentence: 'שַׁי רוֹצֶה לַעֲשׂוֹת מַשֶּׁהוּ מְיוּחָד בִּשְׁבִיל בַּר.' },
+            { id: '7', word: 'חָשַׁבְתִּי', sound: 'cha-SHAV-ti', translit: 'chashavti', meaning: 'I thought', pos: 'verb, past', infinitive: 'לַחְשׁוֹב — to think', trap: 'Same raspy ח. Past “I” ends in תי (-ti). When you need “I thought,” look for that ת.', sentence: 'חָשַׁבְתִּי וְאָמַרְתִּי לְשַׁי שֶׁאֲנִי מַמְלִיץ לוֹ לָקַחַת אֶת בַּר לְסֶרֶט.' },
+            { id: '8', word: 'מַמְלִיץ', sound: 'mam-LITZ', translit: 'mamlitz', meaning: 'recommend (m. sg.)', pos: 'verb, present', infinitive: 'לְהַמְלִיץ — to recommend', trap: 'Ends in צ, a “tz” sound. mam-LITZ. Not “mamlit.”', sentence: 'אֲנִי מַמְלִיץ לוֹ לָקַחַת אֶת בַּר לְסֶרֶט קוֹמֶדְיָה.' },
+            { id: '9', word: 'אַחֲרֵי', sound: 'a-kha-REI', translit: 'acharei', meaning: 'after', pos: 'preposition', trap: 'ח again, then REI. a-kha-REI.', sentence: 'אַחֲרֵי הַסֶּרֶט כְּדַאי לָלֶכֶת לְמִסְעָדָה אִיטַלְקִית.' },
+            { id: '10', word: 'רַעְיוֹן', sound: 'ra-a-YON', translit: "ra'ayon", meaning: 'idea', pos: 'noun (m.)', trap: 'The ע is in the middle, so you hear two beats before YON: ra-a-YON.', sentence: 'אַתָּה חוֹשֵׁב שֶׁזֶּה רַעְיוֹן טוֹב?' }
+        ]
+    },
+
+    fill: {
+        bank: ['ממליץ', 'סרט', 'עצה', 'מיוחד', 'טבע'],
+        sentences: [
+            {
+                id: 1,
+                textPre: 'בשבוע שעבר, חבר שלי ביקש ממני',
+                textPost: '.',
+                answer: 'עצה',
+                english: 'Last week, my friend asked me for ____.',
+                gloss: [
+                    { he: 'בשבוע שעבר', en: 'last week' },
+                    { he: 'חבר שלי', en: 'my friend' },
+                    { he: 'ביקש ממני', en: 'asked me for' }
+                ]
+            },
+            {
+                id: 2,
+                textPre: 'בר אוהבת קפה טוב וטיולים',
+                prefix: 'ב',
+                textPost: '.',
+                answer: 'טבע',
+                english: 'Bar loves good coffee and trips in ____.',
+                gloss: [
+                    { he: 'בר', en: 'Bar, a woman’s name' },
+                    { he: 'אוהבת', en: 'loves (she)' },
+                    { he: 'קפה טוב', en: 'good coffee' },
+                    { he: 'טיולים', en: 'trips, hikes' }
+                ]
+            },
+            {
+                id: 3,
+                textPre: 'שי רוצה לעשות משהו',
+                textPost: ' בשביל בר.',
+                answer: 'מיוחד',
+                english: 'Shai wants to do something ____ for Bar.',
+                gloss: [
+                    { he: 'שי', en: 'Shai, a man’s name' },
+                    { he: 'רוצה לעשות', en: 'wants to do' },
+                    { he: 'משהו', en: 'something' },
+                    { he: 'בשביל', en: 'for' }
+                ]
+            },
+            {
+                id: 4,
+                textPre: 'אני',
+                textPost: ' לו לקחת את בר לסרט קומדיה.',
+                answer: 'ממליץ',
+                english: 'I ____ that he take Bar to a comedy.',
+                gloss: [
+                    { he: 'לו', en: 'to him. Spelled with ו. לא with א means “no.”' },
+                    { he: 'לקחת', en: 'to take' },
+                    { he: 'סרט קומדיה', en: 'a comedy' }
+                ]
+            }
+        ]
+    },
+
+    grammar: {
+        tabLabel: 'Pattern',
+        icon: 'fa-puzzle-piece',
+        heading: 'דפוס אחד — כְּדַאי',
+        lede: 'דפוס אחד לשיעור הזה. נחשו. הטעות שימושית. One pattern for this lesson. Guess. A wrong answer is useful.',
+        prompt: 'Which sentence fits the pattern?',
+        rules: [
+            {
+                title: '1. כדאי רוצה להיות ראשון, כמו יש.',
+                english: 'כדאי likes to come first, the way יש does. כדאי לך = you should. כדאי לו = he should. Then the infinitive.',
+                example: 'כדאי לך לראות את הסרט הזה.'
+            }
+        ],
+        reminders: [
+            'לו נכתב עם ו ופירושו to him. לא נכתב עם א ופירושו no. אני ממליץ לו לקחת = I recommend that he take.',
+            'המילה והשם מסכימים. סרט הוא זכר: מיוחד. עוגה היא נקבה: מיוחדת. אין מילה ל־“is”.',
+            'בסיפור: ש־ נדבקת למילה הבאה, והזמן נשאר. רק שימו לב. In the story, ש־ sticks to the next word and the tense stays. Just notice it.'
+        ],
+        items: [
+            {
+                id: 1,
+                direct: 'You should see this movie.',
+                choices: [
+                    'לך כדאי לראות את הסרט הזה.',
+                    'כדאי לך לראות את הסרט הזה.',
+                    'כדאי לראות לך את הסרט הזה.'
+                ],
+                answer: 1,
+                pointed: 'כְּדַאי לְךָ לִרְאוֹת אֶת הַסֶּרֶט הַזֶּה.',
+                why: 'כדאי comes first, then לך, then the verb. Same habit as יש.'
+            },
+            {
+                id: 2,
+                direct: 'He should take Bar to a movie.',
+                choices: [
+                    'כדאי לו לקחת את בר לסרט.',
+                    'כדאי הוא לקחת את בר לסרט.',
+                    'כדאי לו לוקח את בר לסרט.'
+                ],
+                answer: 0,
+                pointed: 'כְּדַאי לוֹ לָקַחַת אֶת בַּר לְסֶרֶט.',
+                why: 'כדאי comes first, then לו (to him, with ו), then the infinitive לקחת. Not הוא, and not a present-tense verb.'
+            },
+            {
+                id: 3,
+                direct: 'We should go to a restaurant.',
+                choices: [
+                    'כדאי אנחנו ללכת למסעדה.',
+                    'כדאי לנו הולכים למסעדה.',
+                    'כדאי לנו ללכת למסעדה.'
+                ],
+                answer: 2,
+                pointed: 'כְּדַאי לָנוּ לָלֶכֶת לְמִסְעָדָה.',
+                why: 'The same pattern: כדאי, then לנו (to us), then the infinitive ללכת.'
+            }
+        ]
+    },
+
+    reading: {
+        notice: 'Read for the story. Purple is someone reporting what was said: ש־ sticks to the next word, and the tense stays. You do not need to produce these yet.',
+        support: [
+            { he: 'בשבוע שעבר', en: 'last week' },
+            { he: 'ביקש ממני', en: 'asked me' },
+            { he: 'אוהבת', en: 'loves (she)' },
+            { he: 'טיולים', en: 'trips, hikes' },
+            { he: 'רוצה לעשות', en: 'wants to do' },
+            { he: 'משהו', en: 'something' },
+            { he: 'בשביל', en: 'for' },
+            { he: 'מסעדה', en: 'restaurant' },
+            { he: 'כיף', en: 'fun' }
+        ],
+        retell: {
+            seconds: 90,
+            cues: ['שַׁי וּבַר', 'דֵּייט', 'עֵצָה', 'סֶרֶט קוֹמֶדְיָה', 'מִסְעָדָה אִיטַלְקִית', 'רַעְיוֹן']
+        },
+        paragraphs: [
+            ['בַּשָּׁבוּעַ שֶׁעָבַר, חָבֵר שֶׁלִּי שַׁי בִּיקֵּשׁ מִמֶּנִּי ', { word: 'עֵצָה' }, '.'],
+            'הוּא הוֹלֵךְ לְדֵייט בְּיוֹם שַׁבָּת עִם הַחֲבֵרָה הַחֲדָשָׁה שֶׁלּוֹ, בַּר.',
+            ['אֲבָל שַׁי לֹא ', { word: 'יוֹדֵעַ' }, ' מָה ', { word: 'כְּדַאי' }, ' לָהֶם לַעֲשׂוֹת.'],
+            ['שַׁי אָמַר לִי ', { reported: ['שֶׁבַּר אוֹהֶבֶת קָפֶה טוֹב וְטִיּוּלִים בַּ', { word: 'טֶּבַע' }] }, '.'],
+            ['אֲנִי ', { word: 'יוֹדֵעַ' }, ' שֶׁשַּׁי אוֹהֵב סְרָטִים, בִּירָה וְאוֹכֶל טוֹב.'],
+            ['שַׁי אָמַר לִי ', { reported: ['שֶׁהוּא רוֹצֶה לַעֲשׂוֹת מַשֶּׁהוּ ', { word: 'מְיוּחָד' }, ' בִּשְׁבִיל בַּר'] }, '.'],
+            [{ word: 'חָשַׁבְתִּי' }, ' וְאָמַרְתִּי לְשַׁי ', { reported: ['שֶׁאֲנִי ', { word: 'מַמְלִיץ' }, ' לוֹ לָקַחַת אֶת בַּר לְ', { word: 'סֶרֶט' }, ' קוֹמֶדְיָה'] }, '.'],
+            ['אָמַרְתִּי לוֹ ', { reported: ['שֶׁ', { word: 'אַחֲרֵי' }, ' הַסֶּרֶט ', { word: 'כְּדַאי' }, ' לָלֶכֶת לְמִסְעָדָה אִיטַלְקִית טוֹבָה לְיַד הַקּוֹלְנוֹעַ'] }, '.'],
+            'הַמִּסְעָדָה הַזֹּאת מַמָּשׁ רוֹמַנְטִית וְהָאוֹכֶל שָׁם מְצוּיָּן.',
+            ['שַׁי שָׁאַל אוֹתִי: ', { direct: ['"אַתָּה חוֹשֵׁב שֶׁזֶּה ', { word: 'רַעְיוֹן' }, ' טוֹב?"'] }],
+            ['אָמַרְתִּי לוֹ ', { reported: 'שֶׁכֵּן' }, ', כִּי כּוּלָּם אוֹהֲבִים סִרְטֵי קוֹמֶדְיָה וְאוֹכֶל אִיטַלְקִי.'],
+            'אֲנִי חוֹשֵׁב שֶׁיִּהְיֶה לָהֶם מַמָּשׁ כֵּיף!'
+        ],
+        questions: [
+            { id: 1, question: 'למה שי ביקש עצה?', sampleAnswer: 'שי ביקש עצה כי הוא הולך לדייט ביום שבת עם בר, והוא לא יודע מה כדאי להם לעשות.' },
+            { id: 2, question: 'מה בר, החברה של שי, אוהבת?', sampleAnswer: 'בר אוהבת קפה טוב וטיולים בטבע.' },
+            { id: 3, question: 'מה שי אוהב?', sampleAnswer: 'שי אוהב סרטים, בירה ואוכל טוב.' },
+            { id: 4, question: 'מה החבר המליץ לשי? למה?', sampleAnswer: 'החבר המליץ לשי לקחת את בר לסרט קומדיה, ואחרי הסרט ללכת למסעדה איטלקית, כי כולם אוהבים סרטי קומדיה ואוכל איטלקי.' },
+            { id: 5, question: 'אתם חושבים שזו הייתה המלצה טובה? למה?', sampleAnswer: 'לדעתי זו המלצה פחות מתאימה, כי בר אוהבת טבע וקפה, והסרט והמסעדה לא מתאימים למה שהיא אוהבת.' },
+            { id: 6, question: 'מה אתם הייתם ממליצים לשי?', sampleAnswer: 'הייתי ממליץ/ה לשי לקחת את בר לבית קפה טוב, ואז לטיול קצר בטבע.' }
+        ]
+    },
+
+    askFriend: {
+        intro: 'אמרו את התשובה בקול לפני שכותבים. ניחוש לא נכון הוא חלק מהתרגול.',
+        introEn: 'These are the questions from class. Say the answer out loud, then write it. Vowels are on so you can read. Hide them when you want the harder version. The computer voice is only a rough guide.',
+        questions: [
+            {
+                id: 1,
+                question: 'מה אתה מעדיף לעשות בדייט?',
+                pointed: 'מָה אַתָּה מַעֲדִיף לַעֲשׂוֹת בְּדֵייט?',
+                youFeminine: 'מָה אַתְּ מַעֲדִיפָה לַעֲשׂוֹת בְּדֵייט?',
+                speak: 'מה אתה מעדיף לעשות בדייט?',
+                gloss: 'מעדיף means “prefer.” מועדף means “favored” and is a different form. Skip it here. דייט is a date with a person. פגישה usually means a work meeting.',
+                followUp: 'אַתָּה מַעֲדִיף לֶאֱכוֹל בַּבַּיִת אוֹ בְּמִסְעָדָה?'
+            },
+            {
+                id: 2,
+                question: 'היה לך פעם דייט לא טוב?',
+                pointed: 'הָיָה לְךָ פַּעַם דֵּייט לֹא טוֹב?',
+                youFeminine: 'הָיָה לָךְ פַּעַם דֵּייט לֹא טוֹב?',
+                speak: 'היה לך פעם דייט לא טוב?',
+                gloss: 'היה לך = you had, at some point. Answer with a story, even a short one.'
+            },
+            {
+                id: 3,
+                question: 'מה הדייט הכי כיף שהיה לך?',
+                pointed: 'מָה הַדֵּייט הֲכִי כֵּיף שֶׁהָיָה לְךָ?',
+                youFeminine: 'מָה הַדֵּייט הֲכִי כֵּיף שֶׁהָיָה לָךְ?',
+                speak: 'מה הדייט הכי כיף שהיה לך?',
+                gloss: 'הכי = the most. כיף = fun. שהיה לך = that you had.'
+            },
+            {
+                id: 4,
+                question: 'איזה דייט אתה הכי רוצה לעשות?',
+                pointed: 'אֵיזֶה דֵּייט אַתָּה הֲכִי רוֹצֶה לַעֲשׂוֹת?',
+                youFeminine: 'אֵיזֶה דֵּייט אַתְּ הֲכִי רוֹצָה לַעֲשׂוֹת?',
+                speak: 'איזה דייט אתה הכי רוצה לעשות?',
+                gloss: 'Say what you want to do. צניחה = skydiving, if you want that word. אני רוצה לעשות צניחה.'
+            }
+        ]
+    }
+};

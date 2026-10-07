@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "hebrew-lessons": {
+      "command": "node",
+      "args": ["mcp/stdio.js"]
+    }
+  }
+}
