@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const http = require('http');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
@@ -12,6 +13,21 @@ function allowedHost(header) {
         .map(item => item.trim())
         .filter(Boolean);
     return host === 'localhost' || host === '127.0.0.1' || host === '::1' || extra.includes(host);
+}
+
+// Bearer token from MCP_AUTH_TOKEN. Compared as SHA-256 digests in constant time.
+function authorized(req) {
+    const expected = process.env.MCP_AUTH_TOKEN;
+    if (!expected) return false;
+    const match = /^Bearer (\S+)$/.exec(String(req.headers.authorization || ''));
+    if (!match) return false;
+    const given = crypto.createHash('sha256').update(match[1]).digest();
+    const wanted = crypto.createHash('sha256').update(expected).digest();
+    return crypto.timingSafeEqual(given, wanted);
+}
+
+function isLoopback(host) {
+    return host === '127.0.0.1' || host === 'localhost' || host === '::1';
 }
 
 function readBody(req) {
@@ -52,6 +68,10 @@ function createServer() {
 function listen() {
     const port = Number(process.env.MCP_PORT || 8787);
     const host = process.env.HOST || '127.0.0.1';
+    // upsert_lesson writes to disk: never listen beyond loopback without a token.
+    if (!process.env.MCP_AUTH_TOKEN && !isLoopback(host) && process.env.MCP_ALLOW_NO_AUTH !== '1') {
+        throw new Error('MCP_AUTH_TOKEN is required when HOST is not loopback (set MCP_ALLOW_NO_AUTH=1 only for a local container).');
+    }
     const httpServer = http.createServer(async (req, res) => {
         const url = new URL(req.url || '/', 'http://127.0.0.1');
         if (url.pathname !== '/mcp') {
@@ -62,6 +82,14 @@ function listen() {
         if (!allowedHost(req.headers.host)) {
             res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
             res.end('Forbidden host');
+            return;
+        }
+        if (!authorized(req)) {
+            res.writeHead(401, {
+                'Content-Type': 'text/plain; charset=utf-8',
+                'WWW-Authenticate': 'Bearer realm="hebrew-lessons"'
+            });
+            res.end('Unauthorized');
             return;
         }
         let body;

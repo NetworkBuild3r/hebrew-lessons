@@ -7,6 +7,9 @@ services:
     environment:
       HOST: 0.0.0.0
       HEBREW_ROOT: /app
+      # Ports are published on 127.0.0.1 only. Set MCP_AUTH_TOKEN to require a bearer token.
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-}
+      MCP_ALLOW_NO_AUTH: "1"
     volumes:
       - .:/app
       - /app/node_modules
