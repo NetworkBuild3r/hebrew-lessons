@@ -172,13 +172,13 @@
             <div class="player" id="player">
                 <header class="player-top">
                     <div class="player-top-inner">
-                        <a class="back-link" href="../../index.html"><i class="fa-solid fa-house"></i> ${U.bi('חזרה', 'Home')}</a>
+                        <a class="back-link" href="../../index.html">${U.icon('house')} ${U.bi('חזרה', 'Home')}</a>
                         <div class="player-title">
                             <h1>${U.escapeHtml(ws.title || '')}</h1>
                             ${ws.subtitle ? `<p class="subtitle">${U.escapeHtml(ws.subtitle)}</p>` : ''}
                         </div>
                         <button type="button" class="btn btn-again" data-action="again">
-                            <i class="fa-solid fa-rotate-right"></i>
+                            ${U.icon('rotate-right')}
                             <span>${U.bi('עוד סיבוב', 'Practice again')}</span>
                         </button>
                     </div>
@@ -352,8 +352,8 @@
                             const done = !!completedSteps[String(i)];
                             return `<li class="path-item${done ? ' done' : ''}">
                                 <button type="button" class="path-btn" data-action="go-step" data-step="${i}">
-                                    <span class="path-num">${done ? '<i class="fa-solid fa-check"></i>' : (i + 1)}</span>
-                                    <span class="path-label"><i class="fa-solid ${step.icon} ${step.tone}"></i> ${U.bi(step.labelHe, step.labelEn)}</span>
+                                    <span class="path-num">${done ? U.icon('check') : (i + 1)}</span>
+                                    <span class="path-label">${U.icon(step.icon, 'tone-icon ' + step.tone)} ${U.bi(step.labelHe, step.labelEn)}</span>
                                 </button>
                             </li>`;
                         }).join('')}
@@ -382,8 +382,8 @@
             main.innerHTML = `
                 <section class="step-screen" data-step-type="${U.escapeHtml(step.type)}">
                     <div class="step-head">
-                        <button type="button" class="btn btn-ghost btn-sm" data-action="go-path"><i class="fa-solid fa-list"></i> ${U.bi('מסלול', 'Path')}</button>
-                        <h2><i class="fa-solid ${step.icon} ${step.tone}"></i> ${U.bi(step.labelHe, step.labelEn)}</h2>
+                        <button type="button" class="btn btn-ghost btn-sm" data-action="go-path">${U.icon('list')} ${U.bi('מסלול', 'Path')}</button>
+                        <h2>${U.icon(step.icon, 'tone-icon ' + step.tone)} ${U.bi(step.labelHe, step.labelEn)}</h2>
                         <span class="pill">${index + 1} / ${resolved.steps.length}</span>
                     </div>
                     <div class="step-body" id="step-body">${html}</div>
@@ -489,13 +489,13 @@
         function speakButton(text, audio, title) {
             const label = title || 'Listen';
             const clip = audio || Speech.clipFor(text) || '';
-            return `<button type="button" class="icon-btn${clip ? ' human' : ''}" data-speak="${U.escapeHtml(text || '')}" data-audio="${U.escapeHtml(clip)}" title="${U.escapeHtml(label)}"><i class="fa-solid fa-volume-high"></i></button>`;
+            return `<button type="button" class="icon-btn${clip ? ' human' : ''}" data-speak="${U.escapeHtml(text || '')}" data-audio="${U.escapeHtml(clip)}" title="${U.escapeHtml(label)}">${U.icon('volume-high')}</button>`;
         }
 
         function recorderHtml(key) {
             return `<span class="recorder" data-rec="${U.escapeHtml(key)}">
-                <button type="button" class="icon-btn rec-btn" data-rec-toggle="${U.escapeHtml(key)}" title="Record"><i class="fa-solid fa-microphone"></i></button>
-                <button type="button" class="icon-btn hidden" data-rec-play="${U.escapeHtml(key)}" title="Play recording"><i class="fa-solid fa-play"></i></button>
+                <button type="button" class="icon-btn rec-btn" data-rec-toggle="${U.escapeHtml(key)}" title="Record">${U.icon('microphone')}</button>
+                <button type="button" class="icon-btn hidden" data-rec-play="${U.escapeHtml(key)}" title="Play recording">${U.icon('play')}</button>
             </span>`;
         }
 

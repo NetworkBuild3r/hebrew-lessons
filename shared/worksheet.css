@@ -260,6 +260,16 @@ a { color: inherit; }
     flex: 0 0 auto;
 }
 .icon-btn.human { background: #ecfdf5; color: #047857; }
+.btn svg, .icon-btn svg, .back-link svg, .path-label svg, .path-num svg, .step-head h2 svg, .tone-icon {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex: 0 0 auto;
+    display: block;
+}
+.btn svg, .back-link svg, .path-label svg, .step-head h2 svg {
+    display: inline-block;
+    vertical-align: -0.2em;
+}
 .icon-btn.recording, .rec-btn.recording {
     background: #e11d48;
     color: white;

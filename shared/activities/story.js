@@ -25,9 +25,9 @@
                     <div class="story-tools">
                         <button type="button" class="btn btn-ghost" data-action="toggle-vowels">${ctx.vowelsOn ? ctx.bi('הסתר ניקוד', 'Hide vowels') : ctx.bi('הצג ניקוד', 'Show vowels')}</button>
                         <label class="follow-along"><input type="checkbox" id="follow-along"${follow ? ' checked' : ''}> ${ctx.bi('הדגשת השורה', 'Follow along')}</label>
-                        <button type="button" class="btn btn-amber" id="story-play" data-action="story-play"><i class="fa-solid fa-volume-high"></i> ${ctx.bi('הקראת טקסט', 'Read aloud')}</button>
-                        <button type="button" class="btn btn-ghost hidden" id="story-pause" data-action="story-pause"><i class="fa-solid fa-pause"></i> ${ctx.bi('השהיה', 'Pause')}</button>
-                        <button type="button" class="btn btn-stop hidden" id="story-stop" data-action="story-stop"><i class="fa-solid fa-stop"></i> ${ctx.bi('עצירה', 'Stop')}</button>
+                        <button type="button" class="btn btn-amber" id="story-play" data-action="story-play">${U.icon('volume-high')} ${ctx.bi('הקראת טקסט', 'Read aloud')}</button>
+                        <button type="button" class="btn btn-ghost hidden" id="story-pause" data-action="story-pause">${U.icon('pause')} ${ctx.bi('השהיה', 'Pause')}</button>
+                        <button type="button" class="btn btn-stop hidden" id="story-stop" data-action="story-stop">${U.icon('stop')} ${ctx.bi('עצירה', 'Stop')}</button>
                     </div>
                     <div class="story-body card" id="story-text">
                         ${paragraphs.map(p => `<p data-vowels-html="1">${U.renderParts(Array.isArray(p) ? p : [p])}</p>`).join('')}
@@ -132,8 +132,8 @@
         if (play) {
             play.classList.toggle('hidden', status === 'playing');
             play.innerHTML = status === 'paused'
-                ? '<i class="fa-solid fa-play"></i> המשך (Resume)'
-                : '<i class="fa-solid fa-volume-high"></i> הקראת טקסט (Read aloud)';
+                ? U.icon('play') + ' המשך (Resume)'
+                : U.icon('volume-high') + ' הקראת טקסט (Read aloud)';
         }
         pause?.classList.toggle('hidden', status !== 'playing');
         stop?.classList.toggle('hidden', status === 'idle');

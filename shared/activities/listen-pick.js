@@ -98,7 +98,7 @@
         }
         body.innerHTML = `
             <p class="pill">${root._listen.index + 1} / ${root._listen.queue.length}</p>
-            <button type="button" class="btn btn-amber btn-wide" data-action="listen-again"><i class="fa-solid fa-volume-high"></i> ${ctx.bi('השמעה', 'Play')}</button>
+            <button type="button" class="btn btn-amber btn-wide" data-action="listen-again">${U.icon('volume-high')} ${ctx.bi('השמעה', 'Play')}</button>
             <div class="choices">
                 ${options.map(opt => `<button type="button" class="choice-card" data-action="listen-pick" data-value="${ctx.esc(opt)}">${ctx.esc(opt)}</button>`).join('')}
             </div>`;

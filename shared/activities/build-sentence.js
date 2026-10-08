@@ -103,7 +103,7 @@
             <div class="actions">
                 <button type="button" class="btn btn-ghost" data-action="build-clear">${ctx.bi('נקה', 'Clear')}</button>
                 <button type="button" class="btn btn-ghost" data-action="build-check">${ctx.bi('בדיקה', 'Check')}</button>
-                <button type="button" class="btn btn-amber" data-action="speak-built"><i class="fa-solid fa-volume-high"></i></button>
+                <button type="button" class="btn btn-amber" data-action="speak-built">${U.icon('volume-high')}</button>
             </div>
             <div id="build-feedback" class="match-feedback hidden"></div>`;
         paintBuilt(ctx, root);
