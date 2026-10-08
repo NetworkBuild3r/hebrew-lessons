@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "voiceId": "6WRlPmU1fqPwYbSxeP16",
+  "model": "eleven_v3",
+  "entries": {
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|קָם": {
+      "text": "קָם",
+      "file": "806bb3fc99c984531106aeb5.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-08T02:57:39.760Z",
+      "bytes": 26793
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|קָמָה": {
+      "text": "קָמָה",
+      "file": "a2e3165352468e3a501b294e.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-08T02:57:41.156Z",
+      "bytes": 20106
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|שׁוֹתֶה": {
+      "text": "שׁוֹתֶה",
+      "file": "c35c2410e210098ead05320e.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-08T02:57:42.678Z",
+      "bytes": 25539
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|שׁוֹתָה": {
+      "text": "שׁוֹתָה",
+      "file": "9634894b7d32e21bcb10e9c6.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-08T02:57:44.218Z",
+      "bytes": 23031
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|בֹּקֶר": {
+      "text": "בֹּקֶר",
+      "file": "1d0390a2fc75a4e27a074c66.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-08T02:57:45.623Z",
+      "bytes": 17598
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|קָפֶה": {
+      "text": "קָפֶה",
+      "file": "d1597cb73a024c66e8fbeffb.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-08T02:57:47.607Z",
+      "bytes": 18852
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|אַחַר כָּךְ": {
+      "text": "אַחַר כָּךְ",
+      "file": "39eadd11f599ed07bdd27a7d.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-08T02:57:53.134Z",
+      "bytes": 16344
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|יוֹצֵא": {
+      "text": "יוֹצֵא",
+      "file": "38b6df2167d3c0fab5230bdc.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-08T02:57:54.852Z",
+      "bytes": 28047
+    }
+  }
+}

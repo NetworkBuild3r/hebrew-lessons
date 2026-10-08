@@ -1,17 +1,20 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
+const { rootDir, lessonsDir } = require('./paths');
 
 const TYPES = {
     '.html': 'text/html; charset=utf-8',
     '.css': 'text/css; charset=utf-8',
     '.js': 'text/javascript; charset=utf-8',
     '.json': 'application/json; charset=utf-8',
+    '.webmanifest': 'application/manifest+json; charset=utf-8',
     '.svg': 'image/svg+xml',
     '.png': 'image/png',
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
     '.webp': 'image/webp',
+    '.ico': 'image/x-icon',
     '.mp3': 'audio/mpeg',
     '.m4a': 'audio/mp4',
     '.ogg': 'audio/ogg',
@@ -20,12 +23,6 @@ const TYPES = {
     '.woff': 'font/woff',
     '.woff2': 'font/woff2'
 };
-
-function rootDir() {
-    return process.env.HEBREW_ROOT
-        ? path.resolve(process.env.HEBREW_ROOT)
-        : path.resolve(__dirname, '..');
-}
 
 function publicFile(urlPath) {
     let rel;
@@ -36,17 +33,30 @@ function publicFile(urlPath) {
     }
     if (rel.includes('\0')) return null;
     if (rel === '/' || rel === '') rel = '/index.html';
-    const ok = rel === '/index.html' || rel.startsWith('/shared/') || rel.startsWith('/worksheets/');
+    const ok = rel === '/index.html'
+        || rel === '/manifest.webmanifest'
+        || rel === '/icon.svg'
+        || rel.startsWith('/shared/')
+        || rel.startsWith('/worksheets/');
     if (!ok) return null;
     const parts = rel.split('/').slice(1);
     if (parts.some(part => part === '' || part === '.' || part === '..' || part.startsWith('.'))) return null;
 
     const root = rootDir();
+    if (rel.startsWith('/worksheets/')) {
+        const under = rel.slice('/worksheets/'.length);
+        const full = path.resolve(lessonsDir(), under);
+        const base = path.resolve(lessonsDir()) + path.sep;
+        if (full !== path.resolve(lessonsDir()) && !full.startsWith(base)) return null;
+        return full;
+    }
+
     const full = path.resolve(root, '.' + rel);
     const index = path.resolve(root, 'index.html');
     const shared = path.resolve(root, 'shared') + path.sep;
-    const worksheets = path.resolve(root, 'worksheets') + path.sep;
-    if (full !== index && !full.startsWith(shared) && !full.startsWith(worksheets)) return null;
+    const manifest = path.resolve(root, 'manifest.webmanifest');
+    const icon = path.resolve(root, 'icon.svg');
+    if (full !== index && full !== manifest && full !== icon && !full.startsWith(shared)) return null;
     return full;
 }
 
@@ -82,4 +92,4 @@ function listen() {
 
 if (require.main === module) listen();
 
-module.exports = { listen };
+module.exports = { listen, publicFile };

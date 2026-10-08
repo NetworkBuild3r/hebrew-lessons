@@ -7,7 +7,9 @@
     "start": "node server/start.js",
     "web": "node server/web.js",
     "mcp": "node mcp/http.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "audio": "node scripts/generate-audio.js",
+    "audio:dry": "node scripts/generate-audio.js --dry-run"
   },
   "keywords": [],
   "author": "",

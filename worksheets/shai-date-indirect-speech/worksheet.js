@@ -1,5 +1,6 @@
 window.WORKSHEET = {
     id: 'shai-date-indirect-speech',
+    level: 'intermediate',
     legacyStorageKey: 'hebrew_canvas_shays_date_progress',
     title: 'המלצות 1 — הדייט של שי',
     subtitle: 'מילים, משפטים, ודיבור • Level A1+ / A2',

@@ -1,9 +1,14 @@
 <!DOCTYPE html>
-<html lang="he" dir="rtl">
+<html lang="he" dir="rtl" translate="no">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="google" content="notranslate">
+    <meta name="theme-color" content="#1d4ed8">
     <title>דרך עברית — דפי עבודה (Worksheets)</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -15,9 +20,9 @@
         <div class="topbar-inner">
             <div>
                 <div class="kicker">דרך עברית • Light &amp; Easy Hebrew</div>
-                <h1>דפי עבודה (Worksheets)</h1>
-                <p class="subtitle">השיעורים שפורסמו. פותחים דף ועושים אותו שוב. הכול נשמר רק בדפדפן הזה.</p>
-                <p class="subtitle">Published lessons. Open one and do it again. Each new round clears your answers so you recall from memory, and a day between rounds helps. Progress lives only in this browser, so use Save and Load on a lesson to back it up or move it.</p>
+                <h1>דפי עבודה <span class="en" dir="ltr">(Worksheets)</span></h1>
+                <p class="subtitle">השיעורים שפורסמו. פותחים דף ועושים אותו שוב. הכול נשמר אוטומטית בדפדפן הזה.</p>
+                <p class="subtitle en" dir="ltr">Published lessons. Open one and do it again. Progress saves automatically in this browser. A day between rounds helps memory.</p>
             </div>
         </div>
     </header>
@@ -27,9 +32,7 @@
     <script src="worksheets/catalog.js"></script>
     <script>
         const DAY_MS = 24 * 60 * 60 * 1000;
-        const KNOWN_KEYS = ['round', 'matchedPairs', 'fillAnswers', 'grammarAnswers', 'indirectAnswers', 'readingAnswers', 'friendAnswers'];
         const list = document.getElementById('lessons');
-        const messages = {};
 
         function esc(value) {
             return String(value == null ? '' : value)
@@ -72,85 +75,17 @@
                 <article class="lesson-card">
                     <a class="lesson-link" href="worksheets/${esc(lesson.slug)}/index.html">
                         <span class="lesson-status ${status.tone}">${esc(status.he)} <span class="en" dir="ltr">(${esc(status.en)})</span></span>
-                        <p class="fine">${esc(lesson.subtitle || '')}</p>
+                        <p class="fine">${esc(lesson.subtitle || '')}${lesson.level ? ' · ' + esc(lesson.level) : ''}</p>
                         <h2>${esc(lesson.title)}</h2>
                         ${lesson.blurb ? `<p>${esc(lesson.blurb)}</p>` : ''}
                     </a>
-                    <div class="lesson-tools">
-                        <button type="button" class="btn btn-ghost" data-save="${esc(lesson.slug)}">
-                            <i class="fa-solid fa-download"></i> שמירת התקדמות (Save progress)
-                        </button>
-                        <label class="btn btn-ghost">
-                            <i class="fa-solid fa-upload"></i> טעינת התקדמות (Load progress)
-                            <input type="file" accept=".json,application/json" hidden data-load="${esc(lesson.slug)}">
-                        </label>
-                        <span class="lesson-msg" role="status">${esc(messages[lesson.slug] || '')}</span>
-                    </div>
                 </article>
-            `).join('') || '<div class="card"><p>אין עדיין דפי עבודה בקטלוג. (No lessons are published yet.)</p></div>';
+            `).join('') || '<div class="card"><p>אין עדיין דפי עבודה בקטלוג. <span class="en" dir="ltr">(No lessons are published yet.)</span></p></div>';
         }
 
-        function say(slug, text) {
-            messages[slug] = text;
-            render();
+        if (navigator.storage && navigator.storage.persist) {
+            navigator.storage.persist().catch(function () {});
         }
-
-        function saveProgress(slug) {
-            const raw = localStorage.getItem(keyFor(slug));
-            if (!raw) {
-                say(slug, 'עדיין אין התקדמות לשמור. (No progress to save yet.)');
-                return;
-            }
-            const blob = new Blob([JSON.stringify(JSON.parse(raw), null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = slug + '_progress.json';
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            URL.revokeObjectURL(url);
-            say(slug, 'נשמר בקובץ ' + slug + '_progress.json (Saved to a file.)');
-        }
-
-        function loadProgress(slug, file) {
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = event => {
-                let state;
-                try {
-                    state = JSON.parse(event.target.result);
-                } catch (err) {
-                    say(slug, 'לא הצלחנו לקרוא את הקובץ. (That file is not readable JSON.)');
-                    return;
-                }
-                if (!state || typeof state !== 'object' || Array.isArray(state) || !KNOWN_KEYS.some(key => key in state)) {
-                    say(slug, 'זה לא קובץ התקדמות. (That is not a progress file.)');
-                    return;
-                }
-                if (state.lesson && state.lesson !== slug) {
-                    say(slug, 'הקובץ הזה שייך לשיעור אחר: ' + state.lesson + '. (This file belongs to another lesson.)');
-                    return;
-                }
-                if (localStorage.getItem(keyFor(slug)) && !window.confirm('הטעינה תחליף את ההתקדמות הנוכחית בשיעור הזה. להמשיך?\n(Loading replaces the current progress in this lesson. Continue?)')) return;
-                localStorage.setItem(keyFor(slug), JSON.stringify(state));
-                say(slug, 'ההתקדמות נטענה. (Progress loaded.)');
-            };
-            reader.readAsText(file);
-        }
-
-        list.addEventListener('click', event => {
-            const save = event.target.closest('[data-save]');
-            if (save) saveProgress(save.dataset.save);
-        });
-
-        list.addEventListener('change', event => {
-            const input = event.target.closest('[data-load]');
-            if (!input) return;
-            const file = input.files && input.files[0];
-            loadProgress(input.dataset.load, file);
-        });
-
         render();
     </script>
 </body>

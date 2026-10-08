@@ -2,27 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { spawnSync } = require('child_process');
+const { rootDir, lessonsDir, catalogFile, lessonDir } = require('../server/paths');
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-function rootDir() {
-    return process.env.HEBREW_ROOT
-        ? path.resolve(process.env.HEBREW_ROOT)
-        : path.resolve(__dirname, '..');
-}
-
-function catalogFile() {
-    return path.join(rootDir(), 'worksheets', 'catalog.js');
-}
-
-function lessonDir(slug) {
-    const dir = path.resolve(rootDir(), 'worksheets', slug);
-    const worksheets = path.resolve(rootDir(), 'worksheets');
-    if (dir !== path.join(worksheets, slug)) {
-        throw new Error('Lesson path escaped the worksheets folder.');
-    }
-    return dir;
-}
 
 function assertSlug(slug) {
     if (typeof slug !== 'string' || !SLUG.test(slug) || slug === 'template') {
@@ -55,6 +37,7 @@ function listLessons() {
         title: entry.title,
         subtitle: entry.subtitle || '',
         blurb: entry.blurb || '',
+        level: entry.level || '',
         folder: fs.existsSync(path.join(lessonDir(entry.slug), 'worksheet.js'))
     }));
 }
@@ -87,7 +70,7 @@ function upsertLesson(input) {
     assertSlug(slug);
     const worksheet = input.worksheet;
     if (!worksheet || typeof worksheet !== 'object' || Array.isArray(worksheet)) {
-        throw new Error('worksheet must be an object with the lesson fields (title, vocab, fill, grammar, reading, askFriend).');
+        throw new Error('worksheet must be an object with the lesson fields (title, vocab, fill, grammar, reading, askFriend, activities).');
     }
 
     const title = input.title || worksheet.title;
@@ -95,12 +78,14 @@ function upsertLesson(input) {
 
     const next = Object.assign({}, worksheet, { id: slug, title });
     if (input.subtitle) next.subtitle = input.subtitle;
+    if (input.level) next.level = input.level;
 
     const entry = {
         slug,
         title,
         subtitle: input.subtitle || worksheet.subtitle || '',
-        blurb: input.blurb || 'Run it again. The next round hides the English until you ask, and keeps the vowels.'
+        blurb: input.blurb || 'Run it again. The next round hides the English until you ask, and keeps the vowels.',
+        level: input.level || worksheet.level || ''
     };
 
     const dir = lessonDir(slug);
@@ -128,7 +113,10 @@ function upsertLesson(input) {
     const result = spawnSync(process.execPath, [validator, slug], {
         cwd: rootDir(),
         encoding: 'utf8',
-        env: Object.assign({}, process.env, { HEBREW_ROOT: rootDir() })
+        env: Object.assign({}, process.env, {
+            HEBREW_ROOT: rootDir(),
+            LESSONS_DIR: lessonsDir()
+        })
     });
 
     if (result.status !== 0) {
@@ -154,4 +142,4 @@ function upsertLesson(input) {
     };
 }
 
-module.exports = { listLessons, getLesson, listWords, upsertLesson, rootDir };
+module.exports = { listLessons, getLesson, listWords, upsertLesson, rootDir, lessonsDir };

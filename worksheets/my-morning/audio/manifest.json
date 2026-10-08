@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "clips": {
+    "audio/sentences/vocab-1.mp3": "29e508be7189d84c9f727f55329a29e4cbe60c2279a6922f7276697bff35785b",
+    "audio/sentences/vocab-2.mp3": "8138e6c1b12bf2b029d0e642bffd097fb9f655749fc9e4bcb0b4a1c0ffe23578",
+    "audio/sentences/vocab-3.mp3": "4169ab78e4449dfd6413b7746f3fb8e22d6def1b48cbfae799b8ae7d432b5061",
+    "audio/sentences/vocab-4.mp3": "a0501c1e03bc5d7eed23d42350294f48f0f3b3c4955697b1b4335215d729dfbc",
+    "audio/sentences/vocab-5.mp3": "71f7b3a8a0d650031ae22c5a12683d2546d2c02d7667504dbe7d09fc5b7be856",
+    "audio/sentences/vocab-6.mp3": "c17406b421c2d73960e57657fdc54ac6e439ca5a46c779a19a340c45765aeba1",
+    "audio/sentences/vocab-7.mp3": "cfae5b3e50dcbad6d1071755ea887bd472c1bf374aeaf079b27317e4a2cf32de",
+    "audio/sentences/vocab-8.mp3": "267878c0047013c83ac9a09699c178627f0ea6577cb37dcf87677fc27b7098dd",
+    "audio/sentences/friend-1.mp3": "90d8422a4aa1d3da5c2eb7b6014519d2c40a0cbad2f005bcdaa17a7df0f2cab7",
+    "audio/sentences/friend-2.mp3": "acb94bd53e9b23c725684fd01d2deda2fe717a457788d086962c7eaa3aeb5912",
+    "audio/sentences/friend-3.mp3": "dc0c2fd4d37d90d84f56cd5b9be1fd11137787c267b52c6bdb4187a128a19573",
+    "audio/sentences/grammar-1.mp3": "e282102a5cefd5570533598f46683dd51fddaa6a6541d9bd16d8529c8558bba7",
+    "audio/sentences/grammar-2.mp3": "e928ec8867821065541cb9f9429a1a4382ba303ea611ea55b91f87aae7a2dbe6",
+    "audio/sentences/grammar-3.mp3": "dd9745e9d315b07776702c2d6a9b2686169e8e73fc8788d25365b6f679322457",
+    "audio/sentences/question-1.mp3": "6bac0ab80e710d9c439c758111b9a54602224c1ab08c9751f1cc3db951ccf54a",
+    "audio/sentences/question-2.mp3": "d04ee02673a604120755a90dc0b92e321b259674bf945b334dbe3383e810c5a5",
+    "audio/story/line-1.mp3": "71f7b3a8a0d650031ae22c5a12683d2546d2c02d7667504dbe7d09fc5b7be856",
+    "audio/story/line-2.mp3": "069b2a6473424eeeadfdd845fe2853c5e3ac43bad73dd46a2d60f4796b0f123d",
+    "audio/story/line-3.mp3": "6b3797abb1991011d01a2896220b51e2e3c194fcad546cbc03b109a4cd19330e",
+    "audio/story/line-4.mp3": "be694a0b4b8d8801859529badeced1ac20ea79f83a0ec11df85689b84f00ec22"
+  }
+}
