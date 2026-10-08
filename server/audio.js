@@ -60,7 +60,7 @@ function writeWorksheet(file, worksheet) {
 
 function cacheKey(voiceId, model, text) {
     return crypto.createHash('sha256')
-        .update([voiceId, model, text].join('\0'), 'utf8')
+        .update([voiceId, model, String(text || '').trim()].join('\0'), 'utf8')
         .digest('hex')
         .slice(0, 24);
 }
@@ -209,6 +209,35 @@ function readWordManifest(cacheDir) {
 
 function writeWordManifest(cacheDir, manifest) {
     writeJson(path.join(cacheDir, 'manifest.json'), manifest);
+    writeWordCatalog(cacheDir, manifest);
+}
+
+/** Browser-loadable map of pointed Hebrew word → shared clip path. */
+function writeWordCatalog(cacheDir, manifest) {
+    const map = {};
+    const entries = (manifest && manifest.entries) || {};
+    Object.keys(entries).forEach(key => {
+        const entry = entries[key];
+        if (!entry || !entry.text || !entry.file) return;
+        const full = path.join(cacheDir, entry.file);
+        if (!fs.existsSync(full)) return;
+        const url = SITE_WORD_PREFIX + entry.file;
+        const raw = String(entry.text).trim();
+        map[raw] = url;
+        map[raw.normalize('NFC')] = url;
+    });
+    const file = path.join(cacheDir, 'catalog.js');
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(
+        file,
+        'window.HEBREW_WORD_AUDIO = ' + JSON.stringify(map, null, 4) + ';\n',
+        'utf8'
+    );
+}
+
+function rebuildWordCatalog() {
+    const cacheDir = wordAudioDir();
+    writeWordCatalog(cacheDir, readWordManifest(cacheDir));
 }
 
 function readLessonManifest(lessonDirPath) {
@@ -501,6 +530,7 @@ async function generateLessonAudio(slug, opts) {
         }
 
         if (wordManifestDirty && !dryRun) writeWordManifest(cacheDir, wordManifest);
+        else if (!dryRun) writeWordCatalog(cacheDir, wordManifest);
         if (lessonManifestDirty && !dryRun) writeLessonManifest(dir, lessonManifest);
         if (!dryRun) writeWorksheet(dataFile, worksheet);
     } catch (err) {
@@ -538,6 +568,8 @@ module.exports = {
     loadEnvFile,
     generateLessonAudio,
     migrateLegacyWordCache,
+    rebuildWordCatalog,
+    writeWordCatalog,
     formatAudioSummary,
     listLessonSlugs,
     cacheKey,

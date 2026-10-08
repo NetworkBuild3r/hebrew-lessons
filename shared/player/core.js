@@ -134,14 +134,55 @@
             requestRender: () => showStep(stepIndex, false)
         };
 
-        Speech.setClips(buildClipEntries(ws));
+        loadSharedWordAudio(() => {
+            applySharedWordAudio(ws);
+            Speech.setClips(buildClipEntries(ws));
+            document.title = String(ws.title || 'דף עבודה').replace(/<[^>]+>/g, '');
+            app.innerHTML = shellHtml();
+            bindShell();
+            restoreSaved();
+            routeFromHash(false);
+            window.addEventListener('hashchange', () => routeFromHash(true));
+        });
 
-        document.title = String(ws.title || 'דף עבודה').replace(/<[^>]+>/g, '');
-        app.innerHTML = shellHtml();
-        bindShell();
-        restoreSaved();
-        routeFromHash(false);
-        window.addEventListener('hashchange', () => routeFromHash(true));
+        function sharedWordUrl(text) {
+            const map = root.HEBREW_WORD_AUDIO;
+            if (!map || !text) return '';
+            const key = String(text).normalize('NFC').replace(/\s+/g, ' ').trim();
+            return map[key] || '';
+        }
+
+        function applySharedWordAudio(worksheet) {
+            (worksheet.vocab?.items || []).forEach(item => {
+                if (item && item.word && !item.audio) {
+                    const url = sharedWordUrl(item.word);
+                    if (url) item.audio = url;
+                }
+            });
+        }
+
+        function loadSharedWordAudio(done) {
+            if (root.HEBREW_WORD_AUDIO) {
+                done();
+                return;
+            }
+            let finished = false;
+            const finish = () => {
+                if (finished) return;
+                finished = true;
+                done();
+            };
+            const script = document.createElement('script');
+            try {
+                script.src = new URL('../_audio/words/catalog.js', window.location.href).href;
+            } catch (err) {
+                script.src = '../_audio/words/catalog.js';
+            }
+            script.onload = finish;
+            script.onerror = finish;
+            document.head.appendChild(script);
+            root.setTimeout(finish, 1200);
+        }
 
         function buildClipEntries(worksheet) {
             const entries = [];
@@ -149,7 +190,7 @@
                 if (text && url) entries.push({ text, url });
             };
             (worksheet.vocab?.items || []).forEach(item => {
-                push(item.word, item.audio);
+                push(item.word, item.audio || sharedWordUrl(item.word));
                 push(item.sentence, item.sentenceAudio);
             });
             (worksheet.askFriend?.questions || []).forEach(q => {

@@ -10,7 +10,7 @@
     };
 
     function normalizeKey(text) {
-        return String(text || '').replace(/\s+/g, ' ').trim();
+        return String(text || '').normalize('NFC').replace(/\s+/g, ' ').trim();
     }
 
     function stripKey(text) {
