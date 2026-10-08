@@ -71,8 +71,8 @@ function listen() {
     const port = Number(process.env.MCP_PORT || 8787);
     const host = process.env.HOST || '127.0.0.1';
     // upsert_lesson writes to disk: never listen beyond loopback without a token.
-    if (!process.env.MCP_AUTH_TOKEN && !isLoopback(host) && process.env.MCP_ALLOW_NO_AUTH !== '1') {
-        throw new Error('MCP_AUTH_TOKEN is required when HOST is not loopback (set MCP_ALLOW_NO_AUTH=1 only for a local container).');
+    if (!process.env.MCP_AUTH_TOKEN && !isLoopback(host)) {
+        throw new Error('MCP_AUTH_TOKEN is required when HOST is not loopback.');
     }
     const httpServer = http.createServer(async (req, res) => {
         const url = new URL(req.url || '/', 'http://127.0.0.1');

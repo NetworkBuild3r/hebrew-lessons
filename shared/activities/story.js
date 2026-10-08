@@ -4,6 +4,9 @@
     const Speech = window.HebrewSpeech;
     const PREFS_KEY = 'hebrew-worksheet-prefs';
 
+    /** @type {{root:Element,onKey:Function,onDocClick:Function}|null} */
+    let glossSession = null;
+
     P.register({
         type: 'story',
         labelHe: 'סיפור',
@@ -16,11 +19,13 @@
             const questions = ctx.ws.reading.questions || [];
             const answers = Object.fromEntries((state.answers || []).map(a => [String(a.id), a.val]));
             const follow = followAlongPref();
+            const coverage = estimateCoverage(ctx);
             return `
                 <div class="stack">
                     <div class="banner banner-amber">
                         <h3>${ctx.bi('קראו את הטקסט', 'Read the text')}</h3>
                         <p class="fine">${ctx.bi('סגול = דיבור עקיף, אדום = דיבור ישיר', 'Purple = reported speech, red = direct speech')}</p>
+                        ${coverageBadgeHtml(ctx, coverage)}
                     </div>
                     <div class="story-tools">
                         <button type="button" class="btn btn-ghost" data-action="toggle-vowels">${ctx.vowelsOn ? ctx.bi('הסתר ניקוד', 'Hide vowels') : ctx.bi('הצג ניקוד', 'Show vowels')}</button>
@@ -47,6 +52,7 @@
         },
         mount(ctx, root) {
             applyVowels(ctx, root);
+            enhanceStoryTokens(ctx, root);
             Speech.onStoryPaint = () => paintStory(ctx, root);
             paintStory(ctx, root);
             root.querySelector('#follow-along')?.addEventListener('change', () => {
@@ -57,26 +63,62 @@
                 } catch (err) { /* ignore */ }
                 paintStory(ctx, root);
             });
+
+            const onKey = (event) => {
+                if (event.key === 'Escape') dismissGloss(root);
+            };
+            const onDocClick = (event) => {
+                if (!root.contains(event.target)) dismissGloss(root);
+            };
+            document.addEventListener('keydown', onKey);
+            document.addEventListener('click', onDocClick, true);
+            glossSession = { root, onKey, onDocClick };
         },
         unmount() {
             Speech.onStoryPaint = null;
             Speech.stopStory();
+            if (glossSession) {
+                document.removeEventListener('keydown', glossSession.onKey);
+                document.removeEventListener('click', glossSession.onDocClick, true);
+                glossSession = null;
+            }
         },
         onClick(ctx, root, event, action) {
-            if (!action) return;
+            if (!action) {
+                if (event && event.target && event.target.closest && event.target.closest('.story-gloss-popover')) {
+                    return;
+                }
+                dismissGloss(root);
+                return;
+            }
             if (action.dataset.action === 'toggle-vowels') {
+                dismissGloss(root);
                 ctx.vowelsOn = !ctx.vowelsOn;
                 applyVowels(ctx, root);
+                enhanceStoryTokens(ctx, root);
                 action.textContent = ctx.vowelsOn ? 'הסתר ניקוד (Hide vowels)' : 'הצג ניקוד (Show vowels)';
                 ctx.save();
             }
             if (action.dataset.action === 'story-play') {
+                dismissGloss(root);
                 const lines = storyLines(ctx);
                 const from = Speech.story.status === 'paused' ? Speech.story.index : 0;
                 Speech.startStory(lines, from, ctx.ws.reading.audio || []);
             }
             if (action.dataset.action === 'story-pause') Speech.pauseStory();
             if (action.dataset.action === 'story-stop') Speech.stopStory();
+            if (action.dataset.action === 'story-token') {
+                event && event.stopPropagation && event.stopPropagation();
+                openGloss(ctx, root, action);
+            }
+            if (action.dataset.action === 'gloss-audio') {
+                event && event.stopPropagation && event.stopPropagation();
+                const token = action.dataset.token || '';
+                if (token && Speech && typeof Speech.speak === 'function') Speech.speak(token);
+            }
+            if (action.dataset.action === 'gloss-dismiss') {
+                dismissGloss(root);
+            }
         },
         collect(ctx, root) {
             return {
@@ -104,6 +146,198 @@
         return U.storyPlain(ctx.ws.reading.paragraphs).map(line => ctx.vowelsOn ? line : U.stripVowels(line));
     }
 
+    function exactKey(text) {
+        return String(text || '').normalize('NFC').replace(/\s+/g, ' ').trim();
+    }
+
+    function strippedKey(text) {
+        return exactKey(U.stripVowels(text));
+    }
+
+    /**
+     * Identity resolve against a map of exactKey → value (ADR-0001 §1).
+     * @param {string} text
+     * @param {Record<string, *>} catalog
+     */
+    function resolveInCatalog(text, catalog) {
+        if (!catalog || typeof catalog !== 'object') return null;
+        const e = exactKey(text);
+        if (!e) return null;
+        if (Object.prototype.hasOwnProperty.call(catalog, e)) return e;
+        const s = strippedKey(e);
+        if (!s) return null;
+        let match = null;
+        Object.keys(catalog).forEach(key => {
+            if (strippedKey(key) === s) {
+                if (match && match !== key) match = '__ambiguous__';
+                else if (!match) match = key;
+            }
+        });
+        return match && match !== '__ambiguous__' ? match : null;
+    }
+
+    function vocabCatalog(ctx) {
+        const map = Object.create(null);
+        (ctx.ws.vocab && ctx.ws.vocab.items || []).forEach(item => {
+            if (!item || !item.word) return;
+            map[exactKey(item.word)] = item;
+        });
+        return map;
+    }
+
+    function glossCatalog(ctx) {
+        const glosses = ctx.ws.reading && ctx.ws.reading.glosses;
+        if (!glosses || typeof glosses !== 'object' || Array.isArray(glosses)) return Object.create(null);
+        const map = Object.create(null);
+        Object.keys(glosses).forEach(key => {
+            map[exactKey(key)] = String(glosses[key] == null ? '' : glosses[key]);
+        });
+        return map;
+    }
+
+    /**
+     * Lookup order: reading.glosses → lesson vocab meaning → null (audio-only).
+     * @returns {{token:string, meaning:string|null, audioText:string}}
+     */
+    function lookupGloss(ctx, rawToken) {
+        const token = exactKey(rawToken);
+        const glosses = glossCatalog(ctx);
+        const glossKey = resolveInCatalog(token, glosses);
+        if (glossKey != null && glosses[glossKey]) {
+            return { token, meaning: glosses[glossKey], audioText: token };
+        }
+        const vocab = vocabCatalog(ctx);
+        const vocabKey = resolveInCatalog(token, vocab);
+        if (vocabKey != null && vocab[vocabKey] && vocab[vocabKey].meaning) {
+            return { token: vocabKey, meaning: String(vocab[vocabKey].meaning), audioText: vocabKey };
+        }
+        return { token, meaning: null, audioText: token };
+    }
+
+    function sameLocalDay(a, b) {
+        if (a == null || b == null) return false;
+        const da = new Date(a);
+        const db = new Date(b);
+        if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return false;
+        return da.getFullYear() === db.getFullYear()
+            && da.getMonth() === db.getMonth()
+            && da.getDate() === db.getDate();
+    }
+
+    /** Record not_yet at most once per word per local day (ADR-0001 §5). */
+    function recordNotYet(ctx, wordKey) {
+        const Review = ctx.review;
+        if (!Review || typeof Review.record !== 'function') return;
+        const key = exactKey(wordKey);
+        if (!key) return;
+        const existing = typeof Review.get === 'function' ? Review.get(key) : null;
+        const he = existing && existing.he_en;
+        if (he && he.lastResult === 'not_yet' && sameLocalDay(he.lastAt, Date.now())) {
+            return;
+        }
+        try {
+            Review.record(key, 'he_en', 'not_yet', { lesson: ctx.ws && ctx.ws.id });
+        } catch (err) { /* fail-soft */ }
+    }
+
+    function lessonCompleted(slug) {
+        if (!slug) return false;
+        try {
+            if (typeof localStorage === 'undefined' || !localStorage) return false;
+            const raw = localStorage.getItem('hebrew-worksheet:' + slug);
+            if (!raw) return false;
+            const st = JSON.parse(raw);
+            if ((st.completedRounds || 0) > 0) return true;
+            return Object.keys(st.completedSteps || {}).length > 0;
+        } catch (err) {
+            return false;
+        }
+    }
+
+    function hasPassingRecord(entry) {
+        if (!entry) return false;
+        const he = entry.he_en || {};
+        const en = entry.en_he || {};
+        return he.lastResult === 'pass' || en.lastResult === 'pass';
+    }
+
+    function resolveStoreKey(token, store) {
+        if (!store || !store.words) return exactKey(token);
+        const words = store.words;
+        const hit = resolveInCatalog(token, words);
+        return hit || exactKey(token);
+    }
+
+    function knownFromEarlierLesson(tokenKey, ctx) {
+        const index = typeof window !== 'undefined' ? window.HEBREW_VOCAB_INDEX : null;
+        const list = Array.isArray(index) ? index : [];
+        if (!list.length) return false;
+        const current = ctx.ws && ctx.ws.id ? String(ctx.ws.id) : '';
+        const e = exactKey(tokenKey);
+        const s = strippedKey(e);
+        let entry = list.find(item => item && exactKey(item.key || item.word) === e);
+        if (!entry && s) {
+            const matches = list.filter(item => item && strippedKey(item.key || item.word) === s);
+            if (matches.length === 1) entry = matches[0];
+        }
+        if (!entry || !Array.isArray(entry.lessons)) return false;
+        return entry.lessons.some(slug => String(slug) !== current && lessonCompleted(slug));
+    }
+
+    function isKnownToken(token, ctx, store) {
+        const key = resolveStoreKey(token, store);
+        const entry = store && store.words ? store.words[key] : null;
+        if (hasPassingRecord(entry)) return true;
+        if (knownFromEarlierLesson(key, ctx) || knownFromEarlierLesson(token, ctx)) return true;
+        return false;
+    }
+
+    /**
+     * @returns {{kind:'unknown'}|{kind:'estimate',pct:number,known:number,total:number}}
+     */
+    function estimateCoverage(ctx) {
+        const plain = U.storyPlain(ctx.ws.reading && ctx.ws.reading.paragraphs || []).join(' ');
+        const tokens = typeof U.tokenizeHebrew === 'function' ? U.tokenizeHebrew(plain) : [];
+        if (!tokens.length) return { kind: 'unknown' };
+
+        const Review = ctx.review;
+        let store = null;
+        try {
+            store = Review && typeof Review.all === 'function' ? Review.all() : null;
+        } catch (err) {
+            store = null;
+        }
+        const wordCount = store && store.words ? Object.keys(store.words).length : 0;
+        if (!wordCount) return { kind: 'unknown' };
+
+        let known = 0;
+        tokens.forEach(tok => {
+            if (isKnownToken(tok, ctx, store)) known += 1;
+        });
+        const pct = Math.round((known / tokens.length) * 100);
+        return { kind: 'estimate', pct: pct, known: known, total: tokens.length };
+    }
+
+    function coverageBadgeHtml(ctx, coverage) {
+        if (!coverage || coverage.kind === 'unknown') {
+            return `<div class="story-coverage" id="story-coverage" data-coverage="unknown">
+                <p class="story-coverage-value">${ctx.bi('כיסוי לא ידוע', 'Coverage unknown')}</p>
+                <p class="fine story-coverage-note">${ctx.bi(
+                    'אומדן מילים מוכרות לפי מאגר החזרה — עדיין אין נתונים.',
+                    'Estimated known words from the review store — no data yet.'
+                )}</p>
+            </div>`;
+        }
+        const label = '≈' + coverage.pct + '% מילים מוכרות (known words, estimate)';
+        return `<div class="story-coverage" id="story-coverage" data-coverage="${coverage.pct}">
+            <p class="story-coverage-value">${U.escapeHtml(label)}</p>
+            <p class="fine story-coverage-note">${ctx.bi(
+                'אומדן בלבד — לפי מילים שעברו בחזרה או הופיעו בשיעור קודם.',
+                'Estimate only — from words passed in review or seen in an earlier lesson.'
+            )}</p>
+        </div>`;
+    }
+
     function applyVowels(ctx, root) {
         root.querySelectorAll('[data-vowels-html]').forEach((el, i) => {
             const p = ctx.ws.reading.paragraphs[i];
@@ -122,6 +356,102 @@
         };
         walk(tmp);
         return tmp.innerHTML;
+    }
+
+    function enhanceStoryTokens(ctx, root) {
+        const body = root.querySelector('#story-text');
+        if (!body || typeof U.tokenizeHebrew !== 'function') return;
+        const paragraphs = body.querySelectorAll('p[data-vowels-html]');
+        paragraphs.forEach(p => wrapTokensInElement(p));
+    }
+
+    function wrapTokensInElement(el) {
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+        const textNodes = [];
+        let node;
+        while ((node = walker.nextNode())) {
+            if (!node.nodeValue || !/[\u05D0-\u05EA]/.test(node.nodeValue)) continue;
+            if (node.parentElement && node.parentElement.closest('.story-token')) continue;
+            textNodes.push(node);
+        }
+        textNodes.forEach(textNode => {
+            const text = textNode.nodeValue;
+            const tokens = U.tokenizeHebrew(text);
+            if (!tokens.length) return;
+            const frag = document.createDocumentFragment();
+            let remaining = text;
+            tokens.forEach(token => {
+                const idx = remaining.indexOf(token);
+                if (idx < 0) return;
+                if (idx > 0) frag.appendChild(document.createTextNode(remaining.slice(0, idx)));
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'story-token';
+                btn.dataset.action = 'story-token';
+                btn.dataset.token = token;
+                btn.setAttribute('aria-label', 'Gloss: ' + token);
+                btn.textContent = token;
+                frag.appendChild(btn);
+                remaining = remaining.slice(idx + token.length);
+            });
+            if (remaining) frag.appendChild(document.createTextNode(remaining));
+            textNode.parentNode.replaceChild(frag, textNode);
+        });
+    }
+
+    function dismissGloss(root) {
+        const pop = root && root.querySelector && root.querySelector('.story-gloss-popover');
+        if (pop && typeof pop.remove === 'function') {
+            try { pop.remove(); } catch (err) { /* ignore */ }
+        } else if (pop && pop.parentNode && typeof pop.parentNode.removeChild === 'function') {
+            try { pop.parentNode.removeChild(pop); } catch (err) { /* ignore */ }
+        }
+        if (root && root._pop) root._pop = null;
+        root && root.querySelectorAll && root.querySelectorAll('.story-token[aria-expanded="true"]').forEach(el => {
+            el.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    function openGloss(ctx, root, tokenBtn) {
+        dismissGloss(root);
+        const raw = tokenBtn.dataset.token || tokenBtn.textContent || '';
+        const found = lookupGloss(ctx, raw);
+        recordNotYet(ctx, found.token);
+
+        tokenBtn.setAttribute('aria-expanded', 'true');
+        const pop = document.createElement('div');
+        pop.className = 'story-gloss-popover';
+        pop.setAttribute('role', 'dialog');
+        pop.setAttribute('aria-label', ctx.bi('פירוש', 'Gloss'));
+        const meaningHtml = found.meaning
+            ? `<p class="story-gloss-en" dir="ltr">${U.escapeHtml(found.meaning)}</p>`
+            : `<p class="story-gloss-en story-gloss-missing" dir="ltr">${ctx.bi('אין פירוש', 'No gloss')}</p>`;
+        pop.innerHTML = `
+            <p class="story-gloss-he">${U.escapeHtml(found.token)}</p>
+            ${meaningHtml}
+            <div class="story-gloss-actions">
+                <button type="button" class="icon-btn" data-action="gloss-audio" data-token="${U.escapeHtml(found.audioText)}" title="${ctx.bi('השמעה', 'Play audio')}">${U.icon('volume-high')}</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-action="gloss-dismiss">${ctx.bi('סגור', 'Close')}</button>
+            </div>
+        `;
+        const body = root.querySelector('#story-text') || root;
+        body.appendChild(pop);
+
+        // Place below the token without covering story-tools audio controls.
+        try {
+            const tokenRect = tokenBtn.getBoundingClientRect();
+            const bodyRect = body.getBoundingClientRect();
+            const top = tokenRect.bottom - bodyRect.top + body.scrollTop + 6;
+            let left = tokenRect.left - bodyRect.left + body.scrollLeft;
+            const maxLeft = Math.max(0, body.clientWidth - pop.offsetWidth - 8);
+            if (left > maxLeft) left = maxLeft;
+            if (left < 0) left = 0;
+            pop.style.top = top + 'px';
+            pop.style.left = left + 'px';
+        } catch (err) { /* ignore layout errors */ }
+
+        const closeBtn = pop.querySelector('[data-action="gloss-dismiss"]');
+        if (closeBtn && typeof closeBtn.focus === 'function') closeBtn.focus();
     }
 
     function paintStory(ctx, root) {

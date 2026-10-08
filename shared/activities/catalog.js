@@ -120,16 +120,16 @@
             icon: 'fa-keyboard',
             tone: 'tone-purple',
             meaning: false,
-            when: 'Advanced: see the English meaning, type the Hebrew. Vowels are ignored when checking.',
+            when: 'Intermediate+: see the English meaning, type the Hebrew. Vowels are ignored when checking.',
             fields: {},
             needs: ['vocab.items'],
-            levels: ['advanced']
+            levels: ['intermediate', 'advanced']
         }
     ];
 
     const LEVEL_DEFAULTS = {
         basic: { choices: 3, bank: 'open', quizSeconds: 90, typeAllowed: false },
-        intermediate: { choices: 4, bank: 'closed', quizSeconds: 60, typeAllowed: false },
+        intermediate: { choices: 4, bank: 'closed', quizSeconds: 60, typeAllowed: true },
         advanced: { choices: 4, bank: 'none', quizSeconds: 45, typeAllowed: true }
     };
 

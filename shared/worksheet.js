@@ -2,6 +2,7 @@
  * Entry point loaded by every lesson's index.html.
  * Loads the player core and activity modules in order, then boots.
  * Do not edit lesson index.html files — add activities under shared/activities/.
+ * Provenance note: INIT-002/SPEC-013 waits for HebrewSync.init before boot.
  */
 (function () {
     const script = document.currentScript;
@@ -11,6 +12,9 @@
 
     const files = [
         'player/utils.js',
+        'player/review.js',
+        'api.js',
+        'player/sync.js',
         'player/speech.js',
         'player/core.js',
         'activities/catalog.js',
@@ -30,12 +34,7 @@
     let index = 0;
     function next() {
         if (index >= files.length) {
-            if (window.HebrewPlayer && typeof window.HebrewPlayer.boot === 'function') {
-                window.HebrewPlayer.boot();
-            } else {
-                const app = document.getElementById('app');
-                if (app) app.innerHTML = '<main class="wrap"><div class="card"><p>Player failed to load.</p></div></main>';
-            }
+            bootAfterSync();
             return;
         }
         const el = document.createElement('script');
@@ -48,5 +47,25 @@
         };
         (document.head || document.documentElement).appendChild(el);
     }
+
+    function bootPlayer() {
+        if (window.HebrewPlayer && typeof window.HebrewPlayer.boot === 'function') {
+            window.HebrewPlayer.boot();
+        } else {
+            const app = document.getElementById('app');
+            if (app) app.innerHTML = '<main class="wrap"><div class="card"><p>Player failed to load.</p></div></main>';
+        }
+    }
+
+    function bootAfterSync() {
+        const Sync = window.HebrewSync;
+        const slug = window.WORKSHEET && window.WORKSHEET.id ? String(window.WORKSHEET.id) : null;
+        if (Sync && typeof Sync.init === 'function') {
+            Promise.resolve(Sync.init({ lessonSlug: slug })).then(bootPlayer).catch(bootPlayer);
+            return;
+        }
+        bootPlayer();
+    }
+
     next();
 })();

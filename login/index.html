@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" translate="no">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="google" content="notranslate">
+    <meta name="theme-color" content="#1d4ed8">
+    <title>כניסה — Sign in · דרך עברית</title>
+    <!--
+      Styles and scripts are inlined: /shared/* is gated when signed out (SPEC-008).
+      Canonical modules for signed-in pages: shared/api.js, shared/login.js, shared/worksheet.css.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #1e293b;
+            --muted: #64748b;
+            --line: #e2e8f0;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --blue: #2563eb;
+            --blue-deep: #1d4ed8;
+            --rose: #e11d48;
+            --shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+            --radius: 16px;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Rubik", sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(ellipse at 20% 0%, rgba(37, 99, 235, 0.14), transparent 55%),
+                radial-gradient(ellipse at 90% 10%, rgba(30, 64, 175, 0.12), transparent 45%),
+                var(--bg);
+        }
+        .en { unicode-bidi: isolate; }
+        .login-wrap {
+            width: min(26rem, calc(100% - 1.5rem));
+            margin: 0 auto;
+            padding: 2.5rem 0 3rem;
+        }
+        @media (min-width: 800px) {
+            .login-wrap { width: min(28rem, calc(100% - 2rem)); }
+        }
+        .login-card {
+            padding: 1.35rem 1.25rem 1.5rem;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--card);
+            box-shadow: var(--shadow);
+        }
+        .login-kicker {
+            margin: 0 0 0.5rem;
+            color: var(--blue-deep);
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .login-card h1 { margin: 0 0 0.75rem; font-size: 1.45rem; }
+        .login-privacy {
+            margin: 0 0 1rem;
+            font-size: 0.82rem;
+            color: var(--muted);
+            line-height: 1.45;
+        }
+        .login-form label {
+            display: grid;
+            gap: 0.35rem;
+            margin: 0 0 0.85rem;
+            font-weight: 500;
+        }
+        .login-form input {
+            width: 100%;
+            min-height: 44px;
+            padding: 0.55rem 0.7rem;
+            border: 1px solid var(--line);
+            border-radius: calc(var(--radius) - 6px);
+            font: inherit;
+            background: #fff;
+            color: var(--ink);
+        }
+        .login-form input:focus-visible,
+        .btn:focus-visible {
+            outline: 2px solid var(--blue);
+            outline-offset: 2px;
+        }
+        .login-error {
+            margin: 0 0 0.75rem;
+            color: var(--rose);
+            font-size: 0.9rem;
+        }
+        .btn {
+            font: inherit;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        .btn-primary {
+            width: 100%;
+            min-height: 44px;
+            background: var(--blue);
+            color: #fff;
+            border: 1px solid var(--blue-deep);
+            border-radius: calc(var(--radius) - 6px);
+            padding: 0.55rem 1rem;
+            font-weight: 600;
+        }
+        .btn-primary:hover { background: var(--blue-deep); }
+        .btn-primary:disabled { opacity: 0.65; cursor: not-allowed; }
+    </style>
+</head>
+<body class="login-page">
+    <main class="login-wrap">
+        <div class="login-card">
+            <p class="login-kicker">דרך עברית · Light &amp; Easy Hebrew</p>
+            <h1>כניסה <span class="en" dir="ltr">(Sign in)</span></h1>
+            <p class="login-privacy" id="login-privacy">
+                מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה. (Admins can see all your activity, including every answer.)
+            </p>
+            <form id="login-form" class="login-form" method="post" action="#" novalidate>
+                <label>
+                    שם משתמש <span class="en" dir="ltr">(Username)</span>
+                    <input id="login-username" name="username" type="text" autocomplete="username" required>
+                </label>
+                <label>
+                    סיסמה <span class="en" dir="ltr">(Password)</span>
+                    <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+                </label>
+                <p class="login-error" id="login-error" role="alert" hidden></p>
+                <button type="submit" class="btn btn-primary" id="login-submit">
+                    כניסה <span class="en" dir="ltr">(Sign in)</span>
+                </button>
+            </form>
+        </div>
+    </main>
+    <script>
+    /**
+     * Inlined sign-in client — /shared/api.js and /shared/login.js are not public when signed out.
+     * Provenance: INIT-002/SPEC-012
+     */
+    (function () {
+        'use strict';
+
+        var PRIVACY_NOTE =
+            'מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה. (Admins can see all your activity, including every answer.)';
+        var MSG_BAD = 'שם משתמש או סיסמה שגויים. (Wrong username or password.)';
+        var MSG_THROTTLE = 'יותר מדי ניסיונות. נסו שוב מאוחר יותר. (Too many attempts. Try again later.)';
+        var MSG_NETWORK = 'שגיאת רשת. בדקו את החיבור ונסו שוב. (Network error. Check your connection and try again.)';
+
+        function safeNextPath(value) {
+            if (typeof value !== 'string' || !value) return '/';
+            var next = value.trim();
+            if (!next) return '/';
+            if (!next.startsWith('/')) return '/';
+            if (next.startsWith('//')) return '/';
+            if (next.indexOf('\\') !== -1) return '/';
+            if (next.indexOf('\0') !== -1) return '/';
+            if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(next)) return '/';
+            return next;
+        }
+
+        function nextFromQuery() {
+            try {
+                var params = new URLSearchParams(window.location.search || '');
+                return safeNextPath(params.get('next'));
+            } catch (err) {
+                return '/';
+            }
+        }
+
+        function setError(el, text) {
+            if (!el) return;
+            if (!text) {
+                el.hidden = true;
+                el.textContent = '';
+                return;
+            }
+            el.hidden = false;
+            el.textContent = text;
+        }
+
+        function boot() {
+            var form = document.getElementById('login-form');
+            if (!form) return;
+            var userInput = document.getElementById('login-username');
+            var passInput = document.getElementById('login-password');
+            var errEl = document.getElementById('login-error');
+            var submitBtn = document.getElementById('login-submit');
+            var privacy = document.getElementById('login-privacy');
+            if (privacy) privacy.textContent = PRIVACY_NOTE;
+
+            // Expose for smoke / debugging (mirrors shared/api.js safeNextPath)
+            window.HebrewLoginPage = { safeNextPath: safeNextPath };
+
+            form.addEventListener('submit', function (event) {
+                event.preventDefault();
+                setError(errEl, '');
+                if (submitBtn) submitBtn.disabled = true;
+
+                var username = userInput ? String(userInput.value || '') : '';
+                var password = passInput ? String(passInput.value || '') : '';
+                var next = nextFromQuery();
+
+                fetch('/api/session', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: username, password: password, next: next })
+                }).then(function (res) {
+                    return res.json().catch(function () { return null; }).then(function (data) {
+                        return { res: res, data: data };
+                    });
+                }).then(function (pack) {
+                    if (pack.res.ok) {
+                        var dest = safeNextPath(
+                            pack.data && pack.data.redirect != null ? pack.data.redirect : next
+                        );
+                        window.location.href = dest;
+                        return;
+                    }
+                    if (pack.res.status === 429) setError(errEl, MSG_THROTTLE);
+                    else setError(errEl, MSG_BAD);
+                    if (submitBtn) submitBtn.disabled = false;
+                }).catch(function () {
+                    setError(errEl, MSG_NETWORK);
+                    if (submitBtn) submitBtn.disabled = false;
+                });
+            });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', boot);
+        } else {
+            boot();
+        }
+    })();
+    </script>
+</body>
+</html>

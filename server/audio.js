@@ -2,6 +2,8 @@
  * ElevenLabs lesson audio generation.
  * Words are permanent under LESSONS_DIR/_audio/words/ (never overwritten).
  * Lesson clips live under <lesson>/audio/ and regenerate when text changes.
+ * Before overwriting a lesson clip, the prior bytes are archived under audio/_archive/.
+ * INIT-002/SPEC-002
  */
 const crypto = require('crypto');
 const fs = require('fs');
@@ -9,12 +11,116 @@ const path = require('path');
 const vm = require('vm');
 const https = require('https');
 const { rootDir, lessonsDir, lessonDir, wordAudioDir, catalogFile } = require('./paths');
+const { loadDataWindow } = require('./lesson-data');
 
 const DEFAULT_VOICE = '6WRlPmU1fqPwYbSxeP16';
 const DEFAULT_MODEL = 'eleven_v3';
 const SITE_WORD_PREFIX = '../_audio/words/';
 const LEGACY_SHARED_PREFIX = '/shared/audio-cache/words/';
 const CONCURRENCY = 3;
+
+/** Streaming SHA-256 hex digest of a file. INIT-002/SPEC-002 */
+function sha256File(filePath) {
+    const hash = crypto.createHash('sha256');
+    const fd = fs.openSync(filePath, 'r');
+    try {
+        const buf = Buffer.alloc(64 * 1024);
+        let bytesRead;
+        while ((bytesRead = fs.readSync(fd, buf, 0, buf.length, null)) > 0) {
+            hash.update(buf.subarray(0, bytesRead));
+        }
+    } finally {
+        fs.closeSync(fd);
+    }
+    return hash.digest('hex');
+}
+
+/** Ensure resolved path stays under base (both must be absolute). INIT-002/SPEC-002 */
+function assertPathUnder(resolved, base, label) {
+    const absResolved = path.resolve(resolved);
+    const absBase = path.resolve(base);
+    const rel = path.relative(absBase, absResolved);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        throw new Error((label || 'Path') + ' escaped containment base: ' + absBase);
+    }
+    return absResolved;
+}
+
+function isPathUnder(resolved, base) {
+    const rel = path.relative(path.resolve(base), path.resolve(resolved));
+    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+/** Paths must stay under LESSONS_DIR or the repo root (legacy shared/ + data/). INIT-002/SPEC-002 */
+function assertUnderLessonsOrRoot(resolved, label) {
+    const abs = path.resolve(resolved);
+    if (isPathUnder(abs, lessonsDir()) || isPathUnder(abs, rootDir())) return abs;
+    throw new Error((label || 'Path') + ' escaped LESSONS_DIR and repo root');
+}
+
+function sameFileBytes(a, b) {
+    if (!fs.existsSync(a) || !fs.existsSync(b)) return false;
+    const sa = fs.statSync(a);
+    const sb = fs.statSync(b);
+    if (sa.size !== sb.size) return false;
+    return sha256File(a) === sha256File(b);
+}
+
+/**
+ * Copy src → dest only if dest is missing; never overwrite dest.
+ * Unlink src only after dest exists with the same size and SHA-256.
+ * INIT-002/SPEC-002
+ */
+function copyThenUnlinkVerified(src, dest) {
+    assertUnderLessonsOrRoot(src, 'Source');
+    assertUnderLessonsOrRoot(dest, 'Destination');
+    if (!fs.existsSync(src)) return false;
+    if (!fs.existsSync(dest)) {
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.copyFileSync(src, dest);
+    }
+    if (!sameFileBytes(src, dest)) {
+        return false;
+    }
+    fs.unlinkSync(src);
+    return true;
+}
+
+/**
+ * Before overwriting a lesson clip, copy existing bytes to
+ * <lesson>/audio/_archive/<stem>.<first12sha>.mp3.
+ * Skip if that archive name already holds the same hash; never overwrite an archive.
+ * INIT-002/SPEC-002
+ */
+function archiveExistingClip(fullPath, lessonDirPath) {
+    if (!fs.existsSync(fullPath)) return null;
+    const absLesson = path.resolve(lessonDirPath);
+    assertPathUnder(fullPath, absLesson, 'Clip');
+    const hash = sha256File(fullPath);
+    const stem = path.basename(fullPath, path.extname(fullPath));
+    const archiveDir = path.join(absLesson, 'audio', '_archive');
+    assertPathUnder(archiveDir, absLesson, 'Archive dir');
+    const archiveName = stem + '.' + hash.slice(0, 12) + '.mp3';
+    const archivePath = path.join(archiveDir, archiveName);
+    assertPathUnder(archivePath, archiveDir, 'Archive file');
+
+    if (fs.existsSync(archivePath)) {
+        if (sha256File(archivePath) === hash) {
+            return { archived: false, skipped: true, archivePath, hash };
+        }
+        throw new Error('Archive file exists with different content: ' + archivePath);
+    }
+
+    fs.mkdirSync(archiveDir, { recursive: true });
+    fs.copyFileSync(fullPath, archivePath);
+    if (sha256File(archivePath) !== hash) {
+        throw new Error('Archive copy failed verification: ' + archivePath);
+    }
+    const relClip = path.relative(absLesson, fullPath).replace(/\\/g, '/');
+    const relArchive = path.relative(absLesson, archivePath).replace(/\\/g, '/');
+    console.log('Archived clip: ' + relClip + ' → ' + relArchive + ' (sha256 ' + hash.slice(0, 12) + '…)');
+    return { archived: true, skipped: false, archivePath, hash };
+}
 
 function loadEnvFile() {
     const file = path.join(rootDir(), '.env');
@@ -41,7 +147,8 @@ function apiKeyFromEnv() {
         || '';
 }
 
-function loadWindow(file) {
+/** Trusted repo code only (shared/player/utils.js). Never use for lesson or catalog data. */
+function loadTrustedWindow(file) {
     const code = fs.readFileSync(file, 'utf8');
     const sandbox = { window: {}, console, globalThis: {} };
     sandbox.globalThis = sandbox;
@@ -52,7 +159,7 @@ function loadWindow(file) {
 
 function loadUtils() {
     const file = path.join(rootDir(), 'shared', 'player', 'utils.js');
-    return loadWindow(file).HebrewUtils;
+    return loadTrustedWindow(file).HebrewUtils;
 }
 
 function writeWorksheet(file, worksheet) {
@@ -159,7 +266,9 @@ function createPool(limit) {
     };
 }
 
-/** One-time: move shared/audio-cache/words into LESSONS_DIR/_audio/words (no API calls). */
+/** One-time: move shared/audio-cache/words into LESSONS_DIR/_audio/words (no API calls).
+ * Deletes a source only after the destination exists with the same byte length and hash.
+ * INIT-002/SPEC-002 */
 function migrateLegacyWordCache() {
     const legacyDir = path.join(rootDir(), 'shared', 'audio-cache', 'words');
     const destDir = wordAudioDir();
@@ -172,17 +281,13 @@ function migrateLegacyWordCache() {
         if (!name.endsWith('.mp3')) return;
         const src = path.join(legacyDir, name);
         const dest = path.join(destDir, name);
-        if (!fs.existsSync(dest)) {
-            fs.renameSync(src, dest);
-            moved += 1;
-        } else if (fs.existsSync(src)) {
-            fs.unlinkSync(src);
+        // Verified copy then unlink — never rename/unlink without a matching dest. INIT-002/SPEC-002
+        if (copyThenUnlinkVerified(src, dest)) {
+            if (!fs.existsSync(src)) moved += 1;
         }
     });
-    if (fs.existsSync(legacyManifest) && !fs.existsSync(destManifest)) {
-        fs.renameSync(legacyManifest, destManifest);
-    } else if (fs.existsSync(legacyManifest)) {
-        fs.unlinkSync(legacyManifest);
+    if (fs.existsSync(legacyManifest)) {
+        copyThenUnlinkVerified(legacyManifest, destManifest);
     }
     // Leave .gitkeep / empty dir; rewrite lesson paths that still point at the legacy prefix.
     rewriteLegacyWordPathsInLessons();
@@ -288,7 +393,7 @@ function listLessonSlugs() {
             .map(e => e.name);
     }
     try {
-        const catalog = loadWindow(file).HEBREW_CATALOG;
+        const catalog = loadDataWindow(file).HEBREW_CATALOG;
         if (!Array.isArray(catalog)) return [];
         return catalog.filter(e => e && e.slug).map(e => e.slug);
     } catch (err) {
@@ -323,7 +428,7 @@ async function generateLessonAudio(slug, opts) {
     if (!fs.existsSync(dataFile)) {
         throw new Error('No worksheet at ' + path.relative(rootDir(), dataFile));
     }
-    const worksheet = loadWindow(dataFile).WORKSHEET;
+    const worksheet = loadDataWindow(dataFile).WORKSHEET;
     if (!worksheet || typeof worksheet !== 'object') {
         throw new Error('worksheet.js did not set window.WORKSHEET');
     }
@@ -377,11 +482,12 @@ async function generateLessonAudio(slug, opts) {
             const fromManifest = wordManifest.entries[entryKey]?.file;
             if (fromManifest && fromManifest !== fileName) {
                 const legacyFull = path.join(cacheDir, fromManifest);
-                if (fs.existsSync(legacyFull)) fs.renameSync(legacyFull, full);
+                // Verified copy+unlink instead of renameSync. INIT-002/SPEC-002
+                if (fs.existsSync(legacyFull)) copyThenUnlinkVerified(legacyFull, full);
             }
             if (!fs.existsSync(full) && fs.existsSync(cacheDir)) {
                 const legacy = fs.readdirSync(cacheDir).find(name => name.startsWith(key + '-') && name.endsWith('.mp3'));
-                if (legacy) fs.renameSync(path.join(cacheDir, legacy), full);
+                if (legacy) copyThenUnlinkVerified(path.join(cacheDir, legacy), full);
             }
         }
 
@@ -495,6 +601,10 @@ async function generateLessonAudio(slug, opts) {
         try {
             const audio = await tts(trimmed);
             fs.mkdirSync(path.dirname(full), { recursive: true });
+            // Archive prior lesson clip bytes before overwrite. INIT-002/SPEC-002
+            if (fs.existsSync(full)) {
+                archiveExistingClip(full, dir);
+            }
             fs.writeFileSync(full, audio);
             lessonManifest.clips[rel] = hash;
             lessonManifestDirty = true;
@@ -613,6 +723,10 @@ module.exports = {
     listLessonSlugs,
     cacheKey,
     textHash,
+    sha256File,
+    archiveExistingClip,
+    copyThenUnlinkVerified,
+    sameFileBytes,
     DEFAULT_VOICE,
     DEFAULT_MODEL,
     SITE_WORD_PREFIX,

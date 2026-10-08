@@ -36,4 +36,14 @@ describe('validator', () => {
         assert.ok(LEVEL_DEFAULTS.basic);
         assert.ok(LEVEL_DEFAULTS.advanced);
     });
+
+    it('offers type-it at intermediate and advanced, not basic', () => {
+        const { CATALOG, LEVEL_DEFAULTS } = require('../shared/activities/catalog');
+        const typeIt = CATALOG.find(item => item.type === 'type-it');
+        assert.ok(typeIt);
+        assert.deepEqual(typeIt.levels, ['intermediate', 'advanced']);
+        assert.equal(LEVEL_DEFAULTS.basic.typeAllowed, false);
+        assert.equal(LEVEL_DEFAULTS.intermediate.typeAllowed, true);
+        assert.equal(LEVEL_DEFAULTS.advanced.typeAllowed, true);
+    });
 });

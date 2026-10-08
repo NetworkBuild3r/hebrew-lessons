@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Headless Chrome smoke: listen-pick / story use clips, not TTS.
- * Requires the web server on PORT (default 8080).
+ * Sign-in first (INIT-002/SPEC-012). Ephemeral port via signed-in-server.
  *
  *   node test/chrome-audio-smoke.js
  */
@@ -11,8 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const PORT = process.env.PORT || '8080';
-const BASE = 'http://127.0.0.1:' + PORT;
+const harness = require('./helpers/signed-in-server');
 const CHROME = process.env.CHROME_PATH
     || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
@@ -26,15 +25,12 @@ function get(url) {
     });
 }
 
-async function waitForServer() {
-    for (let i = 0; i < 30; i += 1) {
-        try {
-            const res = await get(BASE + '/worksheets/my-morning/index.html');
-            if (res.status === 200) return;
-        } catch (err) { /* retry */ }
-        await new Promise(r => setTimeout(r, 500));
-    }
-    throw new Error('Server not reachable at ' + BASE);
+function cookieParts(cookieHeader) {
+    const eq = cookieHeader.indexOf('=');
+    return {
+        name: cookieHeader.slice(0, eq),
+        value: decodeURIComponent(cookieHeader.slice(eq + 1))
+    };
 }
 
 function cdp(wsUrl, method, params) {
@@ -65,10 +61,11 @@ function cdp(wsUrl, method, params) {
 
 async function main() {
     if (!fs.existsSync(CHROME)) throw new Error('Chrome not found at ' + CHROME);
-    await waitForServer();
+    const started = await harness.start({ lessons: 'real' });
+    const BASE = started.baseUrl;
 
     const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'heb-chrome-'));
-    const debugPort = 9229;
+    const debugPort = 9229 + Math.floor(Math.random() * 200);
     const url = BASE + '/worksheets/my-morning/index.html#step-3';
     const chrome = spawn(CHROME, [
         '--headless=new',
@@ -78,7 +75,7 @@ async function main() {
         '--user-data-dir=' + userData,
         '--remote-debugging-port=' + debugPort,
         '--remote-allow-origins=*',
-        url
+        'about:blank'
     ], { stdio: 'ignore' });
 
     try {
@@ -87,15 +84,24 @@ async function main() {
             try {
                 const list = await get('http://127.0.0.1:' + debugPort + '/json/list');
                 const pages = JSON.parse(list.body);
-                page = pages.find(p => p.type === 'page' && (p.url || '').includes('my-morning'));
+                page = pages.find(p => p.type === 'page' && p.webSocketDebuggerUrl);
                 if (page && page.webSocketDebuggerUrl) break;
             } catch (err) { /* retry */ }
             await new Promise(r => setTimeout(r, 250));
         }
         if (!page) throw new Error('No Chrome page for my-morning');
 
+        await cdp(page.webSocketDebuggerUrl, 'Network.enable', {});
+        const ck = cookieParts(harness.cookieFor('learner'));
+        await cdp(page.webSocketDebuggerUrl, 'Network.setCookie', {
+            name: ck.name,
+            value: ck.value,
+            url: BASE,
+            path: '/'
+        });
         await cdp(page.webSocketDebuggerUrl, 'Page.enable', {});
         await cdp(page.webSocketDebuggerUrl, 'Runtime.enable', {});
+        await cdp(page.webSocketDebuggerUrl, 'Page.navigate', { url: url });
         // Give the player scripts time to boot after first paint
         await new Promise(r => setTimeout(r, 1500));
 
@@ -167,6 +173,7 @@ async function main() {
     } finally {
         chrome.kill();
         try { fs.rmSync(userData, { recursive: true, force: true }); } catch (err) { /* ignore */ }
+        await harness.stop();
     }
 }
 

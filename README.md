@@ -1,8 +1,10 @@
 # Hebrew worksheets
 
-Practice pages for דרך עברית. Each lesson is a folder of content. One shared player walks an ordered path of activities (words, story, drills, speaking). Progress saves automatically in this browser.
+Practice pages for דרך עברית. Each lesson is a folder of content. One shared player walks an ordered path of activities (words, story, drills, speaking). Sign-in is required; progress saves on the server for the signed-in learner.
 
-Open `index.html` in a browser, or run the container and open `http://127.0.0.1:8080`. One person, this browser. There is no account.
+Run the container and open `http://127.0.0.1:8080` (or your deployed origin). Opening lesson files via `file://` no longer works. Operator setup (first admin, backups, lesson sharing): [docs/operations/accounts-and-admin.md](docs/operations/accounts-and-admin.md).
+
+**חזרה היום (Review today)** (`review/index.html`, linked from the home shelf) mixes due words from every lesson the learner can see for spaced recall.
 
 ## Lesson path
 
@@ -32,13 +34,22 @@ Do not edit a lesson's `index.html`. Behavior lives in `shared/player/` and `sha
 
 ## Run in a container
 
+Sign-in is required. Create the first admin before anyone can use the site (password from a TTY prompt or `--password-file`; never `--password=` on the command line):
+
+```powershell
+$env:DATA_DIR = "C:\path\to\app-data"
+npm run user -- create <name> --admin
+```
+
+Then:
+
 ```
 docker compose up --build
 ```
 
-Open `http://127.0.0.1:8080`. Agents speak to `http://127.0.0.1:8787/mcp`.
+Open `http://127.0.0.1:8080`. Agents speak to `http://127.0.0.1:8787/mcp`. Full account, backup, and audio steps: [docs/operations/accounts-and-admin.md](docs/operations/accounts-and-admin.md).
 
-For a deploy that keeps MCP-written lessons across image rebuilds, set `LESSONS_DIR` to a mounted volume. See [deploy/k8s-lessons-volume.md](deploy/k8s-lessons-volume.md). If a lesson exists only on a live pod, pull it first with `node scripts/rescue-lesson.js <slug> <mcpUrl>`.
+For a deploy that keeps MCP-written lessons across image rebuilds, set `LESSONS_DIR` to a mounted volume. See [deploy/k8s-lessons-volume.md](deploy/k8s-lessons-volume.md). Database volume and k8s env: [deploy/k8s-database.md](deploy/k8s-database.md). If a lesson exists only on a live pod, pull it first with `node scripts/rescue-lesson.js <slug> <mcpUrl>`.
 
 ## Agents
 

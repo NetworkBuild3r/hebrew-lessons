@@ -9,11 +9,13 @@ services:
     environment:
       HOST: 0.0.0.0
       HEBREW_ROOT: /app
+      DATA_DIR: /app/data
+      COOKIE_SECURE: "0"
+      PUBLIC_ORIGIN: http://localhost:8080
       # Optional: point LESSONS_DIR at a persistent volume so MCP writes survive image rebuilds.
       # LESSONS_DIR: /data/worksheets
-      # Ports are published on 127.0.0.1 only. Set MCP_AUTH_TOKEN to require a bearer token.
-      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-}
-      MCP_ALLOW_NO_AUTH: "1"
+      # Ports are published on 127.0.0.1 only. MCP_AUTH_TOKEN is required (no empty default).
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN}
       # Secrets come from env_file (.env locally). Do NOT set ELEVENLABS_API_KEY here —
       # an empty ${ELEVENLABS_API_KEY:-} would override env_file and wipe the key.
       # In k8s, inject ELEVENLABS_API_KEY from the vault Secret instead (see deploy/k8s-lessons-volume.md).

@@ -30,6 +30,21 @@
             .trim();
     };
 
+    /**
+     * Split Hebrew text into tokens on whitespace and punctuation.
+     * Maqaf (U+05BE) and geresh/gershayim (U+05F3/U+05F4) stay with the word.
+     * Authored-by-spec: INIT-001/SPEC-007
+     * @param {string} text
+     * @returns {string[]}
+     */
+    utils.tokenizeHebrew = function (text) {
+        const s = String(text || '').normalize('NFC').replace(/\s+/g, ' ').trim();
+        if (!s) return [];
+        // Letters + nikud/cantillation + maqaf + geresh + gershayim stay joined.
+        return s.split(/[^\u05D0-\u05EA\u0591-\u05C7\u05BE\u05F3\u05F4]+/u)
+            .filter(token => /[\u05D0-\u05EA]/.test(token));
+    };
+
     utils.hasVowels = function (str) {
         return /[\u0591-\u05C7]/.test(String(str || ''));
     };
@@ -119,6 +134,137 @@
         const body = ICONS[key] || ICONS.circle;
         const cls = className ? ' class="' + utils.escapeHtml(className) + '"' : '';
         return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + cls + '>' + body + '</svg>';
+    };
+
+    /**
+     * Round-status for a lesson progress blob (same 24-hour rule as the player).
+     * Provenance: INIT-002/SPEC-014
+     *
+     * @param {object|null|undefined} state lesson progress state
+     * @param {number|Date|string} [now]
+     * @param {number} [activityCount] total activities in the current round (optional)
+     * @returns {{
+     *   kind: 'new'|'in_progress'|'due'|'done',
+     *   rank: number,
+     *   tone: string,
+     *   round: number,
+     *   he: string,
+     *   en: string,
+     *   chipHe: string,
+     *   chipEn: string,
+     *   dueAt: number|null
+     * }}
+     */
+    utils.lessonStatus = function (state, now, activityCount) {
+        const DAY_MS = 24 * 60 * 60 * 1000;
+        let t = Date.now();
+        if (now instanceof Date) t = now.getTime();
+        else if (typeof now === 'number' && Number.isFinite(now)) t = now;
+        else if (typeof now === 'string' && now) {
+            const parsed = Date.parse(now);
+            if (Number.isFinite(parsed)) t = parsed;
+        }
+
+        function freshStatus() {
+            return {
+                kind: 'new',
+                rank: 1,
+                tone: 'fresh',
+                round: 1,
+                he: 'חדש — מתחילים סיבוב 1',
+                en: 'New — start round 1',
+                chipHe: 'חדש',
+                chipEn: 'new',
+                dueAt: null
+            };
+        }
+
+        if (!state || typeof state !== 'object') return freshStatus();
+
+        const round = Number.isInteger(state.round) && state.round > 0 ? state.round : 1;
+        const started = Number(state.roundStartedAt) || 0;
+        const stepIndex = Number.isInteger(state.stepIndex) ? state.stepIndex : null;
+        const completedSteps = state.completedSteps && typeof state.completedSteps === 'object'
+            ? state.completedSteps
+            : null;
+        const completedKeys = completedSteps
+            ? Object.keys(completedSteps).filter(function (k) { return !!completedSteps[k]; })
+            : [];
+        const hasActivityState = !!(state.activityState && typeof state.activityState === 'object'
+            && Object.keys(state.activityState).length > 0);
+        const hasProgress = started > 0
+            || (Number.isInteger(state.round) && state.round > 1)
+            || (Number.isInteger(state.completedRounds) && state.completedRounds > 0)
+            || completedKeys.length > 0
+            || (stepIndex != null && stepIndex >= 0)
+            || hasActivityState;
+
+        if (!hasProgress) return freshStatus();
+
+        function activitiesComplete() {
+            if (!completedSteps) return false;
+            let n = activityCount;
+            if (n == null && Number.isInteger(state.activityCount)) n = state.activityCount;
+            if (Number.isInteger(n) && n >= 0) {
+                if (n === 0) return true;
+                for (let i = 0; i < n; i += 1) {
+                    if (!completedSteps[String(i)]) return false;
+                }
+                return true;
+            }
+            // Without a known count: on a step ⇒ not complete; otherwise any
+            // completed step implies the round path was finished (smoke/fixtures).
+            if (stepIndex != null && stepIndex >= 0) return false;
+            return completedKeys.length > 0;
+        }
+
+        const complete = activitiesComplete();
+        if (started > 0 && t >= started + DAY_MS) {
+            return {
+                kind: 'due',
+                rank: 0,
+                tone: 'ready',
+                round: round,
+                he: 'סיבוב ' + round + ' · מוכן לסיבוב נוסף',
+                en: 'Round ' + round + ' · ready to practice again',
+                chipHe: 'סיבוב ' + round + ' מוכן',
+                chipEn: 'round ' + round + ' due',
+                dueAt: started + DAY_MS
+            };
+        }
+
+        if (complete && started > 0) {
+            const dueAt = started + DAY_MS;
+            const heWhen = new Date(dueAt).toLocaleString('he-IL', {
+                weekday: 'long', hour: '2-digit', minute: '2-digit'
+            });
+            const enWhen = new Date(dueAt).toLocaleString('en-US', {
+                weekday: 'long', hour: 'numeric', minute: '2-digit'
+            });
+            return {
+                kind: 'done',
+                rank: 2,
+                tone: 'done',
+                round: round,
+                he: 'סיבוב ' + round + ' · סיבוב נוסף מ' + heWhen,
+                en: 'Round ' + round + ' · next round ' + enWhen,
+                chipHe: 'מספיק לעכשיו',
+                chipEn: 'done for now',
+                dueAt: dueAt
+            };
+        }
+
+        return {
+            kind: 'in_progress',
+            rank: 2,
+            tone: '',
+            round: round,
+            he: 'סיבוב ' + round,
+            en: 'Round ' + round + ' · in progress',
+            chipHe: 'בתהליך',
+            chipEn: 'in progress',
+            dueAt: started > 0 ? started + DAY_MS : null
+        };
     };
 
     root.HebrewUtils = utils;

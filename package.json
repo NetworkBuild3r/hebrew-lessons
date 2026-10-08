@@ -8,8 +8,15 @@
     "web": "node server/web.js",
     "mcp": "node mcp/http.js",
     "test": "node --test test/*.test.js",
+    "db:migrate": "node scripts/db.js migrate",
+    "db:backup": "node scripts/db.js backup",
+    "db:check": "node scripts/db.js check",
+    "user": "node scripts/user.js",
     "audio": "node scripts/generate-audio.js",
-    "audio:dry": "node scripts/generate-audio.js --dry-run"
+    "audio:dry": "node scripts/generate-audio.js --dry-run",
+    "audio:inventory": "node scripts/audio-inventory.js inventory",
+    "audio:verify": "node scripts/audio-inventory.js verify",
+    "vocab-index": "node scripts/build-vocab-index.js"
   },
   "keywords": [],
   "author": "",

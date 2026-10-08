@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="google" content="notranslate">
     <meta name="theme-color" content="#1d4ed8">
-    <title>דרך עברית — דפי עבודה (Worksheets)</title>
+    <title>היום — Today · דרך עברית</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="icon.svg">
@@ -15,78 +15,34 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="shared/worksheet.css">
 </head>
-<body>
-    <header class="topbar">
+<body class="today-page">
+    <div id="app-shell"></div>
+    <header class="topbar page-heading">
         <div class="topbar-inner">
             <div>
                 <div class="kicker">דרך עברית • Light &amp; Easy Hebrew</div>
-                <h1>דפי עבודה <span class="en" dir="ltr">(Worksheets)</span></h1>
-                <p class="subtitle">השיעורים שפורסמו. פותחים דף ועושים אותו שוב. הכול נשמר אוטומטית בדפדפן הזה.</p>
-                <p class="subtitle en" dir="ltr">Published lessons. Open one and do it again. Progress saves automatically in this browser. A day between rounds helps memory.</p>
+                <h1>היום <span class="en" dir="ltr">(Today)</span></h1>
+                <p class="subtitle">מה כדאי לעשות עכשיו. <span class="en" dir="ltr">(What to do now.)</span></p>
             </div>
         </div>
     </header>
-    <main class="wrap">
-        <div class="home-list" id="lessons"></div>
+    <main class="wrap" id="today-app" aria-live="polite">
+        <div class="card today-state" data-today-state="loading">
+            <p>טוען… <span class="en" dir="ltr">(Loading…)</span></p>
+        </div>
     </main>
+    <!-- INIT-002/SPEC-014: catalog via script tag; progress via /api/ only -->
+    <script src="shared/player/utils.js"></script>
+    <script src="shared/player/review.js"></script>
+    <script src="shared/api.js"></script>
+    <script src="shared/player/sync.js"></script>
+    <script src="shared/app-shell.js"></script>
     <script src="worksheets/catalog.js"></script>
+    <script src="shared/today-page.js"></script>
     <script>
-        const DAY_MS = 24 * 60 * 60 * 1000;
-        const list = document.getElementById('lessons');
-
-        function esc(value) {
-            return String(value == null ? '' : value)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
+        if (window.HebrewShell) {
+            window.HebrewShell.mount(document.getElementById('app-shell'));
         }
-
-        function keyFor(slug) { return 'hebrew-worksheet:' + slug; }
-
-        function savedState(slug) {
-            try {
-                const raw = localStorage.getItem(keyFor(slug));
-                return raw ? JSON.parse(raw) : null;
-            } catch (err) {
-                return null;
-            }
-        }
-
-        function statusFor(slug) {
-            const state = savedState(slug);
-            if (!state) return { rank: 1, tone: 'fresh', he: 'חדש — מתחילים סיבוב 1', en: 'New — start round 1' };
-            const round = Number.isInteger(state.round) ? state.round : 1;
-            const started = Number(state.roundStartedAt) || 0;
-            if (!started) return { rank: 2, tone: '', he: 'סיבוב ' + round, en: 'Round ' + round };
-            const due = started + DAY_MS;
-            if (Date.now() >= due) return { rank: 0, tone: 'ready', he: 'סיבוב ' + round + ' · מוכן לסיבוב נוסף', en: 'Round ' + round + ' · ready to practice again' };
-            const he = new Date(due).toLocaleString('he-IL', { weekday: 'long', hour: '2-digit', minute: '2-digit' });
-            const en = new Date(due).toLocaleString('en-US', { weekday: 'long', hour: 'numeric', minute: '2-digit' });
-            return { rank: 2, tone: '', he: 'סיבוב ' + round + ' · סיבוב נוסף מ' + he, en: 'Round ' + round + ' · next round ' + en };
-        }
-
-        function render() {
-            const lessons = (window.HEBREW_CATALOG || [])
-                .map((lesson, index) => ({ lesson, index, status: statusFor(lesson.slug) }))
-                .sort((a, b) => a.status.rank - b.status.rank || a.index - b.index);
-
-            list.innerHTML = lessons.map(({ lesson, status }) => `
-                <article class="lesson-card">
-                    <a class="lesson-link" href="worksheets/${esc(lesson.slug)}/index.html">
-                        <span class="lesson-status ${status.tone}">${esc(status.he)} <span class="en" dir="ltr">(${esc(status.en)})</span></span>
-                        <p class="fine">${esc(lesson.subtitle || '')}${lesson.level ? ' · ' + esc(lesson.level) : ''}</p>
-                        <h2>${esc(lesson.title)}</h2>
-                        ${lesson.blurb ? `<p>${esc(lesson.blurb)}</p>` : ''}
-                    </a>
-                </article>
-            `).join('') || '<div class="card"><p>אין עדיין דפי עבודה בקטלוג. <span class="en" dir="ltr">(No lessons are published yet.)</span></p></div>';
-        }
-
-        if (navigator.storage && navigator.storage.persist) {
-            navigator.storage.persist().catch(function () {});
-        }
-        render();
     </script>
 </body>
 </html>

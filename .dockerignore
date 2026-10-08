@@ -3,3 +3,4 @@ node_modules
 sdd
 .env
 .env.*
+data/

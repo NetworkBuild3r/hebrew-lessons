@@ -1,7 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const vm = require('vm');
-
 const root = process.env.HEBREW_ROOT
     ? path.resolve(process.env.HEBREW_ROOT)
     : path.resolve(__dirname, '..', '..', '..', '..');
@@ -18,12 +16,12 @@ if (!slug || slug.startsWith('-')) {
 const errors = [];
 function fail(message) { errors.push(message); }
 
+// Lesson and catalog files are data. They are parsed as literals and never executed
+// (vm is not a security boundary; see server/lesson-data.js).
+const { loadDataWindow } = require(path.join(root, 'server', 'lesson-data.js'));
+
 function loadWindow(file) {
-    const code = fs.readFileSync(file, 'utf8');
-    const sandbox = { window: {}, console };
-    vm.createContext(sandbox);
-    vm.runInContext(code, sandbox, { filename: file });
-    return sandbox.window;
+    return loadDataWindow(file);
 }
 
 function stripNikud(value) {
@@ -32,6 +30,36 @@ function stripNikud(value) {
 
 function hasNikud(value) {
     return /[\u0591-\u05C7]/.test(String(value || ''));
+}
+
+/** NFC + whitespace collapse — ADR-0001 exactKey (INIT-001/SPEC-008). */
+function exactKey(text) {
+    return String(text || '').normalize('NFC').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Split Hebrew text into tokens (letters + nikud + maqaf).
+ * TODO(INIT-001/SPEC-007): consolidate with shared/player/utils.js tokenizeHebrew when it lands.
+ */
+function tokenizeHebrew(text) {
+    const s = exactKey(text);
+    if (!s) return [];
+    return s.split(/[^\u05D0-\u05EA\u0591-\u05C7\u05BE]+/u).filter(token => /[\u05D0-\u05EA]/.test(token));
+}
+
+function countEncounters(corpus, word) {
+    const target = stripNikud(word);
+    if (!target) return 0;
+    const plain = stripNikud(corpus);
+    let count = 0;
+    let idx = 0;
+    while (idx < plain.length) {
+        const found = plain.indexOf(target, idx);
+        if (found < 0) break;
+        count += 1;
+        idx = found + Math.max(target.length, 1);
+    }
+    return count;
 }
 
 const catalogModule = path.join(root, 'shared', 'activities', 'catalog.js');
@@ -178,20 +206,45 @@ function collectWords(part, into) {
     if (Array.isArray(part.direct)) collectWords(part.direct, into);
 }
 
+let storyText = '';
 if (paragraphs.length) {
-    const story = paragraphs.map(paragraph => (Array.isArray(paragraph) ? paragraph : [paragraph]).map(partText).join('')).join(' ');
-    if (!hasNikud(story)) warn('The story has no vowel points. Show vowels on a story with new words.');
+    storyText = paragraphs.map(paragraph => (Array.isArray(paragraph) ? paragraph : [paragraph]).map(partText).join('')).join(' ');
+    if (!hasNikud(storyText)) warn('The story has no vowel points. Show vowels on a story with new words.');
     const marked = [];
     paragraphs.forEach(paragraph => collectWords(paragraph, marked));
     const vocabForms = vocab.map(item => stripNikud(item.word));
     marked.forEach(word => {
         if (!vocabForms.includes(stripNikud(word))) warn('Story marks "' + word + '" but it is not a vocab word.');
     });
-    const plainStory = stripNikud(story);
+    const plainStory = stripNikud(storyText);
     vocab.forEach(item => {
         if (item?.word && !plainStory.includes(stripNikud(item.word))) warn('Vocab word "' + stripNikud(item.word) + '" never appears in the story.');
     });
     if (vocab.length && !marked.length) warn('No new words are marked in the story. Wrap them in { word: "..." }.');
+}
+
+// reading.glosses — ADR-0001 §8 / INIT-001/SPEC-008
+const glosses = ws?.reading?.glosses;
+if (glosses !== undefined && glosses !== null) {
+    if (typeof glosses !== 'object' || Array.isArray(glosses)) {
+        fail('reading.glosses must be an object map of story-token → English gloss (ADR-0001).');
+    } else {
+        const storyNfc = exactKey(storyText);
+        Object.keys(glosses).forEach(key => {
+            const value = glosses[key];
+            if (typeof key !== 'string' || typeof value !== 'string') {
+                fail('reading.glosses entries must be string → string.');
+                return;
+            }
+            const keyNfc = exactKey(key);
+            if (!keyNfc) return;
+            const inStory = storyNfc.includes(keyNfc)
+                || tokenizeHebrew(storyText).some(token => exactKey(token) === keyNfc || stripNikud(token) === stripNikud(keyNfc));
+            if (!inStory) {
+                warn('reading.glosses key "' + key + '" was not found in the story text.');
+            }
+        });
+    }
 }
 
 function audioCheck(value, label) {
@@ -265,18 +318,132 @@ others.forEach(entry => {
     }
 });
 
-let recycled = 0;
+// Earlier-corpus keys: prefer vocab-index, else lesson walk; word-audio catalogs keys seen before (INIT-001/SPEC-008).
+const earlierKeys = new Set();
+let usedVocabIndex = false;
+const vocabIndexFile = path.join(lessonsRoot, '_review', 'vocab-index.js');
+if (fs.existsSync(vocabIndexFile)) {
+    try {
+        const index = loadWindow(vocabIndexFile).HEBREW_VOCAB_INDEX;
+        if (Array.isArray(index)) {
+            usedVocabIndex = true;
+            index.forEach(entry => {
+                if (!entry) return;
+                const lessons = Array.isArray(entry.lessons) ? entry.lessons : [];
+                if (!lessons.some(lessonSlug => lessonSlug && lessonSlug !== slug)) return;
+                const key = stripNikud(entry.word || entry.key || '');
+                if (key) earlierKeys.add(key);
+            });
+        }
+    } catch (err) {
+        warn('Could not read vocab-index to check recycled words.');
+    }
+}
+if (!usedVocabIndex) {
+    earlier.forEach(words => {
+        words.forEach(word => earlierKeys.add(word));
+    });
+}
+const wordAudioFile = path.join(lessonsRoot, '_audio', 'words', 'catalog.js');
+const wordAudioKeys = new Set();
+if (fs.existsSync(wordAudioFile)) {
+    try {
+        const map = loadWindow(wordAudioFile).HEBREW_WORD_AUDIO;
+        if (map && typeof map === 'object') {
+            Object.keys(map).forEach(key => {
+                const stripped = stripNikud(key);
+                if (stripped) wordAudioKeys.add(stripped);
+            });
+        }
+    } catch (err) {
+        warn('Could not read word-audio catalog to check recycled words.');
+    }
+}
+
 vocab.forEach(item => {
     if (!item?.from) return;
-    recycled += 1;
     const words = earlier.get(item.from);
     if (!words) fail('Vocab "' + item.word + '" says from "' + item.from + '", which is not a published lesson with vocab.');
     else if (!words.has(stripNikud(item.word))) fail('Vocab "' + item.word + '" is not a word in lesson "' + item.from + '".');
 });
-const hasEarlierWords = [...earlier.values()].some(words => words.size > 0);
+
+const recycledWords = new Set();
+vocab.forEach(item => {
+    if (!item?.word) return;
+    const key = stripNikud(item.word);
+    const fromEarlier = item.from || earlierKeys.has(key);
+    // word-audio alone is not enough; require earlier-lesson evidence (index or from:)
+    if (fromEarlier) recycledWords.add(key);
+    else if (wordAudioKeys.has(key) && earlierKeys.has(key)) recycledWords.add(key);
+});
+const recycled = recycledWords.size;
+const hasEarlierWords = earlierKeys.size > 0 || [...earlier.values()].some(words => words.size > 0);
 if (vocab.length && hasEarlierWords) {
-    if (recycled < 3) warn('Bring back 3 to 5 words from earlier lessons (set from: "<slug>" on each). This lesson recycles ' + recycled + '. Use list_words.');
+    if (recycled < 3) {
+        warn('Bring back at least 3 words from earlier lessons (set from: "<slug>" or reuse catalog/index words). This lesson recycles ' + recycled + '. Use list_words.');
+    }
     if (recycled > 5) warn('This lesson recycles ' + recycled + ' earlier words. Keep it to 5 so new words stay the focus.');
+}
+
+// Encounters nudge: new (non-recycled) vocab should appear ≥2 times in story/sentences/activities.
+const encounterChunks = [];
+if (storyText) encounterChunks.push(storyText);
+sentences.forEach(sentence => {
+    if (sentence?.hebrew) encounterChunks.push(String(sentence.hebrew));
+    if (sentence?.text) encounterChunks.push(String(sentence.text));
+    if (sentence?.answer) encounterChunks.push(String(sentence.answer));
+    if (sentence?.english) encounterChunks.push(String(sentence.english));
+});
+(bank || []).forEach(word => encounterChunks.push(String(word)));
+vocab.forEach(item => {
+    if (item?.sentence) encounterChunks.push(String(item.sentence));
+});
+grammar.forEach(item => {
+    if (item?.pointed) encounterChunks.push(String(item.pointed));
+    (item?.choices || []).forEach(choice => encounterChunks.push(String(choice)));
+});
+friends.forEach(question => {
+    if (question?.pointed) encounterChunks.push(String(question.pointed));
+    if (question?.question) encounterChunks.push(String(question.question));
+});
+if (Array.isArray(activities)) {
+    activities.forEach(entry => {
+        if (!entry || typeof entry !== 'object') return;
+        Object.keys(entry).forEach(key => {
+            if (key === 'type') return;
+            const value = entry[key];
+            if (typeof value === 'string') encounterChunks.push(value);
+        });
+    });
+}
+const encounterCorpus = encounterChunks.join(' ');
+vocab.forEach(item => {
+    if (!item?.word) return;
+    const key = stripNikud(item.word);
+    if (recycledWords.has(key)) return;
+    const hits = countEncounters(encounterCorpus, item.word);
+    if (hits < 2) {
+        warn('New vocab "' + item.word + '" appears only ' + hits + ' time(s) across story/sentences/activities (want ≥2).');
+    }
+});
+
+// Coverage nudge: estimated share of story tokens known (this lesson + earlier) ≥90%.
+if (storyText && (vocab.length || earlierKeys.size)) {
+    const knownKeys = new Set(earlierKeys);
+    vocab.forEach(item => {
+        if (item?.word) knownKeys.add(stripNikud(item.word));
+    });
+    const tokens = tokenizeHebrew(storyText);
+    if (tokens.length) {
+        let known = 0;
+        tokens.forEach(token => {
+            if (knownKeys.has(stripNikud(token))) known += 1;
+        });
+        const pct = Math.round((known / tokens.length) * 100);
+        if (pct < 90) {
+            warn('Estimated known-word coverage of the story is ' + pct + '% (below 90%). Estimate only; prefixes are not stripped.');
+        }
+    }
 }
 
 if (activities) {

@@ -102,11 +102,10 @@ async function mcpCall(name, args) {
     const catalogFile = path.join(lessonsRoot, 'catalog.js');
     let list = [];
     if (fs.existsSync(catalogFile)) {
-        const vm = require('vm');
-        const sandbox = { window: {} };
-        vm.createContext(sandbox);
-        vm.runInContext(fs.readFileSync(catalogFile, 'utf8'), sandbox);
-        list = Array.isArray(sandbox.window.HEBREW_CATALOG) ? sandbox.window.HEBREW_CATALOG : [];
+        // Catalog is data: parsed as a literal, never executed (see server/lesson-data.js).
+        const { loadDataWindow } = require('../server/lesson-data');
+        const data = loadDataWindow(catalogFile);
+        list = Array.isArray(data.HEBREW_CATALOG) ? data.HEBREW_CATALOG : [];
     }
     const entry = catalog || {
         slug,

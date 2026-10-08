@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "clips": {
+    "audio/sentences/vocab-1.mp3": "2b81d4ae64410a4be5b6098328b498584227dfba8c83910b8a8912ff371b73dd",
+    "audio/sentences/vocab-2.mp3": "7931d8bbe71a2cfd0d3a7872d8c146c520e254c56eb46b1199a64c96d8489f34",
+    "audio/sentences/vocab-3.mp3": "61f46a3a3268a1354459093e6634ba4027ec3abfdda495964091fdb4d215794a",
+    "audio/sentences/vocab-4.mp3": "c45e197adb4d648a4a1f44d8ef31f2c5bce702bc845ef60157669ae092da2c21",
+    "audio/sentences/vocab-5.mp3": "d310f0021da03120005a693f16e41bcdedf66cee2c34dac63a554cc70fc9e61a",
+    "audio/sentences/vocab-6.mp3": "277770a7ebb74d3e5484fbc1dab5faec68c60618e715ff946992ed8fed5d412b",
+    "audio/sentences/vocab-7.mp3": "0100ac70088a8df43017d90a961c70cf5987df8ee5d2af6d4c423d93791b16d3",
+    "audio/sentences/vocab-8.mp3": "ab25180c1cf3e65e78e7790dce9b18bc213b0e07d6c3c3d637ed204672d3d317",
+    "audio/sentences/vocab-9.mp3": "670272b51e73b548ea3b939e5b4098973332efc48b1bde54ed0798519dd26028",
+    "audio/sentences/vocab-10.mp3": "7c3fb6331f02ce4acb6ad84eb23675f6cecf2a88743106fe183ca8f110755454",
+    "audio/sentences/vocab-11.mp3": "db5d46498a813f3925f60159e19097cbf213ef355f56399c3fa1cb2985fd416f",
+    "audio/sentences/vocab-12.mp3": "fe5dce7a997fec2889b027ee0d7577b33bb1ef2c44b185773f799cde39827212",
+    "audio/sentences/friend-1.mp3": "bcbee83da7ddfb6205510c16c8403137e57e189519950b561d198a28edc6037a",
+    "audio/sentences/friend-2.mp3": "9a49a177c0ccf82476cb54d53b822d42329636a779d0670637a2781a0772e753",
+    "audio/sentences/friend-3.mp3": "3f0dd415ff64c8c8ec55c2861e839989671cd02c3a662e9c0905b33debf3a795",
+    "audio/sentences/grammar-1.mp3": "7931d8bbe71a2cfd0d3a7872d8c146c520e254c56eb46b1199a64c96d8489f34",
+    "audio/sentences/grammar-2.mp3": "c45e197adb4d648a4a1f44d8ef31f2c5bce702bc845ef60157669ae092da2c21",
+    "audio/sentences/grammar-3.mp3": "d310f0021da03120005a693f16e41bcdedf66cee2c34dac63a554cc70fc9e61a",
+    "audio/sentences/question-1.mp3": "c667fd69867c1430b5e47f57b78035499733d6cba84de99edb13c1398537ec22",
+    "audio/sentences/question-2.mp3": "fd85c2e74a844f1721ac10c8729cf9e086a4de9ad3faf71c94290490e9bb49e8",
+    "audio/story/line-1.mp3": "aa0e3cb227655a9d2dcf0da42b74f627ae4d2c0b9193bf57b6dd94b6804cac3e",
+    "audio/story/line-2.mp3": "c82789537082a9446126e2f73ce8d76ac9d33be3d5eb685391f2115b2fc78b21",
+    "audio/story/line-3.mp3": "638a38e1ce4926782a71e65b90761ca9f21d972b09dcc51ec3db0a348f49ca50",
+    "audio/story/line-4.mp3": "ab76614df2f8429458fd2ef1daba51ad3e4ea044b03a39d9e549b0193f841371"
+  }
+}

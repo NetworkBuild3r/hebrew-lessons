@@ -33,6 +33,48 @@ function wordAudioDir() {
     return path.join(lessonsDir(), '_audio', 'words');
 }
 
+/**
+ * Directory roots that server/web.js actually serves (INIT-002/SPEC-003).
+ * Matches publicFile(): /shared/, /review/, /worksheets/ → lessonsDir().
+ */
+function servedRoots() {
+    return [
+        path.resolve(rootDir(), 'shared'),
+        path.resolve(rootDir(), 'review'),
+        path.resolve(lessonsDir())
+    ];
+}
+
+function isInsideOrEqual(candidate, root) {
+    const resolved = path.resolve(candidate);
+    const base = path.resolve(root);
+    if (resolved === base) return true;
+    const prefix = base.endsWith(path.sep) ? base : base + path.sep;
+    return resolved.startsWith(prefix);
+}
+
+function assertDataDirNotServed(dir) {
+    const resolved = path.resolve(dir);
+    for (const root of servedRoots()) {
+        if (isInsideOrEqual(resolved, root)) {
+            throw new Error(
+                'DATA_DIR must not equal or lie inside a served root '
+                + '(shared/, review/, or LESSONS_DIR). Got: ' + resolved
+                + ' (served: ' + root + ')'
+            );
+        }
+    }
+}
+
+/** Persistent data directory. Default <root>/data. Throws if under a served root. */
+function dataDir() {
+    const dir = process.env.DATA_DIR
+        ? path.resolve(process.env.DATA_DIR)
+        : path.join(rootDir(), 'data');
+    assertDataDirNotServed(dir);
+    return dir;
+}
+
 function copyMissing(src, dest) {
     if (!fs.existsSync(src)) return;
     const stat = fs.statSync(src);
@@ -67,5 +109,8 @@ module.exports = {
     catalogFile,
     lessonDir,
     wordAudioDir,
-    seedLessons
+    seedLessons,
+    servedRoots,
+    dataDir,
+    assertDataDirNotServed
 };

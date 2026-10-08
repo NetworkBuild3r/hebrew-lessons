@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" translate="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="google" content="notranslate">
+    <meta name="theme-color" content="#1d4ed8">
+    <title>ניהול — Admin · דרך עברית</title>
+    <link rel="manifest" href="../manifest.webmanifest">
+    <link rel="icon" href="../icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="../icon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../shared/worksheet.css">
+</head>
+<body class="admin-page">
+    <div id="app-shell"></div>
+    <header class="topbar page-heading">
+        <div class="topbar-inner">
+            <div>
+                <div class="kicker">דרך עברית • Light &amp; Easy Hebrew</div>
+                <h1>ניהול <span class="en" dir="ltr">(Admin)</span></h1>
+                <p class="subtitle">משתמשים, שיעורים והתקדמות. <span class="en" dir="ltr">(Users, lessons, and progress.)</span></p>
+            </div>
+        </div>
+    </header>
+    <main class="wrap" id="admin-app" aria-live="polite">
+        <div class="card" data-admin-boot="loading">
+            <p>טוען… <span class="en" dir="ltr">(Loading…)</span></p>
+        </div>
+    </main>
+    <!-- INIT-002/SPEC-016: catalog/vocab/audio via script tags only; admin data via /api/ -->
+    <script src="../shared/player/utils.js"></script>
+    <script src="../shared/player/speech.js"></script>
+    <script src="../shared/api.js"></script>
+    <script src="../shared/app-shell.js"></script>
+    <script src="../shared/progress-page.js"></script>
+    <script src="../shared/word-audio-catalog.js"></script>
+    <script src="../worksheets/_review/vocab-index.js"></script>
+    <script src="../shared/activities/catalog.js"></script>
+    <script src="../shared/admin/users.js"></script>
+    <script src="../shared/admin/lessons.js"></script>
+    <script src="../shared/admin/lesson-editor.js"></script>
+    <script src="../shared/admin/admin-shell.js"></script>
+    <script>
+        (function () {
+            if (window.HebrewShell) {
+                window.HebrewShell.mount(document.getElementById('app-shell'));
+            }
+            if (window.HebrewAdminShell) {
+                window.HebrewAdminShell.mount(document.getElementById('admin-app'));
+            }
+        })();
+    </script>
+</body>
+</html>

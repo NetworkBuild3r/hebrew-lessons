@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const vm = require('vm');
 const { spawnSync } = require('child_process');
 const { rootDir, lessonsDir, catalogFile, lessonDir } = require('../server/paths');
+const { loadDataWindow } = require('../server/lesson-data');
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -12,12 +12,9 @@ function assertSlug(slug) {
     }
 }
 
+// Lesson and catalog files are data: parsed as literals, never executed (see server/lesson-data.js).
 function loadWindow(file) {
-    const code = fs.readFileSync(file, 'utf8');
-    const sandbox = { window: {}, console };
-    vm.createContext(sandbox);
-    vm.runInContext(code, sandbox, { filename: file });
-    return sandbox.window;
+    return loadDataWindow(file);
 }
 
 function readCatalog() {

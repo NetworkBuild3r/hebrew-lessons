@@ -1,6 +1,7 @@
 (function (root) {
     const U = root.HebrewUtils;
     const Speech = root.HebrewSpeech;
+    const Review = root.HebrewReview;
     const PREFS_KEY = 'hebrew-worksheet-prefs';
     const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -118,6 +119,7 @@
             recallMode() { return round > 1; },
             U,
             Speech,
+            review: Review || null,
             bi: U.bi,
             esc: U.escapeHtml,
             sid: U.sid,
@@ -140,7 +142,32 @@
             document.title = String(ws.title || 'דף עבודה').replace(/<[^>]+>/g, '');
             app.innerHTML = shellHtml();
             bindShell();
+            const Sync = root.HebrewSync;
+            if (Sync && typeof Sync.setOnLessonConflict === 'function') {
+                Sync.setOnLessonConflict((prog) => {
+                    applyProgressState(prog && prog.state ? prog.state : {});
+                    if (stepIndex < 0) showPath();
+                    else showStep(stepIndex, true);
+                });
+            }
+            if (Sync && typeof Sync.setLessonSlug === 'function') {
+                Sync.setLessonSlug(ws.id);
+            }
+            ensureAppShellScripts().then(() => {
+                mountAppShell();
+                if (Sync && typeof Sync.paintStatus === 'function') Sync.paintStatus();
+            });
             restoreSaved();
+            if (Review && typeof Review.load === 'function') {
+                try { Review.load(); } catch (err) { /* fail-soft */ }
+            }
+            // Legacy wordMarks migration is skipped while HebrewSync is active (SPEC-013).
+            if (Review && typeof Review.migrateLessonMarks === 'function'
+                && !(Sync && typeof Sync.isActive === 'function' && Sync.isActive())) {
+                try {
+                    Review.migrateLessonMarks({ wordMarks: wordMarks }, ws);
+                } catch (err) { /* fail-soft: lesson play must continue */ }
+            }
             routeFromHash(false);
             window.addEventListener('hashchange', () => routeFromHash(true));
         });
@@ -221,11 +248,12 @@
         }
 
         function shellHtml() {
+            // Shared app shell mounts above .player-top; Home lives there (SPEC-012).
             return `
             <div class="player" id="player">
+                <div id="app-shell"></div>
                 <header class="player-top">
-                    <div class="player-top-inner">
-                        <a class="back-link" href="../../index.html">${U.icon('house')} ${U.bi('חזרה', 'Home')}</a>
+                    <div class="player-top-inner player-top-inner--no-home">
                         <div class="player-title">
                             <h1>${U.escapeHtml(ws.title || '')}</h1>
                             ${ws.subtitle ? `<p class="subtitle">${U.escapeHtml(ws.subtitle)}</p>` : ''}
@@ -244,6 +272,47 @@
                     <div class="action-bar-inner" id="action-bar-inner"></div>
                 </div>
             </div>`;
+        }
+
+        function sharedScriptBase() {
+            try {
+                const scripts = document.getElementsByTagName('script');
+                for (let i = 0; i < scripts.length; i += 1) {
+                    const src = scripts[i].src || '';
+                    if (/\/player\/core\.js(\?|$)/.test(src)) {
+                        return src.replace(/player\/core\.js(\?.*)?$/, '');
+                    }
+                }
+            } catch (err) { /* fall through */ }
+            try {
+                return new URL('../../shared/', window.location.href).href;
+            } catch (err2) {
+                return '../../shared/';
+            }
+        }
+
+        function loadSharedScript(src) {
+            return new Promise((resolve) => {
+                const el = document.createElement('script');
+                el.src = src;
+                el.onload = () => resolve(true);
+                el.onerror = () => resolve(false);
+                (document.head || document.documentElement).appendChild(el);
+            });
+        }
+
+        function ensureAppShellScripts() {
+            const base = sharedScriptBase();
+            const chain = Promise.resolve();
+            return chain
+                .then(() => (root.HebrewApi ? true : loadSharedScript(base + 'api.js')))
+                .then(() => (root.HebrewShell ? true : loadSharedScript(base + 'app-shell.js')));
+        }
+
+        function mountAppShell() {
+            const host = document.getElementById('app-shell');
+            if (!host || !root.HebrewShell || typeof root.HebrewShell.mount !== 'function') return;
+            root.HebrewShell.mount(host);
         }
 
         function bindShell() {
@@ -491,10 +560,57 @@
             };
         }
 
+        function syncActive() {
+            const Sync = root.HebrewSync;
+            return !!(Sync && typeof Sync.isActive === 'function' && Sync.isActive());
+        }
+
+        function applyProgressState(state) {
+            if (!state || typeof state !== 'object') return;
+            if (Number.isInteger(state.round) && state.round > 0) round = state.round;
+            if (Number.isInteger(state.completedRounds) && state.completedRounds >= 0) completedRounds = state.completedRounds;
+            if (Number.isFinite(state.roundStartedAt) && state.roundStartedAt > 0) roundStartedAt = state.roundStartedAt;
+            if (state.wordMarks && typeof state.wordMarks === 'object') wordMarks = Object.assign({}, state.wordMarks);
+            if (Array.isArray(state.missedLast)) missedLast = state.missedLast.map(U.sid);
+            if (typeof state.vowelsOn === 'boolean') vowelsOn = state.vowelsOn;
+            if (state.completedSteps && typeof state.completedSteps === 'object') completedSteps = Object.assign({}, state.completedSteps);
+            if (state.activityState && typeof state.activityState === 'object') activityState = Object.assign({}, state.activityState);
+            // Migrate legacy tab progress into activityState when missing.
+            if (!activityState.match && Array.isArray(state.matchedPairs)) {
+                activityState.match = { matchedPairs: state.matchedPairs };
+            }
+            if (!activityState.fill && Array.isArray(state.fillAnswers)) {
+                activityState.fill = { answers: state.fillAnswers };
+            }
+            if (!activityState.pattern && (state.grammarAnswers || state.indirectAnswers)) {
+                activityState.pattern = { answers: state.grammarAnswers || state.indirectAnswers };
+            }
+            if (!activityState.story && Array.isArray(state.readingAnswers)) {
+                activityState.story = { answers: state.readingAnswers };
+            }
+            if (!activityState['ask-friend'] && Array.isArray(state.friendAnswers)) {
+                activityState['ask-friend'] = { answers: state.friendAnswers };
+            }
+            if (!activityState.retell && typeof state.retellAnswer === 'string') {
+                activityState.retell = { answer: state.retellAnswer };
+            }
+            if (Number.isInteger(state.stepIndex)) stepIndex = state.stepIndex;
+        }
+
         function saveLocalProgress() {
             if (!roundStartedAt) roundStartedAt = Date.now();
+            const state = getProgressStateJSON();
+            if (syncActive() && root.HebrewSync && typeof root.HebrewSync.saveLessonProgress === 'function') {
+                // Do not read/write hebrew-worksheet:<slug> while signed in.
+                try {
+                    root.HebrewSync.saveLessonProgress(state);
+                } catch (err) {
+                    console.error(err);
+                }
+                return;
+            }
             try {
-                localStorage.setItem(storageKey, JSON.stringify(getProgressStateJSON()));
+                localStorage.setItem(storageKey, JSON.stringify(state));
             } catch (err) {
                 console.error(err);
             }
@@ -502,38 +618,16 @@
 
         function restoreSaved() {
             try {
+                if (syncActive() && root.HebrewSync && typeof root.HebrewSync.getLessonProgress === 'function') {
+                    const prog = root.HebrewSync.getLessonProgress();
+                    if (prog && prog.state) applyProgressState(prog.state);
+                    return;
+                }
                 const saved = localStorage.getItem(storageKey)
                     || (ws.legacyStorageKey ? localStorage.getItem(ws.legacyStorageKey) : '');
                 if (!saved) return;
                 const state = JSON.parse(saved);
-                if (Number.isInteger(state.round) && state.round > 0) round = state.round;
-                if (Number.isInteger(state.completedRounds) && state.completedRounds >= 0) completedRounds = state.completedRounds;
-                if (Number.isFinite(state.roundStartedAt) && state.roundStartedAt > 0) roundStartedAt = state.roundStartedAt;
-                if (state.wordMarks && typeof state.wordMarks === 'object') wordMarks = Object.assign({}, state.wordMarks);
-                if (Array.isArray(state.missedLast)) missedLast = state.missedLast.map(U.sid);
-                if (typeof state.vowelsOn === 'boolean') vowelsOn = state.vowelsOn;
-                if (state.completedSteps && typeof state.completedSteps === 'object') completedSteps = Object.assign({}, state.completedSteps);
-                if (state.activityState && typeof state.activityState === 'object') activityState = Object.assign({}, state.activityState);
-                // Migrate legacy tab progress into activityState when missing.
-                if (!activityState.match && Array.isArray(state.matchedPairs)) {
-                    activityState.match = { matchedPairs: state.matchedPairs };
-                }
-                if (!activityState.fill && Array.isArray(state.fillAnswers)) {
-                    activityState.fill = { answers: state.fillAnswers };
-                }
-                if (!activityState.pattern && (state.grammarAnswers || state.indirectAnswers)) {
-                    activityState.pattern = { answers: state.grammarAnswers || state.indirectAnswers };
-                }
-                if (!activityState.story && Array.isArray(state.readingAnswers)) {
-                    activityState.story = { answers: state.readingAnswers };
-                }
-                if (!activityState['ask-friend'] && Array.isArray(state.friendAnswers)) {
-                    activityState['ask-friend'] = { answers: state.friendAnswers };
-                }
-                if (!activityState.retell && typeof state.retellAnswer === 'string') {
-                    activityState.retell = { answer: state.retellAnswer };
-                }
-                if (Number.isInteger(state.stepIndex)) stepIndex = state.stepIndex;
+                applyProgressState(state);
             } catch (err) {
                 console.error(err);
             }
