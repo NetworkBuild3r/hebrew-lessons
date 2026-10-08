@@ -236,10 +236,14 @@ function writeWordCatalog(cacheDir, manifest) {
         + JSON.stringify(map, null, 4) + ');\n';
     fs.mkdirSync(cacheDir, { recursive: true });
     fs.writeFileSync(path.join(cacheDir, 'catalog.js'), body, 'utf8');
-    // Also ship under /shared so every deploy has the known-word index even before the volume seeds.
-    const sharedCopy = path.join(rootDir(), 'shared', 'word-audio-catalog.js');
-    fs.mkdirSync(path.dirname(sharedCopy), { recursive: true });
-    fs.writeFileSync(sharedCopy, body, 'utf8');
+    // Mirror into /shared only for the repo seed tree — never from temp LESSONS_DIR
+    // test dirs (those were wiping shared/word-audio-catalog.js to {}).
+    const seedWords = path.resolve(rootDir(), 'worksheets', '_audio', 'words');
+    if (path.resolve(cacheDir) === seedWords && Object.keys(map).length > 0) {
+        const sharedCopy = path.join(rootDir(), 'shared', 'word-audio-catalog.js');
+        fs.mkdirSync(path.dirname(sharedCopy), { recursive: true });
+        fs.writeFileSync(sharedCopy, body, 'utf8');
+    }
 }
 
 function rebuildWordCatalog() {
