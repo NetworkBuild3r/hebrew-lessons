@@ -4,6 +4,8 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:8787:8787"
+    env_file:
+      - .env
     environment:
       HOST: 0.0.0.0
       HEBREW_ROOT: /app
@@ -12,6 +14,10 @@ services:
       # Ports are published on 127.0.0.1 only. Set MCP_AUTH_TOKEN to require a bearer token.
       MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-}
       MCP_ALLOW_NO_AUTH: "1"
+      # Prefer ELEVENLABS_API_KEY; 11_labs_api_key from .env also works (read by server/audio.js).
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      ELEVENLABS_VOICE_ID: ${ELEVENLABS_VOICE_ID:-6WRlPmU1fqPwYbSxeP16}
+      ELEVENLABS_MODEL: ${ELEVENLABS_MODEL:-eleven_v3}
     volumes:
       - .:/app
       - /app/node_modules

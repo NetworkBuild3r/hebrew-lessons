@@ -37,6 +37,7 @@ function apiKeyFromEnv() {
     return process.env.ELEVENLABS_API_KEY
         || process.env['11_labs_api_key']
         || process.env.ELEVEN_LABS_API_KEY
+        || process.env.ELEVENLABS_KEY
         || '';
 }
 
@@ -212,8 +213,7 @@ function writeWordManifest(cacheDir, manifest) {
     writeWordCatalog(cacheDir, manifest);
 }
 
-/** Browser-loadable map of pointed Hebrew word → shared clip path. */
-function writeWordCatalog(cacheDir, manifest) {
+function buildWordAudioMap(cacheDir, manifest) {
     const map = {};
     const entries = (manifest && manifest.entries) || {};
     Object.keys(entries).forEach(key => {
@@ -226,18 +226,43 @@ function writeWordCatalog(cacheDir, manifest) {
         map[raw] = url;
         map[raw.normalize('NFC')] = url;
     });
-    const file = path.join(cacheDir, 'catalog.js');
+    return map;
+}
+
+/** Browser-loadable map of pointed Hebrew word → shared clip path. */
+function writeWordCatalog(cacheDir, manifest) {
+    const map = buildWordAudioMap(cacheDir, manifest);
+    const body = 'window.HEBREW_WORD_AUDIO = Object.assign({}, window.HEBREW_WORD_AUDIO || {}, '
+        + JSON.stringify(map, null, 4) + ');\n';
     fs.mkdirSync(cacheDir, { recursive: true });
-    fs.writeFileSync(
-        file,
-        'window.HEBREW_WORD_AUDIO = ' + JSON.stringify(map, null, 4) + ';\n',
-        'utf8'
-    );
+    fs.writeFileSync(path.join(cacheDir, 'catalog.js'), body, 'utf8');
+    // Also ship under /shared so every deploy has the known-word index even before the volume seeds.
+    const sharedCopy = path.join(rootDir(), 'shared', 'word-audio-catalog.js');
+    fs.mkdirSync(path.dirname(sharedCopy), { recursive: true });
+    fs.writeFileSync(sharedCopy, body, 'utf8');
 }
 
 function rebuildWordCatalog() {
     const cacheDir = wordAudioDir();
     writeWordCatalog(cacheDir, readWordManifest(cacheDir));
+}
+
+/** Find an existing word mp3 by exact (or NFC) text in the manifest, any voice/model. */
+function findWordFileByText(cacheDir, manifest, text) {
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return null;
+    const nfc = trimmed.normalize('NFC');
+    const entries = (manifest && manifest.entries) || {};
+    const keys = Object.keys(entries);
+    for (let i = 0; i < keys.length; i += 1) {
+        const entry = entries[keys[i]];
+        if (!entry || !entry.file) continue;
+        const t = String(entry.text || '').trim();
+        if (t !== trimmed && t.normalize('NFC') !== nfc) continue;
+        const full = path.join(cacheDir, entry.file);
+        if (fs.existsSync(full)) return { fileName: entry.file, full, text: t };
+    }
+    return null;
 }
 
 function readLessonManifest(lessonDirPath) {
@@ -340,9 +365,9 @@ async function generateLessonAudio(slug, opts) {
         if (!trimmed) return null;
         const key = cacheKey(voiceId, model, trimmed);
         const entryKey = voiceId + '|' + model + '|' + trimmed;
-        const fileName = key + '.mp3';
-        const full = path.join(cacheDir, fileName);
-        const sitePath = SITE_WORD_PREFIX + fileName;
+        let fileName = key + '.mp3';
+        let full = path.join(cacheDir, fileName);
+        let sitePath = SITE_WORD_PREFIX + fileName;
 
         if (!fs.existsSync(full)) {
             const fromManifest = wordManifest.entries[entryKey]?.file;
@@ -353,6 +378,16 @@ async function generateLessonAudio(slug, opts) {
             if (!fs.existsSync(full) && fs.existsSync(cacheDir)) {
                 const legacy = fs.readdirSync(cacheDir).find(name => name.startsWith(key + '-') && name.endsWith('.mp3'));
                 if (legacy) fs.renameSync(path.join(cacheDir, legacy), full);
+            }
+        }
+
+        // Reuse any existing clip for this exact Hebrew text (shared across lessons).
+        if (!fs.existsSync(full)) {
+            const found = findWordFileByText(cacheDir, wordManifest, trimmed);
+            if (found) {
+                fileName = found.fileName;
+                full = found.full;
+                sitePath = SITE_WORD_PREFIX + fileName;
             }
         }
 

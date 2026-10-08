@@ -25,11 +25,14 @@ spec:
           value: /data/worksheets
         - name: HEBREW_ROOT
           value: /app
+        # Vault/ExternalSecrets should sync into this Secret. Key name must match.
         - name: ELEVENLABS_API_KEY
           valueFrom:
             secretKeyRef:
               name: hebrew-secrets
               key: ELEVENLABS_API_KEY
+              # If the vault key is 11_labs_api_key, either rename in the Secret or add:
+              # optional: true
         - name: ELEVENLABS_VOICE_ID
           value: "6WRlPmU1fqPwYbSxeP16"
         - name: ELEVENLABS_MODEL

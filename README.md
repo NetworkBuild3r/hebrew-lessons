@@ -69,7 +69,7 @@ Answers live under `hebrew-worksheet:<id>` in this browser, including the curren
 
 Speech prefers ElevenLabs clips for every listen action (words, listen-pick, story read-aloud, pattern, build-sentence, speaking questions). Browser `speechSynthesis` is only the fallback when a clip is missing.
 
-`upsert_lesson` generates audio automatically. Agents should omit `audio` / `sentenceAudio` / `reading.audio` fields — the server fills them in. Word clips are permanent under `worksheets/_audio/words/` (or `LESSONS_DIR/_audio/words/` on the volume) and are reused across lessons, never overwritten. Lesson clips live under `<lesson>/audio/` and regenerate only when their text changes.
+`upsert_lesson` generates audio automatically. Agents should omit `audio` / `sentenceAudio` / `reading.audio` fields — the server fills them in. Word clips are permanent under `worksheets/_audio/words/` (or `LESSONS_DIR/_audio/words/` on the volume) and are reused across lessons by exact pointed text (never overwritten). The player also loads `shared/word-audio-catalog.js` so a word like קָם plays the same ElevenLabs clip in every lesson even if that lesson’s worksheet omitted `audio`. Lesson clips live under `<lesson>/audio/` and regenerate only when their text changes.
 
 API key lives in `.env` locally (`11_labs_api_key` or `ELEVENLABS_API_KEY`) and as a k8s secret in deploy — never commit it, never bake it into the image.
 

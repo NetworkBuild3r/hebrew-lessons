@@ -96,13 +96,27 @@ function registerLessonTools(server) {
                 head += '\nFix these warnings and call upsert_lesson again:\n- ' + saved.warnings.join('\n- ');
             }
             if (args.audio === false) {
-                return text(head + '\nAudio skipped (audio:false).');
+                // Still relink any words that already exist in the shared cache (no API calls).
+                try {
+                    const linked = await generateLessonAudio(saved.slug, { wordsOnly: true, linkOnly: true });
+                    return text(head + '\nAudio skipped (audio:false), but shared words were linked.\n' + formatAudioSummary(linked));
+                } catch (linkErr) {
+                    return text(head + '\nAudio skipped (audio:false).');
+                }
             }
             try {
+                // Always reuse existing word clips across lessons; create only missing ones.
                 const audioResult = await generateLessonAudio(saved.slug, {});
                 return text(head + '\n' + formatAudioSummary(audioResult));
             } catch (audioErr) {
-                return text(head + '\nAudio failed (lesson kept): ' + (audioErr && audioErr.message ? audioErr.message : String(audioErr)));
+                try {
+                    const linked = await generateLessonAudio(saved.slug, { wordsOnly: true, linkOnly: true });
+                    return text(head + '\nAudio failed (lesson kept); shared words linked where possible.\n'
+                        + formatAudioSummary(linked)
+                        + '\nAudio error: ' + (audioErr && audioErr.message ? audioErr.message : String(audioErr)));
+                } catch (linkErr) {
+                    return text(head + '\nAudio failed (lesson kept): ' + (audioErr && audioErr.message ? audioErr.message : String(audioErr)));
+                }
             }
         } catch (err) {
             return failure(err);

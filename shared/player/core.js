@@ -148,40 +148,52 @@
         function sharedWordUrl(text) {
             const map = root.HEBREW_WORD_AUDIO;
             if (!map || !text) return '';
-            const key = String(text).normalize('NFC').replace(/\s+/g, ' ').trim();
-            return map[key] || '';
+            const raw = String(text).replace(/\s+/g, ' ').trim();
+            return map[raw] || map[raw.normalize('NFC')] || '';
         }
 
         function applySharedWordAudio(worksheet) {
             (worksheet.vocab?.items || []).forEach(item => {
-                if (item && item.word && !item.audio) {
-                    const url = sharedWordUrl(item.word);
-                    if (url) item.audio = url;
-                }
+                if (!item || !item.word) return;
+                const url = sharedWordUrl(item.word);
+                if (!url) return;
+                // Always prefer the shared permanent clip for this word.
+                item.audio = url;
+            });
+        }
+
+        function loadScript(src) {
+            return new Promise(resolve => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = () => resolve(true);
+                script.onerror = () => resolve(false);
+                document.head.appendChild(script);
             });
         }
 
         function loadSharedWordAudio(done) {
-            if (root.HEBREW_WORD_AUDIO) {
-                done();
-                return;
-            }
             let finished = false;
             const finish = () => {
                 if (finished) return;
                 finished = true;
                 done();
             };
-            const script = document.createElement('script');
-            try {
-                script.src = new URL('../_audio/words/catalog.js', window.location.href).href;
-            } catch (err) {
-                script.src = '../_audio/words/catalog.js';
-            }
-            script.onload = finish;
-            script.onerror = finish;
-            document.head.appendChild(script);
-            root.setTimeout(finish, 1200);
+            const lessonCatalog = (() => {
+                try { return new URL('../_audio/words/catalog.js', window.location.href).href; }
+                catch (err) { return '../_audio/words/catalog.js'; }
+            })();
+            const sharedCatalog = (() => {
+                try { return new URL('../../shared/word-audio-catalog.js', window.location.href).href; }
+                catch (err) { return '../../shared/word-audio-catalog.js'; }
+            })();
+            // Image copy first, then volume catalog (may add newer words).
+            Promise.resolve()
+                .then(() => loadScript(sharedCatalog))
+                .then(() => loadScript(lessonCatalog))
+                .then(finish)
+                .catch(finish);
+            root.setTimeout(finish, 2000);
         }
 
         function buildClipEntries(worksheet) {
