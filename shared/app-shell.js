@@ -100,6 +100,9 @@
             + '<p class="hebrew-shell-pw-lead">המנהל איפס את הסיסמה. בחרו סיסמה חדשה לפני שממשיכים.'
             + ' <span class="en" dir="ltr">(An admin reset your password. Choose a new one before continuing.)</span></p>'
             + '<form id="hebrew-shell-pw-form" class="hebrew-shell-pw-form" autocomplete="on">'
+            // Hidden username so password managers file the new password under the right account.
+            + '<input type="text" name="username" autocomplete="username" hidden readonly tabindex="-1"'
+            + ' aria-hidden="true" value="' + escapeHtml((me && me.username) || '') + '">'
             + '<label class="hebrew-shell-field">סיסמה נוכחית <span class="en" dir="ltr">(Current password)</span>'
             + '<input type="password" name="current_password" id="hebrew-shell-pw-current"'
             + ' autocomplete="current-password" required minlength="1"></label>'

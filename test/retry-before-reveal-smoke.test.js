@@ -11,13 +11,20 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+const harness = require('./helpers/signed-in-server');
+
 const root = path.resolve(__dirname, '..');
 const CHROME = process.env.CHROME_PATH
     || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const PORT = String(18080 + Math.floor(Math.random() * 1000));
-const BASE = 'http://127.0.0.1:' + PORT;
+// Sign-in is required for every page (INIT-002), so this runs against the signed-in
+// test server on an ephemeral port and sets the learner's session cookie in Chrome.
+let BASE = '';
 
-let serverProc = null;
+function cookieParts(cookieHeader) {
+    const eq = cookieHeader.indexOf('=');
+    return { name: cookieHeader.slice(0, eq), value: decodeURIComponent(cookieHeader.slice(eq + 1)) };
+}
+
 let chromeProc = null;
 let userData = null;
 let pageWs = null;
@@ -74,17 +81,6 @@ async function evaluate(expression) {
     return result.result && result.result.value;
 }
 
-async function waitForServer() {
-    for (let i = 0; i < 40; i += 1) {
-        try {
-            const res = await get(BASE + '/worksheets/my-morning/index.html');
-            if (res.status === 200) return;
-        } catch (err) { /* retry */ }
-        await new Promise(r => setTimeout(r, 250));
-    }
-    throw new Error('Server not reachable at ' + BASE);
-}
-
 async function openLesson(slug, stepHash) {
     const url = BASE + '/worksheets/' + slug + '/index.html' + (stepHash || '');
     await cdp(pageWs, 'Page.navigate', { url });
@@ -116,12 +112,8 @@ describe('retry-before-reveal smoke (SPEC-006)', () => {
         if (!fs.existsSync(CHROME)) {
             throw new Error('Chrome not found at ' + CHROME + ' (set CHROME_PATH)');
         }
-        serverProc = spawn(process.execPath, [path.join(root, 'server', 'web.js')], {
-            cwd: root,
-            env: Object.assign({}, process.env, { PORT }),
-            stdio: 'ignore'
-        });
-        await waitForServer();
+        const started = await harness.start({ lessons: 'real' });
+        BASE = started.baseUrl;
 
         userData = fs.mkdtempSync(path.join(os.tmpdir(), 'heb-retry-'));
         const debugPort = 9300 + Math.floor(Math.random() * 200);
@@ -148,13 +140,15 @@ describe('retry-before-reveal smoke (SPEC-006)', () => {
         }
         if (!page) throw new Error('No Chrome page');
         pageWs = page.webSocketDebuggerUrl;
+        const ck = cookieParts(harness.cookieFor('learner'));
+        await cdp(pageWs, 'Network.setCookie', { name: ck.name, value: ck.value, url: BASE, path: '/' });
         await cdp(pageWs, 'Page.enable', {});
         await cdp(pageWs, 'Runtime.enable', {});
     });
 
-    after(() => {
+    after(async () => {
         if (chromeProc) try { chromeProc.kill(); } catch (err) { /* ignore */ }
-        if (serverProc) try { serverProc.kill(); } catch (err) { /* ignore */ }
+        try { await harness.stop(); } catch (err) { /* ignore */ }
         if (userData) {
             try { fs.rmSync(userData, { recursive: true, force: true }); } catch (err) { /* ignore */ }
         }

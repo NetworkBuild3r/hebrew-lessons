@@ -159,7 +159,8 @@ If `MCP_AUTH_TOKEN` is unset or empty, those assignment tools refuse. A lesson c
 - **One replica** — SQLite (and in-memory sign-in throttling) do not support multiple writers. Keep `replicas: 1` and `strategy: Recreate` on the cluster.
 - **`file://` no longer works** — open the site through the HTTP(S) origin (local compose or the public host).
 - **Hash-named word mp3s** under the shared words cache require sign-in, but are **not** filtered per lesson.
-- **No Content-Security-Policy** yet.
+- **No Content-Security-Policy** from this app. A reverse proxy in front of the site may add one. Pages load no stylesheet, script, or font from another host (Rubik is served from `shared/fonts/`, icons are inline SVG), so a strict policy such as `style-src 'self' 'unsafe-inline'` works. Keep it that way: `test/self-hosted-assets.test.js` fails if a page links an outside host, including the new-lesson template.
+- **Public paths** are only `/login/`, the web-app manifest and icon (`/manifest.webmanifest`, `/icon.svg`), and the font files under `/shared/fonts/`. Everything else needs a sign-in.
 
 ## OAuth later
 

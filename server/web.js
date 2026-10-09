@@ -86,6 +86,22 @@ function isPublicLoginPath(rel) {
 }
 
 /**
+ * The web-app manifest and its icon are the same for everyone and hold no user data.
+ * Browsers fetch the manifest without cookies, so gating it only produced a 401 on every page.
+ */
+const PUBLIC_STATIC = new Set(['/manifest.webmanifest', '/icon.svg']);
+
+/**
+ * Self-hosted Rubik font files. Same for everyone, and the sign-in page needs them
+ * before anyone is signed in (it cannot load the rest of /shared/).
+ */
+const PUBLIC_FONT_PREFIX = '/shared/fonts/';
+
+function isPublicStatic(rel) {
+    return PUBLIC_STATIC.has(rel) || rel.startsWith(PUBLIC_FONT_PREFIX);
+}
+
+/**
  * Map a decoded relative URL path to an absolute filesystem path, or null.
  * @param {string} rel
  * @returns {string|null}
@@ -309,6 +325,17 @@ async function handleStatic(req, res) {
             return;
         }
         sendPlain(res, 404, 'Not found');
+        return;
+    }
+
+    // Public static assets (manifest, icon, fonts) — no session required.
+    if (isPublicStatic(rel)) {
+        const filePath = resolveFile(rel);
+        if (!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+            sendPlain(res, 404, 'Not found');
+            return;
+        }
+        sendFile(res, method, filePath);
         return;
     }
 

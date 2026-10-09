@@ -277,6 +277,8 @@ Static HTML under `/admin/*` requires an admin session (403 for `user`, redirect
 | `/login/` | Serves `/login/index.html` |
 | `/login/index.html` | Sign-in page |
 | `/login/*` assets referenced by that page only (same directory tree; no shared lesson/audio catalogs) | Scripts, CSS, and images owned by the login page |
+| `/manifest.webmanifest`, `/icon.svg` | Added 2026-10-08. Identical for everyone, no user data. Browsers fetch the manifest without cookies, so gating it returned a 401 on every page. |
+| `/shared/fonts/*` | Added 2026-10-08. Self-hosted Rubik (SIL OFL) replacing the Google Fonts link. Identical for everyone, and the sign-in page needs it before anyone is signed in. The rest of `/shared/` stays gated. |
 
 **Gated responses:**
 

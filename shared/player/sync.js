@@ -33,6 +33,10 @@
     var flushTimerId = null;
     /** @type {number|null} */
     var lessonTimerId = null;
+    /** @type {Promise<object|null>|null} */
+    var putInFlight = null;
+    /** @type {boolean} */
+    var putAgain = false;
     /** @type {function(object): void|null} */
     var onLessonConflict = null;
     /** @type {boolean} */
@@ -324,21 +328,41 @@
         }, LESSON_DEBOUNCE_MS);
     }
 
+    /**
+     * One lesson save at a time. A second PUT sent before the first answers would carry the
+     * old revision, and the server would reject it as a conflict (409). On a slower link that
+     * threw away the learner's newest answers and redrew the page. While one is in flight,
+     * later saves are folded into a single follow-up that uses the revision the server returned.
+     */
     function putLessonNow() {
         if (!isActive() || !lessonSlug) return Promise.resolve(null);
         var Api = api();
         if (!Api || typeof Api.request !== 'function') return Promise.resolve(null);
-        var payload = { state: lessonState, rev: lessonRev };
-        return Api.request('/api/lessons/' + encodeURIComponent(lessonSlug) + '/progress', {
+        if (putInFlight) {
+            putAgain = true;
+            return putInFlight;
+        }
+        var sentState = lessonState;
+        var payload = { state: sentState, rev: lessonRev };
+        putInFlight = Api.request('/api/lessons/' + encodeURIComponent(lessonSlug) + '/progress', {
             method: 'PUT',
             body: payload,
             redirectOn401: false
         }).then(function (res) {
             if (res && res.ok && res.data) {
-                adoptLessonProgress(res.data.state, res.data.rev);
+                var newer = putAgain || lessonTimerId != null || lessonState !== sentState;
+                if (newer) {
+                    // Keep the newer local answers; only take the new revision.
+                    var nextRev = Number(res.data.rev);
+                    if (Number.isFinite(nextRev)) lessonRev = nextRev;
+                } else {
+                    adoptLessonProgress(res.data.state, res.data.rev);
+                }
                 return res.data;
             }
             if (res && res.status === 409 && res.data) {
+                // A real conflict (another tab or device saved first): the server copy wins.
+                putAgain = false;
                 adoptLessonProgress(res.data.state, res.data.rev);
                 if (typeof onLessonConflict === 'function') {
                     try { onLessonConflict(getLessonProgress()); } catch (err) { /* fail-soft */ }
@@ -348,7 +372,15 @@
             return null;
         }).catch(function () {
             return null;
+        }).then(function (out) {
+            putInFlight = null;
+            if (putAgain) {
+                putAgain = false;
+                putLessonNow();
+            }
+            return out;
         });
+        return putInFlight;
     }
 
     function bindLifecycle() {
@@ -452,6 +484,8 @@
     function _resetForTests() {
         clearFlushTimer();
         clearLessonTimer();
+        putInFlight = null;
+        putAgain = false;
         user = null;
         reviewState = null;
         lessonSlug = null;

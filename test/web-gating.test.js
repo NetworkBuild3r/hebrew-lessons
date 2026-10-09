@@ -85,14 +85,31 @@ describe('web gating (ac-1, ac-2, ac-6, ac-7, ac-8)', () => {
             '/worksheets/catalog.js',
             '/worksheets/_review/vocab-index.js',
             '/worksheets/_audio/words/catalog.js',
-            '/shared/word-audio-catalog.js',
-            '/manifest.webmanifest',
-            '/icon.svg'
+            '/shared/word-audio-catalog.js'
         ];
         for (const p of nonHtml) {
             const res = await req(p);
             assert.equal(res.status, 401, 'non-HTML ' + p);
         }
+
+        // The manifest and icon are identical for everyone and browsers fetch the manifest
+        // without cookies, so they are public. Nothing else under the root is.
+        for (const p of ['/manifest.webmanifest', '/icon.svg']) {
+            const res = await req(p);
+            assert.equal(res.status, 200, 'public static ' + p);
+        }
+        // Self-hosted Rubik is public too (the sign-in page needs it). The rest of /shared/ is not.
+        const font = await req('/shared/fonts/rubik-hebrew.woff2');
+        assert.equal(font.status, 200, 'public font');
+        assert.match(font.headers.get('content-type') || '', /font\/woff2/);
+        for (const p of ['/shared/worksheet.css', '/shared/player/core.js', '/shared/fonts/../player/core.js',
+            '/shared/fonts/%2e%2e/player/core.js']) {
+            const res = await req(p);
+            assert.ok(res.status === 401 || res.status === 404, 'still gated: ' + p + ' → ' + res.status);
+            assert.notEqual(res.status, 200, 'not served: ' + p);
+        }
+        const manifest = await (await req('/manifest.webmanifest')).text();
+        assert.ok(!/learner|token|password|session/i.test(manifest), 'manifest carries no user data');
 
         const login = await req('/login/', { headers: { Accept: 'text/html' } });
         assert.equal(login.status, 200);

@@ -19,6 +19,7 @@
             const questions = ctx.ws.reading.questions || [];
             const answers = Object.fromEntries((state.answers || []).map(a => [String(a.id), a.val]));
             const follow = followAlongPref();
+            const questionsOpen = questionsOpenPref();
             const coverage = estimateCoverage(ctx);
             return `
                 <div class="stack">
@@ -38,7 +39,11 @@
                         ${paragraphs.map(p => `<p data-vowels-html="1">${U.renderParts(Array.isArray(p) ? p : [p])}</p>`).join('')}
                     </div>
                     ${questions.length ? `
-                        <div class="card stack">
+                        <div class="story-questions-toggle">
+                            <button type="button" class="btn btn-ghost" data-action="toggle-questions" id="story-questions-btn" aria-expanded="${questionsOpen ? 'true' : 'false'}">${questionsButtonLabel(ctx, questionsOpen)}</button>
+                            <p class="fine${questionsOpen ? ' hidden' : ''}" id="story-questions-note">${ctx.bi('אפשר לחזור לשאלות כשתכירו יותר מילים.', 'Come back to these when you know more words.')}</p>
+                        </div>
+                        <div class="card stack${questionsOpen ? '' : ' hidden'}" id="story-questions-card">
                             <h3>${ctx.bi('שאלות הבנה', 'Comprehension Questions')}</h3>
                             ${questions.map(q => `
                                 <div class="q-block">
@@ -99,6 +104,20 @@
                 action.textContent = ctx.vowelsOn ? 'הסתר ניקוד (Hide vowels)' : 'הצג ניקוד (Show vowels)';
                 ctx.save();
             }
+            if (action.dataset.action === 'toggle-questions') {
+                dismissGloss(root);
+                const card = root.querySelector('#story-questions-card');
+                if (!card) return;
+                // Hidden, not removed: typed answers stay in the page and in collect().
+                const open = card.classList.contains('hidden');
+                card.classList.toggle('hidden', !open);
+                action.setAttribute('aria-expanded', open ? 'true' : 'false');
+                action.innerHTML = questionsButtonLabel(ctx, open);
+                const note = root.querySelector('#story-questions-note');
+                if (note) note.classList.toggle('hidden', open);
+                setQuestionsOpenPref(open);
+                return;
+            }
             if (action.dataset.action === 'story-play') {
                 dismissGloss(root);
                 const lines = storyLines(ctx);
@@ -140,6 +159,30 @@
         } catch (err) {
             return true;
         }
+    }
+
+    /** Comprehension questions start collapsed. The learner's choice is kept in the prefs key. */
+    function questionsOpenPref() {
+        try {
+            const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+            return prefs.questionsOpen === true;
+        } catch (err) {
+            return false;
+        }
+    }
+
+    function setQuestionsOpenPref(open) {
+        try {
+            const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+            prefs.questionsOpen = !!open;
+            localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+        } catch (err) { /* ignore */ }
+    }
+
+    function questionsButtonLabel(ctx, open) {
+        return open
+            ? ctx.bi('הסתר שאלות הבנה', 'Hide comprehension questions')
+            : ctx.bi('הצג שאלות הבנה', 'Show comprehension questions');
     }
 
     function storyLines(ctx) {

@@ -351,6 +351,53 @@ describe('HebrewSync (SPEC-013)', () => {
         assert.equal(conflictCalls, 1);
     });
 
+    it('overlapping lesson saves go one at a time and reuse the returned revision (no false 409)', async () => {
+        const puts = [];
+        const releases = [];
+        let conflictCalls = 0;
+        const api = fakeApi({
+            request(path, opts) {
+                if (!opts || opts.method !== 'PUT') return { ok: true, status: 200, data: {} };
+                const body = JSON.parse(JSON.stringify(opts.body));
+                puts.push(body);
+                // Same rule as the server: a stale revision is a conflict.
+                const expected = puts.length - 1;
+                return new Promise((resolve) => {
+                    releases.push(() => resolve(body.rev === expected
+                        ? { ok: true, status: 200, data: { state: body.state, rev: body.rev + 1 } }
+                        : { ok: false, status: 409, data: { state: { round: 1 }, rev: expected } }));
+                });
+            }
+        });
+        env = loadModules(storage, { HebrewApi: api, WORKSHEET: { id: 'public-lesson' } });
+        const { Sync } = env;
+        Sync.setOnLessonConflict(() => { conflictCalls += 1; });
+        await Sync.init({ lessonSlug: 'public-lesson' });
+
+        // First save is sent and is still waiting for the server.
+        Sync.saveLessonProgress({ lesson: 'public-lesson', round: 1, answers: ['a'] });
+        env.advance(Sync._test.LESSON_DEBOUNCE_MS);
+        assert.equal(puts.length, 1);
+
+        // A second save fires while the first is in flight. It must wait, not go out with rev 0.
+        Sync.saveLessonProgress({ lesson: 'public-lesson', round: 1, answers: ['a', 'b'] });
+        env.advance(Sync._test.LESSON_DEBOUNCE_MS);
+        await Promise.resolve();
+        assert.equal(puts.length, 1, 'no second request while the first is in flight');
+
+        releases[0]();
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(puts.length, 2, 'the newer answers are sent after the first returns');
+        assert.equal(puts[1].rev, 1, 'follow-up carries the revision the server returned');
+        assert.deepEqual(puts[1].state.answers, ['a', 'b']);
+
+        releases[1]();
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(conflictCalls, 0, 'no conflict, so the page is not redrawn');
+        assert.equal(Sync.getLessonProgress().rev, 2);
+        assert.deepEqual(Sync.getLessonProgress().state.answers, ['a', 'b']);
+    });
+
     it('queue cap 1000 drops oldest and console.warns once per drop', async () => {
         const warnings = [];
         const origWarn = console.warn;

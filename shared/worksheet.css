@@ -1376,3 +1376,97 @@ textarea {
     font-weight: 600;
 }
 /* === end INIT-002/SPEC-017 lesson editor === */
+
+/* === 2026-10-08 learner-support: match pairs, type-it hints, story questions toggle === */
+.word-match-card.wrong {
+    border-color: #e11d48;
+    background: #fff1f2;
+}
+.match-pairs { margin-top: 0.25rem; }
+.match-pair-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+    direction: ltr;
+}
+.match-pair {
+    display: grid;
+    grid-template-columns: 1.75rem 1fr 1fr auto;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.55rem 0.7rem;
+    border: 2px solid var(--pair-edge, #94a3b8);
+    border-radius: 12px;
+    background: var(--pair-fill, #f8fafc);
+    color: #1e293b;
+    font-weight: 700;
+}
+.match-pair .pair-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 999px;
+    background: var(--pair-edge, #64748b);
+    color: #fff;
+    font-size: 0.8rem;
+}
+.match-pair .pair-en { text-align: left; }
+.match-pair .pair-he { text-align: right; font-size: 1.15rem; }
+.match-pair.pair-c0 { --pair-edge: #2563eb; --pair-fill: #eff6ff; }
+.match-pair.pair-c1 { --pair-edge: #059669; --pair-fill: #ecfdf5; }
+.match-pair.pair-c2 { --pair-edge: #d97706; --pair-fill: #fffbeb; }
+.match-pair.pair-c3 { --pair-edge: #e11d48; --pair-fill: #fff1f2; }
+.match-pair.pair-c4 { --pair-edge: #7c3aed; --pair-fill: #f5f3ff; }
+.match-pair.pair-c5 { --pair-edge: #0891b2; --pair-fill: #ecfeff; }
+.match-pair.pair-c6 { --pair-edge: #ea580c; --pair-fill: #fff7ed; }
+.match-pair.pair-c7 { --pair-edge: #db2777; --pair-fill: #fdf2f8; }
+
+.type-hint {
+    font-size: 1.3rem;
+    letter-spacing: 0.08em;
+}
+.type-answer {
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+#type-feedback.match-feedback {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+#type-feedback.hidden { display: none !important; }
+
+.story-questions-toggle { display: grid; gap: 0.25rem; justify-items: start; }
+/* === end 2026-10-08 learner-support === */
+
+/* === self-hosted Rubik (SIL OFL, see fonts/OFL.txt). Replaces the Google Fonts link. === */
+@font-face {
+    font-family: "Rubik";
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url("fonts/rubik-hebrew.woff2") format("woff2");
+    unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+@font-face {
+    font-family: "Rubik";
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url("fonts/rubik-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: "Rubik";
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url("fonts/rubik-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* === end self-hosted Rubik === */
