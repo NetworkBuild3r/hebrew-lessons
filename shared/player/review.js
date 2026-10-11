@@ -418,6 +418,7 @@
     var Review = {
         STORAGE_KEY: STORAGE_KEY,
         LADDER_DAYS: LADDER_DAYS,
+        DEFAULT_CAPS: DEFAULT_CAPS,
         keyFor: keyFor,
         nextState: nextState,
         isDue: isDue,

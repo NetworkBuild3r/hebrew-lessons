@@ -115,6 +115,19 @@ async function waitUrl(session, pred, ms) {
     throw new Error('URL wait timed out; last=' + last);
 }
 
+/** After a full page load into the app shell, wait until the first screen has mounted. */
+async function waitAppReady(session, ms) {
+    const deadline = Date.now() + (ms || 15000);
+    while (Date.now() < deadline) {
+        const ready = await evalJson(session,
+            `(() => { const m = document.getElementById('app-main'); return !!(m && m.getAttribute('data-route-ready')); })()`)
+            .catch(() => false);
+        if (ready) return;
+        await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error('app shell did not become ready');
+}
+
 async function evalJson(session, expression) {
     const result = await session.call('Runtime.evaluate', {
         awaitPromise: true,
@@ -215,6 +228,7 @@ async function runOnce() {
             }
         }, 15000);
         report.afterSignIn = homeUrl;
+        await waitAppReady(session);
 
         // Shell on Today
         const todayShell = await evalJson(session, `(() => {
@@ -240,7 +254,7 @@ async function runOnce() {
         // Review page
         await session.call('Page.navigate', { url: baseUrl + '/review/' });
         await waitUrl(session, (u) => u.includes('/review'), 12000);
-        await new Promise((r) => setTimeout(r, 800));
+        await waitAppReady(session);
         const reviewShell = await evalJson(session, `(() => {
             const shell = document.querySelector('.hebrew-shell');
             const current = document.querySelector('.hebrew-shell-link[aria-current="page"]');

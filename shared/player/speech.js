@@ -183,6 +183,12 @@
         if ('speechSynthesis' in root) root.speechSynthesis.cancel();
     };
 
+    /** Stop every sound: story, TTS, and the shared clip player. The router calls this on navigation. */
+    speech.stopAll = function () {
+        speech.silence();
+        stopSharedAudio();
+    };
+
     speech.stopStory = function () {
         speech.story.run += 1;
         speech.story.status = 'idle';

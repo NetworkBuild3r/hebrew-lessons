@@ -140,12 +140,17 @@ async function main() {
             activityState: { words: { forceDir: 'en_he' } }
         };
 
-        await session.call('Page.addScriptToEvaluateOnNewDocument', {
-            source: `
-                localStorage.setItem('hebrew-worksheet:my-morning', ${JSON.stringify(JSON.stringify(seed))});
-                localStorage.removeItem('hebrew-review:v1');
-            `
+        // Signed in, lesson progress comes from the server (localStorage is ignored), so seed it there.
+        const put = await fetch(BASE + '/api/lessons/my-morning/progress', {
+            method: 'PUT',
+            headers: {
+                Cookie: harness.cookieFor('learner'),
+                'Content-Type': 'application/json',
+                Origin: BASE
+            },
+            body: JSON.stringify({ state: seed, rev: 0 })
         });
+        if (!put.ok) throw new Error('seed progress failed: ' + put.status + ' ' + await put.text());
 
         await session.call('Page.navigate', {
             url: BASE + '/worksheets/my-morning/index.html#step-1'
@@ -205,6 +210,10 @@ async function main() {
                         wait();
                     }))()`
                 });
+                if (result.exceptionDetails) {
+                    const ex = result.exceptionDetails.exception;
+                    throw new Error((ex && ex.description) || result.exceptionDetails.text);
+                }
                 value = result.result && result.result.value;
                 if (value) break;
                 if (result.result && result.result.subtype === 'error') {

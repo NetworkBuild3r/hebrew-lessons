@@ -1,0 +1,504 @@
+/**
+ * Admin plan builder — outline actions are the SPEC-004 routes.
+ * Provenance: INIT-004/SPEC-015
+ */
+'use strict';
+
+const { describe, it, before } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+const root = path.resolve(__dirname, '..');
+const LESSON_PATH = 'units/unit-1/lessons/cafe-order';
+
+function matchSel(node, sel) {
+    const found = /^([a-zA-Z]+)?(?:\[([^\]]+)\])?$/.exec(sel);
+    if (!found || (!found[1] && !found[2])) return false;
+    if (found[1] && node.tagName !== found[1].toUpperCase()) return false;
+    if (!found[2]) return true;
+    const eq = found[2].indexOf('=');
+    if (eq === -1) return node.hasAttribute(found[2]);
+    let value = found[2].slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+    }
+    return node.getAttribute(found[2].slice(0, eq)) === value;
+}
+
+function walk(node, fn) {
+    (node.children || []).forEach((child) => {
+        fn(child);
+        walk(child, fn);
+    });
+}
+
+function createElement(tag) {
+    const node = {
+        tagName: String(tag).toUpperCase(),
+        nodeType: 1,
+        children: [],
+        attrs: {},
+        listeners: {},
+        parentNode: null,
+        className: '',
+        value: '',
+        textContent: '',
+        _html: '',
+        _hidden: false,
+        disabled: false,
+        rows: 0,
+        type: '',
+        setAttribute(name, value) { this.attrs[name] = String(value); },
+        getAttribute(name) {
+            return Object.prototype.hasOwnProperty.call(this.attrs, name) ? this.attrs[name] : null;
+        },
+        hasAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attrs, name); },
+        removeAttribute(name) { delete this.attrs[name]; },
+        appendChild(child) {
+            if (child.parentNode && child.parentNode.removeChild) child.parentNode.removeChild(child);
+            child.parentNode = this;
+            this.children.push(child);
+            return child;
+        },
+        removeChild(child) {
+            const index = this.children.indexOf(child);
+            if (index >= 0) this.children.splice(index, 1);
+            child.parentNode = null;
+            return child;
+        },
+        addEventListener(type, fn) {
+            if (!this.listeners[type]) this.listeners[type] = [];
+            this.listeners[type].push(fn);
+        },
+        removeEventListener(type, fn) {
+            const list = this.listeners[type] || [];
+            this.listeners[type] = list.filter((item) => item !== fn);
+        },
+        querySelector(sel) {
+            const all = this.querySelectorAll(sel);
+            return all[0] || null;
+        },
+        querySelectorAll(sel) {
+            const out = [];
+            walk(this, (child) => {
+                if (matchSel(child, sel)) out.push(child);
+            });
+            return out;
+        },
+        focus() {},
+        click() {
+            const ev = { target: this, preventDefault() {}, defaultPrevented: false };
+            const chain = [];
+            let current = this;
+            while (current) {
+                chain.push(current);
+                current = current.parentNode;
+            }
+            chain.forEach((host) => {
+                const list = host.listeners && host.listeners.click ? host.listeners.click.slice() : [];
+                list.forEach((fn) => {
+                    ev.currentTarget = host;
+                    fn(ev);
+                });
+            });
+        }
+    };
+    Object.defineProperty(node, 'firstChild', {
+        get() { return node.children[0] || null; }
+    });
+    Object.defineProperty(node, 'hidden', {
+        get() { return node._hidden; },
+        set(value) {
+            node._hidden = !!value;
+            if (value) node.attrs.hidden = '';
+            else delete node.attrs.hidden;
+        }
+    });
+    Object.defineProperty(node, 'innerHTML', {
+        get() { return node._html; },
+        set(value) { node._html = String(value); }
+    });
+    return node;
+}
+
+function lessonFixture() {
+    return {
+        id: 'cafe-order',
+        title: 'Order',
+        blocks: [
+            {
+                id: 'introduction',
+                type: 'introduction',
+                words: [{
+                    id: '1',
+                    word: 'קפה',
+                    meaning: '<script>alert(1)</script>'
+                }]
+            },
+            {
+                id: 'listen',
+                type: 'listening',
+                passage: 'שלום'
+            }
+        ]
+    };
+}
+
+function planFixture() {
+    return {
+        id: 'beginner-unit-1',
+        revision: 3,
+        status: 'draft',
+        title: 'Cafe',
+        units: [{
+            id: 'unit-1',
+            title: 'Unit',
+            lessons: [lessonFixture()]
+        }]
+    };
+}
+
+/**
+ * @param {{ conflict?: boolean }} [opts]
+ */
+function loadBuilder(opts) {
+    const options = opts || {};
+    const calls = [];
+    let revision = 3;
+    let conflictArmed = !!options.conflict;
+    const sandbox = {
+        console,
+        setTimeout,
+        clearTimeout,
+        Promise,
+        URL,
+        confirm() { return true; },
+        location: { href: 'http://127.0.0.1/admin/', hash: '#plans', pathname: '/admin/' },
+        document: {
+            readyState: 'complete',
+            getElementById() { return null; },
+            querySelectorAll() { return []; },
+            addEventListener() {},
+            createElement
+        },
+        fetch(url, init) {
+            const method = String((init && init.method) || 'GET').toUpperCase();
+            let body = null;
+            if (init && init.body) body = JSON.parse(init.body);
+            calls.push({
+                method,
+                url: String(url),
+                body,
+                credentials: init && init.credentials,
+                contentType: init && init.headers && init.headers['Content-Type']
+            });
+            const json = (status, data) => Promise.resolve({
+                ok: status >= 200 && status < 300,
+                status,
+                headers: {
+                    get(name) {
+                        return String(name).toLowerCase() === 'content-type' ? 'application/json' : null;
+                    }
+                },
+                json() { return Promise.resolve(data); },
+                text() { return Promise.resolve(JSON.stringify(data)); }
+            });
+            if (method === 'GET') {
+                const data = String(url).indexOf('path=') === -1
+                    ? { part: planFixture(), revision }
+                    : { part: lessonFixture(), revision };
+                return json(200, data);
+            }
+            if (conflictArmed && method === 'PATCH') {
+                conflictArmed = false;
+                return json(409, { error: 'revision_conflict', revision: 9 });
+            }
+            revision += 1;
+            return json(200, { plan: planFixture(), revision, status: 'draft' });
+        }
+    };
+    sandbox.window = sandbox;
+    sandbox.globalThis = sandbox;
+    vm.createContext(sandbox);
+    vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'player', 'utils.js'), 'utf8'), sandbox);
+    vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'api.js'), 'utf8'), sandbox);
+    vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'ui', 'plan-render.js'), 'utf8'), sandbox);
+    vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'admin', 'plan-builder.js'), 'utf8'), sandbox);
+    vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'admin', 'admin-shell.js'), 'utf8'), sandbox);
+    return { sandbox, calls, panel: sandbox.document.createElement('div') };
+}
+
+function childWith(node, attr, value) {
+    let found = null;
+    walk(node, (child) => {
+        if (found) return;
+        if (child.getAttribute && child.getAttribute(attr) === value) found = child;
+    });
+    return found;
+}
+
+describe('plan builder outline (INIT-004/SPEC-015)', () => {
+    it('keeps the legacy save hook and does not post to upsert_lesson', () => {
+        const editor = fs.readFileSync(path.join(root, 'shared', 'admin', 'lesson-editor.js'), 'utf8');
+        const builder = fs.readFileSync(path.join(root, 'shared', 'admin', 'plan-builder.js'), 'utf8');
+        const shell = fs.readFileSync(path.join(root, 'shared', 'admin', 'admin-shell.js'), 'utf8');
+        assert.match(editor, /data-lesson-save/);
+        assert.doesNotMatch(builder, /data-lesson-save/);
+        assert.doesNotMatch(builder, /upsert_lesson/);
+        assert.doesNotMatch(builder, /\/api\/admin\/lessons/);
+        assert.doesNotMatch(builder, /replace_part|replacePart/);
+        assert.doesNotMatch(builder, /\.splice\s*\(/);
+        assert.doesNotMatch(builder, /JSON\.parse/);
+        assert.doesNotMatch(builder, /data-revision|dataset\.revision/);
+        assert.match(shell, /data-lesson-save|LessonEditor/);
+        assert.match(shell, /HebrewPlanBuilder|PlanBuilder/);
+    });
+
+    it('sends the move index the route expects and does not renumber block ids', () => {
+        const { sandbox } = loadBuilder();
+        const Builder = sandbox.HebrewPlanBuilder;
+        assert.equal(Builder.moveDestination(0, 'down'), 1);
+        assert.equal(Builder.moveDestination(2, 'up'), 1);
+        assert.equal(Builder.moveDestination(0, 'up'), -1);
+        const created = Builder.newBlock('listening', 'extra');
+        assert.equal(created.id, 'extra');
+        assert.equal(created.type, 'listening');
+        assert.equal(Object.prototype.hasOwnProperty.call(created, 'blocks'), false);
+        const lesson = lessonFixture();
+        const fields = Builder.fieldsForBlock(LESSON_PATH, lesson.blocks[1]);
+        assert.equal(fields[0].path, LESSON_PATH + '/blocks/listen');
+        assert.equal(fields[0].field, 'passage');
+        assert.equal(fields[0].loaded, 'שלום');
+    });
+
+    it('ac-1: insert, move, remove, field save, and publish call the plan routes', async () => {
+        const { sandbox, calls, panel } = loadBuilder();
+        const Builder = sandbox.HebrewPlanBuilder;
+        await Builder.mount(panel, 'beginner-unit-1');
+        assert.equal(calls[0].method, 'GET');
+        assert.equal(calls[0].url, '/api/plans/beginner-unit-1/parts');
+        assert.equal(calls[1].method, 'GET');
+        assert.equal(
+            calls[1].url,
+            '/api/plans/beginner-unit-1/parts?path=' + encodeURIComponent(LESSON_PATH)
+        );
+
+        const listen = panel.querySelector('[data-plan-block="listen"]');
+        childWith(listen, 'data-plan-edit', '').click();
+        await Builder.settled();
+        const passage = panel.querySelector('textarea[data-plan-field="passage"]');
+        passage.value = 'שלום!';
+        childWith(panel, 'data-plan-save-field', '0').click();
+        await Builder.settled();
+
+        panel.querySelector('[data-plan-move="down"]').click();
+        await Builder.settled();
+        childWith(panel.querySelector('[data-plan-block="listen"]'), 'data-plan-remove', '').click();
+        await Builder.settled();
+
+        panel.querySelector('[data-plan-new-id]').value = 'extra';
+        panel.querySelector('[data-plan-new-type]').value = 'listening';
+        panel.querySelector('[data-plan-new-index]').value = '0';
+        panel.querySelector('[data-plan-insert]').click();
+        await Builder.settled();
+
+        panel.querySelector('[data-plan-revision]').textContent = '999';
+        panel.querySelector('[data-plan-publish]').click();
+        await Builder.settled();
+
+        const writes = calls.filter((call) => call.method !== 'GET');
+        assert.deepEqual(writes.map((call) => call.method + ' ' + call.url), [
+            'PATCH /api/plans/beginner-unit-1/fields',
+            'POST /api/plans/beginner-unit-1/blocks/move',
+            'DELETE /api/plans/beginner-unit-1/parts',
+            'POST /api/plans/beginner-unit-1/blocks',
+            'POST /api/plans/beginner-unit-1/publish'
+        ]);
+
+        const field = writes[0].body;
+        assert.deepEqual(Object.keys(field).sort(), ['expectedRevision', 'field', 'path', 'value']);
+        assert.equal(field.path, LESSON_PATH + '/blocks/listen');
+        assert.equal(field.field, 'passage');
+        assert.equal(field.value, 'שלום!');
+        assert.equal(field.expectedRevision, 3);
+
+        const move = writes[1].body;
+        assert.deepEqual(Object.keys(move).sort(), ['expectedRevision', 'index', 'path']);
+        assert.equal(move.path, LESSON_PATH + '/blocks/introduction');
+        assert.equal(move.index, 1);
+        assert.equal(move.expectedRevision, 4);
+        assert.equal(move.block, undefined);
+
+        const removed = writes[2].body;
+        assert.deepEqual(Object.keys(removed).sort(), ['expectedRevision', 'path']);
+        assert.equal(removed.path, LESSON_PATH + '/blocks/listen');
+        assert.equal(removed.expectedRevision, 5);
+
+        const inserted = writes[3].body;
+        assert.deepEqual(Object.keys(inserted).sort(), ['block', 'expectedRevision', 'index', 'path']);
+        assert.equal(inserted.path, LESSON_PATH);
+        assert.equal(inserted.index, 0);
+        assert.equal(inserted.block.id, 'extra');
+        assert.equal(inserted.block.type, 'listening');
+        assert.equal(JSON.stringify(inserted).includes('introduction'), false);
+        assert.equal(inserted.expectedRevision, 6);
+
+        const published = writes[4].body;
+        assert.deepEqual(published, { expectedRevision: 7 });
+        writes.forEach((call) => {
+            assert.equal(call.credentials, 'same-origin');
+            assert.equal(call.contentType, 'application/json');
+            assert.equal(call.body.units, undefined);
+            assert.equal(call.body.plan, undefined);
+        });
+    });
+
+    it('ac-2: a 409 keeps the textarea and names revision_conflict plus the stored revision', async () => {
+        const { sandbox, calls, panel } = loadBuilder({ conflict: true });
+        const Builder = sandbox.HebrewPlanBuilder;
+        await Builder.mount(panel, 'beginner-unit-1');
+        const beforeGets = calls.filter((call) => call.method === 'GET').length;
+        childWith(panel.querySelector('[data-plan-block="listen"]'), 'data-plan-edit', '').click();
+        await Builder.settled();
+        const passage = panel.querySelector('textarea[data-plan-field="passage"]');
+        passage.value = 'ADMIN DRAFT';
+        sandbox.confirm = function () { return false; };
+        assert.equal(Builder.canLeave(), false);
+        assert.equal(passage.value, 'ADMIN DRAFT');
+        childWith(panel, 'data-plan-save-field', '0').click();
+        await Builder.settled();
+
+        const live = panel.querySelector('textarea[data-plan-field="passage"]');
+        assert.equal(live.value, 'ADMIN DRAFT');
+        const conflict = panel.querySelector('[data-plan-conflict]');
+        assert.match(conflict.textContent, /revision_conflict/);
+        assert.match(conflict.textContent, /\b9\b/);
+        const patch = calls.filter((call) => call.method === 'PATCH');
+        assert.equal(patch.length, 1);
+        assert.equal(patch[0].body.expectedRevision, 3);
+        assert.equal(patch[0].body.value, 'ADMIN DRAFT');
+        assert.equal(calls.filter((call) => call.method === 'GET').length, beforeGets);
+
+        panel.querySelector('[data-plan-revision]').textContent = '999';
+        panel.querySelector('[data-plan-publish]').click();
+        await Builder.settled();
+        const publish = calls.filter((call) => call.url.endsWith('/publish'));
+        assert.equal(publish.length, 1);
+        assert.equal(publish[0].body.expectedRevision, 3);
+    });
+
+    it('escapes plan text in the preview and refuses a hostile plan id', async () => {
+        const { sandbox, calls, panel } = loadBuilder();
+        const Builder = sandbox.HebrewPlanBuilder;
+        const hostile = sandbox.document.createElement('div');
+        await Builder.mount(hostile, '../not-a-plan');
+        assert.equal(calls.length, 0);
+        await Builder.mount(panel, 'beginner-unit-1');
+        childWith(panel.querySelector('[data-plan-block="introduction"]'), 'data-plan-edit', '').click();
+        await Builder.settled();
+        const preview = panel.querySelector('[data-plan-preview]');
+        assert.match(preview.innerHTML, /&lt;script/);
+        assert.doesNotMatch(preview.innerHTML, /<script/i);
+        const meaning = panel.querySelector('textarea[data-plan-field="meaning"]');
+        assert.equal(meaning.value, '<script>alert(1)</script>');
+        walk(panel, (node) => {
+            assert.notEqual(node.tagName, 'SCRIPT');
+        });
+    });
+
+    it('ac-3: a non-admin session does not get the builder from the admin shell', () => {
+        const routes = require('../shared/app-routes.js');
+        const admin = routes.find((route) => route.id === 'admin');
+        assert.equal(admin.adminOnly, true);
+        assert.ok(admin.scripts.includes('/shared/admin/plan-builder.js'));
+        assert.ok(admin.scripts.includes('/shared/ui/plan-render.js'));
+        routes.forEach((route) => {
+            if (route.id === 'admin') return;
+            assert.equal(route.scripts.includes('/shared/admin/plan-builder.js'), false);
+            assert.equal(route.adminOnly, undefined);
+        });
+        const shellHtml = fs.readFileSync(path.join(root, 'shared', 'app.html'), 'utf8');
+        assert.doesNotMatch(shellHtml, /plan-builder|data-plan-outline|data-plan-publish/);
+        const spa = require('../server/spa');
+        const user = { id: 2, username: 'learner', display_name: 'Learner', role: 'user', must_change_password: false };
+        const adminUser = { id: 1, username: 'admin', display_name: 'Admin', role: 'admin', must_change_password: false };
+        assert.doesNotMatch(spa.renderShell(user), /plan-builder|data-plan-outline/);
+        assert.doesNotMatch(spa.renderShell(adminUser), /data-plan-outline|data-plan-publish/);
+        const web = fs.readFileSync(path.join(root, 'server', 'web.js'), 'utf8');
+        assert.match(web, /underAdmin && auth\.user\.role !== 'admin'/);
+
+        const mounted = [];
+        const main = {
+            innerHTML: '',
+            focus() {},
+            querySelector() { return null; }
+        };
+        const sandbox = {
+            console,
+            setTimeout,
+            clearTimeout,
+            Promise,
+            URL,
+            location: { pathname: '/admin/', hash: '', origin: 'http://app.test', href: 'http://app.test/admin/' },
+            history: { state: null, pushState() {}, replaceState() {} },
+            document: {
+                title: '',
+                addEventListener() {},
+                getElementById() { return { textContent: '' }; },
+                querySelectorAll() { return []; }
+            },
+            addEventListener() {},
+            HebrewLayout: {
+                message(he, en) { return he + ' ' + en; }
+            },
+            HebrewAdminShell: {
+                mount() { mounted.push('shell'); }
+            }
+        };
+        sandbox.window = sandbox;
+        vm.createContext(sandbox);
+        vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'router.js'), 'utf8'), sandbox);
+        sandbox.HebrewRouter.start({
+            routes: [{
+                id: 'admin',
+                path: '/admin/',
+                title: 'Admin',
+                announce: 'ניהול',
+                bodyClass: 'admin-page',
+                rootId: 'admin-app',
+                adminOnly: true,
+                scripts: ['/shared/admin/plan-builder.js'],
+                view: 'HebrewAdminShell',
+                heading: { he: 'ניהול', en: 'Admin' }
+            }],
+            main,
+            user: { role: 'user' }
+        });
+        assert.match(main.innerHTML, /No access/);
+        assert.deepEqual(mounted, []);
+    });
+
+    it('opens #plan/<id> beside the lesson editor and keeps #lesson/', () => {
+        const { sandbox } = loadBuilder();
+        const Shell = sandbox.HebrewAdminShell;
+        const lesson = Shell.parseHash('#lesson/my-morning');
+        assert.equal(lesson.view, 'lesson');
+        assert.equal(lesson.slug, 'my-morning');
+        assert.equal(lesson.planId, null);
+        assert.equal(Shell.parseHash('#lessons').view, 'lessons');
+        assert.equal(Shell.parseHash('#users').view, 'users');
+        assert.equal(Shell.parseHash('#plans').view, 'plans');
+        const plan = Shell.parseHash('#plan/beginner-unit-1');
+        assert.equal(plan.view, 'plan');
+        assert.equal(plan.planId, 'beginner-unit-1');
+        assert.equal(plan.slug, null);
+        assert.equal(Shell.parseHash('#plan/../x').view, 'users');
+        const tabs = Shell.renderTabs('plan');
+        assert.match(tabs, /data-admin-tab="plans"[^>]*aria-current="page"/);
+        assert.match(tabs, /תוכניות/);
+        assert.match(tabs, /שיעורים/);
+        assert.doesNotMatch(tabs, /data-admin-tab="lessons"[^>]*aria-current/);
+    });
+});

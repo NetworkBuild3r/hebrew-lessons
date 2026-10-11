@@ -60,6 +60,8 @@ describe('web gating (ac-1, ac-2, ac-6, ac-7, ac-8)', () => {
             '/',
             '/index.html',
             '/review/',
+            '/words/',
+            '/guides/',
             '/lessons/',
             '/progress/',
             '/admin/',

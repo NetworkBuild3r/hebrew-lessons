@@ -1,0 +1,391 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "my-morning",
+  "revision": 1,
+  "status": "published",
+  "audience": "shared",
+  "assigneeId": null,
+  "title": "שגרה 1 — הבוקר שלי",
+  "subtitle": "פועל אחד, שני פעלים • A1 / A2+",
+  "language": {
+    "target": "he",
+    "gloss": "en"
+  },
+  "migration": {
+    "legacy": true,
+    "sourceWorksheet": "worksheets/my-morning/worksheet.js",
+    "activityOrder": [
+      "words",
+      "match",
+      "listen-pick",
+      "story",
+      "speed-quiz",
+      "build-sentence",
+      "pattern",
+      "ask-friend"
+    ],
+    "retiredActivityTypes": [
+      "match",
+      "listen-pick"
+    ]
+  },
+  "units": [
+    {
+      "id": "unit-my-morning",
+      "title": "שגרה 1 — הבוקר שלי",
+      "theme": "a morning routine",
+      "lessons": [
+        {
+          "id": "my-morning",
+          "title": "שגרה 1 — הבוקר שלי",
+          "subtitle": "פועל אחד, שני פעלים • A1 / A2+",
+          "footer": "שגרה 1 — הבוקר שלי",
+          "level": "basic",
+          "visibility": "everyone",
+          "buildsOn": [],
+          "newWords": [
+            "קָם",
+            "קָמָה",
+            "שׁוֹתֶה",
+            "שׁוֹתָה",
+            "בֹּקֶר",
+            "קָפֶה",
+            "אַחַר כָּךְ",
+            "יוֹצֵא"
+          ],
+          "recycles": [],
+          "blocks": [
+            {
+              "id": "introduction",
+              "type": "introduction",
+              "words": [
+                {
+                  "id": "1",
+                  "word": "קָם",
+                  "meaning": "gets up (m. sg.)",
+                  "sound": "kam",
+                  "translit": "kam",
+                  "pos": "verb, present",
+                  "trap": "One syllable. Stress kam. Past “I got up” is קַמְתִּי.",
+                  "sentence": "אֲנִי קָם בַּבֹּקֶר.",
+                  "audioPath": "../_audio/words/806bb3fc99c984531106aeb5.mp3",
+                  "sentenceAudioPath": "audio/sentences/vocab-1.mp3"
+                },
+                {
+                  "id": "2",
+                  "word": "קָמָה",
+                  "meaning": "gets up (f. sg.)",
+                  "sound": "ka-MA",
+                  "translit": "kama",
+                  "pos": "verb, present",
+                  "trap": "Feminine ends in ה. Stress the last syllable: ka-MA.",
+                  "sentence": "הִיא קָמָה בַּבֹּקֶר.",
+                  "audioPath": "../_audio/words/a2e3165352468e3a501b294e.mp3",
+                  "sentenceAudioPath": "audio/sentences/vocab-2.mp3"
+                },
+                {
+                  "id": "3",
+                  "word": "שׁוֹתֶה",
+                  "meaning": "drinks (m. sg.)",
+                  "sound": "sho-TE",
+                  "translit": "shote",
+                  "pos": "verb, present",
+                  "trap": "Stress TE. Infinitive לִשְׁתּוֹת.",
+                  "sentence": "הוּא שׁוֹתֶה קָפֶה.",
+                  "audioPath": "../_audio/words/c35c2410e210098ead05320e.mp3",
+                  "sentenceAudioPath": "audio/sentences/vocab-3.mp3"
+                },
+                {
+                  "id": "4",
+                  "word": "שׁוֹתָה",
+                  "meaning": "drinks (f. sg.)",
+                  "sound": "sho-TA",
+                  "translit": "shota",
+                  "pos": "verb, present",
+                  "trap": "Feminine ends in ה: sho-TA.",
+                  "sentence": "הִיא שׁוֹתָה תה.",
+                  "audioPath": "../_audio/words/9634894b7d32e21bcb10e9c6.mp3",
+                  "sentenceAudioPath": "audio/sentences/vocab-4.mp3"
+                },
+                {
+                  "id": "5",
+                  "word": "בֹּקֶר",
+                  "meaning": "morning",
+                  "sound": "BO-ker",
+                  "translit": "boker",
+                  "pos": "noun (m.)",
+                  "trap": "Stress BO. בַּבֹּקֶר means “in the morning.”",
+                  "sentence": "בַּבֹּקֶר אֲנִי קָם.",
+                  "audioPath": "../_audio/words/1d0390a2fc75a4e27a074c66.mp3",
+                  "sentenceAudioPath": "audio/sentences/vocab-5.mp3"
+                },
+                {
+                  "id": "6",
+                  "word": "קָפֶה",
+                  "meaning": "coffee",
+                  "sound": "ka-FE",
+                  "translit": "kafe",
+                  "pos": "noun (m.)",
+                  "trap": "Stress FE. Not English “coffee” rhythm.",
+                  "sentence": "אֲנִי שׁוֹתֶה קָפֶה.",
+                  "audioPath": "../_audio/words/d1597cb73a024c66e8fbeffb.mp3",
+                  "sentenceAudioPath": "audio/sentences/vocab-6.mp3"
+                },
+                {
+                  "id": "7",
+                  "word": "אַחַר כָּךְ",
+                  "meaning": "afterwards / then",
+                  "sound": "a-KHAR-kakh",
+                  "translit": "achar kakh",
+                  "pos": "adverb",
+                  "trap": "Two words. Soft ח in אַחַר.",
+                  "sentence": "אַחַר כָּךְ אֲנִי יוֹצֵא.",
+                  "audioPath": "../_audio/words/39eadd11f599ed07bdd27a7d.mp3",
+                  "sentenceAudioPath": "audio/sentences/vocab-7.mp3"
+                },
+                {
+                  "id": "8",
+                  "word": "יוֹצֵא",
+                  "meaning": "goes out (m. sg.)",
+                  "sound": "yo-TZE",
+                  "translit": "yotze",
+                  "pos": "verb, present",
+                  "trap": "צ is “tz.” yo-TZE. Feminine יוֹצֵאת.",
+                  "sentence": "אֲנִי יוֹצֵא לָעֲבוֹדָה.",
+                  "audioPath": "../_audio/words/38b6df2167d3c0fab5230bdc.mp3",
+                  "sentenceAudioPath": "audio/sentences/vocab-8.mp3"
+                }
+              ],
+              "pattern": {
+                "tabLabel": "Pattern",
+                "heading": "פועל אחד, שני פעלים",
+                "lede": "בבוקר אפשר לשים שני פעלים בזה אחר זה. In the morning you can put two present-tense verbs one after the other.",
+                "prompt": "בחרו את המשפט הנכון.",
+                "rules": [
+                  {
+                    "title": "1. שני פעלים בזה אחר זה.",
+                    "english": "Use two present-tense verbs in a row for a short routine: קם + שותה.",
+                    "example": "אֲנִי קָם וְשׁוֹתֶה קָפֶה.",
+                    "focus": [
+                      "קָם",
+                      "שׁוֹתֶה"
+                    ]
+                  }
+                ],
+                "reminders": [
+                  "זכר: קָם, שׁוֹתֶה, יוֹצֵא. נקבה: קָמָה, שׁוֹתָה, יוֹצֵאת."
+                ],
+                "items": [
+                  {
+                    "id": "1",
+                    "direct": "I get up and drink coffee.",
+                    "choices": [
+                      "אני קמה ושותה קפה.",
+                      "אני קם ושותה קפה.",
+                      "אני קם לשתות קפה אתמול."
+                    ],
+                    "answer": 1,
+                    "pointed": "אֲנִי קָם וְשׁוֹתֶה קָפֶה.",
+                    "why": "זכר, הווה: קם + שותה.",
+                    "audioPath": "audio/sentences/grammar-1.mp3"
+                  },
+                  {
+                    "id": "2",
+                    "direct": "She gets up in the morning.",
+                    "choices": [
+                      "היא קמה בבוקר.",
+                      "היא קם בבוקר.",
+                      "היא קמתי בבוקר."
+                    ],
+                    "answer": 0,
+                    "pointed": "הִיא קָמָה בַּבּוֹקֶר.",
+                    "why": "נקבה בהווה נגמרת ב־ה: קמה.",
+                    "audioPath": "audio/sentences/grammar-2.mp3"
+                  },
+                  {
+                    "id": "3",
+                    "direct": "Afterwards he goes out.",
+                    "choices": [
+                      "אחר כך הוא יוצאת.",
+                      "אחר כך הוא יצא מחר.",
+                      "אחר כך הוא יוצא."
+                    ],
+                    "answer": 2,
+                    "pointed": "אַחַר כָּךְ הוּא יוֹצֵא.",
+                    "why": "הווה זכר: יוצא.",
+                    "audioPath": "audio/sentences/grammar-3.mp3"
+                  }
+                ]
+              },
+              "cloze": {
+                "bank": [
+                  "קם",
+                  "שותה",
+                  "בוקר",
+                  "קפה",
+                  "יוצא"
+                ],
+                "items": [
+                  {
+                    "id": "1",
+                    "textPre": "אני",
+                    "textPost": " בבוקר.",
+                    "answer": "קם",
+                    "english": "I ____ in the morning.",
+                    "gloss": [
+                      {
+                        "id": "g1",
+                        "he": "בבוקר",
+                        "en": "in the morning"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "2",
+                    "textPre": "הוא",
+                    "textPost": " קפה.",
+                    "answer": "שותה",
+                    "english": "He ____ coffee.",
+                    "gloss": [
+                      {
+                        "id": "g1",
+                        "he": "קפה",
+                        "en": "coffee"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "3",
+                    "textPre": "אחר כך אני",
+                    "textPost": ".",
+                    "answer": "יוצא",
+                    "english": "Afterwards I ____.",
+                    "gloss": [
+                      {
+                        "id": "g1",
+                        "he": "אחר כך",
+                        "en": "afterwards"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "id": "story",
+              "type": "graded-story",
+              "paragraphs": [
+                {
+                  "id": "p1",
+                  "text": "בַּבֹּקֶר אֲנִי קָם.",
+                  "highlights": [
+                    "בֹּקֶר",
+                    "קָם"
+                  ],
+                  "audioPath": "audio/story/line-1.mp3"
+                },
+                {
+                  "id": "p2",
+                  "text": "גַּם הִיא קָמָה בַּבֹּקֶר.",
+                  "highlights": [
+                    "קָמָה"
+                  ],
+                  "audioPath": "audio/story/line-2.mp3"
+                },
+                {
+                  "id": "p3",
+                  "text": "אֲנִי שׁוֹתֶה קָפֶה. גַּם הִיא שׁוֹתָה קָפֶה.",
+                  "highlights": [
+                    "שׁוֹתֶה",
+                    "קָפֶה",
+                    "שׁוֹתָה"
+                  ],
+                  "audioPath": "audio/story/line-3.mp3"
+                },
+                {
+                  "id": "p4",
+                  "text": "אַחַר כָּךְ אֲנִי יוֹצֵא לָעֲבוֹדָה.",
+                  "highlights": [
+                    "יוֹצֵא"
+                  ],
+                  "audioPath": "audio/story/line-4.mp3"
+                }
+              ],
+              "questions": [
+                {
+                  "id": "1",
+                  "question": "מתי הוא קם?",
+                  "sampleAnswer": "בבוקר.",
+                  "audioPath": "audio/sentences/question-1.mp3"
+                },
+                {
+                  "id": "2",
+                  "question": "מה הוא שותה?",
+                  "sampleAnswer": "קפה.",
+                  "audioPath": "audio/sentences/question-2.mp3"
+                }
+              ]
+            },
+            {
+              "id": "fluency-retell",
+              "type": "fluency-pass",
+              "seconds": 90,
+              "source": "story",
+              "cues": [
+                "בֹּקֶר",
+                "קָם",
+                "קָפֶה",
+                "אַחַר כָּךְ",
+                "יוֹצֵא"
+              ]
+            },
+            {
+              "id": "fluency-speed",
+              "type": "fluency-pass",
+              "seconds": 90,
+              "source": "vocab",
+              "cues": []
+            },
+            {
+              "id": "dialogue-rebuild",
+              "type": "short-dialogue",
+              "source": "story",
+              "count": 3,
+              "lines": []
+            },
+            {
+              "id": "dialogue-ask",
+              "type": "short-dialogue",
+              "lines": [
+                {
+                  "id": "1",
+                  "speaker": "prompt",
+                  "question": "מתי אתה קם בבוקר?",
+                  "pointed": "מָתַי אַתָּה קָם בַּבֹּקֶר?",
+                  "youFeminine": "מתי את קמה בבוקר?",
+                  "audioPath": "audio/sentences/friend-1.mp3"
+                },
+                {
+                  "id": "2",
+                  "speaker": "prompt",
+                  "question": "מה אתה שותה בבוקר?",
+                  "pointed": "מָה אַתָּה שׁוֹתֶה בַּבֹּקֶר?",
+                  "youFeminine": "מה את שותה בבוקר?",
+                  "audioPath": "audio/sentences/friend-2.mp3"
+                },
+                {
+                  "id": "3",
+                  "speaker": "prompt",
+                  "question": "לאן אתה יוצא אחר כך?",
+                  "pointed": "לְאָן אַתָּה יוֹצֵא אַחַר כָּךְ?",
+                  "youFeminine": "לאן את יוצאת אחר כך?",
+                  "audioPath": "audio/sentences/friend-3.mp3"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

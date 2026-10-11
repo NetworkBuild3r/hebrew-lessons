@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
  * Database CLI: migrate, backup, check.
- * Provenance: INIT-002/SPEC-003
+ * Provenance: INIT-002/SPEC-003, media trees INIT-004/SPEC-017
  */
 'use strict';
 
+const path = require('path');
 const db = require('../server/db');
 
 function usage() {
@@ -25,7 +26,10 @@ try {
         db.open();
         db.migrate();
         const dest = db.backup();
-        console.log('Backup written: ' + dest);
+        console.log('Backup written: ' + path.dirname(dest));
+        console.log('  hebrew.sqlite');
+        console.log('  media/');
+        console.log('  media/_archive/');
         db.close();
     } else if (cmd === 'check') {
         db.open();

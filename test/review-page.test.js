@@ -36,24 +36,28 @@ describe('review page (INIT-001/SPEC-004)', () => {
     });
 
     it('loads vocab via script tags only — no fetch of lesson data', () => {
-        const html = fs.readFileSync(path.join(root, 'review', 'index.html'), 'utf8');
-        assert.match(html, /worksheets\/_review\/vocab-index\.js/);
-        assert.match(html, /shared\/review-page\.js/);
-        assert.match(html, /shared\/player\/review\.js/);
-        assert.doesNotMatch(html, /\bfetch\s*\(/);
+        const routes = require('../shared/app-routes.js');
+        const review = routes.find((r) => r.id === 'review');
+        assert.ok(review.scripts.includes('/worksheets/_review/vocab-index.js'));
+        assert.ok(review.scripts.includes('/shared/review-page.js'));
+        const shell = fs.readFileSync(path.join(root, 'shared', 'app.html'), 'utf8');
+        assert.match(shell, /shared\/player\/review\.js/);
+        const router = fs.readFileSync(path.join(root, 'shared', 'router.js'), 'utf8');
+        assert.doesNotMatch(router, /\bfetch\s*\(/);
         const js = fs.readFileSync(path.join(root, 'shared', 'review-page.js'), 'utf8');
         assert.doesNotMatch(js, /\bfetch\s*\(/);
     });
 
-    it('escapes index text (XSS fixture renders as text, not markup)', () => {
+    it('escapes index text and does not assign card text with innerHTML', () => {
         const dirty = '<img onerror="alert(1)">evil';
         const out = ReviewPage.escapeIndexText(dirty);
         assert.match(out, /&lt;img/);
         assert.doesNotMatch(out, /<img/);
         assert.match(out, /onerror/);
         const pageJs = fs.readFileSync(path.join(root, 'shared', 'review-page.js'), 'utf8');
-        assert.match(pageJs, /esc\(meaning\)/);
-        assert.match(pageJs, /esc\(word\)|esc\(displayHebrew/);
+        assert.match(pageJs, /textContent/);
+        assert.doesNotMatch(pageJs, /\.innerHTML\s*=/);
+        assert.doesNotMatch(pageJs, /insertAdjacentHTML|outerHTML|document\.write/);
     });
 
     it('interleaves due items from my-morning and anal-sex-vocab', () => {
@@ -208,9 +212,10 @@ describe('review page (INIT-001/SPEC-004)', () => {
         assert.equal(after.lapses, 1);
         assert.ok(Date.parse(after.due) > Date.now());
         const pageJs = fs.readFileSync(path.join(root, 'shared', 'review-page.js'), 'utf8');
-        assert.match(pageJs, /data-signal="miss"/);
-        assert.match(pageJs, /if \(!state\.revealed/);
-        assert.match(pageJs, /review-answer hidden/);
+        assert.match(pageJs, /data-grade/);
+        assert.match(pageJs, /if \(!state\.revealed\)/);
+        assert.match(pageJs, /grades go to the server/i);
+        assert.doesNotMatch(pageJs, /HebrewReview\.record/);
     });
 
     it('typed en→he answers match without nikud', () => {
@@ -218,17 +223,23 @@ describe('review page (INIT-001/SPEC-004)', () => {
         assert.equal(ReviewPage.typedMatches('בֹּקֶר', 'בֹּקֶר'), true);
         assert.equal(ReviewPage.typedMatches('קם', 'בֹּקֶר'), false);
         const pageJs = fs.readFileSync(path.join(root, 'shared', 'review-page.js'), 'utf8');
-        assert.match(pageJs, /normalizeHebrew/);
+        const helper = fs.readFileSync(path.join(root, 'shared', 'player', 'flashcard-answer.js'), 'utf8');
+        assert.match(helper, /stripVowels/);
         assert.match(pageJs, /review-typed/);
+        assert.equal(ReviewPage.typedMatches('בקר', 'בֹּקֶר', ['בוקר']), true);
     });
 
     it('home card due count matches filterQueue and hides when zero', () => {
         // INIT-002/SPEC-014 moved the home due card into Today. The count still
         // comes from HebrewReview.dueList; the page links to /review/.
-        const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+        const html = fs.readFileSync(path.join(root, 'shared', 'app.html'), 'utf8');
         const todayJs = fs.readFileSync(path.join(root, 'shared', 'today-page.js'), 'utf8');
         assert.match(html, /shared\/player\/review\.js/);
-        assert.match(html, /shared\/today-page\.js/);
+        const today = require('../shared/app-routes.js').find((r) => r.id === 'today');
+        assert.deepEqual(today.scripts, [
+            '/shared/ui/blocks/conjugation-table.js',
+            '/shared/today-page.js'
+        ]);
         assert.match(todayJs, /href="\/review\/"/);
         assert.match(todayJs, /dueCount/);
 
@@ -271,16 +282,20 @@ describe('review page (INIT-001/SPEC-004)', () => {
         const pageJs = fs.readFileSync(path.join(root, 'shared', 'review-page.js'), 'utf8');
         assert.match(pageJs, /הצג תשובה/);
         assert.match(pageJs, /Show answer/);
-        assert.match(pageJs, /ידעתי/);
-        assert.match(pageJs, /Knew it/);
-        assert.match(pageJs, /פספסתי/);
-        assert.match(pageJs, /Missed it/);
+        assert.match(pageJs, /שוב/);
+        assert.match(pageJs, /Again/);
+        assert.match(pageJs, /קשה/);
+        assert.match(pageJs, /Hard/);
+        assert.match(pageJs, /טוב/);
+        assert.match(pageJs, /Good/);
+        assert.match(pageJs, /קל/);
+        assert.match(pageJs, /Easy/);
         assert.match(pageJs, /הסתר ניקוד/);
         assert.match(pageJs, /Hide vowels/);
         assert.match(pageJs, /hebrew-review-prefs:v1/);
-        const html = fs.readFileSync(path.join(root, 'review', 'index.html'), 'utf8');
-        assert.match(html, /Review today/);
-        assert.match(html, /חזרה היום/);
+        const review = require('../shared/app-routes.js').find((r) => r.id === 'review');
+        assert.equal(review.heading.en, 'Review today');
+        assert.equal(review.heading.he, 'חזרה היום');
     });
 
     it('missing vocab-index shows bilingual no-review-data message instead of failing', () => {
@@ -289,10 +304,9 @@ describe('review page (INIT-001/SPEC-004)', () => {
         assert.equal(ReviewPage.vocabListPresent([]), true);
         assert.equal(ReviewPage.vocabListPresent({}), true);
         const pageJs = fs.readFileSync(path.join(root, 'shared', 'review-page.js'), 'utf8');
-        assert.match(pageJs, /review-no-index/);
-        assert.match(pageJs, /No review data yet/);
-        assert.match(pageJs, /אין עדיין נתוני חזרה/);
-        assert.match(pageJs, /renderMissing/);
+        assert.match(pageJs, /review-load-error/);
+        assert.match(pageJs, /Couldn't load cards/);
+        assert.match(pageJs, /לא הצלחנו לטעון כרטיסים/);
     });
 
     it('worksheet.css marks SPEC-004 review-page section for SPEC-007', () => {
@@ -302,12 +316,12 @@ describe('review page (INIT-001/SPEC-004)', () => {
         assert.match(css, /end INIT-001\/SPEC-004 review-page/);
     });
 
-    it('web server allowlists /review/ for the Review today page', () => {
+    it('server serves the app shell for /review/ (no separate review HTML file)', () => {
+        const spa = require('../server/spa.js');
+        assert.equal(spa.isAppPath('/review/'), true);
+        assert.equal(spa.isAppPath('/review/index.html'), true);
+        assert.equal(fs.existsSync(path.join(root, 'review', 'index.html')), false);
         const { publicFile } = require('../server/web.js');
-        const file = publicFile('/review/index.html');
-        assert.ok(file);
-        assert.ok(fs.existsSync(file));
-        assert.equal(path.basename(path.dirname(file)), 'review');
         assert.equal(publicFile('/review/../shared/worksheet.css'), null);
     });
 });

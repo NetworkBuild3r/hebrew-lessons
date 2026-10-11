@@ -278,14 +278,109 @@ describe('admin users view (SPEC-016)', () => {
     });
 
     it('admin page does not fetch catalog files (script tags only)', () => {
-        const html = fs.readFileSync(path.join(root, 'admin', 'index.html'), 'utf8');
-        assert.match(html, /shared\/admin\/users\.js/);
-        assert.match(html, /shared\/admin\/admin-shell\.js/);
-        assert.match(html, /vocab-index\.js/);
-        assert.match(html, /word-audio-catalog\.js/);
-        assert.doesNotMatch(html, /\bfetch\s*\(/);
+        const admin = require('../shared/app-routes.js').find((r) => r.id === 'admin');
+        assert.equal(admin.adminOnly, true);
+        const scripts = admin.scripts.join('\n');
+        assert.match(scripts, /shared\/admin\/users\.js/);
+        assert.match(scripts, /shared\/admin\/admin-shell\.js/);
+        assert.match(scripts, /vocab-index\.js/);
+        assert.match(scripts, /word-audio-catalog\.js/);
+        const shell = fs.readFileSync(path.join(root, 'shared', 'app.html'), 'utf8');
+        assert.doesNotMatch(shell, /\bfetch\s*\(/);
         const usersJs = fs.readFileSync(path.join(root, 'shared', 'admin', 'users.js'), 'utf8');
         assert.doesNotMatch(usersJs, /\bfetch\s*\(/);
         assert.match(usersJs, /HebrewApi/);
+    });
+
+    it('AI planning confirm quotes the disclosure and does not change state before a 200 (SPEC-017)', () => {
+        const disclosure = 'If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator\'s AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.';
+        const adminSentence = 'Admins can see all your activity, including every answer';
+        const dialog = Users.aiPlanningDialogHtml();
+        assert.match(dialog, /data-ai-disclosure/);
+        assert.ok(dialog.includes(disclosure));
+        assert.equal(Users.AI_DISCLOSURE.includes(disclosure), true);
+
+        const off = Users.renderUserRow({
+            id: 4,
+            username: 'learner',
+            display_name: 'Learner',
+            role: 'user',
+            status: 'active',
+            last_sign_in: null,
+            ai_planning: false
+        });
+        assert.match(off, /data-admin-action="ai-planning"/);
+        assert.match(off, /aria-pressed="false"/);
+        assert.doesNotMatch(off, /aria-pressed="true"/);
+
+        const unknown = Users.renderUserRow({
+            id: 5,
+            username: 'learner',
+            display_name: 'Learner',
+            role: 'user',
+            status: 'active',
+            last_sign_in: null
+        });
+        assert.match(unknown, /disabled/);
+        assert.doesNotMatch(unknown, /data-admin-action="ai-planning"/);
+
+        const users = [{
+            id: 4,
+            username: 'learner',
+            display_name: 'Learner',
+            role: 'user',
+            status: 'active',
+            last_sign_in: null,
+            ai_planning: false
+        }];
+        const panel = makePanel(Users.renderUserRow(users[0]));
+        const state = { users: Users.usersSnapshot(users) };
+        const before = panel._body.innerHTML;
+
+        const failed = Users.applyAiPlanningResult(panel, state, 4, {
+            ok: false,
+            status: 403,
+            error: 'Forbidden'
+        });
+        assert.equal(failed, false);
+        assert.equal(state.users[0].ai_planning, false);
+        assert.equal(panel._body.innerHTML, before);
+        assert.match(panel._body.innerHTML, /aria-pressed="false"/);
+        assert.equal(panel._guard.hidden, false);
+        assert.match(panel._guard.textContent, /Forbidden/);
+
+        const succeeded = Users.applyAiPlanningResult(panel, state, 4, {
+            ok: true,
+            status: 200,
+            data: { ai_planning: true, previous: 0, next: 1 }
+        });
+        assert.equal(succeeded, true);
+        assert.equal(state.users[0].ai_planning, true);
+        assert.match(panel._body.innerHTML, /aria-pressed="true"/);
+        assert.equal(panel._guard.hidden, true);
+
+        const ignored = Users.applyAiPlanningResult(panel, state, 4, {
+            ok: true,
+            status: 200,
+            data: { enabled: false }
+        });
+        assert.equal(ignored, false);
+        assert.equal(state.users[0].ai_planning, true);
+        assert.match(panel._body.innerHTML, /aria-pressed="true"/);
+
+        const shell = fs.readFileSync(path.join(root, 'shared', 'app-shell.js'), 'utf8');
+        const login = fs.readFileSync(path.join(root, 'login', 'index.html'), 'utf8');
+        const loginJs = fs.readFileSync(path.join(root, 'shared', 'login.js'), 'utf8');
+        const progress = fs.readFileSync(path.join(root, 'shared', 'progress-page.js'), 'utf8');
+        const marker = 'a summary of your progress and your username are sent to the operator';
+        for (const file of [shell, login, loginJs]) {
+            assert.ok(file.includes(marker));
+        }
+        assert.match(progress, /HebrewShell/);
+        assert.match(progress, /AI_DISCLOSURE/);
+        assert.ok(dialog.includes(disclosure));
+        for (const file of [shell, login, loginJs]) {
+            assert.ok(file.includes(adminSentence));
+        }
     });
 });

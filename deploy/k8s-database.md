@@ -63,10 +63,29 @@ spec:
                 secretKeyRef:
                   name: hebrew-secrets
                   key: ELEVENLABS_API_KEY
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: hebrew-secrets
+                  key: OPENAI_API_KEY
+            - name: ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: hebrew-secrets
+                  key: ADMIN_USERNAME
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hebrew-secrets
+                  key: ADMIN_PASSWORD
             - name: ELEVENLABS_VOICE_ID
               value: "6WRlPmU1fqPwYbSxeP16"
             - name: ELEVENLABS_MODEL
               value: eleven_v3
+            # Plain env, not a Secret. ladder (default) or fsrs. See
+            # docs/operations/language-program-rollout.md (INIT-006/SPEC-020).
+            - name: SRS_SCHEDULER
+              value: ladder
           volumeMounts:
             - name: lessons
               mountPath: /data/worksheets
@@ -81,9 +100,11 @@ spec:
             claimName: hebrew-data
 ```
 
-`replicas: 1` and `strategy: Recreate` are hard limits: SQLite plus in-memory throttling do not support multiple writers.
+`replicas: 1` and `strategy: Recreate` are hard limits: SQLite plus in-memory throttling do not support multiple writers. Do not add a second replica. Do not change `strategy: Recreate`. `fsGroup` and `runAsUser` stay `1000`. The process already runs as that user and creates its own directories on this volume.
 
-The ElevenLabs key is injected only via `secretKeyRef` (Secret name `hebrew-secrets`, key `ELEVENLABS_API_KEY`). Never put the key value in this document or in the Deployment YAML.
+Generated images use this same `hebrew-data` PVC. With `DATA_DIR=/data/app`, live files are `/data/app/media/` and files kept before a delete are `/data/app/media/_archive/`. Do not add a second volume for media, and do not put media on `hebrew-lessons`. Recordings (`.mp3`) stay on the lessons volume.
+
+`OPENAI_API_KEY`, the ElevenLabs key, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` are injected only via `secretKeyRef` (Secret name `hebrew-secrets`, keys with those same names). This document names `OPENAI_API_KEY`. It does not contain a value. The image does not contain it. The operator adds that key to the existing Secret in the cluster; do not replace the Secret, and do not write the value into git or into this file. `ADMIN_PASSWORD` is read only when the database has no admin; after the first boot, the database account is the one that signs in.
 
 ## Before the first rollout that enables the database volume
 
@@ -105,24 +126,33 @@ kubectl exec -it deploy/<name> -- npm run user -- create <username> --admin
 
 ## Backup
 
+Two layouts on this same `hebrew-data` volume (INIT-006/SPEC-020):
+
+- `node scripts/backup-db.js` — WAL checkpoint, then one flat file `DATA_DIR/backups/hebrew-<ISO stamp>.sqlite`. Prints path and size only. Use for the language-program pre-rollout DB copy.
+- `npm run db:backup` — one directory under `DATA_DIR/backups/hebrew-<stamp>/` with `hebrew.sqlite`, `media/`, and `media/_archive/`. Needs free space for a second copy of `media/`.
+
+Neither command reads or requires `.mp3` files on the lessons volume, and neither moves or deletes them.
+
 ```bash
+kubectl exec -it deploy/<name> -- node scripts/backup-db.js
 kubectl exec -it deploy/<name> -- npm run db:backup
-# Then copy the backup file out of the pod (path under DATA_DIR/backups/):
-kubectl cp <namespace>/<pod>:/data/app/backups/<backup-file> ./<backup-file>
+# Copy the whole media bundle directory (database and both media trees from the same run):
+kubectl cp <namespace>/<pod>:/data/app/backups/hebrew-<stamp> ./hebrew-<stamp>
 ```
 
 ## Restore
 
-1. Stop writes (scale to zero or use a maintenance window — still `replicas: 1`).
-2. Copy a backup file into the pod under `/data/app/` (or replace `hebrew.sqlite` after stopping the process).
-3. Restore by replacing the live database file with the backup, then start the pod again and verify with `npm run db:check` if available.
+1. Stop writers (scale to zero or use a maintenance window — still `replicas: 1`). Do not delete anything under `/data/worksheets`.
+2. Copy that same backup directory back onto the data volume.
+3. With the process stopped, remove leftover `hebrew.sqlite-wal` and `hebrew.sqlite-shm` so SQLite cannot replay them over the restored file. Replace `/data/app/hebrew.sqlite` with the backup's `hebrew.sqlite`. Replace `/data/app/media` with the backup's `media` tree (it includes `media/_archive`).
+4. Start the pod. `npm run db:check` should print `ok`. Confirm the files under `/data/app/media` match this backup, and that an approved image still resolves.
 
 ```bash
-kubectl cp ./<backup-file> <namespace>/<pod>:/data/app/backups/<backup-file>
-kubectl exec -it deploy/<name> -- sh -c 'cp /data/app/backups/<backup-file> /data/app/hebrew.sqlite'
+kubectl cp ./hebrew-<stamp> <namespace>/<pod>:/data/app/backups/hebrew-<stamp>
+kubectl exec -it deploy/<name> -- sh -c 'rm -f /data/app/hebrew.sqlite-wal /data/app/hebrew.sqlite-shm && cp /data/app/backups/hebrew-<stamp>/hebrew.sqlite /data/app/hebrew.sqlite && rm -rf /data/app/media && cp -a /data/app/backups/hebrew-<stamp>/media /data/app/media'
 ```
 
-Confirm the app comes back healthy and sign-in works before ending the maintenance window.
+Confirm the app comes back healthy and sign-in works before ending the maintenance window. The `rm` and `cp` above apply only to the database file and `DATA_DIR/media` on `hebrew-data`.
 
 ## Lessons volume (unchanged)
 

@@ -1,10 +1,13 @@
 /**
  * Lesson progress repository — prepared statements only.
  * Provenance: INIT-002/SPEC-003
+ * Explicit column list (the learner profile reads listByUser): INIT-006/SPEC-007
  */
 'use strict';
 
 const db = require('../index');
+
+const COLUMNS = 'user_id, slug, state_json, rev, updated_at';
 
 function upsert(row) {
     return db.run(
@@ -24,7 +27,7 @@ function upsert(row) {
 
 function find(userId, slug) {
     return db.get(
-        'SELECT * FROM lesson_progress WHERE user_id = ? AND slug = ?',
+        'SELECT ' + COLUMNS + ' FROM lesson_progress WHERE user_id = ? AND slug = ?',
         userId,
         slug
     );
@@ -32,7 +35,7 @@ function find(userId, slug) {
 
 function listByUser(userId) {
     return db.all(
-        'SELECT * FROM lesson_progress WHERE user_id = ? ORDER BY slug',
+        'SELECT ' + COLUMNS + ' FROM lesson_progress WHERE user_id = ? ORDER BY slug',
         userId
     );
 }

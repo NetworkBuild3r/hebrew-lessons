@@ -10,7 +10,7 @@
 | **Initiative** | INIT-002 · multi-user-progress |
 | **Research grounding** | `RSCH-003` (language-learning science) for spacing, recall direction, and metrics; operator decisions for accounts and admin visibility |
 | **Supersedes** | [ADR-0001](ADR-0001-learner-review-model.md) in part — REQ-009 constraint 1 (progress only in `localStorage` / no accounts) and the no-account consequence |
-| **Superseded by** | — |
+| **Superseded by** | Superseded in part by [ADR-0004](ADR-0004-learner-data-media-and-secrets.md) — the MCP learner-progress rule only. Replacement wording is ADR-0004 §11. The sentences in this file are unchanged. Also [ADR-0009](ADR-0009-learner-model-and-language-program.md), Accepted 2026-10-09 (in part — §10 stage threshold under `SRS_SCHEDULER=fsrs`, and the MCP learner-progress rule, whose wording ADR-0009 §9 replaces). |
 
 ## Summary
 
@@ -530,3 +530,6 @@ Password hashes and raw session tokens never leave the server. `DATA_DIR` is nev
 | Date | Change |
 |------|--------|
 | 2026-10-08 | Initial Proposed record — `INIT-002/SPEC-001`; operator decisions aud-1–aud-7 recorded as chosen options |
+| 2026-10-08 | Superseded in part by ADR-0004. Metadata note and this changelog row only; decision sentences in this file are left as written. |
+| 2026-10-09 | ADR-0009 (`INIT-006/SPEC-001`, Proposed) would change the §10 stage threshold under `SRS_SCHEDULER=fsrs` (`longTerm` is stability of 14 days or more) and replace the MCP learner-progress wording again (ADR-0009 §1 profile in place of the ADR-0004 §1 snapshot). Metadata note and this row only; decision sentences are left as written. Takes effect only when ADR-0009 is Accepted. |
+| 2026-10-09 | ADR-0009 Accepted by the operator. The change in the row above is in force. Metadata note and this row only. |

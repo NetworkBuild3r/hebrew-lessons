@@ -307,6 +307,50 @@ function changePassword(userId, currentPassword, newPassword, opts) {
 /**
  * @returns {object[]} public user rows (no password hashes)
  */
+/**
+ * The audit actor ADR-0004 §10 names for an admin action.
+ * @param {string|object|null|undefined} actor
+ * @returns {string}
+ */
+function adminActor(actor) {
+    const label = actorLabel(actor);
+    if (label.startsWith('admin:')) return label;
+    return 'admin:' + label;
+}
+
+/**
+ * Turn AI planning on or off for one account and write the audit row.
+ * `users.setAiPlanning` stores the flag and does not audit; this is the
+ * caller that does (INIT-006/SPEC-010). `enabled` is a boolean or 0 or 1.
+ * @param {number} userId
+ * @param {boolean|number} enabled
+ * @param {string|object} actor signed-in admin
+ * @param {Date|number|string} [now]
+ * @returns {{ previous: 0|1, next: 0|1, username: string }}
+ */
+function setAiPlanning(userId, enabled, actor, now) {
+    const id = Number(userId);
+    if (!Number.isInteger(id) || id <= 0) {
+        throw new AccountsError('User not found', 'not_found');
+    }
+    const target = usersRepo.findById(id);
+    if (!target) throw new AccountsError('User not found', 'not_found');
+    const result = usersRepo.setAiPlanning(id, enabled);
+    if (!result) throw new AccountsError('User not found', 'not_found');
+    writeAudit(
+        adminActor(actor),
+        'ai_planning_switch',
+        target.username,
+        JSON.stringify({ previous: result.previous, next: result.next }),
+        now
+    );
+    return {
+        previous: result.previous,
+        next: result.next,
+        username: target.username
+    };
+}
+
 function listUsers() {
     return usersRepo.listAll().map(publicUser);
 }
@@ -323,6 +367,7 @@ module.exports = {
     resetPassword,
     changePassword,
     listUsers,
+    setAiPlanning,
     publicUser,
     AccountsError,
     GENERIC_AUTH_ERROR,

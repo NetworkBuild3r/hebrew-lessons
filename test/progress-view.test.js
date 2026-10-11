@@ -224,19 +224,23 @@ describe('progress view (SPEC-015)', () => {
         assertNoGamification(host.innerHTML);
 
         const src = fs.readFileSync(path.join(root, 'shared', 'progress-page.js'), 'utf8');
-        const html = fs.readFileSync(path.join(root, 'progress', 'index.html'), 'utf8');
+        const html = fs.readFileSync(path.join(root, 'shared', 'app.html'), 'utf8')
+            + fs.readFileSync(path.join(root, 'shared', 'app-routes.js'), 'utf8');
         assert.doesNotMatch(src, GAMIFICATION_RE);
         assert.doesNotMatch(html, GAMIFICATION_RE);
         assert.doesNotMatch(src, /class=["'][^"']*\b(streak|points|badge|leaderboard)/i);
         assert.doesNotMatch(html, /class=["'][^"']*\b(streak|points|badge|leaderboard)/i);
     });
 
-    it('page mounts shell scripts and does not recompute metrics', () => {
-        const html = fs.readFileSync(path.join(root, 'progress', 'index.html'), 'utf8');
+    it('page mounts in the app shell and does not recompute metrics', () => {
+        const html = fs.readFileSync(path.join(root, 'shared', 'app.html'), 'utf8');
         assert.match(html, /shared\/app-shell\.js/);
         assert.match(html, /shared\/api\.js/);
-        assert.match(html, /shared\/progress-page\.js/);
-        assert.match(html, /HebrewShell\.mount/);
+        const progress = require('../shared/app-routes.js').find((r) => r.id === 'progress');
+        assert.deepEqual(progress.scripts, ['/shared/progress-page.js']);
+        assert.equal(progress.view, 'HebrewProgressView');
+        assert.equal(typeof View.mount, 'function');
+        assert.equal(typeof View.unmount, 'function');
         const src = fs.readFileSync(path.join(root, 'shared', 'progress-page.js'), 'utf8');
         assert.match(src, /\/api\/me\/metrics/);
         assert.doesNotMatch(src, /longTerm\s*\+/);

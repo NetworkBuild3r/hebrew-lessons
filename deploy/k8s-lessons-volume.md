@@ -33,10 +33,25 @@ spec:
               key: ELEVENLABS_API_KEY
               # If the vault key is 11_labs_api_key, either rename in the Secret or add:
               # optional: true
+        # First admin. Read only when the database has no admin user.
+        - name: ADMIN_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: hebrew-secrets
+              key: ADMIN_USERNAME
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: hebrew-secrets
+              key: ADMIN_PASSWORD
         - name: ELEVENLABS_VOICE_ID
           value: "6WRlPmU1fqPwYbSxeP16"
         - name: ELEVENLABS_MODEL
           value: eleven_v3
+        # Plain env, not a Secret. ladder (default) or fsrs.
+        # Full Deployment env lives in deploy/k8s-database.md (INIT-006/SPEC-020).
+        - name: SRS_SCHEDULER
+          value: ladder
       volumeMounts:
         - name: lessons
           mountPath: /data/worksheets
@@ -60,3 +75,5 @@ git commit -m "Rescue <slug> before persistent volume cutover"
 ```
 
 After the volume is mounted, MCP writes go to `/data/worksheets` and the next image push will not wipe them.
+
+Pictures for lessons are not stored on this volume. They live on the data PVC `hebrew-data` at `DATA_DIR/media/` and `DATA_DIR/media/_archive/` (`/data/app/media` when `DATA_DIR=/data/app`). `.mp3` recordings stay here. The Deployment in `deploy/k8s-database.md` names `OPENAI_API_KEY` as a `secretKeyRef` on Secret `hebrew-secrets` and does not contain a value. Do not add a second replica. Do not change `strategy: Recreate`.

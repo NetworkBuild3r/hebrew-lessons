@@ -16,11 +16,15 @@ services:
       # LESSONS_DIR: /data/worksheets
       # Ports are published on 127.0.0.1 only. MCP_AUTH_TOKEN is required (no empty default).
       MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN}
-      # Secrets come from env_file (.env locally). Do NOT set ELEVENLABS_API_KEY here —
-      # an empty ${ELEVENLABS_API_KEY:-} would override env_file and wipe the key.
-      # In k8s, inject ELEVENLABS_API_KEY from the vault Secret instead (see deploy/k8s-lessons-volume.md).
+      # Secrets come from env_file (.env locally). Do NOT set ELEVENLABS_API_KEY,
+      # OPENAI_API_KEY, ADMIN_USERNAME, or ADMIN_PASSWORD here — an empty ${VAR:-}
+      # would override env_file and wipe the value. In k8s, inject them from the
+      # vault Secret (see deploy/k8s-database.md). ADMIN_* is used only when the DB has no admin.
       ELEVENLABS_VOICE_ID: ${ELEVENLABS_VOICE_ID:-6WRlPmU1fqPwYbSxeP16}
       ELEVENLABS_MODEL: ${ELEVENLABS_MODEL:-eleven_v3}
+      # Plain env (not a secret). Unset/empty/ladder = ladder; fsrs = FSRS-6.
+      # Do not flip production to fsrs without the language-program rollout gate.
+      SRS_SCHEDULER: ${SRS_SCHEDULER:-}
     volumes:
       - .:/app
       - /app/node_modules

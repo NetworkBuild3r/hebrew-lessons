@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<!--
+  Signed-in entry for a published lesson plan. Open /shared/plan/?id=<plan id>.
+  The plan script fetches GET /api/plans/:id/published and paints the screens.
+  It does not fetch a worksheet URL. Cutover of the live Today link is SPEC-020.
+  Block scripts and the progress client are INIT-006/SPEC-014.
+  Verse and letter blocks are INIT-006/SPEC-016.
+  Provenance: INIT-004/SPEC-014
+-->
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>תוכנית</title>
+    <link rel="stylesheet" href="/shared/worksheet.css">
+</head>
+<body class="plan-page">
+    <div id="plan-root" class="page"></div>
+    <script src="/shared/player/utils.js"></script>
+    <script src="/shared/api.js"></script>
+    <script src="/shared/player/sync.js"></script>
+    <script src="/shared/ui/blocks/explainer.js"></script>
+    <script src="/shared/ui/blocks/conjugation-table.js"></script>
+    <script src="/shared/ui/blocks/personal-question.js"></script>
+    <script src="/shared/ui/blocks/verse-reading.js"></script>
+    <script src="/shared/ui/blocks/letter-intro.js"></script>
+    <script src="/shared/ui/plan-render.js"></script>
+</body>
+</html>

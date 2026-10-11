@@ -1,29 +1,39 @@
 #!/usr/bin/env node
 /**
- * Headless Chrome smoke: Review today — reveal, grade, store update.
- * Authored-by-spec: INIT-001/SPEC-004
- * Sign-in first (INIT-002/SPEC-012). Ephemeral port via signed-in-server.
- *
+ * Headless Chrome smoke: Review — answer stays out of the DOM until reveal,
+ * lexicon text is text (not markup), four grade buttons exist.
+ * Authored-by-spec: INIT-006/SPEC-012
  *   node test/chrome-review-smoke.js
  */
-const http = require('http');
-const { spawn } = require('child_process');
+'use strict';
+
 const fs = require('fs');
-const path = require('path');
 const os = require('os');
+const path = require('path');
+const { spawn } = require('child_process');
 
 const harness = require('./helpers/signed-in-server');
 const CHROME = process.env.CHROME_PATH
     || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
-function get(url) {
-    return new Promise((resolve, reject) => {
-        http.get(url, res => {
-            let data = '';
-            res.on('data', c => { data += c; });
-            res.on('end', () => resolve({ status: res.statusCode, body: data }));
-        }).on('error', reject);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function api(baseUrl, cookie, method, urlPath, body) {
+    const res = await fetch(baseUrl + urlPath, {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+            Origin: baseUrl,
+            Cookie: cookie
+        },
+        body: body == null ? undefined : JSON.stringify(body)
     });
+    const text = await res.text();
+    let json = null;
+    if (text) {
+        try { json = JSON.parse(text); } catch (err) { json = null; }
+    }
+    return { status: res.status, json };
 }
 
 function cookieParts(cookieHeader) {
@@ -45,7 +55,7 @@ function cdp(wsUrl, method, params) {
         ws.addEventListener('open', () => {
             ws.send(JSON.stringify({ id, method, params: params || {} }));
         });
-        ws.addEventListener('message', event => {
+        ws.addEventListener('message', (event) => {
             const msg = JSON.parse(event.data);
             if (msg.id !== id) return;
             clearTimeout(timer);
@@ -63,11 +73,15 @@ function cdp(wsUrl, method, params) {
 async function main() {
     if (!fs.existsSync(CHROME)) throw new Error('Chrome not found at ' + CHROME);
     const started = await harness.start({ lessons: 'real' });
-    const BASE = started.baseUrl;
+    const baseUrl = started.baseUrl;
+    const cookie = harness.cookieFor('learner');
+    const seeded = await api(baseUrl, cookie, 'POST', '/api/me/library', {
+        words: [{ key: 'בֹּקֶר' }]
+    });
+    if (seeded.status !== 200) throw new Error('seed failed ' + JSON.stringify(seeded.json));
 
     const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'heb-review-'));
     const debugPort = 9300 + Math.floor(Math.random() * 400);
-    const url = BASE + '/review/index.html';
     const chrome = spawn(CHROME, [
         '--headless=new',
         '--disable-gpu',
@@ -83,194 +97,80 @@ async function main() {
         let page = null;
         for (let i = 0; i < 40; i += 1) {
             try {
-                const list = await get('http://127.0.0.1:' + debugPort + '/json/list');
-                const pages = JSON.parse(list.body);
-                page = pages.find(p => p.type === 'page' && p.webSocketDebuggerUrl);
+                const list = await (await fetch('http://127.0.0.1:' + debugPort + '/json/list')).json();
+                page = list.find((p) => p.type === 'page' && p.webSocketDebuggerUrl);
                 if (page) break;
             } catch (err) { /* retry */ }
-            await new Promise(r => setTimeout(r, 250));
+            await sleep(250);
         }
         if (!page) throw new Error('No Chrome page (debug port ' + debugPort + ')');
 
         await cdp(page.webSocketDebuggerUrl, 'Network.enable', {});
-        const ck = cookieParts(harness.cookieFor('learner'));
+        const ck = cookieParts(cookie);
         await cdp(page.webSocketDebuggerUrl, 'Network.setCookie', {
             name: ck.name,
             value: ck.value,
-            url: BASE,
+            url: baseUrl,
             path: '/'
         });
         await cdp(page.webSocketDebuggerUrl, 'Page.enable', {});
-        await cdp(page.webSocketDebuggerUrl, 'Page.navigate', { url: url });
-        await new Promise(r => setTimeout(r, 800));
+        await cdp(page.webSocketDebuggerUrl, 'Page.navigate', { url: baseUrl + '/review/' });
+        await sleep(500);
 
-        // Refresh page handle after navigate
-        for (let i = 0; i < 20; i += 1) {
-            try {
-                const list = await get('http://127.0.0.1:' + debugPort + '/json/list');
-                const pages = JSON.parse(list.body);
-                const hit = pages.find(p => p.type === 'page' && (p.url || '').includes('/review'));
-                if (hit && hit.webSocketDebuggerUrl) {
-                    page = hit;
-                    break;
-                }
-            } catch (err) { /* retry */ }
-            await new Promise(r => setTimeout(r, 200));
+        const value = await cdp(page.webSocketDebuggerUrl, 'Runtime.evaluate', {
+            awaitPromise: true,
+            returnByValue: true,
+            expression: `(() => new Promise((resolve, reject) => {
+                const deadline = Date.now() + 12000;
+                const wait = () => {
+                    const main = document.getElementById('app-main');
+                    const card = document.getElementById('review-card');
+                    if (!main || main.getAttribute('data-route-ready') !== 'review' || !card) {
+                        if (Date.now() > deadline) {
+                            return reject(new Error('review card missing: ' + ((document.body && document.body.innerText) || '').slice(0, 240)));
+                        }
+                        setTimeout(wait, 100);
+                        return;
+                    }
+                    const show = document.getElementById('review-show-answer');
+                    if (!show) return reject(new Error('show answer missing'));
+                    if (document.getElementById('review-answer')) return reject(new Error('answer node before reveal'));
+                    show.click();
+                    const answer = document.getElementById('review-answer');
+                    const meaning = document.getElementById('review-answer-meaning')
+                        || document.getElementById('review-answer-he');
+                    const grades = ['1', '2', '3', '4'].map((g) => document.getElementById('review-grade-' + g));
+                    resolve({
+                        answerVisible: !!(answer && answer.textContent),
+                        meaningHtml: meaning ? meaning.innerHTML : '',
+                        meaningText: meaning ? meaning.textContent : '',
+                        meaningChildren: meaning ? meaning.children.length : -1,
+                        xssFired: !!window.__xss,
+                        gradeCount: grades.filter(Boolean).length,
+                        intervals: grades.map((btn) => btn && btn.querySelector('[data-days]') ? btn.querySelector('[data-days]').getAttribute('data-days') : ''),
+                        bilingualShow: /Show answer|הצג תשובה/.test(show.textContent || ''),
+                        key: card.getAttribute('data-key'),
+                        direction: card.getAttribute('data-direction')
+                    });
+                };
+                wait();
+            }))()`
+        });
+        if (value.exceptionDetails) {
+            const ex = value.exceptionDetails.exception;
+            throw new Error((ex && ex.description) || value.exceptionDetails.text);
         }
-
-        await cdp(page.webSocketDebuggerUrl, 'Page.enable', {});
-        await cdp(page.webSocketDebuggerUrl, 'Runtime.enable', {});
-        await new Promise(r => setTimeout(r, 1200));
-
-        let value = null;
-        let lastErr = null;
-        for (let attempt = 0; attempt < 5; attempt += 1) {
-            try {
-                const result = await cdp(page.webSocketDebuggerUrl, 'Runtime.evaluate', {
-                    awaitPromise: true,
-                    returnByValue: true,
-                    expression: `(() => new Promise((resolve, reject) => {
-                        const deadline = Date.now() + 10000;
-                        const wait = () => {
-                            if (!window.HebrewReview || !window.HebrewUtils || !window.HebrewReviewPage) {
-                                if (Date.now() > deadline) return reject(new Error('review page did not boot'));
-                                setTimeout(wait, 100);
-                                return;
-                            }
-                            if (typeof window.HEBREW_VOCAB_INDEX === 'undefined') {
-                                if (Date.now() > deadline) return reject(new Error('vocab index missing'));
-                                setTimeout(wait, 100);
-                                return;
-                            }
-
-                            const past = new Date(Date.now() - 86400000).toISOString();
-                            const dir = (extra) => Object.assign({
-                                due: past,
-                                step: 0,
-                                streak: 0,
-                                lapses: 0,
-                                lastResult: null,
-                                lastAt: null
-                            }, extra || {});
-                            const xssKey = 'בֹּקֶר';
-                            const store = {
-                                v: 1,
-                                words: {
-                                    [xssKey]: {
-                                        he_en: dir({ lastResult: 'pass', lastAt: past, step: 0 }),
-                                        en_he: dir(),
-                                        sources: ['my-morning']
-                                    },
-                                    'אָנָלִי': {
-                                        he_en: dir({ lastResult: 'pass', lastAt: past }),
-                                        en_he: dir(),
-                                        sources: ['anal-sex-vocab']
-                                    },
-                                    'קָם': {
-                                        he_en: dir({ lastResult: 'pass', lastAt: past }),
-                                        en_he: dir(),
-                                        sources: ['my-morning']
-                                    }
-                                },
-                                migratedLessons: {}
-                            };
-
-                            // Inject XSS meaning into in-memory index entry if present
-                            const idx = window.HEBREW_VOCAB_INDEX;
-                            const list = Array.isArray(idx) ? idx : [];
-                            const morning = list.find(e => e && e.key === xssKey);
-                            if (morning) {
-                                morning.meaning = '<img onerror="window.__xss=1">evil';
-                            }
-
-                            localStorage.setItem('hebrew-review:v1', JSON.stringify(store));
-                            window.HebrewReview._resetMemory(null);
-                            window.HebrewReview.load();
-
-                            // Reboot UI
-                            window.HebrewReviewPage.start();
-
-                            setTimeout(() => {
-                                const answer = document.getElementById('review-answer');
-                                const showBtn = document.getElementById('review-show-answer');
-                                const card = document.getElementById('review-card');
-                                const noIndex = document.getElementById('review-no-index');
-                                if (noIndex) {
-                                    return reject(new Error('unexpected missing-index state'));
-                                }
-                                if (!card || !showBtn) {
-                                    return reject(new Error('review card missing; body=' + (document.body.innerText || '').slice(0, 200)));
-                                }
-                                const answerHiddenBefore = !answer || answer.classList.contains('hidden');
-                                const lessonsSeen = [];
-                                const firstLesson = card.getAttribute('data-lesson') || '';
-                                lessonsSeen.push(firstLesson);
-
-                                showBtn.click();
-                                const answerEl = document.getElementById('review-answer');
-                                const answerVisible = answerEl && !answerEl.classList.contains('hidden');
-                                const meaningHtml = (document.getElementById('review-answer-meaning')
-                                    || document.getElementById('review-prompt-en')
-                                    || { innerHTML: '' }).innerHTML;
-                                const xssFired = !!window.__xss;
-                                const meaningText = (document.getElementById('review-answer-meaning')
-                                    || { textContent: '' }).textContent || '';
-
-                                const beforeRaw = localStorage.getItem('hebrew-review:v1');
-                                const before = JSON.parse(beforeRaw);
-                                const key = card.getAttribute('data-key');
-                                const direction = card.getAttribute('data-direction');
-                                const beforeDue = before.words[key][direction].due;
-
-                                document.getElementById('review-knew').click();
-
-                                setTimeout(() => {
-                                    const after = JSON.parse(localStorage.getItem('hebrew-review:v1'));
-                                    const afterRec = after.words[key][direction];
-                                    const card2 = document.getElementById('review-card');
-                                    if (card2) lessonsSeen.push(card2.getAttribute('data-lesson') || '');
-
-                                    resolve({
-                                        answerHiddenBefore,
-                                        answerVisible,
-                                        xssFired,
-                                        meaningHtml,
-                                        meaningText,
-                                        key,
-                                        direction,
-                                        beforeDue,
-                                        afterDue: afterRec.due,
-                                        afterResult: afterRec.lastResult,
-                                        afterStep: afterRec.step,
-                                        lessonsSeen,
-                                        bilingualShow: !!(showBtn && /Show answer|הצג תשובה/.test(showBtn.textContent || '')),
-                                        hasVocabIndex: Array.isArray(window.HEBREW_VOCAB_INDEX)
-                                    });
-                                }, 200);
-                            }, 300);
-                        };
-                        wait();
-                    }))()`
-                });
-                value = result.result && result.result.value;
-                if (value) break;
-                lastErr = new Error('empty evaluate: ' + JSON.stringify(result));
-            } catch (err) {
-                lastErr = err;
-                await new Promise(r => setTimeout(r, 500));
-            }
-        }
-        if (!value) throw lastErr || new Error('No evaluate result');
-        if (!value.answerHiddenBefore) throw new Error('answer should be hidden before reveal');
-        if (!value.answerVisible) throw new Error('answer should show after reveal');
-        if (value.xssFired) throw new Error('XSS payload executed');
-        if (/<img/i.test(value.meaningHtml || '')) throw new Error('unescaped img in meaning HTML: ' + value.meaningHtml);
-        if (value.afterResult !== 'pass') throw new Error('expected pass after Knew it, got ' + value.afterResult);
-        if (value.afterDue === value.beforeDue) throw new Error('due date did not advance');
-        if (!value.hasVocabIndex) throw new Error('vocab index not loaded');
-        if (!value.bilingualShow) throw new Error('Show answer label not bilingual');
-
-        console.log(JSON.stringify({ ok: true, ...value }, null, 2));
+        const report = value.result && value.result.value;
+        if (!report) throw new Error('empty evaluate');
+        if (!report.answerVisible) throw new Error('answer should show after reveal');
+        if (report.xssFired) throw new Error('XSS payload executed');
+        if (report.meaningChildren !== 0) throw new Error('meaning inserted elements');
+        if (/[<>]/.test(report.meaningHtml || '')) throw new Error('markup in meaning: ' + report.meaningHtml);
+        if (report.meaningHtml !== report.meaningText) throw new Error('meaning html differs from text');
+        if (report.gradeCount !== 4) throw new Error('expected four grade buttons');
+        if (report.intervals.filter(Boolean).length !== 4) throw new Error('expected four interval labels');
+        if (!report.bilingualShow) throw new Error('Show answer label not bilingual');
+        console.log(JSON.stringify({ ok: true, ...report }, null, 2));
     } finally {
         chrome.kill();
         try { fs.rmSync(userData, { recursive: true, force: true }); } catch (err) { /* ignore */ }
@@ -278,7 +178,7 @@ async function main() {
     }
 }
 
-main().catch(err => {
+main().catch((err) => {
     console.error(err.message || err);
     process.exit(1);
 });

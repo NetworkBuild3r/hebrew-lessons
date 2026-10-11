@@ -1,6 +1,10 @@
 /**
- * Today page — next-step cards from server state + filtered catalog.
- * Provenance: INIT-002/SPEC-014
+ * Today page — next-step cards from server state + filtered catalog,
+ * plus the daily mix from GET /api/me/mix.
+ * The mix only arranges the sections the server returned. It does not invent words.
+ * Drill checks go through HebrewBlockConjugation when that module is on the page.
+ * A typed drill answer is not sent. Done marks are session memory, not a new table.
+ * Provenance: INIT-002/SPEC-014, INIT-006/SPEC-015
  */
 (function (root) {
     'use strict';
@@ -151,6 +155,18 @@
             + '</div>';
     }
 
+    function ctaIcon(kind) {
+        var paths = {
+            play: '<circle cx="12" cy="12" r="9"/><path d="m10 8.5 6 3.5-6 3.5Z"/>',
+            next: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+            review: '<path d="M4 12a8 8 0 0 1 14-5l2 2M20 12a8 8 0 0 1-14 5l-2-2"/><path d="M20 4v5h-5M4 20v-5h5"/>'
+        };
+        var inner = paths[kind] || paths.next;
+        return '<svg class="hebrew-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"'
+            + ' stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"'
+            + ' aria-hidden="true" focusable="false">' + inner + '</svg> ';
+    }
+
     function renderReviewCard(summary, brandNew) {
         if (brandNew) return '';
         if (summary.dueCount > 0) {
@@ -168,7 +184,7 @@
                 + '</p>'
                 + '<p class="today-actions">'
                 + '<a class="btn btn-primary" id="today-review-start" href="/review/">'
-                + bi('התחילו', 'Start') + '</a>'
+                + ctaIcon('review') + bi('התחילו', 'Start') + '</a>'
                 + '</p>'
                 + '</div></article>';
         }
@@ -199,7 +215,7 @@
             + (lesson.blurb ? '<p>' + esc(lesson.blurb) + '</p>' : '')
             + '<p class="today-actions">'
             + '<a class="btn btn-primary" id="today-continue-link" href="' + esc(lessonHref(lesson.slug)) + '">'
-            + bi('המשיכו', 'Continue') + '</a>'
+            + ctaIcon('play') + bi('המשיכו', 'Continue') + '</a>'
             + '</p>'
             + '</div></article>';
     }
@@ -246,12 +262,637 @@
             + '</div>';
     }
 
+    var SECTION_IDS = ['review', 'weak', 'drill', 'reading'];
+    var SECTION_CAP = 40;
+    var DONE_KEY = 'hebrew-today-mix-done:v1';
+    var TEXT_CAP = 500;
+
+    var mixById = Object.create(null);
+    var glossMap = Object.create(null);
+    var doneMemory = Object.create(null);
+    var mixSession = null;
+    var clipNode = null;
+    var viewSignal = null;
+    var lastMix = null;
+
+    function shortText(value, max) {
+        var raw = value == null ? '' : String(value);
+        if (raw.length > max) raw = raw.slice(0, max);
+        return raw;
+    }
+
+    function drillReady() {
+        var drill = root.HebrewBlockConjugation;
+        return !!(drill
+            && typeof drill.decideAttempt === 'function'
+            && typeof drill.formSignal === 'function');
+    }
+
+    function itemsOf(section) {
+        var raw = section && Array.isArray(section.items) ? section.items : [];
+        var out = [];
+        for (var i = 0; i < raw.length && out.length < SECTION_CAP; i += 1) {
+            if (raw[i] && typeof raw[i] === 'object') out.push(raw[i]);
+        }
+        return out;
+    }
+
+    /**
+     * Sections the card may show, in practice order.
+     * A drill section is omitted until the conjugation drill module is loaded.
+     * A section the server did not send is not invented.
+     * @param {{ sections?: object[] }|null|undefined} mix
+     * @returns {object[]}
+     */
+    function visibleSections(mix) {
+        var list = mix && Array.isArray(mix.sections) ? mix.sections : [];
+        var byId = Object.create(null);
+        list.forEach(function (section) {
+            if (!section || SECTION_IDS.indexOf(section.id) === -1) return;
+            if (!byId[section.id]) byId[section.id] = section;
+        });
+        var out = [];
+        SECTION_IDS.forEach(function (id) {
+            var section = byId[id];
+            if (!section) return;
+            if (id === 'drill' && !drillReady()) return;
+            if (!itemsOf(section).length) return;
+            out.push(section);
+        });
+        return out;
+    }
+
+    function todayKey(ms) {
+        var d = new Date(ms || Date.now());
+        function pad(n) { return (n < 10 ? '0' : '') + n; }
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    }
+
+    function readDone() {
+        var today = todayKey();
+        var saved = Object.create(null);
+        try {
+            var store = root.sessionStorage;
+            var raw = store && store.getItem(DONE_KEY);
+            if (raw) {
+                var parsed = JSON.parse(raw);
+                var sections = parsed && parsed.date === today ? parsed.sections : null;
+                if (sections && typeof sections === 'object') {
+                    SECTION_IDS.forEach(function (id) {
+                        if (sections[id] === true) saved[id] = true;
+                    });
+                }
+            }
+        } catch (err) { /* keep the in-memory marks */ }
+        SECTION_IDS.forEach(function (id) {
+            if (doneMemory[id] === today) saved[id] = true;
+        });
+        return saved;
+    }
+
+    function markDone(id) {
+        if (SECTION_IDS.indexOf(id) === -1) return;
+        doneMemory[id] = todayKey();
+        var sections = readDone();
+        try {
+            if (root.sessionStorage) {
+                root.sessionStorage.setItem(DONE_KEY, JSON.stringify({
+                    date: todayKey(),
+                    sections: sections
+                }));
+            }
+        } catch (err) { /* the in-memory mark still holds for this view */ }
+    }
+
+    function stripVowels(value) {
+        var raw = String(value == null ? '' : value);
+        if (U && typeof U.stripVowels === 'function') return U.stripVowels(raw);
+        return raw.replace(/[\u0591-\u05C7]/g, '').normalize('NFC').replace(/\s+/g, ' ').trim();
+    }
+
+    function rememberGloss(key, gloss) {
+        var word = shortText(key, 80).trim();
+        var meaning = shortText(gloss, TEXT_CAP).trim();
+        if (!word || !meaning) return;
+        glossMap[word] = meaning;
+    }
+
+    function absorbGlosses(mix) {
+        var list = mix && Array.isArray(mix.sections) ? mix.sections : [];
+        list.forEach(function (section) {
+            itemsOf(section).forEach(function (item) {
+                if (!item.key) return;
+                var english = item.direction === 'he_en' ? item.meaning : item.prompt;
+                rememberGloss(item.key, english);
+            });
+        });
+    }
+
+    function glossFor(token) {
+        var raw = shortText(token, 80).trim();
+        if (!raw) return '';
+        if (glossMap[raw]) return glossMap[raw];
+        var stripped = stripVowels(raw);
+        if (stripped && glossMap[stripped]) return glossMap[stripped];
+        var keys = Object.keys(glossMap);
+        for (var i = 0; i < keys.length; i += 1) {
+            if (stripVowels(keys[i]) === stripped) return glossMap[keys[i]];
+        }
+        return '';
+    }
+
+    /**
+     * Same-origin worksheet clip only. Anything else is not a playable URL.
+     * @param {unknown} audio
+     * @returns {string}
+     */
+    function clipHref(audio) {
+        if (typeof audio !== 'string' || !audio) return '';
+        if (/[\u0000-\u001F\u007F]/.test(audio) || audio.indexOf('..') !== -1 || audio.indexOf('\\') !== -1) {
+            return '';
+        }
+        var loc = root.location;
+        if (!loc || !loc.href) return '';
+        try {
+            var resolved = new URL(audio, loc.href);
+            if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') return '';
+            if (loc.origin && resolved.origin !== loc.origin) return '';
+            if (!/^\/worksheets\/[a-z0-9]+(?:-[a-z0-9]+)*\/.+\.mp3$/i.test(resolved.pathname)) return '';
+            return resolved.pathname;
+        } catch (err) {
+            return '';
+        }
+    }
+
+    function stopClip() {
+        if (!clipNode) return;
+        try { clipNode.pause(); } catch (err) { /* already stopped */ }
+        clipNode = null;
+    }
+
+    function indexMix(mix) {
+        mixById = Object.create(null);
+        glossMap = Object.create(null);
+        visibleSections(mix).forEach(function (section) {
+            mixById[section.id] = {
+                id: section.id,
+                label: shortText(section.label || section.concept || '', 200),
+                concept: shortText(section.concept || '', 80),
+                items: itemsOf(section)
+            };
+        });
+        absorbGlosses(mix);
+    }
+
+    function sectionHeading(section) {
+        if (section.id === 'weak') return bi('מילים חלשות', 'Weak words');
+        if (section.id === 'drill') {
+            var label = shortText(section.label || section.concept || '', 200);
+            return bi('תרגול', 'Drill')
+                + (label
+                    ? ' · <span class="today-mix-concept" dir="auto">' + esc(label) + '</span>'
+                    : '');
+        }
+        if (section.id === 'reading') return bi('קריאה', 'Reading');
+        return bi('חזרה', 'Review');
+    }
+
+    function renderMixRow(section) {
+        var id = section.id;
+        var count = itemsOf(section).length;
+        var done = readDone()[id] === true;
+        var action = done
+            ? '<p class="today-mix-done" data-mix-done="1">' + bi('בוצע להיום', 'Done for today') + '</p>'
+            : '<button type="button" class="btn btn-primary" data-mix-action="start" data-mix-id="'
+                + esc(id) + '">' + bi('התחילו', 'Start') + '</button>';
+        return '<li class="today-mix-row" id="today-mix-' + esc(id) + '" data-mix-section="' + esc(id) + '">'
+            + '<div class="today-mix-copy"><p class="today-mix-title">' + sectionHeading(section) + '</p>'
+            + '<p class="fine"><span class="today-mix-count" data-mix-count="' + esc(id) + '">'
+            + esc(String(count)) + '</span> ' + bi('פריטים', 'items') + '</p></div>'
+            + action + '</li>';
+    }
+
+    function mixBodyHtml(mix) {
+        var sections = visibleSections(mix);
+        if (!sections.length) return '';
+        return '<h2>' + bi('התרגול של היום', "Today's practice") + '</h2>'
+            + '<ul class="today-mix-list" id="today-mix-list">'
+            + sections.map(renderMixRow).join('')
+            + '</ul>';
+    }
+
+    function renderMixCard(mix) {
+        var body = mixBodyHtml(mix);
+        if (!body) return '';
+        return '<article class="lesson-card today-card today-mix" id="today-mix" data-today-card="mix">'
+            + '<div class="lesson-link today-card-body" id="today-mix-body">' + body + '</div></article>';
+    }
+
+    function node(tag, className) {
+        var created = root.document.createElement(tag);
+        if (className) created.className = className;
+        return created;
+    }
+
+    function appendBi(parent, he, en) {
+        parent.appendChild(root.document.createTextNode(he + ' '));
+        var span = node('span', 'en');
+        span.dir = 'ltr';
+        span.lang = 'en';
+        span.textContent = '(' + en + ')';
+        parent.appendChild(span);
+    }
+
+    function actionButton(action, id, he, en, primary) {
+        var button = node('button', primary ? 'btn btn-primary' : 'btn today-mix-back');
+        button.type = 'button';
+        button.setAttribute('data-mix-action', action);
+        if (id) button.setAttribute('data-mix-id', id);
+        appendBi(button, he, en);
+        return button;
+    }
+
+    function showMixList() {
+        stopClip();
+        mixSession = null;
+        var body = root.document && root.document.getElementById('today-mix-body');
+        if (!body || !mounted) return;
+        body.innerHTML = mixBodyHtml(lastMix);
+    }
+
+    function hebrewPrompt(item) {
+        return !item || item.direction === 'en_he' ? false : true;
+    }
+
+    function renderFlash(body, section, index) {
+        var items = section.items;
+        var item = items[index];
+        if (!item) return;
+        mixSession = { id: section.id, index: index, revealed: false };
+        body.textContent = '';
+        var session = node('div', 'today-mix-session');
+        session.id = 'today-mix-session';
+        session.setAttribute('data-mix-phase', 'card');
+        var kicker = node('p', 'fine');
+        kicker.appendChild(root.document.createTextNode(
+            section.id === 'weak' ? 'מילים חלשות ' : 'חזרה '
+        ));
+        var en = node('span', 'en');
+        en.dir = 'ltr';
+        en.lang = 'en';
+        en.textContent = section.id === 'weak' ? '(Weak words)' : '(Review)';
+        kicker.appendChild(en);
+        var prompt = node('p', 'today-mix-prompt');
+        prompt.id = 'today-mix-prompt';
+        var hePrompt = hebrewPrompt(item);
+        prompt.lang = hePrompt ? 'he' : 'en';
+        prompt.dir = hePrompt ? 'rtl' : 'ltr';
+        prompt.textContent = shortText(item.prompt, TEXT_CAP);
+        var actions = node('p', 'today-actions');
+        actions.appendChild(actionButton('reveal', section.id, 'הצגת התשובה', 'Show answer', true));
+        actions.appendChild(actionButton('back', section.id, 'חזרה להיום', 'Back to Today', false));
+        session.appendChild(kicker);
+        session.appendChild(prompt);
+        session.appendChild(actions);
+        body.appendChild(session);
+    }
+
+    function revealFlash() {
+        if (!mixSession || mixSession.revealed) return;
+        var section = mixById[mixSession.id];
+        var item = section && section.items[mixSession.index];
+        var session = root.document && root.document.getElementById('today-mix-session');
+        if (!item || !session) return;
+        mixSession.revealed = true;
+        var answer = node('p', 'today-mix-answer');
+        answer.id = 'today-mix-answer';
+        var heAnswer = !hebrewPrompt(item);
+        answer.lang = heAnswer ? 'he' : 'en';
+        answer.dir = heAnswer ? 'rtl' : 'ltr';
+        answer.textContent = shortText(item.meaning, TEXT_CAP);
+        var actions = session.querySelector('.today-actions');
+        var reveal = session.querySelector('[data-mix-action="reveal"]');
+        if (reveal && reveal.parentNode) reveal.parentNode.removeChild(reveal);
+        session.insertBefore(answer, actions);
+        if (!actions) return;
+        var last = mixSession.index >= section.items.length - 1;
+        actions.insertBefore(
+            last
+                ? actionButton('finish', section.id, 'סיום', 'Done', true)
+                : actionButton('next', section.id, 'הבא', 'Next', true),
+            actions.firstChild
+        );
+    }
+
+    function renderReading(body, section) {
+        mixSession = { id: 'reading', index: 0, revealed: true };
+        body.textContent = '';
+        var session = node('div', 'today-mix-session');
+        session.id = 'today-mix-session';
+        session.setAttribute('data-mix-phase', 'reading');
+        var kicker = node('p', 'fine');
+        appendBi(kicker, 'קריאה', 'Reading');
+        session.appendChild(kicker);
+        section.items.forEach(function (item) {
+            var line = node('p', 'today-mix-sentence');
+            line.lang = 'he';
+            line.dir = 'rtl';
+            var sentence = shortText(item.sentence, TEXT_CAP);
+            sentence.split(/(\s+)/).forEach(function (part) {
+                if (!part) return;
+                if (/[\u0590-\u05FF]/.test(part)) {
+                    var word = node('button', 'today-mix-word');
+                    word.type = 'button';
+                    word.lang = 'he';
+                    word.dir = 'rtl';
+                    word.setAttribute('data-mix-action', 'gloss');
+                    word.textContent = part;
+                    line.appendChild(word);
+                } else {
+                    line.appendChild(root.document.createTextNode(part));
+                }
+            });
+            var clip = clipHref(item.audio);
+            if (clip) {
+                var play = actionButton('play', 'reading', 'השמעה', 'Play', false);
+                play.className = 'btn today-mix-play';
+                play.setAttribute('data-mix-src', clip);
+                line.appendChild(root.document.createTextNode(' '));
+                line.appendChild(play);
+            }
+            session.appendChild(line);
+        });
+        var gloss = node('p', 'today-mix-gloss');
+        gloss.id = 'today-mix-gloss';
+        gloss.lang = 'en';
+        gloss.dir = 'ltr';
+        gloss.setAttribute('aria-live', 'polite');
+        session.appendChild(gloss);
+        var actions = node('p', 'today-actions');
+        actions.appendChild(actionButton('finish', 'reading', 'סיום', 'Done', true));
+        actions.appendChild(actionButton('back', 'reading', 'חזרה להיום', 'Back to Today', false));
+        session.appendChild(actions);
+        body.appendChild(session);
+        loadLibraryGlosses();
+    }
+
+    function loadLibraryGlosses() {
+        var Api = root.HebrewApi;
+        if (!Api || typeof Api.get !== 'function') return;
+        var signal = viewSignal;
+        Api.get('/api/me/library?limit=200', { redirectOn401: false, signal: signal })
+            .then(function (res) {
+                if (!mounted || (signal && signal.aborted)) return;
+                if (!res || !res.ok || !res.data || !Array.isArray(res.data.words)) return;
+                res.data.words.forEach(function (row) {
+                    if (row && row.word) rememberGloss(row.word, row.gloss_en);
+                });
+            })
+            .catch(function () { /* taps still use glosses already on the mix */ });
+    }
+
+    function showGloss(button) {
+        var gloss = root.document && root.document.getElementById('today-mix-gloss');
+        if (!gloss || !button) return;
+        var meaning = glossFor(button.textContent);
+        gloss.textContent = meaning || 'אין תרגום שמור. (No saved gloss.)';
+    }
+
+    function playClip(button) {
+        var src = clipHref(button && button.getAttribute('data-mix-src'));
+        if (!src) return;
+        stopClip();
+        try {
+            clipNode = new root.Audio(src);
+            var played = clipNode.play();
+            if (played && typeof played.catch === 'function') played.catch(function () { /* no clip output */ });
+        } catch (err) {
+            clipNode = null;
+        }
+    }
+
+    function renderDrill(body, section) {
+        mixSession = { id: 'drill', index: 0, revealed: false, tries: 0, settled: false };
+        body.textContent = '';
+        var session = node('div', 'today-mix-session');
+        session.id = 'today-mix-session';
+        session.setAttribute('data-mix-phase', 'drill');
+        var kicker = node('p', 'fine');
+        appendBi(kicker, 'תרגול', 'Drill');
+        var concept = node('p', 'today-mix-concept');
+        concept.dir = 'auto';
+        concept.textContent = section.label || section.concept || '';
+        var prompt = node('p', 'today-mix-prompt');
+        prompt.id = 'today-mix-prompt';
+        prompt.lang = 'en';
+        prompt.dir = 'ltr';
+        var feedback = node('p', 'today-mix-feedback');
+        feedback.id = 'today-mix-feedback';
+        var reveal = node('p', 'today-mix-answer');
+        reveal.id = 'today-mix-reveal';
+        reveal.lang = 'he';
+        reveal.dir = 'rtl';
+        reveal.hidden = true;
+        var label = node('label', 'today-mix-field');
+        appendBi(label, 'התשובה שלכם', 'Your answer');
+        var input = node('input', 'today-mix-input');
+        input.id = 'today-mix-drill-input';
+        input.type = 'text';
+        input.lang = 'he';
+        input.dir = 'rtl';
+        input.setAttribute('autocomplete', 'off');
+        input.setAttribute('autocorrect', 'off');
+        input.spellcheck = false;
+        label.appendChild(input);
+        var actions = node('p', 'today-actions');
+        actions.appendChild(actionButton('check', 'drill', 'בדיקה', 'Check', true));
+        actions.appendChild(actionButton('override', 'drill', 'צדקתי', 'I was right', false));
+        var next = actionButton('next', 'drill', 'הבא', 'Next', true);
+        next.hidden = true;
+        next.id = 'today-mix-drill-next';
+        actions.appendChild(next);
+        actions.appendChild(actionButton('back', 'drill', 'חזרה להיום', 'Back to Today', false));
+        session.appendChild(kicker);
+        session.appendChild(concept);
+        session.appendChild(prompt);
+        session.appendChild(feedback);
+        session.appendChild(reveal);
+        session.appendChild(label);
+        session.appendChild(actions);
+        body.appendChild(session);
+        showDrillItem();
+    }
+
+    function showDrillItem() {
+        var section = mixById.drill;
+        var item = section && mixSession && section.items[mixSession.index];
+        var prompt = root.document && root.document.getElementById('today-mix-prompt');
+        var feedback = root.document && root.document.getElementById('today-mix-feedback');
+        var reveal = root.document && root.document.getElementById('today-mix-reveal');
+        var input = root.document && root.document.getElementById('today-mix-drill-input');
+        var next = root.document && root.document.getElementById('today-mix-drill-next');
+        if (!item || !prompt) return;
+        mixSession.tries = 0;
+        mixSession.settled = false;
+        mixSession.revealed = false;
+        prompt.textContent = shortText(item.prompt, TEXT_CAP);
+        if (feedback) feedback.textContent = '';
+        if (reveal) {
+            reveal.textContent = '';
+            reveal.hidden = true;
+        }
+        if (input) {
+            input.value = '';
+            input.disabled = false;
+        }
+        if (next) next.hidden = true;
+    }
+
+    function drillForm(item) {
+        return {
+            key: item.key,
+            formKey: item.key,
+            lemma: item.lemma || '',
+            accept: Array.isArray(item.accept) ? item.accept : []
+        };
+    }
+
+    function postForm(item, result, activity) {
+        var Drill = root.HebrewBlockConjugation;
+        if (!Drill || typeof Drill.formSignal !== 'function') return;
+        var signal = Drill.formSignal(drillForm(item), result, activity, '');
+        var Sync = root.HebrewSync;
+        if (!signal || !Sync || typeof Sync.queueSignal !== 'function') return;
+        if (typeof Sync.isActive === 'function' && !Sync.isActive()) return;
+        Sync.queueSignal(signal);
+    }
+
+    function settleDrill(item, message, revealText) {
+        if (!mixSession) return;
+        mixSession.settled = true;
+        mixSession.revealed = true;
+        var feedback = root.document.getElementById('today-mix-feedback');
+        var reveal = root.document.getElementById('today-mix-reveal');
+        var input = root.document.getElementById('today-mix-drill-input');
+        var next = root.document.getElementById('today-mix-drill-next');
+        if (feedback) feedback.textContent = message;
+        if (revealText && reveal) {
+            reveal.hidden = false;
+            reveal.textContent = shortText(revealText, TEXT_CAP);
+        }
+        if (input) input.disabled = true;
+        if (!next) return;
+        var section = mixById.drill;
+        var last = !section || mixSession.index >= section.items.length - 1;
+        next.hidden = false;
+        next.textContent = '';
+        appendBi(next, last ? 'סיום' : 'הבא', last ? 'Done' : 'Next');
+        next.setAttribute('data-mix-action', last ? 'finish' : 'next');
+    }
+
+    function checkDrill() {
+        var Drill = root.HebrewBlockConjugation;
+        var section = mixById.drill;
+        var item = section && mixSession && section.items[mixSession.index];
+        var input = root.document && root.document.getElementById('today-mix-drill-input');
+        if (!Drill || !item || !input || !mixSession || mixSession.settled) return;
+        var decision = Drill.decideAttempt(input.value, drillForm(item), mixSession.tries);
+        if (!decision.attempted) return;
+        var kept = input.value;
+        postForm(item, decision.result, decision.activity);
+        input.value = kept;
+        if (decision.correct) {
+            settleDrill(item, 'נכון. (Correct.)', '');
+            return;
+        }
+        if (decision.reveal) {
+            settleDrill(item, 'הצורה. (The form.)', item.key);
+            return;
+        }
+        mixSession.tries += 1;
+        var feedback = root.document.getElementById('today-mix-feedback');
+        if (feedback) feedback.textContent = 'נסו שוב. (Try again.)';
+    }
+
+    function overrideDrill() {
+        var section = mixById.drill;
+        var item = section && mixSession && section.items[mixSession.index];
+        if (!item || !mixSession || mixSession.settled) return;
+        postForm(item, 'pass', 'conjugation-override');
+        settleDrill(item, 'נכון. (I was right.)', '');
+    }
+
+    function openSection(id) {
+        if (!mounted || !mixById[id]) return;
+        var body = root.document.getElementById('today-mix-body');
+        if (!body) return;
+        stopClip();
+        if (id === 'reading') renderReading(body, mixById[id]);
+        else if (id === 'drill') renderDrill(body, mixById[id]);
+        else renderFlash(body, mixById[id], 0);
+    }
+
+    function advanceFlash() {
+        if (!mixSession || !mixSession.revealed) return;
+        var section = mixById[mixSession.id];
+        var body = root.document.getElementById('today-mix-body');
+        if (!section || !body) return;
+        if (mixSession.index >= section.items.length - 1) {
+            markDone(section.id);
+            showMixList();
+            return;
+        }
+        renderFlash(body, section, mixSession.index + 1);
+    }
+
+    function onMixClick(event) {
+        if (!mounted) return;
+        var target = event.target;
+        if (target && target.nodeType === 3) target = target.parentElement;
+        if (!target || typeof target.closest !== 'function') return;
+        var button = target.closest('[data-mix-action]');
+        if (!button || !mounted.contains(button)) return;
+        var action = button.getAttribute('data-mix-action');
+        var id = button.getAttribute('data-mix-id') || (mixSession && mixSession.id);
+        if (action === 'start') openSection(id);
+        else if (action === 'back') showMixList();
+        else if (action === 'reveal') revealFlash();
+        else if (action === 'next') {
+            if (mixSession && mixSession.id === 'drill') {
+                var drill = mixById.drill;
+                if (drill && mixSession.index < drill.items.length - 1) {
+                    mixSession.index += 1;
+                    showDrillItem();
+                }
+            } else advanceFlash();
+        } else if (action === 'finish') {
+            markDone(id);
+            showMixList();
+        } else if (action === 'gloss') showGloss(button);
+        else if (action === 'play') playClip(button);
+        else if (action === 'check') checkDrill();
+        else if (action === 'override') overrideDrill();
+    }
+
+    function loadMix(signal) {
+        var Api = root.HebrewApi;
+        if (!Api || typeof Api.get !== 'function') return Promise.resolve(null);
+        return Api.get('/api/me/mix', { redirectOn401: false, signal: signal })
+            .then(function (res) {
+                if (signal && signal.aborted) return null;
+                if (!res || !res.ok || !res.data || !Array.isArray(res.data.sections)) return null;
+                return res.data;
+            })
+            .catch(function () { return null; });
+    }
+
     function renderToday(model) {
         if (!model || model.state === 'loading') return renderLoading();
         if (model.state === 'error') return renderError(model.message);
         var list = model.catalog || [];
         if (!list.length) return renderEmptyCatalog();
         var parts = [];
+        parts.push(renderMixCard(model.mix));
         parts.push(renderReviewCard(model.review || {}, model.brandNew));
         parts.push(renderContinueCard(model.continueEntry));
         parts.push(renderNextCard(model.nextLesson, model.brandNew));
@@ -315,43 +956,64 @@
 
     function paint(el, model) {
         if (!el) return;
+        lastMix = model && model.mix;
+        indexMix(lastMix);
         el.innerHTML = renderToday(model);
     }
 
-    function boot() {
-        var el = root.document && root.document.getElementById('today-app');
-        if (!el) return;
-        paint(el, { state: 'loading' });
+    // ---- view lifecycle (contract: shared/router.js) ----
+    // `mounted` is the element of the open view, or null once the route closes.
+    // Every async callback checks it so a late response never paints a closed view.
+    var mounted = null;
 
-        var Sync = root.HebrewSync;
-        var start = Sync && typeof Sync.init === 'function'
-            ? Promise.resolve(Sync.init({}))
-            : Promise.resolve(null);
-
-        start.then(function () {
-            if (Sync && typeof Sync.paintStatus === 'function') Sync.paintStatus();
-            return loadProgressMap(catalog());
-        }).then(function (progressBySlug) {
-            paint(el, buildModel(progressBySlug || Object.create(null)));
+    function mount(el, ctx) {
+        mounted = el;
+        viewSignal = (ctx && ctx.signal) || null;
+        mixSession = null;
+        stopClip();
+        if (el && typeof el.addEventListener === 'function') {
+            el.addEventListener('click', onMixClick);
+        }
+        var ready = (ctx && ctx.ready) || Promise.resolve(null);
+        var signal = viewSignal;
+        return ready.then(function () {
+            if (mounted !== el) return null;
+            return Promise.all([
+                loadProgressMap(catalog()),
+                loadMix(signal)
+            ]);
+        }).then(function (pair) {
+            if (!pair || mounted !== el) return;
+            if (signal && signal.aborted) return;
+            var model = buildModel(pair[0] || Object.create(null));
+            model.mix = pair[1];
+            paint(el, model);
         }).catch(function (err) {
-            paint(el, {
-                state: 'error',
-                message: (err && err.message) || 'Network error'
-            });
+            if (mounted !== el) return;
+            if (signal && signal.aborted) return;
+            paint(el, { state: 'error', message: (err && err.message) || 'Network error' });
         });
     }
 
-    root.HebrewTodayPage = {
+    function unmount() {
+        stopClip();
+        if (mounted && typeof mounted.removeEventListener === 'function') {
+            mounted.removeEventListener('click', onMixClick);
+        }
+        mounted = null;
+        viewSignal = null;
+        mixSession = null;
+    }
+
+    var pageApi = {
         render: renderToday,
         buildModel: buildModel,
-        boot: boot
+        mount: mount,
+        unmount: unmount,
+        visibleSections: visibleSections,
+        clipHref: clipHref
     };
 
-    if (root.document) {
-        if (root.document.readyState === 'loading') {
-            root.document.addEventListener('DOMContentLoaded', boot);
-        } else if (root.document.getElementById('today-app')) {
-            boot();
-        }
-    }
+    root.HebrewTodayPage = pageApi;
+    if (typeof module !== 'undefined' && module.exports) module.exports = pageApi;
 })(typeof window !== 'undefined' ? window : globalThis);

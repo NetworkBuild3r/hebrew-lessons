@@ -118,15 +118,29 @@
         }
         .btn-primary:hover { background: var(--blue-deep); }
         .btn-primary:disabled { opacity: 0.65; cursor: not-allowed; }
+        .login-hero { text-align: center; margin-bottom: 1rem; display: grid; justify-items: center; gap: 0.4rem; }
+        .login-tag { margin: 0; font-size: 1.05rem; font-weight: 600; }
+        .login-sub { margin: 0 0 1rem; color: var(--muted); }
+        .login-fine { margin: 0.9rem 0 0; font-size: 0.82rem; color: var(--muted); text-align: center; }
+        .login-card { border-radius: 20px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 16px 40px -16px rgba(67,56,202,.3); }
+        .login-privacy { margin-top: 1rem; }
     </style>
 </head>
 <body class="login-page">
     <main class="login-wrap">
+        <div class="login-hero">
+            <svg width="52" height="52" viewBox="0 0 512 512" aria-hidden="true" focusable="false" style="border-radius:14px;box-shadow:0 6px 20px rgba(29,78,216,.4)"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1d4ed8"/><stop offset=".55" stop-color="#4338ca"/><stop offset="1" stop-color="#7c3aed"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#lg)"/><text x="256" y="348" text-anchor="middle" font-family="Rubik, Arial, sans-serif" font-weight="700" font-size="280" fill="#fff">ע</text><circle cx="392" cy="128" r="36" fill="#fbbf24"/></svg>
+            <p class="login-kicker">דרך עברית · Hebrew Way</p>
+            <p class="login-tag">Order coffee. Chat with Shai. Read the story. <span class="en" dir="ltr">10 minutes a day.</span></p>
+        </div>
         <div class="login-card">
-            <p class="login-kicker">דרך עברית · Light &amp; Easy Hebrew</p>
             <h1>כניסה <span class="en" dir="ltr">(Sign in)</span></h1>
+            <p class="login-sub">המשיכו בדיוק מאיפה שהפסקתם. <span class="en" dir="ltr">(Pick up right where you left off.)</span></p>
             <p class="login-privacy" id="login-privacy">
                 מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה. (Admins can see all your activity, including every answer.)
+            </p>
+            <p class="login-privacy" id="login-ai-disclosure" data-ai-disclosure="1">
+                אם מנהל מפעיל תכנון בינה מלאכותית לחשבון שלך, סיכום של ההתקדמות ושם המשתמש נשלחים לספק הבינה המלאכותית של המפעיל כדי לנסח את השיעור הבא. הסיכום כולל את המילים שתורגלו ומידת הידיעה שלהן, את הדקדוק שתורגל ומידת הדיוק, את השיעורים שהושלמו, ובאיזו תדירות הקריאה היא בלי ניקוד. הסיכום אינו כולל תשובות בודדות, טקסט שהוקלד, או מועדי תרגול. (If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator's AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.)
             </p>
             <form id="login-form" class="login-form" method="post" action="#" novalidate>
                 <label>
@@ -142,6 +156,13 @@
                     כניסה <span class="en" dir="ltr">(Sign in)</span>
                 </button>
             </form>
+            <p class="login-privacy" id="login-privacy">
+                מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה. (Admins can see all your activity, including every answer.)
+            </p>
+            <p class="login-privacy" data-ai-disclosure="1">
+                אם מנהל מפעיל תכנון בינה מלאכותית לחשבון שלך, סיכום של ההתקדמות ושם המשתמש נשלחים לספק הבינה המלאכותית של המפעיל כדי לנסח את השיעור הבא. הסיכום כולל את המילים שתורגלו ומידת הידיעה שלהן, את הדקדוק שתורגל ומידת הדיוק, את השיעורים שהושלמו, ובאיזו תדירות הקריאה היא בלי ניקוד. הסיכום אינו כולל תשובות בודדות, טקסט שהוקלד, או מועדי תרגול. (If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator's AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.)
+            </p>
+            <p class="login-fine">עובד על הטלפון • שומר התקדמות • <span class="en" dir="ltr">No app to install</span></p>
         </div>
     </main>
     <script>
@@ -154,7 +175,12 @@
 
         var PRIVACY_NOTE =
             'מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה. (Admins can see all your activity, including every answer.)';
+        /* Hebrew line is a draft until the operator approves it (ADR-0009). Provenance: INIT-006/SPEC-017 */
+        var AI_DISCLOSURE_EN = 'If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator\'s AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.';
+        var AI_DISCLOSURE_HE = 'אם מנהל מפעיל תכנון בינה מלאכותית לחשבון שלך, סיכום של ההתקדמות ושם המשתמש נשלחים לספק הבינה המלאכותית של המפעיל כדי לנסח את השיעור הבא. הסיכום כולל את המילים שתורגלו ומידת הידיעה שלהן, את הדקדוק שתורגל ומידת הדיוק, את השיעורים שהושלמו, ובאיזו תדירות הקריאה היא בלי ניקוד. הסיכום אינו כולל תשובות בודדות, טקסט שהוקלד, או מועדי תרגול.';
+        var AI_DISCLOSURE = AI_DISCLOSURE_HE + ' (' + AI_DISCLOSURE_EN + ')';
         var MSG_BAD = 'שם משתמש או סיסמה שגויים. (Wrong username or password.)';
+        var MSG_BLOCKED = 'הכניסה נחסמה. רעננו את הדף ונסו שוב. (Sign-in was blocked. Refresh the page and try again.)';
         var MSG_THROTTLE = 'יותר מדי ניסיונות. נסו שוב מאוחר יותר. (Too many attempts. Try again later.)';
         var MSG_NETWORK = 'שגיאת רשת. בדקו את החיבור ונסו שוב. (Network error. Check your connection and try again.)';
 
@@ -199,6 +225,8 @@
             var submitBtn = document.getElementById('login-submit');
             var privacy = document.getElementById('login-privacy');
             if (privacy) privacy.textContent = PRIVACY_NOTE;
+            var disclosures = document.querySelectorAll('[data-ai-disclosure]');
+            for (var d = 0; d < disclosures.length; d += 1) disclosures[d].textContent = AI_DISCLOSURE;
 
             // Expose for smoke / debugging (mirrors shared/api.js safeNextPath)
             window.HebrewLoginPage = { safeNextPath: safeNextPath };
@@ -230,6 +258,7 @@
                         return;
                     }
                     if (pack.res.status === 429) setError(errEl, MSG_THROTTLE);
+                    else if (pack.res.status === 403) setError(errEl, MSG_BLOCKED);
                     else setError(errEl, MSG_BAD);
                     if (submitBtn) submitBtn.disabled = false;
                 }).catch(function () {

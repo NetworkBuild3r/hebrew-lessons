@@ -18,6 +18,15 @@ function freshDbModule(dataDirPath) {
     delete require.cache[require.resolve('../server/paths')];
     delete require.cache[require.resolve('../server/db')];
     delete require.cache[require.resolve('../server/db/migrations/001-initial')];
+    try {
+        delete require.cache[require.resolve('../server/db/migrations/002-plan-store')];
+    } catch (_) { /* not loaded yet */ }
+    try {
+        delete require.cache[require.resolve('../server/db/migrations/003-media-and-ai-planning')];
+    } catch (_) { /* not loaded yet */ }
+    try {
+        delete require.cache[require.resolve('../server/db/migrations/004-fsrs-review-state')];
+    } catch (_) { /* not loaded yet */ }
     const db = require('../server/db');
     db.close();
     return db;
@@ -109,28 +118,42 @@ describe('migrate + schema (ac-2, ac-3, ac-6)', () => {
 
         const expected = [
             'audit_log',
+            'concept_mastery',
+            'grammar_concepts',
             'lesson_grants',
             'lesson_progress',
             'lesson_visibility',
+            'lexicon_entries',
+            'media',
             'meta',
+            'plans',
             'practice_events',
             'review_items',
             'schema_migrations',
             'sessions',
+            'user_words',
             'users'
         ];
         for (const name of expected) {
             assert.ok(tables.includes(name), 'missing table ' + name);
         }
 
-        const versions = db.all('SELECT version, name FROM schema_migrations');
-        assert.equal(versions.length, 1);
-        assert.equal(versions[0].version, 1);
-        assert.match(versions[0].name, /^001-initial\.js$/);
+        const versions = db.all(
+            'SELECT version, name FROM schema_migrations ORDER BY version'
+        );
+        const byVersion = new Map(versions.map((row) => [row.version, row.name]));
+        assert.match(byVersion.get(1), /^001-initial\.js$/);
+        assert.match(byVersion.get(2), /^002-plan-store\.js$/);
+        assert.match(byVersion.get(3), /^003-media-and-ai-planning\.js$/);
+        assert.match(byVersion.get(4), /^004-fsrs-review-state\.js$/);
+        assert.match(byVersion.get(5), /^005-lexicon-library-mastery\.js$/);
+        for (const version of byVersion.keys()) {
+            assert.ok(version >= 1 && version <= 5, 'unexpected migration ' + version);
+        }
 
         db.migrate();
         const again = db.all('SELECT version FROM schema_migrations');
-        assert.equal(again.length, 1);
+        assert.equal(again.length, versions.length);
     });
 
     it('CHECK rejects role=owner', () => {
@@ -303,7 +326,8 @@ describe('db:backup (ac-5)', () => {
         const dest = db.backup();
         assert.ok(fs.existsSync(dest));
         assert.ok(dest.includes(path.join('backups', 'hebrew-')));
-        assert.match(path.basename(dest), /^hebrew-.+\.sqlite$/);
+        assert.match(path.basename(dest), /^hebrew\.sqlite$/);
+        assert.match(path.basename(path.dirname(dest)), /^hebrew-.+$/);
 
         db.close();
         const { DatabaseSync } = require('node:sqlite');

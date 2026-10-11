@@ -2,7 +2,7 @@
   "name": "דרך עברית — Worksheets",
   "short_name": "עברית",
   "description": "Hebrew practice lessons. Sign in to save your progress.",
-  "start_url": "./index.html",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#1d4ed8",
   "theme_color": "#1d4ed8",

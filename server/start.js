@@ -45,5 +45,25 @@ if (seed.seeded) {
     console.log('Seeded lesson visibility for ' + seed.inserted.length + ' lesson(s)');
 }
 
+const lexiconSeed = require('./lexicon/seed').run();
+console.log(
+    'Lexicon seed: ' + lexiconSeed.inserted + ' inserted, '
+    + lexiconSeed.updated + ' updated, ' + lexiconSeed.kept + ' kept'
+);
+if (lexiconSeed.skipped) {
+    console.warn('[lexicon-seed] skipped ' + lexiconSeed.skipped + ' vocab entry(ies)');
+}
+
+// First admin only. An existing admin (even a disabled one) wins over the env.
+try {
+    const boot = require('./bootstrap-admin').ensureBootstrapAdmin();
+    if (boot.created) {
+        console.log('Created admin user "' + boot.username + '" from the environment.');
+    }
+} catch (err) {
+    console.error(err && err.message ? err.message : err);
+    process.exit(1);
+}
+
 require('./web').listen();
 require('../mcp/http').listen();
