@@ -1,0 +1,10 @@
+{
+  "op": "set_field",
+  "path": "units/unit-1/lessons/cafe-order/blocks/introduction/words/2",
+  "field": "image",
+  "value": {
+    "mediaId": "milk",
+    "alt": "coffee"
+  },
+  "expectedRevision": 1
+}

@@ -56,6 +56,36 @@ describe('http security (ac-4)', () => {
         assert.equal(res.status, 403);
     });
 
+    it('ac-4: request host is allowed when PUBLIC_ORIGIN names a different host', async () => {
+        process.env.PUBLIC_ORIGIN = 'http://localhost:8080';
+        try {
+            const res = await api('POST', '/api/session', {
+                headers: {
+                    'Content-Type': 'application/json',
+                    Origin: harness.baseUrl
+                },
+                body: JSON.stringify({
+                    username: 'admin',
+                    password: harness.users.admin.password
+                })
+            });
+            assert.equal(res.status, 200);
+            const foreign = await api('POST', '/api/session', {
+                headers: {
+                    'Content-Type': 'application/json',
+                    Origin: 'https://evil.example'
+                },
+                body: JSON.stringify({
+                    username: 'admin',
+                    password: harness.users.admin.password
+                })
+            });
+            assert.equal(foreign.status, 403);
+        } finally {
+            delete process.env.PUBLIC_ORIGIN;
+        }
+    });
+
     it('ac-4: POST with matching Origin and application/json; charset=utf-8 succeeds', async () => {
         const res = await api('POST', '/api/session', {
             headers: {

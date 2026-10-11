@@ -1,4 +1,8 @@
-# Example path (basic morning lesson)
+# Legacy worksheet example
+
+This file is the `window.WORKSHEET` shape for `upsert_lesson`. It is not a lesson plan. Plan edits use [SKILL.md](SKILL.md) and [schema.md](schema.md). Do not paste a transcript, an account name, or a learner's answers into this sketch. The only sample account id in this skill is `example-learner`.
+
+## Worksheet shape
 
 ```js
 window.WORKSHEET = {

@@ -7,14 +7,59 @@
 
     var PRIVACY_NOTE =
         'מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה. (Admins can see all your activity, including every answer.)';
+    /* Hebrew line is a draft until the operator approves it (ADR-0009). Provenance: INIT-006/SPEC-017 */
+    var AI_DISCLOSURE_EN = 'If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator\'s AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.';
+    var AI_DISCLOSURE_HE = 'אם מנהל מפעיל תכנון בינה מלאכותית לחשבון שלך, סיכום של ההתקדמות ושם המשתמש נשלחים לספק הבינה המלאכותית של המפעיל כדי לנסח את השיעור הבא. הסיכום כולל את המילים שתורגלו ומידת הידיעה שלהן, את הדקדוק שתורגל ומידת הדיוק, את השיעורים שהושלמו, ובאיזו תדירות הקריאה היא בלי ניקוד. הסיכום אינו כולל תשובות בודדות, טקסט שהוקלד, או מועדי תרגול.';
+    var AI_DISCLOSURE = AI_DISCLOSURE_HE + ' (' + AI_DISCLOSURE_EN + ')';
 
     var NAV = [
-        { id: 'today', href: '/', he: 'היום', en: 'Today' },
-        { id: 'lessons', href: '/lessons/', he: 'שיעורים', en: 'Lessons' },
-        { id: 'review', href: '/review/', he: 'חזרה', en: 'Review' },
-        { id: 'progress', href: '/progress/', he: 'התקדמות', en: 'Progress' },
-        { id: 'admin', href: '/admin/', he: 'ניהול', en: 'Admin', adminOnly: true }
+        { id: 'today', href: '/', he: 'היום', en: 'Today', icon: 'today' },
+        { id: 'lessons', href: '/lessons/', he: 'שיעורים', en: 'Lessons', icon: 'lessons' },
+        { id: 'guides', href: '/guides/', he: 'מדריכים', en: 'Guides' },
+        { id: 'review', href: '/review/', he: 'חזרה', en: 'Review', icon: 'review' },
+        { id: 'words', href: '/words/', he: 'מילים', en: 'Words' },
+        { id: 'progress', href: '/progress/', he: 'התקדמות', en: 'Progress', icon: 'progress' },
+        { id: 'admin', href: '/admin/', he: 'ניהול', en: 'Admin', adminOnly: true, icon: 'admin' }
     ];
+
+    var ICON_PATHS = {
+        today: '<circle cx="12" cy="14" r="4"/><path d="M12 6v2M5.5 8.5l1.4 1.4M18.5 8.5 17.1 9.9M4 14h2M18 14h2M6 20h12"/>',
+        lessons: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5Z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20"/>',
+        review: '<path d="M4 12a8 8 0 0 1 14-5l2 2M20 12a8 8 0 0 1-14 5l-2-2"/><path d="M20 4v5h-5M4 20v-5h5"/>',
+        progress: '<path d="M4 20V10M10 20V4M16 20v-8M21 20H3"/>',
+        admin: '<path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6Z"/><path d="m9.5 12 2 2 3.5-4"/>'
+    };
+
+    function navIcon(name) {
+        // Prefer the shared set when loaded; fall back to the built-in paths so
+        // tests that load only this file still render icons.
+        // A screen with no icon (Words, until one exists) is a text label only.
+        if (!name) return '';
+        var U = root.HebrewIcons;
+        var known = (U && U.PATHS && U.PATHS[name]) || ICON_PATHS[name];
+        if (!known) return '';
+        if (U && typeof U.icon === 'function') {
+            try { return U.icon(name, 18); } catch (err) { /* fall through */ }
+        }
+        var inner = ICON_PATHS[name];
+        return '<svg class="hebrew-icon hebrew-icon-' + name + '" width="18" height="18"'
+            + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"'
+            + ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'
+            + inner + '</svg>';
+    }
+
+    function brandMark() {
+        var U = root.HebrewIcons;
+        if (U && typeof U.logoMark === 'function') {
+            try { return U.logoMark(30); } catch (err) { /* fall through */ }
+        }
+        return '<svg class="hebrew-logo-mark" width="30" height="30" viewBox="0 0 512 512"'
+            + ' aria-hidden="true" focusable="false">'
+            + '<rect width="512" height="512" rx="112" fill="#4338ca"/>'
+            + '<text x="256" y="348" text-anchor="middle" font-family="Rubik, Arial, sans-serif"'
+            + ' font-weight="700" font-size="280" fill="#ffffff">ע</text>'
+            + '<circle cx="392" cy="128" r="36" fill="#fbbf24"/></svg>';
+    }
 
     function escapeHtml(str) {
         var U = root.HebrewUtils;
@@ -45,7 +90,9 @@
     function currentNavId(pathname) {
         var path = String(pathname || '/');
         if (path === '/lessons' || path.indexOf('/lessons/') === 0) return 'lessons';
+        if (path === '/guides' || path.indexOf('/guides/') === 0) return 'guides';
         if (path === '/review' || path.indexOf('/review/') === 0) return 'review';
+        if (path === '/words' || path.indexOf('/words/') === 0) return 'words';
         if (path === '/progress' || path.indexOf('/progress/') === 0) return 'progress';
         if (path === '/admin' || path.indexOf('/admin/') === 0) return 'admin';
         if (path.indexOf('/worksheets/') === 0) return 'lessons';
@@ -68,7 +115,8 @@
             return !item.adminOnly || role === 'admin';
         }).map(function (item) {
             var cur = item.id === current ? ' aria-current="page"' : '';
-            var label = escapeHtml(item.he) + ' <span class="en" dir="ltr">(' + escapeHtml(item.en) + ')</span>';
+            var label = navIcon(item.icon) + '<span class="hebrew-shell-label">'
+                + escapeHtml(item.he) + ' <span class="en" dir="ltr">(' + escapeHtml(item.en) + ')</span></span>';
             return '<a class="hebrew-shell-link" href="' + escapeHtml(item.href) + '"' + cur
                 + ' data-nav="' + escapeHtml(item.id) + '">' + label + '</a>';
         }).join('');
@@ -77,6 +125,10 @@
         return ''
             + '<div class="hebrew-shell" dir="rtl" lang="he">'
             + '<div class="hebrew-shell-inner">'
+            + '<a class="hebrew-brand" href="/" aria-label="דרך עברית — Today">'
+            + brandMark()
+            + '<span class="hebrew-brand-text"><span class="hebrew-brand-he">דרך עברית</span>'
+            + '<span class="hebrew-brand-en" dir="ltr">Hebrew Way</span></span></a>'
             + '<nav class="hebrew-shell-nav" aria-label="Primary">' + links + '</nav>'
             + '<div class="hebrew-shell-sync" data-shell-sync aria-live="polite"></div>'
             + '<div class="hebrew-shell-account">'
@@ -92,6 +144,7 @@
             + '<button type="button" class="hebrew-shell-menu-item" role="menuitem" data-shell-action="sign-out">'
             + 'יציאה <span class="en" dir="ltr">(Sign out)</span></button>'
             + '<p class="hebrew-shell-privacy" role="note">' + escapeHtml(PRIVACY_NOTE) + '</p>'
+            + '<p class="hebrew-shell-privacy" data-ai-disclosure="1" role="note">' + escapeHtml(AI_DISCLOSURE) + '</p>'
             + '</div></div></div></div>'
             + '<div class="hebrew-shell-pw-dialog hidden" id="hebrew-shell-pw-dialog" role="dialog"'
             + ' aria-modal="true" aria-labelledby="hebrew-shell-pw-title" hidden>'
@@ -283,17 +336,36 @@
      * @param {{ me?: object|null, pathname?: string, skipFetch?: boolean }} [opts]
      * @returns {Promise<object|null>}
      */
+    /**
+     * Update aria-current on nav links without re-rendering the shell (ADR-0007).
+     * @param {string} pathname
+     */
+    function setActiveNav(pathname) {
+        var current = currentNavId(pathname);
+        var rootEl = root.document && root.document.querySelector('.hebrew-shell');
+        if (!rootEl) return;
+        var links = rootEl.querySelectorAll('[data-nav]');
+        for (var i = 0; i < links.length; i += 1) {
+            var link = links[i];
+            var id = link.getAttribute('data-nav');
+            if (id === current) link.setAttribute('aria-current', 'page');
+            else link.removeAttribute('aria-current');
+        }
+    }
+
     function mount(target, opts) {
         if (!target) return Promise.resolve(null);
         var options = opts || {};
-        var pathname = options.pathname != null
-            ? options.pathname
-            : ((root.location && root.location.pathname) || '/');
-        var state = { me: options.me || null, mustChange: false };
+        var embedded = options.me != null ? options.me : root.__HEBREW_ME__;
+        var state = { me: embedded || null, mustChange: false };
 
         function paint(me) {
             state.me = me;
             state.mustChange = !!(me && me.must_change_password);
+            // Read the URL at paint time: in the app shell it changes without a reload.
+            var pathname = options.pathname != null
+                ? options.pathname
+                : ((root.location && root.location.pathname) || '/');
             target.innerHTML = renderHtml(me, pathname);
             bindShell(target, state);
             if (state.mustChange) {
@@ -306,9 +378,17 @@
             return me;
         }
 
-        if (options.skipFetch || options.me) {
-            paint(options.me || null);
-            return Promise.resolve(options.me || null);
+        if (options.skipFetch) {
+            paint(embedded || null);
+            return Promise.resolve(embedded || null);
+        }
+
+        // ADR-0007: the server embedded the user in this same response, so paint once and
+        // do not re-fetch /api/me. The shell is painted once per document; route changes
+        // only call setActiveNav(). Never re-render the shell on navigation.
+        if (embedded) {
+            paint(embedded);
+            return Promise.resolve(embedded);
         }
 
         var Api = root.HebrewApi;
@@ -379,11 +459,13 @@
 
     root.HebrewShell = {
         PRIVACY_NOTE: PRIVACY_NOTE,
+        AI_DISCLOSURE: AI_DISCLOSURE,
         NAV: NAV,
         escapeHtml: escapeHtml,
         safeNextPath: safeNextPath,
         currentNavId: currentNavId,
         renderHtml: renderHtml,
+        setActiveNav: setActiveNav,
         mount: mount,
         ensureLoaded: ensureLoaded
     };

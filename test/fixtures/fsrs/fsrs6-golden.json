@@ -1,0 +1,1343 @@
+{
+  "about": "Golden values for shared/player/fsrs.js. stability, difficulty, retrievability, and referenceIntervals come from the reference implementation. interval and previewIntervals apply ADR-0009 §2's interval rules on top of it: Again is due the next day; Good is at least Hard + 1 and Easy at least Good + 1; 1 to 365 days. Times are UTC, and the test pins the local time zone to UTC so a calendar day is a UTC day.",
+  "formulaSource": {
+    "page": "open-spaced-repetition, \"The Algorithm\" (FSRS-6)",
+    "url": "https://github.com/open-spaced-repetition/awesome-fsrs/wiki/The-Algorithm",
+    "retrieved": "2026-10-09",
+    "adr": "docs/decisions/ADR-0009-learner-model-and-language-program.md §2"
+  },
+  "implementation": {
+    "name": "py-fsrs (PyPI package fsrs)",
+    "version": "6.3.2",
+    "url": "https://pypi.org/project/fsrs/6.3.2/",
+    "fsrsVersion": "FSRS-6",
+    "settings": {
+      "learning_steps": [],
+      "relearning_steps": [],
+      "desired_retention": 0.9,
+      "maximum_interval": 365,
+      "enable_fuzzing": false
+    },
+    "ranOutsideRepository": true,
+    "generator": "test/fixtures/fsrs/generate-golden.py",
+    "pythonVersion": "3.14.2"
+  },
+  "parameters": [
+    0.212,
+    1.2931,
+    2.3065,
+    8.2956,
+    6.4133,
+    0.8334,
+    3.0194,
+    0.001,
+    1.8722,
+    0.1666,
+    0.796,
+    1.4835,
+    0.0614,
+    0.2629,
+    1.6483,
+    0.6014,
+    1.8729,
+    0.5425,
+    0.0912,
+    0.0658,
+    0.1542
+  ],
+  "desiredRetention": 0.9,
+  "intervalDays": {
+    "min": 1,
+    "max": 365
+  },
+  "cases": [
+    {
+      "name": "new-good-run",
+      "about": "Good on a new card, then Good on every due date.",
+      "start": "2026-01-05T12:00:00.000Z",
+      "steps": [
+        {
+          "at": "2026-01-05T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": null,
+          "sameDay": false,
+          "retrievability": null,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "stability": 2.3065,
+          "difficulty": 2.118103970459016,
+          "interval": 2,
+          "referenceInterval": 2
+        },
+        {
+          "at": "2026-01-07T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 2,
+          "sameDay": false,
+          "retrievability": 0.9094932559773545,
+          "previewIntervals": {
+            "1": 1,
+            "2": 8,
+            "3": 11,
+            "4": 19
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 8,
+            "3": 11,
+            "4": 19
+          },
+          "stability": 10.964332335820698,
+          "difficulty": 2.111214235785395,
+          "interval": 11,
+          "referenceInterval": 11
+        },
+        {
+          "at": "2026-01-18T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 11,
+          "sameDay": false,
+          "retrievability": 0.8997767176252718,
+          "previewIntervals": {
+            "1": 1,
+            "2": 32,
+            "3": 46,
+            "4": 77
+          },
+          "referenceIntervals": {
+            "1": 2,
+            "2": 32,
+            "3": 46,
+            "4": 77
+          },
+          "stability": 46.28021728755693,
+          "difficulty": 2.1043313908464483,
+          "interval": 46,
+          "referenceInterval": 46
+        },
+        {
+          "at": "2026-03-05T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 46,
+          "sameDay": false,
+          "retrievability": 0.9004166937961716,
+          "previewIntervals": {
+            "1": 1,
+            "2": 116,
+            "3": 163,
+            "4": 265
+          },
+          "referenceIntervals": {
+            "1": 3,
+            "2": 116,
+            "3": 163,
+            "4": 265
+          },
+          "stability": 162.86220163874916,
+          "difficulty": 2.0974554287524403,
+          "interval": 163,
+          "referenceInterval": 163
+        },
+        {
+          "at": "2026-08-15T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 163,
+          "sameDay": false,
+          "retrievability": 0.8999418855553695,
+          "previewIntervals": {
+            "1": 1,
+            "2": 364,
+            "3": 365,
+            "4": 365
+          },
+          "referenceIntervals": {
+            "1": 5,
+            "2": 364,
+            "3": 365,
+            "4": 365
+          },
+          "stability": 497.4471936002745,
+          "difficulty": 2.0905863426205262,
+          "interval": 365,
+          "referenceInterval": 365
+        },
+        {
+          "at": "2027-08-15T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 365,
+          "sameDay": false,
+          "retrievability": 0.9198304425157381,
+          "previewIntervals": {
+            "1": 1,
+            "2": 365,
+            "3": 365,
+            "4": 365
+          },
+          "referenceIntervals": {
+            "1": 7,
+            "2": 365,
+            "3": 365,
+            "4": 365
+          },
+          "stability": 1172.3755535348007,
+          "difficulty": 2.083724125574744,
+          "interval": 365,
+          "referenceInterval": 365
+        }
+      ]
+    },
+    {
+      "name": "new-again-recover",
+      "about": "Again on a new card, then recovery on each due date.",
+      "start": "2026-01-05T12:00:00.000Z",
+      "steps": [
+        {
+          "at": "2026-01-05T12:00:00.000Z",
+          "grade": 1,
+          "elapsedDays": null,
+          "sameDay": false,
+          "retrievability": null,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "stability": 0.212,
+          "difficulty": 6.4133,
+          "interval": 1,
+          "referenceInterval": 1
+        },
+        {
+          "at": "2026-01-06T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 1,
+          "sameDay": false,
+          "retrievability": 0.7661957302284143,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 3
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 3
+          },
+          "stability": 1.8867876195204154,
+          "difficulty": 6.402115069296838,
+          "interval": 2,
+          "referenceInterval": 2
+        },
+        {
+          "at": "2026-01-08T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 2,
+          "sameDay": false,
+          "retrievability": 0.8959469231731587,
+          "previewIntervals": {
+            "1": 1,
+            "2": 5,
+            "3": 6,
+            "4": 10
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 5,
+            "3": 6,
+            "4": 10
+          },
+          "stability": 6.269161317502347,
+          "difficulty": 6.3909413235243795,
+          "interval": 6,
+          "referenceInterval": 6
+        },
+        {
+          "at": "2026-01-14T12:00:00.000Z",
+          "grade": 2,
+          "elapsedDays": 6,
+          "sameDay": false,
+          "retrievability": 0.9029863774759158,
+          "previewIntervals": {
+            "1": 1,
+            "2": 13,
+            "3": 17,
+            "4": 27
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 13,
+            "3": 17,
+            "4": 27
+          },
+          "stability": 12.950731946480067,
+          "difficulty": 7.589367037717998,
+          "interval": 13,
+          "referenceInterval": 13
+        },
+        {
+          "at": "2026-01-27T12:00:00.000Z",
+          "grade": 4,
+          "elapsedDays": 13,
+          "sameDay": false,
+          "retrievability": 0.8997389253119771,
+          "previewIntervals": {
+            "1": 1,
+            "2": 22,
+            "3": 29,
+            "4": 42
+          },
+          "referenceIntervals": {
+            "1": 2,
+            "2": 22,
+            "3": 29,
+            "4": 42
+          },
+          "stability": 42.11912512475722,
+          "difficulty": 6.769074206516234,
+          "interval": 42,
+          "referenceInterval": 42
+        }
+      ]
+    },
+    {
+      "name": "new-hard-then-easy",
+      "about": "Hard on a new card, Hard again, then Easy and Good.",
+      "start": "2026-01-05T12:00:00.000Z",
+      "steps": [
+        {
+          "at": "2026-01-05T12:00:00.000Z",
+          "grade": 2,
+          "elapsedDays": null,
+          "sameDay": false,
+          "retrievability": null,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "stability": 1.2931,
+          "difficulty": 5.112170705601056,
+          "interval": 1,
+          "referenceInterval": 1
+        },
+        {
+          "at": "2026-01-06T12:00:00.000Z",
+          "grade": 2,
+          "elapsedDays": 1,
+          "sameDay": false,
+          "retrievability": 0.9166697187203525,
+          "previewIntervals": {
+            "1": 1,
+            "2": 3,
+            "3": 5,
+            "4": 7
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 3,
+            "3": 5,
+            "4": 7
+          },
+          "stability": 3.2494117658571677,
+          "difficulty": 6.7404595108297,
+          "interval": 3,
+          "referenceInterval": 3
+        },
+        {
+          "at": "2026-01-09T12:00:00.000Z",
+          "grade": 4,
+          "elapsedDays": 3,
+          "sameDay": false,
+          "retrievability": 0.9053921242774386,
+          "previewIntervals": {
+            "1": 1,
+            "2": 7,
+            "3": 9,
+            "4": 14
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 7,
+            "3": 9,
+            "4": 14
+          },
+          "stability": 14.0836260797713,
+          "difficulty": 5.636501343232619,
+          "interval": 14,
+          "referenceInterval": 14
+        },
+        {
+          "at": "2026-01-23T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 14,
+          "sameDay": false,
+          "retrievability": 0.9004086299562964,
+          "previewIntervals": {
+            "1": 1,
+            "2": 30,
+            "3": 40,
+            "4": 63
+          },
+          "referenceIntervals": {
+            "1": 2,
+            "2": 30,
+            "3": 40,
+            "4": 63
+          },
+          "stability": 40.165316580429945,
+          "difficulty": 5.626093211186225,
+          "interval": 40,
+          "referenceInterval": 40
+        }
+      ]
+    },
+    {
+      "name": "lapse-after-learning",
+      "about": "Three Goods, a lapse on the due date, then recovery.",
+      "start": "2026-01-05T12:00:00.000Z",
+      "steps": [
+        {
+          "at": "2026-01-05T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": null,
+          "sameDay": false,
+          "retrievability": null,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "stability": 2.3065,
+          "difficulty": 2.118103970459016,
+          "interval": 2,
+          "referenceInterval": 2
+        },
+        {
+          "at": "2026-01-07T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 2,
+          "sameDay": false,
+          "retrievability": 0.9094932559773545,
+          "previewIntervals": {
+            "1": 1,
+            "2": 8,
+            "3": 11,
+            "4": 19
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 8,
+            "3": 11,
+            "4": 19
+          },
+          "stability": 10.964332335820698,
+          "difficulty": 2.111214235785395,
+          "interval": 11,
+          "referenceInterval": 11
+        },
+        {
+          "at": "2026-01-18T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 11,
+          "sameDay": false,
+          "retrievability": 0.8997767176252718,
+          "previewIntervals": {
+            "1": 1,
+            "2": 32,
+            "3": 46,
+            "4": 77
+          },
+          "referenceIntervals": {
+            "1": 2,
+            "2": 32,
+            "3": 46,
+            "4": 77
+          },
+          "stability": 46.28021728755693,
+          "difficulty": 2.1043313908464483,
+          "interval": 46,
+          "referenceInterval": 46
+        },
+        {
+          "at": "2026-03-05T12:00:00.000Z",
+          "grade": 1,
+          "elapsedDays": 46,
+          "sameDay": false,
+          "retrievability": 0.9004166937961716,
+          "previewIntervals": {
+            "1": 1,
+            "2": 116,
+            "3": 163,
+            "4": 265
+          },
+          "referenceIntervals": {
+            "1": 3,
+            "2": 116,
+            "3": 163,
+            "4": 265
+          },
+          "stability": 2.9325804541638116,
+          "difficulty": 7.389975788014609,
+          "interval": 1,
+          "referenceInterval": 3,
+          "note": "ADR-0009 §2: an Again card is due the next day"
+        },
+        {
+          "at": "2026-03-06T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 1,
+          "sameDay": false,
+          "retrievability": 0.9565026371881515,
+          "previewIntervals": {
+            "1": 1,
+            "2": 4,
+            "3": 5,
+            "4": 7
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 4,
+            "3": 5,
+            "4": 7
+          },
+          "stability": 4.9598827510818975,
+          "difficulty": 7.377814181523433,
+          "interval": 5,
+          "referenceInterval": 5
+        },
+        {
+          "at": "2026-03-11T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 5,
+          "sameDay": false,
+          "retrievability": 0.899445600006119,
+          "previewIntervals": {
+            "1": 1,
+            "2": 9,
+            "3": 12,
+            "4": 19
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 9,
+            "3": 12,
+            "4": 19
+          },
+          "stability": 12.415327362173342,
+          "difficulty": 7.365664736638748,
+          "interval": 12,
+          "referenceInterval": 12
+        }
+      ]
+    },
+    {
+      "name": "mature-lapse",
+      "about": "A card with long stability is forgotten. Stability follows FSRS; ADR-0009 puts an Again card on the next day.",
+      "start": "2026-01-05T12:00:00.000Z",
+      "steps": [
+        {
+          "at": "2026-01-05T12:00:00.000Z",
+          "grade": 4,
+          "elapsedDays": null,
+          "sameDay": false,
+          "retrievability": null,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "stability": 8.2956,
+          "difficulty": 1,
+          "interval": 8,
+          "referenceInterval": 8
+        },
+        {
+          "at": "2026-01-13T12:00:00.000Z",
+          "grade": 4,
+          "elapsedDays": 8,
+          "sameDay": false,
+          "retrievability": 0.9024733005284542,
+          "previewIntervals": {
+            "1": 1,
+            "2": 27,
+            "3": 39,
+            "4": 66
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 27,
+            "3": 39,
+            "4": 66
+          },
+          "stability": 65.62422616189994,
+          "difficulty": 1,
+          "interval": 66,
+          "referenceInterval": 66
+        },
+        {
+          "at": "2026-03-20T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 66,
+          "sameDay": false,
+          "retrievability": 0.899607248317662,
+          "previewIntervals": {
+            "1": 1,
+            "2": 172,
+            "3": 242,
+            "4": 365
+          },
+          "referenceIntervals": {
+            "1": 4,
+            "2": 172,
+            "3": 242,
+            "4": 365
+          },
+          "stability": 242.43601386431766,
+          "difficulty": 1,
+          "interval": 242,
+          "referenceInterval": 242
+        },
+        {
+          "at": "2026-11-17T12:00:00.000Z",
+          "grade": 1,
+          "elapsedDays": 242,
+          "sameDay": false,
+          "retrievability": 0.9001236208396289,
+          "previewIntervals": {
+            "1": 1,
+            "2": 365,
+            "3": 365,
+            "4": 365
+          },
+          "referenceIntervals": {
+            "1": 6,
+            "2": 365,
+            "3": 365,
+            "4": 365
+          },
+          "stability": 5.666933062534787,
+          "difficulty": 7.0269895692968385,
+          "interval": 1,
+          "referenceInterval": 6,
+          "note": "ADR-0009 §2: an Again card is due the next day"
+        },
+        {
+          "at": "2026-11-18T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 1,
+          "sameDay": false,
+          "retrievability": 0.9756961206330779,
+          "previewIntervals": {
+            "1": 1,
+            "2": 7,
+            "3": 8,
+            "4": 10
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 7,
+            "3": 8,
+            "4": 10
+          },
+          "stability": 7.8090465407714955,
+          "difficulty": 7.0151909490243805,
+          "interval": 8,
+          "referenceInterval": 8
+        },
+        {
+          "at": "2026-11-26T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 8,
+          "sameDay": false,
+          "retrievability": 0.8983316907313232,
+          "previewIntervals": {
+            "1": 1,
+            "2": 15,
+            "3": 20,
+            "4": 30
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 15,
+            "3": 20,
+            "4": 30
+          },
+          "stability": 19.919915075737936,
+          "difficulty": 7.003404127372194,
+          "interval": 20,
+          "referenceInterval": 20
+        }
+      ]
+    },
+    {
+      "name": "same-day-flashcard",
+      "about": "Explicit grades later on the same day use the FSRS same-day formula.",
+      "start": "2026-01-05T12:00:00.000Z",
+      "steps": [
+        {
+          "at": "2026-01-05T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": null,
+          "sameDay": false,
+          "retrievability": null,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "stability": 2.3065,
+          "difficulty": 2.118103970459016,
+          "interval": 2,
+          "referenceInterval": 2
+        },
+        {
+          "at": "2026-01-05T14:00:00.000Z",
+          "grade": 1,
+          "elapsedDays": 0,
+          "sameDay": true,
+          "retrievability": 1,
+          "previewIntervals": {
+            "1": 1,
+            "2": 2,
+            "3": 3,
+            "4": 4
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 2,
+            "3": 2,
+            "4": 4
+          },
+          "stability": 0.7750839828558984,
+          "difficulty": 7.394502741279718,
+          "interval": 1,
+          "referenceInterval": 1
+        },
+        {
+          "at": "2026-01-05T15:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 0,
+          "sameDay": true,
+          "retrievability": 1,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 3
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 1,
+            "4": 1
+          },
+          "stability": 0.8281648000472626,
+          "difficulty": 7.382336607835277,
+          "interval": 2,
+          "referenceInterval": 1,
+          "note": "ADR-0009 §2: Good is at least Hard + 1 and Easy at least Good + 1"
+        },
+        {
+          "at": "2026-01-06T15:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 1,
+          "sameDay": false,
+          "retrievability": 0.8865325230109102,
+          "previewIntervals": {
+            "1": 1,
+            "2": 2,
+            "3": 3,
+            "4": 4
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 2,
+            "3": 3,
+            "4": 4
+          },
+          "stability": 2.7284449688606975,
+          "difficulty": 7.37018264052428,
+          "interval": 3,
+          "referenceInterval": 3
+        },
+        {
+          "at": "2026-01-06T18:00:00.000Z",
+          "grade": 4,
+          "elapsedDays": 0,
+          "sameDay": true,
+          "retrievability": 1,
+          "previewIntervals": {
+            "1": 1,
+            "2": 3,
+            "3": 4,
+            "4": 5
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 3,
+            "3": 3,
+            "4": 5
+          },
+          "stability": 4.616617450946177,
+          "difficulty": 6.476648597773284,
+          "interval": 5,
+          "referenceInterval": 5
+        },
+        {
+          "at": "2026-01-06T19:00:00.000Z",
+          "grade": 2,
+          "elapsedDays": 0,
+          "sameDay": true,
+          "retrievability": 1,
+          "previewIntervals": {
+            "1": 1,
+            "2": 5,
+            "3": 6,
+            "4": 8
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 5,
+            "3": 5,
+            "4": 8
+          },
+          "stability": 4.616617450946177,
+          "difficulty": 7.646263520323401,
+          "interval": 5,
+          "referenceInterval": 5
+        },
+        {
+          "at": "2026-01-11T19:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 5,
+          "sameDay": false,
+          "retrievability": 0.8944262460251872,
+          "previewIntervals": {
+            "1": 1,
+            "2": 9,
+            "3": 11,
+            "4": 17
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 9,
+            "3": 11,
+            "4": 17
+          },
+          "stability": 11.457430959206903,
+          "difficulty": 7.633845626099916,
+          "interval": 11,
+          "referenceInterval": 11
+        }
+      ]
+    },
+    {
+      "name": "lapse-cap",
+      "about": "Again on a new card, then Again a year later: stability after the lapse is capped at S / e^(w17 * w18).",
+      "start": "2026-01-05T12:00:00.000Z",
+      "steps": [
+        {
+          "at": "2026-01-05T12:00:00.000Z",
+          "grade": 1,
+          "elapsedDays": null,
+          "sameDay": false,
+          "retrievability": null,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "stability": 0.212,
+          "difficulty": 6.4133,
+          "interval": 1,
+          "referenceInterval": 1
+        },
+        {
+          "at": "2027-01-05T12:00:00.000Z",
+          "grade": 1,
+          "elapsedDays": 365,
+          "sameDay": false,
+          "retrievability": 0.31791061636841167,
+          "previewIntervals": {
+            "1": 1,
+            "2": 4,
+            "3": 6,
+            "4": 11
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 4,
+            "3": 6,
+            "4": 11
+          },
+          "stability": 0.20176633585888237,
+          "difficulty": 8.806304468856837,
+          "interval": 1,
+          "referenceInterval": 1
+        },
+        {
+          "at": "2027-01-06T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 1,
+          "sameDay": false,
+          "retrievability": 0.7613838550512164,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 3
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 1,
+            "4": 2
+          },
+          "stability": 0.9877862106709332,
+          "difficulty": 8.792726533684817,
+          "interval": 2,
+          "referenceInterval": 1,
+          "note": "ADR-0009 §2: Good is at least Hard + 1 and Easy at least Good + 1"
+        }
+      ]
+    },
+    {
+      "name": "repeated-same-day-again",
+      "about": "Again twice on a new card in one session, then Hard and Good: intervals under one day become one day before the ordering rule.",
+      "start": "2026-01-05T12:00:00.000Z",
+      "steps": [
+        {
+          "at": "2026-01-05T12:00:00.000Z",
+          "grade": 1,
+          "elapsedDays": null,
+          "sameDay": false,
+          "retrievability": null,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "stability": 0.212,
+          "difficulty": 6.4133,
+          "interval": 1,
+          "referenceInterval": 1
+        },
+        {
+          "at": "2026-01-05T13:00:00.000Z",
+          "grade": 1,
+          "elapsedDays": 0,
+          "sameDay": true,
+          "retrievability": 1,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 3
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 1,
+            "4": 1
+          },
+          "stability": 0.08335671711031604,
+          "difficulty": 8.806304468856837,
+          "interval": 1,
+          "referenceInterval": 1
+        },
+        {
+          "at": "2026-01-05T14:00:00.000Z",
+          "grade": 2,
+          "elapsedDays": 0,
+          "sameDay": true,
+          "retrievability": 1,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 3
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 1,
+            "4": 1
+          },
+          "stability": 0.08335671711031604,
+          "difficulty": 9.192797649512254,
+          "interval": 1,
+          "referenceInterval": 1
+        },
+        {
+          "at": "2026-01-05T15:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 0,
+          "sameDay": true,
+          "retrievability": 1,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 3
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 1,
+            "4": 1
+          },
+          "stability": 0.10314065007785231,
+          "difficulty": 9.17883322115958,
+          "interval": 2,
+          "referenceInterval": 1,
+          "note": "ADR-0009 §2: Good is at least Hard + 1 and Easy at least Good + 1"
+        },
+        {
+          "at": "2026-01-06T15:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 1,
+          "sameDay": false,
+          "retrievability": 0.6958266544079361,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 3
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 1,
+            "4": 1
+          },
+          "stability": 0.5916793160261826,
+          "difficulty": 9.164882757235258,
+          "interval": 2,
+          "referenceInterval": 1,
+          "note": "ADR-0009 §2: Good is at least Hard + 1 and Easy at least Good + 1"
+        }
+      ]
+    },
+    {
+      "name": "late-and-early",
+      "about": "A review twelve days late, then one long before the due date.",
+      "start": "2026-01-05T12:00:00.000Z",
+      "steps": [
+        {
+          "at": "2026-01-05T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": null,
+          "sameDay": false,
+          "retrievability": null,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "stability": 2.3065,
+          "difficulty": 2.118103970459016,
+          "interval": 2,
+          "referenceInterval": 2
+        },
+        {
+          "at": "2026-01-07T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 2,
+          "sameDay": false,
+          "retrievability": 0.9094932559773545,
+          "previewIntervals": {
+            "1": 1,
+            "2": 8,
+            "3": 11,
+            "4": 19
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 8,
+            "3": 11,
+            "4": 19
+          },
+          "stability": 10.964332335820698,
+          "difficulty": 2.111214235785395,
+          "interval": 11,
+          "referenceInterval": 11
+        },
+        {
+          "at": "2026-01-30T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 23,
+          "sameDay": false,
+          "retrievability": 0.8417415345440008,
+          "previewIntervals": {
+            "1": 1,
+            "2": 45,
+            "3": 68,
+            "4": 118
+          },
+          "referenceIntervals": {
+            "1": 2,
+            "2": 45,
+            "3": 68,
+            "4": 118
+          },
+          "stability": 68.05586758203309,
+          "difficulty": 2.1043313908464483,
+          "interval": 68,
+          "referenceInterval": 68
+        },
+        {
+          "at": "2026-01-31T12:00:00.000Z",
+          "grade": 2,
+          "elapsedDays": 1,
+          "sameDay": false,
+          "retrievability": 0.9977970218418085,
+          "previewIntervals": {
+            "1": 1,
+            "2": 70,
+            "3": 71,
+            "4": 74
+          },
+          "referenceIntervals": {
+            "1": 3,
+            "2": 70,
+            "3": 71,
+            "4": 74
+          },
+          "stability": 70.112906063607,
+          "difficulty": 4.743715608383524,
+          "interval": 70,
+          "referenceInterval": 70
+        },
+        {
+          "at": "2026-04-11T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 70,
+          "sameDay": false,
+          "retrievability": 0.9001106839029266,
+          "previewIntervals": {
+            "1": 1,
+            "2": 140,
+            "3": 186,
+            "4": 288
+          },
+          "referenceIntervals": {
+            "1": 3,
+            "2": 140,
+            "3": 186,
+            "4": 288
+          },
+          "stability": 186.39234594565167,
+          "difficulty": 4.734200262071979,
+          "interval": 186,
+          "referenceInterval": 186
+        }
+      ]
+    },
+    {
+      "name": "interval-cap",
+      "about": "Easy on every due date until the interval reaches 365 days.",
+      "start": "2026-01-05T12:00:00.000Z",
+      "steps": [
+        {
+          "at": "2026-01-05T12:00:00.000Z",
+          "grade": 4,
+          "elapsedDays": null,
+          "sameDay": false,
+          "retrievability": null,
+          "previewIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 1,
+            "3": 2,
+            "4": 8
+          },
+          "stability": 8.2956,
+          "difficulty": 1,
+          "interval": 8,
+          "referenceInterval": 8
+        },
+        {
+          "at": "2026-01-13T12:00:00.000Z",
+          "grade": 4,
+          "elapsedDays": 8,
+          "sameDay": false,
+          "retrievability": 0.9024733005284542,
+          "previewIntervals": {
+            "1": 1,
+            "2": 27,
+            "3": 39,
+            "4": 66
+          },
+          "referenceIntervals": {
+            "1": 1,
+            "2": 27,
+            "3": 39,
+            "4": 66
+          },
+          "stability": 65.62422616189994,
+          "difficulty": 1,
+          "interval": 66,
+          "referenceInterval": 66
+        },
+        {
+          "at": "2026-03-20T12:00:00.000Z",
+          "grade": 4,
+          "elapsedDays": 66,
+          "sameDay": false,
+          "retrievability": 0.899607248317662,
+          "previewIntervals": {
+            "1": 1,
+            "2": 172,
+            "3": 242,
+            "4": 365
+          },
+          "referenceIntervals": {
+            "1": 4,
+            "2": 172,
+            "3": 242,
+            "4": 365
+          },
+          "stability": 396.7750233497581,
+          "difficulty": 1,
+          "interval": 365,
+          "referenceInterval": 365
+        },
+        {
+          "at": "2027-03-20T12:00:00.000Z",
+          "grade": 4,
+          "elapsedDays": 365,
+          "sameDay": false,
+          "retrievability": 0.9056313996815197,
+          "previewIntervals": {
+            "1": 1,
+            "2": 365,
+            "3": 365,
+            "4": 365
+          },
+          "referenceIntervals": {
+            "1": 7,
+            "2": 365,
+            "3": 365,
+            "4": 365
+          },
+          "stability": 1787.9500743399976,
+          "difficulty": 1,
+          "interval": 365,
+          "referenceInterval": 365
+        },
+        {
+          "at": "2028-03-19T12:00:00.000Z",
+          "grade": 3,
+          "elapsedDays": 365,
+          "sameDay": false,
+          "retrievability": 0.9722610144471974,
+          "previewIntervals": {
+            "1": 1,
+            "2": 365,
+            "3": 365,
+            "4": 365
+          },
+          "referenceIntervals": {
+            "1": 10,
+            "2": 365,
+            "3": 365,
+            "4": 365
+          },
+          "stability": 2533.3789894683637,
+          "difficulty": 1,
+          "interval": 365,
+          "referenceInterval": 365
+        }
+      ]
+    }
+  ],
+  "crossCheck": {
+    "name": "ts-fsrs",
+    "version": "5.4.2",
+    "url": "https://www.npmjs.com/package/ts-fsrs/v/5.4.2",
+    "function": "FSRSAlgorithm.next_state, enable_short_term true, no learning steps",
+    "steps": 52,
+    "maxRelativeDiff": {
+      "stability": 4.769583891619742e-8,
+      "difficulty": 2.1237243755582124e-9,
+      "retrievability": 4.948783605129847e-9
+    },
+    "tolerance": 0.000001,
+    "note": "ts-fsrs rounds intermediate values to 8 decimals and py-fsrs does not. Intervals are not compared: ts-fsrs orders its button intervals by a different rule.",
+    "ranOutsideRepository": true,
+    "script": "test/fixtures/fsrs/crosscheck-ts-fsrs.cjs"
+  }
+}

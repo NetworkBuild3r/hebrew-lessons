@@ -9,8 +9,13 @@
 
     var PRIVACY_NOTE =
         'מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה. (Admins can see all your activity, including every answer.)';
+    /* Hebrew line is a draft until the operator approves it (ADR-0009). Provenance: INIT-006/SPEC-017 */
+    var AI_DISCLOSURE_EN = 'If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator\'s AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.';
+    var AI_DISCLOSURE_HE = 'אם מנהל מפעיל תכנון בינה מלאכותית לחשבון שלך, סיכום של ההתקדמות ושם המשתמש נשלחים לספק הבינה המלאכותית של המפעיל כדי לנסח את השיעור הבא. הסיכום כולל את המילים שתורגלו ומידת הידיעה שלהן, את הדקדוק שתורגל ומידת הדיוק, את השיעורים שהושלמו, ובאיזו תדירות הקריאה היא בלי ניקוד. הסיכום אינו כולל תשובות בודדות, טקסט שהוקלד, או מועדי תרגול.';
+    var AI_DISCLOSURE = AI_DISCLOSURE_HE + ' (' + AI_DISCLOSURE_EN + ')';
 
     var MSG_BAD = 'שם משתמש או סיסמה שגויים. (Wrong username or password.)';
+    var MSG_BLOCKED = 'הכניסה נחסמה. רעננו את הדף ונסו שוב. (Sign-in was blocked. Refresh the page and try again.)';
     var MSG_THROTTLE = 'יותר מדי ניסיונות. נסו שוב מאוחר יותר. (Too many attempts. Try again later.)';
     var MSG_NETWORK = 'שגיאת רשת. בדקו את החיבור ונסו שוב. (Network error. Check your connection and try again.)';
 
@@ -49,6 +54,11 @@
         var submitBtn = qs('#login-submit', form);
         var privacy = qs('#login-privacy');
         if (privacy) privacy.textContent = PRIVACY_NOTE;
+        var doc = root.document || document;
+        if (doc && typeof doc.querySelectorAll === 'function') {
+            var disclosures = doc.querySelectorAll('[data-ai-disclosure]');
+            for (var i = 0; i < disclosures.length; i += 1) disclosures[i].textContent = AI_DISCLOSURE;
+        }
 
         form.addEventListener('submit', function (event) {
             event.preventDefault();
@@ -74,6 +84,8 @@
                 }
                 if (res.status === 429) {
                     setError(errEl, MSG_THROTTLE);
+                } else if (res.status === 403) {
+                    setError(errEl, MSG_BLOCKED);
                 } else {
                     setError(errEl, MSG_BAD);
                 }

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<!--
+  The ONE page for every signed-in screen (ADR-0007). server/spa.js fills the
+  boot placeholder below with the signed-in user and serves this for every path
+  in APP_PATHS. The placeholder must appear exactly once in this file.
+
+  Only core scripts go here: the ones the shell and most screens need.
+  A screen's own scripts are listed in shared/app-routes.js and loaded by the
+  router on first visit. Do not add a per-screen <script> tag to this file.
+  Do not create a new HTML file for a new screen.
+-->
+<html lang="he" dir="rtl" translate="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="google" content="notranslate">
+    <meta name="theme-color" content="#1d4ed8">
+    <title>דרך עברית</title>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icon.svg">
+    <link rel="stylesheet" href="/shared/worksheet.css">
+</head>
+<body class="hebrew-spa">
+    <div id="app-shell"></div>
+    <main class="wrap" id="app-main" tabindex="-1"></main>
+    <div id="app-route-announce" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+    <script>
+        window.__HEBREW_ME__ = %%HEBREW_BOOT_JSON%%;
+    </script>
+    <!-- core: utilities, API client, server sync, review engine, catalog, shell -->
+    <script src="/shared/player/utils.js"></script>
+    <script src="/shared/player/review.js"></script>
+    <script src="/shared/api.js"></script>
+    <script src="/shared/player/sync.js"></script>
+    <script src="/shared/icons.js"></script>
+    <script src="/shared/app-shell.js"></script>
+    <script src="/worksheets/catalog.js"></script>
+    <!-- app frame: layout templates, route table, router, boot (keep this order) -->
+    <script src="/shared/layout.js"></script>
+    <script src="/shared/app-routes.js"></script>
+    <script src="/shared/router.js"></script>
+    <script src="/shared/app-boot.js"></script>
+</body>
+</html>

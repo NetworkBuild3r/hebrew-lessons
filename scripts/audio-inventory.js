@@ -232,6 +232,7 @@ module.exports = {
     runVerify,
     findArchiveWithHash,
     defaultInventoryDir,
+    inventoryRoots,
     walkAudioFiles
 };
 

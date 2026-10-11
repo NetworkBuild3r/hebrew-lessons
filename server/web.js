@@ -15,8 +15,13 @@ const { createRouter } = require('./api/router');
 const authRoutes = require('./api/auth-routes');
 const progressRoutes = require('./api/progress-routes');
 const adminRoutes = require('./api/admin-routes');
+const planRoutes = require('./api/plan-routes');
+const mediaRoutes = require('./api/media-routes');
+const libraryRoutes = require('./api/library-routes');
+const learnerRoutes = require('./api/learner-routes');
 const { canSeeLesson } = require('./visibility');
 const contentFilter = require('./content-filter');
+const spa = require('./spa');
 
 const TYPES = {
     '.html': 'text/html; charset=utf-8',
@@ -41,10 +46,24 @@ const TYPES = {
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+/**
+ * multipart/form-data, ignoring parameters. Used only for POST /api/media.
+ * @param {string|undefined|null} header
+ * @returns {boolean}
+ */
+function isMultipartForm(header) {
+    if (typeof header !== 'string' || !header) return false;
+    return header.split(';')[0].trim().toLowerCase() === 'multipart/form-data';
+}
+
 const router = createRouter();
 authRoutes.register(router);
 progressRoutes.register(router);
 adminRoutes.register(router);
+planRoutes.register(router);
+mediaRoutes.register(router);
+libraryRoutes.register(router);
+learnerRoutes.register(router);
 
 /**
  * Decode and normalize the URL path. Returns null when the path is hostile.
@@ -108,19 +127,14 @@ function isPublicStatic(rel) {
  */
 function resolveFile(rel) {
     let target = rel;
-    if (target === '/' || target === '') target = '/index.html';
-    // Directory index: /dir/ → /dir/index.html
+    // Directory index: /dir/ → /dir/index.html (lesson folders and /login/).
+    // App screens (/, /review/, …) never reach here: handleStatic serves the shell first.
     if (target.endsWith('/')) target = target + 'index.html';
 
-    const ok = target === '/index.html'
-        || target === '/manifest.webmanifest'
+    const ok = target === '/manifest.webmanifest'
         || target === '/icon.svg'
         || target.startsWith('/shared/')
         || target.startsWith('/worksheets/')
-        || target.startsWith('/review/')
-        || target.startsWith('/lessons/')
-        || target.startsWith('/progress/')
-        || target.startsWith('/admin/')
         || target.startsWith('/login/');
     if (!ok) return null;
 
@@ -142,14 +156,9 @@ function resolveFile(rel) {
 
     const full = path.resolve(root, '.' + target);
     const allowRoots = [
-        path.resolve(root, 'index.html'),
         path.resolve(root, 'manifest.webmanifest'),
         path.resolve(root, 'icon.svg'),
         path.resolve(root, 'shared') + path.sep,
-        path.resolve(root, 'review') + path.sep,
-        path.resolve(root, 'lessons') + path.sep,
-        path.resolve(root, 'progress') + path.sep,
-        path.resolve(root, 'admin') + path.sep,
         path.resolve(root, 'login') + path.sep
     ];
     const allowed = allowRoots.some((entry) => {
@@ -266,20 +275,56 @@ function sendFilteredScript(res, method, body) {
     res.end(buf);
 }
 
-function sendFile(res, method, file) {
+/**
+ * Static file with a validator. `no-cache` means "revalidate before use", so the
+ * browser sends If-None-Match and gets a body-less 304 when the file is unchanged.
+ * Without the ETag, `no-cache` re-downloaded every script on every page load.
+ */
+function sendFile(req, res, method, file) {
     security.applySecurityHeaders(res);
     const type = TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream';
     const stat = fs.statSync(file);
-    res.writeHead(200, {
+    const etag = 'W/"' + stat.size.toString(16) + '-' + Math.floor(stat.mtimeMs).toString(16) + '"';
+    const headers = {
         'Content-Type': type,
         'Cache-Control': 'no-cache',
-        'Content-Length': stat.size
-    });
+        ETag: etag,
+        'Last-Modified': stat.mtime.toUTCString()
+    };
+    if (String(req.headers['if-none-match'] || '') === etag) {
+        res.writeHead(304, headers);
+        res.end();
+        return;
+    }
+    headers['Content-Length'] = stat.size;
+    res.writeHead(200, headers);
     if (method === 'HEAD') {
         res.end();
         return;
     }
     fs.createReadStream(file).pipe(res);
+}
+
+/**
+ * Signed-in app shell (embeds the /api/me-shaped user, so never cached).
+ * @param {import('http').ServerResponse} res
+ * @param {string} method
+ * @param {object} user
+ */
+function sendSpaShell(res, method, user) {
+    security.applySecurityHeaders(res, { noStore: true });
+    const body = spa.renderShell(user);
+    const buf = Buffer.from(body, 'utf8');
+    res.writeHead(200, {
+        'Content-Type': TYPES['.html'],
+        'Cache-Control': 'no-store',
+        'Content-Length': buf.length
+    });
+    if (method === 'HEAD') {
+        res.end();
+        return;
+    }
+    res.end(buf);
 }
 
 /**
@@ -290,11 +335,13 @@ function sendFile(res, method, file) {
 async function handleApi(req, res, pathname) {
     const method = String(req.method || 'GET').toUpperCase();
     if (MUTATING.has(method)) {
-        if (!security.isJsonContentType(req.headers['content-type'])) {
-            security.sendJsonError(res, 403, 'Forbidden', 'csrf');
-            return;
-        }
-        if (!security.originAllowed(req)) {
+        // Image upload is multipart. Every other mutation stays JSON.
+        // Origin is required either way (INIT-004/SPEC-011).
+        const upload = method === 'POST' && pathname === '/api/media';
+        const typeOk = upload
+            ? isMultipartForm(req.headers['content-type'])
+            : security.isJsonContentType(req.headers['content-type']);
+        if (!typeOk || !security.originAllowed(req)) {
             security.sendJsonError(res, 403, 'Forbidden', 'csrf');
             return;
         }
@@ -335,7 +382,7 @@ async function handleStatic(req, res) {
             sendPlain(res, 404, 'Not found');
             return;
         }
-        sendFile(res, method, filePath);
+        sendFile(req, res, method, filePath);
         return;
     }
 
@@ -347,7 +394,7 @@ async function handleStatic(req, res) {
             sendPlain(res, 404, 'Not found');
             return;
         }
-        sendFile(res, method, filePath);
+        sendFile(req, res, method, filePath);
         return;
     }
 
@@ -384,12 +431,19 @@ async function handleStatic(req, res) {
         return;
     }
 
+    // Every signed-in screen is the same shell document (ADR-0007). The admin role
+    // check above has already run, so /admin/ never reaches here for a learner.
+    if (spa.isAppPath(rel)) {
+        sendSpaShell(res, method, auth.user);
+        return;
+    }
+
     const filePath = resolveFile(rel);
     if (!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
         sendPlain(res, 404, 'Not found');
         return;
     }
-    sendFile(res, method, filePath);
+    sendFile(req, res, method, filePath);
 }
 
 function listen() {
@@ -451,5 +505,6 @@ module.exports = {
     decodePath,
     resolveFile,
     safeNextPath: security.safeNextPath,
-    router
+    router,
+    spa
 };

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>יחידה 1 — בבית הקפה</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="page page-today">
+<article class="screen" id="today" data-screen="today">
+    <header class="mast">
+        <p class="kicker">היום</p>
+        <h1>יחידה 1 — בבית הקפה</h1>
+    </header>
+    <section class="block" aria-labelledby="next-heading">
+        <h2 id="next-heading">השיעור הבא בתוכנית</h2>
+        <p class="lesson" lang="he">בבית הקפה 1 — מה רוצים</p>
+        <p class="pointed-line" lang="he">אֲנִי רוֹצֶה</p>
+        <p class="gloss"><span class="meaning" lang="en" dir="ltr">ordering at a café</span></p>
+    </section>
+    <section class="block" aria-labelledby="due-heading">
+        <h2 id="due-heading">לחזרה</h2>
+        <p class="due-line">13 מילים מהשיעורים הקודמים בנקודת הביקורת.</p>
+    </section>
+    <p class="dock"><a class="primary" href="#introduction">להתחיל את השיעור</a></p>
+</article>
+<article class="screen" id="overview" data-screen="overview">
+    <header class="mast">
+        <p class="kicker"><a href="#today">היום</a></p>
+        <h1>יחידה 1 — בבית הקפה</h1>
+    </header>
+    <p class="gloss"><span class="meaning" lang="en" dir="ltr">Three lessons. Each one uses the words from the one before.</span></p>
+    <ol class="lesson-list">
+<li><p class="kicker"><a href="#introduction">בבית הקפה 1 — מה רוצים</a></p><p class="pointed-line" lang="he">אֲנִי רוֹצֶה</p><p class="gloss"><span class="meaning" lang="en" dir="ltr">רוֹצֶה · קָפֶה · מַיִם · בְּבַקָּשָׁה · תּוֹדָה · חָלָב · עִם · חַם</span></p><p class="gloss"><span class="meaning" lang="en" dir="ltr">0 recycled · builds on nothing earlier</span></p></li>
+<li><p class="kicker"><a href="#overview">בבית הקפה 2 — עוד אחד</a></p><p class="pointed-line" lang="he">בְּלִי / עוֹד</p><p class="gloss"><span class="meaning" lang="en" dir="ltr">עוֹד · בְּלִי · סוּכָּר · רֶגַע · חֶשְׁבּוֹן</span></p><p class="gloss"><span class="meaning" lang="en" dir="ltr">8 recycled · builds on cafe-order</span></p></li>
+<li><p class="kicker"><a href="#checkpoint">בבית הקפה 3 — שוב</a></p><p class="pointed-line" lang="en" dir="ltr">Fluency and recall. No new words.</p><p class="gloss"><span class="meaning" lang="en" dir="ltr">no new words</span></p><p class="gloss"><span class="meaning" lang="en" dir="ltr">13 recycled · builds on cafe-order, cafe-again</span></p></li>
+    </ol>
+</article>
+<article class="screen" id="introduction" data-screen="introduction">
+    <header class="mast">
+        <p class="kicker"><a href="#today">היום</a> · היכרות</p>
+        <h1 lang="he">בבית הקפה 1 — מה רוצים</h1>
+    </header>
+    <p class="kicker">היכרות · <span lang="en" dir="ltr">introduction</span></p>
+    <h2>פוגשים מילה</h2>
+    <div class="cluster">
+        <figure class="placeholder"><img src="/media/placeholder-coffee.png" alt="coffee"><figcaption class="placeholder-label">מציין מקום</figcaption></figure>
+        <p class="word" lang="he">קָפֶה</p>
+        <p class="gloss"><span class="meaning" lang="en" dir="ltr">coffee</span></p>
+        <button type="button" class="audio primary" data-audio="placeholder">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3V9zm12.5 3a4.5 4.5 0 0 0-2.5-4.03v8.06A4.5 4.5 0 0 0 15.5 12z"></path></svg>
+            השמעה
+        </button>
+        <p id="audio-note" class="gloss"></p>
+    </div>
+    <p class="example" lang="he">אֲנִי רוֹצֶה קָפֶה.</p>
+    <p class="dock"><a class="primary" href="#recall">אפשר להמשיך</a></p>
+</article>
+<article class="screen" id="recall" data-screen="recall" data-answer="קָפֶה">
+    <p class="kicker">אחרי ניסיון</p>
+    <h2>מה המילה ל־<span class="meaning" lang="en" dir="ltr">coffee</span>&#x200F;?</h2>
+    <label class="field" for="recall-input">התשובה שלך
+        <input id="recall-input" name="attempt" type="text" autocomplete="off" lang="he" dir="rtl">
+    </label>
+    <p class="dock"><button type="button" class="primary" id="recall-check">בדיקה</button></p>
+    <p id="recall-attempt" hidden>התשובה שלך נשארת על המסך: <span id="recall-kept" class="pointed" lang="he"></span>.</p>
+    <p id="recall-ok" hidden>נכון. המילה נשארת על המסך.</p>
+    <div id="recall-correction" class="correction" hidden>
+        <p>זו לא הצורה הנכונה. אחרי ניסיון אחד מוצגת המילה, והיא נשארת כאן.</p>
+        <p class="word" lang="he">קָפֶה</p>
+        <p class="gloss"><span class="meaning" lang="en" dir="ltr">coffee</span></p>
+    </div>
+    <p class="dock"><a class="primary" href="#checkpoint">אפשר להמשיך</a></p>
+</article>
+<article class="screen" id="checkpoint" data-screen="checkpoint">
+    <header class="mast">
+        <p class="kicker"><a href="#today">היום</a> · נקודת ביקורת</p>
+        <h1 lang="he">בבית הקפה 3 — שוב</h1>
+    </header>
+    <h2>מילים מהשיעורים הקודמים</h2>
+    <p class="gloss"><span class="meaning" lang="en" dir="ltr">cafe-order, cafe-again</span></p>
+    <ul class="recycle">
+<li data-from-lesson="cafe-order"><span class="pointed" lang="he">רוֹצֶה</span><span class="meaning" lang="en" dir="ltr">cafe-order</span></li>
+<li data-from-lesson="cafe-order"><span class="pointed" lang="he">קָפֶה</span><span class="meaning" lang="en" dir="ltr">cafe-order</span></li>
+<li data-from-lesson="cafe-order"><span class="pointed" lang="he">מַיִם</span><span class="meaning" lang="en" dir="ltr">cafe-order</span></li>
+<li data-from-lesson="cafe-order"><span class="pointed" lang="he">בְּבַקָּשָׁה</span><span class="meaning" lang="en" dir="ltr">cafe-order</span></li>
+<li data-from-lesson="cafe-order"><span class="pointed" lang="he">תּוֹדָה</span><span class="meaning" lang="en" dir="ltr">cafe-order</span></li>
+<li data-from-lesson="cafe-order"><span class="pointed" lang="he">חָלָב</span><span class="meaning" lang="en" dir="ltr">cafe-order</span></li>
+<li data-from-lesson="cafe-order"><span class="pointed" lang="he">עִם</span><span class="meaning" lang="en" dir="ltr">cafe-order</span></li>
+<li data-from-lesson="cafe-order"><span class="pointed" lang="he">חַם</span><span class="meaning" lang="en" dir="ltr">cafe-order</span></li>
+<li data-from-lesson="cafe-again"><span class="pointed" lang="he">עוֹד</span><span class="meaning" lang="en" dir="ltr">cafe-again</span></li>
+<li data-from-lesson="cafe-again"><span class="pointed" lang="he">בְּלִי</span><span class="meaning" lang="en" dir="ltr">cafe-again</span></li>
+<li data-from-lesson="cafe-again"><span class="pointed" lang="he">סוּכָּר</span><span class="meaning" lang="en" dir="ltr">cafe-again</span></li>
+<li data-from-lesson="cafe-again"><span class="pointed" lang="he">רֶגַע</span><span class="meaning" lang="en" dir="ltr">cafe-again</span></li>
+<li data-from-lesson="cafe-again"><span class="pointed" lang="he">חֶשְׁבּוֹן</span><span class="meaning" lang="en" dir="ltr">cafe-again</span></li>
+    </ul>
+</article>
+<article class="screen" id="edit" data-screen="edit">
+    <header class="mast">
+        <p class="kicker">עריכה</p>
+        <h1>החלפת תמונה</h1>
+    </header>
+    <p class="gloss"><span class="meaning" lang="en" dir="ltr">One field. The form calls the same apply function as the command.</span></p>
+    <form id="edit-form">
+        <input type="hidden" name="op" value="set_field">
+        <input type="hidden" name="path" value="units/unit-1/lessons/cafe-order/blocks/introduction/words/2">
+        <input type="hidden" name="field" value="image">
+        <label class="field" for="edit-revision">revision
+            <input id="edit-revision" name="expectedRevision" type="number" value="1">
+        </label>
+        <label class="field" for="edit-media">media id
+            <input id="edit-media" name="mediaId" type="text" value="coffee-cup">
+        </label>
+        <label class="field" for="edit-alt">alt
+            <input id="edit-alt" name="alt" type="text" value="coffee">
+        </label>
+        <p class="dock"><button type="submit" class="primary">שמירת התמונה</button></p>
+    </form>
+    <p id="edit-result" role="status"></p>
+</article>
+<fieldset class="scheme">
+    <legend>ערכת צבעים</legend>
+    <label><input id="scheme-system" type="radio" name="scheme" checked> לפי המערכת</label>
+    <label><input id="scheme-light" type="radio" name="scheme"> בהירה</label>
+    <label><input id="scheme-dark" type="radio" name="scheme"> כהה</label>
+</fieldset>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

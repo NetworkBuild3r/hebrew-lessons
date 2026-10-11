@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>היום — חם</title>
+    <link rel="stylesheet" href="look.css">
+</head>
+<body>
+    <div class="page">
+        <div class="banner" aria-hidden="true">
+            <svg viewBox="0 0 360 150">
+                <circle class="decor-sun" cx="300" cy="36" r="28"></circle>
+                <path class="decor-hill" d="M0 110 C80 70 140 130 220 96 C280 74 320 88 360 70 L360 150 L0 150 Z"></path>
+                <path class="pic-line" d="M48 78 h22 v14 a10 10 0 0 1-18 0 v-4 h-4 z"></path>
+                <path class="pic-line" d="M70 86 h6 a5 5 0 0 1 0 10 h-6"></path>
+            </svg>
+        </div>
+        <main class="card">
+            <header class="mast">
+                <p class="kicker">היום</p>
+                <h1>הצעד הבא</h1>
+            </header>
+            <section class="block" aria-labelledby="next-heading">
+                <h2 id="next-heading">השיעור הבא בתוכנית</h2>
+                <p class="lesson">בוקר בבית הקפה</p>
+                <p class="pointed-line">היכרות עם שָׁלוֹם, קָפֶה, בֹּקֶר.</p>
+                <p class="gloss"><span class="meaning" lang="en" dir="ltr">hello, coffee, morning</span></p>
+            </section>
+            <section class="block" aria-labelledby="due-heading">
+                <h2 id="due-heading">לחזרה</h2>
+                <p class="due-line">4 מילים שמחכות לחזרה היום.</p>
+            </section>
+            <div class="actions">
+                <a class="primary" href="lesson-step.html">להתחיל את השיעור</a>
+            </div>
+        </main>
+        <fieldset class="scheme">
+            <legend>ערכת צבעים</legend>
+            <label><input id="scheme-system" type="radio" name="scheme" checked> לפי המערכת</label>
+            <label><input id="scheme-light" type="radio" name="scheme"> בהירה</label>
+            <label><input id="scheme-dark" type="radio" name="scheme"> כהה</label>
+        </fieldset>
+    </div>
+</body>
+</html>

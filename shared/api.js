@@ -1,5 +1,7 @@
 /**
  * Same-origin /api/ client with JSON + credentials.
+ * A FormData body is sent as multipart without a JSON content type, so the
+ * browser keeps the boundary. Upload uses this path (INIT-004/SPEC-016).
  * Provenance: INIT-002/SPEC-012
  */
 (function (root) {
@@ -41,8 +43,20 @@
     }
 
     /**
+     * Browser FormData, including a test double whose constructor is named FormData.
+     * @param {unknown} body
+     * @returns {boolean}
+     */
+    function isMultipart(body) {
+        if (!body || typeof body.append !== 'function') return false;
+        var name = body.constructor && body.constructor.name;
+        return name === 'FormData';
+    }
+
+    /**
      * @param {string} path must start with /api/
-     * @param {{ method?: string, body?: object|string, headers?: object, redirectOn401?: boolean }} [opts]
+     * @param {{ method?: string, body?: object|string, headers?: object, redirectOn401?: boolean, raw?: boolean }} [opts]
+     *   `raw: true` keeps the response body string on `rawText` (INIT-006/SPEC-017).
      * @returns {Promise<{ ok: boolean, status: number, data: object|null, error: string|null, code: string|null, response: Response }>}
      */
     function request(path, opts) {
@@ -59,30 +73,53 @@
             headers: headers
         };
         if (body != null && method !== 'GET' && method !== 'HEAD') {
-            if (!headers['Content-Type'] && !headers['content-type']) {
-                headers['Content-Type'] = 'application/json';
+            if (isMultipart(body)) {
+                init.body = body;
+            } else {
+                if (!headers['Content-Type'] && !headers['content-type']) {
+                    headers['Content-Type'] = 'application/json';
+                }
+                init.body = typeof body === 'string' ? body : JSON.stringify(body);
             }
-            init.body = typeof body === 'string' ? body : JSON.stringify(body);
         }
+        if (options.signal) init.signal = options.signal;
 
         return fetch(path, init).then(function (res) {
             if (res.status === 401 && options.redirectOn401 !== false) {
                 redirectToLogin();
             }
             var ctype = res.headers.get('content-type') || '';
-            var parse = ctype.indexOf('application/json') !== -1
-                ? res.json().catch(function () { return null; })
-                : res.text().then(function (t) {
-                    return t ? { raw: t } : null;
-                }).catch(function () { return null; });
-            return parse.then(function (data) {
+            var parse;
+            if (options.raw) {
+                parse = (typeof res.text === 'function' ? res.text() : Promise.resolve(''))
+                    .then(function (text) {
+                        var rawText = text == null ? '' : String(text);
+                        var data = null;
+                        if (ctype.indexOf('application/json') !== -1 && rawText) {
+                            try { data = JSON.parse(rawText); } catch (err) { data = null; }
+                        } else if (rawText) {
+                            data = { raw: rawText };
+                        }
+                        return { data: data, rawText: rawText };
+                    })
+                    .catch(function () { return { data: null, rawText: '' }; });
+            } else {
+                parse = (ctype.indexOf('application/json') !== -1
+                    ? res.json().catch(function () { return null; })
+                    : res.text().then(function (t) {
+                        return t ? { raw: t } : null;
+                    }).catch(function () { return null; }))
+                    .then(function (data) { return { data: data, rawText: null }; });
+            }
+            return parse.then(function (parsed) {
+                var data = parsed.data;
                 var errMsg = null;
                 var code = null;
                 if (data && typeof data === 'object') {
                     if (data.error) errMsg = String(data.error);
                     if (data.code) code = String(data.code);
                 }
-                return {
+                var result = {
                     ok: res.ok,
                     status: res.status,
                     data: data,
@@ -90,6 +127,8 @@
                     code: code,
                     response: res
                 };
+                if (options.raw) result.rawText = parsed.rawText;
+                return result;
             });
         });
     }

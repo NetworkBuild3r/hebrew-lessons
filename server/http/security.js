@@ -36,7 +36,22 @@ function isJsonContentType(header) {
 }
 
 /**
- * Expected origin string for this request (no trailing slash).
+ * Origin derived from the Host the browser actually used (no trailing slash).
+ * @param {import('http').IncomingMessage} req
+ * @returns {string}
+ */
+function hostOrigin(req) {
+    const host = req.headers.host;
+    if (!host) return '';
+    const forwarded = req.headers['x-forwarded-proto'];
+    const proto = (typeof forwarded === 'string' && forwarded)
+        ? forwarded.split(',')[0].trim()
+        : (cookieLooksSecure() ? 'https' : 'http');
+    return proto + '://' + host;
+}
+
+/**
+ * Public origin from PUBLIC_ORIGIN, or the request host when that is unset.
  * @param {import('http').IncomingMessage} req
  * @returns {string}
  */
@@ -44,11 +59,7 @@ function expectedOrigin(req) {
     if (process.env.PUBLIC_ORIGIN) {
         return String(process.env.PUBLIC_ORIGIN).replace(/\/$/, '');
     }
-    const host = req.headers.host;
-    if (!host) return '';
-    const proto = req.headers['x-forwarded-proto']
-        || (cookieLooksSecure() ? 'https' : 'http');
-    return proto + '://' + host;
+    return hostOrigin(req);
 }
 
 function cookieLooksSecure() {
@@ -86,9 +97,14 @@ function requestOrigin(req) {
 function originAllowed(req) {
     const got = requestOrigin(req);
     if (!got) return false;
-    const want = expectedOrigin(req);
-    if (!want) return false;
-    return got === want;
+    // PUBLIC_ORIGIN covers the public site name (k8s). The request host covers
+    // the name the browser actually used, so localhost and 127.0.0.1 both work
+    // when PUBLIC_ORIGIN names only one of them.
+    const pub = process.env.PUBLIC_ORIGIN
+        ? String(process.env.PUBLIC_ORIGIN).replace(/\/$/, '')
+        : '';
+    const host = hostOrigin(req);
+    return got === pub || (!!host && got === host);
 }
 
 /**

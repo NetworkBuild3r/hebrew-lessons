@@ -1,37 +1,28 @@
 # Accounts and admin
 
-Operator guide for first run, day-to-day accounts, lesson sharing, database backup, and audio safety. Commands below are for Windows PowerShell locally, and for `kubectl exec` on the cluster. Env var and k8s secret **names** only — never paste secret values into this file or into shell history.
+Operator guide for first run, day-to-day accounts, lesson sharing, database backup, pictures, and audio safety. Commands below are for Windows PowerShell locally, and for `kubectl exec` on the cluster. Env var and k8s secret **names** only — never paste secret values into this file or into shell history.
 
-Provenance: `INIT-002/SPEC-018`. Cluster layout details: [deploy/k8s-database.md](../../deploy/k8s-database.md).
+Provenance: `INIT-002/SPEC-018`. Pictures: `INIT-004/SPEC-019`. AI planning and the profile loop: `INIT-006/SPEC-019`. Cluster layout details: [deploy/k8s-database.md](../../deploy/k8s-database.md).
 
-## First run (local, PowerShell)
+## First run
 
-There is no public sign-up. Create the first admin before anyone can use the site.
+There is no public sign-up. On startup, if the database has **no admin user**, the server creates one from the environment and logs the username only:
 
-1. Point `DATA_DIR` at a writable folder (not the lessons tree). Example:
+| Name | Required when no admin exists |
+| --- | --- |
+| `ADMIN_USERNAME` | Yes |
+| `ADMIN_PASSWORD` | Yes. At least 10 characters, and not a common password |
+| `ADMIN_DISPLAY_NAME` | No |
 
-```powershell
-$env:DATA_DIR = "C:\path\to\app-data"
-```
+Locally those live in `.env` (see `.env.example`). On Kubernetes, inject `ADMIN_USERNAME` and `ADMIN_PASSWORD` from Secret `hebrew-secrets` the same way as `MCP_AUTH_TOKEN` (see [deploy/k8s-database.md](../../deploy/k8s-database.md)). Do not put the password in the Deployment YAML.
 
-2. Create the admin. The password comes from a **TTY prompt** (no echo) or from `--password-file`. Never pass `--password=` on the command line (the CLI refuses it).
+If any admin already exists, including a disabled one, startup ignores these variables. Changing the Secret later does not change the password. Reset it with the CLI below, or delete the database and restart to bootstrap again.
+
+The CLI still works when you want another account, or a reset. The password comes from a **TTY prompt** (no echo) or from `--password-file`. Never pass `--password=` on the command line (the CLI refuses it).
 
 ```powershell
 npm run user -- create <name> --admin
-```
-
-Or with a password file (useful in scripts; delete the file afterward):
-
-```powershell
-npm run user -- create <name> --admin --password-file C:\path\to\password.txt
-```
-
-3. Start the app (for example `docker compose up --build`) and sign in at the site origin.
-
-On Kubernetes, create the first admin inside the pod (TTY prompt):
-
-```bash
-kubectl exec -it deploy/<name> -- npm run user -- create <username> --admin
+npm run user -- reset <name>
 ```
 
 ## Day to day
@@ -60,6 +51,8 @@ Sign in as an admin. Open the **Lessons** tab. For each lesson set visibility to
 
 New lessons stay hidden until you assign them (in this tab, or via MCP — see below).
 
+After step 2 of the [lesson-plan rollout](lesson-plan-rollout.md), this tab no longer limits who can read the published plan of `my-morning`, `anal-sex-vocab`, or `shai-date-indirect-speech`: the plan route reads the visibility inside the plan. To restrict one of those, change and publish its plan first, as that checklist describes, then this tab.
+
 ## Backup and restore
 
 ### Local
@@ -70,7 +63,7 @@ With `DATA_DIR` set to the same folder the app uses:
 npm run db:backup
 ```
 
-Backups land under `DATA_DIR/backups/` as files named like `hebrew-<timestamp>.sqlite`.
+Backups land under `DATA_DIR/backups/hebrew-<timestamp>/`. Each directory contains `hebrew.sqlite`, `media/`, and `media/_archive/`. The command does not read lesson `.mp3` files, and it does not move or delete them.
 
 Check integrity:
 
@@ -78,7 +71,7 @@ Check integrity:
 npm run db:check
 ```
 
-To restore: stop the app (no writers), replace `DATA_DIR/hebrew.sqlite` with a copy of the backup file, then start again and run `npm run db:check`. Confirm sign-in works before treating the restore as done.
+To restore: stop the app (no writers). From that same backup directory, replace `DATA_DIR/hebrew.sqlite` and replace `DATA_DIR/media` (including `media/_archive`). Remove `hebrew.sqlite-wal` and `hebrew.sqlite-shm` while the process is stopped so they are not replayed over the restored file. Do not delete recordings under the lessons folder. Start again, run `npm run db:check` (expect `ok`), and confirm an approved image still resolves. Confirm sign-in works before treating the restore as done.
 
 ### Kubernetes
 
@@ -86,18 +79,52 @@ From [deploy/k8s-database.md](../../deploy/k8s-database.md):
 
 ```bash
 kubectl exec -it deploy/<name> -- npm run db:backup
-# Then copy the backup file out of the pod (path under DATA_DIR/backups/):
-kubectl cp <namespace>/<pod>:/data/app/backups/<backup-file> ./<backup-file>
+# Copy the whole directory (hebrew.sqlite, media/, and media/_archive/):
+kubectl cp <namespace>/<pod>:/data/app/backups/hebrew-<stamp> ./hebrew-<stamp>
 ```
 
-Restore (still `replicas: 1`; stop writes first — scale to zero or a maintenance window):
+Restore (still `replicas: 1`; stop writes first — scale to zero or a maintenance window). Full commands, including the media tree and the WAL files, are in [deploy/k8s-database.md](../../deploy/k8s-database.md). Do not delete `/data/worksheets`.
 
-```bash
-kubectl cp ./<backup-file> <namespace>/<pod>:/data/app/backups/<backup-file>
-kubectl exec -it deploy/<name> -- sh -c 'cp /data/app/backups/<backup-file> /data/app/hebrew.sqlite'
-```
+Then start the pod again and verify with `npm run db:check` (expect `ok`). Confirm the restored `media/` files match that backup and an approved image still resolves. Confirm the app is healthy and sign-in works before ending the maintenance window.
 
-Then start the pod again and verify with `npm run db:check` if available. Confirm the app is healthy and sign-in works before ending the maintenance window.
+## Pictures
+
+Images live under `DATA_DIR/media/`. They are not a public folder. Upload and generation store a pending PNG. Backup copies that tree and `DATA_DIR/media/_archive/` with the database. Restore stops writers first, restores both trees from the same backup, then checks that an approved image still resolves. Commands are under [Backup and restore](#backup-and-restore).
+
+### Upload
+
+An admin uploads with `POST /api/media`. The MCP tool `upload_media` stores the same pending image and does not approve it. Send PNG, JPEG, or WebP bytes. The filename and the declared content type are ignored. SVG is refused. The server re-encodes one PNG under `DATA_DIR/media/` and does not keep the original filename. A learner cannot upload.
+
+You may send an English alt-text draft with the upload. Empty alt text cannot be approved later.
+
+### Approval
+
+Only an admin session can approve: `POST /api/admin/media/:id/approval` with JSON `altText`. Alt text is a short English statement of the word's meaning. Approval is refused while alt text is empty. The MCP actor cannot approve. Uploading is not approval, even when the same admin does both.
+
+A lesson set to **everyone** or **selected** cannot reference a pending image. A **hidden** lesson may, so you can preview it.
+
+Before you approve a generated picture, check that the object matches the gloss, the frame has nothing the gloss does not need, the pixels contain no letters, and the picture is one word. A photographic look is not a reason to approve. Keep one approved image per word unless the lesson teaches a different sense.
+
+### Generate
+
+The server reads the name `OPENAI_API_KEY` from the environment (see the table below). Do not put a value in this file, a command, or a log. If that name is unset, dry-run and generate both refuse and do not call out.
+
+Dry-run first. An admin calls `GET /api/admin/images/image-plan` with the prompt. MCP calls `plan_image`. The answer is the image count and the estimated dollars. It does not call the provider and does not spend a cap.
+
+Generate is a separate call. It must send `confirm` true and the dollar estimate from that dry-run of the same prompt. Admin: `POST /api/admin/images`. MCP: `generate_image`. Without that confirm, the server does not call the provider. The new image stays pending.
+
+Caps, one pool shared by admin and MCP:
+
+- 15 generation calls per clock hour
+- $1 of estimated generation cost per UTC day
+
+A call that would pass either cap is refused before the provider is contacted. A call that does contact the provider counts toward both caps, including a provider error after the request was sent. The dry-run counts toward neither.
+
+The prompt is one ordinary object or action. The server refuses a prompt that asks for a sexual act, a minor, or a real person's likeness. Learner free text is never the prompt. Adult lessons stay text.
+
+### Delete
+
+Only an admin can delete an image: `POST /api/admin/media/:id/delete`. Delete copies the bytes to `DATA_DIR/media/_archive/`, checks the copy, then removes the live file. Dropping a lesson reference does not delete the file.
 
 ## Audio safety
 
@@ -127,22 +154,65 @@ kubectl exec -it deploy/<name> -- npm run audio:inventory
 
 | Name | Role |
 | --- | --- |
-| `DATA_DIR` | SQLite and backups directory (`hebrew.sqlite`, `backups/`) |
+| `DATA_DIR` | SQLite, backups, and media (`hebrew.sqlite`, `backups/`, `media/`, `media/_archive/`). Not a served root. |
 | `COOKIE_SECURE` | `0` locally; `1` on HTTPS / k8s (Secure cookie + `__Host-` prefix) |
 | `PUBLIC_ORIGIN` | Public site origin used for CSRF Origin checks |
-| `MCP_AUTH_TOKEN` | Required for MCP assignment tools (`list_users`, visibility on `upsert_lesson`, `set_lesson_visibility`) |
+| `MCP_AUTH_TOKEN` | Required for MCP assignment and picture tools (`list_users`, visibility, `upload_media`, `plan_image`, `generate_image`) |
 | `ELEVENLABS_API_KEY` | TTS; never commit or bake into the image |
+| `OPENAI_API_KEY` | Image generation; never commit or bake into the image. In k8s, Secret `hebrew-secrets` key `OPENAI_API_KEY` |
+| `ADMIN_USERNAME` | First admin, only when the database has none |
+| `ADMIN_PASSWORD` | Password for that first admin. Ignored once an admin exists |
+| `ADMIN_DISPLAY_NAME` | Optional display name for that first admin |
+| `SRS_SCHEDULER` | `ladder` (default) or `fsrs`. Not a secret. Read once when the server process starts. See [Ladder fallback](#ladder-fallback). |
 
 **Local compose:** `COOKIE_SECURE=0`, `PUBLIC_ORIGIN=http://localhost:8080`.
 
-**Kubernetes:** `COOKIE_SECURE=1`, `DATA_DIR=/data/app`, `LESSONS_DIR=/data/worksheets`. `MCP_AUTH_TOKEN` and `ELEVENLABS_API_KEY` come from Secret `hebrew-secrets` via `secretKeyRef` (keys with those same names). Full Deployment snippet: [deploy/k8s-database.md](../../deploy/k8s-database.md). Do not paste secret values into docs or YAML.
+**Kubernetes:** `COOKIE_SECURE=1`, `DATA_DIR=/data/app`, `LESSONS_DIR=/data/worksheets`. `SRS_SCHEDULER` is a plain environment variable, not a secret; `ladder` is the fallback. `MCP_AUTH_TOKEN`, `ELEVENLABS_API_KEY`, `OPENAI_API_KEY`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` come from Secret `hebrew-secrets` via `secretKeyRef` (keys with those same names). Media files are `/data/app/media/` and `/data/app/media/_archive/` on PVC `hebrew-data`. Full Deployment snippet: [deploy/k8s-database.md](../../deploy/k8s-database.md). Do not paste secret values into docs or YAML.
 
 ## Privacy: who can see what
 
 - **Admins** can see everything a learner does, including the full answer history.
 - **Learners** are told this on the sign-in page.
-- **The AI and MCP tools cannot** read progress or answer history.
+- **The AI and MCP tools** follow the rule in [AI planning](#ai-planning) below. That section is the only statement of what they may read.
 - **`list_users`** returns only usernames and display names of active accounts (nothing else).
+
+## AI planning
+
+An admin turns AI planning on for one account at a time. The switch starts off. While it is off, `get_learner_profile`, `check_text_coverage`, and `add_library_words` return `planning_off` and nothing else. The MCP cannot flip the switch: `set_ai_planning` always returns `forbidden`.
+
+The rule this guide puts in force (ADR-0009 §9):
+
+> MCP reads only the profile in ADR-0009 §1, for learners whose switch is on. That profile is aggregates: word ids with stage, strength, weak flag and a capped lapse count; accuracy per grammar concept; a journey label; and lessons completed. The MCP still never reads answer history, typed text, timestamps, passwords, sessions, or admin-only views.
+
+What that call can return, and what it must never return, are the two tables in [ADR-0009 §1](../decisions/ADR-0009-learner-model-and-language-program.md). This guide does not copy those tables. The disclosure sentence for the sign-in page, the account menu, Progress, and the admin confirm step is:
+
+> If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator's AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.
+
+That sentence does not replace the notice that admins can see all activity.
+
+### View it on Progress
+
+Sign in as the account you want to inspect. Open **Progress** (`/progress/`) and read **What your AI sees**. That section is `GET /api/me/profile` for the signed-in account: the same object the MCP would receive, plus whether AI planning is on, whatever the switch says. There is no browser page that loads another learner's profile. The sample account id in this guide is `example-learner`.
+
+### Turn it on for your own account
+
+Sign in as an admin. Open **Admin** (`/admin/`) and the **Users** tab. On your own row, read the disclosure sentence above, then turn AI planning on. The request is `PATCH /api/admin/users/:id/ai-planning` with a JSON body `{ "enabled": true }`. Turning it off sends `{ "enabled": false }`. The new state is whatever the response returns. Do not ask the lesson AI to change the switch.
+
+### Forms checklist
+
+Starter verb forms stay unverified until you check the pointing. The list is [SPEC-018-forms-checklist.md](../../sdd/initiatives/INIT-006-language-program/specs/completion-summaries/SPEC-018-forms-checklist.md). Tick a line (`[x]`) only after you have checked that form. Then, from the repo root, with `DATA_DIR` set to the database you mean to update:
+
+```powershell
+node scripts/seed-starter-content.js
+```
+
+That run marks the ticked forms verified and leaves every other form unverified. It does not publish a plan. Untick a line and run the command again to clear that form. The MCP cannot do this step.
+
+### Ladder fallback
+
+Review scheduling uses `SRS_SCHEDULER`. Unset, empty, or `ladder` keeps the five-step ladder. `fsrs` selects FSRS-6. The process reads the variable once at startup, so a change applies on the next start.
+
+To fall back, set `SRS_SCHEDULER` to `ladder` and start the server again. No down migration is required. The variable is not a secret; do not put a token or a password in it, and do not paste secret values into the environment file while you edit the name.
 
 ## Working with the AI (MCP)
 
@@ -151,8 +221,11 @@ Useful tools once `MCP_AUTH_TOKEN` is set:
 - `list_users` — usernames and display names of active accounts
 - `upsert_lesson` — optional `visibility`: `"everyone"` or `{ "users": ["username", ...] }`
 - `set_lesson_visibility` — `"everyone"`, `"hidden"`, or `{ "users": ["username", ...] }`
+- `upload_media` — store one pending image from base64 bytes. Does not approve.
+- `plan_image` — dry-run: image count and estimated dollars. Does not call the provider.
+- `generate_image` — only when `confirm` is true and `estimate` matches that dry-run. The image stays pending.
 
-If `MCP_AUTH_TOKEN` is unset or empty, those assignment tools refuse. A lesson created with no assignment stays **hidden** until you share it in the admin Lessons tab or call `set_lesson_visibility` / pass `visibility` on upsert.
+Approval and delete are admin session routes, not MCP tools. If `MCP_AUTH_TOKEN` is unset or empty, the assignment tools and the picture tools refuse. A lesson created with no assignment stays **hidden** until you share it in the admin Lessons tab or call `set_lesson_visibility` / pass `visibility` on upsert.
 
 ## Known limits
 

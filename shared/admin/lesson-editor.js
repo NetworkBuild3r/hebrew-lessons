@@ -657,8 +657,22 @@
      * @param {HTMLElement} panel
      * @param {string} slug
      */
+    // The editor that is open right now, so the app router can ask before leaving
+    // (canLeave) and remove the beforeunload guard on the way out (unmount).
+    var openEditor = null;
+
+    function canLeave() {
+        return openEditor ? openEditor.confirmLeave() : true;
+    }
+
+    function unmount() {
+        if (openEditor) openEditor.dispose();
+        openEditor = null;
+    }
+
     function mount(panel, slug) {
         if (!panel || !slug) return;
+        unmount();
         var state = {
             slug: slug,
             worksheet: null,
@@ -697,8 +711,16 @@
             event.returnValue = '';
         }
 
+        openEditor = {
+            confirmLeave: confirmLeave,
+            dispose: function () {
+                if (root.removeEventListener) root.removeEventListener('beforeunload', onBeforeUnload);
+            }
+        };
+
         function wire(rootEl) {
             if (root.addEventListener) {
+                // Same function reference each time, so repeated wire() calls do not stack listeners.
                 root.addEventListener('beforeunload', onBeforeUnload);
             }
 
@@ -1120,6 +1142,8 @@
         openDialog: openDialog,
         CORE_VOCAB: CORE_VOCAB,
         EXTRA_VOCAB: EXTRA_VOCAB,
-        mount: mount
+        mount: mount,
+        unmount: unmount,
+        canLeave: canLeave
     };
 })(typeof window !== 'undefined' ? window : globalThis);

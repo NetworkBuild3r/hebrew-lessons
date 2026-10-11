@@ -10,6 +10,10 @@
     var HISTORY_LIMIT = 50;
     var NOTICE_LEARNERS =
         'הלומדים יודעים שמנהלים רואים את כל הפעילות, כולל כל תשובה. (Learners are told that admins can see all activity, including every answer.)';
+    /* Hebrew line is a draft until the operator approves it (ADR-0009). Provenance: INIT-006/SPEC-017 */
+    var AI_DISCLOSURE_EN = 'If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator\'s AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.';
+    var AI_DISCLOSURE_HE = 'אם מנהל מפעיל תכנון בינה מלאכותית לחשבון שלך, סיכום של ההתקדמות ושם המשתמש נשלחים לספק הבינה המלאכותית של המפעיל כדי לנסח את השיעור הבא. הסיכום כולל את המילים שתורגלו ומידת הידיעה שלהן, את הדקדוק שתורגל ומידת הדיוק, את השיעורים שהושלמו, ובאיזו תדירות הקריאה היא בלי ניקוד. הסיכום אינו כולל תשובות בודדות, טקסט שהוקלד, או מועדי תרגול.';
+    var AI_DISCLOSURE = AI_DISCLOSURE_HE + ' (' + AI_DISCLOSURE_EN + ')';
     var PASSWORD_HINT = 'לפחות 10 תווים. (At least 10 characters.)';
 
     function esc(value) {
@@ -231,9 +235,27 @@
                 role: u.role,
                 status: u.status,
                 created_at: u.created_at,
-                last_sign_in: u.last_sign_in
+                last_sign_in: u.last_sign_in,
+                ai_planning: u.ai_planning === true
             };
         });
+    }
+
+    function aiPlanningButton(user, id) {
+        var known = user.ai_planning === true || user.ai_planning === false;
+        if (!known) {
+            return '<button type="button" class="btn admin-row-btn" data-ai-planning-toggle disabled'
+                + ' aria-disabled="true">'
+                + bi('תכנון בינה', 'AI planning') + ': ' + bi('לא ידוע', 'unknown')
+                + '</button>';
+        }
+        var on = user.ai_planning === true;
+        return '<button type="button" class="btn admin-row-btn" data-admin-action="ai-planning"'
+            + ' data-ai-planning-toggle data-user-id="' + id + '"'
+            + ' aria-pressed="' + (on ? 'true' : 'false') + '">'
+            + bi('תכנון בינה', 'AI planning') + ': '
+            + (on ? bi('פעיל', 'on') : bi('כבוי', 'off'))
+            + '</button>';
     }
 
     function renderUserRow(user) {
@@ -260,6 +282,7 @@
             + '<td data-col="role">' + roleLabel(user.role) + '</td>'
             + '<td data-col="status">' + statusLabel(user.status) + '</td>'
             + '<td dir="ltr">' + esc(formatWhen(user.last_sign_in)) + '</td>'
+            + '<td data-col="ai-planning">' + aiPlanningButton(user, id) + '</td>'
             + '<td class="admin-row-actions">' + actions + '</td>'
             + '</tr>';
     }
@@ -267,7 +290,7 @@
     function renderUsersTable(users) {
         var rows = (users || []).map(renderUserRow).join('');
         if (!rows) {
-            rows = '<tr data-admin-empty="1"><td colspan="6">'
+            rows = '<tr data-admin-empty="1"><td colspan="7">'
                 + bi('אין משתמשים.', 'No users.') + '</td></tr>';
         }
         return ''
@@ -286,6 +309,7 @@
             + '<th>' + bi('תפקיד', 'Role') + '</th>'
             + '<th>' + bi('סטטוס', 'Status') + '</th>'
             + '<th>' + bi('התחברות אחרונה', 'Last sign-in') + '</th>'
+            + '<th>' + bi('תכנון בינה', 'AI planning') + '</th>'
             + '<th>' + bi('פעולות', 'Actions') + '</th>'
             + '</tr></thead>'
             + '<tbody data-admin-users-body>' + rows + '</tbody>'
@@ -340,6 +364,23 @@
             + '</div></form></div></div>';
     }
 
+    function aiPlanningDialogHtml() {
+        return ''
+            + '<div class="admin-dialog hidden" id="admin-ai-planning-dialog" role="dialog" aria-modal="true"'
+            + ' aria-labelledby="admin-ai-planning-title" hidden aria-hidden="true">'
+            + '<div class="admin-dialog-panel" role="document">'
+            + '<h2 id="admin-ai-planning-title">' + bi('תכנון בינה מלאכותית', 'AI planning') + '</h2>'
+            + '<p data-ai-planning-name></p>'
+            + '<p data-ai-planning-lead></p>'
+            + '<p class="admin-ai-disclosure" data-ai-disclosure="1">' + esc(AI_DISCLOSURE) + '</p>'
+            + '<form id="admin-ai-planning-form">'
+            + '<p class="admin-inline-error" id="admin-ai-planning-error" hidden></p>'
+            + '<div class="admin-dialog-actions">'
+            + '<button type="submit" class="btn btn-primary">' + bi('אישור', 'Confirm') + '</button>'
+            + '<button type="button" class="btn" data-admin-dialog-close>' + bi('ביטול', 'Cancel') + '</button>'
+            + '</div></form></div></div>';
+    }
+
     function showGuardError(rootEl, message) {
         var el = rootEl.querySelector('[data-admin-guard-error]');
         if (!el) return;
@@ -372,7 +413,11 @@
             var list = state.users || [];
             for (var i = 0; i < list.length; i += 1) {
                 if (String(list[i].id) === String(res.data.id)) {
-                    list[i] = usersSnapshot([res.data])[0];
+                    var next = usersSnapshot([res.data])[0];
+                    if (typeof res.data.ai_planning !== 'boolean') {
+                        next.ai_planning = list[i].ai_planning === true;
+                    }
+                    list[i] = next;
                     break;
                 }
             }
@@ -421,6 +466,43 @@
         return { appended: appended, more: more };
     }
 
+    function findUser(state, userId) {
+        var list = (state && state.users) || [];
+        for (var i = 0; i < list.length; i += 1) {
+            if (String(list[i].id) === String(userId)) return list[i];
+        }
+        return null;
+    }
+
+    function paintUsersBody(panel, users) {
+        var tbody = panel && panel.querySelector('[data-admin-users-body]');
+        if (tbody) tbody.innerHTML = (users || []).map(renderUserRow).join('');
+    }
+
+    /**
+     * The row changes only after a 200 whose body includes boolean ai_planning.
+     * A failure leaves the previous flag and shows the error.
+     * @returns {boolean}
+     */
+    function applyAiPlanningResult(panel, state, userId, res) {
+        var user = findUser(state, userId);
+        if (!user) {
+            showGuardError(panel, 'User not found');
+            return false;
+        }
+        var body = res && res.data;
+        var next = body && typeof body.ai_planning === 'boolean' ? body.ai_planning : null;
+        if (!res || !res.ok || next == null) {
+            showGuardError(panel, (res && res.error) || 'Could not change AI planning');
+            paintUsersBody(panel, state.users);
+            return false;
+        }
+        user.ai_planning = next;
+        clearGuardError(panel);
+        paintUsersBody(panel, state.users);
+        return true;
+    }
+
     function patchUser(userId, body) {
         var Api = api();
         return Api.request('/api/admin/users/' + encodeURIComponent(String(userId)), {
@@ -440,7 +522,8 @@
             + bi('טוען…', 'Loading…') + '</p></div>';
 
         function paintTable() {
-            panel.innerHTML = renderUsersTable(state.users) + createDialogHtml() + resetDialogHtml();
+            panel.innerHTML = renderUsersTable(state.users) + createDialogHtml() + resetDialogHtml()
+                + aiPlanningDialogHtml();
             wireForms(panel);
         }
 
@@ -527,6 +610,59 @@
                     });
                 });
             }
+
+            var planningForm = rootEl.querySelector('#admin-ai-planning-form');
+            if (planningForm && !planningForm.dataset.bound) {
+                planningForm.dataset.bound = '1';
+                planningForm.addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    var dlg = rootEl.querySelector('#admin-ai-planning-dialog');
+                    var errEl = rootEl.querySelector('#admin-ai-planning-error');
+                    if (errEl) {
+                        errEl.hidden = true;
+                        errEl.textContent = '';
+                    }
+                    if (!dlg) return;
+                    var userId = dlg.getAttribute('data-user-id') || '';
+                    var enabled = dlg.getAttribute('data-enabled') === '1';
+                    var subject = findUser(state, userId);
+                    if (!subject) return;
+                    var submitBtn = planningForm.querySelector('button[type="submit"]');
+                    if (submitBtn) submitBtn.disabled = true;
+                    var Api = api();
+                    if (!Api || typeof Api.request !== 'function') {
+                        if (submitBtn) submitBtn.disabled = false;
+                        applyAiPlanningResult(rootEl, state, userId, { ok: false, error: 'API unavailable' });
+                        if (errEl) {
+                            errEl.hidden = false;
+                            errEl.textContent = 'API unavailable';
+                        }
+                        return;
+                    }
+                    Api.request('/api/admin/users/' + encodeURIComponent(userId) + '/ai-planning', {
+                        method: 'PATCH',
+                        body: { enabled: enabled }
+                    }).then(function (res) {
+                        if (submitBtn) submitBtn.disabled = false;
+                        var changed = applyAiPlanningResult(rootEl, state, userId, res);
+                        if (!changed) {
+                            if (errEl) {
+                                errEl.hidden = false;
+                                errEl.textContent = (res && res.error) || 'Could not change AI planning';
+                            }
+                            return;
+                        }
+                        if (state.dialogCtl) state.dialogCtl.close();
+                    }).catch(function () {
+                        if (submitBtn) submitBtn.disabled = false;
+                        applyAiPlanningResult(rootEl, state, userId, { ok: false, error: 'Network error' });
+                        if (errEl) {
+                            errEl.hidden = false;
+                            errEl.textContent = 'Network error';
+                        }
+                    });
+                });
+            }
         }
 
         if (!state.bound) {
@@ -589,6 +725,33 @@
                             error: 'Network error'
                         });
                     });
+                    return;
+                }
+
+                if (action === 'ai-planning' && userId) {
+                    var subject = findUser(state, userId);
+                    if (!subject || (subject.ai_planning !== true && subject.ai_planning !== false)) return;
+                    var dlg = panel.querySelector('#admin-ai-planning-dialog');
+                    var nameEl = panel.querySelector('[data-ai-planning-name]');
+                    var leadEl = panel.querySelector('[data-ai-planning-lead]');
+                    var errEl = panel.querySelector('#admin-ai-planning-error');
+                    var turningOn = subject.ai_planning !== true;
+                    if (nameEl) nameEl.textContent = subject.username || '';
+                    if (leadEl) {
+                        leadEl.textContent = turningOn
+                            ? 'להפעיל תכנון בינה מלאכותית לחשבון הזה? (Turn AI planning on for this account?)'
+                            : 'לכבות תכנון בינה מלאכותית לחשבון הזה? (Turn AI planning off for this account?)';
+                    }
+                    if (errEl) {
+                        errEl.hidden = true;
+                        errEl.textContent = '';
+                    }
+                    if (dlg) {
+                        dlg.setAttribute('data-user-id', String(userId));
+                        dlg.setAttribute('data-enabled', turningOn ? '1' : '0');
+                    }
+                    clearGuardError(panel);
+                    state.dialogCtl = openDialog(dlg, btn);
                     return;
                 }
 
@@ -881,6 +1044,7 @@
     root.HebrewAdminUsers = {
         HISTORY_LIMIT: HISTORY_LIMIT,
         NOTICE_LEARNERS: NOTICE_LEARNERS,
+        AI_DISCLOSURE: AI_DISCLOSURE,
         PASSWORD_HINT: PASSWORD_HINT,
         escapeHtml: esc,
         bi: bi,
@@ -889,6 +1053,7 @@
         hasMoreHistory: hasMoreHistory,
         openDialog: openDialog,
         applyPatchResult: applyPatchResult,
+        applyAiPlanningResult: applyAiPlanningResult,
         applyHistoryPage: applyHistoryPage,
         showGuardError: showGuardError,
         renderUsersTable: renderUsersTable,
@@ -897,6 +1062,7 @@
         renderHistoryRows: renderHistoryRows,
         createDialogHtml: createDialogHtml,
         resetDialogHtml: resetDialogHtml,
+        aiPlanningDialogHtml: aiPlanningDialogHtml,
         mountUsersList: mountUsersList,
         mountUserDetail: mountUserDetail,
         usersSnapshot: usersSnapshot

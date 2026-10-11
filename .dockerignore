@@ -1,6 +1,8 @@
 node_modules
 .git
 sdd
+# Local secrets stay out of the image build context.
 .env
 .env.*
 data/
+spikes/

@@ -223,20 +223,17 @@
         };
     }
 
-    function boot() {
-        var el = root.document && root.document.getElementById('lessons-app');
-        if (!el) return;
-        paint(el, { state: 'loading' });
+    // ---- view lifecycle (contract: shared/router.js) ----
+    // `mounted` is the element of the open view, or null once the route closes.
+    var mounted = null;
 
-        var Sync = root.HebrewSync;
-        var start = Sync && typeof Sync.init === 'function'
-            ? Promise.resolve(Sync.init({}))
-            : Promise.resolve(null);
-
-        start.then(function () {
-            if (Sync && typeof Sync.paintStatus === 'function') Sync.paintStatus();
+    function mount(el, ctx) {
+        mounted = el;
+        var ready = (ctx && ctx.ready) || Promise.resolve(null);
+        return ready.then(function () {
             return loadProgressMap(catalog());
         }).then(function (progressBySlug) {
+            if (mounted !== el) return;
             var model = {
                 state: 'ready',
                 filter: 'all',
@@ -245,24 +242,19 @@
             paint(el, model);
             bindFilter(el, model);
         }).catch(function (err) {
-            paint(el, {
-                state: 'error',
-                message: (err && err.message) || 'Network error'
-            });
+            if (mounted !== el) return;
+            paint(el, { state: 'error', message: (err && err.message) || 'Network error' });
         });
+    }
+
+    function unmount() {
+        mounted = null;
     }
 
     root.HebrewLessonsPage = {
         render: renderList,
         buildRows: buildRows,
-        boot: boot
+        mount: mount,
+        unmount: unmount
     };
-
-    if (root.document) {
-        if (root.document.readyState === 'loading') {
-            root.document.addEventListener('DOMContentLoaded', boot);
-        } else if (root.document.getElementById('lessons-app')) {
-            boot();
-        }
-    }
 })(typeof window !== 'undefined' ? window : globalThis);

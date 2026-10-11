@@ -32,8 +32,6 @@ let server = null;
 let db = null;
 let tmpData = null;
 let tmpLessons = null;
-let adminIndexCreated = false;
-let adminIndexPath = null;
 let priorEnv = null;
 
 function writeFixtureLesson(dir, slug, title, words) {
@@ -122,6 +120,28 @@ function clearServerModules() {
         '../../server/http/security',
         '../../server/api/router',
         '../../server/api/auth-routes',
+        '../../server/api/plan-routes',
+        '../../server/db/migrations/002-plan-store',
+        '../../server/db/migrations/003-media-and-ai-planning',
+        '../../server/plans/store',
+        '../../server/plans/validate',
+        '../../server/plans/ops',
+        '../../server/plans/publish',
+        '../../server/api/media-routes',
+        '../../server/api/library-routes',
+        '../../server/api/learner-routes',
+        '../../server/learner/profile',
+        '../../server/learner/coverage',
+        '../../server/learner/mix',
+        '../../server/learner/gate',
+        '../../server/lexicon/service',
+        '../../server/learner/library',
+        '../../server/learner/cards',
+        '../../server/db/repos/media',
+        '../../server/media/ingest',
+        '../../server/media/openai-images',
+        '../../server/media/sniff',
+        '../../server/media/codec',
         '../../server/web'
     ];
     for (const name of names) {
@@ -166,20 +186,6 @@ async function start(opts) {
         writeFixtureLesson(tmpLessons, 'hidden-lesson', 'Hidden Lesson', ['סוֹד']);
         writeFixtureCatalogs(tmpLessons);
         process.env.LESSONS_DIR = tmpLessons;
-    }
-
-    // Ensure /admin/index.html exists for ac-7 (transient; removed on stop).
-    adminIndexPath = path.join(REPO_ROOT, 'admin', 'index.html');
-    if (!fs.existsSync(adminIndexPath)) {
-        fs.mkdirSync(path.dirname(adminIndexPath), { recursive: true });
-        fs.writeFileSync(
-            adminIndexPath,
-            '<!DOCTYPE html><title>Admin</title><h1>Admin</h1>\n',
-            'utf8'
-        );
-        adminIndexCreated = true;
-    } else {
-        adminIndexCreated = false;
     }
 
     clearServerModules();
@@ -272,17 +278,6 @@ async function stop() {
     if (db) {
         try { db.close(); } catch (_) { /* ignore */ }
         db = null;
-    }
-    if (adminIndexCreated && adminIndexPath && fs.existsSync(adminIndexPath)) {
-        try {
-            fs.rmSync(adminIndexPath, { force: true });
-            const dir = path.dirname(adminIndexPath);
-            if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) {
-                fs.rmSync(dir, { recursive: true, force: true });
-            }
-        } catch (_) { /* ignore */ }
-        adminIndexCreated = false;
-        adminIndexPath = null;
     }
     if (tmpData) {
         try {

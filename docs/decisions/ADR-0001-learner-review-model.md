@@ -10,7 +10,7 @@
 | **Initiative** | INIT-001 · evidence-based-practice |
 | **Research grounding** | `RSCH-003` (language-learning science) |
 | **Supersedes** | — |
-| **Superseded by** | [ADR-0002](ADR-0002-accounts-server-progress-site-map.md) (in part — REQ-009 constraint 1 and the no-account consequence) |
+| **Superseded by** | [ADR-0002](ADR-0002-accounts-server-progress-site-map.md) (in part — REQ-009 constraint 1 and the no-account consequence). Also [ADR-0009](ADR-0009-learner-model-and-language-program.md), Accepted 2026-10-09 (in part — constraint 4 changed; the §3 ladder and §5 schedule effects while `SRS_SCHEDULER=fsrs`). |
 
 ## Summary
 
@@ -348,3 +348,5 @@ Delete `docs/decisions/ADR-0001-learner-review-model.md`. Downstream specs that 
 |------|--------|
 | 2026-10-08 | Initial Accepted record — `INIT-001/SPEC-001` |
 | 2026-10-08 | Superseded in part by ADR-0002 (`INIT-002/SPEC-001`): REQ-009 constraint 1 (progress only in `localStorage` / no accounts) and the no-account consequence. Constraints 2–7, identity key, ladder, caps, signal table, and gloss schema remain in force. |
+| 2026-10-09 | ADR-0009 (`INIT-006/SPEC-001`, Proposed) would change constraint 4 (untimed conjugation practice with feedback allowed; timed root and binyan speed drills stay out) and supersede the §3 ladder and §5 schedule effects while `SRS_SCHEDULER=fsrs`. Identity key, caps, signal meanings, and constraints 3 and 5–7 are unchanged. Metadata note and this row only; the sentences in this file are left as written. Takes effect only when ADR-0009 is Accepted. |
+| 2026-10-09 | ADR-0009 Accepted by the operator. The change in the row above is in force. Metadata note and this row only. |

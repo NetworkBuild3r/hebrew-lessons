@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "1.1.0",
+  "id": "fixture-verse-reading-hostile",
+  "revision": 1,
+  "status": "draft",
+  "audience": "shared",
+  "assigneeId": null,
+  "title": "Genesis",
+  "language": {
+    "target": "he",
+    "gloss": "en"
+  },
+  "units": [
+    {
+      "id": "genesis-1",
+      "title": "Genesis 1",
+      "theme": "the first verses of Genesis",
+      "lessons": [
+        {
+          "id": "genesis-1-1",
+          "title": "בְּרֵאשִׁית א׳ א׳",
+          "level": "intermediate",
+          "visibility": "hidden",
+          "recipe": "verse-reading",
+          "buildsOn": [],
+          "newWords": [],
+          "recycles": [],
+          "blocks": [
+            {
+              "id": "verse-1",
+              "type": "verse-reading",
+              "ref": {
+                "book": "Genesis",
+                "chapter": 1,
+                "from": 1,
+                "to": 1,
+                "source": "Westminster Leningrad Codex (public domain), vowel points only"
+              },
+              "newWords": [
+                "בָּרָא",
+                "אֱלֹהִים",
+                "הַשָּׁמַיִם"
+              ],
+              "verse": "בְּרֵאשִׁית בָּרָא אֱלֹהִים אֵת הַשָּׁמַיִם וְאֵת הָאָרֶץ׃",
+              "questions": [
+                {
+                  "id": "q1",
+                  "he": "מִי בָּרָא אֶת הַשָּׁמַיִם?"
+                },
+                {
+                  "id": "q2",
+                  "he": "מִי בָּרָא אֶת הַשָּׁמַיִם?"
+                },
+                {
+                  "id": "q3",
+                  "he": "מִי בָּרָא אֶת הַשָּׁמַיִם?"
+                },
+                {
+                  "id": "q4",
+                  "he": "מִי בָּרָא אֶת הַשָּׁמַיִם?"
+                },
+                {
+                  "id": "q5",
+                  "he": "מִי בָּרָא אֶת הַשָּׁמַיִם?"
+                }
+              ],
+              "personalQuestion": {
+                "he": "מָה אַתָּה רוֹאֶה בַּשָּׁמַיִם?",
+                "en": "<a href=\"https://example.com\">link</a>"
+              },
+              "translation": "a stored translation of the verse"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

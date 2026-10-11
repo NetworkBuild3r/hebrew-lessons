@@ -1,6 +1,7 @@
 /**
  * Server-side progress: signal apply, review state, lesson blobs, metrics.
  * Provenance: INIT-002/SPEC-005
+ * Grades, form signals, and the SRS_SCHEDULER switch: INIT-006/SPEC-004
  */
 'use strict';
 
@@ -12,9 +13,18 @@ const lessonProgressRepo = require('./db/repos/lesson-progress');
 const { lessonsDir, catalogFile } = require('./paths');
 const { loadDataWindow } = require('./lesson-data');
 const HebrewReview = require('../shared/player/review.js');
+const HebrewFsrs = require('../shared/player/fsrs.js');
+const learnerModel = require('./learner/model');
 
 const VALID_DIRECTIONS = new Set(['he_en', 'en_he']);
 const VALID_RESULTS = new Set(['pass', 'miss', 'not_yet']);
+const VALID_KINDS = new Set(['word', 'form']);
+/** Grade for a signal that carries none (ADR-0009 §2). not_yet has no grade. */
+const GRADE_FOR_RESULT = Object.freeze({ pass: 3, miss: 1 });
+/** Stored for a form signal that names no direction: the learner produces the Hebrew form. */
+const FORM_DEFAULT_DIRECTION = 'en_he';
+/** Under fsrs, a passed direction is long-term from this stability in days (ADR-0009 §2). */
+const LONG_TERM_STABILITY_DAYS = 14;
 const MAX_STATE_BYTES = 65536;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_HISTORY_LIMIT = 50;
@@ -33,6 +43,24 @@ const LESSON_STATE_KEYS = new Set([
     'completedSteps',
     'activityState'
 ]);
+
+/**
+ * 'ladder' or 'fsrs' from SRS_SCHEDULER. An empty value is ladder, the default
+ * until INIT-006 SPEC-020. Any other value is ladder too, with a warning.
+ * @param {string|undefined} raw
+ * @returns {'ladder'|'fsrs'}
+ */
+function resolveScheduler(raw) {
+    if (raw == null || String(raw).trim() === '') return 'ladder';
+    const value = String(raw).trim().toLowerCase();
+    if (value === 'fsrs' || value === 'ladder') return value;
+    console.warn('[progress] SRS_SCHEDULER ' + JSON.stringify(String(raw))
+        + ' is not fsrs or ladder; using ladder');
+    return 'ladder';
+}
+
+/** Read once, when the server process loads this module. */
+const SCHEDULER = resolveScheduler(process.env.SRS_SCHEDULER);
 
 function toIso(now) {
     if (now instanceof Date) return now.toISOString();
@@ -94,19 +122,169 @@ function directionToRow(userId, word, direction, dir, sources) {
     };
 }
 
-function isValidSignal(signal) {
-    if (!signal || typeof signal !== 'object') return false;
-    if (signal.id == null || String(signal.id) === '') return false;
+/** A grade must agree with its result: 1 is a miss, 2 to 4 are a pass, not_yet has none. */
+function gradeFits(grade, result) {
+    if (result === 'miss') return grade === 1;
+    if (result === 'pass') return grade >= 2 && grade <= 4;
+    return false;
+}
+
+/**
+ * Validate one signal and normalize its fields, or return null to reject it.
+ * `grade` is optional; when present it must be an integer 1–4 that fits the result.
+ * `kind` is 'word' (default) or 'form'. A form signal must name its lemma.
+ * `kind` and `lemma`, when present, must be strings.
+ * @param {object} signal
+ * @returns {object|null}
+ */
+function parseSignal(signal) {
+    if (!signal || typeof signal !== 'object') return null;
+    if (signal.id == null || String(signal.id) === '') return null;
     const word = HebrewReview.keyFor(signal.word);
-    if (!word) return false;
-    if (!VALID_DIRECTIONS.has(String(signal.direction))) return false;
-    if (!VALID_RESULTS.has(String(signal.result))) return false;
-    return true;
+    if (!word) return null;
+    const result = String(signal.result);
+    if (!VALID_RESULTS.has(result)) return null;
+    if (signal.kind != null && typeof signal.kind !== 'string') return null;
+    const kind = signal.kind == null ? 'word' : signal.kind;
+    if (!VALID_KINDS.has(kind)) return null;
+    const direction = signal.direction == null && kind === 'form'
+        ? FORM_DEFAULT_DIRECTION
+        : String(signal.direction);
+    if (!VALID_DIRECTIONS.has(direction)) return null;
+    if (signal.lemma != null && typeof signal.lemma !== 'string') return null;
+    const lemma = signal.lemma == null ? '' : HebrewReview.keyFor(signal.lemma);
+    if (kind === 'form' && !lemma) return null;
+    let grade = null;
+    if (signal.grade != null) {
+        if (!Number.isInteger(signal.grade) || !gradeFits(signal.grade, result)) return null;
+        grade = signal.grade;
+    }
+    return {
+        id: String(signal.id),
+        word,
+        direction,
+        result,
+        kind,
+        lemma: lemma || null,
+        grade,
+        slug: signal.slug != null && String(signal.slug) !== '' ? String(signal.slug) : null,
+        activity: signal.activity == null ? null : String(signal.activity),
+        at: signal.at != null ? String(signal.at) : null
+    };
+}
+
+/**
+ * ADR-0009 §2 migration values for a passed row. Used for a row the backfill never
+ * saw (the ladder wrote it after migration 004) when it has no stability yet.
+ * @param {object} row review_items row
+ */
+function ladderBackfill(row) {
+    const ladder = HebrewReview.LADDER_DAYS;
+    const step = Number(row.step);
+    let stability = ladder[0];
+    if (Number.isInteger(step) && step >= 0) stability = ladder[Math.min(step, ladder.length - 1)];
+    const lapses = Number(row.lapses) || 0;
+    return {
+        stability,
+        difficulty: 5 + 0.5 * Math.min(lapses, 5),
+        reps: (Number(row.streak) || 0) + lapses,
+        state: 'review'
+    };
+}
+
+/** Same "ever passed" test as metrics(), for one row. */
+function rowEverPassed(userId, row) {
+    if (row.last_result === 'pass' || Number(row.step) >= 1 || Number(row.last_grade) >= 2) {
+        return true;
+    }
+    return Boolean(db.get(
+        `SELECT 1 AS ok FROM practice_events
+         WHERE user_id = ? AND word = ? AND direction = ? AND result = 'pass' AND kind = 'word'
+         LIMIT 1`,
+        Number(userId),
+        row.word,
+        row.direction
+    ));
+}
+
+/**
+ * FSRS card for a review row (shared/player/fsrs.js shape). No row is a new card.
+ * @param {number} userId
+ * @param {object|null|undefined} row review_items row
+ * @param {number|Date|string} now
+ */
+function cardForRow(userId, row, now) {
+    if (!row) return HebrewFsrs.initCard(now);
+    const card = {
+        stability: row.stability == null ? null : Number(row.stability),
+        difficulty: row.difficulty == null ? null : Number(row.difficulty),
+        reps: Number(row.reps) || 0,
+        state: row.fsrs_state == null ? null : String(row.fsrs_state),
+        due: String(row.due),
+        lastGrade: row.last_grade == null ? null : Number(row.last_grade),
+        lapses: Number(row.lapses) || 0,
+        lastAt: row.last_at == null ? null : String(row.last_at)
+    };
+    if (card.stability == null && rowEverPassed(userId, row)) {
+        Object.assign(card, ladderBackfill(row));
+    }
+    return card;
+}
+
+/**
+ * Review row for a word signal under fsrs. step and streak still follow the
+ * ladder, so SRS_SCHEDULER=ladder picks up where the ladder would be.
+ * not_yet changes no schedule: due, last_at, and the FSRS fields stay.
+ */
+function fsrsRow(userId, signal, grade, existing, ladderNext, sources, serverNow) {
+    const row = directionToRow(userId, signal.word, signal.direction, ladderNext, sources);
+    const card = cardForRow(userId, existing, serverNow);
+    if (grade == null) {
+        row.due = card.due;
+        row.lapses = card.lapses;
+        row.last_at = card.lastAt;
+        if (!existing) row.fsrs_state = card.state;
+        return row;
+    }
+    const next = HebrewFsrs.nextCard(card, grade, serverNow, { fromLesson: signal.grade == null });
+    row.due = next.due;
+    row.lapses = next.lapses;
+    row.last_at = next.lastAt;
+    row.stability = next.stability;
+    row.difficulty = next.difficulty;
+    row.reps = next.reps;
+    row.fsrs_state = next.state;
+    row.last_grade = next.lastGrade;
+    return row;
+}
+
+/**
+ * Schedule one word signal. A suspended row is not scheduled. Under ladder the
+ * schedule is HebrewReview.nextState and the grade is still written.
+ */
+function applyWordSignal(userId, signal, grade, serverNow) {
+    const existing = reviewRepo.find(userId, signal.word, signal.direction);
+    if (existing && Number(existing.suspended) === 1) return;
+    const sources = parseSources(existing && existing.sources);
+    if (signal.slug && sources.indexOf(signal.slug) === -1) sources.push(signal.slug);
+    const ladderNext = HebrewReview.nextState(rowToDirection(existing), signal.result, serverNow);
+    let row;
+    if (SCHEDULER === 'fsrs') {
+        row = fsrsRow(userId, signal, grade, existing, ladderNext, sources, serverNow);
+    } else {
+        row = directionToRow(userId, signal.word, signal.direction, ladderNext, sources);
+        if (grade != null) row.last_grade = grade;
+    }
+    reviewRepo.upsert(row);
 }
 
 /**
  * Apply a batch of practice signals for one user (one transaction).
  * Idempotent on (user_id, id). Uses server `now` for scheduling; client `at` is logged only.
+ * A signal without a grade maps pass→3, miss→1, not_yet→none (ADR-0009 §2).
+ * A `kind: 'form'` signal is logged with its lemma and touches no review row.
+ * A form pass or miss updates concept mastery inside this transaction
+ * (INIT-006/SPEC-006). A word-card grade and not_yet do not.
  * @param {number} userId
  * @param {Array<object>} signals
  * @param {number|Date|string} [now]
@@ -120,42 +298,43 @@ function applySignals(userId, signals, now) {
     let rejected = 0;
 
     db.transaction(() => {
-        for (const signal of batch) {
-            if (!isValidSignal(signal)) {
+        for (const raw of batch) {
+            const signal = parseSignal(raw);
+            if (!signal) {
                 rejected += 1;
                 continue;
             }
-            const id = String(signal.id);
-            if (eventsRepo.find(uid, id)) {
+            if (eventsRepo.find(uid, signal.id)) {
                 continue;
             }
+            const grade = signal.grade != null
+                ? signal.grade
+                : (GRADE_FOR_RESULT[signal.result] || null);
 
-            const word = HebrewReview.keyFor(signal.word);
-            const direction = String(signal.direction);
-            const result = String(signal.result);
-            const slug = signal.slug != null && String(signal.slug) !== ''
-                ? String(signal.slug)
-                : null;
-            const activity = signal.activity == null ? null : String(signal.activity);
-            const at = signal.at != null ? String(signal.at) : toIso(serverNow);
-
-            const existing = reviewRepo.find(uid, word, direction);
-            const before = rowToDirection(existing);
-            const next = HebrewReview.nextState(before, result, serverNow);
-            const sources = parseSources(existing && existing.sources);
-            if (slug && sources.indexOf(slug) === -1) sources.push(slug);
-
-            reviewRepo.upsert(directionToRow(uid, word, direction, next, sources));
+            if (signal.kind === 'word') {
+                applyWordSignal(uid, signal, grade, serverNow);
+            }
             eventsRepo.insert({
-                id,
+                id: signal.id,
                 user_id: uid,
-                word,
-                direction,
-                result,
-                at,
-                slug,
-                activity
+                word: signal.word,
+                direction: signal.direction,
+                result: signal.result,
+                at: signal.at != null ? signal.at : toIso(serverNow),
+                slug: signal.slug,
+                activity: signal.activity,
+                grade,
+                kind: signal.kind,
+                lemma: signal.lemma
             });
+            if (signal.kind === 'form' && (signal.result === 'pass' || signal.result === 'miss')) {
+                learnerModel.recordConceptEvent(uid, {
+                    word: signal.word,
+                    kind: signal.kind,
+                    lemma: signal.lemma,
+                    result: signal.result
+                }, serverNow);
+            }
             applied += 1;
         }
     });
@@ -221,14 +400,19 @@ function emptyAccuracy() {
 }
 
 /**
- * Stage of one direction record (ADR-0002 §10 + aud-2).
- * new = never passed; learning = passed and step 0–2; long-term = step ≥ 3.
- * @param {{ step?: number }} dir
+ * Stage of one direction record. new = never passed.
+ * ladder (ADR-0002 §10 + aud-2): learning = step 0–2; long-term = step ≥ 3.
+ * fsrs (ADR-0009 §2): learning = stability under 14 days; long-term = 14 or more.
+ * @param {{ step?: number, stability?: number|null }} dir
  * @param {boolean} everPassed
  */
 function stageFor(dir, everPassed) {
-    const step = dir && Number.isInteger(dir.step) ? dir.step : 0;
     if (!everPassed) return 'new';
+    if (SCHEDULER === 'fsrs') {
+        const stability = dir && Number.isFinite(dir.stability) ? dir.stability : 0;
+        return stability >= LONG_TERM_STABILITY_DAYS ? 'longTerm' : 'learning';
+    }
+    const step = dir && Number.isInteger(dir.step) ? dir.step : 0;
     if (step >= 3) return 'longTerm';
     return 'learning';
 }
@@ -245,7 +429,7 @@ function metrics(userId, now) {
 
     const passedRows = db.all(
         `SELECT DISTINCT word, direction FROM practice_events
-         WHERE user_id = ? AND result = 'pass'`,
+         WHERE user_id = ? AND result = 'pass' AND kind = 'word'`,
         uid
     );
     const passed = Object.create(null);
@@ -265,8 +449,12 @@ function metrics(userId, now) {
             passed[row.word + '\0' + dir]
             || row.last_result === 'pass'
             || (Number(row.step) >= 1)
+            || (Number(row.last_grade) >= 2)
         );
-        const bucket = stageFor(rowToDirection(row), ever);
+        const record = rowToDirection(row);
+        if (row.stability != null) record.stability = Number(row.stability);
+        else if (ever) record.stability = ladderBackfill(row).stability;
+        const bucket = stageFor(record, ever);
         stages[dir][bucket] += 1;
     }
 
@@ -277,7 +465,7 @@ function metrics(userId, now) {
     const counts = db.all(
         `SELECT direction, result, COUNT(*) AS n
          FROM practice_events
-         WHERE user_id = ? AND at >= ? AND result IN ('pass', 'miss')
+         WHERE user_id = ? AND at >= ? AND result IN ('pass', 'miss') AND kind = 'word'
          GROUP BY direction, result`,
         uid,
         since
@@ -323,6 +511,7 @@ function troubleWords(userId, now, limit) {
           AND r.direction = e.direction
          WHERE e.user_id = ?
            AND e.result = 'miss'
+           AND e.kind = 'word'
            AND e.at >= ?
          GROUP BY e.word, e.direction
          ORDER BY misses DESC, lapses DESC, e.word ASC, e.direction ASC
@@ -544,7 +733,9 @@ function putLessonProgress(userId, slug, state, rev, now) {
 }
 
 module.exports = {
+    SCHEDULER,
     applySignals,
+    cardForRow,
     reviewState,
     getLessonProgress,
     putLessonProgress,

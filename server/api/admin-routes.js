@@ -15,6 +15,11 @@ const audit = require('../db/repos/audit');
 const sessionsRepo = require('../db/repos/sessions');
 const usersRepo = require('../db/repos/users');
 const db = require('../db');
+const lexicon = require('../lexicon/service');
+
+/** Lexicon batches are at most 200 short entries. */
+const LEXICON_BODY_LIMIT = 256 * 1024;
+const SWITCH_BODY_LIMIT = 1024;
 
 const LESSON_BODY_LIMIT = 1024 * 1024;
 const AUDIO_THROTTLE_MAX = 10;
@@ -41,7 +46,10 @@ const ROUTES = Object.freeze([
     { method: 'PUT', path: '/api/admin/lessons/:slug' },
     { method: 'POST', path: '/api/admin/lessons' },
     { method: 'GET', path: '/api/admin/lessons/:slug/audio-plan' },
-    { method: 'POST', path: '/api/admin/lessons/:slug/audio' }
+    { method: 'POST', path: '/api/admin/lessons/:slug/audio' },
+    { method: 'PUT', path: '/api/admin/lexicon' },
+    { method: 'PATCH', path: '/api/admin/lexicon/:key/verified' },
+    { method: 'PATCH', path: '/api/admin/users/:id/ai-planning' }
 ]);
 
 /**
@@ -101,7 +109,10 @@ function listUserRow(row) {
         role: row.role,
         status: row.status,
         created_at: row.created_at,
-        last_sign_in: lastSignInFor(row.id)
+        last_sign_in: lastSignInFor(row.id),
+        // Admin users list only. The toggle reads this and then the PATCH response.
+        // Provenance: INIT-006/SPEC-017
+        ai_planning: usersRepo.getAiPlanning(row.id) === 1
     };
 }
 
@@ -167,6 +178,84 @@ function clampHistoryLimit(limit) {
     if (n < 1) n = 1;
     if (n > 200) n = 200;
     return n;
+}
+
+/**
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ * @param {number} limit
+ * @returns {Promise<object|undefined>} undefined when a response was already sent
+ */
+async function readAdminJson(req, res, limit) {
+    let payload;
+    try {
+        payload = await body.readJson(req, { limit });
+    } catch (err) {
+        if (sendBodyError(err, res)) return undefined;
+        security.sendJsonError(res, 400, 'Invalid request', 'bad_request');
+        return undefined;
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        security.sendJsonError(res, 400, 'Invalid request', 'bad_request');
+        return undefined;
+    }
+    return payload;
+}
+
+/**
+ * @param {object} payload
+ * @param {string[]} keys
+ * @returns {boolean}
+ */
+function onlyKeys(payload, keys) {
+    const allowed = new Set(keys);
+    return Object.keys(payload).every((key) => allowed.has(key));
+}
+
+/**
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isFlag(value) {
+    return value === true || value === false || value === 0 || value === 1;
+}
+
+/**
+ * Drop caller-supplied verify and source fields. The service ignores them too.
+ * @param {unknown} entries
+ * @returns {unknown}
+ */
+function withoutVerify(entries) {
+    if (!Array.isArray(entries)) return entries;
+    return entries.map((entry) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+        const copy = Object.assign({}, entry);
+        delete copy.verified;
+        delete copy.verified_by;
+        delete copy.source;
+        return copy;
+    });
+}
+
+/**
+ * @param {import('http').ServerResponse} res
+ * @param {object} result
+ */
+function sendLexicon(res, result) {
+    if (!result || result.ok !== true) {
+        const code = result && result.error ? result.error : 'bad_request';
+        let status = 400;
+        if (code === 'forbidden') status = 403;
+        else if (code === 'not_found') status = 404;
+        else if (code === 'revision_conflict') status = 409;
+        const body = { error: code, code };
+        if (result && Array.isArray(result.errors)) body.errors = result.errors;
+        if (result && Array.isArray(result.conflicts)) body.conflicts = result.conflicts;
+        if (result && typeof result.key === 'string') body.key = result.key;
+        security.sendJson(res, status, body);
+        return;
+    }
+    security.sendJson(res, 200, { entries: result.entries });
 }
 
 /**
@@ -530,6 +619,57 @@ function register(router) {
                 return;
             }
             security.sendJsonError(res, 400, msg || 'Audio generation failed', 'audio_failed');
+        }
+    });
+
+    addAdmin(router, 'PUT', '/api/admin/lexicon', async (req, res, ctx) => {
+        const payload = await readAdminJson(req, res, LEXICON_BODY_LIMIT);
+        if (payload === undefined) return;
+        if (!onlyKeys(payload, ['entries', 'expectedRev'])) {
+            security.sendJsonError(res, 400, 'Invalid request', 'bad_request');
+            return;
+        }
+        sendLexicon(res, lexicon.upsert(withoutVerify(payload.entries), {
+            actor: 'admin:' + String(ctx.user.username),
+            expectedRev: payload.expectedRev
+        }));
+    });
+
+    addAdmin(router, 'PATCH', '/api/admin/lexicon/:key/verified', async (req, res, ctx) => {
+        const payload = await readAdminJson(req, res, SWITCH_BODY_LIMIT);
+        if (payload === undefined) return;
+        if (!onlyKeys(payload, ['verified']) || !isFlag(payload.verified)) {
+            security.sendJsonError(res, 400, 'Invalid request', 'bad_request');
+            return;
+        }
+        const key = ctx.params && ctx.params.key;
+        sendLexicon(res, lexicon.setVerified([key], payload.verified, {
+            actor: 'admin:' + String(ctx.user.username)
+        }));
+    });
+
+    addAdmin(router, 'PATCH', '/api/admin/users/:id/ai-planning', async (req, res, ctx) => {
+        const payload = await readAdminJson(req, res, SWITCH_BODY_LIMIT);
+        if (payload === undefined) return;
+        if (!onlyKeys(payload, ['enabled']) || typeof payload.enabled !== 'boolean') {
+            security.sendJsonError(res, 400, 'Invalid request', 'bad_request');
+            return;
+        }
+        const id = Number(ctx.params && ctx.params.id);
+        if (!Number.isInteger(id) || id <= 0) {
+            security.sendJsonError(res, 400, 'Invalid request', 'bad_request');
+            return;
+        }
+        try {
+            const result = accounts.setAiPlanning(id, payload.enabled, ctx.user);
+            security.sendJson(res, 200, {
+                ai_planning: result.next === 1,
+                previous: result.previous,
+                next: result.next
+            });
+        } catch (err) {
+            const mapped = mapAccountsError(err);
+            security.sendJsonError(res, mapped.status, mapped.message, mapped.code);
         }
     });
 }

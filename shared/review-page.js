@@ -1,28 +1,77 @@
 /**
- * "Review today" session UI — interleaved due recall across lessons.
- * Authored-by-spec: INIT-001/SPEC-004
+ * Review screen: four-grade flashcards.
+ * Grades go to the server; never schedule in the browser.
+ * Button intervals are the numbers on each card from GET /api/me/cards.
+ * Authored-by-spec: INIT-006/SPEC-012
  */
 (function (root) {
+    'use strict';
+
     var U = root.HebrewUtils;
-    var Review = root.HebrewReview;
-    var Speech = root.HebrewSpeech;
+    var Answers = root.HebrewFlashcardAnswer;
+    if (!Answers && typeof require === 'function') {
+        try { Answers = require('./player/flashcard-answer.js'); } catch (err) { Answers = null; }
+    }
+
     var PREFS_KEY = 'hebrew-review-prefs:v1';
     var VOWELS_DEFAULT = true;
+    var PERSONAL = { self: true, ai: true, lesson: true };
+    var NAMED_DECKS = [
+        { id: 'due', he: 'להיום', en: 'Due' },
+        { id: 'weak', he: 'חלשות', en: 'Weak' },
+        { id: 'new', he: 'חדשות', en: 'New' },
+        { id: 'all', he: 'הכל', en: 'All' }
+    ];
+    var GRADE_LABELS = [
+        { grade: 1, he: 'שוב', en: 'Again' },
+        { grade: 2, he: 'קשה', en: 'Hard' },
+        { grade: 3, he: 'טוב', en: 'Good' },
+        { grade: 4, he: 'קל', en: 'Easy' }
+    ];
 
     var state = {
         vowelsOn: VOWELS_DEFAULT,
+        translitOn: false,
+        deck: 'due',
+        counts: Object.create(null),
+        concepts: [],
+        sourcesByWord: Object.create(null),
+        lexicon: Object.create(null),
         queue: [],
         index: 0,
         revealed: false,
+        grading: false,
         reviewed: 0,
-        passed: 0,
-        missed: 0,
-        finished: false,
-        indexMissing: false
+        gradeCounts: { 1: 0, 2: 0, 3: 0, 4: 0 },
+        phase: 'loading',
+        gen: 0,
+        mountId: 0
     };
 
-    function bi(he, en) {
-        return U && typeof U.bi === 'function' ? U.bi(he, en) : (he + ' (' + en + ')');
+    var viewSignal = null;
+    var mountedEl = null;
+    var keyHandler = null;
+
+    function biText(node, he, en) {
+        node.appendChild(root.document.createTextNode(he));
+        if (!en) return;
+        var span = root.document.createElement('span');
+        span.className = 'en';
+        span.dir = 'ltr';
+        span.lang = 'en';
+        span.textContent = ' (' + en + ')';
+        node.appendChild(span);
+    }
+
+    function clear(node) {
+        if (!node) return;
+        while (node.firstChild) node.removeChild(node.firstChild);
+    }
+
+    function el(tag, className) {
+        var node = root.document.createElement(tag);
+        if (className) node.className = className;
+        return node;
     }
 
     function esc(value) {
@@ -35,38 +84,49 @@
                 .replace(/"/g, '&quot;');
     }
 
-    function icon(name, className) {
-        return U && typeof U.icon === 'function' ? U.icon(name, className) : '';
+    function appEl() {
+        return mountedEl || (root.document && root.document.getElementById('review-app'));
+    }
+
+    function api() {
+        return root.HebrewApi && typeof root.HebrewApi.get === 'function' ? root.HebrewApi : null;
     }
 
     function loadPrefs() {
         try {
-            var raw = localStorage.getItem(PREFS_KEY);
+            var raw = root.localStorage.getItem(PREFS_KEY);
             if (!raw) return;
             var data = JSON.parse(raw);
             if (typeof data.vowelsOn === 'boolean') state.vowelsOn = data.vowelsOn;
-        } catch (err) { /* fail-soft */ }
+            if (typeof data.translitOn === 'boolean') state.translitOn = data.translitOn;
+        } catch (err) { /* display prefs only; a bad value stays at the default */ }
     }
 
     function savePrefs() {
         try {
-            localStorage.setItem(PREFS_KEY, JSON.stringify({ vowelsOn: state.vowelsOn }));
-        } catch (err) { /* fail-soft */ }
+            root.localStorage.setItem(PREFS_KEY, JSON.stringify({
+                vowelsOn: state.vowelsOn,
+                translitOn: state.translitOn
+            }));
+        } catch (err) { /* display prefs only */ }
     }
 
     /**
-     * Vocab-index and word-audio catalog URLs are authored relative to
-     * worksheets/_review/ (or worksheets/<lesson>/). Resolve from that base
-     * so review/index.html can play the same clips.
+     * Resolve a clip to an http(s) URL under the review worksheets base.
+     * @param {string} url
+     * @returns {string}
      */
     function audioHref(url) {
         if (!url) return '';
-        if (/^(https?:|data:|blob:)/i.test(String(url))) return String(url);
+        var raw = String(url);
+        if (/[\u0000-\u001F\u007F]/.test(raw)) return '';
         try {
-            var base = new URL('../worksheets/_review/', root.location.href);
-            return new URL(String(url), base).href;
+            var base = new URL('/worksheets/_review/', root.location.href);
+            var resolved = new URL(raw, base);
+            if (resolved.protocol !== 'http:' && resolved.protocol !== 'https:') return '';
+            return resolved.href;
         } catch (err) {
-            return String(url);
+            return '';
         }
     }
 
@@ -74,7 +134,7 @@
         var map = Object.create(null);
         (list || []).forEach(function (entry) {
             if (!entry) return;
-            var key = entry.key || (Review ? Review.keyFor(entry.word) : entry.word);
+            var key = entry.key || entry.word;
             if (key) map[key] = entry;
         });
         return map;
@@ -86,18 +146,18 @@
         if (Array.isArray(raw)) return raw;
         if (typeof raw === 'object') {
             return Object.keys(raw).map(function (k) {
-                var e = raw[k];
-                if (!e || typeof e !== 'object') return null;
-                return Object.assign({ key: e.key || k }, e);
+                var entry = raw[k];
+                if (!entry || typeof entry !== 'object') return null;
+                return Object.assign({ key: entry.key || k }, entry);
             }).filter(Boolean);
         }
         return null;
     }
 
     /**
-     * aud-1: en→he only after the first he→en pass.
-     * @param {Array} items dueList output
-     * @param {object} words store.words
+     * aud-1: en→he only after the first he→en pass. Kept for the home due count.
+     * @param {Array} items
+     * @param {object} words
      */
     function filterQueue(items, words) {
         return (items || []).filter(function (item) {
@@ -108,428 +168,848 @@
         });
     }
 
-    function buildClips(entries) {
-        if (!Speech || typeof Speech.setClips !== 'function') return;
-        var clipEntries = [];
-        var map = root.HEBREW_WORD_AUDIO || {};
-        Object.keys(map).forEach(function (text) {
-            var url = audioHref(map[text]);
-            if (text && url) clipEntries.push({ text: text, url: url });
-        });
-        (entries || []).forEach(function (entry) {
-            if (!entry || !entry.word) return;
-            var url = audioHref(entry.audio || map[entry.word] || map[String(entry.word).normalize('NFC')] || '');
-            if (url) clipEntries.push({ text: entry.word, url: url });
-        });
-        Speech.setClips(clipEntries);
-    }
-
     function displayHebrew(text) {
         if (!text) return '';
         if (state.vowelsOn) return text;
         return U && typeof U.stripVowels === 'function' ? U.stripVowels(text) : text;
     }
 
-    function speakButton(text, audioUrl, title) {
-        var clip = '';
-        if (audioUrl) clip = audioHref(audioUrl);
-        else if (Speech && typeof Speech.clipFor === 'function') clip = Speech.clipFor(text) || '';
-        var label = title || 'Listen';
-        return '<button type="button" class="icon-btn' + (clip ? ' human' : '') + '" data-action="speak" data-speak="'
-            + esc(text || '') + '" data-audio="' + esc(clip) + '" title="' + esc(label) + '">'
-            + icon('volume-high') + '</button>';
+    function intervalDays(card, grade) {
+        if (!card || !card.intervals) return null;
+        var n = Number(card.intervals[grade]);
+        return Number.isFinite(n) ? n : null;
     }
 
-    function lessonLabel(slug) {
-        if (!slug) return '';
-        return '<p class="fine review-lesson-source">' + bi('משיעור', 'From lesson') + ': <span dir="ltr">' + esc(slug) + '</span></p>';
+    function intervalPhrase(days) {
+        var n = Number(days);
+        if (!Number.isFinite(n)) return null;
+        return {
+            he: n === 1 ? '1 יום' : (n + ' ימים'),
+            en: n === 1 ? '1 day' : (n + ' days')
+        };
     }
 
-    function nextDueIso(store) {
-        var words = store && store.words ? store.words : {};
-        var soonest = null;
-        Object.keys(words).forEach(function (key) {
-            var entry = words[key];
-            if (!entry) return;
-            ['he_en', 'en_he'].forEach(function (dir) {
-                var due = entry[dir] && entry[dir].due;
-                if (!due) return;
-                var ms = Date.parse(String(due));
-                if (!Number.isFinite(ms)) return;
-                if (soonest == null || ms < soonest) soonest = ms;
-            });
-        });
-        return soonest == null ? null : new Date(soonest).toISOString();
-    }
-
-    function formatDue(iso) {
-        if (!iso) return bi('אין תאריך עדיין', 'No next due yet');
-        var d = new Date(iso);
-        if (Number.isNaN(d.getTime())) return bi('אין תאריך עדיין', 'No next due yet');
-        var he = d.toLocaleString('he-IL', { weekday: 'long', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        var en = d.toLocaleString('en-US', { weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-        return esc(he) + ' <span class="en" dir="ltr">(' + esc(en) + ')</span>';
-    }
-
-    function paintChrome() {
-        var home = document.getElementById('review-home-link');
-        if (home) {
-            home.innerHTML = icon('house') + ' ' + bi('דף הבית', 'Home');
+    function lessonSlug(word) {
+        var sources = state.sourcesByWord[word] || [];
+        var i;
+        for (i = 0; i < sources.length; i += 1) {
+            if (sources[i] && !PERSONAL[sources[i]]) return String(sources[i]);
         }
-        var sub = document.getElementById('review-subtitle');
-        if (sub) {
-            sub.innerHTML = bi(
-                'מילים שמגיע הזמן לחזור עליהן מכל השיעורים.',
-                'Words due for recall across all lessons.'
-            );
-        }
-        paintVowelsBtn();
+        var list = vocabList();
+        var entry = list ? indexByKey(list)[word] : null;
+        if (entry && Array.isArray(entry.lessons) && entry.lessons[0]) return String(entry.lessons[0]);
+        var catalog = root.HEBREW_CATALOG || [];
+        if (catalog[0] && catalog[0].slug) return String(catalog[0].slug);
+        return '';
     }
 
-    function paintVowelsBtn() {
-        var btn = document.getElementById('review-vowels-btn');
-        if (!btn) return;
-        btn.setAttribute('aria-pressed', state.vowelsOn ? 'true' : 'false');
-        btn.innerHTML = state.vowelsOn
-            ? bi('הסתר ניקוד', 'Hide vowels')
-            : bi('הצג ניקוד', 'Show vowels');
+    function normalizeCard(raw) {
+        var intervals = raw && raw.intervals && typeof raw.intervals === 'object' ? raw.intervals : {};
+        return {
+            word: raw && raw.word != null ? String(raw.word) : '',
+            direction: raw && raw.direction === 'en_he' ? 'en_he' : 'he_en',
+            prompt: raw && raw.prompt != null ? String(raw.prompt) : '',
+            answer: raw && raw.answer != null ? String(raw.answer) : '',
+            translit: raw && raw.translit != null ? String(raw.translit) : '',
+            audio: raw && raw.audio != null ? String(raw.audio) : '',
+            intervals: {
+                1: Number(intervals[1]),
+                2: Number(intervals[2]),
+                3: Number(intervals[3]),
+                4: Number(intervals[4])
+            },
+            accept: [],
+            root: '',
+            binyan: '',
+            replayed: false
+        };
     }
 
-    function currentItem() {
+    function current() {
         return state.queue[state.index] || null;
     }
 
-    function currentEntry(vocabMap) {
-        var item = currentItem();
-        if (!item) return null;
-        return vocabMap[item.key] || null;
+    function clipFor(text, audio) {
+        var href = audioHref(audio);
+        if (href) return href;
+        var Speech = root.HebrewSpeech;
+        if (Speech && typeof Speech.clipFor === 'function') return Speech.clipFor(text) || '';
+        return '';
     }
 
-    function renderMissing() {
-        state.indexMissing = true;
-        var app = document.getElementById('review-app');
-        if (!app) return;
-        app.innerHTML = '<div class="card review-empty" id="review-no-index">'
-            + '<h2>' + bi('אין עדיין נתוני חזרה', 'No review data yet') + '</h2>'
-            + '<p>' + bi(
-                'אחרי שמפרסמים שיעורים ובונים את האינדקס, החזרה תופיע כאן.',
-                'After lessons are published and the vocab index is built, review will show here.'
-            ) + '</p>'
-            + '<p><a class="btn btn-primary" href="../index.html">' + bi('חזרה לדף הבית', 'Back home') + '</a></p>'
-            + '</div>';
+    function paintToggles() {
+        var vowels = root.document.getElementById('review-vowels-btn');
+        if (vowels) {
+            vowels.setAttribute('aria-pressed', state.vowelsOn ? 'true' : 'false');
+            clear(vowels);
+            biText(vowels, state.vowelsOn ? 'הסתר ניקוד' : 'הצג ניקוד', state.vowelsOn ? 'Hide vowels' : 'Show vowels');
+        }
+        var translit = root.document.getElementById('review-translit-btn');
+        if (translit) {
+            translit.setAttribute('aria-pressed', state.translitOn ? 'true' : 'false');
+            clear(translit);
+            biText(translit, 'תעתיק', 'Transliteration');
+        }
     }
 
-    function renderEmpty() {
-        var app = document.getElementById('review-app');
-        if (!app) return;
-        var store = Review.all();
-        var next = nextDueIso(store);
-        app.innerHTML = '<div class="card review-empty" id="review-nothing-due">'
-            + '<h2>' + bi('אין מה לחזור עליו היום', 'Nothing due today') + '</h2>'
-            + '<p>' + bi('חזרו לשיעורים או בדקו שוב מאוחר יותר.', 'Go back to lessons or check again later.') + '</p>'
-            + (next ? '<p class="fine">' + bi('הבא', 'Next due') + ': ' + formatDue(next) + '</p>' : '')
-            + '<p><a class="btn btn-primary" href="../index.html">' + bi('דף הבית', 'Home') + '</a></p>'
-            + '</div>';
+    function repaintHebrew() {
+        var nodes = root.document.querySelectorAll('[data-vowels]');
+        Array.prototype.forEach.call(nodes, function (node) {
+            node.textContent = displayHebrew(node.getAttribute('data-vowels') || '');
+        });
     }
 
-    function renderFinished() {
-        state.finished = true;
-        var app = document.getElementById('review-app');
-        if (!app) return;
-        var store = Review.all();
-        var next = nextDueIso(store);
-        app.innerHTML = '<div class="card review-summary" id="review-finished">'
-            + '<h2>' + bi('סיימנו להיום', 'Done for now') + '</h2>'
-            + '<ul class="review-stats">'
-            + '<li>' + bi('נבדקו', 'Reviewed') + ': <strong id="review-count-reviewed">' + state.reviewed + '</strong></li>'
-            + '<li>' + bi('ידעתי', 'Knew') + ': <strong id="review-count-knew">' + state.passed + '</strong></li>'
-            + '<li>' + bi('פספסתי', 'Missed') + ': <strong id="review-count-missed">' + state.missed + '</strong></li>'
-            + '</ul>'
-            + '<p class="fine">' + bi('החזרה הבאה', 'Next due') + ': <span id="review-next-due">' + formatDue(next) + '</span></p>'
-            + '<p><a class="btn btn-primary" href="../index.html">' + bi('דף הבית', 'Home') + '</a></p>'
-            + '</div>';
+    function countNode(deck) {
+        var nodes = root.document.querySelectorAll('[data-deck-count]');
+        for (var i = 0; i < nodes.length; i += 1) {
+            if (nodes[i].getAttribute('data-deck-count') === deck) return nodes[i];
+        }
+        return null;
     }
 
-    function renderItem(vocabMap) {
-        var item = currentItem();
-        var entry = currentEntry(vocabMap);
-        var app = document.getElementById('review-app');
-        if (!app || !item) {
-            renderFinished();
+    function setCount(deck, n) {
+        state.counts[deck] = n;
+        var node = countNode(deck);
+        if (!node) return;
+        if (node.tagName === 'OPTION') {
+            var base = node.getAttribute('data-label') || '';
+            node.textContent = base + ' · ' + n;
             return;
         }
-
-        var word = entry && entry.word ? entry.word : item.key;
-        var meaning = entry && entry.meaning ? entry.meaning : '';
-        var audio = entry && entry.audio ? entry.audio : '';
-        var lesson = item.lesson
-            || (entry && Array.isArray(entry.lessons) && entry.lessons[0])
-            || '';
-        var progress = (state.index + 1) + ' / ' + state.queue.length;
-        var isHeEn = item.direction !== 'en_he';
-
-        var promptHtml;
-        if (isHeEn) {
-            promptHtml = '<div class="review-prompt" id="review-prompt">'
-                + '<div class="he-word" id="review-prompt-he" data-vowels="' + esc(word) + '">'
-                + esc(displayHebrew(word)) + '</div>'
-                + speakButton(word, audio, 'Word')
-                + '</div>';
-        } else {
-            promptHtml = '<div class="review-prompt" id="review-prompt">'
-                + '<p class="meaning review-prompt-en" id="review-prompt-en" dir="ltr">' + esc(meaning) + '</p>'
-                + '<label class="fine" for="review-typed">' + bi('כתבו בעברית (לא חובה)', 'Type in Hebrew (optional)') + '</label>'
-                + '<input type="text" id="review-typed" class="review-typed" lang="he" dir="rtl" autocomplete="off" '
-                + 'aria-label="' + esc('Type Hebrew answer') + '">'
-                + '</div>';
-        }
-
-        var answerInner;
-        if (isHeEn) {
-            answerInner = '<p class="meaning" id="review-answer-meaning" dir="ltr">' + esc(meaning) + '</p>';
-        } else {
-            answerInner = '<div class="he-word" id="review-answer-he" data-vowels="' + esc(word) + '">'
-                + esc(displayHebrew(word)) + '</div>'
-                + speakButton(word, audio, 'Word');
-        }
-
-        app.innerHTML = '<div class="card review-card" id="review-card" data-direction="'
-            + esc(item.direction) + '" data-key="' + esc(item.key) + '" data-lesson="' + esc(lesson) + '">'
-            + '<div class="review-progress fine" id="review-progress">' + esc(progress) + '</div>'
-            + '<p class="fine">' + bi(
-                isHeEn ? 'עברית ← אנגלית' : 'אנגלית ← עברית',
-                isHeEn ? 'Hebrew → English' : 'English → Hebrew'
-            ) + '</p>'
-            + promptHtml
-            + lessonLabel(lesson)
-            + '<div class="review-actions" id="review-reveal-row">'
-            + '<button type="button" class="btn btn-primary" id="review-show-answer" data-action="reveal">'
-            + bi('הצג תשובה', 'Show answer') + '</button>'
-            + '</div>'
-            + '<div class="review-answer hidden" id="review-answer" aria-hidden="true">'
-            + answerInner
-            + '<div class="mark-row" id="review-grade-row">'
-            + '<button type="button" class="btn btn-mark" id="review-knew" data-action="grade" data-signal="pass">'
-            + bi('ידעתי', 'Knew it') + '</button>'
-            + '<button type="button" class="btn btn-mark missed" id="review-missed" data-action="grade" data-signal="miss">'
-            + bi('פספסתי', 'Missed it') + '</button>'
-            + '</div>'
-            + '</div>'
-            + '</div>';
-
-        state.revealed = false;
+        node.textContent = String(n);
     }
 
-    function revealAnswer(vocabMap) {
-        if (state.revealed || state.finished) return;
-        var answer = document.getElementById('review-answer');
-        var revealRow = document.getElementById('review-reveal-row');
-        if (!answer) return;
-        answer.classList.remove('hidden');
-        answer.setAttribute('aria-hidden', 'false');
-        if (revealRow) revealRow.classList.add('hidden');
-        state.revealed = true;
-
-        var item = currentItem();
-        if (item && item.direction === 'en_he') {
-            var typed = document.getElementById('review-typed');
-            var entry = currentEntry(vocabMap);
-            if (typed && entry && entry.word && U && typeof U.normalizeHebrew === 'function') {
-                var got = U.normalizeHebrew(typed.value);
-                var want = U.normalizeHebrew(entry.word);
-                if (got && want && got === want) {
-                    typed.classList.add('review-typed-ok');
-                }
+    function updatePressed() {
+        var buttons = root.document.querySelectorAll('[data-deck]');
+        Array.prototype.forEach.call(buttons, function (btn) {
+            var on = btn.getAttribute('data-deck') === state.deck;
+            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        var lesson = root.document.getElementById('review-lesson-deck');
+        if (lesson && lesson.value !== state.deck) {
+            var lessonMatch = false;
+            for (var i = 0; i < lesson.options.length; i += 1) {
+                if (lesson.options[i].value === state.deck) lessonMatch = true;
             }
+            if (!lessonMatch) lesson.value = '';
+        }
+        var concept = root.document.getElementById('review-concept-deck');
+        if (concept && concept.value !== state.deck) {
+            var conceptMatch = false;
+            for (var j = 0; j < concept.options.length; j += 1) {
+                if (concept.options[j].value === state.deck) conceptMatch = true;
+            }
+            if (!conceptMatch) concept.value = '';
         }
     }
 
-    function grade(signal, vocabMap) {
-        if (!state.revealed || state.finished) return;
-        var item = currentItem();
-        if (!item || !Review) return;
-        var entry = currentEntry(vocabMap);
-        var word = entry && entry.word ? entry.word : item.key;
-        var lesson = item.lesson
-            || (entry && Array.isArray(entry.lessons) && entry.lessons[0])
-            || '';
-        Review.record(word, item.direction, signal, { lesson: lesson });
-        state.reviewed += 1;
-        if (signal === 'pass') state.passed += 1;
-        if (signal === 'miss') state.missed += 1;
-        state.index += 1;
-        if (state.index >= state.queue.length) renderFinished();
-        else renderItem(vocabMap);
+    function deckButton(spec) {
+        var btn = el('button', 'btn review-deck-btn');
+        btn.type = 'button';
+        btn.setAttribute('data-action', 'deck');
+        btn.setAttribute('data-deck', spec.id);
+        btn.setAttribute('aria-pressed', state.deck === spec.id ? 'true' : 'false');
+        biText(btn, spec.he, spec.en);
+        var count = el('span', 'review-deck-count');
+        count.setAttribute('data-deck-count', spec.id);
+        count.textContent = state.counts[spec.id] == null ? '…' : String(state.counts[spec.id]);
+        btn.appendChild(root.document.createTextNode(' '));
+        btn.appendChild(count);
+        return btn;
     }
 
-    function onKey(event, vocabMap) {
-        if (state.finished || state.indexMissing) return;
+    function selectField(id, he, en) {
+        var wrap = el('label', 'review-deck-field');
+        var name = el('span', 'fine');
+        biText(name, he, en);
+        var select = el('select', 'review-deck-select');
+        select.id = id;
+        var blank = el('option');
+        blank.value = '';
+        blank.textContent = '—';
+        select.appendChild(blank);
+        wrap.appendChild(name);
+        wrap.appendChild(select);
+        return wrap;
+    }
+
+    function fillLessonOptions() {
+        var select = root.document.getElementById('review-lesson-deck');
+        if (!select) return;
+        var catalog = Array.isArray(root.HEBREW_CATALOG) ? root.HEBREW_CATALOG : [];
+        catalog.forEach(function (lesson) {
+            if (!lesson || !lesson.slug) return;
+            var deck = 'lesson:' + lesson.slug;
+            var title = lesson.title ? String(lesson.title) : lesson.slug;
+            var option = el('option');
+            option.value = deck;
+            option.setAttribute('data-deck-count', deck);
+            option.setAttribute('data-label', title);
+            option.textContent = state.counts[deck] == null ? title : (title + ' · ' + state.counts[deck]);
+            select.appendChild(option);
+        });
+    }
+
+    function fillConceptOptions() {
+        var select = root.document.getElementById('review-concept-deck');
+        if (!select || select.getAttribute('data-filled') === '1') return;
+        if (!state.concepts.length) return;
+        ['binyan', 'tense'].forEach(function (family) {
+            var group = el('optgroup');
+            group.label = family === 'binyan' ? 'בניין (binyan)' : 'זמן (tense)';
+            state.concepts.forEach(function (concept) {
+                if (!concept || concept.family !== family) return;
+                var option = el('option');
+                var deckName = 'concept:' + concept.key;
+                var he = concept.labelHe || concept.key;
+                var en = concept.labelEn || '';
+                var title = en ? (he + ' (' + en + ')') : he;
+                option.value = deckName;
+                option.setAttribute('data-deck-count', deckName);
+                option.setAttribute('data-label', title);
+                option.textContent = state.counts[deckName] == null ? title : (title + ' · ' + state.counts[deckName]);
+                group.appendChild(option);
+            });
+            if (group.childNodes.length) select.appendChild(group);
+        });
+        select.setAttribute('data-filled', '1');
+    }
+
+    function buildDecks() {
+        var bar = el('div', 'review-decks');
+        bar.id = 'review-decks';
+        NAMED_DECKS.forEach(function (spec) {
+            bar.appendChild(deckButton(spec));
+        });
+        var lesson = selectField('review-lesson-deck', 'לפי שיעור', 'By lesson');
+        var concept = selectField('review-concept-deck', 'לפי נושא', 'By concept');
+        bar.appendChild(lesson);
+        bar.appendChild(concept);
+        return bar;
+    }
+
+    function ensureFrame() {
+        var app = appEl();
+        if (!app) return null;
+        if (!app._flashBound) {
+            app._flashBound = true;
+            app.addEventListener('click', onClick);
+            app.addEventListener('change', onChange);
+            app.addEventListener('input', onType);
+        }
+        var decks = root.document.getElementById('review-decks');
+        if (!decks) {
+            clear(app);
+            app.appendChild(buildDecks());
+            fillLessonOptions();
+            fillConceptOptions();
+            var stage = el('div', 'review-stage');
+            stage.id = 'review-stage';
+            app.appendChild(stage);
+        }
+        updatePressed();
+        return root.document.getElementById('review-stage');
+    }
+
+    function audioButton(text, audio) {
+        var href = clipFor(text, audio);
+        if (!href) return null;
+        var btn = el('button', 'btn review-audio');
+        btn.type = 'button';
+        btn.setAttribute('data-action', 'speak');
+        btn.setAttribute('data-speak', text || '');
+        btn.setAttribute('data-audio', href);
+        biText(btn, 'השמעה', 'Listen');
+        return btn;
+    }
+
+    function hebrewNode(text, id) {
+        var node = el('div', 'he-word review-he');
+        if (id) node.id = id;
+        node.lang = 'he';
+        node.dir = 'rtl';
+        node.setAttribute('data-vowels', text || '');
+        node.textContent = displayHebrew(text || '');
+        return node;
+    }
+
+    function renderStage() {
+        var stage = ensureFrame();
+        if (!stage) return;
+        state.grading = false;
+        clear(stage);
+        if (state.phase === 'loading') {
+            var loading = el('div', 'card review-empty');
+            loading.id = 'review-loading';
+            var loadingText = el('p');
+            biText(loadingText, 'טוען כרטיסים…', 'Loading cards…');
+            loading.appendChild(loadingText);
+            stage.appendChild(loading);
+            return;
+        }
+        if (state.phase === 'error') {
+            var error = el('div', 'card review-empty');
+            error.id = 'review-load-error';
+            error.setAttribute('role', 'alert');
+            var errorTitle = el('h2');
+            biText(errorTitle, 'לא הצלחנו לטעון כרטיסים', "Couldn't load cards");
+            var errorBody = el('p');
+            biText(errorBody, 'נסו שוב בעוד רגע.', 'Try again in a moment.');
+            error.appendChild(errorTitle);
+            error.appendChild(errorBody);
+            stage.appendChild(error);
+            return;
+        }
+        if (state.phase === 'empty') {
+            var empty = el('div', 'card review-empty');
+            empty.id = 'review-nothing-due';
+            var emptyTitle = el('h2');
+            biText(emptyTitle, 'אין כרטיסים בחפיסה', 'Nothing in this deck');
+            empty.appendChild(emptyTitle);
+            stage.appendChild(empty);
+            return;
+        }
+        if (state.phase === 'summary') {
+            stage.appendChild(buildSummary());
+            return;
+        }
+        stage.appendChild(buildCard(current()));
+    }
+
+    function buildCard(card) {
+        var wrap = el('div', 'card review-card');
+        wrap.id = 'review-card';
+        wrap.tabIndex = -1;
+        wrap.setAttribute('data-direction', card.direction);
+        var slug = lessonSlug(card.word);
+        if (slug) wrap.setAttribute('data-lesson', slug);
+        var progress = el('div', 'fine review-progress');
+        progress.id = 'review-progress';
+        progress.textContent = (state.index + 1) + ' / ' + state.queue.length;
+        wrap.appendChild(progress);
+        var dir = el('p', 'fine');
+        var heEn = card.direction !== 'en_he';
+        biText(dir, heEn ? 'עברית ← אנגלית' : 'אנגלית ← עברית', heEn ? 'Hebrew → English' : 'English → Hebrew');
+        wrap.appendChild(dir);
+        var prompt = el('div', 'review-prompt');
+        prompt.id = 'review-prompt';
+        if (heEn) {
+            prompt.appendChild(hebrewNode(card.prompt, 'review-prompt-he'));
+            var promptAudio = audioButton(card.prompt, card.audio);
+            if (promptAudio) prompt.appendChild(promptAudio);
+        } else {
+            var meaning = el('p', 'meaning review-prompt-en');
+            meaning.id = 'review-prompt-en';
+            meaning.dir = 'ltr';
+            meaning.lang = 'en';
+            meaning.textContent = card.prompt;
+            prompt.appendChild(meaning);
+            var typedLabel = el('label', 'fine');
+            typedLabel.htmlFor = 'review-typed';
+            biText(typedLabel, 'כתבו בעברית (לא חובה)', 'Type in Hebrew (optional)');
+            var input = el('input', 'review-typed');
+            input.id = 'review-typed';
+            input.type = 'text';
+            input.lang = 'he';
+            input.dir = 'rtl';
+            input.autocomplete = 'off';
+            input.setAttribute('aria-label', 'Type Hebrew answer');
+            prompt.appendChild(typedLabel);
+            prompt.appendChild(input);
+        }
+        wrap.appendChild(prompt);
+        var hint = el('p', 'fine');
+        biText(hint, 'רווח מציג את התשובה. אחר כך 1–4.', 'Space shows the answer. Then 1–4.');
+        wrap.appendChild(hint);
+        var actions = el('div', 'review-actions');
+        actions.id = 'review-reveal-row';
+        var show = el('button', 'btn btn-primary');
+        show.type = 'button';
+        show.id = 'review-show-answer';
+        show.setAttribute('data-action', 'reveal');
+        biText(show, 'הצג תשובה', 'Show answer');
+        actions.appendChild(show);
+        wrap.appendChild(actions);
+        return wrap;
+    }
+
+    function buildAnswer(card) {
+        var box = el('div', 'review-answer');
+        box.id = 'review-answer';
+        var heEn = card.direction !== 'en_he';
+        if (heEn) {
+            var gloss = el('p', 'meaning');
+            gloss.id = 'review-answer-meaning';
+            gloss.dir = 'ltr';
+            gloss.lang = 'en';
+            gloss.textContent = card.answer;
+            box.appendChild(gloss);
+        } else {
+            box.appendChild(hebrewNode(card.answer, 'review-answer-he'));
+            var answerAudio = audioButton(card.answer, card.audio);
+            if (answerAudio) box.appendChild(answerAudio);
+        }
+        var translitSlot = el('div');
+        translitSlot.id = 'review-translit-slot';
+        fillTranslit(translitSlot, card);
+        box.appendChild(translitSlot);
+        var chips = el('div', 'review-chips');
+        chips.id = 'review-chips';
+        fillChips(chips, card);
+        box.appendChild(chips);
+        var grades = el('div', 'review-grades');
+        grades.id = 'review-grade-row';
+        GRADE_LABELS.forEach(function (item) {
+            grades.appendChild(gradeButton(card, item));
+        });
+        var suggestion = el('p', 'fine review-suggestion');
+        suggestion.id = 'review-suggestion';
+        box.appendChild(grades);
+        box.appendChild(suggestion);
+        return box;
+    }
+
+    function gradeButton(card, item) {
+        var btn = el('button', 'btn review-grade');
+        btn.type = 'button';
+        btn.id = 'review-grade-' + item.grade;
+        btn.setAttribute('data-action', 'grade');
+        btn.setAttribute('data-grade', String(item.grade));
+        btn.setAttribute('aria-keyshortcuts', String(item.grade));
+        var key = el('kbd', 'review-key');
+        key.textContent = String(item.grade);
+        btn.appendChild(key);
+        var name = el('span', 'review-grade-name');
+        biText(name, item.he, item.en);
+        btn.appendChild(name);
+        var days = intervalDays(card, item.grade);
+        var phrase = intervalPhrase(days);
+        if (phrase) {
+            var interval = el('span', 'review-interval');
+            interval.setAttribute('data-days', String(days));
+            biText(interval, phrase.he, phrase.en);
+            btn.appendChild(interval);
+        }
+        return btn;
+    }
+
+    function fillTranslit(slot, card) {
+        clear(slot);
+        if (!state.translitOn || !card || !card.translit) return;
+        var line = el('p', 'review-translit');
+        line.dir = 'ltr';
+        line.lang = 'en';
+        line.textContent = card.translit;
+        slot.appendChild(line);
+    }
+
+    function paintTranslit(card) {
+        var slot = root.document.getElementById('review-translit-slot');
+        if (!slot) return;
+        fillTranslit(slot, card);
+    }
+
+    function fillChips(slot, card) {
+        clear(slot);
+        if (!card) return;
+        if (card.root) slot.appendChild(chip('שורש', 'Root', card.root, true));
+        if (card.binyan) slot.appendChild(chip('בניין', 'Binyan', card.binyan, false));
+    }
+
+    function paintChips(card) {
+        var slot = root.document.getElementById('review-chips');
+        if (!slot) return;
+        fillChips(slot, card);
+    }
+
+    function chip(he, en, value, hebrew) {
+        var node = el('span', 'review-chip');
+        var name = el('span', 'review-chip-label');
+        biText(name, he, en);
+        node.appendChild(name);
+        var text = el('span', 'review-chip-value');
+        if (hebrew) {
+            text.lang = 'he';
+            text.dir = 'rtl';
+        } else {
+            text.dir = 'ltr';
+            text.lang = 'en';
+        }
+        text.textContent = value;
+        node.appendChild(text);
+        return node;
+    }
+
+    function typedValue() {
+        var input = root.document.getElementById('review-typed');
+        return input ? input.value : '';
+    }
+
+    function applySuggestion() {
+        var card = current();
+        var note = root.document.getElementById('review-suggestion');
+        var buttons = root.document.querySelectorAll('.review-grade');
+        Array.prototype.forEach.call(buttons, function (btn) {
+            btn.classList.remove('review-suggested');
+        });
+        if (note) clear(note);
+        if (!card || card.direction !== 'en_he' || !Answers) return;
+        var suggested = Answers.suggestGrade(typedValue(), card.word, card.accept);
+        if (suggested == null) return;
+        var btn = root.document.getElementById('review-grade-' + suggested);
+        if (btn) btn.classList.add('review-suggested');
+        if (!note) return;
+        var label = GRADE_LABELS[suggested - 1];
+        biText(note, 'הצעה: ' + label.he, 'suggested: ' + label.en);
+    }
+
+    function reveal() {
+        if (state.revealed || state.phase !== 'card') return;
+        var card = current();
+        var wrap = root.document.getElementById('review-card');
+        if (!card || !wrap) return;
+        state.revealed = true;
+        var row = root.document.getElementById('review-reveal-row');
+        if (row) row.remove();
+        wrap.appendChild(buildAnswer(card));
+        applySuggestion();
+    }
+
+    function commitGrade(grade) {
+        if (!state.revealed || state.phase !== 'card' || state.grading) return;
+        var card = current();
+        if (!card || !Answers) return;
+        var signal = Answers.gradeSignal(card, grade, lessonSlug(card.word));
+        if (!signal) return;
+        state.grading = true;
+        var Sync = root.HebrewSync;
+        if (Sync && typeof Sync.queueSignal === 'function') Sync.queueSignal(signal);
+        state.reviewed += 1;
+        state.gradeCounts[grade] += 1;
+        if (grade === 1 && !card.replayed) {
+            state.queue.push({
+                word: card.word,
+                direction: card.direction,
+                prompt: card.prompt,
+                answer: card.answer,
+                translit: card.translit,
+                audio: card.audio,
+                intervals: card.intervals,
+                accept: card.accept.slice(),
+                root: card.root,
+                binyan: card.binyan,
+                replayed: true
+            });
+        }
+        state.index += 1;
+        state.revealed = false;
+        state.phase = state.index >= state.queue.length ? 'summary' : 'card';
+        renderStage();
+        if (state.phase === 'card') prefetchLexicon(current());
+    }
+
+    function buildSummary() {
+        var box = el('div', 'card review-summary');
+        box.id = 'review-finished';
+        var title = el('h2');
+        biText(title, 'סיימנו', 'Done for now');
+        box.appendChild(title);
+        var list = el('ul', 'review-stats');
+        var reviewed = el('li');
+        biText(reviewed, 'נבדקו', 'Reviewed');
+        reviewed.appendChild(root.document.createTextNode(': '));
+        var reviewedN = el('strong');
+        reviewedN.id = 'review-count-reviewed';
+        reviewedN.textContent = String(state.reviewed);
+        reviewed.appendChild(reviewedN);
+        list.appendChild(reviewed);
+        GRADE_LABELS.forEach(function (item) {
+            var row = el('li');
+            biText(row, item.he, item.en);
+            row.appendChild(root.document.createTextNode(': '));
+            var n = el('strong');
+            n.id = 'review-count-' + item.grade;
+            n.textContent = String(state.gradeCounts[item.grade] || 0);
+            row.appendChild(n);
+            list.appendChild(row);
+        });
+        box.appendChild(list);
+        return box;
+    }
+
+    function onClick(event) {
+        var btn = event.target && event.target.closest ? event.target.closest('[data-action]') : null;
+        if (!btn) return;
+        var action = btn.getAttribute('data-action');
+        if (action === 'deck') {
+            openDeck(btn.getAttribute('data-deck') || 'due');
+            return;
+        }
+        if (action === 'speak') {
+            var Speech = root.HebrewSpeech;
+            if (Speech && typeof Speech.play === 'function') {
+                Speech.play(btn.getAttribute('data-speak') || '', btn.getAttribute('data-audio') || '');
+            }
+            return;
+        }
+        if (action === 'reveal') {
+            reveal();
+            return;
+        }
+        if (action === 'grade') {
+            commitGrade(Number(btn.getAttribute('data-grade')));
+        }
+    }
+
+    function onChange(event) {
+        var target = event.target;
+        if (!target) return;
+        if (target.id !== 'review-lesson-deck' && target.id !== 'review-concept-deck') return;
+        if (!target.value) return;
+        openDeck(target.value);
+    }
+
+    function onType(event) {
+        if (!event.target || event.target.id !== 'review-typed') return;
+        if (state.revealed) applySuggestion();
+    }
+
+    function onKey(event) {
+        if (!mountedEl || state.phase !== 'card') return;
         var tag = (event.target && event.target.tagName) || '';
-        if (tag === 'INPUT' || tag === 'TEXTAREA') {
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
             if (event.key === 'Enter' && !state.revealed) {
                 event.preventDefault();
-                revealAnswer(vocabMap);
+                reveal();
             }
             return;
         }
         if (event.key === ' ' || event.code === 'Space') {
             event.preventDefault();
-            if (!state.revealed) revealAnswer(vocabMap);
+            if (!state.revealed) reveal();
             return;
         }
-        if (!state.revealed) return;
-        if (event.key === '1') {
-            event.preventDefault();
-            grade('pass', vocabMap);
-        } else if (event.key === '2') {
-            event.preventDefault();
-            grade('miss', vocabMap);
+        if (!state.revealed || !Answers) return;
+        var grade = Answers.keyToGrade(event.key);
+        if (!grade) return;
+        event.preventDefault();
+        commitGrade(grade);
+    }
+
+    function bindKeys() {
+        if (keyHandler) root.document.removeEventListener('keydown', keyHandler);
+        keyHandler = function (event) { onKey(event); };
+        root.document.addEventListener('keydown', keyHandler, viewSignal ? { signal: viewSignal } : false);
+    }
+
+    function applyLexicon(card, info) {
+        card.accept = info.accept.slice();
+        card.root = info.root;
+        card.binyan = info.binyan;
+        if (state.revealed && current() === card) {
+            paintChips(card);
+            applySuggestion();
         }
     }
 
-    function bind(vocabMap) {
-        var app = document.getElementById('review-app');
-        if (!app || app._reviewBound) return;
-        app._reviewBound = true;
-        app.addEventListener('click', function (event) {
-            var btn = event.target.closest('[data-action]');
-            if (!btn) return;
-            var action = btn.getAttribute('data-action');
-            if (action === 'speak') {
-                if (Speech && typeof Speech.play === 'function') {
-                    Speech.play(btn.getAttribute('data-speak') || '', btn.getAttribute('data-audio') || null);
+    function prefetchLexicon(card) {
+        if (!card || !card.word) return;
+        var cached = state.lexicon[card.word];
+        if (cached) {
+            applyLexicon(card, cached);
+            return;
+        }
+        var client = api();
+        if (!client) return;
+        var word = card.word;
+        var mountId = state.mountId;
+        client.get('/api/lexicon/' + encodeURIComponent(word), { redirectOn401: false }).then(function (res) {
+            if (mountId !== state.mountId) return;
+            var info = { accept: [], root: '', binyan: '' };
+            if (res && res.ok && res.data && res.data.entry) {
+                var entry = res.data.entry;
+                var lemma = res.data.lemma || {};
+                info.accept = Array.isArray(entry.accept)
+                    ? entry.accept.filter(function (item) { return typeof item === 'string'; })
+                    : [];
+                info.root = entry.root || lemma.root || '';
+                info.binyan = entry.binyan || lemma.binyan || '';
+            }
+            state.lexicon[word] = info;
+            var live = current();
+            if (live && live.word === word) applyLexicon(live, info);
+        }).catch(function () { /* the stripped key still scores a typed answer */ });
+    }
+
+    function loadSideData(mountId) {
+        var client = api();
+        if (!client) return;
+        client.get('/api/me/library?limit=200', { redirectOn401: false }).then(function (res) {
+            if (mountId !== state.mountId) return;
+            var words = res && res.ok && res.data && Array.isArray(res.data.words) ? res.data.words : [];
+            words.forEach(function (row) {
+                if (!row || row.word == null) return;
+                state.sourcesByWord[String(row.word)] = Array.isArray(row.sources) ? row.sources.map(String) : [];
+            });
+        }).catch(function () { /* vocab-index lessons remain the fallback slug */ });
+        client.get('/api/grammar/concepts', { redirectOn401: false }).then(function (res) {
+            if (mountId !== state.mountId) return;
+            var rows = res && res.ok && res.data && Array.isArray(res.data.concepts) ? res.data.concepts : [];
+            state.concepts = rows.filter(function (row) {
+                return row && (row.family === 'binyan' || row.family === 'tense');
+            }).map(function (row) {
+                return {
+                    key: String(row.key || ''),
+                    family: row.family,
+                    labelHe: row.label_he || '',
+                    labelEn: row.label_en || ''
+                };
+            });
+            fillConceptOptions();
+            state.concepts.forEach(function (concept) {
+                fetchCount('concept:' + concept.key, mountId);
+            });
+        }).catch(function () { /* named decks still work without concept chips */ });
+        var catalog = Array.isArray(root.HEBREW_CATALOG) ? root.HEBREW_CATALOG : [];
+        catalog.forEach(function (lesson) {
+            if (lesson && lesson.slug) fetchCount('lesson:' + lesson.slug, mountId);
+        });
+        NAMED_DECKS.forEach(function (spec) {
+            if (spec.id !== state.deck) fetchCount(spec.id, mountId);
+        });
+    }
+
+    function fetchCount(deck, mountId) {
+        var client = api();
+        if (!client) return;
+        client.get('/api/me/cards?deck=' + encodeURIComponent(deck), { redirectOn401: false }).then(function (res) {
+            if (mountId !== state.mountId) return;
+            if (!res || !res.ok || !res.data || !Array.isArray(res.data.cards)) return;
+            setCount(deck, res.data.cards.length);
+        }).catch(function () { /* the deck name stays; the count stays blank */ });
+    }
+
+    function resetSession() {
+        state.queue = [];
+        state.index = 0;
+        state.revealed = false;
+        state.grading = false;
+        state.reviewed = 0;
+        state.gradeCounts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    }
+
+    function openDeck(deck) {
+        var name = deck || 'due';
+        var gen = state.gen + 1;
+        state.gen = gen;
+        state.deck = name;
+        resetSession();
+        state.phase = 'loading';
+        renderStage();
+        var client = api();
+        if (!client) {
+            state.phase = 'error';
+            renderStage();
+            return Promise.resolve();
+        }
+        return client.get('/api/me/cards?deck=' + encodeURIComponent(name), { redirectOn401: false })
+            .then(function (res) {
+                if (gen !== state.gen || !mountedEl) return;
+                if (!res || !res.ok || !res.data || !Array.isArray(res.data.cards)) {
+                    state.phase = 'error';
+                    renderStage();
+                    return;
                 }
-                return;
-            }
-            if (action === 'reveal') {
-                revealAnswer(vocabMap);
-                return;
-            }
-            if (action === 'grade') {
-                grade(btn.getAttribute('data-signal') || 'pass', vocabMap);
-            }
-        });
-        document.addEventListener('keydown', function (event) {
-            onKey(event, vocabMap);
-        });
-        var vowelsBtn = document.getElementById('review-vowels-btn');
-        if (vowelsBtn && !vowelsBtn._reviewBound) {
-            vowelsBtn._reviewBound = true;
-            vowelsBtn.addEventListener('click', function () {
+                state.queue = res.data.cards.map(normalizeCard);
+                setCount(name, state.queue.length);
+                state.phase = state.queue.length ? 'card' : 'empty';
+                renderStage();
+                if (state.phase === 'card') prefetchLexicon(current());
+            }).catch(function () {
+                if (gen !== state.gen || !mountedEl) return;
+                state.phase = 'error';
+                renderStage();
+            });
+    }
+
+    function toggleButton(id, onClickToggle) {
+        var btn = el('button', 'btn btn-ghost');
+        btn.type = 'button';
+        btn.id = id;
+        btn.setAttribute('aria-pressed', 'false');
+        btn.addEventListener('click', onClickToggle);
+        return btn;
+    }
+
+    function mount(elNode, ctx) {
+        mountedEl = elNode;
+        viewSignal = (ctx && ctx.signal) || null;
+        state.mountId += 1;
+        var mountId = state.mountId;
+        loadPrefs();
+        if (ctx && ctx.actions) {
+            clear(ctx.actions);
+            ctx.actions.appendChild(toggleButton('review-vowels-btn', function () {
                 state.vowelsOn = !state.vowelsOn;
                 savePrefs();
-                paintVowelsBtn();
-                document.querySelectorAll('[data-vowels]').forEach(function (el) {
-                    var full = el.getAttribute('data-vowels') || '';
-                    el.textContent = displayHebrew(full);
-                });
-            });
+                paintToggles();
+                repaintHebrew();
+            }));
+            ctx.actions.appendChild(toggleButton('review-translit-btn', function () {
+                state.translitOn = !state.translitOn;
+                savePrefs();
+                paintToggles();
+                paintTranslit(current());
+            }));
         }
-    }
-
-    function start() {
-        paintChrome();
-        loadPrefs();
-        paintVowelsBtn();
-
-        if (!U || !Review) {
-            var app = document.getElementById('review-app');
-            if (app) {
-                app.innerHTML = '<div class="card"><p>'
-                    + bi('שגיאה בטעינת מנוע החזרה.', 'Review engine failed to load.')
-                    + '</p></div>';
+        paintToggles();
+        bindKeys();
+        var ready = (ctx && ctx.ready) || Promise.resolve(null);
+        return ready.then(function () {
+            if (mountedEl !== elNode) return null;
+            loadSideData(mountId);
+            return openDeck('due');
+        }).catch(function () {
+            if (mountedEl === elNode) {
+                state.phase = 'error';
+                renderStage();
             }
-            return;
-        }
-
-        var list = vocabList();
-        if (list == null) {
-            renderMissing();
-            return;
-        }
-
-        var vocabMap = indexByKey(list);
-        buildClips(list);
-        Review.load();
-        var store = Review.all();
-        var rawQueue = Review.dueList(store, Date.now());
-        state.queue = filterQueue(rawQueue, store.words || {});
-        state.index = 0;
-        state.reviewed = 0;
-        state.passed = 0;
-        state.missed = 0;
-        state.finished = false;
-
-        bind(vocabMap);
-
-        if (!state.queue.length) {
-            renderEmpty();
-            return;
-        }
-        renderItem(vocabMap);
-    }
-
-    function sharedBase() {
-        try {
-            var scripts = document.getElementsByTagName('script');
-            for (var i = 0; i < scripts.length; i += 1) {
-                var src = scripts[i].src || '';
-                if (/\/review-page\.js(\?|$)/.test(src)) {
-                    return src.replace(/review-page\.js(\?.*)?$/, '');
-                }
-            }
-        } catch (err) { /* fall through */ }
-        return '../shared/';
-    }
-
-    function loadScript(src) {
-        return new Promise(function (resolve) {
-            var el = document.createElement('script');
-            el.src = src;
-            el.onload = function () { resolve(true); };
-            el.onerror = function () { resolve(false); };
-            (document.head || document.documentElement).appendChild(el);
         });
     }
 
-    function ensureSyncThenStart() {
-        var base = sharedBase();
-        var chain = Promise.resolve(true);
-        if (!root.HebrewApi) {
-            chain = chain.then(function () { return loadScript(base + 'api.js'); });
+    function unmount() {
+        if (keyHandler && root.document) {
+            root.document.removeEventListener('keydown', keyHandler);
         }
-        if (!root.HebrewSync) {
-            chain = chain.then(function () { return loadScript(base + 'player/sync.js'); });
-        }
-        return chain.then(function () {
-            var Sync = root.HebrewSync;
-            if (Sync && typeof Sync.init === 'function') {
-                return Sync.init({}).then(function () {
-                    if (Sync.paintStatus) Sync.paintStatus();
-                    start();
-                }).catch(function () { start(); });
-            }
-            start();
-        }).catch(function () { start(); });
+        keyHandler = null;
+        state.gen += 1;
+        state.mountId += 1;
+        mountedEl = null;
+        viewSignal = null;
     }
 
     /**
-     * Typed en→he check (vowel-insensitive) — exported for tests.
      * @param {string} typed
      * @param {string} expectedWord
+     * @param {string[]} [accept]
      */
-    function typedMatches(typed, expectedWord) {
-        if (!U || typeof U.normalizeHebrew !== 'function') return false;
-        var got = U.normalizeHebrew(typed);
-        var want = U.normalizeHebrew(expectedWord);
-        return !!(got && want && got === want);
+    function typedMatches(typed, expectedWord, accept) {
+        if (!Answers) return false;
+        return Answers.matches(typed, expectedWord, accept);
     }
 
-    var api = {
+    var pageApi = {
         filterQueue: filterQueue,
         audioHref: audioHref,
         escapeIndexText: esc,
         typedMatches: typedMatches,
+        keyToGrade: function (key) { return Answers ? Answers.keyToGrade(key) : null; },
+        suggestGrade: function (typed, key, accept) {
+            return Answers ? Answers.suggestGrade(typed, key, accept) : null;
+        },
+        gradeSignal: function (card, grade, slug) {
+            return Answers ? Answers.gradeSignal(card, grade, slug) : null;
+        },
         vocabListPresent: function (raw) {
             var prev = root.HEBREW_VOCAB_INDEX;
             try {
@@ -541,19 +1021,13 @@
         },
         PREFS_KEY: PREFS_KEY,
         VOWELS_DEFAULT: VOWELS_DEFAULT,
-        start: start
+        start: function () { return openDeck(state.deck || 'due'); },
+        mount: mount,
+        unmount: unmount
     };
 
-    root.HebrewReviewPage = api;
+    root.HebrewReviewPage = pageApi;
     if (typeof module !== 'undefined' && module.exports) {
-        module.exports = api;
-    }
-
-    if (typeof document !== 'undefined') {
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', ensureSyncThenStart);
-        } else {
-            ensureSyncThenStart();
-        }
+        module.exports = pageApi;
     }
 })(typeof window !== 'undefined' ? window : globalThis);
