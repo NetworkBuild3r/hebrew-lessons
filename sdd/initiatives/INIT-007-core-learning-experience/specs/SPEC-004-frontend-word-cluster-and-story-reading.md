@@ -7,7 +7,7 @@ spec_id: SPEC-004
 initiative_id: INIT-007
 title: "Word cluster and story reading experience"
 domain: frontend
-status: ready
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet
@@ -51,19 +51,19 @@ This spec implements the research recommendations:
 
 ## Understood
 
-- [ ] und-1: Pointed Hebrew must remain live resizable text, never an image of text (RSCH-006 Rule 2).
-- [ ] und-2: Pointed text line height must never drop below 1.5, to prevent vowel marks from colliding or clipping (RSCH-006 Rule 3).
-- [ ] und-3: Follow-along highlighting must transition smoothly and follow speech playback.
+- [x] und-1: Pointed Hebrew must remain live resizable text, never an image of text (RSCH-006 Rule 2).
+- [x] und-2: Pointed text line height must never drop below 1.5, to prevent vowel marks from colliding or clipping (RSCH-006 Rule 3).
+- [x] und-3: Follow-along highlighting must transition smoothly and follow speech playback.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] ac-1: In the vocabulary introduction screen, the pointed Hebrew word renders at font size ≥40px with line-height ≥1.5 and `overflow: visible`.
-- [ ] ac-2: The word cluster places the pointed Hebrew word, English gloss, audio button, and image (if present) in one unified container.
-- [ ] ac-3: In the story screen, the currently reading paragraph receives the `.reading-now` class with high-contrast background and text visibility.
-- [ ] ac-4: Tapping any `.story-token` displays the `.story-gloss-popover` containing the pointed word, English meaning, and an audio playback button.
-- [ ] ac-5: Story controls (Pause, Resume, Stop) have pointer targets of at least 44x44px and clear visual active states.
+- [x] ac-1: In the vocabulary introduction screen, the pointed Hebrew word renders at font size ≥40px with line-height ≥1.5 and `overflow: visible`.
+- [x] ac-2: The word cluster places the pointed Hebrew word, English gloss, audio button, and image (if present) in one unified container.
+- [x] ac-3: In the story screen, the currently reading paragraph receives the `.reading-now` class with high-contrast background and text visibility.
+- [x] ac-4: Tapping any `.story-token` displays the `.story-gloss-popover` containing the pointed word, English meaning, and an audio playback button.
+- [x] ac-5: Story controls (Pause, Resume, Stop) have pointer targets of at least 44x44px and clear visual active states.
 
 ---
 

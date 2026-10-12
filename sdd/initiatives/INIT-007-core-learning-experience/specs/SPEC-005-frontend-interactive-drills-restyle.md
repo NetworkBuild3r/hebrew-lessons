@@ -7,7 +7,7 @@ spec_id: SPEC-005
 initiative_id: INIT-007
 title: "Interactive drills restyle (Match, Sentence Builder, Speed Quiz, Type-It)"
 domain: frontend
-status: ready
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet
@@ -59,19 +59,19 @@ This spec gives each interactive drill a tactile, rewarding feel:
 
 ## Understood
 
-- [ ] und-1: The eight pair color classes (`pair-c0` through `pair-c7`) must be preserved for `learner-support.test.js`.
-- [ ] und-2: All input fields and selection cards must have minimum 44px touch targets.
-- [ ] und-3: Corrective feedback must always show the correct pointed Hebrew form on error.
+- [x] und-1: The eight pair color classes (`pair-c0` through `pair-c7`) must be preserved for `learner-support.test.js`.
+- [x] und-2: All input fields and selection cards must have minimum 44px touch targets.
+- [x] und-3: Corrective feedback must always show the correct pointed Hebrew form on error.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] ac-1: In Match, selected cards show clear active borders; matched pairs display assigned `.pair-c0`..`.pair-c7` styles; mismatched taps trigger temporary `.wrong` state without blocking.
-- [ ] ac-2: In Sentence Builder, word bank tiles have min-height 44px, move to the target slot upon click, and can be tapped again to return to the bank.
-- [ ] ac-3: In Type-It, wrong answers display the correct pointed Hebrew word with retry option, preserving `data-action="type-check"` and `data-action="type-hint"` hooks.
-- [ ] ac-4: In Speed Quiz, choices display distinct selected and result states with clear visual contrast.
-- [ ] ac-5: In Speaking / Ask-Friend, recording button displays animated state during active mic recording and exposes audio playback for user recording and model pronunciation.
+- [x] ac-1: In Match, selected cards show clear active borders; matched pairs display assigned `.pair-c0`..`.pair-c7` styles; mismatched taps trigger temporary `.wrong` state without blocking.
+- [x] ac-2: In Sentence Builder, word bank tiles have min-height 44px, move to the target slot upon click, and can be tapped again to return to the bank.
+- [x] ac-3: In Type-It, wrong answers display the correct pointed Hebrew word with retry option, preserving `data-action="type-check"` and `data-action="type-hint"` hooks.
+- [x] ac-4: In Speed Quiz, choices display distinct selected and result states with clear visual contrast.
+- [x] ac-5: In Speaking / Ask-Friend, recording button displays animated state during active mic recording and exposes audio playback for user recording and model pronunciation.
 
 ---
 

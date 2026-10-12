@@ -20,10 +20,10 @@
                         <p>${ctx.esc(g.lede || '')}</p>
                     </div>
                     ${(g.rules || []).map(rule => `
-                        <div class="card">
+                        <div class="card pattern-rule">
                             <h4>${ctx.esc(rule.title || '')}</h4>
                             <p>${ctx.esc(rule.english || '')}</p>
-                            ${rule.example ? `<p class="example">${window.HebrewUtils.renderParts(Array.isArray(rule.example) ? rule.example : [rule.example])}</p>` : ''}
+                            ${rule.example ? `<div class="pattern-box example">${window.HebrewUtils.renderParts(Array.isArray(rule.example) ? rule.example : [rule.example])}</div>` : ''}
                         </div>
                     `).join('')}
                     ${(g.reminders || []).length ? `<ul class="reminders">${g.reminders.map(r => `<li>${ctx.esc(r)}</li>`).join('')}</ul>` : ''}
@@ -138,14 +138,30 @@
         if (!result) return;
         result.classList.remove('hidden');
         if (mode === 'retry') {
+            // First miss: nudge only — answer stays hidden until second attempt.
             result.textContent = TRY_AGAIN;
             return;
         }
         if (mode === 'correct' || mode === 'reveal') {
-            result.innerHTML = (good
-                ? ctx.bi('נכון', 'Correct')
-                : ctx.esc(item.why || 'לא מדויק.'))
-                + (item.pointed ? ' ' + ctx.speakButton(item.pointed, item.audio) : '');
+            const Feedback = window.HebrewFeedback;
+            const pointed = item.pointed || '';
+            if (good && Feedback && typeof Feedback.showCorrect === 'function') {
+                Feedback.showCorrect(result);
+                if (pointed) result.insertAdjacentHTML('beforeend', ' ' + ctx.speakButton(pointed, item.audio));
+            } else if (!good && Feedback && typeof Feedback.showMiss === 'function') {
+                Feedback.showMiss(result, {
+                    pointed: pointed || (item.choices && item.choices[item.answer]) || '',
+                    showRetry: false
+                });
+                const why = item.why ? '<p class="fine">' + ctx.esc(item.why) + '</p>' : '';
+                const speak = pointed ? ' ' + ctx.speakButton(pointed, item.audio) : '';
+                result.insertAdjacentHTML('beforeend', why + speak);
+            } else {
+                result.innerHTML = (good
+                    ? ctx.bi('נכון', 'Correct')
+                    : ctx.esc(item.why || 'לא מדויק.'))
+                    + (pointed ? ' ' + ctx.speakButton(pointed, item.audio) : '');
+            }
         }
     }
 

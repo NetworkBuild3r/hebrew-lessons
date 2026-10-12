@@ -16,6 +16,7 @@
         'api.js',
         'player/sync.js',
         'player/speech.js',
+        'player/feedback.js',
         'player/core.js',
         'activities/catalog.js',
         'activities/words.js',

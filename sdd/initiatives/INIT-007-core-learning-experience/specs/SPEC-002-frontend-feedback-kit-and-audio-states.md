@@ -7,7 +7,7 @@ spec_id: SPEC-002
 initiative_id: INIT-007
 title: "Feedback kit, tactile interactions, and audio playback states"
 domain: frontend
-status: ready
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet
@@ -50,19 +50,19 @@ This spec builds the interactive foundation:
 
 ## Understood
 
-- [ ] und-1: Sound effects must be off by default and never play over Hebrew voice clips.
-- [ ] und-2: When an answer is wrong, the feedback component must show the correct pointed Hebrew word before the user leaves the step.
-- [ ] und-3: All animations must shut off when `prefers-reduced-motion: reduce` is detected.
+- [x] und-1: Sound effects must be off by default and never play over Hebrew voice clips.
+- [x] und-2: When an answer is wrong, the feedback component must show the correct pointed Hebrew word before the user leaves the step.
+- [x] und-3: All animations must shut off when `prefers-reduced-motion: reduce` is detected.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] ac-1: Playing any audio clip via `HebrewSpeech.playClip` adds an active playing class (e.g. `is-playing`) to the associated audio button or container, and removes it cleanly on `ended` or `error`.
-- [ ] ac-2: When an answer is incorrect, the feedback container displays the correct pointed Hebrew word with class `correction` and preserves `data-action` retry hooks.
-- [ ] ac-3: Interactive buttons (`.btn`, `.choice-card`, `.word-match-card`, `.bank-word`) render an active scale transformation (`scale(0.98)`) and high-contrast focus rings.
-- [ ] ac-4: Web Audio tactile clicks can be enabled via user setting, are silent by default, and automatically duck/mute whenever Hebrew speech audio is active.
-- [ ] ac-5: Under `prefers-reduced-motion: reduce`, all transitions and transforms resolve to `none` with 0s duration.
+- [x] ac-1: Playing any audio clip via `HebrewSpeech.playClip` adds an active playing class (e.g. `is-playing`) to the associated audio button or container, and removes it cleanly on `ended` or `error`.
+- [x] ac-2: When an answer is incorrect, the feedback container displays the correct pointed Hebrew word with class `correction` and preserves `data-action` retry hooks.
+- [x] ac-3: Interactive buttons (`.btn`, `.choice-card`, `.word-match-card`, `.bank-word`) render an active scale transformation (`scale(0.98)`) and high-contrast focus rings.
+- [x] ac-4: Web Audio tactile clicks can be enabled via user setting, are silent by default, and automatically duck/mute whenever Hebrew speech audio is active.
+- [x] ac-5: Under `prefers-reduced-motion: reduce`, all transitions and transforms resolve to `none` with 0s duration.
 
 ---
 

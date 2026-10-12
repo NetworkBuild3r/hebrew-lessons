@@ -1,6 +1,7 @@
 /**
  * Type Hebrew from English meaning. Intermediate + advanced. Records en_he.
  * Authored-by-spec: INIT-001/SPEC-005
+ * Restyle: INIT-007/SPEC-005
  *
  * Learner support (2026-10-08):
  * - Hint 1 shows the first letter and a blank per remaining letter.
@@ -96,6 +97,27 @@
         return `<button type="button" class="btn btn-ghost" data-action="type-hint">${label}</button>`;
     }
 
+    /** First contiguous pointed run that differs from the typed (vowel-stripped) attempt. */
+    function mismatchHighlight(pointed, typed) {
+        const bareTarget = U.stripVowels(pointed || '');
+        const bareTyped = U.stripVowels(typed || '');
+        let ti = 0;
+        let start = -1;
+        let end = -1;
+        for (let i = 0; i < pointed.length; i += 1) {
+            const ch = pointed[i];
+            if (!LETTER.test(ch) && ch !== ' ') continue;
+            const tch = bareTarget[ti];
+            const uch = bareTyped[ti];
+            if (tch !== uch && start < 0) start = i;
+            if (tch !== uch) end = i + 1;
+            if (tch === uch && start >= 0) break;
+            ti += 1;
+        }
+        if (start < 0) return '';
+        return pointed.slice(start, end > start ? end : start + 1);
+    }
+
     function hint(ctx, root) {
         if (root._type.awaitingNext) return;
         const item = current(ctx, root);
@@ -109,6 +131,39 @@
         }
         const slot = root.querySelector('#type-hint-slot');
         if (slot) slot.innerHTML = hintButtonHtml(ctx, level);
+    }
+
+    function paintMiss(ctx, fb, item, typedRight, typedValue) {
+        const word = U.escapeHtml(item.word);
+        const speak = typeof ctx.speakButton === 'function' ? ' ' + ctx.speakButton(item.word, item.audio, 'Word') : '';
+        const lead = typedRight
+            ? 'נכון, אבל עם עזרה — המילה תחזור. (Right, but with help — this word will come back.)'
+            : 'התשובה: (Answer:)';
+        const Feedback = window.HebrewFeedback;
+        if (Feedback && typeof Feedback.showMiss === 'function') {
+            Feedback.showMiss(fb, {
+                pointed: item.word,
+                highlight: typedRight ? '' : mismatchHighlight(item.word, typedValue),
+                retryAction: 'type-next',
+                retryLabelHe: 'הבא',
+                retryLabelEn: 'Next',
+                showRetry: true
+            });
+            const wordEl = fb.querySelector('.correction-word');
+            if (wordEl) wordEl.classList.add('type-answer');
+            const label = fb.querySelector('.correction-label');
+            if (label) label.textContent = typedRight
+                ? 'נכון, אבל עם עזרה — המילה תחזור. (Right, but with help — this word will come back.)'
+                : lead;
+            if (speak) {
+                const box = fb.querySelector('.correction');
+                if (box) box.insertAdjacentHTML('beforeend', speak);
+            }
+            return;
+        }
+        fb.classList.remove('hidden');
+        fb.innerHTML = `<span>${U.escapeHtml(lead)}</span> <span class="type-answer" dir="rtl" lang="he">${word}</span>${speak}
+                <button type="button" class="btn btn-primary" data-action="type-next">${U.escapeHtml('הבא (Next)')}</button>`;
     }
 
     function check(ctx, root) {
@@ -132,9 +187,14 @@
         ctx.save();
 
         if (good) {
+            const Feedback = window.HebrewFeedback;
             if (fb) {
-                fb.classList.remove('hidden');
-                fb.textContent = 'נכון! (Correct!)';
+                if (Feedback && typeof Feedback.showCorrect === 'function') {
+                    Feedback.showCorrect(fb);
+                } else {
+                    fb.classList.remove('hidden');
+                    fb.textContent = 'נכון! (Correct!)';
+                }
             }
             setTimeout(() => advance(ctx, root), 600);
             return;
@@ -143,16 +203,7 @@
         // Miss (or copied from the hint): keep the answer up until the learner is ready.
         root._type.awaitingNext = true;
         input.readOnly = true;
-        const word = U.escapeHtml(item.word);
-        const speak = typeof ctx.speakButton === 'function' ? ' ' + ctx.speakButton(item.word, item.audio, 'Word') : '';
-        const lead = typedRight
-            ? 'נכון, אבל עם עזרה — המילה תחזור. (Right, but with help — this word will come back.)'
-            : 'התשובה: (Answer:)';
-        if (fb) {
-            fb.classList.remove('hidden');
-            fb.innerHTML = `<span>${U.escapeHtml(lead)}</span> <span class="type-answer" dir="rtl" lang="he">${word}</span>${speak}
-                <button type="button" class="btn btn-primary" data-action="type-next">${U.escapeHtml('הבא (Next)')}</button>`;
-        }
+        if (fb) paintMiss(ctx, fb, item, typedRight, input.value);
         if (ctx.Speech && typeof ctx.Speech.play === 'function') {
             ctx.Speech.play(item.word, item.audio || null);
         }
@@ -178,7 +229,8 @@
         body.innerHTML = `
             <p class="pill">${root._type.index + 1} / ${root._type.queue.length}</p>
             <p class="english" dir="ltr">${ctx.esc(item.meaning || '')}</p>
-            <input id="type-input" class="fill-input" dir="rtl" autocomplete="off" placeholder="עברית...">
+            <input id="type-input" class="fill-input type-input" dir="rtl" lang="he" autocomplete="off" placeholder="עברית..." inputmode="text">
+            <p class="type-kb-hint fine">${ctx.bi('בטלפון: החזיקו את מקש הגלובוס לבחירת עברית', 'On phone: long-press the globe key for Hebrew')}</p>
             <div class="row-tools">
                 <button type="button" class="btn btn-ghost" data-action="type-check">${ctx.bi('בדיקה', 'Check')}</button>
                 <span id="type-hint-slot">${hintButtonHtml(ctx, level)}</span>

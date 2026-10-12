@@ -1,10 +1,12 @@
 /**
  * Vocab cards: round 1 recognition; recall rounds alternate he→en / en→he.
  * Authored-by-spec: INIT-001/SPEC-005
+ * Provenance: INIT-007/SPEC-004 — 48px pointed word cluster (ADR-0010).
  */
 (function (root) {
     const P = root.HebrewPlayer;
     const U = root.HebrewUtils;
+    const MEDIA_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
     /** Resolve recall direction for a card index. force: 'auto' | 'he_en' | 'en_he'. */
     function directionForCard(cardIndex, force) {
@@ -127,6 +129,40 @@
             </div>`;
     }
 
+    /** Optional contextual picture — mediaId slug + non-empty alt only (ADR-0003). */
+    function vocabImage(ctx, item) {
+        const image = item && item.image;
+        if (!image || typeof image !== 'object' || Array.isArray(image)) return '';
+        const alt = typeof image.alt === 'string' ? image.alt.trim() : '';
+        if (!alt) return '';
+        const id = typeof image.mediaId === 'string' ? image.mediaId.trim() : '';
+        if (!MEDIA_ID.test(id)) return '';
+        return `<figure class="vocab-image"><img src="/api/media/${ctx.esc(id)}" alt="${ctx.esc(alt)}" loading="lazy"></figure>`;
+    }
+
+    function posPill(ctx, item) {
+        if (!item.pos) return '';
+        return `<span class="vocab-pill pos">${ctx.esc(item.pos)}</span>`;
+    }
+
+    function trapPill(ctx, item) {
+        if (!item.trap) return '';
+        return `<span class="vocab-pill trap">${ctx.esc(item.trap)}</span>`;
+    }
+
+    function pills(ctx, item) {
+        const pos = posPill(ctx, item);
+        const trap = trapPill(ctx, item);
+        if (!pos && !trap) return '';
+        return `<div class="vocab-pills">${pos}${trap}</div>`;
+    }
+
+    /** Live pointed word — clickable to play (ADR-0010 / aud-2). */
+    function heWordBtn(ctx, item, displayWord) {
+        const clip = item.audio || '';
+        return `<button type="button" class="he-word" data-vowels="${ctx.esc(item.word)}" data-speak="${ctx.esc(item.word)}" data-audio="${ctx.esc(clip)}" title="${ctx.esc(ctx.bi('השמעה', 'Play word'))}">${ctx.esc(displayWord)}</button>`;
+    }
+
     function card(ctx, item, index, force) {
         const id = ctx.sid(item.id);
         const recall = ctx.recallMode();
@@ -134,20 +170,23 @@
         const review = ctx.missedLast.map(String).includes(id);
         const displayWord = ctx.vowelsOn ? item.word : U.stripVowels(item.word);
         const direction = recall ? directionForCard(index, force) : null;
+        const img = vocabImage(ctx, item);
 
         if (!recall) {
             return `
             <article class="vocab-card card${review ? ' review-first' : ''}">
                 ${review ? `<span class="badge">${ctx.bi('לחזור קודם', 'Review first')}</span>` : ''}
-                <div class="vocab-head">
-                    <div>
-                        <div class="he-word" data-vowels="${ctx.esc(item.word)}">${ctx.esc(displayWord)}</div>
-                        <div class="pos">${ctx.esc(item.pos || '')}</div>
+                <div class="vocab-cluster">
+                    ${img}
+                    <div class="vocab-head">
+                        <div class="vocab-main">
+                            ${heWordBtn(ctx, item, displayWord)}
+                            <p class="meaning">${ctx.esc(item.meaning || '')}</p>
+                            ${pills(ctx, item)}
+                        </div>
+                        ${ctx.speakButton(item.word, item.audio, 'Word')}
                     </div>
-                    ${ctx.speakButton(item.word, item.audio, 'Word')}
                 </div>
-                <p class="meaning">${ctx.esc(item.meaning || '')}</p>
-                ${item.trap ? `<p class="trap">${ctx.esc(item.trap)}</p>` : ''}
                 <button type="button" class="linkish" data-action="toggle-reveal" data-id="${id}">${ctx.bi('איך אומרים את זה?', 'Show pronunciation')}</button>
                 <div class="reveal hidden" data-reveal="${id}">
                     <p class="sound" dir="ltr">${ctx.esc(item.sound || '')}${item.translit ? ' · ' + ctx.esc(item.translit) : ''}</p>
@@ -161,17 +200,23 @@
             return `
             <article class="vocab-card card${review ? ' review-first' : ''}" data-direction="en_he">
                 ${review ? `<span class="badge">${ctx.bi('לחזור קודם', 'Review first')}</span>` : ''}
-                <div class="vocab-head">
-                    <div>
-                        <p class="meaning" dir="ltr">${ctx.esc(item.meaning || '')}</p>
-                        <div class="pos">${ctx.esc(item.pos || '')}</div>
+                <div class="vocab-cluster">
+                    ${img}
+                    <div class="vocab-head">
+                        <div class="vocab-main">
+                            <p class="meaning" dir="ltr">${ctx.esc(item.meaning || '')}</p>
+                            ${pills(ctx, item)}
+                        </div>
                     </div>
                 </div>
                 <button type="button" class="linkish" data-action="toggle-reveal" data-id="${id}" data-direction="en_he" data-word="${ctx.esc(item.word)}" data-audio="${ctx.esc(item.audio || '')}">${ctx.bi('איך כותבים בעברית?', 'Show Hebrew')}</button>
                 <div class="reveal hidden" data-reveal="${id}">
-                    <div class="he-word" data-vowels="${ctx.esc(item.word)}">${ctx.esc(displayWord)}</div>
-                    ${ctx.speakButton(item.word, item.audio, 'Word')}
-                    ${item.trap ? `<p class="trap">${ctx.esc(item.trap)}</p>` : ''}
+                    <div class="vocab-head">
+                        <div class="vocab-main">
+                            ${heWordBtn(ctx, item, displayWord)}
+                        </div>
+                        ${ctx.speakButton(item.word, item.audio, 'Word')}
+                    </div>
                     <p class="sound hidden-until" dir="ltr">${ctx.esc(item.sound || '')}${item.translit ? ' · ' + ctx.esc(item.translit) : ''}</p>
                 </div>
                 ${markRow(ctx, id, mark, 'en_he')}
@@ -182,17 +227,19 @@
         return `
             <article class="vocab-card card${review ? ' review-first' : ''}" data-direction="he_en">
                 ${review ? `<span class="badge">${ctx.bi('לחזור קודם', 'Review first')}</span>` : ''}
-                <div class="vocab-head">
-                    <div>
-                        <div class="he-word" data-vowels="${ctx.esc(item.word)}">${ctx.esc(displayWord)}</div>
-                        <div class="pos">${ctx.esc(item.pos || '')}</div>
+                <div class="vocab-cluster">
+                    ${img}
+                    <div class="vocab-head">
+                        <div class="vocab-main">
+                            ${heWordBtn(ctx, item, displayWord)}
+                            ${pills(ctx, item)}
+                        </div>
+                        ${ctx.speakButton(item.word, item.audio, 'Word')}
                     </div>
-                    ${ctx.speakButton(item.word, item.audio, 'Word')}
                 </div>
                 <button type="button" class="linkish" data-action="toggle-reveal" data-id="${id}" data-direction="he_en">${ctx.bi('איך אומרים את זה?', 'Show pronunciation')}</button>
                 <div class="reveal hidden" data-reveal="${id}">
                     <p class="meaning">${ctx.esc(item.meaning || '')}</p>
-                    ${item.trap ? `<p class="trap">${ctx.esc(item.trap)}</p>` : ''}
                     <p class="sound hidden-until" dir="ltr">${ctx.esc(item.sound || '')}${item.translit ? ' · ' + ctx.esc(item.translit) : ''}</p>
                 </div>
                 ${markRow(ctx, id, mark, 'he_en')}

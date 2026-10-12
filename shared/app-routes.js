@@ -38,6 +38,7 @@
 
     var SPEECH_AND_WORD_DATA = [
         '/shared/player/speech.js',
+        '/shared/player/feedback.js',
         '/shared/word-audio-catalog.js',
         '/worksheets/_audio/words/catalog.js',
         '/worksheets/_review/vocab-index.js'
@@ -129,7 +130,7 @@
                 subHe: 'הספרייה שלכם — חיפוש, תגיות, והוספה.',
                 subEn: 'Your library — search, tags, and add.'
             },
-            scripts: ['/shared/player/speech.js', '/shared/words-page.js'],
+            scripts: ['/shared/player/speech.js', '/shared/player/feedback.js', '/shared/words-page.js'],
             view: 'HebrewWordsPage'
         },
         {

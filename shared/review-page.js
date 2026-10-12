@@ -1,8 +1,8 @@
 /**
- * Review screen: four-grade flashcards.
+ * Review screen: four-grade flashcards with calm recall + mastery summary.
  * Grades go to the server; never schedule in the browser.
  * Button intervals are the numbers on each card from GET /api/me/cards.
- * Authored-by-spec: INIT-006/SPEC-012
+ * Authored-by-spec: INIT-006/SPEC-012, INIT-007/SPEC-006
  */
 (function (root) {
     'use strict';
@@ -15,6 +15,7 @@
 
     var PREFS_KEY = 'hebrew-review-prefs:v1';
     var VOWELS_DEFAULT = true;
+    var DAY_MS = 24 * 60 * 60 * 1000;
     var PERSONAL = { self: true, ai: true, lesson: true };
     var NAMED_DECKS = [
         { id: 'due', he: 'להיום', en: 'Due' },
@@ -23,10 +24,10 @@
         { id: 'all', he: 'הכל', en: 'All' }
     ];
     var GRADE_LABELS = [
-        { grade: 1, he: 'שוב', en: 'Again' },
-        { grade: 2, he: 'קשה', en: 'Hard' },
-        { grade: 3, he: 'טוב', en: 'Good' },
-        { grade: 4, he: 'קל', en: 'Easy' }
+        { grade: 1, he: 'שוב', en: 'Again', signal: 'miss', family: 'miss' },
+        { grade: 2, he: 'קשה', en: 'Hard', signal: 'pass', family: 'miss' },
+        { grade: 3, he: 'טוב', en: 'Good', signal: 'pass', family: 'knew' },
+        { grade: 4, he: 'קל', en: 'Easy', signal: 'pass', family: 'knew' }
     ];
 
     var state = {
@@ -43,6 +44,8 @@
         grading: false,
         reviewed: 0,
         gradeCounts: { 1: 0, 2: 0, 3: 0, 4: 0 },
+        nextDueMs: null,
+        sessionNextDueMs: null,
         phase: 'loading',
         gen: 0,
         mountId: 0
@@ -187,6 +190,47 @@
             he: n === 1 ? '1 יום' : (n + ' ימים'),
             en: n === 1 ? '1 day' : (n + ' days')
         };
+    }
+
+    function noteNextDueMs(ms) {
+        var n = Number(ms);
+        if (!Number.isFinite(n) || n <= Date.now()) return;
+        if (state.nextDueMs == null || n < state.nextDueMs) state.nextDueMs = n;
+    }
+
+    function noteSessionNextDueMs(days) {
+        var n = Number(days);
+        if (!Number.isFinite(n) || n < 0) return;
+        var ms = Date.now() + Math.max(n, 0) * DAY_MS;
+        if (state.sessionNextDueMs == null || ms < state.sessionNextDueMs) {
+            state.sessionNextDueMs = ms;
+        }
+    }
+
+    function formatDueMs(ms) {
+        if (ms == null || !Number.isFinite(ms)) {
+            return { he: 'מחר בבוקר', en: 'tomorrow morning' };
+        }
+        var d = new Date(ms);
+        return {
+            he: d.toLocaleString('he-IL', {
+                weekday: 'long', month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            }),
+            en: d.toLocaleString('en-US', {
+                weekday: 'long', month: 'short', day: 'numeric',
+                hour: 'numeric', minute: '2-digit'
+            })
+        };
+    }
+
+    function appendNextDueLine(parent, ms) {
+        var line = el('p', 'fine review-next-due');
+        line.id = 'review-next-due';
+        var when = formatDueMs(ms);
+        biText(line, 'החזרה הבאה: ' + when.he, when.en);
+        parent.appendChild(line);
+        return line;
     }
 
     function lessonSlug(word) {
@@ -461,12 +505,7 @@
             return;
         }
         if (state.phase === 'empty') {
-            var empty = el('div', 'card review-empty');
-            empty.id = 'review-nothing-due';
-            var emptyTitle = el('h2');
-            biText(emptyTitle, 'אין כרטיסים בחפיסה', 'Nothing in this deck');
-            empty.appendChild(emptyTitle);
-            stage.appendChild(empty);
+            stage.appendChild(buildEmpty());
             return;
         }
         if (state.phase === 'summary') {
@@ -474,6 +513,29 @@
             return;
         }
         stage.appendChild(buildCard(current()));
+    }
+
+    function buildEmpty() {
+        var empty = el('div', 'card review-empty review-caught-up');
+        empty.id = 'review-nothing-due';
+        var emptyTitle = el('h2');
+        if (state.deck === 'due') {
+            biText(emptyTitle, 'הכול מעודכן!', 'All caught up!');
+            empty.appendChild(emptyTitle);
+            var emptyBody = el('p');
+            biText(emptyBody, 'אין מילים לחזרה כרגע', 'No words to review right now');
+            empty.appendChild(emptyBody);
+            appendNextDueLine(empty, state.nextDueMs);
+        } else {
+            biText(emptyTitle, 'אין כרטיסים בחפיסה', 'Nothing in this deck');
+            empty.appendChild(emptyTitle);
+        }
+        var home = el('a', 'btn btn-primary review-home');
+        home.href = '/';
+        home.id = 'review-back-today';
+        biText(home, 'בחזרה להיום', 'Back to Today');
+        empty.appendChild(home);
+        return empty;
     }
 
     function buildCard(card) {
@@ -485,7 +547,9 @@
         if (slug) wrap.setAttribute('data-lesson', slug);
         var progress = el('div', 'fine review-progress');
         progress.id = 'review-progress';
-        progress.textContent = (state.index + 1) + ' / ' + state.queue.length;
+        var n = state.index + 1;
+        var total = state.queue.length;
+        biText(progress, 'כרטיס ' + n + ' מתוך ' + total, 'Card ' + n + ' of ' + total);
         wrap.appendChild(progress);
         var dir = el('p', 'fine');
         var heEn = card.direction !== 'en_he';
@@ -534,7 +598,7 @@
     }
 
     function buildAnswer(card) {
-        var box = el('div', 'review-answer');
+        var box = el('div', 'review-answer review-answer-reveal');
         box.id = 'review-answer';
         var heEn = card.direction !== 'en_he';
         if (heEn) {
@@ -544,6 +608,9 @@
             gloss.lang = 'en';
             gloss.textContent = card.answer;
             box.appendChild(gloss);
+            // Hebrew was the prompt; keep listen available after reveal.
+            var promptAudio = audioButton(card.prompt, card.audio);
+            if (promptAudio) box.appendChild(promptAudio);
         } else {
             box.appendChild(hebrewNode(card.answer, 'review-answer-he'));
             var answerAudio = audioButton(card.answer, card.audio);
@@ -570,11 +637,13 @@
     }
 
     function gradeButton(card, item) {
-        var btn = el('button', 'btn review-grade');
+        var family = item.family === 'knew' ? 'knew' : 'miss';
+        var btn = el('button', 'btn review-grade review-grade-' + item.grade + ' review-grade-' + family);
         btn.type = 'button';
         btn.id = 'review-grade-' + item.grade;
         btn.setAttribute('data-action', 'grade');
         btn.setAttribute('data-grade', String(item.grade));
+        btn.setAttribute('data-signal', item.signal || (item.grade === 1 ? 'miss' : 'pass'));
         btn.setAttribute('aria-keyshortcuts', String(item.grade));
         var key = el('kbd', 'review-key');
         key.textContent = String(item.grade);
@@ -686,6 +755,7 @@
         if (Sync && typeof Sync.queueSignal === 'function') Sync.queueSignal(signal);
         state.reviewed += 1;
         state.gradeCounts[grade] += 1;
+        if (grade > 1) noteSessionNextDueMs(intervalDays(card, grade));
         if (grade === 1 && !card.replayed) {
             state.queue.push({
                 word: card.word,
@@ -709,11 +779,15 @@
     }
 
     function buildSummary() {
-        var box = el('div', 'card review-summary');
+        var box = el('div', 'card review-summary mastery-ceremony complete-ceremony');
         box.id = 'review-finished';
         var title = el('h2');
-        biText(title, 'סיימנו', 'Done for now');
+        title.id = 'review-summary-title';
+        biText(title, 'סיבוב הושלם', 'Round Completed!');
         box.appendChild(title);
+        var lead = el('p', 'review-summary-lead');
+        biText(lead, 'מילים שתרגלתם עכשיו', 'Words you practiced now');
+        box.appendChild(lead);
         var list = el('ul', 'review-stats');
         var reviewed = el('li');
         biText(reviewed, 'נבדקו', 'Reviewed');
@@ -723,6 +797,16 @@
         reviewedN.textContent = String(state.reviewed);
         reviewed.appendChild(reviewedN);
         list.appendChild(reviewed);
+        var mastered = el('li');
+        biText(mastered, 'ידעתי / טוב וקל', 'Knew · Good & Easy');
+        mastered.appendChild(root.document.createTextNode(': '));
+        var masteredN = el('strong');
+        masteredN.id = 'review-count-knew';
+        masteredN.textContent = String(
+            (state.gradeCounts[3] || 0) + (state.gradeCounts[4] || 0)
+        );
+        mastered.appendChild(masteredN);
+        list.appendChild(mastered);
         GRADE_LABELS.forEach(function (item) {
             var row = el('li');
             biText(row, item.he, item.en);
@@ -734,6 +818,20 @@
             list.appendChild(row);
         });
         box.appendChild(list);
+        appendNextDueLine(box, state.sessionNextDueMs != null ? state.sessionNextDueMs : state.nextDueMs);
+        var actions = el('div', 'review-summary-actions path-actions');
+        var home = el('a', 'btn btn-primary review-home');
+        home.href = '/';
+        home.id = 'review-back-today';
+        biText(home, 'בחזרה להיום', 'Back to Today');
+        actions.appendChild(home);
+        var again = el('button', 'btn btn-again');
+        again.type = 'button';
+        again.id = 'review-practice-again';
+        again.setAttribute('data-action', 'again-deck');
+        biText(again, 'עוד סיבוב', 'Practice again');
+        actions.appendChild(again);
+        box.appendChild(actions);
         return box;
     }
 
@@ -758,6 +856,10 @@
         }
         if (action === 'grade') {
             commitGrade(Number(btn.getAttribute('data-grade')));
+            return;
+        }
+        if (action === 'again-deck') {
+            openDeck(state.deck || 'due');
         }
     }
 
@@ -850,7 +952,14 @@
             words.forEach(function (row) {
                 if (!row || row.word == null) return;
                 state.sourcesByWord[String(row.word)] = Array.isArray(row.sources) ? row.sources.map(String) : [];
+                ['he_en', 'en_he'].forEach(function (dir) {
+                    var days = row[dir] && row[dir].due_in_days;
+                    var n = Number(days);
+                    if (!Number.isFinite(n) || n <= 0) return;
+                    noteNextDueMs(Date.now() + n * DAY_MS);
+                });
             });
+            if (state.phase === 'empty') renderStage();
         }).catch(function () { /* vocab-index lessons remain the fallback slug */ });
         client.get('/api/grammar/concepts', { redirectOn401: false }).then(function (res) {
             if (mountId !== state.mountId) return;
@@ -896,6 +1005,7 @@
         state.grading = false;
         state.reviewed = 0;
         state.gradeCounts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+        state.sessionNextDueMs = null;
     }
 
     function openDeck(deck) {

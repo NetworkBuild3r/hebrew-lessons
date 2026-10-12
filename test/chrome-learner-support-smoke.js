@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
- * Headless Chrome smoke: match pairs, Type it hints, story questions toggle.
+ * Headless Chrome smoke: match pairs, Type it hints, story questions toggle,
+ * story read-aloud highlight, audio play trigger, and mastery ceremony
+ * (INIT-007/SPEC-007 ac-4 full my-morning walkthrough pieces).
  * Sign-in first (INIT-002/SPEC-012). Ephemeral port via signed-in-server.
  *
  *   node test/chrome-learner-support-smoke.js
@@ -433,8 +435,133 @@ async function main() {
         assert.equal(t.passHasNext, false, 'a correct answer does not wait');
         assert.notEqual(t.pill4, t.pill3, 'a correct answer advances by itself');
 
+        // ---- Audio play trigger + story read-aloud highlight (SPEC-007 ac-4) ----
+        assert.equal(await openStep('#step-1'), 'words');
+        result.audioPlay = await evaluate(`(() => {
+            const plays = [];
+            const speech = window.HebrewSpeech;
+            const realPlay = speech.play;
+            speech.play = function (text, url) { plays.push({ text: text || '', url: url || '' }); };
+            const speak = document.querySelector('[data-speak], .icon-btn[data-speak], button[data-speak]');
+            if (!speak) {
+                speech.play = realPlay;
+                return { ok: false, reason: 'no speak control' };
+            }
+            speak.click();
+            const out = {
+                ok: plays.length >= 1,
+                plays: plays.length,
+                text: plays[0] && plays[0].text,
+                control: speak.getAttribute('data-speak') || speak.className
+            };
+            speech.play = realPlay;
+            return out;
+        })()`);
+        assert.equal(result.audioPlay.ok, true, 'audio play trigger fires HebrewSpeech.play');
+
+        assert.equal(await openStep('#step-4'), 'story');
+        result.storyRead = await evaluate(`(async () => {
+            const sleep = ms => new Promise(r => setTimeout(r, ms));
+            const follow = document.getElementById('follow-along');
+            if (follow && !follow.checked) {
+                follow.checked = true;
+                follow.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            const lines = () => Array.from(document.querySelectorAll('.story-body p'));
+            const Speech = window.HebrewSpeech;
+            // Drive highlight without real TTS / ElevenLabs.
+            if (!Speech.story) Speech.story = {};
+            Speech.story.index = 0;
+            Speech.story.lines = lines().map(p => p.textContent || '');
+            lines().forEach(p => p.classList.remove('reading-now'));
+            if (lines()[0]) lines()[0].classList.add('reading-now');
+            await sleep(50);
+            const highlighted = document.querySelectorAll('.story-body p.reading-now').length;
+            const playBtn = document.getElementById('story-play');
+            return {
+                followOn: !!(follow && follow.checked),
+                highlighted,
+                hasPlay: !!playBtn,
+                playLabel: playBtn ? playBtn.textContent : ''
+            };
+        })()`);
+        assert.equal(result.storyRead.followOn, true, 'follow-along enabled');
+        assert.equal(result.storyRead.highlighted, 1, 'story read-aloud highlight present');
+        assert.equal(result.storyRead.hasPlay, true, 'story Read aloud control present');
+
+        // ---- Round completion / mastery ceremony (seed full lesson progress) ----
+        const stepCount = await evaluate('((window.WORKSHEET.activities || []).length)');
+        const completedSteps = {};
+        for (let i = 0; i < stepCount; i += 1) completedSteps[String(i)] = true;
+        const cookie = harness.cookieFor('learner');
+        const prior = await fetch(BASE + '/api/lessons/my-morning/progress', {
+            headers: { Cookie: cookie, Origin: BASE }
+        });
+        const priorJson = prior.ok ? await prior.json() : { rev: 0 };
+        const masterySeed = await fetch(BASE + '/api/lessons/my-morning/progress', {
+            method: 'PUT',
+            headers: {
+                Cookie: cookie,
+                'Content-Type': 'application/json',
+                Origin: BASE
+            },
+            body: JSON.stringify({
+                state: {
+                    lesson: 'my-morning',
+                    round: 1,
+                    completedRounds: 0,
+                    roundStartedAt: Date.now() - 60000,
+                    wordMarks: {},
+                    missedLast: [],
+                    vowelsOn: true,
+                    stepIndex: -1,
+                    completedSteps,
+                    activityState: {}
+                },
+                rev: Number.isFinite(Number(priorJson.rev)) ? Number(priorJson.rev) : 0
+            })
+        });
+        if (!masterySeed.ok) {
+            throw new Error('mastery seed failed: ' + masterySeed.status + ' ' + await masterySeed.text());
+        }
+
+        await session.call('Page.navigate', { url: BASE + '/worksheets/my-morning/index.html' });
+        await sleep(2000);
+        result.mastery = await evaluate(`(() => new Promise((resolve, reject) => {
+            const deadline = Date.now() + 12000;
+            const wait = () => {
+                const ceremony = document.getElementById('mastery-ceremony');
+                const back = document.getElementById('mastery-back-today');
+                if (ceremony) {
+                    return resolve({
+                        present: true,
+                        wordsMet: !!(document.getElementById('mastery-words-met')),
+                        stepsDone: (document.getElementById('mastery-steps-done') || {}).textContent || '',
+                        backHref: back ? back.getAttribute('href') : null
+                    });
+                }
+                if (Date.now() > deadline) {
+                    return reject(new Error('mastery ceremony missing: ' + ((document.body && document.body.innerText) || '').slice(0, 240)));
+                }
+                setTimeout(wait, 150);
+            };
+            wait();
+        }))()`);
+        assert.equal(result.mastery.present, true, 'mastery ceremony after full round');
+        assert.equal(result.mastery.wordsMet, true, 'mastery words-met present');
+        assert.equal(result.mastery.backHref, '/', 'mastery Back to Today');
+        assert.equal(String(result.mastery.stepsDone), String(stepCount), 'all steps marked done');
+
         session.close();
-        console.log(JSON.stringify({ ok: true, match: m.rows.length + ' pairs coloured', story: s, typeIt: 'ok' }, null, 2));
+        console.log(JSON.stringify({
+            ok: true,
+            match: m.rows.length + ' pairs coloured',
+            story: s,
+            typeIt: 'ok',
+            audioPlay: result.audioPlay.plays,
+            storyRead: result.storyRead.highlighted,
+            mastery: 'ok'
+        }, null, 2));
     } finally {
         chrome.kill();
         try { fs.rmSync(userData, { recursive: true, force: true }); } catch (err) { /* ignore */ }

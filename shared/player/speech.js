@@ -6,8 +6,63 @@
         story: { run: 0, status: 'idle', index: 0, utterance: null, clips: [] },
         clipsExact: Object.create(null),
         clipsStripped: Object.create(null),
-        audioEl: null
+        audioEl: null,
+        /** @type {{ status: string, el: Element|null }} */
+        playback: { status: 'idle', el: null },
+        _playingEl: null,
+        _lastClip: null
     };
+
+    function resolvePlayEl(elOrOpts) {
+        if (!elOrOpts) return null;
+        if (elOrOpts.nodeType === 1) return elOrOpts;
+        if (elOrOpts.el && elOrOpts.el.nodeType === 1) return elOrOpts.el;
+        if (elOrOpts.button && elOrOpts.button.nodeType === 1) return elOrOpts.button;
+        return null;
+    }
+
+    function notifyFeedback(active) {
+        const fb = root.HebrewFeedback;
+        if (fb && typeof fb.setSpeechActive === 'function') fb.setSpeechActive(!!active);
+    }
+
+    function dispatchPlayback(status, el) {
+        speech.playback = { status: status || 'idle', el: el || null };
+        notifyFeedback(status === 'loading' || status === 'playing');
+        if (typeof root.CustomEvent === 'function' && typeof root.dispatchEvent === 'function') {
+            try {
+                root.dispatchEvent(new root.CustomEvent('hebrew-speech-playback', {
+                    detail: { status: speech.playback.status, el: speech.playback.el }
+                }));
+            } catch (err) { /* ignore */ }
+        }
+    }
+
+    function clearPlayingClasses(el) {
+        const target = el || speech._playingEl;
+        if (target && target.classList) {
+            target.classList.remove('is-loading', 'is-playing');
+        }
+        if (!el || el === speech._playingEl) speech._playingEl = null;
+    }
+
+    function setPlaybackUi(status, el) {
+        if (speech._playingEl && speech._playingEl !== el) clearPlayingClasses(speech._playingEl);
+        if (el && el.classList) {
+            speech._playingEl = el;
+            el.classList.toggle('is-loading', status === 'loading');
+            el.classList.toggle('is-playing', status === 'playing');
+        } else if (status === 'idle' || status === 'error') {
+            clearPlayingClasses();
+        }
+        dispatchPlayback(status, el || null);
+    }
+
+    function endPlayback(status) {
+        const el = speech._playingEl;
+        clearPlayingClasses(el);
+        dispatchPlayback(status || 'idle', null);
+    }
 
     function normalizeKey(text) {
         return String(text || '').normalize('NFC').replace(/\s+/g, ' ').trim();
@@ -54,6 +109,7 @@
             audio.removeAttribute('src');
             audio.load();
         } catch (err) { /* ignore */ }
+        endPlayback('idle');
     }
 
     function pickHebrewVoice() {
@@ -93,10 +149,16 @@
         root.setTimeout(finish, 500);
     }
 
-    function speakTts(text) {
-        if (!('speechSynthesis' in root) || !text) return;
+    function speakTts(text, el) {
+        if (!('speechSynthesis' in root) || !text) {
+            endPlayback('error');
+            return;
+        }
         whenVoicesReady(() => {
             const utterance = buildUtterance(text);
+            utterance.onend = () => endPlayback('idle');
+            utterance.onerror = () => endPlayback('error');
+            setPlaybackUi('playing', el || speech._playingEl);
             root.speechSynthesis.cancel();
             root.setTimeout(() => root.speechSynthesis.speak(utterance), 60);
         });
@@ -133,17 +195,24 @@
         return speech.clipsStripped[stripped] || '';
     };
 
-    speech.play = function (text, url) {
+    /**
+     * Play a clip (or TTS fallback). Optional third arg is the associated
+     * button/container Element, or `{ el }` / `{ button }`, so UI can show
+     * loading/playing classes.
+     */
+    speech.play = function (text, url, elOrOpts) {
+        const el = resolvePlayEl(elOrOpts);
         const clip = url || speech.clipFor(text);
         speech.stopStory();
         if ('speechSynthesis' in root) root.speechSynthesis.cancel();
+        speech._lastClip = { text: text || '', url: clip || '', el: el || null };
         if (!clip) {
-            speakTts(text);
+            speakTts(text, el);
             return;
         }
         const audio = sharedAudio();
         if (!audio) {
-            speakTts(text);
+            speakTts(text, el);
             return;
         }
         const resolved = resolveAudioUrl(clip);
@@ -151,36 +220,62 @@
         const fallback = () => {
             if (settled) return;
             settled = true;
-            speakTts(text);
+            speakTts(text, el);
         };
-        audio.onended = null;
-        audio.onerror = () => fallback();
+        setPlaybackUi('loading', el);
+        audio.onended = () => endPlayback('idle');
+        audio.onerror = () => {
+            endPlayback('error');
+            fallback();
+        };
         try {
             audio.pause();
         } catch (err) { /* ignore */ }
         audio.src = resolved;
         const started = audio.play();
         if (started && typeof started.then === 'function') {
-            started.then(() => { settled = true; }).catch(() => fallback());
+            started.then(() => {
+                settled = true;
+                setPlaybackUi('playing', el);
+            }).catch(() => {
+                endPlayback('error');
+                fallback();
+            });
         } else {
             settled = true;
+            setPlaybackUi('playing', el);
         }
     };
 
-    speech.speak = function (text) {
+    /** Alias used by feedback kit / ADR-0010 callers; same as play with an element hook. */
+    speech.playClip = function (text, url, el) {
+        return speech.play(text, url, el);
+    };
+
+    speech.replayLast = function () {
+        const last = speech._lastClip;
+        if (!last || (!last.text && !last.url)) return false;
+        speech.play(last.text, last.url || null, last.el || null);
+        return true;
+    };
+
+    speech.speak = function (text, elOrOpts) {
         if (!text) return;
+        const el = resolvePlayEl(elOrOpts);
         const clip = speech.clipFor(text);
         if (clip) {
-            speech.play(text, clip);
+            speech.play(text, clip, el);
             return;
         }
         speech.stopStory();
-        speakTts(text);
+        speech._lastClip = { text: text || '', url: '', el: el || null };
+        speakTts(text, el);
     };
 
     speech.silence = function () {
         speech.stopStory();
         if ('speechSynthesis' in root) root.speechSynthesis.cancel();
+        endPlayback('idle');
     };
 
     /** Stop every sound: story, TTS, and the shared clip player. The router calls this on navigation. */
@@ -219,6 +314,7 @@
         speech.story.clips = Array.isArray(clips) ? clips.slice() : [];
         stopSharedAudio();
         if ('speechSynthesis' in root) root.speechSynthesis.cancel();
+        notifyFeedback(true);
         if (typeof speech.onStoryPaint === 'function') speech.onStoryPaint();
         readLine(run, list);
     };
@@ -230,6 +326,7 @@
             speech.story.index = 0;
             speech.story.utterance = null;
             stopSharedAudio();
+            notifyFeedback(false);
             if (typeof speech.onStoryPaint === 'function') speech.onStoryPaint();
             return;
         }

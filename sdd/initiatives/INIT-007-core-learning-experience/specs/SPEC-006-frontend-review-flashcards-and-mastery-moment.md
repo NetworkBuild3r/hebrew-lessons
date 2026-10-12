@@ -7,7 +7,7 @@ spec_id: SPEC-006
 initiative_id: INIT-007
 title: "Review flashcards and session completion mastery moment"
 domain: frontend
-status: ready
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet
@@ -57,19 +57,19 @@ This spec implements the review player and completion moments:
 
 ## Understood
 
-- [ ] und-1: No gamified streaks, leaderboards, experience points, or confetti animations (RSCH-006 Rule 14 / operator constraint).
-- [ ] und-2: Completion must focus on competence: words learned, items completed, and next due schedule.
-- [ ] und-3: Review page DOM hooks for test coverage must be preserved.
+- [x] und-1: No gamified streaks, leaderboards, experience points, or confetti animations (RSCH-006 Rule 14 / operator constraint).
+- [x] und-2: Completion must focus on competence: words learned, items completed, and next due schedule.
+- [x] und-3: Review page DOM hooks for test coverage must be preserved.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] ac-1: On `/review/`, active recall cards display prompt text with hidden answer until reveal action is triggered, keeping `data-signal` hooks intact.
-- [ ] ac-2: Review action buttons (Knew / Missed) have min-height 48px and distinct, high-contrast visual styles.
-- [ ] ac-3: When all review items are finished, the view displays the completion summary showing total words reviewed and the timestamp of the next due word.
-- [ ] ac-4: At the end of a lesson worksheet, the final step presents the completion ceremony with total words met, round summary, and primary button returning to Today (`/`).
-- [ ] ac-5: No element in the review or completion view contains the words "streak", "points", "xp", or "leaderboard".
+- [x] ac-1: On `/review/`, active recall cards display prompt text with hidden answer until reveal action is triggered, keeping `data-signal` hooks intact.
+- [x] ac-2: Review action buttons (Knew / Missed) have min-height 48px and distinct, high-contrast visual styles.
+- [x] ac-3: When all review items are finished, the view displays the completion summary showing total words reviewed and the timestamp of the next due word.
+- [x] ac-4: At the end of a lesson worksheet, the final step presents the completion ceremony with total words met, round summary, and primary button returning to Today (`/`).
+- [x] ac-5: No element in the review or completion view contains the words "streak", "points", "xp", or "leaderboard".
 
 ---
 

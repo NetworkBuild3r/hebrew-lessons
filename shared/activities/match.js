@@ -84,7 +84,10 @@
                     el.classList.remove('selected');
                     el.classList.add('wrong');
                 });
-                setTimeout(() => wrong.forEach(el => el.classList.remove('wrong')), 450);
+                const Feedback = typeof window !== 'undefined' ? window.HebrewFeedback : null;
+                if (Feedback && typeof Feedback.chime === 'function') Feedback.chime('miss');
+                // 120ms shake (CSS); clear after a brief flash so the next tap is never blocked.
+                setTimeout(() => wrong.forEach(el => el.classList.remove('wrong')), 180);
             }
             root._match.selectedHe = null;
             root._match.selectedEn = null;
@@ -117,13 +120,23 @@
             ctx.Speech.play(item.word, item.audio || null);
         }
 
+        const Feedback = typeof window !== 'undefined' ? window.HebrewFeedback : null;
+        if (Feedback && typeof Feedback.chime === 'function') Feedback.chime('correct');
+
         if (root._match.matched.size === items.length) {
             const grid = root.querySelector('#match-grid');
             if (grid) grid.classList.add('hidden');
             const fb = root.querySelector('#match-feedback');
             if (fb) {
-                fb.classList.remove('hidden');
-                fb.textContent = 'כל הזוגות! (All matched!)';
+                if (Feedback && typeof Feedback.showCorrect === 'function') {
+                    Feedback.showCorrect(fb, {
+                        messageHe: 'כל הזוגות!',
+                        messageEn: 'All matched!'
+                    });
+                } else {
+                    fb.classList.remove('hidden');
+                    fb.textContent = 'כל הזוגות! (All matched!)';
+                }
             }
             ctx.markComplete(ctx.stepIndex);
         }
@@ -144,6 +157,7 @@
             <span class="pair-num" aria-hidden="true">${index + 1}</span>
             <span class="pair-en" dir="ltr">${ctx.esc(item.meaning)}</span>
             <span class="pair-he" dir="rtl" lang="he">${ctx.esc(item.word)}</span>
+            <span class="pair-check" aria-hidden="true">✓</span>
             ${ctx.speakButton(item.word, item.audio, 'Word')}
         </li>`;
     }
