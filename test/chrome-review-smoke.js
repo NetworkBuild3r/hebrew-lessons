@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * Headless Chrome smoke: Review — answer stays out of the DOM until reveal,
- * lexicon text is text (not markup), four grade buttons exist.
- * Authored-by-spec: INIT-006/SPEC-012
+ * lexicon text is text (not markup), four grade buttons exist, then Knew/Missed
+ * grading completes the session (INIT-007/SPEC-007 ac-4).
+ * Authored-by-spec: INIT-006/SPEC-012 · INIT-007/SPEC-007
  *   node test/chrome-review-smoke.js
  */
 'use strict';
@@ -120,41 +121,65 @@ async function main() {
         const value = await cdp(page.webSocketDebuggerUrl, 'Runtime.evaluate', {
             awaitPromise: true,
             returnByValue: true,
-            expression: `(() => new Promise((resolve, reject) => {
+            expression: `(async () => {
+                const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
                 const deadline = Date.now() + 12000;
-                const wait = () => {
+                let card = null;
+                while (Date.now() < deadline) {
                     const main = document.getElementById('app-main');
-                    const card = document.getElementById('review-card');
-                    if (!main || main.getAttribute('data-route-ready') !== 'review' || !card) {
-                        if (Date.now() > deadline) {
-                            return reject(new Error('review card missing: ' + ((document.body && document.body.innerText) || '').slice(0, 240)));
-                        }
-                        setTimeout(wait, 100);
-                        return;
-                    }
-                    const show = document.getElementById('review-show-answer');
-                    if (!show) return reject(new Error('show answer missing'));
-                    if (document.getElementById('review-answer')) return reject(new Error('answer node before reveal'));
-                    show.click();
-                    const answer = document.getElementById('review-answer');
-                    const meaning = document.getElementById('review-answer-meaning')
-                        || document.getElementById('review-answer-he');
-                    const grades = ['1', '2', '3', '4'].map((g) => document.getElementById('review-grade-' + g));
-                    resolve({
-                        answerVisible: !!(answer && answer.textContent),
-                        meaningHtml: meaning ? meaning.innerHTML : '',
-                        meaningText: meaning ? meaning.textContent : '',
-                        meaningChildren: meaning ? meaning.children.length : -1,
-                        xssFired: !!window.__xss,
-                        gradeCount: grades.filter(Boolean).length,
-                        intervals: grades.map((btn) => btn && btn.querySelector('[data-days]') ? btn.querySelector('[data-days]').getAttribute('data-days') : ''),
-                        bilingualShow: /Show answer|הצג תשובה/.test(show.textContent || ''),
-                        key: card.getAttribute('data-key'),
-                        direction: card.getAttribute('data-direction')
-                    });
+                    card = document.getElementById('review-card');
+                    if (main && main.getAttribute('data-route-ready') === 'review' && card) break;
+                    await sleep(100);
+                }
+                if (!card) {
+                    throw new Error('review card missing: ' + ((document.body && document.body.innerText) || '').slice(0, 240));
+                }
+                const show = document.getElementById('review-show-answer');
+                if (!show) throw new Error('show answer missing');
+                if (document.getElementById('review-answer')) throw new Error('answer node before reveal');
+                show.click();
+                const answer = document.getElementById('review-answer');
+                const meaning = document.getElementById('review-answer-meaning')
+                    || document.getElementById('review-answer-he');
+                const grades = ['1', '2', '3', '4'].map((g) => document.getElementById('review-grade-' + g));
+                const first = {
+                    answerVisible: !!(answer && answer.textContent),
+                    meaningHtml: meaning ? meaning.innerHTML : '',
+                    meaningText: meaning ? meaning.textContent : '',
+                    meaningChildren: meaning ? meaning.children.length : -1,
+                    xssFired: !!window.__xss,
+                    gradeCount: grades.filter(Boolean).length,
+                    intervals: grades.map((btn) => btn && btn.querySelector('[data-days]') ? btn.querySelector('[data-days]').getAttribute('data-days') : ''),
+                    bilingualShow: /Show answer|הצג תשובה/.test(show.textContent || ''),
+                    key: card.getAttribute('data-key'),
+                    direction: card.getAttribute('data-direction'),
+                    missedSignal: !!(grades[0] && grades[0].getAttribute('data-signal') === 'miss'),
+                    knewSignal: !!(grades[2] && grades[2].getAttribute('data-signal') === 'pass')
                 };
-                wait();
-            }))()`
+
+                // Complete the session: reveal + Easy (4) until summary.
+                let graded = 0;
+                const gradeDeadline = Date.now() + 20000;
+                while (!document.getElementById('review-finished') && Date.now() < gradeDeadline) {
+                    const reveal = document.getElementById('review-show-answer');
+                    if (reveal) reveal.click();
+                    await sleep(80);
+                    const easy = document.getElementById('review-grade-4');
+                    if (!easy) break;
+                    easy.click();
+                    graded += 1;
+                    await sleep(120);
+                }
+                const finished = document.getElementById('review-finished');
+                return Object.assign(first, {
+                    graded,
+                    sessionComplete: !!finished,
+                    reviewedCount: (document.getElementById('review-count-reviewed') || {}).textContent || '',
+                    backToday: document.getElementById('review-back-today')
+                        ? document.getElementById('review-back-today').getAttribute('href')
+                        : null
+                });
+            })()`
         });
         if (value.exceptionDetails) {
             const ex = value.exceptionDetails.exception;
@@ -170,6 +195,10 @@ async function main() {
         if (report.gradeCount !== 4) throw new Error('expected four grade buttons');
         if (report.intervals.filter(Boolean).length !== 4) throw new Error('expected four interval labels');
         if (!report.bilingualShow) throw new Error('Show answer label not bilingual');
+        if (!report.missedSignal || !report.knewSignal) throw new Error('grade data-signal miss/pass missing');
+        if (!report.sessionComplete) throw new Error('review session did not reach #review-finished');
+        if (!(Number(report.reviewedCount) >= 1)) throw new Error('reviewed count missing');
+        if (report.backToday !== '/') throw new Error('Back to Today href');
         console.log(JSON.stringify({ ok: true, ...report }, null, 2));
     } finally {
         chrome.kill();

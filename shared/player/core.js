@@ -133,7 +133,7 @@
             toggleRecording,
             playRecording,
             silence: () => Speech.silence(),
-            requestRender: () => showStep(stepIndex, false)
+            requestRender: () => showStep(stepIndex, { quiet: true })
         };
 
         loadSharedWordAudio(() => {
@@ -248,25 +248,34 @@
         }
 
         function shellHtml() {
-            // Shared app shell mounts above .player-top; Home lives there (SPEC-012).
+            // Shared app shell mounts above .player-top; Home lives there (ADR-0007 / SPEC-012).
+            // Do not put .back-link Home in .player-top — chrome smokes assert it is absent.
             return `
             <div class="player" id="player">
                 <div id="app-shell"></div>
                 <header class="player-top">
                     <div class="player-top-inner player-top-inner--no-home">
-                        <div class="player-title">
-                            <h1>${U.escapeHtml(ws.title || '')}</h1>
-                            ${ws.subtitle ? `<p class="subtitle">${U.escapeHtml(ws.subtitle)}</p>` : ''}
+                        <div class="player-top-start" id="player-exit-slot"></div>
+                        <div class="player-top-center">
+                            <p class="step-indicator" id="step-indicator"></p>
+                            <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="התקדמות בשיעור (Lesson progress)">
+                                <div class="progress-fill" id="progress-fill"></div>
+                            </div>
                         </div>
-                        <button type="button" class="btn btn-again" data-action="again">
-                            ${U.icon('rotate-right')}
-                            <span>${U.bi('עוד סיבוב', 'Practice again')}</span>
-                        </button>
+                        <div class="player-top-end">
+                            <button type="button" class="btn btn-vowels" id="btn-vowels" data-action="toggle-vowels" aria-pressed="true">
+                                <span id="btn-vowels-label"></span>
+                            </button>
+                        </div>
                     </div>
-                    <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progress-fill"></div></div>
+                    <div class="player-title" id="player-title">
+                        <h1>${U.escapeHtml(ws.title || '')}</h1>
+                        ${ws.subtitle ? `<p class="subtitle">${U.escapeHtml(ws.subtitle)}</p>` : ''}
+                    </div>
                     <p class="round-bar"><strong id="round-count"></strong> <span id="round-note"></span></p>
                     <p class="round-bar round-due" id="round-due"></p>
                 </header>
+                <div id="player-step-announce" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
                 <main class="player-main" id="player-main"></main>
                 <div class="action-bar hidden" id="action-bar">
                     <div class="action-bar-inner" id="action-bar-inner"></div>
@@ -340,6 +349,14 @@
             const action = event.target.closest('[data-action]');
             if (action) {
                 const name = action.dataset.action;
+                if (name === 'toggle-vowels') {
+                    // Shell owns vowelsOn; quiet re-render keeps activity UI in sync (story/words).
+                    vowelsOn = !vowelsOn;
+                    paintVowelsBtn();
+                    saveLocalProgress();
+                    if (stepIndex >= 0) showStep(stepIndex, { quiet: true });
+                    return;
+                }
                 if (name === 'again') startNextRound();
                 if (name === 'go-path') goPath();
                 if (name === 'go-step') goStep(Number(action.dataset.step));
@@ -371,6 +388,97 @@
             saveLocalProgress();
         }
 
+        function paintVowelsBtn() {
+            const btn = document.getElementById('btn-vowels');
+            const label = document.getElementById('btn-vowels-label');
+            if (!btn || !label) return;
+            btn.setAttribute('aria-pressed', vowelsOn ? 'true' : 'false');
+            btn.classList.toggle('is-on', vowelsOn);
+            label.innerHTML = vowelsOn
+                ? U.bi('ניקוד', 'Vowels')
+                : U.bi('בלי ניקוד', 'No vowels');
+        }
+
+        function paintExitSlot() {
+            const slot = document.getElementById('player-exit-slot');
+            if (!slot) return;
+            if (stepIndex < 0) {
+                // Lessons exit — not .back-link (Home stays in app shell).
+                slot.innerHTML = `<a class="player-exit" href="/lessons/">${U.icon('list')} <span>${U.bi('שיעורים', 'Lessons')}</span></a>`;
+                return;
+            }
+            slot.innerHTML = `<button type="button" class="player-exit" data-action="go-path">${U.icon('list')} <span>${U.bi('מסלול', 'Path')}</span></button>`;
+        }
+
+        function paintStepChrome() {
+            const indicator = document.getElementById('step-indicator');
+            const title = document.getElementById('player-title');
+            const total = Math.max(resolved.steps.length, 1);
+            if (indicator) {
+                if (stepIndex < 0) {
+                    indicator.textContent = U.bi('מסלול השיעור', 'Lesson path');
+                } else {
+                    indicator.textContent = 'שלב ' + (stepIndex + 1) + ' מתוך ' + total
+                        + ' · Step ' + (stepIndex + 1) + ' of ' + total;
+                }
+            }
+            if (title) title.classList.toggle('hidden', stepIndex >= 0);
+            paintExitSlot();
+            paintVowelsBtn();
+        }
+
+        function progressPercent() {
+            const total = Math.max(resolved.steps.length, 1);
+            const done = stepIndex < 0
+                ? Object.keys(completedSteps).length
+                : Math.max(stepIndex + 1, Object.keys(completedSteps).length);
+            return Math.min(100, Math.round((done / total) * 100));
+        }
+
+        function scrollPlayerToTop() {
+            try {
+                const main = document.getElementById('player-main');
+                if (main && typeof main.scrollIntoView === 'function') {
+                    main.scrollIntoView({ block: 'start' });
+                }
+                window.scrollTo(0, 0);
+                if (document.documentElement) document.documentElement.scrollTop = 0;
+                if (document.body) document.body.scrollTop = 0;
+            } catch (err) { /* fail-soft */ }
+        }
+
+        function announceStep(index) {
+            const live = document.getElementById('player-step-announce');
+            if (!live) return;
+            const total = Math.max(resolved.steps.length, 1);
+            if (index < 0) {
+                live.textContent = U.bi('מסלול השיעור', 'Lesson path');
+                return;
+            }
+            const step = resolved.steps[index];
+            const label = (step && (step.labelHe || step.labelEn)) || '';
+            live.textContent = 'שלב ' + (index + 1) + ' מתוך ' + total
+                + (label ? ': ' + label : '')
+                + '. Step ' + (index + 1) + ' of ' + total
+                + (step && step.labelEn ? ': ' + step.labelEn : '');
+        }
+
+        function prefersReducedMotion() {
+            try {
+                return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+            } catch (err) {
+                return false;
+            }
+        }
+
+        function playStepEnter(screen) {
+            if (!screen || prefersReducedMotion()) return;
+            screen.classList.remove('step-enter');
+            // Force reflow so re-adding the class retriggers the ≤150ms animation.
+            void screen.offsetWidth;
+            screen.classList.add('step-enter');
+        }
+
         function paintRound() {
             const count = document.getElementById('round-count');
             const note = document.getElementById('round-note');
@@ -395,12 +503,12 @@
                     }
                 }
             }
+            const pct = progressPercent();
             const fill = document.getElementById('progress-fill');
-            if (fill) {
-                const total = Math.max(resolved.steps.length, 1);
-                const done = stepIndex < 0 ? Object.keys(completedSteps).length : Math.max(stepIndex, Object.keys(completedSteps).length);
-                fill.style.width = Math.min(100, Math.round((done / total) * 100)) + '%';
-            }
+            if (fill) fill.style.width = pct + '%';
+            const track = document.querySelector('.player-top .progress-track');
+            if (track) track.setAttribute('aria-valuenow', String(pct));
+            paintStepChrome();
         }
 
         function setActionBar(html) {
@@ -455,6 +563,54 @@
             showStep(index, fromNav);
         }
 
+        function wordsMetCount() {
+            const marked = Object.keys(wordMarks || {}).length;
+            if (marked > 0) return marked;
+            const items = (ws.vocab && Array.isArray(ws.vocab.items)) ? ws.vocab.items : [];
+            return items.length;
+        }
+
+        function nextReviewHintHtml() {
+            if (!roundStartedAt) {
+                return U.bi('החזרה הבאה: מחר בבוקר', 'Next review: tomorrow morning');
+            }
+            const when = roundStartedAt + DAY_MS;
+            if (Date.now() >= when) {
+                return U.bi('מוכן לחזרה עכשיו', 'Ready to review now');
+            }
+            const he = new Date(when).toLocaleString('he-IL', {
+                weekday: 'long', hour: '2-digit', minute: '2-digit'
+            });
+            const en = new Date(when).toLocaleString('en-US', {
+                weekday: 'long', hour: 'numeric', minute: '2-digit'
+            });
+            return U.bi('החזרה הבאה: ' + he, 'Next review: ' + en);
+        }
+
+        function masteryCeremonyHtml() {
+            const met = wordsMetCount();
+            const stepsDone = Object.keys(completedSteps).filter((k) => completedSteps[k]).length;
+            const totalSteps = Math.max(resolved.steps.length, 1);
+            return `
+                <section class="path-screen card mastery-ceremony complete-ceremony" id="mastery-ceremony" data-round-complete="1">
+                    <h2>${U.bi('סיבוב הושלם', 'Round Completed!')}</h2>
+                    <p class="mastery-lead">${U.bi('סיכום הכישורים מהסיבוב הזה', 'Competence from this round')}</p>
+                    <ul class="mastery-stats review-stats">
+                        <li>${U.bi('מילים שפגשתם', 'Words met')}: <strong id="mastery-words-met">${met}</strong></li>
+                        <li>${U.bi('שלבים שהושלמו', 'Steps completed')}: <strong id="mastery-steps-done">${stepsDone}</strong> / ${totalSteps}</li>
+                    </ul>
+                    <p class="fine mastery-next-due" id="mastery-next-due">${nextReviewHintHtml()}</p>
+                    <div class="path-actions mastery-actions">
+                        <a class="btn btn-primary" id="mastery-back-today" href="/">${U.bi('בחזרה להיום', 'Back to Today')}</a>
+                        <button type="button" class="btn btn-again" data-action="again">
+                            ${U.icon('rotate-right')}
+                            <span>${U.bi('עוד סיבוב', 'Practice again')}</span>
+                        </button>
+                    </div>
+                    <p class="save-note">${U.bi('התשובות נשמרות אוטומטית בדפדפן הזה', 'Answers save automatically in this browser')}</p>
+                </section>`;
+        }
+
         function showPath() {
             if (currentRoot && currentRoot._activity && currentRoot._activity.unmount) {
                 currentRoot._activity.unmount(ctx, currentRoot);
@@ -465,6 +621,15 @@
             setActionBar('');
             const main = document.getElementById('player-main');
             const resume = resolved.steps.findIndex((_, i) => !completedSteps[String(i)]);
+            const roundComplete = resolved.steps.length > 0 && resume < 0;
+            if (roundComplete) {
+                main.innerHTML = masteryCeremonyHtml();
+                paintRound();
+                announceStep(-1);
+                scrollPlayerToTop();
+                saveLocalProgress();
+                return;
+            }
             main.innerHTML = `
                 <section class="path-screen card">
                     <h2>${U.bi('מסלול השיעור', 'Lesson path')}</h2>
@@ -484,18 +649,28 @@
                         <button type="button" class="btn btn-primary" data-action="go-step" data-step="${resume < 0 ? 0 : resume}">
                             ${resume > 0 ? U.bi('המשיכו מהמקום שעצרתם', 'Continue where you left off') : U.bi('התחילו', 'Start')}
                         </button>
+                        <button type="button" class="btn btn-again" data-action="again">
+                            ${U.icon('rotate-right')}
+                            <span>${U.bi('עוד סיבוב', 'Practice again')}</span>
+                        </button>
                     </div>
                     <p class="save-note">${U.bi('התשובות נשמרות אוטומטית בדפדפן הזה', 'Answers save automatically in this browser')}</p>
                 </section>`;
             paintRound();
+            announceStep(-1);
+            scrollPlayerToTop();
             saveLocalProgress();
         }
 
-        function showStep(index, fromNav) {
+        function showStep(index, options) {
+            const opts = typeof options === 'boolean'
+                ? { fromNav: options }
+                : (options && typeof options === 'object' ? options : {});
+            const quiet = !!opts.quiet;
             if (currentRoot && currentRoot._activity && currentRoot._activity.unmount) {
                 currentRoot._activity.unmount(ctx, currentRoot);
             }
-            Speech.silence();
+            if (!quiet) Speech.silence();
             stepIndex = index;
             const step = resolved.steps[index];
             const main = document.getElementById('player-main');
@@ -504,12 +679,11 @@
             main.innerHTML = `
                 <section class="step-screen" data-step-type="${U.escapeHtml(step.type)}">
                     <div class="step-head">
-                        <button type="button" class="btn btn-ghost btn-sm" data-action="go-path">${U.icon('list')} ${U.bi('מסלול', 'Path')}</button>
                         <h2>${U.icon(step.icon, 'tone-icon ' + step.tone)} ${U.bi(step.labelHe, step.labelEn)}</h2>
-                        <span class="pill">${index + 1} / ${resolved.steps.length}</span>
                     </div>
                     <div class="step-body" id="step-body">${html}</div>
                 </section>`;
+            const screen = main.querySelector('.step-screen');
             currentRoot = document.getElementById('step-body');
             currentRoot._activity = step.def;
             currentRoot._config = step.config;
@@ -517,8 +691,12 @@
             if (step.def.actionBar) setActionBar(step.def.actionBar(ctx, step.config, state));
             else setActionBar(`<button type="button" class="btn btn-primary btn-wide" data-action="continue">${U.bi('המשך', 'Continue')}</button>`);
             paintRound();
+            if (!quiet) {
+                playStepEnter(screen);
+                announceStep(index);
+                scrollPlayerToTop();
+            }
             saveLocalProgress();
-            if (!fromNav) window.scrollTo(0, 0);
         }
 
         function startNextRound() {
@@ -657,7 +835,11 @@
         }
 
         function playModel(button) {
-            Speech.play(button.dataset.speak, button.dataset.audio || null);
+            if (typeof Speech.playClip === 'function') {
+                Speech.playClip(button.dataset.speak, button.dataset.audio || null, button);
+            } else {
+                Speech.play(button.dataset.speak, button.dataset.audio || null, button);
+            }
         }
 
         function toggleRecording(key) {

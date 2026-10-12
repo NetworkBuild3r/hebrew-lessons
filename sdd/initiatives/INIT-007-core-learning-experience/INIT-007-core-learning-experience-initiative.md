@@ -1,13 +1,13 @@
 # Initiative: Core learning experience — practice player visual polish, tactile feedback, and research-backed delight
 
 **Initiative ID:** INIT-007
-**Status:** planned
+**Status:** complete — Mode E closed 2026-10-11. All seven specs complete (SPEC-007 last). Completion report: `INIT-007-core-learning-experience-completion-report.md`.
 **Slug:** INIT-007-core-learning-experience
 **Discipline Profile:** `software`
 **Created:** 2026-10-09
 **Owner:** Brian Nelson
 **Ticket:** None (`branch_naming.ticket_system: none`; operator request 2026-10-09)
-**Branch:** `lesson-system-foundations` (working in place on active development branch; no worktree needed per guard state)
+**Branch:** `core-learning-experience` (from `main` after INIT-004/006 merge; in-place, no worktree). No commit unless the operator asks.
 **Target Completion:** 2026-10-20
 **Source:** Operator request 2026-10-09: "screw the front door. I like the backdoor anyways. so let's make sure we can have something worth a front door. Backend and feel good where 99% of the users time will be spent. Build and initiative for making it prettier and matching our research."
 **Research Grounding:**

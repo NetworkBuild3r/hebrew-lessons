@@ -16,7 +16,12 @@
             return `<div class="card stack" id="speed-quiz-root">
                 <div class="quiz-top">
                     <span class="pill" id="quiz-score">0</span>
-                    <span class="retell-clock" id="quiz-clock">${config.seconds}s</span>
+                    <span class="quiz-clock-wrap">
+                        <span class="retell-clock quiz-clock" id="quiz-clock">${config.seconds}s</span>
+                    </span>
+                </div>
+                <div class="quiz-timer" aria-hidden="true">
+                    <div class="quiz-timer-fill" id="quiz-timer-fill" style="width:100%"></div>
                 </div>
                 <div id="quiz-body"></div>
                 <div id="quiz-done" class="hidden">
@@ -35,6 +40,7 @@
                 index: 0,
                 score: state.score || 0,
                 left: config.seconds || 60,
+                total: config.seconds || 60,
                 choices: config.choices || 3,
                 timer: null,
                 phase: 'main',
@@ -55,6 +61,17 @@
             const item = ctx.ws.vocab.items.find(i => ctx.sid(i.id) === id);
             const good = U.normalizeHebrew(pick) === U.normalizeHebrew(U.stripVowels(item.word));
             action.classList.add(good ? 'correct' : 'wrong');
+            action.classList.add('selected');
+            root.querySelectorAll('.choice-card').forEach(btn => {
+                if (btn !== action) btn.classList.add('dimmed');
+                if (!good && U.normalizeHebrew(btn.dataset.word) === U.normalizeHebrew(U.stripVowels(item.word))) {
+                    btn.classList.add('correct');
+                }
+            });
+            const Feedback = window.HebrewFeedback;
+            if (Feedback && typeof Feedback.chime === 'function') {
+                Feedback.chime(good ? 'correct' : 'miss');
+            }
             if (good) root._quiz.score += 1;
             else root._quiz.missed.push(id);
             root.querySelector('#quiz-score').textContent = String(root._quiz.score);
@@ -73,11 +90,23 @@
         }
     });
 
-    function startClock(ctx, root) {
+    function paintTimer(root) {
         const clock = root.querySelector('#quiz-clock');
+        const fill = root.querySelector('#quiz-timer-fill');
+        const left = Math.max(0, root._quiz.left);
+        const total = Math.max(1, root._quiz.total || 1);
+        if (clock) clock.textContent = left + 's';
+        if (fill) fill.style.width = Math.max(0, Math.min(100, (left / total) * 100)) + '%';
+        if (clock) {
+            clock.classList.toggle('quiz-clock-low', left <= 10 && left > 0);
+        }
+    }
+
+    function startClock(ctx, root) {
+        paintTimer(root);
         root._quiz.timer = setInterval(() => {
             root._quiz.left -= 1;
-            if (clock) clock.textContent = Math.max(0, root._quiz.left) + 's';
+            paintTimer(root);
             if (root._quiz.left <= 0) {
                 clearInterval(root._quiz.timer);
                 finish(ctx, root);

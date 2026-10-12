@@ -7,7 +7,7 @@ spec_id: SPEC-003
 initiative_id: INIT-007
 title: "Player shell, step transitions, and thumb-zone mobile ergonomics"
 domain: frontend
-status: ready
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet
@@ -52,19 +52,19 @@ This spec overhauls the outer player shell (`shared/worksheet.js` / `shared/play
 
 ## Understood
 
-- [ ] und-1: The bottom action bar must never obscure any input or focused control (WCAG 2.4.11).
-- [ ] und-2: The vowel toggle button must remain accessible and functional on every screen.
-- [ ] und-3: Primary touch targets must measure at least 44x44 CSS pixels.
+- [x] und-1: The bottom action bar must never obscure any input or focused control (WCAG 2.4.11).
+- [x] und-2: The vowel toggle button must remain accessible and functional on every screen.
+- [x] und-3: Primary touch targets must measure at least 44x44 CSS pixels.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] ac-1: On mobile viewports (≤599px), the primary action button sits inside a fixed bottom dock with min-height 48px and safe-area inset support.
-- [ ] ac-2: The progress track displays accurate progress across lesson activities without showing points, streaks, or gamified counters.
-- [ ] ac-3: Toggling the Nikud button toggles vowel visibility across all Hebrew text on the screen while keeping Hebrew line heights intact.
-- [ ] ac-4: Advancing between steps resets window scroll to the top of the main container and announces the new step to screen readers.
-- [ ] ac-5: Step change animation finishes in ≤150ms and is completely disabled when `prefers-reduced-motion: reduce` matches.
+- [x] ac-1: On mobile viewports (≤599px), the primary action button sits inside a fixed bottom dock with min-height 48px and safe-area inset support.
+- [x] ac-2: The progress track displays accurate progress across lesson activities without showing points, streaks, or gamified counters.
+- [x] ac-3: Toggling the Nikud button toggles vowel visibility across all Hebrew text on the screen while keeping Hebrew line heights intact.
+- [x] ac-4: Advancing between steps resets window scroll to the top of the main container and announces the new step to screen readers.
+- [x] ac-5: Step change animation finishes in ≤150ms and is completely disabled when `prefers-reduced-motion: reduce` matches.
 
 ---
 

@@ -1,3 +1,7 @@
+/**
+ * Story reading: warm cream surface, follow-along, gloss popover.
+ * Provenance: INIT-007/SPEC-004 · ADR-0010 (reuse SPEC-002 is-playing / playClip).
+ */
 (function () {
     const P = window.HebrewPlayer;
     const U = window.HebrewUtils;
@@ -28,12 +32,13 @@
                         <p class="fine">${ctx.bi('סגול = דיבור עקיף, אדום = דיבור ישיר', 'Purple = reported speech, red = direct speech')}</p>
                         ${coverageBadgeHtml(ctx, coverage)}
                     </div>
-                    <div class="story-tools">
+                    <div class="story-tools" role="toolbar" aria-label="${ctx.esc(ctx.bi('הקראה', 'Read aloud'))}">
                         <button type="button" class="btn btn-ghost" data-action="toggle-vowels">${ctx.vowelsOn ? ctx.bi('הסתר ניקוד', 'Hide vowels') : ctx.bi('הצג ניקוד', 'Show vowels')}</button>
                         <label class="follow-along"><input type="checkbox" id="follow-along"${follow ? ' checked' : ''}> ${ctx.bi('הדגשת השורה', 'Follow along')}</label>
-                        <button type="button" class="btn btn-amber" id="story-play" data-action="story-play">${U.icon('volume-high')} ${ctx.bi('הקראת טקסט', 'Read aloud')}</button>
-                        <button type="button" class="btn btn-ghost hidden" id="story-pause" data-action="story-pause">${U.icon('pause')} ${ctx.bi('השהיה', 'Pause')}</button>
-                        <button type="button" class="btn btn-stop hidden" id="story-stop" data-action="story-stop">${U.icon('stop')} ${ctx.bi('עצירה', 'Stop')}</button>
+                        <button type="button" class="btn btn-amber story-ctrl" id="story-play" data-action="story-play">${U.icon('volume-high')} <span class="story-ctrl-label">${ctx.bi('הקראת טקסט', 'Read aloud')}</span></button>
+                        <button type="button" class="btn btn-ghost story-ctrl hidden" id="story-pause" data-action="story-pause">${U.icon('pause')} <span class="story-ctrl-label">${ctx.bi('השהיה', 'Pause')}</span></button>
+                        <button type="button" class="btn btn-amber story-ctrl hidden" id="story-resume" data-action="story-play">${U.icon('play')} <span class="story-ctrl-label">${ctx.bi('המשך', 'Resume')}</span></button>
+                        <button type="button" class="btn btn-stop story-ctrl hidden" id="story-stop" data-action="story-stop">${U.icon('stop')} <span class="story-ctrl-label">${ctx.bi('עצירה', 'Stop')}</span></button>
                     </div>
                     <div class="story-body card" id="story-text">
                         ${paragraphs.map(p => `<p data-vowels-html="1">${U.renderParts(Array.isArray(p) ? p : [p])}</p>`).join('')}
@@ -133,7 +138,12 @@
             if (action.dataset.action === 'gloss-audio') {
                 event && event.stopPropagation && event.stopPropagation();
                 const token = action.dataset.token || '';
-                if (token && Speech && typeof Speech.speak === 'function') Speech.speak(token);
+                if (!token || !Speech) return;
+                if (typeof Speech.playClip === 'function') {
+                    Speech.playClip(token, null, action);
+                } else if (typeof Speech.speak === 'function') {
+                    Speech.speak(token, action);
+                }
             }
             if (action.dataset.action === 'gloss-dismiss') {
                 dismissGloss(root);
@@ -469,11 +479,12 @@
         const meaningHtml = found.meaning
             ? `<p class="story-gloss-en" dir="ltr">${U.escapeHtml(found.meaning)}</p>`
             : `<p class="story-gloss-en story-gloss-missing" dir="ltr">${ctx.bi('אין פירוש', 'No gloss')}</p>`;
+        const audioText = U.escapeHtml(found.audioText);
         pop.innerHTML = `
-            <p class="story-gloss-he">${U.escapeHtml(found.token)}</p>
+            <p class="story-gloss-he" lang="he">${U.escapeHtml(found.token)}</p>
             ${meaningHtml}
             <div class="story-gloss-actions">
-                <button type="button" class="icon-btn" data-action="gloss-audio" data-token="${U.escapeHtml(found.audioText)}" title="${ctx.bi('השמעה', 'Play audio')}">${U.icon('volume-high')}</button>
+                <button type="button" class="icon-btn" data-action="gloss-audio" data-speak="${audioText}" data-token="${audioText}" title="${ctx.bi('השמעה', 'Play audio')}" aria-label="${ctx.bi('השמעה', 'Play audio')}">${U.icon('volume-high')}</button>
                 <button type="button" class="btn btn-ghost btn-sm" data-action="gloss-dismiss">${ctx.bi('סגור', 'Close')}</button>
             </div>
         `;
@@ -500,15 +511,13 @@
     function paintStory(ctx, root) {
         const play = root.querySelector('#story-play');
         const pause = root.querySelector('#story-pause');
+        const resume = root.querySelector('#story-resume');
         const stop = root.querySelector('#story-stop');
         const status = Speech.story.status;
-        if (play) {
-            play.classList.toggle('hidden', status === 'playing');
-            play.innerHTML = status === 'paused'
-                ? U.icon('play') + ' המשך (Resume)'
-                : U.icon('volume-high') + ' הקראת טקסט (Read aloud)';
-        }
+        // Idle: Read aloud. Playing: Pause + Stop. Paused: Resume + Stop.
+        play?.classList.toggle('hidden', status !== 'idle');
         pause?.classList.toggle('hidden', status !== 'playing');
+        resume?.classList.toggle('hidden', status !== 'paused');
         stop?.classList.toggle('hidden', status === 'idle');
         const lines = root.querySelectorAll('#story-text p');
         lines.forEach(p => p.classList.remove('reading-now'));

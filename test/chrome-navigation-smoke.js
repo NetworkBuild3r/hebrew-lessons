@@ -1,6 +1,9 @@
 /**
  * Chrome smoke: top-nav clicks change screens without reloading the document
  * (INIT-005/SPEC-002..004, ADR-0007).
+ * INIT-007/SPEC-007: keeps review/lessons routes reachable for player a11y smokes;
+ * full lesson + review session coverage lives in chrome-learner-support-smoke
+ * and chrome-review-smoke.
  *
  * Run: node test/chrome-navigation-smoke.js
  * Needs Chrome at the default Windows path (or CHROME_PATH).

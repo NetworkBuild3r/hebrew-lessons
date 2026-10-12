@@ -20,14 +20,20 @@
                     <div class="friend-grid">
                         ${questions.map(q => {
                             const id = ctx.sid(q.id);
-                            return `<div class="card stack">
+                            return `<div class="card stack friend-card">
                                 <p><span class="q-label">${id}</span> ${ctx.esc(q.question)}</p>
                                 ${q.youFeminine ? `<p class="fine">${ctx.bi('לנקבה', 'to a woman')}: ${ctx.esc(q.youFeminine)}</p>` : ''}
-                                <div class="row-tools">
-                                    ${ctx.speakButton(q.pointed || q.question, q.audio)}
-                                    ${ctx.recorderHtml('friend-' + id)}
+                                <div class="friend-audio-compare" role="group" aria-label="${ctx.bi('השוואת הקלטה', 'Compare recordings')}">
+                                    <div class="friend-audio-slot">
+                                        <span class="friend-audio-label fine">${ctx.bi('מודל', 'Model')}</span>
+                                        ${ctx.speakButton(q.pointed || q.question, q.audio)}
+                                    </div>
+                                    <div class="friend-audio-slot">
+                                        <span class="friend-audio-label fine">${ctx.bi('אתם', 'You')}</span>
+                                        ${ctx.recorderHtml('friend-' + id)}
+                                    </div>
                                 </div>
-                                <textarea id="friend-ans-${id}" rows="3" placeholder="תשובה...">${ctx.esc(answers[id] || '')}</textarea>
+                                <textarea id="friend-ans-${id}" class="friend-answer" rows="3" placeholder="תשובה...">${ctx.esc(answers[id] || '')}</textarea>
                             </div>`;
                         }).join('')}
                     </div>

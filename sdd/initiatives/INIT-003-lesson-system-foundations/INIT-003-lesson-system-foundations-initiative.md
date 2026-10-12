@@ -1,7 +1,7 @@
 # Initiative: Lesson system foundations — research, stack, lesson-plan language, and a new look
 
 **Initiative ID:** INIT-003
-**Status:** on_track — all specs complete; ready for `complete-initiative`
+**Status:** complete — Mode E closed 2026-10-11. All ten specs complete. Completion report: `INIT-003-lesson-system-foundations-completion-report.md`. INIT-004 was approved and built after this foundations work.
 **Slug:** INIT-003-lesson-system-foundations
 **Discipline Profile:** `software`
 **Created:** 2026-10-08
@@ -213,8 +213,8 @@ Per-spec security review depth and findings are governed by `.claude/skills/sdd/
 - [x] The spike renders one real unit, with an image, in the chosen look, and passes its own tests.
 - [x] INIT-004 exists, with specs, dependencies, security classification, and a migration plan (operator approval of INIT-004 is a separate gate before that build starts).
 - [x] `npm test` still passes on this branch (the initiative adds no production code, so it must not break any test).
-- [ ] No unresolved Critical/High security findings, or documented, approved risk acceptances.
-- [ ] Completion report generated; initiative status `complete`.
+- [x] No unresolved Critical/High security findings, or documented, approved risk acceptances. *(docs/spikes initiative; deeper code review deferred to INIT-004/006 — disclosed in completion report)*
+- [x] Completion report generated; initiative status `complete`.
 
 **Plan quality (reflection loop, Phase 5.5):** completeness 8, accuracy 8, clarity 8, technical feasibility 7, guardrails compliance 8. Total 39/50, confidence 0.78. Every dimension is at or above 6, so the plan proceeds. Lowest score is feasibility: the stack decision is open on purpose, and the plan cannot show its cost until SPEC-007 runs.
 
@@ -222,9 +222,9 @@ Per-spec security review depth and findings are governed by `.claude/skills/sdd/
 
 ## 11. Next Steps
 
-1. All ten specs are complete.
-2. The operator reviews INIT-004 (`sdd/initiatives/INIT-004-lesson-system-build/`) and approves it in writing before any of it is built.
-3. Run `complete-initiative` after that approval. The completion report and the operator's approval of INIT-004 are the remaining success-criterion items. Status stays `on_track` until that process runs.
+1. All ten specs are complete. Mode E closed 2026-10-11.
+2. INIT-004 was approved and Mode E closed; INIT-006 Mode E closed.
+3. Remaining planned work: INIT-005 (approved, not started), INIT-007 (planned).
 
 ---
 

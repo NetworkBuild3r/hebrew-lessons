@@ -56,6 +56,12 @@
             };
             refreshBank(ctx, root);
             restoreFeedback(ctx, root);
+            const first = root.querySelector('.fill-input:not([readonly])');
+            if (first && typeof first.focus === 'function') {
+                first.focus();
+                root._fill.active = first.dataset.fill || null;
+                first.classList.add('active');
+            }
         },
         onClick(ctx, root, event, action) {
             if (action && action.dataset.action === 'open-bank') {
@@ -144,6 +150,7 @@
         const itemFb = root.querySelector('[data-fill-feedback="' + id + '"]');
         if (!input) return;
         const good = U.normalizeHebrew(input.value) === U.normalizeHebrew(sentence.answer);
+        const Feedback = window.HebrewFeedback;
         input.classList.remove('correct', 'wrong');
         if (mode === 'correct' || (mode === 'reveal' && good)) {
             input.classList.add('correct');
@@ -152,14 +159,36 @@
         }
         if (itemFb) {
             itemFb.classList.remove('hidden');
+            const pointed = sentence.pointed || sentence.answer || '';
             if (mode === 'retry') {
+                // First miss: nudge only — pointed form waits for the second attempt (retry-before-reveal).
                 itemFb.textContent = TRY_AGAIN;
             } else if (mode === 'reveal') {
-                itemFb.innerHTML = TRY_AGAIN + ' — ' + revealHtml(ctx, sentence);
+                if (Feedback && typeof Feedback.showMiss === 'function') {
+                    Feedback.showMiss(itemFb, {
+                        pointed,
+                        showRetry: false
+                    });
+                    const label = itemFb.querySelector('.correction-label');
+                    if (label) label.textContent = TRY_AGAIN;
+                    if (pointed && typeof ctx.speakButton === 'function') {
+                        const box = itemFb.querySelector('.correction');
+                        if (box) box.insertAdjacentHTML('beforeend', ' ' + ctx.speakButton(pointed, sentence.audio));
+                    }
+                } else {
+                    itemFb.innerHTML = TRY_AGAIN + ' — ' + revealHtml(ctx, sentence);
+                }
             } else if (mode === 'correct') {
-                itemFb.innerHTML = ctx.bi('נכון', 'Correct') + (sentence.pointed || sentence.answer
-                    ? ' ' + ctx.speakButton(sentence.pointed || sentence.answer, sentence.audio)
-                    : '');
+                if (Feedback && typeof Feedback.showCorrect === 'function') {
+                    Feedback.showCorrect(itemFb);
+                    if (pointed && typeof ctx.speakButton === 'function') {
+                        itemFb.insertAdjacentHTML('beforeend', ' ' + ctx.speakButton(pointed, sentence.audio));
+                    }
+                } else {
+                    itemFb.innerHTML = ctx.bi('נכון', 'Correct') + (pointed
+                        ? ' ' + ctx.speakButton(pointed, sentence.audio)
+                        : '');
+                }
             }
         }
         if (mode === 'reveal' || mode === 'correct') {

@@ -7,7 +7,7 @@ spec_id: SPEC-007
 initiative_id: INIT-007
 title: "Player visual regression, a11y, touch-target, and Chrome smoke verification"
 domain: testing
-status: ready
+status: complete
 primary_prompt: .claude/agents/test-automator/AGENT.md
 supplement_prompts: []
 model: sonnet
@@ -53,19 +53,19 @@ This spec executes comprehensive mechanized checks:
 
 ## Understood
 
-- [ ] und-1: Zero regressions allowed across existing 318 unit and integration tests.
-- [ ] und-2: All primary interactive targets must measure ≥44x44px.
-- [ ] und-3: Contrast ratios must be verified mathematically for both light and dark modes.
+- [x] und-1: Zero regressions allowed across existing 318 unit and integration tests.
+- [x] und-2: All primary interactive targets must measure ≥44x44px.
+- [x] und-3: Contrast ratios must be verified mathematically for both light and dark modes.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] ac-1: Automated test `test/player-ui-a11y.test.js` verifies all primary buttons and interactive cards have computed dimensions of at least 44x44px.
-- [ ] ac-2: Pointed Hebrew text across all player components has measured contrast ≥4.5:1 against its background in light and dark schemes.
-- [ ] ac-3: CSS audit confirms all animations and transitions are disabled under `@media (prefers-reduced-motion: reduce)`.
-- [ ] ac-4: End-to-end Chrome smoke suite runs without error against a live server instance, completing a full lesson and a review session.
-- [ ] ac-5: Hook contract test confirms all 70 `data-*` attributes and 50 required class names remain present in generated player markup.
+- [x] ac-1: Automated test `test/player-ui-a11y.test.js` verifies all primary buttons and interactive cards have computed dimensions of at least 44x44px.
+- [x] ac-2: Pointed Hebrew text across all player components has measured contrast ≥4.5:1 against its background in light and dark schemes.
+- [x] ac-3: CSS audit confirms all animations and transitions are disabled under `@media (prefers-reduced-motion: reduce)`.
+- [x] ac-4: End-to-end Chrome smoke suite runs without error against a live server instance, completing a full lesson and a review session.
+- [x] ac-5: Hook contract test confirms all 70 `data-*` attributes and 50 required class names remain present in generated player markup.
 
 ---
 
