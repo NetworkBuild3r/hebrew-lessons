@@ -142,6 +142,10 @@
             document.title = String(ws.title || 'דף עבודה').replace(/<[^>]+>/g, '');
             app.innerHTML = shellHtml();
             bindShell();
+            // The sound control is in the markup above; sync its pressed state (off by default).
+            if (root.HebrewFeedback && typeof root.HebrewFeedback.paintToggles === 'function') {
+                root.HebrewFeedback.paintToggles(app);
+            }
             const Sync = root.HebrewSync;
             if (Sync && typeof Sync.setOnLessonConflict === 'function') {
                 Sync.setOnLessonConflict((prog) => {
@@ -247,6 +251,19 @@
             return entries;
         }
 
+        // INIT-005/SPEC-011 (REQ-016): the level is a Hebrew word with an English gloss, never the
+        // raw catalog word ("basic") inside a Hebrew label.
+        function levelLineHtml(level) {
+            const names = {
+                basic: ['בסיסי', 'Basic'],
+                intermediate: ['בינוני', 'Intermediate'],
+                advanced: ['מתקדם', 'Advanced']
+            };
+            const name = names[String(level || '').toLowerCase()];
+            if (name) return U.bi('רמה: ' + name[0], 'Level: ' + name[1]);
+            return level ? U.bi('רמה: ' + level, 'Level: ' + level) : U.bi('רמה', 'Level');
+        }
+
         function shellHtml() {
             // Shared app shell mounts above .player-top; Home lives there (ADR-0007 / SPEC-012).
             // Do not put .back-link Home in .player-top — chrome smokes assert it is absent.
@@ -263,6 +280,10 @@
                             </div>
                         </div>
                         <div class="player-top-end">
+                            <button type="button" class="btn btn-sfx" id="btn-sfx" data-sfx-toggle aria-pressed="false" title="צלילי משוב (Sound effects)">
+                                ${U.sprite('sound')}
+                                <span id="btn-sfx-label">${U.bi('צלילים', 'Sounds')}</span>
+                            </button>
                             <button type="button" class="btn btn-vowels" id="btn-vowels" data-action="toggle-vowels" aria-pressed="true">
                                 <span id="btn-vowels-label"></span>
                             </button>
@@ -416,7 +437,8 @@
             const total = Math.max(resolved.steps.length, 1);
             if (indicator) {
                 if (stepIndex < 0) {
-                    indicator.textContent = U.bi('מסלול השיעור', 'Lesson path');
+                    // U.bi returns escaped markup (Hebrew + a dir="ltr" gloss span): innerHTML, not textContent.
+                    indicator.innerHTML = U.bi('מסלול השיעור', 'Lesson path');
                 } else {
                     indicator.textContent = 'שלב ' + (stepIndex + 1) + ' מתוך ' + total
                         + ' · Step ' + (stepIndex + 1) + ' of ' + total;
@@ -452,7 +474,7 @@
             if (!live) return;
             const total = Math.max(resolved.steps.length, 1);
             if (index < 0) {
-                live.textContent = U.bi('מסלול השיעור', 'Lesson path');
+                live.textContent = 'מסלול השיעור';
                 return;
             }
             const step = resolved.steps[index];
@@ -633,7 +655,7 @@
             main.innerHTML = `
                 <section class="path-screen card">
                     <h2>${U.bi('מסלול השיעור', 'Lesson path')}</h2>
-                    <p class="fine">${U.bi('רמה: ' + resolved.level, 'Level: ' + resolved.level)}</p>
+                    <p class="fine">${levelLineHtml(resolved.level)}</p>
                     <ol class="path-list">
                         ${resolved.steps.map((step, i) => {
                             const done = !!completedSteps[String(i)];
@@ -814,13 +836,13 @@
         function speakButton(text, audio, title) {
             const label = title || 'Listen';
             const clip = audio || Speech.clipFor(text) || '';
-            return `<button type="button" class="icon-btn${clip ? ' human' : ''}" data-speak="${U.escapeHtml(text || '')}" data-audio="${U.escapeHtml(clip)}" title="${U.escapeHtml(label)}">${U.icon('volume-high')}</button>`;
+            return `<button type="button" class="icon-btn${clip ? ' human' : ''}" data-speak="${U.escapeHtml(text || '')}" data-audio="${U.escapeHtml(clip)}" title="${U.escapeHtml(label)}" aria-label="השמעה">${U.icon('volume-high')}</button>`;
         }
 
         function recorderHtml(key) {
             return `<span class="recorder" data-rec="${U.escapeHtml(key)}">
-                <button type="button" class="icon-btn rec-btn" data-rec-toggle="${U.escapeHtml(key)}" title="Record">${U.icon('microphone')}</button>
-                <button type="button" class="icon-btn hidden" data-rec-play="${U.escapeHtml(key)}" title="Play recording">${U.icon('play')}</button>
+                <button type="button" class="icon-btn rec-btn" data-rec-toggle="${U.escapeHtml(key)}" title="Record" aria-label="הקלטה">${U.icon('microphone')}</button>
+                <button type="button" class="icon-btn hidden" data-rec-play="${U.escapeHtml(key)}" title="Play recording" aria-label="השמעת ההקלטה">${U.icon('play')}</button>
             </span>`;
         }
 

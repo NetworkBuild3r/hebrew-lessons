@@ -911,6 +911,17 @@ function ensureRow(store, plan) {
 }
 
 /**
+ * Write context for this script (ADR-0011 §1): actor kind system, name
+ * seed-starter-content. Loaded on use so requiring this file loads no plan module.
+ * Provenance: INIT-008/SPEC-002
+ * @returns {object}
+ */
+function seedContext() {
+    const { makeContext } = require('../server/plans/context');
+    return makeContext({ channel: 'system', name: 'seed-starter-content', tool: 'replace_part' });
+}
+
+/**
  * @param {object} store
  * @param {object} ops
  * @param {Function} validatePlan
@@ -935,7 +946,7 @@ function writePlan(store, ops, validatePlan, lexiconRepo, plan) {
             path: '',
             value: desired,
             expectedRevision: existing.revision
-        });
+        }, seedContext());
         if (replaced.error) return { ok: false, error: replaced.error, blocks: replaced.blocks };
         return { ok: true, revision: replaced.revision };
     }
@@ -944,7 +955,7 @@ function writePlan(store, ops, validatePlan, lexiconRepo, plan) {
         path: '',
         value: desired,
         expectedRevision: 1
-    });
+    }, seedContext());
     if (replaced.error) return { ok: false, error: replaced.error, blocks: replaced.blocks };
     return { ok: true, revision: replaced.revision };
 }

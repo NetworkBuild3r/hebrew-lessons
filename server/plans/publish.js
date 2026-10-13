@@ -8,6 +8,10 @@
  * while it references a pending media row. A hidden lesson may.
  * Provenance: INIT-004/SPEC-003. Pending-media refusal: INIT-004/SPEC-011.
  * Lexicon passed to the validator for N13 and N14: INIT-006/SPEC-011
+ * Context and the plan.publish audit row, written in the same transaction
+ * as the snapshot: INIT-008/SPEC-002. The revision row (op publish) and the
+ * provenance marks go in that same transaction through ./write-log.js:
+ * INIT-008/SPEC-004, SPEC-006
  */
 'use strict';
 
@@ -16,6 +20,8 @@ const lexicon = require('../db/repos/lexicon');
 const mediaRepo = require('../db/repos/media');
 const { validatePlan } = require('./validate');
 const { openWorkingCopy } = require('./ops');
+const { requireContext } = require('./context');
+const { logWrite } = require('./write-log');
 
 /**
  * Media ids on introduction words. Other block types have no image field.
@@ -62,9 +68,11 @@ function referencesPendingMedia(plan) {
  * @param {object} store Plan store from server/plans/store.js. saveSnapshot is required.
  * @param {string} id Plan id.
  * @param {{ expectedRevision: number }} input
+ * @param {object} ctx Write context from server/plans/context.js. Required.
  * @returns {object}
  */
-function publishPlan(store, id, input) {
+function publishPlan(store, id, input, ctx) {
+    requireContext(ctx);
     if (!store || typeof store.saveSnapshot !== 'function') {
         throw new TypeError('store must provide saveSnapshot');
     }
@@ -87,7 +95,7 @@ function publishPlan(store, id, input) {
         return { error: 'invalid_op', revision: opened.row.revision };
     }
 
-    const validation = validatePlan(next, { lexicon });
+    const validation = validatePlan(next, { lexicon, snapshot: opened.row.snapshot });
     if (!validation.ok) {
         return {
             error: 'validation',
@@ -102,6 +110,7 @@ function publishPlan(store, id, input) {
     }
 
     const document = JSON.stringify(next);
+    let logged;
     db.transaction(() => {
         store.saveWorkingCopy({
             id: opened.row.id,
@@ -112,10 +121,18 @@ function publishPlan(store, id, input) {
             assigneeId: next.assigneeId == null ? null : next.assigneeId
         });
         store.saveSnapshot(opened.row.id, document);
+        logged = logWrite({
+            planId: opened.row.id,
+            before: opened.plan,
+            after: next,
+            afterText: document,
+            op: 'publish',
+            path: ''
+        }, ctx);
     });
 
     const saved = store.loadWorkingCopy(opened.row.id);
-    return {
+    const out = {
         plan: JSON.parse(saved.document),
         document: saved.document,
         snapshot: store.loadSnapshot(opened.row.id),
@@ -123,6 +140,8 @@ function publishPlan(store, id, input) {
         status: saved.status,
         validation: validation
     };
+    if (logged.overwrote.length) out.overwrote = logged.overwrote;
+    return out;
 }
 
 module.exports = { publishPlan };

@@ -92,8 +92,45 @@
                 + bi(meta.he, meta.en)
                 + '</button>';
         }).join('');
+        // Hebrew only: one language per label (REQ-016). The visible buttons carry the glosses.
         return '<div class="lessons-filter" role="group" aria-label="'
-            + esc('Level filter') + '">' + buttons + '</div>';
+            + esc('סינון לפי רמה') + '">' + buttons + '</div>';
+    }
+
+    var LEVEL_LABELS = {
+        basic: { he: 'בסיסי', en: 'Basic' },
+        intermediate: { he: 'בינוני', en: 'Intermediate' },
+        advanced: { he: 'מתקדם', en: 'Advanced' }
+    };
+
+    /**
+     * Subtitle line under the status chip: the catalog subtitle, then the level as a Hebrew word
+     * with the English gloss (REQ-016). The catalog sometimes already ends the subtitle with the
+     * raw English level word; that word is dropped so the level shows once.
+     */
+    function metaLine(lesson) {
+        var level = normalizeLevel(lesson.level);
+        var subtitle = String(lesson.subtitle || '');
+        if (level) {
+            subtitle = subtitle
+                .replace(/[\s\u00b7\u2022|\u2013\u2014-]*\b(basic|intermediate|advanced)\s*$/i, '')
+                .replace(/[\s\u00b7\u2022|\u2013\u2014-]+$/, '');
+        }
+        var label = LEVEL_LABELS[level];
+        var levelHtml = label
+            ? esc(label.he) + ' <span class="en" lang="en" dir="ltr">(' + esc(label.en) + ')</span>'
+            : (lesson.level ? esc(lesson.level) : '');
+        var parts = [];
+        if (subtitle.trim()) parts.push(esc(subtitle.trim()));
+        if (levelHtml) parts.push('<span class="lesson-level">' + levelHtml + '</span>');
+        return parts.join(' · ');
+    }
+
+    /** The catalog blurb is English text: mark it so punctuation and direction are right. */
+    function blurbHtml(lesson) {
+        return lesson.blurb
+            ? '<p class="lesson-blurb" lang="en" dir="ltr">' + esc(lesson.blurb) + '</p>'
+            : '';
     }
 
     function renderCard(lesson, status) {
@@ -105,10 +142,9 @@
             + '<span class="lesson-status ' + esc(status.tone) + '">'
             + esc(status.chipHe) + ' <span class="en" dir="ltr">(' + esc(status.chipEn) + ')</span>'
             + '</span>'
-            + '<p class="fine">' + esc(lesson.subtitle || '')
-            + (lesson.level ? ' · ' + esc(lesson.level) : '') + '</p>'
+            + '<p class="fine">' + metaLine(lesson) + '</p>'
             + '<h2>' + esc(lesson.title) + '</h2>'
-            + (lesson.blurb ? '<p>' + esc(lesson.blurb) + '</p>' : '')
+            + blurbHtml(lesson)
             + '</a></article>';
     }
 

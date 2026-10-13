@@ -23,7 +23,7 @@
                             return `<div class="card stack friend-card">
                                 <p><span class="q-label">${id}</span> ${ctx.esc(q.question)}</p>
                                 ${q.youFeminine ? `<p class="fine">${ctx.bi('לנקבה', 'to a woman')}: ${ctx.esc(q.youFeminine)}</p>` : ''}
-                                <div class="friend-audio-compare" role="group" aria-label="${ctx.bi('השוואת הקלטה', 'Compare recordings')}">
+                                <div class="friend-audio-compare" role="group" aria-label="${ctx.esc('השוואת הקלטה')}">
                                     <div class="friend-audio-slot">
                                         <span class="friend-audio-label fine">${ctx.bi('מודל', 'Model')}</span>
                                         ${ctx.speakButton(q.pointed || q.question, q.audio)}

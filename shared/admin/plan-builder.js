@@ -1,12 +1,26 @@
 /**
- * Admin outline for one lesson plan: insert, move, remove, set a field, publish.
+ * Admin outline for one lesson plan: insert, move, remove, publish, and the forms
+ * that edit any part of it. The forms are not written here: plan-form.js renders
+ * an edit form for any plan node from the plan JSON Schema (GET /api/plan-schema),
+ * with the widgets of plan-widgets.js and the hints of plan-hints.js, and sends
+ * each save through the `transport` this file supplies. A new block is generated
+ * from the schema's `required` list, so no block type is written out here.
  * Media upload, dry-run, confirmed generation, and approval are the SPEC-011
  * routes. Picture attach sends set_field. The validation panel prints the
- * save and publish findings. It does not recompute a cap. Preview is the
- * SPEC-014 renderer string for the selected block.
+ * save and publish findings. It does not recompute a cap.
  * Every change is an HTTP call. This file does not edit the plan JSON,
  * does not save a worksheet, and does not read an API key.
- * Provenance: INIT-004/SPEC-015, INIT-004/SPEC-016
+ * Listeners go on the panel and are removed on unmount (an AbortSignal where the
+ * browser has one).
+ *
+ * The panels of INIT-008 are separate modules this file mounts and wires:
+ *   plan-list.js     the Plans tab (mountPicker) and the assign control
+ *   plan-history.js  revisions, compare, restore, and the "edited by a person" restore
+ *   plan-issues.js   the issues panel, with a jump to the field and a one-click fix
+ *   plan-preview.js  the learner's view of the unsaved text
+ * Each is optional: without it the plan view is the editor alone.
+ * Provenance: INIT-004/SPEC-015, INIT-004/SPEC-016, INIT-008/SPEC-011, INIT-008/SPEC-012,
+ *             INIT-008/SPEC-013, INIT-008/SPEC-014, INIT-008/SPEC-015
  */
 (function (root) {
     'use strict';
@@ -17,61 +31,10 @@
     var PART_PATH = /^units\/[a-z0-9]+(?:-[a-z0-9]+)*\/lessons\/[a-z0-9]+(?:-[a-z0-9]+)*\/blocks\/[a-z0-9][a-z0-9-]*(?:\/(?:words|paragraphs|lines|questions)\/[a-z0-9][a-z0-9-]*)?$/;
     var MEDIA_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
-    var BLOCK_TYPES = Object.freeze([
-        'introduction',
-        'graded-story',
-        'listening',
-        'short-dialogue',
-        'fluency-pass',
-        'spaced-review-checkpoint'
-    ]);
-
-    var BLOCK_FIELDS = {
-        introduction: ['heading', 'note'],
-        'graded-story': ['notice'],
-        listening: ['passage'],
-        'short-dialogue': ['intro', 'introEn'],
-        'fluency-pass': ['source'],
-        'spaced-review-checkpoint': []
-    };
-
-    var ITEM_FIELDS = {
-        words: ['word', 'meaning', 'sound', 'translit', 'pos', 'trap', 'infinitive', 'sentence'],
-        paragraphs: ['text'],
-        lines: ['pointed', 'question', 'gloss', 'speak', 'youFeminine', 'followUp'],
-        questions: ['question', 'sampleAnswer']
-    };
-
-    var FIELD_OK = {
-        heading: true,
-        note: true,
-        notice: true,
-        passage: true,
-        intro: true,
-        introEn: true,
-        source: true,
-        seconds: true,
-        word: true,
-        meaning: true,
-        sound: true,
-        translit: true,
-        pos: true,
-        trap: true,
-        infinitive: true,
-        sentence: true,
-        text: true,
-        pointed: true,
-        question: true,
-        gloss: true,
-        speak: true,
-        youFeminine: true,
-        followUp: true,
-        sampleAnswer: true
-    };
-
     var token = 0;
     var state = null;
     var inflight = Promise.resolve();
+    var pickerCleanup = null;
 
     function api() {
         return root.HebrewApi;
@@ -108,33 +71,20 @@
         return null;
     }
 
+    function form() {
+        return root.HebrewPlanForm;
+    }
+
     /**
-     * A new block. Does not copy or renumber ids already in the lesson.
+     * A new block, from the schema's `required` list (plan-form.js). Does not copy or
+     * renumber ids already in the lesson, and writes no Hebrew.
      * @param {string} type
      * @param {string} id
      * @returns {object|null}
      */
     function newBlock(type, id) {
-        if (!ENTRY.test(id) || BLOCK_TYPES.indexOf(type) === -1) return null;
-        if (type === 'introduction') {
-            return { id: id, type: type, words: [{ id: '1', word: 'מילה', meaning: 'word' }] };
-        }
-        if (type === 'graded-story') {
-            return { id: id, type: type, paragraphs: [{ id: '1', text: '…' }] };
-        }
-        if (type === 'listening') {
-            return { id: id, type: type, passage: '…' };
-        }
-        if (type === 'short-dialogue') {
-            return { id: id, type: type, lines: [{ id: '1', pointed: '…' }] };
-        }
-        if (type === 'fluency-pass') {
-            return { id: id, type: type, seconds: 30, source: 'vocab' };
-        }
-        if (type === 'spaced-review-checkpoint') {
-            return { id: id, type: type, wordKeys: ['מילה'], fromLessons: ['prior'] };
-        }
-        return null;
+        if (!ENTRY.test(id) || !form()) return null;
+        return form().newBlock(type, id);
     }
 
     function partsUrl(partPath) {
@@ -176,61 +126,6 @@
             if (blocks[i] && blocks[i].id === id) return { block: blocks[i], index: i };
         }
         return null;
-    }
-
-    function pushField(list, path, field, value, caption) {
-        if (!FIELD_OK[field] || !PART_PATH.test(path)) return;
-        if (typeof value !== 'string') return;
-        list.push({ path: path, field: field, loaded: value, caption: caption, numeric: false });
-    }
-
-    function fieldsForBlock(lessonPath, block) {
-        var list = [];
-        if (!block || typeof block.id !== 'string' || !ENTRY.test(block.id)) return list;
-        if (!LESSON_PATH.test(lessonPath)) return list;
-        var bPath = lessonPath + '/blocks/' + block.id;
-        var names = BLOCK_FIELDS[block.type] || [];
-        var n;
-        for (n = 0; n < names.length; n++) {
-            if (typeof block[names[n]] === 'string') {
-                pushField(list, bPath, names[n], block[names[n]], block.id + ' / ' + names[n]);
-            }
-        }
-        if (block.type === 'fluency-pass' && Number.isInteger(block.seconds) && PART_PATH.test(bPath)) {
-            list.push({
-                path: bPath,
-                field: 'seconds',
-                loaded: String(block.seconds),
-                caption: block.id + ' / seconds',
-                numeric: true
-            });
-        }
-        var bucket;
-        for (bucket in ITEM_FIELDS) {
-            if (!Object.prototype.hasOwnProperty.call(ITEM_FIELDS, bucket)) continue;
-            var items = block[bucket];
-            if (!Array.isArray(items)) continue;
-            var i;
-            for (i = 0; i < items.length; i++) {
-                var item = items[i];
-                if (!item || typeof item.id !== 'string' || !ENTRY.test(item.id)) continue;
-                var path = bPath + '/' + bucket + '/' + item.id;
-                var fields = ITEM_FIELDS[bucket];
-                var f;
-                for (f = 0; f < fields.length; f++) {
-                    if (typeof item[fields[f]] === 'string') {
-                        pushField(
-                            list,
-                            path,
-                            fields[f],
-                            item[fields[f]],
-                            block.id + ' / ' + bucket + ' / ' + item.id + ' / ' + fields[f]
-                        );
-                    }
-                }
-            }
-        }
-        return list;
     }
 
     function labeled(caption, control) {
@@ -281,7 +176,9 @@
     }
 
     function errorText(res) {
-        if (res && typeof res.error === 'string' && res.error) return res.error;
+        if (res && typeof res.error === 'string' && res.error) {
+            return typeof res.code === 'string' && res.code ? res.error + ' ' + res.code : res.error;
+        }
         if (res && res.data && typeof res.data.error === 'string') return res.data.error;
         return 'request failed';
     }
@@ -588,9 +485,27 @@
     }
 
     /**
+     * The validation panel lives in a stable host so a failed save can refresh it
+     * without repainting the page (a repaint would drop the issues shown at the fields).
      * @param {HTMLElement} parent
      */
     function paintValidation(parent) {
+        var host = el('div');
+        host.setAttribute('data-plan-validation-host', '');
+        state.validationHost = host;
+        fillValidation(host);
+        parent.appendChild(host);
+    }
+
+    function refreshValidation() {
+        if (state && state.validationHost) fillValidation(state.validationHost);
+    }
+
+    /**
+     * @param {HTMLElement} host
+     */
+    function fillValidation(host) {
+        empty(host);
         var box = el('div');
         box.className = 'card';
         box.setAttribute('data-plan-validation', '');
@@ -630,16 +545,195 @@
             }
             box.appendChild(list);
         }
-        parent.appendChild(box);
+        host.appendChild(box);
+    }
+
+    /**
+     * Findings from the last save or publish, flattened with their severity, for the
+     * inline issues at the fields.
+     * @returns {object[]}
+     */
+    function validationList() {
+        var v = state && state.validation;
+        if (!v) return [];
+        var out = [];
+        [['block', v.blocks], ['warn', v.warnings], ['inform', v.informs]].forEach(function (group) {
+            (group[1] || []).forEach(function (finding) {
+                if (!finding || typeof finding !== 'object') return;
+                var copy = {};
+                Object.keys(finding).forEach(function (key) { copy[key] = finding[key]; });
+                copy.severity = copy.severity || group[0];
+                out.push(copy);
+            });
+        });
+        return out;
+    }
+
+    function blockLabel(type) {
+        var hints = root.HebrewPlanHints;
+        var hint = hints && hints.blocks && hints.blocks[type];
+        return hint ? hint.label[0] + ' (' + hint.label[1] + ')' : String(type || '');
+    }
+
+    /**
+     * A section the admin opens and closes. The body is built only while it is open,
+     * so a closed plan or unit form costs nothing; unsaved text in a closed form is
+     * kept as a draft by the editor.
+     */
+    function disclosure(name, he, en, build) {
+        var open = state.open[name] === true;
+        var card = el('section');
+        card.className = 'card';
+        card.setAttribute('data-plan-section', name);
+        var heading = el('h3');
+        var toggle = button('data-plan-disclose', name, (open ? '▾ ' : '▸ ') + he + ' (' + en + ')', false);
+        toggle.className = 'btn btn-ghost plan-disclose';
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        toggle.setAttribute('data-plan-focus-key', 'disclose:' + name);
+        heading.appendChild(toggle);
+        card.appendChild(heading);
+        if (open) {
+            var body = build();
+            if (body) card.appendChild(body);
+        }
+        return card;
+    }
+
+    function unitPathOf(lessonPath) {
+        var segs = String(lessonPath || '').split('/');
+        return segs.length >= 2 ? segs[0] + '/' + segs[1] : '';
+    }
+
+    function renderNewDraft(type) {
+        var host = state.newDraftHost;
+        if (!host) return;
+        empty(host);
+        state.draft = null;
+        var tools = state.editor.tools();
+        var def = tools ? tools.blockDef(type) : null;
+        if (!def) return;
+        var required = tools.requiredOf(tools.defSchema(def)).filter(function (prop) {
+            return prop !== 'id' && prop !== 'type';
+        });
+        if (!required.length) return;
+        var seed = form().newBlock(type, 'new');
+        if (!seed) return;
+        var handle = state.editor.renderDraft(def, seed, required);
+        host.appendChild(handle.el);
+        state.draft = { type: type, handle: handle };
+    }
+
+    function paintInsert(parent, blocks) {
+        var insert = el('div');
+        insert.className = 'card';
+        insert.setAttribute('data-plan-newblock', '');
+        var heading = el('h3');
+        heading.textContent = 'בלוק חדש (New block)';
+        insert.appendChild(heading);
+        var idInput = el('input');
+        idInput.type = 'text';
+        idInput.setAttribute('data-plan-new-id', '');
+        idInput.setAttribute('autocomplete', 'off');
+        var typeSelect = el('select');
+        typeSelect.setAttribute('data-plan-new-type', '');
+        var types = form() ? form().blockTypeList() : [];
+        var t;
+        for (t = 0; t < types.length; t++) {
+            var opt = el('option');
+            opt.value = types[t].type;
+            opt.textContent = types[t].he + ' (' + types[t].en + ')';
+            typeSelect.appendChild(opt);
+        }
+        if (types.length) typeSelect.value = types[0].type;
+        var indexInput = el('input');
+        indexInput.type = 'text';
+        indexInput.setAttribute('data-plan-new-index', '');
+        indexInput.setAttribute('inputmode', 'numeric');
+        indexInput.value = String(blocks.length);
+        insert.appendChild(labeled('מזהה (Id)', idInput));
+        insert.appendChild(labeled('סוג (Type)', typeSelect));
+        insert.appendChild(labeled('מקום (Index)', indexInput));
+        var note = el('p');
+        note.className = 'plan-note';
+        note.textContent = 'ממלאים את השדות הנדרשים; השרת אומר מה חסר. (Fill in the required fields; the server says what is missing.)';
+        insert.appendChild(note);
+        var draftHost = el('div');
+        draftHost.setAttribute('data-plan-new-draft', '');
+        state.newDraftHost = draftHost;
+        insert.appendChild(draftHost);
+        var issues = el('ul');
+        issues.className = 'plan-issues';
+        issues.setAttribute('data-plan-new-issues', '');
+        insert.appendChild(issues);
+        insert.appendChild(button('data-plan-insert', '', 'הוספה (Insert)', !state.lessonPath));
+        parent.appendChild(insert);
+        if (types.length && state.editor.hasSchema()) renderNewDraft(typeSelect.value);
+    }
+
+    function showNewIssues(data) {
+        if (!state || !state.panel) return;
+        var list = state.panel.querySelector('[data-plan-new-issues]');
+        if (!list) return;
+        empty(list);
+        var all = [];
+        [['block', data.blocks], ['warn', data.warnings], ['inform', data.informs]].forEach(function (group) {
+            (Array.isArray(group[1]) ? group[1] : []).forEach(function (finding) {
+                if (finding && typeof finding === 'object') all.push({ severity: group[0], finding: finding });
+            });
+        });
+        all.forEach(function (item) {
+            var li = el('li');
+            li.className = 'plan-issue plan-issue-' + item.severity;
+            li.setAttribute('data-plan-issue', typeof item.finding.rule === 'string' ? item.finding.rule : '');
+            var where = typeof item.finding.path === 'string' ? item.finding.path.split('/').slice(-2).join('/') : '';
+            li.textContent = item.severity + ' · ' + (item.finding.rule || '') + ' — '
+                + (item.finding.message || '') + (where ? ' (' + where + ')' : '');
+            list.appendChild(li);
+        });
     }
 
     function paint() {
         var panel = state.panel;
+        var editor = state.editor;
         var lesson = state.lesson;
         var blocks = blocksOf(lesson);
         var selected = state.selectedId ? blockById(state.selectedId) : null;
         if (state.selectedId && !selected) state.selectedId = null;
-        state.fields = selected ? fieldsForBlock(state.lessonPath, selected.block) : [];
+
+        // Keep unsaved text, the open sections, focus, and scroll across the repaint.
+        var focus = editor.focusKey();
+        editor.captureDrafts();
+        editor.reset();
+        var scrollY = typeof root.scrollY === 'number' ? root.scrollY : null;
+
+        // The block form is made first, so its field buttons are numbered first.
+        var ready = state.schema === 'ready';
+        var blockForm = null;
+        if (selected && ready && LESSON_PATH.test(state.lessonPath)) {
+            blockForm = editor.renderNode({
+                path: state.lessonPath + '/blocks/' + selected.block.id,
+                node: selected.block,
+                kind: 'block'
+            });
+        }
+        var lessonCard = null;
+        var unitCard = null;
+        var planCard = null;
+        if (ready && state.plan) {
+            if (lesson && LESSON_PATH.test(state.lessonPath)) {
+                lessonCard = disclosure('lesson', 'פרטי השיעור', 'Lesson details', function () {
+                    return editor.renderNode({ path: state.lessonPath, node: lesson, kind: 'lesson' }).el;
+                });
+                unitCard = disclosure('unit', 'פרטי היחידה', 'Unit details', function () {
+                    var path = unitPathOf(state.lessonPath);
+                    var node = form().nodeAt(state.plan, path);
+                    return node ? editor.renderNode({ path: path, node: node, kind: 'unit' }).el : null;
+                });
+            }
+            planCard = disclosure('plan', 'פרטי התוכנית', 'Plan details', function () {
+                return editor.renderNode({ path: '', node: state.plan, kind: 'plan' }).el;
+            });
+        }
 
         empty(panel);
         var rootEl = el('div');
@@ -670,12 +764,30 @@
         status.setAttribute('data-plan-status', '');
         status.textContent = state.plan && typeof state.plan.status === 'string' ? state.plan.status : '';
         toolbar.appendChild(status);
+        if (state.panels.issues) {
+            // What the publish will meet, and that warnings never stop it. No approval step.
+            var publishNote = el('p');
+            publishNote.className = 'plan-note';
+            publishNote.setAttribute('data-plan-publish-note', '');
+            publishNote.textContent = state.publishNote || '';
+            toolbar.appendChild(publishNote);
+        }
         toolbar.appendChild(button('data-plan-publish', '', 'פרסום (Publish)', false));
         toolbar.appendChild(button('data-plan-reload', '', 'טעינה מחדש (Reload)', false));
+        var notice = el('p');
+        notice.setAttribute('data-plan-notice', '');
+        notice.setAttribute('role', 'status');
+        notice.textContent = state.notice || '';
+        toolbar.appendChild(notice);
         rootEl.appendChild(toolbar);
 
         rootEl.appendChild(messageNode('data-plan-conflict'));
         rootEl.appendChild(messageNode('data-plan-error'));
+
+        if (state.panels.assign) {
+            state.panels.assign.update(state.plan);
+            rootEl.appendChild(state.panels.assign.el);
+        }
 
         var chooser = el('div');
         chooser.className = 'card';
@@ -689,9 +801,39 @@
         }
         rootEl.appendChild(chooser);
 
+        // Two columns on a wide screen: the forms, and beside them the preview, issues, and history.
+        var layout = el('div');
+        layout.className = 'plan-layout';
+        var mainCol = el('div');
+        mainCol.className = 'plan-main';
+        var aside = el('div');
+        aside.className = 'plan-aside';
+        layout.appendChild(mainCol);
+        layout.appendChild(aside);
+        rootEl.appendChild(layout);
+
+        if (state.schema === 'loading') {
+            var loading = el('p');
+            loading.className = 'plan-note';
+            loading.setAttribute('data-plan-schema-loading', '');
+            loading.setAttribute('role', 'status');
+            loading.textContent = 'טוען את הסכמה… (Loading the schema…)';
+            mainCol.appendChild(loading);
+        } else if (state.schema === 'failed') {
+            var failed = el('p');
+            failed.className = 'admin-inline-error';
+            failed.setAttribute('data-plan-schema-failed', '');
+            failed.setAttribute('role', 'alert');
+            failed.textContent = 'הסכמה לא נטענה; אפשר לערוך רק כ-JSON. (The schema did not load; only raw JSON editing is available.)';
+            mainCol.appendChild(failed);
+        }
+        if (lessonCard) mainCol.appendChild(lessonCard);
+        if (unitCard) mainCol.appendChild(unitCard);
+        if (planCard) mainCol.appendChild(planCard);
+
         var outlineHeading = el('h3');
         outlineHeading.textContent = 'בלוקים (Blocks)';
-        rootEl.appendChild(outlineHeading);
+        mainCol.appendChild(outlineHeading);
         var outline = el('ol');
         outline.setAttribute('data-plan-outline', '');
         var b;
@@ -700,8 +842,9 @@
             if (!block || typeof block.id !== 'string' || !ENTRY.test(block.id)) continue;
             var row = el('li');
             row.setAttribute('data-plan-block', block.id);
+            if (state.selectedId === block.id) row.setAttribute('aria-current', 'true');
             var label = el('span');
-            label.textContent = (typeof block.type === 'string' ? block.type : '') + ' ' + block.id;
+            label.textContent = blockLabel(block.type) + ' · ' + block.id;
             row.appendChild(label);
             var upIndex = moveDestination(b, 'up');
             var downIndex = moveDestination(b, 'down');
@@ -716,77 +859,72 @@
             row.appendChild(button('data-plan-edit', '', 'שדות (Fields)', false));
             outline.appendChild(row);
         }
-        rootEl.appendChild(outline);
+        mainCol.appendChild(outline);
 
-        var insert = el('div');
-        insert.className = 'card';
-        var idInput = el('input');
-        idInput.type = 'text';
-        idInput.setAttribute('data-plan-new-id', '');
-        idInput.setAttribute('autocomplete', 'off');
-        var typeSelect = el('select');
-        typeSelect.setAttribute('data-plan-new-type', '');
-        var t;
-        for (t = 0; t < BLOCK_TYPES.length; t++) {
-            var opt = el('option');
-            opt.value = BLOCK_TYPES[t];
-            opt.textContent = BLOCK_TYPES[t];
-            typeSelect.appendChild(opt);
-        }
-        typeSelect.value = BLOCK_TYPES[0];
-        var indexInput = el('input');
-        indexInput.type = 'text';
-        indexInput.setAttribute('data-plan-new-index', '');
-        indexInput.setAttribute('inputmode', 'numeric');
-        indexInput.value = String(blocks.length);
-        insert.appendChild(labeled('מזהה (Id)', idInput));
-        insert.appendChild(labeled('סוג (Type)', typeSelect));
-        insert.appendChild(labeled('מקום (Index)', indexInput));
-        insert.appendChild(button('data-plan-insert', '', 'הוספה (Insert)', !state.lessonPath));
-        rootEl.appendChild(insert);
+        paintInsert(mainCol, blocks);
 
         var fields = el('div');
         fields.className = 'card';
         fields.setAttribute('data-plan-fields', '');
-        var fi;
-        for (fi = 0; fi < state.fields.length; fi++) {
-            var entry = state.fields[fi];
-            var labelEl = el('label');
-            var caption = el('span');
-            caption.textContent = entry.caption;
-            var area = el('textarea');
-            area.value = entry.loaded;
-            area.setAttribute('data-plan-field', entry.field);
-            area.setAttribute('data-plan-field-index', String(fi));
-            area.rows = 3;
-            var save = button('data-plan-save-field', String(fi), 'שמירת שדה (Save field)', false);
-            save.className = 'btn btn-primary';
-            labelEl.appendChild(caption);
-            labelEl.appendChild(area);
-            labelEl.appendChild(save);
-            fields.appendChild(labelEl);
+        if (blockForm) {
+            var fieldsHeading = el('h3');
+            fieldsHeading.textContent = blockLabel(selected.block.type) + ' ';
+            var headingId = el('span');
+            headingId.className = 'plan-block-id';
+            headingId.setAttribute('dir', 'ltr');
+            headingId.textContent = selected.block.id;
+            fieldsHeading.appendChild(headingId);
+            fields.appendChild(fieldsHeading);
+            fields.appendChild(blockForm.el);
         }
-        rootEl.appendChild(fields);
+        mainCol.appendChild(fields);
 
         if (selected && selected.block && selected.block.type === 'introduction') {
-            paintPictures(rootEl, selected.block);
+            paintPictures(mainCol, selected.block);
         }
 
-        paintMedia(rootEl);
-        paintValidation(rootEl);
+        paintMedia(mainCol);
 
+        // The aside: the preview first, so it stays beside the form, then what the server found.
+        var previewCard = el('section');
+        previewCard.className = 'card plan-preview-card';
+        previewCard.setAttribute('data-plan-preview-card', '');
+        var previewHeading = el('h3');
+        previewHeading.textContent = 'תצוגה מקדימה (Preview)';
+        previewCard.appendChild(previewHeading);
+        var previewLabel = el('p');
+        previewLabel.className = 'plan-note';
+        previewLabel.setAttribute('data-plan-preview-label', '');
+        previewLabel.setAttribute('role', 'status');
+        previewCard.appendChild(previewLabel);
         var preview = el('div');
         preview.className = 'plan-page';
         preview.setAttribute('data-plan-preview', '');
         preview.setAttribute('aria-label', 'תצוגה מקדימה');
-        if (selected && root.HebrewPlanRender && typeof root.HebrewPlanRender.renderBlock === 'function') {
-            var html = root.HebrewPlanRender.renderBlock(selected.block, { lesson: lesson });
-            // Renderer output only. Plan text is escaped there. This does not eval it.
-            if (typeof html === 'string') preview.innerHTML = html;
-        }
-        rootEl.appendChild(preview);
+        // The learner's controls are drawn and not wired: a click on one does nothing.
+        var guard = function (ev) {
+            if (root.HebrewPlanPreview) root.HebrewPlanPreview.guardClick(ev, preview);
+        };
+        preview.addEventListener('click', guard, state.controller ? { signal: state.controller.signal } : undefined);
+        previewCard.appendChild(preview);
+        state.previewEl = preview;
+        state.previewLabel = previewLabel;
+        aside.appendChild(previewCard);
+        if (state.panels.issues) aside.appendChild(state.panels.issues.el);
+        paintValidation(aside);
+        if (state.panels.history) aside.appendChild(state.panels.history.el);
 
         panel.appendChild(rootEl);
+        refreshPreview();
+
+        // Findings the server returned for this document show at their fields: the issues list when
+        // it has arrived, otherwise the findings of the last save or publish.
+        var Issues = root.HebrewPlanIssues;
+        var served = state.issues && Array.isArray(state.issues.issues) && Issues;
+        editor.setIssues(served ? Issues.forEditor(state.issues.issues) : validationList(), state.plan);
+        editor.setEditState(state.editState);
+        if (focus) editor.restoreFocus(focus);
+        if (scrollY !== null && typeof root.scrollTo === 'function') root.scrollTo(0, scrollY);
     }
 
     function onClick(ev) {
@@ -841,8 +979,13 @@
         if (move) return moveBlock(move);
         if (attrNode(node, 'data-plan-remove')) return removeBlock(node);
         if (attrNode(node, 'data-plan-insert')) return insertBlock();
-        var save = attrNode(node, 'data-plan-save-field');
-        if (save) return saveField(save);
+        var disclose = attrNode(node, 'data-plan-disclose');
+        if (disclose) {
+            var section = disclose.getAttribute('data-plan-disclose');
+            state.open[section] = state.open[section] !== true;
+            paint();
+            return Promise.resolve();
+        }
         if (attrNode(node, 'data-plan-upload')) return uploadFile();
         if (attrNode(node, 'data-plan-dry-run')) return dryRun();
         if (attrNode(node, 'data-plan-generate')) return generateImage();
@@ -854,12 +997,16 @@
 
     function onChange(ev) {
         if (!state) return;
+        schedulePreview();
         var node = targetNode(ev);
         if (node && attrNode(node, 'data-plan-confirm')) syncGenerate();
+        var typeSelect = node ? attrNode(node, 'data-plan-new-type') : null;
+        if (typeSelect) renderNewDraft(String(typeSelect.value || ''));
     }
 
     function onInput(ev) {
         if (!state || !state.panel) return;
+        schedulePreview();
         var node = targetNode(ev);
         if (!node) return;
         if (attrNode(node, 'data-plan-approve-alt')) syncApprove();
@@ -878,14 +1025,30 @@
         syncGenerate();
     }
 
+    /** Reload takes what the server has and drops unsaved text (the admin asked for it). */
     function reload() {
         hideBox('data-plan-conflict');
+        // reset() first: the next paint would otherwise take the live text for a draft again.
+        state.editor.reset();
+        state.editor.discardDrafts();
         return loadPlan();
     }
 
     function publish() {
         if (!Number.isInteger(state.revision)) return Promise.resolve();
-        return write('POST', '/api/plans/' + encodeURIComponent(state.planId) + '/publish', {});
+        var mine = state.token;
+        return write('POST', '/api/plans/' + encodeURIComponent(state.planId) + '/publish', {}).then(function (ok) {
+            if (!ok || !alive(mine)) return ok;
+            // After a publish: the issues the server found, shown next to the new revision.
+            var issues = state.panels.issues;
+            var last = issues ? issues.last() : null;
+            if (last && root.HebrewPlanIssues) {
+                state.notice = 'פורסם (Published) · ' + state.revision + ' · ' + root.HebrewPlanIssues.countsText(last.counts).text;
+                var node = state.panel && state.panel.querySelector('[data-plan-notice]');
+                if (node) node.textContent = state.notice;
+            }
+            return ok;
+        });
     }
 
     function moveBlock(node) {
@@ -943,38 +1106,25 @@
             showBox('data-plan-error', 'invalid type');
             return Promise.resolve();
         }
+        // The required fields the admin filled in, when the form on screen is for this type.
+        if (state.draft && state.draft.type === type) {
+            var problem = state.draft.handle.check();
+            if (problem) {
+                showBox('data-plan-error', problem);
+                return Promise.resolve();
+            }
+            var drafted = state.draft.handle.getValue();
+            if (drafted && typeof drafted === 'object') {
+                Object.keys(drafted).forEach(function (key) {
+                    if (key !== 'id' && key !== 'type') block[key] = drafted[key];
+                });
+            }
+        }
         return write('POST', '/api/plans/' + encodeURIComponent(state.planId) + '/blocks', {
             path: state.lessonPath,
             index: index,
             block: block
-        });
-    }
-
-    function saveField(node) {
-        var index = Number(node.getAttribute('data-plan-save-field'));
-        var entry = state.fields && state.fields[index];
-        if (!entry || !FIELD_OK[entry.field] || !PART_PATH.test(entry.path)) return Promise.resolve();
-        var areas = state.panel.querySelectorAll('textarea');
-        var area = null;
-        var i;
-        for (i = 0; i < areas.length; i++) {
-            if (!areas[i].hasAttribute('data-plan-field-index')) continue;
-            if (Number(areas[i].getAttribute('data-plan-field-index')) === index) area = areas[i];
-        }
-        if (!area) return Promise.resolve();
-        var value = area.value;
-        if (entry.numeric) {
-            if (!/^\d+$/.test(value)) {
-                showBox('data-plan-error', 'invalid number');
-                return Promise.resolve();
-            }
-            value = Number(value);
-        }
-        return write('PATCH', '/api/plans/' + encodeURIComponent(state.planId) + '/fields', {
-            path: entry.path,
-            field: entry.field,
-            value: value
-        });
+        }, { onValidation: showNewIssues });
     }
 
     /**
@@ -1180,12 +1330,18 @@
     }
 
     /**
+     * One revision-checked write. `expectedRevision` is the value the server last
+     * returned (state.revision), never a value read from the page.
+     * `hooks.onSaved` runs on success before the page repaints; `hooks.onValidation`
+     * gets a 400 validation body. The status and body of the last answer stay in
+     * `state.last` for the editor's transport.
      * @param {string} method
      * @param {string} path
      * @param {object} body
+     * @param {{ onSaved?: Function, onValidation?: Function }} [hooks]
      * @returns {Promise<boolean>}
      */
-    function write(method, path, body) {
+    function write(method, path, body, hooks) {
         var mine = state.token;
         if (!Number.isInteger(state.revision) || !api() || state.busy) return Promise.resolve(false);
         var payload = {
@@ -1199,16 +1355,19 @@
         return api().request(path, { method: method, body: payload }).then(function (res) {
             if (!alive(mine)) return false;
             state.busy = false;
+            state.last = { ok: !!(res && res.ok), status: res ? res.status : 0, data: res ? res.data : null };
             if (res && res.status === 409) {
                 showConflict(res.data || {});
                 return false;
             }
             if (res && res.status === 400 && res.data && res.data.error === 'validation') {
+                // No repaint: the typed text and the issues at the fields stay where they are.
                 state.validation = findingsFrom(res.data);
                 state.publishRefused = path.indexOf('/publish') !== -1;
                 state.publishRefusal = typeof res.data.error === 'string' ? res.data.error : '';
                 hideBox('data-plan-conflict');
-                paint();
+                refreshValidation();
+                if (hooks && typeof hooks.onValidation === 'function') hooks.onValidation(res.data);
                 return false;
             }
             if (!res || !res.ok || !res.data || !Number.isInteger(res.data.revision)) {
@@ -1220,12 +1379,14 @@
             state.validation = findingsFrom(res.data);
             state.publishRefused = false;
             state.publishRefusal = '';
+            state.notice = 'נשמר (Saved) · ' + res.data.revision;
             hideBox('data-plan-conflict');
+            if (hooks && typeof hooks.onSaved === 'function') hooks.onSaved();
             if (state.lessonPath) {
-                return loadLesson(state.lessonPath).then(function () { return true; });
+                return loadLesson(state.lessonPath).then(function () { return refreshSide(); }).then(function () { return true; });
             }
             paint();
-            return true;
+            return refreshSide().then(function () { return true; });
         }).catch(function (err) {
             if (!alive(mine)) return false;
             state.busy = false;
@@ -1276,28 +1437,81 @@
             }
             state.plan = res.data.part;
             state.revision = res.data.revision;
+            state.editState = humanEditedOf(res.data.editState);
             state.lessonChoices = listLessons(state.plan);
-            if (state.lessonChoices.length === 1) return loadLesson(state.lessonChoices[0].path);
-            state.lesson = null;
-            state.lessonPath = '';
-            paint();
+            if (state.panels.assign) state.panels.assign.load();
+            var shown;
+            // A lesson that was open stays open after a reload or a restore, when it is still there.
+            var keep = state.lessonChoices.filter(function (c) { return c.path === state.lessonPath; })[0];
+            if (state.lessonChoices.length === 1 || keep) {
+                shown = loadLesson((keep || state.lessonChoices[0]).path);
+            } else {
+                state.lesson = null;
+                state.lessonPath = '';
+                paint();
+                shown = Promise.resolve();
+            }
+            return shown.then(function () {
+                if (!alive(mine)) return undefined;
+                return ensureSchema();
+            }).then(function () {
+                if (!alive(mine)) return undefined;
+                // the read above already carried who last wrote each field
+                return refreshSide({ skipEditState: true });
+            });
         }).catch(function (err) {
             if (!alive(mine)) return;
             paintMessage((err && err.message) || 'request failed');
         });
     }
 
-    function isDirty() {
-        if (!state || !state.panel || !state.fields) return false;
-        var areas = state.panel.querySelectorAll('textarea');
-        var i;
-        for (i = 0; i < areas.length; i++) {
-            if (!areas[i].hasAttribute('data-plan-field-index')) continue;
-            var index = Number(areas[i].getAttribute('data-plan-field-index'));
-            var entry = state.fields[index];
-            if (entry && areas[i].value !== entry.loaded) return true;
+    /**
+     * The plan JSON Schema is fetched once per mount, after the plan has painted.
+     * Until it arrives the form area says so; if it does not arrive, every node can
+     * still be edited as raw JSON.
+     * @returns {Promise<void>}
+     */
+    function ensureSchema() {
+        var mine = state.token;
+        if (state.editor.hasSchema()) {
+            state.schema = 'ready';
+            paint();
+            return Promise.resolve();
         }
-        return false;
+        return state.editor.loadSchema(api()).then(function (ok) {
+            if (!alive(mine)) return;
+            state.schema = ok ? 'ready' : 'failed';
+            paint();
+        });
+    }
+
+    function isDirty() {
+        return !!(state && state.editor && state.editor.hasUnsaved());
+    }
+
+    /**
+     * What the editor sends through. Each call is one revision-checked write; the
+     * answer carries the status and body so the editor can show a conflict or the
+     * server's rule codes at the field.
+     */
+    function makeTransport(mine) {
+        function call(method, suffix, body, hooks) {
+            if (!state || state !== mine) return Promise.resolve({ ok: false, status: 0, data: null });
+            if (state.busy) return Promise.resolve({ ok: false, status: 0, data: { code: 'busy' } });
+            var url = '/api/plans/' + encodeURIComponent(mine.planId) + suffix;
+            return write(method, url, body, hooks).then(function (ok) {
+                var last = mine.last || {};
+                return { ok: ok, status: last.status, data: last.data };
+            });
+        }
+        return {
+            setField: function (path, field, value, hooks) {
+                return call('PATCH', '/fields', { path: path, field: field, value: value }, hooks);
+            },
+            putPart: function (path, value, hooks) {
+                return call('PUT', '/parts', { path: path, value: value }, hooks);
+            }
+        };
     }
 
     /**
@@ -1317,7 +1531,14 @@
             lessonPath: '',
             lessonChoices: [],
             selectedId: null,
-            fields: [],
+            open: { lesson: true, unit: false, plan: false },
+            schema: 'loading',
+            draft: null,
+            newDraftHost: null,
+            validationHost: null,
+            notice: '',
+            last: null,
+            controller: null,
             revision: null,
             busy: false,
             media: [],
@@ -1326,66 +1547,306 @@
             estimatePrompt: '',
             validation: null,
             publishRefused: false,
-            publishRefusal: ''
+            publishRefusal: '',
+            issues: null,
+            publishNote: '',
+            editState: [],
+            panels: {},
+            transport: null,
+            previewTimer: null,
+            previewEl: null,
+            previewLabel: null
         };
         if (!panel || !SLUG.test(planId)) {
             if (panel) paintMessage('invalid plan id');
             return Promise.resolve();
         }
-        panel.removeEventListener('click', onClick);
-        panel.removeEventListener('change', onChange);
-        panel.removeEventListener('input', onInput);
-        panel.addEventListener('click', onClick);
-        panel.addEventListener('change', onChange);
-        panel.addEventListener('input', onInput);
+        var controller = typeof root.AbortController === 'function' ? new root.AbortController() : null;
+        var listen = controller ? { signal: controller.signal } : undefined;
+        state.controller = controller;
+        panel.addEventListener('click', onClick, listen);
+        panel.addEventListener('change', onChange, listen);
+        panel.addEventListener('input', onInput, listen);
+        if (!form()) {
+            paintMessage('HebrewPlanForm missing');
+            return Promise.resolve();
+        }
+        state.transport = makeTransport(state);
+        state.editor = form().createEditor({
+            doc: root.document,
+            host: panel,
+            signal: controller ? controller.signal : null,
+            transport: state.transport,
+            track: track,
+            getPlan: function () { return state && state.plan; },
+            onToggle: function () { if (state) paint(); },
+            onRestoreValue: onRestoreValue
+        });
+        makePanels(controller ? controller.signal : null);
         return track(loadPlan());
     }
 
+    // ---- the INIT-008 panels -------------------------------------------------------------------
+
+    function makePanels(signal) {
+        var current = state;
+        var common = { doc: root.document, api: api(), planId: current.planId, signal: signal };
+        function extend(extra) {
+            var out = {};
+            Object.keys(common).forEach(function (key) { out[key] = common[key]; });
+            Object.keys(extra).forEach(function (key) { out[key] = extra[key]; });
+            return out;
+        }
+        if (root.HebrewPlanIssues && typeof root.HebrewPlanIssues.create === 'function') {
+            current.panels.issues = root.HebrewPlanIssues.create(extend({
+                getPlan: function () { return state && state.plan; },
+                onJump: jumpTo,
+                onFix: applyFix,
+                onLoaded: onIssues
+            }));
+        }
+        if (root.HebrewPlanHistory && typeof root.HebrewPlanHistory.create === 'function') {
+            current.panels.history = root.HebrewPlanHistory.create(extend({
+                getRevision: function () { return state ? state.revision : null; },
+                hasUnsaved: isDirty,
+                onRestored: afterRestore,
+                onReload: function () { if (state) track(reload()); }
+            }));
+        }
+        if (root.HebrewPlanList && typeof root.HebrewPlanList.createAssign === 'function') {
+            current.panels.assign = root.HebrewPlanList.createAssign(extend({
+                getRevision: function () { return state ? state.revision : null; },
+                onAssigned: afterAssign,
+                onConflict: function (data) { if (state) showConflict(data); }
+            }));
+        }
+    }
+
+    /** `editState.humanEdited` of a read, or an empty list. */
+    function humanEditedOf(editState) {
+        return editState && Array.isArray(editState.humanEdited) ? editState.humanEdited : [];
+    }
+
+    /** The server's issues arrived: the publish line, the inline issues at the fields. */
+    function onIssues(result) {
+        if (!state) return;
+        state.issues = result;
+        var Issues = root.HebrewPlanIssues;
+        state.publishNote = Issues ? Issues.publishNote(result.counts) : '';
+        var note = state.panel && state.panel.querySelector('[data-plan-publish-note]');
+        if (note) note.textContent = state.publishNote;
+        if (state.editor && Issues) state.editor.setIssues(Issues.forEditor(result.issues), state.plan);
+    }
+
     /**
-     * Ask for a plan id. Does not call the lesson worksheet API.
+     * What the side panels show, after the plan was read or written: the issues, the history when it
+     * is open, and which fields a person last wrote. Resolves when they have all answered.
+     * @param {{ skipEditState?: boolean }} [opts]
+     * @returns {Promise<void>}
+     */
+    function refreshSide(opts) {
+        if (!state) return Promise.resolve();
+        var mine = state.token;
+        var panels = state.panels;
+        var jobs = [];
+        if (panels.issues) jobs.push(panels.issues.load());
+        if (panels.history) {
+            jobs.push(panels.history.load());
+            if (!(opts && opts.skipEditState)) jobs.push(loadEditState());
+        }
+        if (!jobs.length) return Promise.resolve();
+        return Promise.all(jobs).then(function () {
+            if (!alive(mine)) return;
+            if (state.editor) state.editor.setEditState(state.editState);
+        });
+    }
+
+    function loadEditState() {
+        var mine = state.token;
+        return api().get(partsUrl('')).then(function (res) {
+            if (!alive(mine)) return;
+            if (res && res.ok && res.data && res.data.editState) state.editState = humanEditedOf(res.data.editState);
+        }).catch(function () { /* the marks stay as they were */ });
+    }
+
+    /** Open the node's form and focus the field an issue is about. */
+    function jumpTo(issue) {
+        if (!state || !issue || !form()) return Promise.resolve();
+        var path = typeof issue.path === 'string' ? issue.path : '';
+        var field = typeof issue.field === 'string' ? issue.field : '';
+        var kind = form().kindOfPath(path);
+        if (kind === null) return Promise.resolve();
+        var segs = path.split('/').filter(Boolean);
+        var lessonPath = segs.length >= 4 ? segs.slice(0, 4).join('/') : '';
+        if (kind === 'unit' && unitPathOf(state.lessonPath) !== path) {
+            var inUnit = state.lessonChoices.filter(function (c) { return c.path.indexOf(path + '/lessons/') === 0; })[0];
+            if (inUnit) lessonPath = inUnit.path;
+        }
+        var step = Promise.resolve();
+        if (lessonPath && lessonPath !== state.lessonPath && LESSON_PATH.test(lessonPath)) step = loadLesson(lessonPath);
+        var mine = state.token;
+        return track(step.then(function () {
+            if (!alive(mine)) return;
+            if (kind === 'plan') state.open.plan = true;
+            else if (kind === 'unit') state.open.unit = true;
+            else if (kind === 'lesson') state.open.lesson = true;
+            else {
+                var blockId = segs[5];
+                if (!ENTRY.test(blockId) || !blockById(blockId)) {
+                    showBox('data-plan-error', 'not_found — ' + path);
+                    return;
+                }
+                state.selectedId = blockId;
+                if (kind === 'item') state.editor.open(path);
+            }
+            paint();
+            state.editor.focusField(path, field);
+        }));
+    }
+
+    /** One set_field through the same save path as every edit; the answer tells the issues panel what happened. */
+    function applyFix(request) {
+        if (!state || !state.transport) return Promise.resolve(false);
+        return state.transport.setField(request.path, request.field, request.value, {}).then(function (out) {
+            if (out && out.ok) return 'refreshed';
+            var Ui = root.HebrewPlanUi;
+            return { error: Ui ? Ui.failureText({ status: out ? out.status : 0, data: out ? out.data : null }) : 'refused' };
+        });
+    }
+
+    /** A restore came back 200: take the new revision and read the plan again. */
+    function afterRestore(data) {
+        if (!state) return Promise.resolve('refreshed');
+        state.revision = data.revision;
+        if (data.plan && typeof data.plan === 'object') state.plan = data.plan;
+        state.validation = findingsFrom(data);
+        state.publishRefused = false;
+        state.publishRefusal = '';
+        state.notice = 'שוחזר (Restored) · ' + data.revision;
+        hideBox('data-plan-conflict');
+        hideBox('data-plan-error');
+        // reset() first: the next paint would otherwise take the live text for a draft again.
+        state.editor.reset();
+        state.editor.discardDrafts();
+        return track(loadPlan().then(function () { return 'refreshed'; }));
+    }
+
+    /** An assignment came back 200. */
+    function afterAssign(data) {
+        if (!state) return;
+        state.revision = data.revision;
+        if (data.plan && typeof data.plan === 'object') state.plan = data.plan;
+        state.validation = findingsFrom(data);
+        state.notice = 'השיוך נשמר (Assignment saved) · ' + data.revision;
+        hideBox('data-plan-conflict');
+        var step = state.lessonPath ? loadLesson(state.lessonPath) : (paint(), Promise.resolve());
+        track(step.then(function () { return refreshSide(); }));
+    }
+
+    /** "Restore the earlier value" under a field: the history panel asks once, then restores. */
+    function onRestoreValue(spec) {
+        var history = state && state.panels.history;
+        if (!history || !spec || !spec.anchor) return;
+        history.confirmAt(spec.anchor, { fromRevision: spec.fromRevision, path: spec.path, field: spec.field });
+    }
+
+    // ---- the live preview ----
+
+    /** Draw the preview from the saved node with the unsaved field text laid over it. */
+    function refreshPreview() {
+        if (!state || !state.previewEl) return;
+        var node = state.previewEl;
+        var selected = state.selectedId ? blockById(state.selectedId) : null;
+        var Preview = root.HebrewPlanPreview;
+        var out;
+        if (Preview) {
+            out = Preview.compute({
+                render: root.HebrewPlanRender,
+                lesson: state.lesson,
+                lessonPath: state.lessonPath,
+                block: selected ? selected.block : null,
+                blockPath: selected ? state.lessonPath + '/blocks/' + selected.block.id : '',
+                handles: state.editor ? state.editor.handles() : []
+            });
+        } else {
+            out = { html: '', state: 'saved' };
+            if (selected && root.HebrewPlanRender && typeof root.HebrewPlanRender.renderBlock === 'function') {
+                out.html = root.HebrewPlanRender.renderBlock(selected.block, { lesson: state.lesson });
+            }
+        }
+        // Renderer output only: plan text is escaped there. This does not eval it.
+        if (typeof out.html === 'string') node.innerHTML = out.html;
+        node.setAttribute('data-plan-preview-state', out.state);
+        if (state.previewLabel) {
+            state.previewLabel.textContent = out.state === 'unsaved'
+                ? 'תצוגה מקדימה — לא נשמרה (Preview — not saved)'
+                : 'תצוגה מקדימה — כפי ששמור (Preview — as saved)';
+        }
+    }
+
+    function schedulePreview() {
+        if (!state || !state.previewEl || typeof root.setTimeout !== 'function') return;
+        if (state.previewTimer && typeof root.clearTimeout === 'function') root.clearTimeout(state.previewTimer);
+        var mine = state.token;
+        var wait = root.HebrewPlanPreview ? root.HebrewPlanPreview.DEBOUNCE_MS : 250;
+        state.previewTimer = root.setTimeout(function () {
+            if (alive(mine)) refreshPreview();
+        }, wait);
+    }
+
+    /**
+     * The Plans tab: a table of every plan, a New plan form, and a way to open one (plan-list.js).
+     * Does not call the lesson worksheet API.
      * @param {HTMLElement} panel
      * @returns {void}
      */
     function mountPicker(panel) {
         unmount();
         if (!panel) return;
-        empty(panel);
-        var box = el('div');
-        box.className = 'card plan-builder';
-        box.setAttribute('data-plan-builder', 'picker');
-        box.setAttribute('data-admin-view', 'plans');
-        box.setAttribute('dir', 'rtl');
-        box.setAttribute('lang', 'he');
-        var heading = el('h2');
-        heading.textContent = 'תוכנית (Plan)';
-        var input = el('input');
-        input.type = 'text';
-        input.setAttribute('data-plan-id', '');
-        input.setAttribute('autocomplete', 'off');
-        var open = button('data-plan-open', '', 'פתיחה (Open)', false);
-        var err = messageNode('data-plan-error');
-        box.appendChild(heading);
-        box.appendChild(input);
-        box.appendChild(open);
-        box.appendChild(err);
-        panel.appendChild(box);
-        panel.addEventListener('click', function (ev) {
-            var node = targetNode(ev);
-            if (!node || !attrNode(node, 'data-plan-open')) return;
-            var id = String(input.value || '').trim();
-            if (!SLUG.test(id)) {
-                err.hidden = false;
-                err.textContent = 'invalid plan id';
-                return;
-            }
-            if (root.HebrewAdminShell && typeof root.HebrewAdminShell.setHash === 'function') {
-                root.HebrewAdminShell.setHash('plan/' + id);
+        if (!root.HebrewPlanList || typeof root.HebrewPlanList.mount !== 'function') {
+            empty(panel);
+            var missing = el('p');
+            missing.className = 'admin-inline-error';
+            missing.setAttribute('role', 'alert');
+            missing.textContent = 'HebrewPlanList missing';
+            panel.appendChild(missing);
+            return;
+        }
+        pickerCleanup = root.HebrewPlanList.mount(panel, {
+            doc: root.document,
+            api: api(),
+            setHash: function (route) {
+                if (root.HebrewAdminShell && typeof root.HebrewAdminShell.setHash === 'function') {
+                    root.HebrewAdminShell.setHash(route);
+                }
             }
         });
     }
 
+    function destroyPanels(current) {
+        if (current.previewTimer && typeof root.clearTimeout === 'function') root.clearTimeout(current.previewTimer);
+        current.previewTimer = null;
+        var panels = current.panels || {};
+        Object.keys(panels).forEach(function (name) {
+            if (panels[name] && typeof panels[name].destroy === 'function') panels[name].destroy();
+        });
+        current.panels = {};
+    }
+
     function unmount() {
         token += 1;
+        if (state) {
+            if (state.controller) state.controller.abort();
+            if (state.panel) {
+                state.panel.removeEventListener('click', onClick);
+                state.panel.removeEventListener('change', onChange);
+                state.panel.removeEventListener('input', onInput);
+            }
+            destroyPanels(state);
+            if (state.editor) state.editor.destroy();
+        }
+        if (pickerCleanup) pickerCleanup();
+        pickerCleanup = null;
         state = null;
     }
 
@@ -1411,10 +1872,10 @@
     }
 
     root.HebrewPlanBuilder = {
-        BLOCK_TYPES: BLOCK_TYPES,
         SLUG: SLUG,
+        blockTypes: function () { return form() ? form().blockTypeList() : []; },
         canLeave: canLeave,
-        fieldsForBlock: fieldsForBlock,
+        editor: function () { return state ? state.editor : null; },
         mount: mount,
         mountPicker: mountPicker,
         moveDestination: moveDestination,

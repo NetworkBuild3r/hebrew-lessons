@@ -128,9 +128,37 @@
         keyboard: '<rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="10" x2="6.01" y2="10"/><line x1="10" y1="10" x2="10.01" y2="10"/><line x1="14" y1="10" x2="14.01" y2="10"/><line x1="18" y1="10" x2="18.01" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/>'
     };
 
+    // INIT-005/SPEC-010: names that exist in the brand sprite (shared/brand/sprite.svg,
+    // docs/design/icon-usage.md) are drawn from it; the rest keep the inline paths above
+    // (the sprite has no pause/stop/microphone/activity-type icons).
+    const SPRITE_URL = '/shared/brand/sprite.svg';
+    const SPRITE_NAMES = {
+        'volume-high': 'sound',
+        play: 'play',
+        check: 'check',
+        house: 'home',
+        'rotate-right': 'retry',
+        list: 'lessons'
+    };
+
+    /**
+     * Decorative sprite icon. aria-hidden: the control or the word beside it is the name.
+     * @param {string} name a sprite icon name (see shared/brand/icons/)
+     * @param {string} [className] extra classes
+     * @param {{ directional?: boolean }} [opts] directional: mirror under [dir=rtl] (next / back only)
+     */
+    utils.sprite = function (name, className, opts) {
+        const safe = String(name || '').replace(/[^a-z-]/g, '');
+        const dir = opts && opts.directional ? ' icon-directional' : '';
+        const extra = className ? ' ' + utils.escapeHtml(className) : '';
+        return '<svg class="icon' + dir + extra + '" aria-hidden="true" focusable="false">'
+            + '<use href="' + SPRITE_URL + '#icon-' + safe + '"></use></svg>';
+    };
+
     utils.icon = function (name, className) {
         let key = String(name || 'circle');
         if (key.indexOf('fa-') === 0) key = key.slice(3);
+        if (SPRITE_NAMES[key]) return utils.sprite(SPRITE_NAMES[key], className);
         const body = ICONS[key] || ICONS.circle;
         const cls = className ? ' class="' + utils.escapeHtml(className) + '"' : '';
         return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + cls + '>' + body + '</svg>';

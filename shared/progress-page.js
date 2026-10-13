@@ -86,10 +86,10 @@
     function renderEmpty() {
         return '<div class="card progress-card progress-empty" data-progress-state="empty">'
             + '<h2>' + bi('עדיין אין חזרות.', 'No reviews yet.') + '</h2>'
+            // One Hebrew sentence; only the two destinations carry an English gloss (REQ-016). The old
+            // word-by-word glosses "(Start with)" and "(or)" are gone.
             + '<p>'
-            + esc('התחילו ב') + ' <span class="en" dir="ltr">(Start with)</span> '
-            + '<a href="/">' + bi('היום', 'Today') + '</a> '
-            + esc('או') + ' <span class="en" dir="ltr">(or)</span> '
+            + esc('התחילו ב') + '<a href="/">' + bi('היום', 'Today') + '</a> ' + esc('או ב')
             + '<a href="/lessons/">' + bi('שיעורים', 'Lessons') + '</a>.'
             + '</p>'
             + '</div>';
@@ -126,7 +126,7 @@
             );
         }
         return '<div class="progress-stage-bar" role="img" aria-label="'
-            + esc('Memory stages') + '">'
+            + esc('שלבי זיכרון') + '">'
             + segs.join('')
             + '</div>';
     }

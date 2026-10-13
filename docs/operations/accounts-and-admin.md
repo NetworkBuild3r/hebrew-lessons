@@ -2,7 +2,7 @@
 
 Operator guide for first run, day-to-day accounts, lesson sharing, database backup, pictures, and audio safety. Commands below are for Windows PowerShell locally, and for `kubectl exec` on the cluster. Env var and k8s secret **names** only — never paste secret values into this file or into shell history.
 
-Provenance: `INIT-002/SPEC-018`. Pictures: `INIT-004/SPEC-019`. AI planning and the profile loop: `INIT-006/SPEC-019`. Cluster layout details: [deploy/k8s-database.md](../../deploy/k8s-database.md).
+Provenance: `INIT-002/SPEC-018`. Pictures: `INIT-004/SPEC-019`. AI planning and the profile loop: `INIT-006/SPEC-019`. Plan builder: `INIT-008/SPEC-017`. Cluster layout details: [deploy/k8s-database.md](../../deploy/k8s-database.md).
 
 ## First run
 
@@ -52,6 +52,68 @@ Sign in as an admin. Open the **Lessons** tab. For each lesson set visibility to
 New lessons stay hidden until you assign them (in this tab, or via MCP — see below).
 
 After step 2 of the [lesson-plan rollout](lesson-plan-rollout.md), this tab no longer limits who can read the published plan of `my-morning`, `anal-sex-vocab`, or `shai-date-indirect-speech`: the plan route reads the visibility inside the plan. To restrict one of those, change and publish its plan first, as that checklist describes, then this tab.
+
+## Plan builder
+
+Provenance: `INIT-008/SPEC-017`. Decisions: [ADR-0011](../decisions/ADR-0011-ai-first-plan-builder.md). Migration and rollout: [plan-builder-rollout.md](plan-builder-rollout.md).
+
+Lesson plans are built by the AI through the MCP and fixed by you in the admin **Plans** tab. The AI creates, edits, and publishes plans without waiting for you. You can open any plan, change any field, and put back an earlier value in one step. Every screen action here has an MCP tool, and every plan tool has an admin route, so the AI and you work on the same plan with the same rules.
+
+### The Plans list and New plan
+
+Sign in as an admin, open **Admin** (`/admin/`), then the **Plans** tab. Each row is one plan: title and id, draft or published (with an "unpublished changes" mark when the working copy is ahead of what learners read), audience and assignee, revision, how many fields a person last wrote, and the last update. Open a plan from its title.
+
+**New plan** asks for an id (a lowercase slug), a title, and optionally a recipe. It makes a draft at revision 1, shared, with the lesson **hidden** and one placeholder block. The recipe sets the lesson's starting recipe; it writes no Hebrew and no blocks. Insert a real block, then remove the placeholder. The AI makes plans the same way with `create_plan`, so a plan you did not create may already be in the list.
+
+### The editor
+
+The form is generated from the plan JSON Schema (`docs/decisions/ADR-0003-assets/lesson-plan.schema.json`), so it covers every block type, including `explainer`, `conjugation-table`, `personal-question`, `verse-reading`, and `letter-intro`, and the lesson's `recipe`, `newWords`, `buildsOn`, `recycles`, and `visibility`. A field the form has no widget for is edited as JSON. Each field has its own **Save field** button; a save sends one operation and the revision in the toolbar goes up by one. Hebrew fields are right-to-left; keep the full vowel points.
+
+If you save while the AI has written since you loaded the plan, you get `revision_conflict` and the revision on the server. Your typed text stays on the screen. **Reload** takes the server's copy and drops unsaved text. Nothing merges by itself.
+
+Plan **audience** and **assignee** are not form fields. They change only through the assign control under the toolbar: shared, or personal for one active account.
+
+### History, Compare, and Restore
+
+Open **History** on a plan. Each row is one change: the revision, who made it, when, the operation, and the path and field. The writer is **a person** (your account name), **AI** (with the tool name), or **system** (a baseline row, or a script). Filter by writer, and load older rows.
+
+**Compare** shows two states side by side, field by field: any two revisions, a revision against the working copy, or the working copy against what is published. Hebrew values keep their direction.
+
+**Restore** puts an earlier value back in one step: "Restore this value" for a field, "Restore this part" for a block or item, or "Restore the whole plan to this revision" on any row. You confirm once, inline. A restore is itself a **new revision**: it does not rewind history, the AI can see and undo it, and a whole-plan restore keeps the plan's current audience and assignee. A restore uses the revision shown in the toolbar, so if the AI wrote in between you get `revision_conflict` and nothing changes. A field a person last wrote carries an **Edited by a person** mark that opens to who, when, and the value that person replaced, with "Restore the earlier value". The mark is information. It never disables a field.
+
+History is never edited. No screen or tool deletes or rewrites a revision.
+
+### The Issues panel
+
+**Issues** lists everything the server finds in the plan, in the plan's working copy, refreshed after each save. Hard errors come first (they stop a publish). Below them are warnings, each with a stable code:
+
+- `pointing-form` — vowel points in an impossible or non-canonical order. The suggested value is the canonical one.
+- `field-language` — Hebrew in an English field, or the reverse.
+- `lexicon-form` — a word pointed differently from its lexicon entry, or a meaning that differs from a **verified** entry. **Use this value** applies the lexicon form in one save. Only a verified entry is an authority; an unverified one is a lead.
+- `pointing-consistency` — one word pointed two ways in a lesson. Pick one form; both may be right.
+- `audio-stale` — text changed since the last publish while its clip stayed. A text fix leaves the old clip attached; no tool regenerates audio for a plan field, so the fix is to remove the stale clip path or set a new existing `.mp3`.
+
+Warnings never block a save or a publish. They are leads. A link on each issue opens the field.
+
+### Preview, publish, and assign
+
+The **preview** beside the form draws the selected block (or the lesson card) the way a learner's screen does, from the text in the form, saved or not. Its label says "Preview — not saved" or "Preview — as saved". It is a view inside the admin page and no learner ever reaches it: learners read only the last **published** snapshot of a plan, and a draft answers "not found" to a learner.
+
+**Publish** sends the working copy to learners (if the lesson's `visibility` is `everyone` or `selected`, or the plan is personal and assigned). The line above the button shows the counts of hard errors and warnings and says warnings do not stop a publish. A hard error (`validation`) or a pending picture on a lesson visible to learners (`pending_media`) refuses it. Pictures are still approved by you, one at a time (see [Pictures](#pictures)).
+
+### What the AI can do without you
+
+With `MCP_AUTH_TOKEN`, the AI can create a plan, edit any field, publish, set a lesson's `visibility` (so it can expose a lesson to learners the moment it publishes), restore an earlier revision, and assign a plan to an active account. No approval step stands in the way. The protection is the record: History shows every change and its writer, Compare shows exactly what changed, and **Restore** undoes it in one step. The skill asks the AI to keep new lessons `hidden` unless you asked otherwise; that is guidance, not a lock the server enforces.
+
+It still cannot mark a lexicon form **verified** (`set_lexicon_verified` answers `forbidden`; you tick the forms checklist), approve a picture (only your admin session can), or turn on a learner's **AI planning** switch (`set_ai_planning` answers `forbidden`).
+
+### Who made a change
+
+The AI's tools all arrive on one shared bearer token, so every AI client shows as `mcp`, and two AI clients cannot be told apart. Your own edits show your account name. The AI is not told your name: its tools show a person's change as `human`. Nothing the AI sends can claim to be you.
+
+### When something looks wrong
+
+Open the plan, then **History**, find the row that changed the field, use **Compare** to see before and after, and **Restore** the value. If a learner saw it, publish again once it is fixed. To see what the AI has been doing, filter History by writer. The audit log also holds one `plan.*` row per change, with the writer and the path, never the text.
 
 ## Backup and restore
 
@@ -224,6 +286,7 @@ Useful tools once `MCP_AUTH_TOKEN` is set:
 - `upload_media` — store one pending image from base64 bytes. Does not approve.
 - `plan_image` — dry-run: image count and estimated dollars. Does not call the provider.
 - `generate_image` — only when `confirm` is true and `estimate` matches that dry-run. The image stays pending.
+- Plan builder (see [Plan builder](#plan-builder)): `list_plans`, `create_plan`, `read_part`, `replace_part`, `insert_block`, `move_block`, `remove_block`, `set_field`, `list_plan_issues`, `list_plan_revisions`, `get_plan_revision`, `diff_plan`, `restore_plan_revision`, `assign_plan`, `publish_plan`. New lessons are plans; `upsert_lesson` stays for a worksheet that has not moved.
 
 Approval and delete are admin session routes, not MCP tools. If `MCP_AUTH_TOKEN` is unset or empty, the assignment tools and the picture tools refuse. A lesson created with no assignment stays **hidden** until you share it in the admin Lessons tab or call `set_lesson_visibility` / pass `visibility` on upsert.
 

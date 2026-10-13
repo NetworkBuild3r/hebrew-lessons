@@ -6,6 +6,12 @@
     <meta name="google" content="notranslate">
     <meta name="theme-color" content="#1d4ed8">
     <title>כניסה — Sign in · דרך עברית</title>
+    <!-- Identity (INIT-005/SPEC-010). /shared/brand/ is public so these load before sign-in. -->
+    <link rel="icon" href="/shared/brand/favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="/shared/brand/favicon-32.png" type="image/png" sizes="32x32">
+    <link rel="icon" href="/shared/brand/favicon-16.png" type="image/png" sizes="16x16">
+    <link rel="apple-touch-icon" href="/shared/brand/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
     <!--
       Styles and scripts are inlined: /shared/* is gated when signed out (SPEC-008).
       Canonical modules for signed-in pages: shared/api.js, shared/login.js, shared/worksheet.css.
@@ -23,115 +29,164 @@
             unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
     </style>
     <style>
+        /* INIT-005/SPEC-012. Same look and token values as shared/worksheet.css (ADR-0010): warm paper,
+           18px card, tactile primary button, 3px focus ring. Inlined because /shared/worksheet.css is
+           gated while signed out. Light by default; data-theme="dark" swaps the tokens, as in the app. */
         :root {
-            --ink: #1e293b;
-            --muted: #64748b;
-            --line: #e2e8f0;
-            --bg: #f8fafc;
-            --card: #ffffff;
-            --blue: #2563eb;
-            --blue-deep: #1d4ed8;
-            --rose: #e11d48;
-            --shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-            --radius: 16px;
+            --color-text: #1c1917;
+            --color-muted: #44403c;
+            --color-line: #8a847c;
+            --color-border: #e4ded2;
+            --color-surface: #ffffff;
+            --color-surface-soft: #f4f1ea;
+            --color-primary: #1d4ed8;
+            --color-primary-hover: #1e40af;
+            --color-primary-edge: #1e3a8a;
+            --color-primary-ink: #ffffff;
+            --color-primary-soft: #e9efff;
+            --color-miss: #e11d48;
+            --color-miss-soft: #fdecef;
+            --color-miss-ink: #9f1239;
+            --paper: #faf8f4;
+            --card-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 16px 40px -18px rgba(67, 56, 202, 0.3);
+            --radius-card: 20px;
+            --radius-button: 14px;
+            color-scheme: light;
+        }
+        :root[data-theme="dark"] {
+            --color-text: #f6f3ec;
+            --color-muted: #d6d0c6;
+            --color-line: #6e6a64;
+            --color-border: #3a3833;
+            --color-surface: #1e1e1c;
+            --color-surface-soft: #27261f;
+            --color-primary: #60a5fa;
+            --color-primary-hover: #93c5fd;
+            --color-primary-edge: #3b82f6;
+            --color-primary-ink: #0b1220;
+            --color-primary-soft: #1c2745;
+            --color-miss: #f43f5e;
+            --color-miss-soft: #301820;
+            --color-miss-ink: #fda4af;
+            --paper: #141413;
+            --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+            color-scheme: dark;
         }
         * { box-sizing: border-box; }
         body {
             margin: 0;
             min-height: 100vh;
             font-family: "Rubik", sans-serif;
-            color: var(--ink);
-            background:
-                radial-gradient(ellipse at 20% 0%, rgba(37, 99, 235, 0.14), transparent 55%),
-                radial-gradient(ellipse at 90% 10%, rgba(30, 64, 175, 0.12), transparent 45%),
-                var(--bg);
+            color: var(--color-text);
+            background: var(--paper);
         }
         .en { unicode-bidi: isolate; }
         .login-wrap {
             width: min(26rem, calc(100% - 1.5rem));
             margin: 0 auto;
-            padding: 2.5rem 0 3rem;
+            padding: 2.25rem 0 3rem;
         }
         @media (min-width: 800px) {
-            .login-wrap { width: min(28rem, calc(100% - 2rem)); }
+            .login-wrap { width: min(28rem, calc(100% - 2rem)); padding-top: 4rem; }
         }
+        .login-hero { text-align: center; margin-bottom: 1.25rem; display: grid; justify-items: center; gap: 0.6rem; }
+        .login-logo { display: block; width: auto; height: 56px; max-width: 100%; }
+        .login-tag { margin: 0; font-size: 1.05rem; font-weight: 600; line-height: 1.5; }
+        .login-tag .en { display: block; margin-top: 0.1rem; font-size: 0.85rem; font-weight: 400; color: var(--color-muted); }
         .login-card {
-            padding: 1.35rem 1.25rem 1.5rem;
-            border: 1px solid var(--line);
-            border-radius: var(--radius);
-            background: var(--card);
-            box-shadow: var(--shadow);
+            padding: 1.6rem 1.4rem 1.5rem;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-card);
+            background: var(--color-surface);
+            box-shadow: var(--card-shadow);
         }
-        .login-kicker {
-            margin: 0 0 0.5rem;
-            color: var(--blue-deep);
-            font-size: 0.8rem;
-            font-weight: 600;
-        }
-        .login-card h1 { margin: 0 0 0.75rem; font-size: 1.45rem; }
+        .login-card h1 { margin: 0 0 0.35rem; font-size: 1.6rem; line-height: 1.3; }
+        .login-card h1 .en { font-size: 0.55em; font-weight: 500; color: var(--color-muted); }
+        .login-sub { margin: 0 0 1.1rem; color: var(--color-muted); line-height: 1.55; }
+        .login-sub .en { display: block; font-size: 0.88em; text-align: end; }
         .login-privacy {
             margin: 0 0 1rem;
+            padding: 0.6rem 0.8rem;
+            background: var(--color-surface-soft);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
             font-size: 0.82rem;
-            color: var(--muted);
-            line-height: 1.45;
+            color: var(--color-muted);
+            line-height: 1.55;
         }
         .login-form label {
             display: grid;
             gap: 0.35rem;
-            margin: 0 0 0.85rem;
-            font-weight: 500;
+            margin: 0 0 1rem;
+            font-weight: 600;
+            font-size: 0.95rem;
         }
+        .login-form label .en { font-weight: 500; color: var(--color-muted); }
         .login-form input {
             width: 100%;
-            min-height: 44px;
-            padding: 0.55rem 0.7rem;
-            border: 1px solid var(--line);
-            border-radius: calc(var(--radius) - 6px);
+            min-height: 48px;
+            padding: 0.55rem 0.8rem;
+            border: 1px solid var(--color-line);
+            border-radius: 12px;
             font: inherit;
-            background: #fff;
-            color: var(--ink);
+            background-color: var(--color-surface);
+            color: var(--color-text);
         }
         .login-form input:focus-visible,
         .btn:focus-visible {
-            outline: 2px solid var(--blue);
+            outline: 3px solid var(--color-primary);
             outline-offset: 2px;
         }
         .login-error {
-            margin: 0 0 0.75rem;
-            color: var(--rose);
-            font-size: 0.9rem;
+            margin: 0 0 1rem;
+            padding: 0.6rem 0.8rem;
+            border: 1px solid var(--color-miss);
+            border-radius: 12px;
+            background: var(--color-miss-soft);
+            color: var(--color-miss-ink);
+            font-size: 0.92rem;
+            line-height: 1.5;
         }
+        .login-error[hidden] { display: none; }
         .btn {
             font: inherit;
             cursor: pointer;
             touch-action: manipulation;
+            transition: transform 0.1s ease, background 0.15s ease, box-shadow 0.15s ease;
         }
         .btn-primary {
             width: 100%;
-            min-height: 44px;
-            background: var(--blue);
-            color: #fff;
-            border: 1px solid var(--blue-deep);
-            border-radius: calc(var(--radius) - 6px);
-            padding: 0.55rem 1rem;
-            font-weight: 600;
+            min-height: 48px;
+            background: var(--color-primary);
+            color: var(--color-primary-ink);
+            border: 1px solid var(--color-primary-edge);
+            border-radius: var(--radius-button);
+            padding: 0.6rem 1rem;
+            font-weight: 700;
+            font-size: 1rem;
+            box-shadow: 0 2px 0 var(--color-primary-edge);
         }
-        .btn-primary:hover { background: var(--blue-deep); }
-        .btn-primary:disabled { opacity: 0.65; cursor: not-allowed; }
-        .login-hero { text-align: center; margin-bottom: 1rem; display: grid; justify-items: center; gap: 0.4rem; }
-        .login-tag { margin: 0; font-size: 1.05rem; font-weight: 600; }
-        .login-sub { margin: 0 0 1rem; color: var(--muted); }
-        .login-fine { margin: 0.9rem 0 0; font-size: 0.82rem; color: var(--muted); text-align: center; }
-        .login-card { border-radius: 20px; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 16px 40px -16px rgba(67,56,202,.3); }
-        .login-privacy { margin-top: 1rem; }
+        .btn-primary:hover { background: var(--color-primary-hover); transform: translateY(-1px); }
+        .btn-primary:active { transform: translateY(1px) scale(0.98); box-shadow: 0 0 0 var(--color-primary-edge); }
+        .btn-primary:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
+        .btn-primary .en { color: inherit; opacity: 0.9; font-weight: 500; }
+        .login-notes { margin-top: 1.25rem; display: grid; gap: 0.6rem; }
+        .login-notes .login-privacy { margin: 0; }
+        .login-fine { margin: 1rem 0 0; font-size: 0.82rem; color: var(--color-muted); text-align: center; line-height: 1.6; }
+        .login-fine .en { display: block; }
+        @media (prefers-reduced-motion: reduce) {
+            .btn { transition: none; }
+            .btn-primary:hover, .btn-primary:active { transform: none; }
+        }
     </style>
 </head>
 <body class="login-page">
     <main class="login-wrap">
         <div class="login-hero">
-            <svg width="52" height="52" viewBox="0 0 512 512" aria-hidden="true" focusable="false" style="border-radius:14px;box-shadow:0 6px 20px rgba(29,78,216,.4)"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1d4ed8"/><stop offset=".55" stop-color="#4338ca"/><stop offset="1" stop-color="#7c3aed"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#lg)"/><text x="256" y="348" text-anchor="middle" font-family="Rubik, Arial, sans-serif" font-weight="700" font-size="280" fill="#fff">ע</text><circle cx="392" cy="128" r="36" fill="#fbbf24"/></svg>
-            <p class="login-kicker">דרך עברית · Hebrew Way</p>
-            <p class="login-tag">Order coffee. Chat with Shai. Read the story. <span class="en" dir="ltr">10 minutes a day.</span></p>
+            <!-- Logo lockup A (mark + Hebrew wordmark + English gloss). Name is Hebrew only. -->
+            <img class="login-logo" src="/shared/brand/logo-a.svg" width="184" height="52" alt="דרך עברית" decoding="async">
+            <!-- Hebrew first, English as the gloss (REQ-016). Hebrew wording is a draft for the operator to confirm. -->
+            <p class="login-tag">להזמין קפה, לדבר עם שי, לקרוא סיפור — עשר דקות ביום. <span class="en" lang="en" dir="ltr">(Order coffee. Chat with Shai. Read the story. 10 minutes a day.)</span></p>
         </div>
         <div class="login-card">
             <h1>כניסה <span class="en" dir="ltr">(Sign in)</span></h1>
@@ -139,16 +194,13 @@
             <p class="login-privacy" id="login-privacy">
                 מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה. (Admins can see all your activity, including every answer.)
             </p>
-            <p class="login-privacy" id="login-ai-disclosure" data-ai-disclosure="1">
-                אם מנהל מפעיל תכנון בינה מלאכותית לחשבון שלך, סיכום של ההתקדמות ושם המשתמש נשלחים לספק הבינה המלאכותית של המפעיל כדי לנסח את השיעור הבא. הסיכום כולל את המילים שתורגלו ומידת הידיעה שלהן, את הדקדוק שתורגל ומידת הדיוק, את השיעורים שהושלמו, ובאיזו תדירות הקריאה היא בלי ניקוד. הסיכום אינו כולל תשובות בודדות, טקסט שהוקלד, או מועדי תרגול. (If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator's AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.)
-            </p>
             <form id="login-form" class="login-form" method="post" action="#" novalidate>
                 <label>
-                    שם משתמש <span class="en" dir="ltr">(Username)</span>
+                    <span class="login-label">שם משתמש <span class="en" dir="ltr">(Username)</span></span>
                     <input id="login-username" name="username" type="text" autocomplete="username" required>
                 </label>
                 <label>
-                    סיסמה <span class="en" dir="ltr">(Password)</span>
+                    <span class="login-label">סיסמה <span class="en" dir="ltr">(Password)</span></span>
                     <input id="login-password" name="password" type="password" autocomplete="current-password" required>
                 </label>
                 <p class="login-error" id="login-error" role="alert" hidden></p>
@@ -156,13 +208,12 @@
                     כניסה <span class="en" dir="ltr">(Sign in)</span>
                 </button>
             </form>
-            <p class="login-privacy" id="login-privacy">
-                מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה. (Admins can see all your activity, including every answer.)
-            </p>
-            <p class="login-privacy" data-ai-disclosure="1">
-                אם מנהל מפעיל תכנון בינה מלאכותית לחשבון שלך, סיכום של ההתקדמות ושם המשתמש נשלחים לספק הבינה המלאכותית של המפעיל כדי לנסח את השיעור הבא. הסיכום כולל את המילים שתורגלו ומידת הידיעה שלהן, את הדקדוק שתורגל ומידת הדיוק, את השיעורים שהושלמו, ובאיזו תדירות הקריאה היא בלי ניקוד. הסיכום אינו כולל תשובות בודדות, טקסט שהוקלד, או מועדי תרגול. (If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator's AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.)
-            </p>
-            <p class="login-fine">עובד על הטלפון • שומר התקדמות • <span class="en" dir="ltr">No app to install</span></p>
+            <div class="login-notes">
+                <p class="login-privacy" data-ai-disclosure="1">
+                    אם מנהל מפעיל תכנון בינה מלאכותית לחשבון שלך, סיכום של ההתקדמות ושם המשתמש נשלחים לספק הבינה המלאכותית של המפעיל כדי לנסח את השיעור הבא. הסיכום כולל את המילים שתורגלו ומידת הידיעה שלהן, את הדקדוק שתורגל ומידת הדיוק, את השיעורים שהושלמו, ובאיזו תדירות הקריאה היא בלי ניקוד. הסיכום אינו כולל תשובות בודדות, טקסט שהוקלד, או מועדי תרגול. (If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator's AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.)
+                </p>
+            </div>
+            <p class="login-fine">עובד על הטלפון • שומר התקדמות • אין צורך להתקין אפליקציה <span class="en" lang="en" dir="ltr">(Works on your phone • Saves your progress • No app to install)</span></p>
         </div>
     </main>
     <script>
@@ -173,8 +224,9 @@
     (function () {
         'use strict';
 
-        var PRIVACY_NOTE =
-            'מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה. (Admins can see all your activity, including every answer.)';
+        var PRIVACY_HE = 'מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה.';
+        var PRIVACY_EN = 'Admins can see all your activity, including every answer.';
+        var PRIVACY_NOTE = PRIVACY_HE + ' (' + PRIVACY_EN + ')';
         /* Hebrew line is a draft until the operator approves it (ADR-0009). Provenance: INIT-006/SPEC-017 */
         var AI_DISCLOSURE_EN = 'If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator\'s AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.';
         var AI_DISCLOSURE_HE = 'אם מנהל מפעיל תכנון בינה מלאכותית לחשבון שלך, סיכום של ההתקדמות ושם המשתמש נשלחים לספק הבינה המלאכותית של המפעיל כדי לנסח את השיעור הבא. הסיכום כולל את המילים שתורגלו ומידת הידיעה שלהן, את הדקדוק שתורגל ומידת הדיוק, את השיעורים שהושלמו, ובאיזו תדירות הקריאה היא בלי ניקוד. הסיכום אינו כולל תשובות בודדות, טקסט שהוקלד, או מועדי תרגול.';
@@ -216,6 +268,17 @@
             el.textContent = text;
         }
 
+        function setNote(el, he, en) {
+            if (!el) return;
+            el.textContent = he + ' ';
+            var gloss = document.createElement('span');
+            gloss.className = 'en';
+            gloss.lang = 'en';
+            gloss.dir = 'ltr';
+            gloss.textContent = '(' + en + ')';
+            el.appendChild(gloss);
+        }
+
         function boot() {
             var form = document.getElementById('login-form');
             if (!form) return;
@@ -224,9 +287,11 @@
             var errEl = document.getElementById('login-error');
             var submitBtn = document.getElementById('login-submit');
             var privacy = document.getElementById('login-privacy');
-            if (privacy) privacy.textContent = PRIVACY_NOTE;
+            // Hebrew sentence, then the English gloss in its own isolated left-to-right span, so the
+            // brackets and full stop land on the right side. The visible text is the same sentence.
+            setNote(privacy, PRIVACY_HE, PRIVACY_EN);
             var disclosures = document.querySelectorAll('[data-ai-disclosure]');
-            for (var d = 0; d < disclosures.length; d += 1) disclosures[d].textContent = AI_DISCLOSURE;
+            for (var d = 0; d < disclosures.length; d += 1) setNote(disclosures[d], AI_DISCLOSURE_HE, AI_DISCLOSURE_EN);
 
             // Expose for smoke / debugging (mirrors shared/api.js safeNextPath)
             window.HebrewLoginPage = { safeNextPath: safeNextPath };

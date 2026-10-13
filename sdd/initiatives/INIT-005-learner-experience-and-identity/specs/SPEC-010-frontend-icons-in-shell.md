@@ -7,7 +7,7 @@ spec_id: SPEC-010
 initiative_id: INIT-005
 title: "Icon sprite, logo and favicon in the shell and every view"
 domain: frontend
-status: ready
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet
@@ -34,14 +34,14 @@ blocks: [SPEC-011, SPEC-012]
 
 ## Understood
 
-- [ ] und-1: No external icon CDN.
-- [ ] und-2: Test hooks stay unless updated in the same change.
+- [x] und-1: No external icon CDN. _(`test/icons-in-shell.test.js` scans `shared/` and `login/` for external hosts and icon fonts.)_
+- [x] und-2: Test hooks stay unless updated in the same change. _(Every ADR-0006 `data-*` hook and class kept; `test/player-ui-a11y.test.js` still passes. Tests changed only where this spec changed behaviour: see the completion summary.)_
 
 ## Acceptance Criteria
 
-- [ ] ac-1 (REQ-010, REQ-018): logo and favicon appear on signed-in screens; assets are local.
-- [ ] ac-2 (REQ-010): every icon-only control has an accessible name; primary actions keep visible text.
-- [ ] ac-3: SVG contains no script or external reference (test or grep).
+- [x] ac-1 (REQ-010, REQ-018): logo and favicon appear on signed-in screens; assets are local. _(Mark A in the shell header, favicon/touch/manifest links in `app.html`, `login/index.html`, `shared/plan/index.html`, and added by the shell script to lesson-player pages; `/shared/brand/` is public. Checked in headless Chrome at 360 and 1280 px.)_
+- [x] ac-2 (REQ-010): every icon-only control has an accessible name; primary actions keep visible text. _(Hebrew-only `aria-label` on speak, record, play-recording, gloss-audio, speak-built and admin-speak buttons; nav, Today buttons, retry, sound toggle keep their visible words. Enforced by a source pattern test over `<button>` + icon only; not a full runtime accessibility audit.)_
+- [x] ac-3: SVG contains no script or external reference (test or grep). _(`test/brand-assets.test.js` for `shared/brand/`; `test/icons-in-shell.test.js` for `/icon.svg`, same-origin `<use>` and no external hosts.)_
 
 ## Assumptions Ledger
 
@@ -55,10 +55,10 @@ blocks: [SPEC-011, SPEC-012]
 
 ## Deliverables
 
-- [ ] Shell and view wiring
-- [ ] Sprite include
-- [ ] Tests / grep for safe SVG
-- [ ] Completion summary
+- [x] Shell and view wiring
+- [x] Sprite include
+- [x] Tests / grep for safe SVG
+- [x] Completion summary (`specs/completion-summaries/SPEC-010-completion-summary.md`)
 
 ---
 

@@ -7,7 +7,7 @@ spec_id: SPEC-002
 initiative_id: INIT-005
 title: "Shell and router spike: one entry, route table, Today and Lessons"
 domain: frontend
-status: in_progress
+status: in_review
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md   # not present; degradation path, disclosed
 supplement_prompts: []
 model: sonnet
@@ -41,17 +41,17 @@ blocks: [SPEC-003, SPEC-007]
 
 ## Understood (agent's read of the intent)
 
-- [ ] und-1: Existing `HebrewShell.mount` is adapted so it paints once from the embedded user and does not call `Api.me()` on every route.
-- [ ] und-2: Old per-page HTML files for Today and Lessons either redirect into the shell or are retired by the server route. Learners who bookmark `/lessons/` still land on Lessons.
-- [ ] und-3: The spike lives in production paths (not only `spikes/`), because the operator asked for the live site first. A feature flag or easy revert is required.
+- [x] und-1: Existing `HebrewShell.mount` is adapted so it paints once from the embedded user and does not call `Api.me()` on every route.
+- [x] und-2: Old per-page HTML files for Today and Lessons either redirect into the shell or are retired by the server route. Learners who bookmark `/lessons/` still land on Lessons.
+- [x] und-3: The spike lives in production paths (not only `spikes/`), because the operator asked for the live site first. A feature flag or easy revert is required. _(Closure: no flag; "easy revert" is reverting the change, as recorded in the shell decision note.)_
 
 ## Acceptance Criteria
 
-- [ ] ac-1 (REQ-001, REQ-003): clicking Lessons from Today does not reload the document; the nav stays painted; no `…` placeholder flash.
-- [ ] ac-2 (REQ-002, REQ-006): refreshing `/lessons/` shows Lessons; an unknown path shows a not-found view inside the shell.
-- [ ] ac-3 (REQ-008): Today and Lessons behaviour matches the previous pages for the cases covered by `test/app-shell.test.js` and the lessons-related unit tests that still apply.
-- [ ] ac-4 (REQ-009): a written spike note records whether `my-morning` mounts and unmounts cleanly, or falls back to a full page.
-- [ ] ac-5: operator has clicked through the spike and said go (or named the fallback).
+- [x] ac-1 (REQ-001, REQ-003): clicking Lessons from Today does not reload the document; the nav stays painted; no `…` placeholder flash.
+- [x] ac-2 (REQ-002, REQ-006): refreshing `/lessons/` shows Lessons; an unknown path shows a not-found view inside the shell. _(Closure: refresh/direct URL covered by `test/spa-shell.test.js` and `test/router-a11y.test.js`; unknown path now returns the shell with HTTP 404 and the router shows a not-found view inside it. Chrome smoke checks it.)_
+- [x] ac-3 (REQ-008): Today and Lessons behaviour matches the previous pages for the cases covered by `test/app-shell.test.js` and the lessons-related unit tests that still apply.
+- [x] ac-4 (REQ-009): a written spike note records whether `my-morning` mounts and unmounts cleanly, or falls back to a full page. _(Closure: the note records the fallback, full page for `/worksheets/<slug>/`. It rests on the ADR-0007 pre-approved fallback and the `window.WORKSHEET` global collision risk. `my-morning` was not mounted in the shell as an experiment.)_
+- [ ] ac-5: operator has clicked through the spike and said go (or named the fallback). _(OPEN: operator click-through and "go" are not recorded. The decision note still says "pending operator click-through". Not ticked on the operator's behalf.)_
 
 ## Assumptions Ledger (disambiguation gate)
 
@@ -66,20 +66,20 @@ blocks: [SPEC-003, SPEC-007]
 
 ## Deliverables
 
-- [ ] Shell HTML entry and server routing for app paths
-- [ ] `shared/router.js` and view modules for Today and Lessons
-- [ ] Spike note: `sdd/initiatives/INIT-005-learner-experience-and-identity/INIT-005-shell-spike-decision.md`
-- [ ] Tests covering no full reload on nav click (as far as `node --test` can) and direct URL
-- [ ] Completion summary
+- [x] Shell HTML entry and server routing for app paths
+- [x] `shared/router.js` and view modules for Today and Lessons
+- [x] Spike note: `sdd/initiatives/INIT-005-learner-experience-and-identity/INIT-005-shell-spike-decision.md`
+- [x] Tests covering no full reload on nav click (as far as `node --test` can) and direct URL
+- [x] Completion summary
 
 ---
 
 ## Technical Requirements (domain-specific)
 
-- [ ] No new npm dependency. No build step.
-- [ ] Test hooks (`data-nav`, shell classes) stay unless the same change updates their test.
-- [ ] Embedded user: same fields as `/api/me`. Escaped. No session token in the body.
-- [ ] Login remains `/login/` as a full page.
+- [x] No new npm dependency. No build step.
+- [x] Test hooks (`data-nav`, shell classes) stay unless the same change updates their test.
+- [x] Embedded user: same fields as `/api/me`. Escaped. No session token in the body.
+- [x] Login remains `/login/` as a full page.
 
 ---
 
@@ -96,8 +96,8 @@ blocks: [SPEC-003, SPEC-007]
 
 - **Sensitivity:** standard. Triggers matched: session embed in HTML, route gating.
 - **Security acceptance criteria:**
-  - [ ] Unauthenticated requests to app routes still redirect to login.
-  - [ ] Embedded payload is not a secret and matches `/api/me` fields.
+  - [x] Unauthenticated requests to app routes still redirect to login.
+  - [x] Embedded payload is not a secret and matches `/api/me` fields.
 - **Review depth:** standard · **focus areas:** gate, embed, XSS via embed escape.
 
 ---

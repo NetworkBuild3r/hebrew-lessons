@@ -7,7 +7,7 @@ spec_id: SPEC-005
 initiative_id: INIT-005
 title: "RSCH-007: motion, sound, icons and picture style in L2 practice"
 domain: docs
-status: ready
+status: complete
 primary_prompt: .claude/agents/researcher/AGENT.md
 supplement_prompts: []
 model: sonnet
@@ -34,20 +34,20 @@ blocks: [SPEC-007]
 
 ## Understood
 
-- [ ] und-1: Honest grades. "We found nothing" is a valid answer.
-- [ ] und-2: Does not reopen points/streaks. Operator excluded them.
+- [x] und-1: Honest grades. "We found nothing" is a valid answer. (Q3 and Q4 are mostly "found nothing"; overall confidence Low.)
+- [x] und-2: Does not reopen points/streaks. Operator excluded them. (One contest-mechanics RCT is recorded as a counter-signal in RSCH-008 §1.4; the exclusion is not reopened.)
 
 ## Acceptance Criteria
 
-- [ ] ac-1: report answers all four questions with evidence labels (High / Moderate / Low / product choice / no evidence).
-- [ ] ac-2: an effects table lists what SPEC-009 may build, what is product choice (off by default or toggle), and what is banned.
-- [ ] ac-3: `sdd/research/README.md` gains an index row.
+- [x] ac-1: report answers all four questions with evidence labels (High / Moderate / Low / product choice / no evidence). (RSCH-008 §1.1–1.4.)
+- [x] ac-2: an effects table lists what SPEC-009 may build, what is product choice (off by default or toggle), and what is banned. (RSCH-008 effects table, with a reconciliation against ADR-0010 and the shipped kit.)
+- [x] ac-3: `sdd/research/README.md` gains an index row. (Row RSCH-008.)
 
 ## Assumptions Ledger
 
 | id | item | interpretation | tone | resolved |
 | -- | ---- | -------------- | ---- | -------- |
-| aud-1 | Research number | RSCH-007 by scanning the research index | resolved | yes — next free |
+| aud-1 | Research number | RSCH-007 by scanning the research index | resolved | yes — next free. **Amended at execution:** RSCH-007 was already taken (new-user ease report, cited as such by ADR-0010 and INIT-007). The next free number is RSCH-008. SPEC-007, SPEC-008, SPEC-009 and the initiative text still say "RSCH-007" for this research and need the same change. |
 
 > **Readiness** = 100.
 
@@ -55,9 +55,9 @@ blocks: [SPEC-007]
 
 ## Deliverables
 
-- [ ] `sdd/research/RSCH-007-motion-sound-icons/RSCH-007-motion-sound-icons-report.md`
-- [ ] Index row
-- [ ] Completion summary
+- [x] `sdd/research/RSCH-008-motion-sound-icons/RSCH-008-motion-sound-icons-report.md` (number changed from RSCH-007, see aud-1)
+- [x] Index row
+- [x] Completion summary (`specs/completion-summaries/SPEC-005-completion-summary.md`)
 
 ---
 

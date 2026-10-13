@@ -116,8 +116,17 @@ const PUBLIC_STATIC = new Set(['/manifest.webmanifest', '/icon.svg']);
  */
 const PUBLIC_FONT_PREFIX = '/shared/fonts/';
 
+/**
+ * Brand assets: logo, favicon, touch and manifest icons, icon sprite. Same for everyone, no
+ * user data, and browsers fetch the favicon, manifest icons and the sign-in logo without a
+ * session. Only this one folder is opened; the rest of /shared/ stays gated (INIT-005/SPEC-010).
+ */
+const PUBLIC_BRAND_PREFIX = '/shared/brand/';
+
 function isPublicStatic(rel) {
-    return PUBLIC_STATIC.has(rel) || rel.startsWith(PUBLIC_FONT_PREFIX);
+    return PUBLIC_STATIC.has(rel)
+        || rel.startsWith(PUBLIC_FONT_PREFIX)
+        || rel.startsWith(PUBLIC_BRAND_PREFIX);
 }
 
 /**
@@ -310,12 +319,13 @@ function sendFile(req, res, method, file) {
  * @param {import('http').ServerResponse} res
  * @param {string} method
  * @param {object} user
+ * @param {number} [status] 200 for a screen; 404 for an unknown app path (the client shows "not found")
  */
-function sendSpaShell(res, method, user) {
+function sendSpaShell(res, method, user, status) {
     security.applySecurityHeaders(res, { noStore: true });
     const body = spa.renderShell(user);
     const buf = Buffer.from(body, 'utf8');
-    res.writeHead(200, {
+    res.writeHead(status || 200, {
         'Content-Type': TYPES['.html'],
         'Cache-Control': 'no-store',
         'Content-Length': buf.length
@@ -440,6 +450,12 @@ async function handleStatic(req, res) {
 
     const filePath = resolveFile(rel);
     if (!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+        // A signed-in browser typing an unknown screen URL gets the shell (HTTP 404) so the
+        // router can show "not found" inside the app. File and API misses stay plain 404.
+        if (wantsHtml(req, rel) && spa.isUnknownAppPath(rel)) {
+            sendSpaShell(res, method, auth.user, 404);
+            return;
+        }
         sendPlain(res, 404, 'Not found');
         return;
     }

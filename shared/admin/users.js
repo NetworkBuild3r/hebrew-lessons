@@ -132,7 +132,7 @@
             : '🔊';
         return '<button type="button" class="icon-btn human admin-speak-btn" data-admin-speak="'
             + esc(word) + '" data-audio="' + esc(clip) + '" title="'
-            + esc('Listen') + '">' + icon + '</button>';
+            + esc('Listen') + '" aria-label="' + esc('השמעה') + '">' + icon + '</button>';
     }
 
     function hasMoreHistory(data, limit) {

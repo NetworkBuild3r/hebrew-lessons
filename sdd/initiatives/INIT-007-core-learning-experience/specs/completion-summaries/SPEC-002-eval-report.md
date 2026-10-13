@@ -31,7 +31,7 @@
 - No `worksheets/*/index.html` edits.
 - Tests never call ElevenLabs/OpenAI.
 - `SRS_SCHEDULER` untouched.
-- Sound effects OFF by default; ducked when Hebrew speech is active.
+- Sound effects OFF by default; new chimes suppressed (not ducked) when Hebrew speech is active.
 
 ## Final
 

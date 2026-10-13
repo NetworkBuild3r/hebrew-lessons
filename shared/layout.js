@@ -43,21 +43,14 @@
             + '</div>';
     }
 
-    var ROUTE_ICONS = {
-        today: '<circle cx="12" cy="14" r="4"/><path d="M12 6v2M5.5 8.5l1.4 1.4M18.5 8.5 17.1 9.9M4 14h2M18 14h2M6 20h12"/>',
-        lessons: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5Z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20"/>',
-        review: '<path d="M4 12a8 8 0 0 1 14-5l2 2M20 12a8 8 0 0 1-14 5l-2-2"/><path d="M20 4v5h-5M4 20v-5h5"/>',
-        progress: '<path d="M4 20V10M10 20V4M16 20v-8M21 20H3"/>',
-        admin: '<path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6Z"/><path d="m9.5 12 2 2 3.5-4"/>'
-    };
+    // Route heading icons are drawn from the brand sprite (INIT-005/SPEC-010). Guides has no icon yet.
+    var ROUTE_ICONS = { today: 1, lessons: 1, review: 1, words: 1, progress: 1, admin: 1 };
 
     function routeIcon(id) {
-        var inner = ROUTE_ICONS[id];
-        if (!inner) return '';
-        return '<svg class="hebrew-icon page-heading-icon" width="26" height="26"'
-            + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"'
-            + ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'
-            + inner + '</svg>';
+        if (!ROUTE_ICONS[id]) return '';
+        return '<svg class="icon hebrew-icon page-heading-icon" width="26" height="26"'
+            + ' aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-' + id
+            + '"></use></svg>';
     }
 
     /**
@@ -80,7 +73,8 @@
             + '<header class="topbar page-heading" data-page-heading>'
             + '<div class="' + innerClass + '">'
             + '<div class="page-heading-text">'
-            + '<div class="kicker"><span class="kicker-mark" aria-hidden="true">✦</span> דרך עברית • Hebrew Way</div>'
+            // INIT-005/SPEC-011: the old "דרך עברית • Hebrew Way" kicker is gone. It repeated the
+            // brand in the header above and was a Hebrew + English label with no gloss structure.
             + '<h1 tabindex="-1">' + iconHtml
             + bi(h.he || '', h.en || '') + '</h1>'
             + subtitle

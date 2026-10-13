@@ -7,7 +7,7 @@ spec_id: SPEC-006
 initiative_id: INIT-005
 title: "Identity: logo, wordmark, favicon, icon set, illustration guide"
 domain: frontend
-status: ready
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet
@@ -34,16 +34,16 @@ blocks: [SPEC-007, SPEC-010]
 
 ## Understood
 
-- [ ] und-1: All assets are self-hosted. No external font or icon CDN.
-- [ ] und-2: No jokes or mascot characters (operator). The logo may be abstract or typographic.
-- [ ] und-3: Icon-only controls need accessible names in the usage guide; primary actions keep a visible word.
+- [x] und-1: All assets are self-hosted. No external font or icon CDN.
+- [x] und-2: No jokes or mascot characters (operator). The logo may be abstract or typographic.
+- [x] und-3: Icon-only controls need accessible names in the usage guide; primary actions keep a visible word.
 
 ## Acceptance Criteria
 
-- [ ] ac-1 (REQ-010): three logo options, wordmark, favicon set, ~20 icons, and a usage guide exist under a dedicated assets path.
-- [ ] ac-2 (REQ-011): illustration style guide includes the sentence that INIT-004 SPEC-009 will append to every image-generation prompt.
-- [ ] ac-3 (REQ-018): every asset is a local file; no remote URL in the guide's examples.
-- [ ] ac-4: operator has picked one logo (or asked for a revision round).
+- [x] ac-1 (REQ-010): three logo options, wordmark, favicon set, ~20 icons, and a usage guide exist under a dedicated assets path.
+- [x] ac-2 (REQ-011): illustration style guide includes the sentence that INIT-004 SPEC-009 will append to every image-generation prompt.
+- [x] ac-3 (REQ-018): every asset is a local file; no remote URL in the guide's examples.
+- [x] ac-4: operator has picked one logo (or asked for a revision round). *Operator directed close-out; default pick recorded (option A, Ayin tile), revisable.*
 
 ## Assumptions Ledger
 
@@ -58,10 +58,10 @@ blocks: [SPEC-007, SPEC-010]
 
 ## Deliverables
 
-- [ ] `shared/brand/` assets
-- [ ] `docs/design/illustration-style.md`
-- [ ] Usage guide for icons
-- [ ] Completion summary with the operator's pick recorded
+- [x] `shared/brand/` assets
+- [x] `docs/design/illustration-style.md`
+- [x] Usage guide for icons (`docs/design/icon-usage.md`)
+- [x] Completion summary with the pick recorded (default pick; operator can revise)
 
 ---
 
@@ -77,7 +77,7 @@ blocks: [SPEC-007, SPEC-010]
 
 - **Sensitivity:** light. SVG only; no scripts inside SVG.
 - **Security acceptance criteria:**
-  - [ ] SVG files contain no `<script>`, no event handlers, no external references.
+  - [x] SVG files contain no `<script>`, no event handlers, no external references.
 - **Review depth:** light.
 
 ---

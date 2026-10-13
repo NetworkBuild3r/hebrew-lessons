@@ -11,6 +11,7 @@
 | **Research grounding** | `RSCH-004` and `RSCH-005` via [ADR-0003](ADR-0003-course-and-lesson-plan-language.md); `RSCH-006` for direction, contrast, target size, and reduced motion. None of those reports names a framework. |
 | **Supersedes** | — |
 | **Superseded by** | Superseded in part by [ADR-0007](ADR-0007-single-page-app-structure.md) — the page model only (one HTML document per signed-in screen). Option A (Node, no framework, no build step, `shared/ui/`, tokens) stays. Replacement wording is ADR-0007. The sentences in this file are unchanged. |
+| **Extended by** | [ADR-0011](ADR-0011-ai-first-plan-builder.md), Accepted 2026-10-12: 5 (the one-implementation table gains rows for list, create, assign, revisions, diff, restore, and issues). |
 
 ## Summary
 
@@ -506,3 +507,4 @@ Decision 8 has no step in which the site is served without sign-in. New routes a
 | 2026-10-08 | Initial Proposed record — `INIT-003/SPEC-007`. Weights are the plan defaults the operator accepted the same day. The letter is A, confirmed at the gate before SPEC-009. |
 | 2026-10-08 | Status Accepted — operator confirmed Option A. |
 | 2026-10-09 | Superseded in part by ADR-0007 (`INIT-005/SPEC-001`). Metadata note and this changelog row only; Option A and the decision sentences in this file are left as written. The page model (one HTML file per signed-in screen) is replaced by one shell document and a hand-built router. |
+| 2026-10-12 | ADR-0011 (`INIT-008/SPEC-001`, Accepted) extends 5: the one-implementation table gains rows for the plan-builder actions. Metadata row and this row only. |

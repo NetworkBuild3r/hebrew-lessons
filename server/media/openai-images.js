@@ -134,15 +134,26 @@ function sameEstimate(value, count) {
 }
 
 /**
+ * House illustration style (docs/design/illustration-style.md, INIT-005/SPEC-010).
+ * Appended to the outbound prompt only, after readPrompt has checked the operator's
+ * subject text, so the refusal list and length limit never see it, the dry-run and
+ * confirm compare the subject alone, and the stored promptText stays the subject.
+ */
+const IMAGE_STYLE_SENTENCE = 'Flat vector-style illustration of a single subject, centered with generous empty margin, '
+    + 'drawn with one uniform thick rounded dark slate (#1e293b) outline and solid flat fills in indigo (#4338ca) '
+    + 'and blue (#2563eb) with one small amber (#fbbf24) accent, on a plain warm off-white (#faf8f4) background, '
+    + 'with no gradients, no shadows, no texture, no text, no letters, no numbers, no logos, and no human faces.';
+
+/**
  * The generation request body. The only model id here is gpt-image-1.
- * Callers cannot choose a model, a size, or a quality.
- * @param {string} prompt
+ * Callers cannot choose a model, a size, or a quality. The style sentence follows the subject.
+ * @param {string} prompt the operator's subject text, already checked by readPrompt
  * @returns {{ model: string, prompt: string, n: number, size: string, quality: string }}
  */
 function buildGenerationBody(prompt) {
     return Object.freeze({
         model: 'gpt-image-1',
-        prompt,
+        prompt: `${prompt} ${IMAGE_STYLE_SENTENCE}`,
         n: 1,
         size: '1024x1024',
         quality: 'low'
@@ -507,6 +518,7 @@ module.exports = {
     planImage,
     generateImage,
     buildGenerationBody,
+    IMAGE_STYLE_SENTENCE,
     createHttpsTransport,
     ImageGenError,
     PINNED_UNIT_MILLS,

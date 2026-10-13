@@ -119,6 +119,47 @@ describe('web gating (ac-1, ac-2, ac-6, ac-7, ac-8)', () => {
         assert.equal(loginIndex.status, 200);
     });
 
+    it('INIT-005/SPEC-010: /shared/brand/ is public; nothing else under /shared/ opened', async () => {
+        const types = {
+            '/shared/brand/favicon.svg': /image\/svg\+xml/,
+            '/shared/brand/sprite.svg': /image\/svg\+xml/,
+            '/shared/brand/mark-a.svg': /image\/svg\+xml/,
+            '/shared/brand/logo-a.svg': /image\/svg\+xml/,
+            '/shared/brand/icons/play.svg': /image\/svg\+xml/,
+            '/shared/brand/favicon-32.png': /image\/png/,
+            '/shared/brand/apple-touch-icon.png': /image\/png/,
+            '/shared/brand/icon-192.png': /image\/png/,
+            '/shared/brand/icon-512.png': /image\/png/
+        };
+        for (const [p, type] of Object.entries(types)) {
+            const res = await req(p);
+            assert.equal(res.status, 200, 'public brand asset ' + p);
+            assert.match(res.headers.get('content-type') || '', type, p);
+        }
+        // The sprite really is the sprite (a signed-out <use> must resolve to symbols).
+        const sprite = await (await req('/shared/brand/sprite.svg')).text();
+        assert.match(sprite, /<symbol id="icon-play"/);
+        // A missing brand file is a plain 404, not a gated 401 and not a directory listing.
+        assert.equal((await req('/shared/brand/nope.svg')).status, 404);
+        assert.equal((await req('/shared/brand/')).status, 404);
+        // Traversal out of the public folder, and look-alike prefixes, stay gated.
+        for (const p of [
+            '/shared/brand/../worksheet.css',
+            '/shared/brand/%2e%2e/worksheet.css',
+            '/shared/brand/..%2fplayer/core.js',
+            '/shared/brandx/favicon.svg',
+            '/shared/BRAND/favicon.svg',
+            '/shared/worksheet.css',
+            '/shared/router.js',
+            '/shared/player/core.js',
+            '/shared/api.js'
+        ]) {
+            const res = await req(p, { headers: { Accept: 'application/javascript, */*;q=0.1' } });
+            assert.ok(res.status === 401 || res.status === 404, 'still gated: ' + p + ' → ' + res.status);
+            assert.notEqual(res.status, 200, 'not served: ' + p);
+        }
+    });
+
     it('ac-2: path-trick variants of gated paths are still gated', async () => {
         const tricks = [
             { path: '/worksheets/%2e%2e/shared/player/core.js', html: false },

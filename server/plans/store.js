@@ -191,10 +191,54 @@ function listSnapshots() {
     ).map((row) => ({ id: row.id, snapshot: row.snapshot }));
 }
 
+/** Most rows listPlans returns. */
+const LIST_MAX = 200;
+
+/**
+ * One row per plan for the plan list, most recently updated first. The two
+ * documents are not loaded: the title, and the revision the snapshot holds, are
+ * read in SQL and are null when a stored document is not valid JSON.
+ * Provenance: INIT-008/SPEC-007
+ * @param {number} [limit] At most LIST_MAX (default). Ask for one more than
+ *   you show to learn whether the list was cut.
+ * @returns {Array<{
+ *   id: string, revision: number, status: string, audience: string,
+ *   assigneeId: string|null, updatedAt: string, title: string|null,
+ *   hasSnapshot: boolean, snapshotRevision: number|null
+ * }>}
+ */
+function listPlans(limit) {
+    const cap = Number.isInteger(limit) && limit > 0 ? Math.min(limit, LIST_MAX + 1) : LIST_MAX;
+    return db.all(
+        `SELECT id, revision, status, audience, assignee_id, updated_at,
+                CASE WHEN json_valid(working_copy)
+                     THEN json_extract(working_copy, '$.title') END AS title,
+                (snapshot IS NOT NULL AND snapshot != '') AS has_snapshot,
+                CASE WHEN snapshot IS NOT NULL AND json_valid(snapshot)
+                     THEN json_extract(snapshot, '$.revision') END AS snapshot_revision
+         FROM plans
+         ORDER BY updated_at DESC, id
+         LIMIT ?`,
+        cap
+    ).map((row) => ({
+        id: row.id,
+        revision: row.revision,
+        status: row.status,
+        audience: row.audience,
+        assigneeId: row.assignee_id == null ? null : row.assignee_id,
+        updatedAt: row.updated_at,
+        title: typeof row.title === 'string' ? row.title : null,
+        hasSnapshot: row.has_snapshot === 1,
+        snapshotRevision: Number.isInteger(row.snapshot_revision) ? row.snapshot_revision : null
+    }));
+}
+
 module.exports = {
+    LIST_MAX,
     loadWorkingCopy,
     saveWorkingCopy,
     loadSnapshot,
     saveSnapshot,
-    listSnapshots
+    listSnapshots,
+    listPlans
 };

@@ -152,7 +152,7 @@ describe('INIT-007/SPEC-002 feedback kit and audio states', () => {
         assert.match(container.innerHTML, /correction-highlight/);
     });
 
-    it('ac-4: SFX off by default and ducked while speech is active', () => {
+    it('ac-4: SFX off by default and suppressed while speech is active', () => {
         const { Feedback } = loadModules();
         assert.equal(Feedback.isSfxEnabled(), false);
         assert.equal(Feedback.chime('correct'), false);

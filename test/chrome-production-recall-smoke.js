@@ -180,7 +180,13 @@ async function main() {
                             }
                             const card = document.querySelector('.vocab-card[data-direction="en_he"]');
                             if (!card) return reject(new Error('no en_he card'));
-                            const heInHead = card.querySelector('.vocab-head .he-word');
+                            // Is any Hebrew (the target word or the Hebrew example sentence) on screen?
+                            // Judge by layout, not by DOM position: since INIT-007 the revealed word sits in
+                            // a .vocab-head nested inside the hidden .reveal, so a plain selector match is
+                            // true even while it is display:none (the stale-selector failure of this smoke).
+                            const visibleHebrew = (el) => Array.from(el.querySelectorAll('.he-word, [data-vowels]'))
+                                .filter((n) => n.getClientRects().length > 0);
+                            const heInHead = visibleHebrew(card)[0] || null;
                             const reveal = card.querySelector('.reveal');
                             const revealHidden = !!(reveal && reveal.classList.contains('hidden'));
                             const meaning = card.querySelector('.vocab-head .meaning');

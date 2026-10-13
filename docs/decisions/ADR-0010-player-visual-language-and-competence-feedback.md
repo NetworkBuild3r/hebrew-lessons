@@ -82,7 +82,7 @@ Interactive targets (choice cards, match cards, word tiles, submit buttons) resp
 - **Active state:** `transform: scale(0.98)` with 100ms transition.
 - **Hover state:** `transform: translateY(-1px)` with elevated shadow.
 - **Focus state:** 3px focus ring with `outline-offset: 2px` clearing 3:1 contrast.
-- **Optional Web Audio chimes:** Gentle, synthesized clicks/pops on match/check, **off by default**, with a persistent toggle. Ducks and mutes automatically whenever Hebrew voice audio plays.
+- **Optional Web Audio chimes:** Gentle, synthesized clicks/pops on match/check, **off by default**, with a persistent toggle. Never overlaps Hebrew voice audio: while a clip is loading or playing, a new chime is suppressed (nothing is ducked or faded; RSCH-008).
 
 ### 5. Self-Determination Theory (SDT) Competence Feedback
 

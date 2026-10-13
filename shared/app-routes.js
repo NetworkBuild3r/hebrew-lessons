@@ -172,7 +172,22 @@
                 '/shared/admin/users.js',
                 '/shared/admin/lessons.js',
                 '/shared/admin/lesson-editor.js',
+                // The five 1.1.0 block renderers load before plan-render.js, which looks them up
+                // when it loads; the live preview draws every block type with them.
+                '/shared/ui/blocks/explainer.js',
+                '/shared/ui/blocks/conjugation-table.js',
+                '/shared/ui/blocks/personal-question.js',
+                '/shared/ui/blocks/verse-reading.js',
+                '/shared/ui/blocks/letter-intro.js',
                 '/shared/ui/plan-render.js',
+                '/shared/admin/plan-ui.js',
+                '/shared/admin/plan-hints.js',
+                '/shared/admin/plan-widgets.js',
+                '/shared/admin/plan-form.js',
+                '/shared/admin/plan-list.js',
+                '/shared/admin/plan-issues.js',
+                '/shared/admin/plan-history.js',
+                '/shared/admin/plan-preview.js',
                 '/shared/admin/plan-builder.js',
                 '/shared/admin/admin-shell.js'
             ]),

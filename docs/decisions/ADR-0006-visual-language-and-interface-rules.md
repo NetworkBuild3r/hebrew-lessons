@@ -10,7 +10,7 @@
 | **Initiative** | INIT-003 · lesson-system-foundations |
 | **Research grounding** | `RSCH-006` rule table, grades, and labels. The pick is the operator's, quoted below. |
 | **Supersedes** | — |
-| **Superseded by** | [ADR-0010](ADR-0010-player-visual-language-and-competence-feedback.md) in part (visual look, 18px radius, elevation, audio states, and competence feedback for in-lesson surfaces; all 18 interface rules and the 121-row hook contract remain active) |
+| **Superseded by** | [ADR-0008](ADR-0008-learner-look-and-feedback.md) and [ADR-0010](ADR-0010-player-visual-language-and-competence-feedback.md) in part (visual look, 18px radius, elevation, audio states, and competence feedback for in-lesson surfaces; all 18 interface rules and the 121-row hook contract remain active) |
 
 ## Summary
 

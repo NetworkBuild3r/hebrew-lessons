@@ -159,8 +159,9 @@
      */
     function swap(html) {
         mainEl.innerHTML = html;
-        if (reducedMotion() || !mainEl.classList) return;
+        if (!mainEl.classList) return;
         mainEl.classList.remove('route-enter');
+        if (reducedMotion()) return;   // no class, so no animation at all (CSS also forces animation: none)
         void mainEl.offsetWidth;  // restart the animation
         mainEl.classList.add('route-enter');
     }
@@ -192,6 +193,35 @@
         if (root.document) root.document.title = he + ' — ' + en + ' · דרך עברית';
         announce(he);
         focusHeading();
+    }
+
+    /** No nav link is "current" on a screen that does not exist. */
+    function clearActiveNav() {
+        var doc = root.document;
+        if (!doc || !doc.querySelectorAll) return;
+        var links = doc.querySelectorAll('.hebrew-shell [data-nav][aria-current]');
+        for (var i = 0; i < links.length; i += 1) links[i].removeAttribute('aria-current');
+    }
+
+    /**
+     * The server sends the shell with HTTP 404 for an unknown screen URL (server/spa.js
+     * isUnknownAppPath). Show "not found" inside the shell: heading focused, title and
+     * announcement set, nav painted once and not marked current. The URL is left as typed.
+     * Provenance: INIT-005/SPEC-002 ac-2 (REQ-006)
+     */
+    function showNotFound() {
+        var prevRoute = current && current.route;
+        leaveCurrent();
+        setBodyClass(prevRoute, null);
+        current = { route: null, url: root.location ? root.location.pathname : '', view: null, controller: null };
+        navSeq += 1;
+        if (mainEl.removeAttribute) mainEl.removeAttribute('data-route-ready');
+        clearActiveNav();
+        showMessage('העמוד לא נמצא', 'Page not found',
+            'לא מצאנו את העמוד הזה. אפשר לחזור להיום ולהמשיך משם.',
+            'We could not find that page. Go back to Today and carry on from there.');
+        try { root.scrollTo(0, 0); } catch (err) { /* ignore */ }
+        if (mainEl.setAttribute) mainEl.setAttribute('data-route-ready', 'not-found');
     }
 
     /**
@@ -370,13 +400,14 @@
         var loc = root.location || {};
         var initial = String(loc.pathname || '/') + String(loc.search || '');
         var ok = navigate(initial, { replace: true, keepHash: true });
-        if (!ok && root.console) root.console.error('[router] no route for', root.location.pathname);
+        if (!ok) showNotFound();
         prefetchOthers();
     }
 
     root.HebrewRouter = {
         start: start,
         navigate: navigate,
+        showNotFound: showNotFound,
         normalize: normalize,
         find: find,
         loadScripts: loadScripts

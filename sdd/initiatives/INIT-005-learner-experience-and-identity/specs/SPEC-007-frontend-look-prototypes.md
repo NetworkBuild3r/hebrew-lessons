@@ -7,7 +7,7 @@ spec_id: SPEC-007
 initiative_id: INIT-005
 title: "Three tap-through prototypes of one lesson step"
 domain: frontend
-status: ready
+status: superseded
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet
@@ -32,10 +32,14 @@ blocks: [SPEC-008]
 
 ---
 
+## Disposition (2026-10-12): superseded, not executed
+
+INIT-007 chose, built and shipped the look (ADR-0010) before this spec ran, and the operator asked for INIT-005 to be closed out. The three prototypes were **not built** and the acceptance criteria below were **not met as written** (ac-1 and ac-3 are void; ac-2's contrast and target-size checks are covered by `test/design-tokens.test.js` and `test/player-ui-a11y.test.js`). ADR-0008 records the adopted look. If the operator wants alternatives to the current look, reopen this spec.
+
 ## Understood
 
 - [ ] und-1: No points, streaks, jokes or mascot.
-- [ ] und-2: Effects constrained by RSCH-007's allowed / product-choice / banned table.
+- [ ] und-2: Effects constrained by RSCH-008's allowed / product-choice / banned table.
 - [ ] und-3: Spikes are not served by the production server (existing `.dockerignore` / `spikes-not-served` rule).
 
 ## Acceptance Criteria

@@ -130,14 +130,14 @@
         const words = U.shuffle(tokens(line));
         body.innerHTML = `
             <p class="pill">${root._build.index + 1} / ${root._build.pool.length}</p>
-            <div class="build-slot" id="build-slot" aria-label="${ctx.bi('משפט', 'Sentence')}"></div>
+            <div class="build-slot" id="build-slot" aria-label="${ctx.esc('משפט')}"></div>
             <div class="build-tiles" id="build-tiles">
                 ${words.map(w => `<button type="button" class="bank-word" data-action="build-tile" data-word="${ctx.esc(w)}">${ctx.esc(w)}</button>`).join('')}
             </div>
             <div class="actions">
                 <button type="button" class="btn btn-ghost" data-action="build-clear">${ctx.bi('נקה', 'Clear')}</button>
                 <button type="button" class="btn btn-ghost" data-action="build-check">${ctx.bi('בדיקה', 'Check')}</button>
-                <button type="button" class="btn btn-amber" data-action="speak-built" title="${ctx.bi('השמעת המשפט', 'Hear the sentence')}">${U.icon('volume-high')}</button>
+                <button type="button" class="btn btn-amber" data-action="speak-built" aria-label="${ctx.esc('השמעת המשפט')}" title="${ctx.esc('השמעת המשפט (Hear the sentence)')}">${U.icon('volume-high')}</button>
             </div>
             <div id="build-feedback" class="match-feedback hidden"></div>`;
         paintBuilt(ctx, root);

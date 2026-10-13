@@ -571,7 +571,7 @@
         if (!meta) return null;
         var bar = el('span', { className: 'words-strength', role: 'img' });
         bar.setAttribute('data-strength', String(bucket));
-        bar.setAttribute('aria-label', meta.he + ' (' + meta.en + ')');
+        bar.setAttribute('aria-label', meta.he); // Hebrew only: one language per label (REQ-016)
         var fill = el('span');
         fill.style.width = meta.pct + '%';
         bar.appendChild(fill);
