@@ -154,6 +154,71 @@ async function main() {
             throw new Error('Back did not restore Admin in place: ' + JSON.stringify(back));
         }
 
+        // Route transition: a short animation normally, none under prefers-reduced-motion (SPEC-003 ac-3).
+        const animationOf = `(() => { const m = document.getElementById('app-main');
+            return { name: getComputedStyle(m).animationName, cls: m.className }; })()`;
+        const clickNav = async (id) => {
+            await cdp.evaluate(`document.querySelector('.hebrew-shell [data-nav="${id}"]').click(); true`);
+            await waitFor(cdp, `document.getElementById('app-main').getAttribute('data-route-ready') === '${id}'`, id);
+        };
+        await cdp.evaluate(`document.querySelector('.hebrew-shell [data-nav="lessons"]').click(); true`);
+        const normal = await cdp.evaluate(animationOf);
+        if (normal.name !== 'hebrew-route-enter') throw new Error('no route transition: ' + JSON.stringify(normal));
+        await waitFor(cdp, `document.getElementById('app-main').getAttribute('data-route-ready') === 'lessons'`, 'lessons');
+        await cdp.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+        await cdp.evaluate(`document.querySelector('.hebrew-shell [data-nav="today"]').click(); true`);
+        const reduced = await cdp.evaluate(animationOf);
+        if (reduced.name !== 'none' || /route-enter/.test(reduced.cls)) {
+            throw new Error('route transition not disabled under reduced motion: ' + JSON.stringify(reduced));
+        }
+        await waitFor(cdp, `document.getElementById('app-main').getAttribute('data-route-ready') === 'today'`, 'today');
+        await cdp.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
+        report.transition = { normal: normal.name, reduced: reduced.name };
+
+        // Unknown path: the shell with a "not found" view, not a blank page (SPEC-002 ac-2).
+        await cdp.call('Page.navigate', { url: BASE + '/nope/' });
+        await waitFor(cdp, `document.getElementById('app-main')
+            && document.getElementById('app-main').getAttribute('data-route-ready') === 'not-found'`, 'not found');
+        const lost = await cdp.evaluate(`({
+            nav: !!document.querySelector('.hebrew-shell [data-nav="today"]'),
+            current: document.querySelectorAll('.hebrew-shell [aria-current="page"]').length,
+            headings: document.querySelectorAll('#app-main h1').length,
+            focused: document.activeElement && document.activeElement.tagName,
+            text: document.getElementById('app-main').textContent,
+            path: location.pathname,
+            title: document.title
+        })`);
+        report.notFound = lost;
+        if (!lost.nav || lost.current !== 0 || lost.headings !== 1 || lost.focused !== 'H1'
+            || !/Page not found/.test(lost.text) || lost.path !== '/nope/') {
+            throw new Error('not-found view wrong: ' + JSON.stringify(lost));
+        }
+        await cdp.evaluate('window.__navMarker = "same-document"; true');
+        await cdp.evaluate(`document.querySelector('#app-main a[href="/"]').click(); true`);
+        await waitFor(cdp, `document.getElementById('app-main').getAttribute('data-route-ready') === 'today'`, 'today again');
+        if (await cdp.evaluate('window.__navMarker') !== 'same-document') throw new Error('not-found link reloaded the page');
+
+        // Lesson player: one visible sound control, off by default, toggles (SPEC-009 ac-2).
+        await cdp.call('Page.navigate', { url: BASE + '/worksheets/my-morning/' });
+        await waitFor(cdp, `document.getElementById('btn-sfx')`, 'sound control');
+        await cdp.evaluate(`localStorage.removeItem('hebrew-sfx-enabled'); HebrewFeedback.paintToggles(); true`);
+        const sfx = await cdp.evaluate(`(() => {
+            const b = document.getElementById('btn-sfx');
+            const r = b.getBoundingClientRect();
+            const before = b.getAttribute('aria-pressed');
+            b.click();
+            const after = b.getAttribute('aria-pressed');
+            const stored = localStorage.getItem('hebrew-sfx-enabled');
+            b.click();
+            return { before, after, stored, again: b.getAttribute('aria-pressed'),
+                w: Math.round(r.width), h: Math.round(r.height), text: b.textContent.trim() };
+        })()`);
+        report.soundToggle = sfx;
+        if (sfx.before !== 'false' || sfx.after !== 'true' || sfx.stored !== '1' || sfx.again !== 'false') {
+            throw new Error('sound toggle wrong: ' + JSON.stringify(sfx));
+        }
+        if (sfx.h < 44 || sfx.w < 44) throw new Error('sound toggle under 44px: ' + JSON.stringify(sfx));
+
         if (cdp.errors.length) throw new Error('page errors: ' + cdp.errors.join(' | '));
         report.ok = true;
         report.back = back;

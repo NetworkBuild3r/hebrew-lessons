@@ -32,7 +32,7 @@
                         <p class="fine">${ctx.bi('סגול = דיבור עקיף, אדום = דיבור ישיר', 'Purple = reported speech, red = direct speech')}</p>
                         ${coverageBadgeHtml(ctx, coverage)}
                     </div>
-                    <div class="story-tools" role="toolbar" aria-label="${ctx.esc(ctx.bi('הקראה', 'Read aloud'))}">
+                    <div class="story-tools" role="toolbar" aria-label="${ctx.esc('הקראה')}">
                         <button type="button" class="btn btn-ghost" data-action="toggle-vowels">${ctx.vowelsOn ? ctx.bi('הסתר ניקוד', 'Hide vowels') : ctx.bi('הצג ניקוד', 'Show vowels')}</button>
                         <label class="follow-along"><input type="checkbox" id="follow-along"${follow ? ' checked' : ''}> ${ctx.bi('הדגשת השורה', 'Follow along')}</label>
                         <button type="button" class="btn btn-amber story-ctrl" id="story-play" data-action="story-play">${U.icon('volume-high')} <span class="story-ctrl-label">${ctx.bi('הקראת טקסט', 'Read aloud')}</span></button>
@@ -484,7 +484,7 @@
             <p class="story-gloss-he" lang="he">${U.escapeHtml(found.token)}</p>
             ${meaningHtml}
             <div class="story-gloss-actions">
-                <button type="button" class="icon-btn" data-action="gloss-audio" data-speak="${audioText}" data-token="${audioText}" title="${ctx.bi('השמעה', 'Play audio')}" aria-label="${ctx.bi('השמעה', 'Play audio')}">${U.icon('volume-high')}</button>
+                <button type="button" class="icon-btn" data-action="gloss-audio" data-speak="${audioText}" data-token="${audioText}" title="${ctx.esc('השמעה (Play audio)')}" aria-label="${ctx.esc('השמעה')}">${U.icon('volume-high')}</button>
                 <button type="button" class="btn btn-ghost btn-sm" data-action="gloss-dismiss">${ctx.bi('סגור', 'Close')}</button>
             </div>
         `;

@@ -1592,12 +1592,10 @@ textarea {
 .word-match-card.wrong {
     border-color: #e11d48;
     background: #fff1f2;
-    animation: match-wrong-shake 0.12s ease-in-out;
-}
-@keyframes match-wrong-shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-3px); }
-    75% { transform: translateX(3px); }
+    /* RSCH-008 P3: the shake had no support. A static highlight carries the same
+       information (the correct form is already on screen). Class kept for hooks. */
+    outline: 2px solid #e11d48;
+    outline-offset: -2px;
 }
 .match-pairs { margin-top: 0.25rem; }
 .match-pair-list {
@@ -2023,8 +2021,10 @@ a.lesson-link { transition: background 0.15s ease; border-radius: 18px; }
     *,
     *::before,
     *::after {
-        animation: none;
-        transition: none;
+        /* !important (INIT-005/SPEC-013): later single-class rules such as .admin-tab and
+           a.lesson-link set their own transition and out-ranked this zero-specificity reset. */
+        animation: none !important;
+        transition: none !important;
         scroll-behavior: auto;
     }
 }
@@ -3054,7 +3054,8 @@ a.lesson-link { transition: background 0.15s ease; border-radius: 18px; }
 [data-speak].is-loading,
 [data-audio].is-loading {
     opacity: 0.72;
-    animation: hebrew-audio-pulse 1s ease-in-out infinite;
+    /* RSCH-008 B6 / WCAG 2.2.2: a stalled fetch must not pulse past 5 s (5 x 1 s). */
+    animation: hebrew-audio-pulse 1s ease-in-out 5;
 }
 
 .icon-btn.is-playing,
@@ -3826,3 +3827,1485 @@ a.lesson-link { transition: background 0.15s ease; border-radius: 18px; }
     }
 }
 /* === end INIT-007/SPEC-006 review flashcards + mastery ceremony === */
+
+/* === Light by default (OS dark mode must not half-darken the app) ===
+   The shell, cards, and page ground are light. The ADR-0006 colour tokens flip dark
+   under prefers-color-scheme: dark, which left black rows and form controls on a
+   cream page (Words, Review, plan screens). Until the whole app has a real dark look,
+   stay light unless a person sets data-theme="dark" on the document element. */
+:root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --color-text: #1c1917;
+    --color-muted: #44403c;
+    --color-bg: #f7f6f3;
+    --color-surface: #ffffff;
+    --color-line: #8a847c;
+    --color-control: #1e3a2f;
+    --color-control-text: #f7f6f3;
+    --color-focus: #1e3a2f;
+    --color-picture: #1c1917;
+    --color-picture-bg: #f7f6f3;
+    --color-on-picture: #1c1917;
+    --color-correct: #059669;
+    --color-miss: #e11d48;
+    --color-audio-active: #f59e0b;
+    --color-surface-story: #fffbeb;
+}
+
+/* === Words library polish (INIT-006/SPEC-013 look, light) === */
+.words-control,
+.words-page select,
+.words-page input {
+    background: #ffffff;
+    color: var(--color-text, #1c1917);
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    padding: 0.55rem 0.75rem;
+}
+.words-page label,
+.words-field > span {
+    color: var(--ink, #1e293b);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+.words-row {
+    background: #ffffff;
+    color: var(--ink, #1e293b);
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 0.85rem 1rem;
+    box-shadow: var(--card-shadow, 0 1px 2px rgba(15, 23, 42, 0.06));
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+.words-row:hover {
+    border-color: #c7d2fe;
+    box-shadow: var(--card-shadow-hover, 0 4px 12px rgba(67, 56, 202, 0.18));
+    transform: translateY(-1px);
+}
+.words-row[aria-pressed="true"] {
+    border-color: var(--brand-1, #1d4ed8);
+    box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.25);
+}
+.words-he { color: var(--ink, #0f172a); font-size: 1.6rem; line-height: 1.5; }
+.words-gloss { color: #475569; }
+.words-chip {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    color: #334155;
+    padding: 0 0.6rem;
+}
+.words-strength { background: #e2e8f0; border: 0; border-radius: 999px; overflow: hidden; }
+.words-strength > span { background: #059669; border-radius: 999px; }
+.words-detail { border-radius: 18px; }
+@media (prefers-reduced-motion: reduce) {
+    .words-row { transition: none; transform: none; }
+    .words-row:hover { transform: none; }
+}
+/* === end light by default + words polish === */
+
+/* === INIT-005/SPEC-009 route transition + sound toggle === */
+/* Provenance: INIT-005/SPEC-003 ac-3 (REQ-005), SPEC-009 ac-2 (REQ-014). ADR-0010.
+   Appended last on purpose. Do not edit the light-by-default or Words blocks above. */
+
+/* Route transition: router.js adds .route-enter to #app-main when a view swaps in.
+   160 ms fade plus a 6 px rise. CSS only, no timers. Under reduced motion there is
+   no animation and no transform at all (the router also skips adding the class). */
+@keyframes hebrew-route-enter {
+    from { opacity: 0.72; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+}
+
+#app-main.route-enter {
+    animation: hebrew-route-enter 160ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #app-main.route-enter {
+        animation: none;
+        transition: none;
+        transform: none;
+    }
+}
+
+/* Sound toggle in the player header. Sound effects are OFF by default; this is the one
+   visible control (REQ-014). State is shown by aria-pressed, colour, and a mark, so it
+   does not rely on colour alone. */
+.player-top-end {
+    gap: 0.4rem;
+}
+
+.player-top .btn-sfx {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.player-top .btn-sfx:hover {
+    background: rgba(255, 255, 255, 0.22);
+}
+
+.player-top .btn-sfx.is-on {
+    background: rgba(16, 185, 129, 0.3);
+    border-color: rgba(167, 243, 208, 0.75);
+    color: #ecfdf5;
+}
+
+.player-top .btn-sfx::after {
+    content: "\2715" / "";
+    margin-inline-start: 0.3rem;
+    opacity: 0.8;
+}
+
+.player-top .btn-sfx[aria-pressed="true"]::after {
+    content: "\2713" / "";
+    opacity: 1;
+}
+
+@media (max-width: 599px) {
+    .player-top .btn-sfx .en {
+        display: none;
+    }
+}
+/* === end INIT-005/SPEC-009 route transition + sound toggle === */
+/* === INIT-005/SPEC-010 icons === */
+/* Brand sprite icons (shared/brand/sprite.svg, drawn with <use>) and the logo mark.
+   Icons are decorative (aria-hidden) and take the text colour. Docs: docs/design/icon-usage.md */
+.icon {
+    width: 1.25em;
+    height: 1.25em;
+    flex: 0 0 auto;
+    color: inherit;
+    vertical-align: -0.22em;
+}
+/* next / back point right / left as drawn: mirror them in a right-to-left screen, only them. */
+[dir="rtl"] .icon-directional { transform: scaleX(-1); }
+
+/* Header mark: the tile is the whole image, so the radius follows the tile (rx 112/512). */
+img.hebrew-logo-mark {
+    display: block;
+    width: 30px;
+    height: 30px;
+    border-radius: 22%;
+}
+.hebrew-brand-en { font-weight: 500; }
+
+/* Nav: icon beside the visible Hebrew word (and English gloss on wider screens). */
+.hebrew-shell-link .icon { width: 20px; height: 20px; opacity: 0.9; }
+.hebrew-shell-link:hover .icon,
+.hebrew-shell-link:focus-visible .icon,
+.hebrew-shell-link[aria-current="page"] .icon { opacity: 1; }
+
+/* Page heading icon: same sprite, larger. */
+.page-heading-icon.icon { width: 26px; height: 26px; vertical-align: middle; }
+
+/* Sound toggle in the player header: icon + visible word, 44 px target stays. */
+.player-top .btn-sfx { display: inline-flex; align-items: center; gap: 0.35rem; }
+.player-top .btn-sfx .icon { width: 20px; height: 20px; }
+
+/* Feedback kit marks. */
+.feedback-mark .icon { width: 1.5rem; height: 1.5rem; vertical-align: middle; }
+.feedback-retry .icon { width: 1.1em; height: 1.1em; }
+
+/* Icon beside a word on a button: line them up and keep the gap on both reading directions. */
+.btn .icon { vertical-align: middle; }
+.icon-btn .icon { width: 1.25rem; height: 1.25rem; }
+/* === end INIT-005/SPEC-010 icons === */
+
+/* === INIT-005/SPEC-011 restyle learner === */
+/* Provenance: INIT-005/SPEC-011 · ADR-0010 (warm paper, 18px cards, tactile press, 3px focus ring).
+   Appended last on purpose; later rules win. Nothing above is renamed or removed, and the
+   "Light by default" block stays: the app is light unless data-theme="dark" is set.
+   Colours come from tokens. Light values are declared here; data-theme="dark" swaps them.
+   No points, streaks, badges or characters live in this block. */
+
+:root {
+    --color-primary: #1d4ed8;
+    --color-primary-hover: #1e40af;
+    --color-primary-edge: #1e3a8a;
+    --color-primary-ink: #ffffff;
+    --color-primary-soft: #e9efff;
+    /* SPEC-013: the older --muted (#64748b) was 4.49:1 on the paper and 4.22:1 on the soft panel. */
+    --muted: #5b6b7f;
+    --color-border: #e4ded2;
+    --color-surface-soft: #f4f1ea;
+    --color-correct: #059669;
+    --color-miss: #e11d48;
+    --color-correct-soft: #e6f6ee;
+    --color-correct-ink: #065f46;
+    --color-miss-soft: #fdecef;
+    --color-miss-ink: #9f1239;
+    --radius-card: 18px;
+    --radius-button: 14px;
+    --radius-pill: 999px;
+    --shell-h: 61px;
+    --shell-w: 72rem;
+    --wrap-w: 40rem;
+}
+
+:root[data-theme="dark"] {
+    --color-primary: #60a5fa;
+    --color-primary-hover: #93c5fd;
+    --color-primary-edge: #3b82f6;
+    --color-primary-ink: #0b1220;
+    --color-primary-soft: #1c2745;
+    --color-border: #3a3833;
+    --color-surface-soft: #27261f;
+    --color-correct: #10b981;
+    --color-miss: #f43f5e;
+    --color-correct-soft: #12281f;
+    --color-correct-ink: #6ee7b7;
+    --color-miss-soft: #301820;
+    --color-miss-ink: #fda4af;
+    --paper: #141413;
+    /* SPEC-013: the older --muted (#64748b) was never swapped, so .lesson-card .fine and ~15 other
+       rules read 3.5:1 on the dark surface. Same value the ADR-0006 muted token uses in dark. */
+    --muted: var(--color-muted);
+    --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --card-shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+/* Wider screens for the data-heavy views; the shell header is always wider than the page. */
+body.words-page { --wrap-w: 60rem; }
+body.progress-page { --wrap-w: 46rem; }
+body.admin-page { --wrap-w: 66rem; }
+
+/* ---- Page ground and base type ---- */
+body {
+    background: var(--paper, #faf8f4);
+    color: var(--color-text);
+}
+.topbar-inner,
+.wrap {
+    width: min(var(--wrap-w), calc(100% - 2rem));
+}
+.wrap { padding: 0.5rem 0 3rem; }
+
+/* ---- Controls always paint their own colours (no UA dark styling) ---- */
+button, input, select, textarea {
+    font-family: inherit;
+}
+input, select, textarea {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+}
+select, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea {
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+}
+textarea { min-height: 6rem; }
+input::placeholder, textarea::placeholder { color: var(--color-muted); opacity: 0.8; }
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* ================= App header (shell) =================
+   One row on a desktop (about 60px). On a phone: brand and account, then the nav as one row that
+   scrolls sideways (about 95px) and scrolls away with the page. Hebrew word and English gloss are
+   both kept; the gloss sits under the word. */
+.hebrew-shell {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-bottom: 1px solid var(--color-border);
+    box-shadow: 0 8px 18px -16px rgba(28, 25, 23, 0.45);
+}
+.hebrew-shell-inner {
+    width: min(var(--shell-w), calc(100% - 2rem));
+    flex-wrap: nowrap;
+    gap: 0.25rem 0.75rem;
+    min-height: 60px;
+    padding: 0.25rem 0;
+}
+.hebrew-brand {
+    color: var(--color-text);
+    gap: 0.6rem;
+    padding: 0.2rem 0.5rem 0.2rem 0.35rem;
+    margin-inline-end: 0;
+    border-radius: 14px;
+}
+.hebrew-brand:hover { background: var(--color-surface-soft); }
+.hebrew-brand:focus-visible { outline-offset: 0; }
+img.hebrew-logo-mark {
+    width: 32px;
+    height: 32px;
+    box-shadow: 0 1px 3px rgba(28, 25, 23, 0.25);
+}
+.hebrew-brand-he { font-size: 1.08rem; font-weight: 700; color: var(--color-text); }
+.hebrew-brand-en {
+    font-size: 0.62rem;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    color: var(--color-muted);
+}
+.hebrew-shell-nav {
+    flex-wrap: nowrap;
+    gap: 0.15rem;
+    padding: 2px 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    overscroll-behavior-x: contain;
+}
+.hebrew-shell-nav::-webkit-scrollbar { display: none; }
+.hebrew-shell-link {
+    flex: 0 0 auto;
+    min-height: 44px;
+    gap: 0.4rem;
+    padding: 0.2rem 0.7rem;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    background-image: none;
+    box-shadow: none;
+    color: var(--color-muted);
+    font-size: 0.92rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.hebrew-shell-link:hover {
+    background: var(--color-surface-soft);
+    color: var(--color-text);
+    outline: 0;
+}
+.hebrew-shell-link:focus-visible {
+    background: var(--color-surface-soft);
+    color: var(--color-text);
+    outline: 3px solid var(--color-primary);
+    outline-offset: -3px;
+}
+.hebrew-shell-link[aria-current="page"] {
+    background: var(--color-primary-soft);
+    background-image: none;
+    color: var(--color-primary);
+    /* The underline and the heavier weight carry "current", not colour alone. */
+    box-shadow: inset 0 -3px 0 var(--color-primary);
+}
+.hebrew-shell-link .icon { width: 20px; height: 20px; opacity: 1; }
+.hebrew-shell-label {
+    display: grid;
+    justify-items: start;
+    line-height: 1.15;
+}
+.hebrew-shell-label .en,
+.hebrew-shell-link .hebrew-shell-label .en {
+    display: block;
+    font-size: 0.66rem;
+    font-weight: 500;
+    opacity: 1;
+    color: var(--color-muted);
+}
+.hebrew-shell-link[aria-current="page"] .hebrew-shell-label { font-weight: 700; }
+.hebrew-shell-link[aria-current="page"] .hebrew-shell-label .en { color: var(--color-primary); }
+.hebrew-shell-sync:empty { display: none; }
+.hebrew-shell-account-btn {
+    min-height: 44px;
+    gap: 0.4rem;
+    padding: 0.25rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+.hebrew-shell-account-btn:hover { background: var(--color-surface-soft); outline: 0; }
+.hebrew-shell-account-btn:focus-visible {
+    background: var(--color-surface-soft);
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
+}
+.hebrew-shell-account-name { max-width: 9rem; }
+.hebrew-shell-account-menu,
+.hebrew-shell-pw-panel,
+.admin-dialog-panel {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    box-shadow: 0 18px 40px -16px rgba(28, 25, 23, 0.4);
+}
+.hebrew-shell-menu-item { border-radius: 12px; color: var(--color-text); }
+.hebrew-shell-menu-item:hover { background: var(--color-surface-soft); outline: 0; }
+.hebrew-shell-menu-item:focus-visible {
+    background: var(--color-surface-soft);
+    outline: 3px solid var(--color-primary);
+    outline-offset: -3px;
+}
+.hebrew-shell-privacy, .login-privacy { color: var(--color-muted); }
+.hebrew-shell-pw-dialog, .admin-dialog { background: rgba(28, 25, 23, 0.5); }
+.hebrew-shell-field { display: block; font-weight: 600; }
+.hebrew-shell-field > input { display: block; width: 100%; margin-top: 0.35rem; }
+.hebrew-shell-pw-error { color: var(--color-miss-ink); }
+.hebrew-shell-field input,
+.login-form input {
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    background: var(--color-surface);
+    color: var(--color-text);
+}
+
+/* Two rows below 1100px: seven nav links with glosses (about 700px) do not fit beside the brand and
+   account, so the nav gets its own row. At 1100px and up it is one row of about 60px. */
+@media (max-width: 1099px) {
+    :root { --shell-h: 0px; }
+    .hebrew-shell { position: relative; }
+    .hebrew-shell-inner {
+        flex-wrap: wrap;
+        width: calc(100% - 1rem);
+        min-height: 0;
+        padding: 0.3rem 0 0;
+        gap: 0 0.5rem;
+    }
+    .hebrew-brand { order: 1; flex: 1 1 auto; }
+    .hebrew-shell-sync { order: 2; }
+    .hebrew-shell-account { order: 2; margin-inline-start: 0; }
+    .hebrew-shell-account-btn { min-height: 40px; padding: 0.2rem 0.65rem; }
+    .hebrew-shell-account-name { max-width: 6.5rem; }
+    .hebrew-shell-nav {
+        order: 3;
+        flex: 1 1 100%;
+        margin-inline: -0.5rem;
+        padding: 0 0.5rem 0.2rem;
+        scroll-snap-type: x proximity;
+        /* The next link peeks out at the edge: that is the cue that the row scrolls. */
+        -webkit-mask-image: linear-gradient(to right, transparent 0, #000 0.9rem, #000 calc(100% - 0.9rem), transparent 100%);
+        mask-image: linear-gradient(to right, transparent 0, #000 0.9rem, #000 calc(100% - 0.9rem), transparent 100%);
+    }
+    .hebrew-shell-link { scroll-snap-align: center; padding: 0.2rem 0.6rem; }
+    .hebrew-shell-link .hebrew-shell-label .en { display: block; }
+}
+
+/* ================= Page heading =================
+   Plain heading on the paper: the old blue banner and the repeated brand kicker are gone. */
+.topbar,
+.topbar.page-heading {
+    background: none;
+    border: 0;
+    box-shadow: none;
+    color: var(--color-text);
+}
+.page-heading .topbar-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    padding: 1.5rem 0 0.75rem;
+}
+.page-heading-text { flex: 1 1 16rem; gap: 0.3rem; min-width: 0; }
+.page-heading .page-actions { flex: 0 1 auto; max-width: 100%; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.topbar h1 {
+    font-size: clamp(1.55rem, 4.5vw, 2.1rem);
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--color-text);
+}
+.topbar h1 .en {
+    font-size: 0.5em;
+    font-weight: 500;
+    color: var(--color-muted);
+    margin-inline-start: 0.15em;
+}
+.page-heading-icon-wrap {
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 14px;
+    background: var(--color-primary-soft);
+    border: 0;
+    color: var(--color-primary);
+    vertical-align: -0.5rem;
+    margin-inline-end: 0.6rem;
+}
+.page-heading-icon, .page-heading-icon.icon { color: var(--color-primary); }
+.topbar .subtitle {
+    margin: 0;
+    color: var(--color-muted);
+    font-size: 1rem;
+    line-height: 1.5;
+}
+.topbar .subtitle .en {
+    display: block;
+    font-size: 0.85em;
+    text-align: end; /* a dir=ltr block in a right-to-left page: "end" is the right edge */
+}
+
+/* ================= Cards ================= */
+.card, .lesson-card, .banner, .story {
+    border-radius: var(--radius-card);
+}
+.card, .lesson-card {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--card-shadow);
+}
+.card { padding: 1.15rem 1.3rem; }
+.card h2, .lesson-card h2 {
+    margin: 0.35rem 0 0.5rem;
+    font-size: 1.3rem;
+    line-height: 1.35;
+    font-weight: 700;
+}
+.card h3 { font-size: 1.05rem; line-height: 1.4; }
+.card h2 .en, .card h3 .en, .lesson-card h2 .en {
+    font-size: 0.6em;
+    font-weight: 500;
+    color: var(--color-muted);
+}
+.card p { line-height: 1.6; }
+.fine, .save-note { color: var(--color-muted); }
+.card .en, .lesson-card .en { color: var(--color-muted); }
+/* SPEC-013: 0.85 dropped the blue gloss on a selected chip to 4.40:1; 0.92 keeps it above 4.5:1. */
+.btn .en, .lessons-filter-btn .en { color: inherit; opacity: 0.92; }
+.home-list { gap: 0.9rem; }
+.lesson-link { padding: 1.15rem 1.3rem; }
+.lesson-card:hover { border-color: #c5d3fb; }
+.lesson-card .fine { font-size: 0.88rem; margin: 0.5rem 0 0; }
+.lesson-card .lesson-blurb,
+.lesson-blurb {
+    margin: 0.4rem 0 0;
+    color: var(--color-muted);
+    font-size: 0.92rem;
+    line-height: 1.55;
+    text-align: end;
+}
+.lesson-level .en { font-size: 0.9em; }
+.today-card .today-actions { margin: 1rem 0 0; }
+.review-today-card {
+    background: var(--color-surface);
+    border-color: var(--color-border);
+}
+.review-today-card h2 { color: var(--color-text); }
+.lesson-card[data-today-card="continue"] { background: var(--color-surface); }
+.today-welcome { background: var(--color-primary-soft); border-color: #c5d3fb; }
+:root[data-theme="dark"] .today-welcome { border-color: var(--color-border); }
+.banner-blue { background: var(--color-primary-soft); }
+
+/* Status chips: shape and wording carry the meaning; colour is a second cue. */
+.lesson-status {
+    padding: 0.2rem 0.7rem;
+    font-size: 0.78rem;
+    background: var(--color-surface-soft);
+    color: var(--color-muted);
+    border: 1px solid var(--color-border);
+}
+.lesson-status .en { color: inherit; font-weight: 500; }
+.lesson-status.ready { background: var(--color-correct-soft); color: var(--color-correct-ink); border-color: transparent; }
+.lesson-status.fresh { background: var(--color-primary-soft); color: var(--color-primary); border-color: transparent; }
+.lesson-status.done { background: var(--color-surface-soft); color: var(--color-muted); }
+.today-nothing-due .lesson-status { background: var(--color-surface-soft); color: var(--color-muted); }
+
+/* Empty states: one look everywhere. Quiet, centred, dashed so it reads as "nothing here yet". */
+.guides-state[data-guides-state="empty"],
+.lessons-state[data-lessons-state="no-lessons"],
+.lessons-state[data-lessons-state="filtered-empty"],
+.today-state[data-today-state="no-lessons"],
+.progress-card.progress-empty,
+.words-empty {
+    text-align: center;
+    background: var(--color-surface-soft);
+    border: 1.5px dashed var(--color-line);
+    box-shadow: none;
+    padding: 1.6rem 1.3rem;
+}
+.guides-state[data-guides-state="empty"] p,
+.lessons-state[data-lessons-state="no-lessons"] p,
+.lessons-state[data-lessons-state="filtered-empty"] p,
+.today-state[data-today-state="no-lessons"] p,
+.progress-card.progress-empty p,
+.words-empty p { margin: 0.25rem 0; }
+.progress-card.progress-empty h2, .words-empty h2 { margin-top: 0; }
+.progress-card.progress-empty a { color: var(--color-primary); }
+[data-lessons-state="loading"], [data-today-state="loading"], [data-progress-state="loading"],
+[data-guides-state="loading"], [data-words-state="loading"] { color: var(--color-muted); }
+.card[role="alert"] {
+    background: var(--color-miss-soft);
+    border-color: var(--color-miss);
+    color: var(--color-text);
+}
+.card[role="alert"] .en { color: var(--color-miss-ink); }
+
+/* ================= Buttons (tactile, ADR-0010) ================= */
+.btn {
+    min-height: 44px;
+    padding: 0.6rem 1.05rem;
+    border-radius: var(--radius-button);
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-weight: 600;
+    font-size: 0.95rem;
+    box-shadow: 0 2px 0 var(--color-border);
+    transition: transform var(--motion-fast, 0.1s ease), box-shadow 0.15s ease, background 0.15s ease;
+}
+.btn:hover { background: var(--color-surface-soft); transform: translateY(-1px); }
+.btn:active { transform: translateY(1px) scale(0.98); box-shadow: 0 0 0 var(--color-border); }
+.btn-primary {
+    background: var(--color-primary);
+    color: var(--color-primary-ink);
+    border-color: var(--color-primary-edge);
+    box-shadow: 0 2px 0 var(--color-primary-edge);
+}
+.btn-primary:hover { background: var(--color-primary-hover); }
+.btn-primary:active { box-shadow: 0 0 0 var(--color-primary-edge); }
+.btn-primary .en { color: inherit; opacity: 0.9; }
+.btn-green, .btn-again {
+    background: #047857;
+    color: #ffffff;
+    border-color: #065f46;
+    box-shadow: 0 2px 0 #065f46;
+}
+.btn-green:hover, .btn-again:hover { background: #065f46; }
+.btn-green .en, .btn-again .en { color: inherit; }
+.btn-ghost {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-color: var(--color-line);
+}
+.btn-ghost:hover { background: var(--color-surface-soft); }
+.btn-amber { background: #fde68a; color: #78350f; border-color: #d97706; box-shadow: 0 2px 0 #d97706; }
+.btn-amber:hover { background: #fcd34d; }
+.btn-stop { background: var(--color-miss-soft); color: var(--color-miss-ink); border-color: var(--color-miss); box-shadow: 0 2px 0 var(--color-miss); }
+.btn-stop:hover { background: var(--color-miss-soft); }
+.btn-mark { background: var(--color-correct-soft); color: var(--color-correct-ink); border-color: var(--color-correct); }
+.btn-mark.missed { background: var(--color-miss-soft); color: var(--color-miss-ink); border-color: var(--color-miss); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: 0.6; cursor: not-allowed; transform: none; }
+.btn-sm { min-height: 40px; padding: 0.4rem 0.8rem; font-size: 0.85rem; }
+.btn .icon { vertical-align: middle; }
+
+/* View toggles in the page heading and in the player top bar (light pills). */
+.btn-vowels,
+.player-top .btn-sfx,
+.review-page .btn-vowels {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.35rem 0.9rem;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+.btn-vowels:hover, .player-top .btn-sfx:hover { background: var(--color-surface-soft); }
+.btn-vowels.is-on,
+.player-top .btn-sfx.is-on {
+    background: var(--color-primary-soft);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+.btn-vowels.is-on:hover { background: var(--color-primary-soft); }
+
+/* Filter chips: Lessons level filter, Review decks. One pill style. */
+.lessons-filter { gap: 0.5rem; margin: 0.25rem 0 1rem; }
+.lessons-filter-btn,
+.review-deck-btn {
+    min-height: 44px;
+    padding: 0.4rem 1rem;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 0.92rem;
+    font-weight: 600;
+    box-shadow: none;
+}
+.lessons-filter-btn:hover, .review-deck-btn:hover {
+    background: var(--color-surface-soft);
+    transform: none;
+    border-color: var(--color-line);
+}
+.lessons-filter-btn.is-active,
+.lessons-filter-btn[aria-pressed="true"],
+.review-deck-btn[aria-pressed="true"] {
+    background: var(--color-primary-soft);
+    border-color: var(--color-primary);
+    border-width: 2px;
+    padding: calc(0.4rem - 1px) calc(1rem - 1px);
+    color: var(--color-primary);
+}
+.review-deck-count {
+    display: inline-flex;
+    min-width: 1.6rem;
+    justify-content: center;
+    padding: 0 0.4rem;
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-soft);
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.85rem;
+}
+.review-deck-btn[aria-pressed="true"] .review-deck-count { background: var(--color-surface); }
+.review-decks { gap: 0.5rem; margin-bottom: 1rem; align-items: flex-end; }
+.review-deck-field { flex: 1 1 12rem; min-width: 0; gap: 0.3rem; }
+.review-deck-field .fine { font-size: 0.85rem; font-weight: 600; color: var(--color-muted); }
+.review-deck-select {
+    width: 100%;
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    background-color: var(--color-surface);
+    color: var(--color-text);
+}
+.review-page .review-top { align-items: flex-end; }
+.review-caught-up, .review-empty { text-align: start; }
+.review-today-card, .review-card { background: var(--color-surface); }
+
+@media (max-width: 599px) {
+    .lessons-filter-btn { padding: 0.35rem 0.8rem; font-size: 0.85rem; }
+    .lessons-filter-btn.is-active,
+    .lessons-filter-btn[aria-pressed="true"] { padding: calc(0.35rem - 1px) calc(0.8rem - 1px); }
+}
+
+/* ================= Words ================= */
+.words-page { gap: 1rem; }
+.words-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: 0.75rem;
+    align-items: end;
+    padding: 1rem 1.15rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--card-shadow);
+}
+.words-field {
+    min-width: 0;
+    gap: 0.3rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--color-text);
+}
+.words-field .en { font-weight: 500; color: var(--color-muted); }
+.words-page label, .words-field > span { color: var(--color-text); }
+.words-he { color: var(--color-text); }
+.words-field-search { grid-column: 1 / -1; }
+.words-control, .words-page select, .words-page input {
+    width: 100%;
+    min-height: 44px;
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+}
+.words-apply { justify-self: start; }
+.words-toolbar { gap: 0.75rem 1rem; align-items: center; }
+.words-status { margin: 0; color: var(--color-muted); }
+.words-layout { grid-template-columns: minmax(0, 1.5fr) minmax(16rem, 1fr); gap: 1rem; }
+.words-row { border-color: var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); }
+.words-row:hover { border-color: #c5d3fb; }
+.words-row[aria-pressed="true"] { border-color: var(--color-primary); box-shadow: 0 0 0 2px var(--color-primary-soft); }
+.words-chip { background: var(--color-surface-soft); border-color: var(--color-border); color: var(--color-text); }
+.words-gloss, .words-translit, .words-note { color: var(--color-muted); }
+.words-detail, .words-add { padding: 1.15rem 1.3rem; }
+.words-add {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 0.75rem 1rem;
+    align-items: end;
+}
+.words-add h2, .words-add .words-add-error { grid-column: 1 / -1; }
+.words-add h2 { margin: 0; }
+.words-add .btn { justify-self: start; }
+.words-add-error { margin: 0; color: var(--color-miss-ink); }
+.words-detail { align-self: start; }
+@media (max-width: 800px) {
+    .words-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ================= Progress ================= */
+.progress-view { gap: 1rem; }
+.progress-card h2 { margin: 0 0 0.6rem; }
+.progress-long-term-note, .progress-why { opacity: 1; color: var(--color-muted); font-size: 0.92rem; }
+.progress-direction, .progress-accuracy-dir { margin-top: 1.1rem; }
+.progress-dir-label { font-size: 1rem; font-weight: 600; margin: 0 0 0.45rem; }
+.progress-stage-bar { height: 0.9rem; background: var(--color-surface-soft); border: 1px solid var(--color-border); }
+.progress-seg-new { background: #94a3b8; }
+.progress-seg-learning { background: var(--color-primary); }
+.progress-seg-long { background: #15803d; }
+.progress-stage-counts { gap: 0.25rem 0.9rem; margin-top: 0.55rem; }
+.progress-count-sep { display: none; }
+.progress-count { display: inline-flex; align-items: baseline; gap: 0.3rem; }
+.progress-count-n { font-size: 1.15rem; }
+.progress-pct { font-size: 1.6rem; color: var(--color-text); }
+
+/* "What your AI sees": the same data as before, set as a quiet reference card. */
+.ai-profile { gap: 0.6rem; padding: 1.2rem 1.3rem 1.3rem; }
+.ai-profile > h2 { margin: 0; }
+.ai-profile h3 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin: 0.4rem 0 0.2rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border);
+}
+.ai-profile h3 .en, .ai-profile h2 .en { font-size: 0.7em; }
+.ai-profile-note {
+    margin: 0;
+    padding: 0.75rem 0.9rem;
+    background: var(--color-surface-soft);
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    color: var(--color-muted);
+    font-size: 0.84rem;
+    line-height: 1.6;
+}
+.ai-profile-line, .ai-profile-counts, .ai-profile-direction, .ai-profile-switch {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.6;
+}
+.ai-profile-switch {
+    padding: 0.5rem 0.8rem;
+    border-radius: 12px;
+    background: var(--color-primary-soft);
+    color: var(--color-text);
+}
+.ai-profile-value { font-weight: 600; }
+.ai-profile-list { list-style: none; padding: 0; margin: 0.25rem 0 0; display: grid; gap: 0.2rem; font-size: 0.9rem; }
+.ai-profile-list li { padding: 0.25rem 0; border-bottom: 1px dashed var(--color-border); }
+.ai-profile-list li:last-child { border-bottom: 0; }
+.ai-profile-empty { color: var(--color-muted); font-size: 0.9rem; }
+.ai-profile-grammar-group { margin: 0.5rem 0 0; }
+.ai-profile-grammar-group h3 { border-top: 0; padding-top: 0; font-size: 0.9rem; color: var(--color-muted); }
+.ai-profile-words a { font-weight: 600; color: var(--color-primary); }
+.ai-profile [data-ai-profile-raw-toggle] { justify-self: start; margin-top: 0.5rem; }
+.ai-profile-raw { background: var(--color-surface-soft); border-color: var(--color-border); }
+
+/* ================= Lesson player chrome =================
+   The top bar was a blue banner; it is now the same warm surface as the shell and sits just
+   under it on a wide screen (on a phone the shell scrolls away and this bar sticks to the top). */
+/* .player-top stays in the markup (hook) but no longer paints a box: its controls row sticks and
+   the title and round lines scroll away, so a phone keeps its height for the exercise. */
+.player-top { display: contents; }
+.player-top-inner {
+    position: sticky;
+    top: var(--shell-h);
+    z-index: 40;
+    max-width: none;
+    margin: 0;
+    /* Full-width bar, content held to the page measure. */
+    padding: 0.4rem max(0.85rem, calc((100% - 40rem) / 2));
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-bottom: 1px solid var(--color-border);
+    box-shadow: 0 8px 18px -16px rgba(28, 25, 23, 0.45);
+}
+.player-title,
+.player-top .round-bar {
+    width: min(40rem, calc(100% - 1.7rem));
+    max-width: none;
+    margin-inline: auto;
+}
+.player-title { margin-top: 0.75rem; }
+.player-top .round-bar { margin-top: 0.3rem; }
+.player-exit {
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-weight: 600;
+}
+.player-exit:hover { background: var(--color-surface-soft); }
+.step-indicator { color: var(--color-muted); }
+.player-title h1 { color: var(--color-text); font-size: 1.05rem; font-weight: 700; }
+.player-title .subtitle,
+.player-top .back-link,
+.player-top .round-bar { color: var(--color-muted); }
+.player-top .round-bar strong, .player-top .round-bar b { color: var(--color-text); }
+.progress-track { background: var(--color-border); }
+.path-screen.card { padding: 1.25rem 1.3rem; }
+.path-btn {
+    min-height: 52px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-button);
+    background: var(--color-surface);
+    color: var(--color-text);
+    transition: transform var(--motion-fast, 0.1s ease), border-color 0.15s ease, background 0.15s ease;
+}
+.path-btn:hover { border-color: var(--color-primary); background: var(--color-surface-soft); }
+.path-btn:active { transform: scale(0.99); }
+.path-item.done .path-btn { background: var(--color-correct-soft); border-color: transparent; }
+.path-num { background: var(--color-surface-soft); border: 1px solid var(--color-border); color: var(--color-text); }
+.path-item.done .path-num { background: var(--color-correct-ink); border-color: var(--color-correct-ink); color: #fff; }
+.path-actions { gap: 0.6rem; margin-top: 0.25rem; }
+.path-actions .btn { width: 100%; justify-content: center; min-height: 48px; }
+.action-bar {
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+    border-top: 1px solid var(--color-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .btn, .btn:hover, .btn:active,
+    .path-btn, .path-btn:active,
+    .hebrew-shell-link, .lessons-filter-btn, .review-deck-btn {
+        transition: none;
+        transform: none;
+    }
+}
+/* === end INIT-005/SPEC-011 restyle learner === */
+
+/* === INIT-005/SPEC-012 restyle login+admin === */
+/* Provenance: INIT-005/SPEC-012 · ADR-0010. Admin is a shell view: it shares the header, cards,
+   buttons and tokens from the SPEC-011 block above. Nothing here changes who may open Admin
+   (the server gates it) and no auth, session or CSRF rule lives in CSS.
+   The sign-in page is a full page outside the shell and cannot load this file while signed out
+   (/shared/worksheet.css is gated), so its look is inlined in login/index.html from the same
+   token values. The .login-* rules below only keep the signed-in copy of that markup (shared/login.js)
+   in step with it. */
+
+/* ---- Admin shell: tabs ---- */
+.admin-page .admin-shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+}
+/* Grid children default to min-width:auto, so one wide table stretched the whole page on a phone. */
+.lesson-editor, .admin-user-detail { grid-template-columns: minmax(0, 1fr); }
+.admin-shell > *, .admin-panel, .lesson-editor > *, .admin-user-detail > * { min-width: 0; }
+.admin-tabs {
+    flex-wrap: nowrap;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0.3rem;
+    width: fit-content;
+    max-width: 100%;
+    background: var(--color-surface-soft);
+    border: 1px solid var(--color-border);
+    border-radius: 18px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.admin-tabs::-webkit-scrollbar { display: none; }
+.admin-tab {
+    flex-direction: column;
+    justify-content: center;
+    gap: 0;
+    min-height: 44px;
+    padding: 0.2rem 1.1rem;
+    border: 0;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--color-muted);
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.admin-tab:hover { background: var(--color-surface); color: var(--color-text); }
+.admin-tab .en { display: block; color: inherit; opacity: 0.85; font-size: 0.7rem; font-weight: 500; }
+.admin-tab.is-active,
+.admin-tab[aria-current="page"] {
+    background: var(--color-surface);
+    color: var(--color-primary);
+    box-shadow: 0 1px 2px rgba(28, 25, 23, 0.18), inset 0 -3px 0 var(--color-primary);
+}
+
+/* ---- Admin: panels, headings ---- */
+.admin-users-head { margin-bottom: 1rem; gap: 0.75rem 1rem; }
+.admin-users-head h2 { font-size: 1.3rem; }
+.admin-back { font-size: 0.95rem; }
+.admin-back a, .admin-user-link, .lesson-view-link { color: var(--color-primary); font-weight: 600; }
+.admin-inline-error { color: var(--color-miss-ink); }
+.admin-empty, .admin-lessons-placeholder p, .admin-password-hint { color: var(--color-muted); }
+.admin-privacy-note {
+    background: var(--color-surface-soft);
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    color: var(--color-muted);
+}
+
+/* ---- Admin: tables (scroll inside their own wrapper, never the page) ---- */
+.admin-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    background: var(--color-surface);
+}
+.admin-users-table,
+.admin-history-table,
+.admin-lessons-table {
+    width: 100%;
+    min-width: 34rem;
+    border-collapse: collapse;
+    font-size: 0.93rem;
+}
+.admin-users-table th,
+.admin-history-table th,
+.admin-lessons-table th {
+    position: sticky;
+    top: 0;
+    background: var(--color-surface-soft);
+    color: var(--color-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-align: start;
+    border-bottom: 1px solid var(--color-border);
+}
+.admin-users-table th .en, .admin-history-table th .en, .admin-lessons-table th .en { display: block; font-weight: 500; }
+.admin-users-table td,
+.admin-history-table td,
+.admin-lessons-table td {
+    padding: 0.65rem 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+    text-align: start;
+    vertical-align: middle;
+}
+.admin-users-table th, .admin-history-table th, .admin-lessons-table th { padding: 0.55rem 0.75rem; }
+.admin-users-table tbody tr:last-child td,
+.admin-history-table tbody tr:last-child td,
+.admin-lessons-table tbody tr:last-child td { border-bottom: 0; }
+.admin-users-table tbody tr:hover td,
+.admin-lessons-table tbody tr:hover td { background: var(--color-surface-soft); }
+.admin-lessons-table code, .admin-users-table code {
+    font-size: 0.85rem;
+    color: var(--color-muted);
+}
+.admin-row-actions { gap: 0.4rem; }
+.admin-row-btn {
+    min-height: 36px;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    box-shadow: none;
+}
+.lesson-vis-cell { min-width: 12rem; }
+.lesson-vis-mode { width: 100%; }
+.lesson-vis-users {
+    background: var(--color-surface-soft);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+}
+.lesson-vis-status { color: var(--color-muted); }
+
+/* ---- Admin: forms and controls (explicit background and colour, no UA styling) ---- */
+.admin-page :is(input, select, textarea) {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+}
+.admin-page :is(input:not([type="checkbox"]):not([type="radio"]), select) { min-height: 44px; }
+.admin-page :is(input[type="checkbox"], input[type="radio"]) {
+    width: 1.25rem;
+    height: 1.25rem;
+    accent-color: var(--color-primary);
+}
+.admin-page :is(table input, table select) { min-height: 36px; padding: 0.25rem 0.5rem; }
+.admin-page label { font-weight: 600; font-size: 0.9rem; }
+/* A label is "Hebrew (English) then the control": block flow keeps the gloss on the Hebrew line. */
+.admin-dialog-panel label,
+.lesson-meta-grid label,
+.lesson-vocab-extra-grid label { display: block; margin-bottom: 0.85rem; }
+.lesson-meta-grid label, .lesson-vocab-extra-grid label { margin-bottom: 0; }
+.admin-dialog-panel label > :is(input, select, textarea),
+.lesson-meta-grid label > :is(input, select, textarea),
+.lesson-vocab-extra-grid label > :is(input, select, textarea) {
+    display: block;
+    width: 100%;
+    margin-top: 0.35rem;
+}
+.admin-dialog-panel { padding: 1.4rem; width: min(26rem, 100%); }
+.admin-dialog-panel h2 { font-size: 1.2rem; }
+.admin-dialog-actions { gap: 0.6rem; margin-top: 1rem; }
+
+/* ---- Admin: user detail ---- */
+.admin-account-details > div {
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--color-border);
+}
+.admin-account-details dt { color: var(--color-muted); font-weight: 600; }
+.admin-trouble-item { padding: 0.4rem 0; border-bottom: 1px dashed var(--color-border); }
+.admin-trouble-meta { color: var(--color-muted); }
+
+/* ---- Lesson editor ---- */
+.lesson-editor { gap: 1rem; }
+.lesson-editor-section { padding: 1.15rem 1.3rem; }
+.lesson-editor-section h3 {
+    font-size: 1.05rem;
+    margin: 0 0 0.85rem;
+    padding-bottom: 0.55rem;
+    border-bottom: 1px solid var(--color-border);
+}
+.lesson-editor-toolbar .lesson-editor-actions { gap: 0.5rem; }
+.lesson-opened-at { color: var(--color-muted); }
+.lesson-meta-grid { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.85rem 1rem; }
+.lesson-meta-grid label:has(textarea) { grid-column: 1 / -1; }
+.lesson-vocab-table-wrap, .lesson-editor-section:has(.lesson-vocab-table) { overflow-x: auto; }
+.lesson-vocab-table { min-width: 40rem; }
+.lesson-vocab-table th {
+    background: var(--color-surface-soft);
+    color: var(--color-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-align: start;
+}
+.lesson-vocab-table td, .lesson-vocab-table th { border-bottom: 1px solid var(--color-border); }
+.lesson-act-row {
+    background: var(--color-surface-soft);
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+}
+span.lesson-editor-row-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; white-space: normal; }
+.lesson-act-row, .lesson-act-opts { min-width: 0; }
+.lesson-act-row > select { flex: 1 1 10rem; min-width: 0; width: auto; }
+.lesson-vocab-table input { min-width: 5.5rem; }
+.lesson-json-area {
+    background-color: var(--color-surface-soft);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+}
+.lesson-json-feedback { color: var(--color-muted); }
+.lesson-validate-errors { color: var(--color-miss-ink); }
+.lesson-validate-warnings { color: #92400e; }
+.lesson-validate-ok { color: var(--color-correct-ink); }
+
+/* ---- Plans tab and media preview (plan builder lives in the admin panel) ---- */
+.admin-panel .card input[list], .admin-panel .card input[type="text"], .admin-panel .card input[type="search"] { width: 100%; }
+.admin-panel img, .admin-panel video { max-width: 100%; height: auto; border-radius: 12px; }
+.admin-panel [class*="media"] img { border: 1px solid var(--color-border); background: var(--color-surface-soft); }
+
+/* ---- Sign-in markup, signed-in copy (shared/login.js) ---- */
+.login-page { background: var(--paper, #faf8f4); }
+.login-card {
+    border: 1px solid var(--color-border);
+    border-radius: 20px;
+    background: var(--color-surface);
+    box-shadow: var(--card-shadow);
+}
+.login-kicker { color: var(--color-primary); }
+.login-error { color: var(--color-miss-ink); }
+
+@media (max-width: 599px) {
+    .admin-tabs { width: 100%; }
+    .admin-tab { flex: 1 1 auto; padding-inline: 0.6rem; }
+}
+/* === end INIT-005/SPEC-012 restyle login+admin === */
+
+/* === INIT-008/SPEC-011 + SPEC-012 schema-driven plan editor === */
+/* Provenance: INIT-008/SPEC-011, INIT-008/SPEC-012 · ADR-0008, ADR-0010. Tokens only, no new raw colour.
+   Controls set their own background and colour (no UA styling); primary targets are 44px. */
+[data-plan-builder] .plan-form { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+[data-plan-builder] .plan-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+    padding-inline-start: var(--space-3);
+    border-inline-start: 3px solid transparent;
+}
+[data-plan-builder] .plan-field[data-plan-dirty="true"] { border-inline-start-color: var(--color-primary); }
+[data-plan-builder] .plan-label { display: block; font-weight: 600; font-size: 0.9rem; color: var(--color-text); }
+[data-plan-builder] .plan-label-he, [data-plan-builder] .plan-label-en { display: block; }
+[data-plan-builder] .plan-label-en { color: var(--color-muted); font-weight: 500; font-size: 0.8rem; }
+[data-plan-builder] .plan-help, [data-plan-builder] .plan-note {
+    margin: 0;
+    color: var(--color-muted);
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+[data-plan-builder] .plan-help-he, [data-plan-builder] .plan-help-en { display: block; }
+[data-plan-builder] .plan-count { font-variant-numeric: tabular-nums; }
+[data-plan-builder] .plan-pointed-en { display: inline-block; unicode-bidi: isolate; }
+[data-plan-builder] .plan-advanced {
+    margin: var(--space-3) 0 0;
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--color-border);
+    font-weight: 600;
+    color: var(--color-muted);
+}
+[data-plan-builder] .plan-form :is(input:not([type="checkbox"]), select, textarea),
+[data-plan-builder] .plan-draft :is(input:not([type="checkbox"]), select, textarea),
+[data-plan-builder] [data-plan-new-draft] :is(input:not([type="checkbox"]), select, textarea) {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    font: inherit;
+    font-size: var(--size-body);
+    line-height: 1.5;
+}
+[data-plan-builder] .plan-form :is(input:not([type="checkbox"]), select) { min-height: 44px; }
+[data-plan-builder] .plan-form textarea { min-height: 5.5rem; resize: vertical; }
+[data-plan-builder] .plan-form textarea.plan-json { font-family: ui-monospace, Consolas, monospace; font-size: 0.85rem; }
+[data-plan-builder] .plan-readonly {
+    display: block;
+    padding: var(--space-2) var(--space-3);
+    border-radius: 12px;
+    background: var(--color-surface-soft);
+    color: var(--color-text);
+    overflow-wrap: anywhere;
+}
+[data-plan-builder] .plan-list, [data-plan-builder] .plan-object, [data-plan-builder] .plan-draft {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+}
+[data-plan-builder] .plan-object-body { display: flex; flex-direction: column; gap: var(--space-3); }
+[data-plan-builder] .plan-list-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+[data-plan-builder] .plan-list-item { display: flex; align-items: flex-start; gap: var(--space-2); min-width: 0; }
+[data-plan-builder] .plan-list-item > :is(input, textarea) { flex: 1 1 auto; min-width: 0; }
+[data-plan-builder] .plan-item {
+    flex-direction: column;
+    align-items: stretch;
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    background: var(--color-surface-soft);
+}
+[data-plan-builder] .plan-item-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+[data-plan-builder] .plan-item-title { font-size: 0.9rem; }
+[data-plan-builder] .plan-item-ops, [data-plan-builder] .plan-list-bar, [data-plan-builder] .plan-field-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
+}
+[data-plan-builder] .plan-item-toggle { text-align: start; white-space: normal; max-width: 100%; }
+[data-plan-builder] .plan-disclose { background: transparent; color: var(--color-text); width: 100%; justify-content: flex-start; font-size: 1.05rem; }
+[data-plan-builder] .plan-issues { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+[data-plan-builder] .plan-issues:empty { display: none; }
+[data-plan-builder] .plan-issue { font-size: 0.85rem; padding: var(--space-1) var(--space-2); border-radius: 8px; overflow-wrap: anywhere; }
+[data-plan-builder] .plan-issue-block { background: var(--color-miss-soft); color: var(--color-miss-ink); }
+[data-plan-builder] .plan-issue-warn, [data-plan-builder] .plan-issue-inform { background: var(--color-surface-soft); color: var(--color-text); border: 1px solid var(--color-border); }
+[data-plan-builder] .plan-json-box { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+[data-plan-builder] [data-plan-outline] { list-style: none; margin: 0 0 var(--space-3); padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+[data-plan-builder] [data-plan-outline] > li { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-surface); }
+[data-plan-builder] [data-plan-outline] > li[aria-current="true"] { border-color: var(--color-primary); }
+[data-plan-builder] [data-plan-outline] > li > span { flex: 1 1 10rem; min-width: 0; overflow-wrap: anywhere; }
+[data-plan-builder] [data-plan-lessons] { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+[data-plan-builder] .card { min-width: 0; }
+[data-plan-builder] .card > label { display: block; margin-bottom: var(--space-3); }
+[data-plan-builder] input[type="checkbox"] { width: 1.5rem; height: 1.5rem; accent-color: var(--color-primary); }
+/* A left-to-right gloss inside a right-to-left column: shrink the block to its text so it sits on the same
+   side as the Hebrew above it, instead of filling the row and starting at the far side. */
+[data-plan-builder] :is(input[type="text"], select) { box-sizing: border-box; max-width: 100%; }
+/* The picture upload's file input has a wide intrinsic size and pushed the page 50px past a 360px screen. */
+[data-plan-builder] input[type="file"] { display: block; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+[data-plan-builder] .plan-label-en, [data-plan-builder] .plan-help-en { width: fit-content; max-width: 100%; }
+[data-plan-builder] .plan-list-item:not(.plan-item) { flex-wrap: wrap; }
+[data-plan-builder] .plan-list-item > :is(input, textarea) { flex: 1 1 12rem; }
+[data-plan-builder] .plan-item-ops { flex: 0 0 auto; flex-wrap: nowrap; }
+[data-plan-builder] .plan-block-id { color: var(--color-muted); font-weight: 500; font-size: 0.85rem; }
+[data-plan-builder] .plan-item-ops .btn { min-width: var(--size-target); }/* The learner-view preview can be wider than a phone; it scrolls inside its own box and never widens the page. */
+[data-plan-builder] [data-plan-preview] { max-width: 100%; overflow-x: auto; }
+[data-plan-builder] .admin-back a { display: inline-flex; align-items: center; min-height: 44px; padding-inline: var(--space-2); }
+/* === end INIT-008/SPEC-011 + SPEC-012 === */
+
+/* === INIT-008/SPEC-013 + SPEC-014 + SPEC-015 plan list, assign, history, issues, preview === */
+/* Provenance: INIT-008/SPEC-013, INIT-008/SPEC-014, INIT-008/SPEC-015 · ADR-0008, ADR-0010.
+   Tokens only, no new raw colour. Buttons and controls set their own colours; primary targets are 44px.
+   Meaning is carried by text and an icon, never by colour alone. */
+[data-plan-builder] [hidden] { display: none !important; }
+[data-plan-builder] .plan-list-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); }
+[data-plan-builder] .plan-new {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    background: var(--color-surface-soft);
+}
+[data-plan-builder] .plan-new :is(input:not([type="checkbox"]), select),
+[data-plan-builder] .plan-assign :is(select),
+[data-plan-builder] .plan-history :is(input:not([type="checkbox"]), select),
+[data-plan-builder] .plan-compare :is(input, select) {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    min-height: 44px;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    font: inherit;
+    font-size: var(--size-body);
+}
+[data-plan-builder] .plan-table-wrap { max-width: 100%; overflow-x: auto; }
+[data-plan-builder] .plan-table { width: 100%; border-collapse: collapse; }
+[data-plan-builder] .plan-table-caption {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+[data-plan-builder] .plan-table th,
+[data-plan-builder] .plan-table td {
+    padding: var(--space-3);
+    border-bottom: 1px solid var(--color-border);
+    text-align: start;
+    vertical-align: top;
+}
+[data-plan-builder] .plan-table th { font-size: 0.85rem; color: var(--color-muted); }
+[data-plan-builder] .plan-table td { display: table-cell; }
+[data-plan-builder] .plan-table tbody tr:hover { background: var(--color-surface-soft); cursor: pointer; }
+[data-plan-builder] .plan-row-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+[data-plan-builder] .plan-row-id { display: block; font-size: 0.8rem; color: var(--color-muted); overflow-wrap: anywhere; }
+[data-plan-builder] .plan-num { font-variant-numeric: tabular-nums; }
+[data-plan-builder] .plan-chip {
+    display: inline-block;
+    margin: 0 0 var(--space-1);
+    margin-inline-end: var(--space-1);
+    padding: 0.1rem var(--space-2);
+    border: 1px solid var(--color-border);
+    border-radius: 0.7rem;
+    background: var(--color-surface-soft);
+    color: var(--color-text);
+    font-size: 0.8rem;
+}
+[data-plan-builder] .plan-chip-published { border-color: var(--color-primary); }
+[data-plan-builder] .plan-chip-changes { border-style: dashed; border-color: var(--color-muted); }
+/* A narrow screen reads a plan as a card: the table's rows become stacked label and value pairs. */
+@media (max-width: 40rem) {
+    [data-plan-builder] .plan-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+    }
+    [data-plan-builder] .plan-table, [data-plan-builder] .plan-table tbody { display: block; }
+    [data-plan-builder] .plan-table tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: var(--space-1) var(--space-3);
+        margin-bottom: var(--space-3);
+        padding: var(--space-3);
+        border: 1px solid var(--color-border);
+        border-radius: 14px;
+        background: var(--color-surface);
+    }
+    [data-plan-builder] .plan-table td { display: block; padding: var(--space-1) 0; border-bottom: 0; min-width: 0; }
+    [data-plan-builder] .plan-table td:first-child, [data-plan-builder] .plan-table td:nth-child(2) { grid-column: 1 / -1; }
+    [data-plan-builder] .plan-table td::before {
+        content: attr(data-label);
+        display: block;
+        font-size: 0.75rem;
+        color: var(--color-muted);
+    }
+    [data-plan-builder] .plan-table td:first-child::before { content: none; }
+}
+
+/* the assign control */
+[data-plan-builder] .plan-assign-row { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); margin-bottom: var(--space-3); }
+[data-plan-builder] .plan-assign-row .plan-field { border-inline-start: 0; padding-inline-start: 0; }
+
+/* the plan view: forms beside the preview, issues, and history on a wide screen */
+[data-plan-builder] .plan-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+[data-plan-builder] .plan-main, [data-plan-builder] .plan-aside { min-width: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+@media (min-width: 64rem) {
+    [data-plan-builder] .plan-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 26rem); align-items: start; }
+    /* The aside is its own scrolling rail, so the preview stays beside the field being typed in. */
+    [data-plan-builder] .plan-aside {
+        position: sticky;
+        top: var(--space-3);
+        max-height: calc(100vh - 2 * var(--space-3));
+        overflow-y: auto;
+        padding-inline-end: var(--space-1);
+    }
+}
+[data-plan-builder] .plan-preview-card [data-plan-preview] { border: 1px solid var(--color-border); border-radius: 12px; padding: var(--space-3); background: var(--color-surface); }
+[data-plan-builder] .plan-preview-card [data-plan-preview-state="unsaved"] { border-style: dashed; border-color: var(--color-primary); }
+[data-plan-builder] [data-plan-jump="true"] { outline: 3px solid var(--color-primary); outline-offset: 2px; border-radius: 8px; }
+
+/* issues */
+[data-plan-builder] .plan-panel-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+[data-plan-builder] .plan-panel-head h3 { margin: 0; }
+[data-plan-builder] .plan-issues-count { margin: 0; font-size: 0.85rem; color: var(--color-muted); }
+[data-plan-builder] .plan-issues-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin: var(--space-2) 0; }
+[data-plan-builder] .plan-check { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 44px; }
+[data-plan-builder] .plan-issues-body, [data-plan-builder] .plan-issue-group, [data-plan-builder] .plan-issue-code-group { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+[data-plan-builder] .plan-issue-group-title { margin: var(--space-2) 0 0; font-size: 0.95rem; }
+[data-plan-builder] .plan-issue-code { margin: 0; font-weight: 600; font-size: 0.85rem; color: var(--color-muted); }
+[data-plan-builder] .plan-issue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+[data-plan-builder] .plan-issue-list > .plan-issue { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) var(--space-3); }
+[data-plan-builder] .plan-issue-message { margin: 0; overflow-wrap: anywhere; }
+[data-plan-builder] .plan-issue-link, [data-plan-builder] .plan-history .admin-row-btn, [data-plan-builder] .plan-edited .admin-row-btn,
+[data-plan-builder] .plan-diff-actions .admin-row-btn { white-space: normal; text-align: start; max-width: 100%; }
+[data-plan-builder] .plan-issue-place { display: block; overflow-wrap: anywhere; font-size: 0.8rem; text-align: start; }
+[data-plan-builder] .plan-issue-go { display: block; }
+[data-plan-builder] .plan-help-he, [data-plan-builder] .plan-help-en { display: block; }
+[data-plan-builder] .plan-list-actions + .plan-new-host:empty { display: none; }
+[data-plan-builder] .plan-new .btn-primary { align-self: flex-start; }
+[data-plan-builder] .plan-fix { display: flex; flex-direction: column; gap: var(--space-2); }
+[data-plan-builder] .plan-fix-pair, [data-plan-builder] .plan-diff-sides { display: grid; gap: var(--space-2); grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+[data-plan-builder] .plan-fix-value, [data-plan-builder] .plan-diff-side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+    padding: var(--space-2);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface);
+}
+[data-plan-builder] .plan-fix-caption, [data-plan-builder] .plan-diff-caption { font-size: 0.78rem; color: var(--color-muted); }
+[data-plan-builder] .plan-fix-text, [data-plan-builder] .plan-diff-value, [data-plan-builder] .plan-prev-value {
+    display: block;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: var(--size-body);
+}
+[data-plan-builder] .plan-fix-choices, [data-plan-builder] .plan-diff-actions, [data-plan-builder] .plan-rev-actions,
+[data-plan-builder] .plan-compare-actions, [data-plan-builder] .plan-confirm-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* history, compare, restore */
+[data-plan-builder] .plan-history-title { margin: 0; }
+[data-plan-builder] .plan-history .plan-disclose { background: transparent; }
+[data-plan-builder] .plan-history-body, [data-plan-builder] .plan-compare, [data-plan-builder] .plan-diff, [data-plan-builder] .plan-rev-detail { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; margin-top: var(--space-3); }
+[data-plan-builder] .plan-rev-list, [data-plan-builder] .plan-diff-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+[data-plan-builder] .plan-rev { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); min-width: 0; }
+[data-plan-builder] .plan-rev-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+[data-plan-builder] .plan-rev-summary { margin: 0; overflow-wrap: anywhere; font-size: 0.85rem; }
+[data-plan-builder] .plan-rev-time { color: var(--color-muted); font-size: 0.8rem; }
+[data-plan-builder] .plan-actor { display: inline-flex; align-items: center; gap: var(--space-1); padding: 0.1rem var(--space-2); border: 1px solid var(--color-border); border-radius: 0.7rem; background: var(--color-surface-soft); color: var(--color-text); font-size: 0.82rem; }
+[data-plan-builder] .plan-actor .icon, [data-plan-builder] .plan-edited .icon { width: 1rem; height: 1rem; flex: none; }
+[data-plan-builder] .plan-diff-group { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--color-border); }
+[data-plan-builder] .plan-diff-path-name { margin: 0; font-size: 0.8rem; color: var(--color-muted); overflow-wrap: anywhere; }
+[data-plan-builder] .plan-diff-entry { display: flex; flex-direction: column; gap: var(--space-2); }
+[data-plan-builder] .plan-diff-field { margin: 0; }
+[data-plan-builder] .plan-diff-head { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+[data-plan-builder] .plan-confirm { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); padding: var(--space-3); border: 2px solid var(--color-primary); border-radius: 12px; background: var(--color-surface); }
+[data-plan-builder] .plan-confirm p { margin: 0; }
+[data-plan-builder] .plan-confirm-en { color: var(--color-muted); font-size: 0.85rem; }
+
+/* "edited by a person": information at a field, never a lock */
+[data-plan-builder] .plan-edited { display: flex; flex-direction: column; gap: var(--space-2); }
+[data-plan-builder] .plan-edited-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: var(--space-1); }
+[data-plan-builder] .plan-edited-detail { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface-soft); }
+[data-plan-builder] .plan-edited-detail[hidden] { display: none; }
+[data-plan-builder] .plan-edited-detail .admin-row-btn { align-self: flex-start; }
+/* === end INIT-008/SPEC-013 + SPEC-014 + SPEC-015 === */

@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 
 const harness = require('./helpers/signed-in-server');
+const { testContext } = require('./helpers/plan-ctx');
 
 const SAMPLE = path.join(
     harness.REPO_ROOT,
@@ -57,8 +58,16 @@ const WRITE_BODIES = {
         value: 'espresso',
         expectedRevision: 1
     }),
-    publishPlan: () => ({ expectedRevision: 1 })
+    publishPlan: () => ({ expectedRevision: 1 }),
+    // INIT-008/SPEC-010: bodies for the three new write routes. Their behavior is
+    // asserted in plan-builder-routes.test.js; here they only need a well-formed body.
+    createPlan: () => ({ id: 'new-cafe', title: 'New cafe' }),
+    assign: () => ({ audience: 'shared', expectedRevision: 1 }),
+    restore: () => ({ fromRevision: 1, expectedRevision: 1 })
 };
+
+// The six routes that each call one function in ops.js or publish.js.
+const OPERATION_FNS = ['replacePart', 'insertBlock', 'moveBlock', 'removeBlock', 'setField', 'publishPlan'];
 
 function samplePlan(id, edit) {
     const plan = JSON.parse(PRETTY);
@@ -191,6 +200,10 @@ describe('plan HTTP routes (INIT-004/SPEC-004)', { concurrency: false }, () => {
 
     function seed(plan) {
         const document = JSON.stringify(plan);
+        // A re-seed rewinds the plan to revision 1; its old log and marks would collide (SPEC-004).
+        const db = require('../server/db');
+        db.run('DELETE FROM plan_revisions WHERE plan_id = ?', plan.id);
+        db.run('DELETE FROM plan_field_marks WHERE plan_id = ?', plan.id);
         store.saveWorkingCopy({
             id: plan.id,
             document: document,
@@ -236,8 +249,10 @@ describe('plan HTTP routes (INIT-004/SPEC-004)', { concurrency: false }, () => {
 
     it('ac-1: each write route calls only its function', async () => {
         const planRoutes = require('../server/api/plan-routes');
-        assert.equal(planRoutes.WRITE_ROUTES.length, 6);
-        for (const route of planRoutes.WRITE_ROUTES) {
+        assert.equal(planRoutes.WRITE_ROUTES.length, 9);
+        const operationRoutes = planRoutes.WRITE_ROUTES.filter((route) => OPERATION_FNS.includes(route.fn));
+        assert.equal(operationRoutes.length, 6);
+        for (const route of operationRoutes) {
             calls.length = 0;
             const plan = samplePlan('beginner-unit-1');
             const before = seed(plan);
@@ -299,7 +314,7 @@ describe('plan HTTP routes (INIT-004/SPEC-004)', { concurrency: false }, () => {
             plan.assigneeId = 'assignee1';
         });
         seed(personal);
-        const publishedPersonal = publish.publishPlan(store, personal.id, { expectedRevision: 1 });
+        const publishedPersonal = publish.publishPlan(store, personal.id, { expectedRevision: 1 }, testContext());
         assert.equal(publishedPersonal.error, undefined, JSON.stringify(publishedPersonal.blocks));
         calls.length = 0;
 
@@ -332,7 +347,7 @@ describe('plan HTTP routes (INIT-004/SPEC-004)', { concurrency: false }, () => {
             });
         });
         seed(selected);
-        const publishedSelected = publish.publishPlan(store, selected.id, { expectedRevision: 1 });
+        const publishedSelected = publish.publishPlan(store, selected.id, { expectedRevision: 1 }, testContext());
         assert.equal(publishedSelected.error, undefined, JSON.stringify(publishedSelected.blocks));
 
         const ungranted = await api('GET', '/api/plans/selected-cafe/published', {
@@ -384,7 +399,7 @@ describe('plan HTTP routes (INIT-004/SPEC-004)', { concurrency: false }, () => {
 
         const hidden = samplePlan('hidden-cafe');
         seed(hidden);
-        const publishedHidden = publish.publishPlan(store, hidden.id, { expectedRevision: 1 });
+        const publishedHidden = publish.publishPlan(store, hidden.id, { expectedRevision: 1 }, testContext());
         assert.equal(publishedHidden.error, undefined);
         const hiddenRead = await api('GET', '/api/plans/hidden-cafe/published', {
             cookie: cookieFor('learner')
@@ -399,7 +414,7 @@ describe('plan HTTP routes (INIT-004/SPEC-004)', { concurrency: false }, () => {
             });
         });
         seed(shared);
-        const publishedShared = publish.publishPlan(store, shared.id, { expectedRevision: 1 });
+        const publishedShared = publish.publishPlan(store, shared.id, { expectedRevision: 1 }, testContext());
         assert.equal(publishedShared.error, undefined);
         const seen = await api('GET', '/api/plans/shared-cafe/published', {
             cookie: cookieFor('learner')

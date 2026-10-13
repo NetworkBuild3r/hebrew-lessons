@@ -9,6 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { withCtx, publishWithCtx } = require('./helpers/plan-ctx');
 
 const root = path.resolve(__dirname, '..');
 const SAMPLE = path.join(
@@ -103,7 +104,9 @@ describe('plan operations and publish', { concurrency: false }, () => {
         fs.writeFileSync(path.join(lessons, 'marker.txt'), 'untouched');
         process.env.LESSONS_DIR = lessons;
         ({ db, store, ops } = freshModules(tmp));
-        publishPlan = require('../server/plans/publish').publishPlan;
+        // INIT-008/SPEC-002: every write takes a context; these calls add one and nothing else.
+        ops = withCtx(ops);
+        publishPlan = publishWithCtx(require('../server/plans/publish').publishPlan);
         apply = ops.apply;
         db.migrate();
     });
@@ -512,7 +515,7 @@ describe('plan operations and publish', { concurrency: false }, () => {
         assert.equal(watched.calls.saveSnapshot, 0);
     });
 
-    it('personal audience and assigneeId are ordinary fields and progress is not read', () => {
+    it('personal audience and assigneeId change only through assignPlan, and progress is not read', () => {
         const plan = JSON.parse(pretty);
         plan.audience = 'personal';
         plan.assigneeId = 'learner-01';
@@ -543,10 +546,11 @@ describe('plan operations and publish', { concurrency: false }, () => {
             value: 'learner-02',
             expectedRevision: 2
         });
-        assert.equal(reassigned.error, undefined);
-        assert.equal(reassigned.plan.assigneeId, 'learner-02');
-        assert.equal(store.loadWorkingCopy(plan.id).assigneeId, 'learner-02');
+        // INIT-008/SPEC-002: set_field can no longer reach assigneeId (was: it could).
+        assert.equal(reassigned.error, 'assign_required');
+        assert.equal(store.loadWorkingCopy(plan.id).assigneeId, 'learner-01');
         assert.equal(store.loadWorkingCopy(plan.id).audience, 'personal');
+        assert.equal(store.loadWorkingCopy(plan.id).revision, 2);
 
         const opsSrc = fs.readFileSync(path.join(root, 'server/plans/ops.js'), 'utf8');
         const pubSrc = fs.readFileSync(path.join(root, 'server/plans/publish.js'), 'utf8');

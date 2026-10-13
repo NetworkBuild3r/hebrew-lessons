@@ -77,7 +77,7 @@
         var lessonsActive = active === 'lessons' || active === 'lesson';
         var plansActive = active === 'plans' || active === 'plan';
         return ''
-            + '<nav class="admin-tabs" aria-label="' + esc('Admin sections') + '" dir="rtl" lang="he">'
+            + '<nav class="admin-tabs" aria-label="' + esc('מדורי ניהול') + '" dir="rtl" lang="he">'
             + '<a class="admin-tab' + (usersActive ? ' is-active' : '') + '" href="#users"'
             + ' data-admin-tab="users"'
             + (usersActive ? ' aria-current="page"' : '') + '>'

@@ -43,6 +43,28 @@ function isAppPath(rel) {
     return APP_PATHS.includes(normalizeAppPath(rel));
 }
 
+/** Trees that are real files or APIs. A missing file there stays a plain 404. */
+const FILE_TREES = ['/shared/', '/worksheets/', '/login/', '/api/'];
+
+/**
+ * A signed-in browser navigation to a path that is not an app screen and not a file
+ * tree ("/nope/", "/review/typo"). The server answers with the shell and HTTP 404;
+ * the client router then shows a not-found view inside the shell (REQ-006).
+ * Missing files (anything with an extension, or under /shared/, /worksheets/, /login/)
+ * are NOT matched, so they keep returning the plain-text 404.
+ * @param {string} rel decoded request path
+ * @returns {boolean}
+ */
+function isUnknownAppPath(rel) {
+    const p = String(rel || '/');
+    if (isAppPath(p)) return false;
+    if (p === '/login' || p === '/shared' || p === '/worksheets' || p === '/api') return false;
+    if (FILE_TREES.some((tree) => p.startsWith(tree))) return false;
+    const last = p.split('/').filter(Boolean).pop() || '';
+    if (last.includes('.')) return false;
+    return true;
+}
+
 /**
  * Same public shape as GET /api/me (server/api/auth-routes.js mePayload).
  * Never add password hashes, session tokens, or other private fields.
@@ -90,6 +112,7 @@ module.exports = {
     APP_PATHS,
     normalizeAppPath,
     isAppPath,
+    isUnknownAppPath,
     mePayload,
     renderShell,
     TEMPLATE_PATH

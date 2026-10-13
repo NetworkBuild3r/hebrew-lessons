@@ -466,7 +466,9 @@ describe('result shape and purity', () => {
     it('requires only fs and path: no database or network', () => {
         const source = fs.readFileSync(MODULE, 'utf8');
         const required = (source.match(/require\(\s*'([^']+)'\s*\)/g) || []).map((call) => call.match(/'([^']+)'/)[1]);
-        assert.deepEqual(required.sort(), ['fs', 'path']);
+        // INIT-008/SPEC-008: the five Hebrew checks live in hebrew-checks.js, which itself
+        // requires only fs, path, and ./id-path (plan-hebrew-checks.test.js pins that).
+        assert.deepEqual(required.sort(), ['./hebrew-checks', 'fs', 'path']);
     });
 
     it('a non-object, non-JSON, or unserializable document is a schema block', () => {

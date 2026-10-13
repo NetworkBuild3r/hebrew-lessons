@@ -61,7 +61,7 @@ This spec builds the interactive foundation:
 - [x] ac-1: Playing any audio clip via `HebrewSpeech.playClip` adds an active playing class (e.g. `is-playing`) to the associated audio button or container, and removes it cleanly on `ended` or `error`.
 - [x] ac-2: When an answer is incorrect, the feedback container displays the correct pointed Hebrew word with class `correction` and preserves `data-action` retry hooks.
 - [x] ac-3: Interactive buttons (`.btn`, `.choice-card`, `.word-match-card`, `.bank-word`) render an active scale transformation (`scale(0.98)`) and high-contrast focus rings.
-- [x] ac-4: Web Audio tactile clicks can be enabled via user setting, are silent by default, and automatically duck/mute whenever Hebrew speech audio is active.
+- [x] ac-4: Web Audio tactile clicks can be enabled via user setting, are silent by default, and are suppressed (no new chime starts) whenever Hebrew speech audio is active.
 - [x] ac-5: Under `prefers-reduced-motion: reduce`, all transitions and transforms resolve to `none` with 0s duration.
 
 ---

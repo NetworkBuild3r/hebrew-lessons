@@ -38,6 +38,46 @@
         return Array.isArray(root.HEBREW_CATALOG) ? root.HEBREW_CATALOG : [];
     }
 
+    // INIT-005/SPEC-011 (REQ-016): the level is a Hebrew word with an English gloss, and the
+    // English catalog blurb is marked as English so its punctuation sits on the right side.
+    var LEVEL_LABELS = {
+        basic: { he: 'בסיסי', en: 'Basic' },
+        intermediate: { he: 'בינוני', en: 'Intermediate' },
+        advanced: { he: 'מתקדם', en: 'Advanced' }
+    };
+
+    function levelKey(raw) {
+        var level = String(raw || '').toLowerCase();
+        if (level === 'basic' || level === 'a1' || level === 'beginner') return 'basic';
+        if (level === 'advanced' || level === 'b1' || level === 'b2') return 'advanced';
+        if (level === 'intermediate' || level === 'a2') return 'intermediate';
+        return level;
+    }
+
+    function metaLine(lesson) {
+        var level = levelKey(lesson.level);
+        var subtitle = String(lesson.subtitle || '');
+        if (level) {
+            subtitle = subtitle
+                .replace(/[\s\u00b7\u2022|\u2013\u2014-]*\b(basic|intermediate|advanced)\s*$/i, '')
+                .replace(/[\s\u00b7\u2022|\u2013\u2014-]+$/, '');
+        }
+        var label = LEVEL_LABELS[level];
+        var levelHtml = label
+            ? esc(label.he) + ' <span class="en" lang="en" dir="ltr">(' + esc(label.en) + ')</span>'
+            : (lesson.level ? esc(lesson.level) : '');
+        var parts = [];
+        if (subtitle.trim()) parts.push(esc(subtitle.trim()));
+        if (levelHtml) parts.push('<span class="lesson-level">' + levelHtml + '</span>');
+        return parts.join(' · ');
+    }
+
+    function blurbHtml(lesson) {
+        return lesson.blurb
+            ? '<p class="lesson-blurb" lang="en" dir="ltr">' + esc(lesson.blurb) + '</p>'
+            : '';
+    }
+
     function activityCountFor(lesson) {
         if (!lesson || typeof lesson !== 'object') return null;
         if (Number.isInteger(lesson.activityCount)) return lesson.activityCount;
@@ -156,15 +196,12 @@
     }
 
     function ctaIcon(kind) {
-        var paths = {
-            play: '<circle cx="12" cy="12" r="9"/><path d="m10 8.5 6 3.5-6 3.5Z"/>',
-            next: '<path d="M5 12h14M13 6l6 6-6 6"/>',
-            review: '<path d="M4 12a8 8 0 0 1 14-5l2 2M20 12a8 8 0 0 1-14 5l-2-2"/><path d="M20 4v5h-5M4 20v-5h5"/>'
-        };
-        var inner = paths[kind] || paths.next;
-        return '<svg class="hebrew-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"'
-            + ' stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"'
-            + ' aria-hidden="true" focusable="false">' + inner + '</svg> ';
+        // Brand sprite (INIT-005/SPEC-010). The word beside the icon is the control's name.
+        var name = (kind === 'play' || kind === 'next' || kind === 'review') ? kind : 'next';
+        // "next" points right; it must point the other way in this right-to-left page.
+        var cls = 'icon hebrew-icon' + (name === 'next' ? ' icon-directional' : '');
+        return '<svg class="' + cls + '" width="20" height="20" aria-hidden="true" focusable="false">'
+            + '<use href="/shared/brand/sprite.svg#icon-' + name + '"></use></svg> ';
     }
 
     function renderReviewCard(summary, brandNew) {
@@ -209,10 +246,9 @@
             + '<div class="lesson-link today-card-body">'
             + '<span class="lesson-status ' + esc(status.tone) + '">'
             + esc(status.he) + ' <span class="en" dir="ltr">(' + esc(status.en) + ')</span></span>'
-            + '<p class="fine">' + esc(lesson.subtitle || '')
-            + (lesson.level ? ' · ' + esc(lesson.level) : '') + '</p>'
+            + '<p class="fine">' + metaLine(lesson) + '</p>'
             + '<h2>' + esc(lesson.title) + '</h2>'
-            + (lesson.blurb ? '<p>' + esc(lesson.blurb) + '</p>' : '')
+            + blurbHtml(lesson)
             + '<p class="today-actions">'
             + '<a class="btn btn-primary" id="today-continue-link" href="' + esc(lessonHref(lesson.slug)) + '">'
             + ctaIcon('play') + bi('המשיכו', 'Continue') + '</a>'
@@ -230,10 +266,9 @@
             + esc(lesson.slug) + '">'
             + '<div class="lesson-link today-card-body">'
             + '<span class="lesson-status fresh">' + bi('חדש', 'New') + '</span>'
-            + '<p class="fine">' + esc(lesson.subtitle || '')
-            + (lesson.level ? ' · ' + esc(lesson.level) : '') + '</p>'
+            + '<p class="fine">' + metaLine(lesson) + '</p>'
             + '<h2>' + esc(lesson.title) + '</h2>'
-            + (lesson.blurb ? '<p>' + esc(lesson.blurb) + '</p>' : '')
+            + blurbHtml(lesson)
             + '<p class="today-actions">'
             + '<a class="btn btn-primary" id="today-next-link" href="' + esc(lessonHref(lesson.slug)) + '">'
             + action + '</a>'

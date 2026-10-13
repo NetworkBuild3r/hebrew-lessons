@@ -5,12 +5,29 @@
  * against the stored working-copy revision, validates, and saves compact JSON.
  * A stale revision returns { error: 'revision_conflict', revision } and does
  * not write. The plan object passed to apply() is left unchanged on conflict.
- * Provenance: INIT-004/SPEC-003; schemaVersion raise: INIT-006/SPEC-011
+ *
+ * Every mutating export takes a trailing write context (./context.js) built by
+ * the adapter from its channel. Without one the call throws TypeError and
+ * writes nothing. Each successful write also appends one plan.* audit_log row
+ * inside the same transaction as the working-copy write (ADR-0011 §1).
+ * `audience` and `assigneeId` change only through assignPlan, which
+ * personal.assign calls after its account check (ADR-0011, INIT-008 D6).
+ * The same transaction also writes the revision row and the provenance marks
+ * (./write-log.js). A restore (revisions.restore) is one more operation here,
+ * so it is revision-checked, validated, and logged like any write.
+ * Provenance: INIT-004/SPEC-003; schemaVersion raise: INIT-006/SPEC-011;
+ * id_mismatch, assign_required, context and audit: INIT-008/SPEC-002;
+ * revision log: INIT-008/SPEC-004; restore: INIT-008/SPEC-005;
+ * marks and editState: INIT-008/SPEC-006
  */
 'use strict';
 
 const { validatePlan, usesV110, V100, V110 } = require('./validate');
 const lexicon = require('../db/repos/lexicon');
+const db = require('../db');
+const { requireContext } = require('./context');
+const { logWrite } = require('./write-log');
+const provenance = require('./provenance');
 
 const FIELD_NAME = /^[A-Za-z][A-Za-z0-9]{0,40}$/;
 const BUCKETS = ['words', 'paragraphs', 'lines', 'questions'];
@@ -31,6 +48,18 @@ const WRITE_BLOCK_RULES = new Set([
     'N10',
     'N11'
 ]);
+
+/** Plan-root fields only assignPlan may change (INIT-008 D6). */
+const PLAN_ASSIGN_FIELDS = ['audience', 'assigneeId'];
+
+/**
+ * A missing assigneeId and null are the same stored value.
+ * @param {unknown} value
+ * @returns {unknown}
+ */
+function assignee(value) {
+    return value == null ? null : value;
+}
 
 /**
  * @param {unknown} value
@@ -145,6 +174,92 @@ function assignField(node, field, value) {
 }
 
 /**
+ * Restore from an older document (revisions.restore builds the op). With no path
+ * and no field the whole document comes back, except that `id`, `audience`, and
+ * `assigneeId` stay as they are now and `schemaVersion` never goes down. With a
+ * path the node at that path replaces the node now, or is re-inserted at its
+ * former index when it is gone and its parent is not. With a path and a field
+ * that one field is set to its old value, or removed if it did not exist then.
+ * @param {object} plan The stored plan.
+ * @param {object} next A clone of `plan` to edit.
+ * @param {object|null} found locate(next, op.path).
+ * @param {{ path?: string, field?: string, source: object }} op
+ * @returns {{ plan: object }|{ conflict: object }}
+ */
+function applyRestore(plan, next, found, op) {
+    const source = op.source;
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return conflict('invalid_op');
+    const path = typeof op.path === 'string' ? op.path : '';
+    const field = typeof op.field === 'string' ? op.field : '';
+    const segs = path.split('/').filter(Boolean);
+
+    if (!field && segs.length === 0) {
+        let value;
+        try {
+            value = cloneJson(source);
+        } catch (err) {
+            return conflict('invalid_op');
+        }
+        value.id = next.id;
+        value.audience = next.audience;
+        value.assigneeId = assignee(next.assigneeId);
+        value.revision = next.revision;
+        if (next.schemaVersion === V110) value.schemaVersion = V110;
+        return finish(plan, value, false);
+    }
+
+    const then = locate(source, path);
+    if (field) {
+        if (!FIELD_NAME.test(field)) return conflict('invalid_op');
+        if (!found) return conflict('not_found', { path: path, reason: 'node_missing' });
+        if (found.kind === 'plan') {
+            if (PLAN_ASSIGN_FIELDS.indexOf(field) !== -1) return conflict('assign_required');
+            if (field === 'id' || field === 'revision' || field === 'status') return conflict('invalid_op');
+        }
+        if (!then) return conflict('not_found', { path: path, reason: 'absent_in_revision' });
+        if (Object.prototype.hasOwnProperty.call(then.node, field)) {
+            let value;
+            try {
+                value = cloneJson(then.node[field]);
+            } catch (err) {
+                return conflict('invalid_op');
+            }
+            if (!assignField(found.node, field, value)) return conflict('invalid_op');
+        } else {
+            delete found.node[field];
+        }
+        return finish(plan, next, found.kind === 'plan' && field === 'schemaVersion');
+    }
+
+    if (!then || then.kind === 'plan') return conflict('not_found', { path: path, reason: 'absent_in_revision' });
+    let node;
+    try {
+        node = cloneJson(then.node);
+    } catch (err) {
+        return conflict('invalid_op');
+    }
+    if (found) {
+        found.list[found.index] = node;
+        return finish(plan, next, false);
+    }
+
+    const listName = segs[segs.length - 2];
+    const parentPath = segs.slice(0, -2).join('/');
+    const parent = parentPath === '' ? { node: next } : locate(next, parentPath);
+    if (!parent || !parent.node || typeof parent.node !== 'object') {
+        return conflict('not_found', { path: path, reason: 'parent_missing' });
+    }
+    let list = parent.node[listName];
+    if (!Array.isArray(list)) {
+        if (BUCKETS.indexOf(listName) === -1) return conflict('not_found', { path: path, reason: 'parent_missing' });
+        list = [];
+        parent.node[listName] = list;
+    }
+    list.splice(Math.max(0, Math.min(then.index, list.length)), 0, node);
+    return finish(plan, next, false);
+}
+
+/**
  * One implementation of the six operations. Does not touch the store.
  * On revision_conflict the plan argument is not mutated.
  * A read does not check the revision and does not increment it (ADR-0003 §4).
@@ -187,12 +302,19 @@ function apply(plan, op, expectedRev) {
         if (found.kind === 'plan' && (op.field === 'id' || op.field === 'revision' || op.field === 'status')) {
             return conflict('invalid_op');
         }
+        if (found.kind === 'plan' && PLAN_ASSIGN_FIELDS.indexOf(op.field) !== -1) {
+            return conflict('assign_required');
+        }
         if (op.value === undefined) return conflict('invalid_op');
         let value;
         try {
             value = cloneJson(op.value);
         } catch (err) {
             return conflict('invalid_op');
+        }
+        // Same defect as replace_part: a changed id breaks every id path that pointed here.
+        if (op.field === 'id' && found.kind !== 'plan' && value !== found.node.id) {
+            return conflict('id_mismatch', { path: typeof op.path === 'string' ? op.path : '' });
         }
         if ((op.field === 'alt' || op.field === 'mediaId')
             && found.node.image
@@ -218,10 +340,30 @@ function apply(plan, op, expectedRev) {
             return conflict('invalid_op');
         }
         if (found.kind === 'plan') {
+            if (value.audience !== next.audience || assignee(value.assigneeId) !== assignee(next.assigneeId)) {
+                return conflict('assign_required');
+            }
             value.revision = next.revision;
             return finish(plan, value, true);
         }
+        if (value.id !== found.node.id) {
+            return conflict('id_mismatch', { path: typeof op.path === 'string' ? op.path : '' });
+        }
         found.list[found.index] = value;
+        return finish(plan, next, false);
+    }
+
+    if (op.op === 'restore') return applyRestore(plan, next, found, op);
+
+    if (op.op === 'assign') {
+        if (!found || found.kind !== 'plan') return conflict('invalid_op');
+        if (op.audience !== 'shared' && op.audience !== 'personal') return conflict('invalid_op');
+        if (op.audience === 'shared' && op.assigneeId != null) return conflict('invalid_op');
+        if (op.audience === 'personal' && (typeof op.assigneeId !== 'string' || op.assigneeId.length === 0)) {
+            return conflict('invalid_op');
+        }
+        next.audience = op.audience;
+        next.assigneeId = op.audience === 'shared' ? null : op.assigneeId;
         return finish(plan, next, false);
     }
 
@@ -318,6 +460,7 @@ function fromConflict(conflictBody, storedRevision) {
     const out = { error: conflictBody.error };
     if (storedRevision != null) out.revision = storedRevision;
     if (conflictBody.path != null) out.path = conflictBody.path;
+    if (conflictBody.reason != null) out.reason = conflictBody.reason;
     return out;
 }
 
@@ -356,27 +499,52 @@ function validationError(validation, revision) {
 }
 
 /**
+ * Save the working copy, the revision row (with a baseline when the plan has
+ * none for its current revision), the provenance marks, and the plan.* audit
+ * row in one transaction. If any of them throws, the whole write rolls back and
+ * the error propagates, so no mutation exists without its rows and no row
+ * without its mutation.
  * @param {object} store
  * @param {object} row
- * @param {object} plan
- * @returns {object}
+ * @param {object} plan The document to store.
+ * @param {object} ctx Context from makeContext.
+ * @param {{ op: string, path: string, field?: string, summary?: string, before: object }} meta
+ *   `before` is the plan as opened, before the write.
+ * @returns {object} `overwrote` is present only when an AI or script write
+ *   replaced a field a person last wrote.
  */
-function persist(store, row, plan) {
+function persist(store, row, plan, ctx, meta) {
     const document = JSON.stringify(plan);
-    const saved = store.saveWorkingCopy({
-        id: row.id,
-        document: document,
-        revision: plan.revision,
-        status: plan.status,
-        audience: plan.audience,
-        assigneeId: plan.assigneeId == null ? null : plan.assigneeId
+    let saved;
+    let logged;
+    db.transaction(() => {
+        saved = store.saveWorkingCopy({
+            id: row.id,
+            document: document,
+            revision: plan.revision,
+            status: plan.status,
+            audience: plan.audience,
+            assigneeId: plan.assigneeId == null ? null : plan.assigneeId
+        });
+        logged = logWrite({
+            planId: row.id,
+            before: meta.before,
+            after: plan,
+            afterText: saved.document,
+            op: meta.op,
+            path: meta.path,
+            field: meta.field,
+            summary: meta.summary
+        }, ctx);
     });
-    return {
+    const out = {
         plan: JSON.parse(saved.document),
         document: saved.document,
         revision: saved.revision,
         status: saved.status
     };
+    if (logged.overwrote.length) out.overwrote = logged.overwrote;
+    return out;
 }
 
 /**
@@ -384,9 +552,11 @@ function persist(store, row, plan) {
  * @param {string} id
  * @param {object} op
  * @param {number} expectedRevision
+ * @param {object} ctx Context from makeContext. Required.
  * @returns {object}
  */
-function mutate(store, id, op, expectedRevision) {
+function mutate(store, id, op, expectedRevision, ctx) {
+    requireContext(ctx);
     const opened = openWorkingCopy(store, id);
     if (opened.error) return failure(opened.error, opened.revision);
     const result = apply(opened.plan, op, expectedRevision);
@@ -394,9 +564,19 @@ function mutate(store, id, op, expectedRevision) {
     if (result.plan.id !== opened.row.id) {
         return { error: 'invalid_op', revision: opened.row.revision };
     }
-    const validation = validatePlan(result.plan, { lexicon });
+    const validation = validatePlan(result.plan, { lexicon, snapshot: opened.row.snapshot });
     if (refusesWrite(validation)) return validationError(validation, opened.row.revision);
-    const saved = persist(store, opened.row, result.plan);
+    let field;
+    if (op.op === 'set_field') field = op.field;
+    else if (op.op === 'assign') field = 'audience';
+    else if (op.op === 'restore' && op.field) field = op.field;
+    const saved = persist(store, opened.row, result.plan, ctx, {
+        op: op.op,
+        path: typeof op.path === 'string' ? op.path : '',
+        field: field,
+        summary: op.op === 'restore' ? op.summary : undefined,
+        before: opened.plan
+    });
     saved.validation = validation;
     return saved;
 }
@@ -417,14 +597,26 @@ function pathOf(input) {
  * @param {object} store Plan store from server/plans/store.js.
  * @param {string} id Plan id.
  * @param {string|{ path?: string }} input Id path, or a body with `path`. Empty path is the plan.
- * @returns {{ part: object, revision: number }|{ error: string, revision?: number, path?: string }}
+ * @param {object} [ctx] Optional. When given it must come from makeContext. It
+ *   decides whether `editState` may name the person who made an edit: only an
+ *   admin or script context sees the name. Without one, no name is returned.
+ * @returns {{ part: object, revision: number, editState: object }
+ *   |{ error: string, revision?: number, path?: string }}
+ *   `editState` is advisory (provenance.editStateFor). It never changes `part`
+ *   or `revision`, and nothing refuses a write because of it.
  */
-function readPart(store, id, input) {
+function readPart(store, id, input, ctx) {
+    if (ctx !== undefined) requireContext(ctx);
     const opened = openWorkingCopy(store, id);
     if (opened.error) return failure(opened.error, opened.revision);
-    const result = apply(opened.plan, { op: 'read_part', path: pathOf(input) }, opened.row.revision);
+    const path = pathOf(input);
+    const result = apply(opened.plan, { op: 'read_part', path: path }, opened.row.revision);
     if (result.conflict) return fromConflict(result.conflict, opened.row.revision);
-    return { part: result.part, revision: opened.row.revision };
+    return {
+        part: result.part,
+        revision: opened.row.revision,
+        editState: provenance.editStateFor(opened.row.id, path, ctx)
+    };
 }
 
 /**
@@ -441,15 +633,16 @@ function expectedOf(input) {
  * @param {object} store
  * @param {string} id
  * @param {{ path?: string, value: object, expectedRevision: number }} input
+ * @param {object} ctx Write context from makeContext.
  * @returns {object}
  */
-function replacePart(store, id, input) {
+function replacePart(store, id, input, ctx) {
     const body = input || {};
     return mutate(store, id, {
         op: 'replace_part',
         path: pathOf(body),
         value: body.value
-    }, expectedOf(body));
+    }, expectedOf(body), ctx);
 }
 
 /**
@@ -457,16 +650,17 @@ function replacePart(store, id, input) {
  * @param {object} store
  * @param {string} id
  * @param {{ path?: string, index?: number, block: object, expectedRevision: number }} input
+ * @param {object} ctx Write context from makeContext.
  * @returns {object}
  */
-function insertBlock(store, id, input) {
+function insertBlock(store, id, input, ctx) {
     const body = input || {};
     return mutate(store, id, {
         op: 'insert_block',
         path: pathOf(body),
         index: body.index,
         block: body.block
-    }, expectedOf(body));
+    }, expectedOf(body), ctx);
 }
 
 /**
@@ -474,15 +668,16 @@ function insertBlock(store, id, input) {
  * @param {object} store
  * @param {string} id
  * @param {{ path?: string, index: number, expectedRevision: number }} input
+ * @param {object} ctx Write context from makeContext.
  * @returns {object}
  */
-function moveBlock(store, id, input) {
+function moveBlock(store, id, input, ctx) {
     const body = input || {};
     return mutate(store, id, {
         op: 'move_block',
         path: pathOf(body),
         index: body.index
-    }, expectedOf(body));
+    }, expectedOf(body), ctx);
 }
 
 /**
@@ -490,14 +685,15 @@ function moveBlock(store, id, input) {
  * @param {object} store
  * @param {string} id
  * @param {{ path?: string, expectedRevision: number }} input
+ * @param {object} ctx Write context from makeContext.
  * @returns {object}
  */
-function removeBlock(store, id, input) {
+function removeBlock(store, id, input, ctx) {
     const body = input || {};
     return mutate(store, id, {
         op: 'remove_block',
         path: pathOf(body)
-    }, expectedOf(body));
+    }, expectedOf(body), ctx);
 }
 
 /**
@@ -505,26 +701,53 @@ function removeBlock(store, id, input) {
  * `alt` and `mediaId` on a word that has an image are written onto that image.
  * @param {object} store
  * @param {string} id
+ * `audience` and `assigneeId` on the plan are refused with `assign_required`.
  * @param {{ path?: string, field: string, value: unknown, expectedRevision: number }} input
+ * @param {object} ctx Write context from makeContext.
  * @returns {object}
  */
-function setField(store, id, input) {
+function setField(store, id, input, ctx) {
     const body = input || {};
     return mutate(store, id, {
         op: 'set_field',
         path: pathOf(body),
         field: body.field,
         value: body.value
-    }, expectedOf(body));
+    }, expectedOf(body), ctx);
+}
+
+/**
+ * The only writer of the plan's `audience` and `assigneeId`. It checks shape
+ * only: `shared` stores assigneeId null, `personal` needs a username. The
+ * active-account check is personal.assign's, and adapters call personal.assign,
+ * never this function (ADR-0011 §1, INIT-008 D6).
+ * @param {object} store
+ * @param {string} id
+ * @param {{ audience: 'shared'|'personal', assigneeId?: string|null, expectedRevision: number }} input
+ * @param {object} ctx Write context from makeContext.
+ * @returns {object}
+ */
+function assignPlan(store, id, input, ctx) {
+    const body = input || {};
+    return mutate(store, id, {
+        op: 'assign',
+        path: '',
+        audience: body.audience,
+        assigneeId: body.assigneeId
+    }, expectedOf(body), ctx);
 }
 
 module.exports = {
     apply,
+    mutate,
     openWorkingCopy,
+    refusesWrite,
+    validationError,
     readPart,
     replacePart,
     insertBlock,
     moveBlock,
     removeBlock,
-    setField
+    setField,
+    assignPlan
 };

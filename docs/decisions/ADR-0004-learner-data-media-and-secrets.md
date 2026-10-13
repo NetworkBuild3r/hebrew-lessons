@@ -11,6 +11,7 @@
 | **Research grounding** | `RSCH-005` (AI-image failure modes and the human review step); operator decisions 2026-10-08 for the snapshot, the provider handoff, the switch default, and approval |
 | **Supersedes** | [ADR-0002](ADR-0002-accounts-server-progress-site-map.md) in part — the rule that the MCP never reads learner progress. Replacement wording is §11. ADR-0002's other decisions stay in force. |
 | **Superseded by** | — Superseded in part by [ADR-0009](ADR-0009-learner-model-and-language-program.md), Accepted 2026-10-09: §1 (the snapshot becomes the aggregate profile), the "what the operator is accepting" paragraph in §2, the disclosure sentence in §3, the snapshot rate-limit and matrix row in §4, the `learner_snapshot_read` audit row in §10, and the MCP wording in §11. The full list with line numbers is ADR-0009 §9. |
+| **Extended by** | [ADR-0011](ADR-0011-ai-first-plan-builder.md), Accepted 2026-10-12: 10 (`plan.*` audit actions and the actor `system:<name>`). |
 
 ## Summary
 
@@ -375,3 +376,4 @@ The snapshot is the only new learner data that leaves the server, and only when 
 | 2026-10-08 | Initial Proposed record — `INIT-003/SPEC-005`. Operator defaults aud-1 through aud-5 recorded as chosen. |
 | 2026-10-09 | ADR-0009 (`INIT-006/SPEC-001`, Proposed) would replace the §1 snapshot with an aggregate learner profile (word stage, strength and weak flags, per-concept accuracy, journey label), with a new disclosure sentence, a shared rate limit, and new audit rows. The switch, the token, the default-off rule, §5 to §9 (uploads, media, image generation, alt text, retention) are unchanged. Metadata note and this row only; the sentences in this file are left as written. Takes effect only when ADR-0009 is Accepted. |
 | 2026-10-09 | ADR-0009 Accepted by the operator. The replacement in the row above is in force. Metadata note and this row only. |
+| 2026-10-12 | ADR-0011 (`INIT-008/SPEC-001`, Accepted) extends 10 with the `plan.*` audit actions and the actor `system:<name>`. Metadata row and this row only. |

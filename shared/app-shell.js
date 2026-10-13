@@ -17,48 +17,52 @@
         { id: 'lessons', href: '/lessons/', he: 'שיעורים', en: 'Lessons', icon: 'lessons' },
         { id: 'guides', href: '/guides/', he: 'מדריכים', en: 'Guides' },
         { id: 'review', href: '/review/', he: 'חזרה', en: 'Review', icon: 'review' },
-        { id: 'words', href: '/words/', he: 'מילים', en: 'Words' },
+        { id: 'words', href: '/words/', he: 'מילים', en: 'Words', icon: 'words' },
         { id: 'progress', href: '/progress/', he: 'התקדמות', en: 'Progress', icon: 'progress' },
         { id: 'admin', href: '/admin/', he: 'ניהול', en: 'Admin', adminOnly: true, icon: 'admin' }
     ];
 
-    var ICON_PATHS = {
-        today: '<circle cx="12" cy="14" r="4"/><path d="M12 6v2M5.5 8.5l1.4 1.4M18.5 8.5 17.1 9.9M4 14h2M18 14h2M6 20h12"/>',
-        lessons: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5Z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20"/>',
-        review: '<path d="M4 12a8 8 0 0 1 14-5l2 2M20 12a8 8 0 0 1-14 5l-2-2"/><path d="M20 4v5h-5M4 20v-5h5"/>',
-        progress: '<path d="M4 20V10M10 20V4M16 20v-8M21 20H3"/>',
-        admin: '<path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6Z"/><path d="m9.5 12 2 2 3.5-4"/>'
-    };
+    // INIT-005/SPEC-010: icons come from the brand sprite (shared/brand/sprite.svg), drawn by
+    // name with <use>. The sprite is public (server/web.js) and same-origin, and no CSP is sent
+    // on app responses. This file stays self-contained because the lesson player loads it alone.
+    var BRAND = '/shared/brand/';
+    var ICON_NAMES = ['today', 'lessons', 'review', 'progress', 'admin', 'words'];
 
+    /** Decorative icon beside a visible word. aria-hidden: the word is the name. */
     function navIcon(name) {
-        // Prefer the shared set when loaded; fall back to the built-in paths so
-        // tests that load only this file still render icons.
-        // A screen with no icon (Words, until one exists) is a text label only.
-        if (!name) return '';
-        var U = root.HebrewIcons;
-        var known = (U && U.PATHS && U.PATHS[name]) || ICON_PATHS[name];
-        if (!known) return '';
-        if (U && typeof U.icon === 'function') {
-            try { return U.icon(name, 18); } catch (err) { /* fall through */ }
-        }
-        var inner = ICON_PATHS[name];
-        return '<svg class="hebrew-icon hebrew-icon-' + name + '" width="18" height="18"'
-            + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"'
-            + ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'
-            + inner + '</svg>';
+        // Guides has no icon yet (docs/design/icon-usage.md): it stays a text-only link.
+        if (!name || ICON_NAMES.indexOf(name) === -1) return '';
+        return '<svg class="icon hebrew-icon hebrew-icon-' + name + '" width="20" height="20"'
+            + ' aria-hidden="true" focusable="false"><use href="' + BRAND + 'sprite.svg#icon-' + name
+            + '"></use></svg>';
     }
 
+    /** The chosen mark (option A, Ayin tile). Decorative: the wordmark text beside it is the name. */
     function brandMark() {
-        var U = root.HebrewIcons;
-        if (U && typeof U.logoMark === 'function') {
-            try { return U.logoMark(30); } catch (err) { /* fall through */ }
-        }
-        return '<svg class="hebrew-logo-mark" width="30" height="30" viewBox="0 0 512 512"'
-            + ' aria-hidden="true" focusable="false">'
-            + '<rect width="512" height="512" rx="112" fill="#4338ca"/>'
-            + '<text x="256" y="348" text-anchor="middle" font-family="Rubik, Arial, sans-serif"'
-            + ' font-weight="700" font-size="280" fill="#ffffff">ע</text>'
-            + '<circle cx="392" cy="128" r="36" fill="#fbbf24"/></svg>';
+        return '<img class="hebrew-logo-mark" src="' + BRAND + 'mark-a.svg" width="30" height="30"'
+            + ' alt="" decoding="async">';
+    }
+
+    /**
+     * Put the favicon, touch icon and manifest links in <head> when the document did not
+     * ship them (lesson player pages are not edited by this spec). Idempotent.
+     */
+    function ensureBrandHead() {
+        var doc = root.document;
+        var head = doc && doc.head;
+        if (!head || typeof head.appendChild !== 'function' || typeof doc.createElement !== 'function') return;
+        [
+            { rel: 'icon', type: 'image/svg+xml', href: BRAND + 'favicon.svg' },
+            { rel: 'icon', type: 'image/png', sizes: '32x32', href: BRAND + 'favicon-32.png' },
+            { rel: 'apple-touch-icon', href: BRAND + 'apple-touch-icon.png' },
+            { rel: 'manifest', href: '/manifest.webmanifest' }
+        ].forEach(function (spec) {
+            var sel = 'link[rel="' + spec.rel + '"]' + (spec.type ? '[type="' + spec.type + '"]' : '');
+            if (typeof head.querySelector === 'function' && head.querySelector(sel)) return;
+            var link = doc.createElement('link');
+            Object.keys(spec).forEach(function (k) { link.setAttribute(k, spec[k]); });
+            head.appendChild(link);
+        });
     }
 
     function escapeHtml(str) {
@@ -116,7 +120,7 @@
         }).map(function (item) {
             var cur = item.id === current ? ' aria-current="page"' : '';
             var label = navIcon(item.icon) + '<span class="hebrew-shell-label">'
-                + escapeHtml(item.he) + ' <span class="en" dir="ltr">(' + escapeHtml(item.en) + ')</span></span>';
+                + escapeHtml(item.he) + ' <span class="en" lang="en" dir="ltr">(' + escapeHtml(item.en) + ')</span></span>';
             return '<a class="hebrew-shell-link" href="' + escapeHtml(item.href) + '"' + cur
                 + ' data-nav="' + escapeHtml(item.id) + '">' + label + '</a>';
         }).join('');
@@ -125,11 +129,12 @@
         return ''
             + '<div class="hebrew-shell" dir="rtl" lang="he">'
             + '<div class="hebrew-shell-inner">'
-            + '<a class="hebrew-brand" href="/" aria-label="דרך עברית — Today">'
+            // The link's name is its visible wordmark: Hebrew name first, English gloss marked lang="en".
+            + '<a class="hebrew-brand" href="/" data-brand>'
             + brandMark()
             + '<span class="hebrew-brand-text"><span class="hebrew-brand-he">דרך עברית</span>'
-            + '<span class="hebrew-brand-en" dir="ltr">Hebrew Way</span></span></a>'
-            + '<nav class="hebrew-shell-nav" aria-label="Primary">' + links + '</nav>'
+            + '<span class="hebrew-brand-en" lang="en" dir="ltr">Hebrew Way</span></span></a>'
+            + '<nav class="hebrew-shell-nav" aria-label="ניווט ראשי">' + links + '</nav>'
             + '<div class="hebrew-shell-sync" data-shell-sync aria-live="polite"></div>'
             + '<div class="hebrew-shell-account">'
             + '<button type="button" class="hebrew-shell-account-btn" id="hebrew-shell-account-btn"'
@@ -351,6 +356,24 @@
             if (id === current) link.setAttribute('aria-current', 'page');
             else link.removeAttribute('aria-current');
         }
+        revealCurrentLink(rootEl);
+    }
+
+    /**
+     * On a phone the nav is one row that scrolls sideways (INIT-005/SPEC-011). Scroll only the nav
+     * (never the page) so the current link is in view. A no-op where nothing overflows.
+     * @param {HTMLElement} rootEl
+     */
+    function revealCurrentLink(rootEl) {
+        try {
+            var nav = rootEl.querySelector('.hebrew-shell-nav');
+            var cur = nav && nav.querySelector('[aria-current="page"]');
+            if (!nav || !cur || typeof cur.getBoundingClientRect !== 'function') return;
+            if (!(nav.scrollWidth > nav.clientWidth)) return;
+            var navBox = nav.getBoundingClientRect();
+            var curBox = cur.getBoundingClientRect();
+            nav.scrollLeft += (curBox.left + curBox.width / 2) - (navBox.left + navBox.width / 2);
+        } catch (err) { /* cosmetic only */ }
     }
 
     function mount(target, opts) {
@@ -368,6 +391,8 @@
                 : ((root.location && root.location.pathname) || '/');
             target.innerHTML = renderHtml(me, pathname);
             bindShell(target, state);
+            try { ensureBrandHead(); } catch (err) { /* ignore */ }
+            revealCurrentLink(target);
             if (state.mustChange) {
                 setPasswordDialog(target, true, true);
             }

@@ -159,7 +159,7 @@ function publish(store, publishPlan, id, lesson) {
         audience: 'shared',
         assigneeId: null
     });
-    const published = publishPlan(store, id, { expectedRevision: 1 });
+    const published = publishPlan(store, id, { expectedRevision: 1 }, require('../server/plans/context').makeContext({ channel: 'system', name: 'guides-smoke', tool: 'smoke' }));
     if (!published.plan) {
         throw new Error('publish failed for ' + id + ': ' + JSON.stringify({
             error: published.error,

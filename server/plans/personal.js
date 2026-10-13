@@ -1,13 +1,14 @@
 /**
- * Personal-plan assignee checks. Confirms the account, then calls ops.js.
+ * Personal-plan assignee checks. Confirms the account, then calls ops.assignPlan.
  * It does not reimplement an operation and it writes no plan SQL.
  * assigneeId is the account username (ADR-0003's opaque id), not the
  * integer primary key and not the name shown to people.
- * Provenance: INIT-004/SPEC-010
+ * Provenance: INIT-004/SPEC-010; assignPlan and ctx: INIT-008/SPEC-002
  */
 'use strict';
 
 const ops = require('./ops');
+const { requireContext } = require('./context');
 const users = require('../db/repos/users');
 
 const ASSIGNEE_MAX = 64;
@@ -38,15 +39,18 @@ function refused(opened) {
 }
 
 /**
- * Set audience and assigneeId in one replacePart.
- * `shared` stores assigneeId null. `personal` stores the active account's
- * username. A disabled or unknown account is `assignee_refused` and is not written.
+ * Set audience and assigneeId through ops.assignPlan, the only writer of those
+ * two fields. `shared` stores assigneeId null. `personal` stores the active
+ * account's username. A disabled or unknown account is `assignee_refused` and
+ * is not written. `ctx` is the write context the adapter built from its channel.
  * @param {object} store Plan store passed through to ops.js.
  * @param {string} id Plan id.
  * @param {{ audience?: unknown, assigneeId?: unknown, expectedRevision?: number }} input
+ * @param {object} ctx Write context from server/plans/context.js.
  * @returns {object}
  */
-function assign(store, id, input) {
+function assign(store, id, input, ctx) {
+    requireContext(ctx);
     const body = input && typeof input === 'object' ? input : {};
     const audience = body.audience;
     if (audience !== 'personal' && audience !== 'shared') {
@@ -60,22 +64,18 @@ function assign(store, id, input) {
         return missing;
     }
 
-    const next = opened.part;
-    if (audience === 'shared') {
-        next.audience = 'shared';
-        next.assigneeId = null;
-    } else {
+    let assigneeId = null;
+    if (audience === 'personal') {
         const account = activeAccount(body.assigneeId);
         if (!account) return refused(opened);
-        next.audience = 'personal';
-        next.assigneeId = account.username;
+        assigneeId = account.username;
     }
 
-    return ops.replacePart(store, id, {
-        path: '',
-        value: next,
+    return ops.assignPlan(store, id, {
+        audience: audience,
+        assigneeId: assigneeId,
         expectedRevision: body.expectedRevision
-    });
+    }, ctx);
 }
 
 module.exports = { assign };

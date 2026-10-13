@@ -13,6 +13,11 @@ const { lessonDir } = require('../server/paths');
 const planStore = require('../server/plans/store');
 const planOps = require('../server/plans/ops');
 const planPublish = require('../server/plans/publish');
+const planCreate = require('../server/plans/create');
+const planRevisions = require('../server/plans/revisions');
+const planIssues = require('../server/plans/issues');
+const planPersonal = require('../server/plans/personal');
+const { makeContext } = require('../server/plans/context');
 const ingest = require('../server/media/ingest');
 const images = require('../server/media/openai-images');
 const audit = require('../server/db/repos/audit');
@@ -151,6 +156,11 @@ function lessonExists(slug) {
     return fs.existsSync(path.join(lessonDir(slug), 'worksheet.js'));
 }
 
+/** `field` and `reason` on a refusal are fixed identifiers from the services, never caller text. */
+function isErrorWord(value) {
+    return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(value);
+}
+
 /**
  * Map a plan-op result to an MCP tool reply.
  * Errors name `error` (revision_conflict includes the stored revision) and
@@ -164,6 +174,9 @@ function planToolResult(result) {
         const body = { error: result && result.error ? result.error : 'invalid_op' };
         if (result && result.revision != null) body.revision = result.revision;
         if (result && typeof result.path === 'string') body.path = result.path;
+        // Which input was refused, and why a restore could not place a part (INIT-008/SPEC-009).
+        if (result && isErrorWord(result.field)) body.field = result.field;
+        if (result && isErrorWord(result.reason)) body.reason = result.reason;
         if (result && Array.isArray(result.blocks)) body.blocks = result.blocks;
         if (result && Array.isArray(result.warnings)) body.warnings = result.warnings;
         if (result && Array.isArray(result.informs)) body.informs = result.informs;
@@ -204,6 +217,43 @@ function planInput(args, keys) {
         if (Object.prototype.hasOwnProperty.call(src, key)) input[key] = src[key];
     }
     return input;
+}
+
+/**
+ * Forward only the named arguments, and only those that were given. Nothing
+ * else a caller sends (an `actor`, a `kind`) reaches a service.
+ * Provenance: INIT-008/SPEC-009
+ * @param {object} args
+ * @param {string[]} keys
+ * @returns {object}
+ */
+function planArgs(args, keys) {
+    const input = {};
+    const src = args && typeof args === 'object' ? args : {};
+    for (const key of keys) {
+        if (Object.prototype.hasOwnProperty.call(src, key) && src[key] !== undefined) input[key] = src[key];
+    }
+    return input;
+}
+
+/**
+ * Write context for a plan tool call (ADR-0011 §1). The MCP is always actor
+ * `ai` named `mcp`: the actor comes from the channel and no tool argument can
+ * set it. `tool` is the tool name. `requestId` is the JSON-RPC id the SDK passes
+ * in the handler's second argument, a client-chosen label and not an identity.
+ * The SDK does not give a handler the clientInfo, and this server is stateless
+ * (a new McpServer per POST, no initialize), so no `client` label is recorded.
+ * Provenance: INIT-008/SPEC-002
+ * @param {string} tool
+ * @param {{ requestId?: string|number }} [extra]
+ * @returns {object}
+ */
+function mcpContext(tool, extra) {
+    const input = { channel: 'mcp', tool: tool };
+    if (extra && (typeof extra.requestId === 'string' || typeof extra.requestId === 'number')) {
+        input.requestId = extra.requestId;
+    }
+    return makeContext(input);
 }
 
 /** Actor stored on every MCP upload or generation. Callers cannot choose another. */
@@ -806,6 +856,211 @@ function addLibraryWords(args) {
     return text({ words: result.words, created: result.created });
 }
 
+const PLAN_ID_SCHEMA = z.string().min(1).max(64);
+const PLAN_PATH_SCHEMA = z.string().max(1024);
+const PLAN_REVISION_SCHEMA = z.number().int().min(1).max(1000000000);
+const PLAN_EXPECTED_SCHEMA = z.number().int().min(0).max(1000000000);
+const PLAN_REF_SCHEMA = z.union([PLAN_REVISION_SCHEMA, z.enum(['working', 'published'])]);
+const PLAN_LIMIT_SCHEMA = z.number().int().min(1).max(200);
+
+/**
+ * Plan-builder tools (INIT-008/SPEC-009). Each handler is an adapter: token
+ * check, forward the named arguments, build the `ai` context, call one function
+ * in server/plans/, shape the result. The services validate their own input, so
+ * a handler never edits plan JSON and never reads an actor from an argument.
+ * Each function is looked up on its module at call time, as the plan tools above.
+ * Provenance: INIT-008/SPEC-009
+ * @param {{ registerTool: Function }} server
+ */
+function registerPlanBuilderTools(server) {
+    register(server, 'list_plans', {
+        title: 'List lesson plans',
+        description: [
+            'List every lesson plan: id, title, audience, status, revision, updatedAt, published, unpublishedChanges, and humanEditedFields.',
+            'Call this first to find a plan id. Newest update first, at most 200 (truncated says there are more).',
+            'published means a snapshot exists and learners can read it; unpublishedChanges means the working copy is ahead of that snapshot.',
+            'humanEditedFields counts the fields a person last changed. If it is above 0, read_part shows them in editState.',
+            'No assignee name is returned, only assigned (true or false).',
+            'Does not change anything. Requires MCP_AUTH_TOKEN.'
+        ].join(' '),
+        inputSchema: {
+            limit: PLAN_LIMIT_SCHEMA.optional().describe('At most this many plans. Default and maximum 200.')
+        },
+        annotations: { readOnlyHint: true }
+    }, async (args, extra) => callPlanTool(() => planCreate.listPlans(
+        planStore,
+        planArgs(args, ['limit']),
+        mcpContext('list_plans', extra)
+    )));
+
+    register(server, 'create_plan', {
+        title: 'Create a lesson plan',
+        description: [
+            'Make a new draft plan at revision 1 from id, title, and an optional recipe.',
+            'id is a lowercase slug such as cafe-order (letters, digits, single hyphens, at most 64). An id that exists returns already_exists and nothing is changed or overwritten.',
+            'recipe is one of topic-conversation, review-worksheet, verse-reading, verb-workshop, letters-and-vowels, guide. It sets the lesson recipe and nothing else.',
+            'unitId and lessonId are optional slugs for the one unit and one lesson made for you (default unit-1 and lesson-1). A part id cannot be renamed later, so pick them now.',
+            'The new plan is shared, its lesson is hidden, and it has one placeholder block (id placeholder, type fluency-pass). It holds no Hebrew.',
+            'Next: read_part with an empty path to get the revision, insert your real blocks with insert_block, then remove the placeholder with remove_block (a lesson must keep at least one block).',
+            'A draft is invisible to learners until publish_plan. Requires MCP_AUTH_TOKEN.'
+        ].join(' '),
+        inputSchema: {
+            id: PLAN_ID_SCHEMA.describe('New plan id: a lowercase slug.'),
+            title: z.string().min(1).max(4000).describe('Plan title as plain text, no markup.'),
+            recipe: z.string().max(64).optional().describe('Optional lesson recipe name.'),
+            unitId: PLAN_ID_SCHEMA.optional().describe('Optional id of the first unit. Default unit-1.'),
+            lessonId: PLAN_ID_SCHEMA.optional().describe('Optional id of the first lesson. Default lesson-1.')
+        }
+    }, async (args, extra) => callPlanTool(() => planCreate.createPlan(
+        planStore,
+        planArgs(args, ['id', 'title', 'recipe', 'unitId', 'lessonId']),
+        mcpContext('create_plan', extra)
+    )));
+
+    register(server, 'list_plan_revisions', {
+        title: 'List the revision history of a plan',
+        description: [
+            'List the revisions of one plan, newest first: revision, op, path, field, summary, actorKind, actorName, tool, at.',
+            'actorKind is ai, human, or system. A person\'s revisions show actorName human, never a name.',
+            'Use sinceRevision with the revision you last read to see what was written after it, and actorKind human to see only what a person changed.',
+            'pathPrefix keeps revisions whose path starts with that text. limit defaults to 50 and is at most 200; truncated says there are more, so pass beforeRevision with the oldest revision shown to page back.',
+            'A summary never holds a field value. Use get_plan_revision for the whole plan at one revision, or diff_plan for what changed.',
+            'Does not change anything. Requires MCP_AUTH_TOKEN.'
+        ].join(' '),
+        inputSchema: {
+            id: PLAN_ID_SCHEMA.describe('Plan id.'),
+            sinceRevision: z.number().int().min(0).max(1000000000).optional()
+                .describe('Only revisions after this one.'),
+            beforeRevision: z.number().int().min(0).max(1000000000).optional()
+                .describe('Only revisions before this one. For paging.'),
+            actorKind: z.enum(['ai', 'human', 'system']).optional().describe('Only revisions written by this kind of actor.'),
+            pathPrefix: PLAN_PATH_SCHEMA.optional().describe('Only revisions whose path starts with this text.'),
+            limit: PLAN_LIMIT_SCHEMA.optional().describe('Default 50, at most 200.')
+        },
+        annotations: { readOnlyHint: true }
+    }, async (args, extra) => callPlanTool(() => planRevisions.list(
+        args && args.id,
+        planArgs(args, ['sinceRevision', 'beforeRevision', 'actorKind', 'pathPrefix', 'limit']),
+        mcpContext('list_plan_revisions', extra)
+    )));
+
+    register(server, 'get_plan_revision', {
+        title: 'Read a plan as it was at one revision',
+        description: [
+            'Read the whole plan document as it was at one revision, with that revision\'s metadata.',
+            'Use it to see an old value before you restore it. It does not change the plan or the revision counter.',
+            'not_found means the plan or that revision does not exist. A plan that has not been written since history began has no rows before its first edit.',
+            'Requires MCP_AUTH_TOKEN.'
+        ].join(' '),
+        inputSchema: {
+            id: PLAN_ID_SCHEMA.describe('Plan id.'),
+            revision: PLAN_REVISION_SCHEMA.describe('Revision number, from list_plan_revisions.')
+        },
+        annotations: { readOnlyHint: true }
+    }, async (args, extra) => callPlanTool(() => planRevisions.get(
+        args && args.id,
+        args && args.revision,
+        mcpContext('get_plan_revision', extra)
+    )));
+
+    register(server, 'diff_plan', {
+        title: 'Diff a plan between two revisions',
+        description: [
+            'List what changed between two points of one plan. from and to are each a revision number, working (the draft now), or published (the last snapshot learners read).',
+            'Example: from published to working is everything not yet published. from 5 to working is everything since revision 5.',
+            'Each entry has path, field, kind (changed, added, removed, or moved), before, after. path is an id path you can pass to read_part, set_field, or restore_plan_revision.',
+            'Pass path to keep one part and what is under it. truncated true means the list was cut: narrow it with path.',
+            'no_snapshot means the plan was never published. Does not change anything. Requires MCP_AUTH_TOKEN.'
+        ].join(' '),
+        inputSchema: {
+            id: PLAN_ID_SCHEMA.describe('Plan id.'),
+            from: PLAN_REF_SCHEMA.describe('Revision number, working, or published.'),
+            to: PLAN_REF_SCHEMA.describe('Revision number, working, or published.'),
+            path: PLAN_PATH_SCHEMA.optional().describe('Id path: keep only this part and what is under it.')
+        },
+        annotations: { readOnlyHint: true }
+    }, async (args, extra) => callPlanTool(() => planRevisions.diff(
+        args && args.id,
+        args && args.from,
+        args && args.to,
+        planArgs(args, ['path']),
+        mcpContext('diff_plan', extra)
+    )));
+
+    register(server, 'restore_plan_revision', {
+        title: 'Restore a plan, one part, or one field from a revision',
+        description: [
+            'Put an older revision back as a NEW revision. History is kept and nothing is erased, so a restore can itself be restored.',
+            'Pass fromRevision and expectedRevision (the revision you last read). With only those, the whole plan comes back. With path, one part comes back. With path and field, one field comes back (path is empty for a field of the plan itself).',
+            'Workflow: list_plan_revisions or diff_plan to find the revision and the id path, get_plan_revision if you want to see the old value, then restore_plan_revision with the narrowest path and field that fits. Use it to undo your own mistake, or to put back a value a person had set (editState and overwrote name that revision).',
+            'Cannot change who a personal plan is assigned to: audience and assigneeId stay as they are (a field restore of either returns assign_required; use assign_plan). The draft keeps its status draft; learners keep reading the last published snapshot until you publish_plan.',
+            'A stale expectedRevision returns revision_conflict and the stored revision, and writes nothing. The restored plan is validated like any write; a refusal lists the reasons and writes nothing. not_found carries a reason when the part cannot be placed back (parent_missing or absent_in_revision).',
+            'Your result includes overwrote when the restore replaced a field a person last wrote. Requires MCP_AUTH_TOKEN.'
+        ].join(' '),
+        inputSchema: {
+            id: PLAN_ID_SCHEMA.describe('Plan id.'),
+            fromRevision: PLAN_REVISION_SCHEMA.describe('The revision to restore from.'),
+            path: PLAN_PATH_SCHEMA.optional().describe('Id path of one part. Omit to restore the whole plan.'),
+            field: z.string().max(64).optional().describe('One field of that part. Omit to restore the whole part.'),
+            expectedRevision: PLAN_EXPECTED_SCHEMA.describe('Revision from the last read. Must match the stored working copy.')
+        },
+        annotations: { destructiveHint: false }
+    }, async (args, extra) => callPlanTool(() => planRevisions.restore(
+        planStore,
+        args && args.id,
+        planInput(args, ['fromRevision', 'field']),
+        mcpContext('restore_plan_revision', extra)
+    )));
+
+    register(server, 'list_plan_issues', {
+        title: 'List the problems the checks find in a plan',
+        description: [
+            'List what the checks find in the draft of one plan, with a stable code, severity, path, field, message, and a fix where one is known.',
+            'severity block is a hard error: it stops publish_plan. warn is advice and never stops a write or a publish. By default you get block and warn; pass inform or all to see more. counts always covers the whole plan.',
+            'Codes include pointing-form, field-language, lexicon-form, pointing-consistency, and audio-stale, plus the older rules. A fix is { action, path, field, suggested } where action is set_field or replace_part: apply it with that tool, or choose your own repair.',
+            'path is an id path for read_part and set_field. pointer is the raw JSON pointer.',
+            'Call this after you build or change a plan and before publish_plan, then fix what you can. Does not change anything. Requires MCP_AUTH_TOKEN.'
+        ].join(' '),
+        inputSchema: {
+            id: PLAN_ID_SCHEMA.describe('Plan id.'),
+            severity: z.union([
+                z.enum(['block', 'warn', 'inform', 'all']),
+                z.array(z.enum(['block', 'warn', 'inform'])).min(1).max(3)
+            ]).optional().describe('block, warn, inform, all, or a list of them. Default block and warn.'),
+            code: z.string().max(64).optional().describe('Only this rule code.'),
+            pathPrefix: PLAN_PATH_SCHEMA.optional().describe('Only issues at or under this id path.'),
+            limit: PLAN_LIMIT_SCHEMA.optional().describe('Default 100, at most 200.')
+        },
+        annotations: { readOnlyHint: true }
+    }, async (args, extra) => callPlanTool(() => planIssues.list(
+        planStore,
+        args && args.id,
+        planArgs(args, ['severity', 'code', 'pathPrefix', 'limit']),
+        mcpContext('list_plan_issues', extra)
+    )));
+
+    register(server, 'assign_plan', {
+        title: 'Assign a plan to everyone or to one learner',
+        description: [
+            'Set who a plan is for. audience is shared (every learner who may see its lessons) or personal (one learner). For personal pass assigneeId, the username of an active account (see list_users). For shared leave assigneeId out.',
+            'Pass expectedRevision, the revision you last read. This is the only way to change audience or assigneeId: set_field, replace_part, and restore_plan_revision cannot.',
+            'assignee_refused means that account is unknown or disabled; nothing was written. A stale expectedRevision returns revision_conflict and the stored revision.',
+            'Learners see a plan only after publish_plan. A personal plan is shown only to its assignee. Requires MCP_AUTH_TOKEN.'
+        ].join(' '),
+        inputSchema: {
+            id: PLAN_ID_SCHEMA.describe('Plan id.'),
+            audience: z.enum(['shared', 'personal']).describe('shared or personal.'),
+            assigneeId: z.string().min(1).max(64).optional().describe('Username of an active account. Required for personal.'),
+            expectedRevision: PLAN_EXPECTED_SCHEMA.describe('Revision from the last read. Must match the stored working copy.')
+        }
+    }, async (args, extra) => callPlanTool(() => planPersonal.assign(
+        planStore,
+        args && args.id,
+        planInput(args, ['audience', 'assigneeId']),
+        mcpContext('assign_plan', extra)
+    )));
+}
+
 function registerLessonTools(server) {
     register(server, 'list_lessons', {
         title: 'List Hebrew lessons',
@@ -1034,32 +1289,38 @@ function registerLessonTools(server) {
     // INIT-004/SPEC-005: same functions as the plan HTTP routes. Adapters only.
     register(server, 'read_part', {
         title: 'Read one part of a lesson plan',
-        description: 'Read the plan part at an id path. An empty path is the plan document. Requires MCP_AUTH_TOKEN. Returns the part and the current revision. Does not change the plan.',
+        description: 'Read the plan part at an id path. An empty path is the plan document. Requires MCP_AUTH_TOKEN. Returns the part, the current revision, and editState. editState lists the fields at or below that path that a person last changed (path, field, revision, previousValue, previousWriter), and lastHumanEdit is the newest person edit anywhere in the plan. It is advice: you may edit those fields anyway, and the note never blocks a write. If you overwrite one, your write result lists it in overwrote, and restore_plan_revision puts the person\'s value back. Read a part before you edit it. Use list_plans to find a plan id and create_plan to start one. Does not change the plan.',
         inputSchema: {
             id: z.string().describe('Plan id.'),
             path: z.string().describe('Id path such as units/unit-1/lessons/cafe-order/blocks/introduction/words/2. Empty string is the whole plan.')
         },
         annotations: { readOnlyHint: true }
-    }, async (args) => callPlanTool(() => planOps.readPart(planStore, args && args.id, planInput(args, []))));
+    }, async (args, extra) => callPlanTool(() => planOps.readPart(
+        planStore,
+        args && args.id,
+        planInput(args, []),
+        mcpContext('read_part', extra)
+    )));
 
     register(server, 'replace_part', {
         title: 'Replace one part of a lesson plan',
-        description: 'Replace the part at an id path. Pass path, value, and expectedRevision. Requires MCP_AUTH_TOKEN. A stale expectedRevision returns revision_conflict and the stored revision. The plan is unchanged.',
+        description: 'Replace the part at an id path. Pass path, value, and expectedRevision. Requires MCP_AUTH_TOKEN. The value\'s id must equal the id in the path (id_mismatch otherwise), and audience and assigneeId cannot change here (assign_required; use assign_plan). A stale expectedRevision returns revision_conflict and the stored revision, and writes nothing. The result lists overwrote when you replaced a field a person last wrote; restore_plan_revision puts it back.',
         inputSchema: {
             id: z.string().describe('Plan id.'),
             path: z.string().describe('Id path of the part to replace. Empty string replaces the plan document.'),
             value: z.any().describe('Replacement object for that part.'),
             expectedRevision: z.number().int().describe('Revision from the last read. Must match the stored working copy.')
         }
-    }, async (args) => callPlanTool(() => planOps.replacePart(
+    }, async (args, extra) => callPlanTool(() => planOps.replacePart(
         planStore,
         args && args.id,
-        planInput(args, ['value'])
+        planInput(args, ['value']),
+        mcpContext('replace_part', extra)
     )));
 
     register(server, 'insert_block', {
         title: 'Insert a block into a lesson plan',
-        description: 'Insert a block into a lesson at index. Omit index to append. Pass path (the lesson), block, and expectedRevision. Requires MCP_AUTH_TOKEN. A stale expectedRevision returns revision_conflict and the stored revision.',
+        description: 'Insert a block into a lesson at index. Omit index to append. Pass path (the lesson), block, and expectedRevision. Requires MCP_AUTH_TOKEN. A stale expectedRevision returns revision_conflict and the stored revision, and writes nothing.',
         inputSchema: {
             id: z.string().describe('Plan id.'),
             path: z.string().describe('Id path of the lesson, such as units/unit-1/lessons/cafe-order.'),
@@ -1067,10 +1328,11 @@ function registerLessonTools(server) {
             block: z.any().describe('Block object to insert.'),
             expectedRevision: z.number().int().describe('Revision from the last read. Must match the stored working copy.')
         }
-    }, async (args) => callPlanTool(() => planOps.insertBlock(
+    }, async (args, extra) => callPlanTool(() => planOps.insertBlock(
         planStore,
         args && args.id,
-        planInput(args, ['index', 'block'])
+        planInput(args, ['index', 'block']),
+        mcpContext('insert_block', extra)
     )));
 
     register(server, 'move_block', {
@@ -1082,10 +1344,11 @@ function registerLessonTools(server) {
             index: z.number().int().describe('Destination index within the lesson.'),
             expectedRevision: z.number().int().describe('Revision from the last read. Must match the stored working copy.')
         }
-    }, async (args) => callPlanTool(() => planOps.moveBlock(
+    }, async (args, extra) => callPlanTool(() => planOps.moveBlock(
         planStore,
         args && args.id,
-        planInput(args, ['index'])
+        planInput(args, ['index']),
+        mcpContext('move_block', extra)
     )));
 
     register(server, 'remove_block', {
@@ -1096,15 +1359,16 @@ function registerLessonTools(server) {
             path: z.string().describe('Id path of the block to remove.'),
             expectedRevision: z.number().int().describe('Revision from the last read. Must match the stored working copy.')
         }
-    }, async (args) => callPlanTool(() => planOps.removeBlock(
+    }, async (args, extra) => callPlanTool(() => planOps.removeBlock(
         planStore,
         args && args.id,
-        planInput(args, [])
+        planInput(args, []),
+        mcpContext('remove_block', extra)
     )));
 
     register(server, 'set_field', {
         title: 'Set one field on a lesson plan part',
-        description: 'Set field to value on the part at path. Pass expectedRevision. Requires MCP_AUTH_TOKEN. A stale expectedRevision returns revision_conflict and the stored revision. The plan is unchanged.',
+        description: 'Set field to value on the part at path. Pass expectedRevision. Requires MCP_AUTH_TOKEN. This is the usual way to fix one issue from list_plan_issues. id cannot be changed, and audience and assigneeId cannot be set here (use assign_plan). A stale expectedRevision returns revision_conflict and the stored revision, and writes nothing. The result lists overwrote when you replaced a value a person last wrote; restore_plan_revision puts it back.',
         inputSchema: {
             id: z.string().describe('Plan id.'),
             path: z.string().describe('Id path of the part. Empty string is the plan document.'),
@@ -1112,23 +1376,25 @@ function registerLessonTools(server) {
             value: z.any().describe('New value.'),
             expectedRevision: z.number().int().describe('Revision from the last read. Must match the stored working copy.')
         }
-    }, async (args) => callPlanTool(() => planOps.setField(
+    }, async (args, extra) => callPlanTool(() => planOps.setField(
         planStore,
         args && args.id,
-        planInput(args, ['field', 'value'])
+        planInput(args, ['field', 'value']),
+        mcpContext('set_field', extra)
     )));
 
     register(server, 'publish_plan', {
         title: 'Publish a lesson plan',
-        description: 'Publish the working copy. Pass expectedRevision. Requires MCP_AUTH_TOKEN. A stale expectedRevision returns revision_conflict and the stored revision. The plan is unchanged.',
+        description: 'Publish the working copy so learners can read it. Pass expectedRevision. Requires MCP_AUTH_TOKEN. No person has to approve a publish, and warnings never stop it. It is refused when a check finds a block (list_plan_issues shows them, validation lists them) or when the plan uses a picture that is still pending approval in a lesson visible to learners (pending_media). A stale expectedRevision returns revision_conflict and the stored revision. Nothing is written when it is refused. A lesson is visible only if its visibility is everyone or selected; a new lesson is hidden.',
         inputSchema: {
             id: z.string().describe('Plan id.'),
             expectedRevision: z.number().int().describe('Revision from the last read. Must match the stored working copy.')
         }
-    }, async (args) => callPlanTool(() => planPublish.publishPlan(
+    }, async (args, extra) => callPlanTool(() => planPublish.publishPlan(
         planStore,
         args && args.id,
-        planInput(args, [])
+        planInput(args, []),
+        mcpContext('publish_plan', extra)
     )));
 
     // INIT-004/SPEC-012: same ingest and image service as the HTTP routes. No second client.
@@ -1200,6 +1466,7 @@ function registerLessonTools(server) {
         return stored;
     }));
 
+    registerPlanBuilderTools(server);
     registerLearnerTools(server);
 }
 

@@ -11,6 +11,7 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
+const { testContext } = require('./helpers/plan-ctx');
 
 const root = path.resolve(__dirname, '..');
 const SAMPLE = path.join(
@@ -312,7 +313,7 @@ describe('plan MCP tools (INIT-004/SPEC-005)', { concurrency: false }, () => {
                 partBytes = JSON.stringify(JSON.parse(replyText(result)).part);
             }
             resetPlan();
-            const direct = originals[fn](store, PLAN_ID, spec.input);
+            const direct = originals[fn](store, PLAN_ID, spec.input, testContext());
             const viaFn = store.loadWorkingCopy(PLAN_ID);
             assert.equal(viaTool.document, viaFn.document, spec.tool);
             assert.equal(viaTool.revision, viaFn.revision, spec.tool);
@@ -352,7 +353,7 @@ describe('plan MCP tools (INIT-004/SPEC-005)', { concurrency: false }, () => {
         assert.equal(row.revision, seeded.revision);
         assert.equal(row.updatedAt, seeded.updatedAt);
 
-        const published = originals.publishPlan(store, PLAN_ID, { expectedRevision: 1 });
+        const published = originals.publishPlan(store, PLAN_ID, { expectedRevision: 1 }, testContext());
         assert.equal(published.error, undefined);
         const frozen = store.loadWorkingCopy(PLAN_ID);
         const again = await handlers.publish_plan({

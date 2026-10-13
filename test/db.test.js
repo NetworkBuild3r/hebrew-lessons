@@ -147,8 +147,9 @@ describe('migrate + schema (ac-2, ac-3, ac-6)', () => {
         assert.match(byVersion.get(3), /^003-media-and-ai-planning\.js$/);
         assert.match(byVersion.get(4), /^004-fsrs-review-state\.js$/);
         assert.match(byVersion.get(5), /^005-lexicon-library-mastery\.js$/);
+        assert.match(byVersion.get(6), /^006-plan-revisions\.js$/);
         for (const version of byVersion.keys()) {
-            assert.ok(version >= 1 && version <= 5, 'unexpected migration ' + version);
+            assert.ok(version >= 1 && version <= 6, 'unexpected migration ' + version);
         }
 
         db.migrate();

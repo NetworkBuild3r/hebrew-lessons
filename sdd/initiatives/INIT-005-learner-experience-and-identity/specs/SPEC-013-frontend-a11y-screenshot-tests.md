@@ -7,7 +7,7 @@ spec_id: SPEC-013
 initiative_id: INIT-005
 title: "Accessibility, screenshot and hook-contract tests"
 domain: frontend
-status: ready
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet
@@ -34,15 +34,15 @@ blocks: []
 
 ## Understood
 
-- [ ] und-1: Screenshot paths live under a checked-in directory or a test artefact path consistent with existing smoke scripts.
-- [ ] und-2: This is the last INIT-005 build spec. Completion report waits for `complete-initiative`.
+- [x] und-1: Screenshot paths live under a checked-in directory or a test artefact path consistent with existing smoke scripts. _(Closure: PNGs go to `spikes/restyle-shots/`, the untracked, never-served folder the earlier restyle screenshots used; `test/chrome-restyle-screenshots-smoke.js` follows the `chrome-*-smoke.js` pattern. They are for human review, not golden images.)_
+- [x] und-2: This is the last INIT-005 build spec. Completion report waits for `complete-initiative`. _(Closure: acknowledged; the completion summary is written, the initiative completion is not.)_
 
 ## Acceptance Criteria
 
-- [ ] ac-1 (REQ-017, REQ-019): contrast and target-size checks pass for ADR-0008 tokens.
-- [ ] ac-2 (REQ-005, REQ-019): reduced-motion path is asserted per route transition and feedback kit.
-- [ ] ac-3 (REQ-019): screenshots at 360 and 1280 exist for Today, Lessons, Review, Progress, Admin, and login.
-- [ ] ac-4: hook-contract test covers the selectors the unit tests and Chrome smokes query.
+- [x] ac-1 (REQ-017, REQ-019): contrast and target-size checks pass for ADR-0008 tokens. _(Closure: ADR-0010 is the adopted look, so the checks run on its colours. `test/restyle-gate.test.js` checks 19 token pairs in light and dark; `test/chrome-restyle-a11y-smoke.js` measures computed text contrast, 24 px targets (with the WCAG spacing exception) and 44 px primary controls on every route and login at 360 and 1280 px. Four real defects found and fixed, see the summary.)_
+- [x] ac-2 (REQ-005, REQ-019): reduced-motion path is asserted per route transition and feedback kit. _(Closure: the smoke emulates `prefers-reduced-motion: reduce` over CDP, asserts no route transition and no transition or animation on any element of all seven routes and login, and asserts the feedback kit's loading, playing, reveal, correct and miss states are still, after first proving they animate under normal motion.)_
+- [x] ac-3 (REQ-019): screenshots at 360 and 1280 exist for Today, Lessons, Review, Progress, Admin, and login. _(Closure: `test/chrome-restyle-screenshots-smoke.js` writes 18 PNGs (also Guides, Words and the player Match step) and asserts size and non-blank. They are untracked artefacts; run the script to regenerate.)_
+- [x] ac-4: hook-contract test covers the selectors the unit tests and Chrome smokes query. _(Closure: `test/restyle-gate.test.js` re-checks the 70 + 50 hooks against production code only, checks the SPA shell files, and fails if a data-* attribute or id a smoke or shell test queries is gone. Three ADR hooks are no longer emitted: `data-key`, `data-slug`, `lessons-grid`; listed in the summary.)_
 
 ## Assumptions Ledger
 
@@ -56,8 +56,8 @@ blocks: []
 
 ## Deliverables
 
-- [ ] Test files and screenshots
-- [ ] Completion summary
+- [x] Test files and screenshots _(Closure: `test/restyle-gate.test.js`, `test/chrome-restyle-a11y-smoke.js`, `test/chrome-restyle-screenshots-smoke.js`, `test/helpers/chrome-cdp.js`.)_
+- [x] Completion summary _(Closure: `completion-summaries/SPEC-013-completion-summary.md`.)_
 - [ ] Initiative status ready for `complete-initiative` (mode e) once this passes
 
 ---

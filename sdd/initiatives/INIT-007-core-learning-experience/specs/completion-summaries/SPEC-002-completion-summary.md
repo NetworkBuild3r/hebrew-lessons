@@ -8,7 +8,7 @@
 
 ## What shipped
 
-- `shared/player/feedback.js` — `HebrewFeedback` competence helpers (`showCorrect` / `showMiss` / `clear`), optional Web Audio tactile chimes (OFF by default, `localStorage` key `hebrew-sfx-enabled`), ducking while Hebrew speech is active, Space/`r` replay binding, `[data-sfx-toggle]` persistent toggle hooks.
+- `shared/player/feedback.js` — `HebrewFeedback` competence helpers (`showCorrect` / `showMiss` / `clear`), optional Web Audio tactile chimes (OFF by default, `localStorage` key `hebrew-sfx-enabled`), new chimes suppressed while Hebrew speech is active (not ducked), Space/`r` replay binding, `[data-sfx-toggle]` persistent toggle hooks.
 - `shared/player/speech.js` — playback state (`loading` / `playing` / `idle` / `error`), `is-loading` / `is-playing` classes on the associated control, `playClip` alias, `replayLast`, `hebrew-speech-playback` events; existing `play` / `speak` callers unchanged.
 - `shared/player/core.js` — `playModel` passes the speak button into `playClip`.
 - `shared/worksheet.css` — additive tactile press (`scale(0.98)`), focus rings, audio pulse, `.correction` / feedback panels, reduced-motion zeros. No `.player-top` / `.action-bar` / mobile-dock redesign (SPEC-003).

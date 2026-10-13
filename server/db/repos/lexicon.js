@@ -172,6 +172,36 @@ function listByKeys(keys) {
 }
 
 /**
+ * ADR-0001 strippedKey: exactKey without vowel points and cantillation (U+0591 to U+05C7).
+ * @param {string|null|undefined} text
+ * @returns {string}
+ */
+function strippedKey(text) {
+    return exactKey(exactKey(text).replace(/[\u0591-\u05C7]/g, ''));
+}
+
+/**
+ * Rows whose stripped key is in `keys`. The table stores no stripped column, so this
+ * reads the key column once, matches in memory, and fetches the matching rows: one scan
+ * per call, no schema change. Read only. Used by the plan `lexicon-form` check.
+ * Provenance: INIT-008/SPEC-008
+ * @param {string[]} keys Stripped keys (they are stripped again, so pointed input also works).
+ * @returns {object[]}
+ */
+function listByStrippedKeys(keys) {
+    const wanted = new Set();
+    for (const raw of Array.isArray(keys) ? keys : []) {
+        const stripped = strippedKey(raw);
+        if (stripped) wanted.add(stripped);
+    }
+    if (!wanted.size) return [];
+    const matched = db.all('SELECT key FROM lexicon_entries')
+        .map((row) => row.key)
+        .filter((key) => wanted.has(strippedKey(key)));
+    return listByKeys(matched);
+}
+
+/**
  * Keyset page. Every column name is fixed in this function; values are bound.
  * `q` is already escaped for LIKE. `limit` includes the extra row the
  * service uses to decide whether another page exists.
@@ -226,6 +256,8 @@ module.exports = {
     listByBinyan,
     listLemmaKeys,
     listByKeys,
+    listByStrippedKeys,
     search,
-    exactKey
+    exactKey,
+    strippedKey
 };

@@ -114,7 +114,7 @@
             return `<button type="button" class="btn btn-ghost btn-sm${active}" data-action="set-dir" data-dir="${dir}">${ctx.bi(he, en)}</button>`;
         };
         return `
-            <div class="row-tools dir-switch" role="group" aria-label="${ctx.esc(ctx.bi('כיוון שליפה', 'Recall direction'))}">
+            <div class="row-tools dir-switch" role="group" aria-label="${ctx.esc('כיוון שליפה')}">
                 ${btn('auto', 'לסירוגין', 'Alternate')}
                 ${btn('he_en', 'אנגלית ← עברית', 'Hebrew → English')}
                 ${btn('en_he', 'עברית ← אנגלית', 'English → Hebrew')}
@@ -160,7 +160,7 @@
     /** Live pointed word — clickable to play (ADR-0010 / aud-2). */
     function heWordBtn(ctx, item, displayWord) {
         const clip = item.audio || '';
-        return `<button type="button" class="he-word" data-vowels="${ctx.esc(item.word)}" data-speak="${ctx.esc(item.word)}" data-audio="${ctx.esc(clip)}" title="${ctx.esc(ctx.bi('השמעה', 'Play word'))}">${ctx.esc(displayWord)}</button>`;
+        return `<button type="button" class="he-word" data-vowels="${ctx.esc(item.word)}" data-speak="${ctx.esc(item.word)}" data-audio="${ctx.esc(clip)}" title="${ctx.esc('השמעה (Play word)')}">${ctx.esc(displayWord)}</button>`;
     }
 
     function card(ctx, item, index, force) {
@@ -218,9 +218,9 @@
                         ${ctx.speakButton(item.word, item.audio, 'Word')}
                     </div>
                     <p class="sound hidden-until" dir="ltr">${ctx.esc(item.sound || '')}${item.translit ? ' · ' + ctx.esc(item.translit) : ''}</p>
+                    ${exampleBlock(ctx, item, id)}
                 </div>
                 ${markRow(ctx, id, mark, 'en_he')}
-                ${exampleBlock(ctx, item, id)}
             </article>`;
         }
 

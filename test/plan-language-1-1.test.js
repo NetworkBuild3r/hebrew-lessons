@@ -13,6 +13,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const { withCtx, publishWithCtx } = require('./helpers/plan-ctx');
 const { RULES, SCHEMA_PATH, validatePlan } = require('../server/plans/validate');
 const { SAMPLE_NAMES, VARIANTS, sample } = require('./fixtures/plans-1.1/variants-1.0.0');
 
@@ -75,8 +76,21 @@ function hits(findings, rule, at) {
     return findings.filter((item) => item.rule === rule && (at === undefined || item.path === at));
 }
 
+/**
+ * These tests pin the ADR-0003 and ADR-0009 rules. INIT-008/SPEC-008 added five warnings
+ * (pointing-form and four more) that read the same documents; they are tested in
+ * plan-hebrew-checks.test.js and left out of these comparisons. Nothing else changed.
+ */
+const INIT_008_RULES = ['pointing-form', 'field-language', 'lexicon-form', 'pointing-consistency', 'audio-stale'];
+
+function withoutInit008(result) {
+    return Object.assign({}, result, {
+        warnings: result.warnings.filter((item) => !INIT_008_RULES.includes(item.rule))
+    });
+}
+
 function check(plan) {
-    return validatePlan(plan, { lexicon: LEXICON });
+    return withoutInit008(validatePlan(plan, { lexicon: LEXICON }));
 }
 
 function shape(result) {
@@ -150,7 +164,7 @@ describe('ac-1 and und-1: 1.0.0 documents keep their results', () => {
         SAMPLE_NAMES.forEach((name) => {
             const plan = sample(name);
             assert.equal(plan.schemaVersion, '1.0.0', name);
-            assert.deepEqual(validatePlan(plan), BASELINE.samples[name], name);
+            assert.deepEqual(withoutInit008(validatePlan(plan)), BASELINE.samples[name], name);
             assert.deepEqual(check(plan), BASELINE.samples[name], name + ' with a lexicon');
             assert.equal(BASELINE.samples[name].ok, true, name);
         });
@@ -1050,7 +1064,9 @@ describe('ac-5: part operations in ops.js, and schemaVersion', { concurrency: fa
         fs.mkdirSync(process.env.LESSONS_DIR);
         const modules = freshModules(path.join(tmp, 'data'));
         ({ db, store, ops } = modules);
-        publishPlan = modules.publish.publishPlan;
+        // INIT-008/SPEC-002: every write takes a context; these calls add one and nothing else.
+        ops = withCtx(ops);
+        publishPlan = publishWithCtx(modules.publish.publishPlan);
         db.open();
         db.migrate();
         const entries = LEXICON_ENTRIES.map((entry) => {
@@ -1152,6 +1168,8 @@ describe('ac-5: part operations in ops.js, and schemaVersion', { concurrency: fa
     it('replacePart with a new block, and setField of a recipe or a group, also raise schemaVersion', () => {
         const before = seed(sample('beginner-unit-1'));
         const block = fixtureBlock('personal-question');
+        // INIT-008/SPEC-002: a replacement keeps the id of the part it replaces.
+        block.id = 'listen';
         const replaced = ops.replacePart(store, before.id, { path: LISTEN, value: block, expectedRevision: 1 });
         assert.equal(replaced.error, undefined, JSON.stringify(replaced));
         const expected = clone(before);

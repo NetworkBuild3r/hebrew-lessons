@@ -93,7 +93,7 @@
         var groups = groupByTopic(guidesOnly(lessons));
         if (!groups.length) {
             return '<div class="card guides-state" data-guides-state="empty">'
-                + '<p>אין מדריכים שפורסמו. <span lang="en" dir="ltr">No published guides.</span></p>'
+                + '<p>אין מדריכים שפורסמו. <span lang="en" dir="ltr">(No published guides.)</span></p>'
                 + '</div>';
         }
         return groups.map(function (group) {
@@ -128,7 +128,7 @@
                 : null;
             if (!lessons) {
                 paint(el, '<div class="card guides-state" data-guides-state="error" role="alert">'
-                    + '<p>שגיאה בטעינת המדריכים. <span lang="en" dir="ltr">Could not load guides.</span></p>'
+                    + '<p>שגיאה בטעינת המדריכים. <span lang="en" dir="ltr">(Could not load guides.)</span></p>'
                     + '</div>');
                 return;
             }
@@ -136,7 +136,7 @@
         }).catch(function () {
             if (mounted !== el) return;
             paint(el, '<div class="card guides-state" data-guides-state="error" role="alert">'
-                + '<p>שגיאה בטעינת המדריכים. <span lang="en" dir="ltr">Could not load guides.</span></p>'
+                + '<p>שגיאה בטעינת המדריכים. <span lang="en" dir="ltr">(Could not load guides.)</span></p>'
                 + '</div>');
         });
     }

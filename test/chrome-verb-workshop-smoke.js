@@ -252,7 +252,7 @@ async function main() {
         audience: 'shared',
         assigneeId: null
     });
-    const published = publish.publishPlan(store, PLAN_ID, { expectedRevision: 1 });
+    const published = publish.publishPlan(store, PLAN_ID, { expectedRevision: 1 }, require('../server/plans/context').makeContext({ channel: 'system', name: 'verb-workshop-smoke', tool: 'smoke' }));
     if (!published.plan) {
         throw new Error('publish failed: ' + JSON.stringify({
             error: published.error,

@@ -11,6 +11,7 @@
 | **Research grounding** | `RSCH-004` (course shape, lesson types, design rules); `RSCH-005` (pictures, typing, spelling) |
 | **Supersedes** | [ADR-0001](ADR-0001-learner-review-model.md) constraint 2 and [ADR-0002](ADR-0002-accounts-server-progress-site-map.md)'s carried form of that constraint, for the **plan document only**, at the API cutover described in Decision 3. Also changes ADR-0002's "hidden is the draft" rule, as described in Decision 7. |
 | **Superseded by** | — Extended by [ADR-0009](ADR-0009-learner-model-and-language-program.md), Accepted 2026-10-09 (schema `1.1.0`, five blocks, a lesson `recipe`, rules N13–N19, and changes to N1, N2, N7 and to the "script and sound support" row). |
+| **Extended by** | [ADR-0011](ADR-0011-ai-first-plan-builder.md), Accepted 2026-10-12: 4 (create and restore join the revision rule; `assign` is one more function on it; no merge), 6 (five named warn rows), 7 (publish has no approval step). |
 
 ## Summary
 
@@ -495,3 +496,4 @@ Delete `docs/decisions/ADR-0003-course-and-lesson-plan-language.md` and `docs/de
 | 2026-10-08 | Initial Proposed record — `INIT-003/SPEC-004`. aud-1 (one plan for shared and personal) and aud-2 (script-tag load may be superseded) recorded as chosen. |
 | 2026-10-09 | ADR-0009 (`INIT-006/SPEC-001`, Proposed) would extend this record: schema `1.1.0` adds five blocks (`explainer`, `conjugation-table`, `personal-question`, `verse-reading`, `letter-intro`), a lesson `recipe`, and an introduction-word `group`; adds rules N13–N19; changes N1 for recipe `topic-conversation`, N2 for `guide`, and N7's language-focused set; reverses the "script and sound support is fields on the introduction word" row for `letter-intro`. `1.0.0` plans stay valid. Metadata note and this row only; the sentences in this file are left as written. Takes effect only when ADR-0009 is Accepted. |
 | 2026-10-09 | ADR-0009 Accepted by the operator. The extension in the row above is in force. Metadata note and this row only. |
+| 2026-10-12 | ADR-0011 (`INIT-008/SPEC-001`, Accepted) extends 4 (create, restore, and `assign` on the same revision rule), 6 (five named warn rows), and 7 (no approval step on publish). Metadata row and this row only. |

@@ -11,6 +11,7 @@ const path = require('path');
 const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
+const SCHEMA_TEXT = fs.readFileSync(path.join(root, 'docs', 'decisions', 'ADR-0003-assets', 'lesson-plan.schema.json'), 'utf8');
 const LESSON_PATH = 'units/unit-1/lessons/cafe-order';
 
 function matchSel(node, sel) {
@@ -205,11 +206,21 @@ function loadBuilder(opts) {
                 json() { return Promise.resolve(data); },
                 text() { return Promise.resolve(JSON.stringify(data)); }
             });
+            if (method === 'GET' && String(url) === '/api/plan-schema') return json(200, JSON.parse(SCHEMA_TEXT));
             if (method === 'GET') {
                 const data = String(url).indexOf('path=') === -1
                     ? { part: planFixture(), revision }
                     : { part: lessonFixture(), revision };
                 return json(200, data);
+            }
+            if (options.failBlocks && method === 'POST' && String(url).endsWith('/blocks')) {
+                return json(400, {
+                    error: 'validation',
+                    revision,
+                    blocks: [{ rule: 'schema', severity: 'block', path: '/units/0/lessons/0/blocks/2/title', message: 'too short' }],
+                    warnings: [],
+                    informs: []
+                });
             }
             if (conflictArmed && method === 'PATCH') {
                 conflictArmed = false;
@@ -225,7 +236,9 @@ function loadBuilder(opts) {
     vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'player', 'utils.js'), 'utf8'), sandbox);
     vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'api.js'), 'utf8'), sandbox);
     vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'ui', 'plan-render.js'), 'utf8'), sandbox);
-    vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'admin', 'plan-builder.js'), 'utf8'), sandbox);
+    for (const name of ['plan-hints.js', 'plan-widgets.js', 'plan-form.js', 'plan-builder.js']) {
+        vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'admin', name), 'utf8'), sandbox);
+    }
     vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'admin', 'admin-shell.js'), 'utf8'), sandbox);
     return { sandbox, calls, panel: sandbox.document.createElement('div') };
 }
@@ -256,21 +269,25 @@ describe('plan builder outline (INIT-004/SPEC-015)', () => {
         assert.match(shell, /HebrewPlanBuilder|PlanBuilder/);
     });
 
-    it('sends the move index the route expects and does not renumber block ids', () => {
-        const { sandbox } = loadBuilder();
+    it('sends the move index the route expects and does not renumber block ids', async () => {
+        // SPEC-011/012: the hand-written fieldsForBlock and newBlock lists are gone; a new block
+        // comes from the schema's required list, and the fields come from the editor form.
+        const { sandbox, panel } = loadBuilder();
         const Builder = sandbox.HebrewPlanBuilder;
         assert.equal(Builder.moveDestination(0, 'down'), 1);
         assert.equal(Builder.moveDestination(2, 'up'), 1);
         assert.equal(Builder.moveDestination(0, 'up'), -1);
+        await Builder.mount(panel, 'beginner-unit-1');
         const created = Builder.newBlock('listening', 'extra');
         assert.equal(created.id, 'extra');
         assert.equal(created.type, 'listening');
         assert.equal(Object.prototype.hasOwnProperty.call(created, 'blocks'), false);
-        const lesson = lessonFixture();
-        const fields = Builder.fieldsForBlock(LESSON_PATH, lesson.blocks[1]);
-        assert.equal(fields[0].path, LESSON_PATH + '/blocks/listen');
-        assert.equal(fields[0].field, 'passage');
-        assert.equal(fields[0].loaded, 'שלום');
+        childWith(panel.querySelector('[data-plan-block="listen"]'), 'data-plan-edit', '').click();
+        await Builder.settled();
+        const form = Builder.editor().forms()[LESSON_PATH + '/blocks/listen'];
+        assert.equal(form.path, LESSON_PATH + '/blocks/listen');
+        assert.equal(form.fields.passage.prop, 'passage');
+        assert.equal(form.fields.passage.getValue(), lessonFixture().blocks[1].passage);
     });
 
     it('ac-1: insert, move, remove, field save, and publish call the plan routes', async () => {
@@ -500,5 +517,130 @@ describe('plan builder outline (INIT-004/SPEC-015)', () => {
         assert.match(tabs, /תוכניות/);
         assert.match(tabs, /שיעורים/);
         assert.doesNotMatch(tabs, /data-admin-tab="lessons"[^>]*aria-current/);
+    });
+});
+
+/** Descendants with an attribute (and value). The ad-hoc fake here has no descendant selectors. */
+function all(node, attr, value) {
+    const out = [];
+    walk(node, (child) => {
+        if (child.hasAttribute && child.hasAttribute(attr) && (value === undefined || child.getAttribute(attr) === value)) out.push(child);
+    });
+    return out;
+}
+
+/** Fire a bubbling event through the fake's listeners. */
+function fireEvent(node, type) {
+    const ev = { target: node, type, preventDefault() {} };
+    for (let cur = node; cur; cur = cur.parentNode) {
+        (cur.listeners[type] || []).slice().forEach((fn) => { ev.currentTarget = cur; fn(ev); });
+    }
+}
+
+function inSection(panel, name, attr, value) {
+    const section = all(panel, 'data-plan-section', name)[0];
+    return section ? all(section, attr, value)[0] || null : null;
+}
+describe('plan builder with the schema-driven editor (INIT-008/SPEC-011, SPEC-012)', () => {
+    it('fetches the schema once per mount, after the plan and the lesson', async () => {
+        const { sandbox, calls, panel } = loadBuilder();
+        await sandbox.HebrewPlanBuilder.mount(panel, 'beginner-unit-1');
+        assert.deepEqual(calls.map((c) => c.url), [
+            '/api/plans/beginner-unit-1/parts',
+            '/api/plans/beginner-unit-1/parts?path=' + encodeURIComponent(LESSON_PATH),
+            '/api/plan-schema'
+        ]);
+        childWith(panel.querySelector('[data-plan-block="listen"]'), 'data-plan-edit', '').click();
+        await sandbox.HebrewPlanBuilder.settled();
+        assert.equal(calls.filter((c) => c.url === '/api/plan-schema').length, 1);
+    });
+
+    it('a save sends the revision the server last returned, one PATCH, and keeps other unsaved text', async () => {
+        const { sandbox, calls, panel } = loadBuilder();
+        const Builder = sandbox.HebrewPlanBuilder;
+        await Builder.mount(panel, 'beginner-unit-1');
+        childWith(panel.querySelector('[data-plan-block="introduction"]'), 'data-plan-edit', '').click();
+        await Builder.settled();
+        const meaning = panel.querySelector('textarea[data-plan-field="meaning"]');
+        meaning.value = 'edited meaning';
+        // unsaved text in another field of the same page
+        const title = inSection(panel, 'lesson', 'data-plan-field', 'title');
+        title.value = 'Typed, not saved';
+        childWith(panel, 'data-plan-save-field', meaning.getAttribute('data-plan-field-index')).click();
+        await Builder.settled();
+        const patches = calls.filter((c) => c.method === 'PATCH');
+        assert.equal(patches.length, 1);
+        assert.deepEqual(patches[0].body, {
+            expectedRevision: 3,
+            path: LESSON_PATH + '/blocks/introduction/words/1',
+            field: 'meaning',
+            value: 'edited meaning'
+        });
+        assert.equal(panel.querySelector('[data-plan-revision]').textContent, '4');
+        const kept = inSection(panel, 'lesson', 'data-plan-field', 'title');
+        assert.equal(kept.value, 'Typed, not saved', 'unsaved text in another field survives the repaint');
+    });
+
+    it('the new-block form follows the schema: all eleven types, required fields, and the filled text is sent', async () => {
+        const { sandbox, calls, panel } = loadBuilder();
+        const Builder = sandbox.HebrewPlanBuilder;
+        await Builder.mount(panel, 'beginner-unit-1');
+        const select = panel.querySelector('select[data-plan-new-type]');
+        assert.equal(select.children.length, 11);
+        assert.deepEqual(Array.from(Builder.blockTypes().map((t) => t.type)), select.children.map((o) => o.value));
+        select.value = 'explainer';
+        fireEvent(select, 'change');
+        const draftTitle = () => all(panel.querySelector('[data-plan-new-draft]'), 'data-plan-sub', 'title')[0];
+        assert.ok(draftTitle(), 'the explainer title is a required field');
+        draftTitle().value = 'A page';
+        panel.querySelector('[data-plan-new-id]').value = 'page';
+        panel.querySelector('[data-plan-insert]').click();
+        await Builder.settled();
+        const post = calls.filter((c) => c.method === 'POST' && c.url.endsWith('/blocks'))[0];
+        assert.equal(post.body.block.type, 'explainer');
+        assert.equal(post.body.block.id, 'page');
+        assert.equal(post.body.block.title, 'A page');
+        assert.deepEqual(post.body.block.sections, []);
+    });
+
+    it('a refused insert lists the server rule codes in the form and does not repaint it away', async () => {
+        const { sandbox, panel } = loadBuilder({ failBlocks: true });
+        const Builder = sandbox.HebrewPlanBuilder;
+        await Builder.mount(panel, 'beginner-unit-1');
+        const select = panel.querySelector('select[data-plan-new-type]');
+        select.value = 'explainer';
+        fireEvent(select, 'change');
+        const draftTitle = () => all(panel.querySelector('[data-plan-new-draft]'), 'data-plan-sub', 'title')[0];
+        draftTitle().value = 'kept text';
+        panel.querySelector('[data-plan-new-id]').value = 'page';
+        panel.querySelector('[data-plan-insert]').click();
+        await Builder.settled();
+        const issue = all(panel.querySelector('[data-plan-new-issues]'), 'data-plan-issue', 'schema')[0];
+        assert.match(issue.textContent, /too short/);
+        assert.equal(draftTitle().value, 'kept text');
+        assert.ok(panel.querySelector('[data-plan-finding="schema"]'), 'the validation panel lists it too');
+    });
+
+    it('unmount removes the panel listeners and the editor listeners', async () => {
+        const { sandbox, panel } = loadBuilder();
+        const Builder = sandbox.HebrewPlanBuilder;
+        await Builder.mount(panel, 'beginner-unit-1');
+        assert.ok(panel.listeners.click.length >= 2);
+        Builder.unmount();
+        assert.equal(panel.listeners.click.length, 0);
+        assert.equal(panel.listeners.change.length, 0);
+        assert.equal(panel.listeners.input.length, 0);
+    });
+
+    it('opens the plan, unit, and lesson forms on demand and shows recipe and visibility as selects', async () => {
+        const { sandbox, panel } = loadBuilder();
+        const Builder = sandbox.HebrewPlanBuilder;
+        await Builder.mount(panel, 'beginner-unit-1');
+        assert.equal(inSection(panel, 'lesson', 'data-plan-field', 'recipe').getAttribute('data-plan-widget'), 'select');
+        assert.equal(inSection(panel, 'lesson', 'data-plan-field', 'visibility').getAttribute('data-plan-widget'), 'select');
+        assert.equal(inSection(panel, 'plan', 'data-plan-field'), null, 'closed until opened');
+        inSection(panel, 'plan', 'data-plan-disclose').click();
+        await Builder.settled();
+        assert.ok(inSection(panel, 'plan', 'data-plan-field', 'title'));
     });
 });

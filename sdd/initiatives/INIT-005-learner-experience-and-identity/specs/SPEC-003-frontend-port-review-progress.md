@@ -7,7 +7,7 @@ spec_id: SPEC-003
 initiative_id: INIT-005
 title: "Port Review and Progress; title, focus, scroll, announce"
 domain: frontend
-status: in_progress
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet
@@ -34,14 +34,14 @@ blocks: [SPEC-004, SPEC-009]
 
 ## Understood (agent's read of the intent)
 
-- [ ] und-1: Existing review and progress behaviour and test hooks stay.
-- [ ] und-2: Listeners and timers are removed in `unmount`.
+- [x] und-1: Existing review and progress behaviour and test hooks stay.
+- [x] und-2: Listeners and timers are removed in `unmount`.
 
 ## Acceptance Criteria
 
-- [ ] ac-1 (REQ-008): Review and Progress work inside the shell with no regression against their existing unit tests and applicable Chrome smokes.
-- [ ] ac-2 (REQ-004): on each in-app route change, title updates, focus moves to the main heading, scroll resets (history restores), and a polite live region announces the screen.
-- [ ] ac-3 (REQ-005): the route transition honours `prefers-reduced-motion`.
+- [x] ac-1 (REQ-008): Review and Progress work inside the shell with no regression against their existing unit tests and applicable Chrome smokes. _(Closure: `npm test` green. Chrome smokes pass: navigation, review, progress, sign-in, words, today-lessons. `chrome-production-recall-smoke` fails with "Hebrew was visible before reveal" in the lesson player words step. It fails the same way on a clean HEAD checkout, so it predates this work and is not a route regression.)_
+- [x] ac-2 (REQ-004): on each in-app route change, title updates, focus moves to the main heading, scroll resets (history restores), and a polite live region announces the screen. _(Closure: `test/router-a11y.test.js` plus `test/chrome-navigation-smoke.js` check title, focus on the h1, polite live region text, scroll reset and Back restore.)_
+- [x] ac-3 (REQ-005): the route transition honours `prefers-reduced-motion`. _(Closure: 160 ms fade and rise via `#app-main.route-enter`; off under reduce in CSS and in the router. Verified by unit test and in Chrome with emulated reduced motion.)_
 
 ## Assumptions Ledger
 
@@ -55,10 +55,10 @@ blocks: [SPEC-004, SPEC-009]
 
 ## Deliverables
 
-- [ ] Review and Progress view modules
-- [ ] Router a11y behaviours
-- [ ] Tests for title, focus, announce, reduced motion
-- [ ] Completion summary
+- [x] Review and Progress view modules
+- [x] Router a11y behaviours
+- [x] Tests for title, focus, announce, reduced motion
+- [x] Completion summary
 
 ---
 

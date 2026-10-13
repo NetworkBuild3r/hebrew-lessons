@@ -7,7 +7,7 @@ spec_id: SPEC-004
 initiative_id: INIT-005
 title: "Port Admin; legacy lessons per SPEC-002; route and 401 tests"
 domain: frontend
-status: in_progress
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet
@@ -34,15 +34,15 @@ blocks: [SPEC-011, SPEC-012]
 
 ## Understood
 
-- [ ] und-1: Admin-only routes stay admin-gated server-side; the client hides the link for non-admins as today.
-- [ ] und-2: SPEC-002's spike note is the source of the legacy-lesson rule; this spec implements it, it does not reopen it.
+- [x] und-1: Admin-only routes stay admin-gated server-side; the client hides the link for non-admins as today.
+- [x] und-2: SPEC-002's spike note is the source of the legacy-lesson rule; this spec implements it, it does not reopen it.
 
 ## Acceptance Criteria
 
-- [ ] ac-1 (REQ-008): Admin works inside the shell with existing admin tests and smokes still passing.
-- [ ] ac-2 (REQ-009): legacy lessons follow the SPEC-002 decision (in-shell or full page with the same header).
-- [ ] ac-3 (REQ-007): a 401 from an API call during a view sends the learner to `/login/` with a safe `next`.
-- [ ] ac-4 (REQ-004, REQ-006, REQ-019): tests cover direct URL, unknown route, history back/forward, and that plain `<a href>` still works for open-in-new-tab.
+- [x] ac-1 (REQ-008): Admin works inside the shell with existing admin tests and smokes still passing.
+- [x] ac-2 (REQ-009): legacy lessons follow the SPEC-002 decision (in-shell or full page with the same header). _(Closure: `/worksheets/<slug>/` stays a full page with the shared header mounted by the player.)_
+- [x] ac-3 (REQ-007): a 401 from an API call during a view sends the learner to `/login/` with a safe `next`. _(Closure: every call a view makes without `redirectOn401:false` goes to `/login/?next=<current path>` through `safeNextPath`. Opted-out calls are sign-in, sign-out, sync, and best-effort enrichment (Today mix, per-lesson progress, library/lexicon lookups). They fail soft and do not redirect. A session that expires while only opted-out calls run is caught on the next reload or the next screen with a default call. Tests: `test/api-redirect.test.js`.)_
+- [x] ac-4 (REQ-004, REQ-006, REQ-019): tests cover direct URL, unknown route, history back/forward, and that plain `<a href>` still works for open-in-new-tab. _(Closure: `test/router-a11y.test.js`.)_
 
 ## Assumptions Ledger
 
@@ -56,9 +56,9 @@ blocks: [SPEC-011, SPEC-012]
 
 ## Deliverables
 
-- [ ] Admin view; legacy handling
-- [ ] Route and 401 tests
-- [ ] Completion summary
+- [x] Admin view; legacy handling
+- [x] Route and 401 tests
+- [x] Completion summary
 
 ---
 
@@ -74,8 +74,8 @@ blocks: [SPEC-011, SPEC-012]
 
 - **Sensitivity:** standard. Triggers matched: admin surface, 401 redirect.
 - **Security acceptance criteria:**
-  - [ ] Admin routes remain server-gated.
-  - [ ] `next` uses `safeNextPath`.
+  - [x] Admin routes remain server-gated.
+  - [x] `next` uses `safeNextPath`.
 - **Review depth:** standard.
 
 ---

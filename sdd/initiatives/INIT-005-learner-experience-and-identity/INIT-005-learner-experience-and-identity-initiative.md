@@ -1,7 +1,7 @@
 # Initiative: Learner experience and identity
 
 **Initiative ID:** INIT-005
-**Status:** approved — operator 2026-10-09 ("Approve"). Specs are written; execution starts at SPEC-001.
+**Status:** executed 2026-10-12. SPEC-001, 003 to 006 and 008 to 013 complete; SPEC-007 superseded (look already chosen by INIT-007 / ADR-0010); SPEC-002 stays `in_review` until the operator clicks through the shell and says go (ac-5). Mode E (completion report) not yet run.
 **Slug:** INIT-005-learner-experience-and-identity
 **Created:** 2026-10-09
 **Updated:** 2026-10-09 (added the app-structure work after the navigation complaint)
@@ -127,7 +127,7 @@ Each spec is one domain, 2 to 6 hours. Sizes are planning estimates, not promise
 
 | Spec | Domain | Title | Blocked by | Effort | Gate |
 |------|--------|-------|-----------|--------|------|
-| SPEC-005 | docs | Research RSCH-007: motion, sound, icons and picture style in second-language practice | none | 3h | none |
+| SPEC-005 | docs | Research RSCH-008: motion, sound, icons and picture style in second-language practice | none | 3h | none |
 | SPEC-006 | frontend | Identity: logo, wordmark, favicon, icon set, illustration style guide | none | 5h | **operator picks the logo** |
 | SPEC-007 | frontend | Three tap-through prototypes of one lesson step, inside the SPEC-002 shell | 002, 005, 006 | 5h | **operator picks one look** |
 | SPEC-008 | docs | ADR-0008: new look, tokens and feedback rules (supersedes ADR-0006 look part) | 007 | 3h | none |
@@ -156,7 +156,7 @@ SPEC-005 and SPEC-006 can run while the structure work is in progress. The resty
 
 **SPEC-003 and SPEC-004, ports.** Convert each page script from a global IIFE to a view with `mount` and `unmount`, listeners removed on exit. Then the route behaviours, the 401 path and the direct-URL path are tested.
 
-**SPEC-005, research (RSCH-007).** Four questions, graded with the project's evidence labels: (1) does animated or sound feedback help or distract second-language vocabulary practice; (2) icon plus label versus icon alone for adult novices; (3) does the style of vocabulary pictures change recall; (4) does a "finished" moment affect return to study without points.
+**SPEC-005, research (RSCH-008).** Four questions, graded with the project's evidence labels: (1) does animated or sound feedback help or distract second-language vocabulary practice; (2) icon plus label versus icon alone for adult novices; (3) does the style of vocabulary pictures change recall; (4) does a "finished" moment affect return to study without points.
 
 **SPEC-006, identity.** Three logo options in SVG, a wordmark in the Hebrew type we ship, favicon set, about 20 icons on one grid, and a one-page illustration guide (palette, line weight, background, and the sentence added to every image-generation prompt).
 

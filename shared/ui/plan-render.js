@@ -167,8 +167,9 @@
         var ready = typeof audioPath === 'string' && AUDIO_FILE.test(audioPath);
         var state = ready ? 'ready' : 'none';
         return '<button type="button" class="audio primary" data-plan-audio="' + state + '">'
-            + '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
-            + '<path d="M3 9h4l5-4v14l-5-4H3V9zm12.5 3a4.5 4.5 0 0 0-2.5-4.03v8.06A4.5 4.5 0 0 0 15.5 12z"></path>'
+            // Brand sprite icon (INIT-005/SPEC-010). The visible word is the control's name.
+            + '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+            + '<use href="/shared/brand/sprite.svg#icon-sound"></use>'
             + '</svg>השמעה</button>'
             + '<p class="gloss" data-plan-audio-note></p>';
     }
@@ -1124,6 +1125,7 @@
         escapeHtml: escapeHtml,
         findCheckpoint: findCheckpoint,
         findMeet: findMeet,
+        lessonCard: lessonCard,
         loadPublished: loadPublished,
         normalizeAnswer: normalizeAnswer,
         picture: picture,

@@ -1,11 +1,12 @@
 ---
 name: hebrew-worksheet
 description: >-
-  Edits a Hebrew lesson plan through the plan MCP tools, or a worksheet that
-  has not moved yet through upsert_lesson. Use when the user asks to create,
-  add, edit, or publish a Hebrew lesson, plan, worksheet, or דף עבודה, to
-  turn class notes into a lesson, or to draft the next lesson from the
-  learner profile.
+  Builds and edits a Hebrew lesson plan through the plan MCP tools (create_plan
+  first, then the six operations, list_plan_issues, publish_plan), or edits a
+  worksheet that has not moved yet through upsert_lesson. Use when the user
+  asks to create, add, edit, or publish a Hebrew lesson, plan, worksheet, or
+  דף עבודה, to turn class notes into a lesson, or to draft the next lesson
+  from the learner profile.
 ---
 
 # Hebrew lesson plans
@@ -14,27 +15,72 @@ The server validates every write. This skill names the tools and the rules you f
 
 ## Default path
 
-Edit an existing plan with the MCP tools on the `hebrew-lessons` server. These tools require the server auth token. A missing or wrong token returns no plan body.
+Build and edit lesson plans with the MCP tools on the `hebrew-lessons` server. These tools require the server auth token. A missing or wrong token returns no plan body.
 
-There is no tool that creates a plan id. Edit a plan that is already imported. Ask the operator before expecting a create tool.
+**New lessons are plans.** Start one with `create_plan`. Do not write a new lesson with `upsert_lesson`; that tool is for a worksheet that has not moved onto a plan (see Legacy worksheets). This is a recommendation, not a refusal: the server still accepts `upsert_lesson`.
 
-Imported plan ids include `beginner-unit-1` and the three legacy plans `my-morning`, `anal-sex-vocab`, and `shai-date-indirect-speech`.
+Imported plan ids include `beginner-unit-1` and the three legacy plans `my-morning`, `anal-sex-vocab`, and `shai-date-indirect-speech`. To change one of those, open it with `read_part`.
+
+### The AI-first loop
+
+1. `list_plans` — see what exists: id, title, status, revision, whether a snapshot is published, and how many fields a person last wrote.
+2. `create_plan` for a new lesson (or `read_part` with an empty `path` to open an existing plan).
+3. Build with the six operations (`insert_block`, `replace_part`, `set_field`, `move_block`, `remove_block`, and `read_part` before each edit, below).
+4. `list_plan_issues` — every finding the validator has for the plan, hard errors and warnings, each with an id path and, where one is known, a fix.
+5. Fix what you can with `set_field` or `replace_part`. Use `fix.suggested` where the finding has one.
+6. `publish_plan` when `list_plan_issues` shows no `block` finding. No person approves a publish. See "Publishing" below.
 
 Call these tools by these names:
 
 | Tool | Call |
 | --- | --- |
-| `read_part` | Read the part at `path`. An empty `path` is the whole plan. Returns the part and the current revision. Does not change the plan. |
-| `replace_part` | Replace the part at `path` with `value`. |
+| `list_plans` | List plans: id, title, audience, status, revision, updated time, whether published, whether it has unpublished changes, and `humanEditedFields` (how many fields a person last wrote). Optional `limit`. No assignee name is returned. |
+| `create_plan` | Make a new draft: `id` (a slug), `title`, optional `recipe`, `unitId`, `lessonId`. Revision 1, audience `shared`, lesson `hidden`. It never overwrites: an id that exists returns `already_exists`. |
+| `read_part` | Read the part at `path`. An empty `path` is the whole plan. Returns the part, the current revision, and `editState` (below). Does not change the plan. |
+| `replace_part` | Replace the part at `path` with `value`. The value's `id` must equal the id in the path, or the write returns `id_mismatch`. |
 | `insert_block` | Insert `block` on a lesson path. Pass `index` to place it; omit `index` to append. |
 | `move_block` | Move the block at `path` to `index` inside its lesson. |
 | `remove_block` | Remove the block at `path`. |
-| `set_field` | Set `field` to `value` on the part at `path`. |
-| `publish_plan` | Publish the working copy. Learners keep the previous snapshot until this succeeds. |
+| `set_field` | Set `field` to `value` on the part at `path`. `audience` and `assigneeId` are not settable here: that is `assign_required`. |
+| `list_plan_issues` | List the plan's findings. Optional `severity` (`block`, `warn`, `inform`, `all`, or a list), `code`, `pathPrefix`, `limit`. Returns `counts`, and for each issue `code`, `severity`, `hard`, `path`, `field`, `message`, and `fix`. |
+| `list_plan_revisions` | List the history, newest first: revision, operation, path, field, who (`ai`, `human`, `system`), tool, time. Optional `sinceRevision`, `beforeRevision`, `actorKind`, `pathPrefix`, `limit`. A person appears as `human`, never by name. |
+| `get_plan_revision` | Read the whole document as it was at one revision. |
+| `diff_plan` | Compare two states field by field. `from` and `to` are a revision number, `working`, or `published`. Optional `path`. `no_snapshot` means nothing is published yet. |
+| `restore_plan_revision` | Put an earlier value back as a **new** revision: `fromRevision`, optional `path` and `field` (the narrowest that fits), and `expectedRevision`. History is not edited. It cannot change `audience` or `assigneeId`. |
+| `assign_plan` | The only way to change `audience` or `assigneeId`: `audience` `shared` or `personal`, `assigneeId` for `personal` (an active account), and `expectedRevision`. `assignee_refused` means that account cannot be used. |
+| `publish_plan` | Publish the working copy: `id` and `expectedRevision`, nothing else. Learners keep the previous snapshot until this succeeds. |
 
-Every write sends `expectedRevision`: the integer from the last `read_part` of that plan. A successful mutation increments the revision by 1.
+Every write sends `expectedRevision`: the integer from the last read of that plan. A successful mutation increments the revision by 1.
 
 If the tool returns `revision_conflict`, stop. The stored revision is in the error, and the document is unchanged. Read the part again and apply your edit to that revision. Do not merge.
+
+### A new plan starts with a placeholder block
+
+`create_plan` writes one placeholder block (`fluency-pass`, id `placeholder`) because a lesson must hold a block. Insert your real block first, then `remove_block` the placeholder; removing it first is refused. The unit and lesson ids default to `unit-1` and `lesson-1`. A part id cannot be changed afterwards (`id_mismatch`), so pass `unitId` and `lessonId` to `create_plan` when you want other names. `recipe` sets the lesson's recipe and `schemaVersion` `1.1.0`; it writes no Hebrew and no block shells.
+
+### Read before you edit
+
+Call `read_part` on a part before you change it. Its `editState` lists the fields under that part that **a person last wrote**: each entry has `path`, `field`, `revision`, `previousValue` (the value the person replaced) and `previousWriter` (`ai`, `human`, `system`, or `unknown`). `lastHumanEdit` is the newest person edit anywhere in the plan.
+
+This is advice, not a refusal. Nothing stops you editing a field a person fixed, and nothing is refused because of who wrote last. If you write over one, your result lists it under `overwrote` with the person's value. Read that list. If the person's value was right, call `restore_plan_revision` for that field (`fromRevision` is the `revision` in `editState` or in `overwrote`, `humanRevision`). Prefer to keep a person's fix unless you have a reason, and say what the reason is in your reply.
+
+### Issues
+
+`list_plan_issues` returns hard errors (`severity` `block`; they stop a publish) and warnings. Five checks report as `warn` and never block a write or a publish:
+
+- `pointing-form` — a vowel point with no letter before it, two vowel points on one letter, or text that is not in canonical (NFC) order. The fix is the canonical value.
+- `field-language` — Hebrew in a field meant for English or Latin letters, or the reverse.
+- `lexicon-form` — a word pointed differently from its one lexicon entry, or a meaning or transliteration that differs from a **verified** entry. Treat the lexicon form as the authority only when the entry is `verified`, and only a person verifies a form. Otherwise it is a lead.
+- `pointing-consistency` — one word pointed two ways in one lesson. `fix.candidates` lists the forms; both may be right (a homograph).
+- `audio-stale` — text changed since the last publish while its clip path stayed. See "Audio already in a plan".
+
+A `fix` is `{ action, path, field, suggested }` (or `candidates`, or a `note`). `action` is `set_field` when the field is one property of the node at `path`, and `replace_part` when it is nested; then `suggested` is the new value of that sub-field.
+
+### Publishing
+
+The server publishes any plan with no `block` finding, with no approval step. You may publish. Two things the server still refuses: a `block` finding (`validation`) and a picture still pending on a lesson visible to `everyone` or `selected` (`pending_media`).
+
+**Guidance, not enforcement:** keep a new lesson `hidden` unless the operator asked you to expose it. `visibility` is a field you can set with `set_field`, so you could publish a lesson and show it to learners with no person involved. History and `restore_plan_revision` undo that, but a learner may have seen it first. After you publish, say in your reply what you published, its revision, and which warnings remain.
 
 ### Id paths
 
@@ -88,6 +134,8 @@ After a media id exists, set the introduction word's `image` with `set_field` (o
 
 Copy `audioPath` and `sentenceAudioPath` unchanged, including the same fields on a paragraph, question, pattern item, or line. Do not invent a `.mp3` path. Where the plan has no clip, leave the field absent.
 
+A person's text fix leaves the old clip attached: when a person changes a sentence, passage, or word, its `audioPath` or `sentenceAudioPath` still points at the clip for the old text. `audio-stale` names the text field and the clip. No tool regenerates audio for a plan field (`generate_lesson_audio` works on legacy worksheets only). The fix is to leave the stale clip path out (`replace_part` without it) so the old clip stops playing, or to set a path to a new `.mp3` that already exists. Do not invent a path.
+
 Before any regeneration, run `npm run audio:inventory`. After it, run `npm run audio:verify`.
 
 ### What never goes in a plan file
@@ -106,7 +154,7 @@ Also kept from the course decision: do not add a root or binyan speed drill, do 
 
 ## Legacy worksheets
 
-`upsert_lesson` is the tool for a worksheet that has not moved onto a plan. It is not the plan editor. It does not accept a plan document.
+`upsert_lesson` is the tool for a worksheet that has not moved onto a plan (today, the three existing worksheets). It is not the plan editor. It does not accept a plan document. For a new lesson, prefer `create_plan`; that is a recommendation, not a refusal, and the server still accepts `upsert_lesson`.
 
 For that worksheet only:
 
@@ -138,9 +186,9 @@ The only username in an example is `example-learner`. Pass it as a tool argument
 1. Call `get_learner_profile` with `{ "username": "example-learner" }` only when that is the account the operator named. If the tool returns `planning_off`, stop. Tell the operator the switch is off. Do not retry, do not invent a profile, and do not draft from memory of an earlier profile. `rate_limited` is the same kind of stop: tell the operator and wait. A profile has no glosses. Join a `word_id` to a meaning with `get_lexicon_entry`. The field list and the never-returned list are ADR-0009 §1. Do not paste the profile, or any part of it, into a plan or a lexicon entry.
 2. Choose a recipe. Rotate among `topic-conversation`, `review-worksheet`, `verse-reading`, and `verb-workshop`. Use `letters-and-vowels` when `journey.stage` is `script`. `guide` is not part of that rotation; use it when the operator asks for a reference page. Do not write three lessons in a row with the same recipe (N17, inform). Read the unit you are appending to and pick a different recipe when the previous two lessons already share one. Open with review of weak words. Due dates are not in the profile; do not invent them. End most lessons with a personal question.
 3. Pick words from the profile, then from the lexicon. Recycle `very_weak_words`, then `weak_words`, then words whose stage is `learning` or whose strength is `fragile` or `shaky`. Introduce new words only inside that recipe's cap: N18 for `topic-conversation`, N1 for every other recipe. Cite the id. Do not copy the numbers into the lesson. When any `grammar[]` entry has status `weak` or `very_weak`, the next `verb-workshop` targets the weakest of those (lowest `recent`, then lowest `accuracy`). `list_grammar_concepts` supplies the concept id. It is not learner data.
-4. Write with the plan tools in the default path (`read_part`, `replace_part`, `insert_block`, `move_block`, `remove_block`, `set_field`). A recipe or any of the five blocks (`explainer`, `conjugation-table`, `personal-question`, `verse-reading`, `letter-intro`) belongs in schema `1.1.0`. A part operation that adds one of those to a `1.0.0` plan raises `schemaVersion` to `1.1.0` in that same revision. Set the lesson field `recipe` with `set_field`. Tag every new word with `upsert_lexicon_entries` before you teach it: `pos`, `root`, `binyan`, `tense`, `cell`, and `accept[]`, as [recipes.md](recipes.md) defines. Pass `expectedRev` 0 for a new key, or the current rev when you edit. A `verified` field on the input is ignored. If `add_library_words` returns `unknown_keys`, write the entries first and retry that call. The cap is 50 new library words per learner per local day. `planning_off` on that call writes nothing.
+4. Write with the plan tools in the default path: `create_plan` for a new lesson, then `read_part`, `replace_part`, `insert_block`, `move_block`, `remove_block`, `set_field`, and `list_plan_issues`. A recipe or any of the five blocks (`explainer`, `conjugation-table`, `personal-question`, `verse-reading`, `letter-intro`) belongs in schema `1.1.0`. A part operation that adds one of those to a `1.0.0` plan raises `schemaVersion` to `1.1.0` in that same revision. Set the lesson field `recipe` with `set_field`. Tag every new word with `upsert_lexicon_entries` before you teach it: `pos`, `root`, `binyan`, `tense`, `cell`, and `accept[]`, as [recipes.md](recipes.md) defines. Pass `expectedRev` 0 for a new key, or the current rev when you edit. A `verified` field on the input is ignored. If `add_library_words` returns `unknown_keys`, write the entries first and retry that call. The cap is 50 new library words per learner per local day. `planning_off` on that call writes nothing.
 5. Call `check_text_coverage` on every reading you write (`graded-story`, `listening`, and the `verse` text of a `verse-reading`). `text` is at most 4000 characters. Revise until `coverage` is at least 0.95. That bar is `RSCH-004` §3 rule 1 (Low). The validator's N3 enforces it for `graded-story` and `listening` only. A verse is not blocked by N3. Revise the verse anyway until the tool reports at least 0.95. `planning_off` means nothing was scored; stop and tell the operator.
-6. Save as a draft. Do not call `publish_plan` unless the operator asks in this conversation. Do not call `set_lesson_visibility` to share it. Leave the lesson hidden. Do not call `set_lexicon_verified` or `set_ai_planning`. Both always return `forbidden` and write nothing. Marking a form verified is a person's act. The operator ticks the forms checklist; you do not.
+6. Check and publish. Call `list_plan_issues`, fix what you can, and call `publish_plan` when there is no `block` finding (see "Publishing" above: you may publish without asking). Keep the lesson `hidden` unless the operator asked you to expose it: that is guidance, not something the server enforces. A plan's lesson is exposed through its own `visibility` field, not through `set_lesson_visibility`. Report what you published and which warnings remain. Do not call `set_lexicon_verified` or `set_ai_planning`. Both always return `forbidden` and write nothing. Marking a form verified is a person's act. The operator ticks the forms checklist; you do not.
 
 ### INIT-006 tools
 

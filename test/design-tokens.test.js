@@ -17,6 +17,9 @@ const END = '/* === end INIT-004/SPEC-013 ADR-0006 tokens === */';
 
 /** Class selectors queried by app-shell and the chrome smokes, and defined in the stylesheet. */
 const QUERIED_CLASS_SNAPSHOT = [
+    // INIT-005/SPEC-013: the restyle a11y smoke (chrome-restyle-a11y-smoke.js) queries
+    // admin-row-btn, btn, btn-ghost, hebrew-shell-nav, path-btn and visually-hidden.
+    'admin-row-btn',
     // `audio` and `word` are ADR-0006 styling classes on the plan screens
     // (INIT-004/SPEC-014). Chrome smokes mention `.audio` and `.word` inside
     // script strings (property access). They are not renamed hooks.
@@ -24,11 +27,14 @@ const QUERIED_CLASS_SNAPSHOT = [
     'back-link',
     'banner',
     'banner-amber',
+    'btn',
+    'btn-ghost',
     'en',
     'example',
     'he-word',
     'hebrew-shell',
     'hebrew-shell-link',
+    'hebrew-shell-nav',
     'hebrew-shell-nav-locked',
     'hebrew-shell-privacy',
     'hidden',
@@ -46,6 +52,7 @@ const QUERIED_CLASS_SNAPSHOT = [
     'pair-en',
     'pair-he',
     'pair-num',
+    'path-btn',
     'path-screen',
     'pill',
     'player-top',
@@ -60,6 +67,7 @@ const QUERIED_CLASS_SNAPSHOT = [
     'story-gloss-popover',
     'story-token',
     'type-answer',
+    'visually-hidden',
     'vocab-card',
     'vocab-head',
     'word',

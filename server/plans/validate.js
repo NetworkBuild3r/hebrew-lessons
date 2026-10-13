@@ -3,12 +3,15 @@
  * Decision 6 rule registry, with the schemaVersion 1.1.0 blocks and rules of
  * ADR-0009 §7. A pure function of one document and, for N13 and N14, of the
  * lexicon the caller passes in. Its only I/O is reading the schema file, once.
+ * Five more rules, all warnings with stable codes, come from hebrew-checks.js
+ * and read an optional published snapshot (INIT-008/SPEC-008).
  * Provenance: INIT-004/SPEC-002; schemaVersion 1.1.0: INIT-006/SPEC-011
  */
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
+const { HEBREW_RULES, checkHebrew } = require('./hebrew-checks');
 
 const SCHEMA_PATH = path.join(
     __dirname, '..', '..', 'docs', 'decisions', 'ADR-0003-assets', 'lesson-plan.schema.json'
@@ -25,7 +28,7 @@ const V110 = '1.1.0';
  * to N1, N2, N6, and N7, are ADR-0009 §7 and reach only a 1.1.0 document.
  * A row with `checked: false` is never reported.
  */
-const RULES = deepFreeze({
+const ADR_RULES = {
     schema: {
         severity: 'block',
         summary: 'Matches lesson-plan.schema.json. Unknown properties, an unknown schemaVersion, and a 1.1.0 construct in a 1.0.0 document fail.'
@@ -192,7 +195,19 @@ const RULES = deepFreeze({
         severity: 'block',
         summary: 'Every audio path matches the schema relative .mp3 pattern.'
     }
+};
+
+/**
+ * The five INIT-008 rows (hebrew-checks.js): pointing-form, field-language,
+ * lexicon-form, pointing-consistency, audio-stale. All `warn`; none can block.
+ * They are own properties of RULES, so `RULES[id]` and `hasOwnProperty` find
+ * them, but they are not enumerable: the ADR-0003 Decision 6 table tests
+ * (`Object.keys(RULES)`) keep counting that table's rows only.
+ */
+Object.keys(HEBREW_RULES).forEach((id) => {
+    Object.defineProperty(ADR_RULES, id, { value: HEBREW_RULES[id], enumerable: false });
 });
+const RULES = deepFreeze(ADR_RULES);
 
 /** ADR-0003 §6 closed function list: a denominator for N3, not a claim that these were taught. */
 const FUNCTION_WORDS = Object.freeze([
@@ -261,6 +276,8 @@ const CELL_AT = /^\/units\/(\d+)\/lessons\/(\d+)\/blocks\/(\d+)\/cells\/(\d+)\/c
  * @property {'block'|'warn'|'inform'} severity
  * @property {string} path RFC 6901 pointer into the plan; the empty string is the plan itself.
  * @property {string} message
+ * @property {string} [field] INIT-008 rules only: the pointer remainder below the deepest id node.
+ * @property {object} [fix] INIT-008 rules only: `{ action, path, field, suggested | candidates }`.
  */
 
 /**
@@ -284,8 +301,10 @@ const CELL_AT = /^\/units\/(\d+)\/lessons\/(\d+)\/blocks\/(\d+)\/cells\/(\d+)\/c
  * over its N9 size is reported by size alone: it is refused either way, and
  * this bounds the work and the report an oversized input can cause.
  * @param {unknown} document
- * @param {{ lexicon?: LexiconSource }} [options] N13 and N14 read stored forms
- *   from `lexicon`. Without it every conjugation-table form is an N13 block.
+ * @param {{ lexicon?: LexiconSource, snapshot?: object|string|null }} [options] N13 and N14 read stored forms
+ *   from `lexicon`. Without it every conjugation-table form is an N13 block. `lexicon-form` also
+ *   needs `lexicon.listByStrippedKeys(keys)`. `snapshot` is the published copy, parsed or as
+ *   JSON text, for `audio-stale`; without it that rule is silent.
  * @returns {ValidationResult}
  */
 function validatePlan(document, options) {
@@ -318,7 +337,21 @@ function validatePlan(document, options) {
     checkStrings(plan, schema, findings);
     checkLessonRules(plan, lessons, context, findings);
     checkEstimates(lessons, context, findings);
+    checkHebrewRules(plan, options, findings);
     return findings.result();
+}
+
+/**
+ * The five INIT-008 warnings. They never block: each is added at its registry
+ * severity, `warn`, and `ok` depends on blocks alone.
+ */
+function checkHebrewRules(plan, options, findings) {
+    const given = isObject(options) ? options : {};
+    checkHebrew(plan, { lexicon: given.lexicon, snapshot: given.snapshot }).forEach((item) => {
+        const extra = { field: item.field };
+        if (item.fix) extra.fix = item.fix;
+        findings.add(item.rule, item.path, item.message, RULES[item.rule].severity, extra);
+    });
 }
 
 /**
@@ -389,11 +422,18 @@ function createFindings() {
     const seen = new Set();
     const items = [];
     return {
-        add(rule, at, message, severity) {
-            const key = rule + '\u0000' + at;
+        /**
+         * `extra` carries the `field` and `fix` keys of the INIT-008 rules. A finding with
+         * `extra` is kept once per message, so one field can carry two pointing-form clauses.
+         * Findings of the older rules are given no `extra` and gain no keys.
+         */
+        add(rule, at, message, severity, extra) {
+            const key = rule + '\u0000' + at + (extra ? '\u0000' + message : '');
             if (seen.has(key)) return;
             seen.add(key);
-            items.push({ rule, severity: severity || RULES[rule].severity, path: at, message });
+            const item = { rule, severity: severity || RULES[rule].severity, path: at, message };
+            if (extra) Object.assign(item, extra);
+            items.push(item);
         },
         result() {
             const pick = (severity) => items.filter((item) => item.severity === severity);
@@ -406,6 +446,18 @@ function createFindings() {
 // --- schema --------------------------------------------------------------
 
 let loaded = null;
+let schemaSource = null;
+
+/**
+ * The plan JSON Schema file as text, exactly the bytes the validator reads
+ * from SCHEMA_PATH, read once per process. The admin editor gets it from
+ * GET /api/plan-schema and builds its forms from it (INIT-008/SPEC-010).
+ * @returns {string}
+ */
+function schemaText() {
+    if (schemaSource === null) schemaSource = fs.readFileSync(SCHEMA_PATH, 'utf8');
+    return schemaSource;
+}
 
 /**
  * Read the schema once. Throws on a keyword or type this walker does not
@@ -1509,6 +1561,9 @@ module.exports = {
     SCHEMA_PATH,
     V100,
     V110,
+    exactKey,
+    schemaText,
+    strippedKey,
     tokenize,
     usesV110,
     validate: validatePlan,

@@ -400,7 +400,7 @@ describe('openai image client', () => {
         assert.equal(outbound.body.n, 1);
         assert.equal(outbound.body.size, '1024x1024');
         assert.equal(outbound.body.quality, 'low');
-        assert.equal(outbound.body.prompt, 'a red apple');
+        assert.equal(outbound.body.prompt, 'a red apple ' + images.IMAGE_STYLE_SENTENCE);
         assert.deepEqual(Object.keys(outbound.body).sort(), ['model', 'n', 'prompt', 'quality', 'size']);
         assert.equal(outbound.headers.Authorization, 'Bearer test-key');
         assert.equal(JSON.stringify(outbound.body).includes('test-key'), false);
@@ -418,6 +418,43 @@ describe('openai image client', () => {
         for (const other of ['dall-e', 'imagen', 'stability', 'gpt-image-2', 'gpt-image-1.5']) {
             assert.equal(src.includes(other), false);
         }
+    });
+
+    it('INIT-005/SPEC-010: the house illustration style follows the subject in the outbound prompt only', async () => {
+        const fake = recordingTransport(okResponse());
+        const store = stubStore();
+        await generate({}, { transport: fake.transport, ingest: store.ingestImage, now: T0 });
+        const sent = fake.calls[0].body.prompt;
+        assert.ok(sent.startsWith('a red apple '), 'subject first');
+        assert.ok(sent.endsWith(images.IMAGE_STYLE_SENTENCE), 'style sentence last');
+        assert.equal(sent, images.buildGenerationBody('a red apple').prompt);
+
+        // The constant is the sentence in docs/design/illustration-style.md, word for word.
+        const doc = fs.readFileSync(path.join(root, 'docs', 'design', 'illustration-style.md'), 'utf8');
+        const quoted = doc.split(/\r?\n/).find((line) => line.startsWith('> Flat vector-style'));
+        assert.ok(quoted, 'doc holds the prompt sentence');
+        assert.equal(quoted.slice(2), images.IMAGE_STYLE_SENTENCE);
+
+        // What is stored and checked is the operator's subject, not the style text.
+        assert.equal(store.calls[0].promptText, 'a red apple');
+        assert.equal(JSON.stringify(store.calls[0]).includes('Flat vector-style'), false);
+    });
+
+    it('INIT-005/SPEC-010: the style sentence does not change refusals, dry-run, or confirm', async () => {
+        const fake = recordingTransport(okResponse());
+        // Refusal still looks at the subject alone; the style sentence is never sent when refused.
+        await rejects(generate({ prompt: 'a minor' }, { transport: fake.transport }), 'prompt_refused');
+        await rejects(generate({ confirm: false }, { transport: fake.transport }), 'confirm_required');
+        await rejects(generate({ estimate: 0.5 }, { transport: fake.transport }), 'estimate_mismatch');
+        assert.equal(fake.calls.length, 0);
+        // The dry-run is still the one-image estimate on the subject, with no network call.
+        const plan = await images.planImage({ prompt: 'a red apple' }, { transport: fake.transport });
+        assert.deepEqual(plan, { count: 1, estimatedDollars: 0.011 });
+        assert.equal(fake.calls.length, 0);
+        // The sentence itself would pass the refusal list and the prompt length limit.
+        assert.ok(images.IMAGE_STYLE_SENTENCE.length < 600);
+        const styled = await images.planImage({ prompt: 'a red apple ' + images.IMAGE_STYLE_SENTENCE });
+        assert.equal(styled.count, 1);
     });
 
     it('refuses a sexual act, a minor, or a likeness before any provider call', async () => {

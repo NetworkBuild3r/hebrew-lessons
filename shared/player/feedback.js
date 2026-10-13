@@ -1,11 +1,14 @@
 /**
  * Competence feedback helpers and optional Web Audio tactile chimes.
- * Sound effects are OFF by default (INIT-005 REQ-014 / RSCH-007) and never
- * overlap Hebrew speech. Provenance: INIT-007/SPEC-002.
+ * Sound effects are OFF by default (INIT-005 REQ-014 / RSCH-008) and never
+ * overlap Hebrew speech. "Never overlap" is done by SUPPRESSING: while a clip is
+ * loading or playing, chime() refuses to start a new chime. Nothing is ducked or
+ * faded and no running sound is changed. Provenance: INIT-007/SPEC-002.
  */
 (function (root) {
     const U = root.HebrewUtils;
     const STORAGE_KEY = 'hebrew-sfx-enabled';
+    const MISS_HZ = 440;
 
     const feedback = {
         speechActive: false,
@@ -20,6 +23,13 @@
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+    }
+
+    /** Decorative brand-sprite icon (INIT-005/SPEC-010); the word or control beside it is the name. */
+    function spriteIcon(name) {
+        if (U && typeof U.sprite === 'function') return U.sprite(name);
+        return '<svg class="icon" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-'
+            + name + '"></use></svg>';
     }
 
     function bi(he, en) {
@@ -72,7 +82,8 @@
     }
 
     /**
-     * Tiny sine chime. No-ops when SFX are off or Hebrew speech is active.
+     * Tiny sine chime. Returns false (suppressed, nothing ducked) when SFX are off
+     * or Hebrew speech is active.
      * @param {'correct'|'miss'|'tap'} [kind]
      */
     feedback.chime = function (kind) {
@@ -88,8 +99,10 @@
         const gain = ctx.createGain();
         const type = kind === 'miss' ? 'miss' : kind === 'tap' ? 'tap' : 'correct';
         osc.type = 'sine';
-        osc.frequency.value = type === 'miss' ? 220 : type === 'tap' ? 520 : 660;
-        const peak = type === 'miss' ? 0.04 : 0.055;
+        // RSCH-008 P2: a low 220 Hz "miss" tone reads as a penalty. The miss cue is a
+        // neutral mid tone (440 Hz, A4), no lower than the tap tone, and as quiet as the others.
+        osc.frequency.value = type === 'miss' ? MISS_HZ : type === 'tap' ? 520 : 660;
+        const peak = type === 'miss' ? 0.045 : 0.055;
         const dur = type === 'tap' ? 0.045 : 0.09;
         gain.gain.setValueAtTime(0.0001, now);
         gain.gain.exponentialRampToValueAtTime(peak, now + 0.012);
@@ -122,7 +135,7 @@
         container.classList.remove('feedback-miss');
         const msg = bi(opts.messageHe || 'נכון', opts.messageEn || 'Correct');
         container.innerHTML =
-            '<div class="feedback-mark" aria-hidden="true">✓</div>' +
+            '<div class="feedback-mark" aria-hidden="true">' + spriteIcon('check') + '</div>' +
             '<p class="feedback-msg">' + msg + '</p>';
         feedback.chime('correct');
         return container;
@@ -167,6 +180,7 @@
         const retryBtn = showRetry
             ? '<button type="button" class="btn btn-ghost feedback-retry" data-action="' +
               esc(retryAction) + '">' +
+              spriteIcon('retry') + ' ' +
               bi(opts.retryLabelHe || 'נסו שוב', opts.retryLabelEn || 'Try again') +
               '</button>'
             : '';

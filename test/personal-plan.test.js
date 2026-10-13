@@ -9,6 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { testContext } = require('./helpers/plan-ctx');
 
 const root = path.resolve(__dirname, '..');
 const SAMPLE = path.join(
@@ -63,6 +64,10 @@ describe('personal plan assignee checks', { concurrency: false }, () => {
         tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hebrew-personal-plan-'));
         process.env.LESSONS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'hebrew-personal-plan-lessons-'));
         ({ db, store, ops, personal, users, validatePlan } = freshModules(tmp));
+        // INIT-008/SPEC-002: assign takes a write context; these calls add one and nothing else.
+        const rawPersonal = personal;
+        const writeCtx = testContext('personal-plan-test');
+        personal = { assign: (planStore, id, input) => rawPersonal.assign(planStore, id, input, writeCtx) };
         db.migrate();
     });
 
@@ -106,14 +111,19 @@ describe('personal plan assignee checks', { concurrency: false }, () => {
     }
 
     function withSpies(fn) {
-        const calls = { replacePart: 0, setField: 0, runs: [] };
+        const calls = { assignPlan: 0, replacePart: 0, setField: 0, runs: [] };
+        const originalAssign = ops.assignPlan;
         const originalReplace = ops.replacePart;
         const originalSet = ops.setField;
         const originalRun = db.run.bind(db);
-        ops.replacePart = function (planStore, id, input) {
+        ops.assignPlan = function (planStore, id, input, ctx) {
+            calls.assignPlan += 1;
+            calls.lastAssign = { id: id, input: input };
+            return originalAssign(planStore, id, input, ctx);
+        };
+        ops.replacePart = function () {
             calls.replacePart += 1;
-            calls.lastReplace = { id: id, input: input };
-            return originalReplace(planStore, id, input);
+            return originalReplace.apply(ops, arguments);
         };
         ops.setField = function () {
             calls.setField += 1;
@@ -126,13 +136,14 @@ describe('personal plan assignee checks', { concurrency: false }, () => {
         try {
             return fn(calls);
         } finally {
+            ops.assignPlan = originalAssign;
             ops.replacePart = originalReplace;
             ops.setField = originalSet;
             db.run = originalRun;
         }
     }
 
-    it('ac-1: audience and assigneeId go through replacePart, and personal.js writes no plan SQL', () => {
+    it('ac-1: audience and assigneeId go through assignPlan, and personal.js writes no plan SQL', () => {
         seed();
         createAccount('learner01');
         const src = fs.readFileSync(path.join(root, 'server/plans/personal.js'), 'utf8');
@@ -141,9 +152,9 @@ describe('personal plan assignee checks', { concurrency: false }, () => {
         }
 
         withSpies((calls) => {
-            const originalReplace = ops.replacePart;
-            ops.replacePart = function () {
-                calls.replacePart += 1;
+            const originalAssign = ops.assignPlan;
+            ops.assignPlan = function () {
+                calls.assignPlan += 1;
                 return { error: 'spy' };
             };
             try {
@@ -154,13 +165,13 @@ describe('personal plan assignee checks', { concurrency: false }, () => {
                     expectedRevision: 1
                 });
                 assert.equal(spied.error, 'spy');
-                assert.equal(calls.replacePart, 1);
+                assert.equal(calls.assignPlan, 1);
                 assert.equal(calls.runs.length, 0);
                 const afterSpy = store.loadWorkingCopy(PLAN_ID);
                 assert.equal(afterSpy.document, before.document);
                 assert.equal(afterSpy.revision, before.revision);
             } finally {
-                ops.replacePart = originalReplace;
+                ops.assignPlan = originalAssign;
             }
         });
 
@@ -171,11 +182,11 @@ describe('personal plan assignee checks', { concurrency: false }, () => {
                 expectedRevision: 1
             });
             assert.equal(assigned.error, undefined);
-            assert.equal(calls.replacePart, 1);
+            assert.equal(calls.assignPlan, 1);
+            assert.equal(calls.replacePart, 0);
             assert.equal(calls.setField, 0);
-            assert.equal(calls.lastReplace.input.value.audience, 'personal');
-            assert.equal(calls.lastReplace.input.value.assigneeId, 'learner01');
-            assert.equal(calls.lastReplace.input.path, '');
+            assert.equal(calls.lastAssign.input.audience, 'personal');
+            assert.equal(calls.lastAssign.input.assigneeId, 'learner01');
             const planWrites = calls.runs.filter((sql) => /plans/i.test(sql));
             assert.equal(planWrites.length, 1);
             assert.equal(planWrites[0].includes('password_hash'), false);
@@ -227,12 +238,12 @@ describe('personal plan assignee checks', { concurrency: false }, () => {
         assert.equal(personalPlan.plan.assigneeId, 'learner01');
         assert.equal(personalPlan.revision, 2);
 
-        const calls = { replacePart: 0 };
-        const original = ops.replacePart;
-        ops.replacePart = function (planStore, id, input) {
-            calls.replacePart += 1;
-            calls.value = input.value;
-            return original(planStore, id, input);
+        const calls = { assignPlan: 0 };
+        const original = ops.assignPlan;
+        ops.assignPlan = function (planStore, id, input, ctx) {
+            calls.assignPlan += 1;
+            calls.input = input;
+            return original(planStore, id, input, ctx);
         };
         let shared;
         try {
@@ -242,11 +253,11 @@ describe('personal plan assignee checks', { concurrency: false }, () => {
                 expectedRevision: 2
             });
         } finally {
-            ops.replacePart = original;
+            ops.assignPlan = original;
         }
-        assert.equal(calls.replacePart, 1);
-        assert.equal(calls.value.audience, 'shared');
-        assert.equal(calls.value.assigneeId, null);
+        assert.equal(calls.assignPlan, 1);
+        assert.equal(calls.input.audience, 'shared');
+        assert.equal(calls.input.assigneeId, null);
         assert.equal(shared.error, undefined);
         assert.equal(shared.plan.audience, 'shared');
         assert.equal(shared.plan.assigneeId, null);

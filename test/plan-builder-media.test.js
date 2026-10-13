@@ -12,6 +12,7 @@ const path = require('path');
 const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
+const SCHEMA_TEXT = fs.readFileSync(path.join(root, 'docs', 'decisions', 'ADR-0003-assets', 'lesson-plan.schema.json'), 'utf8');
 const LESSON_PATH = 'units/unit-1/lessons/cafe-order';
 const WORD_PATH = LESSON_PATH + '/blocks/introduction/words/1';
 const ESTIMATE = 7.25;
@@ -256,6 +257,7 @@ function loadBuilder(opts) {
             if (method === 'GET' && target.indexOf('/api/admin/images/image-plan') !== -1) {
                 return json(200, { count: 1, estimatedDollars: ESTIMATE });
             }
+            if (method === 'GET' && String(url) === '/api/plan-schema') return json(200, JSON.parse(SCHEMA_TEXT));
             if (method === 'GET') {
                 const data = target.indexOf('path=') === -1
                     ? { part: planFixture(), revision }
@@ -316,7 +318,9 @@ function loadBuilder(opts) {
     vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'player', 'utils.js'), 'utf8'), sandbox);
     vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'api.js'), 'utf8'), sandbox);
     vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'ui', 'plan-render.js'), 'utf8'), sandbox);
-    vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'admin', 'plan-builder.js'), 'utf8'), sandbox);
+    for (const name of ['plan-hints.js', 'plan-widgets.js', 'plan-form.js', 'plan-builder.js']) {
+        vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'admin', name), 'utf8'), sandbox);
+    }
     return { sandbox, calls, panel: sandbox.document.createElement('div'), lesson };
 }
 
