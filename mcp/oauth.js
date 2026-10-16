@@ -363,6 +363,7 @@ async function googleCallback(res, url) {
         return page(res, 502, 'Google sign-in failed', '<h1>Google sign-in failed</h1><p class="err">Try again from the app.</p>');
     }
     if (!email || allowedEmails().indexOf(email) === -1) {
+        console.error('mcp google callback rejected access_denied ' + (email ? 'not_allowed' : 'unverified'));
         return redirectWith(res, q.redirect_uri, { error: 'access_denied', state: q.state });
     }
     redirectWith(res, q.redirect_uri, { code: issueAuthCode(q), state: q.state });

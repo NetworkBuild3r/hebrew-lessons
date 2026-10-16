@@ -87,7 +87,7 @@ test.before(async () => {
             if (req.url.startsWith('/userinfo')) {
                 const token = String(req.headers.authorization || '').replace(/^Bearer /, '');
                 const map = {
-                    'gat-good': { email: 'Owner@Example.com', email_verified: true },
+                    'gat-good': { email: 'Owner@Example.com', verified_email: true, id: 'sub-owner' },
                     'gat-stranger': { email: 'stranger@example.com', email_verified: true },
                     'gat-unverified': { email: 'owner@example.com', email_verified: false }
                 };

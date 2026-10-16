@@ -94,12 +94,15 @@ async function identityFromCode(input) {
     });
     if (!infoRes.ok) throw new Error('google');
     const info = await infoRes.json();
-    if (!info || (info.email_verified !== true && info.email_verified !== 'true')) return null;
+    // OpenID userinfo says email_verified. The OAuth2 v2 userinfo this client returns says verified_email.
+    const verified = info && (info.email_verified === true || info.email_verified === 'true'
+        || info.verified_email === true || info.verified_email === 'true');
+    if (!verified) return null;
     const email = String(info.email || '').trim().toLowerCase();
     if (!email) return null;
     const combined = [info.given_name, info.family_name].filter(Boolean).join(' ');
     const name = String(info.name || combined || '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80);
-    return { email: email, sub: String(info.sub || ''), name: name };
+    return { email: email, sub: String(info.sub || info.id || ''), name: name };
 }
 
 module.exports = {

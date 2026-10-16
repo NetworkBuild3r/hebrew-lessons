@@ -88,7 +88,7 @@ describe('Google app sign-in', () => {
                 if (req.url.startsWith('/userinfo')) {
                     const token = String(req.headers.authorization || '').replace(/^Bearer /, '');
                     const map = {
-                        'gat-good': { email: 'Owner@Example.com', email_verified: true, sub: 'sub-owner', name: 'Owner Person', given_name: 'Owner' },
+                        'gat-good': { email: 'Owner@Example.com', verified_email: true, id: 'sub-owner', name: 'Owner Person', given_name: 'Owner' },
                         'gat-stranger': { email: 'stranger@example.com', email_verified: true, sub: 'sub-stranger', name: 'Sam Stranger' },
                         'gat-alice': { email: 'alice@example.com', email_verified: true, sub: 'sub-alice-google', name: 'Alice Google' },
                         'gat-unverified': { email: 'owner@example.com', email_verified: false, sub: 'sub-owner' }
