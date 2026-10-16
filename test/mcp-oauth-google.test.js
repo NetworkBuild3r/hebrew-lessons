@@ -167,21 +167,23 @@ async function begin(clientId, challenge) {
 
 test('Google sign-in replaces the token form and still issues an MCP token', async () => {
     const clientId = await register();
-    assert.strictEqual(await register(), clientId);
+    assert.match(clientId, /^[0-9a-f-]{36}$/);
     const otherClient = JSON.parse((await call('POST', '/register', {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ client_name: 'Cursor', redirect_uris: [CB] })
     })).data).client_id;
     const { verifier, challenge } = pkce();
     const state = await begin(clientId, challenge);
+    assert.ok(state.length <= 48);
 
     const ok = await call('GET', '/oauth/google/callback?code=good&state=' + encodeURIComponent(state));
     const granted = pageTarget(ok);
     assert.strictEqual(granted.searchParams.get('state'), 'st8');
     const code = granted.searchParams.get('code');
-    assert.ok(code);
+    assert.ok(code && code.length <= 48);
     assert.doesNotMatch(ok.data, /Owner@Example.com/i);
 
+    const oauth = require('../mcp/oauth');
     const token = await call('POST', '/token', {
         headers: FORM,
         body: form({ grant_type: 'authorization_code', code, client_id: otherClient, redirect_uri: CB, code_verifier: verifier })
@@ -190,7 +192,8 @@ test('Google sign-in replaces the token form and still issues an MCP token', asy
     assert.strictEqual(token.headers['access-control-allow-origin'], '*');
     const issued = JSON.parse(token.data);
     const access = issued.access_token;
-    const claims = JSON.parse(Buffer.from(access.split('.')[0], 'base64url').toString());
+    assert.ok(access.length <= 48);
+    const claims = oauth.verifyAccessToken(access);
     assert.strictEqual(claims.un, 'owner');
     assert.ok(claims.uid);
     const refreshed = await call('POST', '/token', {
@@ -198,7 +201,8 @@ test('Google sign-in replaces the token form and still issues an MCP token', asy
         body: form({ grant_type: 'refresh_token', refresh_token: issued.refresh_token, client_id: clientId })
     });
     assert.strictEqual(refreshed.status, 200);
-    const again = JSON.parse(Buffer.from(JSON.parse(refreshed.data).access_token.split('.')[0], 'base64url').toString());
+    const refreshedAccess = JSON.parse(refreshed.data).access_token;
+    const again = oauth.verifyAccessToken(refreshedAccess);
     assert.strictEqual(again.uid, claims.uid);
     assert.strictEqual(again.un, 'owner');
     const mcp = await call('POST', '/mcp', {

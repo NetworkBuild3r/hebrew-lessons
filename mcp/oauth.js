@@ -7,12 +7,15 @@
 // URI. The Google leg is a confidential-client code exchange (client secret, scopes email
 // and profile). Cursor cannot send the site cookie, so this browser step is the link.
 //
-// Without those two Google variables, /authorize still asks for MCP_AUTH_TOKEN. Everything
-// issued (client ids, auth codes, access and refresh tokens) is an HMAC-signed blob keyed
-// from MCP_AUTH_TOKEN, so rotating that token revokes every client, grant, and token at once.
+// Without those two Google variables, /authorize still asks for MCP_AUTH_TOKEN.
+// Registered clients and issued tokens are stored as short opaque IDs (UUID client_id,
+// 43-char code/access/refresh) persisted under DATA_DIR so Cursor's OAuth broker never
+// rejects oversized HMAC blobs, while HMAC tokens remain accepted for compatibility.
 //
 // Enabled only when MCP_PUBLIC_URL (the https origin clients use) and MCP_AUTH_TOKEN are both set.
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { AsyncLocalStorage } = require('async_hooks');
 const google = require('../server/auth/google');
 const accounts = require('../server/accounts');
@@ -24,7 +27,6 @@ const REFRESH_TTL = 30 * 24 * 3600;
 const CODE_TTL = 600;
 const REQUEST_TTL = 600;
 const CLIENT_TTL = 400 * 24 * 3600;
-const CLIENT_EXP = 4102444800;
 const MAX_FORM = 64 * 1024;
 const MAX_FAILS = 10;
 const FAIL_WINDOW_MS = 10 * 60 * 1000;
@@ -40,7 +42,11 @@ const DEFAULT_REDIRECTS = [
 ];
 
 const usedCodes = new Map();
+const codes = new Map();
+const pendingReqs = new Map();
 let failures = [];
+let cachedStore = null;
+let cachedStoreKey = '';
 
 function baseUrl() {
     return String(process.env.MCP_PUBLIC_URL || '').replace(/\/+$/, '');
@@ -81,8 +87,72 @@ function key() {
     return crypto.createHmac('sha256', process.env.MCP_AUTH_TOKEN).update('hebrew-mcp-oauth-v1').digest();
 }
 
+function tokenHash(raw) {
+    return crypto.createHmac('sha256', key()).update(String(raw)).digest('hex');
+}
+
 function now() {
     return Math.floor(Date.now() / 1000);
+}
+
+function storeFile() {
+    const dir = process.env.DATA_DIR;
+    if (!dir) return '';
+    return path.join(dir, 'mcp-oauth-state.json');
+}
+
+function loadStore() {
+    const file = storeFile();
+    const cacheKey = file + '|' + String(process.env.MCP_AUTH_TOKEN || '');
+    if (cachedStore && cachedStoreKey === cacheKey) return cachedStore;
+    const empty = { clients: {}, access: {}, refresh: {} };
+    if (file && fs.existsSync(file)) {
+        try {
+            const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+            if (raw && typeof raw === 'object') {
+                if (raw.clients && typeof raw.clients === 'object') empty.clients = raw.clients;
+                if (raw.access && typeof raw.access === 'object') empty.access = raw.access;
+                if (raw.refresh && typeof raw.refresh === 'object') empty.refresh = raw.refresh;
+            }
+        } catch (err) {
+            console.error('mcp oauth state load failed');
+        }
+    }
+    cachedStore = empty;
+    cachedStoreKey = cacheKey;
+    return empty;
+}
+
+function saveStore() {
+    const file = storeFile();
+    if (!file || !cachedStore) return;
+    try {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        const tmp = file + '.tmp-' + process.pid;
+        fs.writeFileSync(tmp, JSON.stringify(cachedStore), { mode: 0o600 });
+        fs.renameSync(tmp, file);
+    } catch (err) {
+        console.error('mcp oauth state save failed');
+    }
+}
+
+function sweepStore() {
+    const t = now();
+    usedCodes.forEach((exp, jti) => { if (exp <= t) usedCodes.delete(jti); });
+    codes.forEach((rec, code) => { if (rec.exp <= t) codes.delete(code); });
+    pendingReqs.forEach((rec, id) => { if (rec.exp <= t) pendingReqs.delete(id); });
+    const store = loadStore();
+    let dirty = false;
+    Object.keys(store.access).forEach(k => {
+        if (store.access[k].exp <= t) { delete store.access[k]; dirty = true; }
+    });
+    Object.keys(store.refresh).forEach(k => {
+        if (store.refresh[k].exp <= t) { delete store.refresh[k]; dirty = true; }
+    });
+    Object.keys(store.clients).forEach(k => {
+        if (store.clients[k].exp && store.clients[k].exp <= t) { delete store.clients[k]; dirty = true; }
+    });
+    if (dirty) saveStore();
 }
 
 function sign(type, ttl, claims) {
@@ -90,27 +160,6 @@ function sign(type, ttl, claims) {
     const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
     const sig = crypto.createHmac('sha256', key()).update(body).digest('base64url');
     return body + '.' + sig;
-}
-
-// Deterministic client_id for the same (redirect_uris, client_name) so repeated DCR calls
-// from Cursor / Grok Bot never produce a client_id mismatch between /authorize and /token.
-function signClient(uris, name) {
-    const payload = { ru: uris, nm: name, t: 'client', exp: CLIENT_EXP };
-    const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
-    const sig = crypto.createHmac('sha256', key()).update(body).digest('base64url');
-    return body + '.' + sig;
-}
-
-function basicClientId(req) {
-    const m = /^Basic\s+(\S+)$/i.exec(String(req && req.headers && req.headers.authorization || ''));
-    if (!m) return '';
-    try {
-        const raw = Buffer.from(m[1], 'base64').toString('utf8');
-        const idx = raw.indexOf(':');
-        return decodeURIComponent(idx >= 0 ? raw.slice(0, idx) : raw);
-    } catch (err) {
-        return '';
-    }
 }
 
 function verify(token, type) {
@@ -127,15 +176,37 @@ function verify(token, type) {
     return payload;
 }
 
+function findClient(clientId) {
+    if (typeof clientId !== 'string' || !clientId) return null;
+    const store = loadStore();
+    const stored = store.clients[clientId];
+    if (stored && (!stored.exp || stored.exp > now())) return stored;
+    return verify(clientId, 'client');
+}
+
+function basicAuth(req) {
+    const m = /^Basic\s+(\S+)$/i.exec(String(req && req.headers && req.headers.authorization || ''));
+    if (!m) return null;
+    try {
+        const raw = Buffer.from(m[1], 'base64').toString('utf8');
+        const idx = raw.indexOf(':');
+        if (idx < 0) return { clientId: decodeURIComponent(raw), clientSecret: '' };
+        return {
+            clientId: decodeURIComponent(raw.slice(0, idx)),
+            clientSecret: decodeURIComponent(raw.slice(idx + 1))
+        };
+    } catch (err) {
+        return null;
+    }
+}
+
 function sameSecret(a, b) {
     const x = crypto.createHash('sha256').update(String(a)).digest();
     const y = crypto.createHash('sha256').update(String(b)).digest();
     return crypto.timingSafeEqual(x, y);
 }
 
-function verifyAccessToken(token) {
-    if (!enabled()) return null;
-    const payload = verify(token, 'access');
+function resolvePayloadUser(payload) {
     if (!payload) return null;
     if (payload.uid == null) {
         if (googleConfigured() && allowedEmails().length === 1) {
@@ -147,6 +218,19 @@ function verifyAccessToken(token) {
     const user = accounts.findActiveUser(payload.uid);
     if (!user || (payload.un && user.username !== payload.un)) return null;
     return payload;
+}
+
+function verifyAccessToken(token) {
+    if (!enabled() || typeof token !== 'string' || !token) return null;
+    const store = loadStore();
+    const h = tokenHash(token);
+    const stored = store.access[h];
+    if (stored && stored.exp > now()) {
+        return resolvePayloadUser(stored);
+    }
+    const payload = verify(token, 'access');
+    if (!payload) return null;
+    return resolvePayloadUser(payload);
 }
 
 function runAs(principal, fn) {
@@ -166,7 +250,7 @@ function resourceMetadataUrl() {
 function withCors(headers) {
     return Object.assign({
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept, MCP-Protocol-Version',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
     }, headers || {});
 }
@@ -174,7 +258,8 @@ function withCors(headers) {
 function json(res, status, body, extra) {
     res.writeHead(status, withCors(Object.assign({
         'Content-Type': 'application/json; charset=utf-8',
-        'Cache-Control': 'no-store'
+        'Cache-Control': 'no-store',
+        'Pragma': 'no-cache'
     }, extra || {})));
     res.end(JSON.stringify(body));
 }
@@ -247,7 +332,7 @@ function metadata(res) {
         response_types_supported: ['code'],
         grant_types_supported: ['authorization_code', 'refresh_token'],
         code_challenge_methods_supported: ['S256'],
-        token_endpoint_auth_methods_supported: ['none'],
+        token_endpoint_auth_methods_supported: ['none', 'client_secret_post', 'client_secret_basic'],
         scopes_supported: [SCOPE]
     });
 }
@@ -277,22 +362,43 @@ async function register(req, res) {
         console.error('mcp oauth register rejected redirect_uri');
         return oauthError(res, 400, 'invalid_redirect_uri', 'redirect_uri is not allowed by this server: ' + bad.slice(0, 120));
     }
+    sweepStore();
     const name = String(body.client_name || 'MCP client').slice(0, 80);
-    const clientId = signClient(uris, name);
-    console.error('mcp oauth register ok ' + name);
-    json(res, 201, {
+    const requestedMethod = body.token_endpoint_auth_method;
+    const authMethod = (requestedMethod === 'client_secret_post' || requestedMethod === 'client_secret_basic' || requestedMethod === 'none')
+        ? requestedMethod
+        : 'none';
+    const clientId = crypto.randomUUID();
+    const issuedAt = now();
+    const clientSecret = authMethod === 'none' ? undefined : crypto.randomBytes(24).toString('hex');
+    const store = loadStore();
+    store.clients[clientId] = {
+        ru: uris,
+        nm: name,
+        am: authMethod,
+        sh: clientSecret ? tokenHash(clientSecret) : undefined,
+        exp: issuedAt + CLIENT_TTL
+    };
+    saveStore();
+    console.error('mcp oauth register ok ' + name + ' id=' + clientId + ' method=' + authMethod);
+    const reply = {
         client_id: clientId,
-        client_id_issued_at: now(),
+        client_id_issued_at: issuedAt,
         client_name: name,
         redirect_uris: uris,
         grant_types: ['authorization_code', 'refresh_token'],
         response_types: ['code'],
-        token_endpoint_auth_method: 'none'
-    });
+        token_endpoint_auth_method: authMethod
+    };
+    if (clientSecret) {
+        reply.client_secret = clientSecret;
+        reply.client_secret_expires_at = 0;
+    }
+    json(res, 201, reply);
 }
 
 function resolveAuthorizeRequest(q) {
-    const client = verify(q.client_id, 'client');
+    const client = findClient(q.client_id);
     if (!client) return { fatal: 'Unknown or expired client. Register again.' };
     if (!q.redirect_uri || !client.ru.includes(q.redirect_uri) || !redirectAllowed(q.redirect_uri)) {
         return { fatal: 'redirect_uri does not match this client.' };
@@ -310,7 +416,7 @@ function resolveAuthorizeRequest(q) {
 function sendRedirect(res, target, plainTitle) {
     const isWeb = /^https?:\/\//i.test(target);
     if (isWeb) {
-        res.writeHead(302, withCors({ Location: target, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }));
+        res.writeHead(303, withCors({ Location: target, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }));
         res.end();
         return;
     }
@@ -330,6 +436,30 @@ function redirectWith(res, redirectUri, params) {
     const url = new URL(redirectUri);
     Object.keys(params).forEach(k => { if (params[k] !== undefined && params[k] !== '') url.searchParams.set(k, params[k]); });
     sendRedirect(res, url.toString(), params.error ? 'Access was not granted.' : 'Signed in. Returning to the app.');
+}
+
+function savePendingRequest(q) {
+    sweepStore();
+    const id = crypto.randomBytes(24).toString('base64url');
+    pendingReqs.set(id, {
+        cid: q.client_id,
+        ru: q.redirect_uri,
+        cc: q.code_challenge,
+        st: q.state || '',
+        exp: now() + REQUEST_TTL
+    });
+    return id;
+}
+
+function loadPendingRequest(stateParam) {
+    if (typeof stateParam !== 'string' || !stateParam) return null;
+    const mem = pendingReqs.get(stateParam);
+    if (mem) {
+        pendingReqs.delete(stateParam);
+        if (mem.exp > now()) return mem;
+        return null;
+    }
+    return verify(stateParam, 'req');
 }
 
 function renderConsent(res, resolved, q, message, status) {
@@ -358,14 +488,32 @@ function lockedOut() {
 }
 
 function issueAuthCode(q, user) {
-    const claims = {
-        jti: crypto.randomBytes(12).toString('base64url'), cid: q.client_id, ru: q.redirect_uri, cc: q.code_challenge
+    sweepStore();
+    const code = crypto.randomBytes(32).toString('base64url');
+    const record = {
+        jti: code,
+        cid: q.client_id,
+        ru: q.redirect_uri,
+        cc: q.code_challenge,
+        exp: now() + CODE_TTL
     };
     if (user) {
-        claims.uid = user.id;
-        claims.un = user.username;
+        record.uid = user.id;
+        record.un = user.username;
     }
-    return sign('code', CODE_TTL, claims);
+    codes.set(code, record);
+    return code;
+}
+
+function loadAuthCode(code) {
+    if (typeof code !== 'string' || !code) return null;
+    const mem = codes.get(code);
+    if (mem) {
+        if (mem.exp > now()) return mem;
+        codes.delete(code);
+        return null;
+    }
+    return verify(code, 'code');
 }
 
 function tokenUser(grant) {
@@ -386,9 +534,7 @@ function startGoogle(res, q) {
         return page(res, 503, 'Sign-in is not configured',
             '<h1>Sign-in is not configured</h1><p class="err">No allowed email is set.</p>');
     }
-    const state = sign('req', REQUEST_TTL, {
-        cid: q.client_id, ru: q.redirect_uri, cc: q.code_challenge, st: q.state || ''
-    });
+    const state = savePendingRequest(q);
     let location;
     try {
         location = google.authorizationUrl({
@@ -411,8 +557,9 @@ async function googleIdentity(code) {
 
 async function googleCallback(res, url) {
     if (!googleConfigured()) return page(res, 404, 'Not found', '<p>Not found.</p>');
-    const pending = verify(url.searchParams.get('state'), 'req');
+    const pending = loadPendingRequest(url.searchParams.get('state'));
     if (!pending) {
+        console.error('mcp google callback expired state');
         return page(res, 400, 'Expired', '<h1>Sign-in expired</h1><p>Start again from the app.</p>');
     }
     const q = {
@@ -421,6 +568,7 @@ async function googleCallback(res, url) {
     };
     const resolved = resolveAuthorizeRequest(q);
     if (resolved.fatal || resolved.redirectError) {
+        console.error('mcp google callback invalid request');
         return page(res, 400, 'Cannot sign in', '<h1>Cannot sign in</h1><p class="err">Invalid request.</p>');
     }
     const err = url.searchParams.get('error');
@@ -449,8 +597,9 @@ async function googleCallback(res, url) {
         console.error('mcp google callback rejected access_denied not_linked');
         return redirectWith(res, q.redirect_uri, { error: 'access_denied', state: q.state });
     }
-    console.error('mcp google callback ok uid=' + user.id);
-    redirectWith(res, q.redirect_uri, { code: issueAuthCode(q, user), state: q.state });
+    const issuedCode = issueAuthCode(q, user);
+    console.error('mcp google callback ok uid=' + user.id + ' cid=' + q.client_id + ' ru=' + q.redirect_uri + ' code_len=' + issuedCode.length);
+    redirectWith(res, q.redirect_uri, { code: issuedCode, state: q.state });
 }
 
 function authorizeGet(req, res, url) {
@@ -458,14 +607,14 @@ function authorizeGet(req, res, url) {
     url.searchParams.forEach((value, name) => { if (!(name in q)) q[name] = value; });
     const resolved = resolveAuthorizeRequest(q);
     if (resolved.fatal) {
-        console.error('mcp oauth authorize fatal');
+        console.error('mcp oauth authorize fatal: ' + resolved.fatal);
         return page(res, 400, 'Cannot sign in', '<h1>Cannot sign in</h1><p class="err">' + esc(resolved.fatal) + '</p>');
     }
     if (resolved.redirectError) {
         console.error('mcp oauth authorize ' + resolved.redirectError);
         return redirectWith(res, q.redirect_uri, { error: resolved.redirectError, error_description: resolved.description, state: q.state });
     }
-    console.error('mcp oauth authorize ok');
+    console.error('mcp oauth authorize ok cid=' + q.client_id + ' ru=' + q.redirect_uri + ' state_len=' + String(q.state || '').length);
     if (googleConfigured()) return startGoogle(res, q);
     renderConsent(res, resolved, q);
 }
@@ -478,7 +627,7 @@ async function authorizePost(req, res) {
     try { form = await readForm(req); } catch (err) {
         return page(res, err.status || 400, 'Bad request', '<p class="err">Bad request.</p>');
     }
-    const pending = verify(form.req, 'req');
+    const pending = loadPendingRequest(form.req);
     if (!pending) {
         return page(res, 400, 'Expired', '<h1>Sign-in expired</h1><p>Start again from the app.</p>');
     }
@@ -502,39 +651,55 @@ async function authorizePost(req, res) {
 }
 
 function issueTokens(res, clientId, userClaims) {
+    sweepStore();
     const claims = Object.assign({ cid: clientId, scope: SCOPE }, userClaims || {});
+    const accessToken = crypto.randomBytes(32).toString('base64url');
+    const refreshToken = crypto.randomBytes(32).toString('base64url');
+    const t = now();
+    const store = loadStore();
+    store.access[tokenHash(accessToken)] = Object.assign({}, claims, { exp: t + ACCESS_TTL });
+    store.refresh[tokenHash(refreshToken)] = Object.assign({}, claims, { exp: t + REFRESH_TTL });
+    saveStore();
     json(res, 200, {
-        access_token: sign('access', ACCESS_TTL, claims),
+        access_token: accessToken,
         token_type: 'Bearer',
         expires_in: ACCESS_TTL,
-        refresh_token: sign('refresh', REFRESH_TTL, claims),
+        refresh_token: refreshToken,
         scope: SCOPE
     });
 }
 
-function sweepUsedCodes() {
-    const t = now();
-    usedCodes.forEach((exp, jti) => { if (exp <= t) usedCodes.delete(jti); });
+function loadRefreshGrant(token) {
+    if (typeof token !== 'string' || !token) return null;
+    const store = loadStore();
+    const h = tokenHash(token);
+    const stored = store.refresh[h];
+    if (stored && stored.exp > now()) return { grant: stored, hash: h };
+    const verified = verify(token, 'refresh');
+    if (verified) return { grant: verified, hash: '' };
+    return null;
 }
 
 async function token(req, res) {
     let form;
     try { form = await readForm(req); } catch (err) {
+        console.error('mcp token invalid_request body');
         return oauthError(res, err.status || 400, 'invalid_request', 'Bad body.');
     }
+    const basic = basicAuth(req);
     if (form.grant_type === 'authorization_code') {
-        const grant = verify(form.code, 'code');
+        const grant = loadAuthCode(form.code);
         if (!grant) {
             console.error('mcp token authorization_code invalid_grant code');
             return oauthError(res, 400, 'invalid_grant', 'Code is invalid or expired.');
         }
-        sweepUsedCodes();
+        sweepStore();
         if (usedCodes.has(grant.jti)) {
             console.error('mcp token authorization_code invalid_grant used_code');
             return oauthError(res, 400, 'invalid_grant', 'Code was already used.');
         }
-        const givenClientId = form.client_id || basicClientId(req) || grant.cid;
-        const client = verify(givenClientId, 'client');
+        const givenClientId = form.client_id || (basic && basic.clientId) || grant.cid;
+        const client = findClient(givenClientId) || findClient(grant.cid);
         const redirectOk = !form.redirect_uri || form.redirect_uri === grant.ru;
         const clientOk = Boolean(client && Array.isArray(client.ru) && client.ru.includes(grant.ru));
         if (!clientOk || !redirectOk) {
@@ -546,31 +711,34 @@ async function token(req, res) {
             return oauthError(res, 400, 'invalid_grant', 'PKCE verification failed.');
         }
         usedCodes.set(grant.jti, grant.exp);
+        codes.delete(form.code);
         const userClaims = tokenUser(grant);
         if (!userClaims) {
             console.error('mcp token authorization_code invalid_grant account');
             return oauthError(res, 400, 'invalid_grant', 'That account can no longer sign in.');
         }
-        console.error('mcp token authorization_code ok' + (userClaims.uid != null ? ' uid' : ''));
+        console.error('mcp token authorization_code ok' + (userClaims.uid != null ? ' uid=' + userClaims.uid : ''));
         return issueTokens(res, givenClientId, userClaims);
     }
     if (form.grant_type === 'refresh_token') {
-        const grant = verify(form.refresh_token, 'refresh');
-        if (!grant) {
+        const loaded = loadRefreshGrant(form.refresh_token);
+        if (!loaded) {
             console.error('mcp token refresh_token invalid_grant token');
             return oauthError(res, 400, 'invalid_grant', 'Refresh token is invalid or expired.');
         }
-        const givenClientId = form.client_id || basicClientId(req) || grant.cid;
-        if (!verify(givenClientId, 'client') || !verify(grant.cid, 'client')) {
-            console.error('mcp token refresh_token invalid_grant client');
-            return oauthError(res, 400, 'invalid_grant', 'Client is no longer registered.');
-        }
+        const grant = loaded.grant;
+        const givenClientId = form.client_id || (basic && basic.clientId) || grant.cid;
         const userClaims = tokenUser(grant);
         if (!userClaims) {
             console.error('mcp token refresh_token invalid_grant account');
             return oauthError(res, 400, 'invalid_grant', 'That account can no longer sign in.');
         }
-        console.error('mcp token refresh_token ok' + (userClaims.uid != null ? ' uid' : ''));
+        if (loaded.hash) {
+            const store = loadStore();
+            delete store.refresh[loaded.hash];
+            saveStore();
+        }
+        console.error('mcp token refresh_token ok' + (userClaims.uid != null ? ' uid=' + userClaims.uid : ''));
         return issueTokens(res, givenClientId, userClaims);
     }
     console.error('mcp token unsupported_grant_type');
