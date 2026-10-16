@@ -128,7 +128,6 @@ function register(router) {
         try {
             identity = await google.identityFromCode({
                 code: code,
-                verifier: pending.v,
                 redirectUri: googleLogin.redirectUri()
             });
         } catch (err) {

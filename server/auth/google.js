@@ -35,7 +35,7 @@ function tokenEndpoint() {
 }
 
 function userinfoEndpoint() {
-    return process.env.GOOGLE_OAUTH_USERINFO_URL || 'https://openidconnect.googleapis.com/v1/userinfo';
+    return process.env.GOOGLE_OAUTH_USERINFO_URL || 'https://www.googleapis.com/oauth2/v2/userinfo';
 }
 
 /**
@@ -47,12 +47,15 @@ function authorizationUrl(input) {
     auth.searchParams.set('client_id', clientId());
     auth.searchParams.set('redirect_uri', input.redirectUri);
     auth.searchParams.set('response_type', 'code');
-    auth.searchParams.set('scope', 'openid email profile');
+    // email + profile only. This is a confidential web client (client secret), the same
+    // shape oauth2-proxy uses. openid, PKCE, and prompt=select_account make Google send
+    // the browser back with an error, which Cursor shows as a token-exchange server_error.
+    auth.searchParams.set('scope', 'email profile');
     auth.searchParams.set('state', input.state);
-    auth.searchParams.set('code_challenge', input.codeChallenge);
-    auth.searchParams.set('code_challenge_method', 'S256');
-    auth.searchParams.set('access_type', 'online');
-    auth.searchParams.set('prompt', 'select_account');
+    if (input.codeChallenge) {
+        auth.searchParams.set('code_challenge', input.codeChallenge);
+        auth.searchParams.set('code_challenge_method', 'S256');
+    }
     return auth.toString();
 }
 
@@ -69,15 +72,19 @@ async function identityFromCode(input) {
         client_id: clientId(),
         client_secret: clientSecret(),
         redirect_uri: input.redirectUri,
-        grant_type: 'authorization_code',
-        code_verifier: input.verifier
+        grant_type: 'authorization_code'
     });
+    if (input.verifier) body.set('code_verifier', input.verifier);
     const tokenRes = await fetch(tokenEndpoint(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
         body: body
     });
-    if (!tokenRes.ok) throw new Error('google');
+    if (!tokenRes.ok) {
+        const err = new Error('google');
+        err.statusCode = tokenRes.status;
+        throw err;
+    }
     const tokenJson = await tokenRes.json();
     if (!tokenJson || typeof tokenJson.access_token !== 'string' || !tokenJson.access_token) {
         throw new Error('google');

@@ -1,9 +1,9 @@
 // MCP authorization (OAuth 2.1 + PKCE + dynamic client registration), single owner, no database.
 //
 // When GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are set, /authorize sends the
-// owner to Google and accepts only the emails in MCP_OAUTH_ALLOWED_EMAILS. Those are the
-// same client credentials oauth2-proxy uses for Tautulli. The Google client must list
-// {MCP_PUBLIC_URL}/oauth/google/callback as a redirect URI.
+// owner to Google and accepts only the emails in MCP_OAUTH_ALLOWED_EMAILS. The Google
+// client must list {MCP_PUBLIC_URL}/oauth/google/callback as a redirect URI. The Google
+// leg is a confidential-client code exchange (client secret, scopes email and profile).
 //
 // Without those two Google variables, /authorize still asks for MCP_AUTH_TOKEN. Everything
 // issued (client ids, auth codes, access and refresh tokens) is an HMAC-signed blob keyed
@@ -308,17 +308,14 @@ function startGoogle(res, q) {
         return page(res, 503, 'Sign-in is not configured',
             '<h1>Sign-in is not configured</h1><p class="err">No allowed email is set.</p>');
     }
-    const verifier = crypto.randomBytes(48).toString('base64url');
-    const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
     const state = sign('req', REQUEST_TTL, {
-        cid: q.client_id, ru: q.redirect_uri, cc: q.code_challenge, st: q.state || '', gv: verifier
+        cid: q.client_id, ru: q.redirect_uri, cc: q.code_challenge, st: q.state || ''
     });
     let location;
     try {
         location = google.authorizationUrl({
             redirectUri: googleRedirectUri(),
-            state: state,
-            codeChallenge: challenge
+            state: state
         });
     } catch (err) {
         return page(res, 500, 'Sign-in is not configured', '<h1>Sign-in is not configured</h1><p class="err">The Google sign-in address is invalid.</p>');
@@ -327,10 +324,9 @@ function startGoogle(res, q) {
     res.end();
 }
 
-async function googleEmail(code, verifier) {
+async function googleEmail(code) {
     const identity = await google.identityFromCode({
         code: code,
-        verifier: verifier,
         redirectUri: googleRedirectUri()
     });
     return identity && identity.email;
@@ -339,7 +335,7 @@ async function googleEmail(code, verifier) {
 async function googleCallback(res, url) {
     if (!googleConfigured()) return page(res, 404, 'Not found', '<p>Not found.</p>');
     const pending = verify(url.searchParams.get('state'), 'req');
-    if (!pending || !pending.gv) {
+    if (!pending) {
         return page(res, 400, 'Expired', '<h1>Sign-in expired</h1><p>Start again from the app.</p>');
     }
     const q = {
@@ -352,17 +348,18 @@ async function googleCallback(res, url) {
     }
     const err = url.searchParams.get('error');
     if (err) {
-        return redirectWith(res, q.redirect_uri, {
-            error: err === 'access_denied' ? 'access_denied' : 'server_error',
-            state: q.state
-        });
+        const allowed = ['invalid_request', 'unauthorized_client', 'access_denied', 'unsupported_response_type', 'invalid_scope', 'server_error', 'temporarily_unavailable'];
+        const code = allowed.indexOf(err) === -1 ? 'server_error' : err;
+        console.error('mcp google callback rejected ' + code);
+        return redirectWith(res, q.redirect_uri, { error: code, state: q.state });
     }
     const code = url.searchParams.get('code');
     if (!code) return page(res, 400, 'Cannot sign in', '<h1>Cannot sign in</h1><p class="err">Google did not return a code.</p>');
     let email;
     try {
-        email = await googleEmail(code, pending.gv);
+        email = await googleEmail(code);
     } catch (e) {
+        console.error('mcp google identity failed ' + (e && e.statusCode ? e.statusCode : ''));
         return page(res, 502, 'Google sign-in failed', '<h1>Google sign-in failed</h1><p class="err">Try again from the app.</p>');
     }
     if (!email || allowedEmails().indexOf(email) === -1) {

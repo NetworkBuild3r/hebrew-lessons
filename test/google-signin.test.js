@@ -70,7 +70,7 @@ describe('Google app sign-in', () => {
                 if (req.url.startsWith('/token')) {
                     const params = new URLSearchParams(raw);
                     lastRedirect = params.get('redirect_uri') || '';
-                    if (params.get('client_secret') !== SECRET || !params.get('code_verifier')) {
+                    if (params.get('client_secret') !== SECRET || params.get('code_verifier')) {
                         res.writeHead(400, { 'Content-Type': 'application/json' });
                         res.end('{}');
                         return;

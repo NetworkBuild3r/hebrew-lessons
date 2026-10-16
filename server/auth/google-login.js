@@ -24,11 +24,10 @@ function stateKey() {
     return crypto.createHmac('sha256', process.env.MCP_AUTH_TOKEN).update('hebrew-app-google-v1').digest();
 }
 
-function signState(next, verifier) {
+function signState(next) {
     const payload = {
         t: 'login',
         n: next,
-        v: verifier,
         exp: Math.floor(Date.now() / 1000) + STATE_TTL
     };
     const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -47,7 +46,6 @@ function readState(token) {
     let payload;
     try { payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8')); } catch (err) { return null; }
     if (!payload || payload.t !== 'login' || !(payload.exp > Math.floor(Date.now() / 1000))) return null;
-    if (typeof payload.v !== 'string' || !payload.v) return null;
     return payload;
 }
 
@@ -56,13 +54,10 @@ function readState(token) {
  * @returns {string} Google authorization URL
  */
 function startUrl(next) {
-    const verifier = crypto.randomBytes(48).toString('base64url');
-    const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
-    const state = signState(next, verifier);
+    const state = signState(next);
     return google.authorizationUrl({
         redirectUri: redirectUri(),
-        state: state,
-        codeChallenge: challenge
+        state: state
     });
 }
 

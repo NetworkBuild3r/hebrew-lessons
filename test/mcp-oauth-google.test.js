@@ -64,7 +64,7 @@ test.before(async () => {
             if (req.url.startsWith('/token')) {
                 lastToken = raw;
                 const params = new URLSearchParams(raw);
-                if (params.get('client_secret') !== SECRET || !params.get('code_verifier')) {
+                if (params.get('client_secret') !== SECRET || params.get('code_verifier')) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
                     res.end('{}');
                     return;
@@ -144,8 +144,8 @@ async function begin(clientId, challenge) {
     assert.strictEqual(loc.origin + loc.pathname, GOOGLE + '/auth');
     assert.strictEqual(loc.searchParams.get('client_id'), 'test-google-client');
     assert.strictEqual(loc.searchParams.get('redirect_uri'), BASE + '/oauth/google/callback');
-    assert.strictEqual(loc.searchParams.get('code_challenge_method'), 'S256');
-    assert.strictEqual(loc.searchParams.get('scope'), 'openid email profile');
+    assert.strictEqual(loc.searchParams.get('code_challenge'), null);
+    assert.strictEqual(loc.searchParams.get('scope'), 'email profile');
     return loc.searchParams.get('state');
 }
 
