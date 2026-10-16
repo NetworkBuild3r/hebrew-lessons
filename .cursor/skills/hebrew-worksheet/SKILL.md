@@ -35,7 +35,7 @@ Call these tools by these names:
 | Tool | Call |
 | --- | --- |
 | `list_plans` | List plans: id, title, audience, status, revision, updated time, whether published, whether it has unpublished changes, and `humanEditedFields` (how many fields a person last wrote). Optional `limit`. No assignee name is returned. |
-| `create_plan` | Make a new draft: `id` (a slug), `title`, optional `recipe`, `unitId`, `lessonId`. Revision 1, audience `shared`, lesson `hidden`. It never overwrites: an id that exists returns `already_exists`. |
+| `create_plan` | Make a new draft: `title`, optional `recipe`, `unitId`, `lessonId`. Omit `id`. The server assigns a UUID. Revision 1, audience `shared`, lesson `hidden`. Passing an id that exists returns `already_exists` and changes nothing. |
 | `read_part` | Read the part at `path`. An empty `path` is the whole plan. Returns the part, the current revision, and `editState` (below). Does not change the plan. |
 | `replace_part` | Replace the part at `path` with `value`. The value's `id` must equal the id in the path, or the write returns `id_mismatch`. |
 | `insert_block` | Insert `block` on a lesson path. Pass `index` to place it; omit `index` to append. |
@@ -43,6 +43,8 @@ Call these tools by these names:
 | `remove_block` | Remove the block at `path`. |
 | `set_field` | Set `field` to `value` on the part at `path`. `audience` and `assigneeId` are not settable here: that is `assign_required`. |
 | `list_plan_issues` | List the plan's findings. Optional `severity` (`block`, `warn`, `inform`, `all`, or a list), `code`, `pathPrefix`, `limit`. Returns `counts`, and for each issue `code`, `severity`, `hard`, `path`, `field`, `message`, and `fix`. |
+| `make_word_audio` | Make (or reuse) the spoken clip for up to 20 Hebrew words, pointed as in the plan. Pass `words`. Returns each word's `audioPath` and whether it was `created`, or an `error`. Does not change the plan: save each path with `set_field` (field `audioPath`). See "Audio already in a plan". |
+| `suggest_glosses` | Draft an English meaning for each word of a `graded-story` block that has no gloss yet. Pass `id` and the block's `path`. Returns `suggestions` (`word`, `meaning`, `form`, `senses`), `unmatched`, and `revision`. Read-only. See "Word meanings for a story". |
 | `list_plan_revisions` | List the history, newest first: revision, operation, path, field, who (`ai`, `human`, `system`), tool, time. Optional `sinceRevision`, `beforeRevision`, `actorKind`, `pathPrefix`, `limit`. A person appears as `human`, never by name. |
 | `get_plan_revision` | Read the whole document as it was at one revision. |
 | `diff_plan` | Compare two states field by field. `from` and `to` are a revision number, `working`, or `published`. Optional `path`. `no_snapshot` means nothing is published yet. |
@@ -56,7 +58,7 @@ If the tool returns `revision_conflict`, stop. The stored revision is in the err
 
 ### A new plan starts with a placeholder block
 
-`create_plan` writes one placeholder block (`fluency-pass`, id `placeholder`) because a lesson must hold a block. Insert your real block first, then `remove_block` the placeholder; removing it first is refused. The unit and lesson ids default to `unit-1` and `lesson-1`. A part id cannot be changed afterwards (`id_mismatch`), so pass `unitId` and `lessonId` to `create_plan` when you want other names. `recipe` sets the lesson's recipe and `schemaVersion` `1.1.0`; it writes no Hebrew and no block shells.
+`create_plan` writes one placeholder block (`fluency-pass`, id `placeholder`) because a lesson must hold a block. Insert your real block first, then `remove_block` the placeholder; removing it first is refused. Omit `id`: the server assigns a UUID, and that id is how you address the plan afterwards. The unit and lesson ids default to `unit-1` and `lesson-1`. A part id cannot be changed afterwards (`id_mismatch`), so pass `unitId` and `lessonId` to `create_plan` when you want other names. `recipe` sets the lesson's recipe and `schemaVersion` `1.1.0` (or `1.2.0` when the first block needs `exercise`, `assignment`, or `tense: future` on a table); it writes no Hebrew and no block shells.
 
 ### Read before you edit
 
@@ -75,6 +77,15 @@ This is advice, not a refusal. Nothing stops you editing a field a person fixed,
 - `audio-stale` — text changed since the last publish while its clip path stayed. See "Audio already in a plan".
 
 A `fix` is `{ action, path, field, suggested }` (or `candidates`, or a `note`). `action` is `set_field` when the field is one property of the node at `path`, and `replace_part` when it is nested; then `suggested` is the new value of that sub-field.
+
+### Word meanings for a story
+
+A reader taps a word in a `graded-story` and sees the block's `glosses` meaning for it. Research (RSCH-003, glosses in the reader's first language, Moderate) supports a short English meaning on every word the learner does not yet know, so write one for each.
+
+1. Call `suggest_glosses` with the plan `id` and the block `path`. It reads the dictionary and writes nothing.
+2. Read every suggestion against the story. The dictionary has no context. In a story it can offer `לחם` as "to fight" where the text means "bread", `אוכלים` as "food" where it means "eat", or `לבית` as "to domesticate" where it means "to the house". `form` names the base word a suggestion came from, and `senses` lists the other meanings the dictionary has. Pick the sense the story uses and write it short. Words in `unmatched` have no entry: write those yourself.
+3. Save the whole map with one `set_field` on the block, field `glosses`: keys are the words as written in the paragraphs, values are the English meanings. At most 80 words. `set_field` replaces the map, so send the words that already have a gloss as well.
+4. A wrong meaning teaches the wrong thing. Do not save a suggestion you have not checked.
 
 ### Publishing
 
@@ -134,7 +145,9 @@ After a media id exists, set the introduction word's `image` with `set_field` (o
 
 Copy `audioPath` and `sentenceAudioPath` unchanged, including the same fields on a paragraph, question, pattern item, or line. Do not invent a `.mp3` path. Where the plan has no clip, leave the field absent.
 
-A person's text fix leaves the old clip attached: when a person changes a sentence, passage, or word, its `audioPath` or `sentenceAudioPath` still points at the clip for the old text. `audio-stale` names the text field and the clip. No tool regenerates audio for a plan field (`generate_lesson_audio` works on legacy worksheets only). The fix is to leave the stale clip path out (`replace_part` without it) so the old clip stops playing, or to set a path to a new `.mp3` that already exists. Do not invent a path.
+**Sound for a new word or dictation cue.** A word's own `audioPath` comes from `make_word_audio`, never from a guess. Pass the words exactly as the plan spells them, with vowel points (up to 20 at a time): the clip is for that exact spelling, and the points are what make the voice say it right. A word that already has a clip is reused for free; a new one is made once with ElevenLabs and kept for every lesson. The tool returns each word's `audioPath` (or an `error`: `bad_word` for anything that is not a short Hebrew word, `not_configured` when the server has no key, `failed` otherwise). It does not change the plan, so save each path with `set_field` on the word entry (field `audioPath`), or on a dictation item (`exercise` with `kind: dictation`, field `audioPath` on the item). A teacher can do the same in the editor: the word's Audio file field is a list of existing sounds with Hear and Make sound buttons. Dictation clips use the same tool when the heard text is a short word or phrase you can pass as one `words` entry. Sentence, story-line, and question clips still have no dedicated tool beyond reusing an existing path.
+
+A person's text fix leaves the old clip attached: when a person changes a sentence, passage, or word, its `audioPath` or `sentenceAudioPath` still points at the clip for the old text. `audio-stale` names the text field and the clip. `generate_lesson_audio` works on legacy worksheets only, so a changed sentence has no tool. For a changed word, call `make_word_audio` with the new spelling and save the path it returns. For a sentence the fix is to leave the stale clip path out (`replace_part` without it) so the old clip stops playing, or to set a path to a new `.mp3` that already exists. Do not invent a path.
 
 Before any regeneration, run `npm run audio:inventory`. After it, run `npm run audio:verify`.
 
@@ -186,7 +199,7 @@ The only username in an example is `example-learner`. Pass it as a tool argument
 1. Call `get_learner_profile` with `{ "username": "example-learner" }` only when that is the account the operator named. If the tool returns `planning_off`, stop. Tell the operator the switch is off. Do not retry, do not invent a profile, and do not draft from memory of an earlier profile. `rate_limited` is the same kind of stop: tell the operator and wait. A profile has no glosses. Join a `word_id` to a meaning with `get_lexicon_entry`. The field list and the never-returned list are ADR-0009 §1. Do not paste the profile, or any part of it, into a plan or a lexicon entry.
 2. Choose a recipe. Rotate among `topic-conversation`, `review-worksheet`, `verse-reading`, and `verb-workshop`. Use `letters-and-vowels` when `journey.stage` is `script`. `guide` is not part of that rotation; use it when the operator asks for a reference page. Do not write three lessons in a row with the same recipe (N17, inform). Read the unit you are appending to and pick a different recipe when the previous two lessons already share one. Open with review of weak words. Due dates are not in the profile; do not invent them. End most lessons with a personal question.
 3. Pick words from the profile, then from the lexicon. Recycle `very_weak_words`, then `weak_words`, then words whose stage is `learning` or whose strength is `fragile` or `shaky`. Introduce new words only inside that recipe's cap: N18 for `topic-conversation`, N1 for every other recipe. Cite the id. Do not copy the numbers into the lesson. When any `grammar[]` entry has status `weak` or `very_weak`, the next `verb-workshop` targets the weakest of those (lowest `recent`, then lowest `accuracy`). `list_grammar_concepts` supplies the concept id. It is not learner data.
-4. Write with the plan tools in the default path: `create_plan` for a new lesson, then `read_part`, `replace_part`, `insert_block`, `move_block`, `remove_block`, `set_field`, and `list_plan_issues`. A recipe or any of the five blocks (`explainer`, `conjugation-table`, `personal-question`, `verse-reading`, `letter-intro`) belongs in schema `1.1.0`. A part operation that adds one of those to a `1.0.0` plan raises `schemaVersion` to `1.1.0` in that same revision. Set the lesson field `recipe` with `set_field`. Tag every new word with `upsert_lexicon_entries` before you teach it: `pos`, `root`, `binyan`, `tense`, `cell`, and `accept[]`, as [recipes.md](recipes.md) defines. Pass `expectedRev` 0 for a new key, or the current rev when you edit. A `verified` field on the input is ignored. If `add_library_words` returns `unknown_keys`, write the entries first and retry that call. The cap is 50 new library words per learner per local day. `planning_off` on that call writes nothing.
+4. Write with the plan tools in the default path: `create_plan` for a new lesson, then `read_part`, `replace_part`, `insert_block`, `move_block`, `remove_block`, `set_field`, and `list_plan_issues`. A recipe or any of the five blocks (`explainer`, `conjugation-table`, `personal-question`, `verse-reading`, `letter-intro`) belongs in schema `1.1.0`. `exercise`, `assignment`, and `conjugation-table` with `tense: future` belong in schema `1.2.0`. A part operation that adds a block above the plan's current version raises `schemaVersion` in that same revision (never down). Set the lesson field `recipe` with `set_field`. Tag every new word with `upsert_lexicon_entries` before you teach it: `pos`, `root`, `binyan`, `tense`, `cell`, and `accept[]`, as [recipes.md](recipes.md) defines. Pass `expectedRev` 0 for a new key, or the current rev when you edit. A `verified` field on the input is ignored. If `add_library_words` returns `unknown_keys`, write the entries first and retry that call. The cap is 50 new library words per learner per local day. `planning_off` on that call writes nothing.
 5. Call `check_text_coverage` on every reading you write (`graded-story`, `listening`, and the `verse` text of a `verse-reading`). `text` is at most 4000 characters. Revise until `coverage` is at least 0.95. That bar is `RSCH-004` §3 rule 1 (Low). The validator's N3 enforces it for `graded-story` and `listening` only. A verse is not blocked by N3. Revise the verse anyway until the tool reports at least 0.95. `planning_off` means nothing was scored; stop and tell the operator.
 6. Check and publish. Call `list_plan_issues`, fix what you can, and call `publish_plan` when there is no `block` finding (see "Publishing" above: you may publish without asking). Keep the lesson `hidden` unless the operator asked you to expose it: that is guidance, not something the server enforces. A plan's lesson is exposed through its own `visibility` field, not through `set_lesson_visibility`. Report what you published and which warnings remain. Do not call `set_lexicon_verified` or `set_ai_planning`. Both always return `forbidden` and write nothing. Marking a form verified is a person's act. The operator ticks the forms checklist; you do not.
 
@@ -206,7 +219,7 @@ These names are the ones registered in `mcp/tools.js`. Call them by these names.
 | `set_lexicon_verified` | Do not call. Always `forbidden`. |
 | `set_ai_planning` | Do not call. Always `forbidden`. An admin turns the switch on in the admin Users view. |
 
-Rules N13 through N19 live in ADR-0009 §7. Cite an id when a write is refused or warned. Do not keep a second copy of the caps here.
+Rules N13 through N23 live in ADR-0009 §7 and ADR-0014. Cite an id when a write is refused or warned. Do not keep a second copy of the caps here.
 
 ### Hard rules
 
@@ -216,17 +229,39 @@ Rules N13 through N19 live in ADR-0009 §7. Cite an id when a write is refused o
 - Do not add a timed root or binyan speed drill. An untimed `conjugation-table` in `drill` mode is allowed.
 - Do not edit a lesson's `index.html`.
 
+## Activity names
+
+Author-facing labels on the plan builder menu map to stored block types in `shared/admin/activity-map.js` (`blockTypeFor`). Use these names in worksheet-to-lesson mapping ([recipes.md](recipes.md)).
+
+| Activity | Block type |
+| --- | --- |
+| Words | `introduction` |
+| Story | `graded-story` |
+| Listening | `listening` |
+| Dialogue | `short-dialogue` |
+| Writing | `personal-question` |
+| Verse | `verse-reading` |
+| Pattern | `conjugation-table` |
+| Type it | `type-it` |
+| Exercise | `exercise` |
+| Assignment | `assignment` |
+| Fluency | `fluency-pass` |
+| Review | `spaced-review-checkpoint` |
+| Notes | `explainer` |
+
+Match column A to B stays INIT-010's `match` block; it is not on this menu until INIT-010 SPEC-004 lands.
+
 ## Recipe cards
 
-One card per recipe in ADR-0009 §7. The block order is guidance for you. The validator does not enforce that order except through the rule ids on the card. The shapes follow the operator's summary of lesson types. They are not quotations from a class sheet. Write original sentences.
+One card per recipe in ADR-0009 §7 and the five teacher lesson types in ADR-0014. The block order is guidance for you. The validator does not enforce that order except through the rule ids on the card. The shapes follow the operator's summary of lesson types. They are not quotations from a class sheet. Write original sentences.
 
 The cards, including the research note on each step, are in [recipes.md](recipes.md):
 
 | Recipe | Blocks, in order |
 | --- | --- |
-| `topic-conversation` | `spaced-review-checkpoint`, `introduction`, `short-dialogue`, `personal-question` |
-| `review-worksheet` | `spaced-review-checkpoint`, `graded-story`, `short-dialogue`, `personal-question` |
-| `verse-reading` | one `verse-reading` per verse or short range |
-| `verb-workshop` | `explainer`, `conjugation-table` in `study`, one `conjugation-table` in `drill`, `personal-question` |
+| `topic-conversation` | `spaced-review-checkpoint`, `introduction`, `short-dialogue`, `personal-question`, `assignment` |
+| `review-worksheet` | `introduction`, `exercise` (choose / unscramble / translate), `graded-story`, `personal-question` or `assignment`; type E adds `true-false` and choose after the story |
+| `verse-reading` | `verse-reading`, grammar pivot (`explainer` or `conjugation-table`), optional `exercise` translate, `personal-question` |
+| `verb-workshop` | `explainer`, `conjugation-table` (`present`, `past`, `future`, one tense per table), `conjugation-table` in `drill`, `personal-question` |
 | `letters-and-vowels` | `letter-intro` per letter, then `spaced-review-checkpoint` |
 | `guide` | `explainer` only |

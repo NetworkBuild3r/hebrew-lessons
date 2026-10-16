@@ -21,7 +21,8 @@
     function bi(he, en) {
         return U && typeof U.bi === 'function'
             ? U.bi(he, en)
-            : (esc(he) + ' <span class="en" dir="ltr">(' + esc(en) + ')</span>');
+            : ('<span class="ui-pair"><span class="ui-he" lang="he">' + esc(he) + '</span>'
+                + '<span class="ui-en" lang="en" dir="ltr">' + esc(en) + '</span></span>');
     }
 
     function lessonStatus(state, now, activityCount) {
@@ -118,7 +119,7 @@
         }
         var label = LEVEL_LABELS[level];
         var levelHtml = label
-            ? esc(label.he) + ' <span class="en" lang="en" dir="ltr">(' + esc(label.en) + ')</span>'
+            ? bi(label.he, label.en)
             : (lesson.level ? esc(lesson.level) : '');
         var parts = [];
         if (subtitle.trim()) parts.push(esc(subtitle.trim()));
@@ -140,7 +141,7 @@
             + '" data-lesson-status="' + esc(status.kind) + '">'
             + '<a class="lesson-link" href="' + esc(lessonHref(lesson.slug)) + '">'
             + '<span class="lesson-status ' + esc(status.tone) + '">'
-            + esc(status.chipHe) + ' <span class="en" dir="ltr">(' + esc(status.chipEn) + ')</span>'
+            + bi(status.chipHe, status.chipEn)
             + '</span>'
             + '<p class="fine">' + metaLine(lesson) + '</p>'
             + '<h2>' + esc(lesson.title) + '</h2>'

@@ -16,7 +16,7 @@ const { rootDir } = require('./paths');
 const TEMPLATE_PATH = path.join(rootDir(), 'shared', 'app.html');
 
 /** Canonical app paths. Must match `path` in shared/app-routes.js. */
-const APP_PATHS = ['/', '/lessons/', '/guides/', '/review/', '/words/', '/progress/', '/admin/'];
+const APP_PATHS = ['/', '/lessons/', '/guides/', '/review/', '/words/', '/progress/', '/admin/', '/editor/'];
 
 let cachedTemplate = null;
 let cachedMtimeMs = 0;

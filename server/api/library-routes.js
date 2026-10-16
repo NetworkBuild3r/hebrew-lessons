@@ -11,10 +11,35 @@ const security = require('../http/security');
 const library = require('../learner/library');
 const cards = require('../learner/cards');
 const lexicon = require('../lexicon/service');
+const dictionary = require('../dictionary/suggest');
+const wordLookup = require('../dictionary/lookup');
+const glossDraft = require('../dictionary/suggest-glosses');
+const wordAudio = require('../word-audio');
 const conceptsRepo = require('../db/repos/concepts');
 
 /** Fifty short notes fit; a larger body is refused before it is parsed. */
 const BODY_LIMIT = 16 * 1024;
+
+/** New word clips an admin may make per hour. A reused clip is free and not counted. */
+const WORD_CLIP_MAX = 60;
+const WORD_CLIP_WINDOW_MS = 60 * 60 * 1000;
+const wordClipRuns = new Map();
+
+/**
+ * @param {string|number} adminId
+ * @returns {boolean} true when this admin may make one more new clip (and counts it).
+ */
+function allowNewWordClip(adminId) {
+    const now = Date.now();
+    const runs = (wordClipRuns.get(adminId) || []).filter((t) => now - t < WORD_CLIP_WINDOW_MS);
+    if (runs.length >= WORD_CLIP_MAX) {
+        wordClipRuns.set(adminId, runs);
+        return false;
+    }
+    runs.push(now);
+    wordClipRuns.set(adminId, runs);
+    return true;
+}
 
 /**
  * @param {import('http').ServerResponse} res
@@ -175,6 +200,94 @@ function register(router) {
             return;
         }
         security.sendJson(res, 200, { deck: result.deck, cards: result.cards });
+    }));
+
+    // Tap a Hebrew word: what it means, from checked forms and the dictionary.
+    router.add('GET', '/api/dictionary/lookup', router.requireSession(async (req, res) => {
+        const params = queryOf(req);
+        const word = param(params, 'word');
+        if (typeof word !== 'string' || !word.trim()) {
+            sendError(res, 400, 'invalid_filter');
+            return;
+        }
+        security.sendJson(res, 200, wordLookup.lookup(word));
+    }));
+
+    // Draft meanings for the words of a story. Reads the dictionary; writes nothing.
+    router.add('POST', '/api/dictionary/suggest-glosses', router.requireSession(router.requireAdmin(async (req, res) => {
+        let payload;
+        try {
+            payload = await body.readJson(req, { limit: BODY_LIMIT });
+        } catch (err) {
+            if (sendBodyError(err, res)) return;
+            sendError(res, 400, 'bad_request');
+            return;
+        }
+        const valid = payload && typeof payload === 'object' && !Array.isArray(payload)
+            && typeof payload.text === 'string' && payload.text.length <= 8000
+            && Object.keys(payload).every((key) => key === 'text' || key === 'skip')
+            && (payload.skip === undefined
+                || (Array.isArray(payload.skip) && payload.skip.length <= 200
+                    && payload.skip.every((word) => typeof word === 'string' && word.length <= 80)));
+        if (!valid) {
+            sendError(res, 400, 'bad_request');
+            return;
+        }
+        security.sendJson(res, 200, glossDraft.suggestGlosses(payload.text, { skip: payload.skip }));
+    })));
+
+    // Words that already have sound, for the picker beside a word's audio file.
+    router.add('GET', '/api/admin/word-audio', router.requireSession(router.requireAdmin(async (req, res) => {
+        security.sendJson(res, 200, { clips: wordAudio.listWordClips() });
+    })));
+
+    // Sound for one word: reuse the clip if there is one, otherwise make it once.
+    router.add('POST', '/api/admin/word-audio', router.requireSession(router.requireAdmin(async (req, res, ctx) => {
+        let payload;
+        try {
+            payload = await body.readJson(req, { limit: 1024 });
+        } catch (err) {
+            if (sendBodyError(err, res)) return;
+            sendError(res, 400, 'bad_request');
+            return;
+        }
+        const valid = payload && typeof payload === 'object' && !Array.isArray(payload)
+            && typeof payload.text === 'string' && Object.keys(payload).every((key) => key === 'text');
+        if (!valid) {
+            sendError(res, 400, 'bad_request');
+            return;
+        }
+        try {
+            let clip = wordAudio.findWordClip(payload.text);
+            if (!clip) {
+                // Only a new clip costs anything, so only a new clip counts toward the cap.
+                if (!allowNewWordClip(ctx.user.id)) {
+                    sendError(res, 429, 'audio_throttle');
+                    return;
+                }
+                clip = await wordAudio.ensureWordClip(payload.text);
+            }
+            security.sendJson(res, 200, clip);
+        } catch (err) {
+            const code = err && err.code;
+            if (code === 'bad_word') return sendError(res, 400, 'bad_word');
+            if (code === 'no_key') return sendError(res, 503, 'audio_not_configured');
+            if (code === 'tts_failed') return sendError(res, 502, 'audio_failed');
+            sendError(res, 500, 'server_error');
+        }
+    })));
+
+    router.add('GET', '/api/dictionary', router.requireSession(async (req, res) => {
+        const params = queryOf(req);
+        const result = dictionary.suggest(param(params, 'q'), param(params, 'limit'));
+        if (!result.ok) {
+            sendError(res, 400, result.error || 'invalid_filter');
+            return;
+        }
+        security.sendJson(res, 200, {
+            entries: result.entries,
+            attribution: 'Wiktionary English–Hebrew, CC BY-SA 3.0'
+        });
     }));
 
     router.add('GET', '/api/lexicon', router.requireSession(async (req, res) => {

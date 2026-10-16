@@ -135,7 +135,8 @@ describe('ac-1: the history list', () => {
         const rows = byAttr(ctx.history.el, 'data-plan-revision');
         assert.deepEqual(rows.map((r) => r.getAttribute('data-plan-revision')), ['6', '5', '4', '3']);
         assert.deepEqual(rows.map((r) => r.getAttribute('data-plan-actor')), ['human', 'ai', 'human', 'system']);
-        assert.match(text(one(rows[0], 'data-plan-actor-mark')), /אדם \(A person\)/);
+        assert.match(text(one(rows[0], 'data-plan-actor-mark')), /אדם/);
+        assert.match(text(one(rows[0], 'data-plan-actor-mark')), /A person/);
         assert.match(text(one(rows[0], 'data-plan-actor-mark')), /example-admin/, 'a person row shows the account name');
         assert.match(text(one(rows[1], 'data-plan-actor-mark')), /AI/);
         assert.match(text(one(rows[1], 'data-plan-actor-mark')), /set_field/, 'an AI row shows the tool');
@@ -212,7 +213,8 @@ describe('ac-2: compare', () => {
         assert.equal(entries.length, DIFF.entries.length);
         assert.deepEqual(entries.map((e) => e.getAttribute('data-plan-diff-kind')), ['changed', 'changed', 'removed', 'added', 'moved']);
         const first = entries[0];
-        assert.equal(text(one(first, 'data-plan-diff-before')).indexOf('לפני (Before)'), 0);
+        assert.equal(text(one(first, 'data-plan-diff-before')).indexOf('לפני'), 0);
+        assert.match(text(one(first, 'data-plan-diff-before')), /Before/);
         assert.match(text(one(first, 'data-plan-diff-before')), /שָׁלוֹם דָּנִי/);
         assert.match(text(one(first, 'data-plan-diff-after')), /שָׁלוֹם רוּת/);
     });
@@ -454,7 +456,8 @@ describe('ac-4: the "edited by a person" mark is information, never a lock', () 
         const row = form.fields.passage.row;
         const mark = one(row, 'data-plan-edited-mark');
         assert.ok(mark);
-        assert.match(text(mark), /נערך על ידי אדם \(Edited by a person\)/);
+        assert.match(text(mark), /נערך על ידי אדם/);
+        assert.match(text(mark), /Edited by a person/);
         assert.equal(mark.getAttribute('aria-expanded'), 'false');
         assert.equal(byAttr(form.fields.audioPath ? form.fields.audioPath.row : form.el, 'data-plan-edited-mark').length, form.fields.audioPath ? 0 : 1);
         assert.equal(byAttr(form.el, 'data-plan-edited-mark').length, 1);

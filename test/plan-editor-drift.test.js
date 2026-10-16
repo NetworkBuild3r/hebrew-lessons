@@ -59,7 +59,7 @@ describe('plan editor drift (INIT-008/SPEC-012)', () => {
         const types = [
             'introduction', 'graded-story', 'listening', 'short-dialogue', 'fluency-pass',
             'spaced-review-checkpoint', 'explainer', 'conjugation-table', 'personal-question',
-            'verse-reading', 'letter-intro'
+            'verse-reading', 'letter-intro', 'type-it', 'exercise', 'assignment'
         ];
         const tools = Form.createTools(SCHEMA);
         assert.deepEqual(tools.blockTypes().map((b) => b.type), types, 'the schema block list moved; update this list');

@@ -17,7 +17,7 @@
  * declares none, and nothing deletes a plan today, so the cascade only matters
  * to tests and to a future delete.
  * The runner (server/db/index.js migrate) wraps up() in one transaction.
- * Provenance: INIT-008/SPEC-003
+ * Provenance: INIT-008/SPEC-003; lesson ops in op CHECK: INIT-010/SPEC-002
  */
 'use strict';
 
@@ -53,7 +53,8 @@ function up(db) {
             op TEXT NOT NULL
                 CHECK (op IN (
                     'create', 'baseline', 'set_field', 'replace_part', 'insert_block',
-                    'move_block', 'remove_block', 'assign', 'publish', 'restore'
+                    'move_block', 'remove_block', 'insert_lesson', 'move_lesson', 'remove_lesson',
+                    'assign', 'publish', 'restore'
                 )),
             path TEXT,
             field TEXT,

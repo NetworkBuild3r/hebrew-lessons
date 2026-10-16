@@ -159,6 +159,8 @@
      */
     function swap(html) {
         mainEl.innerHTML = html;
+        var U = root.HebrewUtils;
+        if (U && typeof U.applyUiLang === 'function') U.applyUiLang(U.readUiLang());
         if (!mainEl.classList) return;
         mainEl.classList.remove('route-enter');
         if (reducedMotion()) return;   // no class, so no animation at all (CSS also forces animation: none)
@@ -190,8 +192,15 @@
     function showMessage(he, en, bodyHe, bodyEn) {
         var Layout = root.HebrewLayout;
         swap(Layout.message(he, en, bodyHe, bodyEn));
-        if (root.document) root.document.title = he + ' — ' + en + ' · דרך עברית';
-        announce(he);
+        if (root.document && root.document.documentElement) {
+            root.document.documentElement.setAttribute('data-page-he', he || '');
+            root.document.documentElement.setAttribute('data-page-en', en || '');
+        }
+        var U = root.HebrewUtils;
+        if (U && typeof U.applyUiLang === 'function') U.applyUiLang(U.readUiLang());
+        else if (root.document) root.document.title = (en || he || '') + ' · Hebrew Way';
+        var lang = U && typeof U.readUiLang === 'function' ? U.readUiLang() : 'en';
+        announce(lang === 'he' ? he : en);
         focusHeading();
     }
 
@@ -299,8 +308,16 @@
 
         if (mainEl.removeAttribute) mainEl.removeAttribute('data-route-ready');
         swap(root.HebrewLayout.page(route));
-        if (root.document) root.document.title = route.title;
-        announce(route.announce);
+        var heading = route.heading || {};
+        if (root.document && root.document.documentElement) {
+            root.document.documentElement.setAttribute('data-page-he', heading.he || '');
+            root.document.documentElement.setAttribute('data-page-en', heading.en || '');
+        }
+        var U = root.HebrewUtils;
+        if (U && typeof U.applyUiLang === 'function') U.applyUiLang(U.readUiLang());
+        else if (root.document) root.document.title = route.title;
+        var lang = U && typeof U.readUiLang === 'function' ? U.readUiLang() : 'en';
+        announce(lang === 'he' ? (heading.he || route.announce) : (heading.en || route.announce));
         focusHeading();
         if (options.popstate) {
             try { root.scrollTo(0, options.scrollY || 0); } catch (err) { /* ignore */ }

@@ -2,6 +2,8 @@
  * Admin landing: tab strip + hash routing.
  * Provenance: INIT-002/SPEC-016
  * Lessons editor is SPEC-017 — placeholder only here.
+ * Worksheet lessons open HebrewAdminLessonEditor (INIT-010/SPEC-003).
+ * Plans live on /editor/, not here.
  */
 (function (root) {
     'use strict';
@@ -21,47 +23,31 @@
     function bi(he, en) {
         return U && typeof U.bi === 'function'
             ? U.bi(he, en)
-            : (esc(he) + ' <span class="en" dir="ltr">(' + esc(en) + ')</span>');
+            : ('<span class="ui-pair"><span class="ui-he" lang="he">' + esc(he) + '</span>'
+                + '<span class="ui-en" lang="en" dir="ltr">' + esc(en) + '</span></span>');
     }
-
-    var PLAN_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
     /**
      * @param {string} hash
-     * @returns {{ view: 'users'|'user'|'lessons'|'lesson'|'plans'|'plan', userId: string|null, slug: string|null, planId: string|null }}
+     * @returns {{ view: 'users'|'user'|'lessons'|'lesson', userId: string|null, slug: string|null }}
      */
     function parseHash(hash) {
         var raw = String(hash || '').replace(/^#/, '').trim();
         if (!raw || raw === 'users') {
-            return { view: 'users', userId: null, slug: null, planId: null };
+            return { view: 'users', userId: null, slug: null };
         }
         if (raw === 'lessons') {
-            return { view: 'lessons', userId: null, slug: null, planId: null };
-        }
-        if (raw === 'plans') {
-            return { view: 'plans', userId: null, slug: null, planId: null };
+            return { view: 'lessons', userId: null, slug: null };
         }
         var userMatch = /^user\/([^/]+)$/.exec(raw);
         if (userMatch) {
-            return { view: 'user', userId: decodeURIComponent(userMatch[1]), slug: null, planId: null };
+            return { view: 'user', userId: decodeURIComponent(userMatch[1]), slug: null };
         }
         var lessonMatch = /^lesson\/([^/]+)$/.exec(raw);
         if (lessonMatch) {
-            return { view: 'lesson', userId: null, slug: decodeURIComponent(lessonMatch[1]), planId: null };
+            return { view: 'lesson', userId: null, slug: decodeURIComponent(lessonMatch[1]) };
         }
-        var planMatch = /^plan\/([^/]+)$/.exec(raw);
-        if (planMatch) {
-            var planId = '';
-            try {
-                planId = decodeURIComponent(planMatch[1]);
-            } catch (err) {
-                planId = '';
-            }
-            if (PLAN_SLUG.test(planId)) {
-                return { view: 'plan', userId: null, slug: null, planId: planId };
-            }
-        }
-        return { view: 'users', userId: null, slug: null, planId: null };
+        return { view: 'users', userId: null, slug: null };
     }
 
     function setHash(route) {
@@ -75,9 +61,8 @@
     function renderTabs(active) {
         var usersActive = active === 'users' || active === 'user';
         var lessonsActive = active === 'lessons' || active === 'lesson';
-        var plansActive = active === 'plans' || active === 'plan';
         return ''
-            + '<nav class="admin-tabs" aria-label="' + esc('מדורי ניהול') + '" dir="rtl" lang="he">'
+            + '<nav class="admin-tabs ui-chrome" data-ui-aria-he="מדורי ניהול" data-ui-aria-en="Admin sections" aria-label="מדורי ניהול">'
             + '<a class="admin-tab' + (usersActive ? ' is-active' : '') + '" href="#users"'
             + ' data-admin-tab="users"'
             + (usersActive ? ' aria-current="page"' : '') + '>'
@@ -87,11 +72,6 @@
             + ' data-admin-tab="lessons"'
             + (lessonsActive ? ' aria-current="page"' : '') + '>'
             + bi('שיעורים', 'Lessons')
-            + '</a>'
-            + '<a class="admin-tab' + (plansActive ? ' is-active' : '') + '" href="#plans"'
-            + ' data-admin-tab="plans"'
-            + (plansActive ? ' aria-current="page"' : '') + '>'
-            + bi('תוכניות', 'Plans')
             + '</a>'
             + '</nav>';
     }
@@ -113,7 +93,7 @@
      * Router view (contract: shared/router.js). Admin sub-pages stay on the URL hash
      * (#users, #lessons, #user/<id>, #lesson/<slug>); the app router ignores hash-only changes.
      * @param {HTMLElement} target
-     * @param {{ Users?: object, Lessons?: object, LessonEditor?: object, PlanBuilder?: object, signal?: AbortSignal }} [opts]
+     * @param {{ Users?: object, Lessons?: object, LessonEditor?: object, signal?: AbortSignal }} [opts]
      *        Router ctx when opened from the app; tests pass module stubs.
      */
     function mount(target, opts) {
@@ -122,7 +102,6 @@
         var Users = options.Users || root.HebrewAdminUsers;
         var Lessons = options.Lessons || root.HebrewAdminLessons;
         var LessonEditor = options.LessonEditor || root.HebrewAdminLessonEditor;
-        var PlanBuilder = options.PlanBuilder || root.HebrewPlanBuilder;
         activeEditor = LessonEditor;
         var state = { route: parseHash(root.location && root.location.hash) };
 
@@ -137,26 +116,6 @@
             var panel = target.querySelector('[data-admin-panel]');
             if (!panel) return;
 
-            var showingPlan = route.view === 'plan' || route.view === 'plans';
-            if (!showingPlan && PlanBuilder && typeof PlanBuilder.unmount === 'function') {
-                PlanBuilder.unmount();
-            }
-            activeBuilder = showingPlan ? PlanBuilder : null;
-
-            if (route.view === 'plan' && route.planId && PlanBuilder && typeof PlanBuilder.mount === 'function') {
-                PlanBuilder.mount(panel, route.planId);
-                return;
-            }
-            if (route.view === 'plans') {
-                if (PlanBuilder && typeof PlanBuilder.mountPicker === 'function') {
-                    PlanBuilder.mountPicker(panel);
-                } else {
-                    panel.innerHTML = '<div class="card" data-admin-view="plans"><p>'
-                        + bi('בוחר התוכנית לא נטען.', 'The plan picker is not loaded.')
-                        + '</p></div>';
-                }
-                return;
-            }
             if (route.view === 'lesson' && route.slug) {
                 if (LessonEditor && typeof LessonEditor.mount === 'function') {
                     LessonEditor.mount(panel, route.slug);
@@ -211,20 +170,14 @@
     }
 
     var activeEditor = null;
-    var activeBuilder = null;
 
     /** Router asks before leaving /admin/: blocks if an editor has unsaved field text. */
     function canLeave() {
-        if (activeBuilder && typeof activeBuilder.canLeave === 'function' && !activeBuilder.canLeave()) {
-            return false;
-        }
         if (activeEditor && typeof activeEditor.canLeave === 'function') return activeEditor.canLeave();
         return true;
     }
 
     function unmount() {
-        if (activeBuilder && typeof activeBuilder.unmount === 'function') activeBuilder.unmount();
-        activeBuilder = null;
         if (activeEditor && typeof activeEditor.unmount === 'function') activeEditor.unmount();
         activeEditor = null;
     }

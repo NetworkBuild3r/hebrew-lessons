@@ -110,7 +110,7 @@ describe('ac-3: wrong-answer markup is escaped and includes the correct form', (
         Feedback.showMiss(box, { pointed: 'שָׁלוֹם', highlight: 'שָׁ', retryAction: 'retry' });
         assert.equal(box.classList.contains('hidden'), false);
         assert.ok(box.classList.contains('feedback-miss'));
-        assert.match(box.innerHTML, /class="correction-label"[^>]*>[^<]*הצורה הנכונה/);
+        assert.match(box.innerHTML, /class="correction-label"[^>]*>[\s\S]*הצורה הנכונה/);
         assert.match(box.innerHTML, /The correct form/);
         assert.match(box.innerHTML, /lang="he" dir="rtl"/);
         assert.ok(box.innerHTML.includes('שָׁלוֹם'.replace('שָׁ', '')), 'rest of the word is present');

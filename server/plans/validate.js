@@ -5,13 +5,16 @@
  * lexicon the caller passes in. Its only I/O is reading the schema file, once.
  * Five more rules, all warnings with stable codes, come from hebrew-checks.js
  * and read an optional published snapshot (INIT-008/SPEC-008).
- * Provenance: INIT-004/SPEC-002; schemaVersion 1.1.0: INIT-006/SPEC-011
+ * Provenance: INIT-004/SPEC-002; schemaVersion 1.1.0: INIT-006/SPEC-011;
+ * picture-on-recall and closed-set: INIT-010/SPEC-002;
+ * schemaVersion 1.2.0 and exercise: INIT-012/SPEC-002
  */
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
 const { HEBREW_RULES, checkHebrew } = require('./hebrew-checks');
+const { ACTIVITY_TO_BLOCK } = require('./activity-map');
 
 const SCHEMA_PATH = path.join(
     __dirname, '..', '..', 'docs', 'decisions', 'ADR-0003-assets', 'lesson-plan.schema.json'
@@ -20,6 +23,7 @@ const DRAFT_07 = 'http://json-schema.org/draft-07/schema#';
 const DEFINITIONS = '#/definitions/';
 const V100 = '1.0.0';
 const V110 = '1.1.0';
+const V120 = '1.2.0';
 
 /**
  * ADR-0003 Decision 6, one row per rule id. A figure is written here once, or
@@ -84,7 +88,7 @@ const ADR_RULES = {
     },
     N10: {
         severity: 'block',
-        summary: 'Units, lessons, blocks, and introduction words, from the schema maxItems.'
+        summary: 'Units, blocks, and introduction words, from the schema maxItems. Lessons have no maximum (INIT-010/SPEC-002).'
     },
     N11: {
         severity: 'block',
@@ -132,6 +136,24 @@ const ADR_RULES = {
     N19: {
         severity: 'block',
         summary: 'A verse-reading carries a non-empty ref.source.'
+    },
+    N20: {
+        severity: 'block',
+        summary: 'In a choose item, answer must equal one of that item\'s choices.'
+    },
+    N21: {
+        severity: 'block',
+        summary: 'In an unscramble item, words has 3–10 entries and each alt order is a different permutation of the same multiset.'
+    },
+    N22: {
+        severity: 'block',
+        summary: 'In a dictation item, audioPath is present and matches the plan audioPath pattern.'
+    },
+    N23: {
+        severity: 'warn',
+        maxExerciseBlocks: 2,
+        recipe: 'topic-conversation',
+        summary: 'A topic-conversation lesson with more than two exercise blocks warns that exercises may crowd out conversation.'
     },
     'later-context': {
         severity: 'warn',
@@ -187,6 +209,14 @@ const ADR_RULES = {
         checked: false,
         summary: 'No image on a written-form task. The conjugation-table drill is the only one and has no image field, so image-placement reports any image there.'
     },
+    'picture-on-recall': {
+        severity: 'warn',
+        summary: 'A type-it block whose cue is a picture. Warn only; does not block publish (ADR-0013).'
+    },
+    'closed-set': {
+        severity: 'warn',
+        summary: 'Every new word in a lesson is a kinship term. Warn only; does not block publish (ADR-0013).'
+    },
     html: {
         severity: 'block',
         summary: 'No string in the plan starts an HTML tag: the schema plainText markup pattern.'
@@ -196,6 +226,17 @@ const ADR_RULES = {
         summary: 'Every audio path matches the schema relative .mp3 pattern.'
     }
 };
+
+/**
+ * Kinship new-word set for closed-set (mother, father, brother, sister, son,
+ * daughter). Compare after stripping nikud. Provenance: INIT-010/SPEC-002
+ */
+const KINSHIP_STRIPPED = Object.freeze(new Set([
+    'אם', 'אב', 'אח', 'אחות', 'בן', 'בת'
+].map((word) => word.normalize('NFC'))));
+
+// Keep the activity map loaded so a missing module fails at require time.
+void ACTIVITY_TO_BLOCK;
 
 /**
  * The five INIT-008 rows (hebrew-checks.js): pointing-form, field-language,
@@ -231,6 +272,8 @@ const MESSAGES = Object.freeze({
     mediaId: 'media id must be an opaque slug, not a URL, path, or filename',
     v110Field: ' needs schemaVersion 1.1.0',
     v110Block: 'this block type needs schemaVersion 1.1.0',
+    v120Field: ' needs schemaVersion 1.2.0',
+    v120Block: 'this block type needs schemaVersion 1.2.0',
     lexiconKey: 'a lexicon key needs a Hebrew letter',
     cellCode: 'not a present or past cell code',
     cellTense: 'this cell does not belong to the table tense',
@@ -260,8 +303,16 @@ const N10_LISTS = [
     /^\/units$/,
     /^\/units\/\d+\/lessons$/,
     /^\/units\/\d+\/lessons\/\d+\/blocks$/,
-    /^\/units\/\d+\/lessons\/\d+\/blocks\/\d+\/words$/
+    /^\/units\/\d+\/lessons\/\d+\/blocks\/\d+\/words$/,
+    /^\/units\/\d+\/lessons\/\d+\/blocks\/\d+\/items$/,
+    /^\/units\/\d+\/lessons\/\d+\/blocks\/\d+\/items\/\d+\/choices$/,
+    /^\/units\/\d+\/lessons\/\d+\/blocks\/\d+\/items\/\d+\/words$/,
+    /^\/units\/\d+\/lessons\/\d+\/blocks\/\d+\/items\/\d+\/alt$/,
+    /^\/units\/\d+\/lessons\/\d+\/blocks\/\d+\/items\/\d+\/accept$/,
+    /^\/units\/\d+\/lessons\/\d+\/blocks\/\d+\/useWords$/,
+    /^\/units\/\d+\/lessons\/\d+\/blocks\/\d+\/homework$/
 ];
+const ACCEPT_STRING = /^\/units\/\d+\/lessons\/\d+\/blocks\/\d+\/items\/\d+\/accept\/\d+$/;
 const WORD_MEANING = /^\/units\/\d+\/lessons\/\d+\/blocks\/\d+\/words\/\d+\/meaning$/;
 const BLOCK_CHILD = /^\/units\/(\d+)\/lessons\/(\d+)\/blocks\/(\d+)\/([^/]+)$/;
 const INTRO_WORD = /^\/units\/(\d+)\/lessons\/(\d+)\/blocks\/(\d+)\/words\/\d+$/;
@@ -326,7 +377,8 @@ function validatePlan(document, options) {
         return findings.result();
     }
     const context = {
-        v110: plan.schemaVersion === V110,
+        v110: plan.schemaVersion === V110 || plan.schemaVersion === V120,
+        v120: plan.schemaVersion === V120,
         recipes: schema.recipes,
         keyLimit: schema.keyLimit,
         lexicon: lexiconOf(options)
@@ -371,6 +423,27 @@ function usesV110(plan) {
                 if (!isObject(block)) continue;
                 if (types.has(block.type)) return true;
                 if (list(block.words).some((word) => isObject(word) && has(word, 'group'))) return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * True when a plan holds a construct ADR-0014 allows only in 1.2.0: an exercise
+ * or assignment block, or a conjugation-table with tense future (SPEC-003).
+ * @param {unknown} plan
+ * @returns {boolean}
+ */
+function usesV120(plan) {
+    const types = loadSchema().v120Types;
+    for (const unit of list(isObject(plan) ? plan.units : undefined)) {
+        for (const lesson of list(isObject(unit) ? unit.lessons : undefined)) {
+            if (!isObject(lesson)) continue;
+            for (const block of list(lesson.blocks)) {
+                if (!isObject(block)) continue;
+                if (types.has(block.type)) return true;
+                if (block.type === 'conjugation-table' && block.tense === 'future') return true;
             }
         }
     }
@@ -463,7 +536,8 @@ function schemaText() {
  * Read the schema once. Throws on a keyword or type this walker does not
  * implement, so a schema change cannot be silently ignored.
  * @returns {{ root: object, patterns: Map<string, RegExp>, versions: unknown[], markup: RegExp, textLimit: number,
- *   recipes: Set<string>, v110Types: Set<string>, cellCodes: Set<string>, keyLimit: number }}
+ *   recipes: Set<string>, v110Types: Set<string>, v120Types: Set<string>, cellCodes: Set<string>,
+ *   keyLimit: number, audioPath: RegExp }}
  */
 function loadSchema() {
     if (loaded) return loaded;
@@ -485,11 +559,19 @@ function loadSchema() {
     const v110Types = isObject(defs.v110BlockType) && isObject(defs.v110BlockType.not)
         ? list(defs.v110BlockType.not.enum)
         : [];
+    const v120Types = isObject(defs.v120BlockType) && isObject(defs.v120BlockType.not)
+        ? list(defs.v120BlockType.not.enum)
+        : [];
     const key = defs.lexiconKey;
     const cellCodes = isObject(defs.cellCode) ? list(defs.cellCode.enum) : [];
-    if (!versions.includes(V100) || !versions.includes(V110) || !recipes.length || !v110Types.length
-        || !cellCodes.length || !isObject(key) || !Number.isInteger(key.maxLength)) {
-        throw new Error('lesson-plan schema lacks the 1.1.0 versions, recipes, block types, cell codes, or lexicon key');
+    const audio = defs.audioPath;
+    const audioPath = isObject(audio) && typeof audio.pattern === 'string'
+        ? patterns.get(audio.pattern)
+        : undefined;
+    if (!versions.includes(V100) || !versions.includes(V110) || !versions.includes(V120) || !recipes.length
+        || !v110Types.length || !v120Types.length || !cellCodes.length || !isObject(key)
+        || !Number.isInteger(key.maxLength) || !audioPath) {
+        throw new Error('lesson-plan schema lacks version, recipe, block-type, cell, lexicon, or audioPath definitions');
     }
     loaded = Object.freeze({
         root,
@@ -499,8 +581,10 @@ function loadSchema() {
         textLimit: text.maxLength,
         recipes: new Set(recipes),
         v110Types: new Set(v110Types),
+        v120Types: new Set(v120Types),
         cellCodes: new Set(cellCodes),
-        keyLimit: key.maxLength
+        keyLimit: key.maxLength,
+        audioPath
     });
     return loaded;
 }
@@ -566,11 +650,31 @@ function checkSchema(plan, schema, findings) {
 function ruleForSchemaError(error, plan, schema) {
     const { keyword, def, property } = error;
     const at = error.path;
-    const v110 = plan.schemaVersion === V110;
+    const v110 = plan.schemaVersion === V110 || plan.schemaVersion === V120;
     if (def === 'v110Only') return ['schema', at.slice(at.lastIndexOf('/') + 1) + MESSAGES.v110Field];
     if (def === 'v110BlockType') return ['schema', MESSAGES.v110Block];
+    if (def === 'v120Only') {
+        const leaf = at.slice(at.lastIndexOf('/') + 1);
+        if (leaf === 'tense') {
+            const match = /^\/units\/(\d+)\/lessons\/(\d+)\/blocks\/(\d+)\/tense$/.exec(at);
+            if (match) {
+                const block = blockAt(plan, Number(match[1]), Number(match[2]), Number(match[3]));
+                if (block && block.tense === 'future') {
+                    return ['schema', 'future tense needs schemaVersion 1.2.0'];
+                }
+            }
+        }
+        return ['schema', leaf + MESSAGES.v120Field];
+    }
+    if (def === 'v120BlockType') return ['schema', MESSAGES.v120Block];
+    if (def === 'acceptString' && keyword === 'not') {
+        return ['schema', 'accept must not include vowel points or cantillation'];
+    }
+    if (def === 'acceptString' && keyword === 'pattern') {
+        return ['schema', 'accept must include at least one Hebrew letter'];
+    }
     if (keyword === 'not' && MARKUP_DEFS.has(def)) return ['html', MESSAGES.html];
-    if (def === 'cellCode' || def === 'presentCell' || def === 'pastCell') {
+    if (def === 'cellCode' || def === 'presentCell' || def === 'pastCell' || def === 'futureCell') {
         if (def === 'cellCode' || !schema.cellCodes.has(cellAt(plan, at))) return ['schema', MESSAGES.cellCode];
         return [v110 ? 'N13' : 'schema', MESSAGES.cellTense];
     }
@@ -806,11 +910,28 @@ function checkKey(plan, schema, key, parent, at, findings) {
         findings.add('N11', at, 'key must be at most ' + schema.textLimit + ' characters');
     }
     if (GLOSS_MAP.test(parent)) return;
+    // type-it picture cues are picture-on-recall (warn), not image-placement (block).
+    if (typeItAt(plan, parent) || typeItAt(plan, at)) return;
     if (key === 'image' && !introWordAt(plan, parent)) findings.add('image-placement', at, MESSAGES.image);
     if (key === 'mediaId') {
-        const imageAt = parent.endsWith('/image') ? parent.slice(0, -'/image'.length) : null;
+        const imageAt = parent.endsWith('/image')
+            ? parent.slice(0, -'/image'.length)
+            : (parent.endsWith('/picture') ? parent.slice(0, -'/picture'.length) : null);
         if (imageAt === null || !introWordAt(plan, imageAt)) findings.add('image-placement', at, MESSAGES.image);
     }
+}
+
+/**
+ * True when `at` is under a type-it block. Provenance: INIT-010/SPEC-002
+ * @param {object} plan
+ * @param {string} at
+ * @returns {boolean}
+ */
+function typeItAt(plan, at) {
+    const match = /^\/units\/(\d+)\/lessons\/(\d+)\/blocks\/(\d+)/.exec(at);
+    if (!match) return false;
+    const block = blockAt(plan, Number(match[1]), Number(match[2]), Number(match[3]));
+    return Boolean(block) && block.type === 'type-it';
 }
 
 function introWordAt(plan, at) {
@@ -872,8 +993,12 @@ function checkLessonRules(plan, lessons, context, findings) {
         checkPoints(entry, findings);
         checkAnswers(entry, findings);
         checkBlockInforms(entry, findings);
+        checkPictureOnRecall(entry, findings);
+        checkClosedSet(entry, findings);
+        if (context.v120) checkExerciseBlocks(entry, findings);
         if (!context.v110) return;
         checkConjugationTables(entry, context, findings);
+        checkExerciseCount(entry, findings);
         checkReviewFirst(entry, findings);
         checkPersonalQuestion(entry, findings);
         checkVerseSources(entry, findings);
@@ -884,6 +1009,47 @@ function checkLessonRules(plan, lessons, context, findings) {
     if (plan.audience === 'personal') {
         findings.add('queue-order', '', 'a personal queue may insert due reviews; it keeps this plan\'s lesson order');
     }
+}
+
+/**
+ * Warn when a type-it block uses a picture as the cue (ADR-0013, RSCH-005).
+ * Provenance: INIT-010/SPEC-002
+ * @param {object} entry
+ * @param {object} findings
+ */
+function checkPictureOnRecall(entry, findings) {
+    entry.blocks.forEach((item) => {
+        if (item.type !== 'type-it') return;
+        if (!typeItHasPictureCue(item.block)) return;
+        findings.add('picture-on-recall', item.at,
+            'a Type it cue is a picture; hide the picture on recall');
+    });
+}
+
+/**
+ * @param {object} block
+ * @returns {boolean}
+ */
+function typeItHasPictureCue(block) {
+    if (!isObject(block)) return false;
+    if (has(block, 'image') && block.image) return true;
+    if (has(block, 'picture') && block.picture) return true;
+    if (typeof block.mediaId === 'string' && block.mediaId.length > 0) return true;
+    return false;
+}
+
+/**
+ * Warn when every new word in a lesson is in the kinship set.
+ * Provenance: INIT-010/SPEC-002
+ * @param {object} entry
+ * @param {object} findings
+ */
+function checkClosedSet(entry, findings) {
+    if (!entry.newWords.length) return;
+    const allKinship = entry.newWords.every((word) => KINSHIP_STRIPPED.has(strippedKey(word.raw)));
+    if (!allKinship) return;
+    findings.add('closed-set', entry.at + '/newWords',
+        'every new word is a kinship term; mix people, places, and actions');
 }
 
 function checkNewWordCap(entry, legacy, findings) {
@@ -978,6 +1144,88 @@ function checkPoints(entry, findings) {
     });
 }
 
+/** N20–N22 on exercise blocks (INIT-012/SPEC-002). */
+function checkExerciseBlocks(entry, findings) {
+    const audioPath = loadSchema().audioPath;
+    entry.blocks.forEach((item) => {
+        if (item.type !== 'exercise') return;
+        const block = item.block;
+        const kind = block.kind;
+        list(block.items).forEach((row, i) => {
+            if (!isObject(row)) return;
+            const at = item.at + '/items/' + i;
+            if (kind === 'choose') {
+                if (typeof row.answer === 'string' && Array.isArray(row.choices)
+                    && !row.choices.some((choice) => choice === row.answer)) {
+                    findings.add('N20', at + '/answer', 'the answer is not one of this item\'s choices');
+                }
+            } else if (kind === 'unscramble') {
+                const words = list(row.words).filter((token) => typeof token === 'string');
+                if (words.length < 3 || words.length > 10) {
+                    findings.add('N21', at + '/words', 'unscramble needs 3 to 10 words');
+                }
+                list(row.alt).forEach((order, a) => {
+                    if (!Array.isArray(order)) return;
+                    const altAt = at + '/alt/' + a;
+                    const altWords = order.filter((token) => typeof token === 'string');
+                    if (altWords.length < 3 || altWords.length > 10) {
+                        findings.add('N21', altAt, 'each alternate order needs 3 to 10 words');
+                        return;
+                    }
+                    if (!sameWordMultiset(words, altWords)) {
+                        findings.add('N21', altAt, 'this order is not a rearrangement of the same words');
+                    } else if (sameWordOrder(words, altWords)) {
+                        findings.add('N21', altAt, 'an alternate order must not match the main word order');
+                    }
+                });
+            } else if (kind === 'dictation') {
+                if (typeof row.audioPath !== 'string' || !row.audioPath.length) {
+                    findings.add('N22', at + '/audioPath', 'dictation needs an audio path');
+                } else if (!audioPath.test(row.audioPath)) {
+                    findings.add('N22', at + '/audioPath',
+                        'audio path must be a relative .mp3 path with no scheme or leading slash');
+                }
+            }
+            list(row.accept).forEach((alt, a) => {
+                if (typeof alt === 'string' && HEBREW_POINT.test(alt)) {
+                    findings.add('schema', at + '/accept/' + a, 'accept must not include vowel points or cantillation');
+                }
+            });
+        });
+    });
+}
+
+/** N23: topic-conversation with more than two exercise blocks warns. */
+function checkExerciseCount(entry, findings) {
+    const rule = RULES.N23;
+    if (entry.recipe !== rule.recipe) return;
+    const count = entry.blocks.filter((item) => item.type === 'exercise').length;
+    if (count > rule.maxExerciseBlocks) {
+        findings.add('N23', entry.at + '/blocks',
+            count + ' exercise blocks; a ' + rule.recipe + ' lesson warns above ' + rule.maxExerciseBlocks);
+    }
+}
+
+function sameWordOrder(left, right) {
+    return left.length === right.length && left.every((word, index) => word === right[index]);
+}
+
+function sameWordMultiset(left, right) {
+    if (left.length !== right.length) return false;
+    const tally = (words) => {
+        const map = new Map();
+        words.forEach((word) => map.set(word, (map.get(word) || 0) + 1));
+        return map;
+    };
+    const a = tally(left);
+    const b = tally(right);
+    if (a.size !== b.size) return false;
+    for (const [word, count] of a) {
+        if (b.get(word) !== count) return false;
+    }
+    return true;
+}
+
 function checkAnswers(entry, findings) {
     entry.blocks.forEach((item) => {
         if (item.type !== 'introduction') return;
@@ -1067,6 +1315,7 @@ function checkReviewFirst(entry, findings) {
 function checkPersonalQuestion(entry, findings) {
     if (!RULES.N16.recipes.includes(entry.recipe)) return;
     const asked = entry.blocks.some((item) => item.type === 'personal-question'
+        || item.type === 'assignment'
         || (entry.recipe === 'verse-reading' && item.type === 'verse-reading' && isObject(item.block.personalQuestion)));
     if (!asked) findings.add('N16', entry.at + '/blocks', 'a ' + entry.recipe + ' lesson has no personal question');
 }
@@ -1561,11 +1810,13 @@ module.exports = {
     SCHEMA_PATH,
     V100,
     V110,
+    V120,
     exactKey,
     schemaText,
     strippedKey,
     tokenize,
     usesV110,
+    usesV120,
     validate: validatePlan,
     validatePlan
 };

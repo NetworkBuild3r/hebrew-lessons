@@ -16,13 +16,15 @@
  * (./write-log.js). A restore (revisions.restore) is one more operation here,
  * so it is revision-checked, validated, and logged like any write.
  * Provenance: INIT-004/SPEC-003; schemaVersion raise: INIT-006/SPEC-011;
+ * schemaVersion 1.2.0 raise: INIT-012/SPEC-002;
  * id_mismatch, assign_required, context and audit: INIT-008/SPEC-002;
  * revision log: INIT-008/SPEC-004; restore: INIT-008/SPEC-005;
- * marks and editState: INIT-008/SPEC-006
+ * marks and editState: INIT-008/SPEC-006;
+ * insert_lesson, move_lesson, remove_lesson: INIT-010/SPEC-002
  */
 'use strict';
 
-const { validatePlan, usesV110, V100, V110 } = require('./validate');
+const { validatePlan, usesV110, usesV120, V100, V110, V120 } = require('./validate');
 const lexicon = require('../db/repos/lexicon');
 const db = require('../db');
 const { requireContext } = require('./context');
@@ -148,9 +150,20 @@ function locate(plan, pathStr) {
  * @param {boolean} versionGiven True when the operation itself sets schemaVersion.
  * @returns {{ plan: object }|{ conflict: { error: string } }}
  */
+function schemaVersionRank(value) {
+    if (value === V120) return 2;
+    if (value === V110) return 1;
+    return 0;
+}
+
 function finish(before, next, versionGiven) {
-    if (before.schemaVersion === V110 && next.schemaVersion === V100) return conflict('invalid_op');
-    if (!versionGiven && next.schemaVersion === V100 && usesV110(next)) next.schemaVersion = V110;
+    if (schemaVersionRank(next.schemaVersion) < schemaVersionRank(before.schemaVersion)) {
+        return conflict('invalid_op');
+    }
+    if (!versionGiven) {
+        if (usesV120(next)) next.schemaVersion = V120;
+        else if (next.schemaVersion === V100 && usesV110(next)) next.schemaVersion = V110;
+    }
     next.revision = next.revision + 1;
     next.status = 'draft';
     return { plan: next };
@@ -204,7 +217,9 @@ function applyRestore(plan, next, found, op) {
         value.audience = next.audience;
         value.assigneeId = assignee(next.assigneeId);
         value.revision = next.revision;
-        if (next.schemaVersion === V110) value.schemaVersion = V110;
+        if (schemaVersionRank(next.schemaVersion) > schemaVersionRank(value.schemaVersion)) {
+            value.schemaVersion = next.schemaVersion;
+        }
         return finish(plan, value, false);
     }
 
@@ -403,6 +418,49 @@ function apply(plan, op, expectedRev) {
         if (!found || found.kind !== 'block') {
             return conflict('not_found', { path: typeof op.path === 'string' ? op.path : '' });
         }
+        found.list.splice(found.index, 1);
+        return finish(plan, next, false);
+    }
+
+    // INIT-010/SPEC-002: lesson stack ops. A unit keeps at least one lesson
+    // (schema minItems); removing the last lesson of a unit is refused here.
+    if (op.op === 'insert_lesson') {
+        if (!found || found.kind !== 'unit' || !Array.isArray(found.node.lessons)) {
+            return conflict('not_found', { path: typeof op.path === 'string' ? op.path : '' });
+        }
+        if (!op.lesson || typeof op.lesson !== 'object' || Array.isArray(op.lesson)) {
+            return conflict('invalid_op');
+        }
+        const at = op.index == null ? found.node.lessons.length : op.index;
+        if (!Number.isInteger(at) || at < 0 || at > found.node.lessons.length) {
+            return conflict('invalid_op');
+        }
+        let lesson;
+        try {
+            lesson = cloneJson(op.lesson);
+        } catch (err) {
+            return conflict('invalid_op');
+        }
+        found.node.lessons.splice(at, 0, lesson);
+        return finish(plan, next, false);
+    }
+
+    if (op.op === 'move_lesson') {
+        if (!found || found.kind !== 'lesson') {
+            return conflict('not_found', { path: typeof op.path === 'string' ? op.path : '' });
+        }
+        if (!Number.isInteger(op.index)) return conflict('invalid_op');
+        const item = found.list.splice(found.index, 1)[0];
+        const at = Math.max(0, Math.min(op.index, found.list.length));
+        found.list.splice(at, 0, item);
+        return finish(plan, next, false);
+    }
+
+    if (op.op === 'remove_lesson') {
+        if (!found || found.kind !== 'lesson') {
+            return conflict('not_found', { path: typeof op.path === 'string' ? op.path : '' });
+        }
+        if (found.list.length <= 1) return conflict('invalid_op');
         found.list.splice(found.index, 1);
         return finish(plan, next, false);
     }
@@ -697,6 +755,60 @@ function removeBlock(store, id, input, ctx) {
 }
 
 /**
+ * Insert a lesson into a unit at a destination index. A missing index appends.
+ * Provenance: INIT-010/SPEC-002
+ * @param {object} store
+ * @param {string} id
+ * @param {{ path?: string, index?: number, lesson: object, expectedRevision: number }} input
+ * @param {object} ctx Write context from makeContext.
+ * @returns {object}
+ */
+function insertLesson(store, id, input, ctx) {
+    const body = input || {};
+    return mutate(store, id, {
+        op: 'insert_lesson',
+        path: pathOf(body),
+        index: body.index,
+        lesson: body.lesson
+    }, expectedOf(body), ctx);
+}
+
+/**
+ * Move a lesson to a destination index within its unit.
+ * Provenance: INIT-010/SPEC-002
+ * @param {object} store
+ * @param {string} id
+ * @param {{ path?: string, index: number, expectedRevision: number }} input
+ * @param {object} ctx Write context from makeContext.
+ * @returns {object}
+ */
+function moveLesson(store, id, input, ctx) {
+    const body = input || {};
+    return mutate(store, id, {
+        op: 'move_lesson',
+        path: pathOf(body),
+        index: body.index
+    }, expectedOf(body), ctx);
+}
+
+/**
+ * Remove the lesson at an id path. Refused when it is the last lesson of its unit.
+ * Provenance: INIT-010/SPEC-002
+ * @param {object} store
+ * @param {string} id
+ * @param {{ path?: string, expectedRevision: number }} input
+ * @param {object} ctx Write context from makeContext.
+ * @returns {object}
+ */
+function removeLesson(store, id, input, ctx) {
+    const body = input || {};
+    return mutate(store, id, {
+        op: 'remove_lesson',
+        path: pathOf(body)
+    }, expectedOf(body), ctx);
+}
+
+/**
  * Set one field under an id path. Unknown names fail validation and are not stored.
  * `alt` and `mediaId` on a word that has an image are written onto that image.
  * @param {object} store
@@ -748,6 +860,9 @@ module.exports = {
     insertBlock,
     moveBlock,
     removeBlock,
+    insertLesson,
+    moveLesson,
+    removeLesson,
     setField,
     assignPlan
 };

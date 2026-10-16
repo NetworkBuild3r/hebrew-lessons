@@ -137,7 +137,6 @@ describe('createPlan and listPlans (INIT-008/SPEC-007)', { concurrency: false },
             [{ id: 'double--hyphen', title: 'x' }, 'invalid_id'],
             [{ id: '', title: 'x' }, 'invalid_id'],
             [{ id: 'a'.repeat(65), title: 'x' }, 'invalid_id'],
-            [{ title: 'x' }, 'invalid_id'],
             [{ id: 42, title: 'x' }, 'invalid_id'],
             [{ id: 'good-id', title: 'x', unitId: 'Bad Unit' }, 'invalid_id'],
             [{ id: 'good-id', title: 'x', lessonId: '../up' }, 'invalid_id'],
@@ -147,7 +146,7 @@ describe('createPlan and listPlans (INIT-008/SPEC-007)', { concurrency: false },
             [{ id: 'good-id', title: '' }, 'validation'],
             [{ id: 'good-id' }, 'validation'],
             [{ id: 'good-id', title: 7 }, 'validation'],
-            [null, 'invalid_id']
+            [null, 'validation']
         ];
         for (const [input, error] of cases) {
             const result = env.create.createPlan(env.store, input, ctx);
@@ -156,6 +155,19 @@ describe('createPlan and listPlans (INIT-008/SPEC-007)', { concurrency: false },
         assert.equal(snapshotTables(), before);
         assert.throws(() => env.create.createPlan(env.store, { id: 'good-id', title: 'x' }, undefined), TypeError);
         assert.equal(snapshotTables(), before);
+    });
+
+    it('a missing id is a new UUID and two creates do not share it', () => {
+        const first = env.create.createPlan(env.store, { title: 'No id' }, env.ai('create_plan'));
+        const second = env.create.createPlan(env.store, { title: 'No id either' }, env.ai('create_plan'));
+        const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+        assert.equal(first.error, undefined, JSON.stringify(first).slice(0, 200));
+        assert.equal(second.error, undefined, JSON.stringify(second).slice(0, 200));
+        assert.match(first.plan.id, uuid);
+        assert.match(second.plan.id, uuid);
+        assert.notEqual(first.plan.id, second.plan.id);
+        assert.equal(env.store.loadWorkingCopy(first.plan.id).revision, 1);
+        assert.equal(JSON.parse(env.store.loadWorkingCopy(first.plan.id).document).id, first.plan.id);
     });
 
     it('ac-3: each of the six recipes sets the recipe and schemaVersion 1.1.0, with no block finding', () => {

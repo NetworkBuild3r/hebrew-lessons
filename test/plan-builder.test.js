@@ -236,10 +236,13 @@ function loadBuilder(opts) {
     vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'player', 'utils.js'), 'utf8'), sandbox);
     vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'api.js'), 'utf8'), sandbox);
     vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'ui', 'plan-render.js'), 'utf8'), sandbox);
-    for (const name of ['plan-hints.js', 'plan-widgets.js', 'plan-form.js', 'plan-builder.js']) {
+    for (const name of [
+        'activity-map.js', 'plan-ui.js', 'plan-hints.js', 'plan-widgets.js', 'plan-form.js', 'plan-builder.js'
+    ]) {
         vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'admin', name), 'utf8'), sandbox);
     }
     vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'admin', 'admin-shell.js'), 'utf8'), sandbox);
+    vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'admin', 'editor-shell.js'), 'utf8'), sandbox);
     return { sandbox, calls, panel: sandbox.document.createElement('div') };
 }
 
@@ -266,7 +269,7 @@ describe('plan builder outline (INIT-004/SPEC-015)', () => {
         assert.doesNotMatch(builder, /JSON\.parse/);
         assert.doesNotMatch(builder, /data-revision|dataset\.revision/);
         assert.match(shell, /data-lesson-save|LessonEditor/);
-        assert.match(shell, /HebrewPlanBuilder|PlanBuilder/);
+        assert.doesNotMatch(shell, /HebrewPlanBuilder|PlanBuilder/);
     });
 
     it('sends the move index the route expects and does not renumber block ids', async () => {
@@ -425,15 +428,19 @@ describe('plan builder outline (INIT-004/SPEC-015)', () => {
         });
     });
 
-    it('ac-3: a non-admin session does not get the builder from the admin shell', () => {
+    it('ac-3: a non-admin session does not get the builder; editor and admin are admin-only', () => {
         const routes = require('../shared/app-routes.js');
         const admin = routes.find((route) => route.id === 'admin');
+        const editor = routes.find((route) => route.id === 'editor');
         assert.equal(admin.adminOnly, true);
-        assert.ok(admin.scripts.includes('/shared/admin/plan-builder.js'));
-        assert.ok(admin.scripts.includes('/shared/ui/plan-render.js'));
+        assert.equal(editor.adminOnly, true);
+        assert.equal(admin.scripts.includes('/shared/admin/plan-builder.js'), false);
+        assert.ok(editor.scripts.includes('/shared/admin/plan-builder.js'));
+        assert.ok(editor.scripts.includes('/shared/ui/plan-render.js'));
         routes.forEach((route) => {
-            if (route.id === 'admin') return;
+            if (route.id === 'editor') return;
             assert.equal(route.scripts.includes('/shared/admin/plan-builder.js'), false);
+            if (route.id === 'admin') return;
             assert.equal(route.adminOnly, undefined);
         });
         const shellHtml = fs.readFileSync(path.join(root, 'shared', 'app.html'), 'utf8');
@@ -445,6 +452,7 @@ describe('plan builder outline (INIT-004/SPEC-015)', () => {
         assert.doesNotMatch(spa.renderShell(adminUser), /data-plan-outline|data-plan-publish/);
         const web = fs.readFileSync(path.join(root, 'server', 'web.js'), 'utf8');
         assert.match(web, /underAdmin && auth\.user\.role !== 'admin'/);
+        assert.match(web, /\/editor/);
 
         const mounted = [];
         const main = {
@@ -497,26 +505,26 @@ describe('plan builder outline (INIT-004/SPEC-015)', () => {
         assert.deepEqual(mounted, []);
     });
 
-    it('opens #plan/<id> beside the lesson editor and keeps #lesson/', () => {
+    it('admin keeps #lesson/; plans open on the editor shell, not admin tabs', () => {
         const { sandbox } = loadBuilder();
-        const Shell = sandbox.HebrewAdminShell;
-        const lesson = Shell.parseHash('#lesson/my-morning');
+        const Admin = sandbox.HebrewAdminShell;
+        const lesson = Admin.parseHash('#lesson/my-morning');
         assert.equal(lesson.view, 'lesson');
         assert.equal(lesson.slug, 'my-morning');
-        assert.equal(lesson.planId, null);
-        assert.equal(Shell.parseHash('#lessons').view, 'lessons');
-        assert.equal(Shell.parseHash('#users').view, 'users');
-        assert.equal(Shell.parseHash('#plans').view, 'plans');
-        const plan = Shell.parseHash('#plan/beginner-unit-1');
+        assert.equal(Admin.parseHash('#lessons').view, 'lessons');
+        assert.equal(Admin.parseHash('#users').view, 'users');
+        assert.equal(Admin.parseHash('#plans').view, 'users', 'plans hash is not an admin view');
+        const tabs = Admin.renderTabs('lessons');
+        assert.doesNotMatch(tabs, /data-admin-tab="plans"/);
+        assert.match(tabs, /data-admin-tab="lessons"/);
+
+        const Editor = sandbox.HebrewEditorShell;
+        assert.ok(Editor);
+        assert.equal(Editor.parseHash('#plans').view, 'plans');
+        const plan = Editor.parseHash('#plan/beginner-unit-1');
         assert.equal(plan.view, 'plan');
         assert.equal(plan.planId, 'beginner-unit-1');
-        assert.equal(plan.slug, null);
-        assert.equal(Shell.parseHash('#plan/../x').view, 'users');
-        const tabs = Shell.renderTabs('plan');
-        assert.match(tabs, /data-admin-tab="plans"[^>]*aria-current="page"/);
-        assert.match(tabs, /תוכניות/);
-        assert.match(tabs, /שיעורים/);
-        assert.doesNotMatch(tabs, /data-admin-tab="lessons"[^>]*aria-current/);
+        assert.equal(Editor.parseHash('#plan/../x').view, 'plans');
     });
 });
 
@@ -581,26 +589,28 @@ describe('plan builder with the schema-driven editor (INIT-008/SPEC-011, SPEC-01
         assert.equal(kept.value, 'Typed, not saved', 'unsaved text in another field survives the repaint');
     });
 
-    it('the new-block form follows the schema: all eleven types, required fields, and the filled text is sent', async () => {
+    it('the activity menu lists research names and insert sends the mapped block type', async () => {
         const { sandbox, calls, panel } = loadBuilder();
         const Builder = sandbox.HebrewPlanBuilder;
         await Builder.mount(panel, 'beginner-unit-1');
         const select = panel.querySelector('select[data-plan-new-type]');
-        assert.equal(select.children.length, 11);
-        assert.deepEqual(Array.from(Builder.blockTypes().map((t) => t.type)), select.children.map((o) => o.value));
-        select.value = 'explainer';
+        assert.ok(panel.querySelector('[data-plan-activity-menu]'));
+        const names = Array.from(select.children).map((o) => o.getAttribute('data-plan-activity-name'));
+        assert.ok(names.indexOf('Words') !== -1);
+        assert.ok(names.indexOf('Story') !== -1);
+        assert.ok(names.indexOf('Match') !== -1);
+        assert.ok(names.indexOf('Type it') !== -1);
+        assert.equal(select.children.length, Builder.activityNames().length);
+        select.value = 'fluency-pass';
         fireEvent(select, 'change');
-        const draftTitle = () => all(panel.querySelector('[data-plan-new-draft]'), 'data-plan-sub', 'title')[0];
-        assert.ok(draftTitle(), 'the explainer title is a required field');
-        draftTitle().value = 'A page';
-        panel.querySelector('[data-plan-new-id]').value = 'page';
+        panel.querySelector('[data-plan-new-id]').value = 'fluency-extra';
         panel.querySelector('[data-plan-insert]').click();
         await Builder.settled();
         const post = calls.filter((c) => c.method === 'POST' && c.url.endsWith('/blocks'))[0];
-        assert.equal(post.body.block.type, 'explainer');
-        assert.equal(post.body.block.id, 'page');
-        assert.equal(post.body.block.title, 'A page');
-        assert.deepEqual(post.body.block.sections, []);
+        assert.equal(post.body.block.type, 'fluency-pass');
+        assert.equal(post.body.block.id, 'fluency-extra');
+        assert.equal(post.body.block.source, 'vocab');
+        assert.ok(Number.isInteger(post.body.block.seconds));
     });
 
     it('a refused insert lists the server rule codes in the form and does not repaint it away', async () => {
@@ -608,16 +618,13 @@ describe('plan builder with the schema-driven editor (INIT-008/SPEC-011, SPEC-01
         const Builder = sandbox.HebrewPlanBuilder;
         await Builder.mount(panel, 'beginner-unit-1');
         const select = panel.querySelector('select[data-plan-new-type]');
-        select.value = 'explainer';
+        select.value = 'fluency-pass';
         fireEvent(select, 'change');
-        const draftTitle = () => all(panel.querySelector('[data-plan-new-draft]'), 'data-plan-sub', 'title')[0];
-        draftTitle().value = 'kept text';
         panel.querySelector('[data-plan-new-id]').value = 'page';
         panel.querySelector('[data-plan-insert]').click();
         await Builder.settled();
         const issue = all(panel.querySelector('[data-plan-new-issues]'), 'data-plan-issue', 'schema')[0];
         assert.match(issue.textContent, /too short/);
-        assert.equal(draftTitle().value, 'kept text');
         assert.ok(panel.querySelector('[data-plan-finding="schema"]'), 'the validation panel lists it too');
     });
 

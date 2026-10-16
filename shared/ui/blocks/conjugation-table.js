@@ -2,7 +2,7 @@
  * Conjugation tables in study and drill mode.
  * Form signals never create cards. Never drill an unverified form.
  * There is no timer. A typed answer stays in the page and is not put on the signal.
- * Provenance: INIT-006/SPEC-014
+ * Provenance: INIT-006/SPEC-014; future tense: INIT-012/SPEC-006
  */
 (function (root, factory) {
     'use strict';
@@ -74,7 +74,7 @@
     }
 
     function known(tense, code) {
-        var list = tense === 'present' ? PRESENT : tense === 'past' ? PAST : [];
+        var list = tense === 'present' ? PRESENT : (tense === 'past' || tense === 'future') ? PAST : [];
         for (var i = 0; i < list.length; i += 1) {
             if (list[i].cell === code) return list[i];
         }
@@ -146,7 +146,7 @@
 
     function studyTable(block, forms, audio) {
         var present = block.tense === 'present';
-        var rows = present ? PRESENT : block.tense === 'past' ? PAST : [];
+        var rows = present ? PRESENT : block.tense === 'past' ? PAST : block.tense === 'future' ? PAST : [];
         var byCell = cellMap(block);
         if (!rows.length) return '';
         if (present) {
@@ -160,7 +160,8 @@
         var bodyRows = rows.map(function (row) {
             return '<tr>' + header(row, false) + studyCell(byCell[row.cell], forms, audio) + '</tr>';
         }).join('');
-        return '<table class="conj-table" data-tense="past"><tbody>' + bodyRows + '</tbody></table>';
+        var tableTense = block.tense === 'future' ? 'future' : 'past';
+        return '<table class="conj-table" data-tense="' + tableTense + '"><tbody>' + bodyRows + '</tbody></table>';
     }
 
     function extraCells(block) {
@@ -390,10 +391,15 @@
         var extraList = extras ? '<ul class="recycle">' + extras + '</ul>' : '';
         var empty = owner ? '<p class="gloss" data-drill-empty hidden>'
             + 'אין צורות שנבדקו. <span lang="en" dir="ltr">No checked forms.</span></p>' : '';
+        var sectionTense = block.tense === 'past' ? 'past' : block.tense === 'future' ? 'future' : 'present';
+        var tenseKicker = block.tense === 'future'
+            ? '<p class="kicker"><span lang="he">עתיד</span> <span lang="en" dir="ltr">future</span></p>'
+            : '';
         return '<section data-block-type="conjugation-table" data-block-id="' + text(block.id) + '"'
-            + ' data-mode="' + (mode || 'study') + '" data-tense="' + (block.tense === 'past' ? 'past' : 'present') + '"'
+            + ' data-mode="' + (mode || 'study') + '" data-tense="' + sectionTense + '"'
             + ' data-drill-owner="' + (owner ? '1' : '0') + '"' + slugAttr + '>'
             + '<h2 lang="he">' + text(block.lemmaKey) + '</h2>'
+            + tenseKicker
             + '<p class="kicker"><span lang="en" dir="ltr">' + (mode || 'study') + '</span></p>'
             + body
             + empty

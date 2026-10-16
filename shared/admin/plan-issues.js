@@ -15,7 +15,7 @@
  * reloaded the issues) or false.
  *
  * Plain browser script, no build step. Node tests load it with require().
- * Provenance: INIT-008/SPEC-015
+ * Provenance: INIT-008/SPEC-015, INIT-011/SPEC-003
  */
 (function (root, factory) {
     'use strict';
@@ -221,7 +221,7 @@
 
         var el = make('section', 'card plan-issues-panel');
         el.setAttribute('data-plan-issues', 'panel');
-        el.setAttribute('aria-label', 'בעיות בתוכנית (Plan issues)');
+        el.setAttribute('aria-label', Ui.line('בעיות בתוכנית', 'Plan issues'));
         var head = make('div', 'plan-panel-head');
         var heading = make('h3', '', 'בעיות (Issues)');
         head.appendChild(heading);
@@ -286,7 +286,7 @@
             link.type = 'button';
             link.setAttribute('data-plan-issue-link', issue.path || '');
             link.setAttribute('data-plan-issue-field', issue.field || '');
-            var goLabel = make('span', 'plan-issue-go', 'מעבר לשדה (Go to the field) ');
+            var goLabel = make('span', 'plan-issue-go', 'מעבר לשדה (Go to the field)');
             link.appendChild(goLabel);
             var place = make('bdi', 'plan-issue-place', where || 'plan');
             place.setAttribute('dir', 'ltr');
@@ -334,7 +334,18 @@
                 counter.textContent = '';
                 return;
             }
-            counter.textContent = countsText(data.counts).text;
+            var counts = countsText(data.counts);
+            counter.textContent = '';
+            if ((counter.className || '').indexOf('ui-pair') === -1) {
+                counter.className = ((counter.className || '') + ' ui-pair').trim();
+            }
+            var cHe = make('span', 'ui-he', counts.he);
+            cHe.setAttribute('lang', 'he');
+            var cEn = make('span', 'ui-en', counts.en);
+            cEn.setAttribute('lang', 'en');
+            cEn.setAttribute('dir', 'ltr');
+            counter.appendChild(cHe);
+            counter.appendChild(cEn);
             var issues = Array.isArray(data.issues) ? data.issues : [];
             if (!issues.length) {
                 var none = make('p', 'plan-note', 'אין בעיות. (No issues.)');
@@ -379,11 +390,14 @@
         function load() {
             seq += 1;
             var mine = seq;
-            if (!result) stateLine.textContent = 'טוען בעיות… (Loading the issues…)';
+            if (!result) Ui.fill(stateLine, 'טוען בעיות… (Loading the issues…)');
             return Promise.resolve(Api.get(url(), signal ? { signal: signal } : undefined)).then(function (res) {
                 if (!alive || mine !== seq) return null;
                 if (!res || !res.ok || !isObject(res.data) || !Array.isArray(res.data.issues)) {
-                    stateLine.textContent = 'לא ניתן לטעון את הבעיות — ' + Ui.failureText(res) + ' (Could not load the issues.)';
+                    stateLine.textContent = Ui.line(
+                        'לא ניתן לטעון את הבעיות — ' + Ui.failureText(res),
+                        'Could not load the issues — ' + Ui.failureText(res)
+                    );
                     return null;
                 }
                 stateLine.textContent = '';
@@ -393,8 +407,11 @@
                 return result;
             }).catch(function (err) {
                 if (!alive || mine !== seq) return null;
-                stateLine.textContent = 'לא ניתן לטעון את הבעיות — ' + Ui.failureText({ status: 0, data: null, error: err && err.message })
-                    + ' (Could not load the issues.)';
+                var fail = Ui.failureText({ status: 0, data: null, error: err && err.message });
+                stateLine.textContent = Ui.line(
+                    'לא ניתן לטעון את הבעיות — ' + fail,
+                    'Could not load the issues — ' + fail
+                );
                 return null;
             });
         }
@@ -404,7 +421,10 @@
             var request = fixRequest(issue, opts.getPlan ? opts.getPlan() : null, choice);
             setFixMessage('');
             if (!request) {
-                setFixMessage('אי אפשר להחיל את התיקון הזה כאן. (This fix cannot be applied here.)');
+                setFixMessage(Ui.line(
+                    'אי אפשר להחיל את התיקון הזה כאן.',
+                    'This fix cannot be applied here.'
+                ));
                 return Promise.resolve(false);
             }
             busy = true;
@@ -413,7 +433,10 @@
                 if (!alive) return false;
                 if (outcome === 'refreshed') return true;
                 if (outcome && typeof outcome === 'object' && typeof outcome.error === 'string') {
-                    setFixMessage('התיקון לא נשמר — ' + outcome.error + ' (The fix was not saved.)');
+                    setFixMessage(Ui.line(
+                        'התיקון לא נשמר — ' + outcome.error,
+                        'The fix was not saved — ' + outcome.error
+                    ));
                     return false;
                 }
                 return outcome ? load().then(function () { return true; }) : false;

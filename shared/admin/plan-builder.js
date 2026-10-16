@@ -20,7 +20,8 @@
  *   plan-preview.js  the learner's view of the unsaved text
  * Each is optional: without it the plan view is the editor alone.
  * Provenance: INIT-004/SPEC-015, INIT-004/SPEC-016, INIT-008/SPEC-011, INIT-008/SPEC-012,
- *             INIT-008/SPEC-013, INIT-008/SPEC-014, INIT-008/SPEC-015
+ *             INIT-008/SPEC-013, INIT-008/SPEC-014, INIT-008/SPEC-015, INIT-009/SPEC-003,
+ *             INIT-010/SPEC-003, INIT-011/SPEC-003, INIT-011/SPEC-004, INIT-011/SPEC-005
  */
 (function (root) {
     'use strict';
@@ -94,6 +95,9 @@
     }
 
     function listLessons(plan) {
+        if (form() && typeof form().stackLessons === 'function') {
+            return form().stackLessons(plan);
+        }
         var out = [];
         var units = plan && Array.isArray(plan.units) ? plan.units : [];
         var u;
@@ -108,11 +112,490 @@
                 out.push({
                     path: 'units/' + unit.id + '/lessons/' + lesson.id,
                     title: typeof lesson.title === 'string' ? lesson.title : lesson.id,
-                    id: lesson.id
+                    id: lesson.id,
+                    unitId: unit.id
                 });
             }
         }
         return out;
+    }
+
+    function readUiLang() {
+        try {
+            if (root.HebrewUtils && typeof root.HebrewUtils.readUiLang === 'function') {
+                return root.HebrewUtils.readUiLang() === 'he' ? 'he' : 'en';
+            }
+        } catch (err) { /* ignore */ }
+        return 'en';
+    }
+
+    function fillOptionUi(option, he, en) {
+        option.setAttribute('data-ui-text-he', he);
+        option.setAttribute('data-ui-text-en', en);
+        option.textContent = readUiLang() === 'he' ? he : en;
+    }
+
+    /** Author-facing activity names (shared/admin/activity-map.js). */
+    function activityMap() {
+        return root.HebrewActivityMap || null;
+    }
+
+    function activityNames() {
+        var map = activityMap();
+        if (map && Array.isArray(map.ACTIVITY_NAMES)) return map.ACTIVITY_NAMES.slice();
+        // Match omitted until INIT-010 SPEC-004 lands a match block (INIT-011/SPEC-002).
+        return ['Words', 'Story', 'Listening', 'Dialogue', 'Writing', 'Verse', 'Pattern', 'Type it', 'Fluency', 'Review', 'Notes'];
+    }
+
+    function blockTypeForActivity(name) {
+        var map = activityMap();
+        if (map && typeof map.blockTypeFor === 'function') return map.blockTypeFor(name);
+        return undefined;
+    }
+
+    /** Hebrew labels for the activity menu (one language shown via data-ui-text-*). */
+    var ACTIVITY_HE = {
+        Words: 'מילים',
+        Story: 'סיפור',
+        Listening: 'האזנה',
+        Dialogue: 'דיאלוג',
+        Writing: 'כתיבה',
+        Notes: 'הערות',
+        Verse: 'פסוק',
+        'Type it': 'הקלדה',
+        Fluency: 'שוטפות',
+        Review: 'חזרה',
+        Pattern: 'תבנית'
+    };
+
+    /** Short id prefix per activity for auto-made block ids (no Id field on screen). */
+    var ACTIVITY_ID_BASE = {
+        Words: 'words',
+        Story: 'story',
+        Listening: 'listening',
+        Dialogue: 'dialogue',
+        Writing: 'writing',
+        Notes: 'notes',
+        Verse: 'verse',
+        'Type it': 'type-it',
+        Fluency: 'fluency',
+        Review: 'review',
+        Pattern: 'pattern'
+    };
+
+    /**
+     * One-line hint for an activity name. Prefer the shared map; fall back locally.
+     * @param {string} name
+     * @returns {{ he: string, en: string }}
+     */
+    function activityHint(name) {
+        var map = activityMap();
+        if (map && typeof map.hintFor === 'function') {
+            var fromMap = map.hintFor(name);
+            if (fromMap) return fromMap;
+        }
+        return { he: '', en: '' };
+    }
+
+    /**
+     * Blocks the teacher sees: every block except the empty fluency placeholder.
+     * @param {object|null} lesson
+     * @returns {object[]}
+     */
+    function listedBlocks(lesson) {
+        return blocksOf(lesson).filter(function (block) {
+            return block && typeof block.id === 'string' && block.id !== 'placeholder' && ENTRY.test(block.id);
+        });
+    }
+
+    /**
+     * Next free block id for an activity type (page-made; teacher never types it).
+     * @param {string} activityName
+     * @param {object[]} blocks
+     * @returns {string}
+     */
+    function nextBlockId(activityName, blocks) {
+        var base = ACTIVITY_ID_BASE[activityName] || String(activityName || 'block')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '') || 'block';
+        if (!ENTRY.test(base)) base = 'block';
+        var used = {};
+        (Array.isArray(blocks) ? blocks : []).forEach(function (block) {
+            if (block && typeof block.id === 'string') used[block.id] = true;
+        });
+        if (!used[base]) return base;
+        var n = 2;
+        while (used[base + '-' + n]) n += 1;
+        return base + '-' + n;
+    }
+
+    /** Plain-text fallback when a block type has no learner renderer. */
+    function activityPreviewText(block) {
+        if (!block || typeof block !== 'object') return '';
+        var parts = [];
+        function push(value) {
+            if (typeof value === 'string' && value.trim()) parts.push(value.trim());
+        }
+        push(block.heading);
+        push(block.notice);
+        push(block.passage);
+        push(block.verse);
+        push(block.prompt);
+        push(block.focus);
+        if (Array.isArray(block.words)) {
+            block.words.forEach(function (w) {
+                if (w && typeof w.word === 'string') push(w.word);
+            });
+        }
+        if (Array.isArray(block.paragraphs)) {
+            block.paragraphs.forEach(function (p) {
+                if (p && typeof p.text === 'string') push(p.text);
+            });
+        }
+        if (Array.isArray(block.questions)) {
+            block.questions.forEach(function (q) {
+                if (q && typeof q.question === 'string') push(q.question);
+            });
+        }
+        if (block.cloze && Array.isArray(block.cloze.items)) {
+            block.cloze.items.forEach(function (item) {
+                if (!item) return;
+                push((item.textPre || '') + ' ___ ' + (item.textPost || ''));
+                push(item.answer);
+            });
+        }
+        if (Array.isArray(block.lines)) {
+            block.lines.forEach(function (line) {
+                if (line && typeof line.pointed === 'string') push(line.pointed);
+            });
+        }
+        if (Array.isArray(block.examples)) {
+            block.examples.forEach(function (ex) {
+                if (ex && typeof ex.he === 'string') push(ex.he);
+            });
+        }
+        return parts.join('\n');
+    }
+
+    /** Smallest fluency-pass shell a new lesson needs (schema minItems: 1). */
+    function newLessonShell(id, title, subtitle) {
+        var lesson = {
+            id: id,
+            title: title || id,
+            level: 'basic',
+            visibility: 'hidden',
+            buildsOn: [],
+            newWords: [],
+            recycles: [],
+            blocks: [{ id: 'placeholder', type: 'fluency-pass', seconds: 60, focus: 'vocab' }]
+        };
+        if (typeof subtitle === 'string' && subtitle.trim()) lesson.subtitle = subtitle.trim();
+        return lesson;
+    }
+
+    function nextLessonId(lessons) {
+        var used = {};
+        (Array.isArray(lessons) ? lessons : []).forEach(function (lesson) {
+            if (lesson && typeof lesson.id === 'string') used[lesson.id] = true;
+        });
+        var n = 1;
+        while (used['lesson-' + n]) n += 1;
+        return 'lesson-' + n;
+    }
+
+    /**
+     * Lesson id from a teacher title. Latin letters become a slug; titles with no
+     * Latin letters (e.g. Hebrew-only) fall back to lesson-N. Always unique in `used`.
+     * @param {string} title
+     * @param {object|string[]|{id?: string}[]} used ids already taken, or lesson list
+     * @returns {string}
+     */
+    function slugFromTitle(title, used) {
+        var taken = {};
+        if (Array.isArray(used)) {
+            used.forEach(function (item) {
+                if (typeof item === 'string') taken[item] = true;
+                else if (item && typeof item.id === 'string') taken[item.id] = true;
+            });
+        } else if (used && typeof used === 'object') {
+            Object.keys(used).forEach(function (k) { if (used[k]) taken[k] = true; });
+        }
+        var raw = String(title || '');
+        var hasLatin = /[A-Za-z]/.test(raw);
+        var base = '';
+        if (hasLatin) {
+            base = raw.toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '')
+                .replace(/-{2,}/g, '-');
+            if (!base || !SLUG.test(base)) base = '';
+        }
+        if (!base) {
+            var n = 1;
+            while (taken['lesson-' + n]) n += 1;
+            return 'lesson-' + n;
+        }
+        if (!taken[base]) return base;
+        var suffix = 2;
+        while (taken[base + '-' + suffix]) suffix += 1;
+        return base + '-' + suffix;
+    }
+
+    /**
+     * Parse pasted word-bank lines. Separators: en-dash, hyphen, tab, comma, or =.
+     * A line with no separator is reported, not dropped.
+     * @param {string} text
+     * @returns {{ words: { word: string, meaning: string }[], rejected: string[] }}
+     */
+    function parseWordLines(text) {
+        var words = [];
+        var rejected = [];
+        String(text || '').split(/\r?\n/).forEach(function (line) {
+            var trimmed = String(line || '').trim();
+            if (!trimmed) return;
+            var sep = /\s*[–\t,=]\s*|\s+-\s+/;
+            var match = sep.exec(trimmed);
+            if (!match) {
+                rejected.push(trimmed);
+                return;
+            }
+            var left = trimmed.slice(0, match.index).trim();
+            var right = trimmed.slice(match.index + match[0].length).trim();
+            if (!left || !right) {
+                rejected.push(trimmed);
+                return;
+            }
+            words.push({ word: left, meaning: right });
+        });
+        return { words: words, rejected: rejected };
+    }
+
+    /**
+     * Words a lesson introduces (newWords plus introduction block words), unique.
+     * @param {object} lesson
+     * @returns {string[]}
+     */
+    function wordsIntroducedByLesson(lesson) {
+        var out = [];
+        var seen = {};
+        function add(w) {
+            if (typeof w !== 'string' || !w || seen[w]) return;
+            seen[w] = true;
+            out.push(w);
+        }
+        if (lesson && Array.isArray(lesson.newWords)) lesson.newWords.forEach(add);
+        if (lesson && Array.isArray(lesson.blocks)) {
+            lesson.blocks.forEach(function (block) {
+                if (!block || block.type !== 'introduction' || !Array.isArray(block.words)) return;
+                block.words.forEach(function (entry) {
+                    add(entry && typeof entry.word === 'string' ? entry.word : '');
+                });
+            });
+        }
+        return out;
+    }
+
+    /**
+     * What a plan says about one word: its meaning (the introduction's, else the story's
+     * gloss), the pointed spelling and sound it saved, and how many lessons use it. Marks
+     * and niqqud are ignored when matching.
+     * @param {object} plan
+     * @param {string} word
+     * @returns {{ meaning: string, translit: string, pointed: string, lessons: number }|null}
+     */
+    function factsFromPlan(plan, word) {
+        var bare = function (text) {
+            return String(text || '').normalize('NFC').replace(/[\u0591-\u05C7]/g, '');
+        };
+        var want = bare(word);
+        if (!want || !plan || !Array.isArray(plan.units)) return null;
+        var meaning = '';
+        var translit = '';
+        var pointed = '';
+        var glossMeaning = '';
+        var lessons = 0;
+
+        function note(text) {
+            var out = {};
+            (String(text || '').match(/[\u05D0-\u05EA\u0591-\u05C7]+/g) || []).forEach(function (token) {
+                out[bare(token)] = token;
+            });
+            return out;
+        }
+
+        plan.units.forEach(function (unit) {
+            (unit && Array.isArray(unit.lessons) ? unit.lessons : []).forEach(function (lesson) {
+                if (!lesson) return;
+                var seen = {};
+                var join = function (map) {
+                    Object.keys(map).forEach(function (key) {
+                        if (!seen[key]) seen[key] = map[key];
+                    });
+                };
+                (Array.isArray(lesson.newWords) ? lesson.newWords : []).forEach(function (w) { join(note(w)); });
+                (Array.isArray(lesson.blocks) ? lesson.blocks : []).forEach(function (block) {
+                    if (!block) return;
+                    (Array.isArray(block.words) ? block.words : []).forEach(function (entry) {
+                        if (!entry) return;
+                        join(note(entry.word));
+                        if (bare(entry.word) !== want) return;
+                        if (!meaning && typeof entry.meaning === 'string') meaning = entry.meaning.trim();
+                        if (!translit && typeof entry.translit === 'string') translit = entry.translit.trim();
+                        if (!pointed && /[\u0591-\u05C7]/.test(entry.word)) pointed = entry.word;
+                    });
+                    (Array.isArray(block.paragraphs) ? block.paragraphs : []).forEach(function (p) {
+                        join(note(p && p.text));
+                    });
+                    (Array.isArray(block.lines) ? block.lines : []).forEach(function (line) {
+                        join(note(line && line.pointed));
+                    });
+                    join(note(block.passage));
+                    if (block.glosses && typeof block.glosses === 'object' && !Array.isArray(block.glosses)) {
+                        Object.keys(block.glosses).forEach(function (key) {
+                            join(note(key));
+                            if (bare(key) !== want) return;
+                            if (!glossMeaning && typeof block.glosses[key] === 'string') glossMeaning = block.glosses[key].trim();
+                            if (!pointed && /[\u0591-\u05C7]/.test(key)) pointed = key;
+                        });
+                    }
+                });
+                if (seen[want]) {
+                    lessons += 1;
+                    if (!pointed && /[\u0591-\u05C7]/.test(seen[want])) pointed = seen[want];
+                }
+            });
+        });
+        meaning = meaning || glossMeaning;
+        if (!meaning && !translit && !lessons) return null;
+        return { meaning: meaning, translit: translit, pointed: pointed, lessons: lessons };
+    }
+
+    /**
+     * The facts the open plan saved for a word, for the tap card.
+     * @param {string} word
+     * @returns {{ meaning: string, translit: string, pointed: string, lessons: number }|null}
+     */
+    function wordFacts(word) {
+        return state && state.plan ? factsFromPlan(state.plan, word) : null;
+    }
+
+    /**
+     * Plan word bank: each introduced word and the lesson that added it (first wins).
+     * @param {object} plan
+     * @returns {{ word: string, lessonId: string, lessonTitle: string }[]}
+     */
+    function planWordBank(plan) {
+        var rows = [];
+        var seen = {};
+        var choices = listLessons(plan);
+        var i;
+        for (i = 0; i < choices.length; i++) {
+            var choice = choices[i];
+            var lesson = form() && form().nodeAt
+                ? form().nodeAt(plan, choice.path)
+                : null;
+            if (!lesson) {
+                var units = plan && Array.isArray(plan.units) ? plan.units : [];
+                var u;
+                for (u = 0; u < units.length && !lesson; u++) {
+                    var lessons = units[u] && Array.isArray(units[u].lessons) ? units[u].lessons : [];
+                    var l;
+                    for (l = 0; l < lessons.length; l++) {
+                        if (lessons[l] && lessons[l].id === choice.id) {
+                            lesson = lessons[l];
+                            break;
+                        }
+                    }
+                }
+            }
+            wordsIntroducedByLesson(lesson).forEach(function (word) {
+                if (seen[word]) return;
+                seen[word] = true;
+                rows.push({
+                    word: word,
+                    lessonId: choice.id,
+                    lessonTitle: choice.title || choice.id
+                });
+            });
+        }
+        return rows;
+    }
+
+    /**
+     * Copy a lesson for reuse into this plan. New id when taken. buildsOn keeps only
+     * ids earlier in this plan; if the original is earlier here, the copy builds on it.
+     * @param {object} sourceLesson
+     * @param {string} sourceLessonId
+     * @param {{ id: string }[]} thisPlanLessons ordered lessons already in this plan
+     * @returns {object}
+     */
+    function prepareReuseLesson(sourceLesson, sourceLessonId, thisPlanLessons) {
+        var lessons = Array.isArray(thisPlanLessons) ? thisPlanLessons : [];
+        var used = lessons.map(function (l) { return l && l.id; }).filter(Boolean);
+        var earlier = {};
+        var sourceEarlier = false;
+        var i;
+        for (i = 0; i < lessons.length; i++) {
+            if (lessons[i] && typeof lessons[i].id === 'string') {
+                earlier[lessons[i].id] = true;
+                if (lessons[i].id === sourceLessonId) sourceEarlier = true;
+            }
+        }
+        var copy;
+        try {
+            copy = JSON.parse(JSON.stringify(sourceLesson || {}));
+        } catch (err) {
+            copy = {};
+        }
+        var preferred = typeof sourceLessonId === 'string' && SLUG.test(sourceLessonId)
+            ? sourceLessonId
+            : '';
+        var newId = preferred && used.indexOf(preferred) === -1
+            ? preferred
+            : slugFromTitle(
+                (copy && typeof copy.title === 'string' && copy.title) || preferred || 'lesson',
+                used
+            );
+        if (used.indexOf(newId) !== -1) newId = nextLessonId(lessons);
+        copy.id = newId;
+        if (typeof copy.title !== 'string' || !copy.title) {
+            copy.title = (sourceLesson && sourceLesson.title) || newId;
+        }
+        var builds = Array.isArray(copy.buildsOn) ? copy.buildsOn : [];
+        var kept = builds.filter(function (id) {
+            return typeof id === 'string' && earlier[id];
+        });
+        if (sourceEarlier && kept.indexOf(sourceLessonId) === -1) kept.push(sourceLessonId);
+        copy.buildsOn = kept;
+        if (!Array.isArray(copy.newWords)) copy.newWords = [];
+        if (!Array.isArray(copy.recycles)) copy.recycles = [];
+        if (!Array.isArray(copy.blocks) || !copy.blocks.length) {
+            copy.blocks = [{ id: 'placeholder', type: 'fluency-pass', seconds: 60, focus: 'vocab' }];
+        }
+        if (!copy.level) copy.level = 'basic';
+        if (!copy.visibility) copy.visibility = 'hidden';
+        return copy;
+    }
+
+    /** Header sentence: who the plan is for. */
+    function forAudienceLine(plan) {
+        if (plan && plan.audience === 'personal' && typeof plan.assigneeId === 'string' && plan.assigneeId) {
+            return {
+                he: 'עבור ' + plan.assigneeId,
+                en: 'For ' + plan.assigneeId
+            };
+        }
+        return { he: 'עבור כל לומד', en: 'For every learner' };
+    }
+
+    function unitById(unitId) {
+        var units = state && state.plan && Array.isArray(state.plan.units) ? state.plan.units : [];
+        var i;
+        for (i = 0; i < units.length; i++) {
+            if (units[i] && units[i].id === unitId) return units[i];
+        }
+        return null;
     }
 
     function blocksOf(lesson) {
@@ -131,10 +614,127 @@
     function labeled(caption, control) {
         var label = el('label');
         var name = el('span');
-        name.textContent = caption;
+        fillUi(name, caption);
         label.appendChild(name);
         label.appendChild(control);
         return label;
+    }
+
+    function splitUiLabel(text) {
+        var Ui = root.HebrewPlanUi;
+        if (Ui && typeof Ui.splitUiLabel === 'function') return Ui.splitUiLabel(text);
+        var raw = String(text == null ? '' : text).replace(/\s+$/, '');
+        var close = raw.lastIndexOf(')');
+        if (close !== raw.length - 1 || close < 0) return null;
+        var open = raw.lastIndexOf(' (');
+        if (open < 0) return null;
+        var he = raw.slice(0, open);
+        var en = raw.slice(open + 2, close);
+        if (!he || !en) return null;
+        if (!/[\u0590-\u05FF]/.test(he) || !/[A-Za-z]/.test(en)) return null;
+        return { he: he, en: en, suffix: '' };
+    }
+
+    function fillUi(node, text) {
+        if (!node) return;
+        var Ui = root.HebrewPlanUi;
+        if (Ui && typeof Ui.fill === 'function') {
+            Ui.fill(node, text);
+            return;
+        }
+        var parts = splitUiLabel(text);
+        while (node.firstChild) node.removeChild(node.firstChild);
+        if (!parts) {
+            node.textContent = text || '';
+            return;
+        }
+        if (node.className.indexOf('ui-pair') === -1) node.className += ' ui-pair';
+        var h = el('span');
+        h.className = 'ui-he';
+        h.lang = 'he';
+        h.textContent = parts.he;
+        var e = el('span');
+        e.className = 'ui-en';
+        e.lang = 'en';
+        e.dir = 'ltr';
+        e.textContent = parts.en;
+        node.appendChild(h);
+        node.appendChild(e);
+        if (parts.suffix) node.appendChild(root.document.createTextNode(parts.suffix));
+    }
+
+    /** One chrome sentence in the teacher's language. Provenance: INIT-011/SPEC-003 */
+    function uiLine(he, en) {
+        var Ui = root.HebrewPlanUi;
+        if (Ui && typeof Ui.line === 'function') return Ui.line(he, en);
+        return en;
+    }
+
+    /**
+     * A schema/validation refusal as a plain sentence: activity name and missing field,
+     * never a JSON path. Provenance: INIT-011/SPEC-003
+     * @param {object|null} data
+     * @returns {string}
+     */
+    function refusalSentence(data) {
+        var blocks = data && Array.isArray(data.blocks) ? data.blocks : [];
+        var first = blocks[0];
+        if (!first || typeof first !== 'object') {
+            return uiLine('התוכנית דחתה את השינוי.', 'The plan refused this change.');
+        }
+        var message = typeof first.message === 'string' ? first.message : '';
+        var path = typeof first.path === 'string' ? first.path : '';
+        var field = '';
+        var missing = /missing required field:\s*(\S+)/.exec(message);
+        if (missing) field = missing[1];
+        else if (typeof first.property === 'string' && first.property) field = first.property;
+        else if (typeof first.field === 'string' && first.field && first.field.indexOf('/') === -1) {
+            field = first.field;
+        } else if (path) {
+            var segs = path.split('/').filter(Boolean);
+            var last = segs.length ? segs[segs.length - 1] : '';
+            if (last && !/^\d+$/.test(last) && last.indexOf('/') === -1) field = last;
+            else if (segs.length >= 2 && /^\d+$/.test(last)) field = segs[segs.length - 2];
+        }
+        // Prefer the activity being drafted (Add activity) over a path that may still
+        // point at a neighbouring block index before the write lands.
+        var activity = '';
+        if (state && state.draft && state.draft.type) {
+            activity = activityNameForType(state.draft.type);
+        }
+        if (!activity) activity = activityNameFromPath(path);
+        if (activity && field && field.indexOf('/') === -1) {
+            return uiLine(
+                activity + ' חסרה את השדה ' + field + '.',
+                activity + ' is missing the ' + field + ' field.'
+            );
+        }
+        if (message && message.indexOf('/') === -1 && !/\$\.|instancePath|\/units\//.test(message)) {
+            return message;
+        }
+        return uiLine('התוכנית דחתה את השינוי.', 'The plan refused this change.');
+    }
+
+    function activityNameForType(type) {
+        var map = root.HebrewActivityMap && root.HebrewActivityMap.ACTIVITY_TO_BLOCK;
+        if (!map || !type) return type || '';
+        var name;
+        for (name in map) {
+            if (Object.prototype.hasOwnProperty.call(map, name) && map[name] === type) return name;
+        }
+        return type;
+    }
+
+    function activityNameFromPath(pointer) {
+        if (!state || !state.plan || typeof pointer !== 'string' || !pointer) return '';
+        var match = /^\/units\/(\d+)\/lessons\/(\d+)\/blocks\/(\d+)/.exec(pointer);
+        if (!match) return '';
+        var units = state.plan.units;
+        var unit = Array.isArray(units) ? units[Number(match[1])] : null;
+        var lesson = unit && Array.isArray(unit.lessons) ? unit.lessons[Number(match[2])] : null;
+        var block = lesson && Array.isArray(lesson.blocks) ? lesson.blocks[Number(match[3])] : null;
+        if (!block || typeof block.type !== 'string') return '';
+        return activityNameForType(block.type);
     }
 
     function button(attr, value, text, locked) {
@@ -142,7 +742,7 @@
         node.type = 'button';
         node.className = 'btn';
         node.setAttribute(attr, value);
-        node.textContent = text;
+        fillUi(node, text);
         if (locked) {
             node.disabled = true;
             node.setAttribute('data-plan-locked', '');
@@ -164,7 +764,8 @@
         var node = state.panel.querySelector('[' + attr + ']');
         if (!node) return;
         node.hidden = false;
-        node.textContent = text;
+        // Prefer .ui-pair when the string is bilingual chrome; otherwise one language via textContent.
+        fillUi(node, text == null ? '' : String(text));
     }
 
     function hideBox(attr) {
@@ -337,7 +938,7 @@
         box.className = 'card';
         box.setAttribute('data-plan-pictures', '');
         var heading = el('h3');
-        heading.textContent = 'תמונה (Picture)';
+        fillUi(heading, 'תמונה (Picture)');
         box.appendChild(heading);
         var rows = libraryRows();
         var w;
@@ -395,7 +996,7 @@
         box.className = 'card';
         box.setAttribute('data-plan-media', '');
         var heading = el('h3');
-        heading.textContent = 'ספריית תמונות (Media)';
+        fillUi(heading, 'ספריית תמונות (Media)');
         box.appendChild(heading);
 
         var list = el('ul');
@@ -510,7 +1111,7 @@
         box.className = 'card';
         box.setAttribute('data-plan-validation', '');
         var heading = el('h3');
-        heading.textContent = 'בדיקה (Validation)';
+        fillUi(heading, 'בדיקה (Validation)');
         box.appendChild(heading);
         if (state.publishRefused) {
             var refused = el('p');
@@ -587,7 +1188,7 @@
         card.setAttribute('data-plan-section', name);
         var heading = el('h3');
         var toggle = button('data-plan-disclose', name, (open ? '▾ ' : '▸ ') + he + ' (' + en + ')', false);
-        toggle.className = 'btn btn-ghost plan-disclose';
+        toggle.className += ' btn-ghost plan-disclose';
         toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
         toggle.setAttribute('data-plan-focus-key', 'disclose:' + name);
         heading.appendChild(toggle);
@@ -615,48 +1216,176 @@
         var required = tools.requiredOf(tools.defSchema(def)).filter(function (prop) {
             return prop !== 'id' && prop !== 'type';
         });
-        if (!required.length) return;
+        // Words also offers fill-in-the-blank (cloze) in the same form (INIT-011/SPEC-005).
+        var fields = required.slice();
+        if (type === 'introduction' && fields.indexOf('cloze') === -1) fields.push('cloze');
+        if (!fields.length) return;
         var seed = form().newBlock(type, 'new');
         if (!seed) return;
-        var handle = state.editor.renderDraft(def, seed, required);
+        if (type === 'conjugation-table' && state.patternFill && state.patternFill.cells && state.patternFill.cells.length) {
+            seed.lemmaKey = state.patternFill.lemmaKey;
+            seed.tense = state.patternFill.tense;
+            seed.mode = seed.mode || 'study';
+            seed.cells = state.patternFill.cells.map(function (cell) {
+                return { cell: cell.cell, formKey: cell.formKey };
+            });
+        }
+        if (type === 'introduction' && !seed.cloze) {
+            seed.cloze = {
+                items: [{ id: 'c1', textPre: '', textPost: '', answer: '' }]
+            };
+        }
+        if (type === 'exercise' && root.HebrewPlanForm && typeof root.HebrewPlanForm.freshExerciseItem === 'function') {
+            var ek = seed.kind || 'choose';
+            var t = form() && typeof form().tools === 'function' ? form().tools() : null;
+            seed.items = [root.HebrewPlanForm.freshExerciseItem(ek, t, 'item-1')];
+        }
+        var handle = state.editor.renderDraft(def, seed, fields);
         host.appendChild(handle.el);
+        if (type === 'conjugation-table' && state.patternFill && state.patternFill.cells && state.patternFill.cells.length) {
+            var filled = el('p');
+            filled.className = 'plan-note';
+            filled.setAttribute('data-plan-verb-filled', '');
+            var tenseEn = state.patternFill.tense === 'past' ? 'past' : 'present';
+            var tenseHe = state.patternFill.tense === 'past' ? 'עבר' : 'הווה';
+            var gloss = state.patternFill.gloss ? ' — ' + state.patternFill.gloss : '';
+            filled.textContent = uiLine(
+                'המילון מילא את ' + tenseHe + gloss,
+                'Dictionary filled the ' + tenseEn + ' table' + gloss
+            );
+            host.appendChild(filled);
+        }
         state.draft = { type: type, handle: handle };
     }
 
-    function paintInsert(parent, blocks) {
+    function selectedActivityName(select) {
+        if (!select) return '';
+        var value = String(select.value || '');
+        var kids = select.children || [];
+        var i;
+        for (i = 0; i < kids.length; i++) {
+            var opt = kids[i];
+            if (!opt || !opt.getAttribute) continue;
+            if (value && String(opt.value || '') === value) {
+                return opt.getAttribute('data-plan-activity-name') || '';
+            }
+        }
+        if (kids[0] && kids[0].getAttribute) {
+            return kids[0].getAttribute('data-plan-activity-name') || '';
+        }
+        return '';
+    }
+
+    function syncActivityHint(select, hintNode) {
+        var hint = hintNode || (state && state.panel && state.panel.querySelector('[data-plan-activity-hint]'));
+        if (!hint || !select) return;
+        var name = selectedActivityName(select);
+        var pair = activityHint(name);
+        empty(hint);
+        if (!pair.he && !pair.en) {
+            hint.hidden = true;
+            return;
+        }
+        hint.hidden = false;
+        hint.className = 'plan-note plan-activity-hint ui-pair';
+        hint.setAttribute('data-plan-activity-hint', name);
+        var he = el('span');
+        he.className = 'ui-he';
+        he.lang = 'he';
+        he.textContent = pair.he;
+        var en = el('span');
+        en.className = 'ui-en';
+        en.lang = 'en';
+        en.setAttribute('dir', 'ltr');
+        en.textContent = pair.en;
+        hint.appendChild(he);
+        hint.appendChild(en);
+    }
+
+    function paintInsert(parent) {
         var insert = el('div');
         insert.className = 'card';
         insert.setAttribute('data-plan-newblock', '');
+        insert.setAttribute('data-plan-activity-menu', '');
         var heading = el('h3');
-        heading.textContent = 'בלוק חדש (New block)';
+        fillUi(heading, 'פעילות חדשה (Add activity)');
         insert.appendChild(heading);
-        var idInput = el('input');
-        idInput.type = 'text';
-        idInput.setAttribute('data-plan-new-id', '');
-        idInput.setAttribute('autocomplete', 'off');
         var typeSelect = el('select');
         typeSelect.setAttribute('data-plan-new-type', '');
-        var types = form() ? form().blockTypeList() : [];
+        typeSelect.setAttribute('data-plan-new-activity', '');
+        typeSelect.setAttribute('aria-label', readUiLang() === 'he' ? 'פעילות' : 'Activity');
+        var names = activityNames();
         var t;
-        for (t = 0; t < types.length; t++) {
+        for (t = 0; t < names.length; t++) {
+            var name = names[t];
+            var blockType = blockTypeForActivity(name);
+            if (!blockType) continue;
             var opt = el('option');
-            opt.value = types[t].type;
-            opt.textContent = types[t].he + ' (' + types[t].en + ')';
+            opt.value = blockType;
+            opt.setAttribute('data-plan-activity-name', name);
+            fillOptionUi(opt, ACTIVITY_HE[name] || name, name);
             typeSelect.appendChild(opt);
         }
-        if (types.length) typeSelect.value = types[0].type;
-        var indexInput = el('input');
-        indexInput.type = 'text';
-        indexInput.setAttribute('data-plan-new-index', '');
-        indexInput.setAttribute('inputmode', 'numeric');
-        indexInput.value = String(blocks.length);
-        insert.appendChild(labeled('מזהה (Id)', idInput));
-        insert.appendChild(labeled('סוג (Type)', typeSelect));
-        insert.appendChild(labeled('מקום (Index)', indexInput));
+        if (names.length) {
+            typeSelect.value = blockTypeForActivity(names[0]) || '';
+        }
+        insert.appendChild(labeled('פעילות (Activity)', typeSelect));
+        var hint = el('p');
+        hint.className = 'plan-note plan-activity-hint ui-pair';
+        hint.setAttribute('data-plan-activity-hint', '');
+        insert.appendChild(hint);
         var note = el('p');
-        note.className = 'plan-note';
-        note.textContent = 'ממלאים את השדות הנדרשים; השרת אומר מה חסר. (Fill in the required fields; the server says what is missing.)';
+        note.className = 'plan-note ui-pair';
+        var noteHe = el('span');
+        noteHe.className = 'ui-he';
+        noteHe.lang = 'he';
+        noteHe.textContent = 'בוחרים פעילות וממלאים — כלום לא מוכנס מראש.';
+        var noteEn = el('span');
+        noteEn.className = 'ui-en';
+        noteEn.lang = 'en';
+        noteEn.setAttribute('dir', 'ltr');
+        noteEn.textContent = 'Pick an activity and fill it in — nothing is pre-inserted.';
+        note.appendChild(noteHe);
+        note.appendChild(noteEn);
         insert.appendChild(note);
+        var verbFind = el('div');
+        verbFind.className = 'plan-verb-find';
+        verbFind.setAttribute('data-plan-verb-find', '');
+        verbFind.hidden = typeSelect.value !== 'conjugation-table';
+        var verbLabel = el('p');
+        verbLabel.className = 'plan-note ui-pair';
+        var verbHe = el('span');
+        verbHe.className = 'ui-he';
+        verbHe.lang = 'he';
+        verbHe.textContent = 'חפשו פועל שכבר במילון והטבלה מתמלאת. כרגע יש לחשוב, להרגיש, לשאול, לענות.';
+        var verbEn = el('span');
+        verbEn.className = 'ui-en';
+        verbEn.lang = 'en';
+        verbEn.setAttribute('dir', 'ltr');
+        verbEn.textContent = 'Search a verb already in the dictionary and the table fills in. So far: to think, to feel, to ask, to answer.';
+        verbLabel.appendChild(verbHe);
+        verbLabel.appendChild(verbEn);
+        verbFind.appendChild(verbLabel);
+        var verbInput = el('input');
+        verbInput.type = 'text';
+        verbInput.setAttribute('data-plan-verb-query', '');
+        verbInput.setAttribute('autocomplete', 'off');
+        verbInput.setAttribute('aria-label', readUiLang() === 'he' ? 'חיפוש פועל' : 'Search for a verb');
+        verbInput.setAttribute('placeholder', readUiLang() === 'he' ? 'לחשוב או think' : 'think or לחשוב');
+        verbFind.appendChild(verbInput);
+        var verbHits = el('ul');
+        verbHits.className = 'plan-lexicon-hits';
+        verbHits.setAttribute('data-plan-verb-hits', '');
+        verbHits.hidden = true;
+        verbFind.appendChild(verbHits);
+        var tenseRow = el('div');
+        tenseRow.className = 'plan-verb-tenses';
+        tenseRow.setAttribute('data-plan-verb-tenses', '');
+        tenseRow.hidden = true;
+        tenseRow.appendChild(button('data-plan-verb-tense', 'present', 'הווה (Present)', false));
+        tenseRow.appendChild(button('data-plan-verb-tense', 'past', 'עבר (Past)', false));
+        verbFind.appendChild(tenseRow);
+        insert.appendChild(verbFind);
         var draftHost = el('div');
         draftHost.setAttribute('data-plan-new-draft', '');
         state.newDraftHost = draftHost;
@@ -665,9 +1394,79 @@
         issues.className = 'plan-issues';
         issues.setAttribute('data-plan-new-issues', '');
         insert.appendChild(issues);
-        insert.appendChild(button('data-plan-insert', '', 'הוספה (Insert)', !state.lessonPath));
+        insert.appendChild(button('data-plan-insert', '', 'שמירה (Save)', !state.lessonPath));
         parent.appendChild(insert);
-        if (types.length && state.editor.hasSchema()) renderNewDraft(typeSelect.value);
+        // Pass the hint node: paintInsert may run before rootEl is on the panel.
+        syncActivityHint(typeSelect, hint);
+        syncVerbFinder(typeSelect, insert);
+        // Draft fields for the selected type only; the lesson is unchanged until Save.
+        if (typeSelect.value && state.editor.hasSchema()) {
+            renderNewDraft(typeSelect.value);
+        }
+    }
+
+    /**
+     * Words earlier lessons added, in stack order, marked with the lesson that added each.
+     * @param {HTMLElement} parent
+     */
+    function paintEarlierWords(parent) {
+        if (!state.plan || !LESSON_PATH.test(state.lessonPath || '') || !form()) return;
+        var earlier = form().earlierLessonsInPlan(state.plan, state.lessonPath);
+        if (!earlier.length) return;
+        var box = el('div');
+        box.className = 'card';
+        box.setAttribute('data-plan-earlier-words', '');
+        var heading = el('h3');
+        fillUi(heading, 'מילים משיעורים קודמים (Words from earlier lessons)');
+        box.appendChild(heading);
+        var list = el('ol');
+        list.setAttribute('data-plan-earlier-words-list', '');
+        var e;
+        for (e = 0; e < earlier.length; e++) {
+            var choice = earlier[e];
+            var lessonNode = form().nodeAt(state.plan, choice.path);
+            var words = [];
+            var seen = {};
+            if (lessonNode && Array.isArray(lessonNode.newWords)) {
+                lessonNode.newWords.forEach(function (w) {
+                    if (typeof w === 'string' && w && !seen[w]) {
+                        seen[w] = true;
+                        words.push(w);
+                    }
+                });
+            }
+            if (lessonNode && Array.isArray(lessonNode.blocks)) {
+                lessonNode.blocks.forEach(function (block) {
+                    if (!block || block.type !== 'introduction' || !Array.isArray(block.words)) return;
+                    block.words.forEach(function (entry) {
+                        var w = entry && typeof entry.word === 'string' ? entry.word : '';
+                        if (w && !seen[w]) {
+                            seen[w] = true;
+                            words.push(w);
+                        }
+                    });
+                });
+            }
+            var w;
+            for (w = 0; w < words.length; w++) {
+                var li = el('li');
+                li.setAttribute('data-plan-earlier-word', words[w]);
+                li.setAttribute('data-from-lesson', choice.id);
+                var wordSpan = el('span');
+                wordSpan.setAttribute('lang', 'he');
+                wordSpan.setAttribute('dir', 'rtl');
+                wordSpan.textContent = words[w];
+                li.appendChild(wordSpan);
+                var mark = el('span');
+                mark.className = 'plan-block-id';
+                mark.setAttribute('dir', 'ltr');
+                mark.textContent = choice.title || choice.id;
+                li.appendChild(mark);
+                list.appendChild(li);
+            }
+        }
+        box.appendChild(list);
+        parent.appendChild(box);
     }
 
     function showNewIssues(data) {
@@ -699,6 +1498,18 @@
         var blocks = blocksOf(lesson);
         var selected = state.selectedId ? blockById(state.selectedId) : null;
         if (state.selectedId && !selected) state.selectedId = null;
+        // The empty fluency placeholder is never the teacher's selected activity.
+        if (selected && selected.block && selected.block.id === 'placeholder') {
+            state.selectedId = null;
+            selected = null;
+        }
+        if (!selected && state.screen === 'lesson') {
+            var firstListed = listedBlocks(lesson)[0];
+            if (firstListed) {
+                state.selectedId = firstListed.id;
+                selected = blockById(firstListed.id);
+            }
+        }
 
         // Keep unsaved text, the open sections, focus, and scroll across the repaint.
         var focus = editor.focusKey();
@@ -744,40 +1555,106 @@
         rootEl.setAttribute('lang', 'he');
 
         var back = el('p');
-        back.className = 'admin-back';
+        back.className = 'admin-back plan-crumb';
+        back.setAttribute('data-plan-crumb', '');
         var backLink = el('a');
         backLink.setAttribute('href', '#plans');
-        backLink.textContent = '← תוכניות (Plans)';
+        var backArrow = el('span');
+        backArrow.textContent = '← ';
+        var backName = el('span');
+        fillUi(backName, 'תוכניות (Plans)');
+        backLink.appendChild(backArrow);
+        backLink.appendChild(backName);
         back.appendChild(backLink);
+        if (state.screen === 'lesson' && state.lessonPath) {
+            var crumbSep = el('span');
+            crumbSep.textContent = ' / ';
+            back.appendChild(crumbSep);
+            var crumbPlan = el('button');
+            crumbPlan.type = 'button';
+            crumbPlan.className = 'btn btn-ghost plan-crumb-plan';
+            crumbPlan.setAttribute('data-plan-crumb-plan', '');
+            fillUi(crumbPlan, 'תוכנית (Plan)');
+            back.appendChild(crumbPlan);
+            var crumbLesson = el('span');
+            crumbLesson.className = 'plan-crumb-here';
+            crumbLesson.setAttribute('data-plan-crumb-lesson', '');
+            crumbLesson.textContent = ' / ' + (lesson && typeof lesson.title === 'string' ? lesson.title : '');
+            back.appendChild(crumbLesson);
+        } else {
+            var crumbHere = el('span');
+            crumbHere.className = 'plan-crumb-here';
+            crumbHere.textContent = ' / Plan builder';
+            back.appendChild(crumbHere);
+        }
         rootEl.appendChild(back);
 
         var toolbar = el('div');
-        toolbar.className = 'card';
+        toolbar.className = 'plan-head';
         var title = el('h2');
         title.textContent = state.plan && typeof state.plan.title === 'string' ? state.plan.title : state.planId;
-        toolbar.appendChild(title);
         var rev = el('p');
         rev.setAttribute('data-plan-revision', '');
         rev.textContent = Number.isInteger(state.revision) ? String(state.revision) : '';
-        toolbar.appendChild(rev);
         var status = el('p');
         status.setAttribute('data-plan-status', '');
         status.textContent = state.plan && typeof state.plan.status === 'string' ? state.plan.status : '';
-        toolbar.appendChild(status);
+        var headRow = el('div');
+        headRow.className = 'plan-head-row';
+        var titleBlock = el('div');
+        titleBlock.className = 'plan-head-copy';
+        titleBlock.appendChild(title);
+        var forLine = el('p');
+        forLine.className = 'plan-for ui-pair';
+        forLine.setAttribute('data-plan-for', '');
+        var forText = forAudienceLine(state.plan);
+        var forHe = el('span');
+        forHe.className = 'ui-he';
+        forHe.setAttribute('lang', 'he');
+        forHe.textContent = forText.he;
+        var forEn = el('span');
+        forEn.className = 'ui-en';
+        forEn.setAttribute('lang', 'en');
+        forEn.setAttribute('dir', 'ltr');
+        forEn.textContent = forText.en;
+        forLine.appendChild(forHe);
+        forLine.appendChild(forEn);
+        titleBlock.appendChild(forLine);
+        headRow.appendChild(titleBlock);
+        var actions = el('div');
+        actions.className = 'plan-head-actions';
+        var draft = el('div');
+        draft.className = 'plan-draft-state';
+        draft.appendChild(status);
+        draft.appendChild(rev);
+        actions.appendChild(draft);
+        var reloadBtn = button('data-plan-reload', '', 'טעינה מחדש (Reload)', false);
+        reloadBtn.className += ' btn-ghost';
+        var publishBtn = button('data-plan-publish', '', 'פרסום (Publish)', false);
+        publishBtn.className += ' btn-primary plan-publish';
+        var publishIcon = el('img');
+        publishIcon.className = 'plan-publish-icon';
+        publishIcon.setAttribute('src', '/shared/brand/icon-publish.svg');
+        publishIcon.setAttribute('alt', '');
+        publishIcon.setAttribute('width', '14');
+        publishIcon.setAttribute('height', '14');
+        publishBtn.appendChild(publishIcon);
+        actions.appendChild(reloadBtn);
+        actions.appendChild(publishBtn);
+        headRow.appendChild(actions);
+        toolbar.appendChild(headRow);
         if (state.panels.issues) {
             // What the publish will meet, and that warnings never stop it. No approval step.
             var publishNote = el('p');
             publishNote.className = 'plan-note';
             publishNote.setAttribute('data-plan-publish-note', '');
-            publishNote.textContent = state.publishNote || '';
+            fillUi(publishNote, state.publishNote || '');
             toolbar.appendChild(publishNote);
         }
-        toolbar.appendChild(button('data-plan-publish', '', 'פרסום (Publish)', false));
-        toolbar.appendChild(button('data-plan-reload', '', 'טעינה מחדש (Reload)', false));
         var notice = el('p');
         notice.setAttribute('data-plan-notice', '');
         notice.setAttribute('role', 'status');
-        notice.textContent = state.notice || '';
+        fillUi(notice, state.notice || '');
         toolbar.appendChild(notice);
         rootEl.appendChild(toolbar);
 
@@ -790,129 +1667,385 @@
         }
 
         var chooser = el('div');
-        chooser.className = 'card';
+        chooser.className = 'card plan-sequence';
         chooser.setAttribute('data-plan-lessons', '');
+        chooser.setAttribute('data-plan-stack', '');
+        var stackHeading = el('h3');
+        fillUi(stackHeading, 'שיעורים (Lessons)');
+        chooser.appendChild(stackHeading);
+        var stack = el('ol');
+        stack.setAttribute('data-plan-stack-list', '');
         var c;
         for (c = 0; c < state.lessonChoices.length; c++) {
             var choice = state.lessonChoices[c];
-            var pick = button('data-plan-lesson', String(c), choice.title + ' (' + choice.id + ')', false);
-            if (choice.path === state.lessonPath) pick.setAttribute('aria-current', 'true');
-            chooser.appendChild(pick);
+            var lessonNode = form() && form().nodeAt ? form().nodeAt(state.plan, choice.path) : null;
+            var row = el('li');
+            row.className = 'plan-lesson-row';
+            row.setAttribute('data-plan-stack-row', choice.id);
+            if (choice.path === state.lessonPath) {
+                row.setAttribute('aria-current', 'true');
+                row.className += ' plan-lesson-row-open';
+            }
+            var copy = el('div');
+            copy.className = 'plan-lesson-row-copy';
+            var titleEl = el('strong');
+            titleEl.className = 'plan-lesson-row-title';
+            titleEl.setAttribute('data-plan-lesson-title', '');
+            // Lesson title is content, not chrome — keep the stored language.
+            titleEl.textContent = choice.title || choice.id;
+            copy.appendChild(titleEl);
+            var sub = el('p');
+            sub.className = 'plan-lesson-row-subtitle';
+            sub.setAttribute('data-plan-lesson-subtitle', '');
+            var subText = lessonNode && typeof lessonNode.subtitle === 'string' ? lessonNode.subtitle : '';
+            sub.textContent = subText;
+            if (!subText) sub.hidden = true;
+            copy.appendChild(sub);
+            var wordsLine = el('p');
+            wordsLine.className = 'plan-lesson-row-words';
+            wordsLine.setAttribute('data-plan-lesson-words', '');
+            var introWords = wordsIntroducedByLesson(lessonNode);
+            wordsLine.textContent = introWords.join(' · ');
+            if (!introWords.length) wordsLine.hidden = true;
+            copy.appendChild(wordsLine);
+            row.appendChild(copy);
+            var ops = el('div');
+            ops.className = 'plan-lesson-row-ops';
+            ops.appendChild(button('data-plan-lesson-move', 'up', 'למעלה (Up)', c === 0));
+            ops.appendChild(button(
+                'data-plan-lesson-move',
+                'down',
+                'למטה (Down)',
+                c >= state.lessonChoices.length - 1
+            ));
+            var openBtn = button('data-plan-lesson', String(c), 'פתיחת שיעור (Open lesson)', false);
+            if (choice.path === state.lessonPath) openBtn.setAttribute('aria-current', 'true');
+            ops.appendChild(openBtn);
+            ops.appendChild(button(
+                'data-plan-lesson-remove',
+                '',
+                'הסרה (Remove)',
+                state.lessonChoices.length <= 1
+            ));
+            row.appendChild(ops);
+            stack.appendChild(row);
         }
-        rootEl.appendChild(chooser);
+        chooser.appendChild(stack);
 
-        // Two columns on a wide screen: the forms, and beside them the preview, issues, and history.
-        var layout = el('div');
-        layout.className = 'plan-layout';
+        var addBox = el('div');
+        addBox.className = 'plan-add-lesson';
+        addBox.setAttribute('data-plan-add-lesson-form', '');
+        var addTitle = el('input');
+        addTitle.type = 'text';
+        addTitle.setAttribute('data-plan-add-lesson-title', '');
+        addTitle.setAttribute('autocomplete', 'off');
+        addTitle.setAttribute('placeholder', readUiLang() === 'he' ? 'כותרת השיעור' : 'Lesson title');
+        addTitle.setAttribute('aria-label', readUiLang() === 'he' ? 'כותרת השיעור' : 'Lesson title');
+        var addSub = el('input');
+        addSub.type = 'text';
+        addSub.setAttribute('data-plan-add-lesson-subtitle', '');
+        addSub.setAttribute('autocomplete', 'off');
+        addSub.setAttribute('placeholder', readUiLang() === 'he' ? 'משפט אחד (רשות)' : 'One sentence (optional)');
+        addSub.setAttribute('aria-label', readUiLang() === 'he' ? 'משפט אחד' : 'One sentence');
+        addBox.appendChild(addTitle);
+        addBox.appendChild(addSub);
+        addBox.appendChild(button('data-plan-add-lesson', '', 'שיעור חדש (Add lesson)', !state.plan));
+        addBox.appendChild(button('data-plan-reuse-lesson-open', '', 'שימוש חוזר (Reuse lesson)', !state.plan));
+        chooser.appendChild(addBox);
+
+        var reuseBox = el('div');
+        reuseBox.className = 'plan-reuse-lesson';
+        reuseBox.setAttribute('data-plan-reuse-form', '');
+        reuseBox.hidden = state.reuseOpen !== true;
+        var reuseSelect = el('select');
+        reuseSelect.setAttribute('data-plan-reuse-select', '');
+        reuseSelect.setAttribute('aria-label', readUiLang() === 'he' ? 'שיעור לשימוש חוזר' : 'Lesson to reuse');
+        var reusePlaceholder = el('option');
+        reusePlaceholder.value = '';
+        fillOptionUi(reusePlaceholder, 'בחירת שיעור…', 'Choose a lesson…');
+        reuseSelect.appendChild(reusePlaceholder);
+        (state.reuseOptions || []).forEach(function (opt) {
+            var o = el('option');
+            o.value = opt.key;
+            o.textContent = opt.label;
+            reuseSelect.appendChild(o);
+        });
+        reuseBox.appendChild(reuseSelect);
+        reuseBox.appendChild(button('data-plan-reuse-lesson', '', 'הכנסה (Insert copy)', !state.plan));
+        chooser.appendChild(reuseBox);
+
+        var bank = el('div');
+        bank.className = 'card plan-word-bank';
+        bank.setAttribute('data-plan-word-bank', '');
+        var bankHeading = el('h3');
+        fillUi(bankHeading, 'בנק מילים (Word bank)');
+        bank.appendChild(bankHeading);
+        var bankList = el('ol');
+        bankList.setAttribute('data-plan-word-bank-list', '');
+        var bankRows = planWordBank(state.plan);
+        var bi;
+        for (bi = 0; bi < bankRows.length; bi++) {
+            var bw = bankRows[bi];
+            var bli = el('li');
+            bli.setAttribute('data-plan-bank-word', bw.word);
+            bli.setAttribute('data-from-lesson', bw.lessonId);
+            var bwSpan = el('button');
+            bwSpan.type = 'button';
+            bwSpan.className = 'lookup-word';
+            bwSpan.setAttribute('data-lookup-word', bw.word);
+            bwSpan.setAttribute('lang', 'he');
+            bwSpan.setAttribute('dir', 'rtl');
+            bwSpan.textContent = bw.word;
+            bli.appendChild(bwSpan);
+            var from = el('span');
+            from.className = 'plan-block-id';
+            from.textContent = bw.lessonTitle;
+            bli.appendChild(from);
+            bankList.appendChild(bli);
+        }
+        bank.appendChild(bankList);
+        var paste = el('textarea');
+        paste.setAttribute('data-plan-word-paste', '');
+        paste.setAttribute('rows', '4');
+        paste.setAttribute('placeholder', readUiLang() === 'he'
+            ? 'הדבקת שורות: עברית – English'
+            : 'Paste lines: Hebrew – English');
+        paste.setAttribute('aria-label', readUiLang() === 'he' ? 'הדבקת מילים' : 'Paste words');
+        bank.appendChild(paste);
+        bank.appendChild(button('data-plan-word-paste-apply', '', 'הוספת מילים (Add words)', !state.lessonPath));
+        var pasteMsg = el('p');
+        pasteMsg.className = 'plan-issue plan-issue-block';
+        pasteMsg.setAttribute('data-plan-word-paste-message', '');
+        pasteMsg.setAttribute('role', 'alert');
+        if (state.wordPasteRejected && state.wordPasteRejected.length) {
+            pasteMsg.hidden = false;
+            pasteMsg.textContent = uiLine(
+                'שורה בלי מפריד: ' + state.wordPasteRejected.join(' · '),
+                'Line with no separator: ' + state.wordPasteRejected.join(' · ')
+            );
+        } else {
+            pasteMsg.hidden = true;
+        }
+        bank.appendChild(pasteMsg);
+        var addWordRow = el('div');
+        addWordRow.className = 'plan-word-add';
+        var addWordInput = el('input');
+        addWordInput.type = 'text';
+        addWordInput.setAttribute('data-plan-word-add', '');
+        addWordInput.setAttribute('autocomplete', 'off');
+        addWordInput.setAttribute('aria-label', readUiLang() === 'he' ? 'מילה חדשה' : 'New word');
+        addWordRow.appendChild(addWordInput);
+        addWordRow.appendChild(button('data-plan-word-add-apply', '', 'הוספה (Add)', !state.lessonPath));
+        bank.appendChild(addWordRow);
+        var wordHint = el('p');
+        wordHint.className = 'plan-note ui-pair';
+        var wordHintHe = el('span');
+        wordHintHe.className = 'ui-he';
+        wordHintHe.lang = 'he';
+        wordHintHe.textContent = 'לחצו על מילה בבנק כדי לראות את התרגום במילון.';
+        var wordHintEn = el('span');
+        wordHintEn.className = 'ui-en';
+        wordHintEn.lang = 'en';
+        wordHintEn.setAttribute('dir', 'ltr');
+        wordHintEn.textContent = 'Click a word in the bank to see the dictionary meaning.';
+        wordHint.appendChild(wordHintHe);
+        wordHint.appendChild(wordHintEn);
+        bank.appendChild(wordHint);
+        var wordHits = el('ul');
+        wordHits.className = 'plan-lexicon-hits';
+        wordHits.setAttribute('data-plan-word-hits', '');
+        wordHits.hidden = true;
+        bank.appendChild(wordHits);
+
+        // Lesson tabs (plan + lesson screens). Open lesson switches to the lesson screen.
+        var tabs = el('nav');
+        tabs.className = 'plan-lesson-tabs';
+        tabs.setAttribute('data-plan-lesson-tabs', '');
+        tabs.setAttribute('aria-label', readUiLang() === 'he' ? 'שיעורים' : 'Lessons');
+        var tabI;
+        for (tabI = 0; tabI < state.lessonChoices.length; tabI++) {
+            var tabChoice = state.lessonChoices[tabI];
+            var tabBtn = button('data-plan-lesson-tab', String(tabI), tabChoice.title || tabChoice.id, false);
+            tabBtn.className += ' plan-lesson-tab';
+            if (tabChoice.path === state.lessonPath && state.screen === 'lesson') {
+                tabBtn.setAttribute('aria-current', 'true');
+            }
+            tabs.appendChild(tabBtn);
+        }
+        rootEl.appendChild(tabs);
+
         var mainCol = el('div');
         mainCol.className = 'plan-main';
         var aside = el('div');
         aside.className = 'plan-aside';
-        layout.appendChild(mainCol);
-        layout.appendChild(aside);
-        rootEl.appendChild(layout);
 
-        if (state.schema === 'loading') {
-            var loading = el('p');
-            loading.className = 'plan-note';
-            loading.setAttribute('data-plan-schema-loading', '');
-            loading.setAttribute('role', 'status');
-            loading.textContent = 'טוען את הסכמה… (Loading the schema…)';
-            mainCol.appendChild(loading);
-        } else if (state.schema === 'failed') {
-            var failed = el('p');
-            failed.className = 'admin-inline-error';
-            failed.setAttribute('data-plan-schema-failed', '');
-            failed.setAttribute('role', 'alert');
-            failed.textContent = 'הסכמה לא נטענה; אפשר לערוך רק כ-JSON. (The schema did not load; only raw JSON editing is available.)';
-            mainCol.appendChild(failed);
+        if (state.screen !== 'lesson') {
+            // Plan screen: lesson list and word bank. Below 900px the bank sits under the list.
+            var layout = el('div');
+            layout.className = 'plan-layout plan-screen';
+            layout.setAttribute('data-plan-screen', '');
+            var rail = el('div');
+            rail.className = 'plan-rail';
+            rail.appendChild(chooser);
+            var bankCol = el('div');
+            bankCol.className = 'plan-bank';
+            bankCol.appendChild(bank);
+            layout.appendChild(rail);
+            layout.appendChild(bankCol);
+            rootEl.appendChild(layout);
+            if (planCard) {
+                var planWrap = el('div');
+                planWrap.className = 'plan-main';
+                planWrap.appendChild(planCard);
+                rootEl.appendChild(planWrap);
+            }
+            state.previewEl = null;
+            state.previewLabel = null;
+        } else {
+            // Lesson screen (Figma 19:2592): bank | activities | preview. Provenance: INIT-011/SPEC-005
+            if (lessonCard) {
+                lessonCard.setAttribute('data-plan-lesson-details', '');
+                rootEl.appendChild(lessonCard);
+            } else if (lesson && ready && LESSON_PATH.test(state.lessonPath)) {
+                var details = el('section');
+                details.className = 'card';
+                details.setAttribute('data-plan-lesson-details', '');
+                var detailsHeading = el('h3');
+                fillUi(detailsHeading, 'פרטי השיעור (Lesson details)');
+                details.appendChild(detailsHeading);
+                rootEl.appendChild(details);
+            }
+
+            var work = el('div');
+            work.className = 'plan-layout plan-lesson-screen';
+            work.setAttribute('data-plan-lesson-screen', '');
+            var lessonBank = el('div');
+            lessonBank.className = 'plan-bank';
+            lessonBank.appendChild(bank);
+            work.appendChild(lessonBank);
+            work.appendChild(mainCol);
+            work.appendChild(aside);
+            rootEl.appendChild(work);
+
+            if (state.schema === 'loading') {
+                var loading = el('p');
+                loading.className = 'plan-note';
+                loading.setAttribute('data-plan-schema-loading', '');
+                loading.setAttribute('role', 'status');
+                fillUi(loading, 'טוען את הסכמה… (Loading the schema…)');
+                mainCol.appendChild(loading);
+            } else if (state.schema === 'failed') {
+                var failed = el('p');
+                failed.className = 'admin-inline-error';
+                failed.setAttribute('data-plan-schema-failed', '');
+                failed.setAttribute('role', 'alert');
+                fillUi(failed, 'הסכמה לא נטענה; אפשר לערוך רק כ-JSON. (The schema did not load; only raw JSON editing is available.)');
+                mainCol.appendChild(failed);
+            }
+
+            paintEarlierWords(mainCol);
+
+            var outlineHeading = el('h3');
+            fillUi(outlineHeading, 'פעילויות (Activities)');
+            mainCol.appendChild(outlineHeading);
+            var outline = el('ol');
+            outline.setAttribute('data-plan-outline', '');
+            outline.setAttribute('data-plan-activities', '');
+            var visible = listedBlocks(lesson);
+            var b;
+            for (b = 0; b < visible.length; b++) {
+                var block = visible[b];
+                var fullIndex = -1;
+                var bi;
+                for (bi = 0; bi < blocks.length; bi++) {
+                    if (blocks[bi] && blocks[bi].id === block.id) {
+                        fullIndex = bi;
+                        break;
+                    }
+                }
+                var row = el('li');
+                row.setAttribute('data-plan-block', block.id);
+                if (state.selectedId === block.id) row.setAttribute('aria-current', 'true');
+                var label = el('span');
+                label.setAttribute('data-plan-activity-label', '');
+                var actName = activityNameForType(block.type);
+                if (actName && ACTIVITY_HE[actName]) {
+                    fillUi(label, ACTIVITY_HE[actName] + ' (' + actName + ')');
+                } else {
+                    fillUi(label, blockLabel(block.type));
+                }
+                row.appendChild(label);
+                var upIndex = moveDestination(fullIndex, 'up');
+                var downIndex = moveDestination(fullIndex, 'down');
+                // Skip over the placeholder when deciding ends; move still uses real indices.
+                row.appendChild(button('data-plan-move', 'up', 'למעלה (Up)', upIndex == null || upIndex < 0));
+                row.appendChild(button(
+                    'data-plan-move',
+                    'down',
+                    'למטה (Down)',
+                    downIndex == null || downIndex > blocks.length - 1
+                ));
+                row.appendChild(button('data-plan-remove', '', 'הסרה (Remove)', false));
+                row.appendChild(button('data-plan-edit', '', 'שדות (Fields)', false));
+                outline.appendChild(row);
+            }
+            mainCol.appendChild(outline);
+
+            paintInsert(mainCol);
+
+            var fields = el('div');
+            fields.className = 'card';
+            fields.setAttribute('data-plan-fields', '');
+            if (blockForm && selected && selected.block && selected.block.id !== 'placeholder') {
+                var fieldsHeading = el('h3');
+                var openName = activityNameForType(selected.block.type);
+                if (openName && ACTIVITY_HE[openName]) {
+                    fillUi(fieldsHeading, ACTIVITY_HE[openName] + ' (' + openName + ')');
+                } else {
+                    fillUi(fieldsHeading, blockLabel(selected.block.type));
+                }
+                fields.appendChild(fieldsHeading);
+                fields.appendChild(blockForm.el);
+            }
+            mainCol.appendChild(fields);
+
+            if (selected && selected.block && selected.block.type === 'introduction') {
+                paintPictures(mainCol, selected.block);
+            }
+
+            paintMedia(mainCol);
+
+            var previewCard = el('section');
+            previewCard.className = 'card plan-preview-card';
+            previewCard.setAttribute('data-plan-preview-card', '');
+            var previewHeading = el('h3');
+            fillUi(previewHeading, 'תצוגה מקדימה (Preview)');
+            previewCard.appendChild(previewHeading);
+            var previewLabel = el('p');
+            previewLabel.className = 'plan-note';
+            previewLabel.setAttribute('data-plan-preview-label', '');
+            previewLabel.setAttribute('role', 'status');
+            previewCard.appendChild(previewLabel);
+            var preview = el('div');
+            preview.className = 'plan-page';
+            preview.setAttribute('data-plan-preview', '');
+            preview.setAttribute('aria-label', 'תצוגה מקדימה');
+            var guard = function (ev) {
+                if (root.HebrewPlanPreview) root.HebrewPlanPreview.guardClick(ev, preview);
+            };
+            preview.addEventListener('click', guard, state.controller ? { signal: state.controller.signal } : undefined);
+            previewCard.appendChild(preview);
+            state.previewEl = preview;
+            state.previewLabel = previewLabel;
+            aside.appendChild(previewCard);
         }
-        if (lessonCard) mainCol.appendChild(lessonCard);
-        if (unitCard) mainCol.appendChild(unitCard);
-        if (planCard) mainCol.appendChild(planCard);
 
-        var outlineHeading = el('h3');
-        outlineHeading.textContent = 'בלוקים (Blocks)';
-        mainCol.appendChild(outlineHeading);
-        var outline = el('ol');
-        outline.setAttribute('data-plan-outline', '');
-        var b;
-        for (b = 0; b < blocks.length; b++) {
-            var block = blocks[b];
-            if (!block || typeof block.id !== 'string' || !ENTRY.test(block.id)) continue;
-            var row = el('li');
-            row.setAttribute('data-plan-block', block.id);
-            if (state.selectedId === block.id) row.setAttribute('aria-current', 'true');
-            var label = el('span');
-            label.textContent = blockLabel(block.type) + ' · ' + block.id;
-            row.appendChild(label);
-            var upIndex = moveDestination(b, 'up');
-            var downIndex = moveDestination(b, 'down');
-            row.appendChild(button('data-plan-move', 'up', 'למעלה (Up)', upIndex == null || upIndex < 0));
-            row.appendChild(button(
-                'data-plan-move',
-                'down',
-                'למטה (Down)',
-                downIndex == null || downIndex > blocks.length - 1
-            ));
-            row.appendChild(button('data-plan-remove', '', 'הסרה (Remove)', false));
-            row.appendChild(button('data-plan-edit', '', 'שדות (Fields)', false));
-            outline.appendChild(row);
-        }
-        mainCol.appendChild(outline);
-
-        paintInsert(mainCol, blocks);
-
-        var fields = el('div');
-        fields.className = 'card';
-        fields.setAttribute('data-plan-fields', '');
-        if (blockForm) {
-            var fieldsHeading = el('h3');
-            fieldsHeading.textContent = blockLabel(selected.block.type) + ' ';
-            var headingId = el('span');
-            headingId.className = 'plan-block-id';
-            headingId.setAttribute('dir', 'ltr');
-            headingId.textContent = selected.block.id;
-            fieldsHeading.appendChild(headingId);
-            fields.appendChild(fieldsHeading);
-            fields.appendChild(blockForm.el);
-        }
-        mainCol.appendChild(fields);
-
-        if (selected && selected.block && selected.block.type === 'introduction') {
-            paintPictures(mainCol, selected.block);
-        }
-
-        paintMedia(mainCol);
-
-        // The aside: the preview first, so it stays beside the form, then what the server found.
-        var previewCard = el('section');
-        previewCard.className = 'card plan-preview-card';
-        previewCard.setAttribute('data-plan-preview-card', '');
-        var previewHeading = el('h3');
-        previewHeading.textContent = 'תצוגה מקדימה (Preview)';
-        previewCard.appendChild(previewHeading);
-        var previewLabel = el('p');
-        previewLabel.className = 'plan-note';
-        previewLabel.setAttribute('data-plan-preview-label', '');
-        previewLabel.setAttribute('role', 'status');
-        previewCard.appendChild(previewLabel);
-        var preview = el('div');
-        preview.className = 'plan-page';
-        preview.setAttribute('data-plan-preview', '');
-        preview.setAttribute('aria-label', 'תצוגה מקדימה');
-        // The learner's controls are drawn and not wired: a click on one does nothing.
-        var guard = function (ev) {
-            if (root.HebrewPlanPreview) root.HebrewPlanPreview.guardClick(ev, preview);
-        };
-        preview.addEventListener('click', guard, state.controller ? { signal: state.controller.signal } : undefined);
-        previewCard.appendChild(preview);
-        state.previewEl = preview;
-        state.previewLabel = previewLabel;
-        aside.appendChild(previewCard);
-        if (state.panels.issues) aside.appendChild(state.panels.issues.el);
-        paintValidation(aside);
-        if (state.panels.history) aside.appendChild(state.panels.history.el);
+        var foot = el('div');
+        foot.className = 'plan-foot';
+        if (state.panels.issues) foot.appendChild(state.panels.issues.el);
+        paintValidation(foot);
+        if (state.panels.history) foot.appendChild(state.panels.history.el);
+        rootEl.appendChild(foot);
 
         panel.appendChild(rootEl);
         refreshPreview();
@@ -960,13 +2093,44 @@
         if (!node || !node.hasAttribute) return Promise.resolve();
         if (attrNode(node, 'data-plan-reload')) return reload();
         if (attrNode(node, 'data-plan-publish')) return publish();
+        if (attrNode(node, 'data-plan-crumb-plan')) {
+            state.screen = 'plan';
+            paint();
+            return Promise.resolve();
+        }
+        var lessonTab = attrNode(node, 'data-plan-lesson-tab');
+        if (lessonTab) {
+            var tabIndex = Number(lessonTab.getAttribute('data-plan-lesson-tab'));
+            var tabChoice = state.lessonChoices[tabIndex];
+            if (!tabChoice || !LESSON_PATH.test(tabChoice.path)) return Promise.resolve();
+            state.screen = 'lesson';
+            return loadLesson(tabChoice.path);
+        }
         var lessonBtn = attrNode(node, 'data-plan-lesson');
         if (lessonBtn) {
             var index = Number(lessonBtn.getAttribute('data-plan-lesson'));
             var choice = state.lessonChoices[index];
             if (!choice || !LESSON_PATH.test(choice.path)) return Promise.resolve();
+            state.screen = 'lesson';
             return loadLesson(choice.path);
         }
+        var bankWord = attrNode(node, 'data-plan-bank-word');
+        if (bankWord && state.screen === 'lesson' && !attrNode(node, 'data-lookup-word')) {
+            var picked = bankWord.getAttribute('data-plan-bank-word') || '';
+            if (picked) return addBankWordToOpenWords(picked);
+        }
+        var lessonMove = attrNode(node, 'data-plan-lesson-move');
+        if (lessonMove) return moveLesson(lessonMove);
+        if (attrNode(node, 'data-plan-lesson-remove')) return removeLesson(node);
+        if (attrNode(node, 'data-plan-add-lesson')) return addLesson();
+        if (attrNode(node, 'data-plan-reuse-lesson-open')) return openReusePicker();
+        if (attrNode(node, 'data-plan-reuse-lesson')) return reuseLesson();
+        if (attrNode(node, 'data-plan-word-paste-apply')) return pasteWordBank();
+        if (attrNode(node, 'data-plan-word-add-apply')) return addBankWord();
+        var lexiconPick = attrNode(node, 'data-plan-lexicon-pick');
+        if (lexiconPick) return pickLexicon(lexiconPick);
+        var verbTense = attrNode(node, 'data-plan-verb-tense');
+        if (verbTense) return applyVerbTense(verbTense.getAttribute('data-plan-verb-tense') || '');
         var edit = attrNode(node, 'data-plan-edit');
         if (edit) {
             var editId = rowBlockId(edit);
@@ -1001,7 +2165,12 @@
         var node = targetNode(ev);
         if (node && attrNode(node, 'data-plan-confirm')) syncGenerate();
         var typeSelect = node ? attrNode(node, 'data-plan-new-type') : null;
-        if (typeSelect) renderNewDraft(String(typeSelect.value || ''));
+        if (typeSelect) {
+            if (String(typeSelect.value || '') !== 'conjugation-table') state.patternFill = null;
+            syncActivityHint(typeSelect);
+            syncVerbFinder(typeSelect);
+            renderNewDraft(String(typeSelect.value || ''));
+        }
     }
 
     function onInput(ev) {
@@ -1009,6 +2178,14 @@
         schedulePreview();
         var node = targetNode(ev);
         if (!node) return;
+        if (attrNode(node, 'data-plan-word-add')) {
+            if (state.pickedWord && String(node.value || '').trim() !== state.pickedWord) {
+                state.pickedWord = '';
+                state.pickedMeaning = '';
+            }
+            scheduleLexiconSearch(node, 'word');
+        }
+        if (attrNode(node, 'data-plan-verb-query')) scheduleLexiconSearch(node, 'verb');
         if (attrNode(node, 'data-plan-approve-alt')) syncApprove();
         if (!attrNode(node, 'data-plan-gen-prompt')) return;
         var promptInput = state.panel.querySelector('[data-plan-gen-prompt]');
@@ -1043,9 +2220,19 @@
             var issues = state.panels.issues;
             var last = issues ? issues.last() : null;
             if (last && root.HebrewPlanIssues) {
-                state.notice = 'פורסם (Published) · ' + state.revision + ' · ' + root.HebrewPlanIssues.countsText(last.counts).text;
+                var counts = root.HebrewPlanIssues.countsText(last.counts);
+                var suffix = ' · ' + state.revision + ' · ';
+                state.notice = 'פורסם (Published) · ' + state.revision;
                 var node = state.panel && state.panel.querySelector('[data-plan-notice]');
-                if (node) node.textContent = state.notice;
+                if (node && root.HebrewPlanUi && typeof root.HebrewPlanUi.fillPair === 'function') {
+                    root.HebrewPlanUi.fillPair(
+                        node,
+                        'פורסם' + suffix + counts.he,
+                        'Published' + suffix + counts.en
+                    );
+                } else if (node) {
+                    fillUi(node, state.notice);
+                }
             }
             return ok;
         });
@@ -1068,9 +2255,572 @@
         });
     }
 
+    /**
+     * Reorder a lesson in its unit via POST /lessons/move (INIT-010/SPEC-002).
+     * @param {HTMLElement} node
+     * @returns {Promise<boolean>}
+     */
+    function moveLesson(node) {
+        if (!state || !state.plan || node.hasAttribute('data-plan-locked') || node.disabled) {
+            return Promise.resolve(false);
+        }
+        var row = attrNode(node, 'data-plan-stack-row');
+        if (!row) return Promise.resolve(false);
+        var lessonId = row.getAttribute('data-plan-stack-row') || '';
+        var from = -1;
+        var i;
+        for (i = 0; i < state.lessonChoices.length; i++) {
+            if (state.lessonChoices[i].id === lessonId) {
+                from = i;
+                break;
+            }
+        }
+        var direction = node.getAttribute('data-plan-lesson-move');
+        var choice = state.lessonChoices[from];
+        if (!choice || !LESSON_PATH.test(choice.path)) return Promise.resolve(false);
+        // Within one unit only (SPEC-002 move_lesson). Index is the post-splice destination.
+        var unitLessons = [];
+        for (i = 0; i < state.lessonChoices.length; i++) {
+            if (state.lessonChoices[i].unitId === choice.unitId) {
+                unitLessons.push(state.lessonChoices[i]);
+            }
+        }
+        var unitFrom = -1;
+        for (i = 0; i < unitLessons.length; i++) {
+            if (unitLessons[i].id === choice.id) {
+                unitFrom = i;
+                break;
+            }
+        }
+        var unitTo = moveDestination(unitFrom, direction);
+        if (!Number.isInteger(unitTo) || unitTo < 0 || unitTo >= unitLessons.length) {
+            return Promise.resolve(false);
+        }
+        return write('POST', '/api/plans/' + encodeURIComponent(state.planId) + '/lessons/move', {
+            path: choice.path,
+            index: unitTo
+        });
+    }
+
+    function currentUnitId() {
+        var unitId = '';
+        if (state.lessonPath) {
+            var segs = state.lessonPath.split('/');
+            if (segs.length >= 2) unitId = segs[1];
+        }
+        if (!unitId && state.lessonChoices.length) unitId = state.lessonChoices[0].unitId;
+        if (!unitId && state.plan && state.plan.units && state.plan.units[0]) {
+            unitId = state.plan.units[0].id;
+        }
+        return unitId;
+    }
+
+    function addLesson() {
+        if (!state || !state.plan) {
+            showBox('data-plan-error', uiLine('אין תוכנית פתוחה.', 'No plan is open.'));
+            return Promise.resolve(false);
+        }
+        var titleInput = state.panel && state.panel.querySelector('[data-plan-add-lesson-title]');
+        var subInput = state.panel && state.panel.querySelector('[data-plan-add-lesson-subtitle]');
+        var title = titleInput ? String(titleInput.value || '').trim() : '';
+        var subtitle = subInput ? String(subInput.value || '').trim() : '';
+        if (!title) {
+            showBox('data-plan-error', uiLine('צריך כותרת לשיעור.', 'A lesson title is needed.'));
+            return Promise.resolve(false);
+        }
+        var unitId = currentUnitId();
+        var unit = unitById(unitId);
+        if (!unit || !Array.isArray(unit.lessons)) {
+            showBox('data-plan-error', uiLine('לא נמצאה יחידה לשיעור החדש.', 'Could not find a unit for the new lesson.'));
+            return Promise.resolve(false);
+        }
+        var id = slugFromTitle(title, unit.lessons);
+        if (!SLUG.test(id)) {
+            showBox('data-plan-error', uiLine('לא ניתן לבחור מזהה לשיעור החדש.', 'Could not choose an id for the new lesson.'));
+            return Promise.resolve(false);
+        }
+        var path = 'units/' + unitId + '/lessons/' + id;
+        var lesson = newLessonShell(id, title, subtitle);
+        return write('POST', '/api/plans/' + encodeURIComponent(state.planId) + '/lessons', {
+            path: 'units/' + unitId,
+            lesson: lesson
+        }, {
+            onSaved: function () {
+                state.lessonPath = path;
+                if (titleInput) titleInput.value = '';
+                if (subInput) subInput.value = '';
+            }
+        });
+    }
+
+    function openReusePicker() {
+        if (!state || !state.plan || !api()) return Promise.resolve(false);
+        state.reuseOpen = true;
+        state.reuseOptions = [];
+        state.reuseCache = {};
+        var mine = state.token;
+        // This plan's lessons first.
+        state.lessonChoices.forEach(function (choice) {
+            var lesson = form().nodeAt(state.plan, choice.path);
+            if (!lesson) return;
+            var key = state.planId + '|' + choice.path;
+            state.reuseOptions.push({
+                key: key,
+                label: (state.plan.title || state.planId) + ' — ' + (choice.title || choice.id),
+                planId: state.planId,
+                path: choice.path,
+                lessonId: choice.id
+            });
+            state.reuseCache[key] = lesson;
+        });
+        paint();
+        return Promise.resolve(api().get('/api/plans', state.controller ? { signal: state.controller.signal } : undefined)).then(function (res) {
+            if (!alive(mine) || !res || !res.ok || !res.data || !Array.isArray(res.data.plans)) {
+                return false;
+            }
+            var plans = res.data.plans.filter(function (row) {
+                return row && typeof row.id === 'string' && row.id !== state.planId;
+            });
+            var chain = Promise.resolve();
+            plans.forEach(function (row) {
+                chain = chain.then(function () {
+                    if (!alive(mine)) return;
+                    return Promise.resolve(api().get(
+                        '/api/plans/' + encodeURIComponent(row.id) + '/parts',
+                        state.controller ? { signal: state.controller.signal } : undefined
+                    )).then(function (partRes) {
+                        if (!alive(mine) || !partRes || !partRes.ok || !partRes.data || !partRes.data.part) return;
+                        var other = partRes.data.part;
+                        listLessons(other).forEach(function (choice) {
+                            var lesson = form().nodeAt(other, choice.path);
+                            if (!lesson) return;
+                            var key = row.id + '|' + choice.path;
+                            state.reuseOptions.push({
+                                key: key,
+                                label: (other.title || row.title || row.id) + ' — ' + (choice.title || choice.id),
+                                planId: row.id,
+                                path: choice.path,
+                                lessonId: choice.id
+                            });
+                            state.reuseCache[key] = lesson;
+                        });
+                    });
+                });
+            });
+            return chain.then(function () {
+                if (!alive(mine)) return false;
+                state.reuseOpen = true;
+                paint();
+                return true;
+            });
+        });
+    }
+
+    function reuseLesson() {
+        if (!state || !state.plan) {
+            showBox('data-plan-error', uiLine('אין תוכנית פתוחה.', 'No plan is open.'));
+            return Promise.resolve(false);
+        }
+        var select = state.panel && state.panel.querySelector('[data-plan-reuse-select]');
+        var key = select ? String(select.value || '') : '';
+        var opt = (state.reuseOptions || []).find(function (o) { return o.key === key; });
+        var source = key && state.reuseCache ? state.reuseCache[key] : null;
+        if (!opt || !source) {
+            showBox('data-plan-error', uiLine('בחרו שיעור לשימוש חוזר.', 'Choose a lesson to reuse.'));
+            return Promise.resolve(false);
+        }
+        var unitId = currentUnitId();
+        var unit = unitById(unitId);
+        if (!unit || !Array.isArray(unit.lessons)) {
+            showBox('data-plan-error', uiLine('לא נמצאה יחידה לשיעור החדש.', 'Could not find a unit for the new lesson.'));
+            return Promise.resolve(false);
+        }
+        var copy = prepareReuseLesson(source, opt.lessonId, state.lessonChoices);
+        if (!SLUG.test(copy.id)) {
+            showBox('data-plan-error', uiLine('לא ניתן לבחור מזהה לשיעור החדש.', 'Could not choose an id for the new lesson.'));
+            return Promise.resolve(false);
+        }
+        var path = 'units/' + unitId + '/lessons/' + copy.id;
+        return write('POST', '/api/plans/' + encodeURIComponent(state.planId) + '/lessons', {
+            path: 'units/' + unitId,
+            lesson: copy
+        }, {
+            onSaved: function () {
+                state.lessonPath = path;
+                state.reuseOpen = false;
+            }
+        });
+    }
+
+    function introductionBlock(lesson) {
+        if (!lesson || !Array.isArray(lesson.blocks)) return null;
+        var i;
+        for (i = 0; i < lesson.blocks.length; i++) {
+            if (lesson.blocks[i] && lesson.blocks[i].type === 'introduction') return lesson.blocks[i];
+        }
+        return null;
+    }
+
+    function wordEntryId(existing, index) {
+        var used = {};
+        (Array.isArray(existing) ? existing : []).forEach(function (w) {
+            if (w && typeof w.id === 'string') used[w.id] = true;
+        });
+        var n = index + 1;
+        while (used['w' + n]) n += 1;
+        return 'w' + n;
+    }
+
+    var PRESENT_CELLS = ['ms', 'fs', 'mp', 'fp'];
+    var PAST_CELLS = ['1s', '2ms', '2fs', '3ms', '3fs', '1p', '2mp', '2fp', '3p'];
+
+    /**
+     * Cells a conjugation table can store, taken from a lexicon paradigm.
+     * Each formKey is the stored pointed form. A tense with no stored forms yields [].
+     * @param {object} paradigm
+     * @param {string} tense
+     * @returns {{ cell: string, formKey: string }[]}
+     */
+    function cellsFromParadigm(paradigm, tense) {
+        var order = tense === 'past' || tense === 'future' ? PAST_CELLS
+            : (tense === 'present' ? PRESENT_CELLS : []);
+        var bucket = paradigm && order.length ? paradigm[tense] : null;
+        if (!bucket || typeof bucket !== 'object') return [];
+        var cells = [];
+        var i;
+        for (i = 0; i < order.length; i++) {
+            var code = order[i];
+            var form = bucket[code];
+            var key = form && typeof form.key === 'string' ? form.key : '';
+            if (key) cells.push({ cell: code, formKey: key });
+        }
+        return cells;
+    }
+
+    function lexiconApi() {
+        return root.HebrewApi && typeof root.HebrewApi.get === 'function' ? root.HebrewApi : null;
+    }
+
+    /**
+     * One row per verb lemma. A matching form still points at its lemma.
+     * @param {object[]} entries
+     * @returns {{ key: string, gloss: string }[]}
+     */
+    function verbChoices(entries) {
+        var byKey = {};
+        var order = [];
+        (Array.isArray(entries) ? entries : []).forEach(function (entry) {
+            if (!entry || typeof entry.key !== 'string') return;
+            var key = entry.kind === 'lemma' ? entry.key : (typeof entry.lemma_key === 'string' ? entry.lemma_key : '');
+            if (!key) return;
+            if (!byKey[key]) order.push(key);
+            var gloss = typeof entry.gloss_en === 'string' ? entry.gloss_en : '';
+            if (!byKey[key] || entry.kind === 'lemma') {
+                byKey[key] = { key: key, gloss: entry.kind === 'lemma' ? gloss : (byKey[key] ? byKey[key].gloss : '') };
+            }
+        });
+        return order.slice(0, 8).map(function (key) { return byKey[key]; });
+    }
+
+    function searchLexicon(q, pos) {
+        var api = lexiconApi();
+        if (!api) return Promise.resolve([]);
+        var path = pos
+            ? '/api/lexicon?q=' + encodeURIComponent(q) + '&limit=40&pos=' + encodeURIComponent(pos)
+            : '/api/dictionary?q=' + encodeURIComponent(q) + '&limit=8';
+        return api.get(path).then(function (res) {
+            return res && res.ok && res.data && Array.isArray(res.data.entries) ? res.data.entries : [];
+        }).catch(function () {
+            return [];
+        });
+    }
+
+    function paintLexiconHits(list, entries, role) {
+        if (!list) return;
+        empty(list);
+        var rows = role === 'verb' ? verbChoices(entries) : (Array.isArray(entries) ? entries : []).slice(0, 8).map(function (entry) {
+            return {
+                key: entry && typeof entry.key === 'string' ? entry.key : '',
+                gloss: entry && typeof entry.gloss_en === 'string' ? entry.gloss_en : ''
+            };
+        }).filter(function (row) { return row.key; });
+        if (!rows.length) {
+            list.hidden = true;
+            return;
+        }
+        list.hidden = false;
+        rows.forEach(function (row) {
+            var li = el('li');
+            var hit = el('button');
+            hit.type = 'button';
+            hit.className = 'plan-lexicon-hit';
+            hit.setAttribute('data-plan-lexicon-pick', role);
+            hit.setAttribute('data-lexicon-key', row.key);
+            hit.setAttribute('data-lexicon-gloss', row.gloss || '');
+            var he = el('span');
+            he.lang = 'he';
+            he.setAttribute('dir', 'rtl');
+            he.textContent = row.key;
+            var en = el('span');
+            en.lang = 'en';
+            en.setAttribute('dir', 'ltr');
+            en.textContent = row.gloss || '';
+            hit.appendChild(he);
+            hit.appendChild(en);
+            li.appendChild(hit);
+            list.appendChild(li);
+        });
+    }
+
+    function scheduleLexiconSearch(input, role) {
+        if (!state) return;
+        if (state.lexiconTimer) clearTimeout(state.lexiconTimer);
+        var q = String(input && input.value || '').trim();
+        var list = state.panel && state.panel.querySelector(role === 'verb' ? '[data-plan-verb-hits]' : '[data-plan-word-hits]');
+        if (q.length < 1) {
+            if (list) {
+                empty(list);
+                list.hidden = true;
+            }
+            return;
+        }
+        state.lexiconTimer = setTimeout(function () {
+            var seq = (state.lexiconSeq || 0) + 1;
+            state.lexiconSeq = seq;
+            searchLexicon(q, role === 'verb' ? 'verb' : '').then(function (entries) {
+                if (!state || state.lexiconSeq !== seq || !list || !list.parentNode) return;
+                paintLexiconHits(list, entries, role);
+            });
+        }, 200);
+    }
+
+    function applyWordsToOpenLesson(pairs) {
+        if (!state || !state.lesson || !LESSON_PATH.test(state.lessonPath) || !pairs.length) {
+            return Promise.resolve(false);
+        }
+        var lesson = state.lesson;
+        var newWords = Array.isArray(lesson.newWords) ? lesson.newWords.slice() : [];
+        pairs.forEach(function (pair) {
+            if (newWords.indexOf(pair.word) === -1) newWords.push(pair.word);
+        });
+        var intro = introductionBlock(lesson);
+        var wordsPath = state.lessonPath + '/newWords';
+        var chain = state.transport.setField(state.lessonPath, 'newWords', newWords, {});
+        if (intro && typeof intro.id === 'string') {
+            var words = Array.isArray(intro.words) ? intro.words.slice() : [];
+            pairs.forEach(function (pair, i) {
+                words.push({
+                    id: wordEntryId(words, words.length + i),
+                    word: pair.word,
+                    meaning: pair.meaning,
+                    sentence: pair.word
+                });
+            });
+            chain = chain.then(function (out) {
+                if (!out || !out.ok) return out;
+                return state.transport.setField(
+                    state.lessonPath + '/blocks/' + intro.id,
+                    'words',
+                    words,
+                    {}
+                );
+            });
+        }
+        return chain.then(function (out) {
+            return !!(out && out.ok);
+        });
+    }
+
+    function pasteWordBank() {
+        if (!state || !state.lessonPath) {
+            showBox('data-plan-error', uiLine('פתחו שיעור קודם.', 'Open a lesson first.'));
+            return Promise.resolve(false);
+        }
+        var area = state.panel && state.panel.querySelector('[data-plan-word-paste]');
+        var parsed = parseWordLines(area ? area.value : '');
+        state.wordPasteRejected = parsed.rejected.slice();
+        if (parsed.rejected.length && !parsed.words.length) {
+            paint();
+            return Promise.resolve(false);
+        }
+        if (!parsed.words.length) {
+            paint();
+            return Promise.resolve(false);
+        }
+        return applyWordsToOpenLesson(parsed.words).then(function (ok) {
+            if (ok && area) area.value = '';
+            // paint() from write already ran; re-paint so rejected lines stay visible.
+            if (state.wordPasteRejected && state.wordPasteRejected.length) paint();
+            return ok;
+        });
+    }
+
+    function addBankWord() {
+        if (!state || !state.lessonPath) {
+            showBox('data-plan-error', uiLine('פתחו שיעור קודם.', 'Open a lesson first.'));
+            return Promise.resolve(false);
+        }
+        var input = state.panel && state.panel.querySelector('[data-plan-word-add]');
+        var word = input ? String(input.value || '').trim() : '';
+        if (!word) {
+            showBox('data-plan-error', uiLine('צריך מילה.', 'A word is needed.'));
+            return Promise.resolve(false);
+        }
+        var meaning = state.pickedWord === word && state.pickedMeaning ? state.pickedMeaning : word;
+        return applyWordsToOpenLesson([{ word: word, meaning: meaning }]).then(function (ok) {
+            if (ok && input) input.value = '';
+            if (ok) {
+                state.pickedWord = '';
+                state.pickedMeaning = '';
+                var hits = state.panel && state.panel.querySelector('[data-plan-word-hits]');
+                if (hits) {
+                    empty(hits);
+                    hits.hidden = true;
+                }
+            }
+            return ok;
+        });
+    }
+
+    function syncVerbFinder(select, scope) {
+        var rootNode = scope || (state && state.panel);
+        var box = rootNode && rootNode.querySelector ? rootNode.querySelector('[data-plan-verb-find]') : null;
+        if (!box) return;
+        box.hidden = !select || String(select.value || '') !== 'conjugation-table';
+        var tenses = rootNode.querySelector('[data-plan-verb-tenses]');
+        if (!tenses) return;
+        var fill = state.patternFill;
+        var present = fill && cellsFromParadigm(fill.paradigm, 'present').length;
+        var past = fill && cellsFromParadigm(fill.paradigm, 'past').length;
+        tenses.hidden = !(present && past);
+    }
+
+    function pickLexicon(node) {
+        var role = node.getAttribute('data-plan-lexicon-pick') || '';
+        var key = node.getAttribute('data-lexicon-key') || '';
+        var gloss = node.getAttribute('data-lexicon-gloss') || '';
+        if (!key) return Promise.resolve(false);
+        if (role === 'word') {
+            var input = state.panel && state.panel.querySelector('[data-plan-word-add]');
+            if (input) input.value = key;
+            state.pickedWord = key;
+            state.pickedMeaning = gloss || key;
+            return addBankWord();
+        }
+        return fillPattern(key);
+    }
+
+    function applyVerbTense(tense) {
+        if (!state || !state.patternFill || (tense !== 'present' && tense !== 'past' && tense !== 'future')) {
+            return Promise.resolve(false);
+        }
+        var cells = cellsFromParadigm(state.patternFill.paradigm, tense);
+        if (!cells.length) return Promise.resolve(false);
+        state.patternFill.tense = tense;
+        state.patternFill.cells = cells;
+        renderNewDraft('conjugation-table');
+        return Promise.resolve(true);
+    }
+
+    function fillPattern(lemmaKey) {
+        var api = lexiconApi();
+        if (!api || !lemmaKey) return Promise.resolve(false);
+        return api.get('/api/lexicon/' + encodeURIComponent(lemmaKey)).then(function (res) {
+            if (!state || !res || !res.ok || !res.data) {
+                showBox('data-plan-error', uiLine('הפועל לא נמצא במילון.', 'That verb is not in the dictionary.'));
+                return false;
+            }
+            var data = res.data;
+            var paradigm = data.paradigm || {};
+            var present = cellsFromParadigm(paradigm, 'present');
+            var past = cellsFromParadigm(paradigm, 'past');
+            var tense = present.length ? 'present' : (past.length ? 'past' : '');
+            var cells = tense === 'past' ? past : present;
+            if (!tense || !cells.length) {
+                showBox('data-plan-error', uiLine('אין הטיות שמורות לפועל הזה.', 'No stored forms for that verb.'));
+                return false;
+            }
+            var lemma = data.lemma && typeof data.lemma.key === 'string' ? data.lemma : (data.entry || {});
+            state.patternFill = {
+                lemmaKey: lemma.key || lemmaKey,
+                gloss: typeof lemma.gloss_en === 'string' ? lemma.gloss_en : '',
+                paradigm: paradigm,
+                tense: tense,
+                cells: cells
+            };
+            var typeSelect = state.panel && state.panel.querySelector('[data-plan-new-type]');
+            if (typeSelect && String(typeSelect.value || '') !== 'conjugation-table') {
+                typeSelect.value = 'conjugation-table';
+                syncActivityHint(typeSelect);
+            }
+            syncVerbFinder(typeSelect);
+            var hits = state.panel && state.panel.querySelector('[data-plan-verb-hits]');
+            if (hits) {
+                empty(hits);
+                hits.hidden = true;
+            }
+            renderNewDraft('conjugation-table');
+            return true;
+        }).catch(function () {
+            showBox('data-plan-error', uiLine('המילון לא נענה.', 'The dictionary did not answer.'));
+            return false;
+        });
+    }
+
+    /**
+     * Remove a lesson via DELETE /lessons (refused when it is the last in its unit).
+     * @param {HTMLElement} node
+     * @returns {Promise<boolean>}
+     */
+    function removeLesson(node) {
+        if (!state || !state.plan || node.hasAttribute('data-plan-locked') || node.disabled) {
+            return Promise.resolve(false);
+        }
+        var row = attrNode(node, 'data-plan-stack-row');
+        if (!row) return Promise.resolve(false);
+        var lessonId = row.getAttribute('data-plan-stack-row') || '';
+        var choice = null;
+        var i;
+        for (i = 0; i < state.lessonChoices.length; i++) {
+            if (state.lessonChoices[i].id === lessonId) {
+                choice = state.lessonChoices[i];
+                break;
+            }
+        }
+        if (!choice || !LESSON_PATH.test(choice.path)) return Promise.resolve(false);
+        var ok = true;
+        try {
+            if (typeof root.confirm === 'function') ok = root.confirm('Remove this lesson?');
+        } catch (err) {
+            ok = false;
+        }
+        if (!ok) return Promise.resolve(false);
+        var wasOpen = state.lessonPath === choice.path;
+        return write('DELETE', '/api/plans/' + encodeURIComponent(state.planId) + '/lessons', {
+            path: choice.path
+        }, {
+            onSaved: function () {
+                if (!wasOpen) return;
+                var next = listLessons(state.plan);
+                state.lessonPath = next.length ? next[0].path : '';
+                state.lesson = null;
+            }
+        });
+    }
+
     function removeBlock(node) {
         var id = rowBlockId(node);
         if (!id || !LESSON_PATH.test(state.lessonPath)) return Promise.resolve();
+        if (id === 'placeholder') return Promise.resolve();
+        // Schema requires at least one block; the page refuses removing the only real activity.
+        var real = listedBlocks(state.lesson);
+        if (real.length <= 1) {
+            showBox(
+                'data-plan-error',
+                uiLine('שיעור צריך לפחות פעילות אחת.', 'A lesson needs at least one activity.')
+            );
+            return Promise.resolve();
+        }
         var ok = true;
         try {
             if (typeof root.confirm === 'function') ok = root.confirm('Remove this block?');
@@ -1083,27 +2833,41 @@
         return write('DELETE', '/api/plans/' + encodeURIComponent(state.planId) + '/parts', { path: path });
     }
 
+    /**
+     * After the first real activity is saved, remove the empty fluency placeholder.
+     * @returns {Promise<boolean>}
+     */
+    function removePlaceholderAfterFirst() {
+        if (!state || !LESSON_PATH.test(state.lessonPath || '')) return Promise.resolve(true);
+        var blocks = blocksOf(state.lesson);
+        var hasPlaceholder = false;
+        var realCount = 0;
+        var i;
+        for (i = 0; i < blocks.length; i++) {
+            if (!blocks[i] || typeof blocks[i].id !== 'string') continue;
+            if (blocks[i].id === 'placeholder') hasPlaceholder = true;
+            else realCount += 1;
+        }
+        if (!hasPlaceholder || realCount < 1) return Promise.resolve(true);
+        var path = state.lessonPath + '/blocks/placeholder';
+        if (!PART_PATH.test(path)) return Promise.resolve(true);
+        return write('DELETE', '/api/plans/' + encodeURIComponent(state.planId) + '/parts', { path: path });
+    }
+
     function insertBlock() {
         if (!state.panel || !LESSON_PATH.test(state.lessonPath || '')) return Promise.resolve();
-        var idInput = state.panel.querySelector('[data-plan-new-id]');
         var typeSelect = state.panel.querySelector('[data-plan-new-type]');
-        var indexInput = state.panel.querySelector('[data-plan-new-index]');
-        var id = idInput ? String(idInput.value || '').trim() : '';
         var type = typeSelect ? String(typeSelect.value || '') : '';
-        var rawIndex = indexInput ? String(indexInput.value || '').trim() : '';
-        var count = blocksOf(state.lesson).length;
-        var index = rawIndex === '' ? count : Number(rawIndex);
+        var activityName = selectedActivityName(typeSelect) || activityNameForType(type);
+        var id = nextBlockId(activityName, blocksOf(state.lesson));
+        var index = blocksOf(state.lesson).length;
         if (!ENTRY.test(id) || blockById(id)) {
-            showBox('data-plan-error', 'invalid id');
-            return Promise.resolve();
-        }
-        if (!Number.isInteger(index) || index < 0 || index > count) {
-            showBox('data-plan-error', 'invalid index');
+            showBox('data-plan-error', uiLine('לא ניתן לבחור מזהה לפעילות.', 'Could not choose an id for the activity.'));
             return Promise.resolve();
         }
         var block = newBlock(type, id);
         if (!block) {
-            showBox('data-plan-error', 'invalid type');
+            showBox('data-plan-error', uiLine('סוג הפעילות אינו תקין.', 'That activity type is not valid.'));
             return Promise.resolve();
         }
         // The required fields the admin filled in, when the form on screen is for this type.
@@ -1124,7 +2888,51 @@
             path: state.lessonPath,
             index: index,
             block: block
-        }, { onValidation: showNewIssues });
+        }, { onValidation: showNewIssues }).then(function (ok) {
+            if (!ok) return false;
+            state.selectedId = id;
+            return removePlaceholderAfterFirst();
+        });
+    }
+
+    /**
+     * Picking a word in the bank adds it to the open Words activity (or the Words draft).
+     * @param {string} word
+     * @returns {Promise<boolean>}
+     */
+    function addBankWordToOpenWords(word) {
+        var text = String(word || '').trim();
+        if (!text || !state || !LESSON_PATH.test(state.lessonPath || '')) return Promise.resolve(false);
+        var intro = null;
+        var selected = state.selectedId ? blockById(state.selectedId) : null;
+        if (selected && selected.block && selected.block.type === 'introduction') {
+            intro = selected.block;
+        } else {
+            intro = introductionBlock(state.lesson);
+        }
+        if (!intro || typeof intro.id !== 'string') {
+            // No Words activity yet: leave a note; teacher adds Words first.
+            showBox(
+                'data-plan-error',
+                uiLine('פתחו פעילות מילים קודם.', 'Open a Words activity first.')
+            );
+            return Promise.resolve(false);
+        }
+        var words = Array.isArray(intro.words) ? intro.words.slice() : [];
+        words.push({
+            id: wordEntryId(words, words.length),
+            word: text,
+            meaning: text,
+            sentence: text
+        });
+        return state.transport.setField(
+            state.lessonPath + '/blocks/' + intro.id,
+            'words',
+            words,
+            {}
+        ).then(function (out) {
+            return !!(out && out.ok);
+        });
     }
 
     /**
@@ -1367,6 +3175,7 @@
                 state.publishRefusal = typeof res.data.error === 'string' ? res.data.error : '';
                 hideBox('data-plan-conflict');
                 refreshValidation();
+                showBox('data-plan-error', refusalSentence(res.data));
                 if (hooks && typeof hooks.onValidation === 'function') hooks.onValidation(res.data);
                 return false;
             }
@@ -1375,7 +3184,10 @@
                 return false;
             }
             state.revision = res.data.revision;
-            if (res.data.plan && typeof res.data.plan === 'object') state.plan = res.data.plan;
+            if (res.data.plan && typeof res.data.plan === 'object') {
+                state.plan = res.data.plan;
+                state.lessonChoices = listLessons(state.plan);
+            }
             state.validation = findingsFrom(res.data);
             state.publishRefused = false;
             state.publishRefusal = '';
@@ -1531,6 +3343,16 @@
             lessonPath: '',
             lessonChoices: [],
             selectedId: null,
+            screen: 'plan',
+            reuseOpen: false,
+            reuseOptions: [],
+            reuseCache: {},
+            wordPasteRejected: [],
+            pickedWord: '',
+            pickedMeaning: '',
+            patternFill: null,
+            lexiconTimer: null,
+            lexiconSeq: 0,
             open: { lesson: true, unit: false, plan: false },
             schema: 'loading',
             draft: null,
@@ -1634,7 +3456,7 @@
         var Issues = root.HebrewPlanIssues;
         state.publishNote = Issues ? Issues.publishNote(result.counts) : '';
         var note = state.panel && state.panel.querySelector('[data-plan-publish-note]');
-        if (note) note.textContent = state.publishNote;
+        if (note) fillUi(note, state.publishNote);
         if (state.editor && Issues) state.editor.setIssues(Issues.forEditor(result.issues), state.plan);
     }
 
@@ -1757,6 +3579,7 @@
         if (!state || !state.previewEl) return;
         var node = state.previewEl;
         var selected = state.selectedId ? blockById(state.selectedId) : null;
+        if (selected && selected.block && selected.block.id === 'placeholder') selected = null;
         var Preview = root.HebrewPlanPreview;
         var out;
         if (Preview) {
@@ -1774,13 +3597,26 @@
                 out.html = root.HebrewPlanRender.renderBlock(selected.block, { lesson: state.lesson });
             }
         }
-        // Renderer output only: plan text is escaped there. This does not eval it.
-        if (typeof out.html === 'string') node.innerHTML = out.html;
+        // No inventing a player: when the type has no renderer, show the activity's own text.
+        var html = typeof out.html === 'string' ? out.html : '';
+        if (selected && selected.block && !html) {
+            var fallback = activityPreviewText(selected.block);
+            empty(node);
+            var pre = el('pre');
+            pre.className = 'plan-preview-fallback';
+            pre.setAttribute('data-plan-preview-fallback', '');
+            pre.setAttribute('dir', 'auto');
+            pre.textContent = fallback || activityNameForType(selected.block.type) || selected.block.type || '';
+            node.appendChild(pre);
+        } else {
+            // Renderer output only: plan text is escaped there. This does not eval it.
+            node.innerHTML = html;
+        }
         node.setAttribute('data-plan-preview-state', out.state);
         if (state.previewLabel) {
-            state.previewLabel.textContent = out.state === 'unsaved'
+            fillUi(state.previewLabel, out.state === 'unsaved'
                 ? 'תצוגה מקדימה — לא נשמרה (Preview — not saved)'
-                : 'תצוגה מקדימה — כפי ששמור (Preview — as saved)';
+                : 'תצוגה מקדימה — כפי ששמור (Preview — as saved)');
         }
     }
 
@@ -1800,9 +3636,14 @@
      * @param {HTMLElement} panel
      * @returns {void}
      */
-    function mountPicker(panel) {
+    /**
+     * @param {HTMLElement} panel
+     * @param {{ setHash?: function(string): void }} [opts]
+     */
+    function mountPicker(panel, opts) {
         unmount();
         if (!panel) return;
+        var options = opts || {};
         if (!root.HebrewPlanList || typeof root.HebrewPlanList.mount !== 'function') {
             empty(panel);
             var missing = el('p');
@@ -1816,6 +3657,14 @@
             doc: root.document,
             api: api(),
             setHash: function (route) {
+                if (typeof options.setHash === 'function') {
+                    options.setHash(route);
+                    return;
+                }
+                if (root.HebrewEditorShell && typeof root.HebrewEditorShell.setHash === 'function') {
+                    root.HebrewEditorShell.setHash(route);
+                    return;
+                }
                 if (root.HebrewAdminShell && typeof root.HebrewAdminShell.setHash === 'function') {
                     root.HebrewAdminShell.setHash(route);
                 }
@@ -1836,6 +3685,7 @@
     function unmount() {
         token += 1;
         if (state) {
+            if (state.lexiconTimer) clearTimeout(state.lexiconTimer);
             if (state.controller) state.controller.abort();
             if (state.panel) {
                 state.panel.removeEventListener('click', onClick);
@@ -1873,14 +3723,31 @@
 
     root.HebrewPlanBuilder = {
         SLUG: SLUG,
+        activityHint: activityHint,
+        activityNames: activityNames,
+        activityPreviewText: activityPreviewText,
+        blockTypeForActivity: blockTypeForActivity,
         blockTypes: function () { return form() ? form().blockTypeList() : []; },
         canLeave: canLeave,
+        draft: function () { return state ? state.draft : null; },
         editor: function () { return state ? state.editor : null; },
+        forAudienceLine: forAudienceLine,
+        listedBlocks: listedBlocks,
         mount: mount,
         mountPicker: mountPicker,
         moveDestination: moveDestination,
         newBlock: newBlock,
+        nextBlockId: nextBlockId,
+        cellsFromParadigm: cellsFromParadigm,
+        parseWordLines: parseWordLines,
+        verbChoices: verbChoices,
+        planWordBank: planWordBank,
+        prepareReuseLesson: prepareReuseLesson,
         settled: settled,
-        unmount: unmount
+        slugFromTitle: slugFromTitle,
+        unmount: unmount,
+        factsFromPlan: factsFromPlan,
+        wordFacts: wordFacts,
+        wordsIntroducedByLesson: wordsIntroducedByLesson
     };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -763,7 +763,6 @@ async function runOnce() {
 
         // ---------- ac-5: new lesson hidden until shared ----------
         logStep('ac-5 start');
-        const newSlug = 'smoke-new-' + Date.now().toString(36);
         const created = await evalJson(sessionA, `(() => new Promise(async (resolve, reject) => {
             try {
                 location.hash = 'lessons';
@@ -771,15 +770,14 @@ async function runOnce() {
                 const openBtn = document.querySelector('[data-lesson-action="new"]');
                 if (!openBtn) return reject(new Error('new lesson button missing'));
                 openBtn.click();
-                document.getElementById('admin-new-lesson-slug').value = ${JSON.stringify(newSlug)};
                 document.getElementById('admin-new-lesson-title-input').value = 'שיעור חדש';
                 const form = document.getElementById('admin-new-lesson-form');
                 form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
                 const deadline = Date.now() + 20000;
                 while (Date.now() < deadline) {
-                    if (String(location.hash).indexOf('lesson/' + ${JSON.stringify(newSlug)}) !== -1) {
-                        return resolve({ ok: true, hash: location.hash });
-                    }
+                    const hash = String(location.hash);
+                    const match = hash.match(/^#lesson\/([0-9a-f-]{36})$/i);
+                    if (match) return resolve({ ok: true, hash: hash, slug: match[1] });
                     const err = (document.getElementById('admin-new-lesson-error') || {}).textContent || '';
                     if (err) return reject(new Error(err));
                     await new Promise(r => setTimeout(r, 250));
@@ -787,7 +785,8 @@ async function runOnce() {
                 reject(new Error('create timed out'));
             } catch (e) { reject(e); }
         }))()`);
-        if (!created.ok) throw new Error('ac-5 create failed');
+        if (!created.ok || !created.slug) throw new Error('ac-5 create failed');
+        const newSlug = created.slug;
 
         // Check list shows hidden
         await sessionA.call('Page.navigate', { url: baseUrl + '/admin/#lessons' });

@@ -18,7 +18,7 @@
  * when the host has already reloaded the plan and its panels. Server text goes in through textContent.
  *
  * Plain browser script, no build step. Node tests load it with require().
- * Provenance: INIT-008/SPEC-014
+ * Provenance: INIT-008/SPEC-014, INIT-011/SPEC-003
  */
 (function (root, factory) {
     'use strict';
@@ -91,14 +91,25 @@
     /**
      * "Revision 7", "the working copy", or "the published copy", from the `from` or `to` of a diff.
      * @param {{ ref?: string|number, revision?: number }|null} side
-     * @returns {string}
+     * @returns {{ he: string, en: string, suffix: string }}
      */
-    function describeRef(side) {
+    function describeRefParts(side) {
         var ref = side ? side.ref : '';
         var rev = side && Number.isInteger(side.revision) ? side.revision : null;
-        if (ref === 'working') return 'העבודה (working copy)' + (rev !== null ? ' · ' + rev : '');
-        if (ref === 'published') return 'המפורסמת (published copy)' + (rev !== null ? ' · ' + rev : '');
-        return 'גרסה ' + (rev !== null ? rev : ref) + ' (revision ' + (rev !== null ? rev : ref) + ')';
+        if (ref === 'working') {
+            return { he: 'העבודה', en: 'working copy', suffix: rev !== null ? ' · ' + rev : '' };
+        }
+        if (ref === 'published') {
+            return { he: 'המפורסמת', en: 'published copy', suffix: rev !== null ? ' · ' + rev : '' };
+        }
+        var n = rev !== null ? rev : ref;
+        return { he: 'גרסה ' + n, en: 'revision ' + n, suffix: '' };
+    }
+
+    /** One bilingual string for tests and older call sites. Prefer describeRefParts + fillPair in the UI. */
+    function describeRef(side) {
+        var p = describeRefParts(side);
+        return p.he + ' (' + p.en + ')' + p.suffix;
     }
 
     /**
@@ -175,7 +186,19 @@
         var heading = make('h3', 'plan-history-title');
         var toggle = Ui.button(doc, '', 'btn btn-ghost plan-disclose', { 'data-plan-history-toggle': '' });
         toggle.setAttribute('aria-expanded', 'false');
-        toggle.textContent = '▸ היסטוריה (History)';
+        toggle.textContent = '▸ ';
+        toggle.className += ' ui-pair';
+        var histHe = doc.createElement('span');
+        histHe.className = 'ui-he';
+        histHe.lang = 'he';
+        histHe.textContent = 'היסטוריה';
+        var histEn = doc.createElement('span');
+        histEn.className = 'ui-en';
+        histEn.lang = 'en';
+        histEn.setAttribute('dir', 'ltr');
+        histEn.textContent = 'History';
+        toggle.appendChild(histHe);
+        toggle.appendChild(histEn);
         heading.appendChild(toggle);
         el.appendChild(heading);
 
@@ -294,14 +317,16 @@
          */
         function confirmAt(container, spec) {
             closeConfirm();
-            var box = make('div', 'plan-confirm');
+            var box = make('div', 'plan-confirm ui-pair');
             box.setAttribute('data-plan-restore-box', '');
             box.setAttribute('role', 'group');
-            box.setAttribute('aria-label', 'אישור שחזור (Confirm restore)');
+            box.setAttribute('data-ui-aria-he', 'אישור שחזור');
+            box.setAttribute('data-ui-aria-en', 'Confirm restore');
+            box.setAttribute('aria-label', 'אישור שחזור');
             var what = restoreWhat(spec);
-            var he = make('p', 'plan-confirm-he', 'לשחזר ' + what[0] + '? זו תהיה גרסה חדשה וההיסטוריה נשמרת.');
+            var he = make('p', 'plan-confirm-he ui-he', 'לשחזר ' + what[0] + '? זו תהיה גרסה חדשה וההיסטוריה נשמרת.');
             he.setAttribute('lang', 'he');
-            var en = make('p', 'plan-confirm-en', 'Restore ' + what[1] + '? This becomes a new revision; history is kept.');
+            var en = make('p', 'plan-confirm-en ui-en', 'Restore ' + what[1] + '? This becomes a new revision; history is kept.');
             en.setAttribute('lang', 'en');
             en.setAttribute('dir', 'ltr');
             box.appendChild(he);
@@ -472,14 +497,17 @@
             var query = [];
             if (filter) query.push('actorKind=' + encodeURIComponent(filter));
             if (older && rows.length) query.push('beforeRevision=' + encodeURIComponent(String(rows[rows.length - 1].revision)));
-            stateLine.textContent = 'טוען היסטוריה… (Loading the history…)';
+            Ui.fill(stateLine, 'טוען היסטוריה… (Loading the history…)');
             setError('');
             return Promise.resolve(Api.get(url('/revisions' + (query.length ? '?' + query.join('&') : '')),
                 signal ? { signal: signal } : undefined)).then(function (res) {
                 if (!alive || mine !== seq) return false;
                 stateLine.textContent = '';
                 if (!res || !res.ok || !isObject(res.data) || !Array.isArray(res.data.revisions)) {
-                    setError('לא ניתן לטעון את ההיסטוריה — ' + Ui.failureText(res) + ' (Could not load the history.)');
+                    setError(Ui.line(
+                        'לא ניתן לטעון את ההיסטוריה — ' + Ui.failureText(res),
+                        'Could not load the history — ' + Ui.failureText(res)
+                    ));
                     return false;
                 }
                 var incoming = res.data.revisions.filter(function (r) { return isObject(r) && Number.isInteger(r.revision); });
@@ -490,7 +518,11 @@
             }).catch(function (err) {
                 if (!alive || mine !== seq) return false;
                 stateLine.textContent = '';
-                setError('לא ניתן לטעון את ההיסטוריה — ' + Ui.failureText({ status: 0, data: null, error: err && err.message }) + ' (Could not load the history.)');
+                var fail = Ui.failureText({ status: 0, data: null, error: err && err.message });
+                setError(Ui.line(
+                    'לא ניתן לטעון את ההיסטוריה — ' + fail,
+                    'Could not load the history — ' + fail
+                ));
                 return false;
             });
         }
@@ -505,7 +537,12 @@
             var val = make('bdi', 'plan-diff-value', present ? (text === '' ? '""' : text) : '—');
             if (present) Ui.applyTextAttrs(val, text);
             box.appendChild(val);
-            if (present && truncatedValue) box.appendChild(make('span', 'plan-diff-cut', ' … (נחתך (cut))'));
+            if (present && truncatedValue) {
+                var cut = make('span', 'plan-diff-cut');
+                cut.setAttribute('data-plan-diff-cut', '');
+                Ui.fillPair(cut, ' … נחתך', ' … cut');
+                box.appendChild(cut);
+            }
             return box;
         }
 
@@ -557,7 +594,13 @@
             last.diff = data;
             var head = make('p', 'plan-diff-head');
             head.setAttribute('data-plan-diff-head', '');
-            head.textContent = describeRef(data.from) + ' → ' + describeRef(data.to);
+            var fromP = describeRefParts(data.from);
+            var toP = describeRefParts(data.to);
+            Ui.fillPair(
+                head,
+                fromP.he + fromP.suffix + ' → ' + toP.he + toP.suffix,
+                fromP.en + fromP.suffix + ' → ' + toP.en + toP.suffix
+            );
             diffBox.appendChild(head);
             var entries = Array.isArray(data.entries) ? data.entries : [];
             if (!entries.length) {
@@ -600,9 +643,13 @@
                 if (!alive || mine !== diffSeq) return null;
                 if (!res || !res.ok || !isObject(res.data) || !Array.isArray(res.data.entries)) {
                     Ui.clear(diffBox);
-                    var bad = make('p', 'admin-inline-error', 'לא ניתן להשוות — ' + Ui.failureText(res) + ' (Could not compare.)');
+                    var bad = make('p', 'admin-inline-error');
                     bad.setAttribute('role', 'alert');
                     bad.setAttribute('data-plan-diff-error', '');
+                    bad.textContent = Ui.line(
+                        'לא ניתן להשוות — ' + Ui.failureText(res),
+                        'Could not compare — ' + Ui.failureText(res)
+                    );
                     diffBox.appendChild(bad);
                     return null;
                 }
@@ -626,15 +673,22 @@
                     if (!alive) return null;
                     Ui.clear(detail);
                     if (!res || !res.ok || !isObject(res.data)) {
-                        var bad = make('p', 'admin-inline-error', 'לא ניתן לפתוח את הגרסה — ' + Ui.failureText(res) + ' (Could not open the revision.)');
+                        var bad = make('p', 'admin-inline-error');
                         bad.setAttribute('role', 'alert');
+                        bad.textContent = Ui.line(
+                            'לא ניתן לפתוח את הגרסה — ' + Ui.failureText(res),
+                            'Could not open the revision — ' + Ui.failureText(res)
+                        );
                         detail.appendChild(bad);
                         return null;
                     }
                     var data = res.data;
                     var head = make('p', 'plan-rev-detail-head');
                     var mark = actorNode(data);
-                    head.appendChild(make('strong', '', 'גרסה ' + data.revision + ' (Revision ' + data.revision + ') · '));
+                    var revTitle = make('strong', '');
+                    revTitle.setAttribute('data-plan-rev-title', '');
+                    Ui.fillPair(revTitle, 'גרסה ' + data.revision, 'Revision ' + data.revision, ' · ');
+                    head.appendChild(revTitle);
                     head.appendChild(mark);
                     head.appendChild(make('span', 'plan-rev-time', ' · ' + Ui.formatTime(data.at)));
                     detail.appendChild(head);
@@ -655,7 +709,23 @@
         function setOpen(next) {
             isOpen = !!next;
             toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-            toggle.textContent = (isOpen ? '▾ ' : '▸ ') + 'היסטוריה (History)';
+            Ui.clear(toggle);
+            var mark = doc.createElement('span');
+            mark.setAttribute('aria-hidden', 'true');
+            mark.textContent = isOpen ? '▾ ' : '▸ ';
+            toggle.appendChild(mark);
+            if ((toggle.className || '').indexOf('ui-pair') === -1) toggle.className += ' ui-pair';
+            var he = doc.createElement('span');
+            he.className = 'ui-he';
+            he.lang = 'he';
+            he.textContent = 'היסטוריה';
+            var en = doc.createElement('span');
+            en.className = 'ui-en';
+            en.lang = 'en';
+            en.setAttribute('dir', 'ltr');
+            en.textContent = 'History';
+            toggle.appendChild(he);
+            toggle.appendChild(en);
             bodyEl.hidden = !isOpen;
             if (isOpen && stale) return load();
             return Promise.resolve();

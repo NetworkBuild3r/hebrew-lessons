@@ -11,7 +11,9 @@
 
 const { actorString, requireContext } = require('./context');
 
-/** The nine actions ADR-0011 §1 names. Only SPEC-002 writes seven of them. */
+/**
+ * Plan write actions (ADR-0011 §1; lesson stack: INIT-010/SPEC-002).
+ */
 const ACTIONS = Object.freeze([
     'plan.create',
     'plan.set_field',
@@ -19,6 +21,9 @@ const ACTIONS = Object.freeze([
     'plan.insert_block',
     'plan.move_block',
     'plan.remove_block',
+    'plan.insert_lesson',
+    'plan.move_lesson',
+    'plan.remove_lesson',
     'plan.publish',
     'plan.restore',
     'plan.assign'

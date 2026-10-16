@@ -48,7 +48,7 @@ describe('hints agree with the server language registry (INIT-008/SPEC-012 ac-4)
 describe('newBlock (INIT-008/SPEC-012 ac-3)', () => {
     it('for each of the eleven types: every required property, the type, the given id, and no Hebrew', () => {
         const types = TOOLS.blockTypes();
-        assert.equal(types.length, 11);
+        assert.equal(types.length, 14);
         const ids = new Set();
         for (const { type, def } of types) {
             const id = 'new-' + type;
@@ -106,14 +106,16 @@ describe('a form for every node kind (INIT-008/SPEC-012 ac-4)', () => {
         }
     });
 
-    it('each of the eleven block types: a control per property and a widget on each', () => {
+    it('each block type: a control per property and a widget on each', () => {
         const lesson = plan.units[0].lessons[0];
         const jsonFallbacks = [];
         for (const { type, def } of TOOLS.blockTypes()) {
             const block = lesson.blocks.find((b) => b.type === type);
             const { form } = render({ path: LESSON + '/blocks/' + block.id, node: block, kind: 'block' });
             assert.equal(form.def, def);
-            const want = Object.keys(SCHEMA.definitions[def].properties).sort();
+            const want = Object.keys(SCHEMA.definitions[def].properties)
+                .filter((p) => !((type === 'exercise' || type === 'assignment') && (p === 'id' || p === 'type')))
+                .sort();
             const have = ownFields(form.el).map((n) => n.getAttribute('data-plan-field')).sort();
             assert.deepEqual(have, want, type);
             ownFields(form.el).forEach((n) => {
@@ -122,8 +124,8 @@ describe('a form for every node kind (INIT-008/SPEC-012 ac-4)', () => {
                 if (name === 'json') jsonFallbacks.push(def + '.' + n.getAttribute('data-plan-field'));
             });
         }
-        // Only the two hinted JSON properties use the fallback at the top of a node (migration is on the plan).
-        assert.deepEqual(jsonFallbacks, ['gradedStoryBlock.glosses']);
+        // No block property needs the raw JSON box: story glosses have their own word-and-meaning list.
+        assert.deepEqual(jsonFallbacks, []);
     });
 
     it('a bucket item form for a word, paragraph, line, and question has every property', () => {
@@ -157,7 +159,7 @@ describe('a form for every node kind (INIT-008/SPEC-012 ac-4)', () => {
         assert.equal(form.fields.sections.widgetName, 'object-list');
         const cj = plan.units[0].lessons[0].blocks.find((b) => b.type === 'conjugation-table');
         const r2 = render({ path: LESSON + '/blocks/conjugation-table', node: cj, kind: 'block' });
-        assert.equal(r2.form.fields.cells.widgetName, 'object-list');
+        assert.equal(r2.form.fields.cells.widgetName, 'table-cells');
         assert.equal(r2.form.fields.tense.widgetName, 'select');
         const verse = plan.units[0].lessons[0].blocks.find((b) => b.type === 'verse-reading');
         const r3 = render({ path: LESSON + '/blocks/verse-reading', node: verse, kind: 'block' });

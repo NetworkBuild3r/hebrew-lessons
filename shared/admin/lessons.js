@@ -1,6 +1,8 @@
 /**
  * Admin lessons list + visibility controls.
- * Provenance: INIT-002/SPEC-017
+ * Teaching content opens HebrewAdminLessonEditor (worksheet).
+ * Plans are authored on /editor/ (INIT-010/SPEC-003).
+ * Provenance: INIT-002/SPEC-017, INIT-010/SPEC-003
  */
 (function (root) {
     'use strict';
@@ -21,11 +23,25 @@
     function bi(he, en) {
         return U && typeof U.bi === 'function'
             ? U.bi(he, en)
-            : (esc(he) + ' <span class="en" dir="ltr">(' + esc(en) + ')</span>');
+            : ('<span class="ui-pair"><span class="ui-he" lang="he">' + esc(he) + '</span>'
+                + '<span class="ui-en" lang="en" dir="ltr">' + esc(en) + '</span></span>');
     }
 
     function api() {
         return root.HebrewApi;
+    }
+
+    function uiLang() {
+        try {
+            if (U && typeof U.readUiLang === 'function') return U.readUiLang();
+        } catch (err) { /* ignore */ }
+        return 'en';
+    }
+
+    /** A menu row shows one language. Child spans inside an option stay visible in both. */
+    function optionLabel(he, en) {
+        return ' data-ui-text-he="' + esc(he) + '" data-ui-text-en="' + esc(en) + '">'
+            + esc(uiLang() === 'he' ? he : en);
     }
 
     function modeLabel(mode) {
@@ -113,17 +129,16 @@
         return '<tr data-lesson-slug="' + slug + '" data-vis-mode="' + esc(mode) + '">'
             + '<td><a class="admin-user-link" href="#lesson/' + encodeURIComponent(lesson.slug) + '">'
             + esc(lesson.title || lesson.slug) + '</a></td>'
-            + '<td dir="ltr"><code>' + slug + '</code></td>'
             + '<td>' + esc(lesson.level || '—') + '</td>'
             + '<td class="lesson-vis-cell">'
             + '<select class="lesson-vis-mode" data-vis-mode-select="' + slug + '" aria-label="'
             + esc('Visibility') + '">'
-            + '<option value="hidden"' + (mode === 'hidden' ? ' selected' : '') + '>'
-            + bi('מוסתר', 'Hidden') + '</option>'
-            + '<option value="everyone"' + (mode === 'everyone' ? ' selected' : '') + '>'
-            + bi('לכולם', 'Everyone') + '</option>'
-            + '<option value="selected"' + (mode === 'selected' ? ' selected' : '') + '>'
-            + bi('נבחרים', 'Selected') + '</option>'
+            + '<option value="hidden"' + (mode === 'hidden' ? ' selected' : '')
+            + optionLabel('מוסתר', 'Hidden') + '</option>'
+            + '<option value="everyone"' + (mode === 'everyone' ? ' selected' : '')
+            + optionLabel('לכולם', 'Everyone') + '</option>'
+            + '<option value="selected"' + (mode === 'selected' ? ' selected' : '')
+            + optionLabel('נבחרים', 'Selected') + '</option>'
             + '</select>'
             + renderUserPicker(lesson, users)
             + '<button type="button" class="btn btn-primary admin-row-btn" data-vis-save="'
@@ -137,7 +152,7 @@
             return renderLessonRow(lesson, users);
         }).join('');
         if (!rows) {
-            rows = '<tr data-admin-empty="1"><td colspan="4">'
+            rows = '<tr data-admin-empty="1"><td colspan="3">'
                 + bi('אין שיעורים.', 'No lessons.') + '</td></tr>';
         }
         return ''
@@ -152,7 +167,6 @@
             + '<table class="admin-lessons-table">'
             + '<thead><tr>'
             + '<th>' + bi('כותרת', 'Title') + '</th>'
-            + '<th>' + bi('מזהה', 'Slug') + '</th>'
             + '<th>' + bi('רמה', 'Level') + '</th>'
             + '<th>' + bi('נראות', 'Visibility') + '</th>'
             + '</tr></thead>'
@@ -167,12 +181,6 @@
             + '<div class="admin-dialog-panel" role="document">'
             + '<h2 id="admin-new-lesson-title">' + bi('שיעור חדש', 'New lesson') + '</h2>'
             + '<form id="admin-new-lesson-form" autocomplete="off">'
-            + '<label class="hebrew-shell-field">' + bi('מזהה (slug)', 'Slug')
-            + '<input type="text" name="slug" id="admin-new-lesson-slug" required'
-            + ' pattern="[a-z0-9]+(?:-[a-z0-9]+)*" dir="ltr" placeholder="my-lesson"></label>'
-            + '<p class="admin-password-hint">'
-            + bi('מילים באנגלית קטנות עם מקפים.', 'Lowercase words with hyphens.')
-            + '</p>'
             + '<label class="hebrew-shell-field">' + bi('כותרת', 'Title')
             + '<input type="text" name="title" id="admin-new-lesson-title-input" required'
             + ' dir="rtl" lang="he"></label>'
@@ -190,23 +198,18 @@
             subtitle: '',
             footer: '',
             level: 'basic',
-            activities: [{ type: 'words' }],
-            vocab: {
-                items: [{
-                    id: '1',
-                    word: 'שָׁלוֹם',
-                    sound: 'sha-LOM',
-                    translit: 'shalom',
-                    meaning: 'hello',
-                    pos: '',
-                    trap: 'Stress the last syllable.',
-                    sentence: 'שָׁלוֹם עוֹלָם.'
-                }]
-            },
-            reading: {
-                paragraphs: ['שָׁלוֹם עוֹלָם.']
-            }
+            activities: [],
+            vocab: { items: [] }
         };
+    }
+
+    function newLessonSlug() {
+        try {
+            if (root.crypto && typeof root.crypto.randomUUID === 'function') {
+                return root.crypto.randomUUID();
+            }
+        } catch (err) { /* ignore */ }
+        return 'lesson-' + String(Date.now()) + '-' + String(Math.floor(Math.random() * 1e6));
     }
 
     function catalogEntryFor(slug, title, level) {
@@ -372,14 +375,20 @@
                         errEl.hidden = true;
                         errEl.textContent = '';
                     }
-                    var slugInput = rootEl.querySelector('#admin-new-lesson-slug');
                     var titleInput = rootEl.querySelector('#admin-new-lesson-title-input');
-                    var slug = String(slugInput && slugInput.value || '').trim();
                     var title = String(titleInput && titleInput.value || '').trim();
+                    if (!title) {
+                        if (errEl) {
+                            errEl.hidden = false;
+                            errEl.textContent = 'A title is needed.';
+                        }
+                        return;
+                    }
+                    var slug = newLessonSlug();
                     if (!SLUG_RE.test(slug)) {
                         if (errEl) {
                             errEl.hidden = false;
-                            errEl.textContent = 'Slug must be lowercase words with hyphens.';
+                            errEl.textContent = 'Could not make a lesson id.';
                         }
                         return;
                     }
@@ -393,7 +402,7 @@
                             if (errEl) {
                                 errEl.hidden = false;
                                 errEl.textContent = res.error
-                                    || (res.data && res.data.errors && res.data.errors.join('\n'))
+                                    || (res.data && res.data.error)
                                     || ('HTTP ' + res.status);
                             }
                             return;

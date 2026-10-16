@@ -66,6 +66,8 @@
                 const id = action.dataset.id;
                 const box = root.querySelector('[data-reveal="' + id + '"]');
                 box?.classList.toggle('hidden');
+                // The "say it first" slot only fills the card while the answer is hidden.
+                root.querySelector('[data-slot="' + id + '"]')?.classList.toggle('hidden', !!box && !box.classList.contains('hidden'));
                 if (ctx.recallMode() && box && !box.classList.contains('hidden')) {
                     const marks = root.querySelector('[data-marks="' + id + '"]');
                     marks?.classList.remove('hidden');
@@ -209,7 +211,8 @@
                         </div>
                     </div>
                 </div>
-                <button type="button" class="linkish" data-action="toggle-reveal" data-id="${id}" data-direction="en_he" data-word="${ctx.esc(item.word)}" data-audio="${ctx.esc(item.audio || '')}">${ctx.bi('איך כותבים בעברית?', 'Show Hebrew')}</button>
+                <div class="recall-slot" data-slot="${id}" aria-hidden="true">${ctx.bi('נסו להגיד אותה בעברית', 'Say it in Hebrew first')}</div>
+                <button type="button" class="linkish recall-reveal" data-action="toggle-reveal" data-id="${id}" data-direction="en_he" data-word="${ctx.esc(item.word)}" data-audio="${ctx.esc(item.audio || '')}">${ctx.bi('איך כותבים בעברית?', 'Show Hebrew')}</button>
                 <div class="reveal hidden" data-reveal="${id}">
                     <div class="vocab-head">
                         <div class="vocab-main">

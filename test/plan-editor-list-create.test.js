@@ -33,15 +33,11 @@ async function mountList(env, panel) {
 describe('plan list: pure helpers', () => {
     const List = require('../shared/admin/plan-list.js');
 
-    it('checkNew uses the schema pattern and says which field is wrong', () => {
-        assert.deepEqual(List.checkNew({ id: 'good-id', title: 'T' }), {});
-        assert.equal(List.checkNew({ id: 'Bad Id', title: 'T' }).id, 'invalid_id');
-        assert.equal(List.checkNew({ id: 'a--b', title: 'T' }).id, 'invalid_id');
-        assert.equal(List.checkNew({ id: 'x'.repeat(65), title: 'T' }).id, 'invalid_id');
-        assert.equal(List.checkNew({ id: 'ok', title: '   ' }).title, 'empty_title');
-        assert.equal(List.checkNew({ id: 'ok', title: 'x'.repeat(41) }, { titleMax: 40 }).title, 'title_too_long');
-        // a pattern from the schema replaces the fallback
-        assert.equal(List.checkNew({ id: 'abc', title: 'T' }, { slug: /^z+$/ }).id, 'invalid_id');
+    it('checkNew checks the title and leaves the id to the server', () => {
+        assert.deepEqual(List.checkNew({ title: 'T' }), {});
+        assert.equal(List.checkNew({ title: '   ' }).title, 'empty_title');
+        assert.equal(List.checkNew({ title: 'x'.repeat(41) }, { titleMax: 40 }).title, 'title_too_long');
+        assert.equal(List.checkNew({ id: 'Not A Slug', title: 'T' }).id, undefined);
     });
 
     it('limitsFromSchema reads the id pattern, the title limit, and the recipes from the schema', () => {
@@ -152,82 +148,99 @@ describe('ac-1: the list renders one row per plan', () => {
     });
 });
 
-describe('ac-2: the New plan form', () => {
+describe('ac-2: the New plan form (INIT-011/SPEC-004: title + For, no recipe)', () => {
     async function openForm(env) {
         const panel = env.panel();
         const stop = await mountList(env, panel);
         one(panel, 'data-plan-new-open').click();
+        await env.sleep(30);
         return { panel, stop };
     }
-    const fill = (panel, id, title, recipe) => {
-        one(panel, 'data-plan-new-id').value = id;
+    const fill = (panel, title, forUser) => {
         one(panel, 'data-plan-new-title').value = title;
-        const select = one(panel, 'data-plan-new-recipe');
-        if (select) select.value = recipe || '';
+        const select = one(panel, 'data-plan-new-for');
+        if (select) select.value = forUser || '';
     };
 
-    it('the recipe options equal the schema recipe enum, plus "no recipe"', async () => {
-        const env = loadPanels({ plans: PLANS });
-        const { panel } = await openForm(env);
-        const options = all(one(panel, 'data-plan-new-recipe'), (n) => n.tagName === 'OPTION').map((o) => o.value);
-        assert.deepEqual(options, [''].concat(SCHEMA.definitions.recipe.enum));
-        // every label has Hebrew and an English gloss
-        all(one(panel, 'data-plan-new-recipe'), (n) => n.tagName === 'OPTION' && n.value).forEach((o) => {
-            assert.match(text(o), /[\u0590-\u05FF]/);
-            assert.match(text(o), /\([A-Za-z ]+\)/);
+    it('has a For field and no recipe field', async () => {
+        const env = loadPanels({
+            plans: PLANS,
+            users: [
+                { username: 'example-learner', display_name: 'Example', status: 'active' },
+                { username: 'retired', status: 'disabled' }
+            ]
         });
-        assert.match(text(one(panel, 'data-plan-new')), /writes no Hebrew/);
+        const { panel } = await openForm(env);
+        assert.equal(byAttr(panel, 'data-plan-new-recipe').length, 0, 'no recipe field');
+        assert.ok(one(panel, 'data-plan-new-for'), 'For field present');
+        const options = all(one(panel, 'data-plan-new-for'), (n) => n.tagName === 'OPTION').map((o) => o.value);
+        assert.ok(options.indexOf('') !== -1, 'everyone option');
+        assert.ok(options.indexOf('example-learner') !== -1, 'active learner');
+        assert.ok(options.indexOf('retired') === -1, 'disabled accounts omitted');
         assert.equal(env.callsOf('GET', /plan-schema/).length, 1);
     });
 
-    it('sends exactly one POST /api/plans with id, title and recipe, then opens the plan', async () => {
+    it('sends POST /api/plans with title only for everyone, then opens the plan', async () => {
         const env = loadPanels({ plans: PLANS });
         const { panel } = await openForm(env);
-        fill(panel, '  my-plan  ', '  My plan  ', 'guide');
+        fill(panel, '  My plan  ', '');
         one(panel, 'data-plan-create').click();
         await env.sleep(20);
         const posts = env.callsOf('POST', /^\/api\/plans$/);
         assert.equal(posts.length, 1);
-        assert.deepEqual(posts[0].body, { id: 'my-plan', title: 'My plan', recipe: 'guide' });
-        assert.deepEqual(env.hashes, ['plan/my-plan']);
+        assert.deepEqual(posts[0].body, { title: 'My plan' });
+        assert.equal(posts[0].body.recipe, undefined);
+        assert.equal(env.callsOf('POST', /\/assign$/).length, 0);
+        assert.deepEqual(env.hashes, ['plan/11111111-1111-4111-8111-111111111111']);
     });
 
-    it('sends no recipe key when none is chosen', async () => {
-        const env = loadPanels({ plans: PLANS });
+    it('creating for a learner calls create then assign (personal)', async () => {
+        const env = loadPanels({
+            plans: PLANS,
+            users: [{ username: 'example-learner', display_name: 'Example', status: 'active' }]
+        });
         const { panel } = await openForm(env);
-        fill(panel, 'plain', 'Plain', '');
+        fill(panel, 'Brian plan', 'example-learner');
         one(panel, 'data-plan-create').click();
-        await env.sleep(20);
-        assert.deepEqual(env.callsOf('POST', /^\/api\/plans$/)[0].body, { id: 'plain', title: 'Plain' });
+        await env.sleep(40);
+        assert.deepEqual(env.callsOf('POST', /^\/api\/plans$/)[0].body, { title: 'Brian plan' });
+        const assign = env.callsOf('POST', /\/assign$/);
+        assert.equal(assign.length, 1);
+        assert.deepEqual(assign[0].body, {
+            audience: 'personal',
+            assigneeId: 'example-learner',
+            expectedRevision: 1
+        });
+        assert.deepEqual(env.hashes, ['plan/11111111-1111-4111-8111-111111111111']);
     });
 
-    it('a bad id or an empty title sends nothing and says why, keeping the typed values', async () => {
-        const env = loadPanels({ plans: PLANS });
+    it('an empty title sends nothing and says why, keeping the For choice', async () => {
+        const env = loadPanels({
+            plans: PLANS,
+            users: [{ username: 'example-learner', status: 'active' }]
+        });
         const { panel } = await openForm(env);
-        fill(panel, 'Not A Slug', '', 'guide');
+        fill(panel, '', 'example-learner');
         one(panel, 'data-plan-create').click();
         await env.sleep(10);
         assert.equal(env.callsOf('POST', /^\/api\/plans$/).length, 0);
-        assert.match(text(one(panel, 'data-plan-new-id-message')), /invalid_id/);
         assert.match(text(one(panel, 'data-plan-new-title-message')), /empty_title/);
-        assert.equal(one(panel, 'data-plan-new-id').value, 'Not A Slug');
-        assert.equal(one(panel, 'data-plan-new-recipe').value, 'guide');
+        assert.equal(one(panel, 'data-plan-new-for').value, 'example-learner');
+        assert.equal(byAttr(panel, 'data-plan-new-id').length, 0);
     });
 
-    it('already_exists and invalid_id from the server are plain messages and lose nothing', async () => {
+    it('already_exists from the server is a plain message and loses nothing', async () => {
         const env = loadPanels({ plans: PLANS });
         env.on('POST', /^\/api\/plans$/, () => env.json(400, { error: 'Invalid request', code: 'already_exists' }));
         const { panel } = await openForm(env);
-        fill(panel, 'alpha', 'Again', 'verb-workshop');
+        fill(panel, 'Again', '');
         one(panel, 'data-plan-create').click();
         await env.sleep(20);
         const message = one(panel, 'data-plan-new-message');
         assert.equal(message.hidden, false);
         assert.match(text(message), /already_exists/);
         assert.match(text(message), /already exists/);
-        assert.equal(one(panel, 'data-plan-new-id').value, 'alpha');
         assert.equal(one(panel, 'data-plan-new-title').value, 'Again');
-        assert.equal(one(panel, 'data-plan-new-recipe').value, 'verb-workshop');
         assert.deepEqual(env.hashes, [], 'nothing opened');
         assert.equal(one(panel, 'data-plan-create').disabled, false, 'the button is usable again');
     });
@@ -376,31 +389,33 @@ describe('ac-3: the assign control', () => {
     });
 });
 
-describe('wiring: the admin route loads the new scripts in order, behind the admin guard', () => {
+describe('wiring: the editor route loads the plan scripts in order, behind the admin guard', () => {
     const routes = require('../shared/app-routes.js');
+    const editor = routes.find((route) => route.id === 'editor');
     const admin = routes.find((route) => route.id === 'admin');
 
     it('is admin-only and loads plan-ui before the panels, and the block renderers before plan-render', () => {
-        assert.equal(admin.adminOnly, true);
-        const at = (file) => admin.scripts.indexOf(file);
+        assert.equal(editor.adminOnly, true);
+        assert.equal(editor.path, '/editor/');
+        const at = (file) => editor.scripts.indexOf(file);
         ['plan-ui', 'plan-hints', 'plan-widgets', 'plan-form', 'plan-list', 'plan-issues', 'plan-history', 'plan-preview', 'plan-builder']
             .forEach((name) => assert.ok(at('/shared/admin/' + name + '.js') > -1, name + ' is loaded'));
         assert.ok(at('/shared/admin/plan-ui.js') < at('/shared/admin/plan-list.js'));
         assert.ok(at('/shared/admin/plan-form.js') < at('/shared/admin/plan-list.js'));
         assert.ok(at('/shared/admin/plan-preview.js') < at('/shared/admin/plan-builder.js'));
-        assert.ok(at('/shared/admin/plan-builder.js') < at('/shared/admin/admin-shell.js'));
+        assert.ok(at('/shared/admin/plan-builder.js') < at('/shared/admin/editor-shell.js'));
         ['explainer', 'conjugation-table', 'personal-question', 'verse-reading', 'letter-intro'].forEach((name) => {
             const file = '/shared/ui/blocks/' + name + '.js';
             assert.ok(at(file) > -1 && at(file) < at('/shared/ui/plan-render.js'), file + ' loads before plan-render.js');
         });
-        // every script it names exists
-        admin.scripts.filter((s) => s.indexOf('/shared/') === 0).forEach((s) => {
+        editor.scripts.filter((s) => s.indexOf('/shared/') === 0).forEach((s) => {
             assert.ok(fs.existsSync(path.resolve(__dirname, '..', s.slice(1))), s + ' exists');
         });
     });
 
-    it('no other route loads a plan screen', () => {
-        routes.filter((route) => route.id !== 'admin').forEach((route) => {
+    it('admin does not load the plan builder; no other learner route loads a plan screen', () => {
+        (admin.scripts || []).forEach((s) => assert.doesNotMatch(s, /\/admin\/plan-/));
+        routes.filter((route) => route.id !== 'editor').forEach((route) => {
             (route.scripts || []).forEach((s) => assert.doesNotMatch(s, /\/admin\/plan-/));
         });
     });

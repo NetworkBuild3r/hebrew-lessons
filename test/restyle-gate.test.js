@@ -328,7 +328,7 @@ describe('INIT-005/SPEC-013 shell and login markup', () => {
 
     it('every route has a title, a spoken name and a Hebrew + English heading', () => {
         const routes = require('../shared/app-routes.js');
-        assert.equal(routes.length, 7);
+        assert.equal(routes.length, 8);
         for (const r of routes) {
             assert.ok(r.title && r.announce && r.heading && r.heading.he && r.heading.en, r.id);
             assert.match(r.heading.he, /[\u0590-\u05FF]/, r.id + ' heading is Hebrew');
@@ -426,7 +426,10 @@ describe('INIT-005/SPEC-013 one language per label (REQ-016)', () => {
             'shared/admin/lesson-editor.js aria-label="activity type"',
             'shared/admin/users.js title="Listen"',
             'shared/admin/users.js aria-label="Progress"',
-            'shared/admin/lessons.js aria-label="Visibility"'
+            'shared/admin/lessons.js aria-label="Visibility"',
+            'shared/admin/plan-list.js aria-label="Search plans"',
+            'shared/admin/plan-list.js aria-label="Status"',
+            'shared/admin/plan-list.js aria-label="Audience"'
         ];
         const fresh = offenders.filter((o) => !known.includes(o));
         assert.deepEqual(fresh, [], 'new English-only admin label(s)');

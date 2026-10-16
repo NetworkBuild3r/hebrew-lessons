@@ -18,6 +18,7 @@
  */
 'use strict';
 
+const crypto = require('node:crypto');
 const fs = require('fs');
 const db = require('../db');
 const lexicon = require('../db/repos/lexicon');
@@ -62,7 +63,8 @@ function isSlug(value) {
 /**
  * Create a draft plan at revision 1.
  * @param {object} store Plan store.
- * @param {{ id: string, title: string, recipe?: string, unitId?: string, lessonId?: string }} input
+ * @param {{ id?: string, title: string, recipe?: string, unitId?: string, lessonId?: string }} input
+ *   Omit `id` and the plan id is a new UUID. A passed id must be a slug.
  * @param {object} ctx Write context from makeContext.
  * @returns {{ plan: object, document: string, revision: 1, status: 'draft', validation: object }
  *   |{ error: 'already_exists'|'invalid_id'|'invalid_recipe'|'validation' }}
@@ -73,7 +75,8 @@ function createPlan(store, input, ctx) {
     const body = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
     const s = schemaFacts();
 
-    if (!isSlug(body.id)) return { error: 'invalid_id' };
+    const id = body.id == null ? crypto.randomUUID() : body.id;
+    if (!isSlug(id)) return { error: 'invalid_id' };
     const unitId = body.unitId == null ? DEFAULT_UNIT : body.unitId;
     const lessonId = body.lessonId == null ? DEFAULT_LESSON : body.lessonId;
     if (!isSlug(unitId)) return { error: 'invalid_id', field: 'unitId' };
@@ -93,7 +96,7 @@ function createPlan(store, input, ctx) {
     if (body.recipe != null) lesson.recipe = body.recipe;
     const plan = {
         schemaVersion: body.recipe != null ? V110 : V100,
-        id: body.id,
+        id: id,
         revision: 1,
         status: 'draft',
         audience: 'shared',
@@ -110,7 +113,7 @@ function createPlan(store, input, ctx) {
     let saved = null;
     db.transaction(() => {
         // Checked inside the transaction so two calls with one id cannot both write.
-        if (store.loadWorkingCopy(plan.id)) return;
+        if (store.loadWorkingCopy(id)) return;
         saved = store.saveWorkingCopy({
             id: plan.id,
             document: document,

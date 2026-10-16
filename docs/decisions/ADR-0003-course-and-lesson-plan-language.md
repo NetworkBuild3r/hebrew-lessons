@@ -11,7 +11,7 @@
 | **Research grounding** | `RSCH-004` (course shape, lesson types, design rules); `RSCH-005` (pictures, typing, spelling) |
 | **Supersedes** | [ADR-0001](ADR-0001-learner-review-model.md) constraint 2 and [ADR-0002](ADR-0002-accounts-server-progress-site-map.md)'s carried form of that constraint, for the **plan document only**, at the API cutover described in Decision 3. Also changes ADR-0002's "hidden is the draft" rule, as described in Decision 7. |
 | **Superseded by** | — Extended by [ADR-0009](ADR-0009-learner-model-and-language-program.md), Accepted 2026-10-09 (schema `1.1.0`, five blocks, a lesson `recipe`, rules N13–N19, and changes to N1, N2, N7 and to the "script and sound support" row). |
-| **Extended by** | [ADR-0011](ADR-0011-ai-first-plan-builder.md), Accepted 2026-10-12: 4 (create and restore join the revision rule; `assign` is one more function on it; no merge), 6 (five named warn rows), 7 (publish has no approval step). |
+| **Extended by** | [ADR-0011](ADR-0011-ai-first-plan-builder.md), Accepted 2026-10-12: 4 (create and restore join the revision rule; `assign` is one more function on it; no merge), 6 (five named warn rows), 7 (publish has no approval step). [ADR-0012](ADR-0012-custom-lesson-stack.md), Accepted 2026-10-14: a lesson is the ordered blocks the author stored; an empty activity list is not back-filled with the legacy six-part ladder. [ADR-0013](ADR-0013-research-shaped-plans.md), Accepted 2026-10-14: research-shaped plans (optional activities, no maximum lesson count, running word list and learner place, practice on ADR-0001, research checks as warnings; three published worksheets stay on the lesson editor). |
 
 ## Summary
 
@@ -267,7 +267,7 @@ Every figure below is stated here and only here. Later specs cite the id.
 | N7 | Introduction blocks are at most **one quarter** of the unit's blocks (`introductions × 4 ≤ block count`). | **Warn** | Adapted. `RSCH-004` §3 rule 4. The equal split is arbitrary in the source. Only `introduction` counts as language-focused. |
 | N8 | Every image `alt` is **1 to 300** characters. | **Block** | Product choice. `RSCH-005` rule 7. No vocabulary study on alt text; the line keeps the meaning if the image fails. |
 | N9 | UTF-8 JSON size: a plan at most **512 KiB**, a lesson at most **128 KiB**, a block at most **32 KiB**. | **Block** | Product choice. Security size limit. |
-| N10 | At most **24** units in a plan, **12** lessons in a unit, **12** blocks in a lesson, **24** words on an introduction. | **Block** | Product choice. Structural ceiling, above the pedagogy cap in N1. |
+| N10 | At most **24** units in a plan, **12** blocks in a lesson, **24** words on an introduction. Lessons in a unit have no maximum (ADR-0013; INIT-010/SPEC-002 removed the former 12-lesson cap). | **Block** | Product choice. Structural ceiling, above the pedagogy cap in N1. |
 | N11 | A plain text field is at most **4000** characters. | **Block** | Product choice. Security size limit. |
 | N12 | A `fluency-pass` block has an empty new-item list (the schema gives it no word list). | **Block** the presence of a word list. **Warn** when that block sits in a lesson whose `newWords` is non-empty. Legacy lessons trip the warn. The new unit does not. | Adapted. `RSCH-004` §3 rule 3. |
 
@@ -288,6 +288,8 @@ Further rules, with no second copy of a number:
 | First-language `meaning` is present on every new word. | Block | Evidence-backed, Moderate. `RSCH-005` rule 1. |
 | An image, if any, is on the introduction word only. | Block | Adapted, Low. `RSCH-005` rule 2, plus the decision that pictures are not repeated on later blocks. |
 | No image on a task whose job is the written form. | Block | Evidence-backed, Moderate. `RSCH-005` rule 3. |
+| A Type it block whose cue is a picture. | Warn | Evidence-backed via `RSCH-005`. Named `picture-on-recall` in ADR-0013. Does not block publish. |
+| Every new word in a lesson is a kinship term (mother, father, brother, sister, son, daughter). | Warn | Adapted, Low. `RSCH-004` §3 rule 8. Named `closed-set` in ADR-0013. Does not block publish. |
 | HTML in a text field: a `<` that starts a tag name, a slash, or `!`. | Block | Security. See Security below. |
 | `audioPath` matches the relative `.mp3` pattern. | Block | INIT-002 path invariant, plus no remote URL. |
 
@@ -497,3 +499,5 @@ Delete `docs/decisions/ADR-0003-course-and-lesson-plan-language.md` and `docs/de
 | 2026-10-09 | ADR-0009 (`INIT-006/SPEC-001`, Proposed) would extend this record: schema `1.1.0` adds five blocks (`explainer`, `conjugation-table`, `personal-question`, `verse-reading`, `letter-intro`), a lesson `recipe`, and an introduction-word `group`; adds rules N13–N19; changes N1 for recipe `topic-conversation`, N2 for `guide`, and N7's language-focused set; reverses the "script and sound support is fields on the introduction word" row for `letter-intro`. `1.0.0` plans stay valid. Metadata note and this row only; the sentences in this file are left as written. Takes effect only when ADR-0009 is Accepted. |
 | 2026-10-09 | ADR-0009 Accepted by the operator. The extension in the row above is in force. Metadata note and this row only. |
 | 2026-10-12 | ADR-0011 (`INIT-008/SPEC-001`, Accepted) extends 4 (create, restore, and `assign` on the same revision rule), 6 (five named warn rows), and 7 (no approval step on publish). Metadata row and this row only. |
+| 2026-10-14 | ADR-0012 (`INIT-009/SPEC-001`, Accepted) extends metadata only: a lesson is the blocks the author stored; an empty activity list is not back-filled with the six-part ladder. Metadata row and this row only. |
+| 2026-10-14 | ADR-0013 (`INIT-010/SPEC-001`, Accepted) extends metadata only: research-shaped plans; warnings do not block publish; three published worksheets stay on the lesson editor; new courses are plans. Metadata row and this row only. |

@@ -36,10 +36,12 @@
         return list;
     }
 
+    // Provenance: INIT-009/SPEC-002 — stored activities (including []) are authoritative;
+    // fallbackActivities only when activities is absent (not an array).
     function resolveSteps(ws) {
         const level = U.levelOf(ws);
         const levelDefaults = (root.HEBREW_LEVEL_DEFAULTS || {})[level] || root.HEBREW_LEVEL_DEFAULTS.intermediate;
-        const raw = Array.isArray(ws.activities) && ws.activities.length
+        const raw = Array.isArray(ws.activities)
             ? ws.activities
             : fallbackActivities(ws);
         const steps = [];
@@ -63,6 +65,8 @@
         });
         return { level, levelDefaults, steps };
     }
+
+    Player.resolveSteps = resolveSteps;
 
     Player.boot = function () {
         const ws = root.WORKSHEET;
@@ -141,6 +145,7 @@
             Speech.setClips(buildClipEntries(ws));
             document.title = String(ws.title || 'דף עבודה').replace(/<[^>]+>/g, '');
             app.innerHTML = shellHtml();
+            if (U && typeof U.applyUiLang === 'function') U.applyUiLang(U.readUiLang());
             bindShell();
             // The sound control is in the markup above; sync its pressed state (off by default).
             if (root.HebrewFeedback && typeof root.HebrewFeedback.paintToggles === 'function') {
@@ -271,7 +276,7 @@
             <div class="player" id="player">
                 <div id="app-shell"></div>
                 <header class="player-top">
-                    <div class="player-top-inner player-top-inner--no-home">
+                    <div class="player-top-inner player-top-inner--no-home ui-chrome">
                         <div class="player-top-start" id="player-exit-slot"></div>
                         <div class="player-top-center">
                             <p class="step-indicator" id="step-indicator"></p>
@@ -298,7 +303,7 @@
                 </header>
                 <div id="player-step-announce" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
                 <main class="player-main" id="player-main"></main>
-                <div class="action-bar hidden" id="action-bar">
+                <div class="action-bar ui-chrome hidden" id="action-bar">
                     <div class="action-bar-inner" id="action-bar-inner"></div>
                 </div>
             </div>`;
@@ -440,8 +445,10 @@
                     // U.bi returns escaped markup (Hebrew + a dir="ltr" gloss span): innerHTML, not textContent.
                     indicator.innerHTML = U.bi('מסלול השיעור', 'Lesson path');
                 } else {
-                    indicator.textContent = 'שלב ' + (stepIndex + 1) + ' מתוך ' + total
-                        + ' · Step ' + (stepIndex + 1) + ' of ' + total;
+                    indicator.innerHTML = U.bi(
+                        'שלב ' + (stepIndex + 1) + ' מתוך ' + total,
+                        'Step ' + (stepIndex + 1) + ' of ' + total
+                    );
                 }
             }
             if (title) title.classList.toggle('hidden', stepIndex >= 0);

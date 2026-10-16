@@ -27,7 +27,8 @@
     function bi(he, en) {
         return U && typeof U.bi === 'function'
             ? U.bi(he, en)
-            : (esc(he) + ' <span class="en" dir="ltr">(' + esc(en) + ')</span>');
+            : ('<span class="ui-pair"><span class="ui-he" lang="he">' + esc(he) + '</span>'
+                + '<span class="ui-en" lang="en" dir="ltr">' + esc(en) + '</span></span>');
     }
 
     function api() {
@@ -433,8 +434,7 @@
             + '<p class="admin-back"><a href="#lessons">' + bi('← חזרה לשיעורים', '← Back to lessons')
             + '</a></p>'
             + '<div class="card lesson-editor-toolbar">'
-            + '<h2>' + bi('עריכת שיעור', 'Edit lesson') + ' <span class="en" dir="ltr">('
-            + esc(state.slug) + ')</span></h2>'
+            + '<h2>' + bi('עריכת שיעור', 'Edit lesson') + '</h2>'
             + '<p class="lesson-opened-at" data-opened-at>'
             + bi('עותק זה נפתח ב־', 'When this copy was opened:') + ' '
             + '<time dir="ltr">' + esc(openedLabel) + '</time></p>'

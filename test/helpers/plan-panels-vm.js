@@ -28,6 +28,7 @@ const SCRIPTS = [
     'shared/ui/blocks/verse-reading.js',
     'shared/ui/blocks/letter-intro.js',
     'shared/ui/plan-render.js',
+    'shared/admin/activity-map.js',
     'shared/admin/plan-ui.js',
     'shared/admin/plan-hints.js',
     'shared/admin/plan-widgets.js',
@@ -36,7 +37,8 @@ const SCRIPTS = [
     'shared/admin/plan-issues.js',
     'shared/admin/plan-history.js',
     'shared/admin/plan-preview.js',
-    'shared/admin/plan-builder.js'
+    'shared/admin/plan-builder.js',
+    'shared/admin/editor-shell.js'
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -72,8 +74,10 @@ function loadPanels(options) {
         diff: opts.diff || { from: { ref: 1, revision: 1 }, to: { ref: 'working', revision: 4 }, entries: [], truncated: false },
         users: opts.users || [],
         plans: opts.plans || [],
+        plansById: opts.plansById || {},
         plansTruncated: opts.plansTruncated === true
     };
+    if (!server.plansById[server.plan.id]) server.plansById[server.plan.id] = server.plan;
     const sandbox = {
         console,
         setTimeout,
@@ -81,7 +85,7 @@ function loadPanels(options) {
         Promise,
         URL,
         confirm() { return true; },
-        location: { href: 'http://127.0.0.1/admin/', hash: '#plans', pathname: '/admin/' },
+        location: { href: 'http://127.0.0.1/editor/', hash: '#plans', pathname: '/editor/' },
         document: dom.makeDocument(),
         fetch(url, init) {
             const method = String((init && init.method) || 'GET').toUpperCase();
@@ -102,6 +106,15 @@ function loadPanels(options) {
     sandbox.HebrewAdminShell = { setHash(route) { hashes.push(route); } };
     vm.createContext(sandbox);
     SCRIPTS.forEach((file) => vm.runInContext(fs.readFileSync(path.join(ROOT, file), 'utf8'), sandbox, { filename: file }));
+    if (sandbox.HebrewEditorShell && typeof sandbox.HebrewEditorShell.setHash === 'function') {
+        const editorSetHash = sandbox.HebrewEditorShell.setHash;
+        sandbox.HebrewEditorShell.setHash = function (route) {
+            hashes.push(route);
+            return editorSetHash.call(this, route);
+        };
+    } else {
+        sandbox.HebrewEditorShell = { setHash(route) { hashes.push(route); } };
+    }
 
     const json = (status, data) => ({ status, data });
 
@@ -116,9 +129,15 @@ function loadPanels(options) {
         if (method === 'GET' && url === '/api/plan-schema') return json(200, SCHEMA);
         if (method === 'GET' && url === '/api/plans') return json(200, { plans: server.plans, truncated: server.plansTruncated });
         if (method === 'GET' && url === '/api/admin/users') return json(200, { users: server.users });
-        if (method === 'GET' && url.indexOf(base + '/parts') === 0) {
+        const partsMatch = method === 'GET' && /^\/api\/plans\/([^/]+)\/parts/.exec(url);
+        if (partsMatch) {
+            const planId = decodeURIComponent(partsMatch[1]);
+            const planDoc = planId === 'sample' || planId === server.plan.id
+                ? server.plan
+                : (server.plansById[planId] || null);
+            if (!planDoc) return json(404, { error: 'Not found', code: 'not_found' });
             const q = /path=([^&]*)/.exec(url);
-            const part = q ? nodeAt(server.plan, decodeURIComponent(q[1])) : server.plan;
+            const part = q ? nodeAt(planDoc, decodeURIComponent(q[1])) : planDoc;
             return json(200, { part: clone(part), revision: server.revision, editState: server.editState });
         }
         if (method === 'GET' && url.indexOf(base + '/issues') === 0) return json(200, server.issues);
@@ -136,11 +155,93 @@ function loadPanels(options) {
             return json(200, { revisions: rows, truncated: !before && server.revisionsTruncated });
         }
         if (method === 'GET' && url.indexOf(base + '/diff') === 0) return json(200, server.diff);
+        if (method === 'POST' && url === base + '/lessons') {
+            if (body.expectedRevision !== server.revision) return json(409, { error: 'revision_conflict', revision: server.revision });
+            const unit = nodeAt(server.plan, body.path);
+            if (!unit || !Array.isArray(unit.lessons)) return json(404, { error: 'Not found', code: 'not_found' });
+            const at = body.index == null ? unit.lessons.length : body.index;
+            unit.lessons.splice(at, 0, clone(body.lesson));
+            server.revision += 1;
+            server.plan.revision = server.revision;
+            return json(200, { plan: clone(server.plan), revision: server.revision, status: 'draft', validation: { ok: true, blocks: [], warnings: [], informs: [] } });
+        }
+        if (method === 'POST' && url === base + '/lessons/move') {
+            if (body.expectedRevision !== server.revision) return json(409, { error: 'revision_conflict', revision: server.revision });
+            const found = (() => {
+                const parts = String(body.path || '').split('/');
+                if (parts.length !== 4 || parts[0] !== 'units' || parts[2] !== 'lessons') return null;
+                const unit = (server.plan.units || []).find((u) => u && u.id === parts[1]);
+                if (!unit || !Array.isArray(unit.lessons)) return null;
+                const index = unit.lessons.findIndex((l) => l && l.id === parts[3]);
+                if (index < 0) return null;
+                return { list: unit.lessons, index: index };
+            })();
+            if (!found) return json(404, { error: 'Not found', code: 'not_found' });
+            const item = found.list.splice(found.index, 1)[0];
+            const at = Math.max(0, Math.min(body.index, found.list.length));
+            found.list.splice(at, 0, item);
+            server.revision += 1;
+            server.plan.revision = server.revision;
+            return json(200, { plan: clone(server.plan), revision: server.revision, status: 'draft', validation: { ok: true, blocks: [], warnings: [], informs: [] } });
+        }
+        if (method === 'DELETE' && url === base + '/lessons') {
+            if (body.expectedRevision !== server.revision) return json(409, { error: 'revision_conflict', revision: server.revision });
+            const parts = String(body.path || '').split('/');
+            const unit = (server.plan.units || []).find((u) => u && u.id === parts[1]);
+            if (!unit || !Array.isArray(unit.lessons)) return json(404, { error: 'Not found', code: 'not_found' });
+            if (unit.lessons.length <= 1) return json(400, { error: 'invalid_op' });
+            const index = unit.lessons.findIndex((l) => l && l.id === parts[3]);
+            if (index < 0) return json(404, { error: 'Not found', code: 'not_found' });
+            unit.lessons.splice(index, 1);
+            server.revision += 1;
+            server.plan.revision = server.revision;
+            return json(200, { plan: clone(server.plan), revision: server.revision, status: 'draft', validation: { ok: true, blocks: [], warnings: [], informs: [] } });
+        }
         if (method === 'PATCH' && url === base + '/fields') {
             if (body.expectedRevision !== server.revision) return json(409, { error: 'revision_conflict', revision: server.revision });
             const node = nodeAt(server.plan, body.path);
             if (!node) return json(404, { error: 'Not found', code: 'not_found' });
             node[body.field] = body.value;
+            server.revision += 1;
+            server.plan.revision = server.revision;
+            return json(200, { plan: clone(server.plan), revision: server.revision, status: 'draft', validation: { ok: true, blocks: [], warnings: [], informs: [] } });
+        }
+        if (method === 'POST' && url === base + '/blocks') {
+            if (body.expectedRevision !== server.revision) return json(409, { error: 'revision_conflict', revision: server.revision });
+            const lesson = nodeAt(server.plan, body.path);
+            if (!lesson || !Array.isArray(lesson.blocks)) return json(404, { error: 'Not found', code: 'not_found' });
+            const at = body.index == null ? lesson.blocks.length : body.index;
+            lesson.blocks.splice(at, 0, clone(body.block));
+            server.revision += 1;
+            server.plan.revision = server.revision;
+            return json(200, { plan: clone(server.plan), revision: server.revision, status: 'draft', validation: { ok: true, blocks: [], warnings: [], informs: [] } });
+        }
+        if (method === 'POST' && /\/blocks\/move$/.test(url)) {
+            if (body.expectedRevision !== server.revision) return json(409, { error: 'revision_conflict', revision: server.revision });
+            const parts = String(body.path || '').split('/');
+            if (parts.length !== 6 || parts[0] !== 'units' || parts[2] !== 'lessons' || parts[4] !== 'blocks') {
+                return json(404, { error: 'Not found', code: 'not_found' });
+            }
+            const lesson = nodeAt(server.plan, parts.slice(0, 4).join('/'));
+            if (!lesson || !Array.isArray(lesson.blocks)) return json(404, { error: 'Not found', code: 'not_found' });
+            const from = lesson.blocks.findIndex((b) => b && b.id === parts[5]);
+            if (from < 0) return json(404, { error: 'Not found', code: 'not_found' });
+            const item = lesson.blocks.splice(from, 1)[0];
+            const at = Math.max(0, Math.min(body.index, lesson.blocks.length));
+            lesson.blocks.splice(at, 0, item);
+            server.revision += 1;
+            server.plan.revision = server.revision;
+            return json(200, { plan: clone(server.plan), revision: server.revision, status: 'draft', validation: { ok: true, blocks: [], warnings: [], informs: [] } });
+        }
+        if (method === 'DELETE' && url === base + '/parts') {
+            if (body.expectedRevision !== server.revision) return json(409, { error: 'revision_conflict', revision: server.revision });
+            const parts = String(body.path || '').split('/');
+            if (parts.length !== 6 || parts[4] !== 'blocks') return json(404, { error: 'Not found', code: 'not_found' });
+            const lesson = nodeAt(server.plan, parts.slice(0, 4).join('/'));
+            if (!lesson || !Array.isArray(lesson.blocks)) return json(404, { error: 'Not found', code: 'not_found' });
+            const index = lesson.blocks.findIndex((b) => b && b.id === parts[5]);
+            if (index < 0) return json(404, { error: 'Not found', code: 'not_found' });
+            lesson.blocks.splice(index, 1);
             server.revision += 1;
             server.plan.revision = server.revision;
             return json(200, { plan: clone(server.plan), revision: server.revision, status: 'draft', validation: { ok: true, blocks: [], warnings: [], informs: [] } });
@@ -158,7 +259,8 @@ function loadPanels(options) {
             server.plan.status = 'published';
             return json(200, { plan: clone(server.plan), revision: server.revision, status: 'published', validation: { ok: true, blocks: [], warnings: [], informs: [] } });
         }
-        if (method === 'POST' && url === base + '/assign') {
+        const assignMatch = method === 'POST' && /^\/api\/plans\/([^/]+)\/assign$/.exec(url);
+        if (assignMatch) {
             if (body.expectedRevision !== server.revision) return json(409, { error: 'revision_conflict', revision: server.revision });
             server.plan.audience = body.audience;
             server.plan.assigneeId = body.assigneeId || null;
@@ -167,7 +269,20 @@ function loadPanels(options) {
             return json(200, { plan: clone(server.plan), revision: server.revision, status: 'draft', validation: { ok: true, blocks: [], warnings: [], informs: [] } });
         }
         if (method === 'POST' && url === '/api/plans') {
-            return json(200, { plan: { id: body.id }, revision: 1, status: 'draft', validation: { ok: true } });
+            const id = body && typeof body.id === 'string' && body.id
+                ? body.id
+                : '11111111-1111-4111-8111-111111111111';
+            // New plan starts at revision 1 so a follow-up assign can use that revision.
+            server.revision = 1;
+            server.plan.audience = 'shared';
+            server.plan.assigneeId = null;
+            if (body && body.title) server.plan.title = body.title;
+            return json(200, {
+                plan: { id: id, title: body && body.title, audience: 'shared', assigneeId: null },
+                revision: 1,
+                status: 'draft',
+                validation: { ok: true }
+            });
         }
         return json(404, { error: 'Not found', code: 'not_found' });
     }

@@ -131,6 +131,52 @@ describe('study tables', () => {
     });
 });
 
+describe('future tense (INIT-012/SPEC-006)', () => {
+    const FUTURE_CELLS = [
+        { cell: '1s', formKey: 'אדבר' },
+        { cell: '2ms', formKey: 'תדבר' },
+        { cell: '2fs', formKey: 'תדברי' },
+        { cell: '3ms', formKey: 'ידבר' },
+        { cell: '3fs', formKey: 'תדבר' },
+        { cell: '1p', formKey: 'נדבר' },
+        { cell: '2mp', formKey: 'תדברו' },
+        { cell: '2fp', formKey: 'תדברנה' },
+        { cell: '3p', formKey: 'ידברו' }
+    ];
+
+    it('study mode lists nine person rows like past', () => {
+        const forms = formsFor(FUTURE_CELLS, new Set(['תדברנה']));
+        const html = table.render({
+            id: 'future',
+            type: 'conjugation-table',
+            lemmaKey: 'לדבר',
+            tense: 'future',
+            mode: 'study',
+            cells: FUTURE_CELLS
+        }, { forms });
+        orderOf(html, ['אני', 'אתה', 'את', 'הוא', 'היא', 'אנחנו', 'אתם', 'אתן', 'הם/הן']);
+        assert.match(html, /data-tense="future"/);
+        assert.match(html, /עתיד/);
+        assert.match(html, /not yet checked/);
+        assert.match(html, /data-verified="0"/);
+    });
+
+    it('drill mode skips unverified future cells', () => {
+        const block = {
+            id: 'f-drill',
+            type: 'conjugation-table',
+            lemmaKey: 'לדבר',
+            tense: 'future',
+            mode: 'drill',
+            cells: FUTURE_CELLS.slice(0, 3)
+        };
+        const forms = formsFor(FUTURE_CELLS.slice(0, 3), new Set([FUTURE_CELLS[2].formKey]));
+        const queue = table.drillQueue([block], forms, () => 0.5);
+        assert.equal(queue.some((item) => item.formKey === FUTURE_CELLS[2].formKey), false);
+        assert.ok(queue.length >= 2);
+    });
+});
+
 describe('drill mode', () => {
     const verified = {
         'חָשַׁבְתִּי': { key: 'חָשַׁבְתִּי', verified: true, accept: ['חשבתי', 'חשבתיי'], root: ROOT },

@@ -185,7 +185,9 @@ describe('migration 006 plan revisions (INIT-008/SPEC-003)', { concurrency: fals
 
     it('is numbered 006 and sits after 005', () => {
         const files = fs.readdirSync(MIGRATIONS).filter((name) => /^\d{3,}-.+\.js$/.test(name)).sort();
-        assert.deepEqual(files.map((name) => name.split('-')[0]), ['001', '002', '003', '004', '005', '006']);
+        assert.deepEqual(files.map((name) => name.split('-')[0]), [
+            '001', '002', '003', '004', '005', '006', '007', '008', '009', '010'
+        ]);
         assert.equal(migration.VERSION, 6);
         assert.equal(files[5], '006-plan-revisions.js');
     });
@@ -203,7 +205,11 @@ describe('migration 006 plan revisions (INIT-008/SPEC-003)', { concurrency: fals
         assert.equal(before.plans.count, 2);
         assert.equal(before.audit_log.count, 1);
 
-        db.migrate();
+        database.exec('BEGIN IMMEDIATE');
+        migration.up(database);
+        database.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
+            .run(6, '006-plan-revisions.js', NOW);
+        database.exec('COMMIT');
 
         const after = snapshot(existing);
         assert.deepEqual(after, before);
@@ -239,7 +245,10 @@ describe('migration 006 plan revisions (INIT-008/SPEC-003)', { concurrency: fals
         const rowsFor6 = database.prepare('SELECT * FROM schema_migrations WHERE version = 6').all();
         assert.equal(rowsFor6.length, 1);
         assert.equal(rowsFor6[0].name, '006-plan-revisions.js');
-        assert.equal(database.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v, 6);
+        const maxMigration = Math.max(...fs.readdirSync(MIGRATIONS)
+            .filter((name) => /^\d{3,}-.+\.js$/.test(name))
+            .map((name) => Number(name.split('-')[0])));
+        assert.equal(database.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v, maxMigration);
     });
 
     it('ac-4: CHECK constraints, the primary key, and the foreign keys reject bad rows', () => {
@@ -252,10 +261,12 @@ describe('migration 006 plan revisions (INIT-008/SPEC-003)', { concurrency: fals
         assert.throws(() => insertRevision(revisionRow({ document_gz: null, revision: 2 })), /NOT NULL/);
         assert.throws(() => insertRevision(revisionRow()), /UNIQUE|PRIMARY/);
         assert.throws(() => insertRevision(revisionRow({ plan_id: 'no-such-plan', revision: 1 })), /FOREIGN KEY/);
-        for (const op of ['create', 'baseline', 'set_field', 'replace_part', 'insert_block',
-            'move_block', 'remove_block', 'assign', 'publish', 'restore']) {
-            assert.equal(insertRevision(revisionRow({ op: op, revision: 10 + ['create', 'baseline', 'set_field',
-                'replace_part', 'insert_block', 'move_block', 'remove_block', 'assign', 'publish', 'restore'].indexOf(op) })).changes, 1, op);
+        const ops = ['create', 'baseline', 'set_field', 'replace_part', 'insert_block',
+            'move_block', 'remove_block', 'insert_lesson', 'move_lesson', 'remove_lesson',
+            'assign', 'publish', 'restore'];
+        // INIT-010/SPEC-002: lesson ops are in the 006 CHECK (fresh migrate). No new migration.
+        for (const op of ops) {
+            assert.equal(insertRevision(revisionRow({ op: op, revision: 10 + ops.indexOf(op) })).changes, 1, op);
         }
         for (const kind of ['human', 'system']) {
             assert.equal(insertRevision(revisionRow({ actor_kind: kind, revision: 30 + (kind === 'human' ? 0 : 1) })).changes, 1);

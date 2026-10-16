@@ -30,7 +30,7 @@
  * (test/plan-editor-drift.test.js) asserts how many there are.
  *
  * Plain browser script, no build step. Node tests load it with require().
- * Provenance: INIT-008/SPEC-012
+ * Provenance: INIT-008/SPEC-012, INIT-009/SPEC-003, INIT-012/SPEC-002, INIT-012/SPEC-003
  */
 (function (root, factory) {
     'use strict';
@@ -104,6 +104,15 @@
     block('letter-intro', 'הכרת אות', 'Letter intro', {
         help: ['אות אחת, עם צלילים ומילים לחיפוש.', 'One letter, with sounds and words to find it in.']
     });
+    block('exercise', 'תרגיל', 'Exercise', {
+        help: ['תרגיל מכוון: בחירה, נכון/לא נכון, סידור, תרגום, או הכתבה.', 'A deliberate exercise: choose, true/false, unscramble, translate, or dictation.']
+    });
+    block('assignment', 'מטלה', 'Assignment', {
+        help: ['כתיבה של כמה משפטים; לפעמים עם מילים לשימוש ושורות שיעורי בית.', 'Write several sentences; optional word list and homework lines. Never scored.']
+    });
+    block('type-it', 'הקלדה', 'Type it', {
+        help: ['רמז באנגלית, כתיבה בעברית.', 'English cue, type the Hebrew.']
+    });
 
     // ---- titles of objects (list items) --------------------------------------------------
 
@@ -134,6 +143,11 @@
     kind('letterSound', 'צליל', 'Sound');
     kind('letterFind', 'מילה לחיפוש', 'Word to find');
     kind('language', 'שפות', 'Languages');
+    kind('exerciseChooseItem', 'פריט בחירה', 'Choose item');
+    kind('exerciseTrueFalseItem', 'פריט נכון/לא נכון', 'True/false item');
+    kind('exerciseUnscrambleItem', 'פריט סידור', 'Unscramble item');
+    kind('exerciseTranslateItem', 'פריט תרגום', 'Translate item');
+    kind('exerciseDictationItem', 'פריט הכתבה', 'Dictation item');
 
     // ---- plan --------------------------------------------------------------------------
 
@@ -164,19 +178,19 @@
 
     // ---- lesson ------------------------------------------------------------------------
 
-    field('lesson.id', 'מזהה', 'Id');
+    field('lesson.id', 'מזהה', 'Id', { advanced: true });
     field('lesson.title', 'כותרת', 'Title', { lang: 'exempt', single: true });
-    field('lesson.subtitle', 'כותרת משנה', 'Subtitle', { lang: 'exempt', single: true });
-    field('lesson.footer', 'כותרת תחתונה', 'Footer', { lang: 'exempt', single: true });
+    field('lesson.subtitle', 'משפט אחד', 'One sentence', { lang: 'exempt', single: true });
+    field('lesson.footer', 'כותרת תחתונה', 'Footer', { lang: 'exempt', single: true, advanced: true });
     field('lesson.level', 'רמה', 'Level', {
         options: {
-            basic: ['בסיסי', 'Basic'],
+            basic: ['מתחילים', 'Beginner'],
             intermediate: ['בינוני', 'Intermediate'],
             advanced: ['מתקדם', 'Advanced']
         },
         default: 'basic'
     });
-    field('lesson.visibility', 'נראות', 'Visibility', {
+    field('lesson.visibility', 'מי יכול לראות', 'Who can see it', {
         help: ['מי רואה את השיעור אחרי פרסום.', 'Who sees this lesson once it is published.'],
         options: {
             hidden: ['מוסתר', 'Hidden'],
@@ -187,6 +201,7 @@
     });
     field('lesson.recipe', 'מתכון', 'Recipe', {
         help: ['צורת פתיחה לשיעור. לא יוצר טקסט.', 'A starting shape for the lesson. It writes no text.'],
+        advanced: true,
         options: {
             'topic-conversation': ['שיחה לפי נושא', 'Topic conversation'],
             'review-worksheet': ['דף חזרה', 'Review worksheet'],
@@ -202,13 +217,16 @@
     field('lesson.buildsOn', 'נשען על', 'Builds on', {
         lang: 'exempt',
         single: true,
-        help: ['מזהי שיעורים קודמים.', 'Ids of earlier lessons.']
+        help: ['שיעורים קודמים בתוכנית זו, לפי כותרת.', 'Earlier lessons in this plan, by title.']
     });
     field('lesson.newWords', 'מילים חדשות', 'New words', {
         lang: 'he',
         single: true,
         pointed: true,
-        help: ['המילים שהשיעור מלמד, כמו שהן כתובות במילון.', 'The words the lesson teaches, as the lexicon writes them.']
+        help: [
+            'לחצו על פירוש ליד מילה כדי לבדוק אותה במילון.',
+            'Click Meaning beside a word to check it in the dictionary.'
+        ]
     });
     field('lesson.recycles', 'מילים חוזרות', 'Recycled words', {
         help: ['מילה משיעור קודם שחוזרת כאן.', 'A word from an earlier lesson that returns here.']
@@ -236,7 +254,11 @@
     field('wordEntry.audioPath', 'קובץ שמע', 'Audio file', {
         lang: 'exempt',
         single: true,
-        help: ['נתיב לקובץ mp3 קיים.', 'Path to an existing mp3 file.']
+        widget: 'audio-clip',
+        help: [
+            'בחרו צליל קיים, או לחצו "יצירת צליל" כדי ליצור אחד למילה. שמרו כדי לשמור.',
+            'Choose a sound that exists, or press Make sound to create one for this word. Save to keep it.'
+        ]
     });
     field('wordEntry.sentenceAudioPath', 'שמע המשפט', 'Sentence audio', { lang: 'exempt', single: true });
     field('wordEntry.fromLessonId', 'משיעור', 'From lesson', { lang: 'exempt', single: true });
@@ -336,8 +358,11 @@
     field('gradedStoryBlock.support', 'מילון עזר', 'Support glossary');
     field('gradedStoryBlock.glosses', 'פירושים למילים', 'Word glosses', {
         lang: 'mixed',
-        widget: 'json',
-        help: ['מפה ממילה לפירוש, כ-JSON.', 'A map from word to gloss, as JSON.']
+        widget: 'gloss-map',
+        help: [
+            'מה הקורא רואה כשהוא לוחץ על מילה. "הצעת פירושים" ממלאת טיוטה מהמילון; בדקו כל פירוש מול הסיפור.',
+            'What a reader sees when they tap a word. "Suggest meanings" fills in a draft from the dictionary; check each one against the story.'
+        ]
     });
     field('gradedStoryBlock.questions', 'שאלות', 'Questions');
 
@@ -437,14 +462,15 @@
         help: ['מפתח במילון, עם אות עברית.', 'A lexicon key, with a Hebrew letter.']
     });
     field('conjugationTableBlock.tense', 'זמן', 'Tense', {
-        options: { present: ['הווה', 'Present'], past: ['עבר', 'Past'] },
-        default: 'present'
+        options: { present: ['הווה', 'Present'], past: ['עבר', 'Past'], future: ['עתיד', 'Future'] },
+        default: 'present',
+        help: ['עתיד דורש schemaVersion 1.2.0.', 'Future tense needs schemaVersion 1.2.0.']
     });
     field('conjugationTableBlock.mode', 'מצב', 'Mode', {
         options: { study: ['לימוד', 'Study'], drill: ['תרגול', 'Drill'] },
         default: 'study'
     });
-    field('conjugationTableBlock.cells', 'תאים', 'Cells');
+    field('conjugationTableBlock.cells', 'תאים', 'Cells', { widget: 'table-cells' });
     field('conjugationTableBlock.sentences', 'משפטים', 'Sentences');
     field('conjugationTableBlock.questions', 'שאלות', 'Questions');
 
@@ -490,6 +516,94 @@
         },
         help: ['תשובות לא נשלחות לשרת.', 'Answers are not sent to the server.'],
         default: 'either'
+    });
+
+    // ---- type it (INIT-010) --------------------------------------------------------------
+
+    field('typeItBlock.id', 'מזהה', 'Id');
+    field('typeItBlock.type', 'סוג', 'Type');
+    field('typeItBlock.image', 'תמונה', 'Picture', { lang: 'exempt', advanced: true });
+    field('typeItBlock.picture', 'תמונה', 'Picture', { lang: 'exempt', advanced: true });
+    field('typeItBlock.mediaId', 'מזהה מדיה', 'Media id', { lang: 'latin', single: true, advanced: true });
+    field('typeItBlock.prompt', 'רמז', 'Prompt', { lang: 'en', single: true });
+    field('typeItBlock.answer', 'תשובה', 'Answer', { lang: 'he', single: true, pointed: true });
+
+    // ---- exercise (INIT-012/SPEC-002) ---------------------------------------------------
+
+    field('exerciseBlock.id', 'מזהה', 'Id');
+    field('exerciseBlock.type', 'סוג', 'Type');
+    field('exerciseBlock.kind', 'סוג התרגיל', 'What kind?', {
+        options: {
+            choose: ['בחירה', 'Choose'],
+            'true-false': ['נכון או לא נכון', 'True or false'],
+            unscramble: ['סידור מילים', 'Put in order'],
+            translate: ['תרגום', 'Translate'],
+            dictation: ['כתיבה משמיעה', 'Type what you hear']
+        },
+        default: 'choose'
+    });
+    field('exerciseBlock.heading', 'כותרת', 'Heading', { lang: 'mixed', single: true });
+    field('exerciseBlock.items', 'פריטים', 'Items', { widget: 'exercise-items' });
+
+    field('exerciseChooseItem.id', 'מזהה', 'Id');
+    field('exerciseChooseItem.prompt', 'שאלה', 'Prompt', { lang: 'mixed', rows: 2 });
+    field('exerciseChooseItem.choices', 'אפשרויות', 'Choices', { lang: 'mixed', widget: 'json' });
+    field('exerciseChooseItem.answer', 'תשובה נכונה', 'Correct answer', { lang: 'mixed', single: true });
+    field('exerciseChooseItem.why', 'למה', 'Why', { lang: 'en', rows: 2 });
+
+    field('exerciseTrueFalseItem.id', 'מזהה', 'Id');
+    field('exerciseTrueFalseItem.statement', 'משפט', 'Statement', { lang: 'mixed', rows: 2 });
+    field('exerciseTrueFalseItem.answer', 'נכון?', 'True?', {
+        options: { true: ['נכון', 'True'], false: ['לא נכון', 'False'] },
+        default: true
+    });
+    field('exerciseTrueFalseItem.why', 'למה', 'Why', { lang: 'en', rows: 2 });
+
+    field('exerciseUnscrambleItem.id', 'מזהה', 'Id');
+    field('exerciseUnscrambleItem.words', 'מילים (סדר נכון)', 'Words (correct order)', {
+        lang: 'he',
+        widget: 'json',
+        pointed: true
+    });
+    field('exerciseUnscrambleItem.alt', 'סדרים חלופיים', 'Alternate orders', { lang: 'he', widget: 'json' });
+    field('exerciseUnscrambleItem.english', 'אנגלית', 'English gloss', { lang: 'en', single: true });
+
+    field('exerciseTranslateItem.id', 'מזהה', 'Id');
+    field('exerciseTranslateItem.english', 'רמז באנגלית', 'English cue', { lang: 'en', single: true });
+    field('exerciseTranslateItem.answer', 'תשובה בעברית', 'Hebrew answer', { lang: 'he', single: true });
+    field('exerciseTranslateItem.accept', 'כתיב חלופי', 'Alternate spellings', {
+        lang: 'he',
+        widget: 'json',
+        help: ['ללא ניקוד, עד 8 אפשרויות.', 'Unpointed spellings, up to eight.']
+    });
+
+    field('exerciseDictationItem.id', 'מזהה', 'Id');
+    field('exerciseDictationItem.audioPath', 'קובץ שמע', 'Audio file', { lang: 'latin', single: true });
+    field('exerciseDictationItem.answer', 'תשובה בעברית', 'Hebrew answer', { lang: 'he', single: true });
+    field('exerciseDictationItem.accept', 'כתיב חלופי', 'Alternate spellings', { lang: 'he', widget: 'json' });
+
+    // ---- assignment (INIT-012/SPEC-003) --------------------------------------------------
+
+    field('assignmentBlock.id', 'מזהה', 'Id');
+    field('assignmentBlock.type', 'סוג', 'Type');
+    field('assignmentBlock.prompt', 'הנחיה', 'Prompt', {
+        lang: 'mixed',
+        rows: 3,
+        help: ['תיאור המשימה; ללא HTML.', 'Task description; no HTML.']
+    });
+    field('assignmentBlock.minSentences', 'מינימום משפטים', 'Minimum sentences', {
+        help: ['1 עד 12.', '1 to 12.']
+    });
+    field('assignmentBlock.useWords', 'מילים לשימוש', 'Words to use', {
+        lang: 'he',
+        widget: 'assignment-use-words',
+        pointed: true,
+        help: ['1 עד 12 מילים.', '1 to 12 words.']
+    });
+    field('assignmentBlock.homework', 'שיעורי בית', 'Homework lines', {
+        lang: 'mixed',
+        widget: 'assignment-homework',
+        help: ['1 עד 6 שורות.', '1 to 6 lines.']
     });
 
     // ---- verse reading --------------------------------------------------------------------

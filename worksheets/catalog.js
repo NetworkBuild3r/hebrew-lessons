@@ -19,5 +19,12 @@ window.HEBREW_CATALOG = [
         "subtitle": "פרטי • intermediate",
         "blurb": "Private vocab lesson — hidden unless assigned.",
         "level": "intermediate"
+    },
+    {
+        "slug": "8ee73fd9-c223-4e01-8dcb-5f0a784eed97",
+        "title": "test",
+        "subtitle": "",
+        "blurb": "Run it again. The next round hides the English until you ask, and keeps the vowels.",
+        "level": "basic"
     }
 ];

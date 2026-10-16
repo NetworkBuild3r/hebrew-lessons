@@ -4,9 +4,9 @@ window.HEBREW_VOCAB_INDEX = [
         "word": "אַחֲרֵי",
         "meaning": "after",
         "sound": "a-kha-REI",
-        "audio": "",
+        "audio": "../_audio/words/f37d0ca16286cc4e93dea492.mp3",
         "sentence": "אַחֲרֵי הַסֶּרֶט כְּדַאי לָלֶכֶת לְמִסְעָדָה אִיטַלְקִית.",
-        "sentenceAudio": "",
+        "sentenceAudio": "audio/sentences/vocab-9.mp3",
         "lessons": [
             "shai-date-indirect-speech"
         ]
@@ -89,9 +89,9 @@ window.HEBREW_VOCAB_INDEX = [
         "word": "חָשַׁבְתִּי",
         "meaning": "I thought",
         "sound": "cha-SHAV-ti",
-        "audio": "",
+        "audio": "../_audio/words/c27af78022df8fb8018fa583.mp3",
         "sentence": "חָשַׁבְתִּי וְאָמַרְתִּי לְשַׁי שֶׁאֲנִי מַמְלִיץ לוֹ לָקַחַת אֶת בַּר לְסֶרֶט.",
-        "sentenceAudio": "",
+        "sentenceAudio": "audio/sentences/vocab-7.mp3",
         "lessons": [
             "shai-date-indirect-speech"
         ]
@@ -101,9 +101,9 @@ window.HEBREW_VOCAB_INDEX = [
         "word": "טֶבַע",
         "meaning": "nature",
         "sound": "TE-va",
-        "audio": "",
+        "audio": "../_audio/words/fddcb2e3688567e36a25ec42.mp3",
         "sentence": "בַּר אוֹהֶבֶת קָפֶה טוֹב וְטִיּוּלִים בַּטֶּבַע.",
-        "sentenceAudio": "",
+        "sentenceAudio": "audio/sentences/vocab-4.mp3",
         "lessons": [
             "shai-date-indirect-speech"
         ]
@@ -113,9 +113,9 @@ window.HEBREW_VOCAB_INDEX = [
         "word": "יוֹדֵעַ",
         "meaning": "knows (m. sg.)",
         "sound": "yo-DE-a",
-        "audio": "",
+        "audio": "../_audio/words/7bc2b7a4b2203a563ac5a229.mp3",
         "sentence": "שַׁי לֹא יוֹדֵעַ מָה כְּדַאי לָהֶם לַעֲשׂוֹת.",
-        "sentenceAudio": "",
+        "sentenceAudio": "audio/sentences/vocab-2.mp3",
         "lessons": [
             "shai-date-indirect-speech"
         ]
@@ -137,9 +137,9 @@ window.HEBREW_VOCAB_INDEX = [
         "word": "כְּדַאי",
         "meaning": "it's a good idea / should",
         "sound": "ke-DAI",
-        "audio": "",
+        "audio": "../_audio/words/245a1be29288a5dd9c114d00.mp3",
         "sentence": "כְּדַאי לְךָ לִרְאוֹת אֶת הַסֶּרֶט הַזֶּה.",
-        "sentenceAudio": "",
+        "sentenceAudio": "audio/sentences/vocab-3.mp3",
         "lessons": [
             "shai-date-indirect-speech"
         ]
@@ -161,9 +161,9 @@ window.HEBREW_VOCAB_INDEX = [
         "word": "מְיוּחָד",
         "meaning": "special",
         "sound": "me-yu-KHAD",
-        "audio": "",
+        "audio": "../_audio/words/83b350f8858aedd3f40d445c.mp3",
         "sentence": "שַׁי רוֹצֶה לַעֲשׂוֹת מַשֶּׁהוּ מְיוּחָד בִּשְׁבִיל בַּר.",
-        "sentenceAudio": "",
+        "sentenceAudio": "audio/sentences/vocab-6.mp3",
         "lessons": [
             "shai-date-indirect-speech"
         ]
@@ -173,9 +173,9 @@ window.HEBREW_VOCAB_INDEX = [
         "word": "מַמְלִיץ",
         "meaning": "recommend (m. sg.)",
         "sound": "mam-LITZ",
-        "audio": "",
+        "audio": "../_audio/words/fcceccda3afd5a4eea9eb45e.mp3",
         "sentence": "אֲנִי מַמְלִיץ לוֹ לָקַחַת אֶת בַּר לְסֶרֶט קוֹמֶדְיָה.",
-        "sentenceAudio": "",
+        "sentenceAudio": "audio/sentences/vocab-8.mp3",
         "lessons": [
             "shai-date-indirect-speech"
         ]
@@ -197,9 +197,9 @@ window.HEBREW_VOCAB_INDEX = [
         "word": "סֶרֶט",
         "meaning": "movie",
         "sound": "SE-ret",
-        "audio": "",
+        "audio": "../_audio/words/b83e037058633b089a09ab3f.mp3",
         "sentence": "שַׁי אוֹהֵב לִרְאוֹת סְרָטִים בַּקּוֹלְנוֹעַ.",
-        "sentenceAudio": "",
+        "sentenceAudio": "audio/sentences/vocab-5.mp3",
         "lessons": [
             "shai-date-indirect-speech"
         ]
@@ -209,9 +209,9 @@ window.HEBREW_VOCAB_INDEX = [
         "word": "עֵצָה",
         "meaning": "advice",
         "sound": "ET-za",
-        "audio": "",
+        "audio": "../_audio/words/aa354a39c32b925072b56333.mp3",
         "sentence": "בַּשָּׁבוּעַ שֶׁעָבַר חָבֵר שֶׁלִּי בִּיקֵּשׁ מִמֶּנִּי עֵצָה.",
-        "sentenceAudio": "",
+        "sentenceAudio": "audio/sentences/vocab-1.mp3",
         "lessons": [
             "shai-date-indirect-speech"
         ]
@@ -258,9 +258,9 @@ window.HEBREW_VOCAB_INDEX = [
         "word": "רַעְיוֹן",
         "meaning": "idea",
         "sound": "ra-a-YON",
-        "audio": "",
+        "audio": "../_audio/words/1828c011c5e8e563ce974431.mp3",
         "sentence": "אַתָּה חוֹשֵׁב שֶׁזֶּה רַעְיוֹן טוֹב?",
-        "sentenceAudio": "",
+        "sentenceAudio": "audio/sentences/vocab-10.mp3",
         "lessons": [
             "shai-date-indirect-speech"
         ]
@@ -275,6 +275,18 @@ window.HEBREW_VOCAB_INDEX = [
         "sentenceAudio": "audio/sentences/vocab-1.mp3",
         "lessons": [
             "anal-sex-vocab"
+        ]
+    },
+    {
+        "key": "שָׁלוֹם",
+        "word": "שָׁלוֹם",
+        "meaning": "hello",
+        "sound": "sha-LOM",
+        "audio": "",
+        "sentence": "שָׁלוֹם עוֹלָם.",
+        "sentenceAudio": "",
+        "lessons": [
+            "8ee73fd9-c223-4e01-8dcb-5f0a784eed97"
         ]
     },
     {

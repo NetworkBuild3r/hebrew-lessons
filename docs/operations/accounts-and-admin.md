@@ -2,7 +2,7 @@
 
 Operator guide for first run, day-to-day accounts, lesson sharing, database backup, pictures, and audio safety. Commands below are for Windows PowerShell locally, and for `kubectl exec` on the cluster. Env var and k8s secret **names** only — never paste secret values into this file or into shell history.
 
-Provenance: `INIT-002/SPEC-018`. Pictures: `INIT-004/SPEC-019`. AI planning and the profile loop: `INIT-006/SPEC-019`. Plan builder: `INIT-008/SPEC-017`. Cluster layout details: [deploy/k8s-database.md](../../deploy/k8s-database.md).
+Provenance: `INIT-002/SPEC-018`. Pictures: `INIT-004/SPEC-019`. AI planning and the profile loop: `INIT-006/SPEC-019`. Plan builder: `INIT-008/SPEC-017`. Teacher screens: `INIT-011/SPEC-001`. Cluster layout details: [deploy/k8s-database.md](../../deploy/k8s-database.md).
 
 ## First run
 
@@ -55,9 +55,41 @@ After step 2 of the [lesson-plan rollout](lesson-plan-rollout.md), this tab no l
 
 ## Plan builder
 
-Provenance: `INIT-008/SPEC-017`. Decisions: [ADR-0011](../decisions/ADR-0011-ai-first-plan-builder.md). Migration and rollout: [plan-builder-rollout.md](plan-builder-rollout.md).
+Provenance: `INIT-008/SPEC-017`. Teacher screens and worksheet map: `INIT-011/SPEC-001`. Decisions: [ADR-0011](../decisions/ADR-0011-ai-first-plan-builder.md). Migration and rollout: [plan-builder-rollout.md](plan-builder-rollout.md).
 
 Lesson plans are built by the AI through the MCP and fixed by you in the admin **Plans** tab. The AI creates, edits, and publishes plans without waiting for you. You can open any plan, change any field, and put back an earlier value in one step. Every screen action here has an MCP tool, and every plan tool has an admin route, so the AI and you work on the same plan with the same rules.
+
+### Teacher workflow (two screens)
+
+The teacher page and MCP call the **same** plan operations. There is one write path and one plan document. A button on the page is not a second kind of edit.
+
+Four steps, start to end:
+
+1. **New plan.** Title, and who it is for: one learner, or everyone.
+2. **The plan screen** (Figma node `19:2304` in file [`NJ8HfTPCQgrFty2VVQBMhY`](https://www.figma.com/design/NJ8HfTPCQgrFty2VVQBMhY)). Lessons in order, one wide row each. Add lesson asks for a title and one sentence. Reuse lesson copies a lesson from this plan or another. Move and Open lesson sit on the row. The word bank on the side lists each word and the lesson that added it.
+3. **The lesson screen** (Figma node `19:2592` in the same file). Tabs for the lessons in this plan. Word bank on the left, activities in the middle, the learner preview on the right. An activity opens with the fields to fill and is saved when it is valid.
+4. **Publish.** Warnings do not stop it.
+
+**Add lesson** and **Reuse lesson** both call `insert_lesson` — the function `insertLesson` behind `POST /api/plans/:id/lessons` in `server/plans/ops.js`. Reuse is that same operation with a copy of the lesson. There is no separate copy tool.
+
+English chrome is English only. Hebrew chrome is Hebrew only. A lesson title in Hebrew stays Hebrew in both languages, because it is the lesson, not the chrome. A teacher does not type a path, a block id, an index, or a recipe slug. Ids are made from the title.
+
+What a worksheet exercise becomes (teacher activity names; the AI maps them through `shared/admin/activity-map.js`):
+
+| What the teacher makes | Activity |
+| --- | --- |
+| Word bank, then complete the sentences | Words (with fill-in-the-blank) |
+| Match column A to column B | Match |
+| Choose the correct sentence | **Not held** (open decision O1 — teach as a Story question until a later schema change; no choice block) |
+| A short reading and questions | Story (with questions) |
+| Write about yourself / discussion prompts | Writing |
+| A verse with glosses | Verse |
+| Verb rows to chant | Pattern |
+| English cue, say the Hebrew | Type it (Fluency for the timed round) |
+| A teacher note | Notes |
+| A pasted list of Hebrew–English lines | Word bank (paste) |
+
+A drawing task (for example “read and draw a family tree”) is not held. Do not invent a drawing block. The AI recipe for turning a Drive worksheet into a lesson is [worksheet-to-lesson](../../.cursor/skills/hebrew-worksheet/recipes.md#worksheet-to-lesson).
 
 ### The Plans list and New plan
 
@@ -286,7 +318,7 @@ Useful tools once `MCP_AUTH_TOKEN` is set:
 - `upload_media` — store one pending image from base64 bytes. Does not approve.
 - `plan_image` — dry-run: image count and estimated dollars. Does not call the provider.
 - `generate_image` — only when `confirm` is true and `estimate` matches that dry-run. The image stays pending.
-- Plan builder (see [Plan builder](#plan-builder)): `list_plans`, `create_plan`, `read_part`, `replace_part`, `insert_block`, `move_block`, `remove_block`, `set_field`, `list_plan_issues`, `list_plan_revisions`, `get_plan_revision`, `diff_plan`, `restore_plan_revision`, `assign_plan`, `publish_plan`. New lessons are plans; `upsert_lesson` stays for a worksheet that has not moved.
+- Plan builder (see [Plan builder](#plan-builder)): `list_plans`, `create_plan`, `read_part`, `replace_part`, `insert_lesson`, `insert_block`, `move_block`, `remove_block`, `set_field`, `list_plan_issues`, `list_plan_revisions`, `get_plan_revision`, `diff_plan`, `restore_plan_revision`, `assign_plan`, `publish_plan`. New lessons are plans; `upsert_lesson` stays for a worksheet that has not moved. Add lesson and Reuse lesson on the teacher page both call `insert_lesson` (`INIT-011/SPEC-001`).
 
 Approval and delete are admin session routes, not MCP tools. If `MCP_AUTH_TOKEN` is unset or empty, the assignment tools and the picture tools refuse. A lesson created with no assignment stays **hidden** until you share it in the admin Lessons tab or call `set_lesson_visibility` / pass `visibility` on upsert.
 

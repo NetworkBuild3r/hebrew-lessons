@@ -221,7 +221,31 @@ const FIELD_LANGUAGE = Object.freeze({
     'verseRef.book': 'mixed',
     'verseRef.source': 'mixed',
     'letterIntroBlock.name': 'mixed',
-    'letterSound.vowel': 'mixed'
+    'letterSound.vowel': 'mixed',
+    'typeItBlock.image': 'exempt',
+    'typeItBlock.picture': 'exempt',
+    'typeItBlock.mediaId': 'latin',
+    'typeItBlock.prompt': 'en',
+    'typeItBlock.answer': 'he',
+    'exerciseBlock.heading': 'mixed',
+    'exerciseChooseItem.prompt': 'mixed',
+    'exerciseChooseItem.choices': 'mixed',
+    'exerciseChooseItem.answer': 'mixed',
+    'exerciseChooseItem.why': 'en',
+    'exerciseTrueFalseItem.statement': 'mixed',
+    'exerciseTrueFalseItem.why': 'en',
+    'exerciseUnscrambleItem.words': 'he',
+    'exerciseUnscrambleItem.alt': 'he',
+    'exerciseUnscrambleItem.english': 'en',
+    'exerciseTranslateItem.english': 'en',
+    'exerciseTranslateItem.answer': 'he',
+    'exerciseTranslateItem.accept': 'he',
+    'exerciseDictationItem.audioPath': 'latin',
+    'exerciseDictationItem.answer': 'he',
+    'exerciseDictationItem.accept': 'he',
+    'assignmentBlock.prompt': 'mixed',
+    'assignmentBlock.useWords': 'he',
+    'assignmentBlock.homework': 'mixed'
 });
 
 /**

@@ -24,7 +24,8 @@
     function bi(he, en) {
         return U && typeof U.bi === 'function'
             ? U.bi(he, en)
-            : (esc(he) + ' <span class="en" dir="ltr">(' + esc(en) + ')</span>');
+            : ('<span class="ui-pair"><span class="ui-he" lang="he">' + esc(he) + '</span>'
+                + '<span class="ui-en" lang="en" dir="ltr">' + esc(en) + '</span></span>');
     }
 
     function lessonStatus(state, now, activityCount) {
@@ -64,7 +65,7 @@
         }
         var label = LEVEL_LABELS[level];
         var levelHtml = label
-            ? esc(label.he) + ' <span class="en" lang="en" dir="ltr">(' + esc(label.en) + ')</span>'
+            ? bi(label.he, label.en)
             : (lesson.level ? esc(lesson.level) : '');
         var parts = [];
         if (subtitle.trim()) parts.push(esc(subtitle.trim()));
@@ -151,7 +152,7 @@
         var en = d.toLocaleString('en-US', {
             weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
         });
-        return esc(he) + ' <span class="en" dir="ltr">(' + esc(en) + ')</span>';
+        return bi(he, en);
     }
 
     function lessonHref(slug) {
@@ -214,10 +215,10 @@
                 + '<h2>' + bi('חזרה', 'Review') + '</h2>'
                 + '<p>'
                 + '<span id="review-due-count">' + esc(String(summary.dueCount)) + '</span> '
-                + esc('מילים לחזרה') + ' <span class="en" dir="ltr">(' + esc('due') + ')</span>'
+                + bi('מילים לחזרה', 'due')
                 + ' · '
                 + '<span id="review-new-count">' + esc(String(summary.newCount)) + '</span> '
-                + esc('חדשות') + ' <span class="en" dir="ltr">(' + esc('new') + ')</span>'
+                + bi('חדשות', 'new')
                 + '</p>'
                 + '<p class="today-actions">'
                 + '<a class="btn btn-primary" id="today-review-start" href="/review/">'
@@ -245,7 +246,7 @@
             + esc(lesson.slug) + '">'
             + '<div class="lesson-link today-card-body">'
             + '<span class="lesson-status ' + esc(status.tone) + '">'
-            + esc(status.he) + ' <span class="en" dir="ltr">(' + esc(status.en) + ')</span></span>'
+            + bi(status.he, status.en) + '</span>'
             + '<p class="fine">' + metaLine(lesson) + '</p>'
             + '<h2>' + esc(lesson.title) + '</h2>'
             + blurbHtml(lesson)

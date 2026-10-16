@@ -28,6 +28,18 @@ const DIALOGUE = LESSON + '/blocks/dialogue';
 const LISTEN = LESSON + '/blocks/listen';
 const EXTRA = { id: 'extra', type: 'listening', passage: 'אֲנִי רוֹצֶה קָפֶה.' };
 const LISTEN_BLOCK = { id: 'listen', type: 'listening', passage: 'תּוֹדָה.' };
+const UNIT = 'units/unit-1';
+const LESSON_AGAIN = 'units/unit-1/lessons/cafe-again';
+const SMALL_LESSON = {
+    id: 'parity-lesson',
+    title: 'Parity lesson',
+    level: 'basic',
+    visibility: 'hidden',
+    buildsOn: [],
+    newWords: [],
+    recycles: [],
+    blocks: [{ id: 'placeholder', type: 'fluency-pass', seconds: 60, source: 'vocab' }]
+};
 
 /** For each tool: the MCP arguments and the HTTP request that mean the same thing. */
 const CALLS = {
@@ -50,6 +62,30 @@ const CALLS = {
     remove_block: (rev) => ({
         mcp: { id: ID, path: DIALOGUE, expectedRevision: rev },
         http: { method: 'DELETE', url: '/api/plans/' + ID + '/parts', body: { path: DIALOGUE, expectedRevision: rev } }
+    }),
+    insert_lesson: (rev) => ({
+        mcp: { id: ID, path: UNIT, index: 1, lesson: SMALL_LESSON, expectedRevision: rev },
+        http: {
+            method: 'POST',
+            url: '/api/plans/' + ID + '/lessons',
+            body: { path: UNIT, index: 1, lesson: SMALL_LESSON, expectedRevision: rev }
+        }
+    }),
+    move_lesson: (rev) => ({
+        mcp: { id: ID, path: LESSON_AGAIN, index: 0, expectedRevision: rev },
+        http: {
+            method: 'POST',
+            url: '/api/plans/' + ID + '/lessons/move',
+            body: { path: LESSON_AGAIN, index: 0, expectedRevision: rev }
+        }
+    }),
+    remove_lesson: (rev) => ({
+        mcp: { id: ID, path: LESSON_AGAIN, expectedRevision: rev },
+        http: {
+            method: 'DELETE',
+            url: '/api/plans/' + ID + '/lessons',
+            body: { path: LESSON_AGAIN, expectedRevision: rev }
+        }
     }),
     set_field: (rev) => ({
         mcp: { id: ID, path: WORD, field: 'meaning', value: 'espresso', expectedRevision: rev },
@@ -265,8 +301,8 @@ describe('plan builder parity (INIT-008/SPEC-010)', { concurrency: false }, () =
 
     it('ac-2: the real table has no problem against the real registries', () => {
         assert.deepEqual(findParityProblems(ROWS, registry()), []);
-        assert.equal(ROWS.length, 17);
-        assert.equal(ROWS.filter((row) => row.tool && row.route).length, 16);
+        assert.equal(ROWS.length, 20);
+        assert.equal(ROWS.filter((row) => row.tool && row.route).length, 19);
     });
 
     it('ac-2: each row of both sides calls the same function through its tool and its route', async () => {

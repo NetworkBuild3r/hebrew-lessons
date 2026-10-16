@@ -715,6 +715,11 @@ function formatAudioSummary(result) {
 
 module.exports = {
     loadEnvFile,
+    apiKeyFromEnv,
+    postTts,
+    readWordManifest,
+    writeWordManifest,
+    findWordFileByText,
     generateLessonAudio,
     migrateLegacyWordCache,
     rebuildWordCatalog,

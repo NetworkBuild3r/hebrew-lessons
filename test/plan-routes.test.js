@@ -59,6 +59,30 @@ const WRITE_BODIES = {
         expectedRevision: 1
     }),
     publishPlan: () => ({ expectedRevision: 1 }),
+    // INIT-010/SPEC-002: lesson stack bodies (403 coverage). Behavior is in plan-lesson-stack.test.js.
+    insertLesson: () => ({
+        path: 'units/unit-1',
+        lesson: {
+            id: 'route-lesson',
+            title: 'Route lesson',
+            level: 'basic',
+            visibility: 'hidden',
+            buildsOn: [],
+            newWords: [],
+            recycles: [],
+            blocks: [{ id: 'placeholder', type: 'fluency-pass', seconds: 60, source: 'vocab' }]
+        },
+        expectedRevision: 1
+    }),
+    moveLesson: () => ({
+        path: 'units/unit-1/lessons/cafe-again',
+        index: 0,
+        expectedRevision: 1
+    }),
+    removeLesson: () => ({
+        path: 'units/unit-1/lessons/cafe-again',
+        expectedRevision: 1
+    }),
     // INIT-008/SPEC-010: bodies for the three new write routes. Their behavior is
     // asserted in plan-builder-routes.test.js; here they only need a well-formed body.
     createPlan: () => ({ id: 'new-cafe', title: 'New cafe' }),
@@ -249,7 +273,7 @@ describe('plan HTTP routes (INIT-004/SPEC-004)', { concurrency: false }, () => {
 
     it('ac-1: each write route calls only its function', async () => {
         const planRoutes = require('../server/api/plan-routes');
-        assert.equal(planRoutes.WRITE_ROUTES.length, 9);
+        assert.equal(planRoutes.WRITE_ROUTES.length, 12);
         const operationRoutes = planRoutes.WRITE_ROUTES.filter((route) => OPERATION_FNS.includes(route.fn));
         assert.equal(operationRoutes.length, 6);
         for (const route of operationRoutes) {

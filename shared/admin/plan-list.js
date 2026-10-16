@@ -3,19 +3,20 @@
  * the assign control that the plan view shows. It is a client of the plan routes and holds no
  * plan logic:
  *   list     GET  /api/plans                        -> { plans: [...], truncated }
- *   create   POST /api/plans   { id, title, recipe? } -> { plan, revision, status, validation }
+ *   create   POST /api/plans   { title }            -> { plan, revision, status, validation }
  *   assign   POST /api/plans/:id/assign { audience, assigneeId?, expectedRevision }
  *   accounts GET  /api/admin/users                  (the same read the Users tab uses)
- *   schema   GET  /api/plan-schema                  (the id pattern and the recipe list come from it)
- * The id pattern and the recipe options are read from the schema, never copied here; the server
- * checks every value again. A failed call shows the server's code in plain words and keeps what
- * the person typed. Server text goes in through textContent only.
+ *   schema   GET  /api/plan-schema                  (the title limit comes from it)
+ * The server assigns a UUID as the plan id. New plan asks for a title and who it is for
+ * (one learner, or everyone) — no recipe field. A learner pick calls create then assign so
+ * the plan ends personal with that assignee. A failed call shows the server's code in
+ * plain words and keeps what the person typed. Server text goes in through textContent only.
  *
  *   var stop = HebrewPlanList.mount(panel, { api, setHash, signal })   // returns a cleanup function
  *   var assign = HebrewPlanList.createAssign({ doc, api, planId, signal, getRevision, onAssigned, onConflict })
  *
  * Plain browser script, no build step. Node tests load it with require().
- * Provenance: INIT-008/SPEC-013
+ * Provenance: INIT-008/SPEC-013, INIT-011/SPEC-003, INIT-011/SPEC-004
  */
 (function (root, factory) {
     'use strict';
@@ -44,19 +45,16 @@
     // ---- pure helpers ---------------------------------------------------------------------------
 
     /**
-     * What the New plan form checks before it asks the server. The pattern and the title limit
-     * come from the schema when it loaded; the server decides in any case.
-     * @param {{ id?: string, title?: string }} input
-     * @param {{ slug?: RegExp, titleMax?: number }} [limits]
-     * @returns {{ id?: string, title?: string }} a code per bad field; empty when both are fine
+     * What the New plan form checks before it asks the server. The title limit comes from the
+     * schema when it loaded; the server assigns the id and checks the title again.
+     * @param {{ title?: string }} input
+     * @param {{ titleMax?: number }} [limits]
+     * @returns {{ title?: string }} a code when the title is bad; empty when it is fine
      */
     function checkNew(input, limits) {
-        var slug = (limits && limits.slug) || SLUG_FALLBACK;
         var max = (limits && limits.titleMax) || TITLE_FALLBACK;
-        var id = String(input && input.id != null ? input.id : '').trim();
         var title = String(input && input.title != null ? input.title : '').trim();
         var out = {};
-        if (!slug.test(id) || id.length > 64) out.id = 'invalid_id';
         var titleCode = !title ? 'empty_title' : (title.length > max ? 'title_too_long' : '');
         if (titleCode) out.title = titleCode;
         return out;
@@ -74,11 +72,12 @@
         }
         var titleNode = schema.properties && tools.resolve(schema.properties.title).schema;
         if (titleNode && Number.isInteger(titleNode.maxLength)) out.titleMax = titleNode.maxLength;
+        // recipes stay on the schema helper for older callers; New plan no longer offers them.
         out.recipes = Form.enumOf('lesson', 'recipe', schema);
         return out;
     }
 
-    /** Hebrew over English labels for a recipe, from the editor's hints. */
+    /** Hebrew over English labels for a recipe, from the editor's hints (kept for schema helpers). */
     function recipeLabel(recipe) {
         var hints = root.HebrewPlanHints;
         var hint = hints && hints.fieldHint ? hints.fieldHint('lesson.recipe') : null;
@@ -158,11 +157,18 @@
         var limits = { slug: SLUG_FALLBACK, titleMax: TITLE_FALLBACK, recipes: [] };
         var newOpen = null;
         var creating = false;
-        var typed = { id: '', title: '', recipe: '' };
+        var typed = { title: '', forUser: '' };
+        var accountUsers = null;
+        var listed = [];
+        var filterText = '';
+        var filterStatus = 'all';
+        var filterAudience = 'all';
 
         function go(planId) {
             if (typeof opts.setHash === 'function') opts.setHash('plan/' + planId);
-            else if (root.HebrewAdminShell && typeof root.HebrewAdminShell.setHash === 'function') {
+            else if (root.HebrewEditorShell && typeof root.HebrewEditorShell.setHash === 'function') {
+                root.HebrewEditorShell.setHash('plan/' + planId);
+            } else if (root.HebrewAdminShell && typeof root.HebrewAdminShell.setHash === 'function') {
                 root.HebrewAdminShell.setHash('plan/' + planId);
             }
         }
@@ -175,12 +181,12 @@
         box.setAttribute('lang', 'he');
         panel.appendChild(box);
 
-        var heading = make('h2', '', 'תוכניות (Plans)');
+        var heading = make('h2', '', 'ספריית תוכניות (Plan library)');
         box.appendChild(heading);
-        var intro = make('p', 'plan-help');
-        var introHe = make('span', 'plan-help-he', 'כל תוכניות השיעור, בין שה-AI בנה אותן ובין שאדם. פתחו תוכנית כדי לערוך אותה.');
+        var intro = make('p', 'plan-help ui-pair');
+        var introHe = make('span', 'plan-help-he ui-he', 'כל תוכניות השיעור, בין שה-AI בנה אותן ובין שאדם. פתחו תוכנית כדי לערוך אותה.');
         introHe.setAttribute('lang', 'he');
-        var introEn = make('span', 'plan-help-en', 'Every lesson plan, whether the AI or a person made it. Open one to edit it.');
+        var introEn = make('span', 'plan-help-en ui-en', 'Open a plan to edit its lesson order, add activities, and prepare new vocabulary notes.');
         introEn.setAttribute('lang', 'en');
         introEn.setAttribute('dir', 'ltr');
         intro.appendChild(introHe);
@@ -194,6 +200,33 @@
         actions.appendChild(newButton);
         actions.appendChild(refresh);
         box.appendChild(actions);
+
+        var filters = make('div', 'plan-filters');
+        var search = make('input', 'plan-filter-search');
+        search.setAttribute('type', 'search');
+        search.setAttribute('data-plan-filter-search', '');
+        search.setAttribute('placeholder', 'Search title or id');
+        search.setAttribute('aria-label', 'Search plans');
+        var statusFilter = make('select', 'plan-filter-status');
+        statusFilter.setAttribute('data-plan-filter-status', '');
+        statusFilter.setAttribute('aria-label', 'Status');
+        [['all', 'All statuses'], ['draft', 'Draft'], ['published', 'Published']].forEach(function (pair) {
+            var option = make('option', '', pair[1]);
+            option.setAttribute('value', pair[0]);
+            statusFilter.appendChild(option);
+        });
+        var audienceFilter = make('select', 'plan-filter-audience');
+        audienceFilter.setAttribute('data-plan-filter-audience', '');
+        audienceFilter.setAttribute('aria-label', 'Audience');
+        [['all', 'All audiences'], ['shared', 'Shared'], ['personal', 'Personal']].forEach(function (pair) {
+            var option = make('option', '', pair[1]);
+            option.setAttribute('value', pair[0]);
+            audienceFilter.appendChild(option);
+        });
+        filters.appendChild(search);
+        filters.appendChild(statusFilter);
+        filters.appendChild(audienceFilter);
+        box.appendChild(filters);
 
         var formHost = make('div', 'plan-new-host');
         box.appendChild(formHost);
@@ -226,6 +259,16 @@
         truncatedNote.hidden = true;
         box.appendChild(truncatedNote);
 
+        function visibleRows() {
+            return listed.filter(function (row) {
+                if (filterStatus !== 'all' && row.status.key !== filterStatus) return false;
+                if (filterAudience !== 'all' && row.audience.key !== filterAudience) return false;
+                if (!filterText) return true;
+                var hay = (row.title + ' ' + row.id).toLowerCase();
+                return hay.indexOf(filterText) !== -1;
+            });
+        }
+
         function renderTable(rows) {
             Ui.clear(wrap);
             var table = make('table', 'plan-table');
@@ -253,7 +296,9 @@
                 function cell(index, build) {
                     var td = make('td');
                     td.setAttribute('role', 'cell');
-                    td.setAttribute('data-label', Ui.label(COLUMNS[index][1], COLUMNS[index][2]));
+                    td.setAttribute('data-label', COLUMNS[index][2]);
+                    td.setAttribute('data-ui-label-he', COLUMNS[index][1]);
+                    td.setAttribute('data-ui-label-en', COLUMNS[index][2]);
                     build(td);
                     tr.appendChild(td);
                 }
@@ -309,11 +354,14 @@
 
         function showError(res) {
             errorBox.hidden = false;
-            errorText.textContent = 'לא ניתן לטעון את התוכניות — ' + Ui.failureText(res) + ' (Could not load the plans.)';
+            errorText.textContent = Ui.line(
+                'לא ניתן לטעון את התוכניות — ' + Ui.failureText(res),
+                'Could not load the plans — ' + Ui.failureText(res)
+            );
         }
 
         function load() {
-            status.textContent = 'טוען תוכניות… (Loading the plans…)';
+            Ui.fill(status, 'טוען תוכניות… (Loading the plans…)');
             errorBox.hidden = true;
             return Promise.resolve(Api.get('/api/plans', signal ? { signal: signal } : undefined)).then(function (res) {
                 if (!alive) return;
@@ -324,7 +372,8 @@
                     showError(res);
                     return;
                 }
-                var rows = rowsOf(res.data);
+                listed = rowsOf(res.data);
+                var rows = visibleRows();
                 truncatedNote.hidden = res.data.truncated !== true;
                 if (!rows.length) {
                     wrap.hidden = true;
@@ -335,7 +384,15 @@
                 emptyNote.hidden = true;
                 wrap.hidden = false;
                 renderTable(rows);
-                status.textContent = rows.length + ' תוכניות (' + rows.length + ' plans)';
+                Ui.clear(status);
+                if (status.className.indexOf('ui-pair') === -1) status.className += ' ui-pair';
+                var countHe = make('span', 'ui-he', rows.length + ' תוכניות');
+                countHe.setAttribute('lang', 'he');
+                var countEn = make('span', 'ui-en', rows.length + ' plans');
+                countEn.setAttribute('lang', 'en');
+                countEn.setAttribute('dir', 'ltr');
+                status.appendChild(countHe);
+                status.appendChild(countEn);
             }).catch(function (err) {
                 if (!alive) return;
                 status.textContent = '';
@@ -354,10 +411,10 @@
             group.appendChild(lab);
             group.appendChild(control);
             if (help) {
-                var p = make('p', 'plan-help');
-                var hHe = make('span', 'plan-help-he', help[0]);
+                var p = make('p', 'plan-help ui-pair');
+                var hHe = make('span', 'plan-help-he ui-he', help[0]);
                 hHe.setAttribute('lang', 'he');
-                var hEn = make('span', 'plan-help-en', help[1]);
+                var hEn = make('span', 'plan-help-en ui-en', help[1]);
                 hEn.setAttribute('lang', 'en');
                 hEn.setAttribute('dir', 'ltr');
                 p.appendChild(hHe);
@@ -367,32 +424,50 @@
             return group;
         }
 
+        function fillForSelect(forSelect) {
+            Ui.clear(forSelect);
+            var everyone = make('option');
+            everyone.value = '';
+            everyone.setAttribute('data-ui-text-he', 'לכל הלומדים');
+            everyone.setAttribute('data-ui-text-en', 'Everyone');
+            everyone.textContent = Ui.line('לכל הלומדים', 'Everyone');
+            forSelect.appendChild(everyone);
+            activeUsers(accountUsers).forEach(function (u) {
+                var o = make('option');
+                o.value = u.username;
+                var label = u.display_name ? u.username + ' — ' + u.display_name : u.username;
+                o.textContent = label;
+                forSelect.appendChild(o);
+            });
+            forSelect.value = typed.forUser || '';
+        }
+
+        function loadAccounts() {
+            if (accountUsers !== null || !Api) return Promise.resolve();
+            return Promise.resolve(Api.get('/api/admin/users', signal ? { signal: signal } : undefined)).then(function (res) {
+                if (!alive) return;
+                accountUsers = (res && res.ok && res.data && Array.isArray(res.data.users))
+                    ? res.data.users
+                    : [];
+                if (newOpen && formHost.firstChild) {
+                    var forSelect = formHost.querySelector('[data-plan-new-for]');
+                    if (forSelect) fillForSelect(forSelect);
+                }
+            }).catch(function () {
+                if (!alive) return;
+                accountUsers = [];
+            });
+        }
+
         function buildForm() {
             Ui.clear(formHost);
             var card = make('form', 'plan-new');
             card.setAttribute('data-plan-new', '');
             card.setAttribute('novalidate', '');
-            card.setAttribute('aria-label', 'תוכנית חדשה (New plan)');
-            var h = make('h3', '', 'תוכנית חדשה (New plan)');
+            card.setAttribute('aria-label', Ui.line('תוכנית חדשה', 'New plan'));
+            var h = make('h3');
+            Ui.fill(h, 'תוכנית חדשה (New plan)');
             card.appendChild(h);
-
-            var idInput = make('input');
-            idInput.type = 'text';
-            idInput.setAttribute('data-plan-new-id', '');
-            idInput.setAttribute('autocomplete', 'off');
-            idInput.setAttribute('autocapitalize', 'none');
-            idInput.setAttribute('spellcheck', 'false');
-            idInput.setAttribute('dir', 'ltr');
-            idInput.setAttribute('lang', 'en');
-            idInput.value = typed.id;
-            card.appendChild(field('plan-new-id', 'מזהה', 'Id', idInput,
-                ['אותיות לועזיות קטנות, ספרות ומקפים. אי אפשר לשנות אחר כך.',
-                    'Lowercase letters, digits and hyphens. It cannot be changed later.']));
-            var idMsg = make('p', 'plan-issue plan-issue-block');
-            idMsg.setAttribute('data-plan-new-id-message', '');
-            idMsg.setAttribute('role', 'alert');
-            idMsg.hidden = true;
-            card.appendChild(idMsg);
 
             var titleInput = make('input');
             titleInput.type = 'text';
@@ -406,23 +481,12 @@
             titleMsg.hidden = true;
             card.appendChild(titleMsg);
 
-            var recipeSelect = null;
-            if (limits.recipes.length) {
-                recipeSelect = make('select');
-                recipeSelect.setAttribute('data-plan-new-recipe', '');
-                var none = make('option', '', 'ללא מתכון (No recipe)');
-                none.value = '';
-                recipeSelect.appendChild(none);
-                limits.recipes.forEach(function (recipe) {
-                    var o = make('option', '', recipeLabel(recipe));
-                    o.value = recipe;
-                    recipeSelect.appendChild(o);
-                });
-                recipeSelect.value = typed.recipe;
-                card.appendChild(field('plan-new-recipe', 'מתכון', 'Recipe', recipeSelect,
-                    ['מתכון קובע צורת פתיחה בלבד ואינו כותב עברית.',
-                        'A recipe sets a starting shape and writes no Hebrew.']));
-            }
+            var forSelect = make('select');
+            forSelect.setAttribute('data-plan-new-for', '');
+            fillForSelect(forSelect);
+            card.appendChild(field('plan-new-for', 'עבור', 'For', forSelect,
+                ['לומד אחד מהרשימה, או כולם.',
+                    'One learner from the account list, or everyone.']));
 
             var message = make('p', 'admin-inline-error');
             message.setAttribute('data-plan-new-message', '');
@@ -432,44 +496,77 @@
             var create = Ui.button(doc, 'יצירה (Create)', 'btn btn-primary', { 'data-plan-create': '' });
             card.appendChild(create);
             formHost.appendChild(card);
+            loadAccounts();
 
             function remember() {
-                typed.id = String(idInput.value);
                 typed.title = String(titleInput.value);
-                typed.recipe = recipeSelect ? String(recipeSelect.value) : '';
+                typed.forUser = String(forSelect.value || '');
             }
             function show(node, text) {
                 node.hidden = !text;
                 node.textContent = text || '';
+            }
+            function showPair(node, he, en) {
+                node.hidden = !(he || en);
+                if (!he && !en) {
+                    node.textContent = '';
+                    return;
+                }
+                Ui.fillPair(node, he, en);
             }
             function submit() {
                 if (creating) return Promise.resolve();
                 remember();
                 show(message, '');
                 var problems = checkNew(typed, limits);
-                show(idMsg, problems.id ? problems.id + ' — ' + Ui.label(
-                    'המזהה: אותיות לועזיות קטנות, ספרות ומקפים בלבד.',
-                    'The id may hold lowercase letters, digits and hyphens only.') : '');
-                show(titleMsg, problems.title ? problems.title + ' — ' + Ui.label(
-                    problems.title === 'empty_title' ? 'צריך כותרת.' : 'הכותרת ארוכה מדי.',
-                    problems.title === 'empty_title' ? 'A title is needed.' : 'The title is too long.') : '');
-                if (problems.id || problems.title) return Promise.resolve();
-                var body = { id: typed.id.trim(), title: typed.title.trim() };
-                if (typed.recipe) body.recipe = typed.recipe;
+                if (problems.title) {
+                    var code = problems.title + ' — ';
+                    showPair(
+                        titleMsg,
+                        code + (problems.title === 'empty_title' ? 'צריך כותרת.' : 'הכותרת ארוכה מדי.'),
+                        code + (problems.title === 'empty_title' ? 'A title is needed.' : 'The title is too long.')
+                    );
+                    return Promise.resolve();
+                }
+                showPair(titleMsg, '', '');
+                var body = { title: typed.title.trim() };
+                var assignee = typed.forUser.trim();
                 creating = true;
                 create.disabled = true;
-                return Promise.resolve(Api.post('/api/plans', body, signal ? { signal: signal } : undefined)).then(function (res) {
+                var opts = signal ? { signal: signal } : undefined;
+                return Promise.resolve(Api.post('/api/plans', body, opts)).then(function (res) {
                     if (!alive) return;
-                    creating = false;
-                    create.disabled = false;
-                    if (res && res.ok && res.data && res.data.plan) {
-                        typed = { id: '', title: '', recipe: '' };
-                        go(body.id);
+                    if (!(res && res.ok && res.data && res.data.plan && res.data.plan.id)) {
+                        creating = false;
+                        create.disabled = false;
+                        show(message, Ui.failureText(res));
                         return;
                     }
-                    var f = Ui.failure(res);
-                    if (f.code === 'invalid_id') show(idMsg, Ui.failureText(res));
-                    else show(message, Ui.failureText(res));
+                    var planId = res.data.plan.id;
+                    var revision = Number.isInteger(res.data.revision) ? res.data.revision : 1;
+                    if (!assignee) {
+                        typed = { title: '', forUser: '' };
+                        creating = false;
+                        create.disabled = false;
+                        go(planId);
+                        return;
+                    }
+                    return Promise.resolve(Api.post(
+                        '/api/plans/' + encodeURIComponent(planId) + '/assign',
+                        { audience: 'personal', assigneeId: assignee, expectedRevision: revision },
+                        opts
+                    )).then(function (assignRes) {
+                        if (!alive) return;
+                        creating = false;
+                        create.disabled = false;
+                        if (assignRes && assignRes.ok) {
+                            typed = { title: '', forUser: '' };
+                            go(planId);
+                            return;
+                        }
+                        show(message, Ui.failureText(assignRes, { detail: true }));
+                        go(planId);
+                    });
                 }).catch(function (err) {
                     if (!alive) return;
                     creating = false;
@@ -479,7 +576,7 @@
             }
             state.submit = submit;
             state.remember = remember;
-            return { card: card, idInput: idInput };
+            return { card: card };
         }
 
         var state = { submit: null, remember: null };
@@ -522,21 +619,31 @@
             if (ev && ev.preventDefault) ev.preventDefault();
             if (state.submit) state.submit();
         }
+        function applyFilters() {
+            filterText = String(search.value || '').trim().toLowerCase();
+            filterStatus = String(statusFilter.value || 'all');
+            filterAudience = String(audienceFilter.value || 'all');
+            if (!listed.length) return;
+            renderTable(visibleRows());
+        }
         removers.push(Ui.listen(panel, 'click', onClick, signal));
         removers.push(Ui.listen(panel, 'submit', onSubmit, signal));
+        removers.push(Ui.listen(search, 'input', applyFilters, signal));
+        removers.push(Ui.listen(statusFilter, 'change', applyFilters, signal));
+        removers.push(Ui.listen(audienceFilter, 'change', applyFilters, signal));
 
-        // the schema first, so the form has its id pattern and recipe list when it opens
+        // the schema first, so the form has its title limit when it opens
         var schemaDone = Promise.resolve(Api.get('/api/plan-schema', signal ? { signal: signal } : undefined)).then(function (res) {
             if (!alive || !res || !res.ok || !isObject(res.data) || !isObject(res.data.definitions)) return;
             limits = limitsFromSchema(res.data);
             if (newOpen) {
-                // rebuild with the recipe list, keeping what was typed
                 if (state.remember) state.remember();
                 Ui.clear(formHost);
                 buildForm();
             }
         }).catch(function () { /* the fallbacks stay */ });
         schemaDone.then(function () { if (alive) return load(); return undefined; });
+        loadAccounts();
 
         return function cleanup() {
             alive = false;
@@ -574,7 +681,7 @@
         el.setAttribute('data-plan-assign', '');
         var heading = make('h3', '', 'שיוך (Assignment)');
         el.appendChild(heading);
-        var summary = make('p', 'plan-note');
+        var summary = make('p', 'plan-note ui-pair');
         summary.setAttribute('data-plan-assign-summary', '');
         el.appendChild(summary);
 
@@ -652,9 +759,22 @@
         }
 
         function paintSummary() {
-            summary.textContent = current.audience === 'personal'
-                ? 'אישית עבור ' + (current.assigneeId || '—') + ' (Personal, for ' + (current.assigneeId || '—') + ')'
-                : 'משותפת לכל הלומדים (Shared with every learner)';
+            Ui.clear(summary);
+            var he = make('span', 'ui-he');
+            he.setAttribute('lang', 'he');
+            var en = make('span', 'ui-en');
+            en.setAttribute('lang', 'en');
+            en.setAttribute('dir', 'ltr');
+            if (current.audience === 'personal') {
+                var who = current.assigneeId || '—';
+                he.textContent = 'אישית עבור ' + who;
+                en.textContent = 'Personal, for ' + who;
+            } else {
+                he.textContent = 'משותפת לכל הלומדים';
+                en.textContent = 'Shared with every learner';
+            }
+            summary.appendChild(he);
+            summary.appendChild(en);
         }
 
         /** Take the plan's current audience and assignee (after a load, a save, or a restore). */
@@ -678,7 +798,10 @@
                 if (!res || !res.ok || !res.data || !Array.isArray(res.data.users)) {
                     usersFailed = true;
                     users = [];
-                    showMessage('לא ניתן לטעון את החשבונות — ' + Ui.failureText(res) + ' (Could not load the accounts.)');
+                    showMessage(Ui.line(
+                        'לא ניתן לטעון את החשבונות — ' + Ui.failureText(res),
+                        'Could not load the accounts — ' + Ui.failureText(res)
+                    ));
                 } else {
                     users = res.data.users;
                 }
@@ -696,7 +819,7 @@
             var audience = String(audienceSelect.value);
             var assignee = String(userSelect.value || '');
             if (audience === 'personal' && !assignee) {
-                showMessage('invalid_assignee — בחרו חשבון מהרשימה (Choose an account from the list.)');
+                showMessage(Ui.line('בחרו חשבון מהרשימה.', 'Choose an account from the list.'));
                 return Promise.resolve(false);
             }
             var revision = opts.getRevision ? opts.getRevision() : null;

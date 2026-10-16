@@ -1,0 +1,90 @@
+{
+  "id": "type-c-genesis-1-1",
+  "title": "Genesis 1:1",
+  "subtitle": "Verse reading sample",
+  "level": "basic",
+  "visibility": "everyone",
+  "recipe": "verse-reading",
+  "buildsOn": [],
+  "newWords": [],
+  "recycles": [],
+  "blocks": [
+    {
+      "id": "verse",
+      "type": "verse-reading",
+      "ref": {
+        "book": "Genesis",
+        "chapter": 1,
+        "from": 1,
+        "to": 1,
+        "source": "Westminster Leningrad Codex (public domain)"
+      },
+      "newWords": [
+        "בְּרֵאשִׁית",
+        "בָּרָא",
+        "אֱלֹהִים"
+      ],
+      "verse": "בְּרֵאשִׁית בָּרָא אֱלֹהִים אֵת הַשָּׁמַיִם וְאֵת הָאָרֶץ.",
+      "questions": [
+        {
+          "id": "q1",
+          "he": "מִי בָּרָא?",
+          "en": "Who created?"
+        }
+      ],
+      "personalQuestion": {
+        "he": "מָה הַפָּסוּק אוֹמֵר בְּמִלִּים שֶׁלְּךָ?",
+        "en": "What does the verse say in your own words?"
+      }
+    },
+    {
+      "id": "pivot",
+      "type": "explainer",
+      "title": "Modern Hebrew pivot",
+      "sections": [
+        {
+          "id": "s1",
+          "heading": "Past tense cue",
+          "paragraphs": [
+            "The verb בָּרָא is past tense. In Modern Hebrew you might say בָּרָא or use a present frame when retelling."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "num",
+      "type": "exercise",
+      "kind": "translate",
+      "items": [
+        {
+          "id": "n1",
+          "english": "one",
+          "answer": "אחת",
+          "accept": [
+            "אחד"
+          ]
+        },
+        {
+          "id": "n2",
+          "english": "two",
+          "answer": "שתיים",
+          "accept": [
+            "שניים"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "you",
+      "type": "personal-question",
+      "prompts": [
+        {
+          "id": "p1",
+          "he": "אֵיזֶה מִלָּה בַּפָּסוּק חֲדָשָׁה לְךָ?",
+          "en": "Which word in the verse is new for you?"
+        }
+      ],
+      "answer": "either"
+    }
+  ]
+}

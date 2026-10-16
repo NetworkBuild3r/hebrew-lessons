@@ -22,7 +22,8 @@
     function bi(he, en) {
         return U && typeof U.bi === 'function'
             ? U.bi(he, en)
-            : (esc(he) + ' <span class="en" dir="ltr">(' + esc(en) + ')</span>');
+            : ('<span class="ui-pair"><span class="ui-he" lang="he">' + esc(he) + '</span>'
+                + '<span class="ui-en" lang="en" dir="ltr">' + esc(en) + '</span></span>');
     }
 
     var DIR_LABELS = {
@@ -339,9 +340,14 @@
 
     function biNode(he, en) {
         var frag = pageDoc().createDocumentFragment();
-        frag.appendChild(pageDoc().createTextNode(String(he) + ' '));
-        var enEl = makeEl('span', { className: 'en', dir: 'ltr', text: '(' + en + ')' });
-        frag.appendChild(enEl);
+        if (!en) {
+            frag.appendChild(pageDoc().createTextNode(String(he || '')));
+            return frag;
+        }
+        var wrap = makeEl('span', { className: 'ui-pair' });
+        wrap.appendChild(makeEl('span', { className: 'ui-he', lang: 'he', text: String(he || '') }));
+        wrap.appendChild(makeEl('span', { className: 'ui-en', lang: 'en', dir: 'ltr', text: String(en) }));
+        frag.appendChild(wrap);
         return frag;
     }
 

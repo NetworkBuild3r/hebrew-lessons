@@ -328,13 +328,13 @@ async function main() {
             sel.value = 'listening'; sel.dispatchEvent(new Event('change', { bubbles: true }));
             return true;
         })()`);
-        await typeInto('[data-plan-new-id]', 'listen-two');
         await typeInto('[data-plan-new-draft] [data-plan-sub="passage"]', 'משפט חדש');
         await click('[data-plan-insert]');
         rev += 1;
         await waitRevision(rev, 'revision after inserting a block');
-        const added = blockOf(stored(), 'listen-two');
-        if (!added || added.type !== 'listening' || added.passage !== 'משפט חדש') fail('new block', JSON.stringify(added));
+        const added = stored().units[0].lessons[0].blocks.find((b) => b.type === 'listening' && b.passage === 'משפט חדש');
+        if (!added) fail('new block', JSON.stringify(stored().units[0].lessons[0].blocks));
+        const listenId = added.id;
         report.edits.newBlock = 'listening block inserted';
 
         // ---- a stale revision: the AI writes in between; the page's save is a 409
@@ -426,39 +426,33 @@ async function main() {
         // ---- SPEC-013: New plan
         await nav('#plans', '[data-plan-new-open]', 'the plans tab');
         await click('[data-plan-new-open]');
-        await waitFor(cdp, `!!${q('[data-plan-new-recipe]')}`, 'the New plan form');
-        const recipeOptions = await cdp.evaluate(`Array.from(document.querySelectorAll('[data-plan-new-recipe] option')).map((o) => o.value)`);
-        const schemaRecipes = require('../docs/decisions/ADR-0003-assets/lesson-plan.schema.json').definitions.recipe.enum;
-        if (JSON.stringify(recipeOptions) !== JSON.stringify([''].concat(schemaRecipes))) fail('new plan', 'recipe options differ from the schema: ' + recipeOptions.join(','));
-        // a bad id is refused in the browser, with the typed values kept
-        await typeInto('[data-plan-new-id]', 'Not A Slug');
+        await waitFor(cdp, `!!${q('[data-plan-new]')}`, 'the New plan form');
+        const newPlanText = await cdp.evaluate(`(${q('[data-plan-new]')} || {}).innerText || ''`);
+        if (/\bId\b|מזהה/.test(newPlanText)) fail('new plan', 'the form still asks for an id');
+        // an empty title is refused in the browser and stores nothing
+        const idsBefore = store.listPlans(50).map((row) => row.id);
+        await click('[data-plan-create]');
+        await waitFor(cdp, `!${q('[data-plan-new-title-message]')}.hidden`, 'the title message');
+        if (!/empty_title/.test(await textOf('[data-plan-new-title-message]'))) fail('new plan', 'no empty_title message');
+        const idsAfterEmpty = store.listPlans(50).map((row) => row.id);
+        if (idsAfterEmpty.length !== idsBefore.length) fail('new plan', 'an empty title was stored');
+        // create for real, with a recipe: the server assigns a UUID and the editor opens on it
         await typeInto('[data-plan-new-title]', 'From the UI');
         await click('[data-plan-create]');
-        await waitFor(cdp, `!${q('[data-plan-new-id-message]')}.hidden`, 'the id message');
-        if (!/invalid_id/.test(await textOf('[data-plan-new-id-message]'))) fail('new plan', 'no invalid_id message');
-        if (store.loadWorkingCopy('Not A Slug')) fail('new plan', 'a bad id was stored');
-        // an id that exists is a plain message and changes nothing
-        const publishedRevision = revisionOf('published-plan');
-        await typeInto('[data-plan-new-id]', 'published-plan');
-        await click('[data-plan-create]');
-        await waitFor(cdp, `!${q('[data-plan-new-message]')}.hidden`, 'the already_exists message');
-        const dup = await cdp.evaluate(`({ message: ${q('[data-plan-new-message]')}.textContent, id: ${q('[data-plan-new-id]')}.value, title: ${q('[data-plan-new-title]')}.value })`);
-        if (!/already_exists/.test(dup.message)) fail('new plan', 'no already_exists message: ' + dup.message);
-        if (dup.id !== 'published-plan' || dup.title !== 'From the UI') fail('new plan', 'typed values were lost: ' + JSON.stringify(dup));
-        if (revisionOf('published-plan') !== publishedRevision) fail('new plan', 'an existing plan changed');
-        // create for real, with a recipe: it opens straight into the editor
-        await typeInto('[data-plan-new-id]', 'from-ui');
-        await setValue('[data-plan-new-recipe]', 'verb-workshop');
-        await click('[data-plan-create]');
         await waitFor(cdp, `!!${q(LESSON_READY)}`, 'the editor of the new plan', 20000);
-        if (await cdp.evaluate('location.hash') !== '#plan/from-ui') fail('new plan', 'the new plan did not open');
-        const born = planOf('from-ui');
-        if (born.units[0].lessons[0].recipe !== 'verb-workshop' || born.title !== 'From the UI' || revisionOf('from-ui') !== 1) fail('new plan', 'stored plan: ' + JSON.stringify(born).slice(0, 200));
+        const bornHash = await cdp.evaluate('location.hash');
+        const bornId = decodeURIComponent(String(bornHash).replace(/^#plan\//, ''));
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(bornId)) fail('new plan', 'the new plan id is not a uuid: ' + bornHash);
+        await setValue('[data-plan-section="lesson"] [data-plan-field="recipe"]', 'verb-workshop');
+        await click('[data-plan-section="lesson"] [data-plan-row="recipe"] [data-plan-save]');
+        await waitRevision(2, 'revision after setting recipe on the new plan');
+        const born = planOf(bornId);
+        if (born.units[0].lessons[0].recipe !== 'verb-workshop' || born.title !== 'From the UI' || born.id !== bornId || revisionOf(bornId) !== 2) fail('new plan', 'stored plan: ' + JSON.stringify(born).slice(0, 200));
         // edit it through the editor
         await typeInto('[data-plan-section="lesson"] [data-plan-row="title"] [data-plan-field="title"]', 'From the UI, edited');
         await click('[data-plan-section="lesson"] [data-plan-row="title"] [data-plan-save]');
-        await waitRevision(2, 'revision after editing the new plan');
-        if (planOf('from-ui').units[0].lessons[0].title !== 'From the UI, edited') fail('new plan', 'the edit was not stored');
+        await waitRevision(3, 'revision after editing the new plan');
+        if (planOf(bornId).units[0].lessons[0].title !== 'From the UI, edited') fail('new plan', 'the edit was not stored');
         await click('[data-plan-history-toggle]');
         await waitFor(cdp, `document.querySelectorAll('[data-plan-history] [data-plan-revision]').length >= 2`, 'history of the new plan');
         const bornRows = await cdp.evaluate(`Array.from(document.querySelectorAll('[data-plan-history] [data-plan-revision]')).map((r) => r.getAttribute('data-plan-actor') + ':' + r.querySelector('[data-plan-op]').textContent)`);
@@ -829,7 +823,7 @@ async function main() {
             };
             await nav('#plans', '[data-plan-list] [data-plan-row]', 'the plan list at ' + width);
             await click('[data-plan-new-open]');
-            await waitFor(cdp, `!!${q('[data-plan-new-recipe]')}`, 'the New plan form at ' + width);
+            await waitFor(cdp, `!!${q('[data-plan-new]')}`, 'the New plan form at ' + width);
             await auditPage('plans');
             await nav('#plan/' + IP, '[data-plan-issues="panel"] [data-plan-issue]', 'issues at ' + width);
             await auditPage('issues');

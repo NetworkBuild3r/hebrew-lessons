@@ -243,6 +243,10 @@ describe('plan builder admin routes (INIT-008/SPEC-010)', { concurrency: false }
         assert.equal(created.json.plan.units[0].lessons[0].visibility, 'hidden');
         assert.equal(typeof created.json.validation, 'object');
 
+        const assignedId = await api('POST', '/api/plans', { body: { title: 'Server picks the id' } });
+        assert.equal(assignedId.status, 200, assignedId.text);
+        assert.match(assignedId.json.plan.id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+
         const before = tables();
         const again = await api('POST', '/api/plans', { body: { id: 'cafe-new', title: 'Changed title' } });
         assert.equal(again.status, 400);
@@ -259,7 +263,7 @@ describe('plan builder admin routes (INIT-008/SPEC-010)', { concurrency: false }
             assert.equal(res.json.code, code);
             assert.equal(res.text.includes(MARKER), false, 'no echo of the request text');
         }
-        for (const body of [{ title: 'x' }, { id: 'a-b' }, { id: 5, title: 'x' }, { id: 'a-b', title: 'x', extra: 1 }, []]) {
+        for (const body of [{ id: 'a-b' }, { id: 5, title: 'x' }, { id: 'a-b', title: 'x', extra: 1 }, []]) {
             const res = await api('POST', '/api/plans', { body });
             assert.equal(res.status, 400);
             assert.equal(res.json.code, 'bad_request');

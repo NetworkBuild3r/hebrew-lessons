@@ -4,12 +4,13 @@
  * mutation, and it changes the verified flag alone. Adapters do not write SQL.
  * Seed refreshes source='seed' rows through applySeed and never overwrites a
  * row whose source is not seed.
- * Provenance: INIT-006/SPEC-005
+ * Provenance: INIT-006/SPEC-005, INIT-012/SPEC-003
  */
 'use strict';
 
 const db = require('../db');
 const lexicon = require('../db/repos/lexicon');
+const concepts = require('../db/repos/concepts');
 const audit = require('../db/repos/audit');
 const { validateEntries, POS, BINYAN, TENSE, ROOT_CLASS } = require('./validate');
 
@@ -23,8 +24,63 @@ const TENSE_ORDER = ['infinitive', 'present', 'past', 'future', 'imperative'];
 const CELL_ORDER = {
     infinitive: ['inf'],
     present: ['ms', 'fs', 'mp', 'fp'],
-    past: ['1s', '2ms', '2fs', '3ms', '3fs', '1p', '2mp', '2fp', '3p']
+    past: ['1s', '2ms', '2fs', '3ms', '3fs', '1p', '2mp', '2fp', '3p'],
+    future: ['1s', '2ms', '2fs', '3ms', '3fs', '1p', '2mp', '2fp', '3p']
 };
+
+/** Future person cells share past pronoun labels (ADR-0014 D5). INIT-012/SPEC-003 */
+const FUTURE_CELL_CONCEPTS = [
+    { key: 'cell:future.1s', labelEn: 'first person singular', labelHe: 'אני' },
+    { key: 'cell:future.2ms', labelEn: 'second person masculine singular', labelHe: 'אתה' },
+    { key: 'cell:future.2fs', labelEn: 'second person feminine singular', labelHe: 'את' },
+    { key: 'cell:future.3ms', labelEn: 'third person masculine singular', labelHe: 'הוא' },
+    { key: 'cell:future.3fs', labelEn: 'third person feminine singular', labelHe: 'היא' },
+    { key: 'cell:future.1p', labelEn: 'first person plural', labelHe: 'אנחנו' },
+    { key: 'cell:future.2mp', labelEn: 'second person masculine plural', labelHe: 'אתם' },
+    { key: 'cell:future.2fp', labelEn: 'second person feminine plural', labelHe: 'אתן' },
+    { key: 'cell:future.3p', labelEn: 'third person plural', labelHe: 'הם, הן' }
+];
+
+let futureCellConceptsEnsured = false;
+
+/**
+ * Idempotent: migration 005 seeds past cells only; existing DBs get future cells on first list.
+ */
+function ensureFutureCellConcepts() {
+    if (futureCellConceptsEnsured) return;
+    const row = db.get('SELECT COALESCE(MAX(sort), 0) AS n FROM grammar_concepts');
+    const baseSort = row && Number.isInteger(row.n) ? row.n : 0;
+    const insert = db.prepare(
+        'INSERT OR IGNORE INTO grammar_concepts (key, family, label_en, label_he, colour, sort) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    FUTURE_CELL_CONCEPTS.forEach((concept, index) => {
+        insert.run(
+            concept.key,
+            'cell',
+            concept.labelEn,
+            concept.labelHe,
+            null,
+            baseSort + index + 1
+        );
+    });
+    futureCellConceptsEnsured = true;
+}
+
+/**
+ * Grammar concept registry for MCP and API. Ensures future cell keys exist.
+ * @returns {object[]}
+ */
+function listGrammarConcepts() {
+    ensureFutureCellConcepts();
+    return concepts.list().map((row) => ({
+        key: row.key,
+        family: row.family,
+        label_en: row.label_en,
+        label_he: row.label_he,
+        colour: row.colour,
+        sort: row.sort
+    }));
+}
 
 /**
  * @param {string} message
@@ -478,5 +534,6 @@ module.exports = {
     get,
     paradigm,
     applySeed,
+    listGrammarConcepts,
     toPublic
 };

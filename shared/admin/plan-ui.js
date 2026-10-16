@@ -6,7 +6,7 @@
  * string from the server goes in through textContent.
  *
  * Plain browser script, no build step. Node tests load it with require().
- * Provenance: INIT-008/SPEC-013, INIT-008/SPEC-014, INIT-008/SPEC-015
+ * Provenance: INIT-008/SPEC-013, INIT-008/SPEC-014, INIT-008/SPEC-015, INIT-011/SPEC-003
  */
 (function (root, factory) {
     'use strict';
@@ -14,7 +14,7 @@
     var api = factory(root);
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     root.HebrewPlanUi = api;
-})(typeof window !== 'undefined' ? window : globalThis, function () {
+})(typeof window !== 'undefined' ? window : globalThis, function (root) {
     'use strict';
 
     var SVG_NS = 'http://www.w3.org/2000/svg';
@@ -56,10 +56,163 @@
      * @param {string} [text]
      * @returns {HTMLElement}
      */
+    function currentUiLang() {
+        try {
+            var U = root.HebrewUtils;
+            if (U && typeof U.readUiLang === 'function') return U.readUiLang();
+        } catch (err) { /* ignore */ }
+        try {
+            var attr = root.document && root.document.documentElement
+                && root.document.documentElement.getAttribute('data-ui-lang');
+            if (attr === 'he' || attr === 'en') return attr;
+        } catch (err2) { /* ignore */ }
+        return 'en';
+    }
+
+    /**
+     * "Hebrew (English)" written as one string. Null when it is not that shape.
+     * Trims a trailing space; the English gloss may hold inner parentheses.
+     * A trailing " · …" after the closing paren is returned as `suffix` (revision, counts).
+     * Provenance: INIT-011/SPEC-003
+     */
+    function splitUiLabel(text) {
+        var raw = String(text == null ? '' : text).replace(/\s+$/, '');
+        var suffix = '';
+        var peeled = /^(.*\))( · .+)$/.exec(raw);
+        if (peeled) {
+            raw = peeled[1];
+            suffix = peeled[2];
+        }
+        // First " (" starts the English gloss; the gloss may hold inner parentheses.
+        var m = /^(.*?) \((.*)\)$/.exec(raw);
+        if (!m) return null;
+        var he = m[1];
+        var en = m[2];
+        if (!he || !en) return null;
+        if (!/[\u0590-\u05FF]/.test(he) || !/[A-Za-z]/.test(en)) return null;
+        // Nested "Hebrew (English)" already inside `he` means this was not one chrome string.
+        if (/ \([A-Za-z]/.test(he)) return null;
+        return { he: he, en: en, suffix: suffix };
+    }
+
+    /** One chrome sentence in the teacher's language (errors, refusals). */
+    function line(he, en) {
+        return currentUiLang() === 'he' ? he : en;
+    }
+
+    /**
+     * Put "Hebrew (English)" into a node as `.ui-pair > .ui-he / .ui-en`, or plain text.
+     * @param {HTMLElement} node
+     * @param {string} text
+     */
+    function ownerDoc(node) {
+        return (node && node.ownerDocument)
+            || (root && root.document)
+            || (typeof document !== 'undefined' ? document : null);
+    }
+
+    function fill(node, text) {
+        if (!node) return;
+        var doc = ownerDoc(node);
+        var parts = splitUiLabel(text);
+        clear(node);
+        if (!parts) {
+            node.textContent = text || '';
+            return;
+        }
+        if (!doc || typeof doc.createElement !== 'function') {
+            node.textContent = (currentUiLang() === 'he' ? parts.he : parts.en) + (parts.suffix || '');
+            return;
+        }
+        if ((node.className || '').indexOf('ui-pair') === -1) {
+            node.className = (node.className ? node.className + ' ' : '') + 'ui-pair';
+        }
+        var h = doc.createElement('span');
+        h.className = 'ui-he';
+        h.lang = 'he';
+        h.textContent = parts.he;
+        var e = doc.createElement('span');
+        e.className = 'ui-en';
+        e.lang = 'en';
+        e.setAttribute('dir', 'ltr');
+        e.textContent = parts.en;
+        node.appendChild(h);
+        node.appendChild(e);
+        appendSuffix(doc, node, parts.suffix);
+    }
+
+    function appendSuffix(doc, node, suffix) {
+        if (!suffix || !doc || !node) return;
+        if (typeof doc.createTextNode === 'function') {
+            node.appendChild(doc.createTextNode(suffix));
+            return;
+        }
+        var s = doc.createElement('span');
+        s.textContent = suffix;
+        node.appendChild(s);
+    }
+
+    /**
+     * Two language spans on an existing node (when the strings were not one "He (En)" label).
+     * @param {HTMLElement} node
+     * @param {string} he
+     * @param {string} en
+     * @param {string} [suffix]
+     */
+    function fillPair(node, he, en, suffix) {
+        if (!node) return;
+        var doc = ownerDoc(node);
+        clear(node);
+        if (!doc || typeof doc.createElement !== 'function') {
+            node.textContent = (currentUiLang() === 'he' ? he : en) + (suffix || '');
+            return;
+        }
+        if ((node.className || '').indexOf('ui-pair') === -1) {
+            node.className = (node.className ? node.className + ' ' : '') + 'ui-pair';
+        }
+        var h = doc.createElement('span');
+        h.className = 'ui-he';
+        h.lang = 'he';
+        h.textContent = he || '';
+        var e = doc.createElement('span');
+        e.className = 'ui-en';
+        e.lang = 'en';
+        e.setAttribute('dir', 'ltr');
+        e.textContent = en || '';
+        node.appendChild(h);
+        node.appendChild(e);
+        appendSuffix(doc, node, suffix);
+    }
+
     function make(doc, tag, className, text) {
         var node = doc.createElement(tag);
         if (className) node.className = className;
-        if (text !== undefined) node.textContent = text;
+        if (text === undefined || text === '') return node;
+        var parts = splitUiLabel(text);
+        var kind = String(tag || '').toLowerCase();
+        if (!parts) {
+            node.textContent = text;
+            return node;
+        }
+        if (kind === 'option' || kind === 'textarea' || kind === 'input') {
+            node.setAttribute('data-ui-text-he', parts.he + (parts.suffix || ''));
+            node.setAttribute('data-ui-text-en', parts.en + (parts.suffix || ''));
+            node.textContent = (currentUiLang() === 'he' ? parts.he : parts.en) + (parts.suffix || '');
+            return node;
+        }
+        node.className = (node.className ? node.className + ' ' : '') + 'ui-pair';
+        var h = doc.createElement('span');
+        h.className = 'ui-he';
+        h.lang = 'he';
+        h.textContent = parts.he;
+        var e = doc.createElement('span');
+        e.className = 'ui-en';
+        e.lang = 'en';
+        e.setAttribute('dir', 'ltr');
+        e.textContent = parts.en;
+        node.appendChild(h);
+        node.appendChild(e);
+        appendSuffix(doc, node, parts.suffix);
         return node;
     }
 
@@ -85,9 +238,10 @@
      */
     function bilingual(doc, tag, className, he, en) {
         var wrap = make(doc, tag, className);
-        var h = make(doc, 'span', 'plan-label-he', he);
+        wrap.className = (wrap.className ? wrap.className + ' ' : '') + 'ui-pair';
+        var h = make(doc, 'span', 'plan-label-he ui-he', he);
         h.setAttribute('lang', 'he');
-        var e = make(doc, 'span', 'plan-label-en', en);
+        var e = make(doc, 'span', 'plan-label-en ui-en', en);
         e.setAttribute('lang', 'en');
         e.setAttribute('dir', 'ltr');
         wrap.appendChild(h);
@@ -203,9 +357,9 @@
         if (code === 'validation' && f.rules.length) {
             text += ': ' + f.rules.filter(function (r) { return r.severity === 'block'; }).map(function (r) { return r.rule; }).join(', ');
         }
-        if (words) text += ' — ' + label(words[0], words[1]);
-        else if (code === 'network') text += ' — ' + label('אין חיבור לשרת.', 'The server could not be reached.');
-        else if (code === 'request_failed') text += ' — ' + label('הבקשה נכשלה.', 'The request failed.');
+        if (words) text += ' — ' + (currentUiLang() === 'he' ? words[0] : words[1]);
+        else if (code === 'network') text += ' — ' + (currentUiLang() === 'he' ? 'אין חיבור לשרת.' : 'The server could not be reached.');
+        else if (code === 'request_failed') text += ' — ' + (currentUiLang() === 'he' ? 'הבקשה נכשלה.' : 'The request failed.');
         if (code === 'validation' && options && options.detail) {
             var detail = f.rules.filter(function (r) { return r.severity === 'block'; }).slice(0, 2).map(function (r) {
                 return (r.path || 'plan') + ': ' + r.message;
@@ -254,13 +408,17 @@
         closestAttr: closestAttr,
         failure: failure,
         failureText: failureText,
+        fill: fill,
+        fillPair: fillPair,
         formatTime: formatTime,
         icon: icon,
         isObject: isObject,
         label: label,
+        line: line,
         listen: listen,
         make: make,
         messageFor: messageFor,
+        splitUiLabel: splitUiLabel,
         textAttrs: textAttrs,
         valueText: valueText
     };

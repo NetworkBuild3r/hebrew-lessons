@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "lesson-plan.schema.json",
   "title": "LessonPlan",
-  "description": "Course and lesson-plan language, schemaVersion 1.0.0 and 1.1.0. Prose contract: docs/decisions/ADR-0003-course-and-lesson-plan-language.md; 1.1.0 adds the five blocks, the lesson recipe, and the introduction-word group of docs/decisions/ADR-0009-learner-model-and-language-program.md §7. JSON Schema draft-07. Unknown properties are rejected. A 1.0.0 document that holds a 1.1.0 construct is rejected.",
+  "description": "Course and lesson-plan language, schemaVersion 1.0.0, 1.1.0, and 1.2.0. Prose contract: docs/decisions/ADR-0003-course-and-lesson-plan-language.md; 1.1.0 adds the five blocks, the lesson recipe, and the introduction-word group of docs/decisions/ADR-0009-learner-model-and-language-program.md §7; 1.2.0 adds the exercise block (ADR-0014). JSON Schema draft-07. Unknown properties are rejected. A document below the construct's version is rejected.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,7 +17,7 @@
     "units"
   ],
   "properties": {
-    "schemaVersion": { "enum": ["1.0.0", "1.1.0"] },
+    "schemaVersion": { "enum": ["1.0.0", "1.1.0", "1.2.0"] },
     "id": { "$ref": "#/definitions/slug" },
     "revision": { "type": "integer", "minimum": 1, "maximum": 1000000 },
     "status": { "enum": ["draft", "published"] },
@@ -66,6 +66,17 @@
       "then": {
         "properties": {
           "units": { "items": { "$ref": "#/definitions/v100Unit" } }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "schemaVersion": { "const": "1.1.0" } },
+        "required": ["schemaVersion"]
+      },
+      "then": {
+        "properties": {
+          "units": { "items": { "$ref": "#/definitions/v110Unit" } }
         }
       }
     }
@@ -146,7 +157,6 @@
         "lessons": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 12,
           "items": { "$ref": "#/definitions/lesson" }
         }
       }
@@ -180,7 +190,6 @@
         },
         "buildsOn": {
           "type": "array",
-          "maxItems": 12,
           "items": { "$ref": "#/definitions/slug" }
         },
         "newWords": {
@@ -222,8 +231,29 @@
         { "$ref": "#/definitions/conjugationTableBlock" },
         { "$ref": "#/definitions/personalQuestionBlock" },
         { "$ref": "#/definitions/verseReadingBlock" },
-        { "$ref": "#/definitions/letterIntroBlock" }
+        { "$ref": "#/definitions/letterIntroBlock" },
+        { "$ref": "#/definitions/typeItBlock" },
+        { "$ref": "#/definitions/exerciseBlock" },
+        { "$ref": "#/definitions/assignmentBlock" }
       ]
+    },
+    "typeItBlock": {
+      "description": "Type it recall (INIT-010/SPEC-002). Minimal shape so picture-on-recall can warn; player comes later.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "type-it" },
+        "image": { "$ref": "#/definitions/imageRef" },
+        "picture": { "$ref": "#/definitions/imageRef" },
+        "mediaId": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        },
+        "prompt": { "$ref": "#/definitions/plainText" },
+        "answer": { "$ref": "#/definitions/plainText" }
+      }
     },
     "imageRef": {
       "type": "object",
@@ -741,7 +771,7 @@
         "id": { "$ref": "#/definitions/entryId" },
         "type": { "const": "conjugation-table" },
         "lemmaKey": { "$ref": "#/definitions/lexiconKey" },
-        "tense": { "enum": ["present", "past"] },
+        "tense": { "enum": ["present", "past", "future"] },
         "mode": { "enum": ["study", "drill"] },
         "cells": {
           "type": "array",
@@ -782,6 +812,17 @@
               "cells": { "items": { "properties": { "cell": { "$ref": "#/definitions/pastCell" } } } }
             }
           }
+        },
+        {
+          "if": {
+            "properties": { "tense": { "const": "future" } },
+            "required": ["tense"]
+          },
+          "then": {
+            "properties": {
+              "cells": { "items": { "properties": { "cell": { "$ref": "#/definitions/futureCell" } } } }
+            }
+          }
         }
       ]
     },
@@ -801,6 +842,7 @@
     },
     "presentCell": { "enum": ["ms", "fs", "mp", "fp"] },
     "pastCell": { "enum": ["1s", "2ms", "2fs", "3ms", "3fs", "1p", "2mp", "2fp", "3p"] },
+    "futureCell": { "enum": ["1s", "2ms", "2fs", "3ms", "3fs", "1p", "2mp", "2fp", "3p"] },
     "personalQuestionBlock": {
       "description": "Never scored. No field holds an answer: answer names how the learner answers, and answers are not sent to the server.",
       "type": "object",
@@ -920,10 +962,67 @@
       }
     },
     "v100Block": {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "allOf": [
+                { "$ref": "#/definitions/v110BlockType" },
+                { "$ref": "#/definitions/v120BlockType" }
+              ]
+            },
+            "words": { "items": { "$ref": "#/definitions/v100Word" } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "const": "conjugation-table" },
+              "tense": { "const": "future" }
+            },
+            "required": ["type", "tense"]
+          },
+          "then": {
+            "properties": {
+              "tense": { "$ref": "#/definitions/v120Only" }
+            }
+          }
+        }
+      ]
+    },
+    "v110Unit": {
+      "description": "schemaVersion 1.1.0: no lesson holds a 1.2.0 construct.",
       "properties": {
-        "type": { "$ref": "#/definitions/v110BlockType" },
-        "words": { "items": { "$ref": "#/definitions/v100Word" } }
+        "lessons": { "items": { "$ref": "#/definitions/v110Lesson" } }
       }
+    },
+    "v110Lesson": {
+      "properties": {
+        "blocks": { "items": { "$ref": "#/definitions/v110Block" } }
+      }
+    },
+    "v110Block": {
+      "allOf": [
+        {
+          "properties": {
+            "type": { "$ref": "#/definitions/v120BlockType" }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "const": "conjugation-table" },
+              "tense": { "const": "future" }
+            },
+            "required": ["type", "tense"]
+          },
+          "then": {
+            "properties": {
+              "tense": { "$ref": "#/definitions/v120Only" }
+            }
+          }
+        }
+      ]
     },
     "v100Word": {
       "properties": {
@@ -938,6 +1037,207 @@
       "description": "Block types that exist only in a schemaVersion 1.1.0 document (ADR-0009 §7).",
       "not": {
         "enum": ["explainer", "conjugation-table", "personal-question", "verse-reading", "letter-intro"]
+      }
+    },
+    "v120Only": {
+      "description": "A field that exists only in a schemaVersion 1.2.0 document.",
+      "not": {}
+    },
+    "v120BlockType": {
+      "description": "Block types that exist only in a schemaVersion 1.2.0 document (ADR-0014).",
+      "not": {
+        "enum": ["exercise", "assignment"]
+      }
+    },
+    "acceptString": {
+      "description": "Unpointed alternate spelling for translate or dictation scoring (ADR-0014).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60,
+      "pattern": "[\u05D0-\u05EA]",
+      "not": { "pattern": "[\u0591-\u05C7]" }
+    },
+    "exerciseBlock": {
+      "description": "Deliberate exercise formats (ADR-0014). schemaVersion 1.2.0 only.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "kind", "items"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "exercise" },
+        "kind": {
+          "enum": ["choose", "true-false", "unscramble", "translate", "dictation"]
+        },
+        "heading": { "$ref": "#/definitions/text120" },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "kind": { "const": "choose" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "items": { "items": { "$ref": "#/definitions/exerciseChooseItem" } }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "true-false" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "items": { "items": { "$ref": "#/definitions/exerciseTrueFalseItem" } }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "unscramble" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "items": { "items": { "$ref": "#/definitions/exerciseUnscrambleItem" } }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "translate" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "items": { "items": { "$ref": "#/definitions/exerciseTranslateItem" } }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "dictation" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "items": { "items": { "$ref": "#/definitions/exerciseDictationItem" } }
+            }
+          }
+        }
+      ]
+    },
+    "exerciseChooseItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "prompt", "choices", "answer"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "prompt": { "$ref": "#/definitions/text200" },
+        "choices": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 5,
+          "items": { "$ref": "#/definitions/text120" }
+        },
+        "answer": { "$ref": "#/definitions/text120" },
+        "why": { "$ref": "#/definitions/text200" }
+      }
+    },
+    "exerciseTrueFalseItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "statement", "answer"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "statement": { "$ref": "#/definitions/text200" },
+        "answer": { "type": "boolean" },
+        "why": { "$ref": "#/definitions/text200" }
+      }
+    },
+    "exerciseUnscrambleItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "words"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "words": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 10,
+          "items": { "$ref": "#/definitions/text80" }
+        },
+        "alt": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 10,
+            "items": { "$ref": "#/definitions/text80" }
+          }
+        },
+        "english": { "$ref": "#/definitions/text120" }
+      }
+    },
+    "exerciseTranslateItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "english", "answer"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "english": { "$ref": "#/definitions/text120" },
+        "answer": { "$ref": "#/definitions/plainText" },
+        "accept": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/definitions/acceptString" }
+        }
+      }
+    },
+    "exerciseDictationItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "audioPath", "answer"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "audioPath": { "$ref": "#/definitions/audioPath" },
+        "answer": { "$ref": "#/definitions/plainText" },
+        "accept": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/definitions/acceptString" }
+        }
+      }
+    },
+    "assignmentBlock": {
+      "description": "Multi-sentence writing task with optional homework (ADR-0014). schemaVersion 1.2.0 only. Never scored.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "prompt", "minSentences"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "assignment" },
+        "prompt": { "$ref": "#/definitions/text300" },
+        "minSentences": { "type": "integer", "minimum": 1, "maximum": 12 },
+        "useWords": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": { "$ref": "#/definitions/text80" }
+        },
+        "homework": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": { "$ref": "#/definitions/text200" }
+        }
       }
     }
   }

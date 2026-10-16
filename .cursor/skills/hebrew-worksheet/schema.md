@@ -1,6 +1,6 @@
 # Lesson plan schema
 
-A plan is one JSON object, UTF-8, `schemaVersion` `1.0.0`. Unknown properties fail validation. An unknown `schemaVersion` is rejected.
+A plan is one JSON object, UTF-8. Known `schemaVersion` values are `1.0.0`, `1.1.0`, and `1.2.0` (see ADR-0009 §7 and ADR-0014). Unknown properties fail validation. An unknown `schemaVersion` is rejected.
 
 | | |
 | --- | --- |
@@ -32,7 +32,50 @@ units/{unitId}/lessons/{lessonId}/blocks/{blockId}/questions/{id}
 
 ## Blocks
 
-Block `type` is one of `introduction`, `graded-story`, `listening`, `short-dialogue`, `fluency-pass`, `spaced-review-checkpoint`. What each type is for is ADR-0003 §2.
+Block `type` includes the ADR-0003 core blocks plus ADR-0009 §7 and ADR-0014 types. At `schemaVersion` `1.2.0`, `exercise` and `assignment` are available; `conjugation-table` may use `tense: future`. What each type is for is ADR-0003 §2 and ADR-0014.
+
+### `assignment` block (`schemaVersion` `1.2.0`)
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `id` | yes | `entryId` slug |
+| `type` | yes | `"assignment"` |
+| `prompt` | yes | `text300` |
+| `minSentences` | yes | integer 1–12 |
+| `useWords` | no | 1–12 entries, each `text80` |
+| `homework` | no | 1–6 lines, each `text200` |
+
+Never scored. Stores no learner answer.
+
+### `conjugation-table` · `tense`
+
+| `tense` | `schemaVersion` | Cell codes |
+| --- | --- | --- |
+| `present` | 1.1.0+ | `ms`, `fs`, `mp`, `fp` |
+| `past` | 1.1.0+ | nine person codes (`1s` … `3p`) |
+| `future` | **1.2.0 only** | same nine person codes as past |
+
+Imperative is not a table tense.
+
+### `exercise` block (`schemaVersion` `1.2.0`)
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `id` | yes | `entryId` slug |
+| `type` | yes | `"exercise"` |
+| `kind` | yes | `choose` \| `true-false` \| `unscramble` \| `translate` \| `dictation` |
+| `heading` | no | `text120` |
+| `items` | yes | 1–12 items; shape depends on `kind` (ADR-0014) |
+
+Per-item fields by `kind` (each item has an `id` slug):
+
+| `kind` | Required | Optional |
+| --- | --- | --- |
+| `choose` | `prompt`, `choices` (2–5), `answer` (must equal one choice) | `why` |
+| `true-false` | `statement`, `answer` (boolean) | `why` |
+| `unscramble` | `words` (3–10) | `english`, `alt` (up to 3 alternate orders, same multiset, not identical to `words`) |
+| `translate` | `english`, `answer` (unpointed) | `accept` (unpointed alternates, up to 8) |
+| `dictation` | `audioPath`, `answer` (unpointed) | `accept` (unpointed alternates, up to 8) |
 
 A picture is allowed only on an introduction word:
 
@@ -50,7 +93,7 @@ Before any regeneration, run `npm run audio:inventory`. After it, run `npm run a
 
 ## Validator ids
 
-N1–N12 are ADR-0003 §6. Cite the id. Do not copy the numeric caps into this skill.
+N1–N12 are ADR-0003 §6. N13–N19 are ADR-0009 §7. N20–N23 are ADR-0014 (`exercise`, `assignment`, and `topic-conversation` exercise count). Cite the id. Do not copy the numeric caps into this skill.
 
 N1 warns when `migration.legacy` is true and blocks publish otherwise. Do not delete words from `my-morning`, `anal-sex-vocab`, or `shai-date-indirect-speech` to satisfy N1.
 

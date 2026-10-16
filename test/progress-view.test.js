@@ -121,10 +121,10 @@ describe('progress view (SPEC-015)', () => {
         assert.match(host.innerHTML, /No reviews yet/);
         assert.match(host.innerHTML, /href="\/"/);
         assert.match(host.innerHTML, /היום/);
-        assert.match(host.innerHTML, /\(Today\)/);
+        assert.match(host.innerHTML, />Today</);
         assert.match(host.innerHTML, /href="\/lessons\/"/);
         assert.match(host.innerHTML, /שיעורים/);
-        assert.match(host.innerHTML, /\(Lessons\)/);
+        assert.match(host.innerHTML, />Lessons</);
         assertNoGamification(host.innerHTML);
     });
 
@@ -165,11 +165,11 @@ describe('progress view (SPEC-015)', () => {
         countsFor('en_he');
 
         assert.match(host.innerHTML, /חדש/);
-        assert.match(host.innerHTML, /\(New\)/);
+        assert.match(host.innerHTML, />New</);
         assert.match(host.innerHTML, /בלמידה/);
-        assert.match(host.innerHTML, /\(Learning\)/);
+        assert.match(host.innerHTML, />Learning</);
         assert.match(host.innerHTML, /לטווח ארוך/);
-        assert.match(host.innerHTML, /\(Long-term\)/);
+        assert.match(host.innerHTML, />Long-term</);
         assert.match(host.innerHTML, /החזרה הבאה בעוד שבועיים או יותר/);
         assert.match(host.innerHTML, /next review 2\+ weeks away/);
         assertNoGamification(host.innerHTML);

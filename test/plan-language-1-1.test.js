@@ -269,9 +269,9 @@ describe('schema 1.1.0', () => {
 
     it('takes schemaVersion 1.0.0 or 1.1.0 and adds the five blocks as oneOf branches', () => {
         assert.equal(SCHEMA.$schema, 'http://json-schema.org/draft-07/schema#');
-        assert.deepEqual(SCHEMA.properties.schemaVersion, { enum: ['1.0.0', '1.1.0'] });
+        assert.deepEqual(SCHEMA.properties.schemaVersion, { enum: ['1.0.0', '1.1.0', '1.2.0'] });
         const branches = defs.block.oneOf.map((branch) => defs[branch.$ref.slice('#/definitions/'.length)].properties.type.const);
-        assert.deepEqual(branches.slice(6), BLOCK_TYPES);
+        assert.deepEqual(branches.slice(6), BLOCK_TYPES.concat(['type-it', 'exercise']));
         assert.deepEqual(defs.v110BlockType.not.enum, BLOCK_TYPES);
         assert.deepEqual(defs.lesson.properties.recipe, { $ref: '#/definitions/recipe' });
         assert.deepEqual(defs.wordEntry.properties.group, { type: 'integer', minimum: 1, maximum: 3 });
@@ -965,7 +965,7 @@ describe('the registry matches ADR-0009 §7 one for one', () => {
     it('N13 to N19 follow N1 to N12 in the registry, in the ADR order', () => {
         const ids = rows.map((cells) => cells[1]);
         assert.deepEqual(ids, NEW_RULES);
-        assert.deepEqual(Object.keys(RULES).filter((id) => /^N\d+$/.test(id)).slice(12), ids);
+        assert.deepEqual(Object.keys(RULES).filter((id) => /^N\d+$/.test(id)).slice(12, 19), ids);
     });
 
     it('each rule carries the ADR severity', () => {

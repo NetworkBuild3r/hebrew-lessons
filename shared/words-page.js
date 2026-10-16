@@ -130,14 +130,11 @@
     }
 
     function bi(heText, enText) {
-        var wrap = el('span');
-        var he = el('span', { lang: 'he', dir: 'rtl', text: heText });
-        wrap.appendChild(he);
-        if (enText) {
-            wrap.appendChild(doc().createTextNode(' '));
-            wrap.appendChild(el('span', { className: 'en', lang: 'en', dir: 'ltr', text: '(' + enText + ')' }));
-        }
-        return wrap;
+        if (!enText) return el('span', { lang: 'he', text: heText || '' });
+        if (!heText) return el('span', { className: 'ui-en', lang: 'en', dir: 'ltr', text: enText });
+        return el('span', { className: 'ui-pair' },
+            el('span', { className: 'ui-he', lang: 'he', text: heText }),
+            el('span', { className: 'ui-en', lang: 'en', dir: 'ltr', text: enText }));
     }
 
     function stripVowels(text) {

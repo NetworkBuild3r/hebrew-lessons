@@ -177,11 +177,11 @@ describe('route change accessibility (REQ-004)', () => {
 
         const b = started();
         await tick(60);
-        assert.equal(b.announce.textContent, 'היום');
+        assert.equal(b.announce.textContent, 'Today');
         b.win.HebrewRouter.navigate('/lessons/');
         assert.equal(b.announce.textContent, '', 'cleared first so the same text re-announces');
         await tick(60);
-        assert.equal(b.announce.textContent, 'שיעורים');
+        assert.equal(b.announce.textContent, 'Lessons');
     });
 
     it('scroll resets to the top on a new route', () => {
@@ -253,12 +253,12 @@ describe('direct URL and unknown route (REQ-002, REQ-006)', () => {
         const b = started({ path: '/nope/' });
         await tick(60);
         assert.deepEqual([...b.log], []);
-        assert.match(b.main.innerHTML, /<h1[^>]*>[^<]*העמוד לא נמצא/);
+        assert.match(b.main.innerHTML, /<h1[^>]*>[\s\S]*העמוד לא נמצא/);
         assert.match(b.main.innerHTML, /Page not found/);
         assert.match(b.main.innerHTML, /href="\/"/, 'a way back to Today');
         assert.equal(b.main.focused, 'h1');
         assert.match(b.win.document.title, /Page not found/);
-        assert.equal(b.announce.textContent, 'העמוד לא נמצא');
+        assert.equal(b.announce.textContent, 'Page not found');
         assert.equal(b.main.attrs['data-route-ready'], 'not-found');
         assert.equal(b.win.location.pathname, '/nope/', 'URL is left as typed');
         assert.equal(b.win.reloaded, undefined);

@@ -54,6 +54,15 @@ if (lexiconSeed.skipped) {
     console.warn('[lexicon-seed] skipped ' + lexiconSeed.skipped + ' vocab entry(ies)');
 }
 
+// Hebrew–English dictionary for tap-a-word. Loads once, when data/dictionary has the files.
+try {
+    const loaded = require('./dictionary/load').loadIfEmpty();
+    if (loaded.loaded) console.log('Dictionary: ' + loaded.loaded + ' entries loaded');
+    else console.log('Dictionary: ' + loaded.skipped);
+} catch (err) {
+    console.warn('[dictionary] not loaded: ' + (err && err.message ? err.message : err));
+}
+
 // First admin only. An existing admin (even a disabled one) wins over the env.
 try {
     const boot = require('./bootstrap-admin').ensureBootstrapAdmin();

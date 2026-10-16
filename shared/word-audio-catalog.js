@@ -19,5 +19,15 @@ window.HEBREW_WORD_AUDIO = Object.assign({}, window.HEBREW_WORD_AUDIO || {}, {
     "שׁוּב": "../_audio/words/a7487707d5c25636d48655e6.mp3",
     "חֵשֶׁק": "../_audio/words/b51ae22fede6ddd1ef5f7256.mp3",
     "אוֹהֶבֶת": "../_audio/words/55934e7f221c468baf9c9030.mp3",
-    "בַּעַל": "../_audio/words/9431811fd015b613f3207e5c.mp3"
+    "בַּעַל": "../_audio/words/9431811fd015b613f3207e5c.mp3",
+    "עֵצָה": "../_audio/words/aa354a39c32b925072b56333.mp3",
+    "יוֹדֵעַ": "../_audio/words/7bc2b7a4b2203a563ac5a229.mp3",
+    "כְּדַאי": "../_audio/words/245a1be29288a5dd9c114d00.mp3",
+    "טֶבַע": "../_audio/words/fddcb2e3688567e36a25ec42.mp3",
+    "סֶרֶט": "../_audio/words/b83e037058633b089a09ab3f.mp3",
+    "מְיוּחָד": "../_audio/words/83b350f8858aedd3f40d445c.mp3",
+    "חָשַׁבְתִּי": "../_audio/words/c27af78022df8fb8018fa583.mp3",
+    "מַמְלִיץ": "../_audio/words/fcceccda3afd5a4eea9eb45e.mp3",
+    "אַחֲרֵי": "../_audio/words/f37d0ca16286cc4e93dea492.mp3",
+    "רַעְיוֹן": "../_audio/words/1828c011c5e8e563ce974431.mp3"
 });

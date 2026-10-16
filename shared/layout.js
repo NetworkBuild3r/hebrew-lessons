@@ -23,10 +23,13 @@
                 .replace(/"/g, '&quot;');
     }
 
-    /** Hebrew text with the English gloss in a dir="ltr" span (RSCH-006 rule 15). */
+    /** One interface language, via HebrewUtils.bi. The other stays in the page for the switch. */
     function bi(he, en) {
+        if (U && typeof U.bi === 'function') return U.bi(he, en);
         if (!en) return esc(he);
-        return esc(he) + ' <span class="en" dir="ltr">(' + esc(en) + ')</span>';
+        if (!he) return '<span class="ui-en" lang="en" dir="ltr">' + esc(en) + '</span>';
+        return '<span class="ui-pair"><span class="ui-he" lang="he">' + esc(he) + '</span>'
+            + '<span class="ui-en" lang="en" dir="ltr">' + esc(en) + '</span></span>';
     }
 
     /**
@@ -70,7 +73,7 @@
             ? '<span class="page-heading-icon-wrap" aria-hidden="true">' + icon + '</span> '
             : '';
         return ''
-            + '<header class="topbar page-heading" data-page-heading>'
+            + '<header class="topbar page-heading ui-chrome" data-page-heading>'
             + '<div class="' + innerClass + '">'
             + '<div class="page-heading-text">'
             // INIT-005/SPEC-011: the old "דרך עברית • Hebrew Way" kicker is gone. It repeated the
@@ -90,7 +93,7 @@
     /** Full-screen message inside the shell (not found, no access, failed to load). */
     function message(he, en, bodyHe, bodyEn) {
         return ''
-            + '<header class="topbar page-heading" data-page-heading><div class="topbar-inner"><div>'
+            + '<header class="topbar page-heading ui-chrome" data-page-heading><div class="topbar-inner"><div>'
             + '<h1 tabindex="-1">' + bi(he, en) + '</h1>'
             + '</div></div></header>'
             + '<div class="card" role="alert"><p>' + bi(bodyHe, bodyEn) + '</p>'

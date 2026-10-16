@@ -5,8 +5,9 @@
 (function (root) {
     'use strict';
 
-    var PRIVACY_NOTE =
-        'מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה. (Admins can see all your activity, including every answer.)';
+    var PRIVACY_HE = 'מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה.';
+    var PRIVACY_EN = 'Admins can see all your activity, including every answer.';
+    var PRIVACY_NOTE = 'מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה. (Admins can see all your activity, including every answer.)';
     /* Hebrew line is a draft until the operator approves it (ADR-0009). Provenance: INIT-006/SPEC-017 */
     var AI_DISCLOSURE_EN = 'If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator\'s AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.';
     var AI_DISCLOSURE_HE = 'אם מנהל מפעיל תכנון בינה מלאכותית לחשבון שלך, סיכום של ההתקדמות ושם המשתמש נשלחים לספק הבינה המלאכותית של המפעיל כדי לנסח את השיעור הבא. הסיכום כולל את המילים שתורגלו ומידת הידיעה שלהן, את הדקדוק שתורגל ומידת הדיוק, את השיעורים שהושלמו, ובאיזו תדירות הקריאה היא בלי ניקוד. הסיכום אינו כולל תשובות בודדות, טקסט שהוקלד, או מועדי תרגול.';
@@ -19,6 +20,7 @@
         { id: 'review', href: '/review/', he: 'חזרה', en: 'Review', icon: 'review' },
         { id: 'words', href: '/words/', he: 'מילים', en: 'Words', icon: 'words' },
         { id: 'progress', href: '/progress/', he: 'התקדמות', en: 'Progress', icon: 'progress' },
+        { id: 'editor', href: '/editor/', he: 'עריכה', en: 'Editor', adminOnly: true },
         { id: 'admin', href: '/admin/', he: 'ניהול', en: 'Admin', adminOnly: true, icon: 'admin' }
     ];
 
@@ -65,6 +67,17 @@
         });
     }
 
+    function bi(he, en) {
+        var U = root.HebrewUtils;
+        if (U && typeof U.bi === 'function') return U.bi(he, en);
+        var h = escapeHtml(he || '');
+        var e = escapeHtml(en || '');
+        if (!e) return h;
+        if (!h) return '<span class="ui-en" lang="en" dir="ltr">' + e + '</span>';
+        return '<span class="ui-pair"><span class="ui-he" lang="he">' + h + '</span>'
+            + '<span class="ui-en" lang="en" dir="ltr">' + e + '</span></span>';
+    }
+
     function escapeHtml(str) {
         var U = root.HebrewUtils;
         if (U && typeof U.escapeHtml === 'function') return U.escapeHtml(str);
@@ -98,6 +111,7 @@
         if (path === '/review' || path.indexOf('/review/') === 0) return 'review';
         if (path === '/words' || path.indexOf('/words/') === 0) return 'words';
         if (path === '/progress' || path.indexOf('/progress/') === 0) return 'progress';
+        if (path === '/editor' || path.indexOf('/editor/') === 0) return 'editor';
         if (path === '/admin' || path.indexOf('/admin/') === 0) return 'admin';
         if (path.indexOf('/worksheets/') === 0) return 'lessons';
         if (path === '/' || path === '/index.html' || path.indexOf('/index.html') === path.length - 11) {
@@ -119,24 +133,26 @@
             return !item.adminOnly || role === 'admin';
         }).map(function (item) {
             var cur = item.id === current ? ' aria-current="page"' : '';
-            var label = navIcon(item.icon) + '<span class="hebrew-shell-label">'
-                + escapeHtml(item.he) + ' <span class="en" lang="en" dir="ltr">(' + escapeHtml(item.en) + ')</span></span>';
+            var label = navIcon(item.icon) + '<span class="hebrew-shell-label">' + bi(item.he, item.en) + '</span>';
             return '<a class="hebrew-shell-link" href="' + escapeHtml(item.href) + '"' + cur
                 + ' data-nav="' + escapeHtml(item.id) + '">' + label + '</a>';
         }).join('');
 
         var display = escapeHtml((me && (me.display_name || me.username)) || '');
         return ''
-            + '<div class="hebrew-shell" dir="rtl" lang="he">'
+            + '<div class="hebrew-shell ui-chrome" dir="rtl" lang="he">'
             + '<div class="hebrew-shell-inner">'
-            // The link's name is its visible wordmark: Hebrew name first, English gloss marked lang="en".
             + '<a class="hebrew-brand" href="/" data-brand>'
             + brandMark()
-            + '<span class="hebrew-brand-text"><span class="hebrew-brand-he">דרך עברית</span>'
-            + '<span class="hebrew-brand-en" lang="en" dir="ltr">Hebrew Way</span></span></a>'
-            + '<nav class="hebrew-shell-nav" aria-label="ניווט ראשי">' + links + '</nav>'
+            + '<span class="hebrew-brand-text ui-pair"><span class="hebrew-brand-he ui-he" lang="he">דרך עברית</span>'
+            + '<span class="hebrew-brand-en ui-en" lang="en" dir="ltr">Hebrew Way</span></span></a>'
+            + '<nav class="hebrew-shell-nav" data-ui-aria-he="ניווט ראשי" data-ui-aria-en="Main" aria-label="ניווט ראשי">' + links + '</nav>'
             + '<div class="hebrew-shell-sync" data-shell-sync aria-live="polite"></div>'
             + '<div class="hebrew-shell-account">'
+            + '<div class="ui-lang" role="group" data-ui-aria-he="שפת הממשק" data-ui-aria-en="Interface language" aria-label="שפת הממשק">'
+            + '<button type="button" class="ui-lang-btn" data-ui-lang-set="en" aria-pressed="false">EN</button>'
+            + '<button type="button" class="ui-lang-btn" data-ui-lang-set="he" aria-pressed="false">עב</button>'
+            + '</div>'
             + '<button type="button" class="hebrew-shell-account-btn" id="hebrew-shell-account-btn"'
             + ' aria-expanded="false" aria-haspopup="true" aria-controls="hebrew-shell-account-menu">'
             + '<span class="hebrew-shell-account-name">' + display + '</span>'
@@ -145,31 +161,33 @@
             + '<div class="hebrew-shell-account-menu hidden" id="hebrew-shell-account-menu" role="menu" hidden>'
             + '<p class="hebrew-shell-menu-name" role="presentation">' + display + '</p>'
             + '<button type="button" class="hebrew-shell-menu-item" role="menuitem" data-shell-action="change-password">'
-            + 'החלפת סיסמה <span class="en" dir="ltr">(Change password)</span></button>'
+            + bi('החלפת סיסמה', 'Change password') + '</button>'
             + '<button type="button" class="hebrew-shell-menu-item" role="menuitem" data-shell-action="sign-out">'
-            + 'יציאה <span class="en" dir="ltr">(Sign out)</span></button>'
-            + '<p class="hebrew-shell-privacy" role="note">' + escapeHtml(PRIVACY_NOTE) + '</p>'
-            + '<p class="hebrew-shell-privacy" data-ai-disclosure="1" role="note">' + escapeHtml(AI_DISCLOSURE) + '</p>'
+            + bi('יציאה', 'Sign out') + '</button>'
+            + '<p class="hebrew-shell-privacy" role="note">' + bi(PRIVACY_HE, PRIVACY_EN) + '</p>'
+            + '<p class="hebrew-shell-privacy" data-ai-disclosure="1" role="note">' + bi(AI_DISCLOSURE_HE, AI_DISCLOSURE_EN) + '</p>'
             + '</div></div></div></div>'
             + '<div class="hebrew-shell-pw-dialog hidden" id="hebrew-shell-pw-dialog" role="dialog"'
             + ' aria-modal="true" aria-labelledby="hebrew-shell-pw-title" hidden>'
             + '<div class="hebrew-shell-pw-panel">'
-            + '<h2 id="hebrew-shell-pw-title">יש להחליף סיסמה <span class="en" dir="ltr">(Change your password)</span></h2>'
-            + '<p class="hebrew-shell-pw-lead">המנהל איפס את הסיסמה. בחרו סיסמה חדשה לפני שממשיכים.'
-            + ' <span class="en" dir="ltr">(An admin reset your password. Choose a new one before continuing.)</span></p>'
+            + '<h2 id="hebrew-shell-pw-title">' + bi('יש להחליף סיסמה', 'Change your password') + '</h2>'
+            + '<p class="hebrew-shell-pw-lead">' + bi(
+                'המנהל איפס את הסיסמה. בחרו סיסמה חדשה לפני שממשיכים.',
+                'An admin reset your password. Choose a new one before continuing.'
+            ) + '</p>'
             + '<form id="hebrew-shell-pw-form" class="hebrew-shell-pw-form" autocomplete="on">'
             // Hidden username so password managers file the new password under the right account.
             + '<input type="text" name="username" autocomplete="username" hidden readonly tabindex="-1"'
             + ' aria-hidden="true" value="' + escapeHtml((me && me.username) || '') + '">'
-            + '<label class="hebrew-shell-field">סיסמה נוכחית <span class="en" dir="ltr">(Current password)</span>'
+            + '<label class="hebrew-shell-field">' + bi('סיסמה נוכחית', 'Current password')
             + '<input type="password" name="current_password" id="hebrew-shell-pw-current"'
             + ' autocomplete="current-password" required minlength="1"></label>'
-            + '<label class="hebrew-shell-field">סיסמה חדשה <span class="en" dir="ltr">(New password)</span>'
+            + '<label class="hebrew-shell-field">' + bi('סיסמה חדשה', 'New password')
             + '<input type="password" name="new_password" id="hebrew-shell-pw-new"'
             + ' autocomplete="new-password" required minlength="10"></label>'
             + '<p class="hebrew-shell-pw-error" id="hebrew-shell-pw-error" hidden></p>'
             + '<button type="submit" class="btn btn-primary" id="hebrew-shell-pw-submit">'
-            + 'שמירה <span class="en" dir="ltr">(Save)</span></button>'
+            + bi('שמירה', 'Save') + '</button>'
             + '</form></div></div>';
     }
 
@@ -261,6 +279,12 @@
         }
 
         rootEl.addEventListener('click', function (event) {
+            var langBtn = event.target.closest && event.target.closest('[data-ui-lang-set]');
+            if (langBtn && rootEl.contains(langBtn)) {
+                var U = root.HebrewUtils;
+                if (U && typeof U.setUiLang === 'function') U.setUiLang(langBtn.getAttribute('data-ui-lang-set'));
+                return;
+            }
             var actionBtn = event.target.closest && event.target.closest('[data-shell-action]');
             if (!actionBtn) return;
             var action = actionBtn.getAttribute('data-shell-action');
@@ -391,6 +415,9 @@
                 : ((root.location && root.location.pathname) || '/');
             target.innerHTML = renderHtml(me, pathname);
             bindShell(target, state);
+            if (root.HebrewUtils && typeof root.HebrewUtils.applyUiLang === 'function') {
+                root.HebrewUtils.applyUiLang(root.HebrewUtils.readUiLang());
+            }
             try { ensureBrandHead(); } catch (err) { /* ignore */ }
             revealCurrentLink(target);
             if (state.mustChange) {

@@ -1,6 +1,6 @@
 /**
  * Admin lesson editor — DOM helpers with fake HebrewApi (SPEC-017).
- * Provenance: INIT-002/SPEC-017
+ * Provenance: INIT-002/SPEC-017, INIT-009/SPEC-003
  */
 'use strict';
 
@@ -239,5 +239,22 @@ describe('admin lesson editor (SPEC-017)', () => {
         assert.doesNotMatch(html, /<img src=x onerror=alert\(1\)>/);
         assert.match(html, /data-admin-view="lessons"/);
         assert.match(html, /value="everyone"/);
+        assert.match(html, /data-ui-text-en="Everyone">Everyone/);
+        assert.doesNotMatch(html, /Everyoneכולם|כולםEveryone/);
+    });
+
+    it('INIT-010/SPEC-003: blankWorksheet is empty; no-plan gate removed; lesson editor mounts from admin', () => {
+        const blank = Lessons.blankWorksheet('new-id', 'כותרת');
+        assert.ok(Array.isArray(blank.activities));
+        assert.equal(blank.activities.length, 0);
+        assert.ok(blank.vocab && Array.isArray(blank.vocab.items));
+        assert.equal(blank.vocab.items.length, 0);
+        assert.equal(blank.reading, undefined);
+        assert.equal(typeof Lessons.noPlanHtml, 'undefined');
+        assert.equal(typeof Lessons.mountLessonGate, 'undefined');
+        const lesson = Shell.parseHash('#lesson/my-morning');
+        assert.equal(lesson.view, 'lesson');
+        assert.equal(lesson.slug, 'my-morning');
+        assert.doesNotMatch(Shell.renderTabs('lesson'), /data-admin-tab="plans"/);
     });
 });

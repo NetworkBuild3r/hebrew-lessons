@@ -506,6 +506,15 @@
 
         const closeBtn = pop.querySelector('[data-action="gloss-dismiss"]');
         if (closeBtn && typeof closeBtn.focus === 'function') closeBtn.focus();
+        if (!found.meaning && window.HebrewWordLookup && typeof window.HebrewWordLookup.meanings === 'function') {
+            window.HebrewWordLookup.meanings(found.token).then(function (line) {
+                if (!line || !pop.parentNode) return;
+                const missing = pop.querySelector('.story-gloss-missing');
+                if (!missing) return;
+                missing.className = 'story-gloss-en';
+                missing.textContent = line;
+            });
+        }
     }
 
     function paintStory(ctx, root) {

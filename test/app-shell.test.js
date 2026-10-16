@@ -87,10 +87,16 @@ describe('app-shell (SPEC-012)', () => {
         }, '/');
         assert.doesNotMatch(userHtml, /data-nav="admin"/);
         assert.doesNotMatch(userHtml, /href="\/admin\/"/);
+        assert.doesNotMatch(userHtml, /data-nav="editor"/);
+        assert.doesNotMatch(userHtml, /href="\/editor\/"/);
         assert.match(adminHtml, /data-nav="admin"/);
         assert.match(adminHtml, /href="\/admin\/"/);
         assert.match(adminHtml, /ניהול/);
-        assert.match(adminHtml, /\(Admin\)/);
+        assert.match(adminHtml, />Admin</);
+        assert.match(adminHtml, /data-nav="editor"/);
+        assert.match(adminHtml, /href="\/editor\/"/);
+        assert.match(adminHtml, /עריכה/);
+        assert.match(adminHtml, />Editor</);
     });
 
     it('marks the current page with aria-current="page" (ac-2)', () => {
@@ -120,10 +126,10 @@ describe('app-shell (SPEC-012)', () => {
         }, '/');
         assert.match(html, /href="\/lessons\/"/);
         assert.match(html, /שיעורים/);
-        assert.match(html, /\(Lessons\)/);
+        assert.match(html, />Lessons</);
         assert.match(html, /href="\/progress\/"/);
         assert.match(html, /התקדמות/);
-        assert.match(html, /\(Progress\)/);
+        assert.match(html, />Progress</);
         assert.match(html, /href="\/admin\/"/);
         assert.match(html, /href="\/review\/"/);
         assert.match(html, /חזרה/);

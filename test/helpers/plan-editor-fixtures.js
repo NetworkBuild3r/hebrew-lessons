@@ -60,6 +60,25 @@ function sampleBlock(type, id) {
             letter: he('בּ'), name: 'Bet',
             sounds: [{ id: '1', vowel: 'a', pointed: he('בַּ'), sound: 'ba' }],
             findIn: [{ id: '1', word: he('בַּיִת'), contains: true }]
+        },
+        exercise: {
+            kind: 'choose',
+            items: [{
+                id: 'item-1',
+                prompt: 'Pick one',
+                choices: ['a', 'b'],
+                answer: 'a'
+            }]
+        },
+        assignment: {
+            prompt: 'Write about your week.',
+            minSentences: 2,
+            useWords: [he('בַּיִת')],
+            homework: ['Read once more.']
+        },
+        'type-it': {
+            prompt: 'Type the word',
+            answer: he('בַּיִת')
         }
     };
     return Object.assign({ id, type }, samples[type]);

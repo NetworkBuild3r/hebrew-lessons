@@ -216,18 +216,45 @@ describe('saving is one operation (INIT-008/SPEC-011 ac-2)', () => {
 
 describe('the generic JSON fallback (INIT-008/SPEC-011 ac-3)', () => {
     it('invalid JSON sends nothing and shows an inline error; valid JSON sends one operation', async () => {
+        // Story glosses have their own list now, so name the JSON widget for this one field.
+        const Hints = require('../shared/admin/plan-hints.js');
+        const hint = Hints.fields['gradedStoryBlock.glosses'];
+        const named = hint.widget;
+        hint.widget = 'json';
+        try {
+            const env = open('graded-story');
+            const handle = env.form.fields.glosses;
+            assert.equal(handle.widgetName, 'json');
+            handle.el.value = '{ not json';
+            saveButtonFor(env.form, 'glosses').click();
+            await tick();
+            assert.equal(env.calls.length, 0);
+            assert.match(handle.issues.textContent, /Invalid JSON/);
+            handle.el.value = '{"a": "b"}';
+            saveButtonFor(env.form, 'glosses').click();
+            await tick();
+            assert.deepEqual(env.calls, [{ op: 'set', path: env.path, field: 'glosses', value: { a: 'b' } }]);
+        } finally {
+            hint.widget = named;
+        }
+    });
+
+    it('story meanings save as one set_field with a plain word-to-meaning map', async () => {
         const env = open('graded-story');
         const handle = env.form.fields.glosses;
-        assert.equal(handle.widgetName, 'json');
-        handle.el.value = '{ not json';
+        assert.equal(handle.widgetName, 'gloss-map');
+        const inputs = dom.collect(handle.el, (n) => n.tagName === 'INPUT');
+        assert.equal(inputs.length, 2, 'one saved meaning is one row');
+        inputs[1].value = 'a house';
+        find(handle.el, 'data-plan-add')[0].click();
+        const rows = dom.collect(handle.el, (n) => n.tagName === 'INPUT');
+        rows[2].value = 'גָּדוֹל';
+        rows[3].value = 'big';
         saveButtonFor(env.form, 'glosses').click();
         await tick();
-        assert.equal(env.calls.length, 0);
-        assert.match(handle.issues.textContent, /Invalid JSON/);
-        handle.el.value = '{"a": "b"}';
-        saveButtonFor(env.form, 'glosses').click();
-        await tick();
-        assert.deepEqual(env.calls, [{ op: 'set', path: env.path, field: 'glosses', value: { a: 'b' } }]);
+        assert.equal(env.calls.length, 1);
+        assert.equal(env.calls[0].field, 'glosses');
+        assert.deepEqual(env.calls[0].value, { 'בַּיִת': 'a house', 'גָּדוֹל': 'big' });
     });
 
     it('any node can be edited as raw JSON: invalid sends nothing, valid sends one put of the node', async () => {

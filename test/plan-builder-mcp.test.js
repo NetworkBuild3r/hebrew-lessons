@@ -29,6 +29,8 @@ const NEW_TOOLS = [
     'list_plans', 'create_plan', 'list_plan_revisions', 'get_plan_revision',
     'diff_plan', 'restore_plan_revision', 'list_plan_issues', 'assign_plan'
 ];
+/** Tools added after the eight above. They are checked in their own tests. */
+const LATER_TOOLS = ['insert_lesson', 'move_lesson', 'remove_lesson', 'suggest_glosses', 'make_word_audio'];
 const NOT_NFC = 'א\u05B7ת\u05BC\u05B8ה';
 
 describe('plan builder MCP tools (INIT-008/SPEC-009)', { concurrency: false }, () => {
@@ -162,7 +164,144 @@ describe('plan builder MCP tools (INIT-008/SPEC-009)', { concurrency: false }, (
             assert.deepEqual(byName[name].inputSchema, SNAPSHOT[name].inputSchema, name + ' input schema');
             assert.deepEqual(byName[name].annotations || null, SNAPSHOT[name].annotations, name + ' annotations');
         }
-        assert.deepEqual(names.filter((n) => !before.includes(n)).sort(), NEW_TOOLS.slice().sort());
+        assert.deepEqual(names.filter((n) => !before.includes(n)).sort(), NEW_TOOLS.concat(LATER_TOOLS).sort());
+    });
+
+    it('the editor route drafts meanings for an admin and refuses everyone else', async () => {
+        require('../server/db/repos/dictionary').replaceEntries([
+            { he: 'כלב', heFold: 'כלב', pos: 'masculine noun', en: 'dog, mutt' }
+        ]);
+        const ok = await adminApi('POST', '/api/dictionary/suggest-glosses', { text: 'הכלב כלב', skip: ['כלב'] });
+        assert.equal(ok.status, 200);
+        assert.deepEqual(ok.json.suggestions.map((s) => [s.word, s.meaning, s.form]), [['הכלב', 'dog, mutt', 'כלב']]);
+        assert.equal(ok.json.skipped, 1);
+
+        const bad = await adminApi('POST', '/api/dictionary/suggest-glosses', { text: 5 });
+        assert.equal(bad.status, 400);
+        const extra = await adminApi('POST', '/api/dictionary/suggest-glosses', { text: 'כלב', write: true });
+        assert.equal(extra.status, 400);
+
+        const anon = await fetch(baseUrl + '/api/dictionary/suggest-glosses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Origin: baseUrl },
+            body: JSON.stringify({ text: 'כלב' })
+        });
+        assert.equal(anon.status, 401);
+    });
+
+    it('suggest_glosses drafts meanings for a story, refuses without a token, and never writes', async () => {
+        require('../server/db/repos/dictionary').replaceEntries([
+            { he: 'בית', heFold: 'בית', pos: 'masculine noun', en: 'house, home, residence' }
+        ]);
+        seed();
+        const inserted = await call('insert_block', {
+            id: ID, path: LESSON, index: 1, expectedRevision: 1,
+            block: {
+                id: 'story',
+                type: 'graded-story',
+                paragraphs: [{ id: 'p1', text: 'הַבַּיִת בית צצצ' }],
+                glosses: { שלום: 'hello' }
+            }
+        });
+        assert.equal(inserted.isError, false, inserted.text);
+        const before = tables();
+
+        const draft = await call('suggest_glosses', { id: ID, path: LESSON + '/blocks/story' });
+        assert.equal(draft.isError, false, draft.text);
+        assert.deepEqual(draft.body.suggestions.map((s) => [s.word, s.meaning]), [
+            ['הַבַּיִת', 'house, home, residence'],
+            ['בית', 'house, home, residence']
+        ]);
+        assert.equal(draft.body.suggestions[0].form, 'בית', 'the definite form says which word it is a form of');
+        assert.equal(draft.body.suggestions[1].form, null);
+        assert.deepEqual(draft.body.unmatched, ['צצצ']);
+        assert.equal(typeof draft.body.revision, 'number');
+        assert.equal(tables(), before, 'a draft changes nothing');
+
+        const notStory = await call('suggest_glosses', { id: ID, path: LESSON });
+        assert.equal(notStory.isError, true);
+
+        delete process.env.MCP_AUTH_TOKEN;
+        try {
+            const refused = await call('suggest_glosses', { id: ID, path: LESSON + '/blocks/story' });
+            assert.equal(refused.isError, true);
+            assert.match(refused.text, /MCP_AUTH_TOKEN/);
+            assert.equal(refused.text.includes('house'), false);
+        } finally {
+            process.env.MCP_AUTH_TOKEN = TOKEN;
+        }
+    });
+
+    /** A word clip already in the (temporary) shared word folder. No ElevenLabs call is made. */
+    function seedWordClip(word, file) {
+        const audio = require('../server/audio');
+        const dir = require('../server/paths').wordAudioDir();
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, file), Buffer.from('fake-mp3'));
+        const manifest = audio.readWordManifest(dir);
+        manifest.entries['v|m|' + word] = { text: word, file, voiceId: 'v', model: 'm', bytes: 8 };
+        audio.writeWordManifest(dir, manifest);
+    }
+
+    it('the editor routes list and reuse word sound for an admin, and refuse bad words and everyone else', async () => {
+        seedWordClip('קָפֶה', 'aaaaaaaaaaaaaaaaaaaaaaaa.mp3');
+
+        const listedClips = await adminApi('GET', '/api/admin/word-audio');
+        assert.equal(listedClips.status, 200);
+        assert.deepEqual(listedClips.json.clips, [{
+            word: 'קָפֶה',
+            audioPath: '../_audio/words/aaaaaaaaaaaaaaaaaaaaaaaa.mp3',
+            url: '/worksheets/_audio/words/aaaaaaaaaaaaaaaaaaaaaaaa.mp3'
+        }]);
+
+        const reused = await adminApi('POST', '/api/admin/word-audio', { text: 'קָפֶה' });
+        assert.equal(reused.status, 200);
+        assert.equal(reused.json.audioPath, '../_audio/words/aaaaaaaaaaaaaaaaaaaaaaaa.mp3');
+        assert.equal(reused.json.created, false);
+
+        const english = await adminApi('POST', '/api/admin/word-audio', { text: 'coffee' });
+        assert.equal(english.status, 400);
+        assert.equal(english.json.code, 'bad_word');
+        const extra = await adminApi('POST', '/api/admin/word-audio', { text: 'קפה', force: true });
+        assert.equal(extra.status, 400);
+        const notText = await adminApi('POST', '/api/admin/word-audio', { text: 5 });
+        assert.equal(notText.status, 400);
+
+        const anon = await fetch(baseUrl + '/api/admin/word-audio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Origin: baseUrl },
+            body: JSON.stringify({ text: 'קפה' })
+        });
+        assert.equal(anon.status, 401);
+        const anonList = await fetch(baseUrl + '/api/admin/word-audio');
+        assert.equal(anonList.status, 401);
+    });
+
+    it('make_word_audio reuses a clip, names a bad word, refuses without a token, and never writes a plan', async () => {
+        seed();
+        seedWordClip('שָׁלוֹם', 'bbbbbbbbbbbbbbbbbbbbbbbb.mp3');
+        const before = tables();
+
+        const out = await call('make_word_audio', { words: ['שָׁלוֹם', 'dog'] });
+        assert.equal(out.isError, false, out.text);
+        assert.deepEqual(out.body.clips, [
+            { word: 'שָׁלוֹם', audioPath: '../_audio/words/bbbbbbbbbbbbbbbbbbbbbbbb.mp3', created: false },
+            { word: 'dog', error: 'bad_word' }
+        ]);
+        assert.equal(tables(), before);
+
+        const tooMany = await call('make_word_audio', { words: new Array(21).fill('שלום') });
+        assert.equal(tooMany.isError, true);
+
+        delete process.env.MCP_AUTH_TOKEN;
+        try {
+            const refused = await call('make_word_audio', { words: ['שָׁלוֹם'] });
+            assert.equal(refused.isError, true);
+            assert.match(refused.text, /MCP_AUTH_TOKEN/);
+            assert.equal(refused.text.includes('bbbbbbbb'), false);
+        } finally {
+            process.env.MCP_AUTH_TOKEN = TOKEN;
+        }
     });
 
     it('ac-2: every new tool refuses without MCP_AUTH_TOKEN and returns no plan content', async () => {

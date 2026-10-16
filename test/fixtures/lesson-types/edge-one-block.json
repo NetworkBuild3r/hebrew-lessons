@@ -1,0 +1,18 @@
+{
+  "id": "edge-one-block",
+  "title": "One block only",
+  "level": "basic",
+  "visibility": "hidden",
+  "recipe": "guide",
+  "buildsOn": [],
+  "newWords": [],
+  "recycles": [],
+  "blocks": [
+    {
+      "id": "only",
+      "type": "explainer",
+      "title": "Single block lesson",
+      "sections": [{ "id": "s1", "heading": "Note", "paragraphs": ["This lesson has one block for edge coverage."] }]
+    }
+  ]
+}

@@ -31,6 +31,7 @@ const TENSE = new Set(['infinitive', 'present', 'past', 'future', 'imperative'])
 const CELLS = {
     present: new Set(['ms', 'fs', 'mp', 'fp']),
     past: new Set(['1s', '2ms', '2fs', '3ms', '3fs', '1p', '2mp', '2fp', '3p']),
+    future: new Set(['1s', '2ms', '2fs', '3ms', '3fs', '1p', '2mp', '2fp', '3p']),
     infinitive: new Set(['inf'])
 };
 

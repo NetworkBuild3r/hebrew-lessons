@@ -2311,6 +2311,233 @@ a.lesson-link { transition: background 0.15s ease; border-radius: 18px; }
         transition: background-color var(--motion-duration) var(--motion-easing);
     }
 }
+
+/* INIT-012/SPEC-004 plan exercise (choose, true-false) */
+.plan-page .plan-exercise {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+}
+
+.plan-page .plan-exercise-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    max-width: 100%;
+    min-width: 0;
+}
+
+.plan-page .plan-exercise-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    max-width: 100%;
+    min-width: 0;
+}
+
+.plan-page .plan-exercise-choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    max-width: 100%;
+    min-width: 0;
+}
+
+.plan-page .plan-exercise-choice {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-height: var(--size-target-primary);
+    padding: var(--space-2) var(--space-3);
+    border: var(--border) solid var(--color-line);
+    border-radius: var(--radius-control);
+    background: var(--color-control);
+    color: var(--color-control-text);
+    font: inherit;
+    text-align: start;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.plan-page .plan-exercise-choice:focus-visible {
+    outline: var(--focus-width) solid var(--color-focus);
+    outline-offset: var(--focus-offset);
+}
+
+.plan-page .plan-exercise-choice.is-wrong {
+    border-color: var(--color-line);
+}
+
+.plan-page .plan-exercise-choice.is-correct,
+.plan-page .plan-exercise-choice[data-exercise-state="answer"] {
+    border-color: var(--color-line);
+}
+
+.plan-page .plan-exercise-feedback,
+.plan-page .plan-exercise-summary,
+.plan-page .plan-exercise-progress {
+    margin: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.plan-page .plan-exercise-live {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@media (min-width: 360px) {
+    .plan-page .plan-exercise-choice {
+        flex: 1 1 calc(50% - var(--space-2));
+    }
+}
+
+@media (max-width: 599px) {
+    .plan-page .plan-exercise-choices {
+        flex-direction: column;
+    }
+
+    .plan-page .plan-exercise-choice {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+}
+
+/* INIT-012/SPEC-006 plan assignment */
+.plan-page .plan-assignment {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+.plan-page .plan-assignment-prompt {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.plan-page .plan-assignment-min {
+    margin: 0;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.plan-page .plan-assignment-help {
+    margin: 0;
+    font-size: var(--size-kicker);
+    color: var(--color-muted);
+}
+
+.plan-page .plan-assignment-words {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.plan-page .plan-assignment-word {
+    font: inherit;
+    padding: var(--space-2) var(--space-3);
+    border: var(--border) solid var(--color-line);
+    border-radius: var(--radius-control);
+    background: var(--color-control);
+    color: var(--color-control-text);
+    cursor: pointer;
+}
+
+.plan-page .plan-assignment-word:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+}
+
+.plan-page .plan-assignment-field {
+    margin: 0;
+}
+
+.plan-page .plan-assignment-textarea {
+    width: 100%;
+    max-width: 100%;
+    min-height: 8rem;
+    padding: var(--space-3);
+    border: var(--border) solid var(--color-line);
+    border-radius: var(--radius-control);
+    font: inherit;
+    line-height: var(--line-height-body);
+    background: var(--color-surface);
+    color: var(--color-text);
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.plan-page .plan-assignment-textarea:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+}
+
+.plan-page .plan-assignment-count {
+    margin: 0;
+    font-size: var(--size-kicker);
+    color: var(--color-muted);
+}
+
+.plan-page .plan-assignment-done {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-control);
+    background: var(--color-picture-bg);
+    color: var(--color-text);
+}
+
+.plan-page .plan-assignment-homework {
+    margin: 0;
+    padding: var(--space-3);
+    border: var(--border) solid var(--color-line);
+    border-radius: var(--radius-control);
+}
+
+.plan-page .plan-assignment-homework legend {
+    font-weight: 600;
+    padding: 0 var(--space-2);
+}
+
+.plan-page .plan-assignment-homework ul {
+    list-style: none;
+    margin: var(--space-2) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.plan-page .plan-assignment-homework li {
+    display: flex;
+    gap: var(--space-2);
+    align-items: flex-start;
+}
+
+.plan-page .plan-assignment-homework label {
+    flex: 1;
+    cursor: pointer;
+}
+
+@media (max-width: 599px) {
+    .plan-page .plan-assignment-textarea {
+        min-height: 6rem;
+    }
+}
 /* === end INIT-004/SPEC-014 plan screens === */
 
 /* === INIT-004/SPEC-015 plan builder === */
@@ -4045,7 +4272,7 @@ img.hebrew-logo-mark {
     --radius-card: 18px;
     --radius-button: 14px;
     --radius-pill: 999px;
-    --shell-h: 61px;
+    --shell-h: 112px;
     --shell-w: 72rem;
     --wrap-w: 40rem;
 }
@@ -4116,9 +4343,8 @@ summary:focus-visible,
 }
 
 /* ================= App header (shell) =================
-   One row on a desktop (about 60px). On a phone: brand and account, then the nav as one row that
-   scrolls sideways (about 95px) and scrolls away with the page. Hebrew word and English gloss are
-   both kept; the gloss sits under the word. */
+   Brand and account on the first row, every nav label on the next. The bar is at most 72rem,
+   so a single row clips the last words. On a phone the shell scrolls away with the page. */
 .hebrew-shell {
     background: var(--color-surface);
     color: var(--color-text);
@@ -4127,11 +4353,14 @@ summary:focus-visible,
 }
 .hebrew-shell-inner {
     width: min(var(--shell-w), calc(100% - 2rem));
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 0.25rem 0.75rem;
     min-height: 60px;
     padding: 0.25rem 0;
 }
+.hebrew-brand { order: 1; flex: 1 1 auto; }
+.hebrew-shell-sync { order: 2; }
+.hebrew-shell-account { order: 2; margin-inline-start: 0; }
 .hebrew-brand {
     color: var(--color-text);
     gap: 0.6rem;
@@ -4154,16 +4383,13 @@ img.hebrew-logo-mark {
     color: var(--color-muted);
 }
 .hebrew-shell-nav {
-    flex-wrap: nowrap;
+    order: 3;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
     gap: 0.15rem;
-    padding: 2px 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    overscroll-behavior-x: contain;
+    padding: 0.15rem 0 0.35rem;
+    overflow: visible;
 }
-.hebrew-shell-nav::-webkit-scrollbar { display: none; }
 .hebrew-shell-link {
     flex: 0 0 auto;
     min-height: 44px;
@@ -4261,8 +4487,9 @@ img.hebrew-logo-mark {
     color: var(--color-text);
 }
 
-/* Two rows below 1100px: seven nav links with glosses (about 700px) do not fit beside the brand and
-   account, so the nav gets its own row. At 1100px and up it is one row of about 60px. */
+/* The nav is its own row at every width: the shell is at most 72rem, and one row clips
+   the last labels once the wordmark and the language switch are in it. On a phone the
+   shell scrolls away; on a wide screen it stays put and the lesson bar clears it. */
 @media (max-width: 1099px) {
     :root { --shell-h: 0px; }
     .hebrew-shell { position: relative; }
@@ -4281,14 +4508,11 @@ img.hebrew-logo-mark {
     .hebrew-shell-nav {
         order: 3;
         flex: 1 1 100%;
-        margin-inline: -0.5rem;
-        padding: 0 0.5rem 0.2rem;
-        scroll-snap-type: x proximity;
-        /* The next link peeks out at the edge: that is the cue that the row scrolls. */
-        -webkit-mask-image: linear-gradient(to right, transparent 0, #000 0.9rem, #000 calc(100% - 0.9rem), transparent 100%);
-        mask-image: linear-gradient(to right, transparent 0, #000 0.9rem, #000 calc(100% - 0.9rem), transparent 100%);
+        margin-inline: 0;
+        padding: 0 0 0.2rem;
+        overflow: visible;
     }
-    .hebrew-shell-link { scroll-snap-align: center; padding: 0.2rem 0.6rem; }
+    .hebrew-shell-link { padding: 0.2rem 0.6rem; }
     .hebrew-shell-link .hebrew-shell-label .en { display: block; }
 }
 
@@ -4316,6 +4540,11 @@ img.hebrew-logo-mark {
     font-weight: 700;
     line-height: 1.25;
     color: var(--color-text);
+}
+/* Route changes focus this heading for assistive tech. It is not a control, so it
+   does not wear the focus ring that [tabindex]:focus-visible paints. */
+.page-heading h1:focus-visible {
+    outline-color: transparent;
 }
 .topbar h1 .en {
     font-size: 0.5em;
@@ -4707,6 +4936,25 @@ img.hebrew-logo-mark {
     color: var(--color-text);
     border-bottom: 1px solid var(--color-border);
     box-shadow: 0 8px 18px -16px rgba(28, 25, 23, 0.45);
+}
+/* The sticky row never squeezes the step counter into a sliver: the centre column keeps a floor,
+   and on a narrow bar it drops under the buttons as a second row. */
+.player-top-center { min-width: 8rem; }
+.player-top-center .step-indicator { white-space: nowrap; }
+@media (max-width: 40rem) {
+    .player-top-inner,
+    .player-top-inner--no-home {
+        grid-template-columns: 1fr auto;
+        grid-template-areas: "start end" "center center";
+    }
+    .player-top-start { grid-area: start; }
+    .player-top-end { grid-area: end; }
+    .player-top-center { grid-area: center; }
+}
+/* A short window (a landscape phone, a small browser pane) cannot spare a bar that stays put:
+   it scrolls away with the page instead of covering the exercise. */
+@media (max-height: 30rem) {
+    .player-top-inner { position: static; }
 }
 .player-title,
 .player-top .round-bar {
@@ -5112,6 +5360,47 @@ span.lesson-editor-row-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; w
 [data-plan-builder] .plan-item-ops .btn { min-width: var(--size-target); }/* The learner-view preview can be wider than a phone; it scrolls inside its own box and never widens the page. */
 [data-plan-builder] [data-plan-preview] { max-width: 100%; overflow-x: auto; }
 [data-plan-builder] .admin-back a { display: inline-flex; align-items: center; min-height: 44px; padding-inline: var(--space-2); }
+/* INIT-012/SPEC-007: exercise item list and assignment editor rows */
+[data-plan-builder] .plan-exercise-editor-row,
+[data-plan-builder] .plan-exercise-choice-row,
+[data-plan-builder] .plan-table-cell-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: flex-start;
+    min-width: 0;
+}
+[data-plan-builder] .plan-exercise-choice-row > input[type="text"],
+[data-plan-builder] .plan-table-cell-row > input[type="text"] {
+    flex: 1 1 12rem;
+    min-width: 0;
+    max-width: 100%;
+}
+[data-plan-builder] .plan-assignment-words-edit {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+    max-width: 100%;
+}
+[data-plan-builder] .plan-assignment-bank {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+@media (max-width: 900px) {
+    [data-plan-builder] .plan-exercise-editor .plan-list-item,
+    [data-plan-builder] .plan-exercise-choice-row,
+    [data-plan-builder] .plan-table-cell-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    [data-plan-builder] .plan-exercise-editor,
+    [data-plan-builder] .plan-assignment-homework-edit {
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+}
 /* === end INIT-008/SPEC-011 + SPEC-012 === */
 
 /* === INIT-008/SPEC-013 + SPEC-014 + SPEC-015 plan list, assign, history, issues, preview === */
@@ -5255,7 +5544,22 @@ span.lesson-editor-row-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; w
 [data-plan-builder] .plan-issue-message { margin: 0; overflow-wrap: anywhere; }
 [data-plan-builder] .plan-issue-link, [data-plan-builder] .plan-history .admin-row-btn, [data-plan-builder] .plan-edited .admin-row-btn,
 [data-plan-builder] .plan-diff-actions .admin-row-btn { white-space: normal; text-align: start; max-width: 100%; }
-[data-plan-builder] .plan-issue-place { display: block; overflow-wrap: anywhere; font-size: 0.8rem; text-align: start; }
+[data-plan-builder] .plan-issue-link {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    width: 100%;
+    height: auto;
+    min-height: 44px;
+}
+[data-plan-builder] .plan-issue-place {
+    display: block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    font-size: 0.8rem;
+    text-align: start;
+}
 [data-plan-builder] .plan-issue-go { display: block; }
 [data-plan-builder] .plan-help-he, [data-plan-builder] .plan-help-en { display: block; }
 [data-plan-builder] .plan-list-actions + .plan-new-host:empty { display: none; }
@@ -5309,3 +5613,766 @@ span.lesson-editor-row-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; w
 [data-plan-builder] .plan-edited-detail[hidden] { display: none; }
 [data-plan-builder] .plan-edited-detail .admin-row-btn { align-self: flex-start; }
 /* === end INIT-008/SPEC-013 + SPEC-014 + SPEC-015 === */
+/* === Words recall: fill the empty English-to-Hebrew card (2026-10-13) === */
+.vocab-card .recall-slot {
+    display: grid;
+    place-items: center;
+    min-height: 5rem;
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    border: 2px dashed var(--color-line, #8a847c);
+    border-radius: 14px;
+    background: var(--color-bg, #f7f6f3);
+    color: var(--color-muted, #44403c);
+    text-align: center;
+    font-weight: 600;
+}
+.vocab-card .recall-slot.hidden { display: none; }
+.vocab-card .recall-reveal {
+    min-height: 44px;
+    margin-top: 0.6rem;
+}
+
+/* === Interface language (2026-10-14) ===
+   One language for chrome. Lesson Hebrew and English meanings are not .ui-he / .ui-en,
+   so they stay. Default is English, including before the script runs. */
+html:not([data-ui-lang="he"]) .ui-pair > .ui-he { display: none; }
+html[data-ui-lang="he"] .ui-pair > .ui-en { display: none; }
+html:not([data-ui-lang="he"]) .ui-chrome { direction: ltr; }
+html[data-ui-lang="he"] .ui-chrome { direction: rtl; }
+html:not([data-ui-lang="he"]) .ui-chrome .icon-directional { transform: none; }
+
+.hebrew-shell-account { display: flex; align-items: center; gap: 0.45rem; }
+.ui-lang {
+    display: inline-flex;
+    flex: 0 0 auto;
+    border: 1px solid var(--color-border, #e4ded2);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--color-surface, #fff);
+}
+.ui-lang-btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.2rem 0.7rem;
+    border: 0;
+    background: transparent;
+    color: var(--color-muted, #44403c);
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+.ui-lang-btn + .ui-lang-btn { box-shadow: inset 1px 0 0 var(--color-border, #e4ded2); }
+.ui-lang-btn.is-on {
+    background: var(--color-primary, #1d4ed8);
+    color: #fff;
+}
+.ui-lang-btn:focus-visible { outline: 3px solid var(--color-primary, #1d4ed8); outline-offset: -3px; }
+
+html:not([data-ui-lang="he"]) .hebrew-brand-en.ui-en {
+    display: block;
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--color-text, #1c1917);
+}
+@media (max-width: 40rem) {
+    html[data-ui-lang="he"] [data-plan-builder] .plan-table td[data-ui-label-he]::before {
+        content: attr(data-ui-label-he);
+    }
+}
+/* === end interface language === */
+/* === end words recall slot === */
+
+/* === Plan builder workspace (Figma planner) === */
+body.editor-page { --wrap-w: 100rem; }
+body.editor-page:has([data-admin-view="plan"]) [data-page-heading] { display: none; }
+
+/* English chrome stays left to right. The builder root is marked rtl for Hebrew
+   fields; those fields keep their own dir. */
+html:not([data-ui-lang="he"]) [data-plan-builder] { direction: ltr; }
+
+[data-plan-builder][data-admin-view="plan"] .plan-crumb {
+    margin: 0 0 12px;
+    font-size: 12px;
+    line-height: 1.45;
+}
+[data-plan-builder][data-admin-view="plan"] .plan-crumb a { min-height: 0; padding-inline: 0; }
+[data-plan-builder] .plan-crumb-here { color: #78716c; }
+
+[data-plan-builder][data-admin-view="plan"] .plan-head {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 0 0 8px;
+}
+[data-plan-builder] .plan-head-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px 24px;
+}
+[data-plan-builder] .plan-head .plan-note,
+[data-plan-builder] .plan-head [data-plan-notice] {
+    margin: 8px 0 0;
+    text-align: start;
+}
+[data-plan-builder] .plan-head-copy { flex: 1 1 auto; min-width: 0; }
+[data-plan-builder] .plan-head-copy h2 {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 600;
+    line-height: 1.25;
+}
+[data-plan-builder] .plan-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 auto;
+}
+[data-plan-builder] .plan-draft-state {
+    display: flex;
+    flex-direction: column;
+    width: 108px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: #8b5c12;
+}
+[data-plan-builder] .plan-draft-state [data-plan-status],
+[data-plan-builder] .plan-draft-state [data-plan-revision] { margin: 0; }
+[data-plan-builder] .plan-draft-state [data-plan-revision] { color: #78716c; font-size: 10px; }
+[data-plan-builder] .plan-head .btn {
+    min-height: 38px;
+    border-radius: 8px;
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 500;
+}
+[data-plan-builder] .plan-publish { display: inline-flex; }
+[data-plan-builder] .plan-publish-icon { width: 14px; height: 14px; flex: none; order: -1; }
+
+[data-plan-builder][data-admin-view="plan"] .card {
+    border-radius: 12px;
+    box-shadow: none;
+    border: 1px solid var(--color-line);
+}
+[data-plan-builder] .plan-sequence h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+[data-plan-builder] [data-plan-stack-list] {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+[data-plan-builder] [data-plan-stack-row] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    grid-template-areas:
+        "title up down remove"
+        "id up down remove";
+    gap: 4px 8px;
+    align-items: center;
+    padding: 14px 16px;
+    border: 1px solid var(--color-line);
+    border-radius: 16px;
+    background: var(--color-surface);
+    min-width: 0;
+}
+[data-plan-builder] [data-plan-stack-row][aria-current="true"] {
+    background: var(--color-primary-soft);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 1px var(--color-primary);
+}
+[data-plan-builder] [data-plan-stack-row] [data-plan-lesson] {
+    grid-area: title;
+    min-height: 32px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text);
+    font-weight: 700;
+    font-size: 16px;
+    text-align: start;
+    white-space: normal;
+    justify-content: flex-start;
+}
+[data-plan-builder] [data-plan-stack-row][aria-current="true"] [data-plan-lesson] { color: var(--color-primary); }
+[data-plan-builder] [data-plan-stack-row] .plan-block-id {
+    grid-area: id;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+}
+[data-plan-builder] [data-plan-stack-row] [data-plan-lesson-move="up"] { grid-area: up; }
+[data-plan-builder] [data-plan-stack-row] [data-plan-lesson-move="down"] { grid-area: down; }
+[data-plan-builder] [data-plan-stack-row] [data-plan-lesson-remove] { grid-area: remove; }
+[data-plan-builder] [data-plan-stack-row][aria-current="true"] [data-plan-lesson] { color: var(--color-primary); }
+[data-plan-builder] [data-plan-stack-row] .btn {
+    min-height: 36px;
+    min-width: 36px;
+    padding: 0 10px;
+    border-radius: 10px;
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+    font-size: 12px;
+    font-weight: 700;
+}
+[data-plan-builder] [data-plan-outline] {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+[data-plan-builder] [data-plan-outline] > li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: var(--color-surface);
+}
+[data-plan-builder] [data-plan-outline] > li > span {
+    flex: 1 1 12rem;
+    font-weight: 700;
+}
+[data-plan-builder] [data-plan-earlier-words-list] {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+[data-plan-builder] [data-plan-earlier-word] {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-line);
+    font-size: 18px;
+}
+[data-plan-builder] [data-plan-outline] > li[aria-current="true"] {
+    background: var(--color-primary-soft);
+    border-color: var(--color-primary);
+}
+
+[data-plan-builder][data-admin-view="plan"] .plan-layout {
+    grid-template-columns: minmax(0, 1fr);
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+}
+/* SPEC-004: below 900px the word bank sits under the lesson list; at 900px+ side by side. */
+[data-plan-builder][data-admin-view="plan"] .plan-layout.plan-screen {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+/* SPEC-005: lesson screen — bank, activities, preview. Stack below 900px; three columns at 1100px. */
+[data-plan-builder][data-admin-view="plan"] .plan-layout.plan-lesson-screen {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+[data-plan-builder] .plan-lesson-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: 0 0 16px;
+}
+[data-plan-builder] .plan-lesson-tab {
+    border-radius: 999px;
+}
+[data-plan-builder] .plan-lesson-tab[aria-current="true"] {
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+}
+[data-plan-builder] .plan-activity-hint {
+    margin: 0.25rem 0 0.75rem;
+}
+[data-plan-builder] .plan-preview-fallback {
+    margin: 0;
+    white-space: pre-wrap;
+    font: inherit;
+}
+[data-plan-builder] .plan-crumb-plan {
+    display: inline;
+    padding: 0;
+    min-height: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+@media (min-width: 900px) {
+    [data-plan-builder][data-admin-view="plan"] .plan-layout.plan-screen {
+        grid-template-columns: minmax(0, 1fr) 320px;
+    }
+    [data-plan-builder][data-admin-view="plan"] .plan-layout.plan-lesson-work {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
+        gap: 16px;
+        align-items: start;
+    }
+}
+@media (min-width: 1100px) {
+    [data-plan-builder][data-admin-view="plan"] .plan-layout.plan-lesson-screen {
+        grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr) minmax(16rem, 24rem);
+        gap: 16px;
+        align-items: start;
+    }
+}
+[data-plan-builder] .plan-stage {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+[data-plan-builder] .plan-rail,
+[data-plan-builder] .plan-bank,
+[data-plan-builder] .plan-main,
+[data-plan-builder] .plan-aside {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+[data-plan-builder] .plan-lesson-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    background: var(--color-surface);
+}
+[data-plan-builder] .plan-lesson-row[aria-current="true"],
+[data-plan-builder] .plan-lesson-row-open {
+    border-color: var(--color-primary);
+    background: var(--color-primary-soft);
+}
+[data-plan-builder] .plan-lesson-row-copy {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+[data-plan-builder] .plan-lesson-row-title {
+    display: block;
+    font-size: 1.05rem;
+}
+[data-plan-builder] .plan-lesson-row-subtitle,
+[data-plan-builder] .plan-lesson-row-words {
+    margin: 0.25rem 0 0;
+    color: var(--color-muted);
+    font-size: 0.9rem;
+}
+[data-plan-builder] .plan-lesson-row-ops {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+[data-plan-builder] .plan-add-lesson,
+[data-plan-builder] .plan-reuse-lesson,
+[data-plan-builder] .plan-word-add {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+    align-items: center;
+}
+[data-plan-builder] .plan-add-lesson input,
+[data-plan-builder] .plan-word-add input,
+[data-plan-builder] .plan-word-bank textarea,
+[data-plan-builder] .plan-verb-find input {
+    flex: 1 1 10rem;
+    min-width: 0;
+}
+[data-plan-builder] .plan-verb-find {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+}
+[data-plan-builder] .plan-verb-tenses {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+[data-plan-builder] .plan-lexicon-hits {
+    list-style: none;
+    margin: 0.25rem 0 0;
+    padding: 0;
+    width: 100%;
+    border: 1px solid var(--color-line);
+    background: var(--color-surface);
+    border-radius: 8px;
+}
+[data-plan-builder] .plan-lexicon-hit {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+    gap: 0.75rem;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--color-line);
+    padding: 0.45rem 0.7rem;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+}
+[data-plan-builder] .plan-lexicon-hits li:last-child .plan-lexicon-hit {
+    border-bottom: 0;
+}
+[data-plan-builder] .plan-lexicon-hit:hover {
+    background: var(--color-primary-soft);
+}
+.lookup-word {
+    display: inline;
+    margin: 0;
+    padding: 0 0.05em;
+    border: 0;
+    border-bottom: 1px dotted currentColor;
+    background: transparent;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+.lookup-word:hover,
+.lookup-word:focus-visible,
+.lookup-word[aria-expanded="true"] {
+    background: var(--color-primary-soft, #e9efff);
+}
+.word-lookup-pop {
+    position: fixed;
+    z-index: 40;
+    min-width: 11rem;
+    max-width: min(20rem, 92vw);
+    padding: 0.85rem 0.95rem;
+    border: 1px solid var(--color-line, #e4ded2);
+    border-radius: 12px;
+    background: var(--color-surface, #fff);
+    box-shadow: 0 14px 32px -10px rgba(28, 25, 23, 0.28);
+}
+.word-lookup-pop {
+    text-align: start;
+}
+.word-lookup-pop .story-gloss-he {
+    margin: 0;
+    text-align: center;
+    font-size: 1.6rem;
+    line-height: 1.2;
+}
+.word-lookup-sound {
+    margin: 0.1rem 0 0;
+    color: var(--color-muted, #44403c);
+    font-size: 0.85rem;
+}
+.word-lookup-body {
+    margin: 0.5rem 0 0.6rem;
+}
+.word-lookup-short {
+    margin: 0 0 0.45rem;
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+.word-lookup-senses {
+    margin: 0 0 0.45rem;
+    padding: 0;
+    list-style: none;
+    max-height: 11rem;
+    overflow-y: auto;
+}
+.word-lookup-senses li {
+    margin: 0 0 0.3rem;
+    font-size: 0.9rem;
+    line-height: 1.35;
+}
+.word-lookup-pos {
+    display: inline-block;
+    margin-inline-end: 0.4rem;
+    color: var(--color-primary, #3b5bdb);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+.word-lookup-more {
+    margin: 0 0 0.4rem;
+}
+.word-lookup-seen {
+    margin: 0 0 0.4rem;
+    color: var(--color-muted, #44403c);
+    font-size: 0.8rem;
+}
+.word-lookup-senses[hidden] {
+    display: none;
+}
+[data-plan-builder] .plan-gloss-row {
+    display: grid;
+    grid-template-columns: minmax(6rem, 1fr) minmax(8rem, 2fr) auto;
+    gap: 0.4rem;
+    align-items: center;
+}
+[data-plan-builder] .plan-gloss-alts {
+    grid-column: 1 / -1;
+    color: var(--color-muted, #44403c);
+    font-size: 0.8rem;
+    line-height: 1.35;
+}
+[data-plan-builder] .plan-audio-clip {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+[data-plan-builder] .plan-audio-clip select {
+    max-width: 22rem;
+    font-size: 1.05rem;
+}
+[data-plan-builder] .plan-audio-clip option {
+    font-family: inherit;
+}
+[data-plan-builder] .plan-gloss-draft {
+    border-inline-start: 3px solid var(--color-primary, #3b5bdb);
+    padding-inline-start: 0.4rem;
+    background: var(--color-primary-soft, #e9efff);
+}
+.word-lookup-form,
+.word-lookup-lesson,
+.word-lookup-note {
+    margin: 0 0 0.4rem;
+    color: var(--color-muted, #44403c);
+    font-size: 0.85rem;
+}
+[data-plan-builder] .plan-for {
+    margin: 0.25rem 0 0;
+    color: var(--color-muted);
+}
+[data-plan-builder] [data-plan-stack-list] {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+[data-plan-builder] [data-plan-word-bank-list] {
+    list-style: none;
+    margin: 0 0 var(--space-3);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+[data-plan-builder] [data-plan-word-bank-list] > li {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--color-border);
+}
+[data-plan-builder][data-admin-view="plan"] .plan-rail > .card,
+[data-plan-builder][data-admin-view="plan"] .plan-main > .card,
+[data-plan-builder][data-admin-view="plan"] .plan-aside > .card,
+[data-plan-builder][data-admin-view="plan"] .plan-main > section.card {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+}
+[data-plan-builder] .plan-disclose {
+    white-space: normal;
+    height: auto;
+    overflow-wrap: anywhere;
+}
+[data-plan-builder] .plan-guidance {
+    padding: 12px;
+    border-radius: 8px;
+    background: #fff8e7;
+}
+[data-plan-builder] .plan-guidance-title {
+    margin: 0 0 6px;
+    color: #8b5c12;
+    font-size: 12px;
+    font-weight: 600;
+}
+[data-plan-builder] .plan-guidance p:last-child {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.45;
+}
+[data-plan-builder] .plan-foot {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+[data-plan-builder="picker"] {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    border-radius: 18px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px -12px rgba(67, 56, 202, 0.25);
+}
+[data-plan-builder="picker"] h2 { margin: 0; font-size: 20px; }
+[data-plan-builder="picker"] .plan-filters { order: 2; margin: 0; }
+[data-plan-builder="picker"] .plan-table-wrap { order: 3; }
+[data-plan-builder="picker"] .plan-list-actions { order: 4; display: flex; gap: 8px; }
+[data-plan-builder="picker"] .plan-list-actions .btn-primary {
+    flex: 1 1 auto;
+    justify-content: center;
+    border-radius: 14px;
+    min-height: 44px;
+}
+[data-plan-builder="picker"] .plan-new-host { order: 5; }
+[data-plan-builder] .plan-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 4px 0 8px;
+}
+[data-plan-builder] .plan-filter-search {
+    flex: 1 1 16rem;
+    border-radius: 14px;
+    background: var(--color-surface-soft);
+    background-image: none;
+    padding: 10px 12px;
+    -webkit-appearance: none;
+    appearance: none;
+}
+/* No browser search icon over the placeholder (INIT-011/SPEC-003). */
+[data-plan-builder] .plan-filter-search::-webkit-search-decoration,
+[data-plan-builder] .plan-filter-search::-webkit-search-cancel-button,
+[data-plan-builder] .plan-filter-search::-webkit-search-results-button,
+[data-plan-builder] .plan-filter-search::-webkit-search-results-decoration {
+    display: none;
+    -webkit-appearance: none;
+}
+[data-plan-builder] .plan-filter-status,
+[data-plan-builder] .plan-filter-audience { flex: 1 1 9rem; border-radius: 14px; }
+
+body.editor-page [data-plan-builder] .plan-table,
+body.editor-page [data-plan-builder] .plan-table tbody {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    width: 100%;
+}
+body.editor-page [data-plan-builder] .plan-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+}
+body.editor-page [data-plan-builder] .plan-table tr {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    flex: 1 1 220px;
+    width: 240px;
+    max-width: 280px;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid var(--color-line);
+    border-radius: 18px;
+    background: var(--color-surface);
+}
+body.editor-page [data-plan-builder] .plan-table tr:hover {
+    border-color: var(--color-primary);
+    background: var(--color-primary-soft);
+}
+body.editor-page [data-plan-builder] .plan-table td {
+    display: block;
+    width: 100%;
+    border: 0;
+    padding: 0;
+    color: var(--color-muted);
+    font-size: 13px;
+}
+body.editor-page [data-plan-builder] .plan-table td:first-child { color: var(--color-text); }
+body.editor-page [data-plan-builder] .plan-row-link {
+    font-size: 16px;
+    min-height: 0;
+    color: var(--color-primary);
+}
+body.editor-page [data-plan-builder] .plan-chip {
+    background: var(--color-surface-soft);
+    border-radius: 999px;
+}
+body.editor-page [data-plan-builder] .plan-chip-published { border-color: var(--color-primary); color: var(--color-primary); }
+
+[data-plan-builder][data-admin-view="plan"] .plan-sequence {
+    background: var(--color-surface);
+    border-radius: 18px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px -12px rgba(67, 56, 202, 0.25);
+}
+[data-plan-builder][data-admin-view="plan"] .plan-aside > .card,
+[data-plan-builder][data-admin-view="plan"] .plan-foot > .card {
+    background: var(--color-surface-soft);
+}
+[data-plan-builder][data-admin-view="plan"] .plan-main > .card,
+[data-plan-builder][data-admin-view="plan"] .plan-main > section.card {
+    background: var(--color-surface);
+}
+[data-plan-builder] [data-plan-outline] > li {
+    background: var(--color-surface);
+    border-radius: 18px;
+}
+[data-plan-builder] [data-plan-status] {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+    border: 1px solid var(--color-primary);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+@media (max-width: 899px) {
+    body.editor-page { --wrap-w: 100%; }
+    body.editor-page .wrap { width: calc(100% - 1rem); }
+    [data-plan-builder] .plan-head-row { flex-direction: column; }
+    [data-plan-builder] .plan-head-actions { width: 100%; }
+    [data-plan-builder] .plan-head .btn { flex: 1 1 auto; justify-content: center; }
+    body.editor-page [data-plan-builder] .plan-table tr {
+        flex-basis: 100%;
+        width: 100%;
+        max-width: none;
+    }
+    [data-plan-builder][data-admin-view="plan"] [data-plan-stack-row] {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "title"
+            "id"
+            "up"
+            "down"
+            "remove";
+    }
+    [data-plan-builder][data-admin-view="plan"] [data-plan-stack-row] .btn { width: 100%; }
+}
+/* One interface language inside the editor. The older plan-label rules
+   force both lines to display; this wins so English hides the Hebrew. */
+html:not([data-ui-lang="he"]) [data-plan-builder] .ui-he,
+html:not([data-ui-lang="he"]) [data-plan-builder] .plan-label-he,
+html:not([data-ui-lang="he"]) [data-plan-builder] .plan-help-he {
+    display: none;
+}
+html[data-ui-lang="he"] [data-plan-builder] .ui-en,
+html[data-ui-lang="he"] [data-plan-builder] .plan-label-en,
+html[data-ui-lang="he"] [data-plan-builder] .plan-help-en {
+    display: none;
+}
+/* === end plan builder workspace === */

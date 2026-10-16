@@ -56,16 +56,34 @@
     var keyHandler = null;
 
     function biText(node, he, en) {
-        // The separating space sits outside the isolated English span so the gloss is not glued
-        // to the Hebrew in a right-to-left line (INIT-005/SPEC-011). textContent is unchanged.
-        node.appendChild(root.document.createTextNode(en ? he + ' ' : he));
-        if (!en) return;
-        var span = root.document.createElement('span');
-        span.className = 'en';
-        span.dir = 'ltr';
-        span.lang = 'en';
-        span.textContent = '(' + en + ')';
-        node.appendChild(span);
+        var doc = root.document;
+        if (!en) {
+            node.appendChild(doc.createTextNode(he || ''));
+            return;
+        }
+        if (!he) {
+            var only = doc.createElement('span');
+            only.className = 'ui-en';
+            only.lang = 'en';
+            only.dir = 'ltr';
+            only.textContent = en;
+            node.appendChild(only);
+            return;
+        }
+        var wrap = doc.createElement('span');
+        wrap.className = 'ui-pair';
+        var h = doc.createElement('span');
+        h.className = 'ui-he';
+        h.lang = 'he';
+        h.textContent = he;
+        var e = doc.createElement('span');
+        e.className = 'ui-en';
+        e.lang = 'en';
+        e.dir = 'ltr';
+        e.textContent = en;
+        wrap.appendChild(h);
+        wrap.appendChild(e);
+        node.appendChild(wrap);
     }
 
     function clear(node) {

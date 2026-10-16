@@ -138,6 +138,15 @@ describe('beginner-unit-1 fixture', () => {
     });
 });
 
+describe('exercise block registry (INIT-012/SPEC-004)', () => {
+    it('loads HebrewBlockExercise in the plan renderer registry', () => {
+        const mod = ui.blocks.exercise;
+        assert.ok(mod, 'exercise module');
+        assert.equal(typeof mod.render, 'function');
+        assert.equal(typeof mod.bind, 'function');
+    });
+});
+
 describe('six block renderers', () => {
     const blocks = {
         introduction: {
@@ -305,6 +314,92 @@ describe('audio and recall', () => {
         assert.equal(/<audio\b/i.test(present), false);
     });
 
+    const CLIP_NAME = '806bb3fc99c984531106aeb5';
+    const introWith = (audioPath) => ui.renderBlock({
+        id: 'introduction',
+        type: 'introduction',
+        words: [{ id: '1', word: 'קָפֶה', meaning: 'coffee', audioPath }]
+    });
+
+    it('marks a shared word clip as ready by its file name only, and carries the word for the browser voice', () => {
+        const html = introWith('../_audio/words/' + CLIP_NAME + '.mp3');
+        assert.match(html, /data-plan-audio="ready"/);
+        assert.match(html, new RegExp('data-plan-audio-clip="' + CLIP_NAME + '"'));
+        assert.match(html, /data-plan-audio-word="קָפֶה"/);
+        assert.equal(html.includes('.mp3'), false, 'no file address is put in the page');
+        assert.equal(html.includes('_audio'), false);
+
+        const none = introWith(undefined);
+        assert.match(none, /data-plan-audio="none"/);
+        assert.equal(none.includes('data-plan-audio-clip'), false);
+        assert.match(none, /data-plan-audio-word="קָפֶה"/, 'a word with no clip can still be spoken');
+
+        const elsewhere = introWith('../../secret/' + CLIP_NAME + '.mp3');
+        assert.equal(elsewhere.includes('data-plan-audio-clip'), false, 'only the shared word folder is played');
+    });
+
+    describe('playing a word', () => {
+        function fakeBrowser(options) {
+            const opts = options || {};
+            const played = [];
+            const spoken = [];
+            const prior = {
+                Audio: globalThis.Audio,
+                Utterance: globalThis.SpeechSynthesisUtterance,
+                speech: globalThis.speechSynthesis
+            };
+            globalThis.Audio = function Audio(url) {
+                played.push(url);
+                this.pause = () => {};
+                this.play = () => (opts.clipFails ? Promise.reject(new Error('blocked')) : Promise.resolve());
+            };
+            if (opts.voice !== false) {
+                globalThis.SpeechSynthesisUtterance = function Utterance(text) { this.text = text; };
+                globalThis.speechSynthesis = { cancel() {}, speak(u) { spoken.push({ text: u.text, lang: u.lang }); } };
+            } else {
+                delete globalThis.SpeechSynthesisUtterance;
+                delete globalThis.speechSynthesis;
+            }
+            return {
+                played,
+                spoken,
+                restore() {
+                    ['Audio', 'SpeechSynthesisUtterance', 'speechSynthesis'].forEach((name) => delete globalThis[name]);
+                    if (prior.Audio) globalThis.Audio = prior.Audio;
+                    if (prior.Utterance) globalThis.SpeechSynthesisUtterance = prior.Utterance;
+                    if (prior.speech) globalThis.speechSynthesis = prior.speech;
+                }
+            };
+        }
+
+        it('plays the saved clip from the shared word folder', async () => {
+            const env = fakeBrowser();
+            try {
+                assert.equal(await ui.playWord(CLIP_NAME, 'קָפֶה'), true);
+                assert.deepEqual(env.played, ['/worksheets/_audio/words/' + CLIP_NAME + '.mp3']);
+                assert.deepEqual(env.spoken, []);
+            } finally { env.restore(); }
+        });
+
+        it('speaks the word in Hebrew when there is no clip, or the clip will not play', async () => {
+            const env = fakeBrowser({ clipFails: true });
+            try {
+                assert.equal(await ui.playWord(CLIP_NAME, 'קָפֶה'), true);
+                assert.equal(await ui.playWord(null, 'קָפֶה'), true);
+                assert.deepEqual(env.spoken, [{ text: 'קָפֶה', lang: 'he-IL' }, { text: 'קָפֶה', lang: 'he-IL' }]);
+            } finally { env.restore(); }
+        });
+
+        it('says nothing played when there is no clip and no voice, and never builds an address from a bad name', async () => {
+            const env = fakeBrowser({ voice: false });
+            try {
+                assert.equal(await ui.playWord(null, 'קָפֶה'), false);
+                assert.equal(await ui.playWord('../../etc/passwd', null), false);
+                assert.deepEqual(env.played, []);
+            } finally { env.restore(); }
+        });
+    });
+
     it('keeps an empty attempt hidden and shows the correct form after a miss', () => {
         const empty = ui.decideRecall('   ', 'קָפֶה');
         assert.equal(empty.attempted, false);
@@ -380,7 +475,11 @@ describe('published plan entry', () => {
         );
         assert.equal((src.match(/innerHTML/g) || []).length, 1);
         assert.equal(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\s*\(/.test(withoutPaint), false);
-        assert.equal(/worksheets/.test(src), false);
+        // The one worksheet-folder address is the shared word clips (sound for a new word).
+        const worksheetLines = src.split('\n')
+            .filter((line) => /worksheets/.test(line) && !/^\s*(\/\/|\*|\/\*)/.test(line))
+            .map((line) => line.trim());
+        assert.deepEqual(worksheetLines, ["var WORD_CLIP_BASE = '/worksheets/_audio/words/';"]);
         assert.equal(/coffee-cup|water-glass|placeholder-coffee/.test(src), false);
         assert.equal(/\bfetch\s*\(\s*['"`]/.test(src), false);
         assert.equal(/new\s+Audio\s*\(/.test(src), false);

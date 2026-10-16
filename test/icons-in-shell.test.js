@@ -68,8 +68,8 @@ describe('shell header and nav (ac-1, ac-2)', () => {
     it('shows the chosen mark from the local brand folder, as a decorative image', () => {
         assert.match(html, /<img class="hebrew-logo-mark" src="\/shared\/brand\/mark-a\.svg"/);
         assert.match(html, /<img class="hebrew-logo-mark"[^>]*alt=""/);
-        assert.match(html, /<span class="hebrew-brand-he">דרך עברית<\/span>/);
-        assert.match(html, /<span class="hebrew-brand-en" lang="en" dir="ltr">Hebrew Way<\/span>/);
+        assert.match(html, /<span class="hebrew-brand-he ui-he" lang="he">דרך עברית<\/span>/);
+        assert.match(html, /<span class="hebrew-brand-en ui-en" lang="en" dir="ltr">Hebrew Way<\/span>/);
         assert.doesNotMatch(html, /<text|ע<\/text>/, 'the old text logo is gone');
     });
 
@@ -85,7 +85,8 @@ describe('shell header and nav (ac-1, ac-2)', () => {
             const link = html.match(re);
             assert.ok(link, item.id + ' link');
             assert.ok(link[1].includes(item.he), item.id + ' Hebrew word');
-            assert.ok(link[1].includes('(' + item.en + ')'), item.id + ' English gloss');
+            assert.ok(link[1].includes('>' + item.en + '<'), item.id + ' English word');
+            assert.ok(!link[1].includes('(' + item.en + ')'), item.id + ' is not a parenthetical gloss');
             // The link has no aria-label of its own: its visible words are its name (label in name).
             assert.doesNotMatch(link[0], /aria-label=/);
         }
@@ -95,7 +96,7 @@ describe('shell header and nav (ac-1, ac-2)', () => {
             assert.match(tag, /aria-hidden="true"/);
             assert.match(tag, /focusable="false"/);
         }
-        assert.match(html, /data-nav="guides">[^<]*<span class="hebrew-shell-label">מדריכים/, 'Guides stays text only');
+        assert.match(html, /data-nav="guides">[^]*?<span class="ui-he" lang="he">מדריכים<\/span>/, 'Guides stays text only');
     });
 
     it('no label in the shell mixes two languages in one aria-label (REQ-016)', () => {

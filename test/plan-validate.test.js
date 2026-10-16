@@ -396,10 +396,11 @@ describe('the registry matches ADR-0003 Decision 6', () => {
             .map((bytes) => bytes / 1024 + ' KiB'));
         assert.deepEqual(figures.N10, [
             schema.properties.units.maxItems,
-            schema.definitions.unit.properties.lessons.maxItems,
             schema.definitions.lesson.properties.blocks.maxItems,
             schema.definitions.introductionBlock.properties.words.maxItems
         ].map(String));
+        assert.equal(schema.definitions.unit.properties.lessons.maxItems, undefined);
+        assert.equal(schema.definitions.lesson.properties.buildsOn.maxItems, undefined);
         assert.deepEqual(figures.N11, [String(schema.definitions.plainText.maxLength)]);
         assert.deepEqual(Object.keys(RULES.N4).sort(), ['checked', 'severity', 'summary']);
     });
@@ -412,7 +413,7 @@ describe('the registry matches ADR-0003 Decision 6', () => {
             .filter((line) => line.startsWith('| ') && !line.startsWith('| Rule |'))
             .map((line) => line.split('|')[2].trim().split(/[\s,.]/)[0].toLowerCase());
         const further = Object.keys(RULES).filter((id) => id !== 'schema' && !/^N\d+$/.test(id));
-        assert.equal(further.length, 15);
+        assert.equal(further.length, 17);
         assert.deepEqual(further.map((id) => RULES[id].severity), severities);
     });
 
@@ -468,7 +469,7 @@ describe('result shape and purity', () => {
         const required = (source.match(/require\(\s*'([^']+)'\s*\)/g) || []).map((call) => call.match(/'([^']+)'/)[1]);
         // INIT-008/SPEC-008: the five Hebrew checks live in hebrew-checks.js, which itself
         // requires only fs, path, and ./id-path (plan-hebrew-checks.test.js pins that).
-        assert.deepEqual(required.sort(), ['./hebrew-checks', 'fs', 'path']);
+        assert.deepEqual(required.sort(), ['./activity-map', './hebrew-checks', 'fs', 'path']);
     });
 
     it('a non-object, non-JSON, or unserializable document is a schema block', () => {
@@ -494,7 +495,7 @@ describe('result shape and purity', () => {
 
 describe('schema: draft-07, closed properties, known schemaVersions', () => {
     it('an unknown schemaVersion is reported alone and the rest is not parsed', () => {
-        ['1.2.0', '2.0.0', 1, null].forEach((version) => {
+        ['1.3.0', '2.0.0', 1, null].forEach((version) => {
             const plan = sample('beginner-unit-1');
             plan.schemaVersion = version;
             plan.title = '<b>not reached</b>';
@@ -651,9 +652,6 @@ describe('N2, N5, N7, N8, N9, N10, N11 limits', () => {
             ['/units', schema.properties.units.maxItems, (plan, n) => {
                 plan.units = Array.from({ length: n }, () => clone(plan.units[0]));
             }],
-            ['/units/0/lessons', schema.definitions.unit.properties.lessons.maxItems, (plan, n) => {
-                plan.units[0].lessons = Array.from({ length: n }, () => clone(lesson(plan, 2)));
-            }],
             [L0 + '/blocks', schema.definitions.lesson.properties.blocks.maxItems, (plan, n) => {
                 const dialogue = lesson(plan, 0).blocks[3];
                 while (lesson(plan, 0).blocks.length < n) lesson(plan, 0).blocks.push(clone(dialogue));
@@ -671,6 +669,24 @@ describe('N2, N5, N7, N8, N9, N10, N11 limits', () => {
             grow(atCeiling, ceiling);
             assert.deepEqual(hits(validatePlan(atCeiling).blocks, 'N10'), [], at);
         });
+    });
+
+    it('N10 does not refuse a plan for lesson count (INIT-010/SPEC-002)', () => {
+        const plan = sample('beginner-unit-1');
+        const small = {
+            id: 'tiny',
+            title: 'Tiny',
+            level: 'basic',
+            visibility: 'hidden',
+            buildsOn: [],
+            newWords: [],
+            recycles: [],
+            blocks: [{ id: 'placeholder', type: 'fluency-pass', seconds: 60, source: 'vocab' }]
+        };
+        plan.units[0].lessons = Array.from({ length: 100 }, (_, i) => Object.assign(clone(small), { id: 'l-' + i }));
+        const result = validatePlan(plan);
+        assert.deepEqual(hits(result.blocks, 'N10'), []);
+        assert.deepEqual(hits(result.blocks, 'schema'), []);
     });
 
     it('N11 also limits keys the schema leaves open', () => {

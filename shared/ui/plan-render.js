@@ -21,6 +21,10 @@
     var MEDIA_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
     var SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
     var AUDIO_FILE = /^(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+\.mp3$/;
+    // A shared word clip: `../_audio/words/<name>.mp3`. Only the name is put on the page;
+    // the address is built when the learner presses play.
+    var WORD_CLIP = /^(?:\.\.\/)?_audio\/words\/([A-Za-z0-9_-]{8,64})\.mp3$/;
+    var WORD_CLIP_BASE = '/worksheets/_audio/words/';
     var SCRIPT_SRC = '/shared/ui/plan-render.js';
 
     /**
@@ -87,7 +91,9 @@
         'conjugation-table': loadBlock('HebrewBlockConjugation', './blocks/conjugation-table.js'),
         'personal-question': loadBlock('HebrewBlockPersonal', './blocks/personal-question.js'),
         'verse-reading': loadBlock('HebrewBlockVerse', './blocks/verse-reading.js'),
-        'letter-intro': loadBlock('HebrewBlockLetter', './blocks/letter-intro.js')
+        'letter-intro': loadBlock('HebrewBlockLetter', './blocks/letter-intro.js'),
+        exercise: loadBlock('HebrewBlockExercise', './blocks/exercise.js'),
+        assignment: loadBlock('HebrewBlockAssignment', './blocks/assignment.js')
     };
 
     /**
@@ -158,15 +164,24 @@
 
     /**
      * Play control. A missing or unsafe path is not turned into a request.
-     * A real `audioPath` is not copied into a URL: those paths are worksheet-relative,
-     * and this page does not fetch worksheet URLs.
+     * A real `audioPath` is not copied into a URL. Only a shared word clip
+     * (`_audio/words/<name>.mp3`) is played, and its address is built on press;
+     * any other lesson-relative path is not fetched from this page.
+     * A shared word clip carries its file name (no folder, no extension) as
+     * `data-plan-audio-clip`; the word itself rides along as `data-plan-audio-word` so a
+     * word with no clip can still be spoken by the browser's Hebrew voice.
      * @param {*} audioPath
+     * @param {*} [wordText]
      * @returns {string}
      */
-    function audioControl(audioPath) {
-        var ready = typeof audioPath === 'string' && AUDIO_FILE.test(audioPath);
+    function audioControl(audioPath, wordText) {
+        var ready = typeof audioPath === 'string' && (AUDIO_FILE.test(audioPath) || WORD_CLIP.test(audioPath));
         var state = ready ? 'ready' : 'none';
-        return '<button type="button" class="audio primary" data-plan-audio="' + state + '">'
+        var clip = typeof audioPath === 'string' ? WORD_CLIP.exec(audioPath) : null;
+        var spoken = typeof wordText === 'string' ? wordText.trim() : '';
+        var extra = (clip ? ' data-plan-audio-clip="' + text(clip[1]) + '"' : '')
+            + (spoken && spoken.length <= 60 ? ' data-plan-audio-word="' + text(spoken) + '"' : '');
+        return '<button type="button" class="audio primary" data-plan-audio="' + state + '"' + extra + '>'
             // Brand sprite icon (INIT-005/SPEC-010). The visible word is the control's name.
             + '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
             + '<use href="/shared/brand/sprite.svg#icon-sound"></use>'
@@ -348,7 +363,7 @@
             + figure
             + '<p class="word" lang="he">' + text(word.word) + '</p>'
             + '<p class="gloss">' + gloss(word.meaning) + '</p>'
-            + audioControl(word.audioPath)
+            + audioControl(word.audioPath, word.word)
             + '</div>'
             + example
             + dock('#recall', 'אפשר להמשיך')
@@ -807,6 +822,49 @@
         });
     }
 
+    var player = null;
+
+    /**
+     * Play a word: its saved clip first, then the browser's Hebrew voice. Resolves true
+     * when something started, false when nothing could play.
+     * @param {string|null} clip File name of a shared word clip (no folder, no extension).
+     * @param {string|null} word The word, for the browser voice.
+     * @returns {Promise<boolean>}
+     */
+    function playWord(clip, word) {
+        function speak() {
+            var Utterance = root.SpeechSynthesisUtterance;
+            var synth = root.speechSynthesis;
+            if (!word || typeof Utterance !== 'function' || !synth || typeof synth.speak !== 'function') {
+                return false;
+            }
+            try {
+                var utterance = new Utterance(word);
+                utterance.lang = 'he-IL';
+                utterance.rate = 0.85;
+                if (typeof synth.cancel === 'function') synth.cancel();
+                synth.speak(utterance);
+                return true;
+            } catch (err) {
+                return false;
+            }
+        }
+        if (clip && /^[A-Za-z0-9_-]{8,64}$/.test(clip) && typeof root.Audio === 'function') {
+            try {
+                if (player && typeof player.pause === 'function') player.pause();
+                player = new root.Audio(WORD_CLIP_BASE + clip + '.mp3');
+                return Promise.resolve(player.play()).then(function () {
+                    return true;
+                }, function () {
+                    return speak();
+                });
+            } catch (err) {
+                return Promise.resolve(speak());
+            }
+        }
+        return Promise.resolve(speak());
+    }
+
     /**
      * @param {Document} doc
      * @returns {void}
@@ -847,11 +905,15 @@
                     ? target.parentNode.querySelector('[data-plan-audio-note]')
                     : null;
                 if (!note) return;
-                if (target.getAttribute('data-plan-audio') !== 'ready') {
-                    note.textContent = 'אין הקלטה בתוכנית.';
-                    return;
-                }
-                note.textContent = 'ההקלטה לא מתנגנת מהדף הזה.';
+                var clip = target.getAttribute('data-plan-audio-clip');
+                var spoken = target.getAttribute('data-plan-audio-word');
+                note.textContent = '';
+                playWord(clip, spoken).then(function (played) {
+                    if (played) return;
+                    note.textContent = target.getAttribute('data-plan-audio') !== 'ready'
+                        ? 'אין הקלטה בתוכנית.'
+                        : 'ההקלטה לא מתנגנת מהדף הזה.';
+                });
             });
         }
         if (REGISTRY['conjugation-table'] && typeof REGISTRY['conjugation-table'].bind === 'function') {
@@ -865,6 +927,12 @@
         }
         if (REGISTRY['letter-intro'] && typeof REGISTRY['letter-intro'].bind === 'function') {
             REGISTRY['letter-intro'].bind(doc);
+        }
+        if (REGISTRY.exercise && typeof REGISTRY.exercise.bind === 'function') {
+            REGISTRY.exercise.bind(doc, live);
+        }
+        if (REGISTRY.assignment && typeof REGISTRY.assignment.bind === 'function') {
+            REGISTRY.assignment.bind(doc, live);
         }
     }
 
@@ -1123,6 +1191,7 @@
         boot: boot,
         decideRecall: decideRecall,
         escapeHtml: escapeHtml,
+        playWord: playWord,
         findCheckpoint: findCheckpoint,
         findMeet: findMeet,
         lessonCard: lessonCard,

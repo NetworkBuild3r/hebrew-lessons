@@ -170,6 +170,86 @@
       "model": "eleven_v3",
       "createdAt": "2026-10-08T14:40:20.184Z",
       "bytes": 36824
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|עֵצָה": {
+      "text": "עֵצָה",
+      "file": "aa354a39c32b925072b56333.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-13T11:16:56.749Z",
+      "bytes": 26793
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|יוֹדֵעַ": {
+      "text": "יוֹדֵעַ",
+      "file": "7bc2b7a4b2203a563ac5a229.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-13T11:16:58.924Z",
+      "bytes": 20106
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|כְּדַאי": {
+      "text": "כְּדַאי",
+      "file": "245a1be29288a5dd9c114d00.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-13T11:17:00.843Z",
+      "bytes": 20106
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|טֶבַע": {
+      "text": "טֶבַע",
+      "file": "fddcb2e3688567e36a25ec42.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-13T11:17:02.697Z",
+      "bytes": 18852
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|סֶרֶט": {
+      "text": "סֶרֶט",
+      "file": "b83e037058633b089a09ab3f.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-13T11:17:04.778Z",
+      "bytes": 29301
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|מְיוּחָד": {
+      "text": "מְיוּחָד",
+      "file": "83b350f8858aedd3f40d445c.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-13T11:17:06.677Z",
+      "bytes": 26793
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|חָשַׁבְתִּי": {
+      "text": "חָשַׁבְתִּי",
+      "file": "c27af78022df8fb8018fa583.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-13T11:17:08.662Z",
+      "bytes": 11328
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|מַמְלִיץ": {
+      "text": "מַמְלִיץ",
+      "file": "fcceccda3afd5a4eea9eb45e.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-13T11:17:11.735Z",
+      "bytes": 11328
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|אַחֲרֵי": {
+      "text": "אַחֲרֵי",
+      "file": "f37d0ca16286cc4e93dea492.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-13T11:17:13.887Z",
+      "bytes": 39332
+    },
+    "6WRlPmU1fqPwYbSxeP16|eleven_v3|רַעְיוֹן": {
+      "text": "רַעְיוֹן",
+      "file": "1828c011c5e8e563ce974431.mp3",
+      "voiceId": "6WRlPmU1fqPwYbSxeP16",
+      "model": "eleven_v3",
+      "createdAt": "2026-10-13T11:17:18.241Z",
+      "bytes": 23031
     }
   }
 }

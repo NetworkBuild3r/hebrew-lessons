@@ -1,0 +1,229 @@
+{
+  "id": "type-d-ledaber-workshop",
+  "title": "לְדַבֵּר — to speak",
+  "subtitle": "Verb workshop with future tense",
+  "level": "basic",
+  "visibility": "everyone",
+  "recipe": "verb-workshop",
+  "buildsOn": [],
+  "newWords": [],
+  "recycles": [],
+  "blocks": [
+    {
+      "id": "rule",
+      "type": "explainer",
+      "title": "Future tense",
+      "sections": [
+        {
+          "id": "s1",
+          "heading": "One root, nine persons",
+          "paragraphs": [
+            "The verb לְדַבֵּר uses the same nine person slots as past tense. Future forms are draft until a person verifies them."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "present",
+      "type": "conjugation-table",
+      "lemmaKey": "לדבר",
+      "tense": "present",
+      "mode": "study",
+      "cells": [
+        {
+          "cell": "ms",
+          "formKey": "מדבר"
+        },
+        {
+          "cell": "fs",
+          "formKey": "מדברת"
+        },
+        {
+          "cell": "mp",
+          "formKey": "מדברים"
+        },
+        {
+          "cell": "fp",
+          "formKey": "מדברות"
+        }
+      ],
+      "sentences": [
+        {
+          "id": "s1",
+          "he": "אֲנִי מְדַבֵּר עִם חָבֵר.",
+          "en": "I speak with a friend."
+        }
+      ],
+      "questions": [
+        {
+          "id": "q1",
+          "he": "מָה אַתָּה מְדַבֵּר?",
+          "en": "What do you speak about?"
+        }
+      ]
+    },
+    {
+      "id": "past",
+      "type": "conjugation-table",
+      "lemmaKey": "לדבר",
+      "tense": "past",
+      "mode": "study",
+      "cells": [
+        {
+          "cell": "1s",
+          "formKey": "דברתי"
+        },
+        {
+          "cell": "2ms",
+          "formKey": "דברת"
+        },
+        {
+          "cell": "2fs",
+          "formKey": "דברת-2fs"
+        },
+        {
+          "cell": "3ms",
+          "formKey": "דבר"
+        },
+        {
+          "cell": "3fs",
+          "formKey": "דברה"
+        },
+        {
+          "cell": "1p",
+          "formKey": "דברנו"
+        },
+        {
+          "cell": "2mp",
+          "formKey": "דברתם"
+        },
+        {
+          "cell": "2fp",
+          "formKey": "דברתן"
+        },
+        {
+          "cell": "3p",
+          "formKey": "דברו"
+        }
+      ],
+      "sentences": [
+        {
+          "id": "s1",
+          "he": "אֲתָמוֹל דִּבַּרְתִּי עִמּוֹ.",
+          "en": "Yesterday I spoke with him."
+        }
+      ],
+      "questions": [
+        {
+          "id": "q1",
+          "he": "מָתַי דִּבַּרְתָּ?",
+          "en": "When did you speak?"
+        }
+      ]
+    },
+    {
+      "id": "future",
+      "type": "conjugation-table",
+      "lemmaKey": "לדבר",
+      "tense": "future",
+      "mode": "study",
+      "cells": [
+        {
+          "cell": "1s",
+          "formKey": "אדבר"
+        },
+        {
+          "cell": "2ms",
+          "formKey": "תדבר"
+        },
+        {
+          "cell": "2fs",
+          "formKey": "תדברי"
+        },
+        {
+          "cell": "3ms",
+          "formKey": "ידבר"
+        },
+        {
+          "cell": "3fs",
+          "formKey": "תדבר-3fs"
+        },
+        {
+          "cell": "1p",
+          "formKey": "נדבר"
+        },
+        {
+          "cell": "2mp",
+          "formKey": "תדברו"
+        },
+        {
+          "cell": "2fp",
+          "formKey": "תדברנה"
+        },
+        {
+          "cell": "3p",
+          "formKey": "ידברו"
+        }
+      ],
+      "sentences": [
+        {
+          "id": "s1",
+          "he": "מָחָר אֲנִי אֲדַבֵּר עִמּוֹ.",
+          "en": "Tomorrow I will speak with him."
+        }
+      ],
+      "questions": [
+        {
+          "id": "q1",
+          "he": "מָתַי תְּדַבְּרִי?",
+          "en": "When will you (f.) speak?"
+        }
+      ]
+    },
+    {
+      "id": "drill",
+      "type": "conjugation-table",
+      "lemmaKey": "לדבר",
+      "tense": "future",
+      "mode": "drill",
+      "cells": [
+        {
+          "cell": "1s",
+          "formKey": "אדבר"
+        },
+        {
+          "cell": "2ms",
+          "formKey": "תדבר"
+        },
+        {
+          "cell": "2fs",
+          "formKey": "תדברי"
+        },
+        {
+          "cell": "3ms",
+          "formKey": "ידבר"
+        },
+        {
+          "cell": "3fs",
+          "formKey": "תדבר-3fs"
+        },
+        {
+          "cell": "1p",
+          "formKey": "נדבר"
+        },
+        {
+          "cell": "2mp",
+          "formKey": "תדברו"
+        },
+        {
+          "cell": "2fp",
+          "formKey": "תדברנה"
+        },
+        {
+          "cell": "3p",
+          "formKey": "ידברו"
+        }
+      ]
+    }
+  ]
+}

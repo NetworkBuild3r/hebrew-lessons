@@ -13,7 +13,17 @@ function testContext(name) {
     return makeContext({ channel: 'system', name: name || 'test', tool: 'test' });
 }
 
-const WRITES = ['replacePart', 'insertBlock', 'moveBlock', 'removeBlock', 'setField', 'assignPlan'];
+const WRITES = [
+    'replacePart',
+    'insertBlock',
+    'moveBlock',
+    'removeBlock',
+    'insertLesson',
+    'moveLesson',
+    'removeLesson',
+    'setField',
+    'assignPlan'
+];
 
 /**
  * A copy of the plan operations whose writes get ctx as the last argument.

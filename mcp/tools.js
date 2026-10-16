@@ -23,6 +23,8 @@ const images = require('../server/media/openai-images');
 const audit = require('../server/db/repos/audit');
 const profile = require('../server/learner/profile');
 const coverage = require('../server/learner/coverage');
+const glossDraft = require('../server/dictionary/suggest-glosses');
+const wordAudio = require('../server/word-audio');
 const library = require('../server/learner/library');
 const lexicon = require('../server/lexicon/service');
 const conceptsRepo = require('../server/db/repos/concepts');
@@ -625,15 +627,7 @@ function registerLearnerTools(server) {
         ].join(' '),
         annotations: { readOnlyHint: true }
     }, async () => callLearner(() => {
-        const concepts = conceptsRepo.list().map((row) => ({
-            key: row.key,
-            family: row.family,
-            label_en: row.label_en,
-            label_he: row.label_he,
-            colour: row.colour,
-            sort: row.sort
-        }));
-        return text({ concepts });
+        return text({ concepts: lexicon.listGrammarConcepts() });
     }));
 
     register(server, 'list_lexicon', {
@@ -896,8 +890,8 @@ function registerPlanBuilderTools(server) {
     register(server, 'create_plan', {
         title: 'Create a lesson plan',
         description: [
-            'Make a new draft plan at revision 1 from id, title, and an optional recipe.',
-            'id is a lowercase slug such as cafe-order (letters, digits, single hyphens, at most 64). An id that exists returns already_exists and nothing is changed or overwritten.',
+            'Make a new draft plan at revision 1 from a title and an optional recipe. Omit id: the server assigns a UUID.',
+            'An id you pass must already be a lowercase slug. An id that exists returns already_exists and nothing is changed or overwritten.',
             'recipe is one of topic-conversation, review-worksheet, verse-reading, verb-workshop, letters-and-vowels, guide. It sets the lesson recipe and nothing else.',
             'unitId and lessonId are optional slugs for the one unit and one lesson made for you (default unit-1 and lesson-1). A part id cannot be renamed later, so pick them now.',
             'The new plan is shared, its lesson is hidden, and it has one placeholder block (id placeholder, type fluency-pass). It holds no Hebrew.',
@@ -905,7 +899,7 @@ function registerPlanBuilderTools(server) {
             'A draft is invisible to learners until publish_plan. Requires MCP_AUTH_TOKEN.'
         ].join(' '),
         inputSchema: {
-            id: PLAN_ID_SCHEMA.describe('New plan id: a lowercase slug.'),
+            id: PLAN_ID_SCHEMA.optional().describe('Omit this. The server assigns a UUID. Pass one only to retry an id you already chose.'),
             title: z.string().min(1).max(4000).describe('Plan title as plain text, no markup.'),
             recipe: z.string().max(64).optional().describe('Optional lesson recipe name.'),
             unitId: PLAN_ID_SCHEMA.optional().describe('Optional id of the first unit. Default unit-1.'),
@@ -1302,6 +1296,58 @@ function registerLessonTools(server) {
         mcpContext('read_part', extra)
     )));
 
+    register(server, 'suggest_glosses', {
+        title: 'Draft word meanings for a graded story',
+        description: 'Draft an English meaning for every word in a graded-story block that has no gloss yet. Pass the plan id and the id path of the block, for example units/unit-1/lessons/cafe-order/blocks/story. Requires MCP_AUTH_TOKEN. The meanings come from the app dictionary and are a first draft: some are the base word of a form (form says which), some are a different sense from the one the story uses, and unmatched lists words with no entry. Read each one against the story, fix it, then save the whole map with set_field on the block (field glosses, at most 80 words). A reader sees these meanings when they tap a word, so a wrong one teaches the wrong thing. Does not change the plan.',
+        inputSchema: {
+            id: z.string().describe('Plan id.'),
+            path: z.string().describe('Id path of a graded-story block.')
+        },
+        annotations: { readOnlyHint: true }
+    }, async (args, extra) => callPlanTool(() => {
+        const read = planOps.readPart(
+            planStore,
+            args && args.id,
+            planInput(args, []),
+            mcpContext('suggest_glosses', extra)
+        );
+        if (!read || read.error) return read;
+        const block = read.part;
+        if (!block || block.type !== 'graded-story') return { error: 'not_a_story', path: args.path };
+        return Object.assign({ revision: read.revision }, glossDraft.suggestForBlock(block));
+    }));
+
+    register(server, 'make_word_audio', {
+        title: 'Make sound for Hebrew words',
+        description: 'Make (or reuse) the spoken clip for up to 20 Hebrew words and return each word\'s audioPath. Requires MCP_AUTH_TOKEN. Pass the words as written in the plan, with vowel points: the clip is for that exact spelling, and points are what make the voice say it right. A word that already has a clip is reused and costs nothing; a new one is made once with ElevenLabs and kept for every lesson, never overwritten. This does not change a plan: save each audioPath with set_field on the word entry (field audioPath). Words with no clip and an error (not_configured, bad_word, failed) are listed in the same order.',
+        inputSchema: {
+            words: z.array(z.string()).min(1).max(20).describe('Hebrew words, with vowel points, as in the plan.')
+        },
+        annotations: { idempotentHint: true }
+    }, async (args) => {
+        try {
+            requireMcpAuthToken();
+            const words = Array.isArray(args && args.words) ? args.words : [];
+            const clips = [];
+            for (const word of words) {
+                try {
+                    let clip = wordAudio.findWordClip(word);
+                    if (!clip) clip = await wordAudio.ensureWordClip(word);
+                    clips.push({ word: clip.word, audioPath: clip.audioPath, created: clip.created });
+                } catch (err) {
+                    const code = err && err.code;
+                    clips.push({
+                        word: typeof word === 'string' ? word : '',
+                        error: code === 'bad_word' ? 'bad_word' : (code === 'no_key' ? 'not_configured' : 'failed')
+                    });
+                }
+            }
+            return planToolResult({ clips });
+        } catch (err) {
+            return failure(err);
+        }
+    });
+
     register(server, 'replace_part', {
         title: 'Replace one part of a lesson plan',
         description: 'Replace the part at an id path. Pass path, value, and expectedRevision. Requires MCP_AUTH_TOKEN. The value\'s id must equal the id in the path (id_mismatch otherwise), and audience and assigneeId cannot change here (assign_required; use assign_plan). A stale expectedRevision returns revision_conflict and the stored revision, and writes nothing. The result lists overwrote when you replaced a field a person last wrote; restore_plan_revision puts it back.',
@@ -1364,6 +1410,55 @@ function registerLessonTools(server) {
         args && args.id,
         planInput(args, []),
         mcpContext('remove_block', extra)
+    )));
+
+    // INIT-010/SPEC-002: lesson stack. A plan has no lesson maximum.
+    register(server, 'insert_lesson', {
+        title: 'Insert a lesson into a plan',
+        description: 'Insert a lesson into a unit at index. Omit index to append. Pass path (the unit), lesson, and expectedRevision. A plan has no lesson maximum: one lesson or a hundred is allowed. Requires MCP_AUTH_TOKEN. A stale expectedRevision returns revision_conflict and the stored revision, and writes nothing.',
+        inputSchema: {
+            id: z.string().describe('Plan id.'),
+            path: z.string().describe('Id path of the unit, such as units/unit-1.'),
+            index: z.number().int().optional().describe('Destination index. Omit to append.'),
+            lesson: z.any().describe('Lesson object to insert.'),
+            expectedRevision: z.number().int().describe('Revision from the last read. Must match the stored working copy.')
+        }
+    }, async (args, extra) => callPlanTool(() => planOps.insertLesson(
+        planStore,
+        args && args.id,
+        planInput(args, ['index', 'lesson']),
+        mcpContext('insert_lesson', extra)
+    )));
+
+    register(server, 'move_lesson', {
+        title: 'Move a lesson in a plan',
+        description: 'Move the lesson at path to index within its unit. Pass expectedRevision. A plan has no lesson maximum. Requires MCP_AUTH_TOKEN. A stale expectedRevision returns revision_conflict and the stored revision.',
+        inputSchema: {
+            id: z.string().describe('Plan id.'),
+            path: z.string().describe('Id path of the lesson.'),
+            index: z.number().int().describe('Destination index within the unit.'),
+            expectedRevision: z.number().int().describe('Revision from the last read. Must match the stored working copy.')
+        }
+    }, async (args, extra) => callPlanTool(() => planOps.moveLesson(
+        planStore,
+        args && args.id,
+        planInput(args, ['index']),
+        mcpContext('move_lesson', extra)
+    )));
+
+    register(server, 'remove_lesson', {
+        title: 'Remove a lesson from a plan',
+        description: 'Remove the lesson at path. Pass expectedRevision. Refused when it is the last lesson of its unit: a plan keeps at least one lesson. A plan has no lesson maximum. Requires MCP_AUTH_TOKEN. A stale expectedRevision returns revision_conflict and the stored revision.',
+        inputSchema: {
+            id: z.string().describe('Plan id.'),
+            path: z.string().describe('Id path of the lesson to remove.'),
+            expectedRevision: z.number().int().describe('Revision from the last read. Must match the stored working copy.')
+        }
+    }, async (args, extra) => callPlanTool(() => planOps.removeLesson(
+        planStore,
+        args && args.id,
+        planInput(args, []),
+        mcpContext('remove_lesson', extra)
     )));
 
     register(server, 'set_field', {

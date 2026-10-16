@@ -9,12 +9,82 @@
             .replace(/"/g, '&quot;');
     };
 
+    /** Interface language. Lesson Hebrew and its English meanings are not this. */
+    utils.UI_LANG_KEY = 'hebrew-ui-lang';
+
+    utils.readUiLang = function () {
+        try {
+            const stored = root.localStorage && root.localStorage.getItem(utils.UI_LANG_KEY);
+            if (stored === 'he' || stored === 'en') return stored;
+        } catch (err) { /* private mode, or no storage */ }
+        return 'en';
+    };
+
+    /**
+     * Show one interface language. Chrome roots (`.ui-chrome`) take that direction.
+     * The document stays `dir="rtl"` so a lesson does not flip.
+     * @param {string} lang `en` or `he`
+     * @returns {'en'|'he'}
+     */
+    utils.applyUiLang = function (lang) {
+        const next = lang === 'he' ? 'he' : 'en';
+        const doc = root.document;
+        const el = doc && doc.documentElement;
+        if (!el || typeof el.setAttribute !== 'function') return next;
+        el.setAttribute('data-ui-lang', next);
+        if (typeof doc.querySelectorAll !== 'function') return next;
+        const chromeDir = next === 'he' ? 'rtl' : 'ltr';
+        const chrome = doc.querySelectorAll('.ui-chrome');
+        for (let i = 0; i < chrome.length; i += 1) {
+            if (typeof chrome[i].setAttribute === 'function') chrome[i].setAttribute('dir', chromeDir);
+        }
+        const labelled = doc.querySelectorAll('[data-ui-aria-en]');
+        for (let j = 0; j < labelled.length; j += 1) {
+            const node = labelled[j];
+            const text = next === 'he' ? node.getAttribute('data-ui-aria-he') : node.getAttribute('data-ui-aria-en');
+            if (text) node.setAttribute('aria-label', text);
+        }
+        const choices = doc.querySelectorAll('[data-ui-text-en]');
+        for (let c = 0; c < choices.length; c += 1) {
+            const node = choices[c];
+            const text = next === 'he' ? node.getAttribute('data-ui-text-he') : node.getAttribute('data-ui-text-en');
+            if (text != null) node.textContent = text;
+        }
+        const buttons = doc.querySelectorAll('[data-ui-lang-set]');
+        for (let k = 0; k < buttons.length; k += 1) {
+            const btn = buttons[k];
+            const on = btn.getAttribute('data-ui-lang-set') === next;
+            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+            if (btn.classList && typeof btn.classList.toggle === 'function') btn.classList.toggle('is-on', on);
+        }
+        const pageHe = el.getAttribute('data-page-he');
+        const pageEn = el.getAttribute('data-page-en');
+        if (pageHe || pageEn) {
+            const site = next === 'he' ? 'דרך עברית' : 'Hebrew Way';
+            doc.title = (next === 'he' ? (pageHe || pageEn) : (pageEn || pageHe)) + ' · ' + site;
+        }
+        return next;
+    };
+
+    utils.setUiLang = function (lang) {
+        const next = lang === 'he' ? 'he' : 'en';
+        try {
+            if (root.localStorage) root.localStorage.setItem(utils.UI_LANG_KEY, next);
+        } catch (err) { /* ignore */ }
+        return utils.applyUiLang(next);
+    };
+
+    /**
+     * Interface label in both languages. CSS shows one.
+     * A string that exists in only one language stays visible in both modes.
+     */
     utils.bi = function (he, en) {
         const h = utils.escapeHtml(he || '');
         const e = utils.escapeHtml(en || '');
         if (!e) return h;
-        if (!h) return '<span class="en" dir="ltr">' + e + '</span>';
-        return h + ' <span class="en" dir="ltr">(' + e + ')</span>';
+        if (!h) return '<span class="ui-en" lang="en" dir="ltr">' + e + '</span>';
+        return '<span class="ui-pair"><span class="ui-he" lang="he">' + h + '</span>'
+            + '<span class="ui-en" lang="en" dir="ltr">' + e + '</span></span>';
     };
 
     utils.sid = function (id) { return String(id); };
@@ -296,4 +366,7 @@
     };
 
     root.HebrewUtils = utils;
+    if (root.document && root.document.documentElement) {
+        utils.applyUiLang(utils.readUiLang());
+    }
 })(typeof window !== 'undefined' ? window : globalThis);

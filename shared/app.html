@@ -12,6 +12,12 @@
 <html lang="he" dir="rtl" translate="no">
 <head>
     <meta charset="UTF-8">
+    <script>
+        try {
+            var uiLang = localStorage.getItem('hebrew-ui-lang');
+            document.documentElement.setAttribute('data-ui-lang', uiLang === 'he' ? 'he' : 'en');
+        } catch (e) { /* English until a script can read the choice */ }
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="google" content="notranslate">
     <meta name="theme-color" content="#1d4ed8">
@@ -34,6 +40,7 @@
     <script src="/shared/player/utils.js"></script>
     <script src="/shared/player/review.js"></script>
     <script src="/shared/api.js"></script>
+    <script src="/shared/word-lookup.js"></script>
     <script src="/shared/player/sync.js"></script>
     <script src="/shared/app-shell.js"></script>
     <script src="/worksheets/catalog.js"></script>

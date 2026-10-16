@@ -3,7 +3,7 @@
  * in server/plans/ops.js or publish.js. These handlers do not edit JSON.
  * Mutating CSRF and Origin checks run in server/web.js before dispatch,
  * the same gate as every other /api/ write.
- * Provenance: INIT-004/SPEC-004
+ * Provenance: INIT-004/SPEC-004; lesson stack routes: INIT-010/SPEC-002
  */
 'use strict';
 
@@ -32,6 +32,9 @@ const WRITE_ROUTES = Object.freeze([
     { method: 'POST', path: '/api/plans/:id/blocks', fn: 'insertBlock' },
     { method: 'POST', path: '/api/plans/:id/blocks/move', fn: 'moveBlock' },
     { method: 'DELETE', path: '/api/plans/:id/parts', fn: 'removeBlock' },
+    { method: 'POST', path: '/api/plans/:id/lessons', fn: 'insertLesson' },
+    { method: 'POST', path: '/api/plans/:id/lessons/move', fn: 'moveLesson' },
+    { method: 'DELETE', path: '/api/plans/:id/lessons', fn: 'removeLesson' },
     { method: 'PATCH', path: '/api/plans/:id/fields', fn: 'setField' },
     { method: 'POST', path: '/api/plans/:id/publish', fn: 'publishPlan' },
     // INIT-008/SPEC-010: the three new writes. Every other new route is a read.
@@ -472,10 +475,11 @@ function registerBuilderRoutes(router) {
     });
 
     addAdmin(router, 'POST', '/api/plans', async (req, res, ctx) => {
-        const payload = await readBodyKeys(req, res, ['id', 'title'], ['recipe', 'unitId', 'lessonId']);
+        const payload = await readBodyKeys(req, res, ['title'], ['id', 'recipe', 'unitId', 'lessonId']);
         if (!payload) return;
         if (!stringsOrAbsent(payload, ['id', 'title', 'recipe', 'unitId', 'lessonId'])) return sendBadRequest(res);
-        const input = { id: payload.id, title: payload.title };
+        const input = { title: payload.title };
+        if (payload.id !== undefined) input.id = payload.id;
         for (const key of ['recipe', 'unitId', 'lessonId']) {
             if (payload[key] !== undefined) input[key] = payload[key];
         }
@@ -664,6 +668,63 @@ function register(router) {
             path: payload.path,
             expectedRevision: payload.expectedRevision
         }, adminContext(ctx, 'remove_block')));
+    });
+
+    // INIT-010/SPEC-002: lesson stack (same apply/mutate path as blocks).
+    addAdmin(router, 'POST', '/api/plans/:id/lessons', async (req, res, ctx) => {
+        const payload = await readOperation(
+            req,
+            res,
+            ['path', 'lesson', 'expectedRevision'],
+            ['index']
+        );
+        if (!payload) return;
+        if (typeof payload.path !== 'string') {
+            security.sendJsonError(res, 400, 'Invalid request', 'bad_request');
+            return;
+        }
+        if (!payload.lesson || typeof payload.lesson !== 'object' || Array.isArray(payload.lesson)) {
+            security.sendJsonError(res, 400, 'Invalid request', 'bad_request');
+            return;
+        }
+        if (payload.index !== undefined && !Number.isInteger(payload.index)) {
+            security.sendJsonError(res, 400, 'Invalid request', 'bad_request');
+            return;
+        }
+        const input = {
+            path: payload.path,
+            lesson: payload.lesson,
+            expectedRevision: payload.expectedRevision
+        };
+        if (payload.index !== undefined) input.index = payload.index;
+        sendMapped(res, ops.insertLesson(store, ctx.params.id, input, adminContext(ctx, 'insert_lesson')));
+    });
+
+    addAdmin(router, 'POST', '/api/plans/:id/lessons/move', async (req, res, ctx) => {
+        const payload = await readOperation(req, res, ['path', 'index', 'expectedRevision']);
+        if (!payload) return;
+        if (typeof payload.path !== 'string' || !Number.isInteger(payload.index)) {
+            security.sendJsonError(res, 400, 'Invalid request', 'bad_request');
+            return;
+        }
+        sendMapped(res, ops.moveLesson(store, ctx.params.id, {
+            path: payload.path,
+            index: payload.index,
+            expectedRevision: payload.expectedRevision
+        }, adminContext(ctx, 'move_lesson')));
+    });
+
+    addAdmin(router, 'DELETE', '/api/plans/:id/lessons', async (req, res, ctx) => {
+        const payload = await readOperation(req, res, ['path', 'expectedRevision']);
+        if (!payload) return;
+        if (typeof payload.path !== 'string') {
+            security.sendJsonError(res, 400, 'Invalid request', 'bad_request');
+            return;
+        }
+        sendMapped(res, ops.removeLesson(store, ctx.params.id, {
+            path: payload.path,
+            expectedRevision: payload.expectedRevision
+        }, adminContext(ctx, 'remove_lesson')));
     });
 
     addAdmin(router, 'PATCH', '/api/plans/:id/fields', async (req, res, ctx) => {

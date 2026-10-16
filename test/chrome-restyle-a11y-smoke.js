@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Chrome smoke: accessibility gate for the INIT-005 restyle (INIT-005/SPEC-013).
  *
  * Drives headless Chrome over CDP (test/helpers/chrome-cdp.js) against the signed-in test

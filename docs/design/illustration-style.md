@@ -1,4 +1,4 @@
-﻿# Illustration style: per-word pictures
+# Illustration style: per-word pictures
 
 **Status:** draft for operator review Â· **Provenance:** `INIT-005/SPEC-006` Â· **Requirement:** REQ-011
 

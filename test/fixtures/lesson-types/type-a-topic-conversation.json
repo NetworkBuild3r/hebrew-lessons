@@ -1,0 +1,65 @@
+{
+  "id": "type-a-weekday-morning",
+  "title": "בוקר יום חול — Weekday morning",
+  "subtitle": "Original topic conversation sample",
+  "level": "basic",
+  "visibility": "everyone",
+  "recipe": "topic-conversation",
+  "buildsOn": [],
+  "newWords": ["בֹּקֶר", "שֶׁמֶשׁ", "מִטְבָּח", "קָפֶה", "לֶחֶם", "עֲבוֹדָה"],
+  "recycles": [],
+  "blocks": [
+    {
+      "id": "review",
+      "type": "spaced-review-checkpoint",
+      "wordKeys": ["בוקר", "קפה"],
+      "fromLessons": ["earlier-morning"]
+    },
+    {
+      "id": "intro",
+      "type": "introduction",
+      "words": [
+        { "id": "w1", "word": "בֹּקֶר", "meaning": "morning", "translit": "boker", "group": 1, "sentence": "בֹּקֶר טוֹב." },
+        { "id": "w2", "word": "שֶׁמֶשׁ", "meaning": "sun", "translit": "shemesh", "group": 1, "sentence": "הַשֶּׁמֶשׁ זוֹרַחַת." },
+        { "id": "w3", "word": "קָם", "meaning": "gets up", "translit": "kam", "group": 1, "sentence": "אֲנִי קָם מֵאֵיל." },
+        { "id": "w4", "word": "מִשְׁחָה", "meaning": "shower", "translit": "mishcha", "group": 2, "sentence": "אַחַר הַמִּשְׁחָה אֲנִי לוֹבֵשׁ." },
+        { "id": "w5", "word": "אוֹר", "meaning": "light", "translit": "or", "group": 2, "sentence": "יֵשׁ אוֹר בַּחֶדֶר." },
+        { "id": "w6", "word": "מִטְבָּח", "meaning": "kitchen", "translit": "mitbach", "group": 2, "sentence": "אֲנִי בַּמִטְבָּח." },
+        { "id": "w7", "word": "קָפֶה", "meaning": "coffee", "translit": "kafe", "group": 3, "sentence": "אֲנִי שׁוֹתֶה קָפֶה." },
+        { "id": "w8", "word": "לֶחֶם", "meaning": "bread", "translit": "lechem", "group": 3, "sentence": "אֲנִי אוֹכֵל לֶחֶם." },
+        { "id": "w9", "word": "עֲבוֹדָה", "meaning": "work", "translit": "avoda", "group": 3, "sentence": "אַחַר הַבֹּקֶר יֵשׁ עֲבוֹדָה." }
+      ],
+      "pattern": {
+        "heading": "Sentence frames",
+        "rules": [
+          { "title": "I … in the morning", "english": "Use אֲנִי + present verb.", "example": "אֲנִי שׁוֹתֶה קָפֶה בַּבֹּקֶר." }
+        ]
+      }
+    },
+    {
+      "id": "dialogue",
+      "type": "short-dialogue",
+      "source": "authored",
+      "lines": [
+        { "id": "l1", "speaker": "learner", "pointed": "אַתָּה שׁוֹתֶה קָפֶה אוֹ תֵּה?" },
+        { "id": "l2", "speaker": "learner", "pointed": "אֲנִי שׁוֹתֶה קָפֶה בַּבֹּקֶר." }
+      ]
+    },
+    {
+      "id": "about-you",
+      "type": "personal-question",
+      "prompts": [
+        { "id": "p1", "he": "מָה אַתָּה עוֹשֶׂה בַּבֹּקֶר?", "en": "What do you do in the morning?" }
+      ],
+      "answer": "either"
+    },
+    {
+      "id": "write",
+      "type": "assignment",
+      "prompt": "כתבו שישה משפטים על הבוקר שלכם. Write six sentences about your weekday morning.",
+      "minSentences": 6,
+      "useWords": ["בֹּקֶר", "קָפֶה", "מִטְבָּח"],
+      "homework": ["Read your sentences aloud once before the next lesson."]
+    }
+  ]
+}

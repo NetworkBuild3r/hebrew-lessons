@@ -26,10 +26,11 @@
  *   editor.focusKey() / editor.restoreFocus(key)
  *   editor.destroy()                             removes the delegated listeners
  *
- * Pure helpers: newBlock, findUncoveredSchemaNodes, splitPointer, createTools, langAttrs.
+ * Pure helpers: newBlock, findUncoveredSchemaNodes, splitPointer, createTools, langAttrs,
+ * stackLessons, earlierLessonsInPlan.
  * Plain browser script, no build step; every string from the server is set with
  * textContent or .value. Node tests load it with require().
- * Provenance: INIT-008/SPEC-011, INIT-008/SPEC-012
+ * Provenance: INIT-008/SPEC-011, INIT-008/SPEC-012, INIT-009/SPEC-003, INIT-012/SPEC-007
  */
 (function (root, factory) {
     'use strict';
@@ -51,11 +52,61 @@
     var PLAN_READ_ONLY = ['schemaVersion', 'id', 'revision', 'status', 'audience', 'assigneeId'];
     var SUMMARY_PROPS = ['word', 'text', 'pointed', 'he', 'question', 'heading', 'title', 'name'];
     var DEFINITIONS = '#/definitions/';
+    var SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
     var currentTools = null;
 
     function isObject(value) {
         return value !== null && typeof value === 'object' && !Array.isArray(value);
+    }
+
+    /**
+     * Every lesson in the plan, in teaching order (units then lessons).
+     * @param {object} plan
+     * @returns {{ path: string, id: string, title: string, unitId: string }[]}
+     */
+    function stackLessons(plan) {
+        var out = [];
+        var units = plan && Array.isArray(plan.units) ? plan.units : [];
+        var u;
+        var i;
+        for (u = 0; u < units.length; u++) {
+            var unit = units[u];
+            if (!unit || typeof unit.id !== 'string' || !SLUG.test(unit.id)) continue;
+            var lessons = Array.isArray(unit.lessons) ? unit.lessons : [];
+            for (i = 0; i < lessons.length; i++) {
+                var lesson = lessons[i];
+                if (!lesson || typeof lesson.id !== 'string' || !SLUG.test(lesson.id)) continue;
+                out.push({
+                    path: 'units/' + unit.id + '/lessons/' + lesson.id,
+                    id: lesson.id,
+                    title: typeof lesson.title === 'string' && lesson.title ? lesson.title : lesson.id,
+                    unitId: unit.id
+                });
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Lessons earlier in the same plan stack than `lessonPath`.
+     * @param {object} plan
+     * @param {string} lessonPath
+     * @returns {{ path: string, id: string, title: string, unitId: string }[]}
+     */
+    function earlierLessonsInPlan(plan, lessonPath) {
+        var stack = stackLessons(plan);
+        var path = String(lessonPath || '');
+        var idx = -1;
+        var i;
+        for (i = 0; i < stack.length; i++) {
+            if (stack[i].path === path) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx < 0) return [];
+        return stack.slice(0, idx);
     }
 
     function clone(value) {
@@ -205,6 +256,65 @@
      * @param {object} [schema] A parsed schema; the one last loaded when omitted.
      * @returns {object|null}
      */
+    var EXERCISE_KIND_ITEM = {
+        choose: 'exerciseChooseItem',
+        'true-false': 'exerciseTrueFalseItem',
+        unscramble: 'exerciseUnscrambleItem',
+        translate: 'exerciseTranslateItem',
+        dictation: 'exerciseDictationItem'
+    };
+
+    function exerciseItemDefForKind(kind) {
+        return EXERCISE_KIND_ITEM[kind] || EXERCISE_KIND_ITEM.choose;
+    }
+
+    function freshExerciseItem(kind, tools, id) {
+        var def = exerciseItemDefForKind(kind);
+        var schema = tools.defSchema(def);
+        var item = makeSkeleton(tools)(schema, def);
+        if (!isObject(item)) item = {};
+        item.id = typeof id === 'string' && id ? id : 'item-1';
+        if (kind === 'choose') {
+            item.choices = ['', ''];
+            item.answer = '';
+        } else if (kind === 'true-false') {
+            item.answer = true;
+        } else if (kind === 'unscramble') {
+            item.words = ['', '', ''];
+        }
+        return item;
+    }
+
+    function exerciseItemsTouched(items, kind) {
+        if (!Array.isArray(items) || !items.length) return false;
+        if (items.length > 1) return true;
+        var item = items[0];
+        if (!isObject(item)) return false;
+        var k = kind || 'choose';
+        if (k === 'choose') {
+            return !!(String(item.prompt || '').trim() || String(item.answer || '').trim()
+                || String(item.why || '').trim()
+                || (Array.isArray(item.choices) && item.choices.some(function (c) { return String(c || '').trim(); })));
+        }
+        if (k === 'true-false') {
+            return !!(String(item.statement || '').trim() || String(item.why || '').trim());
+        }
+        if (k === 'unscramble') {
+            return !!(String(item.english || '').trim()
+                || (Array.isArray(item.words) && item.words.some(function (w) { return String(w || '').trim(); }))
+                || (Array.isArray(item.alt) && item.alt.length));
+        }
+        if (k === 'translate') {
+            return !!(String(item.english || '').trim() || String(item.answer || '').trim()
+                || (Array.isArray(item.accept) && item.accept.some(function (a) { return String(a || '').trim(); })));
+        }
+        if (k === 'dictation') {
+            return !!(String(item.audioPath || '').trim() || String(item.answer || '').trim()
+                || (Array.isArray(item.accept) && item.accept.some(function (a) { return String(a || '').trim(); })));
+        }
+        return false;
+    }
+
     function newBlock(type, id, schema) {
         var tools = schema ? createTools(schema) : currentTools;
         if (!tools) return null;
@@ -213,6 +323,10 @@
         var block = makeSkeleton(tools)(tools.defSchema(def), def);
         if (!isObject(block)) return null;
         block.id = id;
+        if (type === 'exercise') {
+            if (!block.kind) block.kind = 'choose';
+            block.items = [freshExerciseItem(block.kind, tools, 'item-1')];
+        }
         return block;
     }
 
@@ -504,12 +618,76 @@
         function el(tag, className, text) {
             var node = doc.createElement(tag);
             if (className) node.className = className;
-            if (text !== undefined) node.textContent = text;
+            if (text !== undefined) {
+                var Ui = root.HebrewPlanUi;
+                if (Ui && typeof Ui.fill === 'function') Ui.fill(node, text);
+                else node.textContent = text;
+            }
             return node;
         }
 
-        function btn(label, className, attrs) {
-            var node = el('button', className || 'btn btn-ghost admin-row-btn', label);
+        function splitUiLabel(text) {
+            var Ui = root.HebrewPlanUi;
+            if (Ui && typeof Ui.splitUiLabel === 'function') return Ui.splitUiLabel(text);
+            var raw = String(text == null ? '' : text).replace(/\s+$/, '');
+            var close = raw.lastIndexOf(')');
+            if (close !== raw.length - 1 || close < 0) return null;
+            var open = raw.lastIndexOf(' (');
+            if (open < 0) return null;
+            var he = raw.slice(0, open);
+            var en = raw.slice(open + 2, close);
+            if (!he || !en) return null;
+            if (!/[\u0590-\u05FF]/.test(he) || !/[A-Za-z]/.test(en)) return null;
+            return { he: he, en: en, suffix: '' };
+        }
+
+        function readUiLang() {
+            try {
+                if (root.HebrewUtils && typeof root.HebrewUtils.readUiLang === 'function') {
+                    return root.HebrewUtils.readUiLang() === 'he' ? 'he' : 'en';
+                }
+            } catch (err) { /* ignore */ }
+            return 'en';
+        }
+
+        function uiLine(he, en) {
+            return readUiLang() === 'he' ? he : en;
+        }
+
+        function isTeacherActivityDef(def) {
+            return def === 'exerciseBlock' || def === 'assignmentBlock';
+        }
+
+        function hideTeacherBlockMeta(form, entry) {
+            if (entry.prop === 'id') {
+                if (form.kind === 'block' && isObject(form.node)) return true;
+                if (typeof form.path === 'string' && /\/(items|words|lines|questions|sections|examples|cells|sentences|paragraphs|support)\//.test(form.path)) {
+                    return true;
+                }
+            }
+            return form.kind === 'block' && isObject(form.node)
+                && (form.node.type === 'exercise' || form.node.type === 'assignment')
+                && entry.prop === 'type';
+        }
+
+        function btn(labelText, className, attrs, singleLang) {
+            var node = el('button', className || 'btn btn-ghost admin-row-btn');
+            var parts = splitUiLabel(labelText);
+            if (singleLang && parts) {
+                node.textContent = uiLine(parts.he, parts.en);
+                node.setAttribute('lang', readUiLang());
+            } else if (parts) {
+                node.className += ' ui-pair';
+                var h = el('span', 'ui-he', parts.he);
+                h.setAttribute('lang', 'he');
+                var e = el('span', 'ui-en', parts.en);
+                e.setAttribute('lang', 'en');
+                e.setAttribute('dir', 'ltr');
+                node.appendChild(h);
+                node.appendChild(e);
+            } else if (labelText) {
+                node.textContent = labelText;
+            }
             node.type = 'button';
             var name;
             for (name in attrs || {}) {
@@ -565,6 +743,7 @@
             skeleton: function (schemaNode, def) {
                 return skeleton ? skeleton(schemaNode, def) : null;
             },
+            tools: function () { return tools; },
             kindLabel: function (def) {
                 var hint = def && Hints.kinds[def];
                 return hint ? hint.label[0] + ' (' + hint.label[1] + ')' : (def || '');
@@ -579,6 +758,12 @@
                     }
                 }
                 return typeof item.id === 'string' ? item.id : '';
+            },
+            getPlan: function () {
+                return typeof options.getPlan === 'function' ? options.getPlan() : null;
+            },
+            earlierLessons: function (lessonPath) {
+                return earlierLessonsInPlan(ctx.getPlan(), lessonPath);
             },
             childInfo: function (parent, entry, value) {
                 return makeInfo(parent.refDef, entry, value, {
@@ -664,6 +849,15 @@
                 info.itemSchema = item.schema;
                 info.itemDef = item.def;
             }
+            if (ownerDef === 'exerciseBlock' && entry.prop === 'items' && extra && extra.blockNode) {
+                var kind = typeof extra.blockNode.kind === 'string' ? extra.blockNode.kind : 'choose';
+                var itemDefName = exerciseItemDefForKind(kind);
+                var itemSchema = tools.defSchema(itemDefName);
+                if (itemSchema) {
+                    info.itemDef = itemDefName;
+                    info.itemSchema = itemSchema;
+                }
+            }
             return info;
         }
 
@@ -683,20 +877,32 @@
             handle.el.setAttribute('data-plan-widget', widget.name);
             if (fopts && fopts.bare) return handle;
 
-            var group = ['string-list', 'object', 'object-list', 'bucket-list'].indexOf(widget.name) !== -1;
+            var group = ['string-list', 'object', 'object-list', 'bucket-list', 'exercise-items',
+                'assignment-use-words', 'assignment-homework', 'table-cells'].indexOf(widget.name) !== -1;
             var id = ctx.uid('plan-f');
             var row = el('div', 'plan-field');
             row.setAttribute('data-plan-row', info.prop);
             var parts = labelParts(info);
+            var teacherChrome = isTeacherActivityDef(info.def);
             var label = group ? el('span', 'plan-label') : el('label', 'plan-label');
-            var he = el('span', 'plan-label-he', parts[0]);
-            he.setAttribute('lang', 'he');
-            label.appendChild(he);
-            if (parts[1]) {
-                var en = el('span', 'plan-label-en', parts[1]);
+            if (teacherChrome) {
+                var one = el('span', 'plan-label-text', uiLine(parts[0], parts[1] || parts[0]));
+                one.setAttribute('lang', readUiLang());
+                if (readUiLang() === 'en' && parts[1]) one.setAttribute('dir', 'ltr');
+                label.appendChild(one);
+            } else if (parts[1]) {
+                label.className += ' ui-pair';
+                var he = el('span', 'plan-label-he ui-he', parts[0]);
+                he.setAttribute('lang', 'he');
+                label.appendChild(he);
+                var en = el('span', 'plan-label-en ui-en', parts[1]);
                 en.setAttribute('lang', 'en');
                 en.setAttribute('dir', 'ltr');
                 label.appendChild(en);
+            } else {
+                var solo = el('span', 'plan-label-he', parts[0]);
+                solo.setAttribute('lang', 'he');
+                label.appendChild(solo);
             }
             var describedBy = [];
             if (group) {
@@ -710,15 +916,20 @@
             row.appendChild(handle.el);
             handle.after.forEach(function (node) { row.appendChild(node); });
             if (info.hint && info.hint.help) {
-                var help = el('p', 'plan-help');
+                var help = el('p', 'plan-help' + (teacherChrome ? '' : ' ui-pair'));
                 help.setAttribute('id', id + '-h');
-                var hHe = el('span', 'plan-help-he', info.hint.help[0]);
-                hHe.setAttribute('lang', 'he');
-                var hEn = el('span', 'plan-help-en', info.hint.help[1]);
-                hEn.setAttribute('lang', 'en');
-                hEn.setAttribute('dir', 'ltr');
-                help.appendChild(hHe);
-                help.appendChild(hEn);
+                if (teacherChrome) {
+                    help.textContent = uiLine(info.hint.help[0], info.hint.help[1]);
+                    help.setAttribute('lang', readUiLang());
+                } else {
+                    var hHe = el('span', 'plan-help-he ui-he', info.hint.help[0]);
+                    hHe.setAttribute('lang', 'he');
+                    var hEn = el('span', 'plan-help-en ui-en', info.hint.help[1]);
+                    hEn.setAttribute('lang', 'en');
+                    hEn.setAttribute('dir', 'ltr');
+                    help.appendChild(hHe);
+                    help.appendChild(hEn);
+                }
                 row.appendChild(help);
                 describedBy.push(id + '-h');
             }
@@ -804,6 +1015,34 @@
                     delete drafts[keyOf(form.path, handle.prop)];
                 }
             };
+            if (form.def === 'exerciseBlock' && handle.prop === 'kind' && tools) {
+                var nextKind = value;
+                var prevKind = form.node.kind;
+                if (typeof nextKind === 'string' && nextKind !== prevKind
+                    && exerciseItemsTouched(form.node.items, prevKind)) {
+                    var Ui = root.HebrewPlanUi;
+                    var warn = Ui && typeof Ui.line === 'function'
+                        ? Ui.line(
+                            'שינוי סוג התרגיל ימחק את הפריטים שכבר מילאתם.',
+                            'Changing the exercise kind will clear the items you already filled in.'
+                        )
+                        : 'Changing the exercise kind will clear the items you already filled in.';
+                    var confirmClear = Ui && typeof Ui.line === 'function'
+                        ? Ui.line('למחוק את הפריטים ולהחליף סוג?', 'Clear the items and switch kind?')
+                        : 'Clear the items and switch kind?';
+                    if (!ctx.confirm(warn) || !ctx.confirm(confirmClear)) return Promise.resolve(false);
+                }
+                if (typeof nextKind === 'string' && nextKind !== prevKind) {
+                    var merged = clone(form.node);
+                    merged.kind = nextKind;
+                    merged.items = [freshExerciseItem(nextKind, tools, 'item-1')];
+                    return track(Promise.resolve(transport.putPart(form.path, merged, hooks)).then(function (out) {
+                        if (out && out.ok) return true;
+                        afterFailure(form.path, handle.prop, out);
+                        return false;
+                    }));
+                }
+            }
             var pending = value === undefined
                 ? transport.putPart(form.path, without(form.node, handle.prop), hooks)
                 : transport.setField(form.path, handle.prop, value, hooks);
@@ -865,7 +1104,9 @@
             area.setAttribute('lang', 'en');
             area.setAttribute('spellcheck', 'false');
             area.setAttribute('data-plan-json', 'node');
-            area.setAttribute('aria-label', 'JSON גולמי של הצומת (Raw JSON of this node)');
+            area.setAttribute('aria-label', (root.HebrewPlanUi && root.HebrewPlanUi.line)
+                ? root.HebrewPlanUi.line('JSON גולמי של הצומת', 'Raw JSON of this node')
+                : 'Raw JSON of this node');
             area.value = JSON.stringify(form.node, null, 2);
             var error = el('p', 'admin-inline-error');
             error.setAttribute('role', 'alert');
@@ -878,12 +1119,16 @@
                     parsed = JSON.parse(String(area.value));
                 } catch (err) {
                     error.hidden = false;
-                    error.textContent = 'JSON לא תקין (Invalid JSON): ' + (err && err.message ? err.message : '');
+                    error.textContent = (root.HebrewPlanUi && root.HebrewPlanUi.line
+                        ? root.HebrewPlanUi.line('JSON לא תקין: ', 'Invalid JSON: ')
+                        : 'Invalid JSON: ') + (err && err.message ? err.message : '');
                     return Promise.resolve(false);
                 }
                 if (!isObject(parsed)) {
                     error.hidden = false;
-                    error.textContent = 'JSON לא תקין (Invalid JSON): an object is needed';
+                    error.textContent = root.HebrewPlanUi && root.HebrewPlanUi.line
+                        ? root.HebrewPlanUi.line('JSON לא תקין: צריך אובייקט.', 'Invalid JSON: an object is needed.')
+                        : 'Invalid JSON: an object is needed.';
                     return Promise.resolve(false);
                 }
                 error.hidden = true;
@@ -975,7 +1220,9 @@
                 });
                 entries.forEach(function (entry, index) {
                     if (index === advancedAt) {
-                        var heading = el('p', 'plan-advanced', 'מתקדם (Advanced)');
+                        var heading = el('p', 'plan-advanced', isTeacherActivityDef(def)
+                            ? uiLine('מתקדם', 'Advanced')
+                            : 'מתקדם (Advanced)');
                         heading.setAttribute('data-plan-advanced', '');
                         form.el.appendChild(heading);
                     }
@@ -983,33 +1230,36 @@
                 });
             }
 
-            var toggle = btn('JSON גולמי (Raw JSON)', 'btn btn-ghost admin-row-btn', { 'data-plan-json-toggle': '' });
-            toggle.setAttribute('aria-expanded', 'false');
-            var jsonHost = el('div', 'plan-json-host');
-            var opened = null;
-            function openJson() {
-                if (!opened) {
-                    opened = rawJsonBox(form);
-                    jsonHost.appendChild(opened);
+            if (!isTeacherActivityDef(def)) {
+                var toggle = btn('JSON גולמי (Raw JSON)', 'btn btn-ghost admin-row-btn', { 'data-plan-json-toggle': '' });
+                toggle.setAttribute('aria-expanded', 'false');
+                var jsonHost = el('div', 'plan-json-host');
+                var opened = null;
+                function openJson() {
+                    if (!opened) {
+                        opened = rawJsonBox(form);
+                        jsonHost.appendChild(opened);
+                    }
+                    opened.hidden = false;
+                    toggle.setAttribute('aria-expanded', 'true');
                 }
-                opened.hidden = false;
-                toggle.setAttribute('aria-expanded', 'true');
+                ctx.act(toggle, function () {
+                    if (opened && !opened.hidden) {
+                        opened.hidden = true;
+                        toggle.setAttribute('aria-expanded', 'false');
+                    } else {
+                        openJson();
+                    }
+                }, 'json-toggle:' + path);
+                form.el.appendChild(toggle);
+                form.el.appendChild(jsonHost);
+                if (!known) openJson();
             }
-            ctx.act(toggle, function () {
-                if (opened && !opened.hidden) {
-                    opened.hidden = true;
-                    toggle.setAttribute('aria-expanded', 'false');
-                } else {
-                    openJson();
-                }
-            }, 'json-toggle:' + path);
-            form.el.appendChild(toggle);
-            form.el.appendChild(jsonHost);
-            if (!known) openJson();
             return form;
         }
 
         function renderEntry(form, entry, nodeSchema) {
+            if (hideTeacherBlockMeta(form, entry)) return;
             var path = form.path;
             var kind = form.kind;
             var value = form.node[entry.prop];
@@ -1018,6 +1268,7 @@
                 level: 0,
                 path: path,
                 nodeKind: kind,
+                blockNode: form.node,
                 readOnly: isReadOnlyProp(kind, entry.prop, resolved.schema)
             });
             if (kind === 'block' && BUCKETS.indexOf(entry.prop) !== -1 && info.itemSchema
@@ -1045,17 +1296,20 @@
             handle.control.setAttribute('data-plan-focus-key', 'field:' + key);
             // The number of this field's Save button (data-plan-save-field), kept for the hooks tests read.
             handle.el.setAttribute('data-plan-field-index', String(index));
+            var singleLang = isTeacherActivityDef(form.def);
             var save = btn('שמירת שדה (Save field)', 'btn btn-primary', {
                 'data-plan-save': '',
                 'data-plan-save-field': String(index)
-            });
+            }, singleLang);
             ctx.act(save, function () { return saveHandle(handle); }, 'save:' + key);
             var bar = el('div', 'plan-field-actions');
             bar.appendChild(save);
             if (!entry.required && value !== undefined) {
-                var clear = btn('הסרת שדה (Remove field)', 'btn btn-ghost admin-row-btn', { 'data-plan-clear': '' });
+                var clear = btn('הסרת שדה (Remove field)', 'btn btn-ghost admin-row-btn', { 'data-plan-clear': '' }, singleLang);
                 ctx.act(clear, function () {
-                    if (!ctx.confirm('להסיר את השדה? (Remove this field?)')) return undefined;
+                    if (!ctx.confirm(root.HebrewPlanUi && root.HebrewPlanUi.line
+                        ? root.HebrewPlanUi.line('להסיר את השדה?', 'Remove this field?')
+                        : 'Remove this field?')) return undefined;
                     var hooks = {
                         onSaved: function () { delete drafts[key]; }
                     };
@@ -1136,25 +1390,38 @@
 
             var when = typeof entry.at === 'string' ? (Ui ? Ui.formatTime(entry.at) : entry.at) : '';
             var who = typeof entry.by === 'string' && entry.by ? ' · ' + entry.by : '';
-            var meta = el('p', 'plan-note');
-            var metaHe = el('span', 'plan-help-he', 'נערך בגרסה ' + entry.revision);
+            var meta = el('p', 'plan-note ui-pair');
+            var metaHe = el('span', 'plan-help-he ui-he', 'נערך בגרסה ' + entry.revision);
             metaHe.setAttribute('lang', 'he');
             var metaWhen = el('bdi', '', (when ? ' · ' + when : '') + who);
             metaWhen.setAttribute('dir', 'ltr');
-            metaHe.appendChild(metaWhen);
-            var metaEn = el('span', 'plan-help-en', 'Changed in revision ' + entry.revision);
+            var metaEn = el('span', 'plan-help-en ui-en', 'Changed in revision ' + entry.revision);
             metaEn.setAttribute('lang', 'en');
             metaEn.setAttribute('dir', 'ltr');
             meta.appendChild(metaHe);
             meta.appendChild(metaEn);
+            meta.appendChild(metaWhen);
             detail.appendChild(meta);
-            var caption = el('p', 'plan-label-he', 'הערך הקודם (The earlier value)');
+            var caption = el('p', 'ui-pair');
+            caption.appendChild(el('span', 'ui-he', 'הערך הקודם'));
+            var captionEn = el('span', 'ui-en', 'The earlier value');
+            captionEn.setAttribute('lang', 'en');
+            captionEn.setAttribute('dir', 'ltr');
+            caption.appendChild(captionEn);
             detail.appendChild(caption);
             var omitted = entry.previousValueOmitted === true;
             var prevText = omitted ? '' : (Ui ? Ui.valueText(entry.previousValue) : JSON.stringify(entry.previousValue));
-            var prev = el('bdi', 'plan-prev-value', omitted
-                ? 'הערך הקודם גדול ולא נשמר כאן. (The earlier value was too large to keep here.)'
-                : (prevText === '' || entry.previousValue === null ? '—' : prevText));
+            var prev = el('bdi', 'plan-prev-value');
+            if (omitted) {
+                prev.className += ' ui-pair';
+                prev.appendChild(el('span', 'ui-he', 'הערך הקודם גדול ולא נשמר כאן.'));
+                var prevEn = el('span', 'ui-en', 'The earlier value was too large to keep here.');
+                prevEn.setAttribute('lang', 'en');
+                prevEn.setAttribute('dir', 'ltr');
+                prev.appendChild(prevEn);
+            } else {
+                prev.textContent = prevText === '' || entry.previousValue === null ? '—' : prevText;
+            }
             if (!omitted && prevText !== '') {
                 var langAttrs = handle.info && handle.info.hint && handle.info.hint.lang
                     ? Hints.langAttrs(handle.info.hint.lang) : (Ui ? Ui.textAttrs(prevText) : {});
@@ -1420,8 +1687,13 @@
         splitPointer: splitPointer,
         kindOfPath: kindOfPath,
         nodeAt: nodeAt,
+        stackLessons: stackLessons,
+        earlierLessonsInPlan: earlierLessonsInPlan,
         langAttrs: Hints.langAttrs,
         BUCKETS: BUCKETS,
-        CHILD_PROPS: CHILD_PROPS
+        CHILD_PROPS: CHILD_PROPS,
+        exerciseItemDefForKind: exerciseItemDefForKind,
+        freshExerciseItem: freshExerciseItem,
+        exerciseItemsTouched: exerciseItemsTouched
     };
 });

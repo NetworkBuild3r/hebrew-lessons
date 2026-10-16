@@ -2,6 +2,12 @@
 <html lang="he" dir="rtl" translate="no">
 <head>
     <meta charset="utf-8">
+    <script>
+        try {
+            var uiLang = localStorage.getItem('hebrew-ui-lang');
+            document.documentElement.setAttribute('data-ui-lang', uiLang === 'he' ? 'he' : 'en');
+        } catch (e) { /* English until the page script runs */ }
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="google" content="notranslate">
     <meta name="theme-color" content="#1d4ed8">
@@ -174,6 +180,15 @@
         .login-notes .login-privacy { margin: 0; }
         .login-fine { margin: 1rem 0 0; font-size: 0.82rem; color: var(--color-muted); text-align: center; line-height: 1.6; }
         .login-fine .en { display: block; }
+        html:not([data-ui-lang="he"]) .ui-pair > .ui-he { display: none; }
+        html[data-ui-lang="he"] .ui-pair > .ui-en { display: none; }
+        html:not([data-ui-lang="he"]) .login-page { direction: ltr; }
+        html[data-ui-lang="he"] .login-page { direction: rtl; }
+        .login-lang { display: flex; justify-content: flex-end; margin-bottom: 0.75rem; }
+        .ui-lang { display: inline-flex; border: 1px solid var(--color-border); border-radius: 999px; overflow: hidden; background: var(--color-surface); }
+        .ui-lang-btn { min-height: 44px; min-width: 44px; padding: 0.2rem 0.7rem; border: 0; background: transparent; color: var(--color-muted); font-weight: 700; font-size: 0.85rem; cursor: pointer; }
+        .ui-lang-btn + .ui-lang-btn { box-shadow: inset 1px 0 0 var(--color-border); }
+        .ui-lang-btn.is-on { background: var(--color-primary); color: #fff; }
         @media (prefers-reduced-motion: reduce) {
             .btn { transition: none; }
             .btn-primary:hover, .btn-primary:active { transform: none; }
@@ -182,38 +197,43 @@
 </head>
 <body class="login-page">
     <main class="login-wrap">
+        <div class="login-lang">
+            <div class="ui-lang" role="group" data-ui-aria-he="שפת הממשק" data-ui-aria-en="Interface language" aria-label="שפת הממשק">
+                <button type="button" class="ui-lang-btn" data-ui-lang-set="en">EN</button>
+                <button type="button" class="ui-lang-btn" data-ui-lang-set="he">עב</button>
+            </div>
+        </div>
         <div class="login-hero">
             <!-- Logo lockup A (mark + Hebrew wordmark + English gloss). Name is Hebrew only. -->
             <img class="login-logo" src="/shared/brand/logo-a.svg" width="184" height="52" alt="דרך עברית" decoding="async">
             <!-- Hebrew first, English as the gloss (REQ-016). Hebrew wording is a draft for the operator to confirm. -->
-            <p class="login-tag">להזמין קפה, לדבר עם שי, לקרוא סיפור — עשר דקות ביום. <span class="en" lang="en" dir="ltr">(Order coffee. Chat with Shai. Read the story. 10 minutes a day.)</span></p>
+            <p class="login-tag ui-pair"><span class="ui-he" lang="he">להזמין קפה, לדבר עם שי, לקרוא סיפור — עשר דקות ביום.</span><span class="ui-en" lang="en" dir="ltr">Order coffee. Chat with Shai. Read the story. 10 minutes a day.</span></p>
         </div>
         <div class="login-card">
-            <h1>כניסה <span class="en" dir="ltr">(Sign in)</span></h1>
-            <p class="login-sub">המשיכו בדיוק מאיפה שהפסקתם. <span class="en" dir="ltr">(Pick up right where you left off.)</span></p>
-            <p class="login-privacy" id="login-privacy">
-                מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה. (Admins can see all your activity, including every answer.)
+            <h1 class="ui-pair"><span class="ui-he" lang="he">כניסה</span><span class="ui-en" lang="en" dir="ltr">Sign in</span></h1>
+            <p class="login-sub ui-pair"><span class="ui-he" lang="he">המשיכו בדיוק מאיפה שהפסקתם.</span><span class="ui-en" lang="en" dir="ltr">Pick up right where you left off.</span></p>
+            <p class="login-privacy ui-pair" id="login-privacy">
+                <span class="ui-he" lang="he">מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה.</span>
+                <span class="ui-en" lang="en" dir="ltr">Admins can see all your activity, including every answer.</span>
             </p>
             <form id="login-form" class="login-form" method="post" action="#" novalidate>
                 <label>
-                    <span class="login-label">שם משתמש <span class="en" dir="ltr">(Username)</span></span>
+                    <span class="login-label ui-pair"><span class="ui-he" lang="he">שם משתמש</span><span class="ui-en" lang="en" dir="ltr">Username</span></span>
                     <input id="login-username" name="username" type="text" autocomplete="username" required>
                 </label>
                 <label>
-                    <span class="login-label">סיסמה <span class="en" dir="ltr">(Password)</span></span>
+                    <span class="login-label ui-pair"><span class="ui-he" lang="he">סיסמה</span><span class="ui-en" lang="en" dir="ltr">Password</span></span>
                     <input id="login-password" name="password" type="password" autocomplete="current-password" required>
                 </label>
                 <p class="login-error" id="login-error" role="alert" hidden></p>
                 <button type="submit" class="btn btn-primary" id="login-submit">
-                    כניסה <span class="en" dir="ltr">(Sign in)</span>
+                    <span class="ui-pair"><span class="ui-he" lang="he">כניסה</span><span class="ui-en" lang="en" dir="ltr">Sign in</span></span>
                 </button>
             </form>
             <div class="login-notes">
-                <p class="login-privacy" data-ai-disclosure="1">
-                    אם מנהל מפעיל תכנון בינה מלאכותית לחשבון שלך, סיכום של ההתקדמות ושם המשתמש נשלחים לספק הבינה המלאכותית של המפעיל כדי לנסח את השיעור הבא. הסיכום כולל את המילים שתורגלו ומידת הידיעה שלהן, את הדקדוק שתורגל ומידת הדיוק, את השיעורים שהושלמו, ובאיזו תדירות הקריאה היא בלי ניקוד. הסיכום אינו כולל תשובות בודדות, טקסט שהוקלד, או מועדי תרגול. (If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator's AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.)
-                </p>
+                <p class="login-privacy ui-pair" data-ai-disclosure="1"></p>
             </div>
-            <p class="login-fine">עובד על הטלפון • שומר התקדמות • אין צורך להתקין אפליקציה <span class="en" lang="en" dir="ltr">(Works on your phone • Saves your progress • No app to install)</span></p>
+            <p class="login-fine ui-pair"><span class="ui-he" lang="he">עובד על הטלפון • שומר התקדמות • אין צורך להתקין אפליקציה</span><span class="ui-en" lang="en" dir="ltr">Works on your phone. Saves your progress. No app to install.</span></p>
         </div>
     </main>
     <script>
@@ -226,7 +246,7 @@
 
         var PRIVACY_HE = 'מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה.';
         var PRIVACY_EN = 'Admins can see all your activity, including every answer.';
-        var PRIVACY_NOTE = PRIVACY_HE + ' (' + PRIVACY_EN + ')';
+        var PRIVACY_NOTE = 'מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה. (Admins can see all your activity, including every answer.)';
         /* Hebrew line is a draft until the operator approves it (ADR-0009). Provenance: INIT-006/SPEC-017 */
         var AI_DISCLOSURE_EN = 'If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator\'s AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.';
         var AI_DISCLOSURE_HE = 'אם מנהל מפעיל תכנון בינה מלאכותית לחשבון שלך, סיכום של ההתקדמות ושם המשתמש נשלחים לספק הבינה המלאכותית של המפעיל כדי לנסח את השיעור הבא. הסיכום כולל את המילים שתורגלו ומידת הידיעה שלהן, את הדקדוק שתורגל ומידת הדיוק, את השיעורים שהושלמו, ובאיזו תדירות הקריאה היא בלי ניקוד. הסיכום אינו כולל תשובות בודדות, טקסט שהוקלד, או מועדי תרגול.';
@@ -257,6 +277,38 @@
             }
         }
 
+        function applyLoginLang(lang) {
+            var next = lang === 'he' ? 'he' : 'en';
+            try { localStorage.setItem('hebrew-ui-lang', next); } catch (err) { /* ignore */ }
+            document.documentElement.setAttribute('data-ui-lang', next);
+            var buttons = document.querySelectorAll('[data-ui-lang-set]');
+            for (var i = 0; i < buttons.length; i += 1) {
+                var on = buttons[i].getAttribute('data-ui-lang-set') === next;
+                buttons[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+                if (on) buttons[i].classList.add('is-on');
+                else buttons[i].classList.remove('is-on');
+            }
+            var group = document.querySelector('.ui-lang');
+            if (group) group.setAttribute('aria-label', next === 'he' ? 'שפת הממשק' : 'Interface language');
+        }
+
+        function setNote(el, he, en) {
+            if (!el) return;
+            el.textContent = '';
+            if (el.className.indexOf('ui-pair') === -1) el.className += ' ui-pair';
+            var h = document.createElement('span');
+            h.className = 'ui-he';
+            h.lang = 'he';
+            h.textContent = he;
+            var e = document.createElement('span');
+            e.className = 'ui-en';
+            e.lang = 'en';
+            e.dir = 'ltr';
+            e.textContent = en;
+            el.appendChild(h);
+            el.appendChild(e);
+        }
+
         function setError(el, text) {
             if (!el) return;
             if (!text) {
@@ -265,18 +317,12 @@
                 return;
             }
             el.hidden = false;
+            var m = /^(.*?) \(([^()]*)\)$/.exec(text);
+            if (m && /[\u0590-\u05FF]/.test(m[1]) && /[A-Za-z]/.test(m[2])) {
+                setNote(el, m[1], m[2]);
+                return;
+            }
             el.textContent = text;
-        }
-
-        function setNote(el, he, en) {
-            if (!el) return;
-            el.textContent = he + ' ';
-            var gloss = document.createElement('span');
-            gloss.className = 'en';
-            gloss.lang = 'en';
-            gloss.dir = 'ltr';
-            gloss.textContent = '(' + en + ')';
-            el.appendChild(gloss);
         }
 
         function boot() {
@@ -292,6 +338,12 @@
             setNote(privacy, PRIVACY_HE, PRIVACY_EN);
             var disclosures = document.querySelectorAll('[data-ai-disclosure]');
             for (var d = 0; d < disclosures.length; d += 1) setNote(disclosures[d], AI_DISCLOSURE_HE, AI_DISCLOSURE_EN);
+            applyLoginLang(document.documentElement.getAttribute('data-ui-lang'));
+            document.addEventListener('click', function (event) {
+                var btn = event.target.closest && event.target.closest('[data-ui-lang-set]');
+                if (!btn) return;
+                applyLoginLang(btn.getAttribute('data-ui-lang-set'));
+            });
 
             // Expose for smoke / debugging (mirrors shared/api.js safeNextPath)
             window.HebrewLoginPage = { safeNextPath: safeNextPath };

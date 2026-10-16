@@ -172,14 +172,37 @@
                 '/shared/admin/users.js',
                 '/shared/admin/lessons.js',
                 '/shared/admin/lesson-editor.js',
-                // The five 1.1.0 block renderers load before plan-render.js, which looks them up
-                // when it loads; the live preview draws every block type with them.
+                '/shared/admin/admin-shell.js'
+            ]),
+            view: 'HebrewAdminShell'
+        },
+        {
+            id: 'editor',
+            path: '/editor/',
+            title: 'עריכה — Editor' + SITE,
+            announce: 'עריכה',
+            bodyClass: 'editor-page',
+            rootId: 'editor-app',
+            loadingHook: 'editor-boot',
+            adminOnly: true,
+            heading: {
+                he: 'עריכה',
+                en: 'Editor',
+                subHe: 'תוכניות שיעור — מחסנית ומבנים.',
+                subEn: 'Drafts and published plans. Open one to edit the sequence, activities, and learner preview.'
+            },
+            // Plan builder + preview renderers. Provenance: INIT-010/SPEC-003
+            scripts: SPEECH_AND_WORD_DATA.concat([
                 '/shared/ui/blocks/explainer.js',
                 '/shared/ui/blocks/conjugation-table.js',
                 '/shared/ui/blocks/personal-question.js',
                 '/shared/ui/blocks/verse-reading.js',
                 '/shared/ui/blocks/letter-intro.js',
+                '/shared/ui/blocks/compare.js',
+                '/shared/ui/blocks/exercise.js',
+                '/shared/ui/blocks/assignment.js',
                 '/shared/ui/plan-render.js',
+                '/shared/admin/activity-map.js',
                 '/shared/admin/plan-ui.js',
                 '/shared/admin/plan-hints.js',
                 '/shared/admin/plan-widgets.js',
@@ -189,9 +212,9 @@
                 '/shared/admin/plan-history.js',
                 '/shared/admin/plan-preview.js',
                 '/shared/admin/plan-builder.js',
-                '/shared/admin/admin-shell.js'
+                '/shared/admin/editor-shell.js'
             ]),
-            view: 'HebrewAdminShell'
+            view: 'HebrewEditorShell'
         }
     ];
 

@@ -420,8 +420,9 @@ async function handleStatic(req, res) {
         return;
     }
 
-    // Admin pages require admin role.
-    const underAdmin = rel === '/admin' || rel.startsWith('/admin/');
+    // Admin pages require admin role (/admin/ and /editor/). Provenance: INIT-010/SPEC-003
+    const underAdmin = rel === '/admin' || rel.startsWith('/admin/')
+        || rel === '/editor' || rel.startsWith('/editor/');
     if (underAdmin && auth.user.role !== 'admin') {
         sendPlain(res, 403, 'Forbidden');
         return;
