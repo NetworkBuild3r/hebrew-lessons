@@ -1,7 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const crypto = require('crypto');
+const fs = require('fs');
 const http = require('http');
+const os = require('os');
+const path = require('path');
 
 const TOKEN = 'oauth-google-test-token-' + 'z'.repeat(32);
 const SECRET = 'test-google-secret';
@@ -55,6 +58,19 @@ test.before(async () => {
     process.env.GOOGLE_OAUTH_AUTH_URL = GOOGLE + '/auth';
     process.env.GOOGLE_OAUTH_TOKEN_URL = GOOGLE + '/token';
     process.env.GOOGLE_OAUTH_USERINFO_URL = GOOGLE + '/userinfo';
+    process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'hebrew-mcp-oauth-'));
+    process.env.LESSONS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'hebrew-mcp-oauth-lessons-'));
+    const db = require('../server/db');
+    db.close();
+    db.open({ force: true });
+    db.migrate();
+    require('../server/accounts').createUser({
+        username: 'owner',
+        password: 'a-strong-pass1',
+        role: 'admin',
+        googleEmail: 'owner@example.com',
+        actor: 'test'
+    });
 
     google = http.createServer((req, res) => {
         const chunks = [];
@@ -166,7 +182,19 @@ test('Google sign-in replaces the token form and still issues an MCP token', asy
         body: form({ grant_type: 'authorization_code', code, client_id: clientId, redirect_uri: CB, code_verifier: verifier })
     });
     assert.strictEqual(token.status, 200);
-    const access = JSON.parse(token.data).access_token;
+    const issued = JSON.parse(token.data);
+    const access = issued.access_token;
+    const claims = JSON.parse(Buffer.from(access.split('.')[0], 'base64url').toString());
+    assert.strictEqual(claims.un, 'owner');
+    assert.ok(claims.uid);
+    const refreshed = await call('POST', '/token', {
+        headers: FORM,
+        body: form({ grant_type: 'refresh_token', refresh_token: issued.refresh_token, client_id: clientId })
+    });
+    assert.strictEqual(refreshed.status, 200);
+    const again = JSON.parse(Buffer.from(JSON.parse(refreshed.data).access_token.split('.')[0], 'base64url').toString());
+    assert.strictEqual(again.uid, claims.uid);
+    assert.strictEqual(again.un, 'owner');
     const mcp = await call('POST', '/mcp', {
         headers: {
             Authorization: 'Bearer ' + access,

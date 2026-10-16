@@ -1,9 +1,11 @@
-// MCP authorization (OAuth 2.1 + PKCE + dynamic client registration), single owner, no database.
+// MCP authorization (OAuth 2.1 + PKCE + dynamic client registration).
 //
 // When GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are set, /authorize sends the
-// owner to Google and accepts only the emails in MCP_OAUTH_ALLOWED_EMAILS. The Google
-// client must list {MCP_PUBLIC_URL}/oauth/google/callback as a redirect URI. The Google
-// leg is a confidential-client code exchange (client secret, scopes email and profile).
+// person to Google. The email must be in MCP_OAUTH_ALLOWED_EMAILS and already linked to an
+// active app user (the same Google email as site sign-in). The issued token carries that
+// user id. The Google client must list {MCP_PUBLIC_URL}/oauth/google/callback as a redirect
+// URI. The Google leg is a confidential-client code exchange (client secret, scopes email
+// and profile). Cursor cannot send the site cookie, so this browser step is the link.
 //
 // Without those two Google variables, /authorize still asks for MCP_AUTH_TOKEN. Everything
 // issued (client ids, auth codes, access and refresh tokens) is an HMAC-signed blob keyed
@@ -11,7 +13,11 @@
 //
 // Enabled only when MCP_PUBLIC_URL (the https origin clients use) and MCP_AUTH_TOKEN are both set.
 const crypto = require('crypto');
+const { AsyncLocalStorage } = require('async_hooks');
 const google = require('../server/auth/google');
+const accounts = require('../server/accounts');
+
+const principals = new AsyncLocalStorage();
 
 const ACCESS_TTL = 3600;
 const REFRESH_TTL = 30 * 24 * 3600;
@@ -105,8 +111,21 @@ function sameSecret(a, b) {
 }
 
 function verifyAccessToken(token) {
-    if (!enabled()) return false;
-    return Boolean(verify(token, 'access'));
+    if (!enabled()) return null;
+    const payload = verify(token, 'access');
+    if (!payload) return null;
+    if (payload.uid == null) return payload;
+    const user = accounts.findActiveUser(payload.uid);
+    if (!user || (payload.un && user.username !== payload.un)) return null;
+    return payload;
+}
+
+function runAs(principal, fn) {
+    return principals.run(principal || null, fn);
+}
+
+function currentUser() {
+    return principals.getStore() || null;
 }
 
 function resourceMetadataUrl() {
@@ -297,10 +316,22 @@ function lockedOut() {
     return failures.length >= MAX_FAILS;
 }
 
-function issueAuthCode(q) {
-    return sign('code', CODE_TTL, {
+function issueAuthCode(q, user) {
+    const claims = {
         jti: crypto.randomBytes(12).toString('base64url'), cid: q.client_id, ru: q.redirect_uri, cc: q.code_challenge
-    });
+    };
+    if (user) {
+        claims.uid = user.id;
+        claims.un = user.username;
+    }
+    return sign('code', CODE_TTL, claims);
+}
+
+function tokenUser(grant) {
+    if (grant.uid == null) return {};
+    const user = accounts.findActiveUser(grant.uid);
+    if (!user || (grant.un && user.username !== grant.un)) return null;
+    return { uid: user.id, un: user.username };
 }
 
 function startGoogle(res, q) {
@@ -324,12 +355,11 @@ function startGoogle(res, q) {
     res.end();
 }
 
-async function googleEmail(code) {
-    const identity = await google.identityFromCode({
+async function googleIdentity(code) {
+    return google.identityFromCode({
         code: code,
         redirectUri: googleRedirectUri()
     });
-    return identity && identity.email;
 }
 
 async function googleCallback(res, url) {
@@ -355,18 +385,24 @@ async function googleCallback(res, url) {
     }
     const code = url.searchParams.get('code');
     if (!code) return page(res, 400, 'Cannot sign in', '<h1>Cannot sign in</h1><p class="err">Google did not return a code.</p>');
-    let email;
+    let identity;
     try {
-        email = await googleEmail(code);
+        identity = await googleIdentity(code);
     } catch (e) {
         console.error('mcp google identity failed ' + (e && e.statusCode ? e.statusCode : ''));
         return page(res, 502, 'Google sign-in failed', '<h1>Google sign-in failed</h1><p class="err">Try again from the app.</p>');
     }
+    const email = identity && identity.email;
     if (!email || allowedEmails().indexOf(email) === -1) {
         console.error('mcp google callback rejected access_denied ' + (email ? 'not_allowed' : 'unverified'));
         return redirectWith(res, q.redirect_uri, { error: 'access_denied', state: q.state });
     }
-    redirectWith(res, q.redirect_uri, { code: issueAuthCode(q), state: q.state });
+    const user = accounts.findLinkedGoogleUser({ email: email, sub: identity && identity.sub });
+    if (!user) {
+        console.error('mcp google callback rejected access_denied not_linked');
+        return redirectWith(res, q.redirect_uri, { error: 'access_denied', state: q.state });
+    }
+    redirectWith(res, q.redirect_uri, { code: issueAuthCode(q, user), state: q.state });
 }
 
 function authorizeGet(req, res, url) {
@@ -412,12 +448,13 @@ async function authorizePost(req, res) {
     redirectWith(res, q.redirect_uri, { code: issueAuthCode(q), state: q.state });
 }
 
-function issueTokens(res, clientId) {
+function issueTokens(res, clientId, userClaims) {
+    const claims = Object.assign({ cid: clientId, scope: SCOPE }, userClaims || {});
     json(res, 200, {
-        access_token: sign('access', ACCESS_TTL, { cid: clientId, scope: SCOPE }),
+        access_token: sign('access', ACCESS_TTL, claims),
         token_type: 'Bearer',
         expires_in: ACCESS_TTL,
-        refresh_token: sign('refresh', REFRESH_TTL, { cid: clientId, scope: SCOPE }),
+        refresh_token: sign('refresh', REFRESH_TTL, claims),
         scope: SCOPE
     });
 }
@@ -444,7 +481,9 @@ async function token(req, res) {
         if (!pkceMatches(form.code_verifier, grant.cc)) {
             return oauthError(res, 400, 'invalid_grant', 'PKCE verification failed.');
         }
-        return issueTokens(res, grant.cid);
+        const userClaims = tokenUser(grant);
+        if (!userClaims) return oauthError(res, 400, 'invalid_grant', 'That account can no longer sign in.');
+        return issueTokens(res, grant.cid, userClaims);
     }
     if (form.grant_type === 'refresh_token') {
         const grant = verify(form.refresh_token, 'refresh');
@@ -453,7 +492,9 @@ async function token(req, res) {
             return oauthError(res, 400, 'invalid_grant', 'client_id does not match the refresh token.');
         }
         if (!verify(grant.cid, 'client')) return oauthError(res, 400, 'invalid_grant', 'Client is no longer registered.');
-        return issueTokens(res, grant.cid);
+        const userClaims = tokenUser(grant);
+        if (!userClaims) return oauthError(res, 400, 'invalid_grant', 'That account can no longer sign in.');
+        return issueTokens(res, grant.cid, userClaims);
     }
     return oauthError(res, 400, 'unsupported_grant_type', 'Use authorization_code or refresh_token.');
 }
@@ -478,4 +519,4 @@ async function handle(req, res) {
     return false;
 }
 
-module.exports = { handle, enabled, verifyAccessToken, resourceMetadataUrl };
+module.exports = { handle, enabled, verifyAccessToken, resourceMetadataUrl, runAs, currentUser };

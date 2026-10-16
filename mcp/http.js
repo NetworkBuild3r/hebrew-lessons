@@ -17,15 +17,20 @@ function allowedHost(header) {
 }
 
 // Bearer token from MCP_AUTH_TOKEN. Compared as SHA-256 digests in constant time.
-function authorized(req) {
+// Static MCP_AUTH_TOKEN, or an OAuth access token. OAuth tokens carry the app user
+// the Google sign-in resolved; the static token does not.
+function principal(req) {
     const expected = process.env.MCP_AUTH_TOKEN;
-    if (!expected) return false;
+    if (!expected) return null;
     const match = /^Bearer (\S+)$/.exec(String(req.headers.authorization || ''));
-    if (!match) return false;
+    if (!match) return null;
     const given = crypto.createHash('sha256').update(match[1]).digest();
     const wanted = crypto.createHash('sha256').update(expected).digest();
-    // The static token, or an access token this server issued through the OAuth flow.
-    return crypto.timingSafeEqual(given, wanted) || oauth.verifyAccessToken(match[1]);
+    if (crypto.timingSafeEqual(given, wanted)) return { user: null };
+    const access = oauth.verifyAccessToken(match[1]);
+    if (!access) return null;
+    if (access.uid == null) return { user: null };
+    return { user: { id: access.uid, username: access.un } };
 }
 
 function isLoopback(host) {
@@ -96,7 +101,8 @@ function listen() {
             res.end('Not found');
             return;
         }
-        if (!authorized(req)) {
+        const who = principal(req);
+        if (!who) {
             res.writeHead(401, {
                 'Content-Type': 'text/plain; charset=utf-8',
                 'WWW-Authenticate': oauth.enabled()
@@ -122,7 +128,7 @@ function listen() {
         });
         try {
             await mcp.connect(transport);
-            await transport.handleRequest(req, res, body);
+            await oauth.runAs(who.user, () => transport.handleRequest(req, res, body));
         } catch (err) {
             if (!res.headersSent) {
                 res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });

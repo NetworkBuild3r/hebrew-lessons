@@ -1,4 +1,5 @@
 const { z } = require('zod');
+const oauth = require('./oauth');
 const store = require('./store');
 const { CATALOG, LEVEL_DEFAULTS } = require('../shared/activities/catalog');
 const { generateLessonAudio, formatAudioSummary } = require('../server/audio');
@@ -245,8 +246,8 @@ function planArgs(args, keys) {
  * `ai` named `mcp`: the actor comes from the channel and no tool argument can
  * set it. `tool` is the tool name. `requestId` is the JSON-RPC id the SDK passes
  * in the handler's second argument, a client-chosen label and not an identity.
- * The SDK does not give a handler the clientInfo, and this server is stateless
- * (a new McpServer per POST, no initialize), so no `client` label is recorded.
+ * The SDK does not give a handler the clientInfo. When the OAuth token was issued
+ * to an app user, that username is the `client` label. The actor stays `mcp`.
  * Provenance: INIT-008/SPEC-002
  * @param {string} tool
  * @param {{ requestId?: string|number }} [extra]
@@ -254,6 +255,8 @@ function planArgs(args, keys) {
  */
 function mcpContext(tool, extra) {
     const input = { channel: 'mcp', tool: tool };
+    const user = oauth.currentUser();
+    if (user && user.username) input.client = user.username;
     if (extra && (typeof extra.requestId === 'string' || typeof extra.requestId === 'number')) {
         input.requestId = extra.requestId;
     }

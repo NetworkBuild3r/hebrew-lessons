@@ -518,9 +518,45 @@ function didLastSignInUseDummy() {
     return lastSignInUsedDummy;
 }
 
+/**
+ * The app user already linked to this Google identity. Does not create an account
+ * and does not open a session. A missing or disabled user is null.
+ * @param {{ email?: string, sub?: string }} identity
+ * @returns {{ id: number, username: string }|null}
+ */
+function findLinkedGoogleUser(identity) {
+    const email = normalizeEmail(identity && identity.email);
+    if (!email) return null;
+    const sub = identity && identity.sub ? String(identity.sub) : '';
+    const bySub = sub ? usersRepo.findByProviderSubject(sub) : null;
+    const byEmail = usersRepo.findByGoogleEmail(email);
+    if (bySub && byEmail && bySub.id !== byEmail.id) return null;
+    const user = bySub || byEmail;
+    if (!user || user.status !== 'active') return null;
+    if (user.google_email && user.google_email !== email) return null;
+    if (user.provider_subject && sub && user.provider_subject !== sub) return null;
+    if (sub && !user.provider_subject) {
+        updateUserFields(user.id, { provider_subject: sub });
+    }
+    return { id: user.id, username: user.username };
+}
+
+/**
+ * Active user by id, for a token that was issued to that account.
+ * @param {number} id
+ * @returns {{ id: number, username: string }|null}
+ */
+function findActiveUser(id) {
+    const user = usersRepo.findById(id);
+    if (!user || user.status !== 'active') return null;
+    return { id: user.id, username: user.username };
+}
+
 module.exports = {
     signIn,
     signInWithGoogle,
+    findLinkedGoogleUser,
+    findActiveUser,
     setGoogleEmail,
     createUser,
     setRole,
