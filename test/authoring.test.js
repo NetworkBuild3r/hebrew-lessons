@@ -464,4 +464,41 @@ describe('authoring service (SPEC-007)', () => {
         assert.notEqual(marked, before);
         assert.match(fs.readFileSync(indexPath, 'utf8'), /ac7-marker/);
     });
+
+    it('deleteLesson archives the folder and recordings, drops the catalog row, and leaves a same-id plan', () => {
+        const slug = 'ac8-delete';
+        const worksheet = sampleWorksheet(slug);
+        authoring.save('admin', slug, worksheet, { title: worksheet.title }, { create: true });
+        const clipDir = path.join(tmpLessons, slug, 'audio', 'sentences');
+        fs.mkdirSync(clipDir, { recursive: true });
+        const clip = path.join(clipDir, 'line.mp3');
+        fs.writeFileSync(clip, 'not-a-real-mp3');
+        const visibilityRepo = require('../server/db/repos/visibility');
+        visibilityRepo.setVisibility(slug, 'everyone', new Date().toISOString());
+        const planStore = require('../server/plans/store');
+        planStore.saveWorkingCopy({
+            id: slug,
+            document: JSON.stringify({ id: slug }),
+            revision: 1,
+            status: 'draft',
+            audience: 'shared',
+            assigneeId: null
+        });
+
+        const removed = authoring.deleteLesson('admin', slug);
+        assert.equal(removed.deleted, true);
+        assert.equal(removed.slug, slug);
+        assert.equal(fs.existsSync(path.join(tmpLessons, slug)), false);
+        assert.match(removed.archived, /_archive\/ac8-delete\//);
+        assert.equal(fs.readFileSync(path.resolve(root, removed.archived, 'audio', 'sentences', 'line.mp3'), 'utf8'), 'not-a-real-mp3');
+        const catalog = require('../server/lesson-data').loadDataWindow(path.join(tmpLessons, 'catalog.js')).HEBREW_CATALOG;
+        assert.equal(catalog.some((item) => item && item.slug === slug), false);
+        assert.equal(visibilityRepo.getVisibility(slug), undefined);
+        assert.equal(visibilityRepo.listGrants(slug).length, 0);
+        assert.equal(planStore.loadWorkingCopy(slug).id, slug);
+        const audit = db.get("SELECT action, target FROM audit_log WHERE action = 'lesson.delete'");
+        assert.equal(audit.target, slug);
+
+        assert.throws(() => authoring.deleteLesson('admin', slug), (err) => err.code === 'not_found');
+    });
 });

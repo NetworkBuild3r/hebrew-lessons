@@ -97,6 +97,8 @@ Sign in as an admin, open **Admin** (`/admin/`), then the **Plans** tab. Each ro
 
 **New plan** asks for an id (a lowercase slug), a title, and optionally a recipe. It makes a draft at revision 1, shared, with the lesson **hidden** and one placeholder block. The recipe sets the lesson's starting recipe; it writes no Hebrew and no blocks. Insert a real block, then remove the placeholder. The AI makes plans the same way with `create_plan`, so a plan you did not create may already be in the list.
 
+**Delete** on a row, or **Delete plan** in the editor, removes that plan, its published copy, and its history. A worksheet lesson with the same id stays on the Lessons tab until you delete it there. The AI does the same with `delete_plan`.
+
 ### The editor
 
 The form is generated from the plan JSON Schema (`docs/decisions/ADR-0003-assets/lesson-plan.schema.json`), so it covers every block type, including `explainer`, `conjugation-table`, `personal-question`, `verse-reading`, and `letter-intro`, and the lesson's `recipe`, `newWords`, `buildsOn`, `recycles`, and `visibility`. A field the form has no widget for is edited as JSON. Each field has its own **Save field** button; a save sends one operation and the revision in the toolbar goes up by one. Hebrew fields are right-to-left; keep the full vowel points.
@@ -113,7 +115,7 @@ Open **History** on a plan. Each row is one change: the revision, who made it, w
 
 **Restore** puts an earlier value back in one step: "Restore this value" for a field, "Restore this part" for a block or item, or "Restore the whole plan to this revision" on any row. You confirm once, inline. A restore is itself a **new revision**: it does not rewind history, the AI can see and undo it, and a whole-plan restore keeps the plan's current audience and assignee. A restore uses the revision shown in the toolbar, so if the AI wrote in between you get `revision_conflict` and nothing changes. A field a person last wrote carries an **Edited by a person** mark that opens to who, when, and the value that person replaced, with "Restore the earlier value". The mark is information. It never disables a field.
 
-History is never edited. No screen or tool deletes or rewrites a revision.
+While a plan exists, history is never edited. No screen or tool rewrites a revision. Deleting the plan removes that history with it.
 
 ### The Issues panel
 
@@ -318,9 +320,10 @@ Useful tools once `MCP_AUTH_TOKEN` is set:
 - `upload_media` — store one pending image from base64 bytes. Does not approve.
 - `plan_image` — dry-run: image count and estimated dollars. Does not call the provider.
 - `generate_image` — only when `confirm` is true and `estimate` matches that dry-run. The image stays pending.
-- Plan builder (see [Plan builder](#plan-builder)): `list_plans`, `create_plan`, `read_part`, `replace_part`, `insert_lesson`, `insert_block`, `move_block`, `remove_block`, `set_field`, `list_plan_issues`, `list_plan_revisions`, `get_plan_revision`, `diff_plan`, `restore_plan_revision`, `assign_plan`, `publish_plan`. New lessons are plans; `upsert_lesson` stays for a worksheet that has not moved. Add lesson and Reuse lesson on the teacher page both call `insert_lesson` (`INIT-011/SPEC-001`).
+- Plan builder (see [Plan builder](#plan-builder)): `list_plans`, `create_plan`, `read_part`, `replace_part`, `insert_lesson`, `insert_block`, `move_block`, `remove_block`, `set_field`, `list_plan_issues`, `list_plan_revisions`, `get_plan_revision`, `diff_plan`, `restore_plan_revision`, `assign_plan`, `publish_plan`, `delete_plan`. New lessons are plans; `upsert_lesson` stays for a worksheet that has not moved. Add lesson and Reuse lesson on the teacher page both call `insert_lesson` (`INIT-011/SPEC-001`). `delete_plan` removes the plan and its history. `delete_lesson` removes a worksheet from the shelf and archives its recordings.
+- `delete_lesson` — the Lessons tab **Delete** does the same. **Edit** on that row opens the worksheet. Neither one deletes a plan that happens to use the same id.
 
-Approval and delete are admin session routes, not MCP tools. If `MCP_AUTH_TOKEN` is unset or empty, the assignment tools and the picture tools refuse. A lesson created with no assignment stays **hidden** until you share it in the admin Lessons tab or call `set_lesson_visibility` / pass `visibility` on upsert.
+Approving a picture, and deleting an image, are admin session routes, not MCP tools. If `MCP_AUTH_TOKEN` is unset or empty, the assignment tools and the picture tools refuse. A lesson created with no assignment stays **hidden** until you share it in the admin Lessons tab or call `set_lesson_visibility` / pass `visibility` on upsert.
 
 ## Known limits
 
@@ -330,6 +333,6 @@ Approval and delete are admin session routes, not MCP tools. If `MCP_AUTH_TOKEN`
 - **No Content-Security-Policy** from this app. A reverse proxy in front of the site may add one. Pages load no stylesheet, script, or font from another host (Rubik is served from `shared/fonts/`, icons are inline SVG), so a strict policy such as `style-src 'self' 'unsafe-inline'` works. Keep it that way: `test/self-hosted-assets.test.js` fails if a page links an outside host, including the new-lesson template.
 - **Public paths** are only `/login/`, the web-app manifest and icon (`/manifest.webmanifest`, `/icon.svg`), and the font files under `/shared/fonts/`. Everything else needs a sign-in.
 
-## OAuth later
+## Google sign-in
 
-Columns `auth_provider` and `provider_subject` on `users` are reserved for a future OAuth/OIDC path. Do not design that flow here; local username/password remains the current path.
+App sign-in and MCP consent use one Google client, the same client oauth2-proxy uses for Tautulli. Password sign-in stays. A new Google account becomes a learner: the username comes from the email, and the display name comes from the Google profile. An admin can still attach a Google email to an existing user (Users → Google). MCP consent is a separate allowlist, `MCP_OAUTH_ALLOWED_EMAILS`. Redirect URIs to add on that client are listed in `deploy/k8s-database.md`.

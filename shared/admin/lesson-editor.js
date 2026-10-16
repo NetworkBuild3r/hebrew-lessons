@@ -444,7 +444,9 @@
             + '<button type="button" class="btn btn-primary" data-lesson-save disabled>'
             + bi('שמירה', 'Save') + '</button> '
             + '<button type="button" class="btn" data-lesson-audio>'
-            + bi('שמע', 'Audio') + '</button>'
+            + bi('שמע', 'Audio') + '</button> '
+            + '<button type="button" class="btn btn-ghost" data-lesson-delete>'
+            + bi('מחיקה', 'Delete') + '</button>'
             + '</div>'
             + '<p class="admin-inline-error" data-editor-error hidden></p>'
             + '<div class="lesson-validate-out" data-validate-out aria-live="polite"></div>'
@@ -766,6 +768,7 @@
                     || target.hasAttribute('data-lesson-validate')
                     || target.hasAttribute('data-lesson-save')
                     || target.hasAttribute('data-lesson-audio')
+                    || target.hasAttribute('data-lesson-delete')
                     || target.hasAttribute('data-audio-cancel')
                     || target.hasAttribute('data-audio-confirm')
                 ))) {
@@ -882,6 +885,36 @@
                         showEditorError(rootEl, (err && err.message) || 'Network error');
                         state.validationClean = false;
                         setSaveEnabled(rootEl, false);
+                    });
+                    return;
+                }
+
+                if (target.hasAttribute('data-lesson-delete')) {
+                    var confirmed = true;
+                    try {
+                        if (typeof root.confirm === 'function') {
+                            confirmed = root.confirm('למחוק את השיעור מהמדף? ההקלטות נשמרות בארכיון. (Delete this lesson from the shelf? Recordings are kept in the archive.)');
+                        }
+                    } catch (err) {
+                        confirmed = false;
+                    }
+                    if (!confirmed) return;
+                    clearEditorError(rootEl);
+                    target.disabled = true;
+                    api().request('/api/admin/lessons/' + encodeURIComponent(state.slug), {
+                        method: 'DELETE',
+                        body: {}
+                    }).then(function (res) {
+                        target.disabled = false;
+                        if (!res.ok) {
+                            showEditorError(rootEl, res.error || ('HTTP ' + res.status));
+                            return;
+                        }
+                        state.dirty = false;
+                        if (root.location) root.location.hash = '#lessons';
+                    }).catch(function (err) {
+                        target.disabled = false;
+                        showEditorError(rootEl, (err && err.message) || 'Network error');
                     });
                     return;
                 }

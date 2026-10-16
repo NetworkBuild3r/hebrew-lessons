@@ -58,6 +58,30 @@ spec:
                 secretKeyRef:
                   name: hebrew-secrets
                   key: MCP_AUTH_TOKEN
+            # Public origin of the MCP listener (port 8787), no path. Cursor uses this for OAuth.
+            - name: MCP_PUBLIC_URL
+              value: https://<public-mcp-host>
+            # Host header the browser sends to that origin. Loopback is already allowed.
+            - name: MCP_ALLOWED_HOSTS
+              value: <public-mcp-host>
+            # Same Google client as oauth2-proxy (Tautulli). Copy the values into hebrew-secrets.
+            # Do not write them here. On that client, add both redirect URIs and keep
+            # https://auth.ibhacked.us/oauth2/callback
+            #   https://<public-hebrew-host>/api/auth/google/callback
+            #   https://<public-mcp-host>/oauth/google/callback
+            - name: GOOGLE_OAUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: hebrew-secrets
+                  key: GOOGLE_OAUTH_CLIENT_ID
+            - name: GOOGLE_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: hebrew-secrets
+                  key: GOOGLE_OAUTH_CLIENT_SECRET
+            # Comma-separated. Empty refuses every Google sign-in.
+            - name: MCP_OAUTH_ALLOWED_EMAILS
+              value: you@example.com
             - name: ELEVENLABS_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -105,6 +129,13 @@ spec:
 Generated images use this same `hebrew-data` PVC. With `DATA_DIR=/data/app`, live files are `/data/app/media/` and files kept before a delete are `/data/app/media/_archive/`. Do not add a second volume for media, and do not put media on `hebrew-lessons`. Recordings (`.mp3`) stay on the lessons volume.
 
 `OPENAI_API_KEY`, the ElevenLabs key, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` are injected only via `secretKeyRef` (Secret name `hebrew-secrets`, keys with those same names). This document names `OPENAI_API_KEY`. It does not contain a value. The image does not contain it. The operator adds that key to the existing Secret in the cluster; do not replace the Secret, and do not write the value into git or into this file. `ADMIN_PASSWORD` is read only when the database has no admin; after the first boot, the database account is the one that signs in.
+
+`GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` are the same Google client oauth2-proxy uses for Tautulli (`oauth2-proxy-ibhacked-secrets`, Vault key `apps/oauth2-proxy`). Copy those two values into `hebrew-secrets`. Do not write them into git. In Google Cloud Console, add these redirect URIs on that client and leave `https://auth.ibhacked.us/oauth2/callback` in place:
+
+- `https://<public-hebrew-host>/api/auth/google/callback` — app sign-in (`PUBLIC_ORIGIN`)
+- `https://<public-mcp-host>/oauth/google/callback` — MCP consent (`MCP_PUBLIC_URL`)
+
+Cursor cannot use the Tautulli session cookie, so the MCP server runs its own authorization-code flow and then keeps using `MCP_AUTH_TOKEN` to sign the tokens it issues. `MCP_OAUTH_ALLOWED_EMAILS` is not a secret; an empty list refuses every Google account for MCP. App sign-in is separate: a new Google account becomes a learner. MCP stays on the allowlist. Leave the two Google keys unset to keep the token form for MCP and the password form for the app.
 
 ## Before the first rollout that enables the database volume
 

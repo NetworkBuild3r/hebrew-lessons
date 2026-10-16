@@ -1,11 +1,17 @@
 // MCP authorization (OAuth 2.1 + PKCE + dynamic client registration), single owner, no database.
 //
-// The owner signs in on /authorize by typing MCP_AUTH_TOKEN into the page. Everything issued
-// (client ids, auth codes, access and refresh tokens) is an HMAC-signed blob keyed from that same
-// token, so rotating MCP_AUTH_TOKEN revokes every client, grant, and token at once.
+// When GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are set, /authorize sends the
+// owner to Google and accepts only the emails in MCP_OAUTH_ALLOWED_EMAILS. Those are the
+// same client credentials oauth2-proxy uses for Tautulli. The Google client must list
+// {MCP_PUBLIC_URL}/oauth/google/callback as a redirect URI.
+//
+// Without those two Google variables, /authorize still asks for MCP_AUTH_TOKEN. Everything
+// issued (client ids, auth codes, access and refresh tokens) is an HMAC-signed blob keyed
+// from MCP_AUTH_TOKEN, so rotating that token revokes every client, grant, and token at once.
 //
 // Enabled only when MCP_PUBLIC_URL (the https origin clients use) and MCP_AUTH_TOKEN are both set.
 const crypto = require('crypto');
+const google = require('../server/auth/google');
 
 const ACCESS_TTL = 3600;
 const REFRESH_TTL = 30 * 24 * 3600;
@@ -34,6 +40,19 @@ function baseUrl() {
 
 function enabled() {
     return Boolean(baseUrl() && process.env.MCP_AUTH_TOKEN);
+}
+
+function googleConfigured() {
+    return google.configured();
+}
+
+function allowedEmails() {
+    return String(process.env.MCP_OAUTH_ALLOWED_EMAILS || '')
+        .split(',').map(function (item) { return item.trim().toLowerCase(); }).filter(Boolean);
+}
+
+function googleRedirectUri() {
+    return baseUrl() + '/oauth/google/callback';
 }
 
 function allowedRedirects() {
@@ -278,6 +297,80 @@ function lockedOut() {
     return failures.length >= MAX_FAILS;
 }
 
+function issueAuthCode(q) {
+    return sign('code', CODE_TTL, {
+        jti: crypto.randomBytes(12).toString('base64url'), cid: q.client_id, ru: q.redirect_uri, cc: q.code_challenge
+    });
+}
+
+function startGoogle(res, q) {
+    if (allowedEmails().length === 0) {
+        return page(res, 503, 'Sign-in is not configured',
+            '<h1>Sign-in is not configured</h1><p class="err">No allowed email is set.</p>');
+    }
+    const verifier = crypto.randomBytes(48).toString('base64url');
+    const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+    const state = sign('req', REQUEST_TTL, {
+        cid: q.client_id, ru: q.redirect_uri, cc: q.code_challenge, st: q.state || '', gv: verifier
+    });
+    let location;
+    try {
+        location = google.authorizationUrl({
+            redirectUri: googleRedirectUri(),
+            state: state,
+            codeChallenge: challenge
+        });
+    } catch (err) {
+        return page(res, 500, 'Sign-in is not configured', '<h1>Sign-in is not configured</h1><p class="err">The Google sign-in address is invalid.</p>');
+    }
+    res.writeHead(302, { Location: location, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+    res.end();
+}
+
+async function googleEmail(code, verifier) {
+    const identity = await google.identityFromCode({
+        code: code,
+        verifier: verifier,
+        redirectUri: googleRedirectUri()
+    });
+    return identity && identity.email;
+}
+
+async function googleCallback(res, url) {
+    if (!googleConfigured()) return page(res, 404, 'Not found', '<p>Not found.</p>');
+    const pending = verify(url.searchParams.get('state'), 'req');
+    if (!pending || !pending.gv) {
+        return page(res, 400, 'Expired', '<h1>Sign-in expired</h1><p>Start again from the app.</p>');
+    }
+    const q = {
+        client_id: pending.cid, redirect_uri: pending.ru, code_challenge: pending.cc, state: pending.st,
+        response_type: 'code', code_challenge_method: 'S256'
+    };
+    const resolved = resolveAuthorizeRequest(q);
+    if (resolved.fatal || resolved.redirectError) {
+        return page(res, 400, 'Cannot sign in', '<h1>Cannot sign in</h1><p class="err">Invalid request.</p>');
+    }
+    const err = url.searchParams.get('error');
+    if (err) {
+        return redirectWith(res, q.redirect_uri, {
+            error: err === 'access_denied' ? 'access_denied' : 'server_error',
+            state: q.state
+        });
+    }
+    const code = url.searchParams.get('code');
+    if (!code) return page(res, 400, 'Cannot sign in', '<h1>Cannot sign in</h1><p class="err">Google did not return a code.</p>');
+    let email;
+    try {
+        email = await googleEmail(code, pending.gv);
+    } catch (e) {
+        return page(res, 502, 'Google sign-in failed', '<h1>Google sign-in failed</h1><p class="err">Try again from the app.</p>');
+    }
+    if (!email || allowedEmails().indexOf(email) === -1) {
+        return redirectWith(res, q.redirect_uri, { error: 'access_denied', state: q.state });
+    }
+    redirectWith(res, q.redirect_uri, { code: issueAuthCode(q), state: q.state });
+}
+
 function authorizeGet(req, res, url) {
     const q = {};
     url.searchParams.forEach((value, name) => { if (!(name in q)) q[name] = value; });
@@ -286,10 +379,14 @@ function authorizeGet(req, res, url) {
     if (resolved.redirectError) {
         return redirectWith(res, q.redirect_uri, { error: resolved.redirectError, error_description: resolved.description, state: q.state });
     }
+    if (googleConfigured()) return startGoogle(res, q);
     renderConsent(res, resolved, q);
 }
 
 async function authorizePost(req, res) {
+    if (googleConfigured()) {
+        return page(res, 400, 'Use Google', '<h1>Use Google sign-in</h1><p>Start again from the app.</p>');
+    }
     let form;
     try { form = await readForm(req); } catch (err) {
         return page(res, err.status || 400, 'Bad request', '<p class="err">Bad request.</p>');
@@ -314,10 +411,7 @@ async function authorizePost(req, res) {
         failures.push(Date.now());
         return renderConsent(res, resolved, q, 'That token is not correct.', 401);
     }
-    const code = sign('code', CODE_TTL, {
-        jti: crypto.randomBytes(12).toString('base64url'), cid: q.client_id, ru: q.redirect_uri, cc: q.code_challenge
-    });
-    redirectWith(res, q.redirect_uri, { code, state: q.state });
+    redirectWith(res, q.redirect_uri, { code: issueAuthCode(q), state: q.state });
 }
 
 function issueTokens(res, clientId) {
@@ -379,6 +473,7 @@ async function handle(req, res) {
         protectedResource(res); return true;
     }
     if (p === '/register' && req.method === 'POST') { await register(req, res); return true; }
+    if (p === '/oauth/google/callback' && req.method === 'GET') { await googleCallback(res, url); return true; }
     if (p === '/authorize' && get) { authorizeGet(req, res, url); return true; }
     if (p === '/authorize' && req.method === 'POST') { await authorizePost(req, res); return true; }
     if (p === '/token' && req.method === 'POST') { await token(req, res); return true; }

@@ -311,6 +311,10 @@
                     idLine.setAttribute('dir', 'ltr');
                     idLine.setAttribute('lang', 'en');
                     td.appendChild(idLine);
+                    var del = Ui.button(doc, Ui.label('מחיקה', 'Delete'), 'btn btn-ghost admin-row-btn', {
+                        'data-plan-delete': row.id
+                    });
+                    td.appendChild(del);
                 });
                 cell(1, function (td) {
                     td.appendChild(make('span', 'plan-chip plan-chip-' + row.status.key, Ui.label(row.status.he, row.status.en)));
@@ -592,6 +596,50 @@
             }
         }
 
+        var deleting = false;
+
+        function deleteListed(planId) {
+            if (!planId || deleting || !Api) return;
+            var row = null;
+            var i;
+            for (i = 0; i < listed.length; i++) {
+                if (listed[i].id === planId) {
+                    row = listed[i];
+                    break;
+                }
+            }
+            if (!row || !Number.isInteger(row.revision)) {
+                showError({ status: 0, data: { error: 'bad_request' } });
+                return;
+            }
+            var ok = true;
+            try {
+                if (typeof root.confirm === 'function') {
+                    ok = root.confirm('למחוק את התוכנית? אי אפשר לשחזר אותה מההיסטוריה. (Delete this plan? History cannot bring it back.)');
+                }
+            } catch (err) {
+                ok = false;
+            }
+            if (!ok) return;
+            deleting = true;
+            Promise.resolve(Api.request('/api/plans/' + encodeURIComponent(planId), {
+                method: 'DELETE',
+                body: { expectedRevision: row.revision }
+            })).then(function (res) {
+                if (!alive) return;
+                deleting = false;
+                if (!res || !res.ok || !res.data || res.data.deleted !== true) {
+                    showError(res);
+                    return;
+                }
+                load();
+            }).catch(function (err) {
+                if (!alive) return;
+                deleting = false;
+                showError({ status: 0, data: null, error: err && err.message });
+            });
+        }
+
         // ---- events ----
 
         function onClick(ev) {
@@ -608,6 +656,12 @@
             }
             if (Ui.closestAttr(node, 'data-plan-list-refresh', panel) || Ui.closestAttr(node, 'data-plan-list-retry', panel)) {
                 load();
+                return;
+            }
+            var del = Ui.closestAttr(node, 'data-plan-delete', panel);
+            if (del) {
+                if (ev.preventDefault) ev.preventDefault();
+                deleteListed(del.getAttribute('data-plan-delete'));
                 return;
             }
             var link = Ui.closestAttr(node, 'data-plan-open-link', panel);

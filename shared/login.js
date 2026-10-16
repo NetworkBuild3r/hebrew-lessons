@@ -18,6 +18,16 @@
     var MSG_BLOCKED = 'הכניסה נחסמה. רעננו את הדף ונסו שוב. (Sign-in was blocked. Refresh the page and try again.)';
     var MSG_THROTTLE = 'יותר מדי ניסיונות. נסו שוב מאוחר יותר. (Too many attempts. Try again later.)';
     var MSG_NETWORK = 'שגיאת רשת. בדקו את החיבור ונסו שוב. (Network error. Check your connection and try again.)';
+    var GOOGLE_ERRORS = {
+        google_unlinked: 'החשבון הזה ב-Google לא מקושר למשתמש. (This Google account is not linked to a user.)',
+        google_denied: 'הכניסה עם Google בוטלה. (Google sign-in was cancelled.)',
+        google_failed: 'הכניסה עם Google נכשלה. נסו שוב. (Google sign-in failed. Try again.)',
+        google_expired: 'הכניסה פגה. נסו שוב. (Sign-in expired. Try again.)',
+        google_throttled: MSG_THROTTLE,
+        google_off: 'הכניסה עם Google אינה מופעלת. (Google sign-in is not turned on.)',
+        google_unverified: 'Google לא אימת את כתובת הדוא״ל. (Google did not verify that email.)',
+        google_disabled: 'החשבון מושבת. (This account is disabled.)'
+    };
 
     function qs(sel, rootEl) {
         return (rootEl || document).querySelector(sel);
@@ -54,6 +64,22 @@
         var submitBtn = qs('#login-submit', form);
         var privacy = qs('#login-privacy');
         if (privacy) privacy.textContent = PRIVACY_NOTE;
+        try {
+            var errCode = new URLSearchParams(root.location.search || '').get('error');
+            if (errCode && GOOGLE_ERRORS[errCode]) setError(errEl, GOOGLE_ERRORS[errCode]);
+        } catch (err) { /* ignore a bad query */ }
+        var googleWrap = qs('#login-google-wrap');
+        var googleLink = qs('#login-google');
+        var fetcher = root.fetch;
+        if (typeof fetcher === 'function') {
+            fetcher('/api/auth/google', { credentials: 'same-origin' }).then(function (res) {
+                return res && res.ok ? res.json() : null;
+            }).then(function (data) {
+                if (!data || !data.enabled || !googleWrap || !googleLink) return;
+                googleLink.href = '/api/auth/google/start?next=' + encodeURIComponent(nextFromQuery());
+                googleWrap.hidden = false;
+            }).catch(function () { /* password sign-in still works */ });
+        }
         var doc = root.document || document;
         if (doc && typeof doc.querySelectorAll === 'function') {
             var disclosures = doc.querySelectorAll('[data-ai-disclosure]');

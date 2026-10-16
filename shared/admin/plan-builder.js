@@ -1639,7 +1639,10 @@
         publishIcon.setAttribute('width', '14');
         publishIcon.setAttribute('height', '14');
         publishBtn.appendChild(publishIcon);
+        var deleteBtn = button('data-plan-delete', '', 'מחיקת התוכנית (Delete plan)', false);
+        deleteBtn.className += ' btn-ghost';
         actions.appendChild(reloadBtn);
+        actions.appendChild(deleteBtn);
         actions.appendChild(publishBtn);
         headRow.appendChild(actions);
         toolbar.appendChild(headRow);
@@ -1721,11 +1724,12 @@
             var openBtn = button('data-plan-lesson', String(c), 'פתיחת שיעור (Open lesson)', false);
             if (choice.path === state.lessonPath) openBtn.setAttribute('aria-current', 'true');
             ops.appendChild(openBtn);
+            var onlyLesson = state.lessonChoices.length <= 1;
             ops.appendChild(button(
                 'data-plan-lesson-remove',
                 '',
-                'הסרה (Remove)',
-                state.lessonChoices.length <= 1
+                onlyLesson ? 'מחיקת התוכנית (Delete plan)' : 'הסרה (Remove)',
+                false
             ));
             row.appendChild(ops);
             stack.appendChild(row);
@@ -2092,6 +2096,7 @@
         var node = targetNode(ev);
         if (!node || !node.hasAttribute) return Promise.resolve();
         if (attrNode(node, 'data-plan-reload')) return reload();
+        if (attrNode(node, 'data-plan-delete')) return deleteCurrentPlan();
         if (attrNode(node, 'data-plan-publish')) return publish();
         if (attrNode(node, 'data-plan-crumb-plan')) {
             state.screen = 'plan';
@@ -2768,10 +2773,45 @@
     }
 
     /**
-     * Remove a lesson via DELETE /lessons (refused when it is the last in its unit).
-     * @param {HTMLElement} node
+     * Delete the whole plan. History goes with it. A worksheet with the same id stays.
      * @returns {Promise<boolean>}
      */
+    function deleteCurrentPlan() {
+        if (!state || state.busy || !api() || !Number.isInteger(state.revision)) {
+            return Promise.resolve(false);
+        }
+        var ok = true;
+        try {
+            if (typeof root.confirm === 'function') {
+                ok = root.confirm('למחוק את התוכנית? אי אפשר לשחזר אותה מההיסטוריה. (Delete this plan? History cannot bring it back.)');
+            }
+        } catch (err) {
+            ok = false;
+        }
+        if (!ok) return Promise.resolve(false);
+        var mine = state.token;
+        state.busy = true;
+        return api().request('/api/plans/' + encodeURIComponent(state.planId), {
+            method: 'DELETE',
+            body: { expectedRevision: state.revision }
+        }).then(function (res) {
+            if (!alive(mine)) return false;
+            state.busy = false;
+            if (!res || !res.ok || !res.data || res.data.deleted !== true) {
+                if (res && res.status === 409) showConflict(res.data || {});
+                else showError(res);
+                return false;
+            }
+            if (root.location) root.location.hash = '#plans';
+            return true;
+        }).catch(function (err) {
+            if (!alive(mine)) return false;
+            state.busy = false;
+            showBox('data-plan-error', (err && err.message) || 'request failed');
+            return false;
+        });
+    }
+
     function removeLesson(node) {
         if (!state || !state.plan || node.hasAttribute('data-plan-locked') || node.disabled) {
             return Promise.resolve(false);
@@ -2788,6 +2828,7 @@
             }
         }
         if (!choice || !LESSON_PATH.test(choice.path)) return Promise.resolve(false);
+        if (state.lessonChoices.length <= 1) return deleteCurrentPlan();
         var ok = true;
         try {
             if (typeof root.confirm === 'function') ok = root.confirm('Remove this lesson?');

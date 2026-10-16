@@ -16,6 +16,7 @@ const create = require('../plans/create');
 const revisions = require('../plans/revisions');
 const issues = require('../plans/issues');
 const personal = require('../plans/personal');
+const planDelete = require('../plans/delete');
 const validate = require('../plans/validate');
 const store = require('../plans/store');
 const { makeContext } = require('../plans/context');
@@ -40,7 +41,8 @@ const WRITE_ROUTES = Object.freeze([
     // INIT-008/SPEC-010: the three new writes. Every other new route is a read.
     { method: 'POST', path: '/api/plans', fn: 'createPlan' },
     { method: 'POST', path: '/api/plans/:id/assign', fn: 'assign' },
-    { method: 'POST', path: '/api/plans/:id/restore', fn: 'restore' }
+    { method: 'POST', path: '/api/plans/:id/restore', fn: 'restore' },
+    { method: 'DELETE', path: '/api/plans/:id', fn: 'deletePlan' }
 ]);
 
 /**
@@ -138,6 +140,10 @@ function sendMapped(res, result) {
     if (result.overwrote !== undefined) bodyOut.overwrote = result.overwrote;
     // A restore says which revision it came from (INIT-008/SPEC-010).
     if (result.restoredFrom !== undefined) bodyOut.restoredFrom = result.restoredFrom;
+    if (result.deleted === true) {
+        bodyOut.deleted = true;
+        if (typeof result.id === 'string') bodyOut.id = result.id;
+    }
     security.sendJson(res, 200, bodyOut);
 }
 
@@ -744,6 +750,14 @@ function register(router) {
             value: payload.value,
             expectedRevision: payload.expectedRevision
         }, adminContext(ctx, 'set_field')));
+    });
+
+    addAdmin(router, 'DELETE', '/api/plans/:id', async (req, res, ctx) => {
+        const payload = await readOperation(req, res, ['expectedRevision']);
+        if (!payload) return;
+        sendMapped(res, planDelete.deletePlan(store, ctx.params.id, {
+            expectedRevision: payload.expectedRevision
+        }, adminContext(ctx, 'delete_plan')));
     });
 
     addAdmin(router, 'POST', '/api/plans/:id/publish', async (req, res, ctx) => {

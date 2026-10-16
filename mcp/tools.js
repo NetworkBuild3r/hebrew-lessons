@@ -17,6 +17,8 @@ const planCreate = require('../server/plans/create');
 const planRevisions = require('../server/plans/revisions');
 const planIssues = require('../server/plans/issues');
 const planPersonal = require('../server/plans/personal');
+const planDelete = require('../server/plans/delete');
+const authoring = require('../server/authoring');
 const { makeContext } = require('../server/plans/context');
 const ingest = require('../server/media/ingest');
 const images = require('../server/media/openai-images');
@@ -1226,6 +1228,27 @@ function registerLessonTools(server) {
     });
 
     // INIT-002/SPEC-007: change lesson access immediately.
+    register(server, 'delete_lesson', {
+        title: 'Delete a worksheet lesson',
+        description: [
+            'Remove a worksheet lesson from the shelf. Pass slug.',
+            'The lesson folder, including its recordings, is moved to an archive and is not deleted.',
+            'Visibility and grants for that slug are cleared.',
+            'A plan with the same id is left in place. delete_plan removes a plan.',
+            'Requires MCP_AUTH_TOKEN.'
+        ].join(' '),
+        inputSchema: {
+            slug: z.string().describe('Lesson folder name, such as shai-date-indirect-speech.')
+        }
+    }, async (args) => {
+        try {
+            requireMcpAuthToken();
+            return text(authoring.deleteLesson('mcp', args && args.slug));
+        } catch (err) {
+            return failure(err);
+        }
+    });
+
     register(server, 'set_lesson_visibility', {
         title: 'Set who can see a lesson',
         description: [
@@ -1490,6 +1513,26 @@ function registerLessonTools(server) {
         args && args.id,
         planInput(args, []),
         mcpContext('publish_plan', extra)
+    )));
+
+    register(server, 'delete_plan', {
+        title: 'Delete a lesson plan',
+        description: [
+            'Delete the plan, its published snapshot, and its history. Pass id and expectedRevision from the last read.',
+            'A stale expectedRevision returns revision_conflict and deletes nothing.',
+            'This does not remove a worksheet lesson that uses the same id. delete_lesson does that.',
+            'remove_lesson still refuses to remove the last lesson of a unit. Delete the plan instead.',
+            'Requires MCP_AUTH_TOKEN.'
+        ].join(' '),
+        inputSchema: {
+            id: PLAN_ID_SCHEMA.describe('Plan id.'),
+            expectedRevision: z.number().int().describe('Revision from the last read. Must match the stored working copy.')
+        }
+    }, async (args, extra) => callPlanTool(() => planDelete.deletePlan(
+        planStore,
+        args && args.id,
+        planInput(args, []),
+        mcpContext('delete_plan', extra)
     )));
 
     // INIT-004/SPEC-012: same ingest and image service as the HTTP routes. No second client.

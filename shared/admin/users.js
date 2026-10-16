@@ -237,6 +237,7 @@
                 status: u.status,
                 created_at: u.created_at,
                 last_sign_in: u.last_sign_in,
+                google_email: u.google_email || '',
                 ai_planning: u.ai_planning === true
             };
         });
@@ -264,6 +265,8 @@
         var isAdmin = user.role === 'admin';
         var isDisabled = user.status === 'disabled';
         var actions = ''
+            + '<button type="button" class="btn admin-row-btn" data-admin-action="google" data-user-id="'
+            + id + '">' + bi('Google', 'Google') + '</button> '
             + '<button type="button" class="btn admin-row-btn" data-admin-action="reset" data-user-id="'
             + id + '">' + bi('איפוס סיסמה', 'Reset password') + '</button> '
             + '<button type="button" class="btn admin-row-btn" data-admin-action="'
@@ -335,6 +338,9 @@
             + '<option value="user">' + esc('user') + '</option>'
             + '<option value="admin">' + esc('admin') + '</option>'
             + '</select></label>'
+            + '<label class="hebrew-shell-field">' + bi('דוא״ל Google', 'Google email')
+            + '<input type="email" name="googleEmail" id="admin-create-google" autocomplete="off"'
+            + ' inputmode="email" dir="ltr"></label>'
             + '<label class="hebrew-shell-field">' + bi('סיסמה ראשונית', 'Initial password')
             + '<input type="password" name="password" id="admin-create-password" required'
             + ' minlength="10" autocomplete="new-password"></label>'
@@ -342,6 +348,28 @@
             + '<p class="admin-inline-error" id="admin-create-error" hidden></p>'
             + '<div class="admin-dialog-actions">'
             + '<button type="submit" class="btn btn-primary">' + bi('יצירה', 'Create') + '</button>'
+            + '<button type="button" class="btn" data-admin-dialog-close>' + bi('ביטול', 'Cancel') + '</button>'
+            + '</div></form></div></div>';
+    }
+
+    function googleDialogHtml() {
+        return ''
+            + '<div class="admin-dialog hidden" id="admin-google-dialog" role="dialog" aria-modal="true"'
+            + ' aria-labelledby="admin-google-title" hidden aria-hidden="true">'
+            + '<div class="admin-dialog-panel" role="document">'
+            + '<h2 id="admin-google-title">' + bi('דוא״ל Google', 'Google email') + '</h2>'
+            + '<form id="admin-google-form" autocomplete="off">'
+            + '<input type="hidden" name="userId" id="admin-google-user-id" value="">'
+            + '<label class="hebrew-shell-field">' + bi('דוא״ל', 'Email')
+            + '<input type="email" name="googleEmail" id="admin-google-email" autocomplete="off"'
+            + ' inputmode="email" dir="ltr"></label>'
+            + '<p class="admin-password-hint">'
+            + bi('השאירו ריק כדי לנתק. רק הדוא״ל הזה יכול להיכנס לחשבון.',
+                'Leave empty to unlink. Only this email can sign in to the account.')
+            + '</p>'
+            + '<p class="admin-inline-error" id="admin-google-error" hidden></p>'
+            + '<div class="admin-dialog-actions">'
+            + '<button type="submit" class="btn btn-primary">' + bi('שמירה', 'Save') + '</button>'
             + '<button type="button" class="btn" data-admin-dialog-close>' + bi('ביטול', 'Cancel') + '</button>'
             + '</div></form></div></div>';
     }
@@ -523,8 +551,8 @@
             + bi('טוען…', 'Loading…') + '</p></div>';
 
         function paintTable() {
-            panel.innerHTML = renderUsersTable(state.users) + createDialogHtml() + resetDialogHtml()
-                + aiPlanningDialogHtml();
+            panel.innerHTML = renderUsersTable(state.users) + createDialogHtml() + googleDialogHtml()
+                + resetDialogHtml() + aiPlanningDialogHtml();
             wireForms(panel);
         }
 
@@ -539,6 +567,7 @@
                     var displayEl = rootEl.querySelector('#admin-create-display');
                     var roleEl = rootEl.querySelector('#admin-create-role');
                     var passwordEl = rootEl.querySelector('#admin-create-password');
+                    var googleEl = rootEl.querySelector('#admin-create-google');
                     if (errEl) {
                         errEl.hidden = true;
                         errEl.textContent = '';
@@ -546,12 +575,15 @@
                     var Api = api();
                     if (!Api) return;
                     var passwordValue = passwordEl ? passwordEl.value : '';
-                    Api.post('/api/admin/users', {
+                    var createBody = {
                         username: usernameEl ? usernameEl.value : '',
                         displayName: displayEl ? displayEl.value : '',
                         role: roleEl ? roleEl.value : 'user',
                         password: passwordValue
-                    }).then(function (res) {
+                    };
+                    var googleValue = googleEl ? String(googleEl.value || '').trim() : '';
+                    if (googleValue) createBody.googleEmail = googleValue;
+                    Api.post('/api/admin/users', createBody).then(function (res) {
                         if (passwordEl) passwordEl.value = '';
                         passwordValue = '';
                         if (!res.ok) {
@@ -565,6 +597,41 @@
                         refresh();
                     }).catch(function () {
                         if (passwordEl) passwordEl.value = '';
+                        if (errEl) {
+                            errEl.hidden = false;
+                            errEl.textContent = 'Network error';
+                        }
+                    });
+                });
+            }
+
+            var googleFormEl = rootEl.querySelector('#admin-google-form');
+            if (googleFormEl && !googleFormEl.dataset.bound) {
+                googleFormEl.dataset.bound = '1';
+                googleFormEl.addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    var errEl = rootEl.querySelector('#admin-google-error');
+                    var idEl = rootEl.querySelector('#admin-google-user-id');
+                    var emailEl = rootEl.querySelector('#admin-google-email');
+                    if (errEl) {
+                        errEl.hidden = true;
+                        errEl.textContent = '';
+                    }
+                    if (!idEl) return;
+                    var targetId = idEl.value;
+                    patchUser(targetId, {
+                        googleEmail: emailEl ? String(emailEl.value || '').trim() : ''
+                    }).then(function (res) {
+                        if (!res.ok) {
+                            if (errEl) {
+                                errEl.hidden = false;
+                                errEl.textContent = res.error || 'Could not save';
+                            }
+                            return;
+                        }
+                        if (state.dialogCtl) state.dialogCtl.close();
+                        refresh();
+                    }).catch(function () {
                         if (errEl) {
                             errEl.hidden = false;
                             errEl.textContent = 'Network error';
@@ -690,6 +757,24 @@
                         createErr.textContent = '';
                     }
                     state.dialogCtl = openDialog(createDlg, btn);
+                    return;
+                }
+
+                if (action === 'google' && userId) {
+                    var googleDlg = panel.querySelector('#admin-google-dialog');
+                    var googleForm = panel.querySelector('#admin-google-form');
+                    var googleErr = panel.querySelector('#admin-google-error');
+                    var googleId = panel.querySelector('#admin-google-user-id');
+                    var googleInput = panel.querySelector('#admin-google-email');
+                    var subject = findUser(state, userId);
+                    if (googleForm) googleForm.reset();
+                    if (googleId) googleId.value = String(userId);
+                    if (googleInput) googleInput.value = subject && subject.google_email ? subject.google_email : '';
+                    if (googleErr) {
+                        googleErr.hidden = true;
+                        googleErr.textContent = '';
+                    }
+                    state.dialogCtl = openDialog(googleDlg, btn);
                     return;
                 }
 

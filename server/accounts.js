@@ -4,6 +4,7 @@
  */
 'use strict';
 
+const crypto = require('crypto');
 const db = require('./db');
 const usersRepo = require('./db/repos/users');
 const auditRepo = require('./db/repos/audit');
@@ -43,6 +44,7 @@ function publicUser(row) {
         role: row.role,
         status: row.status,
         auth_provider: row.auth_provider,
+        google_email: row.google_email || null,
         must_change_password: Boolean(row.must_change_password),
         created_at: row.created_at,
         updated_at: row.updated_at
@@ -121,6 +123,20 @@ function assertLastAdminSafe(target, next) {
  * @param {{ ip?: string, now?: Date|number|string, userAgent?: string }} [meta]
  * @returns {{ user: object, token: string, expiresAt: string }}
  */
+/**
+ * Empty becomes null (clear). A bad address is false.
+ * @param {unknown} value
+ * @returns {string|null|false}
+ */
+function normalizeEmail(value) {
+    if (value == null) return null;
+    const email = String(value).trim().toLowerCase();
+    if (!email) return null;
+    if (email.length > 254) return false;
+    if (!/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(email)) return false;
+    return email;
+}
+
 function signIn(username, password, meta) {
     lastSignInUsedDummy = false;
     const opts = meta || {};
@@ -156,12 +172,146 @@ function signIn(username, password, meta) {
     };
 }
 
+function usernameFromEmail(email) {
+    const local = String(email).split('@')[0] || '';
+    let base = local.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+    base = base.replace(/^[._-]+/, '').replace(/[._-]+$/, '');
+    if (!base) base = 'learner';
+    if (base.length > 48) base = base.slice(0, 48);
+    let candidate = base;
+    let n = 2;
+    while (usersRepo.findByUsername(candidate)) {
+        const suffix = String(n);
+        candidate = base.slice(0, 64 - suffix.length) + suffix;
+        n += 1;
+        if (n > 1000) throw new AccountsError('Could not create account', 'signup_failed');
+    }
+    return candidate;
+}
+
+/**
+ * Create a learner from a verified Google profile. Role is always user.
+ * The password is random; they sign in with Google.
+ * @param {{ email: string, sub?: string, name?: string }} identity
+ * @param {Date|number|string} [now]
+ */
+function provisionGoogleUser(identity, now) {
+    const email = normalizeEmail(identity.email);
+    const sub = identity.sub ? String(identity.sub) : '';
+    const username = usernameFromEmail(email);
+    const display = String(identity.name || '').trim() || username;
+    let created;
+    try {
+        created = usersRepo.create({
+            username: username,
+            password_hash: passwords.hash(crypto.randomBytes(32).toString('base64url')),
+            display_name: display,
+            role: 'user',
+            status: 'active',
+            auth_provider: 'google',
+            provider_subject: sub || null,
+            must_change_password: false,
+            created_at: nowIso(now),
+            updated_at: nowIso(now)
+        });
+    } catch (err) {
+        const existing = usersRepo.findByGoogleEmail(email) || (sub ? usersRepo.findByProviderSubject(sub) : null);
+        if (existing) return existing;
+        throw err;
+    }
+    const id = Number(created.lastInsertRowid);
+    updateUserFields(id, { google_email: email }, now);
+    writeAudit('google', 'user.create', username, JSON.stringify({ role: 'user', provider: 'google' }), now);
+    return usersRepo.findById(id);
+}
+
+/**
+ * Sign in a verified Google account. An unknown account is created from the profile.
+ * Password sign-in is unchanged. A disabled account is not replaced with a new one.
+ * @param {{ email: string, sub?: string, name?: string }} identity
+ * @param {{ ip?: string, now?: Date|number|string }} [meta]
+ * @returns {{ user: object, token: string, expiresAt: string }}
+ */
+function signInWithGoogle(identity, meta) {
+    const opts = meta || {};
+    const now = opts.now;
+    const ip = opts.ip || '';
+    const email = normalizeEmail(identity && identity.email);
+    const sub = identity && identity.sub ? String(identity.sub) : '';
+    if (!email) throw new AccountsError(GENERIC_AUTH_ERROR, 'not_linked');
+
+    const gate = throttle.check(email, ip, now);
+    if (!gate.ok) throw new AccountsError(THROTTLE_ERROR, 'throttled');
+
+    const bySub = sub ? usersRepo.findByProviderSubject(sub) : null;
+    const byEmail = usersRepo.findByGoogleEmail(email);
+    if (bySub && byEmail && bySub.id !== byEmail.id) {
+        throttle.recordFailure(email, ip, now);
+        throw new AccountsError(GENERIC_AUTH_ERROR, 'not_linked');
+    }
+    let user = bySub || byEmail;
+    if (!user) {
+        user = provisionGoogleUser({ email: email, sub: sub, name: identity.name }, now);
+    }
+    if (user.status !== 'active') {
+        throttle.recordFailure(email, ip, now);
+        throw new AccountsError(GENERIC_AUTH_ERROR, 'disabled');
+    }
+    if (user.google_email && user.google_email !== email) {
+        throttle.recordFailure(email, ip, now);
+        throw new AccountsError(GENERIC_AUTH_ERROR, 'not_linked');
+    }
+    if (user.provider_subject && sub && user.provider_subject !== sub) {
+        throttle.recordFailure(email, ip, now);
+        throw new AccountsError(GENERIC_AUTH_ERROR, 'not_linked');
+    }
+    if (sub && !user.provider_subject) {
+        updateUserFields(user.id, { provider_subject: sub }, now);
+    }
+    throttle.clear(email);
+    const session = sessions.create(user.id, { now });
+    return {
+        user: publicUser(usersRepo.findById(user.id)),
+        token: session.token,
+        expiresAt: session.expiresAt
+    };
+}
+
+/**
+ * Link, replace, or clear the Google email on a user. Clearing also drops the stored Google subject.
+ * @param {number} userId
+ * @param {string|null} email
+ * @param {string|object} actor
+ * @param {Date|number|string} [now]
+ */
+function setGoogleEmail(userId, email, actor, now) {
+    const target = usersRepo.findById(userId);
+    if (!target) throw new AccountsError('User not found', 'not_found');
+    const normalized = normalizeEmail(email);
+    if (normalized === false) throw new AccountsError('Invalid email', 'invalid_email');
+    if (normalized) {
+        const taken = usersRepo.findByGoogleEmail(normalized);
+        if (taken && taken.id !== target.id) {
+            throw new AccountsError('That Google email is already linked', 'google_email_taken');
+        }
+    }
+    const same = (target.google_email || null) === normalized;
+    const fields = { google_email: normalized };
+    if (!same) fields.provider_subject = null;
+    updateUserFields(userId, fields, now);
+    writeAudit(actor, 'user.setGoogleEmail', target.username, JSON.stringify({
+        linked: Boolean(normalized)
+    }), now);
+    return publicUser(usersRepo.findById(userId));
+}
+
 /**
  * @param {{
  *   username: string,
  *   password: string,
  *   role?: 'user'|'admin',
  *   displayName?: string|null,
+ *   googleEmail?: string|null,
  *   actor?: string|object,
  *   now?: Date|number|string
  * }} input
@@ -179,6 +329,14 @@ function createUser(input) {
     if (existing) {
         throw new AccountsError('Username already exists', 'username_taken');
     }
+    let googleEmail = null;
+    if (input.googleEmail != null && String(input.googleEmail).trim()) {
+        googleEmail = normalizeEmail(input.googleEmail);
+        if (googleEmail === false) throw new AccountsError('Invalid email', 'invalid_email');
+        if (usersRepo.findByGoogleEmail(googleEmail)) {
+            throw new AccountsError('That Google email is already linked', 'google_email_taken');
+        }
+    }
     const passwordHash = passwords.hash(input.password);
     const created = usersRepo.create({
         username: input.username,
@@ -191,6 +349,7 @@ function createUser(input) {
         updated_at: nowIso(input.now)
     });
     const id = Number(created.lastInsertRowid);
+    if (googleEmail) updateUserFields(id, { google_email: googleEmail }, input.now);
     writeAudit(input.actor, 'user.create', input.username, JSON.stringify({ role }), input.now);
     return publicUser(usersRepo.findById(id));
 }
@@ -361,6 +520,8 @@ function didLastSignInUseDummy() {
 
 module.exports = {
     signIn,
+    signInWithGoogle,
+    setGoogleEmail,
     createUser,
     setRole,
     setStatus,

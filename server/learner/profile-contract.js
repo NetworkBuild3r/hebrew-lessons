@@ -80,7 +80,7 @@ const NEVER_RETURNED = Object.freeze([
     // auth provider fields, or any other account secret.
     'display_name', 'displayName', 'id', 'user_id', 'userId', 'role',
     'password', 'password_hash', 'passwordHash', 'token', 'token_hash',
-    'session', 'sessions', 'auth_provider', 'provider_subject', 'must_change_password',
+    'session', 'sessions', 'auth_provider', 'provider_subject', 'google_email', 'must_change_password',
     // practice_events rows and every field of one: result, time, lesson slug,
     // activity, client event id, kind, lemma, the grade of one event.
     'practice_events', 'events', 'word', 'direction', 'result', 'at', 'time', 'slug',

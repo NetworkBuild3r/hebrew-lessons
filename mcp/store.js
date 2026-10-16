@@ -139,4 +139,44 @@ function upsertLesson(input) {
     };
 }
 
-module.exports = { listLessons, getLesson, listWords, upsertLesson, rootDir, lessonsDir };
+/**
+ * Remove a shelf lesson. The catalog row is dropped. A lesson folder is moved
+ * under worksheets/_archive, recordings included, and is not deleted.
+ * A plan with the same id is left alone.
+ * @param {string} slug
+ * @returns {{ slug: string, archived: string|null, removedFromCatalog: boolean }}
+ */
+function deleteLesson(slug) {
+    assertSlug(slug);
+    const dir = lessonDir(slug);
+    const hasFolder = fs.existsSync(path.join(dir, 'worksheet.js'));
+    const catalogPath = catalogFile();
+    const previousCatalog = fs.existsSync(catalogPath) ? fs.readFileSync(catalogPath) : null;
+    const catalog = previousCatalog ? readCatalog() : [];
+    const hadEntry = catalog.some((item) => item && item.slug === slug);
+    if (!hasFolder && !hadEntry) {
+        const err = new Error('No lesson for "' + slug + '".');
+        err.code = 'not_found';
+        throw err;
+    }
+    if (hadEntry) {
+        writeJs(catalogPath, 'HEBREW_CATALOG', catalog.filter((item) => item && item.slug !== slug));
+    }
+    let archived = null;
+    if (hasFolder) {
+        try {
+            const archiveRoot = path.join(lessonsDir(), '_archive', slug);
+            fs.mkdirSync(archiveRoot, { recursive: true });
+            let dest = path.join(archiveRoot, new Date().toISOString().replace(/[:.]/g, '-'));
+            if (fs.existsSync(dest)) dest += '-' + Math.random().toString(16).slice(2);
+            fs.renameSync(dir, dest);
+            archived = path.relative(rootDir(), dest).replace(/\\/g, '/');
+        } catch (err) {
+            if (previousCatalog) fs.writeFileSync(catalogPath, previousCatalog);
+            throw err;
+        }
+    }
+    return { slug, archived, removedFromCatalog: hadEntry };
+}
+
+module.exports = { listLessons, getLesson, listWords, upsertLesson, deleteLesson, rootDir, lessonsDir };

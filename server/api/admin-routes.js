@@ -45,6 +45,7 @@ const ROUTES = Object.freeze([
     { method: 'POST', path: '/api/admin/lessons/:slug/validate' },
     { method: 'PUT', path: '/api/admin/lessons/:slug' },
     { method: 'POST', path: '/api/admin/lessons' },
+    { method: 'DELETE', path: '/api/admin/lessons/:slug' },
     { method: 'GET', path: '/api/admin/lessons/:slug/audio-plan' },
     { method: 'POST', path: '/api/admin/lessons/:slug/audio' },
     { method: 'PUT', path: '/api/admin/lexicon' },
@@ -72,7 +73,7 @@ function sendBodyError(err, res) {
  */
 function mapAccountsError(err) {
     if (err && err.name === 'AccountsError') {
-        if (err.code === 'last_admin' || err.code === 'self_disable' || err.code === 'username_taken') {
+        if (err.code === 'last_admin' || err.code === 'self_disable' || err.code === 'username_taken' || err.code === 'google_email_taken') {
             return { status: 409, message: err.message, code: err.code };
         }
         if (err.code === 'not_found') {
@@ -106,6 +107,7 @@ function listUserRow(row) {
         id: row.id,
         username: row.username,
         display_name: row.display_name,
+        google_email: row.google_email || null,
         role: row.role,
         status: row.status,
         created_at: row.created_at,
@@ -301,6 +303,7 @@ function register(router) {
                 password: payload.password,
                 role: payload.role || 'user',
                 displayName: payload.displayName,
+                googleEmail: payload.googleEmail,
                 actor: ctx.user
             });
             security.sendJson(res, 201, listUserRow(created));
@@ -332,7 +335,8 @@ function register(router) {
         const hasRole = payload.role !== undefined;
         const hasStatus = payload.status !== undefined;
         const hasDisplay = payload.displayName !== undefined;
-        if (!hasRole && !hasStatus && !hasDisplay) {
+        const hasGoogle = payload.googleEmail !== undefined;
+        if (!hasRole && !hasStatus && !hasDisplay && !hasGoogle) {
             security.sendJsonError(res, 400, 'No updates provided', 'bad_request');
             return;
         }
@@ -344,6 +348,9 @@ function register(router) {
             }
             if (hasRole) {
                 updated = accounts.setRole(id, payload.role, ctx.user);
+            }
+            if (hasGoogle) {
+                updated = accounts.setGoogleEmail(id, payload.googleEmail, ctx.user);
             }
             if (hasDisplay) {
                 const target = usersRepo.findById(id);
@@ -543,6 +550,24 @@ function register(router) {
                 return;
             }
             security.sendJsonError(res, 400, err.message || 'Invalid request', 'bad_request');
+        }
+    });
+
+    addAdmin(router, 'DELETE', '/api/admin/lessons/:slug', async (req, res, ctx) => {
+        const slug = ctx.params && ctx.params.slug;
+        try {
+            const result = authoring.deleteLesson(ctx.user, slug);
+            security.sendJson(res, 200, {
+                slug: result.slug,
+                deleted: true,
+                archived: result.archived
+            });
+        } catch (err) {
+            if (err && err.code === 'not_found') {
+                security.sendJsonError(res, 404, 'Not found', 'not_found');
+                return;
+            }
+            security.sendJsonError(res, 400, 'Invalid request', 'bad_request');
         }
     });
 

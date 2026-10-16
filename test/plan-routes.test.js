@@ -87,7 +87,8 @@ const WRITE_BODIES = {
     // asserted in plan-builder-routes.test.js; here they only need a well-formed body.
     createPlan: () => ({ id: 'new-cafe', title: 'New cafe' }),
     assign: () => ({ audience: 'shared', expectedRevision: 1 }),
-    restore: () => ({ fromRevision: 1, expectedRevision: 1 })
+    restore: () => ({ fromRevision: 1, expectedRevision: 1 }),
+    deletePlan: () => ({ expectedRevision: 1 })
 };
 
 // The six routes that each call one function in ops.js or publish.js.
@@ -273,7 +274,7 @@ describe('plan HTTP routes (INIT-004/SPEC-004)', { concurrency: false }, () => {
 
     it('ac-1: each write route calls only its function', async () => {
         const planRoutes = require('../server/api/plan-routes');
-        assert.equal(planRoutes.WRITE_ROUTES.length, 12);
+        assert.equal(planRoutes.WRITE_ROUTES.length, 13);
         const operationRoutes = planRoutes.WRITE_ROUTES.filter((route) => OPERATION_FNS.includes(route.fn));
         assert.equal(operationRoutes.length, 6);
         for (const route of operationRoutes) {

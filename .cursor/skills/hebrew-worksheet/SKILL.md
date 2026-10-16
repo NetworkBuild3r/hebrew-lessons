@@ -51,6 +51,7 @@ Call these tools by these names:
 | `restore_plan_revision` | Put an earlier value back as a **new** revision: `fromRevision`, optional `path` and `field` (the narrowest that fits), and `expectedRevision`. History is not edited. It cannot change `audience` or `assigneeId`. |
 | `assign_plan` | The only way to change `audience` or `assigneeId`: `audience` `shared` or `personal`, `assigneeId` for `personal` (an active account), and `expectedRevision`. `assignee_refused` means that account cannot be used. |
 | `publish_plan` | Publish the working copy: `id` and `expectedRevision`, nothing else. Learners keep the previous snapshot until this succeeds. |
+| `delete_plan` | Delete the plan, its published snapshot, and its history. Pass `id` and `expectedRevision`. A stale revision deletes nothing. This does not remove a worksheet with the same id (`delete_lesson` does). |
 
 Every write sends `expectedRevision`: the integer from the last read of that plan. A successful mutation increments the revision by 1.
 
@@ -175,6 +176,7 @@ For that worksheet only:
 2. `upsert_lesson` writes `window.WORKSHEET` and validates it. Omit audio fields. The server fills clips. Do not invent a `.mp3` path on this path either.
 3. `set_lesson_visibility` shares or hides the worksheet after the write. It does not change who can read a published plan for the same slug. To restrict a lesson that has one, first `set_field` the plan lesson's `visibility` and `publish_plan`, then call `set_lesson_visibility`. A new worksheet stays hidden until it is assigned. If you need a sample account id, use `example-learner`. `list_users` can list accounts for that assignment. Do not copy a real account name into the worksheet or into a plan.
 4. `generate_lesson_audio` backfills clips for a worksheet. Run `npm run audio:inventory` before regenerating and `npm run audio:verify` after.
+5. `delete_lesson` takes the worksheet off the shelf. The folder, including recordings, is archived and is not deleted. A plan with the same id stays until `delete_plan`.
 
 Without MCP, copy `worksheets/_template` to `worksheets/<slug>/`, edit only `worksheet.js`, add a catalog row, and run:
 

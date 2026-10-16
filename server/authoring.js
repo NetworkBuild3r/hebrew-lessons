@@ -21,6 +21,7 @@ const {
     lessonDir,
     seedWorksheetsDir
 } = require('./paths');
+const db = require('./db');
 const visibility = require('./visibility');
 const visibilityRepo = require('./db/repos/visibility');
 const audit = require('./db/repos/audit');
@@ -514,10 +515,50 @@ async function generateAudio(actor, slug, opts) {
     }
 }
 
+/**
+ * Take a worksheet lesson off the shelf. The folder, including recordings,
+ * moves under `_archive`. Visibility and grants for the slug are cleared.
+ * A plan that uses the same id is not touched.
+ * @param {unknown} actor
+ * @param {string} slug
+ * @returns {{ slug: string, deleted: true, archived: string|null }}
+ */
+function deleteLesson(actor, slug) {
+    assertAuthoringSlug(slug);
+    let removed;
+    try {
+        removed = store.deleteLesson(slug);
+    } catch (err) {
+        if (err && err.code === 'not_found') {
+            const missing = new Error('No lesson for that id.');
+            missing.code = 'not_found';
+            throw missing;
+        }
+        throw err;
+    }
+    db.transaction(() => {
+        db.run('DELETE FROM lesson_grants WHERE slug = ?', slug);
+        db.run('DELETE FROM lesson_visibility WHERE slug = ?', slug);
+        audit.append({
+            actor: actorLabel(actor),
+            action: 'lesson.delete',
+            target: slug,
+            detail: JSON.stringify({ archived: Boolean(removed.archived) })
+        });
+    });
+    rebuildVocabIndexSafe();
+    return {
+        slug: removed.slug,
+        deleted: true,
+        archived: removed.archived
+    };
+}
+
 module.exports = {
     loadForEdit,
     validateDraft,
     save,
+    deleteLesson,
     audioPlan,
     generateAudio,
     assertAuthoringSlug,

@@ -95,6 +95,10 @@ const CALLS = {
         mcp: { id: ID, expectedRevision: rev },
         http: { method: 'POST', url: '/api/plans/' + ID + '/publish', body: { expectedRevision: rev } }
     }),
+    delete_plan: (rev) => ({
+        mcp: { id: ID, expectedRevision: rev },
+        http: { method: 'DELETE', url: '/api/plans/' + ID, body: { expectedRevision: rev } }
+    }),
     list_plans: (rev) => ({
         mcp: { limit: 5 },
         http: { method: 'GET', url: '/api/plans?limit=5' }
@@ -301,8 +305,8 @@ describe('plan builder parity (INIT-008/SPEC-010)', { concurrency: false }, () =
 
     it('ac-2: the real table has no problem against the real registries', () => {
         assert.deepEqual(findParityProblems(ROWS, registry()), []);
-        assert.equal(ROWS.length, 20);
-        assert.equal(ROWS.filter((row) => row.tool && row.route).length, 19);
+        assert.equal(ROWS.length, 21);
+        assert.equal(ROWS.filter((row) => row.tool && row.route).length, 20);
     });
 
     it('ac-2: each row of both sides calls the same function through its tool and its route', async () => {

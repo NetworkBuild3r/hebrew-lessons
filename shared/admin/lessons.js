@@ -143,6 +143,10 @@
             + renderUserPicker(lesson, users)
             + '<button type="button" class="btn btn-primary admin-row-btn" data-vis-save="'
             + slug + '">' + bi('שמירת נראות', 'Save visibility') + '</button>'
+            + '<a class="btn btn-ghost admin-row-btn" href="#lesson/' + encodeURIComponent(lesson.slug) + '">'
+            + bi('עריכה', 'Edit') + '</a>'
+            + '<button type="button" class="btn btn-ghost admin-row-btn" data-lesson-delete="'
+            + slug + '">' + bi('מחיקה', 'Delete') + '</button>'
             + '<span class="lesson-vis-status" data-vis-status="' + slug + '" aria-live="polite"></span>'
             + '</td></tr>';
     }
@@ -309,6 +313,7 @@
                 while (target && target !== rootEl && !(target.getAttribute && (
                     target.getAttribute('data-vis-save')
                     || target.getAttribute('data-lesson-action')
+                    || target.getAttribute('data-lesson-delete')
                     || target.hasAttribute('data-admin-dialog-close')
                 ))) {
                     target = target.parentNode;
@@ -323,6 +328,39 @@
                 if (target.getAttribute('data-lesson-action') === 'new') {
                     var dlg = rootEl.querySelector('#admin-new-lesson-dialog');
                     state.dialogCtl = openDialog(dlg, target);
+                    return;
+                }
+
+                var deleteSlug = target.getAttribute('data-lesson-delete');
+                if (deleteSlug) {
+                    var confirmed = true;
+                    try {
+                        if (typeof root.confirm === 'function') {
+                            confirmed = root.confirm('למחוק את השיעור מהמדף? ההקלטות נשמרות בארכיון. (Delete this lesson from the shelf? Recordings are kept in the archive.)');
+                        }
+                    } catch (err) {
+                        confirmed = false;
+                    }
+                    if (!confirmed) return;
+                    clearError(rootEl);
+                    target.disabled = true;
+                    api().request('/api/admin/lessons/' + encodeURIComponent(deleteSlug), {
+                        method: 'DELETE',
+                        body: {}
+                    }).then(function (res) {
+                        target.disabled = false;
+                        if (!res.ok) {
+                            showError(rootEl, res.error || ('HTTP ' + res.status));
+                            return;
+                        }
+                        state.lessons = state.lessons.filter(function (lesson) {
+                            return lesson.slug !== deleteSlug;
+                        });
+                        paint();
+                    }).catch(function (err) {
+                        target.disabled = false;
+                        showError(rootEl, (err && err.message) || 'Network error');
+                    });
                     return;
                 }
 

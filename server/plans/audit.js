@@ -26,7 +26,8 @@ const ACTIONS = Object.freeze([
     'plan.remove_lesson',
     'plan.publish',
     'plan.restore',
-    'plan.assign'
+    'plan.assign',
+    'plan.delete'
 ]);
 
 const DETAIL_TEXT_MAX = 256;

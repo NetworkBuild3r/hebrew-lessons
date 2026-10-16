@@ -32,6 +32,7 @@ const ROWS = Object.freeze([
     { operation: 'publish', module: 'publish', fn: 'publishPlan', tool: 'publish_plan', route: { method: 'POST', path: '/api/plans/:id/publish' }, write: true, exemption: null },
     { operation: 'list plans', module: 'create', fn: 'listPlans', tool: 'list_plans', route: { method: 'GET', path: '/api/plans' }, write: false, exemption: null },
     { operation: 'create a plan', module: 'create', fn: 'createPlan', tool: 'create_plan', route: { method: 'POST', path: '/api/plans' }, write: true, exemption: null },
+    { operation: 'delete a plan', module: 'delete', fn: 'deletePlan', tool: 'delete_plan', route: { method: 'DELETE', path: '/api/plans/:id' }, write: true, exemption: null },
     { operation: 'assign a plan', module: 'personal', fn: 'assign', tool: 'assign_plan', route: { method: 'POST', path: '/api/plans/:id/assign' }, write: true, exemption: null },
     { operation: 'list revisions', module: 'revisions', fn: 'list', tool: 'list_plan_revisions', route: { method: 'GET', path: '/api/plans/:id/revisions' }, write: false, exemption: null },
     { operation: 'read one revision', module: 'revisions', fn: 'get', tool: 'get_plan_revision', route: { method: 'GET', path: '/api/plans/:id/revisions/:revision' }, write: false, exemption: null },

@@ -101,6 +101,15 @@ function findByProvider(authProvider, providerSubject) {
     );
 }
 
+function findByGoogleEmail(email) {
+    return db.get('SELECT * FROM users WHERE google_email = ?', email);
+}
+
+function findByProviderSubject(subject) {
+    if (!subject) return undefined;
+    return db.get('SELECT * FROM users WHERE provider_subject = ?', subject);
+}
+
 function updateStatus(id, status) {
     return db.run(
         'UPDATE users SET status = ?, updated_at = ? WHERE id = ?',
@@ -176,6 +185,8 @@ module.exports = {
     findLearnerById,
     findLearnerByUsername,
     findByProvider,
+    findByGoogleEmail,
+    findByProviderSubject,
     updateStatus,
     deleteById,
     listAll,
