@@ -182,6 +182,7 @@ test('Google sign-in replaces the token form and still issues an MCP token', asy
         body: form({ grant_type: 'authorization_code', code, client_id: clientId, redirect_uri: CB, code_verifier: verifier })
     });
     assert.strictEqual(token.status, 200);
+    assert.strictEqual(token.headers['access-control-allow-origin'], '*');
     const issued = JSON.parse(token.data);
     const access = issued.access_token;
     const claims = JSON.parse(Buffer.from(access.split('.')[0], 'base64url').toString());

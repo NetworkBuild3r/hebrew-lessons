@@ -132,11 +132,21 @@ function resourceMetadataUrl() {
     return baseUrl() + '/.well-known/oauth-protected-resource';
 }
 
+// Browser clients (the Cursor / Grok callback page) exchange the code with fetch().
+// Without these headers the browser hides a successful token response and shows server_error.
+function withCors(headers) {
+    return Object.assign({
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+    }, headers || {});
+}
+
 function json(res, status, body, extra) {
-    res.writeHead(status, Object.assign({
+    res.writeHead(status, withCors(Object.assign({
         'Content-Type': 'application/json; charset=utf-8',
         'Cache-Control': 'no-store'
-    }, extra || {}));
+    }, extra || {})));
     res.end(JSON.stringify(body));
 }
 
@@ -149,14 +159,14 @@ function esc(value) {
 }
 
 function page(res, status, title, bodyHtml) {
-    res.writeHead(status, {
+    res.writeHead(status, withCors({
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-store',
         'X-Frame-Options': 'DENY',
         'Referrer-Policy': 'no-referrer',
         'X-Content-Type-Options': 'nosniff',
         'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"
-    });
+    }));
     res.end('<!doctype html><html lang="en"><head><meta charset="utf-8">' +
         '<meta name="viewport" content="width=device-width,initial-scale=1">' +
         '<title>' + esc(title) + '</title><style>' +
@@ -269,17 +279,17 @@ function resolveAuthorizeRequest(q) {
 function sendRedirect(res, target, plainTitle) {
     const isWeb = /^https?:\/\//i.test(target);
     if (isWeb) {
-        res.writeHead(302, { Location: target, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+        res.writeHead(302, withCors({ Location: target, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }));
         res.end();
         return;
     }
     // Custom-scheme callbacks (cursor://): browsers handle a page better than a 302 after a POST.
-    res.writeHead(200, {
+    res.writeHead(200, withCors({
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-store',
         'Referrer-Policy': 'no-referrer',
         'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"
-    });
+    }));
     res.end('<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=' + esc(target) +
         '"><title>' + esc(plainTitle) + '</title></head><body style="font:16px system-ui,sans-serif;max-width:30rem;margin:12vh auto;padding:0 1rem">' +
         '<p>' + esc(plainTitle) + '</p><p><a href="' + esc(target) + '">Return to the app</a></p></body></html>');
@@ -471,7 +481,10 @@ async function token(req, res) {
     }
     if (form.grant_type === 'authorization_code') {
         const grant = verify(form.code, 'code');
-        if (!grant) return oauthError(res, 400, 'invalid_grant', 'Code is invalid or expired.');
+        if (!grant) {
+            console.error('mcp token authorization_code invalid_grant code');
+            return oauthError(res, 400, 'invalid_grant', 'Code is invalid or expired.');
+        }
         sweepUsedCodes();
         if (usedCodes.has(grant.jti)) return oauthError(res, 400, 'invalid_grant', 'Code was already used.');
         usedCodes.set(grant.jti, grant.exp);
@@ -482,7 +495,11 @@ async function token(req, res) {
             return oauthError(res, 400, 'invalid_grant', 'PKCE verification failed.');
         }
         const userClaims = tokenUser(grant);
-        if (!userClaims) return oauthError(res, 400, 'invalid_grant', 'That account can no longer sign in.');
+        if (!userClaims) {
+            console.error('mcp token authorization_code invalid_grant account');
+            return oauthError(res, 400, 'invalid_grant', 'That account can no longer sign in.');
+        }
+        console.error('mcp token authorization_code ok' + (userClaims.uid != null ? ' uid' : ''));
         return issueTokens(res, grant.cid, userClaims);
     }
     if (form.grant_type === 'refresh_token') {
@@ -493,9 +510,14 @@ async function token(req, res) {
         }
         if (!verify(grant.cid, 'client')) return oauthError(res, 400, 'invalid_grant', 'Client is no longer registered.');
         const userClaims = tokenUser(grant);
-        if (!userClaims) return oauthError(res, 400, 'invalid_grant', 'That account can no longer sign in.');
+        if (!userClaims) {
+            console.error('mcp token refresh_token invalid_grant account');
+            return oauthError(res, 400, 'invalid_grant', 'That account can no longer sign in.');
+        }
+        console.error('mcp token refresh_token ok' + (userClaims.uid != null ? ' uid' : ''));
         return issueTokens(res, grant.cid, userClaims);
     }
+    console.error('mcp token unsupported_grant_type');
     return oauthError(res, 400, 'unsupported_grant_type', 'Use authorization_code or refresh_token.');
 }
 
@@ -505,6 +527,13 @@ async function handle(req, res) {
     const url = new URL(req.url || '/', 'http://127.0.0.1');
     const p = url.pathname;
     const get = req.method === 'GET' || req.method === 'HEAD';
+    const oauthPath = p === '/register' || p === '/authorize' || p === '/token' || p === '/oauth/google/callback'
+        || p.startsWith('/.well-known/');
+    if (req.method === 'OPTIONS' && oauthPath) {
+        res.writeHead(204, withCors({ 'Access-Control-Max-Age': '600', 'Cache-Control': 'no-store' }));
+        res.end();
+        return true;
+    }
     if (get && (p === '/.well-known/oauth-authorization-server' || p === '/.well-known/openid-configuration')) {
         metadata(res); return true;
     }
