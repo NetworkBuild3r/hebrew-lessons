@@ -81,6 +81,13 @@ function listen() {
     }
     const httpServer = http.createServer(async (req, res) => {
         const url = new URL(req.url || '/', 'http://127.0.0.1');
+        const ua = String(req.headers['user-agent'] || '');
+        if (url.pathname !== '/mcp' && url.pathname !== '/mcp/' && !ua.startsWith('kube-probe')) {
+            res.on('finish', () => {
+                console.error('mcp req ' + req.method + ' ' + url.pathname + ' ' + res.statusCode
+                    + ' host=' + String(req.headers.host || '') + ' ua=' + JSON.stringify(ua.slice(0, 80)));
+            });
+        }
         if (!allowedHost(req.headers.host)) {
             res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
             res.end('Forbidden host');
