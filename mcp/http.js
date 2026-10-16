@@ -22,7 +22,7 @@ function allowedHost(header) {
 function principal(req) {
     const expected = process.env.MCP_AUTH_TOKEN;
     if (!expected) return null;
-    const match = /^Bearer (\S+)$/.exec(String(req.headers.authorization || ''));
+    const match = /^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization || ''));
     if (!match) return null;
     const given = crypto.createHash('sha256').update(match[1]).digest();
     const wanted = crypto.createHash('sha256').update(expected).digest();
@@ -96,13 +96,14 @@ function listen() {
             }
             return;
         }
-        if (url.pathname !== '/mcp') {
+        if (url.pathname !== '/mcp' && url.pathname !== '/mcp/') {
             res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
             res.end('Not found');
             return;
         }
         const who = principal(req);
         if (!who) {
+            console.error('mcp http 401 ' + req.method);
             res.writeHead(401, {
                 'Content-Type': 'text/plain; charset=utf-8',
                 'WWW-Authenticate': oauth.enabled()
@@ -112,6 +113,7 @@ function listen() {
             res.end('Unauthorized');
             return;
         }
+        console.error('mcp http ' + req.method + (who.user ? ' uid=' + who.user.id : ' static'));
         let body;
         try {
             if (req.method === 'POST') body = await readBody(req);

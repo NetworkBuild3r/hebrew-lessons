@@ -21,9 +21,10 @@ const principals = new AsyncLocalStorage();
 
 const ACCESS_TTL = 3600;
 const REFRESH_TTL = 30 * 24 * 3600;
-const CODE_TTL = 60;
+const CODE_TTL = 600;
 const REQUEST_TTL = 600;
 const CLIENT_TTL = 400 * 24 * 3600;
+const CLIENT_EXP = 4102444800;
 const MAX_FORM = 64 * 1024;
 const MAX_FAILS = 10;
 const FAIL_WINDOW_MS = 10 * 60 * 1000;
@@ -34,6 +35,7 @@ const SCOPE = 'mcp';
 const DEFAULT_REDIRECTS = [
     'cursor://anysphere.cursor-mcp/oauth/callback',
     'https://www.cursor.com/agents/mcp/oauth/callback',
+    'https://cursor.com/agents/mcp/oauth/callback',
     'http://localhost:8787/callback'
 ];
 
@@ -90,6 +92,27 @@ function sign(type, ttl, claims) {
     return body + '.' + sig;
 }
 
+// Deterministic client_id for the same (redirect_uris, client_name) so repeated DCR calls
+// from Cursor / Grok Bot never produce a client_id mismatch between /authorize and /token.
+function signClient(uris, name) {
+    const payload = { ru: uris, nm: name, t: 'client', exp: CLIENT_EXP };
+    const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const sig = crypto.createHmac('sha256', key()).update(body).digest('base64url');
+    return body + '.' + sig;
+}
+
+function basicClientId(req) {
+    const m = /^Basic\s+(\S+)$/i.exec(String(req && req.headers && req.headers.authorization || ''));
+    if (!m) return '';
+    try {
+        const raw = Buffer.from(m[1], 'base64').toString('utf8');
+        const idx = raw.indexOf(':');
+        return decodeURIComponent(idx >= 0 ? raw.slice(0, idx) : raw);
+    } catch (err) {
+        return '';
+    }
+}
+
 function verify(token, type) {
     if (typeof token !== 'string') return null;
     const parts = token.split('.');
@@ -114,7 +137,13 @@ function verifyAccessToken(token) {
     if (!enabled()) return null;
     const payload = verify(token, 'access');
     if (!payload) return null;
-    if (payload.uid == null) return payload;
+    if (payload.uid == null) {
+        if (googleConfigured() && allowedEmails().length === 1) {
+            const linked = accounts.findLinkedGoogleUser({ email: allowedEmails()[0] });
+            if (linked) return Object.assign({}, payload, { uid: linked.id, un: linked.username });
+        }
+        return payload;
+    }
     const user = accounts.findActiveUser(payload.uid);
     if (!user || (payload.un && user.username !== payload.un)) return null;
     return payload;
@@ -245,10 +274,12 @@ async function register(req, res) {
     }
     const bad = uris.find(u => !redirectAllowed(u));
     if (bad) {
+        console.error('mcp oauth register rejected redirect_uri');
         return oauthError(res, 400, 'invalid_redirect_uri', 'redirect_uri is not allowed by this server: ' + bad.slice(0, 120));
     }
     const name = String(body.client_name || 'MCP client').slice(0, 80);
-    const clientId = sign('client', CLIENT_TTL, { ru: uris, nm: name });
+    const clientId = signClient(uris, name);
+    console.error('mcp oauth register ok ' + name);
     json(res, 201, {
         client_id: clientId,
         client_id_issued_at: now(),
@@ -338,7 +369,13 @@ function issueAuthCode(q, user) {
 }
 
 function tokenUser(grant) {
-    if (grant.uid == null) return {};
+    if (grant.uid == null) {
+        if (googleConfigured() && allowedEmails().length === 1) {
+            const linked = accounts.findLinkedGoogleUser({ email: allowedEmails()[0] });
+            if (linked) return { uid: linked.id, un: linked.username };
+        }
+        return {};
+    }
     const user = accounts.findActiveUser(grant.uid);
     if (!user || (grant.un && user.username !== grant.un)) return null;
     return { uid: user.id, un: user.username };
@@ -412,6 +449,7 @@ async function googleCallback(res, url) {
         console.error('mcp google callback rejected access_denied not_linked');
         return redirectWith(res, q.redirect_uri, { error: 'access_denied', state: q.state });
     }
+    console.error('mcp google callback ok uid=' + user.id);
     redirectWith(res, q.redirect_uri, { code: issueAuthCode(q, user), state: q.state });
 }
 
@@ -419,10 +457,15 @@ function authorizeGet(req, res, url) {
     const q = {};
     url.searchParams.forEach((value, name) => { if (!(name in q)) q[name] = value; });
     const resolved = resolveAuthorizeRequest(q);
-    if (resolved.fatal) return page(res, 400, 'Cannot sign in', '<h1>Cannot sign in</h1><p class="err">' + esc(resolved.fatal) + '</p>');
+    if (resolved.fatal) {
+        console.error('mcp oauth authorize fatal');
+        return page(res, 400, 'Cannot sign in', '<h1>Cannot sign in</h1><p class="err">' + esc(resolved.fatal) + '</p>');
+    }
     if (resolved.redirectError) {
+        console.error('mcp oauth authorize ' + resolved.redirectError);
         return redirectWith(res, q.redirect_uri, { error: resolved.redirectError, error_description: resolved.description, state: q.state });
     }
+    console.error('mcp oauth authorize ok');
     if (googleConfigured()) return startGoogle(res, q);
     renderConsent(res, resolved, q);
 }
@@ -486,36 +529,49 @@ async function token(req, res) {
             return oauthError(res, 400, 'invalid_grant', 'Code is invalid or expired.');
         }
         sweepUsedCodes();
-        if (usedCodes.has(grant.jti)) return oauthError(res, 400, 'invalid_grant', 'Code was already used.');
-        usedCodes.set(grant.jti, grant.exp);
-        if (form.client_id !== grant.cid || form.redirect_uri !== grant.ru) {
+        if (usedCodes.has(grant.jti)) {
+            console.error('mcp token authorization_code invalid_grant used_code');
+            return oauthError(res, 400, 'invalid_grant', 'Code was already used.');
+        }
+        const givenClientId = form.client_id || basicClientId(req) || grant.cid;
+        const client = verify(givenClientId, 'client');
+        const redirectOk = !form.redirect_uri || form.redirect_uri === grant.ru;
+        const clientOk = Boolean(client && Array.isArray(client.ru) && client.ru.includes(grant.ru));
+        if (!clientOk || !redirectOk) {
+            console.error('mcp token authorization_code invalid_grant client_or_redirect');
             return oauthError(res, 400, 'invalid_grant', 'client_id or redirect_uri does not match the code.');
         }
         if (!pkceMatches(form.code_verifier, grant.cc)) {
+            console.error('mcp token authorization_code invalid_grant pkce');
             return oauthError(res, 400, 'invalid_grant', 'PKCE verification failed.');
         }
+        usedCodes.set(grant.jti, grant.exp);
         const userClaims = tokenUser(grant);
         if (!userClaims) {
             console.error('mcp token authorization_code invalid_grant account');
             return oauthError(res, 400, 'invalid_grant', 'That account can no longer sign in.');
         }
         console.error('mcp token authorization_code ok' + (userClaims.uid != null ? ' uid' : ''));
-        return issueTokens(res, grant.cid, userClaims);
+        return issueTokens(res, givenClientId, userClaims);
     }
     if (form.grant_type === 'refresh_token') {
         const grant = verify(form.refresh_token, 'refresh');
-        if (!grant) return oauthError(res, 400, 'invalid_grant', 'Refresh token is invalid or expired.');
-        if (form.client_id && form.client_id !== grant.cid) {
-            return oauthError(res, 400, 'invalid_grant', 'client_id does not match the refresh token.');
+        if (!grant) {
+            console.error('mcp token refresh_token invalid_grant token');
+            return oauthError(res, 400, 'invalid_grant', 'Refresh token is invalid or expired.');
         }
-        if (!verify(grant.cid, 'client')) return oauthError(res, 400, 'invalid_grant', 'Client is no longer registered.');
+        const givenClientId = form.client_id || basicClientId(req) || grant.cid;
+        if (!verify(givenClientId, 'client') || !verify(grant.cid, 'client')) {
+            console.error('mcp token refresh_token invalid_grant client');
+            return oauthError(res, 400, 'invalid_grant', 'Client is no longer registered.');
+        }
         const userClaims = tokenUser(grant);
         if (!userClaims) {
             console.error('mcp token refresh_token invalid_grant account');
             return oauthError(res, 400, 'invalid_grant', 'That account can no longer sign in.');
         }
         console.error('mcp token refresh_token ok' + (userClaims.uid != null ? ' uid' : ''));
-        return issueTokens(res, grant.cid, userClaims);
+        return issueTokens(res, givenClientId, userClaims);
     }
     console.error('mcp token unsupported_grant_type');
     return oauthError(res, 400, 'unsupported_grant_type', 'Use authorization_code or refresh_token.');

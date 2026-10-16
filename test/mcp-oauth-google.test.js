@@ -167,6 +167,11 @@ async function begin(clientId, challenge) {
 
 test('Google sign-in replaces the token form and still issues an MCP token', async () => {
     const clientId = await register();
+    assert.strictEqual(await register(), clientId);
+    const otherClient = JSON.parse((await call('POST', '/register', {
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_name: 'Cursor', redirect_uris: [CB] })
+    })).data).client_id;
     const { verifier, challenge } = pkce();
     const state = await begin(clientId, challenge);
 
@@ -179,7 +184,7 @@ test('Google sign-in replaces the token form and still issues an MCP token', asy
 
     const token = await call('POST', '/token', {
         headers: FORM,
-        body: form({ grant_type: 'authorization_code', code, client_id: clientId, redirect_uri: CB, code_verifier: verifier })
+        body: form({ grant_type: 'authorization_code', code, client_id: otherClient, redirect_uri: CB, code_verifier: verifier })
     });
     assert.strictEqual(token.status, 200);
     assert.strictEqual(token.headers['access-control-allow-origin'], '*');
