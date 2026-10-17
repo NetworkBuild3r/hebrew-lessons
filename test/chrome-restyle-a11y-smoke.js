@@ -436,6 +436,33 @@ async function main() {
             }
         }
 
+        // ---- INIT-013 follow-up: the lesson player is not the SPA, so it gets a top bar and a wide
+        // stage at 1440 and 1024, never the 260px rail column (it once collapsed into that column).
+        await chromeCdp.signInAs(cdp, harness, BASE, 'learner');
+        for (const width of [1440, 1024]) {
+            await chromeCdp.setViewport(cdp, width, 900);
+            await cdp.call('Page.navigate', { url: BASE + '/worksheets/my-morning/' });
+            await waitFor(cdp, "document.readyState === 'complete' && !!document.querySelector('.path-btn') && !!document.querySelector('.hebrew-shell-nav')", 'player@' + width, 15000);
+            await sleep(500);
+            const pg = await cdp.evaluate(`(() => {
+                const box = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return { left: b.left, right: b.right, width: b.width, top: b.top }; };
+                return {
+                    bodyDisplay: getComputedStyle(document.body).display,
+                    shell: box('.hebrew-shell'), main: box('.player-main'), inner: box('.player-top-inner'),
+                    scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth,
+                    clientWidth: document.documentElement.clientWidth
+                };
+            })()`);
+            const where = 'player@' + width;
+            report.layout = report.layout || {};
+            report.layout[where] = pg;
+            if (pg.bodyDisplay === 'grid') fail(where, 'body is a grid; the rail grid caught the player');
+            if (!pg.shell || pg.shell.width < pg.clientWidth - 4 || pg.shell.top > 2) fail(where, 'shell is not a full-width top bar: ' + JSON.stringify(pg.shell));
+            if (!pg.main || pg.main.width < 600) fail(where, 'player stage is squeezed: ' + JSON.stringify(pg.main));
+            if (pg.inner && (pg.inner.left > 2 || pg.inner.width < pg.clientWidth - 4)) fail(where, 'controls bar does not span the page: ' + JSON.stringify(pg.inner));
+            if (pg.scrollWidth > pg.innerWidth) fail(where, 'horizontal overflow');
+        }
+
         // ---- dark theme (data-theme="dark"): contrast and overflow again, every route at 360 and 1280 (INIT-013/SPEC-004)
         await chromeCdp.signInAs(cdp, harness, BASE, 'admin');
         for (const width of [360, 1280]) {

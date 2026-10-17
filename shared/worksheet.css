@@ -4812,21 +4812,21 @@ img.hebrew-logo-mark {
 @media (min-width: 1024px) {
     :root { --shell-h: 0px; }
     /* Mirror the rail↔main columns with UI language; lesson stage stays RTL. */
-    :root[data-ui-lang="en"] body.has-hebrew-shell,
-    html[dir="ltr"] body.has-hebrew-shell {
+    :root[data-ui-lang="en"] body.has-hebrew-shell:has(> #app-main),
+    html[dir="ltr"] body.has-hebrew-shell:has(> #app-main) {
         direction: ltr;
     }
-    :root[data-ui-lang="he"] body.has-hebrew-shell,
-    html[dir="rtl"]:not([data-ui-lang="en"]) body.has-hebrew-shell {
+    :root[data-ui-lang="he"] body.has-hebrew-shell:has(> #app-main),
+    html[dir="rtl"]:not([data-ui-lang="en"]) body.has-hebrew-shell:has(> #app-main) {
         direction: rtl;
     }
-    body.has-hebrew-shell {
+    body.has-hebrew-shell:has(> #app-main) {
         display: grid;
         grid-template-columns: var(--shell-rail-w, 260px) minmax(0, 1fr);
         min-height: 100dvh;
         align-items: start;
     }
-    body.has-hebrew-shell > #app-shell {
+    body.has-hebrew-shell:has(> #app-main) > #app-shell {
         grid-column: 1;
         grid-row: 1;
         width: var(--shell-rail-w, 260px);
@@ -4837,7 +4837,7 @@ img.hebrew-logo-mark {
         overflow-y: auto;
         align-self: start;
     }
-    body.has-hebrew-shell > #app-main.wrap {
+    body.has-hebrew-shell:has(> #app-main) > #app-main.wrap {
         grid-column: 2;
         grid-row: 1;
         width: 100%;
@@ -4847,15 +4847,15 @@ img.hebrew-logo-mark {
         box-sizing: border-box;
         direction: rtl;
     }
-    body.has-hebrew-shell > #app-route-announce {
+    body.has-hebrew-shell:has(> #app-main) > #app-route-announce {
         grid-column: 2;
         grid-row: 1;
     }
-    body.has-hebrew-shell .topbar-inner {
+    body.has-hebrew-shell:has(> #app-main) .topbar-inner {
         width: 100%;
         max-width: none;
     }
-    .hebrew-shell {
+    body.has-hebrew-shell:has(> #app-main) .hebrew-shell {
         width: var(--shell-rail-w, 260px);
         min-height: 100%;
         height: 100%;
@@ -4867,7 +4867,7 @@ img.hebrew-logo-mark {
         background-color: var(--color-surface);
         box-shadow: none;
     }
-    .hebrew-shell-inner {
+    body.has-hebrew-shell:has(> #app-main) .hebrew-shell-inner {
         display: flex;
         flex-direction: column;
         align-items: stretch;
@@ -4881,13 +4881,13 @@ img.hebrew-logo-mark {
         gap: 1rem;
         box-sizing: border-box;
     }
-    .hebrew-brand {
+    body.has-hebrew-shell:has(> #app-main) .hebrew-brand {
         order: 1;
         flex: 0 0 auto;
         width: 100%;
         margin-inline-start: 0;
     }
-    .hebrew-shell-nav {
+    body.has-hebrew-shell:has(> #app-main) .hebrew-shell-nav {
         order: 2;
         flex: 1 0 auto;
         display: flex;
@@ -4900,7 +4900,7 @@ img.hebrew-logo-mark {
         padding: 0;
         overflow: visible;
     }
-    .hebrew-shell-link {
+    body.has-hebrew-shell:has(> #app-main) .hebrew-shell-link {
         display: flex;
         flex-direction: row;
         justify-content: flex-start;
@@ -4911,19 +4911,19 @@ img.hebrew-logo-mark {
         gap: 0.55rem;
         background-color: var(--color-surface);
     }
-    .hebrew-shell-link[aria-current="page"] {
+    body.has-hebrew-shell:has(> #app-main) .hebrew-shell-link[aria-current="page"] {
         background-color: var(--color-primary-soft);
         box-shadow: none;
         border-inline-start: 3px solid var(--color-primary);
     }
     /* Sync + account sit at the rail foot (margin-top: auto). No new hook class — ADR-0006. */
-    .hebrew-shell-sync {
+    body.has-hebrew-shell:has(> #app-main) .hebrew-shell-sync {
         order: 3;
         margin-top: auto;
         margin-inline-start: 0;
         width: 100%;
     }
-    .hebrew-shell-account {
+    body.has-hebrew-shell:has(> #app-main) .hebrew-shell-account {
         order: 4;
         position: relative;
         margin-inline-start: 0;
@@ -4931,10 +4931,10 @@ img.hebrew-logo-mark {
         width: 100%;
         gap: 0.45rem;
     }
-    .hebrew-shell-sync:empty ~ .hebrew-shell-account {
+    body.has-hebrew-shell:has(> #app-main) .hebrew-shell-sync:empty ~ .hebrew-shell-account {
         margin-top: auto;
     }
-    .hebrew-shell-account-menu {
+    body.has-hebrew-shell:has(> #app-main) .hebrew-shell-account-menu {
         inset-inline-end: 0;
         inset-inline-start: 0;
         top: auto;
@@ -4943,8 +4943,8 @@ img.hebrew-logo-mark {
         max-width: 100%;
         box-sizing: border-box;
     }
-    .hebrew-shell-theme-toggle,
-    .ui-lang {
+    body.has-hebrew-shell:has(> #app-main) .hebrew-shell-theme-toggle,
+    body.has-hebrew-shell:has(> #app-main) .ui-lang {
         flex: 1 1 auto;
     }
 }
@@ -5357,14 +5357,23 @@ img.hebrew-logo-mark {
 /* .player-top stays in the markup (hook) but no longer paints a box: its controls row sticks and
    the title and round lines scroll away, so a phone keeps its height for the exercise. */
 .player-top { display: contents; }
+/* One measure for the controls row, the title, the round lines and the exercise column, so they
+   line up. Wide screens use the same 56rem as .player-main (the @media (min-width: 800px) block). */
+.player { --player-measure: 40rem; }
+@media (min-width: 800px) {
+    .player { --player-measure: 56rem; }
+}
 .player-top-inner {
     position: sticky;
     top: var(--shell-h);
     z-index: 40;
+    /* The 800px rule above sizes this to 56rem; the bar is full width, so reset it (else RTL pins a
+       56rem bar to the right edge and the strip starts mid-page). */
+    width: auto;
     max-width: none;
     margin: 0;
     /* Full-width bar, content held to the page measure. */
-    padding: 0.4rem max(0.85rem, calc((100% - 40rem) / 2));
+    padding: 0.4rem max(0.85rem, calc((100% - var(--player-measure)) / 2));
     background: var(--color-surface);
     color: var(--color-text);
     border-bottom: 1px solid var(--color-border);
@@ -5391,7 +5400,7 @@ img.hebrew-logo-mark {
 }
 .player-title,
 .player-top .round-bar {
-    width: min(40rem, calc(100% - 1.7rem));
+    width: min(var(--player-measure), calc(100% - 1.7rem));
     max-width: none;
     margin-inline: auto;
 }

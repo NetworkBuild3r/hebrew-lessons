@@ -331,7 +331,7 @@ describe('INIT-013/SPEC-002 theme toggle chrome', () => {
 describe('INIT-013/SPEC-003 adaptive shell rail and dock', () => {
     it('desktop rail: body.has-hebrew-shell grid + sticky 260px shell (ac-1, REQ-001)', () => {
         assert.match(CSS, /@media\s*\(\s*min-width:\s*1024px\s*\)/);
-        assert.match(CSS, /body\.has-hebrew-shell\s*\{[^}]*display:\s*grid/);
+        assert.match(CSS, /body\.has-hebrew-shell:has\(>\s*#app-main\)\s*\{[^}]*display:\s*grid/);
         assert.match(CSS, /grid-template-columns:\s*var\(--shell-rail-w,\s*260px\)\s+minmax\(0,\s*1fr\)/);
         assert.match(CSS, /#app-shell\s*\{[^}]*width:\s*var\(--shell-rail-w,\s*260px\)/);
         assert.match(CSS, /\.hebrew-shell-nav\s*\{[^}]*flex-direction:\s*column/);
@@ -386,8 +386,37 @@ describe('INIT-013/SPEC-003 adaptive shell rail and dock', () => {
         );
         assert.match(
             desktop,
-            /body\.has-hebrew-shell\s*>\s*#app-main\.wrap\s*\{[^}]*direction:\s*rtl/
+            /body\.has-hebrew-shell:has\(>\s*#app-main\)\s*>\s*#app-main\.wrap\s*\{[^}]*direction:\s*rtl/
         );
+    });
+});
+
+describe('INIT-013 follow-up: the rail belongs to the SPA, not to the lesson player', () => {
+    // Regression: the rail grid used to hit every page that mounts the shell. The lesson player
+    // mounts it inside #player, so the whole player fell into the 260px rail column.
+    const desktopAt = CSS.search(/\/\*\s*Desktop\s*≥1024px[\s\S]*?\*\/\s*@media\s*\(\s*min-width:\s*1024px\s*\)/);
+    const desktopEnd = CSS.search(/\/\*\s*=+\s*Page heading/);
+    const RAIL = CSS.slice(desktopAt, desktopEnd);
+
+    it('every rail rule is scoped to a body that owns #app-main', () => {
+        assert.ok(desktopAt >= 0 && desktopEnd > desktopAt, 'rail block found');
+        const selectors = RAIL.split('\n')
+            .filter((l) => /^ {4}\S/.test(l) && /[,{]\s*$/.test(l) && !/^ {4}(\/\*|:root \{)/.test(l));
+        assert.ok(selectors.length >= 15, 'found the rail selectors, saw ' + selectors.length);
+        for (const line of selectors) {
+            assert.match(line, /has-hebrew-shell:has\(>\s*#app-main\)/, 'unscoped rail selector: ' + line.trim());
+        }
+        assert.doesNotMatch(RAIL, /^ {4}body\.has-hebrew-shell\s*\{/m, 'bare body grid would catch the player');
+    });
+
+    it('the lesson player header is one measure and a full-width bar', () => {
+        assert.match(CSS, /\.player\s*\{\s*--player-measure:\s*40rem/);
+        assert.match(CSS, /@media\s*\(\s*min-width:\s*800px\s*\)\s*\{\s*\.player\s*\{\s*--player-measure:\s*56rem/);
+        const inner = CSS.match(/\.player-top-inner\s*\{\s*position:\s*sticky[^}]*\}/);
+        assert.ok(inner, 'sticky .player-top-inner rule');
+        assert.match(inner[0], /width:\s*auto/);
+        assert.match(inner[0], /var\(--player-measure\)/);
+        assert.match(CSS, /\.player-title,\s*\.player-top \.round-bar\s*\{\s*width:\s*min\(var\(--player-measure\)/);
     });
 });
 

@@ -57,7 +57,7 @@ const MOBILE_PLAYER = mediaBlock(PLAYER, /@media\s*\(\s*max-width:\s*767px\s*\)/
 
 describe('INIT-013/SPEC-006 responsive layout (static)', () => {
     it('desktop ≥1024px: persistent 260px sidebar rail on .hebrew-shell (REQ-001)', () => {
-        assert.match(DESKTOP, /body\.has-hebrew-shell\s*\{[^}]*display:\s*grid/);
+        assert.match(DESKTOP, /body\.has-hebrew-shell:has\(>\s*#app-main\)\s*\{[^}]*display:\s*grid/);
         assert.match(
             DESKTOP,
             /grid-template-columns:\s*var\(--shell-rail-w,\s*260px\)\s+minmax\(0,\s*1fr\)/
