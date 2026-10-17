@@ -6,6 +6,9 @@
  * restyle actually uses), REQ-019 (the hook contract) and the markup the router/shell tests do
  * not look at. Contrast math is the same relative-luminance formula as test/design-tokens.test.js
  * and test/player-ui-a11y.test.js. No dependencies, no browser, no network.
+ *
+ * INIT-013/SPEC-002: Jerusalem Stone / Judean Night active tokens + theme toggle contract.
+ * INIT-013/SPEC-004: Desktop Bento Today workspace + catalog/progress grids + mobile compact feed.
  */
 'use strict';
 
@@ -247,6 +250,222 @@ describe('INIT-005/SPEC-013 contrast of the restyle colours (REQ-017)', () => {
         const shellLink = CSS.slice(CSS.indexOf('/* === INIT-005/SPEC-011 restyle learner === */'));
         assert.match(shellLink, /\.hebrew-shell-link\s*\{[^}]*min-height:\s*44px/);
         assert.match(shellLink, /select, input:not\(\[type="checkbox"\]\)[^{]*\{[^}]*min-height:\s*44px/);
+    });
+
+    it('Jerusalem Stone / Judean Night hex values match ADR-0015 (INIT-013/SPEC-002)', () => {
+        assert.equal(LIGHT['--paper'], '#F7F5F0');
+        assert.equal(LIGHT['--color-bg'], '#F7F5F0');
+        assert.equal(LIGHT['--color-surface'], '#FFFFFF');
+        assert.equal(LIGHT['--color-surface-soft'], '#EFECE6');
+        assert.equal(LIGHT['--color-text'], '#121621');
+        assert.equal(LIGHT['--color-muted'], '#4B5565');
+        assert.equal(LIGHT['--muted'], '#4B5565');
+        assert.equal(LIGHT['--color-primary'], '#254EDB');
+        assert.equal(LIGHT['--color-primary-hover'], '#1D3FB8');
+        assert.equal(LIGHT['--color-primary-soft'], '#EBF0FF');
+        assert.equal(LIGHT['--color-primary-ink'], '#FFFFFF');
+        assert.equal(LIGHT['--color-correct-ink'], '#065F46');
+        assert.equal(LIGHT['--color-correct-soft'], '#D1FAE5');
+        assert.equal(LIGHT['--color-miss-ink'], '#92400E');
+        assert.equal(LIGHT['--color-miss-soft'], '#FEF3C7');
+        assert.equal(LIGHT['--color-line'], '#757C8A');
+        assert.equal(DARK['--paper'], '#0E121B');
+        assert.equal(DARK['--color-bg'], '#0E121B');
+        assert.equal(DARK['--color-surface'], '#161C2A');
+        assert.equal(DARK['--color-surface-soft'], '#1E2638');
+        assert.equal(DARK['--color-text'], '#F3F4F6');
+        assert.equal(DARK['--color-muted'], '#A3B1C6');
+        assert.equal(DARK['--muted'], '#A3B1C6');
+        assert.equal(DARK['--color-primary'], '#6E93FF');
+        assert.equal(DARK['--color-primary-hover'], '#8AA8FF');
+        assert.equal(DARK['--color-primary-soft'], '#172347');
+        assert.equal(DARK['--color-primary-ink'], '#0B0F19');
+        assert.equal(DARK['--color-correct-ink'], '#A7F3D0');
+        assert.equal(DARK['--color-correct-soft'], '#0F2E2B');
+        assert.equal(DARK['--color-miss-ink'], '#FDE68A');
+        assert.equal(DARK['--color-miss-soft'], '#3B280C');
+        assert.equal(DARK['--color-line'], '#687792');
+    });
+
+    it('publishes layout, radius, and bilingual font stacks without external font URLs (INIT-013/SPEC-002)', () => {
+        assert.equal(LIGHT['--shell-rail-w'], '260px');
+        assert.equal(LIGHT['--shell-mobile-dock-h'], '68px');
+        assert.equal(LIGHT['--wrap-w-desktop'], '75rem');
+        assert.equal(LIGHT['--wrap-w-reading'], '42rem');
+        assert.equal(LIGHT['--radius-card'], '20px');
+        assert.equal(LIGHT['--radius-control'], '12px');
+        assert.equal(LIGHT['--radius-pill'], '999px');
+        assert.ok(LIGHT['--font-hebrew-display']);
+        assert.ok(LIGHT['--font-hebrew-sans']);
+        assert.ok(LIGHT['--font-sans']);
+        assert.ok(LIGHT['--font-mono']);
+        assert.equal(LIGHT['--line-height-word'], '1.55');
+        assert.doesNotMatch(CSS, /@import\s+url\s*\(\s*['"]?https?:/i);
+        assert.doesNotMatch(CSS, /url\(\s*['"]?https?:\/\/[^)]*font/i);
+    });
+
+    it('cards and page ground use theme surface tokens so dark mode does not bleed light hex (ac-2)', () => {
+        const restyle = CSS.slice(CSS.indexOf('/* === INIT-005/SPEC-011 restyle learner === */'));
+        assert.match(restyle, /\.card,\s*\.lesson-card\s*\{[^}]*background:\s*var\(--color-surface\)/);
+        assert.match(restyle, /body\s*\{[^}]*background:\s*var\(--paper\)/);
+        assert.match(restyle, /color:\s*var\(--color-text\)/);
+    });
+});
+
+describe('INIT-013/SPEC-002 theme toggle chrome', () => {
+    it('app-shell renders a 44px bilingual theme toggle without English-only aria-label/title', () => {
+        const shell = read(path.join(SHARED, 'app-shell.js'));
+        assert.match(shell, /data-theme-toggle/);
+        assert.match(shell, /hebrew-shell-theme-toggle/);
+        assert.match(shell, /hebrew-theme/);
+        assert.match(shell, /val === 'dark' \? 'dark' : 'light'|normalizeTheme/);
+        assert.match(shell, /מצב כהה/);
+        assert.match(shell, /Dark mode/);
+        assert.match(shell, /מצב בהיר/);
+        assert.match(shell, /Light mode/);
+        assert.doesNotMatch(shell, /data-theme-toggle[^;]*aria-label\s*=\s*['"][A-Za-z]/);
+        assert.match(CSS, /\.hebrew-shell-theme-toggle\s*\{[^}]*min-height:\s*44px/);
+    });
+});
+
+describe('INIT-013/SPEC-003 adaptive shell rail and dock', () => {
+    it('desktop rail: body.has-hebrew-shell grid + sticky 260px shell (ac-1, REQ-001)', () => {
+        assert.match(CSS, /@media\s*\(\s*min-width:\s*1024px\s*\)/);
+        assert.match(CSS, /body\.has-hebrew-shell\s*\{[^}]*display:\s*grid/);
+        assert.match(CSS, /grid-template-columns:\s*var\(--shell-rail-w,\s*260px\)\s+minmax\(0,\s*1fr\)/);
+        assert.match(CSS, /#app-shell\s*\{[^}]*width:\s*var\(--shell-rail-w,\s*260px\)/);
+        assert.match(CSS, /\.hebrew-shell-nav\s*\{[^}]*flex-direction:\s*column/);
+        assert.match(CSS, /#app-main\.wrap\s*\{[^}]*max-width:\s*var\(--wrap-w-desktop,\s*75rem\)/);
+        assert.match(CSS, /border-inline-end:\s*1px\s+solid\s+var\(--color-border-subtle\)/);
+    });
+
+    it('mobile dock: fixed bottom nav with 44px column links and main padding (ac-2, REQ-002)', () => {
+        assert.match(CSS, /@media\s*\(\s*max-width:\s*767px\s*\)/);
+        assert.match(CSS, /\.hebrew-shell-nav\s*\{[^}]*position:\s*fixed[^}]*bottom:\s*0/);
+        assert.match(CSS, /inset-inline:\s*0/);
+        assert.match(CSS, /grid-auto-columns:\s*minmax\(0,\s*1fr\)/);
+        assert.match(CSS, /flex-direction:\s*column/);
+        assert.match(CSS, /scroll-padding-bottom:\s*6\.5rem/);
+        assert.match(CSS, /padding-bottom:\s*calc\(6rem\s*\+\s*env\(safe-area-inset-bottom,\s*0px\)\)/);
+        assert.match(CSS, /\.hebrew-shell-link\s*\{[^}]*min-height:\s*44px/);
+        assert.match(CSS, /\.hebrew-shell-link\s*\{[^}]*background-color:\s*var\(--color-surface\)/);
+        assert.match(CSS, /\.hebrew-shell-link\[aria-current="page"\]\s*\{[^}]*background-color:\s*var\(--color-primary-soft\)/);
+    });
+
+    it('tablet stage uses 60rem max-width on #app-main.wrap', () => {
+        assert.match(CSS, /@media\s*\(\s*min-width:\s*768px\s*\)\s*and\s*\(\s*max-width:\s*1023px\s*\)/);
+        const tablet = CSS.slice(CSS.search(/@media\s*\(\s*min-width:\s*768px\s*\)\s*and\s*\(\s*max-width:\s*1023px\s*\)/));
+        assert.match(tablet, /#app-main\.wrap\s*\{[^}]*max-width:\s*60rem/);
+    });
+
+    it('rail footer anchors sync/account with margin-top: auto (no new hook class)', () => {
+        assert.match(CSS, /\.hebrew-shell-sync\s*\{[^}]*margin-top:\s*auto/);
+        assert.match(CSS, /\.hebrew-shell-sync:empty\s*~\s*\.hebrew-shell-account\s*\{[^}]*margin-top:\s*auto/);
+        assert.doesNotMatch(CSS, /hebrew-shell-utilities/);
+    });
+
+    it('desktop grid mirrors rail for EN/HE while #app-main.wrap stays rtl (ac-3)', () => {
+        const desktopAt = CSS.search(/\/\*\s*Desktop\s*≥1024px[\s\S]*?\*\/\s*@media\s*\(\s*min-width:\s*1024px\s*\)/);
+        assert.ok(desktopAt >= 0, 'desktop ≥1024px media query (SPEC-003 rail)');
+        const desktop = CSS.slice(desktopAt, desktopAt + 3500);
+        assert.match(
+            desktop,
+            /:root\[data-ui-lang="en"\]\s+body\.has-hebrew-shell[\s\S]*?\{\s*direction:\s*ltr\s*;/
+        );
+        assert.match(
+            desktop,
+            /html\[dir="ltr"\]\s+body\.has-hebrew-shell[\s\S]*?\{\s*direction:\s*ltr\s*;/
+        );
+        assert.match(
+            desktop,
+            /:root\[data-ui-lang="he"\]\s+body\.has-hebrew-shell[\s\S]*?\{\s*direction:\s*rtl\s*;/
+        );
+        assert.match(
+            desktop,
+            /html\[dir="rtl"\]:not\(\[data-ui-lang="en"\]\)\s+body\.has-hebrew-shell[\s\S]*?\{\s*direction:\s*rtl\s*;/
+        );
+        assert.match(
+            desktop,
+            /body\.has-hebrew-shell\s*>\s*#app-main\.wrap\s*\{[^}]*direction:\s*rtl/
+        );
+    });
+});
+
+describe('INIT-013/SPEC-004 Bento Today & Catalog Grids', () => {
+    const bentoAt = CSS.search(/\/\*\s*===\s*INIT-013\/SPEC-004/);
+    assert.ok(bentoAt >= 0, 'INIT-013/SPEC-004 CSS block present');
+    const BENTO = CSS.slice(bentoAt);
+
+    it('desktop Today list is a 7fr/5fr CSS Grid with primary + secondary columns (ac-1)', () => {
+        assert.match(BENTO, /@media\s*\(\s*min-width:\s*1024px\s*\)/);
+        assert.match(
+            BENTO,
+            /\.today-list\[data-today-state="ready"\]\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0,\s*7fr\)\s+minmax\(0,\s*5fr\)/
+        );
+        assert.match(
+            BENTO,
+            /\.today-list\[data-today-state="ready"\]\s*>\s*#today-continue-card[\s\S]*?#today-mix\s*\{[^}]*grid-column:\s*1/
+        );
+        assert.match(
+            BENTO,
+            /\.today-list\[data-today-state="ready"\]\s*>\s*#today-review-card\s*\{[^}]*grid-column:\s*2/
+        );
+        assert.match(
+            BENTO,
+            /\.today-list\[data-today-state="ready"\]\s*>\s*:only-child\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/
+        );
+    });
+
+    it('hero Continue/Next cards use solid Judean Midnight surface with ≥4.5:1 text & CTA (ac-2)', () => {
+        assert.match(
+            BENTO,
+            /#today-continue-card,\s*\n\s*#today-next-card[\s\S]*?background-color:\s*var\(--color-surface-hero\)/
+        );
+        assert.match(BENTO, /border-radius:\s*22px/);
+        assert.match(BENTO, /color:\s*#FFFFFF/);
+        assert.match(BENTO, /color:\s*#E2E8F0/);
+        assert.match(
+            BENTO,
+            /#today-continue-card\s+\.btn-primary[\s\S]*?#today-continue-link[\s\S]*?background-color:\s*#FFFFFF[\s\S]*?color:\s*#141B2D/
+        );
+        // Light #141B2D / Dark #1D2842 hero surfaces vs white / slate text & white CTA ink
+        assert.ok(contrast('#FFFFFF', '#141B2D') >= 4.5, 'white on Light hero');
+        assert.ok(contrast('#E2E8F0', '#141B2D') >= 4.5, 'slate on Light hero');
+        assert.ok(contrast('#FFFFFF', '#1D2842') >= 4.5, 'white on Dark hero');
+        assert.ok(contrast('#E2E8F0', '#1D2842') >= 4.5, 'slate on Dark hero');
+        assert.ok(contrast('#141B2D', '#FFFFFF') >= 4.5, 'CTA ink on white fill');
+    });
+
+    it('desktop Lessons, Guides, Words, Progress use multi-column grids (ac-3)', () => {
+        assert.match(
+            BENTO,
+            /\.lessons-list[\s\S]*?grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(300px,\s*1fr\)\)/
+        );
+        assert.match(
+            BENTO,
+            /\.guides-list[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/
+        );
+        assert.match(BENTO, /max-width:\s*65ch/);
+        assert.match(
+            BENTO,
+            /\.words-list[\s\S]*?grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(280px,\s*1fr\)\)/
+        );
+        assert.match(
+            BENTO,
+            /\.progress-view[\s\S]*?grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(300px,\s*1fr\)\)/
+        );
+    });
+
+    it('mobile compact feed: 0.85rem gaps, 1rem padding, full-width ≥46px CTAs (ac-4)', () => {
+        assert.match(BENTO, /@media\s*\(\s*max-width:\s*767px\s*\)/);
+        const mobileAt = BENTO.search(/@media\s*\(\s*max-width:\s*767px\s*\)/);
+        const mobile = BENTO.slice(mobileAt, mobileAt + 2800);
+        assert.match(mobile, /gap:\s*0\.85rem/);
+        assert.match(mobile, /padding:\s*1rem/);
+        assert.match(mobile, /width:\s*100%/);
+        assert.match(mobile, /justify-content:\s*center/);
+        assert.match(mobile, /min-height:\s*46px/);
+        assert.match(mobile, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
     });
 });
 

@@ -1,6 +1,8 @@
 /**
  * Shared top bar (nav + account menu + forced password change).
  * Provenance: INIT-002/SPEC-012
+ * Theme persistence: INIT-013/SPEC-002 · ADR-0015 (hebrew-theme localStorage).
+ * Adaptive rail / bottom dock: INIT-013/SPEC-003 · ADR-0015 REQ-001/REQ-002.
  */
 (function (root) {
     'use strict';
@@ -12,6 +14,8 @@
     var AI_DISCLOSURE_EN = 'If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator\'s AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.';
     var AI_DISCLOSURE_HE = 'אם מנהל מפעיל תכנון בינה מלאכותית לחשבון שלך, סיכום של ההתקדמות ושם המשתמש נשלחים לספק הבינה המלאכותית של המפעיל כדי לנסח את השיעור הבא. הסיכום כולל את המילים שתורגלו ומידת הידיעה שלהן, את הדקדוק שתורגל ומידת הדיוק, את השיעורים שהושלמו, ובאיזו תדירות הקריאה היא בלי ניקוד. הסיכום אינו כולל תשובות בודדות, טקסט שהוקלד, או מועדי תרגול.';
     var AI_DISCLOSURE = AI_DISCLOSURE_HE + ' (' + AI_DISCLOSURE_EN + ')';
+    /** localStorage key for Light/Dark (INIT-013/SPEC-002). Allowlisted to light|dark only. */
+    var THEME_KEY = 'hebrew-theme';
 
     var NAV = [
         { id: 'today', href: '/', he: 'היום', en: 'Today', icon: 'today' },
@@ -88,6 +92,77 @@
             .replace(/"/g, '&quot;');
     }
 
+    /**
+     * Allowlist localStorage theme to 'light' | 'dark' (default light).
+     * Provenance: INIT-013/SPEC-002 · ADR-0015 REQ-005.
+     * @param {string|null|undefined} val
+     * @returns {'light'|'dark'}
+     */
+    function normalizeTheme(val) {
+        return val === 'dark' ? 'dark' : 'light';
+    }
+
+    /**
+     * Read persisted theme. Missing/invalid → 'light'.
+     * @returns {'light'|'dark'}
+     */
+    function readTheme() {
+        try {
+            var store = root.localStorage;
+            if (!store || typeof store.getItem !== 'function') return 'light';
+            return normalizeTheme(store.getItem(THEME_KEY));
+        } catch (err) {
+            return 'light';
+        }
+    }
+
+    /**
+     * Apply theme to <html data-theme> and persist when requested.
+     * @param {'light'|'dark'|string} theme
+     * @param {{ persist?: boolean }} [opts]
+     * @returns {'light'|'dark'}
+     */
+    function applyTheme(theme, opts) {
+        var next = normalizeTheme(theme);
+        try {
+            var doc = root.document;
+            if (doc && doc.documentElement && typeof doc.documentElement.setAttribute === 'function') {
+                doc.documentElement.setAttribute('data-theme', next);
+            }
+        } catch (err) { /* ignore */ }
+        if (!opts || opts.persist !== false) {
+            try {
+                var store = root.localStorage;
+                if (store && typeof store.setItem === 'function') store.setItem(THEME_KEY, next);
+            } catch (err2) { /* ignore quota / private mode */ }
+        }
+        return next;
+    }
+
+    /**
+     * Toggle Light ↔ Dark and persist.
+     * @returns {'light'|'dark'}
+     */
+    function toggleTheme() {
+        return applyTheme(readTheme() === 'dark' ? 'light' : 'dark');
+    }
+
+    /** Bilingual visible label for the theme toggle (no English-only aria-label — REQ-016). */
+    function themeToggleLabel(theme) {
+        if (theme === 'dark') {
+            return bi('מצב בהיר', 'Light mode');
+        }
+        return bi('מצב כהה', 'Dark mode');
+    }
+
+    function renderThemeToggle(theme) {
+        var current = normalizeTheme(theme);
+        return '<button type="button" class="hebrew-shell-theme-toggle" data-theme-toggle'
+            + ' aria-pressed="' + (current === 'dark' ? 'true' : 'false') + '">'
+            + themeToggleLabel(current)
+            + '</button>';
+    }
+
     function safeNextPath(value) {
         var Api = root.HebrewApi;
         if (Api && typeof Api.safeNextPath === 'function') return Api.safeNextPath(value);
@@ -139,6 +214,7 @@
         }).join('');
 
         var display = escapeHtml((me && (me.display_name || me.username)) || '');
+        var theme = readTheme();
         return ''
             + '<div class="hebrew-shell ui-chrome" dir="rtl" lang="he">'
             + '<div class="hebrew-shell-inner">'
@@ -153,6 +229,7 @@
             + '<button type="button" class="ui-lang-btn" data-ui-lang-set="en" aria-pressed="false">EN</button>'
             + '<button type="button" class="ui-lang-btn" data-ui-lang-set="he" aria-pressed="false">עב</button>'
             + '</div>'
+            + renderThemeToggle(theme)
             + '<button type="button" class="hebrew-shell-account-btn" id="hebrew-shell-account-btn"'
             + ' aria-expanded="false" aria-haspopup="true" aria-controls="hebrew-shell-account-menu">'
             + '<span class="hebrew-shell-account-name">' + display + '</span>'
@@ -279,6 +356,13 @@
         }
 
         rootEl.addEventListener('click', function (event) {
+            var themeBtn = event.target.closest && event.target.closest('[data-theme-toggle]');
+            if (themeBtn && rootEl.contains(themeBtn)) {
+                var nextTheme = toggleTheme();
+                themeBtn.setAttribute('aria-pressed', nextTheme === 'dark' ? 'true' : 'false');
+                themeBtn.innerHTML = themeToggleLabel(nextTheme);
+                return;
+            }
             var langBtn = event.target.closest && event.target.closest('[data-ui-lang-set]');
             if (langBtn && rootEl.contains(langBtn)) {
                 var U = root.HebrewUtils;
@@ -413,6 +497,7 @@
             var pathname = options.pathname != null
                 ? options.pathname
                 : ((root.location && root.location.pathname) || '/');
+            applyTheme(readTheme(), { persist: false });
             target.innerHTML = renderHtml(me, pathname);
             bindShell(target, state);
             if (root.HebrewUtils && typeof root.HebrewUtils.applyUiLang === 'function') {
@@ -513,9 +598,14 @@
         PRIVACY_NOTE: PRIVACY_NOTE,
         AI_DISCLOSURE: AI_DISCLOSURE,
         NAV: NAV,
+        THEME_KEY: THEME_KEY,
         escapeHtml: escapeHtml,
         safeNextPath: safeNextPath,
         currentNavId: currentNavId,
+        normalizeTheme: normalizeTheme,
+        readTheme: readTheme,
+        applyTheme: applyTheme,
+        toggleTheme: toggleTheme,
         renderHtml: renderHtml,
         setActiveNav: setActiveNav,
         mount: mount,

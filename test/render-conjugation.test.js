@@ -264,3 +264,219 @@ describe('drill mode', () => {
         assert.equal(override.result, 'pass');
     });
 });
+
+describe('SPEC-005 multi-verb multi-tense drill cues (ac-4)', () => {
+    const { createElement, makeDocument, walk, matches } = require('./helpers/fake-dom');
+
+    function patchClosest(node) {
+        if (!node || node.closest) return;
+        node.closest = function (selector) {
+            for (let cur = this; cur; cur = cur.parentNode) {
+                if (cur.tagName && matches(cur, selector)) return cur;
+            }
+            return null;
+        };
+    }
+
+    function wireTree(node) {
+        patchClosest(node);
+        walk(node, (child) => patchClosest(child));
+    }
+
+    function makePlanDoc() {
+        const doc = makeDocument();
+        const root = createElement('div');
+        doc._mount = root;
+        doc.appendChild = function (child) {
+            child.parentNode = root;
+            root.children.push(child);
+            wireTree(child);
+            return child;
+        };
+        doc.querySelectorAll = function (sel) {
+            const out = [];
+            walk(root, (child) => { if (matches(child, sel)) out.push(child); });
+            return out;
+        };
+        doc.querySelector = function (sel) { return doc.querySelectorAll(sel)[0] || null; };
+        return doc;
+    }
+
+    function mountDrillOwner(doc, blockId) {
+        const section = createElement('section');
+        section.setAttribute('data-block-type', 'conjugation-table');
+        section.setAttribute('data-block-id', blockId);
+        section.setAttribute('data-mode', 'drill');
+        section.setAttribute('data-drill-owner', '1');
+        section.setAttribute('data-lesson-slug', 'verb-workshop');
+        wireTree(section);
+
+        const prompt = createElement('p');
+        prompt.setAttribute('data-drill-prompt', '');
+        section.appendChild(prompt);
+
+        const feedback = createElement('p');
+        feedback.setAttribute('data-drill-feedback', '');
+        feedback.hidden = true;
+        section.appendChild(feedback);
+
+        const reveal = createElement('p');
+        reveal.setAttribute('data-drill-reveal', '');
+        reveal.hidden = true;
+        section.appendChild(reveal);
+
+        const input = createElement('input');
+        input.setAttribute('data-drill-input', '');
+        section.appendChild(input);
+
+        const check = createElement('button');
+        check.setAttribute('type', 'button');
+        check.setAttribute('data-drill-check', '');
+        check.textContent = 'Check';
+        section.appendChild(check);
+
+        const next = createElement('button');
+        next.setAttribute('type', 'button');
+        next.setAttribute('data-drill-next', '');
+        next.hidden = true;
+        next.textContent = 'Next';
+        section.appendChild(next);
+
+        doc.appendChild(section);
+        return section;
+    }
+
+    const lehachlit = {
+        id: 'drill-lehachlit',
+        type: 'conjugation-table',
+        lemmaKey: 'lehachlit',
+        tense: 'present',
+        mode: 'drill',
+        cells: [{ cell: 'ms', formKey: 'מַחְלִיט' }]
+    };
+    const livchorPresent = {
+        id: 'drill-livchor-present',
+        type: 'conjugation-table',
+        lemmaKey: 'livchor',
+        tense: 'present',
+        mode: 'drill',
+        cells: [{ cell: 'fs', formKey: 'בּוֹחֶרֶת' }]
+    };
+    const livchorPast = {
+        id: 'drill-livchor-past',
+        type: 'conjugation-table',
+        lemmaKey: 'livchor',
+        tense: 'past',
+        mode: 'drill',
+        cells: [{ cell: '1s', formKey: 'בָּחַרְתִּי' }]
+    };
+    const forms = {
+        'מַחְלִיט': { key: 'מַחְלִיט', verified: true, accept: [], root: 'ח.ל.ט' },
+        'בּוֹחֶרֶת': { key: 'בּוֹחֶרֶת', verified: true, accept: [], root: 'ב.ח.ר' },
+        'בָּחַרְתִּי': { key: 'בָּחַרְתִּי', verified: true, accept: [], root: 'ב.ח.ר' }
+    };
+
+    it('queues lemmaKey + lemma + tense on interleaved multi-verb items', () => {
+        const queue = table.drillQueue(
+            [lehachlit, livchorPresent, livchorPast],
+            forms,
+            () => 0.999999
+        );
+        assert.equal(queue.length, 3);
+        queue.forEach((item) => {
+            assert.ok(item.lemmaKey === 'lehachlit' || item.lemmaKey === 'livchor', item.lemmaKey);
+            assert.equal(item.lemma, item.lemmaKey);
+            assert.ok(['present', 'past'].includes(item.tense), item.tense);
+            assert.ok(item.cell);
+            assert.ok(item.label);
+        });
+        assert.ok(queue.some((item) => item.lemmaKey === 'lehachlit' && item.tense === 'present'));
+        assert.ok(queue.some((item) => item.lemmaKey === 'livchor' && item.tense === 'past'));
+    });
+
+    it('exposes data-drill-lemma/tense/cell and lemma·tense·label text on the prompt', () => {
+        const doc = makePlanDoc();
+        mountDrillOwner(doc, lehachlit.id);
+        const plan = {
+            units: [{
+                lessons: [{
+                    id: 'verb-workshop',
+                    blocks: [lehachlit, livchorPresent, livchorPast]
+                }]
+            }]
+        };
+        table.bind(doc, { plan: plan, forms: forms, rng: () => 0.999999 });
+        const prompt = doc.querySelector('[data-drill-prompt]');
+        assert.ok(prompt);
+        assert.ok(prompt.getAttribute('data-drill-cell'));
+        assert.ok(prompt.getAttribute('data-drill-lemma'));
+        assert.ok(prompt.getAttribute('data-drill-tense'));
+        const lemma = prompt.getAttribute('data-drill-lemma');
+        const tense = prompt.getAttribute('data-drill-tense');
+        assert.ok(lemma === 'lehachlit' || lemma === 'livchor', lemma);
+        assert.ok(tense === 'present' || tense === 'past', tense);
+        assert.ok(prompt.textContent.indexOf(lemma) >= 0, prompt.textContent);
+        if (tense === 'present') {
+            assert.ok(prompt.textContent.indexOf('הווה / present') >= 0, prompt.textContent);
+        } else {
+            assert.ok(prompt.textContent.indexOf('עבר / past') >= 0, prompt.textContent);
+        }
+        assert.ok(prompt.textContent.indexOf(' · ') >= 0, prompt.textContent);
+    });
+
+    it('shows Done and clears drill attrs when the interleaved queue finishes', () => {
+        const single = {
+            id: 'drill-one',
+            type: 'conjugation-table',
+            lemmaKey: 'lehachlit',
+            tense: 'future',
+            mode: 'drill',
+            cells: [{ cell: '1s', formKey: 'אַחְלִיט' }]
+        };
+        const singleForms = {
+            'אַחְלִיט': { key: 'אַחְלִיט', verified: true, accept: ['אחליט'], root: 'ח.ל.ט' }
+        };
+        const doc = makePlanDoc();
+        mountDrillOwner(doc, single.id);
+        const plan = {
+            units: [{ lessons: [{ id: 'verb-workshop', blocks: [single] }] }]
+        };
+        table.bind(doc, { plan: plan, forms: singleForms, rng: () => 0.5 });
+        const prompt = doc.querySelector('[data-drill-prompt]');
+        assert.equal(prompt.getAttribute('data-drill-lemma'), 'lehachlit');
+        assert.equal(prompt.getAttribute('data-drill-tense'), 'future');
+        assert.ok(prompt.textContent.indexOf('עתיד / future') >= 0, prompt.textContent);
+        assert.ok(prompt.textContent.indexOf('lehachlit') >= 0, prompt.textContent);
+
+        const input = doc.querySelector('[data-drill-input]');
+        input.value = 'אַחְלִיט';
+        doc.querySelector('[data-drill-check]').click();
+        doc.querySelector('[data-drill-next]').click();
+
+        assert.ok(prompt.textContent.indexOf('Done') >= 0, prompt.textContent);
+        assert.equal(prompt.textContent, 'סיימתם. / Done.');
+        assert.equal(prompt.getAttribute('data-drill-cell'), null);
+        assert.equal(prompt.getAttribute('data-drill-lemma'), null);
+        assert.equal(prompt.getAttribute('data-drill-tense'), null);
+    });
+
+    it('keeps empty non-owner drill sections in the DOM for CSS collapse', () => {
+        const owner = Object.assign({}, lehachlit, { id: 'owner-drill' });
+        const follower = Object.assign({}, livchorPast, { id: 'follower-drill' });
+        const ownerHtml = table.render(owner, {
+            forms: forms,
+            lesson: { id: 'verb-workshop', blocks: [owner, follower] }
+        });
+        const followerHtml = table.render(follower, {
+            forms: forms,
+            lesson: { id: 'verb-workshop', blocks: [owner, follower] }
+        });
+        assert.match(ownerHtml, /data-drill-owner="1"/);
+        assert.match(ownerHtml, /data-drill-station/);
+        assert.match(followerHtml, /data-drill-owner="0"/);
+        assert.match(followerHtml, /plan-block-conjugation-table/);
+        assert.equal(followerHtml.includes('data-drill-station'), false);
+        assert.match(followerHtml, /conj-header/);
+        assert.equal(/conj-sentences|conj-questions|conj-extra-cells|conj-table/.test(followerHtml), false);
+    });
+});

@@ -212,7 +212,8 @@
         .ui-lang { display: inline-flex; border: 1px solid var(--color-border); border-radius: 999px; overflow: hidden; background: var(--color-surface); }
         .ui-lang-btn { min-height: 44px; min-width: 44px; padding: 0.2rem 0.7rem; border: 0; background: transparent; color: var(--color-muted); font-weight: 700; font-size: 0.85rem; cursor: pointer; }
         .ui-lang-btn + .ui-lang-btn { box-shadow: inset 1px 0 0 var(--color-border); }
-        .ui-lang-btn.is-on { background: var(--color-primary); color: #fff; }
+        .ui-lang-btn.is-on { background: var(--color-primary); color: var(--color-primary-ink); }
+        .ui-lang-btn:focus-visible { outline: 3px solid var(--color-primary); outline-offset: -3px; }
         @media (prefers-reduced-motion: reduce) {
             .btn { transition: none; }
             .btn-primary:hover, .btn-primary:active { transform: none; }

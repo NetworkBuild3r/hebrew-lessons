@@ -87,6 +87,14 @@
         return row.he || row.en || '';
     }
 
+    /** Bilingual tense cue for interleaved multi-verb / multi-tense drills (INIT-013/SPEC-005). */
+    function tenseHeaderLabel(tense) {
+        if (tense === 'past') return 'עבר / past';
+        if (tense === 'future') return 'עתיד / future';
+        if (tense === 'present') return 'הווה / present';
+        return tense ? String(tense) : '';
+    }
+
     function audioButton(audio, key) {
         var path = audio && key != null ? audio[key] : '';
         if (typeof path !== 'string' || !AUDIO_FILE.test(path)) return '';
@@ -246,9 +254,14 @@
                 var form = forms && forms[formKey];
                 if (!isVerified(form)) return;
                 if (form.key && form.key !== formKey) return;
+                var lemmaKey = typeof block.lemmaKey === 'string' ? block.lemmaKey : '';
+                var lemma = (entry && typeof entry.lemma === 'string' && entry.lemma)
+                    ? entry.lemma
+                    : lemmaKey;
                 items.push({
                     blockId: block.id == null ? '' : String(block.id),
-                    lemma: typeof block.lemmaKey === 'string' ? block.lemmaKey : '',
+                    lemmaKey: lemmaKey,
+                    lemma: lemma,
                     tense: block.tense,
                     cell: code,
                     formKey: formKey,
@@ -395,17 +408,24 @@
         var tenseKicker = block.tense === 'future'
             ? '<p class="kicker"><span lang="he">עתיד</span> <span lang="en" dir="ltr">future</span></p>'
             : '';
-        return '<section data-block-type="conjugation-table" data-block-id="' + text(block.id) + '"'
+        return '<section class="plan-block-conjugation-table" data-block-type="conjugation-table"'
+            + ' data-block-id="' + text(block.id) + '"'
             + ' data-mode="' + (mode || 'study') + '" data-tense="' + sectionTense + '"'
             + ' data-drill-owner="' + (owner ? '1' : '0') + '"' + slugAttr + '>'
+            + '<div class="conj-header">'
             + '<h2 lang="he">' + text(block.lemmaKey) + '</h2>'
             + tenseKicker
             + '<p class="kicker"><span lang="en" dir="ltr">' + (mode || 'study') + '</span></p>'
+            + '</div>'
             + body
             + empty
-            + extraList
-            + lines(block.sentences, 'conj-sentence')
-            + lines(block.questions, 'conj-question')
+            + (extraList ? '<div class="conj-extra-cells">' + extraList + '</div>' : '')
+            + (Array.isArray(block.sentences) && block.sentences.length
+                ? '<div class="conj-sentences">' + lines(block.sentences, 'conj-sentence') + '</div>'
+                : '')
+            + (Array.isArray(block.questions) && block.questions.length
+                ? '<div class="conj-questions">' + lines(block.questions, 'conj-question') + '</div>'
+                : '')
             + '</section>';
     }
 
@@ -445,6 +465,8 @@
             if (prompt) {
                 prompt.textContent = state.queue.length ? 'סיימתם. / Done.' : '';
                 prompt.removeAttribute('data-drill-cell');
+                prompt.removeAttribute('data-drill-lemma');
+                prompt.removeAttribute('data-drill-tense');
             }
             if (input) input.disabled = true;
             if (empty && !state.queue.length) empty.hidden = false;
@@ -452,8 +474,14 @@
         }
         if (empty) empty.hidden = true;
         if (prompt) {
-            prompt.textContent = item.label;
+            var tenseCue = tenseHeaderLabel(item.tense);
+            var lemmaCue = item.lemma || item.lemmaKey || '';
             prompt.setAttribute('data-drill-cell', item.cell);
+            prompt.setAttribute('data-drill-lemma', lemmaCue);
+            prompt.setAttribute('data-drill-tense', item.tense || '');
+            prompt.textContent = (lemmaCue ? lemmaCue + ' · ' : '')
+                + (tenseCue ? tenseCue + ' · ' : '')
+                + item.label;
         }
         if (input) {
             input.disabled = false;
@@ -471,6 +499,9 @@
         if (feedback) {
             feedback.hidden = false;
             feedback.textContent = message;
+            feedback.setAttribute('data-result', message.indexOf('Correct') >= 0 || message.indexOf('I was right') >= 0
+                ? 'pass'
+                : 'miss');
         }
         if (reveal && showForm && item) {
             reveal.hidden = false;
@@ -502,6 +533,7 @@
         if (feedback) {
             feedback.hidden = false;
             feedback.textContent = 'נסו שוב. / try again';
+            feedback.setAttribute('data-result', 'miss');
         }
     }
 

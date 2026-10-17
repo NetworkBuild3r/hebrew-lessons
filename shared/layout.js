@@ -6,7 +6,11 @@
  * `<header class="topbar page-heading">` inside a view; describe the heading in
  * shared/app-routes.js and let this module render it.
  *
- * Provenance: INIT-005/SPEC-002
+ * Workspace width follows the adaptive shell (INIT-013/SPEC-003 · ADR-0015):
+ * mobile dock clearance, tablet 60rem stage, desktop rail + 75rem stage are
+ * owned by shared/worksheet.css against #app-main.wrap — keep headings fluid.
+ *
+ * Provenance: INIT-005/SPEC-002; adaptive shell: INIT-013/SPEC-003
  */
 (function (root) {
     'use strict';

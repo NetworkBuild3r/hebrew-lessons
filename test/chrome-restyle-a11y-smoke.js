@@ -20,6 +20,7 @@
  * Run: node test/chrome-restyle-a11y-smoke.js     (exit 0 = pass, 1 = fail)
  * Needs Chrome at the default Windows path (or CHROME_PATH).
  * Provenance: INIT-005/SPEC-013 (REQ-004, 005, 013, 017, 018, 019)
+ * Layout geometry (1440 rail / 390 dock): INIT-013/SPEC-006 (REQ-001, REQ-002, REQ-003)
  */
 'use strict';
 
@@ -251,6 +252,75 @@ function focusProbe() {
     };
 }
 
+/**
+ * INIT-013/SPEC-006 ac-3: bounding boxes for desktop rail / Bento and mobile dock.
+ * Runs inside the page. Avoids new stylesheet class literals so design-tokens snapshot stays stable.
+ */
+function layoutGeometry(opts) {
+    const o = opts || {};
+    const out = {
+        overflow: document.documentElement.scrollWidth - window.innerWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        uiLang: document.documentElement.getAttribute('data-ui-lang') || '',
+        dir: document.documentElement.getAttribute('dir') || '',
+        shell: null,
+        main: null,
+        nav: null,
+        navLinks: [],
+        bento: null
+    };
+    const shell = document.querySelector('.hebrew-shell');
+    const main = document.getElementById('app-main');
+    const nav = document.querySelector('.hebrew-shell-nav');
+    if (shell) {
+        const r = shell.getBoundingClientRect();
+        out.shell = { left: r.left, right: r.right, width: r.width };
+    }
+    if (main) {
+        const r = main.getBoundingClientRect();
+        out.main = { left: r.left, right: r.right, width: r.width };
+    }
+    if (nav) {
+        const r = nav.getBoundingClientRect();
+        out.nav = { bottom: r.bottom, position: getComputedStyle(nav).position };
+        out.navLinks = Array.from(nav.querySelectorAll('a[data-nav]')).map((a) => ({
+            nav: a.getAttribute('data-nav'),
+            height: a.getBoundingClientRect().height
+        }));
+    }
+    const list = document.querySelector('[data-today-state="ready"]');
+    if (list && o.ensureBento) {
+        if (!document.getElementById('today-continue-card') && !document.getElementById('today-next-card')) {
+            const hero = document.createElement('div');
+            hero.id = 'today-continue-card';
+            hero.className = 'card lesson-card';
+            hero.textContent = 'Continue';
+            list.prepend(hero);
+        }
+        if (!document.getElementById('today-review-card')) {
+            const review = document.createElement('div');
+            review.id = 'today-review-card';
+            review.className = 'card lesson-card';
+            review.textContent = 'Review';
+            list.appendChild(review);
+        }
+    }
+    const heroEl = document.getElementById('today-continue-card') || document.getElementById('today-next-card');
+    const reviewEl = document.getElementById('today-review-card');
+    if (heroEl && reviewEl) {
+        const hr = heroEl.getBoundingClientRect();
+        const rr = reviewEl.getBoundingClientRect();
+        out.bento = {
+            heroLeft: hr.left,
+            reviewLeft: rr.left,
+            sideBySide: Math.abs(hr.left - rr.left) > 200
+        };
+    }
+    return out;
+}
+
 /* ------------------------------------------------------------------ runner */
 
 const failures = [];
@@ -304,7 +374,8 @@ async function main() {
                 const a = await cdp.evaluate('(' + pageAudit + ')()');
                 const where = r.id + '@' + width;
                 checkAudit(where, a, { expectCurrent: r.id });
-                if (a.nav.links !== 7) fail(where, 'admin should see 7 nav links, saw ' + a.nav.links);
+                // Admin NAV: 6 learner + Editor + Admin = 8 (INIT-013/SPEC-003; was stale at 7).
+                if (a.nav.links !== 8) fail(where, 'admin should see 8 nav links, saw ' + a.nav.links);
                 report.routes[where] = { h1: a.h1[0], texts: a.texts, contrastSkippedGradient: a.contrastSkipped, scrollWidth: a.overflow.scrollWidth };
             }
         }
@@ -317,16 +388,66 @@ async function main() {
         checkAudit('today@1280 (learner)', learnerNav, { expectCurrent: 'today' });
         if (learnerNav.nav.links !== 6) fail('learner nav', 'expected 6 links, saw ' + learnerNav.nav.links);
 
-        // ---- dark theme (data-theme="dark"): contrast again, every route
+        // ---- INIT-013/SPEC-006 ac-3: Desktop rail + Bento (1440×960) and Mobile dock (390×844)
         await chromeCdp.signInAs(cdp, harness, BASE, 'admin');
-        for (const r of ROUTES) {
+        await chromeCdp.setViewport(cdp, 1440, 960);
+        await load(cdp, BASE, '/', 'today');
+        const desktopGeo = await cdp.evaluate('(' + layoutGeometry + ')({ ensureBento: true })');
+        report.layout = report.layout || {};
+        report.layout['today@1440'] = desktopGeo;
+        if (!desktopGeo.shell || !desktopGeo.main) {
+            fail('layout@1440', 'missing .hebrew-shell or #app-main');
+        } else {
+            if (desktopGeo.shell.width > 280) fail('layout@1440', 'shell width ' + desktopGeo.shell.width + ' > 280');
+            const ltr = desktopGeo.uiLang === 'en' || desktopGeo.dir === 'ltr';
+            if (ltr) {
+                if (desktopGeo.main.left < desktopGeo.shell.right - 2) {
+                    fail('layout@1440', 'LTR main not beside rail');
+                }
+            } else if (desktopGeo.main.right > desktopGeo.shell.left + 2) {
+                fail('layout@1440', 'RTL main not beside rail');
+            }
+            if (!desktopGeo.bento || !desktopGeo.bento.sideBySide) {
+                fail('layout@1440', 'Today Bento not side-by-side: ' + JSON.stringify(desktopGeo.bento));
+            }
+        }
+
+        await chromeCdp.setViewport(cdp, 390, 844);
+        for (const r of [{ id: 'today', path: '/' }, { id: 'lessons', path: '/lessons/' }, { id: 'review', path: '/review/' }]) {
             await load(cdp, BASE, r.path, r.id);
-            await cdp.evaluate(`document.documentElement.setAttribute('data-theme', 'dark'); true`);
-            await sleep(250);
-            const a = await cdp.evaluate('(' + pageAudit + ')()');
-            const where = r.id + '@1280 dark';
-            if (a.contrast.length) fail(where, 'contrast: ' + a.contrast.slice(0, 6).join('; ') + (a.contrast.length > 6 ? ' (+' + (a.contrast.length - 6) + ' more)' : ''));
-            if (a.unnamed.length) fail(where, 'no accessible name: ' + a.unnamed.join('; '));
+            const mobileGeo = await cdp.evaluate('(' + layoutGeometry + ')()');
+            report.layout[r.id + '@390'] = {
+                navPosition: mobileGeo.nav && mobileGeo.nav.position,
+                overflow: mobileGeo.overflow,
+                linkMinH: mobileGeo.navLinks.length
+                    ? Math.min.apply(null, mobileGeo.navLinks.map((l) => l.height))
+                    : null
+            };
+            if (!mobileGeo.nav || mobileGeo.nav.position !== 'fixed') {
+                fail('layout@390 ' + r.id, 'nav not fixed bottom dock');
+            } else if (Math.abs(mobileGeo.nav.bottom - mobileGeo.innerHeight) > 2) {
+                fail('layout@390 ' + r.id, 'nav not at viewport bottom');
+            }
+            if (mobileGeo.navLinks.some((l) => l.height < 44)) {
+                fail('layout@390 ' + r.id, 'nav link under 44px: ' + JSON.stringify(mobileGeo.navLinks));
+            }
+            if (mobileGeo.scrollWidth > mobileGeo.innerWidth) {
+                fail('layout@390 ' + r.id, 'horizontal overflow');
+            }
+        }
+
+        // ---- dark theme (data-theme="dark"): contrast and overflow again, every route at 360 and 1280 (INIT-013/SPEC-004)
+        await chromeCdp.signInAs(cdp, harness, BASE, 'admin');
+        for (const width of [360, 1280]) {
+            await chromeCdp.setViewport(cdp, width, width === 360 ? 800 : 900);
+            for (const r of ROUTES) {
+                await load(cdp, BASE, r.path, r.id);
+                await cdp.evaluate(`document.documentElement.setAttribute('data-theme', 'dark'); true`);
+                await sleep(200);
+                const a = await cdp.evaluate('(' + pageAudit + ')()');
+                const where = r.id + '@' + width + ' dark';
+                checkAudit(where, a, { expectCurrent: r.id });
+            }
         }
 
         // ---- focus is visible on Tab (first 14 stops of each route)

@@ -4056,70 +4056,93 @@ a.lesson-link { transition: background 0.15s ease; border-radius: 18px; }
 /* === end INIT-007/SPEC-006 review flashcards + mastery ceremony === */
 
 /* === Light by default (OS dark mode must not half-darken the app) ===
-   The shell, cards, and page ground are light. The ADR-0006 colour tokens flip dark
-   under prefers-color-scheme: dark, which left black rows and form controls on a
-   cream page (Words, Review, plan screens). Until the whole app has a real dark look,
-   stay light unless a person sets data-theme="dark" on the document element. */
+   Provenance: INIT-013/SPEC-002 · ADR-0015 (Jerusalem Stone light unless data-theme="dark").
+   The ADR-0006 colour tokens still flip under prefers-color-scheme: dark for legacy
+   consumers; active learner chrome reads the restyle block below. Stay light unless
+   a person sets data-theme="dark" (or auto + OS dark). */
 :root:not([data-theme="dark"]) {
     color-scheme: light;
-    --color-text: #1c1917;
-    --color-muted: #44403c;
-    --color-bg: #f7f6f3;
-    --color-surface: #ffffff;
-    --color-line: #8a847c;
-    --color-control: #1e3a2f;
-    --color-control-text: #f7f6f3;
-    --color-focus: #1e3a2f;
-    --color-picture: #1c1917;
-    --color-picture-bg: #f7f6f3;
-    --color-on-picture: #1c1917;
-    --color-correct: #059669;
-    --color-miss: #e11d48;
-    --color-audio-active: #f59e0b;
-    --color-surface-story: #fffbeb;
+    --paper: #F7F5F0;
+    --ink: #121621;
+    --muted: #4B5565;
+    --color-text: #121621;
+    --color-muted: #4B5565;
+    --color-bg: #F7F5F0;
+    --color-surface: #FFFFFF;
+    --color-surface-soft: #EFECE6;
+    --color-surface-hero: #141B2D;
+    --color-hero-bg: #141B2D;
+    --color-hero-text: #FFFFFF;
+    --color-line: #757C8A;
+    --color-border-subtle: #E4E0D8;
+    --color-primary: #254EDB;
+    --color-primary-hover: #1D3FB8;
+    --color-primary-soft: #EBF0FF;
+    --color-primary-ink: #FFFFFF;
+    --color-correct-ink: #065F46;
+    --color-correct-soft: #D1FAE5;
+    --color-miss-ink: #92400E;
+    --color-miss-soft: #FEF3C7;
+    --color-accent-sage: #0D9488;
+    --color-accent-terracotta: #D97706;
+    --color-control: #254EDB;
+    --color-control-text: #FFFFFF;
+    --color-focus: #254EDB;
+    --color-picture: #121621;
+    --color-picture-bg: #F7F5F0;
+    --color-on-picture: #121621;
+    --color-correct: #065F46;
+    --color-miss: #D97706;
+    --color-audio-active: #D97706;
+    --color-surface-story: #EFECE6;
 }
 
-/* === Words library polish (INIT-006/SPEC-013 look, light) === */
+/* === Words library polish (INIT-006/SPEC-013 look; theme-aware — INIT-013/SPEC-002) === */
 .words-control,
 .words-page select,
 .words-page input {
-    background: #ffffff;
-    color: var(--color-text, #1c1917);
-    border: 1px solid #cbd5e1;
-    border-radius: 12px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-control, 12px);
     padding: 0.55rem 0.75rem;
 }
 .words-page label,
 .words-field > span {
-    color: var(--ink, #1e293b);
+    color: var(--ink);
     font-weight: 600;
     font-size: 0.9rem;
 }
 .words-row {
-    background: #ffffff;
-    color: var(--ink, #1e293b);
-    border: 1px solid #e2e8f0;
+    background: var(--color-surface);
+    color: var(--ink);
+    border: 1px solid var(--color-border-subtle, var(--color-border));
     border-radius: 16px;
     padding: 0.85rem 1rem;
     box-shadow: var(--card-shadow, 0 1px 2px rgba(15, 23, 42, 0.06));
     transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
 .words-row:hover {
-    border-color: #c7d2fe;
-    box-shadow: var(--card-shadow-hover, 0 4px 12px rgba(67, 56, 202, 0.18));
+    border-color: var(--color-primary-soft);
+    box-shadow: var(--card-shadow-hover, 0 4px 12px rgba(37, 78, 219, 0.18));
     transform: translateY(-1px);
 }
 .words-row[aria-pressed="true"] {
-    border-color: var(--brand-1, #1d4ed8);
-    box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.25);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary-soft);
 }
-.words-he { color: var(--ink, #0f172a); font-size: 1.6rem; line-height: 1.5; }
-.words-gloss { color: #475569; }
+.words-he {
+    color: var(--ink);
+    font-size: 1.6rem;
+    line-height: 1.55; /* REQ-008 nikud floor — INIT-013/SPEC-002 */
+    font-family: var(--font-hebrew-display, inherit);
+}
+.words-gloss { color: var(--color-muted); }
 .words-chip {
-    background: #f1f5f9;
-    border: 1px solid #cbd5e1;
-    border-radius: 999px;
-    color: #334155;
+    background: var(--color-surface-soft);
+    border: 1px solid var(--color-border-subtle, var(--color-line));
+    border-radius: var(--radius-pill, 999px);
+    color: var(--color-muted);
     padding: 0 0.6rem;
 }
 .words-strength { background: #e2e8f0; border: 0; border-radius: 999px; overflow: hidden; }
@@ -4247,56 +4270,157 @@ img.hebrew-logo-mark {
 /* === end INIT-005/SPEC-010 icons === */
 
 /* === INIT-005/SPEC-011 restyle learner === */
-/* Provenance: INIT-005/SPEC-011 · ADR-0010 (warm paper, 18px cards, tactile press, 3px focus ring).
-   Appended last on purpose; later rules win. Nothing above is renamed or removed, and the
-   "Light by default" block stays: the app is light unless data-theme="dark" is set.
-   Colours come from tokens. Light values are declared here; data-theme="dark" swaps them.
-   No points, streaks, badges or characters live in this block. */
+/* Provenance: INIT-013/SPEC-002 · ADR-0015 (Jerusalem Stone / Judean Night).
+   Appended last on purpose; later rules win. ADR-0006 token block above stays byte-intact.
+   Light by default; data-theme="dark" swaps the active palette. Layout/typography vars
+   here feed SPEC-003–SPEC-005. No external font URLs (REQ-018). */
 
 :root {
-    --color-primary: #1d4ed8;
-    --color-primary-hover: #1e40af;
-    --color-primary-edge: #1e3a8a;
-    --color-primary-ink: #ffffff;
-    --color-primary-soft: #e9efff;
-    /* SPEC-013: the older --muted (#64748b) was 4.49:1 on the paper and 4.22:1 on the soft panel. */
-    --muted: #5b6b7f;
-    --color-border: #e4ded2;
-    --color-surface-soft: #f4f1ea;
-    --color-correct: #059669;
-    --color-miss: #e11d48;
-    --color-correct-soft: #e6f6ee;
-    --color-correct-ink: #065f46;
-    --color-miss-soft: #fdecef;
-    --color-miss-ink: #9f1239;
-    --radius-card: 18px;
-    --radius-button: 14px;
+    /* Jerusalem Stone (Light) — active theme values for restyle-gate */
+    --paper: #F7F5F0;
+    --ink: #121621;
+    --muted: #4B5565;
+    --color-bg: #F7F5F0;
+    --color-surface: #FFFFFF;
+    --color-surface-soft: #EFECE6;
+    --color-surface-hero: #141B2D;
+    --color-hero-bg: #141B2D;
+    --color-hero-text: #FFFFFF;
+    --color-text: #121621;
+    --color-muted: #4B5565;
+    --color-primary: #254EDB;
+    --color-primary-hover: #1D3FB8;
+    --color-primary-edge: #1D3FB8;
+    --color-primary-ink: #FFFFFF;
+    --color-primary-soft: #EBF0FF;
+    --color-correct: #065F46;
+    --color-miss: #D97706;
+    --color-correct-soft: #D1FAE5;
+    --color-correct-ink: #065F46;
+    --color-miss-soft: #FEF3C7;
+    --color-miss-ink: #92400E;
+    --color-accent-sage: #0D9488;
+    --color-accent-terracotta: #D97706;
+    --color-line: #757C8A;
+    --color-border-subtle: #E4E0D8;
+    --color-border: #E4E0D8;
+    /* Responsive layout & radius (ADR-0015 §2.5) */
+    --shell-rail-w: 260px;
+    --shell-mobile-dock-h: 68px;
+    --wrap-w-desktop: 75rem;
+    --wrap-w-reading: 42rem;
+    --radius-card: 20px;
+    --radius-control: 12px;
+    --radius-button: 12px;
     --radius-pill: 999px;
     --shell-h: 112px;
     --shell-w: 72rem;
     --wrap-w: 40rem;
+    /* Bilingual type — local/system stacks only (REQ-018) */
+    --font-hebrew-display: "Rubik", "Segoe UI", "Arial Hebrew", "Noto Sans Hebrew", sans-serif;
+    --font-hebrew-sans: "Rubik", "Segoe UI", "Arial Hebrew", "Noto Sans Hebrew", sans-serif;
+    --font-sans: "Rubik", "Segoe UI", system-ui, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+    /* Nikud-safe study words (REQ-008 / RSCH-006): override ADR-0006 1.5 → 1.55 floor */
+    --line-height-word: 1.55;
+}
+
+:root[data-theme="light"] {
+    color-scheme: light;
+    --paper: #F7F5F0;
+    --ink: #121621;
+    --muted: #4B5565;
+    --color-bg: #F7F5F0;
+    --color-surface: #FFFFFF;
+    --color-surface-soft: #EFECE6;
+    --color-surface-hero: #141B2D;
+    --color-hero-bg: #141B2D;
+    --color-hero-text: #FFFFFF;
+    --color-text: #121621;
+    --color-muted: #4B5565;
+    --color-primary: #254EDB;
+    --color-primary-hover: #1D3FB8;
+    --color-primary-edge: #1D3FB8;
+    --color-primary-ink: #FFFFFF;
+    --color-primary-soft: #EBF0FF;
+    --color-correct: #065F46;
+    --color-miss: #D97706;
+    --color-correct-soft: #D1FAE5;
+    --color-correct-ink: #065F46;
+    --color-miss-soft: #FEF3C7;
+    --color-miss-ink: #92400E;
+    --color-accent-sage: #0D9488;
+    --color-accent-terracotta: #D97706;
+    --color-line: #757C8A;
+    --color-border-subtle: #E4E0D8;
+    --color-border: #E4E0D8;
 }
 
 :root[data-theme="dark"] {
-    --color-primary: #60a5fa;
-    --color-primary-hover: #93c5fd;
-    --color-primary-edge: #3b82f6;
-    --color-primary-ink: #0b1220;
-    --color-primary-soft: #1c2745;
-    --color-border: #3a3833;
-    --color-surface-soft: #27261f;
-    --color-correct: #10b981;
-    --color-miss: #f43f5e;
-    --color-correct-soft: #12281f;
-    --color-correct-ink: #6ee7b7;
-    --color-miss-soft: #301820;
-    --color-miss-ink: #fda4af;
-    --paper: #141413;
-    /* SPEC-013: the older --muted (#64748b) was never swapped, so .lesson-card .fine and ~15 other
-       rules read 3.5:1 on the dark surface. Same value the ADR-0006 muted token uses in dark. */
-    --muted: var(--color-muted);
+    color-scheme: dark;
+    /* Judean Night (Dark) — literal #hex for every restyle-gate pair */
+    --paper: #0E121B;
+    --ink: #F3F4F6;
+    --muted: #A3B1C6;
+    --color-bg: #0E121B;
+    --color-surface: #161C2A;
+    --color-surface-soft: #1E2638;
+    --color-surface-hero: #1D2842;
+    --color-hero-bg: #1D2842;
+    --color-hero-text: #F3F4F6;
+    --color-text: #F3F4F6;
+    --color-muted: #A3B1C6;
+    --color-primary: #6E93FF;
+    --color-primary-hover: #8AA8FF;
+    --color-primary-edge: #8AA8FF;
+    --color-primary-ink: #0B0F19;
+    --color-primary-soft: #172347;
+    --color-correct: #2DD4BF;
+    --color-miss: #F59E0B;
+    --color-correct-soft: #0F2E2B;
+    --color-correct-ink: #A7F3D0;
+    --color-miss-soft: #3B280C;
+    --color-miss-ink: #FDE68A;
+    --color-accent-sage: #2DD4BF;
+    --color-accent-terracotta: #F59E0B;
+    --color-line: #687792;
+    --color-border-subtle: #263044;
+    --color-border: #263044;
     --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
     --card-shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root[data-theme="auto"] {
+        color-scheme: dark;
+        --paper: #0E121B;
+        --ink: #F3F4F6;
+        --muted: #A3B1C6;
+        --color-bg: #0E121B;
+        --color-surface: #161C2A;
+        --color-surface-soft: #1E2638;
+        --color-surface-hero: #1D2842;
+        --color-hero-bg: #1D2842;
+        --color-hero-text: #F3F4F6;
+        --color-text: #F3F4F6;
+        --color-muted: #A3B1C6;
+        --color-primary: #6E93FF;
+        --color-primary-hover: #8AA8FF;
+        --color-primary-edge: #8AA8FF;
+        --color-primary-ink: #0B0F19;
+        --color-primary-soft: #172347;
+        --color-correct: #2DD4BF;
+        --color-miss: #F59E0B;
+        --color-correct-soft: #0F2E2B;
+        --color-correct-ink: #A7F3D0;
+        --color-miss-soft: #3B280C;
+        --color-miss-ink: #FDE68A;
+        --color-accent-sage: #2DD4BF;
+        --color-accent-terracotta: #F59E0B;
+        --color-line: #687792;
+        --color-border-subtle: #263044;
+        --color-border: #263044;
+    }
 }
 
 /* Wider screens for the data-heavy views; the shell header is always wider than the page. */
@@ -4306,14 +4430,38 @@ body.admin-page { --wrap-w: 66rem; }
 
 /* ---- Page ground and base type ---- */
 body {
-    background: var(--paper, #faf8f4);
+    background: var(--paper);
     color: var(--color-text);
+    font-family: var(--font-sans, "Rubik", sans-serif);
 }
 .topbar-inner,
 .wrap {
     width: min(var(--wrap-w), calc(100% - 2rem));
 }
 .wrap { padding: 0.5rem 0 3rem; }
+
+/* Theme toggle in shell chrome — INIT-013/SPEC-002 */
+.hebrew-shell-theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 44px;
+    gap: 0.35rem;
+    padding: 0.25rem 0.75rem;
+    border: 1px solid var(--color-border, var(--color-line));
+    border-radius: var(--radius-pill, 999px);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.hebrew-shell-theme-toggle:hover { background: var(--color-surface-soft); }
+.hebrew-shell-theme-toggle:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
+}
 
 /* ---- Controls always paint their own colours (no UA dark styling) ---- */
 button, input, select, textarea {
@@ -4343,10 +4491,10 @@ summary:focus-visible,
 }
 
 /* ================= App header (shell) =================
-   Brand and account on the first row, every nav label on the next. The bar is at most 72rem,
-   so a single row clips the last words. On a phone the shell scrolls away with the page. */
+   Base chrome; three-tier adaptive layout (INIT-013/SPEC-003 · ADR-0015) follows. */
 .hebrew-shell {
     background: var(--color-surface);
+    background-color: var(--color-surface);
     color: var(--color-text);
     border-bottom: 1px solid var(--color-border);
     box-shadow: 0 8px 18px -16px rgba(28, 25, 23, 0.45);
@@ -4360,7 +4508,7 @@ summary:focus-visible,
 }
 .hebrew-brand { order: 1; flex: 1 1 auto; }
 .hebrew-shell-sync { order: 2; }
-.hebrew-shell-account { order: 2; margin-inline-start: 0; }
+.hebrew-shell-account { order: 2; margin-inline-start: auto; }
 .hebrew-brand {
     color: var(--color-text);
     gap: 0.6rem;
@@ -4397,7 +4545,9 @@ img.hebrew-logo-mark {
     padding: 0.2rem 0.7rem;
     border: 0;
     border-radius: 12px;
-    background: transparent;
+    /* Solid fill so chrome-restyle contrast audit resolves a stable backdrop (REQ-007). */
+    background: var(--color-surface);
+    background-color: var(--color-surface);
     background-image: none;
     box-shadow: none;
     color: var(--color-muted);
@@ -4407,17 +4557,20 @@ img.hebrew-logo-mark {
 }
 .hebrew-shell-link:hover {
     background: var(--color-surface-soft);
+    background-color: var(--color-surface-soft);
     color: var(--color-text);
     outline: 0;
 }
 .hebrew-shell-link:focus-visible {
     background: var(--color-surface-soft);
+    background-color: var(--color-surface-soft);
     color: var(--color-text);
     outline: 3px solid var(--color-primary);
     outline-offset: -3px;
 }
 .hebrew-shell-link[aria-current="page"] {
     background: var(--color-primary-soft);
+    background-color: var(--color-primary-soft);
     background-image: none;
     color: var(--color-primary);
     /* The underline and the heavier weight carry "current", not colour alone. */
@@ -4487,33 +4640,313 @@ img.hebrew-logo-mark {
     color: var(--color-text);
 }
 
-/* The nav is its own row at every width: the shell is at most 72rem, and one row clips
-   the last labels once the wordmark and the language switch are in it. On a phone the
-   shell scrolls away; on a wide screen it stays put and the lesson bar clears it. */
-@media (max-width: 1099px) {
+/* ---- INIT-013/SPEC-003: adaptive shell (mobile dock / tablet / desktop rail) ---- */
+
+/* Mobile <768px: compact top bar + thumb-zone bottom tab dock (REQ-002). */
+@media (max-width: 767px) {
     :root { --shell-h: 0px; }
-    .hebrew-shell { position: relative; }
+    html {
+        scroll-padding-bottom: 6.5rem;
+    }
+    .hebrew-shell {
+        position: relative;
+        z-index: 50;
+        padding: 0.5rem 0.75rem;
+        box-shadow: none;
+    }
+    .hebrew-shell-inner {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        width: 100%;
+        max-width: none;
+        min-height: 0;
+        padding: 0;
+        gap: 0.35rem 0.45rem;
+    }
+    .hebrew-brand {
+        order: 1;
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 0.15rem 0.35rem;
+    }
+    .hebrew-shell-sync { order: 2; }
+    .hebrew-shell-account {
+        order: 2;
+        margin-inline-start: 0;
+        flex: 0 1 auto;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    .hebrew-shell-account-btn { min-height: 44px; padding: 0.2rem 0.55rem; }
+    .hebrew-shell-account-name { max-width: 5.5rem; }
+    .hebrew-shell-theme-toggle {
+        min-height: 44px;
+        padding: 0.2rem 0.55rem;
+        font-size: 0.75rem;
+    }
+    .hebrew-shell-nav {
+        order: 3;
+        position: fixed;
+        bottom: 0;
+        inset-inline: 0;
+        z-index: 40;
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+        gap: 0.15rem;
+        flex: none;
+        width: 100%;
+        max-width: none;
+        margin: 0;
+        padding: 0.3rem 0.35rem calc(0.3rem + env(safe-area-inset-bottom, 0px));
+        background: var(--color-surface);
+        background-color: var(--color-surface);
+        border-top: 1px solid var(--color-line);
+        border-radius: 0;
+        box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.08);
+        overflow: hidden;
+    }
+    .hebrew-shell-link {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-width: 0;
+        min-height: 44px;
+        height: auto;
+        padding: 0.2rem 0.1rem;
+        gap: 0.15rem;
+        border-radius: 10px;
+        font-size: 0.7rem;
+        line-height: 1.15;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        background-color: var(--color-surface);
+        color: var(--color-muted);
+    }
+    .hebrew-shell-link[aria-current="page"] {
+        background-color: var(--color-primary-soft);
+        color: var(--color-primary);
+        box-shadow: none;
+    }
+    .hebrew-shell-link .icon,
+    .hebrew-shell-link .hebrew-icon {
+        width: 18px;
+        height: 18px;
+        flex: 0 0 auto;
+    }
+    .hebrew-shell-label {
+        display: block;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        justify-items: center;
+        text-align: center;
+    }
+    .hebrew-shell-link .hebrew-shell-label .en { display: none; }
+    body.has-hebrew-shell > #app-main.wrap {
+        width: 100%;
+        max-width: none;
+        padding-inline: 1rem;
+        padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+    }
+    body.has-hebrew-shell .topbar-inner {
+        width: 100%;
+        max-width: none;
+    }
+}
+
+/* Tablet 768–1023px: compact top nav, 60rem stage (no dock, no rail). */
+@media (min-width: 768px) and (max-width: 1023px) {
+    :root { --shell-h: 0px; }
+    .hebrew-shell { position: sticky; top: 0; }
     .hebrew-shell-inner {
         flex-wrap: wrap;
-        width: calc(100% - 1rem);
+        width: min(60rem, calc(100% - 2rem));
+        max-width: 60rem;
+        margin-inline: auto;
         min-height: 0;
-        padding: 0.3rem 0 0;
-        gap: 0 0.5rem;
+        padding: 0.35rem 0;
+        gap: 0.35rem 0.65rem;
     }
     .hebrew-brand { order: 1; flex: 1 1 auto; }
     .hebrew-shell-sync { order: 2; }
     .hebrew-shell-account { order: 2; margin-inline-start: 0; }
-    .hebrew-shell-account-btn { min-height: 40px; padding: 0.2rem 0.65rem; }
-    .hebrew-shell-account-name { max-width: 6.5rem; }
     .hebrew-shell-nav {
         order: 3;
+        position: static;
         flex: 1 1 100%;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.2rem;
         margin-inline: 0;
-        padding: 0 0 0.2rem;
+        padding: 0.1rem 0 0.25rem;
+        overflow: visible;
+        box-shadow: none;
+        border-top: 0;
+    }
+    .hebrew-shell-link {
+        padding: 0.2rem 0.65rem;
+        background-color: var(--color-surface);
+    }
+    .hebrew-shell-link[aria-current="page"] {
+        background-color: var(--color-primary-soft);
+    }
+    body.has-hebrew-shell > #app-main.wrap {
+        width: min(60rem, calc(100% - 2rem));
+        max-width: 60rem;
+        margin-inline: auto;
+        padding: 1.25rem 1.5rem 3rem;
+    }
+    body.has-hebrew-shell .topbar-inner {
+        width: 100%;
+        max-width: none;
+    }
+}
+
+/* Desktop ≥1024px: persistent 260px navigation rail (REQ-001). */
+@media (min-width: 1024px) {
+    :root { --shell-h: 0px; }
+    /* Mirror the rail↔main columns with UI language; lesson stage stays RTL. */
+    :root[data-ui-lang="en"] body.has-hebrew-shell,
+    html[dir="ltr"] body.has-hebrew-shell {
+        direction: ltr;
+    }
+    :root[data-ui-lang="he"] body.has-hebrew-shell,
+    html[dir="rtl"]:not([data-ui-lang="en"]) body.has-hebrew-shell {
+        direction: rtl;
+    }
+    body.has-hebrew-shell {
+        display: grid;
+        grid-template-columns: var(--shell-rail-w, 260px) minmax(0, 1fr);
+        min-height: 100dvh;
+        align-items: start;
+    }
+    body.has-hebrew-shell > #app-shell {
+        grid-column: 1;
+        grid-row: 1;
+        width: var(--shell-rail-w, 260px);
+        position: sticky;
+        top: 0;
+        height: 100dvh;
+        overflow-x: hidden;
+        overflow-y: auto;
+        align-self: start;
+    }
+    body.has-hebrew-shell > #app-main.wrap {
+        grid-column: 2;
+        grid-row: 1;
+        width: 100%;
+        max-width: var(--wrap-w-desktop, 75rem);
+        margin-inline: auto;
+        padding: 2rem 2.5rem 4rem;
+        box-sizing: border-box;
+        direction: rtl;
+    }
+    body.has-hebrew-shell > #app-route-announce {
+        grid-column: 2;
+        grid-row: 1;
+    }
+    body.has-hebrew-shell .topbar-inner {
+        width: 100%;
+        max-width: none;
+    }
+    .hebrew-shell {
+        width: var(--shell-rail-w, 260px);
+        min-height: 100%;
+        height: 100%;
+        position: sticky;
+        top: 0;
+        border-bottom: none;
+        border-inline-end: 1px solid var(--color-border-subtle);
+        background: var(--color-surface);
+        background-color: var(--color-surface);
+        box-shadow: none;
+    }
+    .hebrew-shell-inner {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        flex-wrap: nowrap;
+        width: 100%;
+        max-width: none;
+        min-height: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 1.25rem 1rem;
+        gap: 1rem;
+        box-sizing: border-box;
+    }
+    .hebrew-brand {
+        order: 1;
+        flex: 0 0 auto;
+        width: 100%;
+        margin-inline-start: 0;
+    }
+    .hebrew-shell-nav {
+        order: 2;
+        flex: 1 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        flex-wrap: nowrap;
+        gap: 0.35rem;
+        width: 100%;
+        margin: 0;
+        padding: 0;
         overflow: visible;
     }
-    .hebrew-shell-link { padding: 0.2rem 0.6rem; }
-    .hebrew-shell-link .hebrew-shell-label .en { display: block; }
+    .hebrew-shell-link {
+        display: flex;
+        flex-direction: row;
+        justify-content: flex-start;
+        align-items: center;
+        width: 100%;
+        min-height: 44px;
+        padding: 0.35rem 0.75rem;
+        gap: 0.55rem;
+        background-color: var(--color-surface);
+    }
+    .hebrew-shell-link[aria-current="page"] {
+        background-color: var(--color-primary-soft);
+        box-shadow: none;
+        border-inline-start: 3px solid var(--color-primary);
+    }
+    /* Sync + account sit at the rail foot (margin-top: auto). No new hook class — ADR-0006. */
+    .hebrew-shell-sync {
+        order: 3;
+        margin-top: auto;
+        margin-inline-start: 0;
+        width: 100%;
+    }
+    .hebrew-shell-account {
+        order: 4;
+        position: relative;
+        margin-inline-start: 0;
+        flex-wrap: wrap;
+        width: 100%;
+        gap: 0.45rem;
+    }
+    .hebrew-shell-sync:empty ~ .hebrew-shell-account {
+        margin-top: auto;
+    }
+    .hebrew-shell-account-menu {
+        inset-inline-end: 0;
+        inset-inline-start: 0;
+        top: auto;
+        bottom: calc(100% + 0.35rem);
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+    .hebrew-shell-theme-toggle,
+    .ui-lang {
+        flex: 1 1 auto;
+    }
 }
 
 /* ================= Page heading =================
@@ -5664,7 +6097,8 @@ html:not([data-ui-lang="he"]) .ui-chrome .icon-directional { transform: none; }
 .ui-lang-btn + .ui-lang-btn { box-shadow: inset 1px 0 0 var(--color-border, #e4ded2); }
 .ui-lang-btn.is-on {
     background: var(--color-primary, #1d4ed8);
-    color: #fff;
+    /* primary-ink tracks Light/Dark so dark Tekhelet labels stay ≥4.5:1 (INIT-013/SPEC-003). */
+    color: var(--color-primary-ink, #fff);
 }
 .ui-lang-btn:focus-visible { outline: 3px solid var(--color-primary, #1d4ed8); outline-offset: -3px; }
 
@@ -6376,3 +6810,652 @@ html[data-ui-lang="he"] [data-plan-builder] .plan-help-en {
     display: none;
 }
 /* === end plan builder workspace === */
+
+/* === INIT-013/SPEC-004: Bento Today workspace & catalog/progress grids ===
+   Provenance: INIT-013/SPEC-004 · ADR-0015 REQ-002–REQ-005, REQ-007.
+   Desktop asymmetric Today Bento (Figma 31:2), multi-column catalog grids,
+   and mobile compact feed (Figma 33:2). Appended last so hero contrast wins. */
+
+/* ---- Hero Continue / Next (Judean Midnight) — solid bg for chrome a11y ---- */
+#today-continue-card,
+#today-next-card,
+.lesson-card#today-continue-card,
+.lesson-card#today-next-card {
+    background: var(--color-surface-hero);
+    background-color: var(--color-surface-hero);
+    color: var(--color-hero-text, #FFFFFF);
+    border-radius: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 8px 28px -12px rgba(20, 27, 45, 0.55);
+}
+
+#today-continue-card:hover,
+#today-next-card:hover,
+.lesson-card#today-continue-card:hover,
+.lesson-card#today-next-card:hover {
+    border-color: rgba(255, 255, 255, 0.22);
+    transform: translateY(-1px);
+}
+
+#today-continue-card .today-card-body,
+#today-next-card .today-card-body,
+#today-continue-card h2,
+#today-next-card h2,
+#today-continue-card p,
+#today-next-card p,
+#today-continue-card .today-card-title,
+#today-next-card .today-card-title,
+#today-continue-card span,
+#today-next-card span,
+#today-continue-card .ui-he,
+#today-next-card .ui-he {
+    color: #FFFFFF;
+}
+
+#today-continue-card .fine,
+#today-next-card .fine,
+#today-continue-card .today-card-sub,
+#today-next-card .today-card-sub,
+#today-continue-card .today-card-meta,
+#today-next-card .today-card-meta,
+#today-continue-card .muted,
+#today-next-card .muted,
+#today-continue-card .en,
+#today-next-card .en,
+#today-continue-card .ui-en,
+#today-next-card .ui-en,
+#today-continue-card .lesson-blurb,
+#today-next-card .lesson-blurb,
+#today-continue-card h2 .en,
+#today-next-card h2 .en,
+#today-continue-card .lesson-level,
+#today-next-card .lesson-level,
+#today-continue-card .lesson-level .en,
+#today-next-card .lesson-level .en {
+    color: #E2E8F0;
+}
+
+#today-continue-card .lesson-status,
+#today-next-card .lesson-status,
+#today-continue-card .lesson-status.ready,
+#today-next-card .lesson-status.ready,
+#today-continue-card .lesson-status.fresh,
+#today-next-card .lesson-status.fresh,
+#today-continue-card .lesson-status.done,
+#today-next-card .lesson-status.done {
+    background: rgba(255, 255, 255, 0.14);
+    background-color: rgba(255, 255, 255, 0.14);
+    color: #FFFFFF;
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+#today-continue-card h2,
+#today-next-card h2 {
+    font-family: var(--font-hebrew-display, inherit);
+    font-size: clamp(1.35rem, 2.4vw, 1.75rem);
+    line-height: 1.35;
+    color: #FFFFFF;
+}
+
+/* High-contrast CTA on hero (≥4.5:1 in Light #141B2D and Dark #1D2842) */
+#today-continue-card .btn-primary,
+#today-next-card .btn-primary,
+#today-continue-link,
+#today-next-link {
+    background: #FFFFFF;
+    background-color: #FFFFFF;
+    color: #141B2D;
+    border-color: #FFFFFF;
+    box-shadow: 0 2px 0 rgba(20, 27, 45, 0.18);
+}
+
+#today-continue-card .btn-primary:hover,
+#today-next-card .btn-primary:hover,
+#today-continue-link:hover,
+#today-next-link:hover {
+    background: #F8FAFC;
+    background-color: #F8FAFC;
+    color: #141B2D;
+}
+
+#today-continue-card .btn-primary .en,
+#today-next-card .btn-primary .en,
+#today-continue-link .en,
+#today-next-link .en,
+#today-continue-card .btn-primary .ui-en,
+#today-next-card .btn-primary .ui-en,
+#today-continue-card .btn-primary .ui-he,
+#today-next-card .btn-primary .ui-he,
+#today-continue-link .ui-en,
+#today-next-link .ui-en,
+#today-continue-link .ui-he,
+#today-next-link .ui-he {
+    color: #141B2D;
+    opacity: 1;
+}
+
+#today-continue-card .btn-primary .hebrew-icon,
+#today-next-card .btn-primary .hebrew-icon,
+#today-continue-link .hebrew-icon,
+#today-next-link .hebrew-icon {
+    color: #141B2D;
+}
+
+/* ---- Today practice mix rows (tactile steps) ---- */
+.today-mix-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem;
+    padding: 0.85rem 0.35rem;
+    border-top: 1px solid var(--color-border-subtle);
+    border-radius: 0;
+}
+
+.today-mix-row:first-child {
+    border-top: 0;
+    padding-top: 0.35rem;
+}
+
+.today-mix-row .btn,
+.today-mix-row .btn-primary {
+    border-radius: var(--radius-pill, 999px);
+    min-height: 44px;
+    padding-inline: 1.1rem;
+}
+
+/* ---- Desktop ≥1024px: asymmetric Today Bento + catalog grids ---- */
+@media (min-width: 1024px) {
+    .today-list[data-today-state="ready"] {
+        display: grid;
+        grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+        gap: 1.5rem;
+        align-items: start;
+    }
+
+    .today-list[data-today-state="ready"] > #today-continue-card,
+    .today-list[data-today-state="ready"] > #today-next-card,
+    .today-list[data-today-state="ready"] > #today-welcome-card,
+    .today-list[data-today-state="ready"] > #today-mix {
+        grid-column: 1;
+    }
+
+    .today-list[data-today-state="ready"] > #today-review-card {
+        grid-column: 2;
+    }
+
+    /* aud-1: single card spans the full bento so a welcome state is not lopsided */
+    .today-list[data-today-state="ready"] > :only-child {
+        grid-column: 1 / -1;
+    }
+
+    .lessons-list,
+    .home-list.lessons-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.25rem;
+    }
+
+    .guides-list,
+    .home-list.guides-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1.25rem;
+    }
+
+    /* Opened guide reading measure (REQ-004) */
+    .guides-page .story-body,
+    [data-recipe="guide"] .story-body,
+    .plan-page[data-recipe="guide"] .story-body,
+    .guide-body,
+    .guide-prose {
+        max-width: 65ch;
+    }
+
+    .words-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1rem;
+    }
+
+    .words-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 1rem;
+    }
+
+    .progress-view {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.25rem;
+        align-items: start;
+    }
+
+    .progress-view > .progress-card,
+    .progress-view > .ai-profile {
+        min-width: 0;
+    }
+}
+
+/* ---- Mobile <768px: compact feed density + full-width CTAs ---- */
+@media (max-width: 767px) {
+    .today-list,
+    .today-list[data-today-state="ready"],
+    .lessons-list,
+    .guides-list,
+    .words-list,
+    .progress-view,
+    .home-list {
+        gap: 0.85rem;
+    }
+
+    .today-page .card,
+    .today-page .lesson-card,
+    .lessons-page .card,
+    .lessons-page .lesson-card,
+    .guides-page .card,
+    .guides-page .lesson-card,
+    .words-page .card,
+    .progress-page .card,
+    .progress-page .lesson-card,
+    .progress-page .progress-card {
+        padding: 1rem;
+    }
+
+    .today-page .lesson-link,
+    .lessons-page .lesson-link,
+    .guides-page .lesson-link {
+        padding: 1rem;
+    }
+
+    .today-page .today-actions .btn,
+    .today-page .today-actions .btn-primary,
+    .lessons-page .lesson-card .btn,
+    .lessons-page .lesson-card .btn-primary,
+    .guides-page .lesson-card .btn,
+    .guides-page .lesson-card .btn-primary,
+    .words-page .words-toolbar .btn-primary,
+    .words-page .words-add .btn-primary,
+    .progress-page .progress-card .btn,
+    .progress-page .progress-card .btn-primary,
+    #today-continue-link,
+    #today-next-link,
+    #today-review-start {
+        width: 100%;
+        justify-content: center;
+        min-height: 46px;
+        box-sizing: border-box;
+    }
+
+    .words-summary,
+    .progress-stage-counts {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.65rem;
+    }
+
+    .progress-stage-counts .progress-count-sep {
+        display: none;
+    }
+
+    .progress-stage-counts .progress-count {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 0.55rem 0.65rem;
+        border-radius: 12px;
+        background: var(--color-surface-soft);
+        border: 1px solid var(--color-border-subtle);
+        min-width: 0;
+    }
+}
+/* === end INIT-013/SPEC-004 === */
+
+/* === INIT-013 / SPEC-005: Ergonomic Study Stage, Multi-Tense Verb Drill & SRS Stage === */
+/* Provenance: INIT-013/SPEC-005 � ADR-0015 Pillars 4�5 � REQ-006 / REQ-007 / REQ-009.
+   Desktop (=1024px) widens the lesson player, elevates study cards, and lays choose /
+   true-false options in a 2�2 grid. Mobile (<768px) keeps tables, letter pads, and
+   exercise trays inside 360px / 390px with thumb-sized primary actions. SRS Review
+   keeps pointed Hebrew =36px and 48px rating buttons with theme-safe contrast. */
+
+/* ---- Desktop Lesson Player & Exercise Stage (=1024px) ---- */
+@media (min-width: 1024px) {
+    .plan-player,
+    .plan-view,
+    .lesson-player,
+    .plan-page .plan-player,
+    .plan-page .plan-view,
+    .plan-page .lesson-player,
+    .plan-page #plan-root,
+    .plan-page [data-plan-root] {
+        max-width: 68rem;
+    }
+
+    .plan-page .plan-block,
+    .plan-page section[data-block-type],
+    .plan-page .plan-exercise,
+    .plan-page .plan-assignment,
+    .plan-page .plan-block-conjugation-table,
+    .plan-page [data-drill-station] {
+        background-color: var(--color-surface);
+        border-radius: var(--radius-card, 20px);
+        padding: 2rem 2.25rem;
+        border: 1px solid var(--color-border-subtle);
+        box-sizing: border-box;
+        max-width: 100%;
+    }
+
+    /* ac-1: 2�2 Responsive Choice Grid */
+    .exercise-choices,
+    .choice-list,
+    .quiz-options,
+    .plan-page .plan-exercise-choices {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.85rem;
+        max-width: 100%;
+    }
+
+    .exercise-choice,
+    .choice-btn,
+    .quiz-option,
+    .plan-page .plan-exercise-choice {
+        min-height: 44px;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    .exercise-choice:focus-visible,
+    .choice-btn:focus-visible,
+    .quiz-option:focus-visible,
+    .plan-page .plan-exercise-choice:focus-visible {
+        outline: 3px solid var(--focus-ring, var(--color-focus));
+        outline-offset: 2px;
+    }
+}
+
+/* ---- Conjugation Table, Drill Station & Competence Feedback ---- */
+.explainer-table,
+.conj-table,
+.plan-page .explainer-table,
+.plan-page .conj-table {
+    border-collapse: collapse;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.explainer-table th,
+.explainer-table td,
+.conj-table th,
+.conj-table td,
+.plan-page .explainer-table th,
+.plan-page .explainer-table td,
+.plan-page .conj-table th,
+.plan-page .conj-table td {
+    font-family: var(--font-hebrew, var(--font-hebrew-display, inherit));
+    font-size: clamp(1.2rem, 2.2vw, 1.45rem);
+    line-height: 1.6;
+}
+
+.root-letter,
+.plan-page .root-letter {
+    color: var(--color-accent-warm, var(--color-accent-terracotta));
+    font-weight: 700;
+}
+
+[data-drill-prompt] {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--color-text-primary, var(--color-text));
+}
+
+/* Competence feedback: Galilee Sage (pass) / Warm Terracotta (miss / retry / reveal) */
+.exercise-why:not([hidden]),
+.plan-exercise-why:not([hidden]),
+.feedback-banner,
+[data-drill-feedback]:not([hidden])[data-result="pass"],
+.plan-exercise-feedback:not([hidden]).is-correct {
+    background: var(--color-correct-soft);
+    color: var(--color-correct-ink);
+    border-radius: var(--radius-control, 12px);
+    padding: 0.65rem 0.85rem;
+}
+
+.feedback-banner.is-miss,
+[data-drill-feedback]:not([hidden]),
+[data-drill-feedback]:not([hidden])[data-result="miss"],
+.plan-exercise-feedback:not([hidden]),
+.plan-exercise-feedback:not([hidden]).is-wrong {
+    background: var(--color-miss-soft);
+    color: var(--color-miss-ink);
+    border-radius: var(--radius-control, 12px);
+    padding: 0.65rem 0.85rem;
+}
+
+[data-drill-feedback]:not([hidden])[data-result="pass"] {
+    background: var(--color-correct-soft);
+    color: var(--color-correct-ink);
+}
+
+/* Collapse empty non-owner drill sections so multi-verb drills share one station */
+section.plan-block-conjugation-table[data-mode="drill"][data-drill-owner="0"]:not(:has(.conj-sentences, .conj-questions, .conj-extra-cells, .conj-table)),
+section[data-block-type="conjugation-table"][data-mode="drill"][data-drill-owner="0"]:not(:has(.conj-sentences, .conj-questions, .conj-extra-cells, .conj-table)) {
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    min-height: 0;
+}
+
+section.plan-block-conjugation-table[data-mode="drill"][data-drill-owner="0"]:not(:has(.conj-sentences, .conj-questions, .conj-extra-cells, .conj-table)) > .conj-header,
+section[data-block-type="conjugation-table"][data-mode="drill"][data-drill-owner="0"]:not(:has(.conj-sentences, .conj-questions, .conj-extra-cells, .conj-table)) > .conj-header {
+    display: none;
+}
+
+/* ---- Mobile One-Handed Lesson Player & 22-Letter Pad (<768px) ---- */
+@media (max-width: 767px) {
+    .plan-block-exercise,
+    .plan-block-conjugation-table,
+    .plan-block-assignment,
+    .plan-page .plan-exercise,
+    .plan-page .plan-assignment,
+    .plan-page .plan-block-conjugation-table,
+    .plan-page section[data-block-type="exercise"],
+    .plan-page section[data-block-type="conjugation-table"],
+    .plan-page section[data-block-type="assignment"],
+    .conj-table,
+    .explainer-table,
+    .plan-page .conj-table,
+    .plan-page .explainer-table,
+    [data-letter-pad],
+    .letter-pad,
+    .exercise-unscramble-bank,
+    .exercise-unscramble-slots,
+    .plan-page [data-unscramble-bank],
+    .plan-page [data-unscramble-picked],
+    .plan-page [data-drill-station] {
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    .plan-page [data-drill-station],
+    .plan-page .plan-exercise-item {
+        border-radius: 22px;
+        padding: 1rem;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border-subtle);
+        box-sizing: border-box;
+    }
+
+    .plan-page .plan-exercise-prompt,
+    .plan-page [data-drill-prompt] {
+        font-size: 1.5rem;
+        line-height: 1.65;
+    }
+
+    /* aud-1: long choose options stack 1-per-row under 600px; keep short true-false 2-up when space allows */
+    .plan-page .plan-exercise[data-exercise-kind="choose"] .plan-exercise-choices,
+    .exercise-choices {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.65rem;
+    }
+
+    .plan-page .plan-exercise[data-exercise-kind="true-false"] .plan-exercise-choices {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.65rem;
+    }
+
+    [data-letter-pad],
+    .plan-page .letter-pad,
+    .plan-page [data-letter-pad] {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
+        gap: 0.35rem;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    [data-letter-pad] button,
+    [data-letter-pad] .letter-key,
+    .plan-page .letter-pad button,
+    .plan-page [data-letter-pad] button {
+        min-height: 38px;
+        min-width: 0;
+        padding: 0.25rem;
+        box-sizing: border-box;
+    }
+
+    [data-drill-check],
+    [data-drill-next],
+    [data-exercise-submit],
+    [data-exercise-next],
+    .exercise-choice,
+    .plan-page .plan-exercise-choice,
+    .plan-page [data-drill-check],
+    .plan-page [data-drill-next],
+    .plan-page [data-unscramble-check] {
+        min-height: 44px;
+    }
+}
+
+/* ---- SRS Flashcard Review Stage (ac-3) ---- */
+.review-card,
+.review-page .review-card {
+    border-radius: 24px;
+    padding: 2rem 1.5rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-subtle);
+    box-sizing: border-box;
+}
+
+.review-he,
+.he-word.review-he,
+.review-card .he-word,
+.review-card .review-he {
+    font-family: var(--font-hebrew-display, inherit);
+    font-size: clamp(2.25rem, 4vw, 3rem);
+    line-height: 1.55;
+    font-weight: var(--font-weight-word, 700);
+    color: var(--color-text);
+}
+
+.review-grades,
+.review-page .review-grades {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+}
+
+.review-grade,
+.review-page .review-grade,
+.review-grades button {
+    min-height: 48px;
+    font-weight: 600;
+    box-sizing: border-box;
+}
+
+/* High-contrast grade pairings (=4.5:1) � Light */
+.review-grade-1,
+.review-grade-2,
+.review-grade.review-grade-miss,
+.review-grade[data-signal="miss"] {
+    background: var(--color-miss-soft, #FEF3C7);
+    color: var(--color-miss-ink, #92400E);
+    border-color: var(--color-miss, #D97706);
+}
+
+.review-grade-3,
+.review-grade-4,
+.review-grade.review-grade-knew,
+.review-grade[data-signal="pass"].review-grade-knew {
+    background: var(--color-correct-soft, #D1FAE5);
+    color: var(--color-correct-ink, #065F46);
+    border-color: var(--color-correct, #065F46);
+}
+
+:root[data-theme="dark"] .review-grade-1,
+:root[data-theme="dark"] .review-grade-2,
+:root[data-theme="dark"] .review-grade.review-grade-miss,
+:root[data-theme="dark"] .review-grade[data-signal="miss"] {
+    background: var(--color-miss-soft, #3B280C);
+    color: var(--color-miss-ink, #FDE68A);
+    border-color: var(--color-miss, #F59E0B);
+}
+
+:root[data-theme="dark"] .review-grade-3,
+:root[data-theme="dark"] .review-grade-4,
+:root[data-theme="dark"] .review-grade.review-grade-knew,
+:root[data-theme="dark"] .review-grade[data-signal="pass"].review-grade-knew {
+    background: var(--color-correct-soft, #0F2E2B);
+    color: var(--color-correct-ink, #A7F3D0);
+    border-color: var(--color-correct, #2DD4BF);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root[data-theme="auto"] .review-grade-1,
+    :root[data-theme="auto"] .review-grade-2,
+    :root[data-theme="auto"] .review-grade.review-grade-miss,
+    :root[data-theme="auto"] .review-grade[data-signal="miss"] {
+        background: var(--color-miss-soft, #3B280C);
+        color: var(--color-miss-ink, #FDE68A);
+        border-color: var(--color-miss, #F59E0B);
+    }
+
+    :root[data-theme="auto"] .review-grade-3,
+    :root[data-theme="auto"] .review-grade-4,
+    :root[data-theme="auto"] .review-grade.review-grade-knew,
+    :root[data-theme="auto"] .review-grade[data-signal="pass"].review-grade-knew {
+        background: var(--color-correct-soft, #0F2E2B);
+        color: var(--color-correct-ink, #A7F3D0);
+        border-color: var(--color-correct, #2DD4BF);
+    }
+}
+
+@media (max-width: 767px) {
+    .review-grades,
+    .review-page .review-grades {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+    }
+
+    .review-grade,
+    .review-page .review-grade {
+        min-height: 52px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .review-grade,
+    .review-answer-reveal,
+    .plan-page .plan-exercise-choice,
+    .plan-page [data-drill-station] button {
+        transition: none !important;
+        animation: none !important;
+    }
+}
+/* === end INIT-013/SPEC-005 === */
