@@ -420,6 +420,56 @@ describe('INIT-013 follow-up: the rail belongs to the SPA, not to the lesson pla
     });
 });
 
+describe('INIT-013 follow-up: dark lesson player', () => {
+    // Regression: the player's older rules hard-code light fills, so dark showed light text on light
+    // surfaces. The fix is one block, written twice (data-theme="dark" and "auto").
+    const at = CSS.search(/\/\*\s*===\s*INIT-013 follow-up: dark lesson player/);
+    const endAt = CSS.search(/=== end INIT-013 follow-up: dark lesson player/);
+    const BLOCK = CSS.slice(at, endAt);
+    const autoAt = BLOCK.indexOf('@media (prefers-color-scheme: dark)');
+    const DARK = BLOCK.slice(0, autoAt);
+    // BLOCK ends inside the closing comment; keep the media query up to its own closing brace.
+    const AUTO = BLOCK.slice(autoAt, BLOCK.lastIndexOf('}')); // drops the media query's own closing brace
+
+    it('the block is present and has a dark copy and an auto copy', () => {
+        assert.ok(at >= 0 && endAt > at, 'dark player block present');
+        assert.ok(autoAt > 0, 'auto copy sits in a prefers-color-scheme media query');
+        assert.match(DARK, /:root\[data-theme="dark"\]\s*\{/);
+        assert.match(AUTO, /:root\[data-theme="auto"\]\s*\{/);
+    });
+
+    it('the dark and auto copies hold the same rules', () => {
+        const norm = (s, attr) => s
+            .replace(new RegExp(':root\\[data-theme="' + attr + '"\\]', 'g'), ':root[T]')
+            .replace(/@media[^{]*\{/, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const a = norm(DARK.replace(/\/\*[\s\S]*?\*\//g, ''), 'dark');
+        const b = norm(AUTO.replace(/\/\*[\s\S]*?\*\//g, ''), 'auto');
+        assert.equal(b, a);
+    });
+
+    it('every light-only player surface has a dark override', () => {
+        const need = [
+            '.banner-blue', '.banner-purple', '.banner-rose', '.banner-amber', '.pill', '.icon-btn',
+            '.vocab-pill.pos', '.vocab-pill.trap', '.example', '.word-match-card', '.choice-card',
+            '.bank-word', '.choice-card.correct', '.choice-card.wrong', '.build-slot', '.btn-amber',
+            '.feedback-panel.feedback-ok', '.feedback-panel.feedback-miss', '.correction',
+            '.story-gloss-popover', '.friend-audio-slot', '.q-label', '.reminders', '.fill-input'
+        ];
+        for (const sel of need) {
+            const esc = sel.replace(/[.\[\]()]/g, '\\$&');
+            assert.match(DARK, new RegExp(':root\\[data-theme="dark"\\] ' + esc + '[,\\s{]'), 'no dark rule for ' + sel);
+        }
+    });
+
+    it('the legacy tokens are re-mapped for dark (--line, --card, --bg, --blue)', () => {
+        for (const v of ['--line', '--card', '--bg', '--blue', '--amber']) {
+            assert.match(DARK, new RegExp(v + ':\\s*#'), v + ' not re-mapped');
+        }
+    });
+});
+
 describe('INIT-013/SPEC-004 Bento Today & Catalog Grids', () => {
     const bentoAt = CSS.search(/\/\*\s*===\s*INIT-013\/SPEC-004/);
     assert.ok(bentoAt >= 0, 'INIT-013/SPEC-004 CSS block present');

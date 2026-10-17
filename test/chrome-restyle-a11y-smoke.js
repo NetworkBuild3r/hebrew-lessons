@@ -463,6 +463,54 @@ async function main() {
             if (pg.scrollWidth > pg.innerWidth) fail(where, 'horizontal overflow');
         }
 
+        // ---- INIT-013 follow-up: the lesson player in dark. The route audits above never opened the
+        // player, so light text on light surfaces (hard-coded fills) went unseen. Every step, plus two
+        // answered states, must pass contrast and carry no bright light-theme surface.
+        {
+            const BRIGHT = `(() => {
+                const parse = (c) => { const m = String(c).match(/rgba?\\(([^)]+)\\)/); if (!m) return null; const p = m[1].split(/[ ,\\/]+/).filter(Boolean).map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
+                const f = (v) => { const s = v / 255; return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+                const lum = (c) => 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+                const out = [];
+                for (const el of document.body.querySelectorAll('*')) {
+                    const cs = getComputedStyle(el);
+                    const bg = parse(cs.backgroundColor);
+                    if (!bg || bg.a < 0.5 || cs.display === 'none' || cs.visibility === 'hidden') continue;
+                    const r = el.getBoundingClientRect();
+                    if (r.width * r.height < 600 || el.closest('.hidden, [hidden]')) continue;
+                    if (lum(bg) > 0.45) out.push(el.tagName.toLowerCase() + '.' + String(el.className).trim().split(/\\s+/).slice(0, 2).join('.') + ' ' + cs.backgroundColor);
+                }
+                return out;
+            })()`;
+            const clickNth = (sel, n) => `(() => { const e = document.querySelectorAll(${JSON.stringify(sel)})[${n}]; if (e) e.click(); return !!e; })()`;
+            const clickText = (t) => `(() => { const e = Array.from(document.querySelectorAll('button')).find((b) => b.offsetParent && b.textContent.includes(${JSON.stringify(t)})); if (e) e.click(); return !!e; })()`;
+            const PLAYER_DARK = [];
+            for (let step = 0; step < 8; step += 1) PLAYER_DARK.push({ name: 'step ' + (step + 1), step, acts: [] });
+            PLAYER_DARK.push({ name: 'story gloss', step: 3, acts: [clickNth('.story-token', 1)] });
+            PLAYER_DARK.push({ name: 'pattern answered', step: 6, acts: [clickNth('.choice-card', 0), clickNth('.choice-card', 4), clickText('Check')] });
+
+            await chromeCdp.signInAs(cdp, harness, BASE, 'learner');
+            for (const width of [1280, 390]) {
+                await chromeCdp.setViewport(cdp, width, width === 390 ? 844 : 900);
+                for (const st of PLAYER_DARK) {
+                    await cdp.call('Page.navigate', { url: BASE + '/worksheets/my-morning/' });
+                    await waitFor(cdp, "document.readyState === 'complete' && !!document.querySelector('.path-btn')", 'player dark', 15000);
+                    await sleep(400);
+                    await cdp.evaluate(`(() => { const b = document.querySelector('.path-btn[data-step="${st.step}"]'); if (b) b.click(); })()`);
+                    await sleep(700);
+                    for (const act of st.acts) { await cdp.evaluate(act); await sleep(350); }
+                    await cdp.evaluate(`document.documentElement.setAttribute('data-theme', 'dark'); true`);
+                    await sleep(200);
+                    const pa = await cdp.evaluate('(' + pageAudit + ')()');
+                    const bright = await cdp.evaluate(BRIGHT);
+                    const where = 'player dark ' + st.name + '@' + width;
+                    if (pa.contrast.length) fail(where, 'contrast: ' + pa.contrast.slice(0, 4).join('; ') + (pa.contrast.length > 4 ? ' (+' + (pa.contrast.length - 4) + ' more)' : ''));
+                    if (bright.length) fail(where, 'light surface in dark: ' + bright.slice(0, 4).join('; '));
+                    if (pa.overflow.scrollWidth > pa.overflow.innerWidth) fail(where, 'horizontal overflow');
+                }
+            }
+        }
+
         // ---- dark theme (data-theme="dark"): contrast and overflow again, every route at 360 and 1280 (INIT-013/SPEC-004)
         await chromeCdp.signInAs(cdp, harness, BASE, 'admin');
         for (const width of [360, 1280]) {

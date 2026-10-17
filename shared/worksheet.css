@@ -7468,3 +7468,254 @@ section[data-block-type="conjugation-table"][data-mode="drill"][data-drill-owner
     }
 }
 /* === end INIT-013/SPEC-005 === */
+
+/* === INIT-013 follow-up: dark lesson player ===
+   The player's older rules hard-code light fills (#fff, #f8fafc, #ecfdf5 ...) and read the legacy
+   --line/--card/--blue tokens, which the dark palette never re-mapped: light text landed on light
+   surfaces. This block re-skins those surfaces for dark and "auto"; the two copies come from one list. */
+:root[data-theme="dark"] {
+    --line: #263044; --bg: #0e121b; --card: #161c2a; --blue: #6e93ff; --blue-deep: #8aa8ff; --green: #34d399; --purple: #a78bfa; --amber: #fbbf24; --rose: #fb7185; --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+:root[data-theme="dark"] .banner-blue {
+    background: var(--color-primary-soft); border-color: #2a3b6b; color: #dce6ff;
+}
+:root[data-theme="dark"] .banner-purple {
+    background: #1f1a3a; border-color: #3b2f6b; color: #e4dbff;
+}
+:root[data-theme="dark"] .banner-rose {
+    background: #3a1620; border-color: #6b2a3a; color: #fecdd3;
+}
+:root[data-theme="dark"] .banner-amber {
+    background: #33260b; border-color: #6b4f12; color: #fde68a;
+}
+:root[data-theme="dark"] .pill {
+    background: var(--color-surface-soft); color: #c9d8ff; border-color: #2a3b6b;
+}
+:root[data-theme="dark"] .icon-btn {
+    background: var(--color-primary-soft); color: var(--color-primary);
+}
+:root[data-theme="dark"] .icon-btn.human,
+:root[data-theme="dark"] .vocab-pill.pos {
+    background: var(--color-correct-soft); color: var(--color-correct-ink);
+}
+:root[data-theme="dark"] .vocab-pill.trap {
+    background: var(--color-miss-soft); color: var(--color-miss-ink); border-color: rgba(245, 158, 11, 0.4);
+}
+:root[data-theme="dark"] .badge {
+    background: var(--color-miss-soft); color: var(--color-miss-ink);
+}
+:root[data-theme="dark"] .example,
+:root[data-theme="dark"] .sample,
+:root[data-theme="dark"] .vocab-card .example,
+:root[data-theme="dark"] .reminders,
+:root[data-theme="dark"] .friend-audio-slot {
+    background: var(--color-surface-soft);
+}
+:root[data-theme="dark"] .word-match-card,
+:root[data-theme="dark"] .choice-card,
+:root[data-theme="dark"] .bank-word {
+    background: var(--color-surface-soft);
+}
+:root[data-theme="dark"] .word-match-card.selected,
+:root[data-theme="dark"] .choice-card.selected {
+    background: var(--color-primary-soft);
+}
+:root[data-theme="dark"] .word-match-card.matched,
+:root[data-theme="dark"] .choice-card.correct,
+:root[data-theme="dark"] .fill-input.correct {
+    background: var(--color-correct-soft); color: var(--color-correct-ink); border-color: var(--color-correct);
+}
+:root[data-theme="dark"] .word-match-card.wrong,
+:root[data-theme="dark"] .choice-card.wrong,
+:root[data-theme="dark"] .fill-input.wrong {
+    background: var(--color-miss-soft); color: var(--color-miss-ink); border-color: var(--color-miss);
+}
+:root[data-theme="dark"] .match-feedback,
+:root[data-theme="dark"] .quiz-clock {
+    color: var(--color-correct-ink);
+}
+:root[data-theme="dark"] .quiz-clock.quiz-clock-low {
+    color: var(--color-miss-ink);
+}
+:root[data-theme="dark"] .q-label {
+    background: var(--color-surface-soft); color: var(--color-text);
+}
+:root[data-theme="dark"] .build-slot {
+    background: var(--color-surface); border-color: var(--color-line);
+}
+:root[data-theme="dark"] .build-slot-placeholder {
+    opacity: 1; color: var(--color-muted);
+}
+:root[data-theme="dark"] .quiz-timer {
+    background: var(--color-border);
+}
+:root[data-theme="dark"] .btn-amber {
+    background: var(--color-miss-soft); color: var(--color-miss-ink); border-color: var(--color-miss); box-shadow: 0 2px 0 var(--color-miss);
+}
+:root[data-theme="dark"] .btn-amber:hover {
+    background: #4a340f;
+}
+:root[data-theme="dark"] mark.new-word,
+:root[data-theme="dark"] .new-word {
+    background: rgba(245, 158, 11, 0.28); color: var(--color-text);
+}
+:root[data-theme="dark"] .vocab-card:hover {
+    border-color: var(--color-primary);
+}
+:root[data-theme="dark"] .feedback-panel.feedback-ok,
+:root[data-theme="dark"] [data-sfx-toggle].is-on {
+    background: var(--color-correct-soft); color: var(--color-correct-ink);
+}
+:root[data-theme="dark"] .feedback-panel.feedback-miss {
+    background: var(--color-miss-soft); color: var(--color-miss-ink);
+}
+:root[data-theme="dark"] .correction {
+    background: var(--color-miss-soft); color: var(--color-text);
+}
+:root[data-theme="dark"] .story-gloss-popover {
+    background: var(--color-surface-soft); color: var(--color-text); border-color: var(--color-line); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+:root[data-theme="dark"] .story-body p.reading-now {
+    background: rgba(245, 158, 11, 0.22);
+}
+:root[data-theme="dark"] .story-token:hover,
+:root[data-theme="dark"] .story-token:focus-visible {
+    background: rgba(245, 158, 11, 0.28); outline-color: #fbbf24;
+}
+:root[data-theme="dark"] .story-token[aria-expanded="true"] {
+    background: rgba(245, 158, 11, 0.36);
+}
+:root[data-theme="dark"] .reported {
+    color: #c4b5fd;
+}
+:root[data-theme="dark"] .direct {
+    color: #fda4af;
+}
+:root[data-theme="dark"] .fill-input {
+    background: var(--color-surface-soft); color: var(--color-text);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root[data-theme="auto"] {
+        --line: #263044; --bg: #0e121b; --card: #161c2a; --blue: #6e93ff; --blue-deep: #8aa8ff; --green: #34d399; --purple: #a78bfa; --amber: #fbbf24; --rose: #fb7185; --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    }
+    :root[data-theme="auto"] .banner-blue {
+        background: var(--color-primary-soft); border-color: #2a3b6b; color: #dce6ff;
+    }
+    :root[data-theme="auto"] .banner-purple {
+        background: #1f1a3a; border-color: #3b2f6b; color: #e4dbff;
+    }
+    :root[data-theme="auto"] .banner-rose {
+        background: #3a1620; border-color: #6b2a3a; color: #fecdd3;
+    }
+    :root[data-theme="auto"] .banner-amber {
+        background: #33260b; border-color: #6b4f12; color: #fde68a;
+    }
+    :root[data-theme="auto"] .pill {
+        background: var(--color-surface-soft); color: #c9d8ff; border-color: #2a3b6b;
+    }
+    :root[data-theme="auto"] .icon-btn {
+        background: var(--color-primary-soft); color: var(--color-primary);
+    }
+    :root[data-theme="auto"] .icon-btn.human,
+    :root[data-theme="auto"] .vocab-pill.pos {
+        background: var(--color-correct-soft); color: var(--color-correct-ink);
+    }
+    :root[data-theme="auto"] .vocab-pill.trap {
+        background: var(--color-miss-soft); color: var(--color-miss-ink); border-color: rgba(245, 158, 11, 0.4);
+    }
+    :root[data-theme="auto"] .badge {
+        background: var(--color-miss-soft); color: var(--color-miss-ink);
+    }
+    :root[data-theme="auto"] .example,
+    :root[data-theme="auto"] .sample,
+    :root[data-theme="auto"] .vocab-card .example,
+    :root[data-theme="auto"] .reminders,
+    :root[data-theme="auto"] .friend-audio-slot {
+        background: var(--color-surface-soft);
+    }
+    :root[data-theme="auto"] .word-match-card,
+    :root[data-theme="auto"] .choice-card,
+    :root[data-theme="auto"] .bank-word {
+        background: var(--color-surface-soft);
+    }
+    :root[data-theme="auto"] .word-match-card.selected,
+    :root[data-theme="auto"] .choice-card.selected {
+        background: var(--color-primary-soft);
+    }
+    :root[data-theme="auto"] .word-match-card.matched,
+    :root[data-theme="auto"] .choice-card.correct,
+    :root[data-theme="auto"] .fill-input.correct {
+        background: var(--color-correct-soft); color: var(--color-correct-ink); border-color: var(--color-correct);
+    }
+    :root[data-theme="auto"] .word-match-card.wrong,
+    :root[data-theme="auto"] .choice-card.wrong,
+    :root[data-theme="auto"] .fill-input.wrong {
+        background: var(--color-miss-soft); color: var(--color-miss-ink); border-color: var(--color-miss);
+    }
+    :root[data-theme="auto"] .match-feedback,
+    :root[data-theme="auto"] .quiz-clock {
+        color: var(--color-correct-ink);
+    }
+    :root[data-theme="auto"] .quiz-clock.quiz-clock-low {
+        color: var(--color-miss-ink);
+    }
+    :root[data-theme="auto"] .q-label {
+        background: var(--color-surface-soft); color: var(--color-text);
+    }
+    :root[data-theme="auto"] .build-slot {
+        background: var(--color-surface); border-color: var(--color-line);
+    }
+    :root[data-theme="auto"] .build-slot-placeholder {
+        opacity: 1; color: var(--color-muted);
+    }
+    :root[data-theme="auto"] .quiz-timer {
+        background: var(--color-border);
+    }
+    :root[data-theme="auto"] .btn-amber {
+        background: var(--color-miss-soft); color: var(--color-miss-ink); border-color: var(--color-miss); box-shadow: 0 2px 0 var(--color-miss);
+    }
+    :root[data-theme="auto"] .btn-amber:hover {
+        background: #4a340f;
+    }
+    :root[data-theme="auto"] mark.new-word,
+    :root[data-theme="auto"] .new-word {
+        background: rgba(245, 158, 11, 0.28); color: var(--color-text);
+    }
+    :root[data-theme="auto"] .vocab-card:hover {
+        border-color: var(--color-primary);
+    }
+    :root[data-theme="auto"] .feedback-panel.feedback-ok,
+    :root[data-theme="auto"] [data-sfx-toggle].is-on {
+        background: var(--color-correct-soft); color: var(--color-correct-ink);
+    }
+    :root[data-theme="auto"] .feedback-panel.feedback-miss {
+        background: var(--color-miss-soft); color: var(--color-miss-ink);
+    }
+    :root[data-theme="auto"] .correction {
+        background: var(--color-miss-soft); color: var(--color-text);
+    }
+    :root[data-theme="auto"] .story-gloss-popover {
+        background: var(--color-surface-soft); color: var(--color-text); border-color: var(--color-line); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    }
+    :root[data-theme="auto"] .story-body p.reading-now {
+        background: rgba(245, 158, 11, 0.22);
+    }
+    :root[data-theme="auto"] .story-token:hover,
+    :root[data-theme="auto"] .story-token:focus-visible {
+        background: rgba(245, 158, 11, 0.28); outline-color: #fbbf24;
+    }
+    :root[data-theme="auto"] .story-token[aria-expanded="true"] {
+        background: rgba(245, 158, 11, 0.36);
+    }
+    :root[data-theme="auto"] .reported {
+        color: #c4b5fd;
+    }
+    :root[data-theme="auto"] .direct {
+        color: #fda4af;
+    }
+    :root[data-theme="auto"] .fill-input {
+        background: var(--color-surface-soft); color: var(--color-text);
+    }
+}
+/* === end INIT-013 follow-up: dark lesson player === */
