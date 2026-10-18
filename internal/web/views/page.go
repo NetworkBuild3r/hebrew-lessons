@@ -36,6 +36,8 @@ type UI struct {
 	ZeroEN          string
 	NoneHE          string
 	NoneEN          string
+	NoneMoreHE      string
+	NoneMoreEN      string
 	ReviewHeading   string
 	ReviewLede      string
 	ProgressHeading string
@@ -46,28 +48,55 @@ type UI struct {
 	LessonLede      string
 }
 
+// AddressGender is "m" or "f": how Hebrew copy addresses the learner.
+// A fake learner stands in until the user row is available.
+const (
+	AddressMasculine = "m"
+	AddressFeminine  = "f"
+)
+
+// Learner is the shell stand-in for auth.RequireUser.
+type Learner struct {
+	AddressGender string
+}
+
+// FakeLearner is masculine. Replace this when the signed-in user carries address_gender.
+func FakeLearner() Learner {
+	return Learner{AddressGender: AddressMasculine}
+}
+
+// Address picks Hebrew copy for address_gender. Anything other than "f" is masculine.
+func Address(gender, masculine, feminine string) string {
+	if gender == AddressFeminine {
+		return feminine
+	}
+	return masculine
+}
+
 // UIFor returns the English shell for lang "en" and the Hebrew shell otherwise.
-func UIFor(lang string) UI {
+// addressGender selects masculine or feminine Hebrew imperatives.
+func UIFor(lang, addressGender string) UI {
 	if lang == "en" {
 		return englishUI()
 	}
-	return hebrewUI()
+	return hebrewUI(addressGender)
 }
 
-func hebrewUI() UI {
+func hebrewUI(addressGender string) UI {
 	return UI{
 		Lang: "he", Dir: "rtl",
-		Skip: "דַּלֵּג לַתֹּכֶן", Nav: "רָאשִׁי",
+		Skip: Address(addressGender, "דַּלֵּג לַתֹּכֶן", "דַּלְּגִי לַתֹּכֶן"), Nav: "רָאשִׁי",
 		Today: "הַיּוֹם", Review: "חֲזָרָה", Progress: "הִתְקַדְּמוּת",
 		Dark: "כֵּהֶה", Light: "בָּהִיר",
 		Heading:   "הַיּוֹם",
 		DueKicker: "לַחֲזָרָה", DueLabel: "מִלִּים מוּכָנוֹת", DueHint: "עַד עֶשְׂרִים בְּיוֹם",
-		Start:      "הַתְחֵל",
+		Start:      Address(addressGender, "הַתְחֵל", "הַתְחִילִי"),
 		NextKicker: "הַשִּׁיעוּר הַבָּא",
 		Situation:  "Getting ready in the morning.",
 		Open:       "לַשִּׁיעוּר",
 		ZeroHE:     "אֵין חֲזָרוֹת עַכְשָׁיו", ZeroEN: "Nothing due",
 		NoneHE: "אֵין שִׁיעוּר בַּתּוֹר", NoneEN: "No lesson queued",
+		NoneMoreHE: "הַשִּׁיעוּר הַבָּא יוֹפִיעַ כָּאן", NoneMoreEN: "Your next lesson will appear here",
 		ReviewHeading: "חֲזָרָה", ReviewLede: "הַתּוֹר עוֹד רֵיק.",
 		ProgressHeading: "הִתְקַדְּמוּת", ProgressLede: "מִלִּים שֶׁאֶפְשָׁר לִזְכֹּר, וִיחִידוֹת שֶׁהֻשְׁלְמוּ.",
 		WordsLabel: "מִלִּים", UnitsLabel: "יְחִידוֹת",
@@ -89,6 +118,7 @@ func englishUI() UI {
 		Open:       "Open lesson",
 		ZeroHE:     "אֵין חֲזָרוֹת עַכְשָׁיו", ZeroEN: "Nothing due",
 		NoneHE: "אֵין שִׁיעוּר בַּתּוֹר", NoneEN: "No lesson queued",
+		NoneMoreHE: "הַשִּׁיעוּר הַבָּא יוֹפִיעַ כָּאן", NoneMoreEN: "Your next lesson will appear here",
 		ReviewHeading: "Review", ReviewLede: "The queue is still empty.",
 		ProgressHeading: "Progress", ProgressLede: "Words you can remember, and units you have finished.",
 		WordsLabel: "Words", UnitsLabel: "Units",
@@ -129,7 +159,7 @@ type Page struct {
 
 // NewPage builds a shell page. lang "en" selects the English UI.
 func NewPage(lang, csrf, current string) Page {
-	ui := UIFor(lang)
+	ui := UIFor(lang, FakeLearner().AddressGender)
 	return Page{UI: ui, Title: ui.DocTitle(current), CSRF: csrf, Current: current}
 }
 
@@ -141,7 +171,7 @@ type Home struct {
 	Due     int
 	DueText string
 	Lesson  bool
-	Words   []string
+	Words   []Chip
 }
 
 // Page is the shell around Today.
@@ -149,9 +179,32 @@ func (h Home) Page() Page {
 	return Page{UI: h.UI, Title: h.DocTitle("today"), CSRF: h.CSRF, Current: "today"}
 }
 
-// SampleWords is the pointed chip row for the placeholder lesson.
-func SampleWords() []string {
-	return []string{"בֹּקֶר", "קָפֶה", "קָם"}
+// Chip is one new-word chip. Gender is "m" or "f" for a noun, otherwise empty.
+type Chip struct {
+	Text   string
+	Gender string
+}
+
+// GenderLabel is the noun chip ז׳ or נ׳. Other values have no chip.
+func GenderLabel(gender string) string {
+	switch gender {
+	case AddressMasculine:
+		return "ז׳"
+	case AddressFeminine:
+		return "נ׳"
+	default:
+		return ""
+	}
+}
+
+// SampleWords is the pointed new-word row for the placeholder lesson.
+// Each one is a noun, so each one carries a gender chip.
+func SampleWords() []Chip {
+	return []Chip{
+		{Text: "כִּסֵּא", Gender: AddressMasculine},
+		{Text: "חַלּוֹן", Gender: AddressMasculine},
+		{Text: "שֻׁלְחָן", Gender: AddressMasculine},
+	}
 }
 
 // BtnClass is the one primary on Today. primary is the filled action.
@@ -175,7 +228,7 @@ func HXHeaders(token string) string {
 // back to help so a typo cannot request streak or xp.
 func IconHref(name string) templ.SafeURL {
 	switch name {
-	case "today", "review", "progress", "theme", "next", "play", "sound", "help", "check":
+	case "today", "review", "progress", "theme", "next", "play", "sound", "help", "check", "lessons":
 		return templ.SafeURL("/static/icons/sprite.svg#icon-" + name)
 	default:
 		return templ.SafeURL("/static/icons/sprite.svg#icon-help")
@@ -192,5 +245,11 @@ func iconClass(directional bool) string {
 // themeHead is the only inline script: it applies a stored light/dark choice
 // before paint, and the toggle writes that choice back to localStorage.
 func themeHead() templ.Component {
-	return templ.Raw(`<script>(function(){var k="hebrew-theme";try{var t=localStorage.getItem(k);if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}function dark(){var t=document.documentElement.getAttribute("data-theme");return t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);}function paint(){var b=document.getElementById("theme-toggle");if(b)b.setAttribute("aria-pressed",dark()?"true":"false");}document.addEventListener("click",function(ev){var node=ev.target&&ev.target.closest?ev.target:ev.target&&ev.target.parentElement;var b=node&&node.closest&&node.closest("#theme-toggle");if(!b)return;var next=dark()?"light":"dark";document.documentElement.setAttribute("data-theme",next);try{localStorage.setItem(k,next);}catch(err){}paint();});document.addEventListener("DOMContentLoaded",paint);})();</script>`)
+	return templ.Raw(`<script>(function(){var k="hebrew-theme";try{var t=localStorage.getItem(k);if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}function dark(){var t=document.documentElement.getAttribute("data-theme");return t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);}function paint(){var on=dark();document.querySelectorAll(".theme-toggle").forEach(function(b){b.setAttribute("aria-pressed",on?"true":"false");});}function apply(next){var go=function(){document.documentElement.setAttribute("data-theme",next);try{localStorage.setItem(k,next);}catch(err){}paint();};if(document.startViewTransition){document.startViewTransition(go);}else{go();}}document.addEventListener("click",function(ev){var node=ev.target&&ev.target.closest?ev.target:ev.target&&ev.target.parentElement;var b=node&&node.closest&&node.closest(".theme-toggle");if(!b)return;apply(dark()?"light":"dark");});document.addEventListener("DOMContentLoaded",paint);document.addEventListener("htmx:afterSwap",paint);})();</script>`)
+}
+
+// motionScript turns htmx swaps into view transitions and keeps the
+// class-based exit and enter on screen for --dur-base.
+func motionScript() templ.Component {
+	return templ.Raw(`<script>(function(){if(!window.htmx)return;htmx.config.globalViewTransitions=true;var dur=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--dur-base"));if(dur){htmx.config.defaultSwapDelay=dur;htmx.config.defaultSettleDelay=dur;}})();</script>`)
 }

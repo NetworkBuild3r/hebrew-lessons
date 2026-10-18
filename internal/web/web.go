@@ -59,7 +59,7 @@ func newMux(health http.Handler, tokens CSRFToken) http.Handler {
 // ?lang=en flips the shell. ?due=0 clears the queue. ?next=0 hides the lesson.
 func homeFrom(r *http.Request, csrf string) views.Home {
 	q := r.URL.Query()
-	ui := views.UIFor(q.Get("lang"))
+	ui := views.UIFor(q.Get("lang"), views.FakeLearner().AddressGender)
 	due := 12
 	if q.Get("due") == "0" {
 		due = 0

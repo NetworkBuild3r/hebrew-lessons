@@ -12,34 +12,26 @@ templ Layout(p Page) {
 			<link rel="stylesheet" href="/static/css/base.css"/>
 			<title>{ p.Title }</title>
 		</head>
-		<body hx-headers={ HXHeaders(p.CSRF) }>
+		<body hx-boost="true" hx-target="#app" hx-select="#app" hx-swap="outerHTML transition:true" hx-headers={ HXHeaders(p.CSRF) }>
+			<div id="app">
 			<a class="skip" href="#main" lang={ p.Lang }>{ p.Skip }</a>
 			<div class="shell">
-				<div class="dock-wrap">
-					<nav class="dock" aria-label={ p.Nav }>
-						@dockLink(p.Href("/"), "today", p.Today, p.Current, "today", p.Lang)
-						@dockLink(p.Href("/review"), "review", p.Review, p.Current, "review", p.Lang)
-						@dockLink(p.Href("/progress"), "progress", p.Progress, p.Current, "progress", p.Lang)
-					</nav>
+				<div class="rail">
+					@brandLink(p, "brand rail-brand")
+					<div class="dock-wrap">
+						<nav class="dock" aria-label={ p.Nav }>
+							@dockLink(p.Href("/"), "today", p.Today, p.Current, "today", p.Lang)
+							@dockLink(p.Href("/review"), "review", p.Review, p.Current, "review", p.Lang)
+							@dockLink(p.Href("/progress"), "progress", p.Progress, p.Current, "progress", p.Lang)
+						</nav>
+					</div>
+					@themeButton(p, "theme-toggle rail-theme")
 				</div>
 				<div class="stage">
 					<header class="top">
 						<div class="top__inner">
-							<a class="brand" href={ templ.SafeURL(p.Href("/")) }>
-								<span class="brand__mark" aria-hidden="true">ע</span>
-								if p.Lang == "he" {
-									<span class="brand__name" lang="he">{ AppName }</span>
-								} else {
-									<span class="brand__name"><bdi lang="he" dir="rtl">{ AppName }</bdi></span>
-								}
-							</a>
-							<button type="button" class="theme-toggle" id="theme-toggle" aria-pressed="false">
-								<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("theme") }></use></svg>
-								<span class="theme-toggle__label">
-									<span class="when-light" lang={ p.Lang }>{ p.Dark }</span>
-									<span class="when-dark" lang={ p.Lang }>{ p.Light }</span>
-								</span>
-							</button>
+							@brandLink(p, "brand")
+							@themeButton(p, "theme-toggle")
 						</div>
 					</header>
 					<main id="main" class="page" tabindex="-1">
@@ -47,14 +39,33 @@ templ Layout(p Page) {
 					</main>
 				</div>
 			</div>
+			</div>
 			<script src="/static/js/htmx.min.js"></script>
+			@motionScript()
 		</body>
 	</html>
+}
+
+templ brandLink(p Page, className string) {
+	<a class={ className } href={ templ.SafeURL(p.Href("/")) }>
+		<span class="brand__mark" aria-hidden="true">ע</span>
+		<span class="brand__name">@H(AppName)</span>
+	</a>
+}
+
+templ themeButton(p Page, className string) {
+	<button type="button" class={ className } aria-pressed="false">
+		<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("theme") }></use></svg>
+		<span class="theme-toggle__label">
+			<span class="when-light">@uiRun(p.Lang, p.Light)</span>
+			<span class="when-dark">@uiRun(p.Lang, p.Dark)</span>
+		</span>
+	</button>
 }
 
 templ dockLink(href string, iconName string, label string, current string, id string, lang string) {
 	<a href={ templ.SafeURL(href) } class="dock__link" if current == id { aria-current="page" }>
 		<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref(iconName) }></use></svg>
-		<span class="dock__label" lang={ lang }>{ label }</span>
+		<span class="dock__label">@uiRun(lang, label)</span>
 	</a>
 }

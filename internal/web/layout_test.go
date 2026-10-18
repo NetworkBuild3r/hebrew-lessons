@@ -64,8 +64,8 @@ func TestTodayLayout(t *testing.T) {
 	if !strings.Contains(body, views.UnitTitle) || !strings.Contains(body, `class="unit-title"`) {
 		t.Fatal("unit title missing")
 	}
-	if !strings.Contains(body, `<bdi lang="en" dir="ltr">Getting ready in the morning.</bdi>`) {
-		t.Fatal("English situation is not isolated")
+	if !strings.Contains(body, `<p class="situation" lang="en" dir="ltr">`) || !strings.Contains(body, `<bdi lang="en" dir="ltr">Getting ready in the morning.</bdi>`) {
+		t.Fatal("English situation is not an ltr block")
 	}
 	if strings.Count(body, "btn-primary") != 1 || !strings.Contains(body, `class="btn btn-primary"`) {
 		t.Fatal("due Today should have one filled primary")
@@ -73,10 +73,28 @@ func TestTodayLayout(t *testing.T) {
 	if !strings.Contains(body, `class="btn btn-tonal"`) {
 		t.Fatal("lesson CTA should be tonal while reviews are due")
 	}
-	for _, word := range []string{"בֹּקֶר", "קָפֶה", "קָם"} {
-		if !strings.Contains(body, `class="chip" lang="he">`+word) {
-			t.Fatalf("chip %s missing", word)
+	for _, word := range views.SampleWords() {
+		if !strings.Contains(body, `<bdi lang="he" dir="rtl">`+word.Text+`</bdi>`) {
+			t.Fatalf("pointed chip %s missing", word.Text)
 		}
+		mark := views.GenderLabel(word.Gender)
+		if word.Gender != "" && !regexp.MustCompile(`class="gchip">\s*<bdi lang="he" dir="rtl">`+regexp.QuoteMeta(mark)+`</bdi>`).MatchString(body) {
+			t.Fatalf("gender chip for %s missing", word.Text)
+		}
+	}
+	if !strings.Contains(body, `aria-pressed="false"`) || strings.Contains(body, `id="theme-toggle"`) {
+		t.Fatal("theme toggle should use aria-pressed and no id")
+	}
+	ui := views.UIFor("he", "m")
+	label := regexp.MustCompile(`(?s)class="when-light">(.*?)</span>`).FindStringSubmatch(body)
+	if label == nil || !strings.Contains(label[1], ui.Light) || strings.Contains(label[1], ui.Dark) {
+		t.Fatal("theme toggle should name the current mode")
+	}
+	if !strings.Contains(body, "globalViewTransitions") || !strings.Contains(body, `hx-swap="outerHTML transition:true"`) {
+		t.Fatal("htmx view transitions are not enabled")
+	}
+	if !strings.Contains(body, "הַתְחֵל") || strings.Contains(body, "הַתְחִילִי") {
+		t.Fatal("fake masculine learner should be addressed in the masculine")
 	}
 	scriptAt := strings.Index(body, "localStorage")
 	cssAt := strings.Index(body, "/static/css/tokens.css")
@@ -136,9 +154,14 @@ func TestStaticHasNoExternalURL(t *testing.T) {
 	if !strings.Contains(css, "--lh-he-body: 1.6") || !strings.Contains(css, "--lh-he-display: 1.3") {
 		t.Fatal("pointed line-height tokens missing")
 	}
-	for _, token := range []string{"--step-4:", "--fs-eyebrow: var(--step-1)", "--fs-chip: var(--step-3)", "--step-3: 1.25rem", "--shell-max: 1040px", "--bp-desk: 1024px", "--tap-btn: 48px", "--fw-semibold: 600"} {
+	for _, token := range []string{"--fs-he-xl:", "--fs-he-md: 24px", "--fs-small: 15px", "--content-max: 1080px", "--rail-w: 92px", "--tap: 44px", "--motion-shift: 16px", "--motion-shift: 0px", `url("../fonts/noto-sans-hebrew-hebrew.woff2")`} {
 		if !strings.Contains(css, token) {
 			t.Fatalf("tokens missing %s", token)
+		}
+	}
+	for _, gone := range []string{"--step-4:", "--fs-eyebrow:", "--tap-btn:", "--shell-max:", "--fw-semibold:", `url("design/assets/fonts`} {
+		if strings.Contains(css, gone) {
+			t.Fatalf("tokens still contain %s", gone)
 		}
 	}
 	sprite := get(t, h, "/static/icons/sprite.svg")
@@ -175,6 +198,15 @@ func TestZeroDueAndNoLesson(t *testing.T) {
 		t.Fatal("missing lesson still renders the lesson card")
 	}
 	assertPair(t, none, "אֵין שִׁיעוּר בַּתּוֹר", "No lesson queued", "he")
+	if !strings.Contains(none, "quiet-card--next") || !strings.Contains(none, "icon-lessons") {
+		t.Fatal("missing lesson should be a placeholder card")
+	}
+	if !strings.Contains(none, "הַשִּׁיעוּר הַבָּא יוֹפִיעַ כָּאן") || !strings.Contains(none, "Your next lesson will appear here") {
+		t.Fatal("missing lesson hint missing")
+	}
+	if !strings.Contains(zero, "quiet-card--due") || !strings.Contains(zero, "icon-check") {
+		t.Fatal("nothing due should use the check placeholder")
+	}
 	if strings.Count(none, "btn-primary") != 1 {
 		t.Fatal("start should stay the only primary when no lesson is queued")
 	}
@@ -185,7 +217,7 @@ func TestEnglishShell(t *testing.T) {
 	if !strings.Contains(body, `<html lang="en" dir="ltr"`) {
 		t.Fatal("english shell lang/dir missing")
 	}
-	if !strings.Contains(body, `<span class="dock__label" lang="en">Today</span>`) {
+	if !strings.Contains(body, `<bdi lang="en" dir="ltr">Today</bdi>`) {
 		t.Fatal("english nav label missing")
 	}
 	if !strings.Contains(body, `href="/review?lang=en"`) || !strings.Contains(body, `href="/?lang=en"`) {
@@ -221,6 +253,52 @@ func assertPair(t *testing.T, body, he, en, first string) {
 	if first == "he" && heAt > enAt {
 		t.Fatal("hebrew shell pair does not lead with Hebrew")
 	}
+}
+
+func TestForeignRuns(t *testing.T) {
+	h := New(nil)
+	for _, path := range []string{"/", "/?due=0", "/?next=0", "/review", "/progress", "/lesson"} {
+		n := assertRunDir(t, get(t, h, path), "en", "ltr")
+		if path == "/" && n == 0 {
+			t.Fatal("today should isolate its english runs")
+		}
+	}
+	for _, path := range []string{"/?lang=en", "/?lang=en&due=0", "/?lang=en&next=0", "/review?lang=en", "/progress?lang=en", "/lesson?lang=en"} {
+		n := assertRunDir(t, get(t, h, path), "he", "rtl")
+		if path == "/?lang=en" && n == 0 {
+			t.Fatal("english shell should isolate its hebrew runs")
+		}
+	}
+}
+
+func TestAddressGender(t *testing.T) {
+	if views.Address("m", "הַתְחֵל", "הַתְחִילִי") != "הַתְחֵל" {
+		t.Fatal("masculine address")
+	}
+	if views.Address("f", "הַתְחֵל", "הַתְחִילִי") != "הַתְחִילִי" {
+		t.Fatal("feminine address")
+	}
+	if views.GenderLabel("f") != "נ׳" || views.GenderLabel("m") != "ז׳" || views.GenderLabel("") != "" {
+		t.Fatal("gender label")
+	}
+	she := views.UIFor("he", "f")
+	if she.Start != "הַתְחִילִי" || she.Skip != "דַּלְּגִי לַתֹּכֶן" {
+		t.Fatalf("feminine shell: %s / %s", she.Start, she.Skip)
+	}
+	if views.FakeLearner().AddressGender != "m" {
+		t.Fatal("fake learner should be masculine")
+	}
+}
+
+func assertRunDir(t *testing.T, body, lang, dir string) int {
+	t.Helper()
+	tags := regexp.MustCompile(`<[a-zA-Z0-9]+[^>]*\blang="`+lang+`"[^>]*>`).FindAllString(body, -1)
+	for _, tag := range tags {
+		if !strings.Contains(tag, `dir="`+dir+`"`) {
+			t.Fatalf("lang=%s missing dir=%s: %s", lang, dir, tag)
+		}
+	}
+	return len(tags)
 }
 
 func dockHref(body, href string) string {

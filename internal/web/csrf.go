@@ -8,8 +8,9 @@ import (
 )
 
 // CSRFToken is the slice of auth this shell renders and checks.
-// Backend Dev owns sessions and will supply auth.CSRFToken(r).
-// Adapt that function with CSRFFunc. This package does not implement sessions.
+// auth.CSRFToken has the same shape, func(r *http.Request) string, but that
+// package is not merged yet. Adapt it with CSRFFunc(auth.CSRFToken).
+// This package does not implement sessions, and it does not call RequireUser.
 type CSRFToken interface {
 	CSRFToken(*http.Request) string
 }

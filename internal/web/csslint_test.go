@@ -3,6 +3,7 @@ package web
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -72,9 +73,52 @@ func TestShippedCSSHasNoPhysicalProperties(t *testing.T) {
 	if strings.Contains(text, "overflow:hidden") || strings.Contains(text, "overflow: hidden") {
 		t.Error("base.css hides overflow; pointed text must stay visible")
 	}
-	for _, token := range []string{"var(--font-ui)", "var(--font-display)", "var(--lh-he-body)", "var(--lh-he-display)", "padding-block: .1em"} {
+	for _, token := range []string{"var(--font-ui)", "var(--font-display)", "var(--lh-he-body)", "var(--lh-he-display)", "padding-block: .1em", "var(--motion-shift)", ".htmx-swapping", ".htmx-settling", ".htmx-added"} {
 		if !strings.Contains(text, token) {
 			t.Errorf("base.css missing %s", token)
+		}
+	}
+	if hits := transitionOffenders(text); len(hits) != 0 {
+		t.Errorf("base.css transitions a property other than transform or opacity: %s", strings.Join(hits, "; "))
+	}
+	tokens, err := os.ReadFile("static/css/tokens.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defined := map[string]bool{}
+	for _, m := range regexp.MustCompile(`--([a-z0-9-]+)\s*:`).FindAllStringSubmatch(string(tokens), -1) {
+		defined[m[1]] = true
+	}
+	for _, m := range regexp.MustCompile(`var\(--([a-z0-9-]+)`).FindAllStringSubmatch(text, -1) {
+		if !defined[m[1]] {
+			t.Errorf("base.css uses undefined token --%s", m[1])
+		}
+	}
+}
+
+func TestTransitionLint(t *testing.T) {
+	good := []string{
+		"a{transition-property: opacity, transform}",
+		"a{transition-property: transform}",
+		"a{transition: none}",
+		"a{transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) cubic-bezier(.2, .8, .2, 1)}",
+		"a{color: /* transition: color 1s */ transparent}",
+	}
+	for _, css := range good {
+		if hits := transitionOffenders(css); len(hits) != 0 {
+			t.Errorf("%s flagged %v", css, hits)
+		}
+	}
+	bad := []string{
+		"a{transition: color 200ms}",
+		"a{transition: all 200ms}",
+		"a{transition: 200ms}",
+		"a{transition-property: margin}",
+		"a{transition-property: opacity, background-color}",
+	}
+	for _, css := range bad {
+		if hits := transitionOffenders(css); len(hits) == 0 {
+			t.Errorf("expected a hit in %s", css)
 		}
 	}
 }

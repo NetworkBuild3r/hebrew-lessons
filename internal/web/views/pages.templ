@@ -21,18 +21,26 @@ templ Today(h Home) {
 						</a>
 					</section>
 				} else {
-					<p class="quiet">
-						@Pair(h.Lang, h.ZeroHE, h.ZeroEN)
-					</p>
+					<section class="quiet-card quiet-card--due">
+						<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("check") }></use></svg>
+						<p class="quiet-card__line">
+							@Pair(h.Lang, h.ZeroHE, h.ZeroEN)
+						</p>
+					</section>
 				}
 				if h.Lesson {
 					<section class="lesson-card today-next" aria-labelledby="next-title">
 						<p class="eyebrow" lang={ h.Lang }>{ h.NextKicker }</p>
-						<h2 id="next-title" class="unit-title" lang="he">{ UnitTitle }</h2>
-						<p class="situation"><bdi lang="en" dir="ltr">{ h.Situation }</bdi></p>
+						<h2 id="next-title" class="unit-title" lang="he" dir="rtl">{ UnitTitle }</h2>
+						@Situation(h.Situation)
 						<ul class="chips">
 							for _, word := range h.Words {
-								<li class="chip" lang="he">{ word }</li>
+								<li class="chip">
+									@H(word.Text)
+									if word.Gender != "" {
+										<span class="gchip">@H(GenderLabel(word.Gender))</span>
+									}
+								</li>
 							}
 						</ul>
 						<a class={ BtnClass(h.Due == 0) } href={ templ.SafeURL(h.Href("/lesson")) }>
@@ -41,9 +49,15 @@ templ Today(h Home) {
 						</a>
 					</section>
 				} else {
-					<p class="quiet">
-						@Pair(h.Lang, h.NoneHE, h.NoneEN)
-					</p>
+					<section class="quiet-card quiet-card--next">
+						<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("lessons") }></use></svg>
+						<p class="quiet-card__line">
+							@Pair(h.Lang, h.NoneHE, h.NoneEN)
+						</p>
+						<p class="quiet-card__hint">
+							@Pair(h.Lang, h.NoneMoreHE, h.NoneMoreEN)
+						</p>
+					</section>
 				}
 			</div>
 		</article>

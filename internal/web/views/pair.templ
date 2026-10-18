@@ -5,11 +5,38 @@ package views
 templ Pair(uiLang, he, en string) {
 	<span class="pair">
 		if uiLang == "en" {
-			<bdi lang="en" dir="ltr">{ en }</bdi>
-			<bdi lang="he" dir="rtl">{ he }</bdi>
+			@E(en)
+			@H(he)
 		} else {
-			<bdi lang="he" dir="rtl">{ he }</bdi>
-			<bdi lang="en" dir="ltr">{ en }</bdi>
+			@H(he)
+			@E(en)
 		}
 	</span>
+}
+
+// E isolates one English run.
+templ E(text string) {
+	<bdi lang="en" dir="ltr">{ text }</bdi>
+}
+
+// H isolates one Hebrew run.
+templ H(text string) {
+	<bdi lang="he" dir="rtl">{ text }</bdi>
+}
+
+// uiRun isolates a string in the UI language.
+templ uiRun(lang, text string) {
+	if lang == "en" {
+		@E(text)
+	} else {
+		@H(text)
+	}
+}
+
+// Situation is the English line under a Hebrew lesson title.
+// The block itself is LTR so the sentence's punctuation stays at the end.
+templ Situation(text string) {
+	<p class="situation" lang="en" dir="ltr">
+		@E(text)
+	</p>
 }
