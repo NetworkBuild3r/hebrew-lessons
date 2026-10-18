@@ -141,13 +141,13 @@ async function main() {
             }))()`);
         }
 
-        // ---- Fonts: Rubik comes from this site, nothing is fetched from another host ----
+        // ---- Fonts: Noto Sans Hebrew comes from this site, nothing is fetched from another host ----
         assert.equal(await openStep('#step-2'), 'match');
         result.fonts = await evaluate(`(async () => {
             await document.fonts.ready;
-            const hebrew = await document.fonts.load('400 16px Rubik', '\\u05e9\\u05dc\\u05d5\\u05dd');
-            const latin = await document.fonts.load('400 16px Rubik', 'Hello');
-            const loaded = [...document.fonts].filter(f => f.family.replace(/"/g, '') === 'Rubik' && f.status === 'loaded').length;
+            const hebrew = await document.fonts.load('400 16px "Noto Sans Hebrew"', '\\u05e9\\u05dc\\u05d5\\u05dd');
+            const latin = await document.fonts.load('400 16px "Noto Sans Hebrew"', 'Hello');
+            const loaded = [...document.fonts].filter(f => f.family.replace(/"/g, '') === 'Noto Sans Hebrew' && f.status === 'loaded').length;
             const origins = new Set(performance.getEntriesByType('resource').map(r => new URL(r.name).origin));
             return {
                 hebrewLoaded: hebrew.length > 0,
@@ -159,12 +159,12 @@ async function main() {
                 bodyFont: getComputedStyle(document.body).fontFamily
             };
         })()`);
-        assert.equal(result.fonts.hebrewLoaded, true, 'Rubik Hebrew face loads from this site');
-        assert.equal(result.fonts.latinLoaded, true, 'Rubik Latin face loads from this site');
+        assert.equal(result.fonts.hebrewLoaded, true, 'Noto Sans Hebrew face loads from this site');
+        assert.equal(result.fonts.latinLoaded, true, 'Noto Sans Hebrew Latin face loads from this site');
         assert.ok(result.fonts.loadedFaces >= 2, 'loaded faces: ' + result.fonts.loadedFaces);
         assert.deepEqual(result.fonts.origins, [result.fonts.here], 'every resource came from this site');
-        assert.ok(result.fonts.woff2.includes('rubik-hebrew.woff2'));
-        assert.match(result.fonts.bodyFont, /Rubik/);
+        assert.ok(result.fonts.woff2.includes('noto-sans-hebrew-hebrew.woff2'));
+        assert.match(result.fonts.bodyFont, /Noto Sans Hebrew/);
 
         // ---- Match -------------------------------------------------------------------
         result.match = await evaluate(`(async () => {

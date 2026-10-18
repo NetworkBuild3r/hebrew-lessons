@@ -1,7 +1,7 @@
 /**
  * Pages must not depend on third-party style or font hosts. A reverse proxy with
  * `style-src 'self'` blocks them, and they leak every page view to those hosts.
- * Rubik is served from shared/fonts/ instead, and icons are inline SVG.
+ * Noto Sans Hebrew and Frank Ruhl Libre are served from shared/fonts/, and icons are inline SVG.
  */
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -39,9 +39,8 @@ describe('self-hosted fonts and icons', () => {
     it('every font file the stylesheet names exists and is a woff2', () => {
         const css = fs.readFileSync(path.join(ROOT, 'shared', 'worksheet.css'), 'utf8');
         const urls = [...css.matchAll(/url\("(fonts\/[^"]+\.woff2)"\)/g)].map(m => m[1]);
-        const rubik = ['fonts/rubik-hebrew.woff2', 'fonts/rubik-latin.woff2', 'fonts/rubik-latin-ext.woff2'];
-        const guides = ['fonts/noto-sans-hebrew-hebrew.woff2', 'fonts/noto-sans-hebrew-latin.woff2', 'fonts/frank-ruhl-libre-hebrew.woff2'];
-        assert.deepEqual([...urls].sort(), [...rubik, ...guides].sort(), 'Rubik for Node plus the Guides faces');
+        const faces = ['fonts/noto-sans-hebrew-hebrew.woff2', 'fonts/noto-sans-hebrew-latin.woff2', 'fonts/frank-ruhl-libre-hebrew.woff2'];
+        assert.deepEqual([...urls].sort(), [...faces].sort(), 'Noto Sans Hebrew and Frank Ruhl Libre');
         for (const rel of urls) {
             const file = path.join(ROOT, 'shared', rel);
             assert.ok(fs.existsSync(file), rel + ' exists');

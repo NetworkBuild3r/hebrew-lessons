@@ -600,10 +600,6 @@ func TestNoRuleOutsideADRResolvesToRubik(t *testing.T) {
 			continue
 		}
 		value := strings.TrimSpace(rest[colon+1 : semi])
-		// Node plan pages still name the ADR font token. Guides do not.
-		if value == "var(--font-family)" {
-			continue
-		}
 		last[strings.TrimSpace(m[1])] = value
 	}
 	for sel, value := range last {

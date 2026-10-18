@@ -503,11 +503,16 @@ On the Go guides pages, `<html lang dir>` follows the interface language: `en` i
 
 The cover letter's `left: 28px` is physical on purpose. The cover art does not mirror, so that offset stays on the left in both directions.
 
-This amendment does not change the guarded token block. Node pages still use the self-hosted Rubik faces named by `--font-family`. Noto Sans Hebrew is scoped to `.guides-page` for the Guides UI. An app-wide typeface change is a separate decision.
+This amendment does not change the guarded token block. At the time of this amendment, Node pages still used the self-hosted Rubik faces. That typeface choice is superseded by the amendment below.
+
+## Amendment (2026-10-18): Noto Sans Hebrew and Frank Ruhl Libre
+
+Pointed text and the interface use **Noto Sans Hebrew**. Unpointed decorative letters use **Frank Ruhl Libre**. Both are self-hosted woff2 files under `shared/fonts/` (SIL OFL). `--font-sans` is that Noto stack for the whole app, including `.plan-page`. The guarded token line `--font-family: Rubik, sans-serif` stays as written. Rubik's `@font-face` rules are not in `shared/worksheet.css`. The sign-in page does not load that stylesheet; it names its own self-hosted Noto Sans Hebrew and Frank Ruhl Libre faces. The Rubik woff2 files stay in `shared/fonts/` so the public font route can still serve them.
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
-| 2026-10-18 | Amendment: Go guides pages follow the UI language for `lang`/`dir`, wrap Hebrew runs in `<bdi>`, and use logical properties. Node stays `lang="he" dir="rtl"` and Rubik. The cover letter offset stays physical. |
+| 2026-10-18 | Amendment: pointed text and UI use self-hosted Noto Sans Hebrew. Unpointed decorative letters use self-hosted Frank Ruhl Libre. |
+| 2026-10-18 | Amendment: Go guides pages follow the UI language for `lang`/`dir`, wrap Hebrew runs in `<bdi>`, and use logical properties. Node stays `lang="he" dir="rtl"`. The cover letter offset stays physical. |
 | 2026-10-08 | Accepted — `INIT-003/SPEC-008`. Operator pick a-calm-type. Dark mode ships. |

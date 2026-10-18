@@ -26,7 +26,7 @@ html { -webkit-text-size-adjust: 100%; }
 body {
     margin: 0;
     min-height: 100vh;
-    font-family: "Rubik", sans-serif;
+    font-family: "Noto Sans Hebrew", sans-serif;
     background: var(--bg);
     color: var(--ink);
 }
@@ -1670,33 +1670,9 @@ textarea {
 .story-questions-toggle { display: grid; gap: 0.25rem; justify-items: start; }
 /* === end 2026-10-08 learner-support === */
 
-/* === self-hosted Rubik (SIL OFL, see fonts/OFL.txt). Replaces the Google Fonts link. ===
-   Node pages keep these faces. Guides add Noto Sans Hebrew and Frank Ruhl Libre
-   below; those files do not replace Rubik. */
-@font-face {
-    font-family: "Rubik";
-    font-style: normal;
-    font-weight: 300 700;
-    font-display: swap;
-    src: url("fonts/rubik-hebrew.woff2") format("woff2");
-    unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
-}
-@font-face {
-    font-family: "Rubik";
-    font-style: normal;
-    font-weight: 300 700;
-    font-display: swap;
-    src: url("fonts/rubik-latin-ext.woff2") format("woff2");
-    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-    font-family: "Rubik";
-    font-style: normal;
-    font-weight: 300 700;
-    font-display: swap;
-    src: url("fonts/rubik-latin.woff2") format("woff2");
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
+/* === self-hosted faces (SIL OFL, see fonts/OFL.txt). ===
+   Noto Sans Hebrew is the UI and the pointed text. Frank Ruhl Libre is the
+   unpointed decorative letter. */
 @font-face {
     font-family: "Noto Sans Hebrew";
     font-style: normal;
@@ -2068,7 +2044,7 @@ a.lesson-link { transition: background 0.15s ease; border-radius: 18px; }
     min-height: 100vh;
     background: var(--color-bg);
     color: var(--color-text);
-    font-family: var(--font-family);
+    font-family: var(--font-sans);
     font-size: var(--size-body);
     font-weight: var(--font-weight-body);
     line-height: var(--line-height-body);
@@ -4343,9 +4319,11 @@ img.hebrew-logo-mark {
     --shell-w: 72rem;
     --wrap-w: 40rem;
     /* Bilingual type — local/system stacks only (REQ-018) */
-    --font-hebrew-display: "Rubik", "Segoe UI", "Arial Hebrew", "Noto Sans Hebrew", sans-serif;
-    --font-hebrew-sans: "Rubik", "Segoe UI", "Arial Hebrew", "Noto Sans Hebrew", sans-serif;
-    --font-sans: "Rubik", "Segoe UI", system-ui, sans-serif;
+    --font-hebrew-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
+    --font-hebrew-sans: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
+    --font-sans: "Noto Sans Hebrew", "Segoe UI", system-ui, sans-serif;
+    --font-hebrew-lettering: "Frank Ruhl Libre", "Noto Serif Hebrew", "Times New Roman", serif;
+    --font-hebrew-pointed-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
     --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
     /* Nikud-safe study words (REQ-008 / RSCH-006): override ADR-0006 1.5 → 1.55 floor */
     --line-height-word: 1.55;
@@ -4450,7 +4428,7 @@ img.hebrew-logo-mark {
 }
 
 /* === 2026 redesign tokens (Figma "2026 / Theme" + "2026 / Layout") — additive, guarded hex unchanged ===
-   Font faces for Guides live on .guides-page. These :root names stay the Node Rubik stack. */
+   Noto Sans Hebrew and Frank Ruhl Libre are set with the UI tokens above. */
 :root {
     --line-height-pointed: 1.7;
     --size-display: 64px;
@@ -4491,7 +4469,7 @@ body.admin-page { --wrap-w: 66rem; }
 body {
     background: var(--paper);
     color: var(--color-text);
-    font-family: var(--font-sans, "Rubik", sans-serif);
+    font-family: var(--font-sans, "Noto Sans Hebrew", sans-serif);
 }
 .topbar-inner,
 .wrap {
@@ -5101,6 +5079,7 @@ img.hebrew-logo-mark {
 .lesson-link { padding: 1.15rem 1.3rem; }
 .lesson-card:hover { border-color: #c5d3fb; }
 .lesson-card .fine { font-size: 0.88rem; margin: 0.5rem 0 0; }
+.lesson-card .meta { white-space: nowrap; }
 .lesson-card .lesson-blurb,
 .lesson-blurb {
     margin: 0.4rem 0 0;
@@ -8223,7 +8202,7 @@ section[data-block-type="conjugation-table"][data-mode="drill"][data-drill-owner
 }
 
 /* === 2026 /guides/ === */
-/* Noto is the Guides UI face only. Node pages keep the Rubik fallback on body. */
+/* Guides use the same app-wide faces. Repeated so a guides page stays on Noto. */
 .guides-page {
     --font-sans: "Noto Sans Hebrew", "Segoe UI", system-ui, sans-serif;
     --font-hebrew-sans: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
@@ -8342,7 +8321,7 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 
 /* PR #24: logical properties and the guide reading column.
    Node pages stay html dir=rtl, so start/end match the old right/left there.
-   .plan-page keeps var(--font-family), which is Rubik. */
+   .plan-page uses var(--font-sans), the app-wide Noto Sans Hebrew stack. */
 @media (min-width: 1280px) {
     .guide-layout:not(:has(.guide-aside)) {
         display: block;
@@ -8372,7 +8351,7 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 .he-inline + .audio-btn::before { content: ""; position: absolute; inset: -6px; }
 .guides-topic h2 { display: flex; align-items: center; gap: var(--space-2); }
 .guide-body .kicker,
-.guide-page .kicker { background: none; color: inherit; padding: 0; border: 0; border-radius: 0; font: 700 12px/1.2 var(--font-sans, "Rubik", sans-serif); letter-spacing: .08em; text-transform: uppercase; }
+.guide-page .kicker { background: none; color: inherit; padding: 0; border: 0; border-radius: 0; font: 700 12px/1.2 var(--font-sans, "Noto Sans Hebrew", sans-serif); letter-spacing: .08em; text-transform: uppercase; }
 .guide-body .kicker .recipe-chip { border: 0; padding: 0; background: none; border-radius: 0; color: var(--color-accent-olive); }
 .guide-body .callout[data-tone] { padding: var(--space-4); padding-inline-start: calc(var(--space-4) + 3px); border-radius: var(--radius-control); border-inline-start: 3px solid transparent; }
 .guide-body .callout[data-tone="green"] { background: var(--color-correct-soft); color: var(--color-correct-ink); border-inline-start-color: var(--color-correct-ink); }
