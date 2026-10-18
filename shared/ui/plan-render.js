@@ -1124,6 +1124,116 @@
     }
 
     /**
+     * @param {Document} doc
+     * @returns {string}
+     */
+    function lessonIdFromLocation(doc) {
+        var search = doc && doc.location && typeof doc.location.search === 'string' ? doc.location.search : '';
+        try {
+            var value = new URLSearchParams(search).get('lesson') || '';
+            return SLUG.test(value) && value.length <= 64 ? value : '';
+        } catch (err) {
+            return '';
+        }
+    }
+
+    /**
+     * The verb-workshop lesson the URL asks for. With no lesson in the URL, the plan's only lesson.
+     * @param {object} plan
+     * @param {string} lessonId
+     * @returns {object|null}
+     */
+    function verbWorkshopLesson(plan, lessonId) {
+        var all = [];
+        unitsOf(plan).forEach(function (unit) {
+            (unit && Array.isArray(unit.lessons) ? unit.lessons : []).forEach(function (lesson) {
+                if (lesson && typeof lesson === 'object') all.push(lesson);
+            });
+        });
+        var lesson = null;
+        if (lessonId) {
+            all.forEach(function (item) { if (item.id === lessonId) lesson = item; });
+        } else if (all.length === 1) {
+            lesson = all[0];
+        }
+        return lesson && lesson.recipe === 'verb-workshop' ? lesson : null;
+    }
+
+    var USE_BLOCKS = { exercise: true, assignment: true, 'personal-question': true, compare: true };
+
+    /**
+     * A verb workshop opens as Look / Practise / Use instead of one long scroll.
+     * Resolves false when the lesson has no verb the lexicon knows, so the caller paints the screens.
+     * @param {Document} doc
+     * @param {Element} mount
+     * @param {object} plan
+     * @param {object} lesson
+     * @param {Function} [fetchImpl]
+     * @returns {Promise<boolean>}
+     */
+    function startVerbStudio(doc, mount, plan, lesson, fetchImpl) {
+        var VP = root.HebrewVerbPractice;
+        var go = typeof fetchImpl === 'function' ? fetchImpl : fetch;
+        var getJson = function (url) {
+            return Promise.resolve(go(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } }))
+                .then(function (res) {
+                    return res && res.ok === true && typeof res.json === 'function' ? res.json() : null;
+                })
+                .catch(function () { return null; });
+        };
+        var blocks = VP.conjugationBlocks(plan, lesson.id);
+        return Promise.all([VP.loadVerbData(blocks, getJson), getJson('/api/me')]).then(function (loaded) {
+            var data = loaded[0];
+            var me = loaded[1] && typeof loaded[1] === 'object' ? (loaded[1].user || loaded[1]) : null;
+            var verbs = VP.collectVerbs(blocks, data.forms, data.lemmas, data.paradigms);
+            if (!verbs.length) return false;
+            live.plan = plan;
+            live.forms = data.forms;
+            live.lexicon = Object.create(null);
+            live.audio = root.HEBREW_WORD_AUDIO || null;
+            var options = { lesson: lesson, forms: data.forms, lexicon: live.lexicon, audio: live.audio, vowelsOn: true };
+            var lessonBlocks = Array.isArray(lesson.blocks) ? lesson.blocks : [];
+            var explainers = lessonBlocks.filter(function (block) {
+                return block && block.type === 'explainer';
+            }).map(function (block) { return renderBlock(block, options); }).join('');
+            var explainerHtml = explainers
+                ? '<details class="vl-explainer"><summary data-no-lookup><span class="ui-pair">'
+                    + '<span class="ui-he" lang="he">איך הדפוסים עובדים</span>'
+                    + '<span class="ui-en" lang="en" dir="ltr">How the patterns work</span></span></summary>'
+                    + explainers + '</details>'
+                : '';
+            var useHtml = lessonBlocks.filter(function (block) {
+                return block && USE_BLOCKS[block.type];
+            }).map(function (block) {
+                return '<div class="vs-use-block">' + renderBlock(block, options) + '</div>';
+            }).join('');
+            var hash = doc.location && typeof doc.location.hash === 'string' ? doc.location.hash.slice(1) : '';
+            mount.innerHTML = VP.renderStudio({
+                title: lesson.title,
+                kicker: plan.title,
+                backHref: '/lessons/',
+                verbs: verbs,
+                tab: hash,
+                lookHtml: VP.renderLook(verbs, verbs[0].lemma, explainerHtml),
+                useHtml: useHtml
+            });
+            if (doc.body && doc.body.classList) doc.body.classList.add('verb-studio-page');
+            VP.mount(mount, {
+                verbs: verbs,
+                user: me,
+                slug: SLUG.test(String(lesson.id || '')) ? lesson.id : '',
+                explainerHtml: explainerHtml,
+                onTab: function (id) {
+                    var history = root.history;
+                    if (history && typeof history.replaceState === 'function') history.replaceState(null, '', '#' + id);
+                }
+            });
+            bind(doc);
+            return true;
+        });
+    }
+
+    /**
      * Signed-in entry. Paints only `renderScreens` output. Errors use textContent.
      * @param {Document} doc
      * @param {Function} [fetchImpl]
@@ -1142,22 +1252,13 @@
             if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
                 throw new Error('bad plan');
             }
-            return Promise.all([
-                loadForms(plan, fetchImpl),
-                loadGlosses(plan, fetchImpl)
-            ]).then(function (loaded) {
-                live.plan = plan;
-                live.forms = loaded[0] || Object.create(null);
-                live.lexicon = loaded[1] || Object.create(null);
-                live.audio = root.HEBREW_WORD_AUDIO || null;
-                mount.innerHTML = renderScreens(plan, {
-                    forms: live.forms,
-                    lexicon: live.lexicon,
-                    audio: live.audio,
-                    vowelsOn: true
-                });
-                bind(doc);
-                return bootSync(doc, plan);
+            var studioLesson = root.HebrewVerbPractice ? verbWorkshopLesson(plan, lessonIdFromLocation(doc)) : null;
+            var studio = studioLesson
+                ? startVerbStudio(doc, mount, plan, studioLesson, fetchImpl)
+                : Promise.resolve(false);
+            return studio.then(function (painted) {
+                if (painted) return bootSync(doc, plan);
+                return paintScreens(doc, mount, plan, fetchImpl);
             });
         }).then(function () {
             if (mount && typeof mount.setAttribute === 'function') {
@@ -1165,6 +1266,26 @@
             }
         }).catch(function () {
             mount.textContent = 'התוכנית לא נמצאה.';
+        });
+    }
+
+    function paintScreens(doc, mount, plan, fetchImpl) {
+        return Promise.all([
+            loadForms(plan, fetchImpl),
+            loadGlosses(plan, fetchImpl)
+        ]).then(function (loaded) {
+            live.plan = plan;
+            live.forms = loaded[0] || Object.create(null);
+            live.lexicon = loaded[1] || Object.create(null);
+            live.audio = root.HEBREW_WORD_AUDIO || null;
+            mount.innerHTML = renderScreens(plan, {
+                forms: live.forms,
+                lexicon: live.lexicon,
+                audio: live.audio,
+                vowelsOn: true
+            });
+            bind(doc);
+            return bootSync(doc, plan);
         });
     }
 

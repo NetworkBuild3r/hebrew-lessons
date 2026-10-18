@@ -467,13 +467,12 @@ describe('published plan entry', () => {
         assert.equal(ui.publishedPath('beginner-unit-1'), '/api/plans/beginner-unit-1/published');
     });
 
-    it('the page script does not fetch a worksheet or write plan text except through renderScreens', () => {
+    it('the page script does not fetch a worksheet or write plan text except through renderScreens or the verb studio', () => {
         const src = fs.readFileSync(SRC_PATH, 'utf8');
-        const withoutPaint = src.replace(
-            'mount.innerHTML = renderScreens(plan, {',
-            ''
-        );
-        assert.equal((src.match(/innerHTML/g) || []).length, 1);
+        const withoutPaint = src
+            .replace('mount.innerHTML = renderScreens(plan, {', '')
+            .replace('mount.innerHTML = VP.renderStudio({', '');
+        assert.equal((src.match(/innerHTML/g) || []).length, 2);
         assert.equal(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\s*\(/.test(withoutPaint), false);
         // The one worksheet-folder address is the shared word clips (sound for a new word).
         const worksheetLines = src.split('\n')

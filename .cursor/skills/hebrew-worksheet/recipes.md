@@ -82,14 +82,22 @@ Whether the verse body itself is pointed is not a validator check. Drop points o
 
 Use this recipe when a grammar concept is `weak` or `very_weak`. Target the weakest of those. Use `present`, `past`, and `future` — one tense per table, same limits. `imperative` is still not in the `conjugation-table` registry.
 
+A published `verb-workshop` lesson opens as a Look / Practise / Use studio for the learner (not a long scroll). Build the blocks below; the studio wires them:
+
+| Studio tab | What the learner sees | Which blocks feed it |
+| --- | --- | --- |
+| Look | One verb at a time; past, present, and future side by side; root letters marked | `explainer` (collapsed under "How the patterns work") plus every `conjugation-table` in `study` mode. The live tables also pull the full paradigm from the lexicon for each `lemmaKey`. |
+| Practise | 12-card interleaved rounds: pick, then type; one retry; table hidden until answered; spacing across days | Built automatically from those `lemmaKey`s and the lexicon forms. You do **not** author a separate practice screen. Draft (unverified) forms may be practised with a visible draft label; they do not send form signals until a person marks them verified. |
+| Use | Sentence work once the forms come easily | `exercise`, `assignment`, `personal-question`, `compare` |
+
 | Step | Block | Research note |
 | --- | --- | --- |
 | 1 | `explainer` for the rule | Focused instruction on form helps (`RSCH-003` §1.3, Moderate). Explicit versus implicit is unresolved (Low). |
-| 2 | `conjugation-table` in `study` mode for three or four verbs. One tense per table (`present`, then `past`, then `future`). `sentences` at most three; the shape to follow is one sentence and two questions per verb. | Product choice, from this lesson type. N13 blocks a `formKey` that is not a stored form of `lemmaKey` in that tense and cell. N13 and N14 apply to `future` forms the same as `past`. `tense: future` requires `schemaVersion` `1.2.0`. |
-| 3 | One `conjugation-table` in `drill` mode | Retrieval beats rereading (`RSCH-003` §1.1, Moderate). Corrective feedback works (`RSCH-003` §1.3, Moderate). Untimed. Only `verified` forms are drilled. An unverified form warns N14 and is not scored. You cannot mark it verified. No published comparison shows that a morphology drill speeds acquisition (`RSCH-001`, Low, an absence). |
-| 4 | `personal-question` | N16 informs when it is missing. Output is a strand condition, Low (`RSCH-004` §1.4). |
+| 2 | `conjugation-table` in `study` mode for three or four verbs. One tense per table (`present`, then `past`, then `future`). `sentences` at most three; the shape to follow is one sentence and two questions per verb. Upsert every form into the lexicon first (`upsert_lexicon_entries`: `lemma_key`, `tense`, `cell`, `accept[]`, `root`, `binyan`). The studio Practise tab needs those rows — table cells alone are not enough. | Product choice, from this lesson type. N13 blocks a `formKey` that is not a stored form of `lemmaKey` in that tense and cell. N13 and N14 apply to `future` forms the same as `past`. `tense: future` requires `schemaVersion` `1.2.0`. |
+| 3 | Optional: one `conjugation-table` in `drill` mode | Retrieval beats rereading (`RSCH-003` §1.1, Moderate). Corrective feedback works (`RSCH-003` §1.3, Moderate). Untimed. Only `verified` forms are drilled. An unverified form warns N14 and is not scored. You cannot mark it verified. The studio Practise tab already runs interleaved recall, so a drill table is optional; keep it when you want an in-lesson drill station under Use or on the fallback long scroll. No published comparison shows that a morphology drill speeds acquisition (`RSCH-001`, Low, an absence). |
+| 4 | `personal-question` (and optional `exercise` / `assignment`) | N16 informs when the personal question is missing. Output is a strand condition, Low (`RSCH-004` §1.4). These blocks appear under Use. |
 
-Do not add a timed root or binyan speed drill.
+Do not add a timed root or binyan speed drill. After publish, the lesson appears on Lessons (plan rows) and on the Verbs practice screen (`/verbs/`) once `visibility` is open to the learner.
 
 ## letters-and-vowels
 

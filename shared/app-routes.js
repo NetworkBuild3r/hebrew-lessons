@@ -56,6 +56,7 @@
             heading: { he: 'היום', en: 'Today', subHe: 'הצעד הבא שלכם — קצר וברור.', subEn: 'Your next step — short and clear.' },
             scripts: [
                 '/shared/ui/blocks/conjugation-table.js',
+                '/shared/verb-practice.js',
                 '/shared/today-page.js'
             ],
             view: 'HebrewTodayPage'
@@ -93,6 +94,27 @@
             },
             scripts: ['/shared/guides-page.js'],
             view: 'HebrewGuidesPage'
+        },
+        {
+            id: 'verbs',
+            path: '/verbs/',
+            title: 'פעלים — Verbs' + SITE,
+            announce: 'פעלים',
+            bodyClass: 'verbs-page',
+            rootId: 'verbs-app',
+            loadingHook: 'verbs-state',
+            heading: {
+                he: 'פעלים',
+                en: 'Verbs',
+                subHe: 'סבב קצר בכל יום — זוכרים, לא מעתיקים.',
+                subEn: 'A short round each day: recall the form, then see the table.'
+            },
+            scripts: [
+                '/shared/ui/blocks/conjugation-table.js',
+                '/shared/verb-practice.js',
+                '/shared/verbs-page.js'
+            ],
+            view: 'HebrewVerbsPage'
         },
         {
             id: 'review',

@@ -626,7 +626,7 @@ describe('INIT-005/SPEC-013 shell and login markup', () => {
 
     it('every route has a title, a spoken name and a Hebrew + English heading', () => {
         const routes = require('../shared/app-routes.js');
-        assert.equal(routes.length, 8);
+        assert.equal(routes.length, 9);
         for (const r of routes) {
             assert.ok(r.title && r.announce && r.heading && r.heading.he && r.heading.en, r.id);
             assert.match(r.heading.he, /[\u0590-\u05FF]/, r.id + ' heading is Hebrew');

@@ -319,8 +319,8 @@ describe('app-shell adaptive layout hooks (INIT-013/SPEC-003)', () => {
         assert.match(html, /class="hebrew-brand"/);
         assert.match(html, /data-brand/);
         assert.match(html, /data-theme-toggle/);
-        // Learner: 6 nav links, none hidden via markup.
-        assert.equal((html.match(/data-nav="/g) || []).length, 6);
+        // Learner: 7 nav links, none hidden via markup.
+        assert.equal((html.match(/data-nav="/g) || []).length, 7);
     });
 
     it('admin still sees Editor + Admin links (aud-1 / und-1)', () => {
@@ -332,7 +332,7 @@ describe('app-shell adaptive layout hooks (INIT-013/SPEC-003)', () => {
             must_change_password: false
         }, '/');
         const navCount = (html.match(/data-nav="/g) || []).length;
-        assert.equal(navCount, 8);
+        assert.equal(navCount, 9);
         assert.match(html, /data-nav="editor"/);
         assert.match(html, /data-nav="admin"/);
     });

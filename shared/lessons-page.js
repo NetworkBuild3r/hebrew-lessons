@@ -1,6 +1,9 @@
 /**
  * Lessons library — filtered catalog cards with status chips and level filter.
  * Provenance: INIT-002/SPEC-014
+ * Published plan lessons (verb workshop, conversation, verse ...) are listed after the worksheet
+ * lessons; guides stay on the Guides page. INIT-013 follow-up: a published plan lesson had no way
+ * in from the app, because only the Guides page read /api/plans/catalog and it keeps recipe "guide".
  */
 (function (root) {
     'use strict';
@@ -61,6 +64,62 @@
 
     function lessonHref(slug) {
         return '/worksheets/' + encodeURIComponent(String(slug || '')) + '/';
+    }
+
+    var SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+    // Same labels as the plan player's recipe chip (shared/ui/plan-render.js).
+    var PLAN_CHIP = {
+        'topic-conversation': ['שיחה', 'Conversation'],
+        'review-worksheet': ['חזרה', 'Review'],
+        'verse-reading': ['פסוק', 'Verse'],
+        'verb-workshop': ['פעלים', 'Verbs'],
+        'letters-and-vowels': ['אותיות', 'Letters']
+    };
+
+    function planHref(planId, lessonId) {
+        return '/shared/plan/?id=' + encodeURIComponent(planId) + '&lesson=' + encodeURIComponent(lessonId);
+    }
+
+    function isHebrewText(value) {
+        return /[\u0590-\u05FF]/.test(String(value || ''));
+    }
+
+    /**
+     * Published plan lessons the catalog returned, minus guides. A plan id or lesson id that is not
+     * a slug is dropped so it cannot become a URL.
+     * @param {unknown} lessons
+     * @returns {object[]}
+     */
+    function planRowsOnly(lessons) {
+        if (!Array.isArray(lessons)) return [];
+        var out = [];
+        for (var i = 0; i < lessons.length && out.length < 200; i += 1) {
+            var row = lessons[i];
+            if (!row || typeof row !== 'object' || row.recipe === 'guide') continue;
+            if (typeof row.planId !== 'string' || !SLUG.test(row.planId)) continue;
+            if (typeof row.lessonId !== 'string' || !SLUG.test(row.lessonId)) continue;
+            out.push(row);
+        }
+        return out;
+    }
+
+    function renderPlanCard(row) {
+        var title = String(row.title || row.lessonId);
+        var dir = isHebrewText(title) ? 'rtl' : 'ltr';
+        var lang = dir === 'rtl' ? 'he' : 'en';
+        var chip = Object.prototype.hasOwnProperty.call(PLAN_CHIP, row.recipe) ? PLAN_CHIP[row.recipe] : null;
+        var chipHtml = chip
+            ? '<span class="recipe-chip" data-recipe="' + esc(row.recipe) + '">' + bi(chip[0], chip[1]) + '</span>'
+            : '';
+        var topic = row.topic ? '<p class="fine">' + esc(row.topic) + '</p>' : '';
+        return '<article class="lesson-card" data-plan-id="' + esc(row.planId)
+            + '" data-lesson-id="' + esc(row.lessonId) + '"'
+            + (chip ? ' data-recipe="' + esc(row.recipe) + '"' : '') + '>'
+            + '<a class="lesson-link" href="' + esc(planHref(row.planId, row.lessonId)) + '">'
+            + chipHtml
+            + topic
+            + '<h2 lang="' + lang + '" dir="' + dir + '">' + esc(title) + '</h2>'
+            + '</a></article>';
     }
 
     function renderLoading() {
@@ -174,9 +233,10 @@
 
         var filter = model.filter || 'all';
         var rows = model.rows || [];
+        var planRows = model.planRows || [];
         var html = renderFilter(filter);
 
-        if (!rows.length && filter === 'all') {
+        if (!rows.length && !planRows.length && filter === 'all') {
             return html + renderNoLessons();
         }
 
@@ -187,7 +247,9 @@
             });
         }
 
-        if (!visible.length) {
+        // Plan lessons carry no level, so they appear under "All" only.
+        var plans = filter === 'all' ? planRows : [];
+        if (!visible.length && !plans.length) {
             return html + renderEmptyFilter();
         }
 
@@ -196,6 +258,7 @@
         html += sorted.map(function (row) {
             return renderCard(row.lesson, row.status);
         }).join('');
+        html += plans.map(renderPlanCard).join('');
         html += '</div>';
         return html;
     }
@@ -224,6 +287,17 @@
                 if (row && row.slug) map[row.slug] = row.state || {};
             });
             return map;
+        });
+    }
+
+    /** Published plan lessons this session may read. An error here never hides the worksheet lessons. */
+    function loadPlanRows() {
+        var Api = root.HebrewApi;
+        if (!Api || typeof Api.get !== 'function') return Promise.resolve([]);
+        return Api.get('/api/plans/catalog', { redirectOn401: false }).then(function (res) {
+            return res && res.ok && res.data ? planRowsOnly(res.data.lessons) : [];
+        }).catch(function () {
+            return [];
         });
     }
 
@@ -268,13 +342,15 @@
         mounted = el;
         var ready = (ctx && ctx.ready) || Promise.resolve(null);
         return ready.then(function () {
-            return loadProgressMap(catalog());
-        }).then(function (progressBySlug) {
+            return Promise.all([loadProgressMap(catalog()), loadPlanRows()]);
+        }).then(function (loaded) {
             if (mounted !== el) return;
+            var progressBySlug = loaded[0];
             var model = {
                 state: 'ready',
                 filter: 'all',
-                rows: buildRows(progressBySlug || Object.create(null), Date.now())
+                rows: buildRows(progressBySlug || Object.create(null), Date.now()),
+                planRows: loaded[1] || []
             };
             paint(el, model);
             bindFilter(el, model);
@@ -291,6 +367,7 @@
     root.HebrewLessonsPage = {
         render: renderList,
         buildRows: buildRows,
+        planRowsOnly: planRowsOnly,
         mount: mount,
         unmount: unmount
     };

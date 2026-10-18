@@ -238,6 +238,7 @@ describe('review page (INIT-001/SPEC-004)', () => {
         const today = require('../shared/app-routes.js').find((r) => r.id === 'today');
         assert.deepEqual(today.scripts, [
             '/shared/ui/blocks/conjugation-table.js',
+            '/shared/verb-practice.js',
             '/shared/today-page.js'
         ]);
         assert.match(todayJs, /href="\/review\/"/);

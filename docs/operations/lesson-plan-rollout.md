@@ -6,7 +6,7 @@ Provenance: `INIT-004/SPEC-020`. The plan is §14 of [the INIT-004 initiative](.
 
 ## Who approves a link change
 
-Brian Nelson, in writing, for each lesson, naming the lesson id (for example `my-morning`). Until that written approval exists, the lesson's learner link stays `/worksheets/<slug>/`. A passing preflight is not approval. An AI or MCP session never changes a learner link. `npm test` fails if either learner link builder points at the plan screen (`test/rollout-preflight.test.js`, "no learner link opens the plan screen yet"), so a flip has to change that test in the same reviewed change as the approval.
+Brian Nelson, in writing, for each lesson, naming the lesson id (for example `my-morning`). Until that written approval exists, the lesson's learner link stays `/worksheets/<slug>/`. A passing preflight is not approval. An AI or MCP session never changes a learner link. `npm test` fails if either learner link builder points at the plan screen (`test/rollout-preflight.test.js`, "no learner link opens the plan screen yet"), so a flip has to change that test in the same reviewed change as the approval. A lesson that exists only as a published plan, with no worksheet, is not a flip: the Lessons page lists it through `planHref` in `shared/lessons-page.js`, and the same test allows that one builder and nothing else.
 
 ## Rules on every step
 

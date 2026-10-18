@@ -69,6 +69,14 @@
         return stripped.normalize('NFC').replace(/\s+/g, ' ').trim();
     }
 
+    /**
+     * A lexicon key may carry a cell tag to stay unique, e.g. "תַּחְלִיט-3fs" (future she is spelled
+     * like future you m.). The learner sees the form without the tag.
+     */
+    function displayKey(key) {
+        return String(key == null ? '' : key).replace(/-[0-9a-z]+$/i, '');
+    }
+
     function isVerified(form) {
         return !!(form && (form.verified === true || form.verified === 1));
     }
@@ -137,7 +145,7 @@
             ? ''
             : '<span class="not-checked" lang="en" dir="ltr">not yet checked</span>';
         return '<td data-cell="' + text(entry.cell) + '" data-verified="' + (verified ? '1' : '0') + '">'
-            + '<span class="pointed" lang="he">' + highlight(formKey, root) + '</span>'
+            + '<span class="pointed" lang="he">' + highlight(displayKey(formKey), root) + '</span>'
             + mark
             + audioButton(audio, formKey)
             + '</td>';
@@ -178,7 +186,7 @@
             return entry && !known(block.tense, entry.cell);
         }).map(function (entry) {
             return '<li><span lang="he">' + text(entry.cell) + '</span> '
-                + '<span class="pointed" lang="he">' + text(entry.formKey) + '</span> '
+                + '<span class="pointed" lang="he">' + text(displayKey(entry.formKey)) + '</span> '
                 + '<span class="not-checked" lang="en" dir="ltr">not yet checked</span></li>';
         }).join('');
     }
@@ -505,7 +513,7 @@
         }
         if (reveal && showForm && item) {
             reveal.hidden = false;
-            reveal.textContent = item.formKey;
+            reveal.textContent = displayKey(item.formKey);
         }
         if (input) input.disabled = true;
         if (next) next.hidden = false;

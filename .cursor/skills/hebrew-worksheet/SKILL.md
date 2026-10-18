@@ -264,6 +264,6 @@ The cards, including the research note on each step, are in [recipes.md](recipes
 | `topic-conversation` | `spaced-review-checkpoint`, `introduction`, `short-dialogue`, `personal-question`, `assignment` |
 | `review-worksheet` | `introduction`, `exercise` (choose / unscramble / translate), `graded-story`, `personal-question` or `assignment`; type E adds `true-false` and choose after the story |
 | `verse-reading` | `verse-reading`, grammar pivot (`explainer` or `conjugation-table`), optional `exercise` translate, `personal-question` |
-| `verb-workshop` | `explainer`, `conjugation-table` (`present`, `past`, `future`, one tense per table), `conjugation-table` in `drill`, `personal-question` |
+| `verb-workshop` | `explainer`, `conjugation-table` (`present`, `past`, `future`, one tense per table; lexicon forms first), optional `conjugation-table` in `drill`, `personal-question` (plus optional `exercise`/`assignment` for Use). Opens as Look / Practise / Use for the learner — see [recipes.md](recipes.md) § verb-workshop. |
 | `letters-and-vowels` | `letter-intro` per letter, then `spaced-review-checkpoint` |
 | `guide` | `explainer` only |

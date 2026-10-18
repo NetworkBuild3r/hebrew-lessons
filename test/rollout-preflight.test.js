@@ -704,12 +704,19 @@ describe('rollout preflight', () => {
     });
 
     it('no learner link opens the plan screen yet; changing that needs the written deploy gate', () => {
+        // A worksheet lesson keeps its worksheet link. A plan-only lesson (no worksheet to replace)
+        // is listed by planHref in lessons-page.js; that is the one plan-screen link a learner sees.
         const href = /function lessonHref\(slug\) \{\s*return '\/worksheets\/' \+ encodeURIComponent\(String\(slug \|\| ''\)\) \+ '\/';\s*\}/;
+        const planHref = /function planHref\(planId, lessonId\) \{\s*return '\/shared\/plan\/\?id=' \+ encodeURIComponent\(planId\) \+ '&lesson=' \+ encodeURIComponent\(lessonId\);\s*\}/;
         ['shared/today-page.js', 'shared/lessons-page.js'].forEach((rel) => {
             const source = fs.readFileSync(path.join(root, rel), 'utf8');
             assert.match(source, href, rel + ' lessonHref still opens the worksheet');
-            assert.equal(source.includes('/shared/plan'), false, rel + ' does not link the plan screen');
+            const rest = source.replace(planHref, '');
+            assert.equal(rest.includes('/shared/plan'), false, rel + ' links the plan screen only through planHref');
         });
+        const lessons = fs.readFileSync(path.join(root, 'shared', 'lessons-page.js'), 'utf8');
+        assert.match(lessons, planHref);
+        assert.equal((lessons.match(/planHref\(/g) || []).length, 2, 'planHref is defined once and used once, for plan rows');
     });
 
     it('the script requires no network module', () => {

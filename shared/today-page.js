@@ -277,6 +277,30 @@
             + '</div></article>';
     }
 
+    function renderVerbsCard(verbs) {
+        if (!verbs || !verbs.lessons) return '';
+        var line = verbs.due > 0
+            ? '<span id="today-verbs-due">' + esc(String(verbs.due)) + '</span> '
+                + bi('צורות לחזרה', 'forms due')
+            : bi('סבב של 12 כרטיסים, כשלוש דקות.', 'A round of 12 cards, about three minutes.');
+        var known = verbs.known > 0
+            ? '<p class="fine">' + esc(String(verbs.known)) + ' ' + bi('צורות ידועות', 'forms known') + '</p>'
+            : '';
+        return ''
+            + '<article class="lesson-card today-card today-verbs" id="today-verbs-card" data-today-card="verbs">'
+            + '<div class="lesson-link today-card-body">'
+            + '<span class="lesson-status' + (verbs.due > 0 ? ' ready' : ' fresh') + '">'
+            + (verbs.due > 0 ? bi('מוכן לתרגול', 'Ready to practise') : bi('פעלים', 'Verbs')) + '</span>'
+            + '<h2>' + bi('תרגול פעלים', 'Verb practice') + '</h2>'
+            + '<p>' + line + '</p>'
+            + known
+            + '<p class="today-actions">'
+            + '<a class="btn btn-primary" id="today-verbs-start" href="/verbs/">'
+            + ctaIcon('play') + bi('לתרגול', 'Practise') + '</a>'
+            + '</p>'
+            + '</div></article>';
+    }
+
     function renderWelcomeCard(brandNew) {
         if (!brandNew) return '';
         return ''
@@ -842,7 +866,7 @@
             return;
         }
         if (decision.reveal) {
-            settleDrill(item, 'הצורה. (The form.)', item.key);
+            settleDrill(item, 'הצורה. (The form.)', String(item.key || '').replace(/-[0-9a-z]+$/i, ''));
             return;
         }
         mixSession.tries += 1;
@@ -922,6 +946,29 @@
             .catch(function () { return null; });
     }
 
+    /**
+     * Published verb workshops plus this device's verb ladder. Null hides the card.
+     */
+    function loadVerbs(signal, user) {
+        var Api = root.HebrewApi;
+        if (!Api || typeof Api.get !== 'function') return Promise.resolve(null);
+        return Api.get('/api/plans/catalog', { redirectOn401: false, signal: signal })
+            .then(function (res) {
+                var rows = res && res.ok && res.data && Array.isArray(res.data.lessons) ? res.data.lessons : [];
+                var lessons = rows.filter(function (row) { return row && row.recipe === 'verb-workshop'; }).length;
+                if (!lessons) return null;
+                var VP = root.HebrewVerbPractice;
+                var summary = { due: 0, known: 0 };
+                if (VP && typeof VP.loadLadder === 'function') {
+                    var storage = null;
+                    try { storage = root.localStorage; } catch (err) { storage = null; }
+                    summary = VP.dueSummary(VP.loadLadder(storage, user), Date.now());
+                }
+                return { lessons: lessons, due: summary.due, known: summary.known };
+            })
+            .catch(function () { return null; });
+    }
+
     function renderToday(model) {
         if (!model || model.state === 'loading') return renderLoading();
         if (model.state === 'error') return renderError(model.message);
@@ -930,6 +977,7 @@
         var parts = [];
         parts.push(renderMixCard(model.mix));
         parts.push(renderReviewCard(model.review || {}, model.brandNew));
+        parts.push(renderVerbsCard(model.verbs));
         parts.push(renderContinueCard(model.continueEntry));
         parts.push(renderNextCard(model.nextLesson, model.brandNew));
         parts.push(renderWelcomeCard(model.brandNew));
@@ -1016,13 +1064,15 @@
             if (mounted !== el) return null;
             return Promise.all([
                 loadProgressMap(catalog()),
-                loadMix(signal)
+                loadMix(signal),
+                loadVerbs(signal, ctx && ctx.user)
             ]);
         }).then(function (pair) {
             if (!pair || mounted !== el) return;
             if (signal && signal.aborted) return;
             var model = buildModel(pair[0] || Object.create(null));
             model.mix = pair[1];
+            model.verbs = pair[2];
             paint(el, model);
         }).catch(function (err) {
             if (mounted !== el) return;

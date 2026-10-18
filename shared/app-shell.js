@@ -21,6 +21,7 @@
         { id: 'today', href: '/', he: 'היום', en: 'Today', icon: 'today' },
         { id: 'lessons', href: '/lessons/', he: 'שיעורים', en: 'Lessons', icon: 'lessons' },
         { id: 'guides', href: '/guides/', he: 'מדריכים', en: 'Guides' },
+        { id: 'verbs', href: '/verbs/', he: 'פעלים', en: 'Verbs' },
         { id: 'review', href: '/review/', he: 'חזרה', en: 'Review', icon: 'review' },
         { id: 'words', href: '/words/', he: 'מילים', en: 'Words', icon: 'words' },
         { id: 'progress', href: '/progress/', he: 'התקדמות', en: 'Progress', icon: 'progress' },
@@ -183,6 +184,7 @@
         var path = String(pathname || '/');
         if (path === '/lessons' || path.indexOf('/lessons/') === 0) return 'lessons';
         if (path === '/guides' || path.indexOf('/guides/') === 0) return 'guides';
+        if (path === '/verbs' || path.indexOf('/verbs/') === 0) return 'verbs';
         if (path === '/review' || path.indexOf('/review/') === 0) return 'review';
         if (path === '/words' || path.indexOf('/words/') === 0) return 'words';
         if (path === '/progress' || path.indexOf('/progress/') === 0) return 'progress';

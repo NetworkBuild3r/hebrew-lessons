@@ -16,7 +16,7 @@
 
     var WORD = /[\u05D0-\u05EA\u0591-\u05C7\u05BE\u05F3\u05F4]+/g;
     var LETTER = /[\u05D0-\u05EA]/;
-    var SKIP = 'button, a, input, textarea, select, script, style, .lookup-word, .word-lookup-pop, .story-token, #story-text';
+    var SKIP = 'button, a, input, textarea, select, script, style, .lookup-word, .word-lookup-pop, .story-token, #story-text, [data-no-lookup]';
     var TIMEOUT_MS = 6000;
     var WORDS = {
         en: {
