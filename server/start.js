@@ -19,6 +19,13 @@ if (fs.existsSync(envFile)) {
     });
 }
 
+// Empty TRUSTED_PROXIES with an https PUBLIC_ORIGIN: warn, still boot.
+// Behind Traefik the socket is plain HTTP, so the CSRF host origin is http://.
+require('./http/trusted-proxies').warnHttpsPublicOrigin(
+    process.env.TRUSTED_PROXIES,
+    process.env.PUBLIC_ORIGIN
+);
+
 // Fail fast if DATA_DIR sits under a served root (assertDataDirNotServed).
 paths.dataDir();
 
