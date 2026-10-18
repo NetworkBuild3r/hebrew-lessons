@@ -1,0 +1,169 @@
+package pages
+
+import (
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views"
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/components"
+)
+
+templ prose(s string) {
+	if HasHebrew(s) {
+		<p lang="he">{ s }</p>
+	} else if HasLatin(s) {
+		<p lang="en" dir="ltr">{ s }</p>
+	} else {
+		<p>{ s }</p>
+	}
+}
+
+templ cellText(s string) {
+	if HasHebrew(s) {
+		<span lang="he">{ s }</span>
+	} else if HasLatin(s) {
+		<span lang="en" dir="ltr">{ s }</span>
+	} else {
+		{ s }
+	}
+}
+
+templ exampleItem(ex Example) {
+	<li data-example-id={ ex.ID }>
+		<p class="example" lang="he">@HighlightRoot(ex.He, ex.Root)</p>
+		<p class="gloss">
+			<span class="meaning" lang="en" dir="ltr">{ ex.En }</span>
+			if ex.Translit != "" {
+				<span class="meaning" lang="en" dir="ltr">{ ex.Translit }</span>
+			}
+			if ex.Root != "" {
+				<span class="meaning root-label" lang="he">{ ex.Root }</span>
+			}
+		</p>
+	</li>
+}
+
+templ explainerTable(table *Table) {
+	if table != nil && len(table.Columns) > 0 {
+		<table class="explainer-table">
+			<thead>
+				<tr>
+					for _, column := range table.Columns {
+						<th scope="col">@cellText(column)</th>
+					}
+				</tr>
+			</thead>
+			<tbody>
+				for _, row := range table.Rows {
+					<tr>
+						for _, cell := range row {
+							<td>@cellText(cell)</td>
+						}
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+}
+
+templ calloutAside(c Callout) {
+	<aside class="callout" data-tone={ toneAttr(c.Tone) } data-callout-id={ c.ID }>
+		<p class="kicker"><span class="callout-word" lang="en" dir="ltr">{ toneEn(c.Tone) }</span> <span lang="he">{ toneHe(c.Tone) }</span></p>
+		<h3>@cellText(c.Title)</h3>
+		@prose(c.Text)
+	</aside>
+}
+
+templ explainerBlock(block Block) {
+	<section data-block-type="explainer" data-block-id={ block.ID }>
+		<h2>{ block.Title }</h2>
+		for _, section := range block.Sections {
+			<section data-section-id={ section.ID }>
+				<h3>@cellText(section.Heading)</h3>
+				for _, paragraph := range section.Paragraphs {
+					@prose(paragraph)
+				}
+				if len(section.Examples) > 0 {
+					<ul class="explainer-examples">
+						for _, ex := range section.Examples {
+							@exampleItem(ex)
+						}
+					</ul>
+				}
+				@explainerTable(section.Table)
+				for _, c := range section.Callouts {
+					@calloutAside(c)
+				}
+			</section>
+		}
+	</section>
+}
+
+templ guideArticle(g GuideDetail) {
+	<article class="guide-prose story-body guide-body" data-recipe="guide" data-plan-id={ g.PlanID } data-lesson-id={ g.LessonID }>
+		<header>
+			<p class="kicker"><span class="recipe-chip" data-recipe="guide">מדריך <span lang="en" dir="ltr">Guide</span></span></p>
+		</header>
+		for _, block := range g.Blocks {
+			@explainerBlock(block)
+		}
+	</article>
+}
+
+// GuideFragment is the plan root for an HX-Request read of one guide.
+templ GuideFragment(g GuideDetail) {
+	<div id="plan-root" class="page" data-plan-ready="1" data-recipe="guide">
+		@guideArticle(g)
+	</div>
+}
+
+// GuidePage is GET /shared/plan/?id=&lesson= for a published guide.
+templ GuidePage(g GuideDetail) {
+	@views.Layout(views.Doc{
+		Title:      g.Title + " · דרך עברית",
+		BodyClass:  "hebrew-spa has-hebrew-shell guides-page plan-page",
+		PageHe:     "מדריכים",
+		PageEn:     "Guides",
+		Announce:   g.Title,
+		CurrentNav: "guides",
+		RouteReady: "guides",
+		Main:       guidePageMain(g),
+	})
+}
+
+templ guidePageMain(g GuideDetail) {
+	@components.PageHeading(components.Heading{
+		Single:   g.Title,
+		Lang:     g.Lang,
+		Dir:      g.Dir,
+		Subtitle: g.Topic,
+		SubLang:  g.TopicLang,
+		SubDir:   g.TopicDir,
+	})
+	@GuideFragment(g)
+}
+
+templ noticePage(title string, body templ.Component) {
+	@views.Layout(views.Doc{
+		Title:      title + " · דרך עברית",
+		BodyClass:  "hebrew-spa has-hebrew-shell guides-page plan-page",
+		PageHe:     "מדריכים",
+		PageEn:     "Guides",
+		Announce:   "מדריכים",
+		CurrentNav: "guides",
+		RouteReady: "guides",
+		Main:       noticeMain(title, body),
+	})
+}
+
+templ noticeMain(title string, body templ.Component) {
+	@components.PageHeading(components.Heading{Single: title, Lang: "he", Dir: "rtl"})
+	@body
+}
+
+// MissingPlanPage is a 404 when the plan id is not a slug.
+templ MissingPlanPage() {
+	@noticePage("חסר מזהה תוכנית", components.MissingPlan())
+}
+
+// NotFoundPage is a 404 when the guide is hidden or unknown.
+templ NotFoundPage() {
+	@noticePage("התוכנית לא נמצאה", components.PlanNotFound())
+}

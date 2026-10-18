@@ -1,0 +1,13 @@
+package components
+
+// Pair is the bilingual interface label. CSS shows one side from data-ui-lang.
+// English is isolated so it stays left-to-right inside the Hebrew document.
+templ Pair(he string, en string) {
+	if en == "" {
+		{ he }
+	} else if he == "" {
+		<span class="ui-en" lang="en" dir="ltr">{ en }</span>
+	} else {
+		<span class="ui-pair"><span class="ui-he" lang="he">{ he }</span><span class="ui-en" lang="en" dir="ltr">{ en }</span></span>
+	}
+}
