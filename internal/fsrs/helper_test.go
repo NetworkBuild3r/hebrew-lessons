@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
-	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/dbtest"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 )
 
 type fakeClock struct{ t time.Time }
@@ -38,7 +38,7 @@ func mustUser(t *testing.T, store *db.Store, email string) int64 {
 
 func mustLexeme(t *testing.T, store *db.Store, text string) int64 {
 	t.Helper()
-	id, err := dbtest.InsertLexeme(context.Background(), store, text)
+	id, err := testharness.InsertLexeme(context.Background(), store, text)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-package dbtest
+package testharness
 
 import (
 	"os"
@@ -18,7 +18,7 @@ func TestNotLinkedIntoHebrewBinary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go list -deps ./cmd/hebrew: %v\n%s", err, out)
 	}
-	const pkg = "github.com/NetworkBuild3r/hebrew-lessons/internal/db/dbtest"
+	const pkg = "github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 	for _, line := range strings.Split(string(out), "\n") {
 		if line == pkg {
 			t.Fatalf("%s is linked into ./cmd/hebrew\n%s", pkg, out)

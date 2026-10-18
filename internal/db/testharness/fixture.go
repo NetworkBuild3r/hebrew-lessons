@@ -1,9 +1,9 @@
-// Package dbtest inserts fixture rows for tests.
+// Package testharness inserts fixture rows for tests.
 //
 // The helpers used to live on db.Store. They are not part of the server.
 // Tests are the only importers, and TestNotLinkedIntoHebrewBinary checks
 // that `go list -deps ./cmd/hebrew` does not include this package.
-package dbtest
+package testharness
 
 import (
 	"context"
@@ -17,11 +17,11 @@ import (
 func InsertLexeme(ctx context.Context, s *db.Store, textNFC string) (int64, error) {
 	res, err := s.ExecContext(ctx, `INSERT INTO lexemes (text_nfc) VALUES (?)`, textNFC)
 	if err != nil {
-		return 0, fmt.Errorf("dbtest: insert lexeme: %w", err)
+		return 0, fmt.Errorf("testharness: insert lexeme: %w", err)
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
-		return 0, fmt.Errorf("dbtest: insert lexeme: %w", err)
+		return 0, fmt.Errorf("testharness: insert lexeme: %w", err)
 	}
 	return id, nil
 }
@@ -34,11 +34,11 @@ func InsertUnit(ctx context.Context, s *db.Store, title, status string) (int64, 
 		title, status,
 	)
 	if err != nil {
-		return 0, fmt.Errorf("dbtest: insert unit: %w", err)
+		return 0, fmt.Errorf("testharness: insert unit: %w", err)
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
-		return 0, fmt.Errorf("dbtest: insert unit: %w", err)
+		return 0, fmt.Errorf("testharness: insert unit: %w", err)
 	}
 	return id, nil
 }
@@ -50,7 +50,7 @@ func InsertLessonItem(ctx context.Context, s *db.Store, unitID int64, lessonIx i
 		VALUES (?, ?, ?, ?, ?)`,
 		unitID, lessonIx, lexemeID, role, skill,
 	); err != nil {
-		return fmt.Errorf("dbtest: insert lesson item: %w", err)
+		return fmt.Errorf("testharness: insert lesson item: %w", err)
 	}
 	return nil
 }
@@ -68,11 +68,11 @@ func InsertLessonRun(ctx context.Context, s *db.Store, userID, unitID int64, les
 		userID, unitID, lessonIx, db.FormatTime(started), done,
 	)
 	if err != nil {
-		return 0, fmt.Errorf("dbtest: insert lesson run: %w", err)
+		return 0, fmt.Errorf("testharness: insert lesson run: %w", err)
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
-		return 0, fmt.Errorf("dbtest: insert lesson run: %w", err)
+		return 0, fmt.Errorf("testharness: insert lesson run: %w", err)
 	}
 	return id, nil
 }
