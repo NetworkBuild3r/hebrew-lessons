@@ -304,9 +304,9 @@ var demoItems = []Item{
 		StrengthBucket: strPtr("solid"), Sources: []string{"greetings"},
 	},
 	{
+		// No directions: this word is in the shelf and has no review row.
 		Word: "אֹכֶל", GlossEN: "food", Translit: "ochel", POS: strPtr("noun"),
-		HeEN: dir("longTerm", "solid"), EnHE: dir("longTerm", "solid"),
-		StrengthBucket: strPtr("solid"), Sources: []string{"pantry"},
+		Sources: []string{"pantry"},
 	},
 	{
 		Word: "בְּבַקָּשָׁה", GlossEN: "please", Translit: "bevakasha", POS: strPtr("particle"),

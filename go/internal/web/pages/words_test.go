@@ -347,6 +347,9 @@ func TestSuspendAndResume(t *testing.T) {
 	if !strings.Contains(open, `data-words-suspend`) || !strings.Contains(open, ">Pause reviews<") {
 		t.Fatal("suspend control missing")
 	}
+	if !strings.Contains(open, `aria-describedby="words-error-csrf-note"`) || !strings.Contains(open, `id="words-error-csrf-note"`) || !strings.Contains(open, `href=""`) {
+		t.Fatal("csrf note is not a reload link described by the button")
+	}
 	if strings.Contains(open, "data-words-add") || strings.Contains(open, "name=\"gloss\"") {
 		t.Fatal("add or gloss edit shipped")
 	}
@@ -443,6 +446,13 @@ func TestSuspendNotFoundIsDisabled(t *testing.T) {
 	demo := library.NewDemo()
 	mux := http.NewServeMux()
 	NewWords(demo).Register(mux)
+	known := body(get(t, mux, "/words/?word="+url.QueryEscape(key), false))
+	if !strings.Contains(known, `id="words-suspend-note"`) || !strings.Contains(known, "nothing to pause") || strings.Contains(known, `name="pause"`) {
+		t.Fatal("a word with no review history still offered pause")
+	}
+	if strings.Contains(openTag(known, `id="words-suspend-note"`), "autofocus") || strings.Contains(openTag(known, `class="lookup-card__he"`), "autofocus") {
+		t.Fatal("opening the card focused the lock note or the heading")
+	}
 	rec := postSuspend(t, mux, key, "1", true, "")
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status %d", rec.Code)
@@ -456,6 +466,9 @@ func TestSuspendNotFoundIsDisabled(t *testing.T) {
 	}
 	if !strings.Contains(html, "disabled") || strings.Contains(html, `name="pause"`) {
 		t.Fatal("paused control was still a form")
+	}
+	if !strings.Contains(openTag(html, `id="words-suspend-note"`), "autofocus") || strings.Contains(openTag(html, `class="lookup-card__he"`), "autofocus") {
+		t.Fatal("rejected pause did not focus the note")
 	}
 	items, _, err := demo.List(context.Background(), library.DemoUserID, library.Filter{}, "", library.PageSize)
 	if err != nil {
@@ -505,6 +518,19 @@ func TestSuspendCSRFAndSession(t *testing.T) {
 	if rr.Code != http.StatusFound || !strings.HasPrefix(rr.Header().Get("Location"), "/login/?next=") {
 		t.Fatalf("login redirect %d %q", rr.Code, rr.Header().Get("Location"))
 	}
+}
+
+func openTag(html, marker string) string {
+	at := strings.Index(html, marker)
+	if at < 0 {
+		return ""
+	}
+	start := strings.LastIndex(html[:at], "<")
+	end := strings.Index(html[at:], ">")
+	if start < 0 || end < 0 {
+		return ""
+	}
+	return html[start : at+end]
 }
 
 func postSuspend(t *testing.T, mux *http.ServeMux, key, pause string, hx bool, token string) *httptest.ResponseRecorder {

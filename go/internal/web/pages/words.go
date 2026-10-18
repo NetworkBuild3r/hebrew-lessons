@@ -180,6 +180,11 @@ func (h Words) decorate(view *wordview.WordsView, r *http.Request, blocked bool)
 	}
 	d.CSRFHeader = string(raw)
 	d.PostURL = "/_hx/words/" + url.PathEscape(d.Word) + "/suspend"
+	// Neither direction means there is no review row. The card already
+	// knows, so the lock note replaces the pause button before a POST.
+	if !d.HeEn.Show && !d.EnHe.Show {
+		blocked = true
+	}
 	if blocked {
 		d.Blocked = true
 		d.SuspendValue = "1"
@@ -309,6 +314,9 @@ func (h Words) writeNotFound(w http.ResponseWriter, r *http.Request, uid int64, 
 		view.Selected = &detail
 		view.SelectedKey = key
 		view.Word = key
+	}
+	if view.Selected != nil {
+		view.Selected.FocusAction = true
 	}
 	h.decorate(&view, r, true)
 	h.write(w, r, http.StatusNotFound, view)
