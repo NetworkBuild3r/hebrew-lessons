@@ -1,0 +1,402 @@
+{
+  "content": {
+    "counts": {
+      "block": 0,
+      "inform": 5,
+      "warn": 43
+    },
+    "issues": [
+      {
+        "code": "N7",
+        "field": "",
+        "hard": false,
+        "message": "8 of 25 blocks are language-focused; N7 allows one in 4",
+        "path": "units/unit-types",
+        "pointer": "/units/0",
+        "severity": "warn"
+      },
+      {
+        "code": "N6",
+        "field": "newWords/0",
+        "hard": false,
+        "message": "appears 1 time(s) in this lesson; N6 asks for 2",
+        "path": "units/unit-types/lessons/type-b-review-sheet",
+        "pointer": "/units/0/lessons/1/newWords/0",
+        "severity": "warn"
+      },
+      {
+        "code": "later-checkpoint",
+        "field": "newWords/0",
+        "hard": false,
+        "message": "no later spaced-review-checkpoint lists this word",
+        "path": "units/unit-types/lessons/type-b-review-sheet",
+        "pointer": "/units/0/lessons/1/newWords/0",
+        "severity": "warn"
+      },
+      {
+        "code": "later-context",
+        "field": "newWords/0",
+        "hard": false,
+        "message": "no later lesson uses this word in a different sentence",
+        "path": "units/unit-types/lessons/type-b-review-sheet",
+        "pointer": "/units/0/lessons/1/newWords/0",
+        "severity": "warn"
+      },
+      {
+        "code": "N6",
+        "field": "newWords/1",
+        "hard": false,
+        "message": "appears 0 time(s) in this lesson; N6 asks for 2",
+        "path": "units/unit-types/lessons/type-b-review-sheet",
+        "pointer": "/units/0/lessons/1/newWords/1",
+        "severity": "warn"
+      },
+      {
+        "code": "later-checkpoint",
+        "field": "newWords/1",
+        "hard": false,
+        "message": "no later spaced-review-checkpoint lists this word",
+        "path": "units/unit-types/lessons/type-b-review-sheet",
+        "pointer": "/units/0/lessons/1/newWords/1",
+        "severity": "warn"
+      },
+      {
+        "code": "later-context",
+        "field": "newWords/1",
+        "hard": false,
+        "message": "no later lesson uses this word in a different sentence",
+        "path": "units/unit-types/lessons/type-b-review-sheet",
+        "pointer": "/units/0/lessons/1/newWords/1",
+        "severity": "warn"
+      },
+      {
+        "code": "N3",
+        "field": "",
+        "hard": false,
+        "message": "about 11% of running words are known; N3 asks for 95%",
+        "path": "units/unit-types/lessons/type-b-review-sheet/blocks/readings",
+        "pointer": "/units/0/lessons/1/blocks/4",
+        "severity": "warn"
+      },
+      {
+        "code": "N6",
+        "field": "newWords/0",
+        "hard": false,
+        "message": "appears 1 time(s) in this lesson; N6 asks for 2",
+        "path": "units/unit-types/lessons/type-c-genesis-1-1/blocks/verse",
+        "pointer": "/units/0/lessons/2/blocks/0/newWords/0",
+        "severity": "warn"
+      },
+      {
+        "code": "N6",
+        "field": "newWords/2",
+        "hard": false,
+        "message": "appears 1 time(s) in this lesson; N6 asks for 2",
+        "path": "units/unit-types/lessons/type-c-genesis-1-1/blocks/verse",
+        "pointer": "/units/0/lessons/2/blocks/0/newWords/2",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/0/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/drill",
+        "pointer": "/units/0/lessons/3/blocks/4/cells/0/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/1/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/drill",
+        "pointer": "/units/0/lessons/3/blocks/4/cells/1/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/2/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/drill",
+        "pointer": "/units/0/lessons/3/blocks/4/cells/2/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/3/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/drill",
+        "pointer": "/units/0/lessons/3/blocks/4/cells/3/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/4/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/drill",
+        "pointer": "/units/0/lessons/3/blocks/4/cells/4/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/5/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/drill",
+        "pointer": "/units/0/lessons/3/blocks/4/cells/5/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/6/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/drill",
+        "pointer": "/units/0/lessons/3/blocks/4/cells/6/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/7/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/drill",
+        "pointer": "/units/0/lessons/3/blocks/4/cells/7/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/8/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/drill",
+        "pointer": "/units/0/lessons/3/blocks/4/cells/8/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/0/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/future",
+        "pointer": "/units/0/lessons/3/blocks/3/cells/0/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/1/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/future",
+        "pointer": "/units/0/lessons/3/blocks/3/cells/1/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/2/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/future",
+        "pointer": "/units/0/lessons/3/blocks/3/cells/2/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/3/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/future",
+        "pointer": "/units/0/lessons/3/blocks/3/cells/3/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/4/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/future",
+        "pointer": "/units/0/lessons/3/blocks/3/cells/4/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/5/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/future",
+        "pointer": "/units/0/lessons/3/blocks/3/cells/5/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/6/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/future",
+        "pointer": "/units/0/lessons/3/blocks/3/cells/6/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/7/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/future",
+        "pointer": "/units/0/lessons/3/blocks/3/cells/7/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/8/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/future",
+        "pointer": "/units/0/lessons/3/blocks/3/cells/8/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/0/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/past",
+        "pointer": "/units/0/lessons/3/blocks/2/cells/0/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/1/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/past",
+        "pointer": "/units/0/lessons/3/blocks/2/cells/1/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/2/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/past",
+        "pointer": "/units/0/lessons/3/blocks/2/cells/2/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/3/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/past",
+        "pointer": "/units/0/lessons/3/blocks/2/cells/3/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/4/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/past",
+        "pointer": "/units/0/lessons/3/blocks/2/cells/4/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/5/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/past",
+        "pointer": "/units/0/lessons/3/blocks/2/cells/5/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/6/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/past",
+        "pointer": "/units/0/lessons/3/blocks/2/cells/6/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/7/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/past",
+        "pointer": "/units/0/lessons/3/blocks/2/cells/7/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/8/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/past",
+        "pointer": "/units/0/lessons/3/blocks/2/cells/8/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/0/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/present",
+        "pointer": "/units/0/lessons/3/blocks/1/cells/0/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/1/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/present",
+        "pointer": "/units/0/lessons/3/blocks/1/cells/1/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/2/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/present",
+        "pointer": "/units/0/lessons/3/blocks/1/cells/2/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N14",
+        "field": "cells/3/formKey",
+        "hard": false,
+        "message": "this form is not verified",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop/blocks/present",
+        "pointer": "/units/0/lessons/3/blocks/1/cells/3/formKey",
+        "severity": "warn"
+      },
+      {
+        "code": "N3",
+        "field": "",
+        "hard": false,
+        "message": "about 0% of running words are known; N3 asks for 95%",
+        "path": "units/unit-types/lessons/type-e-story-tf/blocks/listen",
+        "pointer": "/units/0/lessons/4/blocks/3",
+        "severity": "warn"
+      },
+      {
+        "code": "N3",
+        "field": "",
+        "hard": false,
+        "message": "about 0% of running words are known; N3 asks for 95%",
+        "path": "units/unit-types/lessons/type-e-story-tf/blocks/story",
+        "pointer": "/units/0/lessons/4/blocks/0",
+        "severity": "warn"
+      }
+    ],
+    "revision": 17,
+    "status": "published",
+    "truncated": false
+  },
+  "isError": false
+}

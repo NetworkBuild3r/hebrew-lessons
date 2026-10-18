@@ -6,12 +6,17 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 )
 
 // Client does not follow redirects. A 302 is a response to record, not a hop.
+// Jar, when non-nil, stores Set-Cookie values and sends them back. A nil Jar
+// leaves cookies untouched, which is what the transport tests want.
 type Client struct {
 	HTTP *http.Client
+	Jar  map[string]string
 }
 
 // New returns a client with a bounded timeout.
@@ -49,6 +54,11 @@ func (c *Client) Do(ctx context.Context, method, url string, headers map[string]
 		}
 		req.Header.Set(k, v)
 	}
+	if c.Jar != nil && req.Header.Get("Cookie") == "" {
+		if cookie := c.cookieHeader(); cookie != "" {
+			req.Header.Set("Cookie", cookie)
+		}
+	}
 	res, err := c.HTTP.Do(req)
 	if err != nil {
 		return nil, err
@@ -58,5 +68,37 @@ func (c *Client) Do(ctx context.Context, method, url string, headers map[string]
 	if err != nil {
 		return nil, err
 	}
+	c.absorbCookies(res.Header)
 	return &Exchange{Status: res.StatusCode, Header: res.Header.Clone(), Body: buf}, nil
+}
+
+func (c *Client) absorbCookies(h http.Header) {
+	if c.Jar == nil {
+		return
+	}
+	for _, line := range h.Values("Set-Cookie") {
+		pair, _, _ := strings.Cut(line, ";")
+		name, value, ok := strings.Cut(pair, "=")
+		name = strings.TrimSpace(name)
+		if !ok || name == "" {
+			continue
+		}
+		c.Jar[name] = strings.TrimSpace(value)
+	}
+}
+
+func (c *Client) cookieHeader() string {
+	if len(c.Jar) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(c.Jar))
+	for name := range c.Jar {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	parts := make([]string, len(names))
+	for i, name := range names {
+		parts[i] = name + "=" + c.Jar[name]
+	}
+	return strings.Join(parts, "; ")
 }

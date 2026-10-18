@@ -1,6 +1,6 @@
 # Contract suite
 
-Black-box tests that freeze the Node server's HTTP and MCP behavior so a later Go port can be gated on the same goldens. The harness is a separate Go module. It uses the standard library only (`go test` and `net/http`) and does not import the MCP SDK or any server code.
+Black-box tests that freeze the Node server's HTTP and MCP behavior so a later Go port can be gated on the same goldens. The harness is a separate Go module. It uses `go test` and `net/http` and does not import the MCP SDK or any server code. The schema dump uses pure-Go `modernc.org/sqlite` (no cgo).
 
 PR1 covers the harness, transport and auth basics, `initialize`, and the canonical `tools/list` for all 42 tools. Later PRs add the tool calls, error matrix, OAuth, web routes, and the Go server.
 
@@ -18,7 +18,7 @@ The runner pins `TZ=UTC`, creates a fresh `DATA_DIR`, starts `CONTRACT_SERVER_CM
 
 On Linux the runner uses `setsid` when it is on `PATH`, so the command is its own session and process group. macOS has no `setsid`. There the runner turns on bash monitor mode for the launch only, which gives the command its own process group, then turns monitor mode off again. Teardown is the same on both: signal that group, signal any descendant that left the group, then `SIGKILL` if it is still alive. No extra packages are required.
 
-`LESSONS_DIR` is left unset. Node then serves the repo `worksheets/` directory in place. Do not point `LESSONS_DIR` at a partial tree: `server/start.js` copies any missing seed lesson into `LESSONS_DIR`. There is no `contract/fixtures/lessons` tree in this suite. Nothing read it. A later seed phase can add a trimmed tree; that tree must omit the adult `anal-sex-vocab` lesson and audio blobs.
+Lessons come from `fixtures/lessons` (only `my-morning`, `shai-date-indirect-speech`, `_template`, and a catalog that lists those two). The runner copies that tree and sets both `LESSONS_DIR` and `HEBREW_ROOT/worksheets` to the copy. Startup's copy-missing step is then a no-op, so lessons that live only in the repo `worksheets/` directory are not filled back in. `shared/` is symlinked from the repo so the web app still finds its files. `HEBREW_ROOT` has no `.env`, so a developer `.env` in the repo is not loaded. The adult worksheet slug and audio blobs are not in that tree.
 
 If `CONTRACT_WEB_URL`, `CONTRACT_MCP_URL`, `CONTRACT_MCP_TOKEN`, and `CONTRACT_MCP_PUBLIC_URL` are already set, the runner does not boot a server. It only runs the tests.
 
@@ -68,8 +68,12 @@ Compared files:
 
 - `golden/mcp/initialize.json` — the `initialize` result
 - `golden/mcp/tools-list.json` — canonical `tools/list`
+- `golden/db/schema.sql` — `sqlite_master`, `schema_migrations` (applied_at masked), `user_version`, `journal_mode`
+- `golden/mcp/calls/<tool>/<case>.json` — one read-only tool call. Success and domain errors are `{isError, content}` with `content` parsed when the tool text is JSON. Validation cases are `{category, field, message}` with message `<validation>`. `transportForm` is stored and not compared.
 
 `golden/mcp/tools-list.raw.json` is the server's SSE data line for `tools/list` (the JSON-RPC message, pretty-printed, server key order kept). The suite compares it. Volatile values are masked on the live payload and on the file, then both are encoded with sorted object keys. Key order in the file is not part of the contract. `$schema`, empty `properties`, and the rest of the wire message are. `tools-list.json` stays the portability golden: it is the `result` after schema canonicalization. Update mode rewrites the raw file from the live payload and keeps the server's key order.
+
+`fixtures/db/seeded.sqlite` is the database after the seed, written in update mode. Later boots can copy it. A normal run does not byte-compare it (password salts and session hashes change); it checks that the file's schema matches `golden/db/schema.sql`.
 
 Regenerate, then review the diff. Do not update a golden to hide an unintended server change.
 
@@ -81,7 +85,7 @@ UPDATE_GOLDEN=1 contract/run.sh
 
 `go test -update` also works when run from this directory against an already-booted server. `run.sh -update` is the path that reaches every package, because it sets `UPDATE_GOLDEN` instead of passing a flag packages do not all define.
 
-Volatile values are masked before a golden is written: UUIDs, ISO timestamps, epoch fields (`exp`, `iat`, `updatedAt`, and the other names in `internal/normalize/mask.go`), OAuth tokens, and session cookie values. Cookie attributes stay. `Date` and `cf-*` headers are dropped. Descriptions, titles, names, enums, defaults, and input schemas are not masked. Numeric revision counters are left as-is until the domain-error goldens land; a bare integer is ambiguous.
+Volatile values are masked before a golden is written: UUIDs, ISO timestamps, epoch fields (`exp`, `iat`, `updatedAt`, and the other names in `internal/normalize/mask.go`), OAuth tokens, and session cookie values. Cookie attributes stay. `Date` and `cf-*` headers are dropped. Numeric revision counters are left as-is when the seed order makes them deterministic. A bare integer is not masked. Strings that contain an id or a timestamp are masked even when the id is only part of the sentence. Descriptions, titles, names, enums, defaults, and input schemas are not masked.
 
 ## Schema canonicalizer
 
@@ -100,6 +104,59 @@ Volatile values are masked before a golden is written: UUIDs, ISO timestamps, ep
 Enum value order is frozen on purpose. `["shared", "personal"]` and `["working", "published"]` are not alphabetical, and a reorder should fail the golden.
 
 `execution: {"taskSupport": "forbidden"}` is kept. Node emits it on every tool. It is not in the canonicalizer's strip list.
+
+## Seed
+
+`internal/seed` runs after boot, through the admin HTTP API and MCP, before the read-only cases:
+
+1. Sign in as the bootstrap admin (`POST /api/session`).
+2. Create `learner` (`POST /api/admin/users`) and turn AI planning on (`PATCH /api/admin/users/:id/ai-planning`).
+3. Create `learner-off` and leave AI planning off, so `planning_off` has an account.
+4. `set_lesson_visibility`: `my-morning` is `everyone`; `shai-date-indirect-speech` is `{users: ["learner"]}`.
+5. `upsert_lexicon_entries` from `fixtures/plans/lexicon-ledaber.json` (`expectedRev` 0), then `add_library_words` for `learner` (`לדבר`, `מדבר`). Lexicon is written before publish because the verb-workshop lesson will not publish without those keys.
+6. `create_plan` id `five-lesson-types-sample` from `fixtures/plans/five-lesson-types.plan.json` (copied from `test/fixtures/lesson-types/five-lesson-types.plan.json`). The first lesson's blocks are inserted with `insert_block` (index 0, reverse order). The placeholder block is removed with `remove_block`. Each lesson's visibility is set to `everyone` with `set_field`. The other four lessons are inserted with `insert_lesson`. `publish_plan` then runs.
+7. `create_plan` id `draft-plan` is left unpublished so `diff_plan` can return `no_snapshot`.
+
+`upsert_lesson` is not called. The worksheet files are the fixture, and a call would generate audio unless `audio` is false. No ElevenLabs, OpenAI, or Google key is set.
+
+Regenerate the database fixture and the goldens together:
+
+```sh
+contract/run.sh -update
+```
+
+That rewrites `fixtures/db/seeded.sqlite` and every compared golden. Review the diff. The adult worksheet slug must not appear under `contract/`; `internal/fixturecheck` fails the run if it does.
+
+## DB schema
+
+`db_schema_test.go` opens `hebrew.sqlite` read-only with `modernc.org/sqlite` (no cgo) after boot and again after the seed. Both dumps must match `golden/db/schema.sql`, and the committed fixture must match that same text. The harness does not migrate.
+
+## Read-only tool cases
+
+| Tool | Cases |
+| --- | --- |
+| `list_lessons` | happy |
+| `get_lesson` | happy, bad_slug, missing, missing_slug (validation) |
+| `list_words` | happy, one_lesson, unknown_slug |
+| `list_activity_types` | happy |
+| `list_users` | happy |
+| `read_part` | plan, block, unknown_id, missing_path |
+| `suggest_glosses` | story, not_a_story, unknown_id |
+| `plan_image` | missing_key, missing_prompt (validation) |
+| `list_plans` | happy, limit_zero (validation) |
+| `list_plan_revisions` | happy, unknown_id |
+| `get_plan_revision` | happy, missing_revision, unknown_id |
+| `diff_plan` | published_to_working, unknown_id, no_snapshot, missing_from (validation) |
+| `list_plan_issues` | happy, unknown_id |
+| `get_learner_profile` | happy, planning_off, unknown_user, missing_username (validation) |
+| `check_text_coverage` | happy, planning_off, unknown_user, invalid_text |
+| `list_grammar_concepts` | happy |
+| `list_lexicon` | search, invalid_pos, cursor |
+| `get_lexicon_entry` | happy, missing |
+
+`get_learner_profile` and `check_text_coverage` write an audit row and share a 60-read hourly cap. The seed does not call them. The cases above are the whole count for one run.
+
+Goldens for `list_users` assume the runner defaults: admin `contract-admin`, display name `Contract Admin`.
 
 ## What this PR does not freeze
 

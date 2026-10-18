@@ -118,6 +118,34 @@ func NormalizeRaw(body []byte) ([]byte, error) {
 	return Marshal(normalize.Mask(v))
 }
 
+// CompareBytes checks got against golden/<rel> as raw text. The body is stored
+// with a trailing newline. In update mode the file is written and the test passes.
+func CompareBytes(t *testing.T, rel string, body []byte) {
+	t.Helper()
+	if !bytes.HasSuffix(body, []byte("\n")) {
+		body = append(append([]byte{}, body...), '\n')
+	}
+	path := filepath.Join(Root(t), rel)
+	if Update() {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, body, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("updated golden %s", rel)
+		return
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read golden %s: %v (set UPDATE_GOLDEN=1 to create it)", rel, err)
+	}
+	if bytes.Equal(want, body) {
+		return
+	}
+	t.Fatalf("golden mismatch %s\n%s", rel, firstDiff(want, body))
+}
+
 // writePretty saves informational bytes in update mode. rel is relative to
 // the contract module root. Key order in body is preserved.
 func writePretty(t *testing.T, rel string, body []byte) {

@@ -1,0 +1,753 @@
+{
+  "content": {
+    "actorKind": "ai",
+    "actorName": "mcp",
+    "at": "<timestamp>",
+    "client": null,
+    "document": {
+      "assigneeId": null,
+      "audience": "shared",
+      "id": "five-lesson-types-sample",
+      "language": {
+        "gloss": "en",
+        "target": "he"
+      },
+      "revision": 17,
+      "schemaVersion": "1.2.0",
+      "status": "published",
+      "title": "Five lesson types (INIT-012 sample)",
+      "units": [
+        {
+          "id": "unit-types",
+          "lessons": [
+            {
+              "blocks": [
+                {
+                  "fromLessons": [
+                    "earlier-morning"
+                  ],
+                  "id": "review",
+                  "type": "spaced-review-checkpoint",
+                  "wordKeys": [
+                    "בוקר",
+                    "קפה"
+                  ]
+                },
+                {
+                  "id": "intro",
+                  "pattern": {
+                    "heading": "Sentence frames",
+                    "rules": [
+                      {
+                        "english": "Use אֲנִי + present verb.",
+                        "example": "אֲנִי שׁוֹתֶה קָפֶה בַּבֹּקֶר.",
+                        "title": "I … in the morning"
+                      }
+                    ]
+                  },
+                  "type": "introduction",
+                  "words": [
+                    {
+                      "group": 1,
+                      "id": "w1",
+                      "meaning": "morning",
+                      "sentence": "בֹּקֶר טוֹב.",
+                      "translit": "boker",
+                      "word": "בֹּקֶר"
+                    },
+                    {
+                      "group": 1,
+                      "id": "w2",
+                      "meaning": "sun",
+                      "sentence": "הַשֶּׁמֶשׁ זוֹרַחַת.",
+                      "translit": "shemesh",
+                      "word": "שֶׁמֶשׁ"
+                    },
+                    {
+                      "group": 1,
+                      "id": "w3",
+                      "meaning": "gets up",
+                      "sentence": "אֲנִי קָם מֵאֵיל.",
+                      "translit": "kam",
+                      "word": "קָם"
+                    },
+                    {
+                      "group": 2,
+                      "id": "w4",
+                      "meaning": "shower",
+                      "sentence": "אַחַר הַמִּשְׁחָה אֲנִי לוֹבֵשׁ.",
+                      "translit": "mishcha",
+                      "word": "מִשְׁחָה"
+                    },
+                    {
+                      "group": 2,
+                      "id": "w5",
+                      "meaning": "light",
+                      "sentence": "יֵשׁ אוֹר בַּחֶדֶר.",
+                      "translit": "or",
+                      "word": "אוֹר"
+                    },
+                    {
+                      "group": 2,
+                      "id": "w6",
+                      "meaning": "kitchen",
+                      "sentence": "אֲנִי בַּמִטְבָּח.",
+                      "translit": "mitbach",
+                      "word": "מִטְבָּח"
+                    },
+                    {
+                      "group": 3,
+                      "id": "w7",
+                      "meaning": "coffee",
+                      "sentence": "אֲנִי שׁוֹתֶה קָפֶה.",
+                      "translit": "kafe",
+                      "word": "קָפֶה"
+                    },
+                    {
+                      "group": 3,
+                      "id": "w8",
+                      "meaning": "bread",
+                      "sentence": "אֲנִי אוֹכֵל לֶחֶם.",
+                      "translit": "lechem",
+                      "word": "לֶחֶם"
+                    },
+                    {
+                      "group": 3,
+                      "id": "w9",
+                      "meaning": "work",
+                      "sentence": "אַחַר הַבֹּקֶר יֵשׁ עֲבוֹדָה.",
+                      "translit": "avoda",
+                      "word": "עֲבוֹדָה"
+                    }
+                  ]
+                },
+                {
+                  "id": "dialogue",
+                  "lines": [
+                    {
+                      "id": "l1",
+                      "pointed": "אַתָּה שׁוֹתֶה קָפֶה אוֹ תֵּה?",
+                      "speaker": "learner"
+                    },
+                    {
+                      "id": "l2",
+                      "pointed": "אֲנִי שׁוֹתֶה קָפֶה בַּבֹּקֶר.",
+                      "speaker": "learner"
+                    }
+                  ],
+                  "source": "authored",
+                  "type": "short-dialogue"
+                },
+                {
+                  "answer": "either",
+                  "id": "about-you",
+                  "prompts": [
+                    {
+                      "en": "What do you do in the morning?",
+                      "he": "מָה אַתָּה עוֹשֶׂה בַּבֹּקֶר?",
+                      "id": "p1"
+                    }
+                  ],
+                  "type": "personal-question"
+                },
+                {
+                  "homework": [
+                    "Read your sentences aloud once before the next lesson."
+                  ],
+                  "id": "write",
+                  "minSentences": 6,
+                  "prompt": "כתבו שישה משפטים על הבוקר שלכם. Write six sentences about your weekday morning.",
+                  "type": "assignment",
+                  "useWords": [
+                    "בֹּקֶר",
+                    "קָפֶה",
+                    "מִטְבָּח"
+                  ]
+                }
+              ],
+              "buildsOn": [],
+              "id": "type-a-weekday-morning",
+              "level": "basic",
+              "newWords": [],
+              "recipe": "topic-conversation",
+              "recycles": [],
+              "title": "Five lesson types (INIT-012 sample)",
+              "visibility": "everyone"
+            },
+            {
+              "blocks": [
+                {
+                  "cloze": {
+                    "items": [
+                      {
+                        "answer": "שֻׁלְחָן",
+                        "id": "c1",
+                        "textPost": " יֵשׁ כּוֹס.",
+                        "textPre": "עַל הַ"
+                      }
+                    ]
+                  },
+                  "id": "words",
+                  "type": "introduction",
+                  "words": [
+                    {
+                      "id": "w1",
+                      "meaning": "table",
+                      "sentence": "עַל הַשֻּׁלְחָן יֵשׁ סֵפֶר.",
+                      "translit": "shulchan",
+                      "word": "שֻׁלְחָן"
+                    },
+                    {
+                      "id": "w2",
+                      "meaning": "chair",
+                      "sentence": "הַכִּסֵּא לְיַד הַשֻּׁלְחָן.",
+                      "translit": "kise",
+                      "word": "כִּסֵּא"
+                    }
+                  ]
+                },
+                {
+                  "heading": "Pick the correct sentence",
+                  "id": "pick",
+                  "items": [
+                    {
+                      "answer": "בַּמִטְבָּח יֵשׁ שֻׁלְחָן.",
+                      "choices": [
+                        "בַּמִטְבָּח יֵשׁ שֻׁלְחָן.",
+                        "בַּמִטְבָּח יֵשׁ כֶּלֶב.",
+                        "בַּגִּנָּה יֵשׁ עֵץ."
+                      ],
+                      "id": "ch-1",
+                      "prompt": "Which sentence means kitchen table?",
+                      "why": "שֻׁלְחָן is table."
+                    }
+                  ],
+                  "kind": "choose",
+                  "type": "exercise"
+                },
+                {
+                  "id": "order",
+                  "items": [
+                    {
+                      "alt": [],
+                      "english": "The chair is next to the table.",
+                      "id": "us-1",
+                      "words": [
+                        "הַכִּסֵּא",
+                        "לְיַד",
+                        "הַשֻּׁלְחָן"
+                      ]
+                    }
+                  ],
+                  "kind": "unscramble",
+                  "type": "exercise"
+                },
+                {
+                  "id": "numbers",
+                  "items": [
+                    {
+                      "accept": [
+                        "שלש"
+                      ],
+                      "answer": "שלוש",
+                      "english": "three",
+                      "id": "tr-1"
+                    }
+                  ],
+                  "kind": "translate",
+                  "type": "exercise"
+                },
+                {
+                  "glosses": {
+                    "כִּסֵּא": "chair",
+                    "שֻׁלְחָן": "table"
+                  },
+                  "id": "readings",
+                  "paragraphs": [
+                    {
+                      "id": "p1",
+                      "text": "בַּבֹּקֶר אֲנִי נִכְנָס לַמִטְבָּח. עַל הַשֻּׁלְחָן יֵשׁ כּוֹס וְסֵפֶר."
+                    },
+                    {
+                      "id": "p2",
+                      "text": "הַכִּסֵּא לְיַד הַחַלּוֹן. אַחַר הַאֲרוּחָה אֲנִי קוֹרֵא מְעַט."
+                    }
+                  ],
+                  "questions": [
+                    {
+                      "id": "q1",
+                      "question": "Where is the chair?"
+                    }
+                  ],
+                  "support": [
+                    {
+                      "en": "table",
+                      "he": "שֻׁלְחָן",
+                      "id": "s1"
+                    },
+                    {
+                      "en": "chair",
+                      "he": "כִּסֵּא",
+                      "id": "s2"
+                    }
+                  ],
+                  "type": "graded-story"
+                },
+                {
+                  "homework": [
+                    "Bring one new word you looked up while writing."
+                  ],
+                  "id": "homework",
+                  "minSentences": 4,
+                  "prompt": "Write four sentences using שֻׁלְחָן and כִּסֵּא.",
+                  "type": "assignment",
+                  "useWords": [
+                    "שֻׁלְחָן",
+                    "כִּסֵּא"
+                  ]
+                }
+              ],
+              "buildsOn": [],
+              "id": "type-b-review-sheet",
+              "level": "basic",
+              "newWords": [
+                "שֻׁלְחָן",
+                "כִּסֵּא"
+              ],
+              "recipe": "review-worksheet",
+              "recycles": [],
+              "subtitle": "Review worksheet sample (match: dependent INIT-010 SPEC-004)",
+              "title": "Review — kitchen and table",
+              "visibility": "everyone"
+            },
+            {
+              "blocks": [
+                {
+                  "id": "verse",
+                  "newWords": [
+                    "בְּרֵאשִׁית",
+                    "בָּרָא",
+                    "אֱלֹהִים"
+                  ],
+                  "personalQuestion": {
+                    "en": "What does the verse say in your own words?",
+                    "he": "מָה הַפָּסוּק אוֹמֵר בְּמִלִּים שֶׁלְּךָ?"
+                  },
+                  "questions": [
+                    {
+                      "en": "Who created?",
+                      "he": "מִי בָּרָא?",
+                      "id": "q1"
+                    }
+                  ],
+                  "ref": {
+                    "book": "Genesis",
+                    "chapter": 1,
+                    "from": 1,
+                    "source": "Westminster Leningrad Codex (public domain)",
+                    "to": 1
+                  },
+                  "type": "verse-reading",
+                  "verse": "בְּרֵאשִׁית בָּרָא אֱלֹהִים אֵת הַשָּׁמַיִם וְאֵת הָאָרֶץ."
+                },
+                {
+                  "id": "pivot",
+                  "sections": [
+                    {
+                      "heading": "Past tense cue",
+                      "id": "s1",
+                      "paragraphs": [
+                        "The verb בָּרָא is past tense. In Modern Hebrew you might say בָּרָא or use a present frame when retelling."
+                      ]
+                    }
+                  ],
+                  "title": "Modern Hebrew pivot",
+                  "type": "explainer"
+                },
+                {
+                  "id": "num",
+                  "items": [
+                    {
+                      "accept": [
+                        "אחד"
+                      ],
+                      "answer": "אחת",
+                      "english": "one",
+                      "id": "n1"
+                    },
+                    {
+                      "accept": [
+                        "שניים"
+                      ],
+                      "answer": "שתיים",
+                      "english": "two",
+                      "id": "n2"
+                    }
+                  ],
+                  "kind": "translate",
+                  "type": "exercise"
+                },
+                {
+                  "answer": "either",
+                  "id": "you",
+                  "prompts": [
+                    {
+                      "en": "Which word in the verse is new for you?",
+                      "he": "אֵיזֶה מִלָּה בַּפָּסוּק חֲדָשָׁה לְךָ?",
+                      "id": "p1"
+                    }
+                  ],
+                  "type": "personal-question"
+                }
+              ],
+              "buildsOn": [],
+              "id": "type-c-genesis-1-1",
+              "level": "basic",
+              "newWords": [],
+              "recipe": "verse-reading",
+              "recycles": [],
+              "subtitle": "Verse reading sample",
+              "title": "Genesis 1:1",
+              "visibility": "everyone"
+            },
+            {
+              "blocks": [
+                {
+                  "id": "rule",
+                  "sections": [
+                    {
+                      "heading": "One root, nine persons",
+                      "id": "s1",
+                      "paragraphs": [
+                        "The verb לְדַבֵּר uses the same nine person slots as past tense. Future forms are draft until a person verifies them."
+                      ]
+                    }
+                  ],
+                  "title": "Future tense",
+                  "type": "explainer"
+                },
+                {
+                  "cells": [
+                    {
+                      "cell": "ms",
+                      "formKey": "מדבר"
+                    },
+                    {
+                      "cell": "fs",
+                      "formKey": "מדברת"
+                    },
+                    {
+                      "cell": "mp",
+                      "formKey": "מדברים"
+                    },
+                    {
+                      "cell": "fp",
+                      "formKey": "מדברות"
+                    }
+                  ],
+                  "id": "present",
+                  "lemmaKey": "לדבר",
+                  "mode": "study",
+                  "questions": [
+                    {
+                      "en": "What do you speak about?",
+                      "he": "מָה אַתָּה מְדַבֵּר?",
+                      "id": "q1"
+                    }
+                  ],
+                  "sentences": [
+                    {
+                      "en": "I speak with a friend.",
+                      "he": "אֲנִי מְדַבֵּר עִם חָבֵר.",
+                      "id": "s1"
+                    }
+                  ],
+                  "tense": "present",
+                  "type": "conjugation-table"
+                },
+                {
+                  "cells": [
+                    {
+                      "cell": "1s",
+                      "formKey": "דברתי"
+                    },
+                    {
+                      "cell": "2ms",
+                      "formKey": "דברת"
+                    },
+                    {
+                      "cell": "2fs",
+                      "formKey": "דברת-2fs"
+                    },
+                    {
+                      "cell": "3ms",
+                      "formKey": "דבר"
+                    },
+                    {
+                      "cell": "3fs",
+                      "formKey": "דברה"
+                    },
+                    {
+                      "cell": "1p",
+                      "formKey": "דברנו"
+                    },
+                    {
+                      "cell": "2mp",
+                      "formKey": "דברתם"
+                    },
+                    {
+                      "cell": "2fp",
+                      "formKey": "דברתן"
+                    },
+                    {
+                      "cell": "3p",
+                      "formKey": "דברו"
+                    }
+                  ],
+                  "id": "past",
+                  "lemmaKey": "לדבר",
+                  "mode": "study",
+                  "questions": [
+                    {
+                      "en": "When did you speak?",
+                      "he": "מָתַי דִּבַּרְתָּ?",
+                      "id": "q1"
+                    }
+                  ],
+                  "sentences": [
+                    {
+                      "en": "Yesterday I spoke with him.",
+                      "he": "אֲתָמוֹל דִּבַּרְתִּי עִמּוֹ.",
+                      "id": "s1"
+                    }
+                  ],
+                  "tense": "past",
+                  "type": "conjugation-table"
+                },
+                {
+                  "cells": [
+                    {
+                      "cell": "1s",
+                      "formKey": "אדבר"
+                    },
+                    {
+                      "cell": "2ms",
+                      "formKey": "תדבר"
+                    },
+                    {
+                      "cell": "2fs",
+                      "formKey": "תדברי"
+                    },
+                    {
+                      "cell": "3ms",
+                      "formKey": "ידבר"
+                    },
+                    {
+                      "cell": "3fs",
+                      "formKey": "תדבר-3fs"
+                    },
+                    {
+                      "cell": "1p",
+                      "formKey": "נדבר"
+                    },
+                    {
+                      "cell": "2mp",
+                      "formKey": "תדברו"
+                    },
+                    {
+                      "cell": "2fp",
+                      "formKey": "תדברנה"
+                    },
+                    {
+                      "cell": "3p",
+                      "formKey": "ידברו"
+                    }
+                  ],
+                  "id": "future",
+                  "lemmaKey": "לדבר",
+                  "mode": "study",
+                  "questions": [
+                    {
+                      "en": "When will you (f.) speak?",
+                      "he": "מָתַי תְּדַבְּרִי?",
+                      "id": "q1"
+                    }
+                  ],
+                  "sentences": [
+                    {
+                      "en": "Tomorrow I will speak with him.",
+                      "he": "מָחָר אֲנִי אֲדַבֵּר עִמּוֹ.",
+                      "id": "s1"
+                    }
+                  ],
+                  "tense": "future",
+                  "type": "conjugation-table"
+                },
+                {
+                  "cells": [
+                    {
+                      "cell": "1s",
+                      "formKey": "אדבר"
+                    },
+                    {
+                      "cell": "2ms",
+                      "formKey": "תדבר"
+                    },
+                    {
+                      "cell": "2fs",
+                      "formKey": "תדברי"
+                    },
+                    {
+                      "cell": "3ms",
+                      "formKey": "ידבר"
+                    },
+                    {
+                      "cell": "3fs",
+                      "formKey": "תדבר-3fs"
+                    },
+                    {
+                      "cell": "1p",
+                      "formKey": "נדבר"
+                    },
+                    {
+                      "cell": "2mp",
+                      "formKey": "תדברו"
+                    },
+                    {
+                      "cell": "2fp",
+                      "formKey": "תדברנה"
+                    },
+                    {
+                      "cell": "3p",
+                      "formKey": "ידברו"
+                    }
+                  ],
+                  "id": "drill",
+                  "lemmaKey": "לדבר",
+                  "mode": "drill",
+                  "tense": "future",
+                  "type": "conjugation-table"
+                }
+              ],
+              "buildsOn": [],
+              "id": "type-d-ledaber-workshop",
+              "level": "basic",
+              "newWords": [],
+              "recipe": "verb-workshop",
+              "recycles": [],
+              "subtitle": "Verb workshop with future tense",
+              "title": "לְדַבֵּר — to speak",
+              "visibility": "everyone"
+            },
+            {
+              "blocks": [
+                {
+                  "glosses": {
+                    "יָם": "sea",
+                    "פַּרְק": "park"
+                  },
+                  "id": "story",
+                  "paragraphs": [
+                    {
+                      "id": "p1",
+                      "text": "בַּיּוֹם שִׁשִּׁי הוֹלְכִים לַפַּרְק. הַיָּם קָרוֹב וְהָאֲוִיר נָעִים."
+                    }
+                  ],
+                  "questions": [
+                    {
+                      "id": "q1",
+                      "question": "Where do they go on Friday?"
+                    }
+                  ],
+                  "support": [
+                    {
+                      "en": "park",
+                      "he": "פַּרְק",
+                      "id": "s1"
+                    }
+                  ],
+                  "type": "graded-story"
+                },
+                {
+                  "id": "tf",
+                  "items": [
+                    {
+                      "answer": true,
+                      "id": "tf-1",
+                      "statement": "הַיָּם קָרוֹב לַפַּרְק.",
+                      "why": "יָם means sea; the story says the sea is close."
+                    }
+                  ],
+                  "kind": "true-false",
+                  "type": "exercise"
+                },
+                {
+                  "id": "pick",
+                  "items": [
+                    {
+                      "answer": "בַּיּוֹם שִׁשִּׁי הוֹלְכִים לַפַּרְק.",
+                      "choices": [
+                        "בַּיּוֹם שִׁשִּׁי הוֹלְכִים לַפַּרְק.",
+                        "בַּיּוֹם רִאשׁוֹן הוֹלְכִים לַבִּיְתָה סֵפֶר.",
+                        "הַיָּם רָחוֹק מִן הָעִיר."
+                      ],
+                      "id": "ch-1",
+                      "prompt": "Which sentence matches the story?",
+                      "why": "The story opens with Friday and the park."
+                    }
+                  ],
+                  "kind": "choose",
+                  "type": "exercise"
+                },
+                {
+                  "id": "listen",
+                  "passage": "מַיִם.",
+                  "questions": [
+                    {
+                      "id": "lq1",
+                      "question": "What word did you hear?"
+                    }
+                  ],
+                  "type": "listening"
+                },
+                {
+                  "id": "dictation",
+                  "items": [
+                    {
+                      "accept": [
+                        "מיים"
+                      ],
+                      "answer": "מַיִם",
+                      "audioPath": "clip.mp3",
+                      "id": "di-1"
+                    }
+                  ],
+                  "kind": "dictation",
+                  "type": "exercise"
+                }
+              ],
+              "buildsOn": [],
+              "id": "type-e-story-tf",
+              "level": "basic",
+              "newWords": [],
+              "recipe": "review-worksheet",
+              "recycles": [],
+              "subtitle": "Graded story with true/false and dictation",
+              "title": "Short story — the park",
+              "visibility": "everyone"
+            }
+          ],
+          "theme": "Five lesson types (INIT-012 sample)",
+          "title": "Five lesson types (INIT-012 sample)"
+        }
+      ]
+    },
+    "field": "",
+    "op": "publish",
+    "path": "",
+    "revision": 17,
+    "summary": "publish",
+    "tool": "publish_plan"
+  },
+  "isError": false
+}

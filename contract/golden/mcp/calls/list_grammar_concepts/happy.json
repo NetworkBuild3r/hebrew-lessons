@@ -1,0 +1,335 @@
+{
+  "content": {
+    "concepts": [
+      {
+        "colour": null,
+        "family": "binyan",
+        "key": "binyan:paal",
+        "label_en": "paal",
+        "label_he": "פָּעַל",
+        "sort": 1
+      },
+      {
+        "colour": null,
+        "family": "binyan",
+        "key": "binyan:nifal",
+        "label_en": "nifal",
+        "label_he": "נִפְעַל",
+        "sort": 2
+      },
+      {
+        "colour": null,
+        "family": "binyan",
+        "key": "binyan:piel",
+        "label_en": "piel",
+        "label_he": "פִּעֵל",
+        "sort": 3
+      },
+      {
+        "colour": null,
+        "family": "binyan",
+        "key": "binyan:pual",
+        "label_en": "pual",
+        "label_he": "פֻּעַל",
+        "sort": 4
+      },
+      {
+        "colour": null,
+        "family": "binyan",
+        "key": "binyan:hifil",
+        "label_en": "hifil",
+        "label_he": "הִפְעִיל",
+        "sort": 5
+      },
+      {
+        "colour": null,
+        "family": "binyan",
+        "key": "binyan:hufal",
+        "label_en": "hufal",
+        "label_he": "הֻפְעַל",
+        "sort": 6
+      },
+      {
+        "colour": null,
+        "family": "binyan",
+        "key": "binyan:hitpael",
+        "label_en": "hitpael",
+        "label_he": "הִתְפַּעֵל",
+        "sort": 7
+      },
+      {
+        "colour": null,
+        "family": "tense",
+        "key": "tense:infinitive",
+        "label_en": "infinitive",
+        "label_he": "שם פועל",
+        "sort": 8
+      },
+      {
+        "colour": null,
+        "family": "tense",
+        "key": "tense:present",
+        "label_en": "present",
+        "label_he": "זמן הווה",
+        "sort": 9
+      },
+      {
+        "colour": null,
+        "family": "tense",
+        "key": "tense:past",
+        "label_en": "past",
+        "label_he": "זמן עבר",
+        "sort": 10
+      },
+      {
+        "colour": null,
+        "family": "tense",
+        "key": "tense:future",
+        "label_en": "future",
+        "label_he": "זמן עתיד",
+        "sort": 11
+      },
+      {
+        "colour": null,
+        "family": "tense",
+        "key": "tense:imperative",
+        "label_en": "imperative",
+        "label_he": "ציווי",
+        "sort": 12
+      },
+      {
+        "colour": "green",
+        "family": "root-class",
+        "key": "root-class:regular",
+        "label_en": "regular",
+        "label_he": "שלם",
+        "sort": 13
+      },
+      {
+        "colour": "yellow",
+        "family": "root-class",
+        "key": "root-class:lamed-he",
+        "label_en": "lamed-he",
+        "label_he": "ל״ה",
+        "sort": 14
+      },
+      {
+        "colour": "red",
+        "family": "root-class",
+        "key": "root-class:peh-yod",
+        "label_en": "peh-yod",
+        "label_he": "פ״י",
+        "sort": 15
+      },
+      {
+        "colour": "red",
+        "family": "root-class",
+        "key": "root-class:peh-nun",
+        "label_en": "peh-nun",
+        "label_he": "פ״נ",
+        "sort": 16
+      },
+      {
+        "colour": "red",
+        "family": "root-class",
+        "key": "root-class:ayin-vav",
+        "label_en": "ayin-vav",
+        "label_he": "ע״ו",
+        "sort": 17
+      },
+      {
+        "colour": "red",
+        "family": "root-class",
+        "key": "root-class:irregular",
+        "label_en": "irregular",
+        "label_he": "חריג",
+        "sort": 18
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:present.ms",
+        "label_en": "masculine singular",
+        "label_he": null,
+        "sort": 19
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:present.fs",
+        "label_en": "feminine singular",
+        "label_he": null,
+        "sort": 20
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:present.mp",
+        "label_en": "masculine plural",
+        "label_he": null,
+        "sort": 21
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:present.fp",
+        "label_en": "feminine plural",
+        "label_he": null,
+        "sort": 22
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:past.1s",
+        "label_en": "first person singular",
+        "label_he": "אני",
+        "sort": 23
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:past.2ms",
+        "label_en": "second person masculine singular",
+        "label_he": "אתה",
+        "sort": 24
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:past.2fs",
+        "label_en": "second person feminine singular",
+        "label_he": "את",
+        "sort": 25
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:past.3ms",
+        "label_en": "third person masculine singular",
+        "label_he": "הוא",
+        "sort": 26
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:past.3fs",
+        "label_en": "third person feminine singular",
+        "label_he": "היא",
+        "sort": 27
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:past.1p",
+        "label_en": "first person plural",
+        "label_he": "אנחנו",
+        "sort": 28
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:past.2mp",
+        "label_en": "second person masculine plural",
+        "label_he": "אתם",
+        "sort": 29
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:past.2fp",
+        "label_en": "second person feminine plural",
+        "label_he": "אתן",
+        "sort": 30
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:past.3p",
+        "label_en": "third person plural",
+        "label_he": "הם, הן",
+        "sort": 31
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:infinitive.inf",
+        "label_en": "infinitive",
+        "label_he": null,
+        "sort": 32
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:future.1s",
+        "label_en": "first person singular",
+        "label_he": "אני",
+        "sort": 33
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:future.2ms",
+        "label_en": "second person masculine singular",
+        "label_he": "אתה",
+        "sort": 34
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:future.2fs",
+        "label_en": "second person feminine singular",
+        "label_he": "את",
+        "sort": 35
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:future.3ms",
+        "label_en": "third person masculine singular",
+        "label_he": "הוא",
+        "sort": 36
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:future.3fs",
+        "label_en": "third person feminine singular",
+        "label_he": "היא",
+        "sort": 37
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:future.1p",
+        "label_en": "first person plural",
+        "label_he": "אנחנו",
+        "sort": 38
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:future.2mp",
+        "label_en": "second person masculine plural",
+        "label_he": "אתם",
+        "sort": 39
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:future.2fp",
+        "label_en": "second person feminine plural",
+        "label_he": "אתן",
+        "sort": 40
+      },
+      {
+        "colour": null,
+        "family": "cell",
+        "key": "cell:future.3p",
+        "label_en": "third person plural",
+        "label_he": "הם, הן",
+        "sort": 41
+      }
+    ]
+  },
+  "isError": false
+}

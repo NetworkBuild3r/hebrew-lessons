@@ -48,6 +48,17 @@ func TestMaskVolatileValues(t *testing.T) {
 	}
 }
 
+func TestMaskEmbeddedIDInMessage(t *testing.T) {
+	in := map[string]any{
+		"message": `Unknown plan 8ee73fd9-c223-4e01-8dcb-5f0a784eed97 at 2026-10-18T15:04:05Z.`,
+	}
+	got := Mask(in).(map[string]any)
+	want := "Unknown plan " + maskUUID + " at " + maskTimestamp + "."
+	if got["message"] != want {
+		t.Fatalf("message: %#v", got["message"])
+	}
+}
+
 func TestMaskStringInsideSentence(t *testing.T) {
 	in := `Unknown plan 8ee73fd9-c223-4e01-8dcb-5f0a784eed97 at 2026-10-18T15:04:05Z.`
 	got := MaskString(in)

@@ -1,0 +1,212 @@
+{
+  "content": {
+    "revisions": [
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "",
+        "op": "publish",
+        "path": "",
+        "revision": 17,
+        "summary": "publish",
+        "tool": "publish_plan"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "visibility",
+        "op": "set_field",
+        "path": "units/unit-types/lessons/type-e-story-tf",
+        "revision": 16,
+        "summary": "set_field units/unit-types/lessons/type-e-story-tf#visibility",
+        "tool": "set_field"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "",
+        "op": "insert_lesson",
+        "path": "units/unit-types",
+        "revision": 15,
+        "summary": "insert_lesson units/unit-types",
+        "tool": "insert_lesson"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "visibility",
+        "op": "set_field",
+        "path": "units/unit-types/lessons/type-d-ledaber-workshop",
+        "revision": 14,
+        "summary": "set_field units/unit-types/lessons/type-d-ledaber-workshop#visibility",
+        "tool": "set_field"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "",
+        "op": "insert_lesson",
+        "path": "units/unit-types",
+        "revision": 13,
+        "summary": "insert_lesson units/unit-types",
+        "tool": "insert_lesson"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "visibility",
+        "op": "set_field",
+        "path": "units/unit-types/lessons/type-c-genesis-1-1",
+        "revision": 12,
+        "summary": "set_field units/unit-types/lessons/type-c-genesis-1-1#visibility",
+        "tool": "set_field"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "",
+        "op": "insert_lesson",
+        "path": "units/unit-types",
+        "revision": 11,
+        "summary": "insert_lesson units/unit-types",
+        "tool": "insert_lesson"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "visibility",
+        "op": "set_field",
+        "path": "units/unit-types/lessons/type-b-review-sheet",
+        "revision": 10,
+        "summary": "set_field units/unit-types/lessons/type-b-review-sheet#visibility",
+        "tool": "set_field"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "",
+        "op": "insert_lesson",
+        "path": "units/unit-types",
+        "revision": 9,
+        "summary": "insert_lesson units/unit-types",
+        "tool": "insert_lesson"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "visibility",
+        "op": "set_field",
+        "path": "units/unit-types/lessons/type-a-weekday-morning",
+        "revision": 8,
+        "summary": "set_field units/unit-types/lessons/type-a-weekday-morning#visibility",
+        "tool": "set_field"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "",
+        "op": "remove_block",
+        "path": "units/unit-types/lessons/type-a-weekday-morning/blocks/placeholder",
+        "revision": 7,
+        "summary": "remove_block units/unit-types/lessons/type-a-weekday-morning/blocks/placeholder",
+        "tool": "remove_block"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "",
+        "op": "insert_block",
+        "path": "units/unit-types/lessons/type-a-weekday-morning",
+        "revision": 6,
+        "summary": "insert_block units/unit-types/lessons/type-a-weekday-morning",
+        "tool": "insert_block"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "",
+        "op": "insert_block",
+        "path": "units/unit-types/lessons/type-a-weekday-morning",
+        "revision": 5,
+        "summary": "insert_block units/unit-types/lessons/type-a-weekday-morning",
+        "tool": "insert_block"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "",
+        "op": "insert_block",
+        "path": "units/unit-types/lessons/type-a-weekday-morning",
+        "revision": 4,
+        "summary": "insert_block units/unit-types/lessons/type-a-weekday-morning",
+        "tool": "insert_block"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "",
+        "op": "insert_block",
+        "path": "units/unit-types/lessons/type-a-weekday-morning",
+        "revision": 3,
+        "summary": "insert_block units/unit-types/lessons/type-a-weekday-morning",
+        "tool": "insert_block"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "",
+        "op": "insert_block",
+        "path": "units/unit-types/lessons/type-a-weekday-morning",
+        "revision": 2,
+        "summary": "insert_block units/unit-types/lessons/type-a-weekday-morning",
+        "tool": "insert_block"
+      },
+      {
+        "actorKind": "ai",
+        "actorName": "mcp",
+        "at": "<timestamp>",
+        "client": null,
+        "field": "",
+        "op": "create",
+        "path": "",
+        "revision": 1,
+        "summary": "create",
+        "tool": "create_plan"
+      }
+    ],
+    "truncated": false
+  },
+  "isError": false
+}

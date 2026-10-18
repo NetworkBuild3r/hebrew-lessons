@@ -1,0 +1,133 @@
+{
+  "content": [
+    {
+      "item": {
+        "audio": "../_audio/words/806bb3fc99c984531106aeb5.mp3",
+        "id": "1",
+        "meaning": "gets up (m. sg.)",
+        "pos": "verb, present",
+        "sentence": "אֲנִי קָם בַּבֹּקֶר.",
+        "sentenceAudio": "audio/sentences/vocab-1.mp3",
+        "sound": "kam",
+        "translit": "kam",
+        "trap": "One syllable. Stress kam. Past “I got up” is קַמְתִּי.",
+        "word": "קָם"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/a2e3165352468e3a501b294e.mp3",
+        "id": "2",
+        "meaning": "gets up (f. sg.)",
+        "pos": "verb, present",
+        "sentence": "הִיא קָמָה בַּבֹּקֶר.",
+        "sentenceAudio": "audio/sentences/vocab-2.mp3",
+        "sound": "ka-MA",
+        "translit": "kama",
+        "trap": "Feminine ends in ה. Stress the last syllable: ka-MA.",
+        "word": "קָמָה"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/c35c2410e210098ead05320e.mp3",
+        "id": "3",
+        "meaning": "drinks (m. sg.)",
+        "pos": "verb, present",
+        "sentence": "הוּא שׁוֹתֶה קָפֶה.",
+        "sentenceAudio": "audio/sentences/vocab-3.mp3",
+        "sound": "sho-TE",
+        "translit": "shote",
+        "trap": "Stress TE. Infinitive לִשְׁתּוֹת.",
+        "word": "שׁוֹתֶה"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/9634894b7d32e21bcb10e9c6.mp3",
+        "id": "4",
+        "meaning": "drinks (f. sg.)",
+        "pos": "verb, present",
+        "sentence": "הִיא שׁוֹתָה תה.",
+        "sentenceAudio": "audio/sentences/vocab-4.mp3",
+        "sound": "sho-TA",
+        "translit": "shota",
+        "trap": "Feminine ends in ה: sho-TA.",
+        "word": "שׁוֹתָה"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/1d0390a2fc75a4e27a074c66.mp3",
+        "id": "5",
+        "meaning": "morning",
+        "pos": "noun (m.)",
+        "sentence": "בַּבֹּקֶר אֲנִי קָם.",
+        "sentenceAudio": "audio/sentences/vocab-5.mp3",
+        "sound": "BO-ker",
+        "translit": "boker",
+        "trap": "Stress BO. בַּבֹּקֶר means “in the morning.”",
+        "word": "בֹּקֶר"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/d1597cb73a024c66e8fbeffb.mp3",
+        "id": "6",
+        "meaning": "coffee",
+        "pos": "noun (m.)",
+        "sentence": "אֲנִי שׁוֹתֶה קָפֶה.",
+        "sentenceAudio": "audio/sentences/vocab-6.mp3",
+        "sound": "ka-FE",
+        "translit": "kafe",
+        "trap": "Stress FE. Not English “coffee” rhythm.",
+        "word": "קָפֶה"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/39eadd11f599ed07bdd27a7d.mp3",
+        "id": "7",
+        "meaning": "afterwards / then",
+        "pos": "adverb",
+        "sentence": "אַחַר כָּךְ אֲנִי יוֹצֵא.",
+        "sentenceAudio": "audio/sentences/vocab-7.mp3",
+        "sound": "a-KHAR-kakh",
+        "translit": "achar kakh",
+        "trap": "Two words. Soft ח in אַחַר.",
+        "word": "אַחַר כָּךְ"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/38b6df2167d3c0fab5230bdc.mp3",
+        "id": "8",
+        "meaning": "goes out (m. sg.)",
+        "pos": "verb, present",
+        "sentence": "אֲנִי יוֹצֵא לָעֲבוֹדָה.",
+        "sentenceAudio": "audio/sentences/vocab-8.mp3",
+        "sound": "yo-TZE",
+        "translit": "yotze",
+        "trap": "צ is “tz.” yo-TZE. Feminine יוֹצֵאת.",
+        "word": "יוֹצֵא"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    }
+  ],
+  "isError": false
+}

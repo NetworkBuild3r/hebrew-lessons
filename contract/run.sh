@@ -143,8 +143,12 @@ cleanup() {
   fi
   if [[ "${KEEP_DATA:-}" == "1" ]]; then
     echo "contract: kept DATA_DIR=$DATA_DIR"
+    echo "contract: kept HEBREW_ROOT=${HEBREW_ROOT:-}"
   else
     rm -rf "$DATA_DIR"
+    if [[ -n "${LESSONS_ROOT:-}" ]]; then
+      rm -rf "$LESSONS_ROOT"
+    fi
   fi
   exit "$status"
 }
@@ -168,8 +172,18 @@ unset GOOGLE_OAUTH_CLIENT_SECRET || true
 unset GOOGLE_CLIENT_ID || true
 unset GOOGLE_CLIENT_SECRET || true
 
-# LESSONS_DIR stays unset. Node serves repo worksheets/ in place. Setting
-# LESSONS_DIR makes server/start.js copy any missing seed lesson into it.
+# The fixture is two lessons plus _template and catalog.js. server/start.js
+# copies any missing seed from HEBREW_ROOT/worksheets into LESSONS_DIR, which
+# would pull the rest of the repo worksheets (including lessons the fixture
+# omits) if HEBREW_ROOT stayed the repo. Point both at the same copy so that
+# copy is a no-op. shared/ is linked so the web app still resolves its files.
+LESSONS_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/hebrew-contract-lessons.XXXXXX")"
+mkdir -p "$LESSONS_ROOT"
+cp -a "$CONTRACT_DIR/fixtures/lessons" "$LESSONS_ROOT/worksheets"
+ln -s "$ROOT/shared" "$LESSONS_ROOT/shared"
+export HEBREW_ROOT="$LESSONS_ROOT"
+export LESSONS_DIR="$LESSONS_ROOT/worksheets"
+export CONTRACT_LESSONS_DIR="$LESSONS_DIR"
 
 if [[ -n "${CONTRACT_SERVER_CMD:-}" ]]; then
   CMD="$CONTRACT_SERVER_CMD"
