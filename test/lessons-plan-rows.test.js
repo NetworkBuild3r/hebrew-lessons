@@ -12,10 +12,17 @@ const path = require('path');
 const vm = require('vm');
 
 const SRC = fs.readFileSync(path.resolve(__dirname, '..', 'shared', 'lessons-page.js'), 'utf8');
+const PATHS = fs.readFileSync(path.resolve(__dirname, '..', 'shared', 'learning-paths.js'), 'utf8');
 
 function load(catalog, planLessons) {
+    const catalogErrors = [];
     const sandbox = {
         HEBREW_CATALOG: catalog,
+        console: {
+            error(...args) {
+                catalogErrors.push(args.map((part) => String(part && part.message ? part.message : part)).join(' '));
+            }
+        },
         HebrewApi: {
             get(url) {
                 if (url === '/api/plans/catalog') {
@@ -27,9 +34,12 @@ function load(catalog, planLessons) {
             }
         }
     };
+    sandbox.catalogErrors = catalogErrors;
     sandbox.globalThis = sandbox;
     vm.createContext(sandbox);
+    vm.runInContext(PATHS, sandbox);
     vm.runInContext(SRC, sandbox);
+    sandbox.HebrewLessonsPage.catalogErrors = catalogErrors;
     return sandbox.HebrewLessonsPage;
 }
 
@@ -76,12 +86,26 @@ describe('Lessons page: published plan lessons', () => {
     });
 
     it('shows worksheet lessons when the plan catalog fails', async () => {
-        const html = await mounted(load(
+        const page = load(
             [{ slug: 'my-morning', title: 'Morning', level: 'basic' }],
             new Error('offline')
-        ));
+        );
+        const html = await mounted(page);
         assert.match(html, /data-lesson-slug="my-morning"/);
         assert.doesNotMatch(html, /data-plan-id/);
+        assert.match(page.catalogErrors.join('\n'), /plan catalog failed/);
+        assert.match(page.catalogErrors.join('\n'), /offline/);
+    });
+
+    it('logs an unusable catalog body instead of painting an empty plan list', async () => {
+        const page = load(
+            [{ slug: 'my-morning', title: 'Morning', level: 'basic' }],
+            null
+        );
+        const html = await mounted(page);
+        assert.match(html, /data-lesson-slug="my-morning"/);
+        assert.doesNotMatch(html, /data-plan-id/);
+        assert.match(page.catalogErrors.join('\n'), /plan catalog unusable/);
     });
 
     it('lists worksheet lessons first, then plan lessons', async () => {
@@ -99,6 +123,93 @@ describe('Lessons page: published plan lessons', () => {
         });
         assert.doesNotMatch(html, /data-plan-id/);
         assert.match(html, /data-lessons-state="filtered-empty"/);
+    });
+
+    it('renders plan cards for 35 rows that share one plan id and an empty recipe', async () => {
+        const planId = 'bdf0aee7-7c57-4982-a351-78063ff567e9';
+        const lessons = [];
+        for (let i = 0; i < 35; i += 1) {
+            lessons.push({
+                planId: planId,
+                planTitle: 'מסלול לימוד — Learning path',
+                unitId: 'u1-routine',
+                topic: 'Routine',
+                lessonId: i === 0 ? 'br-01-yesh-li-raayon' : ('br-' + String(i + 1).padStart(2, '0') + '-lesson'),
+                title: i === 0 ? 'יש לי רעיון' : ('Lesson ' + i),
+                recipe: ''
+            });
+        }
+        const shelf = [];
+        for (let i = 0; i < 13; i += 1) {
+            shelf.push({ slug: 'shelf-' + i, title: 'Shelf ' + i, level: 'basic' });
+        }
+        const html = await mounted(load(shelf, lessons));
+        assert.equal((html.match(/data-plan-id=/g) || []).length, 35);
+        assert.match(html, /data-lesson-id="br-01-yesh-li-raayon"/);
+        assert.match(html, /data-level-filter="all"[^>]*aria-pressed="true"/);
+        assert.equal((html.match(/data-learning-path=/g) || []).length, 1);
+        assert.match(html, /href="\/shared\/plan\/\?id=bdf0aee7-7c57-4982-a351-78063ff567e9"/);
+        assert.ok(html.indexOf('data-learning-path=') < html.indexOf('data-lesson-slug="shelf-0"'));
+        assert.ok(html.indexOf('data-lesson-slug="shelf-0"') < html.indexOf('data-plan-id="'));
+        assert.match(html, /<bdi lang="he">מסלול לימוד — Learning path<\/bdi>/);
+        assert.match(html, /class="path-meta"/);
+        assert.match(html, /35 lessons/);
+        assert.match(html, /35 שיעורים/);
+        assert.match(html, /class="icon path-chevron icon-directional"/);
+        assert.doesNotMatch(html, /class="ui-he"[^>]*>מסלול לימוד/);
+    });
+
+    it('renders no learning path on Lessons when there are zero plans', () => {
+        const page = load([], []);
+        const html = page.render({
+            state: 'ready',
+            filter: 'all',
+            rows: [],
+            planRows: [],
+            planIds: []
+        });
+        assert.equal(html.includes('data-learning-path'), false);
+        assert.equal(html.includes('path-title'), false);
+        assert.equal(html.includes('מסלול'), false);
+        assert.equal(html.includes('Learning path'), false);
+    });
+
+    it('keeps the learning path link when a level filter hides plan lessons', () => {
+        const page = load([], []);
+        const html = page.render({
+            state: 'ready',
+            filter: 'basic',
+            rows: [{
+                lesson: { slug: 'my-morning', title: 'Morning', level: 'basic' },
+                index: 0,
+                status: { kind: 'new', rank: 1, tone: 'fresh', chipHe: 'חדש', chipEn: 'new' }
+            }],
+            planRows: [WORKSHOP],
+            planIds: ['bdf0aee7-7c57-4982-a351-78063ff567e9']
+        });
+        assert.match(html, /data-learning-path="bdf0aee7-7c57-4982-a351-78063ff567e9"/);
+        assert.match(html, /Learning path/);
+        assert.match(html, /מסלול לימוד/);
+        assert.match(html, /data-lesson-slug="my-morning"/);
+        assert.doesNotMatch(html, /data-plan-id/);
+        assert.doesNotMatch(html, /class="path-all"/);
+    });
+
+    it('lists every plan on Lessons', () => {
+        const page = load([], []);
+        const html = page.render({
+            state: 'ready',
+            filter: 'all',
+            rows: [],
+            planRows: [],
+            planIds: [
+                { id: 'first-plan', title: 'ראשון', lessons: 1, units: 1 },
+                { id: 'second-plan', title: 'שני', lessons: 2, units: 1 }
+            ]
+        });
+        assert.match(html, /data-learning-path="first-plan"/);
+        assert.match(html, /data-learning-path="second-plan"/);
+        assert.doesNotMatch(html, /class="path-all"/);
     });
 
     it('escapes a title', async () => {

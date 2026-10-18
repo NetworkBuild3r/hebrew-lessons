@@ -159,6 +159,14 @@
         return '/worksheets/' + encodeURIComponent(String(slug || '')) + '/';
     }
 
+    var Paths = root.HebrewLearningPaths
+        || (typeof require === 'function' ? require('./learning-paths.js') : null);
+
+    function renderPathCards(planIds) {
+        if (!Paths) return '';
+        return Paths.render(planIds, { firstOnly: true, allPaths: true, today: true });
+    }
+
     function pickContinue(list, progressBySlug, now) {
         var best = null;
         for (var i = 0; i < list.length; i += 1) {
@@ -951,12 +959,22 @@
      */
     function loadVerbs(signal, user) {
         var Api = root.HebrewApi;
-        if (!Api || typeof Api.get !== 'function') return Promise.resolve(null);
+        if (!Api || typeof Api.get !== 'function') return Promise.resolve({ verbs: null, planIds: [] });
         return Api.get('/api/plans/catalog', { redirectOn401: false, signal: signal })
             .then(function (res) {
-                var rows = res && res.ok && res.data && Array.isArray(res.data.lessons) ? res.data.lessons : [];
+                var rows = res && res.ok && res.data && Array.isArray(res.data.lessons) ? res.data.lessons : null;
+                if (!rows) {
+                    if (root.console && typeof root.console.error === 'function') {
+                        root.console.error('[today] plan catalog unusable', {
+                            status: res && res.status,
+                            error: res && res.error
+                        });
+                    }
+                    return { verbs: null, planIds: [] };
+                }
+                var planIds = Paths ? Paths.summaries(rows) : [];
                 var lessons = rows.filter(function (row) { return row && row.recipe === 'verb-workshop'; }).length;
-                if (!lessons) return null;
+                if (!lessons) return { verbs: null, planIds: planIds };
                 var VP = root.HebrewVerbPractice;
                 var summary = { due: 0, known: 0 };
                 if (VP && typeof VP.loadLadder === 'function') {
@@ -964,17 +982,27 @@
                     try { storage = root.localStorage; } catch (err) { storage = null; }
                     summary = VP.dueSummary(VP.loadLadder(storage, user), Date.now());
                 }
-                return { lessons: lessons, due: summary.due, known: summary.known };
+                return {
+                    verbs: { lessons: lessons, due: summary.due, known: summary.known },
+                    planIds: planIds
+                };
             })
-            .catch(function () { return null; });
+            .catch(function (err) {
+                if (root.console && typeof root.console.error === 'function') {
+                    root.console.error('[today] plan catalog failed', err);
+                }
+                return { verbs: null, planIds: [] };
+            });
     }
 
     function renderToday(model) {
         if (!model || model.state === 'loading') return renderLoading();
         if (model.state === 'error') return renderError(model.message);
         var list = model.catalog || [];
-        if (!list.length) return renderEmptyCatalog();
+        var planIds = model.planIds || [];
+        if (!list.length && !planIds.length) return renderEmptyCatalog();
         var parts = [];
+        parts.push(renderPathCards(planIds));
         parts.push(renderMixCard(model.mix));
         parts.push(renderReviewCard(model.review || {}, model.brandNew));
         parts.push(renderVerbsCard(model.verbs));
@@ -1071,8 +1099,10 @@
             if (!pair || mounted !== el) return;
             if (signal && signal.aborted) return;
             var model = buildModel(pair[0] || Object.create(null));
+            var catalogBits = pair[2] || { verbs: null, planIds: [] };
             model.mix = pair[1];
-            model.verbs = pair[2];
+            model.verbs = catalogBits.verbs;
+            model.planIds = catalogBits.planIds || [];
             paint(el, model);
         }).catch(function (err) {
             if (mounted !== el) return;

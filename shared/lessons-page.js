@@ -80,6 +80,9 @@
         return '/shared/plan/?id=' + encodeURIComponent(planId) + '&lesson=' + encodeURIComponent(lessonId);
     }
 
+    var Paths = root.HebrewLearningPaths
+        || (typeof require === 'function' ? require('./learning-paths.js') : null);
+
     function isHebrewText(value) {
         return /[\u0590-\u05FF]/.test(String(value || ''));
     }
@@ -101,6 +104,13 @@
             out.push(row);
         }
         return out;
+    }
+
+    function renderPaths(planIds) {
+        if (!Paths) return '';
+        var cards = Paths.render(planIds);
+        if (!cards) return '';
+        return '<div class="home-list lessons-paths">' + cards + '</div>';
     }
 
     function renderPlanCard(row) {
@@ -234,7 +244,7 @@
         var filter = model.filter || 'all';
         var rows = model.rows || [];
         var planRows = model.planRows || [];
-        var html = renderFilter(filter);
+        var html = renderPaths(model.planIds) + renderFilter(filter);
 
         if (!rows.length && !planRows.length && filter === 'all') {
             return html + renderNoLessons();
@@ -290,14 +300,38 @@
         });
     }
 
-    /** Published plan lessons this session may read. An error here never hides the worksheet lessons. */
+    function emptyCatalog() {
+        return { rows: [], planIds: [] };
+    }
+
+    function logCatalog(message, detail) {
+        if (root.console && typeof root.console.error === 'function') {
+            root.console.error('[lessons] ' + message, detail);
+        }
+    }
+
+    /**
+     * Published plan lessons this session may read, plus one id per plan for the path link.
+     * An error here never hides the worksheet lessons.
+     */
     function loadPlanRows() {
         var Api = root.HebrewApi;
-        if (!Api || typeof Api.get !== 'function') return Promise.resolve([]);
+        if (!Api || typeof Api.get !== 'function') return Promise.resolve(emptyCatalog());
         return Api.get('/api/plans/catalog', { redirectOn401: false }).then(function (res) {
-            return res && res.ok && res.data ? planRowsOnly(res.data.lessons) : [];
-        }).catch(function () {
-            return [];
+            var lessons = res && res.ok && res.data && Array.isArray(res.data.lessons)
+                ? res.data.lessons
+                : null;
+            if (!lessons) {
+                logCatalog('plan catalog unusable', {
+                    status: res && res.status,
+                    error: res && res.error
+                });
+                return emptyCatalog();
+            }
+            return { rows: planRowsOnly(lessons), planIds: Paths ? Paths.summaries(lessons) : [] };
+        }).catch(function (err) {
+            logCatalog('plan catalog failed', err);
+            return emptyCatalog();
         });
     }
 
@@ -346,11 +380,13 @@
         }).then(function (loaded) {
             if (mounted !== el) return;
             var progressBySlug = loaded[0];
+            var catalogLoad = loaded[1] || emptyCatalog();
             var model = {
                 state: 'ready',
                 filter: 'all',
                 rows: buildRows(progressBySlug || Object.create(null), Date.now()),
-                planRows: loaded[1] || []
+                planRows: catalogLoad.rows || [],
+                planIds: catalogLoad.planIds || []
             };
             paint(el, model);
             bindFilter(el, model);

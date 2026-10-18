@@ -1179,6 +1179,9 @@ textarea {
     display: grid;
     gap: 1rem;
 }
+.lessons-paths {
+    margin-block-end: var(--space-4);
+}
 .today-card .today-card-body {
     cursor: default;
 }
@@ -6999,6 +7002,10 @@ html[data-ui-lang="he"] [data-plan-builder] .plan-help-en {
         grid-column: 1 / -1;
     }
 
+    .today-list[data-today-state="ready"] > [data-learning-path] {
+        grid-column: 1 / -1;
+    }
+
     .lessons-list,
     .home-list.lessons-list {
         display: grid;
@@ -8159,4 +8166,86 @@ section[data-block-type="conjugation-table"][data-mode="drill"][data-drill-owner
     .vp-map-verb [lang="en"] { display: none; }
     .vp-sq { width: 0.5rem; height: 0.5rem; }
     .vp-map-group { gap: 2px; }
+}
+
+/* Learning path row. Shared .card / .lesson-card rules stay as they are.
+   English chrome is left-to-right, so this card follows that and text-align:start
+   sits on the left. Hebrew keeps the page direction, and the chevron flips with it. */
+html:not([data-ui-lang="he"]) [data-learning-path] {
+    direction: ltr;
+}
+[data-learning-path] {
+    text-align: start;
+    padding: 0;
+    border-inline-start: 4px solid var(--color-primary);
+}
+.lessons-page article[data-learning-path],
+.today-page article[data-learning-path] {
+    padding: 0;
+}
+[data-learning-path] > .lesson-link {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 44px;
+    box-sizing: border-box;
+    text-align: start;
+}
+[data-learning-path] > .lesson-link:focus-visible,
+[data-learning-path] .path-all:focus-visible {
+    outline: var(--focus-width) solid var(--color-focus);
+    outline-offset: calc(-1 * var(--focus-width));
+}
+[data-learning-path] > .lesson-link:active {
+    background: var(--color-primary-soft);
+}
+[data-learning-path] .path-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+[data-learning-path] .path-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.3;
+}
+[data-learning-path] .path-meta {
+    margin: 0;
+    color: var(--color-muted);
+    font-size: 0.92rem;
+}
+[data-learning-path] .path-chevron {
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    margin-inline-start: auto;
+    color: var(--color-muted);
+}
+html:not([data-ui-lang="he"]) [data-learning-path] .path-chevron {
+    transform: none;
+}
+html[data-ui-lang="he"] [data-learning-path] .path-chevron {
+    transform: scaleX(-1);
+}
+[data-learning-path] .path-all {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 1.3rem 0.85rem;
+    color: var(--color-muted);
+    font-weight: 600;
+    text-decoration: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+    html:not([data-ui-lang="he"]) [data-learning-path] > .lesson-link:hover .path-chevron {
+        transform: translateX(2px);
+    }
+    html[data-ui-lang="he"] [data-learning-path] > .lesson-link:hover .path-chevron {
+        transform: scaleX(-1) translateX(2px);
+    }
 }

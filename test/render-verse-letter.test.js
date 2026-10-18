@@ -330,6 +330,7 @@ describe('published catalog', () => {
         assert.equal(out.lessons.length, 1);
         assert.deepEqual(out.lessons[0], {
             planId: 'guides-shelf',
+            planTitle: 'Guides',
             unitId: 'verbs',
             topic: 'Verbs',
             lessonId: 'decoding',

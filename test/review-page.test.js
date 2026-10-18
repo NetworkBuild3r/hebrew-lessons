@@ -239,6 +239,7 @@ describe('review page (INIT-001/SPEC-004)', () => {
         assert.deepEqual(today.scripts, [
             '/shared/ui/blocks/conjugation-table.js',
             '/shared/verb-practice.js',
+            '/shared/learning-paths.js',
             '/shared/today-page.js'
         ]);
         assert.match(todayJs, /href="\/review\/"/);

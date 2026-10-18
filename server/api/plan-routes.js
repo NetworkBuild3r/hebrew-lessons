@@ -354,6 +354,7 @@ function catalogFromSnapshots(user, rows) {
         }
         if (!mayReadPublished(user, snapshot)) continue;
         if (!snapshot || snapshot.id !== row.id) continue;
+        const planTitle = clipCatalogText(snapshot.title);
         const units = Array.isArray(snapshot.units) ? snapshot.units : [];
         for (const unit of units) {
             if (lessons.length >= CATALOG_LIMIT) break;
@@ -368,6 +369,7 @@ function catalogFromSnapshots(user, rows) {
                     : '';
                 lessons.push({
                     planId: row.id,
+                    planTitle: planTitle,
                     unitId: unitId,
                     topic: topic,
                     lessonId: lesson.id,
