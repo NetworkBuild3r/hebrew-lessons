@@ -68,5 +68,5 @@ for (const [id, value] of inputs) {
             + ' plan=' + JSON.stringify(plan(value)));
         process.exit(1);
     }
-    process.stdout.write(JSON.stringify({ kind: 'key', id: id, out: got }) + '\n');
+    process.stdout.write(JSON.stringify({ kind: 'key', id: id, in: value, out: got }) + '\n');
 }

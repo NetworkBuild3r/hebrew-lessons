@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -43,15 +42,4 @@ func seedFixture(t *testing.T, body any) (string, map[string]int64, *sql.DB) {
 	}
 	t.Cleanup(func() { conn.Close() })
 	return dir, seeded.Users, conn
-}
-
-func nodeEnv(tz string) []string {
-	env := make([]string, 0, len(os.Environ())+1)
-	for _, item := range os.Environ() {
-		if len(item) >= 3 && item[:3] == "TZ=" {
-			continue
-		}
-		env = append(env, item)
-	}
-	return append(env, "TZ="+tz)
 }

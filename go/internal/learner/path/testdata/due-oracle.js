@@ -56,7 +56,10 @@ for (const item of cases) {
     }
     process.stdout.write(JSON.stringify({
         id: item.id,
+        now: item.now,
+        username: item.username,
         node: process.version,
+        unicode: process.versions.unicode,
         count: deck.cards.length,
         instantCount: instantCount,
         cards: deck.cards.map((card) => ({ word: card.word, direction: card.direction }))

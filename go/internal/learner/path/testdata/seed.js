@@ -1,7 +1,9 @@
 'use strict';
 
 // Seeds a migrated hebrew.sqlite for the Go learner tests.
-// The Go service does not write. This script runs only from go test.
+// The Go service does not write. go test still calls this for the path
+// fixtures that are not the due golden. go/tools/golden/path.js calls it
+// to build the committed due snapshot.
 //
 // usage: node seed.js <data-dir>
 // stdin: JSON { users, reviews, plans, progress, grants }

@@ -4,25 +4,23 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"unicode/utf8"
 )
 
 func TestExactKeyMatchesNode(t *testing.T) {
-	cmd := exec.Command("node", filepath.Join("testdata", "exact-key-oracle.js"))
-	cmd.Env = append(os.Environ(), "DATA_DIR="+t.TempDir())
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("oracle: %v\n%s", err, stderr.String())
+	raw, err := os.ReadFile(filepath.Join("testdata", "golden", "exact-key.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !utf8.Valid(raw) {
+		t.Fatal("golden file is not valid UTF-8")
 	}
 	var space []int
-	keys := map[string]string{}
-	for _, line := range bytes.Split(bytes.TrimSpace(stdout.Bytes()), []byte("\n")) {
+	var node, unicode string
+	keys := map[string]struct{ in, out string }{}
+	for _, line := range bytes.Split(bytes.TrimSpace(raw), []byte("\n")) {
 		if len(bytes.TrimSpace(line)) == 0 {
 			continue
 		}
@@ -32,6 +30,7 @@ func TestExactKeyMatchesNode(t *testing.T) {
 			Unicode string `json:"unicode"`
 			CPs     []int  `json:"cps"`
 			ID      string `json:"id"`
+			In      string `json:"in"`
 			Out     string `json:"out"`
 		}
 		if err := json.Unmarshal(line, &row); err != nil {
@@ -39,25 +38,26 @@ func TestExactKeyMatchesNode(t *testing.T) {
 		}
 		switch row.Kind {
 		case "space":
-			if !strings.HasPrefix(row.Node, "v22.14.") || row.Unicode != "16.0" {
-				t.Fatalf("node %s unicode %s", row.Node, row.Unicode)
+			if row.Node != "v22.14.0" || row.Unicode != "16.0" {
+				t.Fatalf("golden node %s unicode %s", row.Node, row.Unicode)
 			}
+			node, unicode = row.Node, row.Unicode
 			space = row.CPs
 		case "key":
-			keys[row.ID] = row.Out
+			keys[row.ID] = struct{ in, out string }{row.In, row.Out}
 		default:
 			t.Fatalf("kind %s", row.Kind)
 		}
 	}
-	if len(space) == 0 || len(keys) == 0 {
-		t.Fatal("oracle returned no rows")
+	if node != "v22.14.0" || unicode != "16.0" || len(space) == 0 || len(keys) == 0 {
+		t.Fatal("golden is missing the space set or the keys")
 	}
 	gotSpace := map[rune]bool{}
 	for _, cp := range space {
 		r := rune(cp)
 		gotSpace[r] = true
 		if !jsSpace(r) {
-			t.Fatalf("U+%04X is \\s in Node and not in the hardcoded set", cp)
+			t.Fatalf("U+%04X is \\s in the golden and not in the hardcoded set", cp)
 		}
 	}
 	for cp := rune(0); cp <= 0x10FFFF; cp++ {
@@ -65,76 +65,36 @@ func TestExactKeyMatchesNode(t *testing.T) {
 			continue
 		}
 		if jsSpace(cp) && !gotSpace[cp] {
-			t.Fatalf("U+%04X is hardcoded and is not \\s in Node", cp)
+			t.Fatalf("U+%04X is hardcoded and is not \\s in the golden", cp)
 		}
 	}
 
-	for id, want := range keys {
-		in := exactInput(t, id)
-		if got := ExactKey(in); got != want {
-			t.Fatalf("%s:\n go   %q\n node %q", id, got, want)
+	for id, item := range keys {
+		if got := ExactKey(item.in); got != item.out {
+			t.Fatalf("%s:\n go     %q\n golden %q", id, got, item.out)
 		}
-		if !utf8.ValidString(want) {
-			t.Fatalf("%s node output is not utf-8", id)
+		if !utf8.ValidString(item.out) {
+			t.Fatalf("%s golden output is not utf-8", id)
 		}
 	}
-	if keys["reorder"] != keys["ordered"] {
-		t.Fatalf("nikud order did not meet: %q vs %q", keys["reorder"], keys["ordered"])
+	reorder := keys["reorder"]
+	ordered := keys["ordered"]
+	if reorder.out != ordered.out {
+		t.Fatalf("nikud order did not meet: %q vs %q", reorder.out, ordered.out)
 	}
-	if keys["reorder"] == exactInput(t, "reorder") {
+	if reorder.out == reorder.in {
 		t.Fatal("NFC left the swapped nikud order unchanged")
 	}
-	if keys["u1c89"] != "a\u1C89b" || keys["u1fae9"] != "a\U0001FAE9b" {
+	if keys["u1c89"].out != "a\u1C89b" || keys["u1fae9"].out != "a\U0001FAE9b" {
 		t.Fatalf("astral or cyrillic was treated as space: %#v", keys)
 	}
-	if keys["nel-inside"] != "a\u0085b" || keys["fef"] != "a" {
-		t.Fatalf("FEFF or NEL: fef %q nel %q", keys["fef"], keys["nel-inside"])
+	if keys["nel-inside"].out != "a\u0085b" || keys["fef"].out != "a" {
+		t.Fatalf("FEFF or NEL: fef %q nel %q", keys["fef"].out, keys["nel-inside"].out)
 	}
-	if keys["case"] != "Shalom" {
-		t.Fatalf("lowercased: %q", keys["case"])
+	if keys["case"].out != "Shalom" {
+		t.Fatalf("lowercased: %q", keys["case"].out)
 	}
 	if ExactKey("\xff") != "" {
 		t.Fatal("invalid utf-8 was kept")
-	}
-}
-
-func exactInput(t *testing.T, id string) string {
-	t.Helper()
-	switch id {
-	case "reorder":
-		return "ש\u05C1\u05B8"
-	case "ordered":
-		return "ש\u05B8\u05C1"
-	case "double-space":
-		return "a  b"
-	case "em-space":
-		return "a\u2003b"
-	case "nbsp":
-		return "a\u00A0b"
-	case "fef":
-		return "\uFEFFa\uFEFF"
-	case "nel-inside":
-		return "a\u0085b"
-	case "nel-edge":
-		return "\u0085a\u0085"
-	case "u1c89":
-		return "a\u1C89b"
-	case "u1fae9":
-		return "a\U0001FAE9b"
-	case "case":
-		return "Shalom"
-	case "edges":
-		return " \t\n a \u1680 "
-	case "hebrew-gap":
-		return "שָׁלוֹם  בַּיִת"
-	case "only-space":
-		return " \u3000\uFEFF "
-	case "empty":
-		return ""
-	case "mongolian":
-		return "a\u180Eb"
-	default:
-		t.Fatalf("unknown id %s", id)
-		return ""
 	}
 }
