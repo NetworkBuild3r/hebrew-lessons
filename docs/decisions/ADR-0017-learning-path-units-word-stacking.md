@@ -300,9 +300,9 @@ The 30% fading figure is a product choice.
 
 ### 9. Migration
 
-Observed on 2026-10-18: 13 published lessons, no plans. Hebrew Lesson Builder may start drafting the five units now on schema 1.2.0, using the unit and lesson structure that version already supports (units, `newWords`, `recycles`) and writing toward the stacking ladder. Those plans stayed draft and unpublished until Brian accepted this ADR. The 1.3.0 fields are filled in after the cutover (§11 Sequencing). This record does not add the plans.
+Observed on 2026-10-18: 13 published lessons, no plans. Hebrew Lesson Builder may start drafting the five units now on schema 1.2.0, using the unit and lesson structure that version already supports (units, `newWords`, `recycles`) and writing toward the stacking ladder. Those plans stay draft and unpublished; accepting this ADR does not publish them. Publishing waits for the migration follow-up. The 1.3.0 fields are filled in after the cutover (§11 Sequencing). This record does not add the plans.
 
-Eleven series lessons become five **draft** units. Draft means the plan's `status` is draft ([ADR-0003](ADR-0003-course-and-lesson-plan-language.md) Decision 7). Those plans stayed draft and unpublished until Brian accepted this ADR.
+Eleven series lessons become five **draft** units. Draft means the plan's `status` is draft ([ADR-0003](ADR-0003-course-and-lesson-plan-language.md) Decision 7). Those plans stay draft and unpublished; accepting this ADR does not publish them. Publishing waits for the migration follow-up.
 
 | Draft unit | Lessons, in the order below |
 |------------|-----------------------------|
@@ -351,7 +351,7 @@ This record does not start that work.
 **After the cutover** means Node is retired as the rollback. That means Go has served prod for 14 days with no rollback, and the Node image is no longer the documented rollback. Only after that do the plan tools accept schema 1.3.0, as a versioned contract change, and migration 012+ (`unit_progress`) lands in the Go-owned ledger. Until then the lesson builder authors on schema 1.2.0.
 
 1. The MCP contract is frozen for the Go port ([ADR-0016](ADR-0016-go-server-port.md) keeps the same tool names and schemas through the port). Plan schema 1.3.0 and validators N24–N29 are built in Go after the cutover, not in Node.
-2. Until then, Hebrew Lesson Builder may start drafting the five units now on schema 1.2.0, using the unit and lesson structure that version already supports (units, `newWords`, `recycles`) and writing toward the stacking ladder. Those plans stayed draft and unpublished until Brian accepted this ADR.
+2. Until then, Hebrew Lesson Builder may start drafting the five units now on schema 1.2.0, using the unit and lesson structure that version already supports (units, `newWords`, `recycles`) and writing toward the stacking ladder. Those plans stay draft and unpublished; accepting this ADR does not publish them. Publishing waits for the migration follow-up.
 3. The 1.3.0 fields (`unit_progress`, the gate warning flag, checkpoint score and `passed_at`, and the plan fields in Decision 2) get filled in after the cutover.
 
 ---
@@ -418,7 +418,7 @@ Delete this file. No application file, schema file, database, worksheet, or scre
 | Date | Change |
 |------|--------|
 | 2026-10-18 | Proposed. Records the learning path, schema 1.3.0 (the design spec said 1.2.0, which ADR-0014 already uses), `unit_progress` including the one-time soft-gate flag, the 80% config pass mark, and the migration plan. No schema, code, or lesson file changes with this record. |
-| 2026-10-18 | Sequencing under §11. Schema 1.3.0 and N24–N29 are a Go change after the cutover (§11 Sequencing). Hebrew Lesson Builder may draft the five units on schema 1.2.0 before that. |
-| 2026-10-18 | Drafting the five units on schema 1.2.0 may start now. Those plans stay draft and unpublished until Brian accepts this ADR. The 1.3.0 fields are filled in after the cutover (§11 Sequencing). The checkpoint pass mark and the review-stop threshold belong to the Go learner package config (ADR-0016 layout) after the cutover (§11 Sequencing). Node's `server/learner/thresholds.js` stays unchanged. |
+| 2026-10-18 | Sequencing under §11. Schema 1.3.0 and N24–N29 are a Go change after the ADR-0016 cutover. Hebrew Lesson Builder may draft the five units on schema 1.2.0 before that. |
+| 2026-10-18 | Drafting the five units on schema 1.2.0 may start now. Those plans stay draft and unpublished until Brian accepts this ADR. The 1.3.0 fields are filled in after the Go cutover. The checkpoint pass mark and the review-stop threshold belong to the Go learner package config (ADR-0016 layout) after the cutover. Node's `server/learner/thresholds.js` stays unchanged. |
 | 2026-10-18 | Accepted by Brian Nelson. |
-| 2026-10-18 | Clarification. §11 Sequencing defines "after the cutover": Node is retired as the rollback, which means Go has served prod for 14 days with no rollback and the Node image is no longer the documented rollback. Only after that do the plan tools accept schema 1.3.0, as a versioned contract change, and migration 012+ (`unit_progress`) lands in the Go-owned ledger. Until then the lesson builder authors on schema 1.2.0. Other mentions of the phrase refer to that definition. §9–11 lines that waited on Brian accepting this ADR are in the past tense. No decisions change. |
+| 2026-10-18 | Clarification. §11 Sequencing defines "after the cutover": Node is retired as the rollback, which means Go has served prod for 14 days with no rollback and the Node image is no longer the documented rollback. Only after that do the plan tools accept schema 1.3.0, as a versioned contract change, and migration 012+ (`unit_progress`) lands in the Go-owned ledger. Until then the lesson builder authors on schema 1.2.0. Other mentions of the phrase refer to that definition. §9 (twice) and Sequencing step 2: those plans stay draft and unpublished; accepting this ADR does not publish them. Publishing waits for the migration follow-up. The other §9–11 lines that waited on acceptance are in the past tense. No decisions change. |
