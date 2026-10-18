@@ -5,15 +5,20 @@
 // The snapshot database is the pre-suspend file.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
-const dataDir = path.resolve(process.argv[2]);
-const lessonsDir = path.resolve(process.argv[3]);
-const outPath = path.resolve(process.argv[4]);
-if (!dataDir || !lessonsDir || !outPath) {
-    console.error('usage: golden.js <data-dir> <lessons-dir> <out.jsonl>');
-    process.exit(2);
-}
+// Writes go/internal/learner/library/testdata/golden. Go tests read those
+// files and do not run Node. Regenerate from the repo (Node 22.14.0):
+//
+//   node go/internal/learner/library/testdata/golden.js
+//
+// The working database stays in a temp dir. The committed snapshot is the
+// file from before any suspend write.
+const outDir = path.resolve(process.argv[2] || path.join(__dirname, 'golden'));
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'heb-lib-golden-'));
+const lessonsDir = path.join(dataDir, 'lessons');
+const outPath = path.join(dataDir, 'library.jsonl');
 
 const repo = path.resolve(__dirname, '../../../../..');
 process.env.HEBREW_ROOT = repo;
@@ -37,6 +42,7 @@ const db = require(path.join(repo, 'server/db'));
 const library = require(path.join(repo, 'server/learner/library'));
 const lexicon = require(path.join(repo, 'server/db/repos/lexicon'));
 db.migrate();
+db.run("UPDATE schema_migrations SET applied_at = '2026-01-01T00:00:00.000Z'");
 
 const now = '2026-01-15T12:00:00.000Z';
 const day = (offset) => {
@@ -153,8 +159,9 @@ function columns(table) {
 const snap = path.join(dataDir, 'library.sqlite');
 emit({
     kind: 'meta',
-    db: snap,
-    lessons: lessonsDir,
+    node: process.version,
+    db: 'library.sqlite',
+    lessons: 'lessons',
     now,
     learner,
     other,
@@ -274,3 +281,10 @@ emit({
 db.get('PRAGMA wal_checkpoint(TRUNCATE)');
 db.close();
 fs.writeFileSync(outPath, lines.join('\n') + '\n');
+
+fs.rmSync(outDir, { recursive: true, force: true });
+fs.mkdirSync(outDir, { recursive: true });
+fs.cpSync(lessonsDir, path.join(outDir, 'lessons'), { recursive: true });
+fs.copyFileSync(snap, path.join(outDir, 'library.sqlite'));
+fs.copyFileSync(outPath, path.join(outDir, 'library.jsonl'));
+fs.rmSync(dataDir, { recursive: true, force: true });

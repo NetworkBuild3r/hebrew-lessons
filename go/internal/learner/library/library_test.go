@@ -8,7 +8,6 @@ import (
 	"math"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -78,16 +77,8 @@ func TestCursorRoundTrip(t *testing.T) {
 }
 
 func TestLibraryMatchesNode(t *testing.T) {
-	dataDir := t.TempDir()
-	lessons := t.TempDir()
-	outPath := filepath.Join(dataDir, "library.jsonl")
-	cmd := exec.Command("node", filepath.Join("testdata", "golden.js"), dataDir, lessons, outPath)
-	cmd.Env = nodeEnv()
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node golden: %v\n%s", err, output)
-	}
-	raw, err := os.ReadFile(outPath)
+	base := filepath.Join("testdata", "golden")
+	raw, err := os.ReadFile(filepath.Join(base, "library.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,12 +124,12 @@ func TestLibraryMatchesNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn, err := db.OpenReadOnly(meta.DB)
+	conn, err := db.OpenReadOnly(copyDB(t, filepath.Join(base, meta.DB)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	store := &Store{DB: conn, LessonsDir: meta.Lessons, Now: func() time.Time { return now }}
+	store := &Store{DB: conn, LessonsDir: filepath.Join(base, meta.Lessons), Now: func() time.Time { return now }}
 
 	var full []Item
 	for _, item := range lists {
@@ -205,10 +196,10 @@ func TestLibraryMatchesNode(t *testing.T) {
 		}
 	}
 
-	base := copyDB(t, meta.DB)
-	writer := openRW(t, base)
+	copied := copyDB(t, filepath.Join(base, meta.DB))
+	writer := openRW(t, copied)
 	defer writer.Close()
-	mut := &Store{DB: writer, LessonsDir: meta.Lessons, Now: func() time.Time { return now }, Scheduler: "ladder"}
+	mut := &Store{DB: writer, LessonsDir: filepath.Join(base, meta.Lessons), Now: func() time.Time { return now }, Scheduler: "ladder"}
 	for _, item := range suspends {
 		t.Run("suspend-"+item.ID, func(t *testing.T) {
 			word, err := mut.SetSuspended(context.Background(), item.UserID, item.Key, item.Suspended)
@@ -243,9 +234,9 @@ func TestLibraryMatchesNode(t *testing.T) {
 	}
 
 	t.Run("cursor stable under inserts", func(t *testing.T) {
-		fresh := openRW(t, copyDB(t, meta.DB))
+		fresh := openRW(t, copyDB(t, filepath.Join(base, meta.DB)))
 		defer fresh.Close()
-		stable := &Store{DB: fresh, LessonsDir: meta.Lessons, Now: func() time.Time { return now }, Scheduler: "ladder"}
+		stable := &Store{DB: fresh, LessonsDir: filepath.Join(base, meta.Lessons), Now: func() time.Time { return now }, Scheduler: "ladder"}
 		page, cursor, err := stable.List(context.Background(), meta.Learner, Filter{}, "", 2)
 		if err != nil || len(page) != 2 || cursor == "" {
 			t.Fatalf("page %v cursor %q err %v", page, cursor, err)
@@ -498,15 +489,4 @@ func containsWord(values []string, want string) bool {
 		}
 	}
 	return false
-}
-
-func nodeEnv() []string {
-	out := make([]string, 0, len(os.Environ())+1)
-	for _, value := range os.Environ() {
-		if strings.HasPrefix(value, "TZ=") || strings.HasPrefix(value, "SRS_SCHEDULER=") {
-			continue
-		}
-		out = append(out, value)
-	}
-	return append(out, "TZ=UTC", "SRS_SCHEDULER=ladder")
 }

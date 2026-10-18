@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -191,58 +190,38 @@ func TestClientIPAndProto(t *testing.T) {
 }
 
 func TestOriginMatchesNode(t *testing.T) {
-	cases := []map[string]any{
-		{"id": "public", "publicOrigin": "https://hebrew.example/", "cookieSecure": true, "headers": map[string]string{"host": "127.0.0.1:8090", "origin": "https://hebrew.example"}},
-		{"id": "public-slash", "publicOrigin": "https://hebrew.example", "cookieSecure": true, "headers": map[string]string{"host": "127.0.0.1", "origin": "https://hebrew.example/"}},
-		{"id": "host-https", "cookieSecure": true, "headers": map[string]string{"host": "hebrew.example", "origin": "https://hebrew.example"}},
-		{"id": "host-http", "cookieSecure": false, "headers": map[string]string{"host": "localhost:8090", "origin": "http://localhost:8090"}},
-		{"id": "mismatch", "publicOrigin": "https://hebrew.example", "cookieSecure": true, "headers": map[string]string{"host": "hebrew.example", "origin": "https://evil.example"}},
-		{"id": "missing", "cookieSecure": true, "headers": map[string]string{"host": "hebrew.example"}},
-		{"id": "null-origin-referer", "cookieSecure": true, "headers": map[string]string{"host": "hebrew.example", "origin": "null", "referer": "https://hebrew.example/words/?q=1"}},
-		{"id": "referer-port", "cookieSecure": true, "headers": map[string]string{"host": "hebrew.example", "referer": "https://hebrew.example:443/words/"}},
-		{"id": "bad-referer", "cookieSecure": false, "headers": map[string]string{"host": "hebrew.example", "referer": "not a url"}},
-		{"id": "origin-beats-referer", "publicOrigin": "https://hebrew.example", "cookieSecure": true, "headers": map[string]string{"host": "hebrew.example", "origin": "https://evil.example", "referer": "https://hebrew.example/"}},
-	}
-	dir := t.TempDir()
-	in := filepath.Join(dir, "cases.json")
-	raw, err := json.Marshal(cases)
+	raw, err := os.ReadFile(filepath.Join("testdata", "golden", "origin.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(in, raw, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command("node", filepath.Join("testdata", "origin.js"), in)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node origin: %v\n%s", err, out)
-	}
-	var got []struct {
-		ID      string `json:"id"`
-		Allowed bool   `json:"allowed"`
-		Origin  any    `json:"origin"`
-	}
-	if err := json.Unmarshal(out, &got); err != nil {
-		t.Fatalf("decode %v\n%s", err, out)
-	}
-	if len(got) != len(cases) {
-		t.Fatalf("cases %d", len(got))
-	}
-	for i, item := range got {
-		spec := cases[i]
-		headers := spec["headers"].(map[string]string)
+	var n int
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		var item struct {
+			Kind         string            `json:"kind"`
+			ID           string            `json:"id"`
+			PublicOrigin string            `json:"publicOrigin"`
+			CookieSecure bool              `json:"cookieSecure"`
+			Headers      map[string]string `json:"headers"`
+			Allowed      bool              `json:"allowed"`
+			Origin       any               `json:"origin"`
+		}
+		if err := json.Unmarshal([]byte(line), &item); err != nil {
+			t.Fatal(err)
+		}
+		if item.Kind != "case" {
+			continue
+		}
+		n++
 		req := httptest.NewRequest(http.MethodPost, "/", nil)
-		req.Host = headers["host"]
+		req.Host = item.Headers["host"]
 		req.RemoteAddr = "203.0.113.4:1234"
-		for name, value := range headers {
+		for name, value := range item.Headers {
 			if name == "host" {
 				continue
 			}
 			req.Header.Set(name, value)
 		}
-		pub, _ := spec["publicOrigin"].(string)
-		secure, _ := spec["cookieSecure"].(bool)
-		allowed := OriginAllowed(req, pub, nil, secure)
+		allowed := OriginAllowed(req, item.PublicOrigin, nil, item.CookieSecure)
 		if allowed != item.Allowed {
 			t.Errorf("%s allowed go %v node %v", item.ID, allowed, item.Allowed)
 		}
@@ -254,6 +233,9 @@ func TestOriginMatchesNode(t *testing.T) {
 		if ok != (nodeOrigin != "") || (ok && origin != nodeOrigin) {
 			t.Errorf("%s origin go %q (%v) node %#v", item.ID, origin, ok, item.Origin)
 		}
+	}
+	if n == 0 {
+		t.Fatal("origin.jsonl has no cases")
 	}
 }
 

@@ -1,0 +1,36 @@
+# Regenerates the words-backend goldens from Node and fails if they drift.
+# Separate from .github/workflows/go.yml so go test does not need Node.
+#
+# Runs only on the local ARC scale set (k8-build). Never use GitHub-hosted runners.
+# Node is pinned to 22.14.0 because the golden meta records process.version.
+name: go-words-goldens
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-words-goldens-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  goldens:
+    runs-on: k8-build
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - name: Regenerate goldens
+        run: node go/tools/golden/words.js
+      - name: Goldens match the commit
+        run: |
+          git diff --exit-code -- \
+            go/internal/auth/testdata/golden \
+            go/internal/learner/library/testdata/golden \
+            go/internal/httpx/testdata/golden

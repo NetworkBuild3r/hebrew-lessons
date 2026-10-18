@@ -8,12 +8,17 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const dataDir = path.resolve(process.argv[2]);
-const outPath = path.resolve(process.argv[3]);
-if (!process.argv[2] || !process.argv[3]) {
-    console.error('usage: sessions.js <data-dir> <out.jsonl>');
-    process.exit(2);
-}
+// Writes go/internal/auth/testdata/golden. Go tests read those files and do
+// not run Node. Regenerate from the repo (Node 22.14.0):
+//
+//   node go/internal/auth/testdata/sessions.js
+//
+// Tokens are fixed so the sqlite bytes do not change between runs.
+const outDir = path.resolve(process.argv[2] || path.join(__dirname, 'golden'));
+fs.rmSync(outDir, { recursive: true, force: true });
+fs.mkdirSync(outDir, { recursive: true });
+const dataDir = outDir;
+const outPath = path.join(outDir, 'sessions.jsonl');
 
 const repo = path.resolve(__dirname, '../../../..');
 process.env.HEBREW_ROOT = repo;
@@ -25,6 +30,7 @@ fs.mkdirSync(dataDir, { recursive: true });
 const db = require(path.join(repo, 'server/db'));
 const sessions = require(path.join(repo, 'server/auth/sessions'));
 db.migrate();
+db.run("UPDATE schema_migrations SET applied_at = '2026-01-01T00:00:00.000Z'");
 
 const now = '2026-06-01T00:00:00.000Z';
 const far = '2099-01-01T00:00:00.000Z';
@@ -86,15 +92,15 @@ function emit(row) {
     lines.push(JSON.stringify(row));
 }
 
-emit({ kind: 'meta', db: path.join(dataDir, 'hebrew.sqlite'), now });
+emit({ kind: 'meta', node: process.version, db: 'hebrew.sqlite', now });
 
 const cases = [
-    { name: 'learner', userId: learner, token: null, expires: far, user: learner },
-    { name: 'admin', userId: admin, token: null, expires: far, user: admin },
-    { name: 'expired', userId: learner, token: null, expires: '2020-01-01T00:00:00.000Z', user: null },
-    { name: 'boundary-eq', userId: learner, token: null, expires: now, user: null },
-    { name: 'boundary-after', userId: learner, token: null, expires: '2026-06-01T00:00:00.001Z', user: learner },
-    { name: 'disabled', userId: disabled, token: null, expires: far, user: null },
+    { name: 'learner', userId: learner, token: 'sess-learner', expires: far, user: learner },
+    { name: 'admin', userId: admin, token: 'sess-admin', expires: far, user: admin },
+    { name: 'expired', userId: learner, token: 'sess-expired', expires: '2020-01-01T00:00:00.000Z', user: null },
+    { name: 'boundary-eq', userId: learner, token: 'sess-boundary-eq', expires: now, user: null },
+    { name: 'boundary-after', userId: learner, token: 'sess-boundary-after', expires: '2026-06-01T00:00:00.001Z', user: learner },
+    { name: 'disabled', userId: disabled, token: 'sess-disabled', expires: far, user: null },
     { name: 'unicode', userId: learner, token: 'tok-\u05e9\u05dc\u05d5\u05dd-\u{1F600}', expires: far, user: learner },
     // Nikud (qamats, shin-dot, patah), cantillation (etnachta), emoji, and a non-emoji astral (𝄞).
     { name: 'astral', userId: learner, token: 'tok-\u05E9\u05B8\u05C1\u05DE\u05B7\u0597\u05E2-\u{1F600}-\u{1D11E}', expires: far, user: learner }
@@ -133,4 +139,7 @@ emit({
 
 db.get('PRAGMA wal_checkpoint(TRUNCATE)');
 db.close();
+for (const suffix of ['-wal', '-shm']) {
+    fs.rmSync(path.join(dataDir, 'hebrew.sqlite' + suffix), { force: true });
+}
 fs.writeFileSync(outPath, lines.join('\n') + '\n');

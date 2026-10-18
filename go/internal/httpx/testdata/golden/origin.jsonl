@@ -1,0 +1,11 @@
+{"kind":"meta","node":"v22.14.0"}
+{"kind":"case","id":"public","publicOrigin":"https://hebrew.example/","cookieSecure":true,"headers":{"host":"127.0.0.1:8090","origin":"https://hebrew.example"},"allowed":true,"origin":"https://hebrew.example"}
+{"kind":"case","id":"public-slash","publicOrigin":"https://hebrew.example","cookieSecure":true,"headers":{"host":"127.0.0.1","origin":"https://hebrew.example/"},"allowed":true,"origin":"https://hebrew.example"}
+{"kind":"case","id":"host-https","publicOrigin":"","cookieSecure":true,"headers":{"host":"hebrew.example","origin":"https://hebrew.example"},"allowed":true,"origin":"https://hebrew.example"}
+{"kind":"case","id":"host-http","publicOrigin":"","cookieSecure":false,"headers":{"host":"localhost:8090","origin":"http://localhost:8090"},"allowed":true,"origin":"http://localhost:8090"}
+{"kind":"case","id":"mismatch","publicOrigin":"https://hebrew.example","cookieSecure":true,"headers":{"host":"hebrew.example","origin":"https://evil.example"},"allowed":false,"origin":"https://evil.example"}
+{"kind":"case","id":"missing","publicOrigin":"","cookieSecure":true,"headers":{"host":"hebrew.example"},"allowed":false,"origin":null}
+{"kind":"case","id":"null-origin-referer","publicOrigin":"","cookieSecure":true,"headers":{"host":"hebrew.example","origin":"null","referer":"https://hebrew.example/words/?q=1"},"allowed":true,"origin":"https://hebrew.example"}
+{"kind":"case","id":"referer-port","publicOrigin":"","cookieSecure":true,"headers":{"host":"hebrew.example","referer":"https://hebrew.example:443/words/"},"allowed":true,"origin":"https://hebrew.example"}
+{"kind":"case","id":"bad-referer","publicOrigin":"","cookieSecure":false,"headers":{"host":"hebrew.example","referer":"not a url"},"allowed":false,"origin":null}
+{"kind":"case","id":"origin-beats-referer","publicOrigin":"https://hebrew.example","cookieSecure":true,"headers":{"host":"hebrew.example","origin":"https://evil.example","referer":"https://hebrew.example/"},"allowed":false,"origin":"https://evil.example"}

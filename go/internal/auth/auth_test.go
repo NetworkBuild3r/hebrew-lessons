@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -132,15 +131,8 @@ func TestRequireSession(t *testing.T) {
 }
 
 func TestResolveMatchesNode(t *testing.T) {
-	dataDir := t.TempDir()
-	outPath := filepath.Join(dataDir, "sessions.jsonl")
-	cmd := exec.Command("node", filepath.Join("testdata", "sessions.js"), dataDir, outPath)
-	cmd.Env = nodeEnv()
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node sessions: %v\n%s", err, output)
-	}
-	raw, err := os.ReadFile(outPath)
+	base := filepath.Join("testdata", "golden")
+	raw, err := os.ReadFile(filepath.Join(base, "sessions.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +168,7 @@ func TestResolveMatchesNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn, err := db.OpenReadOnly(meta.DB)
+	conn, err := db.OpenReadOnly(copyFile(t, filepath.Join(base, meta.DB)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,22 +259,24 @@ type sessionCase struct {
 	User       *User  `json:"user"`
 }
 
+func copyFile(t *testing.T, src string) string {
+	t.Helper()
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(t.TempDir(), filepath.Base(src))
+	if err := os.WriteFile(dst, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dst
+}
+
 func sameString(a, b *string) bool {
 	if a == nil || b == nil {
 		return a == nil && b == nil
 	}
 	return *a == *b
-}
-
-func nodeEnv() []string {
-	out := make([]string, 0, len(os.Environ())+1)
-	for _, value := range os.Environ() {
-		if strings.HasPrefix(value, "TZ=") {
-			continue
-		}
-		out = append(out, value)
-	}
-	return append(out, "TZ=UTC")
 }
 
 func TestResolveRejectsNil(t *testing.T) {
