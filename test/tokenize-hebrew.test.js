@@ -82,6 +82,25 @@ describe('tokenizeHebrew', () => {
         assert.ok(stripped.includes('\u05BE'));
     });
 
+    it('maqaf and an ASCII hyphen match in both directions', () => {
+        const maqaf = 'על\u05BEכן';
+        const hyphen = 'על-כן';
+        const pointedMaqaf = '\u05E2\u05B7\u05DC\u05BE\u05DB\u05BC\u05B5\u05DF';
+        const pointedHyphen = '\u05E2\u05B7\u05DC-\u05DB\u05BC\u05B5\u05DF';
+        assert.equal(U.stripVowels(maqaf), 'על\u05BEכן');
+        assert.equal(U.stripVowels(hyphen), 'על\u05BEכן');
+        assert.equal(U.stripVowels(maqaf), U.stripVowels(hyphen));
+        assert.equal(U.stripVowels(hyphen), U.stripVowels(maqaf));
+        assert.equal(U.stripVowels(pointedMaqaf), U.stripVowels(pointedHyphen));
+        assert.equal(U.stripVowels(pointedHyphen), U.stripVowels(maqaf));
+        assert.equal(U.normalizeHebrew(maqaf), 'על\u05BEכן');
+        assert.equal(U.normalizeHebrew(hyphen), 'על\u05BEכן');
+        assert.equal(U.normalizeHebrew(maqaf), U.normalizeHebrew(hyphen));
+        assert.equal(U.normalizeHebrew(hyphen), U.normalizeHebrew(maqaf));
+        assert.equal(U.normalizeHebrew(pointedMaqaf), U.normalizeHebrew(hyphen));
+        assert.equal(U.normalizeHebrew(hyphen), U.normalizeHebrew(pointedMaqaf));
+    });
+
     it('NFC-normalizes input', () => {
         const a = 'קָם'.normalize('NFC');
         const tokens = U.tokenizeHebrew(a);

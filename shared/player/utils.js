@@ -89,14 +89,17 @@
 
     utils.sid = function (id) { return String(id); };
 
-    // Points and cantillation. Maqaf (U+05BE) is punctuation and stays.
+    // Points and cantillation drop. Maqaf (U+05BE) stays. An ASCII hyphen
+    // is the same joiner typed without a Hebrew keyboard, so it becomes a maqaf.
     utils.stripVowels = function (str) {
-        return String(str || '').replace(/[\u0591-\u05BD\u05BF-\u05C7]/g, '');
+        return String(str || '')
+            .replace(/[\u0591-\u05BD\u05BF-\u05C7]/g, '')
+            .replace(/\u002D/g, '\u05BE');
     };
 
     utils.normalizeHebrew = function (str) {
         return utils.stripVowels(str)
-            .replace(/[.,!?;:"'״׳\-–—()]/g, '')
+            .replace(/[.,!?;:"'״׳–—()]/g, '')
             .replace(/\s+/g, ' ')
             .trim();
     };
