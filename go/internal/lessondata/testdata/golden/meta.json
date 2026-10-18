@@ -1,0 +1,8 @@
+{
+  "node": "v22.14.0",
+  "lessonDataSha256": "6ccd5d56389ec3ae6aacaaada3787b60adc6db92d35606d534e354f77d17c523",
+  "generator": "scripts/generate-lessondata-goldens.js",
+  "files": 8,
+  "mutations": 81,
+  "quirks": 80
+}
