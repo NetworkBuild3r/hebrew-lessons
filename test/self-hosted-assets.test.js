@@ -39,7 +39,9 @@ describe('self-hosted fonts and icons', () => {
     it('every font file the stylesheet names exists and is a woff2', () => {
         const css = fs.readFileSync(path.join(ROOT, 'shared', 'worksheet.css'), 'utf8');
         const urls = [...css.matchAll(/url\("(fonts\/[^"]+\.woff2)"\)/g)].map(m => m[1]);
-        assert.equal(urls.length, 3, 'hebrew, latin, latin-ext');
+        const rubik = ['fonts/rubik-hebrew.woff2', 'fonts/rubik-latin.woff2', 'fonts/rubik-latin-ext.woff2'];
+        const guides = ['fonts/noto-sans-hebrew-hebrew.woff2', 'fonts/noto-sans-hebrew-latin.woff2', 'fonts/frank-ruhl-libre-hebrew.woff2'];
+        assert.deepEqual([...urls].sort(), [...rubik, ...guides].sort(), 'Rubik for Node plus the Guides faces');
         for (const rel of urls) {
             const file = path.join(ROOT, 'shared', rel);
             assert.ok(fs.existsSync(file), rel + ' exists');

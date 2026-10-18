@@ -296,7 +296,7 @@ describe('app-shell theme engine (INIT-013/SPEC-002)', () => {
         assert.equal(win.localStorage.getItem('hebrew-theme'), 'light');
     });
 
-    it('renderHtml includes a bilingual theme toggle with no English-only aria-label (ac-3, REQ-016)', () => {
+    it('renderHtml includes a 3-way theme control and shows the resolved theme (ac-3, REQ-016)', () => {
         const html = Shell.renderHtml({
             id: 1,
             username: 'learner',
@@ -305,20 +305,39 @@ describe('app-shell theme engine (INIT-013/SPEC-002)', () => {
             must_change_password: false
         }, '/');
         assert.match(html, /data-theme-toggle/);
-        assert.match(html, /class="hebrew-shell-theme-toggle"/);
-        assert.match(html, /type="button"/);
-        assert.match(html, /מצב כהה/);
-        assert.match(html, /Dark mode/);
-        assert.doesNotMatch(html, /data-theme-toggle[^>]*aria-label=/);
+        assert.match(html, /data-theme-switch/);
+        assert.match(html, /role="radiogroup"/);
+        assert.match(html, /class="theme-switch hebrew-shell-theme-toggle"/);
+        assert.match(html, /בהיר/);
+        assert.match(html, /כהה/);
+        assert.match(html, /אוטומטי/);
+        assert.match(html, /data-theme-choice="auto"[^>]*aria-checked="true"/);
+        assert.match(html, /data-resolved="light"/);
+        assert.match(html, /aria-label="ערכת נושא"/);
+        assert.doesNotMatch(html, /data-theme-toggle[^>]*aria-label="[A-Za-z]/);
         assert.doesNotMatch(html, /hebrew-shell-theme-toggle[^>]*title=/);
+
+        win._colorScheme.matches = true;
+        const autoDark = Shell.renderHtml({
+            id: 1, username: 'learner', display_name: 'Learner', role: 'user', must_change_password: false
+        }, '/');
+        assert.match(autoDark, /data-resolved="dark"/);
+        assert.match(autoDark, /data-theme-choice="auto"[^>]*aria-checked="true"/);
+        assert.match(autoDark, /data-theme-resolved>כהה</);
+        win._colorScheme.matches = false;
 
         Shell.applyTheme('dark');
         const darkHtml = Shell.renderHtml({
             id: 1, username: 'learner', display_name: 'Learner', role: 'user', must_change_password: false
         }, '/');
-        assert.match(darkHtml, /מצב בהיר/);
-        assert.match(darkHtml, /Light mode/);
-        assert.match(darkHtml, /aria-pressed="true"/);
+        assert.match(darkHtml, /data-theme-choice="dark"[^>]*aria-checked="true"/);
+        assert.match(darkHtml, /data-resolved="dark"/);
+        Shell.applyTheme('auto');
+        const back = Shell.renderHtml({
+            id: 1, username: 'learner', display_name: 'Learner', role: 'user', must_change_password: false
+        }, '/');
+        assert.match(back, /data-theme-choice="auto"[^>]*aria-checked="true"/);
+        assert.equal(win.localStorage.getItem('hebrew-theme'), 'auto');
     });
 });
 
