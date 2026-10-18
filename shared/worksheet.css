@@ -5079,6 +5079,7 @@ img.hebrew-logo-mark {
 .lesson-link { padding: 1.15rem 1.3rem; }
 .lesson-card:hover { border-color: #c5d3fb; }
 .lesson-card .fine { font-size: 0.88rem; margin: 0.5rem 0 0; }
+.lesson-card .meta { white-space: nowrap; }
 .lesson-card .lesson-blurb,
 .lesson-blurb {
     margin: 0.4rem 0 0;

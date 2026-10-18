@@ -180,10 +180,15 @@
         var levelHtml = label
             ? bi(label.he, label.en)
             : (lesson.level ? esc(lesson.level) : '');
-        var parts = [];
-        if (subtitle.trim()) parts.push(esc(subtitle.trim()));
+        var parts = subtitle.trim().split(/\s*[\u00b7\u2022|]\s*/).filter(function (part) {
+            return part.trim();
+        }).map(function (part) {
+            return esc(part.trim());
+        });
         if (levelHtml) parts.push('<span class="lesson-level">' + levelHtml + '</span>');
-        return parts.join(' · ');
+        return parts.map(function (html) {
+            return '<span class="meta">' + html + '</span>';
+        }).join(' · ');
     }
 
     /** The catalog blurb is English text: mark it so punctuation and direction are right. */
