@@ -33,7 +33,13 @@ func (s *Service) csrfOK(r *http.Request) bool {
 }
 
 func requestOrigin(r *http.Request) (string, bool) {
-	if raw := strings.TrimSpace(r.Header.Get("Origin")); raw != "" && !strings.EqualFold(raw, "null") {
+	if raw := strings.TrimSpace(r.Header.Get("Origin")); raw != "" {
+		// "null" is the opaque origin browsers send for a privacy-sensitive
+		// or sandboxed request. It is not a missing header, and it does not
+		// fall through to Referer.
+		if strings.EqualFold(raw, "null") {
+			return "", false
+		}
 		return parseAbsoluteOrigin(raw, false)
 	}
 	ref := r.Header.Get("Referer")
@@ -94,9 +100,15 @@ func csrfRequired(r *http.Request) bool {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
 		return false
 	}
-	p := r.URL.Path
-	if p == "/auth/logout" {
-		return true
+	return !csrfExempt(r.URL.Path)
+}
+
+// csrfExempt is the list of mutating paths that skip the CSRF check.
+// There are none. Logout, /_hx/, and every other non-safe method on the
+// learner mux must present Origin or Referer and the session token.
+func csrfExempt(path string) bool {
+	switch path {
+	default:
+		return false
 	}
-	return p == "/_hx" || strings.HasPrefix(p, "/_hx/")
 }

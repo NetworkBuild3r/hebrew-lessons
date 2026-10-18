@@ -49,9 +49,22 @@ func LookupSession(ctx context.Context, store *db.Store, rawID string, now time.
 	return mapUser(user), mapSession(row), nil
 }
 
-// Lookup resolves the cookie value using this service's store and clock.
+// Lookup resolves the cookie value using this service's store and clock,
+// then re-checks the live allowlist. A removed address loses its session
+// rows and returns ErrNoSession. A demoted admin comes back as a learner.
 func (s *Service) Lookup(ctx context.Context, rawID string) (User, Session, error) {
-	return LookupSession(ctx, s.store, rawID, s.now())
+	user, sess, err := LookupSession(ctx, s.store, rawID, s.now())
+	if err != nil {
+		return User{}, Session{}, err
+	}
+	user, ok, err := s.admit(ctx, user)
+	if err != nil {
+		return User{}, Session{}, err
+	}
+	if !ok {
+		return User{}, Session{}, ErrNoSession
+	}
+	return user, sess, nil
 }
 
 func (s *Service) createSession(ctx context.Context, userID int64) (raw string, sess Session, err error) {
@@ -119,18 +132,10 @@ func (s *Service) sessionCookieName() string {
 }
 
 func (s *Service) readSessionCookie(r *http.Request) string {
-	names := []string{s.sessionCookieName(), cookieSessionHost, cookieSession}
-	seen := map[string]bool{}
-	for _, name := range names {
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
-		if v := readCookie(r, name); v != "" {
-			return v
-		}
-	}
-	return ""
+	// Secure mode reads only the __Host- name. A plain hebrew_session
+	// cookie can be planted by a sibling host or a non-HTTPS response,
+	// so it is ignored entirely. Logout still clears both names.
+	return readCookie(r, s.sessionCookieName())
 }
 
 func readCookie(r *http.Request, name string) string {

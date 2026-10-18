@@ -69,15 +69,22 @@ type Config struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 	// Google endpoints. Defaults point at Google. Tests point them at a fake server.
-	GoogleAuthURL     string
-	GoogleTokenURL    string
+	GoogleAuthURL  string
+	GoogleTokenURL string
+	// GoogleUserinfoURL is accepted from the environment so a deployment
+	// can name the endpoint. Sign-in reads email from the ID token and
+	// does not call userinfo.
 	GoogleUserinfoURL string
 	GoogleJWKSURL     string
 	GoogleIssuer      string
 
 	// AllowedEmails is MCP_OAUTH_ALLOWED_EMAILS. AdminEmails is ADMIN_EMAILS.
+	// They seed auth.Access when Access is nil. A non-nil Access is the
+	// live list: sign-in and every later request read it, and Set changes
+	// what the next request allows.
 	AllowedEmails []string
 	AdminEmails   []string
+	Access        *auth.Access
 
 	// MCPAuthToken and MCPPublicURL are recorded for the MCP builder.
 	// Empty values do not stop startup.
@@ -201,6 +208,7 @@ func NewApp(cfg Config) (*App, error) {
 		GoogleIssuer:       cfg.GoogleIssuer,
 		AllowedEmails:      cfg.AllowedEmails,
 		AdminEmails:        cfg.AdminEmails,
+		Access:             cfg.Access,
 		Clock:              cfg.Clock,
 		Store:              store,
 	})

@@ -47,9 +47,12 @@ func (s *Store) CreateUser(ctx context.Context, email, googleSub, role string) (
 	return User{ID: id, Email: email, GoogleSub: googleSub, Role: role, CreatedAt: createdAt}, nil
 }
 
-// UpsertGoogleUser inserts a user or updates the row found by google_sub,
-// falling back to email. email is stored lowercase. created_at comes from
-// the store clock. The call is one transaction.
+// UpsertGoogleUser inserts a user or updates the row found by google_sub.
+// If that subject is new and the email already has a row, the match is the
+// email row and google_sub is rewritten to this subject. That is how a
+// pre-created user becomes the Google account. email is stored lowercase.
+// created_at comes from the store clock on insert and is not changed on
+// update. The call is one transaction.
 func (s *Store) UpsertGoogleUser(ctx context.Context, email, googleSub, role string) (User, error) {
 	if err := s.ready(); err != nil {
 		return User{}, err
@@ -117,6 +120,28 @@ func (s *Store) UpsertGoogleUser(ctx context.Context, email, googleSub, role str
 	u.GoogleSub = googleSub
 	u.Role = role
 	return u, nil
+}
+
+// UpdateUserRole sets users.role. role must be learner or admin.
+func (s *Store) UpdateUserRole(ctx context.Context, id int64, role string) error {
+	if err := s.ready(); err != nil {
+		return err
+	}
+	if role != "learner" && role != "admin" {
+		return fmt.Errorf("db: role %q must be learner or admin", role)
+	}
+	res, err := s.exec(ctx, `UPDATE users SET role = ? WHERE id = ?`, role, id)
+	if err != nil {
+		return fmt.Errorf("db: update user role: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("db: update user role: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // UserByEmail returns the user with that email. The match is lowercase.

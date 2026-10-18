@@ -97,6 +97,19 @@ func (s *Store) DeleteSession(ctx context.Context, idHash string) error {
 	return nil
 }
 
+// DeleteUserSessions removes every session for the user. Used when the
+// address is no longer on the allowlist.
+func (s *Store) DeleteUserSessions(ctx context.Context, userID int64) error {
+	if err := s.ready(); err != nil {
+		return err
+	}
+	_, err := s.exec(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID)
+	if err != nil {
+		return fmt.Errorf("db: delete user sessions: %w", err)
+	}
+	return nil
+}
+
 // DeleteExpiredSessions removes rows whose expires_at is at or before now.
 // Callers run this when they already touch the sessions table.
 func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) error {

@@ -185,6 +185,26 @@ func (s *Service) fetchKeys(ctx context.Context) ([]rsaPublic, error) {
 	if s.jwksURL == "" {
 		return nil, errGoogle
 	}
+	now := s.now()
+	s.jwksMu.Lock()
+	if len(s.jwksKeys) > 0 && now.Before(s.jwksUntil) {
+		keys := s.jwksKeys
+		s.jwksMu.Unlock()
+		return keys, nil
+	}
+	s.jwksMu.Unlock()
+	keys, err := s.fetchKeysUncached(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.jwksMu.Lock()
+	s.jwksKeys = keys
+	s.jwksUntil = s.now().Add(5 * time.Minute)
+	s.jwksMu.Unlock()
+	return keys, nil
+}
+
+func (s *Service) fetchKeysUncached(ctx context.Context) ([]rsaPublic, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.jwksURL, nil)
@@ -256,7 +276,7 @@ func (s *Service) sealState(st oidcState) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	mac := hmac.New(sha256.New, []byte(s.clientSecret))
+	mac := hmac.New(sha256.New, s.stateKey)
 	_, _ = mac.Write(body)
 	return base64.RawURLEncoding.EncodeToString(body) + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
 }
@@ -274,7 +294,7 @@ func (s *Service) openState(token string) (oidcState, error) {
 	if err != nil {
 		return oidcState{}, errBadState
 	}
-	mac := hmac.New(sha256.New, []byte(s.clientSecret))
+	mac := hmac.New(sha256.New, s.stateKey)
 	_, _ = mac.Write(body)
 	if !hmac.Equal(sig, mac.Sum(nil)) {
 		return oidcState{}, errBadState
@@ -297,13 +317,9 @@ func (s *Service) oidcCookieName() string {
 }
 
 func (s *Service) readOIDCCookie(r *http.Request) string {
-	if v := readCookie(r, s.oidcCookieName()); v != "" {
-		return v
-	}
-	if s.oidcCookieName() == cookieOIDCHost {
-		return readCookie(r, cookieOIDC)
-	}
-	return readCookie(r, cookieOIDCHost)
+	// Same rule as the session cookie: secure mode does not read
+	// hebrew_google. The plain name is ignored, not used as a fallback.
+	return readCookie(r, s.oidcCookieName())
 }
 
 func (s *Service) clearOIDCCookie(w http.ResponseWriter) {

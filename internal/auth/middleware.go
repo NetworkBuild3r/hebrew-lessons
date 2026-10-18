@@ -72,7 +72,7 @@ func (s *Service) attach(w http.ResponseWriter, r *http.Request) (*http.Request,
 	if raw == "" {
 		return r, nil
 	}
-	user, sess, err := LookupSession(r.Context(), s.store, raw, s.now())
+	user, sess, err := s.Lookup(r.Context(), raw)
 	if errors.Is(err, ErrNoSession) {
 		s.clearSessionCookies(w)
 		return r, nil

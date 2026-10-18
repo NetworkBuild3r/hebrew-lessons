@@ -46,6 +46,9 @@ func verifyIDToken(tok string, keys []rsaPublic, now time.Time, iss, aud, nonce 
 		Alg string `json:"alg"`
 		Kid string `json:"kid"`
 	}
+	// RS256 is the only accepted alg. none and HS256, including an HMAC
+	// keyed with the RSA public key, are rejected here, before any
+	// signature check.
 	if err := json.Unmarshal(headJSON, &head); err != nil || head.Alg != "RS256" {
 		return identity{}, errBadToken
 	}
@@ -74,6 +77,7 @@ func verifyIDToken(tok string, keys []rsaPublic, now time.Time, iss, aud, nonce 
 		Nonce         string        `json:"nonce"`
 		Email         string        `json:"email"`
 		EmailVerified verifiedClaim `json:"email_verified"`
+		Azp           string        `json:"azp"`
 	}
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		return identity{}, errBadToken
@@ -81,10 +85,19 @@ func verifyIDToken(tok string, keys []rsaPublic, now time.Time, iss, aud, nonce 
 	if !issuerOK(claims.Iss, iss) || !audOK(claims.Aud, aud) {
 		return identity{}, errBadToken
 	}
+	// A list of audiences must name this client in azp. A single audience
+	// may omit azp; a present azp still has to be the client id.
+	if len(claims.Aud) > 1 && claims.Azp == "" {
+		return identity{}, errBadToken
+	}
+	if claims.Azp != "" && claims.Azp != aud {
+		return identity{}, errBadToken
+	}
 	if claims.NBF > 0 && int64(claims.NBF) > now.Unix() {
 		return identity{}, errBadToken
 	}
-	if int64(claims.Exp) <= now.Unix() {
+	// exp is required. A missing claim unmarshals as zero and is rejected.
+	if claims.Exp == 0 || int64(claims.Exp) <= now.Unix() {
 		return identity{}, errBadToken
 	}
 	if claims.Nonce == "" || !tokensEqual(claims.Nonce, nonce) {

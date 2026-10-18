@@ -51,10 +51,11 @@ func TestSessionCookieLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc, err := New(Config{
-		PublicOrigin: "https://hebrew.example",
-		CookieSecure: true,
-		Clock:        clk,
-		Store:        store,
+		PublicOrigin:  "https://hebrew.example",
+		CookieSecure:  true,
+		Clock:         clk,
+		Store:         store,
+		AllowedEmails: []string{"learner@example.com"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -122,6 +123,54 @@ func TestSessionCookieLifecycle(t *testing.T) {
 	cleared := cookieNamed(t, rr, cookieSessionHost)
 	if cleared.Value != "" || cleared.MaxAge > 0 {
 		t.Fatalf("expired cookie not cleared: %+v", cleared)
+	}
+}
+
+func TestSecureModeIgnoresPlainSessionCookie(t *testing.T) {
+	clk := &manualClock{t: time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)}
+	store := openTestStore(t, clk)
+	user, err := store.CreateUser(context.Background(), "learner@example.com", "sub-1", RoleLearner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := New(Config{
+		PublicOrigin:  "https://hebrew.example",
+		CookieSecure:  true,
+		Clock:         clk,
+		Store:         store,
+		AllowedEmails: []string{"learner@example.com"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _, err := svc.createSession(context.Background(), user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /who", func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := CurrentUser(r.Context()); !ok {
+			http.Error(w, "signed out", http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	h := svc.Middleware(mux)
+
+	plain := httptest.NewRequest(http.MethodGet, "/who", nil)
+	plain.AddCookie(&http.Cookie{Name: cookieSession, Value: raw})
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, plain)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("plain cookie was honoured: %d", rr.Code)
+	}
+
+	host := httptest.NewRequest(http.MethodGet, "/who", nil)
+	host.AddCookie(&http.Cookie{Name: cookieSessionHost, Value: raw})
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, host)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("host cookie %d %s", rr.Code, rr.Body.String())
 	}
 }
 

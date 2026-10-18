@@ -18,10 +18,11 @@ func TestCSRFAndLogout(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc, err := New(Config{
-		PublicOrigin: "https://hebrew.example",
-		CookieSecure: false,
-		Clock:        clk,
-		Store:        store,
+		PublicOrigin:  "https://hebrew.example",
+		CookieSecure:  false,
+		Clock:         clk,
+		Store:         store,
+		AllowedEmails: []string{"learner@example.com"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -81,14 +82,27 @@ func TestCSRFAndLogout(t *testing.T) {
 	if rr := call(http.MethodGet, "/_hx/ping", "", "", false); rr.Code != http.StatusNoContent {
 		t.Fatalf("hx get %d", rr.Code)
 	}
-	if rr := call(http.MethodPost, "/elsewhere", "", "", false); rr.Code != http.StatusNoContent {
+	if rr := call(http.MethodPost, "/elsewhere", "", "", false); rr.Code != http.StatusForbidden {
 		t.Fatalf("other post %d", rr.Code)
+	}
+	if rr := call(http.MethodPost, "/elsewhere", sess.CSRF, "", false); rr.Code != http.StatusForbidden {
+		t.Fatalf("token without origin %d", rr.Code)
+	}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/elsewhere", strings.NewReader(""))
+	req.AddCookie(&http.Cookie{Name: cookieSession, Value: raw})
+	req.Header.Set("Origin", "null")
+	req.Header.Set("Referer", "https://hebrew.example/lessons")
+	req.Header.Set("X-CSRF-Token", sess.CSRF)
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("null origin %d", rr.Code)
 	}
 	if rr := call(http.MethodPost, "/_hx/ping", sess.CSRF, "", true); rr.Code != http.StatusNoContent {
 		t.Fatalf("form csrf %d body %s", rr.Code, rr.Body.String())
 	}
 
-	rr := call(http.MethodPost, "/auth/logout", sess.CSRF, "https://hebrew.example", false)
+	rr = call(http.MethodPost, "/auth/logout", sess.CSRF, "https://hebrew.example", false)
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("logout %d %s", rr.Code, rr.Body.String())
 	}
@@ -108,7 +122,13 @@ func TestRequireUserAndAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := New(Config{PublicOrigin: "https://hebrew.example", Clock: clk, Store: store})
+	svc, err := New(Config{
+		PublicOrigin:  "https://hebrew.example",
+		Clock:         clk,
+		Store:         store,
+		AllowedEmails: []string{"learner@example.com"},
+		AdminEmails:   []string{"admin@example.com"},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

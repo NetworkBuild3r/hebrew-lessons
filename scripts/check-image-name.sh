@@ -18,6 +18,11 @@ allow() {
 
 check() {
 	name=$1
+	flat=$(printf '%s' "$name" | tr -d '\012\015')
+	if [ "$flat" != "$name" ]; then
+		echo "refusing image ${name}: name contains a newline" >&2
+		return 1
+	fi
 	case "$name" in
 	*hebrew-lessons*)
 		echo "refusing image ${name}: the name contains hebrew-lessons" >&2
@@ -50,7 +55,8 @@ self_check() {
 		exit 1
 		;;
 	esac
-	for name in "$bare" "$short" "$other"; do
+	multiline=$(printf '%s\nignored' "$good")
+	for name in "$bare" "$short" "$other" "$multiline"; do
 		if check "$name" >/dev/null 2>&1; then
 			echo "self-check: accepted $name" >&2
 			exit 1
