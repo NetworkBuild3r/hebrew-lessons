@@ -764,7 +764,12 @@ async function token(req, res) {
         const clientId = creds.clientId || boundId;
         const client = findClient(clientId);
         if (clientAuthFailed(res, client, creds)) return;
-        const redirectOk = !form.redirect_uri || form.redirect_uri === grant.ru;
+        // RFC 6749 §4.1.3: a code issued with a redirect_uri is redeemed only when
+        // the token request repeats that exact value. Authorize always stores ru.
+        // A grant with no ru still accepts a missing redirect_uri.
+        const redirectOk = grant.ru
+            ? form.redirect_uri === grant.ru
+            : !form.redirect_uri || form.redirect_uri === grant.ru;
         const clientOk = Boolean(client && Array.isArray(client.ru) && client.ru.includes(grant.ru));
         if (!clientOk || !redirectOk) {
             console.error('mcp token authorization_code invalid_grant client_or_redirect');

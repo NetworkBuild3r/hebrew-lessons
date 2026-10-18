@@ -60,8 +60,8 @@ function codeFrom(res) {
     return new URL(target).searchParams.get('code');
 }
 
-async function register(method, name) {
-    const body = { client_name: name || 'Grok Bot', redirect_uris: [CB] };
+async function register(method, name, redirectUris) {
+    const body = { client_name: name || 'Grok Bot', redirect_uris: redirectUris || [CB] };
     if (method) body.token_endpoint_auth_method = method;
     const res = await call('POST', '/register', {
         headers: { 'Content-Type': 'application/json' },
@@ -312,6 +312,30 @@ test('rejects a refresh token from a different client', async () => {
     });
     assert.strictEqual(kept.status, 200, 'the issuing client can still refresh');
     assert.strictEqual(require('../mcp/oauth').verifyAccessToken(JSON.parse(kept.data).access_token).cid, owner.client_id);
+});
+
+test('requires the authorization redirect_uri on the token request', async () => {
+    const other = 'http://localhost:8787/callback';
+    const pub = await register(null, 'Redirect client', [CB, other]);
+    const { verifier, challenge } = pkce();
+    const code = await authorize(pub.client_id, challenge);
+    const base = {
+        grant_type: 'authorization_code', code, client_id: pub.client_id, code_verifier: verifier
+    };
+
+    const missing = await tokenRequest(base);
+    assert.strictEqual(missing.status, 400);
+    assert.strictEqual(JSON.parse(missing.data).error, 'invalid_grant');
+    assert.strictEqual(JSON.parse(missing.data).error_description, 'client_id or redirect_uri does not match the code.');
+
+    const mismatched = await tokenRequest(Object.assign({}, base, { redirect_uri: other }));
+    assert.strictEqual(mismatched.status, 400);
+    assert.strictEqual(JSON.parse(mismatched.data).error, 'invalid_grant');
+    assert.strictEqual(JSON.parse(mismatched.data).error_description, 'client_id or redirect_uri does not match the code.');
+
+    const exact = await tokenRequest(Object.assign({}, base, { redirect_uri: CB }));
+    assert.strictEqual(exact.status, 200, 'a missing or different redirect_uri does not burn the code');
+    assert.strictEqual(JSON.parse(exact.data).token_type, 'Bearer');
 });
 
 test('legacy stored client and token still work', async () => {
