@@ -1,7 +1,7 @@
 'use strict';
 
 // Builds a temp hebrew.sqlite by running the real Node migrations.
-// Go tests call this. It does not change server/.
+// Go tests and CI call this. The server never runs it: the image has no Node.
 //
 // usage: node apply-migrations.js <apply|missing|extra|wrong-name|empty> <data-dir>
 

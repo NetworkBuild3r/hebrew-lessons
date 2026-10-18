@@ -22,6 +22,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Port != DefaultPort {
 		t.Fatalf("port: %d", cfg.Port)
 	}
+	if cfg.Host != "0.0.0.0" {
+		t.Fatalf("host: %s", cfg.Host)
+	}
 	if DefaultPort == 8080 || DefaultPort == 8787 {
 		t.Fatalf("default port %d clashes with Node or MCP", DefaultPort)
 	}
@@ -53,12 +56,16 @@ func TestLoadOverrides(t *testing.T) {
 		"HEBREW_ROOT":     root,
 		"DATA_DIR":        data,
 		"LESSONS_DIR":     lessons,
+		"HOST":            "127.0.0.1",
 		"PORT":            " 8091 ",
 		"COOKIE_SECURE":   "1",
 		"TRUSTED_PROXIES": "10.0.0.0/8, 192.168.1.10, fd00::/8",
 	}))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if cfg.Host != "127.0.0.1" {
+		t.Fatalf("host: %s", cfg.Host)
 	}
 	if cfg.Port != 8091 {
 		t.Fatalf("port: %d", cfg.Port)
@@ -95,6 +102,20 @@ func TestCookieSecureOnlyExactOne(t *testing.T) {
 		if cfg.CookieSecure {
 			t.Fatalf("COOKIE_SECURE %q was true", value)
 		}
+	}
+}
+
+func TestBlankHostIsAllInterfaces(t *testing.T) {
+	root := t.TempDir()
+	cfg, err := load(env(map[string]string{
+		"HEBREW_ROOT": root,
+		"HOST":        "   ",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Host != "0.0.0.0" {
+		t.Fatalf("host: %q", cfg.Host)
 	}
 }
 
@@ -158,6 +179,7 @@ func TestLoadReadsProcessEnv(t *testing.T) {
 	t.Setenv("HEBREW_ROOT", root)
 	t.Setenv("DATA_DIR", filepath.Join(root, "var"))
 	t.Setenv("LESSONS_DIR", filepath.Join(root, "lessons"))
+	t.Setenv("HOST", "127.0.0.1")
 	t.Setenv("PORT", "8092")
 	t.Setenv("COOKIE_SECURE", "1")
 	t.Setenv("TRUSTED_PROXIES", "127.0.0.1/32")
@@ -165,7 +187,7 @@ func TestLoadReadsProcessEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Port != 8092 || !cfg.CookieSecure {
+	if cfg.Host != "127.0.0.1" || cfg.Port != 8092 || !cfg.CookieSecure {
 		t.Fatalf("cfg: %+v", cfg)
 	}
 	if len(cfg.TrustedProxies) != 1 || cfg.TrustedProxies[0].String() != "127.0.0.1/32" {

@@ -12,8 +12,14 @@ import (
 )
 
 // DefaultPort is the listening port when PORT is unset. Node defaults to
-// 8080 and MCP to 8787; 8090 keeps this process off both.
+// 8080 and MCP to 8787; 8090 keeps a local process off both. Staging sets
+// PORT=8080.
 const DefaultPort = 8090
+
+// DefaultHost is the listen address when HOST is unset. 0.0.0.0 accepts
+// connections from the pod network, which Kubernetes probes and the Service
+// need. Set HOST=127.0.0.1 for local use.
+const DefaultHost = "0.0.0.0"
 
 // Config is the typed environment for this process.
 type Config struct {
@@ -22,6 +28,7 @@ type Config struct {
 	LessonsDir     string
 	DBPath         string
 	MediaDir       string
+	Host           string
 	Port           int
 	TrustedProxies []net.IPNet
 	CookieSecure   bool
@@ -55,10 +62,19 @@ func load(getenv func(string) string) (Config, error) {
 		LessonsDir:     layout.LessonsDir,
 		DBPath:         layout.DBPath,
 		MediaDir:       layout.MediaDir,
+		Host:           parseHost(getenv("HOST")),
 		Port:           port,
 		TrustedProxies: proxies,
 		CookieSecure:   getenv("COOKIE_SECURE") == "1",
 	}, nil
+}
+
+func parseHost(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return DefaultHost
+	}
+	return raw
 }
 
 func parsePort(raw string) (int, error) {

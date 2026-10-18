@@ -28,8 +28,10 @@ const (
 	httpWriteTimeout      = 30 * time.Second
 	httpIdleTimeout       = 90 * time.Second
 
-	// listenHost matches Node's HOST default (server/web.js). HOST is not read.
-	listenHost = "127.0.0.1"
+	// healthPingTimeout bounds the cheap DB ping on GET /healthz. The ledger
+	// is cached at startup, so a probe does not re-read schema_migrations.
+	// Stay well under the HTTP write timeout and Cloudflare's 125s limit.
+	healthPingTimeout = 2 * time.Second
 )
 
 func main() {
@@ -53,11 +55,15 @@ func run() error {
 	ledger, err := db.CheckLedger(context.Background(), conn)
 	if err != nil {
 		log.Printf("ledger: %v", err)
+		if ledger.Error == "" {
+			ledger.OK = false
+			ledger.Error = err.Error()
+		}
 	} else {
 		log.Printf("ledger ok (%d versions)", len(ledger.Versions))
 	}
 
-	srv := newServer(net.JoinHostPort(listenHost, strconv.Itoa(cfg.Port)), newMux(conn))
+	srv := newServer(listenAddr(cfg.Host, cfg.Port), newMux(conn, ledger))
 	ln, err := net.Listen("tcp", srv.Addr)
 	if err != nil {
 		return err
@@ -90,30 +96,38 @@ func newServer(addr string, handler http.Handler) *http.Server {
 	}
 }
 
-func newMux(conn *sql.DB) http.Handler {
+func listenAddr(host string, port int) string {
+	return net.JoinHostPort(host, strconv.Itoa(port))
+}
+
+func newMux(conn *sql.DB, ledger db.Ledger) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", healthHandler(conn))
+	mux.HandleFunc("GET /healthz", healthHandler(conn, ledger))
 	return mux
 }
 
-func healthHandler(conn *sql.DB) http.HandlerFunc {
+func healthHandler(conn *sql.DB, ledger db.Ledger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ledger, err := db.CheckLedger(r.Context(), conn)
-		ok := err == nil && ledger.OK
+		ctx, cancel := context.WithTimeout(r.Context(), healthPingTimeout)
+		defer cancel()
+		pingErr := conn.PingContext(ctx)
+
+		out := ledger
+		ok := ledger.OK && pingErr == nil
+		if ledger.OK && pingErr != nil {
+			out.OK = false
+			out.Error = "db ping: " + pingErr.Error()
+		}
 		status := http.StatusOK
 		if !ok {
 			status = http.StatusServiceUnavailable
-			if ledger.Error == "" && err != nil {
-				ledger.OK = false
-				ledger.Error = err.Error()
-			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		encodeErr := json.NewEncoder(w).Encode(struct {
 			OK     bool      `json:"ok"`
 			Ledger db.Ledger `json:"ledger"`
-		}{OK: ok, Ledger: ledger})
+		}{OK: ok, Ledger: out})
 		if encodeErr != nil {
 			log.Printf("healthz encode: %v", encodeErr)
 		}

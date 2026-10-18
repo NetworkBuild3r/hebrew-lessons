@@ -30,25 +30,31 @@ the pull request. `modernc.org/sqlite` is the pure-Go SQLite driver
 
 ## What this module serves
 
-`cmd/hebrew` loads config, opens `DATA_DIR/hebrew.sqlite` read-only, checks that
-`schema_migrations` is exactly versions 1–11, and serves `GET /healthz` on
-`127.0.0.1`. `200` is `{"ok":true,"ledger":...}`. A ledger mismatch is `503`
-with `ok` false. The process still starts in that case. A missing database
-exits.
+`cmd/hebrew` loads config, opens `DATA_DIR/hebrew.sqlite` read-only, checks the
+migration ledger once, and serves `GET /healthz` on `HOST:PORT`. `200` is
+`{"ok":true,"ledger":...}`. A ledger mismatch is `503` with `ok` false, and the
+process still starts. A missing database exits. Each `/healthz` returns the
+cached ledger and pings the database; it does not re-read `schema_migrations`.
 
-Go does not migrate and does not open a writer.
+Go does not migrate and does not open a writer. The process does not need a
+shell, Node, or the repo tree. The image is a static binary (`CGO_ENABLED=0`)
+and runs as distroless `nonroot` (uid 65532).
 
 | Variable | Default |
 |---|---|
-| `HEBREW_ROOT` | Directory that contains `server/paths.js` |
+| `HOST` | `0.0.0.0`, so Kubernetes probes and the Service can connect. Set `HOST=127.0.0.1` for local use. |
+| `PORT` | `8090` when unset. Staging sets `PORT=8080`. Node's own default is 8080; MCP uses 8787. |
+| `HEBREW_ROOT` | Working directory when unset. Node's unset fallback is the parent of `server/`, which is not in the image. The image sets `HEBREW_ROOT=/app`. Relative `DATA_DIR` and `LESSONS_DIR` resolve against the working directory, as in Node. |
 | `DATA_DIR` | `$HEBREW_ROOT/data` |
 | `LESSONS_DIR` | `$HEBREW_ROOT/worksheets` |
-| `PORT` | `8090` (Node defaults to 8080; MCP uses 8787) |
 | `COOKIE_SECURE` | false unless the value is exactly `1` |
 | `TRUSTED_PROXIES` | empty: trust nobody. Comma-separated CIDRs or host addresses (ADR-0016). Node does not read this variable. |
 
 `DATA_DIR` must not sit inside `shared/`, `review/`, or `LESSONS_DIR`.
 The database file is `$DATA_DIR/hebrew.sqlite`. Media is `$DATA_DIR/media`.
+`internal/paths` hard-codes those rules and does not read `server/paths.js`.
+`go test` golden-checks them with `testdata/golden-paths.js`, which is CI-only.
+The migration helper under `internal/db/testdata/` is also CI-only.
 
 ## Checks
 

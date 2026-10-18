@@ -1,5 +1,10 @@
-// Package paths resolves the data, lessons, and database locations the way
-// server/paths.js does.
+// Package paths resolves data, lessons, and database locations.
+//
+// The rules are hard-coded from server/paths.js. This package does not read
+// that file or any other JavaScript: the Go image has no repo sources.
+// HEBREW_ROOT is the app root (the image sets HEBREW_ROOT=/app). When it is
+// unset, Go uses the working directory. Node's unset fallback is the parent
+// of server/, which is not in the image.
 package paths
 
 import (
@@ -20,10 +25,9 @@ type Layout struct {
 	MediaDir   string
 }
 
-// Resolve returns absolute paths. An empty hebrewRoot is discovered by walking
-// up from the working directory until server/paths.js is found (Node's default
-// root is the parent of server/). Relative dataDir and lessonsDir resolve
-// against the working directory, matching path.resolve.
+// Resolve returns absolute paths. Relative hebrewRoot, dataDir, and lessonsDir
+// resolve against the working directory, matching Node's path.resolve.
+// An empty hebrewRoot uses the working directory (see the package comment).
 func Resolve(hebrewRoot, dataDir, lessonsDir string) (Layout, error) {
 	root, err := resolveRoot(hebrewRoot)
 	if err != nil {
@@ -62,7 +66,7 @@ func resolveRoot(hebrewRoot string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return findRoot(cwd)
+	return filepath.Clean(cwd), nil
 }
 
 func resolveDir(value, fallback string) (string, error) {
@@ -78,25 +82,6 @@ func resolveDir(value, fallback string) (string, error) {
 		return "", err
 	}
 	return filepath.Clean(abs), nil
-}
-
-func findRoot(start string) (string, error) {
-	dir, err := filepath.Abs(start)
-	if err != nil {
-		return "", err
-	}
-	for {
-		marker := filepath.Join(dir, "server", "paths.js")
-		info, statErr := os.Stat(marker)
-		if statErr == nil && !info.IsDir() {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("paths: cannot find repo root from %s (set HEBREW_ROOT)", start)
-		}
-		dir = parent
-	}
 }
 
 func assertDataDirNotServed(root, data, lessons string) error {

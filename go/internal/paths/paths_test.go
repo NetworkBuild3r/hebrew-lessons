@@ -66,17 +66,23 @@ func TestRelativeDataDirUsesWorkingDirectory(t *testing.T) {
 	}
 }
 
-func TestDiscoverRootFromWorkingDirectory(t *testing.T) {
+func TestUnsetHebrewRootUsesWorkingDirectory(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
 	layout, err := Resolve("", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	marker := filepath.Join(layout.Root, "server", "paths.js")
-	info, err := os.Stat(marker)
-	if err != nil || info.IsDir() {
-		t.Fatalf("discovered root %s has no server/paths.js: %v", layout.Root, err)
+	if layout.Root != root {
+		t.Fatalf("root: got %s want %s", layout.Root, root)
 	}
-	if layout.DBPath != filepath.Join(layout.Root, "data", "hebrew.sqlite") {
+	if layout.DataDir != filepath.Join(root, "data") {
+		t.Fatalf("data: %s", layout.DataDir)
+	}
+	if layout.LessonsDir != filepath.Join(root, "worksheets") {
+		t.Fatalf("lessons: %s", layout.LessonsDir)
+	}
+	if layout.DBPath != filepath.Join(root, "data", "hebrew.sqlite") {
 		t.Fatalf("db: %s", layout.DBPath)
 	}
 }
