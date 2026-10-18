@@ -1,0 +1,1019 @@
+{
+  "cases": 102,
+  "rules": {
+    "N1": 4,
+    "N10": 1,
+    "N11": 3,
+    "N12": 4,
+    "N13": 3,
+    "N14": 2,
+    "N15": 1,
+    "N16": 7,
+    "N17": 1,
+    "N18": 1,
+    "N19": 1,
+    "N2": 1,
+    "N20": 1,
+    "N21": 1,
+    "N22": 1,
+    "N23": 1,
+    "N3": 67,
+    "N4": 0,
+    "N5": 1,
+    "N6": 64,
+    "N7": 67,
+    "N8": 1,
+    "N9": 3,
+    "audio-path": 2,
+    "audio-stale": 2,
+    "closed-set": 1,
+    "field-language": 9,
+    "form-recall-image": 0,
+    "frequency-band": 1,
+    "html": 7,
+    "image-placement": 3,
+    "later-checkpoint": 2,
+    "later-context": 2,
+    "lexicon-form": 2,
+    "meaning": 14,
+    "pattern-focus": 1,
+    "picture-on-recall": 1,
+    "pointed-word": 10,
+    "pointing-consistency": 1,
+    "pointing-form": 4,
+    "questions": 6,
+    "queue-order": 1,
+    "recall-day": 3,
+    "romanized-answer": 1,
+    "schema": 26,
+    "semantic-set": 0
+  },
+  "byRule": {
+    "N1": [
+      "fixture-anal-sex-vocab.plan",
+      "fixture-shai-date-indirect-speech.plan",
+      "n1-legacy-warn",
+      "n1-nine-new-words"
+    ],
+    "N10": [
+      "n10-too-many-words"
+    ],
+    "N11": [
+      "maxlength-4001-emoji",
+      "n9-block-oversize",
+      "n9-lesson-oversize"
+    ],
+    "N12": [
+      "fixture-anal-sex-vocab.plan",
+      "fixture-my-morning.plan",
+      "fixture-shai-date-indirect-speech.plan",
+      "n12-fluency-list"
+    ],
+    "N13": [
+      "form-recall-image-on-table",
+      "n13-n14-lexicon",
+      "n13-no-lexicon"
+    ],
+    "N14": [
+      "fixture-five-lesson-types.plan",
+      "n13-n14-lexicon"
+    ],
+    "N15": [
+      "n15-review-not-first"
+    ],
+    "N16": [
+      "fixture-five-lesson-types.plan",
+      "n13-n14-lexicon",
+      "n13-no-lexicon",
+      "n16-no-personal-question",
+      "n18-group-and-count",
+      "n19-empty-source",
+      "n23-three-exercises"
+    ],
+    "N17": [
+      "n17-three-recipe-run"
+    ],
+    "N18": [
+      "n18-group-and-count"
+    ],
+    "N19": [
+      "n19-empty-source"
+    ],
+    "N2": [
+      "n2-few-recycles"
+    ],
+    "N20": [
+      "n20-answer-not-choice"
+    ],
+    "N21": [
+      "n21-alt-not-permutation"
+    ],
+    "N22": [
+      "n22-bad-audio"
+    ],
+    "N23": [
+      "n23-three-exercises"
+    ],
+    "N3": [
+      "audio-path-absolute",
+      "audio-stale-object",
+      "audio-stale-string",
+      "audio-stale-unchanged",
+      "field-language-meaning",
+      "fixture-anal-sex-vocab.plan",
+      "fixture-five-lesson-types.plan",
+      "fixture-my-morning.plan",
+      "fixture-shai-date-indirect-speech.plan",
+      "form-recall-image-on-table",
+      "frequency-band",
+      "html-tag",
+      "image-placement-story",
+      "later-context-and-checkpoint",
+      "lexicon-find-only",
+      "lexicon-form-verified",
+      "lexicon-list-throws",
+      "lone-surrogate-title",
+      "markup-0085",
+      "markup-nbsp",
+      "maxlength-4000-emoji",
+      "maxlength-4001-emoji",
+      "meaning-blank",
+      "n1-legacy-warn",
+      "n1-nine-new-words",
+      "n10-too-many-words",
+      "n12-fluency-list",
+      "n15-review-not-first",
+      "n17-three-recipe-run",
+      "n2-few-recycles",
+      "n2-guide-exempt",
+      "n3-unknown-story",
+      "n4-listening-only",
+      "n5-two-introductions",
+      "n6-once",
+      "n7-too-many-introductions",
+      "n8-missing-alt",
+      "n9-block-oversize",
+      "n9-lesson-oversize",
+      "object-mode-base",
+      "pattern-focus-missing",
+      "picture-on-recall",
+      "pointed-word-missing",
+      "pointing-consistency",
+      "pointing-doubled-vowel",
+      "pointing-nfd",
+      "pointing-stray-vowel",
+      "pretty-whitespace-base",
+      "questions-present",
+      "queue-order-personal",
+      "recall-day-checkpoint",
+      "romanized-answer",
+      "semantic-set-kinship",
+      "trim-0085-not-skipped",
+      "trim-fef-only-passage",
+      "ucd-edge-1fa89",
+      "ucd-edge-1fac6",
+      "ucd-edge-1fae9",
+      "ucd-edge-2427",
+      "ucd-edge-2428",
+      "ucd-edge-2429",
+      "ucd-letter-1c89",
+      "ucd-letter-a7cb",
+      "ucd-mark-0897",
+      "ucd-number-10d40",
+      "ucd-punct-1b4e",
+      "v100-rejects-explainer"
+    ],
+    "N4": [],
+    "N5": [
+      "n5-two-introductions"
+    ],
+    "N6": [
+      "audio-path-absolute",
+      "audio-stale-object",
+      "audio-stale-string",
+      "audio-stale-unchanged",
+      "field-language-meaning",
+      "fixture-anal-sex-vocab.plan",
+      "fixture-five-lesson-types.plan",
+      "fixture-my-morning.plan",
+      "fixture-shai-date-indirect-speech.plan",
+      "fixture-verse-reading.hostile.plan",
+      "form-recall-image-on-table",
+      "frequency-band",
+      "html-tag",
+      "image-placement-story",
+      "key-order-aaa-zzz",
+      "key-order-zzz-aaa",
+      "later-context-and-checkpoint",
+      "lexicon-find-only",
+      "lexicon-form-verified",
+      "lexicon-list-throws",
+      "lone-surrogate-title",
+      "markup-0085",
+      "markup-nbsp",
+      "maxlength-4000-emoji",
+      "maxlength-4001-emoji",
+      "meaning-blank",
+      "n1-legacy-warn",
+      "n1-nine-new-words",
+      "n10-too-many-words",
+      "n12-fluency-list",
+      "n15-review-not-first",
+      "n18-group-and-count",
+      "n2-few-recycles",
+      "n2-guide-exempt",
+      "n23-three-exercises",
+      "n3-unknown-story",
+      "n4-listening-only",
+      "n5-two-introductions",
+      "n6-once",
+      "n7-too-many-introductions",
+      "n8-missing-alt",
+      "n9-block-oversize",
+      "n9-lesson-oversize",
+      "object-mode-base",
+      "pattern-focus-missing",
+      "picture-on-recall",
+      "pointed-word-missing",
+      "pointing-consistency",
+      "pointing-doubled-vowel",
+      "pointing-nfd",
+      "pointing-stray-vowel",
+      "pretty-whitespace-base",
+      "questions-present",
+      "queue-order-personal",
+      "recall-day-checkpoint",
+      "romanized-answer",
+      "semantic-set-kinship",
+      "trim-0085-not-skipped",
+      "trim-fef-only-passage",
+      "ucd-letter-1c89",
+      "ucd-letter-a7cb",
+      "ucd-mark-0897",
+      "ucd-number-10d40",
+      "v100-rejects-explainer"
+    ],
+    "N7": [
+      "audio-path-absolute",
+      "audio-stale-object",
+      "audio-stale-string",
+      "audio-stale-unchanged",
+      "field-language-meaning",
+      "fixture-conjugation-table.hostile.plan",
+      "fixture-conjugation-table.plan",
+      "fixture-five-lesson-types.plan",
+      "form-recall-image-on-table",
+      "frequency-band",
+      "html-tag",
+      "image-placement-story",
+      "later-context-and-checkpoint",
+      "lexicon-find-only",
+      "lexicon-form-verified",
+      "lexicon-list-throws",
+      "lone-surrogate-title",
+      "markup-0085",
+      "markup-nbsp",
+      "maxlength-4000-emoji",
+      "maxlength-4001-emoji",
+      "meaning-blank",
+      "n1-legacy-warn",
+      "n1-nine-new-words",
+      "n10-too-many-words",
+      "n12-fluency-list",
+      "n13-n14-lexicon",
+      "n13-no-lexicon",
+      "n15-review-not-first",
+      "n16-no-personal-question",
+      "n18-group-and-count",
+      "n2-few-recycles",
+      "n3-unknown-story",
+      "n4-listening-only",
+      "n5-two-introductions",
+      "n6-once",
+      "n7-too-many-introductions",
+      "n8-missing-alt",
+      "n9-block-oversize",
+      "n9-lesson-oversize",
+      "object-mode-base",
+      "pattern-focus-missing",
+      "picture-on-recall",
+      "pointed-word-missing",
+      "pointing-consistency",
+      "pointing-doubled-vowel",
+      "pointing-nfd",
+      "pointing-stray-vowel",
+      "pretty-whitespace-base",
+      "questions-present",
+      "queue-order-personal",
+      "recall-day-checkpoint",
+      "romanized-answer",
+      "semantic-set-kinship",
+      "trim-0085-not-skipped",
+      "trim-fef-only-passage",
+      "ucd-edge-1fa89",
+      "ucd-edge-1fac6",
+      "ucd-edge-1fae9",
+      "ucd-edge-2427",
+      "ucd-edge-2428",
+      "ucd-edge-2429",
+      "ucd-letter-1c89",
+      "ucd-letter-a7cb",
+      "ucd-mark-0897",
+      "ucd-number-10d40",
+      "ucd-punct-1b4e"
+    ],
+    "N8": [
+      "n8-missing-alt"
+    ],
+    "N9": [
+      "n9-block-oversize",
+      "n9-lesson-oversize",
+      "n9-plan-oversize"
+    ],
+    "audio-path": [
+      "audio-path-absolute",
+      "n22-bad-audio"
+    ],
+    "audio-stale": [
+      "audio-stale-object",
+      "audio-stale-string"
+    ],
+    "closed-set": [
+      "semantic-set-kinship"
+    ],
+    "field-language": [
+      "field-language-meaning",
+      "html-tag",
+      "markup-0085",
+      "markup-nbsp",
+      "picture-on-recall",
+      "romanized-answer",
+      "trim-0085-not-skipped",
+      "ucd-letter-1c89",
+      "ucd-letter-a7cb"
+    ],
+    "form-recall-image": [],
+    "frequency-band": [
+      "frequency-band"
+    ],
+    "html": [
+      "fixture-conjugation-table.hostile.plan",
+      "fixture-explainer.hostile.plan",
+      "fixture-letter-intro.hostile.plan",
+      "fixture-personal-question.hostile.plan",
+      "fixture-verse-reading.hostile.plan",
+      "html-tag",
+      "markup-nbsp"
+    ],
+    "image-placement": [
+      "fixture-letter-intro.hostile.plan",
+      "form-recall-image-on-table",
+      "image-placement-story"
+    ],
+    "later-checkpoint": [
+      "fixture-five-lesson-types.plan",
+      "later-context-and-checkpoint"
+    ],
+    "later-context": [
+      "fixture-five-lesson-types.plan",
+      "later-context-and-checkpoint"
+    ],
+    "lexicon-form": [
+      "lexicon-form-verified",
+      "pointing-consistency"
+    ],
+    "meaning": [
+      "audio-stale-object",
+      "audio-stale-string",
+      "key-order-aaa-zzz",
+      "key-order-zzz-aaa",
+      "meaning-blank",
+      "n1-legacy-warn",
+      "n1-nine-new-words",
+      "n10-too-many-words",
+      "n18-group-and-count",
+      "n23-three-exercises",
+      "pointing-doubled-vowel",
+      "pointing-stray-vowel",
+      "ucd-letter-1c89",
+      "ucd-letter-a7cb"
+    ],
+    "pattern-focus": [
+      "pattern-focus-missing"
+    ],
+    "picture-on-recall": [
+      "picture-on-recall"
+    ],
+    "pointed-word": [
+      "pointed-word-missing",
+      "ucd-edge-1fa89",
+      "ucd-edge-1fac6",
+      "ucd-edge-1fae9",
+      "ucd-edge-2427",
+      "ucd-edge-2428",
+      "ucd-edge-2429",
+      "ucd-mark-0897",
+      "ucd-number-10d40",
+      "ucd-punct-1b4e"
+    ],
+    "pointing-consistency": [
+      "pointing-consistency"
+    ],
+    "pointing-form": [
+      "fixture-shai-date-indirect-speech.plan",
+      "pointing-doubled-vowel",
+      "pointing-nfd",
+      "pointing-stray-vowel"
+    ],
+    "questions": [
+      "fixture-anal-sex-vocab.plan",
+      "fixture-beginner-unit-1.plan",
+      "fixture-five-lesson-types.plan",
+      "fixture-my-morning.plan",
+      "fixture-shai-date-indirect-speech.plan",
+      "questions-present"
+    ],
+    "queue-order": [
+      "queue-order-personal"
+    ],
+    "recall-day": [
+      "fixture-beginner-unit-1.plan",
+      "fixture-five-lesson-types.plan",
+      "recall-day-checkpoint"
+    ],
+    "romanized-answer": [
+      "romanized-answer"
+    ],
+    "schema": [
+      "duplicate-schema-version",
+      "fixture-conjugation-table.hostile.plan",
+      "fixture-edge-one-block",
+      "fixture-edge-twelve-exercise",
+      "fixture-explainer.hostile.plan",
+      "fixture-letter-intro.hostile.plan",
+      "fixture-personal-question.hostile.plan",
+      "fixture-type-a-topic-conversation",
+      "fixture-type-b-review-worksheet",
+      "fixture-type-c-verse-reading",
+      "fixture-type-d-verb-workshop",
+      "fixture-type-e-short-story",
+      "fixture-verse-reading.hostile.plan",
+      "form-recall-image-on-table",
+      "key-order-aaa-zzz",
+      "key-order-zzz-aaa",
+      "n1-legacy-warn",
+      "n13-n14-lexicon",
+      "n13-no-lexicon",
+      "n19-empty-source",
+      "non-object-array",
+      "non-object-number",
+      "not-json",
+      "questions-present",
+      "unknown-schema-version",
+      "v100-rejects-explainer"
+    ],
+    "semantic-set": []
+  },
+  "byCase": {
+    "audio-path-absolute": [
+      "N3",
+      "N6",
+      "N7",
+      "audio-path"
+    ],
+    "audio-stale-object": [
+      "N3",
+      "N6",
+      "N7",
+      "audio-stale",
+      "meaning"
+    ],
+    "audio-stale-string": [
+      "N3",
+      "N6",
+      "N7",
+      "audio-stale",
+      "meaning"
+    ],
+    "audio-stale-unchanged": [
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "duplicate-schema-version": [
+      "schema"
+    ],
+    "field-language-meaning": [
+      "N3",
+      "N6",
+      "N7",
+      "field-language"
+    ],
+    "fixture-anal-sex-vocab.plan": [
+      "N1",
+      "N12",
+      "N3",
+      "N6",
+      "questions"
+    ],
+    "fixture-beginner-unit-1.plan": [
+      "questions",
+      "recall-day"
+    ],
+    "fixture-conjugation-table.hostile.plan": [
+      "N7",
+      "html",
+      "schema"
+    ],
+    "fixture-conjugation-table.plan": [
+      "N7"
+    ],
+    "fixture-edge-one-block": [
+      "schema"
+    ],
+    "fixture-edge-twelve-exercise": [
+      "schema"
+    ],
+    "fixture-explainer.hostile.plan": [
+      "html",
+      "schema"
+    ],
+    "fixture-explainer.plan": [],
+    "fixture-five-lesson-types.plan": [
+      "N14",
+      "N16",
+      "N3",
+      "N6",
+      "N7",
+      "later-checkpoint",
+      "later-context",
+      "questions",
+      "recall-day"
+    ],
+    "fixture-letter-intro.hostile.plan": [
+      "html",
+      "image-placement",
+      "schema"
+    ],
+    "fixture-letter-intro.plan": [],
+    "fixture-my-morning.plan": [
+      "N12",
+      "N3",
+      "N6",
+      "questions"
+    ],
+    "fixture-personal-question.hostile.plan": [
+      "html",
+      "schema"
+    ],
+    "fixture-personal-question.plan": [],
+    "fixture-shai-date-indirect-speech.plan": [
+      "N1",
+      "N12",
+      "N3",
+      "N6",
+      "pointing-form",
+      "questions"
+    ],
+    "fixture-type-a-topic-conversation": [
+      "schema"
+    ],
+    "fixture-type-b-review-worksheet": [
+      "schema"
+    ],
+    "fixture-type-c-verse-reading": [
+      "schema"
+    ],
+    "fixture-type-d-verb-workshop": [
+      "schema"
+    ],
+    "fixture-type-e-short-story": [
+      "schema"
+    ],
+    "fixture-verse-reading.hostile.plan": [
+      "N6",
+      "html",
+      "schema"
+    ],
+    "fixture-verse-reading.plan": [],
+    "form-recall-image-on-table": [
+      "N13",
+      "N3",
+      "N6",
+      "N7",
+      "image-placement",
+      "schema"
+    ],
+    "frequency-band": [
+      "N3",
+      "N6",
+      "N7",
+      "frequency-band"
+    ],
+    "html-tag": [
+      "N3",
+      "N6",
+      "N7",
+      "field-language",
+      "html"
+    ],
+    "image-placement-story": [
+      "N3",
+      "N6",
+      "N7",
+      "image-placement"
+    ],
+    "key-order-aaa-zzz": [
+      "N6",
+      "meaning",
+      "schema"
+    ],
+    "key-order-zzz-aaa": [
+      "N6",
+      "meaning",
+      "schema"
+    ],
+    "later-context-and-checkpoint": [
+      "N3",
+      "N6",
+      "N7",
+      "later-checkpoint",
+      "later-context"
+    ],
+    "lexicon-find-only": [
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "lexicon-form-verified": [
+      "N3",
+      "N6",
+      "N7",
+      "lexicon-form"
+    ],
+    "lexicon-list-throws": [
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "lone-surrogate-title": [
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "markup-0085": [
+      "N3",
+      "N6",
+      "N7",
+      "field-language"
+    ],
+    "markup-nbsp": [
+      "N3",
+      "N6",
+      "N7",
+      "field-language",
+      "html"
+    ],
+    "maxlength-4000-emoji": [
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "maxlength-4001-emoji": [
+      "N11",
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "meaning-blank": [
+      "N3",
+      "N6",
+      "N7",
+      "meaning"
+    ],
+    "n1-legacy-warn": [
+      "N1",
+      "N3",
+      "N6",
+      "N7",
+      "meaning",
+      "schema"
+    ],
+    "n1-nine-new-words": [
+      "N1",
+      "N3",
+      "N6",
+      "N7",
+      "meaning"
+    ],
+    "n10-too-many-words": [
+      "N10",
+      "N3",
+      "N6",
+      "N7",
+      "meaning"
+    ],
+    "n12-fluency-list": [
+      "N12",
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "n13-n14-lexicon": [
+      "N13",
+      "N14",
+      "N16",
+      "N7",
+      "schema"
+    ],
+    "n13-no-lexicon": [
+      "N13",
+      "N16",
+      "N7",
+      "schema"
+    ],
+    "n15-review-not-first": [
+      "N15",
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "n16-no-personal-question": [
+      "N16",
+      "N7"
+    ],
+    "n17-three-recipe-run": [
+      "N17",
+      "N3"
+    ],
+    "n18-group-and-count": [
+      "N16",
+      "N18",
+      "N6",
+      "N7",
+      "meaning"
+    ],
+    "n19-empty-source": [
+      "N16",
+      "N19",
+      "schema"
+    ],
+    "n2-few-recycles": [
+      "N2",
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "n2-guide-exempt": [
+      "N3",
+      "N6"
+    ],
+    "n20-answer-not-choice": [
+      "N20"
+    ],
+    "n21-alt-not-permutation": [
+      "N21"
+    ],
+    "n22-bad-audio": [
+      "N22",
+      "audio-path"
+    ],
+    "n23-three-exercises": [
+      "N16",
+      "N23",
+      "N6",
+      "meaning"
+    ],
+    "n3-unknown-story": [
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "n4-listening-only": [
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "n5-two-introductions": [
+      "N3",
+      "N5",
+      "N6",
+      "N7"
+    ],
+    "n6-once": [
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "n7-too-many-introductions": [
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "n8-missing-alt": [
+      "N3",
+      "N6",
+      "N7",
+      "N8"
+    ],
+    "n9-block-oversize": [
+      "N11",
+      "N3",
+      "N6",
+      "N7",
+      "N9"
+    ],
+    "n9-lesson-oversize": [
+      "N11",
+      "N3",
+      "N6",
+      "N7",
+      "N9"
+    ],
+    "n9-plan-oversize": [
+      "N9"
+    ],
+    "non-object-array": [
+      "schema"
+    ],
+    "non-object-number": [
+      "schema"
+    ],
+    "not-json": [
+      "schema"
+    ],
+    "object-mode-base": [
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "pattern-focus-missing": [
+      "N3",
+      "N6",
+      "N7",
+      "pattern-focus"
+    ],
+    "picture-on-recall": [
+      "N3",
+      "N6",
+      "N7",
+      "field-language",
+      "picture-on-recall"
+    ],
+    "pointed-word-missing": [
+      "N3",
+      "N6",
+      "N7",
+      "pointed-word"
+    ],
+    "pointing-consistency": [
+      "N3",
+      "N6",
+      "N7",
+      "lexicon-form",
+      "pointing-consistency"
+    ],
+    "pointing-doubled-vowel": [
+      "N3",
+      "N6",
+      "N7",
+      "meaning",
+      "pointing-form"
+    ],
+    "pointing-nfd": [
+      "N3",
+      "N6",
+      "N7",
+      "pointing-form"
+    ],
+    "pointing-stray-vowel": [
+      "N3",
+      "N6",
+      "N7",
+      "meaning",
+      "pointing-form"
+    ],
+    "pretty-whitespace-base": [
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "questions-present": [
+      "N3",
+      "N6",
+      "N7",
+      "questions",
+      "schema"
+    ],
+    "queue-order-personal": [
+      "N3",
+      "N6",
+      "N7",
+      "queue-order"
+    ],
+    "recall-day-checkpoint": [
+      "N3",
+      "N6",
+      "N7",
+      "recall-day"
+    ],
+    "romanized-answer": [
+      "N3",
+      "N6",
+      "N7",
+      "field-language",
+      "romanized-answer"
+    ],
+    "semantic-set-kinship": [
+      "N3",
+      "N6",
+      "N7",
+      "closed-set"
+    ],
+    "trim-0085-not-skipped": [
+      "N3",
+      "N6",
+      "N7",
+      "field-language"
+    ],
+    "trim-fef-only-passage": [
+      "N3",
+      "N6",
+      "N7"
+    ],
+    "ucd-edge-1fa89": [
+      "N3",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-edge-1fac6": [
+      "N3",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-edge-1fae9": [
+      "N3",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-edge-2427": [
+      "N3",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-edge-2428": [
+      "N3",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-edge-2429": [
+      "N3",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-letter-1c89": [
+      "N3",
+      "N6",
+      "N7",
+      "field-language",
+      "meaning"
+    ],
+    "ucd-letter-a7cb": [
+      "N3",
+      "N6",
+      "N7",
+      "field-language",
+      "meaning"
+    ],
+    "ucd-mark-0897": [
+      "N3",
+      "N6",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-number-10d40": [
+      "N3",
+      "N6",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-punct-1b4e": [
+      "N3",
+      "N7",
+      "pointed-word"
+    ],
+    "unknown-schema-version": [
+      "schema"
+    ],
+    "v100-rejects-explainer": [
+      "N3",
+      "N6",
+      "schema"
+    ]
+  },
+  "silent": {
+    "N4": "n4-listening-only trips listening coverage; N3 reports it and N4 is never emitted",
+    "semantic-set": "semantic-set-kinship is one category; closed-set reports it and semantic-set is never emitted",
+    "form-recall-image": "form-recall-image-on-table puts an image on a conjugation table; image-placement reports it and form-recall-image is never emitted"
+  }
+}
