@@ -33,10 +33,10 @@ templ guidesHero(card GuideCard) {
 				@components.AudioButton(card.Title, "")
 			</div>
 			if card.Topic != "" {
-				<p class="guides-hero__title" lang={ LangOf(card.Topic) } dir={ DirOf(card.Topic) }>{ card.Topic }</p>
+				<p class="guides-hero__title"><bdi lang={ LangOf(card.Topic) } dir={ DirOf(card.Topic) }>{ card.Topic }</bdi></p>
 			}
 		} else {
-			<p class="guides-hero__title" lang={ card.Lang } dir={ card.Dir }>{ card.Title }</p>
+			<p class="guides-hero__title"><bdi lang={ card.Lang } dir={ card.Dir }>{ card.Title }</bdi></p>
 		}
 		<div class="guides-hero__actions">
 			<a class="btn btn-primary" href={ templ.SafeURL(card.Href) }>

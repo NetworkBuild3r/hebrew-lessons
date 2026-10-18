@@ -1670,9 +1670,33 @@ textarea {
 .story-questions-toggle { display: grid; gap: 0.25rem; justify-items: start; }
 /* === end 2026-10-08 learner-support === */
 
-/* === self-hosted Noto Sans Hebrew + Frank Ruhl Libre (SIL OFL, see fonts/OFL.txt). ===
-   Three faces, same count as the Rubik set they replace. Rubik files stay on disk
-   for the brand outlines. The ADR-0006 --font-family: Rubik block is unchanged. */
+/* === self-hosted Rubik (SIL OFL, see fonts/OFL.txt). Replaces the Google Fonts link. ===
+   Node pages keep these faces. Guides add Noto Sans Hebrew and Frank Ruhl Libre
+   below; those files do not replace Rubik. */
+@font-face {
+    font-family: "Rubik";
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url("fonts/rubik-hebrew.woff2") format("woff2");
+    unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+@font-face {
+    font-family: "Rubik";
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url("fonts/rubik-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: "Rubik";
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url("fonts/rubik-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 @font-face {
     font-family: "Noto Sans Hebrew";
     font-style: normal;
@@ -4425,15 +4449,9 @@ img.hebrew-logo-mark {
     }
 }
 
-/* === 2026 redesign tokens (Figma "2026 / Theme" + "2026 / Layout") — additive, guarded hex unchanged === */
+/* === 2026 redesign tokens (Figma "2026 / Theme" + "2026 / Layout") — additive, guarded hex unchanged ===
+   Font faces for Guides live on .guides-page. These :root names stay the Node Rubik stack. */
 :root {
-    --font-hebrew-sans: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
-    --font-hebrew-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
-    /* Unpointed decorative letters only: the cover letter. */
-    --font-hebrew-lettering: "Frank Ruhl Libre", "Noto Serif Hebrew", "Times New Roman", serif;
-    /* Pointed display Hebrew. Frank Ruhl Libre crowds the holam; Noto Sans Hebrew does not. */
-    --font-hebrew-pointed-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
-    --font-sans: "Noto Sans Hebrew", "Segoe UI", system-ui, sans-serif;
     --line-height-pointed: 1.7;
     --size-display: 64px;
     --size-h2: 24px;
@@ -8205,6 +8223,14 @@ section[data-block-type="conjugation-table"][data-mode="drill"][data-drill-owner
 }
 
 /* === 2026 /guides/ === */
+/* Noto is the Guides UI face only. Node pages keep the Rubik fallback on body. */
+.guides-page {
+    --font-sans: "Noto Sans Hebrew", "Segoe UI", system-ui, sans-serif;
+    --font-hebrew-sans: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
+    --font-hebrew-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
+    --font-hebrew-lettering: "Frank Ruhl Libre", "Noto Serif Hebrew", "Times New Roman", serif;
+    --font-hebrew-pointed-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
+}
 .guides-page .page-heading-kicker { font: 700 13px/1.2 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-olive); }
 html:not([data-ui-lang="he"]) .page-heading-title.ui-he { display: none; }
 html[data-ui-lang="he"] .page-heading-title.ui-en { display: none; }
@@ -8212,7 +8238,8 @@ html[data-ui-lang="he"] .page-heading .page-heading-he { display: none; }
 .guides-page .hebrew-brand-he { font-family: var(--font-hebrew-pointed-display); font-size: 22px; }
 .guides-hero { position: relative; overflow: hidden; border-radius: var(--radius-hero); background: var(--color-surface-hero); color: var(--color-hero-text); min-height: 260px; padding: var(--space-6); display: grid; align-content: start; gap: var(--space-2); }
 .guides-hero__art { position: absolute; inset-block-end: 0; inset-inline-end: 0; width: min(1100px, 100%); height: auto; pointer-events: none; }
-.guides-hero::before { content: ""; position: absolute; inset: 0; z-index: 1; background: linear-gradient(to inline-end, var(--color-surface-hero) 0%, color-mix(in srgb, var(--color-surface-hero) 90%, transparent) 35%, transparent 70%); }
+.guides-hero::before { content: ""; position: absolute; inset: 0; z-index: 1; background: linear-gradient(to right, var(--color-surface-hero) 0%, color-mix(in srgb, var(--color-surface-hero) 90%, transparent) 35%, transparent 70%); }
+html[dir="rtl"] .guides-hero::before { background: linear-gradient(to left, var(--color-surface-hero) 0%, color-mix(in srgb, var(--color-surface-hero) 90%, transparent) 35%, transparent 70%); }
 .guides-hero > :not(.guides-hero__art) { position: relative; z-index: 2; }
 .guides-hero__kicker { font: 700 13px/1.2 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-sun); }
 .guides-hero__he-row { display: flex; align-items: center; gap: var(--space-4); }
@@ -8304,7 +8331,7 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
     .guides-page .guide-card .lesson-link { padding: 0; }
     .guides-hero .audio-btn { width: 44px; height: 44px; }
     .theme-switch [role="radio"] { padding-inline: 0.4rem; font-size: 12px; }
-    .hebrew-shell-nav a:not([aria-current="page"]) .icon { color: var(--color-muted); }
+    .guides-page .hebrew-shell-nav a:not([aria-current="page"]) .icon { color: var(--color-muted); }
     .he-text--word { font-size: 40px; }
     .example-row { grid-template-columns: 44px minmax(0, 1fr); }
     .example-row__he { grid-column: 1 / -1; }
@@ -8313,14 +8340,18 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
     .he-text--word { font-size: 56px; }
 }
 
-/* PR #24: logical properties, plan-page type, and guide reading column.
+/* PR #24: logical properties and the guide reading column.
    Node pages stay html dir=rtl, so start/end match the old right/left there.
-   .plan-page names --font-sans so a missing Rubik face is not the body font. */
-.plan-page { font-family: var(--font-sans); }
+   .plan-page keeps var(--font-family), which is Rubik. */
 @media (min-width: 1280px) {
     .guide-layout:not(:has(.guide-aside)) {
         display: block;
         width: min(100%, var(--wrap-w-reading));
+        margin-inline: auto;
+    }
+    body.has-hebrew-shell.guide-page:has(> #app-main) .page-heading .topbar-inner {
+        width: min(100%, var(--wrap-w-reading));
+        max-width: var(--wrap-w-reading);
         margin-inline: auto;
     }
 }
@@ -8340,6 +8371,9 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 .he-inline + .audio-btn { position: relative; width: 32px; height: 32px; vertical-align: middle; margin-inline: 4px; }
 .he-inline + .audio-btn::before { content: ""; position: absolute; inset: -6px; }
 .guides-topic h2 { display: flex; align-items: center; gap: var(--space-2); }
+.guide-body .kicker,
+.guide-page .kicker { background: none; color: inherit; padding: 0; border: 0; border-radius: 0; font: 700 12px/1.2 var(--font-sans, "Rubik", sans-serif); letter-spacing: .08em; text-transform: uppercase; }
+.guide-body .kicker .recipe-chip { border: 0; padding: 0; background: none; border-radius: 0; color: var(--color-accent-olive); }
 .guide-body .callout[data-tone] { padding: var(--space-4); padding-inline-start: calc(var(--space-4) + 3px); border-radius: var(--radius-control); border-inline-start: 3px solid transparent; }
 .guide-body .callout[data-tone="green"] { background: var(--color-correct-soft); color: var(--color-correct-ink); border-inline-start-color: var(--color-correct-ink); }
 .guide-body .callout[data-tone="yellow"] { background: var(--color-miss-soft); color: var(--color-miss-ink); border-inline-start-color: var(--color-miss); }

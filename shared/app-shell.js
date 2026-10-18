@@ -21,8 +21,8 @@
     var NAV = [
         { id: 'today', href: '/', he: 'היום', en: 'Today', icon: 'today' },
         { id: 'lessons', href: '/lessons/', he: 'שיעורים', en: 'Lessons', icon: 'lessons' },
-        { id: 'guides', href: '/guides/', he: 'מדריכים', en: 'Guides', icon: 'guides' },
-        { id: 'verbs', href: '/verbs/', he: 'פעלים', en: 'Verbs', icon: 'verbs' },
+        { id: 'guides', href: '/guides/', he: 'מדריכים', en: 'Guides' },
+        { id: 'verbs', href: '/verbs/', he: 'פעלים', en: 'Verbs' },
         { id: 'review', href: '/review/', he: 'חזרה', en: 'Review', icon: 'review' },
         { id: 'words', href: '/words/', he: 'מילים', en: 'Words', icon: 'words' },
         { id: 'progress', href: '/progress/', he: 'התקדמות', en: 'Progress', icon: 'progress' },
@@ -34,10 +34,11 @@
     // name with <use>. The sprite is public (server/web.js) and same-origin, and no CSP is sent
     // on app responses. This file stays self-contained because the lesson player loads it alone.
     var BRAND = '/shared/brand/';
-    var ICON_NAMES = ['today', 'lessons', 'review', 'progress', 'admin', 'words', 'guides', 'verbs'];
+    var ICON_NAMES = ['today', 'lessons', 'review', 'progress', 'admin', 'words'];
 
     /** Decorative icon beside a visible word. aria-hidden: the word is the name. */
     function navIcon(name) {
+        // Guides has no icon yet (docs/design/icon-usage.md): it stays a text-only link.
         if (!name || ICON_NAMES.indexOf(name) === -1) return '';
         return '<svg class="icon hebrew-icon hebrew-icon-' + name + '" width="20" height="20"'
             + ' aria-hidden="true" focusable="false"><use href="' + BRAND + 'sprite.svg#icon-' + name
@@ -159,6 +160,9 @@
                 if (store && typeof store.setItem === 'function') store.setItem(THEME_KEY, choice);
             } catch (err2) { /* ignore quota / private mode */ }
         }
+        try {
+            if (doc && typeof doc.querySelector === 'function') paintThemeSwitch(doc);
+        } catch (err3) { /* ignore */ }
         return choice;
     }
 
@@ -182,27 +186,55 @@
     }
 
     /**
-     * Toggle Light ↔ Dark and persist.
+     * Toggle Light ↔ Dark and persist. The shell control is the 3-way switch;
+     * this remains for callers that flip the two concrete themes.
      * @returns {'light'|'dark'}
      */
     function toggleTheme() {
         return applyTheme(readTheme() === 'dark' ? 'light' : 'dark');
     }
 
-    /** Bilingual visible label for the theme toggle (no English-only aria-label — REQ-016). */
-    function themeToggleLabel(theme) {
-        if (theme === 'dark') {
-            return bi('מצב בהיר', 'Light mode');
-        }
-        return bi('מצב כהה', 'Dark mode');
+    function themeChoiceButton(choice, value, label) {
+        var on = choice === value;
+        return '<button type="button" role="radio" data-theme-choice="' + value + '"'
+            + ' aria-checked="' + (on ? 'true' : 'false') + '"'
+            + ' tabindex="' + (on ? '0' : '-1') + '">' + label + '</button>';
     }
 
-    function renderThemeToggle(theme) {
-        var current = normalizeTheme(theme);
-        return '<button type="button" class="hebrew-shell-theme-toggle" data-theme-toggle'
-            + ' aria-pressed="' + (current === 'dark' ? 'true' : 'false') + '">'
-            + themeToggleLabel(current)
-            + '</button>';
+    /**
+     * בהיר / כהה / אוטומטי. aria-checked is the stored choice.
+     * data-resolved is the concrete light|dark on screen, including when the choice is auto.
+     */
+    function renderThemeSwitch(choice) {
+        var current = normalizeTheme(choice);
+        var resolved = resolvedTheme(current);
+        var resolvedName = resolved === 'dark' ? 'כהה' : 'בהיר';
+        return '<div class="theme-switch hebrew-shell-theme-toggle" role="radiogroup" data-theme-toggle data-theme-switch'
+            + ' data-resolved="' + resolved + '"'
+            + ' data-ui-aria-he="ערכת נושא" data-ui-aria-en="Theme" aria-label="ערכת נושא">'
+            + '<svg class="icon" width="18" height="18" aria-hidden="true" focusable="false"><use href="' + BRAND + 'sprite.svg#icon-theme"></use></svg>'
+            + themeChoiceButton(current, 'light', 'בהיר')
+            + themeChoiceButton(current, 'dark', 'כהה')
+            + themeChoiceButton(current, 'auto', 'אוטומטי')
+            + '<span class="visually-hidden" data-theme-resolved>' + resolvedName + '</span>'
+            + '</div>';
+    }
+
+    function paintThemeSwitch(scope) {
+        if (!scope || typeof scope.querySelector !== 'function') return;
+        var group = scope.querySelector('[data-theme-switch]');
+        if (!group) return;
+        var choice = readTheme();
+        var resolved = resolvedTheme(choice);
+        group.setAttribute('data-resolved', resolved);
+        var hidden = group.querySelector('[data-theme-resolved]');
+        if (hidden) hidden.textContent = resolved === 'dark' ? 'כהה' : 'בהיר';
+        var radios = group.querySelectorAll('[role="radio"]');
+        for (var i = 0; i < radios.length; i++) {
+            var on = radios[i].getAttribute('data-theme-choice') === choice;
+            radios[i].setAttribute('aria-checked', on ? 'true' : 'false');
+            radios[i].tabIndex = on ? 0 : -1;
+        }
     }
 
     function safeNextPath(value) {
@@ -263,7 +295,7 @@
             + '<div class="hebrew-shell-inner">'
             + '<a class="hebrew-brand" href="/" data-brand>'
             + brandMark()
-            + '<span class="hebrew-brand-text ui-pair"><span class="hebrew-brand-he ui-he" lang="he">דרך עברית</span>'
+            + '<span class="hebrew-brand-text ui-pair"><span class="hebrew-brand-he ui-he" lang="he">דֶּרֶךְ עִבְרִית</span>'
             + '<span class="hebrew-brand-en ui-en" lang="en" dir="ltr">Hebrew Way</span></span></a>'
             + '<nav class="hebrew-shell-nav" data-ui-aria-he="ניווט ראשי" data-ui-aria-en="Main" aria-label="ניווט ראשי">' + links + '</nav>'
             + '<div class="hebrew-shell-sync" data-shell-sync aria-live="polite"></div>'
@@ -272,7 +304,7 @@
             + '<button type="button" class="ui-lang-btn" data-ui-lang-set="en" aria-pressed="false">EN</button>'
             + '<button type="button" class="ui-lang-btn" data-ui-lang-set="he" aria-pressed="false">עב</button>'
             + '</div>'
-            + renderThemeToggle(theme)
+            + renderThemeSwitch(theme)
             + '<button type="button" class="hebrew-shell-account-btn" id="hebrew-shell-account-btn"'
             + ' aria-expanded="false" aria-haspopup="true" aria-controls="hebrew-shell-account-menu">'
             + '<span class="hebrew-shell-account-name">' + display + '</span>'
@@ -398,12 +430,30 @@
             });
         }
 
+        rootEl.addEventListener('keydown', function (event) {
+            var btn = event.target && event.target.closest && event.target.closest('[data-theme-switch] [role="radio"]');
+            if (!btn || !rootEl.contains(btn)) return;
+            var dir = 0;
+            var rtl = root.document && root.document.documentElement
+                && root.document.documentElement.getAttribute('dir') === 'rtl';
+            if (event.key === 'ArrowDown') dir = 1;
+            if (event.key === 'ArrowUp') dir = -1;
+            if (event.key === 'ArrowRight') dir = rtl ? -1 : 1;
+            if (event.key === 'ArrowLeft') dir = rtl ? 1 : -1;
+            if (!dir) return;
+            var radios = [].slice.call(btn.parentNode.querySelectorAll('[role="radio"]'));
+            var index = radios.indexOf(btn);
+            var next = radios[(index + dir + radios.length) % radios.length];
+            if (!next) return;
+            next.focus();
+            applyTheme(next.getAttribute('data-theme-choice'));
+            event.preventDefault();
+        });
+
         rootEl.addEventListener('click', function (event) {
-            var themeBtn = event.target.closest && event.target.closest('[data-theme-toggle]');
+            var themeBtn = event.target.closest && event.target.closest('[data-theme-choice]');
             if (themeBtn && rootEl.contains(themeBtn)) {
-                var nextTheme = toggleTheme();
-                themeBtn.setAttribute('aria-pressed', nextTheme === 'dark' ? 'true' : 'false');
-                themeBtn.innerHTML = themeToggleLabel(nextTheme);
+                applyTheme(themeBtn.getAttribute('data-theme-choice'));
                 return;
             }
             var langBtn = event.target.closest && event.target.closest('[data-ui-lang-set]');
