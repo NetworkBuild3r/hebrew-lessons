@@ -76,6 +76,12 @@ describe('tokenizeHebrew', () => {
         assert.equal(U.tokenizeHebrew(null).length, 0);
     });
 
+    it('stripVowels keeps maqaf and drops points', () => {
+        const stripped = U.stripVowels('\u05E2\u05B7\u05DC\u05BE\u05DB\u05BC\u05B5\u05DF');
+        assert.equal(stripped, '\u05E2\u05DC\u05BE\u05DB\u05DF');
+        assert.ok(stripped.includes('\u05BE'));
+    });
+
     it('NFC-normalizes input', () => {
         const a = 'קָם'.normalize('NFC');
         const tokens = U.tokenizeHebrew(a);

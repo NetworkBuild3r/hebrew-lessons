@@ -89,8 +89,9 @@
 
     utils.sid = function (id) { return String(id); };
 
+    // Points and cantillation. Maqaf (U+05BE) is punctuation and stays.
     utils.stripVowels = function (str) {
-        return String(str || '').replace(/[\u0591-\u05C7]/g, '');
+        return String(str || '').replace(/[\u0591-\u05BD\u05BF-\u05C7]/g, '');
     };
 
     utils.normalizeHebrew = function (str) {
