@@ -21,10 +21,12 @@ templ GuideCard(g Card) {
 	<article class="lesson-card guide-card" data-recipe="guide" data-plan-id={ g.PlanID } data-lesson-id={ g.LessonID }>
 		<div class="guide-card__cover" aria-hidden="true">
 			<img src={ "/shared/brand/illustrations/" + g.Cover + ".svg" } alt="" width="320" height="160" loading="lazy" decoding="async"/>
-			<span class="guide-card__letter" lang="he">{ g.Letter }</span>
+			if g.Letter != "" {
+				<span class="guide-card__letter" lang="he" dir="rtl">{ g.Letter }</span>
+			}
 		</div>
 		<div class="guide-card__body">
-			<span class="recipe-chip guide-card__meta" data-recipe="guide">מדריך <span lang="en" dir="ltr">Guide</span> · <bdi>{ g.Topic }</bdi></span>
+			<span class="recipe-chip guide-card__meta" data-recipe="guide"><span class="visually-hidden">מדריך <span lang="en" dir="ltr">Guide</span> · </span><bdi>{ g.Topic }</bdi></span>
 			<div class="guide-card__title-row">
 				<h3 lang={ g.TitleLang } dir={ g.TitleDir }><a class="lesson-link" href={ templ.SafeURL(g.Href) }>{ g.Title }</a></h3>
 				if g.HeTitle == "" && g.Speak != "" {

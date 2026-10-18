@@ -342,6 +342,10 @@ func groupTopics(rows []catalogLesson) []guideview.TopicGroup {
 			i = len(groups) - 1
 		}
 		lang, dir := guideview.LangDir(row.Title)
+		cover := guideview.CoverFor(row.PlanID + "/" + row.LessonID)
+		if n := len(groups[i].Cards); n > 0 && groups[i].Cards[n-1].Cover == cover {
+			cover = guideview.NextCover(cover)
+		}
 		groups[i].Cards = append(groups[i].Cards, guideview.GuideCard{
 			PlanID:   row.PlanID,
 			LessonID: row.LessonID,
@@ -350,12 +354,28 @@ func groupTopics(rows []catalogLesson) []guideview.TopicGroup {
 			Dir:      dir,
 			Href:     planHref(row.PlanID, row.LessonID),
 			Topic:    topic,
-			Cover:    guideview.CoverFor(row.PlanID),
-			Letter:   guideview.CoverLetter(row.Title, topic),
+			Cover:    cover,
+			Letter:   guideview.CoverLetter(row.Title, topic, firstExampleHe(row.Lesson)),
 		})
 	}
 	guideview.AssignSlugs(groups)
 	return groups
+}
+
+func firstExampleHe(lesson lessonDoc) string {
+	for _, block := range lesson.Blocks {
+		if block.Type != "explainer" {
+			continue
+		}
+		for _, section := range block.Sections {
+			for _, ex := range section.Examples {
+				if ex.He != "" {
+					return string(ex.He)
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func planHref(planID, lessonID string) string {

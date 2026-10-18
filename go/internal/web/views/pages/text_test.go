@@ -23,17 +23,52 @@ func TestHighlightRootKeepsPointsOnTheLetter(t *testing.T) {
 }
 
 func TestCoverLetterStripsNikudAndFallsBackToTopic(t *testing.T) {
-	if got := CoverLetter("חָשַׁב", "Verbs"); got != "ח" {
+	if got := CoverLetter("חָשַׁב", "Verbs", ""); got != "ח" {
 		t.Fatalf("cover letter %q", got)
 	}
-	if got := CoverLetter("Decoding", "הַ"); got != "ה" {
+	if got := CoverLetter("Decoding", "הַ", ""); got != "ה" {
 		t.Fatalf("topic letter %q", got)
 	}
-	if got := CoverLetter("Decoding", "פעלים"); got != "פ" {
+	if got := CoverLetter("Decoding", "פעלים", ""); got != "פ" {
 		t.Fatalf("topic letter %q", got)
 	}
-	if got := CoverLetter("Decoding", "Verbs"); got != "V" {
+	if got := CoverLetter("Decoding", "Verbs", ""); got != "" {
 		t.Fatalf("latin letter %q", got)
+	}
+	if got := CoverLetter("Decoding", "Verbs", "בַּיִת"); got != "ב" {
+		t.Fatalf("example letter %q", got)
+	}
+}
+
+func TestUILangDirEnglish(t *testing.T) {
+	lang, dir := UILangDir("en")
+	if lang != "en" || dir != "ltr" {
+		t.Fatalf("en: %s %s", lang, dir)
+	}
+	lang, dir = UILangDir("")
+	if lang != "en" || dir != "ltr" {
+		t.Fatalf("default: %s %s", lang, dir)
+	}
+}
+
+func TestUILangDirHebrew(t *testing.T) {
+	lang, dir := UILangDir("he")
+	if lang != "he" || dir != "rtl" {
+		t.Fatalf("he: %s %s", lang, dir)
+	}
+}
+
+func TestTextPartsKeepsAHebrewPhraseTogether(t *testing.T) {
+	parts := TextParts("Say שָׁלוֹם and then בֹּקֶר טוֹב today.")
+	if len(parts) != 5 || !parts[1].Hebrew || parts[1].Text != "שָׁלוֹם" || !parts[3].Hebrew || parts[3].Text != "בֹּקֶר טוֹב" {
+		t.Fatalf("parts %#v", parts)
+	}
+}
+
+func TestMaqafIsNotAPoint(t *testing.T) {
+	got := Clusters("א־ב")
+	if len(got) != 3 || got[1] != "־" {
+		t.Fatalf("clusters %#v", got)
 	}
 }
 

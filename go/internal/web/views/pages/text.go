@@ -59,8 +59,84 @@ func LangDir(s string) (lang, dir string) {
 	return "en", "ltr"
 }
 
-func isPoint(r rune) bool { return r >= 0x0591 && r <= 0x05C7 }
-func isBase(r rune) bool  { return r >= 0x05D0 && r <= 0x05EA }
+// UILangDir is the document language and direction for a Go page.
+// The interface language decides: he is Hebrew and right to left, and
+// anything else (including en) is English and left to right.
+func UILangDir(lang string) (uiLang, dir string) {
+	if lang == "he" {
+		return "he", "rtl"
+	}
+	return "en", "ltr"
+}
+
+// TextPart is one slice of a mixed string. A Hebrew part is a maximal run of
+// the Hebrew block. Spaces between Hebrew letters stay inside that run.
+// Maqaf (U+05BE) is already in the Hebrew block, so it stays in the run too.
+type TextPart struct {
+	Hebrew bool
+	Text   string
+}
+
+// TextParts splits s into Hebrew runs and the text around them.
+// The string is not normalized.
+func TextParts(s string) []TextPart {
+	rs := []rune(s)
+	var parts []TextPart
+	i := 0
+	for i < len(rs) {
+		if !isHebrewBlock(rs[i]) {
+			j := i + 1
+			for j < len(rs) && !isHebrewBlock(rs[j]) {
+				j++
+			}
+			parts = append(parts, TextPart{Text: string(rs[i:j])})
+			i = j
+			continue
+		}
+		j := i + 1
+		for j < len(rs) {
+			if isHebrewBlock(rs[j]) {
+				j++
+				continue
+			}
+			k := j
+			for k < len(rs) && isRunGap(rs[k]) {
+				k++
+			}
+			if k > j && k < len(rs) && isHebrewBlock(rs[k]) {
+				j = k
+				continue
+			}
+			break
+		}
+		parts = append(parts, TextPart{Hebrew: true, Text: string(rs[i:j])})
+		i = j
+	}
+	return parts
+}
+
+func isHebrewBlock(r rune) bool { return r >= 0x0590 && r <= 0x05FF }
+
+func isRunGap(r rune) bool {
+	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+}
+
+// isPoint is a Hebrew point (nikud), not a punctuation mark that shares the
+// block. Maqaf, paseq, sof pasuq, and nun hafukha stay in the word.
+func isPoint(r rune) bool {
+	if r >= 0x0591 && r <= 0x05BD {
+		return true
+	}
+	if r == 0x05BF {
+		return true
+	}
+	if r >= 0x05C1 && r <= 0x05C2 {
+		return true
+	}
+	return r >= 0x05C4 && r <= 0x05C7
+}
+
+func isBase(r rune) bool { return r >= 0x05D0 && r <= 0x05EA }
 
 // escapeHTML matches HebrewUtils.escapeHtml: & < > ". Apostrophes stay.
 func escapeHTML(s string) string {
