@@ -22,6 +22,25 @@ describe('flashcard typed answers (INIT-006/SPEC-012)', () => {
         assert.equal(Answers.matches('בוקר', POINTED, []), false);
     });
 
+    it('matches a maqaf and an ASCII hyphen in both directions', () => {
+        const maqaf = 'על\u05BEכן';
+        const hyphen = 'על-כן';
+        const pointed = '\u05E2\u05B7\u05DC\u05BE\u05DB\u05BC\u05B5\u05DF';
+        assert.equal(Answers.matches(hyphen, maqaf, []), true);
+        assert.equal(Answers.matches(maqaf, hyphen, []), true);
+        assert.equal(Answers.matches(hyphen, pointed, []), true);
+        assert.equal(Answers.matches(pointed, hyphen, []), true);
+        assert.equal(Answers.suggestGrade(hyphen, maqaf, []), 3);
+        assert.equal(Answers.suggestGrade(maqaf, hyphen, []), 3);
+    });
+
+    it('does not treat a missing joiner as the maqaf spelling', () => {
+        assert.equal(Answers.matches('עלכן', 'על\u05BEכן', []), false);
+        assert.equal(Answers.matches('על\u05BEכן', 'עלכן', []), false);
+        assert.equal(Answers.matches('עלכן', 'על-כן', []), false);
+        assert.equal(Answers.suggestGrade('עלכן', 'על\u05BEכן', []), 1);
+    });
+
     it('rejects a wrong answer and empty typing', () => {
         assert.equal(Answers.matches('קם', POINTED, ['בוקר']), false);
         assert.equal(Answers.matches('   ', POINTED, [UNPOINTED]), false);

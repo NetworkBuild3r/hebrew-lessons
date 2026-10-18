@@ -101,6 +101,16 @@ describe('tokenizeHebrew', () => {
         assert.equal(U.normalizeHebrew(hyphen), U.normalizeHebrew(pointedMaqaf));
     });
 
+    it('a word with no joiner stays distinct from the maqaf spelling', () => {
+        const maqaf = 'על\u05BEכן';
+        const plain = 'עלכן';
+        assert.equal(U.normalizeHebrew(plain), 'עלכן');
+        assert.equal(U.stripVowels(plain), 'עלכן');
+        assert.notEqual(U.normalizeHebrew(plain), U.normalizeHebrew(maqaf));
+        assert.notEqual(U.normalizeHebrew(plain), U.normalizeHebrew('על-כן'));
+        assert.notEqual(U.stripVowels(plain), U.stripVowels(maqaf));
+    });
+
     it('NFC-normalizes input', () => {
         const a = 'קָם'.normalize('NFC');
         const tokens = U.tokenizeHebrew(a);

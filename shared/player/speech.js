@@ -70,7 +70,12 @@
 
     function stripKey(text) {
         if (U && typeof U.stripVowels === 'function') return normalizeKey(U.stripVowels(text));
-        return normalizeKey(String(text || '').replace(/[\u0591-\u05C7]/g, ''));
+        // Same rule as HebrewUtils.stripVowels when that file is not on the page
+        // (the guides shell loads speech.js alone). Maqaf stays. An ASCII hyphen
+        // becomes a maqaf, so both spellings share one clip key.
+        return normalizeKey(String(text || '')
+            .replace(/[\u0591-\u05BD\u05BF-\u05C7]/g, '')
+            .replace(/\u002D/g, '\u05BE'));
     }
 
     function resolveAudioUrl(audioPath) {

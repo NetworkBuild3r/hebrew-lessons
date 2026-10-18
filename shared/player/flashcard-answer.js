@@ -8,14 +8,16 @@
 (function (root) {
     'use strict';
 
-    var VOWELS = /[\u0591-\u05C7]/g;
+    // Maqaf (U+05BE) stays. An ASCII hyphen is the same joiner, so it becomes a maqaf.
+    // This matches HebrewUtils.stripVowels, including when that file is not loaded.
+    var VOWELS = /[\u0591-\u05BD\u05BF-\u05C7]/g;
 
     function stripVowels(value) {
         var utils = root.HebrewUtils;
         var raw = String(value == null ? '' : value);
         var stripped = utils && typeof utils.stripVowels === 'function'
             ? utils.stripVowels(raw)
-            : raw.replace(VOWELS, '');
+            : raw.replace(VOWELS, '').replace(/\u002D/g, '\u05BE');
         return stripped.normalize('NFC').replace(/\s+/g, ' ').trim();
     }
 

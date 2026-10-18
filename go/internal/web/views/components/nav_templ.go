@@ -21,8 +21,8 @@ func learnerNav() []navItem {
 	return []navItem{
 		{ID: "today", Href: "/", He: "היום", En: "Today", Icon: "today"},
 		{ID: "lessons", Href: "/lessons/", He: "שיעורים", En: "Lessons", Icon: "lessons"},
-		{ID: "guides", Href: "/guides/", He: "מדריכים", En: "Guides", Icon: "guides"},
-		{ID: "verbs", Href: "/verbs/", He: "פעלים", En: "Verbs", Icon: "verbs"},
+		{ID: "guides", Href: "/guides/", He: "מדריכים", En: "Guides"},
+		{ID: "verbs", Href: "/verbs/", He: "פעלים", En: "Verbs"},
 		{ID: "review", Href: "/review/", He: "חזרה", En: "Review", Icon: "review"},
 		{ID: "words", Href: "/words/", He: "מילים", En: "Words", Icon: "words"},
 		{ID: "progress", Href: "/progress/", He: "התקדמות", En: "Progress", Icon: "progress"},
@@ -289,7 +289,7 @@ func shellInner(current string, ui UI) templ.Component {
 			templ_7745c5c3_Var12 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"hebrew-shell ui-chrome\" dir=\"rtl\" lang=\"he\"><div class=\"hebrew-shell-inner\"><a class=\"hebrew-brand\" href=\"/\" data-brand><img class=\"hebrew-logo-mark\" src=\"/shared/brand/mark-a.svg\" width=\"30\" height=\"30\" alt=\"\" decoding=\"async\"> <span class=\"hebrew-brand-text ui-pair\"><span class=\"hebrew-brand-he ui-he\" lang=\"he\">דֶּרֶךְ עִבְרִית</span><span class=\"hebrew-brand-en ui-en\" lang=\"en\" dir=\"ltr\">Hebrew Way</span></span></a><nav class=\"hebrew-shell-nav\" data-ui-aria-he=\"ניווט ראשי\" data-ui-aria-en=\"Main\" aria-label=\"ניווט ראשי\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"hebrew-shell ui-chrome\" dir=\"rtl\" lang=\"he\"><div class=\"hebrew-shell-inner\"><a class=\"hebrew-brand\" href=\"/\" data-brand><img class=\"hebrew-logo-mark\" src=\"/shared/brand/mark-a.svg\" width=\"30\" height=\"30\" alt=\"\" decoding=\"async\"> <span class=\"hebrew-brand-text ui-pair\"><span class=\"hebrew-brand-he ui-he\" lang=\"he\">דרך עברית</span><span class=\"hebrew-brand-en ui-en\" lang=\"en\" dir=\"ltr\">Hebrew Way</span></span></a><nav class=\"hebrew-shell-nav\" data-ui-aria-he=\"ניווט ראשי\" data-ui-aria-en=\"Main\" aria-label=\"ניווט ראשי\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

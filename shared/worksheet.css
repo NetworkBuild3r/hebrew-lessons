@@ -1630,6 +1630,10 @@ textarea {
     color: #fff;
     font-size: 0.8rem;
 }
+/* English stays on the left of its column. The span is dir="ltr" and the list
+   is direction:ltr, so start is that left edge even when the lesson page is
+   RTL. Physical left would paint the same today; start keeps doing so because
+   the English element does not inherit the page direction. */
 .match-pair .pair-en { text-align: start; }
 .match-pair .pair-he { text-align: end; font-size: 1.15rem; }
 .match-pair .pair-check {
