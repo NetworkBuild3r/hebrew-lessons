@@ -13,6 +13,7 @@ const os = require('os');
 
 const harness = require('./helpers/signed-in-server');
 const { CHROME, chromeSkip } = require('./helpers/chrome-cdp');
+const playerBundle = require('./helpers/player-bundle');
 
 const root = path.resolve(__dirname, '..');
 // Sign-in is required for every page (INIT-002), so this runs against the signed-in
@@ -108,6 +109,7 @@ function sleep(ms) {
 
 describe('retry-before-reveal smoke (SPEC-006)', { skip: chromeSkip() }, () => {
     before(async () => {
+        playerBundle.ensurePlayerBundle();
         const started = await harness.start({ lessons: 'real' });
         BASE = started.baseUrl;
 

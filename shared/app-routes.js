@@ -37,7 +37,8 @@
     var SITE = ' · דרך עברית';
 
     var SPEECH_AND_WORD_DATA = [
-        '/shared/player/speech.js',
+        // Built by `npm run build:player`. Sets HebrewSpeech (and HebrewFlashcardAnswer).
+        '/shared/dist/player.js',
         '/shared/player/feedback.js',
         '/shared/word-audio-catalog.js',
         '/worksheets/_audio/words/catalog.js',
@@ -132,9 +133,9 @@
                 subtitleId: 'review-subtitle'
             },
             // Script tags only for vocab data (ADR-0001 constraint 2): never fetch() it.
+            // HebrewSpeech and HebrewFlashcardAnswer come from the bundle at the
+            // front of SPEECH_AND_WORD_DATA. Do not load that file a second time.
             scripts: SPEECH_AND_WORD_DATA.concat([
-                // Built by `npm run build:player`. Sets HebrewFlashcardAnswer.
-                '/shared/dist/player.js',
                 '/shared/review-page.js'
             ]),
             view: 'HebrewReviewPage'
@@ -153,7 +154,7 @@
                 subHe: 'הספרייה שלכם — חיפוש, תגיות, והוספה.',
                 subEn: 'Your library — search, tags, and add.'
             },
-            scripts: ['/shared/player/speech.js', '/shared/player/feedback.js', '/shared/words-page.js'],
+            scripts: ['/shared/dist/player.js', '/shared/player/feedback.js', '/shared/words-page.js'],
             view: 'HebrewWordsPage'
         },
         {

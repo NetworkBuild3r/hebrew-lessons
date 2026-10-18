@@ -8,6 +8,9 @@ const path = require('path');
 const fs = require('fs');
 const vm = require('vm');
 
+const bundle = require('./helpers/player-bundle');
+const speechBundle = bundle.ensurePlayerBundle();
+
 function loadActivity(file, extra) {
     const sandbox = {
         console,
@@ -136,7 +139,7 @@ describe('match pairs', () => {
 describe('story comprehension questions', () => {
     it('collapses the questions by default but keeps the answer boxes in the page', () => {
         const { def, sandbox } = loadActivity('story.js', [
-            path.join(__dirname, '../shared/player/speech.js')
+            speechBundle
         ]);
         const ctx = makeCtx(sandbox, WS);
         ctx.vowelsOn = true;
@@ -150,7 +153,7 @@ describe('story comprehension questions', () => {
 
     it('opens by default once the learner chose to show them', () => {
         const { def, sandbox } = loadActivity('story.js', [
-            path.join(__dirname, '../shared/player/speech.js')
+            speechBundle
         ]);
         sandbox.localStorage.setItem('hebrew-worksheet-prefs', JSON.stringify({ questionsOpen: true }));
         const ctx = makeCtx(sandbox, WS);
@@ -163,7 +166,7 @@ describe('story comprehension questions', () => {
 
     it('shows no toggle when a lesson has no questions', () => {
         const { def, sandbox } = loadActivity('story.js', [
-            path.join(__dirname, '../shared/player/speech.js')
+            speechBundle
         ]);
         const ctx = makeCtx(sandbox, { ...WS, reading: { paragraphs: ['קם'] } });
         ctx.vowelsOn = true;
