@@ -141,9 +141,9 @@ func TestShelfMatchesTheNodePage(t *testing.T) {
 		`data-plan-id="guides-shelf"`,
 		`data-lesson-id="decoding"`,
 		`href="/shared/plan/?id=guides-shelf&amp;lesson=decoding"`,
-		`lang="en" dir="ltr">Decoding Hebrew Verbs`,
+		`lang="en" dir="ltr"><a class="lesson-link" href="/shared/plan/?id=guides-shelf&amp;lesson=decoding">Decoding Hebrew Verbs</a>`,
 		`lang="he" dir="rtl">פעלים`,
-		`lang="he" dir="rtl">` + pointed,
+		`lang="he" dir="rtl"><a class="lesson-link" href="/shared/plan/?id=guides-shelf-he&amp;lesson=shoresh">` + pointed + `</a>`,
 		`hebrew-spa has-hebrew-shell guides-page`,
 	} {
 		if !strings.Contains(html, want) {
@@ -158,6 +158,15 @@ func TestShelfMatchesTheNodePage(t *testing.T) {
 	}
 	if strings.Contains(html, "fonts.googleapis.com") || strings.Contains(html, "cdn.") {
 		t.Fatal("page references a font CDN")
+	}
+	if !strings.Contains(html, `role="radiogroup"`) || !strings.Contains(html, "אוטומטי") || !strings.Contains(html, "icon-theme") {
+		t.Fatal("theme switch missing")
+	}
+	if strings.Contains(html, "data-say=") || strings.Contains(html, "data-clip=") || strings.Contains(html, "status-chip") {
+		t.Fatal("shelf used a retired hook or a status chip")
+	}
+	if !strings.Contains(html, `guide-card__letter" lang="he">ח</span>`) {
+		t.Fatal("cover letter kept its nikud")
 	}
 	if strings.Count(html, "<script") != 3 {
 		t.Fatalf("script count %d, want the two pre-paint scripts and the theme toggle", strings.Count(html, "<script"))
@@ -239,7 +248,6 @@ func TestGuideDetailRendersExplainerWithoutPictures(t *testing.T) {
 		`class="root-letter"`,
 		`lang="en" dir="ltr">he thought`,
 		`lang="en" dir="ltr">chashav`,
-		`data-say="` + pointed + `"`,
 		`data-speak="` + pointed + `"`,
 		`class="audio-btn"`,
 		`example-row__gloss`,
@@ -255,6 +263,9 @@ func TestGuideDetailRendersExplainerWithoutPictures(t *testing.T) {
 		}
 	}
 	root := html[strings.Index(html, `id="plan-root"`):]
+	if strings.Contains(html, "data-say=") || strings.Contains(html, "data-clip=") || strings.Contains(html, "data-audio=") {
+		t.Fatal("detail used a hook other than data-speak")
+	}
 	if strings.Contains(root, "<img") {
 		t.Fatal("guide rendered a picture")
 	}
@@ -407,6 +418,32 @@ func TestHeroIsNotRepeatedInTheGrid(t *testing.T) {
 	}
 	if strings.Contains(html, `id="topic-verbs"`) && strings.Contains(html, `data-lesson-id="decoding"`) {
 		t.Fatal("verbs topic still contains the hero card")
+	}
+}
+
+func TestHebrewCardButtonSitsOutsideTheLink(t *testing.T) {
+	row := guideSnapshot("guides-shelf", "Verbs", "shoresh", pointed, "everyone", "guide", "")
+	html := body(get(t, newMux(memSource{rows: []PlanSnapshot{row}}), "/guides/", false))
+	i := strings.Index(html, `data-lesson-id="shoresh"`)
+	if i < 0 {
+		t.Fatal("card missing")
+	}
+	article := html[i:]
+	end := strings.Index(article, "</article>")
+	if end < 0 {
+		t.Fatal("article did not close")
+	}
+	article = article[:end]
+	linkEnd := strings.Index(article, "</a>")
+	btn := strings.Index(article, "audio-btn")
+	if linkEnd < 0 || btn < 0 || btn < linkEnd {
+		t.Fatalf("button is inside the link or missing:\n%s", article)
+	}
+	if !strings.Contains(article, `data-speak="`+pointed+`"`) {
+		t.Fatal("card button has no data-speak")
+	}
+	if strings.Contains(article, "data-audio=") {
+		t.Fatal("card invented a clip")
 	}
 }
 
