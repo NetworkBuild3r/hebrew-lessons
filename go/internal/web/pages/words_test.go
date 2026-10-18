@@ -84,11 +84,27 @@ func TestWordsPageHooks(t *testing.T) {
 		`data-strength="shaky"`,
 		`data-strength="steady"`,
 		`data-strength="solid"`,
+		`מילים — Words · דֶּרֶךְ עִבְרִית`,
+		`role="status"`,
+		`hx-on:htmx:send-error`,
+		`hx-on:htmx:response-error`,
+		`wordsNetError`,
+		`Loading…`,
+		`[\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7]`,
+		`· Solid`,
 	}
 	for _, want := range checks {
 		if !strings.Contains(html, want) {
 			t.Errorf("missing %s", want)
 		}
+	}
+	status := html[strings.Index(html, `id="words-status"`):]
+	statusEnd := strings.Index(status, "</p>")
+	if strings.Contains(status[:statusEnd], `role="alert"`) {
+		t.Fatal("result counter is an alert")
+	}
+	if strings.Contains(html, `[\u0591-\u05C7]`) {
+		t.Fatal("vowel strip still deletes the maqaf")
 	}
 	if strings.Contains(html, "data-words-add") || strings.Contains(html, "data-words-suspend") {
 		t.Fatal("write controls shipped in the read-only page")
@@ -126,8 +142,15 @@ func TestBinyanFilterSetsTheReviewDeck(t *testing.T) {
 		t.Fatal("binyan attribute")
 	}
 	open := get(t, wordsMux(library.Demo{}), "/words/?binyan=hifil&word="+url.QueryEscape("הִסְבִּיר"), false)
-	if open.Code != http.StatusOK || !strings.Contains(body(open), "Hebrew → English") || !strings.Contains(body(open), `data-binyan="hifil"`) {
+	detail := body(open)
+	if open.Code != http.StatusOK || !strings.Contains(detail, "Hebrew → English") || !strings.Contains(detail, `data-binyan="hifil"`) {
 		t.Fatalf("detail %d", open.Code)
+	}
+	if !strings.Contains(detail, "Selected word") || !strings.Contains(detail, "How well you know it") || !strings.Contains(detail, ">Shaky<") {
+		t.Fatal("detail kicker, heading, or strength casing")
+	}
+	if strings.Contains(detail, ">not yet checked<") {
+		t.Fatal("duplicate unchecked label")
 	}
 }
 
