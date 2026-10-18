@@ -1,14 +1,24 @@
 package components
 
-// AudioButton is the player hook. data-say / data-clip are the guide names.
-// data-speak / data-audio are the names shared/player/core.js already listens
-// for, so this page does not add a second player.
+// AudioButton is the player hook shared/player/core.js already listens for.
+// data-speak is the Hebrew for speech. data-audio is set only when a clip URL
+// exists. The page does not add a second player.
 templ AudioButton(say string, clip string) {
 	if say != "" || clip != "" {
-		<button type="button" class="audio-btn" aria-label="השמעה" data-say={ say } data-clip={ clip } data-speak={ say } data-audio={ clip }>
-			<svg class="icon" width="24" height="24" aria-hidden="true" focusable="false">
-				<use href="/shared/brand/sprite.svg#icon-sound"></use>
-			</svg>
-		</button>
+		if clip != "" {
+			<button type="button" class="audio-btn" aria-label="השמעה" data-speak={ say } data-audio={ clip }>
+				@audioIcon()
+			</button>
+		} else {
+			<button type="button" class="audio-btn" aria-label="השמעה" data-speak={ say }>
+				@audioIcon()
+			</button>
+		}
 	}
+}
+
+templ audioIcon() {
+	<svg class="icon" width="24" height="24" aria-hidden="true" focusable="false">
+		<use href="/shared/brand/sprite.svg#icon-sound"></use>
+	</svg>
 }

@@ -13,9 +13,11 @@ import "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/component
 // Layout is the signed-in document shell. The document stays Hebrew and RTL.
 // Two pre-paint scripts read the same localStorage keys the app uses.
 // Theme follows the OS until a saved light, dark, or auto choice says
-// otherwise. That default is provisional: ADR-0015 still defaults Node to light.
-// The toggle handler is the only other script. No audio player is added;
-// buttons carry the hooks the existing player already listens for.
+// otherwise. data-theme is the resolved light or dark value. data-theme-choice
+// keeps auto so the switch can show it. That default is provisional:
+// ADR-0015 still defaults Node to light, and this page does not change
+// app-shell.js. The switch handler is the only other script. No audio player
+// is added; buttons carry the hooks the existing player already listens for.
 func Layout(doc Doc) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -44,7 +46,7 @@ func Layout(doc Doc) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(doc.PageHe)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 14, Col: 92}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 16, Col: 92}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -57,7 +59,7 @@ func Layout(doc Doc) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(doc.PageEn)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 14, Col: 120}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 16, Col: 120}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -71,7 +73,7 @@ func Layout(doc Doc) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templ.Raw("<script>(function(){try{var t=localStorage.getItem('hebrew-theme');if(t!=='light'&&t!=='dark'&&t!=='auto')t='auto';var dark=false;try{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}catch(e2){}var resolved=t==='auto'?(dark?'dark':'light'):t;var root=document.documentElement;root.setAttribute('data-theme',resolved);root.setAttribute('data-theme-choice',t);}catch(e){document.documentElement.setAttribute('data-theme','light');document.documentElement.setAttribute('data-theme-choice','auto');}})();</script>").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = templ.Raw("<script>(function(){var choice='auto';try{choice=localStorage.getItem('hebrew-theme')||'auto';}catch(e){}if(choice!=='light'&&choice!=='dark'&&choice!=='auto')choice='auto';var resolved=choice;if(choice==='auto'){var dark=false;try{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}catch(e2){}resolved=dark?'dark':'light';}var root=document.documentElement;root.setAttribute('data-theme',resolved);root.setAttribute('data-theme-choice',choice);})();</script>").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -82,7 +84,7 @@ func Layout(doc Doc) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(doc.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 22, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 24, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -125,7 +127,7 @@ func Layout(doc Doc) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(doc.RouteReady)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 35, Col: 83}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 37, Col: 83}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -146,7 +148,7 @@ func Layout(doc Doc) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(doc.Announce)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 38, Col: 108}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 40, Col: 108}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
@@ -156,7 +158,7 @@ func Layout(doc Doc) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templ.Raw("<script>(function(){var order=['light','dark','auto'];function resolve(choice){if(choice==='dark')return 'dark';if(choice==='light')return 'light';try{return window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}catch(e){return 'light';}}function apply(choice,persist){if(order.indexOf(choice)<0)choice='auto';var root=document.documentElement;root.setAttribute('data-theme-choice',choice);root.setAttribute('data-theme',resolve(choice));if(persist){try{localStorage.setItem('hebrew-theme',choice);}catch(e){}}var btn=document.querySelector('[data-theme-toggle]');if(btn){btn.setAttribute('data-theme-choice',choice);btn.setAttribute('aria-pressed',choice==='dark'?'true':'false');}}document.addEventListener('click',function(ev){var btn=ev.target&&ev.target.closest&&ev.target.closest('[data-theme-toggle]');if(!btn)return;var cur=document.documentElement.getAttribute('data-theme-choice')||'auto';var i=order.indexOf(cur);apply(order[(i+1)%order.length],true);});try{var mq=window.matchMedia('(prefers-color-scheme: dark)');var onChange=function(){if((document.documentElement.getAttribute('data-theme-choice')||'auto')==='auto')apply('auto',false);};if(mq.addEventListener)mq.addEventListener('change',onChange);else if(mq.addListener)mq.addListener(onChange);}catch(e){}apply(document.documentElement.getAttribute('data-theme-choice')||'auto',false);})();</script>").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = templ.Raw("<script>(function(){var order=['light','dark','auto'];function resolve(choice){if(choice==='dark')return 'dark';if(choice==='light')return 'light';try{return window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}catch(e){return 'light';}}function apply(choice,persist){if(order.indexOf(choice)<0)choice='auto';var root=document.documentElement;root.setAttribute('data-theme-choice',choice);root.setAttribute('data-theme',resolve(choice));if(persist){try{localStorage.setItem('hebrew-theme',choice);}catch(e){}}var radios=document.querySelectorAll('.theme-switch [role=\"radio\"]');for(var i=0;i<radios.length;i++){radios[i].setAttribute('aria-checked',radios[i].getAttribute('data-theme-choice')===choice?'true':'false');}}document.addEventListener('click',function(ev){var btn=ev.target&&ev.target.closest&&ev.target.closest('.theme-switch [role=\"radio\"]');if(!btn)return;apply(btn.getAttribute('data-theme-choice'),true);});document.addEventListener('keydown',function(ev){var btn=ev.target&&ev.target.closest&&ev.target.closest('.theme-switch [role=\"radio\"]');if(!btn)return;var dir=0;if(ev.key==='ArrowRight'||ev.key==='ArrowDown')dir=1;if(ev.key==='ArrowLeft'||ev.key==='ArrowUp')dir=-1;if(!dir)return;var radios=[].slice.call(btn.parentNode.querySelectorAll('[role=\"radio\"]'));var i=radios.indexOf(btn);var next=radios[(i+dir+radios.length)%radios.length];if(!next)return;next.focus();apply(next.getAttribute('data-theme-choice'),true);ev.preventDefault();});try{var mq=window.matchMedia('(prefers-color-scheme: dark)');var onChange=function(){if((document.documentElement.getAttribute('data-theme-choice')||'auto')==='auto')apply('auto',false);};if(mq.addEventListener)mq.addEventListener('change',onChange);else if(mq.addListener)mq.addListener(onChange);}catch(e){}apply(document.documentElement.getAttribute('data-theme-choice')||'auto',false);})();</script>").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

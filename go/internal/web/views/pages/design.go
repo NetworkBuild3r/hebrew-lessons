@@ -27,13 +27,37 @@ func CoverFor(planID string) string {
 	return coverNames[h.Sum32()%uint32(len(coverNames))]
 }
 
-// CoverLetter is the first Hebrew letter of the title, with the nikud that
-// follows it. A title with no Hebrew uses the first letter of the topic.
+// CoverLetter is the first Hebrew base letter of the title. Nikud is stripped
+// so the decorative letter can use the unpointed face. A title with no Hebrew
+// uses the first base letter of the topic.
 func CoverLetter(title, topic string) string {
 	if letter := firstHebrewCluster(title); letter != "" {
-		return letter
+		return stripPoints(letter)
 	}
-	return firstCluster(topic)
+	return stripPoints(firstCluster(topic))
+}
+
+// stripPoints drops Hebrew points (U+0591–U+05C7). The string is not normalized.
+func stripPoints(s string) string {
+	return strings.Map(func(r rune) rune {
+		if isPoint(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// cardSpeak is the Hebrew line a card button can voice. A separate Hebrew
+// title is voiced from that line. Otherwise a Hebrew card title is voiced,
+// and the button stays outside the link.
+func cardSpeak(card GuideCard) string {
+	if card.HeTitle != "" {
+		return ""
+	}
+	if HasHebrew(card.Title) {
+		return card.Title
+	}
+	return ""
 }
 
 // HeroLettering is the guide title when it is Hebrew. An English title has

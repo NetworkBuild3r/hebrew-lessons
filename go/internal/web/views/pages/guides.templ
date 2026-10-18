@@ -19,7 +19,7 @@ templ guideCard(card GuideCard) {
 		TitleLang: card.Lang,
 		TitleDir:  card.Dir,
 		HeTitle:   card.HeTitle,
-		Status:    card.Status,
+		Speak:     cardSpeak(card),
 	})
 }
 
@@ -28,8 +28,10 @@ templ guidesHero(card GuideCard) {
 		<img class="guides-hero__art" src="/shared/brand/illustrations/hero-skyline-night.svg" alt="" aria-hidden="true" width="1200" height="360"/>
 		<p class="guides-hero__kicker">@components.Pair("מתחילים כאן", "Start here")</p>
 		if HeroLettering(card.Title) != "" {
-			<p class="guides-hero__lettering" lang="he" dir="rtl">{ HeroLettering(card.Title) }</p>
-			@components.AudioButton(card.Title, "")
+			<div class="guides-hero__he-row">
+				<p class="guides-hero__lettering" lang="he" dir="rtl">{ HeroLettering(card.Title) }</p>
+				@components.AudioButton(card.Title, "")
+			</div>
 		}
 		<p class="guides-hero__title" lang={ card.Lang } dir={ card.Dir }>{ card.Title }</p>
 		<div class="guides-hero__actions">

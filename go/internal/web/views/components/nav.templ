@@ -66,11 +66,12 @@ templ Shell(current string) {
 					<button type="button" class="ui-lang-btn" data-ui-lang-set="en" aria-pressed="false">EN</button>
 					<button type="button" class="ui-lang-btn" data-ui-lang-set="he" aria-pressed="false">עב</button>
 				</div>
-				<button type="button" class="hebrew-shell-theme-toggle" data-theme-toggle aria-pressed="false">
-					<span class="theme-choice theme-choice-light">@Pair("בהיר", "Light")</span>
-					<span class="theme-choice theme-choice-dark">@Pair("כהה", "Dark")</span>
-					<span class="theme-choice theme-choice-auto">@Pair("לפי המערכת", "Auto")</span>
-				</button>
+				<div class="theme-switch" role="radiogroup" data-ui-aria-he="ערכת נושא" data-ui-aria-en="Theme" aria-label="ערכת נושא">
+					<svg class="icon" width="18" height="18" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-theme"></use></svg>
+					<button type="button" role="radio" data-theme-choice="light" aria-checked="false">בהיר</button>
+					<button type="button" role="radio" data-theme-choice="dark" aria-checked="false">כהה</button>
+					<button type="button" role="radio" data-theme-choice="auto" aria-checked="true">אוטומטי</button>
+				</div>
 				<button type="button" class="hebrew-shell-account-btn" id="hebrew-shell-account-btn" aria-expanded="false" aria-haspopup="true" aria-controls="hebrew-shell-account-menu">
 					<span class="hebrew-shell-account-name"></span>
 					<span class="hebrew-shell-account-caret" aria-hidden="true">▾</span>
