@@ -150,14 +150,17 @@ func findIntro(doc *Unit, norm, bare string) (int, int, bool) {
 	return 0, 0, false
 }
 
-func wordBefore(w wordRef, lesson, activity int) bool {
+// introducedBy reports that w's introducing activity is this one or an
+// earlier one. The introducing activity itself counts: a passage that
+// introduces a new word does not score that word as unknown.
+func introducedBy(w wordRef, lesson, activity int) bool {
 	if !w.found {
 		return false
 	}
 	if w.lesson < lesson {
 		return true
 	}
-	return w.lesson == lesson && w.activity < activity
+	return w.lesson == lesson && w.activity <= activity
 }
 
 func countWord(les Lesson, w wordRef) int {

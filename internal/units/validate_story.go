@@ -10,8 +10,8 @@ import "fmt"
 //
 // Ignored, and not reported:
 //   - punctuation (it is not a token)
-//   - numbers, including decimal digits and Hebrew numerals or
-//     abbreviations written with geresh or gershayim
+//   - numbers: decimal digits, or Hebrew numeral notation (ה׳, תשפ״ז).
+//     A geresh loanword such as צ׳יפס is a word, not a number
 //   - names, meaning a lexicon entry whose part of speech is name, propn,
 //     or proper noun, matched on the normalized token or its consonant
 //     skeleton

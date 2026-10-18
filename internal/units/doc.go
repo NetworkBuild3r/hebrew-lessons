@@ -72,7 +72,11 @@ type Lookup interface {
 	// time and the course is global, so this is not scoped to a learner.
 	// Validate passes Unit.Position.
 	KnownLexemes(ctx context.Context, beforePosition int) (map[string]bool, error)
-	// HasAudio reports whether a clip exists for the exact pointed NFC text.
+	// HasAudio reports whether a clip exists for textNFC.
+	// Validate passes the activity text after normalize: Unicode NFC,
+	// format characters removed, whitespace collapsed. Niqqud stays on
+	// the key. The lookup is that exact string, not the consonant
+	// skeleton and not the raw activity text.
 	HasAudio(ctx context.Context, textNFC string) (bool, error)
 	// LexemeByText returns the lexicon id for the exact pointed NFC text.
 	// ok is false when the text is not in the lexicon.

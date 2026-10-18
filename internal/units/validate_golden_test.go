@@ -233,6 +233,8 @@ func goldenCases() []goldenCase {
 	v := validCase()
 	return []goldenCase{
 		v,
+		introducingListen(),
+		introducingStory(),
 		boundary23(),
 		budgetUnit(),
 		budgetLesson(),
@@ -259,6 +261,30 @@ func goldenCases() []goldenCase {
 		nounPlural(true),
 		storyUnpointed(),
 		storyUnmapped(),
+	}
+}
+
+func introducingListen() goldenCase {
+	u, _ := base()
+	text := strings.Join(u.NewWords[:2], " ")
+	u.Lessons[0].Activities = append([]Activity{{Type: ActivityListenPick, Text: text}}, u.Lessons[0].Activities...)
+	return goldenCase{
+		file:   "introducing_listen.json",
+		name:   "A listen_pick that introduces its new words counts those words as known in that activity. Coverage is not 0%. Listening stays a passage, with the same thresholds as story.",
+		unit:   u,
+		lookup: lookupFor(vocab8, u, nil),
+	}
+}
+
+func introducingStory() goldenCase {
+	u, _ := base()
+	text := strings.Join(u.NewWords[:2], " ")
+	u.Lessons[0].Activities = append([]Activity{{Type: ActivityStory, Text: text}}, u.Lessons[0].Activities...)
+	return goldenCase{
+		file:   "introducing_story.json",
+		name:   "A story that introduces its new words counts those words as known in that activity. Coverage is not 0%.",
+		unit:   u,
+		lookup: lookupFor(vocab8, u, nil),
 	}
 }
 

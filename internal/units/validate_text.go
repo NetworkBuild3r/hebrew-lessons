@@ -36,9 +36,10 @@ import (
 // does not count either.
 //
 // A token is a number when it is all decimal digits, or when it is Hebrew
-// letters plus geresh (U+05F3) or gershayim (U+05F4). That second shape
-// covers Hebrew numerals and letter-abbreviations, which the pointing rule
-// treats as numbers.
+// numeral notation. A one-letter numeral is a Hebrew letter plus geresh
+// (U+05F3), as in ה׳. A longer numeral is Hebrew letters with gershayim
+// (U+05F4) immediately before the last letter, as in י״ב or תשפ״ז.
+// A geresh inside a loanword, as in צ׳יפס or ג׳ירפה, is not a number.
 
 func normalize(s string) string {
 	s = strings.Map(func(r rune) rune {
@@ -114,30 +115,43 @@ func isNumberTok(tok string) bool {
 	if tok == "" {
 		return false
 	}
-	digits := true
-	hebrew := false
-	geresh := false
+	var sig []rune
 	for _, r := range tok {
-		switch {
-		case r >= '0' && r <= '9':
-		case isHebrewLetter(r):
+		if isStrippedMark(r) || r == 0x05C1 || r == 0x05C2 {
+			continue
+		}
+		sig = append(sig, r)
+	}
+	if len(sig) == 0 {
+		return false
+	}
+	digits := true
+	for _, r := range sig {
+		if r < '0' || r > '9' {
 			digits = false
-			hebrew = true
-		case r == 0x05F3 || r == 0x05F4:
-			digits = false
-			geresh = true
-		default:
-			if isStrippedMark(r) || r == 0x05C1 || r == 0x05C2 {
-				digits = false
-				continue
-			}
-			return false
+			break
 		}
 	}
 	if digits {
 		return true
 	}
-	return hebrew && geresh
+	// ה׳ : one letter, then geresh.
+	if len(sig) == 2 && isHebrewLetter(sig[0]) && sig[1] == 0x05F3 {
+		return true
+	}
+	// תשפ״ז, י״ב: gershayim immediately before the last letter.
+	if len(sig) >= 3 && sig[len(sig)-2] == 0x05F4 {
+		for i, r := range sig {
+			if i == len(sig)-2 {
+				continue
+			}
+			if !isHebrewLetter(r) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 func containsHebrew(s string) bool {

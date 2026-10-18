@@ -25,11 +25,11 @@ func TestTextNormalizeAndTokens(t *testing.T) {
 	if !isPointed("שָׁלוֹם") || !isPointed("בּ") {
 		t.Fatal("vowel or dagesh should count as niqqud")
 	}
-	if !isNumberTok("12") || !isNumberTok("י״ב") {
-		t.Fatal("numbers should be recognized")
+	if !isNumberTok("12") || !isNumberTok("י״ב") || !isNumberTok("ה׳") || !isNumberTok("תשפ״ז") {
+		t.Fatal("digits and Hebrew numerals should be recognized")
 	}
-	if isNumberTok("שָׁלוֹם") {
-		t.Fatal("a pointed word is not a number")
+	if isNumberTok("שָׁלוֹם") || isNumberTok("צ׳יפס") || isNumberTok("ג׳ירפה") {
+		t.Fatal("a word, including a geresh loanword, is not a number")
 	}
 	if stripNiqqud("בֹּקֶר") != stripNiqqud("בָּקָר") {
 		t.Fatalf("homograph skeletons differ: %q vs %q", stripNiqqud("בֹּקֶר"), stripNiqqud("בָּקָר"))
@@ -301,6 +301,66 @@ func (p *posLookup) KnownLexemes(ctx context.Context, before int) (map[string]bo
 		out[text] = ok
 	}
 	return out, nil
+}
+
+func TestGereshLoanwordIsNotANumber(t *testing.T) {
+	u, lk := v1()
+	text := strings.Join([]string{"צ׳יפס", "ה׳", "תשפ״ז"}, " ")
+	li := len(u.Lessons) - 1
+	ai := addActAt(&u, li, ActivityStory, text)
+	lk.audio[normalize(text)] = true
+	got := Validate(context.Background(), &u, lk)
+	want := []Issue{
+		iss(RuleCoverageStory, SeverityBlock, at("lessons", li, "activities", ai)),
+		iss(RuleStoryUnmapped, SeverityBlock, at("lessons", li, "activities", ai, "text")),
+		iss(RuleStoryUnpointed, SeverityBlock, at("lessons", li, "activities", ai, "text")),
+	}
+	if !sameIssues(got, want) {
+		t.Fatalf("loanword = %s", mustJSON(stripMsg(got)))
+	}
+	joined := joinMsgs(got)
+	if !strings.Contains(joined, "צ׳יפס") || strings.Contains(joined, "ה׳") || strings.Contains(joined, "תשפ״ז") {
+		t.Fatalf("messages = %s", joined)
+	}
+}
+
+func TestHasAudioUsesNormalizedPointedText(t *testing.T) {
+	u, lk := v1()
+	raw := "  " + norm.NFD.String(vocab8[0].text) + "   "
+	want := normalize(raw)
+	if want != vocab8[0].text || stripNiqqud(want) == want {
+		t.Fatalf("normalized key = %q", want)
+	}
+	u.Lessons[0].Activities[0].Text = raw
+	rec := &audioLookup{fakeLookup: lk}
+	if got := Validate(context.Background(), &u, rec); len(got) != 0 {
+		t.Fatalf("issues %s", mustJSON(got))
+	}
+	found := false
+	for _, key := range rec.keys {
+		if key == raw || key == stripNiqqud(want) {
+			t.Fatalf("HasAudio key %q", key)
+		}
+		if key == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("keys %q, want %q", rec.keys, want)
+	}
+}
+
+type audioLookup struct {
+	fakeLookup
+	keys []string
+}
+
+func (a *audioLookup) HasAudio(ctx context.Context, text string) (bool, error) {
+	a.keys = append(a.keys, text)
+	if a.err != nil {
+		return false, a.err
+	}
+	return a.audio[text], nil
 }
 
 func TestGuidanceIsNotEnforced(t *testing.T) {
