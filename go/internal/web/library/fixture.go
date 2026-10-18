@@ -6,13 +6,32 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"strings"
+	"sync"
 	"unicode/utf8"
 )
 
 // Demo is an in-memory library used under the dev flag and in tests.
 // It does not open the database. Replace the import with
 // go/internal/learner/library when that package is on this branch.
-type Demo struct{}
+//
+// A zero Demo reads the fixed shelf. NewDemo owns a shelf SetSuspended can change.
+// אֹכֶל is in the shelf and has no review row, so SetSuspended returns not_found.
+type Demo struct {
+	shelf *shelf
+}
+
+type shelf struct {
+	mu    sync.Mutex
+	items []Item
+}
+
+// personalOnly is listed, but it has no review row.
+const personalOnly = "אֹכֶל"
+
+// NewDemo returns a shelf the dev server can suspend and resume.
+func NewDemo() *Demo {
+	return &Demo{shelf: &shelf{items: cloneItems(demoItems)}}
+}
 
 // cursorBody matches learner/library: base64url JSON
 // {"v":1,"ord":["<word>"],"key":"<word>"}. The page treats the string as opaque.
@@ -26,7 +45,57 @@ const cursorVersion = 1
 
 // List filters and pages demoItems. userID is ignored: one shared shelf until
 // sessions exist. limit follows the library rules (default 50, max 200).
-func (Demo) List(_ context.Context, _ int64, filter Filter, cursor string, limit int) ([]Item, string, error) {
+func (d Demo) snapshot() []Item {
+	if d.shelf == nil {
+		return demoItems
+	}
+	d.shelf.mu.Lock()
+	defer d.shelf.mu.Unlock()
+	return cloneItems(d.shelf.items)
+}
+
+// SetSuspended matches learner/library.SetSuspended: the normalized word is
+// returned, a personal-only word is not_found, and nothing is written to audit_log.
+func (d *Demo) SetSuspended(_ context.Context, userID int64, key string, suspended bool) (string, error) {
+	if userID <= 0 {
+		return "", fail("bad_request", 400)
+	}
+	if strings.TrimSpace(key) == "" || !hebrewLetter(key) {
+		return "", fail("invalid_key", 400)
+	}
+	if d.shelf == nil {
+		d.shelf = &shelf{items: cloneItems(demoItems)}
+	}
+	if key == personalOnly {
+		return "", fail("not_found", 404)
+	}
+	d.shelf.mu.Lock()
+	defer d.shelf.mu.Unlock()
+	for i := range d.shelf.items {
+		if d.shelf.items[i].Word == key {
+			d.shelf.items[i].Suspended = suspended
+			return key, nil
+		}
+	}
+	return "", fail("not_found", 404)
+}
+
+func hebrewLetter(s string) bool {
+	for _, r := range s {
+		if r >= 0x05D0 && r <= 0x05EA {
+			return true
+		}
+	}
+	return false
+}
+
+func cloneItems(items []Item) []Item {
+	out := make([]Item, len(items))
+	copy(out, items)
+	return out
+}
+
+func (d Demo) List(_ context.Context, _ int64, filter Filter, cursor string, limit int) ([]Item, string, error) {
 	normalized, limit, err := normalize(filter, limit)
 	if err != nil {
 		return nil, "", err
@@ -35,7 +104,7 @@ func (Demo) List(_ context.Context, _ int64, filter Filter, cursor string, limit
 	if err != nil {
 		return nil, "", err
 	}
-	sorted := append([]Item(nil), demoItems...)
+	sorted := append([]Item(nil), d.snapshot()...)
 	sortItems(sorted)
 	var matched []Item
 	for _, item := range sorted {
@@ -235,9 +304,9 @@ var demoItems = []Item{
 		StrengthBucket: strPtr("solid"), Sources: []string{"greetings"},
 	},
 	{
+		// No directions: this word is in the shelf and has no review row.
 		Word: "אֹכֶל", GlossEN: "food", Translit: "ochel", POS: strPtr("noun"),
-		HeEN: dir("longTerm", "solid"), EnHE: dir("longTerm", "solid"),
-		StrengthBucket: strPtr("solid"), Sources: []string{"pantry"},
+		Sources: []string{"pantry"},
 	},
 	{
 		Word: "בְּבַקָּשָׁה", GlossEN: "please", Translit: "bevakasha", POS: strPtr("particle"),

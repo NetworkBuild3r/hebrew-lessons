@@ -37,6 +37,17 @@ func Assemble(f Filters, word, cursor, state, errKind string, items []library.It
 	return v
 }
 
+// SelectItem opens the detail for an item that the current filter hid.
+func SelectItem(v *WordsView, item library.Item) {
+	if v == nil {
+		return
+	}
+	detail := detailFrom(item, v.URLWithout(QueryWord))
+	v.Selected = &detail
+	v.SelectedKey = item.Word
+	v.Word = item.Word
+}
+
 func rowFrom(item library.Item, selected string, v WordsView) WordRow {
 	stage := ""
 	if item.HeEN != nil {
@@ -107,6 +118,7 @@ func detailFrom(item library.Item, closeURL string) WordDetail {
 		BinyanHe:   binyanHe(binyan),
 		HeEn:       directionView("he_en", "עברית ← אנגלית", "Hebrew → English", item.HeEN),
 		EnHe:       directionView("en_he", "אנגלית ← עברית", "English → Hebrew", item.EnHE),
+		Suspended:  item.Suspended,
 		CloseURL:   closeURL,
 	}
 	for _, source := range item.Sources {

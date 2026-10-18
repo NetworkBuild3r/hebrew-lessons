@@ -149,6 +149,13 @@ type Lister interface {
 	List(ctx context.Context, userID int64, filter Filter, cursor string, limit int) ([]Item, string, error)
 }
 
+// Suspender is SetSuspended from go/internal/learner/library.
+// A personal-only word with no review row returns OpError not_found, status 404.
+// The returned string is the word key. audit_log is not written.
+type Suspender interface {
+	SetSuspended(ctx context.Context, userID int64, key string, suspended bool) (string, error)
+}
+
 func fail(code string, status int) *OpError {
 	return &OpError{Code: code, Status: status}
 }

@@ -8519,6 +8519,9 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 .words-cell-meaning { display: grid; gap: 4px; min-width: 0; }
 .words-unchecked { justify-self: start; }
 .lookup-card__actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.words-page .lookup-card__actions { display: grid; gap: var(--space-3); justify-items: start; padding-block-end: var(--space-4); }
+.words-page [data-words-suspend-state] { display: flex; gap: var(--space-2); align-items: flex-start; margin: 0; color: var(--color-muted); font: 500 15px/1.45 var(--font-sans); }
+.words-page [data-words-suspend-state] .icon { flex: none; margin-block-start: 3px; }
 
 /* Skeleton is its own single-column card. It does not carry .words-list, or the guarded BENTO grid lays it out. Bars stay still. */
 .words-page .words-skeleton { display: none; grid-template-columns: minmax(0, 1fr); gap: 0; margin: 0; padding: var(--space-2); list-style: none; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-card); background: var(--color-surface); box-shadow: var(--shadow-card); }

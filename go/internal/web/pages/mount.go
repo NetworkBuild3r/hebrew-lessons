@@ -17,14 +17,17 @@ const DevEnv = "HEBREW_DEV_WEB"
 //
 //	pages.Mount(mux, db)
 //
-// db is the handle from internal/db. Guides read it. Words do not: there is
-// no library read in this module yet, so /words/ uses library.Demo until
-// learner/library.List is wired here. The call is a no-op unless the flag is
-// set, so the health check stays the only public route until then.
+// db is the handle from internal/db. Guides read it. Words do not import
+// learner/library yet (draft PR #36, not merged). /words/ uses library.NewDemo,
+// and POST /_hx/words/{key}/suspend is wrapped with the dev stand-ins for
+// auth.Middleware, RequireSession, and httpx.Protector. The call is a no-op
+// unless the flag is set, so the health check stays the only public route.
 func Mount(mux *http.ServeMux, db Queryer) {
 	if os.Getenv(DevEnv) != "1" {
 		return
 	}
 	NewHandler(NewSQLSource(db)).Register(mux)
-	NewWords(library.Demo{}).Register(mux)
+	words := NewWords(library.NewDemo())
+	words.UseDevGate()
+	words.Register(mux)
 }

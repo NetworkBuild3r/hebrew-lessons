@@ -149,6 +149,52 @@ func TestFiltersMatchTheLibraryRules(t *testing.T) {
 	}
 }
 
+func TestSetSuspended(t *testing.T) {
+	d := NewDemo()
+	const key = "שָׁלוֹם"
+	got, err := d.SetSuspended(context.Background(), DemoUserID, key, true)
+	if err != nil || got != key {
+		t.Fatalf("set %q %v", got, err)
+	}
+	items, _, err := d.List(context.Background(), DemoUserID, Filter{}, "", PageSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seen bool
+	for _, item := range items {
+		if item.Word == key {
+			seen = item.Suspended
+		}
+	}
+	if !seen {
+		t.Fatal("list did not show the paused word")
+	}
+	if _, err := d.SetSuspended(context.Background(), DemoUserID, key, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.SetSuspended(context.Background(), DemoUserID, "אֹכֶל", true); !Is(err, "not_found") {
+		t.Fatalf("personal-only err %v", err)
+	}
+	if _, err := d.SetSuspended(context.Background(), DemoUserID, "missing-word", true); !Is(err, "invalid_key") {
+		t.Fatalf("invalid key err %v", err)
+	}
+	if _, err := d.SetSuspended(context.Background(), DemoUserID, "אין", true); !Is(err, "not_found") {
+		t.Fatalf("unknown err %v", err)
+	}
+	if _, err := d.SetSuspended(context.Background(), 0, key, true); !Is(err, "bad_request") {
+		t.Fatalf("user err %v", err)
+	}
+	fixed, _, err := (Demo{}).List(context.Background(), DemoUserID, Filter{}, "", PageSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range fixed {
+		if item.Word == key && item.Suspended {
+			t.Fatal("the fixed shelf was mutated")
+		}
+	}
+}
+
 func nodeSort(t *testing.T, words []string) []string {
 	t.Helper()
 	payload, err := json.Marshal(words)

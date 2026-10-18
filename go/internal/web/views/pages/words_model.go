@@ -197,6 +197,15 @@ type WordDetail struct {
 	Paradigm                     []ParadigmCell
 	Sources                      []SourceLink
 	CloseURL                     string
+	Suspended                    bool
+	CanSuspend                   bool
+	Blocked                      bool
+	FocusAction                  bool
+	PostURL                      string
+	CSRF                         string
+	CSRFHeader                   string
+	SuspendValue                 string
+	SuspendHe, SuspendEn         string
 }
 
 // DirectionView is one direction line on the card.

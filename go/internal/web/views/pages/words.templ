@@ -169,7 +169,7 @@ templ lookupCard(w *WordDetail) {
 		<aside class="words-detail card lookup-card" data-words-detail aria-labelledby="words-detail-title">
 			<p class="page-heading-kicker">@components.Pair("מילה נבחרת", "Selected word")</p>
 			<div class="lookup-card__head">
-				<h2 id="words-detail-title" class="lookup-card__he" lang="he" dir="rtl" tabindex="-1" autofocus data-vowels={ w.Word }>{ w.Word }</h2>
+				<h2 id="words-detail-title" class="lookup-card__he" lang="he" dir="rtl" tabindex="-1" data-vowels={ w.Word }>{ w.Word }</h2>
 				<span data-words-audio>@components.AudioButton(w.Word, w.Audio)</span>
 				<a
 					class="btn btn-ghost lookup-card__close"
@@ -237,7 +237,26 @@ templ lookupCard(w *WordDetail) {
 				</ul>
 			}
 			<div class="lookup-card__actions">
-				<!-- PR 2: Suspend / Resume and Edit. Needs sessions, CSRF, and an edit API. -->
+				if w.Suspended && !w.Blocked {
+					<p class="words-note" data-words-suspend-state="paused">
+						<svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-lock"></use></svg>
+						@components.Pair("מושהית — לא תופיע בחזרות", "Paused — it won’t come up in reviews")
+					</p>
+				}
+				if w.Blocked {
+					<p class="words-note" id="words-suspend-note" data-words-suspend-state="disabled" tabindex="-1" autofocus?={ w.FocusAction }>
+						<svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-lock"></use></svg>
+						@components.Pair(blockedHe(), blockedEn())
+					</p>
+				} else if w.CanSuspend {
+					<form method="post" action={ templ.SafeURL(w.PostURL) } hx-post={ w.PostURL } hx-headers={ w.CSRFHeader } hx-target="#words-results" hx-select="#words-results" hx-swap="outerHTML" hx-include="#words-filters" hx-indicator="#words-results">
+						<input type="hidden" name="csrf" value={ w.CSRF }/>
+						<input type="hidden" name="pause" value={ w.SuspendValue }/>
+						<button type="submit" class="btn btn-ghost" data-words-suspend autofocus?={ w.FocusAction } aria-describedby="words-error-csrf-note">
+							@components.Pair(w.SuspendHe, w.SuspendEn)
+						</button>
+					</form>
+				}
 			</div>
 		</aside>
 	}
@@ -483,7 +502,7 @@ templ wordsEmpty(v WordsView) {
 			<p class="empty-body empty-body-he" lang="he" dir="rtl">מילים מהשיעורים מגיעות לכאן לבד, עם הצליל שלהן ועם כמה טוב אתם מכירים אותן. אפשר גם להוסיף מילים משלכם.</p>
 			<p class="empty-actions">
 				<a class="btn btn-primary" href="/">@components.Pair("לשיעור של היום", "Start today’s lesson")</a>
-				<!-- PR 2: Add a word -->
+				<!-- Add a word stays out: no add API, and gloss edits wait for cutover. -->
 			</p>
 		</div>
 	} else {
@@ -509,7 +528,7 @@ templ wordsEmpty(v WordsView) {
 			</p>
 			<p class="empty-actions">
 				<a class="btn btn-primary" href="/words/" hx-get="/words/" hx-target="#words-results" hx-select="#words-results" hx-swap="outerHTML" hx-push-url="true" hx-indicator="#words-results" hx-headers={ wordsSyncHeader }>@components.Pair("ניקוי סינון", "Clear filters")</a>
-				<!-- PR 2: Add a word, prefilling key only when q contains Hebrew letters -->
+				<!-- Add a word stays out: no add API, and gloss edits wait for cutover. -->
 			</p>
 		</div>
 	}
@@ -539,12 +558,13 @@ templ wordsNetworkError() {
 }
 
 // wordsCsrfError sits outside the swap. A rejected token clones it beside the button.
+// The empty href is the current page URL, so the note reloads whatever is open.
 templ wordsCsrfError() {
 	<template id="words-error-csrf">
-		<p class="words-note words-note--error" role="alert" data-words-error="csrf">
+		<a id="words-error-csrf-note" class="words-note words-note--error" role="alert" data-words-error="csrf" href="">
 			<svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-wrong"></use></svg>
 			@components.Pair("השינוי לא נשמר. רעננו את הדף ונסו שוב.", "We couldn’t save that change. Reload the page and try again.")
-		</p>
+		</a>
 	</template>
 }
 
@@ -609,10 +629,14 @@ templ wordsScript() {
     });
     document.addEventListener('htmx:afterSettle', function () {
         apply();
-        if (!focusWord) return;
-        var row = document.querySelector('[data-word="' + (window.CSS && CSS.escape ? CSS.escape(focusWord) : focusWord) + '"]');
-        focusWord = '';
-        if (row) row.focus();
+        if (focusWord) {
+            var row = document.querySelector('[data-word="' + (window.CSS && CSS.escape ? CSS.escape(focusWord) : focusWord) + '"]');
+            focusWord = '';
+            if (row) row.focus();
+            return;
+        }
+        var action = document.querySelector('[data-' + 'words-suspend][autofocus], #words-suspend-note[autofocus]');
+        if (action) action.focus();
     });
     window.wordsFail = function (e) {
         var d = e.detail || {}, t = d.target, s = d.xhr ? d.xhr.status : 0, n, m, a, c;
