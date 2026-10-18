@@ -101,6 +101,25 @@ describe('Lessons page: published plan lessons', () => {
         assert.match(html, /data-lessons-state="filtered-empty"/);
     });
 
+    it('marks an English plan topic as English and left to right', () => {
+        const page = load([], []);
+        const html = page.render({
+            state: 'ready',
+            filter: 'all',
+            rows: [],
+            planRows: [Object.assign({}, WORKSHOP, { topic: 'Routine' })]
+        });
+        assert.match(html, /<p class="fine"><span lang="en" dir="ltr">Routine<\/span><\/p>/);
+        const hebrew = page.render({
+            state: 'ready',
+            filter: 'all',
+            rows: [],
+            planRows: [Object.assign({}, WORKSHOP, { topic: 'יחידה 1' })]
+        });
+        assert.match(hebrew, /<p class="fine">יחידה 1<\/p>/);
+        assert.doesNotMatch(hebrew, /<p class="fine"><span lang="en"/);
+    });
+
     it('escapes a title', async () => {
         const html = await mounted(load([], [Object.assign({}, WORKSHOP, { title: '<img src=x onerror=1>' })]));
         assert.doesNotMatch(html, /<img/);

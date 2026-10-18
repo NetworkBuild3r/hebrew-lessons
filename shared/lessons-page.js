@@ -103,6 +103,19 @@
         return out;
     }
 
+    /**
+     * Unit topic under the recipe chip. An English topic is marked so it stays
+     * left to right inside the right-to-left page. Hebrew topics are left as text.
+     * @param {unknown} topic
+     * @returns {string}
+     */
+    function topicHtml(topic) {
+        if (!topic) return '';
+        var text = esc(topic);
+        if (isHebrewText(topic)) return '<p class="fine">' + text + '</p>';
+        return '<p class="fine"><span lang="en" dir="ltr">' + text + '</span></p>';
+    }
+
     function renderPlanCard(row) {
         var title = String(row.title || row.lessonId);
         var dir = isHebrewText(title) ? 'rtl' : 'ltr';
@@ -111,7 +124,7 @@
         var chipHtml = chip
             ? '<span class="recipe-chip" data-recipe="' + esc(row.recipe) + '">' + bi(chip[0], chip[1]) + '</span>'
             : '';
-        var topic = row.topic ? '<p class="fine">' + esc(row.topic) + '</p>' : '';
+        var topic = topicHtml(row.topic);
         return '<article class="lesson-card" data-plan-id="' + esc(row.planId)
             + '" data-lesson-id="' + esc(row.lessonId) + '"'
             + (chip ? ' data-recipe="' + esc(row.recipe) + '"' : '') + '>'
