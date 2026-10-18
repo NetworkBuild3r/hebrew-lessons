@@ -12,3 +12,17 @@ templ StatusChip(status string) {
 		</span>
 	}
 }
+
+// StatusChipLabel is a status chip with caller-supplied words. The words
+// screen uses it because Learning, Long-term, and Paused are not the shared
+// In progress / Done / Locked labels.
+templ StatusChipLabel(status string, he string, en string) {
+	if status != "" {
+		<span class="status-chip" data-status={ status }>
+			<svg class="icon" width="16" height="16" aria-hidden="true" focusable="false">
+				<use href={ "/shared/brand/sprite.svg#icon-" + statusIcon(status) }></use>
+			</svg>
+			@Pair(he, en)
+		</span>
+	}
+}

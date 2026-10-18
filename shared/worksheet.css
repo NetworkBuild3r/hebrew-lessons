@@ -8389,3 +8389,175 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
     .example-row { grid-template-columns: 44px minmax(0, 1fr); }
     .example-row__he { grid-column: 1 / -1; }
 }
+
+/* === 2026 /words/ (appended after /guides/; overrides the BENTO grid by order, not by edit) === */
+:root {
+    --words-row-min-h: 72px;          /* row hit area, ≥44 everywhere */
+    --words-he-size: 28px;            /* row headword (pointed) */
+    --words-he-size-detail: 44px;     /* lookup card headword */
+    --words-meter-seg: 14px;          /* segment width; 4 segments, gap 3px, height 6px */
+    --words-meter-empty: var(--color-border-subtle);
+    --words-strength-fragile: var(--color-accent-pomegranate);
+    --words-strength-shaky: var(--color-miss-ink);
+    --words-strength-steady: var(--color-primary);
+    --words-strength-solid: var(--color-correct-ink);
+    --words-scrim: rgba(14, 18, 27, 0.48);          /* behind mobile sheets */
+    --words-skeleton: var(--color-surface-soft);
+    --words-skeleton-sheen: color-mix(in srgb, var(--color-surface) 60%, transparent);
+}
+:root[data-theme="dark"] { --words-scrim: rgba(0, 0, 0, 0.6); }
+@media (prefers-color-scheme: dark) { :root[data-theme="auto"] { --words-scrim: rgba(0, 0, 0, 0.6); } }
+.words-page .page-heading-kicker { font: 700 13px/1.2 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-olive); }
+
+/* Toolbar: search + vowels, then the chip row. The form is display:contents so those pieces sit on the toolbar grid. */
+.words-page .words-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; }
+.words-page form.words-filters { display: contents; }
+.words-page .words-search { grid-column: 1; grid-row: 1; }
+.words-page #words-vowels-btn { grid-column: 2; grid-row: 1; }
+.words-page .words-quick { grid-column: 1 / -1; grid-row: 2; }
+.words-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+.words-search { position: relative; flex: 1 1 320px; min-width: 0; }
+.words-search .icon { position: absolute; inset-inline-start: 14px; inset-block-start: 50%; translate: 0 -50%; color: var(--color-muted); pointer-events: none; }
+.words-page .words-search input[type="search"] { width: 100%; min-height: 48px; padding-inline-start: 44px; border-radius: var(--radius-control); font: 500 16px/1.4 var(--font-sans); } /* 16px stops iOS zoom */
+.words-page .words-search input:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 1px; }
+
+/* Quick chips: radios/checkbox styled as .filter-chip */
+.words-quick { display: flex; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; padding-block: var(--space-1); align-items: center; }
+.words-quick fieldset { display: contents; border: 0; }
+.words-chip-input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.words-quick .filter-chip, .words-more-filters .filter-chip { min-height: 44px; cursor: pointer; } /* guides chips are 36; words goes to 44 for touch */
+.words-chip-input:checked + .filter-chip { background: var(--color-text); border-color: var(--color-text); color: var(--color-surface); }
+.words-chip-input:focus-visible + .filter-chip { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+
+/* More filters: <details>. Desktop = popover panel. Mobile = bottom sheet. */
+.words-more-filters { position: relative; }
+.words-more-filters > summary { list-style: none; }
+.words-more-filters > summary::-webkit-details-marker { display: none; }
+.words-more-filters > summary .words-filter-count { font-variant-numeric: tabular-nums; }
+.words-more-filters__panel { position: absolute; z-index: 20; inset-block-start: calc(100% + 8px); inset-inline-start: 0; width: min(560px, 90vw); display: grid; gap: var(--space-4); padding: var(--space-5); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-card); background: var(--color-surface); box-shadow: var(--shadow-raised); }
+.words-more-filters__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+.words-more-filters label > span { display: block; margin-block-end: 6px; }
+.words-page .words-more-filters select { width: 100%; min-height: 44px; }
+.words-more-filters__foot { display: flex; justify-content: space-between; gap: var(--space-3); padding-block-start: var(--space-3); border-block-start: 1px solid var(--color-border-subtle); }
+.words-more-filters__head { display: none; }
+
+/* Active filters */
+.words-active { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.words-active__chip { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding-inline: 12px 8px; border-radius: var(--radius-pill); background: var(--color-primary-soft); color: var(--color-primary); font: 600 14px/1 var(--font-sans); text-decoration: none; }
+.words-active__chip::after { content: ""; position: absolute; inset: -4px; } /* 44px hit target */
+.words-active__chip { position: relative; }
+.words-active__clear { font: 600 14px/1 var(--font-sans); color: var(--color-primary); min-height: 44px; display: inline-flex; align-items: center; }
+
+/* Status line */
+.words-status { margin: 0; color: var(--color-muted); font: 500 14px/1.4 var(--font-sans); font-variant-numeric: tabular-nums; }
+.words-status-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+.words-page .btn-link { font: 600 14px/1 var(--font-sans); color: var(--color-primary); min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
+
+/* Layout: list + detail. One column until a word is selected, so an empty card does not reserve 380px. */
+.words-page .words-layout { display: block; }
+@media (min-width: 1024px) {
+    .words-layout:has(.words-detail:not([hidden])) { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: var(--space-5); align-items: start; }
+    .words-detail { position: sticky; inset-block-start: var(--space-5); }
+}
+
+/* List: single column, overriding the guarded BENTO auto-fill grid */
+.words-page .words-list[data-words-list] { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; margin: 0; padding: var(--space-2); list-style: none; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-card); background: var(--color-surface); box-shadow: var(--shadow-card); }
+
+/* Word row: li holds the row button and the audio button side by side */
+.word-item { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: var(--space-3); padding-inline-start: var(--space-3); border-radius: var(--radius-control); }
+.word-item + .word-item { border-block-start: 1px solid var(--color-border-subtle); }
+.words-page .words-row { all: unset; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, max-content); align-items: center; gap: var(--space-4); min-height: var(--words-row-min-h); padding: var(--space-2) var(--space-4) var(--space-2) 0; cursor: pointer; color: var(--color-text); border-radius: var(--radius-control); transform: none; box-shadow: none; border: 0; background: transparent; }
+.words-page .words-row:hover { background: var(--color-surface-soft); transform: none; box-shadow: none; }
+.words-page .words-row:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+.word-item:has(.words-row[aria-pressed="true"]) { background: var(--color-primary-soft); box-shadow: inset 3px 0 0 var(--color-primary); }
+[dir="rtl"] .word-item:has(.words-row[aria-pressed="true"]) { box-shadow: inset -3px 0 0 var(--color-primary); }
+.word-item:has(.words-row[data-suspended="true"]) .words-he,
+.word-item:has(.words-row[data-suspended="true"]) .words-gloss { opacity: .62; }
+.words-row__meaning { display: grid; gap: 2px; min-width: 0; }
+.words-page .words-gloss { font: 600 16px/1.35 var(--font-sans); color: var(--color-text); overflow-wrap: anywhere; }
+.words-row__meaning .translit { font-size: 14px; }
+.words-row__status { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; min-width: 120px; }
+.words-page .words-he { font: 600 var(--words-he-size)/var(--line-height-pointed) var(--font-hebrew-pointed-display); text-align: end; white-space: nowrap; padding-block: 2px; } /* no overflow:hidden; nikud needs the 1.7 line box */
+
+/* Strength meter: 4 segments, markup unchanged (.words-strength > span), restyled */
+.words-page .words-strength { display: inline-flex; gap: 3px; background: none; border-radius: 0; overflow: visible; width: auto; height: 6px; }
+.words-page .words-strength > span { display: none; } /* legacy width-% bar hidden; .words-meter i are the segments */
+.words-meter { display: inline-flex; gap: 3px; }
+.words-meter i { width: var(--words-meter-seg); height: 6px; border-radius: 3px; background: var(--words-meter-empty); }
+.words-strength[data-strength="fragile"] .words-meter i:nth-child(-n+1) { background: var(--words-strength-fragile); }
+.words-strength[data-strength="shaky"]   .words-meter i:nth-child(-n+2) { background: var(--words-strength-shaky); }
+.words-strength[data-strength="steady"]  .words-meter i:nth-child(-n+3) { background: var(--words-strength-steady); }
+.words-strength[data-strength="solid"]   .words-meter i                  { background: var(--words-strength-solid); }
+.words-row__he-col { display: grid; justify-items: end; gap: 4px; }
+
+/* Load more */
+.words-more { display: flex; justify-content: center; padding: var(--space-3); list-style: none; }
+
+/* Lookup card (detail). :not([hidden]) keeps the empty card out of the list; a bare .words-detail rule would beat the hidden attribute. */
+.words-page .words-detail:not([hidden]) { display: grid; gap: var(--space-4); padding: var(--space-5); border-radius: var(--radius-card); border: 1px solid var(--color-border-subtle); box-shadow: var(--shadow-card); background: var(--color-surface); }
+.words-page .words-detail[hidden] { display: none; }
+.lookup-card .audio-btn { width: 56px; height: 56px; }
+.lookup-card__head { display: flex; align-items: center; gap: var(--space-3); justify-content: space-between; }
+.lookup-card__he { margin: 0; font: 700 var(--words-he-size-detail)/var(--line-height-pointed) var(--font-hebrew-pointed-display); }
+.lookup-card__he:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 4px; border-radius: var(--radius-sm); }
+.lookup-card__gloss { margin: 0; font: 600 20px/1.35 var(--font-sans); }
+.lookup-card__dirs { display: grid; gap: var(--space-3); }
+.lookup-card__dir { display: grid; gap: 6px; }
+.lookup-card__dir-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.words-paradigm { display: grid; gap: var(--space-2); }
+.words-tense { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); background: var(--color-surface-soft); }
+.words-cell { font: 600 20px/var(--line-height-pointed) var(--font-hebrew-pointed-display); text-align: end; }
+.words-cell-meaning { display: grid; gap: 4px; min-width: 0; }
+.words-unchecked { justify-self: start; }
+.lookup-card__actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+
+/* Skeleton (only while an HTMX request is in flight) */
+.words-skeleton { display: none; }
+#words-results.htmx-request .words-skeleton { display: grid; }
+#words-results.htmx-request .words-list[data-words-list],
+#words-results.htmx-request .words-empty { display: none; }
+.words-skeleton__row { display: grid; grid-template-columns: 44px minmax(0, 1fr) 120px 96px; gap: var(--space-4); align-items: center; min-height: var(--words-row-min-h); padding-inline: var(--space-3); }
+.words-skeleton__row + .words-skeleton__row { border-block-start: 1px solid var(--color-border-subtle); }
+.words-skeleton__row > i { display: block; height: 12px; border-radius: 6px; background: var(--words-skeleton); }
+.words-skeleton__row > i:first-child { width: 44px; height: 44px; border-radius: 999px; }
+.words-skeleton__row > i:last-child { height: 22px; }
+/* Skeleton bars stay still. A repeating sheen would be a forever animation, and the restyle gate allows that only on the audio-playing state. */
+
+/* States reuse .empty-art / .empty-title / .empty-he / .empty-body / .empty-actions from /guides/ */
+.words-page .words-empty, .words-page .words-error { display: grid; justify-items: center; gap: var(--space-4); text-align: center; padding: var(--space-7) var(--space-5); }
+.words-page .empty-he { font-family: var(--font-hebrew-pointed-display); line-height: var(--line-height-pointed); }
+.words-state__icon { width: 64px; height: 64px; border-radius: 999px; display: grid; place-items: center; background: var(--color-primary-soft); color: var(--color-primary); }
+.words-error .words-state__icon { background: var(--color-accent-pomegranate-soft); color: var(--color-accent-pomegranate); }
+
+/* Mobile */
+@media (max-width: 767px) {
+    .words-toolbar .words-search { flex-basis: 100%; order: 2; }
+    .words-page .words-search { order: 0; grid-column: 1; grid-row: 1; }
+    .words-page #words-vowels-btn { grid-column: 2; grid-row: 1; }
+    .words-page .words-quick { order: 0; grid-column: 1 / -1; grid-row: 2; }
+    .word-item { grid-template-columns: 44px minmax(0, 1fr); padding-inline-start: var(--space-2); }
+    .words-page .words-row { grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3); padding-inline-end: var(--space-3); }
+    .words-row__meaning { grid-column: 1; }
+    .words-row__status { grid-column: 1; grid-row: 2; min-width: 0; }
+    .words-row__he-col { grid-column: 2; grid-row: 1 / span 2; }
+    .words-skeleton__row { grid-template-columns: 44px minmax(0, 1fr) 72px; }
+    .words-skeleton__row > i:nth-child(3) { display: none; }
+
+    /* More filters becomes a bottom sheet */
+    .words-more-filters[open]::before { content: ""; position: fixed; inset: 0; z-index: 40; background: var(--words-scrim); }
+    .words-more-filters__panel { position: fixed; z-index: 41; inset: auto 0 0 0; width: auto; max-height: 85dvh; overflow-y: auto; overscroll-behavior: contain; border-radius: var(--radius-hero) var(--radius-hero) 0 0; padding: var(--space-4) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom)); }
+    .words-more-filters__panel::before { content: ""; justify-self: center; width: 40px; height: 4px; border-radius: 2px; background: var(--color-border-subtle); }
+    .words-more-filters__head { display: flex; justify-content: space-between; align-items: center; }
+    .words-more-filters__grid { grid-template-columns: minmax(0, 1fr); }
+    .words-more-filters__foot { position: sticky; inset-block-end: 0; background: var(--color-surface); }
+    .words-more-filters__foot .btn-primary { flex: 1; }
+
+    /* Detail becomes a bottom sheet when a word is selected */
+    .words-detail:not([hidden]) { position: fixed; z-index: 41; inset: auto 0 0 0; max-height: 85dvh; overflow-y: auto; border-radius: var(--radius-hero) var(--radius-hero) 0 0; box-shadow: var(--shadow-raised); padding-block-end: calc(var(--space-5) + env(safe-area-inset-bottom)); }
+    .words-layout:has(.words-detail:not([hidden]))::after { content: ""; position: fixed; inset: 0; z-index: 40; background: var(--words-scrim); }
+    .lookup-card__he { font-size: 40px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .words-more-filters[open] .words-more-filters__panel { animation: hebrew-route-enter var(--motion-duration) var(--motion-easing); }
+}
+/* === end 2026 /words/ === */
