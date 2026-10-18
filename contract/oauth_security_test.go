@@ -23,6 +23,8 @@ import (
 
 const oauthRedirect = "cursor://anysphere.cursor-mcp/oauth/callback"
 
+const basicRealm = `Basic realm="hebrew-lessons"`
+
 func TestTokenChecksClientSecret(t *testing.T) {
 	c := httpx.New()
 	post := registerOAuth(t, c, "client_secret_post", []string{oauthRedirect})
@@ -37,14 +39,37 @@ func TestTokenChecksClientSecret(t *testing.T) {
 	}
 
 	missing := tokenRequest(t, c, postBody, nil)
-	assertOAuth(t, missing, 401, "invalid_client")
-	if got := missing.Header.Get("WWW-Authenticate"); got != "" {
-		t.Fatalf("client_secret_post WWW-Authenticate %q", got)
-	}
+	assertClientAuth(t, missing, "")
+
+	empty := cloneValues(postBody)
+	empty.Set("client_secret", "")
+	assertClientAuth(t, tokenRequest(t, c, empty, nil), "")
 
 	wrong := cloneValues(postBody)
 	wrong.Set("client_secret", "not-the-secret")
-	assertOAuth(t, tokenRequest(t, c, wrong, nil), 401, "invalid_client")
+	assertClientAuth(t, tokenRequest(t, c, wrong, nil), "")
+
+	// A rejected secret does not burn the code.
+	ok := cloneValues(postBody)
+	ok.Set("client_secret", post.Secret)
+	postRefresh := issuedRefresh(t, tokenRequest(t, c, ok, nil))
+
+	postRefreshBody := url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {postRefresh},
+		"client_id":     {post.ID},
+	}
+	assertClientAuth(t, tokenRequest(t, c, postRefreshBody, nil), "")
+	postRefreshWrong := cloneValues(postRefreshBody)
+	postRefreshWrong.Set("client_secret", "not-the-secret")
+	assertClientAuth(t, tokenRequest(t, c, postRefreshWrong, nil), "")
+	postRefreshEmpty := cloneValues(postRefreshBody)
+	postRefreshEmpty.Set("client_secret", "")
+	assertClientAuth(t, tokenRequest(t, c, postRefreshEmpty, nil), "")
+	// A rejected refresh does not rotate the token.
+	postRefreshOK := cloneValues(postRefreshBody)
+	postRefreshOK.Set("client_secret", post.Secret)
+	assertAccessToken(t, tokenRequest(t, c, postRefreshOK, nil))
 
 	basicClient := registerOAuth(t, c, "client_secret_basic", []string{oauthRedirect})
 	basicVerifier, basicChallenge := pkcePair(t)
@@ -55,21 +80,33 @@ func TestTokenChecksClientSecret(t *testing.T) {
 		"redirect_uri":  {oauthRedirect},
 		"code_verifier": {basicVerifier},
 	}
-	const wantChallenge = `Basic realm="hebrew-lessons"`
 
-	noHeader := tokenRequest(t, c, basicBody, nil)
-	assertOAuth(t, noHeader, 401, "invalid_client")
-	if got := noHeader.Header.Get("WWW-Authenticate"); got != wantChallenge {
-		t.Fatalf("WWW-Authenticate\n got %q\nwant %q", got, wantChallenge)
-	}
-
-	badBasic := tokenRequest(t, c, basicBody, map[string]string{
+	assertClientAuth(t, tokenRequest(t, c, basicBody, nil), basicRealm)
+	assertClientAuth(t, tokenRequest(t, c, basicBody, map[string]string{
+		"Authorization": basicHeader(basicClient.ID, ""),
+	}), basicRealm)
+	assertClientAuth(t, tokenRequest(t, c, basicBody, map[string]string{
 		"Authorization": basicHeader(basicClient.ID, "not-the-secret"),
-	})
-	assertOAuth(t, badBasic, 401, "invalid_client")
-	if got := badBasic.Header.Get("WWW-Authenticate"); got != wantChallenge {
-		t.Fatalf("WWW-Authenticate\n got %q\nwant %q", got, wantChallenge)
+	}), basicRealm)
+
+	basicRefresh := issuedRefresh(t, tokenRequest(t, c, basicBody, map[string]string{
+		"Authorization": basicHeader(basicClient.ID, basicClient.Secret),
+	}))
+	basicRefreshBody := url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {basicRefresh},
+		"client_id":     {basicClient.ID},
 	}
+	assertClientAuth(t, tokenRequest(t, c, basicRefreshBody, nil), basicRealm)
+	assertClientAuth(t, tokenRequest(t, c, basicRefreshBody, map[string]string{
+		"Authorization": basicHeader(basicClient.ID, ""),
+	}), basicRealm)
+	assertClientAuth(t, tokenRequest(t, c, basicRefreshBody, map[string]string{
+		"Authorization": basicHeader(basicClient.ID, "not-the-secret"),
+	}), basicRealm)
+	assertAccessToken(t, tokenRequest(t, c, basicRefreshBody, map[string]string{
+		"Authorization": basicHeader(basicClient.ID, basicClient.Secret),
+	}))
 }
 
 func TestAuthCodeIsBoundToTheRegisteringClient(t *testing.T) {
@@ -86,7 +123,17 @@ func TestAuthCodeIsBoundToTheRegisteringClient(t *testing.T) {
 		"redirect_uri":  {oauthRedirect},
 		"code_verifier": {verifier},
 	}, nil)
-	assertOAuth(t, stolen, 400, "invalid_grant")
+	assertDescribed(t, stolen, 400, "invalid_grant", "client_id or redirect_uri does not match the code.")
+
+	// A rejected client does not burn the code.
+	kept := tokenRequest(t, c, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"client_id":     {owner.ID},
+		"redirect_uri":  {oauthRedirect},
+		"code_verifier": {verifier},
+	}, nil)
+	assertAccessToken(t, kept)
 }
 
 func TestRefreshTokenIsBoundToTheIssuingClient(t *testing.T) {
@@ -117,7 +164,15 @@ func TestRefreshTokenIsBoundToTheIssuingClient(t *testing.T) {
 		"refresh_token": {tokens.Refresh},
 		"client_id":     {other.ID},
 	}, nil)
-	assertOAuth(t, stolen, 400, "invalid_grant")
+	assertDescribed(t, stolen, 400, "invalid_grant", "client_id does not match the refresh token.")
+
+	// A rejected client does not rotate the refresh token.
+	kept := tokenRequest(t, c, url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {tokens.Refresh},
+		"client_id":     {owner.ID},
+	}, nil)
+	assertAccessToken(t, kept)
 }
 
 func TestTokenAcceptsTheExactAuthorizationRedirectURI(t *testing.T) {
@@ -292,6 +347,40 @@ func assertOAuth(t *testing.T, res *httpx.Exchange, status int, code string) {
 	if body.Error != code {
 		t.Fatalf("error %q body %s", body.Error, res.Body)
 	}
+}
+
+func assertDescribed(t *testing.T, res *httpx.Exchange, status int, code, description string) {
+	t.Helper()
+	assertOAuth(t, res, status, code)
+	var body struct {
+		Description string `json:"error_description"`
+	}
+	if err := json.Unmarshal(res.Body, &body); err != nil {
+		t.Fatalf("body %s: %v", res.Body, err)
+	}
+	if body.Description != description {
+		t.Fatalf("error_description\n got %q\nwant %q", body.Description, description)
+	}
+}
+
+func assertClientAuth(t *testing.T, res *httpx.Exchange, wwwAuthenticate string) {
+	t.Helper()
+	assertDescribed(t, res, 401, "invalid_client", "Client authentication failed.")
+	if got := res.Header.Get("WWW-Authenticate"); got != wwwAuthenticate {
+		t.Fatalf("WWW-Authenticate\n got %q\nwant %q", got, wwwAuthenticate)
+	}
+}
+
+func issuedRefresh(t *testing.T, res *httpx.Exchange) string {
+	t.Helper()
+	assertAccessToken(t, res)
+	var body struct {
+		Refresh string `json:"refresh_token"`
+	}
+	if err := json.Unmarshal(res.Body, &body); err != nil || body.Refresh == "" {
+		t.Fatalf("refresh token: %s", res.Body)
+	}
+	return body.Refresh
 }
 
 func assertAccessToken(t *testing.T, res *httpx.Exchange) {
