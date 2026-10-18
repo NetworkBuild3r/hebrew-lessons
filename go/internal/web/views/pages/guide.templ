@@ -60,9 +60,13 @@ templ exampleItem(ex Example) {
 			<div class="example-row__gloss">
 				<span lang="en" dir="ltr">{ ex.En }</span>
 			</div>
-			@components.Translit(ex.Translit)
-			if ex.Root != "" {
-				<span class="meaning root-label" lang="he" dir="rtl">{ ex.Root }</span>
+			if ex.Translit != "" || ex.Root != "" {
+				<div class="example-row__meta">
+					@components.Translit(ex.Translit)
+					if ex.Root != "" {
+						<span class="example-row__root"><bdi class="meaning root-label" lang="he">{ ex.Root }</bdi></span>
+					}
+				</div>
 			}
 		</div>
 		<span class="example-row__he" lang="he" dir="rtl">@HighlightRoot(ex.He, ex.Root)</span>
@@ -220,10 +224,8 @@ templ guidePageMain(g GuideDetail) {
 		Subtitle: g.Topic,
 		SubLang:  g.TopicLang,
 		SubDir:   g.TopicDir,
+		Speak:    titleSpeak(g.Title),
 	})
-	if HasHebrew(g.Title) {
-		@components.AudioButton(g.Title, "")
-	}
 	<div class="guide-layout">
 		@GuideFragment(g)
 	</div>
