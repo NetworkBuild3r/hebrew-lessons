@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 )
 
@@ -67,29 +68,98 @@ func (a *App) listGrammarConcepts() (Value, error) {
 	defer rows.Close()
 	var concepts []Value
 	for rows.Next() {
-		var key, family, en, he, colour string
-		var sort int64
-		if err := rows.Scan(&key, &family, &en, &he, &colour, &sort); err != nil {
+		var key, family, en string
+		var he, colour sql.NullString
+		var sortKey int64
+		if err := rows.Scan(&key, &family, &en, &he, &colour, &sortKey); err != nil {
 			return Value{}, err
 		}
-		concepts = append(concepts, Object(
-			Field{Key: "key", Val: String(key)},
-			Field{Key: "family", Val: String(family)},
-			Field{Key: "label_en", Val: String(en)},
-			Field{Key: "label_he", Val: String(he)},
-			Field{Key: "colour", Val: String(colour)},
-			Field{Key: "sort", Val: Int(sort)},
-		))
+		concepts = append(concepts, grammarConcept(key, family, en, nullString(he), nullString(colour), sortKey))
 	}
 	if err := rows.Err(); err != nil {
 		return Value{}, err
 	}
+	// Node inserts future person cells on first list (server/lexicon/service.js
+	// ensureFutureCellConcepts). The read-only handle cannot write those rows.
+	// The same cells are added to the result in memory so the tool text matches
+	// Node, including on a database whose migration only seeded the past cells.
+	concepts = appendFutureCellConcepts(concepts)
+	return Object(Field{Key: "concepts", Val: Array(concepts...)}), nil
+}
+
+func nullString(v sql.NullString) Value {
+	if !v.Valid {
+		return Null()
+	}
+	return String(v.String)
+}
+
+func grammarConcept(key, family, en string, he, colour Value, sortKey int64) Value {
+	return Object(
+		Field{Key: "key", Val: String(key)},
+		Field{Key: "family", Val: String(family)},
+		Field{Key: "label_en", Val: String(en)},
+		Field{Key: "label_he", Val: he},
+		Field{Key: "colour", Val: colour},
+		Field{Key: "sort", Val: Int(sortKey)},
+	)
+}
+
+// futureCellConcepts matches FUTURE_CELL_CONCEPTS in server/lexicon/service.js.
+// Labels are the past-tense pronouns (ADR-0014 D5).
+var futureCellConcepts = []struct{ key, en, he string }{
+	{"cell:future.1s", "first person singular", "אני"},
+	{"cell:future.2ms", "second person masculine singular", "אתה"},
+	{"cell:future.2fs", "second person feminine singular", "את"},
+	{"cell:future.3ms", "third person masculine singular", "הוא"},
+	{"cell:future.3fs", "third person feminine singular", "היא"},
+	{"cell:future.1p", "first person plural", "אנחנו"},
+	{"cell:future.2mp", "second person masculine plural", "אתם"},
+	{"cell:future.2fp", "second person feminine plural", "אתן"},
+	{"cell:future.3p", "third person plural", "הם, הן"},
+}
+
+func appendFutureCellConcepts(concepts []Value) []Value {
 	if concepts == nil {
 		concepts = []Value{}
 	}
-	// Node's listGrammarConcepts also INSERT OR IGNOREs future cell rows.
-	// A read-only handle cannot. Migration 010 is expected to have seeded them.
-	return Object(Field{Key: "concepts", Val: Array(concepts...)}), nil
+	have := map[string]bool{}
+	var maxSort int64
+	for _, concept := range concepts {
+		key, _ := concept.Get("key")
+		if key.Kind == KindString {
+			have[key.Str] = true
+		}
+		sortKey, ok := concept.Get("sort")
+		if !ok || !sortKey.IsInt() {
+			continue
+		}
+		n, _ := sortKey.Float()
+		if int64(n) > maxSort {
+			maxSort = int64(n)
+		}
+	}
+	for i, cell := range futureCellConcepts {
+		if have[cell.key] {
+			continue
+		}
+		concepts = append(concepts, grammarConcept(
+			cell.key, "cell", cell.en, String(cell.he), Null(), maxSort+int64(i)+1,
+		))
+	}
+	sort.SliceStable(concepts, func(i, j int) bool {
+		si, _ := concepts[i].Get("sort")
+		sj, _ := concepts[j].Get("sort")
+		fi, _ := si.Float()
+		fj, _ := sj.Float()
+		if fi != fj {
+			return fi < fj
+		}
+		ki, _ := concepts[i].Get("key")
+		kj, _ := concepts[j].Get("key")
+		return ki.Str < kj.Str
+	})
+	return concepts
 }
 
 func (a *App) listPlans(limit int) (Value, error) {
