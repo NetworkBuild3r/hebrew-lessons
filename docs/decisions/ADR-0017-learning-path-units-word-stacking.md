@@ -96,7 +96,7 @@ In that same catalog order, the share of a lesson's distinct pointed words that 
 | R1 | One visible linear path: course, unit, lesson, activity. |
 | R2 | Additive plan fields at the next free minor version, valid for older plans and for worksheets. |
 | R3 | One stored progress table. Computed path state stays computed. FSRS, the lexicon, and the concept registry stay as they are. |
-| R4 | Validator checks N24–N29 for the new-word caps, the known-word band, and the reuse ladder. They warn. Go adds them after the cutover. Node does not. |
+| R4 | Validator checks N24–N29 for the new-word caps, the known-word band, and the reuse ladder. They warn. Go adds them after the cutover (§11 Sequencing). Node does not. |
 | R5 | Record the 2026-10-18 product decisions: no XP / streaks / leaderboards, the unit word-count line, the 80% pass mark, the one-time soft-gate warning, the review stop, the warm-up, inline tutor units, and reading folded into Units 0–2 with pointing unchanged for now. |
 | R6 | Name the migration of the 13 published lessons into five draft units, without unpublishing or moving anything in this change. |
 | R7 | Point the later `/lessons/` and Today work at the Learning Path page in Figma, and hold those screens until this ADR is accepted. |
@@ -182,7 +182,7 @@ Same rule as [ADR-0009](ADR-0009-learner-model-and-language-program.md) Decision
 
 **Backward compatible** means a 1.0.0, 1.1.0, or 1.2.0 plan still validates, and a worksheet still loads as a worksheet. It does not mean a 1.2.0 reader accepts a 1.3.0 document. Worksheets have no `schemaVersion`. This record does not rewrite them.
 
-The schema file is still `docs/decisions/ADR-0003-assets/lesson-plan.schema.json`. Node keeps accepting `1.0.0`, `1.1.0`, and `1.2.0` only. Go adds `1.3.0` to that file after the cutover. This record does not edit it.
+The schema file is still `docs/decisions/ADR-0003-assets/lesson-plan.schema.json`. Node keeps accepting `1.0.0`, `1.1.0`, and `1.2.0` only. Go adds `1.3.0` to that file after the cutover (§11 Sequencing). This record does not edit it.
 
 Fields already required stay required: unit `id`, `title`, `theme`, `lessons`; lesson `id`, `title`, `level`, `visibility`, `buildsOn`, `newWords`, `recycles`, `blocks`. `frequencyBand`, `recipe`, and array order stay. New fields are optional. When a 1.3.0 lesson sets both `newWords` and `introduces_words`, they are the same `exactKey` list; a difference blocks, because the document would introduce two lists. `recycles` stays the `{ word, fromLessonId }` list. `reuses_words` is the flat key list the ratio uses. A disagreement between those two lists warns.
 
@@ -211,7 +211,7 @@ Fields already required stay required: unit `id`, `title`, `theme`, `lessons`; l
 
 A tutor unit's lessons use the same `kind` values. `tutor` is a unit `source`, not a lesson kind.
 
-Setting any field in these two tables is what raises the document to 1.3.0. Go does that raise after the cutover. Node's part operations do not.
+Setting any field in these two tables is what raises the document to 1.3.0. Go does that raise after the cutover (§11 Sequencing). Node's part operations do not.
 
 ### 3. `unit_progress`
 
@@ -230,7 +230,7 @@ One new table holds the three facts that have to be remembered:
 
 Primary key: `(user_id, plan_id, unit_id)`.
 
-The checkpoint pass mark and the review-stop threshold belong to the Go learner package config (ADR-0016 layout) after the cutover. The defaults are below. The checker reads that config and does not embed the numbers. Node's `server/learner/thresholds.js` stays unchanged.
+The checkpoint pass mark and the review-stop threshold belong to the Go learner package config (ADR-0016 layout) after the cutover (§11 Sequencing). The defaults are below. The checker reads that config and does not embed the numbers. Node's `server/learner/thresholds.js` stays unchanged.
 
 | Key | Default | What reads it |
 |-----|---------|----------------|
@@ -259,7 +259,7 @@ The current unit (prerequisites satisfied, or no prerequisites) does not show th
 
 ### 5. Validator rules
 
-Cite these by id. They apply to `schemaVersion` `1.3.0` documents. Older plans and all worksheets are outside them. The pedagogy checks warn and do not block publish ([ADR-0013](ADR-0013-research-shaped-plans.md)). A later decision may raise one of those warns to **Block** after real plans have been checked. That promotion is not made here. N28 also blocks an unknown unit id or a prerequisite cycle, which is a broken reference rather than a pedagogy cap. Go applies N24–N29 after the cutover. Node's validator does not gain them.
+Cite these by id. They apply to `schemaVersion` `1.3.0` documents. Older plans and all worksheets are outside them. The pedagogy checks warn and do not block publish ([ADR-0013](ADR-0013-research-shaped-plans.md)). A later decision may raise one of those warns to **Block** after real plans have been checked. That promotion is not made here. N28 also blocks an unknown unit id or a prerequisite cycle, which is a broken reference rather than a pedagogy cap. Go applies N24–N29 after the cutover (§11 Sequencing). Node's validator does not gain them.
 
 N1 still blocks a non-legacy lesson above 8 `newWords` on publish. N18 still has its own thresholds for `topic-conversation`. N25 warns inside the 2–3 band and does not change N1 or N18. N3 still warns below 95% on story and listening text and is not restated as a new id.
 
@@ -300,9 +300,9 @@ The 30% fading figure is a product choice.
 
 ### 9. Migration
 
-Observed on 2026-10-18: 13 published lessons, no plans. Hebrew Lesson Builder may start drafting the five units now on schema 1.2.0, using the unit and lesson structure that version already supports (units, `newWords`, `recycles`) and writing toward the stacking ladder. Those plans stay draft and unpublished until Brian accepts this ADR. The 1.3.0 fields are filled in after the Go cutover. This record does not add the plans.
+Observed on 2026-10-18: 13 published lessons, no plans. Hebrew Lesson Builder may start drafting the five units now on schema 1.2.0, using the unit and lesson structure that version already supports (units, `newWords`, `recycles`) and writing toward the stacking ladder. Those plans stayed draft and unpublished until Brian accepted this ADR. The 1.3.0 fields are filled in after the cutover (§11 Sequencing). This record does not add the plans.
 
-Eleven series lessons become five **draft** units. Draft means the plan's `status` is draft ([ADR-0003](ADR-0003-course-and-lesson-plan-language.md) Decision 7). Those plans stay draft and unpublished until Brian accepts this ADR.
+Eleven series lessons become five **draft** units. Draft means the plan's `status` is draft ([ADR-0003](ADR-0003-course-and-lesson-plan-language.md) Decision 7). Those plans stayed draft and unpublished until Brian accepted this ADR.
 
 | Draft unit | Lessons, in the order below |
 |------------|-----------------------------|
@@ -315,11 +315,11 @@ Eleven series lessons become five **draft** units. Draft means the plan's `statu
 The design spec's sentence that all 13 become those five units does not survive the titles. Two of the 13 are not series lessons:
 
 - `anal-sex-vocab` is the explicit-vocab worksheet. The follow-up drafts it as an opt-in personal plan (`audience: personal`), not as one of the five.
-- `test` is not placed in a unit. After acceptance, the follow-up may unpublish `test`. It does not unpublish the other twelve. **Nothing is unpublished by this record**, and nothing is unpublished merely because the ADR is accepted. Unpublishing waits for that follow-up.
+- `test` is not placed in a unit. The follow-up may unpublish `test`. It does not unpublish the other twelve. **Nothing is unpublished by this record**, and nothing is unpublished merely because the ADR is accepted. Unpublishing waits for that follow-up.
 
 `shai-date-indirect-speech` is המלצות 1, so it sits in Preferences. Indirect speech as a pattern of סיפור 1 is `he-said-that-retell`, in Narration. The lesson is not in both units. מסעדה has a lesson numbered 3 and no lesson numbered 1 or 2 on the shelf. The draft does not invent the missing numbers.
 
-The draft uses `newWords` and `recycles`, filled from `list_words` with `exactKey`, and it writes toward the stacking ladder. `introduces_words`, `reuses_words`, `kind`, and `target_skill` stay unset until after the Go cutover. The 69 pointed words that appear in only one lesson still need later touches. N27 is the Go check for that, after the cutover. Review stops are computed at read time, so the draft does not store them. Until `kind` exists, a checkpoint is a lesson of the checkpoint activities the player already has. It gains `kind: checkpoint` after the Go cutover.
+The draft uses `newWords` and `recycles`, filled from `list_words` with `exactKey`, and it writes toward the stacking ladder. `introduces_words`, `reuses_words`, `kind`, and `target_skill` stay unset until after the cutover (§11 Sequencing). The 69 pointed words that appear in only one lesson still need later touches. N27 is the Go check for that, after the cutover (§11 Sequencing). Review stops are computed at read time, so the draft does not store them. Until `kind` exists, a checkpoint is a lesson of the checkpoint activities the player already has. It gains `kind: checkpoint` after the cutover (§11 Sequencing).
 
 FSRS rows carry over. They are keyed by word, not by unit. A finished worksheet maps to a done node through the lesson progress the server already stores. That mapping is computed. It does not copy progress into `unit_progress` except when a checkpoint is later submitted.
 
@@ -329,7 +329,7 @@ The shelf stays at `/lessons/` until the path ships. When the path takes `/lesso
 
 The path map (`/lessons/`) and Today are designed on Figma page **Learning Path** (file `NJ8HfTPCQgrFty2VVQBMhY`, node `71:2`). [ADR-0015](ADR-0015-responsive-desktop-mobile-architecture.md) already cites that file for the shell.
 
-Until this ADR is accepted, the frontend holds `/lessons/` and Today. No screen in this change.
+Until this ADR was accepted, the frontend held `/lessons/` and Today. No screen in this change.
 
 When a later spec implements the page, it keeps these decisions:
 
@@ -342,15 +342,17 @@ When a later spec implements the page, it keeps these decisions:
 
 ### 11. Who builds it after acceptance
 
-The frontend follow-up for `/lessons/` and Today waits on acceptance and on the Figma page named above. Accepting this ADR does not change the MCP contract the Node server validates. Sequencing, below, says when Go takes schema 1.3.0, N24–N29, and `unit_progress`.
+The frontend follow-up for `/lessons/` and Today waited on acceptance and on the Figma page named above. Accepting this ADR does not change the MCP contract the Node server validates. Sequencing, below, says when Go takes schema 1.3.0, N24–N29, and `unit_progress`.
 
 This record does not start that work.
 
 #### Sequencing
 
+**After the cutover** means Node is retired as the rollback. That means Go has served prod for 14 days with no rollback, and the Node image is no longer the documented rollback. Only after that do the plan tools accept schema 1.3.0, as a versioned contract change, and migration 012+ (`unit_progress`) lands in the Go-owned ledger. Until then the lesson builder authors on schema 1.2.0.
+
 1. The MCP contract is frozen for the Go port ([ADR-0016](ADR-0016-go-server-port.md) keeps the same tool names and schemas through the port). Plan schema 1.3.0 and validators N24–N29 are built in Go after the cutover, not in Node.
-2. Until then, Hebrew Lesson Builder may start drafting the five units now on schema 1.2.0, using the unit and lesson structure that version already supports (units, `newWords`, `recycles`) and writing toward the stacking ladder. Those plans stay draft and unpublished until Brian accepts this ADR.
-3. The 1.3.0 fields (`unit_progress`, the gate warning flag, checkpoint score and `passed_at`, and the plan fields in Decision 2) get filled in after the Go cutover.
+2. Until then, Hebrew Lesson Builder may start drafting the five units now on schema 1.2.0, using the unit and lesson structure that version already supports (units, `newWords`, `recycles`) and writing toward the stacking ladder. Those plans stayed draft and unpublished until Brian accepted this ADR.
+3. The 1.3.0 fields (`unit_progress`, the gate warning flag, checkpoint score and `passed_at`, and the plan fields in Decision 2) get filled in after the cutover.
 
 ---
 
@@ -363,8 +365,8 @@ This record does not start that work.
 - The pass mark and the due-count threshold can change without a schema change, because they are config.
 - The soft gate can be walked past. A learner can open a later unit after one warning. The checkpoint is how that unit becomes done.
 - Pointing does not change. `reading_stage` will sit unused by the player until a later decision.
-- MCP clients that only know 1.2.0 will fail a 1.3.0 plan closed, which is what the version rule is for. Go lands the schema and the MCP reader together, after the cutover. Node does not grow a 1.3.0 reader before then.
-- Once Go runs N27, the 69 single-lesson words (pointed) warn until the plan reuses them. Node does not emit that warning before the cutover.
+- MCP clients that only know 1.2.0 will fail a 1.3.0 plan closed, which is what the version rule is for. Go lands the schema and the MCP reader together, after the cutover (§11 Sequencing). Node does not grow a 1.3.0 reader before then.
+- Once Go runs N27, the 69 single-lesson words (pointed) warn until the plan reuses them. Node does not emit that warning before the cutover (§11 Sequencing).
 
 | Risk | What this record does about it |
 |------|--------------------------------|
@@ -406,7 +408,7 @@ Delete this file. No application file, schema file, database, worksheet, or scre
 - [ADR-0013](ADR-0013-research-shaped-plans.md) warnings do not block publish; no maximum lesson count
 - [ADR-0014](ADR-0014-lesson-type-coverage.md) schema 1.2.0
 - [ADR-0015](ADR-0015-responsive-desktop-mobile-architecture.md) same Figma file, shell
-- [ADR-0016](ADR-0016-go-server-port.md) same MCP tool names and schemas through the port; schema 1.3.0 and N24–N29 land in Go after the cutover
+- [ADR-0016](ADR-0016-go-server-port.md) same MCP tool names and schemas through the port; schema 1.3.0 and N24–N29 land in Go after the cutover (§11 Sequencing)
 - [RSCH-001](../../sdd/research/RSCH-001-english-to-hebrew-learning/RSCH-001-english-to-hebrew-learning-report.md), [RSCH-003](../../sdd/research/RSCH-003-language-learning-science/RSCH-003-language-learning-science-report.md), [RSCH-004](../../sdd/research/RSCH-004-course-design-and-lesson-types/RSCH-004-course-design-and-lesson-types-report.md), [RSCH-006](../../sdd/research/RSCH-006-learner-interface-design/RSCH-006-learner-interface-design-report.md), [RSCH-010](../../sdd/research/RSCH-010-lesson-program-layouts/RSCH-010-lesson-program-layouts-report.md)
 - Live shelf, 2026-10-18: MCP `list_lessons`, `list_plans`, `list_words`
 - Figma Learning Path: <https://www.figma.com/design/NJ8HfTPCQgrFty2VVQBMhY?node-id=71-2>
@@ -416,6 +418,7 @@ Delete this file. No application file, schema file, database, worksheet, or scre
 | Date | Change |
 |------|--------|
 | 2026-10-18 | Proposed. Records the learning path, schema 1.3.0 (the design spec said 1.2.0, which ADR-0014 already uses), `unit_progress` including the one-time soft-gate flag, the 80% config pass mark, and the migration plan. No schema, code, or lesson file changes with this record. |
-| 2026-10-18 | Sequencing under §11. Schema 1.3.0 and N24–N29 are a Go change after the ADR-0016 cutover. Hebrew Lesson Builder may draft the five units on schema 1.2.0 before that. |
-| 2026-10-18 | Drafting the five units on schema 1.2.0 may start now. Those plans stay draft and unpublished until Brian accepts this ADR. The 1.3.0 fields are filled in after the Go cutover. The checkpoint pass mark and the review-stop threshold belong to the Go learner package config (ADR-0016 layout) after the cutover. Node's `server/learner/thresholds.js` stays unchanged. |
+| 2026-10-18 | Sequencing under §11. Schema 1.3.0 and N24–N29 are a Go change after the cutover (§11 Sequencing). Hebrew Lesson Builder may draft the five units on schema 1.2.0 before that. |
+| 2026-10-18 | Drafting the five units on schema 1.2.0 may start now. Those plans stay draft and unpublished until Brian accepts this ADR. The 1.3.0 fields are filled in after the cutover (§11 Sequencing). The checkpoint pass mark and the review-stop threshold belong to the Go learner package config (ADR-0016 layout) after the cutover (§11 Sequencing). Node's `server/learner/thresholds.js` stays unchanged. |
 | 2026-10-18 | Accepted by Brian Nelson. |
+| 2026-10-18 | Clarification. §11 Sequencing defines "after the cutover": Node is retired as the rollback, which means Go has served prod for 14 days with no rollback and the Node image is no longer the documented rollback. Only after that do the plan tools accept schema 1.3.0, as a versioned contract change, and migration 012+ (`unit_progress`) lands in the Go-owned ledger. Until then the lesson builder authors on schema 1.2.0. Other mentions of the phrase refer to that definition. §9–11 lines that waited on Brian accepting this ADR are in the past tense. No decisions change. |
