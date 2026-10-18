@@ -8,6 +8,16 @@
  * Covers every worksheets/**\/*.js file, a mutation corpus of rejected
  * inputs, and accepted inputs that exercise JSON.stringify quirks
  * (key order, number format, U+2028/U+2029, lone surrogates).
+ *
+ * Layout under go/internal/lessondata/testdata/golden/:
+ *   meta.json          node version, lesson-data.js sha, counts
+ *   mutations.jsonl    one rejected input per line
+ *   quirks.jsonl       one accepted synthetic input per line
+ *   worksheets.jsonl   one real worksheet per line (emit and assign text)
+ *   written/...        indented writer bytes, one file per worksheet
+ *
+ * errorJSON is JSON.stringify(message): ASCII, so a lone surrogate in the
+ * message survives a Go encoding/json unmarshal as the characters \udXXX.
  */
 'use strict';
 
@@ -63,10 +73,8 @@ function assignParses(globals) {
     });
 }
 
-function writeCase(dir, rec) {
-    fs.mkdirSync(dir, { recursive: true });
+function evaluate(rec) {
     const text = Buffer.isBuffer(rec.src) ? rec.src.toString('utf8') : rec.src;
-    fs.writeFileSync(path.join(dir, 'input.js'), text);
     let globals;
     try {
         globals = parseDataWindow(text, rec.label);
@@ -75,10 +83,12 @@ function writeCase(dir, rec) {
         if (rec.kind !== 'mutation') {
             throw new Error(rec.kind + ' ' + rec.id + ' failed: ' + err.message);
         }
-        const meta = { label: rec.label, ok: false, kind: rec.kind };
-        fs.writeFileSync(path.join(dir, 'case.json'), JSON.stringify(meta, null, 2) + '\n');
-        fs.writeFileSync(path.join(dir, 'error.json'), JSON.stringify(err.message) + '\n');
-        return 'err';
+        return {
+            id: rec.id,
+            label: rec.label,
+            input: text,
+            errorJSON: JSON.stringify(err.message)
+        };
     }
     if (rec.kind === 'mutation') {
         throw new Error('mutation parsed successfully: ' + rec.id);
@@ -96,13 +106,21 @@ function writeCase(dir, rec) {
     if (parses && canonical(parseDataWindow(assign, rec.label)) !== written) {
         throw new Error('assign script changed the value: ' + rec.id);
     }
-    const meta = { label: rec.label, ok: true, kind: rec.kind, assignParses: parses };
-    if (rec.repo) meta.repo = rec.repo;
-    fs.writeFileSync(path.join(dir, 'case.json'), JSON.stringify(meta, null, 2) + '\n');
-    fs.writeFileSync(path.join(dir, 'written.js'), written);
-    fs.writeFileSync(path.join(dir, 'emit.js'), emit);
-    fs.writeFileSync(path.join(dir, 'assign.js'), assign);
-    return 'ok';
+    return {
+        id: rec.id,
+        label: rec.label,
+        input: text,
+        assignParses: parses,
+        written,
+        emit,
+        assign,
+        repo: rec.repo || ''
+    };
+}
+
+function writeJSONL(name, rows) {
+    const body = rows.map((row) => JSON.stringify(row)).join('\n') + (rows.length ? '\n' : '');
+    fs.writeFileSync(path.join(golden, name), body);
 }
 
 const mutations = [
@@ -257,47 +275,68 @@ const quirks = [
 ];
 
 fs.rmSync(golden, { recursive: true, force: true });
+fs.mkdirSync(golden, { recursive: true });
 
 const files = [];
 walkJS(path.join(root, 'worksheets'), 'worksheets', files);
-let fileOK = 0;
+const worksheetRows = [];
 for (const rel of files) {
-    const src = fs.readFileSync(path.join(root, rel));
-    const id = rel;
-    const status = writeCase(path.join(golden, 'files', rel), {
-        id,
+    const got = evaluate({
+        id: rel,
         kind: 'file',
         label: rel,
         repo: rel,
-        src
+        src: fs.readFileSync(path.join(root, rel))
     });
-    if (status !== 'ok') throw new Error('file case was not ok: ' + rel);
-    fileOK++;
+    if (got.errorJSON) throw new Error('file case failed: ' + rel);
+    const writtenRel = 'written/' + rel.replace(/\.js$/, '.written.js');
+    fs.mkdirSync(path.dirname(path.join(golden, writtenRel)), { recursive: true });
+    fs.writeFileSync(path.join(golden, writtenRel), got.written);
+    worksheetRows.push({
+        repo: rel,
+        label: rel,
+        assignParses: got.assignParses,
+        written: writtenRel,
+        emit: got.emit,
+        assign: got.assign
+    });
 }
 
-let mutationErr = 0;
+const mutationRows = [];
 for (const [id, src] of mutations) {
-    const status = writeCase(path.join(golden, 'mutations', id), {
+    const got = evaluate({
         id,
         kind: 'mutation',
         label: 'mutations/' + id + '.js',
         src
     });
-    if (status !== 'err') throw new Error('mutation was not an error: ' + id);
-    mutationErr++;
+    if (!got.errorJSON) throw new Error('mutation was not an error: ' + id);
+    mutationRows.push({ id, label: got.label, input: got.input, errorJSON: got.errorJSON });
 }
 
-let quirkOK = 0;
+const quirkRows = [];
 for (const [id, src] of quirks) {
-    const status = writeCase(path.join(golden, 'quirks', id), {
+    const got = evaluate({
         id,
         kind: 'quirk',
         label: 'quirks/' + id + '.js',
         src
     });
-    if (status !== 'ok') throw new Error('quirk was not ok: ' + id);
-    quirkOK++;
+    if (got.errorJSON) throw new Error('quirk failed: ' + id);
+    quirkRows.push({
+        id,
+        label: got.label,
+        input: got.input,
+        assignParses: got.assignParses,
+        written: got.written,
+        emit: got.emit,
+        assign: got.assign
+    });
 }
+
+writeJSONL('worksheets.jsonl', worksheetRows);
+writeJSONL('mutations.jsonl', mutationRows);
+writeJSONL('quirks.jsonl', quirkRows);
 
 const lessonPath = path.join(root, 'server', 'lesson-data.js');
 const lessonSha = crypto.createHash('sha256').update(fs.readFileSync(lessonPath)).digest('hex');
@@ -305,9 +344,9 @@ const meta = {
     node: process.version,
     lessonDataSha256: lessonSha,
     generator: 'scripts/generate-lessondata-goldens.js',
-    files: fileOK,
-    mutations: mutationErr,
-    quirks: quirkOK
+    files: worksheetRows.length,
+    mutations: mutationRows.length,
+    quirks: quirkRows.length
 };
 fs.writeFileSync(path.join(golden, 'meta.json'), JSON.stringify(meta, null, 2) + '\n');
 console.log(JSON.stringify(meta));

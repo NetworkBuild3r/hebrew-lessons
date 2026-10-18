@@ -1,1 +1,0 @@
-window.M = Object /*c*/ . assign ( { } , window . M || { } , { a : 1 } ) ;

@@ -1,6 +1,0 @@
-{
-  "label": "quirks/cr-does-not-end-comment.js",
-  "ok": true,
-  "kind": "quirk",
-  "assignParses": true
-}

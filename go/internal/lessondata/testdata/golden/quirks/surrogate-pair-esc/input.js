@@ -1,1 +1,0 @@
-window.X = "\uD83D\uDE00";

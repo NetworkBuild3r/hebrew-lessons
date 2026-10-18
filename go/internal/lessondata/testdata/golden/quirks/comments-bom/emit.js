@@ -1,1 +1,0 @@
-window.C = {"key":"v"};

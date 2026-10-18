@@ -1,1 +1,0 @@
-window.X = Object.assign({}, window.Y || {}, { a: 1 });

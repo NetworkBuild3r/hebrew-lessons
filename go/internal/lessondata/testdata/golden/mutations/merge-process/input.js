@@ -1,1 +1,0 @@
-window.X = Object.assign(process, {});

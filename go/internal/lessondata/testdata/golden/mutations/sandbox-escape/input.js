@@ -1,1 +1,0 @@
-window.X = this.constructor.constructor('return process')();

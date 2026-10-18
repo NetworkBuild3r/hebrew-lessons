@@ -1,6 +1,0 @@
-{
-  "label": "quirks/cr-in-string.js",
-  "ok": true,
-  "kind": "quirk",
-  "assignParses": false
-}

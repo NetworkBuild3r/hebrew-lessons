@@ -1,1 +1,0 @@
-window.H = { word: 'קָם', esc: 'a\n\u05D0\x41\'' };

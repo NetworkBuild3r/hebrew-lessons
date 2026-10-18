@@ -1,1 +1,0 @@
-window.B = 1; window.A = 2; window.B = {x:3};

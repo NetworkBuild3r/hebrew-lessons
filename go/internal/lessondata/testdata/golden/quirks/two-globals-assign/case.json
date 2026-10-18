@@ -1,6 +1,0 @@
-{
-  "label": "quirks/two-globals-assign.js",
-  "ok": true,
-  "kind": "quirk",
-  "assignParses": true
-}

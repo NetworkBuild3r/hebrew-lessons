@@ -1,0 +1,81 @@
+{"id":"unterminated-comment","label":"mutations/unterminated-comment.js","input":"window.X = 1; /* hi","errorJSON":"\"mutations/unterminated-comment.js: unterminated comment at offset 14\""}
+{"id":"unterminated-comment-start","label":"mutations/unterminated-comment-start.js","input":"/*","errorJSON":"\"mutations/unterminated-comment-start.js: unterminated comment at offset 0\""}
+{"id":"slash-star-slash","label":"mutations/slash-star-slash.js","input":"window.X = 1; /*/","errorJSON":"\"mutations/slash-star-slash.js: unterminated comment at offset 14\""}
+{"id":"newline-double","label":"mutations/newline-double.js","input":"window.X = \"ab\ncd\";","errorJSON":"\"mutations/newline-double.js: newline inside string literal at offset 11\""}
+{"id":"newline-single","label":"mutations/newline-single.js","input":"window.X = 'ab\ncd';","errorJSON":"\"mutations/newline-single.js: newline inside string literal at offset 11\""}
+{"id":"template-interp","label":"mutations/template-interp.js","input":"window.X = `${1}`;","errorJSON":"\"mutations/template-interp.js: template interpolation is not allowed at offset 11\""}
+{"id":"template-interp-later","label":"mutations/template-interp-later.js","input":"window.X = `a${b}`;","errorJSON":"\"mutations/template-interp-later.js: template interpolation is not allowed at offset 11\""}
+{"id":"unterminated-double","label":"mutations/unterminated-double.js","input":"window.X = \"abc","errorJSON":"\"mutations/unterminated-double.js: unterminated string literal at offset 11\""}
+{"id":"unterminated-single","label":"mutations/unterminated-single.js","input":"window.X = 'abc","errorJSON":"\"mutations/unterminated-single.js: unterminated string literal at offset 11\""}
+{"id":"unterminated-backtick","label":"mutations/unterminated-backtick.js","input":"window.X = `abc","errorJSON":"\"mutations/unterminated-backtick.js: unterminated string literal at offset 11\""}
+{"id":"unterminated-escape","label":"mutations/unterminated-escape.js","input":"window.X = \"abc\\","errorJSON":"\"mutations/unterminated-escape.js: unterminated string literal at offset 11\""}
+{"id":"bad-u-short","label":"mutations/bad-u-short.js","input":"window.X = \"\\u12\";","errorJSON":"\"mutations/bad-u-short.js: malformed \\\\u escape at offset 11\""}
+{"id":"bad-u-hex","label":"mutations/bad-u-hex.js","input":"window.X = \"\\uZZZZ\";","errorJSON":"\"mutations/bad-u-hex.js: malformed \\\\u escape at offset 11\""}
+{"id":"bad-u-end","label":"mutations/bad-u-end.js","input":"window.X = \"\\u\";","errorJSON":"\"mutations/bad-u-end.js: malformed \\\\u escape at offset 11\""}
+{"id":"bad-u-brace","label":"mutations/bad-u-brace.js","input":"window.X = \"\\u{41}\";","errorJSON":"\"mutations/bad-u-brace.js: malformed \\\\u escape at offset 11\""}
+{"id":"bad-x-short","label":"mutations/bad-x-short.js","input":"window.X = \"\\x1\";","errorJSON":"\"mutations/bad-x-short.js: malformed \\\\x escape at offset 11\""}
+{"id":"bad-x-hex","label":"mutations/bad-x-hex.js","input":"window.X = \"\\xZZ\";","errorJSON":"\"mutations/bad-x-hex.js: malformed \\\\x escape at offset 11\""}
+{"id":"bad-x-end","label":"mutations/bad-x-end.js","input":"window.X = \"\\x\";","errorJSON":"\"mutations/bad-x-end.js: malformed \\\\x escape at offset 11\""}
+{"id":"line-cont-lf","label":"mutations/line-cont-lf.js","input":"window.X = \"ab\\\ncd\";","errorJSON":"\"mutations/line-cont-lf.js: line continuation is not allowed at offset 11\""}
+{"id":"line-cont-cr","label":"mutations/line-cont-cr.js","input":"window.X = \"ab\\\rcd\";","errorJSON":"\"mutations/line-cont-cr.js: line continuation is not allowed at offset 11\""}
+{"id":"unexpected-plus","label":"mutations/unexpected-plus.js","input":"window.X = 1 + 2;","errorJSON":"\"mutations/unexpected-plus.js: unexpected character \\\"+\\\" at offset 13\""}
+{"id":"unexpected-amp","label":"mutations/unexpected-amp.js","input":"window.X = a && b;","errorJSON":"\"mutations/unexpected-amp.js: unexpected character \\\"&\\\" at offset 13\""}
+{"id":"unexpected-slash","label":"mutations/unexpected-slash.js","input":"window.X = 1/2;","errorJSON":"\"mutations/unexpected-slash.js: unexpected character \\\"/\\\" at offset 12\""}
+{"id":"unexpected-hebrew","label":"mutations/unexpected-hebrew.js","input":"window.X = {ש: 1};","errorJSON":"\"mutations/unexpected-hebrew.js: unexpected character \\\"ש\\\" at offset 12\""}
+{"id":"unexpected-at","label":"mutations/unexpected-at.js","input":"window.X = @;","errorJSON":"\"mutations/unexpected-at.js: unexpected character \\\"@\\\" at offset 11\""}
+{"id":"unexpected-backslash","label":"mutations/unexpected-backslash.js","input":"window.X = \\;","errorJSON":"\"mutations/unexpected-backslash.js: unexpected character \\\"\\\\\\\" at offset 11\""}
+{"id":"unexpected-nul","label":"mutations/unexpected-nul.js","input":"window.X = \u0000;","errorJSON":"\"mutations/unexpected-nul.js: unexpected character \\\"\\u0000\\\" at offset 11\""}
+{"id":"unexpected-nel","label":"mutations/unexpected-nel.js","input":"window.X =1;","errorJSON":"\"mutations/unexpected-nel.js: unexpected character \\\"\\\" at offset 10\""}
+{"id":"unexpected-emoji","label":"mutations/unexpected-emoji.js","input":"window.X = 😀;","errorJSON":"\"mutations/unexpected-emoji.js: unexpected character \\\"\\ud83d\\\" at offset 11\""}
+{"id":"nonfinite","label":"mutations/nonfinite.js","input":"window.X = 1e309;","errorJSON":"\"mutations/nonfinite.js: non-finite number (token 5)\""}
+{"id":"nonfinite-neg","label":"mutations/nonfinite-neg.js","input":"window.X = -1e309;","errorJSON":"\"mutations/nonfinite-neg.js: non-finite number (token 5)\""}
+{"id":"nonfinite-huge","label":"mutations/nonfinite-huge.js","input":"window.X = 1e999;","errorJSON":"\"mutations/nonfinite-huge.js: non-finite number (token 5)\""}
+{"id":"ident-undefined","label":"mutations/ident-undefined.js","input":"window.X = undefined;","errorJSON":"\"mutations/ident-undefined.js: identifier \\\"undefined\\\" is not a literal value (token 5)\""}
+{"id":"ident-require","label":"mutations/ident-require.js","input":"window.X = { fs: require('fs') };","errorJSON":"\"mutations/ident-require.js: identifier \\\"require\\\" is not a literal value (token 8)\""}
+{"id":"ident-process","label":"mutations/ident-process.js","input":"window.X = process.env;","errorJSON":"\"mutations/ident-process.js: identifier \\\"process\\\" is not a literal value (token 5)\""}
+{"id":"ident-truee","label":"mutations/ident-truee.js","input":"window.X = truee;","errorJSON":"\"mutations/ident-truee.js: identifier \\\"truee\\\" is not a literal value (token 5)\""}
+{"id":"ident-True","label":"mutations/ident-True.js","input":"window.X = True;","errorJSON":"\"mutations/ident-True.js: identifier \\\"True\\\" is not a literal value (token 5)\""}
+{"id":"eof-value","label":"mutations/eof-value.js","input":"window.X =","errorJSON":"\"mutations/eof-value.js: unexpected end of file (token 4)\""}
+{"id":"unexpected-semi","label":"mutations/unexpected-semi.js","input":"window.X = ;","errorJSON":"\"mutations/unexpected-semi.js: unexpected token \\\";\\\" (token 4)\""}
+{"id":"unexpected-paren","label":"mutations/unexpected-paren.js","input":"window.X = (function () { return 1; })();","errorJSON":"\"mutations/unexpected-paren.js: unexpected token \\\"(\\\" (token 4)\""}
+{"id":"unexpected-dot","label":"mutations/unexpected-dot.js","input":"window.X = .5;","errorJSON":"\"mutations/unexpected-dot.js: unexpected token \\\".\\\" (token 4)\""}
+{"id":"key-number","label":"mutations/key-number.js","input":"window.X = {1:2};","errorJSON":"\"mutations/key-number.js: object key must be an identifier or string (token 5)\""}
+{"id":"key-punct","label":"mutations/key-punct.js","input":"window.X = {:1};","errorJSON":"\"mutations/key-punct.js: object key must be an identifier or string (token 5)\""}
+{"id":"missing-colon","label":"mutations/missing-colon.js","input":"window.X = {a 1};","errorJSON":"\"mutations/missing-colon.js: expected \\\":\\\" (token 6)\""}
+{"id":"missing-brace","label":"mutations/missing-brace.js","input":"window.X = {a:1","errorJSON":"\"mutations/missing-brace.js: expected \\\"}\\\" (token 8)\""}
+{"id":"missing-bracket","label":"mutations/missing-bracket.js","input":"window.X = [1, 2","errorJSON":"\"mutations/missing-bracket.js: expected \\\"]\\\" (token 8)\""}
+{"id":"missing-value-key","label":"mutations/missing-value-key.js","input":"window.X = {a:1, b}","errorJSON":"\"mutations/missing-value-key.js: expected \\\":\\\" (token 10)\""}
+{"id":"empty-comma-array","label":"mutations/empty-comma-array.js","input":"window.X = [,];","errorJSON":"\"mutations/empty-comma-array.js: unexpected token \\\",\\\" (token 5)\""}
+{"id":"double-comma-object","label":"mutations/double-comma-object.js","input":"window.X = {a:1,,};","errorJSON":"\"mutations/double-comma-object.js: object key must be an identifier or string (token 9)\""}
+{"id":"hole-array","label":"mutations/hole-array.js","input":"window.X = [1,,2];","errorJSON":"\"mutations/hole-array.js: unexpected token \\\",\\\" (token 7)\""}
+{"id":"not-window","label":"mutations/not-window.js","input":"foo = 1;","errorJSON":"\"mutations/not-window.js: only window.NAME = <literal> statements are allowed (token 0)\""}
+{"id":"global-this","label":"mutations/global-this.js","input":"globalThis.X = {};","errorJSON":"\"mutations/global-this.js: only window.NAME = <literal> statements are allowed (token 0)\""}
+{"id":"window-capital","label":"mutations/window-capital.js","input":"Window.X = 1;","errorJSON":"\"mutations/window-capital.js: only window.NAME = <literal> statements are allowed (token 0)\""}
+{"id":"missing-name","label":"mutations/missing-name.js","input":"window. = 1;","errorJSON":"\"mutations/missing-name.js: expected a global name after window. (token 2)\""}
+{"id":"name-number","label":"mutations/name-number.js","input":"window.1 = 2;","errorJSON":"\"mutations/name-number.js: expected a global name after window. (token 2)\""}
+{"id":"name-string","label":"mutations/name-string.js","input":"window.\"A\" = 1;","errorJSON":"\"mutations/name-string.js: expected a global name after window. (token 2)\""}
+{"id":"name-eof","label":"mutations/name-eof.js","input":"window.","errorJSON":"\"mutations/name-eof.js: expected a global name after window. (token 2)\""}
+{"id":"missing-dot","label":"mutations/missing-dot.js","input":"window = 1;","errorJSON":"\"mutations/missing-dot.js: expected \\\".\\\" (token 1)\""}
+{"id":"missing-eq","label":"mutations/missing-eq.js","input":"window.X 1;","errorJSON":"\"mutations/missing-eq.js: expected \\\"=\\\" (token 3)\""}
+{"id":"merge-array","label":"mutations/merge-array.js","input":"window.X = Object.assign({}, window.X || {}, [1, 2]);","errorJSON":"\"mutations/merge-array.js: merge source must be an object literal (token 19)\""}
+{"id":"merge-wrong-name","label":"mutations/merge-wrong-name.js","input":"window.X = Object.assign({}, window.Y || {}, { a: 1 });","errorJSON":"\"mutations/merge-wrong-name.js: expected \\\"X\\\" (token 13)\""}
+{"id":"merge-process","label":"mutations/merge-process.js","input":"window.X = Object.assign(process, {});","errorJSON":"\"mutations/merge-process.js: expected \\\"{\\\" (token 8)\""}
+{"id":"merge-process-env","label":"mutations/merge-process-env.js","input":"window.X = Object.assign({}, process.env);","errorJSON":"\"mutations/merge-process-env.js: expected \\\"window\\\" (token 11)\""}
+{"id":"merge-extra-arg","label":"mutations/merge-extra-arg.js","input":"window.X = Object.assign({}, window.X || {}, {a:1}, {b:2});","errorJSON":"\"mutations/merge-extra-arg.js: expected \\\")\\\" (token 24)\""}
+{"id":"merge-unclosed","label":"mutations/merge-unclosed.js","input":"window.X = Object.assign({}, window.X || {}, {a:1}","errorJSON":"\"mutations/merge-unclosed.js: expected \\\")\\\" (token 24)\""}
+{"id":"merge-one-pipe","label":"mutations/merge-one-pipe.js","input":"window.X = Object.assign({}, window.X | {}, {a:1});","errorJSON":"\"mutations/merge-one-pipe.js: expected \\\"|\\\" (token 15)\""}
+{"id":"merge-missing-source","label":"mutations/merge-missing-source.js","input":"window.X = Object.assign({}, window.X || {}, );","errorJSON":"\"mutations/merge-missing-source.js: merge source must be an object literal (token 19)\""}
+{"id":"arithmetic","label":"mutations/arithmetic.js","input":"window.X = 1 + 1;","errorJSON":"\"mutations/arithmetic.js: unexpected character \\\"+\\\" at offset 13\""}
+{"id":"extra-statement","label":"mutations/extra-statement.js","input":"window.X = {}; require('child_process');","errorJSON":"\"mutations/extra-statement.js: only window.NAME = <literal> statements are allowed (token 7)\""}
+{"id":"call","label":"mutations/call.js","input":"window.X = foo();","errorJSON":"\"mutations/call.js: identifier \\\"foo\\\" is not a literal value (token 5)\""}
+{"id":"unary-plus","label":"mutations/unary-plus.js","input":"window.X = +1;","errorJSON":"\"mutations/unary-plus.js: unexpected character \\\"+\\\" at offset 11\""}
+{"id":"trailing-minus","label":"mutations/trailing-minus.js","input":"window.X = -","errorJSON":"\"mutations/trailing-minus.js: unexpected character \\\"-\\\" at offset 11\""}
+{"id":"minus-dot","label":"mutations/minus-dot.js","input":"window.X = -.;","errorJSON":"\"mutations/minus-dot.js: unexpected character \\\"-\\\" at offset 11\""}
+{"id":"hex","label":"mutations/hex.js","input":"window.X = 0x10;","errorJSON":"\"mutations/hex.js: only window.NAME = <literal> statements are allowed (token 5)\""}
+{"id":"num-then-ident","label":"mutations/num-then-ident.js","input":"window.X = 1a;","errorJSON":"\"mutations/num-then-ident.js: only window.NAME = <literal> statements are allowed (token 5)\""}
+{"id":"sandbox-escape","label":"mutations/sandbox-escape.js","input":"window.X = this.constructor.constructor('return process')();","errorJSON":"\"mutations/sandbox-escape.js: identifier \\\"this\\\" is not a literal value (token 5)\""}
+{"id":"sandbox-typeof","label":"mutations/sandbox-typeof.js","input":"window.X = this.constructor.constructor('return typeof process')();","errorJSON":"\"mutations/sandbox-typeof.js: identifier \\\"this\\\" is not a literal value (token 5)\""}
+{"id":"trailing-junk","label":"mutations/trailing-junk.js","input":"window.X = 1; junk","errorJSON":"\"mutations/trailing-junk.js: only window.NAME = <literal> statements are allowed (token 6)\""}
+{"id":"regex-like","label":"mutations/regex-like.js","input":"window.X = /a/;","errorJSON":"\"mutations/regex-like.js: unexpected character \\\"/\\\" at offset 11\""}
+{"id":"nested-unclosed","label":"mutations/nested-unclosed.js","input":"window.X = {a: {b: 1}","errorJSON":"\"mutations/nested-unclosed.js: expected \\\"}\\\" (token 12)\""}
+{"id":"array-unclosed-nested","label":"mutations/array-unclosed-nested.js","input":"window.X = [1, {a: 2]","errorJSON":"\"mutations/array-unclosed-nested.js: expected \\\"}\\\" (token 11)\""}

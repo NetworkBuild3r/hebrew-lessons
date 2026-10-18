@@ -1,2 +1,0 @@
-window.X = 'ab
-cd';

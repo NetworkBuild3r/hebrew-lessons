@@ -1,6 +1,0 @@
-{
-  "label": "quirks/slash-in-string.js",
-  "ok": true,
-  "kind": "quirk",
-  "assignParses": false
-}

@@ -1,1 +1,0 @@
-window.X = {true: false, null: 1, false: true};

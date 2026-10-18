@@ -1,1 +1,0 @@
-window.X = { fs: require('fs') };
