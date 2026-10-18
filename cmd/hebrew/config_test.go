@@ -7,6 +7,7 @@ func TestConfigFromEnv(t *testing.T) {
 		"DATA_DIR", "HTTP_ADDR", "MCP_ADDR", "PUBLIC_ORIGIN", "COOKIE_SECURE",
 		"TRUSTED_PROXIES", "LOG_LEVEL", "GOOGLE_AUTH_URL", "GOOGLE_TOKEN_URL",
 		"GOOGLE_USERINFO_URL", "GOOGLE_JWKS_URL", "GOOGLE_ISSUER", "ELEVENLABS_API_KEY",
+		"MCP_AUTH_TOKEN",
 	} {
 		t.Setenv(key, "")
 	}
@@ -26,6 +27,9 @@ func TestConfigFromEnv(t *testing.T) {
 	if cfg.GoogleIssuer != "https://accounts.google.com" || cfg.GoogleJWKSURL != "https://www.googleapis.com/oauth2/v3/certs" {
 		t.Fatalf("google defaults: %+v", cfg)
 	}
+	if cfg.MCPAuthToken != "" {
+		t.Fatalf("MCP auth token %q", cfg.MCPAuthToken)
+	}
 	if cfg.Clock == nil {
 		t.Fatal("clock is nil")
 	}
@@ -40,6 +44,7 @@ func TestConfigFromEnv(t *testing.T) {
 	t.Setenv("GOOGLE_ISSUER", "http://127.0.0.1:9")
 	t.Setenv("GOOGLE_JWKS_URL", "http://127.0.0.1:9/jwks")
 	t.Setenv("ELEVENLABS_API_KEY", "secret")
+	t.Setenv("MCP_AUTH_TOKEN", "author-token")
 	cfg, err = configFromEnv()
 	if err != nil {
 		t.Fatal(err)
@@ -49,6 +54,9 @@ func TestConfigFromEnv(t *testing.T) {
 	}
 	if !cfg.CookieSecure || cfg.LogLevel != "debug" || cfg.ElevenLabsAPIKey != "secret" {
 		t.Fatalf("flags: %+v", cfg)
+	}
+	if cfg.MCPAuthToken != "author-token" {
+		t.Fatalf("mcp token %q", cfg.MCPAuthToken)
 	}
 	if cfg.PublicOrigin != "https://hebrew.example" {
 		t.Fatalf("origin %q", cfg.PublicOrigin)

@@ -31,9 +31,17 @@ func NewFixtureLookup(audioTexts, lexemeTexts []string) *FixtureLookup {
 }
 
 // KnownLexemes returns no known words. A test that needs a learner's
-// known set can wrap this lookup.
-func (l *FixtureLookup) KnownLexemes(context.Context, int64) ([]string, error) {
-	return nil, nil
+// known set can wrap this lookup. The signature matches units.Lookup:
+// beforePosition is a course position, and a true value means the text
+// was introduced earlier.
+func (l *FixtureLookup) KnownLexemes(context.Context, int) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
+// Facts reports no lexicon fields. The fixture lookup only answers
+// identity and audio; noun gender is filled by a test that needs it.
+func (l *FixtureLookup) Facts(context.Context, string) (units.LexemeFacts, bool, error) {
+	return units.LexemeFacts{}, false, nil
 }
 
 // HasAudio reports whether textNFC is one of the fixture clip texts.

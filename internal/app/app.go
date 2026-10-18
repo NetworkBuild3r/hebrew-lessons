@@ -22,6 +22,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web"
 )
 
@@ -69,6 +70,11 @@ type Config struct {
 	// ElevenLabsAPIKey gates the real TTS client. Empty leaves TTS unset
 	// unless TTS is set directly.
 	ElevenLabsAPIKey string
+
+	// MCPAuthToken is the bearer secret for the authoring tools.
+	// cmd/hebrew copies MCP_AUTH_TOKEN. Empty rejects every MCP request.
+	// internal/mcp does not read the environment. GET /healthz stays open.
+	MCPAuthToken string
 
 	// Clock stamps database times. Nil uses the system clock.
 	Clock clock.Clock
@@ -170,14 +176,15 @@ func NewApp(cfg Config) (*App, error) {
 	}
 	health := a.healthHandler()
 	a.web = web.New(health)
-	a.mcp = newMCP(health)
+	a.mcp = newMCP(cfg, health)
 	return a, nil
 }
 
 // Web is the learner handler.
 func (a *App) Web() http.Handler { return a.web }
 
-// MCP is the authoring handler. This skeleton serves /healthz only.
+// MCP is the authoring handler. GET /healthz is unauthenticated.
+// Every other route is the MCP server.
 func (a *App) MCP() http.Handler { return a.mcp }
 
 // AudioDir is <DataDir>/audio, where clips are written as <sha256>.mp3.
@@ -255,8 +262,14 @@ func (a *App) healthHandler() http.Handler {
 	})
 }
 
-func newMCP(health http.Handler) http.Handler {
+func newMCP(cfg Config, health http.Handler) http.Handler {
+	// Course, lexicon, and unit stores stay unset until *db.Store
+	// grows the methods in mcp.CourseReader, mcp.LexiconReader,
+	// mcp.UnitWriter, and units.Lookup. Tools then answer with isError.
+	// The adapter belongs here, next to this call, so db does not import mcp.
+	authoring := mcp.Handler(mcp.Options{AuthToken: cfg.MCPAuthToken})
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
+	mux.Handle("/", authoring)
 	return mux
 }

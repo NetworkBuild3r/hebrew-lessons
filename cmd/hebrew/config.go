@@ -34,6 +34,7 @@ func configFromEnv() (app.Config, error) {
 		GoogleJWKSURL:     strings.TrimSpace(os.Getenv("GOOGLE_JWKS_URL")),
 		GoogleIssuer:      strings.TrimSpace(os.Getenv("GOOGLE_ISSUER")),
 		ElevenLabsAPIKey:  os.Getenv("ELEVENLABS_API_KEY"),
+		MCPAuthToken:      os.Getenv("MCP_AUTH_TOKEN"),
 	}
 	return app.ApplyDefaults(cfg), nil
 }
@@ -84,7 +85,7 @@ func warnOptionalConfig(cfg app.Config) {
 	if cfg.ElevenLabsAPIKey == "" && cfg.TTS == nil {
 		slog.Warn("speech synthesis is off", "reason", "ELEVENLABS_API_KEY is unset")
 	}
-	if os.Getenv("MCP_AUTH_TOKEN") == "" || os.Getenv("MCP_PUBLIC_URL") == "" {
+	if cfg.MCPAuthToken == "" || os.Getenv("MCP_PUBLIC_URL") == "" {
 		slog.Warn("mcp oauth is off", "reason", "MCP_AUTH_TOKEN or MCP_PUBLIC_URL is unset")
 	}
 }

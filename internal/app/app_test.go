@@ -151,6 +151,23 @@ func TestApplyDefaults(t *testing.T) {
 	}
 }
 
+func TestMCPHealthOpenAndToolsClosed(t *testing.T) {
+	a := newTestApp(t, Config{DataDir: t.TempDir(), MCPAuthToken: "test-token"})
+	getHealth(t, a.MCP())
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	rr := httptest.NewRecorder()
+	a.MCP().ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d body %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Header().Get("WWW-Authenticate"), "Bearer") {
+		t.Fatalf("challenge %q", rr.Header().Get("WWW-Authenticate"))
+	}
+}
+
 func newTestApp(t *testing.T, cfg Config) *App {
 	t.Helper()
 	a, err := NewApp(cfg)
