@@ -183,8 +183,20 @@ That re-seeds through HTTP and MCP and rewrites `fixtures/db/seeded.sqlite`. Rev
 
 Goldens for `list_users` assume the runner defaults: admin `contract-admin`, display name `Contract Admin`.
 
+## OAuth
+
+The password consent form is a contract for the Go OAuth server. `POST /authorize` reads three fields: `req` (the hidden pending-request token), `password` (the `MCP_AUTH_TOKEN`), and `action=approve`. The tests match `name="req"` in the HTML and post those names.
+
+On an authorization-code request to `/token`:
+
+- A sent `redirect_uri` must exactly match the authorize request. An empty `redirect_uri=` is sent, so it is a mismatch and returns 400 `invalid_grant`. It does not count as omitted.
+- Omitting `redirect_uri` is accepted only when the code was issued with PKCE and `code_verifier` verifies. A wrong or missing `code_verifier` with no `redirect_uri` is 400 `invalid_grant`, and the code stays usable.
+- `/token`, `/authorize`, and the Google callback log `redirect_uri_present` (`true` or `false`) and `client_id` only. They do not log the redirect value, codes, state, verifiers, tokens, or secrets.
+
+The Go MCP server and the Go OAuth server follow this same logging and PKCE contract.
+
 ## What this PR does not freeze
 
-Two OAuth bugs are known and must not become the contract. `TestTokenChecksClientSecret` and `TestAuthCodeIsBoundToTheRegisteringClient` are skipped and marked expected-to-be-fixed. In-memory authorization codes and pending sign-ins are not part of that skip.
+`oauth_security_test.go` checks client secrets, grant binding, and the authorization-code `redirect_uri` over HTTP. Those checks do not record a golden. In-memory authorization codes and pending sign-ins are not recorded.
 
 `GET /mcp` (the server holds an SSE stream open) and the over-1MiB body (the socket is destroyed) are not exercised here.

@@ -1,8 +1,24 @@
 node_modules
 .git
+.github
 sdd
+# Design notes. Re-include only the schema the plan validator reads.
+docs
+!docs/decisions
+docs/decisions/*
+!docs/decisions/ADR-0003-assets
+docs/decisions/ADR-0003-assets/*
+!docs/decisions/ADR-0003-assets/lesson-plan.schema.json
 # Local secrets stay out of the image build context.
 .env
 .env.*
 data/
 spikes/
+test/
+# Go contract harness. The Node server does not load it.
+contract/
+# Future Go server module (github.com/NetworkBuild3r/hebrew-lessons/go).
+# Not part of this Node image.
+go/
+deploy/
+docker-compose.yml

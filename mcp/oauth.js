@@ -598,7 +598,7 @@ async function googleCallback(res, url) {
         return redirectWith(res, q.redirect_uri, { error: 'access_denied', state: q.state });
     }
     const issuedCode = issueAuthCode(q, user);
-    console.error('mcp google callback ok uid=' + user.id + ' cid=' + q.client_id + ' ru=' + q.redirect_uri + ' code_len=' + issuedCode.length);
+    console.error('mcp google callback ok redirect_uri_present=' + Boolean(q.redirect_uri) + ' client_id=' + logClientId(q.client_id));
     redirectWith(res, q.redirect_uri, { code: issuedCode, state: q.state });
 }
 
@@ -614,7 +614,7 @@ function authorizeGet(req, res, url) {
         console.error('mcp oauth authorize ' + resolved.redirectError);
         return redirectWith(res, q.redirect_uri, { error: resolved.redirectError, error_description: resolved.description, state: q.state });
     }
-    console.error('mcp oauth authorize ok cid=' + q.client_id + ' ru=' + q.redirect_uri + ' state_len=' + String(q.state || '').length);
+    console.error('mcp oauth authorize ok redirect_uri_present=' + Boolean(q.redirect_uri) + ' client_id=' + logClientId(q.client_id));
     if (googleConfigured()) return startGoogle(res, q);
     renderConsent(res, resolved, q);
 }
@@ -717,6 +717,10 @@ function grantClientId(grant) {
     return grant && typeof grant.cid === 'string' ? grant.cid : '';
 }
 
+function logClientId(id) {
+    return String(id || '').replace(/[\r\n]/g, '');
+}
+
 function invalidClient(res, basicChallenge) {
     console.error('mcp token invalid_client');
     return oauthError(res, 401, 'invalid_client', 'Client authentication failed.',
@@ -745,6 +749,9 @@ async function token(req, res) {
     }
     const creds = credentials(form, basicAuth(req));
     if (form.grant_type === 'authorization_code') {
+        // Presence only. The value, the code, the verifier, and any secret stay out of the log.
+        const redirectPresent = Object.prototype.hasOwnProperty.call(form, 'redirect_uri');
+        console.error('mcp token authorization_code redirect_uri_present=' + redirectPresent + ' client_id=' + logClientId(creds.clientId));
         const grant = loadAuthCode(form.code);
         if (!grant) {
             console.error('mcp token authorization_code invalid_grant code');
@@ -764,9 +771,12 @@ async function token(req, res) {
         const clientId = creds.clientId || boundId;
         const client = findClient(clientId);
         if (clientAuthFailed(res, client, creds)) return;
-        const redirectOk = !form.redirect_uri || form.redirect_uri === grant.ru;
+        // A redirect_uri that is sent must exactly match the authorize request.
+        // Omitting it is allowed only for a code issued with PKCE whose
+        // code_verifier verifies (OAuth 2.1). No PKCE and no redirect_uri is
+        // invalid_grant. /authorize will not issue a code without PKCE.
         const clientOk = Boolean(client && Array.isArray(client.ru) && client.ru.includes(grant.ru));
-        if (!clientOk || !redirectOk) {
+        if (!clientOk || (redirectPresent && form.redirect_uri !== grant.ru) || (!redirectPresent && !grant.cc)) {
             console.error('mcp token authorization_code invalid_grant client_or_redirect');
             return oauthError(res, 400, 'invalid_grant', 'client_id or redirect_uri does not match the code.');
         }

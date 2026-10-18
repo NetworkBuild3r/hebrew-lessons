@@ -60,8 +60,8 @@ function codeFrom(res) {
     return new URL(target).searchParams.get('code');
 }
 
-async function register(method, name) {
-    const body = { client_name: name || 'Grok Bot', redirect_uris: [CB] };
+async function register(method, name, redirectUris) {
+    const body = { client_name: name || 'Grok Bot', redirect_uris: redirectUris || [CB] };
     if (method) body.token_endpoint_auth_method = method;
     const res = await call('POST', '/register', {
         headers: { 'Content-Type': 'application/json' },
@@ -312,6 +312,141 @@ test('rejects a refresh token from a different client', async () => {
     });
     assert.strictEqual(kept.status, 200, 'the issuing client can still refresh');
     assert.strictEqual(require('../mcp/oauth').verifyAccessToken(JSON.parse(kept.data).access_token).cid, owner.client_id);
+});
+
+test('accepts the exact authorization redirect_uri', async () => {
+    const pub = await register(null, 'Exact redirect');
+    const { verifier, challenge } = pkce();
+    const code = await authorize(pub.client_id, challenge);
+    const exact = await tokenRequest({
+        grant_type: 'authorization_code', code, client_id: pub.client_id,
+        redirect_uri: CB, code_verifier: verifier
+    });
+    assert.strictEqual(exact.status, 200);
+    assert.strictEqual(JSON.parse(exact.data).token_type, 'Bearer');
+});
+
+test('rejects a redirect_uri that differs from the authorize request', async () => {
+    const other = 'http://localhost:8787/callback';
+    const pub = await register(null, 'Mismatch redirect', [CB, other]);
+    const { verifier, challenge } = pkce();
+    const code = await authorize(pub.client_id, challenge);
+    const mismatched = await tokenRequest({
+        grant_type: 'authorization_code', code, client_id: pub.client_id,
+        redirect_uri: other, code_verifier: verifier
+    });
+    assert.strictEqual(mismatched.status, 400);
+    assert.strictEqual(JSON.parse(mismatched.data).error, 'invalid_grant');
+    assert.strictEqual(JSON.parse(mismatched.data).error_description, 'client_id or redirect_uri does not match the code.');
+
+    const kept = await tokenRequest({
+        grant_type: 'authorization_code', code, client_id: pub.client_id,
+        redirect_uri: CB, code_verifier: verifier
+    });
+    assert.strictEqual(kept.status, 200, 'a mismatched redirect_uri does not burn the code');
+});
+
+test('accepts a missing redirect_uri when PKCE verifies', async () => {
+    const pub = await register(null, 'PKCE redirect');
+    const { verifier, challenge } = pkce();
+    const code = await authorize(pub.client_id, challenge);
+    const missing = await tokenRequest({
+        grant_type: 'authorization_code', code, client_id: pub.client_id, code_verifier: verifier
+    });
+    assert.strictEqual(missing.status, 200);
+    assert.strictEqual(JSON.parse(missing.data).token_type, 'Bearer');
+});
+
+test('rejects a missing redirect_uri when the code has no PKCE', async () => {
+    // /authorize refuses to issue a code without PKCE. This is a legacy HMAC
+    // code, which the server still accepts, with no code_challenge.
+    const pub = await register(null, 'No PKCE');
+    const code = sign({ t: 'code', cid: pub.client_id, ru: CB, jti: 'nopkce-' + pub.client_id, exp: 2000000000 });
+    const missing = await tokenRequest({
+        grant_type: 'authorization_code', code, client_id: pub.client_id, code_verifier: pkce().verifier
+    });
+    assert.strictEqual(missing.status, 400);
+    assert.strictEqual(JSON.parse(missing.data).error, 'invalid_grant');
+    assert.strictEqual(JSON.parse(missing.data).error_description, 'client_id or redirect_uri does not match the code.');
+});
+
+test('token log records redirect_uri presence and does not leak values', async () => {
+    const pub = await register('client_secret_post', 'Log client');
+    const first = pkce();
+    const authLogs = [];
+    const orig = console.error;
+    console.error = (...args) => { authLogs.push(args.map(String).join(' ')); };
+    let code;
+    try {
+        code = await authorize(pub.client_id, first.challenge);
+    } finally {
+        console.error = orig;
+    }
+    const authLog = authLogs.join('\n');
+    assert.match(authLog, /mcp oauth authorize ok redirect_uri_present=true/);
+    assert.match(authLog, new RegExp('client_id=' + pub.client_id));
+    for (const [label, value] of [
+        ['redirect_uri', CB],
+        ['challenge', first.challenge],
+        ['state', 'st8'],
+        ['code', code]
+    ]) {
+        assert.equal(authLog.includes(value), false, 'authorize log leaked ' + label);
+    }
+
+    const sent = [];
+    console.error = (...args) => { sent.push(args.map(String).join(' ')); };
+    let res;
+    try {
+        res = await tokenRequest({
+            grant_type: 'authorization_code', code, client_id: pub.client_id,
+            client_secret: pub.client_secret, redirect_uri: CB, code_verifier: first.verifier
+        });
+    } finally {
+        console.error = orig;
+    }
+    assert.strictEqual(res.status, 200, res.data);
+    const tokens = JSON.parse(res.data);
+    const log = sent.join('\n');
+    assert.match(log, /redirect_uri_present=true/);
+    assert.match(log, new RegExp('client_id=' + pub.client_id));
+    for (const [label, value] of [
+        ['redirect_uri', CB],
+        ['code', code],
+        ['verifier', first.verifier],
+        ['client_secret', pub.client_secret],
+        ['access_token', tokens.access_token],
+        ['refresh_token', tokens.refresh_token]
+    ]) {
+        assert.equal(log.includes(value), false, label);
+    }
+
+    const second = pkce();
+    const omittedCode = await authorize(pub.client_id, second.challenge);
+    const omitted = [];
+    console.error = (...args) => { omitted.push(args.map(String).join(' ')); };
+    try {
+        res = await tokenRequest({
+            grant_type: 'authorization_code', code: omittedCode, client_id: pub.client_id,
+            client_secret: pub.client_secret, code_verifier: second.verifier
+        });
+    } finally {
+        console.error = orig;
+    }
+    assert.strictEqual(res.status, 200, res.data);
+    const quiet = omitted.join('\n');
+    assert.match(quiet, /redirect_uri_present=false/);
+    assert.match(quiet, new RegExp('client_id=' + pub.client_id));
+    for (const [label, value] of [
+        ['redirect_uri', CB],
+        ['code', omittedCode],
+        ['verifier', second.verifier],
+        ['client_secret', pub.client_secret],
+        ['access_token', JSON.parse(res.data).access_token],
+        ['refresh_token', JSON.parse(res.data).refresh_token]
+    ]) {
+        assert.equal(quiet.includes(value), false, label);
+    }
 });
 
 test('legacy stored client and token still work', async () => {
