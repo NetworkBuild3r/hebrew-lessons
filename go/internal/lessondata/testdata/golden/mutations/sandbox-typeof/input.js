@@ -1,0 +1,1 @@
+window.X = this.constructor.constructor('return typeof process')();

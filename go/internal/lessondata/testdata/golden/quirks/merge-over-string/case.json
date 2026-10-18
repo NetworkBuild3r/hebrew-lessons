@@ -1,0 +1,6 @@
+{
+  "label": "quirks/merge-over-string.js",
+  "ok": true,
+  "kind": "quirk",
+  "assignParses": true
+}

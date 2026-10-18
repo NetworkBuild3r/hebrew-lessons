@@ -1,0 +1,1 @@
+window.X = process.env;

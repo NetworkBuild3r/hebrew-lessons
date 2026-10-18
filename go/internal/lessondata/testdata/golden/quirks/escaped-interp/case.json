@@ -1,0 +1,6 @@
+{
+  "label": "quirks/escaped-interp.js",
+  "ok": true,
+  "kind": "quirk",
+  "assignParses": false
+}

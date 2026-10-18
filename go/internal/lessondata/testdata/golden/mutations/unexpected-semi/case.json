@@ -1,0 +1,5 @@
+{
+  "label": "mutations/unexpected-semi.js",
+  "ok": false,
+  "kind": "mutation"
+}

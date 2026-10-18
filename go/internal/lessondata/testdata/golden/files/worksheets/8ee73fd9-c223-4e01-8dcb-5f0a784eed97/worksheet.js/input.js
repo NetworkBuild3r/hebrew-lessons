@@ -1,0 +1,31 @@
+window.WORKSHEET = {
+    "id": "8ee73fd9-c223-4e01-8dcb-5f0a784eed97",
+    "title": "test",
+    "subtitle": "",
+    "footer": "",
+    "level": "basic",
+    "activities": [
+        {
+            "type": "words"
+        }
+    ],
+    "vocab": {
+        "items": [
+            {
+                "id": "1",
+                "word": "שָׁלוֹם",
+                "sound": "sha-LOM",
+                "translit": "shalom",
+                "meaning": "hello",
+                "pos": "",
+                "trap": "Stress the last syllable.",
+                "sentence": "שָׁלוֹם עוֹלָם."
+            }
+        ]
+    },
+    "reading": {
+        "paragraphs": [
+            "שָׁלוֹם עוֹלָם."
+        ]
+    }
+};

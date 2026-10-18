@@ -1,0 +1,6 @@
+{
+  "label": "quirks/double-bom.js",
+  "ok": true,
+  "kind": "quirk",
+  "assignParses": false
+}

@@ -1,0 +1,6 @@
+{
+  "label": "quirks/string-keys.js",
+  "ok": true,
+  "kind": "quirk",
+  "assignParses": true
+}

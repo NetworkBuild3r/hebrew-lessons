@@ -1,0 +1,1 @@
+window.P = { "__proto__": { polluted: true } };

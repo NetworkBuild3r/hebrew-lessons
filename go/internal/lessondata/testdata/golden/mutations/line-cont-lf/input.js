@@ -1,0 +1,2 @@
+window.X = "ab\
+cd";

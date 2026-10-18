@@ -1,0 +1,5 @@
+{
+  "label": "mutations/missing-eq.js",
+  "ok": false,
+  "kind": "mutation"
+}

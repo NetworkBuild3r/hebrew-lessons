@@ -1,0 +1,6 @@
+{
+  "label": "quirks/identity-escape.js",
+  "ok": true,
+  "kind": "quirk",
+  "assignParses": false
+}

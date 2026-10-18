@@ -1,0 +1,6 @@
+{
+  "label": "quirks/bool-null-keys.js",
+  "ok": true,
+  "kind": "quirk",
+  "assignParses": true
+}

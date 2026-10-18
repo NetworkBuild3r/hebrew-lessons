@@ -1,0 +1,1 @@
+window.A = 1 window.B = 2

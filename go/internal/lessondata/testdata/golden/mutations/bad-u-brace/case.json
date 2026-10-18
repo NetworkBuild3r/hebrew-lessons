@@ -1,0 +1,5 @@
+{
+  "label": "mutations/bad-u-brace.js",
+  "ok": false,
+  "kind": "mutation"
+}

@@ -1,0 +1,6 @@
+{
+  "label": "quirks/true-false-null.js",
+  "ok": true,
+  "kind": "quirk",
+  "assignParses": false
+}

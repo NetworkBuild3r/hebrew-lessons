@@ -1,0 +1,1 @@
+window.X = (function () { return 1; })();

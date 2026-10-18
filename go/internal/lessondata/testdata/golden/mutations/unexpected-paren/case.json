@@ -1,0 +1,5 @@
+{
+  "label": "mutations/unexpected-paren.js",
+  "ok": false,
+  "kind": "mutation"
+}

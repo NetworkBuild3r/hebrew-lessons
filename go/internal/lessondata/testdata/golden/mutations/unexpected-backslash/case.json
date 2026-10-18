@@ -1,0 +1,5 @@
+{
+  "label": "mutations/unexpected-backslash.js",
+  "ok": false,
+  "kind": "mutation"
+}

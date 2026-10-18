@@ -1,0 +1,6 @@
+window.P = {
+    "__proto__": {
+        "polluted": true
+    },
+    "z": 1
+};

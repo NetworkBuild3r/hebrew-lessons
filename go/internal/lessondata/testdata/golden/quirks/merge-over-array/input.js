@@ -1,0 +1,1 @@
+window.X = [1,2]; window.X = Object.assign({}, window.X || {}, {a:1});

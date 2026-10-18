@@ -1,0 +1,5 @@
+{
+  "label": "mutations/unterminated-comment-start.js",
+  "ok": false,
+  "kind": "mutation"
+}

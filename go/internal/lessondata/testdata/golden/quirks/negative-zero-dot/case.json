@@ -1,0 +1,6 @@
+{
+  "label": "quirks/negative-zero-dot.js",
+  "ok": true,
+  "kind": "quirk",
+  "assignParses": false
+}

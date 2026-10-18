@@ -1,0 +1,6 @@
+{
+  "label": "quirks/empty-containers.js",
+  "ok": true,
+  "kind": "quirk",
+  "assignParses": true
+}

@@ -1,0 +1,6 @@
+{
+  "label": "quirks/lone-dfff.js",
+  "ok": true,
+  "kind": "quirk",
+  "assignParses": false
+}

@@ -1,0 +1,6 @@
+{
+  "label": "quirks/merge-then-plain.js",
+  "ok": true,
+  "kind": "quirk",
+  "assignParses": true
+}
