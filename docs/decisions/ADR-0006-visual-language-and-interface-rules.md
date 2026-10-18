@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Status** | Accepted |
-| **Date** | 2026-10-18 |
+| **Date** | 2026-10-08 |
 | **Authored by** | `INIT-003/SPEC-008` |
 | **Initiative** | INIT-003 · lesson-system-foundations |
 | **Research grounding** | `RSCH-006` rule table, grades, and labels. The pick is the operator's, quoted below. |
@@ -498,6 +498,8 @@ Rollback of this record is deleting this file and `docs/decisions/ADR-0006-asset
 - [tokens.json](ADR-0006-assets/tokens.json) — the same token values and the same contrast ratios
 
 ## Amendment (2026-10-18): direction on the Go guides pages
+
+Decided by Hebrew Dev as Brian's proxy.
 
 On the Go guides pages, `<html lang dir>` follows the interface language: `en` is `ltr`, `he` is `rtl`. A Hebrew run inside English is `<bdi lang="he">`. A Hebrew-only block (a word, a verse, the Hebrew column) has `dir="rtl"`. Shared CSS uses logical properties where a hand-mirrored `left`/`right` pair used to flip with direction. Node documents stay `<html lang="he" dir="rtl">`, and `applyUiLang` still does not flip the Node document.
 

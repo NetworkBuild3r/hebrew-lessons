@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Status** | Accepted (pending operator read of this record) |
-| **Date** | 2026-10-18 |
+| **Date** | 2026-10-17 |
 | **Authored by** | `INIT-013/SPEC-001` |
 | **Initiative** | INIT-013 · responsive-desktop-mobile-redesign |
 | **Research grounding** | `RSCH-001` (strand balance ~¼ deliberate / ~¾ meaning); `RSCH-003` (interleaving, spacing, self-repair feedback); `RSCH-004` (`N7`); `RSCH-005` (hidden-stem recall); `RSCH-006` (WCAG 2.2 AA/AAA, ≥44px targets, nikud line height, thumb-zone); `RSCH-007` (icon + visible label, competence without streaks); `RSCH-008` (informational motion, `prefers-reduced-motion`); `RSCH-009` (human-verified pointing, `N13`/`N14`); `RSCH-010` (Consistent Navigation 3.2.3, Location 2.4.8) |
@@ -117,9 +117,7 @@ Primary interactive targets remain `≥44×44` CSS px (`--size-target-primary: 4
 | `test/design-tokens.test.js` | The comment-delimited block `/* === ADR-0006 design tokens === */` in `shared/worksheet.css`, checked against `docs/decisions/ADR-0006-assets/tokens.json` | **Leave that block byte-intact.** It is the historical baseline (`ADR-0006`). Active theme values live in later `:root` / `:root[data-theme="light"]` / `:root[data-theme="dark"]` rules authored by `SPEC-002`. |
 | `test/restyle-gate.test.js` | Final resolved tokens from top-level `:root`, `:root:not([data-theme="dark"])`, `:root[data-theme="light"]`, and `:root[data-theme="dark"]` rules; 19 foreground/background pairs; plain `#rrggbb` only | **Every active pair below must meet its ratio.** Text pairs `≥4.5:1`; UI pairs (`--color-line` borders, focus-ring uses of `--color-primary`) `≥3.0:1`. |
 
-Theme persistence (`SPEC-002`): `localStorage` key `hebrew-theme` allowlisted to `'light' | 'dark'`; applied as `document.documentElement.dataset.theme`. Default without a stored value: `'light'` (Jerusalem Stone).
-
-> **Amendment (2026-10-18): OS-following theme.** `hebrew-theme` accepts `light | dark | auto`; **`auto` is the default**. A missing or invalid value also means auto. Auto resolves `prefers-color-scheme` to a concrete `data-theme` in a pre-paint inline script and re-resolves on the media-query `change` event. A 3-way control (בהיר / כהה / אוטומטי, `role="radiogroup"`) in the shell — the desktop rail footer and the mobile top bar, where the theme control already lives — lets the user override. The checked radio is the stored choice. `data-resolved` on that control is the concrete light or dark on screen, so Auto with a dark OS still shows that the page is dark, and the learner can return to Auto. There is no separate Settings sheet. CSS remains keyed on `[data-theme="dark"]` only. This supersedes the original allowlist `light|dark` (default light). `normalizeTheme` returns `'light' | 'dark' | 'auto'` (unknown → `'auto'`), and its tests change accordingly. Guarded token values are unchanged.
+Theme persistence (`SPEC-002`): `localStorage` key `hebrew-theme` allowlisted to `'light' | 'dark'`; applied as `document.documentElement.dataset.theme`. Default without a stored value: `'light'` (Jerusalem Stone). Superseded for the theme choice by the amendment below.
 
 ### 2.2 Light theme — Jerusalem Stone
 
@@ -364,9 +362,17 @@ Documentation only — no executable change in `INIT-013/SPEC-001`. Downstream s
 - [ADR-0006](ADR-0006-visual-language-and-interface-rules.md) · [ADR-0008](ADR-0008-learner-look-and-feedback.md) · [ADR-0010](ADR-0010-player-visual-language-and-competence-feedback.md) · [ADR-0014](ADR-0014-lesson-type-coverage.md)
 - `sdd/research/RSCH-001-*` · `RSCH-003-*` · `RSCH-004-*` · `RSCH-005-*` · `RSCH-006-*` · `RSCH-007-*` · `RSCH-008-*` · `RSCH-009-*` · `RSCH-010-*`
 
+## Amendment (2026-10-18): light, dark, and auto
+
+Decided by Hebrew Dev as Brian's proxy.
+
+The theme choice is `light`, `dark`, or `auto`. **`auto` is the default.** A missing or invalid value also means auto. Auto resolves `prefers-color-scheme` to a concrete `data-theme` of `light` or `dark` in a tiny pre-paint script, before the first paint. A manual toggle lets the learner pick light, dark, or auto. There is no separate Settings sheet. CSS remains keyed on `[data-theme="dark"]` only. `data-theme` itself is only the resolved `light` or `dark`.
+
+This supersedes the original allowlist `light|dark` (default light) in §2.1. Guarded token values are unchanged.
+
 ## Changelog
 
 | Date | Change |
 |------|--------|
-| 2026-10-18 | Amendment: `hebrew-theme` is `light`, `dark`, or `auto` (default auto). The shell theme control is a 3-way radiogroup. See §2.1. |
+| 2026-10-18 | Amendment: theme choice is `light`, `dark`, or `auto` (default auto), with a manual toggle. Decided by Hebrew Dev as Brian's proxy. |
 | 2026-10-17 | Initial record — `INIT-013/SPEC-001`. |
