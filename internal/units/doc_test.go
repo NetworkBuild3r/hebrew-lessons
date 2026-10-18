@@ -13,6 +13,9 @@ func (lookup) HasAudio(context.Context, string) (bool, error)        { return fa
 func (lookup) LexemeByText(context.Context, string) (int64, bool, error) {
 	return 0, false, nil
 }
+func (lookup) Facts(context.Context, string) (LexemeFacts, bool, error) {
+	return LexemeFacts{}, false, nil
+}
 
 func TestValidateStub(t *testing.T) {
 	doc := &Unit{
@@ -28,8 +31,8 @@ func TestValidateStub(t *testing.T) {
 			}},
 		}},
 	}
-	if got := Validate(context.Background(), doc, lookup{}); got != nil {
-		t.Fatalf("Validate = %#v, want nil", got)
+	if got := Validate(context.Background(), doc, lookup{}); len(got) == 0 {
+		t.Fatal("incomplete unit should not validate")
 	}
 	raw, err := json.Marshal(doc)
 	if err != nil {

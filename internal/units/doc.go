@@ -2,7 +2,6 @@
 //
 // Backend owns these structs and the Validate signature.
 // MCP Builder owns validate_*.go and rules.go, which fill in the rules.
-// Validate in this file is a stub and accepts any document.
 package units
 
 import "context"
@@ -68,11 +67,28 @@ type Lookup interface {
 	// LexemeByText returns the lexicon id for the exact pointed NFC text.
 	// ok is false when the text is not in the lexicon.
 	LexemeByText(ctx context.Context, textNFC string) (id int64, ok bool, err error)
+
+	// Facts returns lexicon fields for the exact pointed NFC text.
+	// ok is false when the text is not in the lexicon.
+	//
+	// PROPOSED for Backend Dev. Lookup did not expose gender or plural.
+	// noun.gender and noun.plural need them, so this is the smallest
+	// addition: one method and the struct below. Translit and root are not
+	// read by the validator; player guidance in rules.go names them for the
+	// MCP rules resource.
+	Facts(ctx context.Context, textNFC string) (LexemeFacts, bool, error)
 }
 
-// Validate checks doc against the authoring rules.
-// The skeleton stub accepts every document and returns nil.
-func Validate(ctx context.Context, doc *Unit, lk Lookup) []Issue {
-	_, _, _ = ctx, doc, lk
-	return nil
+// LexemeFacts is the lexicon slice Facts returns.
+//
+// PROPOSED for Backend Dev, with Facts. Zero values mean "not recorded".
+// Gender is "m", "f", or "both". Plural is the pointed irregular plural;
+// leave it empty when the lexicon does not store one. IrregularPlural is
+// the lexicon's own irregular flag. Bare is the unpointed spelling.
+type LexemeFacts struct {
+	POS             string
+	Gender          string
+	Plural          string
+	IrregularPlural bool
+	Bare            string
 }
