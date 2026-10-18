@@ -1,0 +1,6 @@
+{
+  "category": "validation",
+  "field": "prompt",
+  "message": "<validation>",
+  "transportForm": "isError_result"
+}

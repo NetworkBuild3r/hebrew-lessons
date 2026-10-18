@@ -1,0 +1,193 @@
+{
+  "content": {
+    "grammar": [
+      {
+        "attempts": 0,
+        "concept": "binyan:paal",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "binyan:nifal",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "binyan:piel",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "binyan:pual",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "binyan:hifil",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "binyan:hufal",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "binyan:hitpael",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "tense:infinitive",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "tense:present",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "tense:past",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "tense:future",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "tense:imperative",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "root-class:regular",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "root-class:lamed-he",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "root-class:peh-yod",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "root-class:peh-nun",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "root-class:ayin-vav",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "root-class:irregular",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "cell:present.ms",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "cell:present.fs",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "cell:present.mp",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "cell:present.fp",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "cell:past.1s",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "cell:past.2ms",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "cell:past.2fs",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "cell:past.3ms",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "cell:past.3fs",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "cell:past.1p",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "cell:past.2mp",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "cell:past.2fp",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "cell:past.3p",
+        "status": "unseen"
+      },
+      {
+        "attempts": 0,
+        "concept": "cell:infinitive.inf",
+        "status": "unseen"
+      }
+    ],
+    "journey": {
+      "binyanim_practiced": [],
+      "counts": {
+        "en_he": {
+          "learning": 0,
+          "longTerm": 0,
+          "new": 2
+        },
+        "he_en": {
+          "learning": 0,
+          "longTerm": 0,
+          "new": 2
+        }
+      },
+      "lessons_completed": [],
+      "recipes_completed": {},
+      "stage": "script",
+      "tenses_practiced": [],
+      "vowels_off_share": null
+    },
+    "profile_version": 1,
+    "username": "learner",
+    "very_weak_words": [],
+    "weak_words": [],
+    "words": [],
+    "words_total": 0
+  },
+  "isError": false
+}

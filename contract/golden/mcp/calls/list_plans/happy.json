@@ -1,0 +1,32 @@
+{
+  "content": {
+    "plans": [
+      {
+        "assigned": false,
+        "audience": "shared",
+        "humanEditedFields": 0,
+        "id": "draft-plan",
+        "published": false,
+        "revision": 1,
+        "status": "draft",
+        "title": "Unpublished draft",
+        "unpublishedChanges": false,
+        "updatedAt": "<timestamp>"
+      },
+      {
+        "assigned": false,
+        "audience": "shared",
+        "humanEditedFields": 0,
+        "id": "five-lesson-types-sample",
+        "published": true,
+        "revision": 17,
+        "status": "published",
+        "title": "Five lesson types (INIT-012 sample)",
+        "unpublishedChanges": false,
+        "updatedAt": "<timestamp>"
+      }
+    ],
+    "truncated": false
+  },
+  "isError": false
+}

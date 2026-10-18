@@ -1,0 +1,8 @@
+{
+  "content": {
+    "error": "not_found",
+    "path": "units/does-not-exist",
+    "revision": 17
+  },
+  "isError": true
+}

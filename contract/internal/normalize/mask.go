@@ -128,7 +128,9 @@ func maskString(key, s string) string {
 	if timeRE.MatchString(s) {
 		return maskTimestamp
 	}
-	return s
+	// Domain messages quote an id inside a sentence. Exact-match above
+	// handles a value that is only an id or a timestamp.
+	return MaskString(s)
 }
 
 func looksLikeToken(s string) bool {

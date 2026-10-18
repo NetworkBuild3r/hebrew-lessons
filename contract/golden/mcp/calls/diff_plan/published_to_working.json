@@ -1,0 +1,15 @@
+{
+  "content": {
+    "entries": [],
+    "from": {
+      "ref": "published",
+      "revision": 17
+    },
+    "to": {
+      "ref": "working",
+      "revision": 17
+    },
+    "truncated": false
+  },
+  "isError": false
+}

@@ -18,14 +18,33 @@ func TestMarshalSortsKeys(t *testing.T) {
 	}
 }
 
-func TestModuleHasNoDependencies(t *testing.T) {
+func TestModuleDependenciesAreSchemaOnly(t *testing.T) {
 	raw, err := os.ReadFile(Root(t) + "/go.mod")
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The harness stays off the MCP SDK and the server module. The schema dump
+	// is the one exception: pure-Go modernc.org/sqlite, no cgo.
+	const allowed = "modernc.org/sqlite "
+	inBlock := false
 	for _, line := range strings.Split(string(raw), "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "require") {
-			t.Fatalf("contract module must stay stdlib-only, found %q", line)
+		trim := strings.TrimSpace(line)
+		if trim == "require (" {
+			inBlock = true
+			continue
+		}
+		if inBlock && trim == ")" {
+			inBlock = false
+			continue
+		}
+		if strings.HasPrefix(trim, "require ") {
+			if !strings.Contains(trim, allowed) {
+				t.Fatalf("direct require must be modernc.org/sqlite, found %q", trim)
+			}
+			continue
+		}
+		if inBlock && trim != "" && !strings.Contains(trim, "indirect") {
+			t.Fatalf("block require is not indirect: %q", trim)
 		}
 	}
 }

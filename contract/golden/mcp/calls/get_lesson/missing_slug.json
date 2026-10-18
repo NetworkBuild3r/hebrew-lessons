@@ -1,0 +1,6 @@
+{
+  "category": "validation",
+  "field": "slug",
+  "message": "<validation>",
+  "transportForm": "isError_result"
+}

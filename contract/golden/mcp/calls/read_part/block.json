@@ -1,0 +1,23 @@
+{
+  "content": {
+    "editState": {
+      "advisory": true,
+      "humanEdited": [],
+      "lastHumanEdit": null,
+      "more": 0
+    },
+    "part": {
+      "fromLessons": [
+        "earlier-morning"
+      ],
+      "id": "review",
+      "type": "spaced-review-checkpoint",
+      "wordKeys": [
+        "בוקר",
+        "קפה"
+      ]
+    },
+    "revision": 17
+  },
+  "isError": false
+}

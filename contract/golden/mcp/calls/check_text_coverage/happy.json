@@ -1,0 +1,12 @@
+{
+  "content": {
+    "coverage": 0.3333333333333333,
+    "known_count": 1,
+    "running_words": 3,
+    "unknown": [
+      "אני",
+      "עברית"
+    ]
+  },
+  "isError": false
+}

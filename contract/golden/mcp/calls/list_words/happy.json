@@ -1,0 +1,296 @@
+{
+  "content": [
+    {
+      "item": {
+        "audio": "../_audio/words/806bb3fc99c984531106aeb5.mp3",
+        "id": "1",
+        "meaning": "gets up (m. sg.)",
+        "pos": "verb, present",
+        "sentence": "אֲנִי קָם בַּבֹּקֶר.",
+        "sentenceAudio": "audio/sentences/vocab-1.mp3",
+        "sound": "kam",
+        "translit": "kam",
+        "trap": "One syllable. Stress kam. Past “I got up” is קַמְתִּי.",
+        "word": "קָם"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/a2e3165352468e3a501b294e.mp3",
+        "id": "2",
+        "meaning": "gets up (f. sg.)",
+        "pos": "verb, present",
+        "sentence": "הִיא קָמָה בַּבֹּקֶר.",
+        "sentenceAudio": "audio/sentences/vocab-2.mp3",
+        "sound": "ka-MA",
+        "translit": "kama",
+        "trap": "Feminine ends in ה. Stress the last syllable: ka-MA.",
+        "word": "קָמָה"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/c35c2410e210098ead05320e.mp3",
+        "id": "3",
+        "meaning": "drinks (m. sg.)",
+        "pos": "verb, present",
+        "sentence": "הוּא שׁוֹתֶה קָפֶה.",
+        "sentenceAudio": "audio/sentences/vocab-3.mp3",
+        "sound": "sho-TE",
+        "translit": "shote",
+        "trap": "Stress TE. Infinitive לִשְׁתּוֹת.",
+        "word": "שׁוֹתֶה"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/9634894b7d32e21bcb10e9c6.mp3",
+        "id": "4",
+        "meaning": "drinks (f. sg.)",
+        "pos": "verb, present",
+        "sentence": "הִיא שׁוֹתָה תה.",
+        "sentenceAudio": "audio/sentences/vocab-4.mp3",
+        "sound": "sho-TA",
+        "translit": "shota",
+        "trap": "Feminine ends in ה: sho-TA.",
+        "word": "שׁוֹתָה"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/1d0390a2fc75a4e27a074c66.mp3",
+        "id": "5",
+        "meaning": "morning",
+        "pos": "noun (m.)",
+        "sentence": "בַּבֹּקֶר אֲנִי קָם.",
+        "sentenceAudio": "audio/sentences/vocab-5.mp3",
+        "sound": "BO-ker",
+        "translit": "boker",
+        "trap": "Stress BO. בַּבֹּקֶר means “in the morning.”",
+        "word": "בֹּקֶר"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/d1597cb73a024c66e8fbeffb.mp3",
+        "id": "6",
+        "meaning": "coffee",
+        "pos": "noun (m.)",
+        "sentence": "אֲנִי שׁוֹתֶה קָפֶה.",
+        "sentenceAudio": "audio/sentences/vocab-6.mp3",
+        "sound": "ka-FE",
+        "translit": "kafe",
+        "trap": "Stress FE. Not English “coffee” rhythm.",
+        "word": "קָפֶה"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/39eadd11f599ed07bdd27a7d.mp3",
+        "id": "7",
+        "meaning": "afterwards / then",
+        "pos": "adverb",
+        "sentence": "אַחַר כָּךְ אֲנִי יוֹצֵא.",
+        "sentenceAudio": "audio/sentences/vocab-7.mp3",
+        "sound": "a-KHAR-kakh",
+        "translit": "achar kakh",
+        "trap": "Two words. Soft ח in אַחַר.",
+        "word": "אַחַר כָּךְ"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/38b6df2167d3c0fab5230bdc.mp3",
+        "id": "8",
+        "meaning": "goes out (m. sg.)",
+        "pos": "verb, present",
+        "sentence": "אֲנִי יוֹצֵא לָעֲבוֹדָה.",
+        "sentenceAudio": "audio/sentences/vocab-8.mp3",
+        "sound": "yo-TZE",
+        "translit": "yotze",
+        "trap": "צ is “tz.” yo-TZE. Feminine יוֹצֵאת.",
+        "word": "יוֹצֵא"
+      },
+      "lesson": "my-morning",
+      "lessonTitle": "שגרה 1 — הבוקר שלי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/aa354a39c32b925072b56333.mp3",
+        "id": "1",
+        "meaning": "advice",
+        "pos": "noun (f.)",
+        "sentence": "בַּשָּׁבוּעַ שֶׁעָבַר חָבֵר שֶׁלִּי בִּיקֵּשׁ מִמֶּנִּי עֵצָה.",
+        "sentenceAudio": "audio/sentences/vocab-1.mp3",
+        "sound": "ET-za",
+        "translit": "etza",
+        "trap": "The first letter is ע (ayin). Say ET-za, not “atza.” Stress the first syllable.",
+        "word": "עֵצָה"
+      },
+      "lesson": "shai-date-indirect-speech",
+      "lessonTitle": "המלצות 1 — הדייט של שי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/7bc2b7a4b2203a563ac5a229.mp3",
+        "id": "2",
+        "infinitive": "לָדַעַת — to know",
+        "meaning": "knows (m. sg.)",
+        "pos": "verb, present",
+        "sentence": "שַׁי לֹא יוֹדֵעַ מָה כְּדַאי לָהֶם לַעֲשׂוֹת.",
+        "sentenceAudio": "audio/sentences/vocab-2.mp3",
+        "sound": "yo-DE-a",
+        "translit": "yode'a",
+        "trap": "You hear the last א. This form means “knows.” The infinitive is לדעת.",
+        "word": "יוֹדֵעַ"
+      },
+      "lesson": "shai-date-indirect-speech",
+      "lessonTitle": "המלצות 1 — הדייט של שי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/245a1be29288a5dd9c114d00.mp3",
+        "id": "3",
+        "meaning": "it's a good idea / should",
+        "pos": "expression",
+        "sentence": "כְּדַאי לְךָ לִרְאוֹת אֶת הַסֶּרֶט הַזֶּה.",
+        "sentenceAudio": "audio/sentences/vocab-3.mp3",
+        "sound": "ke-DAI",
+        "translit": "kedai",
+        "trap": "ke-DAI, not “kedar.” Stress DAI. In a sentence, כדאי likes to come first: כדאי לך…",
+        "word": "כְּדַאי"
+      },
+      "lesson": "shai-date-indirect-speech",
+      "lessonTitle": "המלצות 1 — הדייט של שי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/fddcb2e3688567e36a25ec42.mp3",
+        "id": "4",
+        "meaning": "nature",
+        "pos": "noun (m.)",
+        "sentence": "בַּר אוֹהֶבֶת קָפֶה טוֹב וְטִיּוּלִים בַּטֶּבַע.",
+        "sentenceAudio": "audio/sentences/vocab-4.mp3",
+        "sound": "TE-va",
+        "translit": "teva",
+        "trap": "Stress the first syllable: TE-va. Not ta-VA.",
+        "word": "טֶבַע"
+      },
+      "lesson": "shai-date-indirect-speech",
+      "lessonTitle": "המלצות 1 — הדייט של שי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/b83e037058633b089a09ab3f.mp3",
+        "id": "5",
+        "meaning": "movie",
+        "pos": "noun (m.)",
+        "sentence": "שַׁי אוֹהֵב לִרְאוֹת סְרָטִים בַּקּוֹלְנוֹעַ.",
+        "sentenceAudio": "audio/sentences/vocab-5.mp3",
+        "sound": "SE-ret",
+        "translit": "seret",
+        "trap": "SE-ret. Not Sarit (that is a name) and not “sarat.”",
+        "word": "סֶרֶט"
+      },
+      "lesson": "shai-date-indirect-speech",
+      "lessonTitle": "המלצות 1 — הדייט של שי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/83b350f8858aedd3f40d445c.mp3",
+        "id": "6",
+        "meaning": "special",
+        "pos": "adjective (m.)",
+        "sentence": "שַׁי רוֹצֶה לַעֲשׂוֹת מַשֶּׁהוּ מְיוּחָד בִּשְׁבִיל בַּר.",
+        "sentenceAudio": "audio/sentences/vocab-6.mp3",
+        "sound": "me-yu-KHAD",
+        "translit": "meyuchad",
+        "trap": "ח is a raspy H from the throat. Not English “ch,” and not “sh.” me-yu-KHAD.",
+        "word": "מְיוּחָד"
+      },
+      "lesson": "shai-date-indirect-speech",
+      "lessonTitle": "המלצות 1 — הדייט של שי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/c27af78022df8fb8018fa583.mp3",
+        "id": "7",
+        "infinitive": "לַחְשׁוֹב — to think",
+        "meaning": "I thought",
+        "pos": "verb, past",
+        "sentence": "חָשַׁבְתִּי וְאָמַרְתִּי לְשַׁי שֶׁאֲנִי מַמְלִיץ לוֹ לָקַחַת אֶת בַּר לְסֶרֶט.",
+        "sentenceAudio": "audio/sentences/vocab-7.mp3",
+        "sound": "cha-SHAV-ti",
+        "translit": "chashavti",
+        "trap": "Same raspy ח. Past “I” ends in תי (-ti). When you need “I thought,” look for that ת.",
+        "word": "חָשַׁבְתִּי"
+      },
+      "lesson": "shai-date-indirect-speech",
+      "lessonTitle": "המלצות 1 — הדייט של שי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/fcceccda3afd5a4eea9eb45e.mp3",
+        "id": "8",
+        "infinitive": "לְהַמְלִיץ — to recommend",
+        "meaning": "recommend (m. sg.)",
+        "pos": "verb, present",
+        "sentence": "אֲנִי מַמְלִיץ לוֹ לָקַחַת אֶת בַּר לְסֶרֶט קוֹמֶדְיָה.",
+        "sentenceAudio": "audio/sentences/vocab-8.mp3",
+        "sound": "mam-LITZ",
+        "translit": "mamlitz",
+        "trap": "Ends in צ, a “tz” sound. mam-LITZ. Not “mamlit.”",
+        "word": "מַמְלִיץ"
+      },
+      "lesson": "shai-date-indirect-speech",
+      "lessonTitle": "המלצות 1 — הדייט של שי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/f37d0ca16286cc4e93dea492.mp3",
+        "id": "9",
+        "meaning": "after",
+        "pos": "preposition",
+        "sentence": "אַחֲרֵי הַסֶּרֶט כְּדַאי לָלֶכֶת לְמִסְעָדָה אִיטַלְקִית.",
+        "sentenceAudio": "audio/sentences/vocab-9.mp3",
+        "sound": "a-kha-REI",
+        "translit": "acharei",
+        "trap": "ח again, then REI. a-kha-REI.",
+        "word": "אַחֲרֵי"
+      },
+      "lesson": "shai-date-indirect-speech",
+      "lessonTitle": "המלצות 1 — הדייט של שי"
+    },
+    {
+      "item": {
+        "audio": "../_audio/words/1828c011c5e8e563ce974431.mp3",
+        "id": "10",
+        "meaning": "idea",
+        "pos": "noun (m.)",
+        "sentence": "אַתָּה חוֹשֵׁב שֶׁזֶּה רַעְיוֹן טוֹב?",
+        "sentenceAudio": "audio/sentences/vocab-10.mp3",
+        "sound": "ra-a-YON",
+        "translit": "ra'ayon",
+        "trap": "The ע is in the middle, so you hear two beats before YON: ra-a-YON.",
+        "word": "רַעְיוֹן"
+      },
+      "lesson": "shai-date-indirect-speech",
+      "lessonTitle": "המלצות 1 — הדייט של שי"
+    }
+  ],
+  "isError": false
+}

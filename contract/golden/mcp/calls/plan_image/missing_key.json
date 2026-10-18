@@ -1,0 +1,7 @@
+{
+  "content": {
+    "error": "missing_key",
+    "message": "Image generation is not configured."
+  },
+  "isError": true
+}

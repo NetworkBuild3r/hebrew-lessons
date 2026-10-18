@@ -1,0 +1,17 @@
+{
+  "content": [
+    {
+      "displayName": "Contract Admin",
+      "username": "contract-admin"
+    },
+    {
+      "displayName": "Contract Learner",
+      "username": "learner"
+    },
+    {
+      "displayName": "Planning Off",
+      "username": "learner-off"
+    }
+  ],
+  "isError": false
+}

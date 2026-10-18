@@ -5,11 +5,15 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/contract/internal/golden"
 	"github.com/NetworkBuild3r/hebrew-lessons/contract/internal/mcp"
+	"github.com/NetworkBuild3r/hebrew-lessons/contract/internal/seed"
+	"github.com/NetworkBuild3r/hebrew-lessons/contract/internal/sqlite"
 )
 
 func TestMain(m *testing.M) {
@@ -20,13 +24,58 @@ func TestMain(m *testing.M) {
 		os.Exit(2)
 	}
 	flag.Parse()
-	for _, key := range []string{"CONTRACT_WEB_URL", "CONTRACT_MCP_URL", "CONTRACT_MCP_TOKEN", "CONTRACT_MCP_PUBLIC_URL"} {
+	for _, key := range []string{"CONTRACT_WEB_URL", "CONTRACT_MCP_URL", "CONTRACT_MCP_TOKEN", "CONTRACT_MCP_PUBLIC_URL", "CONTRACT_DATA_DIR"} {
 		if os.Getenv(key) == "" {
 			fmt.Fprintf(os.Stderr, "missing %s\nRun contract/run.sh, which boots the server and exports the CONTRACT_* variables.\n", key)
 			os.Exit(2)
 		}
 	}
+	dataDir := os.Getenv("CONTRACT_DATA_DIR")
+	dbPath := filepath.Join(dataDir, "hebrew.sqlite")
+	var err error
+	schemaAfterBoot, err = sqlite.Dump(dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "schema after boot: %v\n", err)
+		os.Exit(1)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	if golden.Update() {
+		err = seed.Run(ctx, seed.Options{
+			WebURL:    os.Getenv("CONTRACT_WEB_URL"),
+			MCPURL:    os.Getenv("CONTRACT_MCP_URL"),
+			Token:     os.Getenv("CONTRACT_MCP_TOKEN"),
+			AdminUser: os.Getenv("CONTRACT_ADMIN_USER"),
+			AdminPass: os.Getenv("CONTRACT_ADMIN_PASS"),
+			DataDir:   dataDir,
+			UpdateDB:  true,
+		})
+	} else {
+		err = seed.UseFixture(dataDir, "")
+	}
+	cancel()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "seed: %v\n", err)
+		printLogTail(filepath.Join(dataDir, "server.log"))
+		os.Exit(1)
+	}
+	schemaAfterSeed, err = sqlite.Dump(dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "schema after seed: %v\n", err)
+		os.Exit(1)
+	}
 	os.Exit(m.Run())
+}
+
+func printLogTail(path string) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	lines := strings.Split(string(body), "\n")
+	if len(lines) > 80 {
+		lines = lines[len(lines)-80:]
+	}
+	fmt.Fprintf(os.Stderr, "--- server.log (tail) ---\n%s\n", strings.Join(lines, "\n"))
 }
 
 func mcpClient(t *testing.T) *mcp.Client {

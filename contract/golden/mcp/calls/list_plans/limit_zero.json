@@ -1,0 +1,6 @@
+{
+  "category": "validation",
+  "field": "limit",
+  "message": "<validation>",
+  "transportForm": "isError_result"
+}
