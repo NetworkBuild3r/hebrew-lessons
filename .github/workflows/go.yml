@@ -11,8 +11,8 @@ name: go
 on:
   # `edited` is how a base-branch change arrives. A force-push followed by a
   # base change does not otherwise start a run: synchronize can be dropped,
-  # and the default pull_request types omit edited. Title and body edits are
-  # skipped by the job condition.
+  # and the default pull_request types omit edited. The job condition below
+  # runs that event only when github.event.changes.base is set.
   pull_request:
     types: [opened, synchronize, reopened, edited]
   push:
@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   go-test:
-    if: github.event.action != 'edited' || github.event.changes.base.ref.from
+    if: github.event.action != 'edited' || github.event.changes.base
     runs-on: k8-build
     timeout-minutes: 20
     env:
