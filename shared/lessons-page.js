@@ -80,9 +80,8 @@
         return '/shared/plan/?id=' + encodeURIComponent(planId) + '&lesson=' + encodeURIComponent(lessonId);
     }
 
-    function pathHref(planId) {
-        return '/shared/plan/?id=' + encodeURIComponent(planId);
-    }
+    var Paths = root.HebrewLearningPaths
+        || (typeof require === 'function' ? require('./learning-paths.js') : null);
 
     function isHebrewText(value) {
         return /[\u0590-\u05FF]/.test(String(value || ''));
@@ -107,68 +106,9 @@
         return out;
     }
 
-    /**
-     * One entry per plan, in catalog order. A non-slug id is skipped so it cannot become a URL.
-     * Counts come from the rows already loaded. The title is the plan title when the catalog sent one.
-     */
-    function pathSummaries(lessons) {
-        if (!Array.isArray(lessons)) return [];
-        var order = [];
-        var byId = Object.create(null);
-        for (var i = 0; i < lessons.length; i += 1) {
-            var row = lessons[i];
-            if (!row || typeof row.planId !== 'string' || !SLUG.test(row.planId)) continue;
-            var entry = byId[row.planId];
-            if (!entry) {
-                entry = { id: row.planId, title: '', lessons: 0, units: 0 };
-                byId[row.planId] = entry;
-                order.push(entry);
-                entry._units = [];
-            }
-            entry.lessons += 1;
-            if (!entry.title && typeof row.planTitle === 'string' && row.planTitle) entry.title = row.planTitle;
-            if (typeof row.unitId === 'string' && row.unitId && entry._units.indexOf(row.unitId) < 0) {
-                entry._units.push(row.unitId);
-                entry.units += 1;
-            }
-        }
-        return order;
-    }
-
-    function pathMeta(entry) {
-        if (!entry) return '';
-        var units = entry.units;
-        var lessons = entry.lessons;
-        if (typeof units === 'number' && units > 1) {
-            return '<p class="path-meta">' + bi(units + ' יחידות', units + ' units') + '</p>';
-        }
-        if (typeof lessons === 'number' && lessons > 0) {
-            var he = lessons === 1 ? 'שיעור אחד' : (lessons + ' שיעורים');
-            var en = lessons + (lessons === 1 ? ' lesson' : ' lessons');
-            return '<p class="path-meta">' + bi(he, en) + '</p>';
-        }
-        return '';
-    }
-
     function renderPaths(planIds) {
-        if (!planIds || !planIds.length) return '';
-        var seen = [];
-        var cards = '';
-        for (var i = 0; i < planIds.length; i += 1) {
-            var item = planIds[i];
-            var id = typeof item === 'string' ? item : (item && item.id);
-            if (typeof id !== 'string' || !SLUG.test(id) || seen.indexOf(id) >= 0) continue;
-            seen.push(id);
-            var title = item && typeof item.title === 'string' && item.title ? item.title : 'מסלול לימוד';
-            cards += '<article class="lesson-card" data-learning-path="' + esc(id) + '">'
-                + '<a class="lesson-link" href="' + esc(pathHref(id)) + '">'
-                + '<span class="path-copy">'
-                + '<h2 class="path-title"><bdi lang="he">' + esc(title) + '</bdi></h2>'
-                + pathMeta(typeof item === 'string' ? null : item)
-                + '</span>'
-                + '<span class="path-chevron" aria-hidden="true"></span>'
-                + '</a></article>';
-        }
+        if (!Paths) return '';
+        var cards = Paths.render(planIds);
         if (!cards) return '';
         return '<div class="home-list lessons-paths">' + cards + '</div>';
     }
@@ -388,7 +328,7 @@
                 });
                 return emptyCatalog();
             }
-            return { rows: planRowsOnly(lessons), planIds: pathSummaries(lessons) };
+            return { rows: planRowsOnly(lessons), planIds: Paths ? Paths.summaries(lessons) : [] };
         }).catch(function (err) {
             logCatalog('plan catalog failed', err);
             return emptyCatalog();

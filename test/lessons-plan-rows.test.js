@@ -12,6 +12,7 @@ const path = require('path');
 const vm = require('vm');
 
 const SRC = fs.readFileSync(path.resolve(__dirname, '..', 'shared', 'lessons-page.js'), 'utf8');
+const PATHS = fs.readFileSync(path.resolve(__dirname, '..', 'shared', 'learning-paths.js'), 'utf8');
 
 function load(catalog, planLessons) {
     const catalogErrors = [];
@@ -36,6 +37,7 @@ function load(catalog, planLessons) {
     sandbox.catalogErrors = catalogErrors;
     sandbox.globalThis = sandbox;
     vm.createContext(sandbox);
+    vm.runInContext(PATHS, sandbox);
     vm.runInContext(SRC, sandbox);
     sandbox.HebrewLessonsPage.catalogErrors = catalogErrors;
     return sandbox.HebrewLessonsPage;
@@ -153,7 +155,7 @@ describe('Lessons page: published plan lessons', () => {
         assert.match(html, /class="path-meta"/);
         assert.match(html, /35 lessons/);
         assert.match(html, /35 שיעורים/);
-        assert.match(html, /class="path-chevron"/);
+        assert.match(html, /class="icon path-chevron icon-directional"/);
         assert.doesNotMatch(html, /class="ui-he"[^>]*>מסלול לימוד/);
     });
 
@@ -186,8 +188,28 @@ describe('Lessons page: published plan lessons', () => {
             planIds: ['bdf0aee7-7c57-4982-a351-78063ff567e9']
         });
         assert.match(html, /data-learning-path="bdf0aee7-7c57-4982-a351-78063ff567e9"/);
+        assert.match(html, /Learning path/);
+        assert.match(html, /מסלול לימוד/);
         assert.match(html, /data-lesson-slug="my-morning"/);
         assert.doesNotMatch(html, /data-plan-id/);
+        assert.doesNotMatch(html, /class="path-all"/);
+    });
+
+    it('lists every plan on Lessons', () => {
+        const page = load([], []);
+        const html = page.render({
+            state: 'ready',
+            filter: 'all',
+            rows: [],
+            planRows: [],
+            planIds: [
+                { id: 'first-plan', title: 'ראשון', lessons: 1, units: 1 },
+                { id: 'second-plan', title: 'שני', lessons: 2, units: 1 }
+            ]
+        });
+        assert.match(html, /data-learning-path="first-plan"/);
+        assert.match(html, /data-learning-path="second-plan"/);
+        assert.doesNotMatch(html, /class="path-all"/);
     });
 
     it('escapes a title', async () => {

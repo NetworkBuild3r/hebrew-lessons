@@ -116,18 +116,22 @@ describe('today mix (INIT-006/SPEC-015)', () => {
                 units: 1
             },
             {
-                id: 'bdf0aee7-7c57-4982-a351-78063ff567e9',
-                title: 'מסלול לימוד — Learning path',
-                lessons: 35,
+                id: 'second-plan',
+                title: 'מסלול שני',
+                lessons: 2,
                 units: 1
             }
         ];
         const html = Today.render(model);
         assert.equal((html.match(/data-learning-path=/g) || []).length, 1);
         assert.match(html, /href="\/shared\/plan\/\?id=bdf0aee7-7c57-4982-a351-78063ff567e9"/);
+        assert.doesNotMatch(html, /second-plan/);
         assert.match(html, /<bdi lang="he">מסלול לימוד — Learning path<\/bdi>/);
         assert.match(html, /35 lessons/);
-        assert.match(html, /class="path-chevron"/);
+        assert.match(html, /sprite\.svg#icon-next/);
+        assert.match(html, /href="\/lessons\/"/);
+        assert.match(html, /כל המסלולים/);
+        assert.match(html, /All paths/);
         assert.ok(html.indexOf('data-learning-path=') < html.indexOf('id="today-review-card"'));
     });
 

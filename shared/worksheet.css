@@ -8177,6 +8177,7 @@ html:not([data-ui-lang="he"]) [data-learning-path] {
 [data-learning-path] {
     text-align: start;
     padding: 0;
+    border-inline-start: 4px solid var(--color-primary);
 }
 .lessons-page article[data-learning-path],
 .today-page article[data-learning-path] {
@@ -8191,9 +8192,13 @@ html:not([data-ui-lang="he"]) [data-learning-path] {
     box-sizing: border-box;
     text-align: start;
 }
-[data-learning-path] > .lesson-link:focus-visible {
+[data-learning-path] > .lesson-link:focus-visible,
+[data-learning-path] .path-all:focus-visible {
     outline: var(--focus-width) solid var(--color-focus);
     outline-offset: calc(-1 * var(--focus-width));
+}
+[data-learning-path] > .lesson-link:active {
+    background: var(--color-primary-soft);
 }
 [data-learning-path] .path-copy {
     display: flex;
@@ -8216,13 +8221,31 @@ html:not([data-ui-lang="he"]) [data-learning-path] {
 }
 [data-learning-path] .path-chevron {
     flex: 0 0 auto;
-    width: 0.5rem;
-    height: 0.5rem;
+    width: 20px;
+    height: 20px;
     margin-inline-start: auto;
-    border-top: 2px solid currentColor;
-    border-right: 2px solid currentColor;
-    transform: rotate(45deg);
+    color: var(--color-muted);
+}
+html:not([data-ui-lang="he"]) [data-learning-path] .path-chevron {
+    transform: none;
 }
 html[data-ui-lang="he"] [data-learning-path] .path-chevron {
-    transform: scaleX(-1) rotate(45deg);
+    transform: scaleX(-1);
+}
+[data-learning-path] .path-all {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 1.3rem 0.85rem;
+    color: var(--color-muted);
+    font-weight: 600;
+    text-decoration: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+    html:not([data-ui-lang="he"]) [data-learning-path] > .lesson-link:hover .path-chevron {
+        transform: translateX(2px);
+    }
+    html[data-ui-lang="he"] [data-learning-path] > .lesson-link:hover .path-chevron {
+        transform: scaleX(-1) translateX(2px);
+    }
 }

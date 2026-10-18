@@ -57,6 +57,7 @@
             scripts: [
                 '/shared/ui/blocks/conjugation-table.js',
                 '/shared/verb-practice.js',
+                '/shared/learning-paths.js',
                 '/shared/today-page.js'
             ],
             view: 'HebrewTodayPage'
@@ -75,7 +76,7 @@
                 subHe: 'עולמות לבחירה — בוקר, דייטים, חיים.',
                 subEn: 'Pick your world — morning, dating, real life.'
             },
-            scripts: ['/shared/lessons-page.js'],
+            scripts: ['/shared/learning-paths.js', '/shared/lessons-page.js'],
             view: 'HebrewLessonsPage'
         },
         {
