@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 )
 
 func TestGoogleSignIn(t *testing.T) {
@@ -127,6 +130,23 @@ func TestGoogleSignIn(t *testing.T) {
 	start = beginGoogle(t, a, srv.URL+"/authorize")
 	rr = finishGoogle(t, a, fake, start, "learner@example.com", "new-sub", true, start.nonce, false, true)
 	expectCode(t, rr, http.StatusUnauthorized, "bad_token")
+	assertNoSession(t, rr)
+
+	start = beginGoogle(t, a, srv.URL+"/authorize")
+	rr = finishGoogleAud(t, a, fake, start, "wrong-aud@example.com", "wrong-aud-sub", true, start.nonce, "not-the-client")
+	expectCode(t, rr, http.StatusUnauthorized, "bad_token")
+	assertNoSession(t, rr)
+	if _, err := a.Store().UserByEmail(t.Context(), "wrong-aud@example.com"); !errors.Is(err, db.ErrNotFound) {
+		t.Fatalf("wrong aud created a user: %v", err)
+	}
+
+	start = beginGoogle(t, a, srv.URL+"/authorize")
+	rr = finishGoogleAud(t, a, fake, start, "array-aud@example.com", "array-aud-sub", true, start.nonce, []string{"other-app", "another-app"})
+	expectCode(t, rr, http.StatusUnauthorized, "bad_token")
+	assertNoSession(t, rr)
+	if _, err := a.Store().UserByEmail(t.Context(), "array-aud@example.com"); !errors.Is(err, db.ErrNotFound) {
+		t.Fatalf("aud array created a user: %v", err)
+	}
 }
 
 type startQuery struct {
@@ -164,11 +184,22 @@ func beginGoogle(t *testing.T, a *App, authPrefix string) startQuery {
 
 func finishGoogle(t *testing.T, a *App, fake *googleFake, start startQuery, email, sub string, verified bool, nonce string, tamperState, badSig bool) *httptest.ResponseRecorder {
 	t.Helper()
+	return finishGoogleFull(t, a, fake, start, email, sub, verified, nonce, nil, tamperState, badSig)
+}
+
+func finishGoogleAud(t *testing.T, a *App, fake *googleFake, start startQuery, email, sub string, verified bool, nonce string, aud any) *httptest.ResponseRecorder {
+	t.Helper()
+	return finishGoogleFull(t, a, fake, start, email, sub, verified, nonce, aud, false, false)
+}
+
+func finishGoogleFull(t *testing.T, a *App, fake *googleFake, start startQuery, email, sub string, verified bool, nonce string, aud any, tamperState, badSig bool) *httptest.ResponseRecorder {
+	t.Helper()
 	fake.challenge = start.challenge
 	fake.email = email
 	fake.sub = sub
 	fake.verified = verified
 	fake.nonce = nonce
+	fake.aud = aud
 	fake.badSig = badSig
 	fake.pkceOK = false
 	state := start.state
@@ -180,6 +211,18 @@ func finishGoogle(t *testing.T, a *App, fake *googleFake, start startQuery, emai
 	rr := httptest.NewRecorder()
 	a.Web().ServeHTTP(rr, req)
 	return rr
+}
+
+func assertNoSession(t *testing.T, rr *httptest.ResponseRecorder) {
+	t.Helper()
+	for _, c := range rr.Result().Cookies() {
+		if c.Name != "__Host-hebrew_session" && c.Name != "hebrew_session" {
+			continue
+		}
+		if c.Value != "" && c.MaxAge >= 0 {
+			t.Fatalf("session cookie set: %+v", c)
+		}
+	}
 }
 
 func expectCode(t *testing.T, rr *httptest.ResponseRecorder, status int, code string) {
@@ -212,8 +255,12 @@ type googleFake struct {
 	sub       string
 	nonce     string
 	verified  bool
-	badSig    bool
-	pkceOK    bool
+	// aud overrides the token audience. Nil uses the client_id the app
+	// posted, which is GoogleClientID from the test config. A string or a
+	// list exercises a mismatch.
+	aud    any
+	badSig bool
+	pkceOK bool
 }
 
 func (f *googleFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -244,9 +291,13 @@ func (f *googleFake) serveToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.pkceOK = true
+	aud := f.aud
+	if aud == nil {
+		aud = r.PostForm.Get("client_id")
+	}
 	tok := signToken(f.key, f.kid, map[string]any{
 		"iss":            f.issuer,
-		"aud":            f.clientID,
+		"aud":            aud,
 		"sub":            f.sub,
 		"email":          f.email,
 		"email_verified": f.verified,
