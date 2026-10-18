@@ -1,0 +1,33 @@
+package components
+
+// PageHeading is the route heading from layout.js. Guides has no sprite icon.
+templ PageHeading(h Heading) {
+	<header class="topbar page-heading ui-chrome" data-page-heading>
+		<div class="topbar-inner">
+			<div class="page-heading-text">
+				if h.Single != "" {
+					<h1 tabindex="-1" lang={ h.Lang } dir={ h.Dir }>{ h.Single }</h1>
+				} else {
+					<h1 tabindex="-1">@Pair(h.He, h.En)</h1>
+				}
+				if h.SubHe != "" || h.SubEn != "" {
+					<p class="subtitle">@Pair(h.SubHe, h.SubEn)</p>
+				} else if h.Subtitle != "" {
+					<p class="subtitle" lang={ h.SubLang } dir={ h.SubDir }>{ h.Subtitle }</p>
+				}
+			</div>
+			<div class="page-actions" data-page-actions></div>
+		</div>
+	</header>
+}
+
+// Heading is either a Hebrew/English pair or one lesson title.
+type Heading struct {
+	He, En       string
+	SubHe, SubEn string
+	Single       string
+	Lang, Dir    string
+	Subtitle     string
+	SubLang      string
+	SubDir       string
+}

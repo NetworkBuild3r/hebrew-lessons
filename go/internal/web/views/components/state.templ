@@ -1,0 +1,31 @@
+package components
+
+// EmptyGuides is the shelf when no published guide is visible.
+templ EmptyGuides() {
+	<div class="card guides-state" data-guides-state="empty">
+		<p>אין מדריכים שפורסמו. <span lang="en" dir="ltr">(No published guides.)</span></p>
+	</div>
+}
+
+// ErrorGuides is the shelf when the catalog cannot be read.
+templ ErrorGuides() {
+	<div class="card guides-state" data-guides-state="error" role="alert">
+		<p>שגיאה בטעינת המדריכים. <span lang="en" dir="ltr">(Could not load guides.)</span></p>
+	</div>
+}
+
+// MissingPlan is the plan page when the id is not a slug.
+templ MissingPlan() {
+	<div class="card" role="alert">
+		<p>חסר מזהה תוכנית. <span lang="en" dir="ltr">(Missing plan id.)</span></p>
+		<p><a class="btn btn-primary" href="/guides/">@Pair("למדריכים", "Back to Guides")</a></p>
+	</div>
+}
+
+// PlanNotFound is the plan page when that guide is not visible.
+templ PlanNotFound() {
+	<div class="card" role="alert">
+		<p>התוכנית לא נמצאה. <span lang="en" dir="ltr">(That plan was not found.)</span></p>
+		<p><a class="btn btn-primary" href="/guides/">@Pair("למדריכים", "Back to Guides")</a></p>
+	</div>
+}

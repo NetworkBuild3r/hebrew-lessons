@@ -1,0 +1,49 @@
+package views
+
+import "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/components"
+
+// Layout is the signed-in document shell (shared/app.html plus the shell
+// painted by app-shell.js). The document stays Hebrew and RTL. Interface
+// language is a pre-paint read of the same localStorage key the app uses,
+// so a saved choice does not flash. No other script is added.
+
+templ Layout(doc Doc) {
+	<!DOCTYPE html>
+	<html lang="he" dir="rtl" translate="no" class="has-hebrew-shell" data-page-he={ doc.PageHe } data-page-en={ doc.PageEn }>
+		<head>
+			<meta charset="UTF-8"/>
+			@templ.Raw("<script>\n        try {\n            var uiLang = localStorage.getItem('hebrew-ui-lang');\n            document.documentElement.setAttribute('data-ui-lang', uiLang === 'he' ? 'he' : 'en');\n        } catch (e) { /* English until a script can read the choice */ }\n    </script>")
+			<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+			<meta name="google" content="notranslate"/>
+			<meta name="theme-color" content="#1d4ed8"/>
+			<title>{ doc.Title }</title>
+			<link rel="manifest" href="/manifest.webmanifest"/>
+			<link rel="icon" href="/shared/brand/favicon.svg" type="image/svg+xml"/>
+			<link rel="icon" href="/shared/brand/favicon-32.png" type="image/png" sizes="32x32"/>
+			<link rel="icon" href="/shared/brand/favicon-16.png" type="image/png" sizes="16x16"/>
+			<link rel="apple-touch-icon" href="/shared/brand/apple-touch-icon.png"/>
+			<link rel="stylesheet" href="/shared/worksheet.css"/>
+		</head>
+		<body class={ doc.BodyClass }>
+			<div id="app-shell">
+				@components.Shell(doc.CurrentNav)
+			</div>
+			<main class="wrap" id="app-main" tabindex="-1" data-route-ready={ doc.RouteReady }>
+				@doc.Main
+			</main>
+			<div id="app-route-announce" class="visually-hidden" aria-live="polite" aria-atomic="true">{ doc.Announce }</div>
+		</body>
+	</html>
+}
+
+// Doc is the per-page shell data. Main is the heading plus the view.
+type Doc struct {
+	Title       string
+	BodyClass   string
+	PageHe      string
+	PageEn      string
+	Announce    string
+	CurrentNav  string
+	RouteReady  string
+	Main        templ.Component
+}

@@ -5,7 +5,10 @@ module github.com/NetworkBuild3r/hebrew-lessons/go
 // CGO_ENABLED=0 (see README).
 go 1.26.0
 
-require modernc.org/sqlite v1.60.1
+require (
+	github.com/a-h/templ v0.3.960
+	modernc.org/sqlite v1.60.1
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
