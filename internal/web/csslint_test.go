@@ -73,10 +73,21 @@ func TestShippedCSSHasNoPhysicalProperties(t *testing.T) {
 	if strings.Contains(text, "overflow:hidden") || strings.Contains(text, "overflow: hidden") {
 		t.Error("base.css hides overflow; pointed text must stay visible")
 	}
-	for _, token := range []string{"var(--font-ui)", "var(--font-display)", "var(--lh-he-body)", "var(--lh-he-display)", "padding-block: .1em", "var(--motion-shift)", ".htmx-swapping", ".htmx-settling", ".htmx-added"} {
+	for _, token := range []string{"var(--font-ui)", "var(--font-display)", "var(--lh-he-body)", "var(--lh-he-display)", "padding-block: .1em", ".htmx-settling", ".htmx-added", "view-transition-name: page-main", ".rail > .rail-brand", ".rail > .rail-theme"} {
 		if !strings.Contains(text, token) {
 			t.Errorf("base.css missing %s", token)
 		}
+	}
+	if strings.Contains(text, ".htmx-swapping") {
+		t.Error("base.css still fades the swap target out; that blanks the page between tabs")
+	}
+	for _, name := range []string{"today-due", "today-next", "he-display", "shell-dock", "activity"} {
+		if strings.Contains(text, "view-transition-name: "+name) {
+			t.Errorf("base.css still names %s, so chrome or cards leave the root snapshot", name)
+		}
+	}
+	if !strings.Contains(text, "::view-transition-old(root)") || !strings.Contains(text, "animation: none") {
+		t.Error("root view transition should stay still")
 	}
 	if hits := transitionOffenders(text); len(hits) != 0 {
 		t.Errorf("base.css transitions a property other than transform or opacity: %s", strings.Join(hits, "; "))

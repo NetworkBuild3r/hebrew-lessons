@@ -93,6 +93,12 @@ func TestTodayLayout(t *testing.T) {
 	if !strings.Contains(body, "globalViewTransitions") || !strings.Contains(body, `hx-swap="outerHTML transition:true"`) {
 		t.Fatal("htmx view transitions are not enabled")
 	}
+	if !strings.Contains(body, "defaultSwapDelay=0") || !strings.Contains(body, `typeof document.startViewTransition==="function"`) || !strings.Contains(body, "defaultSettleDelay=0") {
+		t.Fatal("view transitions should snapshot immediately, with no swap delay")
+	}
+	if views.UIFor("he", "m").DueLabel != "מִלִּים מֻכָּנוֹת" {
+		t.Fatalf("due label pointing: %s", views.UIFor("he", "m").DueLabel)
+	}
 	if !strings.Contains(body, "הַתְחֵל") || strings.Contains(body, "הַתְחִילִי") {
 		t.Fatal("fake masculine learner should be addressed in the masculine")
 	}
@@ -206,6 +212,10 @@ func TestZeroDueAndNoLesson(t *testing.T) {
 	}
 	if !strings.Contains(zero, "quiet-card--due") || !strings.Contains(zero, "icon-check") {
 		t.Fatal("nothing due should use the check placeholder")
+	}
+	pill := regexp.MustCompile(`(?s)<section class="quiet-card quiet-card--due">.*?</section>`).FindString(zero)
+	if !strings.Contains(pill, `<bdi lang="en" dir="ltr">Nothing due</bdi>`) {
+		t.Fatal("nothing-due english run must be an ltr bdi inside the pill")
 	}
 	if strings.Count(none, "btn-primary") != 1 {
 		t.Fatal("start should stay the only primary when no lesson is queued")

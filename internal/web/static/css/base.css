@@ -72,8 +72,10 @@ bdi[lang="he"] { unicode-bidi: isolate; }
   min-block-size: 100dvb;
 }
 .rail { display: contents; }
-.rail-brand,
-.rail-theme { display: none; }
+/* Child combinator so this beats the later .brand and .theme-toggle rules.
+   The desktop copies are shown again only at the 1024 rail. */
+.rail > .rail-brand,
+.rail > .rail-theme { display: none; }
 .stage {
   inline-size: min(100%, var(--player-max));
   margin-inline: auto;
@@ -190,7 +192,6 @@ h1 {
     linear-gradient(165deg, var(--ink-soft), var(--ink) 62%);
   color: var(--on-ink);
   box-shadow: var(--shadow-3);
-  view-transition-name: today-due;
 }
 .ink-card .eyebrow { color: var(--kicker-on-ink); }
 .ink-card__label {
@@ -213,7 +214,6 @@ h1 {
   background: var(--surface);
   box-shadow: var(--shadow-2);
   border: 1px solid var(--hairline);
-  view-transition-name: today-next;
 }
 .unit-title {
   font-family: var(--font-display);
@@ -222,7 +222,6 @@ h1 {
   line-height: var(--lh-he-display);
   padding-block: .1em;
   overflow: visible;
-  view-transition-name: he-display;
 }
 .situation {
   color: var(--muted);
@@ -345,7 +344,6 @@ h1 {
   border: 1px solid var(--hairline);
   border-radius: var(--radius-pill);
   box-shadow: var(--shadow-2);
-  view-transition-name: shell-dock;
 }
 .dock__link {
   flex: 1;
@@ -393,8 +391,6 @@ h1 {
   background: var(--surface-soft);
   line-height: var(--lh-he-body);
 }
-.vt-activity { view-transition-name: activity; }
-
 @media (min-width: 1024px) {
   .shell {
     flex-direction: row;
@@ -415,7 +411,7 @@ h1 {
     padding-block: var(--space-4);
     padding-inline: var(--space-2);
   }
-  .rail-brand {
+  .rail > .rail-brand {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -433,7 +429,7 @@ h1 {
     font-size: var(--fs-small);
     max-inline-size: 100%;
   }
-  .rail-theme {
+  .rail > .rail-theme {
     display: inline-flex;
     flex-direction: column;
     margin-block-start: auto;
@@ -518,63 +514,39 @@ h1 {
   .btn { inline-size: auto; align-self: start; }
 }
 
-/* Exit on htmx-swapping. Enter on htmx-added (the from state) and htmx-settling (the to state). */
-.htmx-swapping {
-  opacity: 0;
-  transform: translateX(var(--motion-shift));
-  transition-property: opacity, transform;
-  transition-duration: var(--dur-base);
-  transition-timing-function: var(--ease-out);
-}
-:dir(rtl) .htmx-swapping { transform: translateX(calc(var(--motion-shift) * -1)); }
-.htmx-added {
-  opacity: 0;
-  transform: translateX(calc(var(--motion-shift) * -1));
-}
-:dir(rtl) .htmx-added { transform: translateX(var(--motion-shift)); }
-.htmx-settling {
-  opacity: 1;
-  transform: none;
-  transition-property: opacity, transform;
-  transition-duration: var(--dur-base);
-  transition-timing-function: var(--ease-out);
-}
-@starting-style {
-  .htmx-settling {
-    opacity: 0;
-    transform: translateX(calc(var(--motion-shift) * -1));
-  }
-  :dir(rtl) .htmx-settling { transform: translateX(var(--motion-shift)); }
-}
-
+/* Only the page crossfades. Header, rail, and dock stay in the root snapshot
+   and do not fade out, which is what left a blank frame between tabs. */
 @view-transition { navigation: auto; }
 ::view-transition-old(root),
-::view-transition-new(root),
+::view-transition-new(root) {
+  animation: none;
+}
+::view-transition-old(root) { opacity: 0; }
 ::view-transition-old(page-main),
 ::view-transition-new(page-main) {
   animation-duration: var(--dur-base);
   animation-timing-function: var(--ease-out);
 }
 
-/* Tokens already shorten durations to 100–200ms and zero --motion-shift. Fades only. */
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  .htmx-swapping,
-  .htmx-added,
+/* Browsers without view transitions still need the htmx enter to paint.
+   htmx-added is the from state; htmx-settling is the to state. Kept out of
+   the view-transition path so the new snapshot is not taken at opacity 0. */
+@supports not (view-transition-name: none) {
+  .htmx-added { opacity: 0; }
   .htmx-settling {
-    transform: none;
+    opacity: 1;
     transition-property: opacity;
     transition-duration: var(--dur-base);
     transition-timing-function: var(--ease-out);
+    animation-name: shell-enter;
+    animation-duration: var(--dur-base);
+    animation-timing-function: var(--ease-out);
   }
-  .htmx-swapping,
-  .htmx-added { opacity: 0; }
-  .htmx-settling { opacity: 1; }
   @starting-style {
-    .htmx-settling,
-    :dir(rtl) .htmx-settling {
-      opacity: 0;
-      transform: none;
-    }
+    .htmx-settling { opacity: 0; }
   }
+}
+@keyframes shell-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

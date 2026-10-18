@@ -89,7 +89,7 @@ func hebrewUI(addressGender string) UI {
 		Today: "הַיּוֹם", Review: "חֲזָרָה", Progress: "הִתְקַדְּמוּת",
 		Dark: "כֵּהֶה", Light: "בָּהִיר",
 		Heading:   "הַיּוֹם",
-		DueKicker: "לַחֲזָרָה", DueLabel: "מִלִּים מוּכָנוֹת", DueHint: "עַד עֶשְׂרִים בְּיוֹם",
+		DueKicker: "לַחֲזָרָה", DueLabel: "מִלִּים מֻכָּנוֹת", DueHint: "עַד עֶשְׂרִים בְּיוֹם",
 		Start:      Address(addressGender, "הַתְחֵל", "הַתְחִילִי"),
 		NextKicker: "הַשִּׁיעוּר הַבָּא",
 		Situation:  "Getting ready in the morning.",
@@ -248,8 +248,10 @@ func themeHead() templ.Component {
 	return templ.Raw(`<script>(function(){var k="hebrew-theme";try{var t=localStorage.getItem(k);if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}function dark(){var t=document.documentElement.getAttribute("data-theme");return t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);}function paint(){var on=dark();document.querySelectorAll(".theme-toggle").forEach(function(b){b.setAttribute("aria-pressed",on?"true":"false");});}function apply(next){var go=function(){document.documentElement.setAttribute("data-theme",next);try{localStorage.setItem(k,next);}catch(err){}paint();};if(document.startViewTransition){document.startViewTransition(go);}else{go();}}document.addEventListener("click",function(ev){var node=ev.target&&ev.target.closest?ev.target:ev.target&&ev.target.parentElement;var b=node&&node.closest&&node.closest(".theme-toggle");if(!b)return;apply(dark()?"light":"dark");});document.addEventListener("DOMContentLoaded",paint);document.addEventListener("htmx:afterSwap",paint);})();</script>`)
 }
 
-// motionScript turns htmx swaps into view transitions and keeps the
-// class-based exit and enter on screen for --dur-base.
+// motionScript turns htmx swaps into view transitions.
+// Swap delay stays 0 so the old page is not faded out before the snapshot.
+// When view transitions exist, settle immediately so the new snapshot is the
+// painted page. Otherwise hold htmx-settling for --dur-base so the enter runs.
 func motionScript() templ.Component {
-	return templ.Raw(`<script>(function(){if(!window.htmx)return;htmx.config.globalViewTransitions=true;var dur=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--dur-base"));if(dur){htmx.config.defaultSwapDelay=dur;htmx.config.defaultSettleDelay=dur;}})();</script>`)
+	return templ.Raw(`<script>(function(){if(!window.htmx)return;htmx.config.globalViewTransitions=true;htmx.config.defaultSwapDelay=0;var dur=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--dur-base"));if(typeof document.startViewTransition==="function"){htmx.config.defaultSettleDelay=0;}else if(dur){htmx.config.defaultSettleDelay=dur;}})();</script>`)
 }
