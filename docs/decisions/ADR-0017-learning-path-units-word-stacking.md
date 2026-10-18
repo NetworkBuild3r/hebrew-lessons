@@ -329,7 +329,7 @@ The shelf stays at `/lessons/` until the path ships. When the path takes `/lesso
 
 The path map (`/lessons/`) and Today are designed on Figma page **Learning Path** (file `NJ8HfTPCQgrFty2VVQBMhY`, node `71:2`). [ADR-0015](ADR-0015-responsive-desktop-mobile-architecture.md) already cites that file for the shell.
 
-Until this ADR was accepted, the frontend held `/lessons/` and Today. No screen in this change.
+No screen in this change.
 
 When a later spec implements the page, it keeps these decisions:
 
@@ -421,4 +421,4 @@ Delete this file. No application file, schema file, database, worksheet, or scre
 | 2026-10-18 | Sequencing under §11. Schema 1.3.0 and N24–N29 are a Go change after the ADR-0016 cutover. Hebrew Lesson Builder may draft the five units on schema 1.2.0 before that. |
 | 2026-10-18 | Drafting the five units on schema 1.2.0 may start now. Those plans stay draft and unpublished until Brian accepts this ADR. The 1.3.0 fields are filled in after the Go cutover. The checkpoint pass mark and the review-stop threshold belong to the Go learner package config (ADR-0016 layout) after the cutover. Node's `server/learner/thresholds.js` stays unchanged. |
 | 2026-10-18 | Accepted by Brian Nelson. |
-| 2026-10-18 | Clarification. §11 Sequencing defines "after the cutover": Node is retired as the rollback, which means Go has served prod for 14 days with no rollback and the Node image is no longer the documented rollback. Only after that do the plan tools accept schema 1.3.0, as a versioned contract change, and migration 012+ (`unit_progress`) lands in the Go-owned ledger. Until then the lesson builder authors on schema 1.2.0. Other mentions of the phrase refer to that definition. §9 (twice) and Sequencing step 2: those plans stay draft and unpublished; accepting this ADR does not publish them. Publishing waits for the migration follow-up. The other §9–11 lines that waited on acceptance are in the past tense. No decisions change. |
+| 2026-10-18 | Adds a release criterion, approved by Hebrew Dev as Brian's proxy on 2026-10-18. "After the cutover" means Go has served prod for 14 days with no rollback and the Node image is no longer the documented rollback. Only after that do the plan tools accept schema 1.3.0, as a versioned contract change, and migration 012+ (`unit_progress`) lands in the Go-owned ledger. Until then the lesson builder authors on schema 1.2.0. Other mentions of the phrase refer to that definition. §9 (twice) and Sequencing step 2: those plans stay draft and unpublished; accepting this ADR does not publish them. Publishing waits for the migration follow-up. §11's line that waited on acceptance is in the past tense. The §10 sentence that the frontend held `/lessons/` and Today until this ADR was accepted is removed. |
