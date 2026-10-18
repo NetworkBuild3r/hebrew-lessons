@@ -264,9 +264,11 @@ func (a *App) healthHandler() http.Handler {
 
 func newMCP(cfg Config, health http.Handler) http.Handler {
 	// Course, lexicon, and unit stores stay unset until *db.Store
-	// grows the methods in mcp.CourseReader, mcp.LexiconReader,
-	// mcp.UnitWriter, and units.Lookup. Tools then answer with isError.
-	// The adapter belongs here, next to this call, so db does not import mcp.
+	// grows ListUnits, LatestPlacement, PlacementKnownLexemes,
+	// SearchLexemes, PutDraftUnit, and units.Lookup. Tools then
+	// answer with isError. LatestPlacement is not on this branch;
+	// its pull request is stacked on #60. The adapter belongs here,
+	// next to this call, so db does not import mcp.
 	authoring := mcp.Handler(mcp.Options{AuthToken: cfg.MCPAuthToken})
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)

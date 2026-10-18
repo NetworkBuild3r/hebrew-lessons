@@ -25,6 +25,10 @@ var ErrUnauthorized = sdauth.ErrInvalidToken
 type Principal struct {
 	// Actor is stored on unit_revisions.actor.
 	Actor string
+	// UserID is the learner id passed to LatestPlacement and
+	// PlacementKnownLexemes. The static token leaves it 0. OAuth
+	// sets it to users.id.
+	UserID int64
 	// Source is "token" for the static secret and "oauth" once that
 	// validator is composed in.
 	Source string
@@ -46,6 +50,9 @@ type StaticToken struct {
 	Token string
 	// Actor overrides defaultActor when it is not empty.
 	Actor string
+	// UserID is the learner id for placement reads. Zero is the
+	// static token until OAuth sets Principal.UserID.
+	UserID int64
 }
 
 // Validate implements Validator.
@@ -57,7 +64,7 @@ func (s StaticToken) Validate(_ context.Context, token string, _ *http.Request) 
 	if actor == "" {
 		actor = defaultActor
 	}
-	return Principal{Actor: actor, Source: "token"}, nil
+	return Principal{Actor: actor, UserID: s.UserID, Source: "token"}, nil
 }
 
 // Chain tries each validator until one accepts the token.
@@ -108,7 +115,10 @@ func requireBearer(v Validator, next http.Handler) http.Handler {
 		}
 		info := &sdauth.TokenInfo{
 			UserID: p.Actor,
-			Extra:  map[string]any{"source": p.Source},
+			Extra: map[string]any{
+				"source": p.Source,
+				"userID": p.UserID,
+			},
 		}
 		return info, nil
 	}
@@ -137,4 +147,13 @@ func actorFrom(ctx context.Context) string {
 		return defaultActor
 	}
 	return info.UserID
+}
+
+func userIDFrom(ctx context.Context) int64 {
+	info := sdauth.TokenInfoFromContext(ctx)
+	if info == nil || info.Extra == nil {
+		return 0
+	}
+	id, _ := info.Extra["userID"].(int64)
+	return id
 }

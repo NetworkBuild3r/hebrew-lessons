@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -195,6 +196,10 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	if ctx.Placement.Taken {
 		t.Fatal("placement was taken")
 	}
+	untaken := callRaw(t, session, "get_context", getContextInput{Position: 0})
+	if !strings.Contains(untaken, `"placement":{"taken":false}`) || strings.Contains(untaken, "adjustedScore") {
+		t.Fatalf("untaken placement %s", untaken)
+	}
 	if ctx.Budgets != currentBudgets() {
 		t.Fatalf("budgets %+v", ctx.Budgets)
 	}
@@ -295,21 +300,50 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 		t.Fatalf("negative %q", msg)
 	}
 
-	mem.SetPlacement(Placement{
-		Taken:                  true,
-		TakenAt:                "2026-10-18T12:00:00Z",
+	mem.SetPlacement(9, Placement{
+		TakenAt:                time.Date(2026, 10, 18, 11, 0, 0, 0, time.UTC),
+		Reliable:               true,
+		Level:                  2,
+		EstimatedKnownWords:    10,
+		SuggestedStartPosition: 1,
+	}, []string{coffee})
+	other := getContext(t, session, 3)
+	if other.Placement.Taken {
+		t.Fatal("user 0 saw user 9's placement")
+	}
+	takenAt := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	mem.SetPlacement(0, Placement{
+		TakenAt:        takenAt,
+		Reliable:       true,
+		FalseAlarmRate: 0.05,
+		Level:          0,
+		BandScores: []BandScore{{
+			Band: 0, H: 1, F: 0.05, Corrected: 1, Passed: true,
+		}},
 		EstimatedKnownWords:    40,
-		AdjustedScore:          0.25,
-		FalseAlarmRate:         0.05,
 		SuggestedStartPosition: 0,
-		KnownLexemes:           []string{hello},
-	})
+	}, []string{hello})
 	again := getContext(t, session, 3)
-	if !again.Placement.Taken || again.Placement.SuggestedStartPosition != 0 || again.Placement.EstimatedKnownWords != 40 {
+	if !again.Placement.Taken || !again.Placement.TakenAt.Equal(takenAt) || !again.Placement.Reliable || again.Placement.FalseAlarmRate != 0.05 {
 		t.Fatalf("placement %+v", again.Placement)
+	}
+	if again.Placement.Level != 0 || again.Placement.SuggestedStartPosition != 0 || again.Placement.EstimatedKnownWords != 40 {
+		t.Fatalf("placement zeros %+v", again.Placement)
+	}
+	if len(again.Placement.BandScores) != 1 || again.Placement.BandScores[0].Band != 0 || !again.Placement.BandScores[0].Passed {
+		t.Fatalf("bands %+v", again.Placement.BandScores)
 	}
 	if len(again.Placement.KnownLexemes) != 1 || again.Placement.KnownLexemes[0] != hello {
 		t.Fatalf("placement lexemes %+v", again.Placement.KnownLexemes)
+	}
+	takenText := callRaw(t, session, "get_context", getContextInput{Position: 3})
+	for _, want := range []string{`"taken":true`, `"level":0`, `"suggestedStartPosition":0`, `"reliable":true`, `"bandScores":`, hello} {
+		if !strings.Contains(takenText, want) {
+			t.Fatalf("taken placement missing %s in %s", want, takenText)
+		}
+	}
+	if strings.Contains(takenText, "adjustedScore") || strings.Contains(takenText, coffee) {
+		t.Fatalf("taken placement %s", takenText)
 	}
 	found := false
 	for _, word := range again.KnownLexemes {
@@ -398,6 +432,43 @@ func helloDoc() units.Unit {
 	}
 }
 
+func TestPlacementJSONKeepsZeros(t *testing.T) {
+	raw, err := json.Marshal(placementView{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != `{"taken":false}` {
+		t.Fatalf("untaken %s", raw)
+	}
+	raw, err = json.Marshal(placementView{
+		Taken:                  true,
+		Level:                  -1,
+		SuggestedStartPosition: 0,
+		Reliable:               false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, want := range []string{
+		`"taken":true`,
+		`"reliable":false`,
+		`"level":-1`,
+		`"suggestedStartPosition":0`,
+		`"bandScores":[]`,
+		`"knownLexemes":[]`,
+		`"estimatedKnownWords":0`,
+		`"falseAlarmRate":0`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %s in %s", want, text)
+		}
+	}
+	if strings.Contains(text, "adjustedScore") {
+		t.Fatalf("old field %s", text)
+	}
+}
+
 func getContext(t *testing.T, session *mcp.ClientSession, position int) getContextOutput {
 	t.Helper()
 	return call[getContextOutput](t, session, "get_context", getContextInput{Position: position})
@@ -476,6 +547,18 @@ func call[T any](t *testing.T, session *mcp.ClientSession, name string, args any
 		t.Fatalf("%s: %v", name, err)
 	}
 	return decode[T](t, res)
+}
+
+func callRaw(t *testing.T, session *mcp.ClientSession, name string, args any) string {
+	t.Helper()
+	res, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: name, Arguments: args})
+	if err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	if res.IsError {
+		t.Fatalf("tool error: %s", resultText(res))
+	}
+	return resultText(res)
 }
 
 func callErr(t *testing.T, session *mcp.ClientSession, name string, args any) string {

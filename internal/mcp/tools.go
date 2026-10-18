@@ -2,11 +2,13 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -37,7 +39,60 @@ type getContextOutput struct {
 	Outline      []UnitOutline `json:"outline"`
 	KnownLexemes []string      `json:"knownLexemes"`
 	Budgets      Budgets       `json:"budgets"`
-	Placement    Placement     `json:"placement"`
+	Placement    placementView `json:"placement"`
+}
+
+// placementView is the get_context placement object.
+// Taken false is the whole object when LatestPlacement reports no run.
+// A finished run keeps zero values: level −1, suggestedStartPosition 0,
+// and reliable false are all meaningful.
+type placementView struct {
+	Taken                  bool        `json:"taken"`
+	TakenAt                time.Time   `json:"takenAt,omitempty"`
+	Reliable               bool        `json:"reliable,omitempty"`
+	FalseAlarmRate         float64     `json:"falseAlarmRate,omitempty"`
+	Level                  int         `json:"level,omitempty"`
+	BandScores             []BandScore `json:"bandScores,omitempty"`
+	EstimatedKnownWords    int         `json:"estimatedKnownWords,omitempty"`
+	SuggestedStartPosition int         `json:"suggestedStartPosition,omitempty"`
+	KnownLexemes           []string    `json:"knownLexemes,omitempty"`
+}
+
+// MarshalJSON emits {"taken":false} when there is no finished run.
+// A finished run includes every field, including zeros.
+func (p placementView) MarshalJSON() ([]byte, error) {
+	if !p.Taken {
+		return []byte(`{"taken":false}`), nil
+	}
+	known := p.KnownLexemes
+	if known == nil {
+		known = []string{}
+	}
+	bands := p.BandScores
+	if bands == nil {
+		bands = []BandScore{}
+	}
+	return json.Marshal(struct {
+		Taken                  bool        `json:"taken"`
+		TakenAt                time.Time   `json:"takenAt"`
+		Reliable               bool        `json:"reliable"`
+		FalseAlarmRate         float64     `json:"falseAlarmRate"`
+		Level                  int         `json:"level"`
+		BandScores             []BandScore `json:"bandScores"`
+		EstimatedKnownWords    int         `json:"estimatedKnownWords"`
+		SuggestedStartPosition int         `json:"suggestedStartPosition"`
+		KnownLexemes           []string    `json:"knownLexemes"`
+	}{
+		Taken:                  true,
+		TakenAt:                p.TakenAt,
+		Reliable:               p.Reliable,
+		FalseAlarmRate:         p.FalseAlarmRate,
+		Level:                  p.Level,
+		BandScores:             bands,
+		EstimatedKnownWords:    p.EstimatedKnownWords,
+		SuggestedStartPosition: p.SuggestedStartPosition,
+		KnownLexemes:           known,
+	})
 }
 
 type lookupInput struct {
@@ -94,9 +149,29 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 	if err != nil {
 		return nil, out, storeErr("The known-word list could not be read.", err)
 	}
-	placement, err := s.course.Placement(ctx, actorFrom(ctx))
+	userID := userIDFrom(ctx)
+	row, taken, err := s.course.LatestPlacement(ctx, userID)
 	if err != nil {
 		return nil, out, storeErr("The placement result could not be read.", err)
+	}
+	view := placementView{Taken: taken}
+	if taken {
+		words, err := s.course.PlacementKnownLexemes(ctx, userID)
+		if err != nil {
+			return nil, out, storeErr("The placement words could not be read.", err)
+		}
+		view = placementView{
+			Taken:                  true,
+			TakenAt:                row.TakenAt,
+			Reliable:               row.Reliable,
+			FalseAlarmRate:         row.FalseAlarmRate,
+			Level:                  row.Level,
+			BandScores:             append([]BandScore(nil), row.BandScores...),
+			EstimatedKnownWords:    row.EstimatedKnownWords,
+			SuggestedStartPosition: row.SuggestedStartPosition,
+			KnownLexemes:           append([]string(nil), words...),
+		}
+		slices.Sort(view.KnownLexemes)
 	}
 	if outline == nil {
 		outline = []UnitOutline{}
@@ -105,7 +180,7 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 		Outline:      outline,
 		KnownLexemes: sortedKnown(known),
 		Budgets:      currentBudgets(),
-		Placement:    placement,
+		Placement:    view,
 	}
 	return nil, out, nil
 }
@@ -235,7 +310,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_context",
-		Description: "Read the course before you draft a unit. Returns the outline (position, title, status), lexemes introduced before position, the authoring budgets, and the learner's placement check. Placement taken false means there is no check yet, so do not assume the learner starts at zero if a later check says otherwise. Read hebrew://rules for what the budgets mean.",
+		Description: "Read the course before you draft a unit. Returns the outline (position, title, status), lexemes introduced before position, the authoring budgets, and the learner's placement check. Placement taken false means there is no finished run, so the other placement fields are absent. A finished run includes takenAt, reliable, falseAlarmRate, level (highest passed band, or -1), bandScores (band, h, f, corrected, passed), estimatedKnownWords, suggestedStartPosition, and knownLexemes (pointed text, no pseudo-words). suggestedStartPosition 0 is the first unit. Read hebrew://rules for what the budgets mean.",
 		Annotations: readOnly,
 	}, svc.getContext)
 	mcp.AddTool(server, &mcp.Tool{

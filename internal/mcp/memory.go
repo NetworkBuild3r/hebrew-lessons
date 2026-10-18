@@ -23,7 +23,12 @@ type Memory struct {
 	units     []memUnit
 	lexemes   []storedLexeme
 	audio     map[string]bool
-	placement Placement
+	placement map[int64]storedPlacement
+}
+
+type storedPlacement struct {
+	row   Placement
+	known []string
 }
 
 type memUnit struct {
@@ -82,11 +87,20 @@ func (m *Memory) Actor(id int64) string {
 	return u.actor
 }
 
-// SetPlacement replaces the single vocabulary-check result.
-func (m *Memory) SetPlacement(p Placement) {
+// SetPlacement stores one finished run for userID.
+// known is the pointed NFC text of seeded-known lexemes. Pseudo-words
+// must not be included. The list is sorted before it is stored.
+func (m *Memory) SetPlacement(userID int64, row Placement, known []string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.placement = p
+	if m.placement == nil {
+		m.placement = map[int64]storedPlacement{}
+	}
+	words := append([]string(nil), known...)
+	slices.Sort(words)
+	words = slices.Compact(words)
+	row.BandScores = append([]BandScore(nil), row.BandScores...)
+	m.placement[userID] = storedPlacement{row: row, known: words}
 }
 
 // ListUnits implements CourseReader.
@@ -109,19 +123,36 @@ func (m *Memory) ListUnits(ctx context.Context) ([]UnitOutline, error) {
 	return out, nil
 }
 
-// Placement implements CourseReader. learner is unused until a placement
-// table keys the row by user.
-func (m *Memory) Placement(ctx context.Context, _ string) (Placement, error) {
+// LatestPlacement implements CourseReader.
+// ok is false when userID has no finished run.
+func (m *Memory) LatestPlacement(ctx context.Context, userID int64) (Placement, bool, error) {
 	if err := ctx.Err(); err != nil {
-		return Placement{}, err
+		return Placement{}, false, err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	p := m.placement
-	if p.KnownLexemes != nil {
-		p.KnownLexemes = append([]string(nil), p.KnownLexemes...)
+	stored, ok := m.placement[userID]
+	if !ok {
+		return Placement{}, false, nil
 	}
-	return p, nil
+	row := stored.row
+	row.BandScores = append([]BandScore(nil), row.BandScores...)
+	return row, true, nil
+}
+
+// PlacementKnownLexemes implements CourseReader.
+// The text is pointed NFC, sorted. A learner with no run returns an empty list.
+func (m *Memory) PlacementKnownLexemes(ctx context.Context, userID int64) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	stored, ok := m.placement[userID]
+	if !ok || len(stored.known) == 0 {
+		return []string{}, nil
+	}
+	return append([]string(nil), stored.known...), nil
 }
 
 // SearchLexemes implements LexiconReader.

@@ -2,8 +2,8 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
@@ -19,48 +19,35 @@ type UnitOutline struct {
 	Status   string `json:"status"`
 }
 
-// Placement is the learner's yes/no vocabulary check.
-//
-// The field names are a proposal. There is no placement table yet.
-// Taken false means the check has not been stored; the other fields are
-// then omitted. Backend Dev owns the storage.
-type Placement struct {
-	Taken                  bool     `json:"taken"`
-	TakenAt                string   `json:"takenAt,omitempty"`
-	EstimatedKnownWords    int      `json:"estimatedKnownWords,omitempty"`
-	AdjustedScore          float64  `json:"adjustedScore,omitempty"`
-	FalseAlarmRate         float64  `json:"falseAlarmRate,omitempty"`
-	SuggestedStartPosition int      `json:"suggestedStartPosition,omitempty"`
-	KnownLexemes           []string `json:"knownLexemes,omitempty"`
+// BandScore is one frequency band on a finished placement run.
+// It matches placement.BandScore. H is the real-word yes-rate and F is
+// the pseudo-word yes-rate (the same F on every band). Those two rates
+// are the counts the scorer records. Corrected is (H − F) / (1 − F).
+// Passed is true when Corrected is at least 0.8. Pseudo-words are not
+// lexemes; they appear only as F and FalseAlarmRate.
+type BandScore struct {
+	Band      int     `json:"band"`
+	H         float64 `json:"h"`
+	F         float64 `json:"f"`
+	Corrected float64 `json:"corrected"`
+	Passed    bool    `json:"passed"`
 }
 
-// MarshalJSON keeps a zero suggested start when the check was taken.
-// encoding/json would drop that 0, and 0 is the first unit.
-func (p Placement) MarshalJSON() ([]byte, error) {
-	if !p.Taken {
-		return []byte(`{"taken":false}`), nil
-	}
-	known := p.KnownLexemes
-	if known == nil {
-		known = []string{}
-	}
-	return json.Marshal(struct {
-		Taken                  bool     `json:"taken"`
-		TakenAt                string   `json:"takenAt"`
-		EstimatedKnownWords    int      `json:"estimatedKnownWords"`
-		AdjustedScore          float64  `json:"adjustedScore"`
-		FalseAlarmRate         float64  `json:"falseAlarmRate"`
-		SuggestedStartPosition int      `json:"suggestedStartPosition"`
-		KnownLexemes           []string `json:"knownLexemes"`
-	}{
-		Taken:                  true,
-		TakenAt:                p.TakenAt,
-		EstimatedKnownWords:    p.EstimatedKnownWords,
-		AdjustedScore:          p.AdjustedScore,
-		FalseAlarmRate:         p.FalseAlarmRate,
-		SuggestedStartPosition: p.SuggestedStartPosition,
-		KnownLexemes:           known,
-	})
+// Placement mirrors db.Placement. db.Placement is not on this branch.
+// Its pull request is stacked on #60. The adapter copies these fields
+// once that type lands. There is no Taken field: LatestPlacement's bool
+// is false when the learner has no finished run.
+//
+// Level is the highest passed band, or −1 when none passed.
+// SuggestedStartPosition 0 is the first unit.
+type Placement struct {
+	TakenAt                time.Time
+	Reliable               bool
+	FalseAlarmRate         float64
+	Level                  int
+	BandScores             []BandScore
+	EstimatedKnownWords    int
+	SuggestedStartPosition int
 }
 
 // Lexeme is one dictionary row lookup returns.
@@ -85,12 +72,15 @@ type CourseReader interface {
 	// ListUnits returns every unit, draft and published, ordered by
 	// position ascending and then id ascending.
 	ListUnits(ctx context.Context) ([]UnitOutline, error)
-	// Placement returns the vocabulary-check result for learner.
-	// learner is empty only when the request carried no principal;
-	// the static token passes "mcp". Until a placement table exists,
-	// return a zero Placement (taken false) rather than an error when
-	// the learner has no row. A real failure is still an error.
-	Placement(ctx context.Context, learner string) (Placement, error)
+	// LatestPlacement returns the newest finished run for userID.
+	// ok is false when that learner has no finished run. That is not
+	// an error. The static token passes user id 0 until OAuth sets
+	// Principal.UserID. Shape matches db.LatestPlacement.
+	LatestPlacement(ctx context.Context, userID int64) (Placement, bool, error)
+	// PlacementKnownLexemes returns the pointed NFC text of the
+	// seeded-known learner lexemes, sorted. Pseudo-words are never
+	// included. Shape matches db.PlacementKnownLexemes.
+	PlacementKnownLexemes(ctx context.Context, userID int64) ([]string, error)
 }
 
 // LexiconReader is what lookup reads.
