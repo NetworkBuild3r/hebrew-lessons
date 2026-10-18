@@ -1,6 +1,7 @@
 package golden
 
 import (
+	"bytes"
 	"os"
 	"strings"
 	"testing"
@@ -26,6 +27,28 @@ func TestModuleHasNoDependencies(t *testing.T) {
 		if strings.HasPrefix(strings.TrimSpace(line), "require") {
 			t.Fatalf("contract module must stay stdlib-only, found %q", line)
 		}
+	}
+}
+
+func TestNormalizeRawMasksAndIgnoresKeyOrder(t *testing.T) {
+	compact := []byte(`{"id":"8ee73fd9-c223-4e01-8dcb-5f0a784eed97","z":1,"description":"keep 8ee73fd9-c223-4e01-8dcb-5f0a784eed97"}`)
+	pretty := []byte("{\n  \"z\": 1,\n  \"description\": \"keep 8ee73fd9-c223-4e01-8dcb-5f0a784eed97\",\n  \"id\": \"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee\"\n}\n")
+	gotA, err := NormalizeRaw(compact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotB, err := NormalizeRaw(pretty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(gotA, gotB) {
+		t.Fatalf("key order or a different uuid survived\n a %s\n b %s", gotA, gotB)
+	}
+	if !bytes.Contains(gotA, []byte(`"<uuid>"`)) {
+		t.Fatalf("id was not masked: %s", gotA)
+	}
+	if !bytes.Contains(gotA, []byte("keep 8ee73fd9-c223-4e01-8dcb-5f0a784eed97")) {
+		t.Fatalf("description was rewritten: %s", gotA)
 	}
 }
 

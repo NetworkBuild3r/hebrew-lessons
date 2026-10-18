@@ -57,7 +57,9 @@ func TestToolsList(t *testing.T) {
 		assertNoSDKArtifacts(t, name, schema)
 	}
 	golden.Compare(t, "golden/mcp/tools-list.json", prepared)
-	golden.WriteRaw(t, "golden/mcp/tools-list.raw.json", res.RawPayload)
+	// The raw capture is the SSE data line before schema canonicalization.
+	// Masking drops volatile values; it does not drop $schema or empty properties.
+	golden.CompareRaw(t, "golden/mcp/tools-list.raw.json", res.RawPayload)
 }
 
 func assertNoSDKArtifacts(t *testing.T, tool string, v any) {
