@@ -227,6 +227,37 @@
         });
     }
 
+    /**
+     * Record a shelf slug. `value` is a slug, or a worksheets/<slug>/ path
+     * from sourceWorksheet or worksheetSlug. Titles are never passed here.
+     * A stand-in lesson id is "ws-" plus the worksheet slug; the caller strips that prefix.
+     * @param {Record<string, boolean>} covered
+     * @param {unknown} value
+     */
+    function coverShelfSlug(covered, value) {
+        if (typeof value !== 'string' || !value) return;
+        var fromPath = value.match(/(?:^|\/)worksheets\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:\/|$)/);
+        var slug = fromPath ? fromPath[1] : value;
+        if (SLUG.test(slug)) covered[slug] = true;
+    }
+
+    /** Shelf slugs already represented by a plan lesson that is on screen. */
+    function coveredShelfSlugs(planRows) {
+        var covered = Object.create(null);
+        var rows = planRows || [];
+        for (var i = 0; i < rows.length; i += 1) {
+            var row = rows[i];
+            if (!row || typeof row !== 'object') continue;
+            coverShelfSlug(covered, row.lessonId);
+            coverShelfSlug(covered, row.sourceWorksheet);
+            coverShelfSlug(covered, row.worksheetSlug);
+            if (typeof row.lessonId === 'string' && row.lessonId.indexOf('ws-') === 0) {
+                coverShelfSlug(covered, row.lessonId.slice(3));
+            }
+        }
+        return covered;
+    }
+
     function renderList(model) {
         if (!model || model.state === 'loading') return renderLoading();
         if (model.state === 'error') return renderError(model.message);
@@ -249,6 +280,16 @@
 
         // Plan lessons carry no level, so they appear under "All" only.
         var plans = filter === 'all' ? planRows : [];
+        // Under All, a shelf card whose worksheet is already a plan lesson is the same
+        // card twice. Keep the plan card: it carries the path. Level filters still show
+        // the shelf card, because the plan card is not in that list.
+        if (plans.length) {
+            var covered = coveredShelfSlugs(plans);
+            visible = visible.filter(function (row) {
+                var slug = row && row.lesson && row.lesson.slug;
+                return !slug || !covered[slug];
+            });
+        }
         if (!visible.length && !plans.length) {
             return html + renderEmptyFilter();
         }
