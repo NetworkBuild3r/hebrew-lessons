@@ -38,6 +38,11 @@ jobs:
   test:
     runs-on: k8-build
     timeout-minutes: 30
+    # Module github.com/NetworkBuild3r/hebrew-lessons at the repository root
+    # (not go/). setup-go reads Go 1.26 from go.mod. Every Go command below
+    # runs in that root with CGO disabled.
+    env:
+      CGO_ENABLED: "0"
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v6
@@ -58,7 +63,7 @@ jobs:
             echo "go.mod is present."
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Go tests skipped::go.mod is not in this commit. go vet and go test are skipped."
+            echo "::notice title=Go tests skipped::go.mod is not in this commit. gofmt, go vet, and go test are skipped."
           fi
 
       - uses: actions/setup-go@v7
@@ -67,18 +72,26 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      - name: gofmt
+        if: steps.module.outputs.present == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt would change:"
+            echo "$unformatted"
+            exit 1
+          fi
+
       - name: go vet
         if: steps.module.outputs.present == 'true'
         shell: bash
-        env:
-          CGO_ENABLED: "0"
         run: go vet ./...
 
       - name: go test
         if: steps.module.outputs.present == 'true'
         shell: bash
-        env:
-          CGO_ENABLED: "0"
         run: go test ./...
 
   image:
@@ -119,6 +132,11 @@ jobs:
               exit 1
               ;;
           esac
+          # The skeleton may add this script later. The inline check above
+          # always runs, whether or not the script is in the tree.
+          if [ -f scripts/check-image-name.sh ]; then
+            bash scripts/check-image-name.sh "$computed"
+          fi
           echo "sha=${sha}" >> "$GITHUB_OUTPUT"
           echo "tag=${computed}" >> "$GITHUB_OUTPUT"
           echo "Image name ${computed} does not contain hebrew-lessons."
@@ -240,6 +258,9 @@ jobs:
               exit 1
               ;;
           esac
+          if [ -f scripts/check-image-name.sh ]; then
+            bash scripts/check-image-name.sh "$TAG"
+          fi
           docker push "$TAG"
 
       - name: Remove the local image
