@@ -169,15 +169,38 @@ test('Google sign-in replaces the token form and still issues an MCP token', asy
     const clientId = await register();
     assert.match(clientId, /^[0-9a-f-]{36}$/);
     const { verifier, challenge } = pkce();
-    const state = await begin(clientId, challenge);
+    const logs = [];
+    const origLog = console.error;
+    console.error = (...args) => { logs.push(args.map(String).join(' ')); };
+    let state;
+    let ok;
+    try {
+        state = await begin(clientId, challenge);
+        ok = await call('GET', '/oauth/google/callback?code=good&state=' + encodeURIComponent(state));
+    } finally {
+        console.error = origLog;
+    }
+    const flowLog = logs.join('\n');
+    assert.match(flowLog, /mcp oauth authorize ok redirect_uri_present=true/);
+    assert.match(flowLog, /mcp google callback ok redirect_uri_present=true/);
+    assert.match(flowLog, new RegExp('client_id=' + clientId));
     assert.ok(state.length <= 48);
-
-    const ok = await call('GET', '/oauth/google/callback?code=good&state=' + encodeURIComponent(state));
     const granted = pageTarget(ok);
     assert.strictEqual(granted.searchParams.get('state'), 'st8');
     const code = granted.searchParams.get('code');
     assert.ok(code && code.length <= 48);
     assert.doesNotMatch(ok.data, /Owner@Example.com/i);
+    for (const [label, value] of [
+        ['redirect_uri', CB],
+        ['challenge', challenge],
+        ['verifier', verifier],
+        ['state', state],
+        ['code', code],
+        ['google code', 'good'],
+        ['client_secret', SECRET]
+    ]) {
+        assert.equal(flowLog.includes(value), false, 'google log leaked ' + label);
+    }
 
     const oauth = require('../mcp/oauth');
     const token = await call('POST', '/token', {

@@ -373,9 +373,28 @@ test('rejects a missing redirect_uri when the code has no PKCE', async () => {
 test('token log records redirect_uri presence and does not leak values', async () => {
     const pub = await register('client_secret_post', 'Log client');
     const first = pkce();
-    const code = await authorize(pub.client_id, first.challenge);
-    const sent = [];
+    const authLogs = [];
     const orig = console.error;
+    console.error = (...args) => { authLogs.push(args.map(String).join(' ')); };
+    let code;
+    try {
+        code = await authorize(pub.client_id, first.challenge);
+    } finally {
+        console.error = orig;
+    }
+    const authLog = authLogs.join('\n');
+    assert.match(authLog, /mcp oauth authorize ok redirect_uri_present=true/);
+    assert.match(authLog, new RegExp('client_id=' + pub.client_id));
+    for (const [label, value] of [
+        ['redirect_uri', CB],
+        ['challenge', first.challenge],
+        ['state', 'st8'],
+        ['code', code]
+    ]) {
+        assert.equal(authLog.includes(value), false, 'authorize log leaked ' + label);
+    }
+
+    const sent = [];
     console.error = (...args) => { sent.push(args.map(String).join(' ')); };
     let res;
     try {

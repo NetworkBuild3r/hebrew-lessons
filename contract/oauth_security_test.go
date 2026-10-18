@@ -142,26 +142,17 @@ func TestRefreshTokenIsBoundToTheIssuingClient(t *testing.T) {
 	other := registerOAuth(t, c, "", []string{oauthRedirect})
 	verifier, challenge := pkcePair(t)
 	code := authorizationCode(t, c, owner.ID, challenge, oauthRedirect)
-	issued := tokenRequest(t, c, url.Values{
+	refresh := issuedRefresh(t, tokenRequest(t, c, url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
 		"client_id":     {owner.ID},
 		"redirect_uri":  {oauthRedirect},
 		"code_verifier": {verifier},
-	}, nil)
-	if issued.Status != 200 {
-		t.Fatalf("token %d %s", issued.Status, issued.Body)
-	}
-	var tokens struct {
-		Refresh string `json:"refresh_token"`
-	}
-	if err := json.Unmarshal(issued.Body, &tokens); err != nil || tokens.Refresh == "" {
-		t.Fatalf("refresh token: %s", issued.Body)
-	}
+	}, nil))
 
 	stolen := tokenRequest(t, c, url.Values{
 		"grant_type":    {"refresh_token"},
-		"refresh_token": {tokens.Refresh},
+		"refresh_token": {refresh},
 		"client_id":     {other.ID},
 	}, nil)
 	assertDescribed(t, stolen, 400, "invalid_grant", "client_id does not match the refresh token.")
@@ -169,7 +160,7 @@ func TestRefreshTokenIsBoundToTheIssuingClient(t *testing.T) {
 	// A rejected client does not rotate the refresh token.
 	kept := tokenRequest(t, c, url.Values{
 		"grant_type":    {"refresh_token"},
-		"refresh_token": {tokens.Refresh},
+		"refresh_token": {refresh},
 		"client_id":     {owner.ID},
 	}, nil)
 	assertAccessToken(t, kept)
@@ -203,7 +194,74 @@ func TestTokenRejectsADifferentRedirectURI(t *testing.T) {
 		"redirect_uri":  {other},
 		"code_verifier": {verifier},
 	}, nil)
-	assertOAuth(t, mismatched, 400, "invalid_grant")
+	assertDescribed(t, mismatched, 400, "invalid_grant", "client_id or redirect_uri does not match the code.")
+
+	// A rejected redirect does not burn the code.
+	kept := tokenRequest(t, c, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"client_id":     {client.ID},
+		"redirect_uri":  {oauthRedirect},
+		"code_verifier": {verifier},
+	}, nil)
+	assertAccessToken(t, kept)
+}
+
+func TestTokenRejectsAnEmptyRedirectURI(t *testing.T) {
+	c := httpx.New()
+	client := registerOAuth(t, c, "", []string{oauthRedirect})
+	verifier, challenge := pkcePair(t)
+	code := authorizationCode(t, c, client.ID, challenge, oauthRedirect)
+	empty := tokenRequest(t, c, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"client_id":     {client.ID},
+		"redirect_uri":  {""},
+		"code_verifier": {verifier},
+	}, nil)
+	assertDescribed(t, empty, 400, "invalid_grant", "client_id or redirect_uri does not match the code.")
+
+	kept := tokenRequest(t, c, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"client_id":     {client.ID},
+		"redirect_uri":  {oauthRedirect},
+		"code_verifier": {verifier},
+	}, nil)
+	assertAccessToken(t, kept)
+}
+
+func TestTokenRejectsABadVerifierWhenRedirectURIIsOmitted(t *testing.T) {
+	c := httpx.New()
+	client := registerOAuth(t, c, "", []string{oauthRedirect})
+	verifier, challenge := pkcePair(t)
+	code := authorizationCode(t, c, client.ID, challenge, oauthRedirect)
+	wrong, _ := pkcePair(t)
+
+	bad := tokenRequest(t, c, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"client_id":     {client.ID},
+		"code_verifier": {wrong},
+	}, nil)
+	assertDescribed(t, bad, 400, "invalid_grant", "PKCE verification failed.")
+
+	missing := tokenRequest(t, c, url.Values{
+		"grant_type": {"authorization_code"},
+		"code":       {code},
+		"client_id":  {client.ID},
+	}, nil)
+	assertDescribed(t, missing, 400, "invalid_grant", "PKCE verification failed.")
+
+	// Neither failure burns the code.
+	kept := tokenRequest(t, c, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"client_id":     {client.ID},
+		"redirect_uri":  {oauthRedirect},
+		"code_verifier": {verifier},
+	}, nil)
+	assertAccessToken(t, kept)
 }
 
 func TestTokenAcceptsMissingRedirectURIWhenPKCEVerifies(t *testing.T) {
