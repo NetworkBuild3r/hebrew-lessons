@@ -20,8 +20,8 @@
     var NAV = [
         { id: 'today', href: '/', he: 'היום', en: 'Today', icon: 'today' },
         { id: 'lessons', href: '/lessons/', he: 'שיעורים', en: 'Lessons', icon: 'lessons' },
-        { id: 'guides', href: '/guides/', he: 'מדריכים', en: 'Guides' },
-        { id: 'verbs', href: '/verbs/', he: 'פעלים', en: 'Verbs' },
+        { id: 'guides', href: '/guides/', he: 'מדריכים', en: 'Guides', icon: 'guides' },
+        { id: 'verbs', href: '/verbs/', he: 'פעלים', en: 'Verbs', icon: 'verbs' },
         { id: 'review', href: '/review/', he: 'חזרה', en: 'Review', icon: 'review' },
         { id: 'words', href: '/words/', he: 'מילים', en: 'Words', icon: 'words' },
         { id: 'progress', href: '/progress/', he: 'התקדמות', en: 'Progress', icon: 'progress' },
@@ -33,11 +33,10 @@
     // name with <use>. The sprite is public (server/web.js) and same-origin, and no CSP is sent
     // on app responses. This file stays self-contained because the lesson player loads it alone.
     var BRAND = '/shared/brand/';
-    var ICON_NAMES = ['today', 'lessons', 'review', 'progress', 'admin', 'words'];
+    var ICON_NAMES = ['today', 'lessons', 'review', 'progress', 'admin', 'words', 'guides', 'verbs'];
 
     /** Decorative icon beside a visible word. aria-hidden: the word is the name. */
     function navIcon(name) {
-        // Guides has no icon yet (docs/design/icon-usage.md): it stays a text-only link.
         if (!name || ICON_NAMES.indexOf(name) === -1) return '';
         return '<svg class="icon hebrew-icon hebrew-icon-' + name + '" width="20" height="20"'
             + ' aria-hidden="true" focusable="false"><use href="' + BRAND + 'sprite.svg#icon-' + name

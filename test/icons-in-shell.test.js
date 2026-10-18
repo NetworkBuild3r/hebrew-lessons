@@ -75,7 +75,7 @@ describe('shell header and nav (ac-1, ac-2)', () => {
 
     it('draws nav icons from the sprite and every nav icon name exists in it', () => {
         const used = [...html.matchAll(/<use href="\/shared\/brand\/sprite\.svg#icon-([a-z-]+)">/g)].map((m) => m[1]);
-        assert.deepEqual(used.sort(), ['admin', 'lessons', 'progress', 'review', 'today', 'words']);
+        assert.deepEqual(used.sort(), ['admin', 'guides', 'lessons', 'progress', 'review', 'today', 'verbs', 'words']);
         for (const name of used) assert.ok(spriteIds.has(name), 'sprite has icon-' + name);
     });
 

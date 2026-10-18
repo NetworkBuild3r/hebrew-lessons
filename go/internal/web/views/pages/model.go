@@ -8,19 +8,32 @@ type GuideCard struct {
 	Lang     string
 	Dir      string
 	Href     string
+	Topic    string
+	Cover    string
+	Letter   string
+	// HeTitle is a second Hebrew line. The catalog has one title, so this
+	// stays empty until a plan stores both.
+	HeTitle string
+	// Status is set only when progress is known. Empty omits the chip.
+	Status string
 }
 
 // TopicGroup is guides that share a unit title, in first-seen order.
 type TopicGroup struct {
 	Topic string
+	Slug  string
 	Lang  string
 	Dir   string
 	Cards []GuideCard
 }
 
 // GuideList is the shelf. Empty Topics with Failed false is the empty state.
+// Hero is the first guide when at least three are visible, and that guide is
+// not also in Topics.
 type GuideList struct {
 	Topics []TopicGroup
+	Hero   *GuideCard
+	Count  int
 	Failed bool
 }
 
@@ -31,6 +44,10 @@ type Example struct {
 	En       string
 	Translit string
 	Root     string
+	// Clip is a shared-word clip name when the plan stores one. Explainers
+	// in the 1.1 schema have no audio path, so this stays empty and the
+	// button still carries the Hebrew on data-say.
+	Clip string
 }
 
 // Callout is a traffic-light note. Tone is green, yellow, red, info, or empty.
@@ -57,11 +74,40 @@ type Section struct {
 	Callouts   []Callout
 }
 
+// CompareSide is one column of a compare block. Stem and Ending are split
+// on Hebrew grapheme clusters so nikud stays on its letter.
+type CompareSide struct {
+	Tag      string
+	He       string
+	Stem     string
+	Ending   string
+	Translit string
+	Gloss    string
+	Clip     string
+}
+
+// Compare is a side-by-side block. Nil when the lesson has none.
+type Compare struct {
+	Title string
+	Note  string
+	Sides []CompareSide
+}
+
+// Verse is a verse-reading block. Nil when the lesson has none.
+type Verse struct {
+	Ref  string
+	Text string
+	En   string
+	Clip string
+}
+
 // Block is one explainer inside a guide lesson.
 type Block struct {
 	ID       string
 	Title    string
 	Sections []Section
+	Compare  *Compare
+	Verse    *Verse
 }
 
 // GuideDetail is one published guide lesson.

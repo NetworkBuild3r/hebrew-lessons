@@ -1,19 +1,31 @@
 package components
 
-// PageHeading is the route heading from layout.js. Guides has no sprite icon.
+// PageHeading is the route heading. Guides has no sprite icon (layout.js).
 templ PageHeading(h Heading) {
 	<header class="topbar page-heading ui-chrome" data-page-heading>
 		<div class="topbar-inner">
 			<div class="page-heading-text">
-				if h.Single != "" {
-					<h1 tabindex="-1" lang={ h.Lang } dir={ h.Dir }>{ h.Single }</h1>
-				} else {
-					<h1 tabindex="-1">@Pair(h.He, h.En)</h1>
+				if h.Kicker != "" || h.KickerHe != "" {
+					<p class="page-heading-kicker">@Pair(h.KickerHe, h.Kicker)</p>
 				}
+				<h1 tabindex="-1">
+					if h.Single != "" {
+						<span lang={ h.Lang } dir={ h.Dir }>{ h.Single }</span>
+						if h.HeTitle != "" {
+							<bdi lang="he" class="page-heading-he">{ h.HeTitle }</bdi>
+						}
+					} else {
+						<span class="page-heading-title ui-en" lang="en" dir="ltr">{ h.En }</span>
+						<span class="page-heading-title ui-he" lang="he">{ h.He }</span>
+						if h.He != "" {
+							<bdi lang="he" class="page-heading-he">{ h.He }</bdi>
+						}
+					}
+				</h1>
 				if h.SubHe != "" || h.SubEn != "" {
-					<p class="subtitle">@Pair(h.SubHe, h.SubEn)</p>
+					<p class="page-heading-sub subtitle">@Pair(h.SubHe, h.SubEn)</p>
 				} else if h.Subtitle != "" {
-					<p class="subtitle" lang={ h.SubLang } dir={ h.SubDir }>{ h.Subtitle }</p>
+					<p class="page-heading-sub subtitle" lang={ h.SubLang } dir={ h.SubDir }>{ h.Subtitle }</p>
 				}
 			</div>
 			<div class="page-actions" data-page-actions></div>
@@ -23,11 +35,13 @@ templ PageHeading(h Heading) {
 
 // Heading is either a Hebrew/English pair or one lesson title.
 type Heading struct {
-	He, En       string
-	SubHe, SubEn string
-	Single       string
-	Lang, Dir    string
-	Subtitle     string
-	SubLang      string
-	SubDir       string
+	He, En             string
+	SubHe, SubEn       string
+	Kicker, KickerHe   string
+	Single             string
+	Lang, Dir          string
+	HeTitle            string
+	Subtitle           string
+	SubLang            string
+	SubDir             string
 }

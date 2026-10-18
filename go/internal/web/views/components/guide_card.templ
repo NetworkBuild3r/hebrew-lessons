@@ -1,0 +1,37 @@
+package components
+
+// Card is one guide on the shelf. Cover is one of the six illustration names.
+type Card struct {
+	PlanID    string
+	LessonID  string
+	Href      string
+	Cover     string
+	Letter    string
+	Topic     string
+	Title     string
+	TitleLang string
+	TitleDir  string
+	HeTitle   string
+	Status    string
+}
+
+templ GuideCard(g Card) {
+	<article class="lesson-card guide-card" data-recipe="guide" data-plan-id={ g.PlanID } data-lesson-id={ g.LessonID }>
+		<a class="lesson-link" href={ templ.SafeURL(g.Href) }>
+			<div class="guide-card__cover" aria-hidden="true">
+				<img src={ "/shared/brand/illustrations/" + g.Cover + ".svg" } alt="" width="320" height="160" loading="lazy" decoding="async"/>
+				<span class="guide-card__letter" lang="he">{ g.Letter }</span>
+			</div>
+			<div class="guide-card__body">
+				<span class="recipe-chip guide-card__meta" data-recipe="guide">מדריך <span lang="en" dir="ltr">Guide</span> · <bdi>{ g.Topic }</bdi></span>
+				<h3 lang={ g.TitleLang } dir={ g.TitleDir }>{ g.Title }</h3>
+				if g.HeTitle != "" {
+					<p class="guide-card__he" lang="he" dir="rtl">{ g.HeTitle }</p>
+				}
+				if g.Status != "" {
+					@StatusChip(g.Status)
+				}
+			</div>
+		</a>
+	</article>
+}
