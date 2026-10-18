@@ -24,6 +24,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web"
 )
 
@@ -146,6 +147,7 @@ type App struct {
 	cfg       Config
 	store     *db.Store
 	authSvc   *auth.Service
+	review    *fsrs.Review
 	audioDir  string
 	tts       audio.TTS
 	web       http.Handler
@@ -226,6 +228,7 @@ func NewApp(cfg Config) (*App, error) {
 		cfg:      cfg,
 		store:    store,
 		authSvc:  svc,
+		review:   fsrs.New(store, cfg.Clock),
 		audioDir: audioDir,
 		tts:      tts,
 	}
@@ -250,6 +253,10 @@ func (a *App) AudioDir() string { return a.audioDir }
 // TTS is the resolved synthesizer. It is nil when no override was set and
 // ELEVENLABS_API_KEY was empty.
 func (a *App) TTS() audio.TTS { return a.tts }
+
+// Review is the spaced-repetition service.
+// It uses the clock from Config, the same clock the store was opened with.
+func (a *App) Review() *fsrs.Review { return a.review }
 
 // Close releases the database. /healthz answers 503 after Close returns.
 func (a *App) Close() error {

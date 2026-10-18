@@ -28,7 +28,7 @@ func (s *Store) CreateUser(ctx context.Context, email, googleSub, role string) (
 	if err != nil {
 		return User{}, err
 	}
-	created := formatTime(s.clock.Now())
+	created := formatAuthTime(s.clock.Now())
 	res, err := s.exec(ctx,
 		`INSERT INTO users (email, google_sub, role, created_at) VALUES (?, ?, ?, ?)`,
 		email, googleSub, role, created,
@@ -73,7 +73,7 @@ func (s *Store) UpsertGoogleUser(ctx context.Context, email, googleSub, role str
 		u, err = findUserWhere(ctx, tx, "email = ?", email)
 	}
 	if errors.Is(err, ErrNotFound) {
-		created := formatTime(s.clock.Now())
+		created := formatAuthTime(s.clock.Now())
 		res, err := tx.ExecContext(ctx,
 			`INSERT INTO users (email, google_sub, role, created_at) VALUES (?, ?, ?, ?)`,
 			email, googleSub, role, created,
@@ -203,7 +203,10 @@ func (s *Store) ready() error {
 	return nil
 }
 
-func formatTime(t time.Time) string {
+// formatAuthTime is the session and user timestamp. It is truncated to a
+// second. Learning rows use formatTime, which keeps nine fractional digits
+// so those strings sort.
+func formatAuthTime(t time.Time) string {
 	return t.UTC().Truncate(time.Second).Format(time.RFC3339)
 }
 

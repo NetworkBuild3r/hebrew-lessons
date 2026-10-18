@@ -24,7 +24,7 @@ func (s *Store) InsertSession(ctx context.Context, idHash string, userID int64, 
 	}
 	_, err := s.exec(ctx,
 		`INSERT INTO sessions (id_hash, user_id, csrf, expires_at) VALUES (?, ?, ?, ?)`,
-		idHash, userID, csrf, formatTime(expiresAt),
+		idHash, userID, csrf, formatAuthTime(expiresAt),
 	)
 	if err != nil {
 		return fmt.Errorf("db: insert session: %w", err)
@@ -71,7 +71,7 @@ func (s *Store) UpdateSessionExpiry(ctx context.Context, idHash string, expiresA
 	if err := s.ready(); err != nil {
 		return err
 	}
-	res, err := s.exec(ctx, `UPDATE sessions SET expires_at = ? WHERE id_hash = ?`, formatTime(expiresAt), idHash)
+	res, err := s.exec(ctx, `UPDATE sessions SET expires_at = ? WHERE id_hash = ?`, formatAuthTime(expiresAt), idHash)
 	if err != nil {
 		return fmt.Errorf("db: update session: %w", err)
 	}
@@ -116,7 +116,7 @@ func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) error 
 	if err := s.ready(); err != nil {
 		return err
 	}
-	_, err := s.exec(ctx, `DELETE FROM sessions WHERE expires_at <= ?`, formatTime(now))
+	_, err := s.exec(ctx, `DELETE FROM sessions WHERE expires_at <= ?`, formatAuthTime(now))
 	if err != nil {
 		return fmt.Errorf("db: delete expired sessions: %w", err)
 	}
