@@ -4,7 +4,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Proposed |
+| **Status** | Accepted |
 | **Date** | 2026-10-18 |
 | **Authored by** | Hebrew Dev, recording decisions of 2026-10-18 made on Brian Nelson's behalf |
 | **Initiative** | — |
@@ -14,7 +14,7 @@
 | **Superseded by** | — |
 | **Figma source** | File [`NJ8HfTPCQgrFty2VVQBMhY`](https://www.figma.com/design/NJ8HfTPCQgrFty2VVQBMhY?node-id=71-2) · page **Learning Path** · node `71:2` |
 
-Brian Nelson does not approve pull requests himself. Hebrew PR Reviewer approves and merges. This record is Proposed. It decides the path. It does not change the schema file, the validator, the database, the MCP tools, the lesson files, or the screens.
+Brian Nelson does not approve pull requests himself. Hebrew PR Reviewer approves and merges. This record is Accepted. It decides the path. It does not change the schema file, the validator, the database, the MCP tools, the lesson files, or the screens.
 
 ## Summary
 
@@ -418,3 +418,4 @@ Delete this file. No application file, schema file, database, worksheet, or scre
 | 2026-10-18 | Proposed. Records the learning path, schema 1.3.0 (the design spec said 1.2.0, which ADR-0014 already uses), `unit_progress` including the one-time soft-gate flag, the 80% config pass mark, and the migration plan. No schema, code, or lesson file changes with this record. |
 | 2026-10-18 | Sequencing under §11. Schema 1.3.0 and N24–N29 are a Go change after the ADR-0016 cutover. Hebrew Lesson Builder may draft the five units on schema 1.2.0 before that. |
 | 2026-10-18 | Drafting the five units on schema 1.2.0 may start now. Those plans stay draft and unpublished until Brian accepts this ADR. The 1.3.0 fields are filled in after the Go cutover. The checkpoint pass mark and the review-stop threshold belong to the Go learner package config (ADR-0016 layout) after the cutover. Node's `server/learner/thresholds.js` stays unchanged. |
+| 2026-10-18 | Accepted by Brian Nelson. |
