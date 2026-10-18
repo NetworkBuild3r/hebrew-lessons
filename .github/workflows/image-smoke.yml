@@ -29,12 +29,15 @@ on:
 permissions:
   contents: read
 
+# Cancel a superseded pull request. This workflow has no push trigger.
 concurrency:
   group: image-smoke-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   smoke:
+    # Fork pull requests must not build on the self-hosted runner.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: k8-build
     timeout-minutes: 30
     steps:
@@ -42,6 +45,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
+          persist-credentials: false
 
       # Same rules as image.yml: docs/**, sdd/**, and markdown do not build,
       # except the lesson-plan schema the server reads. The diff is the whole

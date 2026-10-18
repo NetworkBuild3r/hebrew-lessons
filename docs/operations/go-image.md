@@ -17,6 +17,17 @@ The Node image is unchanged: `ghcr.io/networkbuild3r/hebrew-lessons:sha-<full sh
 
 The staging Deployment `hebrew-next` in home_k3 consumes `hebrew-lessons-go`. This repository does not define that Deployment, and this image workflow does not change deploy, cluster, or Cloudflare config.
 
+## Rolling back the Node image
+
+home_k3 pins `ghcr.io/networkbuild3r/hebrew-lessons:sha-<full sha>`. This repository does not contain that Deployment.
+
+The fast rollback does not rebuild:
+
+- Pin the existing `sha-<full sha>` tag in home_k3 when that image is already in GHCR.
+- Or retag an existing GHCR image onto the tag the Deployment already pulls (`crane copy`, or `docker buildx imagetools create --tag`). The cluster then runs the old bytes without a new build.
+
+`workflow_dispatch` of `image.yml` can still rebuild a main SHA that already passed `test`. Smoke keeps the strict `/healthz` checks when that route exists (`GET` 200 `ok`, `HEAD` 200 with an empty body, `POST` 405). A `GET /healthz` of 404 means the image has no such route: smoke logs the fallback and accepts `GET /login/` 200 instead. Commits from before `/healthz` answer 401 for an unknown non-HTML path, so a rebuild of those SHAs still fails smoke. Pin or retag them.
+
 ## Process
 
 The default process is `/usr/local/bin/hebrew` (`go/cmd/hebrew`). Every directory under `go/cmd/` is built into `/usr/local/bin/`. `go/cmd/hebrew-mcp` is optional: the image contains `/usr/local/bin/hebrew-mcp` only when that directory is in the module. A pod selects it with `command: ["/usr/local/bin/hebrew-mcp"]`. PR #13 (Go-1a) has `go/cmd/hebrew` and does not have `go/cmd/hebrew-mcp`.

@@ -148,8 +148,7 @@ describe('web gating (ac-1, ac-2, ac-6, ac-7, ac-8)', () => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
-        assert.ok(post.status === 405 || post.status === 404, 'POST /healthz → ' + post.status);
-        assert.ok(post.status < 200 || post.status >= 300, 'POST /healthz is not 2xx');
+        assert.equal(post.status, 405, 'POST /healthz');
         await post.text();
     });
 
