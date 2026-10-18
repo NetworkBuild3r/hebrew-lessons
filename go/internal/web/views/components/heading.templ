@@ -22,7 +22,11 @@ templ PageHeading(h Heading) {
 					<p class="page-heading-sub subtitle"><bdi lang={ h.SubLang } dir={ h.SubDir }>{ h.Subtitle }</bdi></p>
 				}
 			</div>
-			<div class="page-actions" data-page-actions></div>
+			<div class="page-actions" data-page-actions>
+				if h.Actions != nil {
+					@h.Actions
+				}
+			</div>
 		</div>
 	</header>
 }
@@ -56,4 +60,5 @@ type Heading struct {
 	SubLang            string
 	SubDir             string
 	Speak              string
+	Actions            templ.Component
 }

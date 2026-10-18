@@ -1,0 +1,108 @@
+package pages
+
+import (
+	"strconv"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views"
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/components"
+)
+
+templ todayView(page LearnPage) {
+	if page.Failed {
+		<div class="card" role={ errorRole(page.Swapped) } data-today-state="error">
+			<p>שגיאה בטעינת היום. <span lang="en" dir="ltr">(Could not load today.)</span></p>
+		</div>
+	} else {
+		<section class="today-hero" data-today-hero>
+			<p class="today-hero__kicker">@components.Pair(page.Snap.HeroKickerHe, page.Snap.HeroKickerEn)</p>
+			<div class="today-hero__title-row">
+				@components.HeText("display", page.Snap.HeroTitleHe)
+				@components.AudioButton(page.Snap.HeroSpeak, "")
+			</div>
+			<p class="today-hero__meta">@components.Pair(page.Snap.HeroMetaHe, page.Snap.HeroMetaEn)</p>
+			if page.Snap.ContinueHref != "" {
+				<p class="today-hero__actions">
+					<a class="btn btn-primary" href={ templ.SafeURL(page.Snap.ContinueHref) }>
+						@components.Pair("המשך במסלול", "Continue path")
+						<svg class="icon icon-directional" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-next"></use></svg>
+					</a>
+				</p>
+			}
+		</section>
+		<div class="today-cards">
+			if page.Snap.DueKnown && page.Snap.Due > 0 {
+				<article class="card today-card due-card" data-due={ strconv.Itoa(page.Snap.Due) }>
+					<p class="due-card__count">{ strconv.Itoa(page.Snap.Due) }</p>
+					<p class="due-card__label">@components.Pair("מילים ממתינות", "words due")</p>
+					<ul class="due-card__words">
+						for _, w := range page.Snap.DueWords {
+							<li>
+								<bdi lang="he">{ w.He }</bdi>
+								<span class="ui-en" lang="en" dir="ltr">{ w.En }</span>
+								@components.StrengthPips(w.Strength)
+							</li>
+						}
+					</ul>
+					<p class="due-card__note">@components.Pair(page.Snap.DueHe, page.Snap.DueEn)</p>
+					<p><a class="btn" href="/review/">@components.Pair("לחזרה עכשיו", "Review now instead")</a></p>
+				</article>
+			}
+			<article class="card today-card path-strip">
+				<h2>@components.Pair("המסלול", "On the path")</h2>
+				<ol class="path path--strip">
+					for _, n := range page.Snap.Strip {
+						@components.PathNode(n)
+					}
+				</ol>
+				<p class="path-strip__meta">@components.Pair(page.Snap.StripHe, page.Snap.StripEn)</p>
+				<p><a class="path-strip__link" href="/lessons/">@components.Pair("למסלול", "Path")</a></p>
+			</article>
+			if page.Snap.Tutor != nil {
+				<article class="card today-card tutor-card" data-class-date={ page.Snap.Tutor.DateISO }>
+					<p class="tutor-card__kicker">@components.Pair("שיעור עם אהרן · "+page.Snap.Tutor.DateHe, "Class with Aaron · "+page.Snap.Tutor.DateLabel)</p>
+					<p class="tutor-card__sentence">@components.Pair(page.Snap.Tutor.SentenceHe, page.Snap.Tutor.SentenceEn)</p>
+					<p class="tutor-card__phrase">
+						<bdi lang="he">{ page.Snap.Tutor.Phrase }</bdi>
+						@components.AudioButton(page.Snap.Tutor.Phrase, page.Snap.Tutor.Clip)
+						<span class="ui-en" lang="en" dir="ltr">{ page.Snap.Tutor.PhraseEn }</span>
+					</p>
+					<p><a class="btn btn-ghost" href={ templ.SafeURL(page.Snap.Tutor.Href) }>@components.Pair("תצוגה מקדימה", "Preview unit")</a></p>
+				</article>
+			}
+		</div>
+	}
+}
+
+// TodayFragment is the Today view, for an HX-Request read.
+templ TodayFragment(page LearnPage) {
+	@todayView(page)
+}
+
+// TodayPage is GET /.
+templ TodayPage(page LearnPage) {
+	@views.Layout(views.Doc{
+		Title:      "היום — Today · דֶּרֶךְ עִבְרִית",
+		BodyClass:  "hebrew-spa has-hebrew-shell today-page",
+		PageHe:     "היום",
+		PageEn:     "Today",
+		Announce:   "היום",
+		CurrentNav: "today",
+		RouteReady: "today",
+		HTMX:       true,
+		CSRFHeader: csrfHeader(page.CSRF),
+		Goal:       learnGoal(page.Snap),
+		Main:       todayMain(page),
+	})
+}
+
+templ todayMain(page LearnPage) {
+	@components.PageHeading(components.Heading{
+		He:    "היום",
+		En:    "Today",
+		SubHe: "הצעד הבא שלכם — קצר וברור.",
+		SubEn: "Your next step — short and clear.",
+	})
+	<div id="today-app" class="spa-view">
+		@todayView(page)
+	</div>
+}

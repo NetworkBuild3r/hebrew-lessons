@@ -52,6 +52,7 @@ const QUERIED_CLASS_SNAPSHOT = [
     'pair-en',
     'pair-he',
     'pair-num',
+    'path',
     'path-btn',
     'path-screen',
     'pill',
@@ -286,6 +287,32 @@ describe('ADR-0006 design tokens', () => {
         for (const name of QUERIED_CLASS_SNAPSHOT) {
             assert.match(css, new RegExp('\\.' + name + '(?![\\w-])'), '.' + name);
         }
+    });
+
+    it('publishes the learning-path variables on :root', () => {
+        const names = [
+            '--strength-fragile',
+            '--strength-shaky',
+            '--strength-solid',
+            '--strength-empty',
+            '--color-tutor',
+            '--color-tutor-soft',
+            '--node-size',
+            '--node-size-lg',
+            '--node-size-sm',
+            '--node-ring',
+            '--path-zig'
+        ];
+        const root = css.slice(css.indexOf('/* === 2026 redesign tokens'));
+        for (const name of names) {
+            assert.match(root, new RegExp(name + '\\s*:'), name);
+        }
+        assert.match(root, /--strength-fragile:\s*var\(--color-miss-ink\)/);
+        assert.match(root, /--strength-shaky:\s*var\(--color-accent-sun\)/);
+        assert.match(root, /--strength-solid:\s*var\(--color-correct-ink\)/);
+        assert.match(root, /--path-zig:\s*90px/);
+        assert.match(root, /--node-size:\s*64px/);
+        assert.match(root, /--node-ring:\s*8px/);
     });
 
     it('keeps the legacy corner and the existing reduced-motion rules', () => {

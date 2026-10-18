@@ -1,0 +1,46 @@
+package pages
+
+import (
+	"encoding/json"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/path"
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/components"
+)
+
+// LearnPage is Today or the path map.
+// Swapped is an HTMX fragment. The first paint uses status; a swap uses alert.
+type LearnPage struct {
+	Snap    path.Snapshot
+	CSRF    string
+	Failed  bool
+	Swapped bool
+}
+
+func errorRole(swapped bool) string {
+	if swapped {
+		return "alert"
+	}
+	return "status"
+}
+
+func learnGoal(s path.Snapshot) components.RailGoal {
+	return components.RailGoal{
+		UnitID:  s.Rail.UnitID,
+		UnitN:   s.Rail.UnitN,
+		Learned: s.Rail.Learned,
+		Total:   s.Rail.Total,
+		WordsEn: s.Rail.WordsEn,
+		WordsHe: s.Rail.WordsHe,
+	}
+}
+
+func csrfHeader(token string) string {
+	if token == "" {
+		return ""
+	}
+	raw, err := json.Marshal(map[string]string{"X-CSRF-Token": token})
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}

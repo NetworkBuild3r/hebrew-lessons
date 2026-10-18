@@ -1,0 +1,105 @@
+package components
+
+import (
+	"strconv"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/path"
+)
+
+// PathNode is one circle on the path. Not-yet nodes are ordinary links.
+// data-gate is warn until the unit is acknowledged, then open.
+templ PathNode(n path.Node) {
+	@pathNode(n, false)
+}
+
+// PathNodeOOB replaces one node after the gate sheet opens.
+templ PathNodeOOB(n path.Node) {
+	@pathNode(n, true)
+}
+
+templ pathNode(n path.Node, oob bool) {
+	<li
+		class="path-node"
+		id={ n.DOMID() }
+		data-state={ n.State }
+		data-kind={ n.Kind }
+		data-strength={ strconv.Itoa(n.Strength) }
+		data-unit-id={ n.UnitID }
+		if oob {
+			hx-swap-oob="outerHTML"
+		}
+		if n.Fading {
+			data-fading="true"
+		}
+		if n.Kind == "checkpoint" {
+			data-pass-needed={ strconv.Itoa(n.PassNeeded) }
+			data-total={ strconv.Itoa(n.Total) }
+		}
+		if n.ClassDateISO != "" {
+			data-class-date={ n.ClassDateISO }
+		}
+	>
+		@nodeLink(n)
+		<span class="path-node__label" lang="he" dir="rtl">{ n.TitleHe }</span>
+		if n.Title != "" {
+			<span class="path-node__gloss" lang="en" dir="ltr">{ n.Title }</span>
+		}
+		if n.SubEn != "" || n.SubHe != "" {
+			<span class="path-node__sub">@Pair(n.SubHe, n.SubEn)</span>
+		}
+		if n.Kind == "lesson" && n.State != "not-yet" && n.Strength > 0 {
+			@StrengthPips(n.Strength)
+		}
+		if n.Fading {
+			<span class="chip chip--miss">@Pair("נחלש", "fading")</span>
+		}
+	</li>
+}
+
+templ nodeLink(n path.Node) {
+	if n.Gate == "warn" {
+		<a id={ n.LinkID() } class="path-node__btn" href={ templ.SafeURL(n.Href) } aria-label={ n.Label } data-gate="warn" hx-post={ gateURL(n.UnitID) } hx-target="#gate-host" hx-swap="innerHTML" hx-vals={ n.HXVals }>
+			@nodeIcon(n.State)
+		</a>
+	} else if n.State == "current" {
+		<a id={ n.LinkID() } class="path-node__btn" href={ templ.SafeURL(n.Href) } aria-current="step" aria-label={ n.Label }>
+			@nodeIcon(n.State)
+		</a>
+	} else if n.Gate == "open" {
+		<a id={ n.LinkID() } class="path-node__btn" href={ templ.SafeURL(n.Href) } aria-label={ n.Label } data-gate="open">
+			@nodeIcon(n.State)
+		</a>
+	} else {
+		<a id={ n.LinkID() } class="path-node__btn" href={ templ.SafeURL(n.Href) } aria-label={ n.Label }>
+			@nodeIcon(n.State)
+		</a>
+	}
+}
+
+templ nodeIcon(state string) {
+	if state == "done" {
+		@useIcon("done")
+	} else if state == "current" {
+		@useIcon("play")
+	} else if state == "review" {
+		@useIcon("review")
+	} else if state == "checkpoint" {
+		@useIcon("progress")
+	} else if state == "tutor" {
+		@useIcon("guides")
+	}
+}
+
+templ useIcon(name string) {
+	<svg class="icon" width="28" height="28" aria-hidden="true" focusable="false">
+		<use href={ "/shared/brand/sprite.svg#icon-" + name }></use>
+	</svg>
+}
+
+// StrengthPips draws four marks. The filled count is the bucket.
+templ StrengthPips(bucket int) {
+	<span class="strength-pips" data-strength={ strconv.Itoa(bucket) }>
+		<span class="visually-hidden">@Pair(strengthHe(bucket), strengthEn(bucket))</span>
+		<i></i><i></i><i></i><i></i>
+	</span>
+}

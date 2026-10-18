@@ -11,7 +11,8 @@ import "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/component
 // keeps auto so the switch can show it. ADR-0015 accepts auto as the
 // default, and app-shell.js follows the same choice. Node pages stay
 // dir=rtl. The end script handles the theme
-// switch, the EN/עב toggle, and data-speak / data-audio. No script src is added.
+// switch, the EN/עב toggle, and data-speak / data-audio. htmx is a script src
+// only when the page sets HTMX, the same file PR #34 vendors.
 
 templ Layout(doc Doc) {
 	<!DOCTYPE html>
@@ -31,10 +32,19 @@ templ Layout(doc Doc) {
 			<link rel="apple-touch-icon" href="/shared/brand/apple-touch-icon.png"/>
 			<link rel="preload" as="font" type="font/woff2" href="/shared/fonts/noto-sans-hebrew-hebrew.woff2" crossorigin="anonymous"/>
 			<link rel="stylesheet" href="/shared/worksheet.css"/>
+			if doc.HTMX {
+				@templ.Raw("<meta name=\"htmx-config\" content='{\"responseHandling\":[{\"code\":\"204\",\"swap\":false},{\"code\":\"[23]..\",\"swap\":true},{\"code\":\"[45]..\",\"swap\":true,\"error\":true}]}'>")
+				<script src="/shared/vendor/htmx.min.js"></script>
+			}
 		</head>
-		<body class={ doc.BodyClass }>
+		<body
+			class={ doc.BodyClass }
+			if doc.CSRFHeader != "" {
+				hx-headers={ doc.CSRFHeader }
+			}
+		>
 			<div id="app-shell">
-				@components.Shell(doc.CurrentNav)
+				@components.Shell(doc.CurrentNav, doc.Goal)
 			</div>
 			<main class="wrap" id="app-main" tabindex="-1" data-route-ready={ doc.RouteReady }>
 				@doc.Main
@@ -55,4 +65,7 @@ type Doc struct {
 	CurrentNav string
 	RouteReady string
 	Main       templ.Component
+	HTMX       bool
+	CSRFHeader string
+	Goal       components.RailGoal
 }
