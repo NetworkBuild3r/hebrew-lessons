@@ -4,6 +4,8 @@ go 1.26.0
 
 require (
 	github.com/a-h/templ v0.3.960
+	github.com/open-spaced-repetition/go-fsrs/v3 v3.3.1
+	golang.org/x/text v0.31.0
 	modernc.org/sqlite v1.60.1
 )
 

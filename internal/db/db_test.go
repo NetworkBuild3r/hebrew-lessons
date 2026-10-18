@@ -52,19 +52,32 @@ func TestMigrateEmptyAndIdempotent(t *testing.T) {
 	}
 
 	s = openAt(t, dir, fixedClock{when})
-	if got := count(t, s, `SELECT COUNT(*) FROM schema_migrations`); got != 1 {
-		t.Fatalf("schema_migrations rows = %d, want 1", got)
+	if got := count(t, s, `SELECT COUNT(*) FROM schema_migrations`); got != 2 {
+		t.Fatalf("schema_migrations rows = %d, want 2", got)
 	}
-	var version int
-	var applied string
-	if err := s.queryRow(ctx, `SELECT version, applied_at FROM schema_migrations`).Scan(&version, &applied); err != nil {
+	wantApplied := when.UTC().Format(time.RFC3339Nano)
+	rows, err := s.conn.QueryContext(ctx, `SELECT version, applied_at FROM schema_migrations ORDER BY version`)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 1 {
-		t.Fatalf("version = %d, want 1", version)
+	defer rows.Close()
+	var versions []int
+	for rows.Next() {
+		var version int
+		var applied string
+		if err := rows.Scan(&version, &applied); err != nil {
+			t.Fatal(err)
+		}
+		if applied != wantApplied {
+			t.Fatalf("version %d applied_at = %s", version, applied)
+		}
+		versions = append(versions, version)
 	}
-	if applied != when.UTC().Format(time.RFC3339Nano) {
-		t.Fatalf("applied_at = %s", applied)
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != 2 || versions[0] != 1 || versions[1] != 2 {
+		t.Fatalf("versions = %v, want [1 2]", versions)
 	}
 	if got := count(t, s, `SELECT COUNT(*) FROM users`); got != 1 {
 		t.Fatalf("users = %d, want 1 after a second open", got)
@@ -93,6 +106,7 @@ func TestTables(t *testing.T) {
 	want := []string{
 		"audio_assets",
 		"cards",
+		"confusion_misses",
 		"lesson_items",
 		"lesson_runs",
 		"lexemes",
