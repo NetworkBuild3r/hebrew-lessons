@@ -1,0 +1,130 @@
+[
+  {
+    "lesson": "my-morning",
+    "lessonTitle": "שגרה 1 — הבוקר שלי",
+    "item": {
+      "id": "1",
+      "word": "קָם",
+      "sound": "kam",
+      "translit": "kam",
+      "meaning": "gets up (m. sg.)",
+      "pos": "verb, present",
+      "trap": "One syllable. Stress kam. Past “I got up” is קַמְתִּי.",
+      "sentence": "אֲנִי קָם בַּבֹּקֶר.",
+      "audio": "../_audio/words/806bb3fc99c984531106aeb5.mp3",
+      "sentenceAudio": "audio/sentences/vocab-1.mp3"
+    }
+  },
+  {
+    "lesson": "my-morning",
+    "lessonTitle": "שגרה 1 — הבוקר שלי",
+    "item": {
+      "id": "2",
+      "word": "קָמָה",
+      "sound": "ka-MA",
+      "translit": "kama",
+      "meaning": "gets up (f. sg.)",
+      "pos": "verb, present",
+      "trap": "Feminine ends in ה. Stress the last syllable: ka-MA.",
+      "sentence": "הִיא קָמָה בַּבֹּקֶר.",
+      "audio": "../_audio/words/a2e3165352468e3a501b294e.mp3",
+      "sentenceAudio": "audio/sentences/vocab-2.mp3"
+    }
+  },
+  {
+    "lesson": "my-morning",
+    "lessonTitle": "שגרה 1 — הבוקר שלי",
+    "item": {
+      "id": "3",
+      "word": "שׁוֹתֶה",
+      "sound": "sho-TE",
+      "translit": "shote",
+      "meaning": "drinks (m. sg.)",
+      "pos": "verb, present",
+      "trap": "Stress TE. Infinitive לִשְׁתּוֹת.",
+      "sentence": "הוּא שׁוֹתֶה קָפֶה.",
+      "audio": "../_audio/words/c35c2410e210098ead05320e.mp3",
+      "sentenceAudio": "audio/sentences/vocab-3.mp3"
+    }
+  },
+  {
+    "lesson": "my-morning",
+    "lessonTitle": "שגרה 1 — הבוקר שלי",
+    "item": {
+      "id": "4",
+      "word": "שׁוֹתָה",
+      "sound": "sho-TA",
+      "translit": "shota",
+      "meaning": "drinks (f. sg.)",
+      "pos": "verb, present",
+      "trap": "Feminine ends in ה: sho-TA.",
+      "sentence": "הִיא שׁוֹתָה תה.",
+      "audio": "../_audio/words/9634894b7d32e21bcb10e9c6.mp3",
+      "sentenceAudio": "audio/sentences/vocab-4.mp3"
+    }
+  },
+  {
+    "lesson": "my-morning",
+    "lessonTitle": "שגרה 1 — הבוקר שלי",
+    "item": {
+      "id": "5",
+      "word": "בֹּקֶר",
+      "sound": "BO-ker",
+      "translit": "boker",
+      "meaning": "morning",
+      "pos": "noun (m.)",
+      "trap": "Stress BO. בַּבֹּקֶר means “in the morning.”",
+      "sentence": "בַּבֹּקֶר אֲנִי קָם.",
+      "audio": "../_audio/words/1d0390a2fc75a4e27a074c66.mp3",
+      "sentenceAudio": "audio/sentences/vocab-5.mp3"
+    }
+  },
+  {
+    "lesson": "my-morning",
+    "lessonTitle": "שגרה 1 — הבוקר שלי",
+    "item": {
+      "id": "6",
+      "word": "קָפֶה",
+      "sound": "ka-FE",
+      "translit": "kafe",
+      "meaning": "coffee",
+      "pos": "noun (m.)",
+      "trap": "Stress FE. Not English “coffee” rhythm.",
+      "sentence": "אֲנִי שׁוֹתֶה קָפֶה.",
+      "audio": "../_audio/words/d1597cb73a024c66e8fbeffb.mp3",
+      "sentenceAudio": "audio/sentences/vocab-6.mp3"
+    }
+  },
+  {
+    "lesson": "my-morning",
+    "lessonTitle": "שגרה 1 — הבוקר שלי",
+    "item": {
+      "id": "7",
+      "word": "אַחַר כָּךְ",
+      "sound": "a-KHAR-kakh",
+      "translit": "achar kakh",
+      "meaning": "afterwards / then",
+      "pos": "adverb",
+      "trap": "Two words. Soft ח in אַחַר.",
+      "sentence": "אַחַר כָּךְ אֲנִי יוֹצֵא.",
+      "audio": "../_audio/words/39eadd11f599ed07bdd27a7d.mp3",
+      "sentenceAudio": "audio/sentences/vocab-7.mp3"
+    }
+  },
+  {
+    "lesson": "my-morning",
+    "lessonTitle": "שגרה 1 — הבוקר שלי",
+    "item": {
+      "id": "8",
+      "word": "יוֹצֵא",
+      "sound": "yo-TZE",
+      "translit": "yotze",
+      "meaning": "goes out (m. sg.)",
+      "pos": "verb, present",
+      "trap": "צ is “tz.” yo-TZE. Feminine יוֹצֵאת.",
+      "sentence": "אֲנִי יוֹצֵא לָעֲבוֹדָה.",
+      "audio": "../_audio/words/38b6df2167d3c0fab5230bdc.mp3",
+      "sentenceAudio": "audio/sentences/vocab-8.mp3"
+    }
+  }
+]

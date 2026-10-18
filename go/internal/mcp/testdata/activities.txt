@@ -1,0 +1,180 @@
+{
+  "levels": {
+    "basic": {
+      "choices": 3,
+      "bank": "open",
+      "quizSeconds": 90,
+      "typeAllowed": false
+    },
+    "intermediate": {
+      "choices": 4,
+      "bank": "closed",
+      "quizSeconds": 60,
+      "typeAllowed": true
+    },
+    "advanced": {
+      "choices": 4,
+      "bank": "none",
+      "quizSeconds": 45,
+      "typeAllowed": true
+    }
+  },
+  "activities": [
+    {
+      "type": "words",
+      "labelHe": "מילים",
+      "labelEn": "Words",
+      "icon": "fa-book-bookmark",
+      "tone": "tone-blue",
+      "meaning": true,
+      "when": "New vocabulary cards with listen, optional record, and knew-it / missed-it in later rounds.",
+      "fields": {},
+      "needs": [
+        "vocab.items"
+      ]
+    },
+    {
+      "type": "match",
+      "labelHe": "התאמה",
+      "labelEn": "Match",
+      "icon": "fa-table-cells-large",
+      "tone": "tone-green",
+      "meaning": false,
+      "when": "Tap Hebrew–English pairs. Good early retrieval after words.",
+      "fields": {},
+      "needs": [
+        "vocab.items"
+      ]
+    },
+    {
+      "type": "story",
+      "labelHe": "סיפור",
+      "labelEn": "Story",
+      "icon": "fa-file-lines",
+      "tone": "tone-amber",
+      "meaning": true,
+      "when": "The main reading. Pause, stop, follow-along, and optional comprehension questions.",
+      "fields": {},
+      "needs": [
+        "reading.paragraphs"
+      ]
+    },
+    {
+      "type": "fill",
+      "labelHe": "השלמה",
+      "labelEn": "Fill",
+      "icon": "fa-pen-to-square",
+      "tone": "tone-green",
+      "meaning": false,
+      "when": "Word-bank sentence blanks from fill.sentences.",
+      "fields": {},
+      "needs": [
+        "fill.sentences"
+      ]
+    },
+    {
+      "type": "pattern",
+      "labelHe": "דפוס",
+      "labelEn": "Pattern",
+      "icon": "fa-puzzle-piece",
+      "tone": "tone-purple",
+      "meaning": true,
+      "when": "One transparent grammar pattern with multiple choice.",
+      "fields": {},
+      "needs": [
+        "grammar.items"
+      ]
+    },
+    {
+      "type": "retell",
+      "labelHe": "ספרו שוב",
+      "labelEn": "Retell",
+      "icon": "fa-clock",
+      "tone": "tone-amber",
+      "meaning": true,
+      "when": "Timed retell with cue words. Round 2+ by default.",
+      "fields": {
+        "seconds": "optional number"
+      },
+      "needs": [
+        "reading.retell"
+      ]
+    },
+    {
+      "type": "ask-friend",
+      "labelHe": "שאלו חבר",
+      "labelEn": "Ask a Friend",
+      "icon": "fa-comments",
+      "tone": "tone-rose",
+      "meaning": true,
+      "when": "Speaking interview questions with optional record.",
+      "fields": {},
+      "needs": [
+        "askFriend.questions"
+      ]
+    },
+    {
+      "type": "speed-quiz",
+      "labelHe": "חידון מהיר",
+      "labelEn": "Speed quiz",
+      "icon": "fa-bolt",
+      "tone": "tone-green",
+      "meaning": false,
+      "when": "Timed multiple-choice blanks using each vocab sentence. Missed items repeat at the end.",
+      "fields": {
+        "seconds": "optional total seconds (default by level)"
+      },
+      "needs": [
+        "vocab.items"
+      ]
+    },
+    {
+      "type": "build-sentence",
+      "labelHe": "בנו משפט",
+      "labelEn": "Build a sentence",
+      "icon": "fa-cubes",
+      "tone": "tone-blue",
+      "meaning": false,
+      "when": "Tap word tiles into order to rebuild a sentence from the story (or vocab sentences).",
+      "fields": {
+        "from": "\"story\" (default) or \"vocab\"",
+        "count": "optional number of sentences (default 4)"
+      },
+      "needs": [
+        "reading.paragraphs or vocab.items"
+      ]
+    },
+    {
+      "type": "listen-pick",
+      "labelHe": "הקשיבו ובחרו",
+      "labelEn": "Listen and pick",
+      "icon": "fa-ear-listen",
+      "tone": "tone-blue",
+      "meaning": false,
+      "when": "Hear a vocab word, then pick the meaning (or the written form).",
+      "fields": {
+        "mode": "\"meaning\" (default) or \"form\""
+      },
+      "needs": [
+        "vocab.items"
+      ]
+    },
+    {
+      "type": "type-it",
+      "labelHe": "הקלידו",
+      "labelEn": "Type it",
+      "icon": "fa-keyboard",
+      "tone": "tone-purple",
+      "meaning": false,
+      "when": "Intermediate+: see the English meaning, type the Hebrew. Vowels are ignored when checking.",
+      "fields": {},
+      "needs": [
+        "vocab.items"
+      ],
+      "levels": [
+        "intermediate",
+        "advanced"
+      ]
+    }
+  ]
+}
