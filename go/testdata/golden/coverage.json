@@ -1,5 +1,5 @@
 {
-  "cases": 91,
+  "cases": 102,
   "rules": {
     "N1": 4,
     "N10": 1,
@@ -17,17 +17,17 @@
     "N21": 1,
     "N22": 1,
     "N23": 1,
-    "N3": 56,
+    "N3": 67,
     "N4": 0,
     "N5": 1,
-    "N6": 60,
-    "N7": 56,
+    "N6": 64,
+    "N7": 67,
     "N8": 1,
     "N9": 3,
     "audio-path": 2,
     "audio-stale": 2,
     "closed-set": 1,
-    "field-language": 7,
+    "field-language": 9,
     "form-recall-image": 0,
     "frequency-band": 1,
     "html": 7,
@@ -35,10 +35,10 @@
     "later-checkpoint": 2,
     "later-context": 2,
     "lexicon-form": 2,
-    "meaning": 12,
+    "meaning": 14,
     "pattern-focus": 1,
     "picture-on-recall": 1,
-    "pointed-word": 1,
+    "pointed-word": 10,
     "pointing-consistency": 1,
     "pointing-form": 4,
     "questions": 6,
@@ -170,6 +170,17 @@
       "semantic-set-kinship",
       "trim-0085-not-skipped",
       "trim-fef-only-passage",
+      "ucd-edge-1fa89",
+      "ucd-edge-1fac6",
+      "ucd-edge-1fae9",
+      "ucd-edge-2427",
+      "ucd-edge-2428",
+      "ucd-edge-2429",
+      "ucd-letter-1c89",
+      "ucd-letter-a7cb",
+      "ucd-mark-0897",
+      "ucd-number-10d40",
+      "ucd-punct-1b4e",
       "v100-rejects-explainer"
     ],
     "N4": [],
@@ -236,6 +247,10 @@
       "semantic-set-kinship",
       "trim-0085-not-skipped",
       "trim-fef-only-passage",
+      "ucd-letter-1c89",
+      "ucd-letter-a7cb",
+      "ucd-mark-0897",
+      "ucd-number-10d40",
       "v100-rejects-explainer"
     ],
     "N7": [
@@ -294,7 +309,18 @@
       "romanized-answer",
       "semantic-set-kinship",
       "trim-0085-not-skipped",
-      "trim-fef-only-passage"
+      "trim-fef-only-passage",
+      "ucd-edge-1fa89",
+      "ucd-edge-1fac6",
+      "ucd-edge-1fae9",
+      "ucd-edge-2427",
+      "ucd-edge-2428",
+      "ucd-edge-2429",
+      "ucd-letter-1c89",
+      "ucd-letter-a7cb",
+      "ucd-mark-0897",
+      "ucd-number-10d40",
+      "ucd-punct-1b4e"
     ],
     "N8": [
       "n8-missing-alt"
@@ -322,7 +348,9 @@
       "markup-nbsp",
       "picture-on-recall",
       "romanized-answer",
-      "trim-0085-not-skipped"
+      "trim-0085-not-skipped",
+      "ucd-letter-1c89",
+      "ucd-letter-a7cb"
     ],
     "form-recall-image": [],
     "frequency-band": [
@@ -366,7 +394,9 @@
       "n18-group-and-count",
       "n23-three-exercises",
       "pointing-doubled-vowel",
-      "pointing-stray-vowel"
+      "pointing-stray-vowel",
+      "ucd-letter-1c89",
+      "ucd-letter-a7cb"
     ],
     "pattern-focus": [
       "pattern-focus-missing"
@@ -375,7 +405,16 @@
       "picture-on-recall"
     ],
     "pointed-word": [
-      "pointed-word-missing"
+      "pointed-word-missing",
+      "ucd-edge-1fa89",
+      "ucd-edge-1fac6",
+      "ucd-edge-1fae9",
+      "ucd-edge-2427",
+      "ucd-edge-2428",
+      "ucd-edge-2429",
+      "ucd-mark-0897",
+      "ucd-number-10d40",
+      "ucd-punct-1b4e"
     ],
     "pointing-consistency": [
       "pointing-consistency"
@@ -901,6 +940,67 @@
       "N3",
       "N6",
       "N7"
+    ],
+    "ucd-edge-1fa89": [
+      "N3",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-edge-1fac6": [
+      "N3",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-edge-1fae9": [
+      "N3",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-edge-2427": [
+      "N3",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-edge-2428": [
+      "N3",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-edge-2429": [
+      "N3",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-letter-1c89": [
+      "N3",
+      "N6",
+      "N7",
+      "field-language",
+      "meaning"
+    ],
+    "ucd-letter-a7cb": [
+      "N3",
+      "N6",
+      "N7",
+      "field-language",
+      "meaning"
+    ],
+    "ucd-mark-0897": [
+      "N3",
+      "N6",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-number-10d40": [
+      "N3",
+      "N6",
+      "N7",
+      "pointed-word"
+    ],
+    "ucd-punct-1b4e": [
+      "N3",
+      "N7",
+      "pointed-word"
     ],
     "unknown-schema-version": [
       "schema"

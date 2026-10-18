@@ -3,9 +3,9 @@ package plans
 import (
 	"math"
 	"strings"
-	"unicode"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/jsstr"
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/ucd"
 )
 
 func exactKey(value string) string {
@@ -95,10 +95,7 @@ func prevRune(s string, end int) (rune, int) {
 }
 
 func isEdgeMark(r rune) bool {
-	if r >= 0xD800 && r <= 0xDFFF {
-		return false
-	}
-	return unicode.Is(unicode.P, r) || unicode.Is(unicode.S, r) || unicode.Is(unicode.Cf, r)
+	return ucd.IsEdgeMark(r)
 }
 
 func hasHebrewLetter(s string) bool {
@@ -139,10 +136,8 @@ func hasLetter(s string) bool {
 		if size == 0 {
 			break
 		}
-		if r < 0xD800 || r > 0xDFFF {
-			if unicode.IsLetter(r) {
-				return true
-			}
+		if ucd.IsLetter(r) {
+			return true
 		}
 		i += size
 	}

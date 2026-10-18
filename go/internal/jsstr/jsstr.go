@@ -10,6 +10,8 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"golang.org/x/text/unicode/norm"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/ucd"
 )
 
 // Next decodes one JavaScript code point from s at byte i.
@@ -71,18 +73,11 @@ func UTF16Len(s string) int {
 }
 
 // IsSpace reports whether r is removed by String.prototype.trim and matched by
-// JavaScript \s (Unicode and non-Unicode) in Node 22.
-//
-// Included: HT, LF, VT, FF, CR, SP, NBSP, U+1680, U+2000–U+200A, U+2028,
-// U+2029, U+202F, U+205F, U+3000, and U+FEFF.
-// Excluded, unlike Go's unicode.IsSpace / strings.TrimSpace: U+0085.
+// JavaScript \s. The set comes from the Unicode 16 White_Space property with
+// the two JavaScript exceptions (U+0085 stays, U+FEFF goes), not from Go's
+// unicode.IsSpace.
 func IsSpace(r rune) bool {
-	switch r {
-	case '\t', '\n', '\v', '\f', '\r', ' ',
-		0x00A0, 0x1680, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF:
-		return true
-	}
-	return r >= 0x2000 && r <= 0x200A
+	return ucd.JSSpace(r)
 }
 
 // Trim matches String.prototype.trim. It removes leading and trailing
@@ -205,18 +200,10 @@ func hasSurrogate(s string) bool {
 
 var lower = cases.Lower(language.Und)
 
-// jsLowerDelta is where Node 22.14.0 (Unicode 16.0) and golang.org/x/text
-// v0.29.0 disagree on default case conversion. ToLower emits the Node mapping.
-var jsLowerDelta = map[rune]rune{
-	0x1C89: 0x1C8A,
-	0xA7CB: 0x0264,
-	0xA7CC: 0xA7CD,
-	0xA7DA: 0xA7DB,
-	0xA7DC: 0x019B,
-}
-
 // ToLower matches String.prototype.toLowerCase (Unicode default case
 // conversion, not a locale). Lone surrogates are left unchanged.
+// Where x/text disagrees with Unicode 16 simple lowercase, LowerOverride
+// supplies the UCD mapping.
 func ToLower(s string) string {
 	if !slowLower(s) {
 		return lower.String(s)
@@ -235,7 +222,7 @@ func ToLower(s string) string {
 		if size == 0 {
 			break
 		}
-		if mapped, ok := jsLowerDelta[r]; ok {
+		if mapped, ok := ucd.LowerOverride(r); ok {
 			flush()
 			appendRune(&b, mapped)
 		} else if r >= 0xD800 && r <= 0xDFFF {
@@ -255,7 +242,7 @@ func slowLower(s string) bool {
 		return true
 	}
 	for _, r := range s {
-		if _, ok := jsLowerDelta[r]; ok {
+		if _, ok := ucd.LowerOverride(r); ok {
 			return true
 		}
 	}

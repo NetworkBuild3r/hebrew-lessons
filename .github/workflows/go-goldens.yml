@@ -7,7 +7,11 @@
 name: go-goldens
 
 on:
+  # `edited` is how a base-branch change arrives. A force-push followed by a
+  # base change does not otherwise start a run. Title and body edits are
+  # skipped by the job condition.
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
 
@@ -20,6 +24,7 @@ concurrency:
 
 jobs:
   goldens:
+    if: github.event.action != 'edited' || github.event.changes.base.ref.from
     runs-on: k8-build
     timeout-minutes: 20
     steps:
@@ -29,5 +34,7 @@ jobs:
           node-version: 22.14.0
       - name: Regenerate goldens
         run: node go/tools/golden/gen.js
+        # gen.js also runs go/tools/ucd/props.js, which rewrites
+        # go/testdata/golden/ucd from Node's regexes.
       - name: Goldens match the commit
         run: git diff --exit-code -- go/testdata/golden

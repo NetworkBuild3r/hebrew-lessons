@@ -352,6 +352,33 @@ function mutations() {
     const fef = basePlan();
     lessonOf(fef).blocks[2].passage = '\uFEFF';
     add('trim-fef-only-passage', fef);
+
+    // Unicode 16 scalars Go 1.26's unicode package still treats as unassigned.
+    // Edge symbols are stripped by trimEdges; a new letter trips field-language.
+    const edgeSymbol = (id, cp) => {
+        const ch = String.fromCodePoint(cp);
+        const plan = basePlan();
+        const lesson = lessonOf(plan);
+        lesson.newWords = ['שלום' + ch];
+        lesson.blocks[0].words.push({ id: 'w-edge', word: 'שלום' + ch, meaning: 'hello', sentence: 'שלום.' });
+        add(id, plan);
+    };
+    edgeSymbol('ucd-edge-1fae9', 0x1FAE9);
+    edgeSymbol('ucd-edge-1fa89', 0x1FA89);
+    edgeSymbol('ucd-edge-1fac6', 0x1FAC6);
+    edgeSymbol('ucd-edge-2427', 0x2427);
+    edgeSymbol('ucd-edge-2428', 0x2428);
+    edgeSymbol('ucd-edge-2429', 0x2429);
+    const letterOnly = (id, cp) => {
+        const plan = basePlan();
+        lessonOf(plan).blocks[0].words[0].word = String.fromCodePoint(cp);
+        add(id, plan);
+    };
+    letterOnly('ucd-letter-1c89', 0x1C89);
+    letterOnly('ucd-letter-a7cb', 0xA7CB);
+    edgeSymbol('ucd-mark-0897', 0x0897);
+    edgeSymbol('ucd-number-10d40', 0x10D40);
+    edgeSymbol('ucd-punct-1b4e', 0x1B4E);
     const nelField = basePlan();
     lessonOf(nelField).blocks[2].passage = '\u0085hello';
     add('trim-0085-not-skipped', nelField);
@@ -782,6 +809,7 @@ function main() {
         }
     };
     fs.writeFileSync(path.join(OUT, 'coverage.json'), JSON.stringify(coverage, null, 2) + '\n');
+    execFileSync(process.execPath, [path.join(__dirname, '..', 'ucd', 'props.js')], { stdio: 'inherit' });
     console.log('wrote', found.length, 'cases');
     console.log(JSON.stringify(counts, null, 2));
 }
