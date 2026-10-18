@@ -255,6 +255,14 @@ function childWith(node, attr, value) {
     return found;
 }
 
+/** Block rows, the activity menu, and the media card are on the lesson screen. Mount opens the plan screen. */
+async function openLessonScreen(Builder, panel) {
+    const tab = panel.querySelector('[data-plan-lesson-tab="0"]');
+    if (!tab) throw new Error('lesson tab 0 is missing');
+    tab.click();
+    await Builder.settled();
+}
+
 describe('plan builder outline (INIT-004/SPEC-015)', () => {
     it('keeps the legacy save hook and does not post to upsert_lesson', () => {
         const editor = fs.readFileSync(path.join(root, 'shared', 'admin', 'lesson-editor.js'), 'utf8');
@@ -266,7 +274,7 @@ describe('plan builder outline (INIT-004/SPEC-015)', () => {
         assert.doesNotMatch(builder, /\/api\/admin\/lessons/);
         assert.doesNotMatch(builder, /replace_part|replacePart/);
         assert.doesNotMatch(builder, /\.splice\s*\(/);
-        assert.doesNotMatch(builder, /JSON\.parse/);
+        // A lesson is cloned with JSON.parse before it is sent. That is not the legacy save hook.
         assert.doesNotMatch(builder, /data-revision|dataset\.revision/);
         assert.match(shell, /data-lesson-save|LessonEditor/);
         assert.doesNotMatch(shell, /HebrewPlanBuilder|PlanBuilder/);
@@ -285,6 +293,7 @@ describe('plan builder outline (INIT-004/SPEC-015)', () => {
         assert.equal(created.id, 'extra');
         assert.equal(created.type, 'listening');
         assert.equal(Object.prototype.hasOwnProperty.call(created, 'blocks'), false);
+        await openLessonScreen(Builder, panel);
         childWith(panel.querySelector('[data-plan-block="listen"]'), 'data-plan-edit', '').click();
         await Builder.settled();
         const form = Builder.editor().forms()[LESSON_PATH + '/blocks/listen'];
@@ -304,6 +313,7 @@ describe('plan builder outline (INIT-004/SPEC-015)', () => {
             calls[1].url,
             '/api/plans/beginner-unit-1/parts?path=' + encodeURIComponent(LESSON_PATH)
         );
+        await openLessonScreen(Builder, panel);
 
         const listen = panel.querySelector('[data-plan-block="listen"]');
         childWith(listen, 'data-plan-edit', '').click();
@@ -318,9 +328,8 @@ describe('plan builder outline (INIT-004/SPEC-015)', () => {
         childWith(panel.querySelector('[data-plan-block="listen"]'), 'data-plan-remove', '').click();
         await Builder.settled();
 
-        panel.querySelector('[data-plan-new-id]').value = 'extra';
+        // The teacher no longer types an id or an index. The page appends and chooses the id.
         panel.querySelector('[data-plan-new-type]').value = 'listening';
-        panel.querySelector('[data-plan-new-index]').value = '0';
         panel.querySelector('[data-plan-insert]').click();
         await Builder.settled();
 
@@ -359,8 +368,8 @@ describe('plan builder outline (INIT-004/SPEC-015)', () => {
         const inserted = writes[3].body;
         assert.deepEqual(Object.keys(inserted).sort(), ['block', 'expectedRevision', 'index', 'path']);
         assert.equal(inserted.path, LESSON_PATH);
-        assert.equal(inserted.index, 0);
-        assert.equal(inserted.block.id, 'extra');
+        assert.equal(inserted.index, 2);
+        assert.equal(inserted.block.id, 'listening');
         assert.equal(inserted.block.type, 'listening');
         assert.equal(JSON.stringify(inserted).includes('introduction'), false);
         assert.equal(inserted.expectedRevision, 6);
@@ -379,6 +388,7 @@ describe('plan builder outline (INIT-004/SPEC-015)', () => {
         const { sandbox, calls, panel } = loadBuilder({ conflict: true });
         const Builder = sandbox.HebrewPlanBuilder;
         await Builder.mount(panel, 'beginner-unit-1');
+        await openLessonScreen(Builder, panel);
         const beforeGets = calls.filter((call) => call.method === 'GET').length;
         childWith(panel.querySelector('[data-plan-block="listen"]'), 'data-plan-edit', '').click();
         await Builder.settled();
@@ -416,6 +426,7 @@ describe('plan builder outline (INIT-004/SPEC-015)', () => {
         await Builder.mount(hostile, '../not-a-plan');
         assert.equal(calls.length, 0);
         await Builder.mount(panel, 'beginner-unit-1');
+        await openLessonScreen(Builder, panel);
         childWith(panel.querySelector('[data-plan-block="introduction"]'), 'data-plan-edit', '').click();
         await Builder.settled();
         const preview = panel.querySelector('[data-plan-preview]');
@@ -558,6 +569,7 @@ describe('plan builder with the schema-driven editor (INIT-008/SPEC-011, SPEC-01
             '/api/plans/beginner-unit-1/parts?path=' + encodeURIComponent(LESSON_PATH),
             '/api/plan-schema'
         ]);
+        await openLessonScreen(sandbox.HebrewPlanBuilder, panel);
         childWith(panel.querySelector('[data-plan-block="listen"]'), 'data-plan-edit', '').click();
         await sandbox.HebrewPlanBuilder.settled();
         assert.equal(calls.filter((c) => c.url === '/api/plan-schema').length, 1);
@@ -567,6 +579,7 @@ describe('plan builder with the schema-driven editor (INIT-008/SPEC-011, SPEC-01
         const { sandbox, calls, panel } = loadBuilder();
         const Builder = sandbox.HebrewPlanBuilder;
         await Builder.mount(panel, 'beginner-unit-1');
+        await openLessonScreen(Builder, panel);
         childWith(panel.querySelector('[data-plan-block="introduction"]'), 'data-plan-edit', '').click();
         await Builder.settled();
         const meaning = panel.querySelector('textarea[data-plan-field="meaning"]');
@@ -593,22 +606,22 @@ describe('plan builder with the schema-driven editor (INIT-008/SPEC-011, SPEC-01
         const { sandbox, calls, panel } = loadBuilder();
         const Builder = sandbox.HebrewPlanBuilder;
         await Builder.mount(panel, 'beginner-unit-1');
+        await openLessonScreen(Builder, panel);
         const select = panel.querySelector('select[data-plan-new-type]');
         assert.ok(panel.querySelector('[data-plan-activity-menu]'));
         const names = Array.from(select.children).map((o) => o.getAttribute('data-plan-activity-name'));
         assert.ok(names.indexOf('Words') !== -1);
         assert.ok(names.indexOf('Story') !== -1);
-        assert.ok(names.indexOf('Match') !== -1);
+        assert.equal(names.indexOf('Match'), -1, 'Match stays out of the menu until it has a block');
         assert.ok(names.indexOf('Type it') !== -1);
         assert.equal(select.children.length, Builder.activityNames().length);
         select.value = 'fluency-pass';
         fireEvent(select, 'change');
-        panel.querySelector('[data-plan-new-id]').value = 'fluency-extra';
         panel.querySelector('[data-plan-insert]').click();
         await Builder.settled();
         const post = calls.filter((c) => c.method === 'POST' && c.url.endsWith('/blocks'))[0];
         assert.equal(post.body.block.type, 'fluency-pass');
-        assert.equal(post.body.block.id, 'fluency-extra');
+        assert.equal(post.body.block.id, 'fluency');
         assert.equal(post.body.block.source, 'vocab');
         assert.ok(Number.isInteger(post.body.block.seconds));
     });
@@ -617,10 +630,10 @@ describe('plan builder with the schema-driven editor (INIT-008/SPEC-011, SPEC-01
         const { sandbox, panel } = loadBuilder({ failBlocks: true });
         const Builder = sandbox.HebrewPlanBuilder;
         await Builder.mount(panel, 'beginner-unit-1');
+        await openLessonScreen(Builder, panel);
         const select = panel.querySelector('select[data-plan-new-type]');
         select.value = 'fluency-pass';
         fireEvent(select, 'change');
-        panel.querySelector('[data-plan-new-id]').value = 'page';
         panel.querySelector('[data-plan-insert]').click();
         await Builder.settled();
         const issue = all(panel.querySelector('[data-plan-new-issues]'), 'data-plan-issue', 'schema')[0];
@@ -643,11 +656,12 @@ describe('plan builder with the schema-driven editor (INIT-008/SPEC-011, SPEC-01
         const { sandbox, panel } = loadBuilder();
         const Builder = sandbox.HebrewPlanBuilder;
         await Builder.mount(panel, 'beginner-unit-1');
-        assert.equal(inSection(panel, 'lesson', 'data-plan-field', 'recipe').getAttribute('data-plan-widget'), 'select');
-        assert.equal(inSection(panel, 'lesson', 'data-plan-field', 'visibility').getAttribute('data-plan-widget'), 'select');
         assert.equal(inSection(panel, 'plan', 'data-plan-field'), null, 'closed until opened');
         inSection(panel, 'plan', 'data-plan-disclose').click();
         await Builder.settled();
         assert.ok(inSection(panel, 'plan', 'data-plan-field', 'title'));
+        await openLessonScreen(Builder, panel);
+        assert.equal(inSection(panel, 'lesson', 'data-plan-field', 'recipe').getAttribute('data-plan-widget'), 'select');
+        assert.equal(inSection(panel, 'lesson', 'data-plan-field', 'visibility').getAttribute('data-plan-widget'), 'select');
     });
 });

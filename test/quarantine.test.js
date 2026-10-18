@@ -24,18 +24,19 @@ const ARCHIVE_NAMES = [
 describe('quarantine list', () => {
     const entries = q.loadList();
 
-    it('has one entry per quarantined test with the required fields', () => {
-        assert.equal(entries.length, 43);
+    it('keeps real-bug and environment entries only, each with an owner and an issue or expiry', () => {
+        assert.equal(entries.length, 6);
         const keys = new Set();
         for (const entry of entries) {
             for (const field of q.REQUIRED) assert.equal(typeof entry[field], 'string');
-            assert.ok(entry.file.startsWith('test/') && entry.file.endsWith('.test.js'));
-            assert.ok(entry.category === 'stale' || entry.category === 'real-bug');
+            assert.ok(entry.category === 'real-bug' || entry.category === 'environment');
+            assert.ok(entry.issue || entry.expires);
             keys.add(q.entryKey(entry.file, entry.name));
         }
         assert.equal(keys.size, entries.length);
-        assert.equal(entries.filter((entry) => entry.category === 'stale').length, 37);
+        assert.equal(entries.filter((entry) => entry.category === 'stale').length, 0);
         assert.equal(entries.filter((entry) => entry.category === 'real-bug').length, 6);
+        assert.equal(q.expiredEntries(entries, '2026-10-18').length, 0);
     });
 
     it('does not quarantine the archive-path tests', () => {
@@ -62,54 +63,83 @@ describe('quarantine list', () => {
         assert.equal(deep.owner, 'Hebrew Backend Dev, fix in Go port');
     });
 
-    it('cites the intentional commit on stale tests', () => {
-        for (const entry of entries.filter((item) => item.category === 'stale')) {
-            assert.equal(entry.owner, 'Hebrew QA');
-            const commit = entry.file === 'test/plan-builder-mcp.test.js' ? '59d3367' : 'e3fb466';
-            assert.equal(entry.reason, 'stale: behavior changed intentionally in ' + commit);
-        }
-    });
-
-    it('missingEntries reports a name that was never registered', () => {
-        const seen = new Set(entries.map((entry) => q.entryKey(entry.file, entry.name)));
-        assert.deepEqual(q.missingEntries(entries, seen), []);
-        const dropped = entries[0];
-        seen.delete(q.entryKey(dropped.file, dropped.name));
-        const missing = q.missingEntries(entries, seen);
+    it('unmatchedSkips reports a test that was not skipped with its reason', () => {
+        const seen = entries.map((entry) => ({
+            file: path.join(q.ROOT, entry.file),
+            name: entry.name,
+            skip: entry.reason
+        }));
+        assert.deepEqual(q.unmatchedSkips(entries, seen), []);
+        const dropped = seen[0];
+        const missing = q.unmatchedSkips(entries, seen.slice(1));
         assert.equal(missing.length, 1);
         assert.equal(missing[0].name, dropped.name);
+        const wrong = seen.slice();
+        wrong[0] = Object.assign({}, wrong[0], { skip: 'other' });
+        assert.equal(q.unmatchedSkips(entries, wrong).length, 1);
     });
 
-    it('install skips a quarantined name from this file and leaves others alone', () => {
-        const seen = [];
-        const calls = [];
-        function orig(name, options, fn) {
-            calls.push({ name, options, fn });
-            return 'orig';
-        }
-        orig.skip = function skip() { return 'skip'; };
-        const wrapped = q.install(orig, [{
+    it('optionsFor skips a listed test and throws once expires is past', () => {
+        const entry = {
             file: 'test/quarantine.test.js',
             name: 'sentinel-quarantine-name',
-            category: 'stale',
+            category: 'real-bug',
             reason: 'because',
-            owner: 'Hebrew QA'
-        }], (file, name) => seen.push({ file, name }));
+            owner: 'Hebrew QA',
+            expires: '2000-01-01'
+        };
+        assert.equal(q.expiredEntries([entry], '2000-01-01').length, 0);
+        assert.equal(q.expiredEntries([entry], '2000-01-02').length, 1);
+        const live = q.optionsFor([entry], entry.file, entry.name, { timeout: 5 }, '2000-01-01');
+        assert.equal(live.skip, 'because');
+        assert.equal(live.timeout, 5);
+        assert.throws(
+            () => q.optionsFor([entry], entry.file, entry.name, { timeout: 5 }, '2000-01-02'),
+            /quarantine expired/
+        );
+        assert.deepEqual(q.optionsFor([entry], entry.file, 'plain', { timeout: 5 }, '2099-01-01'), { timeout: 5 });
+    });
 
-        const fn = () => {};
-        wrapped('sentinel-quarantine-name', fn);
-        assert.equal(calls[0].name, 'sentinel-quarantine-name');
-        assert.equal(calls[0].options.skip, 'because');
-        assert.equal(calls[0].fn, fn);
-        assert.deepEqual(seen, [{ file: 'test/quarantine.test.js', name: 'sentinel-quarantine-name' }]);
+    it('loadList rejects a stale category and an entry with no issue or expiry', () => {
+        const file = path.join(os.tmpdir(), 'heb-quarantine-bad.json');
+        const base = {
+            file: 'test/quarantine.test.js',
+            name: 'n',
+            category: 'stale',
+            reason: 'r',
+            owner: 'o'
+        };
+        fs.writeFileSync(file, JSON.stringify([base]));
+        assert.throws(() => q.loadList(file), /category/);
+        base.category = 'real-bug';
+        fs.writeFileSync(file, JSON.stringify([base]));
+        assert.throws(() => q.loadList(file), /issue or expires/);
+        base.expires = '2026-02-31';
+        fs.writeFileSync(file, JSON.stringify([base]));
+        assert.throws(() => q.loadList(file), /expires/);
+    });
 
-        const opts = { timeout: 5 };
-        wrapped('plain', opts, fn);
-        assert.equal(calls[1].options, opts);
-        assert.equal(calls[1].name, 'plain');
-        assert.equal(wrapped.skip, orig.skip);
-        assert.equal(wrapped.it, wrapped);
-        assert.equal(wrapped.test, wrapped);
+    it('literal test titles are unique, so a skip or a failure names one test', () => {
+        const re = /\bit\(\s*(['"`])((?:\\.|(?!\1).)*?)\1/g;
+        const names = new Map();
+        const dir = path.join(q.ROOT, 'test');
+        for (const file of fs.readdirSync(dir).filter((name) => name.endsWith('.test.js'))) {
+            const text = fs.readFileSync(path.join(dir, file), 'utf8');
+            re.lastIndex = 0;
+            let match;
+            while ((match = re.exec(text))) {
+                const after = text.slice(match.index + match[0].length);
+                if (/^\s*\+/.test(after)) continue;
+                const title = match[2];
+                if (!names.has(title)) names.set(title, []);
+                names.get(title).push('test/' + file);
+            }
+        }
+        const dupes = [];
+        for (const [title, files] of names) {
+            if (files.length > 1) dupes.push(title + ' @ ' + files.join(', '));
+        }
+        assert.deepEqual(dupes, []);
     });
 });
 

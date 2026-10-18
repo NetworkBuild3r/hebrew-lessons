@@ -1,7 +1,13 @@
 /**
- * Quarantine list shared by the test runner and the node:test register hook.
- * A quarantined test is skipped with its reason. A list entry whose test was
- * never registered fails the run, so renamed or deleted tests cannot linger.
+ * Quarantine list for tests that are skipped on purpose.
+ *
+ * A test opts in with `it(name, quarantine.for(file, name), fn)`. That returns
+ * node:test's own `{ skip: reason }`, so the runner prints the reason and
+ * counts a skip. Nothing patches `require` or rewrites stack locations.
+ *
+ * `npm test` reads the reporter log afterwards and fails if a listed test was
+ * not skipped with its reason. An entry whose `expires` date is before today
+ * (UTC) fails the run.
  */
 'use strict';
 
@@ -11,24 +17,61 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..', '..');
 const LIST_PATH = path.join(ROOT, 'test', 'quarantine.json');
 const REQUIRED = ['file', 'name', 'category', 'reason', 'owner'];
+const CATEGORIES = ['real-bug', 'environment'];
+const ISSUE_RE = /^https:\/\/github\.com\/NetworkBuild3r\/hebrew-lessons\/issues\/\d+$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function entryKey(file, name) {
     return file + '\n' + name;
+}
+
+function isRealDate(value) {
+    if (typeof value !== 'string' || !DATE_RE.test(value)) return false;
+    const [year, month, day] = value.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year
+        && date.getUTCMonth() === month - 1
+        && date.getUTCDate() === day;
+}
+
+function utcToday(now) {
+    const date = now instanceof Date ? now : new Date();
+    return date.toISOString().slice(0, 10);
 }
 
 function loadList(file) {
     const listPath = file || LIST_PATH;
     const raw = JSON.parse(fs.readFileSync(listPath, 'utf8'));
     if (!Array.isArray(raw)) throw new Error('quarantine list must be an array: ' + listPath);
+    const keys = new Set();
     raw.forEach((entry, index) => {
-        if (!entry || typeof entry !== 'object') {
-            throw new Error('quarantine entry ' + index + ' is not an object');
-        }
+        const where = 'quarantine entry ' + index;
+        if (!entry || typeof entry !== 'object') throw new Error(where + ' is not an object');
         for (const key of REQUIRED) {
             if (typeof entry[key] !== 'string' || entry[key].length === 0) {
-                throw new Error('quarantine entry ' + index + ' missing ' + key);
+                throw new Error(where + ' missing ' + key);
             }
         }
+        if (!CATEGORIES.includes(entry.category)) {
+            throw new Error(where + ' category must be real-bug or environment');
+        }
+        if (!entry.file.startsWith('test/') || !entry.file.endsWith('.test.js')) {
+            throw new Error(where + ' file must be a test/*.test.js path');
+        }
+        const hasIssue = entry.issue != null && entry.issue !== '';
+        const hasExpires = entry.expires != null && entry.expires !== '';
+        if (hasIssue && (typeof entry.issue !== 'string' || !ISSUE_RE.test(entry.issue))) {
+            throw new Error(where + ' issue must be a hebrew-lessons issue URL');
+        }
+        if (hasExpires && !isRealDate(entry.expires)) {
+            throw new Error(where + ' expires must be YYYY-MM-DD');
+        }
+        if (!hasIssue && !hasExpires) {
+            throw new Error(where + ' needs an issue or expires');
+        }
+        const key = entryKey(entry.file, entry.name);
+        if (keys.has(key)) throw new Error(where + ' duplicates ' + entry.file + ' :: ' + entry.name);
+        keys.add(key);
     });
     return raw;
 }
@@ -39,123 +82,77 @@ function indexEntries(entries) {
     return map;
 }
 
-function missingEntries(entries, seenKeys) {
-    return entries.filter((entry) => !seenKeys.has(entryKey(entry.file, entry.name)));
+function isExpired(entry, today) {
+    return typeof entry.expires === 'string' && entry.expires < today;
+}
+
+function expiredEntries(entries, today) {
+    const day = today || utcToday();
+    return entries.filter((entry) => isExpired(entry, day));
+}
+
+/**
+ * node:test options for one test. A listed test is skipped with its reason.
+ * A listed test past `expires` throws, so the file fails instead of skipping.
+ * @param {Array<object>} entries
+ * @param {string} file
+ * @param {string} name
+ * @param {object} [options]
+ * @param {string} [today] UTC YYYY-MM-DD
+ */
+function optionsFor(entries, file, name, options, today) {
+    const base = options && typeof options === 'object' ? Object.assign({}, options) : {};
+    const entry = indexEntries(entries).get(entryKey(file, name));
+    if (!entry) return base;
+    const day = today || utcToday();
+    if (isExpired(entry, day)) {
+        throw new Error('quarantine expired: ' + file + ' :: ' + name + ' (expires ' + entry.expires + ')');
+    }
+    base.skip = entry.reason;
+    return base;
+}
+
+function forTest(file, name, options) {
+    return optionsFor(loadList(), file, name, options);
 }
 
 function relTestFile(filename) {
     if (!filename) return null;
+    if (filename.startsWith('test/')) return filename;
     const abs = path.resolve(filename);
     const rel = path.relative(ROOT, abs);
     if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
     return rel.split(path.sep).join('/');
 }
 
-function callerTestFrame() {
-    const stack = new Error().stack.split('\n');
-    for (const line of stack) {
-        const match = line.match(/\(?((?:[A-Za-z]:)?[^():\n]+?\.test\.js):(\d+):(\d+)\)?/);
-        if (!match) continue;
-        const rel = relTestFile(match[1]);
-        if (!rel) continue;
-        return {
-            file: rel,
-            abs: match[1],
-            line: Number(match[2]),
-            column: Number(match[3])
-        };
-    }
-    return null;
-}
-
-function callerTestFile() {
-    const frame = callerTestFrame();
-    return frame ? frame.file : null;
-}
-
-// node:test records the file and line of the function that calls it(). Calling
-// orig() from this helper would blame quarantine.js, so replay the call from
-// an eval tagged with the test file's path, padded to the caller's line.
-const invokeAtCache = new Map();
-
-function invokeAtCaller(orig, name, options, fn) {
-    const frame = callerTestFrame();
-    if (!frame || /[\r\n]/.test(frame.abs)) return orig(name, options, fn);
-    const key = frame.abs + ':' + frame.line + ':' + frame.column;
-    let invoke = invokeAtCache.get(key);
-    if (!invoke) {
-        const pad = '\n'.repeat(Math.max(0, frame.line - 2));
-        const indent = ' '.repeat(Math.max(0, frame.column - 1));
-        const src = '(function (orig, name, options, fn) {\n'
-            + pad + indent + 'orig(name, options, fn);\n'
-            + '})\n//# sourceURL=' + frame.abs;
-        invoke = eval(src);
-        invokeAtCache.set(key, invoke);
-    }
-    return invoke(orig, name, options, fn);
-}
-
 /**
- * Read the name node:test would use, without changing how an unquarantined
- * call is forwarded.
- */
-function normalizeTestArgs(name, options, fn) {
-    if (typeof name === 'function') {
-        return { testName: name.name || '', opts: {}, cb: name };
-    }
-    if (name && typeof name === 'object') {
-        const opts = Object.assign({}, name);
-        const cb = typeof options === 'function' ? options : fn;
-        const testName = typeof opts.name === 'string' ? opts.name : (cb && cb.name) || '';
-        return { testName, opts, cb };
-    }
-    if (typeof options === 'function' || options === undefined) {
-        return { testName: name, opts: {}, cb: options };
-    }
-    return { testName: name, opts: Object.assign({}, options || {}), cb: fn };
-}
-
-/**
- * Wrap the node:test export. Quarantined tests gain `{ skip: reason }`.
- * Every registered name in a *.test.js file is reported to `record`.
- * @param {Function} orig
+ * Entries that were not skipped with their own reason.
  * @param {Array<object>} entries
- * @param {(file: string, name: string) => void} record
+ * @param {Array<{file: string, name: string, skip: string}>} seen
  */
-function install(orig, entries, record) {
-    const index = indexEntries(entries);
-    function wrapped(name, options, fn) {
-        const parsed = normalizeTestArgs(name, options, fn);
-        const file = callerTestFile();
-        if (file && typeof parsed.testName === 'string' && parsed.testName) {
-            record(file, parsed.testName);
-            const hit = index.get(entryKey(file, parsed.testName));
-            if (hit) {
-                parsed.opts.skip = hit.reason;
-                return invokeAtCaller(orig, parsed.testName, parsed.opts, parsed.cb);
-            }
-        }
-        return invokeAtCaller(orig, name, options, fn);
+function unmatchedSkips(entries, seen) {
+    const got = new Map();
+    for (const row of seen) {
+        const rel = relTestFile(row.file);
+        if (!rel || typeof row.name !== 'string') continue;
+        got.set(entryKey(rel, row.name), row.skip);
     }
-    for (const key of Object.getOwnPropertyNames(orig)) {
-        if (key === 'length' || key === 'name' || key === 'prototype') continue;
-        wrapped[key] = orig[key];
-    }
-    wrapped.test = wrapped;
-    wrapped.it = wrapped;
-    return wrapped;
+    return entries.filter((entry) => got.get(entryKey(entry.file, entry.name)) !== entry.reason);
 }
 
 module.exports = {
     ROOT,
     LIST_PATH,
     REQUIRED,
+    CATEGORIES,
     entryKey,
     loadList,
     indexEntries,
-    missingEntries,
+    utcToday,
+    isExpired,
+    expiredEntries,
+    optionsFor,
+    for: forTest,
     relTestFile,
-    callerTestFile,
-    normalizeTestArgs,
-    install
+    unmatchedSkips
 };

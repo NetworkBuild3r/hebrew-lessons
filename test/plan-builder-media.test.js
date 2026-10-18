@@ -333,6 +333,14 @@ function childWith(node, attr, value) {
     return found;
 }
 
+/** The media card and block rows are painted on the lesson screen. */
+async function openLessonScreen(Builder, panel) {
+    const tab = panel.querySelector('[data-plan-lesson-tab="0"]');
+    if (!tab) throw new Error('lesson tab 0 is missing');
+    tab.click();
+    await Builder.settled();
+}
+
 function generatePosts(calls) {
     return calls.filter((call) => call.method === 'POST' && call.url === '/api/admin/images');
 }
@@ -342,6 +350,7 @@ describe('plan builder media, preview, validation (INIT-004/SPEC-016)', () => {
         const { sandbox, calls, panel } = loadBuilder();
         const Builder = sandbox.HebrewPlanBuilder;
         await Builder.mount(panel, 'beginner-unit-1');
+        await openLessonScreen(Builder, panel);
 
         childWith(panel.querySelector('[data-plan-block="story"]'), 'data-plan-edit', '').click();
         await Builder.settled();
@@ -377,6 +386,7 @@ describe('plan builder media, preview, validation (INIT-004/SPEC-016)', () => {
     it('a word without a picture is given an image object, then mediaId and alt', async () => {
         const { sandbox, calls, panel } = loadBuilder();
         await sandbox.HebrewPlanBuilder.mount(panel, 'beginner-unit-1');
+        await openLessonScreen(sandbox.HebrewPlanBuilder, panel);
         childWith(panel.querySelector('[data-plan-block="introduction"]'), 'data-plan-edit', '').click();
         await sandbox.HebrewPlanBuilder.settled();
         const row = childWith(panel, 'data-plan-word', '2');
@@ -396,6 +406,7 @@ describe('plan builder media, preview, validation (INIT-004/SPEC-016)', () => {
         const { sandbox, calls, panel } = loadBuilder();
         const Builder = sandbox.HebrewPlanBuilder;
         await Builder.mount(panel, 'beginner-unit-1');
+        await openLessonScreen(Builder, panel);
         const source = fs.readFileSync(path.join(root, 'shared', 'admin', 'plan-builder.js'), 'utf8');
         assert.equal(source.includes(String(ESTIMATE)), false);
 
@@ -484,6 +495,7 @@ describe('plan builder media, preview, validation (INIT-004/SPEC-016)', () => {
         const { sandbox, calls, panel } = loadBuilder();
         const Builder = sandbox.HebrewPlanBuilder;
         await Builder.mount(panel, 'beginner-unit-1');
+        await openLessonScreen(Builder, panel);
         const button = panel.querySelector('[data-plan-approve]');
         const alt = panel.querySelector('[data-plan-approve-alt]');
         assert.equal(button.disabled, true);
@@ -515,6 +527,7 @@ describe('plan builder media, preview, validation (INIT-004/SPEC-016)', () => {
         const { sandbox, calls, panel } = loadBuilder();
         const Builder = sandbox.HebrewPlanBuilder;
         await Builder.mount(panel, 'beginner-unit-1');
+        await openLessonScreen(Builder, panel);
         const source = fs.readFileSync(path.join(root, 'shared', 'admin', 'plan-builder.js'), 'utf8');
         assert.doesNotMatch(source, /<form|action\s*=|OPENAI_API_KEY|sk-/);
         assert.match(source, /\/api\/media/);
@@ -549,6 +562,7 @@ describe('plan builder media, preview, validation (INIT-004/SPEC-016)', () => {
         const { sandbox, panel } = loadBuilder();
         const Builder = sandbox.HebrewPlanBuilder;
         await Builder.mount(panel, 'beginner-unit-1');
+        await openLessonScreen(Builder, panel);
         childWith(panel.querySelector('[data-plan-block="introduction"]'), 'data-plan-edit', '').click();
         await Builder.settled();
         const before = panel.querySelector('[data-plan-preview]').innerHTML;

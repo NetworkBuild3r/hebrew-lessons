@@ -182,6 +182,17 @@ function findEditingCalls(source) {
     return banned.filter(([re]) => re.test(source)).map(([, what]) => what);
 }
 
+/**
+ * make_word_audio reads args.words and pushes clips. It does not edit a plan.
+ * The editing-call scan would flag those lines, so that handler is left out.
+ */
+function withoutMakeWordAudio(source) {
+    const start = source.indexOf("register(server, 'make_word_audio'");
+    const end = source.indexOf("register(server, 'replace_part'");
+    if (start === -1 || end <= start) return '';
+    return source.slice(0, start) + source.slice(end);
+}
+
 /** The text between two markers, or '' (a missing marker fails the caller's assertion). */
 function between(source, start, end) {
     const from = source.indexOf(start);
@@ -423,9 +434,12 @@ describe('plan builder parity (INIT-008/SPEC-010)', { concurrency: false }, () =
         const tools = fs.readFileSync(path.join(harness.REPO_ROOT, 'mcp', 'tools.js'), 'utf8');
         const routes = fs.readFileSync(path.join(harness.REPO_ROOT, 'server', 'api', 'plan-routes.js'), 'utf8');
 
+        const spec005 = between(tools, "// INIT-004/SPEC-005: same functions as the plan HTTP routes", "// INIT-004/SPEC-012");
+        assert.ok(spec005.includes("register(server, 'make_word_audio'"));
+        assert.ok(spec005.includes("register(server, 'replace_part'"));
         const toolSegments = [
             between(tools, 'function registerPlanBuilderTools(server) {', 'function registerLessonTools(server) {'),
-            between(tools, "// INIT-004/SPEC-005: same functions as the plan HTTP routes", "// INIT-004/SPEC-012")
+            withoutMakeWordAudio(spec005)
         ];
         const routeSegments = [
             between(routes, 'function registerBuilderRoutes(router) {', ' * Register plan routes on a router'),

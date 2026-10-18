@@ -296,7 +296,7 @@ describe('ac-1 unscramble scoring', () => {
 });
 
 describe('ac-3 ac-4 ac-5 translate', () => {
-    it('ac-4: plene in accept scores correct when typed', () => {
+    it('exercise: ac-4: plene in accept scores correct when typed', () => {
         const doc = makePlanDoc();
         const block = {
             kind: 'translate',

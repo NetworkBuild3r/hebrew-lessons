@@ -456,8 +456,8 @@ describe('ac-4: the "edited by a person" mark is information, never a lock', () 
         const row = form.fields.passage.row;
         const mark = one(row, 'data-plan-edited-mark');
         assert.ok(mark);
-        assert.match(text(mark), /נערך על ידי אדם/);
-        assert.match(text(mark), /Edited by a person/);
+        // The mark is one bilingual label. The default UI language shows the English half.
+        assert.equal(text(mark), 'Edited by a person');
         assert.equal(mark.getAttribute('aria-expanded'), 'false');
         assert.equal(byAttr(form.fields.audioPath ? form.fields.audioPath.row : form.el, 'data-plan-edited-mark').length, form.fields.audioPath ? 0 : 1);
         assert.equal(byAttr(form.el, 'data-plan-edited-mark').length, 1);
@@ -542,6 +542,9 @@ describe('the builder wires the marks, the history panel, and the restore togeth
         env.server.plan.revision = 6;
         const panel = env.panel();
         await env.W.HebrewPlanBuilder.mount(panel, 'sample');
+        await env.W.HebrewPlanBuilder.settled();
+        // The builder opens on the plan screen. The lesson screen is where block rows are.
+        one(panel, 'data-plan-lesson-tab', '0').click();
         await env.W.HebrewPlanBuilder.settled();
         one(one(panel, 'data-plan-block', 'listening'), 'data-plan-edit').click();
         await env.W.HebrewPlanBuilder.settled();

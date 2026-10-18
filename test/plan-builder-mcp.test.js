@@ -30,7 +30,10 @@ const NEW_TOOLS = [
     'diff_plan', 'restore_plan_revision', 'list_plan_issues', 'assign_plan'
 ];
 /** Tools added after the eight above. They are checked in their own tests. */
-const LATER_TOOLS = ['insert_lesson', 'move_lesson', 'remove_lesson', 'suggest_glosses', 'make_word_audio'];
+const LATER_TOOLS = [
+    'insert_lesson', 'move_lesson', 'remove_lesson', 'suggest_glosses', 'make_word_audio',
+    'delete_lesson', 'delete_plan'
+];
 const NOT_NFC = 'א\u05B7ת\u05BC\u05B8ה';
 
 describe('plan builder MCP tools (INIT-008/SPEC-009)', { concurrency: false }, () => {

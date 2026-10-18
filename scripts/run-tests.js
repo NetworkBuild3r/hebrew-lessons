@@ -1,6 +1,8 @@
 /**
- * `npm test`. Runs the node:test files with the quarantine preload, then
- * fails if any quarantine.json entry was never registered.
+ * `npm test`. Runs the node:test files with the spec reporter and a second
+ * reporter that records skipped tests. Fails when a quarantine.json entry
+ * was not skipped with its reason, or when an entry is past its expiry.
+ * TZ is not set here; CI sets TZ=UTC.
  */
 'use strict';
 
@@ -16,50 +18,54 @@ const files = fs.readdirSync(path.join(root, 'test'))
     .sort()
     .map((name) => path.join('test', name));
 
+let entries;
+try {
+    entries = quarantine.loadList();
+} catch (err) {
+    console.error(err && err.message ? err.message : err);
+    process.exit(1);
+}
+
+const expired = quarantine.expiredEntries(entries);
+if (expired.length) {
+    console.error('quarantine expired:');
+    for (const entry of expired) {
+        console.error('  ' + entry.file + ' :: ' + entry.name + ' (expires ' + entry.expires + ')');
+    }
+    process.exit(1);
+}
+
 const seenDir = fs.mkdtempSync(path.join(os.tmpdir(), 'heb-quarantine-'));
+const seenFile = path.join(seenDir, 'skipped.txt');
 const child = spawn(process.execPath, [
-    '--require', path.join(root, 'test', 'helpers', 'quarantine-register.js'),
     '--test',
     '--test-reporter', 'spec',
+    '--test-reporter-destination', 'stdout',
+    '--test-reporter', path.join(root, 'test', 'helpers', 'quarantine-reporter.js'),
+    '--test-reporter-destination', seenFile,
     ...files
 ], {
     cwd: root,
-    env: Object.assign({}, process.env, { HEBREW_QUARANTINE_SEEN: seenDir }),
     stdio: 'inherit'
 });
 
 child.on('exit', (code, signal) => {
-    let entries;
-    try {
-        entries = quarantine.loadList();
-    } catch (err) {
-        console.error(err && err.message ? err.message : err);
-        process.exit(1);
+    let seen = [];
+    if (fs.existsSync(seenFile)) {
+        const text = fs.readFileSync(seenFile, 'utf8');
+        seen = text.split('\n').filter(Boolean).map((line) => JSON.parse(line));
     }
-    const seen = new Set();
-    if (fs.existsSync(seenDir)) {
-        for (const name of fs.readdirSync(seenDir)) {
-            const text = fs.readFileSync(path.join(seenDir, name), 'utf8');
-            for (const line of text.split('\n')) {
-                if (!line) continue;
-                const row = JSON.parse(line);
-                seen.add(quarantine.entryKey(row.file, row.name));
-            }
-        }
-    }
-    const missing = quarantine.missingEntries(entries, seen);
+    const missing = quarantine.unmatchedSkips(entries, seen);
     const matched = entries.length - missing.length;
     console.log('# quarantined ' + matched);
     try { fs.rmSync(seenDir, { recursive: true, force: true }); } catch (err) { /* ignore */ }
     if (missing.length) {
-        console.error('quarantine list is stale; these tests were not registered:');
+        console.error('quarantine list is stale; these tests were not skipped with their reason:');
         for (const entry of missing) {
             console.error('  ' + entry.file + ' :: ' + entry.name);
         }
         process.exit(1);
     }
-    if (signal) {
-        process.exit(1);
-    }
+    if (signal) process.exit(1);
     process.exit(code == null ? 1 : code);
 });

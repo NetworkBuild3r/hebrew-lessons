@@ -181,7 +181,7 @@ describe('verb-tense workshop', { concurrency: false }, () => {
         assert.equal((text.match(/^- \[ \]/gm) || []).length, 88);
     });
 
-    it('a second run with no ticks leaves revisions and verified flags alone', () => {
+    it('verb workshop: a second run with no ticks leaves revisions and verified flags alone', () => {
         const before = repo.find(seed.WORKSHOP_FORMS[0].key);
         const planBefore = store.loadWorkingCopy(seed.PLAN_ID).revision;
         const again = runSeed();
@@ -229,7 +229,7 @@ describe('verb-tense workshop', { concurrency: false }, () => {
         assert.equal(repo.find(keep[2]).verified, 1);
     });
 
-    it('refuses when a target key exists with a source other than admin', () => {
+    it('verb workshop: refuses when a target key exists with a source other than admin', () => {
         const victim = seed.WORKSHOP_FORMS[3];
         const before = repo.find(victim.key);
         db.run('UPDATE lexicon_entries SET source = ? WHERE key = ?', 'seed', victim.key);

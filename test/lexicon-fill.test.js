@@ -12,7 +12,7 @@ require('../shared/admin/plan-builder.js');
 const Builder = globalThis.HebrewPlanBuilder;
 
 describe('lexicon fill', () => {
-    it('builds present and past cells from stored forms only', () => {
+    it('builds present, past, and future cells from stored forms only', () => {
         const paradigm = {
             present: {
                 ms: { key: 'חוֹשֵׁב' },
@@ -37,7 +37,9 @@ describe('lexicon fill', () => {
             { cell: '1s', formKey: 'חָשַׁבְתִּי' },
             { cell: '3ms', formKey: 'חָשַׁב' }
         ]);
-        assert.deepEqual(Builder.cellsFromParadigm(paradigm, 'future'), []);
+        assert.deepEqual(Builder.cellsFromParadigm(paradigm, 'future'), [
+            { cell: '1s', formKey: 'אֶחְשֹׁב' }
+        ]);
         assert.deepEqual(Builder.cellsFromParadigm(null, 'present'), []);
     });
 

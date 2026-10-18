@@ -1,303 +1,50 @@
 [
   {
-    "file": "test/db.test.js",
-    "name": "migrate creates ADR-0002 tables and records version 1; second run is no-op",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/lexicon-fill.test.js",
-    "name": "builds present and past cells from stored forms only",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder-mcp.test.js",
-    "name": "ac-1: the eight new tools are listed once each with the annotations; the existing tools are unchanged",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in 59d3367",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder-media.test.js",
-    "name": "ac-1: a graded-story block offers no picture; an introduction word saves mediaId and alt",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder-media.test.js",
-    "name": "a word without a picture is given an image object, then mediaId and alt",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder-media.test.js",
-    "name": "ac-2: generate stays disabled until the dry-run figure is shown and confirmed",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder-media.test.js",
-    "name": "ac-4: the approval button is disabled while alt text is empty",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder-media.test.js",
-    "name": "lists pending and approved images and uploads through the admin fetch",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder-media.test.js",
-    "name": "re-renders the selected block from the renderer after a successful save",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder-parity.test.js",
-    "name": "ac-2: no handler edits plan JSON, opens the database, or writes the store",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder.test.js",
-    "name": "keeps the legacy save hook and does not post to upsert_lesson",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder.test.js",
-    "name": "sends the move index the route expects and does not renumber block ids",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder.test.js",
-    "name": "ac-1: insert, move, remove, field save, and publish call the plan routes",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder.test.js",
-    "name": "ac-2: a 409 keeps the textarea and names revision_conflict plus the stored revision",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder.test.js",
-    "name": "escapes plan text in the preview and refuses a hostile plan id",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder.test.js",
-    "name": "fetches the schema once per mount, after the plan and the lesson",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder.test.js",
-    "name": "a save sends the revision the server last returned, one PATCH, and keeps other unsaved text",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder.test.js",
-    "name": "the activity menu lists research names and insert sends the mapped block type",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder.test.js",
-    "name": "a refused insert lists the server rule codes in the form and does not repaint it away",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-builder.test.js",
-    "name": "opens the plan, unit, and lesson forms on demand and shows recipe and visibility as selects",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-editor-history.test.js",
-    "name": "the field whose last writer is a person carries the mark; the others do not",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-editor-history.test.js",
-    "name": "a field a person last wrote shows the mark after the plan loads",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-editor-history.test.js",
-    "name": "\"Restore the earlier value\" confirms once, posts once with the builder's revision, and reloads at the new one",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-editor-history.test.js",
-    "name": "a revision restored from the list reloads the plan, and the confirmation names a 409",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-editor-history.test.js",
-    "name": "typing is never blocked by the mark: the marked field takes text and saves",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-editor-issues-preview.test.js",
-    "name": "compute draws all eleven block types",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-editor-issues-preview.test.js",
-    "name": "the issues also show inline at their fields",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-editor-issues-preview.test.js",
-    "name": "a link opens the block form and focuses the field",
-    "category": "real-bug",
-    "reason": "real bug: issue links don't open the target form; UI being replaced",
-    "owner": "Hebrew Frontend Dev"
-  },
-  {
-    "file": "test/plan-editor-issues-preview.test.js",
-    "name": "a link to a word opens that word inside its block",
-    "category": "real-bug",
-    "reason": "real bug: issue links don't open the target form; UI being replaced",
-    "owner": "Hebrew Frontend Dev"
-  },
-  {
-    "file": "test/plan-editor-issues-preview.test.js",
-    "name": "a link to the lesson and one to the plan open those sections",
-    "category": "real-bug",
-    "reason": "real bug: issue links don't open the target form; UI being replaced",
-    "owner": "Hebrew Frontend Dev"
-  },
-  {
-    "file": "test/plan-editor-issues-preview.test.js",
-    "name": "typing changes the preview after the debounce, with no request, and the state is unsaved until the save",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-editor-issues-preview.test.js",
-    "name": "a value with <img onerror=…> appears as text in the preview",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-editor-issues-preview.test.js",
-    "name": "with no block selected the lesson title is previewed as the lesson card",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-editor-issues-preview.test.js",
-    "name": "a click on a link inside the preview does not leave the page",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-editor-issues-preview.test.js",
-    "name": "no request goes anywhere but the plan routes, the schema, and the account list; none to a preview route",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-editor-issues-preview.test.js",
-    "name": "unmount removes every listener, the preview timer, and the panels",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-editor-widgets.test.js",
-    "name": "each block type: a control per property and a widget on each",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
-    "file": "test/plan-editor-widgets.test.js",
-    "name": "a bucket item form for a word, paragraph, line, and question has every property",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
-  },
-  {
     "file": "test/plan-hebrew-checks.test.js",
     "name": "every free-text schema property has a language row, and every audio property a pair",
     "category": "real-bug",
     "reason": "real bug: missing audio pair registry row",
-    "owner": "Hebrew Backend Dev, fix in Go port"
+    "owner": "Hebrew Backend Dev, fix in Go port",
+    "issue": "https://github.com/NetworkBuild3r/hebrew-lessons/issues/10"
   },
   {
     "file": "test/plan-hebrew-checks.test.js",
     "name": "fails on a mutated schema with a clip property that has no pair",
     "category": "real-bug",
     "reason": "real bug: missing audio pair registry row",
-    "owner": "Hebrew Backend Dev, fix in Go port"
+    "owner": "Hebrew Backend Dev, fix in Go port",
+    "issue": "https://github.com/NetworkBuild3r/hebrew-lessons/issues/10"
   },
   {
-    "file": "test/plan-hebrew-checks.test.js",
-    "name": "no registry row names a field the schema no longer has",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
+    "file": "test/plan-editor-issues-preview.test.js",
+    "name": "a link opens the block form and focuses the field",
+    "category": "real-bug",
+    "reason": "real bug: issue links don't open the target form; UI being replaced",
+    "owner": "Hebrew Frontend Dev",
+    "issue": "https://github.com/NetworkBuild3r/hebrew-lessons/issues/11"
   },
   {
-    "file": "test/plan-language-1-1.test.js",
-    "name": "takes schemaVersion 1.0.0 or 1.1.0 and adds the five blocks as oneOf branches",
-    "category": "stale",
-    "reason": "stale: behavior changed intentionally in e3fb466",
-    "owner": "Hebrew QA"
+    "file": "test/plan-editor-issues-preview.test.js",
+    "name": "a link to a word opens that word inside its block",
+    "category": "real-bug",
+    "reason": "real bug: issue links don't open the target form; UI being replaced",
+    "owner": "Hebrew Frontend Dev",
+    "issue": "https://github.com/NetworkBuild3r/hebrew-lessons/issues/11"
+  },
+  {
+    "file": "test/plan-editor-issues-preview.test.js",
+    "name": "a link to the lesson and one to the plan open those sections",
+    "category": "real-bug",
+    "reason": "real bug: issue links don't open the target form; UI being replaced",
+    "owner": "Hebrew Frontend Dev",
+    "issue": "https://github.com/NetworkBuild3r/hebrew-lessons/issues/11"
   },
   {
     "file": "test/plan-validate.test.js",
     "name": "deep nesting under an unknown property is rejected without throwing",
     "category": "real-bug",
     "reason": "real bug, expected-to-be-fixed: should report /extra or a clear depth-limit error",
-    "owner": "Hebrew Backend Dev, fix in Go port"
+    "owner": "Hebrew Backend Dev, fix in Go port",
+    "issue": "https://github.com/NetworkBuild3r/hebrew-lessons/issues/12"
   }
 ]
