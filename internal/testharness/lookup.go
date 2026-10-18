@@ -30,10 +30,23 @@ func NewFixtureLookup(audioTexts, lexemeTexts []string) *FixtureLookup {
 	return &FixtureLookup{audio: audio, ids: ids}
 }
 
-// KnownLexemes returns no known words. A test that needs a learner's
-// known set can wrap this lookup.
-func (l *FixtureLookup) KnownLexemes(context.Context, int64) ([]string, error) {
-	return nil, nil
+// KnownLexemes returns no earlier-unit words. beforePosition is the unit
+// being validated; this fixture has no course, so the map is empty.
+// Validation is authoring-time and global, not per learner.
+func (l *FixtureLookup) KnownLexemes(context.Context, int) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
+// Facts reports that textNFC is a fixture lexeme. The fixture stores text
+// only, so the returned LexemeFacts is the zero value when found is true.
+func (l *FixtureLookup) Facts(_ context.Context, textNFC string) (units.LexemeFacts, bool, error) {
+	if l == nil {
+		return units.LexemeFacts{}, false, nil
+	}
+	if _, ok := l.ids[textNFC]; !ok {
+		return units.LexemeFacts{}, false, nil
+	}
+	return units.LexemeFacts{}, true, nil
 }
 
 // HasAudio reports whether textNFC is one of the fixture clip texts.
