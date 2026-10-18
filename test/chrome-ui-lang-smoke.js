@@ -13,7 +13,7 @@ function fail(msg) {
     process.exitCode = 1;
 }
 
-(async () => {
+require('./helpers/chrome-cdp').skipIfMissing("chrome-ui-lang-smoke") || (async () => {
     let chrome;
     try {
         await harness.start({ lessons: 'fixture' });

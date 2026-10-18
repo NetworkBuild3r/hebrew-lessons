@@ -525,7 +525,7 @@ describe('ac-8 layout at 360px', () => {
         assert.equal(/#[0-9a-fA-F]{3,8}/.test(slice.replace(/\/\*[\s\S]*?\*\//g, '')), false);
     });
 
-    it('headless Chrome at 360×640: no overflow, focus ring, keyboard, live region', { timeout: 90000 }, async () => {
+    it('headless Chrome at 360×640: no overflow, focus ring, keyboard, live region', { timeout: 90000, skip: chromeCdp.chromeSkip() }, async () => {
         const CHROME_CHOOSE = {
             id: 'chrome-choose',
             type: 'exercise',
@@ -539,10 +539,7 @@ describe('ac-8 layout at 360px', () => {
             items: [{ id: 't1', statement: 'True?', answer: true, why: 'It is.' }]
         };
 
-        await harness.start({ lessons: 'real' });
-        const BASE = harness.baseUrl;
-        const browser = await chromeCdp.launch({ tag: 'exercise-360', portBase: 9850, width: 360, height: 640 });
-        const cdp = browser.cdp;
+        let browser;
         let layoutBefore;
         let layoutAfter;
         let focusProbe;
@@ -550,6 +547,10 @@ describe('ac-8 layout at 360px', () => {
         let liveAfterTf;
 
         try {
+            await harness.start({ lessons: 'real' });
+            const BASE = harness.baseUrl;
+            browser = await chromeCdp.launch({ tag: 'exercise-360', portBase: 9850, width: 360, height: 640 });
+            const cdp = browser.cdp;
             await chromeCdp.signInAs(cdp, harness, BASE, 'learner');
             await cdp.call('Page.navigate', { url: BASE + '/shared/plan/index.html' });
             await waitFor(
@@ -626,7 +627,7 @@ describe('ac-8 layout at 360px', () => {
                 assert.ok(s.scrollWidth <= 360, s.kind + ' scrollWidth ' + s.scrollWidth + ' > 360');
             });
         } finally {
-            await browser.close();
+            if (browser) await browser.close();
             await harness.stop();
         }
     });

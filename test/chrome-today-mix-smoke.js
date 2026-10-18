@@ -14,7 +14,7 @@ const { spawn } = require('child_process');
 
 const harness = require('./helpers/signed-in-server');
 
-const CHROME = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const { CHROME } = require('./helpers/chrome-cdp');
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DUE_WORD = 'בֹּקֶר';
 const WEAK_WORD = 'כזזק';
@@ -273,7 +273,7 @@ async function main() {
     }
 }
 
-main().catch((err) => {
+require('./helpers/chrome-cdp').skipIfMissing("chrome-today-mix-smoke") || main().catch((err) => {
     console.error(err && err.stack ? err.stack : err);
     process.exit(1);
 });

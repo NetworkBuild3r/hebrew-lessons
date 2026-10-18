@@ -1,0 +1,28 @@
+# Node test suite. Separate from image.yml so image builds are not affected.
+# Runs only on the local ARC scale set registered to this repo (see home_k3
+# apps/arc-runner-set-hebrew). Never use GitHub-hosted runners.
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  npm-test:
+    runs-on: k8-build
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: TZ=UTC npm test
+
+  # contract-suite lands with the contract harness PR. Kept as its own job so
+  # it is not folded into image.yml and does not run until that harness exists.
+  contract-suite:
+    if: false
+    runs-on: k8-build
+    steps:
+      - run: echo "contract suite is not wired yet"

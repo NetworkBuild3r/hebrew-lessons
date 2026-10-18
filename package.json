@@ -7,7 +7,7 @@
     "start": "node server/start.js",
     "web": "node server/web.js",
     "mcp": "node mcp/http.js",
-    "test": "node --test test/*.test.js",
+    "test": "node scripts/run-tests.js",
     "db:migrate": "node scripts/db.js migrate",
     "db:backup": "node scripts/db.js backup",
     "db:backup-sqlite": "node scripts/backup-db.js",

@@ -98,7 +98,7 @@ async function main() {
     console.log('chrome-plan-editor-exercise: PASS');
 }
 
-main().catch((err) => {
+require('./helpers/chrome-cdp').skipIfMissing("chrome-plan-editor-exercise") || main().catch((err) => {
     console.error(err && err.stack ? err.stack : err);
     process.exit(1);
 });

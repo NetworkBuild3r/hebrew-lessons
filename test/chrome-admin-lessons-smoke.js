@@ -17,8 +17,7 @@ const crypto = require('crypto');
 
 const harness = require('./helpers/signed-in-server');
 
-const CHROME = process.env.CHROME_PATH
-    || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const { CHROME } = require('./helpers/chrome-cdp');
 
 const REPO = harness.REPO_ROOT;
 const SCRIPT_MEANING = '<script>alert(1)</script>';
@@ -1028,4 +1027,4 @@ async function main() {
     process.exit(1);
 }
 
-main();
+require('./helpers/chrome-cdp').skipIfMissing("chrome-admin-lessons-smoke") || main();

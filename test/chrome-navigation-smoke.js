@@ -16,7 +16,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const harness = require('./helpers/signed-in-server');
 
-const CHROME = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const { CHROME } = require('./helpers/chrome-cdp');
 const SCREENS = [
     { id: 'lessons', path: '/lessons/' },
     { id: 'review', path: '/review/' },
@@ -232,7 +232,7 @@ async function main() {
     }
 }
 
-main().catch((err) => {
+require('./helpers/chrome-cdp').skipIfMissing("chrome-navigation-smoke") || main().catch((err) => {
     console.error(err.message || err);
     process.exit(1);
 });

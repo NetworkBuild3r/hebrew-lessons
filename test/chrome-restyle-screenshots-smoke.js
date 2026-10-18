@@ -145,7 +145,7 @@ async function main() {
     }
 }
 
-main().then(() => {
+require('./helpers/chrome-cdp').skipIfMissing("chrome-restyle-screenshots-smoke") || main().then(() => {
     console.log(JSON.stringify(report, null, 2));
     if (failures.length) {
         console.error('\nFAILURES (' + failures.length + '):');
