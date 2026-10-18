@@ -34,7 +34,7 @@
 (function (root) {
     'use strict';
 
-    var SITE = ' · דֶּרֶךְ עִבְרִית';
+    var SITE = ' · דרך עברית';
 
     var SPEECH_AND_WORD_DATA = [
         '/shared/player/speech.js',

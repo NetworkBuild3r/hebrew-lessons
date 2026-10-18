@@ -68,14 +68,14 @@ describe('shell header and nav (ac-1, ac-2)', () => {
     it('shows the chosen mark from the local brand folder, as a decorative image', () => {
         assert.match(html, /<img class="hebrew-logo-mark" src="\/shared\/brand\/mark-a\.svg"/);
         assert.match(html, /<img class="hebrew-logo-mark"[^>]*alt=""/);
-        assert.match(html, /<span class="hebrew-brand-he ui-he" lang="he">דֶּרֶךְ עִבְרִית<\/span>/);
+        assert.match(html, /<span class="hebrew-brand-he ui-he" lang="he">דרך עברית<\/span>/);
         assert.match(html, /<span class="hebrew-brand-en ui-en" lang="en" dir="ltr">Hebrew Way<\/span>/);
         assert.doesNotMatch(html, /<text|ע<\/text>/, 'the old text logo is gone');
     });
 
     it('draws nav icons from the sprite and every nav icon name exists in it', () => {
         const used = [...html.matchAll(/<use href="\/shared\/brand\/sprite\.svg#icon-([a-z-]+)">/g)].map((m) => m[1]);
-        assert.deepEqual(used.sort(), ['admin', 'lessons', 'progress', 'review', 'theme', 'today', 'words']);
+        assert.deepEqual(used.sort(), ['admin', 'lessons', 'progress', 'review', 'today', 'words']);
         for (const name of used) assert.ok(spriteIds.has(name), 'sprite has icon-' + name);
     });
 

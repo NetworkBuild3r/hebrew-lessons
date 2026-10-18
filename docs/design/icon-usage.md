@@ -22,11 +22,11 @@ The Hebrew in every logo file is outlines (paths), not live text, so it does not
 
 ## The icon set
 
-35 icons on one 24 px grid: 2 px stroke, round caps and joins, `stroke="currentColor"`, `fill="none"`. No colour is written into any icon. The icon takes the text colour of whatever holds it, so dark mode and disabled states work with no extra file.
+23 icons on one 24 px grid: 2 px stroke, round caps and joins, `stroke="currentColor"`, `fill="none"`. No colour is written into any icon. The icon takes the text colour of whatever holds it, so dark mode and disabled states work with no extra file.
 
-`play` `replay` `next` `back` `check` `wrong` `retry` `home` `lessons` `review` `progress` `settings` `theme` `mute` `sound` `lock` `done` `help` `admin` `upload` `image` `words` `today` `guides` `verbs` `streak` `xp` `search` `filter` `chevron-down` `close` `compare` `tip` `bookmark` `mic`
+`play` `replay` `next` `back` `check` `wrong` `retry` `home` `lessons` `review` `progress` `settings` `theme` `mute` `sound` `lock` `done` `help` `admin` `upload` `image` `words` `today`
 
-`today` is not in the original list. It is there because the shell nav already uses a today icon. `guides` and `verbs` are in the shell nav. The twelve added in the 2026 guides pass are `guides`, `verbs`, `streak`, `xp`, `search`, `filter`, `chevron-down`, `close`, `compare`, `tip`, `bookmark`, and `mic`.
+`today` is not in the original list. It is there because the shell nav already uses a today icon. There is no `guides` icon; Guides stays a text-only link until one is needed.
 
 Meaning is never carried by colour alone. `check` (bare tick, a right answer), `done` (tick in a circle, a finished item) and `wrong` (cross) differ in shape.
 

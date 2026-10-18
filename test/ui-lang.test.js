@@ -74,7 +74,7 @@ describe('interface language', () => {
         U.applyUiLang('en');
         assert.equal(doc.title, 'Today · Hebrew Way');
         U.applyUiLang('he');
-        assert.equal(doc.title, 'היום · דֶּרֶךְ עִבְרִית');
+        assert.equal(doc.title, 'היום · דרך עברית');
     });
 
     it('the stylesheet hides one language and keeps the lesson text', () => {

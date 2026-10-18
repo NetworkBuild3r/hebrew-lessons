@@ -60,7 +60,7 @@
         const pageHe = el.getAttribute('data-page-he');
         const pageEn = el.getAttribute('data-page-en');
         if (pageHe || pageEn) {
-            const site = next === 'he' ? 'דֶּרֶךְ עִבְרִית' : 'Hebrew Way';
+            const site = next === 'he' ? 'דרך עברית' : 'Hebrew Way';
             doc.title = (next === 'he' ? (pageHe || pageEn) : (pageEn || pageHe)) + ' · ' + site;
         }
         return next;
