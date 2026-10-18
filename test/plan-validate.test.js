@@ -548,8 +548,17 @@ describe('schema: draft-07, closed properties, known schemaVersions', () => {
         personal.audience = 'personal';
         personal.assigneeId = 'learner-0001';
         assert.equal(validatePlan(personal).ok, true);
+        personal.assigneeId = 'bnelson';
+        const short = hits(validatePlan(personal).blocks, 'schema', '/assigneeId');
+        assert.equal(short.length, 1);
+        assert.equal(short[0].message, "This username format can't be assigned to a personal plan yet.");
         personal.assigneeId = 'Bob';
-        assert.equal(hits(validatePlan(personal).blocks, 'schema', '/assigneeId').length, 1);
+        const refused = hits(validatePlan(personal).blocks, 'schema', '/assigneeId');
+        assert.equal(refused.length, 1);
+        assert.equal(refused[0].message, "This username format can't be assigned to a personal plan yet.");
+        personal.assigneeId = '';
+        assert.equal(hits(validatePlan(personal).blocks, 'schema', '/assigneeId')[0].message,
+            "This username format can't be assigned to a personal plan yet.");
         const shared = sample('beginner-unit-1');
         shared.assigneeId = 'learner-0001';
         assert.equal(hits(validatePlan(shared).blocks, 'schema', '/assigneeId').length, 1);

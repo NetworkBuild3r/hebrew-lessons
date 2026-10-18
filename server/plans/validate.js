@@ -703,6 +703,9 @@ function ruleForSchemaError(error, plan, schema) {
         }
     }
     if (keyword === 'pattern' && at.endsWith('/mediaId')) return ['schema', MESSAGES.mediaId];
+    if (keyword === 'pattern' && at === '/assigneeId') {
+        return ['schema', "This username format can't be assigned to a personal plan yet."];
+    }
     return ['schema', error.message];
 }
 

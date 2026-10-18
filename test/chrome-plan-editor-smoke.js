@@ -494,6 +494,7 @@ async function main() {
         const short = await textOf('[data-plan-assign-message]');
         report.shortUsername = short;
         if (!/assigneeId/.test(short)) fail('assign', 'the refusal does not say which field: ' + short);
+        if (!/can't be assigned to a personal plan yet/.test(short)) fail('assign', 'the refusal is not the plain username message: ' + short);
         if (store.loadWorkingCopy('published-plan').audience !== 'shared') fail('assign', 'a refused assignment changed the plan');
 
         // ---- SPEC-014: history, compare, restore

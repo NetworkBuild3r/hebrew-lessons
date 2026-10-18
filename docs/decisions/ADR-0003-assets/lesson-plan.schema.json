@@ -181,6 +181,13 @@
         "footer": { "$ref": "#/definitions/plainText" },
         "level": { "enum": ["basic", "intermediate", "advanced"] },
         "visibility": { "enum": ["hidden", "everyone", "selected"] },
+        "users": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[^A-Z]+$"
+          }
+        },
         "recipe": { "$ref": "#/definitions/recipe" },
         "legacyStorageKey": {
           "type": "string",

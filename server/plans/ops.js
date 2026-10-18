@@ -27,9 +27,11 @@
 const { validatePlan, usesV110, usesV120, V100, V110, V120 } = require('./validate');
 const lexicon = require('../db/repos/lexicon');
 const db = require('../db');
+const visibilityRepo = require('../db/repos/visibility');
 const { requireContext } = require('./context');
 const { logWrite } = require('./write-log');
 const provenance = require('./provenance');
+const usernameList = require('../username-list');
 
 const FIELD_NAME = /^[A-Za-z][A-Za-z0-9]{0,40}$/;
 const BUCKETS = ['words', 'paragraphs', 'lines', 'questions'];
@@ -557,6 +559,66 @@ function validationError(validation, revision) {
 }
 
 /**
+ * Lessons of a plan, in document order.
+ * @param {object} plan
+ * @returns {object[]}
+ */
+function lessonsOf(plan) {
+    const found = [];
+    const units = plan && Array.isArray(plan.units) ? plan.units : [];
+    for (const unit of units) {
+        const lessons = unit && Array.isArray(unit.lessons) ? unit.lessons : [];
+        for (const lesson of lessons) {
+            if (lesson && typeof lesson === 'object' && !Array.isArray(lesson)) found.push(lesson);
+        }
+    }
+    return found;
+}
+
+/**
+ * When a write sets or changes `users`, check those names the way
+ * set_lesson_visibility does and store the account's username. A selected
+ * lesson whose user list changed, or whose visibility just became selected
+ * while `users` is present, replaces lesson_grants for that lesson id.
+ * An omitted `users` property does not read or write grants.
+ * A user list that did not change is not resolved again, so a later title
+ * edit still saves after an account is disabled.
+ * @param {object} before
+ * @param {object} after
+ * @returns {{ slug: string, userIds: number[] }[]}
+ */
+function lessonUserGrants(before, after) {
+    const priorById = new Map();
+    for (const lesson of lessonsOf(before)) {
+        if (typeof lesson.id === 'string') priorById.set(lesson.id, lesson);
+    }
+    const grants = [];
+    for (const lesson of lessonsOf(after)) {
+        if (!Object.prototype.hasOwnProperty.call(lesson, 'users')) continue;
+        const prior = typeof lesson.id === 'string' ? priorById.get(lesson.id) : undefined;
+        const hadUsers = Boolean(prior && Object.prototype.hasOwnProperty.call(prior, 'users'));
+        const usersChanged = !hadUsers || JSON.stringify(prior.users) !== JSON.stringify(lesson.users);
+        const becameSelected = lesson.visibility === 'selected'
+            && (!prior || prior.visibility !== 'selected');
+        if (!usersChanged && !becameSelected) continue;
+        const rows = usernameList.resolveActiveUsers(lesson.users);
+        lesson.users = usernameList.canonicalUsernames(rows);
+        if (lesson.visibility === 'selected' && typeof lesson.id === 'string' && lesson.id) {
+            const userIds = [];
+            const seen = new Set();
+            for (const row of rows) {
+                const id = Number(row.id);
+                if (seen.has(id)) continue;
+                seen.add(id);
+                userIds.push(id);
+            }
+            grants.push({ slug: lesson.id, userIds });
+        }
+    }
+    return grants;
+}
+
+/**
  * Save the working copy, the revision row (with a baseline when the plan has
  * none for its current revision), the provenance marks, and the plan.* audit
  * row in one transaction. If any of them throws, the whole write rolls back and
@@ -594,6 +656,11 @@ function persist(store, row, plan, ctx, meta) {
             field: meta.field,
             summary: meta.summary
         }, ctx);
+        // Selected-lesson user lists replace lesson_grants for that lesson id.
+        // lesson_visibility is not written: that table is the worksheet mode.
+        for (const grant of meta.grants || []) {
+            visibilityRepo.replaceGrants(grant.slug, grant.userIds);
+        }
     });
     const out = {
         plan: JSON.parse(saved.document),
@@ -622,6 +689,9 @@ function mutate(store, id, op, expectedRevision, ctx) {
     if (result.plan.id !== opened.row.id) {
         return { error: 'invalid_op', revision: opened.row.revision };
     }
+    // Throws the set_lesson_visibility username errors before schema validation
+    // and before any write. Unchanged user lists are not checked again.
+    const grants = lessonUserGrants(opened.plan, result.plan);
     const validation = validatePlan(result.plan, { lexicon, snapshot: opened.row.snapshot });
     if (refusesWrite(validation)) return validationError(validation, opened.row.revision);
     let field;
@@ -633,7 +703,8 @@ function mutate(store, id, op, expectedRevision, ctx) {
         path: typeof op.path === 'string' ? op.path : '',
         field: field,
         summary: op.op === 'restore' ? op.summary : undefined,
-        before: opened.plan
+        before: opened.plan,
+        grants: grants
     });
     saved.validation = validation;
     return saved;

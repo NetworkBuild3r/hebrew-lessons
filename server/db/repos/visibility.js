@@ -57,6 +57,24 @@ function listGrantsForUser(userId) {
     );
 }
 
+/**
+ * Replace every grant for one slug. Caller owns the transaction.
+ * Does not write lesson_visibility. Plan lessons keep their mode on the
+ * document and use this only for the user list.
+ * @param {string} slug
+ * @param {number[]} userIds
+ */
+function replaceGrants(slug, userIds) {
+    db.run('DELETE FROM lesson_grants WHERE slug = ?', slug);
+    for (const id of userIds) {
+        db.run(
+            'INSERT OR IGNORE INTO lesson_grants (slug, user_id) VALUES (?, ?)',
+            slug,
+            id
+        );
+    }
+}
+
 module.exports = {
     setVisibility,
     getVisibility,
@@ -64,5 +82,6 @@ module.exports = {
     grant,
     revoke,
     listGrants,
-    listGrantsForUser
+    listGrantsForUser,
+    replaceGrants
 };
