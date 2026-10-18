@@ -1,0 +1,75 @@
+package views
+
+// Today is the learner home: due reviews, and one next lesson.
+// The count is shell copy until the review queue is wired.
+templ Today(csrf string) {
+	@Layout(Page{Title: "הַיּוֹם · " + AppName, CSRF: csrf, Current: "today"}) {
+		<article class="today">
+			<header class="today__head">
+				<h1 lang="he">הַיּוֹם</h1>
+				<p class="lede" lang="he">חֲזָרוֹת שֶׁהִגִּיעַ זְמַנָּן, וְהַשִּׁיעוּר הַבָּא.</p>
+			</header>
+			<section class="ink-card today-due" aria-labelledby="due-title">
+				<p class="kicker" id="due-title" lang="he">לַחֲזָרָה</p>
+				<p class="count" lang="en" dir="ltr"><bdi>12</bdi></p>
+				<p class="ink-card__label" lang="he">מִלִּים מוּכָנוֹת</p>
+				<p class="ink-card__hint" lang="he">עַד עֶשְׂרִים בְּיוֹם</p>
+				<a class="btn btn-lamp" href="/review">
+					<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("play") }></use></svg>
+					<span lang="he">הַתְחֵל</span>
+				</a>
+			</section>
+			<section class="lesson-card today-next" aria-labelledby="next-title">
+				<p class="kicker" lang="he">הַשִּׁיעוּר הַבָּא</p>
+				<h2 id="next-title" class="he-display" lang="he">בֹּקֶר טוֹב</h2>
+				<p class="he-display he-proof" lang="he">שָׁלוֹם עֲלֵיכֶם. בַּבֹּקֶר אֲנִי קָם, שׁוֹתֶה קָפֶה חָם, וְקוֹרֵא עִבְרִית בְּנִקּוּד: חִירִיק, צֵירֵי, חוֹלָם, קֻבּוּץ וְשְׁוָא.</p>
+				<p class="gloss"><bdi lang="en" dir="ltr">good morning, <bdi lang="he" dir="rtl">בֹּקֶר טוֹב</bdi></bdi></p>
+				<p class="pair">
+					<span lang="he">הַבֹּקֶר שֶׁלִּי</span>
+					<bdi lang="en" dir="ltr">My morning</bdi>
+				</p>
+				<a class="btn btn-primary" href="/lesson">
+					<svg class={ iconClass(true) } aria-hidden="true" focusable="false"><use href={ IconHref("next") }></use></svg>
+					<span lang="he">לַשִּׁיעוּר</span>
+				</a>
+			</section>
+		</article>
+	}
+}
+
+templ Review(csrf string) {
+	@Layout(Page{Title: "חֲזָרָה · " + AppName, CSRF: csrf, Current: "review"}) {
+		<article class="sheet">
+			<h1 lang="he">חֲזָרָה</h1>
+			<p class="lede" lang="he">הַתּוֹר עוֹד רֵיק.</p>
+		</article>
+	}
+}
+
+templ Progress(csrf string) {
+	@Layout(Page{Title: "הִתְקַדְּמוּת · " + AppName, CSRF: csrf, Current: "progress"}) {
+		<article class="sheet">
+			<h1 lang="he">הִתְקַדְּמוּת</h1>
+			<p class="lede" lang="he">מִלִּים שֶׁאֶפְשָׁר לִזְכֹּר, וִיחִידוֹת שֶׁהֻשְׁלְמוּ.</p>
+			<ul class="stats">
+				<li>
+					<span class="count" lang="en" dir="ltr"><bdi>0</bdi></span>
+					<span lang="he">מִלִּים</span>
+				</li>
+				<li>
+					<span class="count" lang="en" dir="ltr"><bdi>0</bdi></span>
+					<span lang="he">יְחִידוֹת</span>
+				</li>
+			</ul>
+		</article>
+	}
+}
+
+templ Lesson(csrf string) {
+	@Layout(Page{Title: "הַשִּׁיעוּר · " + AppName, CSRF: csrf, Current: ""}) {
+		<article class="sheet vt-activity">
+			<h1 lang="he">הַשִּׁיעוּר</h1>
+			<p class="lede" lang="he">מִכָּאן נִכְנָסִים לַשִּׁיעוּר.</p>
+		</article>
+	}
+}

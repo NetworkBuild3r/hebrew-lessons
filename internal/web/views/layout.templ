@@ -1,0 +1,54 @@
+package views
+
+templ Layout(p Page) {
+	<!DOCTYPE html>
+	<html lang="he" dir="rtl" translate="no">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+			<meta name="csrf-token" content={ p.CSRF }/>
+			@themeHead()
+			<link rel="stylesheet" href="/static/css/tokens.css"/>
+			<link rel="stylesheet" href="/static/css/base.css"/>
+			<title>{ p.Title }</title>
+		</head>
+		<body hx-headers={ HXHeaders(p.CSRF) }>
+			<a class="skip" href="#main">דַּלֵּג לַתֹּכֶן</a>
+			<div class="shell">
+				<header class="top">
+					<div class="top__inner">
+						<a class="brand" href="/">
+							<span class="brand__mark" aria-hidden="true">ע</span>
+							<span class="brand__name" lang="he">{ AppName }</span>
+						</a>
+						<button type="button" class="theme-toggle" id="theme-toggle" aria-pressed="false">
+							<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("theme") }></use></svg>
+							<span class="theme-toggle__label">
+								<span class="when-light" lang="he">כֵּהֶה</span>
+								<span class="when-dark" lang="he">בָּהִיר</span>
+							</span>
+						</button>
+					</div>
+				</header>
+				<main id="main" class="page" tabindex="-1">
+					{ children... }
+				</main>
+				<div class="dock-wrap">
+					<nav class="dock" aria-label="רָאשִׁי">
+						@dockLink("/", "today", "הַיּוֹם", p.Current, "today", false)
+						@dockLink("/review", "review", "חֲזָרָה", p.Current, "review", false)
+						@dockLink("/progress", "progress", "הִתְקַדְּמוּת", p.Current, "progress", false)
+					</nav>
+				</div>
+			</div>
+			<script src="/static/js/htmx.min.js"></script>
+		</body>
+	</html>
+}
+
+templ dockLink(href string, iconName string, label string, current string, id string, directional bool) {
+	<a href={ templ.SafeURL(href) } class="dock__link" if current == id { aria-current="page" }>
+		<svg class={ iconClass(directional) } aria-hidden="true" focusable="false"><use href={ IconHref(iconName) }></use></svg>
+		<span class="dock__label" lang="he">{ label }</span>
+	</a>
+}
