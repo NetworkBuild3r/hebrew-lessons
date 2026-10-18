@@ -1,6 +1,6 @@
 // Command hebrew loads config, opens the database read-only, checks the
 // migration ledger, and serves GET /healthz. HEBREW_DEV_WEB=1 also serves
-// the guides pages.
+// the guides pages and /shared/ from HEBREW_ROOT/shared.
 package main
 
 import (
@@ -65,7 +65,7 @@ func run() error {
 		log.Printf("ledger ok (%d versions)", len(ledger.Versions))
 	}
 
-	srv := newServer(listenAddr(cfg.Host, cfg.Port), newMux(conn, ledger))
+	srv := newServer(listenAddr(cfg.Host, cfg.Port), newMux(conn, ledger, cfg.HebrewRoot))
 	ln, err := net.Listen("tcp", srv.Addr)
 	if err != nil {
 		return err
@@ -102,10 +102,11 @@ func listenAddr(host string, port int) string {
 	return net.JoinHostPort(host, strconv.Itoa(port))
 }
 
-func newMux(conn *sql.DB, ledger db.Ledger) http.Handler {
+func newMux(conn *sql.DB, ledger db.Ledger, hebrewRoot string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler(conn, ledger))
 	pages.Mount(mux, conn)
+	pages.MountShared(mux, hebrewRoot)
 	return mux
 }
 
