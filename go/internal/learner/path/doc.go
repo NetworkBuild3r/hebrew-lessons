@@ -3,12 +3,11 @@
 // The frontend codes against the exported types in this package. There are
 // no page handlers and no templ views here. Screens come later.
 //
-// DueCount is the number of due review_items rows. A row is due when its
-// local calendar day is today or earlier, using the same local-day number
-// as server/learner/model.js dueInDays. The zone is the process local zone,
-// which is the zone Node's Date methods use. A suspended row is not due.
-// he_en and en_he each count. See DueCount for the choices ADR-0017 leaves
-// open.
+// DueCount is the Review page due-deck length. A card is due when
+// due <= now, the same instant test as server/learner/cards.js isDue and
+// HebrewReview.isDue. Suspended rows are skipped one direction at a time.
+// The 30-card and 10-new-word caps, and the lesson interleaving, match
+// cards.js selectDue. See DueCount.
 //
 // Path reads one published plan: the plan id argument, or, when that
 // argument is empty, the assigned personal plan. States are done, current,

@@ -71,11 +71,14 @@ for (const row of body.reviews || []) {
         `INSERT INTO review_items (
             user_id, word, direction, due, step, streak, lapses,
             last_result, last_at, sources, suspended
-        ) VALUES (?, ?, ?, ?, 0, 0, 0, NULL, NULL, '[]', ?)`,
+        ) VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?)`,
         userId(row.username),
         String(row.word),
         String(row.direction),
         String(row.due),
+        row.lastResult == null || row.lastResult === '' ? null : String(row.lastResult),
+        row.lastAt == null || row.lastAt === '' ? null : String(row.lastAt),
+        Array.isArray(row.sources) ? JSON.stringify(row.sources) : '[]',
         row.suspended ? 1 : 0
     );
 }

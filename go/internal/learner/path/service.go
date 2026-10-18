@@ -43,8 +43,9 @@ func (s *Service) WithClock(now func() time.Time) *Service {
 	return &cp
 }
 
-// WithLocation returns a copy that buckets due dates in loc.
-// nil means the process local zone, matching Node's Date local fields.
+// WithLocation stores loc on the copy. DueCount does not read it.
+// The Review page compares due <= now as instants, so the zone does not
+// change the count. nil means the process local zone.
 func (s *Service) WithLocation(loc *time.Location) *Service {
 	cp := *s
 	cp.loc = loc

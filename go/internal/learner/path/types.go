@@ -97,7 +97,8 @@ type Unit struct {
 	// when that lesson sets the field, otherwise newWords.
 	//
 	// Keys are ExactKey values, first-seen order, duplicates dropped.
-	// ExactKey does not apply Unicode NFC. See ExactKey.
+	// ExactKey is textkey.ExactKey: NFC, then the ECMAScript \s collapse,
+	// then trim. See ExactKey.
 	NewWordsIntroduced int `json:"newWordsIntroduced"`
 	NewWordsDone       int `json:"newWordsDone"`
 

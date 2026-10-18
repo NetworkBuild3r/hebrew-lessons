@@ -38,9 +38,10 @@ func TestExactKey(t *testing.T) {
 	if ExactKey("\xff") != "" {
 		t.Fatal("invalid utf-8 was kept")
 	}
-	// NFC is not applied. A decomposed mark stays decomposed.
-	decomposed := "ש\u05b8"
-	if ExactKey(decomposed) != decomposed {
-		t.Fatalf("composed or dropped: %q", ExactKey(decomposed))
+	// Shin + shin-dot + qamats is not canonical order. NFC reorders it.
+	swapped := "ש\u05C1\u05B8"
+	ordered := "ש\u05B8\u05C1"
+	if ExactKey(swapped) != ordered || ExactKey(ordered) != ordered {
+		t.Fatalf("nikud order: swapped %q ordered %q", ExactKey(swapped), ExactKey(ordered))
 	}
 }

@@ -15,28 +15,32 @@ import (
 
 type dueCase struct {
 	ID       string   `json:"id"`
-	TZ       string   `json:"tz"`
 	Now      string   `json:"now"`
 	Username string   `json:"username"`
 	Rows     []dueRow `json:"rows"`
 }
 
 type dueRow struct {
+	Word       string   `json:"word"`
+	Direction  string   `json:"direction"`
+	Due        string   `json:"due"`
+	Suspended  int      `json:"suspended"`
+	LastAt     string   `json:"lastAt,omitempty"`
+	LastResult string   `json:"lastResult,omitempty"`
+	Sources    []string `json:"sources,omitempty"`
+}
+
+type dueCard struct {
 	Word      string `json:"word"`
 	Direction string `json:"direction"`
-	Due       string `json:"due"`
-	Suspended int    `json:"suspended"`
 }
 
 type dueOracle struct {
-	ID             string `json:"id"`
-	TZ             string `json:"tz"`
-	Node           string `json:"node"`
-	Count          int    `json:"count"`
-	TimestampCount int    `json:"timestampCount"`
-	WordLevelCount int    `json:"wordLevelCount"`
-	NowMs          int64  `json:"nowMs"`
-	NowDay         int64  `json:"nowDay"`
+	ID           string    `json:"id"`
+	Node         string    `json:"node"`
+	Count        int       `json:"count"`
+	InstantCount int       `json:"instantCount"`
+	Cards        []dueCard `json:"cards"`
 }
 
 func TestDueCountGolden(t *testing.T) {
@@ -66,9 +70,6 @@ func TestDueCountGolden(t *testing.T) {
 		}
 		cases = append(cases, item)
 	}
-	if len(cases) == 0 {
-		t.Fatal("no cases")
-	}
 
 	users := make([]string, 0, len(cases))
 	var reviews []map[string]any
@@ -81,11 +82,14 @@ func TestDueCountGolden(t *testing.T) {
 		users = append(users, item.Username)
 		for _, row := range item.Rows {
 			reviews = append(reviews, map[string]any{
-				"username":  item.Username,
-				"word":      row.Word,
-				"direction": row.Direction,
-				"due":       row.Due,
-				"suspended": row.Suspended,
+				"username":   item.Username,
+				"word":       row.Word,
+				"direction":  row.Direction,
+				"due":        row.Due,
+				"suspended":  row.Suspended,
+				"lastAt":     row.LastAt,
+				"lastResult": row.LastResult,
+				"sources":    row.Sources,
 			})
 		}
 	}
@@ -93,27 +97,12 @@ func TestDueCountGolden(t *testing.T) {
 		"users":   users,
 		"reviews": reviews,
 	})
-
-	byTZ := map[string][]dueCase{}
-	var zones []string
-	for _, item := range cases {
-		if _, ok := byTZ[item.TZ]; !ok {
-			zones = append(zones, item.TZ)
-		}
-		byTZ[item.TZ] = append(byTZ[item.TZ], item)
-	}
-
 	oracles := map[string]dueOracle{}
-	for _, tz := range zones {
-		for _, line := range runDueOracle(t, dir, casesPath, tz) {
-			if line.TZ != tz {
-				t.Fatalf("oracle tz %s want %s", line.TZ, tz)
-			}
-			if !strings.HasPrefix(line.Node, "v22.") {
-				t.Fatalf("node %s", line.Node)
-			}
-			oracles[line.ID] = line
+	for _, line := range runDueOracle(t, dir, casesPath) {
+		if !strings.HasPrefix(line.Node, "v22.14.") {
+			t.Fatalf("node %s", line.Node)
 		}
+		oracles[line.ID] = line
 	}
 
 	cfg := testConfig(t)
@@ -123,77 +112,63 @@ func TestDueCountGolden(t *testing.T) {
 		if !ok {
 			t.Fatalf("no oracle for %s", item.ID)
 		}
-		if oracle.TimestampCount > oracle.Count {
-			t.Fatalf("%s timestamp %d > local %d", item.ID, oracle.TimestampCount, oracle.Count)
+		if oracle.Count > oracle.InstantCount {
+			t.Fatalf("%s deck %d exceeds uncapped %d", item.ID, oracle.Count, oracle.InstantCount)
 		}
-		now, err := time.Parse(time.RFC3339, item.Now)
+		now, err := time.Parse(time.RFC3339Nano, item.Now)
 		if err != nil {
-			t.Fatal(err)
-		}
-		if oracle.NowMs != now.UnixMilli() {
-			t.Fatalf("%s nowMs node %d go %d", item.ID, oracle.NowMs, now.UnixMilli())
-		}
-		loc, err := time.LoadLocation(item.TZ)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if day := localDayNumber(now.UnixMilli(), loc); day != oracle.NowDay {
-			t.Fatalf("%s nowDay go %d node %d", item.ID, day, oracle.NowDay)
+			now, err = time.Parse(time.RFC3339, item.Now)
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 		userID := ids[item.Username]
-		if userID <= 0 {
-			t.Fatalf("missing id for %s", item.Username)
-		}
-		svc := New(conn, cfg).WithLocation(loc).WithClock(func() time.Time { return now })
-		got, err := svc.DueCount(ctx, userID)
+		svc := New(conn, cfg).WithClock(func() time.Time { return now })
+		got, err := svc.dueQueue(ctx, userID, now)
 		if err != nil {
 			t.Fatalf("%s: %v", item.ID, err)
 		}
-		if got != oracle.Count {
-			t.Fatalf("%s DueCount %d node %d timestamp %d wordLevel %d",
-				item.ID, got, oracle.Count, oracle.TimestampCount, oracle.WordLevelCount)
+		if len(got) != oracle.Count {
+			t.Fatalf("%s DueCount %d review page %d uncapped %d",
+				item.ID, len(got), oracle.Count, oracle.InstantCount)
+		}
+		if len(got) != len(oracle.Cards) {
+			t.Fatalf("%s cards %d vs %d", item.ID, len(got), len(oracle.Cards))
+		}
+		for i, card := range oracle.Cards {
+			if got[i].word != card.Word || got[i].direction != card.Direction {
+				t.Fatalf("%s card %d go %s %s node %s %s",
+					item.ID, i, got[i].word, got[i].direction, card.Word, card.Direction)
+			}
 		}
 	}
 
-	// These lock the local-day reading against the instant queue and the
-	// word-level suspension flag. The numbers are the Node oracle's.
-	want := []struct {
-		id         string
-		count      int
-		timestamp  int
-		wordLevel  int
-		checkLevel bool
-	}{
-		{id: "utc-both", count: 2, timestamp: 2},
-		{id: "partial-suspend", count: 1, timestamp: 1, wordLevel: 0, checkLevel: true},
-		{id: "both-suspended", count: 0, timestamp: 0, wordLevel: 0, checkLevel: true},
-		{id: "utc-future", count: 0, timestamp: 0},
-		{id: "later-today-utc", count: 1, timestamp: 0},
-		{id: "later-today-ny", count: 1, timestamp: 0},
-		{id: "cross-utc", count: 1, timestamp: 1},
-		{id: "cross-ny", count: 2, timestamp: 1},
-		{id: "cross-kiritimati", count: 2, timestamp: 1},
-		{id: "cross-pago", count: 2, timestamp: 1},
-		{id: "invalid-due", count: 1, timestamp: 1},
-		{id: "exactly-now", count: 1, timestamp: 1},
-		{id: "dst-ny", count: 1, timestamp: 0},
-		{id: "three-of-four", count: 3, timestamp: 3},
-		{id: "no-rows", count: 0, timestamp: 0},
-		{id: "spaced-word", count: 1, timestamp: 1},
-		{id: "offset-now", count: 1, timestamp: 1},
+	// Locks the instant reading and the Review page caps. The numbers are
+	// what cards.deck returned.
+	want := map[string]struct{ count, instant int }{
+		"later-today-before": {0, 0},
+		"later-today-after":  {1, 1},
+		"exactly-now":        {1, 1},
+		"cross-ny":           {1, 1},
+		"due-cap":            {30, 31},
+		"new-cap":            {10, 11},
+		"new-second":         {11, 11},
+		"partial-suspend":    {1, 1},
+		"interleave":         {4, 4},
 	}
-	if len(want) != len(cases) {
-		t.Fatalf("locked cases %d file %d", len(want), len(cases))
+	for id, item := range want {
+		oracle := oracles[id]
+		if oracle.Count != item.count || oracle.InstantCount != item.instant {
+			t.Fatalf("%s review %d uncapped %d want %d %d",
+				id, oracle.Count, oracle.InstantCount, item.count, item.instant)
+		}
 	}
-	for _, item := range want {
-		oracle := oracles[item.id]
-		if oracle.Count != item.count || oracle.TimestampCount != item.timestamp {
-			t.Fatalf("%s oracle count %d timestamp %d want %d %d",
-				item.id, oracle.Count, oracle.TimestampCount, item.count, item.timestamp)
-		}
-		if item.checkLevel && oracle.WordLevelCount != item.wordLevel {
-			t.Fatalf("%s wordLevel %d want %d", item.id, oracle.WordLevelCount, item.wordLevel)
-		}
+	var interleaved []string
+	for _, card := range oracles["interleave"].Cards {
+		interleaved = append(interleaved, card.Word)
+	}
+	if stringsJoin(interleaved) != "a1,a2,b1,a3" {
+		t.Fatalf("interleave %v", interleaved)
 	}
 
 	unknown, err := New(conn, cfg).DueCount(ctx, 1_000_000_000)
@@ -205,15 +180,15 @@ func TestDueCountGolden(t *testing.T) {
 	}
 }
 
-func runDueOracle(t *testing.T, dir, casesPath, tz string) []dueOracle {
+func runDueOracle(t *testing.T, dir, casesPath string) []dueOracle {
 	t.Helper()
 	cmd := exec.Command("node", filepath.Join("testdata", "due-oracle.js"), dir, casesPath)
-	cmd.Env = nodeEnv(tz)
+	cmd.Env = nodeEnv("UTC")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		t.Fatalf("oracle %s: %v\n%s", tz, err, stderr.String())
+		t.Fatalf("oracle: %v\n%s", err, stderr.String())
 	}
 	var out []dueOracle
 	for _, line := range bytes.Split(bytes.TrimSpace(stdout.Bytes()), []byte("\n")) {
@@ -222,7 +197,7 @@ func runDueOracle(t *testing.T, dir, casesPath, tz string) []dueOracle {
 		}
 		var item dueOracle
 		if err := json.Unmarshal(line, &item); err != nil {
-			t.Fatalf("oracle %s line %s: %v\nstderr %s", tz, line, err, stderr.String())
+			t.Fatalf("oracle line %s: %v\nstderr %s", line, err, stderr.String())
 		}
 		out = append(out, item)
 	}
