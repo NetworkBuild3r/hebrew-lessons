@@ -14,8 +14,7 @@ const path = require('path');
 const os = require('os');
 
 const harness = require('./helpers/signed-in-server');
-const CHROME = process.env.CHROME_PATH
-    || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const { CHROME } = require('./helpers/chrome-cdp');
 
 function get(url) {
     return new Promise((resolve, reject) => {
@@ -246,7 +245,7 @@ async function main() {
     }
 }
 
-main().catch(err => {
+require('./helpers/chrome-cdp').skipIfMissing("chrome-production-recall-smoke") || main().catch(err => {
     console.error(err.message || err);
     process.exit(1);
 });

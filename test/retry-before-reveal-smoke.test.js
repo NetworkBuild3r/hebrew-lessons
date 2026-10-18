@@ -12,10 +12,9 @@ const path = require('path');
 const os = require('os');
 
 const harness = require('./helpers/signed-in-server');
+const { CHROME, chromeSkip } = require('./helpers/chrome-cdp');
 
 const root = path.resolve(__dirname, '..');
-const CHROME = process.env.CHROME_PATH
-    || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 // Sign-in is required for every page (INIT-002), so this runs against the signed-in
 // test server on an ephemeral port and sets the learner's session cookie in Chrome.
 let BASE = '';
@@ -107,11 +106,8 @@ function sleep(ms) {
     return new Promise(r => setTimeout(r, ms));
 }
 
-describe('retry-before-reveal smoke (SPEC-006)', () => {
+describe('retry-before-reveal smoke (SPEC-006)', { skip: chromeSkip() }, () => {
     before(async () => {
-        if (!fs.existsSync(CHROME)) {
-            throw new Error('Chrome not found at ' + CHROME + ' (set CHROME_PATH)');
-        }
         const started = await harness.start({ lessons: 'real' });
         BASE = started.baseUrl;
 

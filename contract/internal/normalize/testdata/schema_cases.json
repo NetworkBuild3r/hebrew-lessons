@@ -1,0 +1,301 @@
+[
+  {
+    "name": "drop $schema and keep a real field",
+    "note": "get_lesson.inputSchema from the Node tools/list capture",
+    "before": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "slug": {
+          "type": "string",
+          "description": "Folder name, such as shai-date-indirect-speech."
+        }
+      },
+      "required": ["slug"]
+    },
+    "after": {
+      "type": "object",
+      "properties": {
+        "slug": {
+          "type": "string",
+          "description": "Folder name, such as shai-date-indirect-speech."
+        }
+      },
+      "required": ["slug"]
+    }
+  },
+  {
+    "name": "drop JS safe-integer bounds",
+    "note": "replace_part.expectedRevision from the Node tools/list capture",
+    "before": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991,
+      "description": "Revision from the last read. Must match the stored working copy."
+    },
+    "after": {
+      "type": "integer",
+      "description": "Revision from the last read. Must match the stored working copy."
+    }
+  },
+  {
+    "name": "keep real integer bounds",
+    "note": "list_plans.limit from the Node tools/list capture",
+    "before": {
+      "description": "At most this many plans. Default and maximum 200.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200
+    },
+    "after": {
+      "description": "At most this many plans. Default and maximum 200.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200
+    }
+  },
+  {
+    "name": "empty properties matches absent properties",
+    "note": "list_lessons.inputSchema from the Node tools/list capture",
+    "before": {"type": "object", "properties": {}},
+    "after": {"type": "object"}
+  },
+  {
+    "name": "absent properties stays absent",
+    "note": "synthetic twin of the empty-properties rule",
+    "before": {"type": "object"},
+    "after": {"type": "object"}
+  },
+  {
+    "name": "description-only object is any",
+    "note": "insert_block.block from the Node tools/list capture",
+    "before": {"description": "Block object to insert."},
+    "after": {"description": "Block object to insert.", "type": "any"}
+  },
+  {
+    "name": "untyped empty object is any",
+    "note": "rule 6; Node emits this shape for z.any() with no description",
+    "before": {},
+    "after": {"type": "any"}
+  },
+  {
+    "name": "worksheet description is any",
+    "note": "upsert_lesson.worksheet from the Node tools/list capture",
+    "before": {
+      "description": "Lesson object: title, level, activities, plus vocab, fill, grammar, reading, askFriend sections to include."
+    },
+    "after": {
+      "description": "Lesson object: title, level, activities, plus vocab, fill, grammar, reading, askFriend sections to include.",
+      "type": "any"
+    }
+  },
+  {
+    "name": "value description is any",
+    "note": "set_field.value from the Node tools/list capture",
+    "before": {"description": "New value."},
+    "after": {"description": "New value.", "type": "any"}
+  },
+  {
+    "name": "mixed verified union stays anyOf",
+    "note": "list_lexicon.verified from the Node tools/list capture. The boolean member blocks a const collapse.",
+    "before": {
+      "description": "Filter by the person's verified flag. You cannot change it.",
+      "anyOf": [
+        {"type": "boolean"},
+        {"type": "number", "const": 0},
+        {"type": "number", "const": 1}
+      ]
+    },
+    "after": {
+      "description": "Filter by the person's verified flag. You cannot change it.",
+      "anyOf": [
+        {"type": "boolean"},
+        {"type": "number", "const": 0},
+        {"type": "number", "const": 1}
+      ]
+    }
+  },
+  {
+    "name": "const anyOf collapses to enum",
+    "note": "the two const members of list_lexicon.verified, taken from the Node capture",
+    "before": {
+      "anyOf": [
+        {"type": "number", "const": 0},
+        {"type": "number", "const": 1}
+      ]
+    },
+    "after": {
+      "type": "number",
+      "enum": [0, 1]
+    }
+  },
+  {
+    "name": "revision union stays anyOf and keeps enum order",
+    "note": "diff_plan.from from the Node tools/list capture",
+    "before": {
+      "anyOf": [
+        {"type": "integer", "minimum": 1, "maximum": 1000000000},
+        {"type": "string", "enum": ["working", "published"]}
+      ],
+      "description": "Revision number, working, or published."
+    },
+    "after": {
+      "anyOf": [
+        {"type": "integer", "minimum": 1, "maximum": 1000000000},
+        {"type": "string", "enum": ["working", "published"]}
+      ],
+      "description": "Revision number, working, or published."
+    }
+  },
+  {
+    "name": "required array is sorted",
+    "note": "replace_part.required order from the Node tools/list capture",
+    "before": {
+      "type": "object",
+      "properties": {
+        "value": {"description": "Replacement object for that part."},
+        "id": {"type": "string"}
+      },
+      "required": ["id", "path", "value", "expectedRevision"]
+    },
+    "after": {
+      "type": "object",
+      "properties": {
+        "value": {"description": "Replacement object for that part.", "type": "any"},
+        "id": {"type": "string"}
+      },
+      "required": ["expectedRevision", "id", "path", "value"]
+    }
+  },
+  {
+    "name": "enum value order is kept",
+    "note": "assign_plan.audience from the Node tools/list capture",
+    "before": {
+      "type": "string",
+      "enum": ["shared", "personal"],
+      "description": "shared or personal."
+    },
+    "after": {
+      "type": "string",
+      "enum": ["shared", "personal"],
+      "description": "shared or personal."
+    }
+  },
+  {
+    "name": "nullable becomes a null type union",
+    "note": "synthetic. The live Node tools/list does not emit nullable.",
+    "before": {"type": "string", "nullable": true, "description": "Maybe."},
+    "after": {"type": ["null", "string"], "description": "Maybe."}
+  },
+  {
+    "name": "anyOf null union keeps the other branch constraints",
+    "note": "synthetic. The live Node tools/list does not emit a null union.",
+    "before": {
+      "description": "Maybe.",
+      "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "null"}
+      ]
+    },
+    "after": {
+      "description": "Maybe.",
+      "minLength": 1,
+      "type": ["null", "string"]
+    }
+  },
+  {
+    "name": "single-member anyOf unwraps",
+    "note": "synthetic. The live Node tools/list does not emit a single-member anyOf.",
+    "before": {
+      "description": "Slug.",
+      "anyOf": [{"type": "string", "minLength": 1}]
+    },
+    "after": {
+      "description": "Slug.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  {
+    "name": "single-member oneOf unwraps",
+    "note": "synthetic",
+    "before": {"oneOf": [{"type": "integer", "minimum": 0}]},
+    "after": {"type": "integer", "minimum": 0}
+  },
+  {
+    "name": "number with multipleOf 1 is integer",
+    "note": "synthetic. The live Node tools/list uses type integer directly.",
+    "before": {"type": "number", "multipleOf": 1, "minimum": 0},
+    "after": {"type": "integer", "minimum": 0}
+  },
+  {
+    "name": "additionalProperties false is dropped",
+    "note": "synthetic. The live Node tools/list does not emit additionalProperties.",
+    "before": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"a": {"type": "string"}}
+    },
+    "after": {
+      "type": "object",
+      "properties": {"a": {"type": "string"}}
+    }
+  },
+  {
+    "name": "default is kept and safe bounds are dropped",
+    "note": "synthetic. The live Node tools/list does not emit default.",
+    "before": {
+      "type": "integer",
+      "default": 50,
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "after": {"type": "integer", "default": 50}
+  },
+  {
+    "name": "anyOf of types is sorted",
+    "note": "synthetic",
+    "before": {
+      "anyOf": [
+        {"type": "string"},
+        {"type": "number"},
+        {"type": "boolean"}
+      ]
+    },
+    "after": {"type": ["boolean", "number", "string"]}
+  },
+  {
+    "name": "empty required is dropped",
+    "note": "synthetic. Node omits required when nothing is required.",
+    "before": {"type": "object", "properties": {"a": {"type": "string"}}, "required": []},
+    "after": {"type": "object", "properties": {"a": {"type": "string"}}}
+  },
+  {
+    "name": "severity union stays anyOf",
+    "note": "list_plan_issues.severity from the Node tools/list capture",
+    "before": {
+      "description": "block, warn, inform, all, or a list of them. Default block and warn.",
+      "anyOf": [
+        {"type": "string", "enum": ["block", "warn", "inform", "all"]},
+        {
+          "minItems": 1,
+          "maxItems": 3,
+          "type": "array",
+          "items": {"type": "string", "enum": ["block", "warn", "inform"]}
+        }
+      ]
+    },
+    "after": {
+      "description": "block, warn, inform, all, or a list of them. Default block and warn.",
+      "anyOf": [
+        {"type": "string", "enum": ["block", "warn", "inform", "all"]},
+        {
+          "minItems": 1,
+          "maxItems": 3,
+          "type": "array",
+          "items": {"type": "string", "enum": ["block", "warn", "inform"]}
+        }
+      ]
+    }
+  }
+]

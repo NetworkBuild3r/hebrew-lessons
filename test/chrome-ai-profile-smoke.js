@@ -15,7 +15,7 @@ const { spawn } = require('child_process');
 const assert = require('node:assert/strict');
 const harness = require('./helpers/signed-in-server');
 
-const CHROME = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const { CHROME } = require('./helpers/chrome-cdp');
 const DISCLOSURE = 'If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator\'s AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.';
 const ADMIN_SENTENCE = 'Admins can see all your activity, including every answer';
 
@@ -390,7 +390,7 @@ async function main() {
     }
 }
 
-main().catch((err) => {
+require('./helpers/chrome-cdp').skipIfMissing("chrome-ai-profile-smoke") || main().catch((err) => {
     console.error(err && err.stack ? err.stack : err);
     process.exit(1);
 });

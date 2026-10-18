@@ -450,7 +450,7 @@ describe('verification edge cases', () => {
 });
 
 describe('ac-9 resize keeps textarea text in Chrome', () => {
-    it('headless Chrome: text survives 360→1280 resize and clears on reload', { timeout: 120000 }, async () => {
+    it('headless Chrome: text survives 360→1280 resize and clears on reload', { timeout: 120000, skip: chromeCdp.chromeSkip() }, async () => {
         const CHROME_BLOCK = {
             id: 'chrome-as',
             type: 'assignment',
@@ -460,12 +460,12 @@ describe('ac-9 resize keeps textarea text in Chrome', () => {
             homework: ['Read aloud.']
         };
 
-        await harness.start({ lessons: 'real' });
-        const BASE = harness.baseUrl;
-        const browser = await chromeCdp.launch({ tag: 'assignment-resize', portBase: 9860, width: 360, height: 640 });
-        const cdp = browser.cdp;
-
+        let browser;
         try {
+            await harness.start({ lessons: 'real' });
+            const BASE = harness.baseUrl;
+            browser = await chromeCdp.launch({ tag: 'assignment-resize', portBase: 9860, width: 360, height: 640 });
+            const cdp = browser.cdp;
             await chromeCdp.signInAs(cdp, harness, BASE, 'learner');
             await cdp.call('Page.navigate', { url: BASE + '/shared/plan/index.html' });
             await waitFor(
@@ -514,7 +514,7 @@ describe('ac-9 resize keeps textarea text in Chrome', () => {
             assert.equal(afterReload.text, '');
             assert.equal(afterReload.hwChecked, false);
         } finally {
-            await browser.close();
+            if (browser) await browser.close();
             await harness.stop();
         }
     });

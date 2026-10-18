@@ -514,7 +514,7 @@ async function main() {
     console.log('chrome-lesson-types-smoke: PASS');
 }
 
-main().catch((err) => {
+require('./helpers/chrome-cdp').skipIfMissing("chrome-lesson-types-smoke") || main().catch((err) => {
     console.error(err && err.stack ? err.stack : err);
     process.exit(1);
 });

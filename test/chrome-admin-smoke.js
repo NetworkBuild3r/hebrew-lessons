@@ -15,8 +15,7 @@ const os = require('os');
 
 const harness = require('./helpers/signed-in-server');
 
-const CHROME = process.env.CHROME_PATH
-    || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const { CHROME } = require('./helpers/chrome-cdp');
 
 const INJECTION = '<img src=x onerror=alert(1)>';
 const NEW_USER = 'smokeuser';
@@ -815,4 +814,4 @@ async function main() {
     process.exit(1);
 }
 
-main();
+require('./helpers/chrome-cdp').skipIfMissing("chrome-admin-smoke") || main();

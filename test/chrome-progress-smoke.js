@@ -16,8 +16,7 @@ const os = require('os');
 
 const harness = require('./helpers/signed-in-server');
 
-const CHROME = process.env.CHROME_PATH
-    || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const { CHROME } = require('./helpers/chrome-cdp');
 
 const PENDING_TEXT = 'עדיין לא נשמר — ננסה שוב. (Not saved yet — will retry.)';
 const WORD = 'בֹּקֶר';
@@ -579,7 +578,7 @@ async function main() {
     }
 }
 
-main().catch((err) => {
+require('./helpers/chrome-cdp').skipIfMissing("chrome-progress-smoke") || main().catch((err) => {
     console.error(err.message || err);
     process.exit(1);
 });
