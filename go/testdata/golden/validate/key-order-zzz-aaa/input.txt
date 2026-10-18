@@ -1,1 +1,0 @@
-{"schemaVersion":"1.1.0","id":"mut-plan","revision":1,"status":"draft","audience":"shared","assigneeId":null,"title":"Mutation","language":{"target":"he","gloss":"en"},"units":[{"id":"unit-1","title":"Unit","theme":"home","lessons":[{"id":"l","title":"L","level":"basic","visibility":"hidden","buildsOn":[],"newWords":["שָׁלוֹם"],"recycles":[],"blocks":[]}]}],"zzz":1,"aaa":2}

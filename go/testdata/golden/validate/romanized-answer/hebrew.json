@@ -1,9 +1,0 @@
-[
-  {
-    "rule": "field-language",
-    "severity": "warn",
-    "path": "/units/0/lessons/0/blocks/0/cloze/items/0/answer",
-    "message": "this field is marked Hebrew and holds no Hebrew letter; it may hold English or a transliteration",
-    "field": "cloze/items/0/answer"
-  }
-]

@@ -82,11 +82,33 @@ function lexiconRuntime(spec) {
     return lex;
 }
 
+const validateCases = [];
+
+// A run of 64 or more identical code points is stored as @@REPEAT:hex:count@@.
+// The Go test expands that marker before it calls the validators. The marker
+// is only a file-size device; validatePlan still sees the full string.
+function packRuns(s) {
+    if (s.includes('@@REPEAT:')) throw new Error('input already contains a repeat marker');
+    const chars = Array.from(s);
+    let out = '';
+    for (let i = 0; i < chars.length;) {
+        let j = i + 1;
+        while (j < chars.length && chars[j] === chars[i]) j++;
+        const n = j - i;
+        if (n >= 64) out += '@@REPEAT:' + chars[i].codePointAt(0).toString(16) + ':' + n + '@@';
+        else out += chars[i].repeat(n);
+        i = j;
+    }
+    return out;
+}
+
+function unpackRuns(s) {
+    return s.replace(/@@REPEAT:([0-9a-f]+):(\d+)@@/g, (_, hex, n) => String.fromCodePoint(parseInt(hex, 16)).repeat(Number(n)));
+}
+
 function writeCase(id, input, options) {
-    const dir = path.join(OUT, 'validate', id);
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'input.txt'), input);
-    fs.writeFileSync(path.join(dir, 'options.json'), JSON.stringify(options, null, 2) + '\n');
+    const packed = packRuns(input);
+    if (unpackRuns(packed) !== input) throw new Error('pack/unpack mismatch for ' + id);
     const opt = {};
     const lex = lexiconRuntime(options.lexicon);
     if (lex) opt.lexicon = lex;
@@ -102,8 +124,7 @@ function writeCase(id, input, options) {
     } catch (err) {
         hebrewOut = [];
     }
-    fs.writeFileSync(path.join(dir, 'want.json'), JSON.stringify(result, null, 2) + '\n');
-    fs.writeFileSync(path.join(dir, 'hebrew.json'), JSON.stringify(hebrewOut, null, 2) + '\n');
+    validateCases.push({ id, input: packed, options, want: result, hebrew: hebrewOut });
     return { id, result, hebrew: hebrewOut };
 }
 
@@ -120,9 +141,13 @@ function rulesOf(found) {
     return set;
 }
 
-// jsstr goldens are line-oriented so a lone surrogate survives as a JSON string
-// (\uD800), which encoding/json would replace. Columns are tab-separated.
-// String fields are JSON.stringify output, including the quotes.
+// props.jsonl is one row per run of code points that share trim, UTF-16
+// length, and \s, and whose toLowerCase and NFC are the identity. A code
+// point whose toLowerCase or NFC differs gets its own row, with that output
+// as a JSON string. The Go test builds the four positions around שלום.
+// named-trim.jsonl is the explicit whitespace exhibit and is not derived
+// from the table. phrases.jsonl holds multi-character strings, because NFC
+// and case conversion do not always apply one code point at a time.
 function jsstrGoldens() {
     const dir = path.join(OUT, 'jsstr');
     fs.mkdirSync(dir, { recursive: true });
@@ -140,41 +165,56 @@ function jsstrGoldens() {
     ];
     const astral = [0x10000, 0x1F600, 0x1F4A9, 0x1D11E, 0x20000, 0x2F800, 0xE0100, 0x10FFFF];
 
-    function positions(ch) {
-        return [
-            ['lead', ch + word],
-            ['trail', word + ch],
-            ['interior', wordChars[0] + ch + wordChars.slice(1).join('')],
-            ['repeated', ch + ch + word + ch + ch]
-        ];
-    }
     function q(s) {
         return JSON.stringify(s);
     }
-    function writeLines(name, lines) {
-        fs.writeFileSync(path.join(dir, name), lines.join('\n') + '\n');
+    function hex(cp) {
+        const h = cp.toString(16);
+        return h.length < 4 ? h.padStart(4, '0') : h;
     }
-
-    const trim = [];
-    const lengths = [];
-    const lower = [];
-    const nfc = [];
-    const collapse = [];
-    function addChar(label, ch) {
-        for (const [pos, input] of positions(ch)) {
-            trim.push(label + '-' + pos + '\t' + q(input) + '\t' + q(input.trim()));
+    function props(cp) {
+        const ch = String.fromCodePoint(cp);
+        const lower = ch.toLowerCase();
+        const nfc = ch.normalize('NFC');
+        let flags = '';
+        if (ch.trim() === '') flags += 't';
+        if (/\s/.test(ch)) flags += 's';
+        if (!flags) flags = '-';
+        return {
+            utf16: ch.length,
+            flags,
+            lower: lower === ch ? '' : q(lower),
+            nfc: nfc === ch ? '' : q(nfc)
+        };
+    }
+    function format(start, end, row) {
+        const span = start === end ? hex(start) : hex(start) + '-' + hex(end);
+        return [span, String(row.utf16), row.flags, row.lower, row.nfc].join('\t');
+    }
+    const lines = [
+        '# start[-end]\tutf16\tflags\tlower\tnfc',
+        '# flags: t = trim removes the character, s = /\\s/ matches it, - = neither',
+        '# lower and nfc are JSON strings only when they differ from the character'
+    ];
+    for (let i = 0; i <= 0xFFFF;) {
+        const cur = props(i);
+        if (cur.lower || cur.nfc) {
+            lines.push(format(i, i, cur));
+            i++;
+            continue;
         }
-        lengths.push(label + '\t' + q(ch) + '\t' + Array.from(ch).length + '\t' + ch.length);
-        lower.push(label + '\t' + q(ch) + '\t' + q(ch.toLowerCase()));
-        nfc.push(label + '\t' + q(ch) + '\t' + q(ch.normalize('NFC')));
-        collapse.push(label + '-pair\t' + q(ch + ch) + '\t' + q((ch + ch).replace(/\s+/g, ' ')));
-        collapse.push(label + '-between\t' + q('א' + ch + 'ב') + '\t' + q(('א' + ch + 'ב').replace(/\s+/g, ' ')));
+        let j = i;
+        while (j + 1 <= 0xFFFF) {
+            const next = props(j + 1);
+            if (next.lower || next.nfc || next.utf16 !== cur.utf16 || next.flags !== cur.flags) break;
+            j++;
+        }
+        lines.push(format(i, j, cur));
+        i = j + 1;
     }
-    for (let cp = 0; cp <= 0xFFFF; cp++) {
-        addChar('u' + cp.toString(16).padStart(4, '0'), String.fromCodePoint(cp));
-    }
-    astral.forEach((cp) => addChar('u' + cp.toString(16), String.fromCodePoint(cp)));
-    // Multi-character inputs the validators actually fold, beyond one code point.
+    astral.forEach((cp) => lines.push(format(cp, cp, props(cp))));
+    fs.writeFileSync(path.join(dir, 'props.jsonl'), lines.join('\n') + '\n');
+
     const phrases = [
         ['word', word],
         ['alef-dagesh-qamats', 'א\u05BC\u05B8'],
@@ -190,19 +230,29 @@ function jsstrGoldens() {
         ['two-high-surrogates', '\uD800\uD800'],
         ['empty', '']
     ];
+    const phraseLines = ['# name\tinput\tcodePoints\tutf16\tlower\tnfc\ttrim\tcollapse'];
     phrases.forEach(([label, input]) => {
-        lengths.push(label + '\t' + q(input) + '\t' + Array.from(input).length + '\t' + input.length);
-        lower.push(label + '\t' + q(input) + '\t' + q(input.toLowerCase()));
-        nfc.push(label + '\t' + q(input) + '\t' + q(input.normalize('NFC')));
-        trim.push(label + '\t' + q(input) + '\t' + q(input.trim()));
-        collapse.push(label + '\t' + q(input) + '\t' + q(input.replace(/\s+/g, ' ')));
+        phraseLines.push([
+            label,
+            q(input),
+            String(Array.from(input).length),
+            String(input.length),
+            q(input.toLowerCase()),
+            q(input.normalize('NFC')),
+            q(input.trim()),
+            q(input.replace(/\s+/g, ' '))
+        ].join('\t'));
     });
-    writeLines('trim.jsonl', trim);
-    writeLines('lengths.jsonl', lengths);
-    writeLines('lower.jsonl', lower);
-    writeLines('nfc.jsonl', nfc);
-    writeLines('collapse.jsonl', collapse);
+    fs.writeFileSync(path.join(dir, 'phrases.jsonl'), phraseLines.join('\n') + '\n');
 
+    function positions(ch) {
+        return [
+            ['lead', ch + word],
+            ['trail', word + ch],
+            ['interior', wordChars[0] + ch + wordChars.slice(1).join('')],
+            ['repeated', ch + ch + word + ch + ch]
+        ];
+    }
     const namedLines = [];
     named.forEach(([label, cp]) => {
         const ch = String.fromCodePoint(cp);
@@ -211,7 +261,7 @@ function jsstrGoldens() {
             namedLines.push(label + '-' + pos + '\t' + q(input) + '\t' + q(input.trim()));
         }
     });
-    writeLines('named-trim.jsonl', namedLines);
+    fs.writeFileSync(path.join(dir, 'named-trim.jsonl'), namedLines.join('\n') + '\n');
 }
 
 function jsonGoldens() {
@@ -672,6 +722,7 @@ function main() {
     jsstrGoldens();
     jsonGoldens();
     const found = fixtures().concat(mutations());
+    fs.writeFileSync(path.join(OUT, 'validate.jsonl'), validateCases.map((item) => JSON.stringify(item)).join('\n') + '\n');
     const counts = {};
     const byRule = {};
     const byCase = {};

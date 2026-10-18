@@ -1,67 +1,94 @@
 package plans
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 )
 
+// expandRepeats restores runs that gen.js stored as @@REPEAT:hex:count@@.
+var repeatMarker = regexp.MustCompile(`@@REPEAT:([0-9a-fA-F]+):(\d+)@@`)
+
+func expandRepeats(s string) string {
+	return repeatMarker.ReplaceAllStringFunc(s, func(m string) string {
+		parts := repeatMarker.FindStringSubmatch(m)
+		cp, err1 := strconv.ParseInt(parts[1], 16, 32)
+		n, err2 := strconv.Atoi(parts[2])
+		if err1 != nil || err2 != nil {
+			return m
+		}
+		return strings.Repeat(string(rune(cp)), n)
+	})
+}
+
 func TestGoldenValidate(t *testing.T) {
-	root := filepath.Join("..", "..", "testdata", "golden", "validate")
-	entries, err := os.ReadDir(root)
+	root := filepath.Join("..", "..", "testdata", "golden")
+	covRaw, err := os.ReadFile(filepath.Join(root, "coverage.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) == 0 {
-		t.Fatal("no golden cases")
+	cov, err := Parse(string(covRaw))
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
+	wantN, ok := cov.Get("cases")
+	if !ok || wantN.K != KindNum {
+		t.Fatal("coverage.json has no cases count")
+	}
+	f, err := os.Open(filepath.Join(root, "validate.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	n := 0
+	for sc.Scan() {
+		line := sc.Text()
+		if line == "" {
 			continue
 		}
-		name := entry.Name()
-		t.Run(name, func(t *testing.T) {
-			dir := filepath.Join(root, name)
-			input, err := os.ReadFile(filepath.Join(dir, "input.txt"))
-			if err != nil {
-				t.Fatal(err)
+		n++
+		doc, err := Parse(line)
+		if err != nil {
+			t.Fatalf("line %d: %v", n, err)
+		}
+		id, _ := doc.StrKey("id")
+		t.Run(id, func(t *testing.T) {
+			rawIn, ok := doc.StrKey("input")
+			if !ok {
+				t.Fatal("no input")
 			}
-			optText, err := os.ReadFile(filepath.Join(dir, "options.json"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			optVal, err := Parse(string(optText))
-			if err != nil {
-				t.Fatal(err)
+			input := expandRepeats(rawIn)
+			optVal, ok := doc.Get("options")
+			if !ok {
+				t.Fatal("no options")
 			}
 			opt := optionsFrom(optVal)
 			mode, _ := optVal.StrKey("inputMode")
-			var doc any = string(input)
+			var plan any = input
 			if mode == "object" {
-				parsed, err := Parse(string(input))
+				parsed, err := Parse(input)
 				if err != nil {
 					t.Fatal(err)
 				}
-				doc = parsed
+				plan = parsed
 			}
-			got := ValidatePlan(doc, opt).JSON()
-			wantRaw, err := os.ReadFile(filepath.Join(dir, "want.json"))
-			if err != nil {
-				t.Fatal(err)
+			got := ValidatePlan(plan, opt).JSON()
+			wantVal, ok := doc.Get("want")
+			if !ok {
+				t.Fatal("no want")
 			}
-			want, err := restringify(string(wantRaw))
-			if err != nil {
-				t.Fatal(err)
-			}
+			want := Stringify(wantVal)
 			if got != want {
 				t.Fatalf("validatePlan\n%s", snippet(got, want))
 			}
-			hebrewWant, err := os.ReadFile(filepath.Join(dir, "hebrew.json"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			parsed, err := Parse(string(input))
+			parsed, err := Parse(input)
 			var hebrew []Finding
 			if err == nil && parsed.IsObject() {
 				hebrew = CheckHebrew(parsed, opt)
@@ -69,14 +96,21 @@ func TestGoldenValidate(t *testing.T) {
 				hebrew = []Finding{}
 			}
 			gotH := Stringify(findingsValue(hebrew))
-			wantH, err := restringify(string(hebrewWant))
-			if err != nil {
-				t.Fatal(err)
+			heb, ok := doc.Get("hebrew")
+			if !ok {
+				t.Fatal("no hebrew")
 			}
+			wantH := Stringify(heb)
 			if gotH != wantH {
 				t.Fatalf("checkHebrew\n%s", snippet(gotH, wantH))
 			}
 		})
+	}
+	if err := sc.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if n != int(wantN.N) {
+		t.Fatalf("validate.jsonl has %d cases, coverage.json says %d", n, int(wantN.N))
 	}
 }
 
@@ -101,14 +135,6 @@ func TestGoldenJSON(t *testing.T) {
 			t.Errorf("case %d\ninput %s\ngot   %s\nwant  %s", i, input, got, canonical)
 		}
 	}
-}
-
-func restringify(raw string) (string, error) {
-	v, err := Parse(raw)
-	if err != nil {
-		return "", err
-	}
-	return Stringify(v), nil
 }
 
 func snippet(got, want string) string {

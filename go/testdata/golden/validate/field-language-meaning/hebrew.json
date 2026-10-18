@@ -1,9 +1,0 @@
-[
-  {
-    "rule": "field-language",
-    "severity": "warn",
-    "path": "/units/0/lessons/0/blocks/0/words/0/meaning",
-    "message": "this field is marked English and holds mostly Hebrew letters; the Hebrew may belong in a Hebrew field",
-    "field": "meaning"
-  }
-]

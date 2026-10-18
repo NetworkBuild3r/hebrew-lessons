@@ -1,9 +1,0 @@
-[
-  {
-    "rule": "pointing-form",
-    "severity": "warn",
-    "path": "/units/0/lessons/0/blocks/0/words/0/word",
-    "message": "two vowel points sit on one letter, ending at character 3",
-    "field": "word"
-  }
-]

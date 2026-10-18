@@ -10,19 +10,142 @@ import (
 	"unicode/utf8"
 )
 
-func TestGoldenTrim(t *testing.T) {
+func TestGoldenProps(t *testing.T) {
+	word := "שָׁלוֹם"
+	head, tail := splitFirst(word)
+	wordCP, word16 := phraseLengths(t, "word")
+	next := rune(0)
+	astral := 0
+	scanLines(t, "props.jsonl", func(cols []string) {
+		if len(cols) != 5 {
+			t.Fatalf("props row %q", cols)
+		}
+		start, end := parseSpan(t, cols[0])
+		utf16n, err := strconv.Atoi(cols[1])
+		if err != nil {
+			t.Fatalf("%s utf16: %v", cols[0], err)
+		}
+		flags := cols[2]
+		if flags != "-" && flags != "t" && flags != "s" && flags != "ts" {
+			t.Fatalf("%s flags %q", cols[0], flags)
+		}
+		removes := strings.Contains(flags, "t")
+		space := strings.Contains(flags, "s")
+		if (cols[3] != "" || cols[4] != "") && start != end {
+			t.Fatalf("%s records a case or NFC change across a range", cols[0])
+		}
+		var lower, nfc string
+		if cols[3] != "" {
+			lower = unquote(t, cols[0], cols[3])
+		}
+		if cols[4] != "" {
+			nfc = unquote(t, cols[0], cols[4])
+		}
+		if start > 0xFFFF {
+			astral++
+		} else {
+			if start != next {
+				t.Fatalf("gap or overlap before %s (want U+%04X)", cols[0], next)
+			}
+			next = end + 1
+		}
+		for cp := start; cp <= end; cp++ {
+			ch := fromCP(cp)
+			if CodePoints(ch) != 1 {
+				t.Errorf("U+%04X code points %d", cp, CodePoints(ch))
+			}
+			if UTF16Len(ch) != utf16n {
+				t.Errorf("U+%04X utf16 %d, golden %d", cp, UTF16Len(ch), utf16n)
+			}
+			wantLower := ch
+			if lower != "" {
+				wantLower = lower
+			}
+			if got := ToLower(ch); got != wantLower {
+				t.Errorf("U+%04X toLower %q, golden %q", cp, got, wantLower)
+			}
+			wantNFC := ch
+			if nfc != "" {
+				wantNFC = nfc
+			}
+			if got := NFC(ch); got != wantNFC {
+				t.Errorf("U+%04X NFC %q, golden %q", cp, got, wantNFC)
+			}
+			pair := ch + ch
+			between := "א" + ch + "ב"
+			if space {
+				if CollapseSpace(pair) != " " || CollapseSpace(between) != "א ב" {
+					t.Errorf("U+%04X \\s collapse pair %q between %q", cp, CollapseSpace(pair), CollapseSpace(between))
+				}
+			} else if CollapseSpace(pair) != pair || CollapseSpace(between) != between {
+				t.Errorf("U+%04X non-space collapsed pair %q between %q", cp, CollapseSpace(pair), CollapseSpace(between))
+			}
+			lead := ch + word
+			trail := word + ch
+			interior := head + ch + tail
+			repeated := ch + ch + word + ch + ch
+			checkTrim := func(name, in, kept string) {
+				t.Helper()
+				want := in
+				if removes {
+					want = kept
+				}
+				if got := Trim(in); got != want {
+					t.Errorf("U+%04X %s trim %q, want %q", cp, name, got, want)
+				}
+			}
+			checkTrim("lead", lead, word)
+			checkTrim("trail", trail, word)
+			checkTrim("interior", interior, interior)
+			checkTrim("repeated", repeated, word)
+			if CodePoints(lead) != 1+wordCP || UTF16Len(lead) != utf16n+word16 {
+				t.Errorf("U+%04X lead lengths cp %d utf16 %d", cp, CodePoints(lead), UTF16Len(lead))
+			}
+			if CodePoints(repeated) != 4+wordCP || UTF16Len(repeated) != 4*utf16n+word16 {
+				t.Errorf("U+%04X repeated lengths cp %d utf16 %d", cp, CodePoints(repeated), UTF16Len(repeated))
+			}
+		}
+	})
+	if next != 0x10000 {
+		t.Fatalf("BMP table ended at U+%04X", next)
+	}
+	if astral != 8 {
+		t.Fatalf("astral sample has %d rows, want 8", astral)
+	}
+}
+
+func TestGoldenPhrases(t *testing.T) {
 	n := 0
-	scanJSONL(t, "trim.jsonl", func(name string, cols []string) {
-		in, out := unquote(t, name, cols[0]), unquote(t, name, cols[1])
-		if got := Trim(in); got != out {
-			t.Errorf("%s\ntrim got  %q\nwant %q", name, got, out)
+	scanLines(t, "phrases.jsonl", func(cols []string) {
+		if len(cols) != 8 {
+			t.Fatalf("phrase %q", cols)
+		}
+		name := cols[0]
+		in := unquote(t, name, cols[1])
+		cp, err1 := strconv.Atoi(cols[2])
+		u16, err2 := strconv.Atoi(cols[3])
+		if err1 != nil || err2 != nil {
+			t.Fatalf("%s lengths", name)
+		}
+		if CodePoints(in) != cp || UTF16Len(in) != u16 {
+			t.Errorf("%s code points %d utf16 %d, golden %d %d", name, CodePoints(in), UTF16Len(in), cp, u16)
+		}
+		if got, want := ToLower(in), unquote(t, name, cols[4]); got != want {
+			t.Errorf("%s toLower %q, golden %q", name, got, want)
+		}
+		if got, want := NFC(in), unquote(t, name, cols[5]); got != want {
+			t.Errorf("%s NFC %q, golden %q", name, got, want)
+		}
+		if got, want := Trim(in), unquote(t, name, cols[6]); got != want {
+			t.Errorf("%s trim %q, golden %q", name, got, want)
+		}
+		if got, want := CollapseSpace(in), unquote(t, name, cols[7]); got != want {
+			t.Errorf("%s collapse %q, golden %q", name, got, want)
 		}
 		n++
 	})
-	// U+0000..U+FFFF in four positions, plus eight astral characters in four
-	// positions, plus the multi-character phrases.
-	if n < 0x10000*4 {
-		t.Fatalf("trim golden has %d rows, want at least %d", n, 0x10000*4)
+	if n < 13 {
+		t.Fatalf("phrases has %d rows", n)
 	}
 }
 
@@ -31,8 +154,12 @@ func TestGoldenNamedTrim(t *testing.T) {
 		"U+FEFF", "U+0085", "U+180E", "U+200B", "U+2028", "U+2029", "U+3000", "U+00A0",
 	}
 	seen := map[string]int{}
-	scanJSONL(t, "named-trim.jsonl", func(name string, cols []string) {
-		in, out := unquote(t, name, cols[0]), unquote(t, name, cols[1])
+	scanLines(t, "named-trim.jsonl", func(cols []string) {
+		if len(cols) != 3 {
+			t.Fatalf("named %q", cols)
+		}
+		name := cols[0]
+		in, out := unquote(t, name, cols[1]), unquote(t, name, cols[2])
 		if got := Trim(in); got != out {
 			t.Errorf("%s\ntrim got  %q\nwant %q", name, got, out)
 		}
@@ -54,9 +181,9 @@ func TestGoldenNamedTrim(t *testing.T) {
 // the opposite. The expected sides come from the Node golden, not from Go.
 func TestTrimSpaceDiffersOnFEFFAndNEL(t *testing.T) {
 	rows := map[string][2]string{}
-	scanJSONL(t, "named-trim.jsonl", func(name string, cols []string) {
-		if name == "U+FEFF-only" || name == "U+0085-only" {
-			rows[name] = [2]string{unquote(t, name, cols[0]), unquote(t, name, cols[1])}
+	scanLines(t, "named-trim.jsonl", func(cols []string) {
+		if cols[0] == "U+FEFF-only" || cols[0] == "U+0085-only" {
+			rows[cols[0]] = [2]string{unquote(t, cols[0], cols[1]), unquote(t, cols[0], cols[2])}
 		}
 	})
 	fef, ok := rows["U+FEFF-only"]
@@ -81,69 +208,59 @@ func TestTrimSpaceDiffersOnFEFFAndNEL(t *testing.T) {
 	}
 }
 
-func TestGoldenLengths(t *testing.T) {
-	n := 0
-	scanJSONL(t, "lengths.jsonl", func(name string, cols []string) {
-		in := unquote(t, name, cols[0])
-		cp, err1 := strconv.Atoi(cols[1])
-		u16, err2 := strconv.Atoi(cols[2])
+func phraseLengths(t *testing.T, name string) (int, int) {
+	t.Helper()
+	var cp, u16 int
+	found := false
+	scanLines(t, "phrases.jsonl", func(cols []string) {
+		if cols[0] != name {
+			return
+		}
+		var err1, err2 error
+		cp, err1 = strconv.Atoi(cols[2])
+		u16, err2 = strconv.Atoi(cols[3])
 		if err1 != nil || err2 != nil {
-			t.Fatalf("%s lengths: %q %q", name, cols[1], cols[2])
+			t.Fatalf("%s lengths", name)
 		}
-		if CodePoints(in) != cp || UTF16Len(in) != u16 {
-			t.Errorf("%s code points %d utf16 %d, golden %d %d", name, CodePoints(in), UTF16Len(in), cp, u16)
-		}
-		n++
+		found = true
 	})
-	if n < 0x10000 {
-		t.Fatalf("lengths golden has %d rows", n)
+	if !found {
+		t.Fatalf("missing phrase %s", name)
 	}
+	return cp, u16
 }
 
-func TestGoldenLower(t *testing.T) {
-	n := 0
-	scanJSONL(t, "lower.jsonl", func(name string, cols []string) {
-		in, out := unquote(t, name, cols[0]), unquote(t, name, cols[1])
-		if got := ToLower(in); got != out {
-			t.Errorf("%s\ntoLower got  %q\nwant %q", name, got, out)
-		}
-		n++
-	})
-	if n < 0x10000 {
-		t.Fatalf("lower golden has %d rows", n)
-	}
+func splitFirst(s string) (head, tail string) {
+	_, size := Next(s, 0)
+	return s[:size], s[size:]
 }
 
-func TestGoldenNFC(t *testing.T) {
-	n := 0
-	scanJSONL(t, "nfc.jsonl", func(name string, cols []string) {
-		in, out := unquote(t, name, cols[0]), unquote(t, name, cols[1])
-		if got := NFC(in); got != out {
-			t.Errorf("%s\nNFC got  %q\nwant %q", name, got, out)
-		}
-		n++
-	})
-	if n < 0x10000 {
-		t.Fatalf("nfc golden has %d rows", n)
-	}
+func fromCP(cp rune) string {
+	var b strings.Builder
+	appendRune(&b, cp)
+	return b.String()
 }
 
-func TestGoldenCollapse(t *testing.T) {
-	n := 0
-	scanJSONL(t, "collapse.jsonl", func(name string, cols []string) {
-		in, out := unquote(t, name, cols[0]), unquote(t, name, cols[1])
-		if got := CollapseSpace(in); got != out {
-			t.Errorf("%s\ncollapse got  %q\nwant %q", name, got, out)
-		}
-		n++
-	})
-	// Two rows per BMP character, plus astral and phrases.
-	if n < 0x10000*2 {
-		t.Fatalf("collapse golden has %d rows", n)
+func parseSpan(t *testing.T, s string) (rune, rune) {
+	t.Helper()
+	a, b, ok := strings.Cut(s, "-")
+	start := parseHex(t, a)
+	if !ok {
+		return start, start
 	}
+	return start, parseHex(t, b)
 }
 
-func scanJSONL(t *testing.T, name string, fn func(name string, cols []string)) {
+func parseHex(t *testing.T, s string) rune {
+	t.Helper()
+	v, err := strconv.ParseUint(s, 16, 32)
+	if err != nil {
+		t.Fatalf("hex %q: %v", s, err)
+	}
+	return rune(v)
+}
+
+func scanLines(t *testing.T, name string, fn func(cols []string)) {
 	t.Helper()
 	f, err := os.Open(filepath.Join("..", "..", "testdata", "golden", "jsstr", name))
 	if err != nil {
@@ -152,18 +269,12 @@ func scanJSONL(t *testing.T, name string, fn func(name string, cols []string)) {
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
-	lineNo := 0
 	for sc.Scan() {
-		lineNo++
 		line := sc.Text()
-		if line == "" {
+		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		cols := strings.Split(line, "\t")
-		if len(cols) < 3 {
-			t.Fatalf("%s:%d: %q", name, lineNo, line)
-		}
-		fn(cols[0], cols[1:])
+		fn(strings.Split(line, "\t"))
 	}
 	if err := sc.Err(); err != nil {
 		t.Fatal(err)
