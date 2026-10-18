@@ -32,11 +32,140 @@ jobs:
       - run: npm ci
       - run: TZ=UTC npm test
 
-  # contract-suite lands with the contract harness PR. Kept as its own job so
-  # it is not folded into image.yml and does not run until that harness exists.
+  # run.sh boots the server on loopback with a temp DATA_DIR. No services
+  # or secrets. CONTRACT_* env vars are optional overrides; the node leg
+  # leaves CONTRACT_SERVER_CMD unset so the default `node server/start.js` runs.
+  # The Go leg stays non-blocking until the port lands. Remove continue-on-error
+  # once that server is required.
   contract-suite:
-    if: false
+    continue-on-error: ${{ matrix.server == 'go' }}
     runs-on: k8-build
     timeout-minutes: 30
+    env:
+      TZ: UTC
+    strategy:
+      fail-fast: false
+      matrix:
+        server: [node, go]
     steps:
-      - run: echo "contract suite is not wired yet"
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      # contents: read cannot write the Actions cache, and contract/ has no go.sum.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: contract/go.mod
+          cache: false
+      - name: Locate Go server
+        id: go-server
+        if: ${{ matrix.server == 'go' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          skip() {
+            echo "::notice::$1"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          if [[ ! -f go/go.mod ]]; then
+            skip "go/go.mod is not present; skipping the Go contract leg"
+          fi
+          if [[ ! -d go/cmd ]]; then
+            skip "No server binary under go/cmd; skipping the Go contract leg"
+          fi
+          is_helper() {
+            case "$(basename "$1")" in
+              golden|gen|generate|generator|nodegen|tool|tools|migrate|migration) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+          mains=()
+          while IFS= read -r -d '' file; do
+            if grep -qE '^package main([[:space:]]|$)' "$file"; then
+              dir="$(dirname "$file")"
+              already=0
+              if [[ "${#mains[@]}" -gt 0 ]]; then
+                for seen in "${mains[@]}"; do
+                  if [[ "$seen" == "$dir" ]]; then
+                    already=1
+                    break
+                  fi
+                done
+              fi
+              if [[ "$already" -eq 0 ]]; then
+                mains+=("$dir")
+              fi
+            fi
+          done < <(find go/cmd -type f -name '*.go' -print0)
+          server=""
+          if [[ "${#mains[@]}" -gt 0 ]]; then
+            for dir in "${mains[@]}"; do
+              if [[ "$(basename "$dir")" == "server" ]]; then
+                server="$dir"
+                break
+              fi
+            done
+            if [[ -z "$server" ]]; then
+              for dir in "${mains[@]}"; do
+                if [[ "$(basename "$dir")" == *server* ]]; then
+                  server="$dir"
+                  break
+                fi
+              done
+            fi
+            if [[ -z "$server" ]]; then
+              candidates=()
+              for dir in "${mains[@]}"; do
+                if ! is_helper "$dir"; then
+                  candidates+=("$dir")
+                fi
+              done
+              if [[ "${#candidates[@]}" -eq 1 ]]; then
+                server="${candidates[0]}"
+              fi
+            fi
+          fi
+          if [[ -z "$server" ]]; then
+            found=""
+            if [[ "${#mains[@]}" -gt 0 ]]; then
+              for dir in "${mains[@]}"; do
+                found+="${found:+, }${dir#go/}"
+              done
+            fi
+            if [[ -n "$found" ]]; then
+              skip "No server binary under go/cmd (found: ${found}); skipping the Go contract leg"
+            fi
+            skip "No server binary under go/cmd; skipping the Go contract leg"
+          fi
+          rel="${server#go/}"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "pkg=./${rel}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v7
+        if: ${{ matrix.server == 'go' && steps.go-server.outputs.skip != 'true' }}
+        with:
+          go-version-file: go/go.mod
+          cache: false
+      - name: Build Go server
+        id: go-build
+        if: ${{ matrix.server == 'go' && steps.go-server.outputs.skip != 'true' }}
+        shell: bash
+        env:
+          PKG: ${{ steps.go-server.outputs.pkg }}
+        run: |
+          set -euo pipefail
+          bin="$(mktemp)"
+          ( cd go && CGO_ENABLED=0 go build -o "$bin" "$PKG" )
+          echo "cmd=${bin}" >> "$GITHUB_OUTPUT"
+      - name: Contract suite
+        if: ${{ matrix.server != 'go' || steps.go-server.outputs.skip != 'true' }}
+        shell: bash
+        env:
+          GO_SERVER_BIN: ${{ steps.go-build.outputs.cmd }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${GO_SERVER_BIN:-}" ]]; then
+            export CONTRACT_SERVER_CMD="$GO_SERVER_BIN"
+          fi
+          contract/run.sh
