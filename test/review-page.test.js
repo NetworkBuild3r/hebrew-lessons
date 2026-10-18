@@ -20,7 +20,12 @@ function loadUtils() {
 
 const U = loadUtils();
 globalThis.HebrewUtils = U;
-const ReviewPage = require('../shared/review-page.js');
+const playerBundle = require('./helpers/player-bundle');
+let ReviewPage;
+playerBundle.withBundleLock(() => {
+    playerBundle.ensurePlayerBundleUnlocked();
+    ReviewPage = require('../shared/review-page.js');
+});
 
 function homeFilterQueue(rawQueue, words) {
     return rawQueue.filter(function (item) {
@@ -223,8 +228,11 @@ describe('review page (INIT-001/SPEC-004)', () => {
         assert.equal(ReviewPage.typedMatches('בֹּקֶר', 'בֹּקֶר'), true);
         assert.equal(ReviewPage.typedMatches('קם', 'בֹּקֶר'), false);
         const pageJs = fs.readFileSync(path.join(root, 'shared', 'review-page.js'), 'utf8');
-        const helper = fs.readFileSync(path.join(root, 'shared', 'player', 'flashcard-answer.js'), 'utf8');
+        const helper = fs.readFileSync(path.join(root, 'web', 'player', 'flashcard-answer.ts'), 'utf8');
         assert.match(helper, /stripVowels/);
+        const reviewRoute = require('../shared/app-routes.js').find((r) => r.id === 'review');
+        assert.ok(reviewRoute.scripts.includes('/shared/dist/player.js'));
+        assert.equal(reviewRoute.scripts.includes('/shared/player/flashcard-answer.js'), false);
         assert.match(pageJs, /review-typed/);
         assert.equal(ReviewPage.typedMatches('בקר', 'בֹּקֶר', ['בוקר']), true);
     });

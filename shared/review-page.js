@@ -10,7 +10,10 @@
     var U = root.HebrewUtils;
     var Answers = root.HebrewFlashcardAnswer;
     if (!Answers && typeof require === 'function') {
-        try { Answers = require('./player/flashcard-answer.js'); } catch (err) { Answers = null; }
+        // Node tests load the built bundle. The browser gets the same global
+        // from the /shared/dist/player.js script tag on the review route.
+        try { require('./dist/player.js'); } catch (err) { /* bundle not built */ }
+        Answers = root.HebrewFlashcardAnswer || null;
     }
 
     var PREFS_KEY = 'hebrew-review-prefs:v1';

@@ -133,7 +133,8 @@
             },
             // Script tags only for vocab data (ADR-0001 constraint 2): never fetch() it.
             scripts: SPEECH_AND_WORD_DATA.concat([
-                '/shared/player/flashcard-answer.js',
+                // Built by `npm run build:player`. Sets HebrewFlashcardAnswer.
+                '/shared/dist/player.js',
                 '/shared/review-page.js'
             ]),
             view: 'HebrewReviewPage'
