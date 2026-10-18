@@ -332,4 +332,61 @@ describe('audio preservation guard (INIT-002/SPEC-002)', () => {
     });
 });
 
+describe('archive lookup path', () => {
+    it('keeps an absolute archive directory absolute on POSIX and Windows', () => {
+        const { archiveDirFor, findArchiveWithHash } = require('../scripts/audio-inventory');
+
+        assert.equal(
+            archiveDirFor('/tmp/lessons/z/audio/sentences/friend-1.mp3', path.posix),
+            '/tmp/lessons/z/audio/_archive'
+        );
+        assert.equal(
+            archiveDirFor('/tmp/audio/lesson/audio/clip.mp3', path.posix),
+            '/tmp/audio/lesson/audio/_archive'
+        );
+        assert.equal(
+            archiveDirFor('worksheets/z/audio/sentences/friend-1.mp3', path.posix),
+            'worksheets/z/audio/_archive'
+        );
+        assert.equal(archiveDirFor('/tmp/no-audio/file.mp3', path.posix), null);
+
+        // Drive-letter paths already survived path.join. UNC and current-drive
+        // roots did not; both must stay absolute.
+        assert.equal(
+            archiveDirFor('C:\\data\\worksheets\\z\\audio\\sentences\\friend-1.mp3', path.win32),
+            'C:\\data\\worksheets\\z\\audio\\_archive'
+        );
+        assert.equal(
+            archiveDirFor('\\\\server\\share\\lesson\\audio\\clip.mp3', path.win32),
+            '\\\\server\\share\\lesson\\audio\\_archive'
+        );
+        assert.equal(
+            archiveDirFor('\\data\\lesson\\audio\\clip.mp3', path.win32),
+            '\\data\\lesson\\audio\\_archive'
+        );
+        assert.equal(
+            archiveDirFor('worksheets\\z\\audio\\sentences\\friend-1.mp3', path.win32),
+            'worksheets\\z\\audio\\_archive'
+        );
+        assert.equal(archiveDirFor('C:\\foo\\audio-cache\\words\\a.mp3', path.win32), null);
+
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'heb-arch-'));
+        try {
+            const clip = path.join(tmp, 'z', 'audio', 'sentences', 'friend-1.mp3');
+            const bytes = Buffer.from('CLIP-A');
+            const hash = sha256Sync(bytes);
+            const archived = path.join(
+                tmp, 'z', 'audio', '_archive', 'friend-1.' + hash.slice(0, 12) + '.mp3'
+            );
+            fs.mkdirSync(path.dirname(archived), { recursive: true });
+            fs.writeFileSync(archived, bytes);
+            const found = findArchiveWithHash(clip, hash);
+            assert.equal(found, archived);
+            assert.equal(path.isAbsolute(found), true);
+        } finally {
+            fs.rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+});
+
 void vm;
