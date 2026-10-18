@@ -129,6 +129,7 @@ describe('Lessons page: published plan lessons', () => {
         for (let i = 0; i < 35; i += 1) {
             lessons.push({
                 planId: planId,
+                planTitle: 'מסלול לימוד — Learning path',
                 unitId: 'u1-routine',
                 topic: 'Routine',
                 lessonId: i === 0 ? 'br-01-yesh-li-raayon' : ('br-' + String(i + 1).padStart(2, '0') + '-lesson'),
@@ -148,7 +149,27 @@ describe('Lessons page: published plan lessons', () => {
         assert.match(html, /href="\/shared\/plan\/\?id=bdf0aee7-7c57-4982-a351-78063ff567e9"/);
         assert.ok(html.indexOf('data-learning-path=') < html.indexOf('data-lesson-slug="shelf-0"'));
         assert.ok(html.indexOf('data-lesson-slug="shelf-0"') < html.indexOf('data-plan-id="'));
-        assert.match(html, /<bdi class="ui-he" lang="he">מסלול לימוד<\/bdi>/);
+        assert.match(html, /<bdi lang="he">מסלול לימוד — Learning path<\/bdi>/);
+        assert.match(html, /class="path-meta"/);
+        assert.match(html, /35 lessons/);
+        assert.match(html, /35 שיעורים/);
+        assert.match(html, /class="path-chevron"/);
+        assert.doesNotMatch(html, /class="ui-he"[^>]*>מסלול לימוד/);
+    });
+
+    it('renders no learning path on Lessons when there are zero plans', () => {
+        const page = load([], []);
+        const html = page.render({
+            state: 'ready',
+            filter: 'all',
+            rows: [],
+            planRows: [],
+            planIds: []
+        });
+        assert.equal(html.includes('data-learning-path'), false);
+        assert.equal(html.includes('path-title'), false);
+        assert.equal(html.includes('מסלול'), false);
+        assert.equal(html.includes('Learning path'), false);
     });
 
     it('keeps the learning path link when a level filter hides plan lessons', () => {

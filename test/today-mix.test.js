@@ -108,12 +108,34 @@ describe('today mix (INIT-006/SPEC-015)', () => {
 
     it('puts one Learning path link per plan id ahead of the other cards', () => {
         const model = readyModel(null);
-        model.planIds = ['bdf0aee7-7c57-4982-a351-78063ff567e9', 'bdf0aee7-7c57-4982-a351-78063ff567e9'];
+        model.planIds = [
+            {
+                id: 'bdf0aee7-7c57-4982-a351-78063ff567e9',
+                title: 'מסלול לימוד — Learning path',
+                lessons: 35,
+                units: 1
+            },
+            {
+                id: 'bdf0aee7-7c57-4982-a351-78063ff567e9',
+                title: 'מסלול לימוד — Learning path',
+                lessons: 35,
+                units: 1
+            }
+        ];
         const html = Today.render(model);
         assert.equal((html.match(/data-learning-path=/g) || []).length, 1);
         assert.match(html, /href="\/shared\/plan\/\?id=bdf0aee7-7c57-4982-a351-78063ff567e9"/);
-        assert.match(html, /<bdi class="ui-he" lang="he">מסלול לימוד<\/bdi>/);
+        assert.match(html, /<bdi lang="he">מסלול לימוד — Learning path<\/bdi>/);
+        assert.match(html, /35 lessons/);
+        assert.match(html, /class="path-chevron"/);
         assert.ok(html.indexOf('data-learning-path=') < html.indexOf('id="today-review-card"'));
+    });
+
+    it('renders no learning path on Today when there are zero plans', () => {
+        const html = Today.render(readyModel(null));
+        assert.equal(html.includes('data-learning-path'), false);
+        assert.equal(html.includes('path-title'), false);
+        assert.equal(html.includes('Learning path'), false);
     });
 
     it('keeps only a same-origin worksheet mp3 as a clip', () => {

@@ -165,15 +165,43 @@
         return '/shared/plan/?id=' + encodeURIComponent(planId);
     }
 
-    function distinctPlanIds(lessons) {
+    function pathSummaries(lessons) {
         if (!Array.isArray(lessons)) return [];
-        var ids = [];
+        var order = [];
+        var byId = Object.create(null);
         for (var i = 0; i < lessons.length; i += 1) {
             var row = lessons[i];
             if (!row || typeof row.planId !== 'string' || !PLAN_SLUG.test(row.planId)) continue;
-            if (ids.indexOf(row.planId) < 0) ids.push(row.planId);
+            var entry = byId[row.planId];
+            if (!entry) {
+                entry = { id: row.planId, title: '', lessons: 0, units: 0 };
+                byId[row.planId] = entry;
+                order.push(entry);
+                entry._units = [];
+            }
+            entry.lessons += 1;
+            if (!entry.title && typeof row.planTitle === 'string' && row.planTitle) entry.title = row.planTitle;
+            if (typeof row.unitId === 'string' && row.unitId && entry._units.indexOf(row.unitId) < 0) {
+                entry._units.push(row.unitId);
+                entry.units += 1;
+            }
         }
-        return ids;
+        return order;
+    }
+
+    function pathMeta(entry) {
+        if (!entry) return '';
+        var units = entry.units;
+        var lessons = entry.lessons;
+        if (typeof units === 'number' && units > 1) {
+            return '<p class="path-meta">' + bi(units + ' יחידות', units + ' units') + '</p>';
+        }
+        if (typeof lessons === 'number' && lessons > 0) {
+            var he = lessons === 1 ? 'שיעור אחד' : (lessons + ' שיעורים');
+            var en = lessons + (lessons === 1 ? ' lesson' : ' lessons');
+            return '<p class="path-meta">' + bi(he, en) + '</p>';
+        }
+        return '';
     }
 
     function renderPathCards(planIds) {
@@ -181,13 +209,18 @@
         var seen = [];
         var html = '';
         for (var i = 0; i < planIds.length; i += 1) {
-            var id = planIds[i];
+            var item = planIds[i];
+            var id = typeof item === 'string' ? item : (item && item.id);
             if (typeof id !== 'string' || !PLAN_SLUG.test(id) || seen.indexOf(id) >= 0) continue;
             seen.push(id);
+            var title = item && typeof item.title === 'string' && item.title ? item.title : 'מסלול לימוד';
             html += '<article class="lesson-card today-card" data-today-card="path" data-learning-path="' + esc(id) + '">'
                 + '<a class="lesson-link" href="' + esc(pathHref(id)) + '">'
-                + '<h2><span class="ui-pair"><bdi class="ui-he" lang="he">מסלול לימוד</bdi>'
-                + '<span class="ui-en" lang="en" dir="ltr">Learning path</span></span></h2>'
+                + '<span class="path-copy">'
+                + '<h2 class="path-title"><bdi lang="he">' + esc(title) + '</bdi></h2>'
+                + pathMeta(typeof item === 'string' ? null : item)
+                + '</span>'
+                + '<span class="path-chevron" aria-hidden="true"></span>'
                 + '</a></article>';
         }
         return html;
@@ -998,7 +1031,7 @@
                     }
                     return { verbs: null, planIds: [] };
                 }
-                var planIds = distinctPlanIds(rows);
+                var planIds = pathSummaries(rows);
                 var lessons = rows.filter(function (row) { return row && row.recipe === 'verb-workshop'; }).length;
                 if (!lessons) return { verbs: null, planIds: planIds };
                 var VP = root.HebrewVerbPractice;
