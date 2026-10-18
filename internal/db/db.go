@@ -22,6 +22,9 @@ import (
 
 const busyTimeoutMS = 5000
 
+// ErrNotFound is returned when a user or session row is not in the database.
+var ErrNotFound = errors.New("db: not found")
+
 // Store is the single writer connection for the process.
 type Store struct {
 	conn  *sql.DB

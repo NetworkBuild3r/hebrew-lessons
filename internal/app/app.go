@@ -16,10 +16,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web"
@@ -55,16 +57,32 @@ type Config struct {
 	// TrustedProxies are the CIDRs allowed to supply a forwarded client IP.
 	TrustedProxies []string
 	// CookieSecure sets the Secure flag on session cookies.
+	// cmd/hebrew defaults an unset COOKIE_SECURE to true.
 	CookieSecure bool
+	// Dev is DEV=1. It allows a missing DATA_DIR to be created and silences
+	// the warning when COOKIE_SECURE is off. It does not choose another directory.
+	Dev bool
 	// LogLevel is debug, info, warn, or error.
 	LogLevel string
 
+	// Google sign-in. Empty client id or secret leaves the routes at 503.
+	GoogleClientID     string
+	GoogleClientSecret string
 	// Google endpoints. Defaults point at Google. Tests point them at a fake server.
 	GoogleAuthURL     string
 	GoogleTokenURL    string
 	GoogleUserinfoURL string
 	GoogleJWKSURL     string
 	GoogleIssuer      string
+
+	// AllowedEmails is MCP_OAUTH_ALLOWED_EMAILS. AdminEmails is ADMIN_EMAILS.
+	AllowedEmails []string
+	AdminEmails   []string
+
+	// MCPAuthToken and MCPPublicURL are recorded for the MCP builder.
+	// Empty values do not stop startup.
+	MCPAuthToken string
+	MCPPublicURL string
 
 	// ElevenLabsAPIKey gates the real TTS client. Empty leaves TTS unset
 	// unless TTS is set directly.
@@ -80,7 +98,11 @@ type Config struct {
 // ApplyDefaults fills zero fields. It does not replace a set field.
 func ApplyDefaults(cfg Config) Config {
 	if cfg.DataDir == "" {
-		cfg.DataDir = defaultDataDir
+		if cfg.Dev {
+			cfg.DataDir = "data"
+		} else {
+			cfg.DataDir = defaultDataDir
+		}
 	}
 	if cfg.HTTPAddr == "" {
 		cfg.HTTPAddr = defaultHTTPAddr
@@ -116,6 +138,7 @@ func ApplyDefaults(cfg Config) Config {
 type App struct {
 	cfg       Config
 	store     *db.Store
+	authSvc   *auth.Service
 	audioDir  string
 	tts       audio.TTS
 	web       http.Handler
@@ -140,7 +163,16 @@ func New(cfg Config) (web, mcp http.Handler, err error) {
 // Close releases the database. /healthz answers 503 after Close returns.
 func NewApp(cfg Config) (*App, error) {
 	cfg = ApplyDefaults(cfg)
-	dataDir, err := prepareDataDir(cfg.DataDir)
+	if auth.HTTPSOriginWithoutProxies(cfg.TrustedProxies, cfg.PublicOrigin) {
+		slog.Warn("TRUSTED_PROXIES is empty and PUBLIC_ORIGIN is https",
+			"public_origin", cfg.PublicOrigin,
+			"hint", "set TRUSTED_PROXIES to the proxy CIDR")
+	}
+	if !cfg.CookieSecure && !cfg.Dev {
+		slog.Warn("COOKIE_SECURE is off",
+			"hint", "set COOKIE_SECURE=true, or DEV=1 to silence this outside production")
+	}
+	dataDir, err := prepareDataDir(cfg.DataDir, cfg.Dev)
 	if err != nil {
 		return nil, err
 	}
@@ -157,6 +189,26 @@ func NewApp(cfg Config) (*App, error) {
 		return nil, err
 	}
 
+	svc, err := auth.New(auth.Config{
+		PublicOrigin:       cfg.PublicOrigin,
+		CookieSecure:       cfg.CookieSecure,
+		TrustedProxies:     cfg.TrustedProxies,
+		GoogleClientID:     cfg.GoogleClientID,
+		GoogleClientSecret: cfg.GoogleClientSecret,
+		GoogleAuthURL:      cfg.GoogleAuthURL,
+		GoogleTokenURL:     cfg.GoogleTokenURL,
+		GoogleJWKSURL:      cfg.GoogleJWKSURL,
+		GoogleIssuer:       cfg.GoogleIssuer,
+		AllowedEmails:      cfg.AllowedEmails,
+		AdminEmails:        cfg.AdminEmails,
+		Clock:              cfg.Clock,
+		Store:              store,
+	})
+	if err != nil {
+		store.Close()
+		return nil, err
+	}
+
 	tts := cfg.TTS
 	if tts == nil && cfg.ElevenLabsAPIKey != "" {
 		tts = audio.NewElevenLabs(cfg.ElevenLabsAPIKey)
@@ -165,11 +217,12 @@ func NewApp(cfg Config) (*App, error) {
 	a := &App{
 		cfg:      cfg,
 		store:    store,
+		authSvc:  svc,
 		audioDir: audioDir,
 		tts:      tts,
 	}
 	health := a.healthHandler()
-	a.web = web.New(health)
+	a.web = web.New(health, svc)
 	a.mcp = newMCP(health)
 	return a, nil
 }
@@ -179,6 +232,9 @@ func (a *App) Web() http.Handler { return a.web }
 
 // MCP is the authoring handler. This skeleton serves /healthz only.
 func (a *App) MCP() http.Handler { return a.mcp }
+
+// Store is the process database. QA and MCP Builder use it for users and sessions.
+func (a *App) Store() *db.Store { return a.store }
 
 // AudioDir is <DataDir>/audio, where clips are written as <sha256>.mp3.
 func (a *App) AudioDir() string { return a.audioDir }
@@ -197,29 +253,38 @@ func (a *App) Close() error {
 	return a.closeErr
 }
 
-// prepareDataDir uses dir when this process can create a file there.
-// Otherwise it logs a warning and uses a directory under the system temp
-// path, so a container with no volume still starts.
-func prepareDataDir(dir string) (string, error) {
-	err := usableDir(dir)
-	if err == nil {
-		return dir, nil
+// prepareDataDir refuses an unset, missing, or unwritable directory.
+// DEV=1 creates a missing directory and, when dir is empty, uses "data".
+// It does not substitute another path when the chosen directory cannot be written.
+func prepareDataDir(dir string, dev bool) (string, error) {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		if !dev {
+			return "", fmt.Errorf("DATA_DIR is unset")
+		}
+		dir = "data"
 	}
-	fallback := fallbackDataDir()
-	if fallbackErr := usableDir(fallback); fallbackErr != nil {
-		return "", fmt.Errorf("data dir %s: %w", dir, err)
+	info, err := os.Stat(dir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return "", fmt.Errorf("DATA_DIR %s: %w", dir, err)
+		}
+		if !dev {
+			return "", fmt.Errorf("DATA_DIR %s does not exist", dir)
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return "", fmt.Errorf("DATA_DIR %s: %w", dir, err)
+		}
+	} else if !info.IsDir() {
+		return "", fmt.Errorf("DATA_DIR %s is not a directory", dir)
 	}
-	slog.Warn("data directory is not writable", "dir", dir, "fallback", fallback, "err", err)
-	return fallback, nil
+	if err := writableDir(dir); err != nil {
+		return "", fmt.Errorf("DATA_DIR %s is not writable: %w", dir, err)
+	}
+	return dir, nil
 }
 
-func usableDir(dir string) error {
-	if dir == "" {
-		return fmt.Errorf("path is empty")
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
+func writableDir(dir string) error {
 	f, err := os.CreateTemp(dir, ".write-check-*")
 	if err != nil {
 		return err
@@ -230,10 +295,6 @@ func usableDir(dir string) error {
 		return err
 	}
 	return os.Remove(name)
-}
-
-func fallbackDataDir() string {
-	return filepath.Join(os.TempDir(), "hebrew")
 }
 
 func (a *App) healthHandler() http.Handler {
