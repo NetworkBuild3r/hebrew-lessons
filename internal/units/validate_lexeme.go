@@ -24,6 +24,10 @@ func lexemeIssues(s *scan, doc *Unit, words []wordRef) []Issue {
 	}
 	for i, les := range doc.Lessons {
 		for j, act := range les.Activities {
+			// Story tokens that miss the lexicon are story.unmapped, once.
+			if act.Type == ActivityStory {
+				continue
+			}
 			var unknown []string
 			seen := map[string]bool{}
 			for _, tok := range tokenize(act.Text) {

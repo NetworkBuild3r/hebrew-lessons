@@ -38,8 +38,18 @@ const (
 	RuleSchemaLookup      = "schema.lookup"
 	RuleSchemaRef         = "schema.ref"
 	RuleSchemaRequired    = "schema.required"
+	RuleStoryUnmapped     = "story.unmapped"
 	RuleStoryUnpointed    = "story.unpointed"
 )
+
+// lexeme.unknown and story.unmapped are the same kind of miss, split by
+// where the word sits. A story content word that does not map to a lexicon
+// entry is story.unmapped only, so a story token is never also
+// lexeme.unknown. lexeme.unknown stays for a new word, and for a Hebrew
+// token in any activity other than story. Names and numbers are exempt
+// on the activity token. The split keeps one finding per story token: story.unmapped
+// is what coverage and glosses need, because a gloss has to land on a
+// lexicon entry.
 
 // Rule is one authoring check. The MCP rules resource can serve Rules.
 type Rule struct {
@@ -57,7 +67,7 @@ var Rules = []Rule{
 	{ID: RuleBudgetUnit, Severity: SeverityBlock, Description: "The unit lists more than 8 new words."},
 	{ID: RuleCoverageListening, Severity: SeverityBlock, Description: "Listening-text coverage is below 95%. Block under 90%; warn from 90% up to but not including 95%."},
 	{ID: RuleCoverageStory, Severity: SeverityBlock, Description: "Story coverage is below 95%. Block under 90%; warn from 90% up to but not including 95%."},
-	{ID: RuleLexemeUnknown, Severity: SeverityBlock, Description: "An activity or new word references a lexeme that is not in the lexicon."},
+	{ID: RuleLexemeUnknown, Severity: SeverityBlock, Description: "A new word, or a Hebrew token in an activity other than story, is not in the lexicon. A story token is story.unmapped instead."},
 	{ID: RuleNounGender, Severity: SeverityBlock, Description: "A new noun has no gender (m, f, or both)."},
 	{ID: RuleNounPlural, Severity: SeverityWarn, Description: "A new noun with an irregular plural does not show that plural in the unit."},
 	{ID: RuleRecycleCount, Severity: SeverityWarn, Description: "A new word appears fewer than 4 times in later lessons."},
@@ -68,6 +78,7 @@ var Rules = []Rule{
 	{ID: RuleSchemaLookup, Severity: SeverityBlock, Description: "The lexicon or audio lookup failed."},
 	{ID: RuleSchemaRef, Severity: SeverityBlock, Description: "A new word is duplicated or never appears in a lesson."},
 	{ID: RuleSchemaRequired, Severity: SeverityBlock, Description: "A required field is missing or empty."},
+	{ID: RuleStoryUnmapped, Severity: SeverityBlock, Description: "A story content word does not map to a lexicon entry. Names and numbers are exempt. The same token is not also lexeme.unknown."},
 	{ID: RuleStoryUnpointed, Severity: SeverityBlock, Description: "A story contains a Hebrew word with no niqqud. Names, numbers, and punctuation are ignored. Homographs are not exempt."},
 }
 

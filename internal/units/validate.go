@@ -64,6 +64,10 @@ func collect(ctx context.Context, doc *Unit, lk Lookup) []Issue {
 	if s.err != nil {
 		return append(issues, lookupIssue(s.err))
 	}
+	issues = append(issues, storyUnmappedIssues(s, doc)...)
+	if s.err != nil {
+		return append(issues, lookupIssue(s.err))
+	}
 	issues = append(issues, storyPointIssues(s, doc)...)
 	if s.err != nil {
 		return append(issues, lookupIssue(s.err))

@@ -163,7 +163,7 @@ func TestRulesCatalog(t *testing.T) {
 		RuleCoverageListening, RuleCoverageStory, RuleLexemeUnknown,
 		RuleNounGender, RuleNounPlural, RuleRecycleCount, RuleRecycleSpread,
 		RuleSchemaActivity, RuleSchemaCheckpoint, RuleSchemaKind,
-		RuleSchemaLookup, RuleSchemaRef, RuleSchemaRequired, RuleStoryUnpointed,
+		RuleSchemaLookup, RuleSchemaRef, RuleSchemaRequired, RuleStoryUnmapped, RuleStoryUnpointed,
 	} {
 		if !seen[id] {
 			t.Fatalf("catalog missing %s", id)

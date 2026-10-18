@@ -258,6 +258,7 @@ func goldenCases() []goldenCase {
 		nounPlural(false),
 		nounPlural(true),
 		storyUnpointed(),
+		storyUnmapped(),
 	}
 }
 
@@ -540,14 +541,40 @@ func storyUnpointed() goldenCase {
 	lex[normalize(david)] = glex{ID: 80, POS: "name", Bare: david}
 	lex[normalize(bakar)] = glex{ID: 81, POS: "noun", Gender: "m", Bare: stripNiqqud(bakar)}
 	return goldenCase{
-		file:          "bad_story_unpointed.json",
-		name:          "Unpointed Hebrew in a story blocks. The name, the number, and the punctuation do not. בקר is the bare form of two lexemes, and that homograph is not exempt.",
-		unit:          u,
-		lookup:        lookupFor(vocab8, u, lex),
-		issues:        []Issue{iss(RuleStoryUnpointed, SeverityBlock, at("lessons", li, "activities", ai, "text"))},
+		file:   "bad_story_unpointed.json",
+		name:   "Unpointed Hebrew in a story blocks. The name, the number, and the punctuation do not. בקר is the bare form of two lexemes, and that homograph is not exempt. The bare token is also not a lexicon key, so it is story.unmapped as well as story.unpointed.",
+		unit:   u,
+		lookup: lookupFor(vocab8, u, lex),
+		issues: []Issue{
+			iss(RuleStoryUnmapped, SeverityBlock, at("lessons", li, "activities", ai, "text")),
+			iss(RuleStoryUnpointed, SeverityBlock, at("lessons", li, "activities", ai, "text")),
+		},
 		msgContains:   []string{"בקר"},
 		msgNot:        []string{david},
 		homographBare: stripNiqqud(bakar),
+	}
+}
+
+func storyUnmapped() goldenCase {
+	u, lex := base()
+	text := strings.Join([]string{gelida, david, "12"}, " ")
+	li, ai := addAct(&u, ActivityStory, text)
+	ri := addActAt(&u, li, ActivityRecall, gelida)
+	lex = cloneLex(lex)
+	lex[normalize(david)] = glex{ID: 90, POS: "name", Bare: david}
+	lk := lookupFor(vocab8, u, lex)
+	lk.Known = []string{gelida}
+	return goldenCase{
+		file:   "bad_story_unmapped.json",
+		name:   "A story content word that is not a lexicon entry blocks as story.unmapped. The name and the number do not. The same word in a recall is lexeme.unknown, and the story token is not reported under both ids. KnownLexemes keeps coverage quiet.",
+		unit:   u,
+		lookup: lk,
+		issues: []Issue{
+			iss(RuleStoryUnmapped, SeverityBlock, at("lessons", li, "activities", ai, "text")),
+			iss(RuleLexemeUnknown, SeverityBlock, at("lessons", li, "activities", ri, "text")),
+		},
+		msgContains: []string{gelida},
+		msgNot:      []string{david, "12"},
 	}
 }
 
