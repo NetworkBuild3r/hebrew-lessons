@@ -20,24 +20,47 @@ var coverNames = [...]string{
 
 var topicSlugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
-// CoverFor picks one of the six covers. planID is a slug, never a path.
-func CoverFor(planID string) string {
+// CoverFor picks one of the six covers. key is planID + "/" + lessonID, never
+// a path, so two lessons on one plan do not share a picture.
+func CoverFor(key string) string {
 	h := fnv.New32a()
-	_, _ = h.Write([]byte(planID))
+	_, _ = h.Write([]byte(key))
 	return coverNames[h.Sum32()%uint32(len(coverNames))]
 }
 
-// CoverLetter is the first Hebrew base letter of the title. Nikud is stripped
-// so the decorative letter can use the unpointed face. A title with no Hebrew
-// uses the first base letter of the topic.
-func CoverLetter(title, topic string) string {
-	if letter := firstHebrewCluster(title); letter != "" {
-		return stripPoints(letter)
+// NextCover is the illustration after name. An unknown name starts at the first.
+func NextCover(name string) string {
+	for i, n := range coverNames {
+		if n == name {
+			return coverNames[(i+1)%len(coverNames)]
+		}
 	}
-	return stripPoints(firstCluster(topic))
+	return coverNames[0]
 }
 
-// stripPoints drops Hebrew points (U+0591–U+05C7). The string is not normalized.
+// CoverLetter is one unpointed Hebrew base letter. It tries the title, then
+// the topic, then a Hebrew example. A Latin title with no Hebrew example
+// returns empty so the card does not paint a Latin glyph.
+func CoverLetter(title, topic, example string) string {
+	if letter := hebrewBase(title); letter != "" {
+		return letter
+	}
+	if letter := hebrewBase(topic); letter != "" {
+		return letter
+	}
+	return hebrewBase(example)
+}
+
+func hebrewBase(s string) string {
+	letter := firstHebrewCluster(s)
+	if letter == "" {
+		return ""
+	}
+	return stripPoints(letter)
+}
+
+// stripPoints drops Hebrew points. Punctuation in the Hebrew block stays.
+// The string is not normalized.
 func stripPoints(s string) string {
 	return strings.Map(func(r rune) rune {
 		if isPoint(r) {
@@ -58,6 +81,18 @@ func cardSpeak(card GuideCard) string {
 		return card.Title
 	}
 	return ""
+}
+
+// LangOf is the lang half of LangDir, for a template attribute.
+func LangOf(s string) string {
+	lang, _ := LangDir(s)
+	return lang
+}
+
+// DirOf is the dir half of LangDir, for a template attribute.
+func DirOf(s string) string {
+	_, dir := LangDir(s)
+	return dir
 }
 
 // HeroLettering is the guide title when it is Hebrew. An English title has
@@ -123,18 +158,6 @@ func firstHebrewCluster(s string) string {
 		return string(rs[i:j])
 	}
 	return ""
-}
-
-func firstCluster(s string) string {
-	rs := []rune(s)
-	if len(rs) == 0 {
-		return ""
-	}
-	j := 1
-	for j < len(rs) && isPoint(rs[j]) {
-		j++
-	}
-	return string(rs[:j])
 }
 
 // Clusters splits s into base letters with the marks that follow them.

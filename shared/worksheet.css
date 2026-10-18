@@ -1146,7 +1146,7 @@ textarea {
     white-space: pre-wrap;
     overflow-x: auto;
     direction: ltr;
-    text-align: left;
+    text-align: start;
     font-size: 0.85rem;
     color: var(--color-text);
     background: var(--color-bg);
@@ -1438,7 +1438,7 @@ textarea {
     padding: 0.55rem 0.45rem;
     border-bottom: 1px solid var(--line);
     vertical-align: top;
-    text-align: right;
+    text-align: start;
 }
 .lesson-vis-cell {
     display: grid;
@@ -1560,7 +1560,7 @@ textarea {
     font-size: 0.85rem;
     min-height: 8rem;
     direction: ltr;
-    text-align: left;
+    text-align: start;
 }
 .lesson-json-feedback {
     margin: 0.35rem 0 0;
@@ -1630,8 +1630,8 @@ textarea {
     color: #fff;
     font-size: 0.8rem;
 }
-.match-pair .pair-en { text-align: left; }
-.match-pair .pair-he { text-align: right; font-size: 1.15rem; }
+.match-pair .pair-en { text-align: start; }
+.match-pair .pair-he { text-align: end; font-size: 1.15rem; }
 .match-pair .pair-check {
     color: var(--pair-edge, #059669);
     font-weight: 800;
@@ -4886,6 +4886,8 @@ img.hebrew-logo-mark {
         margin-inline: auto;
         padding: 2rem 2.5rem 4rem;
         box-sizing: border-box;
+    }
+    html[dir="rtl"] body.has-hebrew-shell:has(> #app-main) > #app-main.wrap {
         direction: rtl;
     }
     body.has-hebrew-shell:has(> #app-main) > #app-route-announce {
@@ -8210,8 +8212,7 @@ html[data-ui-lang="he"] .page-heading .page-heading-he { display: none; }
 .guides-page .hebrew-brand-he { font-family: var(--font-hebrew-pointed-display); font-size: 22px; }
 .guides-hero { position: relative; overflow: hidden; border-radius: var(--radius-hero); background: var(--color-surface-hero); color: var(--color-hero-text); min-height: 260px; padding: var(--space-6); display: grid; align-content: start; gap: var(--space-2); }
 .guides-hero__art { position: absolute; inset-block-end: 0; inset-inline-end: 0; width: min(1100px, 100%); height: auto; pointer-events: none; }
-.guides-hero::before { content: ""; position: absolute; inset: 0; z-index: 1; background: linear-gradient(to right, var(--color-surface-hero) 0%, color-mix(in srgb, var(--color-surface-hero) 90%, transparent) 35%, transparent 70%); }
-[dir="rtl"] .guides-hero::before { background: linear-gradient(to left, var(--color-surface-hero) 0%, color-mix(in srgb, var(--color-surface-hero) 90%, transparent) 35%, transparent 70%); }
+.guides-hero::before { content: ""; position: absolute; inset: 0; z-index: 1; background: linear-gradient(to inline-end, var(--color-surface-hero) 0%, color-mix(in srgb, var(--color-surface-hero) 90%, transparent) 35%, transparent 70%); }
 .guides-hero > :not(.guides-hero__art) { position: relative; z-index: 2; }
 .guides-hero__kicker { font: 700 13px/1.2 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-sun); }
 .guides-hero__he-row { display: flex; align-items: center; gap: var(--space-4); }
@@ -8309,4 +8310,41 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 }
 @media (min-width: 1280px) {
     .he-text--word { font-size: 56px; }
+}
+
+/* PR #24: logical properties, plan-page type, and guide reading column.
+   Node pages stay html dir=rtl, so start/end match the old right/left there.
+   .plan-page names --font-sans so a missing Rubik face is not the body font. */
+.plan-page { font-family: var(--font-sans); }
+@media (min-width: 1280px) {
+    .guide-layout:not(:has(.guide-aside)) {
+        display: block;
+        width: min(100%, var(--wrap-w-reading));
+        margin-inline: auto;
+    }
+}
+.guide-page .guide-body { max-width: none; }
+.example-row { grid-template-columns: 44px minmax(0, 1fr) minmax(0, max-content); }
+.example-row__gloss, .example-row .translit { overflow-wrap: break-word; }
+.example-row__he { overflow-wrap: break-word; max-inline-size: 22ch; }
+.example-row__gloss .meaning { font: inherit; color: var(--color-text); margin: 0; }
+.guide-card__meta.recipe-chip { border: 0; padding: 0; background: none; border-radius: 0; justify-self: start; font-size: 13px; color: var(--color-accent-olive); }
+.filter-chip { min-height: 44px; }
+.filter-chip.is-all { background: var(--color-text); border-color: var(--color-text); color: var(--color-surface); }
+.theme-switch { min-height: 44px; padding: 2px; }
+.theme-switch [role="radio"] { min-height: 40px; min-width: 44px; }
+.guide-card:has(.lesson-link:focus-visible) { outline: 3px solid var(--color-primary); outline-offset: 2px; }
+.guide-body [lang="he"]:has(> .audio-btn) { display: inline-flex; align-items: center; gap: var(--space-2); }
+.guides-page .guides-state[data-guides-state="empty"] { background: var(--color-surface); border: 1px solid var(--color-border-subtle); box-shadow: var(--shadow-card); }
+.he-inline + .audio-btn { position: relative; width: 32px; height: 32px; vertical-align: middle; margin-inline: 4px; }
+.he-inline + .audio-btn::before { content: ""; position: absolute; inset: -6px; }
+.guides-topic h2 { display: flex; align-items: center; gap: var(--space-2); }
+.guide-body .callout[data-tone] { padding: var(--space-4); padding-inline-start: calc(var(--space-4) + 3px); border-radius: var(--radius-control); border-inline-start: 3px solid transparent; }
+.guide-body .callout[data-tone="green"] { background: var(--color-correct-soft); color: var(--color-correct-ink); border-inline-start-color: var(--color-correct-ink); }
+.guide-body .callout[data-tone="yellow"] { background: var(--color-miss-soft); color: var(--color-miss-ink); border-inline-start-color: var(--color-miss); }
+.guide-body .callout[data-tone="red"] { background: var(--color-accent-pomegranate-soft); color: var(--color-accent-pomegranate); border-inline-start-color: var(--color-accent-pomegranate); }
+.guide-body .callout[data-tone="info"] { background: var(--color-accent-sky-soft); color: var(--color-text); border-inline-start-color: var(--color-primary); }
+@media (max-width: 767px) {
+    .example-row { grid-template-columns: 44px minmax(0, 1fr); }
+    .example-row__he { grid-column: 1 / -1; }
 }

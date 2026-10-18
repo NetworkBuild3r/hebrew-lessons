@@ -32,8 +32,12 @@ templ guidesHero(card GuideCard) {
 				<p class="guides-hero__lettering" lang="he" dir="rtl">{ HeroLettering(card.Title) }</p>
 				@components.AudioButton(card.Title, "")
 			</div>
+			if card.Topic != "" {
+				<p class="guides-hero__title" lang={ LangOf(card.Topic) } dir={ DirOf(card.Topic) }>{ card.Topic }</p>
+			}
+		} else {
+			<p class="guides-hero__title" lang={ card.Lang } dir={ card.Dir }>{ card.Title }</p>
 		}
-		<p class="guides-hero__title" lang={ card.Lang } dir={ card.Dir }>{ card.Title }</p>
 		<div class="guides-hero__actions">
 			<a class="btn btn-primary" href={ templ.SafeURL(card.Href) }>
 				@components.Pair("לקריאת המדריך", "Read guide")
@@ -45,7 +49,7 @@ templ guidesHero(card GuideCard) {
 
 templ guidesFilters(list GuideList) {
 	<nav class="guides-filters" aria-label="נושאים">
-		<a class="filter-chip" href="#top" aria-current="true">
+		<a class="filter-chip is-all" href="#top">
 			@components.Pair("הכל", "All")
 			<span class="count">{ strconv.Itoa(list.Count) }</span>
 		</a>
@@ -66,7 +70,12 @@ templ guidesShelf(list GuideList) {
 		@guidesFilters(list)
 		for _, group := range list.Topics {
 			<section class="guides-topic" data-topic id={ "topic-" + group.Slug }>
-				<h2 lang={ group.Lang } dir={ group.Dir }>{ group.Topic }</h2>
+				<h2>
+					<bdi lang={ group.Lang } dir={ group.Dir }>{ group.Topic }</bdi>
+					if HasHebrew(group.Topic) {
+						@components.AudioButton(group.Topic, "")
+					}
+				</h2>
 				<div class="home-list guides-list" data-guides-state="ready">
 					for _, card := range group.Cards {
 						@guideCard(card)
@@ -113,7 +122,7 @@ templ guidesPageMain(list GuideList) {
 		SubHe:    "שיעורי הסבר — קוראים ומקשיבים.",
 		SubEn:    "Explanation lessons — read and listen.",
 	})
-	<div id="guides-app" class="spa-view" aria-live="polite">
+	<div id="guides-app" class="spa-view">
 		<div id="top">
 			@guidesView(list)
 		</div>
