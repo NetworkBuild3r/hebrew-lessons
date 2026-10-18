@@ -1,11 +1,17 @@
 // Package app composes the process: configuration, the database, and the
-// two HTTP handlers. cmd/hebrew parses the environment into Config and
-// calls New.
+// two HTTP handlers.
+//
+// New is the constructor tests and embeds call. It returns the learner and
+// MCP handlers. NewApp is the same startup and also returns *App so the
+// caller can Close the database. New wraps NewApp. cmd/hebrew uses NewApp
+// because it has to release the database on shutdown. Handlers returned by
+// New stay open for the process lifetime.
 package app
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -118,12 +124,27 @@ type App struct {
 	closeErr  error
 }
 
-// New opens the database, applies migrations, and builds both handlers.
-func New(cfg Config) (*App, error) {
+// New opens the database, applies migrations, and returns the two handlers.
+// GET /healthz on either handler is unauthenticated. Missing Google,
+// ElevenLabs, and OAuth settings do not fail New; the process logs those
+// separately. Cleanup is NewApp's Close. New wraps NewApp.
+func New(cfg Config) (web, mcp http.Handler, err error) {
+	a, err := NewApp(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	return a.Web(), a.MCP(), nil
+}
+
+// NewApp opens the database, applies migrations, and builds both handlers.
+// Close releases the database. /healthz answers 503 after Close returns.
+func NewApp(cfg Config) (*App, error) {
 	cfg = ApplyDefaults(cfg)
-	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+	dataDir, err := prepareDataDir(cfg.DataDir)
+	if err != nil {
 		return nil, err
 	}
+	cfg.DataDir = dataDir
 	audioDir := filepath.Join(cfg.DataDir, "audio")
 	if err := os.MkdirAll(audioDir, 0o755); err != nil {
 		return nil, err
@@ -176,8 +197,48 @@ func (a *App) Close() error {
 	return a.closeErr
 }
 
+// prepareDataDir uses dir when this process can create a file there.
+// Otherwise it logs a warning and uses a directory under the system temp
+// path, so a container with no volume still starts.
+func prepareDataDir(dir string) (string, error) {
+	err := usableDir(dir)
+	if err == nil {
+		return dir, nil
+	}
+	fallback := fallbackDataDir()
+	if fallbackErr := usableDir(fallback); fallbackErr != nil {
+		return "", fmt.Errorf("data dir %s: %w", dir, err)
+	}
+	slog.Warn("data directory is not writable", "dir", dir, "fallback", fallback, "err", err)
+	return fallback, nil
+}
+
+func usableDir(dir string) error {
+	if dir == "" {
+		return fmt.Errorf("path is empty")
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, ".write-check-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	if err := f.Close(); err != nil {
+		os.Remove(name)
+		return err
+	}
+	return os.Remove(name)
+}
+
+func fallbackDataDir() string {
+	return filepath.Join(os.TempDir(), "hebrew")
+}
+
 func (a *App) healthHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// No session, cookie, or bearer check. Probes call this with an empty request.
 		ctx, cancel := context.WithTimeout(r.Context(), healthTimeout)
 		defer cancel()
 		err := a.store.Ping(ctx)

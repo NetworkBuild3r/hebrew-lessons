@@ -31,8 +31,9 @@ func run() error {
 		return err
 	}
 	setLogLevel(cfg.LogLevel)
+	warnOptionalConfig(cfg)
 
-	application, err := app.New(cfg)
+	application, err := app.NewApp(cfg)
 	if err != nil {
 		return err
 	}
