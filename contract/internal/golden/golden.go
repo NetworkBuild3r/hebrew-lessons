@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/contract/internal/normalize"
 )
 
 var updateFlag bool
@@ -70,9 +72,55 @@ func Compare(t *testing.T, rel string, got any) {
 	t.Fatalf("golden mismatch %s\n%s", rel, firstDiff(want, body))
 }
 
-// WriteRaw saves informational bytes. It runs only in update mode and is not
-// compared. rel is relative to the contract module root.
-func WriteRaw(t *testing.T, rel string, body []byte) {
+// CompareRaw checks a live JSON payload against rel.
+// Volatile values are masked on both sides, then both are encoded with sorted
+// object keys. Key order in the file is not part of the contract. $schema,
+// empty properties, and the rest of the wire message stay. In update mode the
+// file is rewritten from the pretty-printed live bytes (server key order
+// preserved) and the test still passes.
+func CompareRaw(t *testing.T, rel string, body []byte) {
+	t.Helper()
+	if Update() {
+		writePretty(t, rel, body)
+		return
+	}
+	got, err := NormalizeRaw(body)
+	if err != nil {
+		t.Fatalf("live raw %s: %v", rel, err)
+	}
+	path := filepath.Join(Root(t), rel)
+	wantBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read golden %s: %v (set UPDATE_GOLDEN=1 to create it)", rel, err)
+	}
+	want, err := NormalizeRaw(wantBytes)
+	if err != nil {
+		t.Fatalf("golden raw %s: %v", rel, err)
+	}
+	if bytes.Equal(want, got) {
+		return
+	}
+	t.Fatalf("golden mismatch %s\n%s", rel, firstDiff(want, got))
+}
+
+// NormalizeRaw masks volatile JSON values and emits stable JSON.
+func NormalizeRaw(body []byte) ([]byte, error) {
+	body = bytes.TrimSpace(body)
+	if len(body) == 0 {
+		return nil, fmt.Errorf("empty payload")
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return nil, err
+	}
+	return Marshal(normalize.Mask(v))
+}
+
+// writePretty saves informational bytes in update mode. rel is relative to
+// the contract module root. Key order in body is preserved.
+func writePretty(t *testing.T, rel string, body []byte) {
 	t.Helper()
 	if !Update() {
 		return
