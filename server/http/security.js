@@ -4,6 +4,8 @@
  */
 'use strict';
 
+const { peerTrusted } = require('./trusted-proxies');
+
 const SECURITY_HEADERS = {
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'same-origin',
@@ -36,17 +38,54 @@ function isJsonContentType(header) {
 }
 
 /**
+ * Scheme of the connection the process accepted. TLS on the socket is https.
+ * @param {import('http').IncomingMessage|object|null|undefined} req
+ * @returns {'http'|'https'}
+ */
+function socketScheme(req) {
+    const socket = req && req.socket;
+    return socket && socket.encrypted ? 'https' : 'http';
+}
+
+/**
+ * Scheme written by the immediate proxy.
+ *
+ * Traefik's forwarder appends the scheme of the connection it accepted onto
+ * X-Forwarded-Proto. It does not replace a value an earlier hop already
+ * forwarded, so the leftmost field can still be client-controlled. The value
+ * Traefik added is the rightmost field, or the only field when the header has
+ * one. Anything other than http or https is ignored.
+ * @param {import('http').IncomingMessage|object|null|undefined} req
+ * @returns {'http'|'https'|''}
+ */
+function immediateForwardedProto(req) {
+    const headers = req && req.headers;
+    if (!headers) return '';
+    const raw = headers['x-forwarded-proto'];
+    if (typeof raw !== 'string') return '';
+    const parts = raw.split(',');
+    const last = parts[parts.length - 1].trim().toLowerCase();
+    if (last === 'http' || last === 'https') return last;
+    return '';
+}
+
+/**
  * Origin derived from the Host the browser actually used (no trailing slash).
- * @param {import('http').IncomingMessage} req
+ * X-Forwarded-Proto is read only from a TRUSTED_PROXIES peer. Otherwise the
+ * scheme is the socket's TLS state.
+ * @param {import('http').IncomingMessage|object|null|undefined} req
  * @returns {string}
  */
 function hostOrigin(req) {
-    const host = req.headers.host;
-    if (!host) return '';
-    const forwarded = req.headers['x-forwarded-proto'];
-    const proto = (typeof forwarded === 'string' && forwarded)
-        ? forwarded.split(',')[0].trim()
-        : (cookieLooksSecure() ? 'https' : 'http');
+    const headers = req && req.headers;
+    const host = headers && headers.host;
+    if (typeof host !== 'string' || !host) return '';
+    const remoteAddress = req.socket && req.socket.remoteAddress;
+    let proto = socketScheme(req);
+    if (peerTrusted(remoteAddress)) {
+        const forwarded = immediateForwardedProto(req);
+        if (forwarded) proto = forwarded;
+    }
     return proto + '://' + host;
 }
 
@@ -60,10 +99,6 @@ function expectedOrigin(req) {
         return String(process.env.PUBLIC_ORIGIN).replace(/\/$/, '');
     }
     return hostOrigin(req);
-}
-
-function cookieLooksSecure() {
-    return process.env.COOKIE_SECURE === '1';
 }
 
 /**
@@ -173,6 +208,7 @@ module.exports = {
     SECURITY_HEADERS,
     applySecurityHeaders,
     isJsonContentType,
+    hostOrigin,
     expectedOrigin,
     requestOrigin,
     originAllowed,

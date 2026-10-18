@@ -25,8 +25,9 @@ services:
       # Plain env (not a secret). Unset/empty/ladder = ladder; fsrs = FSRS-6.
       # Do not flip production to fsrs without the language-program rollout gate.
       SRS_SCHEDULER: ${SRS_SCHEDULER:-}
-      # Login throttle. Comma-separated proxy IPs or CIDRs. Empty trusts nobody
-      # and keys the throttle on the socket address. See deploy/k8s-database.md.
+      # Login throttle and CSRF scheme. Comma-separated proxy IPs or CIDRs.
+      # Empty trusts nobody: the throttle uses the socket address, and
+      # X-Forwarded-Proto is ignored. See deploy/k8s-database.md.
       TRUSTED_PROXIES: "${TRUSTED_PROXIES:-}"
     volumes:
       - .:/app
