@@ -127,6 +127,7 @@ const FIELD_LANGUAGE = Object.freeze({
     'lesson.subtitle': 'exempt',
     'lesson.footer': 'exempt',
     'lesson.legacyStorageKey': 'exempt',
+    'lesson.users': 'exempt',
     'lesson.buildsOn': 'exempt',
     'recycle.fromLessonId': 'exempt',
     'wordEntry.fromLessonId': 'exempt',

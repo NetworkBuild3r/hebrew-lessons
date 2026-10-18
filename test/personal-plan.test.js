@@ -270,6 +270,42 @@ describe('personal plan assignee checks', { concurrency: false }, () => {
         assert.equal(stored.audience, 'shared');
     });
 
+    it('assigns a 7-character username and still refuses an unknown or non-username assignee', () => {
+        seed();
+        createAccount('bnelson');
+        const assigned = personal.assign(store, PLAN_ID, {
+            audience: 'personal',
+            assigneeId: 'bnelson',
+            expectedRevision: 1
+        });
+        assert.equal(assigned.error, undefined, JSON.stringify(assigned.blocks || assigned));
+        assert.equal(assigned.plan.assigneeId, 'bnelson');
+        assert.equal(assigned.plan.audience, 'personal');
+        const stored = store.loadWorkingCopy(PLAN_ID);
+        assert.equal(stored.assigneeId, 'bnelson');
+        assert.equal(stored.audience, 'personal');
+        assert.equal(stored.document.includes('"assigneeId":"bnelson"'), true);
+
+        const unknown = personal.assign(store, PLAN_ID, {
+            audience: 'personal',
+            assigneeId: 'not-real',
+            expectedRevision: stored.revision
+        });
+        assert.deepEqual(unknown, { error: 'assignee_refused', revision: stored.revision });
+        assert.equal(store.loadWorkingCopy(PLAN_ID).assigneeId, 'bnelson');
+
+        const bob = ops.assignPlan(store, PLAN_ID, {
+            audience: 'personal',
+            assigneeId: 'Bob',
+            expectedRevision: stored.revision
+        }, testContext('personal-plan-test'));
+        assert.equal(bob.error, 'validation');
+        const hit = bob.blocks.find((item) => item.path === '/assigneeId');
+        assert.equal(hit.rule, 'schema');
+        assert.equal(hit.message, 'does not match the required format');
+        assert.equal(store.loadWorkingCopy(PLAN_ID).document, stored.document);
+    });
+
     it('a stale revision does not assign, and progress is not read', () => {
         seed();
         createAccount('learner01');

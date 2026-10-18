@@ -44,7 +44,7 @@
         "properties": {
           "assigneeId": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9-]{7,63}$"
+            "pattern": "^[^A-Z]{1,64}$"
           }
         }
       }
@@ -181,6 +181,13 @@
         "footer": { "$ref": "#/definitions/plainText" },
         "level": { "enum": ["basic", "intermediate", "advanced"] },
         "visibility": { "enum": ["hidden", "everyone", "selected"] },
+        "users": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[^A-Z]+$"
+          }
+        },
         "recipe": { "$ref": "#/definitions/recipe" },
         "legacyStorageKey": {
           "type": "string",

@@ -133,7 +133,7 @@ describe('plan store', () => {
         assert.equal(db.get('SELECT COUNT(*) AS n FROM plans').n >= 1, true);
     });
 
-    it('rejects a display name and a short assignee, and stores an opaque id', () => {
+    it('rejects a display name, stores a short lowercase username, and stores an opaque id', () => {
         assert.throws(() => {
             store.saveWorkingCopy({
                 id: 'personal-name',
@@ -142,14 +142,13 @@ describe('plan store', () => {
                 assigneeId: 'Ada Lovelace'
             });
         }, /CHECK|constraint/i);
-        assert.throws(() => {
-            store.saveWorkingCopy({
-                id: 'personal-short',
-                document: '{"id":"personal-short"}',
-                audience: 'personal',
-                assigneeId: 'abc'
-            });
-        }, /CHECK|constraint/i);
+        const short = store.saveWorkingCopy({
+            id: 'personal-short',
+            document: '{"id":"personal-short"}',
+            audience: 'personal',
+            assigneeId: 'abc'
+        });
+        assert.equal(short.assigneeId, 'abc');
         const saved = store.saveWorkingCopy({
             id: 'personal-ok',
             document: '{"id":"personal-ok"}',

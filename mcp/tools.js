@@ -8,6 +8,7 @@ const accounts = require('../server/accounts');
 const visibility = require('../server/visibility');
 const visibilityRepo = require('../server/db/repos/visibility');
 const usersRepo = require('../server/db/repos/users');
+const { resolveActiveUserIds } = require('../server/username-list');
 const fs = require('fs');
 const path = require('path');
 const { lessonDir } = require('../server/paths');
@@ -65,31 +66,6 @@ function requireMcpAuthToken() {
             'MCP_AUTH_TOKEN must be configured (non-empty) to use this tool or visibility argument.'
         );
     }
-}
-
-/**
- * Resolve usernames to active user ids before any write.
- * @param {string[]} usernames
- * @returns {number[]}
- */
-function resolveActiveUserIds(usernames) {
-    if (!Array.isArray(usernames)) {
-        throw new Error('visibility.users must be an array of usernames.');
-    }
-    const ids = [];
-    const seen = new Set();
-    for (const raw of usernames) {
-        const name = String(raw || '').trim();
-        if (!name) throw new Error('visibility.users contains an empty username.');
-        if (seen.has(name)) continue;
-        seen.add(name);
-        const row = usersRepo.findByUsername(name);
-        if (!row || row.status !== 'active') {
-            throw new Error('Unknown or inactive username: "' + name + '".');
-        }
-        ids.push(Number(row.id));
-    }
-    return ids;
 }
 
 /**

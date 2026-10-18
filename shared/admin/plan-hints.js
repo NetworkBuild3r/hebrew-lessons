@@ -199,6 +199,14 @@
         },
         default: 'hidden'
     });
+    field('lesson.users', 'משתמשים', 'Users', {
+        lang: 'exempt',
+        single: true,
+        help: [
+            'שמות משתמש שרואים שיעור selected. בלי השדה, הרשאות קיימות נשארות.',
+            'Usernames who can see a selected lesson. Omit the field to leave existing grants.'
+        ]
+    });
     field('lesson.recipe', 'מתכון', 'Recipe', {
         help: ['צורת פתיחה לשיעור. לא יוצר טקסט.', 'A starting shape for the lesson. It writes no text.'],
         advanced: true,

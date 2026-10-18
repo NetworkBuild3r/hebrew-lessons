@@ -487,14 +487,19 @@ async function main() {
         const refused = await textOf('[data-plan-assign-message]');
         if (!/assignee_refused/.test(refused) || !/not active/.test(refused)) fail('assign', 'message: ' + refused);
         if (store.loadWorkingCopy('published-plan').audience !== 'shared') fail('assign', 'a refused assignment changed the plan');
-        // an active account whose username the schema's assignee pattern refuses (under 8 characters) is told why
+        // a 7-character active username is a real account and is stored
         await inject('learner');
         await click('[data-plan-assign-save]');
-        await waitFor(cdp, `/schema/.test(${q('[data-plan-assign-message]')}.textContent)`, 'the schema refusal for a short username');
-        const short = await textOf('[data-plan-assign-message]');
-        report.shortUsername = short;
-        if (!/assigneeId/.test(short)) fail('assign', 'the refusal does not say which field: ' + short);
-        if (store.loadWorkingCopy('published-plan').audience !== 'shared') fail('assign', 'a refused assignment changed the plan');
+        await waitRevision(beforeAssign + 3, 'revision after assigning a 7-character username');
+        const shortUser = store.loadWorkingCopy('published-plan');
+        report.shortUsername = shortUser.assigneeId;
+        if (shortUser.audience !== 'personal' || shortUser.assigneeId !== 'learner') {
+            fail('assign', '7-character username was not stored: ' + shortUser.audience + ' ' + shortUser.assigneeId);
+        }
+        await setValue('[data-plan-assign-audience]', 'shared');
+        await click('[data-plan-assign-save]');
+        await waitRevision(beforeAssign + 4, 'revision after sharing again after the short username');
+        if (store.loadWorkingCopy('published-plan').audience !== 'shared') fail('assign', 'the plan stayed personal');
 
         // ---- SPEC-014: history, compare, restore
         const HP = 'history-plan';

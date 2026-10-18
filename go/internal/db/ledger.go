@@ -14,7 +14,7 @@ type Migration struct {
 	Name    string `json:"name"`
 }
 
-// ExpectedMigrations is versions 1–11 with the names in server/db/migrations.
+// ExpectedMigrations is versions 1–12 with the names in server/db/migrations.
 // Go runs nothing when this ledger is already present.
 var ExpectedMigrations = []Migration{
 	{1, "001-initial.js"},
@@ -28,6 +28,7 @@ var ExpectedMigrations = []Migration{
 	{9, "009-dictionary-entries.js"},
 	{10, "010-lexicon-future-cells.js"},
 	{11, "011-google-email.js"},
+	{12, "012-assignee-username.js"},
 }
 
 // Ledger is the result of reading schema_migrations.

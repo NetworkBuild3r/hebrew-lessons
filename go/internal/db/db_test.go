@@ -91,7 +91,7 @@ func TestLedgerMismatches(t *testing.T) {
 		want string
 	}{
 		{mode: "missing", want: "missing version 4 (004-fsrs-review-state.js)"},
-		{mode: "extra", want: "unexpected version 12 (012-extra.js)"},
+		{mode: "extra", want: "unexpected version 99 (099-extra.js)"},
 		{mode: "wrong-name", want: `version 3 name is "003-not-the-real-name.js", want "003-media-and-ai-planning.js"`},
 		{mode: "empty", want: "schema_migrations table is missing"},
 	}

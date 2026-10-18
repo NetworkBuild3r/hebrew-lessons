@@ -398,7 +398,18 @@ function adminContext(routeCtx, tool) {
  * @param {Function} handler
  */
 function addAdmin(router, method, path, handler) {
-    router.add(method, path, router.requireSession(router.requireAdmin(handler)));
+    router.add(method, path, router.requireSession(router.requireAdmin(async (req, res, ctx) => {
+        try {
+            await handler(req, res, ctx);
+        } catch (err) {
+            if (res.headersSent) throw err;
+            if (err && err.code === 'username_list') {
+                security.sendJsonError(res, 400, err.message || 'Invalid request', 'bad_request');
+                return;
+            }
+            throw err;
+        }
+    })));
 }
 
 /**
