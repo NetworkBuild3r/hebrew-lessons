@@ -264,8 +264,8 @@ function json(res, status, body, extra) {
     res.end(JSON.stringify(body));
 }
 
-function oauthError(res, status, error, description) {
-    json(res, status, { error, error_description: description });
+function oauthError(res, status, error, description, extra) {
+    json(res, status, { error, error_description: description }, extra);
 }
 
 function esc(value) {
@@ -680,13 +680,70 @@ function loadRefreshGrant(token) {
     return null;
 }
 
+// Secrets are stored as HMAC digests (sh), the same tokenHash used for access and refresh
+// keys. Compare those digests in constant time. A confidential client must use the method
+// it registered (am): the body field for client_secret_post, the Authorization header for
+// client_secret_basic.
+//
+// am "none", or a record with no am, is a public PKCE client. Registration defaults to
+// none, legacy HMAC clients only carry ru/nm, and both keep working with no secret, so a
+// client that already behaves correctly is not forced to register or sign in again.
+//
+// Codes and refresh grants are bound to cid. A different client_id is invalid_grant.
+// A stored refresh grant with no cid is accepted once from the client that presents it;
+// refresh rotation writes that client_id onto the new grant. This server has always set
+// cid when it issues a refresh token, so a normal stored token is already bound.
+function secretMatches(presented, storedHash) {
+    if (typeof presented !== 'string' || typeof storedHash !== 'string') return false;
+    const got = Buffer.from(tokenHash(presented));
+    const want = Buffer.from(storedHash);
+    if (got.length !== want.length) return false;
+    return crypto.timingSafeEqual(got, want);
+}
+
+function credentials(form, basic) {
+    const bodyId = typeof form.client_id === 'string' ? form.client_id : '';
+    const headerId = basic && typeof basic.clientId === 'string' ? basic.clientId : '';
+    return {
+        conflict: Boolean(bodyId && headerId && bodyId !== headerId),
+        clientId: bodyId || headerId,
+        basicAttempt: Boolean(basic),
+        basicSecret: basic && typeof basic.clientSecret === 'string' ? basic.clientSecret : '',
+        postSecret: typeof form.client_secret === 'string' && form.client_secret ? form.client_secret : ''
+    };
+}
+
+function grantClientId(grant) {
+    return grant && typeof grant.cid === 'string' ? grant.cid : '';
+}
+
+function invalidClient(res, basicChallenge) {
+    console.error('mcp token invalid_client');
+    return oauthError(res, 401, 'invalid_client', 'Client authentication failed.',
+        basicChallenge ? { 'WWW-Authenticate': 'Basic realm="hebrew-lessons"' } : undefined);
+}
+
+// Returns true when a response has been sent.
+function clientAuthFailed(res, client, creds) {
+    const method = client && (client.am === 'client_secret_basic' || client.am === 'client_secret_post') ? client.am : '';
+    if (!method) return false;
+    if (method === 'client_secret_basic') {
+        if (creds.basicAttempt && !creds.postSecret && secretMatches(creds.basicSecret, client.sh)) return false;
+        invalidClient(res, true);
+        return true;
+    }
+    if (!creds.basicAttempt && creds.postSecret && secretMatches(creds.postSecret, client.sh)) return false;
+    invalidClient(res, creds.basicAttempt);
+    return true;
+}
+
 async function token(req, res) {
     let form;
     try { form = await readForm(req); } catch (err) {
         console.error('mcp token invalid_request body');
         return oauthError(res, err.status || 400, 'invalid_request', 'Bad body.');
     }
-    const basic = basicAuth(req);
+    const creds = credentials(form, basicAuth(req));
     if (form.grant_type === 'authorization_code') {
         const grant = loadAuthCode(form.code);
         if (!grant) {
@@ -698,8 +755,15 @@ async function token(req, res) {
             console.error('mcp token authorization_code invalid_grant used_code');
             return oauthError(res, 400, 'invalid_grant', 'Code was already used.');
         }
-        const givenClientId = form.client_id || (basic && basic.clientId) || grant.cid;
-        const client = findClient(givenClientId) || findClient(grant.cid);
+        if (creds.conflict) return invalidClient(res, true);
+        const boundId = grantClientId(grant);
+        if (boundId && creds.clientId && creds.clientId !== boundId) {
+            console.error('mcp token authorization_code invalid_grant client_or_redirect');
+            return oauthError(res, 400, 'invalid_grant', 'client_id or redirect_uri does not match the code.');
+        }
+        const clientId = creds.clientId || boundId;
+        const client = findClient(clientId);
+        if (clientAuthFailed(res, client, creds)) return;
         const redirectOk = !form.redirect_uri || form.redirect_uri === grant.ru;
         const clientOk = Boolean(client && Array.isArray(client.ru) && client.ru.includes(grant.ru));
         if (!clientOk || !redirectOk) {
@@ -718,7 +782,7 @@ async function token(req, res) {
             return oauthError(res, 400, 'invalid_grant', 'That account can no longer sign in.');
         }
         console.error('mcp token authorization_code ok' + (userClaims.uid != null ? ' uid=' + userClaims.uid : ''));
-        return issueTokens(res, givenClientId, userClaims);
+        return issueTokens(res, clientId, userClaims);
     }
     if (form.grant_type === 'refresh_token') {
         const loaded = loadRefreshGrant(form.refresh_token);
@@ -726,8 +790,27 @@ async function token(req, res) {
             console.error('mcp token refresh_token invalid_grant token');
             return oauthError(res, 400, 'invalid_grant', 'Refresh token is invalid or expired.');
         }
+        if (creds.conflict) return invalidClient(res, true);
         const grant = loaded.grant;
-        const givenClientId = form.client_id || (basic && basic.clientId) || grant.cid;
+        const boundId = grantClientId(grant);
+        if (boundId && creds.clientId && creds.clientId !== boundId) {
+            console.error('mcp token refresh_token invalid_grant client');
+            return oauthError(res, 400, 'invalid_grant', 'client_id does not match the refresh token.');
+        }
+        // No cid on a stored grant: the presenting client may take it once. issueTokens binds the replacement.
+        const clientId = creds.clientId || boundId;
+        if (!clientId) {
+            console.error('mcp token refresh_token invalid_grant client');
+            return oauthError(res, 400, 'invalid_grant', 'client_id does not match the refresh token.');
+        }
+        const client = findClient(clientId);
+        // A grant that already names its client keeps working even if that record is gone.
+        // A grant with no cid can be claimed only by a client that is still registered.
+        if (!boundId && !client) {
+            console.error('mcp token refresh_token invalid_grant client');
+            return oauthError(res, 400, 'invalid_grant', 'client_id does not match the refresh token.');
+        }
+        if (clientAuthFailed(res, client, creds)) return;
         const userClaims = tokenUser(grant);
         if (!userClaims) {
             console.error('mcp token refresh_token invalid_grant account');
@@ -739,7 +822,7 @@ async function token(req, res) {
             saveStore();
         }
         console.error('mcp token refresh_token ok' + (userClaims.uid != null ? ' uid=' + userClaims.uid : ''));
-        return issueTokens(res, givenClientId, userClaims);
+        return issueTokens(res, clientId, userClaims);
     }
     console.error('mcp token unsupported_grant_type');
     return oauthError(res, 400, 'unsupported_grant_type', 'Use authorization_code or refresh_token.');
