@@ -19,13 +19,25 @@ import (
 const shutdownTimeout = 5 * time.Second
 
 func main() {
-	if err := run(); err != nil {
+	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "hebrew: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
+func run(args []string) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "import-audio":
+			return runImport(args[1:])
+		default:
+			return fmt.Errorf("unknown command %q", args[0])
+		}
+	}
+	return runServer()
+}
+
+func runServer() error {
 	cfg, err := configFromEnv()
 	if err != nil {
 		return err

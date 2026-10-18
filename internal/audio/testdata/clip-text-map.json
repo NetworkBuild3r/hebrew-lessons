@@ -1,0 +1,2536 @@
+{
+ "words": {
+  "806bb3fc99c984531106aeb5.mp3": {
+   "text": "קָם",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v3"
+  },
+  "a2e3165352468e3a501b294e.mp3": {
+   "text": "קָמָה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v3"
+  },
+  "c35c2410e210098ead05320e.mp3": {
+   "text": "שׁוֹתֶה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v3"
+  },
+  "9634894b7d32e21bcb10e9c6.mp3": {
+   "text": "שׁוֹתָה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v3"
+  },
+  "1d0390a2fc75a4e27a074c66.mp3": {
+   "text": "בֹּקֶר",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v3"
+  },
+  "d1597cb73a024c66e8fbeffb.mp3": {
+   "text": "קָפֶה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v3"
+  },
+  "39eadd11f599ed07bdd27a7d.mp3": {
+   "text": "אַחַר כָּךְ",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v3"
+  },
+  "38b6df2167d3c0fab5230bdc.mp3": {
+   "text": "יוֹצֵא",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v3"
+  },
+  "ee2f7d856aaa3bd643275012.mp3": {
+   "text": "קָם",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "740f599ed5b042767ca34d04.mp3": {
+   "text": "קָמָה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "541fcb499d7b27ecccc5cc44.mp3": {
+   "text": "שׁוֹתֶה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "f39ed9fe1b9f2f0e92368bdf.mp3": {
+   "text": "שׁוֹתָה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "2219cefcea011431fbefc047.mp3": {
+   "text": "בֹּקֶר",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "d50ceba8e7d9d5d763deb746.mp3": {
+   "text": "קָפֶה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "7a7a422ffb259c880d44e99a.mp3": {
+   "text": "אַחַר כָּךְ",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "a62d26357cfcd3863a7e7683.mp3": {
+   "text": "יוֹצֵא",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "35212cd15b4ebc075988b99e.mp3": {
+   "text": "עֵצָה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "e3846706a266e0b59296e3b0.mp3": {
+   "text": "יוֹדֵעַ",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "ebe1c3c8ad3850f97b03c964.mp3": {
+   "text": "כְּדַאי",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "8818634986115f259ce21953.mp3": {
+   "text": "טֶבַע",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "c7e65d3a6e8ebd1833302cd7.mp3": {
+   "text": "סֶרֶט",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "62c8f1719bc78e994d1be7a4.mp3": {
+   "text": "מְיוּחָד",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "34e82b3fcc85e903bd4817a4.mp3": {
+   "text": "חָשַׁבְתִּי",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "986f8f70bec222f49e2100ac.mp3": {
+   "text": "מַמְלִיץ",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "01cf5cacd27d5c855bee7ec9.mp3": {
+   "text": "אַחֲרֵי",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "bba238b1c6dd5eb9359319f4.mp3": {
+   "text": "רַעְיוֹן",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "4627aaef6503a14e21455a3a.mp3": {
+   "text": "נָעִים מְאוֹד",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "7923eb38636888e53ea11192.mp3": {
+   "text": "מֵאֵיפֹה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "65fc14c47f5411508cc9a3f5.mp3": {
+   "text": "הוֹרִים",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "790fa72fc0f746d7a21228c9.mp3": {
+   "text": "אֲחָיוֹת",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "a893128b88857fd13bec050f.mp3": {
+   "text": "תְּאוֹמִים",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "429a8c95b6721370798c9d20.mp3": {
+   "text": "שָׂפוֹת",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "116e98533688310b398dccbb.mp3": {
+   "text": "מִשְׂרָד",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "2bd88973618c7fe6e0cf037d.mp3": {
+   "text": "מִתְאַמֵּן",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "15f6818cbfafd7767caf9c87.mp3": {
+   "text": "מַחְשֵׁב",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "22a3704b2a7ba245b7a329f8.mp3": {
+   "text": "רוֹצָה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "48a82e8bc9445f236d170fd8.mp3": {
+   "text": "אָנָלִי",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "c90a93f2af6225c2230ea386.mp3": {
+   "text": "סֶקְס",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "3abff5ea626a4d4361f9009c.mp3": {
+   "text": "שׁוּב",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "d4941d8b3273ca4f674845ff.mp3": {
+   "text": "חֵשֶׁק",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "c87e2e33403e2990f67aa3e3.mp3": {
+   "text": "אוֹהֶבֶת",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "c2c64d0f4ed49718bae82aae.mp3": {
+   "text": "לְאִט",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "41302833d7b6e4351fe91f4a.mp3": {
+   "text": "בַּעַל",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "b4281ce91de2d283bb0fe6b6.mp3": {
+   "text": "תַּחַת",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "de0160234286eca2631e2de2.mp3": {
+   "text": "שֵׁייק",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "403cd134ff1e64e757eb02f9.mp3": {
+   "text": "מַתְחִיל",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "51084b431dbf73295856c09f.mp3": {
+   "text": "מְסַיֵּם",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "4c1d820d770b52714f348ba0.mp3": {
+   "text": "בְּדֶרֶךְ כְּלָל",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "6fa94738f31cc63b7b184d84.mp3": {
+   "text": "שָׁלוֹם",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "247ae3353e0077bd4c68d6c3.mp3": {
+   "text": "מַעֲדִיף",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "17fdf7bd270acc86eab48f34.mp3": {
+   "text": "מַעֲדִיפָה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "7c52b1d87e2fe16985c48e3f.mp3": {
+   "text": "מוּעֲדָף",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "1d6af5671d5c3e2233dced26.mp3": {
+   "text": "צְנִיחָה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "f30398f59fa97041d818fddd.mp3": {
+   "text": "לִפְנֵי",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "680926899cf311ee96484b98.mp3": {
+   "text": "שָׁנִים",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "849cc09092993f8b44efd09d.mp3": {
+   "text": "עוֹד",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "cb0907d5acba5addc7c6cefc.mp3": {
+   "text": "לְדַבֵּר",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "c78649db90d45744267b16bc.mp3": {
+   "text": "לַחֲזוֹר",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "95f74dc3ddbd92c93398abaf.mp3": {
+   "text": "לִכְתּוֹב",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "674ec871745021c40d168797.mp3": {
+   "text": "לְהַזְמִין",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "572013038b30d662396c731f.mp3": {
+   "text": "לְשַׁלֵּם",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "73164d5ea66b05a5fc7938b9.mp3": {
+   "text": "לְאַט",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "73b309c70b100c87862a0122.mp3": {
+   "text": "לֹא הֵבַנְתִּי",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "7ea6179a4e98f4933f2a27b4.mp3": {
+   "text": "מִלָּה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "c41c4981624fd5b6e38a0a58.mp3": {
+   "text": "אֶתְמוֹל",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "4a271454081a3ac048782d5f.mp3": {
+   "text": "שֶׁעָבַר",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "996e6a85f562e9e1880cc769.mp3": {
+   "text": "נָסַעְתִּי",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "17447e97083d726ecb0a827f.mp3": {
+   "text": "רָאִיתִי",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "903066fb63087d44570675dd.mp3": {
+   "text": "פָּגַשְׁתִּי",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "22d14709b5ecbcc3f04544a0.mp3": {
+   "text": "הִזְמַנְתִּי",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "1609e3bc1fd696d891392677.mp3": {
+   "text": "שִׂיחַקְתִּי",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "ad10b1278982e8bb2e20b08b.mp3": {
+   "text": "חָזַרְתִּי",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "2d94df2d1d8b3ff103f52902.mp3": {
+   "text": "סוֹף הַשָּׁבוּעַ הַבָּא",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "cbc5b073a959836877f2c59f.mp3": {
+   "text": "לְהָבִיא",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "80eda50c366f02311152ac39.mp3": {
+   "text": "לְבַשֵּׁל",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "7883b29b353505e5fb85860f.mp3": {
+   "text": "לִרְכּוֹב",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "73d63bb3286054ef82d42318.mp3": {
+   "text": "לָשֶׁבֶת",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "cd20b7b137c3b504a377f79a.mp3": {
+   "text": "לִישׁוֹן",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "ce2ad9a18006d6755317134a.mp3": {
+   "text": "אֹהֶל",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "2be85f8bf68fa0ebb5cd0c82.mp3": {
+   "text": "מְדוּרָה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "13b44cdb592aa296edfc53f4.mp3": {
+   "text": "לוֹקֵחַ",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "7d584073d86fb08afb575ff9.mp3": {
+   "text": "מֵבִיא",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "930f1e2618eb283bab171ee8.mp3": {
+   "text": "צָרִיךְ",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "8a7e2e6b896abeebf3c07902.mp3": {
+   "text": "מְבַקֵּשׁ",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "b292436b0235d7e77a2b78db.mp3": {
+   "text": "לִטְעוֹם",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "5ff2abcc21aeef06bc546d7e.mp3": {
+   "text": "מָרָק",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "4aa6e89e99c00564d04c8a06.mp3": {
+   "text": "מִיץ",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "190715fc6ec423d4085ecfb6.mp3": {
+   "text": "חֶשְׁבּוֹן",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "7cec349be60c1bd7746877eb.mp3": {
+   "text": "כְּשֶׁ",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "c63439b2a40e33dcae2f236b.mp3": {
+   "text": "טִיסָה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "4298c3c858e0b26ca658be6b.mp3": {
+   "text": "נוֹחֶתֶת",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "cda3e441b3194ea6c7acb463.mp3": {
+   "text": "מַגִּיעַ",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "adbe3ec5528f8e97052859c3.mp3": {
+   "text": "לְבַקֵּר",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "cd8c29545196f085ca49080d.mp3": {
+   "text": "לְטַיֵּל",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "bf888b7a68c578a7ee99fbf1.mp3": {
+   "text": "לִשְׂחוֹת",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "5724c7fd273965f7b43c810e.mp3": {
+   "text": "מַדְרִיךְ",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "bc25e7b4e37a13c5519b7b03.mp3": {
+   "text": "סִיפֵּר",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "28195ab196d9e442b3eefafc.mp3": {
+   "text": "הִסְבִּיר",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "86c625dbdb8fdad71033df93.mp3": {
+   "text": "הִבְטִיחַ",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "a36883291cb25a09308b5b21.mp3": {
+   "text": "שָׁכַח",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "bad54aa46b0fdda7841d9460.mp3": {
+   "text": "עָנָה",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "626b0eca4b0ba74740ac25bd.mp3": {
+   "text": "שָׁמַעְתִּי",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "282048102bdab281e9eee354.mp3": {
+   "text": "בָּטוּחַ",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  },
+  "3179cc50140c0eac886ca496.mp3": {
+   "text": "נִרְאֶה לִי",
+   "voiceId": "6WRlPmU1fqPwYbSxeP16",
+   "model": "eleven_v4"
+  }
+ },
+ "lessons": [
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/friend-1.mp3",
+   "text": "אֵיךְ אוֹמְרִים יֵשׁ לִי חֵשֶׁק?"
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/friend-2.mp3",
+   "text": "אֵיךְ אוֹמְרִים אֲנִי רוֹצָה אֶת זֶה שׁוּב כְּמוֹ שֶׁאֲנִי אוֹהֶבֶת?"
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/friend-3.mp3",
+   "text": "מָה אוֹמְרִים לְבַעַל כְּשֶׁכְּבָר יוֹדְעִים אֵיךְ אוֹהֲבִים אֶת זֶה לְאִט?"
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/grammar-1.mp3",
+   "text": "הִיא רוֹצָה סֶקְס אָנָלִי."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/grammar-2.mp3",
+   "text": "הִיא רוֹצָה אֶת זֶה שׁוּב."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/grammar-3.mp3",
+   "text": "יֵשׁ לִי חֵשֶׁק הַלַּיְלָה."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/question-1.mp3",
+   "text": "כַּמָּה שָׁנִים הֵם נְשׂוּאִים, וְעִם מִי?"
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/question-2.mp3",
+   "text": "מָה מִיכַל רוֹצָה הַלַּיְלָה, וְאֵיךְ הִיא אוֹהֶבֶת אֶת זֶה?"
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/vocab-1.mp3",
+   "text": "הִיא רוֹצָה אוֹתוֹ הַלַּיְלָה."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/vocab-10.mp3",
+   "text": "הִיא קָמָה מֵהַמִּטָּה."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/vocab-11.mp3",
+   "text": "אַחַר כָּךְ הֵם סוֹגְרִים אֶת הַדֶּלֶת."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/vocab-12.mp3",
+   "text": "הִיא שׁוֹתָה מַיִם."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/vocab-2.mp3",
+   "text": "הִיא רוֹצָה סֶקְס אָנָלִי."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/vocab-3.mp3",
+   "text": "יֵשׁ לָהּ חֵשֶׁק לְסֶקְס."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/vocab-4.mp3",
+   "text": "הִיא רוֹצָה אֶת זֶה שׁוּב."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/vocab-5.mp3",
+   "text": "יֵשׁ לִי חֵשֶׁק הַלַּיְלָה."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/vocab-6.mp3",
+   "text": "כְּמוֹ שֶׁאֲנִי אוֹהֶבֶת."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/vocab-7.mp3",
+   "text": "הִיא אוֹהֶבֶת לְאִט בַּהַתְחָלָה."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/vocab-8.mp3",
+   "text": "הִיא מְדַבֶּרֶת עִם הַבַּעַל."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/sentences/vocab-9.mp3",
+   "text": "הִיא רוֹצָה אוֹתוֹ בַּתַּחַת."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/story/line-1.mp3",
+   "text": "עֶשֶׂר וְחָמֵשׁ שָׁנִים הֵם נְשׂוּאִים — רַק הִיא וְהוּא, בְּלִי אַחֵר. הַלַּיְלָה קָמָה מִיכַל מֵהַמִּטָּה. הִיא שׁוֹתָה מַיִם, וְיוֹשֶׁבֶת קָרוֹב אֶל הַבַּעַל שֶׁלָּהּ."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/story/line-2.mp3",
+   "text": "הִיא מְחַיֶּכֶת וְאוֹמֶרֶת יָשָׁר: יֵשׁ לִי חֵשֶׁק. אֲנִי רוֹצָה סֶקְס אָנָלִי אִתְּךָ הַלַּיְלָה — שׁוּב, כְּמוֹ שֶׁאֲנִי אוֹהֶבֶת."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/story/line-3.mp3",
+   "text": "אַתָּה כְּבָר יוֹדֵעַ אֵיךְ אֲנִי אוֹהֶבֶת אֶת זֶה: לְאִט בַּהַתְחָלָה, עָמֹק כְּשֶׁאֲנִי מוּכָנָה, בַּדֶּרֶךְ שֶׁלִּי. לֹא צָרִיךְ לְהַסְבִּיר לִי — אֲנִי כְּבָר בַּמַּצַּב."
+  },
+  {
+   "lesson": "anal-sex-vocab",
+   "clip": "audio/story/line-4.mp3",
+   "text": "הוּא מַקְשִׁיב, וְחִיּוּךְ עַל הַפָּנִים. הִיא לוֹחֶשֶׁת שֶׁהִיא רוֹצָה אוֹתוֹ בַּתַּחַת הַלַּיְלָה, בְּדִיּוּק כְּמוֹ תָּמִיד. אַחַר כָּךְ הֵם סוֹגְרִים אֶת הַדֶּלֶת."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/friend-1.mp3",
+   "text": "מָה אַתָּה מַעֲדִיף לַעֲשׂוֹת בְּדֵייט?"
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/friend-2.mp3",
+   "text": "אַתָּה מַעֲדִיף לֶאֱכֹל בַּבַּיִת אוֹ בְּמִסְעָדָה?"
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/friend-3.mp3",
+   "text": "מָה הָאֹכֶל הַמּוּעֲדָף עָלֶיךָ?"
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/friend-4.mp3",
+   "text": "עָשִׂיתָ פַּעַם צְנִיחָה?"
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/friend-5.mp3",
+   "text": "אֵיפֹה הָיִיתָ לִפְנֵי עֶשֶׂר שָׁנִים?"
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/grammar-1.mp3",
+   "text": "אֲנִי מַעֲדִיף לִשְׁתּוֹת מַיִם."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/grammar-2.mp3",
+   "text": "הִיא מַעֲדִיפָה לְבַשֵּׁל בַּבַּיִת."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/grammar-3.mp3",
+   "text": "מָה אַתָּה מַעֲדִיף לַעֲשׂוֹת הָעֶרֶב?"
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/grammar-4.mp3",
+   "text": "אֲנִי מַעֲדִיף לִרְאוֹת סֶרֶט."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/question-1.mp3",
+   "text": "מתי היה הדייט הראשון?"
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/question-2.mp3",
+   "text": "מה האישה מעדיפה לעשות?"
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/question-3.mp3",
+   "text": "מה האוכל המועדף עליו?"
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/question-4.mp3",
+   "text": "מה הם עושים בסוף?"
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/vocab-1.mp3",
+   "text": "אֲנִי מַעֲדִיף לֶאֱכֹל בְּמִסְעָדָה."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/vocab-10.mp3",
+   "text": "שַׁי אוֹהֵב לִרְאוֹת סְרָטִים בַּקּוֹלְנוֹעַ."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/vocab-11.mp3",
+   "text": "שַׁי רוֹצֶה לַעֲשׂוֹת מַשֶּׁהוּ מְיוּחָד בִּשְׁבִיל בַּר."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/vocab-2.mp3",
+   "text": "הִיא מַעֲדִיפָה לְבַשֵּׁל בַּבַּיִת."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/vocab-3.mp3",
+   "text": "זֶה הַסֶּרֶט הַמּוּעֲדָף עָלַי."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/vocab-4.mp3",
+   "text": "עָשִׂיתִי צְנִיחָה פַּעֲמַיִם."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/vocab-5.mp3",
+   "text": "לִפְנֵי חֲמֵשׁ עֶשְׂרֵה שָׁנִים הָיָה לִי דֵּייט רִאשׁוֹן."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/vocab-6.mp3",
+   "text": "אֲנַחְנוּ נְשׂוּאִים כְּבָר חֲמֵשׁ עֶשְׂרֵה שָׁנִים."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/vocab-7.mp3",
+   "text": "אֲנִי רוֹצֶה לַעֲשׂוֹת עוֹד צְנִיחָה."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/vocab-8.mp3",
+   "text": "אַתָּה חוֹשֵׁב שֶׁזֶּה רַעְיוֹן טוֹב?"
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/sentences/vocab-9.mp3",
+   "text": "אֲנִי מַמְלִיץ לוֹ לָקַחַת אֶת בַּר לְסֶרֶט קוֹמֶדְיָה."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/story/line-1.mp3",
+   "text": "לִפְנֵי חֲמֵשׁ עֶשְׂרֵה שָׁנִים הָיָה לִי דֵּייט רִאשׁוֹן עִם אִשְׁתִּי."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/story/line-10.mp3",
+   "text": "הִיא אוֹמֶרֶת: "
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/story/line-11.mp3",
+   "text": "בַּסּוֹף אֲנַחְנוּ רוֹאִים סֶרֶט מְיוּחָד. וְהַצְּנִיחָה? אוּלַי בְּעוֹד שָׁנָה."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/story/line-2.mp3",
+   "text": "הָעֶרֶב אֲנַחְנוּ שׁוּב בְּדֵייט."
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/story/line-3.mp3",
+   "text": "הִיא שׁוֹאֶלֶת: "
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/story/line-4.mp3",
+   "text": "אֲנִי אוֹמֵר: "
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/story/line-5.mp3",
+   "text": "הִיא אוֹמֶרֶת: "
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/story/line-6.mp3",
+   "text": "אֲנִי אוֹמֵר: "
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/story/line-7.mp3",
+   "text": "הִיא צוֹחֶקֶת: "
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/story/line-8.mp3",
+   "text": "אַחֲרֵי הָאֹכֶל הִיא שׁוֹאֶלֶת: "
+  },
+  {
+   "lesson": "date-night-maadif-infinitive",
+   "clip": "audio/story/line-9.mp3",
+   "text": "אֲנִי אוֹמֵר: "
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/friend-1.mp3",
+   "text": "מָה חָבֵר סִיפֵּר לְךָ הַשָּׁבוּעַ?"
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/friend-2.mp3",
+   "text": "מָה שָׁמַעְתָּ בָּעֲבוֹדָה הַיּוֹם?"
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/friend-3.mp3",
+   "text": "מָה עָשִׂיתָ אַחֲרֵי הָעֲבוֹדָה אֶתְמוֹל?"
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/friend-4.mp3",
+   "text": "מָה אַתָּה אוֹהֵב לַעֲשׂוֹת בְּשַבָּת?"
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/friend-5.mp3",
+   "text": "לְאָן הָלַכְתָּ אֶתְמוֹל?"
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/grammar-1.mp3",
+   "text": "הַמַּדְרִיךְ הִסְבִּיר שֶׁהַכּוֹתֶל עַתִּיק."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/grammar-2.mp3",
+   "text": "הוּא הִבְטִיחַ שֶׁהַמָּרָק לֹא חָרִיף."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/grammar-3.mp3",
+   "text": "שָׁמַעְתִּי שֶׁהַמָּלוֹן מָצָא אֶת הַמַּחְשֵׁב."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/grammar-4.mp3",
+   "text": "הוּא אָמַר שֶׁהוּא לֹא יוֹדֵעַ."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/question-1.mp3",
+   "text": "מה המדריך הסביר?"
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/question-2.mp3",
+   "text": "מה המלצר הבטיח?"
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/question-3.mp3",
+   "text": "מה הבן שכח במלון?"
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/vocab-1.mp3",
+   "text": "הַחָבֵר שֶׁלִּי סִיפֵּר לִי שֶׁהוּא עָיֵף."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/vocab-10.mp3",
+   "text": "הַמַּחְשֵׁב שֶׁלִּי יָשָׁן מְאוֹד."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/vocab-11.mp3",
+   "text": "אַחֲרֵי הַטִּיוּל אֲנַחְנוּ עֲיֵפִים."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/vocab-2.mp3",
+   "text": "הַמּוֹרֶה הִסְבִּיר אֶת הַמִּלָּה."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/vocab-3.mp3",
+   "text": "אַבָּא הִבְטִיחַ שֶׁאֲנַחְנוּ נוֹסְעִים לֶהָרִים."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/vocab-4.mp3",
+   "text": "הוּא שָׁכַח אֶת הַמַּפְתֵּחַ בַּבַּיִת."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/vocab-5.mp3",
+   "text": "שָׁאַלְתִּי, וְהוּא עָנָה מַהֵר."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/vocab-6.mp3",
+   "text": "שָׁמַעְתִּי שֶׁהַסֶּרֶט טוֹב."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/vocab-7.mp3",
+   "text": "אֲנִי לֹא בָּטוּחַ שֶׁהוּא בַּבַּיִת."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/vocab-8.mp3",
+   "text": "נִרְאֶה לִי שֶׁיּוֹרֵד גֶּשֶׁם."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/sentences/vocab-9.mp3",
+   "text": "אֲנִי לֹא יוֹדֵעַ אֵיפֹה הַמָּלוֹן."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/story/line-1.mp3",
+   "text": "חָזַרְתִּי מִיִּשְׂרָאֵל אֶתְמוֹל. הַחָבֵר שֶׁלִּי שׁוֹאֵל: \"נוּ, אֵיךְ הָיָה?\""
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/story/line-2.mp3",
+   "text": "הַמַּדְרִיךְ בִּירוּשָׁלַיִם הִסְבִּיר ."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/story/line-3.mp3",
+   "text": "הוּא גַּם סִיפֵּר לָנוּ ."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/story/line-4.mp3",
+   "text": "הַמֶּלְצַר בַּמִּסְעָדָה הִבְטִיחַ . אֲבָל הוּא הָיָה מְאוֹד חָרִיף!"
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/story/line-5.mp3",
+   "text": "בַּיּוֹם הָאַחֲרוֹן, הַבֵּן שֶׁלִּי שָׁכַח אֶת הַמַּחְשֵׁב בַּמָּלוֹן."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/story/line-6.mp3",
+   "text": "שָׁאַלְתִּי אוֹתוֹ אֵיפֹה הוּא, וְהוּא עָנָה ."
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/story/line-7.mp3",
+   "text": "אַחֲרֵי הַטִּיסָה, שָׁמַעְתִּי . אֵיזֶה מַזָּל!"
+  },
+  {
+   "lesson": "he-said-that-retell",
+   "clip": "audio/story/line-8.mp3",
+   "text": "אֲנִי בָּטוּחַ . נִרְאֶה לִי ."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/friend-1.mp3",
+   "text": "מָה אַתָּה רוֹצֶה לַעֲשׂוֹת כְּשֶׁאַתָּה בְּיִשְׂרָאֵל?"
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/friend-2.mp3",
+   "text": "מָה אַתָּה עוֹשֶׂה כְּשֶׁאַתָּה מַגִּיעַ הַבַּיְתָה?"
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/friend-3.mp3",
+   "text": "מָה אַתָּה הוֹלֵךְ לַעֲשׂוֹת מָחָר?"
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/friend-4.mp3",
+   "text": "מֵאֵיפֹה אַתָּה?"
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/friend-5.mp3",
+   "text": "לְאָן נָסַעְתָּ בַּפַּעַם הָאַחֲרוֹנָה?"
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/grammar-1.mp3",
+   "text": "כְּשֶׁאֲנִי בִּירוּשָׁלַיִם, אֲנִי רוֹצֶה לְבַקֵּר בָּעִיר הָעַתִּיקָה."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/grammar-2.mp3",
+   "text": "מָתַי הַטִּיסָה נוֹחֶתֶת?"
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/grammar-3.mp3",
+   "text": "כְּשֶׁחַם, אֲנַחְנוּ שׂוֹחִים."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/grammar-4.mp3",
+   "text": "כְּשֶׁהַמַּדְרִיךְ מַגִּיעַ, אֲנַחְנוּ הוֹלְכִים."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/question-1.mp3",
+   "text": "מה הם עושים כשהטיסה נוחתת?"
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/question-2.mp3",
+   "text": "מה הוא אומר כשהוא לא מבין?"
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/question-3.mp3",
+   "text": "מה הילדים רוצים לעשות כשחם?"
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/vocab-1.mp3",
+   "text": "כְּשֶׁאֲנִי עָיֵף, אֲנִי שׁוֹתֶה קָפֶה."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/vocab-10.mp3",
+   "text": "מֵאֵיפֹה הַמַּדְרִיךְ?"
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/vocab-11.mp3",
+   "text": "הָאֲחָיוֹת שֶׁלִּי גָּרוֹת קָרוֹב."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/vocab-12.mp3",
+   "text": "יֵשׁ לִי רַעְיוֹן: בְּוֹאוּ נִסַע לַיָּם!"
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/vocab-2.mp3",
+   "text": "הַטִּיסָה לְתֵל אָבִיב אֲרֻכָּה."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/vocab-3.mp3",
+   "text": "הַטִּיסָה נוֹחֶתֶת בְּשֶׁשׁ בַּבֹּקֶר."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/vocab-4.mp3",
+   "text": "אֲנִי מַגִּיעַ לָעֲבוֹדָה בְּתֵשַׁע."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/vocab-5.mp3",
+   "text": "אֲנִי רוֹצֶה לְבַקֵּר אֶת הַהוֹרִים שֶׁלִּי."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/vocab-6.mp3",
+   "text": "בְּשַבָּת אֲנַחְנוּ אוֹהֲבִים לְטַיֵּל בֶּהָרִים."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/vocab-7.mp3",
+   "text": "הַיְּלָדִים אוֹהֲבִים לִשְׂחוֹת בַּבְּרֵכָה."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/vocab-8.mp3",
+   "text": "הַמַּדְרִיךְ מְדַבֵּר עִבְרִית וְאַנְגְּלִית."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/sentences/vocab-9.mp3",
+   "text": "קוֹרְאִים לִי דָּנִי. נָעִים מְאוֹד!"
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/story/line-1.mp3",
+   "text": "בַּקַּיִץ הַבָּא אֲנַחְנוּ נוֹסְעִים לְיִשְׂרָאֵל. זֹאת הַפַּעַם הָרִאשׁוֹנָה!"
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/story/line-2.mp3",
+   "text": "גַּם הָאֲחָיוֹת שֶׁלִּי בָּאוֹת."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/story/line-3.mp3",
+   "text": "כְּשֶׁהַטִּיסָה נוֹחֶתֶת, אֲנַחְנוּ הוֹלְכִים לִישׁוֹן בַּמָּלוֹן."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/story/line-4.mp3",
+   "text": "בַּבֹּקֶר בָּא מַדְרִיךְ. הוּא אוֹמֵר: "
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/story/line-5.mp3",
+   "text": "אֲנִי אוֹמֵר:  הַמַּדְרִיךְ מְדַבֵּר מַהֵר. כְּשֶׁאֲנִי לֹא מֵבִין, אֲנִי אוֹמֵר: "
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/story/line-6.mp3",
+   "text": "הַמַּדְרִיךְ אוֹמֵר: "
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/story/line-7.mp3",
+   "text": "אַחַר כָּךְ אֲנַחְנוּ נוֹסְעִים לַצָּפוֹן לְטַיֵּל בַּטֶּבַע."
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/story/line-8.mp3",
+   "text": "כְּשֶׁחַם, הַיְּלָדִים רוֹצִים לִשְׂחוֹת בַּיָּם. אִשְׁתִּי אוֹמֶרֶת: "
+  },
+  {
+   "lesson": "israel-trip-kshe",
+   "clip": "audio/story/line-9.mp3",
+   "text": "כְּשֶׁאֲנִי מַגִּיעַ הַבַּיְתָה, אֲנִי הוֹלֵךְ לִישׁוֹן הַרְבֵּה!"
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/friend-1.mp3",
+   "text": "מָה עָשִׂיתָ אֶתְמוֹל?"
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/friend-2.mp3",
+   "text": "מָה הִזְמַנְתָּ בְּמִסְעָדָה בַּפַּעַם הָאַחֲרוֹנָה?"
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/friend-3.mp3",
+   "text": "מָה רָצִיתָ לַעֲשׂוֹת בְּסוֹף הַשָּׁבוּעַ?"
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/friend-4.mp3",
+   "text": "מָה אָכַלְתָּ בַּבֹּקֶר?"
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/friend-5.mp3",
+   "text": "לְאָן הָלַכְתָּ בְּשַבָּת?"
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/grammar-1.mp3",
+   "text": "הִזְמַנְתִּי עוֹף."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/grammar-2.mp3",
+   "text": "אֶתְמוֹל פָּגַשְׁתִּי חָבֵר."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/grammar-3.mp3",
+   "text": "חָזַרְתִּי בְּעֶשֶׂר."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/grammar-4.mp3",
+   "text": "רָאִיתִי סֶרֶט."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/question-1.mp3",
+   "text": "לאן הוא נסע עם הילדים?"
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/question-2.mp3",
+   "text": "מה הוא הזמין לכולם?"
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/question-3.mp3",
+   "text": "מתי הוא חזר הביתה?"
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/vocab-1.mp3",
+   "text": "אֶתְמוֹל לֹא עָבַדְתִּי."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/vocab-10.mp3",
+   "text": "הַהוֹרִים שֶׁלִּי בָּאוּ לְבִקּוּר."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/vocab-11.mp3",
+   "text": "הַמִּשְׂרָד שֶׁלִּי סָגוּר בְּשַבָּת."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/vocab-12.mp3",
+   "text": "אִמָּא שֶׁלִּי תָּמִיד נוֹתֶנֶת עֵצָה טוֹבָה."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/vocab-2.mp3",
+   "text": "בַּחֹדֶשׁ שֶׁעָבַר הָיִיתִי בְּיִשְׂרָאֵל."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/vocab-3.mp3",
+   "text": "נָסַעְתִּי לָעבוֹדָה בְּשֶׁבַע."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/vocab-4.mp3",
+   "text": "רָאִיתִי סֶרֶט טוֹב בָּעֶרֶב."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/vocab-5.mp3",
+   "text": "פָּגַשְׁתִּי חָבֵר בְּבֵית קָפֶה."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/vocab-6.mp3",
+   "text": "הִזְמַנְתִּי עוֹף וְאֹרֶז."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/vocab-7.mp3",
+   "text": "שִׂיחַקְתִּי כַּדּוּרֶגֶל עִם הַבֵּן שֶׁלִּי."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/vocab-8.mp3",
+   "text": "חָזַרְתִּי מֵהָעֲבוֹדָה בְּשֵׁשׁ."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/sentences/vocab-9.mp3",
+   "text": "בְּסוֹף הַשָּׁבוּעַ אֲנַחְנוּ אוֹהֲבִים לִהְיוֹת בַּטֶּבַע."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/story/line-1.mp3",
+   "text": "אֶתְמוֹל הָיָה שַבָּת. לֹא הָלַכְתִּי לַמִּשְׂרָד."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/story/line-2.mp3",
+   "text": "בַּבֹּקֶר נָסַעְתִּי עִם הַיְּלָדִים לֶהָרִים. הָיָה יָפֶה מְאוֹד בַּטֶּבַע."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/story/line-3.mp3",
+   "text": "שָׁם רָאִיתִי צְבִי גָּדוֹל!"
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/story/line-4.mp3",
+   "text": "בַּצָּהֳרַיִם פָּגַשְׁתִּי אֶת הַהוֹרִים שֶׁלִּי. הִזְמַנְתִּי פִּיצָה לְכֻלָּם."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/story/line-5.mp3",
+   "text": "אַבָּא שֶׁלִּי נָתַן לִי עֵצָה: "
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/story/line-6.mp3",
+   "text": "אֲבָל בָּעֶרֶב הָלַכְתִּי לַכְּנֵסִיָּה וְשִׂיחַקְתִּי כַּדּוּרְסַל עִם הַנֹּעַר."
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/story/line-7.mp3",
+   "text": "בְּעֶשֶׂר חָזַרְתִּי הַבַּיְתָה. הָיִיתִי עָיֵף, אֲבָל הָיָה כֵּיף!"
+  },
+  {
+   "lesson": "last-weekend-past-ti",
+   "clip": "audio/story/line-8.mp3",
+   "text": "וּבַשָּׁבוּעַ שֶׁעָבַר? עָבַדְתִּי כָּל יוֹם מֵהַבַּיִת."
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/friend-1.mp3",
+   "text": "מָתַי אַתָּה קָם בַּבֹּקֶר?"
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/friend-2.mp3",
+   "text": "מָה אַתָּה שׁוֹתֶה בַּבֹּקֶר?"
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/friend-3.mp3",
+   "text": "לְאָן אַתָּה יוֹצֵא אַחַר כָּךְ?"
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/grammar-1.mp3",
+   "text": "אֲנִי קָם וְשׁוֹתֶה קָפֶה."
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/grammar-2.mp3",
+   "text": "הִיא קָמָה בַּבּוֹקֶר."
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/grammar-3.mp3",
+   "text": "אַחַר כָּךְ הוּא יוֹצֵא."
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/question-1.mp3",
+   "text": "מתי הוא קם?"
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/question-2.mp3",
+   "text": "מה הוא שותה?"
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/vocab-1.mp3",
+   "text": "אֲנִי קָם בַּבֹּקֶר."
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/vocab-2.mp3",
+   "text": "הִיא קָמָה בַּבֹּקֶר."
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/vocab-3.mp3",
+   "text": "הוּא שׁוֹתֶה קָפֶה."
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/vocab-4.mp3",
+   "text": "הִיא שׁוֹתָה תה."
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/vocab-5.mp3",
+   "text": "בַּבֹּקֶר אֲנִי קָם."
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/vocab-6.mp3",
+   "text": "אֲנִי שׁוֹתֶה קָפֶה."
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/vocab-7.mp3",
+   "text": "אַחַר כָּךְ אֲנִי יוֹצֵא."
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/sentences/vocab-8.mp3",
+   "text": "אֲנִי יוֹצֵא לָעֲבוֹדָה."
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/story/line-1.mp3",
+   "text": "בַּבֹּקֶר אֲנִי קָם."
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/story/line-2.mp3",
+   "text": "גַּם הִיא קָמָה בַּבֹּקֶר."
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/story/line-3.mp3",
+   "text": "אֲנִי שׁוֹתֶה קָפֶה. גַּם הִיא שׁוֹתָה קָפֶה."
+  },
+  {
+   "lesson": "my-morning",
+   "clip": "audio/story/line-4.mp3",
+   "text": "אַחַר כָּךְ אֲנִי יוֹצֵא לָעֲבוֹדָה."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/friend-1.mp3",
+   "text": "מָתַי אַתָּה קָם בַּבּוֹקֶר?"
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/friend-2.mp3",
+   "text": "מָה אַתָּה עוֹשֶׂה בַּבּוֹקֶר?"
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/friend-3.mp3",
+   "text": "מָתַי אַתָּה מַתְחִיל לַעֲבוֹד?"
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/friend-4.mp3",
+   "text": "מָה אַתָּה אוֹהֵב לַעֲשׂוֹת אַחֲרֵי הָעֲבוֹדָה?"
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/friend-5.mp3",
+   "text": "כְּדַאי לָקוּם מוּקְדָּם? לָמָּה?"
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/grammar-1.mp3",
+   "text": "אֲנִי קָם בְּחָמֵשׁ."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/grammar-2.mp3",
+   "text": "אֲנִי רוֹצֶה לְהִתְאַמֵּן בַּבּוֹקֶר."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/grammar-3.mp3",
+   "text": "אֲנִי עוֹבֵד מֵהַבַּיִת."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/grammar-4.mp3",
+   "text": "אֲנִי מַתְחִיל לַעֲבוֹד בְּשֶׁבַע."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/question-1.mp3",
+   "text": "מתי הוא קם בדרך כלל?"
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/question-2.mp3",
+   "text": "מה הוא עושה אחרי האימון?"
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/question-3.mp3",
+   "text": "איפה הוא עובד?"
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/question-4.mp3",
+   "text": "מה החבר אומר לו?"
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/question-5.mp3",
+   "text": "מה אתם חושבים? כדאי לו לקום יותר מאוחר?"
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/vocab-1.mp3",
+   "text": "בְּדֶרֶךְ כְּלָל אֲנִי קָם בְּחָמֵשׁ בַּבּוֹקֶר."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/vocab-10.mp3",
+   "text": "אַחֲרֵי הַסֶּרֶט כְּדַאי לָלֶכֶת לְמִסְעָדָה אִיטַלְקִית."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/vocab-11.mp3",
+   "text": "שַׁי לֹא יוֹדֵעַ מָה כְּדַאי לָהֶם לַעֲשׂוֹת."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/vocab-12.mp3",
+   "text": "אַתָּה חוֹשֵׁב שֶׁזֶּה רַעְיוֹן טוֹב?"
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/vocab-2.mp3",
+   "text": "בַּחֲדַר כּוֹשֶׁר אֲנִי מִתְאַמֵּן שָׁעָה."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/vocab-3.mp3",
+   "text": "אַחֲרֵי הָאִימּוּן אֲנִי עוֹשֶׂה שֵׁייק חֶלְבּוֹן."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/vocab-4.mp3",
+   "text": "אֲנִי מַתְחִיל לַעֲבוֹד בְּשֶׁבַע."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/vocab-5.mp3",
+   "text": "בְּאַרְבַּע אֲנִי מְסַיֵּם לַעֲבוֹד."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/vocab-6.mp3",
+   "text": "אֲנִי עוֹבֵד עַל הַמַּחְשֵׁב כָּל הַיּוֹם."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/vocab-7.mp3",
+   "text": "אַחַר כָּךְ אֲנִי עוֹבֵד מֵהַבַּיִת."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/vocab-8.mp3",
+   "text": "בְּדֶרֶךְ כְּלָל אֲנִי לֹא שׁוֹתֶה קָפֶה."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/sentences/vocab-9.mp3",
+   "text": "כְּדַאי לְךָ לִרְאוֹת אֶת הַסֶּרֶט הַזֶּה."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-1.mp3",
+   "text": "בְּדֶרֶךְ כְּלָל אֲנִי קָם בְּחָמֵשׁ בַּבּוֹקֶר."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-10.mp3",
+   "text": "אֲנִי אוֹמֵר לוֹ: "
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-11.mp3",
+   "text": "הֶחָבֵר אוֹמֵר: "
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-12.mp3",
+   "text": "אֲנִי יוֹדֵעַ, אֲבָל אֲנִי אוֹהֵב אֶת הַבּוֹקֶר."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-13.mp3",
+   "text": "בְּאַרְבַּע אֲנִי מְסַיֵּם לַעֲבוֹד."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-14.mp3",
+   "text": "אַחַר כָּךְ אֲנִי מְשַׂחֵק עִם הַיְּלָדִים וְהַכְּלָבִים."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-15.mp3",
+   "text": "בָּעֶרֶב אֲנִי הוֹלֵךְ לִישׁוֹן מוּקְדָּם."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-16.mp3",
+   "text": "אוּלַי כְּדַאי לִי לָקוּם יוֹתֵר מְאוּחָר? זֶה רַעְיוֹן טוֹב?"
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-17.mp3",
+   "text": "לֹא! אֲנִי אוֹהֵב לָקוּם בְּחָמֵשׁ."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-2.mp3",
+   "text": "הַבַּיִת שָׁקֵט. הַיְּלָדִים וְהַכְּלָבִים יְשֵׁנִים."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-3.mp3",
+   "text": "אֲנִי שׁוֹתֶה מַיִם. אֲנִי הוֹלֵךְ לַחֲדַר כּוֹשֶׁר."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-4.mp3",
+   "text": "בַּחֲדַר כּוֹשֶׁר אֲנִי מִתְאַמֵּן שָׁעָה."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-5.mp3",
+   "text": "אַחֲרֵי הָאִימּוּן אֲנִי עוֹשֶׂה שֵׁייק חֶלְבּוֹן."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-6.mp3",
+   "text": "אֲנִי לֹא שׁוֹתֶה קָפֶה. אֲנִי שׁוֹתֶה שֵׁייק!"
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-7.mp3",
+   "text": "אַחַר כָּךְ אֲנִי עוֹבֵד מֵהַבַּיִת."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-8.mp3",
+   "text": "אֲנִי מַתְחִיל לַעֲבוֹד בְּשֶׁבַע, וַאֲנִי עוֹבֵד עַל הַמַּחְשֵׁב כָּל הַיּוֹם."
+  },
+  {
+   "lesson": "my-morning-one-verb-two-verbs",
+   "clip": "audio/story/line-9.mp3",
+   "text": "חָבֵר שֶׁלִּי שׁוֹאֵל: "
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/friend-1.mp3",
+   "text": "מָה אַתָּה הוֹלֵךְ לַעֲשׂוֹת בְּסוֹף הַשָּׁבוּעַ הַבָּא?"
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/friend-2.mp3",
+   "text": "מָה אַתָּה הוֹלֵךְ לְהָבִיא לַטִּיוּל?"
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/friend-3.mp3",
+   "text": "יֵשׁ לְךָ אוֹהֶל?"
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/friend-4.mp3",
+   "text": "מָה אַתָּה רוֹצֶה לֶאֱכוֹל מָחָר?"
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/friend-5.mp3",
+   "text": "מָתַי אַתָּה קָם מָחָר?"
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/grammar-1.mp3",
+   "text": "אֲנִי הוֹלֵךְ לְהָבִיא אֶת הָאוֹהֶל."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/grammar-2.mp3",
+   "text": "הִיא הוֹלֶכֶת לְבַשֵּׁל."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/grammar-3.mp3",
+   "text": "אֲנַחְנוּ הוֹלְכִים לִישׁוֹן בְּאוֹהֶל."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/grammar-4.mp3",
+   "text": "סוֹף הַשָּׁבוּעַ הַבָּא אֲנִי הוֹלֵךְ לִרְכּוֹב."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/question-1.mp3",
+   "text": "מה הוא הולך להביא?"
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/question-2.mp3",
+   "text": "מה התאומים הולכים לעשות?"
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/question-3.mp3",
+   "text": "איפה הם הולכים לישון?"
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/vocab-1.mp3",
+   "text": "סוֹף הַשָּׁבוּעַ הַבָּא אֲנִי לֹא עוֹבֵד."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/vocab-10.mp3",
+   "text": "בְּיוֹם שִׁישִׁי אֲנִי מְסַיֵּם לַעֲבוֹד מוּקְדָם."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/vocab-11.mp3",
+   "text": "זֶה יוֹם מְיוּחָד לַמִּשְׁפָּחָה."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/vocab-12.mp3",
+   "text": "כְּדַאי לְהָבִיא מְעִיל לֶהָרִים."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/vocab-2.mp3",
+   "text": "אֲנִי הוֹלֵךְ לְהָבִיא מַיִם."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/vocab-3.mp3",
+   "text": "הִיא הוֹלֶכֶת לְבַשֵּׁל עוֹף."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/vocab-4.mp3",
+   "text": "הֵם הוֹלְכִים לִרְכּוֹב עַל אוֹפַנַּיִם."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/vocab-5.mp3",
+   "text": "אֲנַחְנוּ הוֹלְכִים לָשֶׁבֶת בַּחוּץ."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/vocab-6.mp3",
+   "text": "הַיְּלָדִים הוֹלְכִים לִישׁוֹן מוּקְדָם."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/vocab-7.mp3",
+   "text": "יֵשׁ לָנוּ אֹהֶל גָּדוֹל."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/vocab-8.mp3",
+   "text": "בָּעֶרֶב עוֹשִׂים מְדוּרָה."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/sentences/vocab-9.mp3",
+   "text": "לַשְׁכֵנִים שֶׁלָנוּ יֵשׁ תְּאוֹמִים."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/story/line-1.mp3",
+   "text": "סוֹף הַשָּׁבוּעַ הַבָּא אֲנַחְנוּ הוֹלְכִים לִנְסוֹעַ לֶהָרִים."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/story/line-2.mp3",
+   "text": "אֲנִי הוֹלֵךְ לְהָבִיא אֶת הָאֹהֶל."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/story/line-3.mp3",
+   "text": "אִשְׁתִּי הוֹלֶכֶת לְבַשֵּׁל אֹכֶל מְיוּחָד."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/story/line-4.mp3",
+   "text": "הַתְּאוֹמִים הוֹלְכִים לִרְכּוֹב עַל טְרַקְטוֹרוֹן."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/story/line-5.mp3",
+   "text": "בָּעֶרֶב כֻּלָּנוּ הוֹלְכִים לָשֶׁבֶת לְיַד הַמְדוּרָה."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/story/line-6.mp3",
+   "text": "אַחַר כָּךְ אֲנַחְנוּ הוֹלְכִים לִישׁוֹן בָּאֹהֶל."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/story/line-7.mp3",
+   "text": "אֲבָל כְּדַאי לִבְדּוֹק אֶת מֶזֶג הָאֲוִיר. מָה אִם יוֹרֵד גֶּשֶׁם?"
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/story/line-8.mp3",
+   "text": "אָז אֲנַחְנוּ הוֹלְכִים לָשֶׁבֶת בָּאֹהֶל וּלְשַׂחֵק קְלָפִים."
+  },
+  {
+   "lesson": "next-weekend-going-to",
+   "clip": "audio/story/line-9.mp3",
+   "text": "בְּיוֹם רִאשׁוֹן אֲנִי מְסַיֵּם לֶאֱרוֹז, וַאֲנַחְנוּ חוֹזְרִים הַבַּיְתָה."
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/friend-1.mp3",
+   "text": "מֵאֵיפֹה אַתָּה?"
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/friend-2.mp3",
+   "text": "יֵשׁ לְךָ אַחִים אוֹ אֲחָיוֹת?"
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/friend-3.mp3",
+   "text": "אֵיפֹה הַהוֹרִים שֶׁלְּךָ גָּרִים?"
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/friend-4.mp3",
+   "text": "אֵיזֶה שָׂפוֹת אַתָּה מְדַבֵּר?"
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/friend-5.mp3",
+   "text": "יֵשׁ לְךָ מִשְׂרָד, אוֹ שֶׁאַתָּה עוֹבֵד מֵהַבַּיִת?"
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/grammar-1.mp3",
+   "text": "יֵשׁ לִי תְּאוֹמִים."
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/grammar-2.mp3",
+   "text": "אֵין לִי מִשְׂרָד."
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/grammar-3.mp3",
+   "text": "יֵשׁ לָךְ אֲחָיוֹת?"
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/grammar-4.mp3",
+   "text": "יֵשׁ לְךָ הוֹרִים בְּיִשְׂרָאֵל?"
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/question-1.mp3",
+   "text": "מאיפה הוא?"
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/question-2.mp3",
+   "text": "יש לה ילדים?"
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/question-3.mp3",
+   "text": "איפה ההורים שלה גרים?"
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/question-4.mp3",
+   "text": "איזה שפות הוא מדבר?"
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/question-5.mp3",
+   "text": "יש לו משרד?"
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/vocab-1.mp3",
+   "text": "אֲנִי מִיּוּטָה. נָעִים מְאוֹד!"
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/vocab-10.mp3",
+   "text": "בַּחֲדַר כּוֹשֶׁר אֲנִי מִתְאַמֵּן שָׁעָה."
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/vocab-11.mp3",
+   "text": "אֲנִי עוֹבֵד עַל הַמַּחְשֵׁב כָּל הַיּוֹם."
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/vocab-2.mp3",
+   "text": "מֵאֵיפֹה אַתָּה?"
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/vocab-3.mp3",
+   "text": "הַהוֹרִים שֶׁלִּי גָּרִים בְּחֵיפָה."
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/vocab-4.mp3",
+   "text": "יֵשׁ לִי שָׁלוֹשׁ אֲחָיוֹת."
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/vocab-5.mp3",
+   "text": "יֵשׁ לִי תְּאוֹמִים."
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/vocab-6.mp3",
+   "text": "אֵיזֶה שָׂפוֹת אַתָּה מְדַבֵּר?"
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/vocab-7.mp3",
+   "text": "אֵין לִי מִשְׂרָד. אֲנִי עוֹבֵד מֵהַבַּיִת."
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/vocab-8.mp3",
+   "text": "שַׁי רוֹצֶה לַעֲשׂוֹת מַשֶּׁהוּ מְיוּחָד בִּשְׁבִיל בַּר."
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/sentences/vocab-9.mp3",
+   "text": "בְּדֶרֶךְ כְּלָל אֲנִי קָם בְּחָמֵשׁ בַּבּוֹקֶר."
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-1.mp3",
+   "text": "אֲנִי בַּטִּיסָה לְתֵל אָבִיב."
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-10.mp3",
+   "text": "אֲנִי אוֹמֵר: "
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-11.mp3",
+   "text": "הִיא שׁוֹאֶלֶת: "
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-12.mp3",
+   "text": "אֲנִי אוֹמֵר: "
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-13.mp3",
+   "text": "הִיא אוֹמֶרֶת: "
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-14.mp3",
+   "text": "אֲנִי שׁוֹאֵל: "
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-15.mp3",
+   "text": "הִיא אוֹמֶרֶת: "
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-16.mp3",
+   "text": "אֲנִי אוֹמֵר: "
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-17.mp3",
+   "text": "הִיא צוֹחֶקֶת: "
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-18.mp3",
+   "text": "הַטִּיסָה אֲרוּכָּה, אֲבָל הַשִּׂיחָה כֵּיף."
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-2.mp3",
+   "text": "לְיָדִי יוֹשֶׁבֶת אִישָּׁה מִיִּשְׂרָאֵל."
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-3.mp3",
+   "text": "הִיא אוֹמֶרֶת: "
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-4.mp3",
+   "text": "אֲנִי אוֹמֵר: "
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-5.mp3",
+   "text": "הִיא שׁוֹאֶלֶת: "
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-6.mp3",
+   "text": "אֲנִי עוֹנֶה: "
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-7.mp3",
+   "text": "הִיא אוֹמֶרֶת: "
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-8.mp3",
+   "text": "אֲנִי שׁוֹאֵל: "
+  },
+  {
+   "lesson": "plane-small-talk-yesh-li",
+   "clip": "audio/story/line-9.mp3",
+   "text": "הִיא אוֹמֶרֶת: "
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/friend-1.mp3",
+   "text": "מִישֶׁהוּ מְדַבֵּר מַהֵר מְאוֹד. מָה אַתָּה אוֹמֵר?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/friend-2.mp3",
+   "text": "מָה אַתָּה רוֹצֶה לְהַזְמִין בְּבֵית קָפֶה?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/friend-3.mp3",
+   "text": "יֵשׁ לְךָ מִלָּה קָשָׁה בְּעִבְרִית?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/friend-4.mp3",
+   "text": "אֵיזֶה שָׂפוֹת אַתָּה מְדַבֵּר?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/friend-5.mp3",
+   "text": "מָה אַתָּה שׁוֹתֶה בַּבֹּקֶר?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/grammar-1.mp3",
+   "text": "אֶפְשָׁר לְדַבֵּר לְאַט?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/grammar-2.mp3",
+   "text": "אֶפְשָׁר לְשַׁלֵּם בְּאַשְׁרַאי?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/grammar-3.mp3",
+   "text": "אֶפְשָׁר לַחֲזוֹר עַל זֶה?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/grammar-4.mp3",
+   "text": "אֶפְשָׁר לְהַזְמִין קָפֶה?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/question-1.mp3",
+   "text": "איך הבריסטה מדברת?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/question-2.mp3",
+   "text": "איזו מילה הוא לא יודע?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/question-3.mp3",
+   "text": "מה הוא מזמין?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/vocab-1.mp3",
+   "text": "אֶפְשָׁר לְדַבֵּר לְאַט, בְּבַקָּשָׁה?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/vocab-10.mp3",
+   "text": "חָשַׁבְתִּי שֶׁעִבְרִית קָשָׁה."
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/vocab-11.mp3",
+   "text": "אֶפְשָׁר שֵׁייק בָּנָנָה?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/vocab-12.mp3",
+   "text": "אֲנִי מַתְחִיל לְהָבִין עִבְרִית."
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/vocab-2.mp3",
+   "text": "אֶפְשָׁר לַחֲזוֹר עַל זֶה?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/vocab-3.mp3",
+   "text": "אֶפְשָׁר לִכְתּוֹב אֶת הַמִּלָּה?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/vocab-4.mp3",
+   "text": "אֶפְשָׁר לְהַזְמִין קָפֶה גָּדוֹל?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/vocab-5.mp3",
+   "text": "אֶפְשָׁר לְשַׁלֵּם בְּאַשְׁרַאי?"
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/vocab-6.mp3",
+   "text": "הִיא מְדַבֶּרֶת לְאַט."
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/vocab-7.mp3",
+   "text": "סְלִיחָה, לֹא הֵבַנְתִּי."
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/vocab-8.mp3",
+   "text": "אֲנִי לֹא יוֹדֵעַ אֶת הַמִּלָּה הַזֹּאת."
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/sentences/vocab-9.mp3",
+   "text": "אֲנִי לוֹמֵד שְׁתֵּי שָׂפוֹת."
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/story/line-1.mp3",
+   "text": "אֲנִי בְּבֵית קָפֶה בִּירוּשָׁלַיִם."
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/story/line-10.mp3",
+   "text": "חָשַׁבְתִּי שֶׁזֶּה קָשֶׁה, אֲבָל אֲנִי מַתְחִיל לְהָבִין. אֲנִי מַזְמִין שֵׁייק תּוּת."
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/story/line-11.mp3",
+   "text": "בַּסּוֹף אֲנִי שׁוֹאֵל:  הִיא אוֹמֶרֶת: "
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/story/line-2.mp3",
+   "text": "הַבָּרִיסְטָה מְדַבֶּרֶת מַהֵר מְאוֹד."
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/story/line-3.mp3",
+   "text": "אֲנִי אוֹמֵר: "
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/story/line-4.mp3",
+   "text": "הִיא צוֹחֶקֶת: "
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/story/line-5.mp3",
+   "text": "אֲנִי אוֹמֵר: "
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/story/line-6.mp3",
+   "text": "הִיא שׁוֹאֶלֶת: "
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/story/line-7.mp3",
+   "text": "אֲנִי לֹא יוֹדֵעַ אֶת הַמִלָּה \"תּוּת\". אֲנִי שׁוֹאֵל: "
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/story/line-8.mp3",
+   "text": "הִיא אוֹמֶרֶת לְאַט: , וּמַרְאָה לִי תּוּת אָדֹם."
+  },
+  {
+   "lesson": "say-it-again-efshar",
+   "clip": "audio/story/line-9.mp3",
+   "text": "אֲנִי אוֹמֵר:  הִיא כּוֹתֶבֶת \"תּוּת\" עַל הַכּוֹס."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/friend-1.mp3",
+   "text": "מָה אַתָּה מַעֲדִיף לַעֲשׂוֹת בְּדֵייט?"
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/friend-2.mp3",
+   "text": "הָיָה לְךָ פַּעַם דֵּייט לֹא טוֹב?"
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/friend-3.mp3",
+   "text": "מָה הַדֵּייט הֲכִי כֵּיף שֶׁהָיָה לְךָ?"
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/friend-4.mp3",
+   "text": "אֵיזֶה דֵּייט אַתָּה הֲכִי רוֹצֶה לַעֲשׂוֹת?"
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/grammar-1.mp3",
+   "text": "כְּדַאי לְךָ לִרְאוֹת אֶת הַסֶּרֶט הַזֶּה."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/grammar-2.mp3",
+   "text": "כְּדַאי לוֹ לָקַחַת אֶת בַּר לְסֶרֶט."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/grammar-3.mp3",
+   "text": "כְּדַאי לָנוּ לָלֶכֶת לְמִסְעָדָה."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/question-1.mp3",
+   "text": "למה שי ביקש עצה?"
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/question-2.mp3",
+   "text": "מה בר, החברה של שי, אוהבת?"
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/question-3.mp3",
+   "text": "מה שי אוהב?"
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/question-4.mp3",
+   "text": "מה החבר המליץ לשי? למה?"
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/question-5.mp3",
+   "text": "אתם חושבים שזו הייתה המלצה טובה? למה?"
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/question-6.mp3",
+   "text": "מה אתם הייתם ממליצים לשי?"
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/vocab-1.mp3",
+   "text": "בַּשָּׁבוּעַ שֶׁעָבַר חָבֵר שֶׁלִּי בִּיקֵּשׁ מִמֶּנִּי עֵצָה."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/vocab-10.mp3",
+   "text": "אַתָּה חוֹשֵׁב שֶׁזֶּה רַעְיוֹן טוֹב?"
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/vocab-2.mp3",
+   "text": "שַׁי לֹא יוֹדֵעַ מָה כְּדַאי לָהֶם לַעֲשׂוֹת."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/vocab-3.mp3",
+   "text": "כְּדַאי לְךָ לִרְאוֹת אֶת הַסֶּרֶט הַזֶּה."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/vocab-4.mp3",
+   "text": "בַּר אוֹהֶבֶת קָפֶה טוֹב וְטִיּוּלִים בַּטֶּבַע."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/vocab-5.mp3",
+   "text": "שַׁי אוֹהֵב לִרְאוֹת סְרָטִים בַּקּוֹלְנוֹעַ."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/vocab-6.mp3",
+   "text": "שַׁי רוֹצֶה לַעֲשׂוֹת מַשֶּׁהוּ מְיוּחָד בִּשְׁבִיל בַּר."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/vocab-7.mp3",
+   "text": "חָשַׁבְתִּי וְאָמַרְתִּי לְשַׁי שֶׁאֲנִי מַמְלִיץ לוֹ לָקַחַת אֶת בַּר לְסֶרֶט."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/vocab-8.mp3",
+   "text": "אֲנִי מַמְלִיץ לוֹ לָקַחַת אֶת בַּר לְסֶרֶט קוֹמֶדְיָה."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/sentences/vocab-9.mp3",
+   "text": "אַחֲרֵי הַסֶּרֶט כְּדַאי לָלֶכֶת לְמִסְעָדָה אִיטַלְקִית."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/story/line-1.mp3",
+   "text": "בַּשָּׁבוּעַ שֶׁעָבַר, חָבֵר שֶׁלִּי שַׁי בִּיקֵּשׁ מִמֶּנִּי עֵצָה."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/story/line-10.mp3",
+   "text": "שַׁי שָׁאַל אוֹתִי: "
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/story/line-11.mp3",
+   "text": "אָמַרְתִּי לוֹ , כִּי כּוּלָּם אוֹהֲבִים סִרְטֵי קוֹמֶדְיָה וְאוֹכֶל אִיטַלְקִי."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/story/line-12.mp3",
+   "text": "אֲנִי חוֹשֵׁב שֶׁיִּהְיֶה לָהֶם מַמָּשׁ כֵּיף!"
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/story/line-2.mp3",
+   "text": "הוּא הוֹלֵךְ לְדֵייט בְּיוֹם שַׁבָּת עִם הַחֲבֵרָה הַחֲדָשָׁה שֶׁלּוֹ, בַּר."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/story/line-3.mp3",
+   "text": "אֲבָל שַׁי לֹא יוֹדֵעַ מָה כְּדַאי לָהֶם לַעֲשׂוֹת."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/story/line-4.mp3",
+   "text": "שַׁי אָמַר לִי ."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/story/line-5.mp3",
+   "text": "אֲנִי יוֹדֵעַ שֶׁשַּׁי אוֹהֵב סְרָטִים, בִּירָה וְאוֹכֶל טוֹב."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/story/line-6.mp3",
+   "text": "שַׁי אָמַר לִי ."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/story/line-7.mp3",
+   "text": "חָשַׁבְתִּי וְאָמַרְתִּי לְשַׁי ."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/story/line-8.mp3",
+   "text": "אָמַרְתִּי לוֹ ."
+  },
+  {
+   "lesson": "shai-date-indirect-speech",
+   "clip": "audio/story/line-9.mp3",
+   "text": "הַמִּסְעָדָה הַזֹּאת מַמָּשׁ רוֹמַנְטִית וְהָאוֹכֶל שָׁם מְצוּיָּן."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/friend-1.mp3",
+   "text": "מָה אַתָּה לוֹקֵחַ בְּמִסְעֶדֶת סְטֵייקִים?"
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/friend-2.mp3",
+   "text": "מָה אַתָּה מֵבִיא לָעֲבוֹדָה?"
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/friend-3.mp3",
+   "text": "מָה אַתָּה שׁוֹאֵל אֶת הַמֶּלְצַר?"
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/friend-4.mp3",
+   "text": "מָה אַתָּה אוֹהֵב לֶאֱכוֹל בְּמִסְעָדָה?"
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/friend-5.mp3",
+   "text": "מָה אַתָּה שׁוֹתֶה בָּעֶרֶב?"
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/grammar-1.mp3",
+   "text": "אֲנִי רוֹצֶה אֶת הַמָּרָק."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/grammar-2.mp3",
+   "text": "הוּא מֵבִיא מִיץ."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/grammar-3.mp3",
+   "text": "אֲנִי מְבַקֵּשׁ אֶת הַחֶשְׁבּוֹן."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/grammar-4.mp3",
+   "text": "לָקְחוּ אֶת הָאוֹטוֹ שֶׁלְּךָ."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/question-1.mp3",
+   "text": "מה הוא מזמין לשתות?"
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/question-2.mp3",
+   "text": "מה המלצר מביא?"
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/question-3.mp3",
+   "text": "על מה המלצר ממליץ?"
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/vocab-1.mp3",
+   "text": "אֲנִי לוֹקֵחַ אֶת הַאוֹטוֹ לָעֲבוֹדָה."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/vocab-10.mp3",
+   "text": "קוֹדֶם אוֹכְלִים, וְאַחַר כָּךְ מְשַׁלְּמִים."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/vocab-11.mp3",
+   "text": "בְּדֶרֶךְ כְּלָל אֲנַחְנוּ אוֹכְלִים בַּבַּיִת."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/vocab-2.mp3",
+   "text": "הַמֶּלְצַר מֵבִיא לָנוּ מַיִם."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/vocab-3.mp3",
+   "text": "אֲנִי צָרִיךְ שֻׁלְחָן לְאַרְבָּעָה."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/vocab-4.mp3",
+   "text": "הִיא מְבַקֶּשֶׁת עוֹד קָפֶה, וַאֲנִי מְבַקֵּשׁ מַיִם."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/vocab-5.mp3",
+   "text": "אֶפְשָׁר לִטְעוֹם אֶת הַרוֹטֶב?"
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/vocab-6.mp3",
+   "text": "בָּחֹרֶף אֲנַחְנוּ אוֹכְלִים מָרָק חַם."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/vocab-7.mp3",
+   "text": "הַיְּלָדִים שׁוֹתִים מִיץ תַּפּוּזִים."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/vocab-8.mp3",
+   "text": "אֶפְשָׁר אֶת הַחֶשְׁבּוֹן, בְּבַקָּשָׁה?"
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/sentences/vocab-9.mp3",
+   "text": "הַמֶּלְצַר מַמְלִיץ עַל הַסְּטֵייק הַזֶּה."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/story/line-1.mp3",
+   "text": "הַיּוֹם אֲנִי וְאִשְׁתִּי בְּמִסְעֶדֶת סְטֵייקִים."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/story/line-2.mp3",
+   "text": "בְּדֶרֶךְ כְּלָל אֲנִי לוֹקֵחַ סְטֵייק וְצִ'יפְּס. הַיּוֹם אֲנִי לוֹקֵחַ אֶת הַסְּטֵייק הַמְּיוּחָד."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/story/line-3.mp3",
+   "text": "הַמֶּלְצַר שׁוֹאֵל:  אֲנִי מַזְמִין מִיץ תַּפּוּזִים."
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/story/line-4.mp3",
+   "text": "הַמֶּלְצַר מֵבִיא מָרָק. אֲבָל לֹא הִזְמַנְתִּי מָרָק!"
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/story/line-5.mp3",
+   "text": "אֲנִי אוֹמֵר: "
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/story/line-6.mp3",
+   "text": "הַמֶּלְצַר צוֹחֵק וּמֵבִיא אֶת הַמִּיץ. הוּא אוֹמֵר: "
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/story/line-7.mp3",
+   "text": "אַחַר כָּךְ אֲנִי אוֹמֵר: "
+  },
+  {
+   "lesson": "steakhouse-et",
+   "clip": "audio/story/line-8.mp3",
+   "text": "בַּסּוֹף אֲנִי מְבַקֵּשׁ אֶת הַחֶשְׁבּוֹן וּמְשַׁלֵּם בְּאַשְׁרַאי. אִשְׁתִּי שְׂמֵחָה."
+  },
+  {
+   "lesson": "test",
+   "clip": "audio/sentences/vocab-1.mp3",
+   "text": "שָׁלוֹם עוֹלָם."
+  },
+  {
+   "lesson": "test",
+   "clip": "audio/story/line-1.mp3",
+   "text": "שָׁלוֹם עוֹלָם."
+  }
+ ],
+ "unmapped_word_files": [
+  "1828c011c5e8e563ce974431.mp3",
+  "245a1be29288a5dd9c114d00.mp3",
+  "27cfea5b1c9a3e087f35a7f6.mp3",
+  "2a01fd11e052ef46cb58f67c.mp3",
+  "38db0c1271e39ee9f57f2ae3.mp3",
+  "3ce70a75761d57ebdf54c126.mp3",
+  "55934e7f221c468baf9c9030.mp3",
+  "5fd52aec962793b7860008cf.mp3",
+  "6e9890e5b17a7f6475045bfe.mp3",
+  "7bc2b7a4b2203a563ac5a229.mp3",
+  "802eb0972786f6c98b22db3b.mp3",
+  "83b350f8858aedd3f40d445c.mp3",
+  "9431811fd015b613f3207e5c.mp3",
+  "9da5a43ba16e07a72d04bac5.mp3",
+  "9e729bd9cf99045972d7d573.mp3",
+  "a7487707d5c25636d48655e6.mp3",
+  "aa354a39c32b925072b56333.mp3",
+  "b51ae22fede6ddd1ef5f7256.mp3",
+  "b83e037058633b089a09ab3f.mp3",
+  "c27af78022df8fb8018fa583.mp3",
+  "f37d0ca16286cc4e93dea492.mp3",
+  "fcceccda3afd5a4eea9eb45e.mp3",
+  "fddcb2e3688567e36a25ec42.mp3"
+ ]
+}
