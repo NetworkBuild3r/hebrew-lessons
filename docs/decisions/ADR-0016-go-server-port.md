@@ -4,15 +4,15 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Proposed |
+| **Status** | Accepted |
 | **Date** | 2026-10-18 |
-| **Authored by** | — (proposed `INIT-014/SPEC-001`; that spec is not in the tree; [open question 1](#open-questions)) |
-| **Initiative** | Proposed INIT-014 · go-server-port ([open question 1](#open-questions)) |
+| **Authored by** | `INIT-014/SPEC-001` |
+| **Initiative** | INIT-014 · go-server-port |
 | **Research grounding** | None. Engineering record. Facts read in code at tree `86e8d50c`, 2026-10-18. |
 | **Supersedes** | [ADR-0005](ADR-0005-stack-and-architecture.md) (Node runtime, `node:sqlite`, in-process TypeScript MCP, no build step, no second runtime). [ADR-0007](ADR-0007-single-page-app-structure.md) (single-shell SPA, as screens move). |
 | **Superseded by** | — |
 
-The operator has approved leaving Node in principle. This record is Proposed for formal review. ADR-0005 and ADR-0007 keep their **Superseded by** lines until this record is Accepted (same point those lines changed for ADR-0007, 2026-10-09).
+Brian Nelson approved moving off Node to Go on 2026-10-18, relayed by Hebrew Dev. He does not approve pull requests himself: Hebrew PR Reviewer approves and merges. This record is Accepted. ADR-0005 and ADR-0007 name it on their **Superseded by** lines (same point those lines changed for ADR-0007, 2026-10-09).
 
 ## Summary
 
@@ -32,7 +32,7 @@ ADR-0007 (Accepted 2026-10-09) put signed-in screens in one shell: a hand-built 
 
 ### Why ADR-0005 no longer holds
 
-The operator is choosing Go. The old cost was carrying the MCP SDK, the database, the tests, and the image. Go is an official SDK, and a pure-Go driver can open the same file. `node:sqlite` is still experimental: `server/db/index.js` swallows the Node 22 warning and re-emits it. Routing, the literal parser, the schema validator, and security headers are hand-written, on two direct dependencies (`@modelcontextprotocol/sdk` `^1.32.1`, `sharp` `0.35.5`). [§9](#9-adr-0005-criteria-with-go) re-scores ADR-0005's own criteria. A and B stay 457 and 459. Go scores 383. The table does not pick Go. The operator does.
+The operator chose Go. The old cost was carrying the MCP SDK, the database, the tests, and the image. Go is an official SDK, and a pure-Go driver can open the same file. `node:sqlite` is still experimental: `server/db/index.js` swallows the Node 22 warning and re-emits it. Routing, the literal parser, the schema validator, and security headers are hand-written, on two direct dependencies (`@modelcontextprotocol/sdk` `^1.32.1`, `sharp` `0.35.5`). [§9](#9-adr-0005-criteria-with-go) re-scores ADR-0005's own criteria. A and B stay 457 and 459. Go scores 383. The table does not pick Go. The operator does.
 
 ### Current state (`86e8d50c`)
 
@@ -48,16 +48,33 @@ One process, ports 8080 and 8787. No Go code. The only workflow builds and pushe
 |---|---|
 | HTTP | Stdlib `net/http` (1.22 patterns). Exact path before `:param`. JSON 404 under `/api/`. SDK release on 2026-10-18 declares Go 1.25; do not pin lower. |
 | Database | `modernc.org/sqlite`, `CGO_ENABLED=0`, same file, WAL, `foreign_keys=ON`, `busy_timeout=5000`. One writer plus read-only handles. `BEGIN IMMEDIATE`. Timestamps as JS `toISOString()` (`YYYY-MM-DDTHH:MM:SS.sssZ`). |
-| UI | templ + HTMX per screen. `data-*` hooks stay. |
-| Player | Small TypeScript player, compiled to static JS, existing `/shared/` gate (fonts and brand stay public). |
+| UI | templ + HTMX per screen. `data-*` hooks stay. Write path under Web and UI. |
+| Player | Small TypeScript player. Sources in `web/player/`, built to `shared/dist/player.js`, existing `/shared/` gate (fonts and brand stay public). |
 | MCP | `github.com/modelcontextprotocol/go-sdk/mcp` on `:8787` `/mcp`. Same tool names, schemas, OAuth routes. |
 | Crypto, text, images | `golang.org/x/crypto/scrypt`, `golang.org/x/text/unicode/norm`, `image/png`, `image/jpeg`, `golang.org/x/image/{webp,draw}`. Keep `sniff.js` animation refusals (PNG `acTL`/`fcTL`/`fdAT`, WebP flag `0x02`). |
+
+### Web and UI
+
+Today a mutating `/api/` call must be JSON, or multipart for `POST /api/media`, and must pass `originAllowed` (`server/web.js` `handleApi`). `requestOrigin` (`server/http/security.js`) reads `Origin`, then `Referer`. An HTMX form post is `application/x-www-form-urlencoded`, so that JSON rule would reject it with 403.
+
+Reads stay on the page URL. When `HX-Request` is set, that URL returns the fragment. There is no new read route.
+
+Writes from HTMX go to `/_hx/`. Those handlers call the same Go services as `/api/`. `/api/` JSON is unchanged.
+
+`/_hx/` accepts `application/x-www-form-urlencoded`. A write needs both of these. If either check fails, the response is 403:
+
+- `Origin`, or `Referer` when `Origin` is absent, matches the site origin.
+- A per-session CSRF token. It is a synchronizer token stored with the session, or it is HMAC-derived from the session token. The page sends it as `X-CSRF-Token` through `hx-headers` on the body, or as a hidden field when the post has no JS. The server compares it in constant time.
+
+`GET` under `/_hx/` never mutates. The session cookie stays `SameSite=Lax`.
+
+templ files live in `go/internal/web/views/`: `layout.templ`, `components/`, `pages/`, `blocks/`, and `partials/`. Page handlers live in `go/internal/web/pages/`. Generated `*_templ.go` files are committed. CI runs `templ generate` and fails on a diff. TypeScript player sources live in `web/player/` and build to `shared/dist/player.js`, served from disk behind the existing `/shared/` gate. `go:embed` cannot reach outside the `go/` module, so that built file is not embedded.
 
 ### 2. Migrations
 
 Versions 1–11 are frozen. If the ledger already has them, Go runs nothing. On an empty database, Go applies `baseline.sql` and inserts rows 1–11 with the original names (`001-initial.js`, …) so Node can open the file. `baseline.sql` is `sqlite_master` plus the seeded `grammar_concepts` rows after the Node migrations run on empty. A golden test compares the two schemas and seed rows.
 
-012+ are SQL files embedded in the Go binary, same ledger. While Node is the rollback, 012+ migrations stay additive. Whether Node refuses an unknown version is [open question 3](#open-questions).
+012+ are SQL files embedded in the Go binary, same ledger. While Node is the rollback, 012+ migrations stay additive. Whether Node refuses an unknown version is [open question 2](#open-questions).
 
 ### 3. Data stays in place
 
@@ -108,7 +125,7 @@ Also covered: `validatePlan` and `checkHebrew` (ADR-0003 samples, `test/fixtures
 
 Go listens on `:8080` and proxies every route it has not taken to Node on a loopback port in the same pod. A phase moves a whole route group.
 
-Hebrew QA owns the contract suite. It lives in this repo at `contract/`, with its own `go.mod`. A group moves only when that suite passes against both Node and Go. A failed group returns to the Node proxy by config, with no new image. What the suite asserts per group is [open question 4](#open-questions).
+Hebrew QA owns the contract suite. It lives in this repo at `contract/`, with its own `go.mod`. A group moves only when that suite passes against both Node and Go. A failed group returns to the Node proxy by config, with no new image. What the suite asserts per group is [open question 3](#open-questions).
 
 From ADR-0005 §3 and `deploy/k8s-database.md`: `replicas: 1`, `strategy: Recreate`, PVCs `hebrew-data` and `hebrew-lessons` at the same paths, Secret `hebrew-secrets` and the same keys, `runAsUser` and `fsGroup` 1000, ports 8080 and 8787 on that pod (`Dockerfile` `EXPOSE`; the Deployment snippet has no `ports` list). No second replica.
 
@@ -116,11 +133,11 @@ Move these whole. Their state is in the process: auth (in-memory throttle in `se
 
 The throttle module takes an `ip` string and reads no header. Node's `server/api/auth-routes.js` `clientIp` passes the first comma-separated field of `X-Forwarded-For`, trimmed, when that header is a non-empty string; otherwise `req.socket.remoteAddress`, or `''` if there is no socket. That leftmost value is client-controlled: Cloudflare appends to whatever the client already sent, so the login throttle can be bypassed. The throttle key is not an external contract, so changing it is in scope and is not a compatibility break. Go does not keep that rule.
 
-Go trusts `CF-Connecting-IP` only when the immediate peer, the socket remote address, is in `TRUSTED_PROXIES`, a CIDR list from env or config (Traefik). Otherwise it uses the socket address. It never uses the leftmost `X-Forwarded-For` value. Empty `TRUSTED_PROXIES` is the default: trust nobody, use the socket address. Whether Traefik passes `CF-Connecting-IP` through untouched, and Traefik's peer address or CIDR, is [open question 12](#open-questions).
+Go trusts `CF-Connecting-IP` only when the immediate peer, the socket remote address, is in `TRUSTED_PROXIES`, a CIDR list from env or config (Traefik). Otherwise it uses the socket address. It never uses the leftmost `X-Forwarded-For` value. Empty `TRUSTED_PROXIES` is the default: trust nobody, use the socket address. Whether Traefik passes `CF-Connecting-IP` through untouched, and Traefik's peer address or CIDR, is [open question 11](#open-questions).
 
 Edge. That review found both hostnames on the proxied wildcard, with no tunnel, no Access, no Workers, and no Cloudflare header or path rules. The origin is k3s Traefik in front of the Service. Cutover in front of the pod is a Traefik routing change only. Cloudflare is not changed.
 
-Cloudflare's Free plan, per that review, has a proxy read timeout of 125 s (a response that sends no bytes for longer than that is dropped; the plan cannot raise it) and a 100 MB request-body cap. Go sets its own lower limits: an inbound server timeout, and `MaxBytesReader` per route, including media upload. Node's HTTP servers (`server/web.js`, `mcp/http.js`) set no `timeout`, `requestTimeout`, `headersTimeout`, or `keepAliveTimeout`, so the Go timeout numbers are [open question 10](#open-questions). Body caps that do exist, which Go stays at or under: `readJson` default `64 * 1024` (`server/http/body.js`); plans and lesson saves `1024 * 1024`; lexicon upsert `256 * 1024`; library writes `16 * 1024`; word-audio POST, lexicon-verified PATCH, and ai-planning PATCH `1024`; coverage `8192`; multipart `POST /api/media` `5242880` (`server/media/ingest.js` `MAX_INPUT_BYTES`); MCP POST `1024 * 1024` (`mcp/http.js`); OAuth forms `64 * 1024` (`mcp/oauth.js`). Sharp's 20 s decode timeout and the outbound image call's 60 s timeout are not inbound server timeouts.
+Cloudflare's Free plan, per that review, has a proxy read timeout of 125 s (a response that sends no bytes for longer than that is dropped; the plan cannot raise it) and a 100 MB request-body cap. Go sets its own lower limits: an inbound server timeout, and `MaxBytesReader` per route, including media upload. Node's HTTP servers (`server/web.js`, `mcp/http.js`) set no `timeout`, `requestTimeout`, `headersTimeout`, or `keepAliveTimeout`, so the Go timeout numbers are [open question 9](#open-questions). Body caps that do exist, which Go stays at or under: `readJson` default `64 * 1024` (`server/http/body.js`); plans and lesson saves `1024 * 1024`; lexicon upsert `256 * 1024`; library writes `16 * 1024`; word-audio POST, lexicon-verified PATCH, and ai-planning PATCH `1024`; coverage `8192`; multipart `POST /api/media` `5242880` (`server/media/ingest.js` `MAX_INPUT_BYTES`); MCP POST `1024 * 1024` (`mcp/http.js`); OAuth forms `64 * 1024` (`mcp/oauth.js`). Sharp's 20 s decode timeout and the outbound image call's 60 s timeout are not inbound server timeouts.
 
 Rollback is the Node-only image. Nothing was converted, so Node runs on the files, subject to additive migrations.
 
@@ -128,7 +145,7 @@ WAL, two processes. Node opens `DATA_DIR/hebrew.sqlite` with `PRAGMA journal_mod
 
 One pod is one host when both containers mount the same volume. `deploy/k8s-database.md` sets `hebrew-data` to `accessModes: ["ReadWriteOnce"]` and does not set `storageClassName`. RWO with `replicas: 1` keeps the mount on one node. It does not say the class is a local filesystem. A read-only open is not a silent fallback on a directory that cannot create files: since SQLite 3.22.0 (2018-01-22) a read-only WAL database opens when `-wal` and `-shm` already exist or can be created. Node's `openReadOnly` passes `readOnly: true` and does not migrate or checkpoint.
 
-Until the storage class is confirmed, Go does not share the writer. Two safe shapes: Go owns writes for a table group and Node uses `openReadOnly` on that file, or a proxy-only cutover where Go does not open `hebrew.sqlite` and Node is the only process that does, until that group has moved and Node has stopped writing it. `busy_timeout` stays 5000 on any connection that does open the file. This tree has no Go module, so Go-3 is the check that `modernc.org/sqlite` and `node:sqlite` lock one local temp file the same way. The storage class is [open question 5](#open-questions).
+Go never shares the writer. Two safe shapes: Go owns writes for a table group and Node uses `openReadOnly` on that file, or a proxy-only cutover where Go does not open `hebrew.sqlite` and Node is the only process that does. Go-4 is proxy-only until the storage class is confirmed. `busy_timeout` stays 5000 on any connection that does open the file. This tree has no Go module, so Go-3 is the check that `modernc.org/sqlite` and `node:sqlite` lock one local temp file the same way. The storage-class check is with CI/CD ([open question 4](#open-questions)).
 
 ### 8. Phase sequence
 
@@ -140,7 +157,7 @@ Labels are Go-0 through Go-17 so they do not collide with GitHub pull-request nu
 | Go-1 | Go module, validators, Node golden generator, Go CI. Nothing served. Audio-key goldens include JS `trim` vs `strings.TrimSpace` (U+FEFF, U+0085). |
 | Go-2 | Lesson-data parser and the §3 writers. |
 | Go-3 | Config, paths, DB open, ledger-compatible migrations, read-only on a DB copy. Baseline golden. The local-file lock check in §7. |
-| Go-4 | Go on `:8080` proxying all routes to Node, plus `GET /api/me`. No second writer on `hebrew.sqlite` until [open question 5](#open-questions) is closed. |
+| Go-4 | Go on `:8080` proxying all routes to Node, plus `GET /api/me`. Proxy-only: Go does not open `hebrew.sqlite` until the storage class is confirmed ([open question 4](#open-questions)). The check is with CI/CD. |
 | Go-5–Go-11 | Auth and sessions; static gate and filtered scripts; read-only content APIs; FSRS, progress, review; mix, library, cards; plans; admin users and lessons. |
 | Go-12–Go-14 | Google sign-in; media (pure Go); audio and word-audio. |
 | Go-15 | MCP and OAuth. 8787 moves whole. |
@@ -195,7 +212,7 @@ Same criteria and weights as ADR-0005 Decision 1. A score is an integer from 1 t
 
 **C13 Migration cost (8).** 5 means the smallest cost. A 5, copied: the new modules are additive. B 4, copied: the data does not move, and the front end gains a dependency and a second dialect. C 3, copied: the `shared/` UI is rewritten and the server is not. D 1, copied: the server, auth, data access, MCP boundary, UI, tests, and image all move. E 2, copied: the HTTP surface, the gate, and the UI are replaced while the database file can stay. Go 2, judgment: that same list moves, the file is not dumped, and Node stays the rollback image while one group moves at a time. Scoring any full server port as 1 would make this cell 1.
 
-Go's 383 trails A by 74 and leads E by 5. B still leads A by 2, which is under C9's weight of 5, so ADR-0005's close-total rule is unchanged between A and B. Raising every judgment cell by one point (C3, C4, and C5 cannot rise) adds 76 and ties B at 459, a lead of 2 over A, and the close-total rule would still pick the lower migration cost. A's C13 is 5. Dropping Go's C13 to 1 subtracts 8 and puts Go at 375, three under E. The operator's choice of Go is recorded here; the table does not make it.
+Go's 383 trails A by 74 and leads E by 5. B still leads A by 2, which is under C9's weight of 5, so ADR-0005's close-total rule is unchanged between A and B. Raising every judgment cell by one point (C3, C4, and C5 cannot rise) adds 76 and ties B at 459, a lead of 2 over A, and the close-total rule would still pick the lower migration cost. A's C13 is 5. Dropping Go's C13 to 1 subtracts 8 and puts Go at 375, three under E. The operator's choice of Go is recorded here; the table does not make it. The operator chose Go on 2026-10-18 despite the lower score.
 
 ---
 
@@ -210,32 +227,31 @@ Gained: a static binary, no native `sharp`, no experimental driver, image-only r
 | Replacing `sharp` | Keep `sniff.js` refusals. `test/fixtures/media/*` checks dimensions, frames, metadata, pixel tolerance. Node media stays proxied until then. |
 | Audio keys | §5 goldens (U+FEFF, U+0085). CI fails if an existing `.mp3` path would change. |
 | Go SDK schemas and tokens | Snapshot the tool list. Node-minted tokens must still verify. 8787 moves in one step. |
-| Two processes, one SQLite file | One writer. Node is read-only for that group, or Go does not open the file (§7). `busy_timeout` stays 5000. Storage class is [open question 5](#open-questions). |
+| Two processes, one SQLite file | Go never shares the writer. Node is read-only for that group, or Go does not open the file (§7). `busy_timeout` stays 5000. The storage-class check is with CI/CD ([open question 4](#open-questions)). |
 
 ---
 
 ## Security considerations
 
-Session required. Admin role for `/admin` and `/editor` (others 403). A hidden lesson is 404. Mutating `/api/` needs JSON, except multipart `POST /api/media`, plus an allowed Origin. `contract/` checks these. Node's loopback port stays inside the pod. The in-pod proxy forwards cookies and `Origin` unchanged. Secrets stay in `hebrew-secrets`.
+Session required. Admin role for `/admin` and `/editor` (others 403). A hidden lesson is 404. Mutating `/api/` needs JSON, except multipart `POST /api/media`, plus an allowed Origin. HTMX writes use `/_hx/` and the Origin-plus-CSRF checks in Web and UI. `contract/` checks these. Node's loopback port stays inside the pod. The in-pod proxy forwards cookies and `Origin` unchanged. Secrets stay in `hebrew-secrets`.
 
-Headers Node sets on app responses are `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, and `X-Frame-Options: DENY` (`server/http/security.js`). MCP OAuth HTML also sends a Content-Security-Policy; other responses do not. This repo does not set `Strict-Transport-Security`. The Cloudflare review saw `strict-transport-security: max-age=0; includeSubDomains; preload` on the live response. `max-age=0` disables HSTS and conflicts with `preload`. Go does not copy `max-age=0`. Whether Go sends HSTS, and the max-age, is [open question 11](#open-questions). The hop that adds the live header is not in this tree.
+Headers Node sets on app responses are `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, and `X-Frame-Options: DENY` (`server/http/security.js`). MCP OAuth HTML also sends a Content-Security-Policy; other responses do not. This repo does not set `Strict-Transport-Security`. The Cloudflare review saw `strict-transport-security: max-age=0; includeSubDomains; preload` on the live response. `max-age=0` disables HSTS and conflicts with `preload`. Go does not copy `max-age=0`. Whether Go sends HSTS, and the max-age, is [open question 10](#open-questions). The hop that adds the live header is not in this tree.
 
 ---
 
 ## Open questions
 
-1. Narrowed. The next free initiative on 2026-10-18 is INIT-014 (`sdd/initiatives/` holds INIT-001 through INIT-013). Spec numbers restart per initiative, and the docs ADR specs in this repo are SPEC-001 (`INIT-013/SPEC-001` authored ADR-0015). The proposed id is `INIT-014/SPEC-001`, slug `INIT-014-go-server-port`. This PR does not add that file. INIT-004's rule is that an initiative does not start until the operator approves its document. Brian approves that document; then Authored by can cite the spec. This record stays Proposed until he accepts it.
-2. Resolved in [§9](#9-adr-0005-criteria-with-go). A–E are copied. Go scores 383, 74 behind A.
-3. Migrations 012+ while Node is the rollback: additive only, a Node twin, or Node refusing unknown versions.
-4. What `contract/` asserts per route group. Home and owner are decided in §7.
-5. Narrowed. §7 states the WAL rules and the two safe shapes (Go owns the writes and Node uses `openReadOnly`, or Go does not open the file). Brian confirms the `hebrew-data` storage class in home_k3: a filesystem on that node that honors POSIX advisory locks and mmap of `hebrew.sqlite-shm`. `deploy/k8s-database.md` does not name the class.
-6. Resolved in §6. The helper cannot drive an external binary. The spawn-and-port change above is the smallest one that keeps its HTTP API. Callers that `require` Node writers after `start` still share the file or move to HTTP.
-7. Whether production `schema_migrations` holds exactly versions 1–11.
-8. Production data sizes (dictionary rows, media volume).
-9. Kubernetes probe paths. This repo only special-cases a user-agent starting with `kube-probe` (`mcp/http.js`).
-10. Inbound Go server timeout values. Node's HTTP servers set none (§7). They must be lower than Cloudflare's 125 s proxy read timeout.
-11. Whether Go sends `Strict-Transport-Security`, and the max-age. Do not copy `max-age=0` (§ Security). The header is not set in this repo. It comes from the edge, not the app.
-12. For the operator: confirm Traefik passes `CF-Connecting-IP` through untouched, and give Traefik's peer address or CIDR for `TRUSTED_PROXIES` (§7).
+1. Resolved in [§9](#9-adr-0005-criteria-with-go). A–E are copied. Go scores 383, 74 behind A. The operator chose Go on 2026-10-18 despite that score.
+2. Migrations 012+ while Node is the rollback: additive only, a Node twin, or Node refusing unknown versions.
+3. What `contract/` asserts per route group. Home and owner are decided in §7.
+4. Narrowed. §7 states the WAL rules. Go never shares the writer. Go-4 is proxy-only until the storage class is confirmed. The storage-class check is with CI/CD: `hebrew-data` must be a filesystem on that node that honors POSIX advisory locks and mmap of `hebrew.sqlite-shm`. `deploy/k8s-database.md` does not name the class.
+5. Resolved in §6. The helper cannot drive an external binary. The spawn-and-port change above is the smallest one that keeps its HTTP API. Callers that `require` Node writers after `start` still share the file or move to HTTP.
+6. Whether production `schema_migrations` holds exactly versions 1–11.
+7. Production data sizes (dictionary rows, media volume).
+8. Kubernetes probe paths. This repo only special-cases a user-agent starting with `kube-probe` (`mcp/http.js`).
+9. Inbound Go server timeout values. Node's HTTP servers set none (§7). They must be lower than Cloudflare's 125 s proxy read timeout.
+10. Whether Go sends `Strict-Transport-Security`, and the max-age. Do not copy `max-age=0` (§ Security). The header is not set in this repo. It comes from the edge, not the app.
+11. For the operator: confirm Traefik passes `CF-Connecting-IP` through untouched, and give Traefik's peer address or CIDR for `TRUSTED_PROXIES` (§7).
 
 ## Rollback
 
@@ -244,6 +260,7 @@ Delete this file. No application file, database, or recording changes with it.
 ## References
 
 - [ADR-0005](ADR-0005-stack-and-architecture.md), [ADR-0007](ADR-0007-single-page-app-structure.md), [ADR-0006](ADR-0006-visual-language-and-interface-rules.md), [ADR-0002](ADR-0002-accounts-server-progress-site-map.md)
+- [INIT-014](../../sdd/initiatives/INIT-014-go-server-port/INIT-014-go-server-port-initiative.md) `INIT-014/SPEC-001`. Operator approval 2026-10-18, relayed by Hebrew Dev.
 - Tree `86e8d50c`: `deploy/k8s-database.md`, `Dockerfile`, `server/{start,web,audio,lesson-data,content-filter}.js`, `server/db/`, `server/auth/`, `server/media/sniff.js`, `server/plans/`, `server/learner/`, `mcp/{http,oauth,store}.js`
 - `github.com/modelcontextprotocol/go-sdk`, pkg.go.dev, checked 2026-10-18
 - Cloudflare review of zone `ibhacked.us` (hebrew and hebrew-mcp), read-only, 2026-10-18. Not a file in this repo. Ingress and any Traefik header rewriting live in home_k3.
@@ -257,3 +274,4 @@ Delete this file. No application file, database, or recording changes with it.
 | 2026-10-18 | Cloudflare edge notes: Traefik-only cutover, login IP is the first `X-Forwarded-For` hop (not `CF-Connecting-IP`), body caps and the 125 s proxy read timeout, HSTS `max-age=0` not copied. |
 | 2026-10-18 | Login IP revised. Go uses `CF-Connecting-IP` only when the socket peer is in `TRUSTED_PROXIES`; otherwise the socket address. Node's leftmost `X-Forwarded-For` is a known throttle bypass and is not kept. |
 | 2026-10-18 | Review notes. WAL rules and the two safe shapes are in §7; the storage class stays with Brian. INIT-014/SPEC-001 is proposed, not filed. The signed-in helper cannot spawn a binary. ADR-0005 re-scored with Go at 383. Phase labels are Go-0 through Go-17. |
+| 2026-10-18 | Accepted. Brian Nelson approved moving off Node to Go on 2026-10-18, relayed by Hebrew Dev. Hebrew PR Reviewer approves and merges. Authored by `INIT-014/SPEC-001`. Former open question 1 is removed and the rest are renumbered. HTMX writes use `/_hx/` with Origin and a CSRF token. The storage-class check is with CI/CD. Go never shares the writer. |
