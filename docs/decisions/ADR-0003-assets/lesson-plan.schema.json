@@ -44,7 +44,7 @@
         "properties": {
           "assigneeId": {
             "type": "string",
-            "pattern": "^[^A-Z]{1,64}$"
+            "pattern": "^[a-z0-9][a-z0-9-]{7,63}$"
           }
         }
       }

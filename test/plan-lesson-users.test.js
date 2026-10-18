@@ -1,7 +1,6 @@
 /**
- * Personal assign of a 7-character username, and optional users on a
- * selected plan lesson. Users are checked with the set_lesson_visibility
- * messages and stored as lesson_grants on the lesson id.
+ * Optional users on a selected plan lesson. Users are checked with the
+ * set_lesson_visibility messages and stored as lesson_grants on the lesson id.
  */
 'use strict';
 
@@ -10,7 +9,7 @@ const assert = require('node:assert/strict');
 
 const { planEnv } = require('./helpers/plan-db');
 
-describe('plan lesson users and assignee username', { concurrency: false }, () => {
+describe('plan lesson users', { concurrency: false }, () => {
     let env;
     let users;
     let visibilityRepo;
@@ -177,52 +176,5 @@ describe('plan lesson users and assignee username', { concurrency: false }, () =
         assert.equal(published.error, undefined, JSON.stringify(published.blocks));
         const snapshot = JSON.parse(env.store.loadSnapshot(env.PLAN_ID));
         assert.equal(mayReadPublished({ id: listed.id, username: listed.username }, snapshot), false);
-    });
-
-    it('migration 012 keeps revision rows and then stores bnelson', () => {
-        reset();
-        const migration = require('../server/db/migrations/012-assignee-username');
-        const database = env.db.open();
-        const seeded = env.seed();
-        const edited = env.ops.setField(env.store, env.PLAN_ID, {
-            path: env.LESSON,
-            field: 'title',
-            value: 'Kept across the rebuild',
-            expectedRevision: seeded.revision
-        }, env.human('set_field'));
-        assert.equal(edited.error, undefined, JSON.stringify(edited));
-        const revisionsBefore = env.count('plan_revisions', env.PLAN_ID);
-        assert.ok(revisionsBefore >= 1);
-
-        migration.down(database);
-        const oldSql = database.prepare(
-            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'plans'"
-        ).get().sql;
-        assert.match(oldSql, /BETWEEN 8 AND 64/);
-        assert.equal(env.count('plan_revisions', env.PLAN_ID), revisionsBefore);
-        assert.equal(env.store.loadWorkingCopy(env.PLAN_ID).revision, edited.revision);
-
-        migration.up(database);
-        const newSql = database.prepare(
-            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'plans'"
-        ).get().sql;
-        assert.match(newSql, /assignee_id = lower\(assignee_id\)/);
-        assert.equal(env.count('plan_revisions', env.PLAN_ID), revisionsBefore);
-        assert.equal(
-            JSON.parse(env.store.loadWorkingCopy(env.PLAN_ID).document).units[0].lessons[0].title,
-            'Kept across the rebuild'
-        );
-
-        const saved = env.store.saveWorkingCopy({
-            id: 'personal-bnelson',
-            document: '{"id":"personal-bnelson"}',
-            audience: 'personal',
-            assigneeId: 'bnelson'
-        });
-        assert.equal(saved.assigneeId, 'bnelson');
-        assert.throws(
-            () => migration.down(database),
-            /Cannot reverse migration 012/
-        );
     });
 });

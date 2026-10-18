@@ -69,7 +69,7 @@ blocks: [SPEC-003, SPEC-006]
 ## Technical Requirements (domain-specific)
 
 - [x] Follow `server/db/migrations/001-initial.js` style: `node:sqlite` through the existing wrapper, a `schema_migrations` row, timestamps in the same form that file uses.
-- [x] `assignee_id` is the account username ADR-0003 describes (the users-table rule `username = lower(username)`, length 1–64) or null. It is not a display name. Migration 012 relaxed the original 8-character `[a-z0-9-]` check.
+- [x] `assignee_id` is the opaque account id ADR-0003 describes (`[a-z0-9-]`, length at least 8) or null. It is not a display name.
 - [x] No lesson text fixtures that contain a learner name, a transcript, or a secret.
 
 ---

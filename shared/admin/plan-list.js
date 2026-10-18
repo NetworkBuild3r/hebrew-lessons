@@ -898,8 +898,8 @@
                     if (opts.onAssigned) opts.onAssigned(res.data);
                     return true;
                 }
-                // detail: a username the schema refuses (empty, longer than 64, or with an
-                // ASCII capital) is shown here. The control is the only place that can say so.
+                // detail: a short username is refused by the schema's assignee pattern, and the control
+                // is the only place that can say so.
                 showMessage(Ui.failureText(res, { detail: true }));
                 return false;
             }).catch(function (err) {

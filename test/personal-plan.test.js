@@ -270,40 +270,45 @@ describe('personal plan assignee checks', { concurrency: false }, () => {
         assert.equal(stored.audience, 'shared');
     });
 
-    it('assigns a 7-character username and still refuses an unknown or non-username assignee', () => {
+    it('refuses a 7-character username in plain words and writes nothing', () => {
         seed();
         createAccount('bnelson');
+        const before = store.loadWorkingCopy(PLAN_ID);
         const assigned = personal.assign(store, PLAN_ID, {
             audience: 'personal',
             assigneeId: 'bnelson',
             expectedRevision: 1
         });
-        assert.equal(assigned.error, undefined, JSON.stringify(assigned.blocks || assigned));
-        assert.equal(assigned.plan.assigneeId, 'bnelson');
-        assert.equal(assigned.plan.audience, 'personal');
+        assert.equal(assigned.error, 'validation');
+        assert.equal(assigned.revision, before.revision);
+        const hit = assigned.blocks.find((item) => item.path === '/assigneeId');
+        assert.equal(hit.rule, 'schema');
+        assert.equal(hit.message, "This username format can't be assigned to a personal plan yet.");
+        assert.ok(Array.isArray(assigned.warnings));
+        assert.ok(Array.isArray(assigned.informs));
         const stored = store.loadWorkingCopy(PLAN_ID);
-        assert.equal(stored.assigneeId, 'bnelson');
-        assert.equal(stored.audience, 'personal');
-        assert.equal(stored.document.includes('"assigneeId":"bnelson"'), true);
+        assert.equal(stored.document, before.document);
+        assert.equal(stored.assigneeId, null);
+        assert.equal(stored.audience, 'shared');
 
         const unknown = personal.assign(store, PLAN_ID, {
             audience: 'personal',
             assigneeId: 'not-real',
-            expectedRevision: stored.revision
+            expectedRevision: before.revision
         });
-        assert.deepEqual(unknown, { error: 'assignee_refused', revision: stored.revision });
-        assert.equal(store.loadWorkingCopy(PLAN_ID).assigneeId, 'bnelson');
+        assert.deepEqual(unknown, { error: 'assignee_refused', revision: before.revision });
+        assert.equal(store.loadWorkingCopy(PLAN_ID).document, before.document);
 
         const bob = ops.assignPlan(store, PLAN_ID, {
             audience: 'personal',
             assigneeId: 'Bob',
-            expectedRevision: stored.revision
+            expectedRevision: before.revision
         }, testContext('personal-plan-test'));
         assert.equal(bob.error, 'validation');
-        const hit = bob.blocks.find((item) => item.path === '/assigneeId');
-        assert.equal(hit.rule, 'schema');
-        assert.equal(hit.message, 'does not match the required format');
-        assert.equal(store.loadWorkingCopy(PLAN_ID).document, stored.document);
+        const bobHit = bob.blocks.find((item) => item.path === '/assigneeId');
+        assert.equal(bobHit.rule, 'schema');
+        assert.equal(bobHit.message, "This username format can't be assigned to a personal plan yet.");
+        assert.equal(store.loadWorkingCopy(PLAN_ID).document, before.document);
     });
 
     it('a stale revision does not assign, and progress is not read', () => {

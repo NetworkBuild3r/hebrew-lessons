@@ -432,7 +432,7 @@ Media is an id plus alt (N8). The plan has no image URL, no `src`, and no embedd
 
 Size limits are N9, N10, and N11.
 
-`assigneeId` is the account username. The users table requires `username = lower(username)` and no other shape (`server/db/migrations/001-initial.js`). `set_lesson_visibility` rejects an empty name and a name that is not an active account (`server/username-list.js`, the check `mcp/tools.js` used to inline). A personal plan stores that username, 1–64 characters, with no ASCII uppercase letter (`^[^A-Z]{1,64}$`). It is not a display name. The earlier 8-character `[a-z0-9-]` pattern is retired; every id that pattern accepted still validates. Samples of shared plans set `assigneeId` to `null`. Personal plans are not listed in the shared catalog.
+`assigneeId` is an opaque account id of at least 8 characters from `[a-z0-9-]`. It is not a display name. Samples of shared plans set it to `null`. Personal plans are not listed in the shared catalog.
 
 Adult lesson wording that already exists is carried into that lesson's sample. This record does not add account names, secrets, or transcript text. Visibility of that published lesson stays `everyone`, matching the seed ADR-0002 already describes. New-unit lessons stay `hidden` until an author publishes and assigns them.
 
@@ -501,4 +501,4 @@ Delete `docs/decisions/ADR-0003-course-and-lesson-plan-language.md` and `docs/de
 | 2026-10-12 | ADR-0011 (`INIT-008/SPEC-001`, Accepted) extends 4 (create, restore, and `assign` on the same revision rule), 6 (five named warn rows), and 7 (no approval step on publish). Metadata row and this row only. |
 | 2026-10-14 | ADR-0012 (`INIT-009/SPEC-001`, Accepted) extends metadata only: a lesson is the blocks the author stored; an empty activity list is not back-filled with the six-part ladder. Metadata row and this row only. |
 | 2026-10-14 | ADR-0013 (`INIT-010/SPEC-001`, Accepted) extends metadata only: research-shaped plans; warnings do not block publish; three published worksheets stay on the lesson editor; new courses are plans. Metadata row and this row only. |
-| 2026-10-18 | Assignee pattern relaxed in place on schema 1.0.0, 1.1.0, and 1.2.0. No schemaVersion bump and no 1.3.0: ADR-0017 reserves 1.3.0 for the Go cutover. Optional lesson `users` is the same kind of addition: omitted documents stay valid, and a reader of this schema accepts the field on every existing version. |
+| 2026-10-18 | Optional lesson `users` on schema 1.0.0, 1.1.0, and 1.2.0. No schemaVersion bump and no 1.3.0: ADR-0017 reserves 1.3.0 for the Go cutover. Omitted documents stay valid, and a reader of this schema accepts the field on every existing version. `assigneeId` stays the 8-character `[a-z0-9-]` pattern. |

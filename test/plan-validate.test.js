@@ -543,20 +543,22 @@ describe('schema: draft-07, closed properties, known schemaVersions', () => {
         assert.equal(hits(validatePlan(plan).blocks, 'schema', L0 + '/blocks/2/passage').length, 1);
     });
 
-    it('a personal plan needs a lowercase username of at most 64 characters and a shared plan none', () => {
+    it('a personal plan needs an opaque assignee id and a shared plan none', () => {
         const personal = sample('beginner-unit-1');
         personal.audience = 'personal';
         personal.assigneeId = 'learner-0001';
         assert.equal(validatePlan(personal).ok, true);
         personal.assigneeId = 'bnelson';
-        assert.equal(validatePlan(personal).ok, true);
+        const short = hits(validatePlan(personal).blocks, 'schema', '/assigneeId');
+        assert.equal(short.length, 1);
+        assert.equal(short[0].message, "This username format can't be assigned to a personal plan yet.");
         personal.assigneeId = 'Bob';
         const refused = hits(validatePlan(personal).blocks, 'schema', '/assigneeId');
         assert.equal(refused.length, 1);
-        assert.equal(refused[0].message, 'does not match the required format');
+        assert.equal(refused[0].message, "This username format can't be assigned to a personal plan yet.");
         personal.assigneeId = '';
         assert.equal(hits(validatePlan(personal).blocks, 'schema', '/assigneeId')[0].message,
-            'does not match the required format');
+            "This username format can't be assigned to a personal plan yet.");
         const shared = sample('beginner-unit-1');
         shared.assigneeId = 'learner-0001';
         assert.equal(hits(validatePlan(shared).blocks, 'schema', '/assigneeId').length, 1);

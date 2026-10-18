@@ -186,7 +186,7 @@ describe('migration 006 plan revisions (INIT-008/SPEC-003)', { concurrency: fals
     it('is numbered 006 and sits after 005', () => {
         const files = fs.readdirSync(MIGRATIONS).filter((name) => /^\d{3,}-.+\.js$/.test(name)).sort();
         assert.deepEqual(files.map((name) => name.split('-')[0]), [
-            '001', '002', '003', '004', '005', '006', '007', '008', '009', '010', '011', '012'
+            '001', '002', '003', '004', '005', '006', '007', '008', '009', '010', '011'
         ]);
         assert.equal(migration.VERSION, 6);
         assert.equal(files[5], '006-plan-revisions.js');

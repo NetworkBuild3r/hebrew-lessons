@@ -47,8 +47,8 @@ if (mode === 'missing') {
 } else if (mode === 'extra') {
     db.run(
         'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
-        99,
-        '099-extra.js',
+        12,
+        '012-extra.js',
         new Date().toISOString()
     );
 } else if (mode === 'wrong-name') {
