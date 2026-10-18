@@ -39,7 +39,14 @@ describe('self-hosted fonts and icons', () => {
     it('every font file the stylesheet names exists and is a woff2', () => {
         const css = fs.readFileSync(path.join(ROOT, 'shared', 'worksheet.css'), 'utf8');
         const urls = [...css.matchAll(/url\("(fonts\/[^"]+\.woff2)"\)/g)].map(m => m[1]);
-        const faces = ['fonts/noto-sans-hebrew-hebrew.woff2', 'fonts/noto-sans-hebrew-latin.woff2', 'fonts/frank-ruhl-libre-hebrew.woff2'];
+        const faces = [
+            'fonts/noto-sans-hebrew-hebrew.woff2',
+            'fonts/noto-sans-hebrew-latin.woff2',
+            'fonts/frank-ruhl-libre-hebrew.woff2',
+            'fonts/frank-ruhl-libre-latin.woff2'
+        ];
+        // Four on purpose: the Latin subset of Frank Ruhl Libre is the new English display face.
+        assert.equal(urls.length, 4);
         assert.deepEqual([...urls].sort(), [...faces].sort(), 'Noto Sans Hebrew and Frank Ruhl Libre');
         for (const rel of urls) {
             const file = path.join(ROOT, 'shared', rel);

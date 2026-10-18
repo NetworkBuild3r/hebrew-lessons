@@ -1672,7 +1672,7 @@ textarea {
 
 /* === self-hosted faces (SIL OFL, see fonts/OFL.txt). ===
    Noto Sans Hebrew is the UI and the pointed text. Frank Ruhl Libre is the
-   unpointed decorative letter. */
+   unpointed decorative letter, and its Latin subset is the English display face. */
 @font-face {
     font-family: "Noto Sans Hebrew";
     font-style: normal;
@@ -1696,6 +1696,14 @@ textarea {
     font-display: swap;
     src: url("fonts/frank-ruhl-libre-hebrew.woff2") format("woff2");
     unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+@font-face {
+    font-family: "Frank Ruhl Libre";
+    font-style: normal;
+    font-weight: 400 900;
+    font-display: swap;
+    src: url("fonts/frank-ruhl-libre-latin.woff2") format("woff2");
+    unicode-range: U+0020-007E, U+00A0-00FF, U+2013-2014, U+2018-201D, U+2026, U+2192;
 }
 /* === end self-hosted faces === */
 
@@ -1929,14 +1937,16 @@ a.lesson-link { transition: background 0.15s ease; border-radius: 18px; }
     --line-height-word: 1.5;
     --line-height-body: 1.5;
     --letter-spacing: 0;
-    --space-1: 0.25rem;
-    --space-2: 0.5rem;
-    --space-3: 0.75rem;
-    --space-4: 1rem;
-    --space-5: 1.5rem;
-    --space-6: 2.5rem;
-    --space-7: 4rem;
-    --space-8: 6rem;
+    /* Guides v3 Ink & Lamplight 8pt scale. The values are space.1–space.9 in tokens.json. */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
+    --space-8: 64px;
+    --space-9: 96px;
     --space-page: var(--space-6);
     --radius: 2px;
     --size-target: 24px;
@@ -4064,22 +4074,22 @@ a.lesson-link { transition: background 0.15s ease; border-radius: 18px; }
    a person sets data-theme="dark" (or auto + OS dark). */
 :root:not([data-theme="dark"]) {
     color-scheme: light;
-    --paper: #F7F5F0;
-    --ink: #121621;
-    --muted: #4B5565;
-    --color-text: #121621;
-    --color-muted: #4B5565;
-    --color-bg: #F7F5F0;
-    --color-surface: #FFFFFF;
-    --color-surface-soft: #EFECE6;
-    --color-surface-hero: #141B2D;
-    --color-hero-bg: #141B2D;
+    --paper: #F5F0E7;
+    --ink: #151A2E;
+    --muted: #555B70;
+    --color-text: #151A2E;
+    --color-muted: #555B70;
+    --color-bg: #F5F0E7;
+    --color-surface: #FFFDF9;
+    --color-surface-soft: #EEE7DA;
+    --color-surface-hero: #10153A;
+    --color-hero-bg: #10153A;
     --color-hero-text: #FFFFFF;
     --color-line: #757C8A;
-    --color-border-subtle: #E4E0D8;
-    --color-primary: #254EDB;
-    --color-primary-hover: #1D3FB8;
-    --color-primary-soft: #EBF0FF;
+    --color-border-subtle: #E3DBCC;
+    --color-primary: #2F4FE0;
+    --color-primary-hover: #2440C4;
+    --color-primary-soft: #E8ECFD;
     --color-primary-ink: #FFFFFF;
     --color-correct-ink: #065F46;
     --color-correct-soft: #D1FAE5;
@@ -4087,16 +4097,16 @@ a.lesson-link { transition: background 0.15s ease; border-radius: 18px; }
     --color-miss-soft: #FEF3C7;
     --color-accent-sage: #0D9488;
     --color-accent-terracotta: #D97706;
-    --color-control: #254EDB;
+    --color-control: #2F4FE0;
     --color-control-text: #FFFFFF;
-    --color-focus: #254EDB;
-    --color-picture: #121621;
-    --color-picture-bg: #F7F5F0;
-    --color-on-picture: #121621;
+    --color-focus: #2F4FE0;
+    --color-picture: #151A2E;
+    --color-picture-bg: #F5F0E7;
+    --color-on-picture: #151A2E;
     --color-correct: #065F46;
     --color-miss: #D97706;
     --color-audio-active: #D97706;
-    --color-surface-story: #EFECE6;
+    --color-surface-story: #EEE7DA;
 }
 
 /* === Words library polish (INIT-006/SPEC-013 look; theme-aware — INIT-013/SPEC-002) === */
@@ -4106,7 +4116,7 @@ a.lesson-link { transition: background 0.15s ease; border-radius: 18px; }
     background: var(--color-surface);
     color: var(--color-text);
     border: 1px solid var(--color-line);
-    border-radius: var(--radius-control, 12px);
+    border-radius: var(--radius-control, 14px);
     padding: 0.55rem 0.75rem;
 }
 .words-page label,
@@ -4272,29 +4282,31 @@ img.hebrew-logo-mark {
 /* === end INIT-005/SPEC-010 icons === */
 
 /* === INIT-005/SPEC-011 restyle learner === */
-/* Provenance: INIT-013/SPEC-002 · ADR-0015 (Jerusalem Stone / Judean Night).
-   Appended last on purpose; later rules win. ADR-0006 token block above stays byte-intact.
+/* Provenance: INIT-013/SPEC-002 · ADR-0015 (Jerusalem Stone / Judean Night),
+   retinted by Guides v3 Ink & Lamplight (warmer paper, indigo hero).
+   Appended last on purpose; later rules win. ADR-0006 colour tokens above stay the
+   historical record. Spacing in that block is the live 8pt scale.
    Light by default; data-theme="dark" swaps the active palette. Layout/typography vars
    here feed SPEC-003–SPEC-005. No external font URLs (REQ-018). */
 
 :root {
     /* Jerusalem Stone (Light) — active theme values for restyle-gate */
-    --paper: #F7F5F0;
-    --ink: #121621;
-    --muted: #4B5565;
-    --color-bg: #F7F5F0;
-    --color-surface: #FFFFFF;
-    --color-surface-soft: #EFECE6;
-    --color-surface-hero: #141B2D;
-    --color-hero-bg: #141B2D;
+    --paper: #F5F0E7;
+    --ink: #151A2E;
+    --muted: #555B70;
+    --color-bg: #F5F0E7;
+    --color-surface: #FFFDF9;
+    --color-surface-soft: #EEE7DA;
+    --color-surface-hero: #10153A;
+    --color-hero-bg: #10153A;
     --color-hero-text: #FFFFFF;
-    --color-text: #121621;
-    --color-muted: #4B5565;
-    --color-primary: #254EDB;
-    --color-primary-hover: #1D3FB8;
-    --color-primary-edge: #1D3FB8;
+    --color-text: #151A2E;
+    --color-muted: #555B70;
+    --color-primary: #2F4FE0;
+    --color-primary-hover: #2440C4;
+    --color-primary-edge: #2440C4;
     --color-primary-ink: #FFFFFF;
-    --color-primary-soft: #EBF0FF;
+    --color-primary-soft: #E8ECFD;
     --color-correct: #065F46;
     --color-miss: #D97706;
     --color-correct-soft: #D1FAE5;
@@ -4304,15 +4316,15 @@ img.hebrew-logo-mark {
     --color-accent-sage: #0D9488;
     --color-accent-terracotta: #D97706;
     --color-line: #757C8A;
-    --color-border-subtle: #E4E0D8;
-    --color-border: #E4E0D8;
+    --color-border-subtle: #E3DBCC;
+    --color-border: #E3DBCC;
     /* Responsive layout & radius (ADR-0015 §2.5) */
     --shell-rail-w: 260px;
     --shell-mobile-dock-h: 68px;
     --wrap-w-desktop: 75rem;
     --wrap-w-reading: 42rem;
     --radius-card: 20px;
-    --radius-control: 12px;
+    --radius-control: 14px;
     --radius-button: 12px;
     --radius-pill: 999px;
     --shell-h: 112px;
@@ -4323,6 +4335,7 @@ img.hebrew-logo-mark {
     --font-hebrew-sans: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
     --font-sans: "Noto Sans Hebrew", "Segoe UI", system-ui, sans-serif;
     --font-hebrew-lettering: "Frank Ruhl Libre", "Noto Serif Hebrew", "Times New Roman", serif;
+    --font-display: "Frank Ruhl Libre", "Noto Serif Hebrew", Georgia, serif;
     --font-hebrew-pointed-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
     --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
     /* Nikud-safe study words (REQ-008 / RSCH-006): override ADR-0006 1.5 → 1.55 floor */
@@ -4331,22 +4344,22 @@ img.hebrew-logo-mark {
 
 :root[data-theme="light"] {
     color-scheme: light;
-    --paper: #F7F5F0;
-    --ink: #121621;
-    --muted: #4B5565;
-    --color-bg: #F7F5F0;
-    --color-surface: #FFFFFF;
-    --color-surface-soft: #EFECE6;
-    --color-surface-hero: #141B2D;
-    --color-hero-bg: #141B2D;
+    --paper: #F5F0E7;
+    --ink: #151A2E;
+    --muted: #555B70;
+    --color-bg: #F5F0E7;
+    --color-surface: #FFFDF9;
+    --color-surface-soft: #EEE7DA;
+    --color-surface-hero: #10153A;
+    --color-hero-bg: #10153A;
     --color-hero-text: #FFFFFF;
-    --color-text: #121621;
-    --color-muted: #4B5565;
-    --color-primary: #254EDB;
-    --color-primary-hover: #1D3FB8;
-    --color-primary-edge: #1D3FB8;
+    --color-text: #151A2E;
+    --color-muted: #555B70;
+    --color-primary: #2F4FE0;
+    --color-primary-hover: #2440C4;
+    --color-primary-edge: #2440C4;
     --color-primary-ink: #FFFFFF;
-    --color-primary-soft: #EBF0FF;
+    --color-primary-soft: #E8ECFD;
     --color-correct: #065F46;
     --color-miss: #D97706;
     --color-correct-soft: #D1FAE5;
@@ -4356,29 +4369,29 @@ img.hebrew-logo-mark {
     --color-accent-sage: #0D9488;
     --color-accent-terracotta: #D97706;
     --color-line: #757C8A;
-    --color-border-subtle: #E4E0D8;
-    --color-border: #E4E0D8;
+    --color-border-subtle: #E3DBCC;
+    --color-border: #E3DBCC;
 }
 
 :root[data-theme="dark"] {
     color-scheme: dark;
     /* Judean Night (Dark) — literal #hex for every restyle-gate pair */
-    --paper: #0E121B;
-    --ink: #F3F4F6;
-    --muted: #A3B1C6;
-    --color-bg: #0E121B;
-    --color-surface: #161C2A;
-    --color-surface-soft: #1E2638;
-    --color-surface-hero: #1D2842;
-    --color-hero-bg: #1D2842;
-    --color-hero-text: #F3F4F6;
-    --color-text: #F3F4F6;
-    --color-muted: #A3B1C6;
-    --color-primary: #6E93FF;
-    --color-primary-hover: #8AA8FF;
-    --color-primary-edge: #8AA8FF;
-    --color-primary-ink: #0B0F19;
-    --color-primary-soft: #172347;
+    --paper: #090D1A;
+    --ink: #ECEEF6;
+    --muted: #A2AAC2;
+    --color-bg: #090D1A;
+    --color-surface: #111729;
+    --color-surface-soft: #171F36;
+    --color-surface-hero: #0B1030;
+    --color-hero-bg: #0B1030;
+    --color-hero-text: #ECEEF6;
+    --color-text: #ECEEF6;
+    --color-muted: #A2AAC2;
+    --color-primary: #8EA6FF;
+    --color-primary-hover: #A9BBFF;
+    --color-primary-edge: #A9BBFF;
+    --color-primary-ink: #0B0F1F;
+    --color-primary-soft: #19234A;
     --color-correct: #2DD4BF;
     --color-miss: #F59E0B;
     --color-correct-soft: #0F2E2B;
@@ -4388,8 +4401,8 @@ img.hebrew-logo-mark {
     --color-accent-sage: #2DD4BF;
     --color-accent-terracotta: #F59E0B;
     --color-line: #687792;
-    --color-border-subtle: #263044;
-    --color-border: #263044;
+    --color-border-subtle: #222B45;
+    --color-border: #222B45;
     --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
     --card-shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
@@ -4397,22 +4410,22 @@ img.hebrew-logo-mark {
 @media (prefers-color-scheme: dark) {
     :root[data-theme="auto"] {
         color-scheme: dark;
-        --paper: #0E121B;
-        --ink: #F3F4F6;
-        --muted: #A3B1C6;
-        --color-bg: #0E121B;
-        --color-surface: #161C2A;
-        --color-surface-soft: #1E2638;
-        --color-surface-hero: #1D2842;
-        --color-hero-bg: #1D2842;
-        --color-hero-text: #F3F4F6;
-        --color-text: #F3F4F6;
-        --color-muted: #A3B1C6;
-        --color-primary: #6E93FF;
-        --color-primary-hover: #8AA8FF;
-        --color-primary-edge: #8AA8FF;
-        --color-primary-ink: #0B0F19;
-        --color-primary-soft: #172347;
+        --paper: #090D1A;
+        --ink: #ECEEF6;
+        --muted: #A2AAC2;
+        --color-bg: #090D1A;
+        --color-surface: #111729;
+        --color-surface-soft: #171F36;
+        --color-surface-hero: #0B1030;
+        --color-hero-bg: #0B1030;
+        --color-hero-text: #ECEEF6;
+        --color-text: #ECEEF6;
+        --color-muted: #A2AAC2;
+        --color-primary: #8EA6FF;
+        --color-primary-hover: #A9BBFF;
+        --color-primary-edge: #A9BBFF;
+        --color-primary-ink: #0B0F1F;
+        --color-primary-soft: #19234A;
         --color-correct: #2DD4BF;
         --color-miss: #F59E0B;
         --color-correct-soft: #0F2E2B;
@@ -4422,8 +4435,8 @@ img.hebrew-logo-mark {
         --color-accent-sage: #2DD4BF;
         --color-accent-terracotta: #F59E0B;
         --color-line: #687792;
-        --color-border-subtle: #263044;
-        --color-border: #263044;
+        --color-border-subtle: #222B45;
+        --color-border: #222B45;
     }
 }
 
@@ -4434,8 +4447,8 @@ img.hebrew-logo-mark {
     --size-display: 64px;
     --size-h2: 24px;
     --size-caption: 14px;
-    --radius-sm: 8px;
-    --radius-hero: 22px;
+    --radius-sm: 10px;
+    --radius-hero: 32px;
     --color-illus-tile: #EFE6D3;
     --color-hero-muted: #E2E8F0;
     --color-accent-olive: #4F5B26;
@@ -6947,16 +6960,16 @@ html[data-ui-lang="he"] [data-plan-builder] .plan-help-en {
     color: #FFFFFF;
 }
 
-/* High-contrast CTA on hero (≥4.5:1 in Light #141B2D and Dark #1D2842) */
+/* High-contrast CTA on the indigo hero (≥4.5:1). Ink is the light hero, #10153A, on white. */
 #today-continue-card .btn-primary,
 #today-next-card .btn-primary,
 #today-continue-link,
 #today-next-link {
     background: #FFFFFF;
     background-color: #FFFFFF;
-    color: #141B2D;
+    color: #10153A;
     border-color: #FFFFFF;
-    box-shadow: 0 2px 0 rgba(20, 27, 45, 0.18);
+    box-shadow: 0 2px 0 rgba(16, 21, 58, 0.18);
 }
 
 #today-continue-card .btn-primary:hover,
@@ -6965,7 +6978,7 @@ html[data-ui-lang="he"] [data-plan-builder] .plan-help-en {
 #today-next-link:hover {
     background: #F8FAFC;
     background-color: #F8FAFC;
-    color: #141B2D;
+    color: #10153A;
 }
 
 #today-continue-card .btn-primary .en,
@@ -6980,7 +6993,7 @@ html[data-ui-lang="he"] [data-plan-builder] .plan-help-en {
 #today-next-link .ui-en,
 #today-continue-link .ui-he,
 #today-next-link .ui-he {
-    color: #141B2D;
+    color: #10153A;
     opacity: 1;
 }
 
@@ -6988,7 +7001,7 @@ html[data-ui-lang="he"] [data-plan-builder] .plan-help-en {
 #today-next-card .btn-primary .hebrew-icon,
 #today-continue-link .hebrew-icon,
 #today-next-link .hebrew-icon {
-    color: #141B2D;
+    color: #10153A;
 }
 
 /* ---- Today practice mix rows (tactile steps) ---- */
@@ -7269,7 +7282,7 @@ html[data-ui-lang="he"] [data-plan-builder] .plan-help-en {
 .plan-exercise-feedback:not([hidden]).is-correct {
     background: var(--color-correct-soft);
     color: var(--color-correct-ink);
-    border-radius: var(--radius-control, 12px);
+    border-radius: var(--radius-control, 14px);
     padding: 0.65rem 0.85rem;
 }
 
@@ -7280,7 +7293,7 @@ html[data-ui-lang="he"] [data-plan-builder] .plan-help-en {
 .plan-exercise-feedback:not([hidden]).is-wrong {
     background: var(--color-miss-soft);
     color: var(--color-miss-ink);
-    border-radius: var(--radius-control, 12px);
+    border-radius: var(--radius-control, 14px);
     padding: 0.65rem 0.85rem;
 }
 
@@ -8208,6 +8221,7 @@ section[data-block-type="conjugation-table"][data-mode="drill"][data-drill-owner
     --font-hebrew-sans: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
     --font-hebrew-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
     --font-hebrew-lettering: "Frank Ruhl Libre", "Noto Serif Hebrew", "Times New Roman", serif;
+    --font-display: "Frank Ruhl Libre", "Noto Serif Hebrew", Georgia, serif;
     --font-hebrew-pointed-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
 }
 .guides-page .page-heading-kicker { font: 700 13px/1.2 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-olive); }
@@ -8361,4 +8375,17 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 @media (max-width: 767px) {
     .example-row { grid-template-columns: 44px minmax(0, 1fr); }
     .example-row__he { grid-column: 1 / -1; }
+}
+
+/* English display headings use the Latin subset of Frank Ruhl Libre.
+   Pointed Hebrew stays on Noto. Preload that file only on /guides/, where the English heading is above the fold. */
+h1 .ui-en,
+h2 .ui-en,
+h3 .ui-en,
+:is(h1, h2, h3)[lang="en"],
+.page-heading-title[lang="en"],
+.guides-hero__title [lang="en"],
+.guide-card h3[lang="en"],
+.empty-title[lang="en"] {
+    font-family: var(--font-display);
 }

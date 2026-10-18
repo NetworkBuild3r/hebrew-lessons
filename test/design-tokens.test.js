@@ -188,7 +188,7 @@ describe('ADR-0006 design tokens', () => {
             assert.ok(block.includes(token.css), token.id + ' css name ' + token.css);
             assert.ok(block.includes(token.id) || block.includes(token.css), token.id);
         }
-        assert.equal(tokens.length, 48);
+        assert.equal(tokens.length, 49);
     });
 
     it('gives every color token a light and a dark custom property', () => {
@@ -244,6 +244,7 @@ describe('ADR-0006 design tokens', () => {
     });
 
     it('publishes the remaining token values, including breakpoints and reduced motion', () => {
+        // Every custom property here, including the 8pt spacing scale, is read from tokens.json.
         for (const token of tokens) {
             if (!token.css.startsWith('--')) continue;
             const value = cssLength(token, 'value');
