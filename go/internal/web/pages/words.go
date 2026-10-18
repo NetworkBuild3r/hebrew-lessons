@@ -1,7 +1,6 @@
 package pages
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 	"unicode"
@@ -12,9 +11,9 @@ import (
 )
 
 // Words serves GET /words/ from a Lister. There is no database query here.
-// Mount passes library.Demo until learner/library.List is wired in, and until
-// RequireSession supplies the signed-in user. Writes (add, edit, suspend)
-// are a later PR.
+// Mount passes library.Demo until go/internal/learner/library is on this
+// branch. The types match that package, so the swap is the import path.
+// Writes (add, edit, suspend) are a later PR.
 type Words struct {
 	lib  library.Lister
 	user func(*http.Request) (int64, error)
@@ -45,10 +44,6 @@ func (h Words) serve(w http.ResponseWriter, r *http.Request) {
 		h.write(w, r, http.StatusBadRequest, wordview.Assemble(q.filters, q.word, q.cursor, "error", kind, nil, ""))
 		return
 	}
-	if q.badCursor {
-		h.write(w, r, http.StatusBadRequest, wordview.Assemble(q.filters, q.word, q.cursor, "error", "load", nil, ""))
-		return
-	}
 	hx := r.Header.Get("HX-Request") == "true"
 	if !hx && !q.canonical {
 		http.Redirect(w, r, q.canonicalURL, http.StatusFound)
@@ -59,13 +54,26 @@ func (h Words) serve(w http.ResponseWriter, r *http.Request) {
 		h.write(w, r, http.StatusInternalServerError, wordview.Assemble(q.filters, q.word, q.cursor, "error", "load", nil, ""))
 		return
 	}
-	items, next, err := h.lib.List(r.Context(), uid, q.libFilter, q.cursor, library.PageSize)
+	items, next, err := h.lib.List(r.Context(), uid, q.libFilter, q.cursor, q.limit)
+	if library.Is(err, "invalid_cursor") {
+		// A bad cursor is not a failed load. Drop it and show the first page.
+		q.cursor = ""
+		q.canonicalURL = wordview.CanonicalPath(q.filters, q.word, "")
+		q.canonical = false
+		if !hx {
+			http.Redirect(w, r, q.canonicalURL, http.StatusFound)
+			return
+		}
+		items, next, err = h.lib.List(r.Context(), uid, q.libFilter, "", q.limit)
+	}
 	if err != nil {
 		status := http.StatusInternalServerError
-		if errors.Is(err, library.ErrInvalidCursor) {
+		kind := "load"
+		if library.Is(err, "invalid_filter") {
 			status = http.StatusBadRequest
+			kind = "invalid_filter"
 		}
-		h.write(w, r, status, wordview.Assemble(q.filters, q.word, q.cursor, "error", "load", nil, ""))
+		h.write(w, r, status, wordview.Assemble(q.filters, q.word, q.cursor, "error", kind, nil, ""))
 		return
 	}
 	state := "ready"
@@ -93,11 +101,11 @@ func (h Words) write(w http.ResponseWriter, r *http.Request, status int, view wo
 type wordsQuery struct {
 	filters      wordview.Filters
 	libFilter    library.Filter
+	limit        int
 	word, cursor string
 	canonicalURL string
 	canonical    bool
 	rowsOnly     bool
-	badCursor    bool
 }
 
 func parseWordsQuery(r *http.Request) (wordsQuery, string) {
@@ -118,19 +126,36 @@ func parseWordsQuery(r *http.Request) (wordsQuery, string) {
 		}
 	}
 	q.cursor = values.Get(wordview.QueryCursor)
-	if len(q.cursor) > 512 {
-		q.badCursor = true
-	}
 	if values.Get(wordview.QueryFragment) == wordview.FragmentRows {
 		q.rowsOnly = true
 	}
-	q.libFilter = library.Filter{
-		Q: q.filters.Q, Status: q.filters.Status, Weak: q.filters.Weak, POS: q.filters.POS,
-		Binyan: q.filters.Binyan, Tense: q.filters.Tense, Source: q.filters.Source, Suspended: q.filters.Suspended,
+	parsed, limit, err := library.ParseQuery(filterMap(q.filters))
+	if err != nil {
+		return q, "invalid_filter"
 	}
+	q.libFilter = parsed
+	q.limit = limit
 	q.canonicalURL = wordview.CanonicalPath(q.filters, q.word, q.cursor)
 	q.canonical = r.URL.RawQuery == wordview.CanonicalQuery(q.filters, q.word, q.cursor)
 	return q, ""
+}
+
+func filterMap(f wordview.Filters) map[string]string {
+	m := map[string]string{}
+	put := func(key, value string) {
+		if value != "" {
+			m[key] = value
+		}
+	}
+	put("q", f.Q)
+	put("status", f.Status)
+	put("weak", f.Weak)
+	put("pos", f.POS)
+	put("binyan", f.Binyan)
+	put("tense", f.Tense)
+	put("source", f.Source)
+	put("suspended", f.Suspended)
+	return m
 }
 
 func canonicalFilter(key, raw string) (string, string) {
