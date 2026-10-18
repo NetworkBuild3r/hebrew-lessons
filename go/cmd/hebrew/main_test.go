@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/learner/path"
 )
 
 func TestHTTPTimeoutsUnderCloudflareLimit(t *testing.T) {
@@ -90,6 +91,38 @@ func TestHealthz(t *testing.T) {
 	newMux(bad, badLedger).ServeHTTP(otherRec, httptest.NewRequest(http.MethodGet, "/", nil))
 	if otherRec.Code != http.StatusNotFound {
 		t.Fatalf("GET /: %d", otherRec.Code)
+	}
+}
+
+func TestDevRoutesStayOff(t *testing.T) {
+	t.Setenv(path.EnvDevWeb, "")
+	conn := openNodeDB(t, "apply")
+	defer conn.Close()
+	rec := httptest.NewRecorder()
+	newMux(conn, mustLedger(t, conn)).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/dev/learner/due?user=1", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("dev route status %d body %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDevRoutesOn(t *testing.T) {
+	t.Setenv(path.EnvDevWeb, "1")
+	t.Setenv("CHECKPOINT_PASS_MARK", "")
+	t.Setenv("REVIEW_STOP_DUE_COUNT", "")
+	t.Setenv("REVIEW_STOP_GAP_LESSONS", "")
+	t.Setenv("LESSON_WARMUP_DUE", "")
+	conn := openNodeDB(t, "apply")
+	defer conn.Close()
+	mux := newMux(conn, mustLedger(t, conn))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/dev/learner/due?user=1", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"dueCount":0`) {
+		t.Fatalf("dev due %d %s", rec.Code, rec.Body.String())
+	}
+	bad := httptest.NewRecorder()
+	mux.ServeHTTP(bad, httptest.NewRequest(http.MethodGet, "/api/dev/learner/path?user=nope", nil))
+	if bad.Code != http.StatusBadRequest {
+		t.Fatalf("bad user %d %s", bad.Code, bad.Body.String())
 	}
 }
 
