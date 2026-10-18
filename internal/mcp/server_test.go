@@ -20,6 +20,7 @@ const (
 	hello     = "שָׁלוֹם"
 	helloBare = "שלום"
 	coffee    = "קָפֶה"
+	book      = "סֵפֶר"
 )
 
 func TestAuthRejectAndAccept(t *testing.T) {
@@ -306,7 +307,7 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 		Level:                  2,
 		EstimatedKnownWords:    10,
 		SuggestedStartPosition: 1,
-	}, []string{coffee})
+	}, []string{coffee}, nil)
 	other := getContext(t, session, 3)
 	if other.Placement.Taken {
 		t.Fatal("user 0 saw user 9's placement")
@@ -318,11 +319,11 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 		FalseAlarmRate: 0.05,
 		Level:          0,
 		BandScores: []BandScore{{
-			Band: 0, H: 1, F: 0.05, Corrected: 1, Passed: true,
+			Band: 0, Shown: 4, Again: 1, Hard: 1, Good: 1, Easy: 1, GoodPlusRate: 0.5,
 		}},
 		EstimatedKnownWords:    40,
 		SuggestedStartPosition: 0,
-	}, []string{hello})
+	}, []string{hello, coffee}, []string{book, helloBare})
 	again := getContext(t, session, 3)
 	if !again.Placement.Taken || !again.Placement.TakenAt.Equal(takenAt) || !again.Placement.Reliable || again.Placement.FalseAlarmRate != 0.05 {
 		t.Fatalf("placement %+v", again.Placement)
@@ -330,20 +331,28 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	if again.Placement.Level != 0 || again.Placement.SuggestedStartPosition != 0 || again.Placement.EstimatedKnownWords != 40 {
 		t.Fatalf("placement zeros %+v", again.Placement)
 	}
-	if len(again.Placement.BandScores) != 1 || again.Placement.BandScores[0].Band != 0 || !again.Placement.BandScores[0].Passed {
-		t.Fatalf("bands %+v", again.Placement.BandScores)
+	band := again.Placement.BandScores
+	if len(band) != 1 || band[0].Band != 0 || band[0].Shown != 4 || band[0].Again != 1 || band[0].Hard != 1 || band[0].Good != 1 || band[0].Easy != 1 || band[0].DontKnow != 0 || band[0].GoodPlusRate != 0.5 {
+		t.Fatalf("bands %+v", band)
 	}
-	if len(again.Placement.KnownLexemes) != 1 || again.Placement.KnownLexemes[0] != hello {
-		t.Fatalf("placement lexemes %+v", again.Placement.KnownLexemes)
+	if len(again.Placement.KnownLexemes) != 2 || again.Placement.KnownLexemes[0] != coffee || again.Placement.KnownLexemes[1] != hello {
+		t.Fatalf("known lexemes %+v", again.Placement.KnownLexemes)
+	}
+	if len(again.Placement.LearningLexemes) != 2 || again.Placement.LearningLexemes[0] != book || again.Placement.LearningLexemes[1] != helloBare {
+		t.Fatalf("learning lexemes %+v", again.Placement.LearningLexemes)
 	}
 	takenText := callRaw(t, session, "get_context", getContextInput{Position: 3})
-	for _, want := range []string{`"taken":true`, `"level":0`, `"suggestedStartPosition":0`, `"reliable":true`, `"bandScores":`, hello} {
+	for _, want := range []string{
+		`"taken":true`, `"level":0`, `"suggestedStartPosition":0`, `"reliable":true`,
+		`"shown":4`, `"again":1`, `"hard":1`, `"good":1`, `"easy":1`, `"dontknow":0`, `"goodPlusRate":0.5`,
+		`"learningLexemes":`, hello, book,
+	} {
 		if !strings.Contains(takenText, want) {
 			t.Fatalf("taken placement missing %s in %s", want, takenText)
 		}
 	}
-	if strings.Contains(takenText, "adjustedScore") || strings.Contains(takenText, coffee) {
-		t.Fatalf("taken placement %s", takenText)
+	if strings.Contains(takenText, "adjustedScore") || strings.Contains(takenText, `"h":`) || strings.Contains(takenText, `"passed"`) {
+		t.Fatalf("old band fields %s", takenText)
 	}
 	found := false
 	for _, word := range again.KnownLexemes {
@@ -457,6 +466,7 @@ func TestPlacementJSONKeepsZeros(t *testing.T) {
 		`"suggestedStartPosition":0`,
 		`"bandScores":[]`,
 		`"knownLexemes":[]`,
+		`"learningLexemes":[]`,
 		`"estimatedKnownWords":0`,
 		`"falseAlarmRate":0`,
 	} {

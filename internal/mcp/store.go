@@ -19,18 +19,20 @@ type UnitOutline struct {
 	Status   string `json:"status"`
 }
 
-// BandScore is one frequency band on a finished placement run.
-// It matches placement.BandScore. H is the real-word yes-rate and F is
-// the pseudo-word yes-rate (the same F on every band). Those two rates
-// are the counts the scorer records. Corrected is (H − F) / (1 − F).
-// Passed is true when Corrected is at least 0.8. Pseudo-words are not
-// lexemes; they appear only as F and FalseAlarmRate.
+// BandScore is one frequency band on a finished adaptive placement run.
+// Shown is how many words from the band were dealt. Again, Hard, Good,
+// Easy, and DontKnow are the FSRS ratings those words received.
+// GoodPlusRate is the share rated Good or Easy. Each rated word also
+// gets a real FSRS card; this row is only the band tally.
 type BandScore struct {
-	Band      int     `json:"band"`
-	H         float64 `json:"h"`
-	F         float64 `json:"f"`
-	Corrected float64 `json:"corrected"`
-	Passed    bool    `json:"passed"`
+	Band         int     `json:"band"`
+	Shown        int     `json:"shown"`
+	Again        int     `json:"again"`
+	Hard         int     `json:"hard"`
+	Good         int     `json:"good"`
+	Easy         int     `json:"easy"`
+	DontKnow     int     `json:"dontknow"`
+	GoodPlusRate float64 `json:"goodPlusRate"`
 }
 
 // Placement mirrors db.Placement. db.Placement is not on this branch.
@@ -77,10 +79,12 @@ type CourseReader interface {
 	// an error. The static token passes user id 0 until OAuth sets
 	// Principal.UserID. Shape matches db.LatestPlacement.
 	LatestPlacement(ctx context.Context, userID int64) (Placement, bool, error)
-	// PlacementKnownLexemes returns the pointed NFC text of the
-	// seeded-known learner lexemes, sorted. Pseudo-words are never
-	// included. Shape matches db.PlacementKnownLexemes.
+	// PlacementKnownLexemes returns the Good and Easy words, pointed
+	// NFC, sorted. Shape matches db.PlacementKnownLexemes.
 	PlacementKnownLexemes(ctx context.Context, userID int64) ([]string, error)
+	// PlacementLearningLexemes returns the Hard, Again, and don't-know
+	// words, pointed NFC, sorted. Shape matches db.PlacementLearningLexemes.
+	PlacementLearningLexemes(ctx context.Context, userID int64) ([]string, error)
 }
 
 // LexiconReader is what lookup reads.

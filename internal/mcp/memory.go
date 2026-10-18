@@ -27,8 +27,9 @@ type Memory struct {
 }
 
 type storedPlacement struct {
-	row   Placement
-	known []string
+	row      Placement
+	known    []string
+	learning []string
 }
 
 type memUnit struct {
@@ -88,19 +89,21 @@ func (m *Memory) Actor(id int64) string {
 }
 
 // SetPlacement stores one finished run for userID.
-// known is the pointed NFC text of seeded-known lexemes. Pseudo-words
-// must not be included. The list is sorted before it is stored.
-func (m *Memory) SetPlacement(userID int64, row Placement, known []string) {
+// known is the Good and Easy words. learning is the Hard, Again, and
+// don't-know words. Both are pointed NFC and are sorted before they
+// are stored.
+func (m *Memory) SetPlacement(userID int64, row Placement, known, learning []string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.placement == nil {
 		m.placement = map[int64]storedPlacement{}
 	}
-	words := append([]string(nil), known...)
-	slices.Sort(words)
-	words = slices.Compact(words)
 	row.BandScores = append([]BandScore(nil), row.BandScores...)
-	m.placement[userID] = storedPlacement{row: row, known: words}
+	m.placement[userID] = storedPlacement{
+		row:      row,
+		known:    sortedCopy(known),
+		learning: sortedCopy(learning),
+	}
 }
 
 // ListUnits implements CourseReader.
@@ -141,7 +144,8 @@ func (m *Memory) LatestPlacement(ctx context.Context, userID int64) (Placement, 
 }
 
 // PlacementKnownLexemes implements CourseReader.
-// The text is pointed NFC, sorted. A learner with no run returns an empty list.
+// The text is the Good and Easy words, pointed NFC, sorted.
+// A learner with no run returns an empty list.
 func (m *Memory) PlacementKnownLexemes(ctx context.Context, userID int64) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -153,6 +157,28 @@ func (m *Memory) PlacementKnownLexemes(ctx context.Context, userID int64) ([]str
 		return []string{}, nil
 	}
 	return append([]string(nil), stored.known...), nil
+}
+
+// PlacementLearningLexemes implements CourseReader.
+// The text is the Hard, Again, and don't-know words, pointed NFC, sorted.
+// A learner with no run returns an empty list.
+func (m *Memory) PlacementLearningLexemes(ctx context.Context, userID int64) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	stored, ok := m.placement[userID]
+	if !ok || len(stored.learning) == 0 {
+		return []string{}, nil
+	}
+	return append([]string(nil), stored.learning...), nil
+}
+
+func sortedCopy(in []string) []string {
+	words := append([]string(nil), in...)
+	slices.Sort(words)
+	return slices.Compact(words)
 }
 
 // SearchLexemes implements LexiconReader.

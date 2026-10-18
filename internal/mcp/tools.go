@@ -56,6 +56,7 @@ type placementView struct {
 	EstimatedKnownWords    int         `json:"estimatedKnownWords,omitempty"`
 	SuggestedStartPosition int         `json:"suggestedStartPosition,omitempty"`
 	KnownLexemes           []string    `json:"knownLexemes,omitempty"`
+	LearningLexemes        []string    `json:"learningLexemes,omitempty"`
 }
 
 // MarshalJSON emits {"taken":false} when there is no finished run.
@@ -67,6 +68,10 @@ func (p placementView) MarshalJSON() ([]byte, error) {
 	known := p.KnownLexemes
 	if known == nil {
 		known = []string{}
+	}
+	learning := p.LearningLexemes
+	if learning == nil {
+		learning = []string{}
 	}
 	bands := p.BandScores
 	if bands == nil {
@@ -82,6 +87,7 @@ func (p placementView) MarshalJSON() ([]byte, error) {
 		EstimatedKnownWords    int         `json:"estimatedKnownWords"`
 		SuggestedStartPosition int         `json:"suggestedStartPosition"`
 		KnownLexemes           []string    `json:"knownLexemes"`
+		LearningLexemes        []string    `json:"learningLexemes"`
 	}{
 		Taken:                  true,
 		TakenAt:                p.TakenAt,
@@ -92,6 +98,7 @@ func (p placementView) MarshalJSON() ([]byte, error) {
 		EstimatedKnownWords:    p.EstimatedKnownWords,
 		SuggestedStartPosition: p.SuggestedStartPosition,
 		KnownLexemes:           known,
+		LearningLexemes:        learning,
 	})
 }
 
@@ -160,6 +167,10 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 		if err != nil {
 			return nil, out, storeErr("The placement words could not be read.", err)
 		}
+		learning, err := s.course.PlacementLearningLexemes(ctx, userID)
+		if err != nil {
+			return nil, out, storeErr("The words still being learned could not be read.", err)
+		}
 		view = placementView{
 			Taken:                  true,
 			TakenAt:                row.TakenAt,
@@ -170,8 +181,10 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 			EstimatedKnownWords:    row.EstimatedKnownWords,
 			SuggestedStartPosition: row.SuggestedStartPosition,
 			KnownLexemes:           append([]string(nil), words...),
+			LearningLexemes:        append([]string(nil), learning...),
 		}
 		slices.Sort(view.KnownLexemes)
+		slices.Sort(view.LearningLexemes)
 	}
 	if outline == nil {
 		outline = []UnitOutline{}
@@ -310,7 +323,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_context",
-		Description: "Read the course before you draft a unit. Returns the outline (position, title, status), lexemes introduced before position, the authoring budgets, and the learner's placement check. Placement taken false means there is no finished run, so the other placement fields are absent. A finished run includes takenAt, reliable, falseAlarmRate, level (highest passed band, or -1), bandScores (band, h, f, corrected, passed), estimatedKnownWords, suggestedStartPosition, and knownLexemes (pointed text, no pseudo-words). suggestedStartPosition 0 is the first unit. Read hebrew://rules for what the budgets mean.",
+		Description: "Read the course before you draft a unit. Returns the outline (position, title, status), lexemes introduced before position, the authoring budgets, and the learner's placement check. Placement is an adaptive deck: each rated word has a real FSRS card. taken false means there is no finished run, so the other placement fields are absent. A finished run includes takenAt, reliable, falseAlarmRate, level (highest passed band, or -1), bandScores (per band: band, shown, again, hard, good, easy, dontknow, goodPlusRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy, pointed NFC, sorted), and learningLexemes (Hard, Again, and don't-know, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for what the budgets mean.",
 		Annotations: readOnly,
 	}, svc.getContext)
 	mcp.AddTool(server, &mcp.Tool{

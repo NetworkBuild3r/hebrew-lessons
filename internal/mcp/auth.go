@@ -25,9 +25,9 @@ var ErrUnauthorized = sdauth.ErrInvalidToken
 type Principal struct {
 	// Actor is stored on unit_revisions.actor.
 	Actor string
-	// UserID is the learner id passed to LatestPlacement and
-	// PlacementKnownLexemes. The static token leaves it 0. OAuth
-	// sets it to users.id.
+	// UserID is the learner id passed to LatestPlacement,
+	// PlacementKnownLexemes, and PlacementLearningLexemes. The static
+	// token leaves it 0. OAuth sets it to users.id.
 	UserID int64
 	// Source is "token" for the static secret and "oauth" once that
 	// validator is composed in.
