@@ -1,7 +1,9 @@
+// Package path turns a learner Path into the snapshot the templates render.
+// The learner types live in go/internal/web/learner/path until PR #37 merges.
 package path
 
-// Snapshot is one learner's path, already scheduled.
-// Review stops are nodes with Kind "review". They are not plan lessons.
+// Snapshot is the rendered path. Review stops are visual nodes with Kind
+// "review". They are not plan lessons.
 type Snapshot struct {
 	PlanID        string
 	UnitCount     int

@@ -6,25 +6,27 @@ import (
 	"strings"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/csrf"
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/learner/config"
+	lpath "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/learner/path"
 	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/path"
 	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/components"
 	learnview "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/pages"
 )
 
-// Learning serves Today and the path map from a Reader and a GateAck.
-// The dev mount passes fixtures. Sessions are not here yet, so the reader
-// id is path.DevUserID.
+// Learning serves Today and the path map from path.New(db, cfg).
+// Sessions are not here yet, so the reader id is lpath.DevUserID.
+// gate is path.Unavailable until unit_progress exists.
 type Learning struct {
-	reader path.Reader
-	gate   path.GateAck
-	cfg    path.Config
+	svc    *lpath.Service
+	gate   lpath.GateAck
+	cfg    config.Config
 	planID string
 }
 
 // NewLearning returns the Today and path handler.
-// planID is the published plan id passed to Reader.Path.
-func NewLearning(reader path.Reader, gate path.GateAck, cfg path.Config, planID string) *Learning {
-	return &Learning{reader: reader, gate: gate, cfg: cfg, planID: planID}
+// planID is the published plan id passed to Service.Path.
+func NewLearning(svc *lpath.Service, gate lpath.GateAck, cfg config.Config, planID string) *Learning {
+	return &Learning{svc: svc, gate: gate, cfg: cfg, planID: planID}
 }
 
 // Register mounts Today, the path, the gate acknowledgement, and htmx.
@@ -51,19 +53,17 @@ func (h *Learning) Lessons(w http.ResponseWriter, r *http.Request) {
 
 func (h *Learning) load(w http.ResponseWriter, r *http.Request) learnview.LearnPage {
 	page := learnview.LearnPage{CSRF: csrf.Issue(w, r)}
-	snap, err := h.reader.Path(r.Context(), path.DevUserID, h.planID)
+	course, err := h.svc.Path(r.Context(), lpath.DevUserID, h.planID)
 	if err != nil {
 		page.Failed = true
 		return page
 	}
-	due, dueErr := h.reader.DueCount(r.Context(), path.DevUserID)
-	if dueErr != nil {
-		snap.DueKnown = false
-	} else {
-		snap.Due = due
-		snap.DueKnown = true
+	due, dueErr := h.svc.DueCount(r.Context(), lpath.DevUserID)
+	dueKnown := dueErr == nil
+	if !dueKnown {
+		due = 0
 	}
-	page.Snap = path.Present(h.cfg, snap)
+	page.Snap = path.Present(h.cfg, course, due, dueKnown)
 	return page
 }
 
@@ -77,13 +77,13 @@ func (h *Learning) GateAck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	_ = h.gate.MarkGateWarningSeen(r.Context(), path.DevUserID, h.planID, id)
+	_ = h.gate.MarkGateWarningSeen(r.Context(), lpath.DevUserID, h.planID, id)
 	next := safeLocal(r.FormValue("next"))
 	checkpoint := safeLocal(r.FormValue("checkpoint"))
 	dialog := components.GateDialog{UnitID: id, Next: next, Checkpoint: checkpoint}
-	snap, err := h.reader.Path(r.Context(), path.DevUserID, h.planID)
+	course, err := h.svc.Path(r.Context(), lpath.DevUserID, h.planID)
 	if err == nil {
-		if n, ok := path.UnfinishedUnit(snap, id); ok {
+		if n, ok := path.UnfinishedUnit(course, id); ok {
 			dialog.Known = true
 			dialog.TitleEn = "You haven't finished Unit " + itoa(n) + "."
 			dialog.TitleHe = "עוד לא סיימת את יחידה " + itoa(n) + "."

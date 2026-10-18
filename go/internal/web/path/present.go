@@ -3,48 +3,63 @@ package path
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/learner/config"
+	lpath "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/learner/path"
 )
 
-// Present fills labels, the pass mark, and the Today lines from cfg.
-// Node states and review stops stay as Path returned them.
-func Present(cfg Config, snap Snapshot) Snapshot {
-	snap.WarmupDue = cfg.LessonWarmupDue
-	snap.ReviewStopDue = cfg.ReviewStopDueCount
+// Present turns a learner Path into the snapshot the templates render.
+// Node states on the Path stay done, current, next, not-yet, or review-stop.
+// The visual state (checkpoint, tutor, review) is display chrome.
+func Present(cfg config.Config, course lpath.Path, due int, dueKnown bool) Snapshot {
+	snap := Snapshot{
+		PlanID: course.PlanID, UnitCount: fixtureCourseUnits, Due: due, DueKnown: dueKnown,
+		WarmupDue: cfg.LessonWarmupDue, ReviewStopDue: cfg.ReviewStopDueCount,
+	}
 	snap.DueEn, snap.DueHe = DueExplainer(cfg.LessonWarmupDue, cfg.ReviewStopDueCount)
+	if dueKnown && due > 0 {
+		snap.DueWords = demoDueWords()
+	}
+	lessons := map[string]lpath.Lesson{}
+	for _, u := range course.Units {
+		for _, lesson := range u.Lessons {
+			lessons[u.ID+"\x00"+lesson.ID] = lesson
+		}
+	}
 	var current *Node
 	var currentUnit *Unit
-	for ui := range snap.Units {
-		u := &snap.Units[ui]
-		u.BannerEn, u.BannerHe = UnitWordsShort(u.NewLearned, u.NewTotal)
-		if u.Current {
-			u.KickerEn = fmt.Sprintf("Unit %d of %d · Lesson %d of %d", u.Order, snap.UnitCount, u.LessonIndex, u.LessonCount)
-			u.KickerHe = fmt.Sprintf("יחידה %d מתוך %d · שיעור %d מתוך %d", u.Order, snap.UnitCount, u.LessonIndex, u.LessonCount)
-			currentUnit = u
+	for i, u := range course.Units {
+		view := viewUnit(i+1, u)
+		for _, n := range course.Nodes {
+			if n.UnitID != u.ID {
+				continue
+			}
+			view.Nodes = append(view.Nodes, viewNode(cfg, u, n, lessons[u.ID+"\x00"+n.LessonID], due))
 		}
-		for ni := range u.Nodes {
-			n := &u.Nodes[ni]
-			if n.Kind == "checkpoint" && n.Total > 0 {
-				n.PassNeeded = PassNeeded(cfg.CheckpointPassMark, n.Total)
+		if view.Current {
+			currentUnit = &view
+		}
+		for ni := range view.Nodes {
+			if view.Nodes[ni].State == "current" {
+				current = &view.Nodes[ni]
 			}
-			n.Label = nodeLabel(*n)
-			n.SubEn, n.SubHe = nodeSub(*n)
-			if n.Gate == "warn" {
-				n.HXVals = hxVals(n.Href, n.CheckpointHref)
-			}
-			if n.State == "current" {
-				current = n
+		}
+		snap.Units = append(snap.Units, view)
+		if u.Source == "tutor" {
+			face := unitChrome(u.ID)
+			snap.Tutor = &TutorCard{
+				UnitID: u.ID, DateLabel: face.DateLabel, DateHe: face.DateHe,
+				DateISO: u.TutorClassDate, SentenceEn: face.SentenceEn, SentenceHe: face.SentenceHe,
+				Phrase: face.Phrase, PhraseEn: face.PhraseEn, Href: face.TutorHref,
 			}
 		}
 	}
 	if currentUnit != nil {
 		wordsEn, wordsHe := UnitWords(currentUnit.NewLearned, currentUnit.NewTotal)
 		snap.Rail = Rail{
-			UnitID:  currentUnit.ID,
-			UnitN:   currentUnit.Order,
-			Learned: currentUnit.NewLearned,
-			Total:   currentUnit.NewTotal,
-			WordsEn: wordsEn,
-			WordsHe: wordsHe,
+			UnitID: currentUnit.ID, UnitN: currentUnit.Order,
+			Learned: currentUnit.NewLearned, Total: currentUnit.NewTotal,
+			WordsEn: wordsEn, WordsHe: wordsHe,
 		}
 		snap.Strip = append([]Node(nil), currentUnit.Nodes...)
 		stops := stopsUntilCheckpoint(currentUnit.Nodes)
@@ -61,6 +76,121 @@ func Present(cfg Config, snap Snapshot) Snapshot {
 		snap.HeroMetaHe = fmt.Sprintf("%d חדשות, %d מוכרות", current.NewCount, current.KnownCount)
 	}
 	return snap
+}
+
+func viewUnit(order int, u lpath.Unit) Unit {
+	face := unitChrome(u.ID)
+	view := Unit{
+		ID: u.ID, Order: order, Title: u.Title, TitleHe: face.TitleHe,
+		Concept: face.Concept, ConceptHe: face.ConceptHe,
+		NewLearned: u.NewWordsDone, NewTotal: u.NewWordsIntroduced,
+		NotYet: u.NotYet, Current: u.State == lpath.StateCurrent,
+		LessonCount: len(u.Lessons), GuideHref: face.GuideHref,
+	}
+	view.BannerEn, view.BannerHe = UnitWordsShort(view.NewLearned, view.NewTotal)
+	for i, lesson := range u.Lessons {
+		if lesson.State == lpath.StateCurrent {
+			view.LessonIndex = i + 1
+			view.Current = true
+		}
+	}
+	if view.Current {
+		count := fixtureCourseUnits
+		view.KickerEn = fmt.Sprintf("Unit %d of %d · Lesson %d of %d", order, count, view.LessonIndex, view.LessonCount)
+		view.KickerHe = fmt.Sprintf("יחידה %d מתוך %d · שיעור %d מתוך %d", order, count, view.LessonIndex, view.LessonCount)
+	}
+	return view
+}
+
+func viewNode(cfg config.Config, u lpath.Unit, n lpath.Node, lesson lpath.Lesson, due int) Node {
+	face := lessonFace(n.LessonID)
+	number := 0
+	for i, item := range u.Lessons {
+		if item.ID == n.LessonID {
+			number = i + 1
+			break
+		}
+	}
+	href := face.Href
+	if href == "" && n.LessonID != "" {
+		href = "/worksheets/" + n.LessonID + "/"
+	}
+	titleHe := face.He
+	if titleHe == "" {
+		titleHe = n.Title
+	}
+	view := Node{
+		Slug: n.LessonID, Title: n.Title, TitleHe: titleHe, UnitID: u.ID,
+		NewCount: len(lesson.NewWords), KnownCount: face.Known, Strength: face.Strength,
+		Fading: face.Fading, Href: href, LessonNumber: number,
+	}
+	switch {
+	case n.Kind == lpath.KindReviewStop || n.State == lpath.StateReviewStop:
+		view.Kind = "review"
+		view.State = "review"
+		view.Title = "Review"
+		view.TitleHe = "חזרה"
+		view.Due = due
+		view.Href = "/review/"
+	case u.Source == "tutor":
+		face := unitChrome(u.ID)
+		view.Kind = "tutor"
+		view.State = "tutor"
+		view.Gate = "open"
+		view.ClassDate = face.DateLabel
+		view.ClassDateHe = face.DateHe
+		view.ClassDateISO = u.TutorClassDate
+	case face.Checkpoint:
+		view.Kind = "checkpoint"
+		view.State = "checkpoint"
+		view.Total = face.Total
+		view.Href = face.Href
+		view.CheckpointHref = face.Href
+		view.Gate = gateFor(n.State)
+		if need, err := cfg.PassNeeded(face.Total); err == nil {
+			view.PassNeeded = need
+		}
+	default:
+		view.Kind = "lesson"
+		view.State = visualState(n.State)
+		view.Gate = gateFor(n.State)
+	}
+	if view.Kind == "lesson" || view.Kind == "checkpoint" {
+		if u.ID == "unit-2" {
+			view.CheckpointHref = "/worksheets/out-and-about-checkpoint/"
+		}
+		if u.ID == "unit-3" {
+			view.CheckpointHref = "/worksheets/cafe-checkpoint/"
+		}
+	}
+	view.Label = nodeLabel(view)
+	view.SubEn, view.SubHe = nodeSub(view)
+	if view.Gate == "warn" {
+		view.HXVals = hxVals(view.Href, view.CheckpointHref)
+	}
+	return view
+}
+
+func visualState(state lpath.State) string {
+	switch state {
+	case lpath.StateDone:
+		return "done"
+	case lpath.StateCurrent:
+		return "current"
+	default:
+		return "not-yet"
+	}
+}
+
+func gateFor(state lpath.State) string {
+	switch state {
+	case lpath.StateNotYet:
+		return "warn"
+	case lpath.StateNext:
+		return "open"
+	default:
+		return ""
+	}
 }
 
 func nodeLabel(n Node) string {
@@ -145,15 +275,15 @@ func stopsUntilCheckpoint(nodes []Node) int {
 
 // UnfinishedUnit is the earlier unit named in the soft-gate warning.
 // The unit being opened is unitID. The copy names the unit before it.
-func UnfinishedUnit(snap Snapshot, unitID string) (int, bool) {
-	for i, u := range snap.Units {
+func UnfinishedUnit(course lpath.Path, unitID string) (int, bool) {
+	for i, u := range course.Units {
 		if u.ID != unitID {
 			continue
 		}
 		if i > 0 {
-			return snap.Units[i-1].Order, true
+			return i, true
 		}
-		return u.Order, true
+		return i + 1, true
 	}
 	return 0, false
 }

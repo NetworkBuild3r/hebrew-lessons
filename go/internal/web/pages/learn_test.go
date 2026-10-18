@@ -7,26 +7,27 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/path"
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/learner/config"
+	lpath "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/learner/path"
 )
 
-func learnMux(reader path.Reader, gate path.GateAck, cfg path.Config) *http.ServeMux {
+func learnMux(svc *lpath.Service, gate lpath.GateAck, cfg config.Config) *http.ServeMux {
 	mux := http.NewServeMux()
-	NewLearning(reader, gate, cfg, path.DemoPlanID).Register(mux)
+	NewLearning(svc, gate, cfg, lpath.DemoPlanID).Register(mux)
 	return mux
 }
 
-func demoMux() *http.ServeMux {
-	demo := path.Demo()
-	return learnMux(
-		path.Mem{Snap: demo, Due: demo.Due},
-		&path.MemGate{Err: path.ErrNotPersisted},
-		path.DefaultConfig(),
-	)
+func demoMux(t *testing.T) *http.ServeMux {
+	t.Helper()
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return learnMux(lpath.New(nil, cfg), lpath.Unavailable{}, cfg)
 }
 
 func TestPathAndTodayRender(t *testing.T) {
-	mux := demoMux()
+	mux := demoMux(t)
 	lessons := get(t, mux, "/lessons/", false)
 	today := get(t, mux, "/", false)
 	if lessons.Code != http.StatusOK || today.Code != http.StatusOK {
@@ -98,20 +99,33 @@ func TestPathAndTodayRender(t *testing.T) {
 }
 
 func TestPassNeededFollowsConfig(t *testing.T) {
-	cfg := path.DefaultConfig()
-	cfg.CheckpointPassMark = 0.50
-	demo := path.Demo()
-	mux := learnMux(path.Mem{Snap: demo, Due: demo.Due}, &path.MemGate{}, cfg)
+	cfg := config.Config{
+		CheckpointPassMark:   "0.50",
+		ReviewStopDueCount:   config.DefaultReviewStopDueCount,
+		ReviewStopGapLessons: config.DefaultReviewStopGapLessons,
+		LessonWarmupDue:      config.DefaultLessonWarmupDue,
+	}
+	mux := learnMux(lpath.New(nil, cfg), lpath.Unavailable{}, cfg)
 	html := body(get(t, mux, "/lessons/", false))
 	if strings.Contains(html, `data-pass-needed="16"`) || !strings.Contains(html, `data-pass-needed="10"`) {
 		t.Fatal("pass_needed stayed at the example 16")
 	}
+	ok, err := cfg.MeetsPassMark(10, 20)
+	if err != nil || !ok {
+		t.Fatal("10 of 20 should meet 0.50")
+	}
 }
 
 func TestDueZeroHidesCardAndStop(t *testing.T) {
-	snap := path.Build(path.DefaultConfig(), 0, false)
-	snap.Tutor = nil
-	mux := learnMux(path.Mem{Snap: snap, Due: 0}, &path.MemGate{}, path.DefaultConfig())
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	course := lpath.DemoCourse(cfg, 0)
+	course.Units = course.Units[:len(course.Units)-1]
+	svc := lpath.New(nil, cfg)
+	svc.UseFixture(course, 0)
+	mux := learnMux(svc, lpath.Unavailable{}, cfg)
 	html := body(get(t, mux, "/", false))
 	if strings.Contains(html, "due-card") {
 		t.Fatal("due card shown with nothing due")
@@ -125,9 +139,12 @@ func TestDueZeroHidesCardAndStop(t *testing.T) {
 }
 
 func TestGateAck(t *testing.T) {
-	gate := &path.MemGate{Err: path.ErrNotPersisted}
-	demo := path.Demo()
-	mux := learnMux(path.Mem{Snap: demo, Due: demo.Due}, gate, path.DefaultConfig())
+	gate := lpath.Unavailable{}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := learnMux(lpath.New(nil, cfg), gate, cfg)
 	page := get(t, mux, "/lessons/", false)
 	tok := csrfToken(t, page)
 	cookie := page.Result().Cookies()[0]
@@ -149,7 +166,7 @@ func TestGateAck(t *testing.T) {
 	if !strings.Contains(sheet, "Go anyway") || !strings.Contains(sheet, "Test out") {
 		t.Fatal("warning actions missing")
 	}
-	seen, seenErr := gate.GateWarningSeen(context.Background(), path.DevUserID, path.DemoPlanID, "unit-3")
+	seen, seenErr := gate.GateWarningSeen(context.Background(), lpath.DevUserID, lpath.DemoPlanID, "unit-3")
 	if seen || seenErr == nil {
 		t.Fatal("ErrNotPersisted still stored the ack")
 	}
@@ -315,7 +332,7 @@ func postGate(t *testing.T, mux *http.ServeMux, cookie *http.Cookie, token, orig
 }
 
 func TestHTMXAsset(t *testing.T) {
-	mux := demoMux()
+	mux := demoMux(t)
 	rec := get(t, mux, "/_static/htmx.min.js", false)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Type"), "javascript") {
 		t.Fatalf("htmx %d %s", rec.Code, rec.Header().Get("Content-Type"))

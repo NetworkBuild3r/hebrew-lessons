@@ -4,7 +4,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/path"
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/learner/config"
+	lpath "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/learner/path"
 )
 
 // DevEnv is the temporary switch for the unauthenticated guides mount.
@@ -27,18 +28,16 @@ func Mount(mux *http.ServeMux, db Queryer) {
 }
 
 // MountLearning registers Today, the path map, and the gate acknowledgement
-// when HEBREW_DEV_WEB=1. The reader and the gate are fixtures until
-// go/internal/learner/path lands. The gate returns ErrNotPersisted, and the
-// page still lets the link through.
+// when HEBREW_DEV_WEB=1. path.New is the stand-in for learner/path.New.
+// After PR #37 merges, import that package and pass the read-only *sql.DB.
+// Unavailable returns ErrNotPersisted, and the page still lets the link through.
 func MountLearning(mux *http.ServeMux) {
 	if os.Getenv(DevEnv) != "1" {
 		return
 	}
-	demo := path.Demo()
-	NewLearning(
-		path.Mem{Snap: demo, Due: demo.Due},
-		&path.MemGate{Err: path.ErrNotPersisted},
-		path.DefaultConfig(),
-		path.DemoPlanID,
-	).Register(mux)
+	cfg, err := config.Load()
+	if err != nil {
+		return
+	}
+	NewLearning(lpath.New(nil, cfg), lpath.Unavailable{}, cfg, lpath.DemoPlanID).Register(mux)
 }
