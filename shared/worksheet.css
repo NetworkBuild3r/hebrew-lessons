@@ -1179,6 +1179,9 @@ textarea {
     display: grid;
     gap: 1rem;
 }
+.lessons-paths {
+    margin-block-end: var(--space-4);
+}
 .today-card .today-card-body {
     cursor: default;
 }
@@ -6996,6 +6999,10 @@ html[data-ui-lang="he"] [data-plan-builder] .plan-help-en {
 
     /* aud-1: single card spans the full bento so a welcome state is not lopsided */
     .today-list[data-today-state="ready"] > :only-child {
+        grid-column: 1 / -1;
+    }
+
+    .today-list[data-today-state="ready"] > [data-learning-path] {
         grid-column: 1 / -1;
     }
 

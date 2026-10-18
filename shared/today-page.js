@@ -159,6 +159,40 @@
         return '/worksheets/' + encodeURIComponent(String(slug || '')) + '/';
     }
 
+    var PLAN_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+    function pathHref(planId) {
+        return '/shared/plan/?id=' + encodeURIComponent(planId);
+    }
+
+    function distinctPlanIds(lessons) {
+        if (!Array.isArray(lessons)) return [];
+        var ids = [];
+        for (var i = 0; i < lessons.length; i += 1) {
+            var row = lessons[i];
+            if (!row || typeof row.planId !== 'string' || !PLAN_SLUG.test(row.planId)) continue;
+            if (ids.indexOf(row.planId) < 0) ids.push(row.planId);
+        }
+        return ids;
+    }
+
+    function renderPathCards(planIds) {
+        if (!planIds || !planIds.length) return '';
+        var seen = [];
+        var html = '';
+        for (var i = 0; i < planIds.length; i += 1) {
+            var id = planIds[i];
+            if (typeof id !== 'string' || !PLAN_SLUG.test(id) || seen.indexOf(id) >= 0) continue;
+            seen.push(id);
+            html += '<article class="lesson-card today-card" data-today-card="path" data-learning-path="' + esc(id) + '">'
+                + '<a class="lesson-link" href="' + esc(pathHref(id)) + '">'
+                + '<h2><span class="ui-pair"><bdi class="ui-he" lang="he">מסלול לימוד</bdi>'
+                + '<span class="ui-en" lang="en" dir="ltr">Learning path</span></span></h2>'
+                + '</a></article>';
+        }
+        return html;
+    }
+
     function pickContinue(list, progressBySlug, now) {
         var best = null;
         for (var i = 0; i < list.length; i += 1) {
@@ -951,12 +985,22 @@
      */
     function loadVerbs(signal, user) {
         var Api = root.HebrewApi;
-        if (!Api || typeof Api.get !== 'function') return Promise.resolve(null);
+        if (!Api || typeof Api.get !== 'function') return Promise.resolve({ verbs: null, planIds: [] });
         return Api.get('/api/plans/catalog', { redirectOn401: false, signal: signal })
             .then(function (res) {
-                var rows = res && res.ok && res.data && Array.isArray(res.data.lessons) ? res.data.lessons : [];
+                var rows = res && res.ok && res.data && Array.isArray(res.data.lessons) ? res.data.lessons : null;
+                if (!rows) {
+                    if (root.console && typeof root.console.error === 'function') {
+                        root.console.error('[today] plan catalog unusable', {
+                            status: res && res.status,
+                            error: res && res.error
+                        });
+                    }
+                    return { verbs: null, planIds: [] };
+                }
+                var planIds = distinctPlanIds(rows);
                 var lessons = rows.filter(function (row) { return row && row.recipe === 'verb-workshop'; }).length;
-                if (!lessons) return null;
+                if (!lessons) return { verbs: null, planIds: planIds };
                 var VP = root.HebrewVerbPractice;
                 var summary = { due: 0, known: 0 };
                 if (VP && typeof VP.loadLadder === 'function') {
@@ -964,17 +1008,27 @@
                     try { storage = root.localStorage; } catch (err) { storage = null; }
                     summary = VP.dueSummary(VP.loadLadder(storage, user), Date.now());
                 }
-                return { lessons: lessons, due: summary.due, known: summary.known };
+                return {
+                    verbs: { lessons: lessons, due: summary.due, known: summary.known },
+                    planIds: planIds
+                };
             })
-            .catch(function () { return null; });
+            .catch(function (err) {
+                if (root.console && typeof root.console.error === 'function') {
+                    root.console.error('[today] plan catalog failed', err);
+                }
+                return { verbs: null, planIds: [] };
+            });
     }
 
     function renderToday(model) {
         if (!model || model.state === 'loading') return renderLoading();
         if (model.state === 'error') return renderError(model.message);
         var list = model.catalog || [];
-        if (!list.length) return renderEmptyCatalog();
+        var planIds = model.planIds || [];
+        if (!list.length && !planIds.length) return renderEmptyCatalog();
         var parts = [];
+        parts.push(renderPathCards(planIds));
         parts.push(renderMixCard(model.mix));
         parts.push(renderReviewCard(model.review || {}, model.brandNew));
         parts.push(renderVerbsCard(model.verbs));
@@ -1071,8 +1125,10 @@
             if (!pair || mounted !== el) return;
             if (signal && signal.aborted) return;
             var model = buildModel(pair[0] || Object.create(null));
+            var catalogBits = pair[2] || { verbs: null, planIds: [] };
             model.mix = pair[1];
-            model.verbs = pair[2];
+            model.verbs = catalogBits.verbs;
+            model.planIds = catalogBits.planIds || [];
             paint(el, model);
         }).catch(function (err) {
             if (mounted !== el) return;

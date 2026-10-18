@@ -708,11 +708,12 @@ describe('rollout preflight', () => {
         // is listed by planHref in lessons-page.js; that is the one plan-screen link a learner sees.
         const href = /function lessonHref\(slug\) \{\s*return '\/worksheets\/' \+ encodeURIComponent\(String\(slug \|\| ''\)\) \+ '\/';\s*\}/;
         const planHref = /function planHref\(planId, lessonId\) \{\s*return '\/shared\/plan\/\?id=' \+ encodeURIComponent\(planId\) \+ '&lesson=' \+ encodeURIComponent\(lessonId\);\s*\}/;
+        const pathHref = /function pathHref\(planId\) \{\s*return '\/shared\/plan\/\?id=' \+ encodeURIComponent\(planId\);\s*\}/;
         ['shared/today-page.js', 'shared/lessons-page.js'].forEach((rel) => {
             const source = fs.readFileSync(path.join(root, rel), 'utf8');
             assert.match(source, href, rel + ' lessonHref still opens the worksheet');
-            const rest = source.replace(planHref, '');
-            assert.equal(rest.includes('/shared/plan'), false, rel + ' links the plan screen only through planHref');
+            const rest = source.replace(planHref, '').replace(pathHref, '');
+            assert.equal(rest.includes('/shared/plan'), false, rel + ' links the plan screen only through planHref or pathHref');
         });
         const lessons = fs.readFileSync(path.join(root, 'shared', 'lessons-page.js'), 'utf8');
         assert.match(lessons, planHref);

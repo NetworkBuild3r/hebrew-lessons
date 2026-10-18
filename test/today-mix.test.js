@@ -106,6 +106,16 @@ describe('today mix (INIT-006/SPEC-015)', () => {
         delete global.HebrewBlockConjugation;
     });
 
+    it('puts one Learning path link per plan id ahead of the other cards', () => {
+        const model = readyModel(null);
+        model.planIds = ['bdf0aee7-7c57-4982-a351-78063ff567e9', 'bdf0aee7-7c57-4982-a351-78063ff567e9'];
+        const html = Today.render(model);
+        assert.equal((html.match(/data-learning-path=/g) || []).length, 1);
+        assert.match(html, /href="\/shared\/plan\/\?id=bdf0aee7-7c57-4982-a351-78063ff567e9"/);
+        assert.match(html, /<bdi class="ui-he" lang="he">מסלול לימוד<\/bdi>/);
+        assert.ok(html.indexOf('data-learning-path=') < html.indexOf('id="today-review-card"'));
+    });
+
     it('keeps only a same-origin worksheet mp3 as a clip', () => {
         global.location = {
             href: 'http://127.0.0.1:9/',
