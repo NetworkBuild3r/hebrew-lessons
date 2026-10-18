@@ -174,6 +174,107 @@ describe('Lessons page: published plan lessons', () => {
         assert.doesNotMatch(basic, /data-plan-id/);
     });
 
+    function shelfRow(slug, title, index) {
+        return {
+            index: index,
+            lesson: { slug: slug, title: title, level: 'basic', subtitle: '', blurb: '' },
+            status: { kind: 'new', rank: 1, tone: 'fresh', chipHe: 'חדש', chipEn: 'new', he: '', en: '' }
+        };
+    }
+
+    function planRow(fields) {
+        return Object.assign({
+            planId: 'learning-path',
+            lessonId: 'plan-only',
+            title: 'Plan',
+            recipe: 'topic-conversation'
+        }, fields);
+    }
+
+    it('matches worksheetSlug alone, as a bare slug or a worksheets path', () => {
+        const page = load([], []);
+        const html = page.render({
+            state: 'ready',
+            filter: 'all',
+            rows: [
+                shelfRow('bare-fixture', 'Bare', 0),
+                shelfRow('path-fixture', 'Path', 1),
+                shelfRow('left-alone', 'Left alone', 2)
+            ],
+            planRows: [
+                planRow({ lessonId: 'plan-bare', worksheetSlug: 'bare-fixture', title: 'Bare plan' }),
+                planRow({
+                    lessonId: 'plan-path',
+                    worksheetSlug: 'worksheets/path-fixture/',
+                    title: 'Path plan'
+                })
+            ]
+        });
+        assert.doesNotMatch(html, /data-lesson-slug="bare-fixture"/);
+        assert.doesNotMatch(html, /data-lesson-slug="path-fixture"/);
+        assert.match(html, /data-lesson-id="plan-bare"/);
+        assert.match(html, /data-lesson-id="plan-path"/);
+        assert.match(html, /data-lesson-slug="left-alone"/);
+    });
+
+    it('keeps shelf rows whose slug is null or empty', () => {
+        const page = load([], []);
+        const html = page.render({
+            state: 'ready',
+            filter: 'all',
+            rows: [
+                shelfRow(null, 'Null slug', 0),
+                shelfRow('', 'Empty slug', 1),
+                shelfRow('covered-fixture', 'Covered', 2)
+            ],
+            planRows: [planRow({ lessonId: 'covered-fixture', title: 'Covered plan' })]
+        });
+        assert.equal((html.match(/data-lesson-slug=""/g) || []).length, 2);
+        assert.match(html, /Null slug/);
+        assert.match(html, /Empty slug/);
+        assert.doesNotMatch(html, /data-lesson-slug="covered-fixture"/);
+        assert.match(html, /data-lesson-id="covered-fixture"/);
+    });
+
+    it('hides nothing when plan match keys are null, empty, or Hebrew', () => {
+        const page = load([], []);
+        const bad = [null, '', 'שגרה'];
+        const html = page.render({
+            state: 'ready',
+            filter: 'all',
+            rows: [shelfRow('kept-shelf', 'Kept shelf', 0)],
+            planRows: bad.map(function (value, index) {
+                return planRow({
+                    lessonId: value,
+                    sourceWorksheet: value,
+                    worksheetSlug: value,
+                    title: 'Bad plan ' + index
+                });
+            })
+        });
+        assert.match(html, /data-lesson-slug="kept-shelf"/);
+        assert.match(html, /Kept shelf/);
+    });
+
+    it('hides every shelf row that shares a covered slug', () => {
+        const page = load([], []);
+        const html = page.render({
+            state: 'ready',
+            filter: 'all',
+            rows: [
+                shelfRow('same-slug', 'First copy', 0),
+                shelfRow('same-slug', 'Second copy', 1),
+                shelfRow('left-alone', 'Left alone', 2)
+            ],
+            planRows: [planRow({ lessonId: 'same-slug', title: 'Same plan' })]
+        });
+        assert.equal((html.match(/data-lesson-slug="same-slug"/g) || []).length, 0);
+        assert.doesNotMatch(html, /First copy/);
+        assert.doesNotMatch(html, /Second copy/);
+        assert.match(html, /data-lesson-slug="left-alone"/);
+        assert.match(html, /data-lesson-id="same-slug"/);
+    });
+
     it('escapes a title', async () => {
         const html = await mounted(load([], [Object.assign({}, WORKSHOP, { title: '<img src=x onerror=1>' })]));
         assert.doesNotMatch(html, /<img/);
