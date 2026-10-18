@@ -22,6 +22,25 @@ func TestHighlightRootKeepsPointsOnTheLetter(t *testing.T) {
 	}
 }
 
+func TestCoverLetterKeepsNikudAndFallsBackToTopic(t *testing.T) {
+	if got := CoverLetter("חָשַׁב", "Verbs"); got != "חָ" {
+		t.Fatalf("cover letter %q", got)
+	}
+	if got := CoverLetter("Decoding", "פעלים"); got != "פ" {
+		t.Fatalf("topic letter %q", got)
+	}
+	if got := CoverLetter("Decoding", "Verbs"); got != "V" {
+		t.Fatalf("latin letter %q", got)
+	}
+}
+
+func TestSplitEndingUsesClusters(t *testing.T) {
+	stem, ending := SplitEnding("חָשַׁב", 1)
+	if stem != "חָשַׁ" || ending != "ב" {
+		t.Fatalf("split %q %q", stem, ending)
+	}
+}
+
 func TestHighlightEscapesAndSkipsABadRoot(t *testing.T) {
 	got := highlightRoot("a<b", "not-a-root")
 	if got != "a&lt;b" {

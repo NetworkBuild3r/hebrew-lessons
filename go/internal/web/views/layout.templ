@@ -2,10 +2,12 @@ package views
 
 import "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/components"
 
-// Layout is the signed-in document shell (shared/app.html plus the shell
-// painted by app-shell.js). The document stays Hebrew and RTL. Interface
-// language is a pre-paint read of the same localStorage key the app uses,
-// so a saved choice does not flash. No other script is added.
+// Layout is the signed-in document shell. The document stays Hebrew and RTL.
+// Two pre-paint scripts read the same localStorage keys the app uses.
+// Theme follows the OS until a saved light, dark, or auto choice says
+// otherwise. That default is provisional: ADR-0015 still defaults Node to light.
+// The toggle handler is the only other script. No audio player is added;
+// buttons carry the hooks the existing player already listens for.
 
 templ Layout(doc Doc) {
 	<!DOCTYPE html>
@@ -13,6 +15,7 @@ templ Layout(doc Doc) {
 		<head>
 			<meta charset="UTF-8"/>
 			@templ.Raw("<script>\n        try {\n            var uiLang = localStorage.getItem('hebrew-ui-lang');\n            document.documentElement.setAttribute('data-ui-lang', uiLang === 'he' ? 'he' : 'en');\n        } catch (e) { /* English until a script can read the choice */ }\n    </script>")
+			@templ.Raw("<script>(function(){try{var t=localStorage.getItem('hebrew-theme');if(t!=='light'&&t!=='dark'&&t!=='auto')t='auto';var dark=false;try{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}catch(e2){}var resolved=t==='auto'?(dark?'dark':'light'):t;var root=document.documentElement;root.setAttribute('data-theme',resolved);root.setAttribute('data-theme-choice',t);}catch(e){document.documentElement.setAttribute('data-theme','light');document.documentElement.setAttribute('data-theme-choice','auto');}})();</script>")
 			<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 			<meta name="google" content="notranslate"/>
 			<meta name="theme-color" content="#1d4ed8"/>
@@ -22,6 +25,7 @@ templ Layout(doc Doc) {
 			<link rel="icon" href="/shared/brand/favicon-32.png" type="image/png" sizes="32x32"/>
 			<link rel="icon" href="/shared/brand/favicon-16.png" type="image/png" sizes="16x16"/>
 			<link rel="apple-touch-icon" href="/shared/brand/apple-touch-icon.png"/>
+			<link rel="preload" as="font" type="font/woff2" href="/shared/fonts/noto-sans-hebrew-hebrew.woff2" crossorigin="anonymous"/>
 			<link rel="stylesheet" href="/shared/worksheet.css"/>
 		</head>
 		<body class={ doc.BodyClass }>
@@ -32,18 +36,19 @@ templ Layout(doc Doc) {
 				@doc.Main
 			</main>
 			<div id="app-route-announce" class="visually-hidden" aria-live="polite" aria-atomic="true">{ doc.Announce }</div>
+			@templ.Raw("<script>(function(){var order=['light','dark','auto'];function resolve(choice){if(choice==='dark')return 'dark';if(choice==='light')return 'light';try{return window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}catch(e){return 'light';}}function apply(choice,persist){if(order.indexOf(choice)<0)choice='auto';var root=document.documentElement;root.setAttribute('data-theme-choice',choice);root.setAttribute('data-theme',resolve(choice));if(persist){try{localStorage.setItem('hebrew-theme',choice);}catch(e){}}var btn=document.querySelector('[data-theme-toggle]');if(btn){btn.setAttribute('data-theme-choice',choice);btn.setAttribute('aria-pressed',choice==='dark'?'true':'false');}}document.addEventListener('click',function(ev){var btn=ev.target&&ev.target.closest&&ev.target.closest('[data-theme-toggle]');if(!btn)return;var cur=document.documentElement.getAttribute('data-theme-choice')||'auto';var i=order.indexOf(cur);apply(order[(i+1)%order.length],true);});try{var mq=window.matchMedia('(prefers-color-scheme: dark)');var onChange=function(){if((document.documentElement.getAttribute('data-theme-choice')||'auto')==='auto')apply('auto',false);};if(mq.addEventListener)mq.addEventListener('change',onChange);else if(mq.addListener)mq.addListener(onChange);}catch(e){}apply(document.documentElement.getAttribute('data-theme-choice')||'auto',false);})();</script>")
 		</body>
 	</html>
 }
 
 // Doc is the per-page shell data. Main is the heading plus the view.
 type Doc struct {
-	Title       string
-	BodyClass   string
-	PageHe      string
-	PageEn      string
-	Announce    string
-	CurrentNav  string
-	RouteReady  string
-	Main        templ.Component
+	Title      string
+	BodyClass  string
+	PageHe     string
+	PageEn     string
+	Announce   string
+	CurrentNav string
+	RouteReady string
+	Main       templ.Component
 }

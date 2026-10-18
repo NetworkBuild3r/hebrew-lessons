@@ -10,10 +10,12 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/components"
 
-// Layout is the signed-in document shell (shared/app.html plus the shell
-// painted by app-shell.js). The document stays Hebrew and RTL. Interface
-// language is a pre-paint read of the same localStorage key the app uses,
-// so a saved choice does not flash. No other script is added.
+// Layout is the signed-in document shell. The document stays Hebrew and RTL.
+// Two pre-paint scripts read the same localStorage keys the app uses.
+// Theme follows the OS until a saved light, dark, or auto choice says
+// otherwise. That default is provisional: ADR-0015 still defaults Node to light.
+// The toggle handler is the only other script. No audio player is added;
+// buttons carry the hooks the existing player already listens for.
 func Layout(doc Doc) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -42,7 +44,7 @@ func Layout(doc Doc) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(doc.PageHe)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 12, Col: 92}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 14, Col: 92}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -55,7 +57,7 @@ func Layout(doc Doc) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(doc.PageEn)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 12, Col: 120}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 14, Col: 120}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
@@ -69,6 +71,10 @@ func Layout(doc Doc) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
+		templ_7745c5c3_Err = templ.Raw("<script>(function(){try{var t=localStorage.getItem('hebrew-theme');if(t!=='light'&&t!=='dark'&&t!=='auto')t='auto';var dark=false;try{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}catch(e2){}var resolved=t==='auto'?(dark?'dark':'light'):t;var root=document.documentElement;root.setAttribute('data-theme',resolved);root.setAttribute('data-theme-choice',t);}catch(e){document.documentElement.setAttribute('data-theme','light');document.documentElement.setAttribute('data-theme-choice','auto');}})();</script>").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, viewport-fit=cover\"><meta name=\"google\" content=\"notranslate\"><meta name=\"theme-color\" content=\"#1d4ed8\"><title>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -76,13 +82,13 @@ func Layout(doc Doc) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(doc.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 19, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 22, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</title><link rel=\"manifest\" href=\"/manifest.webmanifest\"><link rel=\"icon\" href=\"/shared/brand/favicon.svg\" type=\"image/svg+xml\"><link rel=\"icon\" href=\"/shared/brand/favicon-32.png\" type=\"image/png\" sizes=\"32x32\"><link rel=\"icon\" href=\"/shared/brand/favicon-16.png\" type=\"image/png\" sizes=\"16x16\"><link rel=\"apple-touch-icon\" href=\"/shared/brand/apple-touch-icon.png\"><link rel=\"stylesheet\" href=\"/shared/worksheet.css\"></head>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</title><link rel=\"manifest\" href=\"/manifest.webmanifest\"><link rel=\"icon\" href=\"/shared/brand/favicon.svg\" type=\"image/svg+xml\"><link rel=\"icon\" href=\"/shared/brand/favicon-32.png\" type=\"image/png\" sizes=\"32x32\"><link rel=\"icon\" href=\"/shared/brand/favicon-16.png\" type=\"image/png\" sizes=\"16x16\"><link rel=\"apple-touch-icon\" href=\"/shared/brand/apple-touch-icon.png\"><link rel=\"preload\" as=\"font\" type=\"font/woff2\" href=\"/shared/fonts/noto-sans-hebrew-hebrew.woff2\" crossorigin=\"anonymous\"><link rel=\"stylesheet\" href=\"/shared/worksheet.css\"></head>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -119,7 +125,7 @@ func Layout(doc Doc) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(doc.RouteReady)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 31, Col: 83}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 35, Col: 83}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -140,13 +146,21 @@ func Layout(doc Doc) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(doc.Announce)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 34, Col: 108}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 38, Col: 108}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</div></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templ.Raw("<script>(function(){var order=['light','dark','auto'];function resolve(choice){if(choice==='dark')return 'dark';if(choice==='light')return 'light';try{return window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}catch(e){return 'light';}}function apply(choice,persist){if(order.indexOf(choice)<0)choice='auto';var root=document.documentElement;root.setAttribute('data-theme-choice',choice);root.setAttribute('data-theme',resolve(choice));if(persist){try{localStorage.setItem('hebrew-theme',choice);}catch(e){}}var btn=document.querySelector('[data-theme-toggle]');if(btn){btn.setAttribute('data-theme-choice',choice);btn.setAttribute('aria-pressed',choice==='dark'?'true':'false');}}document.addEventListener('click',function(ev){var btn=ev.target&&ev.target.closest&&ev.target.closest('[data-theme-toggle]');if(!btn)return;var cur=document.documentElement.getAttribute('data-theme-choice')||'auto';var i=order.indexOf(cur);apply(order[(i+1)%order.length],true);});try{var mq=window.matchMedia('(prefers-color-scheme: dark)');var onChange=function(){if((document.documentElement.getAttribute('data-theme-choice')||'auto')==='auto')apply('auto',false);};if(mq.addEventListener)mq.addEventListener('change',onChange);else if(mq.addListener)mq.addListener(onChange);}catch(e){}apply(document.documentElement.getAttribute('data-theme-choice')||'auto',false);})();</script>").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

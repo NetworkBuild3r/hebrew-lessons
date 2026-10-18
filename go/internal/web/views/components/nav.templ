@@ -13,8 +13,8 @@ func learnerNav() []navItem {
 	return []navItem{
 		{ID: "today", Href: "/", He: "היום", En: "Today", Icon: "today"},
 		{ID: "lessons", Href: "/lessons/", He: "שיעורים", En: "Lessons", Icon: "lessons"},
-		{ID: "guides", Href: "/guides/", He: "מדריכים", En: "Guides"},
-		{ID: "verbs", Href: "/verbs/", He: "פעלים", En: "Verbs"},
+		{ID: "guides", Href: "/guides/", He: "מדריכים", En: "Guides", Icon: "guides"},
+		{ID: "verbs", Href: "/verbs/", He: "פעלים", En: "Verbs", Icon: "verbs"},
 		{ID: "review", Href: "/review/", He: "חזרה", En: "Review", Icon: "review"},
 		{ID: "words", Href: "/words/", He: "מילים", En: "Words", Icon: "words"},
 		{ID: "progress", Href: "/progress/", He: "התקדמות", En: "Progress", Icon: "progress"},
@@ -53,7 +53,7 @@ templ Shell(current string) {
 		<div class="hebrew-shell-inner">
 			<a class="hebrew-brand" href="/" data-brand>
 				<img class="hebrew-logo-mark" src="/shared/brand/mark-a.svg" width="30" height="30" alt="" decoding="async"/>
-				<span class="hebrew-brand-text ui-pair"><span class="hebrew-brand-he ui-he" lang="he">דרך עברית</span><span class="hebrew-brand-en ui-en" lang="en" dir="ltr">Hebrew Way</span></span>
+				<span class="hebrew-brand-text ui-pair"><span class="hebrew-brand-he ui-he" lang="he">דֶּרֶךְ עִבְרִית</span><span class="hebrew-brand-en ui-en" lang="en" dir="ltr">Hebrew Way</span></span>
 			</a>
 			<nav class="hebrew-shell-nav" data-ui-aria-he="ניווט ראשי" data-ui-aria-en="Main" aria-label="ניווט ראשי">
 				for _, item := range learnerNav() {
@@ -67,7 +67,9 @@ templ Shell(current string) {
 					<button type="button" class="ui-lang-btn" data-ui-lang-set="he" aria-pressed="false">עב</button>
 				</div>
 				<button type="button" class="hebrew-shell-theme-toggle" data-theme-toggle aria-pressed="false">
-					@Pair("מצב כהה", "Dark mode")
+					<span class="theme-choice theme-choice-light">@Pair("בהיר", "Light")</span>
+					<span class="theme-choice theme-choice-dark">@Pair("כהה", "Dark")</span>
+					<span class="theme-choice theme-choice-auto">@Pair("לפי המערכת", "Auto")</span>
 				</button>
 				<button type="button" class="hebrew-shell-account-btn" id="hebrew-shell-account-btn" aria-expanded="false" aria-haspopup="true" aria-controls="hebrew-shell-account-menu">
 					<span class="hebrew-shell-account-name"></span>

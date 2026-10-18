@@ -1,26 +1,69 @@
 package pages
 
 import (
+	"strconv"
+
 	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views"
 	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/components"
 )
 
 templ guideCard(card GuideCard) {
-	<article class="lesson-card" data-recipe="guide" data-plan-id={ card.PlanID } data-lesson-id={ card.LessonID }>
-		<a class="lesson-link" href={ templ.SafeURL(card.Href) }>
-			<span class="recipe-chip" data-recipe="guide">מדריך <span lang="en" dir="ltr">Guide</span></span>
-			<h3 lang={ card.Lang } dir={ card.Dir }>{ card.Title }</h3>
+	@components.GuideCard(components.Card{
+		PlanID:    card.PlanID,
+		LessonID:  card.LessonID,
+		Href:      card.Href,
+		Cover:     card.Cover,
+		Letter:    card.Letter,
+		Topic:     card.Topic,
+		Title:     card.Title,
+		TitleLang: card.Lang,
+		TitleDir:  card.Dir,
+		HeTitle:   card.HeTitle,
+		Status:    card.Status,
+	})
+}
+
+templ guidesHero(card GuideCard) {
+	<div class="guides-hero" data-guides-hero>
+		<img class="guides-hero__art" src="/shared/brand/illustrations/hero-skyline-night.svg" alt="" aria-hidden="true" width="1200" height="360"/>
+		<p class="guides-hero__kicker">@components.Pair("מתחילים כאן", "Start here")</p>
+		if HeroLettering(card.Title) != "" {
+			<p class="guides-hero__lettering" lang="he" dir="rtl">{ HeroLettering(card.Title) }</p>
+			@components.AudioButton(card.Title, "")
+		}
+		<p class="guides-hero__title" lang={ card.Lang } dir={ card.Dir }>{ card.Title }</p>
+		<div class="guides-hero__actions">
+			<a class="btn btn-primary" href={ templ.SafeURL(card.Href) }>
+				@components.Pair("לקריאת המדריך", "Read guide")
+				<svg class="icon icon-directional" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-next"></use></svg>
+			</a>
+		</div>
+	</div>
+}
+
+templ guidesFilters(list GuideList) {
+	<nav class="guides-filters" aria-label="נושאים">
+		<a class="filter-chip" href="#top" aria-current="true">
+			@components.Pair("הכל", "All")
+			<span class="count">{ strconv.Itoa(list.Count) }</span>
 		</a>
-	</article>
+		for _, group := range list.Topics {
+			<a class="filter-chip" href={ templ.SafeURL("#topic-" + group.Slug) }><bdi lang={ group.Lang } dir={ group.Dir }>{ group.Topic }</bdi></a>
+		}
+	</nav>
 }
 
 // guidesShelf is the topic groups, or the empty state.
 templ guidesShelf(list GuideList) {
-	if len(list.Topics) == 0 {
+	if len(list.Topics) == 0 && list.Hero == nil {
 		@components.EmptyGuides()
 	} else {
+		if list.Hero != nil {
+			@guidesHero(*list.Hero)
+		}
+		@guidesFilters(list)
 		for _, group := range list.Topics {
-			<section class="guides-topic" data-topic>
+			<section class="guides-topic" data-topic id={ "topic-" + group.Slug }>
 				<h2 lang={ group.Lang } dir={ group.Dir }>{ group.Topic }</h2>
 				<div class="home-list guides-list" data-guides-state="ready">
 					for _, card := range group.Cards {
@@ -61,12 +104,16 @@ templ GuidesPage(list GuideList) {
 
 templ guidesPageMain(list GuideList) {
 	@components.PageHeading(components.Heading{
-		He:    "מדריכים",
-		En:    "Guides",
-		SubHe: "שיעורי הסבר — קוראים ומקשיבים.",
-		SubEn: "Explanation lessons — read and listen.",
+		He:       "מדריכים",
+		En:       "Guides",
+		KickerHe: "דקדוק ושימוש",
+		Kicker:   "Grammar & usage",
+		SubHe:    "שיעורי הסבר — קוראים ומקשיבים.",
+		SubEn:    "Explanation lessons — read and listen.",
 	})
 	<div id="guides-app" class="spa-view" aria-live="polite">
-		@guidesView(list)
+		<div id="top">
+			@guidesView(list)
+		</div>
 	</div>
 }
