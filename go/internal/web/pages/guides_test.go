@@ -252,7 +252,8 @@ func TestGuideDetailRendersExplainerWithoutPictures(t *testing.T) {
 		pointed,
 		`class="root-letter"`,
 		`lang="en" dir="ltr">he thought`,
-		`lang="en" dir="ltr">chashav`,
+		`<bdi class="translit" lang="en" dir="ltr">chashav</bdi>`,
+		`<span class="example-row__root"><bdi class="meaning root-label" lang="he">ח.ש.ב</bdi></span>`,
 		`data-speak="` + pointed + `"`,
 		`class="audio-btn"`,
 		`example-row__gloss`,
@@ -517,6 +518,29 @@ func TestMixedProseWrapsEachHebrewRun(t *testing.T) {
 	}
 	if !strings.Contains(html, `class="example-row__he" lang="he" dir="rtl"`) {
 		t.Fatal("Hebrew column lost dir=rtl")
+	}
+}
+
+func TestHebrewDetailHeadwordButtonStaysInTheHeading(t *testing.T) {
+	row := guideSnapshot("guides-shelf", "Usage", "shoresh", pointed, "everyone", "guide", "")
+	html := body(get(t, newMux(memSource{rows: []PlanSnapshot{row}}), "/shared/plan/?id=guides-shelf&lesson=shoresh", false))
+	heading := html[strings.Index(html, `data-page-heading`):]
+	end := strings.Index(heading, "</header>")
+	if end < 0 {
+		t.Fatal("heading did not close")
+	}
+	heading = heading[:end]
+	if !strings.Contains(heading, `class="page-heading-title-row"`) {
+		t.Fatalf("headword row missing:\n%s", heading)
+	}
+	if !strings.Contains(heading, `data-speak="`+pointed+`"`) || !strings.Contains(heading, `class="audio-btn"`) {
+		t.Fatalf("audio button is outside the heading:\n%s", heading)
+	}
+	rowStart := strings.Index(heading, `page-heading-title-row`)
+	sub := strings.Index(heading, `page-heading-sub`)
+	btn := strings.Index(heading, `audio-btn`)
+	if rowStart < 0 || btn < rowStart || (sub >= 0 && btn > sub) {
+		t.Fatalf("button is not inline with the headword:\n%s", heading)
 	}
 }
 

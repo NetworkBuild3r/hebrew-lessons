@@ -70,6 +70,14 @@ func stripPoints(s string) string {
 	}, s)
 }
 
+// titleSpeak is the Hebrew a detail heading can voice beside the headword.
+func titleSpeak(title string) string {
+	if HasHebrew(title) {
+		return title
+	}
+	return ""
+}
+
 // cardSpeak is the Hebrew line a card button can voice. A separate Hebrew
 // title is voiced from that line. Otherwise a Hebrew card title is voiced,
 // and the button stays outside the link.

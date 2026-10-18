@@ -17,6 +17,6 @@ templ HeText(size string, he string) {
 // Translit is an English reading, isolated so it stays left to right.
 templ Translit(tr string) {
 	if tr != "" {
-		<span class="translit" lang="en" dir="ltr">{ tr }</span>
+		<bdi class="translit" lang="en" dir="ltr">{ tr }</bdi>
 	}
 }

@@ -8360,6 +8360,12 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 .example-row__gloss, .example-row .translit { overflow-wrap: break-word; }
 .example-row__he { overflow-wrap: break-word; max-inline-size: 22ch; }
 .example-row__gloss .meaning { font: inherit; color: var(--color-text); margin: 0; }
+.example-row__meta { display: flex; flex-wrap: wrap; align-items: baseline; }
+.example-row__meta > .translit + .example-row__root { margin-inline-start: 0.45em; }
+.example-row__root .meaning { margin-block: 0; margin-inline: 0; }
+.page-heading-title-row { display: flex; align-items: center; gap: var(--space-4); min-inline-size: 0; }
+.page-heading-title-row h1 { min-inline-size: 0; }
+.page-heading-title-row .audio-btn { flex: none; }
 .guide-card__meta.recipe-chip { border: 0; padding: 0; background: none; border-radius: 0; justify-self: start; font-size: 13px; color: var(--color-accent-olive); }
 .filter-chip { min-height: 44px; }
 .filter-chip.is-all { background: var(--color-text); border-color: var(--color-text); color: var(--color-surface); }
