@@ -321,9 +321,11 @@ function sendFile(req, res, method, file) {
  * @param {object} user
  * @param {number} [status] 200 for a screen; 404 for an unknown app path (the client shows "not found")
  */
-function sendSpaShell(res, method, user, status) {
+function sendSpaShell(res, method, user, status, rel) {
     security.applySecurityHeaders(res, { noStore: true });
-    const body = spa.renderShell(user);
+    const body = spa.renderShell(user, {
+        preloadDisplayFont: spa.normalizeAppPath(rel || '') === '/guides/'
+    });
     const buf = Buffer.from(body, 'utf8');
     res.writeHead(status || 200, {
         'Content-Type': TYPES['.html'],
@@ -445,7 +447,7 @@ async function handleStatic(req, res) {
     // Every signed-in screen is the same shell document (ADR-0007). The admin role
     // check above has already run, so /admin/ never reaches here for a learner.
     if (spa.isAppPath(rel)) {
-        sendSpaShell(res, method, auth.user);
+        sendSpaShell(res, method, auth.user, 200, rel);
         return;
     }
 
@@ -454,7 +456,7 @@ async function handleStatic(req, res) {
         // A signed-in browser typing an unknown screen URL gets the shell (HTTP 404) so the
         // router can show "not found" inside the app. File and API misses stay plain 404.
         if (wantsHtml(req, rel) && spa.isUnknownAppPath(rel)) {
-            sendSpaShell(res, method, auth.user, 404);
+            sendSpaShell(res, method, auth.user, 404, rel);
             return;
         }
         sendPlain(res, 404, 'Not found');

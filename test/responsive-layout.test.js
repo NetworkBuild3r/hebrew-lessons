@@ -127,10 +127,10 @@ describe('INIT-013/SPEC-006 responsive layout (static)', () => {
     it('Jerusalem Stone / Judean Night tokens and theme toggle persistence (REQ-005)', () => {
         assert.match(CSS, /Jerusalem Stone/);
         assert.match(CSS, /Judean Night/);
-        assert.match(CSS, /--paper:\s*#F7F5F0/);
-        assert.match(CSS, /--paper:\s*#0E121B/);
-        assert.match(CSS, /--color-primary:\s*#254EDB/);
-        assert.match(CSS, /--color-primary:\s*#6E93FF/);
+        assert.match(CSS, /--paper:\s*#F5F0E7/);
+        assert.match(CSS, /--paper:\s*#090D1A/);
+        assert.match(CSS, /--color-primary:\s*#2F4FE0/);
+        assert.match(CSS, /--color-primary:\s*#8EA6FF/);
         assert.match(SHELL_SRC, /hebrew-theme/);
         assert.match(SHELL_SRC, /normalizeTheme/);
         assert.match(SHELL_SRC, /val === 'light' \|\| val === 'dark' \|\| val === 'auto'/);

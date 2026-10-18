@@ -8,7 +8,11 @@ package views
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/components"
+import (
+	"strings"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/components"
+)
 
 // Layout is the signed-in document shell. On these Go pages the document
 // language and direction follow the interface language: en is ltr, he is rtl.
@@ -48,7 +52,7 @@ func Layout(doc Doc) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(doc.PageHe)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 18, Col: 92}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 22, Col: 92}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -61,13 +65,13 @@ func Layout(doc Doc) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(doc.PageEn)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 18, Col: 120}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 22, Col: 120}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\"><head><meta charset=\"UTF-8\"><meta name=\"theme-color\" content=\"#F7F5F0\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\"><head><meta charset=\"UTF-8\"><meta name=\"theme-color\" content=\"#F5F0E7\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -75,7 +79,7 @@ func Layout(doc Doc) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templ.Raw("<script>(function(){var choice='auto';try{choice=localStorage.getItem('hebrew-theme')||'auto';}catch(e){}if(choice!=='light'&&choice!=='dark'&&choice!=='auto')choice='auto';var resolved=choice;if(choice==='auto'){var dark=false;try{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}catch(e2){}resolved=dark?'dark':'light';}var root=document.documentElement;root.setAttribute('data-theme',resolved);root.setAttribute('data-theme-choice',choice);var meta=document.querySelector('meta[name=\"theme-color\"]');if(meta)meta.setAttribute('content',resolved==='dark'?'#0E121B':'#F7F5F0');})();</script>").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = templ.Raw("<script>(function(){var choice='auto';try{choice=localStorage.getItem('hebrew-theme')||'auto';}catch(e){}if(choice!=='light'&&choice!=='dark'&&choice!=='auto')choice='auto';var resolved=choice;if(choice==='auto'){var dark=false;try{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}catch(e2){}resolved=dark?'dark':'light';}var root=document.documentElement;root.setAttribute('data-theme',resolved);root.setAttribute('data-theme-choice',choice);var meta=document.querySelector('meta[name=\"theme-color\"]');if(meta)meta.setAttribute('content',resolved==='dark'?'#090D1A':'#F5F0E7');})();</script>").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -86,13 +90,23 @@ func Layout(doc Doc) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(doc.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 26, Col: 21}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 30, Col: 21}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</title><link rel=\"manifest\" href=\"/manifest.webmanifest\"><link rel=\"icon\" href=\"/shared/brand/favicon.svg\" type=\"image/svg+xml\"><link rel=\"icon\" href=\"/shared/brand/favicon-32.png\" type=\"image/png\" sizes=\"32x32\"><link rel=\"icon\" href=\"/shared/brand/favicon-16.png\" type=\"image/png\" sizes=\"16x16\"><link rel=\"apple-touch-icon\" href=\"/shared/brand/apple-touch-icon.png\"><link rel=\"preload\" as=\"font\" type=\"font/woff2\" href=\"/shared/fonts/noto-sans-hebrew-hebrew.woff2\" crossorigin=\"anonymous\"><link rel=\"stylesheet\" href=\"/shared/worksheet.css\"></head>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</title><link rel=\"manifest\" href=\"/manifest.webmanifest\"><link rel=\"icon\" href=\"/shared/brand/favicon.svg\" type=\"image/svg+xml\"><link rel=\"icon\" href=\"/shared/brand/favicon-32.png\" type=\"image/png\" sizes=\"32x32\"><link rel=\"icon\" href=\"/shared/brand/favicon-16.png\" type=\"image/png\" sizes=\"16x16\"><link rel=\"apple-touch-icon\" href=\"/shared/brand/apple-touch-icon.png\"><link rel=\"preload\" as=\"font\" type=\"font/woff2\" href=\"/shared/fonts/noto-sans-hebrew-hebrew.woff2\" crossorigin=\"anonymous\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if strings.Contains(doc.BodyClass, "guides-page") && !strings.Contains(doc.BodyClass, "guide-page") {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<link rel=\"preload\" as=\"font\" type=\"font/woff2\" href=\"/shared/fonts/frank-ruhl-libre-latin.woff2\" crossorigin=\"anonymous\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<link rel=\"stylesheet\" href=\"/shared/worksheet.css\"></head>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -101,7 +115,7 @@ func Layout(doc Doc) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<body class=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<body class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -114,7 +128,7 @@ func Layout(doc Doc) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\"><div id=\"app-shell\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "\"><div id=\"app-shell\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -122,20 +136,20 @@ func Layout(doc Doc) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div><main class=\"wrap\" id=\"app-main\" tabindex=\"-1\" data-route-ready=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</div><main class=\"wrap\" id=\"app-main\" tabindex=\"-1\" data-route-ready=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(doc.RouteReady)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 39, Col: 83}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 46, Col: 83}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -143,28 +157,28 @@ func Layout(doc Doc) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</main><div id=\"app-route-announce\" class=\"visually-hidden\" aria-live=\"polite\" aria-atomic=\"true\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</main><div id=\"app-route-announce\" class=\"visually-hidden\" aria-live=\"polite\" aria-atomic=\"true\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(doc.Announce)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 42, Col: 108}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `views/layout.templ`, Line: 49, Col: 108}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templ.Raw("<script>(function(){var order=['light','dark','auto'];function resolve(choice){if(choice==='dark')return 'dark';if(choice==='light')return 'light';try{return window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}catch(e){return 'light';}}function paintBar(resolved){var meta=document.querySelector('meta[name=\"theme-color\"]');if(meta)meta.setAttribute('content',resolved==='dark'?'#0E121B':'#F7F5F0');}function apply(choice,persist){if(order.indexOf(choice)<0)choice='auto';var root=document.documentElement;var resolved=resolve(choice);root.setAttribute('data-theme-choice',choice);root.setAttribute('data-theme',resolved);paintBar(resolved);if(persist){try{localStorage.setItem('hebrew-theme',choice);}catch(e){}}var radios=document.querySelectorAll('.theme-switch [role=\"radio\"]');for(var i=0;i<radios.length;i++){var on=radios[i].getAttribute('data-theme-choice')===choice;radios[i].setAttribute('aria-checked',on?'true':'false');radios[i].tabIndex=on?0:-1;}}function applyLang(lang,persist){lang=lang==='he'?'he':'en';var root=document.documentElement;root.setAttribute('data-ui-lang',lang);root.lang=lang;root.dir=lang==='he'?'rtl':'ltr';if(persist){try{localStorage.setItem('hebrew-ui-lang',lang);}catch(e){}}var buttons=document.querySelectorAll('[data-ui-lang-set]');for(var i=0;i<buttons.length;i++){buttons[i].setAttribute('aria-pressed',buttons[i].getAttribute('data-ui-lang-set')===lang?'true':'false');}}document.addEventListener('click',function(ev){var t=ev.target;if(!t||!t.closest)return;var speak=t.closest('[data-speak],[data-audio]');if(speak){ev.preventDefault();var playing=document.querySelectorAll('.audio-btn.is-playing');for(var i=0;i<playing.length;i++)playing[i].classList.remove('is-playing');if(window.speechSynthesis)window.speechSynthesis.cancel();speak.classList.add('is-playing');var done=function(){speak.classList.remove('is-playing');};var url=speak.getAttribute('data-audio');if(url){var audio=new Audio(url);audio.addEventListener('ended',done);audio.addEventListener('error',done);audio.play().catch(done);return;}if(!window.speechSynthesis){done();return;}var uttered=new SpeechSynthesisUtterance(speak.getAttribute('data-speak')||'');uttered.lang='he-IL';uttered.onend=done;uttered.onerror=done;window.speechSynthesis.speak(uttered);return;}var langBtn=t.closest('[data-ui-lang-set]');if(langBtn){applyLang(langBtn.getAttribute('data-ui-lang-set'),true);return;}var btn=t.closest('.theme-switch [role=\"radio\"]');if(!btn)return;apply(btn.getAttribute('data-theme-choice'),true);});document.addEventListener('keydown',function(ev){var btn=ev.target&&ev.target.closest&&ev.target.closest('.theme-switch [role=\"radio\"]');if(!btn)return;var dir=0;var rtl=document.documentElement.dir==='rtl';if(ev.key==='ArrowDown')dir=1;if(ev.key==='ArrowUp')dir=-1;if(ev.key==='ArrowRight')dir=rtl?-1:1;if(ev.key==='ArrowLeft')dir=rtl?1:-1;if(!dir)return;var radios=[].slice.call(btn.parentNode.querySelectorAll('[role=\"radio\"]'));var i=radios.indexOf(btn);var next=radios[(i+dir+radios.length)%radios.length];if(!next)return;next.focus();apply(next.getAttribute('data-theme-choice'),true);ev.preventDefault();});try{var mq=window.matchMedia('(prefers-color-scheme: dark)');var onChange=function(){if((document.documentElement.getAttribute('data-theme-choice')||'auto')==='auto')apply('auto',false);};if(mq.addEventListener)mq.addEventListener('change',onChange);else if(mq.addListener)mq.addListener(onChange);}catch(e){}apply(document.documentElement.getAttribute('data-theme-choice')||'auto',false);applyLang(document.documentElement.getAttribute('data-ui-lang')||'en',false);})();</script>").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = templ.Raw("<script>(function(){var order=['light','dark','auto'];function resolve(choice){if(choice==='dark')return 'dark';if(choice==='light')return 'light';try{return window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}catch(e){return 'light';}}function paintBar(resolved){var meta=document.querySelector('meta[name=\"theme-color\"]');if(meta)meta.setAttribute('content',resolved==='dark'?'#090D1A':'#F5F0E7');}function apply(choice,persist){if(order.indexOf(choice)<0)choice='auto';var root=document.documentElement;var resolved=resolve(choice);root.setAttribute('data-theme-choice',choice);root.setAttribute('data-theme',resolved);paintBar(resolved);if(persist){try{localStorage.setItem('hebrew-theme',choice);}catch(e){}}var radios=document.querySelectorAll('.theme-switch [role=\"radio\"]');for(var i=0;i<radios.length;i++){var on=radios[i].getAttribute('data-theme-choice')===choice;radios[i].setAttribute('aria-checked',on?'true':'false');radios[i].tabIndex=on?0:-1;}}function applyLang(lang,persist){lang=lang==='he'?'he':'en';var root=document.documentElement;root.setAttribute('data-ui-lang',lang);root.lang=lang;root.dir=lang==='he'?'rtl':'ltr';if(persist){try{localStorage.setItem('hebrew-ui-lang',lang);}catch(e){}}var buttons=document.querySelectorAll('[data-ui-lang-set]');for(var i=0;i<buttons.length;i++){buttons[i].setAttribute('aria-pressed',buttons[i].getAttribute('data-ui-lang-set')===lang?'true':'false');}}document.addEventListener('click',function(ev){var t=ev.target;if(!t||!t.closest)return;var speak=t.closest('[data-speak],[data-audio]');if(speak){ev.preventDefault();var playing=document.querySelectorAll('.audio-btn.is-playing');for(var i=0;i<playing.length;i++)playing[i].classList.remove('is-playing');if(window.speechSynthesis)window.speechSynthesis.cancel();speak.classList.add('is-playing');var done=function(){speak.classList.remove('is-playing');};var url=speak.getAttribute('data-audio');if(url){var audio=new Audio(url);audio.addEventListener('ended',done);audio.addEventListener('error',done);audio.play().catch(done);return;}if(!window.speechSynthesis){done();return;}var uttered=new SpeechSynthesisUtterance(speak.getAttribute('data-speak')||'');uttered.lang='he-IL';uttered.onend=done;uttered.onerror=done;window.speechSynthesis.speak(uttered);return;}var langBtn=t.closest('[data-ui-lang-set]');if(langBtn){applyLang(langBtn.getAttribute('data-ui-lang-set'),true);return;}var btn=t.closest('.theme-switch [role=\"radio\"]');if(!btn)return;apply(btn.getAttribute('data-theme-choice'),true);});document.addEventListener('keydown',function(ev){var btn=ev.target&&ev.target.closest&&ev.target.closest('.theme-switch [role=\"radio\"]');if(!btn)return;var dir=0;var rtl=document.documentElement.dir==='rtl';if(ev.key==='ArrowDown')dir=1;if(ev.key==='ArrowUp')dir=-1;if(ev.key==='ArrowRight')dir=rtl?-1:1;if(ev.key==='ArrowLeft')dir=rtl?1:-1;if(!dir)return;var radios=[].slice.call(btn.parentNode.querySelectorAll('[role=\"radio\"]'));var i=radios.indexOf(btn);var next=radios[(i+dir+radios.length)%radios.length];if(!next)return;next.focus();apply(next.getAttribute('data-theme-choice'),true);ev.preventDefault();});try{var mq=window.matchMedia('(prefers-color-scheme: dark)');var onChange=function(){if((document.documentElement.getAttribute('data-theme-choice')||'auto')==='auto')apply('auto',false);};if(mq.addEventListener)mq.addEventListener('change',onChange);else if(mq.addListener)mq.addListener(onChange);}catch(e){}apply(document.documentElement.getAttribute('data-theme-choice')||'auto',false);applyLang(document.documentElement.getAttribute('data-ui-lang')||'en',false);})();</script>").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

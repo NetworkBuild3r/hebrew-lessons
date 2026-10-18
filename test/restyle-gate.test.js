@@ -253,33 +253,33 @@ describe('INIT-005/SPEC-013 contrast of the restyle colours (REQ-017)', () => {
     });
 
     it('Jerusalem Stone / Judean Night hex values match ADR-0015 (INIT-013/SPEC-002)', () => {
-        assert.equal(LIGHT['--paper'], '#F7F5F0');
-        assert.equal(LIGHT['--color-bg'], '#F7F5F0');
-        assert.equal(LIGHT['--color-surface'], '#FFFFFF');
-        assert.equal(LIGHT['--color-surface-soft'], '#EFECE6');
-        assert.equal(LIGHT['--color-text'], '#121621');
-        assert.equal(LIGHT['--color-muted'], '#4B5565');
-        assert.equal(LIGHT['--muted'], '#4B5565');
-        assert.equal(LIGHT['--color-primary'], '#254EDB');
-        assert.equal(LIGHT['--color-primary-hover'], '#1D3FB8');
-        assert.equal(LIGHT['--color-primary-soft'], '#EBF0FF');
+        assert.equal(LIGHT['--paper'], '#F5F0E7');
+        assert.equal(LIGHT['--color-bg'], '#F5F0E7');
+        assert.equal(LIGHT['--color-surface'], '#FFFDF9');
+        assert.equal(LIGHT['--color-surface-soft'], '#EEE7DA');
+        assert.equal(LIGHT['--color-text'], '#151A2E');
+        assert.equal(LIGHT['--color-muted'], '#555B70');
+        assert.equal(LIGHT['--muted'], '#555B70');
+        assert.equal(LIGHT['--color-primary'], '#2F4FE0');
+        assert.equal(LIGHT['--color-primary-hover'], '#2440C4');
+        assert.equal(LIGHT['--color-primary-soft'], '#E8ECFD');
         assert.equal(LIGHT['--color-primary-ink'], '#FFFFFF');
         assert.equal(LIGHT['--color-correct-ink'], '#065F46');
         assert.equal(LIGHT['--color-correct-soft'], '#D1FAE5');
         assert.equal(LIGHT['--color-miss-ink'], '#92400E');
         assert.equal(LIGHT['--color-miss-soft'], '#FEF3C7');
         assert.equal(LIGHT['--color-line'], '#757C8A');
-        assert.equal(DARK['--paper'], '#0E121B');
-        assert.equal(DARK['--color-bg'], '#0E121B');
-        assert.equal(DARK['--color-surface'], '#161C2A');
-        assert.equal(DARK['--color-surface-soft'], '#1E2638');
-        assert.equal(DARK['--color-text'], '#F3F4F6');
-        assert.equal(DARK['--color-muted'], '#A3B1C6');
-        assert.equal(DARK['--muted'], '#A3B1C6');
-        assert.equal(DARK['--color-primary'], '#6E93FF');
-        assert.equal(DARK['--color-primary-hover'], '#8AA8FF');
-        assert.equal(DARK['--color-primary-soft'], '#172347');
-        assert.equal(DARK['--color-primary-ink'], '#0B0F19');
+        assert.equal(DARK['--paper'], '#090D1A');
+        assert.equal(DARK['--color-bg'], '#090D1A');
+        assert.equal(DARK['--color-surface'], '#111729');
+        assert.equal(DARK['--color-surface-soft'], '#171F36');
+        assert.equal(DARK['--color-text'], '#ECEEF6');
+        assert.equal(DARK['--color-muted'], '#A2AAC2');
+        assert.equal(DARK['--muted'], '#A2AAC2');
+        assert.equal(DARK['--color-primary'], '#8EA6FF');
+        assert.equal(DARK['--color-primary-hover'], '#A9BBFF');
+        assert.equal(DARK['--color-primary-soft'], '#19234A');
+        assert.equal(DARK['--color-primary-ink'], '#0B0F1F');
         assert.equal(DARK['--color-correct-ink'], '#A7F3D0');
         assert.equal(DARK['--color-correct-soft'], '#0F2E2B');
         assert.equal(DARK['--color-miss-ink'], '#FDE68A');
@@ -293,7 +293,7 @@ describe('INIT-005/SPEC-013 contrast of the restyle colours (REQ-017)', () => {
         assert.equal(LIGHT['--wrap-w-desktop'], '75rem');
         assert.equal(LIGHT['--wrap-w-reading'], '42rem');
         assert.equal(LIGHT['--radius-card'], '20px');
-        assert.equal(LIGHT['--radius-control'], '12px');
+        assert.equal(LIGHT['--radius-control'], '14px');
         assert.equal(LIGHT['--radius-pill'], '999px');
         assert.ok(LIGHT['--font-hebrew-display']);
         assert.ok(LIGHT['--font-hebrew-sans']);
@@ -505,14 +505,14 @@ describe('INIT-013/SPEC-004 Bento Today & Catalog Grids', () => {
         assert.match(BENTO, /color:\s*#E2E8F0/);
         assert.match(
             BENTO,
-            /#today-continue-card\s+\.btn-primary[\s\S]*?#today-continue-link[\s\S]*?background-color:\s*#FFFFFF[\s\S]*?color:\s*#141B2D/
+            /#today-continue-card\s+\.btn-primary[\s\S]*?#today-continue-link[\s\S]*?background-color:\s*#FFFFFF[\s\S]*?color:\s*#10153A/
         );
-        // Light #141B2D / Dark #1D2842 hero surfaces vs white / slate text & white CTA ink
-        assert.ok(contrast('#FFFFFF', '#141B2D') >= 4.5, 'white on Light hero');
-        assert.ok(contrast('#E2E8F0', '#141B2D') >= 4.5, 'slate on Light hero');
-        assert.ok(contrast('#FFFFFF', '#1D2842') >= 4.5, 'white on Dark hero');
-        assert.ok(contrast('#E2E8F0', '#1D2842') >= 4.5, 'slate on Dark hero');
-        assert.ok(contrast('#141B2D', '#FFFFFF') >= 4.5, 'CTA ink on white fill');
+        // Light #10153A / Dark #0B1030 hero surfaces vs white / slate text & white CTA ink
+        assert.ok(contrast('#FFFFFF', '#10153A') >= 4.5, 'white on Light hero');
+        assert.ok(contrast('#E2E8F0', '#10153A') >= 4.5, 'slate on Light hero');
+        assert.ok(contrast('#FFFFFF', '#0B1030') >= 4.5, 'white on Dark hero');
+        assert.ok(contrast('#E2E8F0', '#0B1030') >= 4.5, 'slate on Dark hero');
+        assert.ok(contrast('#10153A', '#FFFFFF') >= 4.5, 'CTA ink on white fill');
     });
 
     it('desktop Lessons, Guides, Words, Progress use multi-column grids (ac-3)', () => {

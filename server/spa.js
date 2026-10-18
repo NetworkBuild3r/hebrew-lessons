@@ -98,14 +98,22 @@ function readTemplate() {
  * @param {object} user
  * @returns {string}
  */
-function renderShell(user) {
+function renderShell(user, options) {
     const json = JSON.stringify(mePayload(user)).replace(/</g, '\\u003c');
     const parts = readTemplate().split(BOOT_PLACEHOLDER);
     if (parts.length !== 2) {
         throw new Error('shared/app.html must contain ' + BOOT_PLACEHOLDER + ' exactly once');
     }
     // join, not String.replace: a display name containing "$&" must stay literal.
-    return parts.join(json);
+    let html = parts.join(json);
+    // English display headings on /guides/ are above the fold. Other screens do not preload this face.
+    if (options && options.preloadDisplayFont) {
+        const link = '<link rel="preload" as="font" type="font/woff2" href="/shared/fonts/frank-ruhl-libre-latin.woff2" crossorigin="anonymous">';
+        const sheet = '<link rel="stylesheet" href="/shared/worksheet.css">';
+        if (!html.includes(sheet)) throw new Error('app shell lost its stylesheet link');
+        html = html.replace(sheet, link + '\n    ' + sheet);
+    }
+    return html;
 }
 
 module.exports = {
