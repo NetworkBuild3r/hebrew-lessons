@@ -118,7 +118,7 @@ describe('Lessons page: published plan lessons', () => {
             shelf('my-morning-one-verb-two-verbs', 'שגרה 1 — הבוקר שלי', 1),
             shelf('plane-small-talk-yesh-li', 'שיחה 1 — במטוס', 2),
             shelf('exact-match-lesson', 'Exact id', 3),
-            shelf('anal-sex-vocab', 'Private shelf only', 4)
+            shelf('shelf-only', 'Shelf only', 4)
         ];
         const planRows = [
             {
@@ -144,6 +144,8 @@ describe('Lessons page: published plan lessons', () => {
             {
                 planId: 'learning-path',
                 lessonId: 'br-01-yesh-li-raayon',
+                slug: 'shelf-only',
+                worksheet: 'shelf-only',
                 title: 'גשר — יש לי רעיון',
                 recipe: 'topic-conversation'
             }
@@ -160,10 +162,10 @@ describe('Lessons page: published plan lessons', () => {
         assert.match(html, /data-lesson-id="exact-match-lesson"/);
 
         assert.match(html, /data-lesson-slug="my-morning"/);
-        assert.match(html, /data-lesson-slug="anal-sex-vocab"/);
+        assert.match(html, /data-lesson-slug="shelf-only"/);
         assert.match(html, /data-lesson-id="br-01-yesh-li-raayon"/);
         assert.ok(
-            html.indexOf('data-lesson-slug="anal-sex-vocab"') < html.indexOf('data-plan-id="learning-path"'),
+            html.indexOf('data-lesson-slug="shelf-only"') < html.indexOf('data-plan-id="learning-path"'),
             'shelf cards that remain still come before plan cards'
         );
 

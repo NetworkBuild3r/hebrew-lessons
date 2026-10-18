@@ -229,7 +229,7 @@
 
     /**
      * Record a shelf slug. `value` is a slug, or a worksheets/<slug>/ path
-     * (sourceWorksheet and the same fields). Titles are never passed here.
+     * from sourceWorksheet or worksheetSlug. Titles are never passed here.
      * A stand-in lesson id is "ws-" plus the worksheet slug; the caller strips that prefix.
      * @param {Record<string, boolean>} covered
      * @param {unknown} value
@@ -249,10 +249,8 @@
             var row = rows[i];
             if (!row || typeof row !== 'object') continue;
             coverShelfSlug(covered, row.lessonId);
-            coverShelfSlug(covered, row.slug);
             coverShelfSlug(covered, row.sourceWorksheet);
             coverShelfSlug(covered, row.worksheetSlug);
-            coverShelfSlug(covered, row.worksheet);
             if (typeof row.lessonId === 'string' && row.lessonId.indexOf('ws-') === 0) {
                 coverShelfSlug(covered, row.lessonId.slice(3));
             }
