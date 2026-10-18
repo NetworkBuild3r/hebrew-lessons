@@ -39,15 +39,19 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	err = seed.Run(ctx, seed.Options{
-		WebURL:    os.Getenv("CONTRACT_WEB_URL"),
-		MCPURL:    os.Getenv("CONTRACT_MCP_URL"),
-		Token:     os.Getenv("CONTRACT_MCP_TOKEN"),
-		AdminUser: os.Getenv("CONTRACT_ADMIN_USER"),
-		AdminPass: os.Getenv("CONTRACT_ADMIN_PASS"),
-		DataDir:   dataDir,
-		UpdateDB:  golden.Update(),
-	})
+	if golden.Update() {
+		err = seed.Run(ctx, seed.Options{
+			WebURL:    os.Getenv("CONTRACT_WEB_URL"),
+			MCPURL:    os.Getenv("CONTRACT_MCP_URL"),
+			Token:     os.Getenv("CONTRACT_MCP_TOKEN"),
+			AdminUser: os.Getenv("CONTRACT_ADMIN_USER"),
+			AdminPass: os.Getenv("CONTRACT_ADMIN_PASS"),
+			DataDir:   dataDir,
+			UpdateDB:  true,
+		})
+	} else {
+		err = seed.UseFixture(dataDir, "")
+	}
 	cancel()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "seed: %v\n", err)

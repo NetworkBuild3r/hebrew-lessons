@@ -65,9 +65,25 @@ func Dump(path string) (string, error) {
 	return b.String(), nil
 }
 
+// PlanRevision reads plans.revision for id. The fixture boot uses it so the
+// read-only cases do not re-seed to learn the number.
+func PlanRevision(path, id string) (int, error) {
+	db, err := openReadOnly(path)
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+	var rev int
+	if err := db.QueryRow("SELECT revision FROM plans WHERE id = ?", id).Scan(&rev); err != nil {
+		return 0, err
+	}
+	return rev, nil
+}
+
 // Snapshot copies a live database into dest as one file. The server may have
 // the source open in WAL mode. The copy is checkpointed so the committed
-// fixture does not need a sidecar -wal file.
+// fixture does not need a sidecar -wal file. Session rows are removed first:
+// the hashes belong to the seed process, and later runs sign in fresh.
 func Snapshot(src, dest string) error {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
@@ -78,6 +94,9 @@ func Snapshot(src, dest string) error {
 	}
 	defer db.Close()
 	if _, err := db.Exec("PRAGMA busy_timeout = 10000"); err != nil {
+		return err
+	}
+	if _, err := db.Exec("DELETE FROM sessions"); err != nil {
 		return err
 	}
 	if _, err := db.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {

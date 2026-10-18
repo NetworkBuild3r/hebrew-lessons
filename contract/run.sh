@@ -185,6 +185,23 @@ export HEBREW_ROOT="$LESSONS_ROOT"
 export LESSONS_DIR="$LESSONS_ROOT/worksheets"
 export CONTRACT_LESSONS_DIR="$LESSONS_DIR"
 
+# A normal run boots both server legs from the committed database. -update
+# leaves DATA_DIR empty so the server migrates, then the suite seeds through
+# HTTP and MCP and re-snapshots the file. Sidecars are not part of the fixture.
+if [[ "${UPDATE_GOLDEN:-}" == "1" || "${UPDATE_GOLDEN:-}" == "true" ]]; then
+  echo "contract: update mode seeds an empty DATA_DIR through HTTP and MCP"
+else
+  SEED_DB="${CONTRACT_SEED_DB:-$CONTRACT_DIR/fixtures/db/seeded.sqlite}"
+  if [[ ! -f "$SEED_DB" ]]; then
+    echo "contract: seeded fixture not found: $SEED_DB" >&2
+    exit 1
+  fi
+  SEED_ABS="$(cd "$(dirname "$SEED_DB")" && pwd)/$(basename "$SEED_DB")"
+  cp -- "$SEED_ABS" "$DATA_DIR/hebrew.sqlite"
+  rm -f "$DATA_DIR/hebrew.sqlite-wal" "$DATA_DIR/hebrew.sqlite-shm"
+  echo "contract: using seeded fixture $SEED_ABS"
+fi
+
 if [[ -n "${CONTRACT_SERVER_CMD:-}" ]]; then
   CMD="$CONTRACT_SERVER_CMD"
 else

@@ -1,6 +1,6 @@
 # Contract suite
 
-Black-box tests that freeze the Node server's HTTP and MCP behavior so a later Go port can be gated on the same goldens. The harness is a separate Go module. It uses `go test` and `net/http` and does not import the MCP SDK or any server code. The schema dump uses pure-Go `modernc.org/sqlite` (no cgo).
+Black-box tests that freeze the Node server's HTTP and MCP behavior so a later Go port can be gated on the same goldens. The harness is a separate Go module. It uses `go test` and `net/http` and does not import the MCP SDK or any server code. The schema dump uses pure-Go `modernc.org/sqlite` v1.60.1 (no cgo), the same version as `go/go.mod`.
 
 PR1 covers the harness, transport and auth basics, `initialize`, and the canonical `tools/list` for all 42 tools. Later PRs add the tool calls, error matrix, OAuth, web routes, and the Go server.
 
@@ -12,7 +12,7 @@ From the repo root, with Node 22 and Go installed:
 contract/run.sh
 ```
 
-The runner pins `TZ=UTC`, creates a fresh `DATA_DIR`, starts `CONTRACT_SERVER_CMD` (default `node server/start.js`), waits until the web port answers and `POST /mcp` returns 401, runs `go test ./...`, and deletes the data directory. Web listens on `PORT` (default 18080) and MCP on `MCP_PORT` (default 18787).
+The runner pins `TZ=UTC`, creates a fresh `DATA_DIR`, and starts `CONTRACT_SERVER_CMD` (default `node server/start.js`). A normal run copies the seeded database into that directory first and skips the HTTP seed. `-update` leaves the directory empty, seeds through HTTP and MCP, and rewrites the fixture. The runner waits until the web port answers and `POST /mcp` returns 401, runs `go test ./...`, and deletes the data directory. Web listens on `PORT` (default 18080) and MCP on `MCP_PORT` (default 18787).
 
 `CONTRACT_SERVER_CMD` is any shell command: a binary (`./bin/hebrew-server`), a binary with arguments, or a wrapper script. The runner executes it as `bash -c "$CONTRACT_SERVER_CMD"` with the working directory set to the repo root, and with the environment below. The process has to stay in the foreground in the process group the runner created. A server that daemonizes is not stopped on teardown, and the ports stay held.
 
@@ -47,7 +47,7 @@ Readiness, which is all the runner waits for:
 
 These are exported for the test process, not read by the server: `CONTRACT_WEB_URL`, `CONTRACT_MCP_URL`, `CONTRACT_MCP_TOKEN`, `CONTRACT_MCP_PUBLIC_URL`, `CONTRACT_DATA_DIR`, `CONTRACT_ADMIN_USER`, `CONTRACT_ADMIN_PASS`.
 
-The runner unsets `ELEVENLABS_API_KEY`, `ELEVENLABS_KEY`, `OPENAI_API_KEY`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET`. Audio and image tools must not call out. Node's `server/start.js` still fills any unset key from a repo `.env`, so a checkout that has a `.env` is not a clean contract run.
+The runner unsets `ELEVENLABS_API_KEY`, `ELEVENLABS_KEY`, `OPENAI_API_KEY`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET`. Audio and image tools must not call out. `HEBREW_ROOT` is the temp lesson tree, so `server/start.js` does not load a developer `.env` from the repo.
 
 If the command exits before those probes succeed, the runner prints `server exited before it was ready`, the command, and the server log, and exits 1. It does not wait out the ready timeout.
 
@@ -59,8 +59,9 @@ If the command exits before those probes succeed, the runner prints `server exit
 | `CONTRACT_MCP_PUBLIC_URL` | `MCP_PUBLIC_URL` the server was booted with. The 401 `resource_metadata` value is checked against it. |
 | `CONTRACT_DATA_DIR` | Server data directory (read by later DB checks) |
 | `CONTRACT_SERVER_CMD` | Shell command that starts the server. Unset means `node <repo>/server/start.js` |
-| `CONTRACT_ADMIN_USER`, `CONTRACT_ADMIN_PASS` | Bootstrap admin. The runner's defaults satisfy the password policy. |
-| `UPDATE_GOLDEN=1` | Rewrite goldens instead of comparing |
+| `CONTRACT_ADMIN_USER`, `CONTRACT_ADMIN_PASS` | Bootstrap admin on an empty database (`-update`). Defaults are the documented fixture passwords. |
+| `CONTRACT_SEED_DB` | Fixture file copied into `DATA_DIR` on a normal run. Default `fixtures/db/seeded.sqlite`. |
+| `UPDATE_GOLDEN=1` | Seed from scratch and rewrite goldens and the fixture, instead of booting from the fixture. |
 
 ## Goldens
 
@@ -73,7 +74,7 @@ Compared files:
 
 `golden/mcp/tools-list.raw.json` is the server's SSE data line for `tools/list` (the JSON-RPC message, pretty-printed, server key order kept). The suite compares it. Volatile values are masked on the live payload and on the file, then both are encoded with sorted object keys. Key order in the file is not part of the contract. `$schema`, empty `properties`, and the rest of the wire message are. `tools-list.json` stays the portability golden: it is the `result` after schema canonicalization. Update mode rewrites the raw file from the live payload and keeps the server's key order.
 
-`fixtures/db/seeded.sqlite` is the database after the seed, written in update mode. Later boots can copy it. A normal run does not byte-compare it (password salts and session hashes change); it checks that the file's schema matches `golden/db/schema.sql`.
+`fixtures/db/seeded.sqlite` is the database after the seed, written in update mode. A normal run copies it and does not byte-compare it (password salts change when it is regenerated). It checks that the file's schema matches `golden/db/schema.sql`. See [Seeded database](#seeded-database).
 
 Regenerate, then review the diff. Do not update a golden to hide an unintended server change.
 
@@ -105,9 +106,41 @@ Enum value order is frozen on purpose. `["shared", "personal"]` and `["working",
 
 `execution: {"taskSupport": "forbidden"}` is kept. Node emits it on every tool. It is not in the canonicalizer's strip list.
 
+## Seeded database
+
+Path: `fixtures/db/seeded.sqlite`. `CONTRACT_SEED_DB` overrides it.
+
+A normal `run.sh` (Node or Go) copies that file to `$DATA_DIR/hebrew.sqlite` before `CONTRACT_SERVER_CMD` starts, then logs `contract: using seeded fixture <path>`. The copy does not include `-wal` or `-shm`. Both legs get that temp copy; the Go leg needs no other database setup. The HTTP/MCP seed is skipped. `db_schema_test.go` still dumps the live `hebrew.sqlite` after boot and compares it to `golden/db/schema.sql` and to the fixture file.
+
+The file holds migrations 001–011 and the seed:
+
+- Users `contract-admin` (admin, display name `Contract Admin`), `learner` (AI planning on), and `learner-off` (AI planning off).
+- Lesson visibility: `my-morning` is `everyone`; `shai-date-indirect-speech` is limited to `learner`.
+- Lexicon rows from the two fixture lessons plus `fixtures/plans/lexicon-ledaber.json`, and library words `לדבר` and `מדבר` for `learner`.
+- Published plan `five-lesson-types-sample` (revision 17) and unpublished `draft-plan`.
+- No dictionary rows. The snapshot deletes `sessions` before it writes the file, so a boot does not carry the seed process's session.
+
+Contract-only passwords (not production credentials):
+
+| User | Password |
+| --- | --- |
+| `contract-admin` | `contract-admin-pass` |
+| `learner` | `learner-pass-1` |
+| `learner-off` | `learner-off-pass-1` |
+
+Tests that need a login call `POST /api/session` with a new cookie jar and then `GET /api/me`. They do not read `sessions`. The MCP token still comes from `MCP_AUTH_TOKEN` / `CONTRACT_MCP_TOKEN` and is not stored in the fixture.
+
+Regenerate the fixture and the goldens together, from an empty data directory, using these passwords:
+
+```sh
+contract/run.sh -update
+```
+
+That re-seeds through HTTP and MCP and rewrites `fixtures/db/seeded.sqlite`. Review the diff. The adult worksheet slug must not appear under `contract/`; `internal/fixturecheck` fails the run if it does.
+
 ## Seed
 
-`internal/seed` runs after boot, through the admin HTTP API and MCP, before the read-only cases:
+`internal/seed` runs after boot only when `UPDATE_GOLDEN=1`, through the admin HTTP API and MCP, before the read-only cases. A normal run calls `UseFixture` instead and does not create accounts:
 
 1. Sign in as the bootstrap admin (`POST /api/session`).
 2. Create `learner` (`POST /api/admin/users`) and turn AI planning on (`PATCH /api/admin/users/:id/ai-planning`).
@@ -119,17 +152,9 @@ Enum value order is frozen on purpose. `["shared", "personal"]` and `["working",
 
 `upsert_lesson` is not called. The worksheet files are the fixture, and a call would generate audio unless `audio` is false. No ElevenLabs, OpenAI, or Google key is set.
 
-Regenerate the database fixture and the goldens together:
-
-```sh
-contract/run.sh -update
-```
-
-That rewrites `fixtures/db/seeded.sqlite` and every compared golden. Review the diff. The adult worksheet slug must not appear under `contract/`; `internal/fixturecheck` fails the run if it does.
-
 ## DB schema
 
-`db_schema_test.go` opens `hebrew.sqlite` read-only with `modernc.org/sqlite` (no cgo) after boot and again after the seed. Both dumps must match `golden/db/schema.sql`, and the committed fixture must match that same text. The harness does not migrate.
+`db_schema_test.go` opens `hebrew.sqlite` read-only with `modernc.org/sqlite` v1.60.1 (no cgo) after boot and again after the seed step. On a normal run the seed step is the fixture load, so the second dump is the same live file. Both dumps must match `golden/db/schema.sql`, and the committed fixture must match that same text. The harness does not migrate. `internal/fixturecheck` fails if this module's `modernc.org/sqlite` version differs from `go/go.mod`. The module's `go` directive is 1.26.0 because v1.60.1 requires it.
 
 ## Read-only tool cases
 

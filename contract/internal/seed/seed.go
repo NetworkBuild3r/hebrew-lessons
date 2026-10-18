@@ -18,17 +18,23 @@ import (
 )
 
 const (
+	// AdminUsername is the bootstrap admin stored in the seeded fixture.
+	AdminUsername = "contract-admin"
+	// AdminPassword is the contract-only password for AdminUsername.
+	// It is not a production secret. SignIn uses it; session rows are not.
+	AdminPassword = "contract-admin-pass"
 	// LearnerUsername is the account with AI planning on.
 	LearnerUsername = "learner"
+	// LearnerPassword is the contract-only password for LearnerUsername.
+	LearnerPassword = "learner-pass-1"
 	// LearnerOffUsername is active and has AI planning left off.
 	LearnerOffUsername = "learner-off"
+	// LearnerOffPassword is the contract-only password for LearnerOffUsername.
+	LearnerOffPassword = "learner-off-pass-1"
 	// PlanID is the published plan built from the five-lesson-types fixture.
 	PlanID = "five-lesson-types-sample"
 	// DraftPlanID is created and never published, so diff_plan can see no_snapshot.
 	DraftPlanID = "draft-plan"
-
-	learnerPassword = "learner-pass-1"
-	offPassword     = "learner-off-pass-1"
 )
 
 // State is the seeded ids the read-only cases call with.
@@ -55,13 +61,101 @@ type Options struct {
 	UpdateDB   bool
 }
 
+// UseFixture points Current at the committed database. It does not call HTTP
+// or MCP and does not create a session. dataDir is the server's DATA_DIR,
+// which already holds a copy of the fixture.
+func UseFixture(dataDir, moduleRoot string) error {
+	if moduleRoot == "" {
+		root, err := moduleRootFromCaller()
+		if err != nil {
+			return err
+		}
+		moduleRoot = root
+	}
+	plan, err := loadJSON(filepath.Join(moduleRoot, "fixtures", "plans", "five-lesson-types.plan.json"))
+	if err != nil {
+		return err
+	}
+	units, _ := plan["units"].([]any)
+	if len(units) != 1 {
+		return fmt.Errorf("plan units %d", len(units))
+	}
+	unit, _ := units[0].(map[string]any)
+	unitID, _ := unit["id"].(string)
+	lessons, _ := unit["lessons"].([]any)
+	story, block := pathsFromLessons(unitID, lessons)
+	if story == "" || block == "" {
+		return fmt.Errorf("fixture plan is missing a story or block path")
+	}
+	rev, err := sqlite.PlanRevision(filepath.Join(dataDir, "hebrew.sqlite"), PlanID)
+	if err != nil {
+		return fmt.Errorf("fixture plan revision: %w", err)
+	}
+	if rev < 1 {
+		return fmt.Errorf("fixture plan revision %d", rev)
+	}
+	Current = State{
+		PlanID:      PlanID,
+		DraftPlanID: DraftPlanID,
+		Revision:    rev,
+		StoryPath:   story,
+		BlockPath:   block,
+	}
+	fmt.Fprintf(os.Stderr, "seed: using fixture plan %s revision %d\n", PlanID, rev)
+	return nil
+}
+
+// SignIn posts /api/session with a new cookie jar, then checks GET /api/me.
+// Each call starts empty. It does not read the sessions table.
+func SignIn(ctx context.Context, webURL, username, password string) (cookie string, err error) {
+	web := httpx.New()
+	web.Jar = map[string]string{}
+	s := &session{
+		web:    web,
+		origin: strings.TrimRight(webURL, "/"),
+		ctx:    ctx,
+	}
+	if err := s.login(username, password); err != nil {
+		return "", err
+	}
+	cookie = web.Jar["hebrew_session"]
+	if cookie == "" {
+		cookie = web.Jar["__Host-hebrew_session"]
+	}
+	if cookie == "" {
+		return "", fmt.Errorf("login %s did not set a session cookie", username)
+	}
+	res, err := web.Do(ctx, "GET", s.origin+"/api/me", map[string]string{
+		"Accept": "application/json",
+	}, nil)
+	if err != nil {
+		return "", err
+	}
+	if res.Status != 200 {
+		return "", fmt.Errorf("me %s status %d: %s", username, res.Status, truncate(res.Body))
+	}
+	var me struct {
+		Username string `json:"username"`
+	}
+	if err := json.Unmarshal(res.Body, &me); err != nil {
+		return "", err
+	}
+	if me.Username != username {
+		return "", fmt.Errorf("me username %q, want %s", me.Username, username)
+	}
+	return cookie, nil
+}
+
 // Run logs in as the bootstrap admin, creates the two learners, sets lesson
 // visibility, writes lexicon rows, adds library words, and publishes one plan.
 // upsert_lesson is not called: the worksheet files are already the fixture,
 // and a write would generate audio unless audio is false. No provider key is set.
 func Run(ctx context.Context, opt Options) error {
+	if opt.UpdateDB && (opt.AdminUser != AdminUsername || opt.AdminPass != AdminPassword) {
+		return fmt.Errorf("refusing to snapshot: fixture admin must be %s with the documented contract password", AdminUsername)
+	}
 	if opt.ModuleRoot == "" {
-		root, err := moduleRoot()
+		root, err := moduleRootFromCaller()
 		if err != nil {
 			return err
 		}
@@ -86,14 +180,14 @@ func Run(ctx context.Context, opt Options) error {
 	if err := s.login(opt.AdminUser, opt.AdminPass); err != nil {
 		return err
 	}
-	learnerID, err := s.createUser(LearnerUsername, learnerPassword, "Contract Learner")
+	learnerID, err := s.createUser(LearnerUsername, LearnerPassword, "Contract Learner")
 	if err != nil {
 		return err
 	}
 	if err := s.setAIPlanning(learnerID, true); err != nil {
 		return err
 	}
-	if _, err := s.createUser(LearnerOffUsername, offPassword, "Planning Off"); err != nil {
+	if _, err := s.createUser(LearnerOffUsername, LearnerOffPassword, "Planning Off"); err != nil {
 		return err
 	}
 	if err := s.toolOK("set_lesson_visibility", map[string]any{
@@ -468,7 +562,7 @@ func truncate(b []byte) string {
 	return s
 }
 
-func moduleRoot() (string, error) {
+func moduleRootFromCaller() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
 		return "", err
