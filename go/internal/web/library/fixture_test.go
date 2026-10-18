@@ -65,15 +65,40 @@ func TestCursorIsOpaqueKeyset(t *testing.T) {
 			t.Fatalf("%q is not after the cursor", item.Word)
 		}
 	}
-	if _, _, err := (Demo{}).List(context.Background(), 1, Filter{}, "%%%", 4); err != ErrInvalidCursor {
+	if _, _, err := (Demo{}).List(context.Background(), 1, Filter{}, "%%%", 4); !Is(err, "invalid_cursor") {
 		t.Fatalf("bad cursor err %v", err)
 	}
-	enc, err := json.Marshal(cursorBody{Ord: []string{"nope"}, Word: "other"})
+	enc, err := json.Marshal(cursorBody{V: 1, Ord: []string{"nope"}, Key: "other"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := decodeCursor(base64.RawURLEncoding.EncodeToString(enc)); err != ErrInvalidCursor {
+	if _, err := decodeCursor(base64.RawURLEncoding.EncodeToString(enc)); !Is(err, "invalid_cursor") {
 		t.Fatal("tuple that disagrees with the word was accepted")
+	}
+	// Node's current cursor is the word alone, which this keyset rejects.
+	if _, err := decodeCursor(base64.RawURLEncoding.EncodeToString([]byte("שָׁלוֹם"))); !Is(err, "invalid_cursor") {
+		t.Fatal("node word cursor was accepted")
+	}
+}
+
+func TestParseQueryMapsTheLibraryParameters(t *testing.T) {
+	yes := true
+	got, limit, err := ParseQuery(map[string]string{"weak": "1", "suspended": "0", "q": "Peace"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Weak != "any" || got.Suspended == nil || *got.Suspended || got.Q != "Peace" || limit != PageSize {
+		t.Fatalf("parsed %+v suspended %v limit %d", got, got.Suspended, limit)
+	}
+	paused, _, err := ParseQuery(map[string]string{"suspended": "true", "weak": "very_weak"})
+	if err != nil || paused.Suspended == nil || *paused.Suspended != yes || paused.Weak != "very_weak" {
+		t.Fatalf("paused %+v %v", paused, err)
+	}
+	if _, _, err := ParseQuery(map[string]string{"weak": "nope"}); !Is(err, "invalid_filter") {
+		t.Fatalf("weak err %v", err)
+	}
+	if _, _, err := ParseQuery(map[string]string{"limit": "0"}); !Is(err, "invalid_filter") {
+		t.Fatalf("limit err %v", err)
 	}
 }
 
@@ -82,21 +107,23 @@ func TestFiltersMatchTheLibraryRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(hifil) != 1 || hifil[0].Word != "הִסְבִּיר" || hifil[0].Binyan != "hifil" {
+	if len(hifil) != 1 || hifil[0].Word != "הִסְבִּיר" || hifil[0].Binyan == nil || *hifil[0].Binyan != "hifil" {
 		t.Fatalf("hifil: %+v", hifil)
 	}
-	weak, _, err := (Demo{}).List(context.Background(), 1, Filter{Weak: "1"}, "", 50)
+	weak, _, err := (Demo{}).List(context.Background(), 1, Filter{Weak: "any"}, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(weak) != 2 {
 		t.Fatalf("weak count %d", len(weak))
 	}
-	paused, _, err := (Demo{}).List(context.Background(), 1, Filter{Suspended: "1"}, "", 50)
+	on := true
+	paused, _, err := (Demo{}).List(context.Background(), 1, Filter{Suspended: &on}, "", 50)
 	if err != nil || len(paused) != 1 || !paused[0].Suspended || paused[0].Word != "חָבֵר" {
 		t.Fatalf("paused %+v err %v", paused, err)
 	}
-	active, _, err := (Demo{}).List(context.Background(), 1, Filter{Suspended: "0"}, "", 50)
+	off := false
+	active, _, err := (Demo{}).List(context.Background(), 1, Filter{Suspended: &off}, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}

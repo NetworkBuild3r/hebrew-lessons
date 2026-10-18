@@ -126,8 +126,8 @@ func TestBinyanFilterSetsTheReviewDeck(t *testing.T) {
 		t.Fatal("binyan attribute")
 	}
 	open := get(t, wordsMux(library.Demo{}), "/words/?binyan=hifil&word="+url.QueryEscape("הִסְבִּיר"), false)
-	if !strings.Contains(body(open), "not yet checked") || !strings.Contains(body(open), `data-cell="1s"`) {
-		t.Fatal("detail paradigm")
+	if open.Code != http.StatusOK || !strings.Contains(body(open), "Hebrew → English") || !strings.Contains(body(open), `data-binyan="hifil"`) {
+		t.Fatalf("detail %d", open.Code)
 	}
 }
 
@@ -181,8 +181,15 @@ func TestInvalidFilterAndLoadError(t *testing.T) {
 		t.Fatal("load error missing Try again")
 	}
 	cur := get(t, mux, "/words/?cursor="+url.QueryEscape("%%%"), false)
-	if cur.Code != http.StatusBadRequest || !strings.Contains(body(cur), `data-words-error="load"`) {
-		t.Fatalf("cursor %d", cur.Code)
+	if cur.Code != http.StatusFound || cur.Header().Get("Location") != "/words/" {
+		t.Fatalf("bad cursor %d %q", cur.Code, cur.Header().Get("Location"))
+	}
+	hx := get(t, mux, "/words/?cursor="+url.QueryEscape("%%%"), true)
+	if hx.Code != http.StatusOK || hx.Header().Get("HX-Push-Url") != "/words/" {
+		t.Fatalf("hx cursor %d %q", hx.Code, hx.Header().Get("HX-Push-Url"))
+	}
+	if !strings.Contains(body(hx), `data-word="שָׁלוֹם"`) || strings.Contains(body(hx), `data-words-error`) {
+		t.Fatal("bad cursor did not show page 1")
 	}
 }
 
@@ -207,9 +214,10 @@ func TestEmptyAndNoResults(t *testing.T) {
 }
 
 func TestLoadMoreFragmentAndRecordedListCall(t *testing.T) {
+	solid := "solid"
 	rec := &recordLister{items: []library.Item{{
-		Word: "שָׁלוֹם", GlossEN: "peace", HeEn: &library.Direction{Stage: "new", StrengthBucket: "solid"},
-		StrengthBucket: "solid",
+		Word: "שָׁלוֹם", GlossEN: "peace", HeEN: &library.Direction{Stage: "new", StrengthBucket: &solid},
+		StrengthBucket: &solid,
 	}}, next: "opaque-cursor"}
 	mux := wordsMux(rec)
 	page := body(get(t, mux, "/words/", false))

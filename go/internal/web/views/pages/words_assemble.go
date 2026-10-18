@@ -39,12 +39,12 @@ func Assemble(f Filters, word, cursor, state, errKind string, items []library.It
 
 func rowFrom(item library.Item, selected string, v WordsView) WordRow {
 	stage := ""
-	if item.HeEn != nil {
-		stage = item.HeEn.Stage
+	if item.HeEN != nil {
+		stage = item.HeEN.Stage
 	}
 	other := ""
-	if item.EnHe != nil {
-		other = item.EnHe.Stage
+	if item.EnHE != nil {
+		other = item.EnHE.Stage
 	}
 	status, he, en := "new", "חדשה", "New"
 	if item.Suspended {
@@ -57,11 +57,12 @@ func rowFrom(item library.Item, selected string, v WordsView) WordRow {
 		status = stageStatus(low)
 		he, en = stageLabel(low)
 	}
+	strength := textOf(item.StrengthBucket)
 	row := WordRow{
 		Word:          item.Word,
 		Gloss:         item.GlossEN,
 		Translit:      item.Translit,
-		Binyan:        item.Binyan,
+		Binyan:        textOf(item.Binyan),
 		Stage:         stage,
 		Audio:         item.Audio,
 		Suspended:     item.Suspended,
@@ -70,43 +71,43 @@ func rowFrom(item library.Item, selected string, v WordsView) WordRow {
 		ChipStatus:    status,
 		ChipHe:        he,
 		ChipEn:        en,
-		Strength:      item.StrengthBucket,
-		StrengthWidth: strengthWidth(item.StrengthBucket),
+		Strength:      strength,
+		StrengthWidth: strengthWidth(strength),
 	}
-	she, sen := strengthLabel(item.StrengthBucket)
+	she, sen := strengthLabel(strength)
 	if she != "" {
 		row.StrengthLabel = she + " · " + sen
 	}
-	if item.Weak == "weak" || item.Weak == "very_weak" {
-		row.Weak = item.Weak
-		row.WeakHe, row.WeakEn = weakLabel(item.Weak)
+	weak := textOf(item.Weak)
+	if weak == "weak" || weak == "very_weak" {
+		row.Weak = weak
+		row.WeakHe, row.WeakEn = weakLabel(weak)
 	}
 	return row
 }
 
 func detailFrom(item library.Item, closeURL string) WordDetail {
-	posHe, posEn := posLabel(item.POS)
+	pos := textOf(item.POS)
+	root := textOf(item.Root)
+	rootClass := textOf(item.RootClass)
+	binyan := textOf(item.Binyan)
+	posHe, posEn := posLabel(pos)
 	d := WordDetail{
 		Word:       item.Word,
 		Gloss:      item.GlossEN,
 		Translit:   item.Translit,
 		Audio:      item.Audio,
-		POS:        item.POS,
+		POS:        pos,
 		POSHe:      posHe,
 		POSEn:      posEn,
-		Root:       item.Root,
-		RootClass:  item.RootClass,
-		RootColour: rootClassColour(item.RootClass),
-		Binyan:     item.Binyan,
-		BinyanHe:   binyanHe(item.Binyan),
-		HeEn:       directionView("he_en", "עברית ← אנגלית", "Hebrew → English", item.HeEn),
-		EnHe:       directionView("en_he", "אנגלית ← עברית", "English → Hebrew", item.EnHe),
+		Root:       root,
+		RootClass:  rootClass,
+		RootColour: rootClassColour(rootClass),
+		Binyan:     binyan,
+		BinyanHe:   binyanHe(binyan),
+		HeEn:       directionView("he_en", "עברית ← אנגלית", "Hebrew → English", item.HeEN),
+		EnHe:       directionView("en_he", "אנגלית ← עברית", "English → Hebrew", item.EnHE),
 		CloseURL:   closeURL,
-	}
-	for _, form := range item.Paradigm {
-		d.Paradigm = append(d.Paradigm, ParadigmCell{
-			Tense: form.Tense, Cell: form.Cell, He: form.He, Gloss: form.Gloss, Checked: form.Checked,
-		})
 	}
 	for _, source := range item.Sources {
 		d.Sources = append(d.Sources, sourceLink(source))
@@ -114,12 +115,20 @@ func detailFrom(item library.Item, closeURL string) WordDetail {
 	return d
 }
 
+func textOf(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
 func directionView(dir, nameHe, nameEn string, d *library.Direction) DirectionView {
 	if d == nil || d.Stage == "" {
 		return DirectionView{}
 	}
 	he, en := stageLabel(d.Stage)
-	she, sen := strengthLabel(d.StrengthBucket)
+	strength := textOf(d.StrengthBucket)
+	she, sen := strengthLabel(strength)
 	label := ""
 	if she != "" {
 		label = she + " · " + sen
@@ -127,7 +136,7 @@ func directionView(dir, nameHe, nameEn string, d *library.Direction) DirectionVi
 	return DirectionView{
 		Dir: dir, Stage: d.Stage, Status: stageStatus(d.Stage),
 		LabelHe: he, LabelEn: en, NameHe: nameHe, NameEn: nameEn,
-		Strength: d.StrengthBucket, StrengthLabel: label, StrengthWidth: strengthWidth(d.StrengthBucket),
+		Strength: strength, StrengthLabel: label, StrengthWidth: strengthWidth(strength),
 		Show: true,
 	}
 }
