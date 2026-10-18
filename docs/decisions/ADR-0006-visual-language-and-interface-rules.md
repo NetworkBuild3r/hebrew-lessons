@@ -497,8 +497,19 @@ Rollback of this record is deleting this file and `docs/decisions/ADR-0006-asset
 - `spikes/look/check.js` — contrast, target, and reduced-motion check. Command: `node spikes/look/check.js`
 - [tokens.json](ADR-0006-assets/tokens.json) — the same token values and the same contrast ratios
 
+## Amendment (2026-10-18): direction on the Go guides pages
+
+Decided by Hebrew Dev as Brian's proxy.
+
+On the Go guides pages, `<html lang dir>` follows the interface language: `en` is `ltr`, `he` is `rtl`. A Hebrew run inside English is `<bdi lang="he">`. A Hebrew-only block (a word, a verse, the Hebrew column) has `dir="rtl"`. Shared CSS uses logical properties where a hand-mirrored `left`/`right` pair used to flip with direction. Node documents stay `<html lang="he" dir="rtl">`, and `applyUiLang` still does not flip the Node document.
+
+The cover letter's `left: 28px` is physical on purpose. The cover art does not mirror, so that offset stays on the left in both directions.
+
+This amendment does not change the guarded token block. Node pages still use the self-hosted Rubik faces named by `--font-family`. Noto Sans Hebrew is scoped to `.guides-page` for the Guides UI. An app-wide typeface change is a separate decision.
+
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-10-18 | Amendment: Go guides pages follow the UI language for `lang`/`dir`, wrap Hebrew runs in `<bdi>`, and use logical properties. Node stays `lang="he" dir="rtl"` and Rubik. The cover letter offset stays physical. |
 | 2026-10-08 | Accepted — `INIT-003/SPEC-008`. Operator pick a-calm-type. Dark mode ships. |

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -57,16 +58,16 @@ func TestHealthz(t *testing.T) {
 	badLedger := mustLedgerFail(t, bad)
 
 	okRec := httptest.NewRecorder()
-	newMux(good, goodLedger).ServeHTTP(okRec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	newMux(good, goodLedger, "").ServeHTTP(okRec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	assertHealth(t, okRec, http.StatusOK, true)
 
 	badRec := httptest.NewRecorder()
-	newMux(bad, badLedger).ServeHTTP(badRec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	newMux(bad, badLedger, "").ServeHTTP(badRec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	assertHealth(t, badRec, http.StatusServiceUnavailable, false)
 
 	cached := db.Ledger{OK: false, Error: "schema_migrations mismatch: cached"}
 	cachedRec := httptest.NewRecorder()
-	newMux(good, cached).ServeHTTP(cachedRec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	newMux(good, cached, "").ServeHTTP(cachedRec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	assertHealth(t, cachedRec, http.StatusServiceUnavailable, false)
 	if !strings.Contains(cachedRec.Body.String(), "cached") {
 		t.Fatalf("healthz re-read the ledger: %s", cachedRec.Body.String())
@@ -74,22 +75,56 @@ func TestHealthz(t *testing.T) {
 
 	good.Close()
 	pingRec := httptest.NewRecorder()
-	newMux(good, goodLedger).ServeHTTP(pingRec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	newMux(good, goodLedger, "").ServeHTTP(pingRec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	assertHealth(t, pingRec, http.StatusServiceUnavailable, false)
 	if !strings.Contains(pingRec.Body.String(), "db ping:") {
 		t.Fatalf("closed db: %s", pingRec.Body.String())
 	}
 
 	postRec := httptest.NewRecorder()
-	newMux(bad, badLedger).ServeHTTP(postRec, httptest.NewRequest(http.MethodPost, "/healthz", nil))
+	newMux(bad, badLedger, "").ServeHTTP(postRec, httptest.NewRequest(http.MethodPost, "/healthz", nil))
 	if postRec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST /healthz: %d", postRec.Code)
 	}
 
 	otherRec := httptest.NewRecorder()
-	newMux(bad, badLedger).ServeHTTP(otherRec, httptest.NewRequest(http.MethodGet, "/", nil))
+	newMux(bad, badLedger, "").ServeHTTP(otherRec, httptest.NewRequest(http.MethodGet, "/", nil))
 	if otherRec.Code != http.StatusNotFound {
 		t.Fatalf("GET /: %d", otherRec.Code)
+	}
+}
+
+func TestSharedMountUsesHebrewRoot(t *testing.T) {
+	root := t.TempDir()
+	player := filepath.Join(root, "shared", "dist")
+	if err := os.MkdirAll(player, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(player, "player.js"), []byte("player-bytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	conn := openNodeDB(t, "apply")
+	defer conn.Close()
+	ledger := mustLedger(t, conn)
+
+	t.Setenv("HEBREW_DEV_WEB", "")
+	off := httptest.NewRecorder()
+	newMux(conn, ledger, root).ServeHTTP(off, httptest.NewRequest(http.MethodGet, "/shared/dist/player.js", nil))
+	if off.Code != http.StatusNotFound {
+		t.Fatalf("flag off: %d", off.Code)
+	}
+
+	t.Setenv("HEBREW_DEV_WEB", "1")
+	on := httptest.NewRecorder()
+	newMux(conn, ledger, root).ServeHTTP(on, httptest.NewRequest(http.MethodGet, "/shared/dist/player.js", nil))
+	if on.Code != http.StatusOK || on.Body.String() != "player-bytes" {
+		t.Fatalf("player.js: %d %q", on.Code, on.Body.String())
+	}
+	health := httptest.NewRecorder()
+	newMux(conn, ledger, root).ServeHTTP(health, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if health.Code != http.StatusOK {
+		t.Fatalf("healthz: %d %s", health.Code, health.Body.String())
 	}
 }
 

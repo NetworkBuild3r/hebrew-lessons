@@ -117,7 +117,7 @@ Primary interactive targets remain `≥44×44` CSS px (`--size-target-primary: 4
 | `test/design-tokens.test.js` | The comment-delimited block `/* === ADR-0006 design tokens === */` in `shared/worksheet.css`, checked against `docs/decisions/ADR-0006-assets/tokens.json` | **Leave that block byte-intact.** It is the historical baseline (`ADR-0006`). Active theme values live in later `:root` / `:root[data-theme="light"]` / `:root[data-theme="dark"]` rules authored by `SPEC-002`. |
 | `test/restyle-gate.test.js` | Final resolved tokens from top-level `:root`, `:root:not([data-theme="dark"])`, `:root[data-theme="light"]`, and `:root[data-theme="dark"]` rules; 19 foreground/background pairs; plain `#rrggbb` only | **Every active pair below must meet its ratio.** Text pairs `≥4.5:1`; UI pairs (`--color-line` borders, focus-ring uses of `--color-primary`) `≥3.0:1`. |
 
-Theme persistence (`SPEC-002`): `localStorage` key `hebrew-theme` allowlisted to `'light' | 'dark'`; applied as `document.documentElement.dataset.theme`. Default without a stored value: `'light'` (Jerusalem Stone).
+Theme persistence (`SPEC-002`): `localStorage` key `hebrew-theme` allowlisted to `'light' | 'dark'`; applied as `document.documentElement.dataset.theme`. Default without a stored value: `'light'` (Jerusalem Stone). Superseded for the theme choice by the amendment below.
 
 ### 2.2 Light theme — Jerusalem Stone
 
@@ -342,7 +342,7 @@ When `drillQueue` interleaves multiple verbs (`lemmaKey`) and/or tenses (`presen
 
 Documentation only — no executable change in `INIT-013/SPEC-001`. Downstream specs must keep:
 
-- Theme values allowlisted to `'light' | 'dark'` before writing `dataset.theme`.
+- Theme choice allowlisted to `'light' | 'dark' | 'auto'` before writing storage. `dataset.theme` receives only the resolved `'light' | 'dark'` (amendment 2026-10-18). The original `'light' | 'dark'` storage allowlist is superseded.
 - `escapeHtml()` / `bi()` / `textContent` for shell and page markup (no raw `innerHTML` interpolation of user or plan strings).
 - Zero new external network / font URLs (`REQ-018`).
 - Learner typed drill/exercise answers never leave the browser in `formSignal` payloads.
@@ -362,8 +362,17 @@ Documentation only — no executable change in `INIT-013/SPEC-001`. Downstream s
 - [ADR-0006](ADR-0006-visual-language-and-interface-rules.md) · [ADR-0008](ADR-0008-learner-look-and-feedback.md) · [ADR-0010](ADR-0010-player-visual-language-and-competence-feedback.md) · [ADR-0014](ADR-0014-lesson-type-coverage.md)
 - `sdd/research/RSCH-001-*` · `RSCH-003-*` · `RSCH-004-*` · `RSCH-005-*` · `RSCH-006-*` · `RSCH-007-*` · `RSCH-008-*` · `RSCH-009-*` · `RSCH-010-*`
 
+## Amendment (2026-10-18): light, dark, and auto
+
+Decided by Hebrew Dev as Brian's proxy.
+
+The theme choice is `light`, `dark`, or `auto`. **`auto` is the default.** A missing or invalid value also means auto. Auto resolves `prefers-color-scheme` to a concrete `data-theme` of `light` or `dark` in a tiny pre-paint script, before the first paint. A manual toggle lets the learner pick light, dark, or auto. There is no separate Settings sheet. CSS remains keyed on `[data-theme="dark"]` only. `data-theme` itself is only the resolved `light` or `dark`.
+
+This supersedes the original allowlist `light|dark` (default light) in §2.1. Guarded token values are unchanged.
+
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-10-18 | Amendment: theme choice is `light`, `dark`, or `auto` (default auto), with a manual toggle. Decided by Hebrew Dev as Brian's proxy. |
 | 2026-10-17 | Initial record — `INIT-013/SPEC-001`. |

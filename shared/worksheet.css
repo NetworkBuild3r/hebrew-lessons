@@ -1146,7 +1146,7 @@ textarea {
     white-space: pre-wrap;
     overflow-x: auto;
     direction: ltr;
-    text-align: left;
+    text-align: start;
     font-size: 0.85rem;
     color: var(--color-text);
     background: var(--color-bg);
@@ -1438,7 +1438,7 @@ textarea {
     padding: 0.55rem 0.45rem;
     border-bottom: 1px solid var(--line);
     vertical-align: top;
-    text-align: right;
+    text-align: start;
 }
 .lesson-vis-cell {
     display: grid;
@@ -1560,7 +1560,7 @@ textarea {
     font-size: 0.85rem;
     min-height: 8rem;
     direction: ltr;
-    text-align: left;
+    text-align: start;
 }
 .lesson-json-feedback {
     margin: 0.35rem 0 0;
@@ -1630,8 +1630,12 @@ textarea {
     color: #fff;
     font-size: 0.8rem;
 }
-.match-pair .pair-en { text-align: left; }
-.match-pair .pair-he { text-align: right; font-size: 1.15rem; }
+/* English stays on the left of its column. The span is dir="ltr" and the list
+   is direction:ltr, so start is that left edge even when the lesson page is
+   RTL. Physical left would paint the same today; start keeps doing so because
+   the English element does not inherit the page direction. */
+.match-pair .pair-en { text-align: start; }
+.match-pair .pair-he { text-align: end; font-size: 1.15rem; }
 .match-pair .pair-check {
     color: var(--pair-edge, #059669);
     font-weight: 800;
@@ -1670,7 +1674,9 @@ textarea {
 .story-questions-toggle { display: grid; gap: 0.25rem; justify-items: start; }
 /* === end 2026-10-08 learner-support === */
 
-/* === self-hosted Rubik (SIL OFL, see fonts/OFL.txt). Replaces the Google Fonts link. === */
+/* === self-hosted Rubik (SIL OFL, see fonts/OFL.txt). Replaces the Google Fonts link. ===
+   Node pages keep these faces. Guides add Noto Sans Hebrew and Frank Ruhl Libre
+   below; those files do not replace Rubik. */
 @font-face {
     font-family: "Rubik";
     font-style: normal;
@@ -1695,7 +1701,31 @@ textarea {
     src: url("fonts/rubik-latin.woff2") format("woff2");
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
-/* === end self-hosted Rubik === */
+@font-face {
+    font-family: "Noto Sans Hebrew";
+    font-style: normal;
+    font-weight: 300 800;
+    font-display: swap;
+    src: url("fonts/noto-sans-hebrew-hebrew.woff2") format("woff2");
+    unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+@font-face {
+    font-family: "Noto Sans Hebrew";
+    font-style: normal;
+    font-weight: 300 800;
+    font-display: swap;
+    src: url("fonts/noto-sans-hebrew-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0100-017F, U+0131, U+02BB-02BF, U+02C6, U+02DA, U+02DC, U+0301, U+0304, U+2000-206F, U+2074, U+20AC, U+2122, U+2190-2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "Frank Ruhl Libre";
+    font-style: normal;
+    font-weight: 400 900;
+    font-display: swap;
+    src: url("fonts/frank-ruhl-libre-hebrew.woff2") format("woff2");
+    unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+/* === end self-hosted faces === */
 
 /* === INIT-005/SPEC-002 SPA shell helpers === */
 .visually-hidden {
@@ -4423,6 +4453,39 @@ img.hebrew-logo-mark {
     }
 }
 
+/* === 2026 redesign tokens (Figma "2026 / Theme" + "2026 / Layout") — additive, guarded hex unchanged ===
+   Font faces for Guides live on .guides-page. These :root names stay the Node Rubik stack. */
+:root {
+    --line-height-pointed: 1.7;
+    --size-display: 64px;
+    --size-h2: 24px;
+    --size-caption: 14px;
+    --radius-sm: 8px;
+    --radius-hero: 22px;
+    --color-illus-tile: #EFE6D3;
+    --color-hero-muted: #E2E8F0;
+    --color-accent-olive: #4F5B26;
+    --color-accent-olive-soft: #EEF1DC;
+    --color-accent-sky-soft: #DCEBF8;
+    --color-accent-sun: #FBBF24;
+    --color-accent-pomegranate: #B3363F;
+    --color-accent-pomegranate-soft: #F8E4E2;
+    --shadow-card: 0 1px 2px rgba(18, 22, 33, 0.06), 0 8px 24px -4px rgba(18, 22, 33, 0.07);
+    --shadow-raised: 0 14px 32px -6px rgba(18, 22, 33, 0.14);
+}
+:root[data-theme="dark"] {
+    --color-illus-tile: #D9CDB4;
+    --color-hero-muted: #E2E8F0;
+    --color-accent-olive: #B9C77A;
+    --color-accent-olive-soft: #232A14;
+    --color-accent-sky-soft: #16263D;
+    --color-accent-sun: #FBBF24;
+    --color-accent-pomegranate: #F08A84;
+    --color-accent-pomegranate-soft: #3A1A1C;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-raised: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
 /* Wider screens for the data-heavy views; the shell header is always wider than the page. */
 body.words-page { --wrap-w: 60rem; }
 body.progress-page { --wrap-w: 46rem; }
@@ -4845,6 +4908,8 @@ img.hebrew-logo-mark {
         margin-inline: auto;
         padding: 2rem 2.5rem 4rem;
         box-sizing: border-box;
+    }
+    html[dir="rtl"] body.has-hebrew-shell:has(> #app-main) > #app-main.wrap {
         direction: rtl;
     }
     body.has-hebrew-shell:has(> #app-main) > #app-route-announce {
@@ -8159,4 +8224,173 @@ section[data-block-type="conjugation-table"][data-mode="drill"][data-drill-owner
     .vp-map-verb [lang="en"] { display: none; }
     .vp-sq { width: 0.5rem; height: 0.5rem; }
     .vp-map-group { gap: 2px; }
+}
+
+/* === 2026 /guides/ === */
+/* Noto is the Guides UI face only. Node pages keep the Rubik fallback on body. */
+.guides-page {
+    --font-sans: "Noto Sans Hebrew", "Segoe UI", system-ui, sans-serif;
+    --font-hebrew-sans: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
+    --font-hebrew-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
+    --font-hebrew-lettering: "Frank Ruhl Libre", "Noto Serif Hebrew", "Times New Roman", serif;
+    --font-hebrew-pointed-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
+}
+.guides-page .page-heading-kicker { font: 700 13px/1.2 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-olive); }
+html:not([data-ui-lang="he"]) .page-heading-title.ui-he { display: none; }
+html[data-ui-lang="he"] .page-heading-title.ui-en { display: none; }
+html[data-ui-lang="he"] .page-heading .page-heading-he { display: none; }
+.guides-page .hebrew-brand-he { font-family: var(--font-hebrew-pointed-display); font-size: 22px; }
+.guides-hero { position: relative; overflow: hidden; border-radius: var(--radius-hero); background: var(--color-surface-hero); color: var(--color-hero-text); min-height: 260px; padding: var(--space-6); display: grid; align-content: start; gap: var(--space-2); }
+.guides-hero__art { position: absolute; inset-block-end: 0; inset-inline-end: 0; width: min(1100px, 100%); height: auto; pointer-events: none; }
+.guides-hero::before { content: ""; position: absolute; inset: 0; z-index: 1; background: linear-gradient(to right, var(--color-surface-hero) 0%, color-mix(in srgb, var(--color-surface-hero) 90%, transparent) 35%, transparent 70%); }
+html[dir="rtl"] .guides-hero::before { background: linear-gradient(to left, var(--color-surface-hero) 0%, color-mix(in srgb, var(--color-surface-hero) 90%, transparent) 35%, transparent 70%); }
+.guides-hero > :not(.guides-hero__art) { position: relative; z-index: 2; }
+.guides-hero__kicker { font: 700 13px/1.2 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-sun); }
+.guides-hero__he-row { display: flex; align-items: center; gap: var(--space-4); }
+.guides-hero__lettering { font: 700 clamp(44px, 4vw + 20px, 60px)/1.4 var(--font-hebrew-pointed-display); margin: 0; }
+.guides-hero .audio-btn { width: 56px; height: 56px; }
+.guides-hero__title { font: 600 clamp(19px, 1vw + 14px, 24px)/1.3 var(--font-sans); margin: 0; color: var(--color-hero-text); }
+.guides-hero__actions { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+.guides-filters { display: flex; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; padding-block: var(--space-1); }
+.filter-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding-inline: var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-text); font: 600 14px/1 var(--font-sans); text-decoration: none; white-space: nowrap; }
+.filter-chip[aria-current="true"] { background: var(--color-text); border-color: var(--color-text); color: var(--color-surface); }
+.guides-page .lesson-card.guide-card { padding: 0; overflow: hidden; border-radius: var(--radius-card); border: 1px solid var(--color-border-subtle); box-shadow: var(--shadow-card); }
+.guide-card { position: relative; }
+.guide-card .lesson-link { color: inherit; text-decoration: none; padding: 0; }
+.guide-card .lesson-link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.guide-card .lesson-link:focus-visible::after { outline: 3px solid var(--color-primary); outline-offset: 2px; }
+.guide-card__cover { position: relative; height: 132px; background: var(--color-illus-tile); overflow: hidden; }
+.guide-card__cover img { position: absolute; inset: -14px 0 auto 0; width: 100%; height: auto; opacity: .6; transition: transform var(--motion-duration) var(--motion-easing); }
+.guide-card:hover .guide-card__cover img { transform: scale(1.03); }
+/* Intentionally physical: the cover art does not mirror, so a logical-properties sweep must not change this left. */
+.guide-card__letter { position: absolute; inset-block-start: 10px; left: 28px; font: 700 72px/1.4 var(--font-hebrew-lettering); color: var(--color-surface-hero); }
+.guide-card__body { display: grid; gap: var(--space-2); padding: var(--space-4) var(--space-5) var(--space-5); }
+.guide-card__meta { font: 700 13px/1.2 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-olive); }
+.guide-card h3 { margin: 0; font: 600 20px/1.35 var(--font-sans); }
+.guide-card__title-row { display: flex; align-items: flex-start; gap: var(--space-3); }
+.guide-card__title-row h3 { flex: 1; min-width: 0; }
+.guide-card__he-row { display: flex; align-items: center; gap: var(--space-3); }
+.guide-card__he-row .guide-card__he { flex: 1; margin: 0; }
+.guide-card .audio-btn { position: relative; z-index: 1; }
+.guide-card__he { font: 400 18px/var(--line-height-pointed) var(--font-hebrew-pointed-display); color: var(--color-muted); text-align: end; }
+@media (min-width: 1280px) {
+    .guides-list,
+    .home-list.guides-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-5); }
+}
+.guides-state[data-guides-state="empty"] { display: grid; justify-items: center; gap: var(--space-4); text-align: center; padding: var(--space-7) var(--space-5); }
+.empty-art { width: min(360px, 70vw); aspect-ratio: 4 / 3; border-radius: 999px; background: var(--color-illus-tile); display: grid; place-items: center; }
+.empty-art img { width: 89%; height: auto; }
+.empty-title { margin: 0; font: 600 24px/1.3 var(--font-sans); }
+.empty-he { margin: 0; font: 400 24px/1.6 var(--font-hebrew-sans); color: var(--color-muted); }
+.empty-body { margin: 0; max-width: 32rem; color: var(--color-muted); font-size: var(--size-body); line-height: 1.5; }
+.empty-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: center; }
+html[data-ui-lang="he"] .empty-title-en,
+html[data-ui-lang="he"] .empty-body-en,
+html[data-ui-lang="he"] .empty-he,
+html:not([data-ui-lang="he"]) .empty-title-he,
+html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
+.he-text--word { font: 600 48px/1.55 var(--font-hebrew-pointed-display); }
+.he-text--pointed,
+.example-row__he,
+.block-compare__he,
+.block-verse__text,
+.guides-hero__lettering,
+.guide-card__he { font-family: var(--font-hebrew-pointed-display); }
+.guide-card__letter { font-family: var(--font-hebrew-lettering); }
+.block-explainer { display: grid; grid-template-columns: 44px 1fr; gap: var(--space-4); padding: var(--space-5); border-radius: var(--radius-card); background: var(--color-accent-olive-soft); }
+.block-explainer__icon { width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; background: var(--color-surface); color: var(--color-accent-olive); }
+.block-explainer h3 { margin: 0 0 var(--space-2); font: 600 20px/1.35 var(--font-sans); }
+.example-list { display: grid; gap: var(--space-2); }
+.example-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-5) var(--space-3) var(--space-4); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-control); background: var(--color-surface); }
+.example-row__he { font: 600 24px/1.7 var(--font-hebrew-pointed-display); min-width: 0; }
+.example-row__gloss, .example-row .translit { white-space: normal; overflow: visible; text-overflow: unset; overflow-wrap: anywhere; }
+.example-row__gloss { font: 600 15px/1.3 var(--font-sans); min-width: 0; }
+.translit { font: 500 15px/1.4 var(--font-sans); letter-spacing: .005em; color: var(--color-muted); }
+.block-compare { display: grid; gap: var(--space-4); padding: var(--space-5); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-card); background: var(--color-surface); }
+.block-compare__sides { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-3); }
+.block-compare__side { display: grid; gap: var(--space-2); padding: var(--space-4) var(--space-5) var(--space-5); border-radius: var(--radius-control); background: var(--color-surface-soft); }
+.block-compare__he { font: 600 30px/1.7 var(--font-hebrew-pointed-display); text-align: end; }
+.block-compare__he mark { background: none; color: var(--color-primary); }
+.block-compare .translit { color: var(--color-primary); text-align: end; }
+.block-verse { display: grid; gap: var(--space-3); padding: var(--space-5) var(--space-6) var(--space-6); border-radius: var(--radius-card); background: var(--color-surface-hero); color: var(--color-hero-text); }
+.block-verse__text { font: 400 clamp(26px, 1.5vw + 18px, 30px)/1.8 var(--font-hebrew-pointed-display); margin: 0; }
+.block-verse__translation { color: var(--color-hero-muted); margin: 0; }
+.guide-aside { display: grid; gap: var(--space-4); align-content: start; position: sticky; inset-block-start: var(--space-5); }
+@media (min-width: 1280px) { .guide-layout { display: grid; grid-template-columns: minmax(0, var(--wrap-w-reading)) 300px; gap: var(--space-6); justify-content: center; } }
+@media (max-width: 1279px) { .guide-aside { display: none; } }
+.audio-btn { width: 44px; height: 44px; border-radius: 999px; display: inline-grid; place-items: center; border: 1.5px solid var(--color-primary); background: var(--color-primary-soft); color: var(--color-primary); }
+.audio-btn.is-playing { background: var(--color-primary); color: var(--color-primary-ink); border-color: var(--color-primary); }
+.status-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding-inline: 10px; border-radius: var(--radius-pill); font: 700 13px/1 var(--font-sans); }
+.status-chip[data-status="new"] { background: var(--color-primary-soft); color: var(--color-primary); }
+.status-chip[data-status="progress"] { background: var(--color-miss-soft); color: var(--color-miss-ink); }
+.status-chip[data-status="done"] { background: var(--color-correct-soft); color: var(--color-correct-ink); }
+.status-chip[data-status="due"] { background: var(--color-accent-pomegranate-soft); color: var(--color-accent-pomegranate); }
+.status-chip[data-status="locked"] { background: var(--color-surface-soft); color: var(--color-muted); }
+form.ui-lang, form.theme-switch { margin: 0; }
+.theme-switch { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; padding: 2px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-pill); background: var(--color-surface); }
+.theme-switch .icon { width: 18px; height: 18px; margin-inline: 6px; color: var(--color-muted); flex: none; }
+.theme-switch [role="radio"], .theme-switch button { appearance: none; min-height: 36px; padding: 0 0.65rem; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--color-text); font: 700 13px/1 var(--font-sans); cursor: pointer; }
+.theme-switch [role="radio"][aria-checked="true"], .theme-switch button[aria-pressed="true"] { background: var(--color-text); color: var(--color-surface); }
+.theme-switch [role="radio"]:focus-visible, .theme-switch button:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
+@media (max-width: 767px) {
+    .guides-page .guide-card .lesson-link { padding: 0; }
+    .guides-hero .audio-btn { width: 44px; height: 44px; }
+    .theme-switch [role="radio"], .theme-switch button { padding-inline: 0.4rem; font-size: 12px; }
+    .guides-page .hebrew-shell-nav a:not([aria-current="page"]) .icon { color: var(--color-muted); }
+    .he-text--word { font-size: 40px; }
+    .example-row { grid-template-columns: 44px minmax(0, 1fr); }
+    .example-row__he { grid-column: 1 / -1; }
+}
+@media (min-width: 1280px) {
+    .he-text--word { font-size: 56px; }
+}
+
+/* PR #24: logical properties and the guide reading column.
+   Node pages stay html dir=rtl, so start/end match the old right/left there.
+   .plan-page keeps var(--font-family), which is Rubik. */
+@media (min-width: 1280px) {
+    .guide-layout:not(:has(.guide-aside)) {
+        display: block;
+        width: min(100%, var(--wrap-w-reading));
+        margin-inline: auto;
+    }
+    body.has-hebrew-shell.guide-page:has(> #app-main) .page-heading .topbar-inner {
+        width: min(100%, var(--wrap-w-reading));
+        max-width: var(--wrap-w-reading);
+        margin-inline: auto;
+    }
+}
+.guide-page .guide-body { max-width: none; }
+.example-row { grid-template-columns: 44px minmax(0, 1fr) minmax(0, max-content); }
+.example-row__gloss, .example-row .translit { overflow-wrap: break-word; }
+.example-row__he { overflow-wrap: break-word; max-inline-size: 22ch; }
+.example-row__gloss .meaning { font: inherit; color: var(--color-text); margin: 0; }
+.example-row__meta { display: flex; flex-wrap: wrap; align-items: baseline; }
+.example-row__meta > .translit + .example-row__root { margin-inline-start: 0.45em; }
+.example-row__root .meaning { margin-block: 0; margin-inline: 0; }
+.page-heading-title-row { display: flex; align-items: center; gap: var(--space-4); min-inline-size: 0; }
+.page-heading-title-row h1 { min-inline-size: 0; }
+.page-heading-title-row .audio-btn { flex: none; }
+.guide-card__meta.recipe-chip { border: 0; padding: 0; background: none; border-radius: 0; justify-self: start; font-size: 13px; color: var(--color-accent-olive); }
+.filter-chip { min-height: 44px; }
+.filter-chip.is-all { background: var(--color-text); border-color: var(--color-text); color: var(--color-surface); }
+.theme-switch { min-height: 44px; padding: 2px; }
+.theme-switch [role="radio"], .theme-switch button { min-height: 40px; min-width: 44px; }
+.guide-card:has(.lesson-link:focus-visible) { outline: 3px solid var(--color-primary); outline-offset: 2px; }
+.guide-body [lang="he"]:has(> .audio-btn) { display: inline-flex; align-items: center; gap: var(--space-2); }
+.guides-page .guides-state[data-guides-state="empty"] { background: var(--color-surface); border: 1px solid var(--color-border-subtle); box-shadow: var(--shadow-card); }
+.he-inline + .audio-btn { position: relative; width: 32px; height: 32px; vertical-align: middle; margin-inline: 4px; }
+.he-inline + .audio-btn::before { content: ""; position: absolute; inset: -6px; }
+.guides-topic h2 { display: flex; align-items: center; gap: var(--space-2); }
+.guide-body .kicker,
+.guide-page .kicker { background: none; color: inherit; padding: 0; border: 0; border-radius: 0; font: 700 12px/1.2 var(--font-sans, "Rubik", sans-serif); letter-spacing: .08em; text-transform: uppercase; }
+.guide-body .kicker .recipe-chip { border: 0; padding: 0; background: none; border-radius: 0; color: var(--color-accent-olive); }
+.guide-body .callout[data-tone] { padding: var(--space-4); padding-inline-start: calc(var(--space-4) + 3px); border-radius: var(--radius-control); border-inline-start: 3px solid transparent; }
+.guide-body .callout[data-tone="green"] { background: var(--color-correct-soft); color: var(--color-correct-ink); border-inline-start-color: var(--color-correct-ink); }
+.guide-body .callout[data-tone="yellow"] { background: var(--color-miss-soft); color: var(--color-miss-ink); border-inline-start-color: var(--color-miss); }
+.guide-body .callout[data-tone="red"] { background: var(--color-accent-pomegranate-soft); color: var(--color-accent-pomegranate); border-inline-start-color: var(--color-accent-pomegranate); }
+.guide-body .callout[data-tone="info"] { background: var(--color-accent-sky-soft); color: var(--color-text); border-inline-start-color: var(--color-primary); }
+@media (max-width: 767px) {
+    .example-row { grid-template-columns: 44px minmax(0, 1fr); }
+    .example-row__he { grid-column: 1 / -1; }
 }

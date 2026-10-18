@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240" fill="none" aria-hidden="true" focusable="false">
+<path d="M20 200 C 80 168, 140 176, 180 188 S 270 172, 300 182 V214 H20Z" fill="#B9C77A" stroke="#1E293B" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="232" cy="74" r="26" fill="#FBBF24" stroke="#1E293B" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="70" y="70" width="120" height="86" rx="14" fill="#CFE3F6" transform="rotate(-10 130 113)" stroke="#1E293B" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="84" y="64" width="120" height="86" rx="14" fill="#EADFC8" transform="rotate(-2 144 107)" stroke="#1E293B" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="98" y="60" width="120" height="86" rx="14" fill="#FFFFFF" transform="rotate(6 158 103)" stroke="#1E293B" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M134 104 l14 14 26-28" stroke="#6E7D3A" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" transform="rotate(6 158 103)"/>
+<path d="M274 120 Q275.44 126.56 282 128 Q275.44 129.44 274 136 Q272.56 129.44 266 128 Q272.56 126.56 274 120Z" fill="#FBBF24"/>
+<path d="M44 41 Q45.26 46.74 51 48 Q45.26 49.26 44 55 Q42.74 49.26 37 48 Q42.74 46.74 44 41Z" fill="#254EDB"/>
+</svg>

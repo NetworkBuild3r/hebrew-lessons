@@ -1,0 +1,59 @@
+package components
+
+// PageHeading is the route heading. Guides has no sprite icon (layout.js).
+templ PageHeading(h Heading) {
+	<header class="topbar page-heading ui-chrome" data-page-heading>
+		<div class="topbar-inner">
+			<div class="page-heading-text">
+				if h.Kicker != "" || h.KickerHe != "" {
+					<p class="page-heading-kicker">@Pair(h.KickerHe, h.Kicker)</p>
+				}
+				if h.Speak != "" {
+					<div class="page-heading-title-row">
+						<h1 tabindex="-1">@headingTitle(h)</h1>
+						@AudioButton(h.Speak, "")
+					</div>
+				} else {
+					<h1 tabindex="-1">@headingTitle(h)</h1>
+				}
+				if h.SubHe != "" || h.SubEn != "" {
+					<p class="page-heading-sub subtitle">@Pair(h.SubHe, h.SubEn)</p>
+				} else if h.Subtitle != "" {
+					<p class="page-heading-sub subtitle"><bdi lang={ h.SubLang } dir={ h.SubDir }>{ h.Subtitle }</bdi></p>
+				}
+			</div>
+			<div class="page-actions" data-page-actions></div>
+		</div>
+	</header>
+}
+
+// headingTitle is the words inside the route h1.
+templ headingTitle(h Heading) {
+	if h.Single != "" {
+		<span lang={ h.Lang } dir={ h.Dir }>{ h.Single }</span>
+		if h.HeTitle != "" {
+			<bdi lang="he" class="page-heading-he">{ h.HeTitle }</bdi>
+		}
+	} else {
+		<span class="page-heading-title ui-en" lang="en" dir="ltr">{ h.En }</span>
+		<span class="page-heading-title ui-he" lang="he">{ h.He }</span>
+		if h.He != "" {
+			<bdi lang="he" class="page-heading-he">{ h.He }</bdi>
+		}
+	}
+}
+
+// Heading is either a Hebrew/English pair or one lesson title.
+// Speak is Hebrew voiced from a button beside the headword.
+type Heading struct {
+	He, En             string
+	SubHe, SubEn       string
+	Kicker, KickerHe   string
+	Single             string
+	Lang, Dir          string
+	HeTitle            string
+	Subtitle           string
+	SubLang            string
+	SubDir             string
+	Speak              string
+}

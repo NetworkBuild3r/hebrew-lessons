@@ -1,0 +1,260 @@
+package pages
+
+import (
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views"
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/components"
+)
+
+templ prose(s string) {
+	if HasHebrew(s) && !HasLatin(s) {
+		<p lang="he" dir="rtl" class="he-text--pointed">
+			@components.AudioButton(s, "")
+			@components.HeText("pointed", s)
+		</p>
+	} else if HasHebrew(s) {
+		<p lang="en" dir="ltr">
+			@mixedText(s)
+		</p>
+	} else if HasLatin(s) {
+		<p lang="en" dir="ltr">{ s }</p>
+	} else {
+		<p>{ s }</p>
+	}
+}
+
+templ cellText(s string) {
+	if HasHebrew(s) && !HasLatin(s) {
+		<span lang="he" dir="rtl">
+			@components.AudioButton(s, "")
+			@components.HeText("pointed", s)
+		</span>
+	} else if HasHebrew(s) {
+		<span lang="en" dir="ltr">
+			@mixedText(s)
+		</span>
+	} else if HasLatin(s) {
+		<span lang="en" dir="ltr">{ s }</span>
+	} else {
+		{ s }
+	}
+}
+
+// mixedText keeps the paragraph left to right and isolates each Hebrew run.
+templ mixedText(s string) {
+	for _, part := range TextParts(s) {
+		if part.Hebrew {
+			<bdi lang="he" class="he-inline">{ part.Text }</bdi>
+			@components.AudioButton(part.Text, "")
+		} else {
+			{ part.Text }
+		}
+	}
+}
+
+templ exampleItem(ex Example) {
+	<div class="example-row" data-example-id={ ex.ID }>
+		if ex.He != "" {
+			@components.AudioButton(ex.He, ex.Clip)
+		}
+		<div>
+			<div class="example-row__gloss">
+				<span lang="en" dir="ltr">{ ex.En }</span>
+			</div>
+			if ex.Translit != "" || ex.Root != "" {
+				<div class="example-row__meta">
+					@components.Translit(ex.Translit)
+					if ex.Root != "" {
+						<span class="example-row__root"><bdi class="meaning root-label" lang="he">{ ex.Root }</bdi></span>
+					}
+				</div>
+			}
+		</div>
+		<span class="example-row__he" lang="he" dir="rtl">@HighlightRoot(ex.He, ex.Root)</span>
+	</div>
+}
+
+templ explainerTable(table *Table) {
+	if table != nil && len(table.Columns) > 0 {
+		<table class="explainer-table">
+			<thead>
+				<tr>
+					for _, column := range table.Columns {
+						<th scope="col">@cellText(column)</th>
+					}
+				</tr>
+			</thead>
+			<tbody>
+				for _, row := range table.Rows {
+					<tr>
+						for _, cell := range row {
+							<td>@cellText(cell)</td>
+						}
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+}
+
+templ calloutAside(c Callout) {
+	<aside class="callout" data-tone={ toneAttr(c.Tone) } data-callout-id={ c.ID }>
+		<p class="kicker"><span class="callout-word" lang="en" dir="ltr">{ toneEn(c.Tone) }</span> <span lang="he" dir="rtl">{ toneHe(c.Tone) }</span></p>
+		<h3>@cellText(c.Title)</h3>
+		@prose(c.Text)
+	</aside>
+}
+
+templ compareBlock(c *Compare) {
+	if c != nil {
+		<section class="block-compare" data-block-type="compare">
+			<h3>
+				<svg class="icon" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-compare"></use></svg>
+				{ c.Title }
+			</h3>
+			<div class="block-compare__sides">
+				for _, side := range c.Sides {
+					<div class="block-compare__side">
+						<div class="row">
+							<span class="kicker">{ side.Tag }</span>
+							if side.He != "" || side.Clip != "" {
+								@components.AudioButton(side.He, side.Clip)
+							}
+						</div>
+						<p class="block-compare__he" lang="he" dir="rtl">{ side.Stem }<mark>{ side.Ending }</mark></p>
+						@components.Translit(side.Translit)
+						if side.Gloss != "" {
+							<p class="gloss">{ side.Gloss }</p>
+						}
+					</div>
+				}
+			</div>
+			if c.Note != "" {
+				<p class="note">{ c.Note }</p>
+			}
+		</section>
+	}
+}
+
+templ verseBlock(v *Verse) {
+	if v != nil {
+		<section class="block-verse" data-block-type="verse-reading">
+			<div class="row">
+				<span class="kicker">{ v.Ref }</span>
+				if v.Text != "" || v.Clip != "" {
+					@components.AudioButton(v.Text, v.Clip)
+				}
+			</div>
+			<p class="block-verse__text" lang="he" dir="rtl">{ v.Text }</p>
+			if v.En != "" {
+				<p class="block-verse__translation" lang="en" dir="ltr">{ v.En }</p>
+			}
+		</section>
+	}
+}
+
+templ explainerBlock(block Block) {
+	<section class="block-explainer" data-block-type="explainer" data-block-id={ block.ID }>
+		<span class="block-explainer__icon" aria-hidden="true">
+			<svg class="icon" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-tip"></use></svg>
+		</span>
+		<div>
+			<h2>@cellText(block.Title)</h2>
+			for _, section := range block.Sections {
+				<section data-section-id={ section.ID }>
+					<h3>@cellText(section.Heading)</h3>
+					for _, paragraph := range section.Paragraphs {
+						@prose(paragraph)
+					}
+					if len(section.Examples) > 0 {
+						<div class="example-list explainer-examples">
+							for _, ex := range section.Examples {
+								@exampleItem(ex)
+							}
+						</div>
+					}
+					@explainerTable(section.Table)
+					for _, c := range section.Callouts {
+						@calloutAside(c)
+					}
+				</section>
+			}
+			@compareBlock(block.Compare)
+			@verseBlock(block.Verse)
+		</div>
+	</section>
+}
+
+templ guideArticle(g GuideDetail) {
+	<article class="guide-body" data-recipe="guide" data-plan-id={ g.PlanID } data-lesson-id={ g.LessonID }>
+		<header>
+			<p class="kicker"><span class="recipe-chip" data-recipe="guide">מדריך <span lang="en" dir="ltr">Guide</span></span></p>
+		</header>
+		for _, block := range g.Blocks {
+			@explainerBlock(block)
+		}
+	</article>
+}
+
+// GuideFragment is the plan root for an HX-Request read of one guide.
+templ GuideFragment(g GuideDetail) {
+	<div id="plan-root" data-plan-ready="1" data-recipe="guide">
+		@guideArticle(g)
+	</div>
+}
+
+// GuidePage is GET /shared/plan/?id=&lesson= for a published guide.
+templ GuidePage(g GuideDetail) {
+	@views.Layout(views.Doc{
+		Title:      g.Title + " · דֶּרֶךְ עִבְרִית",
+		BodyClass:  "hebrew-spa has-hebrew-shell guides-page guide-page",
+		PageHe:     "מדריכים",
+		PageEn:     "Guides",
+		Announce:   g.Title,
+		CurrentNav: "guides",
+		RouteReady: "guides",
+		Main:       guidePageMain(g),
+	})
+}
+
+templ guidePageMain(g GuideDetail) {
+	@components.PageHeading(components.Heading{
+		Single:   g.Title,
+		Lang:     g.Lang,
+		Dir:      g.Dir,
+		Subtitle: g.Topic,
+		SubLang:  g.TopicLang,
+		SubDir:   g.TopicDir,
+		Speak:    titleSpeak(g.Title),
+	})
+	<div class="guide-layout">
+		@GuideFragment(g)
+	</div>
+}
+
+templ noticePage(title string, body templ.Component) {
+	@views.Layout(views.Doc{
+		Title:      title + " · דֶּרֶךְ עִבְרִית",
+		BodyClass:  "hebrew-spa has-hebrew-shell guides-page guide-page",
+		PageHe:     "מדריכים",
+		PageEn:     "Guides",
+		Announce:   "מדריכים",
+		CurrentNav: "guides",
+		RouteReady: "guides",
+		Main:       noticeMain(title, body),
+	})
+}
+
+templ noticeMain(title string, body templ.Component) {
+	@components.PageHeading(components.Heading{Single: title, Lang: "he", Dir: "rtl"})
+	@body
+}
+
+// MissingPlanPage is a 404 when the plan id is not a slug.
+templ MissingPlanPage() {
+	@noticePage("חסר מזהה תוכנית", components.MissingPlan())
+}
+
+// NotFoundPage is a 404 when the guide is hidden or unknown.
+templ NotFoundPage() {
+	@noticePage("התוכנית לא נמצאה", components.PlanNotFound())
+}

@@ -1,0 +1,53 @@
+package views
+
+import "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/components"
+
+// Layout is the signed-in document shell. On these Go pages the document
+// language and direction follow the interface language: en is ltr, he is rtl.
+// The choice is a cookie, so the markup is already right. One pre-paint script
+// resolves an auto theme from prefers-color-scheme. data-theme is the concrete
+// light or dark value. data-theme-choice keeps auto. Language and theme are
+// forms. Guide audio is shared/player/speech.js.
+
+templ Layout(doc Doc) {
+	<!DOCTYPE html>
+	<html lang={ components.UIFrom(ctx).Lang } dir={ components.UIDir(ctx) } translate="no" class="has-hebrew-shell" data-ui-lang={ components.UIFrom(ctx).Lang } data-theme={ components.ResolvedTheme(components.UIFrom(ctx).Theme) } data-theme-choice={ components.UIFrom(ctx).Theme } data-page-he={ doc.PageHe } data-page-en={ doc.PageEn }>
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="theme-color" content={ components.ThemeColor(components.UIFrom(ctx).Theme) }/>
+			@templ.Raw("<script>(function(){var root=document.documentElement;var choice=root.getAttribute('data-theme-choice')||'auto';if(choice!=='auto')return;var dark=false;try{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}catch(e){}root.setAttribute('data-theme',dark?'dark':'light');var meta=document.querySelector('meta[name=\"theme-color\"]');if(meta)meta.setAttribute('content',dark?'#0E121B':'#F7F5F0');})();</script>")
+			<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+			<meta name="google" content="notranslate"/>
+			<title>{ doc.Title }</title>
+			<link rel="manifest" href="/manifest.webmanifest"/>
+			<link rel="icon" href="/shared/brand/favicon.svg" type="image/svg+xml"/>
+			<link rel="icon" href="/shared/brand/favicon-32.png" type="image/png" sizes="32x32"/>
+			<link rel="icon" href="/shared/brand/favicon-16.png" type="image/png" sizes="16x16"/>
+			<link rel="apple-touch-icon" href="/shared/brand/apple-touch-icon.png"/>
+			<link rel="preload" as="font" type="font/woff2" href="/shared/fonts/noto-sans-hebrew-hebrew.woff2" crossorigin="anonymous"/>
+			<link rel="stylesheet" href="/shared/worksheet.css"/>
+		</head>
+		<body class={ doc.BodyClass }>
+			<div id="app-shell">
+				@components.Shell(doc.CurrentNav)
+			</div>
+			<main class="wrap" id="app-main" tabindex="-1" data-route-ready={ doc.RouteReady }>
+				@doc.Main
+			</main>
+			<div id="app-route-announce" class="visually-hidden" aria-live="polite" aria-atomic="true">{ doc.Announce }</div>
+			<script src="/shared/player/speech.js"></script>
+		</body>
+	</html>
+}
+
+// Doc is the per-page shell data. Main is the heading plus the view.
+type Doc struct {
+	Title      string
+	BodyClass  string
+	PageHe     string
+	PageEn     string
+	Announce   string
+	CurrentNav string
+	RouteReady string
+	Main       templ.Component
+}
