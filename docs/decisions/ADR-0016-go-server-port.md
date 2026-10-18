@@ -131,9 +131,9 @@ From ADR-0005 §3 and `deploy/k8s-database.md`: `replicas: 1`, `strategy: Recrea
 
 Move these whole. Their state is in the process: auth (in-memory throttle in `server/auth/throttle.js`: 5 username failures, 30 s backoff doubling to 15 min, 20 failures per IP per 15 min); MCP on 8787, including in-memory codes and pending requests; every writer of one lesson file or of `mcp-oauth-state.json`.
 
-The throttle module takes an `ip` string and reads no header. Node's `server/api/auth-routes.js` `clientIp` passes the first comma-separated field of `X-Forwarded-For`, trimmed, when that header is a non-empty string; otherwise `req.socket.remoteAddress`, or `''` if there is no socket. That leftmost value is client-controlled: Cloudflare appends to whatever the client already sent, so the login throttle can be bypassed. The throttle key is not an external contract, so changing it is in scope and is not a compatibility break. Go does not keep that rule.
+The throttle module takes an `ip` string and reads no header. At tree `86e8d50c`, Node's `clientIp` passed the first comma-separated field of `X-Forwarded-For`, trimmed, when that header was a non-empty string; otherwise `req.socket.remoteAddress`, or `''` if there was no socket. That leftmost value is client-controlled: Cloudflare appends to whatever the client already sent, so the login throttle could be bypassed. The throttle key is not an external contract, so changing it is in scope and is not a compatibility break. Go does not keep that rule.
 
-Go trusts `CF-Connecting-IP` only when the immediate peer, the socket remote address, is in `TRUSTED_PROXIES`, a CIDR list from env or config (Traefik). Otherwise it uses the socket address. It never uses the leftmost `X-Forwarded-For` value. Empty `TRUSTED_PROXIES` is the default: trust nobody, use the socket address. Whether Traefik passes `CF-Connecting-IP` through untouched, and Traefik's peer address or CIDR, is [open question 11](#open-questions).
+Node now uses the same rule as Go, in `server/auth/client-ip.js`. Both trust `CF-Connecting-IP` only when the immediate peer, the socket remote address, is in `TRUSTED_PROXIES`, a CIDR list from env or config (Traefik). Otherwise they use the socket address. They never use `X-Forwarded-For`. Empty `TRUSTED_PROXIES` is the default: trust nobody, use the socket address. Whether Traefik passes `CF-Connecting-IP` through untouched, and Traefik's peer address or CIDR, is [open question 11](#open-questions).
 
 Edge. That review found both hostnames on the proxied wildcard, with no tunnel, no Access, no Workers, and no Cloudflare header or path rules. The origin is k3s Traefik in front of the Service. Cutover in front of the pod is a Traefik routing change only. Cloudflare is not changed.
 
@@ -251,7 +251,7 @@ Headers Node sets on app responses are `X-Content-Type-Options: nosniff`, `Refer
 8. Kubernetes probe paths. This repo only special-cases a user-agent starting with `kube-probe` (`mcp/http.js`).
 9. Inbound Go server timeout values. Node's HTTP servers set none (§7). They must be lower than Cloudflare's 125 s proxy read timeout.
 10. Whether Go sends `Strict-Transport-Security`, and the max-age. Do not copy `max-age=0` (§ Security). The header is not set in this repo. It comes from the edge, not the app.
-11. For the operator: confirm Traefik passes `CF-Connecting-IP` through untouched, and give Traefik's peer address or CIDR for `TRUSTED_PROXIES` (§7).
+11. For the team lead (Hebrew Dev) and CI/CD: confirm Traefik passes `CF-Connecting-IP` through untouched, and set Traefik's peer address or CIDR as `TRUSTED_PROXIES` (§7). Until that value is set, every sign-in shares the Traefik peer's throttle bucket.
 
 ## Rollback
 
@@ -275,3 +275,4 @@ Delete this file. No application file, database, or recording changes with it.
 | 2026-10-18 | Login IP revised. Go uses `CF-Connecting-IP` only when the socket peer is in `TRUSTED_PROXIES`; otherwise the socket address. Node's leftmost `X-Forwarded-For` is a known throttle bypass and is not kept. |
 | 2026-10-18 | Review notes. WAL rules and the two safe shapes are in §7; the storage class stays with Brian. INIT-014/SPEC-001 is proposed, not filed. The signed-in helper cannot spawn a binary. ADR-0005 re-scored with Go at 383. Phase labels are Go-0 through Go-17. |
 | 2026-10-18 | Accepted. Brian Nelson approved moving off Node to Go on 2026-10-18, relayed by Hebrew Dev. Hebrew PR Reviewer approves and merges. Authored by `INIT-014/SPEC-001`. Former open question 1 is removed and the rest are renumbered. HTMX writes use `/_hx/` with Origin and a CSRF token. The storage-class check is with CI/CD. Go never shares the writer. |
+| 2026-10-18 | Node follows the §7 rule (`server/auth/client-ip.js`). The leftmost `X-Forwarded-For` behavior above is the code at `86e8d50c`, not the current server. Open question 11 is for the team lead (Hebrew Dev) and CI/CD. |

@@ -51,6 +51,8 @@ Open `http://127.0.0.1:8080`. Agents speak to `http://127.0.0.1:8787/mcp`. Full 
 
 For a deploy that keeps MCP-written lessons across image rebuilds, set `LESSONS_DIR` to a mounted volume. See [deploy/k8s-lessons-volume.md](deploy/k8s-lessons-volume.md). Database volume and k8s env: [deploy/k8s-database.md](deploy/k8s-database.md). If a lesson exists only on a live pod, pull it first with `node scripts/rescue-lesson.js <slug> <mcpUrl>`.
 
+The login throttle keys on the socket address unless `TRUSTED_PROXIES` lists the proxy that opened the connection. The value is a comma-separated list of IPv4 or IPv6 addresses or CIDRs. Leave it empty when the process is reached directly. Note for the team lead (Hebrew Dev) and CI/CD: behind Cloudflare and Traefik, set it to Traefik's pod CIDR before or with deploy, and confirm Traefik passes `CF-Connecting-IP` through untouched. Until that value is set, every learner shares the Traefik peer's throttle bucket. Details: [deploy/k8s-database.md](deploy/k8s-database.md).
+
 ## Agents
 
 Cursor loads `.cursor/mcp.json` (`node mcp/stdio.js`):
