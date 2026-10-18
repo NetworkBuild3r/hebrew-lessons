@@ -89,3 +89,5 @@ npm run audio -- my-morning
 npm run audio -- my-morning --force-sentences   # regenerate sentences/story/grammar only; words are never recreated
 npm run audio -- my-morning --words-only --dry-run
 ```
+
+<!-- Temporary docs touch so the contract path gate can skip. Reverted after the proof run. -->
