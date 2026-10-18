@@ -1,0 +1,9 @@
+[
+  {
+    "rule": "pointing-form",
+    "severity": "warn",
+    "path": "/units/0/lessons/0/blocks/0/words/0/word",
+    "message": "a vowel point at character 1 has no Hebrew letter before it",
+    "field": "word"
+  }
+]

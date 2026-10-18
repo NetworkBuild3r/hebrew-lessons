@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.1.0",
+  "id": "fixture-letter-intro",
+  "revision": 1,
+  "status": "draft",
+  "audience": "shared",
+  "assigneeId": null,
+  "title": "Letters and vowels",
+  "language": {
+    "target": "he",
+    "gloss": "en"
+  },
+  "units": [
+    {
+      "id": "letters",
+      "title": "Letters and vowels",
+      "theme": "reading the first letters",
+      "lessons": [
+        {
+          "id": "bet",
+          "title": "בּ",
+          "level": "basic",
+          "visibility": "hidden",
+          "recipe": "letters-and-vowels",
+          "buildsOn": [],
+          "newWords": [],
+          "recycles": [],
+          "blocks": [
+            {
+              "id": "bet",
+              "type": "letter-intro",
+              "letter": "בּ",
+              "name": "בֵּית",
+              "sounds": [
+                { "id": "s1", "vowel": "קָמָץ", "pointed": "בָּ", "sound": "ba" },
+                { "id": "s2", "vowel": "חִירִיק", "pointed": "בִּ", "sound": "bi" },
+                { "id": "s3", "vowel": "חוֹלָם", "pointed": "בּוֹ", "sound": "bo" }
+              ],
+              "findIn": [
+                { "id": "f1", "word": "בַּיִת", "contains": true },
+                { "id": "f2", "word": "אִמָּא", "contains": false },
+                { "id": "f3", "word": "אַבָּא", "contains": true }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

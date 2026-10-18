@@ -1,0 +1,28 @@
+[
+  {
+    "rule": "pointing-form",
+    "severity": "warn",
+    "path": "/units/0/lessons/0/newWords/0",
+    "message": "the text is not in NFC form (letters, points, and marks are in a different order than the stored form)",
+    "field": "newWords/0",
+    "fix": {
+      "action": "replace_part",
+      "path": "units/unit-1/lessons/lesson-1",
+      "field": "newWords/0",
+      "suggested": "אָּ"
+    }
+  },
+  {
+    "rule": "pointing-form",
+    "severity": "warn",
+    "path": "/units/0/lessons/0/blocks/0/words/0/word",
+    "message": "the text is not in NFC form (letters, points, and marks are in a different order than the stored form)",
+    "field": "word",
+    "fix": {
+      "action": "set_field",
+      "path": "units/unit-1/lessons/lesson-1/blocks/intro/words/w1",
+      "field": "word",
+      "suggested": "אָּ"
+    }
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "ok": false,
+  "blocks": [
+    {
+      "rule": "schema",
+      "severity": "block",
+      "path": "/schemaVersion",
+      "message": "schemaVersion must be 1.0.0 or 1.1.0 or 1.2.0; other versions are not parsed"
+    }
+  ],
+  "warnings": [],
+  "informs": []
+}

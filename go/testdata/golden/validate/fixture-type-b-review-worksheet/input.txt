@@ -1,0 +1,90 @@
+{
+  "id": "type-b-review-sheet",
+  "title": "Review — kitchen and table",
+  "subtitle": "Review worksheet sample (match: dependent INIT-010 SPEC-004)",
+  "level": "basic",
+  "visibility": "everyone",
+  "recipe": "review-worksheet",
+  "buildsOn": [],
+  "newWords": ["שֻׁלְחָן", "כִּסֵּא"],
+  "recycles": [],
+  "blocks": [
+    {
+      "id": "words",
+      "type": "introduction",
+      "words": [
+        { "id": "w1", "word": "שֻׁלְחָן", "meaning": "table", "translit": "shulchan", "sentence": "עַל הַשֻּׁלְחָן יֵשׁ סֵפֶר." },
+        { "id": "w2", "word": "כִּסֵּא", "meaning": "chair", "translit": "kise", "sentence": "הַכִּסֵּא לְיַד הַשֻּׁלְחָן." }
+      ],
+      "cloze": {
+        "items": [
+          { "id": "c1", "textPre": "עַל הַ", "textPost": " יֵשׁ כּוֹס.", "answer": "שֻׁלְחָן" }
+        ]
+      }
+    },
+    {
+      "id": "pick",
+      "type": "exercise",
+      "kind": "choose",
+      "heading": "Pick the correct sentence",
+      "items": [
+        {
+          "id": "ch-1",
+          "prompt": "Which sentence means \"There is a table in the kitchen\"?",
+          "choices": [
+            "בַּמִטְבָּח יֵשׁ שֻׁלְחָן.",
+            "בַּמִטְבָּח יֵשׁ כֶּלֶב.",
+            "בַּגִּנָּה יֵשׁ עֵץ."
+          ],
+          "answer": "בַּמִטְבָּח יֵשׁ שֻׁלְחָן.",
+          "why": "שֻׁלְחָן is table."
+        }
+      ]
+    },
+    {
+      "id": "order",
+      "type": "exercise",
+      "kind": "unscramble",
+      "items": [
+        {
+          "id": "us-1",
+          "english": "The chair is next to the table.",
+          "words": ["הַכִּסֵּא", "לְיַד", "הַשֻּׁלְחָן"],
+          "alt": []
+        }
+      ]
+    },
+    {
+      "id": "numbers",
+      "type": "exercise",
+      "kind": "translate",
+      "items": [
+        { "id": "tr-1", "english": "three", "answer": "שלוש", "accept": ["שלש"] }
+      ]
+    },
+    {
+      "id": "readings",
+      "type": "graded-story",
+      "paragraphs": [
+        { "id": "p1", "text": "בַּבֹּקֶר אֲנִי נִכְנָס לַמִטְבָּח. עַל הַשֻּׁלְחָן יֵשׁ כּוֹס וְסֵפֶר." },
+        { "id": "p2", "text": "הַכִּסֵּא לְיַד הַחַלּוֹן. אַחַר הַאֲרוּחָה אֲנִי קוֹרֵא מְעַט." }
+      ],
+      "support": [
+        { "id": "s1", "he": "שֻׁלְחָן", "en": "table" },
+        { "id": "s2", "he": "כִּסֵּא", "en": "chair" }
+      ],
+      "glosses": { "שֻׁלְחָן": "table", "כִּסֵּא": "chair" },
+      "questions": [
+        { "id": "q1", "question": "Where is the chair?" }
+      ]
+    },
+    {
+      "id": "homework",
+      "type": "assignment",
+      "prompt": "Write four sentences using שֻׁלְחָן and כִּסֵּא.",
+      "minSentences": 4,
+      "useWords": ["שֻׁלְחָן", "כִּסֵּא"],
+      "homework": ["Bring one new word you looked up while writing."]
+    }
+  ]
+}

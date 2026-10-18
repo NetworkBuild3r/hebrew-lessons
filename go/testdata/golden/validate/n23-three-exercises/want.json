@@ -1,0 +1,33 @@
+{
+  "ok": false,
+  "blocks": [
+    {
+      "rule": "meaning",
+      "severity": "block",
+      "path": "/units/0/lessons/0/newWords/0",
+      "message": "no introduction word gives this new word a first-language meaning"
+    }
+  ],
+  "warnings": [
+    {
+      "rule": "N23",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/blocks",
+      "message": "3 exercise blocks; a topic-conversation lesson warns above 2"
+    },
+    {
+      "rule": "N6",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/0",
+      "message": "appears 0 time(s) in this lesson; N6 asks for 2"
+    }
+  ],
+  "informs": [
+    {
+      "rule": "N16",
+      "severity": "inform",
+      "path": "/units/0/lessons/0/blocks",
+      "message": "a topic-conversation lesson has no personal question"
+    }
+  ]
+}

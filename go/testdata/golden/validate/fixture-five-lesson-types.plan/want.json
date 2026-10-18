@@ -1,0 +1,320 @@
+{
+  "ok": true,
+  "blocks": [],
+  "warnings": [
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/3/cells/0/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/3/cells/1/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/3/cells/2/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/3/cells/3/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/3/cells/4/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/3/cells/5/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/3/cells/6/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/3/cells/7/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/3/cells/8/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/4/cells/0/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/4/cells/1/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/4/cells/2/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/4/cells/3/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/4/cells/4/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/4/cells/5/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/4/cells/6/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/4/cells/7/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/3/blocks/4/cells/8/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N7",
+      "severity": "warn",
+      "path": "/units/0",
+      "message": "8 of 25 blocks are language-focused; N7 allows one in 4"
+    },
+    {
+      "rule": "later-checkpoint",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/0",
+      "message": "no later spaced-review-checkpoint lists this word"
+    },
+    {
+      "rule": "later-checkpoint",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/1",
+      "message": "no later spaced-review-checkpoint lists this word"
+    },
+    {
+      "rule": "later-checkpoint",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/2",
+      "message": "no later spaced-review-checkpoint lists this word"
+    },
+    {
+      "rule": "later-checkpoint",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/3",
+      "message": "no later spaced-review-checkpoint lists this word"
+    },
+    {
+      "rule": "later-checkpoint",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/4",
+      "message": "no later spaced-review-checkpoint lists this word"
+    },
+    {
+      "rule": "later-checkpoint",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/5",
+      "message": "no later spaced-review-checkpoint lists this word"
+    },
+    {
+      "rule": "later-checkpoint",
+      "severity": "warn",
+      "path": "/units/0/lessons/1/newWords/0",
+      "message": "no later spaced-review-checkpoint lists this word"
+    },
+    {
+      "rule": "later-checkpoint",
+      "severity": "warn",
+      "path": "/units/0/lessons/1/newWords/1",
+      "message": "no later spaced-review-checkpoint lists this word"
+    },
+    {
+      "rule": "N3",
+      "severity": "warn",
+      "path": "/units/0/lessons/1/blocks/4",
+      "message": "about 11% of running words are known; N3 asks for 95%"
+    },
+    {
+      "rule": "N3",
+      "severity": "warn",
+      "path": "/units/0/lessons/4/blocks/0",
+      "message": "about 0% of running words are known; N3 asks for 95%"
+    },
+    {
+      "rule": "N3",
+      "severity": "warn",
+      "path": "/units/0/lessons/4/blocks/3",
+      "message": "about 0% of running words are known; N3 asks for 95%"
+    },
+    {
+      "rule": "N6",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/0",
+      "message": "appears 1 time(s) in this lesson; N6 asks for 2"
+    },
+    {
+      "rule": "later-context",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/0",
+      "message": "no later lesson uses this word in a different sentence"
+    },
+    {
+      "rule": "N6",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/1",
+      "message": "appears 0 time(s) in this lesson; N6 asks for 2"
+    },
+    {
+      "rule": "later-context",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/1",
+      "message": "no later lesson uses this word in a different sentence"
+    },
+    {
+      "rule": "N6",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/2",
+      "message": "appears 0 time(s) in this lesson; N6 asks for 2"
+    },
+    {
+      "rule": "later-context",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/2",
+      "message": "no later lesson uses this word in a different sentence"
+    },
+    {
+      "rule": "later-context",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/3",
+      "message": "no later lesson uses this word in a different sentence"
+    },
+    {
+      "rule": "N6",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/4",
+      "message": "appears 1 time(s) in this lesson; N6 asks for 2"
+    },
+    {
+      "rule": "later-context",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/4",
+      "message": "no later lesson uses this word in a different sentence"
+    },
+    {
+      "rule": "N6",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/5",
+      "message": "appears 1 time(s) in this lesson; N6 asks for 2"
+    },
+    {
+      "rule": "later-context",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/5",
+      "message": "no later lesson uses this word in a different sentence"
+    },
+    {
+      "rule": "N6",
+      "severity": "warn",
+      "path": "/units/0/lessons/1/newWords/0",
+      "message": "appears 1 time(s) in this lesson; N6 asks for 2"
+    },
+    {
+      "rule": "later-context",
+      "severity": "warn",
+      "path": "/units/0/lessons/1/newWords/0",
+      "message": "no later lesson uses this word in a different sentence"
+    },
+    {
+      "rule": "N6",
+      "severity": "warn",
+      "path": "/units/0/lessons/1/newWords/1",
+      "message": "appears 0 time(s) in this lesson; N6 asks for 2"
+    },
+    {
+      "rule": "later-context",
+      "severity": "warn",
+      "path": "/units/0/lessons/1/newWords/1",
+      "message": "no later lesson uses this word in a different sentence"
+    },
+    {
+      "rule": "N6",
+      "severity": "warn",
+      "path": "/units/0/lessons/2/blocks/0/newWords/0",
+      "message": "appears 1 time(s) in this lesson; N6 asks for 2"
+    },
+    {
+      "rule": "N6",
+      "severity": "warn",
+      "path": "/units/0/lessons/2/blocks/0/newWords/2",
+      "message": "appears 1 time(s) in this lesson; N6 asks for 2"
+    }
+  ],
+  "informs": [
+    {
+      "rule": "recall-day",
+      "severity": "inform",
+      "path": "/units/0/lessons/0/blocks/0",
+      "message": "the scheduler places this recall on a later day; the plan holds no dates"
+    },
+    {
+      "rule": "questions",
+      "severity": "inform",
+      "path": "/units/0/lessons/1/blocks/4/questions",
+      "message": "comprehension questions are optional and are not the recall event"
+    },
+    {
+      "rule": "N16",
+      "severity": "inform",
+      "path": "/units/0/lessons/3/blocks",
+      "message": "a verb-workshop lesson has no personal question"
+    },
+    {
+      "rule": "questions",
+      "severity": "inform",
+      "path": "/units/0/lessons/4/blocks/0/questions",
+      "message": "comprehension questions are optional and are not the recall event"
+    },
+    {
+      "rule": "questions",
+      "severity": "inform",
+      "path": "/units/0/lessons/4/blocks/3/questions",
+      "message": "comprehension questions are optional and are not the recall event"
+    }
+  ]
+}

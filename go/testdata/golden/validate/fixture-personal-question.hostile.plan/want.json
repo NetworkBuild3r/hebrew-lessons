@@ -1,0 +1,25 @@
+{
+  "ok": false,
+  "blocks": [
+    {
+      "rule": "schema",
+      "severity": "block",
+      "path": "/units/0/lessons/0/blocks/3/prompts",
+      "message": "must have at most 6 items"
+    },
+    {
+      "rule": "html",
+      "severity": "block",
+      "path": "/units/0/lessons/0/blocks/3/prompts/0/en",
+      "message": "markup is not allowed in plan text"
+    },
+    {
+      "rule": "schema",
+      "severity": "block",
+      "path": "/units/0/lessons/0/blocks/3/prompts/0/sampleAnswer",
+      "message": "unknown property"
+    }
+  ],
+  "warnings": [],
+  "informs": []
+}

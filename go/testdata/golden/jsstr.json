@@ -1,0 +1,468 @@
+{
+  "trim": [
+    {
+      "name": "around-9",
+      "input": "a\tb\t",
+      "trim": "a\tb"
+    },
+    {
+      "name": "only-9",
+      "input": "\t\t",
+      "trim": ""
+    },
+    {
+      "name": "around-a",
+      "input": "a\nb\n",
+      "trim": "a\nb"
+    },
+    {
+      "name": "only-a",
+      "input": "\n\n",
+      "trim": ""
+    },
+    {
+      "name": "around-b",
+      "input": "a\u000bb\u000b",
+      "trim": "a\u000bb"
+    },
+    {
+      "name": "only-b",
+      "input": "\u000b\u000b",
+      "trim": ""
+    },
+    {
+      "name": "around-c",
+      "input": "a\fb\f",
+      "trim": "a\fb"
+    },
+    {
+      "name": "only-c",
+      "input": "\f\f",
+      "trim": ""
+    },
+    {
+      "name": "around-d",
+      "input": "a\rb\r",
+      "trim": "a\rb"
+    },
+    {
+      "name": "only-d",
+      "input": "\r\r",
+      "trim": ""
+    },
+    {
+      "name": "around-20",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-20",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-a0",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-a0",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-1680",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-1680",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-2000",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-2000",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-2001",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-2001",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-2002",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-2002",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-2003",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-2003",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-2004",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-2004",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-2005",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-2005",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-2006",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-2006",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-2007",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-2007",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-2008",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-2008",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-2009",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-2009",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-200a",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-200a",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-2028",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-2028",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-2029",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-2029",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-202f",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-202f",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-205f",
+      "input": "a b ",
+      "trim": "a b"
+    },
+    {
+      "name": "only-205f",
+      "input": "  ",
+      "trim": ""
+    },
+    {
+      "name": "around-3000",
+      "input": "a　b　",
+      "trim": "a　b"
+    },
+    {
+      "name": "only-3000",
+      "input": "　　",
+      "trim": ""
+    },
+    {
+      "name": "around-feff",
+      "input": "a﻿b﻿",
+      "trim": "a﻿b"
+    },
+    {
+      "name": "only-feff",
+      "input": "﻿﻿",
+      "trim": ""
+    },
+    {
+      "name": "around-85",
+      "input": "ab",
+      "trim": "ab"
+    },
+    {
+      "name": "only-85",
+      "input": "",
+      "trim": ""
+    },
+    {
+      "name": "around-180e",
+      "input": "a᠎b᠎",
+      "trim": "a᠎b᠎"
+    },
+    {
+      "name": "only-180e",
+      "input": "᠎᠎",
+      "trim": "᠎᠎"
+    },
+    {
+      "name": "around-200b",
+      "input": "a​b​",
+      "trim": "a​b​"
+    },
+    {
+      "name": "only-200b",
+      "input": "​​",
+      "trim": "​​"
+    },
+    {
+      "name": "around-ad",
+      "input": "a­b­",
+      "trim": "a­b­"
+    },
+    {
+      "name": "only-ad",
+      "input": "­­",
+      "trim": "­­"
+    },
+    {
+      "name": "fef-inner",
+      "input": " ﻿abc﻿ ",
+      "trim": "abc"
+    },
+    {
+      "name": "0085-inner",
+      "input": " abc ",
+      "trim": "abc"
+    }
+  ],
+  "lengths": [
+    {
+      "input": "",
+      "codePoints": 0,
+      "utf16": 0
+    },
+    {
+      "input": "abc",
+      "codePoints": 3,
+      "utf16": 3
+    },
+    {
+      "input": "  abc  ",
+      "codePoints": 7,
+      "utf16": 7
+    },
+    {
+      "input": "﻿",
+      "codePoints": 1,
+      "utf16": 1
+    },
+    {
+      "input": "",
+      "codePoints": 1,
+      "utf16": 1
+    },
+    {
+      "input": "\ud800",
+      "codePoints": 1,
+      "utf16": 1
+    },
+    {
+      "input": "𐈀",
+      "codePoints": 1,
+      "utf16": 2
+    },
+    {
+      "input": "א",
+      "codePoints": 1,
+      "utf16": 1
+    },
+    {
+      "input": "שָׁלוֹם",
+      "codePoints": 7,
+      "utf16": 7
+    },
+    {
+      "input": "😀",
+      "codePoints": 1,
+      "utf16": 2
+    },
+    {
+      "input": "a b",
+      "codePoints": 3,
+      "utf16": 3
+    }
+  ],
+  "lower": [
+    {
+      "input": "İ",
+      "lower": "i̇"
+    },
+    {
+      "input": "ΣΣ",
+      "lower": "σς"
+    },
+    {
+      "input": "ẞ",
+      "lower": "ß"
+    },
+    {
+      "input": "ﬁ",
+      "lower": "ﬁ"
+    },
+    {
+      "input": "ABC",
+      "lower": "abc"
+    },
+    {
+      "input": "שָׁלוֹם",
+      "lower": "שָׁלוֹם"
+    },
+    {
+      "input": "\ud800A",
+      "lower": "\ud800a"
+    }
+  ],
+  "nfc": [
+    {
+      "input": "אָּ",
+      "nfc": "אָּ"
+    },
+    {
+      "input": "שָׁ",
+      "nfc": "שָׁ"
+    },
+    {
+      "input": "\ud800אָּ",
+      "nfc": "\ud800אָּ"
+    },
+    {
+      "input": "café",
+      "nfc": "café"
+    }
+  ],
+  "collapse": [
+    {
+      "input": "a  b",
+      "collapse": "a b"
+    },
+    {
+      "input": "  ab ",
+      "collapse": " ab "
+    },
+    {
+      "input": "﻿",
+      "collapse": " "
+    },
+    {
+      "input": "a\tb\nc",
+      "collapse": "a b c"
+    },
+    {
+      "input": "",
+      "collapse": ""
+    },
+    {
+      "input": "   ",
+      "collapse": " "
+    }
+  ],
+  "markup": [
+    {
+      "input": "<b",
+      "match": true
+    },
+    {
+      "input": "< b",
+      "match": true
+    },
+    {
+      "input": "< b",
+      "match": true
+    },
+    {
+      "input": "<b",
+      "match": false
+    },
+    {
+      "input": "<᠎b",
+      "match": false
+    },
+    {
+      "input": "text",
+      "match": false
+    }
+  ],
+  "anchor": [
+    {
+      "input": "a\n",
+      "match": false,
+      "nonU": false
+    }
+  ]
+}

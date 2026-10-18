@@ -1,0 +1,50 @@
+{
+  "ok": true,
+  "blocks": [],
+  "warnings": [
+    {
+      "rule": "N1",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords",
+      "message": "9 new words; N1 allows 8 (migration.legacy: warn only)"
+    },
+    {
+      "rule": "N12",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/blocks/2",
+      "message": "a fluency-pass in a lesson that introduces new words"
+    },
+    {
+      "rule": "N12",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/blocks/3",
+      "message": "a fluency-pass in a lesson that introduces new words"
+    },
+    {
+      "rule": "N3",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/blocks/1",
+      "message": "about 31% of running words are known; N3 asks for 95%"
+    },
+    {
+      "rule": "N6",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/7",
+      "message": "appears 0 time(s) in this lesson; N6 asks for 2"
+    },
+    {
+      "rule": "N6",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/newWords/8",
+      "message": "appears 0 time(s) in this lesson; N6 asks for 2"
+    }
+  ],
+  "informs": [
+    {
+      "rule": "questions",
+      "severity": "inform",
+      "path": "/units/0/lessons/0/blocks/1/questions",
+      "message": "comprehension questions are optional and are not the recall event"
+    }
+  ]
+}

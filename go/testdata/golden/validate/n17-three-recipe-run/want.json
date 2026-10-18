@@ -1,0 +1,32 @@
+{
+  "ok": true,
+  "blocks": [],
+  "warnings": [
+    {
+      "rule": "N3",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/blocks/0",
+      "message": "about 0% of running words are known; N3 asks for 95%"
+    },
+    {
+      "rule": "N3",
+      "severity": "warn",
+      "path": "/units/0/lessons/1/blocks/0",
+      "message": "about 0% of running words are known; N3 asks for 95%"
+    },
+    {
+      "rule": "N3",
+      "severity": "warn",
+      "path": "/units/0/lessons/2/blocks/0",
+      "message": "about 0% of running words are known; N3 asks for 95%"
+    }
+  ],
+  "informs": [
+    {
+      "rule": "N17",
+      "severity": "inform",
+      "path": "/units/0/lessons/2/recipe",
+      "message": "3 lessons in a row in this unit have the recipe review-worksheet"
+    }
+  ]
+}

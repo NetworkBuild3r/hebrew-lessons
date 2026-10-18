@@ -1,0 +1,8 @@
+{
+  "node": "v22.14.0",
+  "gitSha": {
+    "server/plans/validate.js": "03d68a952fb8f8e2c21d070457d99c302a36e5ee",
+    "server/plans/hebrew-checks.js": "8d1ad300e3d31c611b3c4597a8c571ef99170a88",
+    "server/plans/id-path.js": "f9b13ab20ea35e1c903ace5dc598191905d63192"
+  }
+}

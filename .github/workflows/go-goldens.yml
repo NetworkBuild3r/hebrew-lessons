@@ -1,0 +1,33 @@
+# Go-1b: regenerate plan-validator goldens from the Node validators and fail if
+# the committed files drifted. This file is separate from .github/workflows/go.yml
+# (Go-1a owns gofmt, vet, staticcheck, and go test).
+#
+# Runs only on the local ARC scale set (k8-build). Never use GitHub-hosted runners.
+# Node is pinned to 22.14.0 because the golden manifest records process.version.
+name: go-goldens
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-goldens-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  goldens:
+    runs-on: k8-build
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - name: Regenerate goldens
+        run: node go/tools/golden/gen.js
+      - name: Goldens match the commit
+        run: git diff --exit-code -- go/testdata/golden

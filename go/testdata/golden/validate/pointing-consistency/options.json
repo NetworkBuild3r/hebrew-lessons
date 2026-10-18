@@ -1,0 +1,22 @@
+{
+  "inputMode": "string",
+  "lexicon": {
+    "find": true,
+    "listByStrippedKeys": true,
+    "rows": [
+      {
+        "key": "שָלוֹם",
+        "gloss_en": "hello",
+        "translit": "shalom",
+        "verified": 1
+      },
+      {
+        "key": "בַּיִת",
+        "gloss_en": "house",
+        "translit": "bayit",
+        "verified": true
+      }
+    ]
+  },
+  "snapshot": null
+}

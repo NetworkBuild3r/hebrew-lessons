@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "1.1.0",
+  "id": "fixture-explainer",
+  "revision": 1,
+  "status": "draft",
+  "audience": "shared",
+  "assigneeId": null,
+  "title": "Guides",
+  "language": {
+    "target": "he",
+    "gloss": "en"
+  },
+  "units": [
+    {
+      "id": "guides",
+      "title": "Guides",
+      "theme": "how a Hebrew verb is built",
+      "lessons": [
+        {
+          "id": "verb-roots",
+          "title": "How a Hebrew verb is built",
+          "level": "basic",
+          "visibility": "hidden",
+          "recipe": "guide",
+          "buildsOn": [],
+          "newWords": [],
+          "recycles": [],
+          "blocks": [
+            {
+              "id": "explainer",
+              "type": "explainer",
+              "title": "How a Hebrew verb is built",
+              "sections": [
+                {
+                  "id": "root",
+                  "heading": "The root",
+                  "paragraphs": [
+                    "Most Hebrew verbs are built on a root of three letters. The root carries the core meaning.",
+                    "The vowels and letters around the root change with the tense and with who does the action."
+                  ],
+                  "examples": [
+                    { "id": "e1", "he": "חָשַׁב", "en": "he thought", "translit": "chashav", "root": "ח.ש.ב" },
+                    { "id": "e2", "he": "חוֹשֵׁב", "en": "thinks (m. sg.)", "translit": "choshev", "root": "ח.ש.ב" }
+                  ]
+                },
+                {
+                  "id": "past",
+                  "heading": "Past tense",
+                  "table": {
+                    "columns": ["Person", "Past tense"],
+                    "rows": [
+                      ["I", "חָשַׁבְתִּי"],
+                      ["you (m. sg.)", "חָשַׁבְתָּ"],
+                      ["he", "חָשַׁב"]
+                    ]
+                  },
+                  "callouts": [
+                    { "id": "c1", "tone": "green", "title": "Three root letters", "text": "In these forms all three root letters stay in place." },
+                    { "id": "c2", "tone": "info", "title": "Say it first", "text": "Say each form out loud before you write it." }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+[
+  {
+    "rule": "lexicon-form",
+    "severity": "warn",
+    "path": "/units/0/lessons/0/blocks/0/words/0/word",
+    "message": "the lexicon has one entry with these letters and it is pointed differently; it is verified, so the lexicon form is the authority",
+    "field": "word",
+    "fix": {
+      "action": "set_field",
+      "path": "units/unit-1/lessons/lesson-1/blocks/intro/words/w1",
+      "field": "word",
+      "suggested": "שָלוֹם"
+    }
+  },
+  {
+    "rule": "pointing-consistency",
+    "severity": "warn",
+    "path": "/units/0/lessons/0/blocks/4/findIn/0/word",
+    "message": "this lesson points the same word two ways; this field has בָּיִת and units/unit-1/lessons/lesson-1/blocks/intro/words/w2 (word) has בַּיִת. Both may be right (a homograph); pick one if they are not",
+    "field": "findIn/0/word",
+    "fix": {
+      "action": "replace_part",
+      "path": "units/unit-1/lessons/lesson-1/blocks/letters",
+      "field": "findIn/0/word",
+      "candidates": [
+        "בַּיִת",
+        "בָּיִת"
+      ]
+    }
+  }
+]

@@ -1,0 +1,31 @@
+{
+  "id": "edge-twelve-items",
+  "title": "Twelve translate items",
+  "level": "basic",
+  "visibility": "hidden",
+  "recipe": "review-worksheet",
+  "buildsOn": [],
+  "newWords": [],
+  "recycles": [],
+  "blocks": [
+    {
+      "id": "twelve",
+      "type": "exercise",
+      "kind": "translate",
+      "items": [
+        { "id": "i01", "english": "one", "answer": "אחת", "accept": [] },
+        { "id": "i02", "english": "two", "answer": "שתיים", "accept": [] },
+        { "id": "i03", "english": "three", "answer": "שלוש", "accept": [] },
+        { "id": "i04", "english": "four", "answer": "ארבע", "accept": [] },
+        { "id": "i05", "english": "five", "answer": "חמש", "accept": [] },
+        { "id": "i06", "english": "six", "answer": "שש", "accept": [] },
+        { "id": "i07", "english": "seven", "answer": "שבע", "accept": [] },
+        { "id": "i08", "english": "eight", "answer": "שמונה", "accept": [] },
+        { "id": "i09", "english": "nine", "answer": "תשע", "accept": [] },
+        { "id": "i10", "english": "ten", "answer": "עשר", "accept": [] },
+        { "id": "i11", "english": "eleven", "answer": "אחת עשרה", "accept": [] },
+        { "id": "i12", "english": "twelve", "answer": "שתים עשרה", "accept": [] }
+      ]
+    }
+  ]
+}

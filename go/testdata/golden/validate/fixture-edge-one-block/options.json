@@ -1,0 +1,214 @@
+{
+  "inputMode": "string",
+  "lexicon": {
+    "find": true,
+    "listByStrippedKeys": true,
+    "rows": [
+      {
+        "key": "לדבר",
+        "kind": "lemma",
+        "gloss_en": "to speak",
+        "pos": "verb"
+      },
+      {
+        "key": "מדבר",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "speaks (m.)",
+        "tense": "present",
+        "cell": "ms",
+        "verified": 1
+      },
+      {
+        "key": "מדברת",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "speaks (f.)",
+        "tense": "present",
+        "cell": "fs",
+        "verified": 1
+      },
+      {
+        "key": "מדברים",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "speak (m. pl.)",
+        "tense": "present",
+        "cell": "mp",
+        "verified": 1
+      },
+      {
+        "key": "מדברות",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "speak (f. pl.)",
+        "tense": "present",
+        "cell": "fp",
+        "verified": 1
+      },
+      {
+        "key": "דברתי",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "I spoke",
+        "tense": "past",
+        "cell": "1s",
+        "verified": 1
+      },
+      {
+        "key": "דברת",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "you spoke (m.)",
+        "tense": "past",
+        "cell": "2ms",
+        "verified": 1
+      },
+      {
+        "key": "דברת-2fs",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "you spoke (f.)",
+        "tense": "past",
+        "cell": "2fs",
+        "verified": 1
+      },
+      {
+        "key": "דבר",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "he spoke",
+        "tense": "past",
+        "cell": "3ms",
+        "verified": 1
+      },
+      {
+        "key": "דברה",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "she spoke",
+        "tense": "past",
+        "cell": "3fs",
+        "verified": 1
+      },
+      {
+        "key": "דברנו",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "we spoke",
+        "tense": "past",
+        "cell": "1p",
+        "verified": 1
+      },
+      {
+        "key": "דברתם",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "you spoke (m. pl.)",
+        "tense": "past",
+        "cell": "2mp",
+        "verified": 1
+      },
+      {
+        "key": "דברתן",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "you spoke (f. pl.)",
+        "tense": "past",
+        "cell": "2fp",
+        "verified": 1
+      },
+      {
+        "key": "דברו",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "they spoke",
+        "tense": "past",
+        "cell": "3p",
+        "verified": 1
+      },
+      {
+        "key": "אדבר",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "I will speak",
+        "tense": "future",
+        "cell": "1s",
+        "verified": 0
+      },
+      {
+        "key": "תדבר",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "you will speak (m.)",
+        "tense": "future",
+        "cell": "2ms",
+        "verified": 0
+      },
+      {
+        "key": "תדברי",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "you will speak (f.)",
+        "tense": "future",
+        "cell": "2fs",
+        "verified": 0
+      },
+      {
+        "key": "ידבר",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "he will speak",
+        "tense": "future",
+        "cell": "3ms",
+        "verified": 0
+      },
+      {
+        "key": "תדבר-3fs",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "she will speak",
+        "tense": "future",
+        "cell": "3fs",
+        "verified": 0
+      },
+      {
+        "key": "נדבר",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "we will speak",
+        "tense": "future",
+        "cell": "1p",
+        "verified": 0
+      },
+      {
+        "key": "תדברו",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "you will speak (m. pl.)",
+        "tense": "future",
+        "cell": "2mp",
+        "verified": 0
+      },
+      {
+        "key": "תדברנה",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "you will speak (f. pl.)",
+        "tense": "future",
+        "cell": "2fp",
+        "verified": 0
+      },
+      {
+        "key": "ידברו",
+        "kind": "form",
+        "lemma_key": "לדבר",
+        "gloss_en": "they will speak",
+        "tense": "future",
+        "cell": "3p",
+        "verified": 0
+      }
+    ]
+  },
+  "snapshot": null
+}

@@ -1,0 +1,16 @@
+[
+  {
+    "rule": "field-language",
+    "severity": "warn",
+    "path": "/units/0/lessons/0/blocks/5/prompt",
+    "message": "this field is marked English and holds mostly Hebrew letters; the Hebrew may belong in a Hebrew field",
+    "field": "prompt"
+  },
+  {
+    "rule": "field-language",
+    "severity": "warn",
+    "path": "/units/0/lessons/0/blocks/5/answer",
+    "message": "this field is marked Hebrew and holds no Hebrew letter; it may hold English or a transliteration",
+    "field": "answer"
+  }
+]

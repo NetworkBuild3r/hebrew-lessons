@@ -1,0 +1,26 @@
+{
+  "inputMode": "string",
+  "lexicon": {
+    "find": true,
+    "listByStrippedKeys": true,
+    "rows": [
+      {
+        "key": "חוֹשֵׁב",
+        "kind": "form",
+        "lemma_key": "לַחְשֹׁב",
+        "tense": "present",
+        "cell": "ms",
+        "verified": false
+      },
+      {
+        "key": "לַחְשֹׁב",
+        "kind": "lemma",
+        "lemma_key": null,
+        "tense": null,
+        "cell": null,
+        "verified": true
+      }
+    ]
+  },
+  "snapshot": null
+}

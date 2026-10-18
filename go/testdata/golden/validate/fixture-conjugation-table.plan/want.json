@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "blocks": [],
+  "warnings": [
+    {
+      "rule": "N7",
+      "severity": "warn",
+      "path": "/units/0",
+      "message": "3 of 4 blocks are language-focused; N7 allows one in 4"
+    }
+  ],
+  "informs": []
+}

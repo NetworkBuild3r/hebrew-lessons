@@ -1,0 +1,13 @@
+{
+  "ok": false,
+  "blocks": [
+    {
+      "rule": "N20",
+      "severity": "block",
+      "path": "/units/0/lessons/0/blocks/0/items/0/answer",
+      "message": "the answer is not one of this item's choices"
+    }
+  ],
+  "warnings": [],
+  "informs": []
+}

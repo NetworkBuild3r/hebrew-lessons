@@ -1,0 +1,69 @@
+{
+  "ok": false,
+  "blocks": [
+    {
+      "rule": "schema",
+      "severity": "block",
+      "path": "/units/0/lessons/0/blocks/0/mode",
+      "message": "missing required field: mode"
+    },
+    {
+      "rule": "schema",
+      "severity": "block",
+      "path": "/units/0/lessons/0/blocks/0/cells/0/id",
+      "message": "unknown property"
+    },
+    {
+      "rule": "schema",
+      "severity": "block",
+      "path": "/units/0/lessons/0/blocks/0/cells/0/gloss",
+      "message": "unknown property"
+    },
+    {
+      "rule": "schema",
+      "severity": "block",
+      "path": "/units/0/lessons/0/blocks/0/cells/1/id",
+      "message": "unknown property"
+    },
+    {
+      "rule": "schema",
+      "severity": "block",
+      "path": "/units/0/lessons/0/blocks/0/cells/1/gloss",
+      "message": "unknown property"
+    },
+    {
+      "rule": "N13",
+      "severity": "block",
+      "path": "/units/0/lessons/0/blocks/0/cells/1/cell",
+      "message": "this cell appears more than once in the table"
+    }
+  ],
+  "warnings": [
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/blocks/0/cells/0/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N14",
+      "severity": "warn",
+      "path": "/units/0/lessons/0/blocks/0/cells/1/formKey",
+      "message": "this form is not verified"
+    },
+    {
+      "rule": "N7",
+      "severity": "warn",
+      "path": "/units/0",
+      "message": "1 of 1 blocks are language-focused; N7 allows one in 4"
+    }
+  ],
+  "informs": [
+    {
+      "rule": "N16",
+      "severity": "inform",
+      "path": "/units/0/lessons/0/blocks",
+      "message": "a verb-workshop lesson has no personal question"
+    }
+  ]
+}
