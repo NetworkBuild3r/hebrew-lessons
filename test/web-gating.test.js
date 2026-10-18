@@ -95,11 +95,14 @@ describe('web gating (ac-1, ac-2, ac-6, ac-7, ac-8)', () => {
         }
 
         // The manifest and icon are identical for everyone and browsers fetch the manifest
-        // without cookies, so they are public. Nothing else under the root is.
+        // without cookies, so they are public. /healthz is liveness only.
         for (const p of ['/manifest.webmanifest', '/icon.svg']) {
             const res = await req(p);
             assert.equal(res.status, 200, 'public static ' + p);
         }
+        const health = await req('/healthz');
+        assert.equal(health.status, 200, '/healthz');
+        assert.equal(await health.text(), 'ok');
         // Self-hosted Rubik is public too (the sign-in page needs it). The rest of /shared/ is not.
         const font = await req('/shared/fonts/rubik-hebrew.woff2');
         assert.equal(font.status, 200, 'public font');

@@ -2,7 +2,13 @@ node_modules
 .git
 .github
 sdd
+# Design notes. Re-include only the schema the plan validator reads.
 docs
+!docs/decisions
+docs/decisions/*
+!docs/decisions/ADR-0003-assets
+docs/decisions/ADR-0003-assets/*
+!docs/decisions/ADR-0003-assets/lesson-plan.schema.json
 # Local secrets stay out of the image build context.
 .env
 .env.*
@@ -15,5 +21,4 @@ contract/
 # Not part of this Node image.
 go/
 deploy/
-*.md
 docker-compose.yml

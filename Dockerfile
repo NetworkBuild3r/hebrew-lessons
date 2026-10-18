@@ -23,9 +23,12 @@ COPY worksheets ./worksheets
 COPY login ./login
 COPY scripts ./scripts
 COPY icon.svg manifest.webmanifest ./
-# upsert and authoring.save shell out to this path.
-COPY .cursor/skills/hebrew-worksheet/scripts/validate.js \
-    .cursor/skills/hebrew-worksheet/scripts/validate.js
+# Lesson upsert shells out to scripts/validate.js. The rest of this skill
+# (SKILL.md, recipes.md, schema.md, example.md) sits beside it.
+COPY .cursor/skills/hebrew-worksheet ./.cursor/skills/hebrew-worksheet
+# server/plans/validate.js and hebrew-checks.js read this file by path.
+COPY docs/decisions/ADR-0003-assets/lesson-plan.schema.json \
+    ./docs/decisions/ADR-0003-assets/lesson-plan.schema.json
 
 RUN mkdir -p /app/data && chown -R node:node /app/data
 USER node

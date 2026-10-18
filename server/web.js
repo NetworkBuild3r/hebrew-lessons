@@ -476,6 +476,12 @@ function listen() {
         }
 
         const run = async () => {
+            // Public liveness check. No session, no lesson data.
+            if (pathname === '/healthz' && (method === 'GET' || method === 'HEAD')) {
+                sendPlain(res, 200, 'ok');
+                return;
+            }
+
             if (pathname === '/api' || pathname.startsWith('/api/')) {
                 // Normalize /api → /api/ for routing table (auth paths are absolute).
                 const apiPath = pathname === '/api' ? '/api/' : pathname;
