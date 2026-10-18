@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
 func TestTodayLayout(t *testing.T) {
@@ -56,14 +58,25 @@ func TestTodayLayout(t *testing.T) {
 	if regexp.MustCompile(`(?i)\b(streak|xp)\b`).MatchString(body) {
 		t.Fatal("streak or xp copy is in the shell")
 	}
-	if !regexp.MustCompile(`<bdi lang="en" dir="ltr">[^<]*<bdi lang="he" dir="rtl">`).MatchString(body) {
-		t.Fatal("Hebrew inside English is not isolated")
+	if strings.Contains(body, "good morning") || strings.Contains(body, "שָׁלוֹם") || strings.Contains(body, "he-proof") {
+		t.Fatal("sample paragraph or gloss is still on Today")
 	}
-	if !strings.Contains(body, `<bdi lang="en" dir="ltr">My morning</bdi>`) {
-		t.Fatal("English inside Hebrew is not isolated")
+	if !strings.Contains(body, views.UnitTitle) || !strings.Contains(body, `class="unit-title"`) {
+		t.Fatal("unit title missing")
 	}
-	if !strings.Contains(body, `class="he-display he-proof"`) || !strings.Contains(body, "שָׁלוֹם עֲלֵיכֶם") {
-		t.Fatal("long pointed line missing")
+	if !strings.Contains(body, `<bdi lang="en" dir="ltr">Getting ready in the morning.</bdi>`) {
+		t.Fatal("English situation is not isolated")
+	}
+	if strings.Count(body, "btn-primary") != 1 || !strings.Contains(body, `class="btn btn-primary"`) {
+		t.Fatal("due Today should have one filled primary")
+	}
+	if !strings.Contains(body, `class="btn btn-tonal"`) {
+		t.Fatal("lesson CTA should be tonal while reviews are due")
+	}
+	for _, word := range []string{"בֹּקֶר", "קָפֶה", "קָם"} {
+		if !strings.Contains(body, `class="chip" lang="he">`+word) {
+			t.Fatalf("chip %s missing", word)
+		}
 	}
 	scriptAt := strings.Index(body, "localStorage")
 	cssAt := strings.Index(body, "/static/css/tokens.css")
@@ -123,9 +136,90 @@ func TestStaticHasNoExternalURL(t *testing.T) {
 	if !strings.Contains(css, "--lh-he-body: 1.6") || !strings.Contains(css, "--lh-he-display: 1.3") {
 		t.Fatal("pointed line-height tokens missing")
 	}
+	for _, token := range []string{"--step-4:", "--fs-eyebrow: var(--step-1)", "--fs-chip: var(--step-3)", "--step-3: 1.25rem", "--shell-max: 1040px", "--bp-desk: 1024px", "--tap-btn: 48px", "--fw-semibold: 600"} {
+		if !strings.Contains(css, token) {
+			t.Fatalf("tokens missing %s", token)
+		}
+	}
 	sprite := get(t, h, "/static/icons/sprite.svg")
 	if strings.Contains(sprite, "icon-streak") || strings.Contains(sprite, "icon-xp") {
 		t.Fatal("sprite still ships streak or xp")
+	}
+}
+
+func TestPairSeparatesRuns(t *testing.T) {
+	h := New(nil)
+	he := get(t, h, "/?due=0")
+	assertPair(t, he, "אֵין חֲזָרוֹת עַכְשָׁיו", "Nothing due", "he")
+	en := get(t, h, "/?lang=en&due=0")
+	assertPair(t, en, "אֵין חֲזָרוֹת עַכְשָׁיו", "Nothing due", "en")
+	if strings.Contains(he, "good morning") || strings.Contains(en, "good morning") {
+		t.Fatal("gloss line is still rendered")
+	}
+}
+
+func TestZeroDueAndNoLesson(t *testing.T) {
+	h := New(nil)
+	zero := get(t, h, "/?due=0")
+	if strings.Contains(zero, "ink-card") || strings.Contains(zero, "הַתְחֵל") {
+		t.Fatal("zero due still shows the review hero")
+	}
+	if strings.Count(zero, "btn-primary") != 1 || !strings.Contains(zero, `class="btn btn-primary"`) {
+		t.Fatal("the lesson CTA should be the only primary when nothing is due")
+	}
+	if strings.Contains(zero, "btn-tonal") {
+		t.Fatal("tonal CTA remains when nothing is due")
+	}
+	none := get(t, h, "/?next=0")
+	if strings.Contains(none, `href="/lesson"`) || strings.Contains(none, views.UnitTitle) {
+		t.Fatal("missing lesson still renders the lesson card")
+	}
+	assertPair(t, none, "אֵין שִׁיעוּר בַּתּוֹר", "No lesson queued", "he")
+	if strings.Count(none, "btn-primary") != 1 {
+		t.Fatal("start should stay the only primary when no lesson is queued")
+	}
+}
+
+func TestEnglishShell(t *testing.T) {
+	body := get(t, New(nil), "/?lang=en")
+	if !strings.Contains(body, `<html lang="en" dir="ltr"`) {
+		t.Fatal("english shell lang/dir missing")
+	}
+	if !strings.Contains(body, `<span class="dock__label" lang="en">Today</span>`) {
+		t.Fatal("english nav label missing")
+	}
+	if !strings.Contains(body, `href="/review?lang=en"`) || !strings.Contains(body, `href="/?lang=en"`) {
+		t.Fatal("english shell dropped lang on a link")
+	}
+	if !strings.Contains(body, `<bdi lang="he" dir="rtl">`+views.AppName+`</bdi>`) {
+		t.Fatal("hebrew wordmark is not isolated in the english shell")
+	}
+	if !strings.Contains(body, views.UnitTitle) {
+		t.Fatal("unit title left the english shell")
+	}
+}
+
+func assertPair(t *testing.T, body, he, en, first string) {
+	t.Helper()
+	m := regexp.MustCompile(`(?s)<span class="pair">(.*?)</span>`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatal("pair component missing")
+	}
+	inner := m[1]
+	gap := regexp.MustCompile(`</bdi>(.*?)<bdi`).FindStringSubmatch(inner)
+	if gap == nil || strings.TrimSpace(gap[1]) != "" {
+		t.Fatalf("pair runs are not separated by a gap: %s", inner)
+	}
+	heAt := strings.Index(inner, `lang="he"`)
+	enAt := strings.Index(inner, `lang="en"`)
+	if heAt < 0 || enAt < 0 || !strings.Contains(inner, he) || !strings.Contains(inner, en) {
+		t.Fatalf("pair runs missing: %s", inner)
+	}
+	if first == "en" && enAt > heAt {
+		t.Fatal("english shell pair does not lead with English")
+	}
+	if first == "he" && heAt > enAt {
+		t.Fatal("hebrew shell pair does not lead with Hebrew")
 	}
 }
 

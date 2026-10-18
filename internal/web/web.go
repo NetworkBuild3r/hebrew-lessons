@@ -9,6 +9,7 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
+	"strconv"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 	"github.com/a-h/templ"
@@ -39,11 +40,38 @@ func newMux(health http.Handler, tokens CSRFToken) http.Handler {
 		panic(err)
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(static))))
-	mux.HandleFunc("GET /{$}", handle(tokens, views.Today))
-	mux.HandleFunc("GET /review", handle(tokens, views.Review))
-	mux.HandleFunc("GET /progress", handle(tokens, views.Progress))
-	mux.HandleFunc("GET /lesson", handle(tokens, views.Lesson))
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		render(w, r, views.Today(homeFrom(r, csrfValue(tokens, r))))
+	})
+	mux.HandleFunc("GET /review", func(w http.ResponseWriter, r *http.Request) {
+		render(w, r, views.Review(views.NewPage(r.URL.Query().Get("lang"), csrfValue(tokens, r), "review")))
+	})
+	mux.HandleFunc("GET /progress", func(w http.ResponseWriter, r *http.Request) {
+		render(w, r, views.Progress(views.NewPage(r.URL.Query().Get("lang"), csrfValue(tokens, r), "progress")))
+	})
+	mux.HandleFunc("GET /lesson", func(w http.ResponseWriter, r *http.Request) {
+		render(w, r, views.Lesson(views.NewPage(r.URL.Query().Get("lang"), csrfValue(tokens, r), "lesson")))
+	})
 	return csrfMiddleware(tokens, mux)
+}
+
+// homeFrom is placeholder Today data until the review queue is wired.
+// ?lang=en flips the shell. ?due=0 clears the queue. ?next=0 hides the lesson.
+func homeFrom(r *http.Request, csrf string) views.Home {
+	q := r.URL.Query()
+	ui := views.UIFor(q.Get("lang"))
+	due := 12
+	if q.Get("due") == "0" {
+		due = 0
+	}
+	return views.Home{
+		UI:      ui,
+		CSRF:    csrf,
+		Due:     due,
+		DueText: strconv.Itoa(due),
+		Lesson:  q.Get("next") != "0",
+		Words:   views.SampleWords(),
+	}
 }
 
 // Static returns the embedded static files.
@@ -51,13 +79,11 @@ func Static() (fs.FS, error) {
 	return fs.Sub(Assets, "static")
 }
 
-func handle(tokens CSRFToken, page func(string) templ.Component) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-store")
-		if err := page(csrfValue(tokens, r)).Render(r.Context(), w); err != nil {
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		}
+func render(w http.ResponseWriter, r *http.Request, page templ.Component) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if err := page.Render(r.Context(), w); err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 }
 

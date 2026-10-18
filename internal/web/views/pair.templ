@@ -1,0 +1,15 @@
+package views
+
+// Pair is the only Hebrew/English pair in the shell.
+// Each run sits in its own bdi. The gap is CSS, never punctuation.
+templ Pair(uiLang, he, en string) {
+	<span class="pair">
+		if uiLang == "en" {
+			<bdi lang="en" dir="ltr">{ en }</bdi>
+			<bdi lang="he" dir="rtl">{ he }</bdi>
+		} else {
+			<bdi lang="he" dir="rtl">{ he }</bdi>
+			<bdi lang="en" dir="ltr">{ en }</bdi>
+		}
+	</span>
+}
