@@ -22,9 +22,12 @@ func TestHighlightRootKeepsPointsOnTheLetter(t *testing.T) {
 	}
 }
 
-func TestCoverLetterKeepsNikudAndFallsBackToTopic(t *testing.T) {
-	if got := CoverLetter("חָשַׁב", "Verbs"); got != "חָ" {
+func TestCoverLetterStripsNikudAndFallsBackToTopic(t *testing.T) {
+	if got := CoverLetter("חָשַׁב", "Verbs"); got != "ח" {
 		t.Fatalf("cover letter %q", got)
+	}
+	if got := CoverLetter("Decoding", "הַ"); got != "ה" {
+		t.Fatalf("topic letter %q", got)
 	}
 	if got := CoverLetter("Decoding", "פעלים"); got != "פ" {
 		t.Fatalf("topic letter %q", got)

@@ -14,7 +14,9 @@ type GuideCard struct {
 	// HeTitle is a second Hebrew line. The catalog has one title, so this
 	// stays empty until a plan stores both.
 	HeTitle string
-	// Status is set only when progress is known. Empty omits the chip.
+	// Status, a minute count, and an example count are not rendered. The
+	// catalog does not store progress or those counts, so the shelf does not
+	// invent them.
 	Status string
 }
 
@@ -44,9 +46,9 @@ type Example struct {
 	En       string
 	Translit string
 	Root     string
-	// Clip is a shared-word clip name when the plan stores one. Explainers
+	// Clip is a shared-word clip URL when the plan stores one. Explainers
 	// in the 1.1 schema have no audio path, so this stays empty and the
-	// button still carries the Hebrew on data-say.
+	// button carries the Hebrew on data-speak.
 	Clip string
 }
 

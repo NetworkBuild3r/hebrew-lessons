@@ -1,6 +1,6 @@
 package components
 
-// HeText isolates Hebrew. size "word" and "pointed" use --font-hebrew-lettering.
+// HeText isolates Hebrew. size "word" and "pointed" use --font-hebrew-pointed-display.
 // Anything else is an inline bdi, for a Hebrew word inside an English sentence.
 templ HeText(size string, he string) {
 	if he != "" {
