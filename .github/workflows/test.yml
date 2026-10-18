@@ -9,7 +9,12 @@
 name: test
 
 on:
+  # No workflow-level paths filter: a required check that never starts is
+  # indistinguishable from a skip. contract-suite always reports. Its suite
+  # steps are the only part that is skipped, and only when the event's diff
+  # touches none of the paths the frozen contract depends on.
   pull_request:
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]
 
@@ -35,8 +40,12 @@ jobs:
   # run.sh boots the server on loopback with a temp DATA_DIR. No services
   # or secrets. CONTRACT_* env vars are optional overrides; the node leg
   # leaves CONTRACT_SERVER_CMD unset so the default `node server/start.js` runs.
-  # The Go leg stays non-blocking until the port lands. Remove continue-on-error
-  # once that server is required.
+  #
+  # The Go leg runs against go/cmd (go/go.mod has been on main since #13).
+  # It fails until #30 lands the seeded database: the skeleton exits when
+  # the fresh DATA_DIR has no sqlite file. continue-on-error keeps that
+  # failure from failing the workflow while still reporting the leg's
+  # result. Remove it in a follow-up once #30 has merged and the leg is green.
   contract-suite:
     continue-on-error: ${{ matrix.server == 'go' }}
     runs-on: k8-build
@@ -48,32 +57,127 @@ jobs:
       matrix:
         server: [node, go]
     steps:
+      # pull_request checks out the merge ref. fetch-depth 2 includes that
+      # commit and its first parent (the base tip at merge time). Push checks
+      # out github.sha; depth 2 includes the parent, and a wider push falls
+      # back to running the suite when github.event.before is not present.
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+      - name: Detect contract paths
+        id: changes
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
+          SERVER: ${{ matrix.server }}
+        run: |
+          set -euo pipefail
+          echo "event=${EVENT_NAME} head=$(git rev-parse HEAD) ref=${GITHUB_REF} before=${BEFORE_SHA:-}"
+
+          run_suite() {
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$1"
+            printf '%s\n' "$1"
+          }
+          skip_suite() {
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$1"
+            printf '%s\n' "$1"
+          }
+
+          # git diff, not the pulls list-files API: this workflow's token is
+          # contents:read only. --no-renames keeps a rename out of these
+          # directories visible as a delete on the old path.
+          diff_paths() {
+            git diff --name-only --no-renames "$1" "$2" -- \
+              go \
+              contract \
+              server \
+              mcp \
+              package.json \
+              package-lock.json \
+              .github/workflows
+          }
+
+          # A missing or unfetched base is not "no relevant changes".
+          report() {
+            local base="$1"
+            local head="$2"
+            local missing="$3"
+            if [[ ! "$base" =~ ^[0-9a-fA-F]{40}$ || "$base" =~ ^0+$ ]]; then
+              run_suite "$missing"
+              exit 0
+            fi
+            if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+              run_suite "Base ${base} is not in this checkout; running the contract suite."
+              exit 0
+            fi
+            if ! git cat-file -e "${head}^{commit}" 2>/dev/null; then
+              run_suite "Head ${head} is not in this checkout; running the contract suite."
+              exit 0
+            fi
+            local changed
+            changed="$(diff_paths "$base" "$head")"
+            if [[ -n "$changed" ]]; then
+              echo "Contract paths changed (${base}..${head}):"
+              printf '%s\n' "$changed"
+              run_suite "Contract paths changed; running the ${SERVER} contract leg."
+            else
+              skip_suite "No changes under go/, contract/, server/, mcp/, package*.json, or .github/workflows/; contract steps skipped."
+            fi
+          }
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            # Merge ref: first parent is the base branch, second is the PR head.
+            # Diffing HEAD^1..HEAD ignores commits that landed on the base
+            # after the PR was opened. base.sha stays stale and would not.
+            if ! git rev-parse --verify --quiet 'HEAD^1' >/dev/null; then
+              run_suite "Merge parent HEAD^1 is not in this checkout; running the contract suite."
+              exit 0
+            fi
+            report "$(git rev-parse 'HEAD^1')" "$(git rev-parse HEAD)" \
+              "Merge parent HEAD^1 is not a commit; running the contract suite."
+          elif [[ "$EVENT_NAME" == "push" ]]; then
+            # before is 40 zeros on a new branch's first push.
+            if [[ -z "${BEFORE_SHA}" || "$BEFORE_SHA" =~ ^0+$ ]]; then
+              run_suite "Push before SHA is missing or all zeros; running the contract suite."
+              exit 0
+            fi
+            report "$BEFORE_SHA" "$PUSH_SHA" \
+              "Push before SHA is missing; running the contract suite."
+          else
+            run_suite "Unexpected event ${EVENT_NAME}; running the contract suite."
+          fi
       - uses: actions/setup-node@v4
+        if: steps.changes.outputs.relevant == 'true'
         with:
           node-version: 22
-      - run: npm ci
+      - name: Install dependencies
+        if: steps.changes.outputs.relevant == 'true'
+        run: npm ci
       # contents: read cannot write the Actions cache, and contract/ has no go.sum.
       - uses: actions/setup-go@v7
+        if: steps.changes.outputs.relevant == 'true'
         with:
           go-version-file: contract/go.mod
           cache: false
       - name: Locate Go server
         id: go-server
-        if: ${{ matrix.server == 'go' }}
+        if: steps.changes.outputs.relevant == 'true' && matrix.server == 'go'
         shell: bash
         run: |
           set -euo pipefail
-          skip() {
-            echo "::notice::$1"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          fail() {
+            echo "::error::$1"
+            exit 1
           }
           if [[ ! -f go/go.mod ]]; then
-            skip "go/go.mod is not present; skipping the Go contract leg"
+            fail "go/go.mod is not present; the Go contract leg cannot run"
           fi
           if [[ ! -d go/cmd ]]; then
-            skip "No server binary under go/cmd; skipping the Go contract leg"
+            fail "No server binary under go/cmd; the Go contract leg cannot run"
           fi
           is_helper() {
             case "$(basename "$1")" in
@@ -135,21 +239,20 @@ jobs:
               done
             fi
             if [[ -n "$found" ]]; then
-              skip "No server binary under go/cmd (found: ${found}); skipping the Go contract leg"
+              fail "No server binary under go/cmd (found: ${found}); the Go contract leg cannot run"
             fi
-            skip "No server binary under go/cmd; skipping the Go contract leg"
+            fail "No server binary under go/cmd; the Go contract leg cannot run"
           fi
           rel="${server#go/}"
-          echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "pkg=./${rel}" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v7
-        if: ${{ matrix.server == 'go' && steps.go-server.outputs.skip != 'true' }}
+        if: steps.changes.outputs.relevant == 'true' && matrix.server == 'go'
         with:
           go-version-file: go/go.mod
           cache: false
       - name: Build Go server
         id: go-build
-        if: ${{ matrix.server == 'go' && steps.go-server.outputs.skip != 'true' }}
+        if: steps.changes.outputs.relevant == 'true' && matrix.server == 'go'
         shell: bash
         env:
           PKG: ${{ steps.go-server.outputs.pkg }}
@@ -159,7 +262,7 @@ jobs:
           ( cd go && CGO_ENABLED=0 go build -o "$bin" "$PKG" )
           echo "cmd=${bin}" >> "$GITHUB_OUTPUT"
       - name: Contract suite
-        if: ${{ matrix.server != 'go' || steps.go-server.outputs.skip != 'true' }}
+        if: steps.changes.outputs.relevant == 'true'
         shell: bash
         env:
           GO_SERVER_BIN: ${{ steps.go-build.outputs.cmd }}
