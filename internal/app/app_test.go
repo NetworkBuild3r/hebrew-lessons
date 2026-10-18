@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 )
 
 type fixedClock struct{ t time.Time }
@@ -117,6 +119,43 @@ func TestConfigSeams(t *testing.T) {
 	}
 	if !a.store.Clock().Now().Equal(when) {
 		t.Fatal("store clock was not the injected clock")
+	}
+	if a.Review() == nil {
+		t.Fatal("review service is nil")
+	}
+}
+
+func TestReviewUsesConfigClock(t *testing.T) {
+	when := time.Date(2024, 5, 1, 8, 0, 0, 0, time.UTC)
+	a := newTestApp(t, Config{DataDir: t.TempDir(), Clock: fixedClock{when}})
+	ctx := context.Background()
+	userID, err := a.store.InsertUser(ctx, "learner@example.com", "sub-learner", "learner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lexemeID, err := a.store.InsertLexeme(ctx, "שלום")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cardID, err := a.store.InsertCard(ctx, db.Card{
+		UserID:   userID,
+		LexemeID: lexemeID,
+		Dir:      fsrs.DirHeEn,
+		State:    fsrs.StateNew,
+		Due:      when,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Review().Grade(ctx, cardID, fsrs.Good, false); err != nil {
+		t.Fatal(err)
+	}
+	card, err := a.Review().Card(ctx, cardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !card.LastReview.Equal(when) {
+		t.Fatalf("last review %s, want the config clock %s", card.LastReview, when)
 	}
 }
 
