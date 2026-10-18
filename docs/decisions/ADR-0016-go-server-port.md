@@ -112,6 +112,12 @@ From ADR-0005 §3 and `deploy/k8s-database.md`: `replicas: 1`, `strategy: Recrea
 
 Move these whole. Their state is in the process: auth (in-memory throttle in `server/auth/throttle.js`: 5 username failures, 30 s backoff doubling to 15 min, 20 failures per IP per 15 min); MCP on 8787, including in-memory codes and pending requests; every writer of one lesson file or of `mcp-oauth-state.json`.
 
+The throttle module takes an `ip` string and reads no header. `server/api/auth-routes.js` `clientIp` is what password and Google sign-in pass: the first comma-separated field of `X-Forwarded-For`, trimmed, when that header is a non-empty string; otherwise `req.socket.remoteAddress`, or `''` if there is no socket. It does not read `CF-Connecting-IP`. Go uses that same rule. A read-only Cloudflare review of zone `ibhacked.us` on 2026-10-18 says the edge adds `CF-Connecting-IP` and `X-Forwarded-For`, and Traefik adds its own forwarding headers. Which address is the first `X-Forwarded-For` hop is set in home_k3, not in this repo.
+
+Edge. That review found both hostnames on the proxied wildcard, with no tunnel, no Access, no Workers, and no Cloudflare header or path rules. The origin is k3s Traefik in front of the Service. Cutover in front of the pod is a Traefik routing change only. Cloudflare is not changed.
+
+Cloudflare's Free plan, per that review, has a proxy read timeout of 125 s (a response that sends no bytes for longer than that is dropped; the plan cannot raise it) and a 100 MB request-body cap. Go sets its own lower limits: an inbound server timeout, and `MaxBytesReader` per route, including media upload. Node's HTTP servers (`server/web.js`, `mcp/http.js`) set no `timeout`, `requestTimeout`, `headersTimeout`, or `keepAliveTimeout`, so the Go timeout numbers are [open question 10](#open-questions). Body caps that do exist, which Go stays at or under: `readJson` default `64 * 1024` (`server/http/body.js`); plans and lesson saves `1024 * 1024`; lexicon upsert `256 * 1024`; library writes `16 * 1024`; word-audio POST, lexicon-verified PATCH, and ai-planning PATCH `1024`; coverage `8192`; multipart `POST /api/media` `5242880` (`server/media/ingest.js` `MAX_INPUT_BYTES`); MCP POST `1024 * 1024` (`mcp/http.js`); OAuth forms `64 * 1024` (`mcp/oauth.js`). Sharp's 20 s decode timeout and the outbound image call's 60 s timeout are not inbound server timeouts.
+
 Rollback is the Node-only image. Nothing was converted, so Node runs on the files, subject to additive migrations.
 
 ### 8. PR sequence
@@ -148,7 +154,9 @@ Gained: a static binary, no native `sharp`, no experimental driver, image-only r
 
 ## Security considerations
 
-Session required. Admin role for `/admin` and `/editor` (others 403). A hidden lesson is 404. Mutating `/api/` needs JSON, except multipart `POST /api/media`, plus an allowed Origin. Security headers stay. `contract/` checks these. Node's loopback port stays inside the pod. The proxy forwards cookies and `Origin` unchanged. Secrets stay in `hebrew-secrets`.
+Session required. Admin role for `/admin` and `/editor` (others 403). A hidden lesson is 404. Mutating `/api/` needs JSON, except multipart `POST /api/media`, plus an allowed Origin. `contract/` checks these. Node's loopback port stays inside the pod. The in-pod proxy forwards cookies and `Origin` unchanged. Secrets stay in `hebrew-secrets`.
+
+Headers Node sets on app responses are `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, and `X-Frame-Options: DENY` (`server/http/security.js`). MCP OAuth HTML also sends a Content-Security-Policy; other responses do not. This repo does not set `Strict-Transport-Security`. The Cloudflare review saw `strict-transport-security: max-age=0; includeSubDomains; preload` on the live response. `max-age=0` disables HSTS and conflicts with `preload`. Go does not copy `max-age=0`. Whether Go sends HSTS, and the max-age, is [open question 11](#open-questions). The hop that adds the live header is not in this tree.
 
 ---
 
@@ -163,6 +171,8 @@ Session required. Admin role for `/admin` and `/editor` (others 403). A hidden l
 7. Whether production `schema_migrations` holds exactly versions 1–11.
 8. Production data sizes (dictionary rows, media volume).
 9. Kubernetes probe paths. This repo only special-cases a user-agent starting with `kube-probe` (`mcp/http.js`).
+10. Inbound Go server timeout values. Node's HTTP servers set none (§7). They must be lower than Cloudflare's 125 s proxy read timeout.
+11. Whether Go sends `Strict-Transport-Security`, and the max-age. Do not copy `max-age=0` (§ Security). The header is not set in this repo.
 
 ## Rollback
 
@@ -173,9 +183,11 @@ Delete this file. No application file, database, or recording changes with it.
 - [ADR-0005](ADR-0005-stack-and-architecture.md), [ADR-0007](ADR-0007-single-page-app-structure.md), [ADR-0006](ADR-0006-visual-language-and-interface-rules.md), [ADR-0002](ADR-0002-accounts-server-progress-site-map.md)
 - Tree `86e8d50c`: `deploy/k8s-database.md`, `Dockerfile`, `server/{start,web,audio,lesson-data,content-filter}.js`, `server/db/`, `server/auth/`, `server/media/sniff.js`, `server/plans/`, `server/learner/`, `mcp/{http,oauth,store}.js`
 - `github.com/modelcontextprotocol/go-sdk`, pkg.go.dev, checked 2026-10-18
+- Cloudflare review of zone `ibhacked.us` (hebrew and hebrew-mcp), read-only, 2026-10-18. Not a file in this repo. Ingress and any Traefik header rewriting live in home_k3.
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
 | 2026-10-18 | Proposed for formal review. The operator has approved leaving Node in principle. Supersedes ADR-0005 and ADR-0007. |
+| 2026-10-18 | Cloudflare edge notes: Traefik-only cutover, login IP is the first `X-Forwarded-For` hop (not `CF-Connecting-IP`), body caps and the 125 s proxy read timeout, HSTS `max-age=0` not copied. |
