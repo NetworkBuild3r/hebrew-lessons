@@ -1,37 +1,238 @@
 # Build and publish the hebrew-lessons image (served at hebrew.ibhacked.us).
 # Runs only on the local ARC scale set registered to this repo (see home_k3
 # apps/arc-runner-set-hebrew). Never use GitHub-hosted runners.
+#
+# k8-build talks to the shared docker-builder daemon
+# (DOCKER_HOST=tcp://docker-builder.arc-runners.svc:2375), not a dind sidecar.
+# That node keeps a buildx cache on disk. The registry cache below is what
+# still hits if the job lands on another node. type=gha is not used here.
+#
+# No push trigger. This workflow is the gate (branch protection is unavailable
+# on this private repo). A push to main runs `test`; we build that exact
+# commit only after `test` succeeds. workflow_dispatch is not an open path:
+# the sha (default: current main HEAD) must already have a successful `test`
+# run on main. The gate is the whole `test` workflow, so a job added there
+# later (contract-suite, for example) is included.
 name: image
 
 on:
-  push:
+  workflow_run:
+    workflows: ["test"]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      sha:
+        description: >-
+          Full 40-character commit to build. Leave empty to use the current
+          main HEAD. A completed successful `test` run for this exact SHA on
+          main is required (this is also how a rollback rebuild is allowed).
+        required: false
+        type: string
 
 jobs:
   build:
     runs-on: k8-build
+    timeout-minutes: 30
+    # Queue a later main build behind the one already running. Do not cancel it.
+    concurrency:
+      group: image-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: read
+      actions: read
       packages: write
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
     steps:
+      # Pick the commit, then prove `test` passed for it. Never fall back to
+      # github.sha: on workflow_run that is the default-branch tip, not the
+      # commit that was tested.
+      - name: Resolve and gate the commit
+        id: target
+        uses: actions/github-script@v7
+        env:
+          REQUESTED_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.sha || '' }}
+        with:
+          script: |
+            const fullSha = /^[0-9a-f]{40}$/;
+            const eventName = context.eventName;
+
+            function refuse(message) {
+              core.setFailed(message);
+            }
+
+            let sha;
+            if (eventName === 'workflow_run') {
+              const run = context.payload.workflow_run || {};
+              sha = String(run.head_sha || '').trim().toLowerCase();
+              if (!fullSha.test(sha)) {
+                refuse(
+                  'Refusing to build. workflow_run.head_sha is missing or not a full SHA, ' +
+                  'so this would not build the commit test ran. Got: ' + JSON.stringify(sha)
+                );
+                return;
+              }
+              if (run.conclusion !== 'success' || run.event !== 'push' || run.head_branch !== 'main') {
+                refuse(
+                  'Refusing to build ' + sha + '. Need test conclusion=success, event=push, head_branch=main. ' +
+                  'Got conclusion=' + run.conclusion + ' event=' + run.event + ' head_branch=' + run.head_branch + '.'
+                );
+                return;
+              }
+              core.setOutput('sha', sha);
+              core.info('Building tested main commit ' + sha);
+              return;
+            }
+
+            sha = String(process.env.REQUESTED_SHA || '').trim().toLowerCase();
+            if (!sha) {
+              let main;
+              try {
+                main = await github.rest.repos.getCommit({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: 'main'
+                });
+              } catch (err) {
+                refuse('Refusing to build. Could not resolve the current main HEAD: ' + (err && err.message ? err.message : err));
+                return;
+              }
+              sha = String(main.data.sha || '').trim().toLowerCase();
+              core.info('No sha input. Current main HEAD is ' + sha);
+            }
+            if (!fullSha.test(sha)) {
+              const shown = sha.length > 80 ? sha.slice(0, 80) + '…' : sha;
+              refuse('Refusing to build. sha must be the full 40-character commit id. Got: ' + JSON.stringify(shown));
+              return;
+            }
+
+            let listed;
+            try {
+              listed = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'test.yml',
+                head_sha: sha,
+                branch: 'main',
+                event: 'push',
+                status: 'success',
+                per_page: 100
+              });
+            } catch (err) {
+              refuse(
+                'Refusing to build ' + sha + '. Could not look up `test` workflow runs: ' +
+                (err && err.message ? err.message : err)
+              );
+              return;
+            }
+            const runs = (listed.data && listed.data.workflow_runs) || [];
+            const match = runs.find((run) =>
+              run.head_sha === sha &&
+              run.head_branch === 'main' &&
+              run.event === 'push' &&
+              run.status === 'completed' &&
+              run.conclusion === 'success' &&
+              run.name === 'test'
+            );
+            if (!match) {
+              refuse(
+                'Refusing to build ' + sha + '. No completed successful run of the test workflow ' +
+                '(.github/workflows/test.yml, name `test`) for this exact commit on main (event push). ' +
+                'A pull-request run does not count. Push the commit to main and wait for test to pass, ' +
+                'or dispatch an older full SHA that already passed on main.'
+              );
+              return;
+            }
+            core.setOutput('sha', sha);
+            core.info('test passed for ' + sha + ' on main (' + match.html_url + '). Building.');
+
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.target.outputs.sha }}
+          fetch-depth: 2
+
+      # paths-ignore does not apply to workflow_run. Skip when every file in
+      # the gated commit is docs/**, sdd/**, or a markdown file.
+      # Dispatch still builds that commit (the test gate above already ran).
+      - name: Skip docs-only commits
+        id: scope
+        shell: bash
+        run: |
+          set -eu
+          expected="${{ steps.target.outputs.sha }}"
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Refusing to build. Checked out ${actual}, but the gate selected ${expected}."
+            exit 1
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "Manual dispatch of ${actual}: building."
+            exit 0
+          fi
+          sha="$actual"
+          if ! git rev-parse --verify --quiet "${sha}^1" >/dev/null; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "No parent for ${sha}; building."
+            exit 0
+          fi
+          mapfile -d '' files < <(git diff -z --name-only "${sha}^1" "${sha}")
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "No files in ${sha}; building."
+            exit 0
+          fi
+          echo "Changed files:"
+          build=false
+          for f in "${files[@]}"; do
+            [ -n "$f" ] || continue
+            printf '  %s\n' "$f"
+            base="${f##*/}"
+            case "$f" in
+              docs/*|sdd/*) continue ;;
+            esac
+            case "$base" in
+              *.md) continue ;;
+            esac
+            build=true
+          done
+          echo "build=${build}" >> "$GITHUB_OUTPUT"
+          if [ "$build" = "true" ]; then
+            echo "Code changed; building ${sha}."
+          else
+            echo "Docs-only commit ${sha}; skipping the image build."
+          fi
+
       - uses: docker/setup-buildx-action@v3
+        if: steps.scope.outputs.build == 'true'
       - uses: docker/login-action@v3
+        if: steps.scope.outputs.build == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/metadata-action@v5
         id: meta
+        if: steps.scope.outputs.build == 'true'
         with:
+          # Tag the gated commit, not workflow_run's github.sha (main's tip).
+          # type=raw keeps the existing sha-<full sha> tag text.
           images: ghcr.io/networkbuild3r/hebrew-lessons
           tags: |
-            type=sha,format=long
+            type=raw,value=sha-${{ steps.target.outputs.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ steps.target.outputs.sha }}
       - uses: docker/build-push-action@v6
+        if: steps.scope.outputs.build == 'true'
         with:
           context: .
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=ghcr.io/networkbuild3r/hebrew-lessons:buildcache
+          cache-to: type=registry,ref=ghcr.io/networkbuild3r/hebrew-lessons:buildcache,mode=max,ignore-error=true

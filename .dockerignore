@@ -1,8 +1,19 @@
 node_modules
 .git
+.github
 sdd
+docs
 # Local secrets stay out of the image build context.
 .env
 .env.*
 data/
 spikes/
+test/
+# Go contract harness. The Node server does not load it.
+contract/
+# Future Go server module (github.com/NetworkBuild3r/hebrew-lessons/go).
+# Not part of this Node image.
+go/
+deploy/
+*.md
+docker-compose.yml
