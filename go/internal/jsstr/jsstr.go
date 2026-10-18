@@ -205,11 +205,20 @@ func hasSurrogate(s string) bool {
 
 var lower = cases.Lower(language.Und)
 
-// ToLower matches String.prototype.toLowerCase for the characters the
-// lexicon-form comparison sees (Unicode default case conversion, not a
-// locale). Lone surrogates are left unchanged, as they are not cased.
+// jsLowerDelta is where Node 22.14.0 (Unicode 16.0) and golang.org/x/text
+// v0.29.0 disagree on default case conversion. ToLower emits the Node mapping.
+var jsLowerDelta = map[rune]rune{
+	0x1C89: 0x1C8A,
+	0xA7CB: 0x0264,
+	0xA7CC: 0xA7CD,
+	0xA7DA: 0xA7DB,
+	0xA7DC: 0x019B,
+}
+
+// ToLower matches String.prototype.toLowerCase (Unicode default case
+// conversion, not a locale). Lone surrogates are left unchanged.
 func ToLower(s string) string {
-	if !hasSurrogate(s) && utf8.ValidString(s) {
+	if !slowLower(s) {
 		return lower.String(s)
 	}
 	var b strings.Builder
@@ -226,7 +235,10 @@ func ToLower(s string) string {
 		if size == 0 {
 			break
 		}
-		if r >= 0xD800 && r <= 0xDFFF {
+		if mapped, ok := jsLowerDelta[r]; ok {
+			flush()
+			appendRune(&b, mapped)
+		} else if r >= 0xD800 && r <= 0xDFFF {
 			flush()
 			appendRune(&b, r)
 		} else {
@@ -236,6 +248,18 @@ func ToLower(s string) string {
 	}
 	flush()
 	return b.String()
+}
+
+func slowLower(s string) bool {
+	if hasSurrogate(s) || !utf8.ValidString(s) {
+		return true
+	}
+	for _, r := range s {
+		if _, ok := jsLowerDelta[r]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func appendRune(b *strings.Builder, r rune) {

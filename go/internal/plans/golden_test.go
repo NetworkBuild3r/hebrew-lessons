@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/jsstr"
 )
 
 func TestGoldenValidate(t *testing.T) {
@@ -103,61 +101,6 @@ func TestGoldenJSON(t *testing.T) {
 			t.Errorf("case %d\ninput %s\ngot   %s\nwant  %s", i, input, got, canonical)
 		}
 	}
-}
-
-func TestGoldenJSStr(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "golden", "jsstr.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	doc, err := Parse(string(raw))
-	if err != nil {
-		t.Fatal(err)
-	}
-	check := func(name string, items []Value, fn func(Value) (got, want string)) {
-		t.Run(name, func(t *testing.T) {
-			for i, item := range items {
-				got, want := fn(item)
-				if got != want {
-					in, _ := item.StrKey("input")
-					t.Errorf("%s %d %q\ngot  %q\nwant %q", name, i, in, got, want)
-				}
-			}
-		})
-	}
-	trim, _ := doc.Get("trim")
-	check("trim", trim.A, func(item Value) (string, string) {
-		in, _ := item.StrKey("input")
-		want, _ := item.StrKey("trim")
-		return jsstr.Trim(in), want
-	})
-	lengths, _ := doc.Get("lengths")
-	check("lengths", lengths.A, func(item Value) (string, string) {
-		in, _ := item.StrKey("input")
-		cp, _ := item.Get("codePoints")
-		u16, _ := item.Get("utf16")
-		got := fmt.Sprintf("%d %d", jsstr.CodePoints(in), jsstr.UTF16Len(in))
-		want := fmt.Sprintf("%d %d", int(cp.N), int(u16.N))
-		return got, want
-	})
-	lower, _ := doc.Get("lower")
-	check("lower", lower.A, func(item Value) (string, string) {
-		in, _ := item.StrKey("input")
-		want, _ := item.StrKey("lower")
-		return jsstr.ToLower(in), want
-	})
-	nfc, _ := doc.Get("nfc")
-	check("nfc", nfc.A, func(item Value) (string, string) {
-		in, _ := item.StrKey("input")
-		want, _ := item.StrKey("nfc")
-		return jsstr.NFC(in), want
-	})
-	collapse, _ := doc.Get("collapse")
-	check("collapse", collapse.A, func(item Value) (string, string) {
-		in, _ := item.StrKey("input")
-		want, _ := item.StrKey("collapse")
-		return jsstr.CollapseSpace(in), want
-	})
 }
 
 func restringify(raw string) (string, error) {

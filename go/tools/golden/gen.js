@@ -120,36 +120,98 @@ function rulesOf(found) {
     return set;
 }
 
+// jsstr goldens are line-oriented so a lone surrogate survives as a JSON string
+// (\uD800), which encoding/json would replace. Columns are tab-separated.
+// String fields are JSON.stringify output, including the quotes.
 function jsstrGoldens() {
-    const spaces = [
-        '\t', '\n', '\v', '\f', '\r', ' ', '\u00A0', '\u1680',
-        '\u2000', '\u2001', '\u2002', '\u2003', '\u2004', '\u2005', '\u2006', '\u2007', '\u2008', '\u2009', '\u200A',
-        '\u2028', '\u2029', '\u202F', '\u205F', '\u3000', '\uFEFF',
-        '\u0085', '\u180E', '\u200B', '\u00AD'
+    const dir = path.join(OUT, 'jsstr');
+    fs.mkdirSync(dir, { recursive: true });
+    const word = 'שָׁלוֹם';
+    const wordChars = Array.from(word);
+    const named = [
+        ['U+FEFF', 0xFEFF],
+        ['U+0085', 0x0085],
+        ['U+180E', 0x180E],
+        ['U+200B', 0x200B],
+        ['U+2028', 0x2028],
+        ['U+2029', 0x2029],
+        ['U+3000', 0x3000],
+        ['U+00A0', 0x00A0]
     ];
-    const trim = [];
-    for (const ch of spaces) {
-        trim.push({ name: 'around-' + ch.codePointAt(0).toString(16), input: 'a' + ch + 'b' + ch, trim: ('a' + ch + 'b' + ch).trim() });
-        trim.push({ name: 'only-' + ch.codePointAt(0).toString(16), input: ch + ch, trim: (ch + ch).trim() });
+    const astral = [0x10000, 0x1F600, 0x1F4A9, 0x1D11E, 0x20000, 0x2F800, 0xE0100, 0x10FFFF];
+
+    function positions(ch) {
+        return [
+            ['lead', ch + word],
+            ['trail', word + ch],
+            ['interior', wordChars[0] + ch + wordChars.slice(1).join('')],
+            ['repeated', ch + ch + word + ch + ch]
+        ];
     }
-    trim.push({ name: 'fef-inner', input: ' \uFEFFabc\uFEFF ', trim: ' \uFEFFabc\uFEFF '.trim() });
-    trim.push({ name: '0085-inner', input: ' \u0085abc\u0085 ', trim: ' \u0085abc\u0085 '.trim() });
-    const samples = ['', 'abc', '  abc  ', '\uFEFF', '\u0085', '\uD800', '\uD800\uDE00', 'א', 'שָׁלוֹם', '😀', 'a\u2028b'];
-    const lengths = samples.map((input) => ({
-        input,
-        codePoints: Array.from(input).length,
-        utf16: input.length
-    }));
-    const lowerSrc = ['İ', 'ΣΣ', 'ẞ', 'ﬁ', 'ABC', 'שָׁלוֹם', '\uD800A'];
-    const lower = lowerSrc.map((input) => ({ input, lower: input.toLowerCase() }));
-    const nfcSrc = ['א\u05BC\u05B8', 'ש\u05B8\u05C1', '\uD800א\u05BC\u05B8', 'cafe\u0301'];
-    const nfc = nfcSrc.map((input) => ({ input, nfc: input.normalize('NFC') }));
-    const collapseSrc = ['a  b', ' \u00A0a\u0085b ', '\uFEFF', 'a\tb\nc', '\u0085', '   '];
-    const collapse = collapseSrc.map((input) => ({ input, collapse: input.replace(/\s+/g, ' ') }));
-    const markup = ['<b', '< b', '<\u00A0b', '<\u0085b', '<\u180Eb', 'text'];
-    const markupOut = markup.map((input) => ({ input, match: /<\s*[A-Za-z/!]/u.test(input) }));
-    const anchor = [{ input: 'a\n', match: /^a$/u.test('a\n'), nonU: /^a$/.test('a\n') }];
-    fs.writeFileSync(path.join(OUT, 'jsstr.json'), JSON.stringify({ trim, lengths, lower, nfc, collapse, markup: markupOut, anchor }, null, 2) + '\n');
+    function q(s) {
+        return JSON.stringify(s);
+    }
+    function writeLines(name, lines) {
+        fs.writeFileSync(path.join(dir, name), lines.join('\n') + '\n');
+    }
+
+    const trim = [];
+    const lengths = [];
+    const lower = [];
+    const nfc = [];
+    const collapse = [];
+    function addChar(label, ch) {
+        for (const [pos, input] of positions(ch)) {
+            trim.push(label + '-' + pos + '\t' + q(input) + '\t' + q(input.trim()));
+        }
+        lengths.push(label + '\t' + q(ch) + '\t' + Array.from(ch).length + '\t' + ch.length);
+        lower.push(label + '\t' + q(ch) + '\t' + q(ch.toLowerCase()));
+        nfc.push(label + '\t' + q(ch) + '\t' + q(ch.normalize('NFC')));
+        collapse.push(label + '-pair\t' + q(ch + ch) + '\t' + q((ch + ch).replace(/\s+/g, ' ')));
+        collapse.push(label + '-between\t' + q('א' + ch + 'ב') + '\t' + q(('א' + ch + 'ב').replace(/\s+/g, ' ')));
+    }
+    for (let cp = 0; cp <= 0xFFFF; cp++) {
+        addChar('u' + cp.toString(16).padStart(4, '0'), String.fromCodePoint(cp));
+    }
+    astral.forEach((cp) => addChar('u' + cp.toString(16), String.fromCodePoint(cp)));
+    // Multi-character inputs the validators actually fold, beyond one code point.
+    const phrases = [
+        ['word', word],
+        ['alef-dagesh-qamats', 'א\u05BC\u05B8'],
+        ['shin-qamats-shin-dot', 'ש\u05B8\u05C1'],
+        ['surrogate-then-nfd', '\uD800א\u05BC\u05B8'],
+        ['cafe-combining', 'cafe\u0301'],
+        ['dotted-i', 'İ'],
+        ['final-sigma', 'ΣΣ'],
+        ['sharp-s', 'ẞ'],
+        ['ligature-fi', 'ﬁ'],
+        ['emoji', '😀'],
+        ['lone-surrogate', '\uD800'],
+        ['two-high-surrogates', '\uD800\uD800'],
+        ['empty', '']
+    ];
+    phrases.forEach(([label, input]) => {
+        lengths.push(label + '\t' + q(input) + '\t' + Array.from(input).length + '\t' + input.length);
+        lower.push(label + '\t' + q(input) + '\t' + q(input.toLowerCase()));
+        nfc.push(label + '\t' + q(input) + '\t' + q(input.normalize('NFC')));
+        trim.push(label + '\t' + q(input) + '\t' + q(input.trim()));
+        collapse.push(label + '\t' + q(input) + '\t' + q(input.replace(/\s+/g, ' ')));
+    });
+    writeLines('trim.jsonl', trim);
+    writeLines('lengths.jsonl', lengths);
+    writeLines('lower.jsonl', lower);
+    writeLines('nfc.jsonl', nfc);
+    writeLines('collapse.jsonl', collapse);
+
+    const namedLines = [];
+    named.forEach(([label, cp]) => {
+        const ch = String.fromCodePoint(cp);
+        namedLines.push(label + '-only\t' + q(ch) + '\t' + q(ch.trim()));
+        for (const [pos, input] of positions(ch)) {
+            namedLines.push(label + '-' + pos + '\t' + q(input) + '\t' + q(input.trim()));
+        }
+    });
+    writeLines('named-trim.jsonl', namedLines);
 }
 
 function jsonGoldens() {
@@ -611,12 +673,23 @@ function main() {
     jsonGoldens();
     const found = fixtures().concat(mutations());
     const counts = {};
+    const byRule = {};
+    const byCase = {};
     for (const item of found) {
-        for (const rule of rulesOf(item)) counts[rule] = (counts[rule] || 0) + 1;
+        const rules = Array.from(rulesOf(item)).sort();
+        byCase[item.id] = rules;
+        for (const rule of rules) {
+            counts[rule] = (counts[rule] || 0) + 1;
+            if (!byRule[rule]) byRule[rule] = [];
+            byRule[rule].push(item.id);
+        }
     }
+    for (const rule of Object.keys(byRule)) byRule[rule].sort();
     const silent = ['N4', 'semantic-set', 'form-recall-image'];
     for (const rule of silent) {
         if (counts[rule]) throw new Error(rule + ' fired and must stay silent');
+        counts[rule] = 0;
+        byRule[rule] = [];
     }
     const expected = [
         'schema', 'N1', 'N2', 'N3', 'N5', 'N6', 'N7', 'N8', 'N9', 'N10', 'N11', 'N12', 'N13', 'N14',
@@ -641,9 +714,16 @@ function main() {
         }
     };
     fs.writeFileSync(path.join(OUT, 'MANIFEST.json'), JSON.stringify(manifest, null, 2) + '\n');
+    const sortObj = (obj) => {
+        const out = {};
+        Object.keys(obj).sort().forEach((key) => { out[key] = obj[key]; });
+        return out;
+    };
     const coverage = {
         cases: found.length,
-        rules: counts,
+        rules: sortObj(counts),
+        byRule: sortObj(byRule),
+        byCase: sortObj(byCase),
         silent: {
             N4: 'n4-listening-only trips listening coverage; N3 reports it and N4 is never emitted',
             'semantic-set': 'semantic-set-kinship is one category; closed-set reports it and semantic-set is never emitted',
