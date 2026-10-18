@@ -230,7 +230,7 @@ One new table holds the three facts that have to be remembered:
 
 Primary key: `(user_id, plan_id, unit_id)`.
 
-The pass mark and the review-stop threshold are config. The defaults are below. The checker reads them and does not embed the numbers. Go adds the keys after the cutover, with N24–N29. They are not added to the Node module `server/learner/thresholds.js` ahead of that. This record does not add them.
+The checkpoint pass mark and the review-stop threshold belong to the Go learner package config (ADR-0016 layout) after the cutover. The defaults are below. The checker reads that config and does not embed the numbers. Node's `server/learner/thresholds.js` stays unchanged.
 
 | Key | Default | What reads it |
 |-----|---------|----------------|
@@ -300,9 +300,9 @@ The 30% fading figure is a product choice.
 
 ### 9. Migration
 
-Observed on 2026-10-18: 13 published lessons, no plans. After this ADR is **accepted**, Hebrew Lesson Builder may draft the plan with the unit and lesson fields schema 1.2.0 already has. That draft does not run as part of accepting the ADR, and it does not run in the pull request that adds this file.
+Observed on 2026-10-18: 13 published lessons, no plans. Hebrew Lesson Builder may start drafting the five units now on schema 1.2.0, using the unit and lesson structure that version already supports (units, `newWords`, `recycles`) and writing toward the stacking ladder. Those plans stay draft and unpublished until Brian accepts this ADR. The 1.3.0 fields are filled in after the Go cutover. This record does not add the plans.
 
-Eleven series lessons become five **draft** units. Draft means the plan's `status` is draft ([ADR-0003](ADR-0003-course-and-lesson-plan-language.md) Decision 7). Learners do not see it until it is published, which is a later step.
+Eleven series lessons become five **draft** units. Draft means the plan's `status` is draft ([ADR-0003](ADR-0003-course-and-lesson-plan-language.md) Decision 7). Those plans stay draft and unpublished until Brian accepts this ADR.
 
 | Draft unit | Lessons, in the order below |
 |------------|-----------------------------|
@@ -319,7 +319,7 @@ The design spec's sentence that all 13 become those five units does not survive 
 
 `shai-date-indirect-speech` is המלצות 1, so it sits in Preferences. Indirect speech as a pattern of סיפור 1 is `he-said-that-retell`, in Narration. The lesson is not in both units. מסעדה has a lesson numbered 3 and no lesson numbered 1 or 2 on the shelf. The draft does not invent the missing numbers.
 
-The draft uses `newWords` and `recycles`, filled from `list_words` with `exactKey`, and it writes toward the stacking ladder. `introduces_words`, `reuses_words`, `kind`, and `target_skill` stay unset until Go accepts them. The 69 pointed words that appear in only one lesson still need later touches. N27 is the Go check for that, after the cutover. Review stops are computed at read time, so the draft does not store them. Until `kind` exists, a checkpoint is a lesson of the checkpoint activities the player already has. It gains `kind: checkpoint` when Go supports that field.
+The draft uses `newWords` and `recycles`, filled from `list_words` with `exactKey`, and it writes toward the stacking ladder. `introduces_words`, `reuses_words`, `kind`, and `target_skill` stay unset until after the Go cutover. The 69 pointed words that appear in only one lesson still need later touches. N27 is the Go check for that, after the cutover. Review stops are computed at read time, so the draft does not store them. Until `kind` exists, a checkpoint is a lesson of the checkpoint activities the player already has. It gains `kind: checkpoint` after the Go cutover.
 
 FSRS rows carry over. They are keyed by word, not by unit. A finished worksheet maps to a done node through the lesson progress the server already stores. That mapping is computed. It does not copy progress into `unit_progress` except when a checkpoint is later submitted.
 
@@ -349,8 +349,8 @@ This record does not start that work.
 #### Sequencing
 
 1. The MCP contract is frozen for the Go port ([ADR-0016](ADR-0016-go-server-port.md) keeps the same tool names and schemas through the port). Plan schema 1.3.0 and validators N24–N29 are built in Go after the cutover, not in Node.
-2. Until then, Hebrew Lesson Builder can start authoring the five draft units right away, using the unit and lesson structure schema 1.2.0 already supports (units, `newWords`, `recycles`) and writing toward the stacking ladder.
-3. The 1.3.0 fields (`unit_progress`, the gate warning flag, checkpoint score and `passed_at`, and the plan fields in Decision 2) get filled in once Go supports them.
+2. Until then, Hebrew Lesson Builder may start drafting the five units now on schema 1.2.0, using the unit and lesson structure that version already supports (units, `newWords`, `recycles`) and writing toward the stacking ladder. Those plans stay draft and unpublished until Brian accepts this ADR.
+3. The 1.3.0 fields (`unit_progress`, the gate warning flag, checkpoint score and `passed_at`, and the plan fields in Decision 2) get filled in after the Go cutover.
 
 ---
 
@@ -417,3 +417,4 @@ Delete this file. No application file, schema file, database, worksheet, or scre
 |------|--------|
 | 2026-10-18 | Proposed. Records the learning path, schema 1.3.0 (the design spec said 1.2.0, which ADR-0014 already uses), `unit_progress` including the one-time soft-gate flag, the 80% config pass mark, and the migration plan. No schema, code, or lesson file changes with this record. |
 | 2026-10-18 | Sequencing under §11. Schema 1.3.0 and N24–N29 are a Go change after the ADR-0016 cutover. Hebrew Lesson Builder may draft the five units on schema 1.2.0 before that. |
+| 2026-10-18 | Drafting the five units on schema 1.2.0 may start now. Those plans stay draft and unpublished until Brian accepts this ADR. The 1.3.0 fields are filled in after the Go cutover. The checkpoint pass mark and the review-stop threshold belong to the Go learner package config (ADR-0016 layout) after the cutover. Node's `server/learner/thresholds.js` stays unchanged. |
