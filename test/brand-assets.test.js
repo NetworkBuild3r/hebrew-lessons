@@ -15,7 +15,9 @@ const BRAND = path.resolve(__dirname, '..', 'shared', 'brand');
 const ICON_NAMES = [
     'play', 'replay', 'next', 'back', 'check', 'wrong', 'retry', 'home', 'lessons', 'review',
     'progress', 'settings', 'theme', 'mute', 'sound', 'lock', 'done', 'help', 'admin',
-    'upload', 'image', 'words', 'today'
+    'upload', 'image', 'words', 'today',
+    'guides', 'verbs', 'streak', 'xp', 'search', 'filter', 'chevron-down', 'close',
+    'compare', 'tip', 'bookmark', 'mic'
 ];
 
 const PNG_SIZES = {

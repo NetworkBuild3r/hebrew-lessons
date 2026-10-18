@@ -8160,3 +8160,14 @@ section[data-block-type="conjugation-table"][data-mode="drill"][data-drill-owner
     .vp-sq { width: 0.5rem; height: 0.5rem; }
     .vp-map-group { gap: 2px; }
 }
+
+/* Theme control: light, dark, or auto. Buttons and radios share the pill. */
+form.ui-lang, form.theme-switch { margin: 0; }
+.theme-switch { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; padding: 2px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-pill); background: var(--color-surface); }
+.theme-switch .icon { width: 18px; height: 18px; margin-inline: 6px; color: var(--color-muted); flex: none; }
+.theme-switch [role="radio"], .theme-switch button { appearance: none; min-height: 36px; min-width: 44px; padding: 0 0.65rem; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--color-text); font: 700 13px/1 var(--font-sans); cursor: pointer; }
+.theme-switch [role="radio"][aria-checked="true"], .theme-switch button[aria-pressed="true"] { background: var(--color-text); color: var(--color-surface); }
+.theme-switch [role="radio"]:focus-visible, .theme-switch button:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
+@media (max-width: 767px) {
+    .theme-switch [role="radio"], .theme-switch button { padding-inline: 0.4rem; font-size: 12px; }
+}

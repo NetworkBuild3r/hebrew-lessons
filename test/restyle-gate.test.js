@@ -313,16 +313,16 @@ describe('INIT-005/SPEC-013 contrast of the restyle colours (REQ-017)', () => {
 });
 
 describe('INIT-013/SPEC-002 theme toggle chrome', () => {
-    it('app-shell renders a 44px bilingual theme toggle without English-only aria-label/title', () => {
+    it('app-shell renders a 44px theme control without an English-only aria-label/title', () => {
         const shell = read(path.join(SHARED, 'app-shell.js'));
         assert.match(shell, /data-theme-toggle/);
         assert.match(shell, /hebrew-shell-theme-toggle/);
         assert.match(shell, /hebrew-theme/);
-        assert.match(shell, /val === 'dark' \? 'dark' : 'light'|normalizeTheme/);
-        assert.match(shell, /מצב כהה/);
-        assert.match(shell, /Dark mode/);
-        assert.match(shell, /מצב בהיר/);
-        assert.match(shell, /Light mode/);
+        assert.match(shell, /normalizeTheme/);
+        assert.match(shell, /בהיר/);
+        assert.match(shell, /כהה/);
+        assert.match(shell, /אוטומטי/);
+        assert.match(shell, /role="radiogroup"/);
         assert.doesNotMatch(shell, /data-theme-toggle[^;]*aria-label\s*=\s*['"][A-Za-z]/);
         assert.match(CSS, /\.hebrew-shell-theme-toggle\s*\{[^}]*min-height:\s*44px/);
     });
