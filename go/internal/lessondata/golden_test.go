@@ -17,7 +17,7 @@ import (
 const (
 	minWorksheetFiles = 8
 	minMutations      = 81
-	minQuirks         = 64
+	minQuirks         = 80
 )
 
 type goldenMeta struct {
@@ -55,7 +55,7 @@ type worksheetRow struct {
 	Assign       string `json:"assign"`
 }
 
-func repoRoot(t *testing.T) string {
+func repoRoot(t testing.TB) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
@@ -64,7 +64,7 @@ func repoRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
 }
 
-func goldenRoot(t *testing.T) string {
+func goldenRoot(t testing.TB) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
@@ -73,7 +73,7 @@ func goldenRoot(t *testing.T) string {
 	return filepath.Join(filepath.Dir(file), "testdata", "golden")
 }
 
-func readJSONL(t *testing.T, name string) [][]byte {
+func readJSONL(t testing.TB, name string) [][]byte {
 	t.Helper()
 	f, err := os.Open(filepath.Join(goldenRoot(t), name))
 	if err != nil {
@@ -268,7 +268,7 @@ func TestMutationMessagesCoverGrammar(t *testing.T) {
 	}
 }
 
-func readMeta(t *testing.T) goldenMeta {
+func readMeta(t testing.TB) goldenMeta {
 	t.Helper()
 	body, err := os.ReadFile(filepath.Join(goldenRoot(t), "meta.json"))
 	if err != nil {

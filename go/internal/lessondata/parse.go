@@ -194,7 +194,7 @@ func readString(src []uint16, start int, fail func(string)) (string, int) {
 	for i < len(src) {
 		ch := src[i]
 		if ch == quote {
-			return unitsToWTF8(out), i + 1
+			return unitsToString(out), i + 1
 		}
 		if ch == '\n' && quote != '`' {
 			fail("newline inside string literal")

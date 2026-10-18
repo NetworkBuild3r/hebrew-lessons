@@ -18,9 +18,11 @@ type Value struct {
 	Kind Kind
 	Bool bool
 	Num  float64
-	Str  string // WTF-8, one UTF-16 code unit per scalar or surrogate
-	Arr  []Value
-	Obj  *Obj
+	// Str is UTF-8. An unpaired surrogate is WTF-8 (JSON.stringify writes \ud800).
+	// A supplementary character is one scalar, not two separately encoded halves.
+	Str string
+	Arr []Value
+	Obj *Obj
 }
 
 // Obj is an ordered object. Duplicate keys keep their first position.

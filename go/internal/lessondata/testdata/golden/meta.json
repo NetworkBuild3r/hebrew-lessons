@@ -4,5 +4,5 @@
   "generator": "scripts/generate-lessondata-goldens.js",
   "files": 8,
   "mutations": 81,
-  "quirks": 64
+  "quirks": 80
 }

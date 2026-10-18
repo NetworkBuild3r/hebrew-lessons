@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 )
 
 // WriteIndented emits one statement:
@@ -182,17 +183,19 @@ func quoteJSON(s string) string {
 				b.WriteString(unicodeEscape(c))
 				continue
 			}
-			if c >= 0xD800 && c <= 0xDBFF && i+1 < len(units) && units[i+1] >= 0xDC00 && units[i+1] <= 0xDFFF {
-				r := rune(0x10000 + (uint32(c-0xD800) << 10) + uint32(units[i+1]-0xDC00))
-				b.WriteRune(r)
-				i++
-				continue
-			}
-			if c >= 0xD800 && c <= 0xDFFF {
+			r := rune(c)
+			if utf16.IsSurrogate(r) {
+				if i+1 < len(units) {
+					if dec := utf16.DecodeRune(r, rune(units[i+1])); dec != '\uFFFD' {
+						b.WriteRune(dec)
+						i++
+						continue
+					}
+				}
 				b.WriteString(unicodeEscape(c))
 				continue
 			}
-			b.WriteRune(rune(c))
+			b.WriteRune(r)
 		}
 	}
 	b.WriteByte('"')

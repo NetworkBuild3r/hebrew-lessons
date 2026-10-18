@@ -274,6 +274,66 @@ const quirks = [
     ['ls-between-tokens', 'window.X\u2028=\u20281;']
 ];
 
+function cp(n) {
+    return String.fromCodePoint(n);
+}
+
+function codes(list) {
+    return list.map(cp).join('');
+}
+
+// Lesson source for one global. JSON.stringify is only the input text;
+// the golden writers re-stringify with the real indent rules.
+function stmt(name, value) {
+    return 'window.' + name + ' = ' + JSON.stringify(value) + ';';
+}
+
+const nikud = codes([
+    0x05D1, 0x05BC, 0x05B0, 0x05E8, 0x05B5, 0x05D0, 0x05E9, 0x05B4, 0x05C1, 0x05D9, 0x05EA, 0x20,
+    0x05D1, 0x05BC, 0x05B8, 0x05E8, 0x05B8, 0x05D0, 0x20,
+    0x05D0, 0x05B1, 0x05DC, 0x05B9, 0x05D4, 0x05B4, 0x05D9, 0x05DD
+]);
+let teamim = '';
+for (let c = 0x0591; c <= 0x05AF; c++) teamim += cp(0x05D1) + cp(c);
+const maqaf = codes([
+    0x05D5, 0x05B7, 0x05D9, 0x05B9, 0x05D0, 0x05DE, 0x05B6, 0x05E8, 0x05BE,
+    0x05D0, 0x05B1, 0x05DC, 0x05B9, 0x05D4, 0x05B4, 0x05D9, 0x05DD, 0x05C3
+]);
+let presentation = '';
+for (let c = 0xFB1D; c <= 0xFB4F; c++) presentation += cp(c);
+const astral = codes([0x10000, 0x1D11E, 0x20000, 0x10FFFF]);
+const zwj = codes([
+    0x1F468, 0x200D, 0x1F469, 0x200D, 0x1F467, 0x200D, 0x1F466,
+    0x1F468, 0x200D, 0x1F4BB,
+    0x1F3F3, 0xFE0F, 0x200D, 0x1F308
+]);
+const skin = codes([0x1F44B, 0x1F3FB, 0x1F44D, 0x1F3FD, 0x1F468, 0x1F3FF]);
+const flags = codes([0x1F1EE, 0x1F1F1, 0x1F1FA, 0x1F1F8, 0x1F1EF, 0x1F1F5]);
+const keycaps = codes([0x31, 0xFE0F, 0x20E3, 0x23, 0xFE0F, 0x20E3, 0x2A, 0xFE0F, 0x20E3]);
+const grin = codes([0x1F600]);
+const shalom = codes([0x05E9, 0x05DC, 0x05D5, 0x05DD]);
+const family = codes([0x1F468, 0x200D, 0x1F469, 0x200D, 0x1F467, 0x200D, 0x1F466]);
+const rtl = nikud + ' ' + zwj + ' ' + teamim + ' ' + flags + ' ' + keycaps + ' ' + maqaf + ' ' + presentation;
+
+quirks.push(
+    ['uni-emoji-value', stmt('X', grin + ' ' + shalom)],
+    ['uni-emoji-key', stmt('X', { [grin]: { word: shalom }, [family]: { flag: codes([0x1F1EE, 0x1F1F1]) } })],
+    ['uni-emoji-zwj', stmt('X', zwj)],
+    ['uni-emoji-skin', stmt('X', skin)],
+    ['uni-emoji-flag', stmt('X', flags)],
+    ['uni-emoji-keycap', stmt('X', keycaps)],
+    ['uni-astral', stmt('X', astral)],
+    ['uni-astral-esc', 'window.X = "\\uD800\\uDC00\\uD834\\uDD1E\\uD840\\uDC00\\uDBFF\\uDFFF";'],
+    ['uni-surrogate-reversed', 'window.X = "\\uDE00\\uD83D\\uDFFF\\uD800";'],
+    ['uni-surrogate-lone', 'window.X = "\\uD800\\uDEAD\\uDFFF";'],
+    ['uni-hebrew-nikud', stmt('X', nikud)],
+    ['uni-hebrew-teamim', stmt('X', teamim)],
+    ['uni-hebrew-maqaf', stmt('X', maqaf)],
+    ['uni-hebrew-presentation', stmt('X', presentation)],
+    ['uni-hebrew-key', stmt('X', { [teamim]: { ok: true } })],
+    ['uni-rtl-emoji', stmt('X', rtl)]
+);
+
 fs.rmSync(golden, { recursive: true, force: true });
 fs.mkdirSync(golden, { recursive: true });
 
