@@ -112,7 +112,9 @@ From ADR-0005 §3 and `deploy/k8s-database.md`: `replicas: 1`, `strategy: Recrea
 
 Move these whole. Their state is in the process: auth (in-memory throttle in `server/auth/throttle.js`: 5 username failures, 30 s backoff doubling to 15 min, 20 failures per IP per 15 min); MCP on 8787, including in-memory codes and pending requests; every writer of one lesson file or of `mcp-oauth-state.json`.
 
-The throttle module takes an `ip` string and reads no header. `server/api/auth-routes.js` `clientIp` is what password and Google sign-in pass: the first comma-separated field of `X-Forwarded-For`, trimmed, when that header is a non-empty string; otherwise `req.socket.remoteAddress`, or `''` if there is no socket. It does not read `CF-Connecting-IP`. Go uses that same rule. A read-only Cloudflare review of zone `ibhacked.us` on 2026-10-18 says the edge adds `CF-Connecting-IP` and `X-Forwarded-For`, and Traefik adds its own forwarding headers. Which address is the first `X-Forwarded-For` hop is set in home_k3, not in this repo.
+The throttle module takes an `ip` string and reads no header. Node's `server/api/auth-routes.js` `clientIp` passes the first comma-separated field of `X-Forwarded-For`, trimmed, when that header is a non-empty string; otherwise `req.socket.remoteAddress`, or `''` if there is no socket. That leftmost value is client-controlled: Cloudflare appends to whatever the client already sent, so the login throttle can be bypassed. The throttle key is not an external contract, so changing it is in scope and is not a compatibility break. Go does not keep that rule.
+
+Go trusts `CF-Connecting-IP` only when the immediate peer, the socket remote address, is in `TRUSTED_PROXIES`, a CIDR list from env or config (Traefik). Otherwise it uses the socket address. It never uses the leftmost `X-Forwarded-For` value. Empty `TRUSTED_PROXIES` is the default: trust nobody, use the socket address. Whether Traefik passes `CF-Connecting-IP` through untouched, and Traefik's peer address or CIDR, is [open question 12](#open-questions).
 
 Edge. That review found both hostnames on the proxied wildcard, with no tunnel, no Access, no Workers, and no Cloudflare header or path rules. The origin is k3s Traefik in front of the Service. Cutover in front of the pod is a Traefik routing change only. Cloudflare is not changed.
 
@@ -172,7 +174,8 @@ Headers Node sets on app responses are `X-Content-Type-Options: nosniff`, `Refer
 8. Production data sizes (dictionary rows, media volume).
 9. Kubernetes probe paths. This repo only special-cases a user-agent starting with `kube-probe` (`mcp/http.js`).
 10. Inbound Go server timeout values. Node's HTTP servers set none (§7). They must be lower than Cloudflare's 125 s proxy read timeout.
-11. Whether Go sends `Strict-Transport-Security`, and the max-age. Do not copy `max-age=0` (§ Security). The header is not set in this repo.
+11. Whether Go sends `Strict-Transport-Security`, and the max-age. Do not copy `max-age=0` (§ Security). The header is not set in this repo. It comes from the edge, not the app.
+12. For the operator: confirm Traefik passes `CF-Connecting-IP` through untouched, and give Traefik's peer address or CIDR for `TRUSTED_PROXIES` (§7).
 
 ## Rollback
 
@@ -191,3 +194,4 @@ Delete this file. No application file, database, or recording changes with it.
 |------|--------|
 | 2026-10-18 | Proposed for formal review. The operator has approved leaving Node in principle. Supersedes ADR-0005 and ADR-0007. |
 | 2026-10-18 | Cloudflare edge notes: Traefik-only cutover, login IP is the first `X-Forwarded-For` hop (not `CF-Connecting-IP`), body caps and the 125 s proxy read timeout, HSTS `max-age=0` not copied. |
+| 2026-10-18 | Login IP revised. Go uses `CF-Connecting-IP` only when the socket peer is in `TRUSTED_PROXIES`; otherwise the socket address. Node's leftmost `X-Forwarded-For` is a known throttle bypass and is not kept. |
