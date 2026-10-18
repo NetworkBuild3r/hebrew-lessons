@@ -267,11 +267,11 @@ describe('ac-1 and und-1: 1.0.0 documents keep their results', () => {
 describe('schema 1.1.0', () => {
     const defs = SCHEMA.definitions;
 
-    it('takes schemaVersion 1.0.0 or 1.1.0 and adds the five blocks as oneOf branches', () => {
+    it('takes schemaVersion 1.0.0, 1.1.0, or 1.2.0 and adds type-it, exercise, and assignment after the five blocks', () => {
         assert.equal(SCHEMA.$schema, 'http://json-schema.org/draft-07/schema#');
         assert.deepEqual(SCHEMA.properties.schemaVersion, { enum: ['1.0.0', '1.1.0', '1.2.0'] });
         const branches = defs.block.oneOf.map((branch) => defs[branch.$ref.slice('#/definitions/'.length)].properties.type.const);
-        assert.deepEqual(branches.slice(6), BLOCK_TYPES.concat(['type-it', 'exercise']));
+        assert.deepEqual(branches.slice(6), BLOCK_TYPES.concat(['type-it', 'exercise', 'assignment']));
         assert.deepEqual(defs.v110BlockType.not.enum, BLOCK_TYPES);
         assert.deepEqual(defs.lesson.properties.recipe, { $ref: '#/definitions/recipe' });
         assert.deepEqual(defs.wordEntry.properties.group, { type: 'integer', minimum: 1, maximum: 3 });

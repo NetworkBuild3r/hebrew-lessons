@@ -14,7 +14,7 @@ const { spawn } = require('child_process');
 
 const harness = require('./helpers/signed-in-server');
 
-const CHROME = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const { CHROME } = require('./helpers/chrome-cdp');
 const PLAN_ID = 'verb-workshop';
 const LESSON = 'public-lesson';
 const LEMMA = 'לַחְשֹׁב';
@@ -452,7 +452,7 @@ async function main() {
     }
 }
 
-main().catch((err) => {
+require('./helpers/chrome-cdp').skipIfMissing("chrome-verb-workshop-smoke") || main().catch((err) => {
     console.error(err && err.stack ? err.stack : err);
     process.exit(1);
 });

@@ -172,7 +172,7 @@ async function main() {
     }
 }
 
-main().catch((err) => {
+require('./helpers/chrome-cdp').skipIfMissing("chrome-exercise-smoke") || main().catch((err) => {
     console.error(err);
     process.exit(1);
 });

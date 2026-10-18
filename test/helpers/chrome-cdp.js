@@ -4,7 +4,10 @@
  * The same launch pattern as the older chrome-*-smoke.js files (spawn Chrome with a
  * throwaway profile and --remote-debugging-port, talk to the page over a WebSocket), put in
  * one place for the two SPEC-013 scripts. Not a test file: the name has no .test.js suffix.
- * Needs Chrome at the default Windows path, or CHROME_PATH.
+ *
+ * Chrome is resolved from CHROME_PATH first, then the usual Windows, Linux, and macOS
+ * paths. When none of those exist, suites skip with CHROME_SKIP_REASON instead of
+ * starting a server.
  */
 'use strict';
 
@@ -13,7 +16,58 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 
-const CHROME = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const CHROME_SKIP_REASON = 'Chrome not found (set CHROME_PATH)';
+
+/** Platform binaries, in the order they are tried after CHROME_PATH. */
+const CHROME_CANDIDATES = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+];
+
+/**
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {(p: string) => boolean} [exists]
+ * @returns {string|null}
+ */
+function findChrome(env, exists) {
+    const environment = env || process.env;
+    const existsSync = exists || fs.existsSync;
+    const ordered = [];
+    if (environment.CHROME_PATH) ordered.push(environment.CHROME_PATH);
+    for (const candidate of CHROME_CANDIDATES) ordered.push(candidate);
+    for (const candidate of ordered) {
+        if (candidate && existsSync(candidate)) return candidate;
+    }
+    return null;
+}
+
+const CHROME = findChrome();
+
+/** `false` when Chrome is available, otherwise the skip reason string. */
+function chromeSkip() {
+    return CHROME ? false : CHROME_SKIP_REASON;
+}
+
+/**
+ * Register a skipped describe/it and return true when `chromePath` is missing.
+ * Standalone smoke scripts must not call main() or harness.start() in that case.
+ * Pass `null` to force the skip (tests). The running binary is the default.
+ * @param {string} title
+ * @param {string|null} [chromePath]
+ */
+function skipIfMissing(title, chromePath) {
+    const found = arguments.length > 1 ? chromePath : CHROME;
+    if (found) return false;
+    const { describe, it } = require('node:test');
+    describe(title, { skip: CHROME_SKIP_REASON }, () => {
+        it(title, { skip: CHROME_SKIP_REASON }, () => {});
+    });
+    return true;
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function connect(port) {
@@ -78,7 +132,7 @@ async function waitFor(cdp, expression, label, timeoutMs) {
  */
 async function launch(opts) {
     const o = opts || {};
-    if (!fs.existsSync(CHROME)) throw new Error('Chrome not found at ' + CHROME);
+    if (!CHROME) throw new Error(CHROME_SKIP_REASON);
     const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'heb-' + (o.tag || 'cdp') + '-'));
     const port = (o.portBase || 9600) + Math.floor(Math.random() * 300);
     const chrome = spawn(CHROME, [
@@ -128,4 +182,18 @@ async function pressTab(cdp, shift) {
     await cdp.call('Input.dispatchKeyEvent', Object.assign({ type: 'keyUp' }, base));
 }
 
-module.exports = { CHROME, sleep, connect, waitFor, launch, signInAs, setViewport, pressTab };
+module.exports = {
+    CHROME,
+    CHROME_SKIP_REASON,
+    CHROME_CANDIDATES,
+    findChrome,
+    chromeSkip,
+    skipIfMissing,
+    sleep,
+    connect,
+    waitFor,
+    launch,
+    signInAs,
+    setViewport,
+    pressTab
+};

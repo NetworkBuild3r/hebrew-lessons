@@ -114,7 +114,8 @@ describe('a form for every node kind (INIT-008/SPEC-012 ac-4)', () => {
             const { form } = render({ path: LESSON + '/blocks/' + block.id, node: block, kind: 'block' });
             assert.equal(form.def, def);
             const want = Object.keys(SCHEMA.definitions[def].properties)
-                .filter((p) => !((type === 'exercise' || type === 'assignment') && (p === 'id' || p === 'type')))
+                .filter((p) => p !== 'id')
+                .filter((p) => !(p === 'type' && (type === 'exercise' || type === 'assignment')))
                 .sort();
             const have = ownFields(form.el).map((n) => n.getAttribute('data-plan-field')).sort();
             assert.deepEqual(have, want, type);
@@ -140,7 +141,7 @@ describe('a form for every node kind (INIT-008/SPEC-012 ac-4)', () => {
             const { form } = render({ path: LESSON + '/blocks/' + block.id + '/' + bucket + '/' + item.id, node: item, def, kind: 'item' });
             assert.deepEqual(
                 ownFields(form.el).map((n) => n.getAttribute('data-plan-field')).sort(),
-                Object.keys(SCHEMA.definitions[def].properties).sort(), def
+                Object.keys(SCHEMA.definitions[def].properties).filter((p) => p !== 'id').sort(), def
             );
         }
     });

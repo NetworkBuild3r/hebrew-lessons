@@ -15,8 +15,7 @@ const os = require('os');
 
 const harness = require('./helpers/signed-in-server');
 
-const CHROME = process.env.CHROME_PATH
-    || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const { CHROME } = require('./helpers/chrome-cdp');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RESTRICTED = 'anal-sex-vocab';
@@ -530,7 +529,7 @@ async function main() {
     throw lastErr;
 }
 
-main().catch((err) => {
+require('./helpers/chrome-cdp').skipIfMissing("chrome-today-lessons-smoke") || main().catch((err) => {
     console.error(err && err.stack ? err.stack : err);
     process.exit(1);
 });

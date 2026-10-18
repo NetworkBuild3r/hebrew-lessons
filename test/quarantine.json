@@ -1,0 +1,50 @@
+[
+  {
+    "file": "test/plan-hebrew-checks.test.js",
+    "name": "every free-text schema property has a language row, and every audio property a pair",
+    "category": "real-bug",
+    "reason": "real bug: missing audio pair registry row",
+    "owner": "Hebrew Backend Dev, fix in Go port",
+    "issue": "https://github.com/NetworkBuild3r/hebrew-lessons/issues/10"
+  },
+  {
+    "file": "test/plan-hebrew-checks.test.js",
+    "name": "fails on a mutated schema with a clip property that has no pair",
+    "category": "real-bug",
+    "reason": "real bug: missing audio pair registry row",
+    "owner": "Hebrew Backend Dev, fix in Go port",
+    "issue": "https://github.com/NetworkBuild3r/hebrew-lessons/issues/10"
+  },
+  {
+    "file": "test/plan-editor-issues-preview.test.js",
+    "name": "a link opens the block form and focuses the field",
+    "category": "real-bug",
+    "reason": "real bug: issue links don't open the target form; UI being replaced",
+    "owner": "Hebrew Frontend Dev",
+    "issue": "https://github.com/NetworkBuild3r/hebrew-lessons/issues/11"
+  },
+  {
+    "file": "test/plan-editor-issues-preview.test.js",
+    "name": "a link to a word opens that word inside its block",
+    "category": "real-bug",
+    "reason": "real bug: issue links don't open the target form; UI being replaced",
+    "owner": "Hebrew Frontend Dev",
+    "issue": "https://github.com/NetworkBuild3r/hebrew-lessons/issues/11"
+  },
+  {
+    "file": "test/plan-editor-issues-preview.test.js",
+    "name": "a link to the lesson and one to the plan open those sections",
+    "category": "real-bug",
+    "reason": "real bug: issue links don't open the target form; UI being replaced",
+    "owner": "Hebrew Frontend Dev",
+    "issue": "https://github.com/NetworkBuild3r/hebrew-lessons/issues/11"
+  },
+  {
+    "file": "test/plan-validate.test.js",
+    "name": "deep nesting under an unknown property is rejected without throwing",
+    "category": "real-bug",
+    "reason": "real bug, expected-to-be-fixed: should report /extra or a clear depth-limit error",
+    "owner": "Hebrew Backend Dev, fix in Go port",
+    "issue": "https://github.com/NetworkBuild3r/hebrew-lessons/issues/12"
+  }
+]

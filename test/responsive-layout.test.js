@@ -315,7 +315,7 @@ describe('INIT-013/SPEC-006 responsive layout (Chrome geometry)', { concurrency:
         try { await harness.stop(); } catch (_) { /* ignore */ }
     });
 
-    it('ac-3: desktop rail + Bento and mobile dock across viewports', { timeout: 180000 }, async () => {
+    it('ac-3: desktop rail + Bento and mobile dock across viewports', { timeout: 180000, skip: chromeCdp.chromeSkip() }, async () => {
         const started = await harness.start({ lessons: 'real' });
         base = started.baseUrl;
         browser = await chromeCdp.launch({ tag: 'responsive-layout', portBase: 9750, width: 1440, height: 960 });
