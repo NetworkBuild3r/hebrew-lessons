@@ -6,8 +6,8 @@
 |-------|-------|
 | **Status** | Proposed |
 | **Date** | 2026-10-18 |
-| **Authored by** | — (no INIT/SPEC id yet; [open question 1](#open-questions)) |
-| **Initiative** | — (open question 1) |
+| **Authored by** | — (proposed `INIT-014/SPEC-001`; that spec is not in the tree; [open question 1](#open-questions)) |
+| **Initiative** | Proposed INIT-014 · go-server-port ([open question 1](#open-questions)) |
 | **Research grounding** | None. Engineering record. Facts read in code at tree `86e8d50c`, 2026-10-18. |
 | **Supersedes** | [ADR-0005](ADR-0005-stack-and-architecture.md) (Node runtime, `node:sqlite`, in-process TypeScript MCP, no build step, no second runtime). [ADR-0007](ADR-0007-single-page-app-structure.md) (single-shell SPA, as screens move). |
 | **Superseded by** | — |
@@ -32,7 +32,7 @@ ADR-0007 (Accepted 2026-10-09) put signed-in screens in one shell: a hand-built 
 
 ### Why ADR-0005 no longer holds
 
-The operator is choosing Go. The old cost was carrying the MCP SDK, the database, the tests, and the image. Go is an official SDK, and a pure-Go driver can open the same file. `node:sqlite` is still experimental: `server/db/index.js` swallows the Node 22 warning and re-emits it. Routing, the literal parser, the schema validator, and security headers are hand-written, on two direct dependencies (`@modelcontextprotocol/sdk` `^1.32.1`, `sharp` `0.35.5`). Re-scoring ADR-0005's table is [open question 2](#open-questions). This record does not invent a score.
+The operator is choosing Go. The old cost was carrying the MCP SDK, the database, the tests, and the image. Go is an official SDK, and a pure-Go driver can open the same file. `node:sqlite` is still experimental: `server/db/index.js` swallows the Node 22 warning and re-emits it. Routing, the literal parser, the schema validator, and security headers are hand-written, on two direct dependencies (`@modelcontextprotocol/sdk` `^1.32.1`, `sharp` `0.35.5`). [§9](#9-adr-0005-criteria-with-go) re-scores ADR-0005's own criteria. A and B stay 457 and 459. Go scores 383. The table does not pick Go. The operator does.
 
 ### Current state (`86e8d50c`)
 
@@ -87,7 +87,7 @@ MCP OAuth (`mcp/oauth.js`):
 
 Keys and paths match Node and are golden-tested.
 
-- Cache key: `sha256(voiceId + "\0" + model + "\0" + trim(text)).hex[0:24]`, with JS `String.prototype.trim` (`server/audio.js` `cacheKey`). Go `strings.TrimSpace` differs: JS trim removes U+FEFF and keeps U+0085; `TrimSpace` does the opposite. PR 1's goldens include at least those two.
+- Cache key: `sha256(voiceId + "\0" + model + "\0" + trim(text)).hex[0:24]`, with JS `String.prototype.trim` (`server/audio.js` `cacheKey`). Go `strings.TrimSpace` differs: JS trim removes U+FEFF and keeps U+0085; `TrimSpace` does the opposite. Go-1's goldens include at least those two.
 - Text hash is the full hex of that same input.
 - Word files are `<key>.mp3` under `LESSONS_DIR/_audio/words/`. Site paths are `../_audio/words/<file>`.
 - Keep the `<key>-*.mp3` lookup, the lesson archive `<lesson>/audio/_archive/<stem>.<first-12-hex-of-file-sha256>.mp3` (never replace an archive that exists), `_audio/words/manifest.json` (`version`, `voiceId`, `model`, `entries`), and `<lesson>/audio/manifest.json` (`version`, `clips`).
@@ -98,9 +98,11 @@ Go never overwrites, deletes, or regenerates an existing recording. An existing 
 
 A Node script at the same commit writes `testdata/golden/**` (input, options, exact output) plus the Node version and SHA. Go compares canonical JSON, order-sensitive arrays, and exact messages. CI regenerates from Node and fails on `git diff`.
 
-PR 1's audio-key goldens include the JS `trim` vs `strings.TrimSpace` cases in §5 (at least U+FEFF and U+0085).
+Go-1's audio-key goldens include the JS `trim` vs `strings.TrimSpace` cases in §5 (at least U+FEFF and U+0085).
 
 Also covered: `validatePlan` and `checkHebrew` (ADR-0003 samples, `test/fixtures/plans-1.1`, `test/fixtures/lesson-types`, one mutation corpus per rule); FSRS and ladder via `test/fixtures/fsrs/fsrs6-golden.json` (shared with the TypeScript player); `learner/model.js` and `mix.js` at a fixed clock, seed, and DB fixture; audio keys, hashes, and paths; the lesson-data parser on `worksheets/**/*.js` and the §3 writers; the migration schema and `grammar_concepts` seed.
+
+`test/helpers/signed-in-server.js` cannot drive an external binary. `start` writes a temp `DATA_DIR` and fixture `LESSONS_DIR`, then `require`s `server/db`, `server/accounts`, and `server/web` in process. `server/web.js` `listen` returns a Node `http.Server`. The helper sets `PORT=0`, waits for `listening`, and reads `server.address().port`. `stop` calls `server.close()`. There is no `spawn` and no command path. The smallest change that keeps `start`, `stop`, `cookieFor`, and `baseUrl` is a branch inside `start` and `stop`: keep the fixture, migrate, `createUser`, and `signIn` so the session rows are in the temp `hebrew.sqlite`; close that Node connection; spawn the Go binary with `DATA_DIR`, `LESSONS_DIR`, `HEBREW_ROOT`, and `HOST=127.0.0.1`. The binary must print the bound port, or the helper must pass a port it already released. `PORT=0` is not enough, because a child does not expose `server.address()`. `stop` signals the child, then deletes the temps. `cookieFor` already returns `hebrew_session=<token>` from the in-process sign-in. That change does not make every current caller a black box. After `start`, `test/chrome-progress-smoke.js` calls `accounts.createUser` and `signIn`, `test/chrome-plan-editor-smoke.js` requires `server/plans/store`, and `test/chrome-verb-workshop-smoke.js` calls `publishPlan`, all against the same file the server has open. Those stay Node writers beside the process under test, or they move to HTTP.
 
 ### 7. Strangler cutover
 
@@ -122,20 +124,78 @@ Cloudflare's Free plan, per that review, has a proxy read timeout of 125 s (a re
 
 Rollback is the Node-only image. Nothing was converted, so Node runs on the files, subject to additive migrations.
 
-### 8. PR sequence
+WAL, two processes. Node opens `DATA_DIR/hebrew.sqlite` with `PRAGMA journal_mode = WAL`, `busy_timeout = 5000`, and `BEGIN IMMEDIATE` (`server/db/index.js`). WAL adds `hebrew.sqlite-wal` and `hebrew.sqlite-shm` in that same directory. SQLite's WAL page (sqlite.org/wal.html, read 2026-10-18) says every process that uses the database must be on the same host, because the wal-index is that `-shm` file mapped into shared memory, and WAL does not work over a network filesystem. Its locking page (sqlite.org/lockingv3.html, same day) says Unix builds use POSIX advisory locks, and those locks are buggy or missing on many NFS implementations; if the locks do not work, the file can corrupt. The concurrency WAL allows is many readers and one writer at a time. Readers do not block the writer, and the writer does not block readers. A second writer waits out `busy_timeout`.
 
-| PR | What lands |
+One pod is one host when both containers mount the same volume. `deploy/k8s-database.md` sets `hebrew-data` to `accessModes: ["ReadWriteOnce"]` and does not set `storageClassName`. RWO with `replicas: 1` keeps the mount on one node. It does not say the class is a local filesystem. A read-only open is not a silent fallback on a directory that cannot create files: since SQLite 3.22.0 (2018-01-22) a read-only WAL database opens when `-wal` and `-shm` already exist or can be created. Node's `openReadOnly` passes `readOnly: true` and does not migrate or checkpoint.
+
+Until the storage class is confirmed, Go does not share the writer. Two safe shapes: Go owns writes for a table group and Node uses `openReadOnly` on that file, or a proxy-only cutover where Go does not open `hebrew.sqlite` and Node is the only process that does, until that group has moved and Node has stopped writing it. `busy_timeout` stays 5000 on any connection that does open the file. This tree has no Go module, so Go-3 is the check that `modernc.org/sqlite` and `node:sqlite` lock one local temp file the same way. The storage class is [open question 5](#open-questions).
+
+### 8. Phase sequence
+
+Labels are Go-0 through Go-17 so they do not collide with GitHub pull-request numbers.
+
+| Phase | What lands |
 |---|---|
-| 0 | This ADR. |
-| 1 | Go module, validators, Node golden generator, Go CI. Nothing served. Audio-key goldens include JS `trim` vs `strings.TrimSpace` (U+FEFF, U+0085). |
-| 2 | Lesson-data parser and the §3 writers. |
-| 3 | Config, paths, DB open, ledger-compatible migrations, read-only on a DB copy. Baseline golden. |
-| 4 | Go on `:8080` proxying all routes to Node, plus `GET /api/me`. |
-| 5–11 | Auth and sessions; static gate and filtered scripts; read-only content APIs; FSRS, progress, review; mix, library, cards; plans; admin users and lessons. |
-| 12–14 | Google sign-in; media (pure Go); audio and word-audio. |
-| 15 | MCP and OAuth. 8787 moves whole. |
-| 16 | templ + HTMX and the TypeScript player, screen by screen. |
-| 17 | Remove the Node proxy and image. Port or retire `scripts/`. |
+| Go-0 | This ADR. |
+| Go-1 | Go module, validators, Node golden generator, Go CI. Nothing served. Audio-key goldens include JS `trim` vs `strings.TrimSpace` (U+FEFF, U+0085). |
+| Go-2 | Lesson-data parser and the §3 writers. |
+| Go-3 | Config, paths, DB open, ledger-compatible migrations, read-only on a DB copy. Baseline golden. The local-file lock check in §7. |
+| Go-4 | Go on `:8080` proxying all routes to Node, plus `GET /api/me`. No second writer on `hebrew.sqlite` until [open question 5](#open-questions) is closed. |
+| Go-5–Go-11 | Auth and sessions; static gate and filtered scripts; read-only content APIs; FSRS, progress, review; mix, library, cards; plans; admin users and lessons. |
+| Go-12–Go-14 | Google sign-in; media (pure Go); audio and word-audio. |
+| Go-15 | MCP and OAuth. 8787 moves whole. |
+| Go-16 | templ + HTMX and the TypeScript player, screen by screen. |
+| Go-17 | Remove the Node proxy and image. Port or retire `scripts/`. |
+
+### 9. ADR-0005 criteria, with Go
+
+Same criteria and weights as ADR-0005 Decision 1. A score is an integer from 1 to 5. The weighted total is score times weight. The maximum is 500. A 5 means the criterion is met with the system that already exists, or with a small addition. A 1 means it is met only by replacing the thing it is about. C13 is special: 5 means the smallest migration cost. A–E are copied from ADR-0005 Decision 3 (2026-10-08) and are not re-judged. Go is new. "Judgment" means a reviewer can move that Go cell by one point.
+
+| Id | Weight | A | B | C | D | E | Go |
+|----|--------|---|---|---|---|---|-----|
+| C1 Blocks | 8 | 4 | 5 | 5 | 4 | 5 | 4 |
+| C2 Preview | 7 | 4 | 5 | 5 | 5 | 5 | 4 |
+| C3 One ops module | 12 | 5 | 5 | 5 | 3 | 4 | 5 |
+| C4 RTL / bidi | 6 | 4 | 4 | 4 | 4 | 4 | 4 |
+| C5 Accessibility | 6 | 4 | 4 | 4 | 4 | 4 | 4 |
+| C6 Media | 7 | 5 | 5 | 5 | 4 | 4 | 4 |
+| C7 SQLite and data | 9 | 5 | 5 | 5 | 3 | 4 | 4 |
+| C8 MCP | 9 | 5 | 5 | 5 | 2 | 3 | 4 |
+| C9 Tests | 5 | 5 | 4 | 3 | 2 | 3 | 3 |
+| C10 Solo maintainer | 8 | 5 | 4 | 3 | 2 | 3 | 3 |
+| C11 Agents | 8 | 3 | 4 | 5 | 2 | 5 | 4 |
+| C12 Docker, one replica | 7 | 5 | 5 | 4 | 3 | 3 | 4 |
+| C13 Migration cost | 8 | 5 | 4 | 3 | 1 | 2 | 2 |
+| **Weighted total** | **100** | **457** | **459** | **439** | **295** | **378** | **383** |
+| Lead over A | | — | +2 | −18 | −162 | −79 | −74 |
+
+**C1 Blocks (8).** A 4, copied: nested string HTML can render the six blocks and is clumsier than a component. B 5, copied: a Preact function per block is the render. C 5, copied: React can render the blocks. D 4, copied: HEEx can render them, and today's client audio and reveal become events or hooks. E 5, copied: the same React reason as C. Go 4, judgment: templ can emit the blocks, and the TypeScript player keeps the client behavior; this tree has no templ block renderer, so this is not a 5.
+
+**C2 Preview (7).** A 4, copied: a preview is another call with the working copy, and the hand-built editor is already large. B 5, copied: the Preact function is the preview. C 5, copied: React can preview. D 5, copied: a server render that updates after an event is a live preview. E 5, copied: the same React reason as C. Go 4, judgment: an HTMX partial re-renders one part on a request, which is A's shape, and ADR-0005 did not treat a persistent diff as a requirement.
+
+**C3 One ops module (12).** A 5, copied: one module serves both callers in this process. B 5, copied: the server does not change. C 5, copied: the Node server still owns the operations. D 3, copied: one Elixir module can implement them, and the TypeScript SDK cannot call it in-process. E 4, copied: one Node module serves both only if MCP shares the process, which is the eject. Go 5, judgment: the official Go SDK and the builder share one process at the end, which is the property D lacks. Two copies during the strangler are C13.
+
+**C4 RTL / bidi (6).** A through E are 4, copied: `dir` and logical properties are authoring, and no library does bidi. Go 4, same reason: templ is HTML, and `dir` stays the author's job.
+
+**C5 Accessibility (6).** A through E are 4, copied: alt, labels, and focus can be required arguments and still depend on tests. Go 4, same reason.
+
+**C6 Media (7).** A, B, and C are 5, copied: ADR-0004's pipeline stays in this process. D 4, copied: Plug can sniff, re-encode, and gate, as new code. E 4, copied: the pipeline can move into route handlers, and a public cache of a lesson would break the gate. Go 4, judgment: approval, `DATA_DIR/media`, and the archive stay, and the decoder is new Go code, as D's Plug was.
+
+**C7 SQLite and data (9).** A, B, and C are 5, copied: `hebrew.sqlite` and the clip files stay. D 3, copied: the file can remain, and every query and migration is re-proven on another driver. E 4, copied: `node:sqlite` can stay if the edge runtime is forbidden, after the access layer is re-wired. Go 4, judgment: the file, the schema, and the clips stay with no dump, and every query is re-proven on `modernc.org/sqlite`. A 5 would ignore the driver change. A 3 would ignore the frozen baseline and the goldens.
+
+**C8 MCP (9).** A, B, and C are 5, copied: the MCP listener stays. D 2, copied: the official SDK list has no Elixir. E 3, copied: the SDK runs on Node, and co-hosting it is the eject or a second process. Go 4, judgment: Go is on that list and listens on 8787 in-process, and it replaces the TypeScript SDK already integrated, so it is not a 5.
+
+**C9 Tests (5).** A 5, copied: the files and the Chrome scripts keep their runners if `data-*` hooks stay. B 4, copied: the server tests stay, and a new render tree has to keep the hooks. C 3, copied: utility class names break the Chrome selectors even when the hooks stay. D 2, copied: the Node files must be ported or dropped, and the Chrome scripts can stay as a black box. E 3, copied: imports of `server/web.js` are rewritten, and the Chrome scripts are retargeted. Go 3, judgment: the direct Node tests (155 files now, 44 when ADR-0005 was scored) are ported or re-expressed in `contract/`, the hooks stay, and the helper cannot target a binary until the change in §6. Goldens keep Node as the oracle, which is why this is 3 rather than 2.
+
+**C10 Solo maintainer (8).** A 5, copied: the operator already runs this image, in one language, with no build. B 4, copied: two libraries and an import map. C 3, copied: Vite, React, and Tailwind are a second upgrade train. D 2, copied: the operator would debug Elixir and OTP alone. E 3, copied: the App Router cache sits beside the auth rules. Go 3, judgment: one person debugs Go and a TypeScript player build. That is more than A's one language, and it is the runtime the operator chose.
+
+**C11 Agents (8).** A 3, copied: agents mishandle escaped HTML strings. B 4, copied: htm is easier than string concatenation and less common in agent output than compiled JSX. C 5, copied: this is the markup agents write most reliably. D 2, copied: the repo is Node, so an agent has nothing local to copy. E 5, copied: agents write Next and React reliably. Go 4, judgment: agents write Go reliably, templ is less common than JSX, and this tree has no Go module to copy.
+
+**C12 Docker, one replica (7).** A and B are 5, copied: the Dockerfile and `replicas: 1` stay, and B adds no build stage. C 4, copied: the image gains a build stage and the runtime stays one Node replica. D 3, copied: a release can be one replica, and it replaces the Dockerfile, the workflow, and the `node` uid. E 3, copied: Docker is documented, and the current image, command, and replica pin are replaced. Go 4, judgment: `replicas: 1`, `Recreate`, the PVCs, and uid 1000 stay, and the image becomes a static binary with a build.
+
+**C13 Migration cost (8).** 5 means the smallest cost. A 5, copied: the new modules are additive. B 4, copied: the data does not move, and the front end gains a dependency and a second dialect. C 3, copied: the `shared/` UI is rewritten and the server is not. D 1, copied: the server, auth, data access, MCP boundary, UI, tests, and image all move. E 2, copied: the HTTP surface, the gate, and the UI are replaced while the database file can stay. Go 2, judgment: that same list moves, the file is not dumped, and Node stays the rollback image while one group moves at a time. Scoring any full server port as 1 would make this cell 1.
+
+Go's 383 trails A by 74 and leads E by 5. B still leads A by 2, which is under C9's weight of 5, so ADR-0005's close-total rule is unchanged between A and B. Raising every judgment cell by one point (C3, C4, and C5 cannot rise) adds 76 and ties B at 459, a lead of 2 over A, and the close-total rule would still pick the lower migration cost. A's C13 is 5. Dropping Go's C13 to 1 subtracts 8 and puts Go at 375, three under E. The operator's choice of Go is recorded here; the table does not make it.
 
 ---
 
@@ -150,7 +210,7 @@ Gained: a static binary, no native `sharp`, no experimental driver, image-only r
 | Replacing `sharp` | Keep `sniff.js` refusals. `test/fixtures/media/*` checks dimensions, frames, metadata, pixel tolerance. Node media stays proxied until then. |
 | Audio keys | §5 goldens (U+FEFF, U+0085). CI fails if an existing `.mp3` path would change. |
 | Go SDK schemas and tokens | Snapshot the tool list. Node-minted tokens must still verify. 8787 moves in one step. |
-| Two processes, one SQLite file | One writer per table group. `busy_timeout` stays. See [open question 5](#open-questions). |
+| Two processes, one SQLite file | One writer. Node is read-only for that group, or Go does not open the file (§7). `busy_timeout` stays 5000. Storage class is [open question 5](#open-questions). |
 
 ---
 
@@ -164,12 +224,12 @@ Headers Node sets on app responses are `X-Content-Type-Options: nosniff`, `Refer
 
 ## Open questions
 
-1. INIT/SPEC ids and the operator gate for this record.
-2. Whether to re-score ADR-0005's weighted criteria for Go.
+1. Narrowed. The next free initiative on 2026-10-18 is INIT-014 (`sdd/initiatives/` holds INIT-001 through INIT-013). Spec numbers restart per initiative, and the docs ADR specs in this repo are SPEC-001 (`INIT-013/SPEC-001` authored ADR-0015). The proposed id is `INIT-014/SPEC-001`, slug `INIT-014-go-server-port`. This PR does not add that file. INIT-004's rule is that an initiative does not start until the operator approves its document. Brian approves that document; then Authored by can cite the spec. This record stays Proposed until he accepts it.
+2. Resolved in [§9](#9-adr-0005-criteria-with-go). A–E are copied. Go scores 383, 74 behind A.
 3. Migrations 012+ while Node is the rollback: additive only, a Node twin, or Node refusing unknown versions.
 4. What `contract/` asserts per route group. Home and owner are decided in §7.
-5. Whether WAL with two processes is safe on the `hebrew-data` volume. WAL needs a local filesystem. The storage class is in the home_k3 repo, which this survey could not read. Pending with the operator.
-6. Whether `test/helpers/signed-in-server.js` can drive an external binary, so current HTTP tests can target Go.
+5. Narrowed. §7 states the WAL rules and the two safe shapes (Go owns the writes and Node uses `openReadOnly`, or Go does not open the file). Brian confirms the `hebrew-data` storage class in home_k3: a filesystem on that node that honors POSIX advisory locks and mmap of `hebrew.sqlite-shm`. `deploy/k8s-database.md` does not name the class.
+6. Resolved in §6. The helper cannot drive an external binary. The spawn-and-port change above is the smallest one that keeps its HTTP API. Callers that `require` Node writers after `start` still share the file or move to HTTP.
 7. Whether production `schema_migrations` holds exactly versions 1–11.
 8. Production data sizes (dictionary rows, media volume).
 9. Kubernetes probe paths. This repo only special-cases a user-agent starting with `kube-probe` (`mcp/http.js`).
@@ -187,6 +247,7 @@ Delete this file. No application file, database, or recording changes with it.
 - Tree `86e8d50c`: `deploy/k8s-database.md`, `Dockerfile`, `server/{start,web,audio,lesson-data,content-filter}.js`, `server/db/`, `server/auth/`, `server/media/sniff.js`, `server/plans/`, `server/learner/`, `mcp/{http,oauth,store}.js`
 - `github.com/modelcontextprotocol/go-sdk`, pkg.go.dev, checked 2026-10-18
 - Cloudflare review of zone `ibhacked.us` (hebrew and hebrew-mcp), read-only, 2026-10-18. Not a file in this repo. Ingress and any Traefik header rewriting live in home_k3.
+- SQLite WAL and locking, read 2026-10-18: [Write-Ahead Logging](https://www.sqlite.org/wal.html), [File Locking And Concurrency In SQLite Version 3](https://www.sqlite.org/lockingv3.html).
 
 ## Changelog
 
@@ -195,3 +256,4 @@ Delete this file. No application file, database, or recording changes with it.
 | 2026-10-18 | Proposed for formal review. The operator has approved leaving Node in principle. Supersedes ADR-0005 and ADR-0007. |
 | 2026-10-18 | Cloudflare edge notes: Traefik-only cutover, login IP is the first `X-Forwarded-For` hop (not `CF-Connecting-IP`), body caps and the 125 s proxy read timeout, HSTS `max-age=0` not copied. |
 | 2026-10-18 | Login IP revised. Go uses `CF-Connecting-IP` only when the socket peer is in `TRUSTED_PROXIES`; otherwise the socket address. Node's leftmost `X-Forwarded-For` is a known throttle bypass and is not kept. |
+| 2026-10-18 | Review notes. WAL rules and the two safe shapes are in §7; the storage class stays with Brian. INIT-014/SPEC-001 is proposed, not filed. The signed-in helper cannot spawn a binary. ADR-0005 re-scored with Go at 383. Phase labels are Go-0 through Go-17. |
