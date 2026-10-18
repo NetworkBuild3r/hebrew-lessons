@@ -201,7 +201,7 @@ templ GuideFragment(g GuideDetail) {
 // GuidePage is GET /shared/plan/?id=&lesson= for a published guide.
 templ GuidePage(g GuideDetail) {
 	@views.Layout(views.Doc{
-		Title:      g.Title + " · דרך עברית",
+		Title:      g.Title + " · דֶּרֶךְ עִבְרִית",
 		BodyClass:  "hebrew-spa has-hebrew-shell guides-page guide-page",
 		PageHe:     "מדריכים",
 		PageEn:     "Guides",
@@ -231,7 +231,7 @@ templ guidePageMain(g GuideDetail) {
 
 templ noticePage(title string, body templ.Component) {
 	@views.Layout(views.Doc{
-		Title:      title + " · דרך עברית",
+		Title:      title + " · דֶּרֶךְ עִבְרִית",
 		BodyClass:  "hebrew-spa has-hebrew-shell guides-page guide-page",
 		PageHe:     "מדריכים",
 		PageEn:     "Guides",

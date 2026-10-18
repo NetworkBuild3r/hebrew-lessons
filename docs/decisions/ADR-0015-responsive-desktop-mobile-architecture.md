@@ -119,6 +119,8 @@ Primary interactive targets remain `≥44×44` CSS px (`--size-target-primary: 4
 
 Theme persistence (`SPEC-002`): `localStorage` key `hebrew-theme` allowlisted to `'light' | 'dark'`; applied as `document.documentElement.dataset.theme`. Default without a stored value: `'light'` (Jerusalem Stone).
 
+> **Amendment (2026-10-18): OS-following theme.** `hebrew-theme` accepts `light | dark | auto`; **`auto` is the default**. A missing or invalid value also means auto. Auto resolves `prefers-color-scheme` to a concrete `data-theme` in a pre-paint inline script and re-resolves on the media-query `change` event. A 3-way control (בהיר / כהה / אוטומטי, `role="radiogroup"`) in the rail footer, mobile top bar and Settings sheet lets the user override. CSS remains keyed on `[data-theme="dark"]` only. This supersedes the original allowlist `light|dark` (default light). `normalizeTheme` returns `'light' | 'dark' | 'auto'` (unknown → `'auto'`), and its tests change accordingly. Guarded token values are unchanged.
+
 ### 2.2 Light theme — Jerusalem Stone
 
 | Token | Hex | Role |
@@ -342,7 +344,7 @@ When `drillQueue` interleaves multiple verbs (`lemmaKey`) and/or tenses (`presen
 
 Documentation only — no executable change in `INIT-013/SPEC-001`. Downstream specs must keep:
 
-- Theme values allowlisted to `'light' | 'dark'` before writing `dataset.theme`.
+- Theme choice allowlisted to `'light' | 'dark' | 'auto'` before writing storage. `dataset.theme` receives only the resolved `'light' | 'dark'` (amendment 2026-10-18). The original `'light' | 'dark'` storage allowlist is superseded.
 - `escapeHtml()` / `bi()` / `textContent` for shell and page markup (no raw `innerHTML` interpolation of user or plan strings).
 - Zero new external network / font URLs (`REQ-018`).
 - Learner typed drill/exercise answers never leave the browser in `formSignal` payloads.
