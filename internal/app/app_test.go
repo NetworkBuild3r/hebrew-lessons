@@ -14,6 +14,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 )
 
@@ -133,7 +134,7 @@ func TestReviewUsesConfigClock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lexemeID, err := a.store.InsertLexeme(ctx, "שלום")
+	lexemeID, err := testharness.InsertLexeme(ctx, a.store, "שלום")
 	if err != nil {
 		t.Fatal(err)
 	}
