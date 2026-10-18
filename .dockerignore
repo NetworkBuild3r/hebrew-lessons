@@ -1,6 +1,8 @@
 node_modules
 .git
 sdd
+# The image build stage produces this. Ignore a host copy so the image cannot pick up a stale bundle.
+shared/dist
 # Local secrets stay out of the image build context.
 .env
 .env.*

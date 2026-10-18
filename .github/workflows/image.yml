@@ -1,6 +1,8 @@
 # Build and publish the hebrew-lessons image (served at hebrew.ibhacked.us).
 # Runs only on the local ARC scale set registered to this repo (see home_k3
 # apps/arc-runner-set-hebrew). Never use GitHub-hosted runners.
+# The Dockerfile player stage runs `npm run typecheck` and `npm run build:player`
+# before the runtime stage. A failed typecheck fails this image build.
 name: image
 
 on:

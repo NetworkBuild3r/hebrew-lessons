@@ -6,6 +6,9 @@
   "scripts": {
     "start": "node server/start.js",
     "web": "node server/web.js",
+    "build": "npm run typecheck && npm run build:player",
+    "build:player": "esbuild web/player/main.ts --bundle --format=iife --target=es2020 --minify --sourcemap --outfile=shared/dist/player.js",
+    "typecheck": "tsc --noEmit -p web/tsconfig.json",
     "mcp": "node mcp/http.js",
     "test": "node scripts/run-tests.js",
     "db:migrate": "node scripts/db.js migrate",
@@ -28,5 +31,9 @@
     "@modelcontextprotocol/sdk": "^1.32.1",
     "sharp": "0.35.5",
     "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
   }
 }
