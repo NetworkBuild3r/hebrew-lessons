@@ -8,6 +8,16 @@ const path = require('path');
 const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
+const bundle = require('./helpers/player-bundle');
+
+function bundleSource() {
+    let source = '';
+    bundle.withBundleLock(() => {
+        bundle.ensurePlayerBundleUnlocked();
+        source = fs.readFileSync(bundle.outfile, 'utf8');
+    });
+    return source;
+}
 
 function loadModules() {
     const plays = [];
@@ -99,7 +109,7 @@ function loadModules() {
     sandbox.globalThis = sandbox;
     vm.createContext(sandbox);
     vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'player', 'utils.js'), 'utf8'), sandbox);
-    vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'player', 'speech.js'), 'utf8'), sandbox);
+    vm.runInContext(bundleSource(), sandbox, { filename: 'player.js' });
     vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'player', 'feedback.js'), 'utf8'), sandbox);
     return {
         Speech: sandbox.HebrewSpeech,
@@ -196,10 +206,14 @@ describe('INIT-007/SPEC-002 feedback kit and audio states', () => {
         assert.match(css, /prefers-reduced-motion: reduce\)[\s\S]*transform:\s*none/);
     });
 
-    it('player load path includes feedback.js after speech.js', () => {
+    it('player load path includes feedback.js after the speech bundle', () => {
         const worksheet = fs.readFileSync(path.join(root, 'shared', 'worksheet.js'), 'utf8');
         const routes = fs.readFileSync(path.join(root, 'shared', 'app-routes.js'), 'utf8');
-        assert.match(worksheet, /player\/speech\.js[\s\S]*player\/feedback\.js[\s\S]*player\/core\.js/);
-        assert.match(routes, /\/shared\/player\/speech\.js[\s\S]*\/shared\/player\/feedback\.js/);
+        assert.match(worksheet, /dist\/player\.js[\s\S]*player\/feedback\.js[\s\S]*player\/core\.js/);
+        assert.equal(worksheet.includes('/shared/dist/player.js'), false);
+        assert.match(routes, /\/shared\/dist\/player\.js[\s\S]*\/shared\/player\/feedback\.js/);
+        const review = require('../shared/app-routes.js').find((route) => route.id === 'review');
+        assert.equal(review.scripts.filter((src) => src === '/shared/dist/player.js').length, 1);
+        assert.equal(review.scripts.includes('/shared/player/speech.js'), false);
     });
 });

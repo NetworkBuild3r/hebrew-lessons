@@ -11,6 +11,7 @@
 'use strict';
 
 const { describe, it } = require('node:test');
+const bundle = require('./helpers/player-bundle');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
@@ -93,9 +94,14 @@ function load(opts) {
     sandbox.window = sandbox;
     sandbox.globalThis = sandbox;
     vm.createContext(sandbox);
-    for (const f of ['utils.js', 'speech.js', 'feedback.js']) {
-        vm.runInContext(read('shared', 'player', f), sandbox);
-    }
+    vm.runInContext(read('shared', 'player', 'utils.js'), sandbox);
+    let player = '';
+    bundle.withBundleLock(() => {
+        bundle.ensurePlayerBundleUnlocked();
+        player = fs.readFileSync(bundle.outfile, 'utf8');
+    });
+    vm.runInContext(player, sandbox, { filename: 'player.js' });
+    vm.runInContext(read('shared', 'player', 'feedback.js'), sandbox);
     return {
         Feedback: sandbox.HebrewFeedback,
         Speech: sandbox.HebrewSpeech,

@@ -16,7 +16,7 @@
         'api.js',
         'word-lookup.js',
         'player/sync.js',
-        'player/speech.js',
+        'dist/player.js',
         'player/feedback.js',
         'player/core.js',
         'activities/catalog.js',

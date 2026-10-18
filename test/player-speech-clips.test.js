@@ -5,6 +5,16 @@ const path = require('path');
 const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
+const bundle = require('./helpers/player-bundle');
+
+function bundleSource() {
+    let source = '';
+    bundle.withBundleLock(() => {
+        bundle.ensurePlayerBundleUnlocked();
+        source = fs.readFileSync(bundle.outfile, 'utf8');
+    });
+    return source;
+}
 
 function loadSpeech() {
     const plays = [];
@@ -41,6 +51,7 @@ function loadSpeech() {
             speak: utterance => { tts.push(utterance.text); },
             addEventListener: () => {}
         },
+        URL,
         location: { href: 'http://127.0.0.1:8080/worksheets/my-morning/index.html' },
         addEventListener: () => {}
     };
@@ -48,7 +59,7 @@ function loadSpeech() {
     sandbox.globalThis = sandbox;
     vm.createContext(sandbox);
     vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'player', 'utils.js'), 'utf8'), sandbox);
-    vm.runInContext(fs.readFileSync(path.join(root, 'shared', 'player', 'speech.js'), 'utf8'), sandbox);
+    vm.runInContext(bundleSource(), sandbox, { filename: 'player.js' });
     return { Speech: sandbox.HebrewSpeech, plays, tts };
 }
 
@@ -67,6 +78,7 @@ describe('HebrewSpeech clip registry', () => {
 
         Speech.speak('קָם');
         assert.equal(plays.length, 1);
+        assert.equal(plays[0], 'http://127.0.0.1:8080/worksheets/_audio/words/a.mp3');
         assert.equal(tts.length, 0);
 
         Speech.speak('מילה בלי קליפ');
@@ -82,6 +94,7 @@ describe('HebrewSpeech clip registry', () => {
         Speech.startStory(lines, 0, clips);
         assert.equal(Speech.story.status, 'playing');
         assert.equal(plays.length, 1);
+        assert.equal(plays[0], 'http://127.0.0.1:8080/worksheets/my-morning/audio/story/line-1.mp3');
         // Simulate end of first clip
         const audio = Speech.audioEl;
         assert.ok(audio && typeof audio.onended === 'function');

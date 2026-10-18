@@ -1,6 +1,8 @@
 /**
  * Player TypeScript toolchain. The bundle is built, not committed.
- * The lesson shell and app boot do not load it. The review route does.
+ * Lesson pages load it as a relative dist/player.js URL from worksheet.js,
+ * which resolves under /shared/. app.html and app-boot.js do not name the
+ * absolute /shared/dist/player.js path. App routes that need speech do.
  */
 'use strict';
 
@@ -109,5 +111,7 @@ describe('player toolchain', () => {
         for (const rel of ['shared/app.html', 'shared/worksheet.js', 'shared/app-boot.js']) {
             assert.equal(read(rel).includes('/shared/dist/player.js'), false, rel);
         }
+        assert.match(read('shared/worksheet.js'), /dist\/player\.js/);
+        assert.equal((read('shared/app-routes.js').match(/\/shared\/dist\/player\.js/g) || []).length, 2);
     });
 });
