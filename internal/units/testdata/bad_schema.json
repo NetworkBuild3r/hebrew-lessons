@@ -1,0 +1,59 @@
+{
+  "case": "V16 missing title, unknown activity type, lesson kind other than lesson or checkpoint, and a new word that never appears.",
+  "lookup": {
+    "lexemes": {
+      "שָׁלוֹם": {
+        "id": 1,
+        "pos": "noun",
+        "gender": "m",
+        "bare": "שׁלום"
+      }
+    },
+    "audio": []
+  },
+  "issues": [
+    {
+      "rule": "schema.required",
+      "severity": "block",
+      "pointer": "/lessons/0/activities/0/text"
+    },
+    {
+      "rule": "schema.activity",
+      "severity": "block",
+      "pointer": "/lessons/0/activities/0/type"
+    },
+    {
+      "rule": "schema.kind",
+      "severity": "block",
+      "pointer": "/lessons/0/kind"
+    },
+    {
+      "rule": "schema.ref",
+      "severity": "block",
+      "pointer": "/newWords/0"
+    },
+    {
+      "rule": "schema.required",
+      "severity": "block",
+      "pointer": "/title"
+    }
+  ],
+  "unit": {
+    "title": "",
+    "situation": "cafe",
+    "concept": "greetings",
+    "newWords": [
+      "שָׁלוֹם"
+    ],
+    "lessons": [
+      {
+        "kind": "quiz",
+        "activities": [
+          {
+            "type": "flashcard"
+          }
+        ]
+      }
+    ]
+  }
+}

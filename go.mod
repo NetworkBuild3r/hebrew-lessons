@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/open-spaced-repetition/go-fsrs/v3 v3.3.1
-	golang.org/x/text v0.31.0
+	golang.org/x/text v0.32.0
 	modernc.org/sqlite v1.60.1
 )
 
