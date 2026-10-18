@@ -101,8 +101,16 @@ Enum value order is frozen on purpose. `["shared", "personal"]` and `["working",
 
 `execution: {"taskSupport": "forbidden"}` is kept. Node emits it on every tool. It is not in the canonicalizer's strip list.
 
-## What this PR does not freeze
+## OAuth client checks
 
-Two OAuth bugs are known and must not become the contract. `TestTokenChecksClientSecret` and `TestAuthCodeIsBoundToTheRegisteringClient` are skipped and marked expected-to-be-fixed. In-memory authorization codes and pending sign-ins are not part of that skip.
+`TestTokenChecksClientSecret` and `TestAuthCodeIsBoundToTheRegisteringClient` are required.
+
+A confidential client (`client_secret_post` or `client_secret_basic`) must authenticate on `POST /token`. A wrong secret and a missing secret are HTTP 401 with JSON `error` `invalid_client` and `error_description` `Client authentication failed.`. A `client_secret_post` failure sends no `WWW-Authenticate` header. A `client_secret_basic` failure sends `WWW-Authenticate: Basic realm="hebrew-lessons"`, including when the request used `Authorization: Basic` and when a Basic-registered client omitted the secret entirely. The same checks apply to `refresh_token`.
+
+An authorization code is bound to the client it was issued to. Another client that registered the same redirect URI gets HTTP 400 with `error` `invalid_grant` and `error_description` `client_id or redirect_uri does not match the code.`. A refresh token is bound the same way: the other client gets HTTP 400 `invalid_grant` with `error_description` `client_id does not match the refresh token.`.
+
+The issuing client can still exchange the code with PKCE and can still refresh. A rejected secret or a rejected client does not burn the grant. In-memory authorization codes and pending sign-ins stay as they are. They are not a skipped bug.
+
+## What this suite does not exercise
 
 `GET /mcp` (the server holds an SSE stream open) and the over-1MiB body (the socket is destroyed) are not exercised here.
