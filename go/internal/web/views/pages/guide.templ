@@ -6,10 +6,14 @@ import (
 )
 
 templ prose(s string) {
-	if HasHebrew(s) {
+	if HasHebrew(s) && !HasLatin(s) {
 		<p lang="he" dir="rtl" class="he-text--pointed">
 			@components.AudioButton(s, "")
 			@components.HeText("pointed", s)
+		</p>
+	} else if HasHebrew(s) {
+		<p lang="en" dir="ltr">
+			@mixedText(s)
 		</p>
 	} else if HasLatin(s) {
 		<p lang="en" dir="ltr">{ s }</p>
@@ -19,15 +23,31 @@ templ prose(s string) {
 }
 
 templ cellText(s string) {
-	if HasHebrew(s) {
+	if HasHebrew(s) && !HasLatin(s) {
 		<span lang="he" dir="rtl">
 			@components.AudioButton(s, "")
 			@components.HeText("pointed", s)
+		</span>
+	} else if HasHebrew(s) {
+		<span lang="en" dir="ltr">
+			@mixedText(s)
 		</span>
 	} else if HasLatin(s) {
 		<span lang="en" dir="ltr">{ s }</span>
 	} else {
 		{ s }
+	}
+}
+
+// mixedText keeps the paragraph left to right and isolates each Hebrew run.
+templ mixedText(s string) {
+	for _, part := range TextParts(s) {
+		if part.Hebrew {
+			<bdi lang="he" class="he-inline">{ part.Text }</bdi>
+			@components.AudioButton(part.Text, "")
+		} else {
+			{ part.Text }
+		}
 	}
 }
 
@@ -38,11 +58,11 @@ templ exampleItem(ex Example) {
 		}
 		<div>
 			<div class="example-row__gloss">
-				<span class="meaning" lang="en" dir="ltr">{ ex.En }</span>
+				<span lang="en" dir="ltr">{ ex.En }</span>
 			</div>
 			@components.Translit(ex.Translit)
 			if ex.Root != "" {
-				<span class="meaning root-label" lang="he">{ ex.Root }</span>
+				<span class="meaning root-label" lang="he" dir="rtl">{ ex.Root }</span>
 			}
 		</div>
 		<span class="example-row__he" lang="he" dir="rtl">@HighlightRoot(ex.He, ex.Root)</span>
@@ -74,7 +94,7 @@ templ explainerTable(table *Table) {
 
 templ calloutAside(c Callout) {
 	<aside class="callout" data-tone={ toneAttr(c.Tone) } data-callout-id={ c.ID }>
-		<p class="kicker"><span class="callout-word" lang="en" dir="ltr">{ toneEn(c.Tone) }</span> <span lang="he">{ toneHe(c.Tone) }</span></p>
+		<p class="kicker"><span class="callout-word" lang="en" dir="ltr">{ toneEn(c.Tone) }</span> <span lang="he" dir="rtl">{ toneHe(c.Tone) }</span></p>
 		<h3>@cellText(c.Title)</h3>
 		@prose(c.Text)
 	</aside>
@@ -161,7 +181,7 @@ templ explainerBlock(block Block) {
 }
 
 templ guideArticle(g GuideDetail) {
-	<article class="guide-prose story-body guide-body" data-recipe="guide" data-plan-id={ g.PlanID } data-lesson-id={ g.LessonID }>
+	<article class="guide-body" data-recipe="guide" data-plan-id={ g.PlanID } data-lesson-id={ g.LessonID }>
 		<header>
 			<p class="kicker"><span class="recipe-chip" data-recipe="guide">מדריך <span lang="en" dir="ltr">Guide</span></span></p>
 		</header>
@@ -173,7 +193,7 @@ templ guideArticle(g GuideDetail) {
 
 // GuideFragment is the plan root for an HX-Request read of one guide.
 templ GuideFragment(g GuideDetail) {
-	<div id="plan-root" class="page" data-plan-ready="1" data-recipe="guide">
+	<div id="plan-root" data-plan-ready="1" data-recipe="guide">
 		@guideArticle(g)
 	</div>
 }
@@ -182,7 +202,7 @@ templ GuideFragment(g GuideDetail) {
 templ GuidePage(g GuideDetail) {
 	@views.Layout(views.Doc{
 		Title:      g.Title + " · דרך עברית",
-		BodyClass:  "hebrew-spa has-hebrew-shell guides-page plan-page",
+		BodyClass:  "hebrew-spa has-hebrew-shell guides-page guide-page",
 		PageHe:     "מדריכים",
 		PageEn:     "Guides",
 		Announce:   g.Title,
@@ -212,7 +232,7 @@ templ guidePageMain(g GuideDetail) {
 templ noticePage(title string, body templ.Component) {
 	@views.Layout(views.Doc{
 		Title:      title + " · דרך עברית",
-		BodyClass:  "hebrew-spa has-hebrew-shell guides-page plan-page",
+		BodyClass:  "hebrew-spa has-hebrew-shell guides-page guide-page",
 		PageHe:     "מדריכים",
 		PageEn:     "Guides",
 		Announce:   "מדריכים",

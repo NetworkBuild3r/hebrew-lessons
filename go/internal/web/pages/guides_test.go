@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -124,7 +126,7 @@ func TestShelfMatchesTheNodePage(t *testing.T) {
 	}
 	html := body(rec)
 	for _, want := range []string{
-		`<html lang="he" dir="rtl" translate="no"`,
+		`<html lang="en" dir="ltr" translate="no"`,
 		`class="has-hebrew-shell"`,
 		`href="/shared/worksheet.css"`,
 		`data-route-ready="guides"`,
@@ -165,14 +167,17 @@ func TestShelfMatchesTheNodePage(t *testing.T) {
 	if strings.Contains(html, "data-say=") || strings.Contains(html, "data-clip=") || strings.Contains(html, "status-chip") {
 		t.Fatal("shelf used a retired hook or a status chip")
 	}
-	if !strings.Contains(html, `guide-card__letter" lang="he">ח</span>`) {
+	if !strings.Contains(html, `guide-card__letter" lang="he" dir="rtl">ח</span>`) {
 		t.Fatal("cover letter kept its nikud")
+	}
+	if strings.Contains(html, `hebrew-shell-account-btn`) {
+		t.Fatal("account button rendered before sessions exist")
 	}
 	if strings.Count(html, "<script") != 3 {
 		t.Fatalf("script count %d, want the two pre-paint scripts and the theme toggle", strings.Count(html, "<script"))
 	}
-	if !strings.Contains(html, "localStorage.getItem('hebrew-ui-lang')") {
-		t.Fatal("pre-paint script missing")
+	if !strings.Contains(html, "localStorage.getItem('hebrew-ui-lang')") || !strings.Contains(html, "root.dir = lang === 'he' ? 'rtl' : 'ltr'") {
+		t.Fatal("pre-paint script does not follow the UI language")
 	}
 	if !strings.Contains(html, "localStorage.getItem('hebrew-theme')") || !strings.Contains(html, "prefers-color-scheme: dark") {
 		t.Fatal("theme script missing")
@@ -254,8 +259,8 @@ func TestGuideDetailRendersExplainerWithoutPictures(t *testing.T) {
 		`class="explainer-table"`,
 		`data-tone="green"`,
 		`lang="en" dir="ltr">Go`,
-		`lang="he">קדימה`,
-		`class="guide-prose story-body guide-body"`,
+		`lang="he" dir="rtl">קדימה`,
+		`class="guide-body"`,
 		`Say &lt;b&gt;no&lt;/b&gt;`,
 	} {
 		if !strings.Contains(html, want) {
@@ -265,6 +270,9 @@ func TestGuideDetailRendersExplainerWithoutPictures(t *testing.T) {
 	root := html[strings.Index(html, `id="plan-root"`):]
 	if strings.Contains(html, "data-say=") || strings.Contains(html, "data-clip=") || strings.Contains(html, "data-audio=") {
 		t.Fatal("detail used a hook other than data-speak")
+	}
+	if strings.Contains(html, "plan-page") || strings.Contains(html, "story-body") || strings.Contains(html, `class="page"`) {
+		t.Fatal("detail still uses the player page classes")
 	}
 	if strings.Contains(root, "<img") {
 		t.Fatal("guide rendered a picture")
@@ -461,6 +469,83 @@ func TestTwoGuidesHaveNoHero(t *testing.T) {
 	}
 }
 
+func TestMixedProseWrapsEachHebrewRun(t *testing.T) {
+	extra := `{
+		"id": "guides-shelf",
+		"status": "published",
+		"audience": "shared",
+		"assigneeId": null,
+		"units": [{
+			"id": "unit",
+			"title": "Verbs",
+			"lessons": [{
+				"id": "decoding",
+				"title": "Decoding Hebrew Verbs",
+				"visibility": "everyone",
+				"recipe": "guide",
+				"blocks": [{
+					"id": "rule",
+					"type": "explainer",
+					"title": "The root",
+					"sections": [{
+						"id": "roots",
+						"heading": "Three letters",
+						"paragraphs": ["Say שָׁלוֹם and then בֹּקֶר טוֹב today.", "שָׁלוֹם"],
+						"examples": [{
+							"id": "e1",
+							"he": "` + pointed + `",
+							"en": "he thought",
+							"translit": "chashav",
+							"root": "ח.ש.ב"
+						}]
+					}]
+				}]
+			}]
+		}]
+	}`
+	html := body(get(t, newMux(memSource{rows: []PlanSnapshot{
+		guideSnapshot("guides-shelf", "Verbs", "decoding", "Decoding", "everyone", "guide", extra),
+	}}), "/shared/plan/?id=guides-shelf&lesson=decoding", false))
+	if !strings.Contains(html, `<p lang="en" dir="ltr">Say <bdi lang="he" class="he-inline">שָׁלוֹם</bdi>`) {
+		t.Fatalf("mixed paragraph missing a Hebrew run:\n%s", html)
+	}
+	if !strings.Contains(html, `<bdi lang="he" class="he-inline">בֹּקֶר טוֹב</bdi>`) {
+		t.Fatal("a Hebrew phrase was split")
+	}
+	if !strings.Contains(html, `<p lang="he" dir="rtl" class="he-text--pointed">`) {
+		t.Fatal("a Hebrew-only paragraph lost dir=rtl")
+	}
+	if !strings.Contains(html, `class="example-row__he" lang="he" dir="rtl"`) {
+		t.Fatal("Hebrew column lost dir=rtl")
+	}
+}
+
+func TestHeroHebrewTitleIsNotRepeated(t *testing.T) {
+	src := memSource{rows: []PlanSnapshot{
+		guideSnapshot("guides-shelf", "Verbs", "shoresh", pointed, "everyone", "guide", ""),
+		guideSnapshot("nouns", "Nouns", "bayit", "House", "everyone", "guide", ""),
+		guideSnapshot("numbers", "Numbers", "eser", "Ten", "everyone", "guide", ""),
+	}}
+	html := body(get(t, newMux(src), "/guides/", false))
+	hero := html[strings.Index(html, `data-guides-hero`):]
+	hero = hero[:strings.Index(hero, `guides-filters`)]
+	if !strings.Contains(hero, `guides-hero__lettering" lang="he" dir="rtl">`+pointed) {
+		t.Fatalf("hero lettering missing:\n%s", hero)
+	}
+	titleAt := strings.Index(hero, `guides-hero__title`)
+	if titleAt < 0 {
+		t.Fatal("hero topic missing")
+	}
+	title := hero[titleAt:]
+	end := strings.Index(title, "</p>")
+	if end < 0 || strings.Contains(title[:end], pointed) {
+		t.Fatalf("hero repeated the Hebrew title:\n%s", hero)
+	}
+	if !strings.Contains(hero, `guides-hero__title" lang="en" dir="ltr">Verbs`) {
+		t.Fatal("hero subtitle is not the topic")
+	}
+}
+
 func TestClipOfLongTitle(t *testing.T) {
 	title := strings.Repeat("א", 130)
 	row := guideSnapshot("guides-shelf", "Verbs", "decoding", title, "everyone", "guide", "")
@@ -470,5 +555,86 @@ func TestClipOfLongTitle(t *testing.T) {
 	}
 	if !strings.Contains(html, strings.Repeat("א", 120)) {
 		t.Fatal("clipped title missing")
+	}
+}
+
+func TestNoRuleOutsideADRResolvesToRubik(t *testing.T) {
+	raw, err := os.ReadFile("../../../../shared/worksheet.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawCSS := string(raw)
+	const startMark = "=== INIT-004/SPEC-013 ADR-0006 tokens ==="
+	const endMark = "=== end INIT-004/SPEC-013 ADR-0006 tokens ==="
+	start := strings.Index(rawCSS, startMark)
+	end := strings.Index(rawCSS, endMark)
+	if start < 0 || end < start {
+		t.Fatal("ADR-0006 block missing")
+	}
+	if !strings.Contains(rawCSS[start:end], "--font-family: Rubik, sans-serif") {
+		t.Fatal("ADR-0006 font token changed")
+	}
+	css := stripCSSComments(rawCSS)
+	vars := map[string]string{}
+	decl := regexp.MustCompile(`(?m)(--[a-z0-9-]+)\s*:\s*([^;]+);`)
+	for _, m := range decl.FindAllStringSubmatch(css, -1) {
+		vars[m[1]] = strings.TrimSpace(m[2])
+	}
+	outside := stripCSSComments(rawCSS[:start] + rawCSS[end+len(endMark):])
+	outside = regexp.MustCompile(`@font-face\s*\{[^}]*\}`).ReplaceAllString(outside, "")
+	face := regexp.MustCompile(`(?s)([^{}]+)\{([^{}]*)\}`)
+	last := map[string]string{}
+	for _, m := range face.FindAllStringSubmatch(outside, -1) {
+		body := m[2]
+		idx := strings.LastIndex(body, "font-family")
+		if idx < 0 {
+			continue
+		}
+		rest := body[idx:]
+		if strings.HasPrefix(strings.TrimSpace(rest), "--") {
+			continue
+		}
+		colon := strings.Index(rest, ":")
+		semi := strings.Index(rest, ";")
+		if colon < 0 || semi < colon {
+			continue
+		}
+		last[strings.TrimSpace(m[1])] = strings.TrimSpace(rest[colon+1 : semi])
+	}
+	for sel, value := range last {
+		resolved := resolveFont(value, vars)
+		if strings.Contains(strings.ToLower(resolved), "rubik") {
+			t.Errorf("%s resolves to Rubik via %s", sel, value)
+		}
+	}
+}
+
+func resolveFont(value string, vars map[string]string) string {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, "var(") && strings.HasSuffix(value, ")") {
+		inner := value[len("var(") : len(value)-1]
+		name, fallback, _ := strings.Cut(inner, ",")
+		name = strings.TrimSpace(name)
+		if v, ok := vars[name]; ok && v != value {
+			return resolveFont(v, vars)
+		}
+		if strings.TrimSpace(fallback) != "" {
+			return resolveFont(strings.TrimSpace(fallback), vars)
+		}
+	}
+	return value
+}
+
+func stripCSSComments(css string) string {
+	for {
+		i := strings.Index(css, "/*")
+		if i < 0 {
+			return css
+		}
+		j := strings.Index(css[i:], "*/")
+		if j < 0 {
+			return css[:i]
+		}
+		css = css[:i] + css[i+j+2:]
 	}
 }
