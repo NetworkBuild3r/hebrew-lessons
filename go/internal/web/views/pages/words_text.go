@@ -40,3 +40,11 @@ func errEn(kind string) string {
 	}
 	return "We couldn’t load your words"
 }
+
+func blockedHe() string {
+	return "עוד לא תרגלתם את המילה הזאת, אז אין מה להשהות."
+}
+
+func blockedEn() string {
+	return "You haven’t practised this word yet, so there’s nothing to pause."
+}

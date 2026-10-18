@@ -1,7 +1,7 @@
 /**
  * Chrome smoke: Words library route (INIT-006/SPEC-013).
- * Signs in, opens /words/, filters by binyan, and opens an unchecked form.
- * Add and suspend are skipped until PR 2 (sessions, CSRF, and the write API).
+ * Signs in, opens /words/, filters by binyan, opens an unchecked form,
+ * and suspends the seeded verb. Add stays skipped.
  *
  * Run: node test/chrome-words-smoke.js
  * Needs Chrome at the default Windows path (or CHROME_PATH).
@@ -246,12 +246,50 @@ async function main() {
         })()`, 'unverified form');
         report.paradigm = paradigm;
 
-        // TODO(PR 2): restore add and suspend once sessions, CSRF, and the
-        // learner/library write API exist. The Go page is read-only, so these
-        // steps cannot run against it, and they are skipped here too so the
-        // smoke stays one script. NEW_RAW stays for that follow-up.
+        // Add stays skipped: there is still no add API, and gloss edits wait
+        // for cutover. NEW_RAW stays so that follow-up can fill the form.
         void added;
-        report.ac3 = { skipped: 'PR 2: sessions, CSRF, and the write API' };
+
+        const beforeDue = await cdp.evaluate(`fetch('/api/me/cards?deck=due', { credentials: 'same-origin' })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                var words = (data.cards || []).map(function (card) { return card.word; });
+                return {
+                    ok: words.indexOf(${JSON.stringify(noun)}) >= 0 && words.indexOf(${JSON.stringify(verb)}) >= 0,
+                    words: words
+                };
+            })`);
+        if (!beforeDue || !beforeDue.ok) {
+            throw new Error('seeded words missing from due deck: ' + JSON.stringify(beforeDue));
+        }
+
+        await waitFor(cdp, `(() => {
+            var btn = document.querySelector('[data-words-suspend]');
+            return { ok: !!btn };
+        })()`, 'suspend button');
+        await cdp.evaluate(`(() => {
+            document.querySelector('[data-words-suspend]').click();
+            return true;
+        })()`);
+        const suspended = await waitFor(cdp, `(() => {
+            var row = ${rowExpr(verb)};
+            return { ok: !!(row && row.getAttribute('data-suspended') === 'true') };
+        })()`, 'suspended verb');
+        const dueAfter = await cdp.evaluate(`fetch('/api/me/cards?deck=due', { credentials: 'same-origin' })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                var words = (data.cards || []).map(function (card) { return card.word; });
+                return {
+                    ok: words.indexOf(${JSON.stringify(verb)}) < 0 && words.indexOf(${JSON.stringify(noun)}) >= 0,
+                    words: words
+                };
+            })`);
+        if (!dueAfter.ok) throw new Error('suspend did not hide the verb from due: ' + JSON.stringify(dueAfter));
+        report.ac3 = {
+            skippedAdd: 'add stays out until a write API',
+            suspended: suspended,
+            dueAfter: dueAfter.words
+        };
 
         if (cdp.errors.length) throw new Error('page errors: ' + cdp.errors.join(' | '));
         report.ok = true;

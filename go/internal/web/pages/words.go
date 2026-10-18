@@ -1,41 +1,77 @@
 package pages
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/gate"
 	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/library"
 	wordview "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/pages"
 )
 
-// Words serves GET /words/ from a Lister. There is no database query here.
-// Mount passes library.Demo until go/internal/learner/library is on this
-// branch. The types match that package, so the swap is the import path.
-// Writes (add, edit, suspend) are a later PR.
+// Words serves GET /words/ and POST /_hx/words/{key}/suspend.
+// There is no database query here. Mount passes library.NewDemo until
+// go/internal/learner/library is on this branch. Gloss and transliteration
+// edits are not on this page.
 type Words struct {
-	lib  library.Lister
-	user func(*http.Request) (int64, error)
+	lib     library.Lister
+	shelf   library.Suspender
+	user    func(*http.Request) (int64, error)
+	token   func(*http.Request) string
+	Session func(http.Handler) http.Handler
+	Require func(http.Handler) http.Handler
+	Protect func(http.Handler) http.Handler
 }
 
-// NewWords returns the read-only words handler. A nil lister uses the demo fixture.
+// NewWords returns the words handler. A nil lister uses the fixed demo shelf.
+// A lister that also implements Suspender gets a suspend button.
 func NewWords(lib library.Lister) Words {
 	if lib == nil {
 		lib = library.Demo{}
 	}
-	return Words{lib: lib, user: demoUser}
+	h := Words{lib: lib, user: demoUser, token: gate.CSRFToken}
+	if shelf, ok := lib.(library.Suspender); ok {
+		h.shelf = shelf
+	}
+	return h
+}
+
+// UseDevGate installs the stand-ins for auth.Middleware, auth.RequireSession,
+// and httpx.Protector. Middleware is the outermost wrapper.
+func (h *Words) UseDevGate() {
+	h.Session = gate.Middleware
+	h.Require = gate.RequireSession
+	h.Protect = gate.Protector
 }
 
 func demoUser(*http.Request) (int64, error) {
 	return library.DemoUserID, nil
 }
 
-// Register mounts GET /words/ and the slash-less and index.html aliases.
+// Register mounts GET /words/ and POST /_hx/words/{key}/suspend.
+// When UseDevGate was called, the POST handler is
+// Middleware(RequireSession(Protector(suspend))).
 func (h Words) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /words", h.serve)
-	mux.HandleFunc("GET /words/{$}", h.serve)
-	mux.HandleFunc("GET /words/index.html", h.serve)
+	get := chain(http.HandlerFunc(h.serve), h.Session)
+	mux.Handle("GET /words", get)
+	mux.Handle("GET /words/{$}", get)
+	mux.Handle("GET /words/index.html", get)
+	mux.Handle("POST /_hx/words/{key}/suspend", chain(http.HandlerFunc(h.suspend), h.Session, h.Require, h.Protect))
+}
+
+func chain(h http.Handler, outer ...func(http.Handler) http.Handler) http.Handler {
+	for i := len(outer) - 1; i >= 0; i-- {
+		if outer[i] != nil {
+			h = outer[i](h)
+		}
+	}
+	return h
 }
 
 func (h Words) serve(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +85,7 @@ func (h Words) serve(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, q.canonicalURL, http.StatusFound)
 		return
 	}
-	uid, err := h.user(r)
+	uid, err := h.currentUser(r)
 	if err != nil {
 		h.write(w, r, http.StatusInternalServerError, wordview.Assemble(q.filters, q.word, q.cursor, "error", "load", nil, ""))
 		return
@@ -81,6 +117,7 @@ func (h Words) serve(w http.ResponseWriter, r *http.Request) {
 		state = "empty"
 	}
 	view := wordview.Assemble(q.filters, q.word, q.cursor, state, "", items, next)
+	h.decorate(&view, r, false)
 	if r.Header.Get("X-Words-Sync") == "1" {
 		view.SyncFilters = true
 	}
@@ -96,6 +133,208 @@ func (h Words) serve(w http.ResponseWriter, r *http.Request) {
 
 func (h Words) write(w http.ResponseWriter, r *http.Request, status int, view wordview.WordsView) {
 	writeHTML(w, r, status, wordview.WordsPage(view), wordview.WordsFragment(view))
+}
+
+// writeNoSession answers an expired session with 401. A plain browser
+// navigation still goes to the login page.
+func writeNoSession(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized", "code": "no_session"})
+		return
+	}
+	http.Redirect(w, r, "/login/?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
+}
+
+// currentUser prefers the id auth.Middleware stored. demoUser remains until
+// that middleware is the one on the request.
+func (h Words) currentUser(r *http.Request) (int64, error) {
+	if id := gate.UserID(r); id > 0 {
+		return id, nil
+	}
+	if h.user == nil {
+		return 0, errors.New("no user")
+	}
+	return h.user(r)
+}
+
+// decorate fills the suspend control. blocked is the 404 not_found state:
+// the word is personal-only and has no review row, so pause is disabled.
+func (h Words) decorate(view *wordview.WordsView, r *http.Request, blocked bool) {
+	if view == nil || view.Selected == nil || h.shelf == nil {
+		return
+	}
+	d := view.Selected
+	d.CanSuspend = true
+	token := ""
+	if h.token != nil {
+		token = h.token(r)
+	}
+	d.CSRF = token
+	raw, err := json.Marshal(map[string]string{"X-CSRF-Token": token})
+	if err != nil {
+		raw = []byte(`{"X-CSRF-Token":""}`)
+	}
+	d.CSRFHeader = string(raw)
+	d.PostURL = "/_hx/words/" + url.PathEscape(d.Word) + "/suspend"
+	if blocked {
+		d.Blocked = true
+		d.SuspendValue = "1"
+		d.SuspendHe, d.SuspendEn = "השהו חזרות", "Pause reviews"
+		return
+	}
+	if d.Suspended {
+		d.SuspendValue = "0"
+		d.SuspendHe, d.SuspendEn = "המשיכו חזרות", "Resume reviews"
+		return
+	}
+	d.SuspendValue = "1"
+	d.SuspendHe, d.SuspendEn = "השהו חזרות", "Pause reviews"
+}
+
+// suspend is POST /_hx/words/{key}/suspend. The action field is pause, because
+// the included filter form already has a control named suspended.
+// pause=1 suspends and pause=0 resumes. A 404 not_found redraws the card
+// with the control disabled. The protector answers 403 csrf before this runs.
+func (h Words) suspend(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		h.write(w, r, http.StatusBadRequest, wordview.Assemble(wordview.Filters{}, "", "", "error", "invalid_filter", nil, ""))
+		return
+	}
+	filters, kind := filtersFromForm(r)
+	if kind != "" {
+		h.write(w, r, http.StatusBadRequest, wordview.Assemble(filters, "", "", "error", kind, nil, ""))
+		return
+	}
+	key := r.PathValue("key")
+	on, ok := pauseOn(r.PostFormValue("pause"))
+	if !ok {
+		h.write(w, r, http.StatusBadRequest, wordview.Assemble(filters, "", "", "error", "invalid_filter", nil, ""))
+		return
+	}
+	if h.shelf == nil {
+		h.write(w, r, http.StatusInternalServerError, wordview.Assemble(filters, "", "", "error", "load", nil, ""))
+		return
+	}
+	uid, err := h.currentUser(r)
+	if err != nil || uid <= 0 {
+		writeNoSession(w, r)
+		return
+	}
+	parsed, limit, err := library.ParseQuery(filterMap(filters))
+	if err != nil {
+		h.write(w, r, http.StatusBadRequest, wordview.Assemble(filters, "", "", "error", "invalid_filter", nil, ""))
+		return
+	}
+	if _, err = h.shelf.SetSuspended(r.Context(), uid, key, on); err != nil {
+		if library.Is(err, "not_found") {
+			h.writeNotFound(w, r, uid, filters, parsed, limit, key)
+			return
+		}
+		status := http.StatusInternalServerError
+		kind := "load"
+		if library.Is(err, "invalid_key") || library.Is(err, "bad_request") {
+			status = http.StatusBadRequest
+			kind = "invalid_filter"
+		}
+		h.write(w, r, status, wordview.Assemble(filters, "", "", "error", kind, nil, ""))
+		return
+	}
+	items, next, err := h.lib.List(r.Context(), uid, parsed, "", limit)
+	if err != nil {
+		h.write(w, r, http.StatusInternalServerError, wordview.Assemble(filters, key, "", "error", "load", nil, ""))
+		return
+	}
+	state := "ready"
+	if len(items) == 0 {
+		state = "empty"
+	}
+	view := wordview.Assemble(filters, key, "", state, "", items, next)
+	if view.Selected == nil {
+		if item, ok := h.recoverHidden(r.Context(), uid, parsed, key); ok {
+			wordview.SelectItem(&view, item)
+		}
+	}
+	if view.Selected != nil {
+		view.Selected.FocusAction = true
+	}
+	h.decorate(&view, r, false)
+	if r.Header.Get("HX-Request") != "true" {
+		http.Redirect(w, r, wordview.CanonicalPath(filters, key, ""), http.StatusSeeOther)
+		return
+	}
+	w.Header().Set("HX-Push-Url", wordview.CanonicalPath(filters, key, ""))
+	h.write(w, r, http.StatusOK, view)
+}
+
+// recoverHidden finds a word the active filter just dropped, so the detail
+// stays open and the button can undo the pause.
+func (h Words) recoverHidden(ctx context.Context, uid int64, parsed library.Filter, key string) (library.Item, bool) {
+	parsed.Suspended = nil
+	cursor := ""
+	for page := 0; page < 4; page++ {
+		items, next, err := h.lib.List(ctx, uid, parsed, cursor, library.PageSize)
+		if err != nil {
+			return library.Item{}, false
+		}
+		for _, item := range items {
+			if item.Word == key {
+				return item, true
+			}
+		}
+		if next == "" {
+			break
+		}
+		cursor = next
+	}
+	return library.Item{}, false
+}
+
+func (h Words) writeNotFound(w http.ResponseWriter, r *http.Request, uid int64, filters wordview.Filters, parsed library.Filter, limit int, key string) {
+	items, next, err := h.lib.List(r.Context(), uid, parsed, "", limit)
+	if err != nil {
+		h.write(w, r, http.StatusInternalServerError, wordview.Assemble(filters, key, "", "error", "load", nil, ""))
+		return
+	}
+	state := "ready"
+	if len(items) == 0 {
+		state = "empty"
+	}
+	view := wordview.Assemble(filters, key, "", state, "", items, next)
+	if view.Selected == nil {
+		detail := wordview.WordDetail{Word: key, CloseURL: wordview.CanonicalPath(filters, "", "")}
+		view.Selected = &detail
+		view.SelectedKey = key
+		view.Word = key
+	}
+	h.decorate(&view, r, true)
+	h.write(w, r, http.StatusNotFound, view)
+}
+
+func filtersFromForm(r *http.Request) (wordview.Filters, string) {
+	var f wordview.Filters
+	for _, key := range wordview.FilterKeys {
+		value, kind := canonicalFilter(key, r.FormValue(key))
+		if kind != "" {
+			return f, kind
+		}
+		f = f.With(key, value)
+	}
+	return f, ""
+}
+
+func pauseOn(raw string) (bool, bool) {
+	switch raw {
+	case "1", "true":
+		return true, true
+	case "0", "false":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 type wordsQuery struct {

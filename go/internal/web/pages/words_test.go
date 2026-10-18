@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/gate"
 	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/library"
 )
 
@@ -334,6 +335,194 @@ func TestHtmxPin(t *testing.T) {
 	if err != nil || !strings.Contains(string(lic), "Zero-Clause BSD") {
 		t.Fatal("license missing")
 	}
+}
+
+func TestSuspendAndResume(t *testing.T) {
+	const key = "שָׁלוֹם"
+	demo := library.NewDemo()
+	mux := http.NewServeMux()
+	NewWords(demo).Register(mux)
+
+	open := body(get(t, mux, "/words/?word="+url.QueryEscape(key), false))
+	if !strings.Contains(open, `data-words-suspend`) || !strings.Contains(open, ">Pause reviews<") {
+		t.Fatal("suspend control missing")
+	}
+	if strings.Contains(open, "data-words-add") || strings.Contains(open, "name=\"gloss\"") {
+		t.Fatal("add or gloss edit shipped")
+	}
+
+	paused := postSuspend(t, mux, key, "1", true, "")
+	if paused.Code != http.StatusOK {
+		t.Fatalf("suspend %d %s", paused.Code, paused.Body.String())
+	}
+	html := paused.Body.String()
+	if paused.Header().Get("HX-Push-Url") != "/words/?word="+url.QueryEscape(key) {
+		t.Fatalf("push %q", paused.Header().Get("HX-Push-Url"))
+	}
+	if !strings.Contains(html, ">Resume reviews<") || !strings.Contains(html, `data-suspended="true"`) || !strings.Contains(html, ">Paused<") {
+		t.Fatalf("paused card:\n%s", html)
+	}
+	if !strings.Contains(html, "Paused — it won’t come up in reviews") || !strings.Contains(html, "מושהית — לא תופיע בחזרות") {
+		t.Fatal("paused detail line")
+	}
+	if !strings.Contains(html, `data-words-suspend`) || strings.Contains(html, `lookup-card__he" lang="he" dir="rtl" tabindex="-1" autofocus`) {
+		t.Fatal("focus did not stay on the pause button")
+	}
+	resumed := postSuspend(t, mux, key, "0", true, "")
+	if resumed.Code != http.StatusOK || !strings.Contains(resumed.Body.String(), ">Pause reviews<") {
+		t.Fatalf("resume %d", resumed.Code)
+	}
+	row := rowSnippet(resumed.Body.String(), key)
+	if strings.Contains(row, `data-suspended="true"`) || !strings.Contains(row, `data-suspended="false"`) {
+		t.Fatalf("resume left the row paused: %s", row)
+	}
+}
+
+func rowSnippet(html, key string) string {
+	idx := strings.Index(html, `data-word="`+key+`"`)
+	if idx < 0 {
+		return ""
+	}
+	end := strings.Index(html[idx:], "</button>")
+	if end < 0 {
+		return html[idx:]
+	}
+	return html[idx : idx+end]
+}
+
+func TestSuspendWithoutJSRedirects(t *testing.T) {
+	const key = "סֵפֶר"
+	mux := http.NewServeMux()
+	NewWords(library.NewDemo()).Register(mux)
+	rec := postSuspend(t, mux, key, "1", false, "")
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status %d", rec.Code)
+	}
+	if rec.Header().Get("Location") != "/words/?word="+url.QueryEscape(key) {
+		t.Fatalf("location %q", rec.Header().Get("Location"))
+	}
+}
+
+func TestSuspendStaysOpenUnderActiveOnly(t *testing.T) {
+	const key = "בַּיִת"
+	mux := http.NewServeMux()
+	NewWords(library.NewDemo()).Register(mux)
+	form := url.Values{}
+	form.Set("pause", "1")
+	form.Set("suspended", "0")
+	req := httptest.NewRequest(http.MethodPost, "/_hx/words/"+url.PathEscape(key)+"/suspend", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d %s", rr.Code, rr.Body.String())
+	}
+	html := rr.Body.String()
+	if rowSnippet(html, key) != "" {
+		t.Fatal("active-only list still showed the paused row")
+	}
+	if !strings.Contains(html, "Paused — it won’t come up in reviews") || !strings.Contains(html, ">Resume reviews<") {
+		t.Fatal("detail closed when the row left the list")
+	}
+}
+
+func TestExpiredSessionIsUnauthorized(t *testing.T) {
+	h := NewWords(library.NewDemo())
+	h.user = func(*http.Request) (int64, error) { return 0, nil }
+	mux := http.NewServeMux()
+	h.Register(mux)
+	rec := postSuspend(t, mux, "סֵפֶר", "1", true, "")
+	if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), `"code":"no_session"`) {
+		t.Fatalf("session %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSuspendNotFoundIsDisabled(t *testing.T) {
+	const key = "אֹכֶל"
+	demo := library.NewDemo()
+	mux := http.NewServeMux()
+	NewWords(demo).Register(mux)
+	rec := postSuspend(t, mux, key, "1", true, "")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status %d", rec.Code)
+	}
+	html := rec.Body.String()
+	if !strings.Contains(html, `data-words-suspend-state="disabled"`) || !strings.Contains(html, "nothing to pause") {
+		t.Fatalf("disabled state missing:\n%s", html)
+	}
+	if !strings.Contains(html, "עוד לא תרגלתם את המילה הזאת, אז אין מה להשהות.") || strings.Contains(html, "data-words-suspend disabled") {
+		t.Fatal("can't-pause note")
+	}
+	if !strings.Contains(html, "disabled") || strings.Contains(html, `name="pause"`) {
+		t.Fatal("paused control was still a form")
+	}
+	items, _, err := demo.List(context.Background(), library.DemoUserID, library.Filter{}, "", library.PageSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range items {
+		if item.Word == key && item.Suspended {
+			t.Fatal("not_found still paused the word")
+		}
+	}
+}
+
+func TestSuspendCSRFAndSession(t *testing.T) {
+	const key = "שָׁלוֹם"
+	demo := library.NewDemo()
+	h := NewWords(demo)
+	h.UseDevGate()
+	mux := http.NewServeMux()
+	h.Register(mux)
+
+	page := body(get(t, mux, "/words/?word="+url.QueryEscape(key), false))
+	if !strings.Contains(page, gate.DevToken) || !strings.Contains(page, "X-CSRF-Token") {
+		t.Fatal("csrf header was not rendered")
+	}
+	denied := postSuspend(t, mux, key, "1", true, "")
+	if denied.Code != http.StatusForbidden || !strings.Contains(denied.Body.String(), `"code":"csrf"`) {
+		t.Fatalf("csrf %d %s", denied.Code, denied.Body.String())
+	}
+	ok := postSuspend(t, mux, key, "1", true, gate.DevToken)
+	if ok.Code != http.StatusOK || !strings.Contains(ok.Body.String(), ">Resume reviews<") {
+		t.Fatalf("accepted %d %s", ok.Code, ok.Body.String())
+	}
+
+	bare := NewWords(library.NewDemo())
+	bare.Require = gate.RequireSession
+	session := http.NewServeMux()
+	bare.Register(session)
+	hx := postSuspend(t, session, key, "1", true, gate.DevToken)
+	if hx.Code != http.StatusUnauthorized || !strings.Contains(hx.Body.String(), `"code":"no_session"`) {
+		t.Fatalf("session %d %s", hx.Code, hx.Body.String())
+	}
+	req := httptest.NewRequest(http.MethodPost, "/_hx/words/"+url.PathEscape(key)+"/suspend", strings.NewReader("pause=1"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "text/html")
+	rr := httptest.NewRecorder()
+	session.ServeHTTP(rr, req)
+	if rr.Code != http.StatusFound || !strings.HasPrefix(rr.Header().Get("Location"), "/login/?next=") {
+		t.Fatalf("login redirect %d %q", rr.Code, rr.Header().Get("Location"))
+	}
+}
+
+func postSuspend(t *testing.T, mux *http.ServeMux, key, pause string, hx bool, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	form := url.Values{}
+	form.Set("pause", pause)
+	req := httptest.NewRequest(http.MethodPost, "/_hx/words/"+url.PathEscape(key)+"/suspend", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if hx {
+		req.Header.Set("HX-Request", "true")
+		req.Header.Set("Accept", "text/html")
+	}
+	if token != "" {
+		req.Header.Set("X-CSRF-Token", token)
+	}
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	return rr
 }
 
 type emptyLister struct{}
