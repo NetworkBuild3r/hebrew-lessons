@@ -1,6 +1,7 @@
 // Command hebrew loads config, opens the database read-only, checks the
 // migration ledger, and serves GET /healthz. HEBREW_DEV_WEB=1 also serves
-// the guides pages and /shared/ from HEBREW_ROOT/shared.
+// the guides and words pages and /shared/ from HEBREW_ROOT/shared.
+// /words/ reads a fixture library until learner/library.List is wired.
 package main
 
 import (

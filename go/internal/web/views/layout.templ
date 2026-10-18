@@ -8,10 +8,12 @@ import "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/component
 // localStorage keys the app uses and correct lang, dir, and theme before paint.
 // Theme follows the OS until a saved light, dark, or auto choice says
 // otherwise. data-theme is the resolved light or dark value. data-theme-choice
+<<<<<<< HEAD
 // keeps auto so the switch can show it. ADR-0015 accepts auto as the
 // default, and app-shell.js follows the same choice. Node pages stay
 // dir=rtl. The end script handles the theme
-// switch, the EN/עב toggle, and data-speak / data-audio. No script src is added.
+// switch, the EN/עב toggle, and data-speak / data-audio. htmx is a script src
+// only when the page sets HTMX, so the guides page stays without one.
 
 templ Layout(doc Doc) {
 	<!DOCTYPE html>
@@ -40,6 +42,13 @@ templ Layout(doc Doc) {
 				@doc.Main
 			</main>
 			<div id="app-route-announce" class="visually-hidden" aria-live="polite" aria-atomic="true">{ doc.Announce }</div>
+			if doc.HTMX {
+				@templ.Raw("<meta name=\"htmx-config\" content='{\"responseHandling\":[{\"code\":\"204\",\"swap\":false},{\"code\":\"[23]..\",\"swap\":true},{\"code\":\"[45]..\",\"swap\":true,\"error\":true}]}'>")
+				<script src="/shared/vendor/htmx.min.js"></script>
+			}
+			if doc.Foot != nil {
+				@doc.Foot
+			}
 			@templ.Raw("<script>(function(){var order=['light','dark','auto'];function resolve(choice){if(choice==='dark')return 'dark';if(choice==='light')return 'light';try{return window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}catch(e){return 'light';}}function paintBar(resolved){var meta=document.querySelector('meta[name=\"theme-color\"]');if(meta)meta.setAttribute('content',resolved==='dark'?'#0E121B':'#F7F5F0');}function apply(choice,persist){if(order.indexOf(choice)<0)choice='auto';var root=document.documentElement;var resolved=resolve(choice);root.setAttribute('data-theme-choice',choice);root.setAttribute('data-theme',resolved);paintBar(resolved);if(persist){try{localStorage.setItem('hebrew-theme',choice);}catch(e){}}var radios=document.querySelectorAll('.theme-switch [role=\"radio\"]');for(var i=0;i<radios.length;i++){var on=radios[i].getAttribute('data-theme-choice')===choice;radios[i].setAttribute('aria-checked',on?'true':'false');radios[i].tabIndex=on?0:-1;}}function applyLang(lang,persist){lang=lang==='he'?'he':'en';var root=document.documentElement;root.setAttribute('data-ui-lang',lang);root.lang=lang;root.dir=lang==='he'?'rtl':'ltr';if(persist){try{localStorage.setItem('hebrew-ui-lang',lang);}catch(e){}}var buttons=document.querySelectorAll('[data-ui-lang-set]');for(var i=0;i<buttons.length;i++){buttons[i].setAttribute('aria-pressed',buttons[i].getAttribute('data-ui-lang-set')===lang?'true':'false');}}document.addEventListener('click',function(ev){var t=ev.target;if(!t||!t.closest)return;var speak=t.closest('[data-speak],[data-audio]');if(speak){ev.preventDefault();var playing=document.querySelectorAll('.audio-btn.is-playing');for(var i=0;i<playing.length;i++)playing[i].classList.remove('is-playing');if(window.speechSynthesis)window.speechSynthesis.cancel();speak.classList.add('is-playing');var done=function(){speak.classList.remove('is-playing');};var url=speak.getAttribute('data-audio');if(url){var audio=new Audio(url);audio.addEventListener('ended',done);audio.addEventListener('error',done);audio.play().catch(done);return;}if(!window.speechSynthesis){done();return;}var uttered=new SpeechSynthesisUtterance(speak.getAttribute('data-speak')||'');uttered.lang='he-IL';uttered.onend=done;uttered.onerror=done;window.speechSynthesis.speak(uttered);return;}var langBtn=t.closest('[data-ui-lang-set]');if(langBtn){applyLang(langBtn.getAttribute('data-ui-lang-set'),true);return;}var btn=t.closest('.theme-switch [role=\"radio\"]');if(!btn)return;apply(btn.getAttribute('data-theme-choice'),true);});document.addEventListener('keydown',function(ev){var btn=ev.target&&ev.target.closest&&ev.target.closest('.theme-switch [role=\"radio\"]');if(!btn)return;var dir=0;var rtl=document.documentElement.dir==='rtl';if(ev.key==='ArrowDown')dir=1;if(ev.key==='ArrowUp')dir=-1;if(ev.key==='ArrowRight')dir=rtl?-1:1;if(ev.key==='ArrowLeft')dir=rtl?1:-1;if(!dir)return;var radios=[].slice.call(btn.parentNode.querySelectorAll('[role=\"radio\"]'));var i=radios.indexOf(btn);var next=radios[(i+dir+radios.length)%radios.length];if(!next)return;next.focus();apply(next.getAttribute('data-theme-choice'),true);ev.preventDefault();});try{var mq=window.matchMedia('(prefers-color-scheme: dark)');var onChange=function(){if((document.documentElement.getAttribute('data-theme-choice')||'auto')==='auto')apply('auto',false);};if(mq.addEventListener)mq.addEventListener('change',onChange);else if(mq.addListener)mq.addListener(onChange);}catch(e){}apply(document.documentElement.getAttribute('data-theme-choice')||'auto',false);applyLang(document.documentElement.getAttribute('data-ui-lang')||'en',false);})();</script>")
 		</body>
 	</html>
@@ -55,4 +64,8 @@ type Doc struct {
 	CurrentNav string
 	RouteReady string
 	Main       templ.Component
+	// HTMX loads the vendored htmx 2 script. Guides leaves it false.
+	HTMX bool
+	// Foot is optional page script, after htmx and before the shell script.
+	Foot templ.Component
 }

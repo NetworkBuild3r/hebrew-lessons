@@ -1,0 +1,588 @@
+package pages
+
+import (
+	"strconv"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views"
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/components"
+)
+
+// WordsPage is GET /words/. An HX-Request renders WordsFragment instead.
+templ WordsPage(v WordsView) {
+	@views.Layout(views.Doc{
+		Title:      "מילים — Words · דרך עברית",
+		BodyClass:  "hebrew-spa has-hebrew-shell words-page",
+		PageHe:     "מילים",
+		PageEn:     "Words",
+		Announce:   "מילים",
+		CurrentNav: "words",
+		RouteReady: "words",
+		HTMX:       true,
+		Main:       wordsPageMain(v),
+		Foot:       wordsScript(),
+	})
+}
+
+templ wordsPageMain(v WordsView) {
+	@components.PageHeading(components.Heading{
+		He:       "מילים",
+		En:       "Words",
+		KickerHe: "הספרייה שלך",
+		Kicker:   "Your library",
+		SubHe:    "כל המילים שפגשתם.",
+		SubEn:    "Every word you’ve met.",
+	})
+	<div class="words-page-body">
+		<div class="words-toolbar">
+			@wordsFilterBar(v, false)
+			<button type="button" id="words-vowels-btn" class="btn btn-ghost" aria-pressed="true">@components.Pair("ניקוד", "Vowels")</button>
+		</div>
+		@WordsResults(v)
+	</div>
+}
+
+// WordsFragment is the HTMX swap: #words-results, plus the filter bar out of
+// band when a chip link asked to sync the form.
+templ WordsFragment(v WordsView) {
+	@WordsResults(v)
+	if v.SyncFilters {
+		@wordsFilterBar(v, true)
+	}
+}
+
+// WordsResults is the stable swap root.
+templ WordsResults(v WordsView) {
+	<div id="words-results" class="words-page" data-words-state={ v.State } aria-busy="false">
+		@wordsActiveFilters(v)
+		<div class="words-status-row">
+			if v.State == "error" {
+				<p class="words-status" id="words-status" data-words-status={ v.State } role="alert" aria-live="polite"></p>
+			} else {
+				<p class="words-status" id="words-status" data-words-status={ v.State } aria-live="polite">@components.Pair(ShownHe(v.Shown), ShownEn(v.Shown))</p>
+			}
+			if v.State == "ready" {
+				<a class="btn-link" href={ templ.SafeURL(v.ReviewHref) } data-words-review data-review-deck={ v.ReviewDeck }>
+					@components.Pair("לחזור עליהן", "Review these")
+				</a>
+			}
+		</div>
+		<div class="words-layout">
+			<div class="words-main">
+				@wordsSkeleton()
+				switch v.State {
+					case "error":
+						@wordsError(v)
+					case "empty":
+						@wordsEmpty(v)
+					default:
+						<ul class="words-list" id="words-list-ul" data-words-list aria-label="מילים">
+							for _, r := range v.Rows {
+								@wordRow(r)
+							}
+							if v.NextCursor != "" {
+								@wordsMore(v)
+							}
+						</ul>
+				}
+			</div>
+			@lookupCard(v.Selected)
+		</div>
+	</div>
+}
+
+// WordsRows is the load-more partial: more <li>s, swapped onto the trailing
+// .words-more item. The status count is updated after the swap.
+templ WordsRows(v WordsView) {
+	for _, r := range v.Rows {
+		@wordRow(r)
+	}
+	if v.NextCursor != "" {
+		@wordsMore(v)
+	}
+}
+
+templ wordRow(r WordRow) {
+	<li class="word-item">
+		@components.AudioButton(r.Word, r.Audio)
+		<button
+			class="words-row"
+			type="submit"
+			form="words-filters"
+			name={ QueryWord }
+			value={ r.Word }
+			data-word={ r.Word }
+			data-binyan={ r.Binyan }
+			data-stage={ r.Stage }
+			data-suspended={ strconv.FormatBool(r.Suspended) }
+			aria-pressed={ strconv.FormatBool(r.Pressed) }
+			hx-get={ r.SelectURL }
+			hx-target="#words-results"
+			hx-select="#words-results"
+			hx-swap="outerHTML show:none"
+			hx-push-url="false"
+			hx-indicator="#words-results"
+		>
+			<span class="words-row__meaning">
+				<span class="words-gloss" data-gloss lang="en" dir="ltr">{ r.Gloss }</span>
+				@components.Translit(r.Translit)
+			</span>
+			<span class="words-row__status">
+				@components.StatusChipLabel(r.ChipStatus, r.ChipHe, r.ChipEn)
+				if r.Weak != "" {
+					<span class="status-chip words-chip-weak" data-status="due" data-weak={ r.Weak }>
+						@components.Pair(r.WeakHe, r.WeakEn)
+					</span>
+				}
+			</span>
+			<span class="words-row__he-col">
+				<bdi class="words-he" lang="he" dir="rtl" data-vowels={ r.Word }>{ r.Word }</bdi>
+				@wordStrength(r.Strength, r.StrengthLabel, r.StrengthWidth)
+			</span>
+		</button>
+	</li>
+}
+
+templ wordStrength(bucket, label, width string) {
+	if bucket != "" {
+		<span class="words-strength" data-strength={ bucket } role="img" aria-label={ label }>
+			<span style={ "width:" + width }></span>
+			<span class="words-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+		</span>
+	}
+}
+
+templ lookupCard(w *WordDetail) {
+	if w == nil {
+		<aside class="words-detail card" data-words-detail hidden></aside>
+	} else {
+		<aside class="words-detail card lookup-card" data-words-detail aria-labelledby="words-detail-title">
+			<div class="lookup-card__head">
+				<h2 id="words-detail-title" class="lookup-card__he" lang="he" dir="rtl" tabindex="-1" autofocus data-vowels={ w.Word }>{ w.Word }</h2>
+				<span data-words-audio>@components.AudioButton(w.Word, w.Audio)</span>
+				<a
+					class="btn btn-ghost lookup-card__close"
+					href={ templ.SafeURL(w.CloseURL) }
+					hx-get={ w.CloseURL }
+					hx-target="#words-results"
+					hx-select="#words-results"
+					hx-swap="outerHTML"
+					hx-push-url="false"
+					hx-indicator="#words-results"
+					data-close-word={ w.Word }
+					aria-label="סגירה · Close"
+				>×</a>
+			</div>
+			if w.Gloss != "" {
+				<p class="lookup-card__gloss" lang="en" dir="ltr">{ w.Gloss }</p>
+			}
+			@components.Translit(w.Translit)
+			<div class="words-tags">
+				if w.POS != "" {
+					<span class="words-chip" data-pos={ w.POS }>@components.Pair(w.POSHe, w.POSEn)</span>
+				}
+				if w.Root != "" {
+					<span class="words-chip words-root" data-root={ w.Root } data-root-class={ w.RootClass } data-colour={ w.RootColour }><bdi lang="he">{ w.Root }</bdi></span>
+				}
+				if w.Binyan != "" {
+					<span class="words-chip" data-binyan={ w.Binyan }><bdi lang="he">{ w.BinyanHe }</bdi></span>
+				}
+			</div>
+			<div class="lookup-card__dirs">
+				@directionRow(w.HeEn)
+				@directionRow(w.EnHe)
+			</div>
+			if len(w.Paradigm) > 0 {
+				<section class="words-paradigm" aria-labelledby="words-paradigm-h">
+					<h3 id="words-paradigm-h">@components.Pair("נטייה", "Forms")</h3>
+					for _, c := range w.Paradigm {
+						<div class="words-tense" data-tense={ c.Tense }>
+							<bdi class="words-cell" data-cell={ c.Cell } lang="he" dir="rtl" data-vowels={ c.He }>{ c.He }</bdi>
+							<span class="words-cell-meaning">
+								<span lang="en" dir="ltr">{ c.Gloss }</span>
+								if !c.Checked {
+									<span class="status-chip words-unchecked" data-status="locked">not yet checked</span>
+									@components.Pair("עֲדַיִן לֹא נִבְדַּק", "Not yet checked")
+								}
+							</span>
+						</div>
+					}
+				</section>
+			}
+			if len(w.Sources) > 0 {
+				<ul class="words-sources">
+					for _, s := range w.Sources {
+						<li>
+							if s.Lesson {
+								<a href={ templ.SafeURL(s.Href) } data-lesson-source={ s.LessonSlug }>{ s.TitleEn }</a>
+							} else {
+								@components.Pair(s.TitleHe, s.TitleEn)
+							}
+						</li>
+					}
+				</ul>
+			}
+			<div class="lookup-card__actions">
+				<!-- PR 2: Suspend / Resume and Edit. Needs sessions, CSRF, and an edit API. -->
+			</div>
+		</aside>
+	}
+}
+
+templ directionRow(d DirectionView) {
+	if d.Show {
+		<div class="lookup-card__dir">
+			<span class="lookup-card__dir-label">@components.Pair(d.NameHe, d.NameEn)</span>
+			<span class="lookup-card__dir-row">
+				<span class="words-chip status-chip" data-direction={ d.Dir } data-stage={ d.Stage } data-status={ d.Status }>@components.Pair(d.LabelHe, d.LabelEn)</span>
+				@wordStrength(d.Strength, d.StrengthLabel, d.StrengthWidth)
+				if d.Strength != "" {
+					<span class="words-status">@components.Pair(strengthHe(d.Strength), strengthEn(d.Strength))</span>
+				}
+			</span>
+		</div>
+	}
+}
+
+templ wordsFilterBar(v WordsView, oob bool) {
+	if oob {
+		<form
+			class="words-filters"
+			id="words-filters"
+			method="get"
+			action="/words/"
+			role="search"
+			hx-get="/words/"
+			hx-target="#words-results"
+			hx-select="#words-results"
+			hx-swap="outerHTML"
+			hx-push-url="true"
+			hx-sync="this:replace"
+			hx-indicator="#words-results"
+			hx-trigger="submit, change"
+			hx-swap-oob="outerHTML"
+		>
+			@wordsFilterFields(v)
+		</form>
+	} else {
+		<form
+			class="words-filters"
+			id="words-filters"
+			method="get"
+			action="/words/"
+			role="search"
+			hx-get="/words/"
+			hx-target="#words-results"
+			hx-select="#words-results"
+			hx-swap="outerHTML"
+			hx-push-url="true"
+			hx-sync="this:replace"
+			hx-indicator="#words-results"
+			hx-trigger="submit, change"
+		>
+			@wordsFilterFields(v)
+		</form>
+	}
+}
+
+templ wordsFilterFields(v WordsView) {
+	<button type="submit" class="visually-hidden" tabindex="-1" aria-hidden="true">Apply</button>
+	<div class="words-search">
+		<svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-search"></use></svg>
+		<label class="visually-hidden" for="words-filter-q">@components.Pair("חיפוש בעברית או באנגלית", "Search Hebrew or English")</label>
+		<input
+			type="search"
+			id="words-filter-q"
+			name="q"
+			data-filter="q"
+			value={ v.Filters.Q }
+			placeholder="Search Hebrew or English"
+			autocomplete="off"
+			spellcheck="false"
+			enterkeyhint="search"
+			dir="auto"
+			hx-get="/words/"
+			hx-trigger="input changed delay:300ms, search"
+			hx-target="#words-results"
+			hx-select="#words-results"
+			hx-swap="outerHTML"
+			hx-push-url="true"
+			hx-sync="closest form:replace"
+			hx-include="#words-filters"
+			hx-indicator="#words-results"
+		/>
+	</div>
+	<div class="words-quick">
+		@wordsMoreFilters(v)
+		<fieldset>
+			<legend class="visually-hidden">@components.Pair("שלב", "Stage")</legend>
+			for _, o := range statusOptions {
+				@chipRadio("status", o.V, o.He, o.En, v.Filters.Status)
+			}
+		</fieldset>
+		<input
+			class="words-chip-input"
+			type="checkbox"
+			id="words-filter-weak"
+			name="weak"
+			data-filter="weak"
+			value={ weakValue(v.Filters.Weak) }
+			checked?={ v.Filters.Weak != "" && v.Filters.Weak != "0" }
+		/>
+		<label class="filter-chip" for="words-filter-weak">@components.Pair("חלשות", "Weak")</label>
+	</div>
+}
+
+templ chipRadio(name, value, he, en, current string) {
+	<input
+		class="words-chip-input"
+		type="radio"
+		name={ name }
+		value={ value }
+		id={ "words-filter-" + name + "-" + orDefault(value, "all") }
+		data-filter={ name }
+		checked?={ current == value }
+	/>
+	<label class="filter-chip" for={ "words-filter-" + name + "-" + orDefault(value, "all") }>@components.Pair(he, en)</label>
+}
+
+templ wordsMoreFilters(v WordsView) {
+	<details class="words-more-filters" open?={ v.Filters.MoreOpen() }>
+		<summary class="filter-chip" aria-label={ "More filters, " + strconv.Itoa(v.Filters.MoreCount()) + " active" }>
+			@components.Pair("סינון", "Filters")
+			if v.Filters.MoreCount() > 0 {
+				<span class="words-filter-count">· { strconv.Itoa(v.Filters.MoreCount()) }</span>
+			}
+			<svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-chevron-down"></use></svg>
+		</summary>
+		<div class="words-more-filters__panel" role="group" aria-labelledby="words-more-h">
+			<div class="words-more-filters__head">
+				<h2 id="words-more-h">@components.Pair("סינון", "Filters")</h2>
+				<button type="button" class="btn btn-ghost" onclick="this.closest('details').open=false">@components.Pair("סגירה", "Close")</button>
+			</div>
+			<div class="words-more-filters__grid">
+				<label for="words-filter-pos">
+					<span>@components.Pair("חלק דיבר", "Part of speech")</span>
+					<select id="words-filter-pos" name="pos" data-filter="pos">
+						<option value="">Any</option>
+						for _, o := range posOptions {
+							<option value={ o.V } selected?={ v.Filters.POS == o.V }>{ o.En }</option>
+						}
+					</select>
+				</label>
+				<label for="words-filter-binyan">
+					<span>@components.Pair("בניין", "Binyan")</span>
+					<select id="words-filter-binyan" name="binyan" data-filter="binyan">
+						<option value="">Any</option>
+						for _, o := range binyanOptions {
+							<option value={ o.V } selected?={ v.Filters.Binyan == o.V } lang="he">{ o.En } · { o.He }</option>
+						}
+					</select>
+				</label>
+				<label for="words-filter-tense">
+					<span>@components.Pair("זמן", "Tense")</span>
+					<select id="words-filter-tense" name="tense" data-filter="tense">
+						<option value="">Any</option>
+						for _, o := range tenseOptions {
+							<option value={ o.V } selected?={ v.Filters.Tense == o.V }>{ o.En }</option>
+						}
+					</select>
+				</label>
+			</div>
+			<fieldset class="words-quick">
+				<legend>@components.Pair("מקור", "Source")</legend>
+				@chipRadio("source", "", "הכל", "Any", v.Filters.Source)
+				@chipRadio("source", "lesson", "שיעורים", "Lessons", v.Filters.Source)
+				@chipRadio("source", "self", "הוספתי", "Added by me", v.Filters.Source)
+				@chipRadio("source", "ai", "AI", "AI", v.Filters.Source)
+			</fieldset>
+			<fieldset class="words-quick">
+				<legend>@components.Pair("מושהות", "Paused words")</legend>
+				@chipRadio("suspended", "", "הכל", "Show all", v.Filters.Suspended)
+				@chipRadio("suspended", "0", "פעילות", "Active only", v.Filters.Suspended)
+				@chipRadio("suspended", "1", "מושהות בלבד", "Paused only", v.Filters.Suspended)
+			</fieldset>
+			<div class="words-more-filters__foot">
+				<a class="btn btn-ghost" href="/words/" hx-get="/words/" hx-target="#words-results" hx-select="#words-results" hx-swap="outerHTML" hx-push-url="true" hx-indicator="#words-results" hx-headers={ wordsSyncHeader }>@components.Pair("ניקוי", "Clear")</a>
+				<button type="submit" class="btn btn-primary">@components.Pair("הצגת מילים", "Show words")</button>
+			</div>
+		</div>
+	</details>
+}
+
+templ wordsActiveFilters(v WordsView) {
+	if len(v.Active) > 0 {
+		<div class="words-active" aria-label="Active filters">
+			for _, a := range v.Active {
+				<a
+					class="words-active__chip"
+					data-clear={ a.Key }
+					href={ templ.SafeURL(a.HrefWithout) }
+					hx-get={ a.HrefWithout }
+					hx-target="#words-results"
+					hx-select="#words-results"
+					hx-swap="outerHTML"
+					hx-push-url="true"
+					hx-indicator="#words-results"
+					hx-headers={ wordsSyncHeader }
+					aria-label={ "Remove filter " + a.LabelEn }
+				>
+					@components.Pair(a.LabelHe, a.LabelEn)
+					<svg class="icon" width="14" height="14" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-close"></use></svg>
+				</a>
+			}
+			<a class="words-active__clear" href="/words/" hx-get="/words/" hx-target="#words-results" hx-select="#words-results" hx-swap="outerHTML" hx-push-url="true" hx-indicator="#words-results" hx-headers={ wordsSyncHeader }>@components.Pair("ניקוי הכל", "Clear all")</a>
+		</div>
+	}
+}
+
+templ wordsMore(v WordsView) {
+	<li class="words-more" data-words-more>
+		<a
+			class="btn btn-ghost"
+			href={ templ.SafeURL(v.URLWith(QueryCursor, v.NextCursor)) }
+			hx-get={ v.URLWith(QueryCursor, v.NextCursor) + "&" + QueryFragment + "=" + FragmentRows }
+			hx-target="closest .words-more"
+			hx-swap="outerHTML"
+			hx-push-url="false"
+			hx-indicator="#words-results"
+		>@components.Pair("עוד מילים", "Load more")</a>
+	</li>
+}
+
+templ wordsSkeleton() {
+	<div class="words-skeleton words-list" aria-hidden="true">
+		for i := 0; i < 8; i++ {
+			<div class="words-skeleton__row"><i></i><i></i><i></i><i></i></div>
+		}
+	</div>
+}
+
+templ wordsEmpty(v WordsView) {
+	if v.Filters.IsEmpty() && v.Cursor == "" {
+		<div class="card words-empty" data-words-empty="library">
+			<div class="empty-art"><img src="/shared/brand/illustrations/empty-words.svg" alt="" aria-hidden="true" width="320" height="240"/></div>
+			<p class="empty-he" lang="he" dir="rtl">עֲדַיִן אֵין מִלִּים</p>
+			<h2 class="empty-title empty-title-en" lang="en" dir="ltr">No words yet</h2>
+			<h2 class="empty-title empty-title-he" lang="he" dir="rtl">עֲדַיִן אֵין מִלִּים</h2>
+			<p class="empty-body empty-body-en" lang="en" dir="ltr">Words from your lessons land here on their own, with their sound and how well you know them. You can add your own too.</p>
+			<p class="empty-body empty-body-he" lang="he" dir="rtl">מילים מהשיעורים מגיעות לכאן לבד, עם הצליל שלהן ועם כמה טוב אתם מכירים אותן. אפשר גם להוסיף מילים משלכם.</p>
+			<p class="empty-actions">
+				<a class="btn btn-primary" href="/">@components.Pair("לשיעור של היום", "Start today’s lesson")</a>
+				<!-- PR 2: Add a word -->
+			</p>
+		</div>
+	} else {
+		<div class="card words-empty" data-words-empty="filter">
+			<div class="words-state__icon" aria-hidden="true"><svg class="icon" width="28" height="28" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-search"></use></svg></div>
+			<h2 class="empty-title empty-title-en" lang="en" dir="ltr">No words match</h2>
+			<h2 class="empty-title empty-title-he" lang="he" dir="rtl">לֹא נִמְצְאוּ מִלִּים</h2>
+			<p class="empty-body empty-body-en" lang="en" dir="ltr">
+				if v.Filters.Q != "" {
+					Nothing for “<bdi>{ v.Filters.Q }</bdi>”
+				} else {
+					Nothing matches
+				}
+				{ v.Filters.SummaryEn() }. Try another word or remove a filter.
+			</p>
+			<p class="empty-body empty-body-he" lang="he" dir="rtl">
+				if v.Filters.Q != "" {
+					אֵין מִלִּים עֲבוּר “<bdi>{ v.Filters.Q }</bdi>”
+				} else {
+					אֵין מִלִּים שֶׁמַּתְאִימוֹת
+				}
+				{ v.Filters.SummaryHe() }. נַסּוּ מִלָּה אַחֶרֶת אוֹ הָסִירוּ סִנּוּן.
+			</p>
+			<p class="empty-actions">
+				<a class="btn btn-primary" href="/words/" hx-get="/words/" hx-target="#words-results" hx-select="#words-results" hx-swap="outerHTML" hx-push-url="true" hx-indicator="#words-results" hx-headers={ wordsSyncHeader }>@components.Pair("ניקוי סינון", "Clear filters")</a>
+				<!-- PR 2: Add a word, prefilling key only when q contains Hebrew letters -->
+			</p>
+		</div>
+	}
+}
+
+templ wordsError(v WordsView) {
+	<div class="card words-error" data-words-error={ v.ErrorKind } role="alert">
+		<div class="words-state__icon" aria-hidden="true">×</div>
+		<p class="empty-he" lang="he" dir="rtl">{ errHe(v.ErrorKind) }</p>
+		<h2 class="empty-title" lang="en" dir="ltr">{ errEn(v.ErrorKind) }</h2>
+		<p class="empty-body empty-body-en" lang="en" dir="ltr">Your words are safe. Check your connection and try again.</p>
+		<p class="empty-body empty-body-he" lang="he" dir="rtl">הַמִּלִּים שֶׁלָּכֶם שְׁמוּרוֹת. בִּדְקוּ אֶת הַחִיבּוּר וְנַסּוּ שׁוּב.</p>
+		<p class="empty-actions">
+			if v.ErrorKind != "invalid_filter" {
+				<a class="btn btn-primary" href={ templ.SafeURL(v.URL()) }>@components.Pair("לנסות שוב", "Try again")</a>
+			}
+			<a class="btn btn-ghost" href="/words/">@components.Pair("ניקוי סינון", "Clear filters")</a>
+		</p>
+	</div>
+}
+
+templ wordsScript() {
+	@templ.Raw(`<script>
+(function () {
+    var key = 'hebrew-words-vowels';
+    var on = true;
+    try { on = localStorage.getItem(key) !== '0'; } catch (e) {}
+    function strip(s) { return String(s || '').replace(/[\u0591-\u05C7]/g, ''); }
+    function apply() {
+        var nodes = document.querySelectorAll('[data-vowels]');
+        for (var i = 0; i < nodes.length; i++) {
+            var raw = nodes[i].getAttribute('data-vowels') || '';
+            nodes[i].textContent = on ? raw : strip(raw);
+        }
+        var btn = document.getElementById('words-vowels-btn');
+        if (btn) btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    function shown() {
+        var n = document.querySelectorAll('#words-list-ul .word-item').length;
+        var s = document.getElementById('words-status');
+        if (!s || !n) return;
+        var he = s.querySelector('.ui-he');
+        var en = s.querySelector('.ui-en');
+        if (he) he.textContent = n + ' מוצגות';
+        if (en) en.textContent = n + ' shown';
+    }
+    document.addEventListener('click', function (ev) {
+        var t = ev.target && ev.target.closest ? ev.target : null;
+        if (!t || !t.closest) return;
+        if (t.closest('#words-vowels-btn')) {
+            on = !on;
+            try { localStorage.setItem(key, on ? '1' : '0'); } catch (e) {}
+            apply();
+            return;
+        }
+        var sheet = document.querySelector('details.words-more-filters[open]');
+        if (sheet && ev.target === sheet) sheet.open = false;
+        var layout = document.querySelector('.words-layout');
+        if (layout && ev.target === layout) {
+            var close = layout.querySelector('.lookup-card__close');
+            if (close) close.click();
+        }
+    });
+    document.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Escape') return;
+        var sheet = document.querySelector('details.words-more-filters[open]');
+        if (sheet) { sheet.open = false; return; }
+        var close = document.querySelector('.lookup-card__close');
+        if (close) close.click();
+    });
+    var focusWord = '';
+    document.addEventListener('click', function (ev) {
+        var t = ev.target && ev.target.closest ? ev.target.closest('.lookup-card__close') : null;
+        if (t) focusWord = t.getAttribute('data-close-word') || '';
+    });
+    document.addEventListener('htmx:afterSettle', function () {
+        apply();
+        if (!focusWord) return;
+        var row = document.querySelector('[data-word="' + (window.CSS && CSS.escape ? CSS.escape(focusWord) : focusWord) + '"]');
+        focusWord = '';
+        if (row) row.focus();
+    });
+    document.addEventListener('htmx:afterSwap', function (ev) {
+        var target = ev.detail && ev.detail.target;
+        if (target && target.classList && target.classList.contains('words-more')) shown();
+        apply();
+    });
+    apply();
+})();
+</script>`)
+}
