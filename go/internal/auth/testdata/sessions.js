@@ -103,7 +103,8 @@ const cases = [
     { name: 'disabled', userId: disabled, token: 'sess-disabled', expires: far, user: null },
     { name: 'unicode', userId: learner, token: 'tok-\u05e9\u05dc\u05d5\u05dd-\u{1F600}', expires: far, user: learner },
     // Nikud (qamats, shin-dot, patah), cantillation (etnachta), emoji, and a non-emoji astral (𝄞).
-    { name: 'astral', userId: learner, token: 'tok-\u05E9\u05B8\u05C1\u05DE\u05B7\u0597\u05E2-\u{1F600}-\u{1D11E}', expires: far, user: learner }
+    { name: 'astral', userId: learner, token: 'tok-\u05E9\u05B8\u05C1\u05DE\u05B7\u0597\u05E2-\u{1F600}-\u{1D11E}', expires: far, user: learner },
+    { name: 'unicode16', userId: learner, token: 'tok-\u1C89-\u{1FAE9}', expires: far, user: learner }
 ];
 
 for (const item of cases) {

@@ -142,10 +142,15 @@ const pointed = '\u05E9\u05B8\u05C1\u05DE\u05B7\u0597\u05E2'.normalize('NFC');
 const emojiWord = '\u05E9\u{1F600}';
 const astralWord = '\u05E9\u{1D11E}';
 const highBmp = '\u05E9\uF8FF';
+// U+1C89 is a Unicode 16 case pair (lowercase U+1C8A). U+1FAE9 is a Unicode 16 emoji.
+const tjeWord = '\u05E9\u1C89';
+const bagsWord = '\u05E9\u{1FAE9}';
 review(pointed, 'he_en', { step: 1, last_result: 'pass', last_grade: 3, last_at: day(-1), sources: '["intro"]', due: day(2) });
 review(emojiWord, 'he_en', { sources: '["intro"]', due: day(1) });
 review(astralWord, 'he_en', { sources: '["intro"]', due: day(1) });
 review(highBmp, 'he_en', { sources: '["intro"]', due: day(1) });
+review(tjeWord, 'he_en', { sources: '["intro"]', due: day(1) });
+review(bagsWord, 'he_en', { sources: '["intro"]', due: day(1) });
 
 const lines = [];
 function emit(row) {
@@ -181,6 +186,9 @@ const queries = [
     { id: 'q-pointed', query: { q: ' \uFEFF ' + pointed + ' \t ', limit: '50' }, scheduler: 'ladder' },
     { id: 'q-emoji', query: { q: '\u{1F600}', limit: '50' }, scheduler: 'ladder' },
     { id: 'q-astral', query: { q: '\u{1D11E}', limit: '50' }, scheduler: 'ladder' },
+    { id: 'q-tje', query: { q: '\u1C89', limit: '50' }, scheduler: 'ladder' },
+    { id: 'q-tje-lower', query: { q: '\u1C8A', limit: '50' }, scheduler: 'ladder' },
+    { id: 'q-bags', query: { q: '\u{1FAE9}', limit: '50' }, scheduler: 'ladder' },
     { id: 'q-emoji-run', query: { q: '\u{1F600}'.repeat(41), limit: '50' }, scheduler: 'ladder' },
     { id: 'bad-emoji-q', query: { q: '\u{1F600}'.repeat(81) }, scheduler: 'ladder' },
     { id: 'status-new', query: { status: 'new', limit: '50' }, scheduler: 'ladder' },
@@ -264,6 +272,25 @@ for (const item of suspends) {
         audit: auditCount(),
         auditBefore: before,
         flags: flags(learner)
+    });
+}
+
+const { exactKey } = require(path.join(repo, 'server/vocab-index'));
+for (const item of [
+    { id: 'tje', input: '\u1C89' },
+    { id: 'tje-lower', input: '\u1C8A' },
+    { id: 'bags', input: '\u{1FAE9}' },
+    { id: 'tje-bags-trim', input: ' \uFEFF \u1C89 \u{1FAE9} \t' }
+]) {
+    const exact = exactKey(item.input);
+    emit({
+        kind: 'text',
+        id: item.id,
+        input: item.input,
+        exact,
+        lower: exact.toLowerCase(),
+        upper: item.input.toUpperCase(),
+        nfc: item.input.normalize('NFC')
     });
 }
 

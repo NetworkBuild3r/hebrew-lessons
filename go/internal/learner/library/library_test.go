@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/db"
+	"golang.org/x/text/unicode/norm"
 	_ "modernc.org/sqlite"
 )
 
@@ -87,6 +88,7 @@ func TestLibraryMatchesNode(t *testing.T) {
 	var lists []listCase
 	var suspends []suspendCase
 	var added addCase
+	var texts []textCase
 	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
 		var kind struct {
 			Kind string `json:"kind"`
@@ -115,6 +117,12 @@ func TestLibraryMatchesNode(t *testing.T) {
 			if err := json.Unmarshal([]byte(line), &added); err != nil {
 				t.Fatal(err)
 			}
+		case "text":
+			var item textCase
+			if err := json.Unmarshal([]byte(line), &item); err != nil {
+				t.Fatal(err)
+			}
+			texts = append(texts, item)
 		default:
 			t.Fatalf("kind %s", kind.Kind)
 		}
@@ -150,6 +158,18 @@ func TestLibraryMatchesNode(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if item.ID == "q-tje-lower" {
+				// Node 22.14 lowercases U+1C89 to U+1C8A, so this query hits ש+U+1C89.
+				// strings.ToLower does not. After go/internal/ucd, Go matches Node
+				// and this branch should be removed.
+				if len(item.Words) == 0 || !containsWord(wordsOf(item.Words), "\u05E9\u1C89") {
+					t.Fatal("Node no longer matches U+1C8A against U+1C89")
+				}
+				if len(got) != 0 {
+					t.Fatal("Go now matches Node on U+1C8A; remove the Unicode 15 exception")
+				}
+				return
+			}
 			if !itemsEqual(got, item.Words) {
 				gb, _ := json.Marshal(got)
 				wb, _ := json.Marshal(item.Words)
@@ -165,6 +185,7 @@ func TestLibraryMatchesNode(t *testing.T) {
 		t.Fatalf("full list too small: %d", len(full))
 	}
 	assertUnicodeWords(t, full)
+	assertUnicode16Text(t, texts)
 	store.Scheduler = "ladder"
 	var paged []Item
 	cursor := ""
@@ -282,7 +303,7 @@ func TestLibraryMatchesNode(t *testing.T) {
 
 func assertUnicodeWords(t *testing.T, items []Item) {
 	t.Helper()
-	var sawPointed, sawEmoji, sawAstral, sawHigh bool
+	var sawPointed, sawEmoji, sawAstral, sawHigh, sawTje, sawBags bool
 	for _, item := range items {
 		word := item.Word
 		if strings.ContainsRune(word, '\u0597') && strings.ContainsRune(word, '\u05B8') && strings.ContainsRune(word, '\u05C1') {
@@ -297,9 +318,15 @@ func assertUnicodeWords(t *testing.T, items []Item) {
 		if strings.ContainsRune(word, '\uF8FF') {
 			sawHigh = true
 		}
+		if strings.ContainsRune(word, '\u1C89') {
+			sawTje = true
+		}
+		if strings.ContainsRune(word, '\U0001FAE9') {
+			sawBags = true
+		}
 	}
-	if !sawPointed || !sawEmoji || !sawAstral || !sawHigh {
-		t.Fatalf("golden list missing unicode rows pointed=%v emoji=%v astral=%v high=%v", sawPointed, sawEmoji, sawAstral, sawHigh)
+	if !sawPointed || !sawEmoji || !sawAstral || !sawHigh || !sawTje || !sawBags {
+		t.Fatalf("golden list missing unicode rows pointed=%v emoji=%v astral=%v high=%v tje=%v bags=%v", sawPointed, sawEmoji, sawAstral, sawHigh, sawTje, sawBags)
 	}
 }
 
@@ -326,6 +353,15 @@ type goldenMeta struct {
 	Learner int64               `json:"learner"`
 	Other   int64               `json:"other"`
 	Schema  map[string][]string `json:"schema"`
+}
+
+type textCase struct {
+	ID    string `json:"id"`
+	Input string `json:"input"`
+	Exact string `json:"exact"`
+	Lower string `json:"lower"`
+	Upper string `json:"upper"`
+	NFC   string `json:"nfc"`
 }
 
 type listCase struct {
@@ -480,6 +516,65 @@ func openRW(t *testing.T, path string) *sql.DB {
 		t.Fatal(err)
 	}
 	return conn
+}
+
+func wordsOf(items []Item) []string {
+	out := make([]string, len(items))
+	for i, item := range items {
+		out[i] = item.Word
+	}
+	return out
+}
+
+// assertUnicode16Text compares Node 22.14 ICU casefold and NFC with Go.
+// U+1C89/U+1C8A differ: Node maps the pair, strings.ToLower and ToUpper do not.
+// U+1FAE9 matches. When library casefold moves to go/internal/ucd, the gap
+// assertions fail and should be deleted.
+func assertUnicode16Text(t *testing.T, rows []textCase) {
+	t.Helper()
+	if len(rows) < 4 {
+		t.Fatalf("text goldens %d", len(rows))
+	}
+	for _, row := range rows {
+		if exactKey(row.Input) != row.Exact {
+			t.Errorf("%s exactKey %q want %q", row.ID, exactKey(row.Input), row.Exact)
+		}
+		if norm.NFC.String(row.Input) != row.NFC {
+			t.Errorf("%s nfc %q want %q", row.ID, norm.NFC.String(row.Input), row.NFC)
+		}
+		gotLower := strings.ToLower(row.Exact)
+		gotUpper := strings.ToUpper(row.Input)
+		lowerGap := gotLower != row.Lower
+		upperGap := gotUpper != row.Upper
+		if lowerGap && !unicode15TjeGap(gotLower, row.Lower) {
+			t.Errorf("%s lower %q want %q", row.ID, gotLower, row.Lower)
+		}
+		if upperGap && !unicode15TjeGap(gotUpper, row.Upper) {
+			t.Errorf("%s upper %q want %q", row.ID, gotUpper, row.Upper)
+		}
+		switch row.ID {
+		case "tje", "tje-bags-trim":
+			if !lowerGap {
+				t.Errorf("%s: U+1C89 now lowercases like Node; remove the Unicode 15 exception", row.ID)
+			}
+		case "tje-lower":
+			if !upperGap {
+				t.Errorf("%s: U+1C8A now uppercases like Node; remove the Unicode 15 exception", row.ID)
+			}
+		case "bags":
+			if lowerGap || upperGap {
+				t.Errorf("%s: U+1FAE9 casefold diverged lower %q/%q upper %q/%q", row.ID, gotLower, row.Lower, gotUpper, row.Upper)
+			}
+		}
+	}
+}
+
+// unicode15TjeGap reports whether the only difference is Go leaving the
+// Unicode 16 Tje pair unmapped while Node maps U+1C89 and U+1C8A.
+func unicode15TjeGap(got, want string) bool {
+	return strings.ReplaceAll(got, "\u1C89", "\u1C8A") == strings.ReplaceAll(want, "\u1C89", "\u1C8A") &&
+		strings.ContainsRune(got+"\n"+want, '\u1C89') &&
+		strings.ContainsRune(got+"\n"+want, '\u1C8A')
 }
 
 func containsWord(values []string, want string) bool {
