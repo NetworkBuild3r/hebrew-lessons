@@ -72,76 +72,13 @@ jobs:
           if [[ ! -f go/go.mod ]]; then
             skip "go/go.mod is not present; skipping the Go contract leg"
           fi
-          if [[ ! -d go/cmd ]]; then
-            skip "No server binary under go/cmd; skipping the Go contract leg"
+          if [[ ! -d go/cmd/hebrew ]]; then
+            skip "go/cmd/hebrew is not present; skipping the Go contract leg"
           fi
-          is_helper() {
-            case "$(basename "$1")" in
-              golden|gen|generate|generator|nodegen|tool|tools|migrate|migration) return 0 ;;
-              *) return 1 ;;
-            esac
-          }
-          mains=()
-          while IFS= read -r -d '' file; do
-            if grep -qE '^package main([[:space:]]|$)' "$file"; then
-              dir="$(dirname "$file")"
-              already=0
-              if [[ "${#mains[@]}" -gt 0 ]]; then
-                for seen in "${mains[@]}"; do
-                  if [[ "$seen" == "$dir" ]]; then
-                    already=1
-                    break
-                  fi
-                done
-              fi
-              if [[ "$already" -eq 0 ]]; then
-                mains+=("$dir")
-              fi
-            fi
-          done < <(find go/cmd -type f -name '*.go' -print0)
-          server=""
-          if [[ "${#mains[@]}" -gt 0 ]]; then
-            for dir in "${mains[@]}"; do
-              if [[ "$(basename "$dir")" == "server" ]]; then
-                server="$dir"
-                break
-              fi
-            done
-            if [[ -z "$server" ]]; then
-              for dir in "${mains[@]}"; do
-                if [[ "$(basename "$dir")" == *server* ]]; then
-                  server="$dir"
-                  break
-                fi
-              done
-            fi
-            if [[ -z "$server" ]]; then
-              candidates=()
-              for dir in "${mains[@]}"; do
-                if ! is_helper "$dir"; then
-                  candidates+=("$dir")
-                fi
-              done
-              if [[ "${#candidates[@]}" -eq 1 ]]; then
-                server="${candidates[0]}"
-              fi
-            fi
-          fi
-          if [[ -z "$server" ]]; then
-            found=""
-            if [[ "${#mains[@]}" -gt 0 ]]; then
-              for dir in "${mains[@]}"; do
-                found+="${found:+, }${dir#go/}"
-              done
-            fi
-            if [[ -n "$found" ]]; then
-              skip "No server binary under go/cmd (found: ${found}); skipping the Go contract leg"
-            fi
-            skip "No server binary under go/cmd; skipping the Go contract leg"
-          fi
-          rel="${server#go/}"
+          # The contract server is this binary. Other mains under go/cmd,
+          # including preflight, do not replace it and do not skip this leg.
           echo "skip=false" >> "$GITHUB_OUTPUT"
-          echo "pkg=./${rel}" >> "$GITHUB_OUTPUT"
+          echo "pkg=./cmd/hebrew" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v7
         if: ${{ matrix.server == 'go' && steps.go-server.outputs.skip != 'true' }}
         with:
@@ -155,8 +92,13 @@ jobs:
           PKG: ${{ steps.go-server.outputs.pkg }}
         run: |
           set -euo pipefail
+          if [[ "$PKG" != "./cmd/hebrew" ]]; then
+            echo "contract server must be ./cmd/hebrew, got ${PKG}" >&2
+            exit 1
+          fi
+          echo "building ./cmd/hebrew"
           bin="$(mktemp)"
-          ( cd go && CGO_ENABLED=0 go build -o "$bin" "$PKG" )
+          ( cd go && CGO_ENABLED=0 go build -o "$bin" ./cmd/hebrew )
           echo "cmd=${bin}" >> "$GITHUB_OUTPUT"
       - name: Contract suite
         if: ${{ matrix.server != 'go' || steps.go-server.outputs.skip != 'true' }}
