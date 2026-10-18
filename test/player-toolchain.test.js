@@ -1,5 +1,6 @@
 /**
- * Player TypeScript toolchain. The bundle is built, not committed, and no page loads it.
+ * Player TypeScript toolchain. The bundle is built, not committed.
+ * The lesson shell and app boot do not load it. The review route does.
  */
 'use strict';
 
@@ -12,6 +13,7 @@ const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
 const harness = require('./helpers/signed-in-server');
+const bundle = require('./helpers/player-bundle');
 
 function read(rel) {
     return fs.readFileSync(path.join(root, rel), 'utf8');
@@ -47,7 +49,7 @@ describe('player toolchain', () => {
         assert.match(pkg.scripts['build:player'], /--outfile=shared\/dist\/player\.js/);
     });
 
-    it('typechecks and writes a single gated bundle that nothing loads', async () => {
+    it('typechecks and writes a single gated bundle', async () => {
         const tsconfig = JSON.parse(read('web/tsconfig.json'));
         assert.equal(tsconfig.compilerOptions.strict, true);
         assert.equal(tsconfig.compilerOptions.noEmit, true);
@@ -59,14 +61,17 @@ describe('player toolchain', () => {
 
         const outfile = path.join(root, 'shared/dist/player.js');
         const mapfile = path.join(root, 'shared/dist/player.js.map');
-        fs.rmSync(path.dirname(outfile), { recursive: true, force: true });
-        runNpm('build:player');
-        const source = fs.readFileSync(outfile, 'utf8');
-        assert.ok(source.length > 0);
-        assert.match(source, /sourceMappingURL=player\.js\.map/);
-        assert.equal(fs.existsSync(mapfile), true);
-        const names = fs.readdirSync(path.dirname(outfile)).sort();
-        assert.deepEqual(names, ['player.js', 'player.js.map']);
+        let source = '';
+        bundle.withBundleLock(() => {
+            fs.rmSync(path.dirname(outfile), { recursive: true, force: true });
+            runNpm('build:player');
+            source = fs.readFileSync(outfile, 'utf8');
+            assert.ok(source.length > 0);
+            assert.match(source, /sourceMappingURL=player\.js\.map/);
+            assert.equal(fs.existsSync(mapfile), true);
+            const names = fs.readdirSync(path.dirname(outfile)).sort();
+            assert.deepEqual(names, ['player.js', 'player.js.map']);
+        });
         new vm.Script(source);
 
         await harness.start();

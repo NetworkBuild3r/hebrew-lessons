@@ -12,6 +12,7 @@ const vm = require('vm');
 const root = path.resolve(__dirname, '..');
 const spa = require('../server/spa');
 const ROUTES = require('../shared/app-routes.js');
+const playerBundle = require('./helpers/player-bundle');
 
 describe('server shell (server/spa.js)', () => {
     it('every signed-in screen is an app path; lessons and login are not', () => {
@@ -67,6 +68,7 @@ describe('server shell (server/spa.js)', () => {
 
 describe('route table (shared/app-routes.js)', () => {
     it('each route names a page module that exists and exposes mount/unmount', () => {
+        playerBundle.ensurePlayerBundle();
         const ids = new Set();
         for (const route of ROUTES) {
             assert.ok(!ids.has(route.id), 'duplicate id ' + route.id);
