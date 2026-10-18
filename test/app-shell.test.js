@@ -43,6 +43,18 @@ function loadBrowserScripts() {
             querySelector() { return null; }
         }
     };
+    const scheme = {
+        matches: false,
+        listeners: [],
+        addEventListener(type, fn) { if (type === 'change') this.listeners.push(fn); },
+        addListener(fn) { this.listeners.push(fn); },
+        dispatch() {
+            const ev = { matches: this.matches, media: '(prefers-color-scheme: dark)' };
+            this.listeners.forEach((fn) => fn(ev));
+        }
+    };
+    sandbox.matchMedia = () => scheme;
+    sandbox._colorScheme = scheme;
     sandbox.window = sandbox;
     sandbox.globalThis = sandbox;
     vm.createContext(sandbox);
@@ -236,27 +248,43 @@ describe('app-shell theme engine (INIT-013/SPEC-002)', () => {
     beforeEach(() => {
         win.localStorage.clear();
         win.document.documentElement.removeAttribute('data-theme');
+        win._colorScheme.matches = false;
     });
 
-    it('defaults to light and allowlists localStorage values (ac-3, security)', () => {
+    it('defaults to auto and allowlists light, dark, and auto (ac-3, security)', () => {
         assert.equal(Shell.THEME_KEY, 'hebrew-theme');
         assert.equal(Shell.normalizeTheme('dark'), 'dark');
         assert.equal(Shell.normalizeTheme('light'), 'light');
-        assert.equal(Shell.normalizeTheme('auto'), 'light');
-        assert.equal(Shell.normalizeTheme('<script>'), 'light');
-        assert.equal(Shell.normalizeTheme(null), 'light');
-        assert.equal(Shell.readTheme(), 'light');
+        assert.equal(Shell.normalizeTheme('auto'), 'auto');
+        assert.equal(Shell.normalizeTheme('<script>'), 'auto');
+        assert.equal(Shell.normalizeTheme(null), 'auto');
+        assert.equal(Shell.readTheme(), 'auto');
         win.localStorage.setItem('hebrew-theme', 'evil');
-        assert.equal(Shell.readTheme(), 'light');
+        assert.equal(Shell.readTheme(), 'auto');
         win.localStorage.setItem('hebrew-theme', 'dark');
         assert.equal(Shell.readTheme(), 'dark');
     });
 
-    it('applyTheme sets data-theme and persists allowlisted values only', () => {
+    it('applyTheme persists the choice and writes a concrete data-theme', () => {
         assert.equal(Shell.applyTheme('dark'), 'dark');
         assert.equal(win.document.documentElement.getAttribute('data-theme'), 'dark');
         assert.equal(win.localStorage.getItem('hebrew-theme'), 'dark');
-        assert.equal(Shell.applyTheme('nope'), 'light');
+        assert.equal(Shell.applyTheme('nope'), 'auto');
+        assert.equal(win.document.documentElement.getAttribute('data-theme'), 'light');
+        assert.equal(win.localStorage.getItem('hebrew-theme'), 'auto');
+        assert.notEqual(win.document.documentElement.getAttribute('data-theme'), 'auto');
+    });
+
+    it('re-resolves auto when the OS color scheme changes', () => {
+        assert.equal(Shell.applyTheme('auto'), 'auto');
+        assert.equal(win.document.documentElement.getAttribute('data-theme'), 'light');
+        win._colorScheme.matches = true;
+        win._colorScheme.dispatch();
+        assert.equal(win.document.documentElement.getAttribute('data-theme'), 'dark');
+        assert.equal(win.localStorage.getItem('hebrew-theme'), 'auto');
+        Shell.applyTheme('light');
+        win._colorScheme.matches = false;
+        win._colorScheme.dispatch();
         assert.equal(win.document.documentElement.getAttribute('data-theme'), 'light');
         assert.equal(win.localStorage.getItem('hebrew-theme'), 'light');
     });
