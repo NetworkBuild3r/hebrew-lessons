@@ -25,7 +25,7 @@ templ PageHeading(h Heading) {
 				if h.SubHe != "" || h.SubEn != "" {
 					<p class="page-heading-sub subtitle">@Pair(h.SubHe, h.SubEn)</p>
 				} else if h.Subtitle != "" {
-					<p class="page-heading-sub subtitle" lang={ h.SubLang } dir={ h.SubDir }>{ h.Subtitle }</p>
+					<p class="page-heading-sub subtitle"><bdi lang={ h.SubLang } dir={ h.SubDir }>{ h.Subtitle }</bdi></p>
 				}
 			</div>
 			<div class="page-actions" data-page-actions></div>

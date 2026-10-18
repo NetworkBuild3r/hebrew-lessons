@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Status** | Accepted (pending operator read of this record) |
-| **Date** | 2026-10-17 |
+| **Date** | 2026-10-18 |
 | **Authored by** | `INIT-013/SPEC-001` |
 | **Initiative** | INIT-013 · responsive-desktop-mobile-redesign |
 | **Research grounding** | `RSCH-001` (strand balance ~¼ deliberate / ~¾ meaning); `RSCH-003` (interleaving, spacing, self-repair feedback); `RSCH-004` (`N7`); `RSCH-005` (hidden-stem recall); `RSCH-006` (WCAG 2.2 AA/AAA, ≥44px targets, nikud line height, thumb-zone); `RSCH-007` (icon + visible label, competence without streaks); `RSCH-008` (informational motion, `prefers-reduced-motion`); `RSCH-009` (human-verified pointing, `N13`/`N14`); `RSCH-010` (Consistent Navigation 3.2.3, Location 2.4.8) |
@@ -119,7 +119,7 @@ Primary interactive targets remain `≥44×44` CSS px (`--size-target-primary: 4
 
 Theme persistence (`SPEC-002`): `localStorage` key `hebrew-theme` allowlisted to `'light' | 'dark'`; applied as `document.documentElement.dataset.theme`. Default without a stored value: `'light'` (Jerusalem Stone).
 
-> **Amendment (2026-10-18): OS-following theme.** `hebrew-theme` accepts `light | dark | auto`; **`auto` is the default**. A missing or invalid value also means auto. Auto resolves `prefers-color-scheme` to a concrete `data-theme` in a pre-paint inline script and re-resolves on the media-query `change` event. A 3-way control (בהיר / כהה / אוטומטי, `role="radiogroup"`) in the rail footer, mobile top bar and Settings sheet lets the user override. CSS remains keyed on `[data-theme="dark"]` only. This supersedes the original allowlist `light|dark` (default light). `normalizeTheme` returns `'light' | 'dark' | 'auto'` (unknown → `'auto'`), and its tests change accordingly. Guarded token values are unchanged.
+> **Amendment (2026-10-18): OS-following theme.** `hebrew-theme` accepts `light | dark | auto`; **`auto` is the default**. A missing or invalid value also means auto. Auto resolves `prefers-color-scheme` to a concrete `data-theme` in a pre-paint inline script and re-resolves on the media-query `change` event. A 3-way control (בהיר / כהה / אוטומטי, `role="radiogroup"`) in the shell — the desktop rail footer and the mobile top bar, where the theme control already lives — lets the user override. The checked radio is the stored choice. `data-resolved` on that control is the concrete light or dark on screen, so Auto with a dark OS still shows that the page is dark, and the learner can return to Auto. There is no separate Settings sheet. CSS remains keyed on `[data-theme="dark"]` only. This supersedes the original allowlist `light|dark` (default light). `normalizeTheme` returns `'light' | 'dark' | 'auto'` (unknown → `'auto'`), and its tests change accordingly. Guarded token values are unchanged.
 
 ### 2.2 Light theme — Jerusalem Stone
 
@@ -368,4 +368,5 @@ Documentation only — no executable change in `INIT-013/SPEC-001`. Downstream s
 
 | Date | Change |
 |------|--------|
+| 2026-10-18 | Amendment: `hebrew-theme` is `light`, `dark`, or `auto` (default auto). The shell theme control is a 3-way radiogroup. See §2.1. |
 | 2026-10-17 | Initial record — `INIT-013/SPEC-001`. |
