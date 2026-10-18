@@ -1,0 +1,8 @@
+/hebrew
+*.exe
+*.test
+*.out
+/data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
