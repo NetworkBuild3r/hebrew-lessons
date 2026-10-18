@@ -120,30 +120,80 @@ func TestRefreshTokenIsBoundToTheIssuingClient(t *testing.T) {
 	assertOAuth(t, stolen, 400, "invalid_grant")
 }
 
-func TestTokenRequiresTheAuthorizationRedirectURI(t *testing.T) {
+func TestTokenAcceptsTheExactAuthorizationRedirectURI(t *testing.T) {
+	c := httpx.New()
+	client := registerOAuth(t, c, "", []string{oauthRedirect})
+	verifier, challenge := pkcePair(t)
+	code := authorizationCode(t, c, client.ID, challenge, oauthRedirect)
+	res := tokenRequest(t, c, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"client_id":     {client.ID},
+		"redirect_uri":  {oauthRedirect},
+		"code_verifier": {verifier},
+	}, nil)
+	assertAccessToken(t, res)
+}
+
+func TestTokenRejectsADifferentRedirectURI(t *testing.T) {
 	c := httpx.New()
 	const other = "http://localhost:8787/callback"
 	client := registerOAuth(t, c, "", []string{oauthRedirect, other})
 	verifier, challenge := pkcePair(t)
 	code := authorizationCode(t, c, client.ID, challenge, oauthRedirect)
-	base := url.Values{
+	mismatched := tokenRequest(t, c, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"client_id":     {client.ID},
+		"redirect_uri":  {other},
+		"code_verifier": {verifier},
+	}, nil)
+	assertOAuth(t, mismatched, 400, "invalid_grant")
+}
+
+func TestTokenAcceptsMissingRedirectURIWhenPKCEVerifies(t *testing.T) {
+	c := httpx.New()
+	client := registerOAuth(t, c, "", []string{oauthRedirect})
+	verifier, challenge := pkcePair(t)
+	code := authorizationCode(t, c, client.ID, challenge, oauthRedirect)
+	res := tokenRequest(t, c, url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
 		"client_id":     {client.ID},
 		"code_verifier": {verifier},
+	}, nil)
+	assertAccessToken(t, res)
+}
+
+// /authorize requires S256 PKCE, so this server does not issue a code with no
+// code_challenge. There is no live authorization code on which to redeem a
+// missing redirect_uri without PKCE.
+func TestAuthorizeDoesNotIssueACodeWithoutPKCE(t *testing.T) {
+	c := httpx.New()
+	client := registerOAuth(t, c, "", []string{oauthRedirect})
+	q := url.Values{
+		"response_type": {"code"},
+		"client_id":     {client.ID},
+		"redirect_uri":  {oauthRedirect},
+		"state":         {"st8"},
 	}
-
-	assertOAuth(t, tokenRequest(t, c, base, nil), 400, "invalid_grant")
-
-	mismatched := cloneValues(base)
-	mismatched.Set("redirect_uri", other)
-	assertOAuth(t, tokenRequest(t, c, mismatched, nil), 400, "invalid_grant")
-
-	exact := cloneValues(base)
-	exact.Set("redirect_uri", oauthRedirect)
-	res := tokenRequest(t, c, exact, nil)
-	if res.Status != 200 {
-		t.Fatalf("exact redirect_uri %d %s", res.Status, res.Body)
+	res, err := c.Do(testCtx(t), "GET", publicURL(t)+"/authorize?"+q.Encode(), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := res.Header.Get("Location")
+	if raw == "" {
+		raw = html.UnescapeString(firstMatch(t, res.Body, `url=([^"]+)"`))
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Query().Get("error") != "invalid_request" {
+		t.Fatalf("error %q body %s", u.Query().Get("error"), res.Body)
+	}
+	if u.Query().Get("code") != "" {
+		t.Fatalf("authorize issued a code without PKCE: %s", raw)
 	}
 }
 
@@ -241,6 +291,23 @@ func assertOAuth(t *testing.T, res *httpx.Exchange, status int, code string) {
 	}
 	if body.Error != code {
 		t.Fatalf("error %q body %s", body.Error, res.Body)
+	}
+}
+
+func assertAccessToken(t *testing.T, res *httpx.Exchange) {
+	t.Helper()
+	if res.Status != 200 {
+		t.Fatalf("status %d body %s", res.Status, res.Body)
+	}
+	var body struct {
+		TokenType   string `json:"token_type"`
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(res.Body, &body); err != nil {
+		t.Fatalf("body %s: %v", res.Body, err)
+	}
+	if body.TokenType != "Bearer" || body.AccessToken == "" {
+		t.Fatalf("token response %s", res.Body)
 	}
 }
 
