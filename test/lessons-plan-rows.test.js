@@ -101,6 +101,77 @@ describe('Lessons page: published plan lessons', () => {
         assert.match(html, /data-lessons-state="filtered-empty"/);
     });
 
+    it('keeps one card when a shelf lesson and a plan lesson are the same worksheet', () => {
+        const page = load([], []);
+        const status = {
+            kind: 'new', rank: 1, tone: 'fresh', chipHe: 'חדש', chipEn: 'new', he: '', en: ''
+        };
+        function shelf(slug, title, index) {
+            return {
+                index: index,
+                lesson: { slug: slug, title: title, level: 'basic', subtitle: 'basic', blurb: '' },
+                status: status
+            };
+        }
+        const rows = [
+            shelf('my-morning', 'שגרה 1 — הבוקר שלי', 0),
+            shelf('my-morning-one-verb-two-verbs', 'שגרה 1 — הבוקר שלי', 1),
+            shelf('plane-small-talk-yesh-li', 'שיחה 1 — במטוס', 2),
+            shelf('exact-match-lesson', 'Exact id', 3),
+            shelf('anal-sex-vocab', 'Private shelf only', 4)
+        ];
+        const planRows = [
+            {
+                planId: 'learning-path',
+                lessonId: 'ws-my-morning-one-verb-two-verbs',
+                title: 'שגרה 1 — הבוקר שלי',
+                topic: 'Routine',
+                recipe: 'topic-conversation'
+            },
+            {
+                planId: 'learning-path',
+                lessonId: 'plane-stand-in',
+                sourceWorksheet: 'worksheets/plane-small-talk-yesh-li/worksheet.js',
+                title: 'שיחה 1 — במטוס',
+                recipe: 'topic-conversation'
+            },
+            {
+                planId: 'learning-path',
+                lessonId: 'exact-match-lesson',
+                title: 'Exact id',
+                recipe: 'topic-conversation'
+            },
+            {
+                planId: 'learning-path',
+                lessonId: 'br-01-yesh-li-raayon',
+                title: 'גשר — יש לי רעיון',
+                recipe: 'topic-conversation'
+            }
+        ];
+        const html = page.render({ state: 'ready', filter: 'all', rows: rows, planRows: planRows });
+
+        assert.doesNotMatch(html, /data-lesson-slug="my-morning-one-verb-two-verbs"/);
+        assert.match(html, /data-lesson-id="ws-my-morning-one-verb-two-verbs"/);
+        assert.match(html, /href="\/shared\/plan\/\?id=learning-path&amp;lesson=ws-my-morning-one-verb-two-verbs"/);
+
+        assert.doesNotMatch(html, /data-lesson-slug="plane-small-talk-yesh-li"/);
+        assert.match(html, /data-lesson-id="plane-stand-in"/);
+        assert.doesNotMatch(html, /data-lesson-slug="exact-match-lesson"/);
+        assert.match(html, /data-lesson-id="exact-match-lesson"/);
+
+        assert.match(html, /data-lesson-slug="my-morning"/);
+        assert.match(html, /data-lesson-slug="anal-sex-vocab"/);
+        assert.match(html, /data-lesson-id="br-01-yesh-li-raayon"/);
+        assert.ok(
+            html.indexOf('data-lesson-slug="anal-sex-vocab"') < html.indexOf('data-plan-id="learning-path"'),
+            'shelf cards that remain still come before plan cards'
+        );
+
+        const basic = page.render({ state: 'ready', filter: 'basic', rows: rows, planRows: planRows });
+        assert.match(basic, /data-lesson-slug="my-morning-one-verb-two-verbs"/);
+        assert.doesNotMatch(basic, /data-plan-id/);
+    });
+
     it('escapes a title', async () => {
         const html = await mounted(load([], [Object.assign({}, WORKSHOP, { title: '<img src=x onerror=1>' })]));
         assert.doesNotMatch(html, /<img/);
