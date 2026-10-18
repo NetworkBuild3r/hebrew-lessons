@@ -128,7 +128,7 @@ Contract-only passwords (not production credentials):
 | `learner` | `learner-pass-1` |
 | `learner-off` | `learner-off-pass-1` |
 
-Tests that need a login call `POST /api/session` with a new cookie jar and then `GET /api/me`. They do not read `sessions`. The MCP token still comes from `MCP_AUTH_TOKEN` / `CONTRACT_MCP_TOKEN` and is not stored in the fixture.
+Tests that need a login call `POST /api/session` with a new cookie jar and then `GET /api/me`. They do not read `sessions`. The MCP token still comes from `MCP_AUTH_TOKEN` / `CONTRACT_MCP_TOKEN` and is not stored in the fixture. `internal/fixturecheck` opens the committed file read-only and checks the session count, the three usernames, empty email columns, and that no table which holds OAuth clients, codes, or tokens has rows.
 
 Regenerate the fixture and the goldens together, from an empty data directory, using these passwords:
 

@@ -5,6 +5,7 @@ package sqlite
 import (
 	"database/sql"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,10 +19,11 @@ import (
 // Dump reads sqlite_master, schema_migrations, user_version, and journal_mode.
 // The text is what golden/db/schema.sql compares. applied_at is masked.
 func Dump(path string) (string, error) {
-	db, err := openReadOnly(path)
+	db, cleanup, err := openReadOnly(path)
 	if err != nil {
 		return "", err
 	}
+	defer cleanup()
 	defer db.Close()
 
 	journal, err := pragmaText(db, "journal_mode")
@@ -68,10 +70,11 @@ func Dump(path string) (string, error) {
 // PlanRevision reads plans.revision for id. The fixture boot uses it so the
 // read-only cases do not re-seed to learn the number.
 func PlanRevision(path, id string) (int, error) {
-	db, err := openReadOnly(path)
+	db, cleanup, err := openReadOnly(path)
 	if err != nil {
 		return 0, err
 	}
+	defer cleanup()
 	defer db.Close()
 	var rev int
 	if err := db.QueryRow("SELECT revision FROM plans WHERE id = ?", id).Scan(&rev); err != nil {
@@ -132,26 +135,71 @@ func Snapshot(src, dest string) error {
 		os.Remove(tmp)
 		return err
 	}
+	// A previous mode=ro open can leave sidecars beside dest. Rename replaces
+	// the main file and leaves those names in place. The checkpointed fixture
+	// must not have them.
+	os.Remove(dest + "-wal")
+	os.Remove(dest + "-shm")
 	return nil
 }
 
-func openReadOnly(path string) (*sql.DB, error) {
+// openReadOnly returns a read-only handle. A checkpointed WAL file has no
+// -wal sidecar; opening it with mode=ro would create empty -wal/-shm beside
+// it, and immutable=1 reports journal_mode=delete for that same file. Copy
+// such a file into a temp directory and open the copy, so the sidecars stay
+// off the fixture and PRAGMA journal_mode still reads wal. A live database
+// that already has -wal is opened in place so the dump sees its pages.
+func openReadOnly(path string) (*sql.DB, func(), error) {
+	noop := func() {}
 	if _, err := os.Stat(path); err != nil {
-		return nil, err
+		return nil, noop, err
 	}
-	db, err := sql.Open("sqlite", roDSN(path))
+	openPath := path
+	cleanup := noop
+	if _, err := os.Stat(path + "-wal"); os.IsNotExist(err) {
+		dir, err := os.MkdirTemp("", "hebrew-contract-sqlite-")
+		if err != nil {
+			return nil, noop, err
+		}
+		openPath = filepath.Join(dir, filepath.Base(path))
+		if err := copyFile(path, openPath); err != nil {
+			os.RemoveAll(dir)
+			return nil, noop, err
+		}
+		cleanup = func() { os.RemoveAll(dir) }
+	}
+	db, err := sql.Open("sqlite", roDSN(openPath))
 	if err != nil {
-		return nil, err
+		cleanup()
+		return nil, noop, err
 	}
 	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
 		db.Close()
-		return nil, err
+		cleanup()
+		return nil, noop, err
 	}
-	return db, nil
+	return db, cleanup, nil
 }
 
 func roDSN(path string) string {
 	return "file:" + filepath.ToSlash(path) + "?mode=ro"
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 func rwDSN(path string) string {
