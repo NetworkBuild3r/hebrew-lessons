@@ -65,10 +65,7 @@ templ UnitDivider(u path.Unit) {
 	<h2 id={ "unit-title-" + u.ID } class="unit-divider">
 		<span class="unit-divider__rule"></span>
 		<span class="unit-divider__pill">
-			<span class="unit-divider__en" lang="en" dir="ltr">{ unitLabelEn(u.Order) } · { u.Title }</span>
-			if u.TitleHe != "" {
-				<span class="unit-divider__he" lang="he" dir="rtl">{ u.TitleHe }</span>
-			}
+			@Pair(unitLabelHe(u.Order)+" · "+u.TitleHe, unitLabelEn(u.Order)+" · "+u.Title)
 		</span>
 		<span class="unit-divider__rule"></span>
 	</h2>

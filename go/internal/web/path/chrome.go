@@ -28,10 +28,6 @@ type unitFace struct {
 	TutorHref  string
 }
 
-// fixtureCourseUnits is the kicker denominator for the demo plan, which
-// shows four units of a twelve-unit course.
-const fixtureCourseUnits = 12
-
 func lessonFace(id string) Face {
 	return lessonFaces[id]
 }

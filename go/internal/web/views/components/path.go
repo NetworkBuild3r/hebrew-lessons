@@ -18,6 +18,7 @@ type RailGoal struct {
 }
 
 // GateDialog is the soft-gate sheet. Next and Checkpoint are local paths.
+// TriggerID is the link showModal restores focus to.
 type GateDialog struct {
 	UnitID     string
 	Known      bool
@@ -25,6 +26,7 @@ type GateDialog struct {
 	TitleHe    string
 	Next       string
 	Checkpoint string
+	TriggerID  string
 }
 
 // RingDash is the stroke for a pathLength="100" circle, from the same

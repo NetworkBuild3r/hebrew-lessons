@@ -9,7 +9,7 @@ import (
 
 templ todayView(page LearnPage) {
 	if page.Failed {
-		<div class="card" role="alert" data-today-state="error">
+		<div class="card" role={ errorRole(page.Swapped) } data-today-state="error">
 			<p>שגיאה בטעינת היום. <span lang="en" dir="ltr">(Could not load today.)</span></p>
 		</div>
 	} else {
@@ -48,7 +48,7 @@ templ todayView(page LearnPage) {
 				</article>
 			}
 			<article class="card today-card path-strip">
-				<h2>@components.Pair("הַמַּסְלוּל", "On the path")</h2>
+				<h2>@components.Pair("המסלול", "On the path")</h2>
 				<ol class="path path--strip">
 					for _, n := range page.Snap.Strip {
 						@components.PathNode(n)

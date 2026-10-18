@@ -1,26 +1,37 @@
 package components
 
-// GateSheet is the once-per-unit warning. Go anyway and Test out are
-// ordinary links, so the learner still moves on when the ack did not stick.
+import "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/path"
+
+// GateSheet is the once-per-unit warning. It is not open in the markup.
+// The host calls showModal() after the swap, so Escape, the backdrop, and
+// Close are the native dialog. Go anyway and Test out record the ack, then
+// follow the link.
 templ GateSheet(d GateDialog) {
-	<div class="gate-scrim">
-		<dialog class="gate-sheet" open data-unit-id={ d.UnitID } aria-labelledby="gate-title">
-			if d.Known {
-				<p id="gate-title" class="gate-sheet__title">@Pair(d.TitleHe, d.TitleEn)</p>
-			} else {
-				<p id="gate-title" class="gate-sheet__title">@Pair("עוד לא סיימת את היחידה הקודמת.", "You haven't finished the earlier unit.")</p>
+	<dialog class="gate-sheet" data-trigger={ d.TriggerID } aria-labelledby="gate-title">
+		if d.Known {
+			<p id="gate-title" class="gate-sheet__title">@Pair(d.TitleHe, d.TitleEn)</p>
+		} else {
+			<p id="gate-title" class="gate-sheet__title">@Pair("עוד לא סיימת את היחידה הקודמת.", "You haven't finished the earlier unit.")</p>
+		}
+		<div class="gate-sheet__actions">
+			if d.Next != "" {
+				<a class="btn btn-primary" href={ templ.SafeURL(d.Next) } hx-post={ gateURL(d.UnitID) } hx-swap="none" hx-vals='{"confirm":"1"}' hx-on::after-request="if(event.detail.successful)location.assign(this.getAttribute('href'))">@Pair("להמשיך בכל זאת", "Go anyway")</a>
 			}
-			<div class="gate-sheet__actions">
-				if d.Next != "" {
-					<a class="btn btn-primary" href={ templ.SafeURL(d.Next) }>@Pair("תִּמְשִׁיךְ בְּכָל זֹאת", "Go anyway")</a>
-				}
-				if d.Checkpoint != "" {
-					<a class="btn" href={ templ.SafeURL(d.Checkpoint) }>@Pair("מִבְחַן יְצִיאָה", "Test out")</a>
-				}
-				<form method="dialog">
-					<button type="submit" class="btn btn-ghost">@Pair("סגירה", "Close")</button>
-				</form>
-			</div>
-		</dialog>
-	</div>
+			if d.Checkpoint != "" {
+				<a class="btn" href={ templ.SafeURL(d.Checkpoint) } hx-post={ gateURL(d.UnitID) } hx-swap="none" hx-vals='{"confirm":"1"}' hx-on::after-request="if(event.detail.successful)location.assign(this.getAttribute('href'))">@Pair("מבחן יציאה", "Test out")</a>
+			}
+			<form method="dialog">
+				<button type="submit" class="btn btn-ghost">@Pair("סגירה", "Close")</button>
+			</form>
+		</div>
+	</dialog>
+}
+
+// GateAckBody is the gate-ack response: the sheet, then out-of-band
+// replacements that open this unit's links for the rest of the page view.
+templ GateAckBody(d GateDialog, nodes []path.Node) {
+	@GateSheet(d)
+	for _, n := range nodes {
+		@PathNodeOOB(n)
+	}
 }

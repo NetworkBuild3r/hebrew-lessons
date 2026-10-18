@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"log"
 	"net/http"
 	"os"
 
@@ -37,6 +38,7 @@ func MountLearning(mux *http.ServeMux) {
 	}
 	cfg, err := config.Load()
 	if err != nil {
+		log.Printf("learning path: config: %v", err)
 		return
 	}
 	NewLearning(lpath.New(nil, cfg), lpath.Unavailable{}, cfg, lpath.DemoPlanID).Register(mux)

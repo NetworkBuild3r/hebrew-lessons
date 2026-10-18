@@ -11,7 +11,7 @@ templ allLessonsLink() {
 
 templ lessonsView(page LearnPage) {
 	if page.Failed {
-		<div class="card" role="alert" data-path-state="error">
+		<div class="card" role={ errorRole(page.Swapped) } data-path-state="error">
 			<p>שגיאה בטעינת המסלול. <span lang="en" dir="ltr">(Could not load the path.)</span></p>
 		</div>
 	} else {
@@ -28,7 +28,7 @@ templ lessonsView(page LearnPage) {
 			<div id="path-key-sheet" class="path-key-sheet" popover>
 				@components.PathKey()
 			</div>
-			<div id="gate-host"></div>
+			<div id="gate-host" hx-on::after-settle="var d=this.querySelector('dialog');if(d&&!d.open){var id=d.dataset.trigger;d.showModal();d.addEventListener('close',function(){var el=document.getElementById(id);if(el)el.focus();});}"></div>
 		</div>
 	}
 }
@@ -59,7 +59,7 @@ templ lessonsMain(page LearnPage) {
 	@components.PageHeading(components.Heading{
 		He:      "שיעורים",
 		En:      "Lessons",
-		SubHe:   "הַמַּסְלוּל — יחידה אחר יחידה.",
+		SubHe:   "המסלול — יחידה אחר יחידה.",
 		SubEn:   "Your path — one unit at a time.",
 		Actions: allLessonsLink(),
 	})

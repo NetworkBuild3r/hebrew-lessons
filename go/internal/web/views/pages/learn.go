@@ -8,10 +8,19 @@ import (
 )
 
 // LearnPage is Today or the path map.
+// Swapped is an HTMX fragment. The first paint uses status; a swap uses alert.
 type LearnPage struct {
-	Snap   path.Snapshot
-	CSRF   string
-	Failed bool
+	Snap    path.Snapshot
+	CSRF    string
+	Failed  bool
+	Swapped bool
+}
+
+func errorRole(swapped bool) string {
+	if swapped {
+		return "alert"
+	}
+	return "status"
 }
 
 func learnGoal(s path.Snapshot) components.RailGoal {

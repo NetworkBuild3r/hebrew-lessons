@@ -59,7 +59,7 @@ func PathKey() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = Pair("רופס", "Shaky").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Pair("רועד", "Shaky").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -163,7 +163,7 @@ func PathKey() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = Pair("מִבְחָן", "Checkpoint").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Pair("מבחן", "Checkpoint").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -179,7 +179,7 @@ func PathKey() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = Pair("שיעור", "Class").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Pair("כיתה", "Class").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

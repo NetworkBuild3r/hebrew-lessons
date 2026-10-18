@@ -9,12 +9,25 @@ import (
 // PathNode is one circle on the path. Not-yet nodes are ordinary links.
 // data-gate is warn until the unit is acknowledged, then open.
 templ PathNode(n path.Node) {
+	@pathNode(n, false)
+}
+
+// PathNodeOOB replaces one node after the gate sheet opens.
+templ PathNodeOOB(n path.Node) {
+	@pathNode(n, true)
+}
+
+templ pathNode(n path.Node, oob bool) {
 	<li
 		class="path-node"
+		id={ n.DOMID() }
 		data-state={ n.State }
 		data-kind={ n.Kind }
 		data-strength={ strconv.Itoa(n.Strength) }
 		data-unit-id={ n.UnitID }
+		if oob {
+			hx-swap-oob="outerHTML"
+		}
 		if n.Fading {
 			data-fading="true"
 		}
@@ -34,7 +47,7 @@ templ PathNode(n path.Node) {
 		if n.SubEn != "" || n.SubHe != "" {
 			<span class="path-node__sub">@Pair(n.SubHe, n.SubEn)</span>
 		}
-		if n.Kind == "lesson" {
+		if n.Kind == "lesson" && n.State != "not-yet" && n.Strength > 0 {
 			@StrengthPips(n.Strength)
 		}
 		if n.Fading {
@@ -45,19 +58,19 @@ templ PathNode(n path.Node) {
 
 templ nodeLink(n path.Node) {
 	if n.Gate == "warn" {
-		<a class="path-node__btn" href={ templ.SafeURL(n.Href) } aria-label={ n.Label } data-gate="warn" hx-post={ gateURL(n.UnitID) } hx-target="#gate-host" hx-swap="innerHTML" hx-vals={ n.HXVals }>
+		<a id={ n.LinkID() } class="path-node__btn" href={ templ.SafeURL(n.Href) } aria-label={ n.Label } data-gate="warn" hx-post={ gateURL(n.UnitID) } hx-target="#gate-host" hx-swap="innerHTML" hx-vals={ n.HXVals }>
 			@nodeIcon(n.State)
 		</a>
 	} else if n.State == "current" {
-		<a class="path-node__btn" href={ templ.SafeURL(n.Href) } aria-current="step" aria-label={ n.Label }>
+		<a id={ n.LinkID() } class="path-node__btn" href={ templ.SafeURL(n.Href) } aria-current="step" aria-label={ n.Label }>
 			@nodeIcon(n.State)
 		</a>
 	} else if n.Gate == "open" {
-		<a class="path-node__btn" href={ templ.SafeURL(n.Href) } aria-label={ n.Label } data-gate="open">
+		<a id={ n.LinkID() } class="path-node__btn" href={ templ.SafeURL(n.Href) } aria-label={ n.Label } data-gate="open">
 			@nodeIcon(n.State)
 		</a>
 	} else {
-		<a class="path-node__btn" href={ templ.SafeURL(n.Href) } aria-label={ n.Label }>
+		<a id={ n.LinkID() } class="path-node__btn" href={ templ.SafeURL(n.Href) } aria-label={ n.Label }>
 			@nodeIcon(n.State)
 		</a>
 	}

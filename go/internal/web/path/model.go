@@ -91,6 +91,26 @@ type Node struct {
 	HXVals         string
 }
 
+// DOMID is the list-item id. LinkID is the anchor the gate sheet returns to.
+func (n Node) DOMID() string {
+	return "path-node-" + n.UnitID + "-" + n.nodeSlug()
+}
+
+// LinkID is the focus target for the gate sheet.
+func (n Node) LinkID() string {
+	return "path-link-" + n.UnitID + "-" + n.nodeSlug()
+}
+
+func (n Node) nodeSlug() string {
+	if n.Slug != "" {
+		return n.Slug
+	}
+	if n.Kind != "" {
+		return n.Kind
+	}
+	return "node"
+}
+
 // DueWord is one sample on the Today due card.
 type DueWord struct {
 	He       string

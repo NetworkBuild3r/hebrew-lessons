@@ -13,7 +13,7 @@ import (
 // The visual state (checkpoint, tutor, review) is display chrome.
 func Present(cfg config.Config, course lpath.Path, due int, dueKnown bool) Snapshot {
 	snap := Snapshot{
-		PlanID: course.PlanID, UnitCount: fixtureCourseUnits, Due: due, DueKnown: dueKnown,
+		PlanID: course.PlanID, Due: due, DueKnown: dueKnown,
 		WarmupDue: cfg.LessonWarmupDue, ReviewStopDue: cfg.ReviewStopDueCount,
 	}
 	snap.DueEn, snap.DueHe = DueExplainer(cfg.LessonWarmupDue, cfg.ReviewStopDueCount)
@@ -21,40 +21,51 @@ func Present(cfg config.Config, course lpath.Path, due int, dueKnown bool) Snaps
 		snap.DueWords = demoDueWords()
 	}
 	lessons := map[string]lpath.Lesson{}
+	var core, tutors []lpath.Unit
 	for _, u := range course.Units {
 		for _, lesson := range u.Lessons {
 			lessons[u.ID+"\x00"+lesson.ID] = lesson
 		}
-	}
-	var current *Node
-	var currentUnit *Unit
-	for i, u := range course.Units {
-		view := viewUnit(i+1, u)
-		for _, n := range course.Nodes {
-			if n.UnitID != u.ID {
-				continue
-			}
-			view.Nodes = append(view.Nodes, viewNode(cfg, u, n, lessons[u.ID+"\x00"+n.LessonID], due))
-		}
-		if view.Current {
-			currentUnit = &view
-		}
-		for ni := range view.Nodes {
-			if view.Nodes[ni].State == "current" {
-				current = &view.Nodes[ni]
-			}
-		}
-		snap.Units = append(snap.Units, view)
 		if u.Source == "tutor" {
+			tutors = append(tutors, u)
 			face := unitChrome(u.ID)
 			snap.Tutor = &TutorCard{
 				UnitID: u.ID, DateLabel: face.DateLabel, DateHe: face.DateHe,
 				DateISO: u.TutorClassDate, SentenceEn: face.SentenceEn, SentenceHe: face.SentenceHe,
 				Phrase: face.Phrase, PhraseEn: face.PhraseEn, Href: face.TutorHref,
 			}
+			continue
 		}
+		core = append(core, u)
 	}
-	if currentUnit != nil {
+	snap.UnitCount = len(core)
+	currentIndex := -1
+	for _, u := range core {
+		view := viewUnit(len(snap.Units)+1, snap.UnitCount, u)
+		view.Nodes = nodesFor(cfg, u, course.Nodes, lessons, due)
+		if view.Current {
+			currentIndex = len(snap.Units)
+		}
+		snap.Units = append(snap.Units, view)
+	}
+	if currentIndex >= 0 && len(tutors) > 0 {
+		var extra []Node
+		for _, u := range tutors {
+			if u.TutorClassDate == "" {
+				continue
+			}
+			extra = append(extra, nodesFor(cfg, u, course.Nodes, lessons, due)...)
+		}
+		snap.Units[currentIndex].Nodes = insertBeforeCheckpoint(snap.Units[currentIndex].Nodes, extra)
+	}
+	if currentIndex >= 0 {
+		currentUnit := snap.Units[currentIndex]
+		var current *Node
+		for i := range currentUnit.Nodes {
+			if currentUnit.Nodes[i].State == "current" {
+				current = &currentUnit.Nodes[i]
+			}
+		}
 		wordsEn, wordsHe := UnitWords(currentUnit.NewLearned, currentUnit.NewTotal)
 		snap.Rail = Rail{
 			UnitID: currentUnit.ID, UnitN: currentUnit.Order,
@@ -64,21 +75,49 @@ func Present(cfg config.Config, course lpath.Path, due int, dueKnown bool) Snaps
 		snap.Strip = append([]Node(nil), currentUnit.Nodes...)
 		stops := stopsUntilCheckpoint(currentUnit.Nodes)
 		snap.StripEn = fmt.Sprintf("%d of %d new words · checkpoint in %d stops", currentUnit.NewLearned, currentUnit.NewTotal, stops)
-		snap.StripHe = fmt.Sprintf("%d מתוך %d מילים חדשות · מִבְחָן בְּעוֹד %d תַּחֲנוֹת", currentUnit.NewLearned, currentUnit.NewTotal, stops)
-	}
-	if current != nil && currentUnit != nil {
-		snap.HeroTitleHe = current.TitleHe
-		snap.HeroSpeak = current.TitleHe
-		snap.ContinueHref = current.Href
-		snap.HeroKickerEn = fmt.Sprintf("Next on your path · Unit %d · Lesson %d", currentUnit.Order, current.LessonNumber)
-		snap.HeroKickerHe = fmt.Sprintf("הַבָּא בַּמַּסְלוּל · יחידה %d · שיעור %d", currentUnit.Order, current.LessonNumber)
-		snap.HeroMetaEn = fmt.Sprintf("%d new, %d you know", current.NewCount, current.KnownCount)
-		snap.HeroMetaHe = fmt.Sprintf("%d חדשות, %d מוכרות", current.NewCount, current.KnownCount)
+		snap.StripHe = fmt.Sprintf("%d מתוך %d מילים חדשות · מבחן בעוד %d תחנות", currentUnit.NewLearned, currentUnit.NewTotal, stops)
+		if current != nil {
+			snap.HeroTitleHe = current.TitleHe
+			snap.HeroSpeak = current.TitleHe
+			snap.ContinueHref = current.Href
+			snap.HeroKickerEn = fmt.Sprintf("Next on your path · Unit %d · Lesson %d", currentUnit.Order, current.LessonNumber)
+			snap.HeroKickerHe = fmt.Sprintf("הבא במסלול · יחידה %d · שיעור %d", currentUnit.Order, current.LessonNumber)
+			snap.HeroMetaEn = fmt.Sprintf("%d new, %d you know", current.NewCount, current.KnownCount)
+			snap.HeroMetaHe = fmt.Sprintf("%d חדשות, %d מוכרות", current.NewCount, current.KnownCount)
+		}
 	}
 	return snap
 }
 
-func viewUnit(order int, u lpath.Unit) Unit {
+func nodesFor(cfg config.Config, u lpath.Unit, nodes []lpath.Node, lessons map[string]lpath.Lesson, due int) []Node {
+	var out []Node
+	for _, n := range nodes {
+		if n.UnitID != u.ID {
+			continue
+		}
+		out = append(out, viewNode(cfg, u, n, lessons[u.ID+"\x00"+n.LessonID], due))
+	}
+	return out
+}
+
+func insertBeforeCheckpoint(nodes, extra []Node) []Node {
+	if len(extra) == 0 {
+		return nodes
+	}
+	for i, n := range nodes {
+		if n.Kind != "checkpoint" {
+			continue
+		}
+		out := make([]Node, 0, len(nodes)+len(extra))
+		out = append(out, nodes[:i]...)
+		out = append(out, extra...)
+		out = append(out, nodes[i:]...)
+		return out
+	}
+	return append(nodes, extra...)
+}
+
+func viewUnit(order, count int, u lpath.Unit) Unit {
 	face := unitChrome(u.ID)
 	view := Unit{
 		ID: u.ID, Order: order, Title: u.Title, TitleHe: face.TitleHe,
@@ -95,7 +134,6 @@ func viewUnit(order int, u lpath.Unit) Unit {
 		}
 	}
 	if view.Current {
-		count := fixtureCourseUnits
 		view.KickerEn = fmt.Sprintf("Unit %d of %d · Lesson %d of %d", order, count, view.LessonIndex, view.LessonCount)
 		view.KickerHe = fmt.Sprintf("יחידה %d מתוך %d · שיעור %d מתוך %d", order, count, view.LessonIndex, view.LessonCount)
 	}
@@ -156,17 +194,14 @@ func viewNode(cfg config.Config, u lpath.Unit, n lpath.Node, lesson lpath.Lesson
 		view.Gate = gateFor(n.State)
 	}
 	if view.Kind == "lesson" || view.Kind == "checkpoint" {
-		if u.ID == "unit-2" {
-			view.CheckpointHref = "/worksheets/out-and-about-checkpoint/"
-		}
-		if u.ID == "unit-3" {
-			view.CheckpointHref = "/worksheets/cafe-checkpoint/"
+		if view.CheckpointHref == "" {
+			view.CheckpointHref = unitCheckpointHref(u)
 		}
 	}
 	view.Label = nodeLabel(view)
 	view.SubEn, view.SubHe = nodeSub(view)
 	if view.Gate == "warn" {
-		view.HXVals = hxVals(view.Href, view.CheckpointHref)
+		view.HXVals = hxVals(view.Href, view.CheckpointHref, view.LinkID())
 	}
 	return view
 }
@@ -235,7 +270,7 @@ func nodeSub(n Node) (string, string) {
 		if n.Score != nil {
 			return fmt.Sprintf("%d of %d", *n.Score, n.Total), fmt.Sprintf("%d מתוך %d", *n.Score, n.Total)
 		}
-		return "Test out", "מִבְחַן יְצִיאָה"
+		return "Test out", "מבחן יציאה"
 	case "tutor":
 		return n.ClassDate, n.ClassDateHe
 	default:
@@ -243,10 +278,21 @@ func nodeSub(n Node) (string, string) {
 	}
 }
 
-func hxVals(next, checkpoint string) string {
+func unitCheckpointHref(u lpath.Unit) string {
+	for _, lesson := range u.Lessons {
+		face := lessonFace(lesson.ID)
+		if face.Checkpoint && face.Href != "" {
+			return face.Href
+		}
+	}
+	return ""
+}
+
+func hxVals(next, checkpoint, trigger string) string {
 	raw, err := json.Marshal(map[string]string{
 		"next":       next,
 		"checkpoint": checkpoint,
+		"trigger":    trigger,
 	})
 	if err != nil {
 		return ""
@@ -294,7 +340,7 @@ func StrengthName(bucket int) (en, he string) {
 	case 1:
 		return "fragile", "שביר"
 	case 2:
-		return "shaky", "רופס"
+		return "shaky", "רועד"
 	case 3:
 		return "steady", "יציב"
 	case 4:

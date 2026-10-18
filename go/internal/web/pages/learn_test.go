@@ -1,9 +1,12 @@
 package pages
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -61,8 +64,14 @@ func TestPathAndTodayRender(t *testing.T) {
 			t.Fatalf("aria-current=step count %d", strings.Count(html, `aria-current="step"`))
 		}
 	}
-	if strings.Contains(pathHTML, "<script src=") == false || !strings.Contains(pathHTML, "/_static/htmx.min.js") {
+	if strings.Contains(pathHTML, "<script src=") == false || !strings.Contains(pathHTML, "/shared/vendor/htmx.min.js") {
 		t.Fatal("path page did not load htmx")
+	}
+	if !strings.Contains(pathHTML, "showModal()") {
+		t.Fatal("gate host does not open a modal dialog")
+	}
+	if strings.Contains(pathHTML, "of 12") {
+		t.Fatal("unit count is hard-coded")
 	}
 	if !strings.Contains(pathHTML, `href="/lessons/all"`) || !strings.Contains(pathHTML, "All lessons (list)") {
 		t.Fatal("list link missing")
@@ -154,8 +163,14 @@ func TestGateAck(t *testing.T) {
 		t.Fatalf("persisted failure status %d", ok.Code)
 	}
 	sheet := body(ok)
-	if !strings.Contains(sheet, "<dialog") || !strings.Contains(sheet, "open") {
-		t.Fatal("warning did not open")
+	if !strings.Contains(sheet, "<dialog") || strings.Contains(sheet, "<dialog open") {
+		t.Fatal("warning was not a closed dialog for showModal")
+	}
+	if !strings.Contains(sheet, `hx-swap-oob="outerHTML"`) || !strings.Contains(sheet, `data-gate="open"`) {
+		t.Fatal("gate-ack did not open the unit's links")
+	}
+	if strings.Contains(sheet, "gate-scrim") {
+		t.Fatal("scrim wrapper is still in the response")
 	}
 	if !strings.Contains(sheet, "finished Unit 2.") {
 		t.Fatalf("warning copy: %s", sheet)
@@ -182,6 +197,10 @@ func TestGateAck(t *testing.T) {
 	evil := postGate(t, mux, cookie, tok, "http://example.com", "https://evil.example/phish", "/worksheets/cafe-checkpoint/")
 	if evil.Code != http.StatusOK || strings.Contains(body(evil), "evil.example") {
 		t.Fatal("open redirect was kept")
+	}
+	proto := postGate(t, mux, cookie, tok, "http://example.com", "//evil.example/x", "/worksheets/cafe-checkpoint/")
+	if proto.Code != http.StatusOK || strings.Contains(body(proto), "evil.example") {
+		t.Fatal("protocol-relative redirect was kept")
 	}
 
 	getReq := httptest.NewRequest(http.MethodGet, "/_hx/units/unit-3/gate-ack", nil)
@@ -316,6 +335,20 @@ func isHex(s string) bool {
 	return true
 }
 
+func postConfirm(t *testing.T, mux *http.ServeMux, cookie *http.Cookie, token, origin string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/_hx/units/unit-3/gate-ack", strings.NewReader("confirm=1"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", origin)
+	req.Header.Set("X-CSRF-Token", token)
+	if cookie != nil {
+		req.AddCookie(cookie)
+	}
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	return rec
+}
+
 func postGate(t *testing.T, mux *http.ServeMux, cookie *http.Cookie, token, origin, next, checkpoint string) *httptest.ResponseRecorder {
 	t.Helper()
 	form := "next=" + next + "&checkpoint=" + checkpoint
@@ -332,13 +365,53 @@ func postGate(t *testing.T, mux *http.ServeMux, cookie *http.Cookie, token, orig
 }
 
 func TestHTMXAsset(t *testing.T) {
-	mux := demoMux(t)
-	rec := get(t, mux, "/_static/htmx.min.js", false)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Type"), "javascript") {
-		t.Fatalf("htmx %d %s", rec.Code, rec.Header().Get("Content-Type"))
+	ver, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "shared", "vendor", "htmx.version"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if rec.Body.Len() < 1000 {
-		t.Fatal("htmx body too small")
+	if strings.TrimSpace(string(ver)) != "2.0.10" {
+		t.Fatalf("htmx version %q", ver)
+	}
+	js, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "shared", "vendor", "htmx.min.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(js, []byte("2.0.10")) {
+		t.Fatal("vendored htmx is not 2.0.10")
+	}
+}
+
+func TestGateConfirmAndReload(t *testing.T) {
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := &lpath.MemoryGate{}
+	mux := learnMux(lpath.New(nil, cfg), gate, cfg)
+	page := get(t, mux, "/lessons/", false)
+	tok := csrfToken(t, page)
+	cookie := page.Result().Cookies()[0]
+
+	opened := postGate(t, mux, cookie, tok, "http://example.com", "/worksheets/coffee/", "/worksheets/cafe-checkpoint/")
+	if opened.Code != http.StatusOK {
+		t.Fatalf("open status %d", opened.Code)
+	}
+	seen, seenErr := gate.GateWarningSeen(context.Background(), lpath.DevUserID, lpath.DemoPlanID, "unit-3")
+	if seen || seenErr != nil {
+		t.Fatal("opening the sheet stored the ack")
+	}
+
+	confirm := postConfirm(t, mux, cookie, tok, "http://example.com")
+	if confirm.Code != http.StatusNoContent {
+		t.Fatalf("confirm status %d", confirm.Code)
+	}
+	seen, seenErr = gate.GateWarningSeen(context.Background(), lpath.DevUserID, lpath.DemoPlanID, "unit-3")
+	if !seen || seenErr != nil {
+		t.Fatal("confirm did not store the ack")
+	}
+	html := body(get(t, mux, "/lessons/", false))
+	if strings.Contains(html, `hx-post="/_hx/units/unit-3/gate-ack"`) {
+		t.Fatal("a seen unit still posts the gate")
 	}
 }
 

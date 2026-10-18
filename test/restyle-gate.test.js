@@ -772,4 +772,12 @@ describe('learning path nodes (ADR-0017)', () => {
         assert.match(node, /data-gate="open"/);
         assert.equal((node.match(/aria-current="step"/g) || []).length, 1);
     });
+
+    it('fills strength pips by element type, not child index', () => {
+        assert.match(css, /\.strength-pips\[data-strength="1"\] i:nth-of-type\(-n\+1\)/);
+        assert.match(css, /\.strength-pips\[data-strength="2"\] i:nth-of-type\(-n\+2\)/);
+        assert.match(css, /\.strength-pips\[data-strength="3"\] i:nth-of-type\(-n\+3\)/);
+        assert.match(css, /\.strength-pips\[data-strength="4"\] i:nth-of-type\(-n\+4\)/);
+        assert.doesNotMatch(css, /strength-pips\[data-strength="[1-4]"\] i:nth-child/);
+    });
 });

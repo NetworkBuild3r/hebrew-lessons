@@ -10,7 +10,7 @@ templ HeText(size string, he string) {
 		} else if size == "pointed" {
 			<span class="he-text--pointed" lang="he" dir="rtl">{ he }</span>
 		} else if size == "display" {
-			<span class="he-text--display" lang="he" dir="rtl">{ he }</span>
+			<span class="he-text--display"><bdi lang="he">{ he }</bdi></span>
 		} else {
 			<bdi lang="he">{ he }</bdi>
 		}
