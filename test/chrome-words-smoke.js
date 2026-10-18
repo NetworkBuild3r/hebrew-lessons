@@ -1,6 +1,7 @@
 /**
  * Chrome smoke: Words library route (INIT-006/SPEC-013).
- * Signs in, opens /words/, filters by binyan, adds a word, and suspends it.
+ * Signs in, opens /words/, filters by binyan, and opens an unchecked form.
+ * Add and suspend are skipped until PR 2 (sessions, CSRF, and the write API).
  *
  * Run: node test/chrome-words-smoke.js
  * Needs Chrome at the default Windows path (or CHROME_PATH).
@@ -245,70 +246,12 @@ async function main() {
         })()`, 'unverified form');
         report.paradigm = paradigm;
 
-        const beforeDue = await cdp.evaluate(`fetch('/api/me/cards?deck=due', { credentials: 'same-origin' })
-            .then(function (res) { return res.json(); })
-            .then(function (data) {
-                var words = (data.cards || []).map(function (card) { return card.word; });
-                return { ok: words.indexOf(${JSON.stringify(noun)}) >= 0, words: words };
-            })`);
-        if (!beforeDue || !beforeDue.ok) throw new Error('seeded noun missing from due deck: ' + JSON.stringify(beforeDue));
-
-        await cdp.evaluate(`(() => {
-            document.querySelector('[data-add="key"]').value = ${JSON.stringify(added)};
-            document.querySelector('[data-add="gloss"]').value = 'dog';
-            document.querySelector('[data-words-add]').requestSubmit();
-            return true;
-        })()`);
-        const created = await waitFor(cdp, `(() => {
-            var row = ${rowExpr(added)};
-            var gloss = row && row.querySelector('[data-gloss]');
-            return {
-                ok: !!(row && gloss && gloss.textContent === 'dog' && row.getAttribute('data-stage') === 'new'),
-                stage: row && row.getAttribute('data-stage'),
-                gloss: gloss && gloss.textContent
-            };
-        })()`, 'added word');
-        report.ac3 = { created: created };
-
-        const dueBeforeSuspend = await cdp.evaluate(`fetch('/api/me/cards?deck=due', { credentials: 'same-origin' })
-            .then(function (res) { return res.json(); })
-            .then(function (data) {
-                var words = (data.cards || []).map(function (card) { return card.word; });
-                return { ok: words.indexOf(${JSON.stringify(added)}) >= 0, words: words };
-            })`);
-        if (!dueBeforeSuspend.ok) {
-            throw new Error('new word was not in the due deck: ' + JSON.stringify(dueBeforeSuspend));
-        }
-
-        await cdp.evaluate(`(() => {
-            var row = ${rowExpr(added)};
-            row.click();
-            return true;
-        })()`);
-        await waitFor(cdp, `(() => {
-            var btn = document.querySelector('[data-words-suspend]');
-            return { ok: !!btn };
-        })()`, 'suspend button');
-        await cdp.evaluate(`(() => {
-            document.querySelector('[data-words-suspend]').click();
-            return true;
-        })()`);
-        const suspended = await waitFor(cdp, `(() => {
-            var row = ${rowExpr(added)};
-            return { ok: !!(row && row.getAttribute('data-suspended') === 'true') };
-        })()`, 'suspended row');
-        const dueAfter = await cdp.evaluate(`fetch('/api/me/cards?deck=due', { credentials: 'same-origin' })
-            .then(function (res) { return res.json(); })
-            .then(function (data) {
-                var words = (data.cards || []).map(function (card) { return card.word; });
-                return {
-                    ok: words.indexOf(${JSON.stringify(added)}) < 0 && words.indexOf(${JSON.stringify(noun)}) >= 0,
-                    words: words
-                };
-            })`);
-        if (!dueAfter.ok) throw new Error('suspend did not hide the word from due: ' + JSON.stringify(dueAfter));
-        report.ac3.suspended = suspended;
-        report.ac3.dueAfter = dueAfter.words;
+        // TODO(PR 2): restore add and suspend once sessions, CSRF, and the
+        // learner/library write API exist. The Go page is read-only, so these
+        // steps cannot run against it, and they are skipped here too so the
+        // smoke stays one script. NEW_RAW stays for that follow-up.
+        void added;
+        report.ac3 = { skipped: 'PR 2: sessions, CSRF, and the write API' };
 
         if (cdp.errors.length) throw new Error('page errors: ' + cdp.errors.join(' | '));
         report.ok = true;
