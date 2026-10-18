@@ -2,6 +2,7 @@ package testharness
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -13,10 +14,13 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
-// Activity in the skeleton has type and text only. A clip is not a field
-// on the document. testdata/audio_present.json lists the activity texts
-// that have a clip. bad_missing_audio.json is the valid unit plus one
-// activity whose text is absent from that list.
+// Activities have no audio field, by design. A clip is addressed by the
+// exact pointed NFC text. The validator calls Lookup.HasAudio(ctx, textNFC),
+// which matches audio_assets.text_nfc. A lexeme points at that row through
+// audio_id. testdata/audio_present.json is the text list a fake Lookup uses.
+// bad_missing_audio.json is the valid unit plus one listen_pick whose text
+// is absent from that list. MCP Builder's rules.go (#55) decides which
+// activity types need a clip.
 
 func TestFixtures(t *testing.T) {
 	t.Parallel()
@@ -173,6 +177,111 @@ func TestFixtures(t *testing.T) {
 	})
 }
 
+// TestTestdataHebrewIsNFC checks every Hebrew string under testdata.
+// golang.org/x/text/unicode/norm is not in go.mod. Hebrew letters have no
+// precomposed form, so a string is NFC when each letter's points are already
+// in non-decreasing combining-class order. The check does not strip niqqud.
+func TestTestdataHebrewIsNFC(t *testing.T) {
+	t.Parallel()
+	root := testdataDir(t)
+	n := 0
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || !strings.HasSuffix(path, ".json") {
+			return nil
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		var v any
+		if err := json.Unmarshal(raw, &v); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		n += assertHebrewNFC(t, v)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n == 0 {
+		t.Fatal("testdata has no Hebrew strings")
+	}
+}
+
+func TestAudioPresentLookup(t *testing.T) {
+	t.Parallel()
+	lex := loadLexemes(t)
+	texts := make([]string, len(lex))
+	for i, item := range lex {
+		texts[i] = item.TextNfc
+	}
+	lk := NewFixtureLookup(loadAudio(t), texts)
+	ctx := context.Background()
+	hello := lexemeByGloss(t, lex, "hello; peace")
+	milk := lexemeByGloss(t, lex, "milk")
+	ok, err := lk.HasAudio(ctx, hello)
+	if err != nil || !ok {
+		t.Fatalf("HasAudio(%q) = %v, %v", hello, ok, err)
+	}
+	ok, err = lk.HasAudio(ctx, milk)
+	if err != nil || ok {
+		t.Fatalf("HasAudio(milk) = %v, %v", ok, err)
+	}
+	bare := hebrewLetters(hello)
+	if bare == hello {
+		t.Fatal("bare hello still has points")
+	}
+	ok, err = lk.HasAudio(ctx, bare)
+	if err != nil || ok {
+		t.Fatalf("HasAudio(bare) = %v, %v", ok, err)
+	}
+	id, found, err := lk.LexemeByText(ctx, hello)
+	if err != nil || !found || id == 0 {
+		t.Fatalf("LexemeByText = %d, %v, %v", id, found, err)
+	}
+	if _, found, err := lk.LexemeByText(ctx, bare); err != nil || found {
+		t.Fatalf("bare lexeme found=%v err=%v", found, err)
+	}
+}
+
+func assertHebrewNFC(t *testing.T, v any) int {
+	t.Helper()
+	switch x := v.(type) {
+	case string:
+		if !containsHebrew(x) {
+			return 0
+		}
+		assertNFC(t, x)
+		return 1
+	case []any:
+		n := 0
+		for _, item := range x {
+			n += assertHebrewNFC(t, item)
+		}
+		return n
+	case map[string]any:
+		n := 0
+		for _, item := range x {
+			n += assertHebrewNFC(t, item)
+		}
+		return n
+	default:
+		return 0
+	}
+}
+
+func containsHebrew(s string) bool {
+	for _, r := range s {
+		if r >= 0x0591 && r <= 0x05F4 {
+			return true
+		}
+	}
+	return false
+}
+
 type lexeme struct {
 	TextNfc string `json:"textNfc"`
 	Bare    string `json:"bare"`
@@ -192,8 +301,9 @@ var posOK = map[string]bool{
 }
 
 // hebrewPointClass is the Unicode combining class of each Hebrew point.
-// Hebrew has no precomposed letters, so a string whose points are in
-// non-decreasing class order within each letter is NFC.
+// golang.org/x/text/unicode/norm is not in go.mod. Hebrew has no
+// precomposed letters, so a string whose points are already in
+// non-decreasing class order is NFC. Niqqud stays on the letter.
 var hebrewPointClass = map[rune]int{
 	0x05B0: 10,
 	0x05B1: 11,

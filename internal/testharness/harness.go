@@ -103,8 +103,8 @@ func (e *Env) Cleanup() {
 
 // SeedLearner would insert a learner.
 //
-// TODO: app.App keeps *db.Store unexported, and db.Store has no method that
-// inserts a user. There is nothing to call until Backend exports a seed.
+// TODO: Backend Dev's auth PR adds App.Store and Store.CreateUser.
+// Until those exist, there is no app API to insert a user.
 func (e *Env) SeedLearner(t *testing.T, email string) Account {
 	t.Helper()
 	t.Skipf("TODO: app does not expose a store; cannot seed learner %q", email)
@@ -113,8 +113,8 @@ func (e *Env) SeedLearner(t *testing.T, email string) Account {
 
 // SeedAdmin would insert an admin.
 //
-// TODO: app.App keeps *db.Store unexported, and db.Store has no method that
-// inserts a user. There is nothing to call until Backend exports a seed.
+// TODO: Backend Dev's auth PR adds App.Store and Store.CreateUser.
+// Until those exist, there is no app API to insert a user.
 func (e *Env) SeedAdmin(t *testing.T, email string) Account {
 	t.Helper()
 	t.Skipf("TODO: app does not expose a store; cannot seed admin %q", email)
