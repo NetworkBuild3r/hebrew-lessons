@@ -245,6 +245,17 @@ func TestAudioPresentLookup(t *testing.T) {
 	if _, found, err := lk.LexemeByText(ctx, bare); err != nil || found {
 		t.Fatalf("bare lexeme found=%v err=%v", found, err)
 	}
+	facts, found, err := lk.Facts(ctx, hello)
+	if err != nil || !found || facts != (units.LexemeFacts{}) {
+		t.Fatalf("Facts = %+v, %v, %v", facts, found, err)
+	}
+	if _, found, err := lk.Facts(ctx, bare); err != nil || found {
+		t.Fatalf("bare facts found=%v err=%v", found, err)
+	}
+	known, err := lk.KnownLexemes(ctx, 1)
+	if err != nil || len(known) != 0 {
+		t.Fatalf("KnownLexemes = %v, %v", known, err)
+	}
 }
 
 func assertHebrewNFC(t *testing.T, v any) int {
