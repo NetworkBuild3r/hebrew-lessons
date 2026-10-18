@@ -95,11 +95,12 @@ func (h *Learning) applySeen(r *http.Request, snap *path.Snapshot) {
 }
 
 // GateAck is POST /_hx/units/{id}/gate-ack.
-// confirm=1 records the ack (Go anyway / Test out) and returns 204.
-// The opening post does not record it. It returns the sheet and flips
-// that unit's links to data-gate="open" for the rest of this page view.
-// A failed write, including ErrNotPersisted, still returns the sheet
-// with working links. Origin or token failures are 403.
+// The opening post does not record the ack and does not change data-gate.
+// Closing the sheet leaves the links on warn, so the next tap asks again.
+// confirm=1 (Go anyway / Test out) records the ack and returns out-of-band
+// replacements that set data-gate="open". A failed write, including
+// ErrNotPersisted, still returns that fragment so the link can navigate.
+// Origin or token failures are 403.
 func (h *Learning) GateAck(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	if err := csrf.Check(r); err != nil {
@@ -109,7 +110,14 @@ func (h *Learning) GateAck(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if r.FormValue("confirm") == "1" {
 		_ = h.gate.MarkGateWarningSeen(r.Context(), lpath.DevUserID, h.planID, id)
-		w.WriteHeader(http.StatusNoContent)
+		setFragmentHeaders(w)
+		var flipped []path.Node
+		if course, err := h.svc.Path(r.Context(), lpath.DevUserID, h.planID); err == nil {
+			due, dueErr := h.svc.DueCount(r.Context(), lpath.DevUserID)
+			snap := path.Present(h.cfg, course, due, dueErr == nil)
+			flipped = openUnitNodes(snap, id)
+		}
+		_ = components.GateConfirmed(flipped).Render(r.Context(), w)
 		return
 	}
 	next := safeLocal(r.FormValue("next"))
@@ -118,25 +126,24 @@ func (h *Learning) GateAck(w http.ResponseWriter, r *http.Request) {
 		UnitID: id, Next: next, Checkpoint: checkpoint,
 		TriggerID: r.FormValue("trigger"),
 	}
-	var flipped []path.Node
-	course, err := h.svc.Path(r.Context(), lpath.DevUserID, h.planID)
-	if err == nil {
+	if course, err := h.svc.Path(r.Context(), lpath.DevUserID, h.planID); err == nil {
 		if n, ok := path.UnfinishedUnit(course, id); ok {
 			dialog.Known = true
 			dialog.TitleEn = "You haven't finished Unit " + itoa(n) + "."
 			dialog.TitleHe = "עוד לא סיימת את יחידה " + itoa(n) + "."
 		}
-		due, dueErr := h.svc.DueCount(r.Context(), lpath.DevUserID)
-		snap := path.Present(h.cfg, course, due, dueErr == nil)
-		flipped = openUnitNodes(snap, id)
 	}
+	setFragmentHeaders(w)
+	_ = components.GateAckBody(dialog).Render(r.Context(), w)
+}
+
+func setFragmentHeaders(w http.ResponseWriter) {
 	hdr := w.Header()
 	hdr.Set("Content-Type", "text/html; charset=utf-8")
 	hdr.Set("X-Content-Type-Options", "nosniff")
 	hdr.Set("Referrer-Policy", "same-origin")
 	hdr.Set("X-Frame-Options", "DENY")
 	hdr.Set("Cache-Control", "no-store")
-	_ = components.GateAckBody(dialog, flipped).Render(r.Context(), w)
 }
 
 func openUnitNodes(snap path.Snapshot, unitID string) []path.Node {

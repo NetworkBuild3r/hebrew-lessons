@@ -27,10 +27,15 @@ templ GateSheet(d GateDialog) {
 	</dialog>
 }
 
-// GateAckBody is the gate-ack response: the sheet, then out-of-band
-// replacements that open this unit's links for the rest of the page view.
-templ GateAckBody(d GateDialog, nodes []path.Node) {
+// GateAckBody is the opening response: the sheet only. Links stay on
+// data-gate="warn" until the learner confirms.
+templ GateAckBody(d GateDialog) {
 	@GateSheet(d)
+}
+
+// GateConfirmed is the confirm response. Go anyway and Test out replace
+// this unit's links with data-gate="open". Close does not.
+templ GateConfirmed(nodes []path.Node) {
 	for _, n := range nodes {
 		@PathNodeOOB(n)
 	}

@@ -98,7 +98,7 @@ func Layout(doc Doc) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if doc.HTMX {
-			templ_7745c5c3_Err = templ.Raw("<meta name=\"htmx-config\" content='{\"responseHandling\":[{\"code\":\"204\",\"swap\":false},{\"code\":\"[23]..\",\"swap\":true},{\"code\":\"[45]..\",\"swap\":true,\"error\":true}]}'>").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = templ.Raw("<meta name=\"htmx-config\" content='{\"responseHandling\":[{\"code\":\"204\",\"swap\":false},{\"code\":\"[23]..\",\"swap\":true},{\"code\":\"[45]..\",\"swap\":false,\"error\":true}]}'>").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

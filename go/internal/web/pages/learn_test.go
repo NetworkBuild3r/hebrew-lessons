@@ -166,8 +166,15 @@ func TestGateAck(t *testing.T) {
 	if !strings.Contains(sheet, "<dialog") || strings.Contains(sheet, "<dialog open") {
 		t.Fatal("warning was not a closed dialog for showModal")
 	}
-	if !strings.Contains(sheet, `hx-swap-oob="outerHTML"`) || !strings.Contains(sheet, `data-gate="open"`) {
-		t.Fatal("gate-ack did not open the unit's links")
+	if strings.Contains(sheet, `hx-swap-oob`) || strings.Contains(sheet, `data-gate="open"`) {
+		t.Fatal("opening the sheet flipped links to open")
+	}
+	pageHTML := body(page)
+	if !strings.Contains(pageHTML, `hx-on::response-error="location.assign(this.href)"`) || !strings.Contains(pageHTML, `hx-on::send-error="location.assign(this.href)"`) {
+		t.Fatal("a stale gate post does not fall back to the link")
+	}
+	if !strings.Contains(pageHTML, `"[45]..","swap":false`) {
+		t.Fatal("4xx and 5xx still swap")
 	}
 	if strings.Contains(sheet, "gate-scrim") {
 		t.Fatal("scrim wrapper is still in the response")
@@ -402,8 +409,15 @@ func TestGateConfirmAndReload(t *testing.T) {
 	}
 
 	confirm := postConfirm(t, mux, cookie, tok, "http://example.com")
-	if confirm.Code != http.StatusNoContent {
+	if confirm.Code != http.StatusOK {
 		t.Fatalf("confirm status %d", confirm.Code)
+	}
+	confirmed := body(confirm)
+	if !strings.Contains(confirmed, `hx-swap-oob="outerHTML"`) || !strings.Contains(confirmed, `data-gate="open"`) {
+		t.Fatal("confirm did not open the unit's links")
+	}
+	if strings.Contains(confirmed, "<dialog") {
+		t.Fatal("confirm returned another sheet")
 	}
 	seen, seenErr = gate.GateWarningSeen(context.Background(), lpath.DevUserID, lpath.DemoPlanID, "unit-3")
 	if !seen || seenErr != nil {

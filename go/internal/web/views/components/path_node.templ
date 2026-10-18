@@ -12,7 +12,7 @@ templ PathNode(n path.Node) {
 	@pathNode(n, false)
 }
 
-// PathNodeOOB replaces one node after the gate sheet opens.
+// PathNodeOOB replaces one node after the learner confirms the gate.
 templ PathNodeOOB(n path.Node) {
 	@pathNode(n, true)
 }
@@ -58,7 +58,7 @@ templ pathNode(n path.Node, oob bool) {
 
 templ nodeLink(n path.Node) {
 	if n.Gate == "warn" {
-		<a id={ n.LinkID() } class="path-node__btn" href={ templ.SafeURL(n.Href) } aria-label={ n.Label } data-gate="warn" hx-post={ gateURL(n.UnitID) } hx-target="#gate-host" hx-swap="innerHTML" hx-vals={ n.HXVals }>
+		<a id={ n.LinkID() } class="path-node__btn" href={ templ.SafeURL(n.Href) } aria-label={ n.Label } data-gate="warn" hx-post={ gateURL(n.UnitID) } hx-target="#gate-host" hx-swap="innerHTML" hx-vals={ n.HXVals } hx-on::response-error="location.assign(this.href)" hx-on::send-error="location.assign(this.href)">
 			@nodeIcon(n.State)
 		</a>
 	} else if n.State == "current" {

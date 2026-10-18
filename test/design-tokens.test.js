@@ -308,7 +308,7 @@ describe('ADR-0006 design tokens', () => {
             assert.match(root, new RegExp(name + '\\s*:'), name);
         }
         assert.match(root, /--strength-fragile:\s*var\(--color-miss-ink\)/);
-        assert.match(root, /--strength-shaky:\s*var\(--color-accent-sun\)/);
+        assert.match(root, /--strength-shaky:\s*var\(--amber\)/);
         assert.match(root, /--strength-solid:\s*var\(--color-correct-ink\)/);
         assert.match(root, /--path-zig:\s*90px/);
         assert.match(root, /--node-size:\s*64px/);

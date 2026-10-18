@@ -4470,7 +4470,7 @@ img.hebrew-logo-mark {
     --shadow-raised: 0 14px 32px -6px rgba(18, 22, 33, 0.14);
     /* Learning path. Dark mode inherits these through the theme tokens. */
     --strength-fragile: var(--color-miss-ink);
-    --strength-shaky: var(--color-accent-sun);
+    --strength-shaky: var(--amber);
     --strength-solid: var(--color-correct-ink);
     --strength-empty: var(--color-line);
     --color-tutor: var(--color-accent-olive);
@@ -8741,7 +8741,8 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
     flex-direction: row;
     flex-wrap: nowrap;
     justify-content: flex-start;
-    gap: 0.35rem;
+    gap: 0.25rem;
+    min-width: 0;
     padding: 0;
 }
 .path--strip::before { display: none; }
@@ -8750,15 +8751,20 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 .path--strip .path-node__sub,
 .path--strip .strength-pips,
 .path--strip .chip { display: none; }
-.path--strip .path-node { max-width: none; }
+.path--strip > .path-node {
+    flex: 0 1 32px;
+    min-width: 24px;
+    max-width: none;
+}
+.path--strip > .path-node[data-state="current"] { flex-basis: 40px; }
 .path--strip .path-node__btn,
-.path--strip .path-node[data-state="checkpoint"] .path-node__btn {
-    width: var(--node-size-sm);
-    height: var(--node-size-sm);
+.path--strip .path-node[data-state="checkpoint"] .path-node__btn,
+.path--strip .path-node[data-state="current"] .path-node__btn {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
 }
 .path--strip .path-node[data-state="current"] .path-node__btn {
-    width: 40px;
-    height: 40px;
     box-shadow: 0 0 0 4px var(--color-primary-soft);
 }
 .path--strip .path-node__btn { position: relative; }

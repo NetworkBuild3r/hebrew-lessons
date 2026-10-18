@@ -45,7 +45,7 @@ func PathNode(n path.Node) templ.Component {
 	})
 }
 
-// PathNodeOOB replaces one node after the gate sheet opens.
+// PathNodeOOB replaces one node after the learner confirms the gate.
 func PathNodeOOB(n path.Node) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -401,7 +401,7 @@ func nodeLink(n path.Node) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "\" hx-on::response-error=\"location.assign(this.href)\" hx-on::send-error=\"location.assign(this.href)\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
