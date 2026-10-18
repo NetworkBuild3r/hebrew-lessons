@@ -10,7 +10,7 @@
 | **Initiative** | INIT-005 · learner-experience-and-identity |
 | **Research grounding** | None for the navigation model itself. Route-change accessibility cites WCAG 2.2 via `RSCH-006` / ADR-0006 (title, focus, reduced motion). Learning-outcome evidence for SPA vs multi-page: none found; this is an engineering and feel decision. |
 | **Supersedes** | [ADR-0005](ADR-0005-stack-and-architecture.md) in part — the page model only (one HTML document per signed-in screen, each page loading its own script list and remounting the shell). Option A (Node, no framework, no build step, `shared/ui/` functions, tokens in `shared/worksheet.css`) stays. |
-| **Superseded by** | — |
+| **Superseded by** | [ADR-0016](ADR-0016-go-server-port.md) (Accepted 2026-10-18) — the single-shell SPA, as screens move. The sentences in this file are unchanged. |
 
 ## Summary
 

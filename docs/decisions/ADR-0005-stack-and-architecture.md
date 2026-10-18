@@ -10,7 +10,7 @@
 | **Initiative** | INIT-003 · lesson-system-foundations |
 | **Research grounding** | `RSCH-004` and `RSCH-005` via [ADR-0003](ADR-0003-course-and-lesson-plan-language.md); `RSCH-006` for direction, contrast, target size, and reduced motion. None of those reports names a framework. |
 | **Supersedes** | — |
-| **Superseded by** | Superseded in part by [ADR-0007](ADR-0007-single-page-app-structure.md) — the page model only (one HTML document per signed-in screen). Option A (Node, no framework, no build step, `shared/ui/`, tokens) stays. Replacement wording is ADR-0007. The sentences in this file are unchanged. |
+| **Superseded by** | Superseded in part by [ADR-0007](ADR-0007-single-page-app-structure.md) — the page model only (one HTML document per signed-in screen). Superseded by [ADR-0016](ADR-0016-go-server-port.md) (Accepted 2026-10-18) — the Node runtime, `node:sqlite`, the in-process TypeScript MCP, no build step, and no second runtime. The sentences in this file are unchanged. |
 | **Extended by** | [ADR-0011](ADR-0011-ai-first-plan-builder.md), Accepted 2026-10-12: 5 (the one-implementation table gains rows for list, create, assign, revisions, diff, restore, and issues). |
 
 ## Summary
