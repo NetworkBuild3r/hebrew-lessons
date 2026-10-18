@@ -1,0 +1,386 @@
+package pages
+
+import (
+	"context"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+const pointed = "חָשַׁב"
+
+func guideSnapshot(planID, unitTitle, lessonID, title, visibility, recipe string, extra string) PlanSnapshot {
+	if recipe == "" {
+		recipe = "guide"
+	}
+	body := `{
+		"id": "` + planID + `",
+		"status": "published",
+		"audience": "shared",
+		"assigneeId": null,
+		"units": [{
+			"id": "unit",
+			"title": "` + unitTitle + `",
+			"lessons": [{
+				"id": "` + lessonID + `",
+				"title": "` + title + `",
+				"visibility": "` + visibility + `",
+				"recipe": "` + recipe + `",
+				"blocks": [{
+					"id": "rule",
+					"type": "explainer",
+					"title": "The root",
+					"sections": [{
+						"id": "roots",
+						"heading": "Three letters",
+						"paragraphs": ["A Hebrew verb has a root.", "Say <b>no</b>."],
+						"examples": [{
+							"id": "e1",
+							"he": "` + pointed + `",
+							"en": "he thought",
+							"translit": "chashav",
+							"root": "ח.ש.ב"
+						}],
+						"table": {
+							"columns": ["Person", "Past tense"],
+							"rows": [["I", "` + pointed + `"]]
+						},
+						"callouts": [{
+							"id": "c1",
+							"tone": "green",
+							"title": "Three root letters",
+							"text": "All three stay."
+						}]
+					}]
+				}]
+			}]
+		}]
+	}`
+	if extra != "" {
+		body = extra
+	}
+	return PlanSnapshot{ID: planID, Snapshot: body}
+}
+
+type memSource struct {
+	rows   []PlanSnapshot
+	grants map[string]map[int64]bool
+	err    error
+}
+
+func (m memSource) Snapshots(context.Context) ([]PlanSnapshot, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.rows, nil
+}
+
+func (m memSource) HasGrant(_ context.Context, lessonID string, userID int64) (bool, error) {
+	if m.err != nil {
+		return false, m.err
+	}
+	return m.grants[lessonID][userID], nil
+}
+
+func newMux(src Source) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "ok")
+	})
+	NewHandler(src).Register(mux)
+	return mux
+}
+
+func get(t *testing.T, mux *http.ServeMux, path string, hx bool) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	if hx {
+		req.Header.Set("HX-Request", "true")
+	}
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	return rec
+}
+
+func body(rec *httptest.ResponseRecorder) string {
+	return rec.Body.String()
+}
+
+func TestShelfMatchesTheNodePage(t *testing.T) {
+	src := memSource{rows: []PlanSnapshot{
+		guideSnapshot("guides-shelf", "Verbs", "decoding", "Decoding Hebrew Verbs", "everyone", "guide", ""),
+		guideSnapshot("guides-shelf-he", "פעלים", "shoresh", pointed, "everyone", "guide", ""),
+		guideSnapshot("secret-guides", "Hidden", "secret", "ZZ-HIDDEN-GUIDE", "hidden", "guide", ""),
+		guideSnapshot("other-plan", "Other", "chat", "A conversation", "everyone", "topic-conversation", ""),
+		guideSnapshot("bad id", "Nope", "nope", "Nope", "everyone", "guide", ""),
+	}}
+	mux := newMux(src)
+	rec := get(t, mux, "/guides/", false)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	html := body(rec)
+	for _, want := range []string{
+		`<html lang="he" dir="rtl" translate="no"`,
+		`class="has-hebrew-shell"`,
+		`href="/shared/worksheet.css"`,
+		`data-route-ready="guides"`,
+		`id="guides-app"`,
+		`id="app-shell"`,
+		`id="app-main"`,
+		`id="app-route-announce"`,
+		`data-nav="guides"`,
+		`aria-current="page"`,
+		`מדריכים`,
+		`lang="en" dir="ltr">Guides`,
+		`data-guides-state="ready"`,
+		`data-topic`,
+		`data-plan-id="guides-shelf"`,
+		`data-lesson-id="decoding"`,
+		`href="/shared/plan/?id=guides-shelf&amp;lesson=decoding"`,
+		`lang="en" dir="ltr">Decoding Hebrew Verbs`,
+		`lang="he" dir="rtl">פעלים`,
+		`lang="he" dir="rtl">` + pointed,
+		`hebrew-spa has-hebrew-shell guides-page`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	if strings.Contains(html, "ZZ-HIDDEN-GUIDE") {
+		t.Fatal("hidden guide was listed")
+	}
+	if strings.Contains(html, "A conversation") {
+		t.Fatal("non-guide lesson was listed")
+	}
+	if strings.Contains(html, "fonts.googleapis.com") || strings.Contains(html, "cdn.") {
+		t.Fatal("page references a font CDN")
+	}
+	if strings.Count(html, "<script") != 1 {
+		t.Fatalf("script count %d, want the pre-paint script only", strings.Count(html, "<script"))
+	}
+	if !strings.Contains(html, "localStorage.getItem('hebrew-ui-lang')") {
+		t.Fatal("pre-paint script missing")
+	}
+	if strings.Contains(html, "<script src=") {
+		t.Fatal("a new script was added")
+	}
+	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatal("nosniff missing")
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
+		t.Fatalf("content type %q", ct)
+	}
+}
+
+func TestEmptyShelf(t *testing.T) {
+	rec := get(t, newMux(memSource{}), "/guides", false)
+	html := body(rec)
+	if !strings.Contains(html, `data-guides-state="empty"`) {
+		t.Fatalf("empty state missing:\n%s", html)
+	}
+	if !strings.Contains(html, "אין מדריכים שפורסמו.") || !strings.Contains(html, `lang="en" dir="ltr">(No published guides.)</span>`) {
+		t.Fatalf("empty copy missing:\n%s", html)
+	}
+}
+
+func TestIndexHTMLAndFragment(t *testing.T) {
+	src := memSource{rows: []PlanSnapshot{
+		guideSnapshot("guides-shelf", "Verbs", "decoding", "Decoding Hebrew Verbs", "everyone", "guide", ""),
+	}}
+	mux := newMux(src)
+	full := get(t, mux, "/guides/index.html", false)
+	if !strings.Contains(body(full), "<!DOCTYPE html>") { // templ may lowercase doctype
+		if !strings.Contains(strings.ToLower(body(full)), "<!doctype html>") {
+			t.Fatal("full page has no doctype")
+		}
+	}
+	frag := get(t, mux, "/guides/", true)
+	html := body(frag)
+	if strings.Contains(strings.ToLower(html), "<html") {
+		t.Fatal("fragment included the document")
+	}
+	if !strings.Contains(html, `data-guides-state="ready"`) || !strings.Contains(html, "Decoding Hebrew Verbs") {
+		t.Fatalf("fragment missing the shelf:\n%s", html)
+	}
+}
+
+func TestGuideDetailRendersExplainerWithoutPictures(t *testing.T) {
+	src := memSource{rows: []PlanSnapshot{
+		guideSnapshot("guides-shelf", "Verbs", "decoding", "Decoding Hebrew Verbs", "everyone", "guide", ""),
+	}}
+	mux := newMux(src)
+	rec := get(t, mux, "/shared/plan/?id=guides-shelf&lesson=decoding", false)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d\n%s", rec.Code, body(rec))
+	}
+	html := body(rec)
+	for _, want := range []string{
+		`id="plan-root"`,
+		`data-plan-ready="1"`,
+		`data-recipe="guide"`,
+		`data-section-id="roots"`,
+		`data-block-type="explainer"`,
+		"Three letters",
+		"A Hebrew verb has a root.",
+		pointed,
+		`class="root-letter"`,
+		`lang="en" dir="ltr">he thought`,
+		`lang="en" dir="ltr">chashav`,
+		`class="explainer-table"`,
+		`data-tone="green"`,
+		`lang="en" dir="ltr">Go`,
+		`lang="he">קדימה`,
+		`class="guide-prose story-body guide-body"`,
+		`Say &lt;b&gt;no&lt;/b&gt;`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	root := html[strings.Index(html, `id="plan-root"`):]
+	if strings.Contains(root, "<img") {
+		t.Fatal("guide rendered a picture")
+	}
+	if !strings.Contains(html, pointed) {
+		t.Fatal("nikud was dropped")
+	}
+}
+
+func TestDetailFragmentAndMisses(t *testing.T) {
+	src := memSource{rows: []PlanSnapshot{
+		guideSnapshot("guides-shelf", "Verbs", "decoding", "Decoding Hebrew Verbs", "everyone", "guide", ""),
+		guideSnapshot("secret-guides", "Hidden", "secret", "ZZ-HIDDEN-GUIDE", "hidden", "guide", ""),
+	}}
+	mux := newMux(src)
+	frag := get(t, mux, "/shared/plan/?id=guides-shelf&lesson=decoding", true)
+	if strings.Contains(strings.ToLower(body(frag)), "<html") {
+		t.Fatal("detail fragment included the document")
+	}
+	if !strings.Contains(body(frag), `data-section-id="roots"`) {
+		t.Fatal("detail fragment missing the section")
+	}
+	hidden := get(t, mux, "/shared/plan/?id=secret-guides&lesson=secret", false)
+	if hidden.Code != http.StatusNotFound || strings.Contains(body(hidden), "ZZ-HIDDEN-GUIDE") {
+		t.Fatalf("hidden guide status %d", hidden.Code)
+	}
+	if !strings.Contains(body(hidden), "התוכנית לא נמצאה.") {
+		t.Fatal("not-found copy missing")
+	}
+	missing := get(t, mux, "/shared/plan/?id=NOT%20A%20SLUG&lesson=decoding", false)
+	if missing.Code != http.StatusNotFound || !strings.Contains(body(missing), "חסר מזהה תוכנית.") {
+		t.Fatalf("bad id status %d body %s", missing.Code, body(missing))
+	}
+	post := httptest.NewRequest(http.MethodPost, "/guides/", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, post)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST status %d", rec.Code)
+	}
+}
+
+func TestEscapesTitleAndDropsUnpublished(t *testing.T) {
+	hostile := guideSnapshot("guides-shelf", "Verbs", "decoding", `<img src=x onerror=alert(1)>`, "everyone", "guide", "")
+	draft := PlanSnapshot{ID: "guides-shelf", Snapshot: strings.Replace(hostile.Snapshot, `"published"`, `"draft"`, 1)}
+	draft.ID = "draft-guide"
+	draft.Snapshot = strings.Replace(draft.Snapshot, `"id": "guides-shelf"`, `"id": "draft-guide"`, 1)
+	personal := strings.Replace(hostile.Snapshot, `"audience": "shared"`, `"audience": "personal"`, 1)
+	personal = strings.Replace(personal, `"assigneeId": null`, `"assigneeId": "learner"`, 1)
+	personal = strings.Replace(personal, `"id": "guides-shelf"`, `"id": "mine"`, 1)
+	src := memSource{rows: []PlanSnapshot{
+		hostile,
+		draft,
+		{ID: "mine", Snapshot: personal},
+		{ID: "broken", Snapshot: "{"},
+	}}
+	html := body(get(t, newMux(src), "/guides/", false))
+	if strings.Contains(html, "<img src=x") || !strings.Contains(html, "&lt;img") {
+		t.Fatalf("title was not escaped:\n%s", html)
+	}
+	if strings.Contains(html, "draft-guide") || strings.Contains(html, `data-plan-id="mine"`) {
+		t.Fatal("unpublished or personal guide was listed")
+	}
+}
+
+func TestCatalogCapSkipsAGuidePast200(t *testing.T) {
+	var rows []PlanSnapshot
+	for i := 0; i < 200; i++ {
+		id := "chat-" + two(i)
+		rows = append(rows, guideSnapshot(id, "Talk", "lesson", "Chat", "everyone", "topic-conversation", ""))
+	}
+	rows = append(rows, guideSnapshot("guides-shelf", "Verbs", "decoding", "Too late", "everyone", "guide", ""))
+	html := body(get(t, newMux(memSource{rows: rows}), "/guides/", false))
+	if strings.Contains(html, "Too late") || !strings.Contains(html, `data-guides-state="empty"`) {
+		t.Fatal("guide past the catalog cap was shown, or the shelf was not empty")
+	}
+}
+
+func two(n int) string {
+	const digits = "abcdefghijklmnopqrstuvwxyz"
+	return string([]byte{digits[n/26], digits[n%26]})
+}
+
+func TestSelectedNeedsAGrantAndAnonymousDoesNotHaveOne(t *testing.T) {
+	row := guideSnapshot("guides-shelf", "Verbs", "decoding", "Selected", "selected", "guide", "")
+	html := body(get(t, newMux(memSource{rows: []PlanSnapshot{row}, grants: map[string]map[int64]bool{
+		"decoding": {7: true},
+	}}), "/guides/", false))
+	if strings.Contains(html, "Selected") {
+		t.Fatal("selected guide was shown without a session")
+	}
+	list, err := Guides(context.Background(), memSource{rows: []PlanSnapshot{row}, grants: map[string]map[int64]bool{
+		"decoding": {7: true},
+	}}, &User{ID: 7, Username: "learner"})
+	if err != nil || len(list.Topics) != 1 {
+		t.Fatalf("granted reader: %+v %v", list, err)
+	}
+}
+
+func TestReadErrorPaintsTheErrorState(t *testing.T) {
+	html := body(get(t, newMux(memSource{err: errors.New("locked")}), "/guides/", false))
+	if !strings.Contains(html, `data-guides-state="error"`) || !strings.Contains(html, "שגיאה בטעינת המדריכים.") {
+		t.Fatalf("error state missing:\n%s", html)
+	}
+}
+
+func TestHealthzSurvivesTheMount(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "ok")
+	})
+	t.Setenv(DevEnv, "")
+	Mount(mux, nil)
+	off := get(t, mux, "/guides/", false)
+	if off.Code != http.StatusNotFound {
+		t.Fatalf("flag off status %d", off.Code)
+	}
+	health := get(t, mux, "/healthz", false)
+	if health.Code != http.StatusOK || body(health) != "ok" {
+		t.Fatalf("healthz %d %q", health.Code, body(health))
+	}
+	t.Setenv(DevEnv, "1")
+	Mount(mux, nil)
+	on := get(t, mux, "/guides/", false)
+	if on.Code != http.StatusOK || !strings.Contains(body(on), `data-guides-state="error"`) {
+		t.Fatalf("flag on without a database: %d\n%s", on.Code, body(on))
+	}
+	health = get(t, mux, "/healthz", false)
+	if body(health) != "ok" {
+		t.Fatal("mount changed /healthz")
+	}
+}
+
+func TestClipOfLongTitle(t *testing.T) {
+	title := strings.Repeat("א", 130)
+	row := guideSnapshot("guides-shelf", "Verbs", "decoding", title, "everyone", "guide", "")
+	html := body(get(t, newMux(memSource{rows: []PlanSnapshot{row}}), "/guides/", false))
+	if strings.Contains(html, strings.Repeat("א", 121)) {
+		t.Fatal("title was not clipped at 120")
+	}
+	if !strings.Contains(html, strings.Repeat("א", 120)) {
+		t.Fatal("clipped title missing")
+	}
+}

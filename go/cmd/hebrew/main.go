@@ -1,5 +1,6 @@
 // Command hebrew loads config, opens the database read-only, checks the
-// migration ledger, and serves GET /healthz.
+// migration ledger, and serves GET /healthz. HEBREW_DEV_WEB=1 also serves
+// the guides pages.
 package main
 
 import (
@@ -19,6 +20,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/config"
 	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/pages"
 )
 
 // HTTP timeouts stay under Cloudflare's 125s proxy read timeout (ADR-0016).
@@ -103,6 +105,7 @@ func listenAddr(host string, port int) string {
 func newMux(conn *sql.DB, ledger db.Ledger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler(conn, ledger))
+	pages.Mount(mux, conn)
 	return mux
 }
 

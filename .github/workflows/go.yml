@@ -35,6 +35,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: templ generate
+        run: |
+          tool_dir=$(mktemp -d)
+          GOBIN="$tool_dir" go install github.com/a-h/templ/cmd/templ@v0.3.960
+          (cd go && "$tool_dir/templ" generate -path internal/web)
+          git diff --exit-code
       - name: gofmt
         working-directory: go
         run: |

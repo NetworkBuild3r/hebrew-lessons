@@ -1,0 +1,88 @@
+package components
+
+type navItem struct {
+	ID   string
+	Href string
+	He   string
+	En   string
+	Icon string
+}
+
+// learnerNav matches app-shell.js NAV for a reader who is not an admin.
+func learnerNav() []navItem {
+	return []navItem{
+		{ID: "today", Href: "/", He: "היום", En: "Today", Icon: "today"},
+		{ID: "lessons", Href: "/lessons/", He: "שיעורים", En: "Lessons", Icon: "lessons"},
+		{ID: "guides", Href: "/guides/", He: "מדריכים", En: "Guides"},
+		{ID: "verbs", Href: "/verbs/", He: "פעלים", En: "Verbs"},
+		{ID: "review", Href: "/review/", He: "חזרה", En: "Review", Icon: "review"},
+		{ID: "words", Href: "/words/", He: "מילים", En: "Words", Icon: "words"},
+		{ID: "progress", Href: "/progress/", He: "התקדמות", En: "Progress", Icon: "progress"},
+	}
+}
+
+templ navIcon(name string) {
+	if name != "" {
+		<svg class={ "icon hebrew-icon hebrew-icon-" + name } width="20" height="20" aria-hidden="true" focusable="false">
+			<use href={ "/shared/brand/sprite.svg#icon-" + name }></use>
+		</svg>
+	}
+}
+
+templ navLabel(item navItem) {
+	@navIcon(item.Icon)
+	<span class="hebrew-shell-label">@Pair(item.He, item.En)</span>
+}
+
+templ navLink(item navItem, current string) {
+	if item.ID == current {
+		<a class="hebrew-shell-link" href={ templ.SafeURL(item.Href) } aria-current="page" data-nav={ item.ID }>
+			@navLabel(item)
+		</a>
+	} else {
+		<a class="hebrew-shell-link" href={ templ.SafeURL(item.Href) } data-nav={ item.ID }>
+			@navLabel(item)
+		</a>
+	}
+}
+
+// Shell is the rail and dock. Account actions stay in the markup the CSS
+// already styles. They do nothing until a session script or HTMX lands.
+templ Shell(current string) {
+	<div class="hebrew-shell ui-chrome" dir="rtl" lang="he">
+		<div class="hebrew-shell-inner">
+			<a class="hebrew-brand" href="/" data-brand>
+				<img class="hebrew-logo-mark" src="/shared/brand/mark-a.svg" width="30" height="30" alt="" decoding="async"/>
+				<span class="hebrew-brand-text ui-pair"><span class="hebrew-brand-he ui-he" lang="he">דרך עברית</span><span class="hebrew-brand-en ui-en" lang="en" dir="ltr">Hebrew Way</span></span>
+			</a>
+			<nav class="hebrew-shell-nav" data-ui-aria-he="ניווט ראשי" data-ui-aria-en="Main" aria-label="ניווט ראשי">
+				for _, item := range learnerNav() {
+					@navLink(item, current)
+				}
+			</nav>
+			<div class="hebrew-shell-sync" data-shell-sync aria-live="polite"></div>
+			<div class="hebrew-shell-account">
+				<div class="ui-lang" role="group" data-ui-aria-he="שפת הממשק" data-ui-aria-en="Interface language" aria-label="שפת הממשק">
+					<button type="button" class="ui-lang-btn" data-ui-lang-set="en" aria-pressed="false">EN</button>
+					<button type="button" class="ui-lang-btn" data-ui-lang-set="he" aria-pressed="false">עב</button>
+				</div>
+				<button type="button" class="hebrew-shell-theme-toggle" data-theme-toggle aria-pressed="false">
+					@Pair("מצב כהה", "Dark mode")
+				</button>
+				<button type="button" class="hebrew-shell-account-btn" id="hebrew-shell-account-btn" aria-expanded="false" aria-haspopup="true" aria-controls="hebrew-shell-account-menu">
+					<span class="hebrew-shell-account-name"></span>
+					<span class="hebrew-shell-account-caret" aria-hidden="true">▾</span>
+				</button>
+				<div class="hebrew-shell-account-menu hidden" id="hebrew-shell-account-menu" role="menu" hidden>
+					<button type="button" class="hebrew-shell-menu-item" role="menuitem" data-shell-action="change-password">
+						@Pair("החלפת סיסמה", "Change password")
+					</button>
+					<button type="button" class="hebrew-shell-menu-item" role="menuitem" data-shell-action="sign-out">
+						@Pair("יציאה", "Sign out")
+					</button>
+					<p class="hebrew-shell-privacy" role="note">@Pair("מנהלים יכולים לראות את כל הפעילות שלך, כולל כל תשובה.", "Admins can see all your activity, including every answer.")</p>
+				</div>
+			</div>
+		</div>
+	</div>
+}

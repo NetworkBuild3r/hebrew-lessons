@@ -1,0 +1,72 @@
+package pages
+
+import (
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views"
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/components"
+)
+
+templ guideCard(card GuideCard) {
+	<article class="lesson-card" data-recipe="guide" data-plan-id={ card.PlanID } data-lesson-id={ card.LessonID }>
+		<a class="lesson-link" href={ templ.SafeURL(card.Href) }>
+			<span class="recipe-chip" data-recipe="guide">מדריך <span lang="en" dir="ltr">Guide</span></span>
+			<h3 lang={ card.Lang } dir={ card.Dir }>{ card.Title }</h3>
+		</a>
+	</article>
+}
+
+// guidesShelf is the topic groups, or the empty state.
+templ guidesShelf(list GuideList) {
+	if len(list.Topics) == 0 {
+		@components.EmptyGuides()
+	} else {
+		for _, group := range list.Topics {
+			<section class="guides-topic" data-topic>
+				<h2 lang={ group.Lang } dir={ group.Dir }>{ group.Topic }</h2>
+				<div class="home-list guides-list" data-guides-state="ready">
+					for _, card := range group.Cards {
+						@guideCard(card)
+					}
+				</div>
+			</section>
+		}
+	}
+}
+
+templ guidesView(list GuideList) {
+	if list.Failed {
+		@components.ErrorGuides()
+	} else {
+		@guidesShelf(list)
+	}
+}
+
+// GuidesFragment is the view root contents, for an HX-Request read.
+templ GuidesFragment(list GuideList) {
+	@guidesView(list)
+}
+
+// GuidesPage is GET /guides/.
+templ GuidesPage(list GuideList) {
+	@views.Layout(views.Doc{
+		Title:      "מדריכים — Guides · דרך עברית",
+		BodyClass:  "hebrew-spa has-hebrew-shell guides-page",
+		PageHe:     "מדריכים",
+		PageEn:     "Guides",
+		Announce:   "מדריכים",
+		CurrentNav: "guides",
+		RouteReady: "guides",
+		Main:       guidesPageMain(list),
+	})
+}
+
+templ guidesPageMain(list GuideList) {
+	@components.PageHeading(components.Heading{
+		He:    "מדריכים",
+		En:    "Guides",
+		SubHe: "שיעורי הסבר — קוראים ומקשיבים.",
+		SubEn: "Explanation lessons — read and listen.",
+	})
+	<div id="guides-app" class="spa-view" aria-live="polite">
+		@guidesView(list)
+	</div>
+}
