@@ -9,6 +9,9 @@
  *
  * The login throttle and the CSRF host scheme both use this list. A peer
  * outside it cannot choose the client address or the scheme.
+ *
+ * An empty list plus an https PUBLIC_ORIGIN is warned at startup
+ * (httpsPublicOriginWarning). The process still starts.
  */
 'use strict';
 
@@ -121,9 +124,70 @@ function peerTrusted(remoteAddress) {
     return trusted.check(peer.address, peer.family);
 }
 
+/**
+ * True when the list trusts nobody: unset, blank, or only commas.
+ * A non-empty token counts as set, even if loadTrustedProxies later ignores it.
+ * @param {string|undefined|null} raw
+ * @returns {boolean}
+ */
+function trustedProxiesEmpty(raw) {
+    if (raw == null) return true;
+    for (const part of String(raw).split(',')) {
+        if (part.trim()) return false;
+    }
+    return true;
+}
+
+/**
+ * Startup warning when CSRF will see a plain-HTTP socket behind an https site.
+ *
+ * PUBLIC_ORIGIN is process.env.PUBLIC_ORIGIN (server/http/security.js
+ * originAllowed, and the Google redirect base in server/auth/google-login.js).
+ * originAllowed accepts an Origin that equals that value. It also accepts the
+ * request host. With an empty TRUSTED_PROXIES list the host scheme is the
+ * socket, which is plain HTTP behind Traefik, so an https Origin for any other
+ * host returns 403.
+ *
+ * Returns a multi-line message, or '' when startup should stay quiet.
+ * Does not read the environment and does not log.
+ * @param {string|undefined|null} trustedProxies
+ * @param {string|undefined|null} publicOrigin
+ * @returns {string}
+ */
+function httpsPublicOriginWarning(trustedProxies, publicOrigin) {
+    if (!trustedProxiesEmpty(trustedProxies)) return '';
+    if (publicOrigin == null) return '';
+    const origin = String(publicOrigin).trim();
+    if (!origin.toLowerCase().startsWith('https://')) return '';
+    return [
+        '[trusted-proxies] TRUSTED_PROXIES is empty and PUBLIC_ORIGIN starts with https:// ('
+            + JSON.stringify(origin) + ').',
+        '[trusted-proxies] Behind Traefik the socket is plain HTTP, so the CSRF host origin',
+        '[trusted-proxies] is http:// while the browser sends https://. A state-changing',
+        '[trusted-proxies] request whose Origin is not exactly PUBLIC_ORIGIN returns 403.',
+        '[trusted-proxies] Fix: set TRUSTED_PROXIES to the proxy CIDR.'
+    ].join('\n');
+}
+
+/**
+ * Log httpsPublicOriginWarning when it has something to say. Warn only.
+ * @param {string|undefined|null} trustedProxies
+ * @param {string|undefined|null} publicOrigin
+ * @param {(message: string) => void} [warn]
+ * @returns {string} the message, or ''
+ */
+function warnHttpsPublicOrigin(trustedProxies, publicOrigin, warn) {
+    const message = httpsPublicOriginWarning(trustedProxies, publicOrigin);
+    if (!message) return '';
+    (warn || console.warn)(message);
+    return message;
+}
+
 loadTrustedProxies(process.env.TRUSTED_PROXIES);
 
 module.exports = {
     loadTrustedProxies,
-    peerTrusted
+    peerTrusted,
+    httpsPublicOriginWarning,
+    warnHttpsPublicOrigin
 };
