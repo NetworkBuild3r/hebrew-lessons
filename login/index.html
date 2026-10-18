@@ -23,16 +23,16 @@
       Canonical modules for signed-in pages: shared/api.js, shared/login.js, shared/worksheet.css.
     -->
     <style>
-        /* Self-hosted Noto Sans Hebrew and Frank Ruhl Libre (SIL OFL). /shared/fonts/ is public. */
-        @font-face { font-family: "Noto Sans Hebrew"; font-style: normal; font-weight: 300 800; font-display: swap;
-            src: url("/shared/fonts/noto-sans-hebrew-hebrew.woff2") format("woff2");
-            unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F; }
-        @font-face { font-family: "Noto Sans Hebrew"; font-style: normal; font-weight: 300 800; font-display: swap;
-            src: url("/shared/fonts/noto-sans-hebrew-latin.woff2") format("woff2");
-            unicode-range: U+0000-00FF, U+0100-017F, U+0131, U+02BB-02BF, U+02C6, U+02DA, U+02DC, U+0301, U+0304, U+2000-206F, U+2074, U+20AC, U+2122, U+2190-2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-        @font-face { font-family: "Frank Ruhl Libre"; font-style: normal; font-weight: 400 900; font-display: swap;
-            src: url("/shared/fonts/frank-ruhl-libre-hebrew.woff2") format("woff2");
-            unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F; }
+        /* Self-hosted Rubik (SIL OFL). /shared/fonts/ is public so this works before sign-in. */
+        @font-face { font-family: "Rubik"; font-style: normal; font-weight: 300 700; font-display: swap;
+            src: url("/shared/fonts/rubik-hebrew.woff2") format("woff2");
+            unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F; }
+        @font-face { font-family: "Rubik"; font-style: normal; font-weight: 300 700; font-display: swap;
+            src: url("/shared/fonts/rubik-latin-ext.woff2") format("woff2");
+            unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+        @font-face { font-family: "Rubik"; font-style: normal; font-weight: 300 700; font-display: swap;
+            src: url("/shared/fonts/rubik-latin.woff2") format("woff2");
+            unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
     </style>
     <style>
         /* INIT-005/SPEC-012. Same look and token values as shared/worksheet.css (ADR-0010): warm paper,
@@ -82,7 +82,7 @@
         body {
             margin: 0;
             min-height: 100vh;
-            font-family: "Noto Sans Hebrew", sans-serif;
+            font-family: "Rubik", sans-serif;
             color: var(--color-text);
             background: var(--paper);
         }
