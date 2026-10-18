@@ -35,8 +35,8 @@ templ wordsPageMain(v WordsView) {
 	<div class="words-page-body"
 		hx-on::before-request="var t=event.detail&&event.detail.target;if(t&&t.id==='words-results')t.setAttribute('aria-busy','true')"
 		hx-on::after-request="var t=event.detail&&event.detail.target;if(t&&t.id==='words-results')t.setAttribute('aria-busy','false')"
-		hx-on::before-swap="if(event.detail&&event.detail.isError&&event.detail.target&&event.detail.target.id==='words-results'&&String(event.detail.serverResponse||'').indexOf('words-results')<0){event.detail.shouldSwap=false;wordsOffline(event.detail.target)}"
-		hx-on::send-error="var d=event.detail&&event.detail.target;if(d&&d.id==='words-results')wordsOffline(d)">
+		hx-on::before-swap="wordsFail(event)"
+		hx-on::send-error="wordsFail(event)">
 		<div class="words-toolbar">
 			@wordsFilterBar(v, false)
 			<button type="button" id="words-vowels-btn" class="btn btn-ghost" aria-pressed="true">@components.Pair("ניקוד", "Vowels")</button>
@@ -45,6 +45,7 @@ templ wordsPageMain(v WordsView) {
 		if v.ErrorKind != "invalid_filter" {
 			@wordsNetworkError()
 		}
+		@wordsCsrfError()
 	</div>
 }
 
@@ -181,7 +182,7 @@ templ lookupCard(w *WordDetail) {
 					hx-indicator="#words-results"
 					data-close-word={ w.Word }
 					aria-label="סגירה · Close"
-				>×</a>
+				><svg class="icon" width="20" height="20" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-close"></use></svg></a>
 			</div>
 			if w.Gloss != "" {
 				<p class="lookup-card__gloss" lang="en" dir="ltr">{ w.Gloss }</p>
@@ -371,7 +372,7 @@ templ wordsMoreFilters(v WordsView) {
 		<div class="words-more-filters__panel" role="group" aria-labelledby="words-more-h">
 			<div class="words-more-filters__head">
 				<h2 id="words-more-h">@components.Pair("סינון", "Filters")</h2>
-				<button type="button" class="btn btn-ghost" onclick="this.closest('details').open=false">@components.Pair("סגירה", "Close")</button>
+				<button type="button" class="btn btn-ghost words-sheet-close"><svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-close"></use></svg>@components.Pair("סגירה", "Close")</button>
 			</div>
 			<div class="words-more-filters__grid">
 				<label for="words-filter-pos">
@@ -518,7 +519,7 @@ templ wordsError(v WordsView) {
 	<div class="card words-error" data-words-error={ v.ErrorKind } role="alert">
 		<div class="words-state__icon" aria-hidden="true"><svg class="icon" width="28" height="28" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-close"></use></svg></div>
 		<p class="empty-he" lang="he" dir="rtl">{ errHe(v.ErrorKind) }</p>
-		<h2 class="empty-title" lang="en" dir="ltr">{ errEn(v.ErrorKind) }</h2>
+		<h2 class="empty-title">@components.Pair(errHe(v.ErrorKind), errEn(v.ErrorKind))</h2>
 		<p class="empty-body empty-body-en" lang="en" dir="ltr">Your words are safe. Check your connection and try again.</p>
 		<p class="empty-body empty-body-he" lang="he" dir="rtl">הַמִּלִּים שֶׁלָּכֶם שְׁמוּרוֹת. בִּדְקוּ אֶת הַחִיבּוּר וְנַסּוּ שׁוּב.</p>
 		<p class="empty-actions">
@@ -534,6 +535,16 @@ templ wordsError(v WordsView) {
 templ wordsNetworkError() {
 	<template id="words-error-network">
 		@wordsError(WordsView{ErrorKind: "load"})
+	</template>
+}
+
+// wordsCsrfError sits outside the swap. A rejected token clones it beside the button.
+templ wordsCsrfError() {
+	<template id="words-error-csrf">
+		<p class="words-note words-note--error" role="alert" data-words-error="csrf">
+			<svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-wrong"></use></svg>
+			@components.Pair("השינוי לא נשמר. רעננו את הדף ונסו שוב.", "We couldn’t save that change. Reload the page and try again.")
+		</p>
 	</template>
 }
 
@@ -565,6 +576,11 @@ templ wordsScript() {
     document.addEventListener('click', function (ev) {
         var t = ev.target && ev.target.closest ? ev.target : null;
         if (!t || !t.closest) return;
+        if (t.closest('.words-sheet-close')) {
+            var details = t.closest('details');
+            if (details) details.open = false;
+            return;
+        }
         if (t.closest('#words-vowels-btn')) {
             on = !on;
             try { localStorage.setItem(key, on ? '1' : '0'); } catch (e) {}
@@ -598,17 +614,20 @@ templ wordsScript() {
         focusWord = '';
         if (row) row.focus();
     });
-    window.wordsOffline = function (d) {
-        var n = document.getElementById('words-error-network');
-        var m = d && d.querySelector('.words-main');
+    window.wordsFail = function (e) {
+        var d = e.detail || {}, t = d.target, s = d.xhr ? d.xhr.status : 0, n, m, a, c;
+        if (!t || t.id !== 'words-results') return;
+        if (s === 401) { d.shouldSwap = false; location.assign('/login/?next=' + encodeURIComponent(location.pathname + location.search)); return; }
+        if (s === 403) { d.shouldSwap = false; a = document.querySelector('.lookup-card__actions'); c = document.getElementById('words-error-csrf'); if (a && c && !a.querySelector('[data-words-error="csrf"]')) a.append(c.content.cloneNode(true)); return; }
+        if (!d.isError && e.type.indexOf('send') < 0) return;
+        if (String(d.serverResponse || '').indexOf('words-results') >= 0) return;
+        d.shouldSwap = false;
+        n = document.getElementById('words-error-network'); m = t.querySelector('.words-main');
         if (!n || !m) return;
         m.replaceChildren(n.content.cloneNode(true));
-        d.setAttribute('data-words-state', 'error');
-        d.setAttribute('aria-busy', 'false');
-        var c = d.querySelector('.words-status__count');
-        if (c) c.replaceChildren();
-        var a = d.querySelector('[data-' + 'words-review]');
-        if (a) a.hidden = true;
+        t.setAttribute('data-words-state', 'error'); t.setAttribute('aria-busy', 'false');
+        a = t.querySelector('.words-status__count'); if (a) a.replaceChildren();
+        c = t.querySelector('[data-' + 'words-review]'); if (c) c.hidden = true;
     };
     document.addEventListener('htmx:afterSwap', function (ev) {
         var target = ev.detail && ev.detail.target;

@@ -8574,4 +8574,43 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 @media (prefers-reduced-motion: no-preference) {
     .words-more-filters[open] .words-more-filters__panel { animation: hebrew-route-enter var(--motion-duration) var(--motion-easing); }
 }
+
+/* Desktop chip row must not clip the More-filters panel. */
+@media (min-width: 768px) {
+    .words-page .words-quick { overflow: visible; flex-wrap: wrap; }
+}
+/* Source and Paused fieldsets also carry .words-quick, which would stretch every chip to a full row. */
+.words-more-filters__panel fieldset.words-quick { display: flex; flex-wrap: wrap; gap: var(--space-2); grid-column: auto; grid-row: auto; overflow: visible; margin: 0; padding: 0; border: 0; min-width: 0; }
+.words-more-filters__panel fieldset.words-quick > legend { float: inline-start; inline-size: 100%; padding: 0; margin-block-end: 6px; font: 600 14px/1.3 var(--font-sans); }
+
+/* Legacy .words-strength > span paints green through the meter gaps. */
+.words-page .words-strength > .words-meter { background: none; height: auto; }
+
+/* dir=ltr glosses follow the row's direction, so they sit beside the Hebrew. */
+.words-row__meaning { justify-items: start; }
+.words-detail .lookup-card__gloss,
+.words-detail > .translit { justify-self: start; }
+@media (max-width: 767px) {
+    .words-row .words-gloss,
+    .words-row .translit { justify-self: start; }
+    .words-page .words-row { column-gap: var(--space-3); }
+}
+
+/* .btn-link {display:inline-flex} beats the hidden attribute. */
+.words-page .btn-link[hidden] { display: none; }
+
+/* Sheets sit above the bottom dock (.hebrew-shell is z-index 50). */
+@media (max-width: 767px) {
+    .words-more-filters[open]::before,
+    .words-layout:has(.words-detail:not([hidden]))::after { z-index: 60; }
+    .words-more-filters__panel,
+    .words-detail:not([hidden]) { z-index: 61; }
+}
+
+/* Audio stays beside the headword; the close control goes to the far end. */
+.lookup-card__head { justify-content: flex-start; }
+.lookup-card__head .lookup-card__close { margin-inline-start: auto; }
+
+.words-note--error { display: flex; gap: var(--space-2); align-items: flex-start; padding: var(--space-3) var(--space-4); border-radius: var(--radius-control); background: var(--color-accent-pomegranate-soft); color: var(--color-text); }
+.words-note--error .icon { color: var(--color-accent-pomegranate); flex: none; margin-block-start: 3px; }
 /* === end 2026 /words/ === */

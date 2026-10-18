@@ -89,8 +89,13 @@ func TestWordsPageHooks(t *testing.T) {
 		`aria-atomic="true"`,
 		`aria-busy="false"`,
 		`hx-on::send-error`,
+		`hx-on::before-swap="wordsFail(event)"`,
 		`id="words-error-network"`,
-		`wordsOffline`,
+		`id="words-error-csrf"`,
+		`wordsFail`,
+		`/login/?next=`,
+		`=== 403`,
+		`השינוי לא נשמר. רעננו את הדף ונסו שוב.`,
 		`type="submit" form="words-filters"`,
 		`icon-close`,
 		`Loading…`,
@@ -131,6 +136,12 @@ func TestWordsPageHooks(t *testing.T) {
 	}
 	if strings.Contains(html, "https://") || strings.Contains(html, "cdn.") {
 		t.Fatal("page references a CDN")
+	}
+	if strings.Contains(html, "onclick=") || strings.Contains(html, "wordsOffline") {
+		t.Fatal("inline onclick or the old offline helper")
+	}
+	if !strings.Contains(html, `class="empty-title"`) || !strings.Contains(html, `class="empty-he"`) {
+		t.Fatal("error title lost its Hebrew line or its bilingual title")
 	}
 }
 
