@@ -87,7 +87,8 @@ describe('web gating (ac-1, ac-2, ac-6, ac-7, ac-8)', () => {
             '/worksheets/catalog.js',
             '/worksheets/_review/vocab-index.js',
             '/worksheets/_audio/words/catalog.js',
-            '/shared/word-audio-catalog.js'
+            '/shared/word-audio-catalog.js',
+            '/shared/dist/player.js'
         ];
         for (const p of nonHtml) {
             const res = await req(p);
