@@ -151,6 +151,12 @@ func (s *Store) exec(ctx context.Context, query string, args ...any) (sql.Result
 	return s.conn.ExecContext(ctx, query, args...)
 }
 
+// ExecContext runs one statement on the store connection.
+// internal/db/testharness uses it to insert fixture rows. The server does not call it.
+func (s *Store) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return s.exec(ctx, query, args...)
+}
+
 func (s *Store) queryRow(ctx context.Context, query string, args ...any) *sql.Row {
 	return s.conn.QueryRowContext(ctx, query, args...)
 }

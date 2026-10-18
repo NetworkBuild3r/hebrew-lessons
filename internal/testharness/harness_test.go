@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 
 	_ "modernc.org/sqlite"
 )
@@ -375,7 +376,7 @@ func migrationTime(t *testing.T, dataDir string) time.Time {
 	).Scan(&raw); err != nil {
 		t.Fatal(err)
 	}
-	got, err := time.Parse(time.RFC3339Nano, raw)
+	got, err := db.ParseTime(raw)
 	if err != nil {
 		t.Fatalf("applied_at %q: %v", raw, err)
 	}
