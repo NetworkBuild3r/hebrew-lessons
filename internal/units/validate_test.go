@@ -25,11 +25,15 @@ func TestTextNormalizeAndTokens(t *testing.T) {
 	if !isPointed("שָׁלוֹם") || !isPointed("בּ") {
 		t.Fatal("vowel or dagesh should count as niqqud")
 	}
-	if !isNumberTok("12") || !isNumberTok("י״ב") || !isNumberTok("ה׳") || !isNumberTok("תשפ״ז") {
-		t.Fatal("digits and Hebrew numerals should be recognized")
+	for _, tok := range []string{"12", "ה׳", "י״ב", "ט״ו", "ט״ז", "תשפ״ז", "תתקע״ה"} {
+		if !isNumberTok(tok) {
+			t.Fatalf("%q should be a numeral", tok)
+		}
 	}
-	if isNumberTok("שָׁלוֹם") || isNumberTok("צ׳יפס") || isNumberTok("ג׳ירפה") {
-		t.Fatal("a word, including a geresh loanword, is not a number")
+	for _, tok := range []string{"שָׁלוֹם", "צ׳יפס", "ג׳ירפה", "צה״ל", "ארה״ב", "ביה״ס", "א״א", "י״ה", "י״ו", "ך׳", "י\"ב", "ה'"} {
+		if isNumberTok(tok) {
+			t.Fatalf("%q should be a word, not a numeral", tok)
+		}
 	}
 	if stripNiqqud("בֹּקֶר") != stripNiqqud("בָּקָר") {
 		t.Fatalf("homograph skeletons differ: %q vs %q", stripNiqqud("בֹּקֶר"), stripNiqqud("בָּקָר"))

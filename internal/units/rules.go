@@ -55,6 +55,12 @@ const (
 // on the activity token. The split keeps one finding per story token: story.unmapped
 // is what coverage and glosses need, because a gloss has to land on a
 // lexicon entry.
+//
+// A Hebrew numeral is standard gematria written with geresh (U+05F3) or
+// gershayim (U+05F4), as in ה׳ or תשפ״ז. Acronyms such as צה״ל are words
+// and must map to a lexeme. ASCII-quoted forms such as י"ב or ה' are not
+// numerals; authors should use U+05F3 and U+05F4, and the ASCII forms are
+// flagged.
 
 // Rule is one authoring check. The MCP rules resource can serve Rules.
 type Rule struct {
@@ -83,8 +89,8 @@ var Rules = []Rule{
 	{ID: RuleSchemaLookup, Severity: SeverityBlock, Description: "The lexicon or audio lookup failed."},
 	{ID: RuleSchemaRef, Severity: SeverityBlock, Description: "A new word is duplicated or never appears in a lesson."},
 	{ID: RuleSchemaRequired, Severity: SeverityBlock, Description: "A required field is missing or empty."},
-	{ID: RuleStoryUnmapped, Severity: SeverityBlock, Description: "A story content word does not map to a lexicon entry. Names and numbers are exempt. The same token is not also lexeme.unknown."},
-	{ID: RuleStoryUnpointed, Severity: SeverityBlock, Description: "A story contains a Hebrew word with no niqqud. Names, numbers, and punctuation are ignored. Homographs are not exempt."},
+	{ID: RuleStoryUnmapped, Severity: SeverityBlock, Description: "A story content word does not map to a lexicon entry. Names and numbers are exempt. A number is digits or standard gematria with U+05F3/U+05F4; acronyms and ASCII quotes such as י\"ב or ה' are words. The same token is not also lexeme.unknown."},
+	{ID: RuleStoryUnpointed, Severity: SeverityBlock, Description: "A story contains a Hebrew word with no niqqud. Names, numbers, and punctuation are ignored. A number is digits or standard gematria with U+05F3/U+05F4; acronyms and ASCII quotes such as י\"ב or ה' are words. Homographs are not exempt."},
 }
 
 // Guidance is one player rule for the model that writes units.
