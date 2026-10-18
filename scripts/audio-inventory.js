@@ -105,15 +105,35 @@ function newestInventory() {
 }
 
 /**
+ * Directory for an _archive copy of a clip: the nearest ancestor named "audio",
+ * plus "_archive". dirname keeps a leading root, so an absolute path stays
+ * absolute. path.join of the split segments does not: it drops the empty
+ * POSIX root, and on Windows it drops a UNC or current-drive root. A "C:\..."
+ * path is unchanged from that older join.
+ * @param {string} absOriginal
+ * @param {typeof path} [pathImpl] Platform path implementation. Tests pass path.win32.
+ * @returns {string|null}
+ */
+function archiveDirFor(absOriginal, pathImpl) {
+    const p = pathImpl || path;
+    let dir = p.dirname(absOriginal);
+    const root = p.parse(absOriginal).root;
+    for (;;) {
+        if (p.basename(dir) === 'audio') return p.join(dir, '_archive');
+        if (dir === root || dir === '.') return null;
+        const parent = p.dirname(dir);
+        if (parent === dir) return null;
+        dir = parent;
+    }
+}
+
+/**
  * Look for an _archive/ copy of the inventoried bytes near the original path.
  * Convention: <lesson>/audio/_archive/<stem>.<first12sha>.mp3
  */
 function findArchiveWithHash(absOriginal, expectedHash) {
-    const parts = absOriginal.split(path.sep);
-    const audioIdx = parts.lastIndexOf('audio');
-    if (audioIdx < 0) return null;
-    const archiveDir = path.join(...parts.slice(0, audioIdx + 1), '_archive');
-    if (!fs.existsSync(archiveDir)) return null;
+    const archiveDir = archiveDirFor(absOriginal);
+    if (!archiveDir || !fs.existsSync(archiveDir)) return null;
     const stem = path.basename(absOriginal, path.extname(absOriginal));
     const expectedName = stem + '.' + expectedHash.slice(0, 12) + '.mp3';
     const candidate = path.join(archiveDir, expectedName);
@@ -231,6 +251,7 @@ module.exports = {
     runInventory,
     runVerify,
     findArchiveWithHash,
+    archiveDirFor,
     defaultInventoryDir,
     inventoryRoots,
     walkAudioFiles
