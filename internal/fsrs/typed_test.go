@@ -13,6 +13,7 @@ func TestGradeTyped(t *testing.T) {
 		{name: "niqqud stripped from expected", expected: "שָׁלוֹם", got: "שלום", want: Good},
 		{name: "niqqud stripped from answer", expected: "שלום", got: "שָׁלוֹם", want: Good},
 		{name: "cantillation", expected: "ש\u0591לום", got: "שלום", want: Good},
+		{name: "paseq and sof pasuq", expected: "של\u05C0ום", got: "שלום\u05C3", want: Good},
 		{name: "maqaf and hyphen", expected: "כָּל־כָּךְ", got: "כל-כך", want: Good},
 		{name: "maqaf both sides", expected: "כל־כך", got: "כל־כך", want: Good},
 		{name: "whitespace", expected: "  שלום   עולם ", got: "שלום עולם", want: Good},
