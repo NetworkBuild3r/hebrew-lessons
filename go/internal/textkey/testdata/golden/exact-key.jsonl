@@ -1,0 +1,17 @@
+{"kind":"space","node":"v22.14.0","unicode":"16.0","cps":[9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279]}
+{"kind":"key","id":"reorder","in":"שָׁ","out":"שָׁ"}
+{"kind":"key","id":"ordered","in":"שָׁ","out":"שָׁ"}
+{"kind":"key","id":"double-space","in":"a  b","out":"a b"}
+{"kind":"key","id":"em-space","in":"a b","out":"a b"}
+{"kind":"key","id":"nbsp","in":"a b","out":"a b"}
+{"kind":"key","id":"fef","in":"﻿a﻿","out":"a"}
+{"kind":"key","id":"nel-inside","in":"ab","out":"ab"}
+{"kind":"key","id":"nel-edge","in":"a","out":"a"}
+{"kind":"key","id":"u1c89","in":"aᲉb","out":"aᲉb"}
+{"kind":"key","id":"u1fae9","in":"a🫩b","out":"a🫩b"}
+{"kind":"key","id":"case","in":"Shalom","out":"Shalom"}
+{"kind":"key","id":"edges","in":" \t\n a   ","out":"a"}
+{"kind":"key","id":"hebrew-gap","in":"שָׁלוֹם  בַּיִת","out":"שָׁלוֹם בַּיִת"}
+{"kind":"key","id":"only-space","in":" 　﻿ ","out":""}
+{"kind":"key","id":"empty","in":"","out":""}
+{"kind":"key","id":"mongolian","in":"a᠎b","out":"a᠎b"}

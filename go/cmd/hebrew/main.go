@@ -19,6 +19,8 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/config"
 	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/db"
+	learnerconfig "github.com/NetworkBuild3r/hebrew-lessons/go/internal/learner/config"
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/learner/path"
 )
 
 // HTTP timeouts stay under Cloudflare's 125s proxy read timeout (ADR-0016).
@@ -103,7 +105,28 @@ func listenAddr(host string, port int) string {
 func newMux(conn *sql.DB, ledger db.Ledger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthHandler(conn, ledger))
+	// HEBREW_DEV_WEB=1 adds read-only JSON for contract tests. The default
+	// is off, and the routes do not write the database.
+	if os.Getenv(path.EnvDevWeb) == "1" {
+		lcfg, err := learnerconfig.Load()
+		if err != nil {
+			mux.HandleFunc("GET /api/dev/learner/due", devConfigError(err))
+			mux.HandleFunc("GET /api/dev/learner/path", devConfigError(err))
+		} else {
+			path.MountDev(mux, path.New(conn, lcfg), true)
+		}
+	}
 	return mux
+}
+
+func devConfigError(err error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(struct {
+			Error string `json:"error"`
+		}{Error: err.Error()})
+	}
 }
 
 func healthHandler(conn *sql.DB, ledger db.Ledger) http.HandlerFunc {
