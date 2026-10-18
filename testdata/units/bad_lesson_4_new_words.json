@@ -1,0 +1,81 @@
+{
+  "title": "At the café",
+  "situation": "A small café",
+  "concept": "Ordering a drink",
+  "newWords": [
+    "שָׁלוֹם",
+    "תּוֹדָה",
+    "קָפֶה",
+    "תֵּה",
+    "מַיִם",
+    "בְבַקָּשָׁה",
+    "כַּמָּה",
+    "חֶשְבּוֹן"
+  ],
+  "lessons": [
+    {
+      "kind": "lesson",
+      "activities": [
+        {
+          "type": "listen_pick",
+          "text": "שָׁלוֹם"
+        },
+        {
+          "type": "recall",
+          "text": "תּוֹדָה"
+        },
+        {
+          "type": "produce",
+          "text": "קָפֶה"
+        },
+        {
+          "type": "cloze",
+          "text": "תֵּה"
+        }
+      ]
+    },
+    {
+      "kind": "lesson",
+      "activities": [
+        {
+          "type": "listen_pick",
+          "text": "מַיִם"
+        },
+        {
+          "type": "produce",
+          "text": "בְבַקָּשָׁה"
+        }
+      ]
+    },
+    {
+      "kind": "lesson",
+      "activities": [
+        {
+          "type": "listen_pick",
+          "text": "כַּמָּה"
+        },
+        {
+          "type": "recall",
+          "text": "חֶשְבּוֹן"
+        }
+      ]
+    },
+    {
+      "kind": "checkpoint",
+      "activities": [
+        {
+          "type": "recall",
+          "text": "שָׁלוֹם"
+        },
+        {
+          "type": "shadow",
+          "text": "קָפֶה"
+        },
+        {
+          "type": "produce",
+          "text": "תּוֹדָה"
+        }
+      ]
+    }
+  ]
+}
