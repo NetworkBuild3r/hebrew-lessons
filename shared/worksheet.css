@@ -8223,8 +8223,9 @@ section[data-block-type="conjugation-table"][data-mode="drill"][data-drill-owner
 }
 
 /* === 2026 /guides/ === */
-/* Noto is the Guides UI face only. Node pages keep the Rubik fallback on body. */
-.guides-page {
+/* Noto is the Guides UI face. /words/ joins this list until the app-wide Noto PR lands; then drop body.words-page. Node pages keep the Rubik fallback on body. */
+.guides-page,
+body.words-page {
     --font-sans: "Noto Sans Hebrew", "Segoe UI", system-ui, sans-serif;
     --font-hebrew-sans: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
     --font-hebrew-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
@@ -8391,18 +8392,11 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 }
 
 /* === 2026 /words/ (appended after /guides/; overrides the BENTO grid by order, not by edit) === */
-/* Noto stays on this page after Guides took the faces off :root. */
-.words-page {
-    --font-sans: "Noto Sans Hebrew", "Segoe UI", system-ui, sans-serif;
-    --font-hebrew-sans: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
-    --font-hebrew-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
-    --font-hebrew-lettering: "Frank Ruhl Libre", "Noto Serif Hebrew", "Times New Roman", serif;
-    --font-hebrew-pointed-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
-}
 :root {
     --words-row-min-h: 72px;          /* row hit area, ≥44 everywhere */
     --words-he-size: 28px;            /* row headword (pointed) */
     --words-he-size-detail: 44px;     /* lookup card headword */
+    --words-he-col: 168px;            /* desktop Hebrew column (Figma WordRow) */
     --words-meter-seg: 14px;          /* segment width; 4 segments, gap 3px, height 6px */
     --words-meter-empty: var(--color-border-subtle);
     --words-strength-fragile: var(--color-accent-pomegranate);
@@ -8414,7 +8408,6 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
     --words-skeleton-sheen: color-mix(in srgb, var(--color-surface) 60%, transparent);
 }
 :root[data-theme="dark"] { --words-scrim: rgba(0, 0, 0, 0.6); }
-@media (prefers-color-scheme: dark) { :root[data-theme="auto"] { --words-scrim: rgba(0, 0, 0, 0.6); } }
 .words-page .page-heading-kicker { font: 700 13px/1.2 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-olive); }
 
 /* Toolbar: search + vowels, then the chip row. The form is display:contents so those pieces sit on the toolbar grid. */
@@ -8432,8 +8425,8 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 /* Quick chips: radios/checkbox styled as .filter-chip */
 .words-quick { display: flex; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; padding-block: var(--space-1); align-items: center; }
 .words-quick fieldset { display: contents; border: 0; }
-.words-page .words-chip-input { position: absolute; opacity: 0; width: 1px; height: 1px; min-height: 0; padding: 0; border: 0; margin: 0; pointer-events: none; }
 .words-quick { position: relative; }
+.words-page .words-chip-input { position: absolute; inset-block-start: 0; inset-inline-start: 0; width: 1px; height: 1px; min-height: 0; margin: 0; padding: 0; border: 0; opacity: 0; pointer-events: none; }
 .words-quick .filter-chip, .words-more-filters .filter-chip { min-height: 44px; cursor: pointer; } /* guides chips are 36; words goes to 44 for touch */
 .words-chip-input:checked + .filter-chip { background: var(--color-text); border-color: var(--color-text); color: var(--color-surface); }
 .words-chip-input:focus-visible + .filter-chip { outline: 3px solid var(--color-focus); outline-offset: 2px; }
@@ -8457,9 +8450,12 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 .words-active__chip { position: relative; }
 .words-active__clear { font: 600 14px/1 var(--font-sans); color: var(--color-primary); min-height: 44px; display: inline-flex; align-items: center; }
 
-/* Status line */
+/* Status line. The loading phrase is in the markup and only shows while htmx marks the results. */
 .words-status { margin: 0; color: var(--color-muted); font: 500 14px/1.4 var(--font-sans); font-variant-numeric: tabular-nums; }
 .words-status-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+.words-status__loading { display: none; }
+#words-results.htmx-request .words-status__count { display: none; }
+#words-results.htmx-request .words-status__loading { display: inline; }
 .words-page .btn-link { font: 600 14px/1 var(--font-sans); color: var(--color-primary); min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
 
 /* Layout: list + detail. One column until a word is selected, so an empty card does not reserve 380px. */
@@ -8475,29 +8471,30 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 /* Word row: li holds the row button and the audio button side by side */
 .word-item { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: var(--space-3); padding-inline-start: var(--space-3); border-radius: var(--radius-control); }
 .word-item + .word-item { border-block-start: 1px solid var(--color-border-subtle); }
-.words-page .words-row { all: unset; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, max-content); align-items: center; gap: var(--space-4); min-height: var(--words-row-min-h); padding: var(--space-2) 0; padding-inline-end: var(--space-4); cursor: pointer; color: var(--color-text); border-radius: var(--radius-control); transform: none; box-shadow: none; border: 0; background: transparent; }
+/* Desktop WordRow: [audio] [Hebrew] [gloss + translit] [chips over meter]. One markup order, grid areas. */
+.words-page .words-row { all: unset; box-sizing: border-box; display: grid; grid-template-columns: minmax(var(--words-he-col), max-content) minmax(0, 1fr) auto; grid-template-areas: "he meaning status"; align-items: center; column-gap: var(--space-4); min-height: var(--words-row-min-h); padding-block: var(--space-2); padding-inline: 0 var(--space-4); cursor: pointer; color: var(--color-text); border-radius: var(--radius-control); transform: none; box-shadow: none; border: 0; background: transparent; }
 .words-page .words-row:hover { background: var(--color-surface-soft); transform: none; box-shadow: none; }
 .words-page .words-row:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
 .word-item:has(.words-row[aria-pressed="true"]) { background: var(--color-primary-soft); box-shadow: inset 3px 0 0 var(--color-primary); }
 [dir="rtl"] .word-item:has(.words-row[aria-pressed="true"]) { box-shadow: inset -3px 0 0 var(--color-primary); }
 .word-item:has(.words-row[data-suspended="true"]) .words-he,
 .word-item:has(.words-row[data-suspended="true"]) .words-gloss { opacity: .62; }
-.words-row__meaning { display: grid; gap: 2px; min-width: 0; }
+.words-row__meaning { grid-area: meaning; display: grid; gap: 2px; min-width: 0; }
 .words-page .words-gloss { font: 600 16px/1.35 var(--font-sans); color: var(--color-text); overflow-wrap: anywhere; }
 .words-row__meaning .translit { font-size: 14px; }
-.words-row__status { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; min-width: 120px; }
-.words-page .words-he { font: 600 var(--words-he-size)/var(--line-height-pointed) var(--font-hebrew-pointed-display, "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif); text-align: end; white-space: nowrap; padding-block: 2px; } /* no overflow:hidden; nikud needs the 1.7 line box */
+.words-row__status { grid-area: status; display: grid; justify-items: end; gap: 6px; }
+.words-row__chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.words-page .words-he { grid-area: he; justify-self: end; font: 600 var(--words-he-size)/var(--line-height-pointed) var(--font-hebrew-pointed-display, "Noto Sans Hebrew", sans-serif); white-space: nowrap; padding-block: 2px; } /* end of the column sits next to the gloss. No overflow:hidden. */
 
 /* Strength meter: 4 segments, markup unchanged (.words-strength > span), restyled */
 .words-page .words-strength { display: inline-flex; gap: 3px; background: none; border-radius: 0; overflow: visible; width: auto; height: 6px; }
-.words-page .words-strength > span:not(.words-meter) { display: none; } /* legacy width-% bar hidden; .words-meter i are the segments */
-.words-meter { display: inline-flex; gap: 3px; }
+.words-page .words-strength > span:not(.words-meter) { display: none; } /* legacy width-% bar hidden; .words-meter is a span too */
+.words-page .words-strength > .words-meter { display: inline-flex; gap: 3px; }
 .words-meter i { width: var(--words-meter-seg); height: 6px; border-radius: 3px; background: var(--words-meter-empty); }
 .words-strength[data-strength="fragile"] .words-meter i:nth-child(-n+1) { background: var(--words-strength-fragile); }
 .words-strength[data-strength="shaky"]   .words-meter i:nth-child(-n+2) { background: var(--words-strength-shaky); }
 .words-strength[data-strength="steady"]  .words-meter i:nth-child(-n+3) { background: var(--words-strength-steady); }
 .words-strength[data-strength="solid"]   .words-meter i                  { background: var(--words-strength-solid); }
-.words-row__he-col { display: grid; justify-items: end; gap: 4px; }
 
 /* Load more */
 .words-more { display: flex; justify-content: center; padding: var(--space-3); list-style: none; }
@@ -8507,7 +8504,7 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 .words-page .words-detail[hidden] { display: none; }
 .lookup-card .audio-btn { width: 56px; height: 56px; }
 .lookup-card__head { display: flex; align-items: center; gap: var(--space-3); justify-content: space-between; }
-.words-detail .lookup-card__he { margin: 0; font: 700 var(--words-he-size-detail)/var(--line-height-pointed) var(--font-hebrew-pointed-display, "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif); }
+.words-detail .lookup-card__he { margin: 0; font: 700 var(--words-he-size-detail)/var(--line-height-pointed) var(--font-hebrew-pointed-display, "Noto Sans Hebrew", sans-serif); letter-spacing: 0; }
 .lookup-card__he:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 4px; border-radius: var(--radius-sm); }
 .lookup-card__gloss { margin: 0; font: 600 20px/1.35 var(--font-sans); }
 .lookup-card__dirs { display: grid; gap: var(--space-3); }
@@ -8515,7 +8512,7 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 .lookup-card__dir-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .words-paradigm { display: grid; gap: var(--space-2); }
 .words-page .words-tense { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); background: var(--color-surface-soft); }
-.words-page .words-cell { font: 600 20px/var(--line-height-pointed) var(--font-hebrew-pointed-display, "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif); text-align: end; justify-self: end; }
+.words-page .words-cell { font: 600 20px/var(--line-height-pointed) var(--font-hebrew-pointed-display, "Noto Sans Hebrew", sans-serif); text-align: end; justify-self: end; }
 .words-page .lookup-card__know { margin: 0; font: 700 13px/1.2 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-olive); }
 .words-page .words-sources { display: flex; flex-wrap: wrap; gap: var(--space-2); list-style: none; margin: 0; padding: 0; }
 .words-page .words-sources a { text-decoration: none; color: inherit; }
@@ -8523,23 +8520,25 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 .words-unchecked { justify-self: start; }
 .lookup-card__actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 
-/* Skeleton (only while an HTMX request is in flight) */
-.words-skeleton { display: none; }
+/* Skeleton is its own single-column card. It does not carry .words-list, or the guarded BENTO grid lays it out. Bars stay still. */
+.words-page .words-skeleton { display: none; grid-template-columns: minmax(0, 1fr); gap: 0; margin: 0; padding: var(--space-2); list-style: none; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-card); background: var(--color-surface); box-shadow: var(--shadow-card); }
 #words-results.htmx-request .words-skeleton { display: grid; }
 #words-results.htmx-request .words-list[data-words-list],
-#words-results.htmx-request .words-empty { display: none; }
-.words-skeleton__row { display: grid; grid-template-columns: 44px minmax(0, 1fr) 120px 96px; gap: var(--space-4); align-items: center; min-height: var(--words-row-min-h); padding-inline: var(--space-3); }
+#words-results.htmx-request .words-empty,
+#words-results.htmx-request .words-error { display: none; }
+.words-skeleton__row { display: grid; grid-template-columns: 44px var(--words-he-col) minmax(0, 1fr) 96px; gap: var(--space-4); align-items: center; min-height: var(--words-row-min-h); padding-inline: var(--space-3); }
 .words-skeleton__row + .words-skeleton__row { border-block-start: 1px solid var(--color-border-subtle); }
 .words-skeleton__row > i { display: block; height: 12px; border-radius: 6px; background: var(--words-skeleton); }
 .words-skeleton__row > i:first-child { width: 44px; height: 44px; border-radius: 999px; }
 .words-skeleton__row > i:last-child { height: 22px; }
-/* Skeleton bars stay still. A repeating sheen would be a forever animation, and the restyle gate allows that only on the audio-playing state. */
 
 /* States reuse .empty-art / .empty-title / .empty-he / .empty-body / .empty-actions from /guides/ */
 .words-page .words-empty, .words-page .words-error { display: grid; justify-items: center; gap: var(--space-4); text-align: center; padding: var(--space-7) var(--space-5); }
-.words-page .empty-he { font-family: var(--font-hebrew-pointed-display, "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif); line-height: var(--line-height-pointed); }
+.words-page .empty-he { font-family: var(--font-hebrew-pointed-display, "Noto Sans Hebrew", sans-serif); line-height: var(--line-height-pointed); }
 .words-state__icon { width: 64px; height: 64px; border-radius: 999px; display: grid; place-items: center; background: var(--color-primary-soft); color: var(--color-primary); }
 .words-error .words-state__icon { background: var(--color-accent-pomegranate-soft); color: var(--color-accent-pomegranate); }
+.words-error .words-state__icon .icon { width: 28px; height: 28px; }
+.words-page .words-error.card { background: var(--color-surface); border: 1px solid var(--color-border-subtle); color: var(--color-text); box-shadow: var(--shadow-card); }
 
 /* Mobile */
 @media (max-width: 767px) {
@@ -8547,13 +8546,17 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
     .words-page .words-search { order: 0; grid-column: 1; grid-row: 1; }
     .words-page #words-vowels-btn { grid-column: 2; grid-row: 1; }
     .words-page .words-quick { order: 0; grid-column: 1 / -1; grid-row: 2; }
-    .word-item { grid-template-columns: 44px minmax(0, 1fr); padding-inline-start: var(--space-2); }
-    .words-page .words-row { grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3); padding-inline-end: var(--space-3); }
-    .words-row__meaning { grid-column: 1; }
-    .words-row__status { grid-column: 1; grid-row: 2; min-width: 0; }
-    .words-row__he-col { grid-column: 2; grid-row: 1 / span 2; }
+    .word-item { gap: var(--space-3); padding-inline-start: var(--space-2); }
+    .words-page .words-row { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "gloss gloss he" "translit chips he" "translit chips meter"; column-gap: var(--space-2); row-gap: 2px; padding-inline: 0 var(--space-3); }
+    .words-row__meaning, .words-row__status { display: contents; }
+    .words-row .words-gloss { grid-area: gloss; }
+    .words-row .translit { grid-area: translit; align-self: center; }
+    .words-row__chips { grid-area: chips; justify-content: flex-start; align-self: center; }
+    .words-row .words-strength { grid-area: meter; justify-self: end; align-self: start; }
+    .words-detail .lookup-card__he { font-size: 40px; }
     .words-skeleton__row { grid-template-columns: 44px minmax(0, 1fr) 72px; }
-    .words-skeleton__row > i:nth-child(3) { display: none; }
+    .words-skeleton__row > i:nth-child(2) { order: 1; height: 22px; }
+    .words-skeleton__row > i:nth-child(4) { display: none; }
 
     /* More filters becomes a bottom sheet */
     .words-more-filters[open]::before { content: ""; position: fixed; inset: 0; z-index: 40; background: var(--words-scrim); }
@@ -8567,19 +8570,8 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
     /* Detail becomes a bottom sheet when a word is selected */
     .words-detail:not([hidden]) { position: fixed; z-index: 41; inset: auto 0 0 0; max-height: 85dvh; overflow-y: auto; border-radius: var(--radius-hero) var(--radius-hero) 0 0; box-shadow: var(--shadow-raised); padding-block-end: calc(var(--space-5) + env(safe-area-inset-bottom)); }
     .words-layout:has(.words-detail:not([hidden]))::after { content: ""; position: fixed; inset: 0; z-index: 40; background: var(--words-scrim); }
-    .words-detail .lookup-card__he { font-size: 40px; }
 }
 @media (prefers-reduced-motion: no-preference) {
     .words-more-filters[open] .words-more-filters__panel { animation: hebrew-route-enter var(--motion-duration) var(--motion-easing); }
 }
 /* === end 2026 /words/ === */
-/* Review patch: these selectors beat the legacy .words-page input, .card h2, and .card[role=alert] rules. */
-.words-page .words-chip-input { position: absolute; opacity: 0; width: 1px; height: 1px; min-height: 0; padding: 0; border: 0; margin: 0; pointer-events: none; }
-.words-quick { position: relative; }
-.words-page .words-strength > .words-meter { display: inline-flex; }
-.words-detail .lookup-card__he { font: 700 var(--words-he-size-detail)/var(--line-height-pointed) var(--font-hebrew-pointed-display, "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif); }
-@media (max-width: 767px) { .words-detail .lookup-card__he { font-size: 40px; } }
-.words-page .words-skeleton.words-list { grid-template-columns: minmax(0, 1fr); gap: 0; margin: 0; padding: var(--space-2); list-style: none; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-card); background: var(--color-surface); box-shadow: var(--shadow-card); }
-.words-page .words-error.card { background: var(--color-surface); border: 1px solid var(--color-border-subtle); box-shadow: var(--shadow-card); }
-.words-error .words-state__icon { font: 600 28px/1 var(--font-sans); }
-.words-page .words-row { padding: var(--space-2) 0; padding-inline-end: var(--space-4); }

@@ -86,12 +86,17 @@ func TestWordsPageHooks(t *testing.T) {
 		`data-strength="solid"`,
 		`מילים — Words · דֶּרֶךְ עִבְרִית`,
 		`role="status"`,
-		`hx-on:htmx:send-error`,
-		`hx-on:htmx:response-error`,
-		`wordsNetError`,
+		`aria-atomic="true"`,
+		`aria-busy="false"`,
+		`hx-on::send-error`,
+		`id="words-error-network"`,
+		`wordsOffline`,
+		`type="submit" form="words-filters"`,
+		`icon-close`,
 		`Loading…`,
 		`[\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7]`,
 		`· Solid`,
+		`class="words-row__chips"`,
 	}
 	for _, want := range checks {
 		if !strings.Contains(html, want) {
@@ -105,6 +110,9 @@ func TestWordsPageHooks(t *testing.T) {
 	}
 	if strings.Contains(html, `[\u0591-\u05C7]`) {
 		t.Fatal("vowel strip still deletes the maqaf")
+	}
+	if strings.Contains(html, `words-skeleton words-list`) || strings.Contains(html, "wordsNetError") {
+		t.Fatal("skeleton still uses the list grid, or the old network script is back")
 	}
 	if strings.Contains(html, "data-words-add") || strings.Contains(html, "data-words-suspend") {
 		t.Fatal("write controls shipped in the read-only page")

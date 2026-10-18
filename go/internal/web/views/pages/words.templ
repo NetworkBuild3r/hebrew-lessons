@@ -32,12 +32,19 @@ templ wordsPageMain(v WordsView) {
 		SubHe:    "כל המילים שפגשתם.",
 		SubEn:    "Every word you’ve met.",
 	})
-	<div class="words-page-body">
+	<div class="words-page-body"
+		hx-on::before-request="var t=event.detail&&event.detail.target;if(t&&t.id==='words-results')t.setAttribute('aria-busy','true')"
+		hx-on::after-request="var t=event.detail&&event.detail.target;if(t&&t.id==='words-results')t.setAttribute('aria-busy','false')"
+		hx-on::before-swap="if(event.detail&&event.detail.isError&&event.detail.target&&event.detail.target.id==='words-results'&&String(event.detail.serverResponse||'').indexOf('words-results')<0){event.detail.shouldSwap=false;wordsOffline(event.detail.target)}"
+		hx-on::send-error="var d=event.detail&&event.detail.target;if(d&&d.id==='words-results')wordsOffline(d)">
 		<div class="words-toolbar">
 			@wordsFilterBar(v, false)
 			<button type="button" id="words-vowels-btn" class="btn btn-ghost" aria-pressed="true">@components.Pair("ניקוד", "Vowels")</button>
 		</div>
 		@WordsResults(v)
+		if v.ErrorKind != "invalid_filter" {
+			@wordsNetworkError()
+		}
 	</div>
 }
 
@@ -55,11 +62,14 @@ templ WordsResults(v WordsView) {
 	<div id="words-results" class="words-page" data-words-state={ v.State } aria-busy="false">
 		@wordsActiveFilters(v)
 		<div class="words-status-row">
-			if v.State == "error" {
-				<p class="words-status" id="words-status" data-words-status={ v.State } role="status" aria-live="polite"></p>
-			} else {
-				<p class="words-status" id="words-status" data-words-status={ v.State } role="status" aria-live="polite">@components.Pair(ShownHe(v.Shown), ShownEn(v.Shown))</p>
-			}
+			<p class="words-status" id="words-status" data-words-status={ v.State } role="status" aria-live="polite" aria-atomic="true">
+				<span class="words-status__count">
+					if v.State != "error" {
+						@components.Pair(ShownHe(v.Shown), ShownEn(v.Shown))
+					}
+				</span>
+				<span class="words-status__loading">@components.Pair("טוען…", "Loading…")</span>
+			</p>
 			if v.State == "ready" {
 				<a class="btn-link" href={ templ.SafeURL(v.ReviewHref) } data-words-review data-review-deck={ v.ReviewDeck }>
 					@components.Pair("לחזור עליהן", "Review these")
@@ -122,20 +132,20 @@ templ wordRow(r WordRow) {
 			hx-push-url="false"
 			hx-indicator="#words-results"
 		>
+			<bdi class="words-he" lang="he" dir="rtl" data-vowels={ r.Word }>{ r.Word }</bdi>
 			<span class="words-row__meaning">
 				<span class="words-gloss" data-gloss lang="en" dir="ltr">{ r.Gloss }</span>
 				@components.Translit(r.Translit)
 			</span>
 			<span class="words-row__status">
-				@components.StatusChipLabel(r.ChipStatus, r.ChipHe, r.ChipEn)
-				if r.Weak != "" {
-					<span class="status-chip words-chip-weak" data-status="due" data-weak={ r.Weak }>
-						@components.Pair(r.WeakHe, r.WeakEn)
-					</span>
-				}
-			</span>
-			<span class="words-row__he-col">
-				<bdi class="words-he" lang="he" dir="rtl" data-vowels={ r.Word }>{ r.Word }</bdi>
+				<span class="words-row__chips">
+					@components.StatusChipLabel(r.ChipStatus, r.ChipHe, r.ChipEn)
+					if r.Weak != "" {
+						<span class="status-chip words-chip-weak" data-status="due" data-weak={ r.Weak }>
+							@components.Pair(r.WeakHe, r.WeakEn)
+						</span>
+					}
+				</span>
 				@wordStrength(r.Strength, r.StrengthLabel, r.StrengthWidth)
 			</span>
 		</button>
@@ -264,8 +274,6 @@ templ wordsFilterBar(v WordsView, oob bool) {
 			hx-indicator="#words-results"
 			hx-trigger="submit, change"
 			hx-swap-oob="outerHTML"
-			hx-on:htmx:send-error="wordsNetError(event)"
-			hx-on:htmx:response-error="wordsNetError(event)"
 		>
 			@wordsFilterFields(v)
 		</form>
@@ -284,8 +292,6 @@ templ wordsFilterBar(v WordsView, oob bool) {
 			hx-sync="this:replace"
 			hx-indicator="#words-results"
 			hx-trigger="submit, change"
-			hx-on:htmx:send-error="wordsNetError(event)"
-			hx-on:htmx:response-error="wordsNetError(event)"
 		>
 			@wordsFilterFields(v)
 		</form>
@@ -317,8 +323,6 @@ templ wordsFilterFields(v WordsView) {
 			hx-sync="closest form:replace"
 			hx-include="#words-filters"
 			hx-indicator="#words-results"
-			hx-on:htmx:send-error="wordsNetError(event)"
-			hx-on:htmx:response-error="wordsNetError(event)"
 		/>
 	</div>
 	<div class="words-quick">
@@ -460,7 +464,7 @@ templ wordsMore(v WordsView) {
 }
 
 templ wordsSkeleton() {
-	<div class="words-skeleton words-list" aria-hidden="true">
+	<div class="words-skeleton" aria-hidden="true">
 		for i := 0; i < 8; i++ {
 			<div class="words-skeleton__row"><i></i><i></i><i></i><i></i></div>
 		}
@@ -512,18 +516,25 @@ templ wordsEmpty(v WordsView) {
 
 templ wordsError(v WordsView) {
 	<div class="card words-error" data-words-error={ v.ErrorKind } role="alert">
-		<div class="words-state__icon" aria-hidden="true">×</div>
+		<div class="words-state__icon" aria-hidden="true"><svg class="icon" width="28" height="28" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-close"></use></svg></div>
 		<p class="empty-he" lang="he" dir="rtl">{ errHe(v.ErrorKind) }</p>
 		<h2 class="empty-title" lang="en" dir="ltr">{ errEn(v.ErrorKind) }</h2>
 		<p class="empty-body empty-body-en" lang="en" dir="ltr">Your words are safe. Check your connection and try again.</p>
 		<p class="empty-body empty-body-he" lang="he" dir="rtl">הַמִּלִּים שֶׁלָּכֶם שְׁמוּרוֹת. בִּדְקוּ אֶת הַחִיבּוּר וְנַסּוּ שׁוּב.</p>
 		<p class="empty-actions">
 			if v.ErrorKind != "invalid_filter" {
-				<a class="btn btn-primary" href={ templ.SafeURL(v.URL()) }>@components.Pair("לנסות שוב", "Try again")</a>
+				<button type="submit" form="words-filters" class="btn btn-primary">@components.Pair("לנסות שוב", "Try again")</button>
 			}
 			<a class="btn btn-ghost" href="/words/">@components.Pair("ניקוי סינון", "Clear filters")</a>
 		</p>
 	</div>
+}
+
+// wordsNetworkError is the offline card. It stays outside #words-results so a swap cannot remove it.
+templ wordsNetworkError() {
+	<template id="words-error-network">
+		@wordsError(WordsView{ErrorKind: "load"})
+	</template>
 }
 
 templ wordsScript() {
@@ -587,66 +598,17 @@ templ wordsScript() {
         focusWord = '';
         if (row) row.focus();
     });
-    document.body.addEventListener('htmx:beforeRequest', function (ev) {
-        var target = ev.detail && ev.detail.target;
-        if (!target || target.id !== 'words-results') return;
-        var s = document.getElementById('words-status');
-        if (!s) return;
-        var he = s.querySelector('.ui-he');
-        var en = s.querySelector('.ui-en');
-        if (he) he.textContent = 'טוען…';
-        if (en) en.textContent = 'Loading…';
-    });
-    window.wordsNetError = function (ev) {
-        var xhr = ev.detail && ev.detail.xhr;
-        var status = xhr ? xhr.status : 0;
-        if (status > 0) return;
-        if (ev.detail) ev.detail.shouldSwap = false;
-        var form = document.getElementById('words-filters');
-        if (form) {
-            var params = new URLSearchParams(location.search);
-            var names = ['q', 'status', 'weak', 'pos', 'binyan', 'tense', 'source', 'suspended'];
-            for (var n = 0; n < names.length; n++) {
-                var name = names[n];
-                var value = params.get(name) || '';
-                var nodes = form.querySelectorAll('[name="' + name + '"]');
-                for (var i = 0; i < nodes.length; i++) {
-                    var el = nodes[i];
-                    if (el.type === 'radio') el.checked = (el.value === value);
-                    else if (el.type === 'checkbox') el.checked = value !== '' && value !== '0';
-                    else el.value = value;
-                }
-            }
-        }
-        var root = document.getElementById('words-results');
-        if (!root || root.querySelector('[data-words-error="network"]')) return;
-        var list = root.querySelector('[data-words-list]');
-        if (list) list.hidden = true;
-        var empty = root.querySelector('.words-empty');
-        if (empty) empty.hidden = true;
-        var main = root.querySelector('.words-main') || root;
-        var card = document.createElement('div');
-        card.className = 'card words-error';
-        card.setAttribute('role', 'alert');
-        card.setAttribute('data-words-error', 'network');
-        function line(cls, lang, dir, text) {
-            var p = document.createElement('p');
-            if (cls) p.className = cls;
-            p.lang = lang;
-            p.dir = dir;
-            p.textContent = text;
-            return p;
-        }
-        var icon = document.createElement('div');
-        icon.className = 'words-state__icon';
-        icon.setAttribute('aria-hidden', 'true');
-        icon.textContent = '×';
-        card.appendChild(icon);
-        card.appendChild(line('empty-he', 'he', 'rtl', 'לֹא הִצְלַחְנוּ לִטְעֹן אֶת הַמִּלִּים'));
-        card.appendChild(line('empty-title', 'en', 'ltr', 'We couldn’t load your words'));
-        card.appendChild(line('empty-body empty-body-en', 'en', 'ltr', 'Your words are safe. Check your connection and try again.'));
-        card.appendChild(line('empty-body empty-body-he', 'he', 'rtl', 'הַמִּלִּים שֶׁלָּכֶם שְׁמוּרוֹת. בִּדְקוּ אֶת הַחִיבּוּר וְנַסּוּ שׁוּב.'));
-        main.appendChild(card);
+    window.wordsOffline = function (d) {
+        var n = document.getElementById('words-error-network');
+        var m = d && d.querySelector('.words-main');
+        if (!n || !m) return;
+        m.replaceChildren(n.content.cloneNode(true));
+        d.setAttribute('data-words-state', 'error');
+        d.setAttribute('aria-busy', 'false');
+        var c = d.querySelector('.words-status__count');
+        if (c) c.replaceChildren();
+        var a = d.querySelector('[data-' + 'words-review]');
+        if (a) a.hidden = true;
     };
     document.addEventListener('htmx:afterSwap', function (ev) {
         var target = ev.detail && ev.detail.target;
