@@ -1,0 +1,44 @@
+package components
+
+// PathKey is the strength legend and the node key. Desktop shows it in
+// the side column. Mobile puts the same markup in a popover.
+templ PathKey() {
+	<div class="card strength-legend">
+		<h2>@Pair("חוזק", "Strength")</h2>
+		<ul class="strength-legend__list">
+			<li>@StrengthPips(1) @Pair("שביר", "Fragile")</li>
+			<li>@StrengthPips(2) @Pair("רופס", "Shaky")</li>
+			<li>@StrengthPips(3) @Pair("יציב", "Steady")</li>
+			<li>@StrengthPips(4) @Pair("איתן", "Solid")</li>
+		</ul>
+	</div>
+	<div class="card node-key">
+		<h2>@Pair("מקרא", "Key")</h2>
+		<ul class="node-key__list">
+			<li class="path-node" data-state="done">
+				<span class="path-node__btn">@nodeIcon("done")</span>
+				<span class="path-node__label">@Pair("הושלם", "Done")</span>
+			</li>
+			<li class="path-node" data-state="current">
+				<span class="path-node__btn">@nodeIcon("current")</span>
+				<span class="path-node__label">@Pair("עכשיו", "Current")</span>
+			</li>
+			<li class="path-node" data-state="not-yet">
+				<span class="path-node__btn"></span>
+				<span class="path-node__label">@Pair("עוד לא", "Not yet")</span>
+			</li>
+			<li class="path-node" data-state="review">
+				<span class="path-node__btn">@nodeIcon("review")</span>
+				<span class="path-node__label">@Pair("חזרה", "Review")</span>
+			</li>
+			<li class="path-node" data-state="checkpoint">
+				<span class="path-node__btn">@nodeIcon("checkpoint")</span>
+				<span class="path-node__label">@Pair("מִבְחָן", "Checkpoint")</span>
+			</li>
+			<li class="path-node" data-state="tutor">
+				<span class="path-node__btn">@nodeIcon("tutor")</span>
+				<span class="path-node__label">@Pair("שיעור", "Class")</span>
+			</li>
+		</ul>
+	</div>
+}

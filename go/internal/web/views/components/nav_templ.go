@@ -238,7 +238,8 @@ func navLink(item navItem, current string) templ.Component {
 
 // Shell is the rail and dock. The account button stays out until a session
 // can fill the name. The language and theme controls are live.
-func Shell(current string) templ.Component {
+// goal is the unit word count. An empty UnitID leaves the rail as it was.
+func Shell(current string, goal RailGoal) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -269,7 +270,15 @@ func Shell(current string) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</nav><div class=\"hebrew-shell-sync\" data-shell-sync aria-live=\"polite\"></div><div class=\"hebrew-shell-account\"><div class=\"ui-lang\" role=\"group\" data-ui-aria-he=\"שפת הממשק\" data-ui-aria-en=\"Interface language\" aria-label=\"שפת הממשק\"><button type=\"button\" class=\"ui-lang-btn\" data-ui-lang-set=\"en\" aria-pressed=\"false\">EN</button> <button type=\"button\" class=\"ui-lang-btn\" data-ui-lang-set=\"he\" aria-pressed=\"false\">עב</button></div><div class=\"theme-switch\" role=\"radiogroup\" data-ui-aria-he=\"ערכת נושא\" data-ui-aria-en=\"Theme\" aria-label=\"ערכת נושא\"><svg class=\"icon\" width=\"18\" height=\"18\" aria-hidden=\"true\" focusable=\"false\"><use href=\"/shared/brand/sprite.svg#icon-theme\"></use></svg> <button type=\"button\" role=\"radio\" data-theme-choice=\"light\" aria-checked=\"false\" tabindex=\"-1\">בהיר</button> <button type=\"button\" role=\"radio\" data-theme-choice=\"dark\" aria-checked=\"false\" tabindex=\"-1\">כהה</button> <button type=\"button\" role=\"radio\" data-theme-choice=\"auto\" aria-checked=\"true\" tabindex=\"0\">אוטומטי</button></div></div></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</nav>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = RailGoalView(goal).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<div class=\"hebrew-shell-sync\" data-shell-sync aria-live=\"polite\"></div><div class=\"hebrew-shell-account\"><div class=\"ui-lang\" role=\"group\" data-ui-aria-he=\"שפת הממשק\" data-ui-aria-en=\"Interface language\" aria-label=\"שפת הממשק\"><button type=\"button\" class=\"ui-lang-btn\" data-ui-lang-set=\"en\" aria-pressed=\"false\">EN</button> <button type=\"button\" class=\"ui-lang-btn\" data-ui-lang-set=\"he\" aria-pressed=\"false\">עב</button></div><div class=\"theme-switch\" role=\"radiogroup\" data-ui-aria-he=\"ערכת נושא\" data-ui-aria-en=\"Theme\" aria-label=\"ערכת נושא\"><svg class=\"icon\" width=\"18\" height=\"18\" aria-hidden=\"true\" focusable=\"false\"><use href=\"/shared/brand/sprite.svg#icon-theme\"></use></svg> <button type=\"button\" role=\"radio\" data-theme-choice=\"light\" aria-checked=\"false\" tabindex=\"-1\">בהיר</button> <button type=\"button\" role=\"radio\" data-theme-choice=\"dark\" aria-checked=\"false\" tabindex=\"-1\">כהה</button> <button type=\"button\" role=\"radio\" data-theme-choice=\"auto\" aria-checked=\"true\" tabindex=\"0\">אוטומטי</button></div></div></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

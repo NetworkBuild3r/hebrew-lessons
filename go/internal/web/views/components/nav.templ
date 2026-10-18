@@ -48,7 +48,8 @@ templ navLink(item navItem, current string) {
 
 // Shell is the rail and dock. The account button stays out until a session
 // can fill the name. The language and theme controls are live.
-templ Shell(current string) {
+// goal is the unit word count. An empty UnitID leaves the rail as it was.
+templ Shell(current string, goal RailGoal) {
 	<div class="hebrew-shell ui-chrome" dir="rtl" lang="he">
 		<div class="hebrew-shell-inner">
 			<a class="hebrew-brand" href="/" data-brand>
@@ -60,6 +61,7 @@ templ Shell(current string) {
 					@navLink(item, current)
 				}
 			</nav>
+			@RailGoalView(goal)
 			<div class="hebrew-shell-sync" data-shell-sync aria-live="polite"></div>
 			<div class="hebrew-shell-account">
 				<div class="ui-lang" role="group" data-ui-aria-he="שפת הממשק" data-ui-aria-en="Interface language" aria-label="שפת הממשק">

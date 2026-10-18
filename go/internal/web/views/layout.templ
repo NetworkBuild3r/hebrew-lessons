@@ -31,10 +31,18 @@ templ Layout(doc Doc) {
 			<link rel="apple-touch-icon" href="/shared/brand/apple-touch-icon.png"/>
 			<link rel="preload" as="font" type="font/woff2" href="/shared/fonts/noto-sans-hebrew-hebrew.woff2" crossorigin="anonymous"/>
 			<link rel="stylesheet" href="/shared/worksheet.css"/>
+			if doc.HTMX {
+				<script src="/_static/htmx.min.js"></script>
+			}
 		</head>
-		<body class={ doc.BodyClass }>
+		<body
+			class={ doc.BodyClass }
+			if doc.CSRFHeader != "" {
+				hx-headers={ doc.CSRFHeader }
+			}
+		>
 			<div id="app-shell">
-				@components.Shell(doc.CurrentNav)
+				@components.Shell(doc.CurrentNav, doc.Goal)
 			</div>
 			<main class="wrap" id="app-main" tabindex="-1" data-route-ready={ doc.RouteReady }>
 				@doc.Main
@@ -55,4 +63,7 @@ type Doc struct {
 	CurrentNav string
 	RouteReady string
 	Main       templ.Component
+	HTMX       bool
+	CSRFHeader string
+	Goal       components.RailGoal
 }

@@ -753,3 +753,23 @@ describe('INIT-005/SPEC-013 Chrome scripts are present and parse', () => {
         assert.match(read(path.join(__dirname, 'spikes-not-served.test.js')), /spikes/);
     });
 });
+
+describe('learning path nodes (ADR-0017)', () => {
+    const css = read(path.join(ROOT, 'shared', 'worksheet.css'));
+    const node = read(path.join(ROOT, 'go', 'internal', 'web', 'views', 'components', 'path_node.templ'));
+
+    it('styles every path-node state', () => {
+        for (const state of ['done', 'current', 'not-yet', 'review', 'checkpoint', 'tutor']) {
+            assert.match(css, new RegExp('\\.path-node\\[data-state="' + state + '"\\]'));
+        }
+        assert.match(css, /\.path-node\[data-state="not-yet"\] \.path-node__btn\s*\{[^}]*border:\s*2px dashed var\(--color-border-subtle\)/);
+        assert.match(css, /\.path-node\[data-state="current"\] \.path-node__btn\s*\{[^}]*box-shadow:\s*0 0 0 var\(--node-ring\) var\(--color-primary-soft\)/);
+    });
+
+    it('keeps not-yet nodes as plain links', () => {
+        assert.doesNotMatch(node, /aria-disabled/);
+        assert.match(node, /data-gate="warn"/);
+        assert.match(node, /data-gate="open"/);
+        assert.equal((node.match(/aria-current="step"/g) || []).length, 1);
+    });
+});

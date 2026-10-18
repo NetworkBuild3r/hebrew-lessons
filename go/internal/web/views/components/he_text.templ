@@ -1,13 +1,16 @@
 package components
 
 // HeText isolates Hebrew. size "word" and "pointed" use --font-hebrew-pointed-display.
-// Anything else is an inline bdi, for a Hebrew word inside an English sentence.
+// size "display" is the unit and Today title. Anything else is an inline bdi,
+// for a Hebrew word inside an English sentence.
 templ HeText(size string, he string) {
 	if he != "" {
 		if size == "word" {
 			<span class="he-word he-text--word" lang="he" dir="rtl">{ he }</span>
 		} else if size == "pointed" {
 			<span class="he-text--pointed" lang="he" dir="rtl">{ he }</span>
+		} else if size == "display" {
+			<span class="he-text--display" lang="he" dir="rtl">{ he }</span>
 		} else {
 			<bdi lang="he">{ he }</bdi>
 		}

@@ -1,0 +1,21 @@
+package components
+
+import "strconv"
+
+// RailGoalView is the sidebar goal. The ring text, the ring value, and
+// the words line all come from Learned and Total. The label is Unit N.
+templ RailGoalView(g RailGoal) {
+	if g.UnitID != "" {
+		<div class="rail-goal" data-unit-id={ g.UnitID }>
+			<svg class="progress-ring" data-value={ strconv.Itoa(g.Learned) } data-max={ strconv.Itoa(g.Total) } viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+				<circle class="progress-ring__track" cx="20" cy="20" r="16"></circle>
+				<circle class="progress-ring__value" cx="20" cy="20" r="16" pathLength="100" stroke-dasharray={ RingDash(g.Learned, g.Total) }></circle>
+				<text x="20" y="21">{ RingText(g.Learned, g.Total) }</text>
+			</svg>
+			<div class="rail-goal__text">
+				<p class="rail-goal__label">@Pair(unitLabelHe(g.UnitN), unitLabelEn(g.UnitN))</p>
+				<p class="rail-goal__words">@Pair(g.WordsHe, g.WordsEn)</p>
+			</div>
+		</div>
+	}
+}

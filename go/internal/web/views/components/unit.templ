@@ -1,0 +1,75 @@
+package components
+
+import (
+	"strconv"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/path"
+)
+
+// UnitSection is one unit: a banner when it is current, otherwise a divider,
+// then that unit's path.
+templ UnitSection(u path.Unit) {
+	<section
+		class="path-unit"
+		id={ "unit-" + u.ID }
+		data-unit-id={ u.ID }
+		aria-labelledby={ "unit-title-" + u.ID }
+		if u.NotYet {
+			data-not-yet="true"
+		}
+		if u.Current {
+			data-current="true"
+		}
+	>
+		if u.Current {
+			@UnitBanner(u)
+		} else {
+			@UnitDivider(u)
+		}
+		<ol class="path">
+			for _, n := range u.Nodes {
+				@PathNode(n)
+			}
+		</ol>
+	</section>
+}
+
+// UnitBanner is the current unit. The progress value and the words line
+// are the same learned/total pair the rail ring uses.
+templ UnitBanner(u path.Unit) {
+	<div class="unit-banner" data-unit-id={ u.ID }>
+		<p class="unit-banner__kicker">@Pair(u.KickerHe, u.KickerEn)</p>
+		<h2 id={ "unit-title-" + u.ID } class="unit-banner__title">
+			@HeText("display", u.TitleHe)
+		</h2>
+		<p class="unit-banner__en">
+			<span lang="en" dir="ltr">{ u.Title }</span>
+			if u.Concept != "" {
+				<span class="unit-banner__concept">@Pair(u.ConceptHe, u.Concept)</span>
+			}
+		</p>
+		<div class="unit-banner__progress">
+			<progress id={ "unit-words-" + u.ID } value={ strconv.Itoa(u.NewLearned) } max={ strconv.Itoa(u.NewTotal) }></progress>
+			<p class="unit-banner__words"><label for={ "unit-words-" + u.ID }>@Pair(u.BannerHe, u.BannerEn)</label></p>
+		</div>
+		if u.GuideHref != "" {
+			<p class="unit-banner__actions">
+				<a class="btn btn-ghost" href={ templ.SafeURL(u.GuideHref) }>@Pair("מדריך היחידה", "Unit guide")</a>
+			</p>
+		}
+	</div>
+}
+
+// UnitDivider is a unit that is not the current one.
+templ UnitDivider(u path.Unit) {
+	<h2 id={ "unit-title-" + u.ID } class="unit-divider">
+		<span class="unit-divider__rule"></span>
+		<span class="unit-divider__pill">
+			<span class="unit-divider__en" lang="en" dir="ltr">{ unitLabelEn(u.Order) } · { u.Title }</span>
+			if u.TitleHe != "" {
+				<span class="unit-divider__he" lang="he" dir="rtl">{ u.TitleHe }</span>
+			}
+		</span>
+		<span class="unit-divider__rule"></span>
+	</h2>
+}

@@ -305,6 +305,20 @@ function assertMobileDock(geo, where) {
     );
 }
 
+describe('learning path zigzag', () => {
+    it('stays inside a 358px column on a phone', () => {
+        const zig = Number((CSS.match(/--path-zig:\s*(\d+)px/) || [])[1]);
+        const node = Number((CSS.match(/--node-size:\s*(\d+)px/) || [])[1]);
+        const mult = Number((CSS.match(/nth-child\(8n\+3\)\s*\{\s*--zig:\s*([0-9.]+)/) || [])[1]);
+        assert.equal(zig, 90);
+        assert.equal(node, 64);
+        assert.equal(mult, 1.66);
+        assert.match(CSS, /--path-shift:\s*calc\(var\(--path-zig\)\s*\*\s*\.35\)/);
+        const travel = zig * 0.35 * mult + node / 2;
+        assert.ok(travel <= 358 / 2, 'zigzag reaches ' + travel + 'px from the centre of 358');
+    });
+});
+
 describe('INIT-013/SPEC-006 responsive layout (Chrome geometry)', { concurrency: false }, () => {
     let browser;
     let base;
