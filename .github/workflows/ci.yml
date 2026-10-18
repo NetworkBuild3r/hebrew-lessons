@@ -16,13 +16,16 @@
 # smoke step joins the app container's network (--network container:) instead.
 #
 # pull_request on k8-build is refused when the head repository is a fork.
+# pull_request has no base-branch filter, so a stacked pull request (its base
+# is another PR branch, not v2) still runs. Jobs skip when github.base_ref is
+# main; main's own workflows cover those. A pull request never logs in or
+# pushes. A push still runs only for v2.
 name: ci
 
 on:
   push:
     branches: [v2]
   pull_request:
-    branches: [v2]
 
 permissions:
   contents: read
@@ -39,11 +42,16 @@ jobs:
     runs-on: k8-build
     timeout-minutes: 30
     # Module github.com/NetworkBuild3r/hebrew-lessons at the repository root
-    # (not go/). setup-go reads Go 1.26 from go.mod. Every Go command below
-    # runs in that root with CGO disabled.
+    # (not go/). setup-go reads Go 1.26 from go.mod. The job default is
+    # CGO_ENABLED=0. The race step sets CGO_ENABLED=1 for that step only.
+    # The image build stays CGO_ENABLED=0.
     env:
       CGO_ENABLED: "0"
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # github.base_ref is empty on a push, so a push to v2 still runs.
+    # Fork pull requests never reach this runner.
+    if: >-
+      github.base_ref != 'main' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - uses: actions/checkout@v6
         with:
@@ -63,7 +71,7 @@ jobs:
             echo "go.mod is present."
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Go tests skipped::go.mod is not in this commit. gofmt, go vet, and go test are skipped."
+            echo "::notice title=Go tests skipped::go.mod is not in this commit. gofmt, go vet, go test, and go test -race are skipped."
           fi
 
       - uses: actions/setup-go@v7
@@ -94,13 +102,41 @@ jobs:
         shell: bash
         run: go test ./...
 
+      # -race needs cgo and a C toolchain. CGO_ENABLED=1 is this step only.
+      # gofmt, go vet, and go test stay on the job default CGO_ENABLED=0.
+      # Main's k8-build workflows (go.yml, test.yml, image-go.yml) do not
+      # install gcc; they use the ARC image's git, setup-go, setup-node, and
+      # docker. Install gcc and libc6-dev only when command -v gcc fails.
+      # The image build stays CGO_ENABLED=0 in the Dockerfile.
+      - name: go test -race
+        if: steps.module.outputs.present == 'true'
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          set -euo pipefail
+          if ! command -v gcc >/dev/null 2>&1; then
+            echo "gcc is not on PATH; installing gcc and libc6-dev"
+            if [ "$(id -u)" -eq 0 ]; then
+              apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev
+            else
+              sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc libc6-dev
+            fi
+          else
+            echo "gcc is $(command -v gcc)"
+          fi
+          go test -race ./...
+
   image:
     needs: test
     runs-on: k8-build
     timeout-minutes: 30
     # needs.test success is required here because a job-level if replaces the
-    # default success() check. Fork pull requests never reach this runner.
+    # default success() check. Skip when the pull request base is main.
+    # Fork pull requests never reach this runner. Login and push stay limited
+    # to a push to v2, so a pull request still never logs in or pushes.
     if: >-
+      github.base_ref != 'main' &&
       needs.test.result == 'success' &&
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     permissions:
