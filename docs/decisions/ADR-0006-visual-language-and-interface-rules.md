@@ -89,7 +89,7 @@ Rubik, the 24px target, the 44px primary target, the contrast floors, and reduce
 
 ### 2. Tokens
 
-The machine-readable copy is [tokens.json](ADR-0006-assets/tokens.json). It has 48 tokens. SPEC-009 reads that file. The tables here are the same values. A contrast ratio is `toFixed(1)` of the WCAG ratio, using the function in `spikes/look/check.js`.
+The machine-readable copy is [tokens.json](ADR-0006-assets/tokens.json). It has 49 tokens. SPEC-009 reads that file. The tables here are the same values. A contrast ratio is `toFixed(1)` of the WCAG ratio, using the function in `spikes/look/check.js`.
 
 #### Colour
 
@@ -154,14 +154,15 @@ Pointed lines set `overflow: visible` and block padding of `space.2`, so a vowel
 
 | Token | Value | Purpose |
 |-------|-------|---------|
-| `space.1` | 0.25rem | Focus offset and the smallest inset. |
-| `space.2` | 0.5rem | Padding on the pointed word, gap inside a button. |
-| `space.3` | 0.75rem | Gap inside the cluster, space before a heading. |
-| `space.4` | 1rem | Scheme box and phone-dock padding. |
-| `space.5` | 1.5rem | Correction panel, and the page inset on a narrow window. |
-| `space.6` | 2.5rem | Cluster padding, gap between blocks, default page inset. |
-| `space.7` | 4rem | Space under the mast. |
-| `space.8` | 6rem | Space before a second screen, and the page inset on a wide window. |
+| `space.1` | 4px | Focus offset and the smallest inset. |
+| `space.2` | 8px | Padding on the pointed word, gap inside a button. |
+| `space.3` | 12px | Gap inside the cluster, space before a heading. |
+| `space.4` | 16px | Scheme box and phone-dock padding. |
+| `space.5` | 24px | Correction panel, and the page inset on a narrow window. |
+| `space.6` | 32px | Cluster padding, gap between blocks, default page inset. |
+| `space.7` | 48px | Space under the mast. |
+| `space.8` | 64px | Space before a second screen, and the page inset on a wide window. |
+| `space.9` | 96px | Space between major sections. |
 | `space.page` | `space.6`, `space.5` when narrow, `space.8` when wide | Page inset. It points at those three tokens. |
 | `radius.default` | 2px | Corner of a card, a button, a picture frame, and the scheme box. |
 | `elevation.surface` | none | No shadow. The edge is `color.line` and `border.width`. |

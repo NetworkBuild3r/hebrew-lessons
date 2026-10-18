@@ -188,7 +188,7 @@ describe('ADR-0006 design tokens', () => {
             assert.ok(block.includes(token.css), token.id + ' css name ' + token.css);
             assert.ok(block.includes(token.id) || block.includes(token.css), token.id);
         }
-        assert.equal(tokens.length, 48);
+        assert.equal(tokens.length, 49);
     });
 
     it('gives every color token a light and a dark custom property', () => {
@@ -244,26 +244,9 @@ describe('ADR-0006 design tokens', () => {
     });
 
     it('publishes the remaining token values, including breakpoints and reduced motion', () => {
-        // Guides v3 Ink & Lamplight replaces the ADR-0006 rem scale with an 8pt
-        // pixel scale. The custom properties are declared once, in this block,
-        // and later rules do not override them, so the live scale has to land
-        // here. tokens.json keeps the historical rem record on purpose.
-        const spaceScale = {
-            '--space-1': '4px',
-            '--space-2': '8px',
-            '--space-3': '12px',
-            '--space-4': '16px',
-            '--space-5': '24px',
-            '--space-6': '32px',
-            '--space-7': '48px',
-            '--space-8': '64px'
-        };
+        // Every custom property here, including the 8pt spacing scale, is read from tokens.json.
         for (const token of tokens) {
             if (!token.css.startsWith('--')) continue;
-            if (spaceScale[token.css]) {
-                assert.equal(light[token.css], spaceScale[token.css], token.id);
-                continue;
-            }
             const value = cssLength(token, 'value');
             if (value) assert.equal(light[token.css], value, token.id);
             const narrowValue = cssLength(token, 'narrow');
@@ -271,7 +254,6 @@ describe('ADR-0006 design tokens', () => {
             const wideValue = cssLength(token, 'wide');
             if (wideValue) assert.equal(wide[token.css], wideValue, token.id + ' wide');
         }
-        assert.equal(light['--space-9'], '96px');
         assert.equal(light['--font-family'], 'Rubik, sans-serif');
         assert.equal(light['--font-weight-axis'], '300 700');
         assert.equal(light['--letter-spacing'], '0');

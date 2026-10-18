@@ -1937,7 +1937,7 @@ a.lesson-link { transition: background 0.15s ease; border-radius: 18px; }
     --line-height-word: 1.5;
     --line-height-body: 1.5;
     --letter-spacing: 0;
-    /* Guides v3 Ink & Lamplight. Live 8pt scale; tokens.json still records the ADR-0006 rem scale. */
+    /* Guides v3 Ink & Lamplight 8pt scale. The values are space.1–space.9 in tokens.json. */
     --space-1: 4px;
     --space-2: 8px;
     --space-3: 12px;
