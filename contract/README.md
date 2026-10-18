@@ -103,6 +103,6 @@ Enum value order is frozen on purpose. `["shared", "personal"]` and `["working",
 
 ## What this PR does not freeze
 
-Two OAuth bugs are known and must not become the contract. `TestTokenChecksClientSecret` and `TestAuthCodeIsBoundToTheRegisteringClient` are skipped and marked expected-to-be-fixed. In-memory authorization codes and pending sign-ins are not part of that skip.
+`oauth_security_test.go` checks client secrets, grant binding, and the authorization-code `redirect_uri` over HTTP. Those checks do not record a golden. In-memory authorization codes and pending sign-ins are not recorded.
 
 `GET /mcp` (the server holds an SSE stream open) and the over-1MiB body (the socket is destroyed) are not exercised here.

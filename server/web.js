@@ -259,6 +259,27 @@ function sendPlain(res, status, text, extraHeaders) {
     res.end(body);
 }
 
+/**
+ * Public liveness. GET is the text "ok" and nothing else (no cookie, no lesson).
+ * HEAD carries the same headers and an empty body. POST is not this route.
+ * @param {import('http').ServerResponse} res
+ * @param {string} method
+ */
+function sendHealthz(res, method) {
+    security.applySecurityHeaders(res);
+    const body = 'ok';
+    res.writeHead(200, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Content-Length': Buffer.byteLength(body)
+    });
+    if (method === 'HEAD') {
+        res.end();
+        return;
+    }
+    res.end(body);
+}
+
 function sendRedirect(res, location) {
     security.applySecurityHeaders(res);
     res.writeHead(302, {
@@ -476,6 +497,13 @@ function listen() {
         }
 
         const run = async () => {
+            // Public liveness check. No session, no lesson data.
+            // POST and other methods fall through and are rejected below.
+            if (pathname === '/healthz' && (method === 'GET' || method === 'HEAD')) {
+                sendHealthz(res, method);
+                return;
+            }
+
             if (pathname === '/api' || pathname.startsWith('/api/')) {
                 // Normalize /api → /api/ for routing table (auth paths are absolute).
                 const apiPath = pathname === '/api' ? '/api/' : pathname;
