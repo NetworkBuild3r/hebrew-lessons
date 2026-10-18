@@ -75,6 +75,20 @@ func splitList(raw string) []string {
 	return out
 }
 
+// warnOptionalConfig logs when sign-in, speech, or MCP OAuth is unset.
+// Those settings are not required to boot. /healthz does not use them.
+func warnOptionalConfig(cfg app.Config) {
+	if os.Getenv("GOOGLE_OAUTH_CLIENT_ID") == "" || os.Getenv("GOOGLE_OAUTH_CLIENT_SECRET") == "" {
+		slog.Warn("google sign-in is off", "reason", "GOOGLE_OAUTH_CLIENT_ID or GOOGLE_OAUTH_CLIENT_SECRET is unset")
+	}
+	if cfg.ElevenLabsAPIKey == "" && cfg.TTS == nil {
+		slog.Warn("speech synthesis is off", "reason", "ELEVENLABS_API_KEY is unset")
+	}
+	if os.Getenv("MCP_AUTH_TOKEN") == "" || os.Getenv("MCP_PUBLIC_URL") == "" {
+		slog.Warn("mcp oauth is off", "reason", "MCP_AUTH_TOKEN or MCP_PUBLIC_URL is unset")
+	}
+}
+
 func setLogLevel(level string) {
 	var slogLevel slog.Level
 	switch level {

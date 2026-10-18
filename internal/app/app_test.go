@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -25,24 +26,44 @@ func (fakeTTS) Synthesize(context.Context, string, string, string) ([]byte, erro
 }
 
 func TestHealthzBothHandlers(t *testing.T) {
-	a := newTestApp(t, Config{DataDir: t.TempDir()})
-	if _, err := os.Stat(a.AudioDir()); err != nil {
+	dir := t.TempDir()
+	// No Google, ElevenLabs, or OAuth fields. New must still boot.
+	webH, mcpH, err := New(Config{DataDir: dir})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(a.cfg.DataDir + "/hebrew.sqlite"); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, "audio")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "hebrew.sqlite")); err != nil {
 		t.Fatal(err)
 	}
 
-	for _, name := range []string{"web", "mcp"} {
-		h := a.Web()
-		if name == "mcp" {
-			h = a.MCP()
-		}
-		body := getHealth(t, h)
+	for name, h := range map[string]http.Handler{"web": webH, "mcp": mcpH} {
+		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+		req.Header.Del("Authorization")
+		body := getHealthRequest(t, h, req)
 		if !body.OK {
 			t.Fatalf("%s health = %+v", name, body)
 		}
 	}
+}
+
+func TestDataDirFallback(t *testing.T) {
+	parent := t.TempDir()
+	blocked := filepath.Join(parent, "not-a-directory")
+	if err := os.WriteFile(blocked, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewApp(Config{DataDir: blocked})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = a.Close() })
+	if a.cfg.DataDir == blocked {
+		t.Fatal("startup used the blocked data dir")
+	}
+	getHealth(t, a.Web())
 }
 
 func TestHealthzWhenDBPingFails(t *testing.T) {
@@ -132,7 +153,7 @@ func TestApplyDefaults(t *testing.T) {
 
 func newTestApp(t *testing.T, cfg Config) *App {
 	t.Helper()
-	a, err := New(cfg)
+	a, err := NewApp(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,8 +165,15 @@ func getHealth(t *testing.T, h http.Handler) struct {
 	OK bool `json:"ok"`
 } {
 	t.Helper()
+	return getHealthRequest(t, h, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+}
+
+func getHealthRequest(t *testing.T, h http.Handler, req *http.Request) struct {
+	OK bool `json:"ok"`
+} {
+	t.Helper()
 	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
