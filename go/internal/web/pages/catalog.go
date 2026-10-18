@@ -143,7 +143,27 @@ func Guides(ctx context.Context, src Source, user *User) (guideview.GuideList, e
 	if err != nil {
 		return guideview.GuideList{}, err
 	}
-	return guideview.GuideList{Topics: groupTopics(rows)}, nil
+	groups := groupTopics(rows)
+	list := guideview.GuideList{Topics: groups, Count: countCards(groups)}
+	// The featured guide is the first card. It is not repeated in the grid.
+	if list.Count >= 3 && len(groups) > 0 && len(groups[0].Cards) > 0 {
+		hero := groups[0].Cards[0]
+		list.Hero = &hero
+		groups[0].Cards = groups[0].Cards[1:]
+		if len(groups[0].Cards) == 0 {
+			groups = groups[1:]
+		}
+		list.Topics = groups
+	}
+	return list, nil
+}
+
+func countCards(groups []guideview.TopicGroup) int {
+	n := 0
+	for _, group := range groups {
+		n += len(group.Cards)
+	}
+	return n
 }
 
 // OpenGuide returns one guide that would appear on the shelf.
@@ -329,8 +349,12 @@ func groupTopics(rows []catalogLesson) []guideview.TopicGroup {
 			Lang:     lang,
 			Dir:      dir,
 			Href:     planHref(row.PlanID, row.LessonID),
+			Topic:    topic,
+			Cover:    guideview.CoverFor(row.PlanID),
+			Letter:   guideview.CoverLetter(row.Title, topic),
 		})
 	}
+	guideview.AssignSlugs(groups)
 	return groups
 }
 

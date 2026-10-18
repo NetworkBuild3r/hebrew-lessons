@@ -1,9 +1,22 @@
 package components
 
 // EmptyGuides is the shelf when no published guide is visible.
+// English UI shows the Hebrew line above the English heading. Hebrew UI
+// hides that line and uses the Hebrew heading.
 templ EmptyGuides() {
 	<div class="card guides-state" data-guides-state="empty">
-		<p>אין מדריכים שפורסמו. <span lang="en" dir="ltr">(No published guides.)</span></p>
+		<div class="empty-art">
+			<img src="/shared/brand/illustrations/empty-guides.svg" alt="" aria-hidden="true" width="320" height="240"/>
+		</div>
+		<p class="empty-he" lang="he" dir="rtl">עֲדַיִן אֵין מַדְרִיכִים</p>
+		<h2 class="empty-title empty-title-en" lang="en" dir="ltr">No guides published yet</h2>
+		<h2 class="empty-title empty-title-he" lang="he" dir="rtl">עֲדַיִן אֵין מַדְרִיכִים</h2>
+		<p class="empty-body empty-body-en" lang="en" dir="ltr">Guides are short explainers — grammar, usage and reading tips with audio. When one is published it will show up here.</p>
+		<p class="empty-body empty-body-he" lang="he" dir="rtl">מדריכים הם הסברים קצרים: דקדוק, שימוש וטיפים לקריאה, עם שמע. מדריך שמתפרסם מופיע כאן.</p>
+		<p class="empty-actions">
+			<a class="btn btn-primary" href="/">@Pair("לשיעור של היום", "Go to today’s lesson")</a>
+			<a class="btn btn-ghost" href="/words/">@Pair("לעיון במילים", "Browse words")</a>
+		</p>
 	</div>
 }
 

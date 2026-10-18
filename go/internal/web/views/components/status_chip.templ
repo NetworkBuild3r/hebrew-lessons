@@ -1,0 +1,14 @@
+package components
+
+// StatusChip is omitted by the caller when progress is unknown. Do not pass
+// a made-up "new".
+templ StatusChip(status string) {
+	if status != "" {
+		<span class="status-chip" data-status={ status }>
+			<svg class="icon" width="16" height="16" aria-hidden="true" focusable="false">
+				<use href={ "/shared/brand/sprite.svg#icon-" + statusIcon(status) }></use>
+			</svg>
+			@Pair(statusHe(status), statusEn(status))
+		</span>
+	}
+}

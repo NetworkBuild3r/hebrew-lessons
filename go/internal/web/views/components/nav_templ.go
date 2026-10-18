@@ -21,8 +21,8 @@ func learnerNav() []navItem {
 	return []navItem{
 		{ID: "today", Href: "/", He: "היום", En: "Today", Icon: "today"},
 		{ID: "lessons", Href: "/lessons/", He: "שיעורים", En: "Lessons", Icon: "lessons"},
-		{ID: "guides", Href: "/guides/", He: "מדריכים", En: "Guides"},
-		{ID: "verbs", Href: "/verbs/", He: "פעלים", En: "Verbs"},
+		{ID: "guides", Href: "/guides/", He: "מדריכים", En: "Guides", Icon: "guides"},
+		{ID: "verbs", Href: "/verbs/", He: "פעלים", En: "Verbs", Icon: "verbs"},
 		{ID: "review", Href: "/review/", He: "חזרה", En: "Review", Icon: "review"},
 		{ID: "words", Href: "/words/", He: "מילים", En: "Words", Icon: "words"},
 		{ID: "progress", Href: "/progress/", He: "התקדמות", En: "Progress", Icon: "progress"},
@@ -259,7 +259,7 @@ func Shell(current string) templ.Component {
 			templ_7745c5c3_Var11 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"hebrew-shell ui-chrome\" dir=\"rtl\" lang=\"he\"><div class=\"hebrew-shell-inner\"><a class=\"hebrew-brand\" href=\"/\" data-brand><img class=\"hebrew-logo-mark\" src=\"/shared/brand/mark-a.svg\" width=\"30\" height=\"30\" alt=\"\" decoding=\"async\"> <span class=\"hebrew-brand-text ui-pair\"><span class=\"hebrew-brand-he ui-he\" lang=\"he\">דרך עברית</span><span class=\"hebrew-brand-en ui-en\" lang=\"en\" dir=\"ltr\">Hebrew Way</span></span></a><nav class=\"hebrew-shell-nav\" data-ui-aria-he=\"ניווט ראשי\" data-ui-aria-en=\"Main\" aria-label=\"ניווט ראשי\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"hebrew-shell ui-chrome\" dir=\"rtl\" lang=\"he\"><div class=\"hebrew-shell-inner\"><a class=\"hebrew-brand\" href=\"/\" data-brand><img class=\"hebrew-logo-mark\" src=\"/shared/brand/mark-a.svg\" width=\"30\" height=\"30\" alt=\"\" decoding=\"async\"> <span class=\"hebrew-brand-text ui-pair\"><span class=\"hebrew-brand-he ui-he\" lang=\"he\">דֶּרֶךְ עִבְרִית</span><span class=\"hebrew-brand-en ui-en\" lang=\"en\" dir=\"ltr\">Hebrew Way</span></span></a><nav class=\"hebrew-shell-nav\" data-ui-aria-he=\"ניווט ראשי\" data-ui-aria-en=\"Main\" aria-label=\"ניווט ראשי\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -269,15 +269,31 @@ func Shell(current string) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</nav><div class=\"hebrew-shell-sync\" data-shell-sync aria-live=\"polite\"></div><div class=\"hebrew-shell-account\"><div class=\"ui-lang\" role=\"group\" data-ui-aria-he=\"שפת הממשק\" data-ui-aria-en=\"Interface language\" aria-label=\"שפת הממשק\"><button type=\"button\" class=\"ui-lang-btn\" data-ui-lang-set=\"en\" aria-pressed=\"false\">EN</button> <button type=\"button\" class=\"ui-lang-btn\" data-ui-lang-set=\"he\" aria-pressed=\"false\">עב</button></div><button type=\"button\" class=\"hebrew-shell-theme-toggle\" data-theme-toggle aria-pressed=\"false\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</nav><div class=\"hebrew-shell-sync\" data-shell-sync aria-live=\"polite\"></div><div class=\"hebrew-shell-account\"><div class=\"ui-lang\" role=\"group\" data-ui-aria-he=\"שפת הממשק\" data-ui-aria-en=\"Interface language\" aria-label=\"שפת הממשק\"><button type=\"button\" class=\"ui-lang-btn\" data-ui-lang-set=\"en\" aria-pressed=\"false\">EN</button> <button type=\"button\" class=\"ui-lang-btn\" data-ui-lang-set=\"he\" aria-pressed=\"false\">עב</button></div><button type=\"button\" class=\"hebrew-shell-theme-toggle\" data-theme-toggle aria-pressed=\"false\"><span class=\"theme-choice theme-choice-light\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = Pair("מצב כהה", "Dark mode").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Pair("בהיר", "Light").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</button> <button type=\"button\" class=\"hebrew-shell-account-btn\" id=\"hebrew-shell-account-btn\" aria-expanded=\"false\" aria-haspopup=\"true\" aria-controls=\"hebrew-shell-account-menu\"><span class=\"hebrew-shell-account-name\"></span> <span class=\"hebrew-shell-account-caret\" aria-hidden=\"true\">▾</span></button><div class=\"hebrew-shell-account-menu hidden\" id=\"hebrew-shell-account-menu\" role=\"menu\" hidden><button type=\"button\" class=\"hebrew-shell-menu-item\" role=\"menuitem\" data-shell-action=\"change-password\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</span> <span class=\"theme-choice theme-choice-dark\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = Pair("כהה", "Dark").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</span> <span class=\"theme-choice theme-choice-auto\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = Pair("לפי המערכת", "Auto").Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "</span></button> <button type=\"button\" class=\"hebrew-shell-account-btn\" id=\"hebrew-shell-account-btn\" aria-expanded=\"false\" aria-haspopup=\"true\" aria-controls=\"hebrew-shell-account-menu\"><span class=\"hebrew-shell-account-name\"></span> <span class=\"hebrew-shell-account-caret\" aria-hidden=\"true\">▾</span></button><div class=\"hebrew-shell-account-menu hidden\" id=\"hebrew-shell-account-menu\" role=\"menu\" hidden><button type=\"button\" class=\"hebrew-shell-menu-item\" role=\"menuitem\" data-shell-action=\"change-password\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -285,7 +301,7 @@ func Shell(current string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</button> <button type=\"button\" class=\"hebrew-shell-menu-item\" role=\"menuitem\" data-shell-action=\"sign-out\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</button> <button type=\"button\" class=\"hebrew-shell-menu-item\" role=\"menuitem\" data-shell-action=\"sign-out\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -293,7 +309,7 @@ func Shell(current string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "</button><p class=\"hebrew-shell-privacy\" role=\"note\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</button><p class=\"hebrew-shell-privacy\" role=\"note\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -301,7 +317,7 @@ func Shell(current string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</p></div></div></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</p></div></div></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

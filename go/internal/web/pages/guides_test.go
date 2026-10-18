@@ -159,14 +159,20 @@ func TestShelfMatchesTheNodePage(t *testing.T) {
 	if strings.Contains(html, "fonts.googleapis.com") || strings.Contains(html, "cdn.") {
 		t.Fatal("page references a font CDN")
 	}
-	if strings.Count(html, "<script") != 1 {
-		t.Fatalf("script count %d, want the pre-paint script only", strings.Count(html, "<script"))
+	if strings.Count(html, "<script") != 3 {
+		t.Fatalf("script count %d, want the two pre-paint scripts and the theme toggle", strings.Count(html, "<script"))
 	}
 	if !strings.Contains(html, "localStorage.getItem('hebrew-ui-lang')") {
 		t.Fatal("pre-paint script missing")
 	}
+	if !strings.Contains(html, "localStorage.getItem('hebrew-theme')") || !strings.Contains(html, "prefers-color-scheme: dark") {
+		t.Fatal("theme script missing")
+	}
+	if !strings.Contains(html, "noto-sans-hebrew-hebrew.woff2") {
+		t.Fatal("hebrew face was not preloaded")
+	}
 	if strings.Contains(html, "<script src=") {
-		t.Fatal("a new script was added")
+		t.Fatal("a new script src was added")
 	}
 	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatal("nosniff missing")
@@ -182,8 +188,11 @@ func TestEmptyShelf(t *testing.T) {
 	if !strings.Contains(html, `data-guides-state="empty"`) {
 		t.Fatalf("empty state missing:\n%s", html)
 	}
-	if !strings.Contains(html, "אין מדריכים שפורסמו.") || !strings.Contains(html, `lang="en" dir="ltr">(No published guides.)</span>`) {
+	if !strings.Contains(html, "עֲדַיִן אֵין מַדְרִיכִים") || !strings.Contains(html, "No guides published yet") {
 		t.Fatalf("empty copy missing:\n%s", html)
+	}
+	if !strings.Contains(html, "empty-guides.svg") {
+		t.Fatal("empty illustration missing")
 	}
 }
 
@@ -230,6 +239,10 @@ func TestGuideDetailRendersExplainerWithoutPictures(t *testing.T) {
 		`class="root-letter"`,
 		`lang="en" dir="ltr">he thought`,
 		`lang="en" dir="ltr">chashav`,
+		`data-say="` + pointed + `"`,
+		`data-speak="` + pointed + `"`,
+		`class="audio-btn"`,
+		`example-row__gloss`,
 		`class="explainer-table"`,
 		`data-tone="green"`,
 		`lang="en" dir="ltr">Go`,
@@ -370,6 +383,44 @@ func TestHealthzSurvivesTheMount(t *testing.T) {
 	health = get(t, mux, "/healthz", false)
 	if body(health) != "ok" {
 		t.Fatal("mount changed /healthz")
+	}
+}
+
+func TestHeroIsNotRepeatedInTheGrid(t *testing.T) {
+	src := memSource{rows: []PlanSnapshot{
+		guideSnapshot("guides-shelf", "Verbs", "decoding", "Decoding Hebrew Verbs", "everyone", "guide", ""),
+		guideSnapshot("guides-shelf", "Verbs", "roots", pointed, "everyone", "guide", ""),
+		guideSnapshot("nouns", "Nouns", "bayit", "House", "everyone", "guide", ""),
+	}}
+	html := body(get(t, newMux(src), "/guides/", false))
+	if !strings.Contains(html, `data-guides-hero`) {
+		t.Fatal("hero missing")
+	}
+	if strings.Count(html, `data-lesson-id="decoding"`) != 0 {
+		t.Fatal("featured guide was also a card")
+	}
+	if !strings.Contains(html, "lesson=decoding") {
+		t.Fatal("hero does not open the featured guide")
+	}
+	if !strings.Contains(html, `data-lesson-id="roots"`) || !strings.Contains(html, `data-lesson-id="bayit"`) {
+		t.Fatal("the other guides left the grid")
+	}
+	if strings.Contains(html, `id="topic-verbs"`) && strings.Contains(html, `data-lesson-id="decoding"`) {
+		t.Fatal("verbs topic still contains the hero card")
+	}
+}
+
+func TestTwoGuidesHaveNoHero(t *testing.T) {
+	src := memSource{rows: []PlanSnapshot{
+		guideSnapshot("guides-shelf", "Verbs", "decoding", "Decoding Hebrew Verbs", "everyone", "guide", ""),
+		guideSnapshot("guides-shelf", "Verbs", "roots", pointed, "everyone", "guide", ""),
+	}}
+	html := body(get(t, newMux(src), "/guides/", false))
+	if strings.Contains(html, `data-guides-hero`) {
+		t.Fatal("hero shown for fewer than three guides")
+	}
+	if !strings.Contains(html, `data-lesson-id="decoding"`) || !strings.Contains(html, `data-lesson-id="roots"`) {
+		t.Fatal("both cards should stay in the grid")
 	}
 }
 

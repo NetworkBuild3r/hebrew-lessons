@@ -1670,32 +1670,34 @@ textarea {
 .story-questions-toggle { display: grid; gap: 0.25rem; justify-items: start; }
 /* === end 2026-10-08 learner-support === */
 
-/* === self-hosted Rubik (SIL OFL, see fonts/OFL.txt). Replaces the Google Fonts link. === */
+/* === self-hosted Noto Sans Hebrew + Frank Ruhl Libre (SIL OFL, see fonts/OFL.txt). ===
+   Three faces, same count as the Rubik set they replace. Rubik files stay on disk
+   for the brand outlines. The ADR-0006 --font-family: Rubik block is unchanged. */
 @font-face {
-    font-family: "Rubik";
+    font-family: "Noto Sans Hebrew";
     font-style: normal;
-    font-weight: 300 700;
+    font-weight: 300 800;
     font-display: swap;
-    src: url("fonts/rubik-hebrew.woff2") format("woff2");
-    unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+    src: url("fonts/noto-sans-hebrew-hebrew.woff2") format("woff2");
+    unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
 }
 @font-face {
-    font-family: "Rubik";
+    font-family: "Noto Sans Hebrew";
     font-style: normal;
-    font-weight: 300 700;
+    font-weight: 300 800;
     font-display: swap;
-    src: url("fonts/rubik-latin-ext.woff2") format("woff2");
-    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+    src: url("fonts/noto-sans-hebrew-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0100-017F, U+0131, U+02BB-02BF, U+02C6, U+02DA, U+02DC, U+0301, U+0304, U+2000-206F, U+2074, U+20AC, U+2122, U+2190-2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
-    font-family: "Rubik";
+    font-family: "Frank Ruhl Libre";
     font-style: normal;
-    font-weight: 300 700;
+    font-weight: 400 900;
     font-display: swap;
-    src: url("fonts/rubik-latin.woff2") format("woff2");
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    src: url("fonts/frank-ruhl-libre-hebrew.woff2") format("woff2");
+    unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
 }
-/* === end self-hosted Rubik === */
+/* === end self-hosted faces === */
 
 /* === INIT-005/SPEC-002 SPA shell helpers === */
 .visually-hidden {
@@ -4421,6 +4423,43 @@ img.hebrew-logo-mark {
         --color-border-subtle: #263044;
         --color-border: #263044;
     }
+}
+
+/* === 2026 redesign tokens (Figma "2026 / Theme" + "2026 / Layout") — additive, guarded hex unchanged === */
+:root {
+    --font-hebrew-sans: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
+    --font-hebrew-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
+    /* Pointed display face. One token: hero lettering, cover letters, pointed lines, verse. */
+    --font-hebrew-lettering: "Frank Ruhl Libre", "Noto Serif Hebrew", "Times New Roman", serif;
+    --font-sans: "Noto Sans Hebrew", "Segoe UI", system-ui, sans-serif;
+    --line-height-pointed: 1.7;
+    --size-display: 64px;
+    --size-h2: 24px;
+    --size-caption: 14px;
+    --radius-sm: 8px;
+    --radius-hero: 22px;
+    --color-illus-tile: #EFE6D3;
+    --color-hero-muted: #E2E8F0;
+    --color-accent-olive: #4F5B26;
+    --color-accent-olive-soft: #EEF1DC;
+    --color-accent-sky-soft: #DCEBF8;
+    --color-accent-sun: #FBBF24;
+    --color-accent-pomegranate: #B3363F;
+    --color-accent-pomegranate-soft: #F8E4E2;
+    --shadow-card: 0 1px 2px rgba(18, 22, 33, 0.06), 0 8px 24px -4px rgba(18, 22, 33, 0.07);
+    --shadow-raised: 0 14px 32px -6px rgba(18, 22, 33, 0.14);
+}
+:root[data-theme="dark"] {
+    --color-illus-tile: #D9CDB4;
+    --color-hero-muted: #E2E8F0;
+    --color-accent-olive: #B9C77A;
+    --color-accent-olive-soft: #232A14;
+    --color-accent-sky-soft: #16263D;
+    --color-accent-sun: #FBBF24;
+    --color-accent-pomegranate: #F08A84;
+    --color-accent-pomegranate-soft: #3A1A1C;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-raised: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
 /* Wider screens for the data-heavy views; the shell header is always wider than the page. */
@@ -8159,4 +8198,104 @@ section[data-block-type="conjugation-table"][data-mode="drill"][data-drill-owner
     .vp-map-verb [lang="en"] { display: none; }
     .vp-sq { width: 0.5rem; height: 0.5rem; }
     .vp-map-group { gap: 2px; }
+}
+
+/* === 2026 /guides/ === */
+.guides-page .page-heading-kicker { font: 700 13px/1.2 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-olive); }
+html:not([data-ui-lang="he"]) .page-heading-title.ui-he { display: none; }
+html[data-ui-lang="he"] .page-heading-title.ui-en { display: none; }
+html[data-ui-lang="he"] .page-heading .page-heading-he { display: none; }
+.guides-page .hebrew-brand-he { font-family: var(--font-hebrew-lettering); font-size: 22px; }
+.guides-hero { position: relative; overflow: hidden; border-radius: var(--radius-hero); background: var(--color-surface-hero); color: var(--color-hero-text); min-height: 260px; padding: var(--space-6); display: grid; align-content: start; gap: var(--space-2); }
+.guides-hero__art { position: absolute; inset-block-end: 0; inset-inline-end: 0; width: min(1100px, 100%); height: auto; pointer-events: none; }
+.guides-hero::before { content: ""; position: absolute; inset: 0; z-index: 1; background: linear-gradient(to right, var(--color-surface-hero) 0%, color-mix(in srgb, var(--color-surface-hero) 90%, transparent) 35%, transparent 70%); }
+[dir="rtl"] .guides-hero::before { background: linear-gradient(to left, var(--color-surface-hero) 0%, color-mix(in srgb, var(--color-surface-hero) 90%, transparent) 35%, transparent 70%); }
+.guides-hero > :not(.guides-hero__art) { position: relative; z-index: 2; }
+.guides-hero__kicker { font: 700 13px/1.2 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-sun); }
+.guides-hero__lettering { font: 700 clamp(44px, 4vw + 20px, 60px)/1.35 var(--font-hebrew-lettering); margin: 0; }
+.guides-hero__title { font: 600 clamp(19px, 1vw + 14px, 24px)/1.3 var(--font-sans); margin: 0; color: var(--color-hero-text); }
+.guides-hero__actions { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+.guides-filters { display: flex; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; padding-block: var(--space-1); }
+.filter-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding-inline: var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-text); font: 600 14px/1 var(--font-sans); text-decoration: none; white-space: nowrap; }
+.filter-chip[aria-current="true"] { background: var(--color-text); border-color: var(--color-text); color: var(--color-surface); }
+.guides-page .lesson-card.guide-card { padding: 0; overflow: hidden; border-radius: var(--radius-card); border: 1px solid var(--color-border-subtle); box-shadow: var(--shadow-card); }
+.guide-card .lesson-link { display: grid; padding: 0; color: inherit; text-decoration: none; }
+.guide-card__cover { position: relative; height: 132px; background: var(--color-illus-tile); overflow: hidden; }
+.guide-card__cover img { position: absolute; inset: -14px 0 auto 0; width: 100%; height: auto; opacity: .6; transition: transform var(--motion-duration) var(--motion-easing); }
+.guide-card__letter { position: absolute; inset-block-start: 10px; inset-inline-start: 28px; font: 700 72px/1.4 var(--font-hebrew-lettering); color: var(--color-surface-hero); }
+.guide-card__body { display: grid; gap: var(--space-2); padding: var(--space-4) var(--space-5) var(--space-5); }
+.guide-card__meta { font: 700 13px/1.2 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-olive); }
+.guide-card h3 { margin: 0; font: 600 20px/1.35 var(--font-sans); }
+.guide-card__he { font: 400 18px/var(--line-height-pointed) var(--font-hebrew-lettering); color: var(--color-muted); text-align: end; }
+.guide-card .lesson-link:hover .guide-card__cover img { transform: scale(1.03); }
+@media (min-width: 1280px) {
+    .guides-list,
+    .home-list.guides-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-5); }
+}
+.guides-state[data-guides-state="empty"] { display: grid; justify-items: center; gap: var(--space-4); text-align: center; padding: var(--space-7) var(--space-5); }
+.empty-art { width: min(360px, 70vw); aspect-ratio: 4 / 3; border-radius: 999px; background: var(--color-illus-tile); display: grid; place-items: center; }
+.empty-art img { width: 89%; height: auto; }
+.empty-title { margin: 0; font: 600 24px/1.3 var(--font-sans); }
+.empty-he { margin: 0; font: 400 24px/1.6 var(--font-hebrew-sans); color: var(--color-muted); }
+.empty-body { margin: 0; max-width: 32rem; color: var(--color-muted); font-size: var(--size-body); line-height: 1.5; }
+.empty-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: center; }
+html[data-ui-lang="he"] .empty-title-en,
+html[data-ui-lang="he"] .empty-body-en,
+html[data-ui-lang="he"] .empty-he,
+html:not([data-ui-lang="he"]) .empty-title-he,
+html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
+.he-text--word { font: 400 48px/1.55 var(--font-hebrew-lettering); }
+.he-text--pointed,
+.example-row__he,
+.block-compare__he,
+.block-verse__text,
+.guides-hero__lettering,
+.guide-card__letter { font-family: var(--font-hebrew-lettering); }
+.block-explainer { display: grid; grid-template-columns: 44px 1fr; gap: var(--space-4); padding: var(--space-5); border-radius: var(--radius-card); background: var(--color-accent-olive-soft); }
+.block-explainer__icon { width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; background: var(--color-surface); color: var(--color-accent-olive); }
+.block-explainer h3 { margin: 0 0 var(--space-2); font: 600 20px/1.35 var(--font-sans); }
+.example-list { display: grid; gap: var(--space-2); }
+.example-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-5) var(--space-3) var(--space-4); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-control); background: var(--color-surface); }
+.example-row__he { font: 600 24px/1.7 var(--font-hebrew-lettering); min-width: 0; }
+.example-row__gloss { font: 600 15px/1.3 var(--font-sans); min-width: 0; white-space: normal; overflow: visible; text-overflow: unset; overflow-wrap: anywhere; }
+.translit { font: 500 15px/1.4 var(--font-sans); letter-spacing: .005em; color: var(--color-muted); }
+.block-compare { display: grid; gap: var(--space-4); padding: var(--space-5); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-card); background: var(--color-surface); }
+.block-compare__sides { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-3); }
+.block-compare__side { display: grid; gap: var(--space-2); padding: var(--space-4) var(--space-5) var(--space-5); border-radius: var(--radius-control); background: var(--color-surface-soft); }
+.block-compare__he { font: 600 30px/1.7 var(--font-hebrew-lettering); text-align: end; }
+.block-compare__he mark { background: none; color: var(--color-primary); }
+.block-compare .translit { color: var(--color-primary); text-align: end; }
+.block-verse { display: grid; gap: var(--space-3); padding: var(--space-5) var(--space-6) var(--space-6); border-radius: var(--radius-card); background: var(--color-surface-hero); color: var(--color-hero-text); }
+.block-verse__text { font: 400 clamp(26px, 1.5vw + 18px, 32px)/1.8 var(--font-hebrew-lettering); margin: 0; }
+.block-verse__translation { color: var(--color-hero-muted); margin: 0; }
+.guide-aside { display: grid; gap: var(--space-4); align-content: start; position: sticky; inset-block-start: var(--space-5); }
+@media (min-width: 1280px) { .guide-layout { display: grid; grid-template-columns: minmax(0, var(--wrap-w-reading)) 300px; gap: var(--space-6); justify-content: center; } }
+@media (max-width: 1279px) { .guide-aside { display: none; } }
+.audio-btn { width: 44px; height: 44px; border-radius: 999px; display: inline-grid; place-items: center; border: 1.5px solid var(--color-primary); background: var(--color-primary-soft); color: var(--color-primary); }
+.audio-btn.is-playing { background: var(--color-primary); color: var(--color-primary-ink); border-color: var(--color-primary); }
+.status-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding-inline: 10px; border-radius: var(--radius-pill); font: 700 13px/1 var(--font-sans); }
+.status-chip[data-status="new"] { background: var(--color-primary-soft); color: var(--color-primary); }
+.status-chip[data-status="progress"] { background: var(--color-miss-soft); color: var(--color-miss-ink); }
+.status-chip[data-status="done"] { background: var(--color-correct-soft); color: var(--color-correct-ink); }
+.status-chip[data-status="due"] { background: var(--color-accent-pomegranate-soft); color: var(--color-accent-pomegranate); }
+.status-chip[data-status="locked"] { background: var(--color-surface-soft); color: var(--color-muted); }
+.theme-choice { display: none; }
+html[data-theme-choice="light"] .theme-choice-light,
+html[data-theme-choice="dark"] .theme-choice-dark,
+html[data-theme-choice="auto"] .theme-choice-auto,
+html:not([data-theme-choice]) .theme-choice-auto { display: inline; }
+@media (max-width: 767px) {
+    .guides-page .guide-card .lesson-link { padding: 0; }
+    .he-text--word { font-size: 40px; }
+    .example-row { grid-template-columns: 44px minmax(0, 1fr); }
+    .example-row__he { grid-column: 1 / -1; }
+    .example-row__gloss {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: unset;
+        overflow-wrap: anywhere;
+    }
+}
+@media (min-width: 1280px) {
+    .he-text--word { font-size: 56px; }
 }
