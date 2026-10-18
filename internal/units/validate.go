@@ -8,11 +8,6 @@ import (
 	"strings"
 )
 
-// knownLexemeUser is the learner id passed to Lookup.KnownLexemes.
-// Validate has no learner argument. A Lookup implementation binds the
-// learner itself and may ignore this value.
-const knownLexemeUser int64 = 0
-
 // Validate checks doc against the authoring rules.
 // The result is nil when the document is clean. Otherwise it is sorted by
 // JSON pointer, then by rule id.
@@ -48,7 +43,7 @@ func collect(ctx context.Context, doc *Unit, lk Lookup) []Issue {
 		issues = append(issues, issue(RuleSchemaLookup, SeverityBlock, "", "lexicon lookup is missing"))
 		return issues
 	}
-	s := &scan{ctx: ctx, lk: lk}
+	s := &scan{ctx: ctx, lk: lk, position: doc.Position}
 	if err := s.preload(); err != nil {
 		return append(issues, lookupIssue(err))
 	}
@@ -187,6 +182,7 @@ type probe struct {
 type scan struct {
 	ctx       context.Context
 	lk        Lookup
+	position  int
 	err       error
 	cache     map[string]*probe
 	knownNorm map[string]bool
@@ -200,12 +196,15 @@ func (s *scan) preload() error {
 	s.cache = map[string]*probe{}
 	s.knownNorm = map[string]bool{}
 	s.knownBare = map[string]bool{}
-	known, err := s.lk.KnownLexemes(s.ctx, knownLexemeUser)
+	known, err := s.lk.KnownLexemes(s.ctx, s.position)
 	if err != nil {
 		return err
 	}
-	for _, k := range known {
-		n := normalize(k)
+	for text, ok := range known {
+		if !ok {
+			continue
+		}
+		n := normalize(text)
 		if n == "" {
 			continue
 		}

@@ -82,11 +82,15 @@ type fakeLookup struct {
 	err   error
 }
 
-func (f fakeLookup) KnownLexemes(context.Context, int64) ([]string, error) {
+func (f fakeLookup) KnownLexemes(context.Context, int) (map[string]bool, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	return append([]string(nil), f.known...), nil
+	out := make(map[string]bool, len(f.known))
+	for _, text := range f.known {
+		out[text] = true
+	}
+	return out, nil
 }
 
 func (f fakeLookup) HasAudio(_ context.Context, text string) (bool, error) {
@@ -286,12 +290,12 @@ func budgetLesson() goldenCase {
 	u := assemble(words, [][]int{{0, 1, 2, 3}, {4}, {5, 6, 7}}, evenRepeats(len(words), 3))
 	return goldenCase{
 		file:   "bad_budget_lesson.json",
-		name:   "V3 one lesson introduces 4 new words and another introduces 1. 2 to 3 are allowed.",
+		name:   "V3 one lesson introduces 4 new words (block) and another introduces 1 (warn). Exactly 2 or 3 stay quiet.",
 		unit:   u,
 		lookup: lookupFor(vocab8, u, nil),
 		issues: []Issue{
 			iss(RuleBudgetLesson, SeverityBlock, "/lessons/0"),
-			iss(RuleBudgetLesson, SeverityBlock, "/lessons/1"),
+			iss(RuleBudgetLessonFew, SeverityWarn, "/lessons/1"),
 		},
 	}
 }
@@ -476,11 +480,11 @@ func checkpointNew() goldenCase {
 	u := assemble(words, [][]int{{0, 1}, {2, 3}, {4, 5}, {6}}, evenRepeats(len(words), 3))
 	return goldenCase{
 		file:   "bad_checkpoint_new.json",
-		name:   "V17 a checkpoint introduces a new word. The lesson that was left with one word is also over the lesson budget, and the late word cannot fill three later lessons.",
+		name:   "V17 a checkpoint introduces a new word. The lesson left with one word warns, and the late word cannot fill three later lessons.",
 		unit:   u,
 		lookup: lookupFor(vocab8, u, nil),
 		issues: []Issue{
-			iss(RuleBudgetLesson, SeverityBlock, "/lessons/3"),
+			iss(RuleBudgetLessonFew, SeverityWarn, "/lessons/3"),
 			iss(RuleSchemaCheckpoint, SeverityBlock, "/lessons/4"),
 			iss(RuleRecycleCount, SeverityWarn, "/newWords/7"),
 			iss(RuleRecycleSpread, SeverityWarn, "/newWords/7"),

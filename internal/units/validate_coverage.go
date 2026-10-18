@@ -4,10 +4,11 @@ import "fmt"
 
 // Coverage is by token. Punctuation is not a token. A token counts as known
 // when it is a number, a name (lexicon part of speech name, propn, or
-// proper noun), a lexeme in Lookup.KnownLexemes, or one of this unit's
-// newWords introduced in an earlier activity. The introducing activity
-// itself does not yet count the word as known. Matching uses normalize
-// and the niqqud-insensitive skeleton described in validate_text.go.
+// proper noun), a word introduced as new in an earlier unit
+// (Lookup.KnownLexemes), or one of this unit's newWords introduced in an
+// earlier activity. The introducing activity itself does not yet count the
+// word as known. Matching uses normalize and the niqqud-insensitive
+// skeleton described in validate_text.go.
 //
 // Percent is known/total, truncated to one decimal (not rounded). The
 // message also carries the exact fraction. Below 90% blocks. From 90% up

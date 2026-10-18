@@ -35,12 +35,18 @@ type Issue struct {
 }
 
 // Unit is the JSON document stored in units.doc.
+// Position is the course order from the units.position column, which is
+// 0 or greater. It is not stored in the document, so the JSON tag is "-".
+// The caller sets it before Validate. Validate passes it to KnownLexemes
+// as beforePosition. Zero is a real position: it means no earlier unit,
+// which is correct for the first unit and also what an unset field does.
 type Unit struct {
 	Title     string   `json:"title"`
 	Situation string   `json:"situation"`
 	Concept   string   `json:"concept"`
 	NewWords  []string `json:"newWords"`
 	Lessons   []Lesson `json:"lessons"`
+	Position  int      `json:"-"`
 }
 
 // Lesson is one lesson or checkpoint inside a unit.
@@ -60,8 +66,12 @@ type Activity struct {
 // Lookup is the read surface Validate uses. Implementations live next to
 // the lexicon and the audio store; the validator does not touch the database.
 type Lookup interface {
-	// KnownLexemes returns the pointed NFC texts this learner already knows.
-	KnownLexemes(ctx context.Context, userID int64) ([]string, error)
+	// KnownLexemes returns the pointed NFC text of every word introduced as new
+	// in a unit whose position is lower than beforePosition. A true map value
+	// means that text was introduced earlier. Validation runs at authoring
+	// time and the course is global, so this is not scoped to a learner.
+	// Validate passes Unit.Position.
+	KnownLexemes(ctx context.Context, beforePosition int) (map[string]bool, error)
 	// HasAudio reports whether a clip exists for the exact pointed NFC text.
 	HasAudio(ctx context.Context, textNFC string) (bool, error)
 	// LexemeByText returns the lexicon id for the exact pointed NFC text.
@@ -69,22 +79,16 @@ type Lookup interface {
 	LexemeByText(ctx context.Context, textNFC string) (id int64, ok bool, err error)
 
 	// Facts returns lexicon fields for the exact pointed NFC text.
-	// ok is false when the text is not in the lexicon.
-	//
-	// PROPOSED for Backend Dev. Lookup did not expose gender or plural.
-	// noun.gender and noun.plural need them, so this is the smallest
-	// addition: one method and the struct below. Translit and root are not
-	// read by the validator; player guidance in rules.go names them for the
-	// MCP rules resource.
+	// The bool is false when the text is not in the lexicon.
+	// Gender is "", "m", "f", or "both". Backend Dev approved this shape.
 	Facts(ctx context.Context, textNFC string) (LexemeFacts, bool, error)
 }
 
-// LexemeFacts is the lexicon slice Facts returns.
-//
-// PROPOSED for Backend Dev, with Facts. Zero values mean "not recorded".
-// Gender is "m", "f", or "both". Plural is the pointed irregular plural;
-// leave it empty when the lexicon does not store one. IrregularPlural is
-// the lexicon's own irregular flag. Bare is the unpointed spelling.
+// LexemeFacts is the lexicon slice Facts returns. Backend Dev approved
+// these fields. Zero values mean "not recorded". Gender is "", "m", "f",
+// or "both". Plural is the pointed irregular plural; leave it empty when
+// the lexicon does not store one. IrregularPlural is the lexicon's own
+// irregular flag. Bare is the unpointed spelling.
 type LexemeFacts struct {
 	POS             string
 	Gender          string

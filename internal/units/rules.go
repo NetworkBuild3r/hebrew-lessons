@@ -1,10 +1,12 @@
 package units
 
 // Product thresholds. The numbers are the authoring rules from ADR-R1 and
-// the QA plan: 8 new words in a unit, 2–3 in a lesson, each new word
-// recycled at least 4 times across at least 3 later lessons, story and
-// listening coverage blocking under 90% and warning from 90% up to but
-// not including 95%.
+// the QA plan: 8 new words in a unit, each new word recycled at least 4
+// times across at least 3 later lessons, story and listening coverage
+// blocking under 90% and warning from 90% up to but not including 95%.
+// A lesson that introduces more than 3 new words blocks. A lesson that
+// introduces fewer than 2 warns, because a review or story lesson may
+// introduce 0 or 1. Checkpoints are exempt from both lesson budgets.
 const (
 	MaxNewWordsPerUnit   = 8
 	MinNewWordsPerLesson = 2
@@ -21,6 +23,7 @@ const (
 const (
 	RuleAudioMissing      = "audio.missing"
 	RuleBudgetLesson      = "budget.lesson"
+	RuleBudgetLessonFew   = "budget.lesson.few"
 	RuleBudgetUnit        = "budget.unit"
 	RuleCoverageListening = "coverage.listening"
 	RuleCoverageStory     = "coverage.story"
@@ -49,7 +52,8 @@ type Rule struct {
 // block or warn; Severity here is the block, and Description gives the band.
 var Rules = []Rule{
 	{ID: RuleAudioMissing, Severity: SeverityBlock, Description: "A Hebrew activity has no audio clip for its exact pointed text."},
-	{ID: RuleBudgetLesson, Severity: SeverityBlock, Description: "A lesson introduces fewer than 2 or more than 3 new words."},
+	{ID: RuleBudgetLesson, Severity: SeverityBlock, Description: "A lesson introduces more than 3 new words."},
+	{ID: RuleBudgetLessonFew, Severity: SeverityWarn, Description: "A lesson introduces fewer than 2 new words. Review and story lessons may introduce 0 or 1, so this warns. Checkpoints are exempt."},
 	{ID: RuleBudgetUnit, Severity: SeverityBlock, Description: "The unit lists more than 8 new words."},
 	{ID: RuleCoverageListening, Severity: SeverityBlock, Description: "Listening-text coverage is below 95%. Block under 90%; warn from 90% up to but not including 95%."},
 	{ID: RuleCoverageStory, Severity: SeverityBlock, Description: "Story coverage is below 95%. Block under 90%; warn from 90% up to but not including 95%."},

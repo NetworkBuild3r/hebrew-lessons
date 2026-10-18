@@ -159,7 +159,7 @@ func TestRulesCatalog(t *testing.T) {
 		}
 	}
 	for _, id := range []string{
-		RuleAudioMissing, RuleBudgetLesson, RuleBudgetUnit,
+		RuleAudioMissing, RuleBudgetLesson, RuleBudgetLessonFew, RuleBudgetUnit,
 		RuleCoverageListening, RuleCoverageStory, RuleLexemeUnknown,
 		RuleNounGender, RuleNounPlural, RuleRecycleCount, RuleRecycleSpread,
 		RuleSchemaActivity, RuleSchemaCheckpoint, RuleSchemaKind,
@@ -228,6 +228,79 @@ func TestPlayerGuidance(t *testing.T) {
 	if got["D2"].Basis != "P" {
 		t.Fatalf("D2 basis %s", got["D2"].Basis)
 	}
+}
+
+func TestFewNewWordsWarnsAndCheckpointsAreExempt(t *testing.T) {
+	u, lk := v1()
+	start := len(u.Lessons)
+	u.Lessons = append(u.Lessons,
+		Lesson{Kind: KindLesson, Activities: []Activity{{Type: ActivityRecall, Text: vocab8[0].text}}},
+		Lesson{Kind: KindCheckpoint, Activities: []Activity{{Type: ActivityRecall, Text: vocab8[0].text}}},
+	)
+	got := Validate(context.Background(), &u, lk)
+	want := []Issue{iss(RuleBudgetLessonFew, SeverityWarn, at("lessons", start))}
+	if !sameIssues(got, want) {
+		t.Fatalf("zero-word lesson = %s", mustJSON(stripMsg(got)))
+	}
+	if got[0].Severity != SeverityWarn || !strings.Contains(got[0].Msg, "fewer than 2") {
+		t.Fatalf("warn message = %#v", got[0])
+	}
+}
+
+func TestKnownLexemesUsesPosition(t *testing.T) {
+	u, lk := v1()
+	u.Position = 12
+	const sefer = "סֵפֶר"
+	lk.lex[normalize(sefer)] = glex{ID: 99, POS: "noun", Gender: "m", Bare: stripNiqqud(sefer)}
+	var storyAt int
+	for i, act := range u.Lessons[0].Activities {
+		if act.Type != ActivityStory {
+			continue
+		}
+		storyAt = i
+		text := act.Text + " " + sefer
+		u.Lessons[0].Activities[i].Text = text
+		lk.audio[normalize(text)] = true
+	}
+	rec := &posLookup{fakeLookup: lk, flags: map[string]bool{sefer: false}}
+	got := Validate(context.Background(), &u, rec)
+	if rec.calls != 1 || rec.before != 12 {
+		t.Fatalf("KnownLexemes before=%d calls=%d", rec.before, rec.calls)
+	}
+	want := []Issue{iss(RuleCoverageStory, SeverityBlock, at("lessons", 0, "activities", storyAt))}
+	if !sameIssues(got, want) {
+		t.Fatalf("false known value = %s", mustJSON(stripMsg(got)))
+	}
+	rec.flags[sefer] = true
+	if got = Validate(context.Background(), &u, rec); len(got) != 0 {
+		t.Fatalf("true known value = %s", mustJSON(stripMsg(got)))
+	}
+	if rec.before != 12 {
+		t.Fatalf("position = %d", rec.before)
+	}
+}
+
+type posLookup struct {
+	fakeLookup
+	before int
+	calls  int
+	flags  map[string]bool
+}
+
+func (p *posLookup) KnownLexemes(ctx context.Context, before int) (map[string]bool, error) {
+	p.calls++
+	p.before = before
+	out, err := p.fakeLookup.KnownLexemes(ctx, before)
+	if err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = map[string]bool{}
+	}
+	for text, ok := range p.flags {
+		out[text] = ok
+	}
+	return out, nil
 }
 
 func TestGuidanceIsNotEnforced(t *testing.T) {

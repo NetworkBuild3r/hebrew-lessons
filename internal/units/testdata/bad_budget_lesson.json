@@ -1,5 +1,5 @@
 {
-  "case": "V3 one lesson introduces 4 new words and another introduces 1. 2 to 3 are allowed.",
+  "case": "V3 one lesson introduces 4 new words (block) and another introduces 1 (warn). Exactly 2 or 3 stay quiet.",
   "lookup": {
     "lexemes": {
       "בֹּקֶר": {
@@ -71,8 +71,8 @@
       "pointer": "/lessons/0"
     },
     {
-      "rule": "budget.lesson",
-      "severity": "block",
+      "rule": "budget.lesson.few",
+      "severity": "warn",
       "pointer": "/lessons/1"
     }
   ],

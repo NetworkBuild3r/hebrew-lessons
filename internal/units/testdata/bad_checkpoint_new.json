@@ -1,5 +1,5 @@
 {
-  "case": "V17 a checkpoint introduces a new word. The lesson that was left with one word is also over the lesson budget, and the late word cannot fill three later lessons.",
+  "case": "V17 a checkpoint introduces a new word. The lesson left with one word warns, and the late word cannot fill three later lessons.",
   "lookup": {
     "lexemes": {
       "בֹּקֶר": {
@@ -67,8 +67,8 @@
   },
   "issues": [
     {
-      "rule": "budget.lesson",
-      "severity": "block",
+      "rule": "budget.lesson.few",
+      "severity": "warn",
       "pointer": "/lessons/3"
     },
     {

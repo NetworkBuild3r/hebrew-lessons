@@ -23,8 +23,8 @@ import (
 // string misses. The skeleton drops niqqud, meteg, rafe, cantillation, and
 // the upper dots, and it keeps shin and sin dots because those change the
 // letter. The fallback looks the skeleton up as its own key and compares
-// it with KnownLexemes and this unit's newWords. It does not scan the rest
-// of the lexicon; Lookup has no list method.
+// it with KnownLexemes (words introduced in earlier units) and this unit's
+// newWords. It does not scan the rest of the lexicon; Lookup has no list method.
 //
 // Tokens split on whitespace, punctuation, and maqaf (U+05BE). A Hebrew
 // word keeps its points. A digit run is its own token. Punctuation is not

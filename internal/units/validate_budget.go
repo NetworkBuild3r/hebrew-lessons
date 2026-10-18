@@ -30,9 +30,13 @@ func budgetIssues(doc *Unit, words []wordRef) []Issue {
 					fmt.Sprintf("checkpoint introduces %d new word(s); a checkpoint introduces nothing", n)))
 			}
 		case KindLesson:
-			if n < MinNewWordsPerLesson || n > MaxNewWordsPerLesson {
+			switch {
+			case n > MaxNewWordsPerLesson:
 				out = append(out, issue(RuleBudgetLesson, SeverityBlock, at("lessons", i),
-					fmt.Sprintf("lesson introduces %d new words; %d to %d are allowed", n, MinNewWordsPerLesson, MaxNewWordsPerLesson)))
+					fmt.Sprintf("lesson introduces %d new words; more than %d blocks", n, MaxNewWordsPerLesson)))
+			case n < MinNewWordsPerLesson:
+				out = append(out, issue(RuleBudgetLessonFew, SeverityWarn, at("lessons", i),
+					fmt.Sprintf("lesson introduces %d new words; fewer than %d warns", n, MinNewWordsPerLesson)))
 			}
 		}
 	}
