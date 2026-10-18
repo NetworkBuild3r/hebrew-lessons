@@ -15,6 +15,14 @@
 # After the gate, a docs-only commit is skipped (paths-ignore does not apply
 # to workflow_run). A commit with no go/go.mod still succeeds: vet, test, and
 # the image build are skipped. This file does not replace image.yml.
+#
+# Same branch gate as image.yml. workflow_run runs this file from the default
+# branch, so a `test` run on orphan v2 must not publish
+# ghcr.io/networkbuild3r/hebrew-lessons-go. `branches: [main]` is the trigger
+# filter. The job `if` still requires conclusion success, event push,
+# head_branch main, and this repository. There is no push trigger; do not add
+# one that is not `branches: [main]`. The tree guard fails closed unless the
+# checked-out SHA is an ancestor of origin/main.
 # Tag, cache, and the home_k3 hebrew-next Deployment: docs/operations/go-image.md.
 name: image-go
 
@@ -161,6 +169,32 @@ jobs:
         with:
           ref: ${{ steps.target.outputs.sha }}
           fetch-depth: 2
+
+      # Same ancestor guard as image.yml, before login or push. fetch-depth: 2
+      # cannot see an older main commit, so unshallow origin/main first. An
+      # orphan v2 SHA fails this check. Do not skip: a non-main tree must fail
+      # the job even when go/go.mod is absent and the build would otherwise
+      # succeed without pushing.
+      - name: Refuse a SHA that is not on main
+        shell: bash
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          refuse() {
+            echo "::error::refusing to publish hebrew-lessons-go from a non-main tree"
+            exit 1
+          }
+          sha="$(printf '%s' "$TARGET_SHA" | tr '[:upper:]' '[:lower:]')"
+          actual="$(git rev-parse HEAD)"
+          [ "$actual" = "$sha" ] || refuse
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch --no-tags --unshallow origin +refs/heads/main:refs/remotes/origin/main
+          else
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          fi
+          git merge-base --is-ancestor "$sha" origin/main || refuse
+          echo "SHA ${sha} is an ancestor of origin/main."
 
       # paths-ignore does not apply to workflow_run. Skip when every file in
       # the gated commit is docs/**, sdd/**, or a markdown file.

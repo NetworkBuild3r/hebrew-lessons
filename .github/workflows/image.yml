@@ -13,6 +13,16 @@
 # the sha (default: current main HEAD) must already have a successful `test`
 # run on main. The gate is the whole `test` workflow, so a job added there
 # later (contract-suite, for example) is included.
+#
+# workflow_run always executes this file from the default branch, then checks
+# out workflow_run.head_sha. A `test` run on any other branch (orphan v2
+# included) would otherwise hand that SHA to the publisher of
+# ghcr.io/networkbuild3r/hebrew-lessons, which Argo Image Updater deploys.
+# `branches: [main]` stops the trigger. The job `if` still requires
+# conclusion success, event push, head_branch main, and this repository.
+# Do not add a push trigger that is not `branches: [main]`.
+# The tree guard after checkout fails (it does not skip) unless that SHA is
+# an ancestor of origin/main and the Node app is still in the tree.
 name: image
 
 on:
@@ -158,6 +168,33 @@ jobs:
         with:
           ref: ${{ steps.target.outputs.sha }}
           fetch-depth: 2
+
+      # Fail closed before login or push. Checkout is shallow (fetch-depth: 2),
+      # so fetch the whole of origin/main before the ancestor test; a rollback
+      # SHA older than that window is still an ancestor, and an orphan v2 SHA
+      # is not. Missing Dockerfile, package.json, or server/ is the same refusal:
+      # this image is main's Node app, not the greenfield tree.
+      - name: Refuse a non-main or non-Node tree
+        shell: bash
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          refuse() {
+            echo "::error::refusing to publish hebrew-lessons from a non-main/non-Node tree"
+            exit 1
+          }
+          sha="$(printf '%s' "$TARGET_SHA" | tr '[:upper:]' '[:lower:]')"
+          actual="$(git rev-parse HEAD)"
+          [ "$actual" = "$sha" ] || refuse
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch --no-tags --unshallow origin +refs/heads/main:refs/remotes/origin/main
+          else
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          fi
+          git merge-base --is-ancestor "$sha" origin/main || refuse
+          [ -f Dockerfile ] && [ -f package.json ] && [ -d server ] || refuse
+          echo "SHA ${sha} is an ancestor of origin/main and the Node app is present."
 
       # paths-ignore does not apply to workflow_run. Skip when every file in
       # the gated commit is docs/**, sdd/**, or a markdown file.
