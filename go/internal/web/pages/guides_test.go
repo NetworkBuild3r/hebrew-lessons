@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -164,6 +165,9 @@ func TestShelfMatchesTheNodePage(t *testing.T) {
 	if !strings.Contains(html, `role="radiogroup"`) || !strings.Contains(html, "אוטומטי") || !strings.Contains(html, "icon-theme") {
 		t.Fatal("theme switch missing")
 	}
+	if !strings.Contains(html, `method="post"`) || !strings.Contains(html, `action="/_hx/ui"`) || !strings.Contains(html, `name="lang"`) || !strings.Contains(html, `name="theme"`) {
+		t.Fatal("language and theme controls are not forms")
+	}
 	if strings.Contains(html, "data-say=") || strings.Contains(html, "data-clip=") || strings.Contains(html, "status-chip") {
 		t.Fatal("shelf used a retired hook or a status chip")
 	}
@@ -173,20 +177,20 @@ func TestShelfMatchesTheNodePage(t *testing.T) {
 	if strings.Contains(html, `hebrew-shell-account-btn`) {
 		t.Fatal("account button rendered before sessions exist")
 	}
-	if strings.Count(html, "<script") != 3 {
-		t.Fatalf("script count %d, want the two pre-paint scripts and the theme toggle", strings.Count(html, "<script"))
+	if strings.Count(html, "<script") != 2 {
+		t.Fatalf("script count %d, want the theme pre-paint script and speech.js", strings.Count(html, "<script"))
 	}
-	if !strings.Contains(html, "localStorage.getItem('hebrew-ui-lang')") || !strings.Contains(html, "root.dir = lang === 'he' ? 'rtl' : 'ltr'") {
-		t.Fatal("pre-paint script does not follow the UI language")
+	if strings.Contains(html, "localStorage") {
+		t.Fatal("page script reads localStorage")
 	}
-	if !strings.Contains(html, "localStorage.getItem('hebrew-theme')") || !strings.Contains(html, "prefers-color-scheme: dark") {
-		t.Fatal("theme script missing")
+	if !strings.Contains(html, "prefers-color-scheme: dark") || !strings.Contains(html, "data-theme-choice") {
+		t.Fatal("theme pre-paint script missing")
 	}
 	if !strings.Contains(html, "noto-sans-hebrew-hebrew.woff2") {
 		t.Fatal("hebrew face was not preloaded")
 	}
-	if strings.Contains(html, "<script src=") {
-		t.Fatal("a new script src was added")
+	if strings.Count(html, "<script src=") != 1 || !strings.Contains(html, `<script src="/shared/player/speech.js"></script>`) {
+		t.Fatal("speech.js should be the only script src")
 	}
 	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatal("nosniff missing")
@@ -652,6 +656,140 @@ func resolveFont(value string, vars map[string]string) string {
 		}
 	}
 	return value
+}
+
+func responseCookie(rec *httptest.ResponseRecorder, name string) *http.Cookie {
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == name {
+			return c
+		}
+	}
+	return nil
+}
+
+func TestUIFollowsCookies(t *testing.T) {
+	mux := newMux(memSource{})
+	req := httptest.NewRequest(http.MethodGet, "/guides/", nil)
+	req.AddCookie(&http.Cookie{Name: "hebrew-ui-lang", Value: "he"})
+	req.AddCookie(&http.Cookie{Name: "hebrew-theme", Value: "dark"})
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	html := body(rec)
+	for _, want := range []string{
+		`<html lang="he" dir="rtl"`,
+		`data-ui-lang="he"`,
+		`data-theme="dark"`,
+		`data-theme-choice="dark"`,
+		`name="lang" value="he"`,
+		`aria-pressed="true"`,
+		`content="#0E121B"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	if strings.Contains(html, `data-theme-choice="auto"`) {
+		t.Fatal("dark choice was rendered as auto")
+	}
+}
+
+func TestUIDefaultsToEnglishAndAuto(t *testing.T) {
+	rec := get(t, newMux(memSource{}), "/guides/", false)
+	html := body(rec)
+	if !strings.Contains(html, `<html lang="en" dir="ltr"`) || !strings.Contains(html, `data-theme-choice="auto"`) || !strings.Contains(html, `data-theme="light"`) {
+		t.Fatalf("defaults missing:\n%s", html[:min(400, len(html))])
+	}
+	csrf := responseCookie(rec, "hebrew-csrf")
+	if csrf == nil || !csrf.HttpOnly || csrf.SameSite != http.SameSiteLaxMode || len(csrf.Value) != 64 {
+		t.Fatalf("csrf cookie %#v", csrf)
+	}
+}
+
+func TestSetUIPost(t *testing.T) {
+	mux := newMux(memSource{})
+	first := get(t, mux, "/guides/?id=kept", false)
+	csrf := responseCookie(first, "hebrew-csrf")
+	if csrf == nil {
+		t.Fatal("no csrf cookie")
+	}
+	form := url.Values{}
+	form.Set("csrf", csrf.Value)
+	form.Set("lang", "he")
+	form.Set("next", "/shared/plan/?id=guides-shelf&lesson=decoding")
+	req := httptest.NewRequest(http.MethodPost, "/_hx/ui", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(csrf)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status %d body %s", rec.Code, body(rec))
+	}
+	if loc := rec.Header().Get("Location"); loc != "/shared/plan/?id=guides-shelf&lesson=decoding" {
+		t.Fatalf("location %q", loc)
+	}
+	lang := responseCookie(rec, "hebrew-ui-lang")
+	if lang == nil || lang.Value != "he" || !lang.HttpOnly {
+		t.Fatalf("lang cookie %#v", lang)
+	}
+
+	hx := httptest.NewRequest(http.MethodPost, "/_hx/ui", strings.NewReader(form.Encode()))
+	hx.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	hx.Header.Set("HX-Request", "true")
+	hx.AddCookie(csrf)
+	hxRec := httptest.NewRecorder()
+	mux.ServeHTTP(hxRec, hx)
+	if hxRec.Code != http.StatusNoContent {
+		t.Fatalf("htmx status %d", hxRec.Code)
+	}
+	if hxRec.Header().Get("HX-Redirect") != "/shared/plan/?id=guides-shelf&lesson=decoding" {
+		t.Fatalf("HX-Redirect %q", hxRec.Header().Get("HX-Redirect"))
+	}
+}
+
+func TestSetUIRejectsBadOriginCSRFAndOpenRedirect(t *testing.T) {
+	mux := newMux(memSource{})
+	first := get(t, mux, "/guides/", false)
+	csrf := responseCookie(first, "hebrew-csrf")
+	post := func(origin, token, next string) *httptest.ResponseRecorder {
+		t.Helper()
+		form := url.Values{}
+		form.Set("csrf", token)
+		form.Set("theme", "dark")
+		form.Set("next", next)
+		req := httptest.NewRequest(http.MethodPost, "/_hx/ui", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Host = "example.com"
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		req.AddCookie(csrf)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec
+	}
+	if post("https://evil.example", csrf.Value, "/guides/").Code != http.StatusForbidden {
+		t.Fatal("cross-origin post was accepted")
+	}
+	if post("", "not-the-token", "/guides/").Code != http.StatusForbidden {
+		t.Fatal("bad csrf was accepted")
+	}
+	for _, next := range []string{"https://evil.example/phish", "//evil.example", "/\\evil", "/guides/\r\nSet-Cookie: x=y"} {
+		rec := post("", csrf.Value, next)
+		if rec.Code != http.StatusSeeOther {
+			t.Fatalf("next %q status %d", next, rec.Code)
+		}
+		if loc := rec.Header().Get("Location"); loc != "/guides/" {
+			t.Fatalf("next %q location %q", next, loc)
+		}
+	}
+	ok := post("http://example.com", csrf.Value, "/guides/")
+	if ok.Code != http.StatusSeeOther {
+		t.Fatalf("same-origin status %d", ok.Code)
+	}
+	theme := responseCookie(ok, "hebrew-theme")
+	if theme == nil || theme.Value != "dark" {
+		t.Fatalf("theme cookie %#v", theme)
+	}
 }
 
 func stripCSSComments(css string) string {

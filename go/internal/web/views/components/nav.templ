@@ -47,8 +47,13 @@ templ navLink(item navItem, current string) {
 }
 
 // Shell is the rail and dock. The account button stays out until a session
-// can fill the name. The language and theme controls are live.
+// can fill the name. Language and theme are forms, so they work with no script.
+// hx-post is the HTMX path; the same action works as a plain POST.
 templ Shell(current string) {
+	@shellInner(current, UIFrom(ctx))
+}
+
+templ shellInner(current string, ui UI) {
 	<div class="hebrew-shell ui-chrome" dir="rtl" lang="he">
 		<div class="hebrew-shell-inner">
 			<a class="hebrew-brand" href="/" data-brand>
@@ -62,16 +67,20 @@ templ Shell(current string) {
 			</nav>
 			<div class="hebrew-shell-sync" data-shell-sync aria-live="polite"></div>
 			<div class="hebrew-shell-account">
-				<div class="ui-lang" role="group" data-ui-aria-he="שפת הממשק" data-ui-aria-en="Interface language" aria-label="שפת הממשק">
-					<button type="button" class="ui-lang-btn" data-ui-lang-set="en" aria-pressed="false">EN</button>
-					<button type="button" class="ui-lang-btn" data-ui-lang-set="he" aria-pressed="false">עב</button>
-				</div>
-				<div class="theme-switch" role="radiogroup" data-ui-aria-he="ערכת נושא" data-ui-aria-en="Theme" aria-label="ערכת נושא">
+				<form class="ui-lang" method="post" action="/_hx/ui" hx-post="/_hx/ui" hx-swap="none" role="group" data-ui-aria-he="שפת הממשק" data-ui-aria-en="Interface language" aria-label={ LangGroupLabel(ui.Lang) }>
+					<input type="hidden" name="csrf" value={ ui.CSRF }/>
+					<input type="hidden" name="next" value={ ui.Next }/>
+					<button type="submit" name="lang" value="en" class={ "ui-lang-btn", templ.KV("is-on", ui.Lang == "en") } data-ui-lang-set="en" aria-pressed={ Pressed(ui.Lang == "en") }>EN</button>
+					<button type="submit" name="lang" value="he" class={ "ui-lang-btn", templ.KV("is-on", ui.Lang == "he") } data-ui-lang-set="he" aria-pressed={ Pressed(ui.Lang == "he") }>עב</button>
+				</form>
+				<form class="theme-switch" method="post" action="/_hx/ui" hx-post="/_hx/ui" hx-swap="none" role="radiogroup" data-ui-aria-he="ערכת נושא" data-ui-aria-en="Theme" aria-label={ ThemeGroupLabel(ui.Lang) }>
+					<input type="hidden" name="csrf" value={ ui.CSRF }/>
+					<input type="hidden" name="next" value={ ui.Next }/>
 					<svg class="icon" width="18" height="18" aria-hidden="true" focusable="false"><use href="/shared/brand/sprite.svg#icon-theme"></use></svg>
-					<button type="button" role="radio" data-theme-choice="light" aria-checked="false" tabindex="-1">בהיר</button>
-					<button type="button" role="radio" data-theme-choice="dark" aria-checked="false" tabindex="-1">כהה</button>
-					<button type="button" role="radio" data-theme-choice="auto" aria-checked="true" tabindex="0">אוטומטי</button>
-				</div>
+					<button type="submit" name="theme" value="light" aria-pressed={ Pressed(ui.Theme == "light") }>בהיר</button>
+					<button type="submit" name="theme" value="dark" aria-pressed={ Pressed(ui.Theme == "dark") }>כהה</button>
+					<button type="submit" name="theme" value="auto" aria-pressed={ Pressed(ui.Theme == "auto") }>אוטומטי</button>
+				</form>
 			</div>
 		</div>
 	</div>

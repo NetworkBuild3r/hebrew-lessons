@@ -30,6 +30,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /shared/plan", h.Detail)
 	mux.HandleFunc("GET /shared/plan/{$}", h.Detail)
 	mux.HandleFunc("GET /shared/plan/index.html", h.Detail)
+	mux.HandleFunc("POST /_hx/ui", h.SetUI)
 }
 
 // List is GET /guides/.
@@ -59,6 +60,7 @@ func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeHTML(w http.ResponseWriter, r *http.Request, status int, full, fragment templ.Component) {
+	r = attachUI(w, r)
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("X-Content-Type-Options", "nosniff")

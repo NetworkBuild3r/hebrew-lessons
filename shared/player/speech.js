@@ -398,5 +398,32 @@
         });
     }
 
+    // Guide pages have no lesson player. A click on their audio button plays
+    // here. Lesson and review pages bind #app in core.js, so this stays off
+    // unless the document is a guides page.
+    function onGuideAudioClick(ev) {
+        const t = ev && ev.target;
+        if (!t || typeof t.closest !== 'function') return;
+        const speak = t.closest('.audio-btn[data-speak], .audio-btn[data-audio]');
+        if (!speak || typeof speak.getAttribute !== 'function') return;
+        if (typeof ev.preventDefault === 'function') ev.preventDefault();
+        speech.play(speak.getAttribute('data-speak') || '', speak.getAttribute('data-audio') || '', speak);
+    }
+
+    function bindGuideAudio() {
+        const doc = root.document;
+        if (!doc || !doc.body || !doc.body.classList || typeof doc.body.classList.contains !== 'function') return;
+        if (!doc.body.classList.contains('guides-page')) return;
+        if (speech._guidesAudio) return;
+        speech._guidesAudio = true;
+        if (typeof doc.addEventListener !== 'function') return;
+        doc.addEventListener('click', onGuideAudioClick);
+    }
+
+    if (root.document && root.document.body) bindGuideAudio();
+    else if (root.document && typeof root.document.addEventListener === 'function') {
+        root.document.addEventListener('DOMContentLoaded', bindGuideAudio);
+    }
+
     root.HebrewSpeech = speech;
 })(typeof window !== 'undefined' ? window : globalThis);

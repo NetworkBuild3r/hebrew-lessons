@@ -8322,15 +8322,16 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 .status-chip[data-status="done"] { background: var(--color-correct-soft); color: var(--color-correct-ink); }
 .status-chip[data-status="due"] { background: var(--color-accent-pomegranate-soft); color: var(--color-accent-pomegranate); }
 .status-chip[data-status="locked"] { background: var(--color-surface-soft); color: var(--color-muted); }
+form.ui-lang, form.theme-switch { margin: 0; }
 .theme-switch { display: inline-flex; align-items: center; gap: 2px; min-height: 44px; padding: 2px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-pill); background: var(--color-surface); }
 .theme-switch .icon { width: 18px; height: 18px; margin-inline: 6px; color: var(--color-muted); flex: none; }
-.theme-switch [role="radio"] { appearance: none; min-height: 36px; padding: 0 0.65rem; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--color-text); font: 700 13px/1 var(--font-sans); cursor: pointer; }
-.theme-switch [role="radio"][aria-checked="true"] { background: var(--color-text); color: var(--color-surface); }
-.theme-switch [role="radio"]:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
+.theme-switch [role="radio"], .theme-switch button { appearance: none; min-height: 36px; padding: 0 0.65rem; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--color-text); font: 700 13px/1 var(--font-sans); cursor: pointer; }
+.theme-switch [role="radio"][aria-checked="true"], .theme-switch button[aria-pressed="true"] { background: var(--color-text); color: var(--color-surface); }
+.theme-switch [role="radio"]:focus-visible, .theme-switch button:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
 @media (max-width: 767px) {
     .guides-page .guide-card .lesson-link { padding: 0; }
     .guides-hero .audio-btn { width: 44px; height: 44px; }
-    .theme-switch [role="radio"] { padding-inline: 0.4rem; font-size: 12px; }
+    .theme-switch [role="radio"], .theme-switch button { padding-inline: 0.4rem; font-size: 12px; }
     .guides-page .hebrew-shell-nav a:not([aria-current="page"]) .icon { color: var(--color-muted); }
     .he-text--word { font-size: 40px; }
     .example-row { grid-template-columns: 44px minmax(0, 1fr); }
@@ -8370,7 +8371,7 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 .filter-chip { min-height: 44px; }
 .filter-chip.is-all { background: var(--color-text); border-color: var(--color-text); color: var(--color-surface); }
 .theme-switch { min-height: 44px; padding: 2px; }
-.theme-switch [role="radio"] { min-height: 40px; min-width: 44px; }
+.theme-switch [role="radio"], .theme-switch button { min-height: 40px; min-width: 44px; }
 .guide-card:has(.lesson-link:focus-visible) { outline: 3px solid var(--color-primary); outline-offset: 2px; }
 .guide-body [lang="he"]:has(> .audio-btn) { display: inline-flex; align-items: center; gap: var(--space-2); }
 .guides-page .guides-state[data-guides-state="empty"] { background: var(--color-surface); border: 1px solid var(--color-border-subtle); box-shadow: var(--shadow-card); }
