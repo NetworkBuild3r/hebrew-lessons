@@ -31,9 +31,11 @@ USER_NAME=${SMOKE_ADMIN_USER:-smokeadmin}
 PASSWORD=${SMOKE_ADMIN_PASSWORD:-smoke-not-common-99}
 PUBLIC_ORIGIN=${SMOKE_PUBLIC_ORIGIN:-http://localhost:8080}
 TIMEOUT_MS=${SMOKE_TIMEOUT_MS:-45000}
+PROBE_JS=$(mktemp)
 
 cleanup() {
     code=$?
+    rm -f "$PROBE_JS"
     docker rm -f "$PROBE" >/dev/null 2>&1 || true
     docker rm -f "$NAME" >/dev/null 2>&1 || true
     exit "$code"
@@ -56,18 +58,11 @@ docker run -d --name "$NAME" \
     -e "ADMIN_PASSWORD=${PASSWORD}" \
     "$IMAGE"
 
-# One probe, started once. It retries until the server answers or the timeout.
-# --network container: shares the app's stack, so nothing is published with -p.
-if ! docker run --rm --name "$PROBE" \
-    --network "container:${NAME}" \
-    -i \
-    -e "PUBLIC_ORIGIN=${PUBLIC_ORIGIN}" \
-    -e "SMOKE_MCP_TOKEN=${TOKEN}" \
-    -e "SMOKE_ADMIN_USER=${USER_NAME}" \
-    -e "SMOKE_ADMIN_PASSWORD=${PASSWORD}" \
-    -e "SMOKE_TIMEOUT_MS=${TIMEOUT_MS}" \
-    "$PROBE_IMAGE" \
-    node - <<'JS'
+# The probe shares the app network namespace, so nothing is published with -p.
+# A bind mount would name a path on the remote daemon's host, not this runner,
+# so the script is copied over the Docker API. sleep keeps the probe up; node
+# in that image is the HTTP client (no extra curl pull).
+cat > "$PROBE_JS" <<'JS'
 'use strict';
 
 const http = require('http');
@@ -259,6 +254,28 @@ main().catch((err) => {
     process.exit(1);
 });
 JS
+chmod a+r "$PROBE_JS"
+
+if ! docker run -d --name "$PROBE" \
+    --network "container:${NAME}" \
+    --entrypoint sleep \
+    "$PROBE_IMAGE" 300
+then
+    echo "smoke probe failed to start" >&2
+    docker logs "$NAME" >&2 || true
+    exit 1
+fi
+
+docker cp "$PROBE_JS" "$PROBE:/tmp/smoke-probe.js"
+
+if ! docker exec \
+    -e "PUBLIC_ORIGIN=${PUBLIC_ORIGIN}" \
+    -e "SMOKE_MCP_TOKEN=${TOKEN}" \
+    -e "SMOKE_ADMIN_USER=${USER_NAME}" \
+    -e "SMOKE_ADMIN_PASSWORD=${PASSWORD}" \
+    -e "SMOKE_TIMEOUT_MS=${TIMEOUT_MS}" \
+    "$PROBE" \
+    node /tmp/smoke-probe.js
 then
     echo "smoke probe failed" >&2
     docker logs "$NAME" >&2 || true
