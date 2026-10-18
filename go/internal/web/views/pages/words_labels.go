@@ -64,10 +64,10 @@ var strengthMeta = map[string]struct {
 	he  string
 	en  string
 }{
-	"fragile": {25, "שביר", "fragile"},
-	"shaky":   {50, "רועד", "shaky"},
-	"steady":  {75, "יציב", "steady"},
-	"solid":   {100, "איתן", "solid"},
+	"fragile": {25, "שביר", "Fragile"},
+	"shaky":   {50, "רועד", "Shaky"},
+	"steady":  {75, "יציב", "Steady"},
+	"solid":   {100, "איתן", "Solid"},
 }
 
 var rootColour = map[string]string{
@@ -98,6 +98,7 @@ func known(options []Option, value string) bool {
 
 func posLabel(v string) (string, string)   { return pair(posOptions, v) }
 func binyanHe(v string) string             { he, _ := pair(binyanOptions, v); return he }
+func binyanEn(v string) string             { _, en := pair(binyanOptions, v); return en }
 func tenseLabel(v string) (string, string) { return pair(tenseOptions, v) }
 
 func pair(options []Option, value string) (string, string) {

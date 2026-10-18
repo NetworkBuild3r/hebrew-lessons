@@ -8391,6 +8391,14 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 }
 
 /* === 2026 /words/ (appended after /guides/; overrides the BENTO grid by order, not by edit) === */
+/* Noto stays on this page after Guides took the faces off :root. */
+.words-page {
+    --font-sans: "Noto Sans Hebrew", "Segoe UI", system-ui, sans-serif;
+    --font-hebrew-sans: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
+    --font-hebrew-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
+    --font-hebrew-lettering: "Frank Ruhl Libre", "Noto Serif Hebrew", "Times New Roman", serif;
+    --font-hebrew-pointed-display: "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif;
+}
 :root {
     --words-row-min-h: 72px;          /* row hit area, ≥44 everywhere */
     --words-he-size: 28px;            /* row headword (pointed) */
@@ -8424,7 +8432,8 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 /* Quick chips: radios/checkbox styled as .filter-chip */
 .words-quick { display: flex; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; padding-block: var(--space-1); align-items: center; }
 .words-quick fieldset { display: contents; border: 0; }
-.words-chip-input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.words-page .words-chip-input { position: absolute; opacity: 0; width: 1px; height: 1px; min-height: 0; padding: 0; border: 0; margin: 0; pointer-events: none; }
+.words-quick { position: relative; }
 .words-quick .filter-chip, .words-more-filters .filter-chip { min-height: 44px; cursor: pointer; } /* guides chips are 36; words goes to 44 for touch */
 .words-chip-input:checked + .filter-chip { background: var(--color-text); border-color: var(--color-text); color: var(--color-surface); }
 .words-chip-input:focus-visible + .filter-chip { outline: 3px solid var(--color-focus); outline-offset: 2px; }
@@ -8466,7 +8475,7 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 /* Word row: li holds the row button and the audio button side by side */
 .word-item { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: var(--space-3); padding-inline-start: var(--space-3); border-radius: var(--radius-control); }
 .word-item + .word-item { border-block-start: 1px solid var(--color-border-subtle); }
-.words-page .words-row { all: unset; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, max-content); align-items: center; gap: var(--space-4); min-height: var(--words-row-min-h); padding: var(--space-2) var(--space-4) var(--space-2) 0; cursor: pointer; color: var(--color-text); border-radius: var(--radius-control); transform: none; box-shadow: none; border: 0; background: transparent; }
+.words-page .words-row { all: unset; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, max-content); align-items: center; gap: var(--space-4); min-height: var(--words-row-min-h); padding: var(--space-2) 0; padding-inline-end: var(--space-4); cursor: pointer; color: var(--color-text); border-radius: var(--radius-control); transform: none; box-shadow: none; border: 0; background: transparent; }
 .words-page .words-row:hover { background: var(--color-surface-soft); transform: none; box-shadow: none; }
 .words-page .words-row:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
 .word-item:has(.words-row[aria-pressed="true"]) { background: var(--color-primary-soft); box-shadow: inset 3px 0 0 var(--color-primary); }
@@ -8477,11 +8486,11 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 .words-page .words-gloss { font: 600 16px/1.35 var(--font-sans); color: var(--color-text); overflow-wrap: anywhere; }
 .words-row__meaning .translit { font-size: 14px; }
 .words-row__status { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; min-width: 120px; }
-.words-page .words-he { font: 600 var(--words-he-size)/var(--line-height-pointed) var(--font-hebrew-pointed-display); text-align: end; white-space: nowrap; padding-block: 2px; } /* no overflow:hidden; nikud needs the 1.7 line box */
+.words-page .words-he { font: 600 var(--words-he-size)/var(--line-height-pointed) var(--font-hebrew-pointed-display, "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif); text-align: end; white-space: nowrap; padding-block: 2px; } /* no overflow:hidden; nikud needs the 1.7 line box */
 
 /* Strength meter: 4 segments, markup unchanged (.words-strength > span), restyled */
 .words-page .words-strength { display: inline-flex; gap: 3px; background: none; border-radius: 0; overflow: visible; width: auto; height: 6px; }
-.words-page .words-strength > span { display: none; } /* legacy width-% bar hidden; .words-meter i are the segments */
+.words-page .words-strength > span:not(.words-meter) { display: none; } /* legacy width-% bar hidden; .words-meter i are the segments */
 .words-meter { display: inline-flex; gap: 3px; }
 .words-meter i { width: var(--words-meter-seg); height: 6px; border-radius: 3px; background: var(--words-meter-empty); }
 .words-strength[data-strength="fragile"] .words-meter i:nth-child(-n+1) { background: var(--words-strength-fragile); }
@@ -8498,15 +8507,18 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 .words-page .words-detail[hidden] { display: none; }
 .lookup-card .audio-btn { width: 56px; height: 56px; }
 .lookup-card__head { display: flex; align-items: center; gap: var(--space-3); justify-content: space-between; }
-.lookup-card__he { margin: 0; font: 700 var(--words-he-size-detail)/var(--line-height-pointed) var(--font-hebrew-pointed-display); }
+.words-detail .lookup-card__he { margin: 0; font: 700 var(--words-he-size-detail)/var(--line-height-pointed) var(--font-hebrew-pointed-display, "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif); }
 .lookup-card__he:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 4px; border-radius: var(--radius-sm); }
 .lookup-card__gloss { margin: 0; font: 600 20px/1.35 var(--font-sans); }
 .lookup-card__dirs { display: grid; gap: var(--space-3); }
 .lookup-card__dir { display: grid; gap: 6px; }
 .lookup-card__dir-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .words-paradigm { display: grid; gap: var(--space-2); }
-.words-tense { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); background: var(--color-surface-soft); }
-.words-cell { font: 600 20px/var(--line-height-pointed) var(--font-hebrew-pointed-display); text-align: end; }
+.words-page .words-tense { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); background: var(--color-surface-soft); }
+.words-page .words-cell { font: 600 20px/var(--line-height-pointed) var(--font-hebrew-pointed-display, "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif); text-align: end; justify-self: end; }
+.words-page .lookup-card__know { margin: 0; font: 700 13px/1.2 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-olive); }
+.words-page .words-sources { display: flex; flex-wrap: wrap; gap: var(--space-2); list-style: none; margin: 0; padding: 0; }
+.words-page .words-sources a { text-decoration: none; color: inherit; }
 .words-cell-meaning { display: grid; gap: 4px; min-width: 0; }
 .words-unchecked { justify-self: start; }
 .lookup-card__actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
@@ -8525,7 +8537,7 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
 
 /* States reuse .empty-art / .empty-title / .empty-he / .empty-body / .empty-actions from /guides/ */
 .words-page .words-empty, .words-page .words-error { display: grid; justify-items: center; gap: var(--space-4); text-align: center; padding: var(--space-7) var(--space-5); }
-.words-page .empty-he { font-family: var(--font-hebrew-pointed-display); line-height: var(--line-height-pointed); }
+.words-page .empty-he { font-family: var(--font-hebrew-pointed-display, "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif); line-height: var(--line-height-pointed); }
 .words-state__icon { width: 64px; height: 64px; border-radius: 999px; display: grid; place-items: center; background: var(--color-primary-soft); color: var(--color-primary); }
 .words-error .words-state__icon { background: var(--color-accent-pomegranate-soft); color: var(--color-accent-pomegranate); }
 
@@ -8555,9 +8567,19 @@ html:not([data-ui-lang="he"]) .empty-body-he { display: none; }
     /* Detail becomes a bottom sheet when a word is selected */
     .words-detail:not([hidden]) { position: fixed; z-index: 41; inset: auto 0 0 0; max-height: 85dvh; overflow-y: auto; border-radius: var(--radius-hero) var(--radius-hero) 0 0; box-shadow: var(--shadow-raised); padding-block-end: calc(var(--space-5) + env(safe-area-inset-bottom)); }
     .words-layout:has(.words-detail:not([hidden]))::after { content: ""; position: fixed; inset: 0; z-index: 40; background: var(--words-scrim); }
-    .lookup-card__he { font-size: 40px; }
+    .words-detail .lookup-card__he { font-size: 40px; }
 }
 @media (prefers-reduced-motion: no-preference) {
     .words-more-filters[open] .words-more-filters__panel { animation: hebrew-route-enter var(--motion-duration) var(--motion-easing); }
 }
 /* === end 2026 /words/ === */
+/* Review patch: these selectors beat the legacy .words-page input, .card h2, and .card[role=alert] rules. */
+.words-page .words-chip-input { position: absolute; opacity: 0; width: 1px; height: 1px; min-height: 0; padding: 0; border: 0; margin: 0; pointer-events: none; }
+.words-quick { position: relative; }
+.words-page .words-strength > .words-meter { display: inline-flex; }
+.words-detail .lookup-card__he { font: 700 var(--words-he-size-detail)/var(--line-height-pointed) var(--font-hebrew-pointed-display, "Noto Sans Hebrew", "Segoe UI", "Arial Hebrew", sans-serif); }
+@media (max-width: 767px) { .words-detail .lookup-card__he { font-size: 40px; } }
+.words-page .words-skeleton.words-list { grid-template-columns: minmax(0, 1fr); gap: 0; margin: 0; padding: var(--space-2); list-style: none; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-card); background: var(--color-surface); box-shadow: var(--shadow-card); }
+.words-page .words-error.card { background: var(--color-surface); border: 1px solid var(--color-border-subtle); box-shadow: var(--shadow-card); }
+.words-error .words-state__icon { font: 600 28px/1 var(--font-sans); }
+.words-page .words-row { padding: var(--space-2) 0; padding-inline-end: var(--space-4); }

@@ -16,18 +16,11 @@ import "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/component
 // localStorage keys the app uses and correct lang, dir, and theme before paint.
 // Theme follows the OS until a saved light, dark, or auto choice says
 // otherwise. data-theme is the resolved light or dark value. data-theme-choice
-<<<<<<< HEAD
 // keeps auto so the switch can show it. ADR-0015 accepts auto as the
 // default, and app-shell.js follows the same choice. Node pages stay
 // dir=rtl. The end script handles the theme
-// switch, the EN/עב toggle, and data-speak / data-audio. No script src is added.
-=======
-// keeps auto so the switch can show it. That default is provisional:
-// ADR-0015 still defaults Node to light, and this page does not change
-// app-shell.js. Node pages stay dir=rtl. The end script handles the theme
 // switch, the EN/עב toggle, and data-speak / data-audio. htmx is a script src
 // only when the page sets HTMX, so the guides page stays without one.
->>>>>>> 09b7017 (Serve the read-only /words/ page from a library fixture.)
 func Layout(doc Doc) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context

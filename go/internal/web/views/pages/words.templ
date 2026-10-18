@@ -10,7 +10,7 @@ import (
 // WordsPage is GET /words/. An HX-Request renders WordsFragment instead.
 templ WordsPage(v WordsView) {
 	@views.Layout(views.Doc{
-		Title:      "מילים — Words · דרך עברית",
+		Title:      "מילים — Words · דֶּרֶךְ עִבְרִית",
 		BodyClass:  "hebrew-spa has-hebrew-shell words-page",
 		PageHe:     "מילים",
 		PageEn:     "Words",
@@ -56,9 +56,9 @@ templ WordsResults(v WordsView) {
 		@wordsActiveFilters(v)
 		<div class="words-status-row">
 			if v.State == "error" {
-				<p class="words-status" id="words-status" data-words-status={ v.State } role="alert" aria-live="polite"></p>
+				<p class="words-status" id="words-status" data-words-status={ v.State } role="status" aria-live="polite"></p>
 			} else {
-				<p class="words-status" id="words-status" data-words-status={ v.State } aria-live="polite">@components.Pair(ShownHe(v.Shown), ShownEn(v.Shown))</p>
+				<p class="words-status" id="words-status" data-words-status={ v.State } role="status" aria-live="polite">@components.Pair(ShownHe(v.Shown), ShownEn(v.Shown))</p>
 			}
 			if v.State == "ready" {
 				<a class="btn-link" href={ templ.SafeURL(v.ReviewHref) } data-words-review data-review-deck={ v.ReviewDeck }>
@@ -156,6 +156,7 @@ templ lookupCard(w *WordDetail) {
 		<aside class="words-detail card" data-words-detail hidden></aside>
 	} else {
 		<aside class="words-detail card lookup-card" data-words-detail aria-labelledby="words-detail-title">
+			<p class="page-heading-kicker">@components.Pair("מילה נבחרת", "Selected word")</p>
 			<div class="lookup-card__head">
 				<h2 id="words-detail-title" class="lookup-card__he" lang="he" dir="rtl" tabindex="-1" autofocus data-vowels={ w.Word }>{ w.Word }</h2>
 				<span data-words-audio>@components.AudioButton(w.Word, w.Audio)</span>
@@ -184,9 +185,10 @@ templ lookupCard(w *WordDetail) {
 					<span class="words-chip words-root" data-root={ w.Root } data-root-class={ w.RootClass } data-colour={ w.RootColour }><bdi lang="he">{ w.Root }</bdi></span>
 				}
 				if w.Binyan != "" {
-					<span class="words-chip" data-binyan={ w.Binyan }><bdi lang="he">{ w.BinyanHe }</bdi></span>
+					<span class="words-chip" data-binyan={ w.Binyan }>@components.Pair(w.BinyanHe, binyanEn(w.Binyan))</span>
 				}
 			</div>
+			<h3 class="lookup-card__know">@components.Pair("כמה טוב אתם מכירים", "How well you know it")</h3>
 			<div class="lookup-card__dirs">
 				@directionRow(w.HeEn)
 				@directionRow(w.EnHe)
@@ -196,14 +198,16 @@ templ lookupCard(w *WordDetail) {
 					<h3 id="words-paradigm-h">@components.Pair("נטייה", "Forms")</h3>
 					for _, c := range w.Paradigm {
 						<div class="words-tense" data-tense={ c.Tense }>
-							<bdi class="words-cell" data-cell={ c.Cell } lang="he" dir="rtl" data-vowels={ c.He }>{ c.He }</bdi>
 							<span class="words-cell-meaning">
+								if c.Cell != "" {
+									<span lang="en" dir="ltr">{ c.Cell }</span>
+								}
 								<span lang="en" dir="ltr">{ c.Gloss }</span>
 								if !c.Checked {
-									<span class="status-chip words-unchecked" data-status="locked">not yet checked</span>
-									@components.Pair("עֲדַיִן לֹא נִבְדַּק", "Not yet checked")
+									<span class="status-chip words-unchecked" data-status="locked">@components.Pair("עֲדַיִן לֹא נִבְדַּק", "Not yet checked")</span>
 								}
 							</span>
+							<bdi class="words-cell" data-cell={ c.Cell } lang="he" dir="rtl" data-vowels={ c.He }>{ c.He }</bdi>
 						</div>
 					}
 				</section>
@@ -213,9 +217,9 @@ templ lookupCard(w *WordDetail) {
 					for _, s := range w.Sources {
 						<li>
 							if s.Lesson {
-								<a href={ templ.SafeURL(s.Href) } data-lesson-source={ s.LessonSlug }>{ s.TitleEn }</a>
+								<a class="words-chip" href={ templ.SafeURL(s.Href) } data-lesson-source={ s.LessonSlug }>{ s.TitleEn }</a>
 							} else {
-								@components.Pair(s.TitleHe, s.TitleEn)
+								<span class="words-chip">@components.Pair(s.TitleHe, s.TitleEn)</span>
 							}
 						</li>
 					}
@@ -260,6 +264,8 @@ templ wordsFilterBar(v WordsView, oob bool) {
 			hx-indicator="#words-results"
 			hx-trigger="submit, change"
 			hx-swap-oob="outerHTML"
+			hx-on:htmx:send-error="wordsNetError(event)"
+			hx-on:htmx:response-error="wordsNetError(event)"
 		>
 			@wordsFilterFields(v)
 		</form>
@@ -278,6 +284,8 @@ templ wordsFilterBar(v WordsView, oob bool) {
 			hx-sync="this:replace"
 			hx-indicator="#words-results"
 			hx-trigger="submit, change"
+			hx-on:htmx:send-error="wordsNetError(event)"
+			hx-on:htmx:response-error="wordsNetError(event)"
 		>
 			@wordsFilterFields(v)
 		</form>
@@ -309,6 +317,8 @@ templ wordsFilterFields(v WordsView) {
 			hx-sync="closest form:replace"
 			hx-include="#words-filters"
 			hx-indicator="#words-results"
+			hx-on:htmx:send-error="wordsNetError(event)"
+			hx-on:htmx:response-error="wordsNetError(event)"
 		/>
 	</div>
 	<div class="words-quick">
@@ -522,7 +532,7 @@ templ wordsScript() {
     var key = 'hebrew-words-vowels';
     var on = true;
     try { on = localStorage.getItem(key) !== '0'; } catch (e) {}
-    function strip(s) { return String(s || '').replace(/[\u0591-\u05C7]/g, ''); }
+    function strip(s) { return String(s || '').replace(/[\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7]/g, ''); }
     function apply() {
         var nodes = document.querySelectorAll('[data-vowels]');
         for (var i = 0; i < nodes.length; i++) {
@@ -577,6 +587,67 @@ templ wordsScript() {
         focusWord = '';
         if (row) row.focus();
     });
+    document.body.addEventListener('htmx:beforeRequest', function (ev) {
+        var target = ev.detail && ev.detail.target;
+        if (!target || target.id !== 'words-results') return;
+        var s = document.getElementById('words-status');
+        if (!s) return;
+        var he = s.querySelector('.ui-he');
+        var en = s.querySelector('.ui-en');
+        if (he) he.textContent = 'טוען…';
+        if (en) en.textContent = 'Loading…';
+    });
+    window.wordsNetError = function (ev) {
+        var xhr = ev.detail && ev.detail.xhr;
+        var status = xhr ? xhr.status : 0;
+        if (status > 0) return;
+        if (ev.detail) ev.detail.shouldSwap = false;
+        var form = document.getElementById('words-filters');
+        if (form) {
+            var params = new URLSearchParams(location.search);
+            var names = ['q', 'status', 'weak', 'pos', 'binyan', 'tense', 'source', 'suspended'];
+            for (var n = 0; n < names.length; n++) {
+                var name = names[n];
+                var value = params.get(name) || '';
+                var nodes = form.querySelectorAll('[name="' + name + '"]');
+                for (var i = 0; i < nodes.length; i++) {
+                    var el = nodes[i];
+                    if (el.type === 'radio') el.checked = (el.value === value);
+                    else if (el.type === 'checkbox') el.checked = value !== '' && value !== '0';
+                    else el.value = value;
+                }
+            }
+        }
+        var root = document.getElementById('words-results');
+        if (!root || root.querySelector('[data-words-error="network"]')) return;
+        var list = root.querySelector('[data-words-list]');
+        if (list) list.hidden = true;
+        var empty = root.querySelector('.words-empty');
+        if (empty) empty.hidden = true;
+        var main = root.querySelector('.words-main') || root;
+        var card = document.createElement('div');
+        card.className = 'card words-error';
+        card.setAttribute('role', 'alert');
+        card.setAttribute('data-words-error', 'network');
+        function line(cls, lang, dir, text) {
+            var p = document.createElement('p');
+            if (cls) p.className = cls;
+            p.lang = lang;
+            p.dir = dir;
+            p.textContent = text;
+            return p;
+        }
+        var icon = document.createElement('div');
+        icon.className = 'words-state__icon';
+        icon.setAttribute('aria-hidden', 'true');
+        icon.textContent = '×';
+        card.appendChild(icon);
+        card.appendChild(line('empty-he', 'he', 'rtl', 'לֹא הִצְלַחְנוּ לִטְעֹן אֶת הַמִּלִּים'));
+        card.appendChild(line('empty-title', 'en', 'ltr', 'We couldn’t load your words'));
+        card.appendChild(line('empty-body empty-body-en', 'en', 'ltr', 'Your words are safe. Check your connection and try again.'));
+        card.appendChild(line('empty-body empty-body-he', 'he', 'rtl', 'הַמִּלִּים שֶׁלָּכֶם שְׁמוּרוֹת. בִּדְקוּ אֶת הַחִיבּוּר וְנַסּוּ שׁוּב.'));
+        main.appendChild(card);
+    };
     document.addEventListener('htmx:afterSwap', function (ev) {
         var target = ev.detail && ev.detail.target;
         if (target && target.classList && target.classList.contains('words-more')) shown();
