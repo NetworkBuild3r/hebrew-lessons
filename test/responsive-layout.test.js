@@ -133,7 +133,8 @@ describe('INIT-013/SPEC-006 responsive layout (static)', () => {
         assert.match(CSS, /--color-primary:\s*#6E93FF/);
         assert.match(SHELL_SRC, /hebrew-theme/);
         assert.match(SHELL_SRC, /normalizeTheme/);
-        assert.match(SHELL_SRC, /val === 'dark' \? 'dark' : 'light'|return val === 'dark' \? 'dark' : 'light'/);
+        assert.match(SHELL_SRC, /val === 'light' \|\| val === 'dark' \|\| val === 'auto'/);
+        assert.match(SHELL_SRC, /matchMedia\(\s*'\(prefers-color-scheme: dark\)'/);
         assert.match(SHELL_SRC, /setAttribute\(\s*'data-theme'/);
         assert.match(SHELL_SRC, /store\.setItem\(THEME_KEY/);
 
@@ -167,7 +168,8 @@ describe('INIT-013/SPEC-006 responsive layout (static)', () => {
 
         const Shell = sandbox.HebrewShell;
         assert.equal(Shell.normalizeTheme('dark'), 'dark');
-        assert.equal(Shell.normalizeTheme('nope'), 'light');
+        assert.equal(Shell.normalizeTheme('auto'), 'auto');
+        assert.equal(Shell.normalizeTheme('nope'), 'auto');
         assert.equal(Shell.applyTheme('dark'), 'dark');
         assert.equal(store['hebrew-theme'], 'dark');
         assert.equal(sandbox.document.documentElement.getAttribute('data-theme'), 'dark');

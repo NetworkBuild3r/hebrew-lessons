@@ -14,8 +14,9 @@
     var AI_DISCLOSURE_EN = 'If an admin turns on AI planning for your account, a summary of your progress and your username are sent to the operator\'s AI provider so it can draft your next lesson. The summary covers the words you have practiced and how well you know them, the grammar you have practiced and how accurate you are, the lessons you have finished, and how often you read with vowel points off. It does not include your individual answers, anything you typed, or when you practiced.';
     var AI_DISCLOSURE_HE = 'אם מנהל מפעיל תכנון בינה מלאכותית לחשבון שלך, סיכום של ההתקדמות ושם המשתמש נשלחים לספק הבינה המלאכותית של המפעיל כדי לנסח את השיעור הבא. הסיכום כולל את המילים שתורגלו ומידת הידיעה שלהן, את הדקדוק שתורגל ומידת הדיוק, את השיעורים שהושלמו, ובאיזו תדירות הקריאה היא בלי ניקוד. הסיכום אינו כולל תשובות בודדות, טקסט שהוקלד, או מועדי תרגול.';
     var AI_DISCLOSURE = AI_DISCLOSURE_HE + ' (' + AI_DISCLOSURE_EN + ')';
-    /** localStorage key for Light/Dark (INIT-013/SPEC-002). Allowlisted to light|dark only. */
+    /** localStorage key for the theme choice (INIT-013/SPEC-002, ADR-0015 amendment 2026-10-18). Allowlisted to light|dark|auto. */
     var THEME_KEY = 'hebrew-theme';
+    var systemThemeWatching = false;
 
     var NAV = [
         { id: 'today', href: '/', he: 'היום', en: 'Today', icon: 'today' },
@@ -93,50 +94,91 @@
     }
 
     /**
-     * Allowlist localStorage theme to 'light' | 'dark' (default light).
-     * Provenance: INIT-013/SPEC-002 · ADR-0015 REQ-005.
+     * Allowlist the stored theme choice to 'light' | 'dark' | 'auto'.
+     * Missing or unknown values are 'auto'. data-theme stays a concrete
+     * light|dark; see resolvedTheme.
+     * Provenance: INIT-013/SPEC-002 · ADR-0015 amendment 2026-10-18.
      * @param {string|null|undefined} val
-     * @returns {'light'|'dark'}
+     * @returns {'light'|'dark'|'auto'}
      */
     function normalizeTheme(val) {
-        return val === 'dark' ? 'dark' : 'light';
+        if (val === 'light' || val === 'dark' || val === 'auto') return val;
+        return 'auto';
     }
 
     /**
-     * Read persisted theme. Missing/invalid → 'light'.
+     * Concrete light|dark for data-theme. Auto follows the OS, and falls
+     * back to light when matchMedia is missing.
+     * @param {'light'|'dark'|'auto'} choice
      * @returns {'light'|'dark'}
      */
-    function readTheme() {
+    function resolvedTheme(choice) {
+        if (choice === 'dark') return 'dark';
+        if (choice === 'light') return 'light';
         try {
-            var store = root.localStorage;
-            if (!store || typeof store.getItem !== 'function') return 'light';
-            return normalizeTheme(store.getItem(THEME_KEY));
+            var mq = root.matchMedia && root.matchMedia('(prefers-color-scheme: dark)');
+            return mq && mq.matches ? 'dark' : 'light';
         } catch (err) {
             return 'light';
         }
     }
 
     /**
-     * Apply theme to <html data-theme> and persist when requested.
-     * @param {'light'|'dark'|string} theme
+     * Read the persisted choice. Missing/invalid → 'auto'.
+     * @returns {'light'|'dark'|'auto'}
+     */
+    function readTheme() {
+        try {
+            var store = root.localStorage;
+            if (!store || typeof store.getItem !== 'function') return 'auto';
+            return normalizeTheme(store.getItem(THEME_KEY));
+        } catch (err) {
+            return 'auto';
+        }
+    }
+
+    /**
+     * Apply the choice. data-theme is the resolved light|dark value.
+     * Storage keeps the choice, including auto.
+     * @param {'light'|'dark'|'auto'|string} theme
      * @param {{ persist?: boolean }} [opts]
-     * @returns {'light'|'dark'}
+     * @returns {'light'|'dark'|'auto'}
      */
     function applyTheme(theme, opts) {
-        var next = normalizeTheme(theme);
+        var choice = normalizeTheme(theme);
+        var resolved = resolvedTheme(choice);
         try {
             var doc = root.document;
             if (doc && doc.documentElement && typeof doc.documentElement.setAttribute === 'function') {
-                doc.documentElement.setAttribute('data-theme', next);
+                doc.documentElement.setAttribute('data-theme', resolved);
             }
         } catch (err) { /* ignore */ }
         if (!opts || opts.persist !== false) {
             try {
                 var store = root.localStorage;
-                if (store && typeof store.setItem === 'function') store.setItem(THEME_KEY, next);
+                if (store && typeof store.setItem === 'function') store.setItem(THEME_KEY, choice);
             } catch (err2) { /* ignore quota / private mode */ }
         }
-        return next;
+        return choice;
+    }
+
+    /**
+     * While the stored choice is auto, follow OS scheme changes.
+     * Idempotent so a second mount does not stack listeners.
+     */
+    function watchSystemTheme() {
+        if (systemThemeWatching) return;
+        try {
+            if (typeof root.matchMedia !== 'function') return;
+            var mq = root.matchMedia('(prefers-color-scheme: dark)');
+            var onChange = function () {
+                if (readTheme() === 'auto') applyTheme('auto', { persist: false });
+            };
+            if (typeof mq.addEventListener === 'function') mq.addEventListener('change', onChange);
+            else if (typeof mq.addListener === 'function') mq.addListener(onChange);
+            else return;
+            systemThemeWatching = true;
+        } catch (err) { /* ignore */ }
     }
 
     /**
@@ -498,6 +540,7 @@
             var pathname = options.pathname != null
                 ? options.pathname
                 : ((root.location && root.location.pathname) || '/');
+            watchSystemTheme();
             applyTheme(readTheme(), { persist: false });
             target.innerHTML = renderHtml(me, pathname);
             bindShell(target, state);
@@ -594,6 +637,8 @@
         }
         chain();
     }
+
+    watchSystemTheme();
 
     root.HebrewShell = {
         PRIVACY_NOTE: PRIVACY_NOTE,

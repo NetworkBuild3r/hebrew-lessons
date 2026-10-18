@@ -1018,7 +1018,7 @@ func GuidePage(g GuideDetail) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = views.Layout(views.Doc{
-			Title:      g.Title + " · דרך עברית",
+			Title:      g.Title + " · דֶּרֶךְ עִבְרִית",
 			BodyClass:  "hebrew-spa has-hebrew-shell guides-page guide-page",
 			PageHe:     "מדריכים",
 			PageEn:     "Guides",
@@ -1110,7 +1110,7 @@ func noticePage(title string, body templ.Component) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = views.Layout(views.Doc{
-			Title:      title + " · דרך עברית",
+			Title:      title + " · דֶּרֶךְ עִבְרִית",
 			BodyClass:  "hebrew-spa has-hebrew-shell guides-page guide-page",
 			PageHe:     "מדריכים",
 			PageEn:     "Guides",

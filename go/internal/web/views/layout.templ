@@ -8,9 +8,9 @@ import "github.com/NetworkBuild3r/hebrew-lessons/go/internal/web/views/component
 // localStorage keys the app uses and correct lang, dir, and theme before paint.
 // Theme follows the OS until a saved light, dark, or auto choice says
 // otherwise. data-theme is the resolved light or dark value. data-theme-choice
-// keeps auto so the switch can show it. That default is provisional:
-// ADR-0015 still defaults Node to light, and this page does not change
-// app-shell.js. Node pages stay dir=rtl. The end script handles the theme
+// keeps auto so the switch can show it. ADR-0015 accepts auto as the
+// default, and app-shell.js follows the same choice. Node pages stay
+// dir=rtl. The end script handles the theme
 // switch, the EN/עב toggle, and data-speak / data-audio. No script src is added.
 
 templ Layout(doc Doc) {

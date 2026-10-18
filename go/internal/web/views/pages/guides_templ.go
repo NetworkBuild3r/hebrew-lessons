@@ -560,7 +560,7 @@ func GuidesPage(list GuideList) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = views.Layout(views.Doc{
-			Title:      "מדריכים — Guides · דרך עברית",
+			Title:      "מדריכים — Guides · דֶּרֶךְ עִבְרִית",
 			BodyClass:  "hebrew-spa has-hebrew-shell guides-page",
 			PageHe:     "מדריכים",
 			PageEn:     "Guides",

@@ -259,7 +259,7 @@ func Shell(current string) templ.Component {
 			templ_7745c5c3_Var11 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"hebrew-shell ui-chrome\" dir=\"rtl\" lang=\"he\"><div class=\"hebrew-shell-inner\"><a class=\"hebrew-brand\" href=\"/\" data-brand><img class=\"hebrew-logo-mark\" src=\"/shared/brand/mark-a.svg\" width=\"30\" height=\"30\" alt=\"\" decoding=\"async\"> <span class=\"hebrew-brand-text ui-pair\"><span class=\"hebrew-brand-he ui-he\" lang=\"he\">דֶּרֶךְ עִבְרִית</span><span class=\"hebrew-brand-en ui-en\" lang=\"en\" dir=\"ltr\">Hebrew Way</span></span></a><nav class=\"hebrew-shell-nav\" data-ui-aria-he=\"ניווט ראשי\" data-ui-aria-en=\"Main\" aria-label=\"ניווט ראשי\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"hebrew-shell ui-chrome\" dir=\"rtl\" lang=\"he\"><div class=\"hebrew-shell-inner\"><a class=\"hebrew-brand\" href=\"/\" data-brand><img class=\"hebrew-logo-mark\" src=\"/shared/brand/mark-a.svg\" width=\"30\" height=\"30\" alt=\"\" decoding=\"async\"> <span class=\"hebrew-brand-text ui-pair\"><span class=\"hebrew-brand-he ui-he\" lang=\"he\">דֶּרֶךְ עִבְרִית</span><span class=\"hebrew-brand-en ui-en\" lang=\"en\" dir=\"ltr\">Hebrew Way</span></span></a><nav class=\"hebrew-shell-nav\" data-ui-aria-he=\"ניווט ראשי\" data-ui-aria-en=\"Main\" aria-label=\"ניווט ראשי\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

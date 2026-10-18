@@ -18,6 +18,7 @@
             document.documentElement.setAttribute('data-ui-lang', uiLang === 'he' ? 'he' : 'en');
         } catch (e) { /* English until a script can read the choice */ }
     </script>
+    <script>(function(){var t='auto';try{t=localStorage.getItem('hebrew-theme')||'auto';}catch(e){}if(t!=='light'&&t!=='dark'){var dark=false;try{dark=matchMedia('(prefers-color-scheme: dark)').matches;}catch(e2){}t=dark?'dark':'light';}document.documentElement.setAttribute('data-theme',t);})();</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="google" content="notranslate">
     <meta name="theme-color" content="#1d4ed8">

@@ -8231,7 +8231,8 @@ html[data-ui-lang="he"] .page-heading .page-heading-he { display: none; }
 .guide-card__cover { position: relative; height: 132px; background: var(--color-illus-tile); overflow: hidden; }
 .guide-card__cover img { position: absolute; inset: -14px 0 auto 0; width: 100%; height: auto; opacity: .6; transition: transform var(--motion-duration) var(--motion-easing); }
 .guide-card:hover .guide-card__cover img { transform: scale(1.03); }
-.guide-card__letter { position: absolute; inset-block-start: 10px; inset-inline-start: 28px; font: 700 72px/1.4 var(--font-hebrew-lettering); color: var(--color-surface-hero); }
+/* Intentionally physical: the cover art does not mirror, so a logical-properties sweep must not change this left. */
+.guide-card__letter { position: absolute; inset-block-start: 10px; left: 28px; font: 700 72px/1.4 var(--font-hebrew-lettering); color: var(--color-surface-hero); }
 .guide-card__body { display: grid; gap: var(--space-2); padding: var(--space-4) var(--space-5) var(--space-5); }
 .guide-card__meta { font: 700 13px/1.2 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--color-accent-olive); }
 .guide-card h3 { margin: 0; font: 600 20px/1.35 var(--font-sans); }
