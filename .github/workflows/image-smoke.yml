@@ -56,6 +56,9 @@ jobs:
         env:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
+          # Checkout does not persist credentials. This private fetch uses the
+          # job token for this command only; it is not written into git config.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           full_sha='^[0-9a-f]{40}$'
@@ -68,7 +71,7 @@ jobs:
             echo "::error::Checked out ${actual}, but the pull request head is ${PR_HEAD}."
             exit 1
           fi
-          git fetch --depth=1 origin "$PR_BASE"
+          git -c "http.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" fetch --depth=1 origin "$PR_BASE"
           mapfile -d '' files < <(git diff -z --name-only "$PR_BASE" HEAD)
           if [ "${#files[@]}" -eq 0 ]; then
             echo "build=true" >> "$GITHUB_OUTPUT"
