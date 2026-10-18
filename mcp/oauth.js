@@ -598,7 +598,7 @@ async function googleCallback(res, url) {
         return redirectWith(res, q.redirect_uri, { error: 'access_denied', state: q.state });
     }
     const issuedCode = issueAuthCode(q, user);
-    console.error('mcp google callback ok uid=' + user.id + ' cid=' + q.client_id + ' ru=' + q.redirect_uri + ' code_len=' + issuedCode.length);
+    console.error('mcp google callback ok redirect_uri_present=' + Boolean(q.redirect_uri) + ' client_id=' + logClientId(q.client_id));
     redirectWith(res, q.redirect_uri, { code: issuedCode, state: q.state });
 }
 
@@ -614,7 +614,7 @@ function authorizeGet(req, res, url) {
         console.error('mcp oauth authorize ' + resolved.redirectError);
         return redirectWith(res, q.redirect_uri, { error: resolved.redirectError, error_description: resolved.description, state: q.state });
     }
-    console.error('mcp oauth authorize ok cid=' + q.client_id + ' ru=' + q.redirect_uri + ' state_len=' + String(q.state || '').length);
+    console.error('mcp oauth authorize ok redirect_uri_present=' + Boolean(q.redirect_uri) + ' client_id=' + logClientId(q.client_id));
     if (googleConfigured()) return startGoogle(res, q);
     renderConsent(res, resolved, q);
 }
