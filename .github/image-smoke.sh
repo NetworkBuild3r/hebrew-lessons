@@ -2,6 +2,13 @@
 # Boot a built hebrew-lessons image and fail if the process cannot serve.
 # Usage: .github/image-smoke.sh <image>
 # The token and admin password exist only for this process. They are not secrets.
+#
+# k8-build's DOCKER_HOST is a shared remote daemon, not a local engine.
+# Ports published with -p land on that host, not on this runner, and a fixed
+# host port collides with another job. This script publishes nothing.
+# A probe container joins the app container's network namespace
+# (--network container:$NAME) and connects to the app's own loopback as
+# "localhost" (IPv4). That name is the shared namespace, not this runner.
 set -eu
 
 IMAGE=${1:-}
@@ -10,117 +17,151 @@ if [ -z "$IMAGE" ]; then
     exit 2
 fi
 
-WEB_PORT=${WEB_PORT:-18080}
-MCP_PORT=${MCP_PORT:-18787}
+RUN_ID=${GITHUB_RUN_ID:-local}
+ATTEMPT=${GITHUB_RUN_ATTEMPT:-0}
+# Unique on the shared daemon across concurrent jobs and re-runs.
+NAME="hebrew-smoke-${RUN_ID}-${ATTEMPT}-$$"
+PROBE="hebrew-probe-${RUN_ID}-${ATTEMPT}-$$"
+# The image under test is already loaded and contains node. A separate curl
+# image would be another pull. Override only to point at a different client
+# image that has `node` on PATH (tag or digest).
+PROBE_IMAGE=${SMOKE_PROBE_IMAGE:-$IMAGE}
 TOKEN=${SMOKE_MCP_TOKEN:-smoke-token}
 USER_NAME=${SMOKE_ADMIN_USER:-smokeadmin}
 PASSWORD=${SMOKE_ADMIN_PASSWORD:-smoke-not-common-99}
-ORIGIN="http://127.0.0.1:${WEB_PORT}"
-NAME="hebrew-smoke-$$"
-COOKIE=$(mktemp)
-BODY=$(mktemp)
-trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true; rm -f "$COOKIE" "$BODY"' EXIT
+PUBLIC_ORIGIN=${SMOKE_PUBLIC_ORIGIN:-http://localhost:8080}
+TIMEOUT_MS=${SMOKE_TIMEOUT_MS:-45000}
 
-docker rm -f "$NAME" >/dev/null 2>&1 || true
+cleanup() {
+    code=$?
+    docker rm -f "$PROBE" >/dev/null 2>&1 || true
+    docker rm -f "$NAME" >/dev/null 2>&1 || true
+    exit "$code"
+}
+trap cleanup EXIT
+trap 'exit 1' INT TERM
+
+docker rm -f "$PROBE" "$NAME" >/dev/null 2>&1 || true
+
+echo "smoke: app ${NAME}, probe ${PROBE}, network container:${NAME}, no published ports"
+
 docker run -d --name "$NAME" \
-    -p "127.0.0.1:${WEB_PORT}:8080" \
-    -p "127.0.0.1:${MCP_PORT}:8787" \
     -e HOST=0.0.0.0 \
     -e HEBREW_ROOT=/app \
     -e DATA_DIR=/tmp/hebrew-data \
     -e COOKIE_SECURE=0 \
-    -e "PUBLIC_ORIGIN=${ORIGIN}" \
+    -e "PUBLIC_ORIGIN=${PUBLIC_ORIGIN}" \
     -e "MCP_AUTH_TOKEN=${TOKEN}" \
     -e "ADMIN_USERNAME=${USER_NAME}" \
     -e "ADMIN_PASSWORD=${PASSWORD}" \
     "$IMAGE"
 
-ready=0
-i=0
-while [ "$i" -lt 40 ]; do
-    if curl -fsS "${ORIGIN}/healthz" 2>/dev/null | grep -qx 'ok'; then
-        ready=1
-        break
-    fi
-    if ! docker inspect -f '{{.State.Running}}' "$NAME" | grep -qx true; then
-        echo "container exited before /healthz" >&2
-        docker logs "$NAME" >&2 || true
-        exit 1
-    fi
-    i=$((i + 1))
-    sleep 1
-done
-if [ "$ready" -ne 1 ]; then
-    echo "/healthz did not return 200 ok" >&2
-    docker logs "$NAME" >&2 || true
-    exit 1
-fi
-echo "healthz ok"
+# One probe, started once. It retries until the server answers or the timeout.
+# --network container: shares the app's stack, so nothing is published with -p.
+if ! docker run --rm --name "$PROBE" \
+    --network "container:${NAME}" \
+    -i \
+    -e "PUBLIC_ORIGIN=${PUBLIC_ORIGIN}" \
+    -e "SMOKE_MCP_TOKEN=${TOKEN}" \
+    -e "SMOKE_ADMIN_USER=${USER_NAME}" \
+    -e "SMOKE_ADMIN_PASSWORD=${PASSWORD}" \
+    -e "SMOKE_TIMEOUT_MS=${TIMEOUT_MS}" \
+    "$PROBE_IMAGE" \
+    node - <<'JS'
+'use strict';
 
-code=$(curl -sS -o "$BODY" -w '%{http_code}' -c "$COOKIE" \
-    -H 'Content-Type: application/json' \
-    -H "Origin: ${ORIGIN}" \
-    -d "{\"username\":\"${USER_NAME}\",\"password\":\"${PASSWORD}\"}" \
-    "${ORIGIN}/api/session")
-if [ "$code" != "200" ]; then
-    echo "sign-in failed: HTTP ${code}" >&2
-    cat "$BODY" >&2
-    exit 1
-fi
-echo "sign-in ok"
+const http = require('http');
 
-code=$(curl -sS -o "$BODY" -w '%{http_code}' -b "$COOKIE" \
-    "${ORIGIN}/worksheets/my-morning/index.html")
-if [ "$code" != "200" ]; then
-    echo "worksheet page failed: HTTP ${code}" >&2
-    exit 1
-fi
-if ! grep -q 'src="worksheet.js"' "$BODY"; then
-    echo "worksheet page is not the lesson shell" >&2
-    exit 1
-fi
-echo "worksheet page ok"
-code=$(curl -sS -o "$BODY" -w '%{http_code}' -b "$COOKIE" \
-    "${ORIGIN}/worksheets/my-morning/worksheet.js")
-if [ "$code" != "200" ]; then
-    echo "worksheet data failed: HTTP ${code}" >&2
-    exit 1
-fi
-if ! grep -q '"id": "my-morning"' "$BODY"; then
-    echo "worksheet data is not my-morning" >&2
-    exit 1
-fi
-echo "worksheet ok"
+const origin = process.env.PUBLIC_ORIGIN || 'http://localhost:8080';
+const token = process.env.SMOKE_MCP_TOKEN || '';
+const user = process.env.SMOKE_ADMIN_USER || '';
+const password = process.env.SMOKE_ADMIN_PASSWORD || '';
+const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS || 45000);
+const web = 'http://localhost:8080';
+const mcp = 'http://localhost:8787';
 
-code=$(curl -sS -o "$BODY" -w '%{http_code}' -b "$COOKIE" \
-    -H 'Accept: audio/mpeg' \
-    "${ORIGIN}/worksheets/my-morning/audio/story/line-1.mp3")
-if [ "$code" != "200" ]; then
-    echo "audio fetch failed: HTTP ${code}" >&2
-    exit 1
-fi
-bytes=$(wc -c < "$BODY" | tr -d ' ')
-if [ "$bytes" -lt 100 ]; then
-    echo "audio file is too small (${bytes} bytes)" >&2
-    exit 1
-fi
-echo "audio ok (${bytes} bytes)"
+function fail(message) {
+    console.error(message);
+    process.exit(1);
+}
 
-code=$(curl -sS -o "$BODY" -w '%{http_code}' \
-    -H "Authorization: Bearer ${TOKEN}" \
-    -H 'Content-Type: application/json' \
-    -H 'Accept: application/json, text/event-stream' \
-    -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
-    "http://127.0.0.1:${MCP_PORT}/mcp")
-if [ "$code" != "200" ]; then
-    echo "tools/list failed: HTTP ${code}" >&2
-    cat "$BODY" >&2
-    exit 1
-fi
-docker exec -i "$NAME" node -e '
-let raw = "";
-process.stdin.on("data", (chunk) => { raw += chunk; });
-process.stdin.on("end", () => {
+function request(method, url, headers, body) {
+    return new Promise((resolve, reject) => {
+        const u = new URL(url);
+        const reqHeaders = Object.assign({}, headers || {});
+        const payload = body == null ? null : Buffer.from(body);
+        if (payload && !reqHeaders['Content-Length'] && !reqHeaders['content-length']) {
+            reqHeaders['Content-Length'] = String(payload.length);
+        }
+        const req = http.request({
+            protocol: u.protocol,
+            hostname: u.hostname,
+            port: u.port,
+            path: u.pathname + u.search,
+            method,
+            headers: reqHeaders,
+            family: 4
+        }, (res) => {
+            const chunks = [];
+            res.on('data', (chunk) => chunks.push(chunk));
+            res.on('end', () => {
+                resolve({
+                    status: res.statusCode,
+                    headers: res.headers,
+                    body: Buffer.concat(chunks)
+                });
+            });
+        });
+        req.on('error', reject);
+        if (payload) req.write(payload);
+        req.end();
+    });
+}
+
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function cookieHeader(setCookie) {
+    const list = Array.isArray(setCookie) ? setCookie : (setCookie ? [setCookie] : []);
+    if (!list.length) return '';
+    return list.map((line) => String(line).split(';')[0]).join('; ');
+}
+
+function assertNoCookie(res, label) {
+    if (res.headers['set-cookie']) {
+        fail(label + ' set a cookie');
+    }
+}
+
+function assertHealth(res, label) {
+    if (res.status !== 200) fail(label + ' HTTP ' + res.status + ' body ' + JSON.stringify(res.body.toString('utf8').slice(0, 200)));
+    assertNoCookie(res, label);
+    const text = res.body.toString('utf8');
+    const type = String(res.headers['content-type'] || '');
+    if (!/^text\/plain/i.test(type)) fail(label + ' content-type ' + type);
+    if (text !== 'ok') fail(label + ' body is not ok: ' + JSON.stringify(text.slice(0, 200)));
+    if (/my-morning|worksheet|"id"|<html/i.test(text)) fail(label + ' returned lesson data');
+}
+
+async function waitHealth() {
+    const deadline = Date.now() + timeoutMs;
+    let last = 'no response';
+    while (Date.now() < deadline) {
+        try {
+            const res = await request('GET', web + '/healthz');
+            if (res.status === 200 && res.body.toString('utf8') === 'ok') return res;
+            // The process is accepting connections. A non-ok healthz will not become ok.
+            fail('GET /healthz HTTP ' + res.status + ' body ' + JSON.stringify(res.body.toString('utf8').slice(0, 200)));
+        } catch (err) {
+            last = err && err.message ? err.message : String(err);
+        }
+        await sleep(1000);
+    }
+    fail('/healthz did not return 200 ok within ' + timeoutMs + 'ms (' + last + ')');
+}
+
+function toolCount(raw) {
     const payloads = [];
     const tryParse = (text) => {
         try { payloads.push(JSON.parse(text)); } catch (err) { /* not json */ }
@@ -129,7 +170,7 @@ process.stdin.on("end", () => {
     raw.split(/\r?\n/).forEach((line) => {
         const trimmed = line.trim();
         if (!trimmed) return;
-        tryParse(trimmed.startsWith("data:") ? trimmed.slice(5).trim() : trimmed);
+        tryParse(trimmed.startsWith('data:') ? trimmed.slice(5).trim() : trimmed);
     });
     let tools = null;
     payloads.forEach((payload) => {
@@ -137,15 +178,89 @@ process.stdin.on("end", () => {
         if (Array.isArray(found)) tools = found;
     });
     if (!tools) {
-        console.error("tools/list response has no tools array");
-        console.error(raw.slice(0, 2000));
-        process.exit(1);
+        fail('tools/list response has no tools array\n' + raw.slice(0, 2000));
     }
+    return tools;
+}
+
+async function main() {
+    const ready = await waitHealth();
+    assertHealth(ready, 'GET /healthz (no cookie)');
+    console.log('healthz ok');
+
+    const head = await request('HEAD', web + '/healthz');
+    if (head.status !== 200) fail('HEAD /healthz HTTP ' + head.status);
+    assertNoCookie(head, 'HEAD /healthz');
+    if (head.body.length !== 0) fail('HEAD /healthz body is not empty (' + head.body.length + ' bytes)');
+    console.log('healthz HEAD ok');
+
+    const post = await request('POST', web + '/healthz', {
+        'Content-Type': 'application/json',
+        Origin: origin
+    }, '{}');
+    if (post.status >= 200 && post.status < 300) fail('POST /healthz was 2xx (' + post.status + ')');
+    if (post.status !== 405 && post.status !== 404) {
+        fail('POST /healthz HTTP ' + post.status + ' (want 405 or 404)');
+    }
+    console.log('healthz POST rejected (' + post.status + ')');
+
+    const signInBody = JSON.stringify({ username: user, password: password });
+    const signed = await request('POST', web + '/api/session', {
+        'Content-Type': 'application/json',
+        Origin: origin
+    }, signInBody);
+    if (signed.status !== 200) {
+        fail('sign-in failed: HTTP ' + signed.status + ' ' + signed.body.toString('utf8').slice(0, 500));
+    }
+    const cookie = cookieHeader(signed.headers['set-cookie']);
+    if (!cookie) fail('sign-in set no cookie');
+    console.log('sign-in ok');
+
+    const page = await request('GET', web + '/worksheets/my-morning/index.html', { Cookie: cookie });
+    if (page.status !== 200) fail('worksheet page failed: HTTP ' + page.status);
+    if (!page.body.toString('utf8').includes('src="worksheet.js"')) {
+        fail('worksheet page is not the lesson shell');
+    }
+    console.log('worksheet page ok');
+
+    const data = await request('GET', web + '/worksheets/my-morning/worksheet.js', { Cookie: cookie });
+    if (data.status !== 200) fail('worksheet data failed: HTTP ' + data.status);
+    if (!data.body.toString('utf8').includes('"id": "my-morning"')) {
+        fail('worksheet data is not my-morning');
+    }
+    console.log('worksheet ok');
+
+    const audio = await request('GET', web + '/worksheets/my-morning/audio/story/line-1.mp3', {
+        Cookie: cookie,
+        Accept: 'audio/mpeg'
+    });
+    if (audio.status !== 200) fail('audio fetch failed: HTTP ' + audio.status);
+    if (audio.body.length < 100) fail('audio file is too small (' + audio.body.length + ' bytes)');
+    console.log('audio ok (' + audio.body.length + ' bytes)');
+
+    const listed = await request('POST', mcp + '/mcp', {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream'
+    }, '{"jsonrpc":"2.0","id":1,"method":"tools/list"}');
+    if (listed.status !== 200) {
+        fail('tools/list failed: HTTP ' + listed.status + ' ' + listed.body.toString('utf8').slice(0, 500));
+    }
+    const tools = toolCount(listed.body.toString('utf8'));
     if (tools.length !== 42) {
-        console.error("expected 42 tools, got " + tools.length);
-        tools.forEach((tool) => console.error("  " + tool.name));
-        process.exit(1);
+        const names = tools.map((tool) => tool && tool.name).join('\n  ');
+        fail('expected 42 tools, got ' + tools.length + '\n  ' + names);
     }
-    console.log("tools/list ok (42)");
+    console.log('tools/list ok (42)');
+}
+
+main().catch((err) => {
+    console.error(err && err.stack ? err.stack : err);
+    process.exit(1);
 });
-' < "$BODY"
+JS
+then
+    echo "smoke probe failed" >&2
+    docker logs "$NAME" >&2 || true
+    exit 1
+fi

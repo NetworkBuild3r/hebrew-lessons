@@ -247,9 +247,44 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=ghcr.io/networkbuild3r/hebrew-lessons:buildcache
           cache-to: type=registry,ref=ghcr.io/networkbuild3r/hebrew-lessons:buildcache,mode=max,ignore-error=true
+      # The gated commit is what gets built. A rollback SHA from before this
+      # script existed has no copy of it; take the one shipped with this workflow.
+      - name: Note whether the gated commit has the smoke script
+        id: smoke_src
+        if: steps.scope.outputs.build == 'true'
+        shell: bash
+        run: |
+          if [ -f .github/image-smoke.sh ]; then
+            echo "missing=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Checkout the smoke script from this workflow revision
+        if: steps.scope.outputs.build == 'true' && steps.smoke_src.outputs.missing == 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/image-smoke.sh
+          sparse-checkout-cone-mode: false
+          path: _workflow_smoke
+      # Do not publish ports. DOCKER_HOST is the shared remote daemon, so -p
+      # is not reachable from this runner and a fixed port collides with
+      # another job. image-smoke.sh joins the app container's network instead.
       - name: Smoke the image
         if: steps.scope.outputs.build == 'true'
-        run: .github/image-smoke.sh "${{ steps.meta.outputs.tags }}"
+        shell: bash
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          if [ -f .github/image-smoke.sh ]; then
+            script=.github/image-smoke.sh
+          else
+            script=_workflow_smoke/.github/image-smoke.sh
+            echo "Using the smoke script from this workflow revision."
+          fi
+          chmod +x "$script"
+          "$script" "$IMAGE_TAGS"
       - name: Push the image
         if: steps.scope.outputs.build == 'true'
         run: docker push "${{ steps.meta.outputs.tags }}"

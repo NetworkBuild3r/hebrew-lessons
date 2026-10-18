@@ -102,7 +102,11 @@ describe('web gating (ac-1, ac-2, ac-6, ac-7, ac-8)', () => {
         }
         const health = await req('/healthz');
         assert.equal(health.status, 200, '/healthz');
-        assert.equal(await health.text(), 'ok');
+        assert.equal(health.headers.get('set-cookie'), null, '/healthz sets no session cookie');
+        assert.match(health.headers.get('content-type') || '', /^text\/plain/);
+        const healthBody = await health.text();
+        assert.equal(healthBody, 'ok');
+        assert.equal(/my-morning|worksheet|"id"|<html/i.test(healthBody), false, '/healthz returns no lesson data');
         // Self-hosted Rubik is public too (the sign-in page needs it). The rest of /shared/ is not.
         const font = await req('/shared/fonts/rubik-hebrew.woff2');
         assert.equal(font.status, 200, 'public font');
@@ -120,6 +124,33 @@ describe('web gating (ac-1, ac-2, ac-6, ac-7, ac-8)', () => {
         assert.equal(login.status, 200);
         const loginIndex = await req('/login/index.html');
         assert.equal(loginIndex.status, 200);
+    });
+
+    it('/healthz is liveness: no cookie required, HEAD is empty, POST is rejected', async () => {
+        const bare = await req('/healthz');
+        assert.equal(bare.status, 200, 'GET with no cookie');
+        assert.equal(bare.headers.get('set-cookie'), null);
+        assert.equal(await bare.text(), 'ok');
+
+        const junk = await req('/healthz', {
+            headers: { Cookie: 'hebrew_session=not-a-session' }
+        });
+        assert.equal(junk.status, 200, 'GET ignores a junk session cookie');
+        assert.equal(junk.headers.get('set-cookie'), null);
+        assert.equal(await junk.text(), 'ok');
+
+        const head = await req('/healthz', { method: 'HEAD' });
+        assert.equal(head.status, 200, 'HEAD /healthz');
+        assert.equal(head.headers.get('set-cookie'), null, 'HEAD sets no cookie');
+        assert.equal(await head.text(), '', 'HEAD body is empty');
+
+        const post = await req('/healthz', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        assert.ok(post.status === 405 || post.status === 404, 'POST /healthz → ' + post.status);
+        assert.ok(post.status < 200 || post.status >= 300, 'POST /healthz is not 2xx');
+        await post.text();
     });
 
     it('INIT-005/SPEC-010: /shared/brand/ is public; nothing else under /shared/ opened', async () => {
