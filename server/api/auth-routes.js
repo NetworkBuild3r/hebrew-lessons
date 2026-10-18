@@ -11,6 +11,7 @@ const googleLogin = require('../auth/google-login');
 const cookies = require('../http/cookies');
 const body = require('../http/body');
 const security = require('../http/security');
+const { clientIp } = require('../auth/client-ip');
 
 /**
  * Shape returned by GET /api/me and POST /api/session.
@@ -25,12 +26,6 @@ function mePayload(user) {
         role: user.role,
         must_change_password: Boolean(user.must_change_password)
     };
-}
-
-function clientIp(req) {
-    const xf = req.headers['x-forwarded-for'];
-    if (typeof xf === 'string' && xf) return xf.split(',')[0].trim();
-    return (req.socket && req.socket.remoteAddress) || '';
 }
 
 /**

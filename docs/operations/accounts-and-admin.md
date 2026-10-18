@@ -260,10 +260,11 @@ kubectl exec -it deploy/<name> -- npm run audio:inventory
 | `ADMIN_PASSWORD` | Password for that first admin. Ignored once an admin exists |
 | `ADMIN_DISPLAY_NAME` | Optional display name for that first admin |
 | `SRS_SCHEDULER` | `ladder` (default) or `fsrs`. Not a secret. Read once when the server process starts. See [Ladder fallback](#ladder-fallback). |
+| `TRUSTED_PROXIES` | Comma-separated IPv4 or IPv6 addresses or CIDRs. The login throttle uses `CF-Connecting-IP` only when the socket peer is in this list; otherwise it uses the socket address. Empty trusts nobody. Not a secret. Invalid entries are ignored at startup with one warning. Set Traefik's pod CIDR before a production deploy — see [deploy/k8s-database.md](../../deploy/k8s-database.md). |
 
 **Local compose:** `COOKIE_SECURE=0`, `PUBLIC_ORIGIN=http://localhost:8080`.
 
-**Kubernetes:** `COOKIE_SECURE=1`, `DATA_DIR=/data/app`, `LESSONS_DIR=/data/worksheets`. `SRS_SCHEDULER` is a plain environment variable, not a secret; `ladder` is the fallback. `MCP_AUTH_TOKEN`, `ELEVENLABS_API_KEY`, `OPENAI_API_KEY`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` come from Secret `hebrew-secrets` via `secretKeyRef` (keys with those same names). Media files are `/data/app/media/` and `/data/app/media/_archive/` on PVC `hebrew-data`. Full Deployment snippet: [deploy/k8s-database.md](../../deploy/k8s-database.md). Do not paste secret values into docs or YAML.
+**Kubernetes:** `COOKIE_SECURE=1`, `DATA_DIR=/data/app`, `LESSONS_DIR=/data/worksheets`. `SRS_SCHEDULER` is a plain environment variable, not a secret; `ladder` is the fallback. `TRUSTED_PROXIES` is also plain env. Production is Cloudflare, then Traefik. Note for the team lead (Hebrew Dev) and CI/CD: set `TRUSTED_PROXIES` to Traefik's pod CIDR before or with the deploy, and confirm Traefik passes `CF-Connecting-IP` through untouched. Until that value is set, every sign-in is keyed on the Traefik socket address, so all users share one throttle bucket. `MCP_AUTH_TOKEN`, `ELEVENLABS_API_KEY`, `OPENAI_API_KEY`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` come from Secret `hebrew-secrets` via `secretKeyRef` (keys with those same names). Media files are `/data/app/media/` and `/data/app/media/_archive/` on PVC `hebrew-data`. Full Deployment snippet: [deploy/k8s-database.md](../../deploy/k8s-database.md). Do not paste secret values into docs or YAML.
 
 ## Privacy: who can see what
 

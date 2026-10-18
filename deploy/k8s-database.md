@@ -110,6 +110,15 @@ spec:
             # docs/operations/language-program-rollout.md (INIT-006/SPEC-020).
             - name: SRS_SCHEDULER
               value: ladder
+            # Login throttle. Comma-separated IPs or CIDRs of the proxy that dials
+            # this pod. Note for the team lead (Hebrew Dev) and CI/CD: replace
+            # the placeholder with Traefik's pod CIDR before or with this deploy,
+            # and confirm Traefik passes CF-Connecting-IP through untouched.
+            # Empty trusts nobody: every sign-in shares the Traefik socket address
+            # as one throttle bucket. CF-Connecting-IP is used only from a peer
+            # in this list.
+            - name: TRUSTED_PROXIES
+              value: "<traefik-pod-cidr>"
           volumeMounts:
             - name: lessons
               mountPath: /data/worksheets
@@ -129,6 +138,10 @@ spec:
 Generated images use this same `hebrew-data` PVC. With `DATA_DIR=/data/app`, live files are `/data/app/media/` and files kept before a delete are `/data/app/media/_archive/`. Do not add a second volume for media, and do not put media on `hebrew-lessons`. Recordings (`.mp3`) stay on the lessons volume.
 
 `OPENAI_API_KEY`, the ElevenLabs key, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` are injected only via `secretKeyRef` (Secret name `hebrew-secrets`, keys with those same names). This document names `OPENAI_API_KEY`. It does not contain a value. The image does not contain it. The operator adds that key to the existing Secret in the cluster; do not replace the Secret, and do not write the value into git or into this file. `ADMIN_PASSWORD` is read only when the database has no admin; after the first boot, the database account is the one that signs in.
+
+`TRUSTED_PROXIES` is plain env, not a Secret. It is a comma-separated list of IPv4 or IPv6 addresses or CIDRs. The login throttle reads `CF-Connecting-IP` only when `req.socket.remoteAddress` (IPv4-mapped IPv6 such as `::ffff:10.0.0.1` included) is inside that list. Every other peer, and a missing or malformed `CF-Connecting-IP`, is keyed on the socket address. The server does not use `X-Forwarded-For` for this. The default is empty.
+
+Production is Cloudflare, then Traefik. Cloudflare appends to whatever `X-Forwarded-For` the client sent, so that header cannot identify the client. Note for the team lead (Hebrew Dev) and CI/CD: set `TRUSTED_PROXIES` to Traefik's pod CIDR before or with the deploy that ships this server, and confirm Traefik passes `CF-Connecting-IP` through untouched. With the default empty list, the pod sees Traefik as the peer and every user shares one throttle bucket. A literal `<traefik-pod-cidr>` is not a CIDR: startup ignores it with one warning and the bucket stays shared. Invalid entries are ignored the same way; a typo does not stop the process and does not grant trust.
 
 `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` are the same Google client oauth2-proxy uses for Tautulli (`oauth2-proxy-ibhacked-secrets`, Vault key `apps/oauth2-proxy`). Copy those two values into `hebrew-secrets`. Do not write them into git. In Google Cloud Console, add these redirect URIs on that client and leave `https://auth.ibhacked.us/oauth2/callback` in place:
 
