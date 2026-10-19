@@ -16,6 +16,7 @@ func TestConfigFromEnv(t *testing.T) {
 		"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
 		"GOOGLE_AUTH_URL", "GOOGLE_TOKEN_URL",
 		"GOOGLE_USERINFO_URL", "GOOGLE_JWKS_URL", "GOOGLE_ISSUER",
+		"HEBREW_SESSION_SECRET",
 		"MCP_OAUTH_ALLOWED_EMAILS", "ADMIN_EMAILS",
 		"MCP_AUTH_TOKEN", "MCP_PUBLIC_URL",
 		"ELEVENLABS_API_KEY",
@@ -58,6 +59,7 @@ func TestConfigFromEnv(t *testing.T) {
 	t.Setenv("GOOGLE_CLIENT_SECRET", "secret-value")
 	t.Setenv("GOOGLE_ISSUER", "http://127.0.0.1:9")
 	t.Setenv("GOOGLE_JWKS_URL", "http://127.0.0.1:9/jwks")
+	t.Setenv("HEBREW_SESSION_SECRET", "state-secret")
 	t.Setenv("MCP_OAUTH_ALLOWED_EMAILS", "learner@example.com, admin@example.com")
 	t.Setenv("ADMIN_EMAILS", "admin@example.com")
 	t.Setenv("MCP_AUTH_TOKEN", "mcp-token")
@@ -90,6 +92,9 @@ func TestConfigFromEnv(t *testing.T) {
 	}
 	if cfg.GoogleIssuer != "http://127.0.0.1:9" || cfg.GoogleJWKSURL != "http://127.0.0.1:9/jwks" {
 		t.Fatalf("google override lost: %+v", cfg)
+	}
+	if cfg.StateSecret != "state-secret" {
+		t.Fatalf("state secret %q", cfg.StateSecret)
 	}
 	if cfg.GoogleAuthURL != "https://accounts.google.com/o/oauth2/v2/auth" {
 		t.Fatalf("unset google url was not defaulted: %s", cfg.GoogleAuthURL)

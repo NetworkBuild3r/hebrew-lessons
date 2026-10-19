@@ -55,6 +55,17 @@ const (
 // on the activity token. The split keeps one finding per story token: story.unmapped
 // is what coverage and glosses need, because a gloss has to land on a
 // lexicon entry.
+//
+// A Hebrew numeral is gematria in rank order, written with geresh
+// (U+05F3) or gershayim (U+05F4): zero or more ת, then at most one of
+// ק/ר/ש, then at most one tens letter, then at most one units letter.
+// ט״ו and ט״ז are 15 and 16. Acronyms such as צה״ל and ע״י are words and
+// must map to a lexeme. A known limitation: spellings that are also
+// valid numerals, such as ת״א and ש״ס, cannot be told apart from numbers,
+// so they are treated as numerals. ASCII quotes are not numerals.
+// Tokenize splits י"ב into י and ב, and ה' into ה, and each letter is
+// flagged. Authors should use U+05F3 and U+05F4. ה׳תשפ״ו is a word;
+// write תשפ״ו.
 
 // Rule is one authoring check. The MCP rules resource can serve Rules.
 type Rule struct {
@@ -83,8 +94,8 @@ var Rules = []Rule{
 	{ID: RuleSchemaLookup, Severity: SeverityBlock, Description: "The lexicon or audio lookup failed."},
 	{ID: RuleSchemaRef, Severity: SeverityBlock, Description: "A new word is duplicated or never appears in a lesson."},
 	{ID: RuleSchemaRequired, Severity: SeverityBlock, Description: "A required field is missing or empty."},
-	{ID: RuleStoryUnmapped, Severity: SeverityBlock, Description: "A story content word does not map to a lexicon entry. Names and numbers are exempt. The same token is not also lexeme.unknown."},
-	{ID: RuleStoryUnpointed, Severity: SeverityBlock, Description: "A story contains a Hebrew word with no niqqud. Names, numbers, and punctuation are ignored. Homographs are not exempt."},
+	{ID: RuleStoryUnmapped, Severity: SeverityBlock, Description: "A story content word does not map to a lexicon entry. Names and numbers are exempt. A number is digits or gematria in rank order with U+05F3/U+05F4. Acronyms are words, except spellings that are also valid numerals (ת״א, ש״ס), which are treated as numerals. ASCII quotes are split into letters and flagged. The same token is not also lexeme.unknown."},
+	{ID: RuleStoryUnpointed, Severity: SeverityBlock, Description: "A story contains a Hebrew word with no niqqud. Names, numbers, and punctuation are ignored. A number is digits or gematria in rank order with U+05F3/U+05F4. Acronyms are words, except spellings that are also valid numerals (ת״א, ש״ס), which are treated as numerals. ASCII quotes are split into letters and flagged. Homographs are not exempt."},
 }
 
 // Guidance is one player rule for the model that writes units.
