@@ -23,10 +23,20 @@ type lessonItem struct {
 
 // PutUnit inserts or updates one unit and derives lesson_items.
 //
-// A nil id creates a unit. The same canonical document, position, and scope
-// leave the current revision in place. A scope-only change appends a draft
-// revision. Validation issues do not refuse the write. A missing id returns
-// mcp.ErrUnitNotFound. The actor is the principal on ctx.
+// db.PutUnit is not this method. It keys the row by position, always appends
+// a revision, keeps a published status, stores the actor "put_unit", and
+// does not derive lesson_items or report a missing id. The authoring tool
+// needs the gaps below, so this transaction does not call db.PutUnit:
+//
+//   - an unchanged document, position, and scope inserts nothing
+//   - a scope-only change appends a revision and sets status back to draft
+//   - editing a published unit sets status back to draft
+//   - a missing id returns mcp.ErrUnitNotFound
+//   - the actor is the principal on ctx
+//   - lesson_items are derived from the document
+//
+// A nil id creates a unit. Validation issues do not refuse the write.
+// unit_revisions has no scope column; scope is stored on units.
 func (s *Store) PutUnit(ctx context.Context, id *int64, doc *units.Unit, scope string) (mcp.PutResult, error) {
 	conn, err := s.conn(ctx)
 	if err != nil {
@@ -105,9 +115,9 @@ func (s *Store) PutUnit(ctx context.Context, id *int64, doc *units.Unit, scope s
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO unit_revisions (unit_id, rev, doc, actor, created_at, scope)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		unitID, rev, string(raw), actor, at, scope,
+		INSERT INTO unit_revisions (unit_id, rev, doc, actor, created_at)
+		VALUES (?, ?, ?, ?, ?)`,
+		unitID, rev, string(raw), actor, at,
 	); err != nil {
 		return mcp.PutResult{}, fmt.Errorf("mcpstore: insert revision: %w", err)
 	}

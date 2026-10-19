@@ -44,12 +44,19 @@ var (
 	_ units.Lookup      = (*Store)(nil)
 )
 
-func (s *Store) conn(ctx context.Context) (*sql.DB, error) {
+func (s *Store) ready(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return err
 	}
 	if s == nil || s.db == nil {
-		return nil, errors.New("mcpstore: database is not open")
+		return errors.New("mcpstore: database is not open")
+	}
+	return nil
+}
+
+func (s *Store) conn(ctx context.Context) (*sql.DB, error) {
+	if err := s.ready(ctx); err != nil {
+		return nil, err
 	}
 	return s.db.DB()
 }

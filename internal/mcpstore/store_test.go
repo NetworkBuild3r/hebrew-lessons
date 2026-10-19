@@ -91,9 +91,16 @@ func TestLatestPlacementMapsFinishedRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const result = `{"bands":[{"band":0,"shown":4,"again":1,"hard":1,"good":1,"easy":1,"dontknow":0,"good_plus_rate":0.5}],"estimated_known_words":40}`
+	word := mustLexeme(t, raw, hello)
+	for i := 0; i < 4; i++ {
+		ratePlacement(t, raw, runID, "card-"+strconv.Itoa(i), db.Good, word, started)
+	}
+	if err := raw.AdvancePlacementSitting(ctx, runID); err != nil {
+		t.Fatal(err)
+	}
+	const result = `{"bands":[{"band":0,"rated":4,"again":1,"hard":1,"good":1,"easy":1,"dont_know":0,"good_plus_rate":0.5}],"estimated_known_words":40}`
 	finished := when
-	if err := raw.FinishPlacement(ctx, runID, finished, 0, true, 2, "cards", result); err != nil {
+	if err := raw.FinishPlacement(ctx, runID, finished, 2, "cap_cards", result); err != nil {
 		t.Fatal(err)
 	}
 
@@ -101,7 +108,7 @@ func TestLatestPlacementMapsFinishedRun(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
-	if !row.Finished || row.Sittings != 1 || !row.TakenAt.Equal(finished) || row.Level != 2 || row.CardsRated != 4 || row.StopReason != "cap_cards" {
+	if !row.Finished || row.Sittings != 2 || !row.TakenAt.Equal(finished) || row.Level != 2 || row.CardsRated != 4 || row.StopReason != "cap_cards" {
 		t.Fatalf("placement %+v", row)
 	}
 	if row.EstimatedKnownWords != 40 || row.SuggestedStartPosition != 4 {
@@ -121,11 +128,7 @@ func TestLatestPlacementInProgress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := raw.ExecContext(ctx, `
-		INSERT INTO placement_answers (run_id, item_id, rating, shown_at, answered_at)
-		VALUES (?, 'card-1', 3, ?, ?)`, runID, db.FormatTime(when), db.FormatTime(when)); err != nil {
-		t.Fatal(err)
-	}
+	ratePlacement(t, raw, runID, "card-1", db.Good, mustLexeme(t, raw, hello), when)
 	row, ok, err := store.LatestPlacement(ctx, userID)
 	if err != nil || !ok {
 		t.Fatalf("ok=%v err=%v", ok, err)
@@ -133,9 +136,16 @@ func TestLatestPlacementInProgress(t *testing.T) {
 	if row.Finished || row.Sittings != 1 || row.CardsRated != 1 || row.Level != -1 || row.StopReason != "" || !row.TakenAt.Equal(when) {
 		t.Fatalf("in progress %+v", row)
 	}
+	if err := raw.AdvancePlacementSitting(ctx, runID); err != nil {
+		t.Fatal(err)
+	}
+	row, ok, err = store.LatestPlacement(ctx, userID)
+	if err != nil || !ok || row.Sittings != 2 {
+		t.Fatalf("sitting %+v ok=%v err=%v", row, ok, err)
+	}
 
 	finishedAt := when.Add(time.Minute)
-	if err := raw.FinishPlacement(ctx, runID, finishedAt, 0, true, 0, "band", `{"bands":[],"estimated_known_words":0}`); err != nil {
+	if err := raw.FinishPlacement(ctx, runID, finishedAt, 0, "band_stop", `{"bands":[],"estimated_known_words":0}`); err != nil {
 		t.Fatal(err)
 	}
 	retakeAt := finishedAt.Add(time.Minute)
@@ -146,7 +156,7 @@ func TestLatestPlacementInProgress(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("retake ok=%v err=%v", ok, err)
 	}
-	if again.Finished || again.Sittings != 2 || !again.TakenAt.Equal(retakeAt) || again.Level != -1 {
+	if again.Finished || again.Sittings != 1 || !again.TakenAt.Equal(retakeAt) || again.Level != -1 || again.StopReason != "" {
 		t.Fatalf("retake %+v", again)
 	}
 }
@@ -159,15 +169,20 @@ func TestPlacementLexemeLists(t *testing.T) {
 	knownID := mustLexeme(t, raw, coffee)
 	learnID := mustLexeme(t, raw, hello)
 	otherID := mustLexeme(t, raw, book)
-	if err := raw.SetPlacementLearner(ctx, userID, knownID, "known", when); err != nil {
+	older, err := raw.InsertPlacementRun(ctx, userID, when, 1)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := raw.SetPlacementLearner(ctx, userID, learnID, "learning", when); err != nil {
+	ratePlacement(t, raw, older, "old-book", db.Easy, otherID, when)
+	if err := raw.FinishPlacement(ctx, older, when, 0, "exhausted", `{"bands":[],"estimated_known_words":0}`); err != nil {
 		t.Fatal(err)
 	}
-	if err := raw.InsertLearnerLexeme(ctx, userID, otherID, "known", false, "manual", when); err != nil {
+	latest, err := raw.InsertPlacementRun(ctx, userID, when.Add(time.Minute), 2)
+	if err != nil {
 		t.Fatal(err)
 	}
+	ratePlacement(t, raw, latest, "coffee", db.Good, knownID, when)
+	ratePlacement(t, raw, latest, "hello", db.Again, learnID, when)
 
 	gotKnown, err := store.PlacementKnownLexemes(ctx, userID)
 	if err != nil {
@@ -177,7 +192,7 @@ func TestPlacementLexemeLists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(gotKnown, ",") != strings.Join(pointedSorted(wantKnown), ",") || len(gotKnown) != 1 || gotKnown[0] != coffee {
+	if strings.Join(gotKnown, "\n") != strings.Join(wantKnown, "\n") || len(gotKnown) != 1 || gotKnown[0] != coffee {
 		t.Fatalf("known %+v store %+v", gotKnown, wantKnown)
 	}
 	gotLearn, err := store.PlacementLearningLexemes(ctx, userID)
@@ -197,9 +212,12 @@ func TestStruggleStats(t *testing.T) {
 	recent := when.Add(-time.Hour)
 	old := when.Add(-9 * 24 * time.Hour)
 
-	alef := mustCard(t, raw, userID, mustLexeme(t, raw, "א"), 9)
-	bet := mustCard(t, raw, userID, mustLexeme(t, raw, "ב"), 0)
-	gimel := mustCard(t, raw, userID, mustLexeme(t, raw, "ג"), 3)
+	alefID := mustLexeme(t, raw, "א")
+	betID := mustLexeme(t, raw, "ב")
+	gimelID := mustLexeme(t, raw, "ג")
+	alef := mustCard(t, raw, userID, alefID, 9)
+	bet := mustCard(t, raw, userID, betID, 0)
+	gimel := mustCard(t, raw, userID, gimelID, 3)
 	mustGloss(t, raw, "א", "alef")
 	mustGloss(t, raw, "ב", "bet")
 	mustGloss(t, raw, "ג", "gimel")
@@ -207,16 +225,21 @@ func TestStruggleStats(t *testing.T) {
 	insertReviews(t, raw, bet, recent, 1, 1, 3, 3)
 	insertReviews(t, raw, gimel, recent, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3)
 
-	if err := raw.InsertConfusionMiss(ctx, userID, "letter_pair", "ג/א", recent); err != nil {
+	// The key text mentions א and ג. It is stored with no lexeme, so it must
+	// not land on either word. Gimel's key is ב/כ, which does not contain ג.
+	if err := raw.InsertConfusionMiss(ctx, userID, "letter_pair", "ג/א", 0, recent); err != nil {
 		t.Fatal(err)
 	}
-	if err := raw.InsertConfusionMiss(ctx, userID, "letter_pair", "ג/א", recent.Add(time.Minute)); err != nil {
+	if err := raw.InsertConfusionMiss(ctx, userID, "letter_pair", "ב/כ", gimelID, recent); err != nil {
 		t.Fatal(err)
 	}
-	if err := raw.InsertConfusionMiss(ctx, userID, "agreement", "א", recent); err != nil {
+	if err := raw.InsertConfusionMiss(ctx, userID, "letter_pair", "ב/כ", gimelID, recent.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	if err := raw.InsertConfusionMiss(ctx, userID, "letter_pair", "ב/כ", old); err != nil {
+	if err := raw.InsertConfusionMiss(ctx, userID, "agreement", "א", 0, recent); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.InsertConfusionMiss(ctx, userID, "letter_pair", "ב/כ", gimelID, old); err != nil {
 		t.Fatal(err)
 	}
 
@@ -234,22 +257,27 @@ func TestStruggleStats(t *testing.T) {
 	if gimelRow.Gloss != "gimel" || gimelRow.Reviews != 10 || gimelRow.Lapses != 3 || gimelRow.Misses7d != 2 || gimelRow.AgainRate != float64(2)/float64(10) || !gimelRow.LastSeen.Equal(recent) {
 		t.Fatalf("gimel %+v", gimelRow)
 	}
-	if len(gimelRow.ConfusionKeys) != 1 || gimelRow.ConfusionKeys[0] != "ג/א" {
+	if len(gimelRow.ConfusionKeys) != 1 || gimelRow.ConfusionKeys[0] != "ב/כ" {
 		t.Fatalf("keys %+v", gimelRow.ConfusionKeys)
 	}
-	if len(stats.Confusions) != 2 {
+	if len(stats.Lexemes[0].ConfusionKeys) != 0 {
+		t.Fatalf("alef keys %+v", stats.Lexemes[0].ConfusionKeys)
+	}
+	if len(stats.Confusions) != 3 {
 		t.Fatalf("confusions %+v", stats.Confusions)
 	}
-	var sawAgreement, sawPair bool
+	var sawAgreement, sawGimel, sawBet bool
 	for _, row := range stats.Confusions {
-		switch row.Kind {
-		case "agreement":
-			sawAgreement = row.A == "א" && row.B == "" && row.Count == 1
-		case "letter_pair":
-			sawPair = row.A == "ג" && row.B == "א" && row.Count == 2
+		switch {
+		case row.Kind == "agreement" && row.A == "א" && row.B == "" && row.Count == 1:
+			sawAgreement = true
+		case row.Kind == "letter_pair" && row.A == "ג" && row.B == "א" && row.Count == 1:
+			sawGimel = true
+		case row.Kind == "letter_pair" && row.A == "ב" && row.B == "כ" && row.Count == 2:
+			sawBet = true
 		}
 	}
-	if !sawAgreement || !sawPair {
+	if !sawAgreement || !sawGimel || !sawBet {
 		t.Fatalf("confusions %+v", stats.Confusions)
 	}
 	if len(stats.Lexemes[1].ConfusionKeys) != 0 {
@@ -274,13 +302,13 @@ func TestCompletedSharedUnits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := raw.ExecContext(ctx, `UPDATE units SET position = 0 WHERE id = ?`, earlyID); err != nil {
+	if _, err := raw.ExecContext(ctx, `UPDATE units SET position = 0, doc = '{"title":"Early","lessons":[{}]}' WHERE id = ?`, earlyID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := raw.ExecContext(ctx, `UPDATE units SET position = 2 WHERE id = ?`, lateID); err != nil {
+	if _, err := raw.ExecContext(ctx, `UPDATE units SET position = 2, doc = '{"title":"Late","lessons":[{},{}]}' WHERE id = ?`, lateID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := raw.ExecContext(ctx, `UPDATE units SET position = 1 WHERE id = ?`, openID); err != nil {
+	if _, err := raw.ExecContext(ctx, `UPDATE units SET position = 1, doc = '{"title":"Open","lessons":[{}]}' WHERE id = ?`, openID); err != nil {
 		t.Fatal(err)
 	}
 	bookID := mustLexeme(t, raw, book)
@@ -379,7 +407,7 @@ func TestLearnerKnownLexemes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(got, ",") != book+","+hello {
+	if strings.Join(got, ",") != house+","+book+","+hello {
 		t.Fatalf("known %+v", got)
 	}
 }
@@ -502,8 +530,11 @@ func TestPutUnitIdempotentScopeAndItems(t *testing.T) {
 	}
 
 	revs := revisions(t, raw, first.UnitID)
-	if len(revs) != 2 || revs[0].actor != "author-7" || revs[1].actor != "author-9" || revs[0].scope != mcp.ScopeShared || revs[1].scope != "learner:7" || revs[0].doc != revs[1].doc || revs[0].at != db.FormatTime(when) || revs[1].at != db.FormatTime(when) {
+	if len(revs) != 2 || revs[0].actor != "author-7" || revs[1].actor != "author-9" || revs[0].doc != revs[1].doc || revs[0].at != db.FormatTime(when) || revs[1].at != db.FormatTime(when) {
 		t.Fatalf("revisions %+v", revs)
+	}
+	if scope := unitScope(t, raw, first.UnitID); scope != "learner:7" {
+		t.Fatalf("scope = %s", scope)
 	}
 	items := lessonItems(t, raw, first.UnitID)
 	if len(items) != 2 || items[0].lesson != 0 || items[0].lexeme != helloID || items[0].role != "new" || items[0].skill != units.ActivityListenPick || items[1].lesson != 1 || items[1].role != "recycle" || items[1].skill != units.ActivityProduce {
@@ -520,6 +551,43 @@ func TestPutUnitIdempotentScopeAndItems(t *testing.T) {
 	saved, err := store.PutUnit(ctx, nil, &blocked, mcp.ScopeShared)
 	if err != nil || saved.UnitID == 0 || saved.Revision != 1 {
 		t.Fatalf("blocked draft %+v err=%v", saved, err)
+	}
+}
+
+func TestPutUnitPublishedEditAndUnchanged(t *testing.T) {
+	when := time.Date(2026, 10, 18, 11, 0, 0, 0, time.UTC)
+	store, raw := openAdapter(t, fixedClock{when})
+	ctx := withActor(t, "author-7")
+	doc := unitDoc("Hello", hello)
+
+	first, err := store.PutUnit(ctx, nil, &doc, mcp.ScopeShared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.ExecContext(ctx, `UPDATE units SET status = 'published' WHERE id = ?`, first.UnitID); err != nil {
+		t.Fatal(err)
+	}
+	held, err := store.PutUnit(ctx, &first.UnitID, &doc, mcp.ScopeShared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !held.Unchanged || held.Revision != 1 || unitStatus(t, raw, first.UnitID) != "published" {
+		t.Fatalf("unchanged %+v status %s", held, unitStatus(t, raw, first.UnitID))
+	}
+	if n := len(revisions(t, raw, first.UnitID)); n != 1 {
+		t.Fatalf("unchanged revisions = %d, want 1", n)
+	}
+
+	doc.Title = "Hello again"
+	edited, err := store.PutUnit(ctx, &first.UnitID, &doc, mcp.ScopeShared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edited.Unchanged || edited.Revision != 2 || edited.UnitID != first.UnitID || unitStatus(t, raw, first.UnitID) != "draft" {
+		t.Fatalf("edited %+v status %s", edited, unitStatus(t, raw, first.UnitID))
+	}
+	if n := len(revisions(t, raw, first.UnitID)); n != 2 {
+		t.Fatalf("edited revisions = %d, want 2", n)
 	}
 }
 
@@ -692,7 +760,6 @@ func joinIDs(ids ...int64) string {
 
 type revisionRow struct {
 	actor string
-	scope string
 	doc   string
 	at    string
 }
@@ -704,7 +771,7 @@ func revisions(t *testing.T, raw *db.Store, unitID int64) []revisionRow {
 		t.Fatal(err)
 	}
 	rows, err := conn.QueryContext(context.Background(), `
-		SELECT actor, scope, doc, created_at FROM unit_revisions
+		SELECT actor, doc, created_at FROM unit_revisions
 		WHERE unit_id = ? ORDER BY rev`, unitID)
 	if err != nil {
 		t.Fatal(err)
@@ -713,7 +780,7 @@ func revisions(t *testing.T, raw *db.Store, unitID int64) []revisionRow {
 	var out []revisionRow
 	for rows.Next() {
 		var row revisionRow
-		if err := rows.Scan(&row.actor, &row.scope, &row.doc, &row.at); err != nil {
+		if err := rows.Scan(&row.actor, &row.doc, &row.at); err != nil {
 			t.Fatal(err)
 		}
 		out = append(out, row)
@@ -722,6 +789,30 @@ func revisions(t *testing.T, raw *db.Store, unitID int64) []revisionRow {
 		t.Fatal(err)
 	}
 	return out
+}
+
+func ratePlacement(t *testing.T, raw *db.Store, runID int64, item string, rating int, lexemeID int64, when time.Time) {
+	t.Helper()
+	ctx := context.Background()
+	if err := raw.ShowPlacementCard(ctx, runID, item, 1, when); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.RatePlacementAnswer(ctx, runID, item, rating, lexemeID, when); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func unitScope(t *testing.T, raw *db.Store, unitID int64) string {
+	t.Helper()
+	conn, err := raw.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scope string
+	if err := conn.QueryRowContext(context.Background(), `SELECT scope FROM units WHERE id = ?`, unitID).Scan(&scope); err != nil {
+		t.Fatal(err)
+	}
+	return scope
 }
 
 func unitStatus(t *testing.T, raw *db.Store, unitID int64) string {

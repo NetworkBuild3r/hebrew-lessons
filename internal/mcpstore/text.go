@@ -1,7 +1,6 @@
 package mcpstore
 
 import (
-	"slices"
 	"strings"
 	"unicode"
 
@@ -124,24 +123,6 @@ func tokenize(s string) []string {
 		b.WriteRune(r)
 	}
 	flush()
-	return out
-}
-
-func pointedSorted(in []string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(in))
-	for _, s := range in {
-		n := normalize(s)
-		if n == "" {
-			continue
-		}
-		if _, ok := seen[n]; ok {
-			continue
-		}
-		seen[n] = struct{}{}
-		out = append(out, n)
-	}
-	slices.Sort(out)
 	return out
 }
 
