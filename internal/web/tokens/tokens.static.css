@@ -57,7 +57,10 @@
   --shadow-tile: inset 0 1px 0 #fff, inset 0 -3px 0 oklch(55% .07 75 / .16), 0 8px 18px -8px oklch(20% .08 270 / .45);
 
   /* motion */
-  --dur-fast: 140ms; --dur-base: 240ms; --dur-slow: 420ms; --dur-word: 680ms;
+  /* SPEC-009: no duration is over 400ms, and no rule writes a literal one. */
+  --dur-fast: 150ms; --dur-base: 250ms; --dur-slow: 400ms; --dur: var(--dur-base);
+  --dur-stagger: 40ms;    /* step between list items in stagger-in */
+  --motion-press: .98;    /* scale of a pressed option */
   --ease-out: cubic-bezier(.2, .8, .2, 1); --ease-in-out: cubic-bezier(.6, 0, .3, 1); --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
   /* Review flip and stack, reused by the placement deck. */
   --spring-soft: cubic-bezier(.22, 1.2, .36, 1);
@@ -73,5 +76,10 @@
   /* z-index */
   --z-base: 0; --z-sticky: 10; --z-nav: 20; --z-feedback: 30; --z-popover: 40; --z-toast: 50;
 }
-/* Reduced motion = subtle, not none: short opacity-only fades, no travel, no bounce. */
-@media (prefers-reduced-motion: reduce) { :root { --dur-fast: 100ms; --dur-base: 160ms; --dur-slow: 200ms; --dur-word: 200ms; --ease-spring: linear; --motion-shift: 0px; --spring-soft: linear; --motion-lift: 0px; --motion-scale: 0; --motion-flip: 0deg; --dur-deck: 150ms; } }
+/* A real spring, where linear() is supported; the cubic-bezier above is the fallback. */
+@supports (animation-timing-function: linear(0, 1)) {
+  :root { --ease-spring: linear(0, .22 8%, .63 17%, .98 28%, 1.07 36%, 1.06 42%, 1.01 54%, .99 66%, 1); }
+}
+/* Reduced motion = subtle, not none: short opacity-only fades, no travel, no bounce.
+ * Every duration here is 120ms or less (SPEC-009 ac-3). */
+@media (prefers-reduced-motion: reduce) { :root { --dur-fast: 100ms; --dur-base: 120ms; --dur-slow: 120ms; --dur-stagger: 0ms; --motion-press: 1; --ease-spring: linear; --motion-shift: 0px; --spring-soft: linear; --motion-lift: 0px; --motion-scale: 0; --motion-flip: 0deg; --dur-deck: 120ms; } }

@@ -87,8 +87,8 @@ func TestTodayLayout(t *testing.T) {
 	if strings.Contains(body, "globalViewTransitions") || strings.Contains(body, "defaultSwapDelay") {
 		t.Fatal("motion script must be a file, not an inline script")
 	}
-	if strings.Count(body, "<script") != 3 {
-		t.Fatalf("want the theme boot, htmx, and shell.js; found %d script tags", strings.Count(body, "<script"))
+	if strings.Count(body, "<script") != 4 {
+		t.Fatalf("want the theme boot, htmx, shell.js, and motion.js; found %d script tags", strings.Count(body, "<script"))
 	}
 	if !strings.Contains(body, "<script>"+views.ThemeBoot+"</script>") {
 		t.Fatal("theme boot script is not the inline head script")
@@ -142,8 +142,10 @@ func TestStaticHasNoExternalURL(t *testing.T) {
 		"/static/css/tokens.css",
 		"/static/css/base.css",
 		"/static/css/components.css",
+		"/static/css/motion.css",
 		"/static/js/htmx.min.js",
 		"/static/js/shell.js",
+		"/static/js/motion.js",
 		"/static/icons/sprite.svg",
 		"/static/fonts/noto-sans-hebrew-hebrew.woff2",
 		"/static/fonts/noto-sans-hebrew-latin.woff2",
