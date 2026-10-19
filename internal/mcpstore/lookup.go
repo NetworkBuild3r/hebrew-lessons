@@ -87,9 +87,9 @@ func (s *Store) Facts(ctx context.Context, textNFC string) (units.LexemeFacts, b
 	var gender, plural sql.NullString
 	var irregular int
 	err = conn.QueryRowContext(ctx, `
-		SELECT pos, gender, plural, irregular_plural, bare
+		SELECT pos, gender, plural, irregular_plural, bare, gloss_en
 		FROM lexemes WHERE text_nfc = ?`, textNFC,
-	).Scan(&facts.POS, &gender, &plural, &irregular, &facts.Bare)
+	).Scan(&facts.POS, &gender, &plural, &irregular, &facts.Bare, &facts.Gloss)
 	if errors.Is(err, sql.ErrNoRows) {
 		return units.LexemeFacts{}, false, nil
 	}

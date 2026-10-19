@@ -41,6 +41,7 @@ type glex struct {
 	Plural          string `json:"plural,omitempty"`
 	IrregularPlural bool   `json:"irregularPlural,omitempty"`
 	Bare            string `json:"bare,omitempty"`
+	Gloss           string `json:"gloss,omitempty"`
 }
 
 type goldenLookup struct {
@@ -125,6 +126,7 @@ func (f fakeLookup) Facts(_ context.Context, text string) (LexemeFacts, bool, er
 		Plural:          e.Plural,
 		IrregularPlural: e.IrregularPlural,
 		Bare:            e.Bare,
+		Gloss:           e.Gloss,
 	}, true, nil
 }
 

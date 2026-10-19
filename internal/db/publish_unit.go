@@ -53,6 +53,22 @@ func (s *Store) PublishUnit(ctx context.Context, id int64, revision *int) (PutRe
 	}
 	defer tx.Rollback()
 
+	res, err := publishInTx(ctx, tx, id, revision)
+	if err != nil {
+		return PutResult{}, err
+	}
+	if res.Unchanged {
+		return res, nil
+	}
+	if err := tx.Commit(); err != nil {
+		return PutResult{}, fmt.Errorf("db: commit unit: %w", err)
+	}
+	return res, nil
+}
+
+// publishInTx is PublishUnit inside a transaction the caller owns and commits.
+// Unchanged is true when it wrote nothing.
+func publishInTx(ctx context.Context, tx *sql.Tx, id int64, revision *int) (PutResult, error) {
 	snap, current, err := readUnit(ctx, tx, id, revision)
 	if err != nil {
 		return PutResult{}, err
@@ -70,9 +86,6 @@ func (s *Store) PublishUnit(ctx context.Context, id int64, revision *int) (PutRe
 	}
 	if err := replaceLessonItems(ctx, tx, id, snap.Doc); err != nil {
 		return PutResult{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return PutResult{}, fmt.Errorf("db: commit unit: %w", err)
 	}
 	return PutResult{UnitID: id, Revision: snap.Revision}, nil
 }

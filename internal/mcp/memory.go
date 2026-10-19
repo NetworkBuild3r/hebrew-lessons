@@ -727,6 +727,7 @@ func (m *Memory) Facts(ctx context.Context, textNFC string) (units.LexemeFacts, 
 			Plural:          row.lx.Plural,
 			IrregularPlural: row.lx.Plural != "",
 			Bare:            row.lx.Bare,
+			Gloss:           row.lx.Gloss,
 		}, true, nil
 	}
 	return units.LexemeFacts{}, false, nil
