@@ -22,17 +22,21 @@ templ Today(h Home) {
 				if h.Due > 0 {
 					<section class="ink-card today-due" aria-labelledby="due-title">
 						<img class="skyline" src="/static/illustrations/hero-skyline-night.svg" alt=""/>
-						<div class="stack" aria-hidden="true">
-							<span class="stack__card stack__card--back"></span>
-							<span class="stack__card stack__card--mid"></span>
-							<span class="stack__card stack__card--front"><bdi lang="he" dir="rtl">{ StackWords()[0] }</bdi></span>
+						<div class="due-head">
+							<div class="stack" aria-hidden="true">
+								<span class="stack__card stack__card--back"></span>
+								<span class="stack__card stack__card--mid"></span>
+								<span class="stack__card stack__card--front"><bdi lang="he" dir="rtl">{ StackWords()[0] }</bdi></span>
+							</div>
+							<div class="due-copy">
+								<p class="eyebrow" id="due-title" lang={ h.Lang }>{ h.DueKicker }</p>
+								<p class="count"><bdi lang="en" dir="ltr">{ h.DueText }</bdi></p>
+								<p class="ink-card__label" lang={ h.Lang }>{ h.DueLabel }</p>
+								<p class="ink-card__hint">
+									<bdi lang="en" dir="ltr">{ "≈ " + ReviewMin + " min" }</bdi>
+								</p>
+							</div>
 						</div>
-						<p class="eyebrow" id="due-title" lang={ h.Lang }>{ h.DueKicker }</p>
-						<p class="count"><bdi lang="en" dir="ltr">{ h.DueText }</bdi></p>
-						<p class="ink-card__label" lang={ h.Lang }>{ h.DueLabel }</p>
-						<p class="ink-card__hint">
-							<bdi lang="en" dir="ltr">{ "≈ " + ReviewMin + " min" }</bdi>
-						</p>
 						<a class="btn btn-primary btn-lamp m-hide" href={ templ.SafeURL(h.Href("/review")) }>
 							<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("play") }></use></svg>
 							<span lang={ h.Lang }>{ h.Start }</span>
@@ -129,7 +133,7 @@ templ Today(h Home) {
 								@H("חֲדָשׁוֹת")
 								<span aria-hidden="true">·</span>
 								<bdi lang="en" dir="ltr">{ WarmupCount }</bdi>
-								@H("חִימוּם")
+								@H(WarmupHE)
 							}
 						</p>
 						<a class={ BtnClass(h.Due == 0) } href={ templ.SafeURL(h.Href("/lesson")) }>
@@ -157,7 +161,7 @@ templ Today(h Home) {
 							<bdi lang="en" dir="ltr">{ h.DueText }</bdi>
 						</a>
 					} else {
-						<a class="btn btn-primary thumbbar__btn" href={ templ.SafeURL(h.Href("/lesson")) }>
+						<a class="btn btn-primary btn-lamp thumbbar__btn" href={ templ.SafeURL(h.Href("/lesson")) }>
 							<span lang={ h.Lang }>{ h.Open }</span>
 						</a>
 					}

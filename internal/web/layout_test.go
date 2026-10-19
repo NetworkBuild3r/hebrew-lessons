@@ -203,11 +203,11 @@ func TestPairSeparatesRuns(t *testing.T) {
 func TestZeroDueAndNoLesson(t *testing.T) {
 	h := New(nil, nil)
 	zero := get(t, h, "/?due=0")
-	if !strings.Contains(zero, "today-due--clear") || strings.Contains(zero, "הַתְחֵל") || strings.Contains(zero, "btn-lamp") {
+	if !strings.Contains(zero, "today-due--clear") || strings.Contains(zero, "הַתְחֵל") {
 		t.Fatal("zero due should keep the slate and drop the review action")
 	}
-	if strings.Count(zero, "btn-primary") != 2 || !strings.Contains(zero, `class="btn btn-primary m-hide"`) || !strings.Contains(zero, `class="btn btn-primary thumbbar__btn"`) {
-		t.Fatal("the lesson CTA should be the primary in the card and the thumb bar")
+	if strings.Count(zero, "btn-primary") != 2 || !strings.Contains(zero, `class="btn btn-primary m-hide"`) || !strings.Contains(zero, `class="btn btn-primary btn-lamp thumbbar__btn"`) {
+		t.Fatal("the lesson CTA is primary in the card, and the thumb bar stays lamp")
 	}
 	if strings.Contains(zero, "btn-tonal") {
 		t.Fatal("tonal CTA remains when nothing is due")

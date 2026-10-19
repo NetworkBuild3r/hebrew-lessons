@@ -389,22 +389,23 @@ h1 {
   z-index: 0;
 }
 .today-due > :not(.skyline) { position: relative; z-index: 1; }
-.today-due > .stack { position: absolute; z-index: 2; }
 .today-due .count { font-family: var(--font-display); }
+/* The stack and the count are two columns. The stack stays in its cell,
+   including the rotated cards, so it cannot cover the number. */
+.due-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: var(--space-4);
+}
+.due-copy { display: grid; min-inline-size: 0; }
 .stack {
-  position: absolute;
-  z-index: 2;
-  inset-inline-start: var(--space-4);
-  inset-block-start: var(--space-4);
+  position: relative;
+  z-index: 1;
   inline-size: calc(var(--space-8) + var(--space-7));
-  block-size: calc(var(--space-8) + var(--space-5));
+  block-size: var(--space-9);
 }
-.today-due .eyebrow,
-.today-due .count,
-.today-due .ink-card__label,
-.today-due .ink-card__hint {
-  padding-inline-start: calc(var(--space-8) + var(--space-2));
-}
+.today-due > .btn { margin-block-start: auto; align-self: start; }
 .stack__card {
   position: absolute;
   inset-inline-start: var(--space-4);
@@ -797,17 +798,7 @@ h1 {
     gap: var(--space-1);
     font-size: var(--fs-caption);
   }
-  .rail > .rail-logout {
-    display: flex;
-    justify-content: center;
-    margin-block-start: var(--space-2);
-  }
-  .rail > .rail-logout .logout__btn {
-    inline-size: 100%;
-    min-inline-size: 0;
-    padding-inline: var(--space-1);
-    font-size: var(--fs-caption);
-  }
+  /* Sign-out lives on Progress, including at the rail width. */
   .top { display: none; }
   .dock-wrap {
     position: static;
@@ -882,15 +873,25 @@ h1 {
     padding-inline: var(--space-3);
   }
   .gchip { line-height: var(--lh-he-body); padding-block: var(--space-1); }
-  /* The night plate is a wide scene. On a stretched card, cover pins the
-     buildings to the floor. Keep the whole drawing behind the number. */
+  /* The night plate fills the bottom of the stretched card. The count
+     stays in the display serif at the 96px step, and Start sits at the end. */
   .today-due .skyline {
-    inset-block-end: auto;
+    inset: auto;
+    inset-block-end: 0;
+    inset-inline: 0;
+    inline-size: 100%;
+    block-size: 55%;
+    aspect-ratio: auto;
+    max-block-size: none;
+    object-fit: cover;
+    object-position: center bottom;
+  }
+  .today-due .count { font-size: var(--space-9); }
+  .quiet-card.quiet-card--next {
+    align-self: center;
+    justify-self: center;
     block-size: auto;
-    aspect-ratio: 1200 / 360;
-    max-block-size: 100%;
-    object-fit: contain;
-    object-position: center center;
+    max-block-size: calc(var(--space-9) * 3);
   }
   .quiet-card,
   .quiet-card--due {

@@ -34,13 +34,16 @@ const UnitTitle = "הַבֹּקֶר שֶׁלִּי"
 
 // Fake Today facts. They stand in until the queue and the unit doc are wired.
 const (
-	UnitLetter   = "ב"
-	UnitName     = "בַּבַּיִת"
-	UnitNameEN   = "At home"
-	LessonIndex  = "3"
-	LessonCount  = "5"
-	LessonMin    = "7"
-	WarmupCount  = "2"
+	UnitLetter  = "ב"
+	UnitName    = "בַּבַּיִת"
+	UnitNameEN  = "At home"
+	LessonIndex = "3"
+	LessonCount = "5"
+	LessonMin   = "7"
+	WarmupCount = "2"
+	// WarmupHE is the pointed pi'el noun חִמּוּם: hiriq under the het,
+	// dagesh in the mem, shuruq, final mem. Defective, so there is no yod.
+	WarmupHE     = "חִמּוּם"
 	ReviewMin    = "6"
 	DueSoonCount = "7"
 	DueSoonHours = "3"
