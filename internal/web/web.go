@@ -36,10 +36,13 @@ var Assets embed.FS
 // register that path.
 func New(health http.Handler, sessions *auth.Service) http.Handler {
 	var tokens CSRFToken
+	secure := false
 	if sessions != nil {
 		tokens = CSRFFunc(auth.CSRFToken)
+		// hebrew_lang uses the same COOKIE_SECURE flag as the session cookie.
+		secure = sessions.CookieSecure()
 	}
-	mux := routes(health, tokens, sessions != nil)
+	mux := routes(health, tokens, sessions != nil, secure)
 	if sessions != nil {
 		sessions.Register(mux)
 		// auth.Middleware loads the session and checks CSRF, including
@@ -53,10 +56,10 @@ func New(health http.Handler, sessions *auth.Service) http.Handler {
 
 // newMux is the test router. tokens is a fake; production New does not use it.
 func newMux(health http.Handler, tokens CSRFToken) http.Handler {
-	return securityHeaders(csrfMiddleware(tokens, routes(health, tokens, false)))
+	return securityHeaders(csrfMiddleware(tokens, routes(health, tokens, false, false)))
 }
 
-func routes(health http.Handler, tokens CSRFToken, gate bool) *http.ServeMux {
+func routes(health http.Handler, tokens CSRFToken, gate, secure bool) *http.ServeMux {
 	mux := http.NewServeMux()
 	if health != nil {
 		mux.Handle("GET /healthz", health)
@@ -66,17 +69,17 @@ func routes(health http.Handler, tokens CSRFToken, gate bool) *http.ServeMux {
 		panic(err)
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
-	mux.HandleFunc("GET /{$}", gated(gate, func(w http.ResponseWriter, r *http.Request) {
-		render(w, r, views.Today(homeFrom(r, chooseLang(w, r), csrfValue(tokens, r))))
+	mux.HandleFunc("GET /{$}", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+		render(w, r, views.Today(homeFrom(r, chooseLang(w, r, secure), csrfValue(tokens, r))))
 	}))
-	review := gated(gate, func(w http.ResponseWriter, r *http.Request) {
-		render(w, r, views.Review(views.NewPage(chooseLang(w, r), csrfValue(tokens, r), "review")))
+	review := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+		render(w, r, views.Review(views.NewPage(chooseLang(w, r, secure), csrfValue(tokens, r), "review")))
 	})
-	progress := gated(gate, func(w http.ResponseWriter, r *http.Request) {
-		render(w, r, views.Progress(views.NewPage(chooseLang(w, r), csrfValue(tokens, r), "progress")))
+	progress := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+		render(w, r, views.Progress(views.NewPage(chooseLang(w, r, secure), csrfValue(tokens, r), "progress")))
 	})
-	lesson := gated(gate, func(w http.ResponseWriter, r *http.Request) {
-		render(w, r, views.Lesson(views.NewPage(chooseLang(w, r), csrfValue(tokens, r), "lesson")))
+	lesson := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+		render(w, r, views.Lesson(views.NewPage(chooseLang(w, r, secure), csrfValue(tokens, r), "lesson")))
 	})
 	mux.HandleFunc("GET /review", review)
 	mux.HandleFunc("GET /progress", progress)
@@ -87,7 +90,7 @@ func routes(health http.Handler, tokens CSRFToken, gate bool) *http.ServeMux {
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
-		render(w, r, views.SignIn(views.NewPage(chooseLang(w, r), csrfValue(tokens, r), "signin")))
+		render(w, r, views.SignIn(views.NewPage(chooseLang(w, r, secure), csrfValue(tokens, r), "signin")))
 	})
 	return mux
 }
@@ -164,8 +167,9 @@ const langCookieName = "hebrew_lang"
 
 // chooseLang resolves the shell language. ?lang=he or ?lang=en is a choice
 // and is stored on hebrew_lang. With no query, that cookie wins. With
-// neither, the shell is English.
-func chooseLang(w http.ResponseWriter, r *http.Request) string {
+// neither, the shell is English. secure is COOKIE_SECURE: the same flag
+// the session cookie uses. The ungated router passes false.
+func chooseLang(w http.ResponseWriter, r *http.Request, secure bool) string {
 	q := r.URL.Query().Get("lang")
 	if q == "he" || q == "en" {
 		http.SetCookie(w, &http.Cookie{
@@ -175,6 +179,7 @@ func chooseLang(w http.ResponseWriter, r *http.Request) string {
 			MaxAge:   400 * 24 * 60 * 60,
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
+			Secure:   secure,
 		})
 		return q
 	}
@@ -184,8 +189,8 @@ func chooseLang(w http.ResponseWriter, r *http.Request) string {
 	return "en"
 }
 
-func signInPath(w http.ResponseWriter, r *http.Request) string {
-	if chooseLang(w, r) == "he" {
+func signInPath(w http.ResponseWriter, r *http.Request, secure bool) string {
+	if chooseLang(w, r, secure) == "he" {
 		return "/signin?lang=he"
 	}
 	if r.URL.Query().Get("lang") == "en" {
@@ -197,15 +202,16 @@ func signInPath(w http.ResponseWriter, r *http.Request) string {
 // gated sends a signed-out request to /signin when the router has a
 // session service. A full page is 303. htmx gets 401 and HX-Redirect so
 // the shell does not swap the sign-in page into #app. The ungated test
-// router passes gate false and serves the page.
-func gated(gate bool, next http.HandlerFunc) http.HandlerFunc {
+// router passes gate false and serves the page. secure is forwarded to
+// chooseLang so a ?lang choice on the redirect still sets hebrew_lang.
+func gated(gate, secure bool, next http.HandlerFunc) http.HandlerFunc {
 	if !gate {
 		return next
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := auth.CurrentUser(r.Context()); !ok {
 			w.Header().Set("Cache-Control", "no-store")
-			loc := signInPath(w, r)
+			loc := signInPath(w, r, secure)
 			if r.Header.Get("HX-Request") == "true" {
 				w.Header().Set("HX-Redirect", loc)
 				w.WriteHeader(http.StatusUnauthorized)
