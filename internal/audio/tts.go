@@ -3,6 +3,9 @@
 // A clip's file is <data>/audio/<sha256>.mp3. That hex sha256 of the bytes
 // is audio_assets.id. Callers pass the exact pointed NFC text so one clip
 // serves every lesson that uses the word.
+//
+// Import loads clips the previous app already synthesized, so a later lookup
+// can play those bytes instead of calling ElevenLabs again.
 package audio
 
 import (
