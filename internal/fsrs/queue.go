@@ -21,7 +21,7 @@ func (r *Review) Queue(ctx context.Context, userID int64) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	counts, err := r.store.ConfusionCounts(ctx, userID, now.Add(-ConfusionWindow))
+	counts, err := r.store.ConfusionCounts(ctx, userID, ConfusionWindow)
 	if err != nil {
 		return nil, err
 	}

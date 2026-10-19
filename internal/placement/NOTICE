@@ -26,5 +26,4 @@ fixture. Every item is marked verified false until a person checks it.
 Band 0 words are copied, pointing included, from the tutor's existing
 lesson worksheets. They are not covered by the FrequencyWords licence.
 
-The pseudo-words were written for this test. They are not taken from the
-list, and they are not inserted into the lexicon.
+Transliteration and gender were added for this fixture and are unverified.

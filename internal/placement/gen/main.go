@@ -3,9 +3,8 @@
 //	go run ./internal/placement/gen
 //
 // Run it from the module root. It downloads Hermit Dave's Hebrew frequency
-// list from the commit pinned by freqURL, checks each frequency item's rank,
-// and rejects a pseudo-word whose unpointed form is in that list or matches
-// a real item. The 50k list is not written into the repository.
+// list from the commit pinned by freqURL and checks each frequency item's
+// rank. The 50k list is not written into the repository.
 package main
 
 import (
@@ -38,23 +37,25 @@ var ktivMale = map[string]string{
 }
 
 type rawItem struct {
-	ID     string
-	Text   string
-	Band   *int
-	Pseudo bool
-	Gloss  string
-	POS    string
-	Source string
-	Rank   int
-	List   string
+	ID       string
+	Text     string
+	Band     *int
+	Gloss    string
+	POS      string
+	Translit string
+	Gender   string
+	Source   string
+	Rank     int
+	List     string
 }
 
 type outItem struct {
 	ID       string `json:"id"`
 	TextNFC  string `json:"text_nfc"`
-	Band     *int   `json:"band"`
-	Pseudo   bool   `json:"pseudo"`
+	Band     int    `json:"band"`
 	GlossEN  string `json:"gloss_en"`
+	Translit string `json:"translit"`
+	Gender   string `json:"gender"`
 	POS      string `json:"pos"`
 	Verified bool   `json:"verified"`
 	Source   string `json:"source"`
@@ -88,18 +89,12 @@ func run() error {
 	if len(list) != 50000 {
 		return fmt.Errorf("frequency list has %d lines, want 50000", len(list))
 	}
-	inList := map[string]struct{}{}
-	for _, w := range list {
-		inList[w] = struct{}{}
-	}
-
 	raw := curatedItems()
 	out := make([]outItem, 0, len(raw))
 	seenID := map[string]struct{}{}
 	seenText := map[string]string{}
 	seenBare := map[string]string{}
 	counts := map[int]int{}
-	var pseudoN int
 
 	for _, item := range raw {
 		if item.Source == "tutor" && !norm.NFC.IsNormalString(item.Text) {
@@ -115,15 +110,26 @@ func run() error {
 			return fmt.Errorf("%s and %s share pointed text", item.ID, prev)
 		}
 		seenText[text] = item.ID
+		switch item.Gender {
+		case "", "m", "f", "both":
+		default:
+			return fmt.Errorf("%s: gender %q", item.ID, item.Gender)
+		}
+		if item.Translit == "" || item.Gloss == "" || item.POS == "" {
+			return fmt.Errorf("%s: gloss, translit, and pos are required", item.ID)
+		}
+		if item.Band == nil {
+			return fmt.Errorf("%s: band is required", item.ID)
+		}
 
 		switch item.Source {
 		case "tutor":
-			if item.Pseudo || item.Band == nil || *item.Band != 0 {
+			if *item.Band != 0 {
 				return fmt.Errorf("%s: tutor items are band 0", item.ID)
 			}
 			counts[0]++
 		case "freq":
-			if item.Pseudo || item.Band == nil || item.Rank < 1 || item.Rank > len(list) {
+			if item.Rank < 1 || item.Rank > len(list) {
 				return fmt.Errorf("%s: frequency item is incomplete", item.ID)
 			}
 			if list[item.Rank-1] != item.List {
@@ -136,14 +142,6 @@ func run() error {
 				return fmt.Errorf("%s: pointed form %s does not match list token %s", item.ID, bare, item.List)
 			}
 			counts[*item.Band]++
-		case "pseudo":
-			if !item.Pseudo || item.Band != nil {
-				return fmt.Errorf("%s: pseudo items have a null band", item.ID)
-			}
-			if _, ok := inList[bare]; ok {
-				return fmt.Errorf("%s: unpointed %s is in the frequency list", item.ID, bare)
-			}
-			pseudoN++
 		default:
 			return fmt.Errorf("%s: source %s", item.ID, item.Source)
 		}
@@ -151,17 +149,13 @@ func run() error {
 			return fmt.Errorf("%s and %s share unpointed form %s", item.ID, prev, bare)
 		}
 		seenBare[bare] = item.ID
-		if item.Source == "freq" {
-			if _, ok := inList[item.List]; !ok {
-				return fmt.Errorf("%s: list token %s is not in the frequency list", item.ID, item.List)
-			}
-		}
 		out = append(out, outItem{
 			ID:       item.ID,
 			TextNFC:  text,
-			Band:     item.Band,
-			Pseudo:   item.Pseudo,
+			Band:     *item.Band,
 			GlossEN:  item.Gloss,
+			Translit: item.Translit,
+			Gender:   item.Gender,
 			POS:      item.POS,
 			Verified: false,
 			Source:   item.Source,
@@ -169,12 +163,12 @@ func run() error {
 	}
 
 	for band := 0; band <= 4; band++ {
-		if counts[band] != 12 {
-			return fmt.Errorf("band %d has %d items, want 12", band, counts[band])
+		if counts[band] < 16 {
+			return fmt.Errorf("band %d has %d items, want at least 16", band, counts[band])
 		}
 	}
-	if pseudoN != 20 {
-		return fmt.Errorf("pseudo-words = %d, want 20", pseudoN)
+	if len(out) < 80 {
+		return fmt.Errorf("items = %d, want at least 80", len(out))
 	}
 
 	var buf bytes.Buffer
@@ -188,7 +182,7 @@ func run() error {
 	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
 		return err
 	}
-	fmt.Printf("wrote %s (%d items: bands 12×5, pseudo %d)\n", path, len(out), pseudoN)
+	fmt.Printf("wrote %s (%d items)\n", path, len(out))
 	return nil
 }
 

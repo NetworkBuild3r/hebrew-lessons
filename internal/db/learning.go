@@ -37,12 +37,14 @@ type ReviewLog struct {
 	Peeked        bool
 }
 
-// ConfusionCount is how many times one learner missed one key since a time.
+// ConfusionCount is how many times one learner missed one key inside a window.
 // Count is derived from the rows. It is not a column.
+// LastAt is the latest miss of that key inside the window.
 type ConfusionCount struct {
-	Key   string
-	Kind  string
-	Count int
+	Kind   string
+	Key    string
+	Count  int
+	LastAt time.Time
 }
 
 func (s *Store) connOrErr() (*sql.DB, error) {
@@ -309,14 +311,18 @@ func (s *Store) InsertConfusionMiss(ctx context.Context, learnerID int64, kind, 
 	return nil
 }
 
-// ConfusionCounts counts misses in [since, ...] grouped by key.
-// Kind is the kind of the latest miss of that key inside the window.
-func (s *Store) ConfusionCounts(ctx context.Context, learnerID int64, since time.Time) ([]ConfusionCount, error) {
+// ConfusionCounts counts misses in the window ending at the store clock, grouped by key.
+// Kind and LastAt come from the latest miss of that key inside the window.
+// The rows are ordered by count, then by the latest miss, then by key.
+func (s *Store) ConfusionCounts(ctx context.Context, userID int64, window time.Duration) ([]ConfusionCount, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
 	}
-	sinceText := FormatTime(since)
+	if s.clock == nil {
+		return nil, errors.New("db: clock is not configured")
+	}
+	sinceText := FormatTime(s.clock.Now().Add(-window))
 	rows, err := conn.QueryContext(ctx, `
 		SELECT
 			m.key,
@@ -329,12 +335,13 @@ func (s *Store) ConfusionCounts(ctx context.Context, learnerID int64, since time
 				ORDER BY m2.at DESC, m2.id DESC
 				LIMIT 1
 			),
-			COUNT(*)
+			COUNT(*),
+			MAX(m.at)
 		FROM confusion_misses AS m
 		WHERE m.learner_id = ?
 		  AND m.at >= ?
 		GROUP BY m.key
-		ORDER BY m.key`, sinceText, learnerID, sinceText)
+		ORDER BY COUNT(*) DESC, MAX(m.at) DESC, m.key`, sinceText, userID, sinceText)
 	if err != nil {
 		return nil, fmt.Errorf("db: confusion counts: %w", err)
 	}
@@ -342,7 +349,12 @@ func (s *Store) ConfusionCounts(ctx context.Context, learnerID int64, since time
 	var out []ConfusionCount
 	for rows.Next() {
 		var row ConfusionCount
-		if err := rows.Scan(&row.Key, &row.Kind, &row.Count); err != nil {
+		var last string
+		if err := rows.Scan(&row.Key, &row.Kind, &row.Count, &last); err != nil {
+			return nil, fmt.Errorf("db: confusion counts: %w", err)
+		}
+		row.LastAt, err = ParseTime(last)
+		if err != nil {
 			return nil, fmt.Errorf("db: confusion counts: %w", err)
 		}
 		out = append(out, row)

@@ -69,7 +69,7 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 		}
 	}
 	runCols := columnNames(t, conn, "placement_runs")
-	for _, name := range []string{"id", "user_id", "started_at", "finished_at", "false_alarm_rate", "reliable", "level", "cap", "result", "seed"} {
+	for _, name := range []string{"id", "user_id", "started_at", "finished_at", "level", "stop_reason", "result", "seed"} {
 		if !runCols[name] {
 			t.Errorf("placement_runs missing %s", name)
 		}
@@ -94,7 +94,7 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.ExecContext(ctx, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'boker', 0, ?)`, runID, old); err != nil {
+	if _, err := conn.ExecContext(ctx, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'boker', 1, ?)`, runID, old); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.ExecContext(ctx, `
@@ -104,7 +104,7 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 	}
 	if _, err := conn.ExecContext(ctx, `
 		UPDATE placement_runs
-		SET finished_at = ?, false_alarm_rate = 0, reliable = 1, level = -1, result = '{"bands":[]}'
+		SET finished_at = ?, level = -1, stop_reason = 'exhausted', result = '{"bands":[]}'
 		WHERE id = ?`, old, runID); err != nil {
 		t.Fatal(err)
 	}
@@ -119,10 +119,10 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 	rejectSQL(t, conn, "learner status", `
 		INSERT INTO learner_lexemes (user_id, lexeme_id, status, seeded, source, created_at)
 		VALUES (?, ?, 'knownish', 0, 'placement', ?)`, userID, otherID, old)
-	rejectSQL(t, conn, "rating", `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'other', 5, ?)`, runID, old)
+	rejectSQL(t, conn, "rating", `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'other', 0, ?)`, runID, old)
+	rejectSQL(t, conn, "rating high", `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'other', 5, ?)`, runID, old)
 	rejectSQL(t, conn, "level", `UPDATE placement_runs SET level = 5 WHERE id = ?`, runID)
-	rejectSQL(t, conn, "reliable", `UPDATE placement_runs SET reliable = 2 WHERE id = ?`, runID)
-	rejectSQL(t, conn, "cap", `UPDATE placement_runs SET cap = 'later' WHERE id = ?`, runID)
+	rejectSQL(t, conn, "stop reason", `UPDATE placement_runs SET stop_reason = 'later' WHERE id = ?`, runID)
 
 	if _, err := conn.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID); err != nil {
 		t.Fatal(err)

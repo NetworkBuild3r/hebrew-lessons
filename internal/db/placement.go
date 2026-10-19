@@ -12,24 +12,22 @@ import (
 
 // PlacementRun is one row of placement_runs.
 // FinishedAt is zero while the run is in progress.
-// Level is invalid until the run is finished. A finished run stores −1 when no band passed.
-// Cap is empty until a finished run records why the deck stopped.
+// Level is invalid until the run is finished. A finished run stores −1 when no band was completed.
+// StopReason is empty until a finished run records why the deck stopped.
 type PlacementRun struct {
 	ID         int64
 	UserID     int64
 	StartedAt  time.Time
 	FinishedAt time.Time
-	FalseAlarm sql.NullFloat64
-	Reliable   bool
 	Level      sql.NullInt64
-	Cap        string
+	StopReason string
 	Result     string
 	Seed       int64
 }
 
 // PlacementAnswer is one dealt card.
 // Rating is invalid while the card is face up and unanswered.
-// 0 is "I don't know". 1 Again, 2 Hard, 3 Good, 4 Easy.
+// 1 is Again, 2 Hard, 3 Good, 4 Easy.
 type PlacementAnswer struct {
 	RunID      int64
 	ItemID     string
@@ -40,19 +38,20 @@ type PlacementAnswer struct {
 
 // BandScore is one frequency band stored in placement_runs.result.
 // The JSON tags match placement.BandScore.
+// StruggleRate is (Again + Hard) / Rated, or 0 when Rated is 0.
 type BandScore struct {
 	Band         int     `json:"band"`
-	Shown        int     `json:"shown"`
+	Rated        int     `json:"rated"`
 	Again        int     `json:"again"`
 	Hard         int     `json:"hard"`
 	Good         int     `json:"good"`
 	Easy         int     `json:"easy"`
-	DontKnow     int     `json:"dontknow"`
-	GoodPlusRate float64 `json:"good_plus_rate"`
+	StruggleRate float64 `json:"struggle_rate"`
 }
 
-// Placement is the newest finished run for one learner.
-// TakenAt is that run's finished_at.
+// Placement is the newest run for one learner, finished or not.
+// TakenAt is finished_at when the run is finished, and started_at otherwise.
+// Finished is false while the run is still in progress.
 // SuggestedStartPosition is computed when this value is read: the lowest
 // units.position whose doc newWords are less than 80% covered by the
 // learner's known set, one past the highest position when every unit is
@@ -60,9 +59,10 @@ type BandScore struct {
 // as KnownLexemeIDs.
 type Placement struct {
 	TakenAt                time.Time
-	Reliable               bool
-	FalseAlarmRate         float64
+	Finished               bool
 	Level                  int
+	CardsRated             int
+	StopReason             string
 	BandScores             []BandScore
 	EstimatedKnownWords    int
 	SuggestedStartPosition int
@@ -74,7 +74,7 @@ type placementResultJSON struct {
 	EstimatedKnownWords int         `json:"estimated_known_words"`
 }
 
-const placementRunColumns = `id, user_id, started_at, finished_at, false_alarm_rate, reliable, level, cap, result, seed`
+const placementRunColumns = `id, user_id, started_at, finished_at, level, stop_reason, result, seed`
 
 // placementTimeLayout is the UTC text stored in placement timestamp columns.
 // The fractional part is always nine digits, so the strings sort in time order.
@@ -97,11 +97,10 @@ func parsePlacementTime(value string) (time.Time, error) {
 func scanPlacementRun(scan func(dest ...any) error) (PlacementRun, error) {
 	var run PlacementRun
 	var started string
-	var finished, cap, result sql.NullString
-	var reliable int
+	var finished, stop, result sql.NullString
 	err := scan(
-		&run.ID, &run.UserID, &started, &finished, &run.FalseAlarm,
-		&reliable, &run.Level, &cap, &result, &run.Seed,
+		&run.ID, &run.UserID, &started, &finished,
+		&run.Level, &stop, &result, &run.Seed,
 	)
 	if err != nil {
 		return PlacementRun{}, err
@@ -116,13 +115,12 @@ func scanPlacementRun(scan func(dest ...any) error) (PlacementRun, error) {
 			return PlacementRun{}, fmt.Errorf("db: placement run %d finished_at: %w", run.ID, err)
 		}
 	}
-	if cap.Valid {
-		run.Cap = cap.String
+	if stop.Valid {
+		run.StopReason = stop.String
 	}
 	if result.Valid {
 		run.Result = result.String
 	}
-	run.Reliable = reliable != 0
 	return run, nil
 }
 
@@ -246,11 +244,63 @@ func (s *Store) ListPlacementAnswers(ctx context.Context, runID int64) ([]Placem
 	return out, nil
 }
 
+// OpenPlacementRun returns the learner's unfinished run.
+// ok is false when every run is finished, or the learner has none.
+func (s *Store) OpenPlacementRun(ctx context.Context, userID int64) (PlacementRun, bool, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return PlacementRun{}, false, err
+	}
+	run, err := scanPlacementRun(conn.QueryRowContext(ctx, `
+		SELECT `+placementRunColumns+`
+		FROM placement_runs
+		WHERE user_id = ? AND finished_at IS NULL
+		ORDER BY id DESC
+		LIMIT 1`, userID).Scan)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PlacementRun{}, false, nil
+	}
+	if err != nil {
+		return PlacementRun{}, false, fmt.Errorf("db: open placement: %w", err)
+	}
+	return run, true, nil
+}
+
+// DeleteOpenPlacementAnswer removes a dealt card that has not been rated.
+func (s *Store) DeleteOpenPlacementAnswer(ctx context.Context, runID int64, itemID string) error {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return err
+	}
+	if _, err := conn.ExecContext(ctx, `
+		DELETE FROM placement_answers
+		WHERE run_id = ? AND item_id = ? AND rating IS NULL`,
+		runID, itemID,
+	); err != nil {
+		return fmt.Errorf("db: delete placement answer: %w", err)
+	}
+	return nil
+}
+
+// CountPlacementRatings counts cards the learner has rated in the run.
+func (s *Store) CountPlacementRatings(ctx context.Context, runID int64) (int, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return 0, err
+	}
+	var n int
+	if err := conn.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM placement_answers
+		WHERE run_id = ? AND rating IS NOT NULL`, runID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("db: count placement ratings: %w", err)
+	}
+	return n, nil
+}
+
 // FinishPlacement marks the run finished.
-// An already-finished run returns an error. Seeding is the caller's job and
-// happens before this write, so a failed finish can be retried.
-// An empty cap is stored as NULL.
-func (s *Store) FinishPlacement(ctx context.Context, id int64, finished time.Time, falseAlarm float64, reliable bool, level int, cap, resultJSON string) error {
+// An already-finished run returns an error.
+// An empty stop reason is stored as NULL.
+func (s *Store) FinishPlacement(ctx context.Context, id int64, finished time.Time, level int, stopReason, resultJSON string) error {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return err
@@ -273,19 +323,15 @@ func (s *Store) FinishPlacement(ctx context.Context, id int64, finished time.Tim
 		return fmt.Errorf("db: placement run %d is already finished", id)
 	}
 
-	flag := 0
-	if reliable {
-		flag = 1
-	}
-	var capVal any
-	if cap != "" {
-		capVal = cap
+	var stop any
+	if stopReason != "" {
+		stop = stopReason
 	}
 	res, err := tx.ExecContext(ctx, `
 		UPDATE placement_runs
-		SET finished_at = ?, false_alarm_rate = ?, reliable = ?, level = ?, cap = ?, result = ?
+		SET finished_at = ?, level = ?, stop_reason = ?, result = ?
 		WHERE id = ? AND finished_at IS NULL`,
-		placementTime(finished), falseAlarm, flag, level, capVal, resultJSON, id,
+		placementTime(finished), level, stop, resultJSON, id,
 	)
 	if err != nil {
 		return fmt.Errorf("db: finish placement: %w", err)
@@ -303,9 +349,9 @@ func (s *Store) FinishPlacement(ctx context.Context, id int64, finished time.Tim
 	return nil
 }
 
-// LatestFinishedPlacement returns the newest finished run for the learner.
+// LatestRun returns the learner's newest placement run, finished or not.
 // A learner with none returns sql.ErrNoRows wrapped.
-func (s *Store) LatestFinishedPlacement(ctx context.Context, userID int64) (PlacementRun, error) {
+func (s *Store) LatestRun(ctx context.Context, userID int64) (PlacementRun, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return PlacementRun{}, err
@@ -313,8 +359,8 @@ func (s *Store) LatestFinishedPlacement(ctx context.Context, userID int64) (Plac
 	run, err := scanPlacementRun(conn.QueryRowContext(ctx, `
 		SELECT `+placementRunColumns+`
 		FROM placement_runs
-		WHERE user_id = ? AND finished_at IS NOT NULL
-		ORDER BY finished_at DESC, id DESC
+		WHERE user_id = ?
+		ORDER BY id DESC
 		LIMIT 1`, userID).Scan)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PlacementRun{}, fmt.Errorf("db: placement for user %d: %w", userID, sql.ErrNoRows)
@@ -346,9 +392,10 @@ func (s *Store) InsertLearnerLexeme(ctx context.Context, userID, lexemeID int64,
 	return nil
 }
 
-// UpsertPlacementLexeme inserts the pointed word or updates its gloss and part of speech.
+// UpsertPlacementLexeme inserts the pointed word or updates its gloss, part of speech, transliteration, and gender.
 // verified is not changed on conflict. The new row is stored with verified 0.
-func (s *Store) UpsertPlacementLexeme(ctx context.Context, textNFC, gloss, pos string) (int64, error) {
+// An empty gender is stored as NULL.
+func (s *Store) UpsertPlacementLexeme(ctx context.Context, textNFC, gloss, pos, translit, gender string) (int64, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return 0, err
@@ -356,13 +403,19 @@ func (s *Store) UpsertPlacementLexeme(ctx context.Context, textNFC, gloss, pos s
 	if textNFC == "" {
 		return 0, errors.New("db: placement lexeme text is empty")
 	}
+	var genderVal any
+	if gender != "" {
+		genderVal = gender
+	}
 	if _, err := conn.ExecContext(ctx, `
-		INSERT INTO lexemes (text_nfc, gloss_en, pos, verified)
-		VALUES (?, ?, ?, 0)
+		INSERT INTO lexemes (text_nfc, gloss_en, pos, translit, gender, verified)
+		VALUES (?, ?, ?, ?, ?, 0)
 		ON CONFLICT (text_nfc) DO UPDATE SET
 			gloss_en = excluded.gloss_en,
-			pos = excluded.pos`,
-		textNFC, gloss, pos,
+			pos = excluded.pos,
+			translit = excluded.translit,
+			gender = excluded.gender`,
+		textNFC, gloss, pos, translit, genderVal,
 	); err != nil {
 		return 0, fmt.Errorf("db: upsert placement lexeme: %w", err)
 	}
@@ -477,12 +530,12 @@ func (s *Store) KnownLexemeIDs(ctx context.Context, userID int64) ([]int64, erro
 	return out, nil
 }
 
-// LatestPlacement returns the learner's newest finished run.
-// ok is false when the learner has not finished one.
+// LatestPlacement returns the learner's newest run.
+// ok is false when the learner has no run.
 // SuggestedStartPosition follows the units and known words at this call,
 // so a unit saved after the run changes it.
 func (s *Store) LatestPlacement(ctx context.Context, userID int64) (Placement, bool, error) {
-	run, err := s.LatestFinishedPlacement(ctx, userID)
+	run, err := s.LatestRun(ctx, userID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Placement{}, false, nil
 	}
@@ -495,23 +548,29 @@ func (s *Store) LatestPlacement(ctx context.Context, userID int64) (Placement, b
 			return Placement{}, false, fmt.Errorf("db: placement for user %d result: %w", userID, err)
 		}
 	}
-	rate := 0.0
-	if run.FalseAlarm.Valid {
-		rate = run.FalseAlarm.Float64
-	}
 	level := -1
 	if run.Level.Valid {
 		level = int(run.Level.Int64)
+	}
+	rated, err := s.CountPlacementRatings(ctx, run.ID)
+	if err != nil {
+		return Placement{}, false, err
 	}
 	start, err := s.suggestedStart(ctx, userID)
 	if err != nil {
 		return Placement{}, false, err
 	}
+	taken := run.StartedAt
+	finished := !run.FinishedAt.IsZero()
+	if finished {
+		taken = run.FinishedAt
+	}
 	return Placement{
-		TakenAt:                run.FinishedAt,
-		Reliable:               run.Reliable,
-		FalseAlarmRate:         rate,
+		TakenAt:                taken,
+		Finished:               finished,
 		Level:                  level,
+		CardsRated:             rated,
+		StopReason:             run.StopReason,
 		BandScores:             body.Bands,
 		EstimatedKnownWords:    body.EstimatedKnownWords,
 		SuggestedStartPosition: start,
