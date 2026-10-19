@@ -30,14 +30,23 @@ const (
 
 // Options configures the authoring handler.
 //
-// AuthToken is the bearer secret from app config. This package does not
-// read the environment. Validator, when set, replaces that static check.
-// Compose an OAuth access-token validator with StaticToken in a Chain.
+// AuthToken is the bearer secret from app.Config.MCPAuthToken. This
+// package does not read the environment. Validator, when set, replaces
+// the default chain. The default chain is OAuthSessions and then
+// StaticToken. OAuth fills in SessionFromToken only. Sessions is the
+// session-or-user resolver and is wired now.
 //
 // Nil Course, Lexicon, Lookup, or Units leaves the tools registered.
 // A call that needs a missing store returns a tool error and does not panic.
 type Options struct {
 	AuthToken string
+	// SessionFromToken maps an OAuth access token to a raw session id.
+	// Nil until the authorization server lands. The id is resolved with
+	// Sessions, which must call auth.Service.Lookup.
+	SessionFromToken func(ctx context.Context, token string, r *http.Request) (rawSessionID string, err error)
+	// Sessions resolves that raw session id to a caller. Nil rejects
+	// every OAuth bearer and leaves the static token check in place.
+	Sessions  SessionUserResolver
 	Validator Validator
 	Course    CourseReader
 	Lexicon   LexiconReader
@@ -69,7 +78,10 @@ func (o Options) validator() Validator {
 	if o.Validator != nil {
 		return o.Validator
 	}
-	return StaticToken{Token: o.AuthToken}
+	return Chain{
+		OAuthSessions{Tokens: o.SessionFromToken, Users: o.Sessions},
+		StaticToken{Token: o.AuthToken},
+	}
 }
 
 func newMCPServer(opts Options) *mcp.Server {

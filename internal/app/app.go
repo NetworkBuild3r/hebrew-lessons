@@ -242,7 +242,7 @@ func NewApp(cfg Config) (*App, error) {
 	}
 	health := a.healthHandler()
 	a.web = web.New(health, svc)
-	a.mcp = newMCP(cfg, health)
+	a.mcp = newMCP(cfg, health, svc)
 	return a, nil
 }
 
@@ -340,7 +340,7 @@ func (a *App) healthHandler() http.Handler {
 	})
 }
 
-func newMCP(cfg Config, health http.Handler) http.Handler {
+func newMCP(cfg Config, health http.Handler, sessions *auth.Service) http.Handler {
 	// Course, lexicon, and unit stores stay unset until *db.Store
 	// grows UnitsInScope, LatestPlacement, PlacementKnownLexemes,
 	// PlacementLearningLexemes, StruggleStats, CompletedSharedUnits,
@@ -348,7 +348,15 @@ func newMCP(cfg Config, health http.Handler) http.Handler {
 	// is still a proposal. There is no learner_lexemes table.
 	// Tools answer with isError until those methods exist. The
 	// adapter belongs here, next to this call, so db does not import mcp.
-	authoring := mcp.Handler(mcp.Options{AuthToken: cfg.MCPAuthToken})
+	//
+	// AuthToken is Config.MCPAuthToken. cmd/hebrew copied MCP_AUTH_TOKEN
+	// into that field, untrimmed. This function does not read the
+	// environment. Sessions is auth.Service.Lookup. OAuth later sets
+	// SessionFromToken; it does not resolve the user itself.
+	authoring := mcp.Handler(mcp.Options{
+		AuthToken: cfg.MCPAuthToken,
+		Sessions:  sessions,
+	})
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
 	mux.Handle("/", authoring)
