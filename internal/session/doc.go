@@ -48,12 +48,13 @@
 //
 // # Algorithm
 //
-// A due read or recall card is struggling when its lapse count is at least
-// StruggleLapses, or its latest rating is Again or Hard, or StruggleStats
-// lists a confusion key for its lexeme. StruggleStatsAt reads
-// confusion_misses over ConfusionWindow ending at the same instant as the
-// rest of the build. A card is stable known when its latest rating is Good
-// or Easy and it has no Again inside that same window.
+// A due card (read, recall, listen or spell) is struggling when its lapse
+// count is at least StruggleLapses, or its latest rating is Again or Hard, or
+// the learner model lists a confusion key for its lexeme. The model
+// (internal/learner) reads confusion_misses, of every kind including other,
+// over ConfusionWindow ending at the same instant as the rest of the build.
+// A card is stable known when its latest rating is Good or Easy and it has no
+// Again inside that same window.
 // A read card also has to sit in KnownLexemeIDs, which is the latest-Good
 // or Easy read set. A placement Good or Easy is that review. Finishing a
 // lesson does not add the lesson's new words.
@@ -91,6 +92,37 @@
 // intro lesson sorts after every card that has one. A card with no frequency
 // rank sorts after every card that has one. The lexicon does not store a
 // rank, so ListStudyCards leaves that key unset.
+//
+// # Activities and skills (INIT-015/SPEC-015)
+//
+// Choosing cards is the mix above. Each study visit is then asked through the
+// weakest skill of its word that has a checked activity: CardRef.Activity and
+// CardRef.AskSkill. The skills come from the learner model, one
+// learner.Model.Word per distinct lexeme in the build, read at the build's
+// instant. activity.WeakestSkills ranks them by state, then by accuracy, and
+// activity.Choose picks the activity: the skill's everyday one, and its match
+// activity on every third visit through that skill. The rules, in order:
+//
+//   - a skill is asked only when its gate is open (listening always, the rest
+//     once the letters check is passed: WithGate) and an activity that can ask
+//     the word fits the lexicon (a gloss, a clip, enough fair distractors);
+//   - the weakest state goes first (unseen, seen, struggling, regressed,
+//     learning, known, solid), then the lower accuracy, then listen, read,
+//     recall, spell;
+//   - a skill with no evidence is opened on a word only while none of the
+//     word's other skills is struggling or regressed;
+//   - a word that comes up again in the same queue is asked through the next
+//     skill, while one is left;
+//   - a checked activity always beats a flashcard. Only when none fits is the
+//     visit a flashcard through the card's own skill, graded with Record.
+//
+// The cards, their order and the known and struggle counts are those of the
+// mix before activities: asking through a skill changes no card. The card in
+// a CardRef is the one that was due, and for a checked activity the evidence
+// lands on the card of AskSkill, which activity.Engine.Check creates at the
+// first attempt. Answered closes a checked visit. A new card whose word has no
+// exposure has Intro set: the screen records Engine.Expose before the first
+// check.
 //
 // Next returns the card at the cursor. Reveal marks that card peeked.
 // Record grades it through SelfGrade, which also writes an attempts row with

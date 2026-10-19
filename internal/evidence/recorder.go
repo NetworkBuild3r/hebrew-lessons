@@ -50,6 +50,10 @@ const (
 // answer. Zero means the screen did not time it, and the attempt is never Easy.
 // ChosenLexemeID is the word the learner picked when a wrong pick names another
 // word, or 0. SkipSchedule stores the attempt and leaves every card alone.
+//
+// NearMiss marks a right answer that was one letter off, which the typed grader
+// rates Hard (north-star section 6). Confusions are further confusion rows to write
+// with the attempt, for example the letter pairs found by aligning a typed answer.
 type Attempt struct {
 	UserID         int64
 	LexemeID       int64
@@ -65,7 +69,21 @@ type Attempt struct {
 	Latency        time.Duration
 	ChosenLexemeID int64
 	SkipSchedule   bool
+	NearMiss       bool
+	Confusions     []Confusion
 }
+
+// Confusion is one confusion_misses row to write with an attempt.
+// Kind is letter_pair, agreement, or other. Key is the pair.
+type Confusion = db.Confusion
+
+const (
+	// MaxConfusions is the most extra confusion rows one attempt may carry.
+	MaxConfusions = 8
+
+	// maxConfusionKeyRunes bounds a confusion key.
+	maxConfusionKeyRunes = 200
+)
 
 // Recorder writes checked answers. It is safe for use by several goroutines:
 // the store has one connection and each write is one transaction.
@@ -173,6 +191,7 @@ func (r *Recorder) Attempt(ctx context.Context, a Attempt) (fsrs.Rating, error) 
 		Attempt:   a.row(now),
 		Step:      step,
 		Confusion: confusion,
+		Extra:     a.Confusions,
 	})
 	if err != nil {
 		return 0, err
@@ -285,6 +304,22 @@ func (a Attempt) validate() error {
 	}
 	if a.DontKnow && a.Correct {
 		return errors.New("evidence: an answer cannot be both right and \"I don't know\"")
+	}
+	if a.NearMiss && !a.Correct {
+		return errors.New("evidence: a near miss is a right answer")
+	}
+	if len(a.Confusions) > MaxConfusions {
+		return fmt.Errorf("evidence: %d confusions, at most %d", len(a.Confusions), MaxConfusions)
+	}
+	for _, c := range a.Confusions {
+		switch c.Kind {
+		case fsrs.MissLetterPair, fsrs.MissAgreement, fsrs.MissOther:
+		default:
+			return fmt.Errorf("evidence: confusion kind %q is not letter_pair, agreement, or other", c.Kind)
+		}
+		if strings.TrimSpace(c.Key) == "" || len([]rune(c.Key)) > maxConfusionKeyRunes {
+			return errors.New("evidence: confusion key is empty or too long")
+		}
 	}
 	return nil
 }
