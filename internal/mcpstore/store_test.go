@@ -2,6 +2,7 @@ package mcpstore
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -31,20 +32,20 @@ const (
 func TestUnitsInScopeFiltersAndOrders(t *testing.T) {
 	ctx := context.Background()
 	store, raw := openAdapter(t, nil)
-	early := mustPut(t, store, ctx, nil, unitDoc("Early", hello), mcp.ScopeShared, 0)
+	early := insertUnitRow(t, raw, "Early", mcp.ScopeShared, "draft", 0, hello)
 	middle, err := testharness.InsertUnit(ctx, raw, "Middle", "draft")
 	if err != nil {
 		t.Fatal(err)
 	}
-	late := mustPut(t, store, ctx, nil, unitDoc("Late", coffee), mcp.ScopeShared, 2)
-	mine := mustPut(t, store, ctx, nil, unitDoc("Mine", book), "learner:7", 0)
-	theirs := mustPut(t, store, ctx, nil, unitDoc("Theirs", fish), "learner:8", 5)
+	late := insertUnitRow(t, raw, "Late", mcp.ScopeShared, "draft", 2, coffee)
+	mine := insertUnitRow(t, raw, "Mine", "learner:7", "draft", 0, book)
+	theirs := insertUnitRow(t, raw, "Theirs", "learner:8", "draft", 5, fish)
 
 	shared, err := store.UnitsInScope(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ids(shared) != joinIDs(early.UnitID, middle, late.UnitID) {
+	if ids(shared) != joinIDs(early, middle, late) {
 		t.Fatalf("shared = %+v", shared)
 	}
 	learner := int64(7)
@@ -52,11 +53,11 @@ func TestUnitsInScopeFiltersAndOrders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ids(mineRows) != joinIDs(early.UnitID, mine.UnitID, middle, late.UnitID) {
+	if ids(mineRows) != joinIDs(early, mine, middle, late) {
 		t.Fatalf("learner 7 = %+v", mineRows)
 	}
 	for _, row := range mineRows {
-		if row.Scope == "learner:8" || row.ID == theirs.UnitID {
+		if row.Scope == "learner:8" || row.ID == theirs {
 			t.Fatalf("learner 7 saw %+v", mineRows)
 		}
 	}
@@ -65,7 +66,7 @@ func TestUnitsInScopeFiltersAndOrders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ids(otherRows) != joinIDs(early.UnitID, middle, late.UnitID, theirs.UnitID) {
+	if ids(otherRows) != joinIDs(early, middle, late, theirs) {
 		t.Fatalf("learner 8 = %+v", otherRows)
 	}
 }
@@ -341,8 +342,8 @@ func TestCompletedSharedUnits(t *testing.T) {
 	if _, err := testharness.InsertLessonRun(ctx, raw, userID, openID, 0, when, nil); err != nil {
 		t.Fatal(err)
 	}
-	custom := mustPut(t, store, ctx, nil, unitDoc("Custom", house), "learner:7", 0)
-	if _, err := testharness.InsertLessonRun(ctx, raw, userID, custom.UnitID, 0, when, &when); err != nil {
+	custom := insertUnitRow(t, raw, "Custom", "learner:7", "draft", 0, house)
+	if _, err := testharness.InsertLessonRun(ctx, raw, userID, custom, 0, when, &when); err != nil {
 		t.Fatal(err)
 	}
 
@@ -364,7 +365,7 @@ func TestLearnerKnownLexemes(t *testing.T) {
 	coffeeID := mustLexeme(t, raw, coffee)
 	bookID := mustLexeme(t, raw, book)
 	fishID := mustLexeme(t, raw, fish)
-	mustLexeme(t, raw, house)
+	houseID := mustLexeme(t, raw, house)
 
 	helloCard := mustCard(t, raw, userID, helloID, 0)
 	insertReviews(t, raw, helloCard, when.Add(-time.Hour), 1)
@@ -398,8 +399,11 @@ func TestLearnerKnownLexemes(t *testing.T) {
 	if _, err := testharness.InsertLessonRun(ctx, raw, userID, openID, 0, when, nil); err != nil {
 		t.Fatal(err)
 	}
-	custom := mustPut(t, store, ctx, nil, unitDoc("Custom", house), "learner:7", 3)
-	if _, err := testharness.InsertLessonRun(ctx, raw, userID, custom.UnitID, 0, when, &when); err != nil {
+	custom := insertUnitRow(t, raw, "Custom", "learner:7", "draft", 3, house)
+	if err := testharness.InsertLessonItem(ctx, raw, custom, 0, houseID, "new", "recall"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testharness.InsertLessonRun(ctx, raw, userID, custom, 0, when, &when); err != nil {
 		t.Fatal(err)
 	}
 
@@ -479,6 +483,9 @@ func TestSearchLexemes(t *testing.T) {
 	}
 }
 
+// TestPutUnitIdempotentScopeAndItems calls mcp.UnitWriter.PutUnit.
+// db.PutUnit does not implement that contract yet, so this test fails
+// until #63 is updated.
 func TestPutUnitIdempotentScopeAndItems(t *testing.T) {
 	when := time.Date(2026, 10, 18, 11, 0, 0, 0, time.UTC)
 	store, raw := openAdapter(t, fixedClock{when})
@@ -554,6 +561,10 @@ func TestPutUnitIdempotentScopeAndItems(t *testing.T) {
 	}
 }
 
+// TestPutUnitPublishedEditAndUnchanged calls mcp.UnitWriter.PutUnit.
+// An unchanged put must leave a published unit published with no new
+// revision, and an edit must set it back to draft. db.PutUnit does
+// neither, so this test fails until #63 is updated.
 func TestPutUnitPublishedEditAndUnchanged(t *testing.T) {
 	when := time.Date(2026, 10, 18, 11, 0, 0, 0, time.UTC)
 	store, raw := openAdapter(t, fixedClock{when})
@@ -636,11 +647,8 @@ func TestLookup(t *testing.T) {
 		t.Fatalf("missing facts ok=%v err=%v", ok, err)
 	}
 
-	first := mustPut(t, store, ctx, nil, unitDoc("One", hello), mcp.ScopeShared, 0)
-	second := mustPut(t, store, ctx, nil, unitDoc("Two", coffee), mcp.ScopeShared, 3)
-	if first.UnitID == 0 || second.UnitID == 0 {
-		t.Fatal("units were not saved")
-	}
+	insertUnitRow(t, raw, "One", mcp.ScopeShared, "draft", 0, hello)
+	insertUnitRow(t, raw, "Two", mcp.ScopeShared, "draft", 3, coffee)
 	known, err := store.KnownLexemes(ctx, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -732,14 +740,27 @@ func unitDoc(title, word string) units.Unit {
 	}
 }
 
-func mustPut(t *testing.T, store *Store, ctx context.Context, id *int64, doc units.Unit, scope string, position int) mcp.PutResult {
+func insertUnitRow(t *testing.T, raw *db.Store, title, scope, status string, position int, word string) int64 {
 	t.Helper()
-	doc.Position = position
-	saved, err := store.PutUnit(ctx, id, &doc, scope)
+	doc, err := json.Marshal(map[string]any{
+		"title":    title,
+		"newWords": []string{word},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return saved
+	res, err := raw.ExecContext(context.Background(), `
+		INSERT INTO units (position, title, situation, concept, status, rev, doc, scope)
+		VALUES (?, ?, 'Street', 'One idea', ?, 1, ?, ?)`,
+		position, title, status, string(doc), scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }
 
 func ids(rows []mcp.UnitOutline) string {

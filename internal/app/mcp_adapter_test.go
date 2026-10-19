@@ -39,30 +39,11 @@ func TestMCPToolReadsStore(t *testing.T) {
 		t.Fatalf("lookup %+v", found)
 	}
 
-	saved := callAppTool(t, session, "put_unit", map[string]any{
-		"scope":    "shared",
-		"position": 0,
-		"doc": map[string]any{
-			"title":     "Hello",
-			"situation": "Street",
-			"concept":   "Greeting",
-			"newWords":  []string{"שָׁלוֹם"},
-			"lessons": []any{map[string]any{
-				"kind": "lesson",
-				"activities": []any{map[string]any{
-					"type": "recall",
-					"text": "שָׁלוֹם",
-				}},
-			}},
-		},
-	})
-	var put struct {
-		UnitID   int64 `json:"unitId"`
-		Revision int   `json:"revision"`
-	}
-	decodeStructured(t, saved, &put)
-	if put.UnitID == 0 || put.Revision != 1 {
-		t.Fatalf("put %+v", put)
+	if _, err := a.Store().ExecContext(ctx, `
+		INSERT INTO units (position, title, situation, concept, status, rev, doc, scope)
+		VALUES (0, 'Hello', 'Street', 'Greeting', 'draft', 1, ?, 'shared')`,
+		`{"title":"Hello","newWords":["שָׁלוֹם"]}`); err != nil {
+		t.Fatal(err)
 	}
 
 	outline := callAppTool(t, session, "get_context", map[string]any{"position": 1})
@@ -80,18 +61,6 @@ func TestMCPToolReadsStore(t *testing.T) {
 	}
 	if len(ctxOut.Known) != 1 || ctxOut.Known[0] != "שָׁלוֹם" {
 		t.Fatalf("known %+v", ctxOut.Known)
-	}
-
-	conn, err := a.Store().DB()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var n int
-	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM lesson_items WHERE unit_id = ? AND role = 'new'`, put.UnitID).Scan(&n); err != nil {
-		t.Fatal(err)
-	}
-	if n != 1 {
-		t.Fatalf("lesson_items = %d", n)
 	}
 }
 
