@@ -94,6 +94,20 @@ func stripNiqqud(s string) string {
 	}, s)
 }
 
+// StripNiqqud drops niqqud, meteg, rafe, cantillation, and the upper dots.
+// Shin (U+05C1) and sin (U+05C2) dots stay, because those change the letter.
+// This is the consonant skeleton the validator uses when the pointed string misses.
+func StripNiqqud(s string) string { return stripNiqqud(s) }
+
+// Plain is the unpointed form of s: Normalize, then StripNiqqud.
+// Importers store this string where a consonant skeleton is required.
+func Plain(s string) string { return stripNiqqud(Normalize(s)) }
+
+// Tokenize splits s the way the validator does. It normalizes first, then
+// splits on whitespace, punctuation, and maqaf (U+05BE). A Hebrew word keeps
+// its points. A digit run is its own token. Punctuation is not a token.
+func Tokenize(s string) []string { return tokenize(s) }
+
 func isStrippedMark(r rune) bool {
 	switch {
 	case r >= 0x0591 && r <= 0x05AF:
