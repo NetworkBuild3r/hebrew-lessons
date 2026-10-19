@@ -1,0 +1,802 @@
+[
+  {
+    "id": "boker",
+    "text_nfc": "בֹּקֶר",
+    "band": 0,
+    "pseudo": false,
+    "gloss_en": "morning",
+    "pos": "noun",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
+    "id": "kafe",
+    "text_nfc": "קָפֶה",
+    "band": 0,
+    "pseudo": false,
+    "gloss_en": "coffee",
+    "pos": "noun",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
+    "id": "seret",
+    "text_nfc": "סֶרֶט",
+    "band": 0,
+    "pseudo": false,
+    "gloss_en": "movie",
+    "pos": "noun",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
+    "id": "marak",
+    "text_nfc": "מָרָק",
+    "band": 0,
+    "pseudo": false,
+    "gloss_en": "soup",
+    "pos": "noun",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
+    "id": "misrad",
+    "text_nfc": "מִשְׂרָד",
+    "band": 0,
+    "pseudo": false,
+    "gloss_en": "office",
+    "pos": "noun",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
+    "id": "ohel",
+    "text_nfc": "אֹהֶל",
+    "band": 0,
+    "pseudo": false,
+    "gloss_en": "tent",
+    "pos": "noun",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
+    "id": "kam",
+    "text_nfc": "קָם",
+    "band": 0,
+    "pseudo": false,
+    "gloss_en": "gets up",
+    "pos": "verb",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
+    "id": "shote",
+    "text_nfc": "שׁוֹתֶה",
+    "band": 0,
+    "pseudo": false,
+    "gloss_en": "drinks",
+    "pos": "verb",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
+    "id": "yodea",
+    "text_nfc": "יוֹדֵעַ",
+    "band": 0,
+    "pseudo": false,
+    "gloss_en": "knows",
+    "pos": "verb",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
+    "id": "levashel",
+    "text_nfc": "לְבַשֵּׁל",
+    "band": 0,
+    "pseudo": false,
+    "gloss_en": "to cook",
+    "pos": "verb",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
+    "id": "meyuchad",
+    "text_nfc": "מְיוּחָד",
+    "band": 0,
+    "pseudo": false,
+    "gloss_en": "special",
+    "pos": "adjective",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
+    "id": "batuach",
+    "text_nfc": "בָּטוּחַ",
+    "band": 0,
+    "pseudo": false,
+    "gloss_en": "sure",
+    "pos": "adjective",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
+    "id": "nachon",
+    "text_nfc": "נָכוֹן",
+    "band": 1,
+    "pseudo": false,
+    "gloss_en": "correct",
+    "pos": "adjective",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "laasot",
+    "text_nfc": "לַעֲשׂוֹת",
+    "band": 1,
+    "pseudo": false,
+    "gloss_en": "to do",
+    "pos": "verb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "davar",
+    "text_nfc": "דָּבָר",
+    "band": 1,
+    "pseudo": false,
+    "gloss_en": "thing",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "lirot",
+    "text_nfc": "לִרְאוֹת",
+    "band": 1,
+    "pseudo": false,
+    "gloss_en": "to see",
+    "pos": "verb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "lalechet",
+    "text_nfc": "לָלֶכֶת",
+    "band": 1,
+    "pseudo": false,
+    "gloss_en": "to go",
+    "pos": "verb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "ohev",
+    "text_nfc": "אוֹהֵב",
+    "band": 1,
+    "pseudo": false,
+    "gloss_en": "loves",
+    "pos": "verb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "yom",
+    "text_nfc": "יוֹם",
+    "band": 1,
+    "pseudo": false,
+    "gloss_en": "day",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "chaver",
+    "text_nfc": "חָבֵר",
+    "band": 1,
+    "pseudo": false,
+    "gloss_en": "friend",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "makom",
+    "text_nfc": "מָקוֹם",
+    "band": 1,
+    "pseudo": false,
+    "gloss_en": "place",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "layla",
+    "text_nfc": "לַיְלָה",
+    "band": 1,
+    "pseudo": false,
+    "gloss_en": "night",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "katan",
+    "text_nfc": "קָטָן",
+    "band": 1,
+    "pseudo": false,
+    "gloss_en": "small",
+    "pos": "adjective",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "chadash",
+    "text_nfc": "חָדָשׁ",
+    "band": 1,
+    "pseudo": false,
+    "gloss_en": "new",
+    "pos": "adjective",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "leechol",
+    "text_nfc": "לֶאֱכוֹל",
+    "band": 2,
+    "pseudo": false,
+    "gloss_en": "to eat",
+    "pos": "verb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "lishmor",
+    "text_nfc": "לִשְׁמוֹר",
+    "band": 2,
+    "pseudo": false,
+    "gloss_en": "to keep",
+    "pos": "verb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "lehavin",
+    "text_nfc": "לְהָבִין",
+    "band": 2,
+    "pseudo": false,
+    "gloss_en": "to understand",
+    "pos": "verb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "kal",
+    "text_nfc": "קַל",
+    "band": 2,
+    "pseudo": false,
+    "gloss_en": "easy",
+    "pos": "adjective",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "chazak",
+    "text_nfc": "חָזָק",
+    "band": 2,
+    "pseudo": false,
+    "gloss_en": "strong",
+    "pos": "adjective",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "rosh",
+    "text_nfc": "רֹאשׁ",
+    "band": 2,
+    "pseudo": false,
+    "gloss_en": "head",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "yalda",
+    "text_nfc": "יַלְדָּה",
+    "band": 2,
+    "pseudo": false,
+    "gloss_en": "girl",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "shaa",
+    "text_nfc": "שָׁעָה",
+    "band": 2,
+    "pseudo": false,
+    "gloss_en": "hour",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "mayim",
+    "text_nfc": "מַיִם",
+    "band": 2,
+    "pseudo": false,
+    "gloss_en": "water",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "cheder",
+    "text_nfc": "חֶדֶר",
+    "band": 2,
+    "pseudo": false,
+    "gloss_en": "room",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "rachok",
+    "text_nfc": "רָחוֹק",
+    "band": 2,
+    "pseudo": false,
+    "gloss_en": "far",
+    "pos": "adjective",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "kelev",
+    "text_nfc": "כֶּלֶב",
+    "band": 2,
+    "pseudo": false,
+    "gloss_en": "dog",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "laamod",
+    "text_nfc": "לַעֲמוֹד",
+    "band": 3,
+    "pseudo": false,
+    "gloss_en": "to stand",
+    "pos": "verb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "tsair",
+    "text_nfc": "צָעִיר",
+    "band": 3,
+    "pseudo": false,
+    "gloss_en": "young",
+    "pos": "adjective",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "gavoah",
+    "text_nfc": "גָּבוֹהַּ",
+    "band": 3,
+    "pseudo": false,
+    "gloss_en": "tall",
+    "pos": "adjective",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "tinok",
+    "text_nfc": "תִּינוֹק",
+    "band": 3,
+    "pseudo": false,
+    "gloss_en": "baby",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "lesayem",
+    "text_nfc": "לְסַיֵּם",
+    "band": 3,
+    "pseudo": false,
+    "gloss_en": "to finish",
+    "pos": "verb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "liftoach",
+    "text_nfc": "לִפְתּוֹחַ",
+    "band": 3,
+    "pseudo": false,
+    "gloss_en": "to open",
+    "pos": "verb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "mechonit",
+    "text_nfc": "מְכוֹנִית",
+    "band": 3,
+    "pseudo": false,
+    "gloss_en": "car",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "aroch",
+    "text_nfc": "אָרוֹךְ",
+    "band": 3,
+    "pseudo": false,
+    "gloss_en": "long",
+    "pos": "adjective",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "olam",
+    "text_nfc": "עוֹלָם",
+    "band": 3,
+    "pseudo": false,
+    "gloss_en": "world",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "delet",
+    "text_nfc": "דֶּלֶת",
+    "band": 3,
+    "pseudo": false,
+    "gloss_en": "door",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "ets",
+    "text_nfc": "עֵץ",
+    "band": 3,
+    "pseudo": false,
+    "gloss_en": "tree",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "ir",
+    "text_nfc": "עִיר",
+    "band": 3,
+    "pseudo": false,
+    "gloss_en": "city",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "sachkan",
+    "text_nfc": "שַׂחְקָן",
+    "band": 4,
+    "pseudo": false,
+    "gloss_en": "actor",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "linhog",
+    "text_nfc": "לִנְהוֹג",
+    "band": 4,
+    "pseudo": false,
+    "gloss_en": "to drive",
+    "pos": "verb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "tshuva",
+    "text_nfc": "תְּשׁוּבָה",
+    "band": 4,
+    "pseudo": false,
+    "gloss_en": "answer",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "tseva",
+    "text_nfc": "צֶבַע",
+    "band": 4,
+    "pseudo": false,
+    "gloss_en": "color",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "lashir",
+    "text_nfc": "לָשִׁיר",
+    "band": 4,
+    "pseudo": false,
+    "gloss_en": "to sing",
+    "pos": "verb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "lehachlit",
+    "text_nfc": "לְהַחְלִיט",
+    "band": 4,
+    "pseudo": false,
+    "gloss_en": "to decide",
+    "pos": "verb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "taim",
+    "text_nfc": "טָעִים",
+    "band": 4,
+    "pseudo": false,
+    "gloss_en": "tasty",
+    "pos": "adjective",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "panuy",
+    "text_nfc": "פָּנוּי",
+    "band": 4,
+    "pseudo": false,
+    "gloss_en": "available",
+    "pos": "adjective",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "ayef",
+    "text_nfc": "עָיֵף",
+    "band": 4,
+    "pseudo": false,
+    "gloss_en": "tired",
+    "pos": "adjective",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "shulchan",
+    "text_nfc": "שֻׁלְחָן",
+    "band": 4,
+    "pseudo": false,
+    "gloss_en": "table",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "shaon",
+    "text_nfc": "שָׁעוֹן",
+    "band": 4,
+    "pseudo": false,
+    "gloss_en": "watch",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "shemesh",
+    "text_nfc": "שֶׁמֶשׁ",
+    "band": 4,
+    "pseudo": false,
+    "gloss_en": "sun",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "gazaf",
+    "text_nfc": "גָּזַף",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "verb",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "zafat",
+    "text_nfc": "זָפַט",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "verb",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "gasak",
+    "text_nfc": "גָּסַק",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "verb",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "kazar",
+    "text_nfc": "כָּזַר",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "verb",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "gozef",
+    "text_nfc": "גּוֹזֵף",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "verb",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "sozem",
+    "text_nfc": "סּוֹזֵם",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "verb",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "higzif",
+    "text_nfc": "הִגְזִיף",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "verb",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "hikzim",
+    "text_nfc": "הִקְזִים",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "verb",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "gizuf",
+    "text_nfc": "גִּיזּוּף",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "noun",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "ziput",
+    "text_nfc": "זִיפּוּט",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "noun",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "migzaf",
+    "text_nfc": "מִגְזָף",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "noun",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "miszam",
+    "text_nfc": "מִסְזָם",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "noun",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "gazfan",
+    "text_nfc": "גַּזְפָן",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "noun",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "sazman",
+    "text_nfc": "סַזְמָן",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "noun",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "tsivus",
+    "text_nfc": "צִיבּוּס",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "noun",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "kizum",
+    "text_nfc": "קִיזּוּם",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "noun",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "gazif",
+    "text_nfc": "גָּזִיף",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "adjective",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "kazim",
+    "text_nfc": "קָזִים",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "adjective",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "sazim",
+    "text_nfc": "סָזִים",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "adjective",
+    "verified": false,
+    "source": "pseudo"
+  },
+  {
+    "id": "tsavis",
+    "text_nfc": "צָבִיס",
+    "band": null,
+    "pseudo": true,
+    "gloss_en": "",
+    "pos": "adjective",
+    "verified": false,
+    "source": "pseudo"
+  }
+]
