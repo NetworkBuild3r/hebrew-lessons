@@ -24,18 +24,29 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
 )
 
-const oauthRedirect = "http://127.0.0.1:9/callback"
+const (
+	oauthRedirect     = "http://127.0.0.1:9/callback"
+	oauthLearnerEmail = "learner@example.com"
+	oauthAdminEmail   = "admin@example.com"
+	oauthHello        = "שָׁלוֹם"
+	oauthStaticToken  = "static-secret"
+)
 
-// TestOAuthSessionRoles mirrors the role cases on #64, through a real
-// OAuth access token. sessionUsers is the only adapter: it maps the
-// bearer with SessionFromToken and resolves the caller with Lookup.
-// Admin is users.role from ADMIN_EMAILS. There is no MCP_ADMIN_EMAILS.
-func TestOAuthSessionRoles(t *testing.T) {
-	const (
-		learnerEmail = "learner@example.com"
-		adminEmail   = "admin@example.com"
-		hello        = "שָׁלוֹם"
-	)
+// oauthRoleEnv signs two allowlisted accounts in through the real OAuth
+// authorization-code flow. Role comes only from sessionUsers, which
+// copies users.role after Lookup. The admin email is in ADMIN_EMAILS;
+// the other allowlisted email is not, so it is a learner.
+type oauthRoleEnv struct {
+	base      string
+	learner   string
+	admin     string
+	learnerID int64
+	mem       *mcp.Memory
+	access    *auth.Access
+}
+
+func startOAuthRoles(t *testing.T) oauthRoleEnv {
+	t.Helper()
 	start := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	clk := &stepClock{t: start}
 	store, err := db.Open(context.Background(), filepath.Join(t.TempDir(), "hebrew.sqlite"), clk)
@@ -43,7 +54,7 @@ func TestOAuthSessionRoles(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	access := auth.NewAccess([]string{learnerEmail}, []string{adminEmail})
+	access := auth.NewAccess([]string{oauthLearnerEmail}, []string{oauthAdminEmail})
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -78,7 +89,7 @@ func TestOAuthSessionRoles(t *testing.T) {
 	}
 
 	mem := mcp.NewMemory()
-	mem.AddLexeme(mcp.Lexeme{TextNFC: hello, Bare: "שלום", Gloss: "hello; peace", POS: "interjection"})
+	mem.AddLexeme(mcp.Lexeme{TextNFC: oauthHello, Bare: "שלום", Gloss: "hello; peace", POS: "interjection"})
 	users := sessionUsers{auth: svc}
 	mux := http.NewServeMux()
 	srv := httptest.NewUnstartedServer(mux)
@@ -87,7 +98,7 @@ func TestOAuthSessionRoles(t *testing.T) {
 		t.Fatal("oauth did not mount")
 	}
 	mux.Handle("/", mcp.Handler(mcp.Options{
-		AuthToken:           "static-secret",
+		AuthToken:           oauthStaticToken,
 		Sessions:            users,
 		SessionFromToken:    users.SessionFromToken,
 		ResourceMetadataURL: base + "/.well-known/oauth-protected-resource",
@@ -106,44 +117,30 @@ func TestOAuthSessionRoles(t *testing.T) {
 	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}}
-	learner := signInMCP(t, client, fake, base, learnerEmail, "learner-sub")
-	user, err := store.UserByEmail(context.Background(), learnerEmail)
+	learner := signInMCP(t, client, fake, base, oauthLearnerEmail, "learner-sub")
+	user, err := store.UserByEmail(context.Background(), oauthLearnerEmail)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mem.SetPlacement(user.ID, mcp.Placement{Finished: true, Sittings: 1, StopReason: "exhausted"}, []string{hello}, nil)
-	admin := signInMCP(t, client, fake, base, adminEmail, "admin-sub")
+	mem.SetPlacement(user.ID, mcp.Placement{Finished: true, Sittings: 1, StopReason: "exhausted"}, []string{oauthHello}, nil)
+	admin := signInMCP(t, client, fake, base, oauthAdminEmail, "admin-sub")
+	return oauthRoleEnv{
+		base: base, learner: learner, admin: admin,
+		learnerID: user.ID, mem: mem, access: access,
+	}
+}
 
-	for _, scope := range []string{mcp.ScopeShared, "learner:" + strconv.FormatInt(user.ID, 10)} {
-		put := postTool(t, base, learner, "put_unit", map[string]any{
-			"scope": scope, "position": 0, "doc": map[string]any{"title": "Hello"},
-		})
-		if put.StatusCode != http.StatusForbidden || !strings.Contains(put.Body, "forbidden: admin only") {
-			t.Fatalf("learner put %s %d %s", scope, put.StatusCode, put.Body)
-		}
-	}
-	other := user.ID + 1
-	cross := postTool(t, base, learner, "get_context", map[string]any{"position": 0, "learnerId": other})
-	if cross.StatusCode != http.StatusForbidden || !strings.Contains(cross.Body, "learnerId must be your own id.") {
-		t.Fatalf("other %d %s", cross.StatusCode, cross.Body)
-	}
-	self := postTool(t, base, learner, "get_context", map[string]any{"position": 0, "learnerId": user.ID})
-	if self.StatusCode != http.StatusOK || strings.Contains(self.Body, `"isError":true`) || !strings.Contains(self.Body, hello) {
-		t.Fatalf("self %d %s", self.StatusCode, self.Body)
-	}
-	omitted := postTool(t, base, learner, "get_context", map[string]any{"position": 0})
-	if omitted.StatusCode != http.StatusOK || strings.Contains(omitted.Body, `"isError":true`) || !strings.Contains(omitted.Body, hello) {
-		t.Fatalf("default learnerId %d %s", omitted.StatusCode, omitted.Body)
-	}
-	saved := postTool(t, base, admin, "put_unit", map[string]any{
+func TestOAuthAdminEmailCanPutShared(t *testing.T) {
+	env := startOAuthRoles(t)
+	saved := postTool(t, env.base, env.admin, "put_unit", map[string]any{
 		"scope": mcp.ScopeShared, "position": 0, "doc": map[string]any{
 			"title": "Hello", "situation": "Meeting a friend", "concept": "Greeting",
-			"newWords": []string{hello},
+			"newWords": []string{oauthHello},
 			"lessons": []map[string]any{{
 				"kind": "lesson",
 				"activities": []map[string]any{
-					{"type": "listen_pick", "text": hello},
-					{"type": "recall", "text": hello},
+					{"type": "listen_pick", "text": oauthHello},
+					{"type": "recall", "text": oauthHello},
 				},
 			}},
 		},
@@ -151,21 +148,57 @@ func TestOAuthSessionRoles(t *testing.T) {
 	if saved.StatusCode != http.StatusOK || strings.Contains(saved.Body, `"isError":true`) {
 		t.Fatalf("admin put %d %s", saved.StatusCode, saved.Body)
 	}
-	units, err := mem.ListUnits(context.Background())
+	units, err := env.mem.ListUnits(context.Background())
 	if err != nil || len(units) != 1 || units[0].Scope != mcp.ScopeShared || units[0].Status != "draft" {
 		t.Fatalf("units %+v err %v", units, err)
 	}
+}
 
-	access.Set(nil, []string{adminEmail})
-	removed := postTool(t, base, learner, "get_context", map[string]any{"position": 0})
+func TestOAuthLearnerPutUnitForbidden(t *testing.T) {
+	env := startOAuthRoles(t)
+	for _, scope := range []string{mcp.ScopeShared, "learner:" + strconv.FormatInt(env.learnerID, 10)} {
+		put := postTool(t, env.base, env.learner, "put_unit", map[string]any{
+			"scope": scope, "position": 0, "doc": map[string]any{"title": "Hello"},
+		})
+		if put.StatusCode != http.StatusForbidden || !strings.Contains(put.Body, "forbidden: admin only") {
+			t.Fatalf("learner put %s %d %s", scope, put.StatusCode, put.Body)
+		}
+	}
+	units, err := env.mem.ListUnits(context.Background())
+	if err != nil || len(units) != 0 {
+		t.Fatalf("units %+v err %v", units, err)
+	}
+}
+
+func TestOAuthLearnerGetContextIsSelf(t *testing.T) {
+	env := startOAuthRoles(t)
+	other := env.learnerID + 1
+	cross := postTool(t, env.base, env.learner, "get_context", map[string]any{"position": 0, "learnerId": other})
+	if cross.StatusCode != http.StatusForbidden || !strings.Contains(cross.Body, "learnerId must be your own id.") {
+		t.Fatalf("other %d %s", cross.StatusCode, cross.Body)
+	}
+	self := postTool(t, env.base, env.learner, "get_context", map[string]any{"position": 0, "learnerId": env.learnerID})
+	if self.StatusCode != http.StatusOK || strings.Contains(self.Body, `"isError":true`) || !strings.Contains(self.Body, oauthHello) {
+		t.Fatalf("self %d %s", self.StatusCode, self.Body)
+	}
+	omitted := postTool(t, env.base, env.learner, "get_context", map[string]any{"position": 0})
+	if omitted.StatusCode != http.StatusOK || strings.Contains(omitted.Body, `"isError":true`) || !strings.Contains(omitted.Body, oauthHello) {
+		t.Fatalf("default learnerId %d %s", omitted.StatusCode, omitted.Body)
+	}
+}
+
+func TestOAuthRemovedAllowlistEmailUnauthorized(t *testing.T) {
+	env := startOAuthRoles(t)
+	env.access.Set(nil, []string{oauthAdminEmail})
+	removed := postTool(t, env.base, env.learner, "get_context", map[string]any{"position": 0})
 	if removed.StatusCode != http.StatusUnauthorized || !strings.Contains(removed.Header.Get("WWW-Authenticate"), "Bearer") {
 		t.Fatalf("removed %d %s %q", removed.StatusCode, removed.Body, removed.Header.Get("WWW-Authenticate"))
 	}
-	still := postInit(t, base, "static-secret")
+	still := postInit(t, env.base, oauthStaticToken)
 	if still.StatusCode != http.StatusOK {
 		t.Fatalf("static %d %s", still.StatusCode, still.Body)
 	}
-	adminStill := postTool(t, base, admin, "get_context", map[string]any{"position": 0})
+	adminStill := postTool(t, env.base, env.admin, "get_context", map[string]any{"position": 0})
 	if adminStill.StatusCode != http.StatusOK || strings.Contains(adminStill.Body, `"isError":true`) {
 		t.Fatalf("admin after removal %d %s", adminStill.StatusCode, adminStill.Body)
 	}
