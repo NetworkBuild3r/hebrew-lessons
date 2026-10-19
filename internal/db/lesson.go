@@ -189,7 +189,8 @@ func (s *Store) courseLessonFrom(ctx context.Context, unitID int64, position int
 }
 
 // UnitLexemes returns the distinct lexicon rows used by a unit's lesson_items.
-// The order is pointed text, then id.
+// The order is pointed text, then id. pos is included; callers do not need
+// a second query for part of speech.
 func (s *Store) UnitLexemes(ctx context.Context, unitID int64) ([]LexemeView, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -203,6 +204,32 @@ func (s *Store) UnitLexemes(ctx context.Context, unitID int64) ([]LexemeView, er
 		ORDER BY l.text_nfc, l.id`, unitID)
 	if err != nil {
 		return nil, fmt.Errorf("db: unit lexemes: %w", err)
+	}
+	defer rows.Close()
+	return scanLexemeViews(rows)
+}
+
+// EarlierUnitLexemes returns the distinct lexicon rows taught by published
+// units this learner can open whose position is lower than beforePosition.
+// The learner can open a shared unit and their own learner:<id> unit.
+// Drafts, later units, and another learner's units are left out. The order
+// is pointed text, then id. pos is the same column UnitLexemes loads.
+func (s *Store) EarlierUnitLexemes(ctx context.Context, learnerID int64, beforePosition int) ([]LexemeView, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT DISTINCT l.id, l.text_nfc, l.gloss_en, l.translit, l.gender, l.pos
+		FROM lesson_items AS li
+		JOIN lexemes AS l ON l.id = li.lexeme_id
+		JOIN units AS u ON u.id = li.unit_id
+		WHERE u.position < ?
+		  AND u.status = 'published'
+		  AND (u.scope = 'shared' OR u.scope = ?)
+		ORDER BY l.text_nfc, l.id`, beforePosition, fmt.Sprintf("learner:%d", learnerID))
+	if err != nil {
+		return nil, fmt.Errorf("db: earlier lexemes: %w", err)
 	}
 	defer rows.Close()
 	return scanLexemeViews(rows)
