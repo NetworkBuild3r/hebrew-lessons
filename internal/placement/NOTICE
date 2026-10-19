@@ -18,6 +18,9 @@ Licence for that content: Creative Commons Attribution-ShareAlike 4.0
 International (CC BY-SA 4.0).
 https://creativecommons.org/licenses/by-sa/4.0/
 
+The band 1–4 entries in items.json are an adaptation of that list and are
+distributed under CC BY-SA 4.0 (ShareAlike).
+
 The project states "CC-by-sa-4.0 for content" at the commit above.
 Names, function words, particles, interjections, and junk tokens were
 dropped. The Hebrew pointing and the English glosses were added for this

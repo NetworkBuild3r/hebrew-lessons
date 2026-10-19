@@ -18,6 +18,9 @@ CREATE TABLE placement_runs (
 -- Latest run for a learner: one user, newest finish first.
 CREATE INDEX placement_runs_user_finished ON placement_runs (user_id, finished_at);
 
+-- One unfinished run per learner. A second Start hits this and returns the open row.
+CREATE UNIQUE INDEX placement_runs_one_open ON placement_runs (user_id) WHERE finished_at IS NULL;
+
 -- One card in the deck. item_id is the fixture id.
 -- rating is null while the card is face up and unanswered.
 CREATE TABLE placement_answers (
@@ -38,6 +41,18 @@ ALTER TABLE review_log ADD COLUMN chosen TEXT;
 ALTER TABLE confusion_misses ADD COLUMN lexeme_id INTEGER REFERENCES lexemes (id);
 
 -- shared is the course. learner:<id> is that learner's own unit.
-ALTER TABLE units ADD COLUMN scope TEXT NOT NULL DEFAULT 'shared' CHECK (scope = 'shared' OR scope GLOB 'learner:[0-9]*');
+-- <id> is digits with no leading zero, except exactly 0.
+-- learner:0, learner:7, and learner:123 pass. learner:01, learner:007, and learner:1abc fail.
+ALTER TABLE units ADD COLUMN scope TEXT NOT NULL DEFAULT 'shared' CHECK (
+    scope = 'shared'
+    OR (
+        scope GLOB 'learner:[0-9]*'
+        AND substr(scope, 9) NOT GLOB '*[^0-9]*'
+        AND (
+            substr(scope, 9) = '0'
+            OR substr(scope, 9) NOT GLOB '0*'
+        )
+    )
+);
 
 CREATE INDEX units_scope_position ON units (scope, position);

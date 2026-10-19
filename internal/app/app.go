@@ -43,7 +43,9 @@ const (
 	defaultGoogleJWKSURL     = "https://www.googleapis.com/oauth2/v3/certs"
 	defaultGoogleIssuer      = "https://accounts.google.com"
 
-	openTimeout   = 15 * time.Second
+	// Race-instrumented sqlite on a busy CI runner can spend most of a
+	// shorter window on the first schema statement.
+	openTimeout   = 60 * time.Second
 	healthTimeout = 2 * time.Second
 )
 

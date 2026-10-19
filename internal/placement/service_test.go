@@ -2,9 +2,11 @@ package placement
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -348,6 +350,38 @@ func TestResumeAcrossDays(t *testing.T) {
 	run, err = store.GetPlacementRun(ctx, runID)
 	if err != nil || run.SittingNo != 2 {
 		t.Fatalf("start opened another sitting: %+v %v", run, err)
+	}
+}
+
+func TestConcurrentStartOneOpenRun(t *testing.T) {
+	svc, store := openSvc(t, fixedClock{when})
+	svc.fixture = manyBand(0, 1)
+	userID := insertLearner(t, store, "race@example.com", "sub-race")
+	const n = 16
+	ids := make([]int64, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	ready := make(chan struct{})
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			defer wg.Done()
+			<-ready
+			ids[i], errs[i] = svc.Start(context.Background(), userID)
+		}(i)
+	}
+	close(ready)
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("start %d: %v", i, err)
+		}
+		if ids[i] != ids[0] {
+			t.Fatalf("run %d id %d, want %d among %v", i, ids[i], ids[0], ids)
+		}
+	}
+	if _, err := store.InsertPlacementRun(context.Background(), userID, when, 1); !errors.Is(err, db.ErrOpenPlacementRun) {
+		t.Fatalf("second open run err %v", err)
 	}
 }
 

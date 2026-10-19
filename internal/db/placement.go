@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 // PlacementRun is one row of placement_runs.
@@ -82,22 +85,16 @@ type placementResultJSON struct {
 
 const placementRunColumns = `id, user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no`
 
-// placementTimeLayout is the UTC text stored in placement timestamp columns.
-// The fractional part is always nine digits, so the strings sort in time order.
-const placementTimeLayout = "2006-01-02T15:04:05.000000000Z"
+// ErrOpenPlacementRun means this learner already has a run with no finished_at.
+// Start reads that run and returns it.
+var ErrOpenPlacementRun = errors.New("db: open placement run exists")
 
-// placementTime formats t for a placement timestamp column.
-// Writes and test comparisons of those columns go through this helper.
-func placementTime(t time.Time) string {
-	return t.UTC().Format(placementTimeLayout)
-}
-
-func parsePlacementTime(value string) (time.Time, error) {
-	parsed, err := time.Parse(placementTimeLayout, value)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("parse time %q", value)
+func isUniqueConstraint(err error) bool {
+	var se *sqlite.Error
+	if errors.As(err, &se) && (se.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE || se.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY) {
+		return true
 	}
-	return parsed.UTC(), nil
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
 func scanPlacementRun(scan func(dest ...any) error) (PlacementRun, error) {
@@ -111,12 +108,12 @@ func scanPlacementRun(scan func(dest ...any) error) (PlacementRun, error) {
 	if err != nil {
 		return PlacementRun{}, err
 	}
-	run.StartedAt, err = parsePlacementTime(started)
+	run.StartedAt, err = ParseTime(started)
 	if err != nil {
 		return PlacementRun{}, fmt.Errorf("db: placement run %d started_at: %w", run.ID, err)
 	}
 	if finished.Valid {
-		run.FinishedAt, err = parsePlacementTime(finished.String)
+		run.FinishedAt, err = ParseTime(finished.String)
 		if err != nil {
 			return PlacementRun{}, fmt.Errorf("db: placement run %d finished_at: %w", run.ID, err)
 		}
@@ -139,8 +136,11 @@ func (s *Store) InsertPlacementRun(ctx context.Context, userID int64, started ti
 	res, err := conn.ExecContext(ctx, `
 		INSERT INTO placement_runs (user_id, started_at, seed)
 		VALUES (?, ?, ?)`,
-		userID, placementTime(started), seed,
+		userID, FormatTime(started), seed,
 	)
+	if isUniqueConstraint(err) {
+		return 0, fmt.Errorf("db: insert placement run: %w", ErrOpenPlacementRun)
+	}
 	if err != nil {
 		return 0, fmt.Errorf("db: insert placement run: %w", err)
 	}
@@ -176,7 +176,7 @@ func (s *Store) ShowPlacementCard(ctx context.Context, runID int64, itemID strin
 	if _, err := conn.ExecContext(ctx, `
 		INSERT INTO placement_answers (run_id, item_id, sitting_no, shown_at)
 		VALUES (?, ?, ?, ?)`,
-		runID, itemID, sittingNo, placementTime(shown),
+		runID, itemID, sittingNo, FormatTime(shown),
 	); err != nil {
 		return fmt.Errorf("db: show placement card: %w", err)
 	}
@@ -194,7 +194,7 @@ func (s *Store) RatePlacementAnswer(ctx context.Context, runID int64, itemID str
 		UPDATE placement_answers
 		SET rating = ?, answered_at = ?, lexeme_id = ?
 		WHERE run_id = ? AND item_id = ? AND rating IS NULL`,
-		rating, placementTime(answered), lexemeID, runID, itemID,
+		rating, FormatTime(answered), lexemeID, runID, itemID,
 	)
 	if err != nil {
 		return fmt.Errorf("db: rate placement card: %w", err)
@@ -205,6 +205,111 @@ func (s *Store) RatePlacementAnswer(ctx context.Context, runID int64, itemID str
 	}
 	if n == 0 {
 		return fmt.Errorf("db: placement card %s is not open", itemID)
+	}
+	return nil
+}
+
+// PlacementLexeme is the dictionary row a placement rating writes.
+// An empty Gender is stored as NULL. verified is left alone on conflict.
+type PlacementLexeme struct {
+	TextNFC  string
+	Gloss    string
+	POS      string
+	Translit string
+	Gender   string
+}
+
+// CommitPlacementRating writes the lexeme, the first he_en card, its review
+// log, and the placement answer in one transaction. A failure rolls all of
+// them back. The answer update matches only a card that is still unrated.
+func (s *Store) CommitPlacementRating(ctx context.Context, lexeme PlacementLexeme, card Card, log ReviewLog, runID int64, itemID string, answerRating int) error {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return err
+	}
+	if lexeme.TextNFC == "" {
+		return errors.New("db: placement lexeme text is empty")
+	}
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("db: begin placement rating: %w", err)
+	}
+	defer tx.Rollback()
+
+	var gender any
+	if lexeme.Gender != "" {
+		gender = lexeme.Gender
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO lexemes (text_nfc, gloss_en, pos, translit, gender, verified)
+		VALUES (?, ?, ?, ?, ?, 0)
+		ON CONFLICT (text_nfc) DO UPDATE SET
+			gloss_en = excluded.gloss_en,
+			pos = excluded.pos,
+			translit = excluded.translit,
+			gender = excluded.gender`,
+		lexeme.TextNFC, lexeme.Gloss, lexeme.POS, lexeme.Translit, gender,
+	); err != nil {
+		return fmt.Errorf("db: upsert placement lexeme: %w", err)
+	}
+	var lexemeID int64
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM lexemes WHERE text_nfc = ?`, lexeme.TextNFC).Scan(&lexemeID); err != nil {
+		return fmt.Errorf("db: upsert placement lexeme: %w", err)
+	}
+	if card.State == "" {
+		card.State = "new"
+	}
+	var last any
+	if !card.LastReview.IsZero() {
+		last = FormatTime(card.LastReview)
+	}
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO cards (
+			user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, last_review, suspended
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+		card.UserID, lexemeID, card.Dir, card.State, FormatTime(card.Due),
+		card.Stability, card.Difficulty, card.Reps, card.Lapses, last,
+	)
+	if err != nil {
+		return fmt.Errorf("db: insert card: %w", err)
+	}
+	cardID, err := res.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("db: insert card: %w", err)
+	}
+	peeked := 0
+	if log.Peeked {
+		peeked = 1
+	}
+	var chosen any
+	if log.Chosen != "" {
+		chosen = log.Chosen
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked, chosen)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		cardID, log.Rating, FormatTime(log.ReviewedAt), log.ElapsedDays, log.ScheduledDays, peeked, chosen,
+	); err != nil {
+		return fmt.Errorf("db: insert review: %w", err)
+	}
+	updated, err := tx.ExecContext(ctx, `
+		UPDATE placement_answers
+		SET rating = ?, answered_at = ?, lexeme_id = ?
+		WHERE run_id = ? AND item_id = ? AND rating IS NULL`,
+		answerRating, FormatTime(log.ReviewedAt), lexemeID, runID, itemID,
+	)
+	if err != nil {
+		return fmt.Errorf("db: rate placement card: %w", err)
+	}
+	n, err := updated.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("db: rate placement card: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("db: placement card %s is not open", itemID)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("db: commit placement rating: %w", err)
 	}
 	return nil
 }
@@ -232,12 +337,12 @@ func (s *Store) ListPlacementAnswers(ctx context.Context, runID int64) ([]Placem
 		if err := rows.Scan(&row.RunID, &row.ItemID, &row.Rating, &shown, &answered, &row.SittingNo); err != nil {
 			return nil, fmt.Errorf("db: list placement answers: %w", err)
 		}
-		row.ShownAt, err = parsePlacementTime(shown)
+		row.ShownAt, err = ParseTime(shown)
 		if err != nil {
 			return nil, fmt.Errorf("db: placement answer %s shown_at: %w", row.ItemID, err)
 		}
 		if answered.Valid {
-			row.AnsweredAt, err = parsePlacementTime(answered.String)
+			row.AnsweredAt, err = ParseTime(answered.String)
 			if err != nil {
 				return nil, fmt.Errorf("db: placement answer %s answered_at: %w", row.ItemID, err)
 			}
@@ -360,7 +465,7 @@ func (s *Store) FinishPlacement(ctx context.Context, id int64, finished time.Tim
 		UPDATE placement_runs
 		SET finished_at = ?, level = ?, stop_reason = ?, result = ?
 		WHERE id = ? AND finished_at IS NULL`,
-		placementTime(finished), level, stop, resultJSON, id,
+		FormatTime(finished), level, stop, resultJSON, id,
 	)
 	if err != nil {
 		return fmt.Errorf("db: finish placement: %w", err)
@@ -529,6 +634,42 @@ func (s *Store) KnownLexemeIDs(ctx context.Context, userID int64) ([]int64, erro
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("db: known lexemes: %w", err)
+	}
+	return out, nil
+}
+
+// LearnerKnownLexemes returns the pointed NFC text of KnownLexemeIDs, sorted by that text.
+// It is the he_en cards whose latest rating is Good or Easy, plus new words of
+// lessons this learner has finished. There is no learner_lexemes table.
+func (s *Store) LearnerKnownLexemes(ctx context.Context, userID int64) ([]string, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT l.text_nfc
+		FROM lexemes AS l
+		WHERE l.id IN (
+			`+knownLexemeUnion+`
+		)
+		ORDER BY l.text_nfc`, userID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("db: learner known lexemes: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var text string
+		if err := rows.Scan(&text); err != nil {
+			return nil, fmt.Errorf("db: learner known lexemes: %w", err)
+		}
+		out = append(out, text)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: learner known lexemes: %w", err)
+	}
+	if out == nil {
+		out = []string{}
 	}
 	return out, nil
 }
