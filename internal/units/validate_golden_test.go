@@ -261,6 +261,7 @@ func goldenCases() []goldenCase {
 		nounPlural(true),
 		storyUnpointed(),
 		storyUnmapped(),
+		storyAcronym(),
 	}
 }
 
@@ -578,6 +579,24 @@ func storyUnpointed() goldenCase {
 		msgContains:   []string{"בקר"},
 		msgNot:        []string{david},
 		homographBare: stripNiqqud(bakar),
+	}
+}
+
+func storyAcronym() goldenCase {
+	u, _ := base()
+	const acronym = "צה״ל"
+	text := repeatJoin(vocab8[0].text, 19) + " " + acronym
+	li, ai := addAct(&u, ActivityStory, text)
+	return goldenCase{
+		file:   "bad_story_acronym.json",
+		name:   "צה״ל is an acronym, not a gematria numeral, so an unmapped story token blocks as story.unmapped. It is also unpointed. Nineteen known words keep coverage at 95%.",
+		unit:   u,
+		lookup: lookupFor(vocab8, u, nil),
+		issues: []Issue{
+			iss(RuleStoryUnmapped, SeverityBlock, at("lessons", li, "activities", ai, "text")),
+			iss(RuleStoryUnpointed, SeverityBlock, at("lessons", li, "activities", ai, "text")),
+		},
+		msgContains: []string{acronym},
 	}
 }
 
