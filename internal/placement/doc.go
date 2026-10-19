@@ -1,4 +1,98 @@
-// Package placement deals an adaptive vocabulary deck.
+// Package placement is the placement test. Engine is the v3 test (INIT-015/SPEC-007). Service is the
+// v2 self-graded deck, kept until the placement screens move to Engine (SPEC-012).
+//
+// # The v3 test
+//
+// It measures, and it does not teach. The learner takes four parts. Part 0 is six letters: hear a
+// syllable, pick the letter with its vowel. Five or more right lets reading be tested. Fewer means
+// RunResult.ReadingReady is false and the reading part is skipped. Part 1 is listening: the clip plays,
+// no Hebrew is shown, and the learner picks the meaning from four options or says "I don't know". Part 2
+// is reading: pointed Hebrew, no audio, no transliteration, the same four options. Part 3 is typing, and
+// optional: the English meaning, and the learner types the Hebrew. It asks only words that were right in
+// Parts 1 and 2, at most TypingMax of them, and grades with fsrs.GradeTyped. Only an exact answer is right.
+//
+// Bands are numbered 1 to BandCount here. Band N is the deck's band N−1 (items.json numbers its bands 0
+// to 4), so band 1 is the tutor words. Result levels and estimates use these numbers. The level stored in
+// placement_runs.level is the deck number, the reading level less one, because that column has meant "the
+// highest deck band completed" since v2.
+//
+// # Adaptive rule
+//
+// Each skill (listening, then reading) starts in band 1 and is dealt FirstSize items. Five or six right
+// moves up a band. Three or four right deals ExtraSize more in the same band, and the decision is then on
+// all twelve: eight or more right moves up, and fewer stops. Fewer than three right stops the skill. A
+// skill that clears band 5 is done. "Right" is the only thing that counts toward moving up, and a band
+// that runs out of words ends the skill. Decide and replay are that rule, and TestScoreAdaptiveRule pins it.
+//
+// A word is never asked twice in listening and reading in one run: both walk the band's seeded order and
+// skip a word already asked. A word with no clip is not dealt in listening. Distractors come from the same
+// band and part of speech, and never from a word whose gloss shares a content word with the answer's.
+// Where a band holds too few adverbs, an adverb borrows adjectives and the reverse (the "modifier" class).
+// Nothing else crosses a part of speech.
+//
+// # Scoring
+//
+// The known share of a band is max(0, (right − wrong ÷ 3) ÷ asked). "I don't know" counts in asked and
+// is neither right nor wrong, so it is never penalised. Estimated words known is the sum over bands of
+// share × BandWidth. The level is the highest band with a share of at least 0.5. Listening and reading
+// are scored apart.
+//
+// # What a run writes
+//
+// Every word answer goes through evidence.Recorder.Attempt with source placement, so a right answer
+// seeds that skill's card as Good (only when the word has none) and nothing else is scheduled. A wrong
+// answer or "I don't know" seeds no card. When the run finishes, each of those words gets an exposure with
+// context placement_review, because that is when the review shows it. A letters item names no word, so it
+// writes no attempt: its outcome is kept on the item row. A new lexicon row is made for a word when it is
+// first answered, as v2 did.
+//
+// The result lists each miss with its lexeme, skill, what was picked, the right gloss, the pointed form,
+// and the audio id. It also carries StartUnit, the same value as db.Placement.SuggestedStartPosition.
+// The stored placement_runs.result keeps the v2 keys (bands, estimated_known_words) so that the learner
+// model and the MCP read still work: its bands are the deck's bands, pooled over the skills tested, with
+// good_plus_rate holding the guess-corrected share.
+//
+// # No feedback
+//
+// The reply to an answer is a Step: the next Item, or TypingOffer, or Done with the Result. It has no
+// field that says whether the answer was right, and a test compares the replies to a right answer, a wrong
+// one, and "I don't know" byte for byte. Item ids are opaque tokens ("p7"), option ids are positions
+// ("o0" to "o3"), and the right option is kept on the server.
+//
+// # Calling it
+//
+// Every method takes the learner's id from the session, not from the request, and treats another
+// learner's run, a v2 run, and an unknown run alike as ErrNotYourRun. A handler still needs CSRF on POST.
+//
+//	NewEngine(store, rec, clk, ...EngineOption) *Engine      // WithSource(rand.Source) sets run seeds
+//	(*Engine).Start(ctx, userID) (runID, error)               // resumes an open run; closes an open v2 run
+//	(*Engine).Next(ctx, userID, runID) (Step, error)          // the open item, or deals one; repeatable
+//	(*Engine).Answer(ctx, userID, runID, itemID, AnswerIn) (Step, error)
+//	(*Engine).StartTyping(ctx, userID, runID) (Step, error)   // take Part 3 at the offer
+//	(*Engine).Finish(ctx, userID, runID) (RunResult, error)   // skips typing; idempotent
+//	(*Engine).Result(ctx, userID, runID) (RunResult, error)
+//	(*Engine).Latest(ctx, userID) (RunResult, bool, error)    // the learner's current picture
+//	(*Engine).NewRecheck(ctx, userID, skill) (runID, error)   // skill is "listen" or "read"
+//	(*Engine).RecheckDue(ctx, userID) (RecheckStatus, error)
+//
+// # Re-check
+//
+// NewRecheck opens a short sitting of one skill in one band: the first band above the skill's level in
+// the learner's latest finished v3 result. It is the same item, answer, and write path, so Next, Answer,
+// and Finish drive it. Its result is the whole current picture, with that band replaced, and Recheck says
+// whether the skill moved up, stayed, or went down. RecheckDue is true from 28 days after the last finished
+// v3 placement or re-check, and Late is set from 42 days. It has no end: the window is soft.
+//
+// # State
+//
+// An Engine keeps no run state. A run is its placement_runs row, its placement_v3_runs row, and its
+// placement_items rows (migration 010). The deal is a pure function of the run's seed, drawn from the
+// injected rand.Source, and the answers so far, so any process can serve the next request. Two requests
+// that answer one item at once count once: the answer is claimed with an update that matches an open item.
+//
+// # The v2 deck
+//
+// The rest of this comment describes Service. It is unchanged.
 //
 // The learner sees a pointed Hebrew word and its audio, recalls it, and
 // may say "I don't know this" before the flip. That answer is rating 0.

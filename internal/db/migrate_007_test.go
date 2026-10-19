@@ -123,8 +123,8 @@ func TestMigrate007AppliesOnEmptyDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
-		t.Fatalf("versions = %v, want 1..9", got)
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) {
+		t.Fatalf("versions = %v, want 1..10", got)
 	}
 	for _, table := range m7Tables {
 		if !tableExists(t, conn, table) {
@@ -144,7 +144,7 @@ func TestMigrate007AppliesOnEmptyDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("second migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) {
 		t.Fatalf("versions after rerun = %v", got)
 	}
 }
@@ -238,7 +238,7 @@ func TestMigrate007AtomicWhenAStatementFails(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("retry: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) {
 		t.Fatalf("versions after retry = %v", got)
 	}
 }
