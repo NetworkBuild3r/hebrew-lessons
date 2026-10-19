@@ -393,15 +393,51 @@ h1 {
   border: 1px solid var(--hairline);
 }
 
-/* Signed-out sign-in. One card, no shell nav. Width is four --space-9. */
+/* Signed-out sign-in. Night slate plus a card. No shell nav.
+   At 1024 the two sit side by side. */
 .signin {
   min-block-size: 100dvb;
   display: grid;
-  place-items: center;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-5);
   padding: var(--space-5);
 }
+.signin__slate,
 .signin__card {
   inline-size: min(100%, calc(var(--space-9) * 4));
+}
+.signin__slate {
+  position: relative;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  min-block-size: calc(var(--space-9) * 2);
+  border-radius: var(--radius-hero);
+  background: var(--ink);
+}
+.signin__sky {
+  grid-area: 1 / 1;
+  align-self: stretch;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  object-position: center bottom;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.signin__word {
+  grid-area: 1 / 1;
+  align-self: start;
+  margin-block-start: var(--space-4);
+  font-family: var(--font-he);
+  font-size: var(--fs-he-lg);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  color: var(--on-ink);
+  padding-block: var(--space-2);
+}
+.signin__card {
   display: grid;
   justify-items: center;
   gap: var(--space-5);
@@ -415,20 +451,101 @@ h1 {
 }
 .signin__brand {
   flex-direction: column;
-  font-family: var(--font-ui);
   font-size: var(--fs-body);
   font-weight: 400;
-  line-height: var(--lh-body);
+  line-height: var(--lh-he-display);
+}
+.signin__brand .brand__name {
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  white-space: nowrap;
 }
 .signin__lede {
+  max-inline-size: 28ch;
   color: var(--muted);
   font-size: var(--fs-small);
   line-height: var(--lh-he-body);
 }
-.signin__card .pair { justify-content: center; }
-.signin__card .btn {
+@media (min-width: 1024px) {
+  .signin {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    align-items: center;
+    justify-items: stretch;
+    gap: var(--space-7);
+    inline-size: min(100%, var(--content-max));
+    margin-inline: auto;
+    padding: var(--space-7);
+  }
+  .signin__slate,
+  .signin__card { inline-size: 100%; }
+  .signin__slate { min-block-size: calc(var(--space-9) * 4); }
+  .signin__word { font-size: var(--fs-he-xl); margin-block-start: var(--space-6); }
+}
+
+/* Google Sign-In button. These hex values are Google's required brand
+   colours, the one exception to the token palette. The label is the
+   official wording, so the type stays the UI font at the brand 14/20 size.
+   The logo plate is white because the multicolour G is drawn for white. */
+.gbtn {
+  --gbtn-fill: #FFFFFF;
+  --gbtn-border: #747775;
+  --gbtn-text: #1F1F1F;
+  --gbtn-pressed: #F2F2F2;
+  --gbtn-logo-plate: #FFFFFF;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
   inline-size: 100%;
-  margin-block-start: 0;
+  min-block-size: var(--tap);
+  padding-inline: var(--space-4);
+  border: 1px solid var(--gbtn-border);
+  border-radius: var(--radius-pill);
+  background: var(--gbtn-fill);
+  color: var(--gbtn-text);
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+:root[data-theme="dark"] .gbtn {
+  --gbtn-fill: #131314;
+  --gbtn-border: #8E918F;
+  --gbtn-text: #E3E3E3;
+  --gbtn-pressed: #1F1F1F;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .gbtn {
+    --gbtn-fill: #131314;
+    --gbtn-border: #8E918F;
+    --gbtn-text: #E3E3E3;
+    --gbtn-pressed: #1F1F1F;
+  }
+}
+.gbtn:hover { background: var(--gbtn-pressed); }
+.gbtn:active {
+  background: var(--gbtn-pressed);
+  box-shadow: inset 0 0 0 var(--space-1) color-mix(in srgb, var(--gbtn-text) 16%, transparent);
+}
+.gbtn__mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 20px;
+  block-size: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--gbtn-logo-plate);
+}
+.gbtn__logo {
+  inline-size: 18px;
+  block-size: 18px;
+}
+.gbtn__label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
 }
 .stats {
   display: grid;

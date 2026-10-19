@@ -80,51 +80,49 @@ func assertSignIn(t *testing.T, body, lang string) {
 	if !strings.Contains(body, `<html lang="`+lang+`" dir="`+dir+`"`) {
 		t.Fatalf("sign-in lang/dir: %.200s", body)
 	}
-	if !strings.Contains(body, `class="signin"`) || !strings.Contains(body, `class="signin__card"`) {
-		t.Fatal("centred sign-in card missing")
+	if !strings.Contains(body, `class="signin"`) || !strings.Contains(body, `class="signin__card"`) || !strings.Contains(body, `class="signin__slate"`) {
+		t.Fatal("sign-in slate or card missing")
+	}
+	if !strings.Contains(body, `src="/static/illustrations/hero-skyline-night.svg"`) {
+		t.Fatal("skyline illustration missing")
+	}
+	if !strings.Contains(body, `<bdi lang="he" dir="rtl">`+views.SignInWord+`</bdi>`) {
+		t.Fatal("pointed sample word missing")
 	}
 	if !strings.Contains(body, `<bdi lang="he" dir="rtl">`+views.AppName+`</bdi>`) {
 		t.Fatal("wordmark is not an isolated Hebrew run")
 	}
-	assertPairText(t, body, views.SignInHE, views.SignInEN, lang)
-	link := regexp.MustCompile(`(?s)<a\b[^>]*href="` + regexp.QuoteMeta(views.GoogleSignInStart) + `"[^>]*>.*?</a>`).FindString(body)
-	if link == "" {
+	if strings.Contains(body, `class="pair"`) || strings.Contains(body, "גּוּגֶל") || strings.Contains(body, "btn-primary") {
+		t.Fatal("sign-in still pairs both languages or uses the blue primary")
+	}
+	lede, other := views.SignInLedeHE, views.SignInLedeEN
+	if lang == "en" {
+		lede, other = other, lede
+	}
+	if !strings.Contains(body, lede) || strings.Contains(body, other) {
+		t.Fatal("sign-in lede should be the interface language only")
+	}
+	link := regexp.MustCompile(`(?s)<a\b[^>]*class="gbtn"[^>]*>.*?</a>`).FindString(body)
+	if link == "" || !strings.Contains(link, `href="`+views.GoogleSignInStart+`"`) {
 		t.Fatal("Google sign-in link missing")
 	}
-	if !strings.Contains(link, `class="btn btn-primary"`) {
-		t.Fatalf("Google sign-in link is not the primary button: %s", link)
-	}
-	if !strings.Contains(link, views.SignInGoogleHE) || !strings.Contains(link, views.SignInGoogleEN) {
-		t.Fatalf("button is not the he/en pair: %s", link)
-	}
-	heAt := strings.Index(link, `lang="he"`)
-	enAt := strings.Index(link, `lang="en"`)
-	if lang == "en" && enAt > heAt {
-		t.Fatal("english button pair does not lead with English")
-	}
-	if lang == "he" && heAt > enAt {
-		t.Fatal("hebrew button pair does not lead with Hebrew")
-	}
-}
-
-func assertPairText(t *testing.T, body, he, en, first string) {
-	t.Helper()
-	for _, pair := range regexp.MustCompile(`(?s)<span class="pair">(.*?)</span>`).FindAllStringSubmatch(body, -1) {
-		inner := pair[1]
-		if !strings.Contains(inner, he) || !strings.Contains(inner, en) {
-			continue
+	for _, fill := range []string{"#EA4335", "#4285F4", "#FBBC05", "#34A853"} {
+		if !strings.Contains(link, `fill="`+fill+`"`) {
+			t.Fatalf("G mark missing %s", fill)
 		}
-		heAt := strings.Index(inner, `lang="he"`)
-		enAt := strings.Index(inner, `lang="en"`)
-		if first == "en" && enAt > heAt {
-			t.Fatalf("english pair does not lead with English: %s", inner)
-		}
-		if first == "he" && heAt > enAt {
-			t.Fatalf("hebrew pair does not lead with Hebrew: %s", inner)
-		}
-		return
 	}
-	t.Fatalf("pair %q / %q missing", he, en)
+	if lang == "en" {
+		if !strings.Contains(link, views.SignInGoogleEN) || strings.Contains(link, views.SignInGoogleHE) {
+			t.Fatalf("english button label: %s", link)
+		}
+	} else {
+		if !strings.Contains(link, views.SignInGoogleHE) || strings.Contains(link, views.SignInGoogleEN) {
+			t.Fatalf("hebrew button should be the official label plus Latin Google: %s", link)
+		}
+		if !strings.Contains(link, `<bdi lang="en" dir="ltr">Google</bdi>`) {
+			t.Fatal("Google must stay a Latin run")
+		}
+	}
 }
 
 func signedIn(t *testing.T) (http.Handler, *http.Cookie) {
