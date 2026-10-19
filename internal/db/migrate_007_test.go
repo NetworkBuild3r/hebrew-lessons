@@ -123,8 +123,8 @@ func TestMigrate007AppliesOnEmptyDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8}) {
-		t.Fatalf("versions = %v, want 1..8", got)
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
+		t.Fatalf("versions = %v, want 1..9", got)
 	}
 	for _, table := range m7Tables {
 		if !tableExists(t, conn, table) {
@@ -144,7 +144,7 @@ func TestMigrate007AppliesOnEmptyDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("second migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
 		t.Fatalf("versions after rerun = %v", got)
 	}
 }
@@ -238,7 +238,7 @@ func TestMigrate007AtomicWhenAStatementFails(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("retry: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
 		t.Fatalf("versions after retry = %v", got)
 	}
 }
@@ -520,7 +520,7 @@ func TestMigrate007IndexesAndColumnComments(t *testing.T) {
 	}
 	wantCols := map[string][]string{
 		"daily_snapshots":   {"user_id", "day", "skill", "state", "count", "est_known", "retention"},
-		"regression_events": {"id", "user_id", "lexeme_id", "skill", "from_state", "to_state", "day", "cause"},
+		"regression_events": {"id", "user_id", "lexeme_id", "skill", "from_state", "to_state", "day", "cause", "kind"}, // kind was added by 009.
 		"lesson_briefs":     {"id", "user_id", "theme", "payload_json", "created_at", "used_by_unit_id"},
 		"coach_notes":       {"id", "user_id", "author", "body", "created_at"},
 		"publish_audit":     {"id", "unit_id", "revision", "scope", "actor", "action", "brief_id", "issues_json", "created_at"},

@@ -352,89 +352,14 @@ func (f Filter) matches(w WordState) bool {
 }
 
 // Summary counts the learner's words per skill and state, estimates the words known per
-// skill, and reads retention over the last RetentionWindowDays.
+// skill, and reads retention over the last RetentionWindowDays. It is the Summary part of
+// Snapshot.
 func (m *Model) Summary(ctx context.Context, userID int64) (Summary, error) {
-	if err := m.ready(userID); err != nil {
-		return Summary{}, err
-	}
-	now := m.clock.Now()
-	ids, err := m.store.LexemeIDs(ctx)
+	snap, err := m.Snapshot(ctx, userID)
 	if err != nil {
 		return Summary{}, err
 	}
-	ev, err := m.store.LearnerEvidence(ctx, userID, m.query(now, 0))
-	if err != nil {
-		return Summary{}, err
-	}
-	bands, err := m.bands.LexemeBands(ctx)
-	if err != nil {
-		return Summary{}, err
-	}
-	words := m.evaluate(ev, bands, now)
-	placed, havePlacement, err := m.store.PlacementBands(ctx, userID)
-	if err != nil {
-		return Summary{}, err
-	}
-	retention, err := m.store.DueRetention(ctx, userID, now.AddDate(0, 0, -RetentionWindowDays))
-	if err != nil {
-		return Summary{}, err
-	}
-
-	out := Summary{Words: map[State]int{}}
-	for _, s := range States {
-		out.Words[s] = 0
-	}
-	// Words with no evidence at all are unseen overall and in every skill.
-	unseen := len(ids)
-	for _, id := range ids {
-		if _, ok := words[id]; ok {
-			unseen--
-		}
-	}
-	out.Words[Unseen] += unseen
-
-	var due, right int
-	for _, skill := range Skills {
-		ss := SkillSummary{Skill: skill, Counts: map[State]int{}}
-		for _, s := range States {
-			ss.Counts[s] = 0
-		}
-		ss.Counts[Unseen] += unseen
-		evidenced := [5]int{}
-		known := 0
-		for _, id := range ids {
-			w, ok := words[id]
-			if !ok {
-				continue
-			}
-			sk := w.skill(skill)
-			ss.Counts[sk.State]++
-			if sk.State == Known || sk.State == Solid {
-				known++
-			}
-			if sk.hasEvidence() && w.Band >= 0 {
-				evidenced[w.Band]++
-			}
-		}
-		ss.EstimatedKnown = estimateKnown(placed, havePlacement, evidenced, known)
-		for _, r := range retention {
-			if r.Skill == skill {
-				ss.DueReviews = r.Due
-				ss.Retention = ratio(r.Right, r.Due)
-				due += r.Due
-				right += r.Right
-			}
-		}
-		out.Skills = append(out.Skills, ss)
-	}
-	for _, id := range ids {
-		if w, ok := words[id]; ok {
-			out.Words[w.State]++
-		}
-	}
-	out.DueReviews = due
-	out.Retention = ratio(right, due)
-	return out, nil
+	return snap.Summary, nil
 }
 
 // ConfusionPairs returns the learner's confusions over the last window, grouped by pair,

@@ -52,6 +52,8 @@ func run(args []string) error {
 			return runImport(args[1:])
 		case "import-tanakh":
 			return runImportTanakh(args[1:])
+		case "jobs":
+			return runJobs(args[1:])
 		default:
 			return fmt.Errorf("unknown command %q", args[0])
 		}
@@ -82,7 +84,13 @@ func runServer() error {
 		"tts", application.TTS() != nil,
 	)
 
+	stopJobs, err := startJobs(cfg, application)
+	if err != nil {
+		application.Close()
+		return err
+	}
 	err = serve(cfg, application)
+	stopJobs()
 	closeErr := application.Close()
 	if err != nil {
 		return err
