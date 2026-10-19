@@ -162,10 +162,15 @@ func TestGoogleEnvAliases(t *testing.T) {
 
 	t.Setenv("GOOGLE_CLIENT_ID", "primary-id")
 	t.Setenv("GOOGLE_CLIENT_SECRET", "primary-secret")
+	t.Setenv("GOOGLE_OAUTH_CLIENT_ID", "oauth-id")
+	t.Setenv("GOOGLE_OAUTH_CLIENT_SECRET", "oauth-secret")
 	t.Setenv("GOOGLE_AUTH_URL", "https://primary.example/auth")
+	t.Setenv("GOOGLE_OAUTH_AUTH_URL", "https://alias.example/auth")
+	t.Setenv("web_client_id", "web-id")
+	t.Setenv("client_id", "plain-id")
 	cfg, err = configFromEnv()
 	if err != nil || cfg.GoogleClientID != "primary-id" || cfg.GoogleClientSecret != "primary-secret" || cfg.GoogleAuthURL != "https://primary.example/auth" {
-		t.Fatalf("primary wins %+v %v", cfg, err)
+		t.Fatalf("GOOGLE_CLIENT_* wins over GOOGLE_OAUTH_* %+v %v", cfg, err)
 	}
 
 	t.Setenv("GOOGLE_CLIENT_ID", "  ")

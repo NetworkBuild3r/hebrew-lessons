@@ -31,10 +31,14 @@ const (
 	oauthCodeTTL    = 10 * time.Minute
 	oauthRequestTTL = 10 * time.Minute
 	// OAuthClientTTL matches Node CLIENT_TTL: 400 days from registration.
-	OAuthClientTTL  = 400 * 24 * time.Hour
-	oauthRateWindow = 10 * time.Minute
-	oauthScope      = "mcp"
-	oauthMaxBody    = 64 * 1024
+	// A client that has been issued a code or token keeps this lifetime.
+	OAuthClientTTL = 400 * 24 * time.Hour
+	// OAuthIdleClientTTL is how long a registration may sit with no code
+	// and no token before sweep deletes it. About one day.
+	OAuthIdleClientTTL = 24 * time.Hour
+	oauthRateWindow    = 10 * time.Minute
+	oauthScope         = "mcp"
+	oauthMaxBody       = 64 * 1024
 
 	cookieMCPOAuth     = "hebrew_mcp_google"
 	cookieMCPOAuthHost = "__Host-hebrew_mcp_google"
@@ -60,7 +64,9 @@ var (
 	}
 
 	// Caps bound table growth. Node had no numeric cap; these are the bounds
-	// added for the authorization server. Tests lower them.
+	// added for the authorization server. Tests lower them. Idle
+	// registrations are deleted after OAuthIdleClientTTL, so a burst of
+	// unused clients cannot hold every slot for 400 days.
 	oauthClientCap = 1000
 	oauthRateLimit = 30
 
@@ -1182,7 +1188,8 @@ func (h *oauthHandler) sweep(r *http.Request) {
 		return
 	}
 	now := h.svc.now()
-	if err := h.svc.store.SweepOAuth(r.Context(), now, now.Add(-OAuthClientTTL)); err != nil {
+	h.svc.PruneRateLimits(now)
+	if err := h.svc.store.SweepOAuth(r.Context(), now, now.Add(-OAuthClientTTL), now.Add(-OAuthIdleClientTTL)); err != nil {
 		slog.Error("mcp oauth sweep", "err", err)
 	}
 }
@@ -1210,6 +1217,21 @@ func (h *oauthHandler) unknownWellKnown(w http.ResponseWriter, r *http.Request) 
 type rateWindow struct {
 	start time.Time
 	n     int
+}
+
+// PruneRateLimits drops per-IP windows whose interval has elapsed.
+// The OAuth sweep calls this so the map cannot grow without bound.
+func (s *Service) PruneRateLimits(now time.Time) {
+	if s == nil {
+		return
+	}
+	s.rateMu.Lock()
+	defer s.rateMu.Unlock()
+	for ip, w := range s.rate {
+		if w.start.IsZero() || now.Sub(w.start) >= oauthRateWindow {
+			delete(s.rate, ip)
+		}
+	}
 }
 
 func (s *Service) rateAllow(ip string, now time.Time) bool {

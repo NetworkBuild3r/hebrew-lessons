@@ -212,6 +212,9 @@ func (s *Store) InsertOAuthCode(ctx context.Context, c OAuthCode) error {
 	if err != nil {
 		return fmt.Errorf("db: insert oauth code: %w", err)
 	}
+	if err := markOAuthClientIssued(ctx, s.conn, c.ClientID); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -344,7 +347,7 @@ func insertOAuthTokenTx(ctx context.Context, tx *sql.Tx, t OAuthToken) error {
 	if err != nil {
 		return fmt.Errorf("db: insert oauth token: %w", err)
 	}
-	return nil
+	return markOAuthClientIssued(ctx, tx, t.ClientID)
 }
 
 type scanner interface {
@@ -488,12 +491,31 @@ func (s *Store) CountOAuthRequests(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// SweepOAuth deletes expired authorization requests, codes, and tokens,
-// and clients whose created_at is at or before clientCutoff.
+// SweepOAuth deletes expired authorization requests, codes, and tokens.
+// A client is deleted when created_at is at or before clientCutoff, and
+// also when it has never been issued a code or token and created_at is
+// at or before idleCutoff. A live authorization request keeps that
+// registration. Issued is derived from codes and tokens still in the
+// tables before those rows are deleted, so a used client keeps its
+// longer lifetime after the code or token itself expires.
 // Deleting a client cascades to its requests, codes, and tokens.
-func (s *Store) SweepOAuth(ctx context.Context, now, clientCutoff time.Time) error {
+func (s *Store) SweepOAuth(ctx context.Context, now, clientCutoff, idleCutoff time.Time) error {
 	if err := s.ready(); err != nil {
 		return err
+	}
+	tx, err := s.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("db: begin oauth sweep: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE oauth_clients SET issued = 1
+		WHERE issued = 0 AND client_id IN (
+			SELECT client_id FROM oauth_codes
+			UNION
+			SELECT client_id FROM oauth_tokens
+		)`); err != nil {
+		return fmt.Errorf("db: sweep oauth issued: %w", err)
 	}
 	ts := FormatTime(now)
 	for _, q := range []string{
@@ -501,12 +523,33 @@ func (s *Store) SweepOAuth(ctx context.Context, now, clientCutoff time.Time) err
 		`DELETE FROM oauth_codes WHERE expires_at <= ?`,
 		`DELETE FROM oauth_tokens WHERE expires_at <= ?`,
 	} {
-		if _, err := s.exec(ctx, q, ts); err != nil {
+		if _, err := tx.ExecContext(ctx, q, ts); err != nil {
 			return fmt.Errorf("db: sweep oauth: %w", err)
 		}
 	}
-	if _, err := s.exec(ctx, `DELETE FROM oauth_clients WHERE created_at <= ?`, FormatTime(clientCutoff)); err != nil {
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM oauth_clients
+		WHERE created_at <= ?
+		   OR (
+		     issued = 0
+		     AND created_at <= ?
+		     AND client_id NOT IN (SELECT client_id FROM oauth_requests)
+		   )`, FormatTime(clientCutoff), FormatTime(idleCutoff)); err != nil {
 		return fmt.Errorf("db: sweep oauth clients: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("db: commit oauth sweep: %w", err)
+	}
+	return nil
+}
+
+type oauthExecer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func markOAuthClientIssued(ctx context.Context, exec oauthExecer, clientID string) error {
+	if _, err := exec.ExecContext(ctx, `UPDATE oauth_clients SET issued = 1 WHERE client_id = ? AND issued = 0`, clientID); err != nil {
+		return fmt.Errorf("db: mark oauth client issued: %w", err)
 	}
 	return nil
 }
