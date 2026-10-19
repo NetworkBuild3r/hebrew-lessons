@@ -266,6 +266,7 @@ func newMCP(cfg Config, health http.Handler) http.Handler {
 	// Course, lexicon, and unit stores stay unset until *db.Store
 	// grows ListUnits, LatestPlacement, PlacementKnownLexemes,
 	// PlacementLearningLexemes, StruggleStats, CompletedSharedUnits,
+	// LearnerKnownLexemes,
 	// SearchLexemes, PutDraftUnit, and units.Lookup. Tools then
 	// answer with isError. LatestPlacement is not on this branch;
 	// its pull request is stacked on #60. The adapter belongs here,

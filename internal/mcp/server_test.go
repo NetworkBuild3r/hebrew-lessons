@@ -436,11 +436,15 @@ func TestScopeStruggleAndGuidance(t *testing.T) {
 	if onlyShared.Placement.Taken || len(onlyShared.Struggle.Lexemes) != 0 || len(onlyShared.CompletedSharedUnits) != 0 {
 		t.Fatalf("shared view leaked learner data %+v", onlyShared)
 	}
+	if len(onlyShared.KnownLexemes) != 1 || onlyShared.KnownLexemes[0] != hello {
+		t.Fatalf("shared known %+v", onlyShared.KnownLexemes)
+	}
 
 	mem.SetStruggle(7, []StruggleLexeme{
-		{Text: "ג", Lapses: 0, AgainRate: 0.2, Misses7d: 0},
-		{Text: "ב", Lapses: 2, AgainRate: 0, Misses7d: 1},
-		{Text: "א", Lapses: 2, AgainRate: 0, Misses7d: 1},
+		{Text: "ג", Lapses: 3, AgainRate: 0, Misses7d: 0},
+		{Text: "ב", Lapses: 1, AgainRate: 0.9, Misses7d: 0},
+		{Text: "ד", Lapses: 1, AgainRate: 0.9, Misses7d: 50},
+		{Text: "א", Lapses: 1, AgainRate: 0.1, Misses7d: 0},
 	}, []ConfusionPair{
 		{A: "ב", B: "א", Count: 1},
 		{A: "א", B: "ג", Count: 4},
@@ -474,19 +478,27 @@ func TestScopeStruggleAndGuidance(t *testing.T) {
 	if !sawShared || !sawMine {
 		t.Fatalf("learner outline %+v", top.Outline)
 	}
-	if len(top.Struggle.Lexemes) != 1 || top.Struggle.Lexemes[0].Text != "א" || len(top.Struggle.Top) != 1 || top.Struggle.Top[0] != "א" {
+	if len(top.Struggle.Lexemes) != 1 || top.Struggle.Lexemes[0].Text != "ג" || len(top.Struggle.Top) != 1 || top.Struggle.Top[0] != "ג" {
 		t.Fatalf("top %+v", top.Struggle)
 	}
 	if len(top.Struggle.Confusions) != 1 || top.Struggle.Confusions[0].Count != 4 || top.Struggle.Confusions[0].A != "א" {
 		t.Fatalf("confusions %+v", top.Struggle.Confusions)
 	}
 
+	mem.SetPlacement(7, Placement{TakenAt: early, Reliable: true}, []string{coffee}, nil)
+	mem.SetCompletedUnitLexemes(7, []string{book, coffee})
 	all := call[getContextOutput](t, session, "get_context", getContextInput{Position: 2, LearnerID: &learner7})
-	if len(all.Struggle.Lexemes) != 3 || all.Struggle.Lexemes[0].Text != "א" || all.Struggle.Lexemes[1].Text != "ב" || all.Struggle.Lexemes[2].Text != "ג" {
+	if len(all.Struggle.Lexemes) != 4 || all.Struggle.Lexemes[0].Text != "ג" || all.Struggle.Lexemes[1].Text != "ב" || all.Struggle.Lexemes[2].Text != "ד" || all.Struggle.Lexemes[3].Text != "א" {
 		t.Fatalf("default top %+v", all.Struggle.Lexemes)
 	}
-	if len(all.Struggle.Top) != 3 || all.Struggle.Top[0] != "א" {
+	if all.Struggle.Lexemes[2].Misses7d != 50 {
+		t.Fatalf("misses stayed on the row %+v", all.Struggle.Lexemes[2])
+	}
+	if len(all.Struggle.Top) != 4 || all.Struggle.Top[0] != "ג" {
 		t.Fatalf("default top list %+v", all.Struggle.Top)
+	}
+	if len(all.KnownLexemes) != 2 || all.KnownLexemes[0] != book || all.KnownLexemes[1] != coffee {
+		t.Fatalf("learner known %+v", all.KnownLexemes)
 	}
 	if len(all.CompletedSharedUnits) != 2 || all.CompletedSharedUnits[0].UnitID != 3 || !all.CompletedSharedUnits[0].CompletedAt.Equal(early) || all.CompletedSharedUnits[1].Position != 2 {
 		t.Fatalf("completed %+v", all.CompletedSharedUnits)
@@ -504,6 +516,9 @@ func TestScopeStruggleAndGuidance(t *testing.T) {
 	}
 	if len(eight.Struggle.Lexemes) != 0 {
 		t.Fatalf("learner 8 struggle %+v", eight.Struggle)
+	}
+	if len(eight.KnownLexemes) != 0 {
+		t.Fatalf("learner 8 known %+v", eight.KnownLexemes)
 	}
 
 	neg := int64(-1)

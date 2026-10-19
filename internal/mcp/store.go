@@ -15,7 +15,7 @@ var ErrUnitNotFound = errors.New("unit not found")
 
 // defaultStruggleTop is how many struggled words and confusion pairs
 // get_context returns when topN is omitted.
-const defaultStruggleTop = 20
+const defaultStruggleTop = 30
 
 // ScopeShared is the scope of a unit every learner receives.
 // A custom unit uses "learner:<id>", where id is that learner's numeric id.
@@ -120,22 +120,18 @@ type CourseReader interface {
 	// words, pointed NFC, sorted. Shape matches db.PlacementLearningLexemes.
 	PlacementLearningLexemes(ctx context.Context, userID int64) ([]string, error)
 	// StruggleStats returns the learner's hardest words and confusion pairs.
-	// topN limits each list. Lexemes are ordered by StruggleScore, highest
-	// first, then text. Confusions are ordered by count, highest first.
-	// Shape matches db.StruggleStats.
+	// topN limits each list. Lexemes are ordered by lapses, highest first,
+	// then by Again rate, highest first, then by text. Misses in 7 days
+	// are reported and do not change the order. Confusions are ordered
+	// by count, highest first. Shape matches db.StruggleStats.
 	StruggleStats(ctx context.Context, userID int64, topN int) (Struggle, error)
 	// CompletedSharedUnits returns shared units this learner has finished,
 	// ordered by position, then unit id. Shape matches db.CompletedSharedUnits.
 	CompletedSharedUnits(ctx context.Context, userID int64) ([]UnitCompletion, error)
-}
-
-// StruggleScore ranks a struggled word.
-// It is lapses + misses in the last 7 days + the Again rate.
-// Again rate is the fraction of that word's reviews graded Again, from 0 to 1.
-// The two counts dominate. The rate only separates words with the same counts.
-// Backend Dev's query should use this same score.
-func StruggleScore(row StruggleLexeme) float64 {
-	return float64(row.Lapses+row.Misses7d) + row.AgainRate
+	// LearnerKnownLexemes is the pointed NFC union of placement Good/Easy
+	// words and words from units this learner has completed, sorted.
+	// Shape matches db.LearnerKnownLexemes.
+	LearnerKnownLexemes(ctx context.Context, userID int64) ([]string, error)
 }
 
 // StruggleLexeme is one word the learner is missing.

@@ -34,7 +34,7 @@ type service struct {
 type getContextInput struct {
 	Position  int    `json:"position" jsonschema:"Course position you are about to write. Known lexemes are words introduced in units at a lower position. Zero is the first unit. Use the placement suggestedStartPosition when the learner has taken the vocabulary check."`
 	LearnerID *int64 `json:"learnerId,omitempty" jsonschema:"Optional. The learner whose custom units, placement, struggle, and completed shared units to include. Omit it to see shared units only, with no learner data. OAuth will later default this to the signed-in user."`
-	TopN      int    `json:"topN,omitempty" jsonschema:"How many struggled words and confusion pairs to return. Defaults to 20."`
+	TopN      int    `json:"topN,omitempty" jsonschema:"How many struggled words and confusion pairs to return. Defaults to 30."`
 }
 
 type getContextOutput struct {
@@ -157,15 +157,16 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 	if err != nil {
 		return nil, out, storeErr("The course outline could not be read.", err)
 	}
-	known, err := s.lexLookup.KnownLexemes(ctx, in.Position)
+	courseKnown, err := s.lexLookup.KnownLexemes(ctx, in.Position)
 	if err != nil {
 		return nil, out, storeErr("The known-word list could not be read.", err)
 	}
+	knownList := sortedKnown(courseKnown)
 	if in.LearnerID != nil && *in.LearnerID < 0 {
 		return nil, out, errors.New("learnerId must be 0 or greater.")
 	}
 	if in.TopN < 0 {
-		return nil, out, errors.New("topN must be 0 or greater. Omit it to use 20.")
+		return nil, out, errors.New("topN must be 0 or greater. Omit it to use 30.")
 	}
 	outline = visibleUnits(outline, in.LearnerID)
 	view := placementView{}
@@ -217,10 +218,17 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 		if completed == nil {
 			completed = []UnitCompletion{}
 		}
+		knownList, err = s.course.LearnerKnownLexemes(ctx, userID)
+		if err != nil {
+			return nil, out, storeErr("The learner's known words could not be read.", err)
+		}
+		if knownList == nil {
+			knownList = []string{}
+		}
 	}
 	out = getContextOutput{
 		Outline:              outline,
-		KnownLexemes:         sortedKnown(known),
+		KnownLexemes:         knownList,
 		Budgets:              currentBudgets(),
 		Placement:            view,
 		Struggle:             struggle,
@@ -390,7 +398,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_context",
-		Description: "Read the course before you draft a unit. The outline rows have position, title, status, and scope (shared, or learner:<id>). Omit learnerId to see shared units only, with empty struggle and no placement. Pass learnerId to add that learner's custom units, their placement, their struggle, and the shared units they have finished. topN defaults to 20 and limits struggled words and confusion pairs. Struggle order is lapses + misses in 7 days + again rate (0 to 1), highest first, then text. Placement is an adaptive deck: each rated word has a real FSRS card. taken false means there is no finished run. A finished run includes takenAt, reliable, falseAlarmRate, level (highest passed band, or -1), bandScores (per band: band, shown, again, hard, good, easy, dontknow, goodPlusRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy across bands, pointed NFC, sorted), and learningLexemes (Hard, Again, and don't-know across bands, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for budgets and for the shared-versus-custom guidance. That guidance is not an enforced rule.",
+		Description: "Read the course before you draft a unit. The outline rows have position, title, status, and scope (shared, or learner:<id>). Omit learnerId to see shared units only, with empty struggle and no placement. knownLexemes is then the pointed text introduced before position. Pass learnerId to add that learner's custom units, their placement, their struggle, and the shared units they have finished. knownLexemes is then that learner's words: the union of placement Good and Easy words and words from completed units, sorted pointed NFC. topN defaults to 30 and limits struggled words and confusion pairs. Struggle order is lapses, highest first, then Again rate (0 to 1), highest first, then text. Misses in 7 days are listed and do not change the order. Placement is an adaptive deck: each rated word has a real FSRS card. taken false means there is no finished run. A finished run includes takenAt, reliable, falseAlarmRate, level (highest passed band, or -1), bandScores (per band: band, shown, again, hard, good, easy, dontknow, goodPlusRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy across bands, pointed NFC, sorted), and learningLexemes (Hard, Again, and don't-know across bands, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for budgets and for the shared-versus-custom guidance. That guidance is not an enforced rule.",
 		Annotations: readOnly,
 	}, svc.getContext)
 	mcp.AddTool(server, &mcp.Tool{

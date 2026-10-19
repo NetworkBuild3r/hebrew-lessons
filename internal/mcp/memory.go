@@ -17,15 +17,16 @@ import (
 // units.Lookup used by tests. It does not derive lesson_items and it does
 // not write SQL. The process does not mount it.
 type Memory struct {
-	mu        sync.Mutex
-	nextID    int64
-	nextLex   int64
-	units     []memUnit
-	lexemes   []storedLexeme
-	audio     map[string]bool
-	placement map[int64]storedPlacement
-	struggle  map[int64]storedStruggle
-	completed map[int64][]UnitCompletion
+	mu             sync.Mutex
+	nextID         int64
+	nextLex        int64
+	units          []memUnit
+	lexemes        []storedLexeme
+	audio          map[string]bool
+	placement      map[int64]storedPlacement
+	struggle       map[int64]storedStruggle
+	completed      map[int64][]UnitCompletion
+	completedWords map[int64][]string
 }
 
 type storedPlacement struct {
@@ -211,6 +212,37 @@ func (m *Memory) StruggleStats(ctx context.Context, userID int64, topN int) (Str
 	return rankStruggle(stored.lexemes, stored.confusions, topN), nil
 }
 
+// SetCompletedUnitLexemes stores pointed NFC words from units this
+// learner has completed. LearnerKnownLexemes unions them with the
+// placement Good and Easy words.
+func (m *Memory) SetCompletedUnitLexemes(userID int64, words []string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.completedWords == nil {
+		m.completedWords = map[int64][]string{}
+	}
+	m.completedWords[userID] = append([]string(nil), words...)
+}
+
+// LearnerKnownLexemes implements CourseReader.
+func (m *Memory) LearnerKnownLexemes(ctx context.Context, userID int64) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var parts []string
+	if stored, ok := m.placement[userID]; ok {
+		parts = append(parts, stored.known...)
+	}
+	parts = append(parts, m.completedWords[userID]...)
+	words := sortedCopy(parts)
+	if words == nil {
+		words = []string{}
+	}
+	return words, nil
+}
+
 // SetCompletedSharedUnits stores one learner's finished shared units.
 func (m *Memory) SetCompletedSharedUnits(userID int64, rows []UnitCompletion) {
 	m.mu.Lock()
@@ -244,7 +276,10 @@ func (m *Memory) CompletedSharedUnits(ctx context.Context, userID int64) ([]Unit
 func rankStruggle(lexemes []StruggleLexeme, confusions []ConfusionPair, topN int) Struggle {
 	rows := append([]StruggleLexeme(nil), lexemes...)
 	slices.SortStableFunc(rows, func(a, b StruggleLexeme) int {
-		if c := cmp.Compare(StruggleScore(b), StruggleScore(a)); c != 0 {
+		if c := cmp.Compare(b.Lapses, a.Lapses); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(b.AgainRate, a.AgainRate); c != 0 {
 			return c
 		}
 		return cmp.Compare(a.Text, b.Text)
