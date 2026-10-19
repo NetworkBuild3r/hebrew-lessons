@@ -235,6 +235,17 @@ type ReviewCard struct {
 	Correct       int
 }
 
+// answerSide reports whether this render may show the answer side.
+// Anything that reveals the answer is post-reveal only.
+// On he_en the Hebrew is the prompt, so its transliteration and audio stay.
+// On en_he the Hebrew is the answer, so the word, its transliteration, and its audio wait.
+func answerSide(c ReviewCard) bool {
+	if c.Kind == "en_he" && !c.Revealed {
+		return false
+	}
+	return true
+}
+
 // Flag is the attribute value for a bool.
 func Flag(on bool) string {
 	if on {

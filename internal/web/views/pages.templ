@@ -90,7 +90,9 @@ templ Review(p Page, c ReviewCard) {
 }
 
 templ ReviewBody(c ReviewCard) {
-	<div id="review-card" data-kind={ c.Kind } data-card={ Num64(c.CardID) } data-pointed={ c.Pointed } data-unpointed={ c.Unpointed } data-show-unpointed={ Flag(c.ShowUnpointed) } data-translit={ c.Translit } data-index={ Num(c.Index) } data-total={ Num(c.Total) } data-answered={ Num(c.Answered) } data-correct={ Num(c.Correct) } data-retry={ Flag(c.Retry) } data-done={ Flag(c.Done) } data-revealed={ Flag(c.Revealed) }>
+	<div id="review-card" data-kind={ c.Kind } data-card={ Num64(c.CardID) } data-pointed={ c.Pointed } data-unpointed={ c.Unpointed } data-show-unpointed={ Flag(c.ShowUnpointed) } data-index={ Num(c.Index) } data-total={ Num(c.Total) } data-answered={ Num(c.Answered) } data-correct={ Num(c.Correct) } data-retry={ Flag(c.Retry) } data-done={ Flag(c.Done) } data-revealed={ Flag(c.Revealed) } if c.Translit != "" && answerSide(c) {
+		data-translit={ c.Translit }
+	}>
 		if c.Done {
 			if c.Answered == 0 {
 				<p class="lede" lang={ c.Lang }>{ c.Lede }</p>
@@ -109,13 +111,16 @@ templ ReviewBody(c ReviewCard) {
 					@H(c.Pointed)
 				}
 			</p>
-			if c.Translit != "" {
-				<p class="ink-card__hint">@E(c.Translit)</p>
-			}
-			if c.AudioURL != "" {
-				<a href={ templ.SafeURL(c.AudioURL) }>
-					<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("sound") }></use></svg>
-				</a>
+			// Translit and audio name the Hebrew. On en_he that is the answer, so they wait for reveal. On he_en the Hebrew is the prompt, so both stay.
+			if answerSide(c) {
+				if c.Translit != "" {
+					<p class="ink-card__hint">@E(c.Translit)</p>
+				}
+				if c.AudioURL != "" {
+					<a href={ templ.SafeURL(c.AudioURL) }>
+						<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("sound") }></use></svg>
+					</a>
+				}
 			}
 			<p class="ink-card__hint">
 				<bdi lang="en" dir="ltr">{ Num(c.Index) } / { Num(c.Total) }</bdi>

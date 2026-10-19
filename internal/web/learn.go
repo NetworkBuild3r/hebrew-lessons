@@ -486,12 +486,17 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 	if vm.Revealed {
 		return card
 	}
-	// The answer stays off the page until reveal. he_en hides the gloss.
-	// en_he hides the Hebrew, which is the answer rather than the prompt.
+	// Anything that reveals the answer side is post-reveal only.
+	// he_en: the Hebrew is the prompt, so pointed text, translit, and audio stay.
+	// The English gloss and the gender chip wait.
+	// en_he: the English gloss is the prompt. The Hebrew, its transliteration,
+	// its audio, and the gender chip all identify the answer, so they wait.
 	card.Gender = ""
 	if vm.Kind == fsrs.DirEnHe || vm.Kind == "en_he" {
 		card.Pointed = ""
 		card.Unpointed = ""
+		card.Translit = ""
+		card.AudioURL = ""
 		return card
 	}
 	card.Gloss = ""

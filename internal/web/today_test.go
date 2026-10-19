@@ -178,15 +178,26 @@ func TestReviewBuildsSession(t *testing.T) {
 	}
 
 	en := addLearner(t, store, "en@example.com", "sub-en", now)
-	word := addLexeme(t, store, "כִּסֵּא", "chair", "kise", "m", "")
+	enAudio := strings.Repeat("cd", 32)
+	enText := "כִּסֵּא"
+	if _, err := store.ExecContext(context.Background(), `
+		INSERT INTO audio_assets (id, text_nfc, voice, model, bytes, created_at)
+		VALUES (?, ?, 'voice', 'model', 3, ?)`, enAudio, enText, db.FormatTime(now)); err != nil {
+		t.Fatal(err)
+	}
+	word := addLexeme(t, store, enText, "chair", "kise", "m", enAudio)
 	enCard := addCard(t, store, en.user.ID, word, fsrs.DirEnHe, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 	prod := getLearner(t, h, en, "/review")
-	if !strings.Contains(prod, `data-kind="en_he"`) || strings.Contains(prod, "כִּסֵּא") || !strings.Contains(prod, "chair") || !strings.Contains(prod, `data-revealed="false"`) {
+	if !strings.Contains(prod, `data-kind="en_he"`) || strings.Contains(prod, enText) || !strings.Contains(prod, "chair") || !strings.Contains(prod, `data-revealed="false"`) {
 		t.Fatalf("en_he card leaked the answer: %s", cardAttrs(prod))
 	}
+	if strings.Contains(prod, "data-translit") || strings.Contains(prod, "kise") || strings.Contains(prod, "/audio/") {
+		t.Fatalf("en_he leaked translit or audio before reveal: %s", prod)
+	}
 	shown := postReveal(t, h, en, enCard, "https://learn.example")
-	if shown.Code != http.StatusOK || !strings.Contains(shown.Body.String(), `data-pointed="כִּסֵּא"`) || !strings.Contains(shown.Body.String(), "chair") || !strings.Contains(shown.Body.String(), `data-revealed="true"`) || !strings.Contains(shown.Body.String(), `name="rating"`) {
-		t.Fatalf("en_he reveal = %d %s", shown.Code, shown.Body.String())
+	shownBody := shown.Body.String()
+	if shown.Code != http.StatusOK || !strings.Contains(shownBody, `data-pointed="`+enText+`"`) || !strings.Contains(shownBody, "chair") || !strings.Contains(shownBody, `data-revealed="true"`) || !strings.Contains(shownBody, `name="rating"`) || !strings.Contains(shownBody, `data-translit="kise"`) || !strings.Contains(shownBody, "kise") || !strings.Contains(shownBody, `href="/audio/`+enAudio+`.mp3"`) {
+		t.Fatalf("en_he reveal = %d %s", shown.Code, shownBody)
 	}
 }
 
