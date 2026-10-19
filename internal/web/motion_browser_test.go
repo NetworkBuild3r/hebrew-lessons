@@ -3,6 +3,7 @@
 package web
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -39,9 +40,11 @@ func TestMotionInBrowser(t *testing.T) {
 	cmd := exec.Command("node", "motion-browser.mjs")
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "ORIGIN="+srv.URL)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("node: %v\n%s", err, out)
+		t.Fatalf("node: %v\n%s\n%s", err, out, stderr.String())
 	}
 	type anim struct {
 		EndTime   float64 `json:"endTime"`
@@ -74,6 +77,10 @@ func TestMotionInBrowser(t *testing.T) {
 		t.Fatal("ac-4: no view-transition ran with motion on, so the tap was not tested during one")
 	}
 	if got.Full.Taps == nil || *got.Full.Taps != 1 {
-		t.Errorf("ac-4: taps = %v, want exactly 1 on the first tap during the swap", got.Full.Taps)
+		taps := -1
+		if got.Full.Taps != nil {
+			taps = *got.Full.Taps
+		}
+		t.Errorf("ac-4: taps = %d, want exactly 1 on the first tap during the swap", taps)
 	}
 }

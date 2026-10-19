@@ -7,7 +7,7 @@ const origin = process.env.ORIGIN;
 const browser = await chromium.launch();
 
 async function open(reducedMotion) {
-  const ctx = await browser.newContext({ reducedMotion, viewport: { width: 390, height: 800 } });
+  const ctx = await browser.newContext({ bypassCSP: true, reducedMotion, viewport: { width: 390, height: 800 } });
   const page = await ctx.newPage();
   await page.goto(origin + "/");
   // A probe answer option outside #app, so it survives the swap and counts taps.

@@ -191,6 +191,12 @@
   ::view-transition-new(page-main) {
     animation: motion-fade-in var(--dur-base) linear both;
   }
+  /* The browser animates every group between the old and new position and
+     size with a 250ms transform of its own. Reduced motion switches that
+     off; the group snaps and only the fades above remain. */
+  ::view-transition-group(*) {
+    animation: none;
+  }
   /* The placement deck (base.css) names its own view transitions. They fade
      too, with no flip, no stack, and no delay. */
   ::view-transition-old(rcard),
