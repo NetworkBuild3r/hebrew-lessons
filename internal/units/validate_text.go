@@ -41,7 +41,9 @@ import (
 // (U+05F4) immediately before the last letter, as in י״ב or תשפ״ז.
 // A geresh inside a loanword, as in צ׳יפס or ג׳ירפה, is not a number.
 
-func normalize(s string) string {
+// Normalize is the shared text key for units and audio.
+// Importers store this string, and Lookup.HasAudio is called with it.
+func Normalize(s string) string {
 	s = strings.Map(func(r rune) rune {
 		if unicode.Is(unicode.Cf, r) {
 			return -1
@@ -64,6 +66,8 @@ func normalize(s string) string {
 	}
 	return b.String()
 }
+
+func normalize(s string) string { return Normalize(s) }
 
 func stripNiqqud(s string) string {
 	return strings.Map(func(r rune) rune {

@@ -4,6 +4,9 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,14 +31,14 @@ func TestImportCommand(t *testing.T) {
 	data := t.TempDir()
 	export := t.TempDir()
 	body := []byte("hello-clip")
-	if err := os.MkdirAll(filepath.Join(export, "files", "_audio", "words"), 0o755); err != nil {
+	file := wordFileName("v", "eleven_v3", "שָׁלוֹם")
+	if err := os.MkdirAll(filepath.Join(export, "_audio", "words"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(export, "files", "_audio", "words", "a.mp3"), body, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(export, "_audio", "words", file), body, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	raw := []byte(`{"words":{"a.mp3":{"text":"שָׁלוֹם","voiceId":"v","model":"eleven_v3"}},"lessons":[],"unmapped_word_files":[]}`)
-	if err := os.WriteFile(filepath.Join(export, "clip-text-map.json"), raw, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(export, "clip-text-map.json"), wordMap(file, body, "שָׁלוֹם", "v", "eleven_v3"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("DATA_DIR", data)
@@ -93,7 +96,7 @@ func tinyTGZ(t *testing.T) []byte {
 	zw := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(zw)
 	clip := []byte("stdin-clip")
-	mapBody := []byte(`{"words":{"a.mp3":{"text":"הֵי","voiceId":"v","model":"legacy"}},"lessons":[],"unmapped_word_files":[]}`)
+	file := wordFileName("v", "legacy", "הֵי")
 	writeTar := func(name string, body []byte) {
 		t.Helper()
 		hdr := &tar.Header{Name: name, Mode: 0o644, Size: int64(len(body))}
@@ -104,8 +107,8 @@ func tinyTGZ(t *testing.T) []byte {
 			t.Fatal(err)
 		}
 	}
-	writeTar("clip-text-map.json", mapBody)
-	writeTar("files/_audio/words/a.mp3", clip)
+	writeTar("clip-text-map.json", wordMap(file, clip, "הֵי", "v", "legacy"))
+	writeTar("_audio/words/"+file, clip)
 	if err := tw.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -113,6 +116,34 @@ func tinyTGZ(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	return buf.Bytes()
+}
+
+func wordFileName(voice, model, text string) string {
+	sum := sha256.Sum256([]byte(voice + "\x00" + model + "\x00" + strings.TrimSpace(text)))
+	return hex.EncodeToString(sum[:])[:24] + ".mp3"
+}
+
+func wordMap(file string, body []byte, text, voice, model string) []byte {
+	sum := sha256.Sum256(body)
+	raw, err := json.Marshal(map[string]any{
+		"schema":  "hebrew-clip-text-map/v2",
+		"lessons": []any{},
+		"words": []any{map[string]any{
+			"source":   "word",
+			"file":     file,
+			"path":     "_audio/words/" + file,
+			"text":     text,
+			"voiceId":  voice,
+			"model":    model,
+			"sha256":   hex.EncodeToString(sum[:]),
+			"verified": true,
+		}},
+		"unmapped": []any{},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return raw
 }
 
 func countMP3(t *testing.T, dir string) int {

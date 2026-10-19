@@ -1,18 +1,15 @@
 package audio
 
-import (
-	"strings"
+import "github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 
-	"golang.org/x/text/unicode/norm"
-)
-
-// legacyModel is stored for lesson clips. The export has no voice or model
-// for those files.
-const legacyModel = "legacy"
-
-// NormalizeText is the audio_assets.text_nfc form: NFC, trimmed, internal
-// whitespace collapsed to one space. Niqqud is kept. Callers that look up
-// a clip pass this same string to AudioByText.
+// NormalizeText is the audio_assets.text_nfc form. It is units.Normalize:
+// format characters (Cf) removed, NFC, trimmed, Unicode spaces collapsed
+// to one ASCII space. Niqqud is kept. Callers that look up a clip pass
+// this same string to AudioByText.
+//
+// The legacy content hash is not this string. cacheKey and textHash in
+// origin/main server/audio.js hash voice, model, and String(text).trim()
+// joined by NUL, with no Cf strip and no NFC.
 func NormalizeText(s string) string {
-	return strings.Join(strings.Fields(norm.NFC.String(s)), " ")
+	return units.Normalize(s)
 }

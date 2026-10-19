@@ -12,41 +12,68 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 )
 
-const importReportName = "import-unmapped.json"
+const (
+	importReportName   = "import-unmapped.json"
+	importManifestName = "import-manifest.json"
+	clipMapSchema      = "hebrew-clip-text-map/v2"
+)
+
+// Caps keep a hostile or truncated archive from filling the disk.
+// Tests lower them.
+var (
+	maxClipBytes  int64 = 32 << 20
+	maxSpoolBytes int64 = 512 << 20
+	maxMapBytes   int64 = 16 << 20
+)
+
+// failAtomicWrite, when set, makes writeAtomic fail after it creates the
+// temp file so tests can see that the temp file is removed.
+var failAtomicWrite bool
 
 // Options controls one import.
 type Options struct {
-	// DryRun counts the work and writes the unmapped report. It does not
+	// DryRun counts the work and writes the report and manifest. It does not
 	// write mp3s or rows.
 	DryRun bool
 	// Archive, when set, is a gzip-compressed tar of the export. The stream
-	// is not seekable. exportDir is ignored. The archive is not extracted;
-	// a temporary copy of the compressed bytes is removed before Import
-	// returns.
+	// is not seekable. exportDir is ignored. The archive is not extracted.
+	// A temporary copy of the compressed bytes is removed before Import
+	// returns, including when the process is signaled.
 	Archive io.Reader
 }
 
-// Import reads an export directory, or a .tgz of that directory, and fills
+// Import reads a v2 export directory, or a .tgz of that directory, and fills
 // audio_assets plus <dataDir>/audio/<sha256>.mp3.
 //
-// The export root holds clip-text-map.json and files/. Word clips live at
-// files/_audio/words/<file>.mp3. Lesson clips live at files/<lesson>/<clip>.
-// unmapped_word_files and any path containing /_archive/ are skipped. A
-// mapped entry whose text is empty after normalization is unmapped. A mapped
-// file that is not on disk is a missing-file warning, not an error.
+// The export root holds clip-text-map.json (schema hebrew-clip-text-map/v2).
+// Clip paths in the map are relative to that root: lesson directories and
+// _audio/ sit next to the map, with no files/ prefix. A single archive
+// prefix, such as bundle/clip-text-map.json, is stripped.
 //
-// The id is the hex sha256 of the bytes. The same bytes under two names are
-// one row: the first file kept, in path order for a directory and in archive
-// order for a .tgz. A second run inserts nothing new.
+// Every mapped clip is checked before it is stored. sha256 of the mp3 bytes
+// must equal the map's sha256. sha256 of voiceId, model, and text.trim()
+// joined by NUL must equal a lesson's textHash, and a word's file name must
+// be the first 24 hex characters of that digest plus ".mp3". A miss is
+// hash-mismatch or text-mismatch and is not stored.
+//
+// Unmapped entries are listed and not stored. The same bytes with two
+// different texts are a conflict: both paths and texts are reported, and
+// the second text is not written over the first. Distinct sha256 values are
+// all stored. The text index keeps one asset per (text, voice, model), the
+// lowest id, which is what AudioByText returns when created_at ties. The
+// other ids are aliases in the summary and the import manifest.
 func Import(ctx context.Context, store *db.Store, dataDir, exportDir string, opts Options) (Report, error) {
 	if store == nil {
 		return Report{}, errors.New("audio: store is nil")
@@ -66,20 +93,24 @@ func Import(ctx context.Context, store *db.Store, dataDir, exportDir string, opt
 		if err != nil {
 			return Report{}, err
 		}
-		defer os.Remove(spooled)
+		stop := unlinkOnSignal(spooled)
+		defer stop()
 		return importArchive(ctx, store, dataDir, spooled, opts)
 	}
 	if exportDir == "" {
 		return Report{}, errors.New("audio: export path is empty")
 	}
-	info, err := os.Stat(exportDir)
+	info, err := os.Lstat(exportDir)
 	if err != nil {
 		return Report{}, fmt.Errorf("audio: export %s: %w", exportDir, err)
 	}
-	if info.IsDir() {
-		return importDir(ctx, store, dataDir, exportDir, opts)
+	if info.Mode()&os.ModeSymlink != 0 {
+		return Report{}, fmt.Errorf("audio: export %s is a symlink", exportDir)
 	}
-	return importArchive(ctx, store, dataDir, exportDir, opts)
+	if !info.IsDir() {
+		return importArchive(ctx, store, dataDir, exportDir, opts)
+	}
+	return importDir(ctx, store, dataDir, exportDir, opts)
 }
 
 func spoolArchive(dir string, r io.Reader) (string, error) {
@@ -88,11 +119,15 @@ func spoolArchive(dir string, r io.Reader) (string, error) {
 		return "", fmt.Errorf("audio: spool archive: %w", err)
 	}
 	name := f.Name()
-	_, copyErr := io.Copy(f, r)
+	n, copyErr := io.Copy(f, io.LimitReader(r, maxSpoolBytes+1))
 	closeErr := f.Close()
 	if copyErr != nil {
 		os.Remove(name)
 		return "", fmt.Errorf("audio: spool archive: %w", copyErr)
+	}
+	if n > maxSpoolBytes {
+		os.Remove(name)
+		return "", fmt.Errorf("audio: archive exceeds %d bytes", maxSpoolBytes)
 	}
 	if closeErr != nil {
 		os.Remove(name)
@@ -101,22 +136,50 @@ func spoolArchive(dir string, r io.Reader) (string, error) {
 	return name, nil
 }
 
+// unlinkOnSignal removes path if this process receives SIGINT or SIGTERM,
+// and the returned function always removes it. SIGKILL cannot be caught.
+func unlinkOnSignal(path string) func() {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+	done := make(chan struct{})
+	var once sync.Once
+	go func() {
+		select {
+		case <-ch:
+			os.Remove(path)
+		case <-done:
+		}
+		signal.Stop(ch)
+	}()
+	return func() {
+		once.Do(func() { close(done) })
+		signal.Stop(ch)
+		os.Remove(path)
+	}
+}
+
 type clipMap struct {
-	Words             map[string]wordClip `json:"words"`
-	Lessons           []lessonClip        `json:"lessons"`
-	UnmappedWordFiles []string            `json:"unmapped_word_files"`
+	Schema   string       `json:"schema"`
+	Lessons  []mappedClip `json:"lessons"`
+	Words    []mappedClip `json:"words"`
+	Unmapped []struct {
+		Reason string `json:"reason"`
+		Path   string `json:"path"`
+		SHA256 string `json:"sha256"`
+	} `json:"unmapped"`
 }
 
-type wordClip struct {
-	Text    string `json:"text"`
-	VoiceID string `json:"voiceId"`
-	Model   string `json:"model"`
-}
-
-type lessonClip struct {
-	Lesson string `json:"lesson"`
-	Clip   string `json:"clip"`
-	Text   string `json:"text"`
+type mappedClip struct {
+	Source   string `json:"source"`
+	Lesson   string `json:"lesson"`
+	Clip     string `json:"clip"`
+	File     string `json:"file"`
+	Path     string `json:"path"`
+	Text     string `json:"text"`
+	VoiceID  string `json:"voiceId"`
+	Model    string `json:"model"`
+	TextHash string `json:"textHash"`
+	SHA256   string `json:"sha256"`
 }
 
 type planned struct {
@@ -124,112 +187,133 @@ type planned struct {
 	text  string
 	voice string
 	model string
+	sha   string
+}
+
+// refusedText is a clip whose legacy text hash did not match.
+// sha is the map's byte hash, checked when the file is present.
+type refusedText struct {
+	item Mismatch
+	sha  string
+}
+
+type seenSHA struct {
+	rel   string
+	text  string
+	voice string
+	model string
 }
 
 type builder struct {
-	dry         bool
-	store       *db.Store
-	audioDir    string
-	createdAt   time.Time
-	mapped      map[string]planned
-	preUnmapped map[string]struct{}
-	extra       []string
-	seen        map[string]struct{}
-	shaSeen     map[string]bool
-	byModel     map[string]int
+	dry       bool
+	store     *db.Store
+	audioDir  string
+	createdAt time.Time
 
-	imported        int
-	duplicate       int
-	skippedUnmapped int
-	skippedArchive  int
+	mapped   map[string]planned
+	textBad  map[string]refusedText
+	unmapped map[string]string
+	seenPath map[string]struct{}
+	seenSHA  map[string]seenSHA
+	byModel  map[string]int
+
+	imported  int
+	duplicate int
+	conflict  int
+
+	extraUnmapped  []UnmappedItem
+	hashMismatches []Mismatch
+	conflicts      []Conflict
+	manifest       []ManifestEntry
 }
 
 func plan(m clipMap) (*builder, error) {
+	if m.Schema != clipMapSchema {
+		return nil, fmt.Errorf("audio: clip map schema %q, want %s", m.Schema, clipMapSchema)
+	}
 	b := &builder{
-		mapped:      map[string]planned{},
-		preUnmapped: map[string]struct{}{},
-		seen:        map[string]struct{}{},
-		shaSeen:     map[string]bool{},
-		byModel:     map[string]int{},
+		mapped:   map[string]planned{},
+		textBad:  map[string]refusedText{},
+		unmapped: map[string]string{},
+		seenPath: map[string]struct{}{},
+		seenSHA:  map[string]seenSHA{},
+		byModel:  map[string]int{},
 	}
-	for _, name := range m.UnmappedWordFiles {
-		rel, err := wordRel(name)
+	for _, item := range m.Unmapped {
+		rel, err := cleanRel(item.Path)
 		if err != nil {
 			return nil, err
 		}
-		if relHasArchive(rel) {
-			continue
+		if _, dup := b.unmapped[rel]; dup {
+			return nil, fmt.Errorf("audio: repeated path %s", rel)
 		}
-		b.preUnmapped[rel] = struct{}{}
+		reason := item.Reason
+		if reason == "" {
+			reason = "unmapped"
+		}
+		b.unmapped[rel] = reason
 	}
-	names := make([]string, 0, len(m.Words))
-	for name := range m.Words {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		word := m.Words[name]
-		rel, err := wordRel(name)
+	clips := append(append([]mappedClip{}, m.Words...), m.Lessons...)
+	for _, clip := range clips {
+		rel, err := cleanRel(clip.Path)
 		if err != nil {
 			return nil, err
 		}
-		if _, skip := b.preUnmapped[rel]; skip || relHasArchive(rel) {
-			continue
+		if _, dup := b.mapped[rel]; dup {
+			return nil, fmt.Errorf("audio: repeated path %s", rel)
 		}
-		text := NormalizeText(word.Text)
+		if _, dup := b.textBad[rel]; dup {
+			return nil, fmt.Errorf("audio: repeated path %s", rel)
+		}
+		if _, skip := b.unmapped[rel]; skip {
+			return nil, fmt.Errorf("audio: path %s is both mapped and unmapped", rel)
+		}
+		voice := strings.TrimSpace(clip.VoiceID)
+		model := strings.TrimSpace(clip.Model)
+		got := contentHash(voice, model, clip.Text)
+		fileSHA := strings.ToLower(strings.TrimSpace(clip.SHA256))
+		switch clip.Source {
+		case "lesson":
+			want := strings.ToLower(strings.TrimSpace(clip.TextHash))
+			if got != want {
+				b.textBad[rel] = refusedText{item: Mismatch{Path: rel, Want: want, Got: got}, sha: fileSHA}
+				continue
+			}
+		case "word":
+			want := wordFileName(voice, model, clip.Text)
+			if path.Base(rel) != want {
+				b.textBad[rel] = refusedText{item: Mismatch{Path: rel, Want: want, Got: path.Base(rel)}, sha: fileSHA}
+				continue
+			}
+		default:
+			return nil, fmt.Errorf("audio: clip %s source %q", rel, clip.Source)
+		}
+		text := NormalizeText(clip.Text)
 		if text == "" {
-			b.preUnmapped[rel] = struct{}{}
+			b.unmapped[rel] = "empty-text"
 			continue
 		}
 		b.mapped[rel] = planned{
 			rel:   rel,
 			text:  text,
-			voice: strings.TrimSpace(word.VoiceID),
-			model: strings.TrimSpace(word.Model),
+			voice: voice,
+			model: model,
+			sha:   strings.ToLower(strings.TrimSpace(clip.SHA256)),
 		}
 	}
-	for _, lesson := range m.Lessons {
-		rel, err := lessonRel(lesson.Lesson, lesson.Clip)
-		if err != nil {
-			return nil, err
-		}
-		if relHasArchive(rel) {
-			continue
-		}
-		if _, exists := b.mapped[rel]; exists {
-			return nil, fmt.Errorf("audio: duplicate clip %s", rel)
-		}
-		text := NormalizeText(lesson.Text)
-		if text == "" {
-			b.preUnmapped[rel] = struct{}{}
-			continue
-		}
-		b.mapped[rel] = planned{rel: rel, text: text, voice: "", model: legacyModel}
-	}
-	b.skippedUnmapped = len(b.preUnmapped)
 	return b, nil
 }
 
-func wordRel(name string) (string, error) {
-	if name == "" || path.Base(name) != name || strings.Contains(name, `\`) {
-		return "", fmt.Errorf("audio: word file %q is not a single file name", name)
+func cleanRel(rel string) (string, error) {
+	rel = strings.TrimPrefix(rel, "./")
+	if rel == "" || path.IsAbs(rel) || strings.Contains(rel, `\`) {
+		return "", fmt.Errorf("audio: path %q is not a relative clip path", rel)
 	}
-	return path.Join("files", "_audio", "words", name), nil
-}
-
-func lessonRel(lesson, clip string) (string, error) {
-	if strings.TrimSpace(lesson) == "" || strings.TrimSpace(clip) == "" {
-		return "", errors.New("audio: lesson clip is missing a path")
+	cleaned := path.Clean(rel)
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return "", fmt.Errorf("audio: path %q escapes the export", rel)
 	}
-	rel := path.Join("files", lesson, clip)
-	if rel == "files" || !strings.HasPrefix(rel, "files/") || strings.HasPrefix(rel, "../") {
-		return "", fmt.Errorf("audio: lesson path %s/%s escapes the export", lesson, clip)
-	}
-	return rel, nil
-}
-
-func relHasArchive(rel string) bool {
-	return strings.Contains(rel, "/_archive/")
+	return cleaned, nil
 }
 
 func importDir(ctx context.Context, store *db.Store, dataDir, exportDir string, opts Options) (Report, error) {
@@ -249,11 +333,11 @@ func importDir(ctx context.Context, store *db.Store, dataDir, exportDir string, 
 		if err := ctx.Err(); err != nil {
 			return Report{}, err
 		}
+		if _, dup := b.seenPath[rel]; dup {
+			return Report{}, fmt.Errorf("audio: repeated path %s", rel)
+		}
 		f, err := os.Open(filepath.Join(exportDir, filepath.FromSlash(rel)))
 		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
 			return Report{}, fmt.Errorf("audio: read %s: %w", rel, err)
 		}
 		err = b.onFile(ctx, rel, f)
@@ -269,24 +353,22 @@ func importDir(ctx context.Context, store *db.Store, dataDir, exportDir string, 
 }
 
 func listMP3(exportDir string) ([]string, error) {
-	filesDir := filepath.Join(exportDir, "files")
-	info, err := os.Stat(filesDir)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("audio: read %s: %w", filesDir, err)
-	}
-	if !info.IsDir() {
-		return nil, fmt.Errorf("audio: %s is not a directory", filesDir)
-	}
 	var rels []string
-	err = filepath.WalkDir(filesDir, func(p string, d os.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(exportDir, func(p string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		if d.IsDir() || !d.Type().IsRegular() {
+		if p == exportDir {
 			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("audio: symlink %s", p)
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			return fmt.Errorf("audio: non-regular file %s", p)
 		}
 		if !strings.EqualFold(filepath.Ext(d.Name()), ".mp3") {
 			return nil
@@ -296,10 +378,11 @@ func listMP3(exportDir string) ([]string, error) {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
-		if rel == ".." || strings.HasPrefix(rel, "../") {
-			return fmt.Errorf("audio: path %s escapes the export", rel)
+		cleaned, err := cleanRel(rel)
+		if err != nil {
+			return err
 		}
-		rels = append(rels, rel)
+		rels = append(rels, cleaned)
 		return nil
 	})
 	if err != nil {
@@ -330,9 +413,18 @@ func importArchive(ctx context.Context, store *db.Store, dataDir, tarPath string
 			if err != nil {
 				return fmt.Errorf("audio: read archive: %w", err)
 			}
+			if err := rejectSpecial(header); err != nil {
+				return err
+			}
+			if header.Typeflag == tar.TypeDir {
+				if err := discardEntry(tr); err != nil {
+					return err
+				}
+				continue
+			}
 			if !tarRegular(header) {
-				if _, err := io.Copy(io.Discard, tr); err != nil {
-					return fmt.Errorf("audio: read archive: %w", err)
+				if err := discardEntry(tr); err != nil {
+					return err
 				}
 				continue
 			}
@@ -342,10 +434,13 @@ func importArchive(ctx context.Context, store *db.Store, dataDir, tarPath string
 			}
 			rel, ok := stripRoot(name, root)
 			if !ok || !strings.EqualFold(path.Ext(rel), ".mp3") {
-				if _, err := io.Copy(io.Discard, tr); err != nil {
-					return fmt.Errorf("audio: read archive: %w", err)
+				if err := discardEntry(tr); err != nil {
+					return err
 				}
 				continue
+			}
+			if _, dup := b.seenPath[rel]; dup {
+				return fmt.Errorf("audio: repeated path %s", rel)
 			}
 			if err := b.onFile(ctx, rel, tr); err != nil {
 				return err
@@ -356,6 +451,19 @@ func importArchive(ctx context.Context, store *db.Store, dataDir, tarPath string
 		return Report{}, err
 	}
 	return b.finish()
+}
+
+func rejectSpecial(header *tar.Header) error {
+	switch header.Typeflag {
+	case tar.TypeSymlink:
+		return fmt.Errorf("audio: symlink %s", header.Name)
+	case tar.TypeLink:
+		return fmt.Errorf("audio: hardlink %s", header.Name)
+	case tar.TypeChar, tar.TypeBlock, tar.TypeFifo:
+		return fmt.Errorf("audio: non-regular file %s", header.Name)
+	default:
+		return nil
+	}
 }
 
 func newBuilder(store *db.Store, dataDir string, opts Options, m clipMap) (*builder, error) {
@@ -374,53 +482,70 @@ func newBuilder(store *db.Store, dataDir string, opts Options, m clipMap) (*buil
 }
 
 func (b *builder) onFile(ctx context.Context, rel string, r io.Reader) error {
-	if relHasArchive(rel) {
-		b.skippedArchive++
-		_, err := io.Copy(io.Discard, r)
+	b.seenPath[rel] = struct{}{}
+	if reason, skip := b.unmapped[rel]; skip {
+		if err := discardLimited(r); err != nil {
+			return fmt.Errorf("audio: read %s: %w", rel, err)
+		}
+		_ = reason
+		return nil
+	}
+	if bad, skip := b.textBad[rel]; skip {
+		body, err := readLimited(r)
 		if err != nil {
 			return fmt.Errorf("audio: read %s: %w", rel, err)
 		}
-		return nil
-	}
-	if _, skip := b.preUnmapped[rel]; skip {
-		_, err := io.Copy(io.Discard, r)
-		if err != nil {
-			return fmt.Errorf("audio: read %s: %w", rel, err)
+		sum := sha256.Sum256(body)
+		id := hex.EncodeToString(sum[:])
+		if bad.sha != "" && id != bad.sha {
+			b.hashMismatches = append(b.hashMismatches, Mismatch{Path: rel, Want: bad.sha, Got: id})
 		}
 		return nil
 	}
 	clip, ok := b.mapped[rel]
 	if !ok {
-		b.skippedUnmapped++
-		b.extra = append(b.extra, rel)
-		_, err := io.Copy(io.Discard, r)
-		if err != nil {
+		if err := discardLimited(r); err != nil {
 			return fmt.Errorf("audio: read %s: %w", rel, err)
 		}
+		if strings.Contains(rel, "/_archive/") {
+			b.extraUnmapped = append(b.extraUnmapped, UnmappedItem{Path: rel, Reason: "archive"})
+			return nil
+		}
+		b.extraUnmapped = append(b.extraUnmapped, UnmappedItem{Path: rel, Reason: "not-in-map"})
 		return nil
 	}
-	body, err := io.ReadAll(r)
+	body, err := readLimited(r)
 	if err != nil {
 		return fmt.Errorf("audio: read %s: %w", rel, err)
 	}
-	return b.accept(ctx, clip, body)
-}
-
-func (b *builder) accept(ctx context.Context, clip planned, body []byte) error {
 	sum := sha256.Sum256(body)
 	id := hex.EncodeToString(sum[:])
-	b.byModel[clip.model]++
-	b.seen[clip.rel] = struct{}{}
-	if b.shaSeen[id] {
-		b.duplicate++
+	if clip.sha == "" || id != clip.sha {
+		b.hashMismatches = append(b.hashMismatches, Mismatch{Path: rel, Want: clip.sha, Got: id})
 		return nil
 	}
+	return b.accept(ctx, clip, id, body)
+}
+
+func (b *builder) accept(ctx context.Context, clip planned, id string, body []byte) error {
+	if prev, ok := b.seenSHA[id]; ok {
+		if prev.text != clip.text {
+			b.addConflict(id, prev, clip)
+			return nil
+		}
+		b.byModel[clip.model]++
+		b.duplicate++
+		b.manifest = append(b.manifest, manifestEntry(clip, id, false))
+		return nil
+	}
+	b.seenSHA[id] = seenSHA{rel: clip.rel, text: clip.text, voice: clip.voice, model: clip.model}
+	b.byModel[clip.model]++
+	b.manifest = append(b.manifest, manifestEntry(clip, id, false))
 	if b.dry {
 		has, err := b.store.HasAudio(ctx, id)
 		if err != nil {
 			return err
 		}
-		b.shaSeen[id] = true
 		if has {
 			b.duplicate++
 			return nil
@@ -442,7 +567,6 @@ func (b *builder) accept(ctx context.Context, clip planned, body []byte) error {
 	if err != nil {
 		return err
 	}
-	b.shaSeen[id] = true
 	if inserted {
 		b.imported++
 		return nil
@@ -451,52 +575,197 @@ func (b *builder) accept(ctx context.Context, clip planned, body []byte) error {
 	return nil
 }
 
+func manifestEntry(clip planned, id string, conflict bool) ManifestEntry {
+	return ManifestEntry{
+		Path:     clip.rel,
+		ID:       id,
+		Text:     clip.text,
+		Voice:    clip.voice,
+		Model:    clip.model,
+		Conflict: conflict,
+	}
+}
+
+func (b *builder) addConflict(id string, prev seenSHA, clip planned) {
+	b.conflict++
+	for i := range b.conflicts {
+		if b.conflicts[i].SHA256 != id {
+			continue
+		}
+		b.conflicts[i].Clips = append(b.conflicts[i].Clips, ConflictClip{Path: clip.rel, Text: clip.text})
+		b.manifest = append(b.manifest, manifestEntry(clip, id, true))
+		return
+	}
+	b.conflicts = append(b.conflicts, Conflict{
+		SHA256: id,
+		Clips: []ConflictClip{
+			{Path: prev.rel, Text: prev.text},
+			{Path: clip.rel, Text: clip.text},
+		},
+	})
+	b.manifest = append(b.manifest, manifestEntry(clip, id, true))
+}
+
 func (b *builder) finish() (Report, error) {
 	missing := make([]string, 0)
 	for rel := range b.mapped {
-		if _, ok := b.seen[rel]; !ok {
+		if _, ok := b.seenPath[rel]; !ok {
 			missing = append(missing, rel)
 		}
 	}
 	sort.Strings(missing)
-	unmapped := make([]string, 0, len(b.preUnmapped)+len(b.extra))
-	for rel := range b.preUnmapped {
-		unmapped = append(unmapped, rel)
+	sort.Slice(b.hashMismatches, func(i, j int) bool {
+		return b.hashMismatches[i].Path < b.hashMismatches[j].Path
+	})
+	textMismatch := make([]Mismatch, 0, len(b.textBad))
+	for _, item := range b.textBad {
+		textMismatch = append(textMismatch, item.item)
 	}
-	unmapped = append(unmapped, b.extra...)
-	sort.Strings(unmapped)
+	sort.Slice(textMismatch, func(i, j int) bool {
+		return textMismatch[i].Path < textMismatch[j].Path
+	})
+	unmapped := make([]UnmappedItem, 0, len(b.unmapped)+len(b.extraUnmapped))
+	for rel, reason := range b.unmapped {
+		unmapped = append(unmapped, UnmappedItem{Path: rel, Reason: reason})
+	}
+	unmapped = append(unmapped, b.extraUnmapped...)
+	sort.Slice(unmapped, func(i, j int) bool {
+		if unmapped[i].Path == unmapped[j].Path {
+			return unmapped[i].Reason < unmapped[j].Reason
+		}
+		return unmapped[i].Path < unmapped[j].Path
+	})
+	sort.Slice(b.conflicts, func(i, j int) bool {
+		return b.conflicts[i].SHA256 < b.conflicts[j].SHA256
+	})
+	markAliases(b.manifest)
+	alias := countAliases(b.manifest)
+
 	reportPath := filepath.Join(b.audioDir, importReportName)
+	manifestPath := filepath.Join(b.audioDir, importManifestName)
 	rep := Report{
-		Imported:        b.imported,
-		Duplicate:       b.duplicate,
-		SkippedUnmapped: b.skippedUnmapped,
-		SkippedArchive:  b.skippedArchive,
-		MissingFile:     len(missing),
-		ByModel:         b.byModel,
-		Unmapped:        unmapped,
-		Missing:         missing,
-		ReportPath:      reportPath,
+		Imported:       b.imported,
+		Duplicate:      b.duplicate,
+		Unmapped:       len(unmapped),
+		HashMismatch:   len(b.hashMismatches),
+		TextMismatch:   len(textMismatch),
+		Conflict:       b.conflict,
+		Alias:          alias,
+		MissingFile:    len(missing),
+		ByModel:        b.byModel,
+		UnmappedItems:  unmapped,
+		Missing:        missing,
+		HashMismatches: b.hashMismatches,
+		TextMismatches: textMismatch,
+		Conflicts:      b.conflicts,
+		ReportPath:     reportPath,
+		ManifestPath:   manifestPath,
 	}
 	if rep.ByModel == nil {
 		rep.ByModel = map[string]int{}
 	}
-	if err := writeUnmappedReport(reportPath, unmapped, missing); err != nil {
+	if rep.HashMismatches == nil {
+		rep.HashMismatches = []Mismatch{}
+	}
+	if rep.TextMismatches == nil {
+		rep.TextMismatches = []Mismatch{}
+	}
+	if rep.Conflicts == nil {
+		rep.Conflicts = []Conflict{}
+	}
+	if err := writeUnmappedReport(reportPath, rep); err != nil {
+		return Report{}, err
+	}
+	if err := writeManifest(manifestPath, b.manifest); err != nil {
 		return Report{}, err
 	}
 	return rep, nil
 }
 
-func writeUnmappedReport(path string, unmapped, missing []string) error {
-	if unmapped == nil {
-		unmapped = []string{}
+func markAliases(entries []ManifestEntry) {
+	type key struct {
+		text  string
+		voice string
+		model string
 	}
+	best := map[key]string{}
+	for _, e := range entries {
+		if e.Conflict {
+			continue
+		}
+		k := key{e.Text, e.Voice, e.Model}
+		id, ok := best[k]
+		if !ok || e.ID < id {
+			best[k] = e.ID
+		}
+	}
+	for i := range entries {
+		if entries[i].Conflict {
+			continue
+		}
+		k := key{entries[i].Text, entries[i].Voice, entries[i].Model}
+		entries[i].Alias = entries[i].ID != best[k]
+	}
+}
+
+func countAliases(entries []ManifestEntry) int {
+	type key struct {
+		text  string
+		voice string
+		model string
+	}
+	ids := map[key]map[string]struct{}{}
+	for _, e := range entries {
+		if e.Conflict || !e.Alias {
+			continue
+		}
+		k := key{e.Text, e.Voice, e.Model}
+		if ids[k] == nil {
+			ids[k] = map[string]struct{}{}
+		}
+		ids[k][e.ID] = struct{}{}
+	}
+	n := 0
+	for _, set := range ids {
+		n += len(set)
+	}
+	return n
+}
+
+func writeUnmappedReport(path string, rep Report) error {
+	unmapped := rep.UnmappedItems
+	if unmapped == nil {
+		unmapped = []UnmappedItem{}
+	}
+	missing := rep.Missing
 	if missing == nil {
 		missing = []string{}
 	}
+	hashMismatch := rep.HashMismatches
+	if hashMismatch == nil {
+		hashMismatch = []Mismatch{}
+	}
+	textMismatch := rep.TextMismatches
+	if textMismatch == nil {
+		textMismatch = []Mismatch{}
+	}
+	conflicts := rep.Conflicts
+	if conflicts == nil {
+		conflicts = []Conflict{}
+	}
 	body, err := json.MarshalIndent(struct {
-		Unmapped []string `json:"unmapped"`
-		Missing  []string `json:"missing"`
-	}{Unmapped: unmapped, Missing: missing}, "", "  ")
+		Unmapped     []UnmappedItem `json:"unmapped"`
+		Missing      []string       `json:"missing"`
+		HashMismatch []Mismatch     `json:"hashMismatch"`
+		TextMismatch []Mismatch     `json:"textMismatch"`
+		Conflicts    []Conflict     `json:"conflicts"`
+	}{
+		Unmapped:     unmapped,
+		Missing:      missing,
+		HashMismatch: hashMismatch,
+		TextMismatch: textMismatch,
+		Conflicts:    conflicts,
+	}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("audio: write report: %w", err)
 	}
@@ -504,12 +773,64 @@ func writeUnmappedReport(path string, unmapped, missing []string) error {
 	return writeAtomic(path, body)
 }
 
+func writeManifest(path string, entries []ManifestEntry) error {
+	if entries == nil {
+		entries = []ManifestEntry{}
+	}
+	sorted := append([]ManifestEntry(nil), entries...)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].Path == sorted[j].Path {
+			return sorted[i].Text < sorted[j].Text
+		}
+		return sorted[i].Path < sorted[j].Path
+	})
+	body, err := json.MarshalIndent(struct {
+		Clips []ManifestEntry `json:"clips"`
+	}{Clips: sorted}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("audio: write manifest: %w", err)
+	}
+	body = append(body, '\n')
+	return writeAtomic(path, body)
+}
+
+func readLimited(r io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, maxClipBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > maxClipBytes {
+		return nil, fmt.Errorf("entry exceeds %d bytes", maxClipBytes)
+	}
+	return body, nil
+}
+
+func discardLimited(r io.Reader) error {
+	n, err := io.Copy(io.Discard, io.LimitReader(r, maxClipBytes+1))
+	if err != nil {
+		return err
+	}
+	if n > maxClipBytes {
+		return fmt.Errorf("entry exceeds %d bytes", maxClipBytes)
+	}
+	return nil
+}
+
+func discardEntry(r io.Reader) error {
+	if _, err := io.Copy(io.Discard, r); err != nil {
+		return fmt.Errorf("audio: read archive: %w", err)
+	}
+	return nil
+}
+
 func writeAudioFile(dir, id string, data []byte) error {
 	final := filepath.Join(dir, id+".mp3")
-	if _, err := os.Stat(final); err == nil {
+	got, err := hashFile(final)
+	if err == nil && got == id {
 		return nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("audio: stat %s: %w", final, err)
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("audio: hash %s: %w", final, err)
 	}
 	if err := writeAtomic(final, data); err != nil {
 		return err
@@ -520,8 +841,22 @@ func writeAudioFile(dir, id string, data []byte) error {
 	return nil
 }
 
+func hashFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
 // writeAtomic replaces path by renaming a temp file in the same directory.
-// The destination is left untouched when the write fails.
+// The destination is left untouched when the write fails, and the temp file
+// is removed. The directory is fsynced after the rename.
 func writeAtomic(dest string, data []byte) error {
 	dir := filepath.Dir(dest)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -539,6 +874,9 @@ func writeAtomic(dest string, data []byte) error {
 			os.Remove(tmp)
 		}
 	}()
+	if failAtomicWrite {
+		return fmt.Errorf("audio: write %s: injected failure", dest)
+	}
 	if _, err := f.Write(data); err != nil {
 		return fmt.Errorf("audio: write %s: %w", dest, err)
 	}
@@ -552,15 +890,47 @@ func writeAtomic(dest string, data []byte) error {
 		return fmt.Errorf("audio: rename %s: %w", dest, err)
 	}
 	ok = true
+	if err := syncDir(dir); err != nil {
+		return fmt.Errorf("audio: sync %s: %w", dir, err)
+	}
 	return nil
 }
 
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	syncErr := d.Sync()
+	closeErr := d.Close()
+	if syncErr != nil {
+		return syncErr
+	}
+	return closeErr
+}
+
 func loadMapFile(path string) (clipMap, error) {
-	body, err := os.ReadFile(path)
+	f, err := os.Open(path)
+	if err != nil {
+		return clipMap{}, fmt.Errorf("audio: read clip map: %w", err)
+	}
+	defer f.Close()
+	body, err := readLimitedN(f, maxMapBytes)
 	if err != nil {
 		return clipMap{}, fmt.Errorf("audio: read clip map: %w", err)
 	}
 	return decodeMap(body)
+}
+
+func readLimitedN(r io.Reader, max int64) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, max+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > max {
+		return nil, fmt.Errorf("exceeds %d bytes", max)
+	}
+	return body, nil
 }
 
 func decodeMap(body []byte) (clipMap, error) {
@@ -568,9 +938,6 @@ func decodeMap(body []byte) (clipMap, error) {
 	var m clipMap
 	if err := dec.Decode(&m); err != nil {
 		return clipMap{}, fmt.Errorf("audio: parse clip map: %w", err)
-	}
-	if m.Words == nil {
-		m.Words = map[string]wordClip{}
 	}
 	return m, nil
 }
@@ -594,10 +961,16 @@ func mapFromArchive(tarPath string) (clipMap, string, error) {
 			if err != nil {
 				return err
 			}
+			if name == "." {
+				if err := discardEntry(tr); err != nil {
+					return err
+				}
+				continue
+			}
 			if tarRegular(header) && (name == "clip-text-map.json" || strings.HasSuffix(name, "/clip-text-map.json")) {
 				found++
 				if found == 1 {
-					body, err := io.ReadAll(tr)
+					body, err := readLimitedN(tr, maxMapBytes)
 					if err != nil {
 						return fmt.Errorf("audio: read clip map: %w", err)
 					}
@@ -606,8 +979,8 @@ func mapFromArchive(tarPath string) (clipMap, string, error) {
 					continue
 				}
 			}
-			if _, err := io.Copy(io.Discard, tr); err != nil {
-				return fmt.Errorf("audio: read archive: %w", err)
+			if err := discardEntry(tr); err != nil {
+				return err
 			}
 		}
 	})
@@ -635,7 +1008,7 @@ func tarRegular(header *tar.Header) bool {
 func cleanTarPath(name string) (string, error) {
 	name = strings.TrimPrefix(name, "./")
 	if name == "" || name == "." {
-		return "", errors.New("audio: empty tar name")
+		return ".", nil
 	}
 	if path.IsAbs(name) {
 		return "", fmt.Errorf("audio: absolute tar path %q", name)

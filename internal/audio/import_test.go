@@ -55,59 +55,55 @@ func TestImportDirectory(t *testing.T) {
 	nfdBody := []byte("clip-nfd")
 	spaceBody := []byte("clip-space")
 	lessonBody := []byte("clip-lesson")
+	aliasA := []byte("alias-a-bytes")
+	aliasB := []byte("alias-b-bytes-longer")
+	emptyBody := []byte("empty-text")
 	// Bet, dagesh, qamats. Canonical order is qamats then dagesh, so this
-	// is NFD-incompatible until NormalizeText reorders the marks.
+	// is not NFC until NormalizeText reorders the marks.
 	nfdText := "\u05D1\u05BC\u05B8 "
 	if norm.NFC.IsNormalString(strings.TrimSpace(nfdText)) {
 		t.Fatal("nfd fixture is already NFC")
 	}
+	const (
+		voice = "voice-a"
+		alias = "אוֹתוֹ מִשְׁפָּט"
+	)
 
 	export := t.TempDir()
-	files := map[string][]byte{
-		"files/_audio/words/v4.mp3":            v4,
-		"files/_audio/words/v3.mp3":            v3,
-		"files/_audio/words/a-keep.mp3":        keep,
-		"files/_audio/words/b-dup.mp3":         keep,
-		"files/_audio/words/nfd.mp3":           nfdBody,
-		"files/_audio/words/space.mp3":         spaceBody,
-		"files/_audio/words/unmapped.mp3":      []byte("skip-me"),
-		"files/demo/audio/story/line-1.mp3":    lessonBody,
-		"files/demo/audio/sentences/empty.mp3": []byte("empty-text"),
-		"files/demo/audio/_archive/line-9.mp3": []byte("archived"),
+	lessons := []any{
+		lessonObj("demo", "audio/story/line-1.mp3", "בַּבֹּקֶר \n", voice, "eleven_v4", lessonBody, "", ""),
+		lessonObj("demo", "audio/sentences/empty.mp3", " \n\t ", voice, "eleven_v4", emptyBody, "", ""),
+		lessonObj("demo", "audio/sentences/missing.mp3", "אֵין", voice, "eleven_v4", nil, "", shaID([]byte("missing"))),
+		lessonObj("demo", "audio/story/line-2.mp3", alias, voice, "eleven_v4", aliasA, "", ""),
+		lessonObj("demo", "audio/story/line-3.mp3", alias, voice, "eleven_v4", aliasB, "", ""),
 	}
-	for rel, body := range files {
-		path := filepath.Join(export, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, body, 0o644); err != nil {
-			t.Fatal(err)
-		}
+	words := []any{
+		wordObj("קָם", voice, "eleven_v4", v4, ""),
+		wordObj("קָם", voice, "eleven_v3", v3, ""),
+		wordObj("אֶחָד", voice, "eleven_v4", keep, ""),
+		wordObj("שְׁנַיִם", voice, "eleven_v3", keep, ""),
+		wordObj(nfdText, "voice-b", "eleven_v3", nfdBody, ""),
+		wordObj("אַחַר  כָּךְ", voice, "eleven_v4", spaceBody, ""),
 	}
-	clipMap := map[string]any{
-		"words": map[string]any{
-			"v4.mp3":     map[string]string{"text": "קָם", "voiceId": "voice-a", "model": "eleven_v4"},
-			"v3.mp3":     map[string]string{"text": "קָם", "voiceId": "voice-a", "model": "eleven_v3"},
-			"a-keep.mp3": map[string]string{"text": "אֶחָד", "voiceId": "voice-a", "model": "eleven_v4"},
-			"b-dup.mp3":  map[string]string{"text": "שְׁנַיִם", "voiceId": "voice-a", "model": "eleven_v3"},
-			"nfd.mp3":    map[string]string{"text": nfdText, "voiceId": "voice-b", "model": "eleven_v3"},
-			"space.mp3":  map[string]string{"text": "אַחַר  כָּךְ", "voiceId": "voice-a", "model": "eleven_v4"},
-		},
-		"lessons": []map[string]string{
-			{"lesson": "demo", "clip": "audio/story/line-1.mp3", "text": "בַּבֹּקֶר \n"},
-			{"lesson": "demo", "clip": "audio/sentences/empty.mp3", "text": " \n\t "},
-			{"lesson": "demo", "clip": "audio/sentences/missing.mp3", "text": "אֵין"},
-			{"lesson": "demo", "clip": "audio/_archive/line-9.mp3", "text": "אַרְכִיּוֹן"},
-		},
-		"unmapped_word_files": []string{"unmapped.mp3"},
+	unmapped := []any{
+		map[string]string{"reason": "word-not-in-manifest", "path": "_audio/words/unmapped.mp3", "sha256": shaID([]byte("skip-me"))},
+		map[string]string{"reason": "archive", "path": "demo/audio/_archive/line-9.mp3", "sha256": shaID([]byte("archived"))},
 	}
-	raw, err := json.Marshal(clipMap)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(export, "clip-text-map.json"), raw, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeFiles(t, export, map[string][]byte{
+		words[0].(map[string]any)["path"].(string): v4,
+		words[1].(map[string]any)["path"].(string): v3,
+		words[2].(map[string]any)["path"].(string): keep,
+		words[3].(map[string]any)["path"].(string): keep,
+		words[4].(map[string]any)["path"].(string): nfdBody,
+		words[5].(map[string]any)["path"].(string): spaceBody,
+		"demo/audio/story/line-1.mp3":              lessonBody,
+		"demo/audio/sentences/empty.mp3":           emptyBody,
+		"demo/audio/story/line-2.mp3":              aliasA,
+		"demo/audio/story/line-3.mp3":              aliasB,
+		"_audio/words/unmapped.mp3":                []byte("skip-me"),
+		"demo/audio/_archive/line-9.mp3":           []byte("archived"),
+	})
+	writeMap(t, export, lessons, words, unmapped)
 
 	data := t.TempDir()
 	when := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
@@ -118,10 +114,10 @@ func TestImportDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dry.Imported != 6 || dry.Duplicate != 1 || dry.SkippedUnmapped != 2 || dry.SkippedArchive != 1 || dry.MissingFile != 1 {
+	if dry.Imported != 8 || dry.Duplicate != 0 || dry.Unmapped != 3 || dry.HashMismatch != 0 || dry.TextMismatch != 0 || dry.Conflict != 1 || dry.Alias != 1 || dry.MissingFile != 1 {
 		t.Fatalf("dry-run counts: %+v", dry)
 	}
-	if dry.ByModel["eleven_v4"] != 3 || dry.ByModel["eleven_v3"] != 3 || dry.ByModel["legacy"] != 1 {
+	if dry.ByModel["eleven_v4"] != 6 || dry.ByModel["eleven_v3"] != 2 {
 		t.Fatalf("dry-run models: %+v", dry.ByModel)
 	}
 	if mp3Count(t, filepath.Join(data, "audio")) != 0 {
@@ -130,39 +126,47 @@ func TestImportDirectory(t *testing.T) {
 	if has, err := store.HasAudio(ctx, shaID(v4)); err != nil || has {
 		t.Fatalf("dry-run stored a row: has=%v err=%v", has, err)
 	}
-	assertReportLists(t, dry)
+	assertConflict(t, dry, "אֶחָד", "שְׁנַיִם")
 
 	got, err := Import(ctx, store, data, export, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Imported != 6 || got.Duplicate != 1 || got.SkippedUnmapped != 2 || got.SkippedArchive != 1 || got.MissingFile != 1 {
+	if got.Imported != 8 || got.Duplicate != 0 || got.Unmapped != 3 || got.Conflict != 1 || got.Alias != 1 || got.MissingFile != 1 {
 		t.Fatalf("import counts: %+v", got)
 	}
-	if mp3Count(t, filepath.Join(data, "audio")) != 6 {
-		t.Fatalf("mp3 files = %d, want 6", mp3Count(t, filepath.Join(data, "audio")))
+	if mp3Count(t, filepath.Join(data, "audio")) != 8 {
+		t.Fatalf("mp3 files = %d, want 8", mp3Count(t, filepath.Join(data, "audio")))
 	}
 	if body, err := os.ReadFile(filepath.Join(data, "audio", shaID(v4)+".mp3")); err != nil || !bytes.Equal(body, v4) {
 		t.Fatalf("v4 file = %q err=%v", body, err)
 	}
-	if _, err := os.Stat(filepath.Join(data, "audio", shaID(keep)+".mp3")); err != nil {
-		t.Fatal(err)
-	}
 
 	kam, ok, err := store.AudioByText(ctx, "קָם")
-	if err != nil || !ok || kam.ID != shaID(v4) || kam.Model != "eleven_v4" || kam.Voice != "voice-a" {
+	if err != nil || !ok || kam.ID != shaID(v4) || kam.Model != "eleven_v4" || kam.Voice != voice {
 		t.Fatalf("kam lookup = %+v ok=%v err=%v", kam, ok, err)
 	}
 	if has, err := store.HasAudio(ctx, shaID(v3)); err != nil || !has {
 		t.Fatalf("v3 row kept: has=%v err=%v", has, err)
 	}
-	kept, ok, err := store.AudioByText(ctx, "אֶחָד")
-	if err != nil || !ok || kept.ID != shaID(keep) || kept.Model != "eleven_v4" {
-		t.Fatalf("kept duplicate text = %+v ok=%v err=%v", kept, ok, err)
+	assertConflict(t, got, "אֶחָד", "שְׁנַיִם")
+	storedConflict := 0
+	for _, text := range []string{"אֶחָד", "שְׁנַיִם"} {
+		asset, ok, err := store.AudioByText(ctx, text)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok {
+			storedConflict++
+			if asset.ID != shaID(keep) {
+				t.Fatalf("conflict row = %+v", asset)
+			}
+		}
 	}
-	if _, ok, err := store.AudioByText(ctx, "שְׁנַיִם"); err != nil || ok {
-		t.Fatalf("losing duplicate text was stored: ok=%v err=%v", ok, err)
+	if storedConflict != 1 {
+		t.Fatalf("conflict stored %d texts, want the first path's text only", storedConflict)
 	}
+
 	wantNFC := norm.NFC.String(strings.TrimSpace(nfdText))
 	nfdGot, ok, err := store.AudioByText(ctx, wantNFC)
 	if err != nil || !ok {
@@ -179,13 +183,37 @@ func TestImportDirectory(t *testing.T) {
 		t.Fatalf("collapsed space = %+v ok=%v err=%v", spaceGot, ok, err)
 	}
 	lesson, ok, err := store.AudioByText(ctx, "בַּבֹּקֶר")
-	if err != nil || !ok || lesson.Voice != "" || lesson.Model != "legacy" || lesson.Bytes != int64(len(lessonBody)) {
+	if err != nil || !ok || lesson.Voice != voice || lesson.Model != "eleven_v4" || lesson.Bytes != int64(len(lessonBody)) {
 		t.Fatalf("lesson asset = %+v ok=%v err=%v", lesson, ok, err)
 	}
 	if _, ok, err := store.AudioByText(ctx, "אַרְכִיּוֹן"); err != nil || ok {
 		t.Fatalf("archive clip was stored: ok=%v err=%v", ok, err)
 	}
-	assertReportLists(t, got)
+
+	low, high := shaID(aliasA), shaID(aliasB)
+	if high < low {
+		low, high = high, low
+	}
+	chosen, ok, err := store.AudioByText(ctx, alias)
+	if err != nil || !ok || chosen.ID != low {
+		t.Fatalf("alias index = %+v ok=%v err=%v, want %s", chosen, ok, err, low)
+	}
+	if has, err := store.HasAudio(ctx, high); err != nil || !has {
+		t.Fatalf("alias asset stored: has=%v err=%v", has, err)
+	}
+	manifest := readManifest(t, got.ManifestPath)
+	aliasPaths := 0
+	for _, clip := range manifest {
+		if clip.Text == alias && clip.Alias {
+			aliasPaths++
+			if clip.ID != high {
+				t.Fatalf("alias entry = %+v, want id %s", clip, high)
+			}
+		}
+	}
+	if aliasPaths != 1 {
+		t.Fatalf("alias manifest paths = %d", aliasPaths)
+	}
 
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
@@ -195,10 +223,10 @@ func TestImportDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.Imported != 0 || again.Duplicate != 7 || again.SkippedUnmapped != 2 || again.SkippedArchive != 1 || again.MissingFile != 1 {
+	if again.Imported != 0 || again.Duplicate != 8 || again.Conflict != 1 || again.Alias != 1 || again.Unmapped != 3 || again.MissingFile != 1 {
 		t.Fatalf("re-run counts: %+v", again)
 	}
-	if mp3Count(t, filepath.Join(data, "audio")) != 6 {
+	if mp3Count(t, filepath.Join(data, "audio")) != 8 {
 		t.Fatal("re-run added an mp3")
 	}
 	kam, ok, err = later.AudioByText(ctx, "קָם")
@@ -214,48 +242,68 @@ func TestImportDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if repaired.Imported != 0 || repaired.Duplicate != 7 {
+	if repaired.Imported != 0 || repaired.Duplicate != 8 {
 		t.Fatalf("repair counts: %+v", repaired)
 	}
 	if body, err := os.ReadFile(v4Path); err != nil || !bytes.Equal(body, v4) {
 		t.Fatalf("repaired file %q err=%v", body, err)
 	}
-	kam, ok, err = later.AudioByText(ctx, "קָם")
-	if err != nil || !ok || !kam.CreatedAt.Equal(when) || kam.ID != shaID(v4) {
-		t.Fatalf("repair changed the row: %+v ok=%v err=%v", kam, ok, err)
-	}
-}
 
-func assertReportLists(t *testing.T, rep Report) {
-	t.Helper()
-	body, err := os.ReadFile(rep.ReportPath)
+	if err := os.WriteFile(v4Path, []byte("corrupt-bytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rewritten, err := Import(ctx, later, data, export, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var parsed struct {
-		Unmapped []string `json:"unmapped"`
-		Missing  []string `json:"missing"`
+	if rewritten.Duplicate != 8 || rewritten.Imported != 0 {
+		t.Fatalf("rehash counts: %+v", rewritten)
 	}
-	if err := json.Unmarshal(body, &parsed); err != nil {
+	if body, err := os.ReadFile(v4Path); err != nil || !bytes.Equal(body, v4) {
+		t.Fatalf("rehashed file %q err=%v", body, err)
+	}
+	kam, ok, err = later.AudioByText(ctx, "קָם")
+	if err != nil || !ok || !kam.CreatedAt.Equal(when) || kam.ID != shaID(v4) {
+		t.Fatalf("rehash changed the row: %+v ok=%v err=%v", kam, ok, err)
+	}
+}
+
+func TestImportMismatchesAreNotStored(t *testing.T) {
+	body := []byte("good-bytes")
+	badBody := []byte("other-bytes")
+	const voice = "voice-a"
+	export := t.TempDir()
+	textBad := lessonObj("demo", "audio/story/line-1.mp3", "שָׁלוֹם", voice, "eleven_v4", body, "deadbeef", "")
+	hashBad := lessonObj("demo", "audio/story/line-2.mp3", "שָׁלוֹם", voice, "eleven_v4", badBody, "", shaID(body))
+	wordBad := wordObj("קָם", voice, "eleven_v4", body, "not-the-cache-key.mp3")
+	writeFiles(t, export, map[string][]byte{
+		textBad["path"].(string): body,
+		hashBad["path"].(string): badBody,
+		wordBad["path"].(string): body,
+	})
+	writeMap(t, export, []any{textBad, hashBad}, []any{wordBad}, nil)
+
+	data := t.TempDir()
+	store := openStoreAt(t, data, time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC))
+	got, err := Import(context.Background(), store, data, export, Options{})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(parsed.Unmapped, ",") != strings.Join(rep.Unmapped, ",") {
-		t.Fatalf("report unmapped = %v, summary %v", parsed.Unmapped, rep.Unmapped)
+	if got.Imported != 0 || got.TextMismatch != 2 || got.HashMismatch != 1 || got.Conflict != 0 || got.MissingFile != 0 {
+		t.Fatalf("mismatch counts: %+v text=%+v hash=%+v", got, got.TextMismatches, got.HashMismatches)
 	}
-	wantUnmapped := []string{
-		"files/_audio/words/unmapped.mp3",
-		"files/demo/audio/sentences/empty.mp3",
+	if mp3Count(t, filepath.Join(data, "audio")) != 0 {
+		t.Fatal("mismatch stored an mp3")
 	}
-	if strings.Join(parsed.Unmapped, ",") != strings.Join(wantUnmapped, ",") {
-		t.Fatalf("unmapped = %v", parsed.Unmapped)
+	if _, ok, err := store.AudioByText(context.Background(), "שָׁלוֹם"); err != nil || ok {
+		t.Fatalf("mismatched text stored ok=%v err=%v", ok, err)
 	}
-	if len(parsed.Missing) != 1 || parsed.Missing[0] != "files/demo/audio/sentences/missing.mp3" {
-		t.Fatalf("missing = %v", parsed.Missing)
+	raw, err := os.ReadFile(got.ReportPath)
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, path := range append(append([]string{}, parsed.Unmapped...), parsed.Missing...) {
-		if strings.Contains(path, "/_archive/") {
-			t.Fatalf("archive path listed in the report: %s", path)
-		}
+	if !bytes.Contains(raw, []byte("textMismatch")) || !bytes.Contains(raw, []byte("hashMismatch")) {
+		t.Fatalf("report missing mismatch lists: %s", raw)
 	}
 }
 
@@ -263,28 +311,18 @@ func TestImportArchiveAndStdin(t *testing.T) {
 	export := t.TempDir()
 	word := []byte("word-bytes")
 	lesson := []byte("lesson-bytes")
-	for rel, body := range map[string][]byte{
-		"files/_audio/words/w.mp3":          word,
-		"files/demo/audio/story/line-1.mp3": lesson,
-		"files/_audio/words/skip.mp3":       []byte("nope"),
-		"files/demo/audio/_archive/old.mp3": []byte("old"),
-	} {
-		path := filepath.Join(export, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, body, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	raw := []byte(`{
-		"words": {"w.mp3": {"text": "שָׁלוֹם", "voiceId": "voice-z", "model": "eleven_v4"}},
-		"lessons": [{"lesson": "demo", "clip": "audio/story/line-1.mp3", "text": "בֹּקֶר טוֹב"}],
-		"unmapped_word_files": ["skip.mp3"]
-	}`)
-	if err := os.WriteFile(filepath.Join(export, "clip-text-map.json"), raw, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	wordClip := wordObj("שָׁלוֹם", "voice-z", "eleven_v4", word, "")
+	lessonClip := lessonObj("demo", "audio/story/line-1.mp3", "בֹּקֶר טוֹב", "voice-z", "eleven_v4", lesson, "", "")
+	writeFiles(t, export, map[string][]byte{
+		wordClip["path"].(string):     word,
+		lessonClip["path"].(string):   lesson,
+		"_audio/words/skip.mp3":       []byte("nope"),
+		"demo/audio/_archive/old.mp3": []byte("old"),
+	})
+	writeMap(t, export, []any{lessonClip}, []any{wordClip}, []any{
+		map[string]string{"reason": "word-not-in-manifest", "path": "_audio/words/skip.mp3"},
+		map[string]string{"reason": "archive", "path": "demo/audio/_archive/old.mp3"},
+	})
 	tgz := packExport(t, export, "bundle")
 
 	data := t.TempDir()
@@ -294,7 +332,7 @@ func TestImportArchiveAndStdin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Imported != 2 || got.Duplicate != 0 || got.SkippedUnmapped != 1 || got.SkippedArchive != 1 || got.MissingFile != 0 {
+	if got.Imported != 2 || got.Duplicate != 0 || got.Unmapped != 2 || got.MissingFile != 0 || got.Conflict != 0 {
 		t.Fatalf("tarball counts: %+v", got)
 	}
 	asset, ok, err := store.AudioByText(ctx, "שָׁלוֹם")
@@ -302,7 +340,7 @@ func TestImportArchiveAndStdin(t *testing.T) {
 		t.Fatalf("word from tarball = %+v ok=%v err=%v", asset, ok, err)
 	}
 	asset, ok, err = store.AudioByText(ctx, "בֹּקֶר טוֹב")
-	if err != nil || !ok || asset.Model != "legacy" || asset.Voice != "" || asset.ID != shaID(lesson) {
+	if err != nil || !ok || asset.Model != "eleven_v4" || asset.Voice != "voice-z" || asset.ID != shaID(lesson) {
 		t.Fatalf("lesson from tarball = %+v ok=%v err=%v", asset, ok, err)
 	}
 
@@ -316,7 +354,7 @@ func TestImportArchiveAndStdin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Imported != 2 || got.SkippedArchive != 1 || got.SkippedUnmapped != 1 {
+	if got.Imported != 2 || got.Unmapped != 2 {
 		t.Fatalf("stdin counts: %+v", got)
 	}
 	matches, err := filepath.Glob(filepath.Join(data2, "audio", ".import-stdin-*.tgz"))
@@ -329,32 +367,10 @@ func TestImportArchiveAndStdin(t *testing.T) {
 }
 
 func TestImportRejectsEscapingTarPath(t *testing.T) {
-	var buf bytes.Buffer
-	zw := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(zw)
-	body := []byte(`{"words":{},"lessons":[],"unmapped_word_files":[]}`)
-	if err := tw.WriteHeader(&tar.Header{Name: "clip-text-map.json", Mode: 0o644, Size: int64(len(body))}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tw.Write(body); err != nil {
-		t.Fatal(err)
-	}
-	evil := []byte("nope")
-	if err := tw.WriteHeader(&tar.Header{Name: "../evil.mp3", Mode: 0o644, Size: int64(len(evil))}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tw.Write(evil); err != nil {
-		t.Fatal(err)
-	}
-	if err := tw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := zw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	data := t.TempDir()
-	store := openStoreAt(t, data, time.Date(2026, 10, 18, 8, 0, 0, 0, time.UTC))
-	_, err := Import(context.Background(), store, data, "", Options{Archive: &buf})
+	_, err := importRawTar(t, []tarFile{
+		{name: "clip-text-map.json", body: v2Map(nil, nil, nil)},
+		{name: "../evil.mp3", body: []byte("nope")},
+	})
 	if err == nil || !strings.Contains(err.Error(), "escapes") {
 		t.Fatalf("escaping path error = %v", err)
 	}
@@ -420,6 +436,150 @@ func TestAudioByTextPreference(t *testing.T) {
 	if _, ok, err := store.AudioByText(ctx, "אֵין"); err != nil || ok {
 		t.Fatalf("missing text ok=%v err=%v", ok, err)
 	}
+}
+
+func lessonObj(lesson, clip, text, voice, model string, body []byte, textHash, sha string) map[string]any {
+	if textHash == "" {
+		textHash = contentHash(voice, model, text)
+	}
+	if sha == "" && body != nil {
+		sha = shaID(body)
+	}
+	return map[string]any{
+		"source":   "lesson",
+		"lesson":   lesson,
+		"clip":     clip,
+		"path":     lesson + "/" + clip,
+		"text":     text,
+		"voiceId":  voice,
+		"model":    model,
+		"textHash": textHash,
+		"sha256":   sha,
+		"verified": true,
+	}
+}
+
+func wordObj(text, voice, model string, body []byte, file string) map[string]any {
+	if file == "" {
+		file = wordFileName(voice, model, text)
+	}
+	sha := ""
+	if body != nil {
+		sha = shaID(body)
+	}
+	return map[string]any{
+		"source":   "word",
+		"file":     file,
+		"path":     "_audio/words/" + file,
+		"text":     text,
+		"voiceId":  voice,
+		"model":    model,
+		"sha256":   sha,
+		"verified": true,
+	}
+}
+
+func writeMap(t *testing.T, dir string, lessons, words, unmapped []any) {
+	t.Helper()
+	if lessons == nil {
+		lessons = []any{}
+	}
+	if words == nil {
+		words = []any{}
+	}
+	if unmapped == nil {
+		unmapped = []any{}
+	}
+	raw, err := json.Marshal(map[string]any{
+		"schema":   clipMapSchema,
+		"lessons":  lessons,
+		"words":    words,
+		"unmapped": unmapped,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "clip-text-map.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func v2Map(lessons, words, unmapped []any) []byte {
+	if lessons == nil {
+		lessons = []any{}
+	}
+	if words == nil {
+		words = []any{}
+	}
+	if unmapped == nil {
+		unmapped = []any{}
+	}
+	raw, err := json.Marshal(map[string]any{
+		"schema":   clipMapSchema,
+		"lessons":  lessons,
+		"words":    words,
+		"unmapped": unmapped,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return raw
+}
+
+func writeFiles(t *testing.T, dir string, files map[string][]byte) {
+	t.Helper()
+	for rel, body := range files {
+		path := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, body, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func assertConflict(t *testing.T, rep Report, texts ...string) {
+	t.Helper()
+	if len(rep.Conflicts) != 1 || len(rep.Conflicts[0].Clips) != 2 {
+		t.Fatalf("conflicts = %+v", rep.Conflicts)
+	}
+	got := map[string]bool{}
+	for _, clip := range rep.Conflicts[0].Clips {
+		got[clip.Text] = true
+		if clip.Path == "" {
+			t.Fatalf("conflict clip missing path: %+v", clip)
+		}
+	}
+	for _, text := range texts {
+		if !got[text] {
+			t.Fatalf("conflict texts = %+v, missing %s", rep.Conflicts, text)
+		}
+	}
+	body, err := os.ReadFile(rep.ReportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range texts {
+		if !bytes.Contains(body, []byte(text)) {
+			t.Fatalf("report does not list %s: %s", text, body)
+		}
+	}
+}
+
+func readManifest(t *testing.T, path string) []ManifestEntry {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed struct {
+		Clips []ManifestEntry `json:"clips"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	return parsed.Clips
 }
 
 func packExport(t *testing.T, dir, prefix string) string {

@@ -21,7 +21,7 @@ type Asset struct {
 }
 
 // audioByTextQuery prefers the newest known model, then the newest
-// created_at. created_at is formatTime, so the text order matches time
+// created_at. created_at is FormatTime, so the text order matches time
 // order. id is the last key so two rows with the same model and timestamp
 // still resolve the same way every call.
 //
@@ -63,7 +63,7 @@ func (s *Store) InsertAudio(ctx context.Context, a Asset) (inserted bool, err er
 	res, err := conn.ExecContext(ctx, `
 		INSERT OR IGNORE INTO audio_assets (id, text_nfc, voice, model, bytes, created_at)
 		VALUES (?, ?, ?, ?, ?, ?)`,
-		a.ID, a.TextNFC, a.Voice, a.Model, a.Bytes, formatTime(at),
+		a.ID, a.TextNFC, a.Voice, a.Model, a.Bytes, FormatTime(at),
 	)
 	if err != nil {
 		return false, fmt.Errorf("db: insert audio: %w", err)
@@ -109,7 +109,7 @@ func (s *Store) AudioByText(ctx context.Context, textNFC string) (Asset, bool, e
 	if err != nil {
 		return Asset{}, false, fmt.Errorf("db: audio by text: %w", err)
 	}
-	a.CreatedAt, err = parseTime(created)
+	a.CreatedAt, err = ParseTime(created)
 	if err != nil {
 		return Asset{}, false, fmt.Errorf("db: audio by text: %w", err)
 	}

@@ -17,55 +17,64 @@ import (
 
 func TestClipMapFixture(t *testing.T) {
 	m := loadFixtureMap(t)
-	if len(m.Words) != 104 {
-		t.Fatalf("words = %d, want 104", len(m.Words))
+	if m.Schema != clipMapSchema {
+		t.Fatalf("schema %q", m.Schema)
 	}
-	if len(m.Lessons) != 397 {
-		t.Fatalf("lessons = %d, want 397", len(m.Lessons))
-	}
-	if len(m.UnmappedWordFiles) != 23 {
-		t.Fatalf("unmapped = %d, want 23", len(m.UnmappedWordFiles))
+	if len(m.Lessons) != 5 || len(m.Words) != 2 || len(m.Unmapped) != 2 {
+		t.Fatalf("lessons=%d words=%d unmapped=%d", len(m.Lessons), len(m.Words), len(m.Unmapped))
 	}
 	var v3, v4 int
-	notNFC := 0
-	for name, word := range m.Words {
+	for _, word := range m.Words {
 		switch word.Model {
 		case "eleven_v4":
 			v4++
 		case "eleven_v3":
 			v3++
 		default:
-			t.Errorf("word %s model %q", name, word.Model)
+			t.Errorf("word %s model %q", word.Path, word.Model)
 		}
-		if !norm.NFC.IsNormalString(word.Text) {
-			notNFC++
+		if path.Base(word.Path) != wordFileName(word.VoiceID, word.Model, word.Text) {
+			t.Errorf("word %s is not cacheKey(voice, model, text.trim())", word.Path)
 		}
 		assertNormalized(t, word.Text)
 	}
+	if v3 != 1 || v4 != 1 {
+		t.Fatalf("word models v3=%d v4=%d", v3, v4)
+	}
+	var corrected mappedClip
+	foundCorrected := false
 	for _, lesson := range m.Lessons {
-		if strings.Contains(lesson.Clip, "/_archive/") || strings.Contains(lesson.Lesson, "/_archive/") {
-			t.Errorf("archive path in the lesson map: %s/%s", lesson.Lesson, lesson.Clip)
+		if lesson.Source != "lesson" {
+			t.Errorf("lesson source %q", lesson.Source)
 		}
-		if !norm.NFC.IsNormalString(lesson.Text) {
-			notNFC++
+		if contentHash(lesson.VoiceID, lesson.Model, lesson.Text) != strings.ToLower(lesson.TextHash) {
+			t.Errorf("lesson %s text hash mismatch", lesson.Path)
+		}
+		if strings.Contains(lesson.Path, "/_archive/") {
+			t.Errorf("archive path in the lesson map: %s", lesson.Path)
 		}
 		assertNormalized(t, lesson.Text)
-	}
-	if v4 != 96 || v3 != 8 {
-		t.Fatalf("models eleven_v4=%d eleven_v3=%d, want 96 and 8", v4, v3)
-	}
-	if notNFC == 0 {
-		t.Fatal("fixture has no NFD text, so normalization is not exercised")
-	}
-	unmapped := map[string]bool{}
-	for _, name := range m.UnmappedWordFiles {
-		if _, dup := unmapped[name]; dup {
-			t.Fatalf("duplicate unmapped name %s", name)
+		if lesson.Lesson == "date-night-maadif-infinitive" && lesson.Clip == "audio/story/line-3.mp3" {
+			corrected = lesson
+			foundCorrected = true
 		}
-		unmapped[name] = true
-		if _, mapped := m.Words[name]; mapped {
-			t.Fatalf("unmapped word %s is also mapped", name)
-		}
+	}
+	if !foundCorrected {
+		t.Fatal("fixture is missing the corrected direct-speech clip")
+	}
+	const full = "הִיא שׁוֹאֶלֶת: \"מָה אַתָּה מַעֲדִיף לַעֲשׂוֹת הָעֶרֶב?\""
+	if corrected.Text != full {
+		t.Fatalf("corrected text %q", corrected.Text)
+	}
+	reasons := map[string]string{}
+	for _, item := range m.Unmapped {
+		reasons[item.Path] = item.Reason
+	}
+	if reasons["_audio/words/1828c011c5e8e563ce974431.mp3"] != "word-not-in-manifest" {
+		t.Fatalf("unmapped words: %+v", reasons)
+	}
+	if reasons["anal-sex-vocab/audio/_archive/friend-1.94ba0ad93fdd.mp3"] != "archive" {
+		t.Fatalf("unmapped archive: %+v", reasons)
 	}
 }
 
@@ -76,74 +85,103 @@ func TestImportRealMapDryRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rep.Imported != 0 || rep.Duplicate != 0 || rep.SkippedUnmapped != 23 || rep.SkippedArchive != 0 || rep.MissingFile != 501 {
+	if rep.Imported != 0 || rep.Duplicate != 0 || rep.Unmapped != 2 || rep.HashMismatch != 0 || rep.TextMismatch != 0 || rep.Conflict != 0 || rep.Alias != 0 || rep.MissingFile != 7 {
 		t.Fatalf("real map dry-run: %+v", rep)
 	}
 	if len(rep.ByModel) != 0 {
 		t.Fatalf("models counted without files: %+v", rep.ByModel)
 	}
-	if len(rep.Missing) != 501 || len(rep.Unmapped) != 23 {
-		t.Fatalf("lists missing=%d unmapped=%d", len(rep.Missing), len(rep.Unmapped))
+	if !containsAll(rep.Missing,
+		"my-morning/audio/story/line-1.mp3",
+		"_audio/words/ee2f7d856aaa3bd643275012.mp3",
+	) {
+		t.Fatalf("missing = %v", rep.Missing)
 	}
 	for _, rel := range rep.Missing {
-		if !strings.HasPrefix(rel, "files/") || strings.Contains(rel, "/_archive/") {
+		if strings.HasPrefix(rel, "files/") || strings.Contains(rel, "/_archive/") {
 			t.Fatalf("missing path %s", rel)
 		}
 	}
-	for _, rel := range rep.Unmapped {
-		if !strings.HasPrefix(rel, "files/_audio/words/") {
-			t.Fatalf("unmapped path %s", rel)
+	var sawWord, sawArchive bool
+	for _, item := range rep.UnmappedItems {
+		switch item.Reason {
+		case "word-not-in-manifest":
+			sawWord = true
+		case "archive":
+			sawArchive = strings.Contains(item.Path, "/_archive/")
 		}
 	}
-	if !containsAll(rep.Missing,
-		"files/my-morning/audio/story/line-1.mp3",
-		"files/_audio/words/ee2f7d856aaa3bd643275012.mp3",
-	) {
-		t.Fatal("expected my-morning and word paths in the missing list")
+	if !sawWord || !sawArchive {
+		t.Fatalf("unmapped = %+v", rep.UnmappedItems)
 	}
 	if mp3Count(t, filepath.Join(data, "audio")) != 0 {
 		t.Fatal("dry-run wrote an mp3")
 	}
 }
 
+func TestPartTextEveryWorksheet(t *testing.T) {
+	m := loadFixtureMap(t)
+	sheets := loadWorksheets(t)
+	if len(sheets) < 2 {
+		t.Fatalf("worksheets = %d, want my-morning and a direct/reported lesson", len(sheets))
+	}
+	checked := 0
+	for id, sheet := range sheets {
+		stories := storyClips(m, id)
+		if len(stories) != len(sheet.Reading.Paragraphs) || len(stories) != len(sheet.Reading.Audio) {
+			t.Fatalf("%s stories=%d paragraphs=%d audio=%d", id, len(stories), len(sheet.Reading.Paragraphs), len(sheet.Reading.Audio))
+		}
+		for i, story := range stories {
+			line, err := joinParagraph(sheet.Reading.Paragraphs[i])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if story.Clip != sheet.Reading.Audio[i] || story.Text != line {
+				t.Fatalf("%s story %d: map %s %q, worksheet %s %q", id, i, story.Clip, story.Text, sheet.Reading.Audio[i], line)
+			}
+			checked++
+		}
+	}
+	if checked < 5 {
+		t.Fatalf("checked %d story lines", checked)
+	}
+}
+
 func TestMyMorningStoryOrder(t *testing.T) {
 	m := loadFixtureMap(t)
-	var stories []lessonClip
-	for _, lesson := range m.Lessons {
-		if lesson.Lesson != "my-morning" || !strings.Contains(lesson.Clip, "/story/") {
-			continue
-		}
-		stories = append(stories, lesson)
-	}
-	sort.Slice(stories, func(i, j int) bool {
-		return storyOrdinal(stories[i].Clip) < storyOrdinal(stories[j].Clip)
-	})
-	sheet := loadWorksheet(t, "testdata/my-morning-worksheet.js")
-	if sheet.ID != "my-morning" {
-		t.Fatalf("worksheet id %q", sheet.ID)
-	}
-	if len(stories) != len(sheet.Reading.Paragraphs) || len(stories) != len(sheet.Reading.Audio) {
-		t.Fatalf("stories=%d paragraphs=%d audio=%d", len(stories), len(sheet.Reading.Paragraphs), len(sheet.Reading.Audio))
-	}
-	lines := make([]string, len(sheet.Reading.Paragraphs))
-	for i, raw := range sheet.Reading.Paragraphs {
-		line, err := joinParagraph(raw)
-		if err != nil {
-			t.Fatal(err)
-		}
-		lines[i] = line
-	}
-	for i, story := range stories {
-		if story.Clip != sheet.Reading.Audio[i] || story.Text != lines[i] {
-			t.Fatalf("story %d: map %s %q, worksheet %s %q", i, story.Clip, story.Text, sheet.Reading.Audio[i], lines[i])
-		}
-	}
+	stories := storyClips(m, "my-morning")
 	if stories[0].Clip != "audio/story/line-1.mp3" || stories[0].Text != "בַּבֹּקֶר אֲנִי קָם." {
 		t.Fatalf("first pair: %s %q", stories[0].Clip, stories[0].Text)
 	}
 	last := stories[len(stories)-1]
 	if last.Clip != "audio/story/line-4.mp3" || last.Text != "אַחַר כָּךְ אֲנִי יוֹצֵא לָעֲבוֹדָה." {
 		t.Fatalf("last pair: %s %q", last.Clip, last.Text)
+	}
+}
+
+func TestPartTextReportedDirectStrong(t *testing.T) {
+	// origin/main shared/player/utils.js HebrewUtils.partText, and the
+	// recursive form in the v2 map generator: reported || direct || strong ||
+	// word, then the same function on that value.
+	cases := []struct {
+		raw  string
+		want string
+	}{
+		{`["הִיא שׁוֹאֶלֶת: ",{"direct":"\"מָה אַתָּה מַעֲדִיף לַעֲשׂוֹת הָעֶרֶב?\""}]`, "הִיא שׁוֹאֶלֶת: \"מָה אַתָּה מַעֲדִיף לַעֲשׂוֹת הָעֶרֶב?\""},
+		{`{"reported":[{"strong":"שַׁי "},"אָמַר לִי ."]}`, "שַׁי אָמַר לִי ."},
+		{`{"reported":"","direct":"שָׁלוֹם"}`, "שָׁלוֹם"},
+		{`{"word":"קָם"}`, "קָם"},
+		{`"בַּבֹּקֶר"`, "בַּבֹּקֶר"},
+		{`{"strong":["אֲנִי ","קָם"]}`, "אֲנִי קָם"},
+	}
+	for _, tc := range cases {
+		got, err := joinParagraph(json.RawMessage(tc.raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != tc.want {
+			t.Fatalf("partText(%s) = %q, want %q", tc.raw, got, tc.want)
+		}
 	}
 }
 
@@ -156,6 +194,32 @@ func TestStoryOrdinalSortsNumerically(t *testing.T) {
 	if strings.Join(clips, ",") != strings.Join(want, ",") {
 		t.Fatalf("sorted %v", clips)
 	}
+}
+
+func TestNormalizeTextStripsFormatCharacters(t *testing.T) {
+	got := NormalizeText("קָם\u200e")
+	if got != "קָם" {
+		t.Fatalf("NormalizeText kept a format character: %q", got)
+	}
+	if NormalizeText("\ufeffבַּ  בֹּקֶר") != "בַּ בֹּקֶר" {
+		t.Fatalf("bom/spaces: %q", NormalizeText("\ufeffבַּ  בֹּקֶר"))
+	}
+	if !norm.NFC.IsNormalString(got) {
+		t.Fatal("result is not NFC")
+	}
+}
+
+func storyClips(m clipMap, lesson string) []mappedClip {
+	var stories []mappedClip
+	for _, clip := range m.Lessons {
+		if clip.Lesson == lesson && strings.Contains(clip.Clip, "/story/") {
+			stories = append(stories, clip)
+		}
+	}
+	sort.Slice(stories, func(i, j int) bool {
+		return storyOrdinal(stories[i].Clip) < storyOrdinal(stories[j].Clip)
+	})
+	return stories
 }
 
 func storyOrdinal(clip string) int {
@@ -189,8 +253,8 @@ func assertNormalized(t *testing.T, text string) {
 	if !norm.NFC.IsNormalString(got) {
 		t.Fatalf("normalized text is not NFC: %q", got)
 	}
-	if got != norm.NFC.String(strings.Join(strings.Fields(text), " ")) {
-		t.Fatalf("NormalizeText(%q) = %q", text, got)
+	if got != text {
+		t.Fatalf("fixture text is not normalized: %q -> %q", text, got)
 	}
 }
 
@@ -200,6 +264,23 @@ type worksheet struct {
 		Paragraphs []json.RawMessage `json:"paragraphs"`
 		Audio      []string          `json:"audio"`
 	} `json:"reading"`
+}
+
+func loadWorksheets(t *testing.T) map[string]worksheet {
+	t.Helper()
+	matches, err := filepath.Glob("testdata/*-worksheet.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]worksheet{}
+	for _, path := range matches {
+		sheet := loadWorksheet(t, path)
+		if _, dup := out[sheet.ID]; dup {
+			t.Fatalf("duplicate worksheet %s", sheet.ID)
+		}
+		out[sheet.ID] = sheet
+	}
+	return out
 }
 
 func loadWorksheet(t *testing.T, path string) worksheet {
@@ -222,34 +303,83 @@ func loadWorksheet(t *testing.T, path string) worksheet {
 	return sheet
 }
 
+// joinParagraph is storyPlain's per-paragraph step: partText, then trim.
+// partText is HebrewUtils.partText from origin/main shared/player/utils.js
+// (reported || direct || strong || word). Nested objects and arrays are
+// visited again, which is the generator's recursive form of that function.
 func joinParagraph(raw json.RawMessage) (string, error) {
-	var parts []json.RawMessage
-	if err := json.Unmarshal(raw, &parts); err != nil {
+	s, err := partText(raw)
+	if err != nil {
 		return "", err
 	}
-	var b strings.Builder
-	for _, part := range parts {
-		part = bytesTrim(part)
-		if len(part) == 0 {
-			continue
+	return strings.TrimSpace(s), nil
+}
+
+func partText(raw json.RawMessage) (string, error) {
+	raw = bytesTrim(raw)
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", nil
+	}
+	switch raw[0] {
+	case '"':
+		var s string
+		if err := json.Unmarshal(raw, &s); err != nil {
+			return "", err
 		}
-		if part[0] == '"' {
-			var s string
-			if err := json.Unmarshal(part, &s); err != nil {
+		return s, nil
+	case '[':
+		var parts []json.RawMessage
+		if err := json.Unmarshal(raw, &parts); err != nil {
+			return "", err
+		}
+		var b strings.Builder
+		for _, part := range parts {
+			s, err := partText(part)
+			if err != nil {
 				return "", err
 			}
 			b.WriteString(s)
-			continue
 		}
-		var obj struct {
-			Word string `json:"word"`
-		}
-		if err := json.Unmarshal(part, &obj); err != nil {
+		return b.String(), nil
+	case '{':
+		var obj map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &obj); err != nil {
 			return "", err
 		}
-		b.WriteString(obj.Word)
+		for _, key := range []string{"reported", "direct", "strong", "word"} {
+			v, ok := obj[key]
+			if !ok || jsFalsy(v) {
+				continue
+			}
+			return partText(v)
+		}
+		return "", nil
+	default:
+		return "", nil
 	}
-	return b.String(), nil
+}
+
+func jsFalsy(raw json.RawMessage) bool {
+	raw = bytesTrim(raw)
+	if len(raw) == 0 || string(raw) == "null" {
+		return true
+	}
+	var v any
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return true
+	}
+	switch t := v.(type) {
+	case nil:
+		return true
+	case bool:
+		return !t
+	case string:
+		return t == ""
+	case float64:
+		return t == 0
+	default:
+		return false
+	}
 }
 
 func bytesTrim(b []byte) []byte {
