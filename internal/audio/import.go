@@ -2,7 +2,6 @@ package audio
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -27,7 +26,6 @@ import (
 const (
 	importReportName   = "import-unmapped.json"
 	importManifestName = "import-manifest.json"
-	clipMapSchema      = "hebrew-clip-text-map/v2"
 )
 
 // Caps keep a hostile or truncated archive from filling the disk.
@@ -62,11 +60,12 @@ type Options struct {
 // _audio/ sit next to the map, with no files/ prefix. A single archive
 // prefix, such as bundle/clip-text-map.json, is stripped.
 //
-// Every mapped clip is checked before it is stored. sha256 of the mp3 bytes
-// must equal the map's sha256. sha256 of voiceId, model, and text.trim()
-// joined by NUL must equal a lesson's textHash, and a word's file name must
-// be the first 24 hex characters of that digest plus ".mp3". A miss is
-// hash-mismatch or text-mismatch and is not stored.
+// Every mapped clip is checked before it is stored. When the map entry has
+// a sha256, the mp3 bytes must hash to it (hash-mismatch otherwise). An
+// entry with no sha256 is still stored under the hash of its bytes.
+// sha256 of voiceId, model, and text.trim() joined by NUL must equal a
+// lesson's textHash, and a word's file name must be the first 24 hex
+// characters of that digest plus ".mp3" (text-mismatch otherwise).
 //
 // Unmapped entries are listed and not stored. The same bytes with two
 // different texts are a conflict: both paths and texts are reported, and
@@ -158,30 +157,6 @@ func unlinkOnSignal(path string) func() {
 	}
 }
 
-type clipMap struct {
-	Schema   string       `json:"schema"`
-	Lessons  []mappedClip `json:"lessons"`
-	Words    []mappedClip `json:"words"`
-	Unmapped []struct {
-		Reason string `json:"reason"`
-		Path   string `json:"path"`
-		SHA256 string `json:"sha256"`
-	} `json:"unmapped"`
-}
-
-type mappedClip struct {
-	Source   string `json:"source"`
-	Lesson   string `json:"lesson"`
-	Clip     string `json:"clip"`
-	File     string `json:"file"`
-	Path     string `json:"path"`
-	Text     string `json:"text"`
-	VoiceID  string `json:"voiceId"`
-	Model    string `json:"model"`
-	TextHash string `json:"textHash"`
-	SHA256   string `json:"sha256"`
-}
-
 type planned struct {
 	rel   string
 	text  string
@@ -228,9 +203,6 @@ type builder struct {
 }
 
 func plan(m clipMap) (*builder, error) {
-	if m.Schema != clipMapSchema {
-		return nil, fmt.Errorf("audio: clip map schema %q, want %s", m.Schema, clipMapSchema)
-	}
 	b := &builder{
 		mapped:   map[string]planned{},
 		textBad:  map[string]refusedText{},
@@ -520,7 +492,7 @@ func (b *builder) onFile(ctx context.Context, rel string, r io.Reader) error {
 	}
 	sum := sha256.Sum256(body)
 	id := hex.EncodeToString(sum[:])
-	if clip.sha == "" || id != clip.sha {
+	if clip.sha != "" && id != clip.sha {
 		b.hashMismatches = append(b.hashMismatches, Mismatch{Path: rel, Want: clip.sha, Got: id})
 		return nil
 	}
@@ -919,7 +891,7 @@ func loadMapFile(path string) (clipMap, error) {
 	if err != nil {
 		return clipMap{}, fmt.Errorf("audio: read clip map: %w", err)
 	}
-	return decodeMap(body)
+	return parseClipMap(body)
 }
 
 func readLimitedN(r io.Reader, max int64) ([]byte, error) {
@@ -931,15 +903,6 @@ func readLimitedN(r io.Reader, max int64) ([]byte, error) {
 		return nil, fmt.Errorf("exceeds %d bytes", max)
 	}
 	return body, nil
-}
-
-func decodeMap(body []byte) (clipMap, error) {
-	dec := json.NewDecoder(bytes.NewReader(body))
-	var m clipMap
-	if err := dec.Decode(&m); err != nil {
-		return clipMap{}, fmt.Errorf("audio: parse clip map: %w", err)
-	}
-	return m, nil
 }
 
 func mapFromArchive(tarPath string) (clipMap, string, error) {
@@ -993,7 +956,7 @@ func mapFromArchive(tarPath string) (clipMap, string, error) {
 	if found > 1 {
 		return clipMap{}, "", errors.New("audio: archive contains more than one clip-text-map.json")
 	}
-	m, err := decodeMap(raw)
+	m, err := parseClipMap(raw)
 	if err != nil {
 		return clipMap{}, "", err
 	}

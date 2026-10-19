@@ -1,11 +1,5 @@
 {
   "schema": "hebrew-clip-text-map/v2",
-  "generated": "2026-10-18T23:55:17.967Z",
-  "hash": {
-    "lesson": "sha256(voiceId+\"\\0\"+model+\"\\0\"+text.trim()) == <lesson>/audio/manifest.json clips[clip]",
-    "word": "file name == first 24 hex of sha256(voiceId\\0model\\0text.trim())",
-    "file": "sha256 of mp3 bytes"
-  },
   "lessons": [
     {
       "source": "lesson",
@@ -15,9 +9,7 @@
       "text": "בַּבֹּקֶר אֲנִי קָם.",
       "voiceId": "6WRlPmU1fqPwYbSxeP16",
       "model": "eleven_v4",
-      "textHash": "c03bdaca37f198fc893a6cf644c2e4006f7195629669eaf1d81ee0db31445a4f",
-      "sha256": "7b26000ede08387a708a5d8057244ee19b443114d3ebde6475100c227e8370e7",
-      "verified": true
+      "textHash": "c03bdaca37f198fc893a6cf644c2e4006f7195629669eaf1d81ee0db31445a4f"
     },
     {
       "source": "lesson",
@@ -27,9 +19,7 @@
       "text": "גַּם הִיא קָמָה בַּבֹּקֶר.",
       "voiceId": "6WRlPmU1fqPwYbSxeP16",
       "model": "eleven_v4",
-      "textHash": "79d40d56d3fc5f5019d9a3a36789514f99232427b20812b9dee2b7589bb48eae",
-      "sha256": "41984f4da8ecaa1cc11681002b7572377b7c6e6f1e51eeaeddce78ae69beadbc",
-      "verified": true
+      "textHash": "79d40d56d3fc5f5019d9a3a36789514f99232427b20812b9dee2b7589bb48eae"
     },
     {
       "source": "lesson",
@@ -39,9 +29,7 @@
       "text": "אֲנִי שׁוֹתֶה קָפֶה. גַּם הִיא שׁוֹתָה קָפֶה.",
       "voiceId": "6WRlPmU1fqPwYbSxeP16",
       "model": "eleven_v4",
-      "textHash": "bbf0a47e2000b82e1a6a43f51739483f50f654ac2cf656f3f5730680f085daa8",
-      "sha256": "6c0d5e40dde1bc8a6452b5665d6f581d9bce7e31874ab38914739ed261051aac",
-      "verified": true
+      "textHash": "bbf0a47e2000b82e1a6a43f51739483f50f654ac2cf656f3f5730680f085daa8"
     },
     {
       "source": "lesson",
@@ -51,9 +39,7 @@
       "text": "אַחַר כָּךְ אֲנִי יוֹצֵא לָעֲבוֹדָה.",
       "voiceId": "6WRlPmU1fqPwYbSxeP16",
       "model": "eleven_v4",
-      "textHash": "68051cbfd10d0947d4f1a8e712528237480a84f8c34913b4dc4044178cd28d54",
-      "sha256": "c020cd7eca4f34fe75a473b4f2745c2c50950c99e77d1c5522fd69a45031b09a",
-      "verified": true
+      "textHash": "68051cbfd10d0947d4f1a8e712528237480a84f8c34913b4dc4044178cd28d54"
     },
     {
       "source": "lesson",
@@ -63,9 +49,7 @@
       "text": "הִיא שׁוֹאֶלֶת: \"מָה אַתָּה מַעֲדִיף לַעֲשׂוֹת הָעֶרֶב?\"",
       "voiceId": "6WRlPmU1fqPwYbSxeP16",
       "model": "eleven_v4",
-      "textHash": "af797ad7992c22a45ce5b5b359af81422250ec0ca4d8d9d8dc9d7ff681425518",
-      "sha256": "658e0c6cc75bee87cd54f2774edfa3ab72086a69315bc78646f4702b9ba93460",
-      "verified": true
+      "textHash": "af797ad7992c22a45ce5b5b359af81422250ec0ca4d8d9d8dc9d7ff681425518"
     }
   ],
   "words": [
@@ -75,9 +59,7 @@
       "path": "_audio/words/806bb3fc99c984531106aeb5.mp3",
       "text": "קָם",
       "voiceId": "6WRlPmU1fqPwYbSxeP16",
-      "model": "eleven_v3",
-      "sha256": "4fc009ac8411bd8b509d0bfff3b8a8043c977539baac2cfde3b8cfc7f155db16",
-      "verified": true
+      "model": "eleven_v3"
     },
     {
       "source": "word",
@@ -85,25 +67,17 @@
       "path": "_audio/words/ee2f7d856aaa3bd643275012.mp3",
       "text": "קָם",
       "voiceId": "6WRlPmU1fqPwYbSxeP16",
-      "model": "eleven_v4",
-      "sha256": "998db6b6d96f1341e5b878df6eb6f01655078db5c65e0c96e1b76c49eced296a",
-      "verified": true
+      "model": "eleven_v4"
     }
   ],
   "unmapped": [
     {
       "reason": "word-not-in-manifest",
-      "path": "_audio/words/1828c011c5e8e563ce974431.mp3",
-      "sha256": "c8d9e2c245610bebae2be1ae21005dbf121908af34ecedd61bf84054ca1f4773"
+      "path": "_audio/words/1828c011c5e8e563ce974431.mp3"
     },
     {
       "reason": "archive",
-      "path": "anal-sex-vocab/audio/_archive/friend-1.94ba0ad93fdd.mp3",
-      "sha256": "94ba0ad93fdd49f22b9e845288eb230294db04caca70e71be00168643b984351"
+      "path": "anal-sex-vocab/audio/_archive/friend-1.94ba0ad93fdd.mp3"
     }
-  ],
-  "conflicts": {
-    "sameText": [],
-    "sameBytesDifferentText": []
-  }
+  ]
 }

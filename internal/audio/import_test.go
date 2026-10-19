@@ -268,6 +268,28 @@ func TestImportDirectory(t *testing.T) {
 	}
 }
 
+func TestImportStoresClipWhenSHA256IsAbsent(t *testing.T) {
+	body := []byte("no-map-sha")
+	word := wordObj("קָם", "voice-a", "eleven_v4", body, "")
+	delete(word, "sha256")
+	export := t.TempDir()
+	writeFiles(t, export, map[string][]byte{word["path"].(string): body})
+	writeMap(t, export, nil, []any{word}, nil)
+	data := t.TempDir()
+	store := openStoreAt(t, data, time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC))
+	got, err := Import(context.Background(), store, data, export, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Imported != 1 || got.HashMismatch != 0 || got.TextMismatch != 0 {
+		t.Fatalf("counts: %+v", got)
+	}
+	asset, ok, err := store.AudioByText(context.Background(), "קָם")
+	if err != nil || !ok || asset.ID != shaID(body) {
+		t.Fatalf("stored = %+v ok=%v err=%v", asset, ok, err)
+	}
+}
+
 func TestImportMismatchesAreNotStored(t *testing.T) {
 	body := []byte("good-bytes")
 	badBody := []byte("other-bytes")

@@ -79,9 +79,20 @@ func TestClipMapFixture(t *testing.T) {
 }
 
 func TestImportRealMapDryRun(t *testing.T) {
+	// The importer reads clip-text-map.json from the bundle root. The
+	// testdata file is only the fixture copied into that bundle.
+	src := t.TempDir()
+	raw, err := os.ReadFile("testdata/clip-text-map.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "clip-text-map.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bundle := packExport(t, src, "bundle")
 	data := t.TempDir()
 	store := openStoreAt(t, data, time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC))
-	rep, err := Import(context.Background(), store, data, "testdata", Options{DryRun: true})
+	rep, err := Import(context.Background(), store, data, bundle, Options{DryRun: true})
 	if err != nil {
 		t.Fatal(err)
 	}
