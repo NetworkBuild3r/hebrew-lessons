@@ -70,7 +70,7 @@ func connectAppMCP(t *testing.T, h http.Handler, token string) *mcp.ClientSessio
 	t.Cleanup(srv.Close)
 	client := mcp.NewClient(&mcp.Implementation{Name: "adapter-test", Version: "0"}, nil)
 	session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{
-		Endpoint:             srv.URL,
+		Endpoint:             srv.URL + "/mcp",
 		DisableStandaloneSSE: true,
 		MaxRetries:           -1,
 		HTTPClient:           &http.Client{Transport: bearerRoundTrip{token: token}},

@@ -37,14 +37,15 @@ func configFromEnv() (app.Config, error) {
 		CookieSecure:       cookieSecure,
 		Dev:                dev,
 		LogLevel:           logLevel,
-		GoogleClientID:     strings.TrimSpace(os.Getenv("GOOGLE_CLIENT_ID")),
-		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
-		GoogleAuthURL:      strings.TrimSpace(os.Getenv("GOOGLE_AUTH_URL")),
-		GoogleTokenURL:     strings.TrimSpace(os.Getenv("GOOGLE_TOKEN_URL")),
-		GoogleUserinfoURL:  strings.TrimSpace(os.Getenv("GOOGLE_USERINFO_URL")),
+		GoogleClientID:     firstSet("GOOGLE_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_ID", "web_client_id", "client_id"),
+		GoogleClientSecret: firstSet("GOOGLE_CLIENT_SECRET", "GOOGLE_OAUTH_CLIENT_SECRET", "web_client_secret", "client_secret"),
+		GoogleAuthURL:      firstSet("GOOGLE_AUTH_URL", "GOOGLE_OAUTH_AUTH_URL"),
+		GoogleTokenURL:     firstSet("GOOGLE_TOKEN_URL", "GOOGLE_OAUTH_TOKEN_URL"),
+		GoogleUserinfoURL:  firstSet("GOOGLE_USERINFO_URL", "GOOGLE_OAUTH_USERINFO_URL"),
 		GoogleJWKSURL:      strings.TrimSpace(os.Getenv("GOOGLE_JWKS_URL")),
 		GoogleIssuer:       strings.TrimSpace(os.Getenv("GOOGLE_ISSUER")),
 		StateSecret:        strings.TrimSpace(os.Getenv("HEBREW_SESSION_SECRET")),
+		OAuthRedirectURIs:  splitList(os.Getenv("MCP_OAUTH_REDIRECT_URIS")),
 		AllowedEmails:      splitList(os.Getenv("MCP_OAUTH_ALLOWED_EMAILS")),
 		AdminEmails:        splitList(os.Getenv("ADMIN_EMAILS")),
 		MCPAuthToken:       strings.TrimSpace(os.Getenv("MCP_AUTH_TOKEN")),
@@ -92,6 +93,18 @@ func parseLogLevel(raw string) (string, error) {
 	}
 }
 
+// firstSet returns the first non-empty trimmed environment value.
+// GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET stay ahead of the old
+// app's GOOGLE_OAUTH_* and web_client_*/client_* names.
+func firstSet(keys ...string) string {
+	for _, key := range keys {
+		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func splitList(raw string) []string {
 	if strings.TrimSpace(raw) == "" {
 		return nil
@@ -120,7 +133,7 @@ func warnOptionalConfig(cfg app.Config) {
 		slog.Warn("mcp static token is disabled", "reason", "MCP_AUTH_TOKEN is empty")
 	}
 	if cfg.MCPPublicURL == "" {
-		slog.Warn("mcp oauth is off", "reason", "MCP_PUBLIC_URL is unset")
+		slog.Warn("mcp oauth issuer uses the forwarded host", "reason", "MCP_PUBLIC_URL is unset")
 	}
 }
 
