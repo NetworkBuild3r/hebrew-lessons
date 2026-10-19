@@ -106,14 +106,22 @@ type Config struct {
 	// disables the static bearer: it accepts no request. Startup still
 	// proceeds. internal/mcp does not read the environment.
 	// GET /healthz and GET /version stay open.
+	// MCPReadOnlyToken is MCP_READONLY_TOKEN, trimmed. Empty disables
+	// the smoke bearer. MCPReadOnlyLearnerID is MCP_READONLY_LEARNER_ID.
+	// A set token must be at least 32 characters, must differ from
+	// MCPAuthToken, and must name a positive learner id. Startup
+	// refuses otherwise. The process does not create a users row.
+	// Point the id at a dedicated smoke learner.
 	// MCPPublicURL is the public MCP origin. When it is set, it is the
 	// OAuth issuer. Empty does not stop startup; the trusted proxy's
 	// public host is the issuer then. MCPAllowedOrigins are browser
 	// Origins allowed to call MCP. A request with no Origin header is
 	// allowed. cmd/hebrew reads MCP_ALLOWED_ORIGINS.
-	MCPAuthToken      string
-	MCPPublicURL      string
-	MCPAllowedOrigins []string
+	MCPAuthToken         string
+	MCPReadOnlyToken     string
+	MCPReadOnlyLearnerID int64
+	MCPPublicURL         string
+	MCPAllowedOrigins    []string
 
 	// ElevenLabsAPIKey gates the real TTS client. Empty leaves TTS unset
 	// unless TTS is set directly. The key is read at synthesis time:
@@ -176,6 +184,25 @@ func ApplyDefaults(cfg Config) Config {
 	return cfg
 }
 
+// ConfigureMCPReadOnly parses the smoke-token environment values.
+// An empty token is off and returns zero values, ignoring learnerRaw.
+// A set token must parse as a learner id and pass CheckReadOnlyToken.
+// The returned error is the logged sentence and does not contain the token.
+func ConfigureMCPReadOnly(adminToken, readOnlyToken, learnerRaw string) (string, int64, error) {
+	token := strings.TrimSpace(readOnlyToken)
+	if token == "" {
+		return "", 0, nil
+	}
+	id, err := mcp.ParseReadOnlyLearnerID(learnerRaw)
+	if err != nil {
+		return "", 0, err
+	}
+	if err := mcp.CheckReadOnlyToken(adminToken, token, id); err != nil {
+		return "", 0, err
+	}
+	return token, id, nil
+}
+
 // App is the running process core.
 type App struct {
 	cfg       Config
@@ -208,6 +235,11 @@ func New(cfg Config) (web, mcp http.Handler, err error) {
 // Close releases the database. /healthz answers 503 after Close returns.
 func NewApp(cfg Config) (*App, error) {
 	cfg = ApplyDefaults(cfg)
+	cfg.MCPAuthToken = strings.TrimSpace(cfg.MCPAuthToken)
+	cfg.MCPReadOnlyToken = strings.TrimSpace(cfg.MCPReadOnlyToken)
+	if err := mcp.CheckReadOnlyToken(cfg.MCPAuthToken, cfg.MCPReadOnlyToken, cfg.MCPReadOnlyLearnerID); err != nil {
+		return nil, err
+	}
 	if oauthEnabled(cfg) && strings.TrimSpace(cfg.StateSecret) == "" {
 		return nil, fmt.Errorf("HEBREW_SESSION_SECRET is required when OAuth is enabled")
 	}
@@ -432,7 +464,9 @@ func newMCP(cfg Config, health, version http.Handler, sessions *auth.Service, st
 	//
 	// AuthToken is Config.MCPAuthToken. cmd/hebrew trimmed MCP_AUTH_TOKEN
 	// into that field and logs once when it is empty. An empty value
-	// disables the static bearer. This function does not read the
+	// disables the static bearer. ReadOnlyToken is MCP_READONLY_TOKEN.
+	// Empty disables the smoke bearer. A match is RoleLearner for
+	// MCPReadOnlyLearnerID. This function does not read the
 	// environment and does not log that warning again. sessionUsers calls
 	// auth.Service.Lookup and copies users.role. SessionFromToken maps an
 	// OAuth access token onto that same Lookup path. It does not read the
@@ -460,10 +494,12 @@ func newMCP(cfg Config, health, version http.Handler, sessions *auth.Service, st
 		_, _ = w.Write([]byte("Not found"))
 	})
 	authoring := mcp.Handler(mcp.Options{
-		AuthToken:        cfg.MCPAuthToken,
-		AllowedOrigins:   cfg.MCPAllowedOrigins,
-		Sessions:         users,
-		SessionFromToken: users.SessionFromToken,
+		AuthToken:         cfg.MCPAuthToken,
+		ReadOnlyToken:     cfg.MCPReadOnlyToken,
+		ReadOnlyLearnerID: cfg.MCPReadOnlyLearnerID,
+		AllowedOrigins:    cfg.MCPAllowedOrigins,
+		Sessions:          users,
+		SessionFromToken:  users.SessionFromToken,
 		MetadataURL: func(r *http.Request) string {
 			if sessions == nil {
 				return ""
