@@ -10,8 +10,8 @@ import (
 // in its own bdi, not inside this string.
 const AppName = "דֶּרֶךְ עִבְרִית"
 
-// Sign-in copy. One interface language at a time; the other language is
-// the same page with ?lang=en. GoogleSignInStart is auth's browser
+// Sign-in copy. One interface language at a time. English is the default;
+// ?lang=he is the Hebrew shell. GoogleSignInStart is auth's browser
 // sign-in route. The shell only links to it.
 //
 // SignInGoogleHE is Google's Hebrew button label, unpointed, with the
@@ -26,11 +26,16 @@ const (
 	SignInGoogleHE    = "כניסה באמצעות"
 	SignInGoogleEN    = "Sign in with Google"
 	SignInWord        = "כִּסֵּא"
+	SignInWordGloss   = "(kisé, chair)"
 	GoogleSignInStart = "/auth/google/start"
 )
 
 // UnitTitle is the one lesson the shell shows until the queue is wired.
-const UnitTitle = "הַבֹּקֶר שֶׁלִּי"
+// UnitGloss sits beside it: transliteration, then the English meaning.
+const (
+	UnitTitle = "הַבֹּקֶר שֶׁלִּי"
+	UnitGloss = "(habóker shelí, my morning)"
+)
 
 // UI is the shell copy for one language. Lang is he or en.
 type UI struct {
@@ -93,13 +98,14 @@ func Address(gender, masculine, feminine string) string {
 	return masculine
 }
 
-// UIFor returns the English shell for lang "en" and the Hebrew shell otherwise.
-// addressGender selects masculine or feminine Hebrew imperatives.
+// UIFor returns the Hebrew shell for lang "he" and the English shell otherwise.
+// An empty lang is English: a request with no ?lang and no hebrew_lang cookie
+// uses this default. addressGender selects masculine or feminine Hebrew imperatives.
 func UIFor(lang, addressGender string) UI {
-	if lang == "en" {
-		return englishUI()
+	if lang == "he" {
+		return hebrewUI(addressGender)
 	}
-	return hebrewUI(addressGender)
+	return englishUI()
 }
 
 func hebrewUI(addressGender string) UI {
@@ -166,12 +172,13 @@ func (u UI) DocTitle(current string) string {
 	return name + " · " + AppName
 }
 
-// Href keeps the English shell on in-app links.
+// Href keeps the Hebrew shell on in-app links. English is the default, so
+// those links stay bare; ?lang=en is only needed to override a Hebrew cookie.
 func (u UI) Href(path string) string {
-	if u.Lang != "en" {
-		return path
+	if u.Lang == "he" {
+		return path + "?lang=he"
 	}
-	return path + "?lang=en"
+	return path
 }
 
 // Page is the data the layout shell needs. CSRF is the token auth.CSRFToken
@@ -183,7 +190,8 @@ type Page struct {
 	Current string
 }
 
-// NewPage builds a shell page. lang "en" selects the English UI.
+// NewPage builds a shell page. lang "he" selects the Hebrew UI. Any other
+// value, including empty, selects English.
 func NewPage(lang, csrf, current string) Page {
 	ui := UIFor(lang, FakeLearner().AddressGender)
 	return Page{UI: ui, Title: ui.DocTitle(current), CSRF: csrf, Current: current}
@@ -206,9 +214,12 @@ func (h Home) Page() Page {
 }
 
 // Chip is one new-word chip. Gender is "m" or "f" for a noun, otherwise empty.
+// Gloss is the English transliteration and meaning, including the parentheses,
+// so the Hebrew word is never the only thing on the chip.
 type Chip struct {
 	Text   string
 	Gender string
+	Gloss  string
 }
 
 // GenderLabel is the noun chip ז׳ or נ׳. Other values have no chip.
@@ -227,9 +238,9 @@ func GenderLabel(gender string) string {
 // Each one is a noun, so each one carries a gender chip.
 func SampleWords() []Chip {
 	return []Chip{
-		{Text: "כִּסֵּא", Gender: AddressMasculine},
-		{Text: "חַלּוֹן", Gender: AddressMasculine},
-		{Text: "שֻׁלְחָן", Gender: AddressMasculine},
+		{Text: "כִּסֵּא", Gender: AddressMasculine, Gloss: "(kisé, chair)"},
+		{Text: "חַלּוֹן", Gender: AddressMasculine, Gloss: "(chalón, window)"},
+		{Text: "שֻׁלְחָן", Gender: AddressMasculine, Gloss: "(shulchán, table)"},
 	}
 }
 
