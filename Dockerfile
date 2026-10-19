@@ -28,6 +28,7 @@ RUN mkdir -p /empty-data \
 FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY --from=builder /out/hebrew /usr/local/bin/hebrew
+COPY --from=builder /src/internal/placement/NOTICE /usr/share/hebrew/NOTICE.placement
 COPY --from=builder --chown=65532:65532 /empty-data /data
 
 ENV DATA_DIR=/data \
