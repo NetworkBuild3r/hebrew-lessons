@@ -449,9 +449,18 @@ h1 {
   z-index: var(--z-sticky);
   display: flex;
   justify-content: center;
+  view-transition-name: thumbbar;
   animation-name: thumb-in;
   animation-duration: var(--dur-slow);
   animation-timing-function: var(--spring-soft);
+}
+/* The bar is fixed, so it has to leave the page-main snapshot. Otherwise the
+   old bar paints over the incoming page during the cross-fade. */
+::view-transition-old(thumbbar),
+::view-transition-new(thumbbar) { animation: none; }
+::view-transition-old(thumbbar) { display: none; }
+@supports (view-transition-name: none) {
+  .thumbbar { animation: none; }
 }
 .thumbbar__btn { inline-size: min(100%, var(--player-max)); margin-block-start: 0; }
 @keyframes thumb-in {
