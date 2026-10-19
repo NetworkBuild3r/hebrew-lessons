@@ -22,6 +22,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/buildinfo"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
@@ -104,7 +105,7 @@ type Config struct {
 	// cmd/hebrew copies MCP_AUTH_TOKEN and trims it. An empty token
 	// disables the static bearer: it accepts no request. Startup still
 	// proceeds. internal/mcp does not read the environment.
-	// GET /healthz stays open.
+	// GET /healthz and GET /version stay open.
 	// MCPPublicURL is the public MCP origin. When it is set, it is the
 	// OAuth issuer. Empty does not stop startup; the trusted proxy's
 	// public host is the issuer then. MCPAllowedOrigins are browser
@@ -192,9 +193,9 @@ type App struct {
 }
 
 // New opens the database, applies migrations, and returns the two handlers.
-// GET /healthz on either handler is unauthenticated. Missing Google,
-// ElevenLabs, and OAuth settings do not fail New; the process logs those
-// separately. Cleanup is NewApp's Close. New wraps NewApp.
+// GET /healthz and GET /version on either handler are unauthenticated.
+// Missing Google, ElevenLabs, and OAuth settings do not fail New; the
+// process logs those separately. Cleanup is NewApp's Close. New wraps NewApp.
 func New(cfg Config) (web, mcp http.Handler, err error) {
 	a, err := NewApp(cfg)
 	if err != nil {
@@ -278,13 +279,14 @@ func NewApp(cfg Config) (*App, error) {
 		tts:       tts,
 	}
 	health := a.healthHandler()
-	a.web = web.NewOptions(health, svc, web.Options{
+	version := versionHandler()
+	a.web = mountVersion(web.NewOptions(health, svc, web.Options{
 		Store:    store,
 		AudioDir: audioDir,
 		Deck:     a.placement,
 		Runs:     store,
-	})
-	a.mcp = newMCP(cfg, health, svc, store, tts, audioDir)
+	}))
+	a.mcp = newMCP(cfg, health, version, svc, store, tts, audioDir)
 	sweepCtx, stop := context.WithCancel(context.Background())
 	a.stopSweep = stop
 	go sweepOAuth(sweepCtx, store, cfg.Clock)
@@ -319,9 +321,9 @@ func sweepOAuth(ctx context.Context, store *db.Store, clk clock.Clock) {
 // Web is the learner handler.
 func (a *App) Web() http.Handler { return a.web }
 
-// MCP is the authoring handler. GET /healthz is unauthenticated.
-// /mcp is the streamable MCP server. OAuth routes are mounted beside it.
-// Any other path is 404.
+// MCP is the authoring handler. GET /healthz and GET /version are
+// unauthenticated. /mcp is the streamable MCP server. OAuth routes are
+// mounted beside it. Any other path is 404.
 func (a *App) MCP() http.Handler { return a.mcp }
 
 // Store is the process database. QA and MCP Builder use it for users and sessions.
@@ -402,6 +404,8 @@ func writableDir(dir string) error {
 func (a *App) healthHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// No session, cookie, or bearer check. Probes call this with an empty request.
+		// Status stays 200 or 503. commit is added beside ok; probes that
+		// decode only ok still match.
 		ctx, cancel := context.WithTimeout(r.Context(), healthTimeout)
 		defer cancel()
 		err := a.store.Ping(ctx)
@@ -413,12 +417,13 @@ func (a *App) healthHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(struct {
-			OK bool `json:"ok"`
-		}{OK: err == nil})
+			OK     bool   `json:"ok"`
+			Commit string `json:"commit"`
+		}{OK: err == nil, Commit: buildinfo.Current().Commit})
 	})
 }
 
-func newMCP(cfg Config, health http.Handler, sessions *auth.Service, store *db.Store, tts audio.TTS, audioDir string) http.Handler {
+func newMCP(cfg Config, health, version http.Handler, sessions *auth.Service, store *db.Store, tts audio.TTS, audioDir string) http.Handler {
 	// The adapter is the *db.Store behind the authoring tools.
 	// It lives in internal/mcpstore so internal/db does not import internal/mcp.
 	//
@@ -441,6 +446,7 @@ func newMCP(cfg Config, health http.Handler, sessions *auth.Service, store *db.S
 	users := sessionUsers{auth: sessions}
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
+	mux.Handle("GET /version", version)
 	if sessions != nil {
 		sessions.RegisterOAuth(mux, cfg.MCPPublicURL)
 	}
