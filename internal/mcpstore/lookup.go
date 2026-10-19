@@ -11,8 +11,8 @@ import (
 )
 
 // KnownLexemes is the shared-unit authoring view: pointed NFC text of
-// newWords on shared units whose position is lower than beforePosition.
-// units_scope_position covers the scope and position filter.
+// newWords on published shared units whose position is lower than beforePosition.
+// A draft contributes nothing. units_scope_position covers the scope and position filter.
 func (s *Store) KnownLexemes(ctx context.Context, beforePosition int) (map[string]bool, error) {
 	conn, err := s.conn(ctx)
 	if err != nil {
@@ -20,7 +20,7 @@ func (s *Store) KnownLexemes(ctx context.Context, beforePosition int) (map[strin
 	}
 	rows, err := conn.QueryContext(ctx, `
 		SELECT doc FROM units
-		WHERE position < ? AND scope = 'shared'`, beforePosition)
+		WHERE position < ? AND scope = 'shared' AND status = 'published'`, beforePosition)
 	if err != nil {
 		return nil, fmt.Errorf("mcpstore: known lexemes: %w", err)
 	}

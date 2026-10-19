@@ -55,7 +55,7 @@ func TestAuthRejectAndAccept(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 6 {
+	if len(tools.Tools) != 7 {
 		t.Fatalf("tools = %d", len(tools.Tools))
 	}
 }
@@ -149,11 +149,11 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 		if !strings.Contains(string(raw), "additionalProperties") {
 			t.Fatalf("%s schema is not closed: %s", tool.Name, raw)
 		}
-		if tool.Annotations == nil || (!tool.Annotations.ReadOnlyHint && tool.Name != "put_unit" && tool.Name != "upsert_lexemes" && tool.Name != "generate_audio") {
+		if tool.Annotations == nil || (!tool.Annotations.ReadOnlyHint && tool.Name != "put_unit" && tool.Name != "upsert_lexemes" && tool.Name != "publish_unit" && tool.Name != "generate_audio") {
 			t.Fatalf("%s annotations %#v", tool.Name, tool.Annotations)
 		}
 	}
-	for _, name := range []string{"get_context", "lookup", "validate_unit", "put_unit", "upsert_lexemes", "generate_audio"} {
+	for _, name := range []string{"get_context", "lookup", "validate_unit", "put_unit", "upsert_lexemes", "generate_audio", "publish_unit"} {
 		if !gotNames[name] {
 			t.Fatalf("missing %s in %#v", name, gotNames)
 		}
@@ -163,6 +163,13 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	}
 	if !tools.Tools[indexOf(tools, "put_unit")].Annotations.IdempotentHint {
 		t.Fatal("put_unit is not marked idempotent")
+	}
+	published := tools.Tools[indexOf(tools, "publish_unit")]
+	if published.Annotations.ReadOnlyHint || !published.Annotations.IdempotentHint {
+		t.Fatalf("publish_unit annotations %#v", published.Annotations)
+	}
+	if !strings.Contains(published.Description, "validate_unit") || !strings.Contains(published.Description, "learner:<id>") || !strings.Contains(published.Description, "unchanged") || !strings.Contains(published.Description, "publish true") {
+		t.Fatalf("publish_unit description %s", published.Description)
 	}
 
 	resources, err := session.ListResources(t.Context(), nil)
@@ -446,6 +453,15 @@ func TestScopeStruggleAndGuidance(t *testing.T) {
 	}
 	if len(mustList(t, mem)) != before {
 		t.Fatal("bad scope wrote a unit")
+	}
+
+	draftKnown := getContext(t, session, 2)
+	if len(draftKnown.KnownLexemes) != 0 {
+		t.Fatalf("draft known %+v", draftKnown.KnownLexemes)
+	}
+	published := call[publishOutput](t, session, "publish_unit", publishInput{UnitID: shared.UnitID})
+	if published.Unchanged || published.Status != "published" || mem.Status(shared.UnitID) != "published" {
+		t.Fatalf("publish %+v status %s", published, mem.Status(shared.UnitID))
 	}
 
 	onlyShared := getContext(t, session, 2)

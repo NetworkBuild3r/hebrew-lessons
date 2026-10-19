@@ -29,10 +29,11 @@ type UnitCompletion struct {
 	CompletedAt time.Time
 }
 
-// CompletedSharedUnits returns shared units this learner has finished.
-// A unit is finished when it has at least one lesson and every lesson in
-// its doc has a lesson_runs row for this user with finished_at set.
-// CompletedAt is the latest of those finishes. Learner-scoped units are skipped.
+// CompletedSharedUnits returns published shared units this learner has finished.
+// A draft contributes nothing. A unit is finished when it has at least one
+// lesson and every lesson in its doc has a lesson_runs row for this user
+// with finished_at set. CompletedAt is the latest of those finishes.
+// Learner-scoped units are skipped.
 func (s *Store) CompletedSharedUnits(ctx context.Context, userID int64) ([]UnitCompletion, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -41,7 +42,7 @@ func (s *Store) CompletedSharedUnits(ctx context.Context, userID int64) ([]UnitC
 	rows, err := conn.QueryContext(ctx, `
 		SELECT id, position, doc
 		FROM units
-		WHERE scope = 'shared'
+		WHERE scope = 'shared' AND status = 'published'
 		ORDER BY position, id`)
 	if err != nil {
 		return nil, fmt.Errorf("db: completed units: %w", err)
