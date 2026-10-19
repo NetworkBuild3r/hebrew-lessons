@@ -68,5 +68,9 @@ func runImport(args []string) error {
 		return err
 	}
 	fmt.Fprint(os.Stdout, rep.Summary(*dry))
+	if rep.HashMismatch > 0 || rep.TextMismatch > 0 || rep.Conflict > 0 || rep.MissingFile > 0 {
+		return fmt.Errorf("hash-mismatch=%d text-mismatch=%d conflict=%d missing-file=%d",
+			rep.HashMismatch, rep.TextMismatch, rep.Conflict, rep.MissingFile)
+	}
 	return nil
 }

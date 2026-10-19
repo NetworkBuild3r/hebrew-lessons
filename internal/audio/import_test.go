@@ -104,6 +104,7 @@ func TestImportDirectory(t *testing.T) {
 		"demo/audio/_archive/line-9.mp3":           []byte("archived"),
 	})
 	writeMap(t, export, lessons, words, unmapped)
+	writeLessonManifests(t, export, lessons)
 
 	data := t.TempDir()
 	when := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
@@ -382,6 +383,7 @@ func importMap(t *testing.T, schema string, lessons, words []any, files map[stri
 	export := t.TempDir()
 	writeFiles(t, export, files)
 	writeMapVersion(t, export, schema, lessons, words, nil)
+	writeLessonManifests(t, export, lessons)
 	data := t.TempDir()
 	store := openStoreAt(t, data, time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC))
 	rep, err := Import(context.Background(), store, data, export, Options{})
@@ -389,6 +391,133 @@ func importMap(t *testing.T, schema string, lessons, words []any, files map[stri
 		t.Fatal(err)
 	}
 	return rep, store
+}
+
+func TestLessonManifestRejectsForgedTextHash(t *testing.T) {
+	const (
+		voice  = "voice-a"
+		model  = "eleven_v4"
+		honest = "שָׁלוֹם"
+		forged = "קָם"
+	)
+	body := []byte("forged-lesson")
+	honestHash := contentHash(voice, model, honest)
+	forgedHash := contentHash(voice, model, forged)
+	if honestHash == forgedHash {
+		t.Fatal("forged text hashes to the honest text")
+	}
+	lesson := lessonObj("demo", "audio/story/line-1.mp3", forged, voice, model, body, forgedHash, "")
+	export := t.TempDir()
+	writeFiles(t, export, map[string][]byte{lesson["path"].(string): body})
+	writeMap(t, export, []any{lesson}, nil, nil)
+	// The manifest keeps the hash of the real line. Recomputing textHash
+	// from the altered map text must not make the clip import.
+	writeLessonManifests(t, export, []any{map[string]any{
+		"lesson":   "demo",
+		"clip":     "audio/story/line-1.mp3",
+		"textHash": honestHash,
+	}})
+
+	data := t.TempDir()
+	store := openStoreAt(t, data, time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC))
+	rep, err := Import(context.Background(), store, data, export, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Imported != 0 || rep.TextMismatch != 1 || rep.HashMismatch != 0 || rep.Conflict != 0 || rep.MissingFile != 0 {
+		t.Fatalf("counts: %+v text=%+v", rep, rep.TextMismatches)
+	}
+	if len(rep.TextMismatches) != 1 || rep.TextMismatches[0].Want != honestHash || rep.TextMismatches[0].Got != forgedHash {
+		t.Fatalf("mismatch: %+v", rep.TextMismatches)
+	}
+	if mp3Count(t, filepath.Join(data, "audio")) != 0 {
+		t.Fatal("forged lesson wrote an mp3")
+	}
+	for _, text := range []string{honest, forged} {
+		if _, ok, err := store.AudioByText(context.Background(), text); err != nil || ok {
+			t.Fatalf("stored %q ok=%v err=%v", text, ok, err)
+		}
+	}
+}
+
+func TestLessonManifestMissing(t *testing.T) {
+	const voice = "voice-a"
+	body := []byte("lesson-bytes")
+	lesson := lessonObj("demo", "audio/story/line-1.mp3", "שָׁלוֹם", voice, "eleven_v4", body, "", "")
+
+	t.Run("missing-manifest", func(t *testing.T) {
+		rep, store := importLesson(t, lesson, body, nil)
+		assertManifestRefusal(t, rep, store, "manifest-missing")
+	})
+	t.Run("missing-key", func(t *testing.T) {
+		rep, store := importLesson(t, lesson, body, map[string]string{
+			"audio/story/line-2.mp3": lesson["textHash"].(string),
+		})
+		assertManifestRefusal(t, rep, store, "missing-key")
+	})
+	t.Run("unparseable", func(t *testing.T) {
+		export := t.TempDir()
+		writeFiles(t, export, map[string][]byte{lesson["path"].(string): body})
+		writeMap(t, export, []any{lesson}, nil, nil)
+		manifestDir := filepath.Join(export, "demo", "audio")
+		if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(manifestDir, "manifest.json"), []byte("{"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		data := t.TempDir()
+		store := openStoreAt(t, data, time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC))
+		rep, err := Import(context.Background(), store, data, export, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertManifestRefusal(t, rep, store, "manifest-unparseable")
+	})
+}
+
+func importLesson(t *testing.T, lesson map[string]any, body []byte, clips map[string]string) (Report, *db.Store) {
+	t.Helper()
+	export := t.TempDir()
+	writeFiles(t, export, map[string][]byte{lesson["path"].(string): body})
+	writeMap(t, export, []any{lesson}, nil, nil)
+	if clips != nil {
+		writeLessonManifests(t, export, []any{map[string]any{
+			"lesson": lesson["lesson"], "clip": "unused", "textHash": "unused",
+		}})
+		// Replace the generated clips with the caller's keys.
+		raw, err := json.Marshal(map[string]any{"version": 1, "clips": clips})
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(export, lesson["lesson"].(string), "audio", "manifest.json")
+		if err := os.WriteFile(path, append(raw, '\n'), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data := t.TempDir()
+	store := openStoreAt(t, data, time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC))
+	rep, err := Import(context.Background(), store, data, export, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rep, store
+}
+
+func assertManifestRefusal(t *testing.T, rep Report, store *db.Store, reason string) {
+	t.Helper()
+	if rep.Imported != 0 || rep.TextMismatch != 1 || rep.HashMismatch != 0 || rep.MissingFile != 0 {
+		t.Fatalf("counts: %+v text=%+v", rep, rep.TextMismatches)
+	}
+	if len(rep.TextMismatches) != 1 || rep.TextMismatches[0].Reason != reason {
+		t.Fatalf("mismatch: %+v", rep.TextMismatches)
+	}
+	if mp3Count(t, filepath.Dir(rep.ReportPath)) != 0 {
+		t.Fatal("refused lesson wrote an mp3")
+	}
+	if _, ok, err := store.AudioByText(context.Background(), "שָׁלוֹם"); err != nil || ok {
+		t.Fatalf("stored a row ok=%v err=%v", ok, err)
+	}
 }
 
 func TestImportMismatchesAreNotStored(t *testing.T) {
@@ -405,6 +534,7 @@ func TestImportMismatchesAreNotStored(t *testing.T) {
 		wordBad["path"].(string): body,
 	})
 	writeMap(t, export, []any{textBad, hashBad}, []any{wordBad}, nil)
+	writeLessonManifests(t, export, []any{textBad, hashBad})
 
 	data := t.TempDir()
 	store := openStoreAt(t, data, time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC))
@@ -446,6 +576,7 @@ func TestImportArchiveAndStdin(t *testing.T) {
 		map[string]string{"reason": "word-not-in-manifest", "path": "_audio/words/skip.mp3"},
 		map[string]string{"reason": "archive", "path": "demo/audio/_archive/old.mp3"},
 	})
+	writeLessonManifests(t, export, []any{lessonClip})
 	tgz := packExport(t, export, "bundle")
 
 	data := t.TempDir()
@@ -599,6 +730,40 @@ func wordObj(text, voice, model string, body []byte, file string) map[string]any
 		"model":    model,
 		"sha256":   sha,
 		"verified": true,
+	}
+}
+
+func writeLessonManifests(t *testing.T, dir string, lessons []any) {
+	t.Helper()
+	byLesson := map[string]map[string]string{}
+	for _, item := range lessons {
+		obj, ok := item.(map[string]any)
+		if !ok || obj["source"] == "word" {
+			continue
+		}
+		id, _ := obj["lesson"].(string)
+		clip, _ := obj["clip"].(string)
+		hash, _ := obj["textHash"].(string)
+		if id == "" || clip == "" {
+			continue
+		}
+		if byLesson[id] == nil {
+			byLesson[id] = map[string]string{}
+		}
+		byLesson[id][clip] = hash
+	}
+	for id, clips := range byLesson {
+		manifestDir := filepath.Join(dir, id, "audio")
+		if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		raw, err := json.Marshal(map[string]any{"version": 1, "clips": clips})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(manifestDir, "manifest.json"), append(raw, '\n'), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

@@ -63,13 +63,18 @@ type Options struct {
 // Every mapped clip is checked before it is stored. When the map entry has
 // a sha256, the mp3 bytes must hash to it (hash-mismatch otherwise). An
 // entry with no sha256 is still stored under the hash of its bytes.
-// v3 requires hashText on every lesson and word. When hashText is present,
-// sha256 of voiceId, model, and hashText.trim() joined by NUL must equal a
-// lesson's textHash, and a word's file name must be the first 24 hex
-// characters of that digest plus ".mp3" (text-mismatch otherwise).
-// NormalizeText(hashText) must then equal text (text-mismatch, reason
+// v3 requires hashText on every lesson and word. The digest is sha256 of
+// voiceId, model, and hashText.trim() joined by NUL when hashText is
+// present, and of text.trim() when it is absent. A word's file name must be
+// the first 24 hex characters of that digest plus ".mp3" (text-mismatch
+// otherwise). A lesson is checked against <lesson>/audio/manifest.json
+// ({"version":1,"clips":{"audio/sentences/vocab-1.mp3":"<64-hex>",...}},
+// keys relative to the lesson directory). The digest and the map's textHash
+// must both equal manifest.clips[key]. A missing manifest, a missing key,
+// or an unparseable manifest is a text-mismatch. When hashText is present,
+// NormalizeText(hashText) must also equal text (text-mismatch, reason
 // nfc-differs, otherwise), and text is what is stored. When hashText is
-// absent, v2 hashes text.trim() and stores NormalizeText(text).
+// absent, the stored text is NormalizeText(text).
 //
 // Unmapped entries are listed and not stored. The same bytes with two
 // different texts are a conflict: both paths and texts are reported, and
@@ -206,7 +211,7 @@ type builder struct {
 	manifest       []ManifestEntry
 }
 
-func plan(m clipMap) (*builder, error) {
+func plan(m clipMap, lessons map[string]lessonManifest) (*builder, error) {
 	b := &builder{
 		mapped:   map[string]planned{},
 		textBad:  map[string]refusedText{},
@@ -254,9 +259,7 @@ func plan(m clipMap) (*builder, error) {
 		got := contentHash(voice, model, hashInput)
 		switch clip.Source {
 		case "lesson":
-			want := strings.ToLower(strings.TrimSpace(clip.TextHash))
-			if got != want {
-				b.textBad[rel] = refusedText{item: Mismatch{Path: rel, Want: want, Got: got}, sha: fileSHA}
+			if !lessonTextMatches(b, rel, clip, got, fileSHA, lessons) {
 				continue
 			}
 		case "word":
@@ -313,7 +316,11 @@ func importDir(ctx context.Context, store *db.Store, dataDir, exportDir string, 
 	if err != nil {
 		return Report{}, err
 	}
-	b, err := newBuilder(store, dataDir, opts, m)
+	lessons, err := loadDirManifests(exportDir, m.Lessons)
+	if err != nil {
+		return Report{}, err
+	}
+	b, err := newBuilder(store, dataDir, opts, m, lessons)
 	if err != nil {
 		return Report{}, err
 	}
@@ -385,11 +392,15 @@ func listMP3(exportDir string) ([]string, error) {
 }
 
 func importArchive(ctx context.Context, store *db.Store, dataDir, tarPath string, opts Options) (Report, error) {
-	m, root, err := mapFromArchive(tarPath)
+	m, root, bodies, err := mapFromArchive(tarPath)
 	if err != nil {
 		return Report{}, err
 	}
-	b, err := newBuilder(store, dataDir, opts, m)
+	lessons, err := manifestsForLessons(m.Lessons, bodies)
+	if err != nil {
+		return Report{}, err
+	}
+	b, err := newBuilder(store, dataDir, opts, m, lessons)
 	if err != nil {
 		return Report{}, err
 	}
@@ -458,8 +469,8 @@ func rejectSpecial(header *tar.Header) error {
 	}
 }
 
-func newBuilder(store *db.Store, dataDir string, opts Options, m clipMap) (*builder, error) {
-	b, err := plan(m)
+func newBuilder(store *db.Store, dataDir string, opts Options, m clipMap, lessons map[string]lessonManifest) (*builder, error) {
+	b, err := plan(m, lessons)
 	if err != nil {
 		return nil, err
 	}
@@ -925,11 +936,12 @@ func readLimitedN(r io.Reader, max int64) ([]byte, error) {
 	return body, nil
 }
 
-func mapFromArchive(tarPath string) (clipMap, string, error) {
+func mapFromArchive(tarPath string) (clipMap, string, map[string][]byte, error) {
 	var (
-		raw   []byte
-		root  string
-		found int
+		raw      []byte
+		root     string
+		found    int
+		manifest = map[string][]byte{}
 	)
 	err := withGzipTar(tarPath, func(tr *tar.Reader) error {
 		for {
@@ -962,25 +974,40 @@ func mapFromArchive(tarPath string) (clipMap, string, error) {
 					continue
 				}
 			}
+			if tarRegular(header) && strings.HasSuffix(name, "/audio/manifest.json") {
+				if _, dup := manifest[name]; dup {
+					return fmt.Errorf("audio: repeated path %s", name)
+				}
+				body, err := readLimitedN(tr, maxMapBytes)
+				if err != nil {
+					return fmt.Errorf("audio: read %s: %w", name, err)
+				}
+				manifest[name] = body
+				continue
+			}
 			if err := discardEntry(tr); err != nil {
 				return err
 			}
 		}
 	})
 	if err != nil {
-		return clipMap{}, "", err
+		return clipMap{}, "", nil, err
 	}
 	if found == 0 {
-		return clipMap{}, "", errors.New("audio: clip-text-map.json not found in archive")
+		return clipMap{}, "", nil, errors.New("audio: clip-text-map.json not found in archive")
 	}
 	if found > 1 {
-		return clipMap{}, "", errors.New("audio: archive contains more than one clip-text-map.json")
+		return clipMap{}, "", nil, errors.New("audio: archive contains more than one clip-text-map.json")
 	}
 	m, err := parseClipMap(raw)
 	if err != nil {
-		return clipMap{}, "", err
+		return clipMap{}, "", nil, err
 	}
-	return m, root, nil
+	byLesson, err := manifestBodiesByLesson(root, manifest)
+	if err != nil {
+		return clipMap{}, "", nil, err
+	}
+	return m, root, byLesson, nil
 }
 
 func tarRegular(header *tar.Header) bool {

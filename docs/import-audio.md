@@ -21,8 +21,9 @@ The first Phase 0 `audio.tgz` has only `files/` and no map. Do not import it.
 Every mapped clip is checked before it is stored:
 
 - When the map entry includes `sha256`, the mp3 bytes must hash to it (`hash-mismatch` otherwise). An entry without `sha256` is stored under the hash of its bytes.
-- When `hashText` is present, `sha256(voiceId + "\0" + model + "\0" + hashText.trim())` must equal a lesson's `textHash`, and a word's file name must be the first 24 hex characters of that digest (`text-mismatch` otherwise). `NormalizeText(hashText)` must equal `text` (`text-mismatch`, reason `nfc-differs`, otherwise). The stored text is `text`.
-- When `hashText` is absent, the same digest is of `text.trim()`, and the stored text is `NormalizeText(text)`.
+- The digest is `sha256(voiceId + "\0" + model + "\0" + hashText.trim())` when `hashText` is present, and `sha256(voiceId + "\0" + model + "\0" + text.trim())` when it is absent. When `hashText` is present, `NormalizeText(hashText)` must equal `text` (`text-mismatch`, reason `nfc-differs`, otherwise), and the stored text is `text`. When it is absent, the stored text is `NormalizeText(text)`.
+- A lesson clip is checked against `<lesson>/audio/manifest.json`: `{"version":1,"clips":{"audio/sentences/vocab-1.mp3":"<64-hex textHash>"}}`. Keys are relative to the lesson directory. The digest and the map's `textHash` must both equal `manifest.clips[key]`. A missing manifest, a missing key, or a manifest that cannot be parsed is a `text-mismatch`, and that clip is not stored.
+- A word's file name must be the first 24 hex characters of that digest plus `.mp3` (`text-mismatch` otherwise). Words do not use the lesson manifest.
 
 This is `textHash` / `cacheKey` from `server/audio.js` on `main`. The hash is the trimmed `hashText` when that field is set, and otherwise the trimmed `text`, not the normalized form. Unmapped entries are listed and not stored. The same bytes with two different texts are a `conflict`: both paths and texts are reported, and the second text does not replace the first. Each distinct sha256 that passes the checks is stored. The text index keeps one row per `(text, voice, model)`, the lowest id, which is what a lookup returns when `created_at` ties. The other ids are `alias` in the summary and in `<DATA_DIR>/audio/import-manifest.json`.
 
@@ -48,6 +49,6 @@ kubectl -n hebrew-next exec deploy/hebrew -- /usr/local/bin/hebrew import-audio 
 kubectl -n hebrew-next exec deploy/hebrew -- /usr/local/bin/hebrew import-audio --from /data/audio-import.tgz
 ```
 
-Dry-run first. Against the regenerated `audio-import.tgz` (schema `hebrew-clip-text-map/v3`, sha256 `32a8c16a5378b6729f6118b773d77fa3959e35fa75c9451cf07a7c2af62b8b28`): the first run is imported 501, duplicate 0, unmapped 47, hash-mismatch 0, text-mismatch 0, conflict 0, alias 34, missing-file 0. A second run is imported 0, duplicate 501, and the other counts stay the same.
+Dry-run first. The command prints the summary, then exits non-zero when hash-mismatch, text-mismatch, conflict, or missing-file is above 0. Unmapped clips alone do not. Against the regenerated `audio-import.tgz` (schema `hebrew-clip-text-map/v3`, sha256 `32a8c16a5378b6729f6118b773d77fa3959e35fa75c9451cf07a7c2af62b8b28`): the first run is imported 501, duplicate 0, unmapped 47, hash-mismatch 0, text-mismatch 0, conflict 0, alias 34, missing-file 0. A second run is imported 0, duplicate 501, and the other counts stay the same.
 
 The unmapped, missing, mismatch, and conflict lists are written to `<DATA_DIR>/audio/import-unmapped.json`. The path to id to text list, including aliases, is `<DATA_DIR>/audio/import-manifest.json`. The importer does not delete `--from`. A stdin run leaves no archive. A file you placed on the volume has to be removed by hand from a pod that mounts the volume and has a shell. `kubectl exec deploy/hebrew -- rm` cannot work: this image has no `rm`.
