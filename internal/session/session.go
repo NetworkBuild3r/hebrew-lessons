@@ -9,6 +9,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 )
 
@@ -17,7 +18,7 @@ import (
 // given database. New takes the clock the store was opened with.
 type Service struct {
 	store  *db.Store
-	review *fsrs.Review
+	record *evidence.Recorder
 	clock  clock.Clock
 	seed   int64
 }
@@ -30,7 +31,7 @@ func New(store *db.Store, clk clock.Clock, seed int64) *Service {
 	}
 	return &Service{
 		store:  store,
-		review: fsrs.New(store, clk),
+		record: evidence.New(store, fsrs.New(store, clk), clk),
 		clock:  clk,
 		seed:   seed,
 	}
@@ -43,8 +44,8 @@ func (s *Service) ready() error {
 	if s.clock == nil {
 		return errors.New("session: clock is not configured")
 	}
-	if s.review == nil {
-		return errors.New("session: review is not configured")
+	if s.record == nil {
+		return errors.New("session: recorder is not configured")
 	}
 	return nil
 }
@@ -156,11 +157,11 @@ func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, err
 		})
 	}
 	cands = append(cands, drillCandidates(stats.Confusions)...)
-	review := s.review
+	record := s.record
 	return &Session{
 		userID: userID,
 		cards:  mix(cands, accuracyOf(ratings), now, s.seed),
-		grade: func(ctx context.Context, cardID int64, rating fsrs.Rating, peeked bool) error {
+		grade: func(ctx context.Context, cardID int64, rating fsrs.Rating, _ bool) error {
 			if rating < fsrs.Again || rating > fsrs.Easy {
 				return fmt.Errorf("session: rating %d is outside 1..4", rating)
 			}
@@ -168,7 +169,7 @@ func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, err
 			if cardID <= 0 {
 				return nil
 			}
-			return review.GradeWithChoice(ctx, cardID, rating, peeked, "")
+			return record.SelfGrade(ctx, cardID, rating)
 		},
 	}, nil
 }
@@ -270,8 +271,9 @@ func (s *Session) Reveal(cardID int64) error {
 	return nil
 }
 
-// Record grades cardID through GradeWithChoice and, on Again, re-queues it
-// once. cardID is the card Next just returned. The handler has already
+// Record grades cardID through evidence.Recorder.SelfGrade, which writes the
+// attempts row, the card update, and the review_log row together, and, on
+// Again, re-queues it once. cardID is the card Next just returned. The handler has already
 // checked ownership and CSRF. A second Again on the same card is graded
 // and is not inserted again.
 //
