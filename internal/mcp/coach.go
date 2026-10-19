@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
 const (
@@ -72,11 +70,15 @@ type CardPage struct {
 	NextCursor string
 }
 
-// MixTarget is the new-word budget. It is course config, not a per-learner ratio.
+// MixTarget is the unit new-word budget plus the session mix.
+// It is course config, not a per-learner ratio.
 type MixTarget struct {
-	MaxNewWordsPerUnit   int `json:"maxNewWordsPerUnit"`
-	MinNewWordsPerLesson int `json:"minNewWordsPerLesson"`
-	MaxNewWordsPerLesson int `json:"maxNewWordsPerLesson"`
+	MaxNewWordsPerUnit   int     `json:"maxNewWordsPerUnit"`
+	MinNewWordsPerLesson int     `json:"minNewWordsPerLesson"`
+	MaxNewWordsPerLesson int     `json:"maxNewWordsPerLesson"`
+	TargetSuccess        float64 `json:"targetSuccess"`
+	MaxNewPerSession     int     `json:"maxNewPerSession"`
+	MaxNewShare          float64 `json:"maxNewShare"`
 }
 
 // RecentAccuracy is the learner's recent review and lesson record.
@@ -98,10 +100,12 @@ type AccuracyCount struct {
 
 // LessonAccuracy is finished lesson_runs in the window.
 // Scored omits runs whose score is null. MeanScore is the mean of the rest.
+// Finished, Scored, and MeanScore stay zero or null until the lesson player
+// writes lesson_runs. Coach from the review half until then.
 type LessonAccuracy struct {
 	Finished  int      `json:"finished"`
 	Scored    int      `json:"scored"`
-	MeanScore *float64 `json:"meanScore"`
+	MeanScore *float64 `json:"meanScore" jsonschema:"Mean of non-null lesson_runs scores. Null when none are scored. Stays null until the lesson player writes lesson_runs."`
 }
 
 func countAccuracy(count, good int) AccuracyCount {
@@ -146,7 +150,9 @@ func validCardState(state string) bool {
 }
 
 func coachContextDescription() string {
-	return fmt.Sprintf("When learnerId is set, cards lists that learner's FSRS cards, one per card, including suspended cards. Order is due soonest first, then most recently reviewed, then card id. The list is capped at %d. cardsTruncated is true when cards were left out; call get_learner_words to page the rest. Each card has lexeme (pointed NFC), translit, pos, gloss, dir, state, stability, difficulty, due, lapses, reps, lastRating, and lastReview. Times are UTC RFC3339. translit, lastRating, and lastReview are null when unknown. Recycle cards that are due. Reinforce words with high lapses. recentAccuracy is null when learnerId is omitted. Otherwise it counts Good and Easy ratings over the last %d days and over the last %d reviews, plus the mean lesson_runs score for runs finished in those %d days. rate and meanScore are null when the count is 0. mixTarget is the new-word budget: at most %d new words in a unit and %d to %d new words per lesson, the same limits as budgets. Use mixTarget as the new-word budget.",
-		contextCardCap, AccuracyWindowDays, AccuracyReviewCap, AccuracyWindowDays,
-		units.MaxNewWordsPerUnit, units.MinNewWordsPerLesson, units.MaxNewWordsPerLesson)
+	mix := currentMixTarget()
+	return fmt.Sprintf("When learnerId is set, cards lists that learner's FSRS cards, one per card, including suspended cards. Order is due soonest first, then most recently reviewed, then card id. The list is capped at %d. cardsTruncated is true when cards were left out; call get_learner_words to page the rest. Each card has lexeme (pointed NFC), translit, pos, gloss, dir, state, stability, difficulty, due, lapses, reps, lastRating, and lastReview. Times are UTC RFC3339. translit, lastRating, and lastReview are null when unknown. Recycle cards that are due. Reinforce words with high lapses. recentAccuracy is null when learnerId is omitted. Otherwise the review half counts Good and Easy ratings over the last %d days and over the last %d reviews. The lesson half, lessons7d counts and meanScore, stays zero until the lesson player writes lesson_runs. Coach from the review half until then. rate and meanScore are null when the count is 0. mixTarget keeps the unit budgets, at most %d new words in a unit and %d to %d per lesson, and the session mix: targetSuccess %g, maxNewPerSession %d, and maxNewShare %g, so new cards are at most that share of a session.",
+		contextCardCap, AccuracyWindowDays, AccuracyReviewCap,
+		mix.MaxNewWordsPerUnit, mix.MinNewWordsPerLesson, mix.MaxNewWordsPerLesson,
+		mix.TargetSuccess, mix.MaxNewPerSession, mix.MaxNewShare)
 }

@@ -6,7 +6,54 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
+
+func TestMixTargetMatchesBuildSession(t *testing.T) {
+	got := currentMixTarget()
+	if got.MaxNewWordsPerUnit != units.MaxNewWordsPerUnit || got.MinNewWordsPerLesson != units.MinNewWordsPerLesson || got.MaxNewWordsPerLesson != units.MaxNewWordsPerLesson {
+		t.Fatalf("unit budgets %+v", got)
+	}
+	if got.MaxNewWordsPerUnit != 8 || got.MinNewWordsPerLesson != 2 || got.MaxNewWordsPerLesson != 3 {
+		t.Fatalf("unit budgets %+v", got)
+	}
+	if got.TargetSuccess != session.TargetSuccess {
+		t.Fatalf("targetSuccess %v session %v", got.TargetSuccess, session.TargetSuccess)
+	}
+	if got.TargetSuccess != sessionlimits.TargetSuccess {
+		t.Fatalf("targetSuccess %v shared %v", got.TargetSuccess, sessionlimits.TargetSuccess)
+	}
+	if got.TargetSuccess != 0.85 {
+		t.Fatalf("targetSuccess %v", got.TargetSuccess)
+	}
+	if got.MaxNewPerSession != session.MaxNewPerSession {
+		t.Fatalf("maxNewPerSession %d session %d", got.MaxNewPerSession, session.MaxNewPerSession)
+	}
+	if got.MaxNewPerSession != sessionlimits.MaxNewPerSession {
+		t.Fatalf("maxNewPerSession %d shared %d", got.MaxNewPerSession, sessionlimits.MaxNewPerSession)
+	}
+	if got.MaxNewPerSession != 5 {
+		t.Fatalf("maxNewPerSession %d", got.MaxNewPerSession)
+	}
+	if got.MaxNewShare != session.MaxNewShare {
+		t.Fatalf("maxNewShare %v session %v", got.MaxNewShare, session.MaxNewShare)
+	}
+	if got.MaxNewShare != sessionlimits.MaxNewShare {
+		t.Fatalf("maxNewShare %v shared %v", got.MaxNewShare, sessionlimits.MaxNewShare)
+	}
+	if got.MaxNewShare != 0.25 {
+		t.Fatalf("maxNewShare %v", got.MaxNewShare)
+	}
+	// BuildSession passes accuracyOf to mix. With no reviews that is
+	// NoHistoryAccuracy, which is TargetSuccess, and the in-band share is
+	// DefaultKnownShare.
+	if session.NoHistoryAccuracy != session.TargetSuccess || session.KnownShare(session.TargetSuccess) != session.DefaultKnownShare {
+		t.Fatalf("BuildSession default %v share %v", session.NoHistoryAccuracy, session.KnownShare(session.TargetSuccess))
+	}
+}
 
 func TestGetContextCoachFieldsKeepExistingShape(t *testing.T) {
 	mem := NewMemory()
@@ -51,7 +98,7 @@ func TestGetContextCoachFieldsKeepExistingShape(t *testing.T) {
 	if shared.Budgets != currentBudgets() || shared.MixTarget != currentMixTarget() || shared.RecentAccuracy != nil || len(shared.Cards) != 0 || shared.CardsTruncated || len(shared.Outline) != 0 || len(shared.KnownLexemes) != 0 || shared.Placement.Taken {
 		t.Fatalf("shared %+v", shared)
 	}
-	if shared.MixTarget.MaxNewWordsPerUnit != 8 || shared.MixTarget.MinNewWordsPerLesson != 2 || shared.MixTarget.MaxNewWordsPerLesson != 3 {
+	if shared.MixTarget.MaxNewWordsPerUnit != 8 || shared.MixTarget.MinNewWordsPerLesson != 2 || shared.MixTarget.MaxNewWordsPerLesson != 3 || shared.MixTarget.TargetSuccess != 0.85 || shared.MixTarget.MaxNewPerSession != 5 || shared.MixTarget.MaxNewShare != 0.25 {
 		t.Fatalf("mix %+v", shared.MixTarget)
 	}
 

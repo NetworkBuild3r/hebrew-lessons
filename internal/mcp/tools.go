@@ -49,8 +49,8 @@ type getContextOutput struct {
 	Cards                []LearnerCard    `json:"cards"`
 	CardsTruncated       bool             `json:"cardsTruncated"`
 	CardsHint            string           `json:"cardsHint,omitempty"`
-	RecentAccuracy       *RecentAccuracy  `json:"recentAccuracy"`
-	MixTarget            MixTarget        `json:"mixTarget"`
+	RecentAccuracy       *RecentAccuracy  `json:"recentAccuracy" jsonschema:"Null when learnerId is omitted. The review half counts Good and Easy ratings over the last 7 days and the last 50 reviews. The lesson half, lessons7d counts and meanScore, stays zero until the lesson player writes lesson_runs. Coach from the review half until then. rate and meanScore are null when the count is 0."`
+	MixTarget            MixTarget        `json:"mixTarget" jsonschema:"Unit new-word budgets plus the session mix: targetSuccess, maxNewPerSession, and maxNewShare."`
 }
 
 // placementView is the get_context placement object.
