@@ -407,8 +407,14 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 	}
 	lang := reviewLang(r)
 	s.mu.Lock()
+	loc, locErr := s.learnerLoc(r.Context(), user.ID)
+	if locErr != nil {
+		s.mu.Unlock()
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 	q := s.queues[key]
-	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID || !sameStudyDay(q.builtAt, s.now()) {
+	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID || !sameStudyDay(q.builtAt, s.now(), loc) {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return

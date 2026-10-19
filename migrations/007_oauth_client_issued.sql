@@ -1,4 +1,5 @@
--- Applied after 005_lesson_progress.sql. 006 is reserved.
+-- Applied after 005_lesson_progress.sql.
+-- 006 adds users.tz and does not have to be applied first.
 -- Remembers that a dynamic client was issued an authorization code or a token.
 -- Sweep deletes a registration that is still 0 about a day after created_at.
 -- A client that has been issued anything keeps the 400-day lifetime.

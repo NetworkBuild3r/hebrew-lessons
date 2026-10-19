@@ -29,7 +29,9 @@ type PlacementVM struct {
 
 // HomeVM is the Today page.
 type HomeVM struct {
-	Learner    LearnerVM
+	Learner LearnerVM
+	// DueCount is cards due before the next study-day rollover (04:00 local),
+	// so a card due later tonight still counts today.
 	DueCount   int
 	NextUnit   *UnitRefVM
 	KnownWords int
@@ -72,6 +74,7 @@ type ProgressVM struct {
 	KnownWords     int
 	UnitsCompleted int
 	UnitsTotal     int
-	DueCount       int
-	Placement      *PlacementVM
+	// DueCount is cards due before the next study-day rollover (04:00 local).
+	DueCount  int
+	Placement *PlacementVM
 }

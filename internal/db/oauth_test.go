@@ -27,7 +27,7 @@ func TestOAuthIssuedBackfillSurvivesSweep(t *testing.T) {
 		names = append(names, entry.Name())
 	}
 	sort.Strings(names)
-	if len(names) != 5 {
+	if len(names) != 6 || names[len(names)-1] != "006_learner_tz.sql" {
 		t.Fatalf("migrations before 007 = %v", names)
 	}
 	var versions []int

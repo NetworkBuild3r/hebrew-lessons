@@ -39,7 +39,7 @@ func (s *Store) SessionUser(ctx context.Context, idHash string) (Session, User, 
 	}
 	row := s.queryRow(ctx, `
 		SELECT s.id_hash, s.user_id, s.csrf, s.expires_at,
-		       u.id, u.email, u.google_sub, u.role, u.created_at
+		       u.id, u.email, u.google_sub, u.role, u.created_at, u.tz
 		FROM sessions AS s
 		JOIN users AS u ON u.id = s.user_id
 		WHERE s.id_hash = ?`, idHash)
@@ -48,7 +48,7 @@ func (s *Store) SessionUser(ctx context.Context, idHash string) (Session, User, 
 	var u User
 	var created string
 	err := row.Scan(&sess.IDHash, &sess.UserID, &sess.CSRF, &exp,
-		&u.ID, &u.Email, &u.GoogleSub, &u.Role, &created)
+		&u.ID, &u.Email, &u.GoogleSub, &u.Role, &created, &u.TZ)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Session{}, User{}, ErrNotFound
 	}

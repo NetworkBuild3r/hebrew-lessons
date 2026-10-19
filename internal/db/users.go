@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	_ "time/tzdata" // SetLearnerTZ validates names on a distroless image
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 // User is a row in users.
@@ -16,7 +19,10 @@ type User struct {
 	GoogleSub string
 	Role      string
 	CreatedAt time.Time
+	TZ        string // IANA zone. The study day rolls over at 04:00 in this zone.
 }
+
+const userColumns = `id, email, google_sub, role, created_at, tz`
 
 // CreateUser inserts one user. role must be learner or admin.
 // email is stored lowercase. created_at comes from the store clock.
@@ -44,7 +50,7 @@ func (s *Store) CreateUser(ctx context.Context, email, googleSub, role string) (
 	if err != nil {
 		return User{}, err
 	}
-	return User{ID: id, Email: email, GoogleSub: googleSub, Role: role, CreatedAt: createdAt}, nil
+	return User{ID: id, Email: email, GoogleSub: googleSub, Role: role, CreatedAt: createdAt, TZ: studyday.DefaultTZ}, nil
 }
 
 // UpsertGoogleUser inserts a user or updates the row found by google_sub.
@@ -92,7 +98,7 @@ func (s *Store) UpsertGoogleUser(ctx context.Context, email, googleSub, role str
 		if err != nil {
 			return User{}, err
 		}
-		return User{ID: id, Email: email, GoogleSub: googleSub, Role: role, CreatedAt: createdAt}, nil
+		return User{ID: id, Email: email, GoogleSub: googleSub, Role: role, CreatedAt: createdAt, TZ: studyday.DefaultTZ}, nil
 	}
 	if err != nil {
 		return User{}, err
@@ -144,6 +150,42 @@ func (s *Store) UpdateUserRole(ctx context.Context, id int64, role string) error
 	return nil
 }
 
+// SetLearnerTZ sets users.tz. tz must be an IANA name time.LoadLocation accepts.
+// There is no HTTP handler. The study day reads the column.
+func (s *Store) SetLearnerTZ(ctx context.Context, userID int64, tz string) error {
+	if err := s.ready(); err != nil {
+		return err
+	}
+	tz = strings.TrimSpace(tz)
+	if tz == "" {
+		return errors.New("db: time zone is required")
+	}
+	if _, err := time.LoadLocation(tz); err != nil {
+		return fmt.Errorf("db: time zone %q: %w", tz, err)
+	}
+	res, err := s.exec(ctx, `UPDATE users SET tz = ? WHERE id = ?`, tz, userID)
+	if err != nil {
+		return fmt.Errorf("db: set time zone: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("db: set time zone: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// UserByID returns the user with that id, including tz.
+func (s *Store) UserByID(ctx context.Context, id int64) (User, error) {
+	if err := s.ready(); err != nil {
+		return User{}, err
+	}
+	row := s.queryRow(ctx, `SELECT `+userColumns+` FROM users WHERE id = ?`, id)
+	return scanUser(row)
+}
+
 // AddressGender is users.address_gender for this learner.
 // An unset column returns an empty string, which the shell treats as masculine.
 func (s *Store) AddressGender(ctx context.Context, userID int64) (string, error) {
@@ -180,14 +222,14 @@ type rowQuery interface {
 
 func findUserWhere(ctx context.Context, q rowQuery, clause, arg string) (User, error) {
 	row := q.QueryRowContext(ctx,
-		`SELECT id, email, google_sub, role, created_at FROM users WHERE `+clause, arg)
+		`SELECT `+userColumns+` FROM users WHERE `+clause, arg)
 	return scanUser(row)
 }
 
 func scanUser(row *sql.Row) (User, error) {
 	var u User
 	var created string
-	err := row.Scan(&u.ID, &u.Email, &u.GoogleSub, &u.Role, &created)
+	err := row.Scan(&u.ID, &u.Email, &u.GoogleSub, &u.Role, &created, &u.TZ)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}

@@ -25,6 +25,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
@@ -498,8 +499,67 @@ func TestReviewDoneSessionRebuilds(t *testing.T) {
 	}
 }
 
-func TestReviewStaleSessionRebuilds(t *testing.T) {
-	start := time.Date(2026, 10, 18, 23, 0, 0, 0, time.UTC)
+func TestStudyQueueRollsOverAt4AM(t *testing.T) {
+	loc := mustDenver(t)
+	start := time.Date(2026, 10, 18, 23, 0, 0, 0, loc)
+	reuse := time.Date(2026, 10, 19, 3, 30, 0, 0, loc)
+	rebuild := time.Date(2026, 10, 19, 4, 1, 0, 0, loc)
+	store, h, clk := openStepped(t, start)
+	learner := addLearner(t, store, "a@example.com", "sub-a", start)
+	if _, err := store.ExecContext(context.Background(), `UPDATE sessions SET expires_at = ? WHERE user_id = ?`, db.FormatTime(start.Add(7*24*time.Hour)), learner.user.ID); err != nil {
+		t.Fatal(err)
+	}
+	reviewed := start.Add(-48 * time.Hour)
+	firstLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	first := addCard(t, store, learner.user.ID, firstLex, fsrs.DirHeEn, start.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	page := getLearner(t, h, learner, "/review")
+	if attr(t, page, "data-card") != fmt.Sprint(first) {
+		t.Fatalf("first serve = %s", cardAttrs(page))
+	}
+	if shown := postReveal(t, h, learner, first, "https://learn.example"); shown.Code != http.StatusOK {
+		t.Fatalf("reveal = %d", shown.Code)
+	}
+
+	clk.Advance(reuse.Sub(start))
+	if err := store.SetCardSuspended(context.Background(), first, true); err != nil {
+		t.Fatal(err)
+	}
+	secondLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
+	second := addCard(t, store, learner.user.ID, secondLex, fsrs.DirHeEn, reuse.Add(-time.Minute), 1, int(fsrs.Good), reviewed)
+	kept := getLearner(t, h, learner, "/review")
+	if attr(t, kept, "data-card") != fmt.Sprint(first) || !strings.Contains(kept, "שָׁלוֹם") {
+		t.Fatalf("03:30 local rebuilt the 23:00 queue: %s", cardAttrs(kept))
+	}
+
+	clk.Advance(rebuild.Sub(reuse))
+	stale := postGrade(t, h, learner, first, "3", "https://learn.example")
+	if stale.Code != http.StatusBadRequest {
+		t.Fatalf("grade on a stale queue = %d", stale.Code)
+	}
+	if n := len(mustLogs(t, store, first)); n != 1 {
+		t.Fatalf("stale grade wrote a log, count %d", n)
+	}
+	rebuilt := getLearner(t, h, learner, "/review")
+	if attr(t, rebuilt, "data-card") != fmt.Sprint(second) || strings.Contains(rebuilt, "שָׁלוֹם") || !strings.Contains(rebuilt, "מַיִם") {
+		t.Fatalf("04:01 local did not rebuild: %s", cardAttrs(rebuilt))
+	}
+}
+
+func TestStudyQueueIgnoresUTCMidnight(t *testing.T) {
+	loc := mustDenver(t)
+	start := time.Date(2026, 10, 18, 17, 0, 0, 0, loc)
+	later := time.Date(2026, 10, 18, 19, 0, 0, 0, loc)
+	midnight := time.Date(2026, 10, 18, 18, 0, 0, 0, loc)
+	if !midnight.After(start) || !midnight.Before(later) {
+		t.Fatal("Denver 18:00 does not fall between the build and the check")
+	}
+	if !midnight.Equal(time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("Denver 18:00 = %s, want UTC midnight", midnight.UTC())
+	}
+	if studyday.Key(start, loc) != studyday.Key(later, loc) {
+		t.Fatal("17:00 and 19:00 Denver are not the same study day")
+	}
+
 	store, h, clk := openStepped(t, start)
 	learner := addLearner(t, store, "a@example.com", "sub-a", start)
 	if _, err := store.ExecContext(context.Background(), `UPDATE sessions SET expires_at = ? WHERE user_id = ?`, db.FormatTime(start.Add(7*24*time.Hour)), learner.user.ID); err != nil {
@@ -513,22 +573,51 @@ func TestReviewStaleSessionRebuilds(t *testing.T) {
 		t.Fatalf("first serve = %s", cardAttrs(page))
 	}
 
-	clk.Advance(2 * time.Hour)
-	stale := postGrade(t, h, learner, first, "3", "https://learn.example")
-	if stale.Code != http.StatusBadRequest {
-		t.Fatalf("grade on a stale queue = %d", stale.Code)
-	}
-	if n := len(mustLogs(t, store, first)); n != 1 {
-		t.Fatalf("stale grade wrote a log, count %d", n)
-	}
+	clk.Advance(later.Sub(start))
 	if err := store.SetCardSuspended(context.Background(), first, true); err != nil {
 		t.Fatal(err)
 	}
 	secondLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
-	second := addCard(t, store, learner.user.ID, secondLex, fsrs.DirHeEn, clk.Now().Add(-time.Minute), 1, int(fsrs.Good), reviewed)
-	rebuilt := getLearner(t, h, learner, "/review")
-	if attr(t, rebuilt, "data-card") != fmt.Sprint(second) || strings.Contains(rebuilt, "שָׁלוֹם") || !strings.Contains(rebuilt, "מַיִם") {
-		t.Fatalf("stale rebuild: %s", cardAttrs(rebuilt))
+	addCard(t, store, learner.user.ID, secondLex, fsrs.DirHeEn, later.Add(-time.Minute), 1, int(fsrs.Good), reviewed)
+	kept := getLearner(t, h, learner, "/review")
+	if attr(t, kept, "data-card") != fmt.Sprint(first) || !strings.Contains(kept, "שָׁלוֹם") || strings.Contains(kept, "מַיִם") {
+		t.Fatalf("UTC midnight rebuilt the queue: %s", cardAttrs(kept))
+	}
+}
+
+func TestDueCountIncludesCardBeforeNextRollover(t *testing.T) {
+	loc := mustDenver(t)
+	now := time.Date(2026, 10, 18, 22, 0, 0, 0, loc)
+	tonight := time.Date(2026, 10, 19, 2, 0, 0, 0, loc)
+	rollover := time.Date(2026, 10, 19, 4, 0, 0, 0, loc)
+	if !tonight.Before(studyday.Next(now, loc)) || !rollover.Equal(studyday.Next(now, loc)) {
+		t.Fatalf("tonight %s rollover %s next %s", tonight, rollover, studyday.Next(now, loc))
+	}
+	store, h, _ := openStepped(t, now)
+	learner := addLearner(t, store, "a@example.com", "sub-a", now)
+	soon := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	addCard(t, store, learner.user.ID, soon, fsrs.DirHeEn, tonight, 1, int(fsrs.Good), now.Add(-48*time.Hour))
+	later := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
+	addCard(t, store, learner.user.ID, later, fsrs.DirHeEn, rollover, 1, int(fsrs.Good), now.Add(-48*time.Hour))
+
+	home := getLearner(t, h, learner, "/")
+	if !strings.Contains(home, `data-due="1"`) {
+		t.Fatalf("home due count: %s", articleAttrs(home))
+	}
+	srv := newServer(store)
+	prog, err := srv.progressVM(context.Background(), learner.user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prog.DueCount != 1 {
+		t.Fatalf("ProgressVM.DueCount = %d, want 1", prog.DueCount)
+	}
+	page, _, err := srv.learnerHome(context.Background(), learner.user.ID, learner.user.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.DueCount != 1 {
+		t.Fatalf("HomeVM.DueCount = %d, want 1", page.DueCount)
 	}
 }
 
@@ -554,7 +643,7 @@ func TestStudyQueueMapIsBounded(t *testing.T) {
 		t.Fatal("the oldest queue stayed")
 	}
 	if _, ok := s.queues["old"]; ok {
-		t.Fatal("a queue from another UTC day stayed")
+		t.Fatal("a queue from another study day stayed")
 	}
 	if _, ok := s.queues["nil"]; ok {
 		t.Fatal("a nil queue stayed")
@@ -658,6 +747,15 @@ func (c *stepClock) Advance(d time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.t = c.t.Add(d)
+}
+
+func mustDenver(t *testing.T) *time.Location {
+	t.Helper()
+	loc, err := time.LoadLocation("America/Denver")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return loc
 }
 
 func openApp(t *testing.T) (*db.Store, http.Handler, time.Time) {
