@@ -14,7 +14,17 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/hebrew ./cmd/hebrew
+
+# GIT_SHA is the commit this image was built from. CI passes github.sha
+# (the checkout HEAD). BUILT_AT is UTC RFC3339. .git is not in the build
+# context, so the binary cannot read vcs.revision unless these are set.
+# The args are declared after the module download so a new SHA does not
+# bust that cache.
+ARG GIT_SHA=unknown
+ARG BUILT_AT=
+RUN CGO_ENABLED=0 go build -trimpath \
+    -ldflags "-s -w -X github.com/NetworkBuild3r/hebrew-lessons/internal/buildinfo.Commit=${GIT_SHA} -X github.com/NetworkBuild3r/hebrew-lessons/internal/buildinfo.BuiltAt=${BUILT_AT}" \
+    -o /out/hebrew ./cmd/hebrew
 
 # The Tanakh files are world-readable and not writable. uid 65532 can
 # read them and cannot change them. The corpus is under 30MB, so the
