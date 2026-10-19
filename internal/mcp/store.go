@@ -7,11 +7,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/lexicon"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
-// ErrUnitNotFound means PutUnit was given an id that is not in the store.
+// ErrUnitNotFound means a unit write was given an id that is not in the store.
 var ErrUnitNotFound = errors.New("unit not found")
+
+// ErrRevisionNotFound means a revision number this unit does not have.
+var ErrRevisionNotFound = errors.New("unit revision not found")
 
 // defaultStruggleTop is how many struggled lexemes get_context returns
 // when topN is omitted. It does not limit confusions. The store's
@@ -146,6 +150,16 @@ type CourseReader interface {
 	// Proposed for the top-level knownLexemes field. It does not read a
 	// learner_lexemes table; that table is dropped.
 	LearnerKnownLexemes(ctx context.Context, userID int64) ([]string, error)
+	// LearnerCards returns one page of this learner's cards, including
+	// suspended cards. Order is due ascending, then most recently reviewed
+	// (a card with no review is last), then card id. Limit is the page
+	// size. NextCursor is empty on the last page. An unreadable cursor
+	// returns ErrBadCardCursor.
+	LearnerCards(ctx context.Context, q CardQuery) (CardPage, error)
+	// RecentAccuracy counts Good and Easy reviews and finished lesson
+	// scores for this learner, using the store clock as the end of the
+	// window. Shape matches get_context recentAccuracy.
+	RecentAccuracy(ctx context.Context, userID int64) (RecentAccuracy, error)
 }
 
 // Struggle mirrors db.Struggle.
@@ -197,6 +211,23 @@ type UnitCompletion struct {
 	CompletedAt time.Time `json:"completedAt"`
 }
 
+// LexemeResult is one upsert_lexemes row.
+// Status is created, updated, or unchanged. TextNFC is the normalized key.
+type LexemeResult struct {
+	TextNFC string `json:"text_nfc"`
+	ID      int64  `json:"id"`
+	Status  string `json:"status"`
+}
+
+// LexiconWriter is what upsert_lexemes writes.
+// A *lexicon.Invalid error means the batch was rejected and nothing was
+// written. The database method rebuilds lesson_items for units that
+// reference the batch and returns those unit ids. The in-memory fake
+// does not derive lesson_items and returns no unit ids.
+type LexiconWriter interface {
+	UpsertLexemes(ctx context.Context, entries []lexicon.Input) ([]LexemeResult, []int64, error)
+}
+
 // LexiconReader is what lookup reads.
 type LexiconReader interface {
 	// SearchLexemes matches query against pointed text, unpointed text,
@@ -212,16 +243,35 @@ type PutResult struct {
 	Unchanged bool
 }
 
-// UnitWriter is what put_unit writes.
+// UnitView is the revision publish_unit validates. Position is the
+// units.position column. A revision row does not store it.
+type UnitView struct {
+	UnitID   int64
+	Revision int
+	Position int
+	Scope    string
+	Status   string
+	Doc      units.Unit
+}
+
+// UnitWriter is what put_unit and publish_unit write.
 //
 // The database method is PutUnit(ctx, doc, scope). doc carries the
 // document and Position. scope is shared or learner:<id> and is not
 // inside the document. id nil creates a unit. A set id updates that
 // unit. The same document, position, and scope insert nothing and
-// return Unchanged. A scope-only change appends a revision, sets
-// status to draft, and derives lesson_items. Block issues do not
-// refuse the write. Actor is the principal on ctx.
+// return Unchanged. The database method still rebuilds lesson_items
+// on that path and does not add a revision. A scope-only change
+// appends a revision, sets status to draft, and derives lesson_items.
+// Block issues do not refuse the write. Actor is the principal on ctx.
 // The in-memory fake does not derive lesson_items. The database method does.
+//
+// LoadUnit reads the current row, or one revision when revision is set.
+// A nil revision is the current row, not the highest revision number.
+// PublishUnit marks that revision published. It does not insert a
+// revision and it does not validate. The tool runs units.Validate first.
 type UnitWriter interface {
 	PutUnit(ctx context.Context, id *int64, doc *units.Unit, scope string) (PutResult, error)
+	LoadUnit(ctx context.Context, id int64, revision *int) (UnitView, error)
+	PublishUnit(ctx context.Context, id int64, revision *int) (PutResult, error)
 }

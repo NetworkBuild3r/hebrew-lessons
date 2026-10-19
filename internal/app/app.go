@@ -278,7 +278,7 @@ func NewApp(cfg Config) (*App, error) {
 		tts:       tts,
 	}
 	health := a.healthHandler()
-	a.web = web.NewWithStore(health, svc, store)
+	a.web = web.NewWithPlacement(health, svc, a.placement, store)
 	a.mcp = newMCP(cfg, health, svc, store, tts, audioDir)
 	sweepCtx, stop := context.WithCancel(context.Background())
 	a.stopSweep = stop
@@ -462,6 +462,7 @@ func newMCP(cfg Config, health http.Handler, sessions *auth.Service, store *db.S
 		},
 		Course:  adapter,
 		Lexicon: adapter,
+		Lexemes: adapter,
 		Lookup:  adapter,
 		Units:   adapter,
 		Audio: audioGen{

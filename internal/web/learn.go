@@ -29,6 +29,8 @@ const maxStudyQueues = 128
 type server struct {
 	store *db.Store
 	study *session.Service
+	deck  placementDeck
+	runs  placementRuns
 
 	mu     sync.Mutex
 	queues map[string]*studyQueue
@@ -220,14 +222,36 @@ func homeToView(lang, csrf, gender, situation string, vm HomeVM) views.Home {
 		home.Lesson = true
 		home.UnitTitle = vm.NextUnit.Title
 	}
-	if vm.Placement != nil {
-		home.Placement = placementState(vm.Placement)
-		home.PlacementWords = strconv.Itoa(vm.Placement.EstimatedKnownWords)
-		home.PlacementLevel = strconv.Itoa(vm.Placement.Level)
-		home.PlacementRated = strconv.Itoa(vm.Placement.CardsRated)
-		home.PlacementAt = db.FormatTime(vm.Placement.TakenAt)
-	}
+	fillPlacement(&home, vm.Placement)
 	return home
+}
+
+// fillPlacement copies the learner's placement onto the Today card.
+// A nil value leaves the card off the page only when the caller then sets
+// an inactive shell. Active and finished runs also fill the data attributes.
+func fillPlacement(home *views.Home, p *PlacementVM) {
+	if home == nil || p == nil {
+		return
+	}
+	home.Placement = &views.PlacementVM{
+		Active:              p.Active,
+		Finished:            p.Finished,
+		CardsRated:          p.CardsRated,
+		Level:               p.Level,
+		EstimatedKnownWords: p.EstimatedKnownWords,
+		TakenAt:             p.TakenAt,
+	}
+	state := placementState(p)
+	if state == "" {
+		return
+	}
+	home.PlacementState = state
+	home.PlacementWords = strconv.Itoa(p.EstimatedKnownWords)
+	home.PlacementLevel = strconv.Itoa(p.Level)
+	home.PlacementRated = strconv.Itoa(p.CardsRated)
+	if !p.TakenAt.IsZero() {
+		home.PlacementAt = db.FormatTime(p.TakenAt)
+	}
 }
 
 func progressToView(lang, csrf, gender string, vm ProgressVM) views.ProgressPage {

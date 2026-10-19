@@ -1,0 +1,63 @@
+package views
+
+// WordBlock is the one Hebrew word component.
+// size is chip, inline, card, or display.
+// Pointed Hebrew, then the transliteration as its own LTR run, then the
+// English gloss. hideGloss drops the gloss on a prompt whose answer is the
+// meaning. The transliteration stays.
+templ WordBlock(text, translit, gloss, size, id string, hideGloss bool) {
+	switch size {
+		case "inline":
+			<span class="wb wb--inline">
+				<bdi class="wb__he" lang="he" dir="rtl" if id != "" { id={ id } }>{ text }</bdi>
+				<span class="wb__aux">
+					(
+					if translit != "" {
+						<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ translit }</bdi>
+					}
+					if !hideGloss && gloss != "" {
+						if translit != "" {
+							<span aria-hidden="true"> · </span>
+						}
+						<bdi class="wb__gl" lang="en" dir="ltr">{ gloss }</bdi>
+					}
+					)
+				</span>
+			</span>
+		case "chip":
+			<span class="wb wb--chip">
+				<bdi class="wb__he" lang="he" dir="rtl" if id != "" { id={ id } }>{ text }</bdi>
+				if translit != "" {
+					<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ translit }</bdi>
+				}
+				if !hideGloss && gloss != "" {
+					<bdi class="wb__gl" lang="en" dir="ltr">{ gloss }</bdi>
+				}
+			</span>
+		case "card":
+			<span class="wb wb--card">
+				<bdi class="wb__he" lang="he" dir="rtl" if id != "" { id={ id } }>{ text }</bdi>
+				if translit != "" {
+					<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ translit }</bdi>
+				}
+				if !hideGloss && gloss != "" {
+					<bdi class="wb__gl" lang="en" dir="ltr">{ gloss }</bdi>
+				}
+			</span>
+		default:
+			<span class="wb wb--display">
+				<bdi class="wb__he heword" lang="he" dir="rtl" if id != "" { id={ id } }>{ text }</bdi>
+				<span class="wb__line">
+					if translit != "" {
+						<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ translit }</bdi>
+					}
+					if !hideGloss && gloss != "" {
+						if translit != "" {
+							<span class="wb__dot" aria-hidden="true"> · </span>
+						}
+						<bdi class="wb__gl" lang="en" dir="ltr">{ gloss }</bdi>
+					}
+				</span>
+			</span>
+	}
+}

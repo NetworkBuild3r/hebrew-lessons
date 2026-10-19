@@ -23,8 +23,10 @@
 //
 // # Constants
 //
-// SessionCap is 20. TargetSuccess is 0.85. RecentReviews is 50. LowAccuracy
-// is 0.80 and HighAccuracy is 0.90. A recent Good/Easy share below
+// SessionCap is 20. TargetSuccess is 0.85, the sessionlimits value the
+// coach also reports. MaxNewPerSession is 5 and MaxNewShare is 0.25.
+// BuildSession does not apply those two new-card caps. RecentReviews is 50.
+// LowAccuracy is 0.80 and HighAccuracy is 0.90. A recent Good/Easy share below
 // LowAccuracy uses LowAccuracyKnownShare. A share above HighAccuracy uses
 // HighAccuracyKnownShare. A share from LowAccuracy through HighAccuracy, and
 // a learner with no reviews, uses DefaultKnownShare.

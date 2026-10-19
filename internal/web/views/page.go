@@ -3,6 +3,7 @@ package views
 import (
 	"encoding/json"
 	"strconv"
+	"time"
 
 	"github.com/a-h/templ"
 )
@@ -179,9 +180,23 @@ func NewPage(lang, csrf, current string) Page {
 	return Page{UI: ui, Title: ui.DocTitle(current), CSRF: csrf, Current: current}
 }
 
+// PlacementVM is the Today placement card.
+// The same fields live on internal/web/viewmodel.go as HomeVM.Placement.
+// Nil means the learner has never taken the check.
+// A non-nil value with Active false and Finished false is the shell built
+// without a placement store, so the card stays off.
+type PlacementVM struct {
+	Active              bool
+	Finished            bool
+	CardsRated          int
+	Level               int
+	EstimatedKnownWords int
+	TakenAt             time.Time
+}
+
 // Home is Today. Due is the review count. Lesson is false when no shared
 // unit is waiting. Words is empty until a lesson carries its new-word row.
-// Placement is "", "active", or "finished".
+// Placement is the card. PlacementState is "", "active", or "finished".
 type Home struct {
 	UI
 	CSRF           string
@@ -192,7 +207,8 @@ type Home struct {
 	UnitTitle      string
 	UnitGloss      string
 	KnownText      string
-	Placement      string
+	Placement      *PlacementVM
+	PlacementState string
 	PlacementWords string
 	PlacementLevel string
 	PlacementRated string

@@ -29,24 +29,40 @@ var Assets embed.FS
 // sessions, when non-nil, registers Google sign-in and logout and wraps
 // the mux with the session middleware. Page tokens come from
 // CSRFFunc(auth.CSRFToken). A signed-out GET of /, /review, /progress,
-// or /lesson redirects to /signin (303 for a full page, 401 and
+// /lesson, or /placement redirects to /signin (303 for a full page, 401 and
 // HX-Redirect for htmx). Reads stay on those page URLs. /_hx/ is for
 // htmx writes, and this router does not register read routes there.
+// New does not deal placement. NewWithPlacement wires the deck and the
+// run store the handlers read for ownership and the Today card.
 // Tests pass a fake to newMux; production does not. The ungated router
 // still serves those pages.
 // Audio bytes are served at /audio/<sha256>.mp3; this router does not
 // register that path.
 func New(health http.Handler, sessions *auth.Service) http.Handler {
-	return newHandler(health, sessions, nil)
+	return newHandler(health, sessions, nil, nil, nil)
 }
 
 // NewWithStore is New with the learner database. Today, Review, and Progress
 // read that store. The study queue is built by internal/session.
+// The store is also the placement run reader. Writes need NewWithPlacement.
 func NewWithStore(health http.Handler, sessions *auth.Service, store *db.Store) http.Handler {
-	return newHandler(health, sessions, store)
+	var runs placementRuns
+	if store != nil {
+		runs = store
+	}
+	return newHandler(health, sessions, nil, store, runs)
 }
 
-func newHandler(health http.Handler, sessions *auth.Service, store *db.Store) http.Handler {
+// NewWithPlacement is New plus the placement deck. deck deals cards.
+// runs is the store read for ownership and LatestPlacement. Both are
+// required for a POST; a nil pair still serves the read-only intro.
+// A *db.Store runs value is also the Today, Review, and Progress store.
+func NewWithPlacement(health http.Handler, sessions *auth.Service, deck placementDeck, runs placementRuns) http.Handler {
+	store, _ := runs.(*db.Store)
+	return newHandler(health, sessions, deck, store, runs)
+}
+
+func newHandler(health http.Handler, sessions *auth.Service, deck placementDeck, store *db.Store, runs placementRuns) http.Handler {
 	var tokens CSRFToken
 	secure := false
 	if sessions != nil {
@@ -55,6 +71,8 @@ func newHandler(health http.Handler, sessions *auth.Service, store *db.Store) ht
 		secure = sessions.CookieSecure()
 	}
 	srv := newServer(store)
+	srv.deck = deck
+	srv.runs = runs
 	mux := srv.routes(health, tokens, sessions != nil, secure)
 	if sessions != nil {
 		sessions.Register(mux)
@@ -99,6 +117,7 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 	mux.HandleFunc("GET /lesson", lesson)
 	mux.HandleFunc("POST /_hx/review/reveal", gated(gate, secure, s.reveal))
 	mux.HandleFunc("POST /_hx/review/grade", gated(gate, secure, s.grade))
+	mountPlacement(mux, tokens, gate, secure, s.deck, s.runs)
 	mux.HandleFunc("GET /signin", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := auth.CurrentUser(r.Context()); ok {
 			w.Header().Set("Cache-Control", "no-store")
@@ -146,7 +165,8 @@ func (n noDirFS) Open(name string) (fs.File, error) {
 
 // homeFrom fills Today from the signed-in learner.
 // With no learner, or no store, the page is the empty real state: nothing
-// due, no next unit, no known words, and no placement.
+// due, no next unit, no known words. The placement card stays off unless
+// a run reader has a row.
 func (s *server) homeFrom(r *http.Request, lang, csrf string) (views.Home, error) {
 	vm, gender, situation, err := s.loadHome(r)
 	if err != nil {
@@ -157,6 +177,31 @@ func (s *server) homeFrom(r *http.Request, lang, csrf string) (views.Home, error
 
 func (s *server) serveHome(w http.ResponseWriter, r *http.Request, secure bool, csrf string) {
 	lang := chooseLang(w, r, secure)
+	if s == nil || s.store == nil {
+		page := homeToView(lang, csrf, views.AddressMasculine, "", HomeVM{})
+		if s == nil || s.runs == nil {
+			// No placement store: the card stays off, as on the ungated shell.
+			page.Placement = &views.PlacementVM{}
+		} else {
+			state, err := todayPlacement(r, s.runs)
+			if err != nil {
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				return
+			}
+			if state != nil {
+				fillPlacement(&page, &PlacementVM{
+					Active:              state.Active,
+					Finished:            state.Finished,
+					CardsRated:          state.CardsRated,
+					Level:               state.Level,
+					EstimatedKnownWords: state.EstimatedKnownWords,
+					TakenAt:             state.TakenAt,
+				})
+			}
+		}
+		render(w, r, views.Today(page))
+		return
+	}
 	page, err := s.homeFrom(r, lang, csrf)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

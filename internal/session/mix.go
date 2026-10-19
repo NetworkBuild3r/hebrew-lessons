@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
 )
 
 const (
@@ -15,7 +16,17 @@ const (
 	SessionCap = 20
 
 	// TargetSuccess is the session success rate the default mix aims at.
-	TargetSuccess = 0.85
+	// The literal lives in sessionlimits so the authoring coach reads the
+	// same value BuildSession uses.
+	TargetSuccess = sessionlimits.TargetSuccess
+
+	// MaxNewPerSession is how many new cards one session should introduce.
+	// BuildSession does not apply it.
+	MaxNewPerSession = sessionlimits.MaxNewPerSession
+
+	// MaxNewShare is the largest fraction of a session that should be new
+	// cards. BuildSession does not apply it.
+	MaxNewShare = sessionlimits.MaxNewShare
 
 	// KnownSuccess is the success rate assumed for a stable known card
 	// when TargetSuccess is turned into a known-card share.

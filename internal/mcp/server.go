@@ -22,12 +22,17 @@ const (
 	instructions = "You are writing Hebrew course units. " +
 		"Read hebrew://schema/unit, hebrew://catalog/activities, and hebrew://rules before you draft. " +
 		"Call get_context for the outline, the words already taught before a position, the budgets, and, when you pass learnerId, that learner's placement and struggles. " +
+		"When learnerId is set, get_context also returns that learner's cards, recentAccuracy, and mixTarget. Recycle due cards and reinforce words with high lapses. If cardsTruncated is true, call get_learner_words to page the rest. " +
 		"Omit learnerId for a shared unit. Shared units assume no learner data. " +
 		"Call lookup before you invent a spelling or a gloss. " +
+		"Call upsert_lexemes to add or correct a lexicon entry. It is admin only. " +
 		"Call validate_unit as a dry run. Call put_unit to save a draft. " +
 		"Call generate_audio with texts, or a unitId, to store clips for the activity text. A text that already has a clip is skipped. " +
 		"put_unit requires scope shared or learner:<id>. Scope is not inside the document. " +
-		"put_unit saves even when issues block publishing. It does not publish. " +
+		"put_unit saves even when issues block publishing. " +
+		"Call publish_unit to publish a shared unit once there are no block issues. " +
+		"put_unit with publish true publishes only a learner:<id> unit, and only when there are no block issues. A shared unit ignores that flag. " +
+		"Warnings do not block publishing. Publishing the same revision again reports unchanged. " +
 		"Send unitId when you save again so an unchanged document, position, and scope do not create a revision."
 )
 
@@ -71,6 +76,7 @@ type Options struct {
 	extraTools func(*mcp.Server)
 	Course     CourseReader
 	Lexicon    LexiconReader
+	Lexemes    LexiconWriter
 	Lookup     units.Lookup
 	Units      UnitWriter
 	Audio      AudioGenerator
@@ -142,6 +148,7 @@ func newMCPServer(opts Options) *mcp.Server {
 	svc := &service{
 		course:    opts.Course,
 		lexicon:   opts.Lexicon,
+		lexemes:   opts.Lexemes,
 		lexLookup: opts.Lookup,
 		units:     opts.Units,
 		audio:     opts.Audio,

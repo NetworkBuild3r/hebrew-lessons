@@ -1,10 +1,11 @@
 // Package mcp is the authoring server.
 //
-// This slice serves five tools (get_context, lookup, validate_unit,
-// put_unit, generate_audio) and three resources over streamable HTTP.
-// The other five tools (upsert_lexemes, get_unit, publish_unit,
-// unit_history, delete_unit) register on the same server later. They
-// are not stubbed here, so tools/list shows only what runs.
+// This slice serves eight tools (get_context, lookup, validate_unit,
+// put_unit, upsert_lexemes, generate_audio, publish_unit,
+// get_learner_words) and three resources over streamable HTTP. The
+// other three tools (get_unit, unit_history, delete_unit) register on
+// the same server later. They are not stubbed here, so tools/list shows
+// only what runs.
 //
 // An OAuth access token is accepted when SessionFromToken is set. That
 // function maps the bearer to a session id. Sessions then calls

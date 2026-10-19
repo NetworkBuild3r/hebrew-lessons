@@ -7,6 +7,15 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 )
 
+func TestNoHistoryAccuracyIsTargetSuccess(t *testing.T) {
+	if accuracyOf(nil) != TargetSuccess || NoHistoryAccuracy != TargetSuccess {
+		t.Fatalf("no-history %v target %v", accuracyOf(nil), TargetSuccess)
+	}
+	if MaxNewPerSession != 5 || MaxNewShare != 0.25 {
+		t.Fatalf("new caps %d %v", MaxNewPerSession, MaxNewShare)
+	}
+}
+
 func TestKnownShareBands(t *testing.T) {
 	if TargetSuccess <= LowAccuracy || TargetSuccess >= HighAccuracy {
 		t.Fatalf("TargetSuccess %v sits outside the default band", TargetSuccess)
