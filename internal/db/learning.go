@@ -8,12 +8,6 @@ import (
 	"time"
 )
 
-// timestampLayout is the UTC text stored in due, at, and the other learning
-// timestamps this file writes. The fractional part is fixed at nine digits so
-// the strings sort in time order. time.RFC3339Nano omits trailing zeros, and
-// those strings do not sort against each other.
-const timestampLayout = "2006-01-02T15:04:05.000000000Z"
-
 const cardColumns = `id, user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, last_review, suspended`
 
 // Card is one row of cards.
@@ -58,20 +52,6 @@ func (s *Store) connOrErr() (*sql.DB, error) {
 	return s.conn, nil
 }
 
-func formatTime(t time.Time) string {
-	return t.UTC().Format(timestampLayout)
-}
-
-func parseTime(value string) (time.Time, error) {
-	for _, layout := range []string{timestampLayout, time.RFC3339Nano, time.RFC3339} {
-		parsed, err := time.Parse(layout, value)
-		if err == nil {
-			return parsed.UTC(), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("parse time %q", value)
-}
-
 func scanCard(scan func(dest ...any) error) (Card, error) {
 	var card Card
 	var due, last sql.NullString
@@ -85,13 +65,13 @@ func scanCard(scan func(dest ...any) error) (Card, error) {
 		return Card{}, err
 	}
 	if due.Valid {
-		card.Due, err = parseTime(due.String)
+		card.Due, err = ParseTime(due.String)
 		if err != nil {
 			return Card{}, fmt.Errorf("db: card %d due: %w", card.ID, err)
 		}
 	}
 	if last.Valid {
-		card.LastReview, err = parseTime(last.String)
+		card.LastReview, err = ParseTime(last.String)
 		if err != nil {
 			return Card{}, fmt.Errorf("db: card %d last_review: %w", card.ID, err)
 		}
@@ -128,7 +108,7 @@ func (s *Store) InsertCard(ctx context.Context, card Card) (int64, error) {
 	}
 	var last any
 	if !card.LastReview.IsZero() {
-		last = formatTime(card.LastReview)
+		last = FormatTime(card.LastReview)
 	}
 	suspended := 0
 	if card.Suspended {
@@ -138,7 +118,7 @@ func (s *Store) InsertCard(ctx context.Context, card Card) (int64, error) {
 		INSERT INTO cards (
 			user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, last_review, suspended
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		card.UserID, card.LexemeID, card.Dir, card.State, formatTime(card.Due),
+		card.UserID, card.LexemeID, card.Dir, card.State, FormatTime(card.Due),
 		card.Stability, card.Difficulty, card.Reps, card.Lapses, last, suspended,
 	)
 	if err != nil {
@@ -172,8 +152,8 @@ func (s *Store) ApplyReview(ctx context.Context, card Card, log ReviewLog) error
 		UPDATE cards
 		SET state = ?, due = ?, stability = ?, difficulty = ?, reps = ?, lapses = ?, last_review = ?
 		WHERE id = ?`,
-		card.State, formatTime(card.Due), card.Stability, card.Difficulty,
-		card.Reps, card.Lapses, formatTime(card.LastReview), card.ID,
+		card.State, FormatTime(card.Due), card.Stability, card.Difficulty,
+		card.Reps, card.Lapses, FormatTime(card.LastReview), card.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("db: update card: %w", err)
@@ -192,7 +172,7 @@ func (s *Store) ApplyReview(ctx context.Context, card Card, log ReviewLog) error
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked)
 		VALUES (?, ?, ?, ?, ?, ?)`,
-		card.ID, log.Rating, formatTime(log.ReviewedAt), log.ElapsedDays, log.ScheduledDays, peeked,
+		card.ID, log.Rating, FormatTime(log.ReviewedAt), log.ElapsedDays, log.ScheduledDays, peeked,
 	); err != nil {
 		return fmt.Errorf("db: insert review: %w", err)
 	}
@@ -258,7 +238,7 @@ func (s *Store) ListDueCards(ctx context.Context, userID int64, now time.Time) (
 		          AND lr.finished_at IS NOT NULL
 		      )
 		  )
-		ORDER BY c.due, c.id`, userID, formatTime(now))
+		ORDER BY c.due, c.id`, userID, FormatTime(now))
 	if err != nil {
 		return nil, fmt.Errorf("db: list due cards: %w", err)
 	}
@@ -300,7 +280,7 @@ func (s *Store) ReviewLogs(ctx context.Context, cardID int64) ([]ReviewLog, erro
 		if err := rows.Scan(&log.ID, &log.CardID, &log.Rating, &reviewed, &log.ElapsedDays, &log.ScheduledDays, &peeked); err != nil {
 			return nil, fmt.Errorf("db: review log: %w", err)
 		}
-		log.ReviewedAt, err = parseTime(reviewed)
+		log.ReviewedAt, err = ParseTime(reviewed)
 		if err != nil {
 			return nil, fmt.Errorf("db: review log: %w", err)
 		}
@@ -322,7 +302,7 @@ func (s *Store) InsertConfusionMiss(ctx context.Context, learnerID int64, kind, 
 	if _, err := conn.ExecContext(ctx, `
 		INSERT INTO confusion_misses (learner_id, kind, key, at)
 		VALUES (?, ?, ?, ?)`,
-		learnerID, kind, key, formatTime(at),
+		learnerID, kind, key, FormatTime(at),
 	); err != nil {
 		return fmt.Errorf("db: insert confusion: %w", err)
 	}
@@ -336,7 +316,7 @@ func (s *Store) ConfusionCounts(ctx context.Context, learnerID int64, since time
 	if err != nil {
 		return nil, err
 	}
-	sinceText := formatTime(since)
+	sinceText := FormatTime(since)
 	rows, err := conn.QueryContext(ctx, `
 		SELECT
 			m.key,
@@ -386,7 +366,7 @@ func (s *Store) InsertUser(ctx context.Context, email, sub, role string) (int64,
 	res, err := conn.ExecContext(ctx, `
 		INSERT INTO users (email, google_sub, role, created_at)
 		VALUES (?, ?, ?, ?)`,
-		email, sub, role, formatTime(s.clock.Now()),
+		email, sub, role, FormatTime(s.clock.Now()),
 	)
 	if err != nil {
 		return 0, fmt.Errorf("db: insert user: %w", err)
@@ -394,86 +374,6 @@ func (s *Store) InsertUser(ctx context.Context, email, sub, role string) (int64,
 	id, err := res.LastInsertId()
 	if err != nil {
 		return 0, fmt.Errorf("db: insert user: %w", err)
-	}
-	return id, nil
-}
-
-// InsertLexeme inserts a lexeme with text_nfc and returns the id.
-func (s *Store) InsertLexeme(ctx context.Context, textNFC string) (int64, error) {
-	conn, err := s.connOrErr()
-	if err != nil {
-		return 0, err
-	}
-	res, err := conn.ExecContext(ctx, `INSERT INTO lexemes (text_nfc) VALUES (?)`, textNFC)
-	if err != nil {
-		return 0, fmt.Errorf("db: insert lexeme: %w", err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("db: insert lexeme: %w", err)
-	}
-	return id, nil
-}
-
-// InsertUnit inserts a draft or published unit and returns the id.
-func (s *Store) InsertUnit(ctx context.Context, title, status string) (int64, error) {
-	conn, err := s.connOrErr()
-	if err != nil {
-		return 0, err
-	}
-	res, err := conn.ExecContext(ctx, `
-		INSERT INTO units (position, title, situation, concept, status, rev, doc)
-		VALUES (1, ?, 'street', 'greetings', ?, 1, '{"title":"t"}')`,
-		title, status,
-	)
-	if err != nil {
-		return 0, fmt.Errorf("db: insert unit: %w", err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("db: insert unit: %w", err)
-	}
-	return id, nil
-}
-
-// InsertLessonItem inserts one lesson_items row.
-func (s *Store) InsertLessonItem(ctx context.Context, unitID int64, lessonIx int, lexemeID int64, role, skill string) error {
-	conn, err := s.connOrErr()
-	if err != nil {
-		return err
-	}
-	if _, err := conn.ExecContext(ctx, `
-		INSERT INTO lesson_items (unit_id, lesson_ix, lexeme_id, role, skill)
-		VALUES (?, ?, ?, ?, ?)`,
-		unitID, lessonIx, lexemeID, role, skill,
-	); err != nil {
-		return fmt.Errorf("db: insert lesson item: %w", err)
-	}
-	return nil
-}
-
-// InsertLessonRun inserts one lesson_runs row.
-// A nil or zero finished time is stored as NULL, so the run is still in progress.
-func (s *Store) InsertLessonRun(ctx context.Context, userID, unitID int64, lessonIx int, started time.Time, finished *time.Time) (int64, error) {
-	conn, err := s.connOrErr()
-	if err != nil {
-		return 0, err
-	}
-	var done any
-	if finished != nil && !finished.IsZero() {
-		done = formatTime(*finished)
-	}
-	res, err := conn.ExecContext(ctx, `
-		INSERT INTO lesson_runs (user_id, unit_id, lesson_ix, started_at, finished_at)
-		VALUES (?, ?, ?, ?, ?)`,
-		userID, unitID, lessonIx, formatTime(started), done,
-	)
-	if err != nil {
-		return 0, fmt.Errorf("db: insert lesson run: %w", err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("db: insert lesson run: %w", err)
 	}
 	return id, nil
 }

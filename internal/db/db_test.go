@@ -11,7 +11,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 )
 
-const ts = "2026-10-18T00:00:00Z"
+var ts = FormatTime(time.Date(2026, 10, 18, 0, 0, 0, 0, time.UTC))
 
 type fixedClock struct{ t time.Time }
 
@@ -55,7 +55,7 @@ func TestMigrateEmptyAndIdempotent(t *testing.T) {
 	if got := count(t, s, `SELECT COUNT(*) FROM schema_migrations`); got != 2 {
 		t.Fatalf("schema_migrations rows = %d, want 2", got)
 	}
-	wantApplied := when.UTC().Format(time.RFC3339Nano)
+	wantApplied := FormatTime(when)
 	rows, err := s.conn.QueryContext(ctx, `SELECT version, applied_at FROM schema_migrations ORDER BY version`)
 	if err != nil {
 		t.Fatal(err)

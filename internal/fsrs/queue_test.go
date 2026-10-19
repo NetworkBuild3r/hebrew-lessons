@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 )
 
 func TestAssembleQueue(t *testing.T) {
@@ -235,32 +236,32 @@ func TestQueueHoldsNewWordsUntilIntroFinishes(t *testing.T) {
 	newCard := mustCard(t, store, db.Card{UserID: userID, LexemeID: newID, Dir: DirHeEn, Due: due})
 	oldCard := mustCard(t, store, db.Card{UserID: userID, LexemeID: oldID, Dir: DirHeEn, Due: due})
 	recycleCard := mustCard(t, store, db.Card{UserID: userID, LexemeID: recycleID, Dir: DirEnHe, Due: due})
-	unitID, err := store.InsertUnit(ctx, "Hello", "draft")
+	unitID, err := testharness.InsertUnit(ctx, store, "Hello", "draft")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.InsertLessonItem(ctx, unitID, 0, newID, "new", "recall"); err != nil {
+	if err := testharness.InsertLessonItem(ctx, store, unitID, 0, newID, "new", "recall"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.InsertLessonItem(ctx, unitID, 0, recycleID, "recycle", "recall"); err != nil {
+	if err := testharness.InsertLessonItem(ctx, store, unitID, 0, recycleID, "recycle", "recall"); err != nil {
 		t.Fatal(err)
 	}
 
 	assertCards(t, rev, userID, []int64{oldCard, recycleCard})
 
 	started := clk.Now()
-	if _, err := store.InsertLessonRun(ctx, userID, unitID, 0, started, nil); err != nil {
+	if _, err := testharness.InsertLessonRun(ctx, store, userID, unitID, 0, started, nil); err != nil {
 		t.Fatal(err)
 	}
 	assertCards(t, rev, userID, []int64{oldCard, recycleCard})
 
 	finished := clk.Now()
-	if _, err := store.InsertLessonRun(ctx, otherID, unitID, 0, started, &finished); err != nil {
+	if _, err := testharness.InsertLessonRun(ctx, store, otherID, unitID, 0, started, &finished); err != nil {
 		t.Fatal(err)
 	}
 	assertCards(t, rev, userID, []int64{oldCard, recycleCard})
 
-	if _, err := store.InsertLessonRun(ctx, userID, unitID, 0, started, &finished); err != nil {
+	if _, err := testharness.InsertLessonRun(ctx, store, userID, unitID, 0, started, &finished); err != nil {
 		t.Fatal(err)
 	}
 	assertCards(t, rev, userID, []int64{newCard, oldCard, recycleCard})

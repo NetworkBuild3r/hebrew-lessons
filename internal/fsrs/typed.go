@@ -9,9 +9,10 @@ import (
 
 // GradeTyped grades a typed Hebrew answer.
 // Both strings are NFC-normalized. Niqqud and cantillation in U+0591–U+05C7
-// are removed and letters are kept. Maqaf (U+05BE) and '-' are the same
-// character. Surrounding whitespace is trimmed and internal whitespace
-// collapses to one space. Final letters stay distinct, so ך is not כ.
+// are removed and letters are kept. That range also includes paseq (U+05C0)
+// and sof pasuq (U+05C3), so those are stripped too. Maqaf (U+05BE) and '-'
+// are the same character. Surrounding whitespace is trimmed and internal
+// whitespace collapses to one space. Final letters stay distinct, so ך is not כ.
 //
 // An exact match is Good. Levenshtein distance 1, counted on runes, is Hard.
 // Anything else is Again. Easy is not returned.
@@ -35,6 +36,8 @@ func normalizeAnswer(s string) string {
 		if r == '\u05BE' {
 			r = '-'
 		} else if r >= 0x0591 && r <= 0x05C7 {
+			// Niqqud and cantillation. The range also contains paseq (U+05C0)
+			// and sof pasuq (U+05C3), so the strip removes those too.
 			continue
 		} else if unicode.IsSpace(r) {
 			pendingSpace = true
