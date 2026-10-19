@@ -26,6 +26,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcpstore"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web"
 )
@@ -83,8 +84,13 @@ type Config struct {
 	GoogleJWKSURL     string
 	GoogleIssuer      string
 	// StateSecret is HEBREW_SESSION_SECRET. It derives the OAuth state HMAC
-	// key (HKDF-SHA256). Empty falls back to a random per-process key.
+	// key (HKDF-SHA256). When OAuth is enabled, an empty value refuses
+	// to start. OAuth is enabled when MCP_PUBLIC_URL is set or Google
+	// client credentials are set.
 	StateSecret string
+	// OAuthRedirectURIs is MCP_OAUTH_REDIRECT_URIS, extra exact redirect
+	// URIs for dynamic registration.
+	OAuthRedirectURIs []string
 
 	// AllowedEmails is MCP_OAUTH_ALLOWED_EMAILS. AdminEmails is ADMIN_EMAILS.
 	// They seed auth.Access when Access is nil. A non-nil Access is the
@@ -99,10 +105,11 @@ type Config struct {
 	// disables the static bearer: it accepts no request. Startup still
 	// proceeds. internal/mcp does not read the environment.
 	// GET /healthz stays open.
-	// MCPPublicURL is the public MCP origin. Empty does not stop startup.
-	// MCPAllowedOrigins are browser Origins allowed to call MCP.
-	// A request with no Origin header is allowed. cmd/hebrew reads
-	// MCP_ALLOWED_ORIGINS.
+	// MCPPublicURL is the public MCP origin. When it is set, it is the
+	// OAuth issuer. Empty does not stop startup; the trusted proxy's
+	// public host is the issuer then. MCPAllowedOrigins are browser
+	// Origins allowed to call MCP. A request with no Origin header is
+	// allowed. cmd/hebrew reads MCP_ALLOWED_ORIGINS.
 	MCPAuthToken      string
 	MCPPublicURL      string
 	MCPAllowedOrigins []string
@@ -168,6 +175,7 @@ type App struct {
 	tts       audio.TTS
 	web       http.Handler
 	mcp       http.Handler
+	stopSweep context.CancelFunc
 	closeOnce sync.Once
 	closeErr  error
 }
@@ -188,6 +196,9 @@ func New(cfg Config) (web, mcp http.Handler, err error) {
 // Close releases the database. /healthz answers 503 after Close returns.
 func NewApp(cfg Config) (*App, error) {
 	cfg = ApplyDefaults(cfg)
+	if oauthEnabled(cfg) && strings.TrimSpace(cfg.StateSecret) == "" {
+		return nil, fmt.Errorf("HEBREW_SESSION_SECRET is required when OAuth is enabled")
+	}
 	if auth.HTTPSOriginWithoutProxies(cfg.TrustedProxies, cfg.PublicOrigin) {
 		slog.Warn("TRUSTED_PROXIES is empty and PUBLIC_ORIGIN is https",
 			"public_origin", cfg.PublicOrigin,
@@ -225,6 +236,7 @@ func NewApp(cfg Config) (*App, error) {
 		GoogleJWKSURL:      cfg.GoogleJWKSURL,
 		GoogleIssuer:       cfg.GoogleIssuer,
 		StateSecret:        cfg.StateSecret,
+		OAuthRedirectURIs:  cfg.OAuthRedirectURIs,
 		AllowedEmails:      cfg.AllowedEmails,
 		AdminEmails:        cfg.AdminEmails,
 		Access:             cfg.Access,
@@ -253,15 +265,44 @@ func NewApp(cfg Config) (*App, error) {
 	}
 	health := a.healthHandler()
 	a.web = web.New(health, svc)
-	a.mcp = newMCP(cfg, health, svc)
+	a.mcp = newMCP(cfg, health, svc, store)
+	sweepCtx, stop := context.WithCancel(context.Background())
+	a.stopSweep = stop
+	go sweepOAuth(sweepCtx, store, cfg.Clock)
 	return a, nil
+}
+
+// oauthEnabled reports that the MCP authorization server or Google
+// sign-in will run. Either one seals OAuth state with HEBREW_SESSION_SECRET.
+func oauthEnabled(cfg Config) bool {
+	if strings.TrimSpace(cfg.MCPPublicURL) != "" {
+		return true
+	}
+	return strings.TrimSpace(cfg.GoogleClientID) != "" && strings.TrimSpace(cfg.GoogleClientSecret) != ""
+}
+
+func sweepOAuth(ctx context.Context, store *db.Store, clk clock.Clock) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			now := clk.Now().UTC()
+			if err := store.SweepOAuth(ctx, now, now.Add(-auth.OAuthClientTTL)); err != nil && ctx.Err() == nil {
+				slog.Error("mcp oauth sweep", "err", err)
+			}
+		}
+	}
 }
 
 // Web is the learner handler.
 func (a *App) Web() http.Handler { return a.web }
 
 // MCP is the authoring handler. GET /healthz is unauthenticated.
-// Every other route is the MCP server.
+// /mcp is the streamable MCP server. OAuth routes are mounted beside it.
+// Any other path is 404.
 func (a *App) MCP() http.Handler { return a.mcp }
 
 // Store is the process database. QA and MCP Builder use it for users and sessions.
@@ -285,6 +326,9 @@ func (a *App) Placement() *placement.Service { return a.placement }
 // Close releases the database. /healthz answers 503 after Close returns.
 func (a *App) Close() error {
 	a.closeOnce.Do(func() {
+		if a.stopSweep != nil {
+			a.stopSweep()
+		}
 		if a.store != nil {
 			a.closeErr = a.store.Close()
 		}
@@ -355,28 +399,59 @@ func (a *App) healthHandler() http.Handler {
 	})
 }
 
-func newMCP(cfg Config, health http.Handler, sessions *auth.Service) http.Handler {
-	// Course, lexicon, and unit stores stay unset until *db.Store
-	// grows UnitsInScope, LatestPlacement, PlacementKnownLexemes,
-	// PlacementLearningLexemes, StruggleStats, CompletedSharedUnits,
-	// SearchLexemes, PutUnit, and units.Lookup. LearnerKnownLexemes
-	// is still a proposal. There is no learner_lexemes table.
-	// Tools answer with isError until those methods exist. The
-	// adapter belongs here, next to this call, so db does not import mcp.
+func newMCP(cfg Config, health http.Handler, sessions *auth.Service, store *db.Store) http.Handler {
+	// The adapter is the *db.Store behind the authoring tools.
+	// It lives in internal/mcpstore so internal/db does not import internal/mcp.
 	//
 	// AuthToken is Config.MCPAuthToken. cmd/hebrew trimmed MCP_AUTH_TOKEN
 	// into that field and logs once when it is empty. An empty value
 	// disables the static bearer. This function does not read the
-	// environment and does not log that warning again. Sessions calls
-	// auth.Service.Lookup and copies users.role. OAuth later sets
-	// SessionFromToken; it must not read the web session cookie.
-	authoring := mcp.Handler(mcp.Options{
-		AuthToken:      cfg.MCPAuthToken,
-		AllowedOrigins: cfg.MCPAllowedOrigins,
-		Sessions:       sessionUsers{auth: sessions},
-	})
+	// environment and does not log that warning again. sessionUsers calls
+	// auth.Service.Lookup and copies users.role. SessionFromToken maps an
+	// OAuth access token onto that same Lookup path. It does not read the
+	// web session cookie. Admin is users.role from ADMIN_EMAILS.
+	//
+	// OAuth discovery, registration, authorize, and token are mounted on
+	// this mux, outside the authoring handler. The authoring handler's
+	// bearer middleware and CrossOriginProtection therefore do not see
+	// them. MCP_PUBLIC_URL is the issuer when it is set. The trusted
+	// proxy's public host is the fallback when it is unset. The pod
+	// address is never advertised. Only /mcp reaches the authoring
+	// handler. Every other unmatched path is 404.
+	adapter := mcpstore.New(store)
+	users := sessionUsers{auth: sessions}
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
-	mux.Handle("/", authoring)
+	if sessions != nil {
+		sessions.RegisterOAuth(mux, cfg.MCPPublicURL)
+	}
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("Not found"))
+	})
+	authoring := mcp.Handler(mcp.Options{
+		AuthToken:        cfg.MCPAuthToken,
+		AllowedOrigins:   cfg.MCPAllowedOrigins,
+		Sessions:         users,
+		SessionFromToken: users.SessionFromToken,
+		MetadataURL: func(r *http.Request) string {
+			if sessions == nil {
+				return ""
+			}
+			base, _, ok := sessions.PublicBase(r, cfg.MCPPublicURL)
+			if !ok {
+				return ""
+			}
+			return base + "/.well-known/oauth-protected-resource"
+		},
+		Course:  adapter,
+		Lexicon: adapter,
+		Lookup:  adapter,
+		Units:   adapter,
+	})
+	mux.Handle("/mcp", authoring)
+	mux.Handle("/mcp/{$}", authoring)
 	return mux
 }

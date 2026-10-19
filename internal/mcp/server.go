@@ -56,7 +56,12 @@ type Options struct {
 	SessionFromToken func(ctx context.Context, token string, r *http.Request) (rawSessionID string, err error)
 	// Sessions resolves that raw session id to a caller. Nil rejects
 	// every OAuth bearer and leaves the static token check in place.
-	Sessions       SessionUserResolver
+	Sessions SessionUserResolver
+	// MetadataURL is the RFC 9728 protected-resource metadata URL for
+	// this request. A 401 uses
+	// Bearer realm="hebrew-lessons", resource_metadata="<url>".
+	// A nil func or an empty result keeps the bare Bearer challenge.
+	MetadataURL    func(*http.Request) string
 	AllowedOrigins []string
 	Validator      Validator
 	// extraTools registers tools after the authoring tools. Tests use it
@@ -85,7 +90,7 @@ func Handler(opts Options) http.Handler {
 		// server-initiated requests, and KeepAlive is a ping request.
 		// A rejected ping closes the temporary session.
 	})
-	return protectOrigin(opts.AllowedOrigins, requireBearer(opts.validator(), stream))
+	return protectOrigin(opts.AllowedOrigins, requireBearer(opts.validator(), opts.MetadataURL, stream))
 }
 
 // protectOrigin rejects cross-origin browser requests. A POST with no

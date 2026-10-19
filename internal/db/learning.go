@@ -10,6 +10,26 @@ import (
 
 const cardColumns = `id, user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, last_review, suspended`
 
+// introNotFinished keeps a card out while its lexeme is still a new word
+// of a lesson this learner has not finished. Recycled words, and words
+// with no intro row, stay in the queue. ListDueCards and ListStudyCards
+// share it.
+const introNotFinished = `
+		  AND NOT EXISTS (
+		    SELECT 1
+		    FROM lesson_items AS li
+		    WHERE li.lexeme_id = c.lexeme_id
+		      AND li.role = 'new'
+		      AND NOT EXISTS (
+		        SELECT 1
+		        FROM lesson_runs AS lr
+		        WHERE lr.user_id = c.user_id
+		          AND lr.unit_id = li.unit_id
+		          AND lr.lesson_ix = li.lesson_ix
+		          AND lr.finished_at IS NOT NULL
+		      )
+		  )`
+
 // Card is one row of cards.
 type Card struct {
 	ID         int64
@@ -36,6 +56,18 @@ type ReviewLog struct {
 	ScheduledDays int
 	Peeked        bool
 	Chosen        string // Pointed NFC of the wrong option. Empty when the learner did not pick one.
+}
+
+// StudyCard is a learner's he_en or en_he card plus the fields the
+// post-placement mix reads. LatestRating is the newest review_log rating at
+// or before the now passed to ListStudyCards. HasRating is false when the
+// card has no such review. RecentLapse is true when an Again rating was
+// stored at or after the lapseSince passed to ListStudyCards.
+type StudyCard struct {
+	Card
+	LatestRating int
+	HasRating    bool
+	RecentLapse  bool
 }
 
 func (s *Store) connOrErr() (*sql.DB, error) {
@@ -221,20 +253,7 @@ func (s *Store) ListDueCards(ctx context.Context, userID int64, now time.Time) (
 		WHERE c.user_id = ?
 		  AND c.suspended = 0
 		  AND c.due <= ?
-		  AND NOT EXISTS (
-		    SELECT 1
-		    FROM lesson_items AS li
-		    WHERE li.lexeme_id = c.lexeme_id
-		      AND li.role = 'new'
-		      AND NOT EXISTS (
-		        SELECT 1
-		        FROM lesson_runs AS lr
-		        WHERE lr.user_id = c.user_id
-		          AND lr.unit_id = li.unit_id
-		          AND lr.lesson_ix = li.lesson_ix
-		          AND lr.finished_at IS NOT NULL
-		      )
-		  )
+`+introNotFinished+`
 		ORDER BY c.due, c.id`, userID, FormatTime(now))
 	if err != nil {
 		return nil, fmt.Errorf("db: list due cards: %w", err)
@@ -338,4 +357,114 @@ func (s *Store) InsertUser(ctx context.Context, email, sub, role string) (int64,
 		return 0, fmt.Errorf("db: insert user: %w", err)
 	}
 	return id, nil
+}
+
+// ListStudyCards returns the learner's unsuspended he_en and en_he cards,
+// including cards that are not yet due. Words still waiting on their intro
+// lesson are left out, the same way ListDueCards leaves them out.
+// now caps the latest-rating lookup: a review_log row after now is ignored.
+// lapseSince is the start of the recent-lapse window. An Again at that
+// time or later sets RecentLapse. The clock that produced now and lapseSince
+// is the caller's; this query does not read the wall clock.
+func (s *Store) ListStudyCards(ctx context.Context, userID int64, now, lapseSince time.Time) ([]StudyCard, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT `+cardColumns+`,
+			(
+				SELECT rl.rating
+				FROM review_log AS rl
+				WHERE rl.card_id = c.id
+				  AND rl.reviewed_at <= ?
+				ORDER BY rl.reviewed_at DESC, rl.id DESC
+				LIMIT 1
+			),
+			CASE WHEN EXISTS (
+				SELECT 1
+				FROM review_log AS rl
+				WHERE rl.card_id = c.id
+				  AND rl.rating = 1
+				  AND rl.reviewed_at >= ?
+			) THEN 1 ELSE 0 END
+		FROM cards AS c
+		WHERE c.user_id = ?
+		  AND c.suspended = 0
+		  AND c.dir IN ('he_en', 'en_he')
+`+introNotFinished+`
+		ORDER BY c.due, c.id`, FormatTime(now), FormatTime(lapseSince), userID)
+	if err != nil {
+		return nil, fmt.Errorf("db: study cards: %w", err)
+	}
+	defer rows.Close()
+	var out []StudyCard
+	for rows.Next() {
+		card, err := scanStudyCard(rows.Scan)
+		if err != nil {
+			return nil, fmt.Errorf("db: study cards: %w", err)
+		}
+		out = append(out, card)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: study cards: %w", err)
+	}
+	return out, nil
+}
+
+func scanStudyCard(scan func(dest ...any) error) (StudyCard, error) {
+	var latest sql.NullInt64
+	var recent int
+	card, err := scanCard(func(dest ...any) error {
+		args := make([]any, 0, len(dest)+2)
+		args = append(args, dest...)
+		args = append(args, &latest, &recent)
+		return scan(args...)
+	})
+	if err != nil {
+		return StudyCard{}, err
+	}
+	out := StudyCard{Card: card, RecentLapse: recent != 0}
+	if latest.Valid {
+		out.HasRating = true
+		out.LatestRating = int(latest.Int64)
+	}
+	return out, nil
+}
+
+// RecentReviewRatings returns up to limit ratings for the learner, newest
+// first. reviewed_at is the clock time stored with the review. Rows later
+// than now are left out, and ties break on id descending, so the last N
+// reviews are fixed once the clock and the log are fixed.
+func (s *Store) RecentReviewRatings(ctx context.Context, userID int64, now time.Time, limit int) ([]int, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT rl.rating
+		FROM review_log AS rl
+		JOIN cards AS c ON c.id = rl.card_id
+		WHERE c.user_id = ? AND rl.reviewed_at <= ?
+		ORDER BY rl.reviewed_at DESC, rl.id DESC
+		LIMIT ?`, userID, FormatTime(now), limit)
+	if err != nil {
+		return nil, fmt.Errorf("db: recent ratings: %w", err)
+	}
+	defer rows.Close()
+	var out []int
+	for rows.Next() {
+		var rating int
+		if err := rows.Scan(&rating); err != nil {
+			return nil, fmt.Errorf("db: recent ratings: %w", err)
+		}
+		out = append(out, rating)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: recent ratings: %w", err)
+	}
+	return out, nil
 }

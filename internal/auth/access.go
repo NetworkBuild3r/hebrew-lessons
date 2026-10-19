@@ -1,6 +1,9 @@
 package auth
 
-import "sync"
+import (
+	"strings"
+	"sync"
+)
 
 // Access is the live allowlist and admin list for one process.
 // Sign-in and every authenticated request read it. Tests and operators
@@ -28,6 +31,22 @@ func (a *Access) Set(allowed, admins []string) {
 	defer a.mu.Unlock()
 	a.allowed = append([]string(nil), allowed...)
 	a.admins = append([]string(nil), admins...)
+}
+
+// allowlistEmpty reports that MCP_OAUTH_ALLOWED_EMAILS has no address.
+// Admin addresses do not count. An empty allowlist must not reach Google.
+func (a *Access) allowlistEmpty() bool {
+	if a == nil {
+		return true
+	}
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	for _, email := range a.allowed {
+		if strings.TrimSpace(email) != "" {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *Access) role(email string) (string, bool) {

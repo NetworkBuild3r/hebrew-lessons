@@ -32,7 +32,7 @@ func NewFixtureLookup(audioTexts, lexemeTexts []string) *FixtureLookup {
 
 // KnownLexemes returns no earlier-unit words. beforePosition is the unit
 // being validated; this fixture has no course, so the map is empty.
-// Validation is authoring-time and global, not per learner.
+// The authoring list is shared units only.
 func (l *FixtureLookup) KnownLexemes(context.Context, int) (map[string]bool, error) {
 	return map[string]bool{}, nil
 }

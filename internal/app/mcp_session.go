@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strconv"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
@@ -43,4 +44,26 @@ func (s sessionUsers) ResolveSession(ctx context.Context, rawSessionID string) (
 		Role:   role,
 		Source: "oauth",
 	}, nil
+}
+
+// SessionFromToken maps an OAuth access token to the raw session id
+// ResolveSession accepts. It does not read the web session cookie.
+// ErrNoSession from the authorization server becomes mcp.ErrUnauthorized
+// so the static bearer can still be tried. Any other error is returned
+// unchanged; the bearer middleware logs it and sends a fixed sentence.
+func (s sessionUsers) SessionFromToken(ctx context.Context, token string, r *http.Request) (string, error) {
+	if s.auth == nil {
+		return "", mcp.ErrUnauthorized
+	}
+	raw, err := s.auth.SessionFromAccessToken(ctx, token, r)
+	if err != nil {
+		if errors.Is(err, auth.ErrNoSession) {
+			return "", mcp.ErrUnauthorized
+		}
+		return "", err
+	}
+	if raw == "" {
+		return "", mcp.ErrUnauthorized
+	}
+	return raw, nil
 }
