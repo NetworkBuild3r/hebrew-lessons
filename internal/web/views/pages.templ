@@ -90,7 +90,7 @@ templ Review(p Page, c ReviewCard) {
 }
 
 templ ReviewBody(c ReviewCard) {
-	<div id="review-card" data-kind={ c.Kind } data-card={ Num64(c.CardID) } data-pointed={ c.Pointed } data-unpointed={ c.Unpointed } data-show-unpointed={ Flag(c.ShowUnpointed) } data-translit={ c.Translit } data-index={ Num(c.Index) } data-total={ Num(c.Total) } data-answered={ Num(c.Answered) } data-correct={ Num(c.Correct) } data-retry={ Flag(c.Retry) } data-done={ Flag(c.Done) }>
+	<div id="review-card" data-kind={ c.Kind } data-card={ Num64(c.CardID) } data-pointed={ c.Pointed } data-unpointed={ c.Unpointed } data-show-unpointed={ Flag(c.ShowUnpointed) } data-translit={ c.Translit } data-index={ Num(c.Index) } data-total={ Num(c.Total) } data-answered={ Num(c.Answered) } data-correct={ Num(c.Correct) } data-retry={ Flag(c.Retry) } data-done={ Flag(c.Done) } data-revealed={ Flag(c.Revealed) }>
 		if c.Done {
 			if c.Answered == 0 {
 				<p class="lede" lang={ c.Lang }>{ c.Lede }</p>
@@ -117,31 +117,39 @@ templ ReviewBody(c ReviewCard) {
 					<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("sound") }></use></svg>
 				</a>
 			}
-			if c.Kind == "en_he" {
-				<p class="ink-card__hint">
-					if c.ShowUnpointed {
-						@H(c.Unpointed)
-					} else {
-						@H(c.Pointed)
-					}
-				</p>
-			} else if c.Gloss != "" {
-				<p class="ink-card__hint">@E(c.Gloss)</p>
-			}
-			if c.Gender != "" {
-				<span class="gchip">@H(GenderLabel(c.Gender))</span>
-			}
 			<p class="ink-card__hint">
 				<bdi lang="en" dir="ltr">{ Num(c.Index) } / { Num(c.Total) }</bdi>
 			</p>
-			<form method="post" action="/_hx/review/grade" hx-post="/_hx/review/grade" hx-target="#review-card" hx-swap="outerHTML" hx-boost="false">
-				<input type="hidden" name="_csrf" value={ c.CSRF }/>
-				<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
-				<button type="submit" class="btn btn-tonal" name="rating" value="1">@E("Again")</button>
-				<button type="submit" class="btn btn-tonal" name="rating" value="2">@E("Hard")</button>
-				<button type="submit" class="btn btn-tonal" name="rating" value="3">@E("Good")</button>
-				<button type="submit" class="btn btn-tonal" name="rating" value="4">@E("Easy")</button>
-			</form>
+			if c.Revealed {
+				if c.Kind == "en_he" {
+					<p class="ink-card__hint">
+						if c.ShowUnpointed {
+							@H(c.Unpointed)
+						} else {
+							@H(c.Pointed)
+						}
+					</p>
+				} else if c.Gloss != "" {
+					<p class="ink-card__hint">@E(c.Gloss)</p>
+				}
+				if c.Gender != "" {
+					<span class="gchip">@H(GenderLabel(c.Gender))</span>
+				}
+				<form method="post" action="/_hx/review/grade" hx-post="/_hx/review/grade" hx-target="#review-card" hx-swap="outerHTML" hx-boost="false">
+					<input type="hidden" name="_csrf" value={ c.CSRF }/>
+					<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
+					<button type="submit" class="btn btn-tonal" name="rating" value="1">@E("Again")</button>
+					<button type="submit" class="btn btn-tonal" name="rating" value="2">@E("Hard")</button>
+					<button type="submit" class="btn btn-tonal" name="rating" value="3">@E("Good")</button>
+					<button type="submit" class="btn btn-tonal" name="rating" value="4">@E("Easy")</button>
+				</form>
+			} else {
+				<form method="post" action="/_hx/review/reveal" hx-post="/_hx/review/reveal" hx-target="#review-card" hx-swap="outerHTML" hx-boost="false">
+					<input type="hidden" name="_csrf" value={ c.CSRF }/>
+					<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
+					<button type="submit" class="btn btn-tonal">@E("Show")</button>
+				</form>
+			}
 		}
 	</div>
 }

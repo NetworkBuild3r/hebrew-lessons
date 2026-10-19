@@ -15,10 +15,12 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
@@ -158,11 +160,14 @@ func TestReviewBuildsSession(t *testing.T) {
 	addCard(t, store, learner.user.ID, second, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 
 	body := getLearner(t, h, learner, "/review")
-	if !strings.Contains(body, `data-kind="he_en"`) || !strings.Contains(body, `data-pointed="`+firstText+`"`) || !strings.Contains(body, `data-show-unpointed="false"`) || !strings.Contains(body, `data-translit="shalom"`) || !strings.Contains(body, `data-index="1"`) || !strings.Contains(body, `data-total="2"`) {
+	if !strings.Contains(body, `data-kind="he_en"`) || !strings.Contains(body, `data-pointed="`+firstText+`"`) || !strings.Contains(body, `data-show-unpointed="false"`) || !strings.Contains(body, `data-translit="shalom"`) || !strings.Contains(body, `data-index="1"`) || !strings.Contains(body, `data-total="2"`) || !strings.Contains(body, `data-revealed="false"`) {
 		t.Fatalf("first card: %s", cardAttrs(body))
 	}
-	if !strings.Contains(body, `href="/audio/`+audio+`.mp3"`) || !strings.Contains(body, "hello") || !strings.Contains(body, "ז׳") {
-		t.Fatal("audio, gloss, or gender chip missing")
+	if !strings.Contains(body, `href="/audio/`+audio+`.mp3"`) || !strings.Contains(body, "shalom") || !strings.Contains(body, `action="/_hx/review/reveal"`) {
+		t.Fatal("prompt, audio, or reveal form missing")
+	}
+	if strings.Contains(body, "hello") || strings.Contains(body, "ז׳") || strings.Contains(body, `name="rating"`) {
+		t.Fatal("the answer or the grade buttons rendered before reveal")
 	}
 	if strings.Contains(cardAttrs(body), secondText) {
 		t.Fatal("the second card rendered first")
@@ -174,10 +179,14 @@ func TestReviewBuildsSession(t *testing.T) {
 
 	en := addLearner(t, store, "en@example.com", "sub-en", now)
 	word := addLexeme(t, store, "כִּסֵּא", "chair", "kise", "m", "")
-	addCard(t, store, en.user.ID, word, fsrs.DirEnHe, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	enCard := addCard(t, store, en.user.ID, word, fsrs.DirEnHe, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 	prod := getLearner(t, h, en, "/review")
-	if !strings.Contains(prod, `data-kind="en_he"`) || !strings.Contains(prod, `data-pointed="כִּסֵּא"`) || !strings.Contains(prod, "chair") {
-		t.Fatalf("en_he card: %s", cardAttrs(prod))
+	if !strings.Contains(prod, `data-kind="en_he"`) || strings.Contains(prod, "כִּסֵּא") || !strings.Contains(prod, "chair") || !strings.Contains(prod, `data-revealed="false"`) {
+		t.Fatalf("en_he card leaked the answer: %s", cardAttrs(prod))
+	}
+	shown := postReveal(t, h, en, enCard, "https://learn.example")
+	if shown.Code != http.StatusOK || !strings.Contains(shown.Body.String(), `data-pointed="כִּסֵּא"`) || !strings.Contains(shown.Body.String(), "chair") || !strings.Contains(shown.Body.String(), `data-revealed="true"`) || !strings.Contains(shown.Body.String(), `name="rating"`) {
+		t.Fatalf("en_he reveal = %d %s", shown.Code, shown.Body.String())
 	}
 }
 
@@ -286,8 +295,8 @@ func TestReviewGrade(t *testing.T) {
 		t.Fatalf("next card: %s", body)
 	}
 	logs := mustLogs(t, store, first)
-	if len(logs) != 2 || logs[1].Rating != int(fsrs.Good) {
-		t.Fatalf("log = %+v", logs)
+	if len(logs) != 2 || logs[1].Rating != int(fsrs.Good) || logs[1].Peeked {
+		t.Fatalf("log = %+v, want an unrevealed Good", logs)
 	}
 	after, err := store.GetCard(ctx, first)
 	if err != nil {
@@ -403,16 +412,241 @@ func TestReviewDrillKinds(t *testing.T) {
 	}
 }
 
+func TestReviewReveal(t *testing.T) {
+	store, h, now := openApp(t)
+	learner := addLearner(t, store, "a@example.com", "sub-a", now)
+	reviewed := now.Add(-48 * time.Hour)
+	lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	card := addCard(t, store, learner.user.ID, lex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	page := getLearner(t, h, learner, "/review")
+	if strings.Contains(page, "hello") || strings.Contains(page, "ז׳") || strings.Contains(page, `name="rating"`) {
+		t.Fatal("the back rendered before reveal")
+	}
+
+	noToken := postRevealRaw(t, h, learner.cookie, "", card, "https://learn.example", true)
+	if noToken.Code != http.StatusForbidden {
+		t.Fatalf("missing csrf = %d", noToken.Code)
+	}
+	evil := postRevealRaw(t, h, learner.cookie, learner.csrf, card, "https://evil.example", true)
+	if evil.Code != http.StatusForbidden {
+		t.Fatalf("bad origin = %d", evil.Code)
+	}
+	still := getLearner(t, h, learner, "/review")
+	if strings.Contains(still, "hello") || strings.Contains(still, `data-revealed="true"`) {
+		t.Fatal("a rejected reveal showed the back")
+	}
+
+	shown := postReveal(t, h, learner, card, "https://learn.example")
+	if shown.Code != http.StatusOK {
+		t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
+	}
+	body := shown.Body.String()
+	if !strings.Contains(body, "hello") || !strings.Contains(body, "ז׳") || !strings.Contains(body, `name="rating"`) || !strings.Contains(body, `data-revealed="true"`) || !strings.Contains(body, `data-card="`+fmt.Sprint(card)+`"`) {
+		t.Fatalf("revealed card: %s", body)
+	}
+
+	graded := postGrade(t, h, learner, card, "3", "https://learn.example")
+	if graded.Code != http.StatusOK {
+		t.Fatalf("grade after reveal = %d\n%s", graded.Code, graded.Body.String())
+	}
+	logs := mustLogs(t, store, card)
+	if len(logs) != 2 || !logs[1].Peeked || logs[1].Rating != int(fsrs.Good) {
+		t.Fatalf("log = %+v, want peeked true", logs)
+	}
+}
+
+func TestReviewDoneSessionRebuilds(t *testing.T) {
+	store, h, now := openApp(t)
+	learner := addLearner(t, store, "a@example.com", "sub-a", now)
+	reviewed := now.Add(-48 * time.Hour)
+	firstLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	first := addCard(t, store, learner.user.ID, firstLex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	getLearner(t, h, learner, "/review")
+	done := postGrade(t, h, learner, first, "3", "https://learn.example")
+	if done.Code != http.StatusOK || !strings.Contains(done.Body.String(), `data-done="true"`) {
+		t.Fatalf("done = %d %s", done.Code, done.Body.String())
+	}
+	if err := store.SetCardSuspended(context.Background(), first, true); err != nil {
+		t.Fatal(err)
+	}
+	secondLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
+	second := addCard(t, store, learner.user.ID, secondLex, fsrs.DirHeEn, now.Add(-time.Minute), 1, int(fsrs.Good), reviewed)
+	page := getLearner(t, h, learner, "/review")
+	if attr(t, page, "data-card") != fmt.Sprint(second) || strings.Contains(page, "שָׁלוֹם") || !strings.Contains(page, "מַיִם") || strings.Contains(page, `data-done="true"`) {
+		t.Fatalf("rebuilt session: %s", cardAttrs(page))
+	}
+}
+
+func TestReviewStaleSessionRebuilds(t *testing.T) {
+	start := time.Date(2026, 10, 18, 23, 0, 0, 0, time.UTC)
+	store, h, clk := openStepped(t, start)
+	learner := addLearner(t, store, "a@example.com", "sub-a", start)
+	if _, err := store.ExecContext(context.Background(), `UPDATE sessions SET expires_at = ? WHERE user_id = ?`, db.FormatTime(start.Add(7*24*time.Hour)), learner.user.ID); err != nil {
+		t.Fatal(err)
+	}
+	reviewed := start.Add(-48 * time.Hour)
+	firstLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	first := addCard(t, store, learner.user.ID, firstLex, fsrs.DirHeEn, start.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	page := getLearner(t, h, learner, "/review")
+	if attr(t, page, "data-card") != fmt.Sprint(first) {
+		t.Fatalf("first serve = %s", cardAttrs(page))
+	}
+
+	clk.Advance(2 * time.Hour)
+	stale := postGrade(t, h, learner, first, "3", "https://learn.example")
+	if stale.Code != http.StatusBadRequest {
+		t.Fatalf("grade on a stale queue = %d", stale.Code)
+	}
+	if n := len(mustLogs(t, store, first)); n != 1 {
+		t.Fatalf("stale grade wrote a log, count %d", n)
+	}
+	if err := store.SetCardSuspended(context.Background(), first, true); err != nil {
+		t.Fatal(err)
+	}
+	secondLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
+	second := addCard(t, store, learner.user.ID, secondLex, fsrs.DirHeEn, clk.Now().Add(-time.Minute), 1, int(fsrs.Good), reviewed)
+	rebuilt := getLearner(t, h, learner, "/review")
+	if attr(t, rebuilt, "data-card") != fmt.Sprint(second) || strings.Contains(rebuilt, "שָׁלוֹם") || !strings.Contains(rebuilt, "מַיִם") {
+		t.Fatalf("stale rebuild: %s", cardAttrs(rebuilt))
+	}
+}
+
+func TestStudyQueueMapIsBounded(t *testing.T) {
+	store, _, now := openApp(t)
+	learner := addLearner(t, store, "a@example.com", "sub-a", now)
+	s := newServer(store)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := 0; i < maxStudyQueues+5; i++ {
+		s.queues[fmt.Sprintf("k%03d", i)] = &studyQueue{
+			userID:  learner.user.ID,
+			builtAt: now.Add(time.Duration(i) * time.Second),
+		}
+	}
+	s.queues["old"] = &studyQueue{userID: learner.user.ID, builtAt: now.Add(-48 * time.Hour)}
+	s.queues["nil"] = nil
+	s.evictLocked(now)
+	if len(s.queues) != maxStudyQueues {
+		t.Fatalf("len = %d, want %d", len(s.queues), maxStudyQueues)
+	}
+	if _, ok := s.queues["k000"]; ok {
+		t.Fatal("the oldest queue stayed")
+	}
+	if _, ok := s.queues["old"]; ok {
+		t.Fatal("a queue from another UTC day stayed")
+	}
+	if _, ok := s.queues["nil"]; ok {
+		t.Fatal("a nil queue stayed")
+	}
+	q, err := s.queueLocked(context.Background(), "fresh", learner.user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.queues) != maxStudyQueues {
+		t.Fatalf("len after a new queue = %d, want %d", len(s.queues), maxStudyQueues)
+	}
+	if s.queues["fresh"] != q {
+		t.Fatal("the new queue was not stored")
+	}
+	if _, ok := s.queues["k005"]; ok {
+		t.Fatal("the oldest remaining queue was not dropped to make room")
+	}
+}
+
+func TestReviewGradeDBError(t *testing.T) {
+	store, h, now := openApp(t)
+	learner := addLearner(t, store, "a@example.com", "sub-a", now)
+	lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	card := addCard(t, store, learner.user.ID, lex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
+	getLearner(t, h, learner, "/review")
+	if _, err := store.ExecContext(context.Background(), `DELETE FROM cards WHERE id = ?`, card); err != nil {
+		t.Fatal(err)
+	}
+	got := postGrade(t, h, learner, card, "3", "https://learn.example")
+	if got.Code != http.StatusInternalServerError {
+		t.Fatalf("db error = %d, want 500", got.Code)
+	}
+}
+
+func TestReviewGradeWithoutHTMX(t *testing.T) {
+	store, h, now := openApp(t)
+	learner := addLearner(t, store, "a@example.com", "sub-a", now)
+	reviewed := now.Add(-48 * time.Hour)
+	firstLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	secondLex := addLexeme(t, store, "בֹּקֶר", "morning", "boker", "m", "")
+	first := addCard(t, store, learner.user.ID, firstLex, fsrs.DirHeEn, now.Add(-2*time.Hour), 1, int(fsrs.Good), reviewed)
+	second := addCard(t, store, learner.user.ID, secondLex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	getLearner(t, h, learner, "/review")
+
+	shown := postRevealRaw(t, h, learner.cookie, learner.csrf, first, "https://learn.example", false)
+	if shown.Code != http.StatusSeeOther || shown.Header().Get("Location") != "/review" || strings.Contains(shown.Body.String(), `id="review-card"`) {
+		t.Fatalf("plain reveal = %d location %q body %s", shown.Code, shown.Header().Get("Location"), shown.Body.String())
+	}
+	revealed := getLearner(t, h, learner, "/review")
+	if !strings.Contains(revealed, "<!doctype html>") || !strings.Contains(revealed, "hello") || !strings.Contains(revealed, `name="rating"`) || !strings.Contains(revealed, `data-revealed="true"`) {
+		t.Fatal("the follow-up GET did not render the revealed card")
+	}
+
+	graded := postGradeRawHX(t, h, learner.cookie, learner.csrf, first, "3", "https://learn.example", false)
+	if graded.Code != http.StatusSeeOther || graded.Header().Get("Location") != "/review" || strings.Contains(graded.Body.String(), `id="review-card"`) {
+		t.Fatalf("plain grade = %d location %q body %s", graded.Code, graded.Header().Get("Location"), graded.Body.String())
+	}
+	logs := mustLogs(t, store, first)
+	if len(logs) != 2 || !logs[1].Peeked {
+		t.Fatalf("plain grade log = %+v", logs)
+	}
+	next := getLearner(t, h, learner, "/review")
+	if !strings.Contains(next, "<!doctype html>") || attr(t, next, "data-card") != fmt.Sprint(second) || !strings.Contains(next, "בֹּקֶר") || strings.Contains(next, `data-revealed="true"`) {
+		t.Fatalf("next page: %s", cardAttrs(next))
+	}
+	req := gradeRequest(t, learner.cookie, learner.csrf, second, "3", "https://learn.example", false)
+	req.AddCookie(&http.Cookie{Name: "hebrew_lang", Value: "he"})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/review?lang=he" {
+		t.Fatalf("hebrew plain grade = %d location %q", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
 type learnerFix struct {
 	user   db.User
 	cookie *http.Cookie
 	csrf   string
 }
 
+type stepClock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (c *stepClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
+
+func (c *stepClock) Advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.t = c.t.Add(d)
+}
+
 func openApp(t *testing.T) (*db.Store, http.Handler, time.Time) {
 	t.Helper()
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
-	clk := fixedClock(now)
+	store, h := openAt(t, fixedClock(now))
+	return store, h, now
+}
+
+func openStepped(t *testing.T, start time.Time) (*db.Store, http.Handler, *stepClock) {
+	t.Helper()
+	clk := &stepClock{t: start}
+	store, h := openAt(t, clk)
+	return store, h, clk
+}
+
+func openAt(t *testing.T, clk clock.Clock) (*db.Store, http.Handler) {
+	t.Helper()
 	store, err := db.Open(context.Background(), filepath.Join(t.TempDir(), "hebrew.sqlite"), clk)
 	if err != nil {
 		t.Fatal(err)
@@ -428,7 +662,7 @@ func openApp(t *testing.T) (*db.Store, http.Handler, time.Time) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return store, NewWithStore(nil, svc, store), now
+	return store, NewWithStore(nil, svc, store)
 }
 
 func addLearner(t *testing.T, store *db.Store, email, sub string, now time.Time) learnerFix {
@@ -528,6 +762,19 @@ func postGrade(t *testing.T, h http.Handler, learner learnerFix, cardID int64, r
 
 func postGradeRaw(t *testing.T, h http.Handler, cookie *http.Cookie, csrf string, cardID int64, rating, origin string) *httptest.ResponseRecorder {
 	t.Helper()
+	return postGradeRawHX(t, h, cookie, csrf, cardID, rating, origin, true)
+}
+
+func postGradeRawHX(t *testing.T, h http.Handler, cookie *http.Cookie, csrf string, cardID int64, rating, origin string, hx bool) *httptest.ResponseRecorder {
+	t.Helper()
+	req := gradeRequest(t, cookie, csrf, cardID, rating, origin, hx)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+func gradeRequest(t *testing.T, cookie *http.Cookie, csrf string, cardID int64, rating, origin string, hx bool) *http.Request {
+	t.Helper()
 	form := url.Values{}
 	form.Set("card_id", fmt.Sprint(cardID))
 	form.Set("rating", rating)
@@ -537,6 +784,33 @@ func postGradeRaw(t *testing.T, h http.Handler, cookie *http.Cookie, csrf string
 	req := httptest.NewRequest(http.MethodPost, "/_hx/review/grade", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Origin", origin)
+	if hx {
+		req.Header.Set("HX-Request", "true")
+	}
+	if cookie != nil {
+		req.AddCookie(cookie)
+	}
+	return req
+}
+
+func postReveal(t *testing.T, h http.Handler, learner learnerFix, cardID int64, origin string) *httptest.ResponseRecorder {
+	t.Helper()
+	return postRevealRaw(t, h, learner.cookie, learner.csrf, cardID, origin, true)
+}
+
+func postRevealRaw(t *testing.T, h http.Handler, cookie *http.Cookie, csrf string, cardID int64, origin string, hx bool) *httptest.ResponseRecorder {
+	t.Helper()
+	form := url.Values{}
+	form.Set("card_id", fmt.Sprint(cardID))
+	if csrf != "" {
+		form.Set("_csrf", csrf)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/_hx/review/reveal", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", origin)
+	if hx {
+		req.Header.Set("HX-Request", "true")
+	}
 	if cookie != nil {
 		req.AddCookie(cookie)
 	}

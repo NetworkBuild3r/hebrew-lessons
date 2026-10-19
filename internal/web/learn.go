@@ -2,10 +2,12 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
@@ -15,8 +17,15 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
+// maxStudyQueues is the most review queues kept in memory.
+// The oldest is dropped when a new one would pass this.
+const maxStudyQueues = 128
+
 // server holds the learner's database and the in-memory study queues.
 // Queues are keyed by the auth session id hash. A restart drops them.
+// An auth session can slide for 30 days. A study queue does not: it is
+// rebuilt when it is Done, and when the store clock's UTC date is no
+// longer the date it was built.
 type server struct {
 	store *db.Store
 	study *session.Service
@@ -37,6 +46,8 @@ type studyQueue struct {
 	answered int
 	correct  int
 	done     bool
+	revealed bool
+	builtAt  time.Time
 }
 
 func newServer(store *db.Store) *server {
@@ -166,11 +177,10 @@ func (s *server) placementVM(ctx context.Context, userID int64) (*PlacementVM, e
 	if err != nil || !ok {
 		return nil, err
 	}
-	open, active, err := s.store.OpenPlacementRun(ctx, userID)
+	_, active, err := s.store.OpenPlacementRun(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	_ = open
 	return &PlacementVM{
 		Active:              active,
 		Finished:            latest.Finished,
@@ -264,27 +274,92 @@ func (s *server) sessionKey(r *http.Request) (string, *auth.User, bool) {
 }
 
 // queueLocked returns the study queue for this auth session.
+// A Done queue, or one built on another UTC day, is rebuilt.
 // The caller holds s.mu.
 func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*studyQueue, error) {
-	if q := s.queues[key]; q != nil && q.userID == userID {
+	now := s.now()
+	if q := s.queues[key]; q != nil && q.userID == userID && !q.done && sameStudyDay(q.builtAt, now) {
 		return q, nil
 	}
 	if s.study == nil {
-		q := &studyQueue{userID: userID, done: true}
-		s.queues[key] = q
+		q := &studyQueue{userID: userID, done: true, builtAt: now}
+		s.rememberLocked(key, q, now)
 		return q, nil
 	}
 	built, err := s.study.BuildSession(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	q := &studyQueue{userID: userID, sess: built}
+	q := &studyQueue{userID: userID, sess: built, builtAt: now}
 	s.advance(q)
-	s.queues[key] = q
+	s.rememberLocked(key, q, now)
 	return q, nil
 }
 
+// rememberLocked stores q and keeps the map within maxStudyQueues.
+// Queues from another UTC day are dropped first. The caller holds s.mu.
+func (s *server) rememberLocked(key string, q *studyQueue, now time.Time) {
+	s.evictLocked(now)
+	delete(s.queues, key)
+	for len(s.queues) >= maxStudyQueues {
+		s.dropOldestLocked()
+	}
+	s.queues[key] = q
+}
+
+// evictLocked drops queues built on another UTC day, then the oldest
+// until the map is within maxStudyQueues. The caller holds s.mu.
+func (s *server) evictLocked(now time.Time) {
+	for key, q := range s.queues {
+		if q == nil || !sameStudyDay(q.builtAt, now) {
+			delete(s.queues, key)
+		}
+	}
+	for len(s.queues) > maxStudyQueues {
+		s.dropOldestLocked()
+	}
+}
+
+func (s *server) dropOldestLocked() {
+	oldestKey := ""
+	var oldest time.Time
+	for key, q := range s.queues {
+		if q == nil {
+			delete(s.queues, key)
+			return
+		}
+		if oldestKey == "" || q.builtAt.Before(oldest) {
+			oldestKey = key
+			oldest = q.builtAt
+		}
+	}
+	if oldestKey != "" {
+		delete(s.queues, oldestKey)
+	}
+}
+
+func (s *server) now() time.Time {
+	if s != nil && s.store != nil && s.store.Clock() != nil {
+		return s.store.Clock().Now()
+	}
+	return time.Now().UTC()
+}
+
+// sameStudyDay reports whether built and now fall on the same UTC date.
+// The study queue is rebuilt when the store clock crosses that date.
+func sameStudyDay(built, now time.Time) bool {
+	if built.IsZero() {
+		return false
+	}
+	by, bm, bd := built.UTC().Date()
+	ny, nm, nd := now.UTC().Date()
+	return by == ny && bm == nm && bd == nd
+}
+
 func (s *server) advance(q *studyQueue) {
+	if q != nil {
+		q.revealed = false
+	}
 	if q == nil || q.sess == nil {
 		if q != nil {
 			q.done = true
@@ -319,6 +394,7 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 	vm.Answered = q.answered
 	vm.Correct = q.correct
 	vm.Done = q.done || !q.has
+	vm.Revealed = q.revealed
 	if vm.Done {
 		return vm, nil
 	}
@@ -386,7 +462,7 @@ func (s *server) showUnpointed(ctx context.Context, cardID int64, dir string) (b
 }
 
 func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
-	return views.ReviewCard{
+	card := views.ReviewCard{
 		CSRF:          csrf,
 		Lang:          lang,
 		Lede:          lede,
@@ -403,7 +479,28 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 		Total:         vm.Total,
 		Retry:         vm.Retry,
 		Done:          vm.Done,
+		Revealed:      vm.Revealed,
 		Answered:      vm.Answered,
 		Correct:       vm.Correct,
 	}
+	if vm.Revealed {
+		return card
+	}
+	// The answer stays off the page until reveal. he_en hides the gloss.
+	// en_he hides the Hebrew, which is the answer rather than the prompt.
+	card.Gender = ""
+	if vm.Kind == fsrs.DirEnHe || vm.Kind == "en_he" {
+		card.Pointed = ""
+		card.Unpointed = ""
+		return card
+	}
+	card.Gloss = ""
+	return card
+}
+
+func reviewStatus(err error) int {
+	if errors.Is(err, session.ErrNotServed) {
+		return http.StatusBadRequest
+	}
+	return http.StatusInternalServerError
 }

@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -131,7 +132,7 @@ func drain(t *testing.T, sess *Session) []CardRef {
 			return out
 		}
 		out = append(out, card)
-		if len(out) > SessionCap+5 {
+		if len(out) > SessionCap+DrillCap+DrillSteps {
 			t.Fatalf("queue did not end (%s)", pattern(out))
 		}
 	}
@@ -726,6 +727,183 @@ func TestDrillsFollowThePlan(t *testing.T) {
 	}
 }
 
+func TestDrillCap(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	ctx := context.Background()
+	userID := mustUser(t, store)
+	reviewed := clk.Now().Add(-48 * time.Hour)
+	for i := 0; i < 20; i++ {
+		due := clk.Now().Add(time.Duration(i)*time.Minute - 3*time.Hour)
+		addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+	}
+	for i := 0; i < 20; i++ {
+		due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
+		addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.DirEnHe, due, 0, int(fsrs.Hard), reviewed, false)
+	}
+	// Six pairs at the miss threshold are 24 letter steps. DrillCap keeps 20.
+	pairs := []string{"ב/כ", "ג/ק", "ד/ת", "א/ע", "ח/כ", "ט/ת"}
+	rev := fsrs.New(store, clk)
+	for _, key := range pairs {
+		for i := 0; i < MinMissesForDrill; i++ {
+			if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, key, 0); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	got := drainAll(t, mustBuild(t, svc, userID))
+	plan := PlanFor(0.5)
+	if plan.Known != 19 || plan.Struggle != 1 {
+		t.Fatalf("plan = %+v, want 19/1", plan)
+	}
+	s, k, letters := 0, 0, 0
+	for _, card := range got {
+		switch card.Kind {
+		case KindLetter:
+			letters++
+		case KindPattern:
+			t.Fatalf("pattern drill in a letter-only cap: %+v", card)
+		default:
+			if card.Struggling {
+				s++
+			} else {
+				k++
+			}
+		}
+	}
+	if k != plan.Known || s != plan.Struggle {
+		t.Fatalf("known=%d struggle=%d, plan %+v", k, s, plan)
+	}
+	if letters != DrillCap {
+		t.Fatalf("letters = %d, want DrillCap %d", letters, DrillCap)
+	}
+}
+
+func TestDrillsAtBandPlans(t *testing.T) {
+	cases := []struct {
+		name         string
+		good, again  int
+		wantK, wantS int
+	}{
+		{name: "in-band 16/4", good: 45, again: 5, wantK: 16, wantS: 4},
+		{name: "high 13/7", good: 48, again: 2, wantK: 13, wantS: 7},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, store, clk := openSvc(t, 1)
+			ctx := context.Background()
+			userID := mustUser(t, store)
+			now := clk.Now()
+			addAccuracy(t, store, userID, tc.good, tc.again, now)
+			reviewed := now.Add(-48 * time.Hour)
+			for i := 0; i < 20; i++ {
+				due := now.Add(time.Duration(i)*time.Minute - 3*time.Hour)
+				addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+			}
+			for i := 0; i < 20; i++ {
+				due := now.Add(time.Duration(i)*time.Minute - 2*time.Hour)
+				addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.DirEnHe, due, 0, int(fsrs.Hard), reviewed, false)
+			}
+			rev := fsrs.New(store, clk)
+			for i := 0; i < MinMissesForDrill; i++ {
+				if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, "ב/כ", 0); err != nil {
+					t.Fatal(err)
+				}
+				if err := rev.RecordMiss(ctx, userID, fsrs.MissAgreement, "הוא/היא", 0); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got := drainAll(t, mustBuild(t, svc, userID))
+			accuracy := float64(tc.good) / float64(tc.good+tc.again)
+			plan := PlanFor(accuracy)
+			if plan.Known != tc.wantK || plan.Struggle != tc.wantS {
+				t.Fatalf("plan = %+v, want %d/%d", plan, tc.wantK, tc.wantS)
+			}
+			s, k, letters, patterns := 0, 0, 0, 0
+			for _, card := range got {
+				switch card.Kind {
+				case KindLetter:
+					letters++
+				case KindPattern:
+					patterns++
+				default:
+					if card.Struggling {
+						s++
+					} else {
+						k++
+					}
+				}
+			}
+			if k != plan.Known || s != plan.Struggle {
+				t.Fatalf("known=%d struggle=%d, plan %+v", k, s, plan)
+			}
+			if letters != DrillSteps || patterns != DrillSteps {
+				t.Fatalf("letters=%d patterns=%d, want %d each", letters, patterns, DrillSteps)
+			}
+		})
+	}
+}
+
+func TestRevealMarksPeeked(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	ctx := context.Background()
+	userID := mustUser(t, store)
+	reviewed := clk.Now().Add(-48 * time.Hour)
+	first := addCard(t, store, userID, "גלוי", fsrs.DirHeEn, clk.Now().Add(-2*time.Hour), 0, int(fsrs.Good), reviewed, false)
+	second := addCard(t, store, userID, "נסתר", fsrs.DirHeEn, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+	sess := mustBuild(t, svc, userID)
+
+	hidden, ok := sess.Next()
+	if !ok || hidden.CardID != first {
+		t.Fatalf("first = %+v ok=%v", hidden, ok)
+	}
+	if err := sess.Record(ctx, hidden.CardID, fsrs.Good); err != nil {
+		t.Fatal(err)
+	}
+	hiddenLogs := mustReviewLogs(t, store, first)
+	if len(hiddenLogs) != 2 || hiddenLogs[1].Peeked {
+		t.Fatalf("unrevealed log = %+v, want peeked false", hiddenLogs)
+	}
+
+	shown, ok := sess.Next()
+	if !ok || shown.CardID != second {
+		t.Fatalf("second = %+v ok=%v", shown, ok)
+	}
+	if err := sess.Reveal(otherCard(shown.CardID)); !errors.Is(err, ErrNotServed) {
+		t.Fatalf("reveal of another card = %v", err)
+	}
+	if err := sess.Reveal(shown.CardID); err != nil {
+		t.Fatal(err)
+	}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := sess.Record(cancelled, shown.CardID, fsrs.Good); err == nil {
+		t.Fatal("cancelled context graded the revealed card")
+	}
+	if err := sess.Record(ctx, shown.CardID, fsrs.Good); err != nil {
+		t.Fatal(err)
+	}
+	shownLogs := mustReviewLogs(t, store, second)
+	if len(shownLogs) != 2 || !shownLogs[1].Peeked || shownLogs[1].Rating != int(fsrs.Good) {
+		t.Fatalf("revealed log = %+v, want peeked true", shownLogs)
+	}
+}
+
+func otherCard(id int64) int64 {
+	if id == 0 {
+		return 1
+	}
+	return id + 1
+}
+
+func mustReviewLogs(t *testing.T, store *db.Store, cardID int64) []db.ReviewLog {
+	t.Helper()
+	logs, err := store.ReviewLogs(context.Background(), cardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return logs
+}
+
 func drainAll(t *testing.T, sess *Session) []CardRef {
 	t.Helper()
 	var out []CardRef
@@ -735,7 +913,7 @@ func drainAll(t *testing.T, sess *Session) []CardRef {
 			return out
 		}
 		out = append(out, card)
-		if len(out) > SessionCap+DrillSteps*4 {
+		if len(out) > SessionCap+DrillCap+DrillSteps {
 			t.Fatalf("queue did not end")
 		}
 	}

@@ -64,7 +64,10 @@ type CardRef struct {
 	Step       int
 }
 
-type gradeFunc func(context.Context, int64, fsrs.Rating) error
+type gradeFunc func(context.Context, int64, fsrs.Rating, bool) error
+
+// ErrNotServed means Record or Reveal was given a card other than the one Next just served.
+var ErrNotServed = errors.New("session: card is not the one just served")
 
 // Session is one learner's queue, held in memory.
 // Next and Record share mu. BuildSession returns a pointer because a mutex
@@ -77,6 +80,7 @@ type Session struct {
 	i        int
 	last     CardRef
 	hasLast  bool
+	peeked   bool
 	requeued map[int64]struct{}
 	grade    gradeFunc
 }
@@ -147,7 +151,7 @@ func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, err
 	return &Session{
 		userID: userID,
 		cards:  mix(cands, accuracyOf(ratings), now, s.seed),
-		grade: func(ctx context.Context, cardID int64, rating fsrs.Rating) error {
+		grade: func(ctx context.Context, cardID int64, rating fsrs.Rating, peeked bool) error {
 			if rating < fsrs.Again || rating > fsrs.Easy {
 				return fmt.Errorf("session: rating %d is outside 1..4", rating)
 			}
@@ -155,7 +159,7 @@ func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, err
 			if cardID <= 0 {
 				return nil
 			}
-			return review.GradeWithChoice(ctx, cardID, rating, false, "")
+			return review.GradeWithChoice(ctx, cardID, rating, peeked, "")
 		},
 	}, nil
 }
@@ -179,6 +183,9 @@ func drillCandidates(pairs []db.ConfusionPair) []Candidate {
 			key = pair.A + "/" + pair.B
 		}
 		for step := 0; step < DrillSteps; step++ {
+			if len(out) >= DrillCap {
+				return out
+			}
 			n++
 			out = append(out, Candidate{
 				ID:   -int64(n),
@@ -222,6 +229,7 @@ func (s *Session) Place() (index, total int, retry bool) {
 }
 
 // Next returns the next card. The bool is false when the queue is finished.
+// The new serve starts unrevealed. Peeked is set only by Reveal.
 func (s *Session) Next() (CardRef, bool) {
 	if s == nil {
 		return CardRef{}, false
@@ -233,14 +241,34 @@ func (s *Session) Next() (CardRef, bool) {
 	}
 	s.last = s.cards[s.i]
 	s.hasLast = true
+	s.peeked = false
 	s.i++
 	return s.last, true
+}
+
+// Reveal marks the served card as peeked. Record then stores that flag.
+// A grade without Reveal is still graded. Its review_log row has peeked false.
+func (s *Session) Reveal(cardID int64) error {
+	if s == nil {
+		return errors.New("session: session is not configured")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.hasLast || cardID != s.last.CardID {
+		return fmt.Errorf("session: card %d: %w", cardID, ErrNotServed)
+	}
+	s.peeked = true
+	return nil
 }
 
 // Record grades cardID through GradeWithChoice and, on Again, re-queues it
 // once. cardID is the card Next just returned. The handler has already
 // checked ownership and CSRF. A second Again on the same card is graded
 // and is not inserted again.
+//
+// peeked on the review_log row is true only when Reveal was called for this
+// serve. A grade of an unrevealed card is stored with peeked false. It is
+// not rejected: the session grades the served card either way.
 //
 // The served card is marked graded before the write. The mark is put back
 // only when the write fails, so two Records of the same serve cannot both
@@ -253,16 +281,18 @@ func (s *Session) Record(ctx context.Context, cardID int64, rating fsrs.Rating) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.hasLast || cardID != s.last.CardID {
-		return fmt.Errorf("session: card %d is not the card just served", cardID)
+		return fmt.Errorf("session: card %d: %w", cardID, ErrNotServed)
 	}
 	if s.grade == nil {
 		return errors.New("session: review is not configured")
 	}
+	peeked := s.peeked
 	s.hasLast = false
-	if err := s.grade(ctx, cardID, rating); err != nil {
+	if err := s.grade(ctx, cardID, rating, peeked); err != nil {
 		s.hasLast = true
 		return err
 	}
+	s.peeked = false
 	if rating != fsrs.Again {
 		return nil
 	}

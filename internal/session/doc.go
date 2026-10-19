@@ -6,6 +6,8 @@
 // card kinds in that same mix: a confusion with at least MinMissesForDrill
 // misses in the struggle window adds DrillSteps visits of that kind. Those
 // visits do not take a known or struggle slot, and they do not change PlanFor.
+// DrillCap is 20, the old queue's per-visit bound. Drill steps past that
+// cap are left for a later session. Study cards are not dropped to make room.
 // A drill is not an FSRS card. Record grades it in the queue only.
 //
 // The mix itself does not touch the database. BuildSession reads the clock
@@ -66,10 +68,13 @@
 // every due card stands before every not-yet-due card, so the due known
 // cards are emitted first. Letter steps and pattern steps are woven in
 // after that, one of each after each study card until the drill plan runs
-// out. Study-card order and the known and struggle counts stay as planned.
+// out or DrillCap steps have been woven. Study-card order and the known
+// and struggle counts stay as planned.
 //
-// Next returns the card at the cursor. Record grades that card through
-// GradeWithChoice with an empty chosen option. Again inserts that same card
+// Next returns the card at the cursor. Reveal marks that card peeked.
+// Record grades it through GradeWithChoice with an empty chosen option.
+// peeked is true only after Reveal on this serve. A grade with no Reveal
+// is stored with peeked false and is not rejected. Again inserts that same card
 // RequeueGap places after the cursor, at most once. The inserted visit does
 // not take a second SessionCap slot. When fewer than RequeueGap cards remain,
 // the miss is placed at the end of the queue.

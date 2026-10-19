@@ -81,6 +81,12 @@ const (
 	// A key produces one drill per session, not one drill per miss.
 	DrillSteps = 4
 
+	// DrillCap is the most drill steps one session weaves in.
+	// The old queue stopped every visit at MaxQueue, which was 20.
+	// Study cards still fill SessionCap and are not dropped to make room.
+	// Drill steps past this cap wait for a later session.
+	DrillCap = 20
+
 	// MinMissesForDrill is the 7-day count that adds a drill.
 	// The count is rows in confusion_misses, not a stored counter.
 	MinMissesForDrill = 2

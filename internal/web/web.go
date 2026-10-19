@@ -97,6 +97,7 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 	mux.HandleFunc("GET /review", review)
 	mux.HandleFunc("GET /progress", progress)
 	mux.HandleFunc("GET /lesson", lesson)
+	mux.HandleFunc("POST /_hx/review/reveal", gated(gate, secure, s.reveal))
 	mux.HandleFunc("POST /_hx/review/grade", gated(gate, secure, s.grade))
 	mux.HandleFunc("GET /signin", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := auth.CurrentUser(r.Context()); ok {
@@ -224,18 +225,55 @@ func (s *server) currentReview(r *http.Request, lang, csrf string) (views.Review
 	return reviewView(lang, csrf, lede, vm), nil
 }
 
-// grade records the served card and returns the next card, or Done.
-// Session.Record writes the FSRS review through ApplyReview, once per serve.
-// A drill step has no card, so Record keeps it in the queue only.
-// CSRF and Origin are the checks on /_hx/ in front of this handler.
-func (s *server) grade(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
+// reveal records that this serve was shown the answer, then returns the
+// back and the grade buttons. CSRF and Origin are the checks on /_hx/.
+func (s *server) reveal(w http.ResponseWriter, r *http.Request) {
+	cardID, ok := reviewCardID(w, r)
+	if !ok {
+		return
+	}
+	key, user, ok := s.sessionKey(r)
+	if !ok || user == nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	cardID, err := strconv.ParseInt(r.PostForm.Get("card_id"), 10, 64)
+	lang := reviewLang(r)
+	s.mu.Lock()
+	q, err := s.queueLocked(r.Context(), key, user.ID)
 	if err != nil {
+		s.mu.Unlock()
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	if q == nil || q.sess == nil || !q.has || q.cur.CardID != cardID {
+		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	if err := q.sess.Reveal(cardID); err != nil {
+		s.mu.Unlock()
+		http.Error(w, http.StatusText(reviewStatus(err)), reviewStatus(err))
+		return
+	}
+	q.revealed = true
+	vm, err := s.cardVM(r.Context(), q)
+	s.mu.Unlock()
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	s.finishReview(w, r, lang, vm)
+}
+
+// grade records the served card and returns the next card, or Done.
+// Session.Record writes the FSRS review through ApplyReview, once per serve.
+// peeked is true only when this serve was revealed. A grade with no reveal
+// is stored with peeked false. A drill step has no card, so Record keeps it
+// in the queue only. CSRF and Origin are the checks on /_hx/ in front of
+// this handler. A database error is 500. An unknown card is 400.
+func (s *server) grade(w http.ResponseWriter, r *http.Request) {
+	cardID, ok := reviewCardID(w, r)
+	if !ok {
 		return
 	}
 	rating, err := strconv.Atoi(r.PostForm.Get("rating"))
@@ -251,7 +289,7 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 	lang := reviewLang(r)
 	s.mu.Lock()
 	q := s.queues[key]
-	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID {
+	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID || !sameStudyDay(q.builtAt, s.now()) {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -261,7 +299,8 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 	// the review once; a second grade of the same serve does not match.
 	if err := q.sess.Record(r.Context(), cardID, fsrs.Rating(rating)); err != nil {
 		s.mu.Unlock()
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		status := reviewStatus(err)
+		http.Error(w, http.StatusText(status), status)
 		return
 	}
 	q.answered++
@@ -273,6 +312,33 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	s.finishReview(w, r, lang, vm)
+}
+
+func reviewCardID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return 0, false
+	}
+	cardID, err := strconv.ParseInt(r.PostForm.Get("card_id"), 10, 64)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return 0, false
+	}
+	return cardID, true
+}
+
+// finishReview returns the card partial for htmx. A plain form post gets the
+// full Review page on the next GET, not the partial by itself.
+func (s *server) finishReview(w http.ResponseWriter, r *http.Request, lang string, vm ReviewCardVM) {
+	if r.Header.Get("HX-Request") != "true" {
+		loc := "/review"
+		if lang == "he" {
+			loc = "/review?lang=he"
+		}
+		http.Redirect(w, r, loc, http.StatusSeeOther)
 		return
 	}
 	lede := views.UIFor(lang, views.AddressMasculine).ReviewLede

@@ -230,6 +230,7 @@ type ReviewCard struct {
 	Total         int
 	Retry         bool
 	Done          bool
+	Revealed      bool
 	Answered      int
 	Correct       int
 }
