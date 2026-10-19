@@ -22,7 +22,7 @@ import (
 
 func TestSignInPage(t *testing.T) {
 	body := get(t, New(nil, nil), "/signin")
-	assertSignIn(t, body, "he")
+	assertSignIn(t, body, "en")
 	if strings.Contains(body, "<nav") || strings.Contains(body, `class="dock"`) || strings.Contains(body, `class="rail"`) {
 		t.Fatal("sign-in page has shell navigation")
 	}
@@ -40,6 +40,8 @@ func TestSignInPage(t *testing.T) {
 	}
 	en := get(t, New(nil, nil), "/signin?lang=en")
 	assertSignIn(t, en, "en")
+	he := get(t, New(nil, nil), "/signin?lang=he")
+	assertSignIn(t, he, "he")
 }
 
 func TestHomeServesTodayWhenSignedIn(t *testing.T) {
@@ -91,7 +93,7 @@ func TestSignInRedirectsSignedInUser(t *testing.T) {
 	if anon.Code != http.StatusOK {
 		t.Fatalf("anon status %d", anon.Code)
 	}
-	assertSignIn(t, anon.Body.String(), "he")
+	assertSignIn(t, anon.Body.String(), "en")
 
 	start := httptest.NewRecorder()
 	h.ServeHTTP(start, httptest.NewRequest(http.MethodGet, views.GoogleSignInStart, nil))
@@ -140,6 +142,9 @@ func assertSignIn(t *testing.T, body, lang string) {
 	if !strings.Contains(body, `<bdi lang="he" dir="rtl">`+views.SignInWord+`</bdi>`) {
 		t.Fatal("pointed sample word missing")
 	}
+	if !strings.Contains(body, `<bdi lang="en" dir="ltr">`+views.SignInWordGloss+`</bdi>`) {
+		t.Fatal("sample word gloss missing")
+	}
 	if !strings.Contains(body, `<bdi lang="he" dir="rtl">`+views.AppName+`</bdi>`) {
 		t.Fatal("wordmark is not an isolated Hebrew run")
 	}
@@ -170,6 +175,11 @@ func assertSignIn(t *testing.T, body, lang string) {
 	if lang == "en" {
 		if !strings.Contains(link, views.SignInGoogleEN) || strings.Contains(link, views.SignInGoogleHE) {
 			t.Fatalf("english button label: %s", link)
+		}
+		for _, chrome := range []string{views.SignInTitleHE, views.SignInLedeHE, views.SignInGoogleHE} {
+			if strings.Contains(body, chrome) {
+				t.Fatalf("hebrew chrome %q on the english sign-in page", chrome)
+			}
 		}
 	} else {
 		if !strings.Contains(link, views.SignInGoogleHE) || strings.Contains(link, views.SignInGoogleEN) {

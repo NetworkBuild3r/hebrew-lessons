@@ -14,7 +14,7 @@ func TestTodayLayout(t *testing.T) {
 	const token = `tok"en<script>`
 	body := get(t, newMux(nil, CSRFFunc(func(*http.Request) string { return token })), "/")
 
-	if !strings.Contains(body, `<html lang="he" dir="rtl"`) {
+	if !strings.Contains(body, `<html lang="en" dir="ltr"`) {
 		t.Fatalf("html lang/dir missing:\n%s", body[:min(400, len(body))])
 	}
 	if !strings.Contains(body, `href="#main"`) || !strings.Contains(body, `id="main"`) {
@@ -85,7 +85,7 @@ func TestTodayLayout(t *testing.T) {
 	if !strings.Contains(body, `aria-pressed="false"`) || strings.Contains(body, `id="theme-toggle"`) {
 		t.Fatal("theme toggle should use aria-pressed and no id")
 	}
-	ui := views.UIFor("he", "m")
+	ui := views.UIFor("en", "m")
 	label := regexp.MustCompile(`(?s)class="when-light">(.*?)</span>`).FindStringSubmatch(body)
 	if label == nil || !strings.Contains(label[1], ui.Light) || strings.Contains(label[1], ui.Dark) {
 		t.Fatal("theme toggle should name the current mode")
@@ -111,8 +111,16 @@ func TestTodayLayout(t *testing.T) {
 	if views.UIFor("he", "m").DueLabel != "מִלִּים מֻכָּנוֹת" {
 		t.Fatalf("due label pointing: %s", views.UIFor("he", "m").DueLabel)
 	}
-	if !strings.Contains(body, "הַתְחֵל") || strings.Contains(body, "הַתְחִילִי") {
-		t.Fatal("fake masculine learner should be addressed in the masculine")
+	if !strings.Contains(body, ">Start<") || strings.Contains(body, "הַתְחֵל") {
+		t.Fatal("default Today should use the English start label")
+	}
+	for _, word := range views.SampleWords() {
+		if !strings.Contains(body, `<bdi lang="en" dir="ltr">`+word.Gloss+`</bdi>`) {
+			t.Fatalf("chip gloss %s missing", word.Gloss)
+		}
+	}
+	if !strings.Contains(body, `<bdi lang="en" dir="ltr">`+views.UnitGloss+`</bdi>`) {
+		t.Fatal("unit title gloss missing")
 	}
 	scriptAt := strings.Index(body, "localStorage")
 	cssAt := strings.Index(body, "/static/css/tokens.css")
@@ -191,9 +199,9 @@ func TestStaticHasNoExternalURL(t *testing.T) {
 
 func TestPairSeparatesRuns(t *testing.T) {
 	h := New(nil, nil)
-	he := get(t, h, "/?due=0")
+	he := get(t, h, "/?lang=he&due=0")
 	assertPair(t, he, "אֵין חֲזָרוֹת עַכְשָׁיו", "Nothing due", "he")
-	en := get(t, h, "/?lang=en&due=0")
+	en := get(t, h, "/?due=0")
 	assertPair(t, en, "אֵין חֲזָרוֹת עַכְשָׁיו", "Nothing due", "en")
 	if strings.Contains(he, "good morning") || strings.Contains(en, "good morning") {
 		t.Fatal("gloss line is still rendered")
@@ -216,7 +224,7 @@ func TestZeroDueAndNoLesson(t *testing.T) {
 	if strings.Contains(none, `href="/lesson"`) || strings.Contains(none, views.UnitTitle) {
 		t.Fatal("missing lesson still renders the lesson card")
 	}
-	assertPair(t, none, "אֵין שִׁעוּר בַּתּוֹר", "No lesson queued", "he")
+	assertPair(t, none, "אֵין שִׁעוּר בַּתּוֹר", "No lesson queued", "en")
 	if !strings.Contains(none, "quiet-card--next") || !strings.Contains(none, "icon-lessons") {
 		t.Fatal("missing lesson should be a placeholder card")
 	}
@@ -236,15 +244,25 @@ func TestZeroDueAndNoLesson(t *testing.T) {
 }
 
 func TestEnglishShell(t *testing.T) {
-	body := get(t, New(nil, nil), "/?lang=en")
+	body := get(t, New(nil, nil), "/")
 	if !strings.Contains(body, `<html lang="en" dir="ltr"`) {
 		t.Fatal("english shell lang/dir missing")
 	}
 	if !strings.Contains(body, `<bdi lang="en" dir="ltr">Today</bdi>`) {
 		t.Fatal("english nav label missing")
 	}
-	if !strings.Contains(body, `href="/review?lang=en"`) || !strings.Contains(body, `href="/?lang=en"`) {
-		t.Fatal("english shell dropped lang on a link")
+	if strings.Contains(body, `href="/review?lang=`) || strings.Contains(body, `href="/?lang=`) {
+		t.Fatal("english shell should keep bare links")
+	}
+	if !strings.Contains(body, `href="/review"`) || !strings.Contains(body, `href="/"`) {
+		t.Fatal("english shell dropped a nav link")
+	}
+	he := get(t, New(nil, nil), "/?lang=he")
+	if !strings.Contains(he, `<html lang="he" dir="rtl"`) || !strings.Contains(he, `href="/review?lang=he"`) {
+		t.Fatal("hebrew opt-in did not stick on links")
+	}
+	if !strings.Contains(he, "הַתְחֵל") || strings.Contains(he, "הַתְחִילִי") {
+		t.Fatal("hebrew opt-in should address the fake learner in the masculine")
 	}
 	if !strings.Contains(body, `<bdi lang="he" dir="rtl">`+views.AppName+`</bdi>`) {
 		t.Fatal("hebrew wordmark is not isolated in the english shell")
@@ -280,15 +298,15 @@ func assertPair(t *testing.T, body, he, en, first string) {
 
 func TestForeignRuns(t *testing.T) {
 	h := New(nil, nil)
-	for _, path := range []string{"/", "/?due=0", "/?next=0", "/review", "/progress", "/lesson"} {
+	for _, path := range []string{"/?lang=he", "/?lang=he&due=0", "/?lang=he&next=0", "/review?lang=he", "/progress?lang=he", "/lesson?lang=he"} {
 		n := assertRunDir(t, get(t, h, path), "en", "ltr")
-		if path == "/" && n == 0 {
-			t.Fatal("today should isolate its english runs")
+		if path == "/?lang=he" && n == 0 {
+			t.Fatal("hebrew shell should isolate its english runs")
 		}
 	}
-	for _, path := range []string{"/?lang=en", "/?lang=en&due=0", "/?lang=en&next=0", "/review?lang=en", "/progress?lang=en", "/lesson?lang=en"} {
+	for _, path := range []string{"/", "/?lang=en", "/?due=0", "/?next=0", "/review", "/progress", "/lesson"} {
 		n := assertRunDir(t, get(t, h, path), "he", "rtl")
-		if path == "/?lang=en" && n == 0 {
+		if path == "/" && n == 0 {
 			t.Fatal("english shell should isolate its hebrew runs")
 		}
 	}

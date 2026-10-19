@@ -67,16 +67,16 @@ func routes(health http.Handler, tokens CSRFToken, gate bool) *http.ServeMux {
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
 	mux.HandleFunc("GET /{$}", gated(gate, func(w http.ResponseWriter, r *http.Request) {
-		render(w, r, views.Today(homeFrom(r, csrfValue(tokens, r))))
+		render(w, r, views.Today(homeFrom(r, chooseLang(w, r), csrfValue(tokens, r))))
 	}))
 	review := gated(gate, func(w http.ResponseWriter, r *http.Request) {
-		render(w, r, views.Review(views.NewPage(r.URL.Query().Get("lang"), csrfValue(tokens, r), "review")))
+		render(w, r, views.Review(views.NewPage(chooseLang(w, r), csrfValue(tokens, r), "review")))
 	})
 	progress := gated(gate, func(w http.ResponseWriter, r *http.Request) {
-		render(w, r, views.Progress(views.NewPage(r.URL.Query().Get("lang"), csrfValue(tokens, r), "progress")))
+		render(w, r, views.Progress(views.NewPage(chooseLang(w, r), csrfValue(tokens, r), "progress")))
 	})
 	lesson := gated(gate, func(w http.ResponseWriter, r *http.Request) {
-		render(w, r, views.Lesson(views.NewPage(r.URL.Query().Get("lang"), csrfValue(tokens, r), "lesson")))
+		render(w, r, views.Lesson(views.NewPage(chooseLang(w, r), csrfValue(tokens, r), "lesson")))
 	})
 	mux.HandleFunc("GET /review", review)
 	mux.HandleFunc("GET /progress", progress)
@@ -87,7 +87,7 @@ func routes(health http.Handler, tokens CSRFToken, gate bool) *http.ServeMux {
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
-		render(w, r, views.SignIn(views.NewPage(r.URL.Query().Get("lang"), csrfValue(tokens, r), "signin")))
+		render(w, r, views.SignIn(views.NewPage(chooseLang(w, r), csrfValue(tokens, r), "signin")))
 	})
 	return mux
 }
@@ -127,10 +127,10 @@ func (n noDirFS) Open(name string) (fs.File, error) {
 }
 
 // homeFrom is placeholder Today data until the review queue is wired.
-// ?lang=en flips the shell. ?due=0 clears the queue. ?next=0 hides the lesson.
-func homeFrom(r *http.Request, csrf string) views.Home {
+// lang comes from chooseLang. ?due=0 clears the queue. ?next=0 hides the lesson.
+func homeFrom(r *http.Request, lang, csrf string) views.Home {
 	q := r.URL.Query()
-	ui := views.UIFor(q.Get("lang"), views.FakeLearner().AddressGender)
+	ui := views.UIFor(lang, views.FakeLearner().AddressGender)
 	due := 12
 	if q.Get("due") == "0" {
 		due = 0
@@ -158,7 +158,36 @@ func render(w http.ResponseWriter, r *http.Request, page templ.Component) {
 	}
 }
 
-func signInPath(r *http.Request) string {
+// langCookieName remembers an explicit UI choice. A missing cookie is
+// English, including for an existing session that never opted in.
+const langCookieName = "hebrew_lang"
+
+// chooseLang resolves the shell language. ?lang=he or ?lang=en is a choice
+// and is stored on hebrew_lang. With no query, that cookie wins. With
+// neither, the shell is English.
+func chooseLang(w http.ResponseWriter, r *http.Request) string {
+	q := r.URL.Query().Get("lang")
+	if q == "he" || q == "en" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     langCookieName,
+			Value:    q,
+			Path:     "/",
+			MaxAge:   400 * 24 * 60 * 60,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
+		return q
+	}
+	if c, err := r.Cookie(langCookieName); err == nil && (c.Value == "he" || c.Value == "en") {
+		return c.Value
+	}
+	return "en"
+}
+
+func signInPath(w http.ResponseWriter, r *http.Request) string {
+	if chooseLang(w, r) == "he" {
+		return "/signin?lang=he"
+	}
 	if r.URL.Query().Get("lang") == "en" {
 		return "/signin?lang=en"
 	}
@@ -176,7 +205,7 @@ func gated(gate bool, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := auth.CurrentUser(r.Context()); !ok {
 			w.Header().Set("Cache-Control", "no-store")
-			loc := signInPath(r)
+			loc := signInPath(w, r)
 			if r.Header.Get("HX-Request") == "true" {
 				w.Header().Set("HX-Redirect", loc)
 				w.WriteHeader(http.StatusUnauthorized)
