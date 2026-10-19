@@ -18,7 +18,7 @@ func TestConfigFromEnv(t *testing.T) {
 		"GOOGLE_USERINFO_URL", "GOOGLE_JWKS_URL", "GOOGLE_ISSUER",
 		"HEBREW_SESSION_SECRET",
 		"MCP_OAUTH_ALLOWED_EMAILS", "ADMIN_EMAILS",
-		"MCP_AUTH_TOKEN", "MCP_PUBLIC_URL",
+		"MCP_AUTH_TOKEN", "MCP_PUBLIC_URL", "MCP_ALLOWED_ORIGINS",
 		"ELEVENLABS_API_KEY",
 	} {
 		t.Setenv(key, "")
@@ -43,6 +43,9 @@ func TestConfigFromEnv(t *testing.T) {
 	if cfg.GoogleIssuer != "https://accounts.google.com" || cfg.GoogleJWKSURL != "https://www.googleapis.com/oauth2/v3/certs" {
 		t.Fatalf("google defaults: %+v", cfg)
 	}
+	if cfg.MCPAuthToken != "" {
+		t.Fatalf("MCP auth token %q", cfg.MCPAuthToken)
+	}
 	if cfg.Clock == nil {
 		t.Fatal("clock is nil")
 	}
@@ -62,8 +65,9 @@ func TestConfigFromEnv(t *testing.T) {
 	t.Setenv("HEBREW_SESSION_SECRET", "state-secret")
 	t.Setenv("MCP_OAUTH_ALLOWED_EMAILS", "learner@example.com, admin@example.com")
 	t.Setenv("ADMIN_EMAILS", "admin@example.com")
-	t.Setenv("MCP_AUTH_TOKEN", "mcp-token")
+	t.Setenv("MCP_AUTH_TOKEN", " mcp-token\n")
 	t.Setenv("MCP_PUBLIC_URL", "https://hebrew.example/mcp")
+	t.Setenv("MCP_ALLOWED_ORIGINS", "https://hebrew.example, https://builder.example")
 	t.Setenv("ELEVENLABS_API_KEY", "secret")
 	cfg, err = configFromEnv()
 	if err != nil {
@@ -80,6 +84,9 @@ func TestConfigFromEnv(t *testing.T) {
 	}
 	if cfg.MCPAuthToken != "mcp-token" || cfg.MCPPublicURL != "https://hebrew.example/mcp" {
 		t.Fatalf("mcp: %+v", cfg)
+	}
+	if len(cfg.MCPAllowedOrigins) != 2 || cfg.MCPAllowedOrigins[0] != "https://hebrew.example" || cfg.MCPAllowedOrigins[1] != "https://builder.example" {
+		t.Fatalf("origins: %+v", cfg.MCPAllowedOrigins)
 	}
 	if len(cfg.AllowedEmails) != 2 || cfg.AllowedEmails[0] != "learner@example.com" || len(cfg.AdminEmails) != 1 {
 		t.Fatalf("emails: %+v", cfg)
@@ -98,6 +105,18 @@ func TestConfigFromEnv(t *testing.T) {
 	}
 	if cfg.GoogleAuthURL != "https://accounts.google.com/o/oauth2/v2/auth" {
 		t.Fatalf("unset google url was not defaulted: %s", cfg.GoogleAuthURL)
+	}
+}
+
+func TestMCPAuthTokenBlankDisablesStaticToken(t *testing.T) {
+	t.Setenv("DATA_DIR", "/data")
+	t.Setenv("MCP_AUTH_TOKEN", " \n\t ")
+	cfg, err := configFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MCPAuthToken != "" {
+		t.Fatalf("token %q", cfg.MCPAuthToken)
 	}
 }
 

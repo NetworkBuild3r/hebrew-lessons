@@ -41,6 +41,34 @@ func TestSignInPage(t *testing.T) {
 	assertSignIn(t, en, "en")
 }
 
+func TestHomeServesTodayWhenSignedIn(t *testing.T) {
+	h, cookie := signedIn(t)
+	anon := httptest.NewRecorder()
+	h.ServeHTTP(anon, httptest.NewRequest(http.MethodGet, "/", nil))
+	if anon.Code != http.StatusSeeOther || anon.Header().Get("Location") != "/signin" {
+		t.Fatalf("signed-out GET / = %d %q", anon.Code, anon.Header().Get("Location"))
+	}
+	en := httptest.NewRecorder()
+	h.ServeHTTP(en, httptest.NewRequest(http.MethodGet, "/?lang=en", nil))
+	if en.Code != http.StatusSeeOther || en.Header().Get("Location") != "/signin?lang=en" {
+		t.Fatalf("signed-out GET /?lang=en = %d %q", en.Code, en.Header().Get("Location"))
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `class="today"`) {
+		t.Fatalf("signed-in GET / = %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `value="signin-csrf"`) {
+		t.Fatal("signed-in Today did not render auth.CSRFToken")
+	}
+	if !strings.Contains(get(t, New(nil, nil), "/"), `class="today"`) {
+		t.Fatal("the ungated router did not serve Today")
+	}
+}
+
 func TestSignInRedirectsSignedInUser(t *testing.T) {
 	h, cookie := signedIn(t)
 	req := httptest.NewRequest(http.MethodGet, "/signin?lang=en", nil)
