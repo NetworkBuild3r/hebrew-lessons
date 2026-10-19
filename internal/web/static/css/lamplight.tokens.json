@@ -1,0 +1,246 @@
+{
+  "collection": "Lamplight",
+  "source": {
+    "figmaFile": "NJ8HfTPCQgrFty2VVQBMhY",
+    "page": "139:2",
+    "collectionId": "VariableCollectionId:139:7",
+    "exportedAt": "2026-10-19",
+    "note": "Exported through use_figma by the INIT-015 orchestrator. Color values are #rrggbb or #rrggbbaa. Re-export from Figma to change a value; do not hand-edit tokens.css."
+  },
+  "modes": [
+    "light",
+    "dark"
+  ],
+  "tokens": [
+    {
+      "name": "bg/paper",
+      "type": "color",
+      "light": "#f5f0e7",
+      "dark": "#090d1a"
+    },
+    {
+      "name": "bg/surface",
+      "type": "color",
+      "light": "#fffdf9",
+      "dark": "#111729"
+    },
+    {
+      "name": "bg/surface-soft",
+      "type": "color",
+      "light": "#eee7da",
+      "dark": "#171f36"
+    },
+    {
+      "name": "bg/raised",
+      "type": "color",
+      "light": "#ffffff",
+      "dark": "#1a2240"
+    },
+    {
+      "name": "bg/slate",
+      "type": "color",
+      "light": "#10153a",
+      "dark": "#0b1030"
+    },
+    {
+      "name": "bg/slate-soft",
+      "type": "color",
+      "light": "#232a5c",
+      "dark": "#1a2150"
+    },
+    {
+      "name": "text/primary",
+      "type": "color",
+      "light": "#151a2e",
+      "dark": "#eceef6"
+    },
+    {
+      "name": "text/muted",
+      "type": "color",
+      "light": "#555b70",
+      "dark": "#a2aac2"
+    },
+    {
+      "name": "text/on-slate",
+      "type": "color",
+      "light": "#ffffff",
+      "dark": "#ffffff"
+    },
+    {
+      "name": "text/on-slate-muted",
+      "type": "color",
+      "light": "#c9cfea",
+      "dark": "#c9cfea"
+    },
+    {
+      "name": "text/kicker-on-slate",
+      "type": "color",
+      "light": "#f7e3b5",
+      "dark": "#f7e3b5"
+    },
+    {
+      "name": "line/hairline",
+      "type": "color",
+      "light": "#151a2e1a",
+      "dark": "#eceef614"
+    },
+    {
+      "name": "line/strong",
+      "type": "color",
+      "light": "#151a2e29",
+      "dark": "#eceef624"
+    },
+    {
+      "name": "action/bg",
+      "type": "color",
+      "light": "#10153a",
+      "dark": "#f2b84b"
+    },
+    {
+      "name": "action/text",
+      "type": "color",
+      "light": "#ffffff",
+      "dark": "#2a1a00"
+    },
+    {
+      "name": "accent/lamp",
+      "type": "color",
+      "light": "#f2b84b",
+      "dark": "#f2b84b"
+    },
+    {
+      "name": "accent/lamp-ink",
+      "type": "color",
+      "light": "#8a5300",
+      "dark": "#f2b84b"
+    },
+    {
+      "name": "feedback/go",
+      "type": "color",
+      "light": "#0e7a55",
+      "dark": "#62d3a6"
+    },
+    {
+      "name": "feedback/go-soft",
+      "type": "color",
+      "light": "#ddf2e8",
+      "dark": "#0f2a24"
+    },
+    {
+      "name": "feedback/stop",
+      "type": "color",
+      "light": "#b3363f",
+      "dark": "#ff938b"
+    },
+    {
+      "name": "feedback/stop-soft",
+      "type": "color",
+      "light": "#f8e1e0",
+      "dark": "#3a1a1d"
+    },
+    {
+      "name": "focus/ring",
+      "type": "color",
+      "light": "#2f4fe0",
+      "dark": "#8ea6ff"
+    },
+    {
+      "name": "radius/control",
+      "type": "number",
+      "unit": "px",
+      "light": 14,
+      "dark": 14
+    },
+    {
+      "name": "radius/card",
+      "type": "number",
+      "unit": "px",
+      "light": 24,
+      "dark": 24
+    },
+    {
+      "name": "radius/hero",
+      "type": "number",
+      "unit": "px",
+      "light": 32,
+      "dark": 32
+    },
+    {
+      "name": "radius/pill",
+      "type": "number",
+      "unit": "px",
+      "light": 999,
+      "dark": 999
+    },
+    {
+      "name": "space/1",
+      "type": "number",
+      "unit": "px",
+      "light": 4,
+      "dark": 4
+    },
+    {
+      "name": "space/2",
+      "type": "number",
+      "unit": "px",
+      "light": 8,
+      "dark": 8
+    },
+    {
+      "name": "space/3",
+      "type": "number",
+      "unit": "px",
+      "light": 12,
+      "dark": 12
+    },
+    {
+      "name": "space/4",
+      "type": "number",
+      "unit": "px",
+      "light": 16,
+      "dark": 16
+    },
+    {
+      "name": "space/5",
+      "type": "number",
+      "unit": "px",
+      "light": 24,
+      "dark": 24
+    },
+    {
+      "name": "space/6",
+      "type": "number",
+      "unit": "px",
+      "light": 32,
+      "dark": 32
+    },
+    {
+      "name": "space/7",
+      "type": "number",
+      "unit": "px",
+      "light": 48,
+      "dark": 48
+    },
+    {
+      "name": "space/8",
+      "type": "number",
+      "unit": "px",
+      "light": 64,
+      "dark": 64
+    },
+    {
+      "name": "size/tap",
+      "type": "number",
+      "unit": "px",
+      "light": 44,
+      "dark": 44
+    },
+    {
+      "name": "size/cta",
+      "type": "number",
+      "unit": "px",
+      "light": 56,
+      "dark": 56
+    }
+  ]
+}

@@ -141,6 +141,7 @@ func TestStaticHasNoExternalURL(t *testing.T) {
 	for _, path := range []string{
 		"/static/css/tokens.css",
 		"/static/css/base.css",
+		"/static/css/components.css",
 		"/static/js/htmx.min.js",
 		"/static/js/shell.js",
 		"/static/icons/sprite.svg",
@@ -167,7 +168,7 @@ func TestStaticHasNoExternalURL(t *testing.T) {
 	if !strings.Contains(css, "--lh-he-body: 1.6") || !strings.Contains(css, "--lh-he-display: 1.3") {
 		t.Fatal("pointed line-height tokens missing")
 	}
-	for _, token := range []string{"--fs-he-xl:", "--fs-he-md: 24px", "--fs-small: 15px", "--content-max: 1080px", "--rail-w: 92px", "--tap: 44px", "--motion-shift: 16px", "--motion-shift: 0px", `url("../fonts/noto-sans-hebrew-hebrew.woff2")`} {
+	for _, token := range []string{"--fs-he-xl:", "--fs-he-md: 24px", "--fs-small: 15px", "--content-max: 1080px", "--rail-w: 92px", "--tap: var(--size-tap)", "--size-tap: 44px", "--size-cta: 56px", "--motion-shift: 16px", "--motion-shift: 0px", `url("../fonts/noto-sans-hebrew-hebrew.woff2")`} {
 		if !strings.Contains(css, token) {
 			t.Fatalf("tokens missing %s", token)
 		}
