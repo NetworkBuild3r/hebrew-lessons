@@ -44,6 +44,7 @@ func configFromEnv() (app.Config, error) {
 		GoogleUserinfoURL:  strings.TrimSpace(os.Getenv("GOOGLE_USERINFO_URL")),
 		GoogleJWKSURL:      strings.TrimSpace(os.Getenv("GOOGLE_JWKS_URL")),
 		GoogleIssuer:       strings.TrimSpace(os.Getenv("GOOGLE_ISSUER")),
+		StateSecret:        strings.TrimSpace(os.Getenv("HEBREW_SESSION_SECRET")),
 		AllowedEmails:      splitList(os.Getenv("MCP_OAUTH_ALLOWED_EMAILS")),
 		AdminEmails:        splitList(os.Getenv("ADMIN_EMAILS")),
 		MCPAuthToken:       os.Getenv("MCP_AUTH_TOKEN"),
