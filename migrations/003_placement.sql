@@ -2,16 +2,17 @@
 -- Applied after 002_learning.sql. There is no learner_lexemes table:
 -- known and learning are read from cards.
 
--- One sitting of the placement deck.
+-- One placement run. A run can take several sittings.
 CREATE TABLE placement_runs (
     id INTEGER PRIMARY KEY, -- Surrogate key.
     user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE, -- Learner. Deleting the user deletes the run.
     started_at TEXT NOT NULL, -- UTC time the run started, from the process clock.
     finished_at TEXT, -- UTC time the run was scored. Null while it is in progress.
     level INTEGER CHECK (level IS NULL OR level BETWEEN -1 AND 4), -- Highest band completed without tripping the struggle rule. -1 when a finished run completed none. Null until the run is finished.
-    stop_reason TEXT CHECK (stop_reason IS NULL OR stop_reason IN ('band_stop', 'cap_cards', 'cap_time', 'exhausted')), -- Why the deck stopped. Null when the learner finished before a stop, and while the run is in progress.
+    stop_reason TEXT CHECK (stop_reason IS NULL OR stop_reason IN ('band_stop', 'cap_cards', 'exhausted')), -- Why the deck stopped. Null when the learner finished before a stop, and while the run is in progress.
     result TEXT CHECK (result IS NULL OR json_valid(result)), -- JSON object with per-band counts and the known-word estimate. Null until the run is finished.
-    seed INTEGER NOT NULL -- Shuffle seed. The same seed always deals the same order inside each band.
+    seed INTEGER NOT NULL, -- Shuffle seed. The same seed always deals the same order inside each band.
+    sitting_no INTEGER NOT NULL DEFAULT 1 CHECK (sitting_no >= 1) -- Current sitting. Start and ContinueSitting advance it when the previous sitting is full.
 );
 
 -- Latest run for a learner: one user, newest finish first.
@@ -26,6 +27,7 @@ CREATE TABLE placement_answers (
     shown_at TEXT NOT NULL, -- UTC time the card was dealt, from the process clock.
     answered_at TEXT, -- UTC time the rating was stored. Null while the card is unanswered.
     lexeme_id INTEGER REFERENCES lexemes (id), -- Word this rating graded. Null until the card is rated.
+    sitting_no INTEGER NOT NULL DEFAULT 1 CHECK (sitting_no >= 1), -- Sitting that dealt this card.
     PRIMARY KEY (run_id, item_id)
 );
 

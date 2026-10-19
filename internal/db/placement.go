@@ -23,6 +23,7 @@ type PlacementRun struct {
 	StopReason string
 	Result     string
 	Seed       int64
+	SittingNo  int
 }
 
 // PlacementAnswer is one dealt card.
@@ -34,6 +35,7 @@ type PlacementAnswer struct {
 	Rating     sql.NullInt64
 	ShownAt    time.Time
 	AnsweredAt time.Time
+	SittingNo  int
 }
 
 // BandScore is one frequency band stored in placement_runs.result.
@@ -59,6 +61,7 @@ type BandScore struct {
 // learner's known set, one past the highest position when every unit is
 // covered, and 0 when there are no units. The known set is the same union
 // as KnownLexemeIDs.
+// Sittings is the run's current sitting number.
 type Placement struct {
 	TakenAt                time.Time
 	Finished               bool
@@ -68,6 +71,7 @@ type Placement struct {
 	BandScores             []BandScore
 	EstimatedKnownWords    int
 	SuggestedStartPosition int
+	Sittings               int
 }
 
 // placementResultJSON is the object stored in placement_runs.result.
@@ -76,7 +80,7 @@ type placementResultJSON struct {
 	EstimatedKnownWords int         `json:"estimated_known_words"`
 }
 
-const placementRunColumns = `id, user_id, started_at, finished_at, level, stop_reason, result, seed`
+const placementRunColumns = `id, user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no`
 
 // placementTimeLayout is the UTC text stored in placement timestamp columns.
 // The fractional part is always nine digits, so the strings sort in time order.
@@ -102,7 +106,7 @@ func scanPlacementRun(scan func(dest ...any) error) (PlacementRun, error) {
 	var finished, stop, result sql.NullString
 	err := scan(
 		&run.ID, &run.UserID, &started, &finished,
-		&run.Level, &stop, &result, &run.Seed,
+		&run.Level, &stop, &result, &run.Seed, &run.SittingNo,
 	)
 	if err != nil {
 		return PlacementRun{}, err
@@ -163,16 +167,16 @@ func (s *Store) GetPlacementRun(ctx context.Context, id int64) (PlacementRun, er
 	return run, nil
 }
 
-// ShowPlacementCard deals one card. Rating stays null until RatePlacementAnswer.
-func (s *Store) ShowPlacementCard(ctx context.Context, runID int64, itemID string, shown time.Time) error {
+// ShowPlacementCard deals one card in sittingNo. Rating stays null until RatePlacementAnswer.
+func (s *Store) ShowPlacementCard(ctx context.Context, runID int64, itemID string, sittingNo int, shown time.Time) error {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return err
 	}
 	if _, err := conn.ExecContext(ctx, `
-		INSERT INTO placement_answers (run_id, item_id, shown_at)
-		VALUES (?, ?, ?)`,
-		runID, itemID, placementTime(shown),
+		INSERT INTO placement_answers (run_id, item_id, sitting_no, shown_at)
+		VALUES (?, ?, ?, ?)`,
+		runID, itemID, sittingNo, placementTime(shown),
 	); err != nil {
 		return fmt.Errorf("db: show placement card: %w", err)
 	}
@@ -212,7 +216,7 @@ func (s *Store) ListPlacementAnswers(ctx context.Context, runID int64) ([]Placem
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT run_id, item_id, rating, shown_at, answered_at
+		SELECT run_id, item_id, rating, shown_at, answered_at, sitting_no
 		FROM placement_answers
 		WHERE run_id = ?
 		ORDER BY shown_at, item_id`, runID)
@@ -225,7 +229,7 @@ func (s *Store) ListPlacementAnswers(ctx context.Context, runID int64) ([]Placem
 		var row PlacementAnswer
 		var shown string
 		var answered sql.NullString
-		if err := rows.Scan(&row.RunID, &row.ItemID, &row.Rating, &shown, &answered); err != nil {
+		if err := rows.Scan(&row.RunID, &row.ItemID, &row.Rating, &shown, &answered, &row.SittingNo); err != nil {
 			return nil, fmt.Errorf("db: list placement answers: %w", err)
 		}
 		row.ShownAt, err = parsePlacementTime(shown)
@@ -280,6 +284,29 @@ func (s *Store) DeleteOpenPlacementAnswer(ctx context.Context, runID int64, item
 		runID, itemID,
 	); err != nil {
 		return fmt.Errorf("db: delete placement answer: %w", err)
+	}
+	return nil
+}
+
+// AdvancePlacementSitting opens the next sitting on an unfinished run.
+func (s *Store) AdvancePlacementSitting(ctx context.Context, runID int64) error {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return err
+	}
+	res, err := conn.ExecContext(ctx, `
+		UPDATE placement_runs
+		SET sitting_no = sitting_no + 1
+		WHERE id = ? AND finished_at IS NULL`, runID)
+	if err != nil {
+		return fmt.Errorf("db: advance placement sitting: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("db: advance placement sitting: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("db: placement run %d is not open", runID)
 	}
 	return nil
 }
@@ -550,6 +577,7 @@ func (s *Store) LatestPlacement(ctx context.Context, userID int64) (Placement, b
 		BandScores:             body.Bands,
 		EstimatedKnownWords:    body.EstimatedKnownWords,
 		SuggestedStartPosition: start,
+		Sittings:               run.SittingNo,
 	}, true, nil
 }
 

@@ -81,15 +81,19 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 	if !columnNames(t, conn, "units")["scope"] {
 		t.Error("units missing scope")
 	}
-	if !columnNames(t, conn, "placement_answers")["lexeme_id"] {
+	answerCols := columnNames(t, conn, "placement_answers")
+	if !answerCols["lexeme_id"] {
 		t.Error("placement_answers missing lexeme_id")
+	}
+	if !answerCols["sitting_no"] {
+		t.Error("placement_answers missing sitting_no")
 	}
 	gotIndex := indexColumns(t, conn, "units_scope_position")
 	if stringsJoin(gotIndex) != "scope,position" {
 		t.Fatalf("units_scope_position = %v", gotIndex)
 	}
 	runCols := columnNames(t, conn, "placement_runs")
-	for _, name := range []string{"id", "user_id", "started_at", "finished_at", "level", "stop_reason", "result", "seed"} {
+	for _, name := range []string{"id", "user_id", "started_at", "finished_at", "level", "stop_reason", "result", "seed", "sitting_no"} {
 		if !runCols[name] {
 			t.Errorf("placement_runs missing %s", name)
 		}
@@ -169,12 +173,12 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 	rejectSQL(t, conn, "level", `UPDATE placement_runs SET level = 5 WHERE id = ?`, runID)
 	rejectSQL(t, conn, "stop reason", `UPDATE placement_runs SET stop_reason = 'later' WHERE id = ?`, runID)
 	rejectSQL(t, conn, "old cap", `UPDATE placement_runs SET stop_reason = 'cap' WHERE id = ?`, runID)
+	rejectSQL(t, conn, "cap time", `UPDATE placement_runs SET stop_reason = 'cap_time' WHERE id = ?`, runID)
 	if _, err := conn.ExecContext(ctx, `UPDATE placement_runs SET stop_reason = 'cap_cards' WHERE id = ?`, runID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.ExecContext(ctx, `UPDATE placement_runs SET stop_reason = 'cap_time' WHERE id = ?`, runID); err != nil {
-		t.Fatal(err)
-	}
+	rejectSQL(t, conn, "sitting", `UPDATE placement_runs SET sitting_no = 0 WHERE id = ?`, runID)
+	rejectSQL(t, conn, "answer sitting", `UPDATE placement_answers SET sitting_no = 0 WHERE item_id = 'boker'`)
 
 	if _, err := conn.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID); err != nil {
 		t.Fatal(err)

@@ -58,6 +58,8 @@ func (s *Service) loadFixture() ([]fixtureItem, error) {
 
 // Start returns the learner's unfinished run, or opens one.
 // The deck order comes from the seed stored on that run.
+// A run left unfinished is resumed on a later day. When its current sitting
+// already has SittingSize answers, Start opens the next sitting.
 func (s *Service) Start(ctx context.Context, userID int64) (int64, error) {
 	if err := s.ready(); err != nil {
 		return 0, err
@@ -67,6 +69,9 @@ func (s *Service) Start(ctx context.Context, userID int64) (int64, error) {
 		return 0, err
 	}
 	if ok {
+		if err := s.resumeSitting(ctx, open); err != nil {
+			return 0, err
+		}
 		return open.ID, nil
 	}
 	cat, err := s.loadFixture()
@@ -85,54 +90,51 @@ func (s *Service) Start(ctx context.Context, userID int64) (int64, error) {
 }
 
 // Next returns the next card after the last answered one.
-// done is true when the deck has stopped: a finished block's Good-or-Easy
-// share is below StopGoodPlusMin, the run has rated MaxCards, MaxDuration
-// has passed on the clock, or nothing dealable remains. A word that already
-// has a he_en card is skipped. A card already dealt is returned even after
-// the clock runs out, so the learner can still rate it. A finished run
-// returns an error.
-func (s *Service) Next(ctx context.Context, runID int64) (*Card, bool, error) {
+// Done is set when a band's Again rate has reached StopAgainMin, the run
+// has rated MaxCards, or nothing dealable remains. That also scores the
+// run. Break is set when the current sitting has SittingSize answers and
+// the run is still open. A word that already has a he_en card is skipped.
+// A card already dealt is returned so the learner can rate it. A finished
+// run returns an error.
+func (s *Service) Next(ctx context.Context, runID int64) (NextResult, error) {
 	if err := s.ready(); err != nil {
-		return nil, false, err
+		return NextResult{}, err
 	}
 	run, err := s.loadOpen(ctx, runID)
 	if err != nil {
-		return nil, false, err
+		return NextResult{}, err
 	}
 	rows, err := s.store.ListPlacementAnswers(ctx, runID)
 	if err != nil {
-		return nil, false, err
+		return NextResult{}, err
 	}
 	if open, ok := unanswered(rows); ok {
 		it, err := s.find(open.ItemID)
 		if err != nil {
-			return nil, false, err
+			return NextResult{}, err
 		}
 		has, err := s.hasCard(ctx, run.UserID, it.TextNFC)
 		if err != nil {
-			return nil, false, err
+			return NextResult{}, err
 		}
 		if !has {
 			card, err := s.present(ctx, it)
 			if err != nil {
-				return nil, false, err
+				return NextResult{}, err
 			}
-			return &card, false, nil
+			return NextResult{Card: &card}, nil
 		}
 		if err := s.store.DeleteOpenPlacementAnswer(ctx, runID, open.ItemID); err != nil {
-			return nil, false, err
+			return NextResult{}, err
 		}
 		rows, err = s.store.ListPlacementAnswers(ctx, runID)
 		if err != nil {
-			return nil, false, err
+			return NextResult{}, err
 		}
-	}
-	if ratedCount(rows) >= MaxCards || s.timedOut(run) {
-		return nil, true, nil
 	}
 	cat, err := s.loadFixture()
 	if err != nil {
-		return nil, false, err
+		return NextResult{}, err
 	}
 	order := deck(run.Seed, cat)
 	answered := map[string]int{}
@@ -141,53 +143,97 @@ func (s *Service) Next(ctx context.Context, runID int64) (*Card, bool, error) {
 			answered[row.ItemID] = int(row.Rating.Int64)
 		}
 	}
-	byID := indexItems(cat)
-	var counts [bands]bandCount
-	for id, rating := range answered {
-		it, ok := byID[id]
-		if !ok || it.Band < 0 || it.Band >= bands {
-			continue
-		}
-		counts[it.Band].add(rating)
+	counts := bandCounts(answered, indexItems(cat))
+	if ratedCount(rows) >= MaxCards || bandTripped(counts) {
+		return s.finishNow(ctx, runID)
 	}
+	next, ok, err := s.pick(ctx, run, order, answered, counts)
+	if err != nil {
+		return NextResult{}, err
+	}
+	if !ok {
+		return s.finishNow(ctx, runID)
+	}
+	if sittingRated(rows, run.SittingNo) >= SittingSize {
+		return NextResult{Break: true}, nil
+	}
+	if err := s.store.ShowPlacementCard(ctx, runID, next.ID, run.SittingNo, s.clock.Now()); err != nil {
+		return NextResult{}, err
+	}
+	card, err := s.present(ctx, next)
+	if err != nil {
+		return NextResult{}, err
+	}
+	return NextResult{Card: &card}, nil
+}
+
+// ContinueSitting opens the next sitting after this one is full.
+// "Keep going" calls it. "Done for today" does not, and does not finish the run.
+func (s *Service) ContinueSitting(ctx context.Context, runID int64) error {
+	if err := s.ready(); err != nil {
+		return err
+	}
+	run, err := s.loadOpen(ctx, runID)
+	if err != nil {
+		return err
+	}
+	rows, err := s.store.ListPlacementAnswers(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if sittingRated(rows, run.SittingNo) < SittingSize {
+		return fmt.Errorf("placement: sitting %d is not full", run.SittingNo)
+	}
+	return s.store.AdvancePlacementSitting(ctx, runID)
+}
+
+func (s *Service) resumeSitting(ctx context.Context, run db.PlacementRun) error {
+	rows, err := s.store.ListPlacementAnswers(ctx, run.ID)
+	if err != nil {
+		return err
+	}
+	if sittingRated(rows, run.SittingNo) < SittingSize {
+		return nil
+	}
+	return s.store.AdvancePlacementSitting(ctx, run.ID)
+}
+
+func (s *Service) finishNow(ctx context.Context, runID int64) (NextResult, error) {
+	if _, err := s.Finish(ctx, runID); err != nil {
+		return NextResult{}, err
+	}
+	return NextResult{Done: true}, nil
+}
+
+func (s *Service) pick(ctx context.Context, run db.PlacementRun, order []fixtureItem, answered map[string]int, counts [bands]bandCount) (fixtureItem, bool, error) {
 	for _, it := range order {
 		if _, ok := answered[it.ID]; ok {
 			continue
 		}
 		has, err := s.hasCard(ctx, run.UserID, it.TextNFC)
 		if err != nil {
-			return nil, false, err
+			return fixtureItem{}, false, err
 		}
 		if has {
 			continue
 		}
 		if it.Band < 0 || it.Band >= bands {
-			return nil, true, nil
+			return fixtureItem{}, false, nil
 		}
-		if counts[it.Band].rated >= BlockSize {
-			if belowGoodPlus(counts[it.Band]) {
-				return nil, true, nil
-			}
+		if tripped(counts[it.Band]) {
+			return fixtureItem{}, false, nil
+		}
+		if counts[it.Band].rated >= BandSize {
 			continue
 		}
 		for band := 0; band < it.Band; band++ {
-			if belowGoodPlus(counts[band]) {
-				return nil, true, nil
+			if tripped(counts[band]) {
+				return fixtureItem{}, false, nil
 			}
 		}
-		if ratedCount(rows) >= MaxCards || s.timedOut(run) {
-			return nil, true, nil
-		}
-		if err := s.store.ShowPlacementCard(ctx, runID, it.ID, s.clock.Now()); err != nil {
-			return nil, false, err
-		}
-		card, err := s.present(ctx, it)
-		if err != nil {
-			return nil, false, err
-		}
-		return &card, false, nil
+		return it, true, nil
 	}
-	return nil, true, nil
+	return fixtureItem{}, false, nil
 }
 
 // Rate stores the grade and makes it the word's first he_en review.
@@ -252,10 +298,6 @@ func (s *Service) Rate(ctx context.Context, runID int64, itemID string, rating i
 	return s.store.RatePlacementAnswer(ctx, runID, itemID, rating, lexemeID, now)
 }
 
-func (s *Service) timedOut(run db.PlacementRun) bool {
-	return !s.clock.Now().Before(run.StartedAt.Add(MaxDuration))
-}
-
 // Finish scores the run and marks it finished.
 // A second call returns the stored result and does not grade anything again.
 // SuggestedStartPosition is computed from the units and known words now.
@@ -303,14 +345,11 @@ func (s *Service) Finish(ctx context.Context, runID int64) (Result, error) {
 		}
 	}
 	for band := range tallies {
-		if tallies[band].Dealable > BlockSize {
-			tallies[band].Dealable = BlockSize
+		if tallies[band].Dealable > BandSize {
+			tallies[band].Dealable = BandSize
 		}
 	}
 	result := Score(tallies)
-	if result.StopReason == "" && s.timedOut(run) {
-		result.StopReason = stopTime
-	}
 	now := s.clock.Now()
 	result.RunID = run.ID
 	result.UserID = run.UserID
@@ -441,4 +480,35 @@ func ratedCount(rows []db.PlacementAnswer) int {
 		}
 	}
 	return n
+}
+
+func sittingRated(rows []db.PlacementAnswer, sitting int) int {
+	n := 0
+	for _, row := range rows {
+		if row.SittingNo == sitting && row.Rating.Valid {
+			n++
+		}
+	}
+	return n
+}
+
+func bandCounts(answered map[string]int, byID map[string]fixtureItem) [bands]bandCount {
+	var counts [bands]bandCount
+	for id, rating := range answered {
+		it, ok := byID[id]
+		if !ok || it.Band < 0 || it.Band >= bands {
+			continue
+		}
+		counts[it.Band].add(rating)
+	}
+	return counts
+}
+
+func bandTripped(counts [bands]bandCount) bool {
+	for band := range counts {
+		if tripped(counts[band]) {
+			return true
+		}
+	}
+	return false
 }

@@ -165,12 +165,12 @@ func run() error {
 	}
 
 	for band := 0; band <= 4; band++ {
-		if counts[band] < placement.BlockSize {
-			return fmt.Errorf("band %d has %d items, want at least %d", band, counts[band], placement.BlockSize)
+		if counts[band] < placement.BandSize {
+			return fmt.Errorf("band %d has %d items, want at least %d", band, counts[band], placement.BandSize)
 		}
 	}
-	if len(out) < 5*placement.BlockSize {
-		return fmt.Errorf("items = %d, want at least %d", len(out), 5*placement.BlockSize)
+	if len(out) < 5*placement.BandSize {
+		return fmt.Errorf("items = %d, want at least %d", len(out), 5*placement.BandSize)
 	}
 
 	var buf bytes.Buffer

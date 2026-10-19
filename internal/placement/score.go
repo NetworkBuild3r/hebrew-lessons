@@ -6,21 +6,21 @@ import "math"
 // its Good and Easy answers are counted one by one.
 var bandRankSize = [bands]float64{0, 500, 500, 1000, 2000}
 
-// Score applies the block rule and returns the estimate of known words.
+// Score applies the band rule and returns the estimate of known words.
 // SuggestedStartPosition is 0. Finish fills it once the learner's units and
-// known set are known. Finish also sets cap_time from the clock; Score does
-// not see the clock, so it leaves that reason empty.
+// known set are known.
 //
-// A band's block is min(BlockSize, Dealable) words. Once that block is
-// rated, (Good + Easy) / Rated below StopGoodPlusMin stops the run, and
-// every band above it is left unrated. Exactly StopGoodPlusMin does not
-// stop. Level is the highest block that was fully rated without stopping,
-// or −1.
+// A band deals at most BandSize words. Once MinRatedForStop cards in that
+// band are rated, an Again share of StopAgainMin or more stops the run.
+// "I don't know" counts as Again. Hard does not. Exactly StopAgainMin stops.
+// Fewer than MinRatedForStop ratings never stop, even when every one is
+// Again. Level is the highest band whose block was fully rated without
+// stopping, or −1.
 //
-// StopReason is band_stop when a block stopped the run, cap_cards when
+// StopReason is band_stop when a band stopped the run, cap_cards when
 // MaxCards were rated and words remain, exhausted when nothing dealable
 // remains, and empty when the learner stopped first. DontKnow counts in
-// Rated and in DontKnow, not in Again.
+// Rated and in DontKnow. It is not added to the Again field.
 func Score(tallies [bands]BandTally) Result {
 	var counted [bands]bandCount
 	var cardsRated int
@@ -46,7 +46,7 @@ func Score(tallies [bands]BandTally) Result {
 		if !stopped && counted[band].rated < block {
 			remain = true
 		}
-		if !stopped && block > 0 && counted[band].rated >= block && belowGoodPlus(counted[band]) {
+		if !stopped && tripped(counted[band]) {
 			stopped = true
 		}
 		if band == 0 {
@@ -71,7 +71,7 @@ func Score(tallies [bands]BandTally) Result {
 		if block == 0 {
 			continue
 		}
-		if counted[band].rated < block || belowGoodPlus(counted[band]) {
+		if counted[band].rated < block || tripped(counted[band]) {
 			break
 		}
 		out.Level = band
@@ -79,25 +79,25 @@ func Score(tallies [bands]BandTally) Result {
 	return out
 }
 
-// blockLen is the block the learner has to finish: BlockSize words, or
+// blockLen is the block the learner has to finish: BandSize words, or
 // fewer when the band does not have that many dealable words.
 func blockLen(dealable, rated int) int {
 	if dealable < rated {
 		dealable = rated
 	}
-	if dealable > BlockSize {
-		return BlockSize
+	if dealable > BandSize {
+		return BandSize
 	}
 	return dealable
 }
 
-// belowGoodPlus reports (Good + Easy) / Rated < StopGoodPlusMin.
-// A block with no ratings does not stop. Exactly StopGoodPlusMin does not.
-func belowGoodPlus(c bandCount) bool {
-	if c.rated == 0 {
+// tripped reports that the band has enough ratings and its Again share,
+// counting "I don't know" as Again, is at least StopAgainMin.
+func tripped(c bandCount) bool {
+	if c.rated < MinRatedForStop {
 		return false
 	}
-	return float64(c.good+c.easy) < StopGoodPlusMin*float64(c.rated)
+	return float64(c.again+c.dontKnow) >= StopAgainMin*float64(c.rated)
 }
 
 type bandCount struct {

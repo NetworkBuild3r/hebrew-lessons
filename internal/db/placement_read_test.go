@@ -101,7 +101,7 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("finished: ok=%v err=%v", ok, err)
 	}
-	if !place.TakenAt.Equal(finished) || !place.Finished || place.Level != 1 || place.StopReason != "" {
+	if !place.TakenAt.Equal(finished) || !place.Finished || place.Level != 1 || place.StopReason != "" || place.Sittings != 1 {
 		t.Fatalf("header = %+v", place)
 	}
 	if place.EstimatedKnownWords != 42 || len(place.BandScores) != 1 || place.BandScores[0].GoodPlusRate != 0 || place.BandScores[0].Rated != 12 {
@@ -230,7 +230,7 @@ func TestSuggestedStartWithNoUnitsIsZero(t *testing.T) {
 func rateAnswer(t *testing.T, s *Store, runID int64, itemID string, lexemeID int64, rating int, at time.Time) {
 	t.Helper()
 	ctx := context.Background()
-	if err := s.ShowPlacementCard(ctx, runID, itemID, at); err != nil {
+	if err := s.ShowPlacementCard(ctx, runID, itemID, 1, at); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.RatePlacementAnswer(ctx, runID, itemID, rating, lexemeID, at); err != nil {

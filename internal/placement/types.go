@@ -3,8 +3,9 @@ package placement
 import "time"
 
 // Ratings stored on a placement answer.
-// 0 is "I don't know this", sent before the flip. It is graded as Again
-// and counted as DontKnow, not as Again.
+// 0 is "I don't know this", sent before the flip. It is graded as Again.
+// BandScore counts it as DontKnow, not as Again. The stop rule counts it
+// as Again.
 // 1 is Again, 2 Hard, 3 Good, 4 Easy.
 const (
 	DontKnow = 0
@@ -17,20 +18,20 @@ const (
 const (
 	// bands is the count of frequency bands, 0 through 4.
 	bands = 5
-	// BlockSize is how many real words one band deals before the stop rule.
-	BlockSize = 20
-	// StopGoodPlusMin is the Good-or-Easy share a finished block must reach.
-	// Below this, the run stops and higher bands are not dealt. Exactly this
-	// share does not stop.
-	StopGoodPlusMin = 0.50
+	// BandSize is the most real words one band deals.
+	BandSize = 20
+	// MinRatedForStop is how many ratings a band needs before the stop rule applies.
+	MinRatedForStop = 10
+	// StopAgainMin is the Again share that stops a band. "I don't know" counts
+	// as Again. Exactly this share stops. Hard does not count.
+	StopAgainMin = 0.60
+	// SittingSize is how many answers one sitting takes before Next asks for a break.
+	SittingSize = 20
 	// MaxCards is the most cards one run rates.
 	MaxCards = 100
-	// MaxDuration is the longest a run may deal cards, measured with clock.Clock.
-	MaxDuration = 10 * time.Minute
 
 	stopBand      = "band_stop"
 	stopCards     = "cap_cards"
-	stopTime      = "cap_time"
 	stopExhausted = "exhausted"
 )
 
@@ -48,9 +49,22 @@ type Card struct {
 	Gender   string `json:"gender"`
 }
 
+// NextResult is one step of the deck.
+// Card is the word to show. Break means the current sitting has SittingSize
+// answers: the run stays unfinished, and the client offers "Done for today"
+// and "Keep going". Done means the run has been scored because a band
+// stopped, the card cap was hit, or nothing dealable remains.
+// Break and Done are not set together. A finished run returns an error.
+type NextResult struct {
+	Card  *Card
+	Break bool
+	Done  bool
+}
+
 // BandScore is one frequency band on a run.
 // GoodPlusRate is (Good + Easy) / Rated. It is 0 when Rated is 0.
-// DontKnow counts "I don't know this" answers. Those are not Again.
+// DontKnow counts "I don't know this" answers. The Again field does not
+// include them. The stop rule does.
 type BandScore struct {
 	Band         int     `json:"band"`
 	Rated        int     `json:"rated"`
@@ -71,10 +85,10 @@ type BandTally struct {
 }
 
 // Result is one placement run.
-// Level is the highest band whose block was fully rated at or above
-// StopGoodPlusMin, or −1 when none was.
-// StopReason is band_stop, cap_cards, cap_time, exhausted, or empty when
-// the run is still in progress or the learner finished it first.
+// Level is the highest band whose block was fully rated without the Again
+// rate reaching StopAgainMin, or −1 when none was.
+// StopReason is band_stop, cap_cards, exhausted, or empty when the run is
+// still in progress or the learner finished it first.
 //
 // EstimatedKnownWords sums, over bands 1–4, GoodPlusRate times that band's
 // width in the frequency list (500, 500, 1000, 2000), then adds the number
