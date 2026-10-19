@@ -63,6 +63,15 @@ try {
     console.warn('[dictionary] not loaded: ' + (err && err.message ? err.message : err));
 }
 
+// Tanakh corpus (public-domain Hebrew + JPS 1917 English). Loads once, when data/tanakh has the files.
+try {
+    const loaded = require('./tanakh/load').loadIfEmpty();
+    if (loaded.loaded) console.log('Tanakh: ' + loaded.loaded + ' verses loaded');
+    else console.log('Tanakh: ' + loaded.skipped);
+} catch (err) {
+    console.warn('[tanakh] not loaded: ' + (err && err.message ? err.message : err));
+}
+
 // First admin only. An existing admin (even a disabled one) wins over the env.
 try {
     const boot = require('./bootstrap-admin').ensureBootstrapAdmin();

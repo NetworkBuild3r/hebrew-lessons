@@ -131,6 +131,8 @@ describe('migrate + schema (ac-2, ac-3, ac-6)', () => {
             'review_items',
             'schema_migrations',
             'sessions',
+            'tanakh_meta',
+            'tanakh_verses',
             'user_words',
             'users'
         ];
@@ -153,8 +155,9 @@ describe('migrate + schema (ac-2, ac-3, ac-6)', () => {
         assert.match(byVersion.get(9), /^009-dictionary-entries\.js$/);
         assert.match(byVersion.get(10), /^010-lexicon-future-cells\.js$/);
         assert.match(byVersion.get(11), /^011-google-email\.js$/);
+        assert.match(byVersion.get(12), /^012-tanakh-corpus\.js$/);
         for (const version of byVersion.keys()) {
-            assert.ok(version >= 1 && version <= 11, 'unexpected migration ' + version);
+            assert.ok(version >= 1 && version <= 12, 'unexpected migration ' + version);
         }
 
         db.migrate();

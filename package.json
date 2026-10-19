@@ -18,7 +18,9 @@
     "audio:dry": "node scripts/generate-audio.js --dry-run",
     "audio:inventory": "node scripts/audio-inventory.js inventory",
     "audio:verify": "node scripts/audio-inventory.js verify",
-    "vocab-index": "node scripts/build-vocab-index.js"
+    "vocab-index": "node scripts/build-vocab-index.js",
+    "tanakh:fetch": "node scripts/fetch-tanakh.js",
+    "tanakh:import": "node scripts/import-tanakh.js"
   },
   "keywords": [],
   "author": "",
