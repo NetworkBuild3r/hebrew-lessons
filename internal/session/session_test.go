@@ -1060,10 +1060,89 @@ func TestNewCardCaps(t *testing.T) {
 		if len(seenKnown) != len(known) {
 			t.Fatalf("known cards = %v, want %v", seenKnown, known)
 		}
-		if len(newIDs) != 1 || newIDs[0] != fresh[0] {
-			t.Fatalf("new = %v, want the first new card %d of %v", newIDs, fresh[0], fresh)
+		// 3 reviewed cards. sessionSize = 3+2 = 5.
+		// min(5, max(2, floor(0.25*5))) = min(5, max(2, 1)) = 2.
+		// The share alone admitted 1; MinNewPerSession raises it to 2.
+		if len(newIDs) != 2 || newIDs[0] != fresh[0] || newIDs[1] != fresh[1] {
+			t.Fatalf("new = %v, want the first two new cards %v", newIDs, fresh[:2])
 		}
 	})
+}
+
+func TestNewCardFloor(t *testing.T) {
+	// sessionSize is the reviewed cards in the built queue plus the new
+	// cards. newCount = min(5, max(2, floor(0.25 * sessionSize))) when
+	// reviews are due. Zero reviews uses the full cap of 5.
+	//
+	// Ten reviews: the consistent count is 3. sessionSize = 10+3 = 13,
+	// floor(0.25*13) = 3, min(5, max(2, 3)) = 3.
+	cases := []struct {
+		reviews int
+		wantNew int
+	}{
+		{reviews: 0, wantNew: 5},
+		{reviews: 1, wantNew: 2},
+		{reviews: 2, wantNew: 2},
+		{reviews: 10, wantNew: 3},
+	}
+	// Four finished-lesson words are eight unreviewed cards, more than
+	// every allowance in this table, so the cap is what limits the queue.
+	const newWords = 4
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("%d reviews", tc.reviews), func(t *testing.T) {
+			svc, store, clk := openSvc(t, 1)
+			userID := mustUser(t, store)
+			now := clk.Now()
+			reviewedAt := now.Add(-48 * time.Hour)
+			known := map[int64]bool{}
+			for i := 0; i < tc.reviews; i++ {
+				id := addCard(t, store, userID, fmt.Sprintf("נִסְקָר-%d", i), fsrs.DirHeEn, now.Add(-time.Hour), 0, int(fsrs.Good), reviewedAt, false)
+				known[id] = true
+			}
+			unit := insertUnitAt(t, store, 1)
+			var words []int64
+			for i := 0; i < newWords; i++ {
+				words = append(words, mustLexeme(t, store, fmt.Sprintf("חָדָשׁ-%d", i)))
+			}
+			finishLesson(t, store, userID, unit, 0, words, now)
+			var fresh []int64
+			for _, word := range words {
+				he, en := enqueuePair(t, store, userID, word, now)
+				fresh = append(fresh, he, en)
+			}
+			if tc.wantNew >= len(fresh) {
+				t.Fatalf("want %d new is not below the %d unreviewed candidates", tc.wantNew, len(fresh))
+			}
+			got := drain(t, mustBuild(t, svc, userID))
+			var newIDs []int64
+			seenKnown := map[int64]bool{}
+			for _, card := range got {
+				if card.New {
+					newIDs = append(newIDs, card.CardID)
+					continue
+				}
+				if card.Kind == KindLetter || card.Kind == KindPattern {
+					t.Fatalf("drill %+v is not part of this session", card)
+				}
+				if !known[card.CardID] {
+					t.Fatalf("unexpected card %+v", card)
+				}
+				seenKnown[card.CardID] = true
+			}
+			if len(seenKnown) != tc.reviews {
+				t.Fatalf("reviewed = %d, want %d", len(seenKnown), tc.reviews)
+			}
+			sessionSize := len(seenKnown) + len(newIDs)
+			if len(newIDs) != tc.wantNew {
+				t.Fatalf("new = %d, want %d (sessionSize %d, candidates %d)", len(newIDs), tc.wantNew, sessionSize, len(fresh))
+			}
+			for i, id := range newIDs {
+				if id != fresh[i] {
+					t.Fatalf("new[%d] = %d, want %d of %v", i, id, fresh[i], fresh)
+				}
+			}
+		})
+	}
 }
 
 func insertUnitAt(t *testing.T, store *db.Store, position int) int64 {

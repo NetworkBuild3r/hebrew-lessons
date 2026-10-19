@@ -37,7 +37,8 @@ func currentBudgets() Budgets {
 // currentMixTarget is the unit new-word budget plus the session mix.
 // targetSuccess is sessionlimits.TargetSuccess, the same value
 // session.BuildSession aims at. maxNewPerSession and maxNewShare are the
-// coaching caps. BuildSession does not apply those two.
+// coaching caps. BuildSession reads those same constants. With reviews
+// due, new cards are also at least sessionlimits.MinNewPerSession.
 func currentMixTarget() MixTarget {
 	return MixTarget{
 		MaxNewWordsPerUnit:   units.MaxNewWordsPerUnit,

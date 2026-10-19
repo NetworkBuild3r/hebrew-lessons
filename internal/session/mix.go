@@ -22,11 +22,18 @@ const (
 
 	// MaxNewPerSession is how many new cards one session introduces.
 	// A new card has no review yet. BuildSession applies this cap.
+	// A session with no reviewed cards still introduces up to this many.
 	MaxNewPerSession = sessionlimits.MaxNewPerSession
 
-	// MaxNewShare is the largest fraction of a session that new cards
-	// may be, once the session already has a reviewed card. A session
-	// with no reviewed cards still introduces up to MaxNewPerSession,
+	// MinNewPerSession is the fewest new cards admitted when the planned
+	// queue already has a reviewed card and that many new cards are waiting.
+	// floor(MaxNewShare * sessionSize) is 0 for one or two reviews.
+	MinNewPerSession = sessionlimits.MinNewPerSession
+
+	// MaxNewShare is the largest fraction of the reviewed cards plus the
+	// new cards that new cards may be. With reviews due, the allowance is
+	// min(MaxNewPerSession, max(MinNewPerSession, floor(MaxNewShare * sessionSize))).
+	// A session with no reviewed cards still introduces up to MaxNewPerSession,
 	// so a finished lesson is not an empty queue.
 	MaxNewShare = sessionlimits.MaxNewShare
 
@@ -381,17 +388,32 @@ func take(in []Candidate, n int) []Candidate {
 }
 
 // newAllowance is how many of available new cards this session takes.
-// The absolute cap is MaxNewPerSession. When the planned queue already
-// has reviewed cards, new cards are also at most MaxNewShare of the
-// session those reviewed cards and the new cards make together.
-// A planned queue of zero still takes up to MaxNewPerSession: the share
-// would otherwise be zero and a finished lesson would never be reviewed.
+// sessionSize is the reviewed cards already in the planned queue plus the
+// new cards admitted here. Drill steps are woven around that queue and
+// are not part of sessionSize.
+//
+// A planned queue of zero takes up to MaxNewPerSession. The share would
+// otherwise be zero and a finished lesson would never be reviewed.
+// With reviews due, and with MaxNewShare strictly between 0 and 1,
+// newCount = min(MaxNewPerSession, max(MinNewPerSession, floor(MaxNewShare * sessionSize))).
+// That count is the largest one at most MaxNewPerSession for which
+// floor(MaxNewShare * sessionSize) still allows it, and at least
+// MinNewPerSession when the floor would admit fewer.
 func newAllowance(planned, available int) int {
 	limit := MaxNewPerSession
 	if planned > 0 && MaxNewShare > 0 && MaxNewShare < 1 {
-		share := int(math.Floor((MaxNewShare * float64(planned)) / (1 - MaxNewShare)))
-		if share < limit {
-			limit = share
+		limit = MinNewPerSession
+		if limit > MaxNewPerSession {
+			limit = MaxNewPerSession
+		}
+		if limit < 0 {
+			limit = 0
+		}
+		for n := limit; n <= MaxNewPerSession; n++ {
+			sessionSize := planned + n
+			if int(math.Floor(MaxNewShare*float64(sessionSize))) >= n {
+				limit = n
+			}
 		}
 	}
 	if limit < 0 {
