@@ -2,6 +2,8 @@ package fsrs
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,8 +40,16 @@ func TestQAGradeRejectsOutOfRange(t *testing.T) {
 			if len(logsBefore) != 0 {
 				t.Fatalf("seed logs = %d, want 0", len(logsBefore))
 			}
-			if err := rev.Grade(ctx, cardID, rating, false); err == nil {
-				t.Skip("BUG: accepts invalid rating: owner Backend Dev")
+			err = rev.Grade(ctx, cardID, rating, false)
+			if err == nil {
+				t.Fatalf("BUG: accepts invalid rating: owner Backend Dev")
+			}
+			// The review_log CHECK (rating BETWEEN 1 AND 4) also rejects a
+			// write. Require the Go range error so that constraint is not
+			// what makes this test pass.
+			want := fmt.Sprintf("fsrs: rating %d is outside 1..4", rating)
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("Grade(%d) = %v, want the 1..4 rating check", rating, err)
 			}
 			after, err := store.GetCard(ctx, cardID)
 			if err != nil {
