@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"golang.org/x/text/unicode/norm"
@@ -24,7 +25,8 @@ type Memory struct {
 	lexemes        []storedLexeme
 	audio          map[string]bool
 	placement      map[int64]storedPlacement
-	struggle       map[int64]storedStruggle
+	struggles      map[int64][]LexemeStruggle
+	confusions     map[int64][]ConfusionCount
 	completed      map[int64][]UnitCompletion
 	completedWords map[int64][]string
 }
@@ -45,11 +47,6 @@ type memUnit struct {
 	canonical []byte
 	doc       units.Unit
 	actor     string
-}
-
-type storedStruggle struct {
-	lexemes    []StruggleLexeme
-	confusions []ConfusionPair
 }
 
 type storedLexeme struct {
@@ -97,10 +94,9 @@ func (m *Memory) Actor(id int64) string {
 	return u.actor
 }
 
-// SetPlacement stores one finished run for userID.
-// known is the Good and Easy words. learning is the Hard, Again, and
-// don't-know words. Both are pointed NFC and are sorted before they
-// are stored.
+// SetPlacement stores one placement row for userID.
+// known is the Good and Easy words. learning is the Again and Hard
+// words. Both are pointed NFC and are sorted before they are stored.
 func (m *Memory) SetPlacement(userID int64, row Placement, known, learning []string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -136,7 +132,7 @@ func (m *Memory) ListUnits(ctx context.Context) ([]UnitOutline, error) {
 }
 
 // LatestPlacement implements CourseReader.
-// ok is false when userID has no finished run.
+// ok is false when userID has no placement row.
 func (m *Memory) LatestPlacement(ctx context.Context, userID int64) (Placement, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return Placement{}, false, err
@@ -169,8 +165,8 @@ func (m *Memory) PlacementKnownLexemes(ctx context.Context, userID int64) ([]str
 }
 
 // PlacementLearningLexemes implements CourseReader.
-// The text is the Hard, Again, and don't-know words, pointed NFC, sorted.
-// A learner with no run returns an empty list.
+// The text is the Again and Hard words, pointed NFC, sorted.
+// A learner with no row returns an empty list.
 func (m *Memory) PlacementLearningLexemes(ctx context.Context, userID int64) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -184,32 +180,69 @@ func (m *Memory) PlacementLearningLexemes(ctx context.Context, userID int64) ([]
 	return append([]string(nil), stored.learning...), nil
 }
 
-// SetStruggle stores the raw struggle rows for userID.
-// StruggleStats orders and trims them.
-func (m *Memory) SetStruggle(userID int64, lexemes []StruggleLexeme, confusions []ConfusionPair) {
+// SetLexemeStruggles stores struggled words for userID in the given order.
+// LexemeStruggles returns that order and does not re-rank it.
+func (m *Memory) SetLexemeStruggles(userID int64, rows []LexemeStruggle) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.struggle == nil {
-		m.struggle = map[int64]storedStruggle{}
+	if m.struggles == nil {
+		m.struggles = map[int64][]LexemeStruggle{}
 	}
-	m.struggle[userID] = storedStruggle{
-		lexemes:    append([]StruggleLexeme(nil), lexemes...),
-		confusions: append([]ConfusionPair(nil), confusions...),
-	}
+	m.struggles[userID] = append([]LexemeStruggle(nil), rows...)
 }
 
-// StruggleStats implements CourseReader.
-func (m *Memory) StruggleStats(ctx context.Context, userID int64, topN int) (Struggle, error) {
+// SetConfusionCounts stores confusion rows for userID in the given order.
+func (m *Memory) SetConfusionCounts(userID int64, rows []ConfusionCount) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.confusions == nil {
+		m.confusions = map[int64][]ConfusionCount{}
+	}
+	m.confusions[userID] = append([]ConfusionCount(nil), rows...)
+}
+
+// LexemeStruggles implements CourseReader.
+// The stored order is kept. topN only truncates it.
+func (m *Memory) LexemeStruggles(ctx context.Context, userID int64, topN int) ([]LexemeStruggle, error) {
 	if err := ctx.Err(); err != nil {
-		return Struggle{}, err
+		return nil, err
 	}
 	if topN <= 0 {
 		topN = defaultStruggleTop
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	stored := m.struggle[userID]
-	return rankStruggle(stored.lexemes, stored.confusions, topN), nil
+	rows := append([]LexemeStruggle(nil), m.struggles[userID]...)
+	if topN < len(rows) {
+		rows = rows[:topN]
+	}
+	if rows == nil {
+		rows = []LexemeStruggle{}
+	}
+	return rows, nil
+}
+
+// ConfusionCounts implements CourseReader.
+// Rows stay in stored order. LastAt older than the window is dropped.
+// A zero LastAt is kept. window of zero or less uses 30 days.
+func (m *Memory) ConfusionCounts(ctx context.Context, userID int64, window time.Duration) ([]ConfusionCount, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if window <= 0 {
+		window = time.Duration(defaultWindowDays) * 24 * time.Hour
+	}
+	cutoff := time.Now().Add(-window)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]ConfusionCount, 0, len(m.confusions[userID]))
+	for _, row := range m.confusions[userID] {
+		if !row.LastAt.IsZero() && row.LastAt.Before(cutoff) {
+			continue
+		}
+		out = append(out, row)
+	}
+	return out, nil
 }
 
 // SetCompletedUnitLexemes stores pointed NFC words from units this
@@ -271,46 +304,6 @@ func (m *Memory) CompletedSharedUnits(ctx context.Context, userID int64) ([]Unit
 		rows = []UnitCompletion{}
 	}
 	return rows, nil
-}
-
-func rankStruggle(lexemes []StruggleLexeme, confusions []ConfusionPair, topN int) Struggle {
-	rows := append([]StruggleLexeme(nil), lexemes...)
-	slices.SortStableFunc(rows, func(a, b StruggleLexeme) int {
-		if c := cmp.Compare(b.Lapses, a.Lapses); c != 0 {
-			return c
-		}
-		if c := cmp.Compare(b.AgainRate, a.AgainRate); c != 0 {
-			return c
-		}
-		return cmp.Compare(a.Text, b.Text)
-	})
-	pairs := append([]ConfusionPair(nil), confusions...)
-	slices.SortStableFunc(pairs, func(a, b ConfusionPair) int {
-		if c := cmp.Compare(b.Count, a.Count); c != 0 {
-			return c
-		}
-		if c := cmp.Compare(a.A, b.A); c != 0 {
-			return c
-		}
-		return cmp.Compare(a.B, b.B)
-	})
-	if topN < len(rows) {
-		rows = rows[:topN]
-	}
-	if topN < len(pairs) {
-		pairs = pairs[:topN]
-	}
-	top := make([]string, len(rows))
-	for i, row := range rows {
-		top[i] = row.Text
-	}
-	if rows == nil {
-		rows = []StruggleLexeme{}
-	}
-	if pairs == nil {
-		pairs = []ConfusionPair{}
-	}
-	return Struggle{Lexemes: rows, Confusions: pairs, Top: top}
 }
 
 func sortedCopy(in []string) []string {

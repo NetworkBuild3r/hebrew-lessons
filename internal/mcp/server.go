@@ -19,7 +19,7 @@ const (
 
 	instructions = "You are writing Hebrew course units. " +
 		"Read hebrew://schema/unit, hebrew://catalog/activities, and hebrew://rules before you draft. " +
-		"Call get_context for the outline, the words already taught before a position, the budgets, and, when you pass learnerId, that learner's placement and struggle. " +
+		"Call get_context for the outline, the words already taught before a position, the budgets, and, when you pass learnerId, that learner's placement and struggles. " +
 		"Omit learnerId for a shared unit. Shared units assume no learner data. " +
 		"Call lookup before you invent a spelling or a gloss. " +
 		"Call validate_unit as a dry run. Call put_unit to save a draft. " +

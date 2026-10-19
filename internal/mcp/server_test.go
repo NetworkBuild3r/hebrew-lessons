@@ -201,8 +201,11 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 		t.Fatal("placement was taken")
 	}
 	untaken := callRaw(t, session, "get_context", getContextInput{Position: 0})
-	if !strings.Contains(untaken, `"placement":{"taken":false}`) || strings.Contains(untaken, "adjustedScore") {
+	if !strings.Contains(untaken, `"placement":{"taken":false}`) || strings.Contains(untaken, "adjustedScore") || strings.Contains(untaken, `"reliable"`) {
 		t.Fatalf("untaken placement %s", untaken)
+	}
+	if !strings.Contains(untaken, `"struggles":`) || !strings.Contains(untaken, `"lexemes":[]`) || !strings.Contains(untaken, `"confusions":[]`) {
+		t.Fatalf("untaken struggles %s", untaken)
 	}
 	if ctx.Budgets != currentBudgets() {
 		t.Fatalf("budgets %+v", ctx.Budgets)
@@ -307,8 +310,10 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 
 	mem.SetPlacement(9, Placement{
 		TakenAt:                time.Date(2026, 10, 18, 11, 0, 0, 0, time.UTC),
-		Reliable:               true,
+		Finished:               true,
 		Level:                  2,
+		CardsRated:             12,
+		StopReason:             "band_stop",
 		EstimatedKnownWords:    10,
 		SuggestedStartPosition: 1,
 	}, []string{coffee}, nil)
@@ -319,25 +324,26 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	}
 	takenAt := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	mem.SetPlacement(0, Placement{
-		TakenAt:        takenAt,
-		Reliable:       true,
-		FalseAlarmRate: 0.05,
-		Level:          0,
+		TakenAt:    takenAt,
+		Finished:   true,
+		Level:      0,
+		CardsRated: 4,
+		StopReason: "cap",
 		BandScores: []BandScore{{
-			Band: 0, Shown: 4, Again: 1, Hard: 1, Good: 1, Easy: 1, GoodPlusRate: 0.5,
+			Band: 0, Rated: 4, Again: 1, Hard: 1, Good: 1, Easy: 1, StruggleRate: 0.5,
 		}},
 		EstimatedKnownWords:    40,
 		SuggestedStartPosition: 0,
 	}, []string{hello, coffee}, []string{book, helloBare})
 	again := call[getContextOutput](t, session, "get_context", getContextInput{Position: 3, LearnerID: &learnerZero})
-	if !again.Placement.Taken || !again.Placement.TakenAt.Equal(takenAt) || !again.Placement.Reliable || again.Placement.FalseAlarmRate != 0.05 {
+	if !again.Placement.Taken || !again.Placement.TakenAt.Equal(takenAt) || !again.Placement.Finished || again.Placement.StopReason != "cap" || again.Placement.CardsRated != 4 {
 		t.Fatalf("placement %+v", again.Placement)
 	}
 	if again.Placement.Level != 0 || again.Placement.SuggestedStartPosition != 0 || again.Placement.EstimatedKnownWords != 40 {
 		t.Fatalf("placement zeros %+v", again.Placement)
 	}
-	band := again.Placement.BandScores
-	if len(band) != 1 || band[0].Band != 0 || band[0].Shown != 4 || band[0].Again != 1 || band[0].Hard != 1 || band[0].Good != 1 || band[0].Easy != 1 || band[0].DontKnow != 0 || band[0].GoodPlusRate != 0.5 {
+	band := again.Placement.Bands
+	if len(band) != 1 || band[0].Band != 0 || band[0].Rated != 4 || band[0].Again != 1 || band[0].Hard != 1 || band[0].Good != 1 || band[0].Easy != 1 || band[0].StruggleRate != 0.5 {
 		t.Fatalf("bands %+v", band)
 	}
 	if len(again.Placement.KnownLexemes) != 2 || again.Placement.KnownLexemes[0] != coffee || again.Placement.KnownLexemes[1] != hello {
@@ -348,16 +354,18 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	}
 	takenText := callRaw(t, session, "get_context", getContextInput{Position: 3, LearnerID: &learnerZero})
 	for _, want := range []string{
-		`"taken":true`, `"level":0`, `"suggestedStartPosition":0`, `"reliable":true`,
-		`"shown":4`, `"again":1`, `"hard":1`, `"good":1`, `"easy":1`, `"dontknow":0`, `"goodPlusRate":0.5`,
-		`"learningLexemes":`, hello, book,
+		`"taken":true`, `"finished":true`, `"level":0`, `"cardsRated":4`, `"stopReason":"cap"`,
+		`"suggestedStartPosition":0`, `"bands":`, `"rated":4`, `"again":1`, `"hard":1`,
+		`"good":1`, `"easy":1`, `"struggleRate":0.5`, `"learningLexemes":`, hello, book,
 	} {
 		if !strings.Contains(takenText, want) {
 			t.Fatalf("taken placement missing %s in %s", want, takenText)
 		}
 	}
-	if strings.Contains(takenText, "adjustedScore") || strings.Contains(takenText, `"h":`) || strings.Contains(takenText, `"passed"`) {
-		t.Fatalf("old band fields %s", takenText)
+	for _, gone := range []string{"adjustedScore", `"h":`, `"passed"`, `"reliable"`, `"falseAlarmRate"`, `"bandScores"`, `"shown"`, `"dontknow"`, `"goodPlusRate"`} {
+		if strings.Contains(takenText, gone) {
+			t.Fatalf("old placement field %s in %s", gone, takenText)
+		}
 	}
 	found := false
 	for _, word := range again.KnownLexemes {
@@ -433,21 +441,25 @@ func TestScopeStruggleAndGuidance(t *testing.T) {
 	if len(onlyShared.Outline) != 1 || onlyShared.Outline[0].Scope != ScopeShared || onlyShared.Outline[0].Title != doc.Title {
 		t.Fatalf("shared outline %+v", onlyShared.Outline)
 	}
-	if onlyShared.Placement.Taken || len(onlyShared.Struggle.Lexemes) != 0 || len(onlyShared.CompletedSharedUnits) != 0 {
+	if onlyShared.Placement.Taken || len(onlyShared.Struggles.Lexemes) != 0 || len(onlyShared.Struggles.Confusions) != 0 || len(onlyShared.CompletedSharedUnits) != 0 {
 		t.Fatalf("shared view leaked learner data %+v", onlyShared)
 	}
 	if len(onlyShared.KnownLexemes) != 1 || onlyShared.KnownLexemes[0] != hello {
 		t.Fatalf("shared known %+v", onlyShared.KnownLexemes)
 	}
 
-	mem.SetStruggle(7, []StruggleLexeme{
-		{Text: "ג", Lapses: 3, AgainRate: 0, Misses7d: 0},
-		{Text: "ב", Lapses: 1, AgainRate: 0.9, Misses7d: 0},
-		{Text: "ד", Lapses: 1, AgainRate: 0.9, Misses7d: 50},
-		{Text: "א", Lapses: 1, AgainRate: 0.1, Misses7d: 0},
-	}, []ConfusionPair{
-		{A: "ב", B: "א", Count: 1},
-		{A: "א", B: "ג", Count: 4},
+	recent := time.Now().Add(-48 * time.Hour).UTC()
+	old := time.Now().Add(-40 * 24 * time.Hour).UTC()
+	mem.SetLexemeStruggles(7, []LexemeStruggle{
+		{LexemeID: 11, TextNFC: "א", Gloss: "alef", Reviews: 2, Lapses: 0, AgainRate: 0.1, Misses7d: 0, LastReviewAt: recent},
+		{LexemeID: 12, TextNFC: "ג", Gloss: "gimel", Reviews: 9, Lapses: 8, AgainRate: 0.9, Misses7d: 3, LastReviewAt: recent},
+		{LexemeID: 13, TextNFC: "ב", Gloss: "bet", Reviews: 4, Lapses: 1, AgainRate: 0.9, Misses7d: 0, LastReviewAt: recent},
+		{LexemeID: 14, TextNFC: "ד", Gloss: "dalet", Reviews: 5, Lapses: 1, AgainRate: 0.9, Misses7d: 50, LastReviewAt: recent},
+	})
+	mem.SetConfusionCounts(7, []ConfusionCount{
+		{Kind: "pair", Key: "old", Count: 9, LastAt: old},
+		{Kind: "pair", Key: "recent", Count: 4, LastAt: recent},
+		{Kind: "root", Key: "zero", Count: 1},
 	})
 	early := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	later := time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC)
@@ -478,24 +490,36 @@ func TestScopeStruggleAndGuidance(t *testing.T) {
 	if !sawShared || !sawMine {
 		t.Fatalf("learner outline %+v", top.Outline)
 	}
-	if len(top.Struggle.Lexemes) != 1 || top.Struggle.Lexemes[0].Text != "ג" || len(top.Struggle.Top) != 1 || top.Struggle.Top[0] != "ג" {
-		t.Fatalf("top %+v", top.Struggle)
+	if len(top.Struggles.Lexemes) != 1 || top.Struggles.Lexemes[0].TextNFC != "א" || top.Struggles.Lexemes[0].Gloss != "alef" || top.Struggles.Lexemes[0].Reviews != 2 || top.Struggles.Lexemes[0].Lapses != 0 {
+		t.Fatalf("top kept store order %+v", top.Struggles.Lexemes)
 	}
-	if len(top.Struggle.Confusions) != 1 || top.Struggle.Confusions[0].Count != 4 || top.Struggle.Confusions[0].A != "א" {
-		t.Fatalf("confusions %+v", top.Struggle.Confusions)
+	if len(top.Struggles.Confusions) != 2 || top.Struggles.Confusions[0].Key != "recent" || top.Struggles.Confusions[0].Count != 4 || top.Struggles.Confusions[1].Key != "zero" || !top.Struggles.Confusions[1].LastAt.IsZero() {
+		t.Fatalf("confusions %+v", top.Struggles.Confusions)
+	}
+	topText := callRaw(t, session, "get_context", getContextInput{Position: 2, LearnerID: &learner7, TopN: 1})
+	if strings.Contains(topText, `"lexemeId"`) || strings.Contains(topText, `"top"`) {
+		t.Fatalf("struggle leaked store-only fields %s", topText)
 	}
 
-	mem.SetPlacement(7, Placement{TakenAt: early, Reliable: true}, []string{coffee}, nil)
+	mem.SetPlacement(7, Placement{TakenAt: early, Finished: true, StopReason: "exhausted"}, []string{coffee}, nil)
 	mem.SetCompletedUnitLexemes(7, []string{book, coffee})
 	all := call[getContextOutput](t, session, "get_context", getContextInput{Position: 2, LearnerID: &learner7})
-	if len(all.Struggle.Lexemes) != 4 || all.Struggle.Lexemes[0].Text != "ג" || all.Struggle.Lexemes[1].Text != "ב" || all.Struggle.Lexemes[2].Text != "ד" || all.Struggle.Lexemes[3].Text != "א" {
-		t.Fatalf("default top %+v", all.Struggle.Lexemes)
+	if len(all.Struggles.Lexemes) != 4 || all.Struggles.Lexemes[0].TextNFC != "א" || all.Struggles.Lexemes[1].TextNFC != "ג" || all.Struggles.Lexemes[2].TextNFC != "ב" || all.Struggles.Lexemes[3].TextNFC != "ד" {
+		t.Fatalf("default top kept store order %+v", all.Struggles.Lexemes)
 	}
-	if all.Struggle.Lexemes[2].Misses7d != 50 {
-		t.Fatalf("misses stayed on the row %+v", all.Struggle.Lexemes[2])
+	if all.Struggles.Lexemes[3].Misses7d != 50 || !all.Struggles.Lexemes[3].LastReviewAt.Equal(recent) {
+		t.Fatalf("row fields %+v", all.Struggles.Lexemes[3])
 	}
-	if len(all.Struggle.Top) != 4 || all.Struggle.Top[0] != "ג" {
-		t.Fatalf("default top list %+v", all.Struggle.Top)
+	wide := call[getContextOutput](t, session, "get_context", getContextInput{Position: 2, LearnerID: &learner7, Window: 60})
+	if len(wide.Struggles.Confusions) != 3 || wide.Struggles.Confusions[0].Key != "old" || wide.Struggles.Confusions[1].Key != "recent" || wide.Struggles.Confusions[2].Key != "zero" {
+		t.Fatalf("wide window %+v", wide.Struggles.Confusions)
+	}
+	narrow := call[getContextOutput](t, session, "get_context", getContextInput{Position: 2, LearnerID: &learner7, Window: 1})
+	if len(narrow.Struggles.Confusions) != 1 || narrow.Struggles.Confusions[0].Key != "zero" || narrow.Struggles.Confusions[0].Kind != "root" {
+		t.Fatalf("narrow window %+v", narrow.Struggles.Confusions)
+	}
+	if len(narrow.Struggles.Lexemes) != 4 {
+		t.Fatalf("window trimmed lexemes %+v", narrow.Struggles.Lexemes)
 	}
 	if len(all.KnownLexemes) != 2 || all.KnownLexemes[0] != book || all.KnownLexemes[1] != coffee {
 		t.Fatalf("learner known %+v", all.KnownLexemes)
@@ -514,8 +538,8 @@ func TestScopeStruggleAndGuidance(t *testing.T) {
 	if len(eight.CompletedSharedUnits) != 1 || eight.CompletedSharedUnits[0].UnitID != 4 {
 		t.Fatalf("learner 8 completed %+v", eight.CompletedSharedUnits)
 	}
-	if len(eight.Struggle.Lexemes) != 0 {
-		t.Fatalf("learner 8 struggle %+v", eight.Struggle)
+	if len(eight.Struggles.Lexemes) != 0 || len(eight.Struggles.Confusions) != 0 {
+		t.Fatalf("learner 8 struggle %+v", eight.Struggles)
 	}
 	if len(eight.KnownLexemes) != 0 {
 		t.Fatalf("learner 8 known %+v", eight.KnownLexemes)
@@ -527,6 +551,9 @@ func TestScopeStruggleAndGuidance(t *testing.T) {
 	}
 	if msg := callErr(t, session, "get_context", getContextInput{TopN: -1}); !strings.Contains(msg, "topN must be 0 or greater") {
 		t.Fatalf("negative top %q", msg)
+	}
+	if msg := callErr(t, session, "get_context", getContextInput{Window: -1}); !strings.Contains(msg, "window must be 0 or greater") {
+		t.Fatalf("negative window %q", msg)
 	}
 }
 
@@ -609,7 +636,8 @@ func TestPlacementJSONKeepsZeros(t *testing.T) {
 		Taken:                  true,
 		Level:                  -1,
 		SuggestedStartPosition: 0,
-		Reliable:               false,
+		Finished:               false,
+		StopReason:             "",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -617,21 +645,24 @@ func TestPlacementJSONKeepsZeros(t *testing.T) {
 	text := string(raw)
 	for _, want := range []string{
 		`"taken":true`,
-		`"reliable":false`,
+		`"finished":false`,
 		`"level":-1`,
+		`"cardsRated":0`,
+		`"stopReason":""`,
 		`"suggestedStartPosition":0`,
-		`"bandScores":[]`,
+		`"bands":[]`,
 		`"knownLexemes":[]`,
 		`"learningLexemes":[]`,
 		`"estimatedKnownWords":0`,
-		`"falseAlarmRate":0`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %s in %s", want, text)
 		}
 	}
-	if strings.Contains(text, "adjustedScore") {
-		t.Fatalf("old field %s", text)
+	for _, gone := range []string{"adjustedScore", `"reliable"`, `"falseAlarmRate"`, `"bandScores"`, `"dontknow"`, `"goodPlusRate"`} {
+		if strings.Contains(text, gone) {
+			t.Fatalf("old field %s in %s", gone, text)
+		}
 	}
 }
 

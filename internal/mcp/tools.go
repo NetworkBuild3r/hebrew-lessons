@@ -33,8 +33,9 @@ type service struct {
 
 type getContextInput struct {
 	Position  int    `json:"position" jsonschema:"Course position you are about to write. Known lexemes are words introduced in units at a lower position. Zero is the first unit. Use the placement suggestedStartPosition when the learner has taken the vocabulary check."`
-	LearnerID *int64 `json:"learnerId,omitempty" jsonschema:"Optional. The learner whose custom units, placement, struggle, and completed shared units to include. Omit it to see shared units only, with no learner data. OAuth will later default this to the signed-in user."`
-	TopN      int    `json:"topN,omitempty" jsonschema:"How many struggled words and confusion pairs to return. Defaults to 30."`
+	LearnerID *int64 `json:"learnerId,omitempty" jsonschema:"Optional. The learner whose custom units, placement, struggles, and completed shared units to include. Omit it to see shared units only, with no learner data. OAuth will later default this to the signed-in user."`
+	TopN      int    `json:"topN,omitempty" jsonschema:"How many struggled lexemes to return. Defaults to 30. Does not limit confusions. The list is already ordered, most-struggled first."`
+	Window    int    `json:"window,omitempty" jsonschema:"How many days of confusion counts to include. Defaults to 30. A confusion with no lastAt is always included. Does not limit struggled lexemes."`
 }
 
 type getContextOutput struct {
@@ -42,25 +43,33 @@ type getContextOutput struct {
 	KnownLexemes         []string         `json:"knownLexemes"`
 	Budgets              Budgets          `json:"budgets"`
 	Placement            placementView    `json:"placement"`
-	Struggle             Struggle         `json:"struggle"`
+	Struggles            strugglesView    `json:"struggles"`
 	CompletedSharedUnits []UnitCompletion `json:"completedSharedUnits"`
 }
 
 // placementView is the get_context placement object.
-// Taken false is the whole object when LatestPlacement reports no run.
-// A finished run keeps zero values: level −1, suggestedStartPosition 0,
-// and reliable false are all meaningful.
+// Taken false is the whole object when LatestPlacement reports no row.
+// A row keeps zero values: level −1, suggestedStartPosition 0, finished
+// false, and an empty stopReason are all meaningful.
 type placementView struct {
 	Taken                  bool        `json:"taken"`
 	TakenAt                time.Time   `json:"takenAt,omitempty"`
-	Reliable               bool        `json:"reliable,omitempty"`
-	FalseAlarmRate         float64     `json:"falseAlarmRate,omitempty"`
+	Finished               bool        `json:"finished,omitempty"`
 	Level                  int         `json:"level,omitempty"`
-	BandScores             []BandScore `json:"bandScores,omitempty"`
+	CardsRated             int         `json:"cardsRated,omitempty"`
+	StopReason             string      `json:"stopReason,omitempty"`
+	Bands                  []BandScore `json:"bands,omitempty"`
 	EstimatedKnownWords    int         `json:"estimatedKnownWords,omitempty"`
 	SuggestedStartPosition int         `json:"suggestedStartPosition,omitempty"`
 	KnownLexemes           []string    `json:"knownLexemes,omitempty"`
 	LearningLexemes        []string    `json:"learningLexemes,omitempty"`
+}
+
+// strugglesView is the get_context struggles object.
+// Lexemes arrive already ordered, most-struggled first.
+type strugglesView struct {
+	Lexemes    []LexemeStruggle `json:"lexemes"`
+	Confusions []ConfusionCount `json:"confusions"`
 }
 
 // MarshalJSON emits {"taken":false} when there is no finished run.
@@ -77,17 +86,18 @@ func (p placementView) MarshalJSON() ([]byte, error) {
 	if learning == nil {
 		learning = []string{}
 	}
-	bands := p.BandScores
+	bands := p.Bands
 	if bands == nil {
 		bands = []BandScore{}
 	}
 	return json.Marshal(struct {
 		Taken                  bool        `json:"taken"`
 		TakenAt                time.Time   `json:"takenAt"`
-		Reliable               bool        `json:"reliable"`
-		FalseAlarmRate         float64     `json:"falseAlarmRate"`
+		Finished               bool        `json:"finished"`
 		Level                  int         `json:"level"`
-		BandScores             []BandScore `json:"bandScores"`
+		CardsRated             int         `json:"cardsRated"`
+		StopReason             string      `json:"stopReason"`
+		Bands                  []BandScore `json:"bands"`
 		EstimatedKnownWords    int         `json:"estimatedKnownWords"`
 		SuggestedStartPosition int         `json:"suggestedStartPosition"`
 		KnownLexemes           []string    `json:"knownLexemes"`
@@ -95,10 +105,11 @@ func (p placementView) MarshalJSON() ([]byte, error) {
 	}{
 		Taken:                  true,
 		TakenAt:                p.TakenAt,
-		Reliable:               p.Reliable,
-		FalseAlarmRate:         p.FalseAlarmRate,
+		Finished:               p.Finished,
 		Level:                  p.Level,
-		BandScores:             bands,
+		CardsRated:             p.CardsRated,
+		StopReason:             p.StopReason,
+		Bands:                  bands,
 		EstimatedKnownWords:    p.EstimatedKnownWords,
 		SuggestedStartPosition: p.SuggestedStartPosition,
 		KnownLexemes:           known,
@@ -168,9 +179,12 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 	if in.TopN < 0 {
 		return nil, out, errors.New("topN must be 0 or greater. Omit it to use 30.")
 	}
+	if in.Window < 0 {
+		return nil, out, errors.New("window must be 0 or greater. Omit it to use 30 days.")
+	}
 	outline = visibleUnits(outline, in.LearnerID)
 	view := placementView{}
-	struggle := emptyStruggle()
+	struggles := emptyStruggles()
 	completed := []UnitCompletion{}
 	if in.LearnerID != nil {
 		userID := *in.LearnerID
@@ -190,10 +204,11 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 			view = placementView{
 				Taken:                  true,
 				TakenAt:                row.TakenAt,
-				Reliable:               row.Reliable,
-				FalseAlarmRate:         row.FalseAlarmRate,
+				Finished:               row.Finished,
 				Level:                  row.Level,
-				BandScores:             append([]BandScore(nil), row.BandScores...),
+				CardsRated:             row.CardsRated,
+				StopReason:             row.StopReason,
+				Bands:                  append([]BandScore(nil), row.BandScores...),
 				EstimatedKnownWords:    row.EstimatedKnownWords,
 				SuggestedStartPosition: row.SuggestedStartPosition,
 				KnownLexemes:           append([]string(nil), words...),
@@ -206,11 +221,19 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 		if topN == 0 {
 			topN = defaultStruggleTop
 		}
-		struggle, err = s.course.StruggleStats(ctx, userID, topN)
+		lexemes, err := s.course.LexemeStruggles(ctx, userID, topN)
 		if err != nil {
 			return nil, out, storeErr("The struggle list could not be read.", err)
 		}
-		struggle = fillStruggle(struggle)
+		days := in.Window
+		if days == 0 {
+			days = defaultWindowDays
+		}
+		confusions, err := s.course.ConfusionCounts(ctx, userID, time.Duration(days)*24*time.Hour)
+		if err != nil {
+			return nil, out, storeErr("The confusion counts could not be read.", err)
+		}
+		struggles = fillStruggles(strugglesView{Lexemes: lexemes, Confusions: confusions})
 		completed, err = s.course.CompletedSharedUnits(ctx, userID)
 		if err != nil {
 			return nil, out, storeErr("The completed shared units could not be read.", err)
@@ -231,7 +254,7 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 		KnownLexemes:         knownList,
 		Budgets:              currentBudgets(),
 		Placement:            view,
-		Struggle:             struggle,
+		Struggles:            struggles,
 		CompletedSharedUnits: completed,
 	}
 	return nil, out, nil
@@ -247,23 +270,19 @@ func visibleUnits(outline []UnitOutline, learner *int64) []UnitOutline {
 	return out
 }
 
-func emptyStruggle() Struggle {
-	return Struggle{
-		Lexemes:    []StruggleLexeme{},
-		Confusions: []ConfusionPair{},
-		Top:        []string{},
+func emptyStruggles() strugglesView {
+	return strugglesView{
+		Lexemes:    []LexemeStruggle{},
+		Confusions: []ConfusionCount{},
 	}
 }
 
-func fillStruggle(in Struggle) Struggle {
+func fillStruggles(in strugglesView) strugglesView {
 	if in.Lexemes == nil {
-		in.Lexemes = []StruggleLexeme{}
+		in.Lexemes = []LexemeStruggle{}
 	}
 	if in.Confusions == nil {
-		in.Confusions = []ConfusionPair{}
-	}
-	if in.Top == nil {
-		in.Top = []string{}
+		in.Confusions = []ConfusionCount{}
 	}
 	return in
 }
@@ -398,7 +417,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_context",
-		Description: "Read the course before you draft a unit. The outline rows have position, title, status, and scope (shared, or learner:<id>). Omit learnerId to see shared units only, with empty struggle and no placement. knownLexemes is then the pointed text introduced before position. Pass learnerId to add that learner's custom units, their placement, their struggle, and the shared units they have finished. knownLexemes is then that learner's words: the union of placement Good and Easy words and words from completed units, sorted pointed NFC. topN defaults to 30 and limits struggled words and confusion pairs. Struggle order is lapses, highest first, then Again rate (0 to 1), highest first, then text. Misses in 7 days are listed and do not change the order. Placement is an adaptive deck: each rated word has a real FSRS card. taken false means there is no finished run. A finished run includes takenAt, reliable, falseAlarmRate, level (highest passed band, or -1), bandScores (per band: band, shown, again, hard, good, easy, dontknow, goodPlusRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy across bands, pointed NFC, sorted), and learningLexemes (Hard, Again, and don't-know across bands, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for budgets and for the shared-versus-custom guidance. That guidance is not an enforced rule.",
+		Description: "Read the course before you draft a unit. The outline rows have position, title, status, and scope (shared, or learner:<id>). Omit learnerId to see shared units only, with empty struggles and placement taken false. knownLexemes is then the pointed text introduced before position. Pass learnerId to add that learner's custom units, their placement, their struggles, and the shared units they have finished. knownLexemes is then that learner's words: the union of placement Good and Easy words and words from completed units, sorted pointed NFC. topN defaults to 30 and limits struggled lexemes only. window defaults to 30 days and limits confusion counts by lastAt. The struggle list is already ordered, most-struggled first; do not re-rank it. Each lexeme has text, gloss, reviews, lapses, againRate, misses7d, and lastReviewAt. Each confusion has kind, key, count, and lastAt. Placement taken false means there is no row. A row includes takenAt, finished, level, cardsRated, stopReason (band_stop, cap, exhausted, or empty), bands (per band: band, rated, again, hard, good, easy, struggleRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy, pointed NFC, sorted), and learningLexemes (Again and Hard, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for budgets and for the shared-versus-custom guidance. That guidance is not an enforced rule.",
 		Annotations: readOnly,
 	}, svc.getContext)
 	mcp.AddTool(server, &mcp.Tool{
