@@ -98,14 +98,14 @@ templ placementCard(v PlacementView) {
 			if v.Mode == PlaceModeBack {
 				@WordBlock(v.Word.Text, v.Word.Translit, "", "display", "pw", true)
 				if v.Word.AudioURL != "" {
-					@listenButton(v, true)
+					@placementAudio(v, true)
 				}
 			} else {
 				<button type="submit" form="plflip" class="plword" aria-label={ v.Copy.ShowMeaning + ": " + v.Word.Text }>
 					@WordBlock(v.Word.Text, v.Word.Translit, "", "display", "pw", true)
 				</button>
 				if v.Word.AudioURL != "" {
-					@listenButton(v, false)
+					@placementAudio(v, false)
 				}
 			}
 		</div>
@@ -116,20 +116,14 @@ templ placementCard(v PlacementView) {
 					<p class="wb__line">
 						<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ v.Word.Translit }</bdi>
 					</p>
-					<div class="fbchips">
-						if short, full, ok := GenderChip(v.Lang, v.Word.Gender); ok {
+					if short, full, ok := GenderChip(v.Lang, v.Word.Gender); ok {
+						<div class="fbchips">
 							<span class="gchip" data-g={ v.Word.Gender } title={ full }>
 								<span aria-hidden="true">{ short }</span>
 								<span class="vh">{ full }</span>
 							</span>
-						}
-						if v.Word.AudioURL != "" {
-							<span class="fbplay">
-								@replayButton(v)
-								@slowButton(v)
-							</span>
-						}
-					</div>
+						</div>
+					}
 				</div>
 				<p class="muted plq" id="plq" lang={ v.Lang }>{ v.Copy.HowWell }</p>
 				@placeForm("/_hx/placement/rate", ".rcard", "") {
@@ -150,9 +144,8 @@ templ placementCard(v PlacementView) {
 						<input type="hidden" name="_csrf" value={ v.CSRF }/>
 						<input type="hidden" name="run_id" value={ v.RunIDText }/>
 						<input type="hidden" name="item_id" value={ v.Word.ID }/>
-						<button type="submit" class="btn btn--lamp btn--lg" hx-post="/_hx/placement/flip" hx-target=".rcard" hx-swap="outerHTML transition:true" hx-select="unset" hx-include="closest form" hx-trigger={ KeyTrigger(" ") }>
+						<button type="submit" class="btn btn--lamp btn--lg" hx-post="/_hx/placement/flip" hx-target=".rcard" hx-swap="outerHTML transition:true" hx-select="unset" hx-include="closest form">
 							<span lang={ v.Lang }>{ v.Copy.Flip }</span>
-							<kbd>{ v.Copy.Space }</kbd>
 						</button>
 					}
 					@placeForm("/_hx/placement/rate", ".rcard", "") {
@@ -169,37 +162,16 @@ templ placementCard(v PlacementView) {
 	</article>
 }
 
-templ listenButton(v PlacementView, auto bool) {
-	<button type="button" class="listen" aria-label={ v.Copy.Listen + ": " + v.Word.Text }>
-		<span class="listen__play" aria-hidden="true">
-			<svg class="icon"><use href={ IconHref("play") }></use></svg>
-		</span>
-		<span lang={ v.Lang }>{ v.Copy.Listen }</span>
-		if auto {
-			<audio autoplay controls preload="none" src={ templ.SafeURL(v.Word.AudioURL) }></audio>
-		} else {
-			<audio controls preload="none" src={ templ.SafeURL(v.Word.AudioURL) }></audio>
-		}
-	</button>
-}
-
-templ replayButton(v PlacementView) {
-	<button type="button" class="audio" aria-label={ v.Copy.Listen + ": " + v.Word.Text } hx-on:click="this.querySelector('audio').play()">
-		<audio preload="none" src={ templ.SafeURL(v.Word.AudioURL) }></audio>
-		<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("sound") }></use></svg>
-	</button>
-}
-
-templ slowButton(v PlacementView) {
-	<button type="button" class="audio audio--slow" aria-label={ v.Copy.Slow + ": " + v.Word.Text } hx-on:click="const a=this.querySelector('audio');a.playbackRate=0.75;a.play()">
-		<audio preload="none" src={ templ.SafeURL(v.Word.AudioURL) }></audio>
-		<span aria-hidden="true">0.75×</span>
-	</button>
+templ placementAudio(v PlacementView, auto bool) {
+	if auto {
+		<audio autoplay controls preload="auto" src={ templ.SafeURL(v.Word.AudioURL) } aria-label={ v.Copy.Listen + ": " + v.Word.Text }></audio>
+	} else {
+		<audio controls preload="auto" src={ templ.SafeURL(v.Word.AudioURL) } aria-label={ v.Copy.Listen + ": " + v.Word.Text }></audio>
+	}
 }
 
 templ gradeButton(value, tone, icon, label, sub, lang string) {
-	<button type="submit" name="rating" value={ value } class="grade" data-tone={ tone } hx-post="/_hx/placement/rate" hx-target=".rcard" hx-swap="outerHTML transition:true" hx-select="unset" hx-include="closest form" hx-trigger={ KeyTrigger(value) }>
-		<kbd>{ value }</kbd>
+	<button type="submit" name="rating" value={ value } class="grade" data-tone={ tone } hx-post="/_hx/placement/rate" hx-target=".rcard" hx-swap="outerHTML transition:true" hx-select="unset" hx-include="closest form">
 		<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref(icon) }></use></svg>
 		<b lang={ lang }>{ label }</b>
 		<small lang={ lang }>{ sub }</small>
