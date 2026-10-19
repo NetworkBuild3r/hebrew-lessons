@@ -13,7 +13,7 @@ import (
 var itemsJSON []byte
 
 // fixtureItem is one row of items.json.
-// Verified stays false until a person checks the row.
+// Verified is true once a person has checked the row.
 // Gender is m, f, both, or empty when the form does not mark gender.
 type fixtureItem struct {
 	ID       string `json:"id"`

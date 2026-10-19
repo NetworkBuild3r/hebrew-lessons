@@ -2,6 +2,10 @@ package placement
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -88,6 +92,59 @@ func TestDeckLint(t *testing.T) {
 		}
 		if (it.POS == "verb" || it.POS == "adjective") && it.Gender != "" {
 			t.Errorf("%s %s has gender %q", it.ID, it.POS, it.Gender)
+		}
+	}
+}
+
+// letterAllow is the bare spelling an item may use when it is not the
+// letters of its form in gen/curated.go. אִשָּׁה is written the same way
+// in both files, so nothing is listed.
+var letterAllow = map[string]string{}
+
+func TestBareLettersMatchCurated(t *testing.T) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("caller")
+	}
+	body, err := os.ReadFile(filepath.Join(filepath.Dir(file), "gen", "curated.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	curated := map[string]string{}
+	for _, m := range regexp.MustCompile(`(?:tutor|freq)\("([^"]+)", "([^"]*)"`).FindAllStringSubmatch(string(body), -1) {
+		curated[m[1]] = unpointed(m[2])
+	}
+	cat, err := catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]struct{}{}
+	for _, it := range cat {
+		seen[it.ID] = struct{}{}
+		got := unpointed(it.TextNFC)
+		if want, ok := letterAllow[it.ID]; ok {
+			if got != want {
+				t.Errorf("%s bare %s, allowlist %s", it.ID, got, want)
+			}
+			continue
+		}
+		want, ok := curated[it.ID]
+		if !ok {
+			t.Errorf("%s is not in gen/curated.go", it.ID)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s bare %s, gen/curated.go %s", it.ID, got, want)
+		}
+	}
+	for id := range letterAllow {
+		if _, ok := seen[id]; !ok {
+			t.Errorf("allowlist %s is not in the deck", id)
+		}
+	}
+	for id := range curated {
+		if _, ok := seen[id]; !ok {
+			t.Errorf("gen/curated.go %s is not in the deck", id)
 		}
 	}
 }

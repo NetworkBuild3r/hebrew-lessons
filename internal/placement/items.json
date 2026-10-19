@@ -111,7 +111,7 @@
   },
   {
     "id": "meyuchad",
-    "text_nfc": "מְיֻחָד",
+    "text_nfc": "מְיוּחָד",
     "band": 0,
     "gloss_en": "special",
     "translit": "meyukhad",
@@ -397,7 +397,7 @@
   },
   {
     "id": "achshav",
-    "text_nfc": "עַכְשָׁו",
+    "text_nfc": "עַכְשָׁיו",
     "band": 1,
     "gloss_en": "now",
     "translit": "akhshav",
@@ -441,7 +441,7 @@
   },
   {
     "id": "leechol",
-    "text_nfc": "לֶאֱכֹל",
+    "text_nfc": "לֶאֱכוֹל",
     "band": 2,
     "gloss_en": "to eat",
     "translit": "le'ekhol",
@@ -452,7 +452,7 @@
   },
   {
     "id": "lishmor",
-    "text_nfc": "לִשְׁמֹר",
+    "text_nfc": "לִשְׁמוֹר",
     "band": 2,
     "gloss_en": "to keep",
     "translit": "lishmor",
@@ -650,7 +650,7 @@
   },
   {
     "id": "lilmod",
-    "text_nfc": "לִלְמֹד",
+    "text_nfc": "לִלְמוֹד",
     "band": 2,
     "gloss_en": "to learn",
     "translit": "lilmod",
@@ -661,7 +661,7 @@
   },
   {
     "id": "laamod",
-    "text_nfc": "לַעֲמֹד",
+    "text_nfc": "לַעֲמוֹד",
     "band": 3,
     "gloss_en": "to stand",
     "translit": "la'amod",
@@ -683,7 +683,7 @@
   },
   {
     "id": "gavoah",
-    "text_nfc": "גָּבֹהַּ",
+    "text_nfc": "גָּבוֹהַּ",
     "band": 3,
     "gloss_en": "tall",
     "translit": "gavoah",
@@ -716,7 +716,7 @@
   },
   {
     "id": "liftoach",
-    "text_nfc": "לִפְתֹּחַ",
+    "text_nfc": "לִפְתּוֹחַ",
     "band": 3,
     "gloss_en": "to open",
     "translit": "liftoakh",
@@ -738,7 +738,7 @@
   },
   {
     "id": "aroch",
-    "text_nfc": "אָרֹךְ",
+    "text_nfc": "אָרוֹךְ",
     "band": 3,
     "gloss_en": "long",
     "translit": "arokh",
@@ -870,7 +870,7 @@
   },
   {
     "id": "shachor",
-    "text_nfc": "שָׁחֹר",
+    "text_nfc": "שָׁחוֹר",
     "band": 3,
     "gloss_en": "black",
     "translit": "shakhor",
@@ -892,7 +892,7 @@
   },
   {
     "id": "linhog",
-    "text_nfc": "לִנְהֹג",
+    "text_nfc": "לִנְהוֹג",
     "band": 4,
     "gloss_en": "to drive",
     "translit": "linhog",
