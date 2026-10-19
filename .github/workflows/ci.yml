@@ -93,6 +93,30 @@ jobs:
             exit 1
           fi
 
+      # Generated *_templ.go must match the .templ sources at this commit.
+      # Install the templ version from go.mod with an explicit @version so
+      # this step does not rewrite go.mod or go.sum.
+      - name: templ generate
+        if: steps.module.outputs.present == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(awk '/^[[:space:]]*github.com\/a-h\/templ / { print $2; exit }' go.mod)
+          if [ -z "$version" ]; then
+            echo "templ is not a module dependency"
+            exit 1
+          fi
+          bindir=$(mktemp -d)
+          GOBIN="$bindir" go install "github.com/a-h/templ/cmd/templ@${version}"
+          "$bindir/templ" generate
+          drift=$(git diff --name-only)
+          if [ -n "$drift" ]; then
+            echo "templ generate changed checked-in files:"
+            echo "$drift"
+            git diff
+            exit 1
+          fi
+
       - name: go vet
         if: steps.module.outputs.present == 'true'
         shell: bash

@@ -1,0 +1,172 @@
+package views
+
+// Today is the learner home: due reviews, and one next lesson.
+// The count is shell copy until the review queue is wired.
+templ Today(h Home) {
+	@Layout(h.Page()) {
+		<article class="today">
+			<header class="today__head">
+				<h1 lang={ h.Lang }>{ h.Heading }</h1>
+			</header>
+			<div class="today__cols">
+				if h.Due > 0 {
+					<section class="ink-card today-due" aria-labelledby="due-title">
+						<p class="eyebrow" id="due-title" lang={ h.Lang }>{ h.DueKicker }</p>
+						<p class="count"><bdi lang="en" dir="ltr">{ h.DueText }</bdi></p>
+						<p class="ink-card__label" lang={ h.Lang }>{ h.DueLabel }</p>
+						<p class="ink-card__hint" lang={ h.Lang }>{ h.DueHint }</p>
+						<a class="btn btn-primary" href={ templ.SafeURL(h.Href("/review")) }>
+							<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("play") }></use></svg>
+							<span lang={ h.Lang }>{ h.Start }</span>
+						</a>
+					</section>
+				} else {
+					<section class="quiet-card quiet-card--due">
+						<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("check") }></use></svg>
+						<p class="quiet-card__line">
+							@Pair(h.Lang, h.ZeroHE, h.ZeroEN)
+						</p>
+					</section>
+				}
+				if h.Lesson {
+					<section class="lesson-card today-next" aria-labelledby="next-title">
+						<p class="eyebrow" lang={ h.Lang }>{ h.NextKicker }</p>
+						<h2 id="next-title" class="unit-title" lang="he" dir="rtl">{ UnitTitle }</h2>
+						@Situation(h.Situation)
+						<ul class="chips">
+							for _, word := range h.Words {
+								<li class="chip">
+									@H(word.Text)
+									if word.Gender != "" {
+										<span class="gchip">@H(GenderLabel(word.Gender))</span>
+									}
+								</li>
+							}
+						</ul>
+						<a class={ BtnClass(h.Due == 0) } href={ templ.SafeURL(h.Href("/lesson")) }>
+							<svg class={ iconClass(h.Dir == "rtl") } aria-hidden="true" focusable="false"><use href={ IconHref("next") }></use></svg>
+							<span lang={ h.Lang }>{ h.Open }</span>
+						</a>
+					</section>
+				} else {
+					<section class="quiet-card quiet-card--next">
+						<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("lessons") }></use></svg>
+						<p class="quiet-card__line">
+							@Pair(h.Lang, h.NoneHE, h.NoneEN)
+						</p>
+						<p class="quiet-card__hint">
+							@Pair(h.Lang, h.NoneMoreHE, h.NoneMoreEN)
+						</p>
+					</section>
+				}
+			</div>
+		</article>
+	}
+}
+
+templ Review(p Page) {
+	@Layout(p) {
+		<article class="sheet">
+			<h1 lang={ p.Lang }>{ p.ReviewHeading }</h1>
+			<p class="lede" lang={ p.Lang }>{ p.ReviewLede }</p>
+		</article>
+	}
+}
+
+templ Progress(p Page) {
+	@Layout(p) {
+		<article class="sheet">
+			<h1 lang={ p.Lang }>{ p.ProgressHeading }</h1>
+			<p class="lede" lang={ p.Lang }>{ p.ProgressLede }</p>
+			<ul class="stats">
+				<li>
+					<span class="count"><bdi lang="en" dir="ltr">0</bdi></span>
+					<span lang={ p.Lang }>{ p.WordsLabel }</span>
+				</li>
+				<li>
+					<span class="count"><bdi lang="en" dir="ltr">0</bdi></span>
+					<span lang={ p.Lang }>{ p.UnitsLabel }</span>
+				</li>
+			</ul>
+		</article>
+	}
+}
+
+// SignIn is the signed-out page. No rail, dock, or other navigation:
+// logout lands here, and the only action is auth's Google start route.
+// Copy follows the interface language. The button is Google's sign-in
+// control, not the app's primary button.
+templ SignIn(p Page) {
+	<!DOCTYPE html>
+	<html lang={ p.Lang } dir={ p.Dir } translate="no">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+			@themeHead()
+			<link rel="stylesheet" href="/static/css/tokens.css"/>
+			<link rel="stylesheet" href="/static/css/base.css"/>
+			<title>{ p.Title }</title>
+		</head>
+		<body>
+			<main id="main" class="signin">
+				<div class="signin__slate">
+					<img class="signin__sky" src="/static/illustrations/hero-skyline-night.svg" alt="" aria-hidden="true"/>
+					<p class="signin__word">@H(SignInWord)</p>
+				</div>
+				<section class="signin__card">
+					<h1 class="brand signin__brand">
+						<span class="brand__mark" aria-hidden="true">ע</span>
+						<span class="brand__name">@H(AppName)</span>
+					</h1>
+					<p class="signin__title">
+						if p.Lang == "en" {
+							@E(SignInTitleEN)
+						} else {
+							@H(SignInTitleHE)
+						}
+					</p>
+					<p class="signin__lede">
+						if p.Lang == "en" {
+							@E(SignInLedeEN)
+						} else {
+							@H(SignInLedeHE)
+						}
+					</p>
+					<a class="gbtn" href={ templ.SafeURL(GoogleSignInStart) }>
+						@googleMark()
+						<span class="gbtn__label">
+							if p.Lang == "en" {
+								@E(SignInGoogleEN)
+							} else {
+								@H(SignInGoogleHE)
+								@E("Google")
+							}
+						</span>
+					</a>
+				</section>
+			</main>
+		</body>
+	</html>
+}
+
+// googleMark is the official multicolour G. The paths are unmodified.
+templ googleMark() {
+	<span class="gbtn__mark" aria-hidden="true">
+		<svg class="gbtn__logo" viewBox="0 0 48 48" focusable="false">
+			<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+			<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+			<path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+			<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+			<path fill="none" d="M0 0h48v48H0z"></path>
+		</svg>
+	</span>
+}
+
+templ Lesson(p Page) {
+	@Layout(p) {
+		<article class="sheet">
+			<h1 lang={ p.Lang }>{ p.LessonHeading }</h1>
+			<p class="lede" lang={ p.Lang }>{ p.LessonLede }</p>
+		</article>
+	}
+}
