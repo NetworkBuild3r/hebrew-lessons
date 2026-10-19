@@ -280,9 +280,7 @@ func TestRequeueMissOnce(t *testing.T) {
 	if len(logs) != 1 {
 		t.Fatalf("unserved card gained a review: %+v", logs)
 	}
-	if err := sess.Record(ctx, first.CardID, fsrs.Again); err != nil {
-		t.Fatal(err)
-	}
+	revealAndRecord(t, sess, ctx, first.CardID, fsrs.Again)
 
 	between := 0
 	seen := 1
@@ -308,9 +306,7 @@ func TestRequeueMissOnce(t *testing.T) {
 		if seen > 2 {
 			t.Fatalf("card %d appeared %d times", first.CardID, seen)
 		}
-		if err := sess.Record(ctx, card.CardID, fsrs.Again); err != nil {
-			t.Fatal(err)
-		}
+		revealAndRecord(t, sess, ctx, card.CardID, fsrs.Again)
 	}
 	if seen != 2 {
 		t.Fatalf("appearances = %d, want 2", seen)
@@ -542,6 +538,9 @@ func TestConcurrentRecordWritesOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := sess.Reveal(first.CardID); err != nil {
+		t.Fatal(err)
+	}
 
 	const n = 4
 	start := make(chan struct{})
@@ -599,6 +598,9 @@ func TestRecordRestoresClaimWhenGradeFails(t *testing.T) {
 	card, ok := sess.Next()
 	if !ok || card.CardID != id {
 		t.Fatalf("first = %+v ok=%v", card, ok)
+	}
+	if err := sess.Reveal(card.CardID); err != nil {
+		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -843,30 +845,55 @@ func TestDrillsAtBandPlans(t *testing.T) {
 	}
 }
 
-func TestRevealMarksPeeked(t *testing.T) {
+func TestRecordRejectsUnrevealed(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	ctx := context.Background()
 	userID := mustUser(t, store)
 	reviewed := clk.Now().Add(-48 * time.Hour)
-	first := addCard(t, store, userID, "גלוי", fsrs.DirHeEn, clk.Now().Add(-2*time.Hour), 0, int(fsrs.Good), reviewed, false)
-	second := addCard(t, store, userID, "נסתר", fsrs.DirHeEn, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+	first := addCard(t, store, userID, "נסתר", fsrs.DirHeEn, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
 	sess := mustBuild(t, svc, userID)
-
-	hidden, ok := sess.Next()
-	if !ok || hidden.CardID != first {
-		t.Fatalf("first = %+v ok=%v", hidden, ok)
+	card, ok := sess.Next()
+	if !ok || card.CardID != first {
+		t.Fatalf("first = %+v ok=%v", card, ok)
 	}
-	if err := sess.Record(ctx, hidden.CardID, fsrs.Good); err != nil {
+	before, err := store.GetCard(ctx, first)
+	if err != nil {
 		t.Fatal(err)
 	}
-	hiddenLogs := mustReviewLogs(t, store, first)
-	if len(hiddenLogs) != 2 || hiddenLogs[1].Peeked {
-		t.Fatalf("unrevealed log = %+v, want peeked false", hiddenLogs)
+	err = sess.Record(ctx, card.CardID, fsrs.Good)
+	if !errors.Is(err, ErrNotRevealed) {
+		t.Fatalf("unrevealed grade = %v", err)
 	}
+	logs := mustReviewLogs(t, store, first)
+	if len(logs) != 1 {
+		t.Fatalf("unrevealed grade wrote a log: %+v", logs)
+	}
+	after, err := store.GetCard(ctx, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Due != before.Due || after.Stability != before.Stability || after.Reps != before.Reps {
+		t.Fatalf("unrevealed grade changed the card: before %+v after %+v", before, after)
+	}
+	// The serve is still the current card, so reveal-then-grade can proceed.
+	if err := sess.Reveal(card.CardID); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Record(ctx, card.CardID, fsrs.Good); err != nil {
+		t.Fatalf("reveal after a rejected grade = %v", err)
+	}
+}
 
+func TestRevealThenGrade(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	ctx := context.Background()
+	userID := mustUser(t, store)
+	reviewed := clk.Now().Add(-48 * time.Hour)
+	first := addCard(t, store, userID, "גלוי", fsrs.DirHeEn, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+	sess := mustBuild(t, svc, userID)
 	shown, ok := sess.Next()
-	if !ok || shown.CardID != second {
-		t.Fatalf("second = %+v ok=%v", shown, ok)
+	if !ok || shown.CardID != first {
+		t.Fatalf("first = %+v ok=%v", shown, ok)
 	}
 	if err := sess.Reveal(otherCard(shown.CardID)); !errors.Is(err, ErrNotServed) {
 		t.Fatalf("reveal of another card = %v", err)
@@ -882,9 +909,19 @@ func TestRevealMarksPeeked(t *testing.T) {
 	if err := sess.Record(ctx, shown.CardID, fsrs.Good); err != nil {
 		t.Fatal(err)
 	}
-	shownLogs := mustReviewLogs(t, store, second)
+	shownLogs := mustReviewLogs(t, store, first)
 	if len(shownLogs) != 2 || !shownLogs[1].Peeked || shownLogs[1].Rating != int(fsrs.Good) {
 		t.Fatalf("revealed log = %+v, want peeked true", shownLogs)
+	}
+}
+
+func revealAndRecord(t *testing.T, sess *Session, ctx context.Context, cardID int64, rating fsrs.Rating) {
+	t.Helper()
+	if err := sess.Reveal(cardID); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Record(ctx, cardID, rating); err != nil {
+		t.Fatal(err)
 	}
 }
 

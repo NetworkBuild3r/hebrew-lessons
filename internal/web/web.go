@@ -313,9 +313,11 @@ func (s *server) reveal(w http.ResponseWriter, r *http.Request) {
 // grade records the served card and returns the next card, or Done.
 // Session.Record writes the FSRS review through ApplyReview, once per serve.
 // peeked is true only when this serve was revealed. A grade with no reveal
-// is stored with peeked false. A drill step has no card, so Record keeps it
-// in the queue only. CSRF and Origin are the checks on /_hx/ in front of
-// this handler. A database error is 500. An unknown card is 400.
+// is 400 and writes nothing. A drill step has no card, so Record keeps it
+// in the queue only, after Reveal. CSRF and Origin are the checks on /_hx/
+// in front of this handler. A database error is 500. An unknown card, or a
+// card that was not revealed, is 400. A plain form post, including Reveal,
+// is a 303 back to /review.
 func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 	cardID, ok := reviewCardID(w, r)
 	if !ok {

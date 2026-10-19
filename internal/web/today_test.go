@@ -297,7 +297,17 @@ func TestReviewGrade(t *testing.T) {
 		t.Fatalf("bad origin = %d", evil.Code)
 	}
 
-	next := postGrade(t, h, learner, first, "3", "https://learn.example")
+	hidden := postGrade(t, h, learner, first, "3", "https://learn.example")
+	if hidden.Code != http.StatusBadRequest {
+		t.Fatalf("unrevealed grade = %d, want 400", hidden.Code)
+	}
+	if n := len(mustLogs(t, store, first)); n != 1 {
+		t.Fatalf("unrevealed grade wrote a log, count %d", n)
+	}
+	if attr(t, getLearner(t, h, learner, "/review"), "data-card") != fmt.Sprint(first) {
+		t.Fatal("a rejected grade advanced the queue")
+	}
+	next := gradeRevealed(t, h, learner, first, "3", "https://learn.example")
 	if next.Code != http.StatusOK {
 		t.Fatalf("good grade = %d\n%s", next.Code, next.Body.String())
 	}
@@ -306,8 +316,8 @@ func TestReviewGrade(t *testing.T) {
 		t.Fatalf("next card: %s", body)
 	}
 	logs := mustLogs(t, store, first)
-	if len(logs) != 2 || logs[1].Rating != int(fsrs.Good) || logs[1].Peeked {
-		t.Fatalf("log = %+v, want an unrevealed Good", logs)
+	if len(logs) != 2 || logs[1].Rating != int(fsrs.Good) || !logs[1].Peeked {
+		t.Fatalf("log = %+v, want a revealed Good", logs)
 	}
 	after, err := store.GetCard(ctx, first)
 	if err != nil {
@@ -330,7 +340,7 @@ func TestReviewGrade(t *testing.T) {
 	lex := addLexeme(t, againStore, "שָׁלוֹם", "hello", "shalom", "m", "")
 	card := addCard(t, againStore, one.user.ID, lex, fsrs.DirHeEn, againNow.Add(-time.Hour), 1, int(fsrs.Good), againNow.Add(-48*time.Hour))
 	getLearner(t, againH, one, "/review")
-	retry := postGrade(t, againH, one, card, "1", "https://learn.example")
+	retry := gradeRevealed(t, againH, one, card, "1", "https://learn.example")
 	if retry.Code != http.StatusOK {
 		t.Fatalf("again = %d\n%s", retry.Code, retry.Body.String())
 	}
@@ -368,7 +378,7 @@ func TestReviewLearnersAreIsolated(t *testing.T) {
 	if !strings.Contains(bPage, "מַיִם") || strings.Contains(bPage, "שָׁלוֹם") {
 		t.Fatal("learner B saw the other queue")
 	}
-	graded := postGrade(t, h, a, aCard, "3", "https://learn.example")
+	graded := gradeRevealed(t, h, a, aCard, "3", "https://learn.example")
 	if graded.Code != http.StatusOK {
 		t.Fatalf("grade A = %d", graded.Code)
 	}
@@ -406,7 +416,7 @@ func TestReviewDrillKinds(t *testing.T) {
 	if attr(t, page, "data-kind") != fsrs.DirHeEn || attr(t, page, "data-card") != fmt.Sprint(card) {
 		t.Fatalf("drill replaced the study card: %s", cardAttrs(page))
 	}
-	letter := postGrade(t, h, learner, card, "3", "https://learn.example")
+	letter := gradeRevealed(t, h, learner, card, "3", "https://learn.example")
 	if letter.Code != http.StatusOK || attr(t, letter.Body.String(), "data-kind") != session.KindLetter || !strings.Contains(letter.Body.String(), "ב/כ") {
 		t.Fatalf("letter drill: %d %s", letter.Code, letter.Body.String())
 	}
@@ -414,7 +424,7 @@ func TestReviewDrillKinds(t *testing.T) {
 		t.Fatal("a pair under the miss threshold was drilled")
 	}
 	letterID := attr(t, letter.Body.String(), "data-card")
-	pattern := postGrade(t, h, learner, mustInt(t, letterID), "3", "https://learn.example")
+	pattern := gradeRevealed(t, h, learner, mustInt(t, letterID), "3", "https://learn.example")
 	if pattern.Code != http.StatusOK || attr(t, pattern.Body.String(), "data-kind") != session.KindPattern || !strings.Contains(pattern.Body.String(), "הוא/היא") {
 		t.Fatalf("pattern drill: %d %s", pattern.Code, pattern.Body.String())
 	}
@@ -473,7 +483,7 @@ func TestReviewDoneSessionRebuilds(t *testing.T) {
 	firstLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
 	first := addCard(t, store, learner.user.ID, firstLex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 	getLearner(t, h, learner, "/review")
-	done := postGrade(t, h, learner, first, "3", "https://learn.example")
+	done := gradeRevealed(t, h, learner, first, "3", "https://learn.example")
 	if done.Code != http.StatusOK || !strings.Contains(done.Body.String(), `data-done="true"`) {
 		t.Fatalf("done = %d %s", done.Code, done.Body.String())
 	}
@@ -570,6 +580,10 @@ func TestReviewGradeDBError(t *testing.T) {
 	lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
 	card := addCard(t, store, learner.user.ID, lex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
 	getLearner(t, h, learner, "/review")
+	shown := postReveal(t, h, learner, card, "https://learn.example")
+	if shown.Code != http.StatusOK {
+		t.Fatalf("reveal = %d", shown.Code)
+	}
 	if _, err := store.ExecContext(context.Background(), `DELETE FROM cards WHERE id = ?`, card); err != nil {
 		t.Fatal(err)
 	}
@@ -609,6 +623,10 @@ func TestReviewGradeWithoutHTMX(t *testing.T) {
 	next := getLearner(t, h, learner, "/review")
 	if !strings.Contains(next, "<!doctype html>") || attr(t, next, "data-card") != fmt.Sprint(second) || !strings.Contains(next, "בֹּקֶר") || strings.Contains(next, `data-revealed="true"`) {
 		t.Fatalf("next page: %s", cardAttrs(next))
+	}
+	revealedSecond := postRevealRaw(t, h, learner.cookie, learner.csrf, second, "https://learn.example", false)
+	if revealedSecond.Code != http.StatusSeeOther || revealedSecond.Header().Get("Location") != "/review" {
+		t.Fatalf("plain reveal of the next card = %d location %q", revealedSecond.Code, revealedSecond.Header().Get("Location"))
 	}
 	req := gradeRequest(t, learner.cookie, learner.csrf, second, "3", "https://learn.example", false)
 	req.AddCookie(&http.Cookie{Name: "hebrew_lang", Value: "he"})
@@ -769,6 +787,15 @@ func getLearner(t *testing.T, h http.Handler, learner learnerFix, path string) s
 func postGrade(t *testing.T, h http.Handler, learner learnerFix, cardID int64, rating, origin string) *httptest.ResponseRecorder {
 	t.Helper()
 	return postGradeRaw(t, h, learner.cookie, learner.csrf, cardID, rating, origin)
+}
+
+func gradeRevealed(t *testing.T, h http.Handler, learner learnerFix, cardID int64, rating, origin string) *httptest.ResponseRecorder {
+	t.Helper()
+	shown := postReveal(t, h, learner, cardID, origin)
+	if shown.Code != http.StatusOK {
+		t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
+	}
+	return postGrade(t, h, learner, cardID, rating, origin)
 }
 
 func postGradeRaw(t *testing.T, h http.Handler, cookie *http.Cookie, csrf string, cardID int64, rating, origin string) *httptest.ResponseRecorder {

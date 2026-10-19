@@ -71,6 +71,10 @@ type gradeFunc func(context.Context, int64, fsrs.Rating, bool) error
 // ErrNotServed means Record or Reveal was given a card other than the one Next just served.
 var ErrNotServed = errors.New("session: card is not the one just served")
 
+// ErrNotRevealed means Record was asked to grade a card this serve has not revealed.
+// The grade is not applied and no review_log row is written.
+var ErrNotRevealed = errors.New("session: card was not revealed")
+
 // Session is one learner's queue, held in memory.
 // Next and Record share mu. BuildSession returns a pointer because a mutex
 // must not be copied. The handler that built it checks UserID against the
@@ -252,7 +256,7 @@ func (s *Session) Next() (CardRef, bool) {
 }
 
 // Reveal marks the served card as peeked. Record then stores that flag.
-// A grade without Reveal is still graded. Its review_log row has peeked false.
+// A grade without Reveal is rejected with ErrNotRevealed.
 func (s *Session) Reveal(cardID int64) error {
 	if s == nil {
 		return errors.New("session: session is not configured")
@@ -272,8 +276,9 @@ func (s *Session) Reveal(cardID int64) error {
 // and is not inserted again.
 //
 // peeked on the review_log row is true only when Reveal was called for this
-// serve. A grade of an unrevealed card is stored with peeked false. It is
-// not rejected: the session grades the served card either way.
+// serve. A grade of an unrevealed card returns ErrNotRevealed. ApplyReview
+// is not called and no review_log row is written. The serve stays current,
+// so a later Reveal and Record can still grade it.
 //
 // The served card is marked graded before the write. The mark is put back
 // only when the write fails, so two Records of the same serve cannot both
@@ -287,6 +292,9 @@ func (s *Session) Record(ctx context.Context, cardID int64, rating fsrs.Rating) 
 	defer s.mu.Unlock()
 	if !s.hasLast || cardID != s.last.CardID {
 		return fmt.Errorf("session: card %d: %w", cardID, ErrNotServed)
+	}
+	if !s.peeked {
+		return fmt.Errorf("session: card %d: %w", cardID, ErrNotRevealed)
 	}
 	if s.grade == nil {
 		return errors.New("session: review is not configured")

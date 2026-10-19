@@ -528,7 +528,7 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 }
 
 func reviewStatus(err error) int {
-	if errors.Is(err, session.ErrNotServed) {
+	if errors.Is(err, session.ErrNotServed) || errors.Is(err, session.ErrNotRevealed) {
 		return http.StatusBadRequest
 	}
 	return http.StatusInternalServerError

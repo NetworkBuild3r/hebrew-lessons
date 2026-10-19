@@ -90,7 +90,8 @@
 // Next returns the card at the cursor. Reveal marks that card peeked.
 // Record grades it through GradeWithChoice with an empty chosen option.
 // peeked is true only after Reveal on this serve. A grade with no Reveal
-// is stored with peeked false and is not rejected. Again inserts that same card
+// returns ErrNotRevealed, writes nothing, and leaves the serve in place.
+// Again inserts that same card
 // RequeueGap places after the cursor, at most once. The inserted visit does
 // not take a second SessionCap slot. When fewer than RequeueGap cards remain,
 // the miss is placed at the end of the queue.
