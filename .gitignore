@@ -2,7 +2,10 @@
 *.exe
 *.test
 *.out
-/data/
+# Local data stays out of git. The public-domain Tanakh corpus is checked in.
+/data/*
+!/data/tanakh/
+!/data/tanakh/**
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm

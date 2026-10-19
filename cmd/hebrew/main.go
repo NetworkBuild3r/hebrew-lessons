@@ -20,9 +20,29 @@ const shutdownTimeout = 5 * time.Second
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "hebrew: %v\n", err)
-		os.Exit(1)
+		code, quiet := statusCode(err)
+		if !quiet {
+			fmt.Fprintf(os.Stderr, "hebrew: %v\n", err)
+		}
+		os.Exit(code)
 	}
+}
+
+// statusCode maps an error to a process status. A validation refusal
+// implements ExitCode and Quiet so the summary line is the only log.
+// Every other error is status 1.
+func statusCode(err error) (code int, quiet bool) {
+	if err == nil {
+		return 0, true
+	}
+	var eb interface {
+		ExitCode() int
+		Quiet() bool
+	}
+	if errors.As(err, &eb) {
+		return eb.ExitCode(), eb.Quiet()
+	}
+	return 1, false
 }
 
 func run(args []string) error {
@@ -30,6 +50,8 @@ func run(args []string) error {
 		switch args[0] {
 		case "import-audio":
 			return runImport(args[1:])
+		case "import-tanakh":
+			return runImportTanakh(args[1:])
 		default:
 			return fmt.Errorf("unknown command %q", args[0])
 		}
