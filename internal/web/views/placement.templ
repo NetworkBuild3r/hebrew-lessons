@@ -60,7 +60,7 @@ func placementClass(mode string) string {
 }
 
 templ placementToast(v PlacementView) {
-	<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("tip") }></use></svg>
+	@Icon("tip", "")
 	<span lang={ v.Lang }>
 		{ v.Copy.ToastLead }
 		{ ": " }
@@ -172,7 +172,7 @@ templ placementAudio(v PlacementView, auto bool) {
 
 templ gradeButton(value, tone, icon, label, sub, lang string) {
 	<button type="submit" name="rating" value={ value } class="grade" data-tone={ tone } hx-post="/_hx/placement/rate" hx-target=".rcard" hx-swap="outerHTML transition:true" hx-select="unset" hx-include="closest form">
-		<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref(icon) }></use></svg>
+		@Icon(icon, "")
 		<b lang={ lang }>{ label }</b>
 		<small lang={ lang }>{ sub }</small>
 	</button>

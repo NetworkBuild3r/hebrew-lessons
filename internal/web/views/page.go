@@ -327,12 +327,7 @@ func HXHeaders(token string) string {
 // IconHref points at one symbol in the vendored sprite. Unknown names fall
 // back to help so a typo cannot request streak or xp.
 func IconHref(name string) templ.SafeURL {
-	switch name {
-	case "today", "review", "progress", "theme", "next", "play", "sound", "help", "check", "lessons":
-		return templ.SafeURL("/static/icons/sprite.svg#icon-" + name)
-	default:
-		return templ.SafeURL("/static/icons/sprite.svg#icon-help")
-	}
+	return templ.SafeURL(iconRef(name))
 }
 
 func iconClass(directional bool) string {
