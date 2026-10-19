@@ -440,6 +440,133 @@ func TestMarkAliasesDeterministic(t *testing.T) {
 	}
 }
 
+func TestMapV4(t *testing.T) {
+	const (
+		voice = "voice-a"
+		text  = "שָׁלוֹם"
+	)
+	lessonBody := []byte("v4-lesson")
+	wordBody := []byte("v4-word")
+	recoveredBody := []byte("v4-recovered")
+
+	lesson := func(manifest any) map[string]any {
+		obj := lessonObj("demo", "audio/story/line-1.mp3", text, voice, "eleven_v4", lessonBody, "", "")
+		obj["hashText"] = text
+		obj["manifest"] = manifest
+		return obj
+	}
+	word := func(manifest any, recovered any, file string) map[string]any {
+		obj := wordObj(text, voice, "eleven_v3", wordBody, file)
+		obj["hashText"] = text
+		obj["manifest"] = manifest
+		if recovered != nil {
+			obj["recovered"] = recovered
+		}
+		return obj
+	}
+
+	t.Run("lesson", func(t *testing.T) {
+		rep, store := importV4(t, []any{lesson("demo/audio/manifest.json")}, nil, map[string][]byte{
+			"demo/audio/story/line-1.mp3": lessonBody,
+		}, false)
+		if rep.Imported != 1 || rep.TextMismatch != 0 || rep.HashMismatch != 0 {
+			t.Fatalf("counts: %+v text=%+v", rep, rep.TextMismatches)
+		}
+		asset, ok, err := store.AudioByText(context.Background(), text)
+		if err != nil || !ok || asset.Model != "eleven_v4" || asset.ID != shaID(lessonBody) {
+			t.Fatalf("stored = %+v ok=%v err=%v", asset, ok, err)
+		}
+	})
+	t.Run("lesson-manifest-path", func(t *testing.T) {
+		rep, store := importV4(t, []any{lesson("other/audio/manifest.json")}, nil, map[string][]byte{
+			"demo/audio/story/line-1.mp3": lessonBody,
+		}, false)
+		assertManifestRefusal(t, rep, store, "manifest-path")
+		if rep.TextMismatches[0].Want != "demo/audio/manifest.json" || rep.TextMismatches[0].Got != "other/audio/manifest.json" {
+			t.Fatalf("mismatch %+v", rep.TextMismatches)
+		}
+	})
+	t.Run("lesson-manifest-null", func(t *testing.T) {
+		rep, store := importV4(t, []any{lesson(nil)}, nil, map[string][]byte{
+			"demo/audio/story/line-1.mp3": lessonBody,
+		}, false)
+		assertManifestRefusal(t, rep, store, "manifest-missing")
+	})
+	t.Run("lesson-recovered", func(t *testing.T) {
+		obj := lesson("demo/audio/manifest.json")
+		obj["recovered"] = recoveredCacheKey
+		rep, store := importV4(t, []any{obj}, nil, map[string][]byte{
+			"demo/audio/story/line-1.mp3": lessonBody,
+		}, false)
+		assertManifestRefusal(t, rep, store, "recovered-unknown")
+	})
+	t.Run("recovered", func(t *testing.T) {
+		file := wordFileName(voice, "eleven_v3", text)
+		obj := word(nil, recoveredCacheKey, file)
+		obj["sha256"] = shaID(recoveredBody)
+		rep, store := importV4(t, nil, []any{obj}, map[string][]byte{
+			"_audio/words/" + file: recoveredBody,
+		}, false)
+		if rep.Imported != 1 || rep.TextMismatch != 0 || rep.MissingFile != 0 {
+			t.Fatalf("counts: %+v text=%+v", rep, rep.TextMismatches)
+		}
+		asset, ok, err := store.AudioByText(context.Background(), text)
+		if err != nil || !ok || asset.Model != "eleven_v3" || asset.ID != shaID(recoveredBody) {
+			t.Fatalf("stored = %+v ok=%v err=%v", asset, ok, err)
+		}
+	})
+	t.Run("manifest-null", func(t *testing.T) {
+		rep, store := importV4(t, nil, []any{word(nil, nil, "")}, map[string][]byte{
+			word(nil, nil, "")["path"].(string): wordBody,
+		}, true)
+		assertWordRefusal(t, rep, store, "manifest-missing")
+	})
+	t.Run("recovered-unknown", func(t *testing.T) {
+		rep, store := importV4(t, nil, []any{word(nil, "cache-key", "")}, map[string][]byte{
+			word(nil, "cache-key", "")["path"].(string): wordBody,
+		}, false)
+		assertWordRefusal(t, rep, store, "recovered-unknown")
+	})
+	t.Run("recovered-with-manifest", func(t *testing.T) {
+		rep, store := importV4(t, nil, []any{word(wordsManifestRel, recoveredCacheKey, "")}, map[string][]byte{
+			word(wordsManifestRel, recoveredCacheKey, "")["path"].(string): wordBody,
+		}, true)
+		assertWordRefusal(t, rep, store, "recovered-unknown")
+	})
+	t.Run("word-manifest", func(t *testing.T) {
+		obj := word(wordsManifestRel, nil, "")
+		rep, store := importV4(t, nil, []any{obj}, map[string][]byte{
+			obj["path"].(string): wordBody,
+		}, true)
+		if rep.Imported != 1 || rep.TextMismatch != 0 {
+			t.Fatalf("counts: %+v text=%+v", rep, rep.TextMismatches)
+		}
+		asset, ok, err := store.AudioByText(context.Background(), text)
+		if err != nil || !ok || asset.Model != "eleven_v3" {
+			t.Fatalf("stored = %+v ok=%v err=%v", asset, ok, err)
+		}
+	})
+	t.Run("word-manifest-path", func(t *testing.T) {
+		obj := word("other/manifest.json", nil, "")
+		rep, store := importV4(t, nil, []any{obj}, map[string][]byte{
+			obj["path"].(string): wordBody,
+		}, true)
+		assertWordRefusal(t, rep, store, "manifest-path")
+	})
+}
+
+func importV4(t *testing.T, lessons, words []any, files map[string][]byte, withWordManifest bool) (Report, *db.Store) {
+	t.Helper()
+	export := t.TempDir()
+	writeFiles(t, export, files)
+	writeMapVersion(t, export, clipMapSchemaV4, lessons, words, nil)
+	writeLessonManifests(t, export, lessons)
+	if withWordManifest {
+		writeWordManifest(t, export, words)
+	}
+	return importExport(t, export)
+}
+
 func TestWordManifest(t *testing.T) {
 	const voice = "voice-a"
 	body := []byte("word-bytes")

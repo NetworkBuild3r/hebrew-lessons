@@ -52,34 +52,40 @@ type Options struct {
 	Archive io.Reader
 }
 
-// Import reads a v2 or v3 export directory, or a .tgz of that directory,
+// Import reads a v2, v3, or v4 export directory, or a .tgz of that directory,
 // and fills audio_assets plus <dataDir>/audio/<sha256>.mp3.
 //
-// The export root holds clip-text-map.json (schema hebrew-clip-text-map/v3,
-// or v2). Clip paths in the map are relative to that root: lesson directories
-// and _audio/ sit next to the map, with no files/ prefix. A single archive
-// prefix, such as bundle/clip-text-map.json, is stripped.
+// The export root holds clip-text-map.json (schema hebrew-clip-text-map/v4,
+// v3, or v2). Clip paths in the map are relative to that root: lesson
+// directories and _audio/ sit next to the map, with no files/ prefix. A
+// single archive prefix, such as bundle/clip-text-map.json, is stripped.
 //
 // Every mapped clip is checked before it is stored. When the map entry has
 // a sha256, the mp3 bytes must hash to it (hash-mismatch otherwise). An
 // entry with no sha256 is still stored under the hash of its bytes.
 // v3 requires hashText on every lesson and word. The digest is sha256 of
 // voiceId, model, and hashText.trim() joined by NUL when hashText is
-// present, and of text.trim() when it is absent. A word's file name must be
-// the first 24 hex characters of that digest plus ".mp3" (text-mismatch
-// otherwise). A lesson is checked against <lesson>/audio/manifest.json
+// present, and of text.trim() when it is absent. v4 always hashes hashText.
+// A word's file name must be the first 24 hex characters of that digest
+// plus ".mp3" (text-mismatch otherwise). A lesson is checked against
+// <lesson>/audio/manifest.json
 // ({"version":1,"clips":{"audio/sentences/vocab-1.mp3":"<64-hex>",...}},
 // keys relative to the lesson directory). The digest and the map's textHash
-// must both equal manifest.clips[key]. A word is also checked against
+// must both equal manifest.clips[key]. A v4 lesson's manifest field must
+// name that same path. A word is also checked against
 // _audio/words/manifest.json. That file's entries are voiceId|model|text
 // records with text, file, voiceId, and model. The digest must equal the
 // hash of the entry's voice, model, and text, and the entry's file must be
-// the clip. A missing manifest, a missing entry, or an unparseable manifest
-// is a text-mismatch. The stored model stays the map's eleven_v4 or
-// eleven_v3 label when the manifest names that same model. When hashText is
-// present, NormalizeText(hashText) must also equal text (text-mismatch,
-// reason nfc-differs, otherwise), and text is what is stored. When hashText
-// is absent, the stored text is NormalizeText(text).
+// the clip. A v4 word's manifest field must name _audio/words/manifest.json,
+// except a word with manifest null and recovered "filename-cachekey", which
+// is imported from the filename cache key alone. Any other null manifest
+// or recovered value is a text-mismatch. A missing manifest, a missing
+// entry, or an unparseable manifest is a text-mismatch. The stored model
+// stays the map's eleven_v4 or eleven_v3 label when the manifest names that
+// same model. When hashText is present, NormalizeText(hashText) must also
+// equal text (text-mismatch, reason nfc-differs, otherwise), and text is
+// what is stored. When hashText is absent, the stored text is
+// NormalizeText(text).
 //
 // Unmapped entries are listed and not stored. The same bytes with two
 // different texts are a conflict: both paths and texts are reported, and
@@ -260,12 +266,15 @@ func plan(m clipMap, lessons map[string]lessonManifest, words wordManifest) (*bu
 		model := strings.TrimSpace(clip.Model)
 		fileSHA := strings.ToLower(strings.TrimSpace(clip.SHA256))
 		hashInput := clip.Text
-		if strings.TrimSpace(clip.HashText) != "" {
+		if m.Schema == clipMapSchemaV4 || strings.TrimSpace(clip.HashText) != "" {
 			hashInput = clip.HashText
 		}
 		got := contentHash(voice, model, hashInput)
 		switch clip.Source {
 		case "lesson":
+			if m.Schema == clipMapSchemaV4 && !v4LessonManifest(b, rel, clip, fileSHA) {
+				continue
+			}
 			if !lessonTextMatches(b, rel, clip, got, fileSHA, lessons) {
 				continue
 			}
@@ -275,7 +284,11 @@ func plan(m clipMap, lessons map[string]lessonManifest, words wordManifest) (*bu
 				b.textBad[rel] = refusedText{item: Mismatch{Path: rel, Want: want, Got: path.Base(rel)}, sha: fileSHA}
 				continue
 			}
-			if !wordTextMatches(b, rel, got, voice, model, fileSHA, words) {
+			if m.Schema == clipMapSchemaV4 {
+				if !v4WordManifest(b, rel, clip, got, voice, model, fileSHA, words) {
+					continue
+				}
+			} else if !wordTextMatches(b, rel, got, voice, model, fileSHA, words) {
 				continue
 			}
 		default:

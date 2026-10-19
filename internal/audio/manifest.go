@@ -22,6 +22,61 @@ type lessonManifest struct {
 	bad   string
 }
 
+const (
+	wordsManifestRel  = "_audio/words/manifest.json"
+	recoveredCacheKey = "filename-cachekey"
+)
+
+// v4LessonManifest requires the entry to name its own lesson manifest.
+// A null manifest or any recovered value is a text-mismatch. The file
+// itself is still the one lessonTextMatches reads.
+func v4LessonManifest(b *builder, rel string, clip mappedClip, fileSHA string) bool {
+	want := clip.Lesson + "/audio/manifest.json"
+	if clip.Recovered != nil {
+		b.textBad[rel] = refusedText{item: Mismatch{Path: rel, Reason: "recovered-unknown", Got: *clip.Recovered}, sha: fileSHA}
+		return false
+	}
+	if clip.Manifest == nil {
+		b.textBad[rel] = refusedText{item: Mismatch{Path: rel, Reason: "manifest-missing", Want: want}, sha: fileSHA}
+		return false
+	}
+	if *clip.Manifest != want {
+		b.textBad[rel] = refusedText{item: Mismatch{Path: rel, Reason: "manifest-path", Want: want, Got: *clip.Manifest}, sha: fileSHA}
+		return false
+	}
+	return true
+}
+
+// v4WordManifest checks a v4 word after the filename cache key matched.
+// manifest null is imported only when recovered is filename-cachekey.
+// Any other null, or any other recovered value, is a text-mismatch.
+// A named manifest must be _audio/words/manifest.json, and that file's
+// entry must still match.
+func v4WordManifest(b *builder, rel string, clip mappedClip, got, voice, model, fileSHA string, words wordManifest) bool {
+	if clip.Manifest == nil {
+		if clip.Recovered != nil && *clip.Recovered == recoveredCacheKey {
+			return true
+		}
+		reason := "manifest-missing"
+		gotRecovered := ""
+		if clip.Recovered != nil {
+			reason = "recovered-unknown"
+			gotRecovered = *clip.Recovered
+		}
+		b.textBad[rel] = refusedText{item: Mismatch{Path: rel, Reason: reason, Got: gotRecovered}, sha: fileSHA}
+		return false
+	}
+	if clip.Recovered != nil {
+		b.textBad[rel] = refusedText{item: Mismatch{Path: rel, Reason: "recovered-unknown", Got: *clip.Recovered}, sha: fileSHA}
+		return false
+	}
+	if *clip.Manifest != wordsManifestRel {
+		b.textBad[rel] = refusedText{item: Mismatch{Path: rel, Reason: "manifest-path", Want: wordsManifestRel, Got: *clip.Manifest}, sha: fileSHA}
+		return false
+	}
+	return wordTextMatches(b, rel, got, voice, model, fileSHA, words)
+}
+
 func lessonTextMatches(b *builder, rel string, clip mappedClip, got, fileSHA string, lessons map[string]lessonManifest) bool {
 	man, ok := lessons[clip.Lesson]
 	if !ok || man.bad == "missing" {

@@ -10,12 +10,14 @@ import (
 const (
 	clipMapSchemaV2 = "hebrew-clip-text-map/v2"
 	clipMapSchemaV3 = "hebrew-clip-text-map/v3"
+	clipMapSchemaV4 = "hebrew-clip-text-map/v4"
 )
 
 // clipMapDocument is the clip-text-map.json shape this importer knows.
-// v3 is v2 plus a required hashText on every lesson and word. v2 still
-// accepts a missing hashText. The file is read from the bundle root.
-// Testdata copies are fixtures.
+// v3 is v2 plus a required hashText on every lesson and word. v4 adds
+// the bundle path of the clip's old manifest, and recovered words whose
+// manifest is null. v2 still accepts a missing hashText. The file is
+// read from the bundle root. Testdata copies are fixtures.
 type clipMapDocument struct {
 	Schema   string            `json:"schema"`
 	Lessons  []clipMapRecord   `json:"lessons"`
@@ -25,19 +27,24 @@ type clipMapDocument struct {
 
 // clipMapRecord is one mapped lesson or word. SHA256 is optional: when it
 // is set, the mp3 bytes must hash to it. HashText, when set, is the string
-// the legacy digest was computed from. v3 requires it.
+// the legacy digest was computed from. v3 requires it. Manifest is the
+// bundle path of the clip's old manifest (v4). Recovered names how a v4
+// word with a null manifest was found. Both are pointers so JSON null
+// stays distinct from an empty string.
 type clipMapRecord struct {
-	Source   string `json:"source"`
-	Lesson   string `json:"lesson"`
-	Clip     string `json:"clip"`
-	File     string `json:"file"`
-	Path     string `json:"path"`
-	Text     string `json:"text"`
-	HashText string `json:"hashText,omitempty"`
-	VoiceID  string `json:"voiceId"`
-	Model    string `json:"model"`
-	TextHash string `json:"textHash"`
-	SHA256   string `json:"sha256,omitempty"`
+	Source    string  `json:"source"`
+	Lesson    string  `json:"lesson"`
+	Clip      string  `json:"clip"`
+	File      string  `json:"file"`
+	Path      string  `json:"path"`
+	Text      string  `json:"text"`
+	HashText  string  `json:"hashText,omitempty"`
+	VoiceID   string  `json:"voiceId"`
+	Model     string  `json:"model"`
+	TextHash  string  `json:"textHash"`
+	SHA256    string  `json:"sha256,omitempty"`
+	Manifest  *string `json:"manifest,omitempty"`
+	Recovered *string `json:"recovered,omitempty"`
 }
 
 type clipMapUnmapped struct {
@@ -55,17 +62,19 @@ type clipMap struct {
 }
 
 type mappedClip struct {
-	Source   string
-	Lesson   string
-	Clip     string
-	File     string
-	Path     string
-	Text     string
-	HashText string
-	VoiceID  string
-	Model    string
-	TextHash string
-	SHA256   string
+	Source    string
+	Lesson    string
+	Clip      string
+	File      string
+	Path      string
+	Text      string
+	HashText  string
+	VoiceID   string
+	Model     string
+	TextHash  string
+	SHA256    string
+	Manifest  *string
+	Recovered *string
 }
 
 type unmappedClip struct {
@@ -82,9 +91,9 @@ func parseClipMap(body []byte) (clipMap, error) {
 		return clipMap{}, fmt.Errorf("audio: parse clip map: %w", err)
 	}
 	switch doc.Schema {
-	case clipMapSchemaV2, clipMapSchemaV3:
+	case clipMapSchemaV2, clipMapSchemaV3, clipMapSchemaV4:
 	default:
-		return clipMap{}, fmt.Errorf("audio: clip map schema %q, want %s or %s", doc.Schema, clipMapSchemaV2, clipMapSchemaV3)
+		return clipMap{}, fmt.Errorf("audio: clip map schema %q, want %s, %s, or %s", doc.Schema, clipMapSchemaV2, clipMapSchemaV3, clipMapSchemaV4)
 	}
 	out := clipMap{
 		Schema:   doc.Schema,

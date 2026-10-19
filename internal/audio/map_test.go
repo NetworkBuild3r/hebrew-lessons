@@ -129,6 +129,21 @@ func TestParseClipMapSchemas(t *testing.T) {
 	if _, err := parseClipMap(bare(clipMapSchemaV3, lesson, `{"source":"word","path":"_audio/words/a.mp3","text":"קָם","hashText":"  ","voiceId":"v","model":"eleven_v4"}`)); err == nil {
 		t.Fatal("v3 blank hashText accepted")
 	}
+	const v4Lesson = `{"source":"lesson","path":"demo/audio/story/line-1.mp3","text":"קָם","hashText":"קָם","voiceId":"v","model":"eleven_v4","textHash":"abc","manifest":"demo/audio/manifest.json"}`
+	const v4Word = `{"source":"word","file":"a.mp3","path":"_audio/words/a.mp3","text":"קָם","hashText":"קָם","voiceId":"v","model":"eleven_v4","manifest":null,"recovered":"filename-cachekey"}`
+	v4, err := parseClipMap(bare(clipMapSchemaV4, v4Lesson, v4Word))
+	if err != nil || v4.Schema != clipMapSchemaV4 {
+		t.Fatalf("v4: %+v err=%v", v4, err)
+	}
+	if v4.Lessons[0].Manifest == nil || *v4.Lessons[0].Manifest != "demo/audio/manifest.json" || v4.Lessons[0].Recovered != nil {
+		t.Fatalf("v4 lesson manifest: %+v", v4.Lessons[0])
+	}
+	if v4.Words[0].Manifest != nil || v4.Words[0].Recovered == nil || *v4.Words[0].Recovered != "filename-cachekey" {
+		t.Fatalf("v4 recovered word: %+v", v4.Words[0])
+	}
+	if _, err := parseClipMap(bare(clipMapSchemaV4, `{"source":"lesson","path":"demo/a.mp3","text":"קָם","voiceId":"v","model":"eleven_v4","textHash":"abc","manifest":"demo/audio/manifest.json"}`, "")); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestImportRealMapDryRun(t *testing.T) {
