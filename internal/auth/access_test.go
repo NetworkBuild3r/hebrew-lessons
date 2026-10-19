@@ -1,9 +1,13 @@
 package auth
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -118,5 +122,65 @@ func TestStateKeyIsNotTheClientSecret(t *testing.T) {
 	}
 	if _, err := a.openState(sealed); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestStateSecretSharedAcrossServices(t *testing.T) {
+	clk := &manualClock{t: time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)}
+	newSvc := func(secret string) *Service {
+		t.Helper()
+		store := openTestStore(t, clk)
+		svc, err := New(Config{
+			PublicOrigin: "https://hebrew.example",
+			StateSecret:  secret,
+			Clock:        clk,
+			Store:        store,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return svc
+	}
+	a := newSvc("shared-session-secret")
+	b := newSvc("shared-session-secret")
+	c := newSvc("other-session-secret")
+	sealed, err := a.sealState(oidcState{
+		State: "state", Nonce: "nonce", Verifier: "verifier",
+		Exp: db.FormatTime(a.now().Add(time.Minute)),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := b.openState(sealed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opened.State != "state" || opened.Nonce != "nonce" || opened.Verifier != "verifier" {
+		t.Fatalf("opened %+v", opened)
+	}
+	if _, err := c.openState(sealed); err == nil {
+		t.Fatal("a different HEBREW_SESSION_SECRET accepted the state cookie")
+	}
+}
+
+func TestUnsetStateSecretWarnsOnce(t *testing.T) {
+	warnStateSecretOnce = sync.Once{}
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() {
+		slog.SetDefault(prev)
+		warnStateSecretOnce = sync.Once{}
+	})
+
+	clk := &manualClock{t: time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)}
+	for range 2 {
+		store := openTestStore(t, clk)
+		if _, err := New(Config{Clock: clk, Store: store}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := strings.Count(buf.String(), "HEBREW_SESSION_SECRET is unset"); got != 1 {
+		t.Fatalf("warning count %d in %s", got, buf.String())
 	}
 }

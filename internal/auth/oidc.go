@@ -92,10 +92,6 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	raw, err := s.exchange(r.Context(), q.Get("code"), st.Verifier)
-	if errors.Is(err, errGoogle) {
-		writeJSON(w, http.StatusBadGateway, "google_unavailable")
-		return
-	}
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, "google_unavailable")
 		return
@@ -180,6 +176,15 @@ func (s *Service) verify(ctx context.Context, raw, nonce string) (identity, erro
 	if err != nil {
 		return identity{}, err
 	}
+	if kid, ok := headerKid(raw); ok && selectKey(keys, kid) == nil {
+		if s.allowUnknownKidRefetch() {
+			fresh, ferr := s.refetchKeys(ctx)
+			if ferr != nil {
+				return identity{}, ferr
+			}
+			keys = fresh
+		}
+	}
 	return verifyIDToken(raw, keys, s.now(), s.issuer, s.clientID, nonce)
 }
 
@@ -195,15 +200,35 @@ func (s *Service) fetchKeys(ctx context.Context) ([]rsaPublic, error) {
 		return keys, nil
 	}
 	s.jwksMu.Unlock()
+	return s.refetchKeys(ctx)
+}
+
+// refetchKeys loads the JWKS and replaces the cache. Callers that refetch
+// because a kid was missing must pass allowUnknownKidRefetch first.
+func (s *Service) refetchKeys(ctx context.Context) ([]rsaPublic, error) {
 	keys, err := s.fetchKeysUncached(ctx)
 	if err != nil {
 		return nil, err
 	}
 	s.jwksMu.Lock()
 	s.jwksKeys = keys
-	s.jwksUntil = s.now().Add(5 * time.Minute)
+	s.jwksUntil = s.now().Add(jwksCacheTTL)
 	s.jwksMu.Unlock()
 	return keys, nil
+}
+
+// allowUnknownKidRefetch permits at most one unknown-kid JWKS refetch per
+// jwksUnknownKidMinInterval. The slot is taken before the request so a
+// burst of unknown kids cannot hammer the JWKS URL.
+func (s *Service) allowUnknownKidRefetch() bool {
+	s.jwksMu.Lock()
+	defer s.jwksMu.Unlock()
+	now := s.now()
+	if now.Before(s.jwksUnknownKidAt.Add(jwksUnknownKidMinInterval)) {
+		return false
+	}
+	s.jwksUnknownKidAt = now
+	return true
 }
 
 func (s *Service) fetchKeysUncached(ctx context.Context) ([]rsaPublic, error) {

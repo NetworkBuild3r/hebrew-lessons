@@ -44,10 +44,12 @@ func configFromEnv() (app.Config, error) {
 		GoogleUserinfoURL:  strings.TrimSpace(os.Getenv("GOOGLE_USERINFO_URL")),
 		GoogleJWKSURL:      strings.TrimSpace(os.Getenv("GOOGLE_JWKS_URL")),
 		GoogleIssuer:       strings.TrimSpace(os.Getenv("GOOGLE_ISSUER")),
+		StateSecret:        strings.TrimSpace(os.Getenv("HEBREW_SESSION_SECRET")),
 		AllowedEmails:      splitList(os.Getenv("MCP_OAUTH_ALLOWED_EMAILS")),
 		AdminEmails:        splitList(os.Getenv("ADMIN_EMAILS")),
-		MCPAuthToken:       os.Getenv("MCP_AUTH_TOKEN"),
+		MCPAuthToken:       strings.TrimSpace(os.Getenv("MCP_AUTH_TOKEN")),
 		MCPPublicURL:       strings.TrimSpace(os.Getenv("MCP_PUBLIC_URL")),
+		MCPAllowedOrigins:  splitList(os.Getenv("MCP_ALLOWED_ORIGINS")),
 		ElevenLabsAPIKey:   os.Getenv("ELEVENLABS_API_KEY"),
 	}
 	return app.ApplyDefaults(cfg), nil
@@ -114,8 +116,11 @@ func warnOptionalConfig(cfg app.Config) {
 	if cfg.ElevenLabsAPIKey == "" && cfg.TTS == nil {
 		slog.Warn("speech synthesis is off", "reason", "ELEVENLABS_API_KEY is unset")
 	}
-	if cfg.MCPAuthToken == "" || cfg.MCPPublicURL == "" {
-		slog.Warn("mcp oauth is off", "reason", "MCP_AUTH_TOKEN or MCP_PUBLIC_URL is unset")
+	if cfg.MCPAuthToken == "" {
+		slog.Warn("mcp static token is disabled", "reason", "MCP_AUTH_TOKEN is empty")
+	}
+	if cfg.MCPPublicURL == "" {
+		slog.Warn("mcp oauth is off", "reason", "MCP_PUBLIC_URL is unset")
 	}
 }
 

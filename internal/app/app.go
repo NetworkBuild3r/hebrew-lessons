@@ -25,6 +25,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web"
 )
@@ -79,6 +80,9 @@ type Config struct {
 	GoogleUserinfoURL string
 	GoogleJWKSURL     string
 	GoogleIssuer      string
+	// StateSecret is HEBREW_SESSION_SECRET. It derives the OAuth state HMAC
+	// key (HKDF-SHA256). Empty falls back to a random per-process key.
+	StateSecret string
 
 	// AllowedEmails is MCP_OAUTH_ALLOWED_EMAILS. AdminEmails is ADMIN_EMAILS.
 	// They seed auth.Access when Access is nil. A non-nil Access is the
@@ -88,10 +92,18 @@ type Config struct {
 	AdminEmails   []string
 	Access        *auth.Access
 
-	// MCPAuthToken and MCPPublicURL are recorded for the MCP builder.
-	// Empty values do not stop startup.
-	MCPAuthToken string
-	MCPPublicURL string
+	// MCPAuthToken is the bearer secret for the authoring tools.
+	// cmd/hebrew copies MCP_AUTH_TOKEN and trims it. An empty token
+	// disables the static bearer: it accepts no request. Startup still
+	// proceeds. internal/mcp does not read the environment.
+	// GET /healthz stays open.
+	// MCPPublicURL is the public MCP origin. Empty does not stop startup.
+	// MCPAllowedOrigins are browser Origins allowed to call MCP.
+	// A request with no Origin header is allowed. cmd/hebrew reads
+	// MCP_ALLOWED_ORIGINS.
+	MCPAuthToken      string
+	MCPPublicURL      string
+	MCPAllowedOrigins []string
 
 	// ElevenLabsAPIKey gates the real TTS client. Empty leaves TTS unset
 	// unless TTS is set directly.
@@ -210,6 +222,7 @@ func NewApp(cfg Config) (*App, error) {
 		GoogleTokenURL:     cfg.GoogleTokenURL,
 		GoogleJWKSURL:      cfg.GoogleJWKSURL,
 		GoogleIssuer:       cfg.GoogleIssuer,
+		StateSecret:        cfg.StateSecret,
 		AllowedEmails:      cfg.AllowedEmails,
 		AdminEmails:        cfg.AdminEmails,
 		Access:             cfg.Access,
@@ -238,14 +251,15 @@ func NewApp(cfg Config) (*App, error) {
 	}
 	health := a.healthHandler()
 	a.web = web.New(health, svc)
-	a.mcp = newMCP(health)
+	a.mcp = newMCP(cfg, health, svc)
 	return a, nil
 }
 
 // Web is the learner handler.
 func (a *App) Web() http.Handler { return a.web }
 
-// MCP is the authoring handler. This skeleton serves /healthz only.
+// MCP is the authoring handler. GET /healthz is unauthenticated.
+// Every other route is the MCP server.
 func (a *App) MCP() http.Handler { return a.mcp }
 
 // Store is the process database. QA and MCP Builder use it for users and sessions.
@@ -339,8 +353,28 @@ func (a *App) healthHandler() http.Handler {
 	})
 }
 
-func newMCP(health http.Handler) http.Handler {
+func newMCP(cfg Config, health http.Handler, sessions *auth.Service) http.Handler {
+	// Course, lexicon, and unit stores stay unset until *db.Store
+	// grows UnitsInScope, LatestPlacement, PlacementKnownLexemes,
+	// PlacementLearningLexemes, StruggleStats, CompletedSharedUnits,
+	// SearchLexemes, PutUnit, and units.Lookup. LearnerKnownLexemes
+	// is still a proposal. There is no learner_lexemes table.
+	// Tools answer with isError until those methods exist. The
+	// adapter belongs here, next to this call, so db does not import mcp.
+	//
+	// AuthToken is Config.MCPAuthToken. cmd/hebrew trimmed MCP_AUTH_TOKEN
+	// into that field and logs once when it is empty. An empty value
+	// disables the static bearer. This function does not read the
+	// environment and does not log that warning again. Sessions calls
+	// auth.Service.Lookup and copies users.role. OAuth later sets
+	// SessionFromToken; it must not read the web session cookie.
+	authoring := mcp.Handler(mcp.Options{
+		AuthToken:      cfg.MCPAuthToken,
+		AllowedOrigins: cfg.MCPAllowedOrigins,
+		Sessions:       sessionUsers{auth: sessions},
+	})
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
+	mux.Handle("/", authoring)
 	return mux
 }

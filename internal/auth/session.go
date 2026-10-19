@@ -19,10 +19,11 @@ const (
 )
 
 // LookupSession resolves rawID, the session cookie value, at now.
-// MCP Builder can call this with the store and the process clock.
-// Expired rows are deleted. LookupSession does not slide the expiry;
-// the HTTP middleware does that. ErrNoSession means the id is missing,
-// malformed, unknown, or expired.
+// It does not re-check the email allowlist. MCP must not call it.
+// Call Service.Lookup, which does that check and drops sessions for a
+// removed address. Expired rows are deleted. LookupSession does not
+// slide the expiry; the HTTP middleware does that. ErrNoSession means
+// the id is missing, malformed, unknown, or expired.
 func LookupSession(ctx context.Context, store *db.Store, rawID string, now time.Time) (User, Session, error) {
 	if store == nil {
 		return User{}, Session{}, errors.New("auth: nil store")
@@ -108,7 +109,12 @@ func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 	_ = s.store.DeleteExpiredSessions(r.Context(), s.now())
 	s.clearSessionCookies(w)
 	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusNoContent)
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", "/signin")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	http.Redirect(w, r, "/signin", http.StatusSeeOther)
 }
 
 func sessionHash(cookie string) (string, error) {
