@@ -43,6 +43,20 @@ func (s *Store) UpsertLexemes(ctx context.Context, entries []lexicon.Input) ([]L
 	}
 	defer tx.Rollback()
 
+	var missing []lexicon.Issue
+	for i, row := range rows {
+		_, ok, err := readLexeme(ctx, tx, row.TextNFC)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !ok && lexicon.TranslitBlank(row) {
+			missing = append(missing, lexicon.NewTranslitIssue(i))
+		}
+	}
+	if len(missing) > 0 {
+		return nil, nil, &lexicon.Invalid{Issues: missing}
+	}
+
 	out := make([]LexemeResult, 0, len(rows))
 	keys := make(map[string]bool, len(rows)*2)
 	for _, row := range rows {

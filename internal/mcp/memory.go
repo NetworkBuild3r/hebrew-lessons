@@ -473,15 +473,26 @@ func (m *Memory) UpsertLexemes(ctx context.Context, entries []lexicon.Input) ([]
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make([]LexemeResult, 0, len(rows))
-	for _, row := range rows {
-		found := -1
-		for i, stored := range m.lexemes {
+	foundAt := make([]int, len(rows))
+	var missing []lexicon.Issue
+	for i, row := range rows {
+		foundAt[i] = -1
+		for j, stored := range m.lexemes {
 			if units.Normalize(stored.lx.TextNFC) == row.TextNFC {
-				found = i
+				foundAt[i] = j
 				break
 			}
 		}
+		if foundAt[i] < 0 && lexicon.TranslitBlank(row) {
+			missing = append(missing, lexicon.NewTranslitIssue(i))
+		}
+	}
+	if len(missing) > 0 {
+		return nil, nil, &lexicon.Invalid{Issues: missing}
+	}
+	out := make([]LexemeResult, 0, len(rows))
+	for i, row := range rows {
+		found := foundAt[i]
 		if found < 0 {
 			m.nextLex++
 			m.lexemes = append(m.lexemes, storedLexeme{

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -71,6 +72,28 @@ func TestMemoryUpsertVerifiedDiff(t *testing.T) {
 	fourth, _, err := m.UpsertLexemes(ctx, []lexicon.Input{in})
 	if err != nil || fourth[0].Status != lexicon.StatusUnchanged || m.lexemes[0].verified {
 		t.Fatalf("same verified %+v %v", fourth, err)
+	}
+}
+
+func TestMemoryNewTranslitRequired(t *testing.T) {
+	m := NewMemory()
+	ctx := context.Background()
+	_, _, err := m.UpsertLexemes(ctx, []lexicon.Input{{TextNFC: "אני", Gloss: "I"}})
+	var bad *lexicon.Invalid
+	if !errors.As(err, &bad) || len(m.lexemes) != 0 {
+		t.Fatalf("create err %v stored %d", err, len(m.lexemes))
+	}
+	if !strings.Contains(err.Error(), "/entries/0/translit") || !strings.Contains(err.Error(), "A new lexeme requires a transliteration.") {
+		t.Fatalf("error %v", err)
+	}
+	translit := "ani"
+	first, _, err := m.UpsertLexemes(ctx, []lexicon.Input{{TextNFC: "אני", Gloss: "I", Translit: &translit}})
+	if err != nil || first[0].Status != lexicon.StatusCreated {
+		t.Fatalf("create %+v %v", first, err)
+	}
+	second, _, err := m.UpsertLexemes(ctx, []lexicon.Input{{TextNFC: "אני", Gloss: "me"}})
+	if err != nil || second[0].Status != lexicon.StatusUpdated || m.lexemes[0].lx.Translit != "ani" {
+		t.Fatalf("omit %+v translit %q err %v", second, m.lexemes[0].lx.Translit, err)
 	}
 }
 

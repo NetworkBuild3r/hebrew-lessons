@@ -31,7 +31,9 @@ const (
 // A nil pointer means the caller omitted the field. On an update, an
 // omitted pos, gender, plural, translit, or verified keeps the stored
 // value. A non-nil pointer replaces it, and an empty string clears a
-// text column. An empty bare pointer is treated as omitted, and the
+// text column. A new lexeme requires translit: a missing or empty value
+// is rejected by the writer, which can see whether the row already
+// exists. An empty bare pointer is treated as omitted, and the
 // consonant skeleton is derived.
 type Input struct {
 	TextNFC  string
@@ -46,10 +48,11 @@ type Input struct {
 
 // Row is one entry ready to store.
 // TextNFC is units.Normalize, the same string audio.NormalizeText stores.
-// Bare is units.StripNiqqud of that text. A nil POS, Gender, Plural, or
-// Translit means the caller omitted it: a new row stores the empty value,
-// and an existing row keeps its column. Verified nil means a new row is
-// unverified and an existing row keeps its flag.
+// Bare is units.StripNiqqud of that text. A nil POS, Gender, or Plural
+// means the caller omitted it: a new row stores empty, and an existing
+// row keeps the column. A nil or empty Translit is rejected for a new
+// row. An existing row keeps translit when it is omitted. Verified nil
+// means a new row is unverified and an existing row keeps its flag.
 type Row struct {
 	TextNFC  string
 	Bare     string
@@ -274,4 +277,17 @@ func hebrewRune(r rune) bool {
 
 func fieldPtr(i int, field string) string {
 	return "/entries/" + strconv.Itoa(i) + "/" + field
+}
+
+// TranslitBlank reports a missing or empty transliteration.
+func TranslitBlank(row Row) bool {
+	return row.Translit == nil || strings.TrimSpace(*row.Translit) == ""
+}
+
+// NewTranslitIssue is the per-entry error for a new lexeme with no translit.
+func NewTranslitIssue(i int) Issue {
+	return Issue{
+		Pointer: fieldPtr(i, "translit"),
+		Msg:     "A new lexeme requires a transliteration.",
+	}
 }

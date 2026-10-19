@@ -60,7 +60,8 @@ func TestUpsertLexemesRebuildFailureRollsBack(t *testing.T) {
 	insertUnit(t, s, "draft")
 	mustExec(t, s, `UPDATE units SET doc = '[]'`)
 
-	_, _, err := s.UpsertLexemes(ctx, []lexicon.Input{{TextNFC: "אֲנִי", Gloss: "I"}})
+	translit := "ani"
+	_, _, err := s.UpsertLexemes(ctx, []lexicon.Input{{TextNFC: "אֲנִי", Gloss: "I", Translit: &translit}})
 	if err == nil {
 		t.Fatal("want rebuild error")
 	}
@@ -73,7 +74,7 @@ func TestUpsertLexemesRebuildFailureRollsBack(t *testing.T) {
 	}
 
 	mustExec(t, s, `UPDATE units SET doc = '{"title":"t"}'`)
-	saved, _, err := s.UpsertLexemes(ctx, []lexicon.Input{{TextNFC: "אֲנִי", Gloss: "I"}})
+	saved, _, err := s.UpsertLexemes(ctx, []lexicon.Input{{TextNFC: "אֲנִי", Gloss: "I", Translit: &translit}})
 	if err != nil || len(saved) != 1 || saved[0].Status != lexicon.StatusCreated {
 		t.Fatalf("after rollback %+v %v", saved, err)
 	}

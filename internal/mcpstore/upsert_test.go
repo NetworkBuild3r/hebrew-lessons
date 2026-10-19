@@ -142,6 +142,60 @@ func TestUpsertLexemesRejectsInvalidEntry(t *testing.T) {
 	}
 }
 
+func TestUpsertLexemesNewTranslitRequired(t *testing.T) {
+	raw, session := openAuthoring(t)
+	ctx := context.Background()
+	msg := callToolErr(t, session, "upsert_lexemes", map[string]any{"entries": []any{
+		map[string]any{"text_nfc": "אֲנִי", "gloss_en": "I", "pos": "pron"},
+	}})
+	if !strings.Contains(msg, "The batch was rejected and nothing was written.") || !strings.Contains(msg, "/entries/0/translit") || !strings.Contains(msg, "A new lexeme requires a transliteration.") {
+		t.Fatalf("missing translit %q", msg)
+	}
+	empty := callToolErr(t, session, "upsert_lexemes", map[string]any{"entries": []any{
+		map[string]any{"text_nfc": "אֲנִי", "gloss_en": "I", "translit": "  "},
+	}})
+	if !strings.Contains(empty, "/entries/0/translit") || !strings.Contains(empty, "A new lexeme requires a transliteration.") {
+		t.Fatalf("empty translit %q", empty)
+	}
+	if n := countLexemes(t, raw); n != 0 {
+		t.Fatalf("lexemes %d", n)
+	}
+
+	created := callTool[upsertView](t, session, "upsert_lexemes", map[string]any{"entries": []any{
+		map[string]any{"text_nfc": "אֲנִי", "gloss_en": "I", "translit": "ani", "pos": "pron"},
+	}})
+	if created.Entries[0].Status != lexicon.StatusCreated {
+		t.Fatalf("create %+v", created.Entries[0])
+	}
+	kept := callTool[upsertView](t, session, "upsert_lexemes", map[string]any{"entries": []any{
+		map[string]any{"text_nfc": "אֲנִי", "gloss_en": "me"},
+	}})
+	if kept.Entries[0].Status != lexicon.StatusUpdated || kept.Entries[0].ID != created.Entries[0].ID {
+		t.Fatalf("omit translit %+v", kept.Entries[0])
+	}
+	var translit, gloss string
+	if err := mustConn(t, raw).QueryRowContext(ctx, `SELECT translit, gloss_en FROM lexemes WHERE id = ?`, created.Entries[0].ID).Scan(&translit, &gloss); err != nil {
+		t.Fatal(err)
+	}
+	if translit != "ani" || gloss != "me" {
+		t.Fatalf("translit %q gloss %q", translit, gloss)
+	}
+
+	msg = callToolErr(t, session, "upsert_lexemes", map[string]any{"entries": []any{
+		map[string]any{"text_nfc": "אֲנִי", "gloss_en": "I"},
+		map[string]any{"text_nfc": "פֹּה", "gloss_en": "here"},
+	}})
+	if !strings.Contains(msg, "/entries/1/translit") {
+		t.Fatalf("mixed batch %q", msg)
+	}
+	if err := mustConn(t, raw).QueryRowContext(ctx, `SELECT translit, gloss_en FROM lexemes WHERE id = ?`, created.Entries[0].ID).Scan(&translit, &gloss); err != nil {
+		t.Fatal(err)
+	}
+	if translit != "ani" || gloss != "me" || countLexemes(t, raw) != 1 {
+		t.Fatalf("rolled back translit %q gloss %q", translit, gloss)
+	}
+}
+
 func TestPutUnitUnchangedRebuildsLessonItems(t *testing.T) {
 	raw, session := openAuthoring(t)
 	ctx := context.Background()
@@ -375,6 +429,15 @@ func assertLessonItems(t *testing.T, raw *db.Store, unitID int64, ids map[string
 			t.Fatalf("%s item %+v", text, item)
 		}
 	}
+}
+
+func countLexemes(t *testing.T, raw *db.Store) int {
+	t.Helper()
+	var n int
+	if err := mustConn(t, raw).QueryRowContext(context.Background(), `SELECT COUNT(*) FROM lexemes`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
 }
 
 func countItems(t *testing.T, raw *db.Store, unitID int64) int {
