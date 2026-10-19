@@ -1,8 +1,12 @@
 package mcpstore
 
 import (
+	"cmp"
 	"context"
+	"slices"
+	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
 )
 
@@ -94,37 +98,71 @@ func (s *Store) PlacementLearningLexemes(ctx context.Context, userID int64) ([]s
 	return s.db.PlacementLearningLexemes(ctx, userID)
 }
 
-// StruggleStats maps db.StruggleStats. ConfusionKeys are the keys stored
-// against confusion_misses.lexeme_id. Top is the ranked text.
+// struggleWindow is the span of the confusion list and of Misses7d.
+const struggleWindow = learner.MissWindowDays * 24 * time.Hour
+
+// StruggleStats is the learner's struggle picture for get_context. Lexemes are the
+// words the learner model calls struggling (learner.Model.List with that state),
+// sorted by pointed text. The shape is the one db.StruggleStats gave: Reviews, Lapses,
+// and AgainRate come from the review_log, Misses7d is Again ratings in the last 7 days,
+// and ConfusionKeys are the keys confused in that window. Confusions are the last 7
+// days of confusion_misses. Top is the first topN texts ordered by Misses7d, then
+// Lapses, then AgainRate, ties by text. topN of 0 or less leaves Top empty.
 func (s *Store) StruggleStats(ctx context.Context, userID int64, topN int) (mcp.Struggle, error) {
 	if err := s.ready(ctx); err != nil {
 		return mcp.Struggle{}, err
 	}
-	row, err := s.db.StruggleStats(ctx, userID, topN)
+	model := learner.New(s.db, nil)
+	var words []learner.WordState
+	var after learner.Cursor
+	for {
+		page, next, err := model.List(ctx, userID, learner.Filter{
+			State: learner.Struggling,
+			Limit: learner.MaxPageSize,
+			After: after,
+		})
+		if err != nil {
+			return mcp.Struggle{}, err
+		}
+		words = append(words, page...)
+		if next == "" {
+			break
+		}
+		after = next
+	}
+	pairs, err := model.ConfusionPairs(ctx, userID, struggleWindow)
 	if err != nil {
 		return mcp.Struggle{}, err
 	}
+
 	var lexemes []mcp.StruggleLexeme
-	if row.Lexemes != nil {
-		lexemes = make([]mcp.StruggleLexeme, len(row.Lexemes))
-		for i, lx := range row.Lexemes {
+	if len(words) > 0 {
+		lexemes = make([]mcp.StruggleLexeme, len(words))
+		for i, w := range words {
+			last := w.Review.LastReview
+			if last.IsZero() {
+				last = w.LastSeen
+			}
 			lexemes[i] = mcp.StruggleLexeme{
-				LexemeID:      lx.LexemeID,
-				TextNFC:       lx.TextNFC,
-				Gloss:         lx.Gloss,
-				Reviews:       lx.Reviews,
-				Lapses:        lx.Lapses,
-				AgainRate:     lx.AgainRate,
-				Misses7d:      lx.Misses7d,
-				LastSeen:      lx.LastSeen,
-				ConfusionKeys: lx.ConfusionKeys,
+				LexemeID:      w.LexemeID,
+				TextNFC:       w.Text,
+				Gloss:         w.Gloss,
+				Reviews:       w.Review.Reviews,
+				Lapses:        w.Review.Lapses,
+				AgainRate:     w.Review.AgainRate,
+				Misses7d:      w.Review.Misses7d,
+				LastSeen:      last,
+				ConfusionKeys: w.Review.ConfusionKeys,
 			}
 		}
+		slices.SortFunc(lexemes, func(a, b mcp.StruggleLexeme) int {
+			return cmp.Compare(a.TextNFC, b.TextNFC)
+		})
 	}
 	var confusions []mcp.StruggleConfusion
-	if row.Confusions != nil {
-		confusions = make([]mcp.StruggleConfusion, len(row.Confusions))
-		for i, pair := range row.Confusions {
+	if len(pairs) > 0 {
+		confusions = make([]mcp.StruggleConfusion, len(pairs))
+		for i, pair := range pairs {
 			confusions[i] = mcp.StruggleConfusion{
 				Kind:   pair.Kind,
 				A:      pair.A,
@@ -135,9 +173,25 @@ func (s *Store) StruggleStats(ctx context.Context, userID int64, topN int) (mcp.
 		}
 	}
 	var top []string
-	if row.Top != nil {
-		top = make([]string, len(row.Top))
-		for i, lx := range row.Top {
+	if topN > 0 && len(lexemes) > 0 {
+		ranked := slices.Clone(lexemes)
+		slices.SortFunc(ranked, func(a, b mcp.StruggleLexeme) int {
+			if n := cmp.Compare(b.Misses7d, a.Misses7d); n != 0 {
+				return n
+			}
+			if n := cmp.Compare(b.Lapses, a.Lapses); n != 0 {
+				return n
+			}
+			if n := cmp.Compare(b.AgainRate, a.AgainRate); n != 0 {
+				return n
+			}
+			return cmp.Compare(a.TextNFC, b.TextNFC)
+		})
+		if len(ranked) > topN {
+			ranked = ranked[:topN]
+		}
+		top = make([]string, len(ranked))
+		for i, lx := range ranked {
 			top[i] = lx.TextNFC
 		}
 	}

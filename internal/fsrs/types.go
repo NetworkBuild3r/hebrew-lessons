@@ -40,6 +40,9 @@ const (
 	MissLetterPair = "letter_pair"
 	// MissAgreement is a confused agreement, practised as a pattern drill.
 	MissAgreement = "agreement"
+	// MissOther is a wrong pick of another word that is neither a one-letter
+	// pair nor an agreement miss. The key is the two words, in pointed NFC.
+	MissOther = "other"
 )
 
 const (

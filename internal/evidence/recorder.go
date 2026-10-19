@@ -105,7 +105,8 @@ func (r *Recorder) ready() error {
 // In one transaction it writes the attempts row, applies the rating to the
 // learner's card for the word and skill (creating the card if there is none),
 // appends the review_log row, and writes a confusion_misses row when a wrong
-// pick names another word that differs by one letter. If any write fails,
+// pick names another word (a letter_pair when it is one letter off, otherwise
+// kind other). If any write fails,
 // nothing is stored.
 //
 // A placement attempt follows ADR-0018 D2: only a right answer seeds a card,
@@ -333,9 +334,11 @@ func selfGradeLabel(rating fsrs.Rating) string {
 
 // confusionFor looks up the word the learner picked in place of the asked word.
 // It returns the picked word's pointed text, for review_log.chosen, and the
-// confusion row to write. The row is a letter_pair when the two words differ by
-// exactly one letter. Other pairs of words are not a letter confusion, and the
-// confusion_misses kinds are only letter_pair and agreement, so no row is written.
+// confusion row to write. Any wrong pick that names another word is a confusion.
+// The row is a letter_pair when the two words differ by exactly one letter, and
+// otherwise it is kind other, keyed by the two words in code point order, so the
+// pair in either order is one key. Nothing here knows an agreement miss, so that
+// kind is not written from this path.
 func (r *Recorder) confusionFor(ctx context.Context, a Attempt) (string, *db.Confusion, error) {
 	if a.Correct || a.ChosenLexemeID <= 0 || a.ChosenLexemeID == a.LexemeID {
 		return "", nil, nil
@@ -351,11 +354,19 @@ func (r *Recorder) confusionFor(ctx context.Context, a Attempt) (string, *db.Con
 	if !ok {
 		return picked.TextNFC, nil, nil
 	}
-	key, ok := letterPair(asked.TextNFC, picked.TextNFC)
-	if !ok {
-		return picked.TextNFC, nil, nil
+	if key, ok := letterPair(asked.TextNFC, picked.TextNFC); ok {
+		return picked.TextNFC, &db.Confusion{Kind: fsrs.MissLetterPair, Key: key}, nil
 	}
-	return picked.TextNFC, &db.Confusion{Kind: fsrs.MissLetterPair, Key: key}, nil
+	return picked.TextNFC, &db.Confusion{Kind: fsrs.MissOther, Key: wordPair(asked.TextNFC, picked.TextNFC)}, nil
+}
+
+// wordPair is the key of two words that are not one letter apart: both in pointed
+// NFC, joined by a slash, the smaller by code point first.
+func wordPair(a, b string) string {
+	if a > b {
+		a, b = b, a
+	}
+	return a + "/" + b
 }
 
 // letterPair is the confused pair of two spellings that differ by one letter.

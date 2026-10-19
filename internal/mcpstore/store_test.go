@@ -276,9 +276,15 @@ func TestStruggleStats(t *testing.T) {
 	mustGloss(t, raw, "א", "alef")
 	mustGloss(t, raw, "ב", "bet")
 	mustGloss(t, raw, "ג", "gimel")
-	insertReviews(t, raw, alef, old, 1, 1)
-	insertReviews(t, raw, bet, recent, 1, 1, 3, 3)
-	insertReviews(t, raw, gimel, recent, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3)
+	// StruggleStats lists the words the learner model calls struggling: 3 or more Again
+	// in the newest 8 reviews. Each word below has 3, and gimel has 4 in its 10 reviews.
+	insertReviews(t, raw, alef, old, 1, 1, 1)
+	insertReviews(t, raw, bet, recent, 1, 1, 1, 3)
+	insertReviews(t, raw, gimel, recent, 3, 3, 1, 1, 3, 3, 1, 3, 3, 1)
+	// A reviewed word that is not struggling is not listed. Two Again is not three.
+	daletID := mustLexeme(t, raw, "ד")
+	dalet := mustCard(t, raw, userID, daletID, 0)
+	insertReviews(t, raw, dalet, recent, 1, 1, 3, 3, 3)
 
 	// The key text mentions א and ג. It is stored with no lexeme, so it must
 	// not land on either word. Gimel's key is ב/כ, which does not contain ג.
@@ -317,7 +323,7 @@ func TestStruggleStats(t *testing.T) {
 		t.Fatalf("top %+v", stats.Top)
 	}
 	gimelRow := stats.Lexemes[2]
-	if gimelRow.Gloss != "gimel" || gimelRow.Reviews != 10 || gimelRow.Lapses != 3 || gimelRow.Misses7d != 2 || gimelRow.AgainRate != float64(2)/float64(10) || !gimelRow.LastSeen.Equal(recent) {
+	if gimelRow.Gloss != "gimel" || gimelRow.Reviews != 10 || gimelRow.Lapses != 3 || gimelRow.Misses7d != 4 || gimelRow.AgainRate != float64(4)/float64(10) || !gimelRow.LastSeen.Equal(recent) {
 		t.Fatalf("gimel %+v", gimelRow)
 	}
 	if len(gimelRow.ConfusionKeys) != 1 || gimelRow.ConfusionKeys[0] != "ב/כ" {

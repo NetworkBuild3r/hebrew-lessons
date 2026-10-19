@@ -595,12 +595,91 @@ func TestWrongPickNamingAnotherWordWritesAConfusion(t *testing.T) {
 	}
 }
 
-func TestConfusionIsNotWrittenWhenThereIsNoLetterPair(t *testing.T) {
+// A wrong pick of a word that is not one letter off is still a confusion, of kind other.
+// The key is the two words in code point order, so the pair in either order is one key.
+func TestWrongPickOfAnUnrelatedWordWritesAnOtherConfusion(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	asked, picked := e.lexeme(kelev), e.lexeme(shalom)
+	a := e.attempt(asked)
+	a.Correct = false
+	a.ChosenLexemeID = picked
+	if got, err := e.rec.Attempt(ctx, a); err != nil || got != fsrs.Again {
+		t.Fatalf("Attempt = %d, %v", got, err)
+	}
+	// The same two words the other way round.
+	b := e.attempt(picked)
+	b.Correct = false
+	b.ChosenLexemeID = asked
+	if _, err := e.rec.Attempt(ctx, b); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := e.conn().Query(`SELECT kind, key, lexeme_id, at FROM confusion_misses WHERE learner_id = ? ORDER BY id`, e.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	type row struct {
+		kind, key string
+		lexeme    int64
+		at        string
+	}
+	var got []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.kind, &r.key, &r.lexeme, &r.at); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	wantKey := kelev + "/" + shalom
+	if shalom < kelev {
+		wantKey = shalom + "/" + kelev
+	}
+	at := db.FormatTime(e.clk.t)
+	want := []row{
+		{fsrs.MissOther, wantKey, asked, at},
+		{fsrs.MissOther, wantKey, picked, at},
+	}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("confusions = %v, want %v", got, want)
+	}
+	// The pair feeds the 7-day count, split into its two words.
+	stats, err := e.store.StruggleStatsAt(ctx, e.user, 0, e.clk.t)
+	if err != nil || len(stats.Confusions) != 1 || stats.Confusions[0].Kind != fsrs.MissOther || stats.Confusions[0].Count != 2 {
+		t.Fatalf("struggle confusions = %+v, %v", stats.Confusions, err)
+	}
+	if a, b := stats.Confusions[0].A, stats.Confusions[0].B; a+"/"+b != wantKey {
+		t.Fatalf("pair = %q / %q, want %q", a, b, wantKey)
+	}
+}
+
+// A one-letter pair stays a letter_pair. Kind other is only for the rest.
+func TestOtherKindIsNotUsedForALetterPair(t *testing.T) {
+	e := newEnv(t)
+	asked, picked := e.lexeme(kelev), e.lexeme(kala)
+	a := e.attempt(asked)
+	a.Correct = false
+	a.ChosenLexemeID = picked
+	if _, err := e.rec.Attempt(context.Background(), a); err != nil {
+		t.Fatal(err)
+	}
+	if n := e.count(`SELECT COUNT(*) FROM confusion_misses WHERE kind = 'letter_pair'`); n != 1 {
+		t.Fatalf("letter_pair rows = %d, want 1", n)
+	}
+	if n := e.count(`SELECT COUNT(*) FROM confusion_misses WHERE kind = 'other'`); n != 0 {
+		t.Fatalf("other rows = %d, want 0", n)
+	}
+}
+
+func TestConfusionIsNotWrittenWithoutAWrongPickOfAnotherWord(t *testing.T) {
 	tests := []struct {
 		name   string
 		mutate func(a *Attempt, asked, picked int64)
 	}{
-		{"unrelated word", func(a *Attempt, asked, picked int64) { a.ChosenLexemeID = picked }},
 		{"right answer", func(a *Attempt, asked, picked int64) { a.Correct = true; a.ChosenLexemeID = picked }},
 		{"picked the asked word", func(a *Attempt, asked, picked int64) { a.ChosenLexemeID = asked }},
 		{"nothing picked", func(a *Attempt, asked, picked int64) { a.ChosenLexemeID = 0 }},
