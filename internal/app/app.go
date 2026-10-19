@@ -78,6 +78,9 @@ type Config struct {
 	GoogleUserinfoURL string
 	GoogleJWKSURL     string
 	GoogleIssuer      string
+	// StateSecret is HEBREW_SESSION_SECRET. It derives the OAuth state HMAC
+	// key (HKDF-SHA256). Empty falls back to a random per-process key.
+	StateSecret string
 
 	// AllowedEmails is MCP_OAUTH_ALLOWED_EMAILS. AdminEmails is ADMIN_EMAILS.
 	// They seed auth.Access when Access is nil. A non-nil Access is the
@@ -208,6 +211,7 @@ func NewApp(cfg Config) (*App, error) {
 		GoogleTokenURL:     cfg.GoogleTokenURL,
 		GoogleJWKSURL:      cfg.GoogleJWKSURL,
 		GoogleIssuer:       cfg.GoogleIssuer,
+		StateSecret:        cfg.StateSecret,
 		AllowedEmails:      cfg.AllowedEmails,
 		AdminEmails:        cfg.AdminEmails,
 		Access:             cfg.Access,

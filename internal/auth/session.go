@@ -108,7 +108,12 @@ func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 	_ = s.store.DeleteExpiredSessions(r.Context(), s.now())
 	s.clearSessionCookies(w)
 	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusNoContent)
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", "/signin")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	http.Redirect(w, r, "/signin", http.StatusSeeOther)
 }
 
 func sessionHash(cookie string) (string, error) {

@@ -114,6 +114,31 @@ func verifyIDToken(tok string, keys []rsaPublic, now time.Time, iss, aud, nonce 
 	return identity{Email: email, Sub: sub}, nil
 }
 
+// headerKid returns the kid of an RS256 token. A missing kid, a different
+// alg, or a malformed header returns false so those tokens are not a reason
+// to refetch JWKS.
+func headerKid(tok string) (string, bool) {
+	if tok == "" || len(tok) > 8192 {
+		return "", false
+	}
+	parts := strings.Split(tok, ".")
+	if len(parts) != 3 {
+		return "", false
+	}
+	headJSON, err := decodeB64(parts[0])
+	if err != nil {
+		return "", false
+	}
+	var head struct {
+		Alg string `json:"alg"`
+		Kid string `json:"kid"`
+	}
+	if err := json.Unmarshal(headJSON, &head); err != nil || head.Alg != "RS256" || head.Kid == "" {
+		return "", false
+	}
+	return head.Kid, true
+}
+
 func selectKey(keys []rsaPublic, kid string) *rsa.PublicKey {
 	if kid != "" {
 		for _, k := range keys {

@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"crypto/hkdf"
 	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"log/slog"
 	"net"
@@ -32,6 +34,17 @@ const (
 
 	sessionIDBytes = 32
 	oidcStateTTL   = 10 * time.Minute
+
+	// stateKeyInfo is the HKDF info label for the OAuth state HMAC key.
+	// HEBREW_SESSION_SECRET is the input keying material.
+	stateKeyInfo = "hebrew-lessons oauth-state v1"
+
+	// jwksCacheTTL is how long a successful JWKS response is reused.
+	jwksCacheTTL = 5 * time.Minute
+	// jwksUnknownKidMinInterval is the minimum gap between JWKS refetches
+	// caused by an ID token whose kid is not in the cache. A burst of
+	// tokens with unknown kids cannot fetch more often than this.
+	jwksUnknownKidMinInterval = time.Minute
 )
 
 // ErrNoSession means the cookie value is missing, unknown, or expired.
@@ -49,6 +62,10 @@ type Config struct {
 	GoogleTokenURL     string
 	GoogleJWKSURL      string
 	GoogleIssuer       string
+	// StateSecret is HEBREW_SESSION_SECRET. New derives the OAuth state
+	// HMAC key from it with HKDF-SHA256 and stateKeyInfo. An empty value
+	// uses a random per-process key, and New logs that fallback once.
+	StateSecret string
 	// AllowedEmails is MCP_OAUTH_ALLOWED_EMAILS. Anyone else is refused,
 	// except addresses in AdminEmails. These slices are copied at New
 	// when Access is nil.
@@ -65,23 +82,24 @@ type Config struct {
 
 // Service is Google sign-in, sessions, and CSRF for one process.
 type Service struct {
-	store        *db.Store
-	clock        clock.Clock
-	origin       string
-	cookieSecure bool
-	proxies      []net.IPNet
-	clientID     string
-	clientSecret string
-	authURL      string
-	tokenURL     string
-	jwksURL      string
-	issuer       string
-	access       *Access
-	stateKey     []byte
-	httpClient   *http.Client
-	jwksMu       sync.Mutex
-	jwksKeys     []rsaPublic
-	jwksUntil    time.Time
+	store            *db.Store
+	clock            clock.Clock
+	origin           string
+	cookieSecure     bool
+	proxies          []net.IPNet
+	clientID         string
+	clientSecret     string
+	authURL          string
+	tokenURL         string
+	jwksURL          string
+	issuer           string
+	access           *Access
+	stateKey         []byte
+	httpClient       *http.Client
+	jwksMu           sync.Mutex
+	jwksKeys         []rsaPublic
+	jwksUntil        time.Time
+	jwksUnknownKidAt time.Time
 }
 
 // New builds the auth service. Invalid TRUSTED_PROXIES entries are logged
@@ -102,8 +120,8 @@ func New(cfg Config) (*Service, error) {
 	if access == nil {
 		access = NewAccess(cfg.AllowedEmails, cfg.AdminEmails)
 	}
-	stateKey := make([]byte, 32)
-	if _, err := rand.Read(stateKey); err != nil {
+	stateKey, err := stateKeyFromSecret(cfg.StateSecret)
+	if err != nil {
 		return nil, err
 	}
 	return &Service{
@@ -127,6 +145,25 @@ func New(cfg Config) (*Service, error) {
 			},
 		},
 	}, nil
+}
+
+var warnStateSecretOnce sync.Once
+
+// stateKeyFromSecret derives the 32-byte OAuth state HMAC key.
+// An empty secret falls back to a random per-process key and logs once.
+func stateKeyFromSecret(secret string) ([]byte, error) {
+	secret = strings.TrimSpace(secret)
+	if secret == "" {
+		warnStateSecretOnce.Do(func() {
+			slog.Warn("HEBREW_SESSION_SECRET is unset; oauth state is sealed with a random per-process key")
+		})
+		key := make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			return nil, err
+		}
+		return key, nil
+	}
+	return hkdf.Key(sha256.New, []byte(secret), nil, stateKeyInfo, 32)
 }
 
 func (s *Service) now() time.Time {
