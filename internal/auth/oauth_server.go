@@ -30,6 +30,9 @@ const (
 	oauthRefreshTTL = 30 * 24 * time.Hour
 	oauthCodeTTL    = 10 * time.Minute
 	oauthRequestTTL = 10 * time.Minute
+	// OAuthClientTTL matches Node CLIENT_TTL: 400 days from registration.
+	OAuthClientTTL  = 400 * 24 * time.Hour
+	oauthRateWindow = 10 * time.Minute
 	oauthScope      = "mcp"
 	oauthMaxBody    = 64 * 1024
 
@@ -46,6 +49,20 @@ var (
 
 	pkceChallenge = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 	pkceVerifier  = regexp.MustCompile(`^[A-Za-z0-9._~-]{43,128}$`)
+
+	// Default redirects are the old app's DEFAULT_REDIRECTS.
+	// Anything else must be http loopback or an exact MCP_OAUTH_REDIRECT_URIS entry.
+	defaultOAuthRedirects = []string{
+		"cursor://anysphere.cursor-mcp/oauth/callback",
+		"https://www.cursor.com/agents/mcp/oauth/callback",
+		"https://cursor.com/agents/mcp/oauth/callback",
+		"http://localhost:8787/callback",
+	}
+
+	// Caps bound table growth. Node had no numeric cap; these are the bounds
+	// added for the authorization server. Tests lower them.
+	oauthClientCap = 1000
+	oauthRateLimit = 30
 
 	googleErrorCodes = map[string]struct{}{
 		"invalid_request":           {},
@@ -66,10 +83,10 @@ type oauthHandler struct {
 }
 
 // RegisterOAuth mounts the authorization server on mux.
-// publicURL is the configured MCP origin (MCP_PUBLIC_URL). It may be
-// empty: discovery still mounts, and the issuer is taken from the
-// trusted proxy's public host. Paths match the Node server: discovery,
-// RFC 7591 registration, /authorize, /token, and /oauth/google/callback.
+// publicURL is MCP_PUBLIC_URL. When it is set, it is the issuer.
+// When it is empty, the issuer is the trusted proxy's public host.
+// The redirect_uri sent to Google is {issuer}/oauth/google/callback.
+// /auth/google/callback is the same handler and is never that redirect_uri.
 // These routes are not behind the MCP bearer middleware.
 func (s *Service) RegisterOAuth(mux *http.ServeMux, publicURL string) bool {
 	if s == nil || mux == nil {
@@ -81,10 +98,12 @@ func (s *Service) RegisterOAuth(mux *http.ServeMux, publicURL string) bool {
 	mux.HandleFunc("/.well-known/openid-configuration", h.metadata)
 	mux.HandleFunc("/.well-known/oauth-protected-resource", h.protectedResource)
 	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", h.protectedResource)
+	mux.HandleFunc("/.well-known/", h.unknownWellKnown)
 	mux.HandleFunc("/register", h.register)
 	mux.HandleFunc("/authorize", h.authorize)
 	mux.HandleFunc("/token", h.token)
 	mux.HandleFunc("/oauth/google/callback", h.googleCallback)
+	mux.HandleFunc("/auth/google/callback", h.googleCallback)
 	return true
 }
 
@@ -143,11 +162,15 @@ func (s *Service) bindTokenSession(ctx context.Context, userID int64, rawToken s
 }
 
 // PublicBase is the origin clients use for this request.
-// A trusted proxy's X-Forwarded-Host and X-Forwarded-Proto win when
-// that host is a public DNS name. configured (MCP_PUBLIC_URL) is the
-// fallback. A non-loopback IP and a cluster-internal name are refused,
-// so the pod address is never advertised.
+// MCP_PUBLIC_URL wins when it is set and its host is not a pod address.
+// The trusted proxy's public host is the fallback when that URL is unset.
+// A non-loopback IP and a cluster-internal name are refused, so the pod
+// address is never advertised.
 func (s *Service) PublicBase(r *http.Request, configured string) (base, origin string, ok bool) {
+	base, origin, ok = oauthBase(configured)
+	if ok && !podHost(hostOf(base)) {
+		return base, origin, true
+	}
 	if s != nil && r != nil {
 		if proxiesFrom(r.Context()) == nil {
 			r = r.WithContext(context.WithValue(r.Context(), proxyKey{}, s.proxies))
@@ -156,11 +179,7 @@ func (s *Service) PublicBase(r *http.Request, configured string) (base, origin s
 			return joinOrigin(scheme, host)
 		}
 	}
-	base, origin, ok = oauthBase(configured)
-	if !ok || podHost(hostOf(base)) {
-		return "", "", false
-	}
-	return base, origin, true
+	return "", "", false
 }
 
 func (h *oauthHandler) requestBase(r *http.Request) (base, origin string, ok bool) {
@@ -401,6 +420,10 @@ func (h *oauthHandler) register(w http.ResponseWriter, r *http.Request) {
 		h.notFound(w)
 		return
 	}
+	h.sweep(r)
+	if h.limited(w, r) {
+		return
+	}
 	body, err := readBody(r, oauthMaxBody)
 	if errors.Is(err, errBodyTooLarge) {
 		h.oauthError(w, http.StatusRequestEntityTooLarge, "invalid_client_metadata", "Body must be JSON.")
@@ -424,7 +447,7 @@ func (h *oauthHandler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, uri := range uris {
-		if !redirectAllowed(uri) {
+		if !h.redirectAllowed(uri) {
 			slog.Info("mcp oauth register rejected redirect_uri")
 			h.oauthError(w, http.StatusBadRequest, "invalid_redirect_uri", "redirect_uri is not allowed by this server: "+clip(uri, 120))
 			return
@@ -460,6 +483,15 @@ func (h *oauthHandler) register(w http.ResponseWriter, r *http.Request) {
 		secretHash = tokenDigest(secret)
 	}
 	now := h.svc.now()
+	n, err := h.svc.store.CountOAuthClients(r.Context(), now.Add(-OAuthClientTTL))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if n >= oauthClientCap {
+		h.oauthError(w, http.StatusTooManyRequests, "invalid_client_metadata", "Too many registered clients.")
+		return
+	}
 	if err := h.svc.store.InsertOAuthClient(r.Context(), db.OAuthClient{
 		ID:            id,
 		SecretHash:    secretHash,
@@ -497,11 +529,20 @@ func (h *oauthHandler) authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch r.Method {
-	case http.MethodGet, http.MethodHead:
+	case http.MethodGet:
+		h.sweep(r)
+		if h.limited(w, r) {
+			return
+		}
 		h.authorizeGet(w, r)
 	case http.MethodPost:
+		h.sweep(r)
+		if h.limited(w, r) {
+			return
+		}
 		h.authorizePost(w, r)
 	default:
+		// HEAD writes no row. Only GET starts an authorization.
 		h.notFound(w)
 	}
 }
@@ -524,6 +565,11 @@ func (h *oauthHandler) authorizeGet(w http.ResponseWriter, r *http.Request) {
 	if errCode != "" {
 		slog.Info("mcp oauth authorize", "error", errCode)
 		h.redirectError(w, r, q.Get("redirect_uri"), q.Get("state"), errCode, desc)
+		return
+	}
+	if h.svc.googleOn() && h.svc.access.allowlistEmpty() {
+		h.page(w, http.StatusServiceUnavailable, "Sign-in is not configured",
+			"<h1>Sign-in is not configured</h1><p class=\"err\">No allowed email is set.</p>")
 		return
 	}
 	reqID, err := randomToken(24)
@@ -629,6 +675,11 @@ func (h *oauthHandler) authorizePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *oauthHandler) startGoogle(w http.ResponseWriter, r *http.Request, reqID string) {
+	if h.svc.access.allowlistEmpty() {
+		h.page(w, http.StatusServiceUnavailable, "Sign-in is not configured",
+			"<h1>Sign-in is not configured</h1><p class=\"err\">No allowed email is set.</p>")
+		return
+	}
 	if !h.svc.googleOn() {
 		h.page(w, http.StatusServiceUnavailable, "Sign-in is not configured",
 			"<h1>Sign-in is not configured</h1><p class=\"err\">Google sign-in is not configured.</p>")
@@ -791,6 +842,7 @@ func (h *oauthHandler) token(w http.ResponseWriter, r *http.Request) {
 		h.notFound(w)
 		return
 	}
+	h.sweep(r)
 	body, err := readBody(r, oauthMaxBody)
 	if err != nil {
 		status := http.StatusBadRequest
@@ -850,7 +902,7 @@ func (h *oauthHandler) tokenCode(w http.ResponseWriter, r *http.Request, form ur
 	if clientID == "" {
 		clientID = code.ClientID
 	}
-	client, err := h.svc.store.OAuthClient(r.Context(), clientID)
+	client, err := h.loadClient(r.Context(), clientID)
 	if errors.Is(err, db.ErrNotFound) {
 		client = db.OAuthClient{}
 		err = nil
@@ -877,7 +929,20 @@ func (h *oauthHandler) tokenCode(w http.ResponseWriter, r *http.Request, form ur
 		h.oauthError(w, http.StatusBadRequest, "invalid_grant", "PKCE verification failed.")
 		return
 	}
-	if _, ok := h.svc.roleFor(code.Email); !ok {
+	user, userErr := h.svc.store.UserByEmail(r.Context(), code.Email)
+	allowed := userErr == nil && user.ID == code.UserID
+	if allowed {
+		_, allowed = h.svc.roleFor(user.Email)
+	}
+	if !allowed {
+		if userErr != nil && !errors.Is(userErr, db.ErrNotFound) {
+			h.fail(w, userErr)
+			return
+		}
+		if err := h.svc.store.BurnOAuthCode(r.Context(), code.Hash, h.svc.now()); err != nil {
+			h.fail(w, err)
+			return
+		}
 		slog.Info("mcp token", "grant_type", "authorization_code", "result", "account")
 		h.oauthError(w, http.StatusBadRequest, "invalid_grant", "That account can no longer sign in.")
 		return
@@ -937,7 +1002,7 @@ func (h *oauthHandler) tokenRefresh(w http.ResponseWriter, r *http.Request, form
 		h.oauthError(w, http.StatusBadRequest, "invalid_grant", "client_id does not match the refresh token.")
 		return
 	}
-	client, err := h.svc.store.OAuthClient(r.Context(), clientID)
+	client, err := h.loadClient(r.Context(), clientID)
 	if errors.Is(err, db.ErrNotFound) {
 		client = db.OAuthClient{}
 		err = nil
@@ -1047,7 +1112,7 @@ func (h *oauthHandler) writeTokens(w http.ResponseWriter, pair issuedPair) {
 }
 
 func (h *oauthHandler) resolveAuthorize(ctx context.Context, q url.Values, base string) (client db.OAuthClient, fatal, errCode, desc string) {
-	loaded, err := h.svc.store.OAuthClient(ctx, q.Get("client_id"))
+	loaded, err := h.loadClient(ctx, q.Get("client_id"))
 	if errors.Is(err, db.ErrNotFound) || q.Get("client_id") == "" {
 		return db.OAuthClient{}, "Unknown or expired client. Register again.", "", ""
 	}
@@ -1055,7 +1120,7 @@ func (h *oauthHandler) resolveAuthorize(ctx context.Context, q url.Values, base 
 		return db.OAuthClient{}, "Unknown or expired client. Register again.", "", ""
 	}
 	redirect := q.Get("redirect_uri")
-	if redirect == "" || !slices.Contains(loaded.RedirectURIs, redirect) || !redirectAllowed(redirect) {
+	if redirect == "" || !slices.Contains(loaded.RedirectURIs, redirect) || !h.redirectAllowed(redirect) {
 		return loaded, "redirect_uri does not match this client.", "", ""
 	}
 	if q.Get("response_type") != "code" {
@@ -1076,23 +1141,96 @@ func resourceMatches(base, resource string) bool {
 	return resource == base+"/mcp" || resource == base
 }
 
-func redirectAllowed(uri string) bool {
-	if uri == "" || strings.ContainsAny(uri, "\r\n#\\") {
+// redirectAllowed matches Node: reject a fragment first, then an exact
+// member of the built-in list or MCP_OAUTH_REDIRECT_URIS, then http
+// loopback on any port. A random https URI is refused. cursor:// is in
+// the built-in list.
+func (h *oauthHandler) redirectAllowed(uri string) bool {
+	if strings.ContainsAny(uri, "\r\n") {
 		return false
 	}
 	u, err := url.Parse(uri)
-	if err != nil || u.Fragment != "" || u.Host == "" || u.User != nil || u.RawQuery != "" && strings.ContainsAny(u.RawQuery, "\r\n") {
+	if err != nil || u.Scheme == "" {
 		return false
 	}
-	switch strings.ToLower(u.Scheme) {
-	case "https":
+	if u.Fragment != "" || strings.Contains(uri, "#") {
+		return false
+	}
+	if slices.Contains(defaultOAuthRedirects, uri) || (h != nil && h.svc != nil && slices.Contains(h.svc.oauthRedirects, uri)) {
 		return true
-	case "http":
-		host := strings.ToLower(u.Hostname())
-		return host == "localhost" || host == "127.0.0.1" || host == "::1"
-	default:
+	}
+	if u.Scheme != "http" {
 		return false
 	}
+	host := u.Hostname()
+	return strings.EqualFold(host, "localhost") || host == "127.0.0.1" || host == "::1" || host == "[::1]"
+}
+
+func (h *oauthHandler) loadClient(ctx context.Context, id string) (db.OAuthClient, error) {
+	c, err := h.svc.store.OAuthClient(ctx, id)
+	if err != nil {
+		return db.OAuthClient{}, err
+	}
+	if !c.CreatedAt.Add(OAuthClientTTL).After(h.svc.now()) {
+		return db.OAuthClient{}, db.ErrNotFound
+	}
+	return c, nil
+}
+
+func (h *oauthHandler) sweep(r *http.Request) {
+	if h == nil || h.svc == nil {
+		return
+	}
+	now := h.svc.now()
+	if err := h.svc.store.SweepOAuth(r.Context(), now, now.Add(-OAuthClientTTL)); err != nil {
+		slog.Error("mcp oauth sweep", "err", err)
+	}
+}
+
+func (h *oauthHandler) limited(w http.ResponseWriter, r *http.Request) bool {
+	if h.svc.rateAllow(ClientIP(r), h.svc.now()) {
+		return false
+	}
+	if r.URL.Path == "/register" {
+		h.oauthError(w, http.StatusTooManyRequests, "invalid_request", "Too many requests from this address.")
+		return true
+	}
+	h.page(w, http.StatusTooManyRequests, "Too many requests", "<h1>Too many requests</h1><p class=\"err\">Wait and try again.</p>")
+	return true
+}
+
+func (h *oauthHandler) unknownWellKnown(w http.ResponseWriter, r *http.Request) {
+	r = h.withReq(r)
+	if h.preflight(w, r) {
+		return
+	}
+	h.notFound(w)
+}
+
+type rateWindow struct {
+	start time.Time
+	n     int
+}
+
+func (s *Service) rateAllow(ip string, now time.Time) bool {
+	if s == nil {
+		return true
+	}
+	if ip == "" {
+		ip = "unknown"
+	}
+	s.rateMu.Lock()
+	defer s.rateMu.Unlock()
+	if s.rate == nil {
+		s.rate = map[string]rateWindow{}
+	}
+	w := s.rate[ip]
+	if w.start.IsZero() || now.Sub(w.start) >= oauthRateWindow {
+		w = rateWindow{start: now}
+	}
+	w.n++
+	s.rate[ip] = w
+	return w.n <= oauthRateLimit
 }
 
 func redirectList(raw json.RawMessage) ([]string, bool) {
@@ -1282,10 +1420,7 @@ func (h *oauthHandler) browserSession(r *http.Request) (User, Session, bool) {
 }
 
 func (h *oauthHandler) consentPage(w http.ResponseWriter, client db.OAuthClient, reqID, redirectURI, csrf string, status int, message string) {
-	host := redirectURI
-	if u, err := url.Parse(redirectURI); err == nil && u.Host != "" {
-		host = u.Host
-	}
+	host := redirectTargetLabel(redirectURI)
 	msg := ""
 	if message != "" {
 		msg = "<p class=\"err\">" + esc(message) + "</p>"
@@ -1318,7 +1453,7 @@ func (h *oauthHandler) redirectError(w http.ResponseWriter, r *http.Request, red
 
 func (h *oauthHandler) redirectQuery(w http.ResponseWriter, r *http.Request, redirectURI string, q url.Values, failed bool) {
 	u, err := url.Parse(redirectURI)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+	if err != nil || u.Scheme == "" {
 		h.page(w, http.StatusBadRequest, "Cannot sign in", "<h1>Cannot sign in</h1><p class=\"err\">Invalid request.</p>")
 		return
 	}
@@ -1331,15 +1466,41 @@ func (h *oauthHandler) redirectQuery(w http.ResponseWriter, r *http.Request, red
 		}
 	}
 	u.RawQuery = existing.Encode()
+	target := u.String()
 	h.cors(w.Header())
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
+	web := strings.HasPrefix(strings.ToLower(target), "http://") || strings.HasPrefix(strings.ToLower(target), "https://")
+	if web {
+		http.Redirect(w, r, target, http.StatusSeeOther)
+		return
+	}
 	title := "Signed in. Returning to the app."
 	if failed {
 		title = "Access was not granted."
 	}
-	_ = title
-	http.Redirect(w, r, u.String(), http.StatusSeeOther)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, "<!doctype html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"refresh\" content=\"0;url="+esc(target)+
+		"\"><title>"+esc(title)+"</title></head><body style=\"font:16px system-ui,sans-serif;max-width:30rem;margin:12vh auto;padding:0 1rem\">"+
+		"<p>"+esc(title)+"</p><p><a href=\""+esc(target)+"\">Return to the app</a></p></body></html>")
+}
+
+// redirectTargetLabel is the parenthetical on the consent page.
+// A custom scheme shows the scheme. An http(s) URI shows the host.
+func redirectTargetLabel(redirectURI string) string {
+	u, err := url.Parse(redirectURI)
+	if err != nil || u.Scheme == "" {
+		return redirectURI
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return u.Scheme + ":"
+	}
+	if u.Host != "" {
+		return u.Host
+	}
+	return redirectURI
 }
 
 func (s *Service) mcpGoogleURL(redirectURI, state, nonce, challenge string) (string, error) {

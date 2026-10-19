@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	sdauth "github.com/modelcontextprotocol/go-sdk/auth"
 )
@@ -123,10 +125,9 @@ func constantEqual(got, want string) bool {
 }
 
 // requireBearer wraps next with the SDK bearer middleware.
-// metadata, when it returns a URL, sets the Node challenge
-// Bearer realm="hebrew-lessons", resource_metadata="<url>".
-// An empty URL keeps a bare Bearer challenge when the handler did not
-// set WWW-Authenticate.
+// A 401 is text/plain "Unauthorized". When metadata returns a URL the
+// challenge is Bearer realm="hebrew-lessons", resource_metadata="<url>".
+// When it does not, the challenge is Bearer realm="hebrew-lessons".
 func requireBearer(v Validator, metadata func(*http.Request) string, next http.Handler) http.Handler {
 	verifier := func(ctx context.Context, token string, r *http.Request) (*sdauth.TokenInfo, error) {
 		p, err := v.Validate(ctx, token, r)
@@ -165,17 +166,43 @@ func requireBearer(v Validator, metadata func(*http.Request) string, next http.H
 type challengeWriter struct {
 	http.ResponseWriter
 	metadataURL string
+	wrote       bool
+	status      int
+	sentBody    bool
 }
 
 func (w *challengeWriter) WriteHeader(code int) {
+	if w.wrote {
+		return
+	}
+	w.wrote = true
+	w.status = code
 	if code == http.StatusUnauthorized {
 		if w.metadataURL != "" {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="hebrew-lessons", resource_metadata="`+w.metadataURL+`"`)
-		} else if w.Header().Get("WWW-Authenticate") == "" {
-			w.Header().Set("WWW-Authenticate", "Bearer")
+		} else {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="hebrew-lessons"`)
 		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Content-Length", strconv.Itoa(len("Unauthorized")))
 	}
 	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *challengeWriter) Write(p []byte) (int, error) {
+	if !w.wrote {
+		w.WriteHeader(http.StatusOK)
+	}
+	if w.status == http.StatusUnauthorized {
+		if !w.sentBody {
+			w.sentBody = true
+			if _, err := io.WriteString(w.ResponseWriter, "Unauthorized"); err != nil {
+				return 0, err
+			}
+		}
+		return len(p), nil
+	}
+	return w.ResponseWriter.Write(p)
 }
 
 func actorFrom(ctx context.Context) string {

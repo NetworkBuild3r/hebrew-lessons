@@ -76,8 +76,12 @@ type Config struct {
 	// authenticated request and AllowedEmails and AdminEmails are ignored.
 	// Mutate it with Set. It is not global state.
 	Access *Access
-	Clock  clock.Clock
-	Store  *db.Store
+	// OAuthRedirectURIs is MCP_OAUTH_REDIRECT_URIS. These exact strings
+	// are allowed at dynamic registration, in addition to the built-in
+	// Cursor redirects and http loopback.
+	OAuthRedirectURIs []string
+	Clock             clock.Clock
+	Store             *db.Store
 }
 
 // Service is Google sign-in, sessions, and CSRF for one process.
@@ -94,7 +98,10 @@ type Service struct {
 	jwksURL          string
 	issuer           string
 	access           *Access
+	oauthRedirects   []string
 	stateKey         []byte
+	rateMu           sync.Mutex
+	rate             map[string]rateWindow
 	httpClient       *http.Client
 	jwksMu           sync.Mutex
 	jwksKeys         []rsaPublic
@@ -125,19 +132,20 @@ func New(cfg Config) (*Service, error) {
 		return nil, err
 	}
 	return &Service{
-		store:        cfg.Store,
-		clock:        cfg.Clock,
-		origin:       origin,
-		cookieSecure: cfg.CookieSecure,
-		proxies:      nets,
-		clientID:     strings.TrimSpace(cfg.GoogleClientID),
-		clientSecret: strings.TrimSpace(cfg.GoogleClientSecret),
-		authURL:      strings.TrimSpace(cfg.GoogleAuthURL),
-		tokenURL:     strings.TrimSpace(cfg.GoogleTokenURL),
-		jwksURL:      strings.TrimSpace(cfg.GoogleJWKSURL),
-		issuer:       strings.TrimSpace(cfg.GoogleIssuer),
-		access:       access,
-		stateKey:     stateKey,
+		store:          cfg.Store,
+		clock:          cfg.Clock,
+		origin:         origin,
+		cookieSecure:   cfg.CookieSecure,
+		proxies:        nets,
+		clientID:       strings.TrimSpace(cfg.GoogleClientID),
+		clientSecret:   strings.TrimSpace(cfg.GoogleClientSecret),
+		authURL:        strings.TrimSpace(cfg.GoogleAuthURL),
+		tokenURL:       strings.TrimSpace(cfg.GoogleTokenURL),
+		jwksURL:        strings.TrimSpace(cfg.GoogleJWKSURL),
+		issuer:         strings.TrimSpace(cfg.GoogleIssuer),
+		access:         access,
+		oauthRedirects: append([]string(nil), cfg.OAuthRedirectURIs...),
+		stateKey:       stateKey,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error {

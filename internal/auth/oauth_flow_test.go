@@ -84,7 +84,7 @@ func TestOAuthDiscoveryDocuments(t *testing.T) {
 }
 
 func TestOAuthIssuerUsesTrustedPublicHost(t *testing.T) {
-	env := newOAuthEnvProxied(t)
+	env := startOAuthEnvOpts(t, oauthStartOpts{proxies: []string{"127.0.0.1"}, unsetPublic: true})
 	req := env.do(http.MethodGet, "/.well-known/oauth-authorization-server", nil, "")
 	req.Header.Set("X-Forwarded-Host", "hebrew-mcp.ibhacked.us")
 	req.Header.Set("X-Forwarded-Proto", "https")
@@ -103,23 +103,47 @@ func TestOAuthIssuerUsesTrustedPublicHost(t *testing.T) {
 	pod.Header.Set("X-Forwarded-Host", "10.8.8.8")
 	pod.Header.Set("X-Forwarded-Proto", "https")
 	got = env.roundTrip(pod)
-	if got.StatusCode != http.StatusOK || strings.Contains(got.Body, "10.8.8.8") || !strings.Contains(got.Body, env.base) {
+	if got.StatusCode != http.StatusServiceUnavailable || strings.Contains(got.Body, "10.8.8.8") {
 		t.Fatalf("pod address %d %s", got.StatusCode, got.Body)
 	}
 	cluster := env.do(http.MethodGet, "/.well-known/oauth-authorization-server", nil, "")
 	cluster.Header.Set("X-Forwarded-Host", "hebrew.default.svc.cluster.local")
 	cluster.Header.Set("X-Forwarded-Proto", "https")
 	got = env.roundTrip(cluster)
-	if strings.Contains(got.Body, "cluster.local") || !strings.Contains(got.Body, env.base) {
+	if got.StatusCode != http.StatusServiceUnavailable || strings.Contains(got.Body, "cluster.local") {
 		t.Fatalf("cluster host %d %s", got.StatusCode, got.Body)
+	}
+}
+
+func TestMCPPublicURLPrecedesForwardedHost(t *testing.T) {
+	const public = "https://hebrew-mcp.ibhacked.us"
+	env := startOAuthEnvOpts(t, oauthStartOpts{google: true, proxies: []string{"127.0.0.1"}, public: public})
+	req := env.do(http.MethodGet, "/.well-known/oauth-authorization-server", nil, "")
+	req.Header.Set("X-Forwarded-Host", "other.example")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	got := env.roundTrip(req)
+	if got.StatusCode != http.StatusOK || !strings.Contains(got.Body, `"issuer":"`+public+`"`) || strings.Contains(got.Body, "other.example") {
+		t.Fatalf("issuer %d %s", got.StatusCode, got.Body)
+	}
+	id := env.registerClient(oauthRedirect, "none")
+	pair := pkcePair(t)
+	start := env.authorize(id, oauthRedirect, pair.challenge, "S256", "st")
+	if start.StatusCode != http.StatusFound {
+		t.Fatalf("authorize %d %s", start.StatusCode, start.Body)
+	}
+	redir := mustParse(t, start.Header.Get("Location")).Query().Get("redirect_uri")
+	if redir != public+"/oauth/google/callback" || strings.Contains(redir, "/auth/google/callback") {
+		t.Fatalf("google redirect_uri %q", redir)
 	}
 }
 
 func TestOAuthDynamicRegistration(t *testing.T) {
 	env := newOAuthEnv(t, false)
 	accepted := []string{
-		"https://client.example/callback",
-		"https://client.example:8443/callback",
+		"cursor://anysphere.cursor-mcp/oauth/callback",
+		"https://www.cursor.com/agents/mcp/oauth/callback",
+		"https://cursor.com/agents/mcp/oauth/callback",
+		"http://localhost:8787/callback",
 		"http://127.0.0.1:1/callback",
 		"http://localhost:9/callback",
 		"http://[::1]:9/callback",
@@ -141,7 +165,7 @@ func TestOAuthDynamicRegistration(t *testing.T) {
 		}
 	}
 	conf := env.registerRaw(map[string]any{
-		"redirect_uris":              []string{"https://client.example/cb"},
+		"redirect_uris":              []string{"https://cursor.com/agents/mcp/oauth/callback"},
 		"token_endpoint_auth_method": "client_secret_post",
 		"client_name":                "<script>",
 	})
@@ -149,9 +173,11 @@ func TestOAuthDynamicRegistration(t *testing.T) {
 		t.Fatalf("confidential %d %s", conf.StatusCode, conf.Body)
 	}
 	rejected := []string{
+		"https://client.example/callback",
+		"https://client.example:8443/callback",
 		"http://client.example/callback",
-		"cursor://anysphere.cursor-mcp/oauth/callback",
-		"https://client.example/callback#frag",
+		"http://127.0.0.1:9/callback#frag",
+		"cursor://anysphere.cursor-mcp/oauth/callback#x",
 		"https://user:pass@client.example/callback",
 		"javascript:alert(1)",
 		"http://127.0.0.2/callback",
@@ -559,12 +585,18 @@ func TestOAuthGoogleAndAllowlistFailures(t *testing.T) {
 	if rejected.StatusCode != http.StatusBadRequest || !strings.Contains(rejected.Body, "That account can no longer sign in.") {
 		t.Fatalf("removed at token %d %s", rejected.StatusCode, rejected.Body)
 	}
-	env.access.Set([]string{oauthLearner}, []string{oauthAdmin})
-	restored := env.exchange(clientID, code, verifier, oauthRedirect, "", "")
-	if restored.AccessToken == "" {
-		t.Fatal("account rejection burned the code")
+	again := env.tokenForm(url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"code_verifier": {verifier},
+		"redirect_uri":  {oauthRedirect},
+		"client_id":     {clientID},
+	}, "")
+	if again.StatusCode != http.StatusBadRequest || !strings.Contains(again.Body, "Code was already used.") {
+		t.Fatalf("code was not burned %d %s", again.StatusCode, again.Body)
 	}
 
+	env.access.Set([]string{oauthLearner}, []string{oauthAdmin})
 	agedCode, agedVerifier, agedClient := env.authorizationCode(oauthLearner, "learner-sub")
 	env.clk.Advance(oauthCodeTTL + time.Second)
 	expired := env.tokenForm(url.Values{
@@ -618,7 +650,20 @@ func newOAuthEnvProxied(t *testing.T) *oauthEnv {
 	return startOAuthEnv(t, false, false, []string{"127.0.0.1"})
 }
 
+type oauthStartOpts struct {
+	google      bool
+	secure      bool
+	proxies     []string
+	public      string
+	unsetPublic bool
+}
+
 func startOAuthEnv(t *testing.T, google, secure bool, proxies []string) *oauthEnv {
+	t.Helper()
+	return startOAuthEnvOpts(t, oauthStartOpts{google: google, secure: secure, proxies: proxies})
+}
+
+func startOAuthEnvOpts(t *testing.T, opts oauthStartOpts) *oauthEnv {
 	t.Helper()
 	clk := &manualClock{t: time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)}
 	store := openTestStore(t, clk)
@@ -626,14 +671,14 @@ func startOAuthEnv(t *testing.T, google, secure bool, proxies []string) *oauthEn
 	env := &oauthEnv{t: t, clk: clk, store: store, access: access}
 	cfg := Config{
 		PublicOrigin:   "https://hebrew.example",
-		CookieSecure:   secure,
+		CookieSecure:   opts.secure,
 		StateSecret:    "oauth-test-secret",
 		Access:         access,
 		Clock:          clk,
 		Store:          store,
-		TrustedProxies: proxies,
+		TrustedProxies: opts.proxies,
 	}
-	if google {
+	if opts.google {
 		key, err := rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
 			t.Fatal(err)
@@ -658,7 +703,13 @@ func startOAuthEnv(t *testing.T, google, secure bool, proxies []string) *oauthEn
 	mux := http.NewServeMux()
 	srv := httptest.NewUnstartedServer(mux)
 	env.base = "http://" + srv.Listener.Addr().String()
-	if !svc.RegisterOAuth(mux, env.base) {
+	public := env.base
+	if opts.unsetPublic {
+		public = ""
+	} else if opts.public != "" {
+		public = opts.public
+	}
+	if !svc.RegisterOAuth(mux, public) {
 		t.Fatal("oauth did not mount")
 	}
 	srv.Start()
@@ -797,6 +848,10 @@ func (e *oauthEnv) finishGoogle(start oauthHTTP, email, sub string, verified boo
 	}
 	gu := mustParse(e.t, start.Header.Get("Location"))
 	q := gu.Query()
+	redir := q.Get("redirect_uri")
+	if redir != e.base+"/oauth/google/callback" {
+		e.t.Fatalf("google redirect_uri %q", redir)
+	}
 	e.fake.prepare(q.Get("code_challenge"), q.Get("nonce"), email, sub, verified)
 	req := e.do(http.MethodGet, "/oauth/google/callback?code=authcode&state="+url.QueryEscape(q.Get("state")), nil, "")
 	for _, c := range start.Cookies {
@@ -1009,4 +1064,214 @@ func signOAuthIDToken(key *rsa.PrivateKey, kid string, claims map[string]any) st
 		panic(err)
 	}
 	return h + "." + b + "." + base64.RawURLEncoding.EncodeToString(sig)
+}
+
+func TestOAuthExtraRedirectURI(t *testing.T) {
+	env := newOAuthEnv(t, false)
+	const extra = "https://client.example/callback"
+	env.svc.oauthRedirects = []string{extra}
+	ok := env.registerRaw(map[string]any{"redirect_uris": []string{extra}, "client_name": "extra"})
+	if ok.StatusCode != http.StatusCreated {
+		t.Fatalf("extra %d %s", ok.StatusCode, ok.Body)
+	}
+	frag := env.registerRaw(map[string]any{"redirect_uris": []string{extra + "#frag"}})
+	if frag.StatusCode != http.StatusBadRequest || !strings.Contains(frag.Body, "redirect_uri is not allowed by this server: ") {
+		t.Fatalf("fragment %d %s", frag.StatusCode, frag.Body)
+	}
+}
+
+func TestOAuthCursorSchemeEndToEnd(t *testing.T) {
+	const redirect = "cursor://anysphere.cursor-mcp/oauth/callback"
+	env := newOAuthEnv(t, true)
+	id := env.registerClient(redirect, "none")
+	pair := pkcePair(t)
+	start := env.authorize(id, redirect, pair.challenge, "S256", "client-state")
+	page := env.finishGoogle(start, oauthLearner, "learner-sub", true)
+	if page.StatusCode != http.StatusOK || !strings.Contains(page.Body, "(cursor:)") {
+		t.Fatalf("consent %d %s", page.StatusCode, page.Body)
+	}
+	reqID, csrf := consentFields(t, page.Body)
+	approved := env.consent(reqID, csrf, "approve", env.base)
+	if approved.StatusCode != http.StatusOK || approved.Header.Get("Location") != "" {
+		t.Fatalf("approve %d location %q %s", approved.StatusCode, approved.Header.Get("Location"), approved.Body)
+	}
+	if approved.Header.Get("Content-Security-Policy") != "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'" {
+		t.Fatalf("csp %q", approved.Header.Get("Content-Security-Policy"))
+	}
+	if !strings.Contains(approved.Body, "Signed in. Returning to the app.") || !strings.Contains(approved.Body, "Return to the app") {
+		t.Fatalf("page %s", approved.Body)
+	}
+	code := codeFromCustomPage(t, approved.Body)
+	tok := env.exchange(id, code, pair.verifier, redirect, "", "")
+	if tok.AccessToken == "" || tok.TokenType != "Bearer" {
+		t.Fatalf("token %+v", tok)
+	}
+
+	deniedStart := env.authorize(id, redirect, pkcePair(t).challenge, "S256", "deny-state")
+	if deniedStart.StatusCode != http.StatusOK || !strings.Contains(deniedStart.Body, "(cursor:)") {
+		t.Fatalf("second consent %d %s", deniedStart.StatusCode, deniedStart.Body)
+	}
+	denyID, denyCSRF := consentFields(t, deniedStart.Body)
+	denied := env.consent(denyID, denyCSRF, "deny", env.base)
+	if denied.StatusCode != http.StatusOK || !strings.Contains(denied.Body, "Access was not granted.") {
+		t.Fatalf("deny %d %s", denied.StatusCode, denied.Body)
+	}
+}
+
+func TestEmptyAllowlistDoesNotRedirectToGoogle(t *testing.T) {
+	env := newOAuthEnv(t, true)
+	env.access.Set(nil, []string{oauthAdmin})
+	id := env.registerClient(oauthRedirect, "none")
+	res := env.authorize(id, oauthRedirect, pkcePair(t).challenge, "S256", "st")
+	if res.StatusCode != http.StatusServiceUnavailable || !strings.Contains(res.Body, "No allowed email is set.") {
+		t.Fatalf("empty allowlist %d %s", res.StatusCode, res.Body)
+	}
+	if res.Header.Get("Location") != "" {
+		t.Fatalf("redirected to %s", res.Header.Get("Location"))
+	}
+	n, err := env.store.CountOAuthRequests(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("authorize wrote %d requests", n)
+	}
+}
+
+func TestTokenBurnsCodeWhenAllowlistRemovesUser(t *testing.T) {
+	env := newOAuthEnv(t, true)
+	code, verifier, clientID := env.authorizationCode(oauthLearner, "learner-sub")
+	env.access.Set(nil, nil)
+	form := url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"code_verifier": {verifier},
+		"redirect_uri":  {oauthRedirect},
+		"client_id":     {clientID},
+	}
+	rejected := env.tokenForm(form, "")
+	if rejected.StatusCode != http.StatusBadRequest || !strings.Contains(rejected.Body, "That account can no longer sign in.") {
+		t.Fatalf("removed %d %s", rejected.StatusCode, rejected.Body)
+	}
+	env.access.Set([]string{oauthLearner}, []string{oauthAdmin})
+	again := env.tokenForm(form, "")
+	if again.StatusCode != http.StatusBadRequest || !strings.Contains(again.Body, "Code was already used.") {
+		t.Fatalf("code survived %d %s", again.StatusCode, again.Body)
+	}
+}
+
+func TestMCPSessionCookieIsHostOnly(t *testing.T) {
+	env := newOAuthEnvSecure(t)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.client.Jar = jar
+	id := env.registerClient(oauthRedirect, "none")
+	start := env.authorize(id, oauthRedirect, pkcePair(t).challenge, "S256", "st")
+	page := env.finishGoogle(start, oauthLearner, "learner-sub", true)
+	session := cookieByName(t, page.Cookies, "__Host-hebrew_session")
+	if session.Domain != "" || !session.Secure || !session.HttpOnly || session.Path != "/" || session.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("cookie %+v", session)
+	}
+	for _, raw := range page.Header.Values("Set-Cookie") {
+		if strings.Contains(strings.ToLower(raw), "domain=") {
+			t.Fatalf("domain attribute %s", raw)
+		}
+	}
+}
+
+func TestAuthorizeHeadWritesNoRow(t *testing.T) {
+	env := newOAuthEnv(t, true)
+	id := env.registerClient(oauthRedirect, "none")
+	pair := pkcePair(t)
+	q := url.Values{
+		"response_type":         {"code"},
+		"client_id":             {id},
+		"redirect_uri":          {oauthRedirect},
+		"code_challenge":        {pair.challenge},
+		"code_challenge_method": {"S256"},
+		"state":                 {"st"},
+	}
+	res := env.roundTrip(env.do(http.MethodHead, "/authorize?"+q.Encode(), nil, ""))
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("head %d %s", res.StatusCode, res.Body)
+	}
+	n, err := env.store.CountOAuthRequests(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("head wrote %d requests", n)
+	}
+}
+
+func TestOAuthSweepTTLCapAndRateLimit(t *testing.T) {
+	env := newOAuthEnv(t, false)
+	id := env.registerClient(oauthRedirect, "none")
+	if err := env.store.InsertOAuthRequest(context.Background(), db.OAuthRequest{
+		ID: "old-req", ClientID: id, RedirectURI: oauthRedirect,
+		CodeChallenge: strings.Repeat("a", 43), ExpiresAt: env.clk.Now().Add(-time.Second),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.store.InsertOAuthClient(context.Background(), db.OAuthClient{
+		ID: "old-client", Name: "old", RedirectURIs: []string{oauthRedirect}, AuthMethod: "none",
+		GrantTypes: []string{"authorization_code"}, ResponseTypes: []string{"code"},
+		CreatedAt: env.clk.Now().Add(-OAuthClientTTL - time.Second),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stale := env.authorize("old-client", oauthRedirect, pkcePair(t).challenge, "S256", "st")
+	if stale.StatusCode != http.StatusBadRequest || !strings.Contains(stale.Body, "Unknown or expired client") {
+		t.Fatalf("ttl %d %s", stale.StatusCode, stale.Body)
+	}
+	if err := env.store.SweepOAuth(context.Background(), env.clk.Now(), env.clk.Now().Add(-OAuthClientTTL)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.store.OAuthRequest(context.Background(), "old-req"); !errors.Is(err, db.ErrNotFound) {
+		t.Fatalf("request sweep %v", err)
+	}
+	if _, err := env.store.OAuthClient(context.Background(), "old-client"); !errors.Is(err, db.ErrNotFound) {
+		t.Fatalf("client sweep %v", err)
+	}
+
+	prevCap := oauthClientCap
+	oauthClientCap = 1
+	t.Cleanup(func() { oauthClientCap = prevCap })
+	capped := env.registerRaw(map[string]any{"redirect_uris": []string{oauthRedirect}})
+	if capped.StatusCode != http.StatusTooManyRequests || !strings.Contains(capped.Body, "Too many registered clients.") {
+		t.Fatalf("cap %d %s", capped.StatusCode, capped.Body)
+	}
+	oauthClientCap = prevCap
+
+	prevRate := oauthRateLimit
+	oauthRateLimit = 2
+	t.Cleanup(func() { oauthRateLimit = prevRate })
+	limited := newOAuthEnv(t, false)
+	for i := 0; i < 2; i++ {
+		ok := limited.registerRaw(map[string]any{"redirect_uris": []string{oauthRedirect}})
+		if ok.StatusCode != http.StatusCreated {
+			t.Fatalf("rate %d %d %s", i, ok.StatusCode, ok.Body)
+		}
+	}
+	blocked := limited.registerRaw(map[string]any{"redirect_uris": []string{oauthRedirect}})
+	if blocked.StatusCode != http.StatusTooManyRequests || !strings.Contains(blocked.Body, "Too many requests from this address.") {
+		t.Fatalf("rate limit %d %s", blocked.StatusCode, blocked.Body)
+	}
+}
+
+func codeFromCustomPage(t *testing.T, body string) string {
+	t.Helper()
+	const needle = "code="
+	i := strings.Index(body, needle)
+	if i < 0 {
+		t.Fatalf("no code in %s", body)
+	}
+	rest := body[i+len(needle):]
+	end := strings.IndexAny(rest, "&\"")
+	if end < 0 {
+		t.Fatalf("code tail %s", rest)
+	}
+	return rest[:end]
 }

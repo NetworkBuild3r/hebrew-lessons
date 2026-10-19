@@ -445,3 +445,68 @@ func nullString(s string) any {
 	}
 	return s
 }
+
+// BurnOAuthCode marks a code used without issuing tokens.
+// A second call is a no-op. The row stays until SweepOAuth drops it.
+func (s *Store) BurnOAuthCode(ctx context.Context, hash string, now time.Time) error {
+	if err := s.ready(); err != nil {
+		return err
+	}
+	_, err := s.exec(ctx, `
+		UPDATE oauth_codes SET used_at = ?
+		WHERE code_hash = ? AND used_at IS NULL`, FormatTime(now), hash)
+	if err != nil {
+		return fmt.Errorf("db: burn oauth code: %w", err)
+	}
+	return nil
+}
+
+// CountOAuthClients counts clients registered after createdAfter.
+// Callers pass now minus the client lifetime so expired rows are not counted.
+func (s *Store) CountOAuthClients(ctx context.Context, createdAfter time.Time) (int, error) {
+	if err := s.ready(); err != nil {
+		return 0, err
+	}
+	var n int
+	err := s.queryRow(ctx, `SELECT COUNT(*) FROM oauth_clients WHERE created_at > ?`, FormatTime(createdAfter)).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("db: count oauth clients: %w", err)
+	}
+	return n, nil
+}
+
+// CountOAuthRequests counts in-flight authorization requests.
+func (s *Store) CountOAuthRequests(ctx context.Context) (int, error) {
+	if err := s.ready(); err != nil {
+		return 0, err
+	}
+	var n int
+	err := s.queryRow(ctx, `SELECT COUNT(*) FROM oauth_requests`).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("db: count oauth requests: %w", err)
+	}
+	return n, nil
+}
+
+// SweepOAuth deletes expired authorization requests, codes, and tokens,
+// and clients whose created_at is at or before clientCutoff.
+// Deleting a client cascades to its requests, codes, and tokens.
+func (s *Store) SweepOAuth(ctx context.Context, now, clientCutoff time.Time) error {
+	if err := s.ready(); err != nil {
+		return err
+	}
+	ts := FormatTime(now)
+	for _, q := range []string{
+		`DELETE FROM oauth_requests WHERE expires_at <= ?`,
+		`DELETE FROM oauth_codes WHERE expires_at <= ?`,
+		`DELETE FROM oauth_tokens WHERE expires_at <= ?`,
+	} {
+		if _, err := s.exec(ctx, q, ts); err != nil {
+			return fmt.Errorf("db: sweep oauth: %w", err)
+		}
+	}
+	if _, err := s.exec(ctx, `DELETE FROM oauth_clients WHERE created_at <= ?`, FormatTime(clientCutoff)); err != nil {
+		return fmt.Errorf("db: sweep oauth clients: %w", err)
+	}
+	return nil
+}
