@@ -15,8 +15,8 @@ import (
 )
 
 // Migrate applies each embedded SQL file whose version is not in
-// schema_migrations. Running it again is a no-op. applied_at is clk.Now()
-// in UTC, RFC3339Nano. A nil clock uses the system clock.
+// schema_migrations. Running it again is a no-op. applied_at is
+// FormatTime(clk.Now()). A nil clock uses the system clock.
 func Migrate(ctx context.Context, conn *sql.DB, clk clock.Clock) error {
 	if conn == nil {
 		return fmt.Errorf("db: migrate: nil connection")
@@ -27,7 +27,7 @@ func Migrate(ctx context.Context, conn *sql.DB, clk clock.Clock) error {
 	if _, err := conn.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version INTEGER PRIMARY KEY, -- Version parsed from the SQL file name.
-			applied_at TEXT NOT NULL -- UTC RFC3339Nano time from the process clock.
+			applied_at TEXT NOT NULL -- UTC time from the process clock, written with FormatTime.
 		)`); err != nil {
 		return fmt.Errorf("db: create schema_migrations: %w", err)
 	}
@@ -88,7 +88,7 @@ func apply(ctx context.Context, conn *sql.DB, name string, version int, script s
 			return fmt.Errorf("db: %s: %w", name, err)
 		}
 	}
-	applied := at.UTC().Format(time.RFC3339Nano)
+	applied := FormatTime(at)
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`,
 		version, applied,

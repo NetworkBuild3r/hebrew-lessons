@@ -14,6 +14,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 )
 
@@ -51,21 +52,30 @@ func TestHealthzBothHandlers(t *testing.T) {
 	}
 }
 
-func TestDataDirFallback(t *testing.T) {
+func TestDataDirFailsClosed(t *testing.T) {
 	parent := t.TempDir()
 	blocked := filepath.Join(parent, "not-a-directory")
 	if err := os.WriteFile(blocked, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a, err := NewApp(Config{DataDir: blocked})
-	if err != nil {
+	if _, err := NewApp(Config{DataDir: blocked}); err == nil {
+		t.Fatal("expected DATA_DIR error")
+	}
+	missing := filepath.Join(parent, "missing")
+	if _, err := NewApp(Config{DataDir: missing}); err == nil {
+		t.Fatal("expected missing DATA_DIR error")
+	}
+}
+
+func TestDevCreatesMissingDataDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "missing")
+	a := newTestApp(t, Config{DataDir: dir, Dev: true})
+	if _, err := os.Stat(filepath.Join(dir, "hebrew.sqlite")); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = a.Close() })
-	if a.cfg.DataDir == blocked {
-		t.Fatal("startup used the blocked data dir")
+	if a.cfg.DataDir != dir {
+		t.Fatalf("data dir %q", a.cfg.DataDir)
 	}
-	getHealth(t, a.Web())
 }
 
 func TestHealthzWhenDBPingFails(t *testing.T) {
@@ -133,7 +143,7 @@ func TestReviewUsesConfigClock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lexemeID, err := a.store.InsertLexeme(ctx, "שלום")
+	lexemeID, err := testharness.InsertLexeme(ctx, a.store, "שלום")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,13 +208,6 @@ func newTestApp(t *testing.T, cfg Config) *App {
 	}
 	t.Cleanup(func() { _ = a.Close() })
 	return a
-}
-
-func getHealth(t *testing.T, h http.Handler) struct {
-	OK bool `json:"ok"`
-} {
-	t.Helper()
-	return getHealthRequest(t, h, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 }
 
 func getHealthRequest(t *testing.T, h http.Handler, req *http.Request) struct {

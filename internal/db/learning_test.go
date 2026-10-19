@@ -89,7 +89,7 @@ func TestMigration002AppliesOnTopOf001(t *testing.T) {
 	if err := conn.QueryRowContext(ctx, `SELECT applied_at FROM schema_migrations WHERE version = 2`).Scan(&applied2); err != nil {
 		t.Fatal(err)
 	}
-	if applied2 != when.UTC().Format(time.RFC3339Nano) {
+	if applied2 != FormatTime(when) {
 		t.Fatalf("version 2 applied_at = %s", applied2)
 	}
 
@@ -190,7 +190,7 @@ func TestMigration002AppliesOnTopOf001(t *testing.T) {
 	if err := conn.QueryRowContext(ctx, `SELECT applied_at FROM schema_migrations WHERE version = 2`).Scan(&applied2); err != nil {
 		t.Fatal(err)
 	}
-	if applied2 != when.UTC().Format(time.RFC3339Nano) {
+	if applied2 != FormatTime(when) {
 		t.Fatalf("second migrate rewrote version 2 applied_at to %s", applied2)
 	}
 }
