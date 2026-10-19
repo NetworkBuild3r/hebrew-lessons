@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -27,5 +28,27 @@ func TestLearnerAndAnonymousCannotUpsertLexemes(t *testing.T) {
 	anonBody := readBody(t, anon)
 	if anon.StatusCode != http.StatusUnauthorized || strings.Contains(anonBody, "created") {
 		t.Fatalf("anonymous %d %s", anon.StatusCode, anonBody)
+	}
+}
+
+func TestUpsertLexemesSchema(t *testing.T) {
+	session := connectMCP(t, Handler(Options{AuthToken: testToken, Lexemes: NewMemory()}), testToken)
+	tools, err := session.ListTools(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upsert := tools.Tools[indexOf(tools, "upsert_lexemes")]
+	if upsert.Annotations == nil || upsert.Annotations.ReadOnlyHint || !upsert.Annotations.IdempotentHint {
+		t.Fatalf("upsert_lexemes annotations %#v", upsert.Annotations)
+	}
+	raw, err := json.Marshal(upsert.InputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema := string(raw)
+	for _, piece := range []string{"entries", "text_nfc", "gloss_en", "bare", "translit", "gender", "plural", "verified"} {
+		if !strings.Contains(schema, piece) {
+			t.Fatalf("upsert_lexemes schema missing %s: %s", piece, schema)
+		}
 	}
 }

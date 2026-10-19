@@ -164,20 +164,6 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	if !tools.Tools[indexOf(tools, "put_unit")].Annotations.IdempotentHint {
 		t.Fatal("put_unit is not marked idempotent")
 	}
-	upsert := tools.Tools[indexOf(tools, "upsert_lexemes")]
-	if upsert.Name != "upsert_lexemes" || upsert.Annotations.ReadOnlyHint || !upsert.Annotations.IdempotentHint {
-		t.Fatalf("upsert_lexemes annotations %#v", upsert.Annotations)
-	}
-	raw, err := json.Marshal(upsert.InputSchema)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := string(raw)
-	for _, piece := range []string{"entries", "text_nfc", "gloss_en", "bare", "translit", "gender", "plural", "verified"} {
-		if !strings.Contains(schema, piece) {
-			t.Fatalf("upsert_lexemes schema missing %s: %s", piece, schema)
-		}
-	}
 
 	resources, err := session.ListResources(t.Context(), nil)
 	if err != nil {
