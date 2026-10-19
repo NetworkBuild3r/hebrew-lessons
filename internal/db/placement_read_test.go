@@ -104,7 +104,7 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 	if !place.TakenAt.Equal(finished) || !place.Finished || place.Level != 1 || place.StopReason != "" {
 		t.Fatalf("header = %+v", place)
 	}
-	if place.EstimatedKnownWords != 42 || len(place.BandScores) != 1 || place.BandScores[0].StruggleRate != 0 || place.BandScores[0].Rated != 12 {
+	if place.EstimatedKnownWords != 42 || len(place.BandScores) != 1 || place.BandScores[0].GoodPlusRate != 0 || place.BandScores[0].Rated != 12 {
 		t.Fatalf("scores = %+v", place)
 	}
 	if place.SuggestedStartPosition != 1 {

@@ -2,24 +2,35 @@ package placement
 
 import "time"
 
-// Ratings match the FSRS grades. 1 is Again, 2 Hard, 3 Good, 4 Easy.
+// Ratings stored on a placement answer.
+// 0 is "I don't know this", sent before the flip. It is graded as Again
+// and counted as DontKnow, not as Again.
+// 1 is Again, 2 Hard, 3 Good, 4 Easy.
 const (
-	Again = 1
-	Hard  = 2
-	Good  = 3
-	Easy  = 4
+	DontKnow = 0
+	Again    = 1
+	Hard     = 2
+	Good     = 3
+	Easy     = 4
 )
 
 const (
 	// bands is the count of frequency bands, 0 through 4.
 	bands = 5
-	// stopAt is how many ratings a band needs before the struggle rule can fire.
-	stopAt = 10
-	// cardCap is the most cards one run rates.
-	cardCap = 100
+	// BlockSize is how many real words one band deals before the stop rule.
+	BlockSize = 20
+	// StopGoodPlusMin is the Good-or-Easy share a finished block must reach.
+	// Below this, the run stops and higher bands are not dealt. Exactly this
+	// share does not stop.
+	StopGoodPlusMin = 0.50
+	// MaxCards is the most cards one run rates.
+	MaxCards = 100
+	// MaxDuration is the longest a run may deal cards, measured with clock.Clock.
+	MaxDuration = 10 * time.Minute
 
 	stopBand      = "band_stop"
-	stopCap       = "cap"
+	stopCards     = "cap_cards"
+	stopTime      = "cap_time"
 	stopExhausted = "exhausted"
 )
 
@@ -38,7 +49,8 @@ type Card struct {
 }
 
 // BandScore is one frequency band on a run.
-// StruggleRate is Again / Rated. Hard does not count. It is 0 when Rated is 0.
+// GoodPlusRate is (Good + Easy) / Rated. It is 0 when Rated is 0.
+// DontKnow counts "I don't know this" answers. Those are not Again.
 type BandScore struct {
 	Band         int     `json:"band"`
 	Rated        int     `json:"rated"`
@@ -46,7 +58,8 @@ type BandScore struct {
 	Hard         int     `json:"hard"`
 	Good         int     `json:"good"`
 	Easy         int     `json:"easy"`
-	StruggleRate float64 `json:"struggle_rate"`
+	DontKnow     int     `json:"dont_know"`
+	GoodPlusRate float64 `json:"good_plus_rate"`
 }
 
 // BandTally is one band's ratings passed to Score.
@@ -58,15 +71,14 @@ type BandTally struct {
 }
 
 // Result is one placement run.
-// Level is the highest band that was fully rated without tripping the
-// struggle rule, or −1 when none was.
-// StopReason is band_stop, cap, exhausted, or empty when the learner
-// finished before any of those.
+// Level is the highest band whose block was fully rated at or above
+// StopGoodPlusMin, or −1 when none was.
+// StopReason is band_stop, cap_cards, cap_time, exhausted, or empty when
+// the run is still in progress or the learner finished it first.
 //
-// EstimatedKnownWords sums, over bands 1–4, (Good + Easy) / Rated times
-// that band's width in the frequency list (500, 500, 1000, 2000), then adds
-// the number of band 0 words rated Good or Easy. A band with no ratings
-// adds nothing.
+// EstimatedKnownWords sums, over bands 1–4, GoodPlusRate times that band's
+// width in the frequency list (500, 500, 1000, 2000), then adds the number
+// of band 0 words rated Good or Easy. A band with no ratings adds nothing.
 // SuggestedStartPosition is the lowest units.position whose newWords are
 // less than 80% covered by the learner's known set. It is one past the
 // highest position when every unit is covered, and 0 when there are no units.

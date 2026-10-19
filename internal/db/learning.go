@@ -38,16 +38,6 @@ type ReviewLog struct {
 	Chosen        string // Pointed NFC of the wrong option. Empty when the learner did not pick one.
 }
 
-// ConfusionCount is how many times one learner missed one key inside a window.
-// Count is derived from the rows. It is not a column.
-// LastAt is the latest miss of that key inside the window.
-type ConfusionCount struct {
-	Kind   string
-	Key    string
-	Count  int
-	LastAt time.Time
-}
-
 func (s *Store) connOrErr() (*sql.DB, error) {
 	if s == nil || s.conn == nil {
 		return nil, errors.New("db: store is closed")
@@ -323,60 +313,6 @@ func (s *Store) InsertConfusionMiss(ctx context.Context, learnerID int64, kind, 
 		return fmt.Errorf("db: insert confusion: %w", err)
 	}
 	return nil
-}
-
-// ConfusionCounts counts misses in the window ending at the store clock, grouped by key.
-// Kind and LastAt come from the latest miss of that key inside the window.
-// The rows are ordered by count, then by the latest miss, then by key.
-func (s *Store) ConfusionCounts(ctx context.Context, userID int64, window time.Duration) ([]ConfusionCount, error) {
-	conn, err := s.connOrErr()
-	if err != nil {
-		return nil, err
-	}
-	if s.clock == nil {
-		return nil, errors.New("db: clock is not configured")
-	}
-	sinceText := FormatTime(s.clock.Now().Add(-window))
-	rows, err := conn.QueryContext(ctx, `
-		SELECT
-			m.key,
-			(
-				SELECT m2.kind
-				FROM confusion_misses AS m2
-				WHERE m2.learner_id = m.learner_id
-				  AND m2.key = m.key
-				  AND m2.at >= ?
-				ORDER BY m2.at DESC, m2.id DESC
-				LIMIT 1
-			),
-			COUNT(*),
-			MAX(m.at)
-		FROM confusion_misses AS m
-		WHERE m.learner_id = ?
-		  AND m.at >= ?
-		GROUP BY m.key
-		ORDER BY COUNT(*) DESC, MAX(m.at) DESC, m.key`, sinceText, userID, sinceText)
-	if err != nil {
-		return nil, fmt.Errorf("db: confusion counts: %w", err)
-	}
-	defer rows.Close()
-	var out []ConfusionCount
-	for rows.Next() {
-		var row ConfusionCount
-		var last string
-		if err := rows.Scan(&row.Key, &row.Kind, &row.Count, &last); err != nil {
-			return nil, fmt.Errorf("db: confusion counts: %w", err)
-		}
-		row.LastAt, err = ParseTime(last)
-		if err != nil {
-			return nil, fmt.Errorf("db: confusion counts: %w", err)
-		}
-		out = append(out, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("db: confusion counts: %w", err)
-	}
-	return out, nil
 }
 
 // InsertUser inserts a user and returns the id.

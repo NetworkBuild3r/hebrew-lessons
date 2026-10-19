@@ -162,10 +162,19 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 	rejectSQL(t, conn, "confusion lexeme", `
 		INSERT INTO confusion_misses (learner_id, kind, key, lexeme_id, at)
 		VALUES (?, 'letter_pair', 'ב/כ', 99999, ?)`, userID, old)
-	rejectSQL(t, conn, "rating", `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'other', 0, ?)`, runID, old)
-	rejectSQL(t, conn, "rating high", `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'other', 5, ?)`, runID, old)
+	if _, err := conn.ExecContext(ctx, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'other', 0, ?)`, runID, old); err != nil {
+		t.Fatal(err)
+	}
+	rejectSQL(t, conn, "rating high", `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'high', 5, ?)`, runID, old)
 	rejectSQL(t, conn, "level", `UPDATE placement_runs SET level = 5 WHERE id = ?`, runID)
 	rejectSQL(t, conn, "stop reason", `UPDATE placement_runs SET stop_reason = 'later' WHERE id = ?`, runID)
+	rejectSQL(t, conn, "old cap", `UPDATE placement_runs SET stop_reason = 'cap' WHERE id = ?`, runID)
+	if _, err := conn.ExecContext(ctx, `UPDATE placement_runs SET stop_reason = 'cap_cards' WHERE id = ?`, runID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, `UPDATE placement_runs SET stop_reason = 'cap_time' WHERE id = ?`, runID); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := conn.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID); err != nil {
 		t.Fatal(err)

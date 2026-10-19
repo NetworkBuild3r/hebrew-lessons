@@ -85,10 +85,12 @@ func (s *Service) Start(ctx context.Context, userID int64) (int64, error) {
 }
 
 // Next returns the next card after the last answered one.
-// done is true when the deck has stopped: a band's Again rate reached 60%
-// after 10 ratings, the run has rated 100 cards, or nothing dealable
-// remains. Hard does not count toward the stop. A word that already has a
-// he_en card is skipped. A finished run returns an error.
+// done is true when the deck has stopped: a finished block's Good-or-Easy
+// share is below StopGoodPlusMin, the run has rated MaxCards, MaxDuration
+// has passed on the clock, or nothing dealable remains. A word that already
+// has a he_en card is skipped. A card already dealt is returned even after
+// the clock runs out, so the learner can still rate it. A finished run
+// returns an error.
 func (s *Service) Next(ctx context.Context, runID int64) (*Card, bool, error) {
 	if err := s.ready(); err != nil {
 		return nil, false, err
@@ -125,7 +127,7 @@ func (s *Service) Next(ctx context.Context, runID int64) (*Card, bool, error) {
 			return nil, false, err
 		}
 	}
-	if ratedCount(rows) >= cardCap {
+	if ratedCount(rows) >= MaxCards || s.timedOut(run) {
 		return nil, true, nil
 	}
 	cat, err := s.loadFixture()
@@ -159,13 +161,22 @@ func (s *Service) Next(ctx context.Context, runID int64) (*Card, bool, error) {
 		if has {
 			continue
 		}
-		if it.Band < 0 || it.Band >= bands || struggling(counts[it.Band]) {
+		if it.Band < 0 || it.Band >= bands {
 			return nil, true, nil
 		}
-		for band := 0; band < it.Band; band++ {
-			if struggling(counts[band]) {
+		if counts[it.Band].rated >= BlockSize {
+			if belowGoodPlus(counts[it.Band]) {
 				return nil, true, nil
 			}
+			continue
+		}
+		for band := 0; band < it.Band; band++ {
+			if belowGoodPlus(counts[band]) {
+				return nil, true, nil
+			}
+		}
+		if ratedCount(rows) >= MaxCards || s.timedOut(run) {
+			return nil, true, nil
 		}
 		if err := s.store.ShowPlacementCard(ctx, runID, it.ID, s.clock.Now()); err != nil {
 			return nil, false, err
@@ -180,14 +191,15 @@ func (s *Service) Next(ctx context.Context, runID int64) (*Card, bool, error) {
 }
 
 // Rate stores the grade and makes it the word's first he_en review.
-// rating is 1 Again, 2 Hard, 3 Good, or 4 Easy.
+// rating is 0 "I don't know this", 1 Again, 2 Hard, 3 Good, or 4 Easy.
+// 0 is stored as DontKnow and graded as Again.
 // A word that already has a card is not graded again.
 func (s *Service) Rate(ctx context.Context, runID int64, itemID string, rating int) error {
 	if err := s.ready(); err != nil {
 		return err
 	}
-	if rating < Again || rating > Easy {
-		return fmt.Errorf("placement: rating %d is outside 1..4", rating)
+	if rating < DontKnow || rating > Easy {
+		return fmt.Errorf("placement: rating %d is outside 0..4", rating)
 	}
 	if itemID == "" {
 		return errors.New("placement: item id is empty")
@@ -230,10 +242,18 @@ func (s *Service) Rate(ctx context.Context, runID int64, itemID string, rating i
 	if err != nil {
 		return err
 	}
-	if err := s.review.Grade(ctx, cardID, fsrs.Rating(rating), false); err != nil {
+	grade := fsrs.Rating(rating)
+	if rating == DontKnow {
+		grade = fsrs.Again
+	}
+	if err := s.review.Grade(ctx, cardID, grade, false); err != nil {
 		return err
 	}
 	return s.store.RatePlacementAnswer(ctx, runID, itemID, rating, lexemeID, now)
+}
+
+func (s *Service) timedOut(run db.PlacementRun) bool {
+	return !s.clock.Now().Before(run.StartedAt.Add(MaxDuration))
 }
 
 // Finish scores the run and marks it finished.
@@ -282,7 +302,15 @@ func (s *Service) Finish(ctx context.Context, runID int64) (Result, error) {
 			tallies[it.Band].Dealable++
 		}
 	}
+	for band := range tallies {
+		if tallies[band].Dealable > BlockSize {
+			tallies[band].Dealable = BlockSize
+		}
+	}
 	result := Score(tallies)
+	if result.StopReason == "" && s.timedOut(run) {
+		result.StopReason = stopTime
+	}
 	now := s.clock.Now()
 	result.RunID = run.ID
 	result.UserID = run.UserID

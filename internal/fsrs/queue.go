@@ -21,7 +21,7 @@ func (r *Review) Queue(ctx context.Context, userID int64) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	counts, err := r.store.ConfusionCounts(ctx, userID, ConfusionWindow)
+	stats, err := r.store.StruggleStats(ctx, userID, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func (r *Review) Queue(ctx context.Context, userID int64) (*Session, error) {
 		})
 	}
 	var letters, patterns []Item
-	for _, count := range counts {
+	for _, count := range stats.Confusions {
 		if count.Count < MinMissesForDrill {
 			continue
 		}
@@ -44,8 +44,12 @@ func (r *Review) Queue(ctx context.Context, userID int64) (*Session, error) {
 		if !ok {
 			continue
 		}
+		key := count.A
+		if count.B != "" {
+			key = count.A + "/" + count.B
+		}
 		for i := 0; i < DrillItems; i++ {
-			item := Item{Kind: kind, Key: count.Key, Index: i}
+			item := Item{Kind: kind, Key: key, Index: i}
 			switch kind {
 			case ItemLetter:
 				letters = append(letters, item)

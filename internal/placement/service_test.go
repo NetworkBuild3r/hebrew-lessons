@@ -22,11 +22,16 @@ type fixedClock struct{ t time.Time }
 
 func (c fixedClock) Now() time.Time { return c.t }
 
-func TestStruggleStopOnARun(t *testing.T) {
-	if stopAt != 10 || cardCap != 100 {
-		t.Fatalf("stopAt=%d cardCap=%d", stopAt, cardCap)
+type movingClock struct{ t *time.Time }
+
+func (c movingClock) Now() time.Time { return *c.t }
+
+func TestGoodPlusStop(t *testing.T) {
+	if BlockSize != 20 || StopGoodPlusMin != 0.50 || MaxCards != 100 || MaxDuration != 10*time.Minute {
+		t.Fatalf("BlockSize=%d min=%v cards=%d duration=%s", BlockSize, StopGoodPlusMin, MaxCards, MaxDuration)
 	}
-	svc, store := openSvc(t, fixedClock{when})
+	now := when
+	svc, store := openSvc(t, movingClock{&now})
 	ctx := context.Background()
 	userID := insertLearner(t, store, "stop@example.com", "sub-stop")
 	runID := start(t, svc, userID)
@@ -41,21 +46,24 @@ func TestStruggleStopOnARun(t *testing.T) {
 	if order[0].Band != 0 {
 		t.Fatalf("first card band %d", order[0].Band)
 	}
-	ratePrefix(t, svc, runID, 10, func(i int) int {
-		if i < 6 {
-			return Again
+	ratePrefix(t, svc, runID, BlockSize, func(i int) int {
+		if i < 11 {
+			return DontKnow
 		}
 		return Good
 	})
 	if card, done, err := svc.Next(ctx, runID); err != nil || !done || card != nil {
-		t.Fatalf("after 6/10: card=%v done=%v err=%v", card, done, err)
+		t.Fatalf("after 11 dont-know: card=%v done=%v err=%v", card, done, err)
 	}
+	// A clock past the cap does not replace a band stop.
+	now = when.Add(MaxDuration)
 	result, err := svc.Finish(ctx, runID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.StopReason != stopBand || result.Level != -1 || result.CardsRated != 10 || result.Bands[0].StruggleRate != 0.6 {
-		t.Fatalf("stop result %+v band0=%+v", result, result.Bands[0])
+	band := result.Bands[0]
+	if result.StopReason != stopBand || result.Level != -1 || result.CardsRated != BlockSize || band.DontKnow != 11 || band.Again != 0 || band.Good != 9 || band.GoodPlusRate != 9.0/20 {
+		t.Fatalf("stop result %+v band0=%+v", result, band)
 	}
 	stored, err := store.GetPlacementRun(ctx, runID)
 	if err != nil || stored.StopReason != stopBand {
@@ -65,32 +73,30 @@ func TestStruggleStopOnARun(t *testing.T) {
 	again, _ := openSvc(t, fixedClock{when})
 	againUser := insertLearner(t, again.store, "below@example.com", "sub-below")
 	againRun := start(t, again, againUser)
-	ratePrefix(t, again, againRun, 10, func(i int) int {
-		if i < 5 {
-			return Again
+	ratePrefix(t, again, againRun, BlockSize, func(i int) int {
+		if i < 10 {
+			return Good
 		}
-		return Good
+		return DontKnow
 	})
 	card, done, err := again.Next(ctx, againRun)
 	if err != nil || done || card == nil {
-		t.Fatalf("after 5/10: card=%v done=%v err=%v", card, done, err)
+		t.Fatalf("after 10/20: card=%v done=%v err=%v", card, done, err)
 	}
-	if mustFind(t, again, card.ID).Band != 0 {
-		t.Fatalf("11th card band %d", mustFind(t, again, card.ID).Band)
+	if mustFind(t, again, card.ID).Band != 1 {
+		t.Fatalf("21st card band %d", mustFind(t, again, card.ID).Band)
 	}
 
-	// Ten Hards stay under the Again rate, so the band continues.
 	hardSvc, _ := openSvc(t, fixedClock{when})
 	hardUser := insertLearner(t, hardSvc.store, "hard@example.com", "sub-hard")
 	hardRun := start(t, hardSvc, hardUser)
-	ratePrefix(t, hardSvc, hardRun, 10, func(int) int { return Hard })
-	card, done, err = hardSvc.Next(ctx, hardRun)
-	if err != nil || done || card == nil || mustFind(t, hardSvc, card.ID).Band != 0 {
-		t.Fatalf("after 10 hard: card=%v done=%v err=%v", card, done, err)
+	ratePrefix(t, hardSvc, hardRun, BlockSize, func(int) int { return Hard })
+	if card, done, err := hardSvc.Next(ctx, hardRun); err != nil || !done || card != nil {
+		t.Fatalf("after a block of hard: card=%v done=%v err=%v", card, done, err)
 	}
 }
 
-func TestCardCap(t *testing.T) {
+func TestFullDeckExhaustsAtMaxCards(t *testing.T) {
 	svc, store := openSvc(t, fixedClock{when})
 	svc.fixture = many(25)
 	ctx := context.Background()
@@ -106,26 +112,118 @@ func TestCardCap(t *testing.T) {
 			break
 		}
 		dealt++
-		if dealt > cardCap {
+		if dealt > MaxCards {
 			t.Fatalf("dealt %d", dealt)
 		}
 		if err := svc.Rate(ctx, runID, card.ID, Good); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if dealt != cardCap {
-		t.Fatalf("dealt %d, want %d", dealt, cardCap)
+	if dealt != MaxCards {
+		t.Fatalf("dealt %d, want %d", dealt, MaxCards)
 	}
 	result, err := svc.Finish(ctx, runID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.StopReason != stopCap || result.Level != 3 || result.CardsRated != cardCap {
-		t.Fatalf("cap result stop=%s level=%d rated=%d", result.StopReason, result.Level, result.CardsRated)
+	if result.StopReason != stopExhausted || result.Level != 4 || result.CardsRated != MaxCards {
+		t.Fatalf("full deck stop=%s level=%d rated=%d", result.StopReason, result.Level, result.CardsRated)
 	}
 	n, err := store.CountCards(ctx, userID)
-	if err != nil || n != cardCap {
+	if err != nil || n != MaxCards {
 		t.Fatalf("cards = %d %v", n, err)
+	}
+}
+
+func TestTimeCap(t *testing.T) {
+	now := when
+	svc, store := openSvc(t, movingClock{&now})
+	svc.fixture = manyBand(0, 5)
+	ctx := context.Background()
+	userID := insertLearner(t, store, "time@example.com", "sub-time")
+	runID := start(t, svc, userID)
+	first := rateNext(t, svc, runID, Good)
+
+	now = when.Add(MaxDuration - time.Nanosecond)
+	card, done, err := svc.Next(ctx, runID)
+	if err != nil || done || card == nil || card.ID == first.ID {
+		t.Fatalf("before the cap: card=%v done=%v err=%v", card, done, err)
+	}
+	open := *card
+	now = when.Add(MaxDuration)
+	card, done, err = svc.Next(ctx, runID)
+	if err != nil || done || card == nil || card.ID != open.ID {
+		t.Fatalf("open card after the cap: card=%v done=%v err=%v", card, done, err)
+	}
+	if err := svc.Rate(ctx, runID, card.ID, Good); err != nil {
+		t.Fatal(err)
+	}
+	if card, done, err = svc.Next(ctx, runID); err != nil || !done || card != nil {
+		t.Fatalf("after the cap: card=%v done=%v err=%v", card, done, err)
+	}
+	result, err := svc.Finish(ctx, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StopReason != stopTime || result.Level != -1 || result.CardsRated != 2 {
+		t.Fatalf("time result stop=%s level=%d rated=%d", result.StopReason, result.Level, result.CardsRated)
+	}
+	now = now.Add(time.Hour)
+	again, err := svc.Finish(ctx, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.StopReason != stopTime || again.CardsRated != 2 {
+		t.Fatalf("second finish %+v", again)
+	}
+}
+
+func TestDontKnowGradesAsAgain(t *testing.T) {
+	svc, store := openSvc(t, fixedClock{when})
+	const text = "לֹא"
+	svc.fixture = []fixtureItem{real("dk", text, 0)}
+	ctx := context.Background()
+	userID := insertLearner(t, store, "dont@example.com", "sub-dont")
+	runID := start(t, svc, userID)
+	card := rateNext(t, svc, runID, DontKnow)
+
+	id, _, _, _, ok, err := store.LexemeByText(ctx, text)
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
+	cardID, has, err := store.CardID(ctx, userID, id, fsrs.DirHeEn)
+	if err != nil || !has {
+		t.Fatal(err)
+	}
+	logs, err := store.ReviewLogs(ctx, cardID)
+	if err != nil || len(logs) != 1 || logs[0].Rating != int(fsrs.Again) {
+		t.Fatalf("logs %+v %v", logs, err)
+	}
+	stored, err := store.GetCard(ctx, cardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	param := gofsrs.DefaultParam()
+	param.EnableFuzz = false
+	first := gofsrs.NewFSRS(param).Next(gofsrs.NewCard(), when, gofsrs.Again)
+	if stored.Stability != first.Card.Stability {
+		t.Fatalf("stability %v, want %v", stored.Stability, first.Card.Stability)
+	}
+	rows, err := store.ListPlacementAnswers(ctx, runID)
+	if err != nil || len(rows) != 1 || !rows[0].Rating.Valid || rows[0].Rating.Int64 != DontKnow || rows[0].ItemID != card.ID {
+		t.Fatalf("answers %+v %v", rows, err)
+	}
+	learning, err := store.PlacementLearningLexemes(ctx, userID)
+	if err != nil || len(learning) != 1 || learning[0] != text {
+		t.Fatalf("learning %v %v", learning, err)
+	}
+	known, err := store.PlacementKnownLexemes(ctx, userID)
+	if err != nil || len(known) != 0 {
+		t.Fatalf("known %v %v", known, err)
+	}
+	ids, err := store.KnownLexemeIDs(ctx, userID)
+	if err != nil || slices.Contains(ids, id) {
+		t.Fatalf("known ids %v %v", ids, err)
 	}
 }
 
@@ -376,8 +474,8 @@ func TestAudioURL(t *testing.T) {
 	if err := svc.Rate(ctx, runID, "nope", Good); err == nil {
 		t.Fatal("wrong card was rated")
 	}
-	if err := svc.Rate(ctx, runID, card.ID, 0); err == nil {
-		t.Fatal("rating 0 was accepted")
+	if err := svc.Rate(ctx, runID, card.ID, 5); err == nil {
+		t.Fatal("rating 5 was accepted")
 	}
 	want := ""
 	if card.TextNFC == text {

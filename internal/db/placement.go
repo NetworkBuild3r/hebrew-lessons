@@ -27,7 +27,7 @@ type PlacementRun struct {
 
 // PlacementAnswer is one dealt card.
 // Rating is invalid while the card is face up and unanswered.
-// 1 is Again, 2 Hard, 3 Good, 4 Easy.
+// 0 is "I don't know this", 1 is Again, 2 Hard, 3 Good, 4 Easy.
 type PlacementAnswer struct {
 	RunID      int64
 	ItemID     string
@@ -38,7 +38,8 @@ type PlacementAnswer struct {
 
 // BandScore is one frequency band stored in placement_runs.result.
 // The JSON tags match placement.BandScore.
-// StruggleRate is (Again + Hard) / Rated, or 0 when Rated is 0.
+// GoodPlusRate is (Good + Easy) / Rated, or 0 when Rated is 0.
+// DontKnow is "I don't know this". It is graded as Again and is not counted in Again.
 type BandScore struct {
 	Band         int     `json:"band"`
 	Rated        int     `json:"rated"`
@@ -46,7 +47,8 @@ type BandScore struct {
 	Hard         int     `json:"hard"`
 	Good         int     `json:"good"`
 	Easy         int     `json:"easy"`
-	StruggleRate float64 `json:"struggle_rate"`
+	DontKnow     int     `json:"dont_know"`
+	GoodPlusRate float64 `json:"good_plus_rate"`
 }
 
 // Placement is the newest run for one learner, finished or not.
@@ -561,9 +563,9 @@ func (s *Store) PlacementKnownLexemes(ctx context.Context, userID int64) ([]stri
 }
 
 // PlacementLearningLexemes returns the pointed NFC text of the newest run's
-// answers rated Again or Hard, sorted by that text.
+// answers rated "I don't know", Again, or Hard, sorted by that text.
 func (s *Store) PlacementLearningLexemes(ctx context.Context, userID int64) ([]string, error) {
-	return s.placementLexemeTexts(ctx, userID, Again, Hard)
+	return s.placementLexemeTexts(ctx, userID, 0, Again, Hard)
 }
 
 // Again, Hard, Good, and Easy match the FSRS grades stored on placement answers.
@@ -579,6 +581,13 @@ func (s *Store) placementLexemeTexts(ctx context.Context, userID int64, ratings 
 	if err != nil {
 		return nil, err
 	}
+	marks := make([]string, len(ratings))
+	args := make([]any, 0, 1+len(ratings))
+	args = append(args, userID)
+	for i, rating := range ratings {
+		marks[i] = "?"
+		args = append(args, rating)
+	}
 	rows, err := conn.QueryContext(ctx, `
 		SELECT l.text_nfc
 		FROM placement_answers AS a
@@ -586,8 +595,8 @@ func (s *Store) placementLexemeTexts(ctx context.Context, userID int64, ratings 
 		WHERE a.run_id = (
 		    SELECT id FROM placement_runs WHERE user_id = ? ORDER BY id DESC LIMIT 1
 		)
-		  AND a.rating IN (?, ?)
-		ORDER BY l.text_nfc`, userID, ratings[0], ratings[1])
+		  AND a.rating IN (`+strings.Join(marks, ", ")+`)
+		ORDER BY l.text_nfc`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("db: placement lexemes: %w", err)
 	}

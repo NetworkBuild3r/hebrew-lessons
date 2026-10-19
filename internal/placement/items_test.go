@@ -14,8 +14,8 @@ func TestFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cat) < 80 {
-		t.Fatalf("items = %d, want at least 80", len(cat))
+	if len(cat) < 5*BlockSize {
+		t.Fatalf("items = %d, want at least %d", len(cat), 5*BlockSize)
 	}
 	counts := map[int]int{}
 	ids := map[string]struct{}{}
@@ -65,11 +65,8 @@ func TestFixture(t *testing.T) {
 		bare[key] = it.ID
 	}
 	for band := 0; band <= 4; band++ {
-		if counts[band] < stopAt {
-			t.Errorf("band %d = %d, want at least %d", band, counts[band], stopAt)
-		}
-		if counts[band] < 16 {
-			t.Errorf("band %d = %d, want about 16", band, counts[band])
+		if counts[band] < BlockSize {
+			t.Errorf("band %d = %d, want at least %d", band, counts[band], BlockSize)
 		}
 	}
 }

@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"golang.org/x/text/unicode/norm"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 )
 
 const (
@@ -163,12 +165,12 @@ func run() error {
 	}
 
 	for band := 0; band <= 4; band++ {
-		if counts[band] < 16 {
-			return fmt.Errorf("band %d has %d items, want at least 16", band, counts[band])
+		if counts[band] < placement.BlockSize {
+			return fmt.Errorf("band %d has %d items, want at least %d", band, counts[band], placement.BlockSize)
 		}
 	}
-	if len(out) < 80 {
-		return fmt.Errorf("items = %d, want at least 80", len(out))
+	if len(out) < 5*placement.BlockSize {
+		return fmt.Errorf("items = %d, want at least %d", len(out), 5*placement.BlockSize)
 	}
 
 	var buf bytes.Buffer

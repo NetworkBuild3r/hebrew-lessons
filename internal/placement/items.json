@@ -176,6 +176,50 @@
     "source": "tutor"
   },
   {
+    "id": "ima",
+    "text_nfc": "אִמָּא",
+    "band": 0,
+    "gloss_en": "mother",
+    "translit": "ima",
+    "gender": "f",
+    "pos": "noun",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
+    "id": "aba",
+    "text_nfc": "אַבָּא",
+    "band": 0,
+    "gloss_en": "father",
+    "translit": "aba",
+    "gender": "m",
+    "pos": "noun",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
+    "id": "chalon",
+    "text_nfc": "חַלּוֹן",
+    "band": 0,
+    "gloss_en": "window",
+    "translit": "chalon",
+    "gender": "m",
+    "pos": "noun",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
+    "id": "kise",
+    "text_nfc": "כִּסֵּא",
+    "band": 0,
+    "gloss_en": "chair",
+    "translit": "kise",
+    "gender": "m",
+    "pos": "noun",
+    "verified": false,
+    "source": "tutor"
+  },
+  {
     "id": "nachon",
     "text_nfc": "נָכוֹן",
     "band": 1,
@@ -347,6 +391,50 @@
     "gloss_en": "woman",
     "translit": "isha",
     "gender": "f",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "achshav",
+    "text_nfc": "עַכְשָׁיו",
+    "band": 1,
+    "gloss_en": "now",
+    "translit": "achshav",
+    "gender": "",
+    "pos": "adverb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "tamid",
+    "text_nfc": "תָּמִיד",
+    "band": 1,
+    "gloss_en": "always",
+    "translit": "tamid",
+    "gender": "",
+    "pos": "adverb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "kesef",
+    "text_nfc": "כֶּסֶף",
+    "band": 1,
+    "gloss_en": "money",
+    "translit": "kesef",
+    "gender": "m",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "ish",
+    "text_nfc": "אִישׁ",
+    "band": 1,
+    "gloss_en": "man",
+    "translit": "ish",
+    "gender": "m",
     "pos": "noun",
     "verified": false,
     "source": "freq"
@@ -528,6 +616,50 @@
     "source": "freq"
   },
   {
+    "id": "yad",
+    "text_nfc": "יָד",
+    "band": 2,
+    "gloss_en": "hand",
+    "translit": "yad",
+    "gender": "f",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "yam",
+    "text_nfc": "יָם",
+    "band": 2,
+    "gloss_en": "sea",
+    "translit": "yam",
+    "gender": "m",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "telefon",
+    "text_nfc": "טֵלֵפוֹן",
+    "band": 2,
+    "gloss_en": "phone",
+    "translit": "telefon",
+    "gender": "m",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "lilmod",
+    "text_nfc": "לִלְמוֹד",
+    "band": 2,
+    "gloss_en": "to learn",
+    "translit": "lilmod",
+    "gender": "",
+    "pos": "verb",
+    "verified": false,
+    "source": "freq"
+  },
+  {
     "id": "laamod",
     "text_nfc": "לַעֲמוֹד",
     "band": 3,
@@ -704,6 +836,50 @@
     "source": "freq"
   },
   {
+    "id": "ayin",
+    "text_nfc": "עַיִן",
+    "band": 3,
+    "gloss_en": "eye",
+    "translit": "ayin",
+    "gender": "f",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "regel",
+    "text_nfc": "רֶגֶל",
+    "band": 3,
+    "gloss_en": "leg",
+    "translit": "regel",
+    "gender": "f",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "cham",
+    "text_nfc": "חַם",
+    "band": 3,
+    "gloss_en": "hot",
+    "translit": "cham",
+    "gender": "m",
+    "pos": "adjective",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "shachor",
+    "text_nfc": "שָׁחוֹר",
+    "band": 3,
+    "gloss_en": "black",
+    "translit": "shachor",
+    "gender": "m",
+    "pos": "adjective",
+    "verified": false,
+    "source": "freq"
+  },
+  {
     "id": "sachkan",
     "text_nfc": "שַׂחְקָן",
     "band": 4,
@@ -874,6 +1050,50 @@
     "band": 4,
     "gloss_en": "bread",
     "translit": "lechem",
+    "gender": "m",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "kova",
+    "text_nfc": "כּוֹבַע",
+    "band": 4,
+    "gloss_en": "hat",
+    "translit": "kova",
+    "gender": "m",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "machshev",
+    "text_nfc": "מַחְשֵׁב",
+    "band": 4,
+    "gloss_en": "computer",
+    "translit": "machshev",
+    "gender": "m",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "matos",
+    "text_nfc": "מָטוֹס",
+    "band": 4,
+    "gloss_en": "airplane",
+    "translit": "matos",
+    "gender": "m",
+    "pos": "noun",
+    "verified": false,
+    "source": "freq"
+  },
+  {
+    "id": "gan",
+    "text_nfc": "גַּן",
+    "band": 4,
+    "gloss_en": "garden",
+    "translit": "gan",
     "gender": "m",
     "pos": "noun",
     "verified": false,

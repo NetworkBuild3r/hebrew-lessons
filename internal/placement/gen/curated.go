@@ -40,6 +40,10 @@ func curatedItems() []rawItem {
 		tutor("toda", "תּוֹדָה", "thanks", "noun", "toda", "f"),
 		tutor("sefer", "סֵפֶר", "book", "noun", "sefer", "m"),
 		tutor("bayit", "בַּיִת", "house", "noun", "bayit", "m"),
+		tutor("ima", "אִמָּא", "mother", "noun", "ima", "f"),
+		tutor("aba", "אַבָּא", "father", "noun", "aba", "m"),
+		tutor("chalon", "חַלּוֹן", "window", "noun", "chalon", "m"),
+		tutor("kise", "כִּסֵּא", "chair", "noun", "kise", "m"),
 
 		freq("nachon", "נָכוֹן", "correct", "adjective", "nachon", "m", 1, 52, "נכון"),
 		freq("laasot", "לַעֲשׂוֹת", "to do", "verb", "laasot", "", 1, 53, "לעשות"),
@@ -57,6 +61,10 @@ func curatedItems() []rawItem {
 		freq("yeled", "יֶלֶד", "boy", "noun", "yeled", "m", 1, 273, "ילד"),
 		freq("yafa", "יָפֶה", "beautiful", "adjective", "yafe", "m", 1, 235, "יפה"),
 		freq("isha", "אִישָּׁה", "woman", "noun", "isha", "f", 1, 409, "אישה"),
+		freq("achshav", "עַכְשָׁיו", "now", "adverb", "achshav", "", 1, 41, "עכשיו"),
+		freq("tamid", "תָּמִיד", "always", "adverb", "tamid", "", 1, 147, "תמיד"),
+		freq("kesef", "כֶּסֶף", "money", "noun", "kesef", "m", 1, 269, "כסף"),
+		freq("ish", "אִישׁ", "man", "noun", "ish", "m", 1, 348, "איש"),
 
 		freq("leechol", "לֶאֱכוֹל", "to eat", "verb", "leechol", "", 2, 512, "לאכול"),
 		freq("lishmor", "לִשְׁמוֹר", "to keep", "verb", "lishmor", "", 2, 516, "לשמור"),
@@ -74,6 +82,10 @@ func curatedItems() []rawItem {
 		freq("mishpacha", "מִשְׁפָּחָה", "family", "noun", "mishpacha", "f", 2, 661, "משפחה"),
 		freq("shavua", "שָׁבוּעַ", "week", "noun", "shavua", "m", 2, 759, "שבוע"),
 		freq("ach", "אָח", "brother", "noun", "ach", "m", 2, 926, "אח"),
+		freq("yad", "יָד", "hand", "noun", "yad", "f", 2, 993, "יד"),
+		freq("yam", "יָם", "sea", "noun", "yam", "m", 2, 774, "ים"),
+		freq("telefon", "טֵלֵפוֹן", "phone", "noun", "telefon", "m", 2, 952, "טלפון"),
+		freq("lilmod", "לִלְמוֹד", "to learn", "verb", "lilmod", "", 2, 863, "ללמוד"),
 
 		freq("laamod", "לַעֲמוֹד", "to stand", "verb", "laamod", "", 3, 1007, "לעמוד"),
 		freq("tsair", "צָעִיר", "young", "adjective", "tsair", "m", 3, 1012, "צעיר"),
@@ -91,6 +103,10 @@ func curatedItems() []rawItem {
 		freq("rofe", "רוֹפֵא", "doctor", "noun", "rofe", "m", 3, 1091, "רופא"),
 		freq("achot", "אָחוֹת", "sister", "noun", "achot", "f", 3, 1594, "אחות"),
 		freq("rechov", "רְחוֹב", "street", "noun", "rechov", "m", 3, 1945, "רחוב"),
+		freq("ayin", "עַיִן", "eye", "noun", "ayin", "f", 3, 1311, "עין"),
+		freq("regel", "רֶגֶל", "leg", "noun", "regel", "f", 3, 1709, "רגל"),
+		freq("cham", "חַם", "hot", "adjective", "cham", "m", 3, 1051, "חם"),
+		freq("shachor", "שָׁחוֹר", "black", "adjective", "shachor", "m", 3, 1205, "שחור"),
 
 		freq("sachkan", "שַׂחְקָן", "actor", "noun", "sachkan", "m", 4, 2013, "שחקן"),
 		freq("linhog", "לִנְהוֹג", "to drive", "verb", "linhog", "", 4, 2030, "לנהוג"),
@@ -108,5 +124,9 @@ func curatedItems() []rawItem {
 		freq("chatul", "חָתוּל", "cat", "noun", "chatul", "m", 4, 2748, "חתול"),
 		freq("chalav", "חָלָב", "milk", "noun", "chalav", "m", 4, 2575, "חלב"),
 		freq("lechem", "לֶחֶם", "bread", "noun", "lechem", "m", 4, 3423, "לחם"),
+		freq("kova", "כּוֹבַע", "hat", "noun", "kova", "m", 4, 3635, "כובע"),
+		freq("machshev", "מַחְשֵׁב", "computer", "noun", "machshev", "m", 4, 2564, "מחשב"),
+		freq("matos", "מָטוֹס", "airplane", "noun", "matos", "m", 4, 2313, "מטוס"),
+		freq("gan", "גַּן", "garden", "noun", "gan", "m", 4, 2750, "גן"),
 	}
 }

@@ -9,7 +9,7 @@ CREATE TABLE placement_runs (
     started_at TEXT NOT NULL, -- UTC time the run started, from the process clock.
     finished_at TEXT, -- UTC time the run was scored. Null while it is in progress.
     level INTEGER CHECK (level IS NULL OR level BETWEEN -1 AND 4), -- Highest band completed without tripping the struggle rule. -1 when a finished run completed none. Null until the run is finished.
-    stop_reason TEXT CHECK (stop_reason IS NULL OR stop_reason IN ('band_stop', 'cap', 'exhausted')), -- Why the deck stopped. Null when the learner finished before a stop, and while the run is in progress.
+    stop_reason TEXT CHECK (stop_reason IS NULL OR stop_reason IN ('band_stop', 'cap_cards', 'cap_time', 'exhausted')), -- Why the deck stopped. Null when the learner finished before a stop, and while the run is in progress.
     result TEXT CHECK (result IS NULL OR json_valid(result)), -- JSON object with per-band counts and the known-word estimate. Null until the run is finished.
     seed INTEGER NOT NULL -- Shuffle seed. The same seed always deals the same order inside each band.
 );
@@ -22,7 +22,7 @@ CREATE INDEX placement_runs_user_finished ON placement_runs (user_id, finished_a
 CREATE TABLE placement_answers (
     run_id INTEGER NOT NULL REFERENCES placement_runs (id) ON DELETE CASCADE, -- Run. Deleting the run deletes its answers.
     item_id TEXT NOT NULL, -- Fixture id. Not a lexeme id.
-    rating INTEGER CHECK (rating IS NULL OR rating BETWEEN 1 AND 4), -- 1 Again, 2 Hard, 3 Good, 4 Easy. Null until the learner rates the card.
+    rating INTEGER CHECK (rating IS NULL OR rating BETWEEN 0 AND 4), -- 0 I don't know, 1 Again, 2 Hard, 3 Good, 4 Easy. Null until the learner rates the card. 0 is graded as Again.
     shown_at TEXT NOT NULL, -- UTC time the card was dealt, from the process clock.
     answered_at TEXT, -- UTC time the rating was stored. Null while the card is unanswered.
     lexeme_id INTEGER REFERENCES lexemes (id), -- Word this rating graded. Null until the card is rated.
