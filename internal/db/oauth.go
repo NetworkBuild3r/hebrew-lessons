@@ -197,12 +197,68 @@ func (s *Store) ConsumeOAuthRequest(ctx context.Context, id string, now time.Tim
 	return req, nil
 }
 
-// InsertOAuthCode writes one authorization code. Hash is the digest.
+// InsertOAuthCode writes one authorization code and marks the client issued,
+// in one transaction. Hash is the digest. A failed mark does not leave the code.
 func (s *Store) InsertOAuthCode(ctx context.Context, c OAuthCode) error {
 	if err := s.ready(); err != nil {
 		return err
 	}
-	_, err := s.exec(ctx, `
+	tx, err := s.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("db: begin oauth code: %w", err)
+	}
+	defer tx.Rollback()
+	if err := insertOAuthCodeTx(ctx, tx, c); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("db: commit oauth code: %w", err)
+	}
+	return nil
+}
+
+// IssueOAuthCode consumes the authorization request and inserts the code
+// in one transaction. The client is marked issued in that same transaction,
+// so a sweep cannot delete a never-issued client between dropping the
+// request and writing the code. The code's client id is the request's client.
+// ErrNotFound means the request is missing or expired. An expired row is deleted.
+func (s *Store) IssueOAuthCode(ctx context.Context, requestID string, now time.Time, c OAuthCode) (OAuthRequest, error) {
+	if err := s.ready(); err != nil {
+		return OAuthRequest{}, err
+	}
+	tx, err := s.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return OAuthRequest{}, fmt.Errorf("db: begin oauth code: %w", err)
+	}
+	defer tx.Rollback()
+	row := tx.QueryRowContext(ctx, `
+		SELECT id, client_id, redirect_uri, state, code_challenge, scope, resource, expires_at
+		FROM oauth_requests WHERE id = ?`, requestID)
+	req, err := scanOAuthRequest(row)
+	if err != nil {
+		return OAuthRequest{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM oauth_requests WHERE id = ?`, requestID); err != nil {
+		return OAuthRequest{}, fmt.Errorf("db: delete oauth request: %w", err)
+	}
+	if !req.ExpiresAt.After(now) {
+		if err := tx.Commit(); err != nil {
+			return OAuthRequest{}, fmt.Errorf("db: commit oauth request: %w", err)
+		}
+		return OAuthRequest{}, ErrNotFound
+	}
+	c.ClientID = req.ClientID
+	if err := insertOAuthCodeTx(ctx, tx, c); err != nil {
+		return OAuthRequest{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return OAuthRequest{}, fmt.Errorf("db: commit oauth code: %w", err)
+	}
+	return req, nil
+}
+
+func insertOAuthCodeTx(ctx context.Context, tx *sql.Tx, c OAuthCode) error {
+	_, err := tx.ExecContext(ctx, `
 		INSERT INTO oauth_codes (
 			code_hash, client_id, user_id, redirect_uri, code_challenge, scope, resource, expires_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -212,10 +268,7 @@ func (s *Store) InsertOAuthCode(ctx context.Context, c OAuthCode) error {
 	if err != nil {
 		return fmt.Errorf("db: insert oauth code: %w", err)
 	}
-	if err := markOAuthClientIssued(ctx, s.conn, c.ClientID); err != nil {
-		return err
-	}
-	return nil
+	return markOAuthClientIssued(ctx, tx, c.ClientID)
 }
 
 // OAuthCode loads one code and the user's email. ErrNotFound means no row.

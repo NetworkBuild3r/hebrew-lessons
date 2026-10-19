@@ -623,13 +623,20 @@ func (h *oauthHandler) authorizePost(w http.ResponseWriter, r *http.Request) {
 		h.page(w, http.StatusForbidden, "Forbidden", "<h1>Forbidden</h1><p class=\"err\">The sign-in form could not be confirmed.</p>")
 		return
 	}
-	pending, err := h.svc.store.ConsumeOAuthRequest(r.Context(), vals.Get("req"), h.svc.now())
+	now := h.svc.now()
+	reqID := vals.Get("req")
+	pending, err := h.svc.store.OAuthRequest(r.Context(), reqID)
 	if errors.Is(err, db.ErrNotFound) {
 		h.page(w, http.StatusBadRequest, "Expired", "<h1>Sign-in expired</h1><p>Start again from the app.</p>")
 		return
 	}
 	if err != nil {
 		h.fail(w, err)
+		return
+	}
+	if !pending.ExpiresAt.After(now) {
+		_, _ = h.svc.store.ConsumeOAuthRequest(r.Context(), reqID, now)
+		h.page(w, http.StatusBadRequest, "Expired", "<h1>Sign-in expired</h1><p>Start again from the app.</p>")
 		return
 	}
 	q := url.Values{
@@ -643,18 +650,32 @@ func (h *oauthHandler) authorizePost(w http.ResponseWriter, r *http.Request) {
 	}
 	base, _, _ := h.requestBase(r)
 	if _, fatal, errCode, _ := h.resolveAuthorize(r.Context(), q, base); fatal != "" || errCode != "" {
+		_, _ = h.svc.store.ConsumeOAuthRequest(r.Context(), reqID, now)
 		h.page(w, http.StatusBadRequest, "Cannot sign in", "<h1>Cannot sign in</h1><p class=\"err\">Invalid request.</p>")
 		return
 	}
 	if vals.Get("action") == "deny" {
+		if _, err := h.svc.store.ConsumeOAuthRequest(r.Context(), reqID, now); err != nil {
+			if errors.Is(err, db.ErrNotFound) {
+				h.page(w, http.StatusBadRequest, "Expired", "<h1>Sign-in expired</h1><p>Start again from the app.</p>")
+				return
+			}
+			h.fail(w, err)
+			return
+		}
 		h.redirectError(w, r, pending.RedirectURI, pending.State, "access_denied", "")
 		return
 	}
 	if vals.Get("action") != "approve" {
+		_, _ = h.svc.store.ConsumeOAuthRequest(r.Context(), reqID, now)
 		h.page(w, http.StatusBadRequest, "Bad request", "<p class=\"err\">Bad request.</p>")
 		return
 	}
 	if _, ok := h.svc.roleFor(user.Email); !ok {
+		if _, err := h.svc.store.ConsumeOAuthRequest(r.Context(), reqID, now); err != nil && !errors.Is(err, db.ErrNotFound) {
+			h.fail(w, err)
+			return
+		}
 		h.redirectError(w, r, pending.RedirectURI, pending.State, "access_denied", "")
 		return
 	}
@@ -663,7 +684,7 @@ func (h *oauthHandler) authorizePost(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	if err := h.svc.store.InsertOAuthCode(r.Context(), db.OAuthCode{
+	pending, err = h.svc.store.IssueOAuthCode(r.Context(), reqID, now, db.OAuthCode{
 		Hash:          tokenDigest(raw),
 		ClientID:      pending.ClientID,
 		UserID:        user.ID,
@@ -671,8 +692,13 @@ func (h *oauthHandler) authorizePost(w http.ResponseWriter, r *http.Request) {
 		CodeChallenge: pending.CodeChallenge,
 		Scope:         oauthScope,
 		Resource:      pending.Resource,
-		ExpiresAt:     h.svc.now().Add(oauthCodeTTL),
-	}); err != nil {
+		ExpiresAt:     now.Add(oauthCodeTTL),
+	})
+	if errors.Is(err, db.ErrNotFound) {
+		h.page(w, http.StatusBadRequest, "Expired", "<h1>Sign-in expired</h1><p>Start again from the app.</p>")
+		return
+	}
+	if err != nil {
 		h.fail(w, err)
 		return
 	}
