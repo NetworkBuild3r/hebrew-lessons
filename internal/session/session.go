@@ -51,14 +51,16 @@ func (s *Service) ready() error {
 
 // CardRef is one visit in the queue.
 // Struggling is true when the card was selected as a struggling card.
-// Kind is the card direction (he_en or en_he) or letter or pattern.
-// Key and Step are set on a drill. A drill's CardID is negative and is not
-// an FSRS card.
+// New is true when the card has no review yet. A new card is not a known
+// card and not a struggling card. Kind is the card direction (he_en or
+// en_he) or letter or pattern. Key and Step are set on a drill. A drill's
+// CardID is negative and is not an FSRS card.
 type CardRef struct {
 	CardID     int64
 	LexemeID   int64
 	Dir        string
 	Struggling bool
+	New        bool
 	Kind       string
 	Key        string
 	Step       int
@@ -141,9 +143,12 @@ func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, err
 			Lapses:      card.Lapses,
 			Latest:      card.LatestRating,
 			HasRating:   card.HasRating,
-			RecentLapse: card.RecentLapse,
-			Confused:    isConfused,
-			KnownLexeme: isKnown,
+			RecentLapse:   card.RecentLapse,
+			Confused:      isConfused,
+			KnownLexeme:   isKnown,
+			HasIntro:      card.HasIntro,
+			IntroPosition: card.IntroPosition,
+			IntroLesson:   card.IntroLesson,
 		})
 	}
 	cands = append(cands, drillCandidates(stats.Confusions)...)

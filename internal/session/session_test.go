@@ -132,7 +132,7 @@ func drain(t *testing.T, sess *Session) []CardRef {
 			return out
 		}
 		out = append(out, card)
-		if len(out) > SessionCap+DrillCap+DrillSteps {
+		if len(out) > SessionCap+MaxNewPerSession+DrillCap+DrillSteps {
 			t.Fatalf("queue did not end (%s)", pattern(out))
 		}
 	}
@@ -917,6 +917,169 @@ func drainAll(t *testing.T, sess *Session) []CardRef {
 			t.Fatalf("queue did not end")
 		}
 	}
+}
+
+func TestFinishedLessonWordsEnterReview(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	ctx := context.Background()
+	userID := mustUser(t, store)
+	now := clk.Now()
+	// The later unit is enqueued first, so its card ids are lower.
+	// Lesson position has to win over that id order.
+	lateWord := mustLexeme(t, store, "מְאֻחָר")
+	earlyWord := mustLexeme(t, store, "מֻקְדָּם")
+	waitingWord := mustLexeme(t, store, "מַמְתִּין")
+	lateUnit := insertUnitAt(t, store, 4)
+	earlyUnit := insertUnitAt(t, store, 1)
+	waitingUnit := insertUnitAt(t, store, 0)
+	finishLesson(t, store, userID, lateUnit, 0, []int64{lateWord}, now)
+	finishLesson(t, store, userID, earlyUnit, 0, []int64{earlyWord}, now)
+	if err := testharness.InsertLessonItem(ctx, store, waitingUnit, 0, waitingWord, "new", "recall"); err != nil {
+		t.Fatal(err)
+	}
+	lateHe, lateEn := enqueuePair(t, store, userID, lateWord, now)
+	earlyHe, earlyEn := enqueuePair(t, store, userID, earlyWord, now)
+	waitingHe, waitingEn := enqueuePair(t, store, userID, waitingWord, now)
+
+	got := drain(t, mustBuild(t, svc, userID))
+	want := []int64{earlyHe, earlyEn, lateHe, lateEn}
+	if ids := idsOf(got); !sameIDs(ids, want) {
+		t.Fatalf("queue = %v, want %v", ids, want)
+	}
+	for _, card := range got {
+		if !card.New || (card.Dir != fsrs.DirHeEn && card.Dir != fsrs.DirEnHe) {
+			t.Fatalf("card %+v, want a new he_en or en_he card", card)
+		}
+	}
+	for _, id := range []int64{waitingHe, waitingEn} {
+		for _, card := range got {
+			if card.CardID == id {
+				t.Fatalf("unfinished lesson card %d was queued", id)
+			}
+		}
+	}
+}
+
+func TestNewCardCaps(t *testing.T) {
+	t.Run("five", func(t *testing.T) {
+		svc, store, clk := openSvc(t, 1)
+		userID := mustUser(t, store)
+		now := clk.Now()
+		unit := insertUnitAt(t, store, 1)
+		var words []int64
+		for i := 0; i < 4; i++ {
+			words = append(words, mustLexeme(t, store, fmt.Sprintf("חָדָשׁ-%d", i)))
+		}
+		finishLesson(t, store, userID, unit, 0, words, now)
+		var ids []int64
+		for _, word := range words {
+			he, en := enqueuePair(t, store, userID, word, now)
+			ids = append(ids, he, en)
+		}
+		got := drain(t, mustBuild(t, svc, userID))
+		if len(got) != MaxNewPerSession {
+			t.Fatalf("len = %d, want %d", len(got), MaxNewPerSession)
+		}
+		for i, card := range got {
+			if !card.New || card.CardID != ids[i] {
+				t.Fatalf("card %d = %+v, want new %d", i, card, ids[i])
+			}
+		}
+	})
+	t.Run("quarter", func(t *testing.T) {
+		svc, store, clk := openSvc(t, 1)
+		userID := mustUser(t, store)
+		now := clk.Now()
+		reviewed := now.Add(-48 * time.Hour)
+		known := map[int64]bool{}
+		for i := 0; i < 3; i++ {
+			id := addCard(t, store, userID, fmt.Sprintf("יָדוּעַ-%d", i), fsrs.DirHeEn, now.Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+			known[id] = true
+		}
+		unit := insertUnitAt(t, store, 2)
+		var words []int64
+		for i := 0; i < 4; i++ {
+			words = append(words, mustLexeme(t, store, fmt.Sprintf("קָטָן-%d", i)))
+		}
+		finishLesson(t, store, userID, unit, 0, words, now)
+		var fresh []int64
+		for _, word := range words {
+			he, en := enqueuePair(t, store, userID, word, now)
+			fresh = append(fresh, he, en)
+		}
+		got := drain(t, mustBuild(t, svc, userID))
+		var newIDs []int64
+		seenKnown := map[int64]bool{}
+		for _, card := range got {
+			if card.New {
+				newIDs = append(newIDs, card.CardID)
+				continue
+			}
+			if !known[card.CardID] {
+				t.Fatalf("unexpected card %+v", card)
+			}
+			seenKnown[card.CardID] = true
+		}
+		if len(seenKnown) != len(known) {
+			t.Fatalf("known cards = %v, want %v", seenKnown, known)
+		}
+		if len(newIDs) != 1 || newIDs[0] != fresh[0] {
+			t.Fatalf("new = %v, want the first new card %d of %v", newIDs, fresh[0], fresh)
+		}
+	})
+}
+
+func insertUnitAt(t *testing.T, store *db.Store, position int) int64 {
+	t.Helper()
+	res, err := store.ExecContext(context.Background(), `
+		INSERT INTO units (position, title, situation, concept, status, rev, doc)
+		VALUES (?, 't', 's', 'c', 'published', 1, '{"title":"t"}')`, position)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func finishLesson(t *testing.T, store *db.Store, userID, unitID int64, lessonIx int, words []int64, when time.Time) {
+	t.Helper()
+	ctx := context.Background()
+	for _, word := range words {
+		if err := testharness.InsertLessonItem(ctx, store, unitID, lessonIx, word, "new", "recall"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := testharness.InsertLessonRun(ctx, store, userID, unitID, lessonIx, when.Add(-time.Hour), &when); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// enqueuePair inserts the he_en card and then the en_he card, due now,
+// with state new and no review_log row. That is the row enqueueNewWords writes.
+func enqueuePair(t *testing.T, store *db.Store, userID, lexemeID int64, due time.Time) (he, en int64) {
+	t.Helper()
+	ctx := context.Background()
+	for _, dir := range []string{fsrs.DirHeEn, fsrs.DirEnHe} {
+		id, err := store.InsertCard(ctx, db.Card{
+			UserID:   userID,
+			LexemeID: lexemeID,
+			Dir:      dir,
+			State:    "new",
+			Due:      due,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if dir == fsrs.DirHeEn {
+			he = id
+		} else {
+			en = id
+		}
+	}
+	return he, en
 }
 
 func lexemeOf(t *testing.T, store *db.Store, cardID int64) int64 {

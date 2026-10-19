@@ -219,6 +219,11 @@ func TestClassify(t *testing.T) {
 			c.Lapses = StruggleLapses
 			c.Latest = int(fsrs.Hard)
 		}, want: kindSkip},
+		{name: "unreviewed due", edit: func(c *Candidate) { c.HasRating = false }, want: kindNew},
+		{name: "unreviewed later", edit: func(c *Candidate) {
+			c.HasRating = false
+			c.Due = later
+		}, want: kindSkip},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -294,11 +299,132 @@ func struggleRun(cards []CardRef) int {
 
 func knownLater(cards []CardRef, i int) bool {
 	for _, card := range cards[i+1:] {
+		if card.New || card.Kind == KindLetter || card.Kind == KindPattern {
+			continue
+		}
 		if !card.Struggling {
 			return true
 		}
 	}
 	return false
+}
+
+func TestNewCardsDoNotChangeThePlan(t *testing.T) {
+	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+	var cands []Candidate
+	for i := 0; i < 20; i++ {
+		cands = append(cands, knownCand(int64(i+1), now.Add(-time.Hour)))
+	}
+	for i := 0; i < 20; i++ {
+		cands = append(cands, struggleCand(int64(100+i), now.Add(-time.Hour)))
+	}
+	for i := 0; i < 8; i++ {
+		cands = append(cands, newCand(int64(200+i), now.Add(-time.Minute), 1, 0, false, 0))
+	}
+	cands = append(cands, Candidate{ID: -1, Kind: KindLetter, Key: "ב/כ", Step: 0})
+	got := mix(cands, TargetSuccess, now, 1)
+	plan := PlanFor(TargetSuccess)
+	var known, struggle, fresh, letters int
+	for _, card := range got {
+		switch {
+		case card.Kind == KindLetter:
+			letters++
+		case card.New:
+			fresh++
+		case card.Struggling:
+			struggle++
+		default:
+			known++
+		}
+	}
+	if known != plan.Known || struggle != plan.Struggle {
+		t.Fatalf("known=%d struggle=%d, plan %+v", known, struggle, plan)
+	}
+	if fresh != MaxNewPerSession {
+		t.Fatalf("new = %d, want the session cap %d", fresh, MaxNewPerSession)
+	}
+	if letters != 1 {
+		t.Fatalf("letters = %d, want the one drill step", letters)
+	}
+	if got[len(got)-1].CardID != 204 || !got[len(got)-1].New {
+		t.Fatalf("tail = %+v, want the fifth new card", got[len(got)-1])
+	}
+}
+
+func TestNewCardOrderAndSmallQueueShare(t *testing.T) {
+	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+	var cands []Candidate
+	for i := 0; i < 3; i++ {
+		cands = append(cands, knownCand(int64(i+1), now.Add(-time.Hour)))
+	}
+	// Inserted so id order is the opposite of lesson order.
+	cands = append(cands,
+		newCand(10, now, 5, 0, true, 20),
+		newCand(11, now, 5, 0, true, 2),
+		newCand(12, now, 5, 0, false, 0),
+		newCand(13, now, 1, 1, true, 9),
+		newCand(14, now, 1, 0, false, 0),
+		newCand(15, now, 1, 0, true, 3),
+		newCand(16, now, 0, 0, false, 0),
+	)
+	got := mix(cands, TargetSuccess, now, 1)
+	var fresh []int64
+	var reviewed int
+	for _, card := range got {
+		if card.New {
+			fresh = append(fresh, card.CardID)
+			continue
+		}
+		reviewed++
+	}
+	if reviewed != 3 {
+		t.Fatalf("reviewed = %d, want the three known cards", reviewed)
+	}
+	// 3 reviewed cards: new/(3+new) <= 0.25 means one new card.
+	// That card is the earliest unit position, then lesson, then rank, then id.
+	if len(fresh) != 1 || fresh[0] != 16 {
+		t.Fatalf("new = %v, want [16]", fresh)
+	}
+
+	only := mix([]Candidate{
+		newCand(16, now, 0, 0, false, 0),
+		newCand(14, now, 1, 0, false, 0),
+		newCand(15, now, 1, 0, true, 3),
+		newCand(13, now, 1, 1, true, 9),
+		newCand(11, now, 5, 0, true, 2),
+		newCand(10, now, 5, 0, true, 20),
+		newCand(12, now, 5, 0, false, 0),
+	}, TargetSuccess, now, 1)
+	want := []int64{16, 15, 14, 13, 11}
+	if ids := idsOf(only); !sameIDs(ids, want) {
+		t.Fatalf("order = %v, want %v", ids, want)
+	}
+}
+
+func TestNewAllowance(t *testing.T) {
+	if newAllowance(0, 8) != MaxNewPerSession {
+		t.Fatalf("empty queue allowance %d", newAllowance(0, 8))
+	}
+	if newAllowance(3, 8) != 1 {
+		t.Fatalf("small queue allowance %d, want 1", newAllowance(3, 8))
+	}
+	if newAllowance(12, 10) != 4 {
+		t.Fatalf("quarter of 12 is %d, want 4", newAllowance(12, 10))
+	}
+	if newAllowance(20, 8) != MaxNewPerSession {
+		t.Fatalf("full queue allowance %d, want %d", newAllowance(20, 8), MaxNewPerSession)
+	}
+	if newAllowance(3, 0) != 0 {
+		t.Fatal("no new cards still returned some")
+	}
+}
+
+func newCand(id int64, due time.Time, position, lesson int, ranked bool, rank int) Candidate {
+	return Candidate{
+		ID: id, LexemeID: id, Dir: fsrs.DirHeEn, Due: due,
+		HasIntro: true, IntroPosition: position, IntroLesson: lesson,
+		HasFreq: ranked, FreqRank: rank,
+	}
 }
 
 func switches(cards []CardRef) int {

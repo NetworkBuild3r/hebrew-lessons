@@ -4,8 +4,7 @@
 // The package does not import the database. session.TargetSuccess is
 // this TargetSuccess, and BuildSession feeds that value to the mix when
 // the learner has no reviews. MaxNewPerSession and MaxNewShare are the
-// coaching caps. BuildSession does not apply them: its queue mixes known
-// cards with struggling cards and does not count new cards.
+// caps BuildSession applies to cards that have no review yet.
 package sessionlimits
 
 const (
