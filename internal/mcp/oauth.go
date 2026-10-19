@@ -6,9 +6,13 @@ import (
 )
 
 // SessionUserResolver turns a raw session id into the MCP caller.
-// The implementation is auth.Service.ResolveSession, which calls
-// auth.Service.Lookup. Lookup re-checks the live email allowlist.
-// auth.LookupSession skips that check, so MCP must not use it.
+// The implementation is internal/app sessionUsers. It calls
+// auth.Service.Lookup, which re-checks the live email allowlist.
+// auth.LookupSession skips that check, so the adapter must not use it.
+// internal/auth does not implement this interface and does not import
+// this package. Lookup's ErrNoSession is ErrUnauthorized (HTTP 401).
+// Any other error is logged by the bearer middleware and replaced with
+// a fixed message. The store error text is not sent to the client.
 type SessionUserResolver interface {
 	ResolveSession(ctx context.Context, rawSessionID string) (Principal, error)
 }
