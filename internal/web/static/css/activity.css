@@ -1,0 +1,309 @@
+/* Activity screens (INIT-015/SPEC-016, views/activity.templ). One frame for every
+   activity: progress at the top, the prompt in the middle, the answers in the
+   thumb zone, and one gold action. Colours, radius, space, and type come from
+   tokens.css. Logical properties only. Nothing here moves: the motion is
+   SPEC-009's (option states, feedback-rise on .c-sheet, card-flip through
+   data-motion, press through data-motion), so this file has no transition and
+   no animation. Green and red appear only in the feedback rules below:
+   [data-state=correct|wrong] (components.css) and .feedback-right and
+   .feedback-wrong. The four flashcard grades share one neutral class. */
+
+/* A focused flow on a phone, as the placement deck is: the dock and the top bar
+   step aside. The close control at the top of the frame leads back to Today. */
+@media (max-width: 1023px) {
+  .shell:has(.act) .top,
+  .shell:has(.act) .dock-wrap { display: none; }
+}
+.shell:has(.act) .page { padding-block-end: var(--space-4); }
+
+/* The page card around the review turns into the bare frame. The heading stays
+   for assistive tech. */
+.review:has(.act) {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  min-block-size: 0;
+}
+.review:has(.act) > .review__h1 {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.act {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: var(--space-4);
+  inline-size: min(100%, var(--player-max));
+  margin-inline: auto;
+  min-block-size: calc(100dvb - var(--space-5) - var(--space-4));
+}
+.act__form {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: var(--space-4);
+  min-block-size: 0;
+}
+
+/* Top: a way out, the progress, the count. */
+.act__top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.act__close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: var(--size-tap);
+  block-size: var(--size-tap);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+}
+.act__top .c-progress { flex: 1 1 auto; min-inline-size: 0; }
+.act__count {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Middle: the prompt. */
+.act__stage {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-4);
+  padding-block: var(--space-4);
+  text-align: center;
+}
+.act__lead,
+.act__hint {
+  color: var(--muted);
+  line-height: var(--lh-he-body);
+  max-inline-size: 32ch;
+}
+.act__hint { font-size: var(--fs-small); }
+.act__gloss {
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  line-height: var(--lh-he-body);
+}
+.act__word,
+.act__answer {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  overflow: visible;
+}
+.act__orb .c-orb {
+  inline-size: calc(var(--size-cta) * 2);
+  block-size: calc(var(--size-cta) * 2);
+}
+.act__orb .c-orb .icon {
+  inline-size: var(--space-6);
+  block-size: var(--space-6);
+}
+
+/* The flashcard face. */
+.act__card {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  inline-size: 100%;
+  padding-block: var(--space-6);
+  padding-inline: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-2);
+  text-align: center;
+}
+.act__card .act__answer {
+  inline-size: 100%;
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--hairline-strong);
+}
+
+/* Bottom: the thumb zone. */
+.act__thumb {
+  display: grid;
+  gap: var(--space-3);
+  align-content: end;
+}
+/* On a phone the gold action and the feedback sheet stay at the foot of the screen,
+   however far the page has scrolled. Only they are pinned, not the whole zone, so a
+   tall board never slides up over the prompt. */
+@media (max-width: 1023px) {
+  .act__actions {
+    position: sticky;
+    inset-block-end: 0;
+    z-index: var(--z-sticky);
+    padding-block: var(--space-2) calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+    background: var(--paper);
+  }
+  .act__thumb .c-sheet {
+    position: sticky;
+    inset-block-end: 0;
+    z-index: var(--z-feedback);
+  }
+}
+.act__answers,
+.act__actions { display: grid; gap: var(--space-2); }
+.act__actions .c-button[data-kind="primary"],
+.c-sheet .c-button[data-kind="primary"] { inline-size: 100%; }
+.act__more {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+}
+.c-answer[aria-disabled="true"] { cursor: default; }
+.act .hk-input { inline-size: 100%; }
+
+/* The four self-grades. One class, neutral surfaces only. */
+.act__grades {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.act-grade {
+  display: grid;
+  place-items: center;
+  min-block-size: var(--space-8);
+  min-inline-size: var(--size-tap);
+  padding: var(--space-2);
+  background: var(--surface-soft);
+  color: var(--text);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  font-size: var(--fs-small);
+  font-weight: 700;
+  line-height: var(--lh-he-body);
+  text-align: center;
+}
+.act-grade:hover { background: var(--surface-raised); }
+
+/* Match: two columns of AnswerOption tiles. A made pair locks and shows its
+   number on both tiles. */
+.act__board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.act__col { display: grid; align-content: start; gap: var(--space-2); }
+[data-tile] {
+  gap: var(--space-2);
+  padding-inline: var(--space-3);
+}
+[data-tile] .c-answer__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* After the answer the keys are done with: the tile keeps its word, its pair number, and
+   the Correct or Wrong mark, which is what fits in half a phone. */
+.act[data-phase="feedback"] [data-tile] .c-answer__key { display: none; }
+[data-tile] .c-answer__label bdi[lang="he"] {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-md);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  padding-block: .1em;
+}
+[data-tile] .c-answer__label bdi[lang="en"] { font-size: var(--fs-small); font-weight: 600; }
+[data-tile][data-locked][data-state="default"] {
+  background: var(--surface-soft);
+  border-color: var(--hairline-strong);
+}
+.act-tile__clip { display: inline-grid; place-items: center; }
+.act-pair {
+  flex: none;
+  margin-inline-start: auto;
+  min-inline-size: var(--space-5);
+  padding-inline: var(--space-2);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.act-pair:empty { display: none; }
+
+/* Feedback: the sheet shows the right response, not right or wrong alone. */
+@media (max-width: 599px) {
+  .act__thumb .c-sheet { margin-inline: calc(var(--space-5) * -1); }
+}
+/* The sheet takes focus so it is announced, but it is not a control: no ring on it. */
+.c-sheet:focus-visible { outline: none; }
+.fb { display: grid; gap: var(--space-2); }
+.fb__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  line-height: var(--lh-he-body);
+}
+.feedback-right .fb__title { color: var(--go); }
+.feedback-wrong .fb__title { color: var(--stop); }
+.fb__answer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.fb__label {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.fb__word bdi,
+.fb__pair > bdi,
+.fb__line bdi[lang="he"] {
+  font-family: var(--font-he);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  padding-block: .1em;
+}
+.fb__word bdi { font-size: var(--fs-he-lg); }
+.fb__pair > bdi { font-size: var(--fs-he-md); }
+.fb__line bdi[lang="he"] { font-size: 1.15em; }
+.fb__gloss { font-size: var(--fs-body); font-weight: 600; }
+.fb__line { line-height: var(--lh-he-body); }
+.fb__bad {
+  text-decoration-line: underline;
+  text-decoration-thickness: 3px;
+  text-underline-offset: .2em;
+}
+.feedback-wrong .fb__bad { text-decoration-color: var(--stop); }
+.fb__pairs {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+.fb__pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.fb .c-orb {
+  inline-size: var(--size-tap);
+  block-size: var(--size-tap);
+}
+.fb .c-orb .icon {
+  inline-size: var(--space-4);
+  block-size: var(--space-4);
+}

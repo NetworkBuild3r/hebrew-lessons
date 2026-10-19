@@ -283,6 +283,8 @@ func NewApp(cfg Config) (*App, error) {
 		AudioDir: audioDir,
 		Deck:     a.placement,
 		Runs:     store,
+		// The activity item tokens are signed with a key derived from this secret.
+		SessionSecret: cfg.StateSecret,
 	})
 	a.mcp = newMCP(cfg, health, svc, store, tts, audioDir)
 	sweepCtx, stop := context.WithCancel(context.Background())

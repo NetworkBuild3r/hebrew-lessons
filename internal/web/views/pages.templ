@@ -103,16 +103,22 @@ templ Today(h Home) {
 
 templ Review(p Page, c ReviewCard) {
 	@Layout(p) {
-		<article class="sheet">
-			<h1 lang={ p.Lang }>{ p.ReviewHeading }</h1>
+		<article class="review sheet">
+			<h1 class="review__h1" lang={ p.Lang }>{ p.ReviewHeading }</h1>
 			@ReviewBody(c)
+			<script src="/static/js/activity.js" defer></script>
 		</article>
 	}
 }
 
+// ReviewBody is the card htmx swaps. A checked activity and the flashcard share
+// one frame (activity.templ). Done is the end of the queue. The root keeps its
+// data attributes and, with the frame, data-no-transition: see ActivityFrame.
 templ ReviewBody(c ReviewCard) {
 	<div id="review-card" data-kind={ c.Kind } data-card={ Num64(c.CardID) } data-pointed={ c.Pointed } data-unpointed={ c.Unpointed } data-show-unpointed={ Flag(c.ShowUnpointed) } data-index={ Num(c.Index) } data-total={ Num(c.Total) } data-answered={ Num(c.Answered) } data-correct={ Num(c.Correct) } data-retry={ Flag(c.Retry) } data-done={ Flag(c.Done) } data-revealed={ Flag(c.Revealed) } if c.Translit != "" && answerSide(c) {
 		data-translit={ c.Translit }
+	} if !c.Done {
+		data-no-transition
 	}>
 		if c.Done {
 			if c.Answered == 0 {
@@ -122,60 +128,10 @@ templ ReviewBody(c ReviewCard) {
 					<bdi lang="en" dir="ltr">{ Num(c.Correct) } / { Num(c.Answered) }</bdi>
 				</p>
 			}
+		} else if c.Act != nil {
+			@ActivityFrame(*c.Act)
 		} else {
-			<p class="count">
-				if c.Kind == "recall" {
-					@E(c.Gloss)
-				} else if c.ShowUnpointed {
-					@H(c.Unpointed)
-				} else {
-					@H(c.Pointed)
-				}
-			</p>
-			// Translit and audio name the Hebrew. On recall that is the answer, so they wait for reveal. On read the Hebrew is the prompt, so both stay.
-			if answerSide(c) {
-				if c.Translit != "" {
-					<p class="ink-card__hint">@E(c.Translit)</p>
-				}
-				if c.AudioURL != "" {
-					<a href={ templ.SafeURL(c.AudioURL) } lang="en">
-						@Icon("sound", PlayWord)
-					</a>
-				}
-			}
-			<p class="ink-card__hint">
-				<bdi lang="en" dir="ltr">{ Num(c.Index) } / { Num(c.Total) }</bdi>
-			</p>
-			if c.Revealed {
-				if c.Kind == "recall" {
-					<p class="ink-card__hint">
-						if c.ShowUnpointed {
-							@H(c.Unpointed)
-						} else {
-							@H(c.Pointed)
-						}
-					</p>
-				} else if c.Gloss != "" {
-					<p class="ink-card__hint">@E(c.Gloss)</p>
-				}
-				if c.Gender != "" {
-					<span class="gchip">@H(GenderLabel(c.Gender))</span>
-				}
-				<form method="post" action="/_hx/review/grade" hx-post="/_hx/review/grade" hx-target="#review-card" hx-swap="outerHTML" hx-boost="false">
-					<input type="hidden" name="_csrf" value={ c.CSRF }/>
-					<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
-					<button type="submit" class="btn btn-tonal" name="rating" value="1">@E("Again")</button>
-					<button type="submit" class="btn btn-tonal" name="rating" value="2">@E("Hard")</button>
-					<button type="submit" class="btn btn-tonal" name="rating" value="3">@E("Good")</button>
-					<button type="submit" class="btn btn-tonal" name="rating" value="4">@E("Easy")</button>
-				</form>
-			} else {
-				<form method="post" action="/_hx/review/reveal" hx-post="/_hx/review/reveal" hx-target="#review-card" hx-swap="outerHTML" hx-boost="false">
-					<input type="hidden" name="_csrf" value={ c.CSRF }/>
-					<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
-					<button type="submit" class="btn btn-tonal">@E("Show")</button>
-				</form>
-			}
+			@flashFrame(c)
 		}
 	</div>
 }

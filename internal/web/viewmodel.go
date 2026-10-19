@@ -1,6 +1,10 @@
 package web
 
-import "time"
+import (
+	"time"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
+)
 
 // LearnerVM is the signed-in learner shown on Today.
 type LearnerVM struct {
@@ -65,6 +69,10 @@ type ReviewCardVM struct {
 	Revealed      bool
 	Answered      int
 	Correct       int
+	// Item is the checked activity this visit is asked through, with Answer set once
+	// it has been checked. Both are nil for a flashcard and a drill.
+	Item   *activity.Item
+	Answer *answerState
 }
 
 // ProgressVM is the Progress page.

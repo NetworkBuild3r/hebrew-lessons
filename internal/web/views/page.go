@@ -254,6 +254,9 @@ type ReviewCard struct {
 	Revealed      bool
 	Answered      int
 	Correct       int
+	// Act is the checked activity this visit is asked through. Nil means the card is
+	// a flashcard (or a drill), graded by the learner.
+	Act *ActivityView
 }
 
 // answerSide reports whether this render may show the answer side.

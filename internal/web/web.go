@@ -12,9 +12,11 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 	"github.com/a-h/templ"
 )
@@ -51,6 +53,12 @@ type Options struct {
 	AudioDir string
 	Deck     placementDeck
 	Runs     placementRuns
+	// SessionSecret is HEBREW_SESSION_SECRET. The key of the activity item tokens is
+	// derived from it (activity.KeyFromSecret), so a token cannot be forged and one
+	// issued before a restart still verifies. Empty gives a random key per process.
+	SessionSecret string
+	// study replaces the review session service. It is for tests in this package.
+	study *session.Service
 }
 
 // NewOptions is New with the lesson store, the audio directory, and placement.
@@ -92,6 +100,16 @@ func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.
 		secure = sessions.CookieSecure()
 	}
 	srv := newServer(opts.Store)
+	if opts.Store != nil {
+		key, err := activity.KeyFromSecret(opts.SessionSecret)
+		if err != nil {
+			panic(err)
+		}
+		srv.useActivityKey(key)
+		if opts.study != nil {
+			srv.study = opts.study
+		}
+	}
 	srv.audioDir = opts.AudioDir
 	srv.deck = opts.Deck
 	srv.runs = opts.Runs
@@ -151,6 +169,8 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 	})
 	mux.HandleFunc("POST /_hx/review/reveal", gated(gate, secure, s.reveal))
 	mux.HandleFunc("POST /_hx/review/grade", gated(gate, secure, s.grade))
+	mux.HandleFunc("POST /_hx/review/answer", gated(gate, secure, s.answer))
+	mux.HandleFunc("POST /_hx/review/next", gated(gate, secure, s.next))
 	mountPlacement(mux, tokens, gate, secure, s.deck, s.runs)
 	mux.HandleFunc("GET /signin", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := auth.CurrentUser(r.Context()); ok {
@@ -362,7 +382,8 @@ func (s *server) reveal(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	if q == nil || q.sess == nil || !q.has || q.cur.CardID != cardID {
+	// A checked activity is answered through /_hx/review/answer, never self-graded.
+	if q == nil || q.sess == nil || !q.has || q.cur.CardID != cardID || q.item != nil {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -408,7 +429,7 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 	lang := reviewLang(r)
 	s.mu.Lock()
 	q := s.queues[key]
-	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID || !sameStudyDay(q.builtAt, s.now()) {
+	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID || q.item != nil || !sameStudyDay(q.builtAt, s.now()) {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -426,7 +447,11 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 	if rating >= int(fsrs.Good) {
 		q.correct++
 	}
-	s.advance(q)
+	if err := s.advance(r.Context(), q); err != nil {
+		s.mu.Unlock()
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 	vm, err := s.cardVM(r.Context(), q)
 	s.mu.Unlock()
 	if err != nil {

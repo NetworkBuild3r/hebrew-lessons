@@ -28,7 +28,16 @@ templ ButtonWith(kind ButtonKind, attrs templ.Attributes) {
 // Selected, Correct, Wrong. key is the keyboard badge ("1", "A"). Correct and
 // Wrong add a mark and a hidden word, so colour is never the only signal.
 templ AnswerOption(state AnswerState, key string) {
-	<button type="button" class="c-answer" data-state={ string(state.normal()) } if state.normal() == AnswerSelected { aria-pressed="true" }>
+	@AnswerOptionWith(state, key, nil) {
+		{ children... }
+	}
+}
+
+// AnswerOptionWith is AnswerOption with extra attributes (data-*, aria-*). type
+// defaults to "button". The activity screens use it for the hotkey and the
+// accessible name of a pick option or a match tile (SPEC-016).
+templ AnswerOptionWith(state AnswerState, key string, attrs templ.Attributes) {
+	<button { buttonAttrs(attrs)... } class="c-answer" data-state={ string(state.normal()) } if state.normal() == AnswerSelected { aria-pressed="true" }>
 		<span class="c-answer__key" aria-hidden="true">{ key }</span>
 		<span class="c-answer__label">
 			{ children... }
