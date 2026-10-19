@@ -726,7 +726,7 @@ func (s *Store) LatestPlacement(ctx context.Context, userID int64) (Placement, b
 // answers rated Good or Easy, sorted by that text.
 // A word taught only by a finished lesson is not included; KnownLexemeIDs is
 // the union that contains those ids. units.Lookup.KnownLexemes(ctx,
-// beforePosition) is the global authoring view and is a different set.
+// beforePosition) is the shared-unit authoring view and is a different set.
 func (s *Store) PlacementKnownLexemes(ctx context.Context, userID int64) ([]string, error) {
 	return s.placementLexemeTexts(ctx, userID, Good, Easy)
 }

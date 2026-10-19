@@ -26,6 +26,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcpstore"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web"
 )
@@ -253,7 +254,7 @@ func NewApp(cfg Config) (*App, error) {
 	}
 	health := a.healthHandler()
 	a.web = web.New(health, svc)
-	a.mcp = newMCP(cfg, health, svc)
+	a.mcp = newMCP(cfg, health, svc, store)
 	return a, nil
 }
 
@@ -355,14 +356,9 @@ func (a *App) healthHandler() http.Handler {
 	})
 }
 
-func newMCP(cfg Config, health http.Handler, sessions *auth.Service) http.Handler {
-	// Course, lexicon, and unit stores stay unset until *db.Store
-	// grows UnitsInScope, LatestPlacement, PlacementKnownLexemes,
-	// PlacementLearningLexemes, StruggleStats, CompletedSharedUnits,
-	// SearchLexemes, PutUnit, and units.Lookup. LearnerKnownLexemes
-	// is still a proposal. There is no learner_lexemes table.
-	// Tools answer with isError until those methods exist. The
-	// adapter belongs here, next to this call, so db does not import mcp.
+func newMCP(cfg Config, health http.Handler, sessions *auth.Service, store *db.Store) http.Handler {
+	// The adapter is the *db.Store behind the authoring tools.
+	// It lives in internal/mcpstore so internal/db does not import internal/mcp.
 	//
 	// AuthToken is Config.MCPAuthToken. cmd/hebrew trimmed MCP_AUTH_TOKEN
 	// into that field and logs once when it is empty. An empty value
@@ -370,10 +366,15 @@ func newMCP(cfg Config, health http.Handler, sessions *auth.Service) http.Handle
 	// environment and does not log that warning again. Sessions calls
 	// auth.Service.Lookup and copies users.role. OAuth later sets
 	// SessionFromToken; it must not read the web session cookie.
+	adapter := mcpstore.New(store)
 	authoring := mcp.Handler(mcp.Options{
 		AuthToken:      cfg.MCPAuthToken,
 		AllowedOrigins: cfg.MCPAllowedOrigins,
 		Sessions:       sessionUsers{auth: sessions},
+		Course:         adapter,
+		Lexicon:        adapter,
+		Lookup:         adapter,
+		Units:          adapter,
 	})
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
