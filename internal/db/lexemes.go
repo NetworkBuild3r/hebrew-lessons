@@ -92,7 +92,7 @@ func upsertLexeme(ctx context.Context, tx *sql.Tx, row lexicon.Row) (LexemeResul
 	if lexemeUnchanged(cur, row) {
 		return LexemeResult{TextNFC: row.TextNFC, ID: cur.id, Status: lexicon.StatusUnchanged}, nil
 	}
-	if err := updateLexeme(ctx, tx, cur.id, row); err != nil {
+	if err := updateLexeme(ctx, tx, cur, row); err != nil {
 		return LexemeResult{}, err
 	}
 	return LexemeResult{TextNFC: row.TextNFC, ID: cur.id, Status: lexicon.StatusUpdated}, nil
@@ -120,21 +120,39 @@ func readLexeme(ctx context.Context, tx *sql.Tx, text string) (storedLexeme, boo
 }
 
 func lexemeUnchanged(cur storedLexeme, row lexicon.Row) bool {
-	if cur.bare != row.Bare || cur.gloss != row.Gloss || cur.pos != row.POS || cur.gender != row.Gender || cur.plural != row.Plural || cur.translit != row.Translit {
-		return false
+	return cur == mergedLexeme(cur, row)
+}
+
+// mergedLexeme applies an update. Omitted pos, gender, plural, translit,
+// and verified keep the stored column. A set pointer replaces it.
+func mergedLexeme(cur storedLexeme, row lexicon.Row) storedLexeme {
+	out := cur
+	out.bare = row.Bare
+	out.gloss = row.Gloss
+	if row.POS != nil {
+		out.pos = *row.POS
 	}
-	if row.Verified != nil && cur.verified != *row.Verified {
-		return false
+	if row.Gender != nil {
+		out.gender = *row.Gender
 	}
-	return true
+	if row.Plural != nil {
+		out.plural = *row.Plural
+	}
+	if row.Translit != nil {
+		out.translit = *row.Translit
+	}
+	if row.Verified != nil {
+		out.verified = *row.Verified
+	}
+	return out
 }
 
 func insertLexemeRow(ctx context.Context, tx *sql.Tx, row lexicon.Row) (int64, error) {
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO lexemes (text_nfc, bare, gloss_en, pos, gender, plural, translit, verified)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		row.TextNFC, row.Bare, row.Gloss, row.POS,
-		nullIfEmpty(row.Gender), nullIfEmpty(row.Plural), nullIfEmpty(row.Translit), verifiedBit(row.Verified),
+		row.TextNFC, row.Bare, row.Gloss, strOrEmpty(row.POS),
+		nullIfEmpty(strOrEmpty(row.Gender)), nullIfEmpty(strOrEmpty(row.Plural)), nullIfEmpty(strOrEmpty(row.Translit)), verifiedBit(row.Verified),
 	)
 	if err != nil {
 		return 0, fmt.Errorf("db: insert lexeme: %w", err)
@@ -146,26 +164,14 @@ func insertLexemeRow(ctx context.Context, tx *sql.Tx, row lexicon.Row) (int64, e
 	return id, nil
 }
 
-func updateLexeme(ctx context.Context, tx *sql.Tx, id int64, row lexicon.Row) error {
-	if row.Verified == nil {
-		_, err := tx.ExecContext(ctx, `
-			UPDATE lexemes
-			SET bare = ?, gloss_en = ?, pos = ?, gender = ?, plural = ?, translit = ?
-			WHERE id = ?`,
-			row.Bare, row.Gloss, row.POS,
-			nullIfEmpty(row.Gender), nullIfEmpty(row.Plural), nullIfEmpty(row.Translit), id,
-		)
-		if err != nil {
-			return fmt.Errorf("db: update lexeme: %w", err)
-		}
-		return nil
-	}
+func updateLexeme(ctx context.Context, tx *sql.Tx, cur storedLexeme, row lexicon.Row) error {
+	next := mergedLexeme(cur, row)
 	_, err := tx.ExecContext(ctx, `
 		UPDATE lexemes
 		SET bare = ?, gloss_en = ?, pos = ?, gender = ?, plural = ?, translit = ?, verified = ?
 		WHERE id = ?`,
-		row.Bare, row.Gloss, row.POS,
-		nullIfEmpty(row.Gender), nullIfEmpty(row.Plural), nullIfEmpty(row.Translit), verifiedBit(row.Verified), id,
+		next.bare, next.gloss, next.pos,
+		nullIfEmpty(next.gender), nullIfEmpty(next.plural), nullIfEmpty(next.translit), verifiedBitBool(next.verified), next.id,
 	)
 	if err != nil {
 		return fmt.Errorf("db: update lexeme: %w", err)
@@ -173,11 +179,25 @@ func updateLexeme(ctx context.Context, tx *sql.Tx, id int64, row lexicon.Row) er
 	return nil
 }
 
+func strOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 func nullIfEmpty(s string) any {
 	if s == "" {
 		return nil
 	}
 	return s
+}
+
+func verifiedBitBool(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func verifiedBit(v *bool) int {

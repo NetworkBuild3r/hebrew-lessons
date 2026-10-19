@@ -55,8 +55,9 @@ type memUnit struct {
 }
 
 type storedLexeme struct {
-	id int64
-	lx Lexeme
+	id       int64
+	lx       Lexeme
+	verified bool
 }
 
 // NewMemory returns an empty store.
@@ -474,15 +475,6 @@ func (m *Memory) UpsertLexemes(ctx context.Context, entries []lexicon.Input) ([]
 	defer m.mu.Unlock()
 	out := make([]LexemeResult, 0, len(rows))
 	for _, row := range rows {
-		lx := Lexeme{
-			TextNFC:  row.TextNFC,
-			Bare:     row.Bare,
-			Gloss:    row.Gloss,
-			POS:      row.POS,
-			Gender:   row.Gender,
-			Plural:   row.Plural,
-			Translit: row.Translit,
-		}
 		found := -1
 		for i, stored := range m.lexemes {
 			if units.Normalize(stored.lx.TextNFC) == row.TextNFC {
@@ -492,23 +484,51 @@ func (m *Memory) UpsertLexemes(ctx context.Context, entries []lexicon.Input) ([]
 		}
 		if found < 0 {
 			m.nextLex++
-			m.lexemes = append(m.lexemes, storedLexeme{id: m.nextLex, lx: lx})
+			m.lexemes = append(m.lexemes, storedLexeme{
+				id:       m.nextLex,
+				lx:       memoryLexeme(Lexeme{}, row),
+				verified: row.Verified != nil && *row.Verified,
+			})
 			out = append(out, LexemeResult{TextNFC: row.TextNFC, ID: m.nextLex, Status: lexicon.StatusCreated})
 			continue
 		}
 		cur := m.lexemes[found]
-		if memoryUnchanged(cur.lx, row) {
+		next := memoryLexeme(cur.lx, row)
+		verified := cur.verified
+		if row.Verified != nil {
+			verified = *row.Verified
+		}
+		if cur.lx == next && cur.verified == verified {
 			out = append(out, LexemeResult{TextNFC: row.TextNFC, ID: cur.id, Status: lexicon.StatusUnchanged})
 			continue
 		}
-		m.lexemes[found].lx = lx
+		m.lexemes[found].lx = next
+		m.lexemes[found].verified = verified
 		out = append(out, LexemeResult{TextNFC: row.TextNFC, ID: cur.id, Status: lexicon.StatusUpdated})
 	}
 	return out, []int64{}, nil
 }
 
-func memoryUnchanged(cur Lexeme, row lexicon.Row) bool {
-	return cur.TextNFC == row.TextNFC && cur.Bare == row.Bare && cur.Gloss == row.Gloss && cur.POS == row.POS && cur.Gender == row.Gender && cur.Plural == row.Plural && cur.Translit == row.Translit
+// memoryLexeme keeps omitted pos, gender, plural, and translit.
+// A set pointer replaces the stored value, including an empty string.
+func memoryLexeme(cur Lexeme, row lexicon.Row) Lexeme {
+	out := cur
+	out.TextNFC = row.TextNFC
+	out.Bare = row.Bare
+	out.Gloss = row.Gloss
+	if row.POS != nil {
+		out.POS = *row.POS
+	}
+	if row.Gender != nil {
+		out.Gender = *row.Gender
+	}
+	if row.Plural != nil {
+		out.Plural = *row.Plural
+	}
+	if row.Translit != nil {
+		out.Translit = *row.Translit
+	}
+	return out
 }
 
 // KnownLexemes implements units.Lookup. Words introduced by a saved shared

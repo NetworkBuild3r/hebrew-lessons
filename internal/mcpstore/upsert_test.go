@@ -130,7 +130,7 @@ func TestUpsertLexemesRejectsInvalidEntry(t *testing.T) {
 	entries := unit1Entries()
 	entries[7]["gender"] = "neuter"
 	msg := callToolErr(t, session, "upsert_lexemes", map[string]any{"entries": entries})
-	if !strings.Contains(msg, "/entries/7/gender") || !strings.Contains(msg, "gender must be m, f, or both") {
+	if !strings.Contains(msg, "The batch was rejected and nothing was written.") || !strings.Contains(msg, "/entries/7/gender") || !strings.Contains(msg, "Gender must be m, f, or both.") {
 		t.Fatalf("error %q", msg)
 	}
 	var n int

@@ -1,8 +1,10 @@
 package lexicon
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
@@ -14,17 +16,29 @@ const (
 	StatusUnchanged = "unchanged"
 )
 
+// MaxBatch is the most entries one upsert_lexemes call accepts.
+const MaxBatch = 200
+
+const (
+	maxTextNFC  = 64
+	maxGloss    = 256
+	maxTranslit = 64
+	maxPOS      = 16
+	maxPlural   = 64
+)
+
 // Input is one upsert_lexemes entry before normalization.
-// A nil pointer means the caller omitted the field.
-// An empty bare pointer is treated as omitted, and the consonant
-// skeleton is derived. Gender, plural, and translit empty mean the
-// column stays unset.
+// A nil pointer means the caller omitted the field. On an update, an
+// omitted pos, gender, plural, translit, or verified keeps the stored
+// value. A non-nil pointer replaces it, and an empty string clears a
+// text column. An empty bare pointer is treated as omitted, and the
+// consonant skeleton is derived.
 type Input struct {
 	TextNFC  string
 	Bare     *string
 	Gloss    string
 	Translit *string
-	POS      string
+	POS      *string
 	Gender   *string
 	Plural   *string
 	Verified *bool
@@ -32,17 +46,18 @@ type Input struct {
 
 // Row is one entry ready to store.
 // TextNFC is units.Normalize, the same string audio.NormalizeText stores.
-// Bare is units.StripNiqqud of that text. Empty Gender, Plural, and
-// Translit are stored as NULL. Verified nil means a new row is unverified
-// and an existing row keeps its flag.
+// Bare is units.StripNiqqud of that text. A nil POS, Gender, Plural, or
+// Translit means the caller omitted it: a new row stores the empty value,
+// and an existing row keeps its column. Verified nil means a new row is
+// unverified and an existing row keeps its flag.
 type Row struct {
 	TextNFC  string
 	Bare     string
 	Gloss    string
-	Translit string
-	POS      string
-	Gender   string
-	Plural   string
+	Translit *string
+	POS      *string
+	Gender   *string
+	Plural   *string
 	Verified *bool
 }
 
@@ -60,14 +75,13 @@ type Invalid struct {
 }
 
 func (e *Invalid) Error() string {
-	if e == nil || len(e.Issues) == 0 {
-		return "invalid lexeme batch"
-	}
 	var b strings.Builder
-	for i, issue := range e.Issues {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
+	b.WriteString("The batch was rejected and nothing was written.")
+	if e == nil {
+		return b.String()
+	}
+	for _, issue := range e.Issues {
+		b.WriteByte('\n')
 		b.WriteString(issue.Pointer)
 		b.WriteString(": ")
 		b.WriteString(issue.Msg)
@@ -81,49 +95,49 @@ func (e *Invalid) Error() string {
 // nil, and nothing is written.
 func Prepare(entries []Input) ([]Row, *Invalid) {
 	if len(entries) == 0 {
-		return nil, &Invalid{Issues: []Issue{{Pointer: "/entries", Msg: "entries is empty"}}}
+		return nil, &Invalid{Issues: []Issue{{Pointer: "/entries", Msg: "The entries list is empty."}}}
+	}
+	if len(entries) > MaxBatch {
+		return nil, &Invalid{Issues: []Issue{{
+			Pointer: "/entries",
+			Msg:     fmt.Sprintf("A batch may contain at most %d entries.", MaxBatch),
+		}}}
 	}
 	var issues []Issue
 	rows := make([]Row, 0, len(entries))
 	seen := map[string]int{}
 	for i, in := range entries {
-		text := units.Normalize(in.TextNFC)
-		if text == "" {
-			issues = append(issues, Issue{Pointer: fieldPtr(i, "text_nfc"), Msg: "text_nfc is empty"})
+		text, textOK := textOf(i, in.TextNFC, &issues)
+		gloss, glossOK := glossOf(i, in.Gloss, &issues)
+		pos, posOK := limited(i, "pos", "The pos value", in.POS, maxPOS, &issues)
+		translit, translitOK := limited(i, "translit", "The translit value", in.Translit, maxTranslit, &issues)
+		plural, pluralOK := pluralOf(i, in.Plural, &issues)
+		gender, genderOK := genderOf(i, in.Gender, &issues)
+		if !textOK || !glossOK || !posOK || !translitOK || !pluralOK || !genderOK {
 			continue
 		}
-		gloss := strings.TrimSpace(in.Gloss)
-		if gloss == "" {
-			issues = append(issues, Issue{Pointer: fieldPtr(i, "gloss_en"), Msg: "gloss_en is empty"})
-		}
 		bare, bareOK := bareOf(i, text, in.Bare, &issues)
-		gender, genderOK := genderOf(i, in.Gender, &issues)
-		if !bareOK || !genderOK || gloss == "" {
+		if !bareOK {
 			continue
 		}
 		if prev, ok := seen[text]; ok {
 			issues = append(issues, Issue{
 				Pointer: fieldPtr(i, "text_nfc"),
-				Msg:     "duplicate text_nfc of /entries/" + strconv.Itoa(prev),
+				Msg:     "The text_nfc value duplicates /entries/" + strconv.Itoa(prev) + ".",
 			})
 			continue
 		}
 		seen[text] = i
-		row := Row{
+		rows = append(rows, Row{
 			TextNFC:  text,
 			Bare:     bare,
 			Gloss:    gloss,
-			POS:      strings.TrimSpace(in.POS),
+			Translit: translit,
+			POS:      pos,
 			Gender:   gender,
+			Plural:   plural,
 			Verified: in.Verified,
-		}
-		if in.Translit != nil {
-			row.Translit = strings.TrimSpace(*in.Translit)
-		}
-		if in.Plural != nil {
-			row.Plural = units.Normalize(*in.Plural)
-		}
-		rows = append(rows, row)
+		})
 	}
 	if len(issues) > 0 {
 		return nil, &Invalid{Issues: issues}
@@ -131,10 +145,86 @@ func Prepare(entries []Input) ([]Row, *Invalid) {
 	return rows, nil
 }
 
+func textOf(i int, raw string, issues *[]Issue) (string, bool) {
+	text := units.Normalize(raw)
+	if text == "" {
+		*issues = append(*issues, Issue{Pointer: fieldPtr(i, "text_nfc"), Msg: "The text_nfc value is empty."})
+		return "", false
+	}
+	if utf8.RuneCountInString(text) > maxTextNFC {
+		*issues = append(*issues, Issue{Pointer: fieldPtr(i, "text_nfc"), Msg: "The text_nfc value is longer than 64 characters."})
+		return "", false
+	}
+	if !hebrewValue(i, "text_nfc", "The text_nfc value", text, issues) {
+		return "", false
+	}
+	return text, true
+}
+
+func glossOf(i int, raw string, issues *[]Issue) (string, bool) {
+	gloss := strings.TrimSpace(raw)
+	if gloss == "" {
+		*issues = append(*issues, Issue{Pointer: fieldPtr(i, "gloss_en"), Msg: "The gloss_en value is empty."})
+		return "", false
+	}
+	if utf8.RuneCountInString(gloss) > maxGloss {
+		*issues = append(*issues, Issue{Pointer: fieldPtr(i, "gloss_en"), Msg: "The gloss_en value is longer than 256 characters."})
+		return "", false
+	}
+	return gloss, true
+}
+
+func limited(i int, field, label string, raw *string, max int, issues *[]Issue) (*string, bool) {
+	if raw == nil {
+		return nil, true
+	}
+	v := strings.TrimSpace(*raw)
+	if utf8.RuneCountInString(v) > max {
+		*issues = append(*issues, Issue{
+			Pointer: fieldPtr(i, field),
+			Msg:     fmt.Sprintf("%s is longer than %d characters.", label, max),
+		})
+		return nil, false
+	}
+	return &v, true
+}
+
+func pluralOf(i int, raw *string, issues *[]Issue) (*string, bool) {
+	if raw == nil {
+		return nil, true
+	}
+	v := units.Normalize(*raw)
+	if v == "" {
+		return &v, true
+	}
+	if utf8.RuneCountInString(v) > maxPlural {
+		*issues = append(*issues, Issue{Pointer: fieldPtr(i, "plural"), Msg: "The plural value is longer than 64 characters."})
+		return nil, false
+	}
+	if !hebrewValue(i, "plural", "The plural value", v, issues) {
+		return nil, false
+	}
+	return &v, true
+}
+
+func genderOf(i int, raw *string, issues *[]Issue) (*string, bool) {
+	if raw == nil {
+		return nil, true
+	}
+	g := strings.TrimSpace(*raw)
+	switch g {
+	case "", "m", "f", "both":
+		return &g, true
+	default:
+		*issues = append(*issues, Issue{Pointer: fieldPtr(i, "gender"), Msg: "Gender must be m, f, or both."})
+		return nil, false
+	}
+}
+
 func bareOf(i int, text string, raw *string, issues *[]Issue) (string, bool) {
 	want := units.StripNiqqud(text)
 	if want == "" {
-		*issues = append(*issues, Issue{Pointer: fieldPtr(i, "text_nfc"), Msg: "text_nfc has no consonants"})
+		*issues = append(*issues, Issue{Pointer: fieldPtr(i, "text_nfc"), Msg: "The text_nfc value has no consonants."})
 		return "", false
 	}
 	if raw == nil || strings.TrimSpace(*raw) == "" {
@@ -142,23 +232,43 @@ func bareOf(i int, text string, raw *string, issues *[]Issue) (string, bool) {
 	}
 	got := units.StripNiqqud(units.Normalize(*raw))
 	if got != want {
-		*issues = append(*issues, Issue{Pointer: fieldPtr(i, "bare"), Msg: "bare does not match text_nfc"})
+		*issues = append(*issues, Issue{Pointer: fieldPtr(i, "bare"), Msg: "The bare value does not match text_nfc."})
 		return "", false
 	}
 	return want, true
 }
 
-func genderOf(i int, raw *string, issues *[]Issue) (string, bool) {
-	if raw == nil {
-		return "", true
+func hebrewValue(i int, field, label, s string, issues *[]Issue) bool {
+	letters := 0
+	for _, r := range s {
+		if !hebrewRune(r) {
+			*issues = append(*issues, Issue{
+				Pointer: fieldPtr(i, field),
+				Msg:     label + " may contain only Hebrew letters, points, spaces, maqaf, and geresh.",
+			})
+			return false
+		}
+		if r >= 0x05D0 && r <= 0x05EA {
+			letters++
+		}
 	}
-	g := strings.TrimSpace(*raw)
-	switch g {
-	case "", "m", "f", "both":
-		return g, true
+	if letters == 0 {
+		*issues = append(*issues, Issue{Pointer: fieldPtr(i, field), Msg: label + " must include a Hebrew letter."})
+		return false
+	}
+	return true
+}
+
+func hebrewRune(r rune) bool {
+	switch {
+	case r >= 0x05D0 && r <= 0x05EA:
+		return true
+	case r >= 0x0591 && r <= 0x05C7:
+		return true
+	case r == ' ' || r == 0x05F3 || r == 0x05F4:
+		return true
 	default:
-		*issues = append(*issues, Issue{Pointer: fieldPtr(i, "gender"), Msg: "gender must be m, f, or both"})
-		return "", false
+		return false
 	}
 }
 

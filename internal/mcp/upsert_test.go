@@ -1,11 +1,14 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/lexicon"
 )
 
 func TestLearnerAndAnonymousCannotUpsertLexemes(t *testing.T) {
@@ -28,6 +31,46 @@ func TestLearnerAndAnonymousCannotUpsertLexemes(t *testing.T) {
 	anonBody := readBody(t, anon)
 	if anon.StatusCode != http.StatusUnauthorized || strings.Contains(anonBody, "created") {
 		t.Fatalf("anonymous %d %s", anon.StatusCode, anonBody)
+	}
+}
+
+func TestMemoryUpsertVerifiedDiff(t *testing.T) {
+	m := NewMemory()
+	ctx := context.Background()
+	pos, gender, plural, translit := "pron", "m", "אנשים", "ani"
+	yes := true
+	no := false
+	in := lexicon.Input{
+		TextNFC: "אני", Gloss: "I", POS: &pos, Gender: &gender, Plural: &plural, Translit: &translit, Verified: &yes,
+	}
+	first, _, err := m.UpsertLexemes(ctx, []lexicon.Input{in})
+	if err != nil || first[0].Status != lexicon.StatusCreated || !m.lexemes[0].verified {
+		t.Fatalf("create %+v verified %v err %v", first, m.lexemes[0].verified, err)
+	}
+
+	in.Gloss = "me"
+	in.POS, in.Gender, in.Plural, in.Translit, in.Verified = nil, nil, nil, nil, nil
+	second, _, err := m.UpsertLexemes(ctx, []lexicon.Input{in})
+	if err != nil || second[0].Status != lexicon.StatusUpdated {
+		t.Fatalf("omit %+v %v", second, err)
+	}
+	got := m.lexemes[0]
+	if !got.verified || got.lx.POS != "pron" || got.lx.Gender != "m" || got.lx.Plural != "אנשים" || got.lx.Translit != "ani" || got.lx.Gloss != "me" {
+		t.Fatalf("kept %+v", got)
+	}
+
+	in.Verified = &no
+	third, _, err := m.UpsertLexemes(ctx, []lexicon.Input{in})
+	if err != nil || third[0].Status != lexicon.StatusUpdated || m.lexemes[0].verified {
+		t.Fatalf("verified diff %+v stored %v err %v", third, m.lexemes[0].verified, err)
+	}
+	if m.lexemes[0].lx.POS != "pron" {
+		t.Fatalf("pos wiped %q", m.lexemes[0].lx.POS)
+	}
+
+	fourth, _, err := m.UpsertLexemes(ctx, []lexicon.Input{in})
+	if err != nil || fourth[0].Status != lexicon.StatusUnchanged || m.lexemes[0].verified {
+		t.Fatalf("same verified %+v %v", fourth, err)
 	}
 }
 
