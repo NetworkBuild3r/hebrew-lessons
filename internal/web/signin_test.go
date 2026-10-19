@@ -152,8 +152,14 @@ func assertSignIn(t *testing.T, body, lang string) {
 		title = views.SignInTitleEN
 		lede, other = other, lede
 	}
-	if !strings.Contains(body, `class="signin__title"`) || !strings.Contains(body, title) {
-		t.Fatal("sign-in title is not rendered")
+	if !strings.Contains(body, `<h1 class="brand signin__brand">`) {
+		t.Fatal("app name is not the h1")
+	}
+	if strings.Count(body, "<h1") != 1 || strings.Count(body, "<h2") != 1 {
+		t.Fatalf("sign-in headings: h1=%d h2=%d", strings.Count(body, "<h1"), strings.Count(body, "<h2"))
+	}
+	if !strings.Contains(body, `<h2 class="signin__title">`) || !strings.Contains(body, title) {
+		t.Fatal("sign-in title is not the h2")
 	}
 	if !strings.Contains(body, lede) || strings.Contains(body, other) {
 		t.Fatal("sign-in lede should be the interface language only")

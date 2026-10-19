@@ -469,6 +469,12 @@ h1 {
   font-weight: 700;
   line-height: var(--lh-he-display);
 }
+/* Pointed כְּנִיסָה sits smaller than "Sign in" at the same size.
+   The next step up matches the English title's cap height. */
+html[lang="he"] .signin__title {
+  font-size: var(--fs-h1);
+  font-weight: 800;
+}
 .signin__lede {
   max-inline-size: 40ch;
   color: var(--text);
