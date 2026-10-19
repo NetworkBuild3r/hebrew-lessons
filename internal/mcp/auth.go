@@ -123,10 +123,11 @@ func constantEqual(got, want string) bool {
 }
 
 // requireBearer wraps next with the SDK bearer middleware.
-// OAuth later passes a ResourceMetadataURL through the same middleware;
-// until that document exists, a bare Bearer challenge is added when the
-// SDK did not set WWW-Authenticate.
-func requireBearer(v Validator, next http.Handler) http.Handler {
+// metadataURL is the protected-resource metadata document. When it is
+// set, a 401 uses the Node challenge, including realm and
+// resource_metadata. When it is empty, a bare Bearer challenge is added
+// if the handler did not set WWW-Authenticate.
+func requireBearer(v Validator, metadataURL string, next http.Handler) http.Handler {
 	verifier := func(ctx context.Context, token string, r *http.Request) (*sdauth.TokenInfo, error) {
 		p, err := v.Validate(ctx, token, r)
 		if err != nil {
@@ -153,17 +154,22 @@ func requireBearer(v Validator, next http.Handler) http.Handler {
 		AllowMissingExpiration: true,
 	})(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		protected.ServeHTTP(&challengeWriter{ResponseWriter: w}, r)
+		protected.ServeHTTP(&challengeWriter{ResponseWriter: w, metadataURL: metadataURL}, r)
 	})
 }
 
 type challengeWriter struct {
 	http.ResponseWriter
+	metadataURL string
 }
 
 func (w *challengeWriter) WriteHeader(code int) {
-	if code == http.StatusUnauthorized && w.Header().Get("WWW-Authenticate") == "" {
-		w.Header().Set("WWW-Authenticate", "Bearer")
+	if code == http.StatusUnauthorized {
+		if w.metadataURL != "" {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="hebrew-lessons", resource_metadata="`+w.metadataURL+`"`)
+		} else if w.Header().Get("WWW-Authenticate") == "" {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+		}
 	}
 	w.ResponseWriter.WriteHeader(code)
 }

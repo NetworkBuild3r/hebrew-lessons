@@ -356,19 +356,30 @@ func newMCP(cfg Config, health http.Handler, sessions *auth.Service) http.Handle
 	//
 	// AuthToken is Config.MCPAuthToken. cmd/hebrew trimmed MCP_AUTH_TOKEN
 	// into that field. An empty value disables the static bearer.
-	// This function does not read the environment. Sessions calls
-	// auth.Service.Lookup and copies users.role. OAuth later sets
-	// SessionFromToken; it must not read the web session cookie.
+	// This function does not read the environment. sessionUsers calls
+	// auth.Service.Lookup and copies users.role. Its SessionFromToken
+	// maps an OAuth access token onto that same Lookup path. It does
+	// not read the web session cookie. Admin is users.role from
+	// ADMIN_EMAILS. There is no MCP_ADMIN_EMAILS list.
 	if cfg.MCPAuthToken == "" {
 		slog.Warn("mcp static token is disabled", "reason", "MCP_AUTH_TOKEN is empty")
 	}
-	authoring := mcp.Handler(mcp.Options{
-		AuthToken:      cfg.MCPAuthToken,
-		AllowedOrigins: cfg.MCPAllowedOrigins,
-		Sessions:       sessionUsers{auth: sessions},
-	})
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
+	public := strings.TrimRight(strings.TrimSpace(cfg.MCPPublicURL), "/")
+	mounted := sessions != nil && sessions.RegisterOAuth(mux, cfg.MCPPublicURL)
+	meta := ""
+	if mounted {
+		meta = public + "/.well-known/oauth-protected-resource"
+	}
+	users := sessionUsers{auth: sessions}
+	authoring := mcp.Handler(mcp.Options{
+		AuthToken:           cfg.MCPAuthToken,
+		AllowedOrigins:      cfg.MCPAllowedOrigins,
+		Sessions:            users,
+		SessionFromToken:    users.SessionFromToken,
+		ResourceMetadataURL: meta,
+	})
 	mux.Handle("/", authoring)
 	return mux
 }

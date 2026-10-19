@@ -182,6 +182,35 @@ func TestTTSFromAPIKey(t *testing.T) {
 	}
 }
 
+func TestMCPOAuthDiscoveryAndChallenge(t *testing.T) {
+	const public = "https://mcp.example"
+	a := newTestApp(t, Config{
+		DataDir:      t.TempDir(),
+		PublicOrigin: "https://hebrew.example",
+		MCPPublicURL: public,
+		MCPAuthToken: "static-secret",
+	})
+	rr := httptest.NewRecorder()
+	a.MCP().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server", nil))
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"issuer":"`+public+`"`) {
+		t.Fatalf("discovery %d %s", rr.Code, rr.Body.String())
+	}
+	rr = httptest.NewRecorder()
+	a.MCP().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("healthz %d", rr.Code)
+	}
+	rr = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	a.MCP().ServeHTTP(rr, req)
+	want := `Bearer realm="hebrew-lessons", resource_metadata="` + public + `/.well-known/oauth-protected-resource"`
+	if rr.Code != http.StatusUnauthorized || rr.Header().Get("WWW-Authenticate") != want {
+		t.Fatalf("challenge %d %q", rr.Code, rr.Header().Get("WWW-Authenticate"))
+	}
+}
+
 func TestApplyDefaults(t *testing.T) {
 	cfg := ApplyDefaults(Config{})
 	if cfg.DataDir != "/data" || cfg.HTTPAddr != ":8080" || cfg.MCPAddr != ":8787" {

@@ -36,10 +36,9 @@ const (
 // package does not read the environment. An empty token disables the
 // static check. A matching token is RoleAdmin and has full access.
 // Validator, when set, replaces the default chain. The default chain is
-// OAuthSessions and then StaticToken. OAuth fills in SessionFromToken
-// only. That function maps the bearer to a session id and must not read
-// the web session cookie. Sessions resolves the id through
-// auth.Service.Lookup.
+// OAuthSessions and then StaticToken. SessionFromToken maps an OAuth
+// access token to a session id and must not read the web session cookie.
+// Sessions resolves the id through auth.Service.Lookup.
 //
 // AllowedOrigins are browser Origins that may call this handler. A
 // request with no Origin and no Sec-Fetch-Site header is allowed. Any
@@ -56,13 +55,18 @@ type Options struct {
 	SessionFromToken func(ctx context.Context, token string, r *http.Request) (rawSessionID string, err error)
 	// Sessions resolves that raw session id to a caller. Nil rejects
 	// every OAuth bearer and leaves the static token check in place.
-	Sessions       SessionUserResolver
-	AllowedOrigins []string
-	Validator      Validator
-	Course         CourseReader
-	Lexicon        LexiconReader
-	Lookup         units.Lookup
-	Units          UnitWriter
+	Sessions SessionUserResolver
+	// ResourceMetadataURL is the RFC 9728 protected-resource metadata
+	// URL. When it is set, a 401 challenge is
+	// Bearer realm="hebrew-lessons", resource_metadata="<url>".
+	// Empty keeps the bare Bearer challenge.
+	ResourceMetadataURL string
+	AllowedOrigins      []string
+	Validator           Validator
+	Course              CourseReader
+	Lexicon             LexiconReader
+	Lookup              units.Lookup
+	Units               UnitWriter
 }
 
 // Handler returns the streamable HTTP handler for the authoring server.
@@ -82,7 +86,7 @@ func Handler(opts Options) http.Handler {
 		// server-initiated requests, and KeepAlive is a ping request.
 		// A rejected ping closes the temporary session.
 	})
-	return protectOrigin(opts.AllowedOrigins, requireBearer(opts.validator(), authorizeTools(stream)))
+	return protectOrigin(opts.AllowedOrigins, requireBearer(opts.validator(), opts.ResourceMetadataURL, authorizeTools(stream)))
 }
 
 // protectOrigin rejects cross-origin browser requests. A POST with no
