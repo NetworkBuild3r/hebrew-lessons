@@ -6,31 +6,87 @@ templ Today(h Home) {
 	@Layout(h.Page()) {
 		<article class="today">
 			<header class="today__head">
-				<h1 lang={ h.Lang }>{ h.Heading }</h1>
+				<p class="eyebrow today__date">
+					if h.Lang == "en" {
+						<span lang="en">{ DateDayEN }</span>
+						<bdi lang="en" dir="ltr">{ DateRestEN }</bdi>
+					} else {
+						@H(DateDayHE)
+						<bdi lang="en" dir="ltr">{ DateNum }</bdi>
+						@H(DateRestHE)
+					}
+				</p>
+				<h1 class="today__title" lang={ h.Lang }>{ h.Heading }</h1>
 			</header>
 			<div class="today__cols">
 				if h.Due > 0 {
 					<section class="ink-card today-due" aria-labelledby="due-title">
+						<img class="skyline" src="/static/illustrations/hero-skyline-night.svg" alt=""/>
+						<div class="stack" aria-hidden="true">
+							for i, bare := range StackWords() {
+								<span class={ stackClass(i) }><bdi lang="he" dir="rtl">{ bare }</bdi></span>
+							}
+						</div>
 						<p class="eyebrow" id="due-title" lang={ h.Lang }>{ h.DueKicker }</p>
 						<p class="count"><bdi lang="en" dir="ltr">{ h.DueText }</bdi></p>
 						<p class="ink-card__label" lang={ h.Lang }>{ h.DueLabel }</p>
-						<p class="ink-card__hint" lang={ h.Lang }>{ h.DueHint }</p>
-						<a class="btn btn-primary" href={ templ.SafeURL(h.Href("/review")) }>
+						<p class="ink-card__hint">
+							<bdi lang="en" dir="ltr">{ "≈ " + ReviewMin + " min" }</bdi>
+						</p>
+						<a class="btn btn-primary btn-lamp m-hide" href={ templ.SafeURL(h.Href("/review")) }>
 							<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("play") }></use></svg>
 							<span lang={ h.Lang }>{ h.Start }</span>
 						</a>
 					</section>
 				} else {
-					<section class="quiet-card quiet-card--due">
-						<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("check") }></use></svg>
-						<p class="quiet-card__line">
-							@Pair(h.Lang, h.ZeroHE, h.ZeroEN)
+					<section class="ink-card today-due today-due--clear">
+						<img class="skyline" src="/static/illustrations/hero-skyline-night.svg" alt=""/>
+						<div class="quiet-card quiet-card--due">
+							<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("check") }></use></svg>
+							<p class="quiet-card__line">
+								@Pair(h.Lang, h.ZeroHE, h.ZeroEN)
+							</p>
+						</div>
+						<p class="ink-card__hint">
+							if h.Lang == "en" {
+								<bdi lang="en" dir="ltr">{ DueSoonCount + " words come due in " + DueSoonHours + " hours" }</bdi>
+							} else {
+								<bdi lang="en" dir="ltr">{ DueSoonCount }</bdi>
+								@H("מִלִּים יַגִּיעוּ בְּעוֹד")
+								<bdi lang="en" dir="ltr">{ DueSoonHours }</bdi>
+								@H("שָׁעוֹת")
+							}
 						</p>
 					</section>
 				}
 				if h.Lesson {
 					<section class="lesson-card today-next" aria-labelledby="next-title">
-						<p class="eyebrow" lang={ h.Lang }>{ h.NextKicker }</p>
+						<div class="lesson-kicker">
+							<span class="letter-tile" aria-hidden="true"><bdi lang="he" dir="rtl">{ UnitLetter }</bdi></span>
+							<p class="lesson-meta">
+								if h.Lang == "en" {
+									<span lang="en">Unit</span>
+									<bdi lang="en" dir="ltr">{ "2" }</bdi>
+									<span aria-hidden="true">·</span>
+									@H(UnitName)
+									@E(UnitNameEN)
+									<span aria-hidden="true">·</span>
+									<span lang="en">Lesson</span>
+									<bdi lang="en" dir="ltr">{ LessonIndex + " of " + LessonCount }</bdi>
+								} else {
+									@H("יְחִידָה")
+									<bdi lang="en" dir="ltr">{ "2" }</bdi>
+									<span aria-hidden="true">·</span>
+									@H(UnitName)
+									@E(UnitNameEN)
+									<span aria-hidden="true">·</span>
+									@H("שִׁעוּר")
+									<bdi lang="en" dir="ltr">{ LessonIndex }</bdi>
+									@H("מִתּוֹךְ")
+									<bdi lang="en" dir="ltr">{ LessonCount }</bdi>
+								}
+							</p>
+						</div>
 						<h2 id="next-title" class="unit-title" lang="he" dir="rtl">{ UnitTitle }</h2>
 						@Situation(h.Situation)
 						<ul class="chips">
@@ -40,9 +96,30 @@ templ Today(h Home) {
 									if word.Gender != "" {
 										<span class="gchip">@H(GenderLabel(word.Gender))</span>
 									}
+									@E(word.Gloss)
 								</li>
 							}
 						</ul>
+						<div class="unitbar" role="progressbar" aria-valuemin="1" aria-valuenow="3" aria-valuemax="5" aria-label={ h.NextKicker }>
+							<i class="is-done"></i>
+							<i class="is-done"></i>
+							<i class="is-current"></i>
+							<i></i>
+							<i></i>
+						</div>
+						<p class="lesson-facts">
+							<bdi lang="en" dir="ltr">{ "≈ " + LessonMin + " min" }</bdi>
+							<span aria-hidden="true">·</span>
+							if h.Lang == "en" {
+								<bdi lang="en" dir="ltr">{ "3 new · " + WarmupCount + " warm-up" }</bdi>
+							} else {
+								<bdi lang="en" dir="ltr">{ "3" }</bdi>
+								@H("חֲדָשׁוֹת")
+								<span aria-hidden="true">·</span>
+								<bdi lang="en" dir="ltr">{ WarmupCount }</bdi>
+								@H("חִימוּם")
+							}
+						</p>
 						<a class={ BtnClass(h.Due == 0) } href={ templ.SafeURL(h.Href("/lesson")) }>
 							<svg class={ iconClass(h.Dir == "rtl") } aria-hidden="true" focusable="false"><use href={ IconHref("next") }></use></svg>
 							<span lang={ h.Lang }>{ h.Open }</span>
@@ -60,6 +137,20 @@ templ Today(h Home) {
 					</section>
 				}
 			</div>
+			if h.Due > 0 || h.Lesson {
+				<div class="thumbbar">
+					if h.Due > 0 {
+						<a class="btn btn-primary btn-lamp thumbbar__btn" href={ templ.SafeURL(h.Href("/review")) }>
+							<span lang={ h.Lang }>{ h.Start }</span>
+							<bdi lang="en" dir="ltr">{ h.DueText }</bdi>
+						</a>
+					} else {
+						<a class="btn btn-primary thumbbar__btn" href={ templ.SafeURL(h.Href("/lesson")) }>
+							<span lang={ h.Lang }>{ h.Open }</span>
+						</a>
+					}
+				</div>
+			}
 		</article>
 	}
 }

@@ -25,6 +25,7 @@ templ Layout(p Page) {
 							@dockLink(p.Href("/progress"), "progress", p.Progress, p.Current, "progress", p.Lang)
 						</nav>
 					</div>
+					@langLink(p, "lang-switch rail-lang")
 					@themeButton(p, "theme-toggle rail-theme")
 					@logoutForm(p, "logout rail-logout")
 				</div>
@@ -32,8 +33,11 @@ templ Layout(p Page) {
 					<header class="top">
 						<div class="top__inner">
 							@brandLink(p, "brand")
-							@themeButton(p, "theme-toggle")
-							@logoutForm(p, "logout")
+							<div class="top__tools">
+								@langLink(p, "lang-switch")
+								@themeButton(p, "theme-toggle")
+								@logoutForm(p, "logout")
+							</div>
 						</div>
 					</header>
 					<main id="main" class="page" tabindex="-1">
@@ -53,6 +57,14 @@ templ brandLink(p Page, className string) {
 		<span class="brand__mark" aria-hidden="true">ע</span>
 		<span class="brand__name">@H(AppName)</span>
 	</a>
+}
+
+templ langLink(p Page, className string) {
+	if p.Lang == "en" {
+		<a class={ className } href={ templ.SafeURL(p.LangHref()) }><bdi lang="he" dir="rtl">{ p.LangLabel() }</bdi></a>
+	} else {
+		<a class={ className } href={ templ.SafeURL(p.LangHref()) }><bdi lang="en" dir="ltr">{ p.LangLabel() }</bdi></a>
+	}
 }
 
 templ themeButton(p Page, className string) {

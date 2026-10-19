@@ -83,8 +83,23 @@
   --shadow-tile: inset 0 1px 0 #fff, inset 0 -3px 0 oklch(55% .07 75 / .16), 0 8px 18px -8px oklch(20% .08 270 / .45);
 
   /* motion */
-  --dur-fast: 140ms; --dur-base: 240ms; --dur-slow: 420ms; --dur-word: 680ms;
-  --ease-out: cubic-bezier(.2, .8, .2, 1); --ease-in-out: cubic-bezier(.6, 0, .3, 1); --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  /* durations: nothing over 300ms except deliberate reveals */
+  --dur-instant: 80ms; --dur-fast: 140ms; --dur-base: 200ms; --dur-slow: 280ms;
+  --dur-reveal: 600ms;     /* deliberate reveals only (audio-first word reveal) */
+  --delay-reveal: 600ms;   /* text/niqqud appear this long after audio onset; pedagogy, kept under reduced motion */
+  --dur-word: var(--dur-reveal);   /* legacy alias */
+  --stagger: 40ms; --stagger-max: 5;   /* chip/item entrance stagger, capped at 5 items */
+  /* easings */
+  --ease-out: cubic-bezier(.2, .8, .2, 1); --ease-in-out: cubic-bezier(.65, 0, .35, 1); --ease-emph: cubic-bezier(.3, 0, 0, 1);
+  /* springs: damped-spring step responses sampled into linear() by src/tokens.py (soft: zeta .75, snappy: zeta .55) */
+  --spring-soft: cubic-bezier(.22, 1.2, .36, 1); --spring-snappy: cubic-bezier(.34, 1.56, .64, 1);   /* fallback */
+  --ease-spring: var(--spring-snappy);   /* legacy alias */
+  /* distances */
+  --motion-shake: 6px;     /* wrong-answer shake amplitude (inline axis) */
+  --motion-scale: .04;     /* enter/stack scale delta (from 1 - delta to 1) */
+  --motion-lift: 8px;      /* stacked card / sheet rise */
+  --motion-flip: 90deg;    /* review card half-turn */
+  --motion-sheet: 100%;    /* bottom-sheet travel (its own height) */
 
   /* z-index */
   --z-base: 0; --z-sticky: 10; --z-nav: 20; --z-feedback: 30; --z-popover: 40; --z-toast: 50;
@@ -92,5 +107,13 @@
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"]  { color-scheme: dark; }
 @supports not (color: light-dark(#000, #fff)) { :root { color-scheme: light; } }   /* pre-2024 engines get the light palette */
-/* Reduced motion = subtle, not none: short opacity-only fades, no travel, no bounce. */
-@media (prefers-reduced-motion: reduce) { :root { --dur-fast: 100ms; --dur-base: 160ms; --dur-slow: 200ms; --dur-word: 200ms; --ease-spring: linear; --motion-shift: 0px; } }
+@supports (transition-timing-function: linear(0, 1)) { :root {
+  --spring-soft: linear(0, 0.019, 0.068, 0.139, 0.221, 0.31, 0.4, 0.488, 0.572, 0.648, 0.717, 0.778, 0.831, 0.876, 0.914, 0.944, 0.969, 0.988, 1.002, 1.013, 1.02, 1.025, 1.028, 1.028, 1.028, 1.027, 1.025, 1.022, 1.02, 1.017, 1.015, 1.012, 1.01, 1.008, 1.006, 1.005, 1.004, 1.003, 1.002, 1);
+  --spring-snappy: linear(0, 0.047, 0.165, 0.321, 0.49, 0.654, 0.799, 0.918, 1.008, 1.071, 1.108, 1.124, 1.125, 1.114, 1.096, 1.075, 1.054, 1.034, 1.018, 1.004, 0.995, 0.988, 0.985, 0.984, 0.985, 0.987, 0.989, 0.992, 0.994, 0.997, 0.999, 1, 1.001, 1.002, 1.002, 1.002, 1.002, 1.002, 1.001, 1);
+} }
+/* Reduced motion = fade or instant: every move/scale token goes to 0, durations cap at 150ms, springs become linear. */
+@media (prefers-reduced-motion: reduce) { :root {
+  --dur-instant: 0ms; --dur-fast: 100ms; --dur-base: 150ms; --dur-slow: 150ms; --dur-reveal: 150ms; --stagger: 0ms;
+  --motion-shift: 0px; --motion-shake: 0px; --motion-scale: 0; --motion-lift: 0px; --motion-flip: 0deg; --motion-sheet: 0%;
+  --spring-soft: linear; --spring-snappy: linear; --ease-emph: linear;
+} }

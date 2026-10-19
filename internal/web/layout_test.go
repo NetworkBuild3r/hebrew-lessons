@@ -67,10 +67,10 @@ func TestTodayLayout(t *testing.T) {
 	if !strings.Contains(body, `<p class="situation" lang="en" dir="ltr">`) || !strings.Contains(body, `<bdi lang="en" dir="ltr">Getting ready in the morning.</bdi>`) {
 		t.Fatal("English situation is not an ltr block")
 	}
-	if strings.Count(body, "btn-primary") != 1 || !strings.Contains(body, `class="btn btn-primary"`) {
-		t.Fatal("due Today should have one filled primary")
+	if strings.Count(body, "btn-primary") != 2 || !strings.Contains(body, `class="btn btn-primary btn-lamp m-hide"`) || !strings.Contains(body, `class="btn btn-primary btn-lamp thumbbar__btn"`) {
+		t.Fatal("due Today should put the lamp action in the card and the thumb bar")
 	}
-	if !strings.Contains(body, `class="btn btn-tonal"`) {
+	if !strings.Contains(body, `class="btn btn-tonal m-hide"`) {
 		t.Fatal("lesson CTA should be tonal while reviews are due")
 	}
 	for _, word := range views.SampleWords() {
@@ -203,11 +203,11 @@ func TestPairSeparatesRuns(t *testing.T) {
 func TestZeroDueAndNoLesson(t *testing.T) {
 	h := New(nil, nil)
 	zero := get(t, h, "/?due=0")
-	if strings.Contains(zero, "ink-card") || strings.Contains(zero, "הַתְחֵל") {
-		t.Fatal("zero due still shows the review hero")
+	if !strings.Contains(zero, "today-due--clear") || strings.Contains(zero, "הַתְחֵל") || strings.Contains(zero, "btn-lamp") {
+		t.Fatal("zero due should keep the slate and drop the review action")
 	}
-	if strings.Count(zero, "btn-primary") != 1 || !strings.Contains(zero, `class="btn btn-primary"`) {
-		t.Fatal("the lesson CTA should be the only primary when nothing is due")
+	if strings.Count(zero, "btn-primary") != 2 || !strings.Contains(zero, `class="btn btn-primary m-hide"`) || !strings.Contains(zero, `class="btn btn-primary thumbbar__btn"`) {
+		t.Fatal("the lesson CTA should be the primary in the card and the thumb bar")
 	}
 	if strings.Contains(zero, "btn-tonal") {
 		t.Fatal("tonal CTA remains when nothing is due")
@@ -226,12 +226,12 @@ func TestZeroDueAndNoLesson(t *testing.T) {
 	if !strings.Contains(zero, "quiet-card--due") || !strings.Contains(zero, "icon-check") {
 		t.Fatal("nothing due should use the check placeholder")
 	}
-	pill := regexp.MustCompile(`(?s)<section class="quiet-card quiet-card--due">.*?</section>`).FindString(zero)
+	pill := regexp.MustCompile(`(?s)<div class="quiet-card quiet-card--due">.*?</div>`).FindString(zero)
 	if !strings.Contains(pill, `<bdi lang="en" dir="ltr">Nothing due</bdi>`) {
 		t.Fatal("nothing-due english run must be an ltr bdi inside the pill")
 	}
-	if strings.Count(none, "btn-primary") != 1 {
-		t.Fatal("start should stay the only primary when no lesson is queued")
+	if strings.Count(none, "btn-primary") != 2 {
+		t.Fatal("start should stay the primary, in the card and the thumb bar, when no lesson is queued")
 	}
 }
 

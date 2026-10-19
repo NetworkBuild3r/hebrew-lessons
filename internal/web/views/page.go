@@ -13,6 +13,25 @@ const AppName = "דֶּרֶךְ עִבְרִית"
 // UnitTitle is the one lesson the shell shows until the queue is wired.
 const UnitTitle = "הַבֹּקֶר שֶׁלִּי"
 
+// Fake Today facts. They stand in until the queue and the unit doc are wired.
+const (
+	UnitLetter   = "ב"
+	UnitName     = "בַּבַּיִת"
+	UnitNameEN   = "At home"
+	LessonIndex  = "3"
+	LessonCount  = "5"
+	LessonMin    = "7"
+	WarmupCount  = "2"
+	ReviewMin    = "6"
+	DueSoonCount = "7"
+	DueSoonHours = "3"
+	DateDayHE    = "יוֹם רִאשׁוֹן"
+	DateRestHE   = "בְּאוֹקְטוֹבֶּר"
+	DateDayEN    = "Sunday"
+	DateRestEN   = "18 October"
+	DateNum      = "18"
+)
+
 // UI is the shell copy for one language. Lang is he or en.
 type UI struct {
 	Lang            string
@@ -149,6 +168,34 @@ func (u UI) Href(path string) string {
 	return path + "?lang=en"
 }
 
+// LangHref switches UI language and stays on the same screen.
+func (p Page) LangHref() string {
+	path := "/"
+	switch p.Current {
+	case "review":
+		path = "/review"
+	case "progress":
+		path = "/progress"
+	case "lesson":
+		path = "/lesson"
+	}
+	if p.Lang == "en" {
+		return path
+	}
+	if path == "/" {
+		return "/?lang=en"
+	}
+	return path + "?lang=en"
+}
+
+// LangLabel is the short switch: EN from Hebrew, עב from English.
+func (p Page) LangLabel() string {
+	if p.Lang == "en" {
+		return "עב"
+	}
+	return "EN"
+}
+
 // Page is the data the layout shell needs. CSRF is the token auth.CSRFToken
 // returned for this request.
 type Page struct {
@@ -181,9 +228,27 @@ func (h Home) Page() Page {
 }
 
 // Chip is one new-word chip. Gender is "m" or "f" for a noun, otherwise empty.
+// Gloss is the English meaning, isolated from the pointed Hebrew.
 type Chip struct {
 	Text   string
 	Gender string
+	Gloss  string
+}
+
+// StackWords are unpointed bare forms, decorative on the review slate.
+func StackWords() []string {
+	return []string{"כסא", "חלון", "שלחן"}
+}
+
+func stackClass(i int) string {
+	switch i {
+	case 0:
+		return "stack__card stack__card--0"
+	case 1:
+		return "stack__card stack__card--1"
+	default:
+		return "stack__card stack__card--2"
+	}
 }
 
 // GenderLabel is the noun chip ז׳ or נ׳. Other values have no chip.
@@ -202,18 +267,18 @@ func GenderLabel(gender string) string {
 // Each one is a noun, so each one carries a gender chip.
 func SampleWords() []Chip {
 	return []Chip{
-		{Text: "כִּסֵּא", Gender: AddressMasculine},
-		{Text: "חַלּוֹן", Gender: AddressMasculine},
-		{Text: "שֻׁלְחָן", Gender: AddressMasculine},
+		{Text: "כִּסֵּא", Gender: AddressMasculine, Gloss: "chair"},
+		{Text: "חַלּוֹן", Gender: AddressMasculine, Gloss: "window"},
+		{Text: "שֻׁלְחָן", Gender: AddressMasculine, Gloss: "table"},
 	}
 }
 
 // BtnClass is the one primary on Today. primary is the filled action.
 func BtnClass(primary bool) string {
 	if primary {
-		return "btn btn-primary"
+		return "btn btn-primary m-hide"
 	}
-	return "btn btn-tonal"
+	return "btn btn-tonal m-hide"
 }
 
 // HXHeaders is the JSON object htmx sends as request headers from <body hx-headers>.
