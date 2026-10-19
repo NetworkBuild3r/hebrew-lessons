@@ -199,13 +199,65 @@ func TestReviewUsesConfigClock(t *testing.T) {
 func TestTTSFromAPIKey(t *testing.T) {
 	withKey := newTestApp(t, Config{DataDir: t.TempDir(), ElevenLabsAPIKey: "test-key"})
 	el, ok := withKey.TTS().(*audio.ElevenLabs)
-	if !ok || el.APIKey != "test-key" {
+	if !ok || el.APIKey != "test-key" || el.Voice != audio.DefaultVoiceID || el.Model != audio.DefaultModel {
 		t.Fatalf("tts = %#v, want *audio.ElevenLabs", withKey.TTS())
 	}
 
 	unset := newTestApp(t, Config{DataDir: t.TempDir()})
 	if unset.TTS() != nil {
 		t.Fatalf("tts = %#v, want nil without a key", unset.TTS())
+	}
+}
+
+func TestMCPOAuthDiscoveryAndChallenge(t *testing.T) {
+	const public = "https://mcp.example"
+	a := newTestApp(t, Config{
+		DataDir:      t.TempDir(),
+		PublicOrigin: "https://hebrew.example",
+		StateSecret:  "mcp-test-secret",
+		MCPPublicURL: public,
+		MCPAuthToken: "static-secret",
+	})
+	rr := httptest.NewRecorder()
+	a.MCP().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server", nil))
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"issuer":"`+public+`"`) {
+		t.Fatalf("discovery %d %s", rr.Code, rr.Body.String())
+	}
+	rr = httptest.NewRecorder()
+	a.MCP().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("healthz %d", rr.Code)
+	}
+	rr = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	a.MCP().ServeHTTP(rr, req)
+	want := `Bearer realm="hebrew-lessons", resource_metadata="` + public + `/.well-known/oauth-protected-resource"`
+	if rr.Code != http.StatusUnauthorized || rr.Header().Get("WWW-Authenticate") != want || rr.Body.String() != "Unauthorized" {
+		t.Fatalf("challenge %d %q %s", rr.Code, rr.Header().Get("WWW-Authenticate"), rr.Body.String())
+	}
+}
+
+func TestOAuthRefusesToStartWithoutSessionSecret(t *testing.T) {
+	_, err := NewApp(Config{
+		DataDir:      t.TempDir(),
+		MCPPublicURL: "https://hebrew-mcp.ibhacked.us",
+	})
+	if err == nil || !strings.Contains(err.Error(), "HEBREW_SESSION_SECRET is required when OAuth is enabled") {
+		t.Fatalf("public url: %v", err)
+	}
+	_, err = NewApp(Config{
+		DataDir:            t.TempDir(),
+		GoogleClientID:     "id",
+		GoogleClientSecret: "secret",
+	})
+	if err == nil || !strings.Contains(err.Error(), "HEBREW_SESSION_SECRET") {
+		t.Fatalf("google: %v", err)
+	}
+	a := newTestApp(t, Config{DataDir: t.TempDir()})
+	if a.MCP() == nil {
+		t.Fatal("oauth off should still start")
 	}
 }
 
@@ -235,16 +287,21 @@ func TestMCPHealthOpenAndToolsClosed(t *testing.T) {
 		t.Fatalf("health = %+v", body)
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
+	req = httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	rr := httptest.NewRecorder()
 	a.MCP().ServeHTTP(rr, req)
-	if rr.Code != http.StatusUnauthorized {
+	if rr.Code != http.StatusUnauthorized || rr.Body.String() != "Unauthorized" {
 		t.Fatalf("status = %d body %s", rr.Code, rr.Body.String())
 	}
-	if !strings.Contains(rr.Header().Get("WWW-Authenticate"), "Bearer") {
+	if rr.Header().Get("WWW-Authenticate") != `Bearer realm="hebrew-lessons"` {
 		t.Fatalf("challenge %q", rr.Header().Get("WWW-Authenticate"))
+	}
+	unknown := httptest.NewRecorder()
+	a.MCP().ServeHTTP(unknown, httptest.NewRequest(http.MethodGet, "/", nil))
+	if unknown.Code != http.StatusNotFound || unknown.Body.String() != "Not found" || unknown.Header().Get("WWW-Authenticate") != "" {
+		t.Fatalf("root %d %q %q", unknown.Code, unknown.Header().Get("WWW-Authenticate"), unknown.Body.String())
 	}
 }
 

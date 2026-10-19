@@ -14,12 +14,17 @@ func TestConfigFromEnv(t *testing.T) {
 		"DATA_DIR", "HTTP_ADDR", "MCP_ADDR", "PUBLIC_ORIGIN", "COOKIE_SECURE",
 		"TRUSTED_PROXIES", "LOG_LEVEL", "DEV",
 		"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+		"GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET",
+		"web_client_id", "client_id", "web_client_secret", "client_secret",
 		"GOOGLE_AUTH_URL", "GOOGLE_TOKEN_URL",
-		"GOOGLE_USERINFO_URL", "GOOGLE_JWKS_URL", "GOOGLE_ISSUER",
+		"GOOGLE_OAUTH_AUTH_URL", "GOOGLE_OAUTH_TOKEN_URL",
+		"GOOGLE_USERINFO_URL", "GOOGLE_OAUTH_USERINFO_URL",
+		"GOOGLE_JWKS_URL", "GOOGLE_ISSUER",
+		"MCP_OAUTH_REDIRECT_URIS",
 		"HEBREW_SESSION_SECRET",
 		"MCP_OAUTH_ALLOWED_EMAILS", "ADMIN_EMAILS",
 		"MCP_AUTH_TOKEN", "MCP_PUBLIC_URL", "MCP_ALLOWED_ORIGINS",
-		"ELEVENLABS_API_KEY",
+		"ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID", "ELEVENLABS_MODEL",
 	} {
 		t.Setenv(key, "")
 	}
@@ -69,6 +74,8 @@ func TestConfigFromEnv(t *testing.T) {
 	t.Setenv("MCP_PUBLIC_URL", "https://hebrew.example/mcp")
 	t.Setenv("MCP_ALLOWED_ORIGINS", "https://hebrew.example, https://builder.example")
 	t.Setenv("ELEVENLABS_API_KEY", "secret")
+	t.Setenv("ELEVENLABS_VOICE_ID", " voice-x ")
+	t.Setenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
 	cfg, err = configFromEnv()
 	if err != nil {
 		t.Fatal(err)
@@ -78,6 +85,9 @@ func TestConfigFromEnv(t *testing.T) {
 	}
 	if cfg.CookieSecure || !cfg.Dev || cfg.LogLevel != "debug" || cfg.ElevenLabsAPIKey != "secret" {
 		t.Fatalf("flags: %+v", cfg)
+	}
+	if cfg.ElevenLabsVoice != "voice-x" || cfg.ElevenLabsModel != "eleven_multilingual_v2" {
+		t.Fatalf("elevenlabs voice %q model %q", cfg.ElevenLabsVoice, cfg.ElevenLabsModel)
 	}
 	if cfg.GoogleClientID != "client" || cfg.GoogleClientSecret != "secret-value" {
 		t.Fatalf("google client: %+v", cfg)
@@ -105,6 +115,75 @@ func TestConfigFromEnv(t *testing.T) {
 	}
 	if cfg.GoogleAuthURL != "https://accounts.google.com/o/oauth2/v2/auth" {
 		t.Fatalf("unset google url was not defaulted: %s", cfg.GoogleAuthURL)
+	}
+}
+
+func TestGoogleEnvAliases(t *testing.T) {
+	t.Setenv("DATA_DIR", "/data")
+	for _, key := range []string{
+		"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+		"GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET",
+		"web_client_id", "client_id", "web_client_secret", "client_secret",
+		"GOOGLE_AUTH_URL", "GOOGLE_TOKEN_URL", "GOOGLE_OAUTH_AUTH_URL", "GOOGLE_OAUTH_TOKEN_URL",
+		"GOOGLE_USERINFO_URL", "GOOGLE_OAUTH_USERINFO_URL",
+		"MCP_OAUTH_REDIRECT_URIS",
+	} {
+		t.Setenv(key, "")
+	}
+
+	t.Setenv("GOOGLE_OAUTH_CLIENT_ID", "oauth-id")
+	t.Setenv("GOOGLE_OAUTH_CLIENT_SECRET", "oauth-secret")
+	t.Setenv("GOOGLE_OAUTH_AUTH_URL", "https://alias.example/auth")
+	t.Setenv("GOOGLE_OAUTH_TOKEN_URL", "https://alias.example/token")
+	t.Setenv("GOOGLE_OAUTH_USERINFO_URL", "https://alias.example/userinfo")
+	cfg, err := configFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.GoogleClientID != "oauth-id" || cfg.GoogleClientSecret != "oauth-secret" {
+		t.Fatalf("oauth alias %+v", cfg)
+	}
+	if cfg.GoogleAuthURL != "https://alias.example/auth" || cfg.GoogleTokenURL != "https://alias.example/token" || cfg.GoogleUserinfoURL != "https://alias.example/userinfo" {
+		t.Fatalf("url alias %+v", cfg)
+	}
+
+	t.Setenv("GOOGLE_OAUTH_CLIENT_ID", "")
+	t.Setenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
+	t.Setenv("web_client_id", "web-id")
+	t.Setenv("web_client_secret", "web-secret")
+	cfg, err = configFromEnv()
+	if err != nil || cfg.GoogleClientID != "web-id" || cfg.GoogleClientSecret != "web-secret" {
+		t.Fatalf("web alias %+v %v", cfg, err)
+	}
+
+	t.Setenv("web_client_id", "")
+	t.Setenv("web_client_secret", "")
+	t.Setenv("client_id", "plain-id")
+	t.Setenv("client_secret", "plain-secret")
+	cfg, err = configFromEnv()
+	if err != nil || cfg.GoogleClientID != "plain-id" || cfg.GoogleClientSecret != "plain-secret" {
+		t.Fatalf("client alias %+v %v", cfg, err)
+	}
+
+	t.Setenv("GOOGLE_CLIENT_ID", "primary-id")
+	t.Setenv("GOOGLE_CLIENT_SECRET", "primary-secret")
+	t.Setenv("GOOGLE_AUTH_URL", "https://primary.example/auth")
+	cfg, err = configFromEnv()
+	if err != nil || cfg.GoogleClientID != "primary-id" || cfg.GoogleClientSecret != "primary-secret" || cfg.GoogleAuthURL != "https://primary.example/auth" {
+		t.Fatalf("primary wins %+v %v", cfg, err)
+	}
+
+	t.Setenv("GOOGLE_CLIENT_ID", "  ")
+	t.Setenv("GOOGLE_OAUTH_CLIENT_ID", "fallback-id")
+	cfg, err = configFromEnv()
+	if err != nil || cfg.GoogleClientID != "fallback-id" {
+		t.Fatalf("blank primary %+v %v", cfg, err)
+	}
+
+	t.Setenv("MCP_OAUTH_REDIRECT_URIS", "https://client.example/cb, cursor://anysphere.cursor-mcp/oauth/callback")
+	cfg, err = configFromEnv()
+	if err != nil || len(cfg.OAuthRedirectURIs) != 2 || cfg.OAuthRedirectURIs[0] != "https://client.example/cb" {
+		t.Fatalf("redirects %+v %v", cfg.OAuthRedirectURIs, err)
 	}
 }
 

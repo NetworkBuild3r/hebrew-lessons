@@ -1,6 +1,9 @@
 .git
 .env*
-data/
+# Local data stays out of the image. The Tanakh corpus is the exception.
+data/*
+!data/tanakh
+!data/tanakh/**
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm

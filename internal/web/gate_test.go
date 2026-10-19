@@ -16,9 +16,9 @@ func TestLearnerPagesRequireSignIn(t *testing.T) {
 		marker string
 	}{
 		{"/", `class="today"`},
-		{"/review", views.UIFor("he", "m").ReviewHeading},
-		{"/progress", views.UIFor("he", "m").ProgressHeading},
-		{"/lesson", views.UIFor("he", "m").LessonHeading},
+		{"/review", views.UIFor("en", "m").ReviewHeading},
+		{"/progress", views.UIFor("en", "m").ProgressHeading},
+		{"/lesson", views.UIFor("en", "m").LessonHeading},
 	}
 	for _, page := range pages {
 		t.Run(page.path, func(t *testing.T) {
