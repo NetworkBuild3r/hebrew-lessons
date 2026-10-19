@@ -9,6 +9,26 @@ templ Today(h Home) {
 				<h1 lang={ h.Lang }>{ h.Heading }</h1>
 			</header>
 			<div class="today__cols">
+				if h.Placement == nil {
+					<section class="today-place today-place--open" aria-labelledby="place-title">
+						<p class="eyebrow" lang={ h.Lang }>{ PlacementFor(h.Lang).Kicker }</p>
+						<h2 id="place-title" lang={ h.Lang }>{ PlacementFor(h.Lang).TakeTitle }</h2>
+						<p class="today-place__hint" lang={ h.Lang }>{ PlacementFor(h.Lang).TakeHint }</p>
+						<a class="btn btn-primary" href={ templ.SafeURL(h.Href("/placement")) }>
+							<span lang={ h.Lang }>{ PlacementFor(h.Lang).TakeTitle }</span>
+						</a>
+					</section>
+				}
+				if h.Placement != nil && h.Placement.Active {
+					<section class="today-place today-place--resume" aria-labelledby="place-title">
+						<p class="eyebrow" lang={ h.Lang }>{ PlacementFor(h.Lang).Kicker }</p>
+						<h2 id="place-title" lang={ h.Lang }>{ PlacementFor(h.Lang).TodayResume }</h2>
+						<p class="today-place__hint" lang={ h.Lang }>{ PlacementFor(h.Lang).TakeHint }</p>
+						<a class="btn btn-tonal" href={ templ.SafeURL(h.Href("/placement")) }>
+							<span lang={ h.Lang }>{ PlacementFor(h.Lang).TodayResume }</span>
+						</a>
+					</section>
+				}
 				if h.Due > 0 {
 					<section class="ink-card today-due" aria-labelledby="due-title">
 						<p class="eyebrow" id="due-title" lang={ h.Lang }>{ h.DueKicker }</p>
