@@ -18,17 +18,17 @@ const (
 const (
 	// bands is the count of frequency bands, 0 through 4.
 	bands = 5
-	// BandSize is the most real words one band deals.
-	BandSize = 20
-	// MinRatedForStop is how many ratings a band needs before the stop rule applies.
-	MinRatedForStop = 10
-	// StopAgainMin is the Again share that stops a band. "I don't know" counts
+	// BandMax is the most real words one band deals.
+	BandMax = 20
+	// StopMinRated is how many ratings a band needs before the stop rule applies.
+	StopMinRated = 10
+	// StopAgainRate is the Again share that stops a band. "I don't know" counts
 	// as Again. Exactly this share stops. Hard does not count.
-	StopAgainMin = 0.60
+	StopAgainRate = 0.60
 	// SittingSize is how many answers one sitting takes before Next asks for a break.
 	SittingSize = 20
-	// MaxCards is the most cards one run rates.
-	MaxCards = 100
+	// CardCap is the most cards one run rates.
+	CardCap = 100
 
 	stopBand      = "band_stop"
 	stopCards     = "cap_cards"
@@ -86,7 +86,7 @@ type BandTally struct {
 
 // Result is one placement run.
 // Level is the highest band whose block was fully rated without the Again
-// rate reaching StopAgainMin, or −1 when none was.
+// rate reaching StopAgainRate, or −1 when none was.
 // StopReason is band_stop, cap_cards, exhausted, or empty when the run is
 // still in progress or the learner finished it first.
 //
@@ -105,6 +105,7 @@ type Result struct {
 	Level                  int         `json:"level"`
 	CardsRated             int         `json:"cards_rated"`
 	StopReason             string      `json:"stop_reason,omitempty"`
+	Sittings               int         `json:"sittings"`
 	Bands                  []BandScore `json:"bands"`
 	EstimatedKnownWords    int         `json:"estimated_known_words"`
 	SuggestedStartPosition int         `json:"suggested_start_position"`

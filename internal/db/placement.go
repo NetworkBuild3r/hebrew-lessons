@@ -68,7 +68,7 @@ type Placement struct {
 	Level                  int
 	CardsRated             int
 	StopReason             string
-	BandScores             []BandScore
+	BandScores             []BandScore // The band tallies. mcp.Placement reads this field.
 	EstimatedKnownWords    int
 	SuggestedStartPosition int
 	Sittings               int

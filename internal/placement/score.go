@@ -10,15 +10,15 @@ var bandRankSize = [bands]float64{0, 500, 500, 1000, 2000}
 // SuggestedStartPosition is 0. Finish fills it once the learner's units and
 // known set are known.
 //
-// A band deals at most BandSize words. Once MinRatedForStop cards in that
-// band are rated, an Again share of StopAgainMin or more stops the run.
-// "I don't know" counts as Again. Hard does not. Exactly StopAgainMin stops.
-// Fewer than MinRatedForStop ratings never stop, even when every one is
+// A band deals at most BandMax words. Once StopMinRated cards in that
+// band are rated, an Again share of StopAgainRate or more stops the run.
+// "I don't know" counts as Again. Hard does not. Exactly StopAgainRate stops.
+// Fewer than StopMinRated ratings never stop, even when every one is
 // Again. Level is the highest band whose block was fully rated without
 // stopping, or −1.
 //
 // StopReason is band_stop when a band stopped the run, cap_cards when
-// MaxCards were rated and words remain, exhausted when nothing dealable
+// CardCap were rated and words remain, exhausted when nothing dealable
 // remains, and empty when the learner stopped first. DontKnow counts in
 // Rated and in DontKnow. It is not added to the Again field.
 func Score(tallies [bands]BandTally) Result {
@@ -60,7 +60,7 @@ func Score(tallies [bands]BandTally) Result {
 	switch {
 	case stopped:
 		out.StopReason = stopBand
-	case remain && cardsRated >= MaxCards:
+	case remain && cardsRated >= CardCap:
 		out.StopReason = stopCards
 	case !remain:
 		out.StopReason = stopExhausted
@@ -79,25 +79,25 @@ func Score(tallies [bands]BandTally) Result {
 	return out
 }
 
-// blockLen is the block the learner has to finish: BandSize words, or
+// blockLen is the block the learner has to finish: BandMax words, or
 // fewer when the band does not have that many dealable words.
 func blockLen(dealable, rated int) int {
 	if dealable < rated {
 		dealable = rated
 	}
-	if dealable > BandSize {
-		return BandSize
+	if dealable > BandMax {
+		return BandMax
 	}
 	return dealable
 }
 
 // tripped reports that the band has enough ratings and its Again share,
-// counting "I don't know" as Again, is at least StopAgainMin.
+// counting "I don't know" as Again, is at least StopAgainRate.
 func tripped(c bandCount) bool {
-	if c.rated < MinRatedForStop {
+	if c.rated < StopMinRated {
 		return false
 	}
-	return float64(c.again+c.dontKnow) >= StopAgainMin*float64(c.rated)
+	return float64(c.again+c.dontKnow) >= StopAgainRate*float64(c.rated)
 }
 
 type bandCount struct {

@@ -90,8 +90,8 @@ func (s *Service) Start(ctx context.Context, userID int64) (int64, error) {
 }
 
 // Next returns the next card after the last answered one.
-// Done is set when a band's Again rate has reached StopAgainMin, the run
-// has rated MaxCards, or nothing dealable remains. That also scores the
+// Done is set when a band's Again rate has reached StopAgainRate, the run
+// has rated CardCap, or nothing dealable remains. That also scores the
 // run. Break is set when the current sitting has SittingSize answers and
 // the run is still open. A word that already has a he_en card is skipped.
 // A card already dealt is returned so the learner can rate it. A finished
@@ -144,7 +144,7 @@ func (s *Service) Next(ctx context.Context, runID int64) (NextResult, error) {
 		}
 	}
 	counts := bandCounts(answered, indexItems(cat))
-	if ratedCount(rows) >= MaxCards || bandTripped(counts) {
+	if ratedCount(rows) >= CardCap || bandTripped(counts) {
 		return s.finishNow(ctx, runID)
 	}
 	next, ok, err := s.pick(ctx, run, order, answered, counts)
@@ -167,24 +167,28 @@ func (s *Service) Next(ctx context.Context, runID int64) (NextResult, error) {
 	return NextResult{Card: &card}, nil
 }
 
-// ContinueSitting opens the next sitting after this one is full.
-// "Keep going" calls it. "Done for today" does not, and does not finish the run.
-func (s *Service) ContinueSitting(ctx context.Context, runID int64) error {
+// ContinueSitting opens the next sitting on the learner's unfinished run
+// after the current one is full. "Keep going" calls it with the user id.
+// "Done for today" does not, and does not finish the run.
+func (s *Service) ContinueSitting(ctx context.Context, userID int64) error {
 	if err := s.ready(); err != nil {
 		return err
 	}
-	run, err := s.loadOpen(ctx, runID)
+	run, ok, err := s.store.OpenPlacementRun(ctx, userID)
 	if err != nil {
 		return err
 	}
-	rows, err := s.store.ListPlacementAnswers(ctx, runID)
+	if !ok {
+		return fmt.Errorf("placement: user %d has no open run", userID)
+	}
+	rows, err := s.store.ListPlacementAnswers(ctx, run.ID)
 	if err != nil {
 		return err
 	}
 	if sittingRated(rows, run.SittingNo) < SittingSize {
 		return fmt.Errorf("placement: sitting %d is not full", run.SittingNo)
 	}
-	return s.store.AdvancePlacementSitting(ctx, runID)
+	return s.store.AdvancePlacementSitting(ctx, run.ID)
 }
 
 func (s *Service) resumeSitting(ctx context.Context, run db.PlacementRun) error {
@@ -223,7 +227,7 @@ func (s *Service) pick(ctx context.Context, run db.PlacementRun, order []fixture
 		if tripped(counts[it.Band]) {
 			return fixtureItem{}, false, nil
 		}
-		if counts[it.Band].rated >= BandSize {
+		if counts[it.Band].rated >= BandMax {
 			continue
 		}
 		for band := 0; band < it.Band; band++ {
@@ -345,8 +349,8 @@ func (s *Service) Finish(ctx context.Context, runID int64) (Result, error) {
 		}
 	}
 	for band := range tallies {
-		if tallies[band].Dealable > BandSize {
-			tallies[band].Dealable = BandSize
+		if tallies[band].Dealable > BandMax {
+			tallies[band].Dealable = BandMax
 		}
 	}
 	result := Score(tallies)
@@ -355,6 +359,7 @@ func (s *Service) Finish(ctx context.Context, runID int64) (Result, error) {
 	result.UserID = run.UserID
 	result.StartedAt = run.StartedAt
 	result.FinishedAt = now
+	result.Sittings = run.SittingNo
 	body, err := json.Marshal(storedResult{Bands: result.Bands, EstimatedKnownWords: result.EstimatedKnownWords})
 	if err != nil {
 		return Result{}, err
@@ -395,6 +400,7 @@ func (s *Service) resultFrom(ctx context.Context, run db.PlacementRun) (Result, 
 		Level:               level,
 		CardsRated:          rated,
 		StopReason:          run.StopReason,
+		Sittings:            run.SittingNo,
 		Bands:               stored.Bands,
 		EstimatedKnownWords: stored.EstimatedKnownWords,
 	}

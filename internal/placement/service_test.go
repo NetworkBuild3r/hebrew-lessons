@@ -27,8 +27,8 @@ type movingClock struct{ t *time.Time }
 func (c movingClock) Now() time.Time { return *c.t }
 
 func TestAgainStop(t *testing.T) {
-	if BandSize != 20 || MinRatedForStop != 10 || StopAgainMin != 0.60 || SittingSize != 20 || MaxCards != 100 {
-		t.Fatalf("BandSize=%d minRated=%d again=%v sitting=%d cards=%d", BandSize, MinRatedForStop, StopAgainMin, SittingSize, MaxCards)
+	if BandMax != 20 || StopMinRated != 10 || StopAgainRate != 0.60 || SittingSize != 20 || CardCap != 100 {
+		t.Fatalf("BandMax=%d minRated=%d again=%v sitting=%d cards=%d", BandMax, StopMinRated, StopAgainRate, SittingSize, CardCap)
 	}
 	svc, store := openSvc(t, fixedClock{when})
 	ctx := context.Background()
@@ -56,7 +56,7 @@ func TestAgainStop(t *testing.T) {
 		t.Fatalf("after 9 agains: %+v %v", res, err)
 	}
 
-	ratePrefix(t, svc, runID, MinRatedForStop, func(i int) int {
+	ratePrefix(t, svc, runID, StopMinRated, func(i int) int {
 		if i < 6 {
 			return Again
 		}
@@ -75,14 +75,14 @@ func TestAgainStop(t *testing.T) {
 		t.Fatal(err)
 	}
 	band := result.Bands[0]
-	if result.StopReason != stopBand || result.Level != -1 || result.CardsRated != MinRatedForStop || band.Again != 6 || band.Good != 4 || !result.FinishedAt.Equal(stored.FinishedAt) {
+	if result.StopReason != stopBand || result.Level != -1 || result.CardsRated != StopMinRated || band.Again != 6 || band.Good != 4 || !result.FinishedAt.Equal(stored.FinishedAt) {
 		t.Fatalf("stop result %+v band0=%+v", result, band)
 	}
 
 	below, _ := openSvc(t, fixedClock{when})
 	belowUser := insertLearner(t, below.store, "below@example.com", "sub-below")
 	belowRun := start(t, below, belowUser)
-	ratePrefix(t, below, belowRun, MinRatedForStop, func(i int) int {
+	ratePrefix(t, below, belowRun, StopMinRated, func(i int) int {
 		if i < 5 {
 			return Again
 		}
@@ -96,7 +96,7 @@ func TestAgainStop(t *testing.T) {
 	dontSvc, dontStore := openSvc(t, fixedClock{when})
 	dontUser := insertLearner(t, dontStore, "dontstop@example.com", "sub-dontstop")
 	dontRun := start(t, dontSvc, dontUser)
-	ratePrefix(t, dontSvc, dontRun, MinRatedForStop, func(i int) int {
+	ratePrefix(t, dontSvc, dontRun, StopMinRated, func(i int) int {
 		if i < 6 {
 			return DontKnow
 		}
@@ -117,14 +117,14 @@ func TestAgainStop(t *testing.T) {
 	hardSvc, _ := openSvc(t, fixedClock{when})
 	hardUser := insertLearner(t, hardSvc.store, "hard@example.com", "sub-hard")
 	hardRun := start(t, hardSvc, hardUser)
-	ratePrefix(t, hardSvc, hardRun, MinRatedForStop, func(int) int { return Hard })
+	ratePrefix(t, hardSvc, hardRun, StopMinRated, func(int) int { return Hard })
 	res, err = hardSvc.Next(ctx, hardRun)
 	if err != nil || res.Done || res.Break || res.Card == nil || mustFind(t, hardSvc, res.Card.ID).Band != 0 {
 		t.Fatalf("after 10 hard: %+v %v", res, err)
 	}
 }
 
-func TestFullDeckExhaustsAtMaxCards(t *testing.T) {
+func TestFullDeckExhaustsAtCardCap(t *testing.T) {
 	svc, store := openSvc(t, fixedClock{when})
 	svc.fixture = many(25)
 	ctx := context.Background()
@@ -137,7 +137,7 @@ func TestFullDeckExhaustsAtMaxCards(t *testing.T) {
 			t.Fatal(err)
 		}
 		if res.Break {
-			if err := svc.ContinueSitting(ctx, runID); err != nil {
+			if err := svc.ContinueSitting(ctx, userID); err != nil {
 				t.Fatal(err)
 			}
 			continue
@@ -149,30 +149,93 @@ func TestFullDeckExhaustsAtMaxCards(t *testing.T) {
 			t.Fatal("next returned no card")
 		}
 		dealt++
-		if dealt > MaxCards {
+		if dealt > CardCap {
 			t.Fatalf("dealt %d", dealt)
 		}
 		if err := svc.Rate(ctx, runID, res.Card.ID, Good); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if dealt != MaxCards {
-		t.Fatalf("dealt %d, want %d", dealt, MaxCards)
+	if dealt != CardCap {
+		t.Fatalf("dealt %d, want %d", dealt, CardCap)
 	}
 	result, err := svc.Finish(ctx, runID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.StopReason != stopExhausted || result.Level != 4 || result.CardsRated != MaxCards {
+	if result.StopReason != stopExhausted || result.Level != 4 || result.CardsRated != CardCap {
 		t.Fatalf("full deck stop=%s level=%d rated=%d", result.StopReason, result.Level, result.CardsRated)
 	}
 	place, ok, err := store.LatestPlacement(ctx, userID)
-	if err != nil || !ok || place.Sittings != MaxCards/SittingSize || place.StopReason != stopExhausted {
+	if err != nil || !ok || place.Sittings != CardCap/SittingSize || place.StopReason != stopExhausted {
 		t.Fatalf("latest %+v ok=%v err=%v", place, ok, err)
 	}
 	n, err := store.CountCards(ctx, userID)
-	if err != nil || n != MaxCards {
+	if err != nil || n != CardCap {
 		t.Fatalf("cards = %d %v", n, err)
+	}
+	rows, err := store.ListPlacementAnswers(ctx, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byBand := map[int]int{}
+	for _, row := range rows {
+		if !row.Rating.Valid {
+			continue
+		}
+		it, err := svc.find(row.ItemID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		byBand[it.Band]++
+	}
+	for band := 0; band < bands; band++ {
+		if byBand[band] != BandMax {
+			t.Fatalf("band %d rated %d, want %d", band, byBand[band], BandMax)
+		}
+	}
+}
+
+func TestBandMax(t *testing.T) {
+	svc, _ := openSvc(t, fixedClock{when})
+	svc.fixture = many(25)
+	ctx := context.Background()
+	userID := insertLearner(t, svc.store, "band@example.com", "sub-band")
+	runID := start(t, svc, userID)
+	ratePrefix(t, svc, runID, BandMax, func(int) int { return Good })
+	res, err := svc.Next(ctx, runID)
+	if err != nil || !res.Break || res.Done || res.Card != nil {
+		t.Fatalf("after %d in the band: %+v %v", BandMax, res, err)
+	}
+	if err := svc.ContinueSitting(ctx, userID); err != nil {
+		t.Fatal(err)
+	}
+	res, err = svc.Next(ctx, runID)
+	if err != nil || res.Break || res.Done || res.Card == nil {
+		t.Fatalf("card after the band cap: %+v %v", res, err)
+	}
+	if got := mustFind(t, svc, res.Card.ID).Band; got != 1 {
+		t.Fatalf("card after band 0 is band %d", got)
+	}
+}
+
+func TestLatestPlacementUnfinished(t *testing.T) {
+	svc, store := openSvc(t, fixedClock{when})
+	svc.fixture = manyBand(0, 8)
+	ctx := context.Background()
+	userID := insertLearner(t, store, "open@example.com", "sub-open")
+	runID := start(t, svc, userID)
+	ratePrefix(t, svc, runID, 3, func(int) int { return Again })
+	place, ok, err := store.LatestPlacement(ctx, userID)
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if place.Finished || place.StopReason != "" || place.CardsRated != 3 || place.Sittings != 1 || !place.TakenAt.Equal(when) || len(place.BandScores) != 0 {
+		t.Fatalf("unfinished %+v", place)
+	}
+	run, err := store.GetPlacementRun(ctx, runID)
+	if err != nil || !run.FinishedAt.IsZero() || run.StopReason != "" {
+		t.Fatalf("run %+v %v", run, err)
 	}
 }
 
@@ -195,7 +258,7 @@ func TestSittingBreak(t *testing.T) {
 	if err != nil || !ok || place.Finished || place.Sittings != 1 || place.StopReason != "" || place.CardsRated != SittingSize {
 		t.Fatalf("latest %+v ok=%v err=%v", place, ok, err)
 	}
-	if err := svc.ContinueSitting(ctx, runID); err != nil {
+	if err := svc.ContinueSitting(ctx, userID); err != nil {
 		t.Fatal(err)
 	}
 	res, err = svc.Next(ctx, runID)
@@ -230,7 +293,7 @@ func TestSittingBreak(t *testing.T) {
 	if first != SittingSize || second != 1 {
 		t.Fatalf("sittings first=%d second=%d", first, second)
 	}
-	if err := svc.ContinueSitting(ctx, runID); err == nil {
+	if err := svc.ContinueSitting(ctx, userID); err == nil {
 		t.Fatal("continue on an open sitting succeeded")
 	}
 }

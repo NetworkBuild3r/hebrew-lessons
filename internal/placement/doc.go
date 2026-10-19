@@ -18,13 +18,13 @@
 // when it is learning. Times come from the clock.Clock passed to New.
 //
 // Bands 0–4 are real words. There are no pseudo-words. Each band deals at
-// most BandSize words. The deck plays band 0 first, then bands 1–4. Each
-// band is shuffled from the seed stored on the run. Once MinRatedForStop
-// cards in a band are rated, an Again share of StopAgainMin or more stops
+// most BandMax words. The deck plays band 0 first, then bands 1–4. Each
+// band is shuffled from the seed stored on the run. Once StopMinRated
+// cards in a band are rated, an Again share of StopAgainRate or more stops
 // that band and every band above it, and the run ends. "I don't know"
-// counts as Again for that rule. Hard does not. Exactly StopAgainMin stops.
-// Fewer than MinRatedForStop ratings do not stop. The run also stops after
-// MaxCards rated cards. There is no time cap.
+// counts as Again for that rule. Hard does not. Exactly StopAgainRate stops.
+// Fewer than StopMinRated ratings do not stop. The run also stops after
+// CardCap rated cards. There is no time cap.
 //
 // A sitting is SittingSize answers. Next then returns a break instead of a
 // card. The client shows "Done for today" as the primary action and "Keep
@@ -37,10 +37,10 @@
 // StopReason is band_stop, cap_cards, exhausted, or empty while the run is
 // in progress or when the learner finished it first. band_stop wins over
 // the card cap. exhausted wins when nothing remains, including a full run
-// of BandSize Good answers in every band.
+// of BandMax Good answers in every band.
 //
 // Level is the highest band whose block was fully rated without the Again
-// rate reaching StopAgainMin, or −1. A band with nothing dealable is skipped.
+// rate reaching StopAgainRate, or −1. A band with nothing dealable is skipped.
 // EstimatedKnownWords sums, over bands 1–4, GoodPlusRate times the band's
 // width in ranks (500, 500, 1000, 2000), then adds the count of band 0
 // words rated Good or Easy. SuggestedStartPosition is filled by Finish,
@@ -52,14 +52,14 @@
 // is covered. A latest Again or Hard does not count. The position is
 // recomputed on read.
 //
-// The tuning numbers are BandSize, MinRatedForStop, StopAgainMin,
-// SittingSize, and MaxCards.
+// The tuning numbers are BandMax, StopMinRated, StopAgainRate,
+// SittingSize, and CardCap.
 //
 // The deck API on *Service, reached from app.App.Placement, is:
 //
 //	Start(ctx, userID) (runID, error)
 //	Next(ctx, runID) (NextResult, error)
-//	ContinueSitting(ctx, runID) error
+//	ContinueSitting(ctx, userID) error
 //	Rate(ctx, runID, itemID, rating) error
 //	Finish(ctx, runID) (Result, error)
 //

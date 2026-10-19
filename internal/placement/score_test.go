@@ -3,13 +3,13 @@ package placement
 import "testing"
 
 func TestScoreAgainStop(t *testing.T) {
-	if BandSize != 20 || MinRatedForStop != 10 || StopAgainMin != 0.60 || SittingSize != 20 || MaxCards != 100 {
-		t.Fatalf("BandSize=%d minRated=%d again=%v sitting=%d cards=%d", BandSize, MinRatedForStop, StopAgainMin, SittingSize, MaxCards)
+	if BandMax != 20 || StopMinRated != 10 || StopAgainRate != 0.60 || SittingSize != 20 || CardCap != 100 {
+		t.Fatalf("BandMax=%d minRated=%d again=%v sitting=%d cards=%d", BandMax, StopMinRated, StopAgainRate, SittingSize, CardCap)
 	}
 
 	// Exactly 6/10 stops. Later bands stay unrated.
 	trip := openTail()
-	trip[0] = BandTally{Ratings: append(repeat(Again, 6), repeat(Good, 4)...), Dealable: BandSize}
+	trip[0] = BandTally{Ratings: append(repeat(Again, 6), repeat(Good, 4)...), Dealable: BandMax}
 	got := Score(trip)
 	if got.StopReason != stopBand || got.Level != -1 || got.Bands[0].Rated != 10 || got.Bands[0].Again != 6 {
 		t.Fatalf("6/10: stop=%s level=%d band=%+v", got.StopReason, got.Level, got.Bands[0])
@@ -17,7 +17,7 @@ func TestScoreAgainStop(t *testing.T) {
 
 	// Nine Agains are under the minimum, so the band does not stop.
 	nine := openTail()
-	nine[0] = BandTally{Ratings: repeat(Again, 9), Dealable: BandSize}
+	nine[0] = BandTally{Ratings: repeat(Again, 9), Dealable: BandMax}
 	got = Score(nine)
 	if got.StopReason != "" || got.Level != -1 || got.Bands[0].Rated != 9 || got.Bands[0].Again != 9 {
 		t.Fatalf("9 agains: stop=%s level=%d band=%+v", got.StopReason, got.Level, got.Bands[0])
@@ -25,7 +25,7 @@ func TestScoreAgainStop(t *testing.T) {
 
 	// 5/10 is under the line, so the band stays open.
 	below := openTail()
-	below[0] = BandTally{Ratings: append(repeat(Again, 5), repeat(Good, 5)...), Dealable: BandSize}
+	below[0] = BandTally{Ratings: append(repeat(Again, 5), repeat(Good, 5)...), Dealable: BandMax}
 	got = Score(below)
 	if got.StopReason != "" || got.Level != -1 || got.Bands[0].Rated != 10 {
 		t.Fatalf("5/10: stop=%s level=%d band=%+v", got.StopReason, got.Level, got.Bands[0])
@@ -33,7 +33,7 @@ func TestScoreAgainStop(t *testing.T) {
 
 	// "I don't know" counts as Again for the stop, and stays in DontKnow.
 	dont := openTail()
-	dont[0] = BandTally{Ratings: append(repeat(DontKnow, 6), repeat(Good, 4)...), Dealable: BandSize}
+	dont[0] = BandTally{Ratings: append(repeat(DontKnow, 6), repeat(Good, 4)...), Dealable: BandMax}
 	got = Score(dont)
 	if got.StopReason != stopBand || got.Level != -1 || got.Bands[0].DontKnow != 6 || got.Bands[0].Again != 0 {
 		t.Fatalf("dont know: stop=%s level=%d band=%+v", got.StopReason, got.Level, got.Bands[0])
@@ -41,16 +41,16 @@ func TestScoreAgainStop(t *testing.T) {
 
 	// Hard is not Again, so ten Hards do not stop.
 	hard := openTail()
-	hard[0] = BandTally{Ratings: repeat(Hard, MinRatedForStop), Dealable: BandSize}
+	hard[0] = BandTally{Ratings: repeat(Hard, StopMinRated), Dealable: BandMax}
 	got = Score(hard)
-	if got.StopReason != "" || got.Bands[0].Hard != MinRatedForStop || got.Bands[0].Again != 0 {
+	if got.StopReason != "" || got.Bands[0].Hard != StopMinRated || got.Bands[0].Again != 0 {
 		t.Fatalf("hard: stop=%s band=%+v", got.StopReason, got.Bands[0])
 	}
 
 	// A finished earlier band still sets the level when the next one trips.
 	var both [bands]BandTally
-	both[0] = BandTally{Ratings: repeat(Good, BandSize), Dealable: BandSize}
-	both[1] = BandTally{Ratings: append(repeat(Again, 6), repeat(Good, 4)...), Dealable: BandSize}
+	both[0] = BandTally{Ratings: repeat(Good, BandMax), Dealable: BandMax}
+	both[1] = BandTally{Ratings: append(repeat(Again, 6), repeat(Good, 4)...), Dealable: BandMax}
 	got = Score(both)
 	if got.Level != 0 || got.StopReason != stopBand {
 		t.Fatalf("band 1 trip: level=%d stop=%s", got.Level, got.StopReason)
@@ -95,16 +95,16 @@ func TestScoreEstimateCapAndExhausted(t *testing.T) {
 	var capped [bands]BandTally
 	capped[0] = BandTally{Ratings: repeat(Good, 40), Dealable: 40}
 	for band := 1; band < 4; band++ {
-		capped[band] = BandTally{Ratings: repeat(Good, BandSize), Dealable: BandSize}
+		capped[band] = BandTally{Ratings: repeat(Good, BandMax), Dealable: BandMax}
 	}
-	capped[4] = BandTally{Dealable: BandSize}
+	capped[4] = BandTally{Dealable: BandMax}
 	got := Score(capped)
-	if got.CardsRated != MaxCards || got.StopReason != stopCards || got.Level != 3 {
+	if got.CardsRated != CardCap || got.StopReason != stopCards || got.Level != 3 {
 		t.Fatalf("cap: rated=%d stop=%s level=%d", got.CardsRated, got.StopReason, got.Level)
 	}
 
 	var done [bands]BandTally
-	done[0] = BandTally{Ratings: repeat(Good, BandSize), Dealable: BandSize}
+	done[0] = BandTally{Ratings: repeat(Good, BandMax), Dealable: BandMax}
 	got = Score(done)
 	if got.StopReason != stopExhausted || got.Level != 0 {
 		t.Fatalf("exhausted: stop=%s level=%d", got.StopReason, got.Level)
@@ -114,7 +114,7 @@ func TestScoreEstimateCapAndExhausted(t *testing.T) {
 func openTail() [bands]BandTally {
 	var out [bands]BandTally
 	for band := 1; band < bands; band++ {
-		out[band] = BandTally{Dealable: BandSize}
+		out[band] = BandTally{Dealable: BandMax}
 	}
 	return out
 }
