@@ -1,9 +1,11 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -258,6 +260,91 @@ func TestOAuthRefusesToStartWithoutSessionSecret(t *testing.T) {
 	a := newTestApp(t, Config{DataDir: t.TempDir()})
 	if a.MCP() == nil {
 		t.Fatal("oauth off should still start")
+	}
+}
+
+func TestReadOnlyTokenRefusesToStart(t *testing.T) {
+	const admin = "admin-token-admin-token-admin-tok"
+	const smoke = "smoke-token-smoke-token-smoke-tok"
+	cases := []struct {
+		name string
+		cfg  Config
+		want string
+	}{
+		{
+			name: "missing learner",
+			cfg:  Config{DataDir: t.TempDir(), MCPAuthToken: admin, MCPReadOnlyToken: smoke},
+			want: "MCP_READONLY_LEARNER_ID must be a positive integer when MCP_READONLY_TOKEN is set",
+		},
+		{
+			name: "negative learner",
+			cfg:  Config{DataDir: t.TempDir(), MCPAuthToken: admin, MCPReadOnlyToken: smoke, MCPReadOnlyLearnerID: -3},
+			want: "MCP_READONLY_LEARNER_ID must be a positive integer when MCP_READONLY_TOKEN is set",
+		},
+		{
+			name: "equals admin",
+			cfg:  Config{DataDir: t.TempDir(), MCPAuthToken: admin, MCPReadOnlyToken: admin, MCPReadOnlyLearnerID: 7},
+			want: "MCP_READONLY_TOKEN must not equal MCP_AUTH_TOKEN",
+		},
+		{
+			name: "too short",
+			cfg:  Config{DataDir: t.TempDir(), MCPAuthToken: admin, MCPReadOnlyToken: "smoke-token-smoke-token-smoke-t", MCPReadOnlyLearnerID: 7},
+			want: "MCP_READONLY_TOKEN must be at least 32 characters",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			prev := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+			t.Cleanup(func() { slog.SetDefault(prev) })
+			_, err := NewApp(tc.cfg)
+			if err == nil || err.Error() != tc.want {
+				t.Fatalf("err %v", err)
+			}
+			if !strings.Contains(buf.String(), tc.want) {
+				t.Fatalf("log %q", buf.String())
+			}
+			if strings.Contains(err.Error(), tc.cfg.MCPReadOnlyToken) || strings.Contains(buf.String(), tc.cfg.MCPReadOnlyToken) {
+				t.Fatal("refusal exposed the token")
+			}
+		})
+	}
+}
+
+func TestReadOnlyTokenAcceptedAtStartup(t *testing.T) {
+	const admin = "admin-token-admin-token-admin-tok"
+	const smoke = "smoke-token-smoke-token-smoke-tok"
+	a := newTestApp(t, Config{
+		DataDir:              t.TempDir(),
+		StateSecret:          "state-secret-state-secret-ok",
+		MCPPublicURL:         "https://mcp.example",
+		MCPAuthToken:         admin,
+		MCPReadOnlyToken:     smoke,
+		MCPReadOnlyLearnerID: 7,
+	})
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}`
+	for _, token := range []string{admin, smoke} {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("MCP-Protocol-Version", "2025-11-25")
+		req.Header.Set("Authorization", "Bearer "+token)
+		a.MCP().ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status %d %s", rr.Code, rr.Body.String())
+		}
+	}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("MCP-Protocol-Version", "2025-11-25")
+	req.Header.Set("Authorization", "Bearer nope")
+	a.MCP().ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized || rr.Body.String() != "Unauthorized" {
+		t.Fatalf("wrong token %d %s", rr.Code, rr.Body.String())
 	}
 }
 
