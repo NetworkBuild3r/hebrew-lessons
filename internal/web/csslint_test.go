@@ -101,8 +101,18 @@ func TestShippedCSSHasNoPhysicalProperties(t *testing.T) {
 		defined[m[1]] = true
 	}
 	for _, m := range regexp.MustCompile(`var\(--([a-z0-9-]+)`).FindAllStringSubmatch(text, -1) {
+		// --gbtn-* are Google's required brand colours. They live on .gbtn,
+		// not in tokens.css, and they are the one exception.
+		if strings.HasPrefix(m[1], "gbtn-") {
+			continue
+		}
 		if !defined[m[1]] {
 			t.Errorf("base.css uses undefined token --%s", m[1])
+		}
+	}
+	for _, hex := range []string{"#FFFFFF", "#747775", "#1F1F1F", "#131314", "#8E918F", "#E3E3E3"} {
+		if !strings.Contains(text, hex) {
+			t.Errorf("Google button missing brand colour %s", hex)
 		}
 	}
 }

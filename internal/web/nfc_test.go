@@ -141,8 +141,8 @@ func TestRenderedPagesAreNFC(t *testing.T) {
 	for _, path := range []string{
 		"/", "/?lang=en", "/?due=0", "/?next=0",
 		"/?lang=en&due=0", "/?lang=en&next=0",
-		"/review", "/progress", "/lesson",
-		"/review?lang=en", "/progress?lang=en", "/lesson?lang=en",
+		"/review", "/progress", "/lesson", "/signin",
+		"/review?lang=en", "/progress?lang=en", "/lesson?lang=en", "/signin?lang=en",
 	} {
 		body := get(t, h, path)
 		if !norm.NFC.IsNormalString(body) {

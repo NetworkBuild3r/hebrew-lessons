@@ -102,12 +102,105 @@ func TestCSRFAndLogout(t *testing.T) {
 		t.Fatalf("form csrf %d body %s", rr.Code, rr.Body.String())
 	}
 
-	rr = call(http.MethodPost, "/auth/logout", sess.CSRF, "https://hebrew.example", false)
-	if rr.Code != http.StatusNoContent {
-		t.Fatalf("logout %d %s", rr.Code, rr.Body.String())
+	rr = call(http.MethodPost, "/auth/logout", sess.CSRF, "https://hebrew.example", true)
+	if rr.Code != http.StatusSeeOther || rr.Header().Get("Location") != "/signin" {
+		t.Fatalf("logout %d location %q body %s", rr.Code, rr.Header().Get("Location"), rr.Body.String())
 	}
 	if _, _, err := svc.Lookup(context.Background(), raw); err != ErrNoSession {
 		t.Fatalf("session after logout: %v", err)
+	}
+}
+
+func TestLogoutFormAndHTMX(t *testing.T) {
+	clk := &manualClock{t: time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)}
+	store := openTestStore(t, clk)
+	user, err := store.CreateUser(context.Background(), "learner@example.com", "sub-1", RoleLearner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := New(Config{
+		PublicOrigin:  "https://hebrew.example",
+		CookieSecure:  false,
+		Clock:         clk,
+		Store:         store,
+		AllowedEmails: []string{"learner@example.com"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawForm, sessForm, err := svc.createSession(context.Background(), user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawHX, sessHX, err := svc.createSession(context.Background(), user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mux := http.NewServeMux()
+	svc.Register(mux)
+	h := svc.Middleware(mux)
+
+	bad := httptest.NewRequest(http.MethodPost, "/auth/logout", strings.NewReader(""))
+	bad.Header.Set("HX-Request", "true")
+	bad.Header.Set("Origin", "https://evil.example")
+	bad.Header.Set("X-CSRF-Token", sessHX.CSRF)
+	bad.AddCookie(&http.Cookie{Name: cookieSession, Value: rawHX})
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, bad)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("htmx bad origin %d", rr.Code)
+	}
+	if _, _, err := svc.Lookup(context.Background(), rawHX); err != nil {
+		t.Fatalf("session after rejected htmx logout: %v", err)
+	}
+
+	form := httptest.NewRequest(http.MethodPost, "/auth/logout", strings.NewReader(url.Values{"_csrf": {sessForm.CSRF}}.Encode()))
+	form.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	form.Header.Set("Origin", "https://hebrew.example")
+	form.AddCookie(&http.Cookie{Name: cookieSession, Value: rawForm})
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, form)
+	if rr.Code != http.StatusSeeOther || rr.Header().Get("Location") != "/signin" {
+		t.Fatalf("form logout %d location %q", rr.Code, rr.Header().Get("Location"))
+	}
+	if rr.Header().Get("HX-Redirect") != "" {
+		t.Fatalf("form logout set HX-Redirect %q", rr.Header().Get("HX-Redirect"))
+	}
+	assertSessionCookiesCleared(t, rr)
+	if _, _, err := svc.Lookup(context.Background(), rawForm); err != ErrNoSession {
+		t.Fatalf("form session after logout: %v", err)
+	}
+
+	hx := httptest.NewRequest(http.MethodPost, "/auth/logout", strings.NewReader(""))
+	hx.Header.Set("HX-Request", "true")
+	hx.Header.Set("Origin", "https://hebrew.example")
+	hx.Header.Set("X-CSRF-Token", sessHX.CSRF)
+	hx.AddCookie(&http.Cookie{Name: cookieSession, Value: rawHX})
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, hx)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("htmx logout %d %s", rr.Code, rr.Body.String())
+	}
+	if rr.Header().Get("HX-Redirect") != "/signin" {
+		t.Fatalf("HX-Redirect %q", rr.Header().Get("HX-Redirect"))
+	}
+	if loc := rr.Header().Get("Location"); loc != "" {
+		t.Fatalf("htmx logout Location %q", loc)
+	}
+	assertSessionCookiesCleared(t, rr)
+	if _, _, err := svc.Lookup(context.Background(), rawHX); err != ErrNoSession {
+		t.Fatalf("htmx session after logout: %v", err)
+	}
+}
+
+func assertSessionCookiesCleared(t *testing.T, rr *httptest.ResponseRecorder) {
+	t.Helper()
+	for _, name := range []string{cookieSession, cookieSessionHost} {
+		c := cookieNamed(t, rr, name)
+		if c.Value != "" || c.MaxAge >= 0 {
+			t.Fatalf("%s not cleared: %+v", name, c)
+		}
 	}
 }
 

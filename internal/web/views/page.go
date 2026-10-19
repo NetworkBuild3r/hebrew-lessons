@@ -10,6 +10,24 @@ import (
 // in its own bdi, not inside this string.
 const AppName = "דֶּרֶךְ עִבְרִית"
 
+// Sign-in copy. One interface language at a time; the other language is
+// the same page with ?lang=en. GoogleSignInStart is auth's browser
+// sign-in route. The shell only links to it.
+//
+// SignInGoogleHE is Google's Hebrew button label, unpointed, with the
+// word Google rendered separately in Latin. SignInWord is the pointed
+// teaser on the night slate.
+const (
+	SignInTitleHE     = "כְּנִיסָה"
+	SignInTitleEN     = "Sign in"
+	SignInLedeHE      = "עִבִרִית, כְּמוֹ שֶׁהַמֶּחְקָר אוֹמֵר"
+	SignInLedeEN      = "Hebrew, the way research says works"
+	SignInGoogleHE    = "כניסה באמצעות"
+	SignInGoogleEN    = "Sign in with Google"
+	SignInWord        = "כִּסֵּא"
+	GoogleSignInStart = "/auth/google/start"
+)
+
 // UnitTitle is the one lesson the shell shows until the queue is wired.
 const UnitTitle = "הַבֹּקֶר שֶׁלִּי"
 
@@ -156,6 +174,12 @@ func (u UI) DocTitle(current string) string {
 		name = u.ProgressHeading
 	case "lesson":
 		name = u.LessonHeading
+	case "signin":
+		if u.Lang == "en" {
+			name = SignInTitleEN
+		} else {
+			name = SignInTitleHE
+		}
 	}
 	return name + " · " + AppName
 }
