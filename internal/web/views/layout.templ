@@ -11,6 +11,7 @@ templ Layout(p Page) {
 			<link rel="stylesheet" href="/static/css/tokens.css"/>
 			<link rel="stylesheet" href="/static/css/base.css"/>
 			<link rel="stylesheet" href="/static/css/components.css"/>
+			<link rel="stylesheet" href="/static/css/motion.css"/>
 			<title>{ p.Title }</title>
 		</head>
 		<body hx-boost="true" hx-target="#app" hx-select="#app" hx-swap="outerHTML transition:true" hx-headers={ HXHeaders(p.CSRF) }>
@@ -45,6 +46,7 @@ templ Layout(p Page) {
 			</div>
 			<script src="/static/js/htmx.min.js"></script>
 			<script src="/static/js/shell.js" defer></script>
+			<script src="/static/js/motion.js" defer></script>
 		</body>
 	</html>
 }

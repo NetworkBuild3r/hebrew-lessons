@@ -171,7 +171,7 @@ func TestPlacementGateAndFragment(t *testing.T) {
 	if strings.Contains(page, `aria-current="page"`) {
 		t.Fatal("placement should not mark a dock item current")
 	}
-	if strings.Count(page, "<script") != 3 {
+	if strings.Count(page, "<script") != 4 {
 		t.Fatalf("placement page scripts = %d", strings.Count(page, "<script"))
 	}
 	if left := hebrewExcept(page, []string{views.AppName, "ע"}); left != "" {
