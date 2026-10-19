@@ -9,13 +9,19 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	sdauth "github.com/modelcontextprotocol/go-sdk/auth"
 )
 
-// defaultActor is written to unit_revisions.actor for the static bearer
-// token. An OAuth validator sets Principal.Actor to the user id instead.
-const defaultActor = "mcp"
+// defaultActor is written to unit_revisions.actor for the admin static
+// bearer. An OAuth validator sets Principal.Actor to the user id instead.
+// readOnlyActor is the same field for MCP_READONLY_TOKEN, so a smoke
+// call is distinct from an admin call in that identity.
+const (
+	defaultActor  = "mcp"
+	readOnlyActor = "mcp-readonly"
+)
 
 // ErrUnauthorized means this validator does not accept the bearer token.
 // Chain tries the next validator. The HTTP layer answers 401.
@@ -26,9 +32,14 @@ var ErrUnauthorized = sdauth.ErrInvalidToken
 
 // RoleAdmin and RoleLearner match auth.RoleAdmin and auth.RoleLearner
 // from the sign-in work (#57). The static MCP_AUTH_TOKEN uses RoleAdmin.
+// MCP_READONLY_TOKEN uses RoleLearner.
 const (
 	RoleAdmin   = "admin"
 	RoleLearner = "learner"
+
+	// readOnlyTokenMinLen is the shortest MCP_READONLY_TOKEN that may
+	// start. A shorter secret is refused before the process listens.
+	readOnlyTokenMinLen = 32
 )
 
 // Principal is the caller a validator accepted.
@@ -36,13 +47,15 @@ type Principal struct {
 	// Actor is stored on unit_revisions.actor.
 	Actor string
 	// UserID is the learner id passed to LatestPlacement,
-	// PlacementKnownLexemes, and PlacementLearningLexemes. The static
-	// token leaves it 0. A session sets it to users.id.
+	// PlacementKnownLexemes, and PlacementLearningLexemes. The admin
+	// static token leaves it 0. The read-only smoke token sets it to
+	// MCP_READONLY_LEARNER_ID. A session sets it to users.id.
 	UserID int64
-	// Role is RoleAdmin or RoleLearner. The static token is RoleAdmin
-	// and has full access. A session copies users.role from Lookup.
+	// Role is RoleAdmin or RoleLearner. The admin static token is
+	// RoleAdmin and has full access. The read-only smoke token is
+	// RoleLearner. A session copies users.role from Lookup.
 	Role string
-	// Source is "token" for the static secret and "oauth" for a session.
+	// Source is "token" for a static secret and "oauth" for a session.
 	Source string
 }
 
@@ -63,13 +76,14 @@ type Validator interface {
 // StaticToken compares a bearer token with Token in constant time.
 // An empty Token is disabled: it accepts no bearer, including an empty one.
 // A match is an operator (Lesson Builder) and has RoleAdmin, full access,
-// unless Role is set.
+// unless Role is set. The read-only smoke token sets Role to RoleLearner,
+// UserID to MCP_READONLY_LEARNER_ID, and Actor to mcp-readonly.
 type StaticToken struct {
 	Token string
 	// Actor overrides defaultActor when it is not empty.
 	Actor string
 	// UserID is the learner id for placement reads. Zero is the
-	// static token.
+	// admin static token. The read-only smoke token sets the bound learner.
 	UserID int64
 	// Role overrides RoleAdmin when it is not empty.
 	Role string
@@ -122,6 +136,52 @@ func constantEqual(got, want string) bool {
 		return false
 	}
 	return same
+}
+
+// ParseReadOnlyLearnerID reads MCP_READONLY_LEARNER_ID once
+// MCP_READONLY_TOKEN is set. An empty value and a non-integer each log
+// a fixed reason and refuse startup. The reason does not include the
+// token or the raw value. Zero and negative values parse here and are
+// refused by CheckReadOnlyToken.
+func ParseReadOnlyLearnerID(raw string) (int64, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, refuseReadOnly("MCP_READONLY_LEARNER_ID is required when MCP_READONLY_TOKEN is set")
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, refuseReadOnly("MCP_READONLY_LEARNER_ID must be an integer")
+	}
+	return id, nil
+}
+
+// CheckReadOnlyToken decides whether a configured smoke token may start.
+// An empty token is off. A set token must name a positive learner id,
+// must not equal the admin token, and must be at least 32 characters.
+// Equality uses the same constant-time compare as StaticToken. Each
+// refusal logs its reason and returns that sentence. The token is not
+// logged.
+func CheckReadOnlyToken(adminToken, token string, learnerID int64) error {
+	token = strings.TrimSpace(token)
+	adminToken = strings.TrimSpace(adminToken)
+	if token == "" {
+		return nil
+	}
+	if learnerID <= 0 {
+		return refuseReadOnly("MCP_READONLY_LEARNER_ID must be a positive integer when MCP_READONLY_TOKEN is set")
+	}
+	if constantEqual(token, adminToken) {
+		return refuseReadOnly("MCP_READONLY_TOKEN must not equal MCP_AUTH_TOKEN")
+	}
+	if len(token) < readOnlyTokenMinLen {
+		return refuseReadOnly("MCP_READONLY_TOKEN must be at least 32 characters")
+	}
+	return nil
+}
+
+func refuseReadOnly(reason string) error {
+	slog.Error(reason)
+	return errors.New(reason)
 }
 
 // requireBearer wraps next with the SDK bearer middleware.

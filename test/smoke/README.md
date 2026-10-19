@@ -20,7 +20,7 @@ The host check in `guard.go` runs first, including from `go test ./...` without 
 | --- | --- |
 | `SMOKE_WEB_URL` | `https://hebrew-next.ibhacked.us` |
 | `SMOKE_MCP_URL` | `https://hebrew-mcp-next.ibhacked.us/mcp` |
-| `SMOKE_MCP_TOKEN` | read-only bearer token from CI/CD |
+| `SMOKE_MCP_TOKEN` | the deployment's `MCP_READONLY_TOKEN` |
 | `SMOKE_ALLOW_PROD` | unset. Set to `1` only when the URL is production or another non-staging host on purpose |
 
 `SMOKE_WEB_URL` covers `GET /healthz`, `GET /`, and the OAuth metadata documents. `SMOKE_MCP_URL` covers `GET /healthz` on that host. `initialize` and `tools/list` also need `SMOKE_MCP_TOKEN`; without the token that check skips even if the URL is set.
