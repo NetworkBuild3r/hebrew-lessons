@@ -13,10 +13,10 @@ func TestLangHrefAndLabel(t *testing.T) {
 		heHref  string
 		enHref  string
 	}{
-		{"today", "/?lang=en", "/"},
-		{"review", "/review?lang=en", "/review"},
-		{"progress", "/progress?lang=en", "/progress"},
-		{"lesson", "/lesson?lang=en", "/lesson"},
+		{"today", "/?lang=en", "/?lang=he"},
+		{"review", "/review?lang=en", "/review?lang=he"},
+		{"progress", "/progress?lang=en", "/progress?lang=he"},
+		{"lesson", "/lesson?lang=en", "/lesson?lang=he"},
 	}
 	for _, screen := range screens {
 		he := views.NewPage("he", "", screen.current)
@@ -34,24 +34,36 @@ func TestLangHrefAndLabel(t *testing.T) {
 			t.Errorf("en %s label %q", screen.current, en.LangLabel())
 		}
 	}
+	blank := views.NewPage("", "", "today")
+	if blank.Lang != "en" || blank.LangLabel() != "עב" || blank.LangHref() != "/?lang=he" {
+		t.Fatalf("empty lang href %q label %q lang %q", blank.LangHref(), blank.LangLabel(), blank.Lang)
+	}
 }
 
 func TestLangLink(t *testing.T) {
 	pages := []struct {
-		hePath string
-		enPath string
-		heHref string
-		enHref string
+		path  string
+		href  string
+		lang  string
+		dir   string
+		label string
 	}{
-		{"/", "/?lang=en", "/?lang=en", "/"},
-		{"/review", "/review?lang=en", "/review?lang=en", "/review"},
-		{"/progress", "/progress?lang=en", "/progress?lang=en", "/progress"},
-		{"/lesson", "/lesson?lang=en", "/lesson?lang=en", "/lesson"},
+		{"/", "/?lang=he", "he", "rtl", "עב"},
+		{"/?lang=en", "/?lang=he", "he", "rtl", "עב"},
+		{"/?lang=he", "/?lang=en", "en", "ltr", "EN"},
+		{"/review", "/review?lang=he", "he", "rtl", "עב"},
+		{"/review?lang=en", "/review?lang=he", "he", "rtl", "עב"},
+		{"/review?lang=he", "/review?lang=en", "en", "ltr", "EN"},
+		{"/progress", "/progress?lang=he", "he", "rtl", "עב"},
+		{"/progress?lang=en", "/progress?lang=he", "he", "rtl", "עב"},
+		{"/progress?lang=he", "/progress?lang=en", "en", "ltr", "EN"},
+		{"/lesson", "/lesson?lang=he", "he", "rtl", "עב"},
+		{"/lesson?lang=en", "/lesson?lang=he", "he", "rtl", "עב"},
+		{"/lesson?lang=he", "/lesson?lang=en", "en", "ltr", "EN"},
 	}
 	h := New(nil, nil)
 	for _, page := range pages {
-		assertLangLinks(t, get(t, h, page.hePath), page.heHref, "en", "ltr", "EN")
-		assertLangLinks(t, get(t, h, page.enPath), page.enHref, "he", "rtl", "עב")
+		assertLangLinks(t, get(t, h, page.path), page.href, page.lang, page.dir, page.label)
 	}
 }
 

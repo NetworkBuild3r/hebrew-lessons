@@ -279,6 +279,19 @@ h1 {
   padding-block: .1em;
   overflow: visible;
 }
+.unit-gloss,
+.chip__gloss,
+.signin__gloss {
+  font-family: var(--font-ui);
+  font-weight: 500;
+  line-height: var(--lh-body);
+}
+.unit-gloss,
+.chip__gloss {
+  font-size: var(--fs-caption);
+  color: var(--note);
+}
+.chip__gloss { white-space: nowrap; }
 .situation {
   color: var(--muted);
   font-size: var(--fs-body);
@@ -602,6 +615,13 @@ h1 {
   line-height: var(--lh-he-display);
   color: var(--on-ink);
   padding-block: var(--space-2);
+  text-align: center;
+}
+.signin__gloss {
+  display: block;
+  margin-block-start: var(--space-1);
+  font-size: var(--fs-small);
+  color: var(--on-ink);
 }
 .signin__card {
   display: grid;

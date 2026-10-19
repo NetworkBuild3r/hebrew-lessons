@@ -27,9 +27,12 @@ func TestWarmupHE(t *testing.T) {
 	if !strings.Contains(views.WarmupHE, "\u05DE\u05BC") {
 		t.Fatal("WarmupHE mem has no dagesh")
 	}
-	body := get(t, New(nil, nil), "/")
+	body := get(t, New(nil, nil), "/?lang=he")
 	if !strings.Contains(body, `<bdi lang="he" dir="rtl">`+word+`</bdi>`) {
 		t.Fatal("Today did not render the pointed warm-up word")
+	}
+	if strings.Contains(get(t, New(nil, nil), "/"), `<bdi lang="he" dir="rtl">`+word+`</bdi>`) {
+		t.Fatal("default English Today rendered the Hebrew warm-up word")
 	}
 	if strings.Contains(body, yod) {
 		t.Fatal("Today still renders the yod spelling")

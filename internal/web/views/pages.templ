@@ -103,16 +103,21 @@ templ Today(h Home) {
 								}
 							</p>
 						</div>
-						<h2 id="next-title" class="unit-title" lang="he" dir="rtl">{ UnitTitle }</h2>
+						<h2 id="next-title" class="unit-title">
+							@H(UnitTitle)
+							<span class="unit-gloss">@E(UnitGloss)</span>
+						</h2>
 						@Situation(h.Situation)
 						<ul class="chips">
 							for _, word := range h.Words {
 								<li class="chip">
 									@H(word.Text)
+									if word.Gloss != "" {
+										<span class="chip__gloss">@E(word.Gloss)</span>
+									}
 									if word.Gender != "" {
 										<span class="gchip">@H(GenderLabel(word.Gender))</span>
 									}
-									@E(word.Gloss)
 								</li>
 							}
 						</ul>
@@ -219,7 +224,10 @@ templ SignIn(p Page) {
 			<main id="main" class="signin">
 				<div class="signin__slate">
 					<img class="signin__sky" src="/static/illustrations/hero-skyline-night.svg" alt="" aria-hidden="true"/>
-					<p class="signin__word">@H(SignInWord)</p>
+					<p class="signin__word">
+						@H(SignInWord)
+						<span class="signin__gloss">@E(SignInWordGloss)</span>
+					</p>
 				</div>
 				<section class="signin__card">
 					<h1 class="brand signin__brand">

@@ -1,0 +1,244 @@
+{
+  "source": "sefaria-api",
+  "fetchedAt": "2026-10-18T23:41:40.840Z",
+  "versionEn": "The Holy Scriptures: A New Translation (JPS 1917)",
+  "versionHe": "Tanach with Nikkud",
+  "licenseEn": "Public Domain",
+  "licenseHe": "Public Domain",
+  "books": [
+    {
+      "slug": "genesis",
+      "title": "Genesis",
+      "rows": 1533,
+      "file": "genesis.json"
+    },
+    {
+      "slug": "exodus",
+      "title": "Exodus",
+      "rows": 1210,
+      "file": "exodus.json"
+    },
+    {
+      "slug": "leviticus",
+      "title": "Leviticus",
+      "rows": 859,
+      "file": "leviticus.json"
+    },
+    {
+      "slug": "numbers",
+      "title": "Numbers",
+      "rows": 1288,
+      "file": "numbers.json"
+    },
+    {
+      "slug": "deuteronomy",
+      "title": "Deuteronomy",
+      "rows": 956,
+      "file": "deuteronomy.json"
+    },
+    {
+      "slug": "joshua",
+      "title": "Joshua",
+      "rows": 658,
+      "file": "joshua.json"
+    },
+    {
+      "slug": "judges",
+      "title": "Judges",
+      "rows": 618,
+      "file": "judges.json"
+    },
+    {
+      "slug": "i-samuel",
+      "title": "I Samuel",
+      "rows": 811,
+      "file": "i-samuel.json"
+    },
+    {
+      "slug": "ii-samuel",
+      "title": "II Samuel",
+      "rows": 695,
+      "file": "ii-samuel.json"
+    },
+    {
+      "slug": "i-kings",
+      "title": "I Kings",
+      "rows": 817,
+      "file": "i-kings.json"
+    },
+    {
+      "slug": "ii-kings",
+      "title": "II Kings",
+      "rows": 719,
+      "file": "ii-kings.json"
+    },
+    {
+      "slug": "isaiah",
+      "title": "Isaiah",
+      "rows": 1291,
+      "file": "isaiah.json"
+    },
+    {
+      "slug": "jeremiah",
+      "title": "Jeremiah",
+      "rows": 1364,
+      "file": "jeremiah.json"
+    },
+    {
+      "slug": "ezekiel",
+      "title": "Ezekiel",
+      "rows": 1273,
+      "file": "ezekiel.json"
+    },
+    {
+      "slug": "hosea",
+      "title": "Hosea",
+      "rows": 197,
+      "file": "hosea.json"
+    },
+    {
+      "slug": "joel",
+      "title": "Joel",
+      "rows": 73,
+      "file": "joel.json"
+    },
+    {
+      "slug": "amos",
+      "title": "Amos",
+      "rows": 146,
+      "file": "amos.json"
+    },
+    {
+      "slug": "obadiah",
+      "title": "Obadiah",
+      "rows": 21,
+      "file": "obadiah.json"
+    },
+    {
+      "slug": "jonah",
+      "title": "Jonah",
+      "rows": 48,
+      "file": "jonah.json"
+    },
+    {
+      "slug": "micah",
+      "title": "Micah",
+      "rows": 105,
+      "file": "micah.json"
+    },
+    {
+      "slug": "nahum",
+      "title": "Nahum",
+      "rows": 47,
+      "file": "nahum.json"
+    },
+    {
+      "slug": "habakkuk",
+      "title": "Habakkuk",
+      "rows": 56,
+      "file": "habakkuk.json"
+    },
+    {
+      "slug": "zephaniah",
+      "title": "Zephaniah",
+      "rows": 53,
+      "file": "zephaniah.json"
+    },
+    {
+      "slug": "haggai",
+      "title": "Haggai",
+      "rows": 38,
+      "file": "haggai.json"
+    },
+    {
+      "slug": "zechariah",
+      "title": "Zechariah",
+      "rows": 211,
+      "file": "zechariah.json"
+    },
+    {
+      "slug": "malachi",
+      "title": "Malachi",
+      "rows": 55,
+      "file": "malachi.json"
+    },
+    {
+      "slug": "psalms",
+      "title": "Psalms",
+      "rows": 2527,
+      "file": "psalms.json"
+    },
+    {
+      "slug": "proverbs",
+      "title": "Proverbs",
+      "rows": 915,
+      "file": "proverbs.json"
+    },
+    {
+      "slug": "job",
+      "title": "Job",
+      "rows": 1070,
+      "file": "job.json"
+    },
+    {
+      "slug": "song-of-songs",
+      "title": "Song of Songs",
+      "rows": 117,
+      "file": "song-of-songs.json"
+    },
+    {
+      "slug": "ruth",
+      "title": "Ruth",
+      "rows": 85,
+      "file": "ruth.json"
+    },
+    {
+      "slug": "lamentations",
+      "title": "Lamentations",
+      "rows": 154,
+      "file": "lamentations.json"
+    },
+    {
+      "slug": "ecclesiastes",
+      "title": "Ecclesiastes",
+      "rows": 222,
+      "file": "ecclesiastes.json"
+    },
+    {
+      "slug": "esther",
+      "title": "Esther",
+      "rows": 167,
+      "file": "esther.json"
+    },
+    {
+      "slug": "daniel",
+      "title": "Daniel",
+      "rows": 357,
+      "file": "daniel.json"
+    },
+    {
+      "slug": "ezra",
+      "title": "Ezra",
+      "rows": 280,
+      "file": "ezra.json"
+    },
+    {
+      "slug": "nehemiah",
+      "title": "Nehemiah",
+      "rows": 405,
+      "file": "nehemiah.json"
+    },
+    {
+      "slug": "i-chronicles",
+      "title": "I Chronicles",
+      "rows": 943,
+      "file": "i-chronicles.json"
+    },
+    {
+      "slug": "ii-chronicles",
+      "title": "II Chronicles",
+      "rows": 822,
+      "file": "ii-chronicles.json"
+    }
+  ]
+}

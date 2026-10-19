@@ -10,8 +10,8 @@ import (
 // in its own bdi, not inside this string.
 const AppName = "דֶּרֶךְ עִבְרִית"
 
-// Sign-in copy. One interface language at a time; the other language is
-// the same page with ?lang=en. GoogleSignInStart is auth's browser
+// Sign-in copy. One interface language at a time. English is the default;
+// ?lang=he is the Hebrew shell. GoogleSignInStart is auth's browser
 // sign-in route. The shell only links to it.
 //
 // SignInGoogleHE is Google's Hebrew button label, unpointed, with the
@@ -26,11 +26,16 @@ const (
 	SignInGoogleHE    = "כניסה באמצעות"
 	SignInGoogleEN    = "Sign in with Google"
 	SignInWord        = "כִּסֵּא"
+	SignInWordGloss   = "(kisé, chair)"
 	GoogleSignInStart = "/auth/google/start"
 )
 
 // UnitTitle is the one lesson the shell shows until the queue is wired.
-const UnitTitle = "הַבֹּקֶר שֶׁלִּי"
+// UnitGloss sits beside it: transliteration, then the English meaning.
+const (
+	UnitTitle = "הַבֹּקֶר שֶׁלִּי"
+	UnitGloss = "(habóker shelí, my morning)"
+)
 
 // Fake Today facts. They stand in until the queue and the unit doc are wired.
 const (
@@ -115,13 +120,14 @@ func Address(gender, masculine, feminine string) string {
 	return masculine
 }
 
-// UIFor returns the English shell for lang "en" and the Hebrew shell otherwise.
-// addressGender selects masculine or feminine Hebrew imperatives.
+// UIFor returns the Hebrew shell for lang "he" and the English shell otherwise.
+// An empty lang is English: a request with no ?lang and no hebrew_lang cookie
+// uses this default. addressGender selects masculine or feminine Hebrew imperatives.
 func UIFor(lang, addressGender string) UI {
-	if lang == "en" {
-		return englishUI()
+	if lang == "he" {
+		return hebrewUI(addressGender)
 	}
-	return hebrewUI(addressGender)
+	return englishUI()
 }
 
 func hebrewUI(addressGender string) UI {
@@ -188,15 +194,18 @@ func (u UI) DocTitle(current string) string {
 	return name + " · " + AppName
 }
 
-// Href keeps the English shell on in-app links.
+// Href keeps the Hebrew shell on in-app links. English is the default, so
+// those links stay bare; ?lang=en is only needed to override a Hebrew cookie.
 func (u UI) Href(path string) string {
-	if u.Lang != "en" {
-		return path
+	if u.Lang == "he" {
+		return path + "?lang=he"
 	}
-	return path + "?lang=en"
+	return path
 }
 
 // LangHref switches UI language and stays on the same screen.
+// The link is always explicit: ?lang=he from English, ?lang=en from Hebrew.
+// A bare path stays English, so the switch cannot omit the query.
 func (p Page) LangHref() string {
 	path := "/"
 	switch p.Current {
@@ -207,13 +216,14 @@ func (p Page) LangHref() string {
 	case "lesson":
 		path = "/lesson"
 	}
-	if p.Lang == "en" {
-		return path
+	lang := "he"
+	if p.Lang == "he" {
+		lang = "en"
 	}
 	if path == "/" {
-		return "/?lang=en"
+		return "/?lang=" + lang
 	}
-	return path + "?lang=en"
+	return path + "?lang=" + lang
 }
 
 // LangLabel is the short switch: EN from Hebrew, עב from English.
@@ -233,7 +243,8 @@ type Page struct {
 	Current string
 }
 
-// NewPage builds a shell page. lang "en" selects the English UI.
+// NewPage builds a shell page. lang "he" selects the Hebrew UI. Any other
+// value, including empty, selects English.
 func NewPage(lang, csrf, current string) Page {
 	ui := UIFor(lang, FakeLearner().AddressGender)
 	return Page{UI: ui, Title: ui.DocTitle(current), CSRF: csrf, Current: current}
@@ -256,7 +267,8 @@ func (h Home) Page() Page {
 }
 
 // Chip is one new-word chip. Gender is "m" or "f" for a noun, otherwise empty.
-// Gloss is the English meaning, isolated from the pointed Hebrew.
+// Gloss is the English transliteration and meaning, including the parentheses,
+// so the Hebrew word is never the only thing on the chip.
 type Chip struct {
 	Text   string
 	Gender string
@@ -290,9 +302,9 @@ func GenderLabel(gender string) string {
 // Each one is a noun, so each one carries a gender chip.
 func SampleWords() []Chip {
 	return []Chip{
-		{Text: "כִּסֵּא", Gender: AddressMasculine, Gloss: "chair"},
-		{Text: "חַלּוֹן", Gender: AddressMasculine, Gloss: "window"},
-		{Text: "שֻׁלְחָן", Gender: AddressMasculine, Gloss: "table"},
+		{Text: "כִּסֵּא", Gender: AddressMasculine, Gloss: "(kisé, chair)"},
+		{Text: "חַלּוֹן", Gender: AddressMasculine, Gloss: "(chalón, window)"},
+		{Text: "שֻׁלְחָן", Gender: AddressMasculine, Gloss: "(shulchán, table)"},
 	}
 }
 

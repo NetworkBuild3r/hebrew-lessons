@@ -16,6 +16,11 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/hebrew ./cmd/hebrew
 
+# The Tanakh files are world-readable and not writable. uid 65532 can
+# read them and cannot change them. The corpus is under 30MB, so the
+# image ships the JSON as-is rather than gzip.
+RUN chmod -R a-w,a+rX /src/data/tanakh
+
 # Empty data directory owned by uid 65532. The image is smoked with no volume
 # and no extra env, so this path has to be writable by the nonroot user.
 # A mounted volume should use the same uid (fsGroup 65532).
@@ -29,6 +34,7 @@ FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY --from=builder /out/hebrew /usr/local/bin/hebrew
 COPY --from=builder /src/internal/placement/NOTICE /usr/share/hebrew/NOTICE.placement
+COPY --from=builder /src/data/tanakh /usr/share/hebrew/tanakh
 COPY --from=builder --chown=65532:65532 /empty-data /data
 
 ENV DATA_DIR=/data \
