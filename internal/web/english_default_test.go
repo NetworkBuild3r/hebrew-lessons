@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"unicode"
@@ -248,8 +247,7 @@ func TestTodayAndNavAreEnglish(t *testing.T) {
 		allowed := []string{views.AppName, "ע"}
 		if path == "/" {
 			assertEnglishToday(t, body)
-			ui := views.UIFor("en", "m")
-			allowed = append([]string{ui.NoneHE, ui.NoneMoreHE}, allowed...)
+			allowed = todayHebrewContent()
 		}
 		if left := hebrewExcept(body, allowed); left != "" {
 			t.Fatalf("signed-in %s has Hebrew UI %q", path, left)
@@ -286,23 +284,29 @@ func assertEnglishToday(t *testing.T, body string) {
 		t.Fatal("Today is not the English shell")
 	}
 	for _, label := range []string{
-		"Skip to content", "Today", "Review", "Progress", "Words ready",
-		"Up to twenty a day", "Start", "Next lesson", "No lesson published yet",
+		"Skip to content", "Today", "Review", "Progress",
+		"Nothing due", "Next lesson", "No lesson published yet",
 	} {
 		if !strings.Contains(body, label) {
 			t.Fatalf("english label %q missing", label)
 		}
 	}
 	he := views.UIFor("he", "m")
-	chromeBody := regexp.MustCompile(`(?s)<section class="quiet-card quiet-card--next">.*?</section>`).ReplaceAllString(body, "")
+	withoutPairs := body
+	for _, s := range todayHebrewContent() {
+		withoutPairs = strings.ReplaceAll(withoutPairs, s, "")
+	}
 	for _, chrome := range []string{
 		he.Skip, he.Today, he.Review, he.Progress, he.Dark, he.Light, he.Logout,
 		he.DueKicker, he.DueLabel, he.DueHint, he.Start, he.NextKicker, he.Open,
 		he.ReviewLede, he.ProgressLede, he.LessonHeading,
 	} {
-		if strings.Contains(chromeBody, chrome) {
+		if strings.Contains(withoutPairs, chrome) {
 			t.Fatalf("hebrew chrome %q on Today", chrome)
 		}
+	}
+	if strings.Contains(body, `class="unit-title"`) || strings.Contains(body, "Getting ready in the morning") {
+		t.Fatal("empty Today still renders the sample lesson")
 	}
 	if left := hebrewExcept(body, todayHebrewContent()); left != "" {
 		t.Fatalf("Today has Hebrew UI %q", left)
@@ -331,8 +335,9 @@ func assertEnglishNav(t *testing.T, body string) {
 
 func todayHebrewContent() []string {
 	ui := views.UIFor("en", "m")
-	// The empty-state lines contain ע, so they have to be removed before the brand letter.
-	return []string{ui.NoneHE, ui.NoneMoreHE, views.AppName, "ע"}
+	// Longer phrases first. A lone ayin is also the brand mark, and replacing
+	// it before these phrases would punch a hole in each of them.
+	return []string{ui.NoneMoreHE, ui.ZeroHE, ui.NoneHE, views.AppName, "ע"}
 }
 
 func hebrewExcept(body string, allowed []string) string {

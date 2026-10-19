@@ -22,7 +22,6 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/lexicon"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
-	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 
 	_ "modernc.org/sqlite"
 )
@@ -152,24 +151,16 @@ func TestLessonPlayer(t *testing.T) {
 	if !strings.Contains(today, "Saying hello.") || !strings.Contains(today, "ז׳") {
 		t.Fatal("situation or gender chip missing")
 	}
-	for _, hidden := range []string{"Draft secret", "Other morning", "Brian later", "כִּסֵּא", views.UnitTitle} {
+	for _, hidden := range []string{"Draft secret", "Other morning", "Brian later", "כִּסֵּא", "הַבֹּקֶר שֶׁלִּי"} {
 		if strings.Contains(today, hidden) {
 			t.Fatalf("Today shows %s", hidden)
 		}
 	}
-	if !strings.Contains(today, "btn-tonal") || strings.Count(today, "btn-primary") != 1 {
-		t.Fatal("due count should keep the lesson button tonal")
+	if !strings.Contains(today, `data-due="0"`) || !strings.Contains(today, `class="btn btn-primary"`) || !strings.Contains(today, link) {
+		t.Fatal("a gated card stays off the due count, and the next lesson stays on Today")
 	}
-	if !strings.Contains(today, ">12<") {
-		t.Fatal("placeholder due count changed")
-	}
-	zero := getAuthed(t, h, brianCookie, "/?due=0")
-	if !strings.Contains(zero, `class="btn btn-primary"`) || !strings.Contains(zero, link) {
-		t.Fatal("zero due should make the lesson the primary")
-	}
-	hidden := getAuthed(t, h, brianCookie, "/?next=0")
-	if strings.Contains(hidden, link) || !strings.Contains(hidden, "No lesson published yet") {
-		t.Fatal("?next=0 should hide the real lesson")
+	if strings.Contains(today, ">12<") {
+		t.Fatal("placeholder due count is back")
 	}
 	if scalar(t, dbPath, `SELECT COUNT(*) FROM lesson_runs`) != 0 {
 		t.Fatal("opening Today started a lesson run")

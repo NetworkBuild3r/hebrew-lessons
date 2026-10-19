@@ -61,19 +61,16 @@ func TestTodayLayout(t *testing.T) {
 	if strings.Contains(body, "good morning") || strings.Contains(body, "שָׁלוֹם") || strings.Contains(body, "he-proof") {
 		t.Fatal("sample paragraph or gloss is still on Today")
 	}
-	if strings.Contains(body, views.UnitTitle) || strings.Contains(body, `class="unit-title"`) {
-		t.Fatal("unpublished sample lesson is still on Today")
+	if strings.Contains(body, `class="unit-title"`) || strings.Contains(body, "Getting ready in the morning") {
+		t.Fatal("empty Today still renders a sample lesson")
 	}
-	if strings.Contains(body, "Getting ready in the morning.") {
-		t.Fatal("sample situation is still on Today")
+	if strings.Contains(body, "btn-primary") || strings.Contains(body, `href="/lesson"`) {
+		t.Fatal("empty Today still offers a lesson or a filled action")
 	}
-	if strings.Count(body, "btn-primary") != 1 || !strings.Contains(body, `class="btn btn-primary"`) {
-		t.Fatal("due Today should have one filled primary")
+	if !strings.Contains(body, "quiet-card--due") || !strings.Contains(body, "quiet-card--next") {
+		t.Fatal("empty Today should show both quiet cards")
 	}
-	if strings.Contains(body, "btn-tonal") {
-		t.Fatal("empty lesson card should not show a lesson button")
-	}
-	if !strings.Contains(body, "quiet-card--next") || !strings.Contains(body, "No lesson published yet") {
+	if !strings.Contains(body, "No lesson published yet") {
 		t.Fatal("empty Today should say no lesson is published")
 	}
 	if !strings.Contains(body, `aria-pressed="false"`) || strings.Contains(body, `id="theme-toggle"`) {
@@ -105,8 +102,11 @@ func TestTodayLayout(t *testing.T) {
 	if views.UIFor("he", "m").DueLabel != "מִלִּים מֻכָּנוֹת" {
 		t.Fatalf("due label pointing: %s", views.UIFor("he", "m").DueLabel)
 	}
-	if !strings.Contains(body, ">Start<") || strings.Contains(body, "הַתְחֵל") {
-		t.Fatal("default Today should use the English start label")
+	if strings.Contains(body, ">Start<") || strings.Contains(body, "הַתְחֵל") {
+		t.Fatal("empty Today should not offer a start button")
+	}
+	if !strings.Contains(body, "Nothing due") || !strings.Contains(body, "No lesson published yet") {
+		t.Fatal("empty Today should say nothing is due and no lesson is published")
 	}
 	scriptAt := strings.Index(body, "localStorage")
 	cssAt := strings.Index(body, "/static/css/tokens.css")
@@ -196,36 +196,32 @@ func TestPairSeparatesRuns(t *testing.T) {
 
 func TestZeroDueAndNoLesson(t *testing.T) {
 	h := New(nil, nil)
-	zero := get(t, h, "/?due=0")
-	if strings.Contains(zero, "ink-card") || strings.Contains(zero, "הַתְחֵל") {
-		t.Fatal("zero due still shows the review hero")
+	body := get(t, h, "/")
+	if strings.Contains(body, "ink-card") || strings.Contains(body, "הַתְחֵל") || strings.Contains(body, "btn-primary") {
+		t.Fatal("empty Today still shows a review hero or a filled action")
 	}
-	if strings.Count(zero, "btn-primary") != 0 {
-		t.Fatal("nothing due and no published lesson should have no primary button")
-	}
-	if strings.Contains(zero, "btn-tonal") {
+	if strings.Contains(body, "btn-tonal") {
 		t.Fatal("tonal CTA remains when nothing is due")
 	}
-	none := get(t, h, "/?next=0")
-	if strings.Contains(none, `href="/lesson"`) || strings.Contains(none, views.UnitTitle) {
-		t.Fatal("missing lesson still renders the lesson card")
+	if strings.Contains(body, `href="/lesson"`) || strings.Contains(body, `class="unit-title"`) {
+		t.Fatal("empty Today still renders a lesson card")
 	}
-	assertPair(t, none, "אֵין שִׁעוּר בַּתּוֹר", "No lesson published yet", "en")
-	if !strings.Contains(none, "quiet-card--next") || !strings.Contains(none, "icon-lessons") {
-		t.Fatal("missing lesson should be a placeholder card")
+	assertPair(t, body, "אֵין חֲזָרוֹת עַכְשָׁיו", "Nothing due", "en")
+	if !strings.Contains(body, "No lesson published yet") {
+		t.Fatal("empty Today should say no lesson is published")
 	}
-	if !strings.Contains(none, "הַשִּׁעוּר הַבָּא יוֹפִיעַ כָּאן") || !strings.Contains(none, "Your next lesson will appear here") {
-		t.Fatal("missing lesson hint missing")
-	}
-	if !strings.Contains(zero, "quiet-card--due") || !strings.Contains(zero, "icon-check") {
+	if !strings.Contains(body, "quiet-card--due") || !strings.Contains(body, "icon-check") {
 		t.Fatal("nothing due should use the check placeholder")
 	}
-	pill := regexp.MustCompile(`(?s)<section class="quiet-card quiet-card--due">.*?</section>`).FindString(zero)
+	if !strings.Contains(body, "quiet-card--next") || !strings.Contains(body, "icon-lessons") {
+		t.Fatal("missing lesson should be a placeholder card")
+	}
+	if !strings.Contains(body, "הַשִּׁעוּר הַבָּא יוֹפִיעַ כָּאן") || !strings.Contains(body, "Your next lesson will appear here") {
+		t.Fatal("missing lesson hint missing")
+	}
+	pill := regexp.MustCompile(`(?s)<section class="quiet-card quiet-card--due">.*?</section>`).FindString(body)
 	if !strings.Contains(pill, `<bdi lang="en" dir="ltr">Nothing due</bdi>`) {
 		t.Fatal("nothing-due english run must be an ltr bdi inside the pill")
-	}
-	if strings.Count(none, "btn-primary") != 1 {
-		t.Fatal("start should stay the only primary when no lesson is queued")
 	}
 }
 
@@ -247,8 +243,8 @@ func TestEnglishShell(t *testing.T) {
 	if !strings.Contains(he, `<html lang="he" dir="rtl"`) || !strings.Contains(he, `href="/review?lang=he"`) {
 		t.Fatal("hebrew opt-in did not stick on links")
 	}
-	if !strings.Contains(he, "הַתְחֵל") || strings.Contains(he, "הַתְחִילִי") {
-		t.Fatal("hebrew opt-in should address the fake learner in the masculine")
+	if !strings.Contains(he, "דַּלֵּג לַתֹּכֶן") || strings.Contains(he, "דַּלְּגִי לַתֹּכֶן") {
+		t.Fatal("hebrew opt-in should address the learner in the masculine")
 	}
 	if !strings.Contains(body, `<bdi lang="he" dir="rtl">`+views.AppName+`</bdi>`) {
 		t.Fatal("hebrew wordmark is not isolated in the english shell")
@@ -311,9 +307,6 @@ func TestAddressGender(t *testing.T) {
 	she := views.UIFor("he", "f")
 	if she.Start != "הַתְחִילִי" || she.Skip != "דַּלְּגִי לַתֹּכֶן" {
 		t.Fatalf("feminine shell: %s / %s", she.Start, she.Skip)
-	}
-	if views.FakeLearner().AddressGender != "m" {
-		t.Fatal("fake learner should be masculine")
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 	"github.com/a-h/templ"
 )
@@ -31,19 +32,20 @@ var Assets embed.FS
 // /lesson, or /placement redirects to /signin (303 for a full page, 401 and
 // HX-Redirect for htmx). Reads stay on those page URLs. /_hx/ is for
 // htmx writes, and this router does not register read routes there.
-// New does not deal placement. NewWithPlacement wires the deck and the
-// run store the handlers read for ownership and the Today card.
-// NewOptions wires those plus the lesson store and the audio directory.
-// Tests pass a fake to newMux; production does not. The ungated router
-// still serves those pages.
+// New does not deal placement. NewWithStore reads Today, Review, and
+// Progress from the learner database. NewWithPlacement wires the deck and
+// the run store. NewOptions wires those plus the lesson store and the audio
+// directory. Tests pass a fake to newMux; production does not. The ungated
+// router still serves those pages.
 // Audio bytes are served at /audio/<sha256>.mp3 from Options.AudioDir.
 func New(health http.Handler, sessions *auth.Service) http.Handler {
 	return NewOptions(health, sessions, Options{})
 }
 
-// Options is the data the learner pages read. A nil Store leaves Today
-// and /lesson on the empty published-lesson state. Deck and Runs are the
-// placement deck; a nil pair still serves the read-only intro.
+// Options is the data the learner pages read. A nil Store leaves Today,
+// Review, and Progress on the empty real state, and /lesson on the empty
+// published-lesson state. Deck and Runs are the placement deck; a nil pair
+// still serves the read-only intro.
 type Options struct {
 	Store    *db.Store
 	AudioDir string
@@ -56,10 +58,23 @@ func NewOptions(health http.Handler, sessions *auth.Service, opts Options) http.
 	return newHandler(health, sessions, opts)
 }
 
+// NewWithStore is New with the learner database. Today, Review, and Progress
+// read that store. The study queue is built by internal/session.
+// The store is also the placement run reader and the lesson player store.
+// Writes need NewWithPlacement. Audio stays empty until NewOptions.
+func NewWithStore(health http.Handler, sessions *auth.Service, store *db.Store) http.Handler {
+	var runs placementRuns
+	if store != nil {
+		runs = store
+	}
+	return newHandler(health, sessions, Options{Store: store, Runs: runs})
+}
+
 // NewWithPlacement is New plus the placement deck. deck deals cards.
 // runs is the store read for ownership and LatestPlacement. Both are
 // required for a POST; a nil pair still serves the read-only intro.
-// When runs is the process store, the lesson player uses it too.
+// When runs is the process store, Today, Review, Progress, and the lesson
+// player use it too.
 func NewWithPlacement(health http.Handler, sessions *auth.Service, deck placementDeck, runs placementRuns) http.Handler {
 	opts := Options{Deck: deck, Runs: runs}
 	if store, ok := runs.(*db.Store); ok {
@@ -76,13 +91,17 @@ func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.
 		// hebrew_lang uses the same COOKIE_SECURE flag as the session cookie.
 		secure = sessions.CookieSecure()
 	}
-	mux := routes(health, tokens, sessions != nil, secure, opts)
+	srv := newServer(opts.Store)
+	srv.audioDir = opts.AudioDir
+	srv.deck = opts.Deck
+	srv.runs = opts.Runs
+	mux := srv.routes(health, tokens, sessions != nil, secure)
 	if sessions != nil {
 		sessions.Register(mux)
 		// auth.Middleware loads the session and checks CSRF, including
-		// POST /auth/logout and POST /lesson. The local csrf middleware is
-		// not stacked on top: it compares Origin to r.Host and would reject
-		// a same-origin post behind a host-rewriting proxy.
+		// POST /auth/logout, POST /lesson, and POST /_hx/. The local csrf
+		// middleware is not stacked on top: it compares Origin to r.Host and
+		// would reject a same-origin post behind a host-rewriting proxy.
 		return securityHeaders(sessions.Middleware(mux))
 	}
 	return securityHeaders(csrfMiddleware(nil, mux))
@@ -90,10 +109,10 @@ func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.
 
 // newMux is the test router. tokens is a fake; production New does not use it.
 func newMux(health http.Handler, tokens CSRFToken) http.Handler {
-	return securityHeaders(csrfMiddleware(tokens, routes(health, tokens, false, false, Options{})))
+	return securityHeaders(csrfMiddleware(tokens, newServer(nil).routes(health, tokens, false, false)))
 }
 
-func routes(health http.Handler, tokens CSRFToken, gate, secure bool, opts Options) *http.ServeMux {
+func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool) *http.ServeMux {
 	mux := http.NewServeMux()
 	if health != nil {
 		mux.Handle("GET /healthz", health)
@@ -103,26 +122,15 @@ func routes(health http.Handler, tokens CSRFToken, gate, secure bool, opts Optio
 		panic(err)
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
-	play := player{store: opts.Store, audioDir: opts.AudioDir}
+	play := player{store: s.store, audioDir: s.audioDir}
 	mux.HandleFunc("GET /{$}", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
-		lang := chooseLang(w, r, secure)
-		state, err := todayPlacement(r, opts.Runs)
-		if err != nil {
-			serverError(w)
-			return
-		}
-		home, err := homeFrom(r, lang, csrfValue(tokens, r), opts.Store, state)
-		if err != nil {
-			serverError(w)
-			return
-		}
-		render(w, r, views.Today(home))
+		s.serveHome(w, r, secure, csrfValue(tokens, r))
 	}))
 	review := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
-		render(w, r, views.Review(views.NewPage(chooseLang(w, r, secure), csrfValue(tokens, r), "review")))
+		s.serveReview(w, r, secure, csrfValue(tokens, r))
 	})
 	progress := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
-		render(w, r, views.Progress(views.NewPage(chooseLang(w, r, secure), csrfValue(tokens, r), "progress")))
+		s.serveProgress(w, r, secure, csrfValue(tokens, r))
 	})
 	lesson := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
 		play.lessonIndex(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
@@ -139,9 +147,11 @@ func routes(health http.Handler, tokens CSRFToken, gate, secure bool, opts Optio
 	mux.HandleFunc("GET /lesson/{unitID}/{lessonIx}", lessonAt)
 	mux.HandleFunc("POST /lesson/{unitID}/{lessonIx}", lessonPost)
 	mux.HandleFunc("GET /audio/{name}", func(w http.ResponseWriter, r *http.Request) {
-		serveAudio(opts.AudioDir, w, r)
+		serveAudio(s.audioDir, w, r)
 	})
-	mountPlacement(mux, tokens, gate, secure, opts.Deck, opts.Runs)
+	mux.HandleFunc("POST /_hx/review/reveal", gated(gate, secure, s.reveal))
+	mux.HandleFunc("POST /_hx/review/grade", gated(gate, secure, s.grade))
+	mountPlacement(mux, tokens, gate, secure, s.deck, s.runs)
 	mux.HandleFunc("GET /signin", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := auth.CurrentUser(r.Context()); ok {
 			w.Header().Set("Cache-Control", "no-store")
@@ -187,39 +197,81 @@ func (n noDirFS) Open(name string) (fs.File, error) {
 	return f, nil
 }
 
-// homeFrom builds Today. The due count is still the placeholder: ?due=0
-// clears it. ?next=0 hides the lesson card. Otherwise the card is the
-// next published lesson in this learner's scope, or the empty state when
-// nothing is waiting. A missing store or a signed-out request is empty.
-// placement is copied through. Nil means the learner has never taken the check.
-func homeFrom(r *http.Request, lang, csrf string, store *db.Store, placement *views.PlacementVM) (views.Home, error) {
-	q := r.URL.Query()
-	ui := views.UIFor(lang, views.FakeLearner().AddressGender)
-	due := 12
-	if q.Get("due") == "0" {
-		due = 0
+// homeFrom fills Today from the signed-in learner.
+// With no learner, or no store, the page is the empty real state: nothing
+// due, no next unit, no known words. The placement card stays off unless
+// a run reader has a row.
+func (s *server) homeFrom(r *http.Request, lang, csrf string) (views.Home, error) {
+	vm, gender, situation, err := s.loadHome(r)
+	if err != nil {
+		return views.Home{}, err
 	}
-	home := views.Home{
-		UI:        ui,
-		CSRF:      csrf,
-		Due:       due,
-		DueText:   strconv.Itoa(due),
-		Placement: placement,
+	return homeToView(lang, csrf, gender, situation, vm), nil
+}
+
+func (s *server) serveHome(w http.ResponseWriter, r *http.Request, secure bool, csrf string) {
+	lang := chooseLang(w, r, secure)
+	if s == nil || s.store == nil {
+		page := homeToView(lang, csrf, views.AddressMasculine, "", HomeVM{})
+		if s == nil || s.runs == nil {
+			// No placement store: the card stays off, as on the ungated shell.
+			page.Placement = &views.PlacementVM{}
+		} else {
+			state, err := todayPlacement(r, s.runs)
+			if err != nil {
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				return
+			}
+			if state != nil {
+				fillPlacement(&page, &PlacementVM{
+					Active:              state.Active,
+					Finished:            state.Finished,
+					CardsRated:          state.CardsRated,
+					Level:               state.Level,
+					EstimatedKnownWords: state.EstimatedKnownWords,
+					TakenAt:             state.TakenAt,
+				})
+			}
+		}
+		render(w, r, views.Today(page))
+		return
 	}
-	if q.Get("next") == "0" || store == nil {
-		return home, nil
+	page, err := s.homeFrom(r, lang, csrf)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	if err := s.applyCourseLesson(r, &page); err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	render(w, r, views.Today(page))
+}
+
+// applyCourseLesson puts the next published lesson in this learner's scope
+// on the Today card. The due count, known count, and placement stay on the
+// scheduler's page. No lesson leaves the empty card.
+func (s *server) applyCourseLesson(r *http.Request, home *views.Home) error {
+	if home == nil || s == nil || s.store == nil {
+		return nil
 	}
 	user, ok := auth.CurrentUser(r.Context())
 	if !ok || user == nil {
-		return home, nil
+		home.Lesson = false
+		return nil
 	}
-	lesson, ok, err := store.NextCourseLesson(r.Context(), user.ID)
-	if err != nil || !ok {
-		return home, err
-	}
-	gloss, err := titleGloss(r.Context(), store, lesson.Title)
+	lesson, found, err := s.store.NextCourseLesson(r.Context(), user.ID)
 	if err != nil {
-		return views.Home{}, err
+		return err
+	}
+	if !found {
+		home.Lesson = false
+		home.Words = nil
+		return nil
+	}
+	gloss, err := titleGloss(r.Context(), s.store, lesson.Title)
+	if err != nil {
+		return err
 	}
 	home.Lesson = true
 	home.LessonTitle = lesson.Title
@@ -227,7 +279,196 @@ func homeFrom(r *http.Request, lang, csrf string, store *db.Store, placement *vi
 	home.LessonHref = lessonPath(lesson.UnitID, lesson.LessonIx)
 	home.UI.Situation = lesson.Situation
 	home.Words = chipsFor(lesson.NewWords)
-	return home, nil
+	return nil
+}
+
+func (s *server) serveReview(w http.ResponseWriter, r *http.Request, secure bool, csrf string) {
+	lang := chooseLang(w, r, secure)
+	card, err := s.currentReview(r, lang, csrf)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	gender := views.AddressMasculine
+	if user, ok := auth.CurrentUser(r.Context()); ok {
+		gender, err = s.addressGender(r.Context(), user.ID)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+	}
+	ui := views.UIFor(lang, gender)
+	page := views.Page{UI: ui, Title: ui.DocTitle("review"), CSRF: csrf, Current: "review"}
+	render(w, r, views.Review(page, card))
+}
+
+func (s *server) serveProgress(w http.ResponseWriter, r *http.Request, secure bool, csrf string) {
+	lang := chooseLang(w, r, secure)
+	user, ok := auth.CurrentUser(r.Context())
+	gender := views.AddressMasculine
+	var vm ProgressVM
+	if ok && s != nil && s.store != nil {
+		var err error
+		vm, err = s.progressVM(r.Context(), user.ID)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		gender, err = s.addressGender(r.Context(), user.ID)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+	}
+	render(w, r, views.Progress(progressToView(lang, csrf, gender, vm)))
+}
+
+func (s *server) currentReview(r *http.Request, lang, csrf string) (views.ReviewCard, error) {
+	lede := views.UIFor(lang, views.AddressMasculine).ReviewLede
+	key, user, ok := s.sessionKey(r)
+	if !ok || user == nil {
+		return reviewView(lang, csrf, lede, ReviewCardVM{Done: true}), nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	q, err := s.queueLocked(r.Context(), key, user.ID)
+	if err != nil {
+		return views.ReviewCard{}, err
+	}
+	vm, err := s.cardVM(r.Context(), q)
+	if err != nil {
+		return views.ReviewCard{}, err
+	}
+	return reviewView(lang, csrf, lede, vm), nil
+}
+
+// reveal records that this serve was shown the answer, then returns the
+// back and the grade buttons. CSRF and Origin are the checks on /_hx/.
+func (s *server) reveal(w http.ResponseWriter, r *http.Request) {
+	cardID, ok := reviewCardID(w, r)
+	if !ok {
+		return
+	}
+	key, user, ok := s.sessionKey(r)
+	if !ok || user == nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	lang := reviewLang(r)
+	s.mu.Lock()
+	q, err := s.queueLocked(r.Context(), key, user.ID)
+	if err != nil {
+		s.mu.Unlock()
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	if q == nil || q.sess == nil || !q.has || q.cur.CardID != cardID {
+		s.mu.Unlock()
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	if err := q.sess.Reveal(cardID); err != nil {
+		s.mu.Unlock()
+		http.Error(w, http.StatusText(reviewStatus(err)), reviewStatus(err))
+		return
+	}
+	q.revealed = true
+	vm, err := s.cardVM(r.Context(), q)
+	s.mu.Unlock()
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	s.finishReview(w, r, lang, vm)
+}
+
+// grade records the served card and returns the next card, or Done.
+// Session.Record writes the FSRS review through ApplyReview, once per serve.
+// peeked is true only when this serve was revealed. A grade with no reveal
+// is 400 and writes nothing. A drill step has no card, so Record keeps it
+// in the queue only, after Reveal. CSRF and Origin are the checks on /_hx/
+// in front of this handler. A database error is 500. An unknown card, or a
+// card that was not revealed, is 400. A plain form post, including Reveal,
+// is a 303 back to /review.
+func (s *server) grade(w http.ResponseWriter, r *http.Request) {
+	cardID, ok := reviewCardID(w, r)
+	if !ok {
+		return
+	}
+	rating, err := strconv.Atoi(r.PostForm.Get("rating"))
+	if err != nil || rating < int(fsrs.Again) || rating > int(fsrs.Easy) {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	key, user, ok := s.sessionKey(r)
+	if !ok || user == nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	lang := reviewLang(r)
+	s.mu.Lock()
+	q := s.queues[key]
+	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID || !sameStudyDay(q.builtAt, s.now()) {
+		s.mu.Unlock()
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	// A positive id that belongs to someone else is not the card this
+	// session served. The id check above rejects it. Record then applies
+	// the review once; a second grade of the same serve does not match.
+	if err := q.sess.Record(r.Context(), cardID, fsrs.Rating(rating)); err != nil {
+		s.mu.Unlock()
+		status := reviewStatus(err)
+		http.Error(w, http.StatusText(status), status)
+		return
+	}
+	q.answered++
+	if rating >= int(fsrs.Good) {
+		q.correct++
+	}
+	s.advance(q)
+	vm, err := s.cardVM(r.Context(), q)
+	s.mu.Unlock()
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	s.finishReview(w, r, lang, vm)
+}
+
+func reviewCardID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return 0, false
+	}
+	cardID, err := strconv.ParseInt(r.PostForm.Get("card_id"), 10, 64)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return 0, false
+	}
+	return cardID, true
+}
+
+// finishReview returns the card partial for htmx. A plain form post gets the
+// full Review page on the next GET, not the partial by itself.
+func (s *server) finishReview(w http.ResponseWriter, r *http.Request, lang string, vm ReviewCardVM) {
+	if r.Header.Get("HX-Request") != "true" {
+		loc := "/review"
+		if lang == "he" {
+			loc = "/review?lang=he"
+		}
+		http.Redirect(w, r, loc, http.StatusSeeOther)
+		return
+	}
+	lede := views.UIFor(lang, views.AddressMasculine).ReviewLede
+	render(w, r, views.ReviewBody(reviewView(lang, auth.CSRFToken(r), lede, vm)))
+}
+
+func reviewLang(r *http.Request) string {
+	if c, err := r.Cookie(langCookieName); err == nil && (c.Value == "he" || c.Value == "en") {
+		return c.Value
+	}
+	return "en"
 }
 
 // Static returns the embedded static files.
