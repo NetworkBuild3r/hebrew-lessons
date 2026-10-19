@@ -17,13 +17,13 @@ import (
 
 func TestClipMapFixture(t *testing.T) {
 	m := loadFixtureMap(t)
-	if m.Schema != clipMapSchema {
+	if m.Schema != clipMapSchemaV3 {
 		t.Fatalf("schema %q", m.Schema)
 	}
 	if len(m.Lessons) != 5 || len(m.Words) != 2 || len(m.Unmapped) != 2 {
 		t.Fatalf("lessons=%d words=%d unmapped=%d", len(m.Lessons), len(m.Words), len(m.Unmapped))
 	}
-	var v3, v4 int
+	var v3, v4, differ int
 	for _, word := range m.Words {
 		switch word.Model {
 		case "eleven_v4":
@@ -33,10 +33,16 @@ func TestClipMapFixture(t *testing.T) {
 		default:
 			t.Errorf("word %s model %q", word.Path, word.Model)
 		}
-		if path.Base(word.Path) != wordFileName(word.VoiceID, word.Model, word.Text) {
-			t.Errorf("word %s is not cacheKey(voice, model, text.trim())", word.Path)
+		if strings.TrimSpace(word.HashText) == "" {
+			t.Errorf("word %s is missing hashText", word.Path)
+		}
+		if path.Base(word.Path) != wordFileName(word.VoiceID, word.Model, word.HashText) {
+			t.Errorf("word %s is not cacheKey(voice, model, hashText.trim())", word.Path)
 		}
 		assertNormalized(t, word.Text)
+		if word.HashText != word.Text {
+			differ++
+		}
 	}
 	if v3 != 1 || v4 != 1 {
 		t.Fatalf("word models v3=%d v4=%d", v3, v4)
@@ -47,17 +53,32 @@ func TestClipMapFixture(t *testing.T) {
 		if lesson.Source != "lesson" {
 			t.Errorf("lesson source %q", lesson.Source)
 		}
-		if contentHash(lesson.VoiceID, lesson.Model, lesson.Text) != strings.ToLower(lesson.TextHash) {
+		if strings.TrimSpace(lesson.HashText) == "" {
+			t.Errorf("lesson %s is missing hashText", lesson.Path)
+		}
+		if contentHash(lesson.VoiceID, lesson.Model, lesson.HashText) != strings.ToLower(lesson.TextHash) {
 			t.Errorf("lesson %s text hash mismatch", lesson.Path)
 		}
 		if strings.Contains(lesson.Path, "/_archive/") {
 			t.Errorf("archive path in the lesson map: %s", lesson.Path)
 		}
 		assertNormalized(t, lesson.Text)
+		if lesson.HashText != lesson.Text {
+			differ++
+			if norm.NFC.IsNormalString(lesson.HashText) {
+				t.Errorf("differing hashText is already NFC: %s", lesson.Path)
+			}
+			if NormalizeText(lesson.HashText) != lesson.Text {
+				t.Errorf("hashText does not normalize to text: %s", lesson.Path)
+			}
+		}
 		if lesson.Lesson == "date-night-maadif-infinitive" && lesson.Clip == "audio/story/line-3.mp3" {
 			corrected = lesson
 			foundCorrected = true
 		}
+	}
+	if differ != 1 {
+		t.Fatalf("hashText differs from text on %d entries, want 1", differ)
 	}
 	if !foundCorrected {
 		t.Fatal("fixture is missing the corrected direct-speech clip")
@@ -75,6 +96,38 @@ func TestClipMapFixture(t *testing.T) {
 	}
 	if reasons["anal-sex-vocab/audio/_archive/friend-1.94ba0ad93fdd.mp3"] != "archive" {
 		t.Fatalf("unmapped archive: %+v", reasons)
+	}
+}
+
+func TestParseClipMapSchemas(t *testing.T) {
+	const lesson = `{"source":"lesson","path":"demo/audio/story/line-1.mp3","text":"קָם","hashText":"קָם","voiceId":"v","model":"eleven_v4","textHash":"abc"}`
+	const word = `{"source":"word","file":"a.mp3","path":"_audio/words/a.mp3","text":"קָם","hashText":"קָם","voiceId":"v","model":"eleven_v4"}`
+	bare := func(schema, lessons, words string) []byte {
+		return []byte(`{"schema":"` + schema + `","lessons":[` + lessons + `],"words":[` + words + `],"unmapped":[]}`)
+	}
+	if _, err := parseClipMap(bare("hebrew-clip-text-map/v1", "", "")); err == nil {
+		t.Fatal("v1 schema accepted")
+	}
+	v2, err := parseClipMap(bare(clipMapSchemaV2, `{"source":"lesson","path":"demo/a.mp3","text":"קָם","voiceId":"v","model":"eleven_v4","textHash":"abc"}`, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v2.Lessons[0].HashText != "" {
+		t.Fatalf("v2 hashText = %q", v2.Lessons[0].HashText)
+	}
+	kept, err := parseClipMap(bare(clipMapSchemaV2, lesson, ""))
+	if err != nil || kept.Lessons[0].HashText != "קָם" {
+		t.Fatalf("v2 with hashText: %+v err=%v", kept, err)
+	}
+	v3, err := parseClipMap(bare(clipMapSchemaV3, lesson, word))
+	if err != nil || v3.Schema != clipMapSchemaV3 || v3.Words[0].HashText != "קָם" {
+		t.Fatalf("v3: %+v err=%v", v3, err)
+	}
+	if _, err := parseClipMap(bare(clipMapSchemaV3, `{"source":"lesson","path":"demo/a.mp3","text":"קָם","voiceId":"v","model":"eleven_v4","textHash":"abc"}`, word)); err == nil {
+		t.Fatal("v3 lesson without hashText accepted")
+	}
+	if _, err := parseClipMap(bare(clipMapSchemaV3, lesson, `{"source":"word","path":"_audio/words/a.mp3","text":"קָם","hashText":"  ","voiceId":"v","model":"eleven_v4"}`)); err == nil {
+		t.Fatal("v3 blank hashText accepted")
 	}
 }
 

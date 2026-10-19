@@ -4,14 +4,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
-const clipMapSchema = "hebrew-clip-text-map/v2"
+const (
+	clipMapSchemaV2 = "hebrew-clip-text-map/v2"
+	clipMapSchemaV3 = "hebrew-clip-text-map/v3"
+)
 
 // clipMapDocument is the clip-text-map.json shape this importer knows.
-// Hebrew Dev is regenerating the bundle and will send the schema; change
-// this struct and parseClipMap, and leave the rest of the importer alone.
-// The file is read from the bundle root. Testdata copies are fixtures.
+// v3 is v2 plus a required hashText on every lesson and word. v2 still
+// accepts a missing hashText. The file is read from the bundle root.
+// Testdata copies are fixtures.
 type clipMapDocument struct {
 	Schema   string            `json:"schema"`
 	Lessons  []clipMapRecord   `json:"lessons"`
@@ -20,7 +24,8 @@ type clipMapDocument struct {
 }
 
 // clipMapRecord is one mapped lesson or word. SHA256 is optional: when it
-// is set, the mp3 bytes must hash to it.
+// is set, the mp3 bytes must hash to it. HashText, when set, is the string
+// the legacy digest was computed from. v3 requires it.
 type clipMapRecord struct {
 	Source   string `json:"source"`
 	Lesson   string `json:"lesson"`
@@ -28,6 +33,7 @@ type clipMapRecord struct {
 	File     string `json:"file"`
 	Path     string `json:"path"`
 	Text     string `json:"text"`
+	HashText string `json:"hashText,omitempty"`
 	VoiceID  string `json:"voiceId"`
 	Model    string `json:"model"`
 	TextHash string `json:"textHash"`
@@ -55,6 +61,7 @@ type mappedClip struct {
 	File     string
 	Path     string
 	Text     string
+	HashText string
 	VoiceID  string
 	Model    string
 	TextHash string
@@ -74,8 +81,10 @@ func parseClipMap(body []byte) (clipMap, error) {
 	if err := dec.Decode(&doc); err != nil {
 		return clipMap{}, fmt.Errorf("audio: parse clip map: %w", err)
 	}
-	if doc.Schema != clipMapSchema {
-		return clipMap{}, fmt.Errorf("audio: clip map schema %q, want %s", doc.Schema, clipMapSchema)
+	switch doc.Schema {
+	case clipMapSchemaV2, clipMapSchemaV3:
+	default:
+		return clipMap{}, fmt.Errorf("audio: clip map schema %q, want %s or %s", doc.Schema, clipMapSchemaV2, clipMapSchemaV3)
 	}
 	out := clipMap{
 		Schema:   doc.Schema,
@@ -92,5 +101,27 @@ func parseClipMap(body []byte) (clipMap, error) {
 	for i, rec := range doc.Unmapped {
 		out.Unmapped[i] = unmappedClip(rec)
 	}
+	if doc.Schema == clipMapSchemaV3 {
+		if err := requireHashText(out.Lessons); err != nil {
+			return clipMap{}, err
+		}
+		if err := requireHashText(out.Words); err != nil {
+			return clipMap{}, err
+		}
+	}
 	return out, nil
+}
+
+func requireHashText(clips []mappedClip) error {
+	for _, clip := range clips {
+		if strings.TrimSpace(clip.HashText) != "" {
+			continue
+		}
+		rel := clip.Path
+		if rel == "" {
+			rel = clip.File
+		}
+		return fmt.Errorf("audio: clip %s: v3 hashText is required", rel)
+	}
+	return nil
 }

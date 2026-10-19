@@ -290,6 +290,107 @@ func TestImportStoresClipWhenSHA256IsAbsent(t *testing.T) {
 	}
 }
 
+func TestHashText(t *testing.T) {
+	// Bet, dagesh, qamats. Canonical order is qamats then dagesh.
+	raw := "\u05D1\u05BC\u05B8 "
+	if norm.NFC.IsNormalString(strings.TrimSpace(raw)) {
+		t.Fatal("hashText fixture is already NFC")
+	}
+	stored := NormalizeText(raw)
+	if stored == raw || stored == "" {
+		t.Fatalf("normalized hashText = %q", stored)
+	}
+	const voice = "voice-a"
+	body := []byte("hashtext-bytes")
+	wordBody := []byte("hashtext-word")
+
+	t.Run("present-valid", func(t *testing.T) {
+		lesson := lessonObj("demo", "audio/story/line-1.mp3", stored, voice, "eleven_v4", body, contentHash(voice, "eleven_v4", raw), "")
+		lesson["hashText"] = raw
+		word := wordObj(stored, voice, "eleven_v3", wordBody, wordFileName(voice, "eleven_v3", raw))
+		word["hashText"] = raw
+		rep, store := importMap(t, clipMapSchemaV3, []any{lesson}, []any{word}, map[string][]byte{
+			lesson["path"].(string): body,
+			word["path"].(string):   wordBody,
+		})
+		if rep.Imported != 2 || rep.TextMismatch != 0 || rep.HashMismatch != 0 || rep.Unmapped != 0 {
+			t.Fatalf("counts: %+v text=%+v", rep, rep.TextMismatches)
+		}
+		asset, ok, err := store.AudioByText(context.Background(), stored)
+		if err != nil || !ok || asset.TextNFC != stored {
+			t.Fatalf("stored = %+v ok=%v err=%v", asset, ok, err)
+		}
+		for _, clip := range readManifest(t, rep.ManifestPath) {
+			if clip.Text != stored {
+				t.Fatalf("manifest text %q", clip.Text)
+			}
+		}
+	})
+
+	t.Run("nfc-differs", func(t *testing.T) {
+		const other = "שָׁלוֹם"
+		if NormalizeText(raw) == other {
+			t.Fatal("nfc fixture equals the stored text")
+		}
+		lesson := lessonObj("demo", "audio/story/line-1.mp3", other, voice, "eleven_v4", body, contentHash(voice, "eleven_v4", raw), "")
+		lesson["hashText"] = raw
+		word := wordObj(other, voice, "eleven_v3", wordBody, wordFileName(voice, "eleven_v3", raw))
+		word["hashText"] = raw
+		rep, store := importMap(t, clipMapSchemaV3, []any{lesson}, []any{word}, map[string][]byte{
+			lesson["path"].(string): body,
+			word["path"].(string):   wordBody,
+		})
+		if rep.Imported != 0 || rep.TextMismatch != 2 || rep.HashMismatch != 0 {
+			t.Fatalf("counts: %+v text=%+v", rep, rep.TextMismatches)
+		}
+		for _, item := range rep.TextMismatches {
+			if item.Reason != "nfc-differs" || item.Want != stored || item.Got != other {
+				t.Fatalf("mismatch %+v", item)
+			}
+		}
+		if _, ok, err := store.AudioByText(context.Background(), other); err != nil || ok {
+			t.Fatalf("nfc-differs stored a row ok=%v err=%v", ok, err)
+		}
+		if _, ok, err := store.AudioByText(context.Background(), stored); err != nil || ok {
+			t.Fatalf("nfc-differs stored the hash text ok=%v err=%v", ok, err)
+		}
+		if mp3Count(t, filepath.Dir(rep.ReportPath)) != 0 {
+			t.Fatal("nfc-differs wrote an mp3")
+		}
+	})
+
+	t.Run("absent", func(t *testing.T) {
+		lesson := lessonObj("demo", "audio/story/line-1.mp3", "שָׁלוֹם", voice, "eleven_v4", body, "", "")
+		if _, ok := lesson["hashText"]; ok {
+			t.Fatal("absent fixture set hashText")
+		}
+		rep, store := importMap(t, clipMapSchemaV2, []any{lesson}, nil, map[string][]byte{
+			lesson["path"].(string): body,
+		})
+		if rep.Imported != 1 || rep.TextMismatch != 0 || rep.HashMismatch != 0 {
+			t.Fatalf("counts: %+v", rep)
+		}
+		asset, ok, err := store.AudioByText(context.Background(), "שָׁלוֹם")
+		if err != nil || !ok || asset.TextNFC != "שָׁלוֹם" || asset.ID != shaID(body) {
+			t.Fatalf("stored = %+v ok=%v err=%v", asset, ok, err)
+		}
+	})
+}
+
+func importMap(t *testing.T, schema string, lessons, words []any, files map[string][]byte) (Report, *db.Store) {
+	t.Helper()
+	export := t.TempDir()
+	writeFiles(t, export, files)
+	writeMapVersion(t, export, schema, lessons, words, nil)
+	data := t.TempDir()
+	store := openStoreAt(t, data, time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC))
+	rep, err := Import(context.Background(), store, data, export, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rep, store
+}
+
 func TestImportMismatchesAreNotStored(t *testing.T) {
 	body := []byte("good-bytes")
 	badBody := []byte("other-bytes")
@@ -503,6 +604,11 @@ func wordObj(text, voice, model string, body []byte, file string) map[string]any
 
 func writeMap(t *testing.T, dir string, lessons, words, unmapped []any) {
 	t.Helper()
+	writeMapVersion(t, dir, clipMapSchemaV2, lessons, words, unmapped)
+}
+
+func writeMapVersion(t *testing.T, dir, schema string, lessons, words, unmapped []any) {
+	t.Helper()
 	if lessons == nil {
 		lessons = []any{}
 	}
@@ -513,7 +619,7 @@ func writeMap(t *testing.T, dir string, lessons, words, unmapped []any) {
 		unmapped = []any{}
 	}
 	raw, err := json.Marshal(map[string]any{
-		"schema":   clipMapSchema,
+		"schema":   schema,
 		"lessons":  lessons,
 		"words":    words,
 		"unmapped": unmapped,
@@ -537,7 +643,7 @@ func v2Map(lessons, words, unmapped []any) []byte {
 		unmapped = []any{}
 	}
 	raw, err := json.Marshal(map[string]any{
-		"schema":   clipMapSchema,
+		"schema":   clipMapSchemaV2,
 		"lessons":  lessons,
 		"words":    words,
 		"unmapped": unmapped,

@@ -52,20 +52,24 @@ type Options struct {
 	Archive io.Reader
 }
 
-// Import reads a v2 export directory, or a .tgz of that directory, and fills
-// audio_assets plus <dataDir>/audio/<sha256>.mp3.
+// Import reads a v2 or v3 export directory, or a .tgz of that directory,
+// and fills audio_assets plus <dataDir>/audio/<sha256>.mp3.
 //
-// The export root holds clip-text-map.json (schema hebrew-clip-text-map/v2).
-// Clip paths in the map are relative to that root: lesson directories and
-// _audio/ sit next to the map, with no files/ prefix. A single archive
+// The export root holds clip-text-map.json (schema hebrew-clip-text-map/v3,
+// or v2). Clip paths in the map are relative to that root: lesson directories
+// and _audio/ sit next to the map, with no files/ prefix. A single archive
 // prefix, such as bundle/clip-text-map.json, is stripped.
 //
 // Every mapped clip is checked before it is stored. When the map entry has
 // a sha256, the mp3 bytes must hash to it (hash-mismatch otherwise). An
 // entry with no sha256 is still stored under the hash of its bytes.
-// sha256 of voiceId, model, and text.trim() joined by NUL must equal a
+// v3 requires hashText on every lesson and word. When hashText is present,
+// sha256 of voiceId, model, and hashText.trim() joined by NUL must equal a
 // lesson's textHash, and a word's file name must be the first 24 hex
 // characters of that digest plus ".mp3" (text-mismatch otherwise).
+// NormalizeText(hashText) must then equal text (text-mismatch, reason
+// nfc-differs, otherwise), and text is what is stored. When hashText is
+// absent, v2 hashes text.trim() and stores NormalizeText(text).
 //
 // Unmapped entries are listed and not stored. The same bytes with two
 // different texts are a conflict: both paths and texts are reported, and
@@ -242,8 +246,12 @@ func plan(m clipMap) (*builder, error) {
 		}
 		voice := strings.TrimSpace(clip.VoiceID)
 		model := strings.TrimSpace(clip.Model)
-		got := contentHash(voice, model, clip.Text)
 		fileSHA := strings.ToLower(strings.TrimSpace(clip.SHA256))
+		hashInput := clip.Text
+		if strings.TrimSpace(clip.HashText) != "" {
+			hashInput = clip.HashText
+		}
+		got := contentHash(voice, model, hashInput)
 		switch clip.Source {
 		case "lesson":
 			want := strings.ToLower(strings.TrimSpace(clip.TextHash))
@@ -252,7 +260,7 @@ func plan(m clipMap) (*builder, error) {
 				continue
 			}
 		case "word":
-			want := wordFileName(voice, model, clip.Text)
+			want := wordFileName(voice, model, hashInput)
 			if path.Base(rel) != want {
 				b.textBad[rel] = refusedText{item: Mismatch{Path: rel, Want: want, Got: path.Base(rel)}, sha: fileSHA}
 				continue
@@ -261,6 +269,18 @@ func plan(m clipMap) (*builder, error) {
 			return nil, fmt.Errorf("audio: clip %s source %q", rel, clip.Source)
 		}
 		text := NormalizeText(clip.Text)
+		if strings.TrimSpace(clip.HashText) != "" {
+			if NormalizeText(clip.HashText) != clip.Text {
+				b.textBad[rel] = refusedText{item: Mismatch{
+					Path:   rel,
+					Want:   NormalizeText(clip.HashText),
+					Got:    clip.Text,
+					Reason: "nfc-differs",
+				}, sha: fileSHA}
+				continue
+			}
+			text = clip.Text
+		}
 		if text == "" {
 			b.unmapped[rel] = "empty-text"
 			continue

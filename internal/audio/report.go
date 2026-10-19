@@ -41,9 +41,10 @@ type UnmappedItem struct {
 // Mismatch is a clip whose bytes or legacy text hash did not match the map.
 // It is not stored.
 type Mismatch struct {
-	Path string `json:"path"`
-	Want string `json:"want"`
-	Got  string `json:"got"`
+	Path   string `json:"path"`
+	Want   string `json:"want"`
+	Got    string `json:"got"`
+	Reason string `json:"reason,omitempty"`
 }
 
 // Conflict is one sha256 whose paths disagree on the text.
