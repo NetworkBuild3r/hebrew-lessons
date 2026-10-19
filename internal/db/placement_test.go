@@ -60,7 +60,7 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 	if err := conn.QueryRowContext(ctx, `SELECT applied_at FROM schema_migrations WHERE version = 3`).Scan(&applied3); err != nil {
 		t.Fatal(err)
 	}
-	if applied3 != placementTime(when) {
+	if applied3 != FormatTime(when) {
 		t.Fatalf("version 3 applied_at = %s", applied3)
 	}
 
@@ -114,6 +114,9 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := conn.ExecContext(ctx, `INSERT INTO placement_runs (user_id, started_at, seed) VALUES (?, ?, 8)`, userID, old); err == nil {
+		t.Fatal("second open run was inserted")
+	}
 	runID, err := res.LastInsertId()
 	if err != nil {
 		t.Fatal(err)
@@ -157,10 +160,17 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 		WHERE id = ?`, old, runID); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := conn.ExecContext(ctx, `INSERT INTO placement_runs (user_id, started_at, seed) VALUES (?, ?, 9)`, userID, old); err != nil {
+		t.Fatalf("finished run still blocked a new one: %v", err)
+	}
 
 	rejectSQL(t, conn, "unit scope", `UPDATE units SET scope = 'private'`)
 	rejectSQL(t, conn, "unit scope learner", `UPDATE units SET scope = 'learner:'`)
+	rejectSQL(t, conn, "unit scope trailing junk", `UPDATE units SET scope = 'learner:1abc'`)
 	if _, err := conn.ExecContext(ctx, `UPDATE units SET scope = 'learner:4'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, `UPDATE units SET scope = 'learner:01'`); err != nil {
 		t.Fatal(err)
 	}
 	rejectSQL(t, conn, "confusion lexeme", `
@@ -196,7 +206,7 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 	if err := conn.QueryRowContext(ctx, `SELECT applied_at FROM schema_migrations WHERE version = 3`).Scan(&applied3); err != nil {
 		t.Fatal(err)
 	}
-	if applied3 != placementTime(when) {
+	if applied3 != FormatTime(when) {
 		t.Fatalf("second migrate rewrote version 3 applied_at to %s", applied3)
 	}
 }

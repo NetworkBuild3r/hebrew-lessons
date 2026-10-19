@@ -13,9 +13,13 @@ import (
 )
 
 // Service deals the placement deck. Each rating is that word's first he_en
-// review: the card is created and graded through fsrs.Review.Grade, so the
-// stability is the one FSRS-5 assigns a new card.
+// review. The stability is the one FSRS-5 assigns a new card.
 // The clock stamps the run, the answers, and the review.
+//
+// Handlers must check run ownership and CSRF. Next, Rate, and Finish take
+// a run id and do not read the session. The handler loads the run, requires
+// run.UserID to be the session user, and takes that user id only from the
+// session. A POST uses the existing CSRF check.
 type Service struct {
 	store   *db.Store
 	review  *fsrs.Review
@@ -60,19 +64,11 @@ func (s *Service) loadFixture() ([]fixtureItem, error) {
 // The deck order comes from the seed stored on that run.
 // A run left unfinished is resumed on a later day. When its current sitting
 // already has SittingSize answers, Start opens the next sitting.
+// Two callers starting at once share one open run: the insert that loses
+// the unique index reads the run the winner created.
 func (s *Service) Start(ctx context.Context, userID int64) (int64, error) {
 	if err := s.ready(); err != nil {
 		return 0, err
-	}
-	open, ok, err := s.store.OpenPlacementRun(ctx, userID)
-	if err != nil {
-		return 0, err
-	}
-	if ok {
-		if err := s.resumeSitting(ctx, open); err != nil {
-			return 0, err
-		}
-		return open.ID, nil
 	}
 	cat, err := s.loadFixture()
 	if err != nil {
@@ -81,15 +77,46 @@ func (s *Service) Start(ctx context.Context, userID int64) (int64, error) {
 	if len(cat) == 0 {
 		return 0, errors.New("placement: fixture is empty")
 	}
-	now := s.clock.Now()
-	seed := now.UnixNano()
-	if seed == 0 {
-		seed = 1
+	for attempt := 0; attempt < 2; attempt++ {
+		open, ok, err := s.store.OpenPlacementRun(ctx, userID)
+		if err != nil {
+			return 0, err
+		}
+		if ok {
+			if err := s.resumeSitting(ctx, open); err != nil {
+				return 0, err
+			}
+			return open.ID, nil
+		}
+		now := s.clock.Now()
+		seed := now.UnixNano()
+		if seed == 0 {
+			seed = 1
+		}
+		id, err := s.store.InsertPlacementRun(ctx, userID, now, seed)
+		if err == nil {
+			return id, nil
+		}
+		if !errors.Is(err, db.ErrOpenPlacementRun) {
+			return 0, err
+		}
 	}
-	return s.store.InsertPlacementRun(ctx, userID, now, seed)
+	open, ok, err := s.store.OpenPlacementRun(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	if !ok {
+		return 0, errors.New("placement: open run was not stored")
+	}
+	if err := s.resumeSitting(ctx, open); err != nil {
+		return 0, err
+	}
+	return open.ID, nil
 }
 
 // Next returns the next card after the last answered one.
+// The handler must check that the run belongs to the session user, and a
+// POST must pass the existing CSRF check.
 // Done is set when a band's Again rate has reached StopAgainRate, the run
 // has rated CardCap, or nothing dealable remains. That also scores the
 // run. Break is set when the current sitting has SittingSize answers and
@@ -244,6 +271,9 @@ func (s *Service) pick(ctx context.Context, run db.PlacementRun, order []fixture
 // rating is 0 "I don't know this", 1 Again, 2 Hard, 3 Good, or 4 Easy.
 // 0 is stored as DontKnow and graded as Again.
 // A word that already has a card is not graded again.
+// The lexeme, card, review log, and answer are written in one transaction.
+// The handler must check that the run belongs to the session user, and the
+// POST must pass the existing CSRF check.
 func (s *Service) Rate(ctx context.Context, runID int64, itemID string, rating int) error {
 	if err := s.ready(); err != nil {
 		return err
@@ -277,34 +307,31 @@ func (s *Service) Rate(ctx context.Context, runID int64, itemID string, rating i
 	if has {
 		return fmt.Errorf("placement: %s already has a card", it.TextNFC)
 	}
-	lexemeID, err := s.store.UpsertPlacementLexeme(ctx, it.TextNFC, it.GlossEN, it.POS, it.Translit, it.Gender)
-	if err != nil {
-		return err
-	}
 	now := s.clock.Now()
-	cardID, err := s.store.InsertCard(ctx, db.Card{
-		UserID:   run.UserID,
-		LexemeID: lexemeID,
-		Dir:      fsrs.DirHeEn,
-		State:    fsrs.StateNew,
-		Due:      now,
-	})
-	if err != nil {
-		return err
-	}
 	grade := fsrs.Rating(rating)
 	if rating == DontKnow {
 		grade = fsrs.Again
 	}
-	if err := s.review.Grade(ctx, cardID, grade, false); err != nil {
+	card, log, err := s.review.ScheduleNew(now, grade)
+	if err != nil {
 		return err
 	}
-	return s.store.RatePlacementAnswer(ctx, runID, itemID, rating, lexemeID, now)
+	card.UserID = run.UserID
+	card.Dir = fsrs.DirHeEn
+	return s.store.CommitPlacementRating(ctx, db.PlacementLexeme{
+		TextNFC:  it.TextNFC,
+		Gloss:    it.GlossEN,
+		POS:      it.POS,
+		Translit: it.Translit,
+		Gender:   it.Gender,
+	}, card, log, runID, itemID, rating)
 }
 
 // Finish scores the run and marks it finished.
 // A second call returns the stored result and does not grade anything again.
 // SuggestedStartPosition is computed from the units and known words now.
+// The handler must check that the run belongs to the session user, and the
+// POST must pass the existing CSRF check.
 func (s *Service) Finish(ctx context.Context, runID int64) (Result, error) {
 	if err := s.ready(); err != nil {
 		return Result{}, err

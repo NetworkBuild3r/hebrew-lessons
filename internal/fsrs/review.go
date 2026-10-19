@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
@@ -43,6 +44,39 @@ func (r *Review) ready() error {
 		return errors.New("fsrs: clock is not configured")
 	}
 	return nil
+}
+
+// ScheduleNew plans the first review of a new card. It does not write.
+// The result is what Grade stores after inserting a new he_en card and
+// reviewing it at now. rating is 1 Again, 2 Hard, 3 Good, or 4 Easy.
+func (r *Review) ScheduleNew(now time.Time, rating Rating) (db.Card, db.ReviewLog, error) {
+	if r == nil || r.sched == nil {
+		return db.Card{}, db.ReviewLog{}, errors.New("fsrs: review is not configured")
+	}
+	if rating < Again || rating > Easy {
+		return db.Card{}, db.ReviewLog{}, fmt.Errorf("fsrs: rating %d is outside 1..4", rating)
+	}
+	info := r.sched.Next(gofsrs.NewCard(), now, gofsrs.Rating(rating))
+	state, err := stateName(info.Card.State)
+	if err != nil {
+		return db.Card{}, db.ReviewLog{}, err
+	}
+	card := db.Card{
+		State:      state,
+		Due:        info.Card.Due,
+		Stability:  info.Card.Stability,
+		Difficulty: info.Card.Difficulty,
+		Reps:       int(info.Card.Reps),
+		Lapses:     int(info.Card.Lapses),
+		LastReview: info.Card.LastReview,
+	}
+	log := db.ReviewLog{
+		Rating:        int(rating),
+		ReviewedAt:    now,
+		ElapsedDays:   int(info.ReviewLog.ElapsedDays),
+		ScheduledDays: int(info.Card.ScheduledDays),
+	}
+	return card, log, nil
 }
 
 // Grade applies one rating to a card and appends a review_log row.

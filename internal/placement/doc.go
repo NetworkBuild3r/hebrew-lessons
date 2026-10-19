@@ -8,8 +8,9 @@
 // They are returned together. AudioURL is /audio/<id>.mp3 when a clip
 // exists for the exact pointed text, and empty otherwise.
 //
-// Each rating is that word's first real FSRS review. Rate creates a he_en
-// card and grades it through fsrs.Review.Grade. Rating 0 is stored as
+// Each rating is that word's first real FSRS review. Rate writes the he_en
+// card, its review log, and the answer in one transaction. The schedule is
+// the one FSRS-5 assigns a new card. Rating 0 is stored as
 // DontKnow and graded as Again, so the card's latest rating is Again and
 // the word is learning. The initial stability is the one FSRS-5 assigns a
 // new card. There is no separate seeding step. A word that already has a
@@ -82,6 +83,8 @@
 //
 //	(*db.Store).KnownLexemeIDs(ctx, userID) ([]int64, error)
 //	  Sorted card-based known set described above.
+//	(*db.Store).LearnerKnownLexemes(ctx, userID) ([]string, error)
+//	  The pointed NFC text of that set, sorted.
 //
 //	(*db.Store).StruggleStats(ctx, userID, topN) (db.Struggle, error)
 //	  Lexemes is every reviewed lexeme sorted by text, with ConfusionKeys.
@@ -92,10 +95,17 @@
 //
 //	(*db.Store).CompletedSharedUnits(ctx, userID) ([]db.UnitCompletion, error)
 //	(*db.Store).UnitsInScope(ctx, learnerID) ([]db.UnitRow, error)
-//	(*db.Store).PutUnit(ctx, doc, scope) (int64, error)
-//	  Writes the units row's scope and a unit_revisions row in one
-//	  transaction. scope is shared or learner:<digits>. A scope-only
-//	  change still writes a revision.
+//	(*db.Store).PutUnit(ctx, id *int64, doc, scope, actor) (db.PutResult, error)
+//	  A nil id creates a draft. A missing id returns db.ErrUnitNotFound.
+//	  An identical document, position, and scope returns Unchanged and
+//	  writes nothing, so a published unit stays published. Any change,
+//	  including scope only, appends a revision, sets status to draft,
+//	  and replaces lesson_items. actor is the caller, not a fixed name.
+//	  A position change updates that unit only.
+//
+// Handlers that call Next, Rate, or Finish must check run ownership and
+// CSRF. They load the run, require run.UserID to be the session user, and
+// take that user id only from the session. A POST uses the existing CSRF check.
 //
 // units.Lookup.KnownLexemes(ctx, beforePosition) is the global authoring
 // view: words introduced as new in an earlier unit. It is a different set,

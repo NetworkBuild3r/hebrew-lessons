@@ -174,6 +174,48 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 	}
 }
 
+func TestLearnerKnownLexemes(t *testing.T) {
+	when := time.Date(2026, 10, 18, 15, 0, 0, 0, time.UTC)
+	s := openStore(t, fixedClock{when})
+	ctx := context.Background()
+	userID := insertUser(t, s, "known@example.com", "sub-known", "learner")
+	otherID := insertUser(t, s, "other-known@example.com", "sub-other-known", "learner")
+	alef := insertLexeme(t, s, "אֶחָד")
+	bet := insertLexeme(t, s, "בַּיִת")
+	gimel := insertLexeme(t, s, "גֶּשֶׁם")
+	insertKnownCard(t, s, userID, bet, "he_en", Good, when)
+	insertKnownCard(t, s, userID, alef, "he_en", Again, when)
+	insertKnownCard(t, s, otherID, gimel, "he_en", Easy, when)
+	unitID := insertUnitDoc(t, s, 0, "draft", `{"title":"t"}`)
+	if err := s.execLesson(ctx, unitID, 0, gimel, "new", userID, &when); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.LearnerKnownLexemes(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"בַּיִת", "גֶּשֶׁם"}
+	if len(got) != len(want) {
+		t.Fatalf("texts %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("texts %v, want %v", got, want)
+		}
+	}
+	ids, err := s.KnownLexemeIDs(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 2 || ids[0] != bet || ids[1] != gimel {
+		t.Fatalf("ids %v, want %d %d", ids, bet, gimel)
+	}
+	none, err := s.LearnerKnownLexemes(ctx, otherID)
+	if err != nil || len(none) != 1 || none[0] != "גֶּשֶׁם" {
+		t.Fatalf("other %v %v", none, err)
+	}
+}
+
 func TestKnownLexemeIDsUsesLatestHeEnRating(t *testing.T) {
 	when := time.Date(2026, 10, 18, 15, 0, 0, 0, time.UTC)
 	s := openStore(t, fixedClock{when})
@@ -277,10 +319,10 @@ func (s *Store) execLesson(ctx context.Context, unitID int64, lessonIx int, lexe
 	}
 	var done any
 	if finished != nil {
-		done = placementTime(*finished)
+		done = FormatTime(*finished)
 	}
 	_, err := s.exec(ctx, `
 		INSERT INTO lesson_runs (user_id, unit_id, lesson_ix, started_at, finished_at)
-		VALUES (?, ?, ?, ?, ?)`, userID, unitID, lessonIx, placementTime(*finished), done)
+		VALUES (?, ?, ?, ?, ?)`, userID, unitID, lessonIx, FormatTime(*finished), done)
 	return err
 }
