@@ -149,13 +149,15 @@ type putInput struct {
 	UnitID   *int64     `json:"unitId,omitempty" jsonschema:"Id from an earlier put_unit. Omit it to create a unit. Send the same id and the same document to avoid a new revision."`
 	Position int        `json:"position" jsonschema:"Course position, 0 or greater. This is not a field inside doc. Changing it saves a new draft revision."`
 	Scope    string     `json:"scope" jsonschema:"Required. shared for every learner, or learner:<id> for one learner. <id> is the numeric learner id, such as learner:7. Scope is metadata, not a field of doc. Changing it saves a new draft revision."`
-	Doc      units.Unit `json:"doc" jsonschema:"Unit document. JSON that cannot be read as a unit is rejected. Warnings and block issues are returned, and the draft is still saved. Publishing is a later tool."`
+	Doc      units.Unit `json:"doc" jsonschema:"Unit document. JSON that cannot be read as a unit is rejected. Warnings and block issues are returned, and the draft is still saved."`
+	Publish  bool       `json:"publish,omitempty" jsonschema:"When true, publish this save if scope is learner:<id> and there are no block issues. Shared scope ignores this flag. Warnings do not block it. Block issues still save the draft and leave it unpublished."`
 }
 
 type putOutput struct {
 	UnitID    int64         `json:"unitId"`
 	Revision  int           `json:"revision"`
 	Unchanged bool          `json:"unchanged"`
+	Published bool          `json:"published"`
 	Issues    []units.Issue `json:"issues"`
 }
 
@@ -395,9 +397,17 @@ func (s *service) putUnit(ctx context.Context, _ *mcp.CallToolRequest, in putInp
 	if err != nil {
 		return nil, out, storeErr("The draft could not be saved.", err)
 	}
+	published := false
+	if in.Publish {
+		saved, published, err = s.publishLearnerDraft(ctx, scope, saved, issues)
+		if err != nil {
+			return nil, out, err
+		}
+	}
 	out.UnitID = saved.UnitID
 	out.Revision = saved.Revision
 	out.Unchanged = saved.Unchanged
+	out.Published = published
 	out.Issues = issueList(issues)
 	return nil, out, nil
 }
@@ -468,7 +478,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}, svc.validateUnit)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "put_unit",
-		Description: "Save a draft revision. Admin only, including the static token: a learner call is a tool error, forbidden: admin only, even for scope learner:<their own id>. scope is required: shared, or learner:<id> for one learner. Scope is not inside the unit document. Send unitId to update; omit it to create. The same document, position, and scope do not create another revision. lesson_items are still rebuilt, so a unit saved before its words were in the lexicon gains those rows without a new revision. Changing scope does create a revision. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. This does not publish.",
+		Description: "Save a draft revision. Admin only, including the static token: a learner call is a tool error, forbidden: admin only, even for scope learner:<their own id>. scope is required: shared, or learner:<id> for one learner. Scope is not inside the unit document. Send unitId to update; omit it to create. The same document, position, and scope do not create another revision. lesson_items are still rebuilt, so a unit saved before its words were in the lexicon gains those rows without a new revision. Changing scope does create a revision. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. publish true is honored only for scope learner:<id>, and only when there are no block issues. A shared unit ignores publish and stays a draft until publish_unit. Warnings do not block that learner-scope publish.",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    false,
 			IdempotentHint:  true,
@@ -478,5 +488,6 @@ func registerTools(server *mcp.Server, svc *service) {
 	}, svc.putUnit)
 	registerUpsertLexemes(server, svc)
 	registerGenerateAudio(server, svc)
+	registerPublishUnit(server, svc)
 	registerLearnerWords(server, svc)
 }

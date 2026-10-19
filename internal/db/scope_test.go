@@ -15,6 +15,9 @@ func TestScopeUnits(t *testing.T) {
 	otherID := insertUser(t, s, "scope-other@example.com", "sub-scope-other", "learner")
 
 	shared := insertScopedUnit(t, s, 2, "shared", `{"title":"t","lessons":[{},{}]}`)
+	if _, err := s.exec(ctx, `UPDATE units SET status = 'published' WHERE id = ?`, shared); err != nil {
+		t.Fatal(err)
+	}
 	private := insertScopedUnit(t, s, 0, fmt.Sprintf("learner:%d", userID), `{"lessons":[{}]}`)
 	otherPrivate := insertScopedUnit(t, s, 1, fmt.Sprintf("learner:%d", otherID), `{"lessons":[{}]}`)
 	empty := insertScopedUnit(t, s, 3, "shared", `{"title":"empty"}`)

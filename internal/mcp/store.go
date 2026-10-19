@@ -11,8 +11,11 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
-// ErrUnitNotFound means PutUnit was given an id that is not in the store.
+// ErrUnitNotFound means a unit write was given an id that is not in the store.
 var ErrUnitNotFound = errors.New("unit not found")
+
+// ErrRevisionNotFound means a revision number this unit does not have.
+var ErrRevisionNotFound = errors.New("unit revision not found")
 
 // defaultStruggleTop is how many struggled lexemes get_context returns
 // when topN is omitted. It does not limit confusions. The store's
@@ -240,7 +243,18 @@ type PutResult struct {
 	Unchanged bool
 }
 
-// UnitWriter is what put_unit writes.
+// UnitView is the revision publish_unit validates. Position is the
+// units.position column. A revision row does not store it.
+type UnitView struct {
+	UnitID   int64
+	Revision int
+	Position int
+	Scope    string
+	Status   string
+	Doc      units.Unit
+}
+
+// UnitWriter is what put_unit and publish_unit write.
 //
 // The database method is PutUnit(ctx, doc, scope). doc carries the
 // document and Position. scope is shared or learner:<id> and is not
@@ -251,6 +265,13 @@ type PutResult struct {
 // appends a revision, sets status to draft, and derives lesson_items.
 // Block issues do not refuse the write. Actor is the principal on ctx.
 // The in-memory fake does not derive lesson_items. The database method does.
+//
+// LoadUnit reads the current row, or one revision when revision is set.
+// A nil revision is the current row, not the highest revision number.
+// PublishUnit marks that revision published. It does not insert a
+// revision and it does not validate. The tool runs units.Validate first.
 type UnitWriter interface {
 	PutUnit(ctx context.Context, id *int64, doc *units.Unit, scope string) (PutResult, error)
+	LoadUnit(ctx context.Context, id int64, revision *int) (UnitView, error)
+	PublishUnit(ctx context.Context, id int64, revision *int) (PutResult, error)
 }
