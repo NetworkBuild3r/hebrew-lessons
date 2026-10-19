@@ -221,6 +221,7 @@ jobs:
           fi
           echo "sha=${sha}" >> "$GITHUB_OUTPUT"
           echo "tag=${computed}" >> "$GITHUB_OUTPUT"
+          echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           echo "Image name ${computed} does not contain hebrew-lessons."
 
       # This job never pushes. With either file absent, it stays green and
@@ -253,6 +254,9 @@ jobs:
           load: true
           provenance: false
           tags: ${{ steps.guard.outputs.tag }}
+          build-args: |
+            GIT_SHA=${{ steps.guard.outputs.sha }}
+            BUILT_AT=${{ steps.guard.outputs.built_at }}
           labels: |
             org.opencontainers.image.revision=${{ steps.guard.outputs.sha }}
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache,ignore-error=true
@@ -264,6 +268,7 @@ jobs:
         shell: bash
         env:
           TAG: ${{ steps.guard.outputs.tag }}
+          EXPECT_SHA: ${{ steps.guard.outputs.sha }}
         run: |
           set -euo pipefail
           run_id="${GITHUB_RUN_ID:-0}"
@@ -291,6 +296,31 @@ jobs:
             code="$(printf '%s\n' "$output" | awk '/HTTP\//{ print $2; exit }')"
             if [ "$code" = "200" ]; then
               echo "GET /healthz 200"
+              # EXPECT_SHA is git rev-parse HEAD, the same value passed as
+              # GIT_SHA. On pull_request that is github.sha, the merge ref
+              # this job checked out, not pull_request.head.sha.
+              if [ -z "${EXPECT_SHA}" ]; then
+                echo "::error::EXPECT_SHA is empty" >&2
+                exit 1
+              fi
+              voutput="$(docker exec "$probe" wget -S -O - "http://127.0.0.1:8080/version" 2>&1 || true)"
+              vcode="$(printf '%s\n' "$voutput" | awk '/HTTP\//{ print $2; exit }')"
+              if [ "$vcode" != "200" ]; then
+                echo "::error::GET /version status ${vcode:-none}" >&2
+                printf '%s\n' "$voutput" >&2
+                exit 1
+              fi
+              if ! printf '%s\n' "$voutput" | grep -q "Cache-Control: no-store"; then
+                echo "::error::/version missing Cache-Control: no-store" >&2
+                printf '%s\n' "$voutput" >&2
+                exit 1
+              fi
+              if ! printf '%s\n' "$voutput" | grep -Fq "\"commit\":\"${EXPECT_SHA}\""; then
+                echo "::error::/version commit is not ${EXPECT_SHA}" >&2
+                printf '%s\n' "$voutput" >&2
+                exit 1
+              fi
+              echo "GET /version commit=${EXPECT_SHA}"
               exit 0
             fi
             last="$code"
@@ -355,6 +385,7 @@ jobs:
           fi
           echo "sha=${sha}" >> "$GITHUB_OUTPUT"
           echo "tag=${computed}" >> "$GITHUB_OUTPUT"
+          echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           echo "Image name ${computed} does not contain hebrew-lessons."
 
       # Push to the registry only on a push to v3, and only when both files
@@ -392,6 +423,9 @@ jobs:
           load: true
           provenance: false
           tags: ${{ steps.guard.outputs.tag }}
+          build-args: |
+            GIT_SHA=${{ steps.guard.outputs.sha }}
+            BUILT_AT=${{ steps.guard.outputs.built_at }}
           labels: |
             org.opencontainers.image.revision=${{ steps.guard.outputs.sha }}
           cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
@@ -404,6 +438,7 @@ jobs:
         shell: bash
         env:
           TAG: ${{ steps.guard.outputs.tag }}
+          EXPECT_SHA: ${{ steps.guard.outputs.sha }}
         run: |
           set -euo pipefail
           run_id="${GITHUB_RUN_ID:-0}"
@@ -431,6 +466,31 @@ jobs:
             code="$(printf '%s\n' "$output" | awk '/HTTP\//{ print $2; exit }')"
             if [ "$code" = "200" ]; then
               echo "GET /healthz 200"
+              # EXPECT_SHA is git rev-parse HEAD, the same value passed as
+              # GIT_SHA. On pull_request that is github.sha, the merge ref
+              # this job checked out, not pull_request.head.sha.
+              if [ -z "${EXPECT_SHA}" ]; then
+                echo "::error::EXPECT_SHA is empty" >&2
+                exit 1
+              fi
+              voutput="$(docker exec "$probe" wget -S -O - "http://127.0.0.1:8080/version" 2>&1 || true)"
+              vcode="$(printf '%s\n' "$voutput" | awk '/HTTP\//{ print $2; exit }')"
+              if [ "$vcode" != "200" ]; then
+                echo "::error::GET /version status ${vcode:-none}" >&2
+                printf '%s\n' "$voutput" >&2
+                exit 1
+              fi
+              if ! printf '%s\n' "$voutput" | grep -q "Cache-Control: no-store"; then
+                echo "::error::/version missing Cache-Control: no-store" >&2
+                printf '%s\n' "$voutput" >&2
+                exit 1
+              fi
+              if ! printf '%s\n' "$voutput" | grep -Fq "\"commit\":\"${EXPECT_SHA}\""; then
+                echo "::error::/version commit is not ${EXPECT_SHA}" >&2
+                printf '%s\n' "$voutput" >&2
+                exit 1
+              fi
+              echo "GET /version commit=${EXPECT_SHA}"
               exit 0
             fi
             last="$code"
