@@ -288,6 +288,17 @@ func TestLearnerWordsPagesFiltersAndOrder(t *testing.T) {
 	}
 }
 
+func TestLearnerGetContextOmittedIDSeesOwnCards(t *testing.T) {
+	mem, srv := roleServer(t)
+	mem.AddCard(7, LearnerCard{Lexeme: hello, Gloss: "own-card", Dir: "he_en", State: "review", Due: time.Now().UTC()})
+	mem.AddCard(9, LearnerCard{Lexeme: coffee, Gloss: "secret-card", Dir: "he_en", State: "review", Due: time.Now().UTC()})
+	res := postTool(t, srv.URL, "learner", "get_context", getContextInput{Position: 0}, nil)
+	body := readBody(t, res)
+	if res.StatusCode != http.StatusOK || strings.Contains(body, `"isError":true`) || !strings.Contains(body, "own-card") || strings.Contains(body, "secret-card") {
+		t.Fatalf("omitted learnerId %d %s", res.StatusCode, body)
+	}
+}
+
 func TestLearnerWordsRole(t *testing.T) {
 	mem, srv := roleServer(t)
 	mem.AddCard(9, LearnerCard{Lexeme: coffee, Gloss: "secret-latte", Dir: "he_en", State: "review", Due: time.Now().UTC()})
