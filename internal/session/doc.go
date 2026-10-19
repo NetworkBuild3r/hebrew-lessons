@@ -2,7 +2,7 @@
 //
 // This is the only study scheduler. It is not the login row in package db.
 // It interleaves struggling cards with stable known cards, then grades each
-// answer through fsrs.Review.GradeWithChoice. Letter and pattern drills are
+// answer through evidence.Recorder.SelfGrade. Letter and pattern drills are
 // card kinds in that same mix: a confusion with at least MinMissesForDrill
 // misses in the struggle window adds DrillSteps visits of that kind. Those
 // visits do not take a known or struggle slot, and they do not change PlanFor.
@@ -93,8 +93,9 @@
 // rank, so ListStudyCards leaves that key unset.
 //
 // Next returns the card at the cursor. Reveal marks that card peeked.
-// Record grades it through GradeWithChoice with an empty chosen option.
-// peeked is true only after Reveal on this serve. A grade with no Reveal
+// Record grades it through SelfGrade, which also writes an attempts row with
+// activity flashcard. A grade is only accepted after Reveal on this serve, so
+// the review_log row is peeked. A grade with no Reveal
 // returns ErrNotRevealed, writes nothing, and leaves the serve in place.
 // Again inserts that same card
 // RequeueGap places after the cursor, at most once. The inserted visit does

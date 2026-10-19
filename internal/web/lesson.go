@@ -14,6 +14,8 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
@@ -196,7 +198,12 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 	case run.Phase == "ask" && graded && answer != "" && answer != "continue":
 		picked, parseErr := strconv.ParseInt(answer, 10, 64)
 		correct := parseErr == nil && picked == target.ID
-		run, _, err = p.store.AnswerPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, correct)
+		var applied bool
+		run, applied, err = p.store.AnswerPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, correct)
+		// A repeated post is not applied, and it is not a second answer.
+		if err == nil && applied {
+			err = p.recordAnswer(r.Context(), userID, lesson, act, target, answer, correct)
+		}
 	case answer == "continue" && (run.Phase == "reveal" || (run.Phase == "ask" && !graded)):
 		run, _, err = p.store.ContinuePlayerRun(r.Context(), userID, run.ID, run.ActivityIx, total)
 	}
@@ -210,6 +217,54 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		return
 	}
 	p.writeScreen(w, r, page, screen, partial)
+}
+
+// recordAnswer writes one checked lesson answer through evidence.Recorder.
+// userID is the signed-in learner. answer is the lexeme id the learner picked.
+// The response stored is that word's pointed text, or the raw form value when
+// no such word exists. The recorder caps its length.
+func (p player) recordAnswer(ctx context.Context, userID int64, lesson db.CourseLesson, act units.Activity, target db.LexemeView, answer string, correct bool) error {
+	picked, _ := strconv.ParseInt(answer, 10, 64)
+	response := answer
+	if picked > 0 {
+		face, ok, err := p.store.LexemeByID(ctx, picked)
+		if err != nil {
+			return err
+		}
+		if ok {
+			response = face.TextNFC
+		}
+	}
+	_, err := evidence.New(p.store, nil, nil).Attempt(ctx, evidence.Attempt{
+		UserID:         userID,
+		LexemeID:       target.ID,
+		Skill:          lessonSkill(act.Type),
+		Activity:       act.Type,
+		Source:         evidence.SourceLesson,
+		UnitID:         lesson.UnitID,
+		Prompt:         act.Text,
+		Response:       response,
+		Correct:        correct,
+		ChosenLexemeID: picked,
+		// A lesson's new words get their cards when the lesson ends (v2).
+		// Scheduling from lesson answers is not part of this change.
+		SkipSchedule: true,
+	})
+	return err
+}
+
+// lessonSkill is the skill a graded lesson activity exercises.
+// recall and cloze show Hebrew and ask for meaning or the missing word (read).
+// listen_pick plays a clip (listen). produce shows the meaning and asks for the Hebrew (recall).
+func lessonSkill(typ string) string {
+	switch typ {
+	case units.ActivityListenPick:
+		return fsrs.SkillListen
+	case units.ActivityProduce:
+		return fsrs.SkillRecall
+	default:
+		return fsrs.SkillRead
+	}
 }
 
 func (p player) writePlaying(w http.ResponseWriter, r *http.Request, page views.Page, userID int64, lesson db.CourseLesson, partial bool) {
