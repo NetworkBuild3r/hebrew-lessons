@@ -60,6 +60,13 @@ func (s *Store) Ping(ctx context.Context) error {
 	return s.conn.PingContext(ctx)
 }
 
+// DB returns the process connection.
+// internal/mcpstore runs the authoring statements on it so this package
+// does not import internal/mcp. Callers share the one-connection pool.
+func (s *Store) DB() (*sql.DB, error) {
+	return s.connOrErr()
+}
+
 // Close releases the connection. A later Ping fails, which is how /healthz
 // reports the database as down.
 func (s *Store) Close() error {
