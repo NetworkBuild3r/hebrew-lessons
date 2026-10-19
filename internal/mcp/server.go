@@ -195,7 +195,7 @@ func registerResources(server *mcp.Server) error {
 		URI:         resourceActivities,
 		Name:        "activity-catalog",
 		Title:       "Activity catalog",
-		Description: "The seven activity types and the fields each one stores. text is pointed Hebrew. Audio and glosses are not fields.",
+		Description: "The eight activity types and the fields each one stores. text is pointed Hebrew, and a dialogue has lines of {speaker, text} instead. Audio and glosses are not fields.",
 		MIMEType:    "application/json",
 	}, string(catalogJSON))
 	addTextResource(server, &mcp.Resource{

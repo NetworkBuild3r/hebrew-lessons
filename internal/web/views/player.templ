@@ -51,6 +51,9 @@ templ ActivityBlock(a Activity) {
 			if a.Prompt != "" {
 				<p class="lede" lang="en">@E(a.Prompt)</p>
 			}
+			if a.Dialogue != nil {
+				@dialogueBlock(a.Dialogue)
+			}
 			if a.Audio != "" {
 				@clip(a.Audio)
 			}
@@ -111,6 +114,40 @@ templ choiceButton(c Choice) {
 			@E(c.Label)
 		}
 	</button>
+}
+
+// dialogueBlock is a conversation, one line at a time in spoken order. Each line
+// has the speaker's fixed name, the words with sound and meaning, and a play
+// control for that line alone. "Play the conversation" plays every line in order
+// (dialogue.js). A line with no clip has no control, and is never played in the
+// other speaker's voice. Nothing here is an answer option, so no c-answer.
+templ dialogueBlock(d *Dialogue) {
+	<div class="dlg" data-dialogue>
+		<p class="dlg__bar">
+			@ButtonWith(ButtonQuiet, templ.Attributes{"data-dlg-all": "", "aria-pressed": "false"}) {
+				@E("Play the conversation")
+			}
+		</p>
+		<ol class="dlg__lines">
+			for _, line := range d.Lines {
+				<li class={ dialogueLineClass(line.Speaker) } data-speaker={ line.Speaker } data-line={ Num(line.Index) }>
+					<p class="dlg__who" lang="en">{ line.Name }</p>
+					<div class="dlg__bubble">
+						<div class="word-blocks">
+							for _, word := range line.Words {
+								@activityWord(word)
+							}
+						</div>
+						if line.Audio != "" {
+							<audio id={ dialogueClipID(line.Index) } src={ templ.SafeURL(line.Audio) } preload="none" data-dlg-clip={ Num(line.Index) }></audio>
+							@AudioOrb("Play line "+Num(line.Index+1)+", "+line.Name, dialogueOrbAttrs(line.Index))
+						}
+					</div>
+				</li>
+			}
+		</ol>
+	</div>
+	<script src="/static/js/dialogue.js" defer></script>
 }
 
 templ clip(src string) {

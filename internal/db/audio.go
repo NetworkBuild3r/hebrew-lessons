@@ -39,6 +39,50 @@ ORDER BY CASE model
 END, created_at DESC, id ASC
 LIMIT 1`
 
+// audioByTextVoiceQuery is audioByTextQuery limited to one voice id. A dialogue
+// line is played in its speaker's voice, so the same text can have one clip per
+// voice, and each lookup has to name the voice it wants.
+const audioByTextVoiceQuery = `
+SELECT id, text_nfc, voice, model, bytes, created_at
+FROM audio_assets
+WHERE text_nfc = ? AND voice = ?
+ORDER BY CASE model
+    WHEN 'eleven_v4' THEN 0
+    WHEN 'eleven_v3' THEN 1
+    WHEN 'legacy' THEN 2
+    ELSE 3
+END, created_at DESC, id ASC
+LIMIT 1`
+
+// AudioByTextVoice is AudioByText for one voice: the clip of textNFC whose voice
+// column is exactly voice. A clip in any other voice is not a match, and an empty
+// voice matches nothing. The model and time order are the same as AudioByText.
+func (s *Store) AudioByTextVoice(ctx context.Context, textNFC, voice string) (Asset, bool, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return Asset{}, false, err
+	}
+	if voice == "" {
+		return Asset{}, false, nil
+	}
+	var a Asset
+	var created string
+	err = conn.QueryRowContext(ctx, audioByTextVoiceQuery, textNFC, voice).Scan(
+		&a.ID, &a.TextNFC, &a.Voice, &a.Model, &a.Bytes, &created,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Asset{}, false, nil
+	}
+	if err != nil {
+		return Asset{}, false, fmt.Errorf("db: audio by text and voice: %w", err)
+	}
+	a.CreatedAt, err = ParseTime(created)
+	if err != nil {
+		return Asset{}, false, fmt.Errorf("db: audio by text and voice: %w", err)
+	}
+	return a, true, nil
+}
+
 // InsertAudio inserts one clip. A row with the same id is left unchanged
 // and inserted is false. created_at uses the store clock when a.CreatedAt
 // is zero.

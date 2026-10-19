@@ -65,6 +65,10 @@ const (
 	RuleStoryUnmapped     = "story.unmapped"
 	RuleStoryUnpointed    = "story.unpointed"
 	RuleUnitNoMarkup      = "unit.no_markup"
+
+	// Dialogue rules (INIT-015/SPEC-026).
+	RuleUnitDialogueLines    = "unit.dialogue_lines"
+	RuleUnitDialogueSpeakers = "unit.dialogue_speakers"
 )
 
 // lexeme.unknown and story.unmapped are the same kind of miss, split by
@@ -97,7 +101,7 @@ type Rule struct {
 // Rules is the validator catalog, sorted by id. Coverage ids fire as
 // block or warn; Severity here is the block, and Description gives the band.
 var Rules = []Rule{
-	{ID: RuleAudioMissing, Severity: SeverityBlock, Description: "A Hebrew activity has no audio clip for its exact pointed text."},
+	{ID: RuleAudioMissing, Severity: SeverityBlock, Description: "A Hebrew activity has no audio clip for its exact pointed text. A dialogue line needs a clip in its own speaker's voice, and a clip in the other voice does not count."},
 	{ID: RuleBriefAudioAll, Severity: SeverityBlock, Description: "Brief check. A new word, or a title, situation, or concept that contains Hebrew, has no audio clip for its exact pointed text. Activity text is covered by audio.missing."},
 	{ID: RuleBriefCoverage, Severity: SeverityBlock, Description: "Brief check. In a story or listen_pick passage, the share of Hebrew tokens that are known or solid for the learner, or in the brief, is below the brief's tier figure (0.60, 0.90, or 0.95). Function words, proper names, and numerals are left out of the count, and a token that matches no lexeme counts as unknown. Replaces coverage.story and coverage.listening when a brief is used."},
 	{ID: RuleBriefExpired, Severity: SeverityBlock, Description: "Brief check. The brief is older than its time to live and cannot be used."},
@@ -118,7 +122,7 @@ var Rules = []Rule{
 	{ID: RuleNounPlural, Severity: SeverityWarn, Description: "A new noun with an irregular plural does not show that plural in the unit."},
 	{ID: RuleRecycleCount, Severity: SeverityWarn, Description: fmt.Sprintf("A new word appears fewer than %d times in later lessons.", RecycleMinCount)},
 	{ID: RuleRecycleSpread, Severity: SeverityWarn, Description: fmt.Sprintf("A new word appears in fewer than %d later lessons.", RecycleMinLessons)},
-	{ID: RuleSchemaActivity, Severity: SeverityBlock, Description: "An activity type is not one of the seven lesson types."},
+	{ID: RuleSchemaActivity, Severity: SeverityBlock, Description: "An activity type is not one of the eight lesson types."},
 	{ID: RuleSchemaCheckpoint, Severity: SeverityBlock, Description: "A checkpoint introduces a new word."},
 	{ID: RuleSchemaKind, Severity: SeverityBlock, Description: "A lesson kind is not lesson or checkpoint."},
 	{ID: RuleSchemaLookup, Severity: SeverityBlock, Description: "The lexicon or audio lookup failed."},
@@ -126,7 +130,9 @@ var Rules = []Rule{
 	{ID: RuleSchemaRequired, Severity: SeverityBlock, Description: "A required field is missing or empty."},
 	{ID: RuleStoryUnmapped, Severity: SeverityBlock, Description: "A story content word does not map to a lexicon entry. Names and numbers are exempt. A number is digits or gematria in rank order with U+05F3/U+05F4. Acronyms are words, except spellings that are also valid numerals (ת״א, ש״ס), which are treated as numerals. ASCII quotes are split into letters and flagged. The same token is not also lexeme.unknown."},
 	{ID: RuleStoryUnpointed, Severity: SeverityBlock, Description: "A story contains a Hebrew word with no niqqud. Names, numbers, and punctuation are ignored. A number is digits or gematria in rank order with U+05F3/U+05F4. Acronyms are words, except spellings that are also valid numerals (ת״א, ש״ס), which are treated as numerals. ASCII quotes are split into letters and flagged. Homographs are not exempt."},
-	{ID: RuleUnitNoMarkup, Severity: SeverityBlock, Description: "Brief check. A text field of the unit (title, situation, concept, a new word, a lesson kind, an activity type or text) contains <, >, or javascript: in any letter case. The unit is plain text and the templates escape it again on output."},
+	{ID: RuleUnitDialogueLines, Severity: SeverityBlock, Description: fmt.Sprintf("A dialogue has fewer than %d or more than %d lines, a dialogue carries text instead of lines, or an activity that is not a dialogue carries lines.", MinDialogueLines, MaxDialogueLines)},
+	{ID: RuleUnitDialogueSpeakers, Severity: SeverityBlock, Description: "A dialogue line has a speaker other than a (female voice) or b (male voice), or one of the two speakers has no line."},
+	{ID: RuleUnitNoMarkup, Severity: SeverityBlock, Description: "Brief check. A text field of the unit (title, situation, concept, a new word, a lesson kind, an activity type or text, a dialogue line's speaker or text) contains <, >, or javascript: in any letter case. The unit is plain text and the templates escape it again on output."},
 }
 
 // Guidance is one player rule for the model that writes units.

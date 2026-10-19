@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
@@ -40,9 +41,16 @@ import (
 //   - any other type shows the words and a continue button.
 //
 // A step with no lexicon target is exposure, not a graded choice.
+//
+//   - dialogue shows its lines in order, each with its speaker's name and the
+//     words with their sound and meaning. Each line plays from the clip in its
+//     speaker's voice, and the learner can replay one line or the whole
+//     conversation. Continue counts the step correct. A line with no clip in
+//     its voice has no play control, and is never played in the other voice.
 type player struct {
 	store    *db.Store
 	audioDir string
+	voices   audio.Voices
 }
 
 func (p player) lessonIndex(w http.ResponseWriter, r *http.Request, lang, csrf string) {
@@ -340,6 +348,14 @@ func (p player) screenFor(ctx context.Context, page views.Page, lesson db.Course
 	if err != nil {
 		return views.Screen{}, err
 	}
+	if act.Type == units.ActivityDialogue {
+		screen.Activity = p.step(page, lesson, run, act, target, lex, pool, false)
+		screen.Activity.Dialogue, err = p.dialogueView(ctx, act, lex, lesson.NewWords)
+		if err != nil {
+			return views.Screen{}, err
+		}
+		return screen, nil
+	}
 	clips, err := p.clips(ctx, act)
 	if err != nil {
 		return views.Screen{}, err
@@ -429,8 +445,46 @@ func (p player) audioSrc(ctx context.Context, text string) (string, error) {
 	return "/audio/" + asset.ID + ".mp3", nil
 }
 
+// actTokens is every word token of an activity: its text, or the lines of a dialogue.
+func actTokens(act units.Activity) []string {
+	var out []string
+	for _, text := range act.Texts() {
+		out = append(out, units.Tokenize(text)...)
+	}
+	return out
+}
+
+// dialogueView is the lines of a dialogue, each with its speaker's fixed name,
+// its words, and the clip in its speaker's voice. A line whose speaker is not a
+// or b, whose voice is not configured, or that has no clip in that voice has no
+// audio. It is never played in the other voice: the lookup is by voice id.
+func (p player) dialogueView(ctx context.Context, act units.Activity, lex map[string]db.LexemeView, newWords []db.LexemeView) (*views.Dialogue, error) {
+	d := &views.Dialogue{}
+	for i, line := range act.Lines {
+		view := views.DialogueLine{
+			Index:   i,
+			Speaker: line.Speaker,
+			Name:    views.SpeakerName(line.Speaker),
+		}
+		if p.store != nil {
+			if voice, err := p.voices.ForSpeaker(line.Speaker); err == nil {
+				asset, ok, err := p.store.AudioByTextVoice(ctx, units.Normalize(line.Text), voice)
+				if err != nil {
+					return nil, err
+				}
+				if ok && asset.ID != "" {
+					view.Audio = "/audio/" + asset.ID + ".mp3"
+				}
+			}
+		}
+		view.Words = wordsForText(line.Text, units.ActivityDialogue, lex, newWords, "reveal", clipSet{}, false)
+		d.Lines = append(d.Lines, view)
+	}
+	return d, nil
+}
+
 func (p player) targetOf(ctx context.Context, lesson db.CourseLesson, act units.Activity) (db.LexemeView, error) {
-	lex, err := p.store.LexemesByText(ctx, units.Tokenize(act.Text))
+	lex, err := p.store.LexemesByText(ctx, actTokens(act))
 	if err != nil {
 		return db.LexemeView{}, err
 	}
@@ -438,13 +492,19 @@ func (p player) targetOf(ctx context.Context, lesson db.CourseLesson, act units.
 }
 
 func wordsFor(act units.Activity, lex map[string]db.LexemeView, newWords []db.LexemeView, phase string, clips clipSet) []views.Word {
-	tokens := units.Tokenize(act.Text)
+	return wordsForText(act.Text, act.Type, lex, newWords, phase, clips, act.Type == units.ActivityCloze && phase == "ask")
+}
+
+// wordsForText is wordsFor for one string of Hebrew: an activity's text, or one
+// line of a dialogue. blank gaps the first new word, for a cloze in its ask phase.
+func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.LexemeView, phase string, clips clipSet, blank bool) []views.Word {
+	tokens := units.Tokenize(text)
 	if len(tokens) == 0 {
 		return nil
 	}
-	show := visibleFields(act.Type, phase)
+	show := visibleFields(typ, phase)
 	gap := ""
-	if act.Type == units.ActivityCloze && phase == "ask" {
+	if blank {
 		gap = gapToken(tokens, lex, newWords)
 	}
 	hebrewN := 0
@@ -527,7 +587,7 @@ func targetFrom(act units.Activity, lex map[string]db.LexemeView, newWords []db.
 		fresh[word.Text] = true
 	}
 	var first db.LexemeView
-	for _, tok := range units.Tokenize(act.Text) {
+	for _, tok := range actTokens(act) {
 		view, ok := lex[tok]
 		if !ok {
 			continue
@@ -616,6 +676,8 @@ func activityPrompt(lesson db.CourseLesson, act units.Activity, target db.Lexeme
 		return "Read the example."
 	case units.ActivityShadow:
 		return "Listen, then say the line."
+	case units.ActivityDialogue:
+		return "Listen to the conversation. Tap a line to hear it again."
 	case units.ActivityRecall:
 		return "What does this Hebrew mean?"
 	case units.ActivityListenPick:
@@ -680,7 +742,7 @@ func activityTexts(lesson db.CourseLesson) []string {
 	var texts []string
 	texts = append(texts, units.Tokenize(lesson.Title)...)
 	for _, act := range lesson.Activities {
-		texts = append(texts, units.Tokenize(act.Text)...)
+		texts = append(texts, actTokens(act)...)
 	}
 	return texts
 }

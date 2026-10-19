@@ -64,6 +64,24 @@ func (s *Store) HasAudio(ctx context.Context, textNFC string) (bool, error) {
 	return ok, err
 }
 
+// HasAudioForSpeaker reports a clip for this exact text in the voice of speaker
+// a or b, from the voices set by WithVoices. A speaker with no voice, or one that
+// is not a or b, has no clip. A clip in the other speaker's voice never counts.
+func (s *Store) HasAudioForSpeaker(ctx context.Context, textNFC, speaker string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if s == nil || s.db == nil {
+		return false, errors.New("mcpstore: database is not open")
+	}
+	voice, err := s.voices.ForSpeaker(speaker)
+	if err != nil {
+		return false, nil
+	}
+	_, ok, err := s.db.AudioByTextVoice(ctx, textNFC, voice)
+	return ok, err
+}
+
 // LexemeByText returns the lexicon id for the exact pointed text.
 func (s *Store) LexemeByText(ctx context.Context, textNFC string) (int64, bool, error) {
 	if err := ctx.Err(); err != nil {

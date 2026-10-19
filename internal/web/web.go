@@ -13,6 +13,7 @@ import (
 	"strconv"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
@@ -51,8 +52,12 @@ func New(health http.Handler, sessions *auth.Service) http.Handler {
 type Options struct {
 	Store    *db.Store
 	AudioDir string
-	Deck     placementDeck
-	Runs     placementRuns
+	// Voices is the speaker table of a dialogue (INIT-015/SPEC-026): a line is
+	// played from the clip in its speaker's voice. A zero value means the default
+	// female voice and no male voice, so a speaker b line is silent.
+	Voices audio.Voices
+	Deck   placementDeck
+	Runs   placementRuns
 	// SessionSecret is HEBREW_SESSION_SECRET. The key of the activity item tokens is
 	// derived from it (activity.KeyFromSecret), so a token cannot be forged and one
 	// issued before a restart still verifies. Empty gives a random key per process.
@@ -111,6 +116,7 @@ func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.
 		}
 	}
 	srv.audioDir = opts.AudioDir
+	srv.voices = opts.Voices
 	srv.deck = opts.Deck
 	srv.runs = opts.Runs
 	mux := srv.routes(health, tokens, sessions != nil, secure)
@@ -140,7 +146,7 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 		panic(err)
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
-	play := player{store: s.store, audioDir: s.audioDir}
+	play := player{store: s.store, audioDir: s.audioDir, voices: s.voices}
 	mux.HandleFunc("GET /{$}", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
 		s.serveHome(w, r, secure, csrfValue(tokens, r))
 	}))
