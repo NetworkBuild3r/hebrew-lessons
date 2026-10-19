@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -25,12 +26,13 @@ func TestTextNormalizeAndTokens(t *testing.T) {
 	if !isPointed("שָׁלוֹם") || !isPointed("בּ") {
 		t.Fatal("vowel or dagesh should count as niqqud")
 	}
-	for _, tok := range []string{"12", "ה׳", "י״ב", "ט״ו", "ט״ז", "תשפ״ז", "תתקע״ה"} {
+	// ת״א and ש״ס are also acronyms. Spelling cannot tell them apart, so they stay numerals.
+	for _, tok := range []string{"12", "ה׳", "י״ב", "ט״ו", "ט״ז", "תשפ״ז", "תתקע״ה", "ת״א", "ש״ס"} {
 		if !isNumberTok(tok) {
 			t.Fatalf("%q should be a numeral", tok)
 		}
 	}
-	for _, tok := range []string{"שָׁלוֹם", "צ׳יפס", "ג׳ירפה", "צה״ל", "ארה״ב", "ביה״ס", "א״א", "י״ה", "י״ו", "ך׳", "י\"ב", "ה'"} {
+	for _, tok := range []string{"שָׁלוֹם", "צ׳יפס", "ג׳ירפה", "צה״ל", "ארה״ב", "ביה״ס", "א״א", "י״ה", "י״ו", "ע״י", "נ״ל", "ס״ל", "כ״י", "ד״ג", "ש״ר", "ר״ק", "ט״ח", "ך׳", "ה׳תשפ״ו", "י\"ב", "ה'"} {
 		if isNumberTok(tok) {
 			t.Fatalf("%q should be a word, not a numeral", tok)
 		}
@@ -325,6 +327,32 @@ func TestGereshLoanwordIsNotANumber(t *testing.T) {
 	joined := joinMsgs(got)
 	if !strings.Contains(joined, "צ׳יפס") || strings.Contains(joined, "ה׳") || strings.Contains(joined, "תשפ״ז") {
 		t.Fatalf("messages = %s", joined)
+	}
+}
+
+func TestAcronymAndASCIIQuoteAreFlaggedInAStory(t *testing.T) {
+	u, lk := v1()
+	text := "ע״י י\"ב"
+	if got := strings.Join(tokenize(text), "|"); got != "ע״י|י|ב" {
+		t.Fatalf("tokens = %q", got)
+	}
+	li := len(u.Lessons) - 1
+	ai := addActAt(&u, li, ActivityStory, text)
+	lk.audio[normalize(text)] = true
+	got := Validate(context.Background(), &u, lk)
+	want := []Issue{
+		iss(RuleCoverageStory, SeverityBlock, at("lessons", li, "activities", ai)),
+		iss(RuleStoryUnmapped, SeverityBlock, at("lessons", li, "activities", ai, "text")),
+		iss(RuleStoryUnpointed, SeverityBlock, at("lessons", li, "activities", ai, "text")),
+	}
+	if !sameIssues(got, want) {
+		t.Fatalf("acronym = %s", mustJSON(stripMsg(got)))
+	}
+	joined := joinMsgs(got)
+	for _, tok := range []string{"ע״י", "י", "ב"} {
+		if !strings.Contains(joined, strconv.Quote(tok)) {
+			t.Fatalf("messages %q lack %q", joined, tok)
+		}
 	}
 }
 
