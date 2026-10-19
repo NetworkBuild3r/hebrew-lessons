@@ -1,1 +1,1 @@
-Frontend owns the css, icons, and vendored htmx in this directory.
+Frontend owns the css, icons, vendored htmx, and shell.js in this directory.
