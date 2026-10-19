@@ -137,7 +137,7 @@ func (o Options) validator() Validator {
 	return Chain{
 		OAuthSessions{Tokens: o.SessionFromToken, Users: o.Sessions},
 		StaticToken{Token: o.AuthToken},
-		StaticToken{Token: o.ReadOnlyToken, Role: RoleLearner, UserID: o.ReadOnlyLearnerID},
+		StaticToken{Token: o.ReadOnlyToken, Actor: readOnlyActor, Role: RoleLearner, UserID: o.ReadOnlyLearnerID},
 	}
 }
 

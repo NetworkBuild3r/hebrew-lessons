@@ -47,6 +47,28 @@ func readOnlyHandler(t *testing.T, oauth bool) (*Memory, *httptest.Server) {
 	return mem, srv
 }
 
+func TestReadOnlyTokenActor(t *testing.T) {
+	v := (Options{
+		AuthToken:         readOnlyAdminToken,
+		ReadOnlyToken:     readOnlySmokeToken,
+		ReadOnlyLearnerID: readOnlyLearner,
+	}).validator()
+	p, err := v.Validate(t.Context(), readOnlySmokeToken, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Actor != readOnlyActor || p.Role != RoleLearner || p.UserID != readOnlyLearner || p.Source != "token" {
+		t.Fatalf("readonly principal %+v", p)
+	}
+	admin, err := v.Validate(t.Context(), readOnlyAdminToken, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if admin.Actor != defaultActor || admin.Role != RoleAdmin || admin.UserID != 0 {
+		t.Fatalf("admin principal %+v", admin)
+	}
+}
+
 func TestReadOnlyTokenReads(t *testing.T) {
 	for _, oauth := range []bool{false, true} {
 		name := "oauth off"

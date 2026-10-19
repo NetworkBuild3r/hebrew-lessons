@@ -12,7 +12,8 @@
 // auth.Service.Lookup, which re-checks the live allowlist and copies
 // users.role. The static MCP_AUTH_TOKEN stays RoleAdmin.
 // MCP_READONLY_TOKEN, when set, is a second static bearer. A match is
-// RoleLearner bound to MCP_READONLY_LEARNER_ID and may call only
+// RoleLearner bound to MCP_READONLY_LEARNER_ID. Its actor is
+// mcp-readonly; the admin static token stays mcp. It may call only
 // get_context, lookup, get_learner_words, and validate_unit. get_context
 // and get_learner_words are limited to that learner id. The process does
 // not create a users row. Point the id at a dedicated smoke learner so

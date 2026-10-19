@@ -14,9 +14,14 @@ import (
 	sdauth "github.com/modelcontextprotocol/go-sdk/auth"
 )
 
-// defaultActor is written to unit_revisions.actor for the static bearer
-// token. An OAuth validator sets Principal.Actor to the user id instead.
-const defaultActor = "mcp"
+// defaultActor is written to unit_revisions.actor for the admin static
+// bearer. An OAuth validator sets Principal.Actor to the user id instead.
+// readOnlyActor is the same field for MCP_READONLY_TOKEN, so a smoke
+// call is distinct from an admin call in that identity.
+const (
+	defaultActor  = "mcp"
+	readOnlyActor = "mcp-readonly"
+)
 
 // ErrUnauthorized means this validator does not accept the bearer token.
 // Chain tries the next validator. The HTTP layer answers 401.
@@ -71,8 +76,8 @@ type Validator interface {
 // StaticToken compares a bearer token with Token in constant time.
 // An empty Token is disabled: it accepts no bearer, including an empty one.
 // A match is an operator (Lesson Builder) and has RoleAdmin, full access,
-// unless Role is set. The read-only smoke token sets Role to RoleLearner
-// and UserID to MCP_READONLY_LEARNER_ID.
+// unless Role is set. The read-only smoke token sets Role to RoleLearner,
+// UserID to MCP_READONLY_LEARNER_ID, and Actor to mcp-readonly.
 type StaticToken struct {
 	Token string
 	// Actor overrides defaultActor when it is not empty.
