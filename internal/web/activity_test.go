@@ -500,7 +500,10 @@ func TestMatchTilesHaveNamesAndKeys(t *testing.T) {
 // nothing from the activity engine.
 func TestPlacementViewsShareNoFeedbackComponent(t *testing.T) {
 	forbidden := map[string]string{}
-	for _, name := range []string{"Sheet", "AnswerOption", "AnswerOptionWith", "AnswerState", "AnswerDefault", "AnswerSelected", "AnswerCorrect", "AnswerWrong", "AnswerStates"} {
+	// AnswerOption and its Default and Selected states are allowed (SPEC-012): a placement option needs
+	// the c-answer class, and a Selected option is neutral. What placement may not reach is the Correct and
+	// Wrong states, the list of all four states, and the feedback sheet.
+	for _, name := range []string{"Sheet", "AnswerCorrect", "AnswerWrong", "AnswerStates"} {
 		forbidden[name] = "a component with Correct and Wrong states"
 	}
 	fset := token.NewFileSet()
@@ -535,7 +538,7 @@ func TestPlacementViewsShareNoFeedbackComponent(t *testing.T) {
 		t.Fatalf("only %d feedback names found; the scan is broken", len(forbidden))
 	}
 	used := 0
-	for _, name := range []string{"views/placement.go", "views/placement_templ.go", "placement.go"} {
+	for _, name := range []string{"views/placement.go", "views/placement_templ.go", "placement.go", "placement_view.go"} {
 		f, err := parser.ParseFile(fset, name, nil, 0)
 		if err != nil {
 			t.Fatal(err)
@@ -568,7 +571,7 @@ func TestPlacementViewsShareNoFeedbackComponent(t *testing.T) {
 			t.Errorf("placement.templ calls @%s", name)
 		}
 	}
-	for _, class := range []string{"c-sheet", "c-answer", "fb__", "feedback-right", "feedback-wrong", "act__", "act-grade", `data-state="correct"`, `data-state="wrong"`} {
+	for _, class := range []string{"c-sheet", "c-answer__mark", "fb__", "feedback-right", "feedback-wrong", "act__", "act-grade", `data-state="correct"`, `data-state="wrong"`} {
 		if strings.Contains(string(src), class) {
 			t.Errorf("placement.templ uses %s", class)
 		}

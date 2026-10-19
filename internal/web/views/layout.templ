@@ -14,6 +14,7 @@ templ Layout(p Page) {
 			@brandHead()
 			<link rel="stylesheet" href="/static/css/motion.css"/>
 			<link rel="stylesheet" href="/static/css/activity.css"/>
+			<link rel="stylesheet" href="/static/css/placement.css"/>
 			<title>{ p.Title }</title>
 		</head>
 		<body hx-boost="true" hx-target="#app" hx-select="#app" hx-swap="outerHTML transition:true" hx-headers={ HXHeaders(p.CSRF) }>
