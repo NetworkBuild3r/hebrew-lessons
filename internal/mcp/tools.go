@@ -46,6 +46,11 @@ type getContextOutput struct {
 	Placement            placementView    `json:"placement"`
 	Struggles            Struggles        `json:"struggles"`
 	CompletedSharedUnits []UnitCompletion `json:"completedSharedUnits"`
+	Cards                []LearnerCard    `json:"cards"`
+	CardsTruncated       bool             `json:"cardsTruncated"`
+	CardsHint            string           `json:"cardsHint,omitempty"`
+	RecentAccuracy       *RecentAccuracy  `json:"recentAccuracy" jsonschema:"Null when learnerId is omitted. The review half counts Good and Easy ratings over the last 7 days and the last 50 reviews. The lesson half, lessons7d counts and meanScore, stays zero until the lesson player writes lesson_runs. Coach from the review half until then. rate and meanScore are null when the count is 0."`
+	MixTarget            MixTarget        `json:"mixTarget" jsonschema:"Unit new-word budgets plus the session mix: targetSuccess, maxNewPerSession, and maxNewShare."`
 }
 
 // placementView is the get_context placement object.
@@ -263,6 +268,9 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 		Struggles:            struggles,
 		CompletedSharedUnits: completed,
 	}
+	if err := s.attachCoach(ctx, &out, in.LearnerID); err != nil {
+		return nil, getContextOutput{}, err
+	}
 	return nil, out, nil
 }
 
@@ -455,7 +463,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_context",
-		Description: "Read the course before you draft a unit. A learner account is limited to their own learnerId; omitting it uses that id, and another id is forbidden. An admin, including the static token, may omit learnerId or pass any id. The outline rows have position, title, status, and scope (shared, or learner:<id>). Omit learnerId as an admin to see shared units only, with empty struggles and placement taken false. knownLexemes is then the pointed text introduced before position. Pass learnerId to add that learner's custom units, their placement, their struggles, and the shared units they have finished. knownLexemes is then that learner's words: the union of placement Good and Easy words and words from completed units, sorted pointed NFC. topN defaults to 30. Struggled lexemes are the store's Top rows, ordered by misses in 7 days, then lapses, then Again rate. Do not re-rank them. Each lexeme has text, gloss, reviews, lapses, againRate, misses7d, lastSeen, and confusionKeys. Confusions cover 7 days and are not limited by topN. Each has kind, a, b, count, and lastAt. b is empty for the agreement kind. Placement taken false means there is no row. A row includes takenAt, finished, sittings (20 cards each; a run can resume across days and has no time cap), inProgress (true when finished is false and sittings is greater than 0), level, cardsRated, stopReason (band_stop, cap_cards, exhausted, or empty), bands (per band: band, rated, again, hard, good, easy, dontKnow, goodPlusRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy, pointed NFC, sorted), and learningLexemes (Again, Hard, and don't-know, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for budgets and for the shared-versus-custom guidance. That guidance is not an enforced rule.",
+		Description: "Read the course before you draft a unit. A learner account is limited to their own learnerId; omitting it uses that id, and another id is forbidden. An admin, including the static token, may omit learnerId or pass any id. The outline rows have position, title, status, and scope (shared, or learner:<id>). Omit learnerId as an admin to see shared units only, with empty struggles and placement taken false. knownLexemes is then the pointed text introduced before position. Pass learnerId to add that learner's custom units, their placement, their struggles, and the shared units they have finished. knownLexemes is then that learner's words: the union of placement Good and Easy words and words from completed units, sorted pointed NFC. topN defaults to 30. Struggled lexemes are the store's Top rows, ordered by misses in 7 days, then lapses, then Again rate. Do not re-rank them. Each lexeme has text, gloss, reviews, lapses, againRate, misses7d, lastSeen, and confusionKeys. Confusions cover 7 days and are not limited by topN. Each has kind, a, b, count, and lastAt. b is empty for the agreement kind. Placement taken false means there is no row. A row includes takenAt, finished, sittings (20 cards each; a run can resume across days and has no time cap), inProgress (true when finished is false and sittings is greater than 0), level, cardsRated, stopReason (band_stop, cap_cards, exhausted, or empty), bands (per band: band, rated, again, hard, good, easy, dontKnow, goodPlusRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy, pointed NFC, sorted), and learningLexemes (Again, Hard, and don't-know, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for budgets and for the shared-versus-custom guidance. That guidance is not an enforced rule. " + coachContextDescription(),
 		Annotations: readOnly,
 	}, svc.getContext)
 	mcp.AddTool(server, &mcp.Tool{
@@ -481,4 +489,5 @@ func registerTools(server *mcp.Server, svc *service) {
 	registerUpsertLexemes(server, svc)
 	registerGenerateAudio(server, svc)
 	registerPublishUnit(server, svc)
+	registerLearnerWords(server, svc)
 }

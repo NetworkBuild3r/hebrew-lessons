@@ -30,6 +30,10 @@ type Memory struct {
 	struggle       map[int64]storedStruggle
 	completed      map[int64][]UnitCompletion
 	completedWords map[int64][]string
+	cards          []storedCard
+	reviews        []storedReview
+	lessons        []storedLesson
+	nextCard       int64
 }
 
 type storedPlacement struct {
