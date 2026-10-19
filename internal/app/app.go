@@ -264,7 +264,7 @@ func NewApp(cfg Config) (*App, error) {
 		tts:       tts,
 	}
 	health := a.healthHandler()
-	a.web = web.New(health, svc)
+	a.web = web.NewWithStore(health, svc, store)
 	a.mcp = newMCP(cfg, health, svc, store)
 	sweepCtx, stop := context.WithCancel(context.Background())
 	a.stopSweep = stop

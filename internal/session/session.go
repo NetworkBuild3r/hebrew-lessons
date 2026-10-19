@@ -51,11 +51,17 @@ func (s *Service) ready() error {
 
 // CardRef is one visit in the queue.
 // Struggling is true when the card was selected as a struggling card.
+// Kind is the card direction (he_en or en_he) or letter or pattern.
+// Key and Step are set on a drill. A drill's CardID is negative and is not
+// an FSRS card.
 type CardRef struct {
 	CardID     int64
 	LexemeID   int64
 	Dir        string
 	Struggling bool
+	Kind       string
+	Key        string
+	Step       int
 }
 
 type gradeFunc func(context.Context, int64, fsrs.Rating) error
@@ -136,14 +142,83 @@ func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, err
 			KnownLexeme: isKnown,
 		})
 	}
+	cands = append(cands, drillCandidates(stats.Confusions)...)
 	review := s.review
 	return &Session{
 		userID: userID,
 		cards:  mix(cands, accuracyOf(ratings), now, s.seed),
 		grade: func(ctx context.Context, cardID int64, rating fsrs.Rating) error {
+			if rating < fsrs.Again || rating > fsrs.Easy {
+				return fmt.Errorf("session: rating %d is outside 1..4", rating)
+			}
+			// A drill step has no FSRS card. The queue records the visit.
+			if cardID <= 0 {
+				return nil
+			}
 			return review.GradeWithChoice(ctx, cardID, rating, false, "")
 		},
 	}, nil
+}
+
+// drillCandidates is one drill per confusion key that reached the miss
+// threshold. The steps are negative card ids, unique inside this build,
+// so Record can tell them apart. They do not enter the known or struggle plan.
+func drillCandidates(pairs []db.ConfusionPair) []Candidate {
+	var out []Candidate
+	n := 0
+	for _, pair := range pairs {
+		if pair.Count < MinMissesForDrill {
+			continue
+		}
+		kind, ok := drillKind(pair.Kind)
+		if !ok {
+			continue
+		}
+		key := pair.A
+		if pair.B != "" {
+			key = pair.A + "/" + pair.B
+		}
+		for step := 0; step < DrillSteps; step++ {
+			n++
+			out = append(out, Candidate{
+				ID:   -int64(n),
+				Kind: kind,
+				Key:  key,
+				Step: step,
+			})
+		}
+	}
+	return out
+}
+
+func drillKind(confusionKind string) (string, bool) {
+	switch confusionKind {
+	case fsrs.MissLetterPair:
+		return KindLetter, true
+	case fsrs.MissAgreement:
+		return KindPattern, true
+	default:
+		return "", false
+	}
+}
+
+// Place reports the visit Next just returned.
+// index is 1-based. total counts study cards and drill steps, including a
+// re-queued visit. retry is true when this visit was inserted after Again.
+func (s *Session) Place() (index, total int, retry bool) {
+	if s == nil {
+		return 0, 0, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	total = len(s.cards)
+	if !s.hasLast {
+		return 0, total, false
+	}
+	if s.requeued != nil {
+		_, retry = s.requeued[s.last.CardID]
+	}
+	return s.i, total, retry
 }
 
 // Next returns the next card. The bool is false when the queue is finished.

@@ -2,6 +2,7 @@ package views
 
 import (
 	"encoding/json"
+	"strconv"
 
 	"github.com/a-h/templ"
 )
@@ -28,13 +29,6 @@ const (
 	SignInWord        = "כִּסֵּא"
 	SignInWordGloss   = "(kisé, chair)"
 	GoogleSignInStart = "/auth/google/start"
-)
-
-// UnitTitle is the one lesson the shell shows until the queue is wired.
-// UnitGloss sits beside it: transliteration, then the English meaning.
-const (
-	UnitTitle = "הַבֹּקֶר שֶׁלִּי"
-	UnitGloss = "(habóker shelí, my morning)"
 )
 
 // UI is the shell copy for one language. Lang is he or en.
@@ -74,21 +68,11 @@ type UI struct {
 }
 
 // AddressGender is "m" or "f": how Hebrew copy addresses the learner.
-// A fake learner stands in until the user row is available.
+// An empty users.address_gender is masculine.
 const (
 	AddressMasculine = "m"
 	AddressFeminine  = "f"
 )
-
-// Learner is the shell stand-in for auth.RequireUser.
-type Learner struct {
-	AddressGender string
-}
-
-// FakeLearner is masculine. Replace this when the signed-in user carries address_gender.
-func FakeLearner() Learner {
-	return Learner{AddressGender: AddressMasculine}
-}
 
 // Address picks Hebrew copy for address_gender. Anything other than "f" is masculine.
 func Address(gender, masculine, feminine string) string {
@@ -118,7 +102,6 @@ func hebrewUI(addressGender string) UI {
 		DueKicker: "לַחֲזָרָה", DueLabel: "מִלִּים מֻכָּנוֹת", DueHint: "עַד עֶשְׂרִים בְּיוֹם",
 		Start:      Address(addressGender, "הַתְחֵל", "הַתְחִילִי"),
 		NextKicker: "הַשִּׁעוּר הַבָּא",
-		Situation:  "Getting ready in the morning.",
 		Open:       "לַשִּׁעוּר",
 		ZeroHE:     "אֵין חֲזָרוֹת עַכְשָׁיו", ZeroEN: "Nothing due",
 		NoneHE: "אֵין שִׁעוּר בַּתּוֹר", NoneEN: "No lesson queued",
@@ -140,7 +123,6 @@ func englishUI() UI {
 		DueKicker: "To review", DueLabel: "Words ready", DueHint: "Up to twenty a day",
 		Start:      "Start",
 		NextKicker: "Next lesson",
-		Situation:  "Getting ready in the morning.",
 		Open:       "Open lesson",
 		ZeroHE:     "אֵין חֲזָרוֹת עַכְשָׁיו", ZeroEN: "Nothing due",
 		NoneHE: "אֵין שִׁעוּר בַּתּוֹר", NoneEN: "No lesson queued",
@@ -193,20 +175,78 @@ type Page struct {
 // NewPage builds a shell page. lang "he" selects the Hebrew UI. Any other
 // value, including empty, selects English.
 func NewPage(lang, csrf, current string) Page {
-	ui := UIFor(lang, FakeLearner().AddressGender)
+	ui := UIFor(lang, AddressMasculine)
 	return Page{UI: ui, Title: ui.DocTitle(current), CSRF: csrf, Current: current}
 }
 
-// Home is the Today placeholder. Due is the review count. Lesson is false
-// when nothing is queued. Words are the new-word chips.
+// Home is Today. Due is the review count. Lesson is false when no shared
+// unit is waiting. Words is empty until a lesson carries its new-word row.
+// Placement is "", "active", or "finished".
 type Home struct {
 	UI
-	CSRF    string
-	Due     int
-	DueText string
-	Lesson  bool
-	Words   []Chip
+	CSRF           string
+	Due            int
+	DueText        string
+	Lesson         bool
+	Words          []Chip
+	UnitTitle      string
+	UnitGloss      string
+	KnownText      string
+	Placement      string
+	PlacementWords string
+	PlacementLevel string
+	PlacementRated string
+	PlacementAt    string
 }
+
+// ProgressPage is the progress shell plus the real counts.
+type ProgressPage struct {
+	Page
+	KnownText      string
+	UnitsText      string
+	DueText        string
+	Placement      string
+	PlacementWords string
+	PlacementLevel string
+	PlacementRated string
+	PlacementAt    string
+}
+
+// ReviewCard is one study visit, or Done when the queue is finished.
+type ReviewCard struct {
+	CSRF          string
+	Lang          string
+	Lede          string
+	CardID        int64
+	Kind          string
+	Pointed       string
+	Unpointed     string
+	ShowUnpointed bool
+	AudioURL      string
+	Gloss         string
+	Translit      string
+	Gender        string
+	Index         int
+	Total         int
+	Retry         bool
+	Done          bool
+	Answered      int
+	Correct       int
+}
+
+// Flag is the attribute value for a bool.
+func Flag(on bool) string {
+	if on {
+		return "true"
+	}
+	return "false"
+}
+
+// Num is the decimal form of n for a template.
+func Num(n int) string { return strconv.Itoa(n) }
+
+// Num64 is the decimal form of n for a template.
+func Num64(n int64) string { return strconv.FormatInt(n, 10) }
 
 // Page is the shell around Today.
 func (h Home) Page() Page {
@@ -231,16 +271,6 @@ func GenderLabel(gender string) string {
 		return "נ׳"
 	default:
 		return ""
-	}
-}
-
-// SampleWords is the pointed new-word row for the placeholder lesson.
-// Each one is a noun, so each one carries a gender chip.
-func SampleWords() []Chip {
-	return []Chip{
-		{Text: "כִּסֵּא", Gender: AddressMasculine, Gloss: "(kisé, chair)"},
-		{Text: "חַלּוֹן", Gender: AddressMasculine, Gloss: "(chalón, window)"},
-		{Text: "שֻׁלְחָן", Gender: AddressMasculine, Gloss: "(shulchán, table)"},
 	}
 }
 

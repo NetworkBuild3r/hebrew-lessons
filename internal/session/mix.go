@@ -71,6 +71,19 @@ const (
 	// ConfusionWindow is how far back an Again, and a confusion_misses row,
 	// still changes the mix. It matches the window StruggleStats counts.
 	ConfusionWindow = 7 * 24 * time.Hour
+
+	// KindLetter is one step of a letter-pair drill.
+	KindLetter = "letter"
+	// KindPattern is one step of an agreement drill.
+	KindPattern = "pattern"
+
+	// DrillSteps is the length of one confusion drill.
+	// A key produces one drill per session, not one drill per miss.
+	DrillSteps = 4
+
+	// MinMissesForDrill is the 7-day count that adds a drill.
+	// The count is rows in confusion_misses, not a stored counter.
+	MinMissesForDrill = 2
 )
 
 // Plan is how many cards of each kind a full SessionCap queue aims to take
@@ -126,6 +139,12 @@ type Candidate struct {
 	RecentLapse bool
 	Confused    bool
 	KnownLexeme bool
+	// Kind is letter or pattern for a drill step. Empty is a study card.
+	Kind string
+	// Key is the confusion key, for example ב/כ. Empty on a study card.
+	Key string
+	// Step is 0..DrillSteps-1 and distinguishes the steps of one drill.
+	Step int
 }
 
 type kind int
@@ -152,10 +171,73 @@ func accuracyOf(ratings []int) float64 {
 // mix orders candidates and returns the queue. accuracy is the recent
 // Good/Easy share, now is the clock, and seed breaks due-time ties.
 func mix(cands []Candidate, accuracy float64, now time.Time, seed int64) []CardRef {
-	ordered := append([]Candidate(nil), cands...)
+	study, letters, patterns := splitKinds(cands)
+	ordered := append([]Candidate(nil), study...)
 	sortCandidates(seed, ordered)
 	dueS, dueK, laterK := splitPools(ordered, now)
-	return assemble(dueS, dueK, laterK, accuracy)
+	return weave(assemble(dueS, dueK, laterK, accuracy), drillCards(letters), drillCards(patterns))
+}
+
+func splitKinds(cands []Candidate) (study, letters, patterns []Candidate) {
+	for _, c := range cands {
+		switch c.Kind {
+		case KindLetter:
+			letters = append(letters, c)
+		case KindPattern:
+			patterns = append(patterns, c)
+		default:
+			study = append(study, c)
+		}
+	}
+	return study, letters, patterns
+}
+
+func drillCards(in []Candidate) []CardRef {
+	out := make([]CardRef, len(in))
+	for i, c := range in {
+		out[i] = CardRef{
+			CardID:   c.ID,
+			LexemeID: c.LexemeID,
+			Kind:     c.Kind,
+			Key:      c.Key,
+			Step:     c.Step,
+		}
+	}
+	return out
+}
+
+// weave inserts drill steps after the study cards without dropping any of
+// them or changing their order. One letter step and one pattern step follow
+// each study card until that kind runs out. Leftover steps alternate at the
+// end. An empty drill plan returns the study queue as it was built.
+func weave(cards, letters, patterns []CardRef) []CardRef {
+	if len(letters) == 0 && len(patterns) == 0 {
+		return cards
+	}
+	out := make([]CardRef, 0, len(cards)+len(letters)+len(patterns))
+	li, pi := 0, 0
+	for _, card := range cards {
+		out = append(out, card)
+		if li < len(letters) {
+			out = append(out, letters[li])
+			li++
+		}
+		if pi < len(patterns) {
+			out = append(out, patterns[pi])
+			pi++
+		}
+	}
+	for li < len(letters) || pi < len(patterns) {
+		if li < len(letters) {
+			out = append(out, letters[li])
+			li++
+		}
+		if pi < len(patterns) {
+			out = append(out, patterns[pi])
+			pi++
+		}
+	}
+	return out
 }
 
 func sortCandidates(seed int64, cands []Candidate) {
@@ -261,6 +343,7 @@ func refs(cards []Candidate, struggling bool) []CardRef {
 			LexemeID:   c.LexemeID,
 			Dir:        c.Dir,
 			Struggling: struggling,
+			Kind:       c.Dir,
 		}
 	}
 	return out

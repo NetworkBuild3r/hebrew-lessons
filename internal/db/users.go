@@ -144,6 +144,24 @@ func (s *Store) UpdateUserRole(ctx context.Context, id int64, role string) error
 	return nil
 }
 
+// AddressGender is users.address_gender for this learner.
+// An unset column returns an empty string, which the shell treats as masculine.
+func (s *Store) AddressGender(ctx context.Context, userID int64) (string, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return "", err
+	}
+	var gender sql.NullString
+	err = conn.QueryRowContext(ctx, `SELECT address_gender FROM users WHERE id = ?`, userID).Scan(&gender)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("db: address gender: %w", err)
+	}
+	return gender.String, nil
+}
+
 // UserByEmail returns the user with that email. The match is lowercase.
 func (s *Store) UserByEmail(ctx context.Context, email string) (User, error) {
 	if err := s.ready(); err != nil {

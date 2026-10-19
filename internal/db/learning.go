@@ -105,6 +105,39 @@ func scanCard(scan func(dest ...any) error) (Card, error) {
 	return card, nil
 }
 
+// LexemeRef is the learner-facing face of one dictionary entry.
+type LexemeRef struct {
+	TextNFC  string
+	Gloss    string
+	Translit string
+	Gender   string
+	AudioID  string
+}
+
+// LexemeByID reads the text, gloss, transliteration, gender, and audio id.
+// ok is false when the id is not in lexemes.
+func (s *Store) LexemeByID(ctx context.Context, id int64) (LexemeRef, bool, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return LexemeRef{}, false, err
+	}
+	var face LexemeRef
+	var translit, gender, audio sql.NullString
+	err = conn.QueryRowContext(ctx, `
+		SELECT text_nfc, gloss_en, translit, gender, audio_id
+		FROM lexemes WHERE id = ?`, id).Scan(&face.TextNFC, &face.Gloss, &translit, &gender, &audio)
+	if errors.Is(err, sql.ErrNoRows) {
+		return LexemeRef{}, false, nil
+	}
+	if err != nil {
+		return LexemeRef{}, false, fmt.Errorf("db: lexeme %d: %w", id, err)
+	}
+	face.Translit = translit.String
+	face.Gender = gender.String
+	face.AudioID = audio.String
+	return face, true, nil
+}
+
 // GetCard reads one card by id.
 func (s *Store) GetCard(ctx context.Context, id int64) (Card, error) {
 	conn, err := s.connOrErr()

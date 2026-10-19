@@ -1,9 +1,12 @@
 // Package session builds the post-placement review queue.
 //
-// This is the in-memory study queue. It is not the login row in package db,
-// and it is not fsrs.Queue. fsrs.Queue interleaves due cards with letter and
-// pattern drills. This package interleaves struggling cards with stable known
-// cards, then grades each answer through fsrs.Review.GradeWithChoice.
+// This is the only study scheduler. It is not the login row in package db.
+// It interleaves struggling cards with stable known cards, then grades each
+// answer through fsrs.Review.GradeWithChoice. Letter and pattern drills are
+// card kinds in that same mix: a confusion with at least MinMissesForDrill
+// misses in the struggle window adds DrillSteps visits of that kind. Those
+// visits do not take a known or struggle slot, and they do not change PlanFor.
+// A drill is not an FSRS card. Record grades it in the queue only.
 //
 // The mix itself does not touch the database. BuildSession reads the clock
 // once and passes that instant to ListStudyCards, RecentReviewRatings, and
@@ -61,7 +64,9 @@
 // The two lists are then interleaved. While a known card is still waiting,
 // a run of struggling cards stops at MaxStruggleRun. Within the known list,
 // every due card stands before every not-yet-due card, so the due known
-// cards are emitted first.
+// cards are emitted first. Letter steps and pattern steps are woven in
+// after that, one of each after each study card until the drill plan runs
+// out. Study-card order and the known and struggle counts stay as planned.
 //
 // Next returns the card at the cursor. Record grades that card through
 // GradeWithChoice with an empty chosen option. Again inserts that same card

@@ -155,25 +155,25 @@ func TestSuspendExcludesFromQueue(t *testing.T) {
 	if err := rev.Suspend(ctx, dueID, true); err != nil {
 		t.Fatal(err)
 	}
-	sess, err := rev.Queue(ctx, userID)
+	due, err := store.ListDueCards(ctx, userID, clk.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(sess.Items) != 0 {
-		t.Fatalf("suspended card was queued: %+v", sess.Items)
+	if len(due) != 0 {
+		t.Fatalf("suspended card was due: %+v", due)
 	}
 	if err := rev.Suspend(ctx, dueID, false); err != nil {
 		t.Fatal(err)
 	}
-	sess, err = rev.Queue(ctx, userID)
+	due, err = store.ListDueCards(ctx, userID, clk.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(sess.Items) != 1 || sess.Items[0].CardID != dueID {
-		t.Fatalf("queue = %+v, want card %d", sess.Items, dueID)
+	if len(due) != 1 || due[0].ID != dueID {
+		t.Fatalf("due = %+v, want card %d", due, dueID)
 	}
-	for _, item := range sess.Items {
-		if item.CardID == futureID {
+	for _, card := range due {
+		if card.ID == futureID {
 			t.Fatal("a card due in the future was queued")
 		}
 	}
@@ -238,5 +238,30 @@ func TestShowUnpointedUsesReviewLog(t *testing.T) {
 	card.Stability = 21
 	if !ShowUnpointed(card) {
 		t.Fatal("stability 21 with no Again should be unpointed")
+	}
+}
+
+// TestQueueSchedulerRemoved keeps the study queue in internal/session.
+// Letter and pattern drills are card kinds there. This package schedules.
+func TestQueueSchedulerRemoved(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == "queue.go" || name == "queue_test.go" {
+			t.Fatalf("%s is still a second scheduler", name)
+		}
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		body, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(body), "func (r *Review) Queue") {
+			t.Fatalf("%s still builds a queue", name)
+		}
 	}
 }

@@ -653,6 +653,94 @@ func TestBuildSessionUsesOneNow(t *testing.T) {
 	}
 }
 
+func TestDrillsFollowThePlan(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	ctx := context.Background()
+	userID := mustUser(t, store)
+	reviewed := clk.Now().Add(-48 * time.Hour)
+	for i := 0; i < 20; i++ {
+		due := clk.Now().Add(time.Duration(i)*time.Minute - 3*time.Hour)
+		addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+	}
+	for i := 0; i < 20; i++ {
+		due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
+		addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.DirEnHe, due, 0, int(fsrs.Hard), reviewed, false)
+	}
+	rev := fsrs.New(store, clk)
+	for i := 0; i < MinMissesForDrill; i++ {
+		if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, "ב/כ", 0); err != nil {
+			t.Fatal(err)
+		}
+		if err := rev.RecordMiss(ctx, userID, fsrs.MissAgreement, "הוא/היא", 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// One miss of another pair is under the threshold.
+	if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, "ג/ק", 0); err != nil {
+		t.Fatal(err)
+	}
+
+	got := drainAll(t, mustBuild(t, svc, userID))
+	// Twenty Good and twenty Hard reviews: accuracy 0.5, under the low band.
+	plan := PlanFor(0.5)
+	s, k, letters, patterns := 0, 0, 0, 0
+	letterSteps := map[int]string{}
+	patternSteps := map[int]string{}
+	for _, card := range got {
+		switch card.Kind {
+		case KindLetter:
+			letters++
+			letterSteps[card.Step] = card.Key
+			if card.CardID >= 0 {
+				t.Fatalf("letter drill used a real card id: %+v", card)
+			}
+		case KindPattern:
+			patterns++
+			patternSteps[card.Step] = card.Key
+		default:
+			if card.Struggling {
+				s++
+			} else {
+				k++
+			}
+		}
+	}
+	if k != plan.Known || s != plan.Struggle {
+		t.Fatalf("known=%d struggle=%d, plan %+v", k, s, plan)
+	}
+	if letters != DrillSteps || patterns != DrillSteps {
+		t.Fatalf("letters=%d patterns=%d, want %d each", letters, patterns, DrillSteps)
+	}
+	for step := 0; step < DrillSteps; step++ {
+		if letterSteps[step] != "ב/כ" || patternSteps[step] != "הוא/היא" {
+			t.Fatalf("step %d letter %q pattern %q", step, letterSteps[step], patternSteps[step])
+		}
+	}
+	// The study cards stay in their planned order, with a letter and a
+	// pattern woven after each of the first drill steps.
+	if got[0].Kind == KindLetter || got[0].Kind == KindPattern {
+		t.Fatalf("drills replaced the first study card: %+v", got[0])
+	}
+	if got[1].Kind != KindLetter || got[2].Kind != KindPattern {
+		t.Fatalf("weave = %s %s, want letter then pattern", got[1].Kind, got[2].Kind)
+	}
+}
+
+func drainAll(t *testing.T, sess *Session) []CardRef {
+	t.Helper()
+	var out []CardRef
+	for {
+		card, ok := sess.Next()
+		if !ok {
+			return out
+		}
+		out = append(out, card)
+		if len(out) > SessionCap+DrillSteps*4 {
+			t.Fatalf("queue did not end")
+		}
+	}
+}
+
 func lexemeOf(t *testing.T, store *db.Store, cardID int64) int64 {
 	t.Helper()
 	card, err := store.GetCard(context.Background(), cardID)
