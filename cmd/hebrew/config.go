@@ -52,6 +52,8 @@ func configFromEnv() (app.Config, error) {
 		MCPPublicURL:       strings.TrimSpace(os.Getenv("MCP_PUBLIC_URL")),
 		MCPAllowedOrigins:  splitList(os.Getenv("MCP_ALLOWED_ORIGINS")),
 		ElevenLabsAPIKey:   os.Getenv("ELEVENLABS_API_KEY"),
+		ElevenLabsVoice:    strings.TrimSpace(os.Getenv("ELEVENLABS_VOICE_ID")),
+		ElevenLabsModel:    strings.TrimSpace(os.Getenv("ELEVENLABS_MODEL")),
 	}
 	return app.ApplyDefaults(cfg), nil
 }

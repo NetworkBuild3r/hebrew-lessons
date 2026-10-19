@@ -29,6 +29,7 @@ type service struct {
 	lexicon   LexiconReader
 	lexLookup units.Lookup
 	units     UnitWriter
+	audio     AudioGenerator
 }
 
 type getContextInput struct {
@@ -466,4 +467,5 @@ func registerTools(server *mcp.Server, svc *service) {
 			OpenWorldHint:   &falseHint,
 		},
 	}, svc.putUnit)
+	registerGenerateAudio(server, svc)
 }
