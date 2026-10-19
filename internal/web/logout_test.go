@@ -21,8 +21,20 @@ import (
 
 func TestLogoutForm(t *testing.T) {
 	const token = `tok"en<script>`
-	body := get(t, newMux(nil, CSRFFunc(func(*http.Request) string { return token })), "/")
-	assertLogoutForms(t, body, "tok&#34;en&lt;script&gt;")
+	h := newMux(nil, CSRFFunc(func(*http.Request) string { return token }))
+	home := get(t, h, "/")
+	progress := get(t, h, "/progress")
+	if n := logoutCount(home, "rail-logout"); n != 1 {
+		t.Fatalf("home rail logout = %d", n)
+	}
+	if logoutCount(home, "sheet-logout") != 0 {
+		t.Fatal("home still has a header logout")
+	}
+	if n := logoutCount(progress, "sheet-logout"); n != 1 {
+		t.Fatalf("progress logout = %d", n)
+	}
+	assertLogoutForms(t, home, "tok&#34;en&lt;script&gt;")
+	assertLogoutForms(t, progress, "tok&#34;en&lt;script&gt;")
 	shell := get(t, newMux(nil, CSRFFunc(func(*http.Request) string { return token })), "/static/js/shell.js")
 	if strings.Contains(shell, "/auth/logout") || strings.Contains(shell, "/signin") || strings.Contains(shell, "HX-Redirect") {
 		t.Fatal("shell.js must not handle logout")
@@ -89,8 +101,8 @@ func assertLogoutForms(t *testing.T, body, csrf string) {
 			logout = append(logout, form)
 		}
 	}
-	if len(logout) != 2 {
-		t.Fatalf("logout forms = %d, want the header and the rail", len(logout))
+	if len(logout) == 0 {
+		t.Fatal("no logout form")
 	}
 	for _, form := range logout {
 		if !strings.Contains(form, `method="post"`) {
@@ -106,6 +118,16 @@ func assertLogoutForms(t *testing.T, body, csrf string) {
 			t.Fatalf("logout form missing _csrf %q: %s", csrf, form)
 		}
 	}
+}
+
+func logoutCount(body, className string) int {
+	n := 0
+	for _, form := range regexp.MustCompile(`(?s)<form\b[^>]*>.*?</form>`).FindAllString(body, -1) {
+		if strings.Contains(form, `action="/auth/logout"`) && strings.Contains(form, className) {
+			n++
+		}
+	}
+	return n
 }
 
 type fixedClock time.Time

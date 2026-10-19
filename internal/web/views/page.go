@@ -259,20 +259,15 @@ type Chip struct {
 	Gloss  string
 }
 
-// StackWords are unpointed bare forms, decorative on the review slate.
+// StackWords are pointed fakes for the review slate. The front card shows
+// the first word. The other two cards stay blank and sit behind it.
 func StackWords() []string {
-	return []string{"כסא", "חלון", "שלחן"}
-}
-
-func stackClass(i int) string {
-	switch i {
-	case 0:
-		return "stack__card stack__card--0"
-	case 1:
-		return "stack__card stack__card--1"
-	default:
-		return "stack__card stack__card--2"
+	words := SampleWords()
+	out := make([]string, len(words))
+	for i, word := range words {
+		out[i] = word.Text
 	}
+	return out
 }
 
 // GenderLabel is the noun chip ז׳ or נ׳. Other values have no chip.

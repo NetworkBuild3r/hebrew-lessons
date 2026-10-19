@@ -226,6 +226,12 @@ func TestZeroDueAndNoLesson(t *testing.T) {
 	if !strings.Contains(zero, "quiet-card--due") || !strings.Contains(zero, "icon-check") {
 		t.Fatal("nothing due should use the check placeholder")
 	}
+	if !regexp.MustCompile(`>7</bdi>\s+<bdi lang="he" dir="rtl">מִלִּים יַגִּיעוּ בְּעוֹד</bdi>\s+<bdi lang="en" dir="ltr">3</bdi>\s+<bdi lang="he" dir="rtl">שָׁעוֹת</bdi>`).MatchString(zero) {
+		t.Fatal("nothing-due line is missing spaces or number isolates")
+	}
+	if strings.Contains(zero, "כסא") || strings.Contains(get(t, New(nil, nil), "/"), "כסא") {
+		t.Fatal("unpointed stack word is still rendered")
+	}
 	pill := regexp.MustCompile(`(?s)<div class="quiet-card quiet-card--due">.*?</div>`).FindString(zero)
 	if !strings.Contains(pill, `<bdi lang="en" dir="ltr">Nothing due</bdi>`) {
 		t.Fatal("nothing-due english run must be an ltr bdi inside the pill")

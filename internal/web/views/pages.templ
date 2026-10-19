@@ -23,9 +23,9 @@ templ Today(h Home) {
 					<section class="ink-card today-due" aria-labelledby="due-title">
 						<img class="skyline" src="/static/illustrations/hero-skyline-night.svg" alt=""/>
 						<div class="stack" aria-hidden="true">
-							for i, bare := range StackWords() {
-								<span class={ stackClass(i) }><bdi lang="he" dir="rtl">{ bare }</bdi></span>
-							}
+							<span class="stack__card stack__card--back"></span>
+							<span class="stack__card stack__card--mid"></span>
+							<span class="stack__card stack__card--front"><bdi lang="he" dir="rtl">{ StackWords()[0] }</bdi></span>
 						</div>
 						<p class="eyebrow" id="due-title" lang={ h.Lang }>{ h.DueKicker }</p>
 						<p class="count"><bdi lang="en" dir="ltr">{ h.DueText }</bdi></p>
@@ -49,11 +49,17 @@ templ Today(h Home) {
 						</div>
 						<p class="ink-card__hint">
 							if h.Lang == "en" {
-								<bdi lang="en" dir="ltr">{ DueSoonCount + " words come due in " + DueSoonHours + " hours" }</bdi>
+								<bdi lang="en" dir="ltr">{ DueSoonCount }</bdi>
+								{" words come due in "}
+								<bdi lang="en" dir="ltr">{ DueSoonHours }</bdi>
+								{" hours"}
 							} else {
 								<bdi lang="en" dir="ltr">{ DueSoonCount }</bdi>
+								{" "}
 								@H("מִלִּים יַגִּיעוּ בְּעוֹד")
+								{" "}
 								<bdi lang="en" dir="ltr">{ DueSoonHours }</bdi>
+								{" "}
 								@H("שָׁעוֹת")
 							}
 						</p>
@@ -69,7 +75,10 @@ templ Today(h Home) {
 									<bdi lang="en" dir="ltr">{ "2" }</bdi>
 									<span aria-hidden="true">·</span>
 									@H(UnitName)
-									@E(UnitNameEN)
+									<span class="wide-only">
+										<span aria-hidden="true">·</span>
+										@E(UnitNameEN)
+									</span>
 									<span aria-hidden="true">·</span>
 									<span lang="en">Lesson</span>
 									<bdi lang="en" dir="ltr">{ LessonIndex + " of " + LessonCount }</bdi>
@@ -78,7 +87,10 @@ templ Today(h Home) {
 									<bdi lang="en" dir="ltr">{ "2" }</bdi>
 									<span aria-hidden="true">·</span>
 									@H(UnitName)
-									@E(UnitNameEN)
+									<span class="wide-only">
+										<span aria-hidden="true">·</span>
+										@E(UnitNameEN)
+									</span>
 									<span aria-hidden="true">·</span>
 									@H("שִׁעוּר")
 									<bdi lang="en" dir="ltr">{ LessonIndex }</bdi>
@@ -179,6 +191,7 @@ templ Progress(p Page) {
 					<span lang={ p.Lang }>{ p.UnitsLabel }</span>
 				</li>
 			</ul>
+			@logoutForm(p, "logout sheet-logout")
 		</article>
 	}
 }
