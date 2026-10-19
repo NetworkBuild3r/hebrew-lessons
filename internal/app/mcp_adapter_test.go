@@ -59,6 +59,18 @@ func TestMCPToolReadsStore(t *testing.T) {
 	if len(ctxOut.Outline) != 1 || ctxOut.Outline[0].Title != "Hello" || ctxOut.Outline[0].Scope != "shared" || ctxOut.Outline[0].Status != "draft" {
 		t.Fatalf("outline %+v", ctxOut.Outline)
 	}
+	if len(ctxOut.Known) != 0 {
+		t.Fatalf("draft known %+v", ctxOut.Known)
+	}
+
+	if _, err := a.Store().ExecContext(ctx, `UPDATE units SET status = 'published' WHERE position = 0`); err != nil {
+		t.Fatal(err)
+	}
+	published := callAppTool(t, session, "get_context", map[string]any{"position": 1})
+	decodeStructured(t, published, &ctxOut)
+	if len(ctxOut.Outline) != 1 || ctxOut.Outline[0].Status != "published" {
+		t.Fatalf("published outline %+v", ctxOut.Outline)
+	}
 	if len(ctxOut.Known) != 1 || ctxOut.Known[0] != "שָׁלוֹם" {
 		t.Fatalf("known %+v", ctxOut.Known)
 	}

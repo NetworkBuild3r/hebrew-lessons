@@ -199,7 +199,7 @@ func TestReviewUsesConfigClock(t *testing.T) {
 func TestTTSFromAPIKey(t *testing.T) {
 	withKey := newTestApp(t, Config{DataDir: t.TempDir(), ElevenLabsAPIKey: "test-key"})
 	el, ok := withKey.TTS().(*audio.ElevenLabs)
-	if !ok || el.APIKey != "test-key" {
+	if !ok || el.APIKey != "test-key" || el.Voice != audio.DefaultVoiceID || el.Model != audio.DefaultModel {
 		t.Fatalf("tts = %#v, want *audio.ElevenLabs", withKey.TTS())
 	}
 

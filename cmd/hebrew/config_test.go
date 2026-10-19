@@ -24,7 +24,7 @@ func TestConfigFromEnv(t *testing.T) {
 		"HEBREW_SESSION_SECRET",
 		"MCP_OAUTH_ALLOWED_EMAILS", "ADMIN_EMAILS",
 		"MCP_AUTH_TOKEN", "MCP_PUBLIC_URL", "MCP_ALLOWED_ORIGINS",
-		"ELEVENLABS_API_KEY",
+		"ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID", "ELEVENLABS_MODEL",
 	} {
 		t.Setenv(key, "")
 	}
@@ -74,6 +74,8 @@ func TestConfigFromEnv(t *testing.T) {
 	t.Setenv("MCP_PUBLIC_URL", "https://hebrew.example/mcp")
 	t.Setenv("MCP_ALLOWED_ORIGINS", "https://hebrew.example, https://builder.example")
 	t.Setenv("ELEVENLABS_API_KEY", "secret")
+	t.Setenv("ELEVENLABS_VOICE_ID", " voice-x ")
+	t.Setenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
 	cfg, err = configFromEnv()
 	if err != nil {
 		t.Fatal(err)
@@ -83,6 +85,9 @@ func TestConfigFromEnv(t *testing.T) {
 	}
 	if cfg.CookieSecure || !cfg.Dev || cfg.LogLevel != "debug" || cfg.ElevenLabsAPIKey != "secret" {
 		t.Fatalf("flags: %+v", cfg)
+	}
+	if cfg.ElevenLabsVoice != "voice-x" || cfg.ElevenLabsModel != "eleven_multilingual_v2" {
+		t.Fatalf("elevenlabs voice %q model %q", cfg.ElevenLabsVoice, cfg.ElevenLabsModel)
 	}
 	if cfg.GoogleClientID != "client" || cfg.GoogleClientSecret != "secret-value" {
 		t.Fatalf("google client: %+v", cfg)
