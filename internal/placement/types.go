@@ -2,114 +2,117 @@ package placement
 
 import "time"
 
-// Ratings a learner can give a card. They match the FSRS grades, plus 0.
+// Ratings stored on a placement answer.
+// 0 is "I don't know this", sent before the flip. It is graded as Again.
+// BandScore counts it as DontKnow, not as Again. The stop rule counts it
+// as Again.
+// 1 is Again, 2 Hard, 3 Good, 4 Easy.
 const (
-	// DontKnow is "I don't know this", offered before the card is flipped.
 	DontKnow = 0
-	// Again means the word was missed.
-	Again = 1
-	// Hard means the word came back with difficulty.
-	Hard = 2
-	// Good means the word came back.
-	Good = 3
-	// Easy means the word came back easily.
-	Easy = 4
+	Again    = 1
+	Hard     = 2
+	Good     = 3
+	Easy     = 4
 )
 
 const (
-	// passAt is the Good-or-better rate at which a band is passed.
-	// A rate of exactly 0.5 passes.
-	passAt = 0.5
-	// maxFalseAlarm is the highest Good-or-Easy rate on pseudo-words that
-	// still seeds words. A rate above this marks the run unreliable.
-	maxFalseAlarm = 0.25
-
-	capCards = "cards"
-	capTime  = "time"
-	capBand  = "band"
-
 	// bands is the count of frequency bands, 0 through 4.
 	bands = 5
+	// BandMax is the most real words one band deals.
+	BandMax = 20
+	// StopMinRated is how many ratings a band needs before the stop rule applies.
+	StopMinRated = 10
+	// StopAgainRate is the Again share that stops a band. "I don't know" counts
+	// as Again. Exactly this share stops. Hard does not count.
+	StopAgainRate = 0.60
+	// SittingSize is how many answers one sitting takes before Next asks for a break.
+	SittingSize = 20
+	// CardCap is the most cards one run rates.
+	CardCap = 100
+
+	stopBand      = "band_stop"
+	stopCards     = "cap_cards"
+	stopExhausted = "exhausted"
 )
 
 // Card is one word dealt to the learner.
-// GlossEN and AudioURL travel with the card. The client shows them after
-// the flip. Band and whether the word was invented are not on this type.
+// TextNFC and AudioURL are the front. GlossEN, Translit, and Gender are the
+// back. They travel together so the client can flip without another request.
+// AudioURL is /audio/<id>.mp3 when a clip exists for the exact pointed text,
+// and empty otherwise.
 type Card struct {
 	ID       string `json:"id"`
 	TextNFC  string `json:"text_nfc"`
-	GlossEN  string `json:"gloss_en"`
 	AudioURL string `json:"audio_url"`
+	GlossEN  string `json:"gloss_en"`
+	Translit string `json:"translit"`
+	Gender   string `json:"gender"`
 }
 
-// Rated is the server's note after a rating is stored.
-// IsPseudo is how the client learns the word was invented. The card itself
-// does not carry that flag, so a pseudo-word is not given away before the rating.
-type Rated struct {
-	IsPseudo bool `json:"is_pseudo"`
+// NextResult is one step of the deck.
+// Card is the word to show. Break means the current sitting has SittingSize
+// answers: the run stays unfinished, and the client offers "Done for today"
+// and "Keep going". Done means the run has been scored because a band
+// stopped, the card cap was hit, or nothing dealable remains.
+// Break and Done are not set together. A finished run returns an error.
+type NextResult struct {
+	Card  *Card
+	Break bool
+	Done  bool
 }
 
-// BandScore is one frequency band on a finished run.
-// Shown counts real words that were rated, including "I don't know".
-// GoodPlusRate is (Good + Easy) / Shown. It is 0 when Shown is 0.
+// BandScore is one frequency band on a run.
+// GoodPlusRate is (Good + Easy) / Rated. It is 0 when Rated is 0.
+// DontKnow counts "I don't know this" answers. The Again field does not
+// include them. The stop rule does.
 type BandScore struct {
 	Band         int     `json:"band"`
-	Shown        int     `json:"shown"`
+	Rated        int     `json:"rated"`
 	Again        int     `json:"again"`
 	Hard         int     `json:"hard"`
 	Good         int     `json:"good"`
 	Easy         int     `json:"easy"`
-	DontKnow     int     `json:"dontknow"`
+	DontKnow     int     `json:"dont_know"`
 	GoodPlusRate float64 `json:"good_plus_rate"`
 }
 
-// Answer is one rating passed to Score.
-// A later answer for the same item id replaces an earlier one.
-// An item with no answer is not counted as shown.
-type Answer struct {
-	ItemID string `json:"item_id"`
-	Rating int    `json:"rating"`
+// BandTally is one band's ratings passed to Score.
+// Dealable is how many words in the band can still be shown, including the
+// ones already rated. A word that already had a card is not dealable.
+type BandTally struct {
+	Ratings  []int
+	Dealable int
 }
 
-// ScoreItem is one row Score can see.
-// Band is nil when the row is a pseudo-word. Pseudo is true for an invented word.
-type ScoreItem struct {
-	ID     string
-	Band   *int
-	Pseudo bool
-}
-
-// Result is one finished placement run.
-// Level is the highest band whose Good-or-better rate is at least 0.5, or −1
-// when none reached that. Reliable is false when the pseudo Good-or-Easy rate
-// is above 0.25. An unreliable run still records a level, and it seeds nothing.
-// Cap is cards, time, or band when a cap stopped the deck, and empty when the
-// learner finished without one.
+// Result is one placement run.
+// Level is the highest band whose block was fully rated without the Again
+// rate reaching StopAgainRate, or −1 when none was.
+// StopReason is band_stop, cap_cards, exhausted, or empty when the run is
+// still in progress or the learner finished it first.
 //
-// EstimatedKnownWords sums, over bands 1–4, the Good-or-better rate times that
-// band's width in the frequency list (500, 500, 1000, 2000), then adds the
-// number of band 0 words rated Good or Easy.
-// SuggestedStartPosition is the lowest units.position whose newWords are less
-// than 80% covered by the learner's known set. It is one past the highest
-// position when every unit is covered, and 0 when there are no units.
+// EstimatedKnownWords sums, over bands 1–4, GoodPlusRate times that band's
+// width in the frequency list (500, 500, 1000, 2000), then adds the number
+// of band 0 words rated Good or Easy. A band with no ratings adds nothing.
+// SuggestedStartPosition is the lowest units.position whose newWords are
+// less than 80% covered by the learner's known set. It is one past the
+// highest position when every unit is covered, and 0 when there are no units.
 // Score leaves it at 0. Finish fills it from the units stored now.
 type Result struct {
 	RunID                  int64       `json:"run_id"`
 	UserID                 int64       `json:"user_id"`
 	StartedAt              time.Time   `json:"started_at"`
 	FinishedAt             time.Time   `json:"finished_at"`
-	FalseAlarmRate         float64     `json:"false_alarm_rate"`
-	Reliable               bool        `json:"reliable"`
 	Level                  int         `json:"level"`
+	CardsRated             int         `json:"cards_rated"`
+	StopReason             string      `json:"stop_reason,omitempty"`
+	Sittings               int         `json:"sittings"`
 	Bands                  []BandScore `json:"bands"`
 	EstimatedKnownWords    int         `json:"estimated_known_words"`
 	SuggestedStartPosition int         `json:"suggested_start_position"`
-	Cap                    string      `json:"cap,omitempty"`
 }
 
 // storedResult is the JSON object kept in placement_runs.result.
 // SuggestedStartPosition is not stored. It is computed from the current units.
-// Cap is a column, not a field of this object.
 type storedResult struct {
 	Bands               []BandScore `json:"bands"`
 	EstimatedKnownWords int         `json:"estimated_known_words"`

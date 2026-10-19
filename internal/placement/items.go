@@ -13,13 +13,15 @@ import (
 var itemsJSON []byte
 
 // fixtureItem is one row of items.json.
-// Band is null for a pseudo-word. Verified stays false until a person checks the row.
+// Verified stays false until a person checks the row.
+// Gender is m, f, both, or empty when the form does not mark gender.
 type fixtureItem struct {
 	ID       string `json:"id"`
 	TextNFC  string `json:"text_nfc"`
-	Band     *int   `json:"band"`
-	Pseudo   bool   `json:"pseudo"`
+	Band     int    `json:"band"`
 	GlossEN  string `json:"gloss_en"`
+	Translit string `json:"translit"`
+	Gender   string `json:"gender"`
 	POS      string `json:"pos"`
 	Verified bool   `json:"verified"`
 	Source   string `json:"source"`
@@ -46,7 +48,13 @@ func catalog() ([]fixtureItem, error) {
 }
 
 func (it fixtureItem) card() Card {
-	return Card{ID: it.ID, TextNFC: it.TextNFC, GlossEN: it.GlossEN}
+	return Card{
+		ID:       it.ID,
+		TextNFC:  it.TextNFC,
+		GlossEN:  it.GlossEN,
+		Translit: it.Translit,
+		Gender:   it.Gender,
+	}
 }
 
 // unpointed drops Hebrew points, leaving the letters.

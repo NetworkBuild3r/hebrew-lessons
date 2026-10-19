@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"io/fs"
+	"strings"
 	"testing"
 	"time"
 
@@ -63,13 +64,36 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 		t.Fatalf("version 3 applied_at = %s", applied3)
 	}
 
-	for _, table := range []string{"placement_runs", "placement_answers", "learner_lexemes"} {
+	for _, table := range []string{"placement_runs", "placement_answers"} {
 		if !tableExists(t, conn, table) {
 			t.Errorf("missing table %s", table)
 		}
 	}
+	if tableExists(t, conn, "learner_lexemes") {
+		t.Error("learner_lexemes was created")
+	}
+	if !columnNames(t, conn, "review_log")["chosen"] {
+		t.Error("review_log missing chosen")
+	}
+	if !columnNames(t, conn, "confusion_misses")["lexeme_id"] {
+		t.Error("confusion_misses missing lexeme_id")
+	}
+	if !columnNames(t, conn, "units")["scope"] {
+		t.Error("units missing scope")
+	}
+	answerCols := columnNames(t, conn, "placement_answers")
+	if !answerCols["lexeme_id"] {
+		t.Error("placement_answers missing lexeme_id")
+	}
+	if !answerCols["sitting_no"] {
+		t.Error("placement_answers missing sitting_no")
+	}
+	gotIndex := indexColumns(t, conn, "units_scope_position")
+	if stringsJoin(gotIndex) != "scope,position" {
+		t.Fatalf("units_scope_position = %v", gotIndex)
+	}
 	runCols := columnNames(t, conn, "placement_runs")
-	for _, name := range []string{"id", "user_id", "started_at", "finished_at", "false_alarm_rate", "reliable", "level", "cap", "result", "seed"} {
+	for _, name := range []string{"id", "user_id", "started_at", "finished_at", "level", "stop_reason", "result", "seed", "sitting_no"} {
 		if !runCols[name] {
 			t.Errorf("placement_runs missing %s", name)
 		}
@@ -94,35 +118,67 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.ExecContext(ctx, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'boker', 0, ?)`, runID, old); err != nil {
+	if _, err := conn.ExecContext(ctx, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'boker', 1, ?)`, runID, old); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.ExecContext(ctx, `
-		INSERT INTO learner_lexemes (user_id, lexeme_id, status, seeded, source, created_at)
-		VALUES (?, ?, 'known', 1, 'placement', ?)`, userID, lexemeID, old); err != nil {
+		UPDATE placement_answers SET lexeme_id = ? WHERE item_id = 'boker'`, lexemeID); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, `
+		INSERT INTO cards (user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses)
+		VALUES (?, ?, 'he_en', 'new', ?, 0, 0, 0, 0)`, userID, lexemeID, old); err != nil {
+		t.Fatal(err)
+	}
+	var cardID int64
+	if err := conn.QueryRowContext(ctx, `SELECT id FROM cards`).Scan(&cardID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, `
+		INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, chosen)
+		VALUES (?, 3, ?, 0, 0, 'שָׁלוֹם')`, cardID, old); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, `
+		INSERT INTO units (position, title, situation, concept, status, rev, doc)
+		VALUES (0, 't', 's', 'c', 'draft', 1, '{"title":"t"}')`); err != nil {
+		t.Fatal(err)
+	}
+	var scope string
+	if err := conn.QueryRowContext(ctx, `SELECT scope FROM units`).Scan(&scope); err != nil {
+		t.Fatal(err)
+	}
+	if scope != "shared" {
+		t.Fatalf("scope = %q, want shared", scope)
 	}
 	if _, err := conn.ExecContext(ctx, `
 		UPDATE placement_runs
-		SET finished_at = ?, false_alarm_rate = 0, reliable = 1, level = -1, result = '{"bands":[]}'
+		SET finished_at = ?, level = -1, stop_reason = 'exhausted', result = '{"bands":[]}'
 		WHERE id = ?`, old, runID); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := conn.ExecContext(ctx, `INSERT INTO lexemes (text_nfc) VALUES ('סֵפֶר')`); err != nil {
+	rejectSQL(t, conn, "unit scope", `UPDATE units SET scope = 'private'`)
+	rejectSQL(t, conn, "unit scope learner", `UPDATE units SET scope = 'learner:'`)
+	if _, err := conn.ExecContext(ctx, `UPDATE units SET scope = 'learner:4'`); err != nil {
 		t.Fatal(err)
 	}
-	var otherID int64
-	if err := conn.QueryRowContext(ctx, `SELECT id FROM lexemes WHERE text_nfc = 'סֵפֶר'`).Scan(&otherID); err != nil {
+	rejectSQL(t, conn, "confusion lexeme", `
+		INSERT INTO confusion_misses (learner_id, kind, key, lexeme_id, at)
+		VALUES (?, 'letter_pair', 'ב/כ', 99999, ?)`, userID, old)
+	if _, err := conn.ExecContext(ctx, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'other', 0, ?)`, runID, old); err != nil {
 		t.Fatal(err)
 	}
-	rejectSQL(t, conn, "learner status", `
-		INSERT INTO learner_lexemes (user_id, lexeme_id, status, seeded, source, created_at)
-		VALUES (?, ?, 'knownish', 0, 'placement', ?)`, userID, otherID, old)
-	rejectSQL(t, conn, "rating", `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'other', 5, ?)`, runID, old)
+	rejectSQL(t, conn, "rating high", `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'high', 5, ?)`, runID, old)
 	rejectSQL(t, conn, "level", `UPDATE placement_runs SET level = 5 WHERE id = ?`, runID)
-	rejectSQL(t, conn, "reliable", `UPDATE placement_runs SET reliable = 2 WHERE id = ?`, runID)
-	rejectSQL(t, conn, "cap", `UPDATE placement_runs SET cap = 'later' WHERE id = ?`, runID)
+	rejectSQL(t, conn, "stop reason", `UPDATE placement_runs SET stop_reason = 'later' WHERE id = ?`, runID)
+	rejectSQL(t, conn, "old cap", `UPDATE placement_runs SET stop_reason = 'cap' WHERE id = ?`, runID)
+	rejectSQL(t, conn, "cap time", `UPDATE placement_runs SET stop_reason = 'cap_time' WHERE id = ?`, runID)
+	if _, err := conn.ExecContext(ctx, `UPDATE placement_runs SET stop_reason = 'cap_cards' WHERE id = ?`, runID); err != nil {
+		t.Fatal(err)
+	}
+	rejectSQL(t, conn, "sitting", `UPDATE placement_runs SET sitting_no = 0 WHERE id = ?`, runID)
+	rejectSQL(t, conn, "answer sitting", `UPDATE placement_answers SET sitting_no = 0 WHERE item_id = 'boker'`)
 
 	if _, err := conn.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID); err != nil {
 		t.Fatal(err)
@@ -134,13 +190,6 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 	if left != 0 {
 		t.Fatalf("runs left after deleting the learner = %d", left)
 	}
-	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM learner_lexemes`).Scan(&left); err != nil {
-		t.Fatal(err)
-	}
-	if left != 0 {
-		t.Fatalf("learner lexemes left = %d", left)
-	}
-
 	if err := Migrate(ctx, conn, fixedClock{when.Add(time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
@@ -150,6 +199,10 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 	if applied3 != placementTime(when) {
 		t.Fatalf("second migrate rewrote version 3 applied_at to %s", applied3)
 	}
+}
+
+func stringsJoin(parts []string) string {
+	return strings.Join(parts, ",")
 }
 
 func tableExists(t *testing.T, conn *sql.DB, name string) bool {

@@ -6,81 +6,108 @@ import "math"
 // its Good and Easy answers are counted one by one.
 var bandRankSize = [bands]float64{0, 500, 500, 1000, 2000}
 
-// Score applies the Good-or-better rule and returns the estimate of known words.
+// Score applies the band rule and returns the estimate of known words.
 // SuggestedStartPosition is 0. Finish fills it once the learner's units and
 // known set are known.
 //
-// The last answer for an item id wins. An item with no answer is not shown.
-// A pseudo-word, and a real-looking item whose band is nil, counts only toward
-// the false-alarm rate. Good or Easy on a pseudo-word is a false alarm. Hard
-// is recorded on the answer and is not a false alarm. A band outside 0–4 is
-// ignored. A band with no rated real words has a Good-or-better rate of 0 and
-// does not set the level. With no rated pseudo-words, the false-alarm rate is
-// 0 and the run is reliable.
-func Score(answers []Answer, items []ScoreItem) Result {
-	rating := make(map[string]int, len(answers))
-	for _, answer := range answers {
-		rating[answer.ItemID] = answer.Rating
-	}
-
+// A band deals at most BandMax words. Once StopMinRated cards in that
+// band are rated, an Again share of StopAgainRate or more stops the run.
+// "I don't know" counts as Again. Hard does not. Exactly StopAgainRate stops.
+// Fewer than StopMinRated ratings never stop, even when every one is
+// Again. Level is the highest band whose block was fully rated without
+// stopping, or −1.
+//
+// StopReason is band_stop when a band stopped the run, cap_cards when
+// CardCap were rated and words remain, exhausted when nothing dealable
+// remains, and empty when the learner stopped first. DontKnow counts in
+// Rated and in DontKnow. It is not added to the Again field.
+func Score(tallies [bands]BandTally) Result {
 	var counted [bands]bandCount
-	var pseudoShown, falseAlarms int
-	for _, it := range items {
-		grade, ok := rating[it.ID]
-		if !ok {
-			continue
+	var cardsRated int
+	for band := 0; band < bands; band++ {
+		for _, rating := range tallies[band].Ratings {
+			counted[band].add(rating)
 		}
-		if it.Pseudo || it.Band == nil {
-			pseudoShown++
-			if grade == Good || grade == Easy {
-				falseAlarms++
-			}
-			continue
-		}
-		band := *it.Band
-		if band < 0 || band >= bands {
-			continue
-		}
-		counted[band].add(grade)
+		cardsRated += counted[band].rated
 	}
 
-	f := 0.0
-	if pseudoShown > 0 {
-		f = float64(falseAlarms) / float64(pseudoShown)
-	}
 	out := Result{
-		FalseAlarmRate: f,
-		Reliable:       f <= maxFalseAlarm,
-		Level:          -1,
-		Bands:          make([]BandScore, bands),
+		Level:      -1,
+		CardsRated: cardsRated,
+		Bands:      make([]BandScore, bands),
 	}
 	var sum float64
 	band0Known := 0
+	stopped := false
+	remain := false
 	for band := 0; band < bands; band++ {
-		score := counted[band].score(band)
-		out.Bands[band] = score
-		if counted[band].shown > 0 && passed(counted[band].good, counted[band].easy, counted[band].shown) && band > out.Level {
-			out.Level = band
+		out.Bands[band] = counted[band].score(band)
+		block := blockLen(tallies[band].Dealable, counted[band].rated)
+		if !stopped && counted[band].rated < block {
+			remain = true
+		}
+		if !stopped && tripped(counted[band]) {
+			stopped = true
 		}
 		if band == 0 {
 			band0Known = counted[band].good + counted[band].easy
 			continue
 		}
-		sum += score.GoodPlusRate * bandRankSize[band]
+		sum += out.Bands[band].GoodPlusRate * bandRankSize[band]
 	}
 	out.EstimatedKnownWords = int(math.Round(sum)) + band0Known
+
+	switch {
+	case stopped:
+		out.StopReason = stopBand
+	case remain && cardsRated >= CardCap:
+		out.StopReason = stopCards
+	case !remain:
+		out.StopReason = stopExhausted
+	}
+
+	for band := 0; band < bands; band++ {
+		block := blockLen(tallies[band].Dealable, counted[band].rated)
+		if block == 0 {
+			continue
+		}
+		if counted[band].rated < block || tripped(counted[band]) {
+			break
+		}
+		out.Level = band
+	}
 	return out
 }
 
+// blockLen is the block the learner has to finish: BandMax words, or
+// fewer when the band does not have that many dealable words.
+func blockLen(dealable, rated int) int {
+	if dealable < rated {
+		dealable = rated
+	}
+	if dealable > BandMax {
+		return BandMax
+	}
+	return dealable
+}
+
+// tripped reports that the band has enough ratings and its Again share,
+// counting "I don't know" as Again, is at least StopAgainRate.
+func tripped(c bandCount) bool {
+	if c.rated < StopMinRated {
+		return false
+	}
+	return float64(c.again+c.dontKnow) >= StopAgainRate*float64(c.rated)
+}
+
 type bandCount struct {
-	shown, again, hard, good, easy, dont int
+	rated, again, hard, good, easy, dontKnow int
 }
 
 func (c *bandCount) add(rating int) {
-	c.shown++
 	switch rating {
 	case DontKnow:
-		c.dont++
+		c.dontKnow++
 	case Again:
 		c.again++
 	case Hard:
@@ -90,35 +117,27 @@ func (c *bandCount) add(rating int) {
 	case Easy:
 		c.easy++
 	default:
-		c.shown--
+		return
 	}
+	c.rated++
 }
 
 func (c bandCount) score(band int) BandScore {
 	return BandScore{
 		Band:         band,
-		Shown:        c.shown,
+		Rated:        c.rated,
 		Again:        c.again,
 		Hard:         c.hard,
 		Good:         c.good,
 		Easy:         c.easy,
-		DontKnow:     c.dont,
-		GoodPlusRate: rate(c.good, c.easy, c.shown),
+		DontKnow:     c.dontKnow,
+		GoodPlusRate: goodPlusRate(c),
 	}
 }
 
-func rate(good, easy, shown int) float64 {
-	if shown == 0 {
+func goodPlusRate(c bandCount) float64 {
+	if c.rated == 0 {
 		return 0
 	}
-	return float64(good+easy) / float64(shown)
-}
-
-// passed reports a Good-or-better rate of at least passAt.
-// The comparison is integer so exactly half the words passes.
-func passed(good, easy, shown int) bool {
-	if shown == 0 {
-		return false
-	}
-	return (good+easy)*2 >= shown
+	return float64(c.good+c.easy) / float64(c.rated)
 }

@@ -3,7 +3,9 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -31,27 +33,39 @@ const (
 // Options configures the authoring handler.
 //
 // AuthToken is the bearer secret from app.Config.MCPAuthToken. This
-// package does not read the environment. Validator, when set, replaces
-// the default chain. The default chain is OAuthSessions and then
-// StaticToken. OAuth fills in SessionFromToken only. Sessions is the
-// session-or-user resolver and is wired now.
+// package does not read the environment. An empty token disables the
+// static check. A matching token is RoleAdmin and has full access.
+// Validator, when set, replaces the default chain. The default chain is
+// OAuthSessions and then StaticToken. OAuth fills in SessionFromToken
+// only. That function maps the bearer to a session id and must not read
+// the web session cookie. Sessions resolves the id through
+// auth.Service.Lookup.
 //
-// Nil Course, Lexicon, Lookup, or Units leaves the tools registered.
-// A call that needs a missing store returns a tool error and does not panic.
+// AllowedOrigins are browser Origins that may call this handler. A
+// request with no Origin and no Sec-Fetch-Site header is allowed. Any
+// other cross-origin browser request is rejected.
+//
+// Nil Course, Lexicon, or Units makes the tools that need them return
+// isError. A nil Lookup does not: validate_unit still runs and reports
+// a schema.lookup block issue.
 type Options struct {
 	AuthToken string
 	// SessionFromToken maps an OAuth access token to a raw session id.
-	// Nil until the authorization server lands. The id is resolved with
-	// Sessions, which must call auth.Service.Lookup.
+	// Nil until the authorization server lands. It must not read the
+	// web session cookie. The id is resolved with Sessions.
 	SessionFromToken func(ctx context.Context, token string, r *http.Request) (rawSessionID string, err error)
 	// Sessions resolves that raw session id to a caller. Nil rejects
 	// every OAuth bearer and leaves the static token check in place.
-	Sessions  SessionUserResolver
-	Validator Validator
-	Course    CourseReader
-	Lexicon   LexiconReader
-	Lookup    units.Lookup
-	Units     UnitWriter
+	Sessions       SessionUserResolver
+	AllowedOrigins []string
+	Validator      Validator
+	// extraTools registers tools after the authoring tools. Tests use it
+	// for a tool that has no per-tool role check. Production leaves it nil.
+	extraTools func(*mcp.Server)
+	Course     CourseReader
+	Lexicon    LexiconReader
+	Lookup     units.Lookup
+	Units      UnitWriter
 }
 
 // Handler returns the streamable HTTP handler for the authoring server.
@@ -71,7 +85,27 @@ func Handler(opts Options) http.Handler {
 		// server-initiated requests, and KeepAlive is a ping request.
 		// A rejected ping closes the temporary session.
 	})
-	return requireBearer(opts.validator(), stream)
+	return protectOrigin(opts.AllowedOrigins, requireBearer(opts.validator(), stream))
+}
+
+// protectOrigin rejects cross-origin browser requests. A POST with no
+// Origin and no Sec-Fetch-Site header is allowed, which is how a
+// non-browser client calls the server.
+func protectOrigin(allowed []string, next http.Handler) http.Handler {
+	p := http.NewCrossOriginProtection()
+	p.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "cross-origin request rejected", http.StatusForbidden)
+	}))
+	for _, origin := range allowed {
+		origin = strings.TrimSpace(origin)
+		if origin == "" {
+			continue
+		}
+		if err := p.AddTrustedOrigin(origin); err != nil {
+			slog.Error("mcp allowed origin", "origin", origin, "err", err)
+		}
+	}
+	return p.Handler(next)
 }
 
 func (o Options) validator() Validator {
@@ -94,6 +128,9 @@ func newMCPServer(opts Options) *mcp.Server {
 		// historical default that advertised logging.
 		Capabilities: &mcp.ServerCapabilities{},
 	})
+	// Role checks use the parsed tool call. This wraps every tool,
+	// including a test tool that does not check the role itself.
+	server.AddReceivingMiddleware(enforceRole)
 	svc := &service{
 		course:    opts.Course,
 		lexicon:   opts.Lexicon,
@@ -101,6 +138,9 @@ func newMCPServer(opts Options) *mcp.Server {
 		units:     opts.Units,
 	}
 	registerTools(server, svc)
+	if opts.extraTools != nil {
+		opts.extraTools(server)
+	}
 	if err := registerResources(server); err != nil {
 		// The schemas are derived from units.Unit. A failure here is a
 		// programming error, not a request failure.

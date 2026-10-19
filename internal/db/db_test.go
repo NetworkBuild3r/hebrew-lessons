@@ -107,7 +107,6 @@ func TestTables(t *testing.T) {
 		"audio_assets",
 		"cards",
 		"confusion_misses",
-		"learner_lexemes",
 		"lesson_items",
 		"lesson_runs",
 		"lexemes",

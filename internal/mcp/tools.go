@@ -33,7 +33,7 @@ type service struct {
 
 type getContextInput struct {
 	Position  int    `json:"position" jsonschema:"Course position you are about to write. Known lexemes are words introduced in units at a lower position. Zero is the first unit. Use the placement suggestedStartPosition when the learner has taken the vocabulary check."`
-	LearnerID *int64 `json:"learnerId,omitempty" jsonschema:"Optional. The learner whose custom units, placement, struggles, and completed shared units to include. Omit it to see shared units only, with no learner data. OAuth will later default this to the signed-in user."`
+	LearnerID *int64 `json:"learnerId,omitempty" jsonschema:"Optional for an admin or the static token. Omit it to see shared units only. A learner account uses their own id when this is omitted. Another id is forbidden. A whole number is accepted, including 9.0, which is the integer 9. A fraction such as 9.5 is rejected."`
 	TopN      int    `json:"topN,omitempty" jsonschema:"How many struggled lexemes to return. Defaults to 30. The store ranks them by misses in 7 days, then lapses, then Again rate. This tool keeps that order. It does not limit confusions, which already cover 7 days."`
 }
 
@@ -154,6 +154,19 @@ type putOutput struct {
 
 func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in getContextInput) (*mcp.CallToolResult, getContextOutput, error) {
 	var out getContextOutput
+	caller, err := s.gate(ctx, "get_context")
+	if err != nil {
+		return nil, out, err
+	}
+	if caller.Role == RoleLearner {
+		if in.LearnerID != nil && *in.LearnerID != caller.UserID {
+			return nil, out, errors.New(msgOtherLearner)
+		}
+		if in.LearnerID == nil {
+			id := caller.UserID
+			in.LearnerID = &id
+		}
+	}
 	if in.Position < 0 {
 		return nil, out, errBadPosition
 	}
@@ -299,6 +312,9 @@ func strugglesFrom(stats Struggle) Struggles {
 
 func (s *service) lookup(ctx context.Context, _ *mcp.CallToolRequest, in lookupInput) (*mcp.CallToolResult, lookupOutput, error) {
 	var out lookupOutput
+	if _, err := s.gate(ctx, "lookup"); err != nil {
+		return nil, out, err
+	}
 	query := strings.TrimSpace(in.Query)
 	if query == "" {
 		return nil, out, errors.New("Query is empty. Send pointed Hebrew, unpointed Hebrew, or an English gloss.")
@@ -329,6 +345,9 @@ func (s *service) lookup(ctx context.Context, _ *mcp.CallToolRequest, in lookupI
 }
 
 func (s *service) validateUnit(ctx context.Context, _ *mcp.CallToolRequest, in validateInput) (*mcp.CallToolResult, validateOutput, error) {
+	if _, err := s.gate(ctx, "validate_unit"); err != nil {
+		return nil, validateOutput{}, err
+	}
 	if in.Position < 0 {
 		return nil, validateOutput{}, errBadPosition
 	}
@@ -340,6 +359,9 @@ func (s *service) validateUnit(ctx context.Context, _ *mcp.CallToolRequest, in v
 
 func (s *service) putUnit(ctx context.Context, _ *mcp.CallToolRequest, in putInput) (*mcp.CallToolResult, putOutput, error) {
 	var out putOutput
+	if _, err := s.gate(ctx, "put_unit"); err != nil {
+		return nil, out, err
+	}
 	if in.Position < 0 {
 		return nil, out, errBadPosition
 	}
@@ -421,7 +443,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_context",
-		Description: "Read the course before you draft a unit. The outline rows have position, title, status, and scope (shared, or learner:<id>). Omit learnerId to see shared units only, with empty struggles and placement taken false. knownLexemes is then the pointed text introduced before position. Pass learnerId to add that learner's custom units, their placement, their struggles, and the shared units they have finished. knownLexemes is then that learner's words: the union of placement Good and Easy words and words from completed units, sorted pointed NFC. topN defaults to 30. Struggled lexemes are the store's Top rows, ordered by misses in 7 days, then lapses, then Again rate. Do not re-rank them. Each lexeme has text, gloss, reviews, lapses, againRate, misses7d, lastSeen, and confusionKeys. Confusions cover 7 days and are not limited by topN. Each has kind, a, b, count, and lastAt. b is empty for the agreement kind. Placement taken false means there is no row. A row includes takenAt, finished, sittings (20 cards each; a run can resume across days and has no time cap), inProgress (true when finished is false and sittings is greater than 0), level, cardsRated, stopReason (band_stop, cap_cards, exhausted, or empty), bands (per band: band, rated, again, hard, good, easy, dontKnow, goodPlusRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy, pointed NFC, sorted), and learningLexemes (Again, Hard, and don't-know, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for budgets and for the shared-versus-custom guidance. That guidance is not an enforced rule.",
+		Description: "Read the course before you draft a unit. A learner account is limited to their own learnerId; omitting it uses that id, and another id is forbidden. An admin, including the static token, may omit learnerId or pass any id. The outline rows have position, title, status, and scope (shared, or learner:<id>). Omit learnerId as an admin to see shared units only, with empty struggles and placement taken false. knownLexemes is then the pointed text introduced before position. Pass learnerId to add that learner's custom units, their placement, their struggles, and the shared units they have finished. knownLexemes is then that learner's words: the union of placement Good and Easy words and words from completed units, sorted pointed NFC. topN defaults to 30. Struggled lexemes are the store's Top rows, ordered by misses in 7 days, then lapses, then Again rate. Do not re-rank them. Each lexeme has text, gloss, reviews, lapses, againRate, misses7d, lastSeen, and confusionKeys. Confusions cover 7 days and are not limited by topN. Each has kind, a, b, count, and lastAt. b is empty for the agreement kind. Placement taken false means there is no row. A row includes takenAt, finished, sittings (20 cards each; a run can resume across days and has no time cap), inProgress (true when finished is false and sittings is greater than 0), level, cardsRated, stopReason (band_stop, cap_cards, exhausted, or empty), bands (per band: band, rated, again, hard, good, easy, dontKnow, goodPlusRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy, pointed NFC, sorted), and learningLexemes (Again, Hard, and don't-know, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for budgets and for the shared-versus-custom guidance. That guidance is not an enforced rule.",
 		Annotations: readOnly,
 	}, svc.getContext)
 	mcp.AddTool(server, &mcp.Tool{
@@ -436,7 +458,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}, svc.validateUnit)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "put_unit",
-		Description: "Save a draft revision. scope is required: shared, or learner:<id> for one learner. Scope is not inside the unit document. Send unitId to update; omit it to create. The same document, position, and scope do not create another revision. Changing scope does. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. This does not publish.",
+		Description: "Save a draft revision. Admin only, including the static token: a learner call is a tool error, forbidden: admin only, even for scope learner:<their own id>. scope is required: shared, or learner:<id> for one learner. Scope is not inside the unit document. Send unitId to update; omit it to create. The same document, position, and scope do not create another revision. Changing scope does. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. This does not publish.",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    false,
 			IdempotentHint:  true,
