@@ -17,6 +17,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -1226,7 +1227,7 @@ func TestOAuthSweepTTLCapAndRateLimit(t *testing.T) {
 	if stale.StatusCode != http.StatusBadRequest || !strings.Contains(stale.Body, "Unknown or expired client") {
 		t.Fatalf("ttl %d %s", stale.StatusCode, stale.Body)
 	}
-	if err := env.store.SweepOAuth(context.Background(), env.clk.Now(), env.clk.Now().Add(-OAuthClientTTL)); err != nil {
+	if err := env.store.SweepOAuth(context.Background(), env.clk.Now(), env.clk.Now().Add(-OAuthClientTTL), env.clk.Now().Add(-OAuthIdleClientTTL)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := env.store.OAuthRequest(context.Background(), "old-req"); !errors.Is(err, db.ErrNotFound) {
@@ -1259,6 +1260,217 @@ func TestOAuthSweepTTLCapAndRateLimit(t *testing.T) {
 	if blocked.StatusCode != http.StatusTooManyRequests || !strings.Contains(blocked.Body, "Too many requests from this address.") {
 		t.Fatalf("rate limit %d %s", blocked.StatusCode, blocked.Body)
 	}
+}
+
+func TestLoadClientRejectsExpiredTTL(t *testing.T) {
+	env := newOAuthEnv(t, false)
+	live := env.registerClient(oauthRedirect, "none")
+	h := &oauthHandler{svc: env.svc}
+	if _, err := h.loadClient(context.Background(), live); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.store.InsertOAuthClient(context.Background(), db.OAuthClient{
+		ID: "aged", Name: "aged", RedirectURIs: []string{oauthRedirect}, AuthMethod: "none",
+		GrantTypes: []string{"authorization_code"}, ResponseTypes: []string{"code"},
+		CreatedAt: env.clk.Now().Add(-OAuthClientTTL),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.loadClient(context.Background(), "aged"); !errors.Is(err, db.ErrNotFound) {
+		t.Fatalf("past ttl %v", err)
+	}
+	if err := env.store.InsertOAuthClient(context.Background(), db.OAuthClient{
+		ID: "inside", Name: "inside", RedirectURIs: []string{oauthRedirect}, AuthMethod: "none",
+		GrantTypes: []string{"authorization_code"}, ResponseTypes: []string{"code"},
+		CreatedAt: env.clk.Now().Add(-OAuthClientTTL + time.Second),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.loadClient(context.Background(), "inside"); err != nil {
+		t.Fatalf("inside ttl %v", err)
+	}
+}
+
+func TestOAuthIdleClientPrune(t *testing.T) {
+	env := newOAuthEnv(t, false)
+	ctx := context.Background()
+	now := env.clk.Now()
+	user, err := env.store.CreateUser(ctx, oauthLearner, "learner-sub", RoleLearner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	insertClient := func(id string, age time.Duration) {
+		t.Helper()
+		if err := env.store.InsertOAuthClient(ctx, db.OAuthClient{
+			ID: id, Name: id, RedirectURIs: []string{oauthRedirect}, AuthMethod: "none",
+			GrantTypes: []string{"authorization_code"}, ResponseTypes: []string{"code"},
+			CreatedAt: now.Add(-age),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insertClient("idle", 25*time.Hour)
+	insertClient("coded", 25*time.Hour)
+	insertClient("tokened", 25*time.Hour)
+	insertClient("young", 23*time.Hour)
+	insertClient("ancient", OAuthClientTTL+time.Second)
+	// Raw rows leave issued at 0. Sweep has to notice the code and token
+	// before it deletes those expired rows.
+	if _, err := env.store.ExecContext(ctx, `
+		INSERT INTO oauth_codes (code_hash, client_id, user_id, code_challenge, expires_at)
+		VALUES ('code-hash', 'coded', ?, ?, ?)`,
+		user.ID, strings.Repeat("a", 43), db.FormatTime(now.Add(-time.Minute))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.store.ExecContext(ctx, `
+		INSERT INTO oauth_tokens (token_hash, kind, client_id, user_id, family_id, expires_at, created_at)
+		VALUES ('token-hash', 'access', 'tokened', ?, 'fam', ?, ?)`,
+		user.ID, db.FormatTime(now.Add(-time.Minute)), db.FormatTime(now.Add(-time.Hour))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.store.ExecContext(ctx, `
+		INSERT INTO oauth_codes (code_hash, client_id, user_id, code_challenge, expires_at)
+		VALUES ('ancient-code', 'ancient', ?, ?, ?)`,
+		user.ID, strings.Repeat("b", 43), db.FormatTime(now.Add(time.Hour))); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.store.SweepOAuth(ctx, now, now.Add(-OAuthClientTTL), now.Add(-OAuthIdleClientTTL)); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"idle", "ancient"} {
+		if _, err := env.store.OAuthClient(ctx, id); !errors.Is(err, db.ErrNotFound) {
+			t.Fatalf("%s survived: %v", id, err)
+		}
+	}
+	for _, id := range []string{"coded", "tokened", "young"} {
+		if _, err := env.store.OAuthClient(ctx, id); err != nil {
+			t.Fatalf("%s missing: %v", id, err)
+		}
+	}
+	if _, err := env.store.OAuthCode(ctx, "code-hash"); !errors.Is(err, db.ErrNotFound) {
+		t.Fatalf("expired code kept: %v", err)
+	}
+	if _, err := env.store.OAuthToken(ctx, "token-hash"); !errors.Is(err, db.ErrNotFound) {
+		t.Fatalf("expired token kept: %v", err)
+	}
+	if _, err := env.store.OAuthCode(ctx, "ancient-code"); !errors.Is(err, db.ErrNotFound) {
+		t.Fatalf("ancient code kept: %v", err)
+	}
+
+	prev := oauthClientCap
+	oauthClientCap = 1
+	t.Cleanup(func() { oauthClientCap = prev })
+	blocked := newOAuthEnv(t, false)
+	if err := blocked.store.InsertOAuthClient(context.Background(), db.OAuthClient{
+		ID: "recent-idle", Name: "recent", RedirectURIs: []string{oauthRedirect}, AuthMethod: "none",
+		GrantTypes: []string{"authorization_code"}, ResponseTypes: []string{"code"},
+		CreatedAt: blocked.clk.Now().Add(-23 * time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if res := blocked.registerRaw(map[string]any{"redirect_uris": []string{oauthRedirect}}); res.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("23h idle still holds a slot %d %s", res.StatusCode, res.Body)
+	}
+	freed := newOAuthEnv(t, false)
+	if err := freed.store.InsertOAuthClient(context.Background(), db.OAuthClient{
+		ID: "dead-idle", Name: "dead", RedirectURIs: []string{oauthRedirect}, AuthMethod: "none",
+		GrantTypes: []string{"authorization_code"}, ResponseTypes: []string{"code"},
+		CreatedAt: freed.clk.Now().Add(-25 * time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if res := freed.registerRaw(map[string]any{"redirect_uris": []string{oauthRedirect}}); res.StatusCode != http.StatusCreated {
+		t.Fatalf("25h idle lockout %d %s", res.StatusCode, res.Body)
+	}
+	if _, err := freed.store.OAuthClient(context.Background(), "dead-idle"); !errors.Is(err, db.ErrNotFound) {
+		t.Fatalf("dead registration kept: %v", err)
+	}
+}
+
+func TestOAuthRateLimitUsesTrustedClientIP(t *testing.T) {
+	prev := oauthRateLimit
+	oauthRateLimit = 1
+	t.Cleanup(func() { oauthRateLimit = prev })
+
+	trusted := newOAuthEnvProxied(t)
+	first := trusted.registerForwarded("203.0.113.10, 127.0.0.1")
+	if first.StatusCode != http.StatusCreated {
+		t.Fatalf("first forwarded %d %s", first.StatusCode, first.Body)
+	}
+	same := trusted.registerForwarded("203.0.113.10, 127.0.0.1")
+	if same.StatusCode != http.StatusTooManyRequests || !strings.Contains(same.Body, "Too many requests from this address.") {
+		t.Fatalf("same forwarded ip %d %s", same.StatusCode, same.Body)
+	}
+	other := trusted.registerForwarded("203.0.113.11, 127.0.0.1")
+	if other.StatusCode != http.StatusCreated {
+		t.Fatalf("second forwarded ip %d %s", other.StatusCode, other.Body)
+	}
+	if keys := trusted.rateKeys(); len(keys) != 2 || keys[0] != "203.0.113.10" || keys[1] != "203.0.113.11" {
+		t.Fatalf("trusted buckets %v", keys)
+	}
+
+	plain := newOAuthEnv(t, false)
+	spoofed := plain.registerForwarded("203.0.113.10")
+	if spoofed.StatusCode != http.StatusCreated {
+		t.Fatalf("untrusted first %d %s", spoofed.StatusCode, spoofed.Body)
+	}
+	if keys := plain.rateKeys(); len(keys) != 1 || keys[0] != "127.0.0.1" {
+		t.Fatalf("untrusted key %v", keys)
+	}
+	otherSpoof := plain.registerForwarded("198.51.100.20")
+	if otherSpoof.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("untrusted header opened a second bucket %d %s", otherSpoof.StatusCode, otherSpoof.Body)
+	}
+	if keys := plain.rateKeys(); len(keys) != 1 || keys[0] != "127.0.0.1" {
+		t.Fatalf("untrusted keys after second header %v", keys)
+	}
+}
+
+func TestOAuthRateMapShrinksAfterWindow(t *testing.T) {
+	env := newOAuthEnv(t, false)
+	now := env.clk.Now()
+	if !env.svc.rateAllow("203.0.113.1", now) || !env.svc.rateAllow("203.0.113.2", now) {
+		t.Fatal("rate allow")
+	}
+	if keys := env.rateKeys(); len(keys) != 2 {
+		t.Fatalf("filled %v", keys)
+	}
+	env.clk.Advance(oauthRateWindow - time.Second)
+	env.svc.PruneRateLimits(env.clk.Now())
+	if keys := env.rateKeys(); len(keys) != 2 {
+		t.Fatalf("window still open %v", keys)
+	}
+	env.clk.Advance(time.Second)
+	res := env.registerRaw(map[string]any{"redirect_uris": []string{oauthRedirect}})
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("register after window %d %s", res.StatusCode, res.Body)
+	}
+	if keys := env.rateKeys(); len(keys) != 1 || keys[0] != "127.0.0.1" {
+		t.Fatalf("sweep left %v", keys)
+	}
+}
+
+func (e *oauthEnv) registerForwarded(forwarded string) oauthHTTP {
+	e.t.Helper()
+	raw, err := json.Marshal(map[string]any{"redirect_uris": []string{oauthRedirect}})
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	req := e.do(http.MethodPost, "/register", strings.NewReader(string(raw)), "")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Forwarded-For", forwarded)
+	return e.roundTrip(req)
+}
+
+func (e *oauthEnv) rateKeys() []string {
+	e.svc.rateMu.Lock()
+	defer e.svc.rateMu.Unlock()
+	keys := make([]string, 0, len(e.svc.rate))
+	for k := range e.svc.rate {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func codeFromCustomPage(t *testing.T, body string) string {

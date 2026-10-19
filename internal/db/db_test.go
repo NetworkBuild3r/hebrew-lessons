@@ -52,8 +52,8 @@ func TestMigrateEmptyAndIdempotent(t *testing.T) {
 	}
 
 	s = openAt(t, dir, fixedClock{when})
-	if got := count(t, s, `SELECT COUNT(*) FROM schema_migrations`); got != 5 {
-		t.Fatalf("schema_migrations rows = %d, want 5", got)
+	if got := count(t, s, `SELECT COUNT(*) FROM schema_migrations`); got != 6 {
+		t.Fatalf("schema_migrations rows = %d, want 6", got)
 	}
 	wantApplied := FormatTime(when)
 	rows, err := s.conn.QueryContext(ctx, `SELECT version, applied_at FROM schema_migrations ORDER BY version`)
@@ -76,8 +76,9 @@ func TestMigrateEmptyAndIdempotent(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if len(versions) != 5 || versions[0] != 1 || versions[1] != 2 || versions[2] != 3 || versions[3] != 4 || versions[4] != 5 {
-		t.Fatalf("versions = %v, want [1 2 3 4 5]", versions)
+	// 006 is reserved. This branch's client marker is version 7.
+	if len(versions) != 6 || versions[0] != 1 || versions[1] != 2 || versions[2] != 3 || versions[3] != 4 || versions[4] != 5 || versions[5] != 7 {
+		t.Fatalf("versions = %v, want [1 2 3 4 5 7]", versions)
 	}
 	if got := count(t, s, `SELECT COUNT(*) FROM users`); got != 1 {
 		t.Fatalf("users = %d, want 1 after a second open", got)
