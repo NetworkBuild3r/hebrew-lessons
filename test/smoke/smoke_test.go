@@ -31,6 +31,14 @@ var noRedirect = &http.Client{
 
 var followRedirect = &http.Client{Timeout: 20 * time.Second}
 
+func TestMain(m *testing.M) {
+	if err := refuseProdSmoke(os.Getenv("SMOKE_WEB_URL"), os.Getenv("SMOKE_MCP_URL"), os.Getenv("SMOKE_ALLOW_PROD")); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	os.Exit(m.Run())
+}
+
 func TestWebHealthz(t *testing.T) {
 	t.Parallel()
 	base := requireEnv(t, "SMOKE_WEB_URL", stagingWebURL)
