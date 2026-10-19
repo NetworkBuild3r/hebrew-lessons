@@ -12,7 +12,8 @@
 //
 // The mix itself does not touch the database. BuildSession reads the clock
 // once and passes that instant to ListStudyCards, RecentReviewRatings, and
-// StruggleStatsAt, then mix turns that snapshot into a queue. Record is the
+// the learner model (which supplies each word's state and confusions), then
+// mix turns that snapshot into a queue. Record is the
 // only write: it grades the card that Next just served. BuildSession returns
 // a pointer. The queue stays in that Session. A restart drops it.
 //

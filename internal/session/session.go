@@ -142,7 +142,7 @@ func (s *Session) UserID() int64 {
 }
 
 // BuildSession queues at most SessionCap cards for userID.
-// now is read once and passed to every load, including StruggleStats.
+// now is read once and passed to every load, including the learner model.
 // The caller checks that userID is the signed-in learner.
 func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, error) {
 	if err := s.ready(); err != nil {
