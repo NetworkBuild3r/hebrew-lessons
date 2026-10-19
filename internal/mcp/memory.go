@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/lexicon"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"golang.org/x/text/unicode/norm"
 )
@@ -58,8 +59,9 @@ type memUnit struct {
 }
 
 type storedLexeme struct {
-	id int64
-	lx Lexeme
+	id       int64
+	lx       Lexeme
+	verified bool
 }
 
 // NewMemory returns an empty store.
@@ -460,6 +462,88 @@ func (m *Memory) byID(id int64) *memUnit {
 		}
 	}
 	return nil
+}
+
+// UpsertLexemes implements LexiconWriter. It does not rebuild lesson_items.
+// The database writer does. An invalid batch returns *lexicon.Invalid and
+// leaves the stored rows as they were.
+func (m *Memory) UpsertLexemes(ctx context.Context, entries []lexicon.Input) ([]LexemeResult, []int64, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	rows, bad := lexicon.Prepare(entries)
+	if bad != nil {
+		return nil, nil, bad
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	foundAt := make([]int, len(rows))
+	var missing []lexicon.Issue
+	for i, row := range rows {
+		foundAt[i] = -1
+		for j, stored := range m.lexemes {
+			if units.Normalize(stored.lx.TextNFC) == row.TextNFC {
+				foundAt[i] = j
+				break
+			}
+		}
+		if foundAt[i] < 0 && lexicon.TranslitBlank(row) {
+			missing = append(missing, lexicon.NewTranslitIssue(i))
+		}
+	}
+	if len(missing) > 0 {
+		return nil, nil, &lexicon.Invalid{Issues: missing}
+	}
+	out := make([]LexemeResult, 0, len(rows))
+	for i, row := range rows {
+		found := foundAt[i]
+		if found < 0 {
+			m.nextLex++
+			m.lexemes = append(m.lexemes, storedLexeme{
+				id:       m.nextLex,
+				lx:       memoryLexeme(Lexeme{}, row),
+				verified: row.Verified != nil && *row.Verified,
+			})
+			out = append(out, LexemeResult{TextNFC: row.TextNFC, ID: m.nextLex, Status: lexicon.StatusCreated})
+			continue
+		}
+		cur := m.lexemes[found]
+		next := memoryLexeme(cur.lx, row)
+		verified := cur.verified
+		if row.Verified != nil {
+			verified = *row.Verified
+		}
+		if cur.lx == next && cur.verified == verified {
+			out = append(out, LexemeResult{TextNFC: row.TextNFC, ID: cur.id, Status: lexicon.StatusUnchanged})
+			continue
+		}
+		m.lexemes[found].lx = next
+		m.lexemes[found].verified = verified
+		out = append(out, LexemeResult{TextNFC: row.TextNFC, ID: cur.id, Status: lexicon.StatusUpdated})
+	}
+	return out, []int64{}, nil
+}
+
+// memoryLexeme keeps omitted pos, gender, plural, and translit.
+// A set pointer replaces the stored value, including an empty string.
+func memoryLexeme(cur Lexeme, row lexicon.Row) Lexeme {
+	out := cur
+	out.TextNFC = row.TextNFC
+	out.Bare = row.Bare
+	out.Gloss = row.Gloss
+	if row.POS != nil {
+		out.POS = *row.POS
+	}
+	if row.Gender != nil {
+		out.Gender = *row.Gender
+	}
+	if row.Plural != nil {
+		out.Plural = *row.Plural
+	}
+	if row.Translit != nil {
+		out.Translit = *row.Translit
+	}
+	return out
 }
 
 // KnownLexemes implements units.Lookup. Words introduced by a saved shared

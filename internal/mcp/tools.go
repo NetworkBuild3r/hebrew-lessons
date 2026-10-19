@@ -27,6 +27,7 @@ var (
 type service struct {
 	course    CourseReader
 	lexicon   LexiconReader
+	lexemes   LexiconWriter
 	lexLookup units.Lookup
 	units     UnitWriter
 	audio     AudioGenerator
@@ -457,7 +458,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}, svc.getContext)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "lookup",
-		Description: "Find a lexicon entry by pointed Hebrew, unpointed Hebrew, or an English gloss. Use an entry's text_nfc as the spelling in a unit. A miss returns suggestions and is not an error. Do not invent a lexeme here; upsert_lexemes is a later tool.",
+		Description: "Find a lexicon entry by pointed Hebrew, unpointed Hebrew, or an English gloss. Use an entry's text_nfc as the spelling in a unit. A miss returns suggestions and is not an error. Add a missing entry with upsert_lexemes.",
 		Annotations: readOnly,
 	}, svc.lookup)
 	mcp.AddTool(server, &mcp.Tool{
@@ -467,7 +468,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}, svc.validateUnit)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "put_unit",
-		Description: "Save a draft revision. Admin only, including the static token: a learner call is a tool error, forbidden: admin only, even for scope learner:<their own id>. scope is required: shared, or learner:<id> for one learner. Scope is not inside the unit document. Send unitId to update; omit it to create. The same document, position, and scope do not create another revision. Changing scope does. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. This does not publish.",
+		Description: "Save a draft revision. Admin only, including the static token: a learner call is a tool error, forbidden: admin only, even for scope learner:<their own id>. scope is required: shared, or learner:<id> for one learner. Scope is not inside the unit document. Send unitId to update; omit it to create. The same document, position, and scope do not create another revision. lesson_items are still rebuilt, so a unit saved before its words were in the lexicon gains those rows without a new revision. Changing scope does create a revision. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. This does not publish.",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    false,
 			IdempotentHint:  true,
@@ -475,6 +476,7 @@ func registerTools(server *mcp.Server, svc *service) {
 			OpenWorldHint:   &falseHint,
 		},
 	}, svc.putUnit)
+	registerUpsertLexemes(server, svc)
 	registerGenerateAudio(server, svc)
 	registerLearnerWords(server, svc)
 }

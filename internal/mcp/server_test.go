@@ -55,7 +55,7 @@ func TestAuthRejectAndAccept(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 6 {
+	if len(tools.Tools) != 7 {
 		t.Fatalf("tools = %d", len(tools.Tools))
 	}
 }
@@ -149,11 +149,11 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 		if !strings.Contains(string(raw), "additionalProperties") {
 			t.Fatalf("%s schema is not closed: %s", tool.Name, raw)
 		}
-		if tool.Annotations == nil || !tool.Annotations.ReadOnlyHint && tool.Name != "put_unit" && tool.Name != "generate_audio" {
+		if tool.Annotations == nil || (!tool.Annotations.ReadOnlyHint && tool.Name != "put_unit" && tool.Name != "upsert_lexemes" && tool.Name != "generate_audio") {
 			t.Fatalf("%s annotations %#v", tool.Name, tool.Annotations)
 		}
 	}
-	for _, name := range []string{"get_context", "lookup", "validate_unit", "put_unit", "generate_audio", "get_learner_words"} {
+	for _, name := range []string{"get_context", "lookup", "validate_unit", "put_unit", "upsert_lexemes", "generate_audio", "get_learner_words"} {
 		if !gotNames[name] {
 			t.Fatalf("missing %s in %#v", name, gotNames)
 		}
