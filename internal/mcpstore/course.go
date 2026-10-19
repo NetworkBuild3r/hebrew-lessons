@@ -2,9 +2,6 @@ package mcpstore
 
 import (
 	"context"
-	"fmt"
-	"slices"
-	"strings"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
 )
@@ -167,45 +164,10 @@ func (s *Store) CompletedSharedUnits(ctx context.Context, userID int64) ([]mcp.U
 	return out, nil
 }
 
-// LearnerKnownLexemes is KnownLexemeIDs mapped to pointed text and sorted.
+// LearnerKnownLexemes is db.LearnerKnownLexemes.
 func (s *Store) LearnerKnownLexemes(ctx context.Context, userID int64) ([]string, error) {
 	if err := s.ready(ctx); err != nil {
 		return nil, err
 	}
-	ids, err := s.db.KnownLexemeIDs(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if len(ids) == 0 {
-		return []string{}, nil
-	}
-	conn, err := s.conn(ctx)
-	if err != nil {
-		return nil, err
-	}
-	marks := make([]string, len(ids))
-	args := make([]any, len(ids))
-	for i, id := range ids {
-		marks[i] = "?"
-		args[i] = id
-	}
-	rows, err := conn.QueryContext(ctx, `
-		SELECT text_nfc FROM lexemes WHERE id IN (`+strings.Join(marks, ", ")+`)`, args...)
-	if err != nil {
-		return nil, fmt.Errorf("mcpstore: known lexemes: %w", err)
-	}
-	defer rows.Close()
-	out := []string{}
-	for rows.Next() {
-		var text string
-		if err := rows.Scan(&text); err != nil {
-			return nil, fmt.Errorf("mcpstore: known lexemes: %w", err)
-		}
-		out = append(out, text)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("mcpstore: known lexemes: %w", err)
-	}
-	slices.Sort(out)
-	return out, nil
+	return s.db.LearnerKnownLexemes(ctx, userID)
 }

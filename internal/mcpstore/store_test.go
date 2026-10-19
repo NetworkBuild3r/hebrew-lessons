@@ -484,8 +484,6 @@ func TestSearchLexemes(t *testing.T) {
 }
 
 // TestPutUnitIdempotentScopeAndItems calls mcp.UnitWriter.PutUnit.
-// db.PutUnit does not implement that contract yet, so this test fails
-// until #63 is updated.
 func TestPutUnitIdempotentScopeAndItems(t *testing.T) {
 	when := time.Date(2026, 10, 18, 11, 0, 0, 0, time.UTC)
 	store, raw := openAdapter(t, fixedClock{when})
@@ -562,9 +560,8 @@ func TestPutUnitIdempotentScopeAndItems(t *testing.T) {
 }
 
 // TestPutUnitPublishedEditAndUnchanged calls mcp.UnitWriter.PutUnit.
-// An unchanged put must leave a published unit published with no new
-// revision, and an edit must set it back to draft. db.PutUnit does
-// neither, so this test fails until #63 is updated.
+// An unchanged put leaves a published unit published with no new
+// revision. An edit sets it back to draft.
 func TestPutUnitPublishedEditAndUnchanged(t *testing.T) {
 	when := time.Date(2026, 10, 18, 11, 0, 0, 0, time.UTC)
 	store, raw := openAdapter(t, fixedClock{when})
