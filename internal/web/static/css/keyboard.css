@@ -1,0 +1,109 @@
+/* Hebrew on-screen keyboard (views/keyboard.templ, static/js/hekbd.js).
+   Colours, radius, space, type, and the tap size come from tokens.css. Logical
+   properties only. Nothing transitions. A key is a button that is the whole
+   hit area: at least --size-tap tall and, on a 360px screen with ten keys in
+   a row, about 30px wide. The cap inside it is the drawn key. The rows are
+   always left to right (the page sets dir="ltr" on them), like a PC keyboard. */
+
+.hk {
+  display: grid;
+  gap: var(--space-1);
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: calc(var(--space-9) * 6);
+  margin-inline: auto;
+  padding: var(--space-2);
+  background: var(--surface-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+.hk-row { display: flex; }
+
+.hk-key {
+  position: relative;
+  display: grid;
+  flex: 1 1 0;
+  min-inline-size: calc(var(--space-6) - var(--space-1));
+  min-block-size: var(--size-tap);
+  padding: calc(var(--space-1) / 2);
+  color: var(--text);
+  font-family: var(--font-he);
+  font-size: var(--fs-he-md);
+  line-height: 1;
+}
+.hk-key__cap {
+  display: grid;
+  place-items: center;
+  min-inline-size: 0;
+  background: var(--surface);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-sm);
+}
+.hk-key:focus-visible {
+  outline-width: calc(var(--space-1) / 2);
+  outline-offset: calc(var(--space-1) / -2);
+}
+@media (hover: hover) {
+  .hk-key:hover .hk-key__cap { background: var(--surface-raised); }
+}
+.hk-key:active .hk-key__cap,
+.hk-key[data-pressed] .hk-key__cap {
+  background: var(--surface-raised);
+  border-color: var(--focus-ring);
+  transform: scale(.94);
+}
+
+/* Final forms sit on their own keys, as on the physical layout. A thin top
+   rule on the cap marks them; the letter itself tells them apart. */
+.hk-key[data-final] .hk-key__cap { border-block-start-width: 3px; }
+
+.hk-key--act { font-family: var(--font-ui); font-size: var(--fs-small); font-weight: 700; }
+.hk-key--back { flex: 2 1 0; }
+.hk-key--space { flex: 6 1 0; }
+.hk-key--enter { flex: 3 1 0; }
+
+/* Key hints: the Latin key that types this letter on a US keyboard. They are
+   on for the first three sessions and after that when the learner turns them on. */
+.hk-key__hint {
+  display: none;
+  position: absolute;
+  inset-block-start: var(--space-1);
+  inset-inline-end: var(--space-1);
+  font-family: var(--font-ui);
+  font-size: var(--fs-caption);
+  font-weight: 400;
+  line-height: 1;
+  color: var(--muted);
+  pointer-events: none;
+}
+.hk[data-hints="on"] .hk-key__hint { display: block; }
+
+.hk-hints {
+  justify-self: start;
+  min-block-size: var(--size-tap);
+  padding-inline: var(--space-4);
+  color: var(--text);
+  font-size: var(--fs-small);
+  font-weight: 700;
+  border: 2px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+}
+.hk-hints[aria-pressed="true"] { background: var(--surface); border-color: var(--text); }
+
+/* The input a keyboard fills (HebrewInput). Right to left, pointed-safe line height. */
+.hk-input {
+  inline-size: 100%;
+  min-block-size: var(--size-cta);
+  padding-inline: var(--space-4);
+  background: var(--surface);
+  color: var(--text);
+  border: 2px solid var(--hairline-strong);
+  border-radius: var(--radius-control);
+  font-family: var(--font-he);
+  font-size: var(--fs-he-lg);
+  line-height: var(--lh-he-body);
+  text-align: start;
+}

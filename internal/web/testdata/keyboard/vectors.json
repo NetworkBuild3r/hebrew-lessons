@@ -1,0 +1,42 @@
+{
+  "_comment": "Shared by keyboard_test.go (Go) and hekbd.test.js (Node). ASCII only, so the NFC walk over testdata sees it as it is. keys is the Israeli layout (SI-1452) written out independently of the Go table. normalize.out is units.Normalize(in), the rule the audio package uses. edit is [value, selectionStart, selectionEnd, text] to [value, caret]; a null caret means the end, and empty text is backspace.",
+  "keys": {
+    "KeyE": "\u05e7", "KeyR": "\u05e8", "KeyT": "\u05d0", "KeyY": "\u05d8", "KeyU": "\u05d5",
+    "KeyI": "\u05df", "KeyO": "\u05dd", "KeyP": "\u05e4",
+    "KeyA": "\u05e9", "KeyS": "\u05d3", "KeyD": "\u05d2", "KeyF": "\u05db", "KeyG": "\u05e2",
+    "KeyH": "\u05d9", "KeyJ": "\u05d7", "KeyK": "\u05dc", "KeyL": "\u05da", "Semicolon": "\u05e3",
+    "KeyZ": "\u05d6", "KeyX": "\u05e1", "KeyC": "\u05d1", "KeyV": "\u05d4", "KeyB": "\u05e0",
+    "KeyN": "\u05de", "KeyM": "\u05e6", "Comma": "\u05ea", "Period": "\u05e5"
+  },
+  "normalize": [
+    {"name": "trims", "in": "  \u05e9\u05dc\u05d5\u05dd  ", "out": "\u05e9\u05dc\u05d5\u05dd"},
+    {"name": "drops RLM", "in": "\u05e9\u200f\u05dc\u05d5\u05dd", "out": "\u05e9\u05dc\u05d5\u05dd"},
+    {"name": "drops embedding marks", "in": "\u202b\u05e9\u05dc\u05d5\u05dd\u202c", "out": "\u05e9\u05dc\u05d5\u05dd"},
+    {"name": "drops ZWJ", "in": "\u05d0\u200d\u05d1", "out": "\u05d0\u05d1"},
+    {"name": "drops BOM", "in": "\ufeff\u05d0\u05d1", "out": "\u05d0\u05d1"},
+    {"name": "collapses spaces", "in": "\u05e9\u05dc\u05d5\u05dd   \u05e2\u05d5\u05dc\u05dd", "out": "\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"},
+    {"name": "no-break space is a space", "in": "\u05e9\u05dc\u05d5\u05dd\u00a0\u05e2\u05d5\u05dc\u05dd", "out": "\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"},
+    {"name": "tab and newline", "in": "\u05d0\t\n\u05d1", "out": "\u05d0 \u05d1"},
+    {"name": "NEL and ideographic space trim", "in": "\u0085\u05d0\u3000", "out": "\u05d0"},
+    {"name": "dagesh before vowel is reordered to NFC", "in": "\u05d1\u05bc\u05b8", "out": "\u05d1\u05b8\u05bc"},
+    {"name": "shin dot after vowel is reordered to NFC", "in": "\u05e9\u05c1\u05b8\u05dc\u05d5\u05b9\u05dd", "out": "\u05e9\u05b8\u05c1\u05dc\u05d5\u05b9\u05dd"},
+    {"name": "final letters stay final", "in": "\u05da\u05dd\u05df\u05e3\u05e5", "out": "\u05da\u05dd\u05df\u05e3\u05e5"},
+    {"name": "empty", "in": "", "out": ""},
+    {"name": "only spaces", "in": " \u00a0\t ", "out": ""}
+  ],
+  "edit": [
+    {"name": "append", "args": ["\u05d0\u05d1", 2, 2, "\u05ea"], "want": ["\u05d0\u05d1\u05ea", 3]},
+    {"name": "append with no caret", "args": ["\u05d0\u05d1", null, null, "\u05ea"], "want": ["\u05d0\u05d1\u05ea", 3]},
+    {"name": "insert in the middle", "args": ["\u05d0\u05ea", 1, 1, "\u05d1"], "want": ["\u05d0\u05d1\u05ea", 2]},
+    {"name": "replace a selection", "args": ["\u05d0\u05d1\u05ea", 1, 2, "\u05d2"], "want": ["\u05d0\u05d2\u05ea", 2]},
+    {"name": "backspace removes one letter", "args": ["\u05d0\u05d1\u05ea", 3, 3, ""], "want": ["\u05d0\u05d1", 2]},
+    {"name": "backspace removes a final letter", "args": ["\u05e9\u05dc\u05d5\u05dd", 4, 4, ""], "want": ["\u05e9\u05dc\u05d5", 3]},
+    {"name": "backspace in the middle", "args": ["\u05d0\u05d1\u05ea", 2, 2, ""], "want": ["\u05d0\u05ea", 1]},
+    {"name": "backspace at the start does nothing", "args": ["\u05d0\u05d1", 0, 0, ""], "want": ["\u05d0\u05d1", 0]},
+    {"name": "backspace on an empty value", "args": ["", 0, 0, ""], "want": ["", 0]},
+    {"name": "backspace deletes a selection", "args": ["\u05d0\u05d1\u05ea", 1, 3, ""], "want": ["\u05d0", 1]},
+    {"name": "backspace with no caret", "args": ["\u05d0\u05d1", null, null, ""], "want": ["\u05d0", 1]},
+    {"name": "backspace removes a surrogate pair whole", "args": ["\u05d0\ud83d\ude00", 3, 3, ""], "want": ["\u05d0", 1]},
+    {"name": "space", "args": ["\u05d0", 1, 1, " "], "want": ["\u05d0 ", 2]}
+  ]
+}
