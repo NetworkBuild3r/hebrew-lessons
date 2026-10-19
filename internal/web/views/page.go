@@ -10,6 +10,17 @@ import (
 // in its own bdi, not inside this string.
 const AppName = "דֶּרֶךְ עִבְרִית"
 
+// Sign-in copy. Both languages render together through Pair.
+// GoogleSignInStart is auth's browser sign-in route. The shell only links
+// to it; the auth package owns the OAuth redirect.
+const (
+	SignInHE          = "כְּנִיסָה לְלִמּוּד"
+	SignInEN          = "Sign in to study"
+	SignInGoogleHE    = "כְּנִיסָה עִם גּוּגֶל"
+	SignInGoogleEN    = "Sign in with Google"
+	GoogleSignInStart = "/auth/google/start"
+)
+
 // UnitTitle is the one lesson the shell shows until the queue is wired.
 const UnitTitle = "הַבֹּקֶר שֶׁלִּי"
 
@@ -137,6 +148,12 @@ func (u UI) DocTitle(current string) string {
 		name = u.ProgressHeading
 	case "lesson":
 		name = u.LessonHeading
+	case "signin":
+		if u.Lang == "en" {
+			name = SignInEN
+		} else {
+			name = SignInHE
+		}
 	}
 	return name + " · " + AppName
 }

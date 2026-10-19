@@ -92,6 +92,38 @@ templ Progress(p Page) {
 	}
 }
 
+// SignIn is the signed-out page. No rail, dock, or other navigation:
+// logout lands here, and the only action is auth's Google start route.
+templ SignIn(p Page) {
+	<!DOCTYPE html>
+	<html lang={ p.Lang } dir={ p.Dir } translate="no">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+			@themeHead()
+			<link rel="stylesheet" href="/static/css/tokens.css"/>
+			<link rel="stylesheet" href="/static/css/base.css"/>
+			<title>{ p.Title }</title>
+		</head>
+		<body>
+			<main id="main" class="signin">
+				<section class="signin__card">
+					<h1 class="brand signin__brand">
+						<span class="brand__mark" aria-hidden="true">ע</span>
+						<span class="brand__name">@H(AppName)</span>
+					</h1>
+					<p class="signin__lede">
+						@Pair(p.Lang, SignInHE, SignInEN)
+					</p>
+					<a class="btn btn-primary" href={ templ.SafeURL(GoogleSignInStart) }>
+						@Pair(p.Lang, SignInGoogleHE, SignInGoogleEN)
+					</a>
+				</section>
+			</main>
+		</body>
+	</html>
+}
+
 templ Lesson(p Page) {
 	@Layout(p) {
 		<article class="sheet">

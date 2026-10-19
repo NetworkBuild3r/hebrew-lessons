@@ -73,6 +73,14 @@ func routes(health http.Handler, tokens CSRFToken) *http.ServeMux {
 	mux.HandleFunc("GET /lesson", func(w http.ResponseWriter, r *http.Request) {
 		render(w, r, views.Lesson(views.NewPage(r.URL.Query().Get("lang"), csrfValue(tokens, r), "lesson")))
 	})
+	mux.HandleFunc("GET /signin", func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := auth.CurrentUser(r.Context()); ok {
+			w.Header().Set("Cache-Control", "no-store")
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		render(w, r, views.SignIn(views.NewPage(r.URL.Query().Get("lang"), csrfValue(tokens, r), "signin")))
+	})
 	return mux
 }
 

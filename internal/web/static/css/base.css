@@ -392,6 +392,44 @@ h1 {
   box-shadow: var(--shadow-2);
   border: 1px solid var(--hairline);
 }
+
+/* Signed-out sign-in. One card, no shell nav. Width is four --space-9. */
+.signin {
+  min-block-size: 100dvb;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+}
+.signin__card {
+  inline-size: min(100%, calc(var(--space-9) * 4));
+  display: grid;
+  justify-items: center;
+  gap: var(--space-5);
+  padding: var(--space-6);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-2);
+  text-align: center;
+}
+.signin__brand {
+  flex-direction: column;
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
+  font-weight: 400;
+  line-height: var(--lh-body);
+}
+.signin__lede {
+  color: var(--muted);
+  font-size: var(--fs-small);
+  line-height: var(--lh-he-body);
+}
+.signin__card .pair { justify-content: center; }
+.signin__card .btn {
+  inline-size: 100%;
+  margin-block-start: 0;
+}
 .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
