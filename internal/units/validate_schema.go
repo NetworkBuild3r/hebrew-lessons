@@ -44,6 +44,16 @@ func schemaIssues(doc *Unit) []Issue {
 			case !knownActivity(typ):
 				out = append(out, issue(RuleSchemaActivity, SeverityBlock, at("lessons", i, "activities", j, "type"), fmt.Sprintf("unknown activity type %q", act.Type)))
 			}
+			if typ == ActivityDialogue {
+				// A dialogue has lines, not text. dialogueIssues checks the line
+				// count and the speakers; each line still needs its text.
+				for k, line := range act.Lines {
+					if strings.TrimSpace(line.Text) == "" {
+						out = append(out, issue(RuleSchemaRequired, SeverityBlock, at("lessons", i, "activities", j, "lines", k, "text"), "dialogue line text is required"))
+					}
+				}
+				continue
+			}
 			if strings.TrimSpace(act.Text) == "" {
 				out = append(out, issue(RuleSchemaRequired, SeverityBlock, at("lessons", i, "activities", j, "text"), "activity text is required"))
 			}

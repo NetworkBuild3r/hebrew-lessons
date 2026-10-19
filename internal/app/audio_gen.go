@@ -24,11 +24,11 @@ type audioGen struct {
 }
 
 func (a audioGen) GenerateAudio(ctx context.Context, req mcp.GenerateAudioRequest) ([]mcp.AudioClip, error) {
-	texts, err := a.texts(ctx, req)
+	items, err := a.items(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	got, err := a.gen.Generate(ctx, texts)
+	got, err := a.gen.GenerateItems(ctx, items)
 	if err != nil {
 		slog.Error("audio generate", "err", err)
 		if strings.Contains(err.Error(), "at most") {
@@ -41,6 +41,7 @@ func (a audioGen) GenerateAudio(ctx context.Context, req mcp.GenerateAudioReques
 		out = append(out, mcp.AudioClip{
 			Text:    item.Text,
 			TextNFC: item.TextNFC,
+			Speaker: item.Speaker,
 			Status:  item.Status,
 			AudioID: item.AudioID,
 			Error:   item.Detail,
@@ -49,40 +50,57 @@ func (a audioGen) GenerateAudio(ctx context.Context, req mcp.GenerateAudioReques
 	return out, nil
 }
 
-func (a audioGen) texts(ctx context.Context, req mcp.GenerateAudioRequest) ([]string, error) {
-	texts := append([]string{}, req.Texts...)
+// itemKey is what makes two items one clip: the normalized text and the speaker.
+func itemKey(text, speaker string) string {
+	return speaker + "\x00" + audio.NormalizeText(text)
+}
+
+// items is the request as a list of clips to make, in order: texts, then lines,
+// then what the unit adds. An item that repeats an earlier one is dropped, so a
+// text the caller passed is not asked for twice when the unit has it too. The
+// speaker of a line is checked against a and b by the tool and again by the
+// generator, and nothing here maps a speaker to a voice.
+func (a audioGen) items(ctx context.Context, req mcp.GenerateAudioRequest) ([]audio.Item, error) {
+	var items []audio.Item
 	seen := map[string]bool{}
-	for _, text := range texts {
-		if key := audio.NormalizeText(text); key != "" {
-			seen[key] = true
-		}
+	// What the caller passed is kept as sent, one result per entry, even a
+	// repeat or a blank: the result row says skipped or failed. Only what the
+	// unit adds is dropped when it repeats something already asked for.
+	for _, text := range req.Texts {
+		seen[itemKey(text, "")] = true
+		items = append(items, audio.Item{Text: text})
+	}
+	for _, l := range req.Lines {
+		seen[itemKey(l.Text, l.Speaker)] = true
+		items = append(items, audio.Item{Text: l.Text, Speaker: l.Speaker})
 	}
 	if req.UnitID != nil {
-		more, err := a.unitTexts(ctx, *req.UnitID)
+		more, err := a.unitItems(ctx, *req.UnitID)
 		if err != nil {
 			return nil, err
 		}
-		for _, text := range more {
-			key := audio.NormalizeText(text)
-			if key == "" || seen[key] {
+		for _, it := range more {
+			key := itemKey(it.Text, it.Speaker)
+			if seen[key] {
 				continue
 			}
 			seen[key] = true
-			texts = append(texts, text)
+			items = append(items, it)
 		}
 	}
-	if len(texts) == 0 {
-		return nil, errors.New("Pass texts, or a unitId whose activities have Hebrew text.")
+	if len(items) == 0 {
+		return nil, errors.New("Pass texts, lines, or a unitId whose activities have Hebrew text.")
 	}
-	if len(texts) > audio.MaxTexts {
+	if len(items) > audio.MaxTexts {
 		return nil, fmt.Errorf("At most %d texts per call.", audio.MaxTexts)
 	}
-	return texts, nil
+	return items, nil
 }
 
-// unitTexts is the Hebrew activity text validate_unit checks for a clip,
-// in document order, one row per normalized spelling.
-func (a audioGen) unitTexts(ctx context.Context, unitID int64) ([]string, error) {
+// unitItems is the Hebrew activity text validate_unit checks for a clip, in
+// document order, one row per normalized spelling and speaker. A dialogue
+// contributes one row per line with that line's speaker.
+func (a audioGen) unitItems(ctx context.Context, unitID int64) ([]audio.Item, error) {
 	conn, err := a.store.DB()
 	if err != nil {
 		slog.Error("audio unit", "err", err)
@@ -102,18 +120,27 @@ func (a audioGen) unitTexts(ctx context.Context, unitID int64) ([]string, error)
 		return nil, errors.New("The unit document could not be read.")
 	}
 	seen := map[string]bool{}
-	var out []string
+	var out []audio.Item
+	take := func(text, speaker string) {
+		if strings.TrimSpace(text) == "" || !hebrewText(text) {
+			return
+		}
+		key := itemKey(text, speaker)
+		if audio.NormalizeText(text) == "" || seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, audio.Item{Text: text, Speaker: speaker})
+	}
 	for _, lesson := range unit.Lessons {
 		for _, act := range lesson.Activities {
-			if strings.TrimSpace(act.Text) == "" || !hebrewText(act.Text) {
+			if act.Type == units.ActivityDialogue {
+				for _, line := range act.Lines {
+					take(line.Text, line.Speaker)
+				}
 				continue
 			}
-			key := audio.NormalizeText(act.Text)
-			if key == "" || seen[key] {
-				continue
-			}
-			seen[key] = true
-			out = append(out, act.Text)
+			take(act.Text, "")
 		}
 	}
 	return out, nil

@@ -37,6 +37,28 @@
 // beginner brief with 3 to 4 new words in a 20-token passage can never pass,
 // and north-star section 7.3 stages the figure for that reason. BriefFacts
 // carries the tier's number, and a value of zero or less means 0.95.
+//
+// # Dialogue (INIT-015/SPEC-026)
+//
+// A dialogue is a conversation between two people, one woman and one man. It
+// is an activity with type "dialogue", no text, and a list of lines. Each line
+// is {"speaker": "a" | "b", "text": "<pointed Hebrew>"}. Speaker a is the
+// female voice and speaker b is the male voice, fixed for the whole unit. A
+// story stays a single-voice narration.
+//
+// Every text rule judges a dialogue line by line, as if each line were its own
+// activity, and an issue points at the line (/lessons/0/activities/2/lines/1/text).
+// A line is pointed, mapped to the lexicon, covered by the brief, and held to
+// the per-text length limit exactly as a story is. A dialogue is not a way
+// around the brief. Audio is checked in the speaker's voice: a clip that
+// exists only in the other voice does not count (audio.missing).
+//
+//	unit.dialogue_lines     A dialogue has fewer than 2 or more than 8 lines, or has text, or a non-dialogue activity has lines (block).
+//	unit.dialogue_speakers  A line's speaker is not a or b, or one of the two never speaks (block).
+//
+// A lookup that can check a clip in a speaker's voice implements
+// SpeakerLookup. One that cannot makes a unit with a dialogue fail with
+// schema.lookup. It never answers from a clip in the wrong voice.
 package units
 
 import "context"
@@ -59,7 +81,21 @@ const (
 	ActivityPattern    = "pattern"
 	ActivityStory      = "story"
 	ActivityShadow     = "shadow"
+	ActivityDialogue   = "dialogue"
 )
+
+// The two speakers of a dialogue. A is the female voice and B is the male voice.
+const (
+	SpeakerA = "a"
+	SpeakerB = "b"
+
+	// MinDialogueLines and MaxDialogueLines bound one dialogue.
+	MinDialogueLines = 2
+	MaxDialogueLines = 8
+)
+
+// ValidSpeaker reports whether s is a or b. It is exact: "A" and " a" are not speakers.
+func ValidSpeaker(s string) bool { return s == SpeakerA || s == SpeakerB }
 
 // Issue is one validator finding. Pointer is a JSON pointer into the document.
 type Issue struct {
@@ -92,10 +128,35 @@ type Lesson struct {
 
 // Activity is one screen. Type is one of the Activity* constants.
 // Text is the Hebrew the activity speaks or asks about, when it has any.
-// Further fields land with the rules.
+// A dialogue has Lines instead of Text.
 type Activity struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
+	Type  string         `json:"type"`
+	Text  string         `json:"text,omitempty"`
+	Lines []DialogueLine `json:"lines,omitempty"`
+
+	// speaker is set only on the one-line views of a dialogue that the validator
+	// builds (see flatten). It is never read from or written to JSON.
+	speaker string
+}
+
+// DialogueLine is one line of a dialogue. Speaker is a (female voice) or b
+// (male voice). Text is pointed Hebrew in NFC.
+type DialogueLine struct {
+	Speaker string `json:"speaker"`
+	Text    string `json:"text"`
+}
+
+// Texts returns every Hebrew string the activity speaks, in order: Text for an
+// ordinary activity, one entry per line for a dialogue.
+func (a Activity) Texts() []string {
+	if a.Type == ActivityDialogue {
+		out := make([]string, 0, len(a.Lines))
+		for _, l := range a.Lines {
+			out = append(out, l.Text)
+		}
+		return out
+	}
+	return []string{a.Text}
 }
 
 // Lookup is the read surface Validate uses. Implementations live next to
@@ -120,6 +181,15 @@ type Lookup interface {
 	// The bool is false when the text is not in the lexicon.
 	// Gender is "", "m", "f", or "both". Backend Dev approved this shape.
 	Facts(ctx context.Context, textNFC string) (LexemeFacts, bool, error)
+}
+
+// SpeakerLookup is an optional extension of Lookup. HasAudioForSpeaker reports
+// whether a clip for textNFC exists in the voice of speaker a or b. A dialogue
+// line is checked with it, never with HasAudio, because HasAudio accepts a clip
+// in any voice. An implementation that cannot tell the voices apart must not
+// implement it.
+type SpeakerLookup interface {
+	HasAudioForSpeaker(ctx context.Context, textNFC, speaker string) (bool, error)
 }
 
 // LexemeFacts is the lexicon slice Facts returns. Backend Dev approved

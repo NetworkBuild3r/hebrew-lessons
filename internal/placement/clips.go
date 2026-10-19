@@ -21,6 +21,18 @@ const (
 //go:embed letters.json
 var lettersJSON []byte
 
+// manifestJSON is audio-manifest.json compiled into the binary. The image is
+// distroless and has no repository checkout, so `hebrew audio-ensure` reads the
+// list of clips from here (INIT-015/SPEC-026).
+//
+//go:embed audio-manifest.json
+var manifestJSON []byte
+
+// EmbeddedManifest is the committed clip manifest, as compiled into this binary.
+func EmbeddedManifest() (ClipManifest, error) {
+	return ParseManifest(manifestJSON)
+}
+
 // Letter is one Part 0 item: the learner hears SyllableText and picks
 // LetterNFC (a letter with its vowel) from LetterNFC and Distractors.
 // SyllableText is the exact pointed text the clip is generated from.

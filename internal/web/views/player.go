@@ -1,5 +1,7 @@
 package views
 
+import "github.com/a-h/templ"
+
 // Screen is one lesson page. Empty is the honest state when nothing
 // published is waiting. Title, Gloss, and Situation describe the unit.
 // Activity is the current step, or the completion panel when Done is set.
@@ -30,6 +32,63 @@ type Activity struct {
 	Continue      string
 	Asking        bool
 	HomeHref      string
+	// Dialogue is set for a dialogue step. It replaces Words and Audio.
+	Dialogue *Dialogue
+}
+
+// Dialogue is a conversation between two people, shown line by line in order.
+type Dialogue struct {
+	Lines []DialogueLine
+}
+
+// DialogueLine is one line. Speaker is a or b, Name is the speaker's fixed name
+// (SpeakerName), and Words are the line's words with their sound and meaning.
+// Audio is the clip in the speaker's voice, empty when there is none, and then
+// the line has no play control.
+type DialogueLine struct {
+	Index   int
+	Speaker string
+	Name    string
+	Words   []Word
+	Audio   string
+}
+
+// The two speakers' names. They are neutral first names, fixed in copy, so the
+// learner can follow who is talking: a is the woman's voice and b is the man's.
+const (
+	SpeakerNameA = "Dana"
+	SpeakerNameB = "Avi"
+)
+
+// SpeakerName is the fixed name shown for a speaker. An unknown speaker has none.
+func SpeakerName(speaker string) string {
+	switch speaker {
+	case "a":
+		return SpeakerNameA
+	case "b":
+		return SpeakerNameB
+	default:
+		return ""
+	}
+}
+
+// dialogueLineClass is the CSS class of a line. The two speakers sit at opposite
+// ends of the column, so a line's place tells who is speaking as well as its name.
+func dialogueLineClass(speaker string) string {
+	if speaker == "b" {
+		return "dlg__line dlg__line--b"
+	}
+	return "dlg__line dlg__line--a"
+}
+
+// dialogueClipID is the id of the audio element of line i.
+func dialogueClipID(i int) string { return "dlg-clip-" + Num(i) }
+
+// dialogueOrbAttrs are the attributes of a line's play control. data-dlg-line
+// marks it for dialogue.js, and data-audio names its clip so the orb pulses
+// while the clip plays (motion.js).
+func dialogueOrbAttrs(i int) templ.Attributes {
+	return templ.Attributes{"data-audio": dialogueClipID(i), "data-dlg-line": Num(i)}
 }
 
 // Word is one token in an activity. Plain is a number or a Latin token.

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
@@ -31,6 +32,7 @@ const maxStudyQueues = 128
 type server struct {
 	store    *db.Store
 	audioDir string
+	voices   audio.Voices
 	study    *session.Service
 	engine   *activity.Engine
 	deck     placementDeck

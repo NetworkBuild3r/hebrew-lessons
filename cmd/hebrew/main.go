@@ -50,6 +50,8 @@ func run(args []string) error {
 		switch args[0] {
 		case "import-audio":
 			return runImport(args[1:])
+		case "audio-ensure":
+			return runAudioEnsure(args[1:])
 		case "import-tanakh":
 			return runImportTanakh(args[1:])
 		case "jobs":
@@ -82,6 +84,8 @@ func runServer() error {
 		"cookie_secure", cfg.CookieSecure,
 		"trusted_proxies", len(cfg.TrustedProxies),
 		"tts", application.TTS() != nil,
+		// Whether speaker b of a dialogue has a voice. Never the voice id.
+		"male_voice", cfg.ElevenLabsVoiceMale != "",
 	)
 
 	stopJobs, err := startJobs(cfg, application)

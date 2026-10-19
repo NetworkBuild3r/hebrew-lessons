@@ -79,7 +79,7 @@ func SkillOfActivity(typ string) string {
 	switch typ {
 	case ActivityListenPick, ActivityShadow, "audio_match":
 		return SkillListen
-	case ActivityStory, ActivityCloze, ActivityPattern, "read_pick", "word_match":
+	case ActivityStory, ActivityDialogue, ActivityCloze, ActivityPattern, "read_pick", "word_match":
 		return SkillRead
 	case ActivityRecall, "type_it":
 		return SkillRecall
@@ -91,14 +91,17 @@ func SkillOfActivity(typ string) string {
 }
 
 // exposureActivity reports an activity that shows a word without checking it.
-// A story is read and a shadow is repeated aloud; neither takes an answer, so
-// either one can introduce a new word. Every other type is checked.
+// A story or a dialogue is read and a shadow is repeated aloud; none takes an
+// answer, so any of them can introduce a new word. Every other type is checked.
 func exposureActivity(typ string) bool {
-	return typ == ActivityStory || typ == ActivityShadow
+	return typ == ActivityStory || typ == ActivityShadow || typ == ActivityDialogue
 }
 
+// passageActivity reports the types that hold running text, which coverage and
+// the length limit judge. A dialogue is judged one line at a time, because
+// briefIssues reads the flattened document.
 func passageActivity(typ string) bool {
-	return typ == ActivityStory || typ == ActivityListenPick
+	return typ == ActivityStory || typ == ActivityListenPick || typ == ActivityDialogue
 }
 
 // briefPointer is where a brief issue about the brief itself points. The brief
@@ -181,6 +184,10 @@ func markupIssues(doc *Unit) []Issue {
 		for j, act := range les.Activities {
 			check(at("lessons", i, "activities", j, "type"), act.Type)
 			check(at("lessons", i, "activities", j, "text"), act.Text)
+			for k, line := range act.Lines {
+				check(at("lessons", i, "activities", j, "lines", k, "speaker"), line.Speaker)
+				check(at("lessons", i, "activities", j, "lines", k, "text"), line.Text)
+			}
 		}
 	}
 	return out
@@ -253,7 +260,15 @@ func (a actTokens) count(id int64) int {
 	return n
 }
 
+// briefIssues reads the flattened document, so a dialogue line is one passage
+// for coverage and length, and its words count toward uses exactly like a
+// story's. The pointers are mapped back to the real document on the way out.
 func briefIssues(ctx context.Context, doc *Unit, lk Lookup, f *BriefFacts) []Issue {
+	flat, refs := flatten(doc)
+	return remapIssues(briefIssuesFlat(ctx, flat, lk, f), refs)
+}
+
+func briefIssuesFlat(ctx context.Context, doc *Unit, lk Lookup, f *BriefFacts) []Issue {
 	s := &scan{ctx: ctx, lk: lk, position: doc.Position, cache: map[string]*probe{}}
 	b := &briefScan{scan: s, ids: map[string]*idProbe{}, refs: map[string]lexRef{}}
 

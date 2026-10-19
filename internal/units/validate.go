@@ -2,6 +2,7 @@ package units
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -40,7 +41,17 @@ func collect(ctx context.Context, doc *Unit, lk Lookup) []Issue {
 	if doc == nil {
 		return []Issue{issue(RuleSchemaRequired, SeverityBlock, "", "unit document is missing")}
 	}
+	// The shape rules read the real document. The text rules read a copy in
+	// which every dialogue line is its own activity (validate_dialogue.go).
+	flat, refs := flatten(doc)
 	issues := schemaIssues(doc)
+	issues = append(issues, dialogueIssues(doc)...)
+	return append(issues, remapIssues(textIssues(ctx, flat, lk), refs)...)
+}
+
+// textIssues runs the rules that read activity text, on a flattened document.
+func textIssues(ctx context.Context, doc *Unit, lk Lookup) []Issue {
+	var issues []Issue
 	words := indexWords(doc)
 	issues = append(issues, budgetIssues(doc, words)...)
 	issues = append(issues, refIssues(words)...)
@@ -197,6 +208,7 @@ type scan struct {
 	position  int
 	err       error
 	cache     map[string]*probe
+	spk       map[string]bool
 	knownNorm map[string]bool
 	knownBare map[string]bool
 }
@@ -318,6 +330,37 @@ func (s *scan) probeFacts(key string) (LexemeFacts, bool) {
 	return f, ok
 }
 
+// hasAudioFor reports a clip for text in the voice of speaker a or b. A lookup
+// that is not a SpeakerLookup cannot tell the voices apart, so it fails the scan
+// with a lookup issue rather than accept a clip in the wrong voice.
+func (s *scan) hasAudioFor(text, speaker string) bool {
+	if s.err != nil {
+		return false
+	}
+	sl, ok := s.lk.(SpeakerLookup)
+	if !ok {
+		s.fail(errors.New("the lookup cannot check a clip in a speaker's voice"))
+		return false
+	}
+	n := normalize(text)
+	key := speaker + "\x00" + n
+	if v, done := s.spk[key]; done {
+		return v
+	}
+	if err := s.ctx.Err(); s.fail(err) {
+		return false
+	}
+	has, err := sl.HasAudioForSpeaker(s.ctx, n, speaker)
+	if s.fail(err) {
+		return false
+	}
+	if s.spk == nil {
+		s.spk = map[string]bool{}
+	}
+	s.spk[key] = has
+	return has
+}
+
 func (s *scan) hasAudio(text string) bool {
 	if s.err != nil {
 		return false
@@ -381,7 +424,7 @@ func genderOK(g string) bool {
 
 func knownActivity(typ string) bool {
 	switch typ {
-	case ActivityListenPick, ActivityRecall, ActivityProduce, ActivityCloze, ActivityPattern, ActivityStory, ActivityShadow:
+	case ActivityListenPick, ActivityRecall, ActivityProduce, ActivityCloze, ActivityPattern, ActivityStory, ActivityShadow, ActivityDialogue:
 		return true
 	default:
 		return false

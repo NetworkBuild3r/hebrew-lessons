@@ -120,6 +120,12 @@ type Config struct {
 	ElevenLabsAPIKey string
 	// ElevenLabsVoice is ELEVENLABS_VOICE_ID. Empty uses the legacy voice.
 	ElevenLabsVoice string
+	// ElevenLabsVoiceMale is ELEVENLABS_VOICE_ID_MALE, the voice of speaker b in a
+	// dialogue (INIT-015/SPEC-026). Speaker a is ElevenLabsVoice, the female voice.
+	// Empty means there is no male voice: a speaker b clip fails with an error that
+	// names this setting, and nothing falls back to the female voice. It has no
+	// default, and its value is never logged.
+	ElevenLabsVoiceMale string
 	// ElevenLabsModel is ELEVENLABS_MODEL. Empty uses the legacy model.
 	ElevenLabsModel string
 
@@ -173,6 +179,12 @@ func ApplyDefaults(cfg Config) Config {
 		cfg.ElevenLabsModel = audio.DefaultModel
 	}
 	return cfg
+}
+
+// Voices is the speaker table for a dialogue: a is the female voice and b is the
+// male voice. It holds the ids and is never printed.
+func (c Config) Voices() audio.Voices {
+	return audio.Voices{Female: c.ElevenLabsVoice, Male: c.ElevenLabsVoiceMale}
 }
 
 // App is the running process core.
@@ -283,6 +295,8 @@ func NewApp(cfg Config) (*App, error) {
 		AudioDir: audioDir,
 		Deck:     a.placement,
 		Runs:     store,
+		// A dialogue line is played from the clip in its speaker's voice.
+		Voices: cfg.Voices(),
 		// The activity item tokens are signed with a key derived from this secret.
 		SessionSecret: cfg.StateSecret,
 	})
@@ -439,7 +453,7 @@ func newMCP(cfg Config, health http.Handler, sessions *auth.Service, store *db.S
 	// proxy's public host is the fallback when it is unset. The pod
 	// address is never advertised. Only /mcp reaches the authoring
 	// handler. Every other unmatched path is 404.
-	adapter := mcpstore.New(store)
+	adapter := mcpstore.New(store).WithVoices(cfg.Voices())
 	users := sessionUsers{auth: sessions}
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
@@ -478,7 +492,12 @@ func newMCP(cfg Config, health http.Handler, sessions *auth.Service, store *db.S
 				Store: store,
 				Dir:   audioDir,
 				Voice: cfg.ElevenLabsVoice,
-				Model: cfg.ElevenLabsModel,
+				// The male voice for speaker b. Empty leaves speaker b with no voice.
+				VoiceMale: cfg.ElevenLabsVoiceMale,
+				Model:     cfg.ElevenLabsModel,
+				// The server's write timeout is 30 s. A call that runs past it loses
+				// its reply, so a call stops with the provider after audio.CallBudget.
+				Budget: audio.CallBudget,
 			},
 			store: store,
 		},

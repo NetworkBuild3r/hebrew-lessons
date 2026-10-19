@@ -280,9 +280,11 @@ func docReferences(doc units.Unit, keys map[string]bool) bool {
 	}
 	for _, lesson := range doc.Lessons {
 		for _, act := range lesson.Activities {
-			for _, tok := range lessonTokens(act.Text) {
-				if keys[tok] || keys[units.StripNiqqud(tok)] {
-					return true
+			for _, text := range act.Texts() {
+				for _, tok := range lessonTokens(text) {
+					if keys[tok] || keys[units.StripNiqqud(tok)] {
+						return true
+					}
 				}
 			}
 		}
