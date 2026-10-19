@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	sdauth "github.com/modelcontextprotocol/go-sdk/auth"
 )
 
 const (
@@ -57,15 +59,37 @@ func TestReadOnlyTokenActor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Actor != readOnlyActor || p.Role != RoleLearner || p.UserID != readOnlyLearner || p.Source != "token" {
+	if p.Actor != "mcp-readonly" || p.Role != RoleLearner || p.UserID != readOnlyLearner || p.Source != "token" {
 		t.Fatalf("readonly principal %+v", p)
 	}
 	admin, err := v.Validate(t.Context(), readOnlyAdminToken, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if admin.Actor != defaultActor || admin.Role != RoleAdmin || admin.UserID != 0 {
+	if admin.Actor != "mcp" || admin.Role != RoleAdmin || admin.UserID != 0 {
 		t.Fatalf("admin principal %+v", admin)
+	}
+
+	// The bearer middleware records Actor as the request's caller name.
+	// That is the audit name for this bearer.
+	h := requireBearer(v, nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		info := sdauth.TokenInfoFromContext(r.Context())
+		caller := actorFrom(r.Context())
+		principal := principalFrom(r.Context())
+		if info == nil || info.UserID != "mcp-readonly" || caller != "mcp-readonly" || principal.Actor != "mcp-readonly" {
+			t.Errorf("audit name info=%v caller=%q principal=%+v", info, caller, principal)
+		}
+		if caller == readOnlySmokeToken || principal.Actor == readOnlySmokeToken {
+			t.Error("audit name is the token")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	req.Header.Set("Authorization", "Bearer "+readOnlySmokeToken)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status %d body %s", rr.Code, rr.Body.String())
 	}
 }
 
