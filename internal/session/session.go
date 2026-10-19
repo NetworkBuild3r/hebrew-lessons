@@ -140,13 +140,13 @@ func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, err
 		_, isKnown := known[card.LexemeID]
 		_, isConfused := confused[card.LexemeID]
 		cands = append(cands, Candidate{
-			ID:          card.ID,
-			LexemeID:    card.LexemeID,
-			Dir:         card.Dir,
-			Due:         card.Due,
-			Lapses:      card.Lapses,
-			Latest:      card.LatestRating,
-			HasRating:   card.HasRating,
+			ID:            card.ID,
+			LexemeID:      card.LexemeID,
+			Dir:           card.Dir,
+			Due:           card.Due,
+			Lapses:        card.Lapses,
+			Latest:        card.LatestRating,
+			HasRating:     card.HasRating,
 			RecentLapse:   card.RecentLapse,
 			Confused:      isConfused,
 			KnownLexeme:   isKnown,
