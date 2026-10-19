@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type roleTokens struct{}
@@ -44,18 +46,19 @@ func roleServer(t *testing.T) (*Memory, *httptest.Server) {
 }
 
 func TestLearnerPutUnitForbidden(t *testing.T) {
-	_, srv := roleServer(t)
+	mem, srv := roleServer(t)
 	for _, scope := range []string{ScopeShared, "learner:7"} {
 		res := postTool(t, srv.URL, "learner", "put_unit", map[string]any{
 			"scope": scope, "position": 0, "doc": helloDoc(),
 		}, nil)
-		body := readBody(t, res)
-		if res.StatusCode != http.StatusForbidden {
-			t.Fatalf("scope %s status %d body %s", scope, res.StatusCode, body)
-		}
-		if !strings.Contains(body, msgAdminOnly) {
-			t.Fatalf("body %s", body)
-		}
+		assertDenied(t, res, msgAdminOnly)
+	}
+	units, err := mem.ListUnits(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(units) != 0 {
+		t.Fatalf("learner put wrote %+v", units)
 	}
 }
 
@@ -63,12 +66,9 @@ func TestLearnerGetContextOtherLearnerForbidden(t *testing.T) {
 	_, srv := roleServer(t)
 	other := int64(9)
 	res := postTool(t, srv.URL, "learner", "get_context", getContextInput{Position: 0, LearnerID: &other}, nil)
-	body := readBody(t, res)
-	if res.StatusCode != http.StatusForbidden {
-		t.Fatalf("status %d body %s", res.StatusCode, body)
-	}
-	if !strings.Contains(body, msgOtherLearner) {
-		t.Fatalf("body %s", body)
+	body := assertDenied(t, res, msgOtherLearner)
+	if strings.Contains(body, coffee) {
+		t.Fatalf("other learner leaked: %s", body)
 	}
 }
 
@@ -160,9 +160,86 @@ func TestStaticTokenIsAdmin(t *testing.T) {
 func TestUnlistedWriteToolIsAdminOnly(t *testing.T) {
 	_, srv := roleServer(t)
 	res := postTool(t, srv.URL, "learner", "publish_unit", map[string]any{}, nil)
-	body := readBody(t, res)
-	if res.StatusCode != http.StatusForbidden || !strings.Contains(body, msgAdminOnly) {
-		t.Fatalf("status %d body %s", res.StatusCode, body)
+	assertDenied(t, res, msgAdminOnly)
+}
+
+func TestDuplicateToolNameIsDenied(t *testing.T) {
+	mem, srv := roleServer(t)
+	doc, err := json.Marshal(helloDoc())
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"put_unit","Name":"lookup","arguments":{"scope":"shared","position":0,"doc":` + string(doc) + `}}}`
+	res := postRaw(t, srv.URL, "learner", body)
+	assertDenied(t, res, msgAdminOnly)
+	units, err := mem.ListUnits(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(units) != 0 {
+		t.Fatalf("duplicate name wrote %+v", units)
+	}
+}
+
+func TestExtraMethodKeyIsDenied(t *testing.T) {
+	mem, srv := roleServer(t)
+	doc, err := json.Marshal(helloDoc())
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","Method":"notifications/initialized","params":{"name":"put_unit","arguments":{"scope":"learner:7","position":0,"doc":` + string(doc) + `}}}`
+	res := postRaw(t, srv.URL, "learner", body)
+	assertDenied(t, res, msgAdminOnly)
+	units, err := mem.ListUnits(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(units) != 0 {
+		t.Fatalf("extra method wrote %+v", units)
+	}
+}
+
+func TestLearnerIDFraction(t *testing.T) {
+	_, srv := roleServer(t)
+	other := postRaw(t, srv.URL, "learner", `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_context","arguments":{"position":0,"learnerId":9.0}}}`)
+	body := assertDenied(t, other, msgOtherLearner)
+	if strings.Contains(body, coffee) {
+		t.Fatalf("9.0 leaked another learner: %s", body)
+	}
+	frac := postRaw(t, srv.URL, "learner", `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_context","arguments":{"position":0,"learnerId":9.5}}}`)
+	assertDenied(t, frac, msgOtherLearner)
+
+	self := postRaw(t, srv.URL, "learner", `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_context","arguments":{"position":0,"learnerId":7.0}}}`)
+	selfBody := readBody(t, self)
+	if self.StatusCode != http.StatusOK || strings.Contains(selfBody, `"isError":true`) || !strings.Contains(selfBody, hello) {
+		t.Fatalf("7.0 self status %d body %s", self.StatusCode, selfBody)
+	}
+}
+
+func TestMiddlewareBlocksToolWithoutGate(t *testing.T) {
+	h := Handler(Options{
+		Validator: roleTokens{},
+		extraTools: func(server *mcp.Server) {
+			mcp.AddTool(server, &mcp.Tool{
+				Name:        "probe_role",
+				Description: "Test tool with no role check of its own.",
+			}, func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, any, error) {
+				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "ran"}}}, "ran", nil
+			})
+		},
+	})
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+
+	learner := postTool(t, srv.URL, "learner", "probe_role", map[string]any{}, nil)
+	body := assertDenied(t, learner, msgAdminOnly)
+	if strings.Contains(body, "ran") {
+		t.Fatalf("learner ran the ungated tool: %s", body)
+	}
+	admin := postTool(t, srv.URL, "admin", "probe_role", map[string]any{}, nil)
+	adminBody := readBody(t, admin)
+	if admin.StatusCode != http.StatusOK || strings.Contains(adminBody, `"isError":true`) || !strings.Contains(adminBody, "ran") {
+		t.Fatalf("admin status %d body %s", admin.StatusCode, adminBody)
 	}
 }
 
@@ -292,6 +369,34 @@ type leakToken struct{}
 
 func (leakToken) Validate(context.Context, string, *http.Request) (Principal, error) {
 	return Principal{}, errors.New("db: store is closed")
+}
+
+func assertDenied(t *testing.T, res *http.Response, msg string) string {
+	t.Helper()
+	body := readBody(t, res)
+	if res.StatusCode != http.StatusOK || !strings.Contains(body, `"isError":true`) || !strings.Contains(body, msg) {
+		t.Fatalf("status %d body %s", res.StatusCode, body)
+	}
+	return body
+}
+
+func postRaw(t *testing.T, url, token, body string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("MCP-Protocol-Version", "2025-11-25")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
 }
 
 func postTool(t *testing.T, url, token, name string, args any, hdr map[string]string) *http.Response {

@@ -33,7 +33,7 @@ type service struct {
 
 type getContextInput struct {
 	Position  int    `json:"position" jsonschema:"Course position you are about to write. Known lexemes are words introduced in units at a lower position. Zero is the first unit. Use the placement suggestedStartPosition when the learner has taken the vocabulary check."`
-	LearnerID *int64 `json:"learnerId,omitempty" jsonschema:"Optional for an admin or the static token. Omit it to see shared units only. A learner account uses their own id when this is omitted. Another id is forbidden."`
+	LearnerID *int64 `json:"learnerId,omitempty" jsonschema:"Optional for an admin or the static token. Omit it to see shared units only. A learner account uses their own id when this is omitted. Another id is forbidden. A whole number is accepted, including 9.0, which is the integer 9. A fraction such as 9.5 is rejected."`
 	TopN      int    `json:"topN,omitempty" jsonschema:"How many struggled lexemes to return. Defaults to 30. The store ranks them by misses in 7 days, then lapses, then Again rate. This tool keeps that order. It does not limit confusions, which already cover 7 days."`
 }
 
@@ -458,7 +458,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}, svc.validateUnit)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "put_unit",
-		Description: "Save a draft revision. Admin only, including the static token: a learner call is HTTP 403, forbidden: admin only, even for scope learner:<their own id>. scope is required: shared, or learner:<id> for one learner. Scope is not inside the unit document. Send unitId to update; omit it to create. The same document, position, and scope do not create another revision. Changing scope does. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. This does not publish.",
+		Description: "Save a draft revision. Admin only, including the static token: a learner call is a tool error, forbidden: admin only, even for scope learner:<their own id>. scope is required: shared, or learner:<id> for one learner. Scope is not inside the unit document. Send unitId to update; omit it to create. The same document, position, and scope do not create another revision. Changing scope does. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. This does not publish.",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    false,
 			IdempotentHint:  true,

@@ -355,13 +355,11 @@ func newMCP(cfg Config, health http.Handler, sessions *auth.Service) http.Handle
 	// adapter belongs here, next to this call, so db does not import mcp.
 	//
 	// AuthToken is Config.MCPAuthToken. cmd/hebrew trimmed MCP_AUTH_TOKEN
-	// into that field. An empty value disables the static bearer.
-	// This function does not read the environment. Sessions calls
+	// into that field and logs once when it is empty. An empty value
+	// disables the static bearer. This function does not read the
+	// environment and does not log that warning again. Sessions calls
 	// auth.Service.Lookup and copies users.role. OAuth later sets
 	// SessionFromToken; it must not read the web session cookie.
-	if cfg.MCPAuthToken == "" {
-		slog.Warn("mcp static token is disabled", "reason", "MCP_AUTH_TOKEN is empty")
-	}
 	authoring := mcp.Handler(mcp.Options{
 		AuthToken:      cfg.MCPAuthToken,
 		AllowedOrigins: cfg.MCPAllowedOrigins,

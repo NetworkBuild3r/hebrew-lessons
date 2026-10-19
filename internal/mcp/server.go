@@ -59,10 +59,13 @@ type Options struct {
 	Sessions       SessionUserResolver
 	AllowedOrigins []string
 	Validator      Validator
-	Course         CourseReader
-	Lexicon        LexiconReader
-	Lookup         units.Lookup
-	Units          UnitWriter
+	// extraTools registers tools after the authoring tools. Tests use it
+	// for a tool that has no per-tool role check. Production leaves it nil.
+	extraTools func(*mcp.Server)
+	Course     CourseReader
+	Lexicon    LexiconReader
+	Lookup     units.Lookup
+	Units      UnitWriter
 }
 
 // Handler returns the streamable HTTP handler for the authoring server.
@@ -82,7 +85,7 @@ func Handler(opts Options) http.Handler {
 		// server-initiated requests, and KeepAlive is a ping request.
 		// A rejected ping closes the temporary session.
 	})
-	return protectOrigin(opts.AllowedOrigins, requireBearer(opts.validator(), authorizeTools(stream)))
+	return protectOrigin(opts.AllowedOrigins, requireBearer(opts.validator(), stream))
 }
 
 // protectOrigin rejects cross-origin browser requests. A POST with no
@@ -125,6 +128,9 @@ func newMCPServer(opts Options) *mcp.Server {
 		// historical default that advertised logging.
 		Capabilities: &mcp.ServerCapabilities{},
 	})
+	// Role checks use the parsed tool call. This wraps every tool,
+	// including a test tool that does not check the role itself.
+	server.AddReceivingMiddleware(enforceRole)
 	svc := &service{
 		course:    opts.Course,
 		lexicon:   opts.Lexicon,
@@ -132,6 +138,9 @@ func newMCPServer(opts Options) *mcp.Server {
 		units:     opts.Units,
 	}
 	registerTools(server, svc)
+	if opts.extraTools != nil {
+		opts.extraTools(server)
+	}
 	if err := registerResources(server); err != nil {
 		// The schemas are derived from units.Unit. A failure here is a
 		// programming error, not a request failure.

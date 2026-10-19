@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // learnerTools are the only tools a non-admin session may call.
@@ -20,13 +23,18 @@ var learnerTools = map[string]bool{
 }
 
 const (
-	// msgAdminOnly is the fixed text for an admin-only tool. authorizeTools
-	// writes it as a plain HTTP 403 before the SDK starts its 200 stream.
-	// A tool isError cannot be an HTTP status: the SDK has already
-	// committed 200 by the time the tool function runs. gate returns the
-	// same sentence if a call reaches the tool without that middleware.
-	msgAdminOnly    = "forbidden: admin only"
+	// msgAdminOnly is the fixed text when a caller may not use a tool.
+	// enforceRole returns it as a tool isError. The SDK has already
+	// accepted the HTTP request by the time receiving middleware runs,
+	// so the status stays 200 and the sentence is in the tool result.
+	msgAdminOnly = "forbidden: admin only"
+	// msgOtherLearner is the fixed text when a learner names someone else.
 	msgOtherLearner = "learnerId must be your own id."
+
+	// toolsCallMethod is the SDK method name for a tool call. The SDK
+	// constant is unexported. Matching it here is the same string the
+	// parsed request carries.
+	toolsCallMethod = "tools/call"
 )
 
 func (p Principal) allowed(tool string) bool {
@@ -40,69 +48,129 @@ func (p Principal) allowed(tool string) bool {
 	}
 }
 
-func denialMessage(string) string {
+func denialMessage() string {
 	return msgAdminOnly
 }
 
 func (s *service) gate(ctx context.Context, tool string) (Principal, error) {
 	p := principalFrom(ctx)
 	if !p.allowed(tool) {
-		return p, errors.New(denialMessage(tool))
+		return p, errors.New(denialMessage())
 	}
 	return p, nil
 }
 
-// authorizeTools rejects a forbidden tool call with a plain HTTP 403
-// before the SDK writes a 200. The body is msgAdminOnly, or
-// msgOtherLearner when a learner names someone else's id. Session
-// resolution never reads the web cookie; the bearer is the only credential.
-func authorizeTools(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.Body == nil {
-			next.ServeHTTP(w, r)
-			return
+// enforceRole is receiving middleware. It sees the tool name and arguments
+// the SDK has already parsed into CallToolParamsRaw, so a second JSON parse
+// of the HTTP body cannot disagree with the call that will run.
+//
+// A tools/call whose name or arguments cannot be read is denied. learnerId
+// must be a JSON integer, or a JSON number whose fraction is all zeros.
+// 9.0 is the integer 9. 9.5 is rejected. The comparison uses that integer.
+func enforceRole(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+		if method != toolsCallMethod {
+			return next(ctx, method, req)
 		}
-		body, err := io.ReadAll(r.Body)
-		_ = r.Body.Close()
+		call, ok := req.(*mcp.CallToolRequest)
+		if !ok || call == nil || call.Params == nil || call.Params.Name == "" {
+			return forbid(denialMessage()), nil
+		}
+		args, err := argumentObject(call.Params.Arguments)
 		if err != nil {
-			http.Error(w, errAuthUnavailable.Error(), http.StatusInternalServerError)
-			return
+			return forbid(denialMessage()), nil
 		}
-		r.Body = io.NopCloser(bytes.NewReader(body))
-
-		var call struct {
-			Method string `json:"method"`
-			Params struct {
-				Name      string          `json:"name"`
-				Arguments json.RawMessage `json:"arguments"`
-			} `json:"params"`
-		}
-		if err := json.Unmarshal(body, &call); err != nil || call.Method != "tools/call" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		p := principalFrom(r.Context())
+		p := principalFrom(ctx)
 		if !p.allowed(call.Params.Name) {
-			http.Error(w, denialMessage(call.Params.Name), http.StatusForbidden)
-			return
+			return forbid(denialMessage()), nil
 		}
-		if p.Role == RoleLearner && call.Params.Name == "get_context" && otherLearner(call.Params.Arguments, p.UserID) {
-			http.Error(w, msgOtherLearner, http.StatusForbidden)
-			return
+		if p.Role == RoleLearner && call.Params.Name == "get_context" {
+			id, present, err := learnerIDArg(args)
+			if err != nil {
+				return forbid(msgOtherLearner), nil
+			}
+			if present && id != p.UserID {
+				return forbid(msgOtherLearner), nil
+			}
 		}
-		next.ServeHTTP(w, r)
-	})
+		return next(ctx, method, req)
+	}
 }
 
-func otherLearner(raw json.RawMessage, self int64) bool {
-	if len(raw) == 0 || string(raw) == "null" {
-		return false
+func forbid(msg string) *mcp.CallToolResult {
+	res := &mcp.CallToolResult{}
+	res.SetError(errors.New(msg))
+	return res
+}
+
+// argumentObject reads the SDK's raw arguments. An omitted value is an
+// empty object. Anything that is not a JSON object cannot be read.
+func argumentObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return map[string]json.RawMessage{}, nil
 	}
-	var args struct {
-		LearnerID *int64 `json:"learnerId"`
+	dec := json.NewDecoder(bytes.NewReader(trimmed))
+	var obj map[string]json.RawMessage
+	if err := dec.Decode(&obj); err != nil {
+		return nil, err
 	}
-	if err := json.Unmarshal(raw, &args); err != nil {
-		return false
+	var extra any
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return nil, errors.New("trailing arguments")
+		}
+		return nil, err
 	}
-	return args.LearnerID != nil && *args.LearnerID != self
+	if obj == nil {
+		return nil, errors.New("arguments are not an object")
+	}
+	return obj, nil
+}
+
+// learnerIDArg reads the learnerId field. The key match is exact.
+// A missing field is not present. 9.0 is 9. A nonzero fraction is an error.
+func learnerIDArg(args map[string]json.RawMessage) (id int64, present bool, err error) {
+	raw, ok := args["learnerId"]
+	if !ok || len(bytes.TrimSpace(raw)) == 0 || string(bytes.TrimSpace(raw)) == "null" {
+		return 0, false, nil
+	}
+	n, err := parseIntegral(raw)
+	if err != nil {
+		return 0, true, err
+	}
+	return n, true, nil
+}
+
+// parseIntegral accepts a JSON integer, or a JSON number whose fraction
+// is only zeros. 9 and 9.0 are both 9. 9.5, exponents, and strings are not.
+func parseIntegral(raw []byte) (int64, error) {
+	s := strings.TrimSpace(string(raw))
+	if s == "" {
+		return 0, errors.New("empty learnerId")
+	}
+	i := 0
+	if s[0] == '-' {
+		i++
+	}
+	if i >= len(s) || s[i] < '0' || s[i] > '9' {
+		return 0, errors.New("learnerId is not an integer")
+	}
+	if s[i] == '0' && i+1 < len(s) && s[i+1] >= '0' && s[i+1] <= '9' {
+		return 0, errors.New("learnerId is not an integer")
+	}
+	j := i
+	for j < len(s) && s[j] >= '0' && s[j] <= '9' {
+		j++
+	}
+	if j < len(s) {
+		if s[j] != '.' {
+			return 0, errors.New("learnerId is not an integer")
+		}
+		frac := s[j+1:]
+		if frac == "" || strings.Trim(frac, "0") != "" {
+			return 0, errors.New("learnerId is not an integer")
+		}
+	}
+	return strconv.ParseInt(s[:j], 10, 64)
 }
