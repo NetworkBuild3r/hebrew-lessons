@@ -1,8 +1,8 @@
 // Package mcp is the authoring server.
 //
-// This slice serves five tools (get_context, lookup, validate_unit,
-// put_unit, generate_audio) and three resources over streamable HTTP.
-// The other five tools (upsert_lexemes, get_unit, publish_unit,
+// This slice serves six tools (get_context, lookup, validate_unit,
+// put_unit, upsert_lexemes, generate_audio) and three resources over
+// streamable HTTP. The other four tools (get_unit, publish_unit,
 // unit_history, delete_unit) register on the same server later. They
 // are not stubbed here, so tools/list shows only what runs.
 //

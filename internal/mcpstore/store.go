@@ -41,6 +41,7 @@ var (
 	_ mcp.CourseReader  = (*Store)(nil)
 	_ mcp.LexiconReader = (*Store)(nil)
 	_ mcp.UnitWriter    = (*Store)(nil)
+	_ mcp.LexiconWriter = (*Store)(nil)
 	_ units.Lookup      = (*Store)(nil)
 )
 
