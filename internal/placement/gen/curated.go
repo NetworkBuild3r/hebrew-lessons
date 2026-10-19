@@ -4,8 +4,8 @@ package main
 //
 // Band 0 keeps the tutor worksheet words. Bands 1–4 add niqqud to the
 // FrequencyWords token named by List, which is the word at Rank (1-based).
-// Pointing is ktiv male with niqqud. אִשָּׁה has no mater yod. Three other
-// forms omit a mater the subtitle list writes: לְסַיֵּם / לסיים,
+// Pointing is ktiv male with niqqud, including the mater yod in אִישָּׁה.
+// Three forms omit a mater the subtitle list writes: לְסַיֵּם / לסיים,
 // עָיֵף / עייף, שֻׁלְחָן / שולחן. ktivMale in main.go pairs those.
 // Gender is m, f, both, or empty. Verbs and adjectives have none.
 // Transliteration uses kh, ts, and '. These rows are checked, so Verified
@@ -62,7 +62,7 @@ func curatedItems() []rawItem {
 		freq("gadol", "גָּדוֹל", "big", "adjective", "gadol", "", 1, 225, "גדול"),
 		freq("yeled", "יֶלֶד", "boy", "noun", "yeled", "m", 1, 273, "ילד"),
 		freq("yafa", "יָפֶה", "beautiful", "adjective", "yafe", "", 1, 235, "יפה"),
-		freq("isha", "אִשָּׁה", "woman", "noun", "isha", "f", 1, 409, "אישה"),
+		freq("isha", "אִישָּׁה", "woman", "noun", "isha", "f", 1, 409, "אישה"),
 		freq("achshav", "עַכְשָׁיו", "now", "adverb", "akhshav", "", 1, 41, "עכשיו"),
 		freq("tamid", "תָּמִיד", "always", "adverb", "tamid", "", 1, 147, "תמיד"),
 		freq("kesef", "כֶּסֶף", "money", "noun", "kesef", "m", 1, 269, "כסף"),

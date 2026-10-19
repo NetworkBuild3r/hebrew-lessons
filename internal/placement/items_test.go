@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -96,23 +95,23 @@ func TestDeckLint(t *testing.T) {
 	}
 }
 
-// letterAllow is the bare spelling an item may use when it is not the
-// letters of its form in gen/curated.go. אִשָּׁה is written the same way
-// in both files, so nothing is listed.
+// testdata/v2-bare-letters.json is the niqqud-stripped text of each item
+// on v2 before this PR. letterAllow lists bare spellings that may differ
+// from that snapshot. It is empty: every item keeps the letters it had on v2.
 var letterAllow = map[string]string{}
 
-func TestBareLettersMatchCurated(t *testing.T) {
+func TestBareLettersMatchV2(t *testing.T) {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("caller")
 	}
-	body, err := os.ReadFile(filepath.Join(filepath.Dir(file), "gen", "curated.go"))
+	body, err := os.ReadFile(filepath.Join(filepath.Dir(file), "testdata", "v2-bare-letters.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	curated := map[string]string{}
-	for _, m := range regexp.MustCompile(`(?:tutor|freq)\("([^"]+)", "([^"]*)"`).FindAllStringSubmatch(string(body), -1) {
-		curated[m[1]] = unpointed(m[2])
+	var snapshot map[string]string
+	if err := json.Unmarshal(body, &snapshot); err != nil {
+		t.Fatal(err)
 	}
 	cat, err := catalog()
 	if err != nil {
@@ -128,13 +127,13 @@ func TestBareLettersMatchCurated(t *testing.T) {
 			}
 			continue
 		}
-		want, ok := curated[it.ID]
+		want, ok := snapshot[it.ID]
 		if !ok {
-			t.Errorf("%s is not in gen/curated.go", it.ID)
+			t.Errorf("%s is not in the v2 letter snapshot", it.ID)
 			continue
 		}
 		if got != want {
-			t.Errorf("%s bare %s, gen/curated.go %s", it.ID, got, want)
+			t.Errorf("%s bare %s, v2 snapshot %s", it.ID, got, want)
 		}
 	}
 	for id := range letterAllow {
@@ -142,9 +141,9 @@ func TestBareLettersMatchCurated(t *testing.T) {
 			t.Errorf("allowlist %s is not in the deck", id)
 		}
 	}
-	for id := range curated {
+	for id := range snapshot {
 		if _, ok := seen[id]; !ok {
-			t.Errorf("gen/curated.go %s is not in the deck", id)
+			t.Errorf("v2 snapshot %s is not in the deck", id)
 		}
 	}
 }

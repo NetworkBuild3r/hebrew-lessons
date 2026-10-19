@@ -33,7 +33,6 @@ const (
 // ktivMale maps a pointed skeleton to the subtitle spelling when the list
 // writes a mater the dictionary form leaves out.
 var ktivMale = map[string]string{
-	"אשה":  "אישה",
 	"לסים": "לסיים",
 	"עיף":  "עייף",
 	"שלחן": "שולחן",
