@@ -30,13 +30,42 @@ func TestKnownShareBands(t *testing.T) {
 	if LowAccuracyKnownShare > 1 || HighAccuracyKnownShare < 0 {
 		t.Fatal("a shifted share leaves 0..1 and would be clamped")
 	}
-	plans := [3]Plan{PlanFor(0), PlanFor(TargetSuccess), PlanFor(1)}
-	if plans[0].Known <= plans[1].Known || plans[1].Known <= plans[2].Known {
-		t.Fatalf("plans = %+v", plans)
+	// Literal slots for a full 20-card session. These are not computed from
+	// PlanFor or KnownShare, so a change to the share constants fails here.
+	cases := []struct {
+		accuracy float64
+		known    int
+		struggle int
+	}{
+		{0, 19, 1},
+		{0.79, 19, 1},
+		{0.80, 16, 4},
+		{0.85, 16, 4},
+		{0.90, 16, 4},
+		{0.91, 13, 7},
+		{1.0, 13, 7},
 	}
-	for _, plan := range plans {
-		if plan.Known+plan.Struggle != SessionCap {
-			t.Fatalf("plan %+v does not fill the cap", plan)
+	for _, tc := range cases {
+		got := PlanFor(tc.accuracy)
+		if got.Known != tc.known || got.Struggle != tc.struggle {
+			t.Fatalf("accuracy %v plan = %+v, want known %d struggle %d", tc.accuracy, got, tc.known, tc.struggle)
+		}
+	}
+}
+
+func TestMixAllStruggling(t *testing.T) {
+	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+	var cands []Candidate
+	for i := 0; i < 25; i++ {
+		cands = append(cands, struggleCand(int64(i+1), now.Add(time.Duration(i)*time.Minute-2*time.Hour)))
+	}
+	got := mix(cands, 0, now, 1)
+	if len(got) != SessionCap {
+		t.Fatalf("len = %d, want %d", len(got), SessionCap)
+	}
+	for i, card := range got {
+		if card.CardID != int64(i+1) || !card.Struggling {
+			t.Fatalf("card %d = %+v, want struggling %d", i, card, i+1)
 		}
 	}
 }

@@ -53,15 +53,26 @@ type ConfusionPair struct {
 }
 
 // StruggleStats returns the learner's struggle picture.
+// The 7-day window is read from the store clock. StruggleStatsAt takes the
+// instant instead, so a caller that already read the clock can pass that
+// same value.
 func (s *Store) StruggleStats(ctx context.Context, userID int64, topN int) (Struggle, error) {
-	conn, err := s.connOrErr()
-	if err != nil {
+	if _, err := s.connOrErr(); err != nil {
 		return Struggle{}, err
 	}
 	if s.clock == nil {
 		return Struggle{}, fmt.Errorf("db: clock is not configured")
 	}
-	since := FormatTime(s.clock.Now().Add(-struggleWindow))
+	return s.StruggleStatsAt(ctx, userID, topN, s.clock.Now())
+}
+
+// StruggleStatsAt is StruggleStats with the window ending at now.
+func (s *Store) StruggleStatsAt(ctx context.Context, userID int64, topN int, now time.Time) (Struggle, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return Struggle{}, err
+	}
+	since := FormatTime(now.Add(-struggleWindow))
 	rows, err := conn.QueryContext(ctx, `
 		SELECT
 			l.id,

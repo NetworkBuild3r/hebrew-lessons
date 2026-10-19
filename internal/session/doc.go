@@ -5,15 +5,16 @@
 // pattern drills. This package interleaves struggling cards with stable known
 // cards, then grades each answer through fsrs.Review.GradeWithChoice.
 //
-// The mix itself does not touch the database. BuildSession loads candidates,
-// RecentReviewRatings, StruggleStats, and KnownLexemeIDs, and mix turns that
-// snapshot into a queue. Record is the only write: it grades the card that
-// Next just served. The queue stays in the Session value. A restart drops it.
+// The mix itself does not touch the database. BuildSession reads the clock
+// once and passes that instant to ListStudyCards, RecentReviewRatings, and
+// StruggleStatsAt, then mix turns that snapshot into a queue. Record is the
+// only write: it grades the card that Next just served. BuildSession returns
+// a pointer. The queue stays in that Session. A restart drops it.
 //
 // Handlers are not in this package. The handler that calls BuildSession or
-// Record checks that userID is the signed-in learner, and it checks the CSRF
-// token on every mutating request. Those checks need the HTTP request, which
-// this package does not see.
+// Record checks Session.UserID against the signed-in learner, and it checks
+// the CSRF token on every mutating request. Those checks need the HTTP
+// request, which this package does not see.
 //
 // # Constants
 //
@@ -23,9 +24,10 @@
 // HighAccuracyKnownShare. A share from LowAccuracy through HighAccuracy, and
 // a learner with no reviews, uses DefaultKnownShare.
 //
-// DefaultKnownShare is the known-card fraction that lands on TargetSuccess
-// when a known card succeeds at KnownSuccess (0.95) and a struggling card
-// succeeds at StruggleSuccess (0.50):
+// 85% (TargetSuccess) is the target success rate. The known share that
+// lands on that rate is about 7/9 (0.778). DefaultKnownShare is that
+// fraction, from a known card at KnownSuccess (0.95) and a struggling card
+// at StruggleSuccess (0.50):
 //
 //	(TargetSuccess - StruggleSuccess) / (KnownSuccess - StruggleSuccess)
 //
@@ -37,9 +39,10 @@
 //
 // A due he_en or en_he card is struggling when its lapse count is at least
 // StruggleLapses, or its latest rating is Again or Hard, or StruggleStats
-// lists a confusion key for its lexeme. StruggleStats reads confusion_misses
-// over ConfusionWindow on the store clock. A card is stable known when its
-// latest rating is Good or Easy and it has no Again inside that same window.
+// lists a confusion key for its lexeme. StruggleStatsAt reads
+// confusion_misses over ConfusionWindow ending at the same instant as the
+// rest of the build. A card is stable known when its latest rating is Good
+// or Easy and it has no Again inside that same window.
 // A he_en card also has to sit in KnownLexemeIDs, which is the latest-Good
 // or Easy he_en set plus new words of lessons this learner has finished.
 // Struggling wins when a card matches both. A not-yet-due card is never

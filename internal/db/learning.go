@@ -59,9 +59,10 @@ type ReviewLog struct {
 }
 
 // StudyCard is a learner's he_en or en_he card plus the fields the
-// post-placement mix reads. LatestRating is the newest review_log rating.
-// HasRating is false when the card has no review. RecentLapse is true when
-// an Again rating was stored at or after the lapseSince passed to ListStudyCards.
+// post-placement mix reads. LatestRating is the newest review_log rating at
+// or before the now passed to ListStudyCards. HasRating is false when the
+// card has no such review. RecentLapse is true when an Again rating was
+// stored at or after the lapseSince passed to ListStudyCards.
 type StudyCard struct {
 	Card
 	LatestRating int
@@ -361,10 +362,11 @@ func (s *Store) InsertUser(ctx context.Context, email, sub, role string) (int64,
 // ListStudyCards returns the learner's unsuspended he_en and en_he cards,
 // including cards that are not yet due. Words still waiting on their intro
 // lesson are left out, the same way ListDueCards leaves them out.
+// now caps the latest-rating lookup: a review_log row after now is ignored.
 // lapseSince is the start of the recent-lapse window. An Again at that
-// time or later sets RecentLapse. The clock that produced lapseSince is
-// the caller's; this query does not read the wall clock.
-func (s *Store) ListStudyCards(ctx context.Context, userID int64, lapseSince time.Time) ([]StudyCard, error) {
+// time or later sets RecentLapse. The clock that produced now and lapseSince
+// is the caller's; this query does not read the wall clock.
+func (s *Store) ListStudyCards(ctx context.Context, userID int64, now, lapseSince time.Time) ([]StudyCard, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
@@ -375,6 +377,7 @@ func (s *Store) ListStudyCards(ctx context.Context, userID int64, lapseSince tim
 				SELECT rl.rating
 				FROM review_log AS rl
 				WHERE rl.card_id = c.id
+				  AND rl.reviewed_at <= ?
 				ORDER BY rl.reviewed_at DESC, rl.id DESC
 				LIMIT 1
 			),
@@ -390,7 +393,7 @@ func (s *Store) ListStudyCards(ctx context.Context, userID int64, lapseSince tim
 		  AND c.suspended = 0
 		  AND c.dir IN ('he_en', 'en_he')
 `+introNotFinished+`
-		ORDER BY c.due, c.id`, FormatTime(lapseSince), userID)
+		ORDER BY c.due, c.id`, FormatTime(now), FormatTime(lapseSince), userID)
 	if err != nil {
 		return nil, fmt.Errorf("db: study cards: %w", err)
 	}

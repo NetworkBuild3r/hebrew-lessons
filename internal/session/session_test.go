@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -109,11 +110,14 @@ func addAccuracy(t *testing.T, store *db.Store, userID int64, good, again int, n
 	}
 }
 
-func mustBuild(t *testing.T, svc *Service, userID int64) Session {
+func mustBuild(t *testing.T, svc *Service, userID int64) *Session {
 	t.Helper()
 	sess, err := svc.BuildSession(context.Background(), userID)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if sess.UserID() != userID {
+		t.Fatalf("UserID = %d, want %d", sess.UserID(), userID)
 	}
 	return sess
 }
@@ -170,7 +174,7 @@ func TestSessionCap(t *testing.T) {
 		}
 		addCard(t, store, userID, fmt.Sprintf("cap-%02d", i), fsrs.DirHeEn, due, 0, rating, reviewed, false)
 	}
-	got := drain(t, ptr(mustBuild(t, svc, userID)))
+	got := drain(t, mustBuild(t, svc, userID))
 	if len(got) != SessionCap {
 		t.Fatalf("len = %d, want %d", len(got), SessionCap)
 	}
@@ -196,7 +200,7 @@ func TestInterleaveStruggleRun(t *testing.T) {
 		due := clk.Now().Add(time.Duration(i)*time.Minute - 30*time.Minute)
 		addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
 	}
-	got := drain(t, ptr(mustBuild(t, svc, userID)))
+	got := drain(t, mustBuild(t, svc, userID))
 	s, k := counts(got)
 	if s != 15 || k != 2 {
 		t.Fatalf("struggle=%d known=%d (%s)", s, k, pattern(got))
@@ -232,7 +236,7 @@ func TestMixFollowsAccuracy(t *testing.T) {
 				addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.DirEnHe, due, 0, int(fsrs.Hard), reviewed, false)
 			}
 			addAccuracy(t, store, userID, tc.good, tc.again, clk.Now())
-			got := drain(t, ptr(mustBuild(t, svc, userID)))
+			got := drain(t, mustBuild(t, svc, userID))
 			assertShape(t, got)
 			if len(got) != SessionCap {
 				t.Fatalf("len = %d, want %d (%s)", len(got), SessionCap, pattern(got))
@@ -347,7 +351,7 @@ func TestConfusionMarksStruggling(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := drain(t, ptr(mustBuild(t, svc, userID)))
+	got := drain(t, mustBuild(t, svc, userID))
 	flags := map[int64]bool{}
 	for _, card := range got {
 		flags[card.CardID] = card.Struggling
@@ -360,7 +364,7 @@ func TestConfusionMarksStruggling(t *testing.T) {
 	}
 
 	clk.Advance(8 * 24 * time.Hour)
-	got = drain(t, ptr(mustBuild(t, svc, userID)))
+	got = drain(t, mustBuild(t, svc, userID))
 	seen := map[int64]bool{}
 	for _, card := range got {
 		seen[card.CardID] = card.Struggling
@@ -388,7 +392,7 @@ func TestLapseRules(t *testing.T) {
 	insertReview(t, store, old, int(fsrs.Good), now.Add(-time.Hour))
 	clean := addCard(t, store, userID, "נקי", fsrs.DirHeEn, due, 0, int(fsrs.Good), now.Add(-time.Hour), false)
 
-	got := drain(t, ptr(mustBuild(t, svc, userID)))
+	got := drain(t, mustBuild(t, svc, userID))
 	flags := map[int64]bool{}
 	for _, card := range got {
 		flags[card.CardID] = card.Struggling
@@ -424,7 +428,7 @@ func TestNotDueKnownOnlyFillTheGap(t *testing.T) {
 			due := clk.Now().Add(time.Duration(i+1) * time.Minute)
 			laterIDs = append(laterIDs, addCard(t, store, userID, fmt.Sprintf("later-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false))
 		}
-		got := drain(t, ptr(mustBuild(t, svc, userID)))
+		got := drain(t, mustBuild(t, svc, userID))
 		want := PlanFor(1).Known
 		if len(got) != want {
 			t.Fatalf("len = %d, want known quota %d", len(got), want)
@@ -467,7 +471,7 @@ func TestNotDueKnownOnlyFillTheGap(t *testing.T) {
 			due := clk.Now().Add(time.Duration(i+1) * time.Hour)
 			addCard(t, store, userID, fmt.Sprintf("later-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
 		}
-		got := drain(t, ptr(mustBuild(t, svc, userID)))
+		got := drain(t, mustBuild(t, svc, userID))
 		if len(got) != SessionCap {
 			t.Fatalf("len = %d, want %d", len(got), SessionCap)
 		}
@@ -504,9 +508,9 @@ func TestDeterministic(t *testing.T) {
 	for i := 0; i < 25; i++ {
 		addCard(t, store, userID, fmt.Sprintf("tie-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
 	}
-	a := idsOf(drain(t, ptr(mustBuild(t, New(store, clk, 1), userID))))
-	b := idsOf(drain(t, ptr(mustBuild(t, New(store, clk, 1), userID))))
-	c := idsOf(drain(t, ptr(mustBuild(t, New(store, clk, 2), userID))))
+	a := idsOf(drain(t, mustBuild(t, New(store, clk, 1), userID)))
+	b := idsOf(drain(t, mustBuild(t, New(store, clk, 1), userID)))
+	c := idsOf(drain(t, mustBuild(t, New(store, clk, 2), userID)))
 	if !sameIDs(a, b) {
 		t.Fatalf("same clock and seed differed\n%v\n%v", a, b)
 	}
@@ -518,6 +522,137 @@ func TestDeterministic(t *testing.T) {
 	}
 }
 
+func TestConcurrentRecordWritesOnce(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	ctx := context.Background()
+	userID := mustUser(t, store)
+	reviewed := clk.Now().Add(-48 * time.Hour)
+	var ids []int64
+	for i := 0; i < 8; i++ {
+		due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
+		ids = append(ids, addCard(t, store, userID, fmt.Sprintf("race-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false))
+	}
+	sess := mustBuild(t, svc, userID)
+	first, ok := sess.Next()
+	if !ok || first.CardID != ids[0] {
+		t.Fatalf("first = %+v ok=%v, want %d", first, ok, ids[0])
+	}
+	before, err := store.ReviewLogs(ctx, first.CardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const n = 4
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			errs[i] = sess.Record(ctx, first.CardID, fsrs.Again)
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	okN := 0
+	for _, err := range errs {
+		if err == nil {
+			okN++
+		}
+	}
+	if okN != 1 {
+		t.Fatalf("successes = %d, want 1 (%v)", okN, errs)
+	}
+	logs, err := store.ReviewLogs(ctx, first.CardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(logs) != len(before)+1 {
+		t.Fatalf("review_log rows = %d, want exactly 1 new row (had %d)", len(logs), len(before))
+	}
+	requeues := 0
+	for {
+		card, ok := sess.Next()
+		if !ok {
+			break
+		}
+		if card.CardID == first.CardID {
+			requeues++
+		}
+	}
+	if requeues != 1 {
+		t.Fatalf("re-queues = %d, want at most 1 and the successful Again to insert once", requeues)
+	}
+}
+
+func TestRecordRestoresClaimWhenGradeFails(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	userID := mustUser(t, store)
+	reviewed := clk.Now().Add(-time.Hour)
+	due := clk.Now().Add(-time.Minute)
+	id := addCard(t, store, userID, "נכשל", fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+	sess := mustBuild(t, svc, userID)
+	card, ok := sess.Next()
+	if !ok || card.CardID != id {
+		t.Fatalf("first = %+v ok=%v", card, ok)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := sess.Record(ctx, card.CardID, fsrs.Again); err == nil {
+		t.Fatal("cancelled context graded the card")
+	}
+	if err := sess.Record(context.Background(), card.CardID, fsrs.Good); err != nil {
+		t.Fatal(err)
+	}
+	logs, err := store.ReviewLogs(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(logs) != 2 || logs[1].Rating != int(fsrs.Good) {
+		t.Fatalf("log = %+v, want the fixture grade plus one Good", logs)
+	}
+}
+
+func TestLatestRatingIgnoresTheFuture(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	userID := mustUser(t, store)
+	now := clk.Now()
+	id := addCard(t, store, userID, "עתיד", fsrs.DirEnHe, now.Add(-time.Minute), 0, int(fsrs.Good), now.Add(-time.Hour), false)
+	insertReview(t, store, id, int(fsrs.Hard), now.Add(24*time.Hour))
+	sess := mustBuild(t, svc, userID)
+	card, ok := sess.Next()
+	if !ok || card.CardID != id || card.Struggling {
+		t.Fatalf("card = %+v ok=%v, want the Good at or before now", card, ok)
+	}
+}
+
+func TestBuildSessionUsesOneNow(t *testing.T) {
+	storeClk := &fakeClock{t: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)}
+	store, err := db.Open(context.Background(), filepath.Join(t.TempDir(), "hebrew.sqlite"), storeClk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	// Eight days ahead of the store. A confusion at the store's now is inside
+	// the store's 7-day window and outside the window ending at this instant.
+	svcClk := &fakeClock{t: storeClk.Now().Add(8 * 24 * time.Hour)}
+	svc := New(store, svcClk, 1)
+	userID := mustUser(t, store)
+	now := svcClk.Now()
+	id := addCard(t, store, userID, "שעון", fsrs.DirEnHe, now.Add(-time.Minute), 0, int(fsrs.Good), now.Add(-time.Hour), false)
+	if err := fsrs.New(store, storeClk).RecordMiss(context.Background(), userID, fsrs.MissLetterPair, "ב/כ", lexemeOf(t, store, id)); err != nil {
+		t.Fatal(err)
+	}
+	sess := mustBuild(t, svc, userID)
+	card, ok := sess.Next()
+	if !ok || card.CardID != id || card.Struggling {
+		t.Fatalf("card = %+v ok=%v, want the confusion aged out on the build clock", card, ok)
+	}
+}
+
 func lexemeOf(t *testing.T, store *db.Store, cardID int64) int64 {
 	t.Helper()
 	card, err := store.GetCard(context.Background(), cardID)
@@ -526,5 +661,3 @@ func lexemeOf(t *testing.T, store *db.Store, cardID int64) int64 {
 	}
 	return card.LexemeID
 }
-
-func ptr(s Session) *Session { return &s }

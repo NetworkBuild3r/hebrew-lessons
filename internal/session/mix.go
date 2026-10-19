@@ -40,8 +40,10 @@ const (
 	// accuracy is below LowAccuracy or above HighAccuracy.
 	AccuracyShareShift = 0.15
 
-	// DefaultKnownShare is the in-band known-card fraction. It is the
-	// fraction that yields TargetSuccess at KnownSuccess and StruggleSuccess.
+	// DefaultKnownShare is the in-band known-card fraction, about 7/9 (0.778).
+	// TargetSuccess 0.85 is the success rate that fraction is chosen to hit
+	// when a known card succeeds at KnownSuccess and a struggling card
+	// succeeds at StruggleSuccess.
 	DefaultKnownShare = (TargetSuccess - StruggleSuccess) / (KnownSuccess - StruggleSuccess)
 
 	// LowAccuracyKnownShare is DefaultKnownShare plus AccuracyShareShift.
