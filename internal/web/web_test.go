@@ -27,7 +27,7 @@ func TestEmbeddedTrees(t *testing.T) {
 func TestHealthRoute(t *testing.T) {
 	h := New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}))
+	}), nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	if rr.Code != http.StatusNoContent {

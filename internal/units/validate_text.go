@@ -35,11 +35,27 @@ import (
 // do not count: they do not resolve a vowel homograph. Cantillation alone
 // does not count either.
 //
-// A token is a number when it is all decimal digits, or when it is Hebrew
-// numeral notation. A one-letter numeral is a Hebrew letter plus geresh
-// (U+05F3), as in ה׳. A longer numeral is Hebrew letters with gershayim
-// (U+05F4) immediately before the last letter, as in י״ב or תשפ״ז.
-// A geresh inside a loanword, as in צ׳יפס or ג׳ירפה, is not a number.
+// A token is a number when it is all decimal digits, or when it is a
+// Hebrew numeral in gematria rank order. A one-letter numeral is one
+// letter plus geresh (U+05F3), as in ה׳. A longer numeral is letters
+// with gershayim (U+05F4) immediately before the last letter, as in
+// י״ב or תשפ״ז.
+//
+// Reading order is string order: the first rune is the rightmost letter.
+// The ranks, in that order, are:
+//   - zero or more ת
+//   - then at most one of ק, ר, or ש
+//   - then at most one tens letter (י through צ, non-final)
+//   - then at most one units letter (א through ט)
+// Fifteen and sixteen are ט״ו and ט״ז. י״ה and י״ו are words, including
+// when that pair is the tens and the ones of a longer number. Final
+// forms (ךםןףץ) are never numerals.
+//
+// A spelling that is both an acronym and a valid numeral, such as ת״א
+// or ש״ס, cannot be told apart by spelling, so it is a numeral.
+// ה׳תשפ״ו is not a numeral; write תשפ״ו. A geresh inside a loanword,
+// as in צ׳יפס, is not a number. ASCII quotes (י"ב, ה') are not
+// U+05F3 or U+05F4. Tokenize splits them, and each letter is a word.
 
 // Normalize is the shared text key for units and audio.
 // Importers store this string, and Lookup.HasAudio is called with it.
@@ -139,23 +155,78 @@ func isNumberTok(tok string) bool {
 	if digits {
 		return true
 	}
-	// ה׳ : one letter, then geresh.
-	if len(sig) == 2 && isHebrewLetter(sig[0]) && sig[1] == 0x05F3 {
+	return hebrewNumeral(sig)
+}
+
+// hebrewNumeral reports whether sig is gematria in rank order.
+// The caller has already dropped niqqud. See the number comment above.
+func hebrewNumeral(sig []rune) bool {
+	letters, ok := numeralLetters(sig)
+	if !ok || len(letters) == 0 {
+		return false
+	}
+	i := 0
+	for i < len(letters) && letters[i] == 'ת' {
+		i++
+	}
+	if i < len(letters) && isHundreds(letters[i]) {
+		i++
+	}
+	// 15 and 16 are ט״ו and ט״ז, and nothing follows them.
+	if i+2 == len(letters) && letters[i] == 'ט' && (letters[i+1] == 'ו' || letters[i+1] == 'ז') {
 		return true
 	}
-	// תשפ״ז, י״ב: gershayim immediately before the last letter.
-	if len(sig) >= 3 && sig[len(sig)-2] == 0x05F4 {
+	if i < len(letters) && isTens(letters[i]) {
+		tens := letters[i]
+		i++
+		if i < len(letters) && isUnits(letters[i]) {
+			if tens == 'י' && (letters[i] == 'ה' || letters[i] == 'ו') {
+				return false
+			}
+			i++
+		}
+	} else if i < len(letters) && isUnits(letters[i]) {
+		i++
+	}
+	return i == len(letters)
+}
+
+func numeralLetters(sig []rune) ([]rune, bool) {
+	switch {
+	case len(sig) == 2 && sig[1] == 0x05F3 && isHebrewLetter(sig[0]):
+		return sig[:1], true
+	case len(sig) >= 3 && sig[len(sig)-2] == 0x05F4:
+		letters := make([]rune, 0, len(sig)-1)
 		for i, r := range sig {
 			if i == len(sig)-2 {
 				continue
 			}
 			if !isHebrewLetter(r) {
-				return false
+				return nil, false
 			}
+			letters = append(letters, r)
 		}
-		return true
+		return letters, true
+	default:
+		return nil, false
 	}
-	return false
+}
+
+func isHundreds(r rune) bool {
+	return r == 'ק' || r == 'ר' || r == 'ש'
+}
+
+func isTens(r rune) bool {
+	switch r {
+	case 'י', 'כ', 'ל', 'מ', 'נ', 'ס', 'ע', 'פ', 'צ':
+		return true
+	default:
+		return false
+	}
+}
+
+func isUnits(r rune) bool {
+	return r >= 'א' && r <= 'ט'
 }
 
 func containsHebrew(s string) bool {
