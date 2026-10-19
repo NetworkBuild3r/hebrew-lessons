@@ -118,6 +118,13 @@ templ SignIn(p Page) {
 						<span class="brand__mark" aria-hidden="true">ע</span>
 						<span class="brand__name">@H(AppName)</span>
 					</h1>
+					<p class="signin__title">
+						if p.Lang == "en" {
+							@E(SignInTitleEN)
+						} else {
+							@H(SignInTitleHE)
+						}
+					</p>
 					<p class="signin__lede">
 						if p.Lang == "en" {
 							@E(SignInLedeEN)

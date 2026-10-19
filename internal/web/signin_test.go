@@ -17,6 +17,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
+	"golang.org/x/text/unicode/norm"
 )
 
 func TestSignInPage(t *testing.T) {
@@ -99,6 +100,28 @@ func TestSignInRedirectsSignedInUser(t *testing.T) {
 	}
 }
 
+func TestSignInLedeHESheva(t *testing.T) {
+	// עִבְרִית is ayin+hiriq, bet+sheva, resh+hiriq, yod, tav.
+	// The rejected spelling puts hiriq (U+05B4) under the bet.
+	const (
+		sheva = "\u05E2\u05B4\u05D1\u05B0\u05E8\u05B4\u05D9\u05EA"
+		hiriq = "\u05E2\u05B4\u05D1\u05B4\u05E8\u05B4\u05D9\u05EA"
+	)
+	if !norm.NFC.IsNormalString(views.SignInLedeHE) {
+		t.Fatal("SignInLedeHE is not NFC")
+	}
+	if !strings.Contains(views.SignInLedeHE, sheva) {
+		t.Fatalf("SignInLedeHE = %q, want %q (sheva under the bet)", views.SignInLedeHE, sheva)
+	}
+	if strings.Contains(views.SignInLedeHE, hiriq) {
+		t.Fatal("SignInLedeHE has hiriq under the bet")
+	}
+	word, _, _ := strings.Cut(views.SignInLedeHE, ",")
+	if !strings.Contains(views.AppName, word) {
+		t.Fatalf("lede first word %q is not the spelling in AppName", word)
+	}
+}
+
 func assertSignIn(t *testing.T, body, lang string) {
 	t.Helper()
 	dir := "rtl"
@@ -123,9 +146,14 @@ func assertSignIn(t *testing.T, body, lang string) {
 	if strings.Contains(body, `class="pair"`) || strings.Contains(body, "גּוּגֶל") || strings.Contains(body, "btn-primary") {
 		t.Fatal("sign-in still pairs both languages or uses the blue primary")
 	}
+	title := views.SignInTitleHE
 	lede, other := views.SignInLedeHE, views.SignInLedeEN
 	if lang == "en" {
+		title = views.SignInTitleEN
 		lede, other = other, lede
+	}
+	if !strings.Contains(body, `class="signin__title"`) || !strings.Contains(body, title) {
+		t.Fatal("sign-in title is not rendered")
 	}
 	if !strings.Contains(body, lede) || strings.Contains(body, other) {
 		t.Fatal("sign-in lede should be the interface language only")

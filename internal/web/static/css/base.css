@@ -462,11 +462,19 @@ h1 {
   line-height: var(--lh-he-display);
   white-space: nowrap;
 }
+.signin__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+}
 .signin__lede {
-  max-inline-size: 28ch;
-  color: var(--muted);
-  font-size: var(--fs-small);
+  max-inline-size: 40ch;
+  color: var(--text);
+  font-size: var(--fs-body);
   line-height: var(--lh-he-body);
+  text-wrap: balance;
 }
 @media (min-width: 1024px) {
   .signin {
@@ -474,7 +482,7 @@ h1 {
     align-items: center;
     justify-items: stretch;
     gap: var(--space-7);
-    inline-size: min(100%, var(--content-max));
+    inline-size: min(100%, calc(var(--content-max) + var(--space-9) * 3));
     margin-inline: auto;
     padding: var(--space-7);
   }
