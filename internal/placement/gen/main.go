@@ -49,6 +49,7 @@ type rawItem struct {
 	Source   string
 	Rank     int
 	List     string
+	Verified bool
 }
 
 type outItem struct {
@@ -159,7 +160,7 @@ func run() error {
 			Translit: item.Translit,
 			Gender:   item.Gender,
 			POS:      item.POS,
-			Verified: false,
+			Verified: item.Verified,
 			Source:   item.Source,
 		})
 	}
