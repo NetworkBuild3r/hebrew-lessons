@@ -88,6 +88,11 @@ func TestHebrewSourcesAreNFC(t *testing.T) {
 		if !inTree {
 			return nil
 		}
+		// hashText in this map is the pre-normalization form. The importer
+		// test requires that one entry to stay out of NFC.
+		if rel == filepath.Join("internal", "audio", "testdata", "clip-text-map.json") {
+			return nil
+		}
 		switch filepath.Ext(path) {
 		case ".templ", ".go", ".json", ".html", ".txt", ".md":
 			add(path)

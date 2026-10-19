@@ -57,7 +57,9 @@ import (
 // as in צ׳יפס, is not a number. ASCII quotes (י"ב, ה') are not
 // U+05F3 or U+05F4. Tokenize splits them, and each letter is a word.
 
-func normalize(s string) string {
+// Normalize is the shared text key for units and audio.
+// Importers store this string, and Lookup.HasAudio is called with it.
+func Normalize(s string) string {
 	s = strings.Map(func(r rune) rune {
 		if unicode.Is(unicode.Cf, r) {
 			return -1
@@ -80,6 +82,8 @@ func normalize(s string) string {
 	}
 	return b.String()
 }
+
+func normalize(s string) string { return Normalize(s) }
 
 func stripNiqqud(s string) string {
 	return strings.Map(func(r rune) rune {
