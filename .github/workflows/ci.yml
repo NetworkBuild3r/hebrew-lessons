@@ -21,6 +21,18 @@
 # main; main's own workflows cover those. A pull request builds and smokes
 # with contents: read and never logs in or pushes. packages: write is only
 # on the publish job, which runs on a push to v2.
+#
+# Checkouts do not pin pull_request.head.sha. Omitting ref is the
+# pull_request default: actions/checkout uses github.ref
+# (refs/pull/N/merge) and github.sha, the test merge of the head into the
+# base when that event fired. A green check is that merged tree. Pinning the
+# head is what let #78 pass and then fail to compile once merged with v2.
+# On a push, the omitted ref resolves to the pushed commit. Publish sets
+# ref to github.sha, so the image tag stays
+# ghcr.io/networkbuild3r/hebrew:sha-<push sha>. fetch-depth stays 1. Nothing
+# in this file runs merge-base or diffs against origin/v2. templ's git diff
+# is the worktree against the checked-out commit, which does not need parents.
+# There is no pull_request_target.
 name: ci
 
 on:
@@ -54,10 +66,12 @@ jobs:
       github.base_ref != 'main' &&
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     steps:
+      # No ref on purpose. pull_request checks out refs/pull/N/merge at
+      # github.sha (the merge commit). A push checks out the pushed commit.
+      # Do not pin pull_request.head.sha.
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
       # Green job when this commit has no module yet. ::notice:: does not fail
@@ -168,14 +182,17 @@ jobs:
     permissions:
       contents: read
     steps:
+      # pull_request only. No ref: refs/pull/N/merge at github.sha.
+      # Do not pin pull_request.head.sha.
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
-      # The tag is sha-<full 40-character commit>. Fail before login, build,
-      # or push if that name contains hebrew-lessons.
+      # The tag is sha-<full 40-character commit>. On this job that commit is
+      # the merge ref: git rev-parse HEAD, which is github.sha for the event.
+      # The tag is local. This job never logs in or pushes. Fail before the
+      # build if that name contains hebrew-lessons.
       - name: Refuse a hebrew-lessons image name
         id: guard
         shell: bash
@@ -299,10 +316,13 @@ jobs:
       contents: read
       packages: write
     steps:
+      # Push to v2 only. ref is the pushed commit, which the sha- tag
+      # records. This job does not run on pull_request, and it does not
+      # read pull_request.head.sha.
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 1
 
       # The tag is sha-<full 40-character commit>. Fail before login, build,
