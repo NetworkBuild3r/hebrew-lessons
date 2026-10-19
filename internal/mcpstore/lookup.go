@@ -10,14 +10,17 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
-// KnownLexemes is the global authoring view: pointed NFC text of newWords
-// on units whose position is lower than beforePosition.
+// KnownLexemes is the shared-unit authoring view: pointed NFC text of
+// newWords on shared units whose position is lower than beforePosition.
+// units_scope_position covers the scope and position filter.
 func (s *Store) KnownLexemes(ctx context.Context, beforePosition int) (map[string]bool, error) {
 	conn, err := s.conn(ctx)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := conn.QueryContext(ctx, `SELECT doc FROM units WHERE position < ?`, beforePosition)
+	rows, err := conn.QueryContext(ctx, `
+		SELECT doc FROM units
+		WHERE position < ? AND scope = 'shared'`, beforePosition)
 	if err != nil {
 		return nil, fmt.Errorf("mcpstore: known lexemes: %w", err)
 	}
@@ -48,8 +51,8 @@ func (s *Store) KnownLexemes(ctx context.Context, beforePosition int) (map[strin
 }
 
 // HasAudio reports a clip for this exact text.
-// db.Store.AudioIDByText reads audio_assets. AudioByText from a later
-// audio index is not on this branch.
+// db.Store.AudioIDByText filters audio_assets on text_nfc only.
+// text_nfc, voice, and model have no index. Adding one needs a migration.
 func (s *Store) HasAudio(ctx context.Context, textNFC string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err

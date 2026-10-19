@@ -32,14 +32,18 @@ const (
 func TestUnitsInScopeFiltersAndOrders(t *testing.T) {
 	ctx := context.Background()
 	store, raw := openAdapter(t, nil)
+	userA := mustUser(t, raw)
+	userB := mustOtherUser(t, raw)
+	scopeA := "learner:" + strconv.FormatInt(userA, 10)
+	scopeB := "learner:" + strconv.FormatInt(userB, 10)
 	early := insertUnitRow(t, raw, "Early", mcp.ScopeShared, "draft", 0, hello)
 	middle, err := testharness.InsertUnit(ctx, raw, "Middle", "draft")
 	if err != nil {
 		t.Fatal(err)
 	}
 	late := insertUnitRow(t, raw, "Late", mcp.ScopeShared, "draft", 2, coffee)
-	mine := insertUnitRow(t, raw, "Mine", "learner:7", "draft", 0, book)
-	theirs := insertUnitRow(t, raw, "Theirs", "learner:8", "draft", 5, fish)
+	mine := insertUnitRow(t, raw, "Mine", scopeA, "draft", 0, book)
+	theirs := insertUnitRow(t, raw, "Theirs", scopeB, "draft", 5, fish)
 
 	shared, err := store.UnitsInScope(ctx, nil)
 	if err != nil {
@@ -48,26 +52,29 @@ func TestUnitsInScopeFiltersAndOrders(t *testing.T) {
 	if ids(shared) != joinIDs(early, middle, late) {
 		t.Fatalf("shared = %+v", shared)
 	}
-	learner := int64(7)
-	mineRows, err := store.UnitsInScope(ctx, &learner)
+	mineRows, err := store.UnitsInScope(ctx, &userA)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ids(mineRows) != joinIDs(early, mine, middle, late) {
-		t.Fatalf("learner 7 = %+v", mineRows)
+		t.Fatalf("learner A = %+v", mineRows)
 	}
 	for _, row := range mineRows {
-		if row.Scope == "learner:8" || row.ID == theirs {
-			t.Fatalf("learner 7 saw %+v", mineRows)
+		if row.Scope == scopeB || row.ID == theirs || row.Title == "Theirs" {
+			t.Fatalf("learner A saw %+v", mineRows)
 		}
 	}
-	other := int64(8)
-	otherRows, err := store.UnitsInScope(ctx, &other)
+	otherRows, err := store.UnitsInScope(ctx, &userB)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ids(otherRows) != joinIDs(early, middle, late, theirs) {
-		t.Fatalf("learner 8 = %+v", otherRows)
+		t.Fatalf("learner B = %+v", otherRows)
+	}
+	for _, row := range otherRows {
+		if row.Scope == scopeA || row.ID == mine || row.Title == "Mine" {
+			t.Fatalf("learner B saw %+v", otherRows)
+		}
 	}
 }
 
@@ -117,6 +124,27 @@ func TestLatestPlacementMapsFinishedRun(t *testing.T) {
 	}
 	if len(row.BandScores) != 1 || row.BandScores[0].Band != 0 || row.BandScores[0].Rated != 4 || row.BandScores[0].Again != 1 || row.BandScores[0].Hard != 1 || row.BandScores[0].Good != 1 || row.BandScores[0].Easy != 1 || row.BandScores[0].DontKnow != 0 || row.BandScores[0].GoodPlusRate != 0.5 {
 		t.Fatalf("bands %+v", row.BandScores)
+	}
+
+	otherID := mustOtherUser(t, raw)
+	otherRun, err := raw.InsertPlacementRun(ctx, otherID, when.Add(time.Hour), 99)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ratePlacement(t, raw, otherRun, "house", db.Easy, mustLexeme(t, raw, house), when)
+	if err := raw.FinishPlacement(ctx, otherRun, when.Add(time.Hour), 4, "exhausted", `{"bands":[],"estimated_known_words":7}`); err != nil {
+		t.Fatal(err)
+	}
+	again, ok, err := store.LatestPlacement(ctx, userID)
+	if err != nil || !ok {
+		t.Fatalf("after other ok=%v err=%v", ok, err)
+	}
+	if !again.Finished || again.Sittings != 2 || again.Level != 2 || again.StopReason != "cap_cards" || again.CardsRated != 4 || again.EstimatedKnownWords != 40 {
+		t.Fatalf("learner A saw B's placement %+v", again)
+	}
+	other, ok, err := store.LatestPlacement(ctx, otherID)
+	if err != nil || !ok || other.StopReason != "exhausted" || other.Level != 4 || other.Sittings != 1 || other.EstimatedKnownWords != 7 {
+		t.Fatalf("learner B placement %+v ok=%v err=%v", other, ok, err)
 	}
 }
 
@@ -203,6 +231,32 @@ func TestPlacementLexemeLists(t *testing.T) {
 	if len(gotLearn) != 1 || gotLearn[0] != hello {
 		t.Fatalf("learning %+v", gotLearn)
 	}
+
+	userB := mustOtherUser(t, raw)
+	houseID := mustLexeme(t, raw, house)
+	otherRun, err := raw.InsertPlacementRun(ctx, userB, when.Add(2*time.Minute), 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ratePlacement(t, raw, otherRun, "house", db.Easy, houseID, when)
+	otherKnown, err := store.PlacementKnownLexemes(ctx, userB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(otherKnown) != 1 || otherKnown[0] != house {
+		t.Fatalf("learner B known %+v", otherKnown)
+	}
+	gotKnown, err = store.PlacementKnownLexemes(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gotKnown) != 1 || gotKnown[0] != coffee || containsWord(gotKnown, house) {
+		t.Fatalf("learner A known after B %+v", gotKnown)
+	}
+	gotLearn, err = store.PlacementLearningLexemes(ctx, userID)
+	if err != nil || len(gotLearn) != 1 || gotLearn[0] != hello || containsWord(gotLearn, house) {
+		t.Fatalf("learner A learning after B %+v err=%v", gotLearn, err)
+	}
 }
 
 func TestStruggleStats(t *testing.T) {
@@ -241,6 +295,14 @@ func TestStruggleStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := raw.InsertConfusionMiss(ctx, userID, "letter_pair", "ב/כ", gimelID, old); err != nil {
+		t.Fatal(err)
+	}
+	otherID := mustOtherUser(t, raw)
+	zayinID := mustLexeme(t, raw, "ז")
+	mustGloss(t, raw, "ז", "zayin")
+	zayin := mustCard(t, raw, otherID, zayinID, 4)
+	insertReviews(t, raw, zayin, recent, 1, 1, 1)
+	if err := raw.InsertConfusionMiss(ctx, otherID, "letter_pair", "ז/ק", zayinID, recent); err != nil {
 		t.Fatal(err)
 	}
 
@@ -283,6 +345,28 @@ func TestStruggleStats(t *testing.T) {
 	}
 	if len(stats.Lexemes[1].ConfusionKeys) != 0 {
 		t.Fatalf("bet keys %+v", stats.Lexemes[1].ConfusionKeys)
+	}
+	for _, row := range stats.Lexemes {
+		if row.TextNFC == "ז" {
+			t.Fatalf("learner A saw B's lexeme %+v", stats.Lexemes)
+		}
+	}
+	for _, row := range stats.Confusions {
+		if row.A == "ז" || row.B == "ז" || row.A == "ק" {
+			t.Fatalf("learner A saw B's confusion %+v", stats.Confusions)
+		}
+	}
+	other, err := store.StruggleStats(ctx, otherID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(other.Top) != 1 || other.Top[0] != "ז" || len(other.Lexemes) != 1 || other.Lexemes[0].TextNFC != "ז" {
+		t.Fatalf("learner B struggle %+v", other)
+	}
+	for _, row := range other.Lexemes {
+		if row.TextNFC == "א" || row.TextNFC == "ב" || row.TextNFC == "ג" {
+			t.Fatalf("learner B saw A's lexeme %+v", other.Lexemes)
+		}
 	}
 }
 
@@ -413,6 +497,24 @@ func TestLearnerKnownLexemes(t *testing.T) {
 	}
 	if strings.Join(got, ",") != house+","+book+","+hello {
 		t.Fatalf("known %+v", got)
+	}
+
+	otherID := mustOtherUser(t, raw)
+	fishCard := mustCard(t, raw, otherID, fishID, 0)
+	insertReviews(t, raw, fishCard, when, 4)
+	other, err := store.LearnerKnownLexemes(ctx, otherID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(other, ",") != fish {
+		t.Fatalf("learner B known %+v", other)
+	}
+	got, err = store.LearnerKnownLexemes(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, ",") != house+","+book+","+hello || containsWord(got, fish) {
+		t.Fatalf("learner A known after B %+v", got)
 	}
 }
 
@@ -663,6 +765,73 @@ func TestLookup(t *testing.T) {
 	}
 }
 
+func TestKnownLexemesSharedOnly(t *testing.T) {
+	ctx := context.Background()
+	store, raw := openAdapter(t, nil)
+	insertUnitRow(t, raw, "Private", "learner:8", "draft", 0, fish)
+	insertUnitRow(t, raw, "SharedHello", mcp.ScopeShared, "draft", 0, hello)
+
+	privateOnly, err := store.KnownLexemes(ctx, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if privateOnly[fish] || !privateOnly[hello] || len(privateOnly) != 1 {
+		t.Fatalf("before shared fish %+v", privateOnly)
+	}
+	if issues := units.Validate(ctx, storyUnit(2, fish), store); !hasRule(issues, units.RuleCoverageStory) {
+		t.Fatalf("private fish counted as known: %+v", issues)
+	}
+	if issues := units.Validate(ctx, storyUnit(2, hello), store); hasRule(issues, units.RuleCoverageStory) {
+		t.Fatalf("shared hello missing from coverage: %+v", issues)
+	}
+
+	insertUnitRow(t, raw, "SharedFish", mcp.ScopeShared, "draft", 1, fish)
+	shared, err := store.KnownLexemes(ctx, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !shared[fish] || !shared[hello] {
+		t.Fatalf("shared fish %+v", shared)
+	}
+	if issues := units.Validate(ctx, storyUnit(2, fish), store); hasRule(issues, units.RuleCoverageStory) {
+		t.Fatalf("shared fish missing from coverage: %+v", issues)
+	}
+}
+
+func storyUnit(position int, word string) *units.Unit {
+	return &units.Unit{
+		Position:  position,
+		Title:     "Check",
+		Situation: "Street",
+		Concept:   "One idea",
+		Lessons: []units.Lesson{{
+			Kind: units.KindLesson,
+			Activities: []units.Activity{{
+				Type: units.ActivityStory,
+				Text: word,
+			}},
+		}},
+	}
+}
+
+func hasRule(issues []units.Issue, rule string) bool {
+	for _, iss := range issues {
+		if iss.Rule == rule {
+			return true
+		}
+	}
+	return false
+}
+
+func containsWord(words []string, word string) bool {
+	for _, w := range words {
+		if w == word {
+			return true
+		}
+	}
+	return false
+}
+
 type fixedClock struct{ t time.Time }
 
 func (f fixedClock) Now() time.Time { return f.t }
@@ -679,7 +848,17 @@ func openAdapter(t *testing.T, clk clock.Clock) (*Store, *db.Store) {
 
 func mustUser(t *testing.T, raw *db.Store) int64 {
 	t.Helper()
-	id, err := raw.InsertUser(context.Background(), "learner@example.com", "sub-learner", "learner")
+	return insertUser(t, raw, "learner@example.com", "sub-learner")
+}
+
+func mustOtherUser(t *testing.T, raw *db.Store) int64 {
+	t.Helper()
+	return insertUser(t, raw, "other@example.com", "sub-other")
+}
+
+func insertUser(t *testing.T, raw *db.Store, email, sub string) int64 {
+	t.Helper()
+	id, err := raw.InsertUser(context.Background(), email, sub, "learner")
 	if err != nil {
 		t.Fatal(err)
 	}
