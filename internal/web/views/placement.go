@@ -472,12 +472,3 @@ func ladderLabel(copy PlacementCopy, state string) string {
 		return copy.StillAhead
 	}
 }
-
-// KeyTrigger is the htmx key filter for a grade or for Space.
-// Plain buttons remain the fallback when filters do not run.
-func KeyTrigger(key string) string {
-	if key == " " {
-		return "click, keyup[key==' '&&!event.ctrlKey&&!event.metaKey&&event.target.tagName!='BUTTON'] from:body"
-	}
-	return "click, keyup[key=='" + key + "'&&!event.ctrlKey&&!event.metaKey&&event.target.tagName!='BUTTON'] from:body"
-}

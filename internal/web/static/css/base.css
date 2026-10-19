@@ -1082,25 +1082,12 @@ h1 {
   color: var(--text);
   border: 1px solid var(--hairline-strong);
 }
-.listen, .audio, .audio--slow {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  min-block-size: var(--tap);
-  min-inline-size: var(--tap);
-  padding-inline: var(--space-3);
-  border-radius: var(--radius-pill);
-  background: color-mix(in oklch, var(--on-ink) 12%, transparent);
-  color: var(--on-ink);
-}
-.rcard__body .audio, .rcard__body .audio--slow {
-  background: var(--surface-soft);
-  color: var(--text);
-}
-.listen audio, .audio audio {
-  inline-size: min(100%, calc(var(--space-9) * 3));
-  min-block-size: var(--tap);
+.slate audio {
+  display: block;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  margin-block-start: var(--space-3);
+  color-scheme: inherit;
 }
 .ans { display: grid; justify-items: center; gap: var(--space-2); text-align: center; overflow: visible; }
 .ans__main {
@@ -1130,11 +1117,6 @@ h1 {
   font-weight: 700;
 }
 .grade small { font-weight: 500; font-size: var(--fs-caption); }
-.grade kbd {
-  font: inherit;
-  font-size: var(--fs-caption);
-  color: var(--muted);
-}
 .grade[data-tone="stop"] { background: var(--stop-soft); color: var(--stop); }
 .grade[data-tone="check"] { background: var(--check-soft); color: var(--check); }
 .grade[data-tone="go"] { background: var(--go-soft); color: var(--go); }
@@ -1255,8 +1237,14 @@ h1 {
 .plnote { color: var(--muted); }
 
 ::view-transition-group(plbar) { animation: none; }
-::view-transition-old(rcard) { animation: place-flip-out var(--dur-deck) var(--ease-in-out); }
-::view-transition-new(rcard) { animation: place-flip-in var(--dur-deck) var(--ease-out); }
+::view-transition-old(rcard) {
+  animation: place-flip-out 140ms var(--ease-in-out) both;
+  backface-visibility: hidden;
+}
+::view-transition-new(rcard) {
+  animation: place-flip-in 140ms var(--ease-out) 140ms both;
+  backface-visibility: hidden;
+}
 ::view-transition-old(rcard-next) { animation: place-stack-out var(--dur-deck) var(--ease-in-out); }
 ::view-transition-new(rcard-next) { animation: place-stack-in var(--dur-deck) var(--spring-soft); }
 @keyframes place-flip-out {

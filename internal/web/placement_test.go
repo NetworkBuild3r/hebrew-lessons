@@ -276,6 +276,21 @@ func TestPlacementOwnership(t *testing.T) {
 	if strings.Contains(stolen.Body.String(), word[1]) {
 		t.Fatal("forbidden response included the card")
 	}
+	flipped := b.post(t, h, "/_hx/placement/flip", url.Values{
+		"run_id":  {runID},
+		"item_id": {itemID},
+		"_csrf":   {b.csrf},
+	}, "", true)
+	if flipped.Code != http.StatusForbidden || strings.Contains(flipped.Body.String(), word[1]) {
+		t.Fatalf("other user flip = %d %s", flipped.Code, flipped.Body.String())
+	}
+	keptGoing := b.post(t, h, "/_hx/placement/continue", url.Values{
+		"run_id": {runID},
+		"_csrf":  {b.csrf},
+	}, "", true)
+	if keptGoing.Code != http.StatusForbidden || strings.Contains(keptGoing.Body.String(), word[1]) {
+		t.Fatalf("other user continue = %d %s", keptGoing.Code, keptGoing.Body.String())
+	}
 	finished := b.post(t, h, "/_hx/placement/finish", url.Values{
 		"run_id": {runID},
 		"_csrf":  {b.csrf},
@@ -323,6 +338,68 @@ func TestPlacementOwnership(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed || strings.Contains(rec.Body.String(), word[1]) {
 		t.Fatalf("GET /_hx/placement/start = %d", rec.Code)
 	}
+}
+
+func TestPlacementRateWritesOneCard(t *testing.T) {
+	h, store, a, b := newPlacementRouter(t)
+	started := a.post(t, h, "/_hx/placement/start", url.Values{"_csrf": {a.csrf}}, "", true)
+	if started.Code != http.StatusOK {
+		t.Fatal(started.Body.String())
+	}
+	runID := hidden(t, started.Body.String(), "run_id")
+	itemID := hidden(t, started.Body.String(), "item_id")
+	if cards, logs := learnerMemory(t, store, a.id); cards != 0 || logs != 0 {
+		t.Fatalf("start wrote memory: %d cards, %d logs", cards, logs)
+	}
+
+	stolen := b.post(t, h, "/_hx/placement/rate", url.Values{
+		"run_id":  {runID},
+		"item_id": {itemID},
+		"rating":  {"3"},
+		"_csrf":   {b.csrf},
+	}, "", true)
+	if stolen.Code != http.StatusForbidden {
+		t.Fatalf("other user rate = %d", stolen.Code)
+	}
+	if cards, logs := learnerMemory(t, store, a.id); cards != 0 || logs != 0 {
+		t.Fatalf("forbidden rate wrote the owner's memory: %d cards, %d logs", cards, logs)
+	}
+	if cards, logs := learnerMemory(t, store, b.id); cards != 0 || logs != 0 {
+		t.Fatalf("forbidden rate wrote the other user: %d cards, %d logs", cards, logs)
+	}
+
+	rated := a.post(t, h, "/_hx/placement/rate", url.Values{
+		"run_id":  {runID},
+		"item_id": {itemID},
+		"rating":  {"3"},
+		"_csrf":   {a.csrf},
+	}, "", true)
+	if rated.Code != http.StatusOK {
+		t.Fatalf("rate = %d %s", rated.Code, rated.Body.String())
+	}
+	if cards, logs := learnerMemory(t, store, a.id); cards != 1 || logs != 1 {
+		t.Fatalf("one rating wrote %d cards and %d logs", cards, logs)
+	}
+}
+
+func learnerMemory(t *testing.T, store *db.Store, userID int64) (cards, logs int) {
+	t.Helper()
+	var err error
+	cards, err = store.CountCards(context.Background(), userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := store.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = conn.QueryRowContext(context.Background(), `
+		SELECT COUNT(*) FROM review_log
+		WHERE card_id IN (SELECT id FROM cards WHERE user_id = ?)`, userID).Scan(&logs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cards, logs
 }
 
 func TestPlacementReadDoesNotDeal(t *testing.T) {
@@ -550,10 +627,13 @@ func assertFront(t *testing.T, body string, copy views.PlacementCopy) {
 	if strings.Contains(body, `name="rating" value="1"`) {
 		t.Fatal("grades are on the front")
 	}
-	if !strings.Contains(body, `hx-post="/_hx/placement/flip"`) || !strings.Contains(body, "from:body") || !strings.Contains(body, `role="progressbar"`) || !strings.Contains(body, "/20") {
-		t.Fatal("flip keys or sitting bar missing")
+	if !strings.Contains(body, `hx-post="/_hx/placement/flip"`) || !strings.Contains(body, `role="progressbar"`) || !strings.Contains(body, "/20") {
+		t.Fatal("flip or sitting bar missing")
 	}
-	if !strings.Contains(body, "controls") || !strings.Contains(body, `src="/audio/`) {
+	if strings.Contains(body, "from:body") || strings.Contains(body, "hx-on") || strings.Contains(body, `class="listen"`) {
+		t.Fatal("front still has a key shortcut or a button around the audio")
+	}
+	if !strings.Contains(body, "<audio controls") || !strings.Contains(body, `preload="auto"`) || !strings.Contains(body, `src="/audio/`) || !strings.Contains(body, `aria-label="`) {
 		t.Fatal("front audio missing")
 	}
 	if strings.Contains(body, "overflow:hidden") || strings.Contains(body, "overflow: hidden") {
@@ -566,7 +646,7 @@ func assertBack(t *testing.T, body string, copy views.PlacementCopy) {
 	if !strings.Contains(body, `class="ans__main"`) || !strings.Contains(body, `lang="he-Latn"`) {
 		t.Fatal("back is missing the gloss or the transliteration")
 	}
-	if !strings.Contains(body, "autoplay") || !strings.Contains(body, "0.75") {
+	if !strings.Contains(body, "<audio autoplay controls") || !strings.Contains(body, `preload="auto"`) || strings.Contains(body, "hx-on") || strings.Contains(body, "0.75") {
 		t.Fatal("back audio missing")
 	}
 	for _, label := range []string{copy.Again, copy.Hard, copy.Good, copy.Easy} {
@@ -575,9 +655,12 @@ func assertBack(t *testing.T, body string, copy views.PlacementCopy) {
 		}
 	}
 	for _, value := range []string{"1", "2", "3", "4"} {
-		if !strings.Contains(body, `name="rating" value="`+value+`"`) || !strings.Contains(body, "key==&#39;"+value+"&#39;") {
+		if !strings.Contains(body, `name="rating" value="`+value+`"`) {
 			t.Fatalf("rating %s missing", value)
 		}
+	}
+	if strings.Contains(body, "key==") || strings.Contains(body, "from:body") {
+		t.Fatal("grades still advertise a key shortcut")
 	}
 	if strings.Contains(body, "overflow:hidden") || strings.Contains(body, "overflow: hidden") {
 		t.Fatal("card clips overflow")
