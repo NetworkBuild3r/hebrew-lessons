@@ -178,6 +178,12 @@ func (s *Service) now() time.Time {
 	return s.clock.Now().UTC()
 }
 
+// CookieSecure reports whether browser cookies must set the Secure flag.
+// Session cookies and the UI language cookie both follow COOKIE_SECURE.
+func (s *Service) CookieSecure() bool {
+	return s.cookieSecure
+}
+
 func (s *Service) googleOn() bool {
 	return s.clientID != "" && s.clientSecret != "" && s.origin != "" &&
 		s.authURL != "" && s.tokenURL != "" && s.jwksURL != "" && s.issuer != ""
