@@ -35,14 +35,7 @@ type ReviewLog struct {
 	ElapsedDays   int
 	ScheduledDays int
 	Peeked        bool
-}
-
-// ConfusionCount is how many times one learner missed one key since a time.
-// Count is derived from the rows. It is not a column.
-type ConfusionCount struct {
-	Key   string
-	Kind  string
-	Count int
+	Chosen        string // Pointed NFC of the wrong option. Empty when the learner did not pick one.
 }
 
 func (s *Store) connOrErr() (*sql.DB, error) {
@@ -169,10 +162,14 @@ func (s *Store) ApplyReview(ctx context.Context, card Card, log ReviewLog) error
 	if log.Peeked {
 		peeked = 1
 	}
+	var chosen any
+	if log.Chosen != "" {
+		chosen = log.Chosen
+	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		card.ID, log.Rating, FormatTime(log.ReviewedAt), log.ElapsedDays, log.ScheduledDays, peeked,
+		INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked, chosen)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		card.ID, log.Rating, FormatTime(log.ReviewedAt), log.ElapsedDays, log.ScheduledDays, peeked, chosen,
 	); err != nil {
 		return fmt.Errorf("db: insert review: %w", err)
 	}
@@ -264,7 +261,7 @@ func (s *Store) ReviewLogs(ctx context.Context, cardID int64) ([]ReviewLog, erro
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT id, card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked
+		SELECT id, card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked, chosen
 		FROM review_log
 		WHERE card_id = ?
 		ORDER BY id`, cardID)
@@ -277,7 +274,8 @@ func (s *Store) ReviewLogs(ctx context.Context, cardID int64) ([]ReviewLog, erro
 		var log ReviewLog
 		var reviewed string
 		var peeked int
-		if err := rows.Scan(&log.ID, &log.CardID, &log.Rating, &reviewed, &log.ElapsedDays, &log.ScheduledDays, &peeked); err != nil {
+		var chosen sql.NullString
+		if err := rows.Scan(&log.ID, &log.CardID, &log.Rating, &reviewed, &log.ElapsedDays, &log.ScheduledDays, &peeked, &chosen); err != nil {
 			return nil, fmt.Errorf("db: review log: %w", err)
 		}
 		log.ReviewedAt, err = ParseTime(reviewed)
@@ -285,6 +283,9 @@ func (s *Store) ReviewLogs(ctx context.Context, cardID int64) ([]ReviewLog, erro
 			return nil, fmt.Errorf("db: review log: %w", err)
 		}
 		log.Peeked = peeked != 0
+		if chosen.Valid {
+			log.Chosen = chosen.String
+		}
 		out = append(out, log)
 	}
 	if err := rows.Err(); err != nil {
@@ -294,63 +295,24 @@ func (s *Store) ReviewLogs(ctx context.Context, cardID int64) ([]ReviewLog, erro
 }
 
 // InsertConfusionMiss appends one miss. The 7-day total is not stored.
-func (s *Store) InsertConfusionMiss(ctx context.Context, learnerID int64, kind, key string, at time.Time) error {
+// lexemeID 0 is stored as NULL: the miss is not tied to a word.
+func (s *Store) InsertConfusionMiss(ctx context.Context, learnerID int64, kind, key string, lexemeID int64, at time.Time) error {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return err
 	}
+	var lexeme any
+	if lexemeID != 0 {
+		lexeme = lexemeID
+	}
 	if _, err := conn.ExecContext(ctx, `
-		INSERT INTO confusion_misses (learner_id, kind, key, at)
-		VALUES (?, ?, ?, ?)`,
-		learnerID, kind, key, FormatTime(at),
+		INSERT INTO confusion_misses (learner_id, kind, key, lexeme_id, at)
+		VALUES (?, ?, ?, ?, ?)`,
+		learnerID, kind, key, lexeme, FormatTime(at),
 	); err != nil {
 		return fmt.Errorf("db: insert confusion: %w", err)
 	}
 	return nil
-}
-
-// ConfusionCounts counts misses in [since, ...] grouped by key.
-// Kind is the kind of the latest miss of that key inside the window.
-func (s *Store) ConfusionCounts(ctx context.Context, learnerID int64, since time.Time) ([]ConfusionCount, error) {
-	conn, err := s.connOrErr()
-	if err != nil {
-		return nil, err
-	}
-	sinceText := FormatTime(since)
-	rows, err := conn.QueryContext(ctx, `
-		SELECT
-			m.key,
-			(
-				SELECT m2.kind
-				FROM confusion_misses AS m2
-				WHERE m2.learner_id = m.learner_id
-				  AND m2.key = m.key
-				  AND m2.at >= ?
-				ORDER BY m2.at DESC, m2.id DESC
-				LIMIT 1
-			),
-			COUNT(*)
-		FROM confusion_misses AS m
-		WHERE m.learner_id = ?
-		  AND m.at >= ?
-		GROUP BY m.key
-		ORDER BY m.key`, sinceText, learnerID, sinceText)
-	if err != nil {
-		return nil, fmt.Errorf("db: confusion counts: %w", err)
-	}
-	defer rows.Close()
-	var out []ConfusionCount
-	for rows.Next() {
-		var row ConfusionCount
-		if err := rows.Scan(&row.Key, &row.Kind, &row.Count); err != nil {
-			return nil, fmt.Errorf("db: confusion counts: %w", err)
-		}
-		out = append(out, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("db: confusion counts: %w", err)
-	}
-	return out, nil
 }
 
 // InsertUser inserts a user and returns the id.
