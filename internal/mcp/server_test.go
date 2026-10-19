@@ -102,6 +102,7 @@ func TestChainAcceptsStaticToken(t *testing.T) {
 	h := Handler(Options{
 		Validator: Chain{rejectToken{}, StaticToken{Token: testToken, Actor: "author-7"}},
 		Course:    mem,
+		Struggle:  mem,
 		Lexicon:   mem,
 		Lookup:    mem,
 		Units:     mem,
@@ -127,6 +128,7 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	session := connectMCP(t, Handler(Options{
 		AuthToken: testToken,
 		Course:    mem,
+		Struggle:  mem,
 		Lexicon:   mem,
 		Lookup:    mem,
 		Units:     mem,
@@ -393,6 +395,7 @@ func TestScopeStruggleAndGuidance(t *testing.T) {
 	session := connectMCP(t, Handler(Options{
 		AuthToken: testToken,
 		Course:    mem,
+		Struggle:  mem,
 		Lexicon:   mem,
 		Lookup:    mem,
 		Units:     mem,
@@ -562,6 +565,11 @@ func TestNilStoresAreToolErrors(t *testing.T) {
 	if msg := callErr(t, session, "get_context", getContextInput{}); !strings.Contains(msg, "not connected") {
 		t.Fatalf("get_context %q", msg)
 	}
+	learner := int64(1)
+	bare := connectMCP(t, Handler(Options{AuthToken: testToken, Course: NewMemory(), Lookup: NewMemory()}), testToken)
+	if msg := callErr(t, bare, "get_context", getContextInput{LearnerID: &learner}); !strings.Contains(msg, "Struggle storage is not connected") {
+		t.Fatalf("missing struggle %q", msg)
+	}
 	if msg := callErr(t, session, "put_unit", putInput{Scope: ScopeShared, Doc: helloDoc()}); !strings.Contains(msg, "not saved") {
 		t.Fatalf("put_unit %q", msg)
 	}
@@ -576,7 +584,8 @@ func TestMemoryPutRace(t *testing.T) {
 			defer wg.Done()
 			doc := helloDoc()
 			doc.Title = doc.Title + string(rune('a'+i))
-			if _, err := mem.PutDraftUnit(context.Background(), PutDraft{Position: i, Doc: &doc, Actor: "mcp"}); err != nil {
+			doc.Position = i
+			if _, err := mem.PutUnit(context.Background(), nil, &doc, ScopeShared); err != nil {
 				t.Error(err)
 			}
 		}()

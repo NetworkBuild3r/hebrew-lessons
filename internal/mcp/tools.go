@@ -26,6 +26,7 @@ var (
 
 type service struct {
 	course    CourseReader
+	struggles StruggleSource
 	lexicon   LexiconReader
 	lexLookup units.Lookup
 	units     UnitWriter
@@ -43,7 +44,7 @@ type getContextOutput struct {
 	KnownLexemes         []string         `json:"knownLexemes"`
 	Budgets              Budgets          `json:"budgets"`
 	Placement            placementView    `json:"placement"`
-	Struggles            strugglesView    `json:"struggles"`
+	Struggles            Struggles        `json:"struggles"`
 	CompletedSharedUnits []UnitCompletion `json:"completedSharedUnits"`
 }
 
@@ -65,14 +66,7 @@ type placementView struct {
 	LearningLexemes        []string    `json:"learningLexemes,omitempty"`
 }
 
-// strugglesView is the get_context struggles object.
-// Lexemes arrive already ordered, most-struggled first.
-type strugglesView struct {
-	Lexemes    []LexemeStruggle `json:"lexemes"`
-	Confusions []ConfusionCount `json:"confusions"`
-}
-
-// MarshalJSON emits {"taken":false} when there is no finished run.
+// MarshalJSON emits {"taken":false} when there is no placement row.
 // A finished run includes every field, including zeros.
 func (p placementView) MarshalJSON() ([]byte, error) {
 	if !p.Taken {
@@ -164,15 +158,6 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 	if s.lexLookup == nil {
 		return nil, out, errors.New("The lexicon lookup is not connected.")
 	}
-	outline, err := s.course.ListUnits(ctx)
-	if err != nil {
-		return nil, out, storeErr("The course outline could not be read.", err)
-	}
-	courseKnown, err := s.lexLookup.KnownLexemes(ctx, in.Position)
-	if err != nil {
-		return nil, out, storeErr("The known-word list could not be read.", err)
-	}
-	knownList := sortedKnown(courseKnown)
 	if in.LearnerID != nil && *in.LearnerID < 0 {
 		return nil, out, errors.New("learnerId must be 0 or greater.")
 	}
@@ -182,7 +167,15 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 	if in.Window < 0 {
 		return nil, out, errors.New("window must be 0 or greater. Omit it to use 30 days.")
 	}
-	outline = visibleUnits(outline, in.LearnerID)
+	outline, err := s.course.UnitsInScope(ctx, in.LearnerID)
+	if err != nil {
+		return nil, out, storeErr("The course outline could not be read.", err)
+	}
+	courseKnown, err := s.lexLookup.KnownLexemes(ctx, in.Position)
+	if err != nil {
+		return nil, out, storeErr("The known-word list could not be read.", err)
+	}
+	knownList := sortedKnown(courseKnown)
 	view := placementView{}
 	struggles := emptyStruggles()
 	completed := []UnitCompletion{}
@@ -217,23 +210,22 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 			slices.Sort(view.KnownLexemes)
 			slices.Sort(view.LearningLexemes)
 		}
+		if s.struggles == nil {
+			return nil, out, errors.New("Struggle storage is not connected.")
+		}
 		topN := in.TopN
 		if topN == 0 {
 			topN = defaultStruggleTop
-		}
-		lexemes, err := s.course.LexemeStruggles(ctx, userID, topN)
-		if err != nil {
-			return nil, out, storeErr("The struggle list could not be read.", err)
 		}
 		days := in.Window
 		if days == 0 {
 			days = defaultWindowDays
 		}
-		confusions, err := s.course.ConfusionCounts(ctx, userID, time.Duration(days)*24*time.Hour)
+		struggles, err = s.struggles.Struggles(ctx, userID, topN, time.Duration(days)*24*time.Hour)
 		if err != nil {
-			return nil, out, storeErr("The confusion counts could not be read.", err)
+			return nil, out, storeErr("The struggle list could not be read.", err)
 		}
-		struggles = fillStruggles(strugglesView{Lexemes: lexemes, Confusions: confusions})
+		struggles = fillStruggles(struggles)
 		completed, err = s.course.CompletedSharedUnits(ctx, userID)
 		if err != nil {
 			return nil, out, storeErr("The completed shared units could not be read.", err)
@@ -260,24 +252,14 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 	return nil, out, nil
 }
 
-func visibleUnits(outline []UnitOutline, learner *int64) []UnitOutline {
-	out := make([]UnitOutline, 0, len(outline))
-	for _, row := range outline {
-		if row.Scope == ScopeShared || (learner != nil && row.Scope == fmt.Sprintf("learner:%d", *learner)) {
-			out = append(out, row)
-		}
-	}
-	return out
-}
-
-func emptyStruggles() strugglesView {
-	return strugglesView{
+func emptyStruggles() Struggles {
+	return Struggles{
 		Lexemes:    []LexemeStruggle{},
 		Confusions: []ConfusionCount{},
 	}
 }
 
-func fillStruggles(in strugglesView) strugglesView {
+func fillStruggles(in Struggles) Struggles {
 	if in.Lexemes == nil {
 		in.Lexemes = []LexemeStruggle{}
 	}
@@ -346,13 +328,7 @@ func (s *service) putUnit(ctx context.Context, _ *mcp.CallToolRequest, in putInp
 	doc := in.Doc
 	doc.Position = in.Position
 	issues := units.Validate(ctx, &doc, s.lexLookup)
-	saved, err := s.units.PutDraftUnit(ctx, PutDraft{
-		UnitID:   in.UnitID,
-		Position: in.Position,
-		Doc:      &doc,
-		Scope:    scope,
-		Actor:    actorFrom(ctx),
-	})
+	saved, err := s.units.PutUnit(ctx, in.UnitID, &doc, scope)
 	if errors.Is(err, ErrUnitNotFound) {
 		return nil, out, fmt.Errorf("No unit has id %d.", *in.UnitID)
 	}

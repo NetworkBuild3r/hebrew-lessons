@@ -10,7 +10,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
-// ErrUnitNotFound means PutDraftUnit was given an id that is not in the store.
+// ErrUnitNotFound means PutUnit was given an id that is not in the store.
 var ErrUnitNotFound = errors.New("unit not found")
 
 // defaultStruggleTop is how many struggled lexemes get_context returns
@@ -108,37 +108,51 @@ type Lexeme struct {
 	AudioPresent bool   `json:"audioPresent"`
 }
 
-// CourseReader is what get_context reads besides units.Lookup.
+// CourseReader is what get_context reads besides units.Lookup and
+// StruggleSource.
 type CourseReader interface {
-	// ListUnits returns every unit, draft and published, ordered by
-	// position ascending and then id ascending.
-	ListUnits(ctx context.Context) ([]UnitOutline, error)
+	// UnitsInScope returns the outline for learnerID, ordered by
+	// position ascending and then id ascending. A nil learnerID is
+	// shared units only. A set id is shared units plus that learner's
+	// custom units. Shape matches db.UnitsInScope.
+	UnitsInScope(ctx context.Context, learnerID *int64) ([]UnitOutline, error)
 	// LatestPlacement returns the learner's placement row.
 	// ok is false when that learner has no row. That is not an error.
 	// Finished is a field of the row. The static token passes user id 0
 	// until OAuth sets Principal.UserID. Shape matches db.LatestPlacement.
 	LatestPlacement(ctx context.Context, userID int64) (Placement, bool, error)
 	// PlacementKnownLexemes returns the Good and Easy words, pointed
-	// NFC, sorted. Shape matches db.PlacementKnownLexemes.
+	// NFC, sorted. There is no learner_lexemes table. These are the
+	// known words. Shape matches db.PlacementKnownLexemes.
 	PlacementKnownLexemes(ctx context.Context, userID int64) ([]string, error)
 	// PlacementLearningLexemes returns the Again and Hard words, pointed
-	// NFC, sorted. Shape matches db.PlacementLearningLexemes.
+	// NFC, sorted. These are the learning words. Shape matches
+	// db.PlacementLearningLexemes.
 	PlacementLearningLexemes(ctx context.Context, userID int64) ([]string, error)
-	// LexemeStruggles returns struggled words already sorted,
-	// most-struggled first. topN truncates that order and does not
-	// re-rank. Shape matches db.LexemeStruggles.
-	LexemeStruggles(ctx context.Context, userID int64, topN int) ([]LexemeStruggle, error)
-	// ConfusionCounts returns confusion rows whose LastAt falls inside
-	// window, in store order. A zero LastAt is kept. Shape matches
-	// db.ConfusionCounts.
-	ConfusionCounts(ctx context.Context, userID int64, window time.Duration) ([]ConfusionCount, error)
 	// CompletedSharedUnits returns shared units this learner has finished,
-	// ordered by position, then unit id. Proposed: not on db.Store yet.
+	// ordered by position, then unit id. A unit is complete when every
+	// lesson in it has a finished run. Shape matches db.CompletedSharedUnits.
 	CompletedSharedUnits(ctx context.Context, userID int64) ([]UnitCompletion, error)
 	// LearnerKnownLexemes is the pointed NFC union of placement Good/Easy
 	// words and words from units this learner has completed, sorted.
-	// Proposed: not on db.Store yet.
+	// Proposed for the top-level knownLexemes field. It does not read a
+	// learner_lexemes table; that table is dropped.
 	LearnerKnownLexemes(ctx context.Context, userID int64) ([]string, error)
+}
+
+// StruggleSource returns the get_context struggles object.
+// The store method behind it is not settled. Callers see only this shape.
+type StruggleSource interface {
+	// Struggles returns struggled lexemes and confusion counts.
+	// Lexemes are already ordered, most-struggled first. topN limits
+	// that list. window limits confusions. Neither call re-ranks.
+	Struggles(ctx context.Context, userID int64, topN int, window time.Duration) (Struggles, error)
+}
+
+// Struggles is the get_context struggles object.
+type Struggles struct {
+	Lexemes    []LexemeStruggle `json:"lexemes"`
+	Confusions []ConfusionCount `json:"confusions"`
 }
 
 // LexemeStruggle is one word the learner is missing.
@@ -181,21 +195,6 @@ type LexiconReader interface {
 	SearchLexemes(ctx context.Context, query string, limit int) (hits, suggestions []Lexeme, err error)
 }
 
-// PutDraft is one put_unit save.
-type PutDraft struct {
-	// UnitID nil creates a unit. A set id updates that unit.
-	UnitID *int64
-	// Position is the course order. It is not part of the document.
-	Position int
-	// Doc is the unit document. The caller has already set Doc.Position
-	// for validation; the stored JSON omits that field.
-	Doc *units.Unit
-	// Scope is shared or learner:<id>. It is not part of the document.
-	Scope string
-	// Actor is written to unit_revisions.actor.
-	Actor string
-}
-
 // PutResult is the row put_unit reports.
 type PutResult struct {
 	UnitID    int64
@@ -205,13 +204,14 @@ type PutResult struct {
 
 // UnitWriter is what put_unit writes.
 //
-// PutDraftUnit is idempotent: the same canonical document, the same
-// position, and the same scope as the latest revision insert nothing
-// and return Unchanged. A different document, position, or scope appends
-// a revision, sets status to draft, and derives lesson_items. Block
-// issues do not refuse the write; the caller has already decided to save
-// a draft.
+// The database method is PutUnit(ctx, doc, scope). doc carries the
+// document and Position. scope is shared or learner:<id> and is not
+// inside the document. id nil creates a unit. A set id updates that
+// unit. The same document, position, and scope insert nothing and
+// return Unchanged. A scope-only change appends a revision, sets
+// status to draft, and derives lesson_items. Block issues do not
+// refuse the write. Actor is the principal on ctx.
 // The in-memory fake does not derive lesson_items. The database method does.
 type UnitWriter interface {
-	PutDraftUnit(ctx context.Context, in PutDraft) (PutResult, error)
+	PutUnit(ctx context.Context, id *int64, doc *units.Unit, scope string) (PutResult, error)
 }

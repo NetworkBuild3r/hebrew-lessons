@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -14,9 +15,9 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// Memory is the in-memory CourseReader, LexiconReader, UnitWriter, and
-// units.Lookup used by tests. It does not derive lesson_items and it does
-// not write SQL. The process does not mount it.
+// Memory is the in-memory CourseReader, StruggleSource, LexiconReader,
+// UnitWriter, and units.Lookup used by tests. It does not derive
+// lesson_items and it does not write SQL. The process does not mount it.
 type Memory struct {
 	mu             sync.Mutex
 	nextID         int64
@@ -111,7 +112,8 @@ func (m *Memory) SetPlacement(userID int64, row Placement, known, learning []str
 	}
 }
 
-// ListUnits implements CourseReader.
+// ListUnits returns every saved unit, ordered by position then id.
+// get_context reads UnitsInScope. Tests use this full list.
 func (m *Memory) ListUnits(ctx context.Context) ([]UnitOutline, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -128,6 +130,22 @@ func (m *Memory) ListUnits(ctx context.Context) ([]UnitOutline, error) {
 		}
 		return cmp.Compare(a.ID, b.ID)
 	})
+	return out, nil
+}
+
+// UnitsInScope implements CourseReader.
+// A nil learnerID is shared units only.
+func (m *Memory) UnitsInScope(ctx context.Context, learnerID *int64) ([]UnitOutline, error) {
+	rows, err := m.ListUnits(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]UnitOutline, 0, len(rows))
+	for _, row := range rows {
+		if row.Scope == ScopeShared || (learnerID != nil && row.Scope == fmt.Sprintf("learner:%d", *learnerID)) {
+			out = append(out, row)
+		}
+	}
 	return out, nil
 }
 
@@ -181,7 +199,7 @@ func (m *Memory) PlacementLearningLexemes(ctx context.Context, userID int64) ([]
 }
 
 // SetLexemeStruggles stores struggled words for userID in the given order.
-// LexemeStruggles returns that order and does not re-rank it.
+// Struggles returns that order and does not re-rank it.
 func (m *Memory) SetLexemeStruggles(userID int64, rows []LexemeStruggle) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -201,9 +219,22 @@ func (m *Memory) SetConfusionCounts(userID int64, rows []ConfusionCount) {
 	m.confusions[userID] = append([]ConfusionCount(nil), rows...)
 }
 
-// LexemeStruggles implements CourseReader.
-// The stored order is kept. topN only truncates it.
-func (m *Memory) LexemeStruggles(ctx context.Context, userID int64, topN int) ([]LexemeStruggle, error) {
+// Struggles implements StruggleSource.
+// The stored lexeme order is kept. topN only truncates it.
+func (m *Memory) Struggles(ctx context.Context, userID int64, topN int, window time.Duration) (Struggles, error) {
+	lexemes, err := m.lexemeStruggles(ctx, userID, topN)
+	if err != nil {
+		return Struggles{}, err
+	}
+	confusions, err := m.confusionCounts(ctx, userID, window)
+	if err != nil {
+		return Struggles{}, err
+	}
+	return Struggles{Lexemes: lexemes, Confusions: confusions}, nil
+}
+
+// lexemeStruggles returns the stored order. topN only truncates it.
+func (m *Memory) lexemeStruggles(ctx context.Context, userID int64, topN int) ([]LexemeStruggle, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -222,10 +253,9 @@ func (m *Memory) LexemeStruggles(ctx context.Context, userID int64, topN int) ([
 	return rows, nil
 }
 
-// ConfusionCounts implements CourseReader.
-// Rows stay in stored order. LastAt older than the window is dropped.
-// A zero LastAt is kept. window of zero or less uses 30 days.
-func (m *Memory) ConfusionCounts(ctx context.Context, userID int64, window time.Duration) ([]ConfusionCount, error) {
+// confusionCounts keeps stored order. LastAt older than the window is
+// dropped. A zero LastAt is kept. window of zero or less uses 30 days.
+func (m *Memory) confusionCounts(ctx context.Context, userID int64, window time.Duration) ([]ConfusionCount, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -345,18 +375,19 @@ func (m *Memory) SearchLexemes(ctx context.Context, query string, limit int) ([]
 	return clip(hits, limit), clip(suggestions, limit), nil
 }
 
-// PutDraftUnit implements UnitWriter.
-func (m *Memory) PutDraftUnit(ctx context.Context, in PutDraft) (PutResult, error) {
+// PutUnit implements UnitWriter.
+// A scope-only change appends a revision. Actor comes from ctx.
+func (m *Memory) PutUnit(ctx context.Context, id *int64, doc *units.Unit, scope string) (PutResult, error) {
 	if err := ctx.Err(); err != nil {
 		return PutResult{}, err
 	}
-	if in.Doc == nil {
+	if doc == nil {
 		return PutResult{}, errMissingDoc
 	}
-	if in.Position < 0 {
+	if doc.Position < 0 {
 		return PutResult{}, errBadPosition
 	}
-	raw, err := json.Marshal(in.Doc)
+	raw, err := json.Marshal(doc)
 	if err != nil {
 		return PutResult{}, err
 	}
@@ -364,38 +395,39 @@ func (m *Memory) PutDraftUnit(ctx context.Context, in PutDraft) (PutResult, erro
 	if err != nil {
 		return PutResult{}, err
 	}
+	actor := actorFrom(ctx)
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if in.UnitID == nil {
+	if id == nil {
 		m.nextID++
 		m.units = append(m.units, memUnit{
 			id:        m.nextID,
-			position:  in.Position,
-			title:     in.Doc.Title,
+			position:  doc.Position,
+			title:     doc.Title,
 			status:    "draft",
-			scope:     in.Scope,
+			scope:     scope,
 			rev:       1,
 			canonical: raw,
 			doc:       stored,
-			actor:     in.Actor,
+			actor:     actor,
 		})
 		return PutResult{UnitID: m.nextID, Revision: 1}, nil
 	}
-	u := m.byID(*in.UnitID)
+	u := m.byID(*id)
 	if u == nil {
 		return PutResult{}, ErrUnitNotFound
 	}
-	if u.position == in.Position && u.scope == in.Scope && bytes.Equal(u.canonical, raw) {
+	if u.position == doc.Position && u.scope == scope && bytes.Equal(u.canonical, raw) {
 		return PutResult{UnitID: u.id, Revision: u.rev, Unchanged: true}, nil
 	}
 	u.rev++
-	u.position = in.Position
-	u.title = in.Doc.Title
+	u.position = doc.Position
+	u.title = doc.Title
 	u.status = "draft"
-	u.scope = in.Scope
+	u.scope = scope
 	u.canonical = append([]byte(nil), raw...)
 	u.doc = stored
-	u.actor = in.Actor
+	u.actor = actor
 	return PutResult{UnitID: u.id, Revision: u.rev}, nil
 }
 

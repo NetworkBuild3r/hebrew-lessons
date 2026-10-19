@@ -263,15 +263,15 @@ func (a *App) healthHandler() http.Handler {
 }
 
 func newMCP(cfg Config, health http.Handler) http.Handler {
-	// Course, lexicon, and unit stores stay unset until *db.Store
-	// grows ListUnits, LatestPlacement, PlacementKnownLexemes,
-	// PlacementLearningLexemes, LexemeStruggles, and ConfusionCounts.
-	// CompletedSharedUnits and LearnerKnownLexemes are proposed and
-	// not on db.Store yet. SearchLexemes, PutDraftUnit, and
-	// units.Lookup are also still missing. Tools then
-	// answer with isError. LatestPlacement is not on this branch;
-	// its pull request is stacked on #60. The adapter belongs here,
-	// next to this call, so db does not import mcp.
+	// Course, struggle, lexicon, and unit stores stay unset until
+	// *db.Store grows UnitsInScope, LatestPlacement,
+	// PlacementKnownLexemes, PlacementLearningLexemes,
+	// CompletedSharedUnits, SearchLexemes, PutUnit, and units.Lookup.
+	// LearnerKnownLexemes is still a proposal. There is no
+	// learner_lexemes table. Struggle reads go through struggleSource
+	// in struggle.go, which calls LexemeStruggles and ConfusionCounts.
+	// Tools answer with isError until those methods exist. The adapter
+	// stays in this package so db does not import mcp.
 	authoring := mcp.Handler(mcp.Options{AuthToken: cfg.MCPAuthToken})
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
