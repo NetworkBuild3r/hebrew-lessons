@@ -430,6 +430,19 @@ func TestCompletedSharedUnits(t *testing.T) {
 	if _, err := testharness.InsertLessonRun(ctx, raw, userID, custom, 0, when, &when); err != nil {
 		t.Fatal(err)
 	}
+	draftRes, err := raw.ExecContext(ctx, `
+		INSERT INTO units (position, title, situation, concept, status, rev, doc, scope)
+		VALUES (3, 'Draft', 'Street', 'One idea', 'draft', 1, '{"title":"Draft","lessons":[{}]}', 'shared')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	draftID, err := draftRes.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testharness.InsertLessonRun(ctx, raw, userID, draftID, 0, when, &when); err != nil {
+		t.Fatal(err)
+	}
 
 	rows, err := store.CompletedSharedUnits(ctx, userID)
 	if err != nil {
@@ -746,13 +759,14 @@ func TestLookup(t *testing.T) {
 		t.Fatalf("missing facts ok=%v err=%v", ok, err)
 	}
 
-	insertUnitRow(t, raw, "One", mcp.ScopeShared, "draft", 0, hello)
-	insertUnitRow(t, raw, "Two", mcp.ScopeShared, "draft", 3, coffee)
+	insertUnitRow(t, raw, "One", mcp.ScopeShared, "published", 0, hello)
+	insertUnitRow(t, raw, "Two", mcp.ScopeShared, "published", 3, coffee)
+	insertUnitRow(t, raw, "Draft", mcp.ScopeShared, "draft", 0, fish)
 	known, err := store.KnownLexemes(ctx, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(known) != 1 || !known[hello] {
+	if len(known) != 1 || !known[hello] || known[fish] {
 		t.Fatalf("before 1 %+v", known)
 	}
 	none, err := store.KnownLexemes(ctx, 0)
@@ -760,7 +774,7 @@ func TestLookup(t *testing.T) {
 		t.Fatalf("before 0 %+v err=%v", none, err)
 	}
 	both, err := store.KnownLexemes(ctx, 4)
-	if err != nil || !both[hello] || !both[coffee] {
+	if err != nil || !both[hello] || !both[coffee] || both[fish] {
 		t.Fatalf("before 4 %+v err=%v", both, err)
 	}
 }
@@ -769,13 +783,14 @@ func TestKnownLexemesSharedOnly(t *testing.T) {
 	ctx := context.Background()
 	store, raw := openAdapter(t, nil)
 	insertUnitRow(t, raw, "Private", "learner:8", "draft", 0, fish)
-	insertUnitRow(t, raw, "SharedHello", mcp.ScopeShared, "draft", 0, hello)
+	insertUnitRow(t, raw, "SharedHello", mcp.ScopeShared, "published", 0, hello)
+	insertUnitRow(t, raw, "DraftCoffee", mcp.ScopeShared, "draft", 0, coffee)
 
 	privateOnly, err := store.KnownLexemes(ctx, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if privateOnly[fish] || !privateOnly[hello] || len(privateOnly) != 1 {
+	if privateOnly[fish] || privateOnly[coffee] || !privateOnly[hello] || len(privateOnly) != 1 {
 		t.Fatalf("before shared fish %+v", privateOnly)
 	}
 	if issues := units.Validate(ctx, storyUnit(2, fish), store); !hasRule(issues, units.RuleCoverageStory) {
@@ -785,7 +800,7 @@ func TestKnownLexemesSharedOnly(t *testing.T) {
 		t.Fatalf("shared hello missing from coverage: %+v", issues)
 	}
 
-	insertUnitRow(t, raw, "SharedFish", mcp.ScopeShared, "draft", 1, fish)
+	insertUnitRow(t, raw, "SharedFish", mcp.ScopeShared, "published", 1, fish)
 	shared, err := store.KnownLexemes(ctx, 2)
 	if err != nil {
 		t.Fatal(err)

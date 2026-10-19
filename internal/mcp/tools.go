@@ -46,6 +46,11 @@ type getContextOutput struct {
 	Placement            placementView    `json:"placement"`
 	Struggles            Struggles        `json:"struggles"`
 	CompletedSharedUnits []UnitCompletion `json:"completedSharedUnits"`
+	Cards                []LearnerCard    `json:"cards"`
+	CardsTruncated       bool             `json:"cardsTruncated"`
+	CardsHint            string           `json:"cardsHint,omitempty"`
+	RecentAccuracy       *RecentAccuracy  `json:"recentAccuracy" jsonschema:"Null when learnerId is omitted. The review half counts Good and Easy ratings over the last 7 days and the last 50 reviews. The lesson half, lessons7d counts and meanScore, stays zero until the lesson player writes lesson_runs. Coach from the review half until then. rate and meanScore are null when the count is 0."`
+	MixTarget            MixTarget        `json:"mixTarget" jsonschema:"Unit new-word budgets plus the session mix: targetSuccess, maxNewPerSession, and maxNewShare."`
 }
 
 // placementView is the get_context placement object.
@@ -144,13 +149,15 @@ type putInput struct {
 	UnitID   *int64     `json:"unitId,omitempty" jsonschema:"Id from an earlier put_unit. Omit it to create a unit. Send the same id and the same document to avoid a new revision."`
 	Position int        `json:"position" jsonschema:"Course position, 0 or greater. This is not a field inside doc. Changing it saves a new draft revision."`
 	Scope    string     `json:"scope" jsonschema:"Required. shared for every learner, or learner:<id> for one learner. <id> is the numeric learner id, such as learner:7. Scope is metadata, not a field of doc. Changing it saves a new draft revision."`
-	Doc      units.Unit `json:"doc" jsonschema:"Unit document. JSON that cannot be read as a unit is rejected. Warnings and block issues are returned, and the draft is still saved. Publishing is a later tool."`
+	Doc      units.Unit `json:"doc" jsonschema:"Unit document. JSON that cannot be read as a unit is rejected. Warnings and block issues are returned, and the draft is still saved."`
+	Publish  bool       `json:"publish,omitempty" jsonschema:"When true, publish this save if scope is learner:<id> and there are no block issues. Shared scope ignores this flag. Warnings do not block it. Block issues still save the draft and leave it unpublished."`
 }
 
 type putOutput struct {
 	UnitID    int64         `json:"unitId"`
 	Revision  int           `json:"revision"`
 	Unchanged bool          `json:"unchanged"`
+	Published bool          `json:"published"`
 	Issues    []units.Issue `json:"issues"`
 }
 
@@ -260,6 +267,9 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 		Placement:            view,
 		Struggles:            struggles,
 		CompletedSharedUnits: completed,
+	}
+	if err := s.attachCoach(ctx, &out, in.LearnerID); err != nil {
+		return nil, getContextOutput{}, err
 	}
 	return nil, out, nil
 }
@@ -387,9 +397,17 @@ func (s *service) putUnit(ctx context.Context, _ *mcp.CallToolRequest, in putInp
 	if err != nil {
 		return nil, out, storeErr("The draft could not be saved.", err)
 	}
+	published := false
+	if in.Publish {
+		saved, published, err = s.publishLearnerDraft(ctx, scope, saved, issues)
+		if err != nil {
+			return nil, out, err
+		}
+	}
 	out.UnitID = saved.UnitID
 	out.Revision = saved.Revision
 	out.Unchanged = saved.Unchanged
+	out.Published = published
 	out.Issues = issueList(issues)
 	return nil, out, nil
 }
@@ -445,7 +463,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_context",
-		Description: "Read the course before you draft a unit. A learner account is limited to their own learnerId; omitting it uses that id, and another id is forbidden. An admin, including the static token, may omit learnerId or pass any id. The outline rows have position, title, status, and scope (shared, or learner:<id>). Omit learnerId as an admin to see shared units only, with empty struggles and placement taken false. knownLexemes is then the pointed text introduced before position. Pass learnerId to add that learner's custom units, their placement, their struggles, and the shared units they have finished. knownLexemes is then that learner's words: the union of placement Good and Easy words and words from completed units, sorted pointed NFC. topN defaults to 30. Struggled lexemes are the store's Top rows, ordered by misses in 7 days, then lapses, then Again rate. Do not re-rank them. Each lexeme has text, gloss, reviews, lapses, againRate, misses7d, lastSeen, and confusionKeys. Confusions cover 7 days and are not limited by topN. Each has kind, a, b, count, and lastAt. b is empty for the agreement kind. Placement taken false means there is no row. A row includes takenAt, finished, sittings (20 cards each; a run can resume across days and has no time cap), inProgress (true when finished is false and sittings is greater than 0), level, cardsRated, stopReason (band_stop, cap_cards, exhausted, or empty), bands (per band: band, rated, again, hard, good, easy, dontKnow, goodPlusRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy, pointed NFC, sorted), and learningLexemes (Again, Hard, and don't-know, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for budgets and for the shared-versus-custom guidance. That guidance is not an enforced rule.",
+		Description: "Read the course before you draft a unit. A learner account is limited to their own learnerId; omitting it uses that id, and another id is forbidden. An admin, including the static token, may omit learnerId or pass any id. The outline rows have position, title, status, and scope (shared, or learner:<id>). Omit learnerId as an admin to see shared units only, with empty struggles and placement taken false. knownLexemes is then the pointed text introduced before position. Pass learnerId to add that learner's custom units, their placement, their struggles, and the shared units they have finished. knownLexemes is then that learner's words: the union of placement Good and Easy words and words from completed units, sorted pointed NFC. topN defaults to 30. Struggled lexemes are the store's Top rows, ordered by misses in 7 days, then lapses, then Again rate. Do not re-rank them. Each lexeme has text, gloss, reviews, lapses, againRate, misses7d, lastSeen, and confusionKeys. Confusions cover 7 days and are not limited by topN. Each has kind, a, b, count, and lastAt. b is empty for the agreement kind. Placement taken false means there is no row. A row includes takenAt, finished, sittings (20 cards each; a run can resume across days and has no time cap), inProgress (true when finished is false and sittings is greater than 0), level, cardsRated, stopReason (band_stop, cap_cards, exhausted, or empty), bands (per band: band, rated, again, hard, good, easy, dontKnow, goodPlusRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy, pointed NFC, sorted), and learningLexemes (Again, Hard, and don't-know, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for budgets and for the shared-versus-custom guidance. That guidance is not an enforced rule. " + coachContextDescription(),
 		Annotations: readOnly,
 	}, svc.getContext)
 	mcp.AddTool(server, &mcp.Tool{
@@ -460,7 +478,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}, svc.validateUnit)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "put_unit",
-		Description: "Save a draft revision. Admin only, including the static token: a learner call is a tool error, forbidden: admin only, even for scope learner:<their own id>. scope is required: shared, or learner:<id> for one learner. Scope is not inside the unit document. Send unitId to update; omit it to create. The same document, position, and scope do not create another revision. lesson_items are still rebuilt, so a unit saved before its words were in the lexicon gains those rows without a new revision. Changing scope does create a revision. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. This does not publish.",
+		Description: "Save a draft revision. Admin only, including the static token: a learner call is a tool error, forbidden: admin only, even for scope learner:<their own id>. scope is required: shared, or learner:<id> for one learner. Scope is not inside the unit document. Send unitId to update; omit it to create. The same document, position, and scope do not create another revision. lesson_items are still rebuilt, so a unit saved before its words were in the lexicon gains those rows without a new revision. Changing scope does create a revision. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. publish true is honored only for scope learner:<id>, and only when there are no block issues. A shared unit ignores publish and stays a draft until publish_unit. Warnings do not block that learner-scope publish.",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    false,
 			IdempotentHint:  true,
@@ -470,4 +488,6 @@ func registerTools(server *mcp.Server, svc *service) {
 	}, svc.putUnit)
 	registerUpsertLexemes(server, svc)
 	registerGenerateAudio(server, svc)
+	registerPublishUnit(server, svc)
+	registerLearnerWords(server, svc)
 }

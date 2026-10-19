@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/google/jsonschema-go/jsonschema"
 )
@@ -30,6 +31,21 @@ func currentBudgets() Budgets {
 		RecycleMinLessons:    units.RecycleMinLessons,
 		CoverageBlockBelow:   units.CoverageBlockBelow,
 		CoverageWarnBelow:    units.CoverageWarnBelow,
+	}
+}
+
+// currentMixTarget is the unit new-word budget plus the session mix.
+// targetSuccess is sessionlimits.TargetSuccess, the same value
+// session.BuildSession aims at. maxNewPerSession and maxNewShare are the
+// coaching caps. BuildSession does not apply those two.
+func currentMixTarget() MixTarget {
+	return MixTarget{
+		MaxNewWordsPerUnit:   units.MaxNewWordsPerUnit,
+		MinNewWordsPerLesson: units.MinNewWordsPerLesson,
+		MaxNewWordsPerLesson: units.MaxNewWordsPerLesson,
+		TargetSuccess:        sessionlimits.TargetSuccess,
+		MaxNewPerSession:     sessionlimits.MaxNewPerSession,
+		MaxNewShare:          sessionlimits.MaxNewShare,
 	}
 }
 

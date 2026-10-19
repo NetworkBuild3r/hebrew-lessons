@@ -27,12 +27,14 @@ import (
 //   - recall shows the pointed Hebrew and hides the transliteration and
 //     gloss until the answer. Choices are English glosses.
 //   - listen_pick hides the Hebrew, the transliteration, and the gloss
-//     until the answer. The clip is the prompt. Choices are glosses.
-//   - produce hides the Hebrew and the transliteration until the answer,
-//     and hides the clip until then too. Choices show pointed Hebrew and
-//     transliteration.
-//   - cloze gaps the first new word. The other words stay visible.
-//     Choices show pointed Hebrew and transliteration.
+//     until the answer. The clip is the prompt. Choices are English glosses.
+//     The button value is the lexeme id, so the pointed word is not in the markup.
+//   - produce hides the Hebrew, the transliteration, and the clip until the
+//     answer. Choices show pointed Hebrew. The button value is the lexeme id.
+//   - cloze gaps the first new word. Until the answer, the other words show
+//     pointed Hebrew and transliteration, with no gloss, and the sentence
+//     clip stays hidden. After the answer, every word shows its pointed
+//     text, transliteration, and gloss. Choice values are lexeme ids.
 //   - any other type shows the words and a continue button.
 //
 // A step with no lexicon target is exposure, not a graded choice.
@@ -192,7 +194,8 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 	graded := gradedActivity(act.Type) && target.ID != 0
 	switch {
 	case run.Phase == "ask" && graded && answer != "" && answer != "continue":
-		correct := units.Normalize(answer) == target.Text
+		picked, parseErr := strconv.ParseInt(answer, 10, 64)
+		correct := parseErr == nil && picked == target.ID
 		run, _, err = p.store.AnswerPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, correct)
 	case answer == "continue" && (run.Phase == "reveal" || (run.Phase == "ask" && !graded)):
 		run, _, err = p.store.ContinuePlayerRun(r.Context(), userID, run.ID, run.ActivityIx, total)
@@ -311,7 +314,7 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 		return activity
 	}
 	hebrew := act.Type == units.ActivityProduce || act.Type == units.ActivityCloze
-	activity.Choices = choicesFor(pool, target, hebrew)
+	activity.Choices = choicesFor(pool, target, hebrew, act.Type == units.ActivityCloze)
 	activity.Asking = len(activity.Choices) > 0
 	if !activity.Asking {
 		activity.Continue = continueLabel(run.ActivityIx, total)
@@ -424,10 +427,11 @@ func wordsFor(act units.Activity, lex map[string]db.LexemeView, newWords []db.Le
 	return words
 }
 
-// applyPhrase hides a produce clip until the answer. It is split out so
-// screenFor can set Activity.Audio after wordsFor.
+// phraseAudio hides the sentence clip until the answer for produce and cloze.
+// A cloze clip speaks the gapped word. It is split out so screenFor can set
+// Activity.Audio after wordsFor.
 func phraseAudio(act units.Activity, phase, src string) string {
-	if act.Type == units.ActivityProduce && phase == "ask" {
+	if phase == "ask" && (act.Type == units.ActivityProduce || act.Type == units.ActivityCloze) {
 		return ""
 	}
 	return src
@@ -444,6 +448,10 @@ func visibleFields(typ, phase string) fieldVis {
 		return fieldVis{text: true, translit: revealed, gloss: revealed}
 	case units.ActivityListenPick, units.ActivityProduce:
 		return fieldVis{text: revealed, translit: revealed, gloss: revealed}
+	case units.ActivityCloze:
+		// Before the answer the other words show pointed Hebrew and transliteration.
+		// After the answer every word, including the gap, shows transliteration and gloss.
+		return fieldVis{text: true, translit: true, gloss: revealed}
 	default:
 		return fieldVis{text: true, translit: true, gloss: true}
 	}
@@ -499,7 +507,7 @@ func gapToken(tokens []string, lex map[string]db.LexemeView, newWords []db.Lexem
 	return first
 }
 
-func choicesFor(pool []db.LexemeView, target db.LexemeView, hebrew bool) []views.Choice {
+func choicesFor(pool []db.LexemeView, target db.LexemeView, hebrew, translit bool) []views.Choice {
 	if target.ID == 0 {
 		return nil
 	}
@@ -524,13 +532,17 @@ func choicesFor(pool []db.LexemeView, target db.LexemeView, hebrew bool) []views
 	})
 	out := make([]views.Choice, 0, len(picked))
 	for _, lex := range picked {
-		out = append(out, views.Choice{
-			Value:    lex.Text,
-			Label:    lex.Gloss,
-			Text:     lex.Text,
-			Translit: lex.Translit,
-			Hebrew:   hebrew,
-		})
+		choice := views.Choice{Value: strconv.FormatInt(lex.ID, 10)}
+		if hebrew {
+			choice.Hebrew = true
+			choice.Text = lex.Text
+			if translit {
+				choice.Translit = lex.Translit
+			}
+		} else {
+			choice.Label = lex.Gloss
+		}
+		out = append(out, choice)
 	}
 	return out
 }

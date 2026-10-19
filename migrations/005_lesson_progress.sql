@@ -12,3 +12,6 @@ ALTER TABLE lesson_runs ADD COLUMN phase TEXT NOT NULL DEFAULT 'ask' CHECK (phas
 
 -- 1 when the answer just graded was correct. Continue adds it to correct_n.
 ALTER TABLE lesson_runs ADD COLUMN pending INTEGER NOT NULL DEFAULT 0 CHECK (pending IN (0, 1));
+
+-- One open run per learner and lesson. A second start returns that row.
+CREATE UNIQUE INDEX lesson_runs_one_open ON lesson_runs (user_id, unit_id, lesson_ix) WHERE finished_at IS NULL;

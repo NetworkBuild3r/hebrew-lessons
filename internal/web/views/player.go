@@ -48,9 +48,17 @@ type Word struct {
 	Plain        bool
 }
 
-// Choice is one answer button. Value is the pointed lexeme text.
-// Hebrew choices show the pointed word and its transliteration.
-// English choices show Label, which is the gloss.
+// shown returns value when the field is visible.
+func shown(ok bool, value string) string {
+	if !ok {
+		return ""
+	}
+	return value
+}
+
+// Choice is one answer button. Value is the lexeme id, never the pointed text.
+// Hebrew choices show the pointed word. Translit is set only when that
+// choice should show a transliteration. English choices show Label, the gloss.
 type Choice struct {
 	Value    string
 	Label    string

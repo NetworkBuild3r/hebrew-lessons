@@ -17,9 +17,18 @@ import (
 // and any scope. A name that is not listed here is admin-only, which
 // is the default for every write tool added later.
 var learnerTools = map[string]bool{
-	"get_context":   true,
-	"lookup":        true,
-	"validate_unit": true,
+	"get_context":       true,
+	"get_learner_words": true,
+	"lookup":            true,
+	"validate_unit":     true,
+}
+
+// learnerOwnDataTools are the reads a learner may make only for their
+// own learnerId. Omitting the id uses that caller's id. Another id is
+// rejected before the handler runs.
+var learnerOwnDataTools = map[string]bool{
+	"get_context":       true,
+	"get_learner_words": true,
 }
 
 const (
@@ -84,7 +93,7 @@ func enforceRole(next mcp.MethodHandler) mcp.MethodHandler {
 		if !p.allowed(call.Params.Name) {
 			return forbid(denialMessage()), nil
 		}
-		if p.Role == RoleLearner && call.Params.Name == "get_context" {
+		if p.Role == RoleLearner && learnerOwnDataTools[call.Params.Name] {
 			id, present, err := learnerIDArg(args)
 			if err != nil {
 				return forbid(msgOtherLearner), nil

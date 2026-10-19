@@ -28,9 +28,12 @@ var Assets embed.FS
 // sessions, when non-nil, registers Google sign-in and logout and wraps
 // the mux with the session middleware. Page tokens come from
 // CSRFFunc(auth.CSRFToken). A signed-out GET of /, /review, /progress,
-// or /lesson redirects to /signin (303 for a full page, 401 and
+// /lesson, or /placement redirects to /signin (303 for a full page, 401 and
 // HX-Redirect for htmx). Reads stay on those page URLs. /_hx/ is for
 // htmx writes, and this router does not register read routes there.
+// New does not deal placement. NewWithPlacement wires the deck and the
+// run store the handlers read for ownership and the Today card.
+// NewOptions wires those plus the lesson store and the audio directory.
 // Tests pass a fake to newMux; production does not. The ungated router
 // still serves those pages.
 // Audio bytes are served at /audio/<sha256>.mp3 from Options.AudioDir.
@@ -39,14 +42,33 @@ func New(health http.Handler, sessions *auth.Service) http.Handler {
 }
 
 // Options is the data the learner pages read. A nil Store leaves Today
-// and /lesson on the empty published-lesson state.
+// and /lesson on the empty published-lesson state. Deck and Runs are the
+// placement deck; a nil pair still serves the read-only intro.
 type Options struct {
 	Store    *db.Store
 	AudioDir string
+	Deck     placementDeck
+	Runs     placementRuns
 }
 
-// NewOptions is New with the lesson store and the audio directory.
+// NewOptions is New with the lesson store, the audio directory, and placement.
 func NewOptions(health http.Handler, sessions *auth.Service, opts Options) http.Handler {
+	return newHandler(health, sessions, opts)
+}
+
+// NewWithPlacement is New plus the placement deck. deck deals cards.
+// runs is the store read for ownership and LatestPlacement. Both are
+// required for a POST; a nil pair still serves the read-only intro.
+// When runs is the process store, the lesson player uses it too.
+func NewWithPlacement(health http.Handler, sessions *auth.Service, deck placementDeck, runs placementRuns) http.Handler {
+	opts := Options{Deck: deck, Runs: runs}
+	if store, ok := runs.(*db.Store); ok {
+		opts.Store = store
+	}
+	return newHandler(health, sessions, opts)
+}
+
+func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.Handler {
 	var tokens CSRFToken
 	secure := false
 	if sessions != nil {
@@ -83,7 +105,13 @@ func routes(health http.Handler, tokens CSRFToken, gate, secure bool, opts Optio
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
 	play := player{store: opts.Store, audioDir: opts.AudioDir}
 	mux.HandleFunc("GET /{$}", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
-		home, err := homeFrom(r, chooseLang(w, r, secure), csrfValue(tokens, r), opts.Store)
+		lang := chooseLang(w, r, secure)
+		state, err := todayPlacement(r, opts.Runs)
+		if err != nil {
+			serverError(w)
+			return
+		}
+		home, err := homeFrom(r, lang, csrfValue(tokens, r), opts.Store, state)
 		if err != nil {
 			serverError(w)
 			return
@@ -113,6 +141,7 @@ func routes(health http.Handler, tokens CSRFToken, gate, secure bool, opts Optio
 	mux.HandleFunc("GET /audio/{name}", func(w http.ResponseWriter, r *http.Request) {
 		serveAudio(opts.AudioDir, w, r)
 	})
+	mountPlacement(mux, tokens, gate, secure, opts.Deck, opts.Runs)
 	mux.HandleFunc("GET /signin", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := auth.CurrentUser(r.Context()); ok {
 			w.Header().Set("Cache-Control", "no-store")
@@ -162,7 +191,8 @@ func (n noDirFS) Open(name string) (fs.File, error) {
 // clears it. ?next=0 hides the lesson card. Otherwise the card is the
 // next published lesson in this learner's scope, or the empty state when
 // nothing is waiting. A missing store or a signed-out request is empty.
-func homeFrom(r *http.Request, lang, csrf string, store *db.Store) (views.Home, error) {
+// placement is copied through. Nil means the learner has never taken the check.
+func homeFrom(r *http.Request, lang, csrf string, store *db.Store, placement *views.PlacementVM) (views.Home, error) {
 	q := r.URL.Query()
 	ui := views.UIFor(lang, views.FakeLearner().AddressGender)
 	due := 12
@@ -170,10 +200,11 @@ func homeFrom(r *http.Request, lang, csrf string, store *db.Store) (views.Home, 
 		due = 0
 	}
 	home := views.Home{
-		UI:      ui,
-		CSRF:    csrf,
-		Due:     due,
-		DueText: strconv.Itoa(due),
+		UI:        ui,
+		CSRF:      csrf,
+		Due:       due,
+		DueText:   strconv.Itoa(due),
+		Placement: placement,
 	}
 	if q.Get("next") == "0" || store == nil {
 		return home, nil

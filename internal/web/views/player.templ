@@ -57,7 +57,7 @@ templ ActivityBlock(a Activity) {
 			if len(a.Words) > 0 {
 				<div class="word-blocks">
 					for _, word := range a.Words {
-						@WordBlock(word)
+						@activityWord(word)
 					}
 				</div>
 			}
@@ -81,23 +81,17 @@ templ ActivityBlock(a Activity) {
 	</div>
 }
 
-// WordBlock is the pointed word with its transliteration and English gloss.
-// A recall prompt can hide the gloss and the transliteration until the answer.
-templ WordBlock(w Word) {
+// activityWord is one token. A gap is the cloze blank. A visible word uses
+// the shared word block, with any hidden field passed empty.
+templ activityWord(w Word) {
 	if w.Plain {
 		@E(w.Text)
 	} else if w.Gap {
 		<span class="word-block word-block--gap">@E("___")</span>
 	} else {
-		<span class="word-block">
-			if w.ShowText && w.Text != "" {
-				<bdi class="word-block__he" lang="he" dir="rtl">{ w.Text }</bdi>
-			}
-			if w.ShowTranslit && w.Translit != "" {
-				<bdi class="word-block__translit" lang="en" dir="ltr">{ w.Translit }</bdi>
-			}
-			if w.ShowGloss && w.Gloss != "" {
-				<bdi class="word-block__gloss" lang="en" dir="ltr">{ w.Gloss }</bdi>
+		<span class="activity-word">
+			if w.ShowText || w.ShowTranslit || w.ShowGloss {
+				@WordBlock(shown(w.ShowText, w.Text), shown(w.ShowTranslit, w.Translit), shown(w.ShowGloss, w.Gloss), "card", "", !w.ShowGloss)
 			}
 			if w.ShowText && GenderLabel(w.Gender) != "" {
 				<span class="gchip">@H(GenderLabel(w.Gender))</span>
@@ -112,14 +106,7 @@ templ WordBlock(w Word) {
 templ choiceButton(c Choice) {
 	<button type="submit" class="choice" name="answer" value={ c.Value }>
 		if c.Hebrew {
-			<span class="word-block word-block--choice">
-				if c.Text != "" {
-					<bdi class="word-block__he" lang="he" dir="rtl">{ c.Text }</bdi>
-				}
-				if c.Translit != "" {
-					<bdi class="word-block__translit" lang="en" dir="ltr">{ c.Translit }</bdi>
-				}
-			</span>
+			@WordBlock(c.Text, c.Translit, "", "chip", "", true)
 		} else {
 			@E(c.Label)
 		}
@@ -129,6 +116,6 @@ templ choiceButton(c Choice) {
 templ clip(src string) {
 	<div class="clip">
 		<p class="clip__label">@E("Play")</p>
-		<audio controls preload="none" src={ src }></audio>
+		<audio controls preload="none" src={ src } aria-label="Play"></audio>
 	</div>
 }

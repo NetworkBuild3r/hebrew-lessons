@@ -328,6 +328,9 @@ func (s *Store) FinishedLessonScore(ctx context.Context, userID, unitID int64, l
 
 // StartPlayerRun inserts a lesson_runs row, or returns the open one.
 // A finished run is not reused. started_at comes from the store clock.
+// The store connection begins this transaction with BEGIN IMMEDIATE
+// (_txlock=immediate). lesson_runs_one_open rejects a second open row
+// for the same learner and lesson.
 func (s *Store) StartPlayerRun(ctx context.Context, userID, unitID int64, lessonIx int) (PlayerRun, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -349,17 +352,27 @@ func (s *Store) StartPlayerRun(ctx context.Context, userID, unitID int64, lesson
 		ORDER BY id
 		LIMIT 1`, userID, unitID, lessonIx).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
-		res, err := tx.ExecContext(ctx, `
+		res, insErr := tx.ExecContext(ctx, `
 			INSERT INTO lesson_runs (user_id, unit_id, lesson_ix, started_at)
 			VALUES (?, ?, ?, ?)`,
 			userID, unitID, lessonIx, FormatTime(s.clock.Now()),
 		)
-		if err != nil {
-			return PlayerRun{}, fmt.Errorf("db: insert lesson run: %w", err)
-		}
-		id, err = res.LastInsertId()
-		if err != nil {
-			return PlayerRun{}, fmt.Errorf("db: insert lesson run: %w", err)
+		if isUniqueConstraint(insErr) {
+			err = tx.QueryRowContext(ctx, `
+				SELECT id FROM lesson_runs
+				WHERE user_id = ? AND unit_id = ? AND lesson_ix = ? AND finished_at IS NULL
+				ORDER BY id
+				LIMIT 1`, userID, unitID, lessonIx).Scan(&id)
+			if err != nil {
+				return PlayerRun{}, fmt.Errorf("db: lesson run: %w", err)
+			}
+		} else if insErr != nil {
+			return PlayerRun{}, fmt.Errorf("db: insert lesson run: %w", insErr)
+		} else {
+			id, err = res.LastInsertId()
+			if err != nil {
+				return PlayerRun{}, fmt.Errorf("db: insert lesson run: %w", err)
+			}
 		}
 	} else if err != nil {
 		return PlayerRun{}, fmt.Errorf("db: lesson run: %w", err)
@@ -417,6 +430,7 @@ func (s *Store) stepPlayerRun(ctx context.Context, userID, runID int64, kind str
 	if s.clock == nil {
 		return PlayerRun{}, false, errors.New("db: clock is not configured")
 	}
+	// Same BEGIN IMMEDIATE as StartPlayerRun, via _txlock=immediate.
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return PlayerRun{}, false, fmt.Errorf("db: begin lesson step: %w", err)

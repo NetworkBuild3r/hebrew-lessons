@@ -189,11 +189,15 @@ func TestLessonPlayer(t *testing.T) {
 		if code := codeAuthed(t, h, brianCookie, path); code != http.StatusNotFound {
 			t.Fatalf("GET %s = %d, want 404", path, code)
 		}
+		posted := postLesson(t, h, brianCookie, path, "1", "continue", true, "brian-csrf")
+		if posted.Code != http.StatusNotFound {
+			t.Fatalf("POST %s = %d, want 404\n%s", path, posted.Code, posted.Body.String())
+		}
 	}
 
 	body := getAuthed(t, h, brianCookie, "/lesson")
 	runID := runValue(t, body)
-	if !strings.Contains(body, "word-block__gloss") || !strings.Contains(body, "word-block__translit") || !strings.Contains(body, hello) {
+	if !strings.Contains(body, "wb__gl") || !strings.Contains(body, "wb__tr") || !strings.Contains(body, hello) {
 		t.Fatal("story step is missing the word block")
 	}
 	if !strings.Contains(body, "/audio/"+phraseID+".mp3") || !strings.Contains(body, "/audio/"+wordID+".mp3") {
@@ -220,16 +224,22 @@ func TestLessonPlayer(t *testing.T) {
 		t.Fatalf("continue = %d %s", story.Code, story.Body.String())
 	}
 	recall := story.Body.String()
-	if strings.Contains(recall, "<html") || strings.Contains(recall, "word-block__gloss") || strings.Contains(recall, "word-block__translit") || strings.Contains(recall, "shalom") {
+	if strings.Contains(recall, "<html") || strings.Contains(recall, "wb__gl") || strings.Contains(recall, "wb__tr") || strings.Contains(recall, "shalom") {
 		t.Fatalf("recall prompt shows the answer:\n%s", recall)
 	}
 	if !strings.Contains(recall, hello) || !strings.Contains(recall, "hello") || !strings.Contains(recall, "What does this Hebrew mean?") {
 		t.Fatalf("recall prompt missing: %s", recall)
 	}
+	if strings.Contains(recall, `value="`+hello+`"`) || strings.Contains(recall, `value="`+morning+`"`) {
+		t.Fatalf("recall choice value leaks Hebrew:\n%s", recall)
+	}
+	if !strings.Contains(recall, `value="`+itoa(ids[hello])+`"`) {
+		t.Fatalf("recall choice value should be the lexeme id:\n%s", recall)
+	}
 
-	wrong := postLesson(t, h, brianCookie, link, runID, morning, true, "brian-csrf")
+	wrong := postLesson(t, h, brianCookie, link, runID, itoa(ids[morning]), true, "brian-csrf")
 	revealed := wrong.Body.String()
-	if wrong.Code != http.StatusOK || !strings.Contains(revealed, "Not quite") || !strings.Contains(revealed, "shalom") || !strings.Contains(revealed, "word-block__gloss") {
+	if wrong.Code != http.StatusOK || !strings.Contains(revealed, "Not quite") || !strings.Contains(revealed, "shalom") || !strings.Contains(revealed, "wb__gl") {
 		t.Fatalf("wrong answer did not reveal the word: %d %s", wrong.Code, revealed)
 	}
 	done := postLesson(t, h, brianCookie, link, runID, "continue", true, "brian-csrf")
@@ -299,6 +309,159 @@ func TestLessonPlayer(t *testing.T) {
 	h.ServeHTTP(bad, httptest.NewRequest(http.MethodGet, "/audio/not-a-hash.mp3", nil))
 	if bad.Code != http.StatusNotFound {
 		t.Fatalf("bad audio name = %d", bad.Code)
+	}
+}
+
+func TestLessonPromptDoesNotLeak(t *testing.T) {
+	const (
+		hello   = "שָׁלוֹם"
+		morning = "בֹּקֶר"
+	)
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	ctx := context.Background()
+	dir := t.TempDir()
+	store, err := db.Open(ctx, filepath.Join(dir, "hebrew.sqlite"), fixedClock(now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	brian, err := store.CreateUser(ctx, "brian@example.com", "sub-brian", auth.RoleLearner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sp := func(s string) *string { return &s }
+	saved, _, err := store.UpsertLexemes(ctx, []lexicon.Input{
+		{TextNFC: hello, Gloss: "hello", Translit: sp("shalom"), Gender: sp("m"), POS: sp("noun")},
+		{TextNFC: morning, Gloss: "morning", Translit: sp("boker"), Gender: sp("m"), POS: sp("noun")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]int64{}
+	for _, row := range saved {
+		ids[row.TextNFC] = row.ID
+	}
+	line := hello + " " + morning
+	unitID := putLesson(t, store, nil, units.Unit{
+		Title: "Greetings", Situation: "Saying hello.", Position: 1,
+		NewWords: []string{hello, morning},
+		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
+			{Type: units.ActivityListenPick, Text: line},
+			{Type: units.ActivityProduce, Text: hello},
+			{Type: units.ActivityCloze, Text: line},
+		}}},
+	}, "shared")
+	publish(t, store, unitID)
+
+	phraseID := strings.Repeat("ab", 32)
+	helloID := strings.Repeat("cd", 32)
+	morningID := strings.Repeat("ef", 32)
+	for _, asset := range []db.Asset{
+		{ID: phraseID, TextNFC: units.Normalize(line), Voice: "voice", Model: "eleven_v4", Bytes: 4},
+		{ID: helloID, TextNFC: hello, Voice: "voice", Model: "eleven_v4", Bytes: 4},
+		{ID: morningID, TextNFC: morning, Voice: "voice", Model: "eleven_v4", Bytes: 4},
+	} {
+		if _, err := store.InsertAudio(ctx, asset); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	svc, err := auth.New(auth.Config{
+		PublicOrigin:  "https://learn.example",
+		Clock:         fixedClock(now),
+		Store:         store,
+		AllowedEmails: []string{"brian@example.com"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := NewOptions(nil, svc, Options{Store: store})
+	cookie := mintSession(t, store, brian.ID, "brian-csrf", now.Add(time.Hour))
+	path := "/lesson/" + itoa(unitID) + "/0"
+
+	listen := activityHTML(t, getAuthed(t, h, cookie, path))
+	if containsHebrew(listen) || strings.Contains(listen, "shalom") || strings.Contains(listen, "boker") {
+		t.Fatalf("listen_pick prompt leaks Hebrew or translit:\n%s", listen)
+	}
+	if containsHebrew(attrValues(listen)) {
+		t.Fatalf("listen_pick attributes leak Hebrew:\n%s", attrValues(listen))
+	}
+	for _, gloss := range []string{">hello<", ">morning<"} {
+		if !strings.Contains(listen, gloss) {
+			t.Fatalf("listen_pick missing gloss %s:\n%s", gloss, listen)
+		}
+	}
+	if !strings.Contains(listen, `value="`+itoa(ids[hello])+`"`) || !strings.Contains(listen, `value="`+itoa(ids[morning])+`"`) {
+		t.Fatalf("listen_pick choices should be lexeme ids:\n%s", listen)
+	}
+	if strings.Contains(listen, `value="`+hello+`"`) || strings.Contains(listen, `value="`+morning+`"`) {
+		t.Fatal("listen_pick value is pointed Hebrew")
+	}
+	if !strings.Contains(listen, `/audio/`+phraseID+`.mp3`) || !strings.Contains(listen, `aria-label="Play"`) {
+		t.Fatalf("listen_pick missing the phrase clip:\n%s", listen)
+	}
+	if strings.Contains(listen, helloID) || strings.Contains(listen, morningID) {
+		t.Fatal("listen_pick prompt includes a word clip")
+	}
+
+	runID := runValue(t, listen)
+	revealed := activityHTML(t, postLesson(t, h, cookie, path, runID, itoa(ids[hello]), true, "brian-csrf").Body.String())
+	if !strings.Contains(revealed, hello) || !strings.Contains(revealed, morning) || !strings.Contains(revealed, "shalom") || !strings.Contains(revealed, "boker") || !strings.Contains(revealed, "wb__gl") {
+		t.Fatalf("listen_pick answer did not reveal the words:\n%s", revealed)
+	}
+
+	produce := activityHTML(t, postLesson(t, h, cookie, path, runID, "continue", true, "brian-csrf").Body.String())
+	if strings.Contains(produce, "<audio") || strings.Contains(produce, "/audio/") || strings.Contains(produce, "shalom") {
+		t.Fatalf("produce prompt leaks translit or audio:\n%s", produce)
+	}
+	if containsHebrew(attrValues(produce)) {
+		t.Fatalf("produce attributes leak Hebrew:\n%s", attrValues(produce))
+	}
+	if !strings.Contains(produce, hello) || !strings.Contains(produce, `value="`+itoa(ids[hello])+`"`) {
+		t.Fatalf("produce choices should show pointed Hebrew and post the lexeme id:\n%s", produce)
+	}
+	if strings.Contains(produce, `value="`+hello+`"`) {
+		t.Fatal("produce value is pointed Hebrew")
+	}
+
+	shown := activityHTML(t, postLesson(t, h, cookie, path, runID, itoa(ids[hello]), true, "brian-csrf").Body.String())
+	if !strings.Contains(shown, hello) || !strings.Contains(shown, "shalom") || !strings.Contains(shown, "wb__gl") || !strings.Contains(shown, `/audio/`+helloID+`.mp3`) {
+		t.Fatalf("produce answer did not reveal the word and clip:\n%s", shown)
+	}
+
+	cloze := activityHTML(t, postLesson(t, h, cookie, path, runID, "continue", true, "brian-csrf").Body.String())
+	sentence, choices, ok := strings.Cut(cloze, `class="choices"`)
+	if !ok {
+		t.Fatalf("cloze missing choices:\n%s", cloze)
+	}
+	if strings.Contains(sentence, hello) || strings.Contains(sentence, "shalom") || strings.Contains(sentence, ">hello<") || strings.Contains(sentence, "wb__gl") {
+		t.Fatalf("cloze sentence shows the gap or a gloss:\n%s", sentence)
+	}
+	if !strings.Contains(sentence, morning) || !strings.Contains(sentence, "boker") || !strings.Contains(sentence, "___") {
+		t.Fatalf("cloze should show the other word with translit:\n%s", sentence)
+	}
+	if strings.Contains(cloze, `/audio/`+phraseID+`.mp3`) || strings.Contains(cloze, helloID) {
+		t.Fatalf("cloze ask plays the gapped clip:\n%s", cloze)
+	}
+	if !strings.Contains(cloze, `/audio/`+morningID+`.mp3`) {
+		t.Fatalf("cloze hid the other word's clip:\n%s", cloze)
+	}
+	if containsHebrew(attrValues(cloze)) || strings.Contains(attrValues(cloze), "shalom") || strings.Contains(attrValues(cloze), "hello") {
+		t.Fatalf("cloze attributes leak the gap:\n%s", attrValues(cloze))
+	}
+	if !strings.Contains(choices, hello) || !strings.Contains(choices, "shalom") {
+		t.Fatalf("cloze choices should show pointed Hebrew and translit:\n%s", choices)
+	}
+
+	filled := activityHTML(t, postLesson(t, h, cookie, path, runID, itoa(ids[hello]), true, "brian-csrf").Body.String())
+	if strings.Contains(filled, "___") || !strings.Contains(filled, hello) || !strings.Contains(filled, morning) {
+		t.Fatalf("cloze answer did not fill the gap:\n%s", filled)
+	}
+	if !strings.Contains(filled, "shalom") || !strings.Contains(filled, "boker") || !strings.Contains(filled, ">hello<") || !strings.Contains(filled, ">morning<") {
+		t.Fatalf("cloze answer should show translit and gloss:\n%s", filled)
+	}
+	if !strings.Contains(filled, `/audio/`+phraseID+`.mp3`) {
+		t.Fatalf("cloze answer should play the sentence:\n%s", filled)
 	}
 }
 
@@ -389,6 +552,51 @@ func postLesson(t *testing.T, h http.Handler, cookie *http.Cookie, path, runID, 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
+}
+
+func activityHTML(t *testing.T, body string) string {
+	t.Helper()
+	const marker = `id="activity"`
+	i := strings.Index(body, marker)
+	if i < 0 {
+		t.Fatalf("activity missing:\n%s", body)
+	}
+	start := strings.LastIndex(body[:i], "<div")
+	if start < 0 {
+		t.Fatalf("activity div missing:\n%s", body)
+	}
+	depth := 0
+	for j := start; j < len(body); j++ {
+		switch {
+		case strings.HasPrefix(body[j:], "<div"):
+			depth++
+		case strings.HasPrefix(body[j:], "</div>"):
+			depth--
+			if depth == 0 {
+				return body[start : j+len("</div>")]
+			}
+		}
+	}
+	t.Fatalf("activity div is unclosed:\n%s", body[start:])
+	return ""
+}
+
+func attrValues(html string) string {
+	var b strings.Builder
+	for _, m := range regexp.MustCompile(`=\s*"([^"]*)"`).FindAllStringSubmatch(html, -1) {
+		b.WriteString(m[1])
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+func containsHebrew(s string) bool {
+	for _, r := range s {
+		if r >= 0x0590 && r <= 0x05FF {
+			return true
+		}
+	}
+	return false
 }
 
 func runValue(t *testing.T, body string) string {
