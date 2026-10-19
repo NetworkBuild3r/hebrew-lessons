@@ -7,7 +7,7 @@
     "translit": "boker",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -18,7 +18,7 @@
     "translit": "kafe",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -29,7 +29,7 @@
     "translit": "seret",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -40,7 +40,7 @@
     "translit": "marak",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -51,7 +51,7 @@
     "translit": "misrad",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -62,7 +62,7 @@
     "translit": "ohel",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -71,9 +71,9 @@
     "band": 0,
     "gloss_en": "gets up",
     "translit": "kam",
-    "gender": "m",
+    "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -82,9 +82,9 @@
     "band": 0,
     "gloss_en": "drinks",
     "translit": "shote",
-    "gender": "m",
+    "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -93,9 +93,9 @@
     "band": 0,
     "gloss_en": "knows",
     "translit": "yodea",
-    "gender": "m",
+    "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -106,18 +106,18 @@
     "translit": "levashel",
     "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
     "id": "meyuchad",
-    "text_nfc": "מְיוּחָד",
+    "text_nfc": "מְיֻחָד",
     "band": 0,
     "gloss_en": "special",
-    "translit": "meyuchad",
-    "gender": "m",
+    "translit": "meyukhad",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -125,21 +125,21 @@
     "text_nfc": "בָּטוּחַ",
     "band": 0,
     "gloss_en": "sure",
-    "translit": "batuach",
-    "gender": "m",
+    "translit": "batuakh",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
     "id": "shalom",
     "text_nfc": "שָׁלוֹם",
     "band": 0,
-    "gloss_en": "hello",
+    "gloss_en": "peace",
     "translit": "shalom",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -150,7 +150,7 @@
     "translit": "toda",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -161,7 +161,7 @@
     "translit": "sefer",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -172,7 +172,7 @@
     "translit": "bayit",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -183,7 +183,7 @@
     "translit": "ima",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -194,7 +194,7 @@
     "translit": "aba",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -202,10 +202,10 @@
     "text_nfc": "חַלּוֹן",
     "band": 0,
     "gloss_en": "window",
-    "translit": "chalon",
+    "translit": "khalon",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -216,7 +216,7 @@
     "translit": "kise",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "tutor"
   },
   {
@@ -224,10 +224,10 @@
     "text_nfc": "נָכוֹן",
     "band": 1,
     "gloss_en": "correct",
-    "translit": "nachon",
-    "gender": "m",
+    "translit": "nakhon",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -235,10 +235,10 @@
     "text_nfc": "לַעֲשׂוֹת",
     "band": 1,
     "gloss_en": "to do",
-    "translit": "laasot",
+    "translit": "la'asot",
     "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -249,7 +249,7 @@
     "translit": "davar",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -257,10 +257,10 @@
     "text_nfc": "לִרְאוֹת",
     "band": 1,
     "gloss_en": "to see",
-    "translit": "lirot",
+    "translit": "lir'ot",
     "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -268,10 +268,10 @@
     "text_nfc": "לָלֶכֶת",
     "band": 1,
     "gloss_en": "to go",
-    "translit": "lalechet",
+    "translit": "lalekhet",
     "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -280,9 +280,9 @@
     "band": 1,
     "gloss_en": "loves",
     "translit": "ohev",
-    "gender": "m",
+    "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -293,7 +293,7 @@
     "translit": "yom",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -301,10 +301,10 @@
     "text_nfc": "חָבֵר",
     "band": 1,
     "gloss_en": "friend",
-    "translit": "chaver",
+    "translit": "khaver",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -315,7 +315,7 @@
     "translit": "makom",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -326,7 +326,7 @@
     "translit": "layla",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -335,9 +335,9 @@
     "band": 1,
     "gloss_en": "small",
     "translit": "katan",
-    "gender": "m",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -345,10 +345,10 @@
     "text_nfc": "חָדָשׁ",
     "band": 1,
     "gloss_en": "new",
-    "translit": "chadash",
-    "gender": "m",
+    "translit": "khadash",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -357,9 +357,9 @@
     "band": 1,
     "gloss_en": "big",
     "translit": "gadol",
-    "gender": "m",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -370,7 +370,7 @@
     "translit": "yeled",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -379,31 +379,31 @@
     "band": 1,
     "gloss_en": "beautiful",
     "translit": "yafe",
-    "gender": "m",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
     "id": "isha",
-    "text_nfc": "אִישָּׁה",
+    "text_nfc": "אִשָּׁה",
     "band": 1,
     "gloss_en": "woman",
     "translit": "isha",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
     "id": "achshav",
-    "text_nfc": "עַכְשָׁיו",
+    "text_nfc": "עַכְשָׁו",
     "band": 1,
     "gloss_en": "now",
-    "translit": "achshav",
+    "translit": "akhshav",
     "gender": "",
     "pos": "adverb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -414,7 +414,7 @@
     "translit": "tamid",
     "gender": "",
     "pos": "adverb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -425,7 +425,7 @@
     "translit": "kesef",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -436,29 +436,29 @@
     "translit": "ish",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
     "id": "leechol",
-    "text_nfc": "לֶאֱכוֹל",
+    "text_nfc": "לֶאֱכֹל",
     "band": 2,
     "gloss_en": "to eat",
-    "translit": "leechol",
+    "translit": "le'ekhol",
     "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
     "id": "lishmor",
-    "text_nfc": "לִשְׁמוֹר",
+    "text_nfc": "לִשְׁמֹר",
     "band": 2,
     "gloss_en": "to keep",
     "translit": "lishmor",
     "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -469,7 +469,7 @@
     "translit": "lehavin",
     "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -478,9 +478,9 @@
     "band": 2,
     "gloss_en": "easy",
     "translit": "kal",
-    "gender": "m",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -488,10 +488,10 @@
     "text_nfc": "חָזָק",
     "band": 2,
     "gloss_en": "strong",
-    "translit": "chazak",
-    "gender": "m",
+    "translit": "khazak",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -502,7 +502,7 @@
     "translit": "rosh",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -513,7 +513,7 @@
     "translit": "yalda",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -521,10 +521,10 @@
     "text_nfc": "שָׁעָה",
     "band": 2,
     "gloss_en": "hour",
-    "translit": "shaa",
+    "translit": "sha'a",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -535,7 +535,7 @@
     "translit": "mayim",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -543,10 +543,10 @@
     "text_nfc": "חֶדֶר",
     "band": 2,
     "gloss_en": "room",
-    "translit": "cheder",
+    "translit": "kheder",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -554,10 +554,10 @@
     "text_nfc": "רָחוֹק",
     "band": 2,
     "gloss_en": "far",
-    "translit": "rachok",
-    "gender": "m",
+    "translit": "rakhok",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -568,7 +568,7 @@
     "translit": "kelev",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -577,9 +577,9 @@
     "band": 2,
     "gloss_en": "near",
     "translit": "karov",
-    "gender": "m",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -587,10 +587,10 @@
     "text_nfc": "מִשְׁפָּחָה",
     "band": 2,
     "gloss_en": "family",
-    "translit": "mishpacha",
+    "translit": "mishpakha",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -601,7 +601,7 @@
     "translit": "shavua",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -609,10 +609,10 @@
     "text_nfc": "אָח",
     "band": 2,
     "gloss_en": "brother",
-    "translit": "ach",
+    "translit": "akh",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -623,7 +623,7 @@
     "translit": "yad",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -634,40 +634,40 @@
     "translit": "yam",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
     "id": "telefon",
-    "text_nfc": "טֵלֵפוֹן",
+    "text_nfc": "טֶלֶפוֹן",
     "band": 2,
     "gloss_en": "phone",
     "translit": "telefon",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
     "id": "lilmod",
-    "text_nfc": "לִלְמוֹד",
+    "text_nfc": "לִלְמֹד",
     "band": 2,
     "gloss_en": "to learn",
     "translit": "lilmod",
     "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
     "id": "laamod",
-    "text_nfc": "לַעֲמוֹד",
+    "text_nfc": "לַעֲמֹד",
     "band": 3,
     "gloss_en": "to stand",
-    "translit": "laamod",
+    "translit": "la'amod",
     "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -675,21 +675,21 @@
     "text_nfc": "צָעִיר",
     "band": 3,
     "gloss_en": "young",
-    "translit": "tsair",
-    "gender": "m",
+    "translit": "tsa'ir",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
     "id": "gavoah",
-    "text_nfc": "גָּבוֹהַּ",
+    "text_nfc": "גָּבֹהַּ",
     "band": 3,
     "gloss_en": "tall",
     "translit": "gavoah",
-    "gender": "m",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -700,7 +700,7 @@
     "translit": "tinok",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -711,18 +711,18 @@
     "translit": "lesayem",
     "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
     "id": "liftoach",
-    "text_nfc": "לִפְתּוֹחַ",
+    "text_nfc": "לִפְתֹּחַ",
     "band": 3,
     "gloss_en": "to open",
-    "translit": "liftoach",
+    "translit": "liftoakh",
     "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -730,21 +730,21 @@
     "text_nfc": "מְכוֹנִית",
     "band": 3,
     "gloss_en": "car",
-    "translit": "mechonit",
+    "translit": "mekhonit",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
     "id": "aroch",
-    "text_nfc": "אָרוֹךְ",
+    "text_nfc": "אָרֹךְ",
     "band": 3,
     "gloss_en": "long",
-    "translit": "aroch",
-    "gender": "m",
+    "translit": "arokh",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -755,7 +755,7 @@
     "translit": "olam",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -766,7 +766,7 @@
     "translit": "delet",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -777,7 +777,7 @@
     "translit": "ets",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -788,7 +788,7 @@
     "translit": "ir",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -799,7 +799,7 @@
     "translit": "daka",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -810,7 +810,7 @@
     "translit": "rofe",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -818,10 +818,10 @@
     "text_nfc": "אָחוֹת",
     "band": 3,
     "gloss_en": "sister",
-    "translit": "achot",
+    "translit": "akhot",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -829,10 +829,10 @@
     "text_nfc": "רְחוֹב",
     "band": 3,
     "gloss_en": "street",
-    "translit": "rechov",
+    "translit": "rekhov",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -843,7 +843,7 @@
     "translit": "ayin",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -854,7 +854,7 @@
     "translit": "regel",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -862,21 +862,21 @@
     "text_nfc": "חַם",
     "band": 3,
     "gloss_en": "hot",
-    "translit": "cham",
-    "gender": "m",
+    "translit": "kham",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
     "id": "shachor",
-    "text_nfc": "שָׁחוֹר",
+    "text_nfc": "שָׁחֹר",
     "band": 3,
     "gloss_en": "black",
-    "translit": "shachor",
-    "gender": "m",
+    "translit": "shakhor",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -884,21 +884,21 @@
     "text_nfc": "שַׂחְקָן",
     "band": 4,
     "gloss_en": "actor",
-    "translit": "sachkan",
+    "translit": "sakhkan",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
     "id": "linhog",
-    "text_nfc": "לִנְהוֹג",
+    "text_nfc": "לִנְהֹג",
     "band": 4,
     "gloss_en": "to drive",
     "translit": "linhog",
     "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -909,7 +909,7 @@
     "translit": "tshuva",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -920,7 +920,7 @@
     "translit": "tseva",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -931,7 +931,7 @@
     "translit": "lashir",
     "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -939,10 +939,10 @@
     "text_nfc": "לְהַחְלִיט",
     "band": 4,
     "gloss_en": "to decide",
-    "translit": "lehachlit",
+    "translit": "lehakhlit",
     "gender": "",
     "pos": "verb",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -950,10 +950,10 @@
     "text_nfc": "טָעִים",
     "band": 4,
     "gloss_en": "tasty",
-    "translit": "taim",
-    "gender": "m",
+    "translit": "ta'im",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -962,9 +962,9 @@
     "band": 4,
     "gloss_en": "available",
     "translit": "panuy",
-    "gender": "m",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -973,9 +973,9 @@
     "band": 4,
     "gloss_en": "tired",
     "translit": "ayef",
-    "gender": "m",
+    "gender": "",
     "pos": "adjective",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -983,10 +983,10 @@
     "text_nfc": "שֻׁלְחָן",
     "band": 4,
     "gloss_en": "table",
-    "translit": "shulchan",
+    "translit": "shulkhan",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -994,10 +994,10 @@
     "text_nfc": "שָׁעוֹן",
     "band": 4,
     "gloss_en": "watch",
-    "translit": "shaon",
+    "translit": "sha'on",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -1008,7 +1008,7 @@
     "translit": "shemesh",
     "gender": "f",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -1019,7 +1019,7 @@
     "translit": "more",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -1027,10 +1027,10 @@
     "text_nfc": "חָתוּל",
     "band": 4,
     "gloss_en": "cat",
-    "translit": "chatul",
+    "translit": "khatul",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -1038,10 +1038,10 @@
     "text_nfc": "חָלָב",
     "band": 4,
     "gloss_en": "milk",
-    "translit": "chalav",
+    "translit": "khalav",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -1049,10 +1049,10 @@
     "text_nfc": "לֶחֶם",
     "band": 4,
     "gloss_en": "bread",
-    "translit": "lechem",
+    "translit": "lekhem",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -1063,7 +1063,7 @@
     "translit": "kova",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -1071,10 +1071,10 @@
     "text_nfc": "מַחְשֵׁב",
     "band": 4,
     "gloss_en": "computer",
-    "translit": "machshev",
+    "translit": "makhshev",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -1085,7 +1085,7 @@
     "translit": "matos",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   },
   {
@@ -1096,7 +1096,7 @@
     "translit": "gan",
     "gender": "m",
     "pos": "noun",
-    "verified": false,
+    "verified": true,
     "source": "freq"
   }
 ]
