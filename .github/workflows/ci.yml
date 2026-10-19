@@ -1,6 +1,10 @@
-# hebrew v2. Publishes ghcr.io/networkbuild3r/hebrew only.
+# hebrew v3. Publishes ghcr.io/networkbuild3r/hebrew only.
 # Never ghcr.io/networkbuild3r/hebrew-lessons: Argo Image Updater deploys
 # the newest sha- tag of that image to production.
+#
+# v3 is the line that publishes (ADR-0018, D6). v2 is frozen and no longer
+# publishes. Only one branch may publish sha- tags at a time, because Argo
+# Image Updater deploys whichever sha- tag was pushed last.
 #
 # Runs only on the local ARC scale set registered to this repo (see home_k3
 # apps/arc-runner-set-hebrew). Never use GitHub-hosted runners.
@@ -17,10 +21,10 @@
 #
 # pull_request on k8-build is refused when the head repository is a fork.
 # pull_request has no base-branch filter, so a stacked pull request (its base
-# is another PR branch, not v2) still runs. Jobs skip when github.base_ref is
+# is another PR branch, not v3) still runs. Jobs skip when github.base_ref is
 # main; main's own workflows cover those. A pull request builds and smokes
 # with contents: read and never logs in or pushes. packages: write is only
-# on the publish job, which runs on a push to v2.
+# on the publish job, which runs on a push to v3.
 #
 # Checkouts do not pin pull_request.head.sha. Omitting ref is the
 # pull_request default: actions/checkout uses github.ref
@@ -30,14 +34,14 @@
 # On a push, the omitted ref resolves to the pushed commit. Publish sets
 # ref to github.sha, so the image tag stays
 # ghcr.io/networkbuild3r/hebrew:sha-<push sha>. fetch-depth stays 1. Nothing
-# in this file runs merge-base or diffs against origin/v2. templ's git diff
+# in this file runs merge-base or diffs against origin/v3. templ's git diff
 # is the worktree against the checked-out commit, which does not need parents.
 # There is no pull_request_target.
 name: ci
 
 on:
   push:
-    branches: [v2]
+    branches: [v3]
   pull_request:
 
 permissions:
@@ -60,7 +64,7 @@ jobs:
     # The image build stays CGO_ENABLED=0.
     env:
       CGO_ENABLED: "0"
-    # github.base_ref is empty on a push, so a push to v2 still runs.
+    # github.base_ref is empty on a push, so a push to v3 still runs.
     # Fork pull requests never reach this runner.
     if: >-
       github.base_ref != 'main' &&
@@ -307,16 +311,16 @@ jobs:
     timeout-minutes: 30
     # needs.test success is required here because a job-level if replaces the
     # default success() check. packages: write is granted only when this job
-    # runs, which is a push to v2, never a pull_request.
+    # runs, which is a push to v3, never a pull_request.
     if: >-
       needs.test.result == 'success' &&
       github.event_name == 'push' &&
-      github.ref == 'refs/heads/v2'
+      github.ref == 'refs/heads/v3'
     permissions:
       contents: read
       packages: write
     steps:
-      # Push to v2 only. ref is the pushed commit, which the sha- tag
+      # Push to v3 only. ref is the pushed commit, which the sha- tag
       # records. This job does not run on pull_request, and it does not
       # read pull_request.head.sha.
       - uses: actions/checkout@v6
@@ -353,7 +357,7 @@ jobs:
           echo "tag=${computed}" >> "$GITHUB_OUTPUT"
           echo "Image name ${computed} does not contain hebrew-lessons."
 
-      # Push to the registry only on a push to v2, and only when both files
+      # Push to the registry only on a push to v3, and only when both files
       # exist. With neither file yet, the job stays green and the build is skipped.
       - name: Skip unless Dockerfile and go.mod exist
         id: scope
@@ -369,7 +373,7 @@ jobs:
           fi
 
       - uses: docker/login-action@v3
-        if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/v2'
+        if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/v3'
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -379,7 +383,7 @@ jobs:
         if: steps.scope.outputs.build == 'true'
 
       - name: Build
-        if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/v2'
+        if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/v3'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -437,14 +441,14 @@ jobs:
           exit 1
 
       - name: Push the image
-        if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/v2'
+        if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/v3'
         shell: bash
         env:
           TAG: ${{ steps.guard.outputs.tag }}
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" != "push" ] || [ "$GITHUB_REF" != "refs/heads/v2" ]; then
-            echo "::error::refusing to push except on a push to v2"
+          if [ "$GITHUB_EVENT_NAME" != "push" ] || [ "$GITHUB_REF" != "refs/heads/v3" ]; then
+            echo "::error::refusing to push except on a push to v3"
             exit 1
           fi
           case "$TAG" in
