@@ -1,0 +1,371 @@
+package views
+
+// Placement is the full placement page. The region is what a write swaps
+// when the request replaces the whole flow.
+templ Placement(v PlacementView) {
+	@Layout(v.Page) {
+		@PlacementRegion(v)
+	}
+}
+
+// PlacementRegion is the focused deck. A write with HX-Request returns it
+// alone when the form targets #placement.
+templ PlacementRegion(v PlacementView) {
+	<div id="placement" class={ placementClass(v.Mode) }>
+		if v.Mode == PlaceModeFront || v.Mode == PlaceModeBack {
+			@placementBar(v, false)
+			<main class="plstage" id="plstage">
+				<div class="rv">
+					@placementCard(v)
+				</div>
+				<p id="pltoast" class="pltoast" role="status">
+					if v.HasToast {
+						@placementToast(v)
+					}
+				</p>
+			</main>
+		} else if v.Mode == PlaceModeBreak {
+			@placementBreak(v)
+		} else if v.Mode == PlaceModeResult {
+			@placementResult(v)
+		} else if v.Mode == PlaceModeResume {
+			@placementResume(v)
+		} else {
+			@placementIntro(v)
+		}
+	</div>
+}
+
+// PlacementCardSwap is the htmx answer for flip and rate.
+// The bar and the toast update out of band. The card is the swap.
+templ PlacementCardSwap(v PlacementView) {
+	@placementBar(v, true)
+	@placementCard(v)
+	<p id="pltoast" class="pltoast" role="status" hx-swap-oob="outerHTML">
+		if v.HasToast {
+			@placementToast(v)
+		}
+	</p>
+}
+
+func placementClass(mode string) string {
+	switch mode {
+	case PlaceModeIntro, PlaceModeResume:
+		return "placement placement--intro"
+	case PlaceModeBreak, PlaceModeResult:
+		return "placement placement--end"
+	default:
+		return "placement"
+	}
+}
+
+templ placementToast(v PlacementView) {
+	<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("tip") }></use></svg>
+	<span lang={ v.Lang }>
+		{ v.Copy.ToastLead }
+		{ ": " }
+		@WordBlock(v.Toast.Text, v.Toast.Translit, v.Toast.Gloss, "inline", "", false)
+	</span>
+}
+
+templ placementBar(v PlacementView, oob bool) {
+	<header id="plbar" class="plbar" if oob { hx-swap-oob="outerHTML" }>
+		<div class="plprogs">
+			<div class="plprog" role="progressbar" aria-valuemin="0" aria-valuemax="20" aria-valuenow={ fmtInt(v.DoneInSit) } aria-label={ v.BarName() } data-v={ v.Fill } data-v0={ v.FillPrev }>
+				<i></i>
+			</div>
+			<div class="plall" aria-hidden="true" data-o={ v.Overall }>
+				<i></i>
+			</div>
+		</div>
+		<span class="pln"><bdi lang="en" dir="ltr">{ v.Fraction() }</bdi></span>
+		@placeForm("/_hx/placement/finish", "#placement", "") {
+			<input type="hidden" name="_csrf" value={ v.CSRF }/>
+			<input type="hidden" name="run_id" value={ v.RunIDText }/>
+			<button type="submit" class="pllink">
+				<span lang={ v.Lang }>{ v.Copy.Stop }</span>
+			</button>
+		}
+	</header>
+}
+
+templ placementCard(v PlacementView) {
+	<article class="rcard" data-enter={ v.Enter() } aria-labelledby="pw">
+		<div class="slate">
+			<div class="slate__top">
+				<span class="tag" lang={ v.Lang }>{ v.Copy.Direction }</span>
+			</div>
+			if v.Mode == PlaceModeBack {
+				@WordBlock(v.Word.Text, v.Word.Translit, "", "display", "pw", true)
+				if v.Word.AudioURL != "" {
+					@listenButton(v, true)
+				}
+			} else {
+				<button type="submit" form="plflip" class="plword" aria-label={ v.Copy.ShowMeaning + ": " + v.Word.Text }>
+					@WordBlock(v.Word.Text, v.Word.Translit, "", "display", "pw", true)
+				</button>
+				if v.Word.AudioURL != "" {
+					@listenButton(v, false)
+				}
+			}
+		</div>
+		<div class="rcard__body">
+			if v.Mode == PlaceModeBack {
+				<div class="ans" aria-live="polite">
+					<p class="ans__main" lang="en" dir="ltr">{ v.Word.Gloss }</p>
+					<p class="wb__line">
+						<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ v.Word.Translit }</bdi>
+					</p>
+					<div class="fbchips">
+						if short, full, ok := GenderChip(v.Lang, v.Word.Gender); ok {
+							<span class="gchip" data-g={ v.Word.Gender } title={ full }>
+								<span aria-hidden="true">{ short }</span>
+								<span class="vh">{ full }</span>
+							</span>
+						}
+						if v.Word.AudioURL != "" {
+							<span class="fbplay">
+								@replayButton(v)
+								@slowButton(v)
+							</span>
+						}
+					</div>
+				</div>
+				<p class="muted plq" id="plq" lang={ v.Lang }>{ v.Copy.HowWell }</p>
+				@placeForm("/_hx/placement/rate", ".rcard", "") {
+					<input type="hidden" name="_csrf" value={ v.CSRF }/>
+					<input type="hidden" name="run_id" value={ v.RunIDText }/>
+					<input type="hidden" name="item_id" value={ v.Word.ID }/>
+					<div class="grades thumb" role="group" aria-labelledby="plq">
+						@gradeButton("1", "stop", "replay", v.Copy.Again, v.Copy.AgainSub, v.Lang)
+						@gradeButton("2", "check", "tip", v.Copy.Hard, v.Copy.HardSub, v.Lang)
+						@gradeButton("3", "go", "check", v.Copy.Good, v.Copy.GoodSub, v.Lang)
+						@gradeButton("4", "note", "next", v.Copy.Easy, v.Copy.EasySub, v.Lang)
+					</div>
+				}
+			} else {
+				<p class="rcard__hint" lang={ v.Lang }>{ v.Copy.Hint }</p>
+				<div class="thumb plfront">
+					@placeForm("/_hx/placement/flip", ".rcard", "plflip") {
+						<input type="hidden" name="_csrf" value={ v.CSRF }/>
+						<input type="hidden" name="run_id" value={ v.RunIDText }/>
+						<input type="hidden" name="item_id" value={ v.Word.ID }/>
+						<button type="submit" class="btn btn--lamp btn--lg" hx-post="/_hx/placement/flip" hx-target=".rcard" hx-swap="outerHTML transition:true" hx-select="unset" hx-include="closest form" hx-trigger={ KeyTrigger(" ") }>
+							<span lang={ v.Lang }>{ v.Copy.Flip }</span>
+							<kbd>{ v.Copy.Space }</kbd>
+						</button>
+					}
+					@placeForm("/_hx/placement/rate", ".rcard", "") {
+						<input type="hidden" name="_csrf" value={ v.CSRF }/>
+						<input type="hidden" name="run_id" value={ v.RunIDText }/>
+						<input type="hidden" name="item_id" value={ v.Word.ID }/>
+						<button type="submit" name="rating" value="0" class="btn btn--quiet plidk">
+							<span lang={ v.Lang }>{ v.Copy.DontKnow }</span>
+						</button>
+					}
+				</div>
+			}
+		</div>
+	</article>
+}
+
+templ listenButton(v PlacementView, auto bool) {
+	<button type="button" class="listen" aria-label={ v.Copy.Listen + ": " + v.Word.Text }>
+		<span class="listen__play" aria-hidden="true">
+			<svg class="icon"><use href={ IconHref("play") }></use></svg>
+		</span>
+		<span lang={ v.Lang }>{ v.Copy.Listen }</span>
+		if auto {
+			<audio autoplay controls preload="none" src={ templ.SafeURL(v.Word.AudioURL) }></audio>
+		} else {
+			<audio controls preload="none" src={ templ.SafeURL(v.Word.AudioURL) }></audio>
+		}
+	</button>
+}
+
+templ replayButton(v PlacementView) {
+	<button type="button" class="audio" aria-label={ v.Copy.Listen + ": " + v.Word.Text } hx-on:click="this.querySelector('audio').play()">
+		<audio preload="none" src={ templ.SafeURL(v.Word.AudioURL) }></audio>
+		<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("sound") }></use></svg>
+	</button>
+}
+
+templ slowButton(v PlacementView) {
+	<button type="button" class="audio audio--slow" aria-label={ v.Copy.Slow + ": " + v.Word.Text } hx-on:click="const a=this.querySelector('audio');a.playbackRate=0.75;a.play()">
+		<audio preload="none" src={ templ.SafeURL(v.Word.AudioURL) }></audio>
+		<span aria-hidden="true">0.75×</span>
+	</button>
+}
+
+templ gradeButton(value, tone, icon, label, sub, lang string) {
+	<button type="submit" name="rating" value={ value } class="grade" data-tone={ tone } hx-post="/_hx/placement/rate" hx-target=".rcard" hx-swap="outerHTML transition:true" hx-select="unset" hx-include="closest form" hx-trigger={ KeyTrigger(value) }>
+		<kbd>{ value }</kbd>
+		<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref(icon) }></use></svg>
+		<b lang={ lang }>{ label }</b>
+		<small lang={ lang }>{ sub }</small>
+	</button>
+}
+
+templ placementIntro(v PlacementView) {
+	<main class="plstage" id="plstage">
+		<section class="plintro">
+			<span class="caps" lang={ v.Lang }>{ v.Copy.Before }</span>
+			<h1 id="placement-title" lang={ v.Lang }>{ v.Copy.Heading }</h1>
+			<p class="plwhy" lang={ v.Lang }>{ v.Copy.Why }</p>
+			<ul class="plist" role="list">
+				<li><span lang={ v.Lang }>{ v.Copy.BulletSit }</span></li>
+				<li><span lang={ v.Lang }>{ v.Copy.BulletFlip }</span></li>
+				<li><span lang={ v.Lang }>{ v.Copy.BulletScore }</span></li>
+			</ul>
+		</section>
+		<div class="plbtns">
+			@placeForm("/_hx/placement/start", "#placement", "") {
+				<input type="hidden" name="_csrf" value={ v.CSRF }/>
+				<button type="submit" class="btn btn-primary btn--lg">
+					<span lang={ v.Lang }>{ v.Copy.Start }</span>
+				</button>
+			}
+			@placeForm("/_hx/placement/skip", "#placement", "") {
+				<input type="hidden" name="_csrf" value={ v.CSRF }/>
+				<button type="submit" class="btn btn--quiet">
+					<span lang={ v.Lang }>{ v.Copy.Skip }</span>
+				</button>
+			}
+		</div>
+	</main>
+}
+
+templ placementResume(v PlacementView) {
+	<main class="plstage" id="plstage">
+		<section class="plintro">
+			<span class="caps" lang={ v.Lang }>{ v.Copy.Welcome }</span>
+			<h1 id="placement-title" lang={ v.Lang }>{ v.Copy.ResumeTitle }</h1>
+			<p class="plwhy" lang={ v.Lang }>{ v.ResumeLine }</p>
+			@ladderBlock(v)
+		</section>
+		<div class="plbtns">
+			@placeForm("/_hx/placement/start", "#placement", "") {
+				<input type="hidden" name="_csrf" value={ v.CSRF }/>
+				<input type="hidden" name="run_id" value={ v.RunIDText }/>
+				<button type="submit" class="btn btn-primary btn--lg">
+					<span lang={ v.Lang }>{ v.Copy.KeepGoing }</span>
+				</button>
+			}
+			@placeForm("/_hx/placement/finish", "#placement", "") {
+				<input type="hidden" name="_csrf" value={ v.CSRF }/>
+				<input type="hidden" name="run_id" value={ v.RunIDText }/>
+				<button type="submit" class="btn btn--quiet">
+					<span lang={ v.Lang }>{ v.Copy.FinishNow }</span>
+				</button>
+			}
+		</div>
+	</main>
+}
+
+templ placementBreak(v PlacementView) {
+	<main class="plstage" id="plstage">
+		<section class="plend plbreak">
+			<span class="caps" lang={ v.Lang }>{ v.BreakKick }</span>
+			<h1 id="placement-title" lang={ v.Lang }>{ v.Copy.BreakTitle }</h1>
+			<p class="plsum" lang={ v.Lang }>
+				<b>{ v.Covered }</b>
+				{ " " }
+				{ v.Copy.BreakBody }
+			</p>
+			if len(v.Samples) > 0 {
+				<ul class="plseen" role="list" aria-label={ v.Copy.Samples }>
+					for _, word := range v.Samples {
+						<li>
+							@WordBlock(word.Text, word.Translit, word.Gloss, "chip", "", false)
+						</li>
+					}
+				</ul>
+			}
+			@ladderBlock(v)
+			<p class="muted plnote" lang={ v.Lang }>{ v.LeftNote }</p>
+		</section>
+		<div class="plbtns">
+			<a class="btn btn-primary btn--lg" href={ templ.SafeURL(v.Href("/")) }>
+				<span lang={ v.Lang }>{ v.Copy.DoneToday }</span>
+			</a>
+			@placeForm("/_hx/placement/continue", "#placement", "") {
+				<input type="hidden" name="_csrf" value={ v.CSRF }/>
+				<input type="hidden" name="run_id" value={ v.RunIDText }/>
+				<button type="submit" class="btn btn--ghost btn--lg">
+					<span lang={ v.Lang }>{ v.Copy.KeepGoing }</span>
+				</button>
+			}
+		</div>
+	</main>
+}
+
+templ placementResult(v PlacementView) {
+	<main class="plstage" id="plstage">
+		<section class="plend">
+			<span class="caps" lang={ v.Lang }>{ v.Copy.AllDone }</span>
+			<h1 id="placement-title" lang={ v.Lang }>{ v.Copy.Results }</h1>
+			@ladderBlock(v)
+			<div class="plstart">
+				<p class="plstart__u">
+					<b lang={ v.Lang }>{ v.UnitLine }</b>
+				</p>
+				<p lang={ v.Lang }>{ v.AddedText }</p>
+			</div>
+			<p class="muted plnote" lang={ v.Lang }>{ v.Copy.NoteChange }</p>
+		</section>
+		<div class="plbtns">
+			if v.CourseDone {
+				<a class="btn btn-primary btn--lg" href={ templ.SafeURL(v.Href("/")) }>
+					<span lang={ v.Lang }>{ v.Copy.Back }</span>
+				</a>
+			} else {
+				<a class="btn btn-primary btn--lg" href={ templ.SafeURL(v.Href("/")) }>
+					<span lang={ v.Lang }>{ v.StartLabel }</span>
+				</a>
+			}
+			@placeForm("/_hx/placement/start-over", "#placement", "") {
+				<input type="hidden" name="_csrf" value={ v.CSRF }/>
+				<input type="hidden" name="run_id" value={ v.RunIDText }/>
+				<button type="submit" class="btn btn--ghost btn--lg">
+					<span lang={ v.Lang }>{ v.Copy.StartOver }</span>
+				</button>
+			}
+		</div>
+	</main>
+}
+
+templ ladderBlock(v PlacementView) {
+	<div class="card plcov">
+		if v.Compact {
+			<span class="caps" lang={ v.Lang }>{ v.Copy.SoFar }</span>
+		}
+		<ol class={ ladderClass(v.Compact) } role="list" reversed>
+			for _, row := range v.Ladder {
+				<li data-state={ row.State }>
+					<span class="lad__dot" aria-hidden="true"></span>
+					<span class="lad__t">
+						<b lang={ v.Lang }>{ row.Title }</b>
+						<small lang={ v.Lang }>{ row.Units }</small>
+					</span>
+					<span class="lad__s" lang={ v.Lang }>{ row.Label }</span>
+				</li>
+			}
+		</ol>
+	</div>
+}
+
+func ladderClass(compact bool) string {
+	if compact {
+		return "ladder ladder--compact"
+	}
+	return "ladder"
+}
+
+// placeForm posts to a write route. hx-select is unset so the body's
+// #app selector does not drop a fragment. hx-boost is off so the form
+// is this post, not a shell navigation.
+templ placeForm(action, target, formID string) {
+	<form method="post" action={ templ.SafeURL(action) } hx-boost="false" hx-post={ action } hx-target={ target } hx-swap="outerHTML transition:true" hx-select="unset" if formID != "" { id={ formID } }>
+		{ children... }
+	</form>
+}
