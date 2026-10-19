@@ -193,15 +193,39 @@ func activityCatalog() []activityInfo {
 	}
 }
 
+// scopeGuidance is authoring advice. Enforced is false: the validator
+// does not check these notes.
+type scopeGuidance struct {
+	Kind     string   `json:"kind"`
+	Enforced bool     `json:"enforced"`
+	Summary  string   `json:"summary"`
+	Notes    []string `json:"notes"`
+}
+
+func authoringGuidance() scopeGuidance {
+	return scopeGuidance{
+		Kind:     "guidance",
+		Enforced: false,
+		Summary:  "Guidance for shared and custom units. Not an enforced rule. The validator does not check these notes.",
+		Notes: []string{
+			"A custom unit, scope learner:<id>, recycles that learner's struggled words first, then learning lexemes from placement, then new words.",
+			"Confusion pairs make good minimal-pair distractors.",
+			"A shared unit assumes no learner data. Do not depend on struggle, placement, or which shared units a learner has finished.",
+		},
+	}
+}
+
 func rulesDocument() ([]byte, error) {
 	doc := struct {
 		Rules          []units.Rule     `json:"rules"`
 		PlayerGuidance []units.Guidance `json:"playerGuidance"`
 		Budgets        Budgets          `json:"budgets"`
+		Guidance       scopeGuidance    `json:"guidance"`
 	}{
 		Rules:          units.Rules,
 		PlayerGuidance: units.PlayerGuidance,
 		Budgets:        currentBudgets(),
+		Guidance:       authoringGuidance(),
 	}
 	return json.Marshal(doc)
 }

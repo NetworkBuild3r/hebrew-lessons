@@ -107,7 +107,7 @@ func TestChainAcceptsStaticToken(t *testing.T) {
 		Units:     mem,
 	})
 	session := connectMCP(t, h, testToken)
-	out := call[putOutput](t, session, "put_unit", putInput{Position: 0, Doc: helloDoc()})
+	out := call[putOutput](t, session, "put_unit", putInput{Scope: ScopeShared, Position: 0, Doc: helloDoc()})
 	if mem.Actor(out.UnitID) != "author-7" {
 		t.Fatalf("actor = %q", mem.Actor(out.UnitID))
 	}
@@ -192,6 +192,9 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	if !strings.Contains(rulesText, `"maxNewWordsPerUnit":8`) {
 		t.Fatalf("budgets %s", rulesText)
 	}
+	if !strings.Contains(rulesText, `"enforced":false`) || !strings.Contains(rulesText, "Not an enforced rule") || !strings.Contains(rulesText, "struggled words first") || !strings.Contains(rulesText, "minimal-pair") || !strings.Contains(rulesText, "assumes no learner data") {
+		t.Fatalf("guidance %s", rulesText)
+	}
 
 	ctx := getContext(t, session, 0)
 	if ctx.Placement.Taken {
@@ -242,7 +245,7 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 		t.Fatal("validate_unit wrote a unit")
 	}
 
-	first := call[putOutput](t, session, "put_unit", putInput{Position: 0, Doc: doc})
+	first := call[putOutput](t, session, "put_unit", putInput{Scope: ScopeShared, Position: 0, Doc: doc})
 	if first.UnitID == 0 || first.Revision != 1 || first.Unchanged {
 		t.Fatalf("first put %+v", first)
 	}
@@ -252,24 +255,24 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	if mem.Actor(first.UnitID) != defaultActor {
 		t.Fatalf("actor %q", mem.Actor(first.UnitID))
 	}
-	second := call[putOutput](t, session, "put_unit", putInput{UnitID: &first.UnitID, Position: 0, Doc: doc})
+	second := call[putOutput](t, session, "put_unit", putInput{Scope: ScopeShared, UnitID: &first.UnitID, Position: 0, Doc: doc})
 	if second.Revision != 1 || !second.Unchanged || second.UnitID != first.UnitID {
 		t.Fatalf("idempotent put %+v", second)
 	}
 	moved := doc
 	moved.Title = "Hello again"
-	third := call[putOutput](t, session, "put_unit", putInput{UnitID: &first.UnitID, Position: 0, Doc: moved})
+	third := call[putOutput](t, session, "put_unit", putInput{Scope: ScopeShared, UnitID: &first.UnitID, Position: 0, Doc: moved})
 	if third.Unchanged || third.Revision != 2 {
 		t.Fatalf("changed put %+v", third)
 	}
-	shifted := call[putOutput](t, session, "put_unit", putInput{UnitID: &first.UnitID, Position: 2, Doc: moved})
+	shifted := call[putOutput](t, session, "put_unit", putInput{Scope: ScopeShared, UnitID: &first.UnitID, Position: 2, Doc: moved})
 	if shifted.Unchanged || shifted.Revision != 3 {
 		t.Fatalf("position change %+v", shifted)
 	}
 
 	bad := doc
 	bad.Title = ""
-	saved := call[putOutput](t, session, "put_unit", putInput{Position: 1, Doc: bad})
+	saved := call[putOutput](t, session, "put_unit", putInput{Scope: ScopeShared, Position: 1, Doc: bad})
 	if saved.Unchanged || saved.Revision != 1 {
 		t.Fatalf("blocked draft %+v", saved)
 	}
@@ -278,17 +281,18 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	}
 
 	missing := int64(99)
-	if msg := callErr(t, session, "put_unit", putInput{UnitID: &missing, Position: 0, Doc: doc}); !strings.Contains(msg, "No unit has id 99") {
+	if msg := callErr(t, session, "put_unit", putInput{Scope: ScopeShared, UnitID: &missing, Position: 0, Doc: doc}); !strings.Contains(msg, "No unit has id 99") {
 		t.Fatalf("missing unit %q", msg)
 	}
 	before := len(mustList(t, mem))
-	if msg := callErr(t, session, "put_unit", map[string]any{"position": 0, "doc": "not-a-unit"}); !strings.Contains(msg, `want "object"`) {
+	if msg := callErr(t, session, "put_unit", map[string]any{"scope": ScopeShared, "position": 0, "doc": "not-a-unit"}); !strings.Contains(msg, `want "object"`) {
 		t.Fatalf("malformed %q", msg)
 	}
-	if msg := callErr(t, session, "put_unit", map[string]any{"position": 0, "doc": map[string]any{"nope": true}}); !strings.Contains(msg, "nope") {
+	if msg := callErr(t, session, "put_unit", map[string]any{"scope": ScopeShared, "position": 0, "doc": map[string]any{"nope": true}}); !strings.Contains(msg, "nope") {
 		t.Fatalf("unknown field %q", msg)
 	}
 	if msg := callErr(t, session, "put_unit", map[string]any{
+		"scope":    ScopeShared,
 		"position": 0,
 		"doc":      map[string]any{"title": 1, "situation": "x", "concept": "y", "newWords": []any{}, "lessons": []any{}},
 	}); !strings.Contains(msg, "title") {
@@ -308,7 +312,8 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 		EstimatedKnownWords:    10,
 		SuggestedStartPosition: 1,
 	}, []string{coffee}, nil)
-	other := getContext(t, session, 3)
+	learnerZero := int64(0)
+	other := call[getContextOutput](t, session, "get_context", getContextInput{Position: 3, LearnerID: &learnerZero})
 	if other.Placement.Taken {
 		t.Fatal("user 0 saw user 9's placement")
 	}
@@ -324,7 +329,7 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 		EstimatedKnownWords:    40,
 		SuggestedStartPosition: 0,
 	}, []string{hello, coffee}, []string{book, helloBare})
-	again := getContext(t, session, 3)
+	again := call[getContextOutput](t, session, "get_context", getContextInput{Position: 3, LearnerID: &learnerZero})
 	if !again.Placement.Taken || !again.Placement.TakenAt.Equal(takenAt) || !again.Placement.Reliable || again.Placement.FalseAlarmRate != 0.05 {
 		t.Fatalf("placement %+v", again.Placement)
 	}
@@ -341,7 +346,7 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	if len(again.Placement.LearningLexemes) != 2 || again.Placement.LearningLexemes[0] != book || again.Placement.LearningLexemes[1] != helloBare {
 		t.Fatalf("learning lexemes %+v", again.Placement.LearningLexemes)
 	}
-	takenText := callRaw(t, session, "get_context", getContextInput{Position: 3})
+	takenText := callRaw(t, session, "get_context", getContextInput{Position: 3, LearnerID: &learnerZero})
 	for _, want := range []string{
 		`"taken":true`, `"level":0`, `"suggestedStartPosition":0`, `"reliable":true`,
 		`"shown":4`, `"again":1`, `"hard":1`, `"good":1`, `"easy":1`, `"dontknow":0`, `"goodPlusRate":0.5`,
@@ -374,12 +379,148 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	}
 }
 
+func TestScopeStruggleAndGuidance(t *testing.T) {
+	mem := NewMemory()
+	mem.AddLexeme(helloLexeme())
+	session := connectMCP(t, Handler(Options{
+		AuthToken: testToken,
+		Course:    mem,
+		Lexicon:   mem,
+		Lookup:    mem,
+		Units:     mem,
+	}), testToken)
+
+	doc := helloDoc()
+	shared := call[putOutput](t, session, "put_unit", putInput{Scope: ScopeShared, Position: 0, Doc: doc})
+	same := call[putOutput](t, session, "put_unit", putInput{Scope: ScopeShared, UnitID: &shared.UnitID, Position: 0, Doc: doc})
+	if !same.Unchanged || same.Revision != 1 {
+		t.Fatalf("same scope %+v", same)
+	}
+	mine := doc
+	mine.Title = "For learner 7"
+	custom := call[putOutput](t, session, "put_unit", putInput{Scope: " learner:7 ", Position: 1, Doc: mine})
+	if custom.Unchanged || custom.Revision != 1 {
+		t.Fatalf("custom create %+v", custom)
+	}
+	retargeted := call[putOutput](t, session, "put_unit", putInput{Scope: "learner:9", UnitID: &custom.UnitID, Position: 1, Doc: mine})
+	if retargeted.Unchanged || retargeted.Revision != 2 {
+		t.Fatalf("scope change %+v", retargeted)
+	}
+	back := call[putOutput](t, session, "put_unit", putInput{Scope: "learner:7", UnitID: &custom.UnitID, Position: 1, Doc: mine})
+	if back.Unchanged || back.Revision != 3 {
+		t.Fatalf("scope change back %+v", back)
+	}
+	held := call[putOutput](t, session, "put_unit", putInput{Scope: "learner:7", UnitID: &custom.UnitID, Position: 1, Doc: mine})
+	if !held.Unchanged || held.Revision != 3 {
+		t.Fatalf("same custom scope %+v", held)
+	}
+	theirs := doc
+	theirs.Title = "For learner 8"
+	call[putOutput](t, session, "put_unit", putInput{Scope: "learner:8", Position: 1, Doc: theirs})
+
+	before := len(mustList(t, mem))
+	for _, scope := range []string{"", "nope", "learner:", "learner:01", "learner:-3", "Shared"} {
+		msg := callErr(t, session, "put_unit", putInput{Scope: scope, Position: 0, Doc: doc})
+		if !strings.Contains(msg, "Scope must be") {
+			t.Fatalf("scope %q: %s", scope, msg)
+		}
+	}
+	if len(mustList(t, mem)) != before {
+		t.Fatal("bad scope wrote a unit")
+	}
+
+	onlyShared := getContext(t, session, 2)
+	if len(onlyShared.Outline) != 1 || onlyShared.Outline[0].Scope != ScopeShared || onlyShared.Outline[0].Title != doc.Title {
+		t.Fatalf("shared outline %+v", onlyShared.Outline)
+	}
+	if onlyShared.Placement.Taken || len(onlyShared.Struggle.Lexemes) != 0 || len(onlyShared.CompletedSharedUnits) != 0 {
+		t.Fatalf("shared view leaked learner data %+v", onlyShared)
+	}
+
+	mem.SetStruggle(7, []StruggleLexeme{
+		{Text: "ג", Lapses: 0, AgainRate: 0.2, Misses7d: 0},
+		{Text: "ב", Lapses: 2, AgainRate: 0, Misses7d: 1},
+		{Text: "א", Lapses: 2, AgainRate: 0, Misses7d: 1},
+	}, []ConfusionPair{
+		{A: "ב", B: "א", Count: 1},
+		{A: "א", B: "ג", Count: 4},
+	})
+	early := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	later := time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC)
+	mem.SetCompletedSharedUnits(7, []UnitCompletion{
+		{UnitID: 9, Position: 2, CompletedAt: later},
+		{UnitID: 3, Position: 0, CompletedAt: early},
+	})
+	mem.SetCompletedSharedUnits(8, []UnitCompletion{
+		{UnitID: 4, Position: 0, CompletedAt: early},
+	})
+
+	learner7 := int64(7)
+	top := call[getContextOutput](t, session, "get_context", getContextInput{Position: 2, LearnerID: &learner7, TopN: 1})
+	if len(top.Outline) != 2 {
+		t.Fatalf("learner outline %+v", top.Outline)
+	}
+	var sawShared, sawMine bool
+	for _, row := range top.Outline {
+		switch row.Scope {
+		case ScopeShared:
+			sawShared = row.Title == doc.Title
+		case "learner:7":
+			sawMine = row.Title == "For learner 7"
+		default:
+			t.Fatalf("unexpected scope %+v", row)
+		}
+	}
+	if !sawShared || !sawMine {
+		t.Fatalf("learner outline %+v", top.Outline)
+	}
+	if len(top.Struggle.Lexemes) != 1 || top.Struggle.Lexemes[0].Text != "א" || len(top.Struggle.Top) != 1 || top.Struggle.Top[0] != "א" {
+		t.Fatalf("top %+v", top.Struggle)
+	}
+	if len(top.Struggle.Confusions) != 1 || top.Struggle.Confusions[0].Count != 4 || top.Struggle.Confusions[0].A != "א" {
+		t.Fatalf("confusions %+v", top.Struggle.Confusions)
+	}
+
+	all := call[getContextOutput](t, session, "get_context", getContextInput{Position: 2, LearnerID: &learner7})
+	if len(all.Struggle.Lexemes) != 3 || all.Struggle.Lexemes[0].Text != "א" || all.Struggle.Lexemes[1].Text != "ב" || all.Struggle.Lexemes[2].Text != "ג" {
+		t.Fatalf("default top %+v", all.Struggle.Lexemes)
+	}
+	if len(all.Struggle.Top) != 3 || all.Struggle.Top[0] != "א" {
+		t.Fatalf("default top list %+v", all.Struggle.Top)
+	}
+	if len(all.CompletedSharedUnits) != 2 || all.CompletedSharedUnits[0].UnitID != 3 || !all.CompletedSharedUnits[0].CompletedAt.Equal(early) || all.CompletedSharedUnits[1].Position != 2 {
+		t.Fatalf("completed %+v", all.CompletedSharedUnits)
+	}
+
+	learner8 := int64(8)
+	eight := call[getContextOutput](t, session, "get_context", getContextInput{Position: 2, LearnerID: &learner8})
+	for _, row := range eight.Outline {
+		if row.Scope == "learner:7" {
+			t.Fatalf("learner 8 saw %+v", eight.Outline)
+		}
+	}
+	if len(eight.CompletedSharedUnits) != 1 || eight.CompletedSharedUnits[0].UnitID != 4 {
+		t.Fatalf("learner 8 completed %+v", eight.CompletedSharedUnits)
+	}
+	if len(eight.Struggle.Lexemes) != 0 {
+		t.Fatalf("learner 8 struggle %+v", eight.Struggle)
+	}
+
+	neg := int64(-1)
+	if msg := callErr(t, session, "get_context", getContextInput{LearnerID: &neg}); !strings.Contains(msg, "learnerId must be 0 or greater") {
+		t.Fatalf("negative learner %q", msg)
+	}
+	if msg := callErr(t, session, "get_context", getContextInput{TopN: -1}); !strings.Contains(msg, "topN must be 0 or greater") {
+		t.Fatalf("negative top %q", msg)
+	}
+}
+
 func TestNilStoresAreToolErrors(t *testing.T) {
 	session := connectMCP(t, Handler(Options{AuthToken: testToken}), testToken)
 	if msg := callErr(t, session, "get_context", getContextInput{}); !strings.Contains(msg, "not connected") {
 		t.Fatalf("get_context %q", msg)
 	}
-	if msg := callErr(t, session, "put_unit", putInput{Doc: helloDoc()}); !strings.Contains(msg, "not saved") {
+	if msg := callErr(t, session, "put_unit", putInput{Scope: ScopeShared, Doc: helloDoc()}); !strings.Contains(msg, "not saved") {
 		t.Fatalf("put_unit %q", msg)
 	}
 }

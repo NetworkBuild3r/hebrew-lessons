@@ -19,11 +19,13 @@ const (
 
 	instructions = "You are writing Hebrew course units. " +
 		"Read hebrew://schema/unit, hebrew://catalog/activities, and hebrew://rules before you draft. " +
-		"Call get_context for the outline, the words already taught before a position, the budgets, and the learner's placement. " +
+		"Call get_context for the outline, the words already taught before a position, the budgets, and, when you pass learnerId, that learner's placement and struggle. " +
+		"Omit learnerId for a shared unit. Shared units assume no learner data. " +
 		"Call lookup before you invent a spelling or a gloss. " +
 		"Call validate_unit as a dry run. Call put_unit to save a draft. " +
+		"put_unit requires scope shared or learner:<id>. Scope is not inside the document. " +
 		"put_unit saves even when issues block publishing. It does not publish. " +
-		"Send unitId when you save again so an unchanged document does not create a revision."
+		"Send unitId when you save again so an unchanged document, position, and scope do not create a revision."
 )
 
 // Options configures the authoring handler.
@@ -132,7 +134,7 @@ func registerResources(server *mcp.Server) error {
 		URI:         resourceRules,
 		Name:        "authoring-rules",
 		Title:       "Authoring rules",
-		Description: "Validator rule ids and the player guidance table. The validator enforces rules. It does not enforce playerGuidance.",
+		Description: "Validator rule ids, the player guidance table, and scope guidance. The validator enforces rules. It does not enforce playerGuidance or the scope guidance.",
 		MIMEType:    "application/json",
 	}, string(rulesJSON))
 	return nil

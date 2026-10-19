@@ -32,14 +32,18 @@ type service struct {
 }
 
 type getContextInput struct {
-	Position int `json:"position" jsonschema:"Course position you are about to write. Known lexemes are words introduced in units at a lower position. Zero is the first unit. Use the placement suggestedStartPosition when the learner has taken the vocabulary check."`
+	Position  int    `json:"position" jsonschema:"Course position you are about to write. Known lexemes are words introduced in units at a lower position. Zero is the first unit. Use the placement suggestedStartPosition when the learner has taken the vocabulary check."`
+	LearnerID *int64 `json:"learnerId,omitempty" jsonschema:"Optional. The learner whose custom units, placement, struggle, and completed shared units to include. Omit it to see shared units only, with no learner data. OAuth will later default this to the signed-in user."`
+	TopN      int    `json:"topN,omitempty" jsonschema:"How many struggled words and confusion pairs to return. Defaults to 20."`
 }
 
 type getContextOutput struct {
-	Outline      []UnitOutline `json:"outline"`
-	KnownLexemes []string      `json:"knownLexemes"`
-	Budgets      Budgets       `json:"budgets"`
-	Placement    placementView `json:"placement"`
+	Outline              []UnitOutline    `json:"outline"`
+	KnownLexemes         []string         `json:"knownLexemes"`
+	Budgets              Budgets          `json:"budgets"`
+	Placement            placementView    `json:"placement"`
+	Struggle             Struggle         `json:"struggle"`
+	CompletedSharedUnits []UnitCompletion `json:"completedSharedUnits"`
 }
 
 // placementView is the get_context placement object.
@@ -127,6 +131,7 @@ type validateOutput struct {
 type putInput struct {
 	UnitID   *int64     `json:"unitId,omitempty" jsonschema:"Id from an earlier put_unit. Omit it to create a unit. Send the same id and the same document to avoid a new revision."`
 	Position int        `json:"position" jsonschema:"Course position, 0 or greater. This is not a field inside doc. Changing it saves a new draft revision."`
+	Scope    string     `json:"scope" jsonschema:"Required. shared for every learner, or learner:<id> for one learner. <id> is the numeric learner id, such as learner:7. Scope is metadata, not a field of doc. Changing it saves a new draft revision."`
 	Doc      units.Unit `json:"doc" jsonschema:"Unit document. JSON that cannot be read as a unit is rejected. Warnings and block issues are returned, and the draft is still saved. Publishing is a later tool."`
 }
 
@@ -156,46 +161,103 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 	if err != nil {
 		return nil, out, storeErr("The known-word list could not be read.", err)
 	}
-	userID := userIDFrom(ctx)
-	row, taken, err := s.course.LatestPlacement(ctx, userID)
-	if err != nil {
-		return nil, out, storeErr("The placement result could not be read.", err)
+	if in.LearnerID != nil && *in.LearnerID < 0 {
+		return nil, out, errors.New("learnerId must be 0 or greater.")
 	}
-	view := placementView{Taken: taken}
-	if taken {
-		words, err := s.course.PlacementKnownLexemes(ctx, userID)
-		if err != nil {
-			return nil, out, storeErr("The placement words could not be read.", err)
-		}
-		learning, err := s.course.PlacementLearningLexemes(ctx, userID)
-		if err != nil {
-			return nil, out, storeErr("The words still being learned could not be read.", err)
-		}
-		view = placementView{
-			Taken:                  true,
-			TakenAt:                row.TakenAt,
-			Reliable:               row.Reliable,
-			FalseAlarmRate:         row.FalseAlarmRate,
-			Level:                  row.Level,
-			BandScores:             append([]BandScore(nil), row.BandScores...),
-			EstimatedKnownWords:    row.EstimatedKnownWords,
-			SuggestedStartPosition: row.SuggestedStartPosition,
-			KnownLexemes:           append([]string(nil), words...),
-			LearningLexemes:        append([]string(nil), learning...),
-		}
-		slices.Sort(view.KnownLexemes)
-		slices.Sort(view.LearningLexemes)
+	if in.TopN < 0 {
+		return nil, out, errors.New("topN must be 0 or greater. Omit it to use 20.")
 	}
-	if outline == nil {
-		outline = []UnitOutline{}
+	outline = visibleUnits(outline, in.LearnerID)
+	view := placementView{}
+	struggle := emptyStruggle()
+	completed := []UnitCompletion{}
+	if in.LearnerID != nil {
+		userID := *in.LearnerID
+		row, taken, err := s.course.LatestPlacement(ctx, userID)
+		if err != nil {
+			return nil, out, storeErr("The placement result could not be read.", err)
+		}
+		if taken {
+			words, err := s.course.PlacementKnownLexemes(ctx, userID)
+			if err != nil {
+				return nil, out, storeErr("The placement words could not be read.", err)
+			}
+			learning, err := s.course.PlacementLearningLexemes(ctx, userID)
+			if err != nil {
+				return nil, out, storeErr("The words still being learned could not be read.", err)
+			}
+			view = placementView{
+				Taken:                  true,
+				TakenAt:                row.TakenAt,
+				Reliable:               row.Reliable,
+				FalseAlarmRate:         row.FalseAlarmRate,
+				Level:                  row.Level,
+				BandScores:             append([]BandScore(nil), row.BandScores...),
+				EstimatedKnownWords:    row.EstimatedKnownWords,
+				SuggestedStartPosition: row.SuggestedStartPosition,
+				KnownLexemes:           append([]string(nil), words...),
+				LearningLexemes:        append([]string(nil), learning...),
+			}
+			slices.Sort(view.KnownLexemes)
+			slices.Sort(view.LearningLexemes)
+		}
+		topN := in.TopN
+		if topN == 0 {
+			topN = defaultStruggleTop
+		}
+		struggle, err = s.course.StruggleStats(ctx, userID, topN)
+		if err != nil {
+			return nil, out, storeErr("The struggle list could not be read.", err)
+		}
+		struggle = fillStruggle(struggle)
+		completed, err = s.course.CompletedSharedUnits(ctx, userID)
+		if err != nil {
+			return nil, out, storeErr("The completed shared units could not be read.", err)
+		}
+		if completed == nil {
+			completed = []UnitCompletion{}
+		}
 	}
 	out = getContextOutput{
-		Outline:      outline,
-		KnownLexemes: sortedKnown(known),
-		Budgets:      currentBudgets(),
-		Placement:    view,
+		Outline:              outline,
+		KnownLexemes:         sortedKnown(known),
+		Budgets:              currentBudgets(),
+		Placement:            view,
+		Struggle:             struggle,
+		CompletedSharedUnits: completed,
 	}
 	return nil, out, nil
+}
+
+func visibleUnits(outline []UnitOutline, learner *int64) []UnitOutline {
+	out := make([]UnitOutline, 0, len(outline))
+	for _, row := range outline {
+		if row.Scope == ScopeShared || (learner != nil && row.Scope == fmt.Sprintf("learner:%d", *learner)) {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+func emptyStruggle() Struggle {
+	return Struggle{
+		Lexemes:    []StruggleLexeme{},
+		Confusions: []ConfusionPair{},
+		Top:        []string{},
+	}
+}
+
+func fillStruggle(in Struggle) Struggle {
+	if in.Lexemes == nil {
+		in.Lexemes = []StruggleLexeme{}
+	}
+	if in.Confusions == nil {
+		in.Confusions = []ConfusionPair{}
+	}
+	if in.Top == nil {
+		in.Top = []string{}
+	}
+	return in
 }
 
 func (s *service) lookup(ctx context.Context, _ *mcp.CallToolRequest, in lookupInput) (*mcp.CallToolResult, lookupOutput, error) {
@@ -247,6 +309,10 @@ func (s *service) putUnit(ctx context.Context, _ *mcp.CallToolRequest, in putInp
 	if in.UnitID != nil && *in.UnitID <= 0 {
 		return nil, out, errors.New("unitId must be a positive id from an earlier put_unit. Omit it to create a unit.")
 	}
+	scope, err := CanonicalScope(in.Scope)
+	if err != nil {
+		return nil, out, err
+	}
 	if s.units == nil {
 		return nil, out, errors.New("Unit storage is not connected, so the draft was not saved.")
 	}
@@ -257,6 +323,7 @@ func (s *service) putUnit(ctx context.Context, _ *mcp.CallToolRequest, in putInp
 		UnitID:   in.UnitID,
 		Position: in.Position,
 		Doc:      &doc,
+		Scope:    scope,
 		Actor:    actorFrom(ctx),
 	})
 	if errors.Is(err, ErrUnitNotFound) {
@@ -323,7 +390,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_context",
-		Description: "Read the course before you draft a unit. Returns the outline (position, title, status), lexemes introduced before position, the authoring budgets, and the learner's placement check. Placement is an adaptive deck: each rated word has a real FSRS card. taken false means there is no finished run, so the other placement fields are absent. A finished run includes takenAt, reliable, falseAlarmRate, level (highest passed band, or -1), bandScores (per band: band, shown, again, hard, good, easy, dontknow, goodPlusRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy, pointed NFC, sorted), and learningLexemes (Hard, Again, and don't-know, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for what the budgets mean.",
+		Description: "Read the course before you draft a unit. The outline rows have position, title, status, and scope (shared, or learner:<id>). Omit learnerId to see shared units only, with empty struggle and no placement. Pass learnerId to add that learner's custom units, their placement, their struggle, and the shared units they have finished. topN defaults to 20 and limits struggled words and confusion pairs. Struggle order is lapses + misses in 7 days + again rate (0 to 1), highest first, then text. Placement is an adaptive deck: each rated word has a real FSRS card. taken false means there is no finished run. A finished run includes takenAt, reliable, falseAlarmRate, level (highest passed band, or -1), bandScores (per band: band, shown, again, hard, good, easy, dontknow, goodPlusRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy across bands, pointed NFC, sorted), and learningLexemes (Hard, Again, and don't-know across bands, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for budgets and for the shared-versus-custom guidance. That guidance is not an enforced rule.",
 		Annotations: readOnly,
 	}, svc.getContext)
 	mcp.AddTool(server, &mcp.Tool{
@@ -338,7 +405,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}, svc.validateUnit)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "put_unit",
-		Description: "Save a draft revision. Send unitId to update; omit it to create. The same document and the same position do not create another revision. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. This does not publish.",
+		Description: "Save a draft revision. scope is required: shared, or learner:<id> for one learner. Scope is not inside the unit document. Send unitId to update; omit it to create. The same document, position, and scope do not create another revision. Changing scope does. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. This does not publish.",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    false,
 			IdempotentHint:  true,

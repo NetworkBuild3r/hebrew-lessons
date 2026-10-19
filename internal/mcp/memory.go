@@ -24,6 +24,8 @@ type Memory struct {
 	lexemes   []storedLexeme
 	audio     map[string]bool
 	placement map[int64]storedPlacement
+	struggle  map[int64]storedStruggle
+	completed map[int64][]UnitCompletion
 }
 
 type storedPlacement struct {
@@ -37,10 +39,16 @@ type memUnit struct {
 	position  int
 	title     string
 	status    string
+	scope     string
 	rev       int
 	canonical []byte
 	doc       units.Unit
 	actor     string
+}
+
+type storedStruggle struct {
+	lexemes    []StruggleLexeme
+	confusions []ConfusionPair
 }
 
 type storedLexeme struct {
@@ -115,7 +123,7 @@ func (m *Memory) ListUnits(ctx context.Context) ([]UnitOutline, error) {
 	defer m.mu.Unlock()
 	out := make([]UnitOutline, len(m.units))
 	for i, u := range m.units {
-		out[i] = UnitOutline{ID: u.id, Position: u.position, Title: u.title, Status: u.status}
+		out[i] = UnitOutline{ID: u.id, Position: u.position, Title: u.title, Status: u.status, Scope: u.scope}
 	}
 	slices.SortFunc(out, func(a, b UnitOutline) int {
 		if c := cmp.Compare(a.Position, b.Position); c != 0 {
@@ -173,6 +181,101 @@ func (m *Memory) PlacementLearningLexemes(ctx context.Context, userID int64) ([]
 		return []string{}, nil
 	}
 	return append([]string(nil), stored.learning...), nil
+}
+
+// SetStruggle stores the raw struggle rows for userID.
+// StruggleStats orders and trims them.
+func (m *Memory) SetStruggle(userID int64, lexemes []StruggleLexeme, confusions []ConfusionPair) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.struggle == nil {
+		m.struggle = map[int64]storedStruggle{}
+	}
+	m.struggle[userID] = storedStruggle{
+		lexemes:    append([]StruggleLexeme(nil), lexemes...),
+		confusions: append([]ConfusionPair(nil), confusions...),
+	}
+}
+
+// StruggleStats implements CourseReader.
+func (m *Memory) StruggleStats(ctx context.Context, userID int64, topN int) (Struggle, error) {
+	if err := ctx.Err(); err != nil {
+		return Struggle{}, err
+	}
+	if topN <= 0 {
+		topN = defaultStruggleTop
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	stored := m.struggle[userID]
+	return rankStruggle(stored.lexemes, stored.confusions, topN), nil
+}
+
+// SetCompletedSharedUnits stores one learner's finished shared units.
+func (m *Memory) SetCompletedSharedUnits(userID int64, rows []UnitCompletion) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.completed == nil {
+		m.completed = map[int64][]UnitCompletion{}
+	}
+	m.completed[userID] = append([]UnitCompletion(nil), rows...)
+}
+
+// CompletedSharedUnits implements CourseReader.
+func (m *Memory) CompletedSharedUnits(ctx context.Context, userID int64) ([]UnitCompletion, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	rows := append([]UnitCompletion(nil), m.completed[userID]...)
+	slices.SortFunc(rows, func(a, b UnitCompletion) int {
+		if c := cmp.Compare(a.Position, b.Position); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.UnitID, b.UnitID)
+	})
+	if rows == nil {
+		rows = []UnitCompletion{}
+	}
+	return rows, nil
+}
+
+func rankStruggle(lexemes []StruggleLexeme, confusions []ConfusionPair, topN int) Struggle {
+	rows := append([]StruggleLexeme(nil), lexemes...)
+	slices.SortStableFunc(rows, func(a, b StruggleLexeme) int {
+		if c := cmp.Compare(StruggleScore(b), StruggleScore(a)); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Text, b.Text)
+	})
+	pairs := append([]ConfusionPair(nil), confusions...)
+	slices.SortStableFunc(pairs, func(a, b ConfusionPair) int {
+		if c := cmp.Compare(b.Count, a.Count); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(a.A, b.A); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.B, b.B)
+	})
+	if topN < len(rows) {
+		rows = rows[:topN]
+	}
+	if topN < len(pairs) {
+		pairs = pairs[:topN]
+	}
+	top := make([]string, len(rows))
+	for i, row := range rows {
+		top[i] = row.Text
+	}
+	if rows == nil {
+		rows = []StruggleLexeme{}
+	}
+	if pairs == nil {
+		pairs = []ConfusionPair{}
+	}
+	return Struggle{Lexemes: rows, Confusions: pairs, Top: top}
 }
 
 func sortedCopy(in []string) []string {
@@ -242,6 +345,7 @@ func (m *Memory) PutDraftUnit(ctx context.Context, in PutDraft) (PutResult, erro
 			position:  in.Position,
 			title:     in.Doc.Title,
 			status:    "draft",
+			scope:     in.Scope,
 			rev:       1,
 			canonical: raw,
 			doc:       stored,
@@ -253,13 +357,14 @@ func (m *Memory) PutDraftUnit(ctx context.Context, in PutDraft) (PutResult, erro
 	if u == nil {
 		return PutResult{}, ErrUnitNotFound
 	}
-	if u.position == in.Position && bytes.Equal(u.canonical, raw) {
+	if u.position == in.Position && u.scope == in.Scope && bytes.Equal(u.canonical, raw) {
 		return PutResult{UnitID: u.id, Revision: u.rev, Unchanged: true}, nil
 	}
 	u.rev++
 	u.position = in.Position
 	u.title = in.Doc.Title
 	u.status = "draft"
+	u.scope = in.Scope
 	u.canonical = append([]byte(nil), raw...)
 	u.doc = stored
 	u.actor = in.Actor
