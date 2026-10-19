@@ -9,7 +9,7 @@ templ Lesson(p Page, s Screen) {
 			if s.Empty {
 				<section class="quiet-card quiet-card--next">
 					<p class="eyebrow" lang={ p.Lang }>{ p.NextKicker }</p>
-					<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("lessons") }></use></svg>
+					@Icon("lessons", "")
 					<p class="quiet-card__line">
 						@Pair(p.Lang, p.NoneHE, p.NoneEN)
 					</p>
