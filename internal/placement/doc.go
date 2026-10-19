@@ -48,8 +48,9 @@
 // not by Score: the lowest units.position whose doc newWords are less than
 // 80% covered by the learner's known set, one past the highest position
 // when every unit is covered, and 0 when there are no units. The known set
-// is KnownLexemeIDs: he_en cards whose latest rating is Good or Easy, plus
-// new words of lessons this learner has finished. An empty newWords list
+// is KnownLexemeIDs: he_en cards whose latest rating is Good or Easy.
+// A placement Good or Easy is that review. Finishing a lesson does not
+// add the lesson's new words. An empty newWords list
 // is covered. A latest Again or Hard does not count. The position is
 // recomputed on read.
 //

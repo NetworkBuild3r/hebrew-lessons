@@ -4,7 +4,13 @@ package views
 // The count is shell copy until the review queue is wired.
 templ Today(h Home) {
 	@Layout(h.Page()) {
-		<article class="today">
+		<article class="today" data-due={ h.DueText } data-known={ h.KnownText } if h.PlacementState != "" {
+			data-placement={ h.PlacementState }
+			data-placement-words={ h.PlacementWords }
+			data-placement-level={ h.PlacementLevel }
+			data-placement-rated={ h.PlacementRated }
+			data-placement-at={ h.PlacementAt }
+		}>
 			<header class="today__head">
 				<h1 lang={ h.Lang }>{ h.Heading }</h1>
 			</header>
@@ -52,10 +58,14 @@ templ Today(h Home) {
 					<section class="lesson-card today-next" aria-labelledby="next-title">
 						<p class="eyebrow" lang={ h.Lang }>{ h.NextKicker }</p>
 						<h2 id="next-title" class="unit-title">
-							@H(UnitTitle)
-							<span class="unit-gloss">@E(UnitGloss)</span>
+							@H(h.UnitTitle)
+							if h.UnitGloss != "" {
+								<span class="unit-gloss">@E(h.UnitGloss)</span>
+							}
 						</h2>
-						@Situation(h.Situation)
+						if h.Situation != "" {
+							@Situation(h.Situation)
+						}
 						<ul class="chips">
 							for _, word := range h.Words {
 								<li class="chip">
@@ -90,28 +100,108 @@ templ Today(h Home) {
 	}
 }
 
-templ Review(p Page) {
+templ Review(p Page, c ReviewCard) {
 	@Layout(p) {
 		<article class="sheet">
 			<h1 lang={ p.Lang }>{ p.ReviewHeading }</h1>
-			<p class="lede" lang={ p.Lang }>{ p.ReviewLede }</p>
+			@ReviewBody(c)
 		</article>
 	}
 }
 
-templ Progress(p Page) {
-	@Layout(p) {
-		<article class="sheet">
+templ ReviewBody(c ReviewCard) {
+	<div id="review-card" data-kind={ c.Kind } data-card={ Num64(c.CardID) } data-pointed={ c.Pointed } data-unpointed={ c.Unpointed } data-show-unpointed={ Flag(c.ShowUnpointed) } data-index={ Num(c.Index) } data-total={ Num(c.Total) } data-answered={ Num(c.Answered) } data-correct={ Num(c.Correct) } data-retry={ Flag(c.Retry) } data-done={ Flag(c.Done) } data-revealed={ Flag(c.Revealed) } if c.Translit != "" && answerSide(c) {
+		data-translit={ c.Translit }
+	}>
+		if c.Done {
+			if c.Answered == 0 {
+				<p class="lede" lang={ c.Lang }>{ c.Lede }</p>
+			} else {
+				<p class="lede" lang="en" dir="ltr">
+					<bdi lang="en" dir="ltr">{ Num(c.Correct) } / { Num(c.Answered) }</bdi>
+				</p>
+			}
+		} else {
+			<p class="count">
+				if c.Kind == "en_he" {
+					@E(c.Gloss)
+				} else if c.ShowUnpointed {
+					@H(c.Unpointed)
+				} else {
+					@H(c.Pointed)
+				}
+			</p>
+			// Translit and audio name the Hebrew. On en_he that is the answer, so they wait for reveal. On he_en the Hebrew is the prompt, so both stay.
+			if answerSide(c) {
+				if c.Translit != "" {
+					<p class="ink-card__hint">@E(c.Translit)</p>
+				}
+				if c.AudioURL != "" {
+					<a href={ templ.SafeURL(c.AudioURL) }>
+						<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("sound") }></use></svg>
+					</a>
+				}
+			}
+			<p class="ink-card__hint">
+				<bdi lang="en" dir="ltr">{ Num(c.Index) } / { Num(c.Total) }</bdi>
+			</p>
+			if c.Revealed {
+				if c.Kind == "en_he" {
+					<p class="ink-card__hint">
+						if c.ShowUnpointed {
+							@H(c.Unpointed)
+						} else {
+							@H(c.Pointed)
+						}
+					</p>
+				} else if c.Gloss != "" {
+					<p class="ink-card__hint">@E(c.Gloss)</p>
+				}
+				if c.Gender != "" {
+					<span class="gchip">@H(GenderLabel(c.Gender))</span>
+				}
+				<form method="post" action="/_hx/review/grade" hx-post="/_hx/review/grade" hx-target="#review-card" hx-swap="outerHTML" hx-boost="false">
+					<input type="hidden" name="_csrf" value={ c.CSRF }/>
+					<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
+					<button type="submit" class="btn btn-tonal" name="rating" value="1">@E("Again")</button>
+					<button type="submit" class="btn btn-tonal" name="rating" value="2">@E("Hard")</button>
+					<button type="submit" class="btn btn-tonal" name="rating" value="3">@E("Good")</button>
+					<button type="submit" class="btn btn-tonal" name="rating" value="4">@E("Easy")</button>
+				</form>
+			} else {
+				<form method="post" action="/_hx/review/reveal" hx-post="/_hx/review/reveal" hx-target="#review-card" hx-swap="outerHTML" hx-boost="false">
+					<input type="hidden" name="_csrf" value={ c.CSRF }/>
+					<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
+					<button type="submit" class="btn btn-tonal">@E("Show")</button>
+				</form>
+			}
+		}
+	</div>
+}
+
+templ Progress(p ProgressPage) {
+	@Layout(p.Page) {
+		<article class="sheet" if p.Placement != "" {
+			data-placement={ p.Placement }
+			data-placement-words={ p.PlacementWords }
+			data-placement-level={ p.PlacementLevel }
+			data-placement-rated={ p.PlacementRated }
+			data-placement-at={ p.PlacementAt }
+		}>
 			<h1 lang={ p.Lang }>{ p.ProgressHeading }</h1>
 			<p class="lede" lang={ p.Lang }>{ p.ProgressLede }</p>
 			<ul class="stats">
 				<li>
-					<span class="count"><bdi lang="en" dir="ltr">0</bdi></span>
+					<span class="count"><bdi lang="en" dir="ltr">{ p.KnownText }</bdi></span>
 					<span lang={ p.Lang }>{ p.WordsLabel }</span>
 				</li>
 				<li>
-					<span class="count"><bdi lang="en" dir="ltr">0</bdi></span>
+					<span class="count"><bdi lang="en" dir="ltr">{ p.UnitsText }</bdi></span>
 					<span lang={ p.Lang }>{ p.UnitsLabel }</span>
+				</li>
+				<li>
+					<span class="count"><bdi lang="en" dir="ltr">{ p.DueText }</bdi></span>
+					<span lang={ p.Lang }>{ p.DueLabel }</span>
 				</li>
 			</ul>
 		</article>

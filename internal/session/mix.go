@@ -20,12 +20,14 @@ const (
 	// same value BuildSession uses.
 	TargetSuccess = sessionlimits.TargetSuccess
 
-	// MaxNewPerSession is how many new cards one session should introduce.
-	// BuildSession does not apply it.
+	// MaxNewPerSession is how many new cards one session introduces.
+	// A new card has no review yet. BuildSession applies this cap.
 	MaxNewPerSession = sessionlimits.MaxNewPerSession
 
-	// MaxNewShare is the largest fraction of a session that should be new
-	// cards. BuildSession does not apply it.
+	// MaxNewShare is the largest fraction of a session that new cards
+	// may be, once the session already has a reviewed card. A session
+	// with no reviewed cards still introduces up to MaxNewPerSession,
+	// so a finished lesson is not an empty queue.
 	MaxNewShare = sessionlimits.MaxNewShare
 
 	// KnownSuccess is the success rate assumed for a stable known card
@@ -82,6 +84,25 @@ const (
 	// ConfusionWindow is how far back an Again, and a confusion_misses row,
 	// still changes the mix. It matches the window StruggleStats counts.
 	ConfusionWindow = 7 * 24 * time.Hour
+
+	// KindLetter is one step of a letter-pair drill.
+	KindLetter = "letter"
+	// KindPattern is one step of an agreement drill.
+	KindPattern = "pattern"
+
+	// DrillSteps is the length of one confusion drill.
+	// A key produces one drill per session, not one drill per miss.
+	DrillSteps = 4
+
+	// DrillCap is the most drill steps one session weaves in.
+	// The old queue stopped every visit at MaxQueue, which was 20.
+	// Study cards still fill SessionCap and are not dropped to make room.
+	// Drill steps past this cap wait for a later session.
+	DrillCap = 20
+
+	// MinMissesForDrill is the 7-day count that adds a drill.
+	// The count is rows in confusion_misses, not a stored counter.
+	MinMissesForDrill = 2
 )
 
 // Plan is how many cards of each kind a full SessionCap queue aims to take
@@ -137,6 +158,21 @@ type Candidate struct {
 	RecentLapse bool
 	Confused    bool
 	KnownLexeme bool
+	// Kind is letter or pattern for a drill step. Empty is a study card.
+	Kind string
+	// Key is the confusion key, for example ב/כ. Empty on a study card.
+	Key string
+	// Step is 0..DrillSteps-1 and distinguishes the steps of one drill.
+	Step int
+	// HasIntro is true when the word's intro lesson is known.
+	// IntroPosition is that unit's position. IntroLesson is lesson_ix.
+	HasIntro      bool
+	IntroPosition int
+	IntroLesson   int
+	// HasFreq is true when FreqRank is a real frequency rank.
+	// A missing rank sorts after every rank that is present.
+	HasFreq  bool
+	FreqRank int
 }
 
 type kind int
@@ -145,6 +181,7 @@ const (
 	kindSkip kind = iota
 	kindStruggle
 	kindKnown
+	kindNew
 )
 
 func accuracyOf(ratings []int) float64 {
@@ -163,10 +200,79 @@ func accuracyOf(ratings []int) float64 {
 // mix orders candidates and returns the queue. accuracy is the recent
 // Good/Easy share, now is the clock, and seed breaks due-time ties.
 func mix(cands []Candidate, accuracy float64, now time.Time, seed int64) []CardRef {
-	ordered := append([]Candidate(nil), cands...)
+	study, letters, patterns := splitKinds(cands)
+	ordered := append([]Candidate(nil), study...)
 	sortCandidates(seed, ordered)
-	dueS, dueK, laterK := splitPools(ordered, now)
-	return assemble(dueS, dueK, laterK, accuracy)
+	dueS, dueK, laterK, fresh := splitPools(ordered, now)
+	planned := assemble(dueS, dueK, laterK, accuracy)
+	// New cards do not take a known or struggle slot, and they are not
+	// woven into the drill pattern. The planned queue, including drills,
+	// stays as it was. New cards follow it, already capped and ordered.
+	fresh = orderNew(fresh)
+	n := newAllowance(len(planned), len(fresh))
+	return append(weave(planned, drillCards(letters), drillCards(patterns)), newRefs(take(fresh, n))...)
+}
+
+func splitKinds(cands []Candidate) (study, letters, patterns []Candidate) {
+	for _, c := range cands {
+		switch c.Kind {
+		case KindLetter:
+			letters = append(letters, c)
+		case KindPattern:
+			patterns = append(patterns, c)
+		default:
+			study = append(study, c)
+		}
+	}
+	return study, letters, patterns
+}
+
+func drillCards(in []Candidate) []CardRef {
+	out := make([]CardRef, len(in))
+	for i, c := range in {
+		out[i] = CardRef{
+			CardID:   c.ID,
+			LexemeID: c.LexemeID,
+			Kind:     c.Kind,
+			Key:      c.Key,
+			Step:     c.Step,
+		}
+	}
+	return out
+}
+
+// weave inserts drill steps after the study cards without dropping any of
+// them or changing their order. One letter step and one pattern step follow
+// each study card until that kind runs out. Leftover steps alternate at the
+// end. An empty drill plan returns the study queue as it was built.
+func weave(cards, letters, patterns []CardRef) []CardRef {
+	if len(letters) == 0 && len(patterns) == 0 {
+		return cards
+	}
+	out := make([]CardRef, 0, len(cards)+len(letters)+len(patterns))
+	li, pi := 0, 0
+	for _, card := range cards {
+		out = append(out, card)
+		if li < len(letters) {
+			out = append(out, letters[li])
+			li++
+		}
+		if pi < len(patterns) {
+			out = append(out, patterns[pi])
+			pi++
+		}
+	}
+	for li < len(letters) || pi < len(patterns) {
+		if li < len(letters) {
+			out = append(out, letters[li])
+			li++
+		}
+		if pi < len(patterns) {
+			out = append(out, patterns[pi])
+			pi++
+		}
+	}
+	return out
 }
 
 func sortCandidates(seed int64, cands []Candidate) {
@@ -191,7 +297,7 @@ func tieBreak(seed, id int64) uint64 {
 	return z ^ (z >> 31)
 }
 
-func splitPools(cands []Candidate, now time.Time) (dueS, dueK, laterK []Candidate) {
+func splitPools(cands []Candidate, now time.Time) (dueS, dueK, laterK, fresh []Candidate) {
 	for _, c := range cands {
 		switch classify(c, now) {
 		case kindStruggle:
@@ -202,14 +308,24 @@ func splitPools(cands []Candidate, now time.Time) (dueS, dueK, laterK []Candidat
 			} else {
 				dueK = append(dueK, c)
 			}
+		case kindNew:
+			fresh = append(fresh, c)
 		}
 	}
-	return dueS, dueK, laterK
+	return dueS, dueK, laterK, fresh
 }
 
 func classify(c Candidate, now time.Time) kind {
 	if c.Dir != fsrs.DirHeEn && c.Dir != fsrs.DirEnHe {
 		return kindSkip
+	}
+	// A card with no review is new once it is due. It is not struggling
+	// and it is not known. A future due date waits.
+	if !c.HasRating {
+		if c.Due.After(now) {
+			return kindSkip
+		}
+		return kindNew
 	}
 	due := !c.Due.After(now)
 	weak := c.HasRating && (c.Latest == int(fsrs.Again) || c.Latest == int(fsrs.Hard))
@@ -264,6 +380,78 @@ func take(in []Candidate, n int) []Candidate {
 	return append([]Candidate{}, in[:n]...)
 }
 
+// newAllowance is how many of available new cards this session takes.
+// The absolute cap is MaxNewPerSession. When the planned queue already
+// has reviewed cards, new cards are also at most MaxNewShare of the
+// session those reviewed cards and the new cards make together.
+// A planned queue of zero still takes up to MaxNewPerSession: the share
+// would otherwise be zero and a finished lesson would never be reviewed.
+func newAllowance(planned, available int) int {
+	limit := MaxNewPerSession
+	if planned > 0 && MaxNewShare > 0 && MaxNewShare < 1 {
+		share := int(math.Floor((MaxNewShare * float64(planned)) / (1 - MaxNewShare)))
+		if share < limit {
+			limit = share
+		}
+	}
+	if limit < 0 {
+		limit = 0
+	}
+	if available < limit {
+		return available
+	}
+	return limit
+}
+
+// orderNew sorts new cards by the intro unit's position, then that
+// lesson's index, then frequency rank when the card has one, then id.
+// A card with no intro lesson sorts after every card that has one.
+// A card with no frequency rank sorts after every card that has one.
+func orderNew(in []Candidate) []Candidate {
+	out := append([]Candidate(nil), in...)
+	slices.SortFunc(out, func(a, b Candidate) int {
+		if n := cmp.Compare(introKey(a), introKey(b)); n != 0 {
+			return n
+		}
+		if n := cmp.Compare(a.IntroLesson, b.IntroLesson); n != 0 {
+			return n
+		}
+		if n := cmp.Compare(rankKey(a), rankKey(b)); n != 0 {
+			return n
+		}
+		return cmp.Compare(a.ID, b.ID)
+	})
+	return out
+}
+
+func introKey(c Candidate) int {
+	if !c.HasIntro {
+		return math.MaxInt
+	}
+	return c.IntroPosition
+}
+
+func rankKey(c Candidate) int {
+	if !c.HasFreq {
+		return math.MaxInt
+	}
+	return c.FreqRank
+}
+
+func newRefs(cards []Candidate) []CardRef {
+	out := make([]CardRef, len(cards))
+	for i, c := range cards {
+		out[i] = CardRef{
+			CardID:   c.ID,
+			LexemeID: c.LexemeID,
+			Dir:      c.Dir,
+			Kind:     c.Dir,
+			New:      true,
+		}
+	}
+	return out
+}
+
 func refs(cards []Candidate, struggling bool) []CardRef {
 	out := make([]CardRef, len(cards))
 	for i, c := range cards {
@@ -272,6 +460,7 @@ func refs(cards []Candidate, struggling bool) []CardRef {
 			LexemeID:   c.LexemeID,
 			Dir:        c.Dir,
 			Struggling: struggling,
+			Kind:       c.Dir,
 		}
 	}
 	return out

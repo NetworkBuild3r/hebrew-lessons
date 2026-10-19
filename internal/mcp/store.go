@@ -145,10 +145,10 @@ type CourseReader interface {
 	// ordered by position, then unit id. A unit is complete when every
 	// lesson in it has a finished run. Shape matches db.CompletedSharedUnits.
 	CompletedSharedUnits(ctx context.Context, userID int64) ([]UnitCompletion, error)
-	// LearnerKnownLexemes is the pointed NFC union of placement Good/Easy
-	// words and words from units this learner has completed, sorted.
-	// Proposed for the top-level knownLexemes field. It does not read a
-	// learner_lexemes table; that table is dropped.
+	// LearnerKnownLexemes is the pointed NFC text of he_en cards whose
+	// latest rating is Good or Easy, sorted. A placement Good or Easy is
+	// that review. Words from a finished lesson are not included.
+	// It does not read a learner_lexemes table; that table is dropped.
 	LearnerKnownLexemes(ctx context.Context, userID int64) ([]string, error)
 	// LearnerCards returns one page of this learner's cards, including
 	// suspended cards. Order is due ascending, then most recently reviewed

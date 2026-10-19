@@ -513,7 +513,7 @@ func TestTodayPlacementCards(t *testing.T) {
 	if !strings.Contains(none, `href="/placement"`) || strings.Contains(none, `href="/placement?lang=`) {
 		t.Fatal("english placement link should be bare")
 	}
-	if !strings.Contains(none, `href="/review"`) || !strings.Contains(none, `class="ink-card`) {
+	if !strings.Contains(none, `href="/review"`) || !strings.Contains(none, `quiet-card--due`) {
 		t.Fatal("placement card replaced Today")
 	}
 	if strings.Contains(none, "Resume placement") {

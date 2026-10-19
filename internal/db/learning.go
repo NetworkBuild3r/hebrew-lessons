@@ -63,11 +63,17 @@ type ReviewLog struct {
 // or before the now passed to ListStudyCards. HasRating is false when the
 // card has no such review. RecentLapse is true when an Again rating was
 // stored at or after the lapseSince passed to ListStudyCards.
+// HasIntro is true when a finished lesson introduces this lexeme as new.
+// IntroPosition is that unit's position and IntroLesson is lesson_ix,
+// from the earliest such lesson.
 type StudyCard struct {
 	Card
-	LatestRating int
-	HasRating    bool
-	RecentLapse  bool
+	LatestRating  int
+	HasRating     bool
+	RecentLapse   bool
+	HasIntro      bool
+	IntroPosition int
+	IntroLesson   int
 }
 
 func (s *Store) connOrErr() (*sql.DB, error) {
@@ -103,6 +109,39 @@ func scanCard(scan func(dest ...any) error) (Card, error) {
 	}
 	card.Suspended = suspended != 0
 	return card, nil
+}
+
+// LexemeRef is the learner-facing face of one dictionary entry.
+type LexemeRef struct {
+	TextNFC  string
+	Gloss    string
+	Translit string
+	Gender   string
+	AudioID  string
+}
+
+// LexemeByID reads the text, gloss, transliteration, gender, and audio id.
+// ok is false when the id is not in lexemes.
+func (s *Store) LexemeByID(ctx context.Context, id int64) (LexemeRef, bool, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return LexemeRef{}, false, err
+	}
+	var face LexemeRef
+	var translit, gender, audio sql.NullString
+	err = conn.QueryRowContext(ctx, `
+		SELECT text_nfc, gloss_en, translit, gender, audio_id
+		FROM lexemes WHERE id = ?`, id).Scan(&face.TextNFC, &face.Gloss, &translit, &gender, &audio)
+	if errors.Is(err, sql.ErrNoRows) {
+		return LexemeRef{}, false, nil
+	}
+	if err != nil {
+		return LexemeRef{}, false, fmt.Errorf("db: lexeme %d: %w", id, err)
+	}
+	face.Translit = translit.String
+	face.Gender = gender.String
+	face.AudioID = audio.String
+	return face, true, nil
 }
 
 // GetCard reads one card by id.
@@ -387,7 +426,41 @@ func (s *Store) ListStudyCards(ctx context.Context, userID int64, now, lapseSinc
 				WHERE rl.card_id = c.id
 				  AND rl.rating = 1
 				  AND rl.reviewed_at >= ?
-			) THEN 1 ELSE 0 END
+			) THEN 1 ELSE 0 END,
+			(
+				SELECT u.position
+				FROM lesson_items AS li
+				JOIN units AS u ON u.id = li.unit_id
+				WHERE li.lexeme_id = c.lexeme_id
+				  AND li.role = 'new'
+				  AND EXISTS (
+				    SELECT 1
+				    FROM lesson_runs AS lr
+				    WHERE lr.user_id = c.user_id
+				      AND lr.unit_id = li.unit_id
+				      AND lr.lesson_ix = li.lesson_ix
+				      AND lr.finished_at IS NOT NULL
+				  )
+				ORDER BY u.position, li.lesson_ix, u.id
+				LIMIT 1
+			),
+			(
+				SELECT li.lesson_ix
+				FROM lesson_items AS li
+				JOIN units AS u ON u.id = li.unit_id
+				WHERE li.lexeme_id = c.lexeme_id
+				  AND li.role = 'new'
+				  AND EXISTS (
+				    SELECT 1
+				    FROM lesson_runs AS lr
+				    WHERE lr.user_id = c.user_id
+				      AND lr.unit_id = li.unit_id
+				      AND lr.lesson_ix = li.lesson_ix
+				      AND lr.finished_at IS NOT NULL
+				  )
+				ORDER BY u.position, li.lesson_ix, u.id
+				LIMIT 1
+			)
 		FROM cards AS c
 		WHERE c.user_id = ?
 		  AND c.suspended = 0
@@ -415,10 +488,11 @@ func (s *Store) ListStudyCards(ctx context.Context, userID int64, now, lapseSinc
 func scanStudyCard(scan func(dest ...any) error) (StudyCard, error) {
 	var latest sql.NullInt64
 	var recent int
+	var position, lesson sql.NullInt64
 	card, err := scanCard(func(dest ...any) error {
-		args := make([]any, 0, len(dest)+2)
+		args := make([]any, 0, len(dest)+4)
 		args = append(args, dest...)
-		args = append(args, &latest, &recent)
+		args = append(args, &latest, &recent, &position, &lesson)
 		return scan(args...)
 	})
 	if err != nil {
@@ -428,6 +502,11 @@ func scanStudyCard(scan func(dest ...any) error) (StudyCard, error) {
 	if latest.Valid {
 		out.HasRating = true
 		out.LatestRating = int(latest.Int64)
+	}
+	if position.Valid && lesson.Valid {
+		out.HasIntro = true
+		out.IntroPosition = int(position.Int64)
+		out.IntroLesson = int(lesson.Int64)
 	}
 	return out, nil
 }

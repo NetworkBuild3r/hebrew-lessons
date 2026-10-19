@@ -14,6 +14,13 @@ type (
 	sessionKey struct{}
 )
 
+// CurrentSession returns the browser session Middleware stored on the request.
+// The bool is false when there is no session. IDHash is the map key for the
+// in-memory study queue.
+func CurrentSession(ctx context.Context) (Session, bool) {
+	return sessionFrom(ctx)
+}
+
 // CurrentUser returns the signed-in user Middleware stored on the request.
 // The bool is false when there is no session.
 func CurrentUser(ctx context.Context) (*User, bool) {

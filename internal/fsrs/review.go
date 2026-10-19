@@ -12,8 +12,8 @@ import (
 	gofsrs "github.com/open-spaced-repetition/go-fsrs/v3"
 )
 
-// Review schedules cards and builds the session queue.
-// The clock is the process clock from configuration.
+// Review schedules cards.
+// The study queue is package session. The clock is the process clock from configuration.
 type Review struct {
 	store *db.Store
 	clock clock.Clock
@@ -134,7 +134,7 @@ func (r *Review) GradeWithChoice(ctx context.Context, cardID int64, rating Ratin
 	return r.store.ApplyReview(ctx, next, log)
 }
 
-// Suspend sets whether the card is kept out of Queue.
+// Suspend sets whether the card is kept out of the due and study lists.
 // The card and its review log stay. Passing false queues it again once it is due.
 func (r *Review) Suspend(ctx context.Context, cardID int64, suspended bool) error {
 	if err := r.ready(); err != nil {
