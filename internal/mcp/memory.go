@@ -458,8 +458,8 @@ func (m *Memory) byID(id int64) *memUnit {
 	return nil
 }
 
-// KnownLexemes implements units.Lookup. Words introduced by a saved unit
-// whose position is lower than beforePosition are known.
+// KnownLexemes implements units.Lookup. Words introduced by a saved shared
+// unit whose position is lower than beforePosition are known.
 func (m *Memory) KnownLexemes(ctx context.Context, beforePosition int) (map[string]bool, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -468,7 +468,7 @@ func (m *Memory) KnownLexemes(ctx context.Context, beforePosition int) (map[stri
 	defer m.mu.Unlock()
 	out := map[string]bool{}
 	for _, u := range m.units {
-		if u.position >= beforePosition {
+		if u.scope != ScopeShared || u.position >= beforePosition {
 			continue
 		}
 		for _, w := range u.doc.NewWords {
