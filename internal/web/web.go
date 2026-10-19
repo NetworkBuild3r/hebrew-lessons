@@ -27,9 +27,11 @@ var Assets embed.FS
 // sessions, when non-nil, registers Google sign-in and logout and wraps
 // the mux with the session middleware. Page tokens come from
 // CSRFFunc(auth.CSRFToken). A signed-out GET of /, /review, /progress,
-// /lesson, or their /_hx/ endpoints redirects to /signin (303 for a full
-// page, 401 and HX-Redirect for htmx). Tests pass a fake to newMux;
-// production does not. The ungated router still serves those pages.
+// or /lesson redirects to /signin (303 for a full page, 401 and
+// HX-Redirect for htmx). Reads stay on those page URLs. /_hx/ is for
+// htmx writes, and this router does not register read routes there.
+// Tests pass a fake to newMux; production does not. The ungated router
+// still serves those pages.
 // Audio bytes are served at /audio/<sha256>.mp3; this router does not
 // register that path.
 func New(health http.Handler, sessions *auth.Service) http.Handler {
@@ -79,9 +81,6 @@ func routes(health http.Handler, tokens CSRFToken, gate bool) *http.ServeMux {
 	mux.HandleFunc("GET /review", review)
 	mux.HandleFunc("GET /progress", progress)
 	mux.HandleFunc("GET /lesson", lesson)
-	mux.HandleFunc("GET /_hx/review", review)
-	mux.HandleFunc("GET /_hx/progress", progress)
-	mux.HandleFunc("GET /_hx/lesson", lesson)
 	mux.HandleFunc("GET /signin", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := auth.CurrentUser(r.Context()); ok {
 			w.Header().Set("Cache-Control", "no-store")

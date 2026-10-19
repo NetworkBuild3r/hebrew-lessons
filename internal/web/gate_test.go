@@ -19,9 +19,6 @@ func TestLearnerPagesRequireSignIn(t *testing.T) {
 		{"/review", views.UIFor("he", "m").ReviewHeading},
 		{"/progress", views.UIFor("he", "m").ProgressHeading},
 		{"/lesson", views.UIFor("he", "m").LessonHeading},
-		{"/_hx/review", views.UIFor("he", "m").ReviewHeading},
-		{"/_hx/progress", views.UIFor("he", "m").ProgressHeading},
-		{"/_hx/lesson", views.UIFor("he", "m").LessonHeading},
 	}
 	for _, page := range pages {
 		t.Run(page.path, func(t *testing.T) {
@@ -84,7 +81,7 @@ func TestLearnerPagesRequireSignIn(t *testing.T) {
 
 func TestUngatedRouterServesLearnerPages(t *testing.T) {
 	h := newMux(nil, nil)
-	for _, path := range []string{"/", "/review", "/progress", "/lesson", "/_hx/review", "/_hx/progress", "/_hx/lesson"} {
+	for _, path := range []string{"/", "/review", "/progress", "/lesson"} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		if rec.Code != http.StatusOK {
@@ -93,5 +90,48 @@ func TestUngatedRouterServesLearnerPages(t *testing.T) {
 		if rec.Header().Get("HX-Redirect") != "" || rec.Header().Get("Location") != "" {
 			t.Fatalf("ungated GET %s redirected", path)
 		}
+	}
+}
+
+func TestGatedPathVariants(t *testing.T) {
+	h, _ := signedIn(t)
+	for _, path := range []string{"/", "/review", "/progress", "/lesson"} {
+		head := httptest.NewRecorder()
+		h.ServeHTTP(head, httptest.NewRequest(http.MethodHead, path, nil))
+		if head.Code != http.StatusSeeOther || head.Header().Get("Location") != "/signin" {
+			t.Fatalf("signed-out HEAD %s = %d %q", path, head.Code, head.Header().Get("Location"))
+		}
+	}
+	for _, path := range []string{"/review/", "/progress/", "/lesson/", "/_hx/review", "/_hx/progress", "/_hx/lesson"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("GET %s = %d, want 404", path, rec.Code)
+		}
+		if rec.Header().Get("Location") == "/signin" {
+			t.Fatalf("GET %s redirected to sign-in", path)
+		}
+	}
+}
+
+func TestPublicRoutesStayOpen(t *testing.T) {
+	h, _ := signedIn(t)
+	for _, path := range []string{"/static/css/base.css", "/static/css/tokens.css", "/static/js/shell.js", "/signin"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("signed-out GET %s = %d", path, rec.Code)
+		}
+		if rec.Header().Get("Location") != "" || rec.Header().Get("HX-Redirect") != "" {
+			t.Fatalf("GET %s redirected", path)
+		}
+	}
+	cb := httptest.NewRecorder()
+	h.ServeHTTP(cb, httptest.NewRequest(http.MethodGet, "/auth/google/callback", nil))
+	if cb.Code == http.StatusNotFound {
+		t.Fatal("OAuth callback is not registered")
+	}
+	if cb.Header().Get("Location") == "/signin" || cb.Header().Get("HX-Redirect") == "/signin" {
+		t.Fatalf("OAuth callback redirected to sign-in: %d", cb.Code)
 	}
 }
