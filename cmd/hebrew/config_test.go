@@ -23,7 +23,8 @@ func TestConfigFromEnv(t *testing.T) {
 		"MCP_OAUTH_REDIRECT_URIS",
 		"HEBREW_SESSION_SECRET",
 		"MCP_OAUTH_ALLOWED_EMAILS", "ADMIN_EMAILS",
-		"MCP_AUTH_TOKEN", "MCP_PUBLIC_URL", "MCP_ALLOWED_ORIGINS",
+		"MCP_AUTH_TOKEN", "MCP_READONLY_TOKEN", "MCP_READONLY_LEARNER_ID",
+		"MCP_PUBLIC_URL", "MCP_ALLOWED_ORIGINS",
 		"ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID", "ELEVENLABS_MODEL",
 	} {
 		t.Setenv(key, "")
@@ -237,6 +238,73 @@ func TestWarnOptionalConfigUsesStruct(t *testing.T) {
 	})
 	if buf.Len() != 0 {
 		t.Fatalf("configured settings still warned: %s", buf.String())
+	}
+}
+
+func TestMCPReadOnlyTokenConfig(t *testing.T) {
+	t.Setenv("DATA_DIR", "/data")
+	const admin = "admin-token-admin-token-admin-tok"
+	const smoke = "smoke-token-smoke-token-smoke-to"
+	t.Setenv("MCP_AUTH_TOKEN", " "+admin+"\n")
+	t.Setenv("MCP_READONLY_TOKEN", " "+smoke+" \n")
+	t.Setenv("MCP_READONLY_LEARNER_ID", " 42 ")
+	cfg, err := configFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MCPAuthToken != admin || cfg.MCPReadOnlyToken != smoke || cfg.MCPReadOnlyLearnerID != 42 {
+		t.Fatalf("mcp readonly: %+v", cfg)
+	}
+
+	t.Setenv("MCP_READONLY_TOKEN", " \n\t ")
+	t.Setenv("MCP_READONLY_LEARNER_ID", "not-a-number")
+	cfg, err = configFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MCPReadOnlyToken != "" || cfg.MCPReadOnlyLearnerID != 0 {
+		t.Fatalf("blank smoke token should be off: %+v", cfg)
+	}
+}
+
+func TestMCPReadOnlyTokenRefusesStartup(t *testing.T) {
+	t.Setenv("DATA_DIR", "/data")
+	const admin = "admin-token-admin-token-admin-tok"
+	const smoke = "smoke-token-smoke-token-smoke-tok"
+	t.Setenv("MCP_AUTH_TOKEN", admin)
+
+	cases := []struct {
+		name    string
+		token   string
+		learner string
+		want    string
+	}{
+		{name: "missing learner", token: smoke, learner: "  ", want: "MCP_READONLY_LEARNER_ID is required when MCP_READONLY_TOKEN is set"},
+		{name: "non-integer", token: smoke, learner: "7abc", want: "MCP_READONLY_LEARNER_ID must be an integer"},
+		{name: "zero", token: smoke, learner: "0", want: "MCP_READONLY_LEARNER_ID must be a positive integer when MCP_READONLY_TOKEN is set"},
+		{name: "negative", token: smoke, learner: "-3", want: "MCP_READONLY_LEARNER_ID must be a positive integer when MCP_READONLY_TOKEN is set"},
+		{name: "equals admin", token: admin, learner: "7", want: "MCP_READONLY_TOKEN must not equal MCP_AUTH_TOKEN"},
+		{name: "too short", token: "smoke-token-smoke-token-smoke-t", learner: "7", want: "MCP_READONLY_TOKEN must be at least 32 characters"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("MCP_READONLY_TOKEN", tc.token)
+			t.Setenv("MCP_READONLY_LEARNER_ID", tc.learner)
+			var buf bytes.Buffer
+			prev := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+			t.Cleanup(func() { slog.SetDefault(prev) })
+			_, err := configFromEnv()
+			if err == nil || err.Error() != tc.want {
+				t.Fatalf("err %v", err)
+			}
+			if !strings.Contains(buf.String(), tc.want) {
+				t.Fatalf("log %q", buf.String())
+			}
+			if strings.Contains(buf.String(), tc.token) || strings.Contains(err.Error(), tc.token) {
+				t.Fatal("refusal exposed the token")
+			}
+		})
 	}
 }
 

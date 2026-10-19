@@ -41,11 +41,15 @@ const (
 // AuthToken is the bearer secret from app.Config.MCPAuthToken. This
 // package does not read the environment. An empty token disables the
 // static check. A matching token is RoleAdmin and has full access.
-// Validator, when set, replaces the default chain. The default chain is
-// OAuthSessions and then StaticToken. OAuth fills in SessionFromToken
-// only. That function maps the bearer to a session id and must not read
-// the web session cookie. Sessions resolves the id through
-// auth.Service.Lookup.
+// ReadOnlyToken is MCP_READONLY_TOKEN. Empty disables the smoke bearer.
+// A match is RoleLearner with UserID ReadOnlyLearnerID, so the learner
+// allowlist and the self-only learnerId checks apply. It is accepted
+// whether or not OAuth is configured. Validator, when set, replaces the
+// default chain. The default chain is OAuthSessions, then the admin
+// StaticToken, then the read-only StaticToken. OAuth fills in
+// SessionFromToken only. That function maps the bearer to a session id
+// and must not read the web session cookie. Sessions resolves the id
+// through auth.Service.Lookup.
 //
 // AllowedOrigins are browser Origins that may call this handler. A
 // request with no Origin and no Sec-Fetch-Site header is allowed. Any
@@ -57,6 +61,10 @@ const (
 // isError. The other tools do not call it.
 type Options struct {
 	AuthToken string
+	// ReadOnlyToken is the smoke bearer. Empty accepts nothing.
+	// ReadOnlyLearnerID is the learner id bound to that bearer.
+	ReadOnlyToken     string
+	ReadOnlyLearnerID int64
 	// SessionFromToken maps an OAuth access token to a raw session id.
 	// Nil until the authorization server lands. It must not read the
 	// web session cookie. The id is resolved with Sessions.
@@ -129,6 +137,7 @@ func (o Options) validator() Validator {
 	return Chain{
 		OAuthSessions{Tokens: o.SessionFromToken, Users: o.Sessions},
 		StaticToken{Token: o.AuthToken},
+		StaticToken{Token: o.ReadOnlyToken, Role: RoleLearner, UserID: o.ReadOnlyLearnerID},
 	}
 }
 
