@@ -28,7 +28,7 @@ type Attempt struct {
 }
 
 // Confusion is one confusion_misses row written with an attempt.
-// Kind is letter_pair or agreement. Key is the pair, for example ב/כ.
+// Kind is letter_pair, agreement, or other. Key is the pair, for example ב/כ.
 type Confusion struct {
 	Kind string
 	Key  string

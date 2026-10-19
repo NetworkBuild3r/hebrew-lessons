@@ -123,8 +123,8 @@ func TestMigrate007AppliesOnEmptyDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7}) {
-		t.Fatalf("versions = %v, want 1..7", got)
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8}) {
+		t.Fatalf("versions = %v, want 1..8", got)
 	}
 	for _, table := range m7Tables {
 		if !tableExists(t, conn, table) {
@@ -144,7 +144,7 @@ func TestMigrate007AppliesOnEmptyDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("second migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8}) {
 		t.Fatalf("versions after rerun = %v", got)
 	}
 }
@@ -162,7 +162,12 @@ func TestMigrate007AppliesOnSeededDatabaseAndLeavesExistingTablesAlone(t *testin
 		t.Fatal("daily_snapshots exists before 007")
 	}
 
-	if err := m6Migrate(conn); err != nil {
+	// Apply 007 alone. Migrate would go on to 008, which rebuilds confusion_misses on purpose.
+	body, err := fs.ReadFile(migrations.FS, "007_learner_model.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := apply(context.Background(), conn, "007_learner_model.sql", 7, string(body), time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatalf("migrate 007: %v", err)
 	}
 	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7}) {
@@ -233,7 +238,7 @@ func TestMigrate007AtomicWhenAStatementFails(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("retry: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8}) {
 		t.Fatalf("versions after retry = %v", got)
 	}
 }
