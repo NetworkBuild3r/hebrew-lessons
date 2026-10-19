@@ -2,6 +2,9 @@ package placement
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -32,8 +35,8 @@ func TestFixture(t *testing.T) {
 		if !isNFC(it.TextNFC) {
 			t.Errorf("%s text is not NFC", it.ID)
 		}
-		if it.Verified {
-			t.Errorf("%s verified = true", it.ID)
+		if !it.Verified {
+			t.Errorf("%s verified = false", it.ID)
 		}
 		if it.Translit == "" || it.GlossEN == "" || it.POS == "" {
 			t.Errorf("%s missing gloss, translit, or pos", it.ID)
@@ -67,6 +70,80 @@ func TestFixture(t *testing.T) {
 	for band := 0; band <= 4; band++ {
 		if counts[band] < BandMax {
 			t.Errorf("band %d = %d, want at least %d", band, counts[band], BandMax)
+		}
+	}
+}
+
+func TestDeckLint(t *testing.T) {
+	cat, err := catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range cat {
+		if !isNFC(it.TextNFC) {
+			t.Errorf("%s text is not NFC", it.ID)
+		}
+		if it.Translit == "" || it.GlossEN == "" {
+			t.Errorf("%s missing translit or gloss", it.ID)
+		}
+		if strings.Contains(strings.ToLower(it.Translit), "ch") {
+			t.Errorf("%s translit %q contains ch", it.ID, it.Translit)
+		}
+		if (it.POS == "verb" || it.POS == "adjective") && it.Gender != "" {
+			t.Errorf("%s %s has gender %q", it.ID, it.POS, it.Gender)
+		}
+	}
+}
+
+// testdata/v2-bare-letters.json is the niqqud-stripped text of each item
+// on v2 before this PR. letterAllow lists bare spellings that may differ
+// from that snapshot. It is empty: every item keeps the letters it had on v2.
+var letterAllow = map[string]string{}
+
+func TestBareLettersMatchV2(t *testing.T) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("caller")
+	}
+	body, err := os.ReadFile(filepath.Join(filepath.Dir(file), "testdata", "v2-bare-letters.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snapshot map[string]string
+	if err := json.Unmarshal(body, &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	cat, err := catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]struct{}{}
+	for _, it := range cat {
+		seen[it.ID] = struct{}{}
+		got := unpointed(it.TextNFC)
+		if want, ok := letterAllow[it.ID]; ok {
+			if got != want {
+				t.Errorf("%s bare %s, allowlist %s", it.ID, got, want)
+			}
+			continue
+		}
+		want, ok := snapshot[it.ID]
+		if !ok {
+			t.Errorf("%s is not in the v2 letter snapshot", it.ID)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s bare %s, v2 snapshot %s", it.ID, got, want)
+		}
+	}
+	for id := range letterAllow {
+		if _, ok := seen[id]; !ok {
+			t.Errorf("allowlist %s is not in the deck", id)
+		}
+	}
+	for id := range snapshot {
+		if _, ok := seen[id]; !ok {
+			t.Errorf("v2 snapshot %s is not in the deck", id)
 		}
 	}
 }
