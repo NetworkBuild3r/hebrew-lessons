@@ -79,6 +79,11 @@ async function withOption(page) {
   await collect(page);
   await page.click('.dock__link[href="/progress"]', { noWaitAfter: true });
   await page.waitForSelector("#optprobe", { timeout: 3000 });
+  // Tap while a transition would be in flight. Chromium only blocks taps once
+  // the transition overlay exists, a frame or two after the swap, so tapping
+  // the instant the option appears would pass even with the fix removed.
+  // With the fix there is no transition: wait out the timeout, then tap.
+  await page.waitForFunction(vtRunning, null, { timeout: 250 }).catch(() => {});
   const box = await page.locator("#optprobe").boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await page.waitForTimeout(700);
