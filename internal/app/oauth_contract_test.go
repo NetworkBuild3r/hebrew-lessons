@@ -73,7 +73,7 @@ func TestOAuthContract(t *testing.T) {
 
 	learner := signInMCP(t, env.client, env.fake, env.base, oauthPublicOrigin, oauthLearnerEmail, "learner-sub")
 	listed := postMCPPath(t, env.base, "/mcp", learner, []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
-	if listed.StatusCode != http.StatusOK || strings.Contains(listed.Body, `"isError":true`) || !strings.Contains(listed.Body, "get_context") {
+	if listed.StatusCode != http.StatusOK || strings.Contains(listed.Body, `"isError":true`) || !strings.Contains(listed.Body, "get_context") || !publishUnitListed(listed.Body) {
 		t.Fatalf("tools/list %d %s", listed.StatusCode, listed.Body)
 	}
 
@@ -84,9 +84,16 @@ func TestOAuthContract(t *testing.T) {
 	}
 
 	still := postMCPPath(t, env.base, "/mcp", oauthStaticToken, []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
-	if still.StatusCode != http.StatusOK || strings.Contains(still.Body, `"isError":true`) || !strings.Contains(still.Body, "get_context") {
+	if still.StatusCode != http.StatusOK || strings.Contains(still.Body, `"isError":true`) || !strings.Contains(still.Body, "get_context") || !publishUnitListed(still.Body) {
 		t.Fatalf("static %d %s", still.StatusCode, still.Body)
 	}
+}
+
+func publishUnitListed(body string) bool {
+	return strings.Contains(body, "publish_unit") &&
+		strings.Contains(body, "validate_unit") &&
+		strings.Contains(body, "learner:<id>") &&
+		strings.Contains(body, "unchanged")
 }
 
 // TestOAuthGoogleCallbackSkipsBearer is the production mux. /oauth/ and

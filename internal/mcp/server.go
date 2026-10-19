@@ -26,7 +26,10 @@ const (
 		"Call lookup before you invent a spelling or a gloss. " +
 		"Call validate_unit as a dry run. Call put_unit to save a draft. " +
 		"put_unit requires scope shared or learner:<id>. Scope is not inside the document. " +
-		"put_unit saves even when issues block publishing. It does not publish. " +
+		"put_unit saves even when issues block publishing. " +
+		"Call publish_unit to publish a shared unit once there are no block issues. " +
+		"put_unit with publish true publishes only a learner:<id> unit, and only when there are no block issues. A shared unit ignores that flag. " +
+		"Warnings do not block publishing. Publishing the same revision again reports unchanged. " +
 		"Send unitId when you save again so an unchanged document, position, and scope do not create a revision."
 )
 

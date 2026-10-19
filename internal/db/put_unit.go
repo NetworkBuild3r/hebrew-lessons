@@ -33,6 +33,8 @@ type PutResult struct {
 // returns Unchanged with the current revision, so a published unit stays published.
 // Any difference, including a scope-only change, appends a revision, sets
 // status back to draft, and replaces that unit's lesson_items from the document.
+// The new revision number is one past the highest unit_revisions row, so
+// publishing an older revision cannot collide with that history.
 // actor is the caller's principal, stored on the new revision.
 // scope is "shared" or "learner:<id>". <id> is a decimal integer with no
 // leading zero, except 0 itself, the same rule as mcp.CanonicalScope.
@@ -108,7 +110,13 @@ func (s *Store) PutUnit(ctx context.Context, id *int64, doc units.Unit, scope, a
 	if stored.position == doc.Position && stored.scope == scope && bytes.Equal([]byte(stored.doc), body) {
 		return PutResult{UnitID: *id, Revision: stored.rev, Unchanged: true}, nil
 	}
-	rev := stored.rev + 1
+	var maxRev int
+	if err := tx.QueryRowContext(ctx, `
+		SELECT COALESCE(MAX(rev), 0) FROM unit_revisions WHERE unit_id = ?`, *id,
+	).Scan(&maxRev); err != nil {
+		return PutResult{}, fmt.Errorf("db: put unit: %w", err)
+	}
+	rev := maxRev + 1
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE units
 		SET position = ?, title = ?, situation = ?, concept = ?, status = 'draft', rev = ?, doc = ?, scope = ?

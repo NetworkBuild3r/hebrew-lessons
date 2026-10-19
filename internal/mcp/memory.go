@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -41,6 +42,11 @@ type storedStruggle struct {
 	confusions []StruggleConfusion
 }
 
+type memRev struct {
+	rev       int
+	canonical []byte
+}
+
 type memUnit struct {
 	id        int64
 	position  int
@@ -51,6 +57,7 @@ type memUnit struct {
 	canonical []byte
 	doc       units.Unit
 	actor     string
+	revisions []memRev
 }
 
 type storedLexeme struct {
@@ -397,7 +404,7 @@ func (m *Memory) PutUnit(ctx context.Context, id *int64, doc *units.Unit, scope 
 	defer m.mu.Unlock()
 	if id == nil {
 		m.nextID++
-		m.units = append(m.units, memUnit{
+		u := memUnit{
 			id:        m.nextID,
 			position:  doc.Position,
 			title:     doc.Title,
@@ -407,7 +414,9 @@ func (m *Memory) PutUnit(ctx context.Context, id *int64, doc *units.Unit, scope 
 			canonical: raw,
 			doc:       stored,
 			actor:     actor,
-		})
+		}
+		u.remember()
+		m.units = append(m.units, u)
 		return PutResult{UnitID: m.nextID, Revision: 1}, nil
 	}
 	u := m.byID(*id)
@@ -417,7 +426,7 @@ func (m *Memory) PutUnit(ctx context.Context, id *int64, doc *units.Unit, scope 
 	if u.position == doc.Position && u.scope == scope && bytes.Equal(u.canonical, raw) {
 		return PutResult{UnitID: u.id, Revision: u.rev, Unchanged: true}, nil
 	}
-	u.rev++
+	u.rev = u.maxRev() + 1
 	u.position = doc.Position
 	u.title = doc.Title
 	u.status = "draft"
@@ -425,7 +434,115 @@ func (m *Memory) PutUnit(ctx context.Context, id *int64, doc *units.Unit, scope 
 	u.canonical = append([]byte(nil), raw...)
 	u.doc = stored
 	u.actor = actor
+	u.remember()
 	return PutResult{UnitID: u.id, Revision: u.rev}, nil
+}
+
+func (u *memUnit) remember() {
+	u.revisions = append(u.revisions, memRev{
+		rev:       u.rev,
+		canonical: append([]byte(nil), u.canonical...),
+	})
+}
+
+func (u *memUnit) maxRev() int {
+	max := u.rev
+	for _, rev := range u.revisions {
+		if rev.rev > max {
+			max = rev.rev
+		}
+	}
+	return max
+}
+
+func (u *memUnit) revision(n int) (memRev, bool) {
+	for _, rev := range u.revisions {
+		if rev.rev == n {
+			return rev, true
+		}
+	}
+	return memRev{}, false
+}
+
+// LoadUnit implements UnitWriter. A nil revision is the current row.
+func (m *Memory) LoadUnit(ctx context.Context, id int64, revision *int) (UnitView, error) {
+	if err := ctx.Err(); err != nil {
+		return UnitView{}, err
+	}
+	if revision != nil && *revision < 1 {
+		return UnitView{}, errors.New("revision must be a positive revision number")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u := m.byID(id)
+	if u == nil {
+		return UnitView{}, ErrUnitNotFound
+	}
+	raw := u.canonical
+	rev := u.rev
+	if revision != nil {
+		stored, ok := u.revision(*revision)
+		if !ok {
+			return UnitView{}, ErrRevisionNotFound
+		}
+		raw = stored.canonical
+		rev = stored.rev
+	}
+	doc, err := cloneUnit(raw)
+	if err != nil {
+		return UnitView{}, err
+	}
+	doc.Position = u.position
+	return UnitView{
+		UnitID:   u.id,
+		Revision: rev,
+		Position: u.position,
+		Scope:    u.scope,
+		Status:   u.status,
+		Doc:      doc,
+	}, nil
+}
+
+// PublishUnit implements UnitWriter. It restores a stored revision onto
+// the current row and does not append a revision. A nil revision publishes
+// the current row. The same published revision writes nothing.
+func (m *Memory) PublishUnit(ctx context.Context, id int64, revision *int) (PutResult, error) {
+	if err := ctx.Err(); err != nil {
+		return PutResult{}, err
+	}
+	if revision != nil && *revision < 1 {
+		return PutResult{}, errors.New("revision must be a positive revision number")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u := m.byID(id)
+	if u == nil {
+		return PutResult{}, ErrUnitNotFound
+	}
+	raw := u.canonical
+	rev := u.rev
+	if revision != nil {
+		stored, ok := u.revision(*revision)
+		if !ok {
+			return PutResult{}, ErrRevisionNotFound
+		}
+		raw = stored.canonical
+		rev = stored.rev
+	}
+	if u.status == "published" && u.rev == rev && bytes.Equal(u.canonical, raw) {
+		return PutResult{UnitID: u.id, Revision: rev, Unchanged: true}, nil
+	}
+	doc, err := cloneUnit(raw)
+	if err != nil {
+		return PutResult{}, err
+	}
+	doc.Position = u.position
+	u.rev = rev
+	u.title = doc.Title
+	u.status = "published"
+	u.canonical = append([]byte(nil), raw...)
+	u.doc = doc
+	return PutResult{UnitID: u.id, Revision: rev}, nil
 }
 
 // SetStatus sets the stored status. Tests use it to mark a unit published.
@@ -458,8 +575,9 @@ func (m *Memory) byID(id int64) *memUnit {
 	return nil
 }
 
-// KnownLexemes implements units.Lookup. Words introduced by a saved shared
-// unit whose position is lower than beforePosition are known.
+// KnownLexemes implements units.Lookup. Words introduced by a published
+// shared unit whose position is lower than beforePosition are known.
+// A draft contributes nothing.
 func (m *Memory) KnownLexemes(ctx context.Context, beforePosition int) (map[string]bool, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -468,7 +586,7 @@ func (m *Memory) KnownLexemes(ctx context.Context, beforePosition int) (map[stri
 	defer m.mu.Unlock()
 	out := map[string]bool{}
 	for _, u := range m.units {
-		if u.scope != ScopeShared || u.position >= beforePosition {
+		if u.scope != ScopeShared || u.status != "published" || u.position >= beforePosition {
 			continue
 		}
 		for _, w := range u.doc.NewWords {
