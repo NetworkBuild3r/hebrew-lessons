@@ -2,803 +2,851 @@ package placement
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
-	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
-	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
-
-	gofsrs "github.com/open-spaced-repetition/go-fsrs/v3"
 )
 
-var when = time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+// Tests of the v3 engine on a real store: what a run writes, what the client is told, and who may answer.
 
-type fixedClock struct{ t time.Time }
+func newLearner(t *testing.T, store *db.Store, name string) int64 {
+	t.Helper()
+	return insertLearner(t, store, name+"@example.com", "sub-"+name)
+}
 
-func (c fixedClock) Now() time.Time { return c.t }
-
-type movingClock struct{ t *time.Time }
-
-func (c movingClock) Now() time.Time { return *c.t }
-
-func TestAgainStop(t *testing.T) {
-	if BandMax != 20 || StopMinRated != 10 || StopAgainRate != 0.60 || SittingSize != 20 || CardCap != 100 {
-		t.Fatalf("BandMax=%d minRated=%d again=%v sitting=%d cards=%d", BandMax, StopMinRated, StopAgainRate, SittingSize, CardCap)
-	}
-	svc, store := openSvc(t, fixedClock{when})
-	ctx := context.Background()
-	userID := insertLearner(t, store, "stop@example.com", "sub-stop")
-	runID := start(t, svc, userID)
-	run, err := store.GetPlacementRun(ctx, runID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if run.Seed != when.UnixNano() || !run.StartedAt.Equal(when) || run.SittingNo != 1 {
-		t.Fatalf("run seed %d started %s sitting %d", run.Seed, run.StartedAt, run.SittingNo)
-	}
-	order := deck(run.Seed, mustCatalog(t))
-	if order[0].Band != 0 {
-		t.Fatalf("first card band %d", order[0].Band)
-	}
-
-	// Nine Agains do not stop, and the tenth card is still dealt.
-	nineSvc, _ := openSvc(t, fixedClock{when})
-	nineUser := insertLearner(t, nineSvc.store, "nine@example.com", "sub-nine")
-	nineRun := start(t, nineSvc, nineUser)
-	ratePrefix(t, nineSvc, nineRun, 9, func(int) int { return Again })
-	res, err := nineSvc.Next(ctx, nineRun)
-	if err != nil || res.Done || res.Break || res.Card == nil || mustFind(t, nineSvc, res.Card.ID).Band != 0 {
-		t.Fatalf("after 9 agains: %+v %v", res, err)
-	}
-
-	ratePrefix(t, svc, runID, StopMinRated, func(i int) int {
-		if i < 6 {
-			return Again
-		}
-		return Good
-	})
-	res, err = svc.Next(ctx, runID)
-	if err != nil || !res.Done || res.Break || res.Card != nil {
-		t.Fatalf("after 6/10: %+v %v", res, err)
-	}
-	stored, err := store.GetPlacementRun(ctx, runID)
-	if err != nil || stored.FinishedAt.IsZero() || stored.StopReason != stopBand {
-		t.Fatalf("run did not finish itself: %+v %v", stored, err)
-	}
-	result, err := svc.Finish(ctx, runID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	band := result.Bands[0]
-	if result.StopReason != stopBand || result.Level != -1 || result.CardsRated != StopMinRated || band.Again != 6 || band.Good != 4 || !result.FinishedAt.Equal(stored.FinishedAt) {
-		t.Fatalf("stop result %+v band0=%+v", result, band)
-	}
-
-	below, _ := openSvc(t, fixedClock{when})
-	belowUser := insertLearner(t, below.store, "below@example.com", "sub-below")
-	belowRun := start(t, below, belowUser)
-	ratePrefix(t, below, belowRun, StopMinRated, func(i int) int {
-		if i < 5 {
-			return Again
-		}
-		return Good
-	})
-	res, err = below.Next(ctx, belowRun)
-	if err != nil || res.Done || res.Break || res.Card == nil || mustFind(t, below, res.Card.ID).Band != 0 {
-		t.Fatalf("after 5/10: %+v %v", res, err)
-	}
-
-	dontSvc, dontStore := openSvc(t, fixedClock{when})
-	dontUser := insertLearner(t, dontStore, "dontstop@example.com", "sub-dontstop")
-	dontRun := start(t, dontSvc, dontUser)
-	ratePrefix(t, dontSvc, dontRun, StopMinRated, func(i int) int {
-		if i < 6 {
-			return DontKnow
-		}
-		return Good
-	})
-	res, err = dontSvc.Next(ctx, dontRun)
-	if err != nil || !res.Done || res.Card != nil {
-		t.Fatalf("after 6 dont-know: %+v %v", res, err)
-	}
-	dontResult, err := dontSvc.Finish(ctx, dontRun)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if dontResult.StopReason != stopBand || dontResult.Bands[0].DontKnow != 6 || dontResult.Bands[0].Again != 0 {
-		t.Fatalf("dont-know stop %+v", dontResult.Bands[0])
-	}
-
-	hardSvc, _ := openSvc(t, fixedClock{when})
-	hardUser := insertLearner(t, hardSvc.store, "hard@example.com", "sub-hard")
-	hardRun := start(t, hardSvc, hardUser)
-	ratePrefix(t, hardSvc, hardRun, StopMinRated, func(int) int { return Hard })
-	res, err = hardSvc.Next(ctx, hardRun)
-	if err != nil || res.Done || res.Break || res.Card == nil || mustFind(t, hardSvc, res.Card.ID).Band != 0 {
-		t.Fatalf("after 10 hard: %+v %v", res, err)
+// cycle answers right, wrong, and "I don't know" in turn, so a run has all three.
+func cycle() func(string, int, int) byte {
+	n := 0
+	return func(string, int, int) byte {
+		n++
+		return "RWI"[n%3]
 	}
 }
 
-func TestFullDeckExhaustsAtCardCap(t *testing.T) {
-	svc, store := openSvc(t, fixedClock{when})
-	svc.fixture = many(25)
+// ac-3: after a run, cards exist only for right answers, each rated Good, and every wrong or "I don't know"
+// item has an exposure and no card.
+func TestSeedOnlyRightAnswersBecomeGoodCards(t *testing.T) {
+	e, store := openEngine(t, fixedClock{when}, 1)
 	ctx := context.Background()
-	userID := insertLearner(t, store, "cap@example.com", "sub-cap")
-	runID := start(t, svc, userID)
-	var dealt int
-	for {
-		res, err := svc.Next(ctx, runID)
+	user := newLearner(t, store, "seed")
+	runID, res, _ := drive(t, e, user, script{letters: 6, pattern: cycle(), typing: "skip"})
+
+	var right, wrong, idk, cards int
+	for _, it := range itemsOf(t, e, runID) {
+		if it.Part != string(PartListening) && it.Part != string(PartReading) {
+			continue
+		}
+		if it.LexemeID == 0 {
+			t.Fatalf("item %d has no lexeme", it.Seq)
+		}
+		_, hasCard, err := store.CardID(ctx, user, it.LexemeID, it.Skill)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if res.Break {
-			if err := svc.ContinueSitting(ctx, userID); err != nil {
+		exposures := countRows(t, store, `SELECT COUNT(*) FROM exposures WHERE user_id = ? AND lexeme_id = ? AND context = 'placement_review'`, user, it.LexemeID)
+		attempts, err := store.ListAttempts(ctx, user, it.LexemeID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(attempts) != 1 {
+			t.Fatalf("item %d: %d attempts, want 1", it.Seq, len(attempts))
+		}
+		a := attempts[0]
+		if a.Source != "placement" || a.Skill != it.Skill {
+			t.Fatalf("item %d: attempt source %q skill %q", it.Seq, a.Source, a.Skill)
+		}
+		switch it.Outcome {
+		case OutcomeRight:
+			right++
+			if !hasCard {
+				t.Fatalf("item %d: a right answer has no card", it.Seq)
+			}
+			id, _, _ := store.CardID(ctx, user, it.LexemeID, it.Skill)
+			logs, err := store.ReviewLogs(ctx, id)
+			if err != nil {
 				t.Fatal(err)
 			}
-			continue
-		}
-		if res.Done {
-			break
-		}
-		if res.Card == nil {
-			t.Fatal("next returned no card")
-		}
-		dealt++
-		if dealt > CardCap {
-			t.Fatalf("dealt %d", dealt)
-		}
-		if err := svc.Rate(ctx, runID, res.Card.ID, Good); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if dealt != CardCap {
-		t.Fatalf("dealt %d, want %d", dealt, CardCap)
-	}
-	result, err := svc.Finish(ctx, runID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.StopReason != stopExhausted || result.Level != 4 || result.CardsRated != CardCap {
-		t.Fatalf("full deck stop=%s level=%d rated=%d", result.StopReason, result.Level, result.CardsRated)
-	}
-	place, ok, err := store.LatestPlacement(ctx, userID)
-	if err != nil || !ok || place.Sittings != CardCap/SittingSize || place.StopReason != stopExhausted {
-		t.Fatalf("latest %+v ok=%v err=%v", place, ok, err)
-	}
-	n, err := store.CountCards(ctx, userID)
-	if err != nil || n != CardCap {
-		t.Fatalf("cards = %d %v", n, err)
-	}
-	rows, err := store.ListPlacementAnswers(ctx, runID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	byBand := map[int]int{}
-	for _, row := range rows {
-		if !row.Rating.Valid {
-			continue
-		}
-		it, err := svc.find(row.ItemID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		byBand[it.Band]++
-	}
-	for band := 0; band < bands; band++ {
-		if byBand[band] != BandMax {
-			t.Fatalf("band %d rated %d, want %d", band, byBand[band], BandMax)
-		}
-	}
-}
-
-func TestBandMax(t *testing.T) {
-	svc, _ := openSvc(t, fixedClock{when})
-	svc.fixture = many(25)
-	ctx := context.Background()
-	userID := insertLearner(t, svc.store, "band@example.com", "sub-band")
-	runID := start(t, svc, userID)
-	ratePrefix(t, svc, runID, BandMax, func(int) int { return Good })
-	res, err := svc.Next(ctx, runID)
-	if err != nil || !res.Break || res.Done || res.Card != nil {
-		t.Fatalf("after %d in the band: %+v %v", BandMax, res, err)
-	}
-	if err := svc.ContinueSitting(ctx, userID); err != nil {
-		t.Fatal(err)
-	}
-	res, err = svc.Next(ctx, runID)
-	if err != nil || res.Break || res.Done || res.Card == nil {
-		t.Fatalf("card after the band cap: %+v %v", res, err)
-	}
-	if got := mustFind(t, svc, res.Card.ID).Band; got != 1 {
-		t.Fatalf("card after band 0 is band %d", got)
-	}
-}
-
-func TestLatestPlacementUnfinished(t *testing.T) {
-	svc, store := openSvc(t, fixedClock{when})
-	svc.fixture = manyBand(0, 8)
-	ctx := context.Background()
-	userID := insertLearner(t, store, "open@example.com", "sub-open")
-	runID := start(t, svc, userID)
-	ratePrefix(t, svc, runID, 3, func(int) int { return Again })
-	place, ok, err := store.LatestPlacement(ctx, userID)
-	if err != nil || !ok {
-		t.Fatalf("ok=%v err=%v", ok, err)
-	}
-	if place.Finished || place.StopReason != "" || place.CardsRated != 3 || place.Sittings != 1 || !place.TakenAt.Equal(when) || len(place.BandScores) != 0 {
-		t.Fatalf("unfinished %+v", place)
-	}
-	run, err := store.GetPlacementRun(ctx, runID)
-	if err != nil || !run.FinishedAt.IsZero() || run.StopReason != "" {
-		t.Fatalf("run %+v %v", run, err)
-	}
-}
-
-func TestSittingBreak(t *testing.T) {
-	svc, store := openSvc(t, fixedClock{when})
-	svc.fixture = many(25)
-	ctx := context.Background()
-	userID := insertLearner(t, store, "sit@example.com", "sub-sit")
-	runID := start(t, svc, userID)
-	ratePrefix(t, svc, runID, SittingSize, func(int) int { return Good })
-	res, err := svc.Next(ctx, runID)
-	if err != nil || !res.Break || res.Done || res.Card != nil {
-		t.Fatalf("break: %+v %v", res, err)
-	}
-	run, err := store.GetPlacementRun(ctx, runID)
-	if err != nil || !run.FinishedAt.IsZero() || run.SittingNo != 1 || run.StopReason != "" {
-		t.Fatalf("break finished the run: %+v %v", run, err)
-	}
-	place, ok, err := store.LatestPlacement(ctx, userID)
-	if err != nil || !ok || place.Finished || place.Sittings != 1 || place.StopReason != "" || place.CardsRated != SittingSize {
-		t.Fatalf("latest %+v ok=%v err=%v", place, ok, err)
-	}
-	if err := svc.ContinueSitting(ctx, userID); err != nil {
-		t.Fatal(err)
-	}
-	res, err = svc.Next(ctx, runID)
-	if err != nil || res.Break || res.Done || res.Card == nil {
-		t.Fatalf("after continue: %+v %v", res, err)
-	}
-	run, err = store.GetPlacementRun(ctx, runID)
-	if err != nil || run.SittingNo != 2 {
-		t.Fatalf("sitting after continue: %+v %v", run, err)
-	}
-	rows, err := store.ListPlacementAnswers(ctx, runID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var first, second int
-	for _, row := range rows {
-		switch row.SittingNo {
-		case 1:
-			if !row.Rating.Valid {
-				t.Fatalf("sitting 1 left a card open: %+v", row)
+			if len(logs) != 1 || logs[0].Rating != int(fsrs.Good) {
+				t.Fatalf("item %d: review logs %+v, want one rated Good", it.Seq, logs)
 			}
-			first++
-		case 2:
-			second++
-			if row.ItemID != res.Card.ID || row.Rating.Valid {
-				t.Fatalf("sitting 2 card %+v", row)
+			if exposures != 0 || !a.Correct || a.DontKnow {
+				t.Fatalf("item %d: right answer has %d exposures, attempt %+v", it.Seq, exposures, a)
+			}
+			cards++
+		case OutcomeWrong, OutcomeDontKnow:
+			if it.Outcome == OutcomeWrong {
+				wrong++
+			} else {
+				idk++
+			}
+			if hasCard {
+				t.Fatalf("item %d: a %s answer has a card", it.Seq, it.Outcome)
+			}
+			if exposures != 1 {
+				t.Fatalf("item %d: a %s answer has %d exposures, want 1", it.Seq, it.Outcome, exposures)
+			}
+			if a.Correct || a.DontKnow != (it.Outcome == OutcomeDontKnow) {
+				t.Fatalf("item %d: attempt %+v for a %s answer", it.Seq, a, it.Outcome)
 			}
 		default:
-			t.Fatalf("sitting %d", row.SittingNo)
+			t.Fatalf("item %d has outcome %q", it.Seq, it.Outcome)
 		}
 	}
-	if first != SittingSize || second != 1 {
-		t.Fatalf("sittings first=%d second=%d", first, second)
+	if right == 0 || wrong == 0 || idk == 0 {
+		t.Fatalf("the script gave %d right, %d wrong, %d idk: the test needs all three", right, wrong, idk)
 	}
-	if err := svc.ContinueSitting(ctx, userID); err == nil {
-		t.Fatal("continue on an open sitting succeeded")
+	if n, err := store.CountCards(ctx, user); err != nil || n != cards {
+		t.Fatalf("cards = %d (%v), want %d, one for each right answer and none else", n, err, cards)
+	}
+	if n := countRows(t, store, `SELECT COUNT(*) FROM review_log`); n != cards {
+		t.Fatalf("review_log rows = %d, want %d", n, cards)
+	}
+	if n := countRows(t, store, `SELECT COUNT(*) FROM exposures WHERE user_id = ?`, user); n != wrong+idk {
+		t.Fatalf("exposures = %d, want %d", n, wrong+idk)
+	}
+	if len(res.Misses) != wrong+idk {
+		t.Fatalf("misses = %d, want %d", len(res.Misses), wrong+idk)
+	}
+	// Part 0 writes no attempt: a letter is not a word.
+	if n := countRows(t, store, `SELECT COUNT(*) FROM attempts WHERE user_id = ?`, user); n != right+wrong+idk {
+		t.Fatalf("attempts = %d, want %d", n, right+wrong+idk)
 	}
 }
 
-func TestResumeAcrossDays(t *testing.T) {
+// A word the learner already has a card for is not scheduled again by a right placement answer, and a miss is
+// not given a card. This is the recorder's rule for placement, seen through the engine.
+func TestSeedLeavesAnExistingCardAlone(t *testing.T) {
+	e, store := openEngine(t, fixedClock{when}, 2)
+	ctx := context.Background()
+	user := newLearner(t, store, "existing")
+	d, _ := e.loadDeck()
+	runID, err := e.Start(ctx, user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Answer Part 0, then give the first listening word a card with five reps before it is asked.
+	state := newScriptState(script{letters: 6, pattern: always('R')})
+	var step Step
+	for {
+		step, err = e.Next(ctx, user, runID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if step.Item.Part != PartLetters {
+			break
+		}
+		if _, err = e.Answer(ctx, user, runID, step.Item.ID, state.answer(d, openRow(t, e, runID, step.Item.ID))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	open := openRow(t, e, runID, step.Item.ID)
+	word := d.byID[open.ItemID]
+	lex, err := e.lexeme(ctx, word)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ExecContext(ctx, `INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended)
+		VALUES (?, ?, 'listen', 'review', '2026-12-01T00:00:00.000000000Z', 30, 5, 5, 0, '2026-10-01T00:00:00.000000000Z', 0)`, user, lex); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Answer(ctx, user, runID, step.Item.ID, state.answer(d, open)); err != nil {
+		t.Fatal(err)
+	}
+	id, _, _ := store.CardID(ctx, user, lex, "listen")
+	card, err := store.GetCard(ctx, id)
+	if err != nil || card.Reps != 5 || card.Stability != 30 {
+		t.Fatalf("existing card was rescheduled: %+v %v", card, err)
+	}
+	if logs, _ := store.ReviewLogs(ctx, id); len(logs) != 0 {
+		t.Fatalf("existing card got %d review logs", len(logs))
+	}
+}
+
+// ac-4: the reply to an answer holds no field that says whether the answer was right.
+func TestNoFeedbackStepsCarryNoCorrectnessField(t *testing.T) {
+	e, store := openEngine(t, fixedClock{when}, 3)
+	user := newLearner(t, store, "nofeedback")
+	_, _, steps := drive(t, e, user, script{letters: 6, pattern: knows(3), typing: "right"})
+	allowed := map[string]bool{
+		"item": true, "typing_offer": true, "done": true, "result": true,
+		"id": true, "part": true, "kind": true, "seq": true, "new_part": true, "audio_url": true,
+		"prompt": true, "options": true, "text": true,
+	}
+	if len(steps) < 60 {
+		t.Fatalf("only %d steps", len(steps))
+	}
+	for i, st := range steps {
+		if st.Done {
+			continue
+		}
+		body, err := json.Marshal(st)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var generic any
+		if err := json.Unmarshal(body, &generic); err != nil {
+			t.Fatal(err)
+		}
+		walkKeys(generic, func(path, key string) {
+			if !allowed[key] {
+				t.Errorf("step %d: field %q at %s is not in the list of fields a reply may carry: %s", i, key, path, body)
+			}
+		})
+	}
+	last := steps[len(steps)-1]
+	if !last.Done || last.Result == nil {
+		t.Fatal("the last step is not the result")
+	}
+}
+
+func walkKeys(v any, visit func(path, key string)) {
+	var walk func(path string, v any)
+	walk = func(path string, v any) {
+		switch x := v.(type) {
+		case map[string]any:
+			for k, child := range x {
+				visit(path, k)
+				walk(path+"."+k, child)
+			}
+		case []any:
+			for _, child := range x {
+				walk(path+"[]", child)
+			}
+		}
+	}
+	walk("$", v)
+}
+
+// The reply to a right answer, to a wrong answer, and to "I don't know" is the same bytes. If a reply differed
+// by how the last answer went, a client could read the difference.
+func TestNoFeedbackReplyIsTheSameWhateverTheAnswer(t *testing.T) {
+	replyFor := func(kind byte) (string, string) {
+		e, store := openEngine(t, fixedClock{when}, 4) // the same seed source, so the same deal
+		user := newLearner(t, store, "same")
+		ctx := context.Background()
+		d, _ := e.loadDeck()
+		runID, err := e.Start(ctx, user)
+		if err != nil {
+			t.Fatal(err)
+		}
+		state := newScriptState(script{letters: 6, pattern: always(kind)})
+		step, err := e.Next(ctx, user, runID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		first, _ := json.Marshal(step)
+		in := state.answer(d, openRow(t, e, runID, step.Item.ID))
+		if kind == 'W' {
+			state.letters = 99 // a wrong letter
+			in = state.answer(d, openRow(t, e, runID, step.Item.ID))
+		}
+		if kind == 'I' {
+			in = AnswerIn{DontKnow: true}
+		}
+		next, err := e.Answer(ctx, user, runID, step.Item.ID, in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		reply, _ := json.Marshal(next)
+		return string(first), string(reply)
+	}
+	firstR, right := replyFor('R')
+	firstW, wrong := replyFor('W')
+	firstI, idk := replyFor('I')
+	if firstR != firstW || firstR != firstI {
+		t.Fatalf("the same seed dealt different first items:\n%s\n%s\n%s", firstR, firstW, firstI)
+	}
+	if right != wrong || right != idk {
+		t.Fatalf("replies differ by answer:\n right: %s\n wrong: %s\n idk:   %s", right, wrong, idk)
+	}
+
+	// The same holds after the last item of the parts: the typing offer is the same for a learner who knew everything
+	// and for one who knew nothing but passed the letters.
+	offer := func(pattern func(string, int, int) byte) string {
+		e, store := openEngine(t, fixedClock{when}, 4)
+		user := newLearner(t, store, "offer")
+		_, _, steps := drive(t, e, user, script{letters: 6, pattern: pattern, typing: "skip"})
+		for _, st := range steps {
+			if st.TypingOffer {
+				body, _ := json.Marshal(st)
+				return string(body)
+			}
+		}
+		t.Fatal("no typing offer")
+		return ""
+	}
+	if a, b := offer(always('R')), offer(always('I')); a != b || a != `{"typing_offer":true}` {
+		t.Fatalf("typing offers differ: %s and %s", a, b)
+	}
+}
+
+// Listening has audio and no Hebrew. Reading has pointed Hebrew, no audio, and no transliteration. Letters
+// have audio. Typing shows the English meaning.
+func TestNoFeedbackItemsShowOnlyWhatTheirPartAllows(t *testing.T) {
+	e, store := openEngine(t, fixedClock{when}, 5)
+	user := newLearner(t, store, "parts")
+	d, _ := e.loadDeck()
+	runID, _, steps := drive(t, e, user, script{letters: 6, pattern: knows(2), typing: "right"})
+	seen := map[Part]int{}
+	for _, st := range steps {
+		it := st.Item
+		if it == nil {
+			continue
+		}
+		seen[it.Part]++
+		row := openRow(t, e, runID, it.ID)
+		word := d.byID[row.ItemID]
+		hasLatin := func(s string) bool {
+			for _, r := range s {
+				if r < 0x80 && (r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') {
+					return true
+				}
+			}
+			return false
+		}
+		switch it.Part {
+		case PartListening:
+			if it.AudioURL == "" || !strings.HasPrefix(it.AudioURL, "/audio/") || it.Prompt != "" {
+				t.Errorf("listening item %d: audio %q prompt %q", it.Seq, it.AudioURL, it.Prompt)
+			}
+			if len(it.Options) != OptionCount {
+				t.Errorf("listening item %d has %d options", it.Seq, len(it.Options))
+			}
+		case PartReading:
+			if it.AudioURL != "" || it.Prompt != word.Text || hasLatin(it.Prompt) {
+				t.Errorf("reading item %d: audio %q prompt %q, want only %q", it.Seq, it.AudioURL, it.Prompt, word.Text)
+			}
+			if body, _ := json.Marshal(it); strings.Contains(string(body), "translit") || (len(word.Translit) > 3 && strings.Contains(string(body), word.Translit)) {
+				t.Errorf("reading item %d carries the transliteration: %s", it.Seq, body)
+			}
+		case PartLetters:
+			if it.AudioURL == "" || it.Prompt != "" || len(it.Options) != OptionCount {
+				t.Errorf("letters item %d: %+v", it.Seq, it)
+			}
+		case PartTyping:
+			if it.Kind != KindType || it.Prompt != word.Gloss || len(it.Options) != 0 || it.AudioURL != "" {
+				t.Errorf("typing item %d: %+v", it.Seq, it)
+			}
+		}
+		// Option ids are positions. An id that said which option is right would be feedback.
+		for i, o := range it.Options {
+			if o.ID != fmt.Sprintf("o%d", i) {
+				t.Errorf("item %d: option %d has id %q", it.Seq, i, o.ID)
+			}
+		}
+		if (it.Kind == KindPick) != (it.Part != PartTyping) {
+			t.Errorf("item %d of part %s has kind %s", it.Seq, it.Part, it.Kind)
+		}
+	}
+	for _, p := range []Part{PartLetters, PartListening, PartReading, PartTyping} {
+		if seen[p] == 0 {
+			t.Errorf("no %s item was dealt", p)
+		}
+	}
+	// The first item of each part says so, and no other does.
+	first := map[Part]bool{}
+	for _, st := range steps {
+		if st.Item == nil {
+			continue
+		}
+		if st.Item.NewPart == first[st.Item.Part] {
+			t.Errorf("item %d of part %s: new_part = %v, but the part was seen before = %v", st.Item.Seq, st.Item.Part, st.Item.NewPart, first[st.Item.Part])
+		}
+		first[st.Item.Part] = true
+	}
+}
+
+// Words with no clip are never dealt in listening. They may still be asked in reading.
+func TestAdaptiveListeningNeverDealsAWordWithoutAudio(t *testing.T) {
+	e := simEngine()
+	items, _ := catalog()
+	silent := map[string]bool{}
+	for i, it := range items {
+		if i%3 == 0 {
+			silent[audio.NormalizeText(it.TextNFC)] = true
+		}
+	}
+	e.audioLookup = func(_ context.Context, text string) (string, bool, error) {
+		return "clip", !silent[text], nil
+	}
+	d, _ := e.loadDeck()
+	reading := 0
+	for seed := int64(1); seed <= 100; seed++ {
+		_, got := simulate(t, e, seed, script{letters: 6, pattern: always('R'), typing: "skip"})
+		for _, it := range got {
+			w := d.byID[it.ItemID]
+			if it.Part == string(PartListening) && silent[audio.NormalizeText(w.Text)] {
+				t.Fatalf("seed %d: %s has no clip and was dealt in listening", seed, w.ID)
+			}
+			if it.Part == string(PartReading) && silent[audio.NormalizeText(w.Text)] {
+				reading++
+			}
+		}
+	}
+	if reading == 0 {
+		t.Error("silent words never appear in reading: the filter is too wide")
+	}
+}
+
+// ac-5: fewer than five letters right skips the reading part and records reading_ready = false.
+func TestAdaptiveLettersGateSkipsReading(t *testing.T) {
+	for _, tc := range []struct {
+		right     int
+		wantReady bool
+	}{{0, false}, {4, false}, {5, true}, {6, true}} {
+		t.Run(fmt.Sprintf("%d letters right", tc.right), func(t *testing.T) {
+			e, store := openEngine(t, fixedClock{when}, 6)
+			user := newLearner(t, store, "letters")
+			runID, res, steps := drive(t, e, user, script{letters: tc.right, pattern: knows(2), typing: "right"})
+			reading := countPart(itemsOf(t, e, runID), PartReading)
+			typing := countPart(itemsOf(t, e, runID), PartTyping)
+			if res.ReadingReady != tc.wantReady || res.Reading.Tested != tc.wantReady {
+				t.Fatalf("reading_ready %v, tested %v, want %v", res.ReadingReady, res.Reading.Tested, tc.wantReady)
+			}
+			if res.LettersAsked != LettersAsked || res.LettersRight != tc.right {
+				t.Fatalf("letters %d of %d", res.LettersRight, res.LettersAsked)
+			}
+			offered := false
+			for _, st := range steps {
+				offered = offered || st.TypingOffer
+			}
+			stored, err := store.GetPlacementRun(context.Background(), runID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var body struct {
+				ReadingReady bool `json:"reading_ready"`
+			}
+			if err := json.Unmarshal([]byte(stored.Result), &body); err != nil {
+				t.Fatal(err)
+			}
+			if body.ReadingReady != tc.wantReady {
+				t.Fatalf("stored reading_ready = %v, want %v", body.ReadingReady, tc.wantReady)
+			}
+			if tc.wantReady {
+				if reading == 0 || !offered || typing == 0 {
+					t.Fatalf("reading %d, typing offered %v, typing items %d: want all of them", reading, offered, typing)
+				}
+				return
+			}
+			if reading != 0 || len(res.Reading.Bands) != 0 || res.Reading.Level != 0 || res.Reading.Estimate != 0 {
+				t.Fatalf("reading was tested: %d items, %+v", reading, res.Reading)
+			}
+			if offered || typing != 0 {
+				t.Fatalf("typing was offered (%v) or asked (%d) without the letters", offered, typing)
+			}
+			if !res.Listening.Tested || res.Listening.Level == 0 {
+				t.Fatalf("listening was not tested: %+v", res.Listening)
+			}
+		})
+	}
+}
+
+// ac-7: a check-in is due 28 days after the last placement or re-check, and not before.
+func TestRecheckDueIsFalseAtDay27AndTrueAtDay28(t *testing.T) {
 	now := when
-	svc, store := openSvc(t, movingClock{&now})
-	svc.fixture = many(25)
+	e, store := openEngine(t, movingClock{&now}, 7)
 	ctx := context.Background()
-	userID := insertLearner(t, store, "day@example.com", "sub-day")
-	runID := start(t, svc, userID)
-	ratePrefix(t, svc, runID, 5, func(int) int { return Good })
+	user := newLearner(t, store, "due")
+	if st, err := e.RecheckDue(ctx, user); err != nil || st.Due || st.HasPlacement {
+		t.Fatalf("before any placement: %+v %v", st, err)
+	}
+	_, res, _ := drive(t, e, user, script{letters: 6, pattern: knows(3), typing: "skip"})
+	finished := res.FinishedAt
+	if !finished.Equal(when) {
+		t.Fatalf("finished at %s, want %s", finished, when)
+	}
+	day := 24 * time.Hour
+	for _, c := range []struct {
+		at        time.Duration
+		due, late bool
+	}{
+		{0, false, false},
+		{27 * day, false, false},
+		{28*day - time.Nanosecond, false, false},
+		{28 * day, true, false},
+		{35 * day, true, false},
+		{42*day - time.Nanosecond, true, false},
+		{42 * day, true, true},
+		{90 * day, true, true},
+	} {
+		now = finished.Add(c.at)
+		st, err := e.RecheckDue(ctx, user)
+		if err != nil || st.Due != c.due || st.Late != c.late || !st.HasPlacement {
+			t.Errorf("at +%v: %+v %v, want due %v late %v", c.at, st, err, c.due, c.late)
+		}
+		if !st.LastAt.Equal(finished) || !st.DueAt.Equal(finished.Add(28*day)) {
+			t.Errorf("at +%v: last %s due at %s", c.at, st.LastAt, st.DueAt)
+		}
+	}
 
-	now = now.Add(24 * time.Hour)
-	if again := start(t, svc, userID); again != runID {
-		t.Fatalf("next day run %d, want %d", again, runID)
+	// Another learner's run does not make this learner due, and an unfinished run is not a placement.
+	other := newLearner(t, store, "other")
+	if st, err := e.RecheckDue(ctx, other); err != nil || st.Due || st.HasPlacement {
+		t.Fatalf("another learner: %+v %v", st, err)
 	}
-	run, err := store.GetPlacementRun(ctx, runID)
-	if err != nil || run.SittingNo != 1 || !run.FinishedAt.IsZero() {
-		t.Fatalf("partial next day: %+v %v", run, err)
+	if _, err := e.Start(ctx, other); err != nil {
+		t.Fatal(err)
 	}
-	res, err := svc.Next(ctx, runID)
-	if err != nil || res.Break || res.Done || res.Card == nil {
-		t.Fatalf("resume card: %+v %v", res, err)
-	}
-
-	ratePrefix(t, svc, runID, SittingSize-5, func(int) int { return Good })
-	res, err = svc.Next(ctx, runID)
-	if err != nil || !res.Break || res.Done {
-		t.Fatalf("end of sitting: %+v %v", res, err)
-	}
-	place, ok, err := store.LatestPlacement(ctx, userID)
-	if err != nil || !ok || place.Finished {
-		t.Fatalf("done for today finished the run: %+v %v", place, err)
-	}
-
-	now = now.Add(24 * time.Hour)
-	if again := start(t, svc, userID); again != runID {
-		t.Fatalf("second day run %d, want %d", again, runID)
-	}
-	run, err = store.GetPlacementRun(ctx, runID)
-	if err != nil || run.SittingNo != 2 || !run.FinishedAt.IsZero() {
-		t.Fatalf("new sitting: %+v %v", run, err)
-	}
-	res, err = svc.Next(ctx, runID)
-	if err != nil || res.Break || res.Done || res.Card == nil {
-		t.Fatalf("second sitting card: %+v %v", res, err)
-	}
-	if again := start(t, svc, userID); again != runID {
-		t.Fatalf("same day run %d, want %d", again, runID)
-	}
-	run, err = store.GetPlacementRun(ctx, runID)
-	if err != nil || run.SittingNo != 2 {
-		t.Fatalf("start opened another sitting: %+v %v", run, err)
+	if st, err := e.RecheckDue(ctx, other); err != nil || st.Due || st.HasPlacement {
+		t.Fatalf("an unfinished run: %+v %v", st, err)
 	}
 }
 
-func TestConcurrentStartOneOpenRun(t *testing.T) {
-	svc, store := openSvc(t, fixedClock{when})
-	svc.fixture = manyBand(0, 1)
-	userID := insertLearner(t, store, "race@example.com", "sub-race")
-	const n = 16
-	ids := make([]int64, n)
-	errs := make([]error, n)
-	var wg sync.WaitGroup
-	ready := make(chan struct{})
-	wg.Add(n)
-	for i := 0; i < n; i++ {
-		go func(i int) {
-			defer wg.Done()
-			<-ready
-			ids[i], errs[i] = svc.Start(context.Background(), userID)
-		}(i)
-	}
-	close(ready)
-	wg.Wait()
-	for i, err := range errs {
-		if err != nil {
-			t.Fatalf("start %d: %v", i, err)
-		}
-		if ids[i] != ids[0] {
-			t.Fatalf("run %d id %d, want %d among %v", i, ids[i], ids[0], ids)
-		}
-	}
-	if _, err := store.InsertPlacementRun(context.Background(), userID, when, 1); !errors.Is(err, db.ErrOpenPlacementRun) {
-		t.Fatalf("second open run err %v", err)
-	}
-}
-
-func TestDontKnowGradesAsAgain(t *testing.T) {
-	svc, store := openSvc(t, fixedClock{when})
-	const text = "לֹא"
-	svc.fixture = []fixtureItem{real("dk", text, 0)}
+// Only the item the server dealt to this run, and left open, can be answered.
+func TestAnswerAcceptedOnlyForTheDealtItem(t *testing.T) {
+	e, store := openEngine(t, fixedClock{when}, 8)
 	ctx := context.Background()
-	userID := insertLearner(t, store, "dont@example.com", "sub-dont")
-	runID := start(t, svc, userID)
-	card := rateNext(t, svc, runID, DontKnow)
-
-	id, _, _, _, ok, err := store.LexemeByText(ctx, text)
-	if err != nil || !ok {
-		t.Fatal(err)
-	}
-	cardID, has, err := store.CardID(ctx, userID, id, fsrs.SkillRead)
-	if err != nil || !has {
-		t.Fatal(err)
-	}
-	logs, err := store.ReviewLogs(ctx, cardID)
-	if err != nil || len(logs) != 1 || logs[0].Rating != int(fsrs.Again) {
-		t.Fatalf("logs %+v %v", logs, err)
-	}
-	stored, err := store.GetCard(ctx, cardID)
+	user := newLearner(t, store, "owner")
+	thief := newLearner(t, store, "thief")
+	d, _ := e.loadDeck()
+	runID, err := e.Start(ctx, user)
 	if err != nil {
 		t.Fatal(err)
 	}
-	param := gofsrs.DefaultParam()
-	param.EnableFuzz = false
-	first := gofsrs.NewFSRS(param).Next(gofsrs.NewCard(), when, gofsrs.Again)
-	if stored.Stability != first.Card.Stability {
-		t.Fatalf("stability %v, want %v", stored.Stability, first.Card.Stability)
-	}
-	rows, err := store.ListPlacementAnswers(ctx, runID)
-	if err != nil || len(rows) != 1 || !rows[0].Rating.Valid || rows[0].Rating.Int64 != DontKnow || rows[0].ItemID != card.ID {
-		t.Fatalf("answers %+v %v", rows, err)
-	}
-	learning, err := store.PlacementLearningLexemes(ctx, userID)
-	if err != nil || len(learning) != 1 || learning[0] != text {
-		t.Fatalf("learning %v %v", learning, err)
-	}
-	known, err := store.PlacementKnownLexemes(ctx, userID)
-	if err != nil || len(known) != 0 {
-		t.Fatalf("known %v %v", known, err)
-	}
-	ids, err := store.KnownLexemeIDs(ctx, userID)
-	if err != nil || slices.Contains(ids, id) {
-		t.Fatalf("known ids %v %v", ids, err)
-	}
-}
-
-func TestResumeAndIdempotentFinish(t *testing.T) {
-	svc, store := openSvc(t, fixedClock{when})
-	svc.fixture = manyBand(0, 6)
-	ctx := context.Background()
-	userID := insertLearner(t, store, "resume@example.com", "sub-resume")
-	runID := start(t, svc, userID)
-	first := rateNext(t, svc, runID, Good)
-	second := rateNext(t, svc, runID, Easy)
-	if again := start(t, svc, userID); again != runID {
-		t.Fatalf("resume run %d, want %d", again, runID)
-	}
-	third, err := svc.Next(ctx, runID)
-	if err != nil || third.Done || third.Break || third.Card == nil {
-		t.Fatal(err)
-	}
-	if third.Card.ID == first.ID || third.Card.ID == second.ID {
-		t.Fatalf("resume replayed %s", third.Card.ID)
-	}
-	run, err := store.GetPlacementRun(ctx, runID)
+	otherRun, err := e.Start(ctx, thief)
 	if err != nil {
 		t.Fatal(err)
 	}
-	order := deck(run.Seed, svc.fixture)
-	if third.Card.ID != order[2].ID {
-		t.Fatalf("third card %s, want %s", third.Card.ID, order[2].ID)
+	step, err := e.Next(ctx, user, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Next(ctx, thief, otherRun); err != nil {
+		t.Fatal(err)
+	}
+	open := openRow(t, e, runID, step.Item.ID)
+	good := newScriptState(script{letters: 6, pattern: always('R')}).answer(d, open)
+	attempts := func() int { return countRows(t, store, `SELECT COUNT(*) FROM attempts`) }
+	answered := func() int {
+		return countRows(t, store, `SELECT COUNT(*) FROM placement_items WHERE outcome IS NOT NULL`)
 	}
 
-	result, err := svc.Finish(ctx, runID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.StopReason != "" || result.Level != -1 || result.CardsRated != 2 || result.SuggestedStartPosition != 0 {
-		t.Fatalf("partial %+v", result)
-	}
-	n, err := store.CountCards(ctx, userID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	again, err := svc.Finish(ctx, runID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again.Level != result.Level || again.StopReason != result.StopReason || again.CardsRated != 2 || again.EstimatedKnownWords != result.EstimatedKnownWords {
-		t.Fatalf("second finish %+v, first %+v", again, result)
-	}
-	if got, err := store.CountCards(ctx, userID); err != nil || got != n {
-		t.Fatalf("cards after second finish = %d, want %d (%v)", got, n, err)
-	}
-	if _, err := svc.Next(ctx, runID); err == nil {
-		t.Fatal("next on a finished run succeeded")
-	}
-
-	if _, err := testharness.InsertUnit(ctx, store, "covered", "draft"); err != nil {
-		t.Fatal(err)
-	}
-	place, ok, err := store.LatestPlacement(ctx, userID)
-	if err != nil || !ok || !place.Finished || place.StopReason != "" || place.SuggestedStartPosition != 2 || place.CardsRated != 2 {
-		t.Fatalf("latest %+v ok=%v err=%v", place, ok, err)
-	}
-}
-
-func TestRatingIsTheFirstReview(t *testing.T) {
-	svc, store := openSvc(t, fixedClock{when})
-	words := []fixtureItem{
-		real("g", "טוֹב", 0),
-		real("e", "קַל", 0),
-		real("h", "קָשֶׁה", 0),
-		real("a", "שׁוּב", 0),
-	}
-	svc.fixture = words
-	if _, err := store.ExecContext(context.Background(), `
-		INSERT INTO lexemes (text_nfc, gloss_en, pos, verified) VALUES ('טוֹב', 'old', 'noun', 1)`); err != nil {
-		t.Fatal(err)
-	}
-	ctx := context.Background()
-	userID := insertLearner(t, store, "grade@example.com", "sub-grade")
-	runID := start(t, svc, userID)
-	want := []int{Good, Easy, Hard, Again}
-	got := map[string]int{}
-	var n int
-	for {
-		res, err := svc.Next(ctx, runID)
-		if err != nil {
-			t.Fatal(err)
+	refused := func(name string, want error, call func() error) {
+		t.Helper()
+		if err := call(); !errors.Is(err, want) {
+			t.Errorf("%s: err = %v, want %v", name, err, want)
 		}
-		if res.Done {
-			break
-		}
-		if res.Break || res.Card == nil {
-			t.Fatalf("next %+v", res)
-		}
-		rating := want[n]
-		n++
-		if err := svc.Rate(ctx, runID, res.Card.ID, rating); err != nil {
-			t.Fatal(err)
-		}
-		got[res.Card.TextNFC] = rating
-	}
-	if n != 4 {
-		t.Fatalf("dealt %d", n)
-	}
-	param := gofsrs.DefaultParam()
-	param.EnableFuzz = false
-	sched := gofsrs.NewFSRS(param)
-	var known, learning []string
-	for text, rating := range got {
-		id, gloss, _, verified, ok, err := store.LexemeByText(ctx, text)
-		if err != nil || !ok {
-			t.Fatalf("lexeme %s ok=%v err=%v", text, ok, err)
-		}
-		if text == "טוֹב" && (!verified || gloss != "gloss") {
-			t.Fatalf("verified lexeme gloss=%q verified=%v", gloss, verified)
-		}
-		cardID, has, err := store.CardID(ctx, userID, id, fsrs.SkillRead)
-		if err != nil || !has {
-			t.Fatalf("card %s has=%v err=%v", text, has, err)
-		}
-		card, err := store.GetCard(ctx, cardID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		first := sched.Next(gofsrs.NewCard(), when, gofsrs.Rating(rating))
-		if card.Stability != first.Card.Stability {
-			t.Fatalf("%s stability %v, want %v", text, card.Stability, first.Card.Stability)
-		}
-		logs, err := store.ReviewLogs(ctx, cardID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(logs) != 1 || logs[0].Rating != rating {
-			t.Fatalf("%s logs %+v", text, logs)
-		}
-		if rating == Good || rating == Easy {
-			known = append(known, text)
-		} else {
-			learning = append(learning, text)
+		if attempts() != 0 || answered() != 0 {
+			t.Errorf("%s: something was written (attempts %d, answered %d)", name, attempts(), answered())
 		}
 	}
-	slices.Sort(known)
-	slices.Sort(learning)
-	gotKnown, err := store.PlacementKnownLexemes(ctx, userID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	gotLearning, err := store.PlacementLearningLexemes(ctx, userID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(gotKnown, known) || !slices.Equal(gotLearning, learning) {
-		t.Fatalf("known %v want %v; learning %v want %v", gotKnown, known, gotLearning, learning)
-	}
-	result, err := svc.Finish(ctx, runID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.StopReason != stopExhausted || result.Level != 0 {
-		t.Fatalf("finish %+v", result)
-	}
-
-	// A retake skips every word that already has a card.
-	second := start(t, svc, userID)
-	if res, err := svc.Next(ctx, second); err != nil || !res.Done || res.Break || res.Card != nil {
-		t.Fatalf("retake %+v %v", res, err)
-	}
-	for text := range got {
-		id, _, _, _, ok, err := store.LexemeByText(ctx, text)
-		if err != nil || !ok {
-			t.Fatal(err)
-		}
-		cardID, has, err := store.CardID(ctx, userID, id, fsrs.SkillRead)
-		if err != nil || !has {
-			t.Fatal(err)
-		}
-		logs, err := store.ReviewLogs(ctx, cardID)
-		if err != nil || len(logs) != 1 {
-			t.Fatalf("%s logs %+v %v", text, logs, err)
-		}
-	}
-	if n, err := store.CountCards(ctx, userID); err != nil || n != 4 {
-		t.Fatalf("cards after retake = %d %v", n, err)
-	}
-}
-
-func TestSkipExistingCard(t *testing.T) {
-	svc, store := openSvc(t, fixedClock{when})
-	svc.fixture = []fixtureItem{real("a", "אֶחָד", 0), real("b", "בַּיִת", 0), real("c", "גֶּשֶׁם", 0)}
-	ctx := context.Background()
-	userID := insertLearner(t, store, "skip@example.com", "sub-skip")
-	lexemeID, err := testharness.InsertLexeme(ctx, store, "אֶחָד")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cardID, err := store.InsertCard(ctx, db.Card{
-		UserID:   userID,
-		LexemeID: lexemeID,
-		Skill:    fsrs.SkillRead,
-		State:    fsrs.StateNew,
-		Due:      when,
+	refused("an item never dealt", ErrWrongItem, func() error { _, err := e.Answer(ctx, user, runID, "p99", good); return err })
+	refused("an empty id", ErrWrongItem, func() error { _, err := e.Answer(ctx, user, runID, "", good); return err })
+	refused("a fixture id", ErrWrongItem, func() error { _, err := e.Answer(ctx, user, runID, open.ItemID, good); return err })
+	refused("the next item before this one is answered", ErrWrongItem, func() error { _, err := e.Answer(ctx, user, runID, "p2", good); return err })
+	refused("another learner's run", ErrNotYourRun, func() error { _, err := e.Answer(ctx, thief, runID, step.Item.ID, good); return err })
+	refused("my token on the other learner's run", ErrNotYourRun, func() error { _, err := e.Answer(ctx, user, otherRun, "p1", good); return err })
+	refused("a run that does not exist", ErrNotYourRun, func() error { _, err := e.Answer(ctx, user, 9999, "p1", good); return err })
+	refused("Next on another learner's run", ErrNotYourRun, func() error { _, err := e.Next(ctx, thief, runID); return err })
+	refused("Finish on another learner's run", ErrNotYourRun, func() error { _, err := e.Finish(ctx, thief, runID); return err })
+	refused("StartTyping on another learner's run", ErrNotYourRun, func() error { _, err := e.StartTyping(ctx, thief, runID); return err })
+	refused("Result on another learner's run", ErrNotYourRun, func() error { _, err := e.Result(ctx, thief, runID); return err })
+	// An answer that does not fit the item.
+	refused("two choices", ErrBadAnswer, func() error {
+		_, err := e.Answer(ctx, user, runID, step.Item.ID, AnswerIn{Option: good.Option, DontKnow: true})
+		return err
 	})
+	refused("no choice", ErrBadAnswer, func() error { _, err := e.Answer(ctx, user, runID, step.Item.ID, AnswerIn{}); return err })
+	refused("an option not offered", ErrBadAnswer, func() error {
+		_, err := e.Answer(ctx, user, runID, step.Item.ID, AnswerIn{Option: "o7"})
+		return err
+	})
+	refused("typed text on a pick item", ErrBadAnswer, func() error {
+		_, err := e.Answer(ctx, user, runID, step.Item.ID, AnswerIn{Typed: "x"})
+		return err
+	})
+	refused("blank typed text", ErrBadAnswer, func() error {
+		_, err := e.Answer(ctx, user, runID, step.Item.ID, AnswerIn{Typed: "   "})
+		return err
+	})
+
+	// The right answer is accepted once, and the same item cannot be answered again.
+	if _, err := e.Answer(ctx, user, runID, step.Item.ID, good); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Answer(ctx, user, runID, step.Item.ID, good); !errors.Is(err, ErrWrongItem) {
+		t.Fatalf("answering the same item twice: %v, want ErrWrongItem", err)
+	}
+	if answered() != 1 {
+		t.Fatalf("%d items answered, want 1", answered())
+	}
+}
+
+// A v2 run is not a v3 run: the engine will not answer it, and a finished run takes no more answers.
+func TestAnswerRefusesAV2RunAndAFinishedRun(t *testing.T) {
+	e, store := openEngine(t, fixedClock{when}, 9)
+	ctx := context.Background()
+	user := newLearner(t, store, "v2")
+	v2 := New(store, nil, fixedClock{when})
+	v2Run, err := v2.Start(ctx, user)
 	if err != nil {
 		t.Fatal(err)
 	}
-	runID := start(t, svc, userID)
-	var seen []string
-	for {
-		res, err := svc.Next(ctx, runID)
+	if _, err := e.Answer(ctx, user, v2Run, "p1", AnswerIn{DontKnow: true}); !errors.Is(err, ErrNotYourRun) {
+		t.Fatalf("a v2 run: %v, want ErrNotYourRun", err)
+	}
+	if _, err := e.Next(ctx, user, v2Run); !errors.Is(err, ErrNotYourRun) {
+		t.Fatalf("Next on a v2 run: %v", err)
+	}
+
+	user2 := newLearner(t, store, "finished")
+	runID, _, _ := drive(t, e, user2, script{letters: 6, pattern: always('R'), typing: "skip"})
+	if _, err := e.Answer(ctx, user2, runID, "p1", AnswerIn{DontKnow: true}); !errors.Is(err, ErrFinished) {
+		t.Fatalf("a finished run: %v, want ErrFinished", err)
+	}
+	if _, err := e.StartTyping(ctx, user2, runID); !errors.Is(err, ErrFinished) {
+		t.Fatalf("StartTyping on a finished run: %v", err)
+	}
+}
+
+// Two requests that answer the same item at once count once. Run with -race.
+func TestAnswerTwiceAtOnceCountsOnce(t *testing.T) {
+	e, store := openEngine(t, fixedClock{when}, 10)
+	ctx := context.Background()
+	user := newLearner(t, store, "race")
+	d, _ := e.loadDeck()
+	runID, err := e.Start(ctx, user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := newScriptState(script{letters: 6, pattern: always('R')})
+	for { // skip Part 0 so the attempt path is the one raced
+		step, err := e.Next(ctx, user, runID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if res.Done {
+		if step.Item.Part != PartLetters {
 			break
 		}
-		if res.Break || res.Card == nil {
-			t.Fatalf("next %+v", res)
-		}
-		seen = append(seen, res.Card.TextNFC)
-		if err := svc.Rate(ctx, runID, res.Card.ID, Good); err != nil {
+		if _, err := e.Answer(ctx, user, runID, step.Item.ID, state.answer(d, openRow(t, e, runID, step.Item.ID))); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if slices.Contains(seen, "אֶחָד") || len(seen) != 2 {
-		t.Fatalf("dealt %v", seen)
+	step, _ := e.Next(ctx, user, runID)
+	in := state.answer(d, openRow(t, e, runID, step.Item.ID))
+	var wg sync.WaitGroup
+	errs := make([]error, 8)
+	for i := range errs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, errs[i] = e.Answer(ctx, user, runID, step.Item.ID, in)
+		}()
 	}
-	logs, err := store.ReviewLogs(ctx, cardID)
-	if err != nil || len(logs) != 0 {
-		t.Fatalf("existing card logs %+v %v", logs, err)
+	wg.Wait()
+	ok := 0
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			ok++
+		case !errors.Is(err, ErrWrongItem):
+			t.Errorf("unexpected error %v", err)
+		}
 	}
-	if n, err := store.CountCards(ctx, userID); err != nil || n != 3 {
-		t.Fatalf("cards = %d %v", n, err)
+	if ok != 1 {
+		t.Fatalf("%d of 8 concurrent answers were accepted, want exactly 1", ok)
+	}
+	if n := countRows(t, store, `SELECT COUNT(*) FROM attempts WHERE user_id = ?`, user); n != 1 {
+		t.Fatalf("%d attempts, want 1", n)
+	}
+	if n := countRows(t, store, `SELECT COUNT(*) FROM cards WHERE user_id = ?`, user); n != 1 {
+		t.Fatalf("%d cards, want 1", n)
 	}
 }
 
-func TestAudioURL(t *testing.T) {
-	svc, store := openSvc(t, fixedClock{when})
-	const text = "שָׁלוֹם"
-	clip := stringsRepeat("ab", 32)
+// Asking for the next item is safe to repeat and to do at once: the learner is dealt one item, not several.
+func TestNextIsStableAndDealsOnce(t *testing.T) {
+	e, store := openEngine(t, fixedClock{when}, 11)
 	ctx := context.Background()
-	if _, err := store.ExecContext(ctx, `
-		INSERT INTO audio_assets (id, text_nfc, voice, model, bytes, created_at)
-		VALUES (?, ?, 'voice', 'model', 1, ?)`,
-		clip, text, "2026-01-01T00:00:00.000000000Z"); err != nil {
-		t.Fatal(err)
-	}
-	svc.fixture = []fixtureItem{real("a", text, 0), real("b", "קָפֶה", 0)}
-	userID := insertLearner(t, store, "audio@example.com", "sub-audio")
-	runID := start(t, svc, userID)
-	res, err := svc.Next(ctx, runID)
-	if err != nil || res.Done || res.Break || res.Card == nil {
-		t.Fatal(err)
-	}
-	card := res.Card
-	if err := svc.Rate(ctx, runID, "nope", Good); err == nil {
-		t.Fatal("wrong card was rated")
-	}
-	if err := svc.Rate(ctx, runID, card.ID, 5); err == nil {
-		t.Fatal("rating 5 was accepted")
-	}
-	want := ""
-	if card.TextNFC == text {
-		want = "/audio/" + clip + ".mp3"
-	}
-	if card.AudioURL != want || card.GlossEN == "" || card.Translit == "" || card.Gender == "" {
-		t.Fatalf("card %+v", card)
-	}
-	if err := svc.Rate(ctx, runID, card.ID, Good); err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.Rate(ctx, runID, card.ID, Good); err == nil {
-		t.Fatal("second rating was accepted")
-	}
-}
-
-func ratePrefix(t *testing.T, svc *Service, runID int64, n int, rating func(int) int) {
-	t.Helper()
-	for i := 0; i < n; i++ {
-		rateNext(t, svc, runID, rating(i))
-	}
-}
-
-func rateNext(t *testing.T, svc *Service, runID int64, rating int) Card {
-	t.Helper()
-	res, err := svc.Next(context.Background(), runID)
-	if err != nil || res.Done || res.Break || res.Card == nil {
-		t.Fatalf("next: %+v %v", res, err)
-	}
-	if err := svc.Rate(context.Background(), runID, res.Card.ID, rating); err != nil {
-		t.Fatal(err)
-	}
-	return *res.Card
-}
-
-func mustFind(t *testing.T, svc *Service, id string) fixtureItem {
-	t.Helper()
-	it, err := svc.find(id)
+	user := newLearner(t, store, "next")
+	runID, err := e.Start(ctx, user)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return it
+	var wg sync.WaitGroup
+	steps := make([]Step, 6)
+	errs := make([]error, 6)
+	for i := range steps {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			steps[i], errs[i] = e.Next(ctx, user, runID)
+		}()
+	}
+	wg.Wait()
+	want, _ := json.Marshal(steps[0])
+	for i := range steps {
+		if errs[i] != nil {
+			t.Fatal(errs[i])
+		}
+		if got, _ := json.Marshal(steps[i]); string(got) != string(want) {
+			t.Fatalf("call %d returned %s, want %s", i, got, want)
+		}
+	}
+	if n := len(itemsOf(t, e, runID)); n != 1 {
+		t.Fatalf("%d items dealt by 6 calls, want 1", n)
+	}
 }
 
-func mustCatalog(t *testing.T) []fixtureItem {
-	t.Helper()
-	cat, err := catalog()
+// Start resumes the learner's open run, shares it between callers, closes a v2 run left open, and keeps
+// finished v2 runs as they were.
+func TestStartResumesAndRetiresTheV2Run(t *testing.T) {
+	e, store := openEngine(t, fixedClock{when}, 12)
+	ctx := context.Background()
+	user := newLearner(t, store, "start")
+
+	// A finished v2 run with an answer, then an open v2 run.
+	oldRun, err := store.InsertPlacementRun(ctx, user, when.Add(-48*time.Hour), 5)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return cat
-}
-
-func real(id, text string, band int) fixtureItem {
-	return fixtureItem{ID: id, TextNFC: text, Band: band, GlossEN: "gloss", Translit: id, Gender: "m", POS: "noun", Source: "tutor"}
-}
-
-func many(n int) []fixtureItem {
-	var out []fixtureItem
-	for band := 0; band < bands; band++ {
-		out = append(out, manyBand(band, n)...)
+	if err := store.ShowPlacementCard(ctx, oldRun, "boker", 1, when.Add(-48*time.Hour)); err != nil {
+		t.Fatal(err)
 	}
-	return out
-}
-
-func manyBand(band, n int) []fixtureItem {
-	out := make([]fixtureItem, n)
-	for i := range out {
-		id := fmt.Sprintf("b%d-%02d", band, i)
-		out[i] = real(id, id, band)
+	lex, _ := store.UpsertPlacementLexeme(ctx, "boker", "morning", "noun", "boker", "m")
+	if err := store.RatePlacementAnswer(ctx, oldRun, "boker", 3, lex, when.Add(-47*time.Hour)); err != nil {
+		t.Fatal(err)
 	}
-	return out
+	if err := store.FinishPlacement(ctx, oldRun, when.Add(-47*time.Hour), 0, "", `{"bands":[],"estimated_known_words":3}`); err != nil {
+		t.Fatal(err)
+	}
+	beforeRun, _ := store.GetPlacementRun(ctx, oldRun)
+	beforeAnswers, _ := store.ListPlacementAnswers(ctx, oldRun)
+	openV2, err := store.InsertPlacementRun(ctx, user, when.Add(-time.Hour), 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runID, err := e.Start(ctx, user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runID == openV2 || runID == oldRun {
+		t.Fatalf("Start returned the v2 run %d", runID)
+	}
+	if run, _ := store.GetPlacementRun(ctx, openV2); run.FinishedAt.IsZero() {
+		t.Fatal("the open v2 run was left open and would block the new one")
+	}
+	afterRun, _ := store.GetPlacementRun(ctx, oldRun)
+	afterAnswers, _ := store.ListPlacementAnswers(ctx, oldRun)
+	if afterRun != beforeRun || len(afterAnswers) != 1 || afterAnswers[0] != beforeAnswers[0] {
+		t.Fatalf("the finished v2 run changed:\n%+v\n%+v", beforeRun, afterRun)
+	}
+	if meta, ok, _ := store.GetPlacementV3Run(ctx, runID); !ok || meta.Kind != db.RunInitial || meta.Phase != db.PhaseParts {
+		t.Fatalf("v3 row %+v %v", meta, ok)
+	}
+
+	again, err := e.Start(ctx, user)
+	if err != nil || again != runID {
+		t.Fatalf("Start again = %d %v, want %d", again, err, runID)
+	}
+
+	// Callers that start at once share one run.
+	racer := newLearner(t, store, "racer")
+	ids := make([]int64, 6)
+	errs := make([]error, 6)
+	var wg sync.WaitGroup
+	for i := range ids {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ids[i], errs[i] = e.Start(ctx, racer)
+		}()
+	}
+	wg.Wait()
+	for i := range ids {
+		if errs[i] != nil || ids[i] != ids[0] {
+			t.Fatalf("concurrent Start %d = %d %v, want %d", i, ids[i], errs[i], ids[0])
+		}
+	}
+	if n := countRows(t, store, `SELECT COUNT(*) FROM placement_runs WHERE user_id = ? AND finished_at IS NULL`, racer); n != 1 {
+		t.Fatalf("%d open runs", n)
+	}
 }
 
-func openSvc(t *testing.T, clk clock.Clock) (*Service, *db.Store) {
-	t.Helper()
-	store, err := db.Open(context.Background(), filepath.Join(t.TempDir(), "hebrew.sqlite"), clk)
+// The test refuses to start without the letters clips: Part 0 plays a sound.
+func TestStartNeedsTheLettersAudio(t *testing.T) {
+	clk := fixedClock{when}
+	store, err := db.Open(context.Background(), t.TempDir()+"/hebrew.sqlite", clk)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	return New(store, fsrs.New(store, clk), clk), store
+	seedAudio(t, store, false)
+	e := NewEngine(store, nil, clk)
+	user := newLearner(t, store, "noaudio")
+	if _, err := e.Start(context.Background(), user); !errors.Is(err, ErrNoAudio) {
+		t.Fatalf("Start without letters audio: %v, want ErrNoAudio", err)
+	}
+	if n := countRows(t, store, `SELECT COUNT(*) FROM placement_runs`); n != 0 {
+		t.Fatalf("%d runs were written", n)
+	}
 }
 
-func insertLearner(t *testing.T, store *db.Store, email, sub string) int64 {
-	t.Helper()
-	id, err := store.InsertUser(context.Background(), email, sub, "learner")
+// New runs draw their seed from the injected source, and a run's deal follows its seed.
+func TestSeedComesFromTheInjectedSource(t *testing.T) {
+	first := func(srcSeed uint64) (int64, string) {
+		e, store := openEngine(t, fixedClock{when}, srcSeed)
+		user := newLearner(t, store, "src")
+		runID, err := e.Start(context.Background(), user)
+		if err != nil {
+			t.Fatal(err)
+		}
+		run, _ := store.GetPlacementRun(context.Background(), runID)
+		step, err := e.Next(context.Background(), user, runID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := json.Marshal(step)
+		return run.Seed, string(body)
+	}
+	seedA, itemA := first(100)
+	seedB, itemB := first(100)
+	seedC, itemC := first(101)
+	if seedA != seedB || itemA != itemB {
+		t.Fatalf("the same source gave different runs: %d %d", seedA, seedB)
+	}
+	if seedA == seedC || itemA == itemC {
+		t.Fatalf("different sources gave the same run: %d %d", seedA, seedC)
+	}
+	if seedA <= 0 {
+		t.Fatalf("seed %d is not positive", seedA)
+	}
+}
+
+// The database refuses a word asked twice, as a backstop under the planner.
+func TestStoreRefusesAWordAskedTwice(t *testing.T) {
+	e, store := openEngine(t, fixedClock{when}, 13)
+	ctx := context.Background()
+	user := newLearner(t, store, "dup")
+	runID, err := e.Start(ctx, user)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return id
-}
-
-func start(t *testing.T, svc *Service, userID int64) int64 {
-	t.Helper()
-	id, err := svc.Start(context.Background(), userID)
-	if err != nil {
+	row := func(seq int, part string) db.PlacementItem {
+		return db.PlacementItem{RunID: runID, Seq: seq, Part: part, Skill: "listen", Band: 1, ItemID: "boker", Options: `{"options":[]}`, ShownAt: when}
+	}
+	if err := store.InsertPlacementItem(ctx, row(1, "listening")); err != nil {
 		t.Fatal(err)
 	}
-	if id == 0 {
-		t.Fatal("run id is 0")
+	for _, part := range []string{"listening", "reading"} {
+		if err := store.InsertPlacementItem(ctx, row(2, part)); !errors.Is(err, db.ErrPlacementItemExists) {
+			t.Fatalf("%s repeat: %v, want ErrPlacementItemExists", part, err)
+		}
 	}
-	return id
-}
-
-func stringsRepeat(s string, n int) string {
-	out := ""
-	for i := 0; i < n; i++ {
-		out += s
+	if err := store.InsertPlacementItem(ctx, row(1, "typing")); !errors.Is(err, db.ErrPlacementItemExists) {
+		t.Fatalf("the same sequence twice: %v", err)
 	}
-	return out
+	if err := store.InsertPlacementItem(ctx, row(2, "typing")); err != nil {
+		t.Fatalf("typing asks a word again on purpose: %v", err)
+	}
 }

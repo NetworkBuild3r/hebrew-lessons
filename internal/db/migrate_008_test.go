@@ -58,8 +58,8 @@ func TestMigrate008KeepsRowsIdsAndIndex(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate 008: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
-		t.Fatalf("versions = %v, want 1..9", got)
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) {
+		t.Fatalf("versions = %v, want 1..10", got)
 	}
 	if got := m6Dump(t, conn, m8Select); !reflect.DeepEqual(got, before) {
 		t.Fatalf("rows changed\n got: %v\nwant: %v", got, before)
@@ -94,6 +94,12 @@ func TestMigrate008KeepsRowsIdsAndIndex(t *testing.T) {
 	// 009 adds job_state and rebuilds regression_events, so they are not part of what 008 must leave alone.
 	delete(after.tables, "job_state")
 	delete(after.rowCnts, "job_state")
+	// 010 adds placement_v3_runs and placement_items, which no earlier migration may touch.
+	for _, name := range []string{"placement_v3_runs", "placement_items"} {
+		delete(after.tables, name)
+		delete(after.rowCnts, name)
+		after.schema = m8SchemaWithout(after.schema, name)
+	}
 	if !reflect.DeepEqual(after.tables, others.tables) {
 		t.Fatal("rows of another table changed")
 	}
@@ -157,7 +163,7 @@ func TestMigrate008AppliesOnEmptyDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) {
 		t.Fatalf("versions = %v", got)
 	}
 	if n := m6One(t, conn, `SELECT COUNT(*) FROM confusion_misses`); n != 0 {
@@ -168,7 +174,7 @@ func TestMigrate008AppliesOnEmptyDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("second migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) {
 		t.Fatalf("versions after rerun = %v", got)
 	}
 	if n := m6One(t, conn, `SELECT COUNT(*) FROM confusion_misses`); n != 1 {
@@ -238,7 +244,7 @@ func TestMigrate008AtomicWhenCopyFails(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("retry after fixing the data: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) {
 		t.Fatalf("versions after retry = %v", got)
 	}
 	if got := m6Dump(t, conn, m8Select); !reflect.DeepEqual(got, wantRows) {
@@ -274,7 +280,7 @@ func TestMigrate008AtomicWhenFailureComesAfterTheDrop(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("retry: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) {
 		t.Fatalf("versions after retry = %v", got)
 	}
 }

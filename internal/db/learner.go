@@ -435,8 +435,8 @@ type PlacementItemLexeme struct {
 	LexemeID int64
 }
 
-// PlacementItemLexemes returns each distinct pair of placement item and lexeme that any run
-// has rated. The pairs say which deck item a word is, which is how a word gets a band. The
+// PlacementItemLexemes returns each distinct pair of placement item and lexeme that any run,
+// v2 or v3, has answered. The pairs say which deck item a word is, which is how a word gets a band. The
 // result carries no learner, so it is the same for every caller.
 func (s *Store) PlacementItemLexemes(ctx context.Context) ([]PlacementItemLexeme, error) {
 	conn, err := s.connOrErr()
@@ -444,7 +444,9 @@ func (s *Store) PlacementItemLexemes(ctx context.Context) ([]PlacementItemLexeme
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT DISTINCT item_id, lexeme_id FROM placement_answers WHERE lexeme_id IS NOT NULL`)
+		SELECT item_id, lexeme_id FROM placement_answers WHERE lexeme_id IS NOT NULL
+		UNION
+		SELECT item_id, lexeme_id FROM placement_items WHERE lexeme_id IS NOT NULL AND part <> 'letters'`)
 	if err != nil {
 		return nil, fmt.Errorf("db: placement items: %w", err)
 	}
