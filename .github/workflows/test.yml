@@ -16,9 +16,10 @@ on:
 permissions:
   contents: read
 
+# Cancel a superseded pull request. A push to main keeps running.
 concurrency:
   group: test-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   npm-test:

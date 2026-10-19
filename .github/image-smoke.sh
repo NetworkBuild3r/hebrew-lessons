@@ -145,8 +145,12 @@ async function waitHealth() {
     while (Date.now() < deadline) {
         try {
             const res = await request('GET', web + '/healthz');
-            if (res.status === 200 && res.body.toString('utf8') === 'ok') return res;
-            // The process is accepting connections. A non-ok healthz will not become ok.
+            if (res.status === 200 && res.body.toString('utf8') === 'ok') {
+                return { present: true, res: res };
+            }
+            // An image from before this route answers 404. Do not keep waiting.
+            if (res.status === 404) return { present: false, res: res };
+            // The process is accepting connections. Any other status will not become ok.
             fail('GET /healthz HTTP ' + res.status + ' body ' + JSON.stringify(res.body.toString('utf8').slice(0, 200)));
         } catch (err) {
             last = err && err.message ? err.message : String(err);
@@ -180,24 +184,30 @@ function toolCount(raw) {
 
 async function main() {
     const ready = await waitHealth();
-    assertHealth(ready, 'GET /healthz (no cookie)');
-    console.log('healthz ok');
+    if (!ready.present) {
+        console.log('GET /healthz returned 404. This image has no /healthz route. Falling back to GET /login/.');
+        const login = await request('GET', web + '/login/', { Accept: 'text/html' });
+        if (login.status !== 200) {
+            fail('fallback GET /login/ HTTP ' + login.status + ' body ' + JSON.stringify(login.body.toString('utf8').slice(0, 200)));
+        }
+        console.log('fallback: GET /login/ returned 200');
+    } else {
+        assertHealth(ready.res, 'GET /healthz (no cookie)');
+        console.log('healthz ok');
 
-    const head = await request('HEAD', web + '/healthz');
-    if (head.status !== 200) fail('HEAD /healthz HTTP ' + head.status);
-    assertNoCookie(head, 'HEAD /healthz');
-    if (head.body.length !== 0) fail('HEAD /healthz body is not empty (' + head.body.length + ' bytes)');
-    console.log('healthz HEAD ok');
+        const head = await request('HEAD', web + '/healthz');
+        if (head.status !== 200) fail('HEAD /healthz HTTP ' + head.status);
+        assertNoCookie(head, 'HEAD /healthz');
+        if (head.body.length !== 0) fail('HEAD /healthz body is not empty (' + head.body.length + ' bytes)');
+        console.log('healthz HEAD ok');
 
-    const post = await request('POST', web + '/healthz', {
-        'Content-Type': 'application/json',
-        Origin: origin
-    }, '{}');
-    if (post.status >= 200 && post.status < 300) fail('POST /healthz was 2xx (' + post.status + ')');
-    if (post.status !== 405 && post.status !== 404) {
-        fail('POST /healthz HTTP ' + post.status + ' (want 405 or 404)');
+        const post = await request('POST', web + '/healthz', {
+            'Content-Type': 'application/json',
+            Origin: origin
+        }, '{}');
+        if (post.status !== 405) fail('POST /healthz HTTP ' + post.status + ' (want 405)');
+        console.log('healthz POST rejected (405)');
     }
-    console.log('healthz POST rejected (' + post.status + ')');
 
     const signInBody = JSON.stringify({ username: user, password: password });
     const signed = await request('POST', web + '/api/session', {

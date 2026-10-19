@@ -29,12 +29,15 @@ on:
 permissions:
   contents: read
 
+# Cancel a superseded pull request. This workflow has no push trigger.
 concurrency:
   group: image-smoke-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   smoke:
+    # Fork pull requests must not build on the self-hosted runner.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: k8-build
     timeout-minutes: 30
     steps:
@@ -42,6 +45,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
+          persist-credentials: false
 
       # Same rules as image.yml: docs/**, sdd/**, and markdown do not build,
       # except the lesson-plan schema the server reads. The diff is the whole
@@ -52,6 +56,10 @@ jobs:
         env:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
+          # Checkout does not persist credentials. This private fetch uses the
+          # job token in the URL for this command only. It is not written into
+          # git config. credential.helper is empty so the runner does not prompt.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           full_sha='^[0-9a-f]{40}$'
@@ -64,7 +72,9 @@ jobs:
             echo "::error::Checked out ${actual}, but the pull request head is ${PR_HEAD}."
             exit 1
           fi
-          git fetch --depth=1 origin "$PR_BASE"
+          git -c credential.helper= fetch --depth=1 \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "$PR_BASE"
           mapfile -d '' files < <(git diff -z --name-only "$PR_BASE" HEAD)
           if [ "${#files[@]}" -eq 0 ]; then
             echo "build=true" >> "$GITHUB_OUTPUT"
