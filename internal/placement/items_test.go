@@ -32,8 +32,8 @@ func TestFixture(t *testing.T) {
 		if !isNFC(it.TextNFC) {
 			t.Errorf("%s text is not NFC", it.ID)
 		}
-		if it.Verified {
-			t.Errorf("%s verified = true", it.ID)
+		if !it.Verified {
+			t.Errorf("%s verified = false", it.ID)
 		}
 		if it.Translit == "" || it.GlossEN == "" || it.POS == "" {
 			t.Errorf("%s missing gloss, translit, or pos", it.ID)
@@ -67,6 +67,27 @@ func TestFixture(t *testing.T) {
 	for band := 0; band <= 4; band++ {
 		if counts[band] < BandMax {
 			t.Errorf("band %d = %d, want at least %d", band, counts[band], BandMax)
+		}
+	}
+}
+
+func TestDeckLint(t *testing.T) {
+	cat, err := catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range cat {
+		if !isNFC(it.TextNFC) {
+			t.Errorf("%s text is not NFC", it.ID)
+		}
+		if it.Translit == "" || it.GlossEN == "" {
+			t.Errorf("%s missing translit or gloss", it.ID)
+		}
+		if strings.Contains(strings.ToLower(it.Translit), "ch") {
+			t.Errorf("%s translit %q contains ch", it.ID, it.Translit)
+		}
+		if (it.POS == "verb" || it.POS == "adjective") && it.Gender != "" {
+			t.Errorf("%s %s has gender %q", it.ID, it.POS, it.Gender)
 		}
 	}
 }
