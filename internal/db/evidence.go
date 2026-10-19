@@ -45,11 +45,13 @@ type Confusion struct {
 type CardStep func(prev *Card) (next Card, log ReviewLog, apply bool, err error)
 
 // AttemptWrite is everything one checked answer writes.
-// Step and Confusion are optional.
+// Step, Confusion and Extra are optional. Extra holds further confusion rows
+// for the same attempt, for example the letter pairs found in a typed answer.
 type AttemptWrite struct {
 	Attempt   Attempt
 	Step      CardStep
 	Confusion *Confusion
+	Extra     []Confusion
 }
 
 // AttemptResult says what WriteAttempt stored.
@@ -131,12 +133,16 @@ func (s *Store) WriteAttempt(ctx context.Context, w AttemptWrite) (AttemptResult
 		}
 	}
 
+	confusions := w.Extra
 	if w.Confusion != nil {
+		confusions = append([]Confusion{*w.Confusion}, w.Extra...)
+	}
+	for _, c := range confusions {
 		var lexeme any = a.LexemeID
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO confusion_misses (learner_id, kind, key, lexeme_id, at)
 			VALUES (?, ?, ?, ?, ?)`,
-			a.UserID, w.Confusion.Kind, w.Confusion.Key, lexeme, FormatTime(a.CreatedAt),
+			a.UserID, c.Kind, c.Key, lexeme, FormatTime(a.CreatedAt),
 		); err != nil {
 			return AttemptResult{}, fmt.Errorf("db: insert confusion: %w", err)
 		}

@@ -19,8 +19,9 @@ const (
 
 // Grade turns a checked attempt into an FSRS rating.
 //
-// Wrong, or "I don't know", is Again. Right after a hint is Hard. Right and
-// strictly faster than median is Easy. Any other right answer is Good.
+// Wrong, or "I don't know", is Again. Right after a hint, or one letter off
+// (NearMiss), is Hard. Right and strictly faster than median is Easy. Any other
+// right answer is Good.
 // A median of 0 means there is no baseline yet, and Easy is not given.
 // An attempt with a latency of 0 was not timed, so it is never Easy.
 // Correct is ignored when DontKnow is set.
@@ -28,7 +29,7 @@ func Grade(a Attempt, median time.Duration) fsrs.Rating {
 	switch {
 	case a.DontKnow || !a.Correct:
 		return fsrs.Again
-	case a.HintUsed:
+	case a.HintUsed || a.NearMiss:
 		return fsrs.Hard
 	case median > 0 && a.Latency > 0 && a.Latency < median:
 		return fsrs.Easy

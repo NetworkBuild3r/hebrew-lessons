@@ -58,7 +58,7 @@ type ReviewLog struct {
 	Chosen        string // Pointed NFC of the wrong option. Empty when the learner did not pick one.
 }
 
-// StudyCard is a learner's read or recall card plus the fields the
+// StudyCard is a learner's card, in any skill, plus the fields the
 // post-placement mix reads. LatestRating is the newest review_log rating at
 // or before the now passed to ListStudyCards. HasRating is false when the
 // card has no such review. RecentLapse is true when an Again rating was
@@ -398,8 +398,8 @@ func (s *Store) InsertUser(ctx context.Context, email, sub, role string) (int64,
 	return id, nil
 }
 
-// ListStudyCards returns the learner's unsuspended read and recall cards,
-// including cards that are not yet due. Words still waiting on their intro
+// ListStudyCards returns the learner's unsuspended cards in every skill (read,
+// recall, listen, spell), including cards that are not yet due. Words still waiting on their intro
 // lesson are left out, the same way ListDueCards leaves them out.
 // now caps the latest-rating lookup: a review_log row after now is ignored.
 // lapseSince is the start of the recent-lapse window. An Again at that
@@ -464,7 +464,7 @@ func (s *Store) ListStudyCards(ctx context.Context, userID int64, now, lapseSinc
 		FROM cards AS c
 		WHERE c.user_id = ?
 		  AND c.suspended = 0
-		  AND c.skill IN ('read', 'recall')
+		  AND c.skill IN ('read', 'recall', 'listen', 'spell')
 `+introNotFinished+`
 		ORDER BY c.due, c.id`, FormatTime(now), FormatTime(lapseSince), userID)
 	if err != nil {

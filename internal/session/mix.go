@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
 )
@@ -180,6 +181,14 @@ type Candidate struct {
 	// A missing rank sorts after every rank that is present.
 	HasFreq  bool
 	FreqRank int
+
+	// Skills is how the learner model sees the card's word in each skill, and Facts says
+	// which activities can ask it. Exposed is true when the word has been shown with no
+	// question asked. A candidate with no Skills has no model data: it is asked as a
+	// flashcard through its own skill.
+	Skills  []activity.SkillView
+	Facts   activity.Facts
+	Exposed bool
 }
 
 type kind int
@@ -207,6 +216,64 @@ func accuracyOf(ratings []int) float64 {
 // mix orders candidates and returns the queue. accuracy is the recent
 // Good/Easy share, now is the clock, and seed breaks due-time ties.
 func mix(cands []Candidate, accuracy float64, now time.Time, seed int64) []CardRef {
+	return mixGate(cands, accuracy, now, seed, activity.OpenGate())
+}
+
+// mixGate is mix for a learner whose skills are open as gate says. Choosing cards is
+// the old mix. Each card is then asked through the weakest skill of its word that has a
+// checked activity, as annotate does.
+func mixGate(cands []Candidate, accuracy float64, now time.Time, seed int64, gate activity.Gate) []CardRef {
+	queue := mixCards(cands, accuracy, now, seed)
+	byID := make(map[int64]Candidate, len(cands))
+	for _, c := range cands {
+		byID[c.ID] = c
+	}
+	return annotate(queue, byID, gate)
+}
+
+// annotate gives every study visit its activity. The card stays the one the mix chose: it
+// is what is due, and what a flashcard grades. The activity and the skill it asks through
+// come from the word's skills, so they can differ from the card's own skill.
+//
+// Visits are taken in queue order. A word that comes up twice is asked through a different
+// skill each time while it has one left. activity.Choose says how the everyday and the
+// match activity of a skill alternate. A new card whose word has never been shown opens
+// with an exposure: Intro is set, and the screen records Engine.Expose before the first
+// check. A visit with no checked activity that fits stays a flashcard through the card's
+// own skill.
+func annotate(queue []CardRef, byID map[int64]Candidate, gate activity.Gate) []CardRef {
+	used := map[int64]map[string]bool{}
+	visits := map[string]int{}
+	for i := range queue {
+		ref := &queue[i]
+		if ref.CardID <= 0 || ref.Kind == KindLetter || ref.Kind == KindPattern {
+			continue
+		}
+		c, ok := byID[ref.CardID]
+		if !ok {
+			continue
+		}
+		ref.Intro = ref.New && !c.Exposed
+		if len(c.Skills) == 0 {
+			ref.Activity, ref.AskSkill = activity.Flashcard, c.Skill
+			continue
+		}
+		avoid := used[c.LexemeID]
+		choice := activity.Choose(c.Skills, gate, c.Facts, avoid, visits, c.Skill)
+		ref.Activity, ref.AskSkill = choice.Kind, choice.Skill
+		if choice.Kind == activity.Flashcard {
+			continue
+		}
+		if used[c.LexemeID] == nil {
+			used[c.LexemeID] = map[string]bool{}
+		}
+		used[c.LexemeID][choice.Skill] = true
+		visits[choice.Skill]++
+	}
+	return queue
+}
+
+func mixCards(cands []Candidate, accuracy float64, now time.Time, seed int64) []CardRef {
 	study, letters, patterns := splitKinds(cands)
 	ordered := append([]Candidate(nil), study...)
 	sortCandidates(seed, ordered)
@@ -323,7 +390,9 @@ func splitPools(cands []Candidate, now time.Time) (dueS, dueK, laterK, fresh []C
 }
 
 func classify(c Candidate, now time.Time) kind {
-	if c.Skill != fsrs.SkillRead && c.Skill != fsrs.SkillRecall {
+	switch c.Skill {
+	case fsrs.SkillRead, fsrs.SkillRecall, fsrs.SkillListen, fsrs.SkillSpell:
+	default:
 		return kindSkip
 	}
 	// A card with no review is new once it is due. It is not struggling
@@ -343,8 +412,8 @@ func classify(c Candidate, now time.Time) kind {
 	if !strong || c.RecentLapse || c.Confused {
 		return kindSkip
 	}
-	// read known cards are the KnownLexemeIDs set. recall is known from
-	// its own latest Good or Easy rating.
+	// read known cards are the KnownLexemeIDs set. recall, listen and spell
+	// are known from their own latest Good or Easy rating.
 	if c.Skill == fsrs.SkillRead && !c.KnownLexeme {
 		return kindSkip
 	}
