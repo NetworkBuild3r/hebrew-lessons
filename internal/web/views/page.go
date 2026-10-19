@@ -16,11 +16,12 @@ const AppName = "דֶּרֶךְ עִבְרִית"
 //
 // SignInGoogleHE is Google's Hebrew button label, unpointed, with the
 // word Google rendered separately in Latin. SignInWord is the pointed
-// teaser on the night slate.
+// teaser on the night slate. SignInLedeHE points עִבְרִית with sheva
+// (U+05B0) under the bet.
 const (
 	SignInTitleHE     = "כְּנִיסָה"
 	SignInTitleEN     = "Sign in"
-	SignInLedeHE      = "עִבִרִית, כְּמוֹ שֶׁהַמֶּחְקָר אוֹמֵר"
+	SignInLedeHE      = "עִבְרִית, כְּמוֹ שֶׁהַמֶּחְקָר אוֹמֵר"
 	SignInLedeEN      = "Hebrew, the way research says works"
 	SignInGoogleHE    = "כניסה באמצעות"
 	SignInGoogleEN    = "Sign in with Google"
