@@ -26,6 +26,8 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcpstore"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web"
 )
 
@@ -41,7 +43,9 @@ const (
 	defaultGoogleJWKSURL     = "https://www.googleapis.com/oauth2/v3/certs"
 	defaultGoogleIssuer      = "https://accounts.google.com"
 
-	openTimeout   = 15 * time.Second
+	// Race-instrumented sqlite on a busy CI runner can spend most of a
+	// shorter window on the first schema statement.
+	openTimeout   = 60 * time.Second
 	healthTimeout = 2 * time.Second
 )
 
@@ -160,6 +164,7 @@ type App struct {
 	store     *db.Store
 	authSvc   *auth.Service
 	review    *fsrs.Review
+	placement *placement.Service
 	audioDir  string
 	tts       audio.TTS
 	web       http.Handler
@@ -237,17 +242,19 @@ func NewApp(cfg Config) (*App, error) {
 		tts = audio.NewElevenLabs(cfg.ElevenLabsAPIKey)
 	}
 
+	review := fsrs.New(store, cfg.Clock)
 	a := &App{
-		cfg:      cfg,
-		store:    store,
-		authSvc:  svc,
-		review:   fsrs.New(store, cfg.Clock),
-		audioDir: audioDir,
-		tts:      tts,
+		cfg:       cfg,
+		store:     store,
+		authSvc:   svc,
+		review:    review,
+		placement: placement.New(store, review, cfg.Clock),
+		audioDir:  audioDir,
+		tts:       tts,
 	}
 	health := a.healthHandler()
 	a.web = web.New(health, svc)
-	a.mcp = newMCP(cfg, health, svc)
+	a.mcp = newMCP(cfg, health, svc, store)
 	return a, nil
 }
 
@@ -271,6 +278,10 @@ func (a *App) TTS() audio.TTS { return a.tts }
 // Review is the spaced-repetition service.
 // It uses the clock from Config, the same clock the store was opened with.
 func (a *App) Review() *fsrs.Review { return a.review }
+
+// Placement is the vocabulary placement deck.
+// It uses the clock from Config, the same clock the store and the review service use.
+func (a *App) Placement() *placement.Service { return a.placement }
 
 // Close releases the database. /healthz answers 503 after Close returns.
 func (a *App) Close() error {
@@ -345,40 +356,50 @@ func (a *App) healthHandler() http.Handler {
 	})
 }
 
-func newMCP(cfg Config, health http.Handler, sessions *auth.Service) http.Handler {
-	// Course, lexicon, and unit stores stay unset until *db.Store
-	// grows UnitsInScope, LatestPlacement, PlacementKnownLexemes,
-	// PlacementLearningLexemes, StruggleStats, CompletedSharedUnits,
-	// SearchLexemes, PutUnit, and units.Lookup. LearnerKnownLexemes
-	// is still a proposal. There is no learner_lexemes table.
-	// Tools answer with isError until those methods exist. The
-	// adapter belongs here, next to this call, so db does not import mcp.
+func newMCP(cfg Config, health http.Handler, sessions *auth.Service, store *db.Store) http.Handler {
+	// The adapter is the *db.Store behind the authoring tools.
+	// It lives in internal/mcpstore so internal/db does not import internal/mcp.
 	//
 	// AuthToken is Config.MCPAuthToken. cmd/hebrew trimmed MCP_AUTH_TOKEN
-	// into that field. An empty value disables the static bearer.
-	// This function does not read the environment. sessionUsers calls
-	// auth.Service.Lookup and copies users.role. Its SessionFromToken
-	// maps an OAuth access token onto that same Lookup path. It does
-	// not read the web session cookie. Admin is users.role from
-	// ADMIN_EMAILS. There is no MCP_ADMIN_EMAILS list.
-	if cfg.MCPAuthToken == "" {
-		slog.Warn("mcp static token is disabled", "reason", "MCP_AUTH_TOKEN is empty")
-	}
+	// into that field and logs once when it is empty. An empty value
+	// disables the static bearer. This function does not read the
+	// environment and does not log that warning again. sessionUsers calls
+	// auth.Service.Lookup and copies users.role. SessionFromToken maps an
+	// OAuth access token onto that same Lookup path. It does not read the
+	// web session cookie. Admin is users.role from ADMIN_EMAILS.
+	//
+	// OAuth discovery, registration, authorize, and token are mounted on
+	// this mux, outside the authoring handler. The authoring handler's
+	// bearer middleware and CrossOriginProtection therefore do not see
+	// them. The issuer is the trusted proxy's public host, or
+	// MCP_PUBLIC_URL when the request does not carry one. It is never
+	// the pod address.
+	adapter := mcpstore.New(store)
+	users := sessionUsers{auth: sessions}
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
-	public := strings.TrimRight(strings.TrimSpace(cfg.MCPPublicURL), "/")
-	mounted := sessions != nil && sessions.RegisterOAuth(mux, cfg.MCPPublicURL)
-	meta := ""
-	if mounted {
-		meta = public + "/.well-known/oauth-protected-resource"
+	if sessions != nil {
+		sessions.RegisterOAuth(mux, cfg.MCPPublicURL)
 	}
-	users := sessionUsers{auth: sessions}
 	authoring := mcp.Handler(mcp.Options{
-		AuthToken:           cfg.MCPAuthToken,
-		AllowedOrigins:      cfg.MCPAllowedOrigins,
-		Sessions:            users,
-		SessionFromToken:    users.SessionFromToken,
-		ResourceMetadataURL: meta,
+		AuthToken:        cfg.MCPAuthToken,
+		AllowedOrigins:   cfg.MCPAllowedOrigins,
+		Sessions:         users,
+		SessionFromToken: users.SessionFromToken,
+		MetadataURL: func(r *http.Request) string {
+			if sessions == nil {
+				return ""
+			}
+			base, _, ok := sessions.PublicBase(r, cfg.MCPPublicURL)
+			if !ok {
+				return ""
+			}
+			return base + "/.well-known/oauth-protected-resource"
+		},
+		Course:  adapter,
+		Lexicon: adapter,
+		Lookup:  adapter,
+		Units:   adapter,
 	})
 	mux.Handle("/", authoring)
 	return mux

@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -60,25 +61,22 @@ var (
 // oauthHandler is the MCP OAuth 2.1 authorization server.
 // Sign-in is Google only. The password form is not served.
 type oauthHandler struct {
-	svc    *Service
-	base   string
-	origin string
+	svc  *Service
+	base string
 }
 
 // RegisterOAuth mounts the authorization server on mux.
-// publicURL is the MCP origin clients use (MCP_PUBLIC_URL), with no
-// trailing slash required. An empty or unparsable URL mounts nothing.
-// Paths match the Node server: discovery, RFC 7591 registration,
-// /authorize, /token, and /oauth/google/callback.
+// publicURL is the configured MCP origin (MCP_PUBLIC_URL). It may be
+// empty: discovery still mounts, and the issuer is taken from the
+// trusted proxy's public host. Paths match the Node server: discovery,
+// RFC 7591 registration, /authorize, /token, and /oauth/google/callback.
+// These routes are not behind the MCP bearer middleware.
 func (s *Service) RegisterOAuth(mux *http.ServeMux, publicURL string) bool {
 	if s == nil || mux == nil {
 		return false
 	}
-	base, origin, ok := oauthBase(publicURL)
-	if !ok {
-		return false
-	}
-	h := &oauthHandler{svc: s, base: base, origin: origin}
+	base, _, _ := oauthBase(publicURL)
+	h := &oauthHandler{svc: s, base: base}
 	mux.HandleFunc("/.well-known/oauth-authorization-server", h.metadata)
 	mux.HandleFunc("/.well-known/openid-configuration", h.metadata)
 	mux.HandleFunc("/.well-known/oauth-protected-resource", h.protectedResource)
@@ -144,6 +142,151 @@ func (s *Service) bindTokenSession(ctx context.Context, userID int64, rawToken s
 	return s.store.InsertSession(ctx, hash, userID, csrf, exp)
 }
 
+// PublicBase is the origin clients use for this request.
+// A trusted proxy's X-Forwarded-Host and X-Forwarded-Proto win when
+// that host is a public DNS name. configured (MCP_PUBLIC_URL) is the
+// fallback. A non-loopback IP and a cluster-internal name are refused,
+// so the pod address is never advertised.
+func (s *Service) PublicBase(r *http.Request, configured string) (base, origin string, ok bool) {
+	if s != nil && r != nil {
+		if proxiesFrom(r.Context()) == nil {
+			r = r.WithContext(context.WithValue(r.Context(), proxyKey{}, s.proxies))
+		}
+		if host, scheme, good := forwardedPublicHost(r); good {
+			return joinOrigin(scheme, host)
+		}
+	}
+	base, origin, ok = oauthBase(configured)
+	if !ok || podHost(hostOf(base)) {
+		return "", "", false
+	}
+	return base, origin, true
+}
+
+func (h *oauthHandler) requestBase(r *http.Request) (base, origin string, ok bool) {
+	if h == nil || h.svc == nil {
+		return "", "", false
+	}
+	return h.svc.PublicBase(r, h.base)
+}
+
+func (h *oauthHandler) noPublicHost(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusServiceUnavailable)
+	_, _ = io.WriteString(w, "public host is not configured")
+}
+
+// forwardedPublicHost reads the public host from a trusted proxy.
+// X-Forwarded-Host wins. The Host header is used when the proxy rewrote
+// it to a DNS name. An IP is not a public host.
+func forwardedPublicHost(r *http.Request) (host, scheme string, ok bool) {
+	if r == nil {
+		return "", "", false
+	}
+	peer := peerIP(r)
+	if peer == nil || !ipTrusted(proxiesFrom(r.Context()), peer) {
+		return "", "", false
+	}
+	scheme = ForwardedProto(r)
+	if name := rightmostForwardedHost(r.Header.Values("X-Forwarded-Host")); dnsPublicHost(name) {
+		return trimDefaultPort(scheme, name), scheme, true
+	}
+	if dnsPublicHost(r.Host) {
+		return trimDefaultPort(scheme, r.Host), scheme, true
+	}
+	return "", "", false
+}
+
+func rightmostForwardedHost(values []string) string {
+	var last string
+	for _, v := range values {
+		for _, part := range strings.Split(v, ",") {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				last = part
+			}
+		}
+	}
+	return last
+}
+
+func dnsPublicHost(hostport string) bool {
+	host := hostOf(hostport)
+	if host == "" || strings.ContainsAny(host, " /\\@") {
+		return false
+	}
+	if net.ParseIP(host) != nil {
+		return false
+	}
+	if podHost(host) {
+		return false
+	}
+	return host == "localhost" || strings.Contains(host, ".")
+}
+
+func podHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return false
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return !ip.IsLoopback()
+	}
+	return strings.HasSuffix(host, ".cluster.local") || strings.HasSuffix(host, ".svc")
+}
+
+func hostOf(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if strings.Contains(raw, "://") {
+		u, err := url.Parse(raw)
+		if err != nil {
+			return ""
+		}
+		return strings.ToLower(u.Hostname())
+	}
+	host := raw
+	if h, _, err := net.SplitHostPort(raw); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	return strings.ToLower(host)
+}
+
+func trimDefaultPort(scheme, hostport string) string {
+	host, port, err := net.SplitHostPort(hostport)
+	if err != nil {
+		return hostport
+	}
+	if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
+		return host
+	}
+	return hostport
+}
+
+func joinOrigin(scheme, hostport string) (base, origin string, ok bool) {
+	scheme = strings.ToLower(strings.TrimSpace(scheme))
+	if scheme != "http" && scheme != "https" {
+		return "", "", false
+	}
+	hostport = strings.TrimSpace(hostport)
+	if hostport == "" || strings.Contains(hostport, "/") {
+		return "", "", false
+	}
+	u, err := url.Parse(scheme + "://" + hostport)
+	if err != nil || u.Host == "" || u.User != nil || u.Hostname() == "" {
+		return "", "", false
+	}
+	if podHost(u.Hostname()) {
+		return "", "", false
+	}
+	base = scheme + "://" + strings.ToLower(u.Host)
+	return base, base, true
+}
+
 func oauthBase(raw string) (base, origin string, ok bool) {
 	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
 	u, err := url.Parse(raw)
@@ -170,11 +313,16 @@ func (h *oauthHandler) metadata(w http.ResponseWriter, r *http.Request) {
 		h.notFound(w)
 		return
 	}
+	base, _, ok := h.requestBase(r)
+	if !ok {
+		h.noPublicHost(w)
+		return
+	}
 	h.writeJSON(w, http.StatusOK, asMetadata{
-		Issuer:                            h.base,
-		AuthorizationEndpoint:             h.base + "/authorize",
-		TokenEndpoint:                     h.base + "/token",
-		RegistrationEndpoint:              h.base + "/register",
+		Issuer:                            base,
+		AuthorizationEndpoint:             base + "/authorize",
+		TokenEndpoint:                     base + "/token",
+		RegistrationEndpoint:              base + "/register",
 		ResponseTypesSupported:            []string{"code"},
 		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
 		CodeChallengeMethodsSupported:     []string{"S256"},
@@ -192,9 +340,14 @@ func (h *oauthHandler) protectedResource(w http.ResponseWriter, r *http.Request)
 		h.notFound(w)
 		return
 	}
+	base, _, ok := h.requestBase(r)
+	if !ok {
+		h.noPublicHost(w)
+		return
+	}
 	h.writeJSON(w, http.StatusOK, protectedMetadata{
-		Resource:               h.base + "/mcp",
-		AuthorizationServers:   []string{h.base},
+		Resource:               base + "/mcp",
+		AuthorizationServers:   []string{base},
 		ScopesSupported:        []string{oauthScope},
 		BearerMethodsSupported: []string{"header"},
 	})
@@ -361,7 +514,8 @@ func (h *oauthHandler) authorizeGet(w http.ResponseWriter, r *http.Request) {
 		"client_ip", ClientIP(r),
 		"scheme", ForwardedProto(r),
 	)
-	client, fatal, errCode, desc := h.resolveAuthorize(r.Context(), q)
+	base, _, _ := h.requestBase(r)
+	client, fatal, errCode, desc := h.resolveAuthorize(r.Context(), q, base)
 	if fatal != "" {
 		slog.Info("mcp oauth authorize fatal", "reason", fatal)
 		h.page(w, http.StatusBadRequest, "Cannot sign in", "<h1>Cannot sign in</h1><p class=\"err\">"+esc(fatal)+"</p>")
@@ -435,7 +589,8 @@ func (h *oauthHandler) authorizePost(w http.ResponseWriter, r *http.Request) {
 		"response_type":         {"code"},
 		"resource":              {pending.Resource},
 	}
-	if _, fatal, errCode, _ := h.resolveAuthorize(r.Context(), q); fatal != "" || errCode != "" {
+	base, _, _ := h.requestBase(r)
+	if _, fatal, errCode, _ := h.resolveAuthorize(r.Context(), q, base); fatal != "" || errCode != "" {
 		h.page(w, http.StatusBadRequest, "Cannot sign in", "<h1>Cannot sign in</h1><p class=\"err\">Invalid request.</p>")
 		return
 	}
@@ -499,8 +654,13 @@ func (h *oauthHandler) startGoogle(w http.ResponseWriter, r *http.Request, reqID
 		h.fail(w, err)
 		return
 	}
+	base, _, ok := h.requestBase(r)
+	if !ok {
+		h.noPublicHost(w)
+		return
+	}
 	h.svc.setCookie(w, h.googleCookieName(), sealed, h.svc.now().Add(oidcStateTTL), int(oidcStateTTL/time.Second))
-	loc, err := h.svc.mcpGoogleURL(h.base+"/oauth/google/callback", reqID, nonce, challenge)
+	loc, err := h.svc.mcpGoogleURL(base+"/oauth/google/callback", reqID, nonce, challenge)
 	if err != nil {
 		h.page(w, http.StatusInternalServerError, "Sign-in is not configured",
 			"<h1>Sign-in is not configured</h1><p class=\"err\">The Google sign-in address is invalid.</p>")
@@ -553,7 +713,8 @@ func (h *oauthHandler) googleCallback(w http.ResponseWriter, r *http.Request) {
 		"response_type":         {"code"},
 		"resource":              {pending.Resource},
 	}
-	client, fatal, errCode, _ := h.resolveAuthorize(r.Context(), aq)
+	base, _, baseOK := h.requestBase(r)
+	client, fatal, errCode, _ := h.resolveAuthorize(r.Context(), aq, base)
 	if fatal != "" || errCode != "" {
 		slog.Info("mcp google callback", "result", "invalid")
 		_, _ = h.svc.store.ConsumeOAuthRequest(r.Context(), pending.ID, h.svc.now())
@@ -574,7 +735,11 @@ func (h *oauthHandler) googleCallback(w http.ResponseWriter, r *http.Request) {
 		h.page(w, http.StatusBadRequest, "Cannot sign in", "<h1>Cannot sign in</h1><p class=\"err\">Google did not return a code.</p>")
 		return
 	}
-	rawToken, err := h.svc.exchangeAt(r.Context(), q.Get("code"), st.Verifier, h.base+"/oauth/google/callback")
+	if !baseOK {
+		h.noPublicHost(w)
+		return
+	}
+	rawToken, err := h.svc.exchangeAt(r.Context(), q.Get("code"), st.Verifier, base+"/oauth/google/callback")
 	if err != nil {
 		slog.Info("mcp google callback", "result", "identity_failed")
 		h.page(w, http.StatusBadGateway, "Google sign-in failed", "<h1>Google sign-in failed</h1><p class=\"err\">Try again from the app.</p>")
@@ -881,7 +1046,7 @@ func (h *oauthHandler) writeTokens(w http.ResponseWriter, pair issuedPair) {
 	})
 }
 
-func (h *oauthHandler) resolveAuthorize(ctx context.Context, q url.Values) (client db.OAuthClient, fatal, errCode, desc string) {
+func (h *oauthHandler) resolveAuthorize(ctx context.Context, q url.Values, base string) (client db.OAuthClient, fatal, errCode, desc string) {
 	loaded, err := h.svc.store.OAuthClient(ctx, q.Get("client_id"))
 	if errors.Is(err, db.ErrNotFound) || q.Get("client_id") == "" {
 		return db.OAuthClient{}, "Unknown or expired client. Register again.", "", ""
@@ -899,7 +1064,7 @@ func (h *oauthHandler) resolveAuthorize(ctx context.Context, q url.Values) (clie
 	if q.Get("code_challenge_method") != "S256" || !pkceChallenge.MatchString(q.Get("code_challenge")) {
 		return loaded, "", "invalid_request", "PKCE with S256 is required."
 	}
-	if resource := q.Get("resource"); resource != "" && !resourceMatches(h.base, resource) {
+	if resource := q.Get("resource"); resource != "" && (base == "" || !resourceMatches(base, resource)) {
 		return loaded, "", "invalid_target", ""
 	}
 	return loaded, "", "", ""
@@ -1097,7 +1262,8 @@ func (h *oauthHandler) readConsent(r *http.Request) (int, User, url.Values, erro
 
 func (h *oauthHandler) originOK(r *http.Request) bool {
 	got, ok := requestOrigin(r)
-	return ok && got == h.origin
+	_, origin, baseOK := h.requestBase(r)
+	return ok && baseOK && got == origin
 }
 
 func consentCSRFValue(r *http.Request, vals url.Values) string {

@@ -30,6 +30,8 @@ const (
 	oauthAdminEmail   = "admin@example.com"
 	oauthHello        = "שָׁלוֹם"
 	oauthStaticToken  = "static-secret"
+	oauthPublicHost   = "hebrew-mcp.ibhacked.us"
+	oauthPublicOrigin = "https://hebrew-mcp.ibhacked.us"
 )
 
 // oauthRoleEnv signs two allowlisted accounts in through the real OAuth
@@ -98,14 +100,13 @@ func startOAuthRoles(t *testing.T) oauthRoleEnv {
 		t.Fatal("oauth did not mount")
 	}
 	mux.Handle("/", mcp.Handler(mcp.Options{
-		AuthToken:           oauthStaticToken,
-		Sessions:            users,
-		SessionFromToken:    users.SessionFromToken,
-		ResourceMetadataURL: base + "/.well-known/oauth-protected-resource",
-		Course:              mem,
-		Lexicon:             mem,
-		Lookup:              mem,
-		Units:               mem,
+		AuthToken:        oauthStaticToken,
+		Sessions:         users,
+		SessionFromToken: users.SessionFromToken,
+		Course:           mem,
+		Lexicon:          mem,
+		Lookup:           mem,
+		Units:            mem,
 	}))
 	srv.Start()
 	t.Cleanup(srv.Close)
@@ -117,13 +118,13 @@ func startOAuthRoles(t *testing.T) oauthRoleEnv {
 	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}}
-	learner := signInMCP(t, client, fake, base, oauthLearnerEmail, "learner-sub")
+	learner := signInMCP(t, client, fake, base, "", oauthLearnerEmail, "learner-sub")
 	user, err := store.UserByEmail(context.Background(), oauthLearnerEmail)
 	if err != nil {
 		t.Fatal(err)
 	}
 	mem.SetPlacement(user.ID, mcp.Placement{Finished: true, Sittings: 1, StopReason: "exhausted"}, []string{oauthHello}, nil)
-	admin := signInMCP(t, client, fake, base, oauthAdminEmail, "admin-sub")
+	admin := signInMCP(t, client, fake, base, "", oauthAdminEmail, "admin-sub")
 	return oauthRoleEnv{
 		base: base, learner: learner, admin: admin,
 		learnerID: user.ID, mem: mem, access: access,
@@ -160,7 +161,7 @@ func TestOAuthLearnerPutUnitForbidden(t *testing.T) {
 		put := postTool(t, env.base, env.learner, "put_unit", map[string]any{
 			"scope": scope, "position": 0, "doc": map[string]any{"title": "Hello"},
 		})
-		if put.StatusCode != http.StatusForbidden || !strings.Contains(put.Body, "forbidden: admin only") {
+		if put.StatusCode != http.StatusOK || !strings.Contains(put.Body, `"isError":true`) || !strings.Contains(put.Body, "forbidden: admin only") {
 			t.Fatalf("learner put %s %d %s", scope, put.StatusCode, put.Body)
 		}
 	}
@@ -174,7 +175,7 @@ func TestOAuthLearnerGetContextIsSelf(t *testing.T) {
 	env := startOAuthRoles(t)
 	other := env.learnerID + 1
 	cross := postTool(t, env.base, env.learner, "get_context", map[string]any{"position": 0, "learnerId": other})
-	if cross.StatusCode != http.StatusForbidden || !strings.Contains(cross.Body, "learnerId must be your own id.") {
+	if cross.StatusCode != http.StatusOK || !strings.Contains(cross.Body, `"isError":true`) || !strings.Contains(cross.Body, "learnerId must be your own id.") {
 		t.Fatalf("other %d %s", cross.StatusCode, cross.Body)
 	}
 	self := postTool(t, env.base, env.learner, "get_context", map[string]any{"position": 0, "learnerId": env.learnerID})
@@ -204,8 +205,11 @@ func TestOAuthRemovedAllowlistEmailUnauthorized(t *testing.T) {
 	}
 }
 
-func signInMCP(t *testing.T, client *http.Client, fake *googleFake, base, email, sub string) string {
+func signInMCP(t *testing.T, client *http.Client, fake *googleFake, base, publicOrigin, email, sub string) string {
 	t.Helper()
+	if publicOrigin == "" {
+		publicOrigin = base
+	}
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -257,7 +261,7 @@ func signInMCP(t *testing.T, client *http.Client, fake *googleFake, base, email,
 	reqID := hidden(t, cb.Body, "req")
 	csrf := hidden(t, cb.Body, "_csrf")
 	form := url.Values{"req": {reqID}, "_csrf": {csrf}, "action": {"approve"}}.Encode()
-	approved := doOAuth(t, client, http.MethodPost, base+"/authorize", form, "application/x-www-form-urlencoded", base)
+	approved := doOAuth(t, client, http.MethodPost, base+"/authorize", form, "application/x-www-form-urlencoded", publicOrigin)
 	if approved.StatusCode != http.StatusSeeOther {
 		t.Fatalf("approve %d %s", approved.StatusCode, approved.Body)
 	}
@@ -303,6 +307,8 @@ func doOAuth(t *testing.T, client *http.Client, method, rawURL, body, contentTyp
 	if origin != "" {
 		req.Header.Set("Origin", origin)
 	}
+	req.Header.Set("X-Forwarded-Host", oauthPublicHost)
+	req.Header.Set("X-Forwarded-Proto", "https")
 	res, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -361,6 +367,8 @@ func postMCPBody(t *testing.T, base, token string, body []byte) oauthResult {
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
+	req.Header.Set("X-Forwarded-Host", oauthPublicHost)
+	req.Header.Set("X-Forwarded-Proto", "https")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)

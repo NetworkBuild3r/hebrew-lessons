@@ -9,7 +9,8 @@
 // An OAuth access token is accepted when SessionFromToken is set. That
 // function maps the bearer to a session id. Sessions then calls
 // auth.Service.Lookup, which re-checks the live allowlist and copies
-// users.role. The static MCP_AUTH_TOKEN stays RoleAdmin.
+// users.role. The static MCP_AUTH_TOKEN stays RoleAdmin. Discovery and
+// registration are not this handler: the app mounts them outside it.
 //
 // Owned by MCP Builder. The package does not read the environment and
 // does not import the database.

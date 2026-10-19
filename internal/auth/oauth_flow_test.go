@@ -83,6 +83,38 @@ func TestOAuthDiscoveryDocuments(t *testing.T) {
 	}
 }
 
+func TestOAuthIssuerUsesTrustedPublicHost(t *testing.T) {
+	env := newOAuthEnvProxied(t)
+	req := env.do(http.MethodGet, "/.well-known/oauth-authorization-server", nil, "")
+	req.Header.Set("X-Forwarded-Host", "hebrew-mcp.ibhacked.us")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	got := env.roundTrip(req)
+	if got.StatusCode != http.StatusOK || !strings.Contains(got.Body, `"issuer":"https://hebrew-mcp.ibhacked.us"`) || strings.Contains(got.Body, env.base) {
+		t.Fatalf("public host %d %s", got.StatusCode, got.Body)
+	}
+	ported := env.do(http.MethodGet, "/.well-known/oauth-protected-resource", nil, "")
+	ported.Header.Set("X-Forwarded-Host", "hebrew-mcp.ibhacked.us:443")
+	ported.Header.Set("X-Forwarded-Proto", "https")
+	got = env.roundTrip(ported)
+	if got.StatusCode != http.StatusOK || !strings.Contains(got.Body, `"resource":"https://hebrew-mcp.ibhacked.us/mcp"`) || strings.Contains(got.Body, ":443") {
+		t.Fatalf("default port %d %s", got.StatusCode, got.Body)
+	}
+	pod := env.do(http.MethodGet, "/.well-known/oauth-authorization-server", nil, "")
+	pod.Header.Set("X-Forwarded-Host", "10.8.8.8")
+	pod.Header.Set("X-Forwarded-Proto", "https")
+	got = env.roundTrip(pod)
+	if got.StatusCode != http.StatusOK || strings.Contains(got.Body, "10.8.8.8") || !strings.Contains(got.Body, env.base) {
+		t.Fatalf("pod address %d %s", got.StatusCode, got.Body)
+	}
+	cluster := env.do(http.MethodGet, "/.well-known/oauth-authorization-server", nil, "")
+	cluster.Header.Set("X-Forwarded-Host", "hebrew.default.svc.cluster.local")
+	cluster.Header.Set("X-Forwarded-Proto", "https")
+	got = env.roundTrip(cluster)
+	if strings.Contains(got.Body, "cluster.local") || !strings.Contains(got.Body, env.base) {
+		t.Fatalf("cluster host %d %s", got.StatusCode, got.Body)
+	}
+}
+
 func TestOAuthDynamicRegistration(t *testing.T) {
 	env := newOAuthEnv(t, false)
 	accepted := []string{

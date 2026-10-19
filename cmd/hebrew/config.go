@@ -120,7 +120,7 @@ func warnOptionalConfig(cfg app.Config) {
 		slog.Warn("mcp static token is disabled", "reason", "MCP_AUTH_TOKEN is empty")
 	}
 	if cfg.MCPPublicURL == "" {
-		slog.Warn("mcp oauth is off", "reason", "MCP_PUBLIC_URL is unset")
+		slog.Warn("mcp oauth issuer uses the forwarded host", "reason", "MCP_PUBLIC_URL is unset")
 	}
 }
 

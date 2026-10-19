@@ -36,9 +36,10 @@ const (
 // package does not read the environment. An empty token disables the
 // static check. A matching token is RoleAdmin and has full access.
 // Validator, when set, replaces the default chain. The default chain is
-// OAuthSessions and then StaticToken. SessionFromToken maps an OAuth
-// access token to a session id and must not read the web session cookie.
-// Sessions resolves the id through auth.Service.Lookup.
+// OAuthSessions and then StaticToken. OAuth fills in SessionFromToken
+// only. That function maps the bearer to a session id and must not read
+// the web session cookie. Sessions resolves the id through
+// auth.Service.Lookup.
 //
 // AllowedOrigins are browser Origins that may call this handler. A
 // request with no Origin and no Sec-Fetch-Site header is allowed. Any
@@ -56,17 +57,20 @@ type Options struct {
 	// Sessions resolves that raw session id to a caller. Nil rejects
 	// every OAuth bearer and leaves the static token check in place.
 	Sessions SessionUserResolver
-	// ResourceMetadataURL is the RFC 9728 protected-resource metadata
-	// URL. When it is set, a 401 challenge is
+	// MetadataURL is the RFC 9728 protected-resource metadata URL for
+	// this request. A 401 uses
 	// Bearer realm="hebrew-lessons", resource_metadata="<url>".
-	// Empty keeps the bare Bearer challenge.
-	ResourceMetadataURL string
-	AllowedOrigins      []string
-	Validator           Validator
-	Course              CourseReader
-	Lexicon             LexiconReader
-	Lookup              units.Lookup
-	Units               UnitWriter
+	// A nil func or an empty result keeps the bare Bearer challenge.
+	MetadataURL    func(*http.Request) string
+	AllowedOrigins []string
+	Validator      Validator
+	// extraTools registers tools after the authoring tools. Tests use it
+	// for a tool that has no per-tool role check. Production leaves it nil.
+	extraTools func(*mcp.Server)
+	Course     CourseReader
+	Lexicon    LexiconReader
+	Lookup     units.Lookup
+	Units      UnitWriter
 }
 
 // Handler returns the streamable HTTP handler for the authoring server.
@@ -86,7 +90,7 @@ func Handler(opts Options) http.Handler {
 		// server-initiated requests, and KeepAlive is a ping request.
 		// A rejected ping closes the temporary session.
 	})
-	return protectOrigin(opts.AllowedOrigins, requireBearer(opts.validator(), opts.ResourceMetadataURL, authorizeTools(stream)))
+	return protectOrigin(opts.AllowedOrigins, requireBearer(opts.validator(), opts.MetadataURL, stream))
 }
 
 // protectOrigin rejects cross-origin browser requests. A POST with no
@@ -129,6 +133,9 @@ func newMCPServer(opts Options) *mcp.Server {
 		// historical default that advertised logging.
 		Capabilities: &mcp.ServerCapabilities{},
 	})
+	// Role checks use the parsed tool call. This wraps every tool,
+	// including a test tool that does not check the role itself.
+	server.AddReceivingMiddleware(enforceRole)
 	svc := &service{
 		course:    opts.Course,
 		lexicon:   opts.Lexicon,
@@ -136,6 +143,9 @@ func newMCPServer(opts Options) *mcp.Server {
 		units:     opts.Units,
 	}
 	registerTools(server, svc)
+	if opts.extraTools != nil {
+		opts.extraTools(server)
+	}
 	if err := registerResources(server); err != nil {
 		// The schemas are derived from units.Unit. A failure here is a
 		// programming error, not a request failure.

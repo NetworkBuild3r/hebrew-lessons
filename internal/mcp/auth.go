@@ -123,11 +123,11 @@ func constantEqual(got, want string) bool {
 }
 
 // requireBearer wraps next with the SDK bearer middleware.
-// metadataURL is the protected-resource metadata document. When it is
-// set, a 401 uses the Node challenge, including realm and
-// resource_metadata. When it is empty, a bare Bearer challenge is added
-// if the handler did not set WWW-Authenticate.
-func requireBearer(v Validator, metadataURL string, next http.Handler) http.Handler {
+// metadata, when it returns a URL, sets the Node challenge
+// Bearer realm="hebrew-lessons", resource_metadata="<url>".
+// An empty URL keeps a bare Bearer challenge when the handler did not
+// set WWW-Authenticate.
+func requireBearer(v Validator, metadata func(*http.Request) string, next http.Handler) http.Handler {
 	verifier := func(ctx context.Context, token string, r *http.Request) (*sdauth.TokenInfo, error) {
 		p, err := v.Validate(ctx, token, r)
 		if err != nil {
@@ -154,7 +154,11 @@ func requireBearer(v Validator, metadataURL string, next http.Handler) http.Hand
 		AllowMissingExpiration: true,
 	})(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		protected.ServeHTTP(&challengeWriter{ResponseWriter: w, metadataURL: metadataURL}, r)
+		url := ""
+		if metadata != nil {
+			url = metadata(r)
+		}
+		protected.ServeHTTP(&challengeWriter{ResponseWriter: w, metadataURL: url}, r)
 	})
 }
 

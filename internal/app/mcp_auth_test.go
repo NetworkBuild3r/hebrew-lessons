@@ -6,9 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
 func TestMCPRejectsRemovedAllowlistEmail(t *testing.T) {
@@ -129,6 +132,64 @@ func TestMCPLookupErrorIsGeneric(t *testing.T) {
 	}
 }
 
+func TestMCPAdminSessionPutUnit(t *testing.T) {
+	clk := fixedClock{t: time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)}
+	store := openAuthStore(t, clk)
+	user, err := store.CreateUser(context.Background(), "admin@example.com", "sub-admin", auth.RoleAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	access := auth.NewAccess(nil, []string{"admin@example.com"})
+	svc, err := auth.New(auth.Config{
+		PublicOrigin: "https://hebrew.example",
+		Clock:        clk,
+		Store:        store,
+		Access:       access,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := insertSession(t, store, user.ID, clk.Now().Add(time.Hour))
+	mem := mcp.NewMemory()
+	const oauthToken = "admin-session"
+	h := mcp.Handler(mcp.Options{
+		AuthToken: "static-secret-not-used",
+		Sessions:  sessionUsers{auth: svc},
+		SessionFromToken: func(_ context.Context, token string, _ *http.Request) (string, error) {
+			if token != oauthToken {
+				return "", mcp.ErrUnauthorized
+			}
+			return raw, nil
+		},
+		Course:  mem,
+		Lexicon: mem,
+		Lookup:  mem,
+		Units:   mem,
+	})
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+
+	res := postMCPTool(t, srv.URL, oauthToken, "put_unit", map[string]any{
+		"scope":    mcp.ScopeShared,
+		"position": 0,
+		"doc":      units.Unit{Title: "Admin draft", Situation: "Class", Concept: "Greeting"},
+	})
+	body := readAll(t, res)
+	if res.StatusCode != http.StatusOK || strings.Contains(body, `"isError":true`) {
+		t.Fatalf("status %d body %s", res.StatusCode, body)
+	}
+	unitsOut, err := mem.ListUnits(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unitsOut) != 1 || unitsOut[0].Scope != mcp.ScopeShared || unitsOut[0].Status != "draft" {
+		t.Fatalf("units %+v", unitsOut)
+	}
+	if got := mem.Actor(unitsOut[0].ID); got != strconv.FormatInt(user.ID, 10) {
+		t.Fatalf("actor %q, user %d", got, user.ID)
+	}
+}
+
 func openAuthStore(t *testing.T, clk fixedClock) *db.Store {
 	t.Helper()
 	store, err := db.Open(context.Background(), t.TempDir()+"/hebrew.sqlite", clk)
@@ -153,6 +214,35 @@ func insertSession(t *testing.T, store *db.Store, userID int64, exp time.Time) s
 }
 
 const mcpInitializeBody = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}`
+
+func postMCPTool(t *testing.T, url, token, name string, args any) *http.Response {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      name,
+			"arguments": args,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(string(raw)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("MCP-Protocol-Version", "2025-11-25")
+	req.Header.Set("Authorization", "Bearer "+token)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
+}
 
 func postMCP(t *testing.T, url, token string) *http.Response {
 	t.Helper()

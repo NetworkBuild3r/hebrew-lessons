@@ -3,6 +3,7 @@ module github.com/NetworkBuild3r/hebrew-lessons
 go 1.26.0
 
 require (
+	github.com/a-h/templ v0.3.960
 	github.com/google/jsonschema-go v0.4.3
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/open-spaced-repetition/go-fsrs/v3 v3.3.1
