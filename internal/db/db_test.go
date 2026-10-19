@@ -76,8 +76,9 @@ func TestMigrateEmptyAndIdempotent(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if len(versions) != 4 || versions[0] != 1 || versions[1] != 2 || versions[2] != 3 || versions[3] != 4 {
-		t.Fatalf("versions = %v, want [1 2 3 4]", versions)
+	// 004_tanakh.sql is reserved. This branch's client marker is version 5.
+	if len(versions) != 4 || versions[0] != 1 || versions[1] != 2 || versions[2] != 3 || versions[3] != 5 {
+		t.Fatalf("versions = %v, want [1 2 3 5]", versions)
 	}
 	if got := count(t, s, `SELECT COUNT(*) FROM users`); got != 1 {
 		t.Fatalf("users = %d, want 1 after a second open", got)
