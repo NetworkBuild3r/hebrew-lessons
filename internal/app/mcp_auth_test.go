@@ -81,6 +81,54 @@ func TestMCPRejectsRemovedAllowlistEmail(t *testing.T) {
 	}
 }
 
+func TestMCPLookupErrorIsGeneric(t *testing.T) {
+	clk := fixedClock{t: time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)}
+	store := openAuthStore(t, clk)
+	user, err := store.CreateUser(context.Background(), "learner@example.com", "sub-1", auth.RoleLearner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := auth.New(auth.Config{
+		PublicOrigin: "https://hebrew.example",
+		Clock:        clk,
+		Store:        store,
+		Access:       auth.NewAccess([]string{"learner@example.com"}, nil),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := insertSession(t, store, user.ID, clk.Now().Add(time.Hour))
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	const oauthToken = "oauth-access"
+	h := mcp.Handler(mcp.Options{
+		AuthToken: "static-secret",
+		Sessions:  sessionUsers{auth: svc},
+		SessionFromToken: func(_ context.Context, token string, _ *http.Request) (string, error) {
+			if token != oauthToken {
+				return "", mcp.ErrUnauthorized
+			}
+			return raw, nil
+		},
+	})
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+
+	res := postMCP(t, srv.URL, oauthToken)
+	body := readAll(t, res)
+	if res.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status %d body %s", res.StatusCode, body)
+	}
+	if strings.Contains(body, "store is closed") || strings.Contains(body, "db:") {
+		t.Fatalf("leaked body %s", body)
+	}
+	if !strings.Contains(body, "authorization is unavailable") {
+		t.Fatalf("body %s", body)
+	}
+}
+
 func openAuthStore(t *testing.T, clk fixedClock) *db.Store {
 	t.Helper()
 	store, err := db.Open(context.Background(), t.TempDir()+"/hebrew.sqlite", clk)

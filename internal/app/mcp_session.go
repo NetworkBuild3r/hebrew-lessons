@@ -28,6 +28,9 @@ func (s sessionUsers) ResolveSession(ctx context.Context, rawSessionID string) (
 		if errors.Is(err, auth.ErrNoSession) {
 			return mcp.Principal{}, mcp.ErrUnauthorized
 		}
+		// The raw error stays intact so the bearer middleware can log it.
+		// That middleware replaces it with a fixed sentence before the
+		// SDK writes the response. Do not put err.Error() in the result.
 		return mcp.Principal{}, err
 	}
 	role := mcp.RoleLearner

@@ -53,7 +53,7 @@ func TestLearnerPutUnitForbidden(t *testing.T) {
 		if res.StatusCode != http.StatusForbidden {
 			t.Fatalf("scope %s status %d body %s", scope, res.StatusCode, body)
 		}
-		if !strings.Contains(body, msgPutDenied) {
+		if !strings.Contains(body, msgAdminOnly) {
 			t.Fatalf("body %s", body)
 		}
 	}
@@ -109,6 +109,59 @@ func TestAdminGetContextOtherLearner(t *testing.T) {
 	res := postTool(t, srv.URL, "admin", "get_context", getContextInput{Position: 0, LearnerID: &other}, nil)
 	body := readBody(t, res)
 	if res.StatusCode != http.StatusOK || strings.Contains(body, `"isError":true`) || !strings.Contains(body, coffee) {
+		t.Fatalf("status %d body %s", res.StatusCode, body)
+	}
+}
+
+func TestStaticTokenIsAdmin(t *testing.T) {
+	mem := NewMemory()
+	mem.AddLexeme(helloLexeme())
+	mem.AddLexeme(Lexeme{TextNFC: coffee, Bare: "קפה", Gloss: "coffee", POS: "noun"})
+	mem.SetPlacement(9, Placement{Finished: true, Sittings: 1, StopReason: "exhausted"}, []string{coffee}, nil)
+	h := Handler(Options{
+		AuthToken: testToken,
+		Course:    mem,
+		Lexicon:   mem,
+		Lookup:    mem,
+		Units:     mem,
+	})
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+
+	put := postTool(t, srv.URL, testToken, "put_unit", map[string]any{
+		"scope": ScopeShared, "position": 0, "doc": helloDoc(),
+	}, nil)
+	putBody := readBody(t, put)
+	if put.StatusCode != http.StatusOK || strings.Contains(putBody, `"isError":true`) {
+		t.Fatalf("put status %d body %s", put.StatusCode, putBody)
+	}
+	units, err := mem.ListUnits(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(units) != 1 || units[0].Scope != ScopeShared {
+		t.Fatalf("units %+v", units)
+	}
+
+	other := int64(9)
+	got := postTool(t, srv.URL, testToken, "get_context", getContextInput{Position: 0, LearnerID: &other}, nil)
+	gotBody := readBody(t, got)
+	if got.StatusCode != http.StatusOK || strings.Contains(gotBody, `"isError":true`) || !strings.Contains(gotBody, coffee) {
+		t.Fatalf("get_context status %d body %s", got.StatusCode, gotBody)
+	}
+
+	later := postTool(t, srv.URL, testToken, "publish_unit", map[string]any{}, nil)
+	laterBody := readBody(t, later)
+	if later.StatusCode == http.StatusForbidden || strings.Contains(laterBody, msgAdminOnly) {
+		t.Fatalf("static token treated as non-admin: %d %s", later.StatusCode, laterBody)
+	}
+}
+
+func TestUnlistedWriteToolIsAdminOnly(t *testing.T) {
+	_, srv := roleServer(t)
+	res := postTool(t, srv.URL, "learner", "publish_unit", map[string]any{}, nil)
+	body := readBody(t, res)
+	if res.StatusCode != http.StatusForbidden || !strings.Contains(body, msgAdminOnly) {
 		t.Fatalf("status %d body %s", res.StatusCode, body)
 	}
 }
