@@ -61,26 +61,20 @@ func TestTodayLayout(t *testing.T) {
 	if strings.Contains(body, "good morning") || strings.Contains(body, "שָׁלוֹם") || strings.Contains(body, "he-proof") {
 		t.Fatal("sample paragraph or gloss is still on Today")
 	}
-	if !strings.Contains(body, views.UnitTitle) || !strings.Contains(body, `class="unit-title"`) {
-		t.Fatal("unit title missing")
+	if strings.Contains(body, views.UnitTitle) || strings.Contains(body, `class="unit-title"`) {
+		t.Fatal("unpublished sample lesson is still on Today")
 	}
-	if !strings.Contains(body, `<p class="situation" lang="en" dir="ltr">`) || !strings.Contains(body, `<bdi lang="en" dir="ltr">Getting ready in the morning.</bdi>`) {
-		t.Fatal("English situation is not an ltr block")
+	if strings.Contains(body, "Getting ready in the morning.") {
+		t.Fatal("sample situation is still on Today")
 	}
 	if strings.Count(body, "btn-primary") != 1 || !strings.Contains(body, `class="btn btn-primary"`) {
 		t.Fatal("due Today should have one filled primary")
 	}
-	if !strings.Contains(body, `class="btn btn-tonal"`) {
-		t.Fatal("lesson CTA should be tonal while reviews are due")
+	if strings.Contains(body, "btn-tonal") {
+		t.Fatal("empty lesson card should not show a lesson button")
 	}
-	for _, word := range views.SampleWords() {
-		if !strings.Contains(body, `<bdi lang="he" dir="rtl">`+word.Text+`</bdi>`) {
-			t.Fatalf("pointed chip %s missing", word.Text)
-		}
-		mark := views.GenderLabel(word.Gender)
-		if word.Gender != "" && !regexp.MustCompile(`class="gchip">\s*<bdi lang="he" dir="rtl">`+regexp.QuoteMeta(mark)+`</bdi>`).MatchString(body) {
-			t.Fatalf("gender chip for %s missing", word.Text)
-		}
+	if !strings.Contains(body, "quiet-card--next") || !strings.Contains(body, "No lesson published yet") {
+		t.Fatal("empty Today should say no lesson is published")
 	}
 	if !strings.Contains(body, `aria-pressed="false"`) || strings.Contains(body, `id="theme-toggle"`) {
 		t.Fatal("theme toggle should use aria-pressed and no id")
@@ -114,21 +108,13 @@ func TestTodayLayout(t *testing.T) {
 	if !strings.Contains(body, ">Start<") || strings.Contains(body, "הַתְחֵל") {
 		t.Fatal("default Today should use the English start label")
 	}
-	for _, word := range views.SampleWords() {
-		if !strings.Contains(body, `<bdi lang="en" dir="ltr">`+word.Gloss+`</bdi>`) {
-			t.Fatalf("chip gloss %s missing", word.Gloss)
-		}
-	}
-	if !strings.Contains(body, `<bdi lang="en" dir="ltr">`+views.UnitGloss+`</bdi>`) {
-		t.Fatal("unit title gloss missing")
-	}
 	scriptAt := strings.Index(body, "localStorage")
 	cssAt := strings.Index(body, "/static/css/tokens.css")
 	if scriptAt < 0 || cssAt < 0 || scriptAt > cssAt {
 		t.Fatal("theme script must run before the stylesheet")
 	}
-	if !strings.Contains(body, `href="/lesson"`) {
-		t.Fatal("Today does not link to the lesson player")
+	if strings.Contains(body, `href="/lesson"`) {
+		t.Fatal("empty Today should not link to a lesson")
 	}
 }
 
@@ -214,8 +200,8 @@ func TestZeroDueAndNoLesson(t *testing.T) {
 	if strings.Contains(zero, "ink-card") || strings.Contains(zero, "הַתְחֵל") {
 		t.Fatal("zero due still shows the review hero")
 	}
-	if strings.Count(zero, "btn-primary") != 1 || !strings.Contains(zero, `class="btn btn-primary"`) {
-		t.Fatal("the lesson CTA should be the only primary when nothing is due")
+	if strings.Count(zero, "btn-primary") != 0 {
+		t.Fatal("nothing due and no published lesson should have no primary button")
 	}
 	if strings.Contains(zero, "btn-tonal") {
 		t.Fatal("tonal CTA remains when nothing is due")
@@ -224,7 +210,7 @@ func TestZeroDueAndNoLesson(t *testing.T) {
 	if strings.Contains(none, `href="/lesson"`) || strings.Contains(none, views.UnitTitle) {
 		t.Fatal("missing lesson still renders the lesson card")
 	}
-	assertPair(t, none, "אֵין שִׁעוּר בַּתּוֹר", "No lesson queued", "en")
+	assertPair(t, none, "אֵין שִׁעוּר בַּתּוֹר", "No lesson published yet", "en")
 	if !strings.Contains(none, "quiet-card--next") || !strings.Contains(none, "icon-lessons") {
 		t.Fatal("missing lesson should be a placeholder card")
 	}
@@ -267,8 +253,8 @@ func TestEnglishShell(t *testing.T) {
 	if !strings.Contains(body, `<bdi lang="he" dir="rtl">`+views.AppName+`</bdi>`) {
 		t.Fatal("hebrew wordmark is not isolated in the english shell")
 	}
-	if !strings.Contains(body, views.UnitTitle) {
-		t.Fatal("unit title left the english shell")
+	if !strings.Contains(body, "No lesson published yet") {
+		t.Fatal("empty lesson state left the english shell")
 	}
 }
 

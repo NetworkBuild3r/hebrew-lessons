@@ -121,7 +121,7 @@ func hebrewUI(addressGender string) UI {
 		Situation:  "Getting ready in the morning.",
 		Open:       "לַשִּׁעוּר",
 		ZeroHE:     "אֵין חֲזָרוֹת עַכְשָׁיו", ZeroEN: "Nothing due",
-		NoneHE: "אֵין שִׁעוּר בַּתּוֹר", NoneEN: "No lesson queued",
+		NoneHE: "אֵין שִׁעוּר בַּתּוֹר", NoneEN: "No lesson published yet",
 		NoneMoreHE: "הַשִּׁעוּר הַבָּא יוֹפִיעַ כָּאן", NoneMoreEN: "Your next lesson will appear here",
 		ReviewHeading: "חֲזָרָה", ReviewLede: "הַתּוֹר עוֹד רֵיק.",
 		ProgressHeading: "הִתְקַדְּמוּת", ProgressLede: "מִלִּים שֶׁאֶפְשָׁר לִזְכֹּר, וִיחִידוֹת שֶׁהֻשְׁלְמוּ.",
@@ -143,7 +143,7 @@ func englishUI() UI {
 		Situation:  "Getting ready in the morning.",
 		Open:       "Open lesson",
 		ZeroHE:     "אֵין חֲזָרוֹת עַכְשָׁיו", ZeroEN: "Nothing due",
-		NoneHE: "אֵין שִׁעוּר בַּתּוֹר", NoneEN: "No lesson queued",
+		NoneHE: "אֵין שִׁעוּר בַּתּוֹר", NoneEN: "No lesson published yet",
 		NoneMoreHE: "הַשִּׁעוּר הַבָּא יוֹפִיעַ כָּאן", NoneMoreEN: "Your next lesson will appear here",
 		ReviewHeading: "Review", ReviewLede: "The queue is still empty.",
 		ProgressHeading: "Progress", ProgressLede: "Words you can remember, and units you have finished.",
@@ -197,15 +197,20 @@ func NewPage(lang, csrf, current string) Page {
 	return Page{UI: ui, Title: ui.DocTitle(current), CSRF: csrf, Current: current}
 }
 
-// Home is the Today placeholder. Due is the review count. Lesson is false
-// when nothing is queued. Words are the new-word chips.
+// Home is Today. Due is the review count. Lesson is false when no published
+// lesson is waiting. LessonTitle is the unit title. LessonGloss is the
+// transliteration and English meaning, including the parentheses. LessonHref
+// is the path of that lesson, without a language query. Words are its new-word chips.
 type Home struct {
 	UI
-	CSRF    string
-	Due     int
-	DueText string
-	Lesson  bool
-	Words   []Chip
+	CSRF        string
+	Due         int
+	DueText     string
+	Lesson      bool
+	LessonTitle string
+	LessonGloss string
+	LessonHref  string
+	Words       []Chip
 }
 
 // Page is the shell around Today.

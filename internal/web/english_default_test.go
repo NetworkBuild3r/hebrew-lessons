@@ -248,10 +248,8 @@ func TestTodayAndNavAreEnglish(t *testing.T) {
 		allowed := []string{views.AppName, "ע"}
 		if path == "/" {
 			assertEnglishToday(t, body)
-			allowed = append(allowed, views.UnitTitle)
-			for _, word := range views.SampleWords() {
-				allowed = append(allowed, word.Text, views.GenderLabel(word.Gender))
-			}
+			ui := views.UIFor("en", "m")
+			allowed = append([]string{ui.NoneHE, ui.NoneMoreHE}, allowed...)
 		}
 		if left := hebrewExcept(body, allowed); left != "" {
 			t.Fatalf("signed-in %s has Hebrew UI %q", path, left)
@@ -289,40 +287,21 @@ func assertEnglishToday(t *testing.T, body string) {
 	}
 	for _, label := range []string{
 		"Skip to content", "Today", "Review", "Progress", "Words ready",
-		"Up to twenty a day", "Start", "Next lesson", "Open lesson",
+		"Up to twenty a day", "Start", "Next lesson", "No lesson published yet",
 	} {
 		if !strings.Contains(body, label) {
 			t.Fatalf("english label %q missing", label)
 		}
 	}
 	he := views.UIFor("he", "m")
+	chromeBody := regexp.MustCompile(`(?s)<section class="quiet-card quiet-card--next">.*?</section>`).ReplaceAllString(body, "")
 	for _, chrome := range []string{
 		he.Skip, he.Today, he.Review, he.Progress, he.Dark, he.Light, he.Logout,
 		he.DueKicker, he.DueLabel, he.DueHint, he.Start, he.NextKicker, he.Open,
 		he.ReviewLede, he.ProgressLede, he.LessonHeading,
 	} {
-		if strings.Contains(body, chrome) {
+		if strings.Contains(chromeBody, chrome) {
 			t.Fatalf("hebrew chrome %q on Today", chrome)
-		}
-	}
-	title := regexp.MustCompile(`(?s)<h2 id="next-title" class="unit-title">.*?</h2>`).FindString(body)
-	if title == "" || strings.Index(title, views.UnitTitle) > strings.Index(title, views.UnitGloss) || !strings.Contains(title, views.UnitGloss) {
-		t.Fatalf("unit gloss is not beside the title: %s", title)
-	}
-	found := map[string]bool{}
-	for _, part := range strings.Split(body, `<li class="chip">`)[1:] {
-		chunk, _, _ := strings.Cut(part, "</li>")
-		for _, word := range views.SampleWords() {
-			heAt := strings.Index(chunk, word.Text)
-			glossAt := strings.Index(chunk, word.Gloss)
-			if heAt >= 0 && glossAt > heAt {
-				found[word.Text] = true
-			}
-		}
-	}
-	for _, word := range views.SampleWords() {
-		if !found[word.Text] {
-			t.Fatalf("chip %s is missing its gloss beside it", word.Text)
 		}
 	}
 	if left := hebrewExcept(body, todayHebrewContent()); left != "" {
@@ -351,11 +330,9 @@ func assertEnglishNav(t *testing.T, body string) {
 }
 
 func todayHebrewContent() []string {
-	allowed := []string{views.AppName, "ע", views.UnitTitle}
-	for _, word := range views.SampleWords() {
-		allowed = append(allowed, word.Text, views.GenderLabel(word.Gender))
-	}
-	return allowed
+	ui := views.UIFor("en", "m")
+	// The empty-state lines contain ע, so they have to be removed before the brand letter.
+	return []string{ui.NoneHE, ui.NoneMoreHE, views.AppName, "ע"}
 }
 
 func hebrewExcept(body string, allowed []string) string {

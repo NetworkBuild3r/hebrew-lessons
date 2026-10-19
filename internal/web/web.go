@@ -13,6 +13,7 @@ import (
 	"strconv"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 	"github.com/a-h/templ"
 )
@@ -32,9 +33,20 @@ var Assets embed.FS
 // htmx writes, and this router does not register read routes there.
 // Tests pass a fake to newMux; production does not. The ungated router
 // still serves those pages.
-// Audio bytes are served at /audio/<sha256>.mp3; this router does not
-// register that path.
+// Audio bytes are served at /audio/<sha256>.mp3 from Options.AudioDir.
 func New(health http.Handler, sessions *auth.Service) http.Handler {
+	return NewOptions(health, sessions, Options{})
+}
+
+// Options is the data the learner pages read. A nil Store leaves Today
+// and /lesson on the empty published-lesson state.
+type Options struct {
+	Store    *db.Store
+	AudioDir string
+}
+
+// NewOptions is New with the lesson store and the audio directory.
+func NewOptions(health http.Handler, sessions *auth.Service, opts Options) http.Handler {
 	var tokens CSRFToken
 	secure := false
 	if sessions != nil {
@@ -42,13 +54,13 @@ func New(health http.Handler, sessions *auth.Service) http.Handler {
 		// hebrew_lang uses the same COOKIE_SECURE flag as the session cookie.
 		secure = sessions.CookieSecure()
 	}
-	mux := routes(health, tokens, sessions != nil, secure)
+	mux := routes(health, tokens, sessions != nil, secure, opts)
 	if sessions != nil {
 		sessions.Register(mux)
 		// auth.Middleware loads the session and checks CSRF, including
-		// POST /auth/logout. The local csrf middleware is not stacked on
-		// top: it compares Origin to r.Host and would reject a same-origin
-		// post behind a host-rewriting proxy.
+		// POST /auth/logout and POST /lesson. The local csrf middleware is
+		// not stacked on top: it compares Origin to r.Host and would reject
+		// a same-origin post behind a host-rewriting proxy.
 		return securityHeaders(sessions.Middleware(mux))
 	}
 	return securityHeaders(csrfMiddleware(nil, mux))
@@ -56,10 +68,10 @@ func New(health http.Handler, sessions *auth.Service) http.Handler {
 
 // newMux is the test router. tokens is a fake; production New does not use it.
 func newMux(health http.Handler, tokens CSRFToken) http.Handler {
-	return securityHeaders(csrfMiddleware(tokens, routes(health, tokens, false, false)))
+	return securityHeaders(csrfMiddleware(tokens, routes(health, tokens, false, false, Options{})))
 }
 
-func routes(health http.Handler, tokens CSRFToken, gate, secure bool) *http.ServeMux {
+func routes(health http.Handler, tokens CSRFToken, gate, secure bool, opts Options) *http.ServeMux {
 	mux := http.NewServeMux()
 	if health != nil {
 		mux.Handle("GET /healthz", health)
@@ -69,8 +81,14 @@ func routes(health http.Handler, tokens CSRFToken, gate, secure bool) *http.Serv
 		panic(err)
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
+	play := player{store: opts.Store, audioDir: opts.AudioDir}
 	mux.HandleFunc("GET /{$}", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
-		render(w, r, views.Today(homeFrom(r, chooseLang(w, r, secure), csrfValue(tokens, r))))
+		home, err := homeFrom(r, chooseLang(w, r, secure), csrfValue(tokens, r), opts.Store)
+		if err != nil {
+			serverError(w)
+			return
+		}
+		render(w, r, views.Today(home))
 	}))
 	review := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
 		render(w, r, views.Review(views.NewPage(chooseLang(w, r, secure), csrfValue(tokens, r), "review")))
@@ -79,11 +97,22 @@ func routes(health http.Handler, tokens CSRFToken, gate, secure bool) *http.Serv
 		render(w, r, views.Progress(views.NewPage(chooseLang(w, r, secure), csrfValue(tokens, r), "progress")))
 	})
 	lesson := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
-		render(w, r, views.Lesson(views.NewPage(chooseLang(w, r, secure), csrfValue(tokens, r), "lesson")))
+		play.lessonIndex(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
+	})
+	lessonAt := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+		play.lessonAt(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
+	})
+	lessonPost := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+		play.lessonSubmit(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
 	})
 	mux.HandleFunc("GET /review", review)
 	mux.HandleFunc("GET /progress", progress)
 	mux.HandleFunc("GET /lesson", lesson)
+	mux.HandleFunc("GET /lesson/{unitID}/{lessonIx}", lessonAt)
+	mux.HandleFunc("POST /lesson/{unitID}/{lessonIx}", lessonPost)
+	mux.HandleFunc("GET /audio/{name}", func(w http.ResponseWriter, r *http.Request) {
+		serveAudio(opts.AudioDir, w, r)
+	})
 	mux.HandleFunc("GET /signin", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := auth.CurrentUser(r.Context()); ok {
 			w.Header().Set("Cache-Control", "no-store")
@@ -129,23 +158,45 @@ func (n noDirFS) Open(name string) (fs.File, error) {
 	return f, nil
 }
 
-// homeFrom is placeholder Today data until the review queue is wired.
-// lang comes from chooseLang. ?due=0 clears the queue. ?next=0 hides the lesson.
-func homeFrom(r *http.Request, lang, csrf string) views.Home {
+// homeFrom builds Today. The due count is still the placeholder: ?due=0
+// clears it. ?next=0 hides the lesson card. Otherwise the card is the
+// next published lesson in this learner's scope, or the empty state when
+// nothing is waiting. A missing store or a signed-out request is empty.
+func homeFrom(r *http.Request, lang, csrf string, store *db.Store) (views.Home, error) {
 	q := r.URL.Query()
 	ui := views.UIFor(lang, views.FakeLearner().AddressGender)
 	due := 12
 	if q.Get("due") == "0" {
 		due = 0
 	}
-	return views.Home{
+	home := views.Home{
 		UI:      ui,
 		CSRF:    csrf,
 		Due:     due,
 		DueText: strconv.Itoa(due),
-		Lesson:  q.Get("next") != "0",
-		Words:   views.SampleWords(),
 	}
+	if q.Get("next") == "0" || store == nil {
+		return home, nil
+	}
+	user, ok := auth.CurrentUser(r.Context())
+	if !ok || user == nil {
+		return home, nil
+	}
+	lesson, ok, err := store.NextCourseLesson(r.Context(), user.ID)
+	if err != nil || !ok {
+		return home, err
+	}
+	gloss, err := titleGloss(r.Context(), store, lesson.Title)
+	if err != nil {
+		return views.Home{}, err
+	}
+	home.Lesson = true
+	home.LessonTitle = lesson.Title
+	home.LessonGloss = gloss
+	home.LessonHref = lessonPath(lesson.UnitID, lesson.LessonIx)
+	home.UI.Situation = lesson.Situation
+	home.Words = chipsFor(lesson.NewWords)
+	return home, nil
 }
 
 // Static returns the embedded static files.
