@@ -52,8 +52,8 @@ func TestMigrateEmptyAndIdempotent(t *testing.T) {
 	}
 
 	s = openAt(t, dir, fixedClock{when})
-	if got := count(t, s, `SELECT COUNT(*) FROM schema_migrations`); got != 8 {
-		t.Fatalf("schema_migrations rows = %d, want 8", got)
+	if got := count(t, s, `SELECT COUNT(*) FROM schema_migrations`); got != 9 {
+		t.Fatalf("schema_migrations rows = %d, want 9", got)
 	}
 	wantApplied := FormatTime(when)
 	rows, err := s.conn.QueryContext(ctx, `SELECT version, applied_at FROM schema_migrations ORDER BY version`)
@@ -76,8 +76,8 @@ func TestMigrateEmptyAndIdempotent(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if len(versions) != 8 || versions[0] != 1 || versions[1] != 2 || versions[2] != 3 || versions[3] != 4 || versions[4] != 5 || versions[5] != 6 || versions[6] != 7 || versions[7] != 8 {
-		t.Fatalf("versions = %v, want [1 2 3 4 5 6 7 8]", versions)
+	if len(versions) != 9 || versions[0] != 1 || versions[1] != 2 || versions[2] != 3 || versions[3] != 4 || versions[4] != 5 || versions[5] != 6 || versions[6] != 7 || versions[7] != 8 || versions[8] != 9 {
+		t.Fatalf("versions = %v, want [1 2 3 4 5 6 7 8 9]", versions)
 	}
 	if got := count(t, s, `SELECT COUNT(*) FROM users`); got != 1 {
 		t.Fatalf("users = %d, want 1 after a second open", got)
@@ -111,6 +111,7 @@ func TestTables(t *testing.T) {
 		"confusion_misses",
 		"daily_snapshots",
 		"exposures",
+		"job_state",
 		"lesson_briefs",
 		"lesson_items",
 		"lesson_runs",
