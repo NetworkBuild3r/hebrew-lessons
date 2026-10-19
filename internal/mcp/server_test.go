@@ -55,7 +55,7 @@ func TestAuthRejectAndAccept(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 7 {
+	if len(tools.Tools) != 8 {
 		t.Fatalf("tools = %d", len(tools.Tools))
 	}
 }
@@ -153,10 +153,25 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 			t.Fatalf("%s annotations %#v", tool.Name, tool.Annotations)
 		}
 	}
-	for _, name := range []string{"get_context", "lookup", "validate_unit", "put_unit", "upsert_lexemes", "generate_audio", "publish_unit"} {
+	for _, name := range []string{"get_context", "lookup", "validate_unit", "put_unit", "upsert_lexemes", "generate_audio", "publish_unit", "get_learner_words"} {
 		if !gotNames[name] {
 			t.Fatalf("missing %s in %#v", name, gotNames)
 		}
+	}
+	contextTool := tools.Tools[indexOf(tools, "get_context")]
+	if !strings.Contains(contextTool.Description, "cardsTruncated") || !strings.Contains(contextTool.Description, "get_learner_words") || !strings.Contains(contextTool.Description, "mixTarget") || !strings.Contains(contextTool.Description, "lapses") || !strings.Contains(contextTool.Description, "lesson player") || !strings.Contains(contextTool.Description, "review half") {
+		t.Fatalf("get_context description %s", contextTool.Description)
+	}
+	outSchema, err := json.Marshal(contextTool.OutputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(outSchema), "recentAccuracy") || !strings.Contains(string(outSchema), "lesson player") || !strings.Contains(string(outSchema), "review half") {
+		t.Fatalf("recentAccuracy description %s", outSchema)
+	}
+	wordsTool := tools.Tools[indexOf(tools, "get_learner_words")]
+	if !strings.Contains(wordsTool.Description, "nextCursor") || !strings.Contains(wordsTool.Description, "due") || !strings.Contains(wordsTool.Description, "lapses") {
+		t.Fatalf("get_learner_words description %s", wordsTool.Description)
 	}
 	if tools.Tools[indexOf(tools, "put_unit")].Annotations.ReadOnlyHint {
 		t.Fatal("put_unit is marked read-only")

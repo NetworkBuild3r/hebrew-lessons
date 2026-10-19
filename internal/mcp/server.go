@@ -22,6 +22,7 @@ const (
 	instructions = "You are writing Hebrew course units. " +
 		"Read hebrew://schema/unit, hebrew://catalog/activities, and hebrew://rules before you draft. " +
 		"Call get_context for the outline, the words already taught before a position, the budgets, and, when you pass learnerId, that learner's placement and struggles. " +
+		"When learnerId is set, get_context also returns that learner's cards, recentAccuracy, and mixTarget. Recycle due cards and reinforce words with high lapses. If cardsTruncated is true, call get_learner_words to page the rest. " +
 		"Omit learnerId for a shared unit. Shared units assume no learner data. " +
 		"Call lookup before you invent a spelling or a gloss. " +
 		"Call upsert_lexemes to add or correct a lexicon entry. It is admin only. " +
