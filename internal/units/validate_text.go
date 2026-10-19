@@ -85,6 +85,12 @@ func Normalize(s string) string {
 
 func normalize(s string) string { return Normalize(s) }
 
+// StripNiqqud is the unpointed spelling stored in lexemes.bare.
+// It drops niqqud, meteg, rafe, cantillation, and the upper dots, and it
+// keeps shin and sin dots because those change the letter. text_nfc itself
+// is Normalize, which is the string the audio importer stores.
+func StripNiqqud(s string) string { return stripNiqqud(s) }
+
 func stripNiqqud(s string) string {
 	return strings.Map(func(r rune) rune {
 		if isStrippedMark(r) {

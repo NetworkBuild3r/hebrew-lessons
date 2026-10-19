@@ -448,6 +448,7 @@ func newMCP(cfg Config, health http.Handler, sessions *auth.Service, store *db.S
 		},
 		Course:  adapter,
 		Lexicon: adapter,
+		Lexemes: adapter,
 		Lookup:  adapter,
 		Units:   adapter,
 	})

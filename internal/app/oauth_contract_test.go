@@ -73,7 +73,7 @@ func TestOAuthContract(t *testing.T) {
 
 	learner := signInMCP(t, env.client, env.fake, env.base, oauthPublicOrigin, oauthLearnerEmail, "learner-sub")
 	listed := postMCPPath(t, env.base, "/mcp", learner, []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
-	if listed.StatusCode != http.StatusOK || strings.Contains(listed.Body, `"isError":true`) || !strings.Contains(listed.Body, "get_context") {
+	if listed.StatusCode != http.StatusOK || strings.Contains(listed.Body, `"isError":true`) || !strings.Contains(listed.Body, "get_context") || !strings.Contains(listed.Body, "upsert_lexemes") {
 		t.Fatalf("tools/list %d %s", listed.StatusCode, listed.Body)
 	}
 

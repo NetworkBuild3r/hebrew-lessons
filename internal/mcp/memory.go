@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/lexicon"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"golang.org/x/text/unicode/norm"
 )
@@ -456,6 +457,58 @@ func (m *Memory) byID(id int64) *memUnit {
 		}
 	}
 	return nil
+}
+
+// UpsertLexemes implements LexiconWriter. It does not rebuild lesson_items.
+// The database writer does. An invalid batch returns *lexicon.Invalid and
+// leaves the stored rows as they were.
+func (m *Memory) UpsertLexemes(ctx context.Context, entries []lexicon.Input) ([]LexemeResult, []int64, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	rows, bad := lexicon.Prepare(entries)
+	if bad != nil {
+		return nil, nil, bad
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]LexemeResult, 0, len(rows))
+	for _, row := range rows {
+		lx := Lexeme{
+			TextNFC:  row.TextNFC,
+			Bare:     row.Bare,
+			Gloss:    row.Gloss,
+			POS:      row.POS,
+			Gender:   row.Gender,
+			Plural:   row.Plural,
+			Translit: row.Translit,
+		}
+		found := -1
+		for i, stored := range m.lexemes {
+			if units.Normalize(stored.lx.TextNFC) == row.TextNFC {
+				found = i
+				break
+			}
+		}
+		if found < 0 {
+			m.nextLex++
+			m.lexemes = append(m.lexemes, storedLexeme{id: m.nextLex, lx: lx})
+			out = append(out, LexemeResult{TextNFC: row.TextNFC, ID: m.nextLex, Status: lexicon.StatusCreated})
+			continue
+		}
+		cur := m.lexemes[found]
+		if memoryUnchanged(cur.lx, row) {
+			out = append(out, LexemeResult{TextNFC: row.TextNFC, ID: cur.id, Status: lexicon.StatusUnchanged})
+			continue
+		}
+		m.lexemes[found].lx = lx
+		out = append(out, LexemeResult{TextNFC: row.TextNFC, ID: cur.id, Status: lexicon.StatusUpdated})
+	}
+	return out, []int64{}, nil
+}
+
+func memoryUnchanged(cur Lexeme, row lexicon.Row) bool {
+	return cur.TextNFC == row.TextNFC && cur.Bare == row.Bare && cur.Gloss == row.Gloss && cur.POS == row.POS && cur.Gender == row.Gender && cur.Plural == row.Plural && cur.Translit == row.Translit
 }
 
 // KnownLexemes implements units.Lookup. Words introduced by a saved shared

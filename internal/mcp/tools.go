@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/lexicon"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -27,6 +28,7 @@ var (
 type service struct {
 	course    CourseReader
 	lexicon   LexiconReader
+	lexemes   LexiconWriter
 	lexLookup units.Lookup
 	units     UnitWriter
 }
@@ -150,6 +152,26 @@ type putOutput struct {
 	Revision  int           `json:"revision"`
 	Unchanged bool          `json:"unchanged"`
 	Issues    []units.Issue `json:"issues"`
+}
+
+type lexemeInput struct {
+	TextNFC  string  `json:"text_nfc" jsonschema:"Pointed Hebrew. Stored with the audio importer's normalization: format characters removed, Unicode NFC, trimmed, and spaces collapsed."`
+	Bare     *string `json:"bare,omitempty" jsonschema:"Unpointed spelling. Omit it and the consonant skeleton of text_nfc is stored. Shin and sin dots stay."`
+	GlossEN  string  `json:"gloss_en" jsonschema:"Short English gloss."`
+	Translit *string `json:"translit,omitempty" jsonschema:"Latin transliteration. Omit it to leave the field empty."`
+	POS      string  `json:"pos,omitempty" jsonschema:"Part of speech, such as noun, verb, pron, or adv."`
+	Gender   *string `json:"gender,omitempty" jsonschema:"m, f, or both. Omit it when the word has no gender."`
+	Plural   *string `json:"plural,omitempty" jsonschema:"Pointed plural. Omit it, or send null, when the entry has none."`
+	Verified *bool   `json:"verified,omitempty" jsonschema:"True once a person has confirmed the entry. Omit it to leave an existing flag unchanged. A new row is unverified when this is omitted."`
+}
+
+type upsertLexemesInput struct {
+	Entries []lexemeInput `json:"entries" jsonschema:"Rows to insert or update, in one transaction. One invalid row rejects the batch and writes nothing."`
+}
+
+type upsertLexemesOutput struct {
+	Entries      []LexemeResult `json:"entries"`
+	RebuiltUnits []int64        `json:"rebuiltUnits"`
 }
 
 func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in getContextInput) (*mcp.CallToolResult, getContextOutput, error) {
@@ -392,6 +414,50 @@ func (s *service) putUnit(ctx context.Context, _ *mcp.CallToolRequest, in putInp
 	return nil, out, nil
 }
 
+func (s *service) upsertLexemes(ctx context.Context, _ *mcp.CallToolRequest, in upsertLexemesInput) (*mcp.CallToolResult, upsertLexemesOutput, error) {
+	var out upsertLexemesOutput
+	if _, err := s.gate(ctx, "upsert_lexemes"); err != nil {
+		return nil, out, err
+	}
+	if s.lexemes == nil {
+		return nil, out, errors.New("The lexicon is not connected, so nothing was written.")
+	}
+	saved, rebuilt, err := s.lexemes.UpsertLexemes(ctx, lexemeInputs(in.Entries))
+	if err != nil {
+		var bad *lexicon.Invalid
+		if errors.As(err, &bad) {
+			return nil, out, bad
+		}
+		return nil, out, storeErr("The lexicon could not be saved.", err)
+	}
+	if saved == nil {
+		saved = []LexemeResult{}
+	}
+	if rebuilt == nil {
+		rebuilt = []int64{}
+	}
+	out.Entries = saved
+	out.RebuiltUnits = rebuilt
+	return nil, out, nil
+}
+
+func lexemeInputs(in []lexemeInput) []lexicon.Input {
+	out := make([]lexicon.Input, len(in))
+	for i, row := range in {
+		out[i] = lexicon.Input{
+			TextNFC:  row.TextNFC,
+			Bare:     row.Bare,
+			Gloss:    row.GlossEN,
+			Translit: row.Translit,
+			POS:      row.POS,
+			Gender:   row.Gender,
+			Plural:   row.Plural,
+			Verified: row.Verified,
+		}
+	}
+	return out
+}
+
 func summarize(issues []units.Issue) validateOutput {
 	var blocks, warns int
 	for _, issue := range issues {
@@ -448,7 +514,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}, svc.getContext)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "lookup",
-		Description: "Find a lexicon entry by pointed Hebrew, unpointed Hebrew, or an English gloss. Use an entry's text_nfc as the spelling in a unit. A miss returns suggestions and is not an error. Do not invent a lexeme here; upsert_lexemes is a later tool.",
+		Description: "Find a lexicon entry by pointed Hebrew, unpointed Hebrew, or an English gloss. Use an entry's text_nfc as the spelling in a unit. A miss returns suggestions and is not an error. Add a missing entry with upsert_lexemes.",
 		Annotations: readOnly,
 	}, svc.lookup)
 	mcp.AddTool(server, &mcp.Tool{
@@ -458,7 +524,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}, svc.validateUnit)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "put_unit",
-		Description: "Save a draft revision. Admin only, including the static token: a learner call is a tool error, forbidden: admin only, even for scope learner:<their own id>. scope is required: shared, or learner:<id> for one learner. Scope is not inside the unit document. Send unitId to update; omit it to create. The same document, position, and scope do not create another revision. Changing scope does. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. This does not publish.",
+		Description: "Save a draft revision. Admin only, including the static token: a learner call is a tool error, forbidden: admin only, even for scope learner:<their own id>. scope is required: shared, or learner:<id> for one learner. Scope is not inside the unit document. Send unitId to update; omit it to create. The same document, position, and scope do not create another revision. lesson_items are still rebuilt, so a unit saved before its words were in the lexicon gains those rows without a new revision. Changing scope does create a revision. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. This does not publish.",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    false,
 			IdempotentHint:  true,
@@ -466,4 +532,14 @@ func registerTools(server *mcp.Server, svc *service) {
 			OpenWorldHint:   &falseHint,
 		},
 	}, svc.putUnit)
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "upsert_lexemes",
+		Description: "Insert or update lexicon entries. Admin only, including the static token: a learner call is a tool error, forbidden: admin only. entries is one transaction. text_nfc is stored with the audio importer's normalization, and bare is the unpointed form when you omit it. The unique key is text_nfc. Sending the same row again reports unchanged and does not write it. One invalid entry rejects the batch and writes nothing; the error names that entry with a JSON pointer. After a successful batch, lesson_items are rebuilt for every unit whose document references an entry by its pointed text or its bare form. rebuiltUnits lists those unit ids. This does not add a unit revision and does not publish.",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint:    false,
+			IdempotentHint:  true,
+			DestructiveHint: &falseHint,
+			OpenWorldHint:   &falseHint,
+		},
+	}, svc.upsertLexemes)
 }

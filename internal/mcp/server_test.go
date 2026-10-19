@@ -55,7 +55,7 @@ func TestAuthRejectAndAccept(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 4 {
+	if len(tools.Tools) != 5 {
 		t.Fatalf("tools = %d", len(tools.Tools))
 	}
 }
@@ -149,11 +149,11 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 		if !strings.Contains(string(raw), "additionalProperties") {
 			t.Fatalf("%s schema is not closed: %s", tool.Name, raw)
 		}
-		if tool.Annotations == nil || !tool.Annotations.ReadOnlyHint && tool.Name != "put_unit" {
+		if tool.Annotations == nil || (!tool.Annotations.ReadOnlyHint && tool.Name != "put_unit" && tool.Name != "upsert_lexemes") {
 			t.Fatalf("%s annotations %#v", tool.Name, tool.Annotations)
 		}
 	}
-	for _, name := range []string{"get_context", "lookup", "validate_unit", "put_unit"} {
+	for _, name := range []string{"get_context", "lookup", "validate_unit", "put_unit", "upsert_lexemes"} {
 		if !gotNames[name] {
 			t.Fatalf("missing %s in %#v", name, gotNames)
 		}
@@ -163,6 +163,20 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	}
 	if !tools.Tools[indexOf(tools, "put_unit")].Annotations.IdempotentHint {
 		t.Fatal("put_unit is not marked idempotent")
+	}
+	upsert := tools.Tools[indexOf(tools, "upsert_lexemes")]
+	if upsert.Name != "upsert_lexemes" || upsert.Annotations.ReadOnlyHint || !upsert.Annotations.IdempotentHint {
+		t.Fatalf("upsert_lexemes annotations %#v", upsert.Annotations)
+	}
+	raw, err := json.Marshal(upsert.InputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema := string(raw)
+	for _, piece := range []string{"entries", "text_nfc", "gloss_en", "bare", "translit", "gender", "plural", "verified"} {
+		if !strings.Contains(schema, piece) {
+			t.Fatalf("upsert_lexemes schema missing %s: %s", piece, schema)
+		}
 	}
 
 	resources, err := session.ListResources(t.Context(), nil)

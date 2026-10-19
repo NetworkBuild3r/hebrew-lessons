@@ -29,8 +29,10 @@ type PutResult struct {
 // PutUnit creates or updates one unit and its lesson_items in a single transaction.
 // A nil id inserts a draft. A set id updates that unit and no other: a move
 // onto a position another unit already occupies leaves that other unit as it was.
-// An identical canonical document, position, and scope writes nothing and
-// returns Unchanged with the current revision, so a published unit stays published.
+// An identical canonical document, position, and scope writes no revision
+// and returns Unchanged with the current revision, so a published unit stays
+// published. It still replaces lesson_items. A unit saved before its words
+// were in the lexicon gains those rows without a new revision.
 // Any difference, including a scope-only change, appends a revision, sets
 // status back to draft, and replaces that unit's lesson_items from the document.
 // actor is the caller's principal, stored on the new revision.
@@ -106,6 +108,16 @@ func (s *Store) PutUnit(ctx context.Context, id *int64, doc units.Unit, scope, a
 		return PutResult{}, fmt.Errorf("db: put unit: %w", err)
 	}
 	if stored.position == doc.Position && stored.scope == scope && bytes.Equal([]byte(stored.doc), body) {
+		// The document, position, and scope already match, so this is not a
+		// new revision and a published unit stays published. lesson_items are
+		// still rebuilt: the first save may have run before the lexicon had
+		// these words, and a repeated save fills them in.
+		if err := replaceLessonItems(ctx, tx, *id, doc); err != nil {
+			return PutResult{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return PutResult{}, fmt.Errorf("db: commit unit: %w", err)
+		}
 		return PutResult{UnitID: *id, Revision: stored.rev, Unchanged: true}, nil
 	}
 	rev := stored.rev + 1
