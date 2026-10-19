@@ -1,63 +1,72 @@
-// Package placement is a yes/no vocabulary test in the style of Paul Meara.
+// Package placement deals an adaptive vocabulary deck.
 //
-// The learner sees pointed Hebrew words, some of them invented, and says
-// whether they know each one. Review history starts empty. A finished run
-// can record real words the learner already knows, so a later unit does not
-// treat those words as new. Invented words are never written to lexemes,
-// and this package does not create FSRS cards.
+// The learner sees a pointed Hebrew word, recalls it, flips it, and rates
+// Again, Hard, Good, or Easy. Before the flip, every card also offers
+// "I don't know this", including invented words, so a pseudo-word is not
+// given away by the absence of that button. Gloss and audio travel on the
+// card. The client shows them after the flip. AudioURL is /audio/<id>.mp3
+// when a clip exists for the exact pointed text, and empty otherwise.
+// Whether the word was invented is returned only from Rate.
 //
-// Times come from the clock.Clock passed to New.
+// Times come from the clock.Clock passed to New. The same clock drives the
+// FSRS review that a reliable finish writes.
 //
 // Bands 0–4 are real words: 12 from the tutor's lessons (band 0) and 12
 // from each frequency band (bands 1–4). Twenty items are pseudo-words.
-// Start deals all 80 in an order fixed by a seed stored on the run. The
-// Item a caller receives has the id and the pointed text only. Band,
-// pseudo, gloss, and part of speech stay on the server.
+// The deck starts at band 0. Each band deals up to 16 real words and 4
+// pseudo-words, shuffled from the seed stored on the run. After a band's
+// block, a Good-or-better rate under 50% on its real words stops the deck.
+// Exactly 50% continues. The deck also stops at 100 cards, or 5 minutes
+// after started_at. The next card after a cap returns done. An unanswered
+// card already dealt is still returned so it can be rated.
 //
 // Scoring lives in Score(answers, items) Result, so a UI and MCP apply the
-// same rule. For each band, h is the yes-rate on that band's real words, f
-// is the yes-rate on the pseudo-words, and corrected is (h − f) / (1 − f).
-// A band passes when corrected is at least 0.8. When f is 1, no band
-// passes and each corrected score is 0. When f is above 0.25 the run is
-// unreliable and seeds nothing. Level is the highest passed band, or −1
-// when none passed.
+// same rule. A pseudo-word rated Good or Easy is a false alarm. Hard on a
+// pseudo-word is only recorded. f is false alarms divided by pseudo-words
+// shown. Above 0.25 the run is unreliable: it is stored, and it seeds
+// nothing. Level is the highest band whose Good-or-better rate is at least
+// 0.5, or −1.
 //
-// EstimatedKnownWords sums, over bands 1–4, clamp(corrected, 0, 1) times
+// EstimatedKnownWords sums, over bands 1–4, the Good-or-better rate times
 // the band's width in ranks (500, 500, 1000, 2000), then adds the count of
-// band 0 words answered yes. SuggestedStartPosition is filled by Finish and
-// Latest, not by Score: the lowest units.position whose doc newWords are
+// band 0 words rated Good or Easy. SuggestedStartPosition is filled by
+// Finish, not by Score: the lowest units.position whose doc newWords are
 // less than 80% covered by the learner's known set, one past the highest
 // position when every unit is covered, and 0 when there are no units. The
 // known set is the KnownLexemeIDs union. An empty newWords list is covered.
+// Learning rows do not count toward coverage.
 //
-// Seeding writes each yes-answered real word in a passed band into lexemes
-// (text_nfc, gloss_en, pos, verified 0) and into learner_lexemes as status
-// known, seeded 1, source placement. A retake's latest finished run sets
-// the level. Seeds from an earlier run stay, because the learner row is
-// inserted with INSERT OR IGNORE.
+// A reliable finish, for each rated real word, upserts the lexeme with
+// verified 0 and writes a he_en card. That card is graded through
+// fsrs.Review.Grade, so the placement rating is the card's first review
+// and a review_log row. "I don't know" is graded Again. learner_lexemes
+// stores Good or Easy as known, and Hard, Again, or "I don't know" as
+// learning, with seeded 1 and source placement. A word that already has a
+// he_en card is skipped, so a retake does not grade it twice. The latest
+// finished run sets the level. Invented words are never written to lexemes
+// or cards.
 //
-// MCP Builder, for get_context, reads these.
+// The deck API on *Service, reached from app.App.Placement, is:
 //
-//	Latest(ctx, userID) (*Result, error)
-//	  The most recently finished run, ordered by finished_at then id.
-//	  (nil, nil) when the learner has not finished a run.
-//	  EstimatedKnownWords is the value stored with that run.
-//	  SuggestedStartPosition is computed from the units and known words now.
+//	Start(ctx, userID) (runID, error)
+//	Next(ctx, runID) (*Card, done bool, error)
+//	Rate(ctx, runID, itemID, rating) (Rated, error)
+//	Finish(ctx, runID) (Result, error)
 //
-//	KnownLexemeIDs(ctx, userID) ([]int64, error)
-//	  The union of learner_lexemes rows with status known and seeded 1,
-//	  and lexemes taught as lesson_items.role new in a lesson this learner
-//	  has finished (lesson_runs.finished_at is set for that user, unit, and
-//	  lesson). Ids are sorted and unique.
+// MCP Builder, for get_context, reads these store methods.
 //
 //	(*db.Store).LatestPlacement(ctx, userID) (db.Placement, bool, error)
-//	  The same finished run as Latest, with ok false when there is none.
+//	  The newest finished run, ordered by finished_at then id.
+//	  ok is false when the learner has not finished a run.
 //	  db.Placement carries TakenAt, Reliable, FalseAlarmRate, Level,
-//	  BandScores, EstimatedKnownWords, and SuggestedStartPosition.
+//	  BandScores (shown, again, hard, good, easy, dontknow, goodPlusRate),
+//	  EstimatedKnownWords, and SuggestedStartPosition.
+//	  SuggestedStartPosition is computed from the units and known words now.
 //
 //	(*db.Store).PlacementKnownLexemes(ctx, userID) ([]string, error)
-//	  The pointed NFC text of the seeded-known learner_lexemes, sorted.
-//	  This is the seeded half of the union, not KnownLexemeIDs.
+//	(*db.Store).PlacementLearningLexemes(ctx, userID) ([]string, error)
+//	  Pointed NFC text of seeded learner_lexemes in that status, sorted.
+//	  A word taught only by a finished lesson is not included.
 //	  units.Lookup.KnownLexemes(ctx, beforePosition) is the global authoring
 //	  view: words introduced as new in an earlier unit. It is a different set,
 //	  and this package does not implement Lookup.

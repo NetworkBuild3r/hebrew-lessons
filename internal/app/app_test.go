@@ -146,12 +146,12 @@ func TestPlacementUsesConfigClock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runID, items, err := a.Placement().Start(ctx, userID)
+	runID, err := a.Placement().Start(ctx, userID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if runID == 0 || len(items) == 0 {
-		t.Fatalf("run %d items %d", runID, len(items))
+	if runID == 0 {
+		t.Fatal("run id is 0")
 	}
 	run, err := a.store.GetPlacementRun(ctx, runID)
 	if err != nil {

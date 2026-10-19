@@ -6,6 +6,9 @@ import (
 )
 
 func TestScoreBandWidthsAndBandZero(t *testing.T) {
+	if passAt != 0.5 || maxFalseAlarm != 0.25 {
+		t.Fatalf("thresholds pass=%v false-alarm=%v", passAt, maxFalseAlarm)
+	}
 	for _, tc := range []struct {
 		band int
 		want int
@@ -16,11 +19,11 @@ func TestScoreBandWidthsAndBandZero(t *testing.T) {
 		{4, 2000},
 	} {
 		got := Score(
-			[]Answer{{ItemID: "w", Yes: true}},
+			[]Answer{{ItemID: "w", Rating: Good}},
 			[]ScoreItem{{ID: "w", Band: bandPtr(tc.band)}},
 		)
-		if got.EstimatedKnownWords != tc.want || got.Level != tc.band || !got.Bands[tc.band].Passed {
-			t.Fatalf("band %d: estimate=%d level=%d passed=%v", tc.band, got.EstimatedKnownWords, got.Level, got.Bands[tc.band].Passed)
+		if got.EstimatedKnownWords != tc.want || got.Level != tc.band || got.Bands[tc.band].GoodPlusRate != 1 {
+			t.Fatalf("band %d: estimate=%d level=%d rate=%v", tc.band, got.EstimatedKnownWords, got.Level, got.Bands[tc.band].GoodPlusRate)
 		}
 		if got.SuggestedStartPosition != 0 {
 			t.Fatalf("band %d set a start position of %d", tc.band, got.SuggestedStartPosition)
@@ -31,10 +34,14 @@ func TestScoreBandWidthsAndBandZero(t *testing.T) {
 	answers := make([]Answer, 12)
 	for i := range items {
 		items[i] = ScoreItem{ID: string(rune('a' + i)), Band: bandPtr(0)}
-		answers[i] = Answer{ItemID: items[i].ID, Yes: i < 10}
+		rating := Again
+		if i < 10 {
+			rating = Easy
+		}
+		answers[i] = Answer{ItemID: items[i].ID, Rating: rating}
 	}
 	got := Score(answers, items)
-	if got.EstimatedKnownWords != 10 || got.Level != 0 || !got.Bands[0].Passed {
+	if got.EstimatedKnownWords != 10 || got.Level != 0 || got.Bands[0].Easy != 10 || got.Bands[0].Again != 2 {
 		t.Fatalf("band 0: estimate=%d level=%d band=%+v", got.EstimatedKnownWords, got.Level, got.Bands[0])
 	}
 	if len(got.Bands) != 5 {
@@ -42,113 +49,124 @@ func TestScoreBandWidthsAndBandZero(t *testing.T) {
 	}
 }
 
-func TestScoreClampRoundAndFalseAlarmOfOne(t *testing.T) {
-	if clamp01(-0.4) != 0 || clamp01(1.7) != 1 || clamp01(0.25) != 0.25 {
-		t.Fatal("clamp01")
+func TestScoreHalfPassesAndBelowFails(t *testing.T) {
+	items := make([]ScoreItem, 12)
+	for i := range items {
+		items[i] = ScoreItem{ID: string(rune('a' + i)), Band: bandPtr(0)}
 	}
-	if math.IsNaN(clamp01(math.NaN())) || clamp01(math.NaN()) != 0 {
-		t.Fatal("clamp01(NaN)")
+	half := make([]Answer, 12)
+	below := make([]Answer, 12)
+	for i := range items {
+		halfRating := Again
+		belowRating := Again
+		if i < 6 {
+			halfRating = Good
+		}
+		if i < 5 {
+			belowRating = Good
+		}
+		half[i] = Answer{ItemID: items[i].ID, Rating: halfRating}
+		below[i] = Answer{ItemID: items[i].ID, Rating: belowRating}
 	}
+	got := Score(half, items)
+	if got.Level != 0 || got.Bands[0].GoodPlusRate != 0.5 || got.Bands[0].Shown != 12 {
+		t.Fatalf("exactly half: level=%d band=%+v", got.Level, got.Bands[0])
+	}
+	miss := Score(below, items)
+	if miss.Level != -1 || miss.Bands[0].Good != 5 || miss.Bands[0].GoodPlusRate >= 0.5 {
+		t.Fatalf("below half: level=%d band=%+v", miss.Level, miss.Bands[0])
+	}
+}
 
-	// h = 0, f = 0.5, corrected = -1. The negative score adds nothing.
-	negative := Score(
-		[]Answer{{ItemID: "w", Yes: false}, {ItemID: "p", Yes: true}, {ItemID: "q", Yes: false}},
-		[]ScoreItem{{ID: "w", Band: bandPtr(1)}, {ID: "p", Pseudo: true}, {ID: "q", Pseudo: true}},
-	)
-	if negative.Bands[1].Corrected != -1 || negative.EstimatedKnownWords != 0 || negative.Bands[1].Passed {
-		t.Fatalf("negative corrected: %+v estimate=%d", negative.Bands[1], negative.EstimatedKnownWords)
-	}
-
-	// (1/3) * 500 rounds to 167. The two missing answers count as no.
-	third := Score([]Answer{{ItemID: "a", Yes: true}}, []ScoreItem{
+func TestScoreEstimateRoundsAndIgnoresMissing(t *testing.T) {
+	// One Good of three rated words is 1/3 of the band, which rounds to 167.
+	// A fourth item with no answer is not shown.
+	third := Score([]Answer{
+		{ItemID: "a", Rating: Good},
+		{ItemID: "b", Rating: Hard},
+		{ItemID: "c", Rating: Again},
+	}, []ScoreItem{
 		{ID: "a", Band: bandPtr(1)},
 		{ID: "b", Band: bandPtr(1)},
 		{ID: "c", Band: bandPtr(1)},
+		{ID: "d", Band: bandPtr(1)},
 	})
-	if third.EstimatedKnownWords != 167 || third.Bands[1].Passed {
-		t.Fatalf("one third of band 1: estimate=%d passed=%v corrected=%v", third.EstimatedKnownWords, third.Bands[1].Passed, third.Bands[1].Corrected)
+	if third.EstimatedKnownWords != 167 || third.Level != -1 || third.Bands[1].Shown != 3 {
+		t.Fatalf("one third: estimate=%d level=%d band=%+v", third.EstimatedKnownWords, third.Level, third.Bands[1])
+	}
+	if math.Abs(third.Bands[1].GoodPlusRate-1.0/3.0) > 1e-12 {
+		t.Fatalf("rate = %v", third.Bands[1].GoodPlusRate)
 	}
 
-	// Exactly 0.8 of band 1 is 400 words and a pass. 0.6 is 300 and a miss.
-	four := Score([]Answer{
-		{ItemID: "a", Yes: true}, {ItemID: "b", Yes: true}, {ItemID: "c", Yes: true}, {ItemID: "d", Yes: true},
-	}, fiveBand(1))
-	if !four.Bands[1].Passed || four.Bands[1].Corrected != 0.8 || four.EstimatedKnownWords != 400 {
-		t.Fatalf("4/5: %+v estimate=%d", four.Bands[1], four.EstimatedKnownWords)
-	}
-	three := Score([]Answer{
-		{ItemID: "a", Yes: true}, {ItemID: "b", Yes: true}, {ItemID: "c", Yes: true},
-	}, fiveBand(1))
-	if three.Bands[1].Passed || three.EstimatedKnownWords != 300 {
-		t.Fatalf("3/5: %+v estimate=%d", three.Bands[1], three.EstimatedKnownWords)
-	}
-
-	// f = 1 stores corrected 0, and the band 0 yes still counts.
-	blocked := Score([]Answer{
-		{ItemID: "a", Yes: true}, {ItemID: "b", Yes: true}, {ItemID: "p", Yes: true},
+	// Band 1 at 1 and band 2 at 0.5 sum to 750. Band 0 adds its two known words.
+	sum := Score([]Answer{
+		{ItemID: "z", Rating: Good},
+		{ItemID: "y", Rating: Easy},
+		{ItemID: "a", Rating: Good},
+		{ItemID: "b", Rating: Good},
+		{ItemID: "c", Rating: Again},
 	}, []ScoreItem{
-		{ID: "a", Band: bandPtr(0)},
-		{ID: "b", Band: bandPtr(1)},
-		{ID: "p", Pseudo: true},
+		{ID: "z", Band: bandPtr(0)},
+		{ID: "y", Band: bandPtr(0)},
+		{ID: "a", Band: bandPtr(1)},
+		{ID: "b", Band: bandPtr(2)},
+		{ID: "c", Band: bandPtr(2)},
 	})
-	if blocked.Level != -1 || blocked.Reliable || blocked.FalseAlarmRate != 1 || blocked.EstimatedKnownWords != 1 {
-		t.Fatalf("f=1: level=%d reliable=%v f=%v estimate=%d", blocked.Level, blocked.Reliable, blocked.FalseAlarmRate, blocked.EstimatedKnownWords)
-	}
-	for _, band := range blocked.Bands {
-		if band.Corrected != 0 || band.Passed {
-			t.Fatalf("f=1 band %+v", band)
-		}
+	if sum.EstimatedKnownWords != 752 || sum.Level != 2 {
+		t.Fatalf("sum: estimate=%d level=%d bands=%+v", sum.EstimatedKnownWords, sum.Level, sum.Bands)
 	}
 }
 
-func TestScoreAnswerRules(t *testing.T) {
-	// The later answer wins. A pseudo-word that also carries a band stays a
-	// pseudo-word. A band outside 0–4 is ignored. A nil band is a pseudo-word.
-	got := Score([]Answer{
-		{ItemID: "w", Yes: false},
-		{ItemID: "w", Yes: true},
-		{ItemID: "p", Yes: true},
-		{ItemID: "z", Yes: true},
-		{ItemID: "n", Yes: true},
+func TestScoreFalseAlarm(t *testing.T) {
+	// Hard on a pseudo-word is not a false alarm.
+	hard := Score(
+		[]Answer{{ItemID: "p", Rating: Hard}, {ItemID: "w", Rating: Good}},
+		[]ScoreItem{{ID: "p", Pseudo: true}, {ID: "w", Band: bandPtr(1)}},
+	)
+	if hard.FalseAlarmRate != 0 || !hard.Reliable || hard.EstimatedKnownWords != 500 {
+		t.Fatalf("hard pseudo: %+v", hard)
+	}
+
+	// 1 of 4 is exactly 0.25 and still reliable.
+	quarter := Score([]Answer{
+		{ItemID: "p1", Rating: Easy},
+		{ItemID: "p2", Rating: Again},
+		{ItemID: "p3", Rating: Hard},
+		{ItemID: "p4", Rating: DontKnow},
+		{ItemID: "w", Rating: Good},
 	}, []ScoreItem{
+		{ID: "p1", Pseudo: true},
+		{ID: "p2", Pseudo: true},
+		{ID: "p3", Pseudo: true},
+		{ID: "p4", Pseudo: true},
+		{ID: "w", Band: bandPtr(1)},
+	})
+	if quarter.FalseAlarmRate != 0.25 || !quarter.Reliable {
+		t.Fatalf("quarter: f=%v reliable=%v", quarter.FalseAlarmRate, quarter.Reliable)
+	}
+
+	// 2 of 4 is above 0.25. The level is still recorded.
+	over := Score([]Answer{
+		{ItemID: "p1", Rating: Good},
+		{ItemID: "p2", Rating: Easy},
+		{ItemID: "p3", Rating: Again},
+		{ItemID: "p4", Rating: Again},
+		{ItemID: "w", Rating: Good},
+	}, []ScoreItem{
+		{ID: "p1", Pseudo: true},
+		{ID: "p2", Pseudo: true},
+		{ID: "p3", Pseudo: true},
+		{ID: "p4", Pseudo: true},
 		{ID: "w", Band: bandPtr(2)},
-		{ID: "p", Band: bandPtr(2), Pseudo: true},
-		{ID: "z", Band: bandPtr(7)},
-		{ID: "n", Band: nil},
 	})
-	if got.Bands[2].H != 1 || got.Bands[2].F != 1 || got.FalseAlarmRate != 1 {
-		t.Fatalf("rules: band2=%+v f=%v", got.Bands[2], got.FalseAlarmRate)
-	}
-	if got.EstimatedKnownWords != 0 || got.Level != -1 {
-		t.Fatalf("rules: estimate=%d level=%d", got.EstimatedKnownWords, got.Level)
+	if over.FalseAlarmRate != 0.5 || over.Reliable || over.Level != 2 || over.EstimatedKnownWords != 500 {
+		t.Fatalf("over: f=%v reliable=%v level=%d estimate=%d", over.FalseAlarmRate, over.Reliable, over.Level, over.EstimatedKnownWords)
 	}
 
-	// No pseudo-words leaves f at 0, and the run can pass.
-	open := Score([]Answer{{ItemID: "w", Yes: true}}, []ScoreItem{{ID: "w", Band: bandPtr(3)}})
-	if open.FalseAlarmRate != 0 || !open.Reliable || open.EstimatedKnownWords != 1000 || !open.Bands[3].Passed {
-		t.Fatalf("no pseudo: %+v", open)
-	}
-
-	empty := Score(nil, nil)
-	if empty.Level != -1 || !empty.Reliable || empty.EstimatedKnownWords != 0 || len(empty.Bands) != 5 {
-		t.Fatalf("empty: %+v", empty)
-	}
-	for _, band := range empty.Bands {
-		if band.H != 0 || band.Passed {
-			t.Fatalf("empty band %+v", band)
-		}
+	none := Score([]Answer{{ItemID: "w", Rating: DontKnow}}, []ScoreItem{{ID: "w", Band: bandPtr(0)}})
+	if none.FalseAlarmRate != 0 || !none.Reliable || none.Level != -1 || none.EstimatedKnownWords != 0 || none.Bands[0].DontKnow != 1 {
+		t.Fatalf("no pseudo: %+v", none)
 	}
 }
 
-func bandPtr(n int) *int {
-	b := n
-	return &b
-}
-
-func fiveBand(band int) []ScoreItem {
-	items := make([]ScoreItem, 5)
-	for i := range items {
-		items[i] = ScoreItem{ID: string(rune('a' + i)), Band: bandPtr(band)}
-	}
-	return items
-}
+func bandPtr(band int) *int { return &band }

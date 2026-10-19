@@ -13,6 +13,7 @@ import (
 // PlacementRun is one row of placement_runs.
 // FinishedAt is zero while the run is in progress.
 // Level is invalid until the run is finished. A finished run stores −1 when no band passed.
+// Cap is empty until a finished run records why the deck stopped.
 type PlacementRun struct {
 	ID         int64
 	UserID     int64
@@ -21,32 +22,33 @@ type PlacementRun struct {
 	FalseAlarm sql.NullFloat64
 	Reliable   bool
 	Level      sql.NullInt64
+	Cap        string
 	Result     string
 	Seed       int64
 }
 
-// PlacementAnswer is one yes or no.
+// PlacementAnswer is one dealt card.
+// Rating is invalid while the card is face up and unanswered.
+// 0 is "I don't know". 1 Again, 2 Hard, 3 Good, 4 Easy.
 type PlacementAnswer struct {
-	RunID   int64
-	ItemID  string
-	SaidYes bool
-}
-
-// PlacementSeed is one real word to record as known.
-type PlacementSeed struct {
-	TextNFC string
-	GlossEN string
-	POS     string
+	RunID      int64
+	ItemID     string
+	Rating     sql.NullInt64
+	ShownAt    time.Time
+	AnsweredAt time.Time
 }
 
 // BandScore is one frequency band stored in placement_runs.result.
 // The JSON tags match placement.BandScore.
 type BandScore struct {
-	Band      int     `json:"band"`
-	H         float64 `json:"h"`
-	F         float64 `json:"f"`
-	Corrected float64 `json:"corrected"`
-	Passed    bool    `json:"passed"`
+	Band         int     `json:"band"`
+	Shown        int     `json:"shown"`
+	Again        int     `json:"again"`
+	Hard         int     `json:"hard"`
+	Good         int     `json:"good"`
+	Easy         int     `json:"easy"`
+	DontKnow     int     `json:"dontknow"`
+	GoodPlusRate float64 `json:"good_plus_rate"`
 }
 
 // Placement is the newest finished run for one learner.
@@ -72,7 +74,7 @@ type placementResultJSON struct {
 	EstimatedKnownWords int         `json:"estimated_known_words"`
 }
 
-const placementRunColumns = `id, user_id, started_at, finished_at, false_alarm_rate, reliable, level, result, seed`
+const placementRunColumns = `id, user_id, started_at, finished_at, false_alarm_rate, reliable, level, cap, result, seed`
 
 // placementTimeLayout is the UTC text stored in placement timestamp columns.
 // The fractional part is always nine digits, so the strings sort in time order.
@@ -95,11 +97,11 @@ func parsePlacementTime(value string) (time.Time, error) {
 func scanPlacementRun(scan func(dest ...any) error) (PlacementRun, error) {
 	var run PlacementRun
 	var started string
-	var finished, result sql.NullString
+	var finished, cap, result sql.NullString
 	var reliable int
 	err := scan(
 		&run.ID, &run.UserID, &started, &finished, &run.FalseAlarm,
-		&reliable, &run.Level, &result, &run.Seed,
+		&reliable, &run.Level, &cap, &result, &run.Seed,
 	)
 	if err != nil {
 		return PlacementRun{}, err
@@ -113,6 +115,9 @@ func scanPlacementRun(scan func(dest ...any) error) (PlacementRun, error) {
 		if err != nil {
 			return PlacementRun{}, fmt.Errorf("db: placement run %d finished_at: %w", run.ID, err)
 		}
+	}
+	if cap.Valid {
+		run.Cap = cap.String
 	}
 	if result.Valid {
 		run.Result = result.String
@@ -158,38 +163,59 @@ func (s *Store) GetPlacementRun(ctx context.Context, id int64) (PlacementRun, er
 	return run, nil
 }
 
-// UpsertPlacementAnswer inserts or replaces one answer.
-func (s *Store) UpsertPlacementAnswer(ctx context.Context, runID int64, itemID string, yes bool) error {
+// ShowPlacementCard deals one card. Rating stays null until RatePlacementAnswer.
+func (s *Store) ShowPlacementCard(ctx context.Context, runID int64, itemID string, shown time.Time) error {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return err
 	}
-	flag := 0
-	if yes {
-		flag = 1
-	}
 	if _, err := conn.ExecContext(ctx, `
-		INSERT INTO placement_answers (run_id, item_id, said_yes)
-		VALUES (?, ?, ?)
-		ON CONFLICT (run_id, item_id) DO UPDATE SET said_yes = excluded.said_yes`,
-		runID, itemID, flag,
+		INSERT INTO placement_answers (run_id, item_id, shown_at)
+		VALUES (?, ?, ?)`,
+		runID, itemID, placementTime(shown),
 	); err != nil {
-		return fmt.Errorf("db: placement answer: %w", err)
+		return fmt.Errorf("db: show placement card: %w", err)
 	}
 	return nil
 }
 
-// ListPlacementAnswers returns every answer for the run.
+// RatePlacementAnswer stores the grade on the open card.
+// A card that was not dealt, or was already rated, returns an error.
+func (s *Store) RatePlacementAnswer(ctx context.Context, runID int64, itemID string, rating int, answered time.Time) error {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return err
+	}
+	res, err := conn.ExecContext(ctx, `
+		UPDATE placement_answers
+		SET rating = ?, answered_at = ?
+		WHERE run_id = ? AND item_id = ? AND rating IS NULL`,
+		rating, placementTime(answered), runID, itemID,
+	)
+	if err != nil {
+		return fmt.Errorf("db: rate placement card: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("db: rate placement card: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("db: placement card %s is not open", itemID)
+	}
+	return nil
+}
+
+// ListPlacementAnswers returns every dealt card for the run, oldest first.
 func (s *Store) ListPlacementAnswers(ctx context.Context, runID int64) ([]PlacementAnswer, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT run_id, item_id, said_yes
+		SELECT run_id, item_id, rating, shown_at, answered_at
 		FROM placement_answers
 		WHERE run_id = ?
-		ORDER BY item_id`, runID)
+		ORDER BY shown_at, item_id`, runID)
 	if err != nil {
 		return nil, fmt.Errorf("db: list placement answers: %w", err)
 	}
@@ -197,11 +223,21 @@ func (s *Store) ListPlacementAnswers(ctx context.Context, runID int64) ([]Placem
 	var out []PlacementAnswer
 	for rows.Next() {
 		var row PlacementAnswer
-		var yes int
-		if err := rows.Scan(&row.RunID, &row.ItemID, &yes); err != nil {
+		var shown string
+		var answered sql.NullString
+		if err := rows.Scan(&row.RunID, &row.ItemID, &row.Rating, &shown, &answered); err != nil {
 			return nil, fmt.Errorf("db: list placement answers: %w", err)
 		}
-		row.SaidYes = yes != 0
+		row.ShownAt, err = parsePlacementTime(shown)
+		if err != nil {
+			return nil, fmt.Errorf("db: placement answer %s shown_at: %w", row.ItemID, err)
+		}
+		if answered.Valid {
+			row.AnsweredAt, err = parsePlacementTime(answered.String)
+			if err != nil {
+				return nil, fmt.Errorf("db: placement answer %s answered_at: %w", row.ItemID, err)
+			}
+		}
 		out = append(out, row)
 	}
 	if err := rows.Err(); err != nil {
@@ -210,10 +246,11 @@ func (s *Store) ListPlacementAnswers(ctx context.Context, runID int64) ([]Placem
 	return out, nil
 }
 
-// FinishPlacement marks the run finished and, when reliable, seeds lexemes.
-// An already-finished run returns an error. Seeding does not create cards.
-// A learner_lexemes row that already exists is left as it is.
-func (s *Store) FinishPlacement(ctx context.Context, id int64, finished time.Time, falseAlarm float64, reliable bool, level int, resultJSON string, seeds []PlacementSeed) error {
+// FinishPlacement marks the run finished.
+// An already-finished run returns an error. Seeding is the caller's job and
+// happens before this write, so a failed finish can be retried.
+// An empty cap is stored as NULL.
+func (s *Store) FinishPlacement(ctx context.Context, id int64, finished time.Time, falseAlarm float64, reliable bool, level int, cap, resultJSON string) error {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return err
@@ -224,9 +261,8 @@ func (s *Store) FinishPlacement(ctx context.Context, id int64, finished time.Tim
 	}
 	defer tx.Rollback()
 
-	var userID int64
 	var done sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT user_id, finished_at FROM placement_runs WHERE id = ?`, id).Scan(&userID, &done)
+	err = tx.QueryRowContext(ctx, `SELECT finished_at FROM placement_runs WHERE id = ?`, id).Scan(&done)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("db: placement run %d: %w", id, sql.ErrNoRows)
 	}
@@ -241,11 +277,15 @@ func (s *Store) FinishPlacement(ctx context.Context, id int64, finished time.Tim
 	if reliable {
 		flag = 1
 	}
+	var capVal any
+	if cap != "" {
+		capVal = cap
+	}
 	res, err := tx.ExecContext(ctx, `
 		UPDATE placement_runs
-		SET finished_at = ?, false_alarm_rate = ?, reliable = ?, level = ?, result = ?
+		SET finished_at = ?, false_alarm_rate = ?, reliable = ?, level = ?, cap = ?, result = ?
 		WHERE id = ? AND finished_at IS NULL`,
-		placementTime(finished), falseAlarm, flag, level, resultJSON, id,
+		placementTime(finished), falseAlarm, flag, level, capVal, resultJSON, id,
 	)
 	if err != nil {
 		return fmt.Errorf("db: finish placement: %w", err)
@@ -257,43 +297,8 @@ func (s *Store) FinishPlacement(ctx context.Context, id int64, finished time.Tim
 	if n == 0 {
 		return fmt.Errorf("db: placement run %d is already finished", id)
 	}
-	if reliable {
-		for _, seed := range seeds {
-			if err := seedLexeme(ctx, tx, userID, seed, finished); err != nil {
-				return err
-			}
-		}
-	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("db: commit placement: %w", err)
-	}
-	return nil
-}
-
-func seedLexeme(ctx context.Context, tx *sql.Tx, userID int64, seed PlacementSeed, at time.Time) error {
-	if seed.TextNFC == "" {
-		return errors.New("db: placement seed text is empty")
-	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO lexemes (text_nfc, gloss_en, pos, verified)
-		VALUES (?, ?, ?, 0)
-		ON CONFLICT (text_nfc) DO UPDATE SET
-			gloss_en = excluded.gloss_en,
-			pos = excluded.pos`,
-		seed.TextNFC, seed.GlossEN, seed.POS,
-	); err != nil {
-		return fmt.Errorf("db: upsert placement lexeme: %w", err)
-	}
-	var lexemeID int64
-	if err := tx.QueryRowContext(ctx, `SELECT id FROM lexemes WHERE text_nfc = ?`, seed.TextNFC).Scan(&lexemeID); err != nil {
-		return fmt.Errorf("db: upsert placement lexeme: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT OR IGNORE INTO learner_lexemes (user_id, lexeme_id, status, seeded, source, created_at)
-		VALUES (?, ?, 'known', 1, 'placement', ?)`,
-		userID, lexemeID, placementTime(at),
-	); err != nil {
-		return fmt.Errorf("db: insert learner lexeme: %w", err)
 	}
 	return nil
 }
@@ -339,6 +344,96 @@ func (s *Store) InsertLearnerLexeme(ctx context.Context, userID, lexemeID int64,
 		return fmt.Errorf("db: insert learner lexeme: %w", err)
 	}
 	return nil
+}
+
+// UpsertPlacementLexeme inserts the pointed word or updates its gloss and part of speech.
+// verified is not changed on conflict. The new row is stored with verified 0.
+func (s *Store) UpsertPlacementLexeme(ctx context.Context, textNFC, gloss, pos string) (int64, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return 0, err
+	}
+	if textNFC == "" {
+		return 0, errors.New("db: placement lexeme text is empty")
+	}
+	if _, err := conn.ExecContext(ctx, `
+		INSERT INTO lexemes (text_nfc, gloss_en, pos, verified)
+		VALUES (?, ?, ?, 0)
+		ON CONFLICT (text_nfc) DO UPDATE SET
+			gloss_en = excluded.gloss_en,
+			pos = excluded.pos`,
+		textNFC, gloss, pos,
+	); err != nil {
+		return 0, fmt.Errorf("db: upsert placement lexeme: %w", err)
+	}
+	var id int64
+	if err := conn.QueryRowContext(ctx, `SELECT id FROM lexemes WHERE text_nfc = ?`, textNFC).Scan(&id); err != nil {
+		return 0, fmt.Errorf("db: upsert placement lexeme: %w", err)
+	}
+	return id, nil
+}
+
+// SetPlacementLearner records the placement status for one learner and word.
+// A row that already exists is updated to this status, seeded 1, source placement.
+func (s *Store) SetPlacementLearner(ctx context.Context, userID, lexemeID int64, status string, at time.Time) error {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return err
+	}
+	if _, err := conn.ExecContext(ctx, `
+		INSERT INTO learner_lexemes (user_id, lexeme_id, status, seeded, source, created_at)
+		VALUES (?, ?, ?, 1, 'placement', ?)
+		ON CONFLICT (user_id, lexeme_id) DO UPDATE SET
+			status = excluded.status,
+			seeded = 1,
+			source = 'placement'`,
+		userID, lexemeID, status, placementTime(at),
+	); err != nil {
+		return fmt.Errorf("db: set placement learner: %w", err)
+	}
+	return nil
+}
+
+// CardID returns the card for this learner, lexeme, and direction.
+// ok is false when that card does not exist.
+func (s *Store) CardID(ctx context.Context, userID, lexemeID int64, dir string) (int64, bool, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return 0, false, err
+	}
+	var id int64
+	err = conn.QueryRowContext(ctx, `
+		SELECT id FROM cards WHERE user_id = ? AND lexeme_id = ? AND dir = ?`,
+		userID, lexemeID, dir,
+	).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("db: card id: %w", err)
+	}
+	return id, true, nil
+}
+
+// AudioIDByText returns the newest clip id for this exact pointed text.
+// ok is false when no clip is stored.
+func (s *Store) AudioIDByText(ctx context.Context, textNFC string) (string, bool, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return "", false, err
+	}
+	var id string
+	err = conn.QueryRowContext(ctx, `
+		SELECT id FROM audio_assets WHERE text_nfc = ? ORDER BY created_at DESC LIMIT 1`,
+		textNFC,
+	).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("db: audio by text: %w", err)
+	}
+	return id, true, nil
 }
 
 // KnownLexemeIDs returns the sorted union of seeded-known learner_lexemes
@@ -429,6 +524,16 @@ func (s *Store) LatestPlacement(ctx context.Context, userID int64) (Placement, b
 // the union that contains those ids. units.Lookup.KnownLexemes(ctx,
 // beforePosition) is the global authoring view and is a different set.
 func (s *Store) PlacementKnownLexemes(ctx context.Context, userID int64) ([]string, error) {
+	return s.placementLexemeTexts(ctx, userID, "known")
+}
+
+// PlacementLearningLexemes returns the pointed NFC text of learner_lexemes rows
+// with status learning and seeded 1, sorted by that text.
+func (s *Store) PlacementLearningLexemes(ctx context.Context, userID int64) ([]string, error) {
+	return s.placementLexemeTexts(ctx, userID, "learning")
+}
+
+func (s *Store) placementLexemeTexts(ctx context.Context, userID int64, status string) ([]string, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
@@ -437,22 +542,22 @@ func (s *Store) PlacementKnownLexemes(ctx context.Context, userID int64) ([]stri
 		SELECT l.text_nfc
 		FROM learner_lexemes AS ll
 		JOIN lexemes AS l ON l.id = ll.lexeme_id
-		WHERE ll.user_id = ? AND ll.status = 'known' AND ll.seeded = 1
-		ORDER BY l.text_nfc`, userID)
+		WHERE ll.user_id = ? AND ll.status = ? AND ll.seeded = 1
+		ORDER BY l.text_nfc`, userID, status)
 	if err != nil {
-		return nil, fmt.Errorf("db: placement known lexemes: %w", err)
+		return nil, fmt.Errorf("db: placement %s lexemes: %w", status, err)
 	}
 	defer rows.Close()
 	var out []string
 	for rows.Next() {
 		var text string
 		if err := rows.Scan(&text); err != nil {
-			return nil, fmt.Errorf("db: placement known lexemes: %w", err)
+			return nil, fmt.Errorf("db: placement %s lexemes: %w", status, err)
 		}
 		out = append(out, text)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("db: placement known lexemes: %w", err)
+		return nil, fmt.Errorf("db: placement %s lexemes: %w", status, err)
 	}
 	return out, nil
 }

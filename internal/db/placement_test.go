@@ -69,7 +69,7 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 		}
 	}
 	runCols := columnNames(t, conn, "placement_runs")
-	for _, name := range []string{"id", "user_id", "started_at", "finished_at", "false_alarm_rate", "reliable", "level", "result", "seed"} {
+	for _, name := range []string{"id", "user_id", "started_at", "finished_at", "false_alarm_rate", "reliable", "level", "cap", "result", "seed"} {
 		if !runCols[name] {
 			t.Errorf("placement_runs missing %s", name)
 		}
@@ -94,7 +94,7 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.ExecContext(ctx, `INSERT INTO placement_answers (run_id, item_id, said_yes) VALUES (?, 'boker', 1)`, runID); err != nil {
+	if _, err := conn.ExecContext(ctx, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'boker', 0, ?)`, runID, old); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.ExecContext(ctx, `
@@ -119,9 +119,10 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 	rejectSQL(t, conn, "learner status", `
 		INSERT INTO learner_lexemes (user_id, lexeme_id, status, seeded, source, created_at)
 		VALUES (?, ?, 'knownish', 0, 'placement', ?)`, userID, otherID, old)
-	rejectSQL(t, conn, "answer flag", `INSERT INTO placement_answers (run_id, item_id, said_yes) VALUES (?, 'other', 2)`, runID)
+	rejectSQL(t, conn, "rating", `INSERT INTO placement_answers (run_id, item_id, rating, shown_at) VALUES (?, 'other', 5, ?)`, runID, old)
 	rejectSQL(t, conn, "level", `UPDATE placement_runs SET level = 5 WHERE id = ?`, runID)
 	rejectSQL(t, conn, "reliable", `UPDATE placement_runs SET reliable = 2 WHERE id = ?`, runID)
+	rejectSQL(t, conn, "cap", `UPDATE placement_runs SET cap = 'later' WHERE id = ?`, runID)
 
 	if _, err := conn.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID); err != nil {
 		t.Fatal(err)

@@ -93,14 +93,17 @@ func TestClientItemHidesBand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err := json.Marshal(cat[0].public())
+	body, err := json.Marshal(cat[0].card())
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := string(body)
-	for _, hidden := range []string{"band", "pseudo", "gloss", "verified", "source"} {
+	for _, hidden := range []string{"\"band\"", "pseudo", "verified", "source", "\"pos\"", "is_pseudo"} {
 		if strings.Contains(s, hidden) {
-			t.Fatalf("client item JSON contains %s: %s", hidden, s)
+			t.Fatalf("client card JSON contains %s: %s", hidden, s)
 		}
+	}
+	if !strings.Contains(s, "gloss_en") || !strings.Contains(s, "audio_url") {
+		t.Fatalf("client card JSON = %s", s)
 	}
 }

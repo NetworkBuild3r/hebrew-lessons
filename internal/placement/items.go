@@ -3,7 +3,6 @@ package placement
 import (
 	_ "embed"
 	"encoding/json"
-	"math/rand/v2"
 	"strings"
 	"sync"
 
@@ -46,20 +45,8 @@ func catalog() ([]fixtureItem, error) {
 	return loaded, loadErr
 }
 
-// deal returns catalog order shuffled by seed.
-// The same seed always returns the same order. The catalog slice is not modified.
-func deal(seed int64, items []fixtureItem) []fixtureItem {
-	out := make([]fixtureItem, len(items))
-	copy(out, items)
-	r := rand.New(rand.NewPCG(uint64(seed), uint64(seed)))
-	r.Shuffle(len(out), func(i, j int) {
-		out[i], out[j] = out[j], out[i]
-	})
-	return out
-}
-
-func (it fixtureItem) public() Item {
-	return Item{ID: it.ID, TextNFC: it.TextNFC}
+func (it fixtureItem) card() Card {
+	return Card{ID: it.ID, TextNFC: it.TextNFC, GlossEN: it.GlossEN}
 }
 
 // unpointed drops Hebrew points, leaving the letters.

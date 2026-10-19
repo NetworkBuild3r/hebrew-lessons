@@ -80,10 +80,17 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 			t.Fatalf("seeded texts = %v, want %v", got, wantTexts)
 		}
 	}
+	learningTexts, err := s.PlacementLearningLexemes(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(learningTexts) != 1 || learningTexts[0] != he {
+		t.Fatalf("learning texts = %v, want [%s]", learningTexts, he)
+	}
 
 	body, err := json.Marshal(placementResultJSON{
 		Bands: []BandScore{{
-			Band: 1, H: 1, F: 0, Corrected: 1, Passed: true,
+			Band: 1, Shown: 12, Good: 12, GoodPlusRate: 1,
 		}},
 		EstimatedKnownWords: 42,
 	})
@@ -91,7 +98,7 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 		t.Fatal(err)
 	}
 	finished := when.Add(time.Minute)
-	if err := s.FinishPlacement(ctx, runID, finished, 0.25, true, 1, string(body), nil); err != nil {
+	if err := s.FinishPlacement(ctx, runID, finished, 0.25, true, 1, "", string(body)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -103,7 +110,7 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 	if !place.TakenAt.Equal(finished) || !place.Reliable || place.FalseAlarmRate != 0.25 || place.Level != 1 {
 		t.Fatalf("header = %+v", place)
 	}
-	if place.EstimatedKnownWords != 42 || len(place.BandScores) != 1 || !place.BandScores[0].Passed {
+	if place.EstimatedKnownWords != 42 || len(place.BandScores) != 1 || place.BandScores[0].GoodPlusRate != 1 || place.BandScores[0].Shown != 12 {
 		t.Fatalf("scores = %+v", place)
 	}
 	if place.SuggestedStartPosition != 1 {
@@ -141,7 +148,7 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.FinishPlacement(ctx, otherRun, finished, 0, false, -1, `{"bands":[],"estimated_known_words":0}`, nil); err != nil {
+	if err := s.FinishPlacement(ctx, otherRun, finished, 0, false, -1, "", `{"bands":[],"estimated_known_words":0}`); err != nil {
 		t.Fatal(err)
 	}
 	// Units are global, but coverage is this learner's known set. The unit at
@@ -168,7 +175,7 @@ func TestSuggestedStartWithNoUnitsIsZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.FinishPlacement(ctx, runID, when, 0, true, -1, `{"estimated_known_words":3}`, nil); err != nil {
+	if err := s.FinishPlacement(ctx, runID, when, 0, true, -1, "", `{"estimated_known_words":3}`); err != nil {
 		t.Fatal(err)
 	}
 	place, ok, err := s.LatestPlacement(ctx, userID)

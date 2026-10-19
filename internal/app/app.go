@@ -226,12 +226,13 @@ func NewApp(cfg Config) (*App, error) {
 		tts = audio.NewElevenLabs(cfg.ElevenLabsAPIKey)
 	}
 
+	review := fsrs.New(store, cfg.Clock)
 	a := &App{
 		cfg:       cfg,
 		store:     store,
 		authSvc:   svc,
-		review:    fsrs.New(store, cfg.Clock),
-		placement: placement.New(store, cfg.Clock),
+		review:    review,
+		placement: placement.New(store, review, cfg.Clock),
 		audioDir:  audioDir,
 		tts:       tts,
 	}
@@ -261,8 +262,8 @@ func (a *App) TTS() audio.TTS { return a.tts }
 // It uses the clock from Config, the same clock the store was opened with.
 func (a *App) Review() *fsrs.Review { return a.review }
 
-// Placement is the yes/no vocabulary test.
-// It uses the clock from Config, the same clock the store was opened with.
+// Placement is the vocabulary placement deck.
+// It uses the clock from Config, the same clock the store and the review service use.
 func (a *App) Placement() *placement.Service { return a.placement }
 
 // Close releases the database. /healthz answers 503 after Close returns.
