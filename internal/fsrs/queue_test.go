@@ -191,16 +191,16 @@ func TestQueueAlternatesDrills(t *testing.T) {
 			Due:      clk.Now().Add(-time.Duration(2-i) * time.Hour),
 		})
 	}
-	if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ב/כ"); err != nil {
+	if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ב/כ", 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ב/כ"); err != nil {
+	if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ב/כ", 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := rev.RecordMiss(ctx, userID, MissAgreement, "הוא/היא"); err != nil {
+	if err := rev.RecordMiss(ctx, userID, MissAgreement, "הוא/היא", 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := rev.RecordMiss(ctx, userID, MissAgreement, "הוא/היא"); err != nil {
+	if err := rev.RecordMiss(ctx, userID, MissAgreement, "הוא/היא", 0); err != nil {
 		t.Fatal(err)
 	}
 	sess, err := rev.Queue(ctx, userID)
@@ -274,7 +274,7 @@ func TestConfusionDrills(t *testing.T) {
 	t.Run("one miss", func(t *testing.T) {
 		rev, store, _ := openReview(t)
 		userID := mustUser(t, store, "learner@example.com")
-		if err := rev.RecordMiss(context.Background(), userID, MissLetterPair, "ב/כ"); err != nil {
+		if err := rev.RecordMiss(context.Background(), userID, MissLetterPair, "ב/כ", 0); err != nil {
 			t.Fatal(err)
 		}
 		assertNoDrill(t, rev, userID)
@@ -283,14 +283,14 @@ func TestConfusionDrills(t *testing.T) {
 		rev, store, clk := openReview(t)
 		ctx := context.Background()
 		userID := mustUser(t, store, "learner@example.com")
-		if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ב/כ"); err != nil {
+		if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ב/כ", 0); err != nil {
 			t.Fatal(err)
 		}
-		if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ג/ק"); err != nil {
+		if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ג/ק", 0); err != nil {
 			t.Fatal(err)
 		}
 		clk.Advance(7 * 24 * time.Hour)
-		if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ב/כ"); err != nil {
+		if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ב/כ", 0); err != nil {
 			t.Fatal(err)
 		}
 		sess := mustQueue(t, rev, userID)
@@ -305,11 +305,11 @@ func TestConfusionDrills(t *testing.T) {
 		rev, store, clk := openReview(t)
 		ctx := context.Background()
 		userID := mustUser(t, store, "learner@example.com")
-		if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ב/כ"); err != nil {
+		if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ב/כ", 0); err != nil {
 			t.Fatal(err)
 		}
 		clk.Advance(8 * 24 * time.Hour)
-		if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ב/כ"); err != nil {
+		if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ב/כ", 0); err != nil {
 			t.Fatal(err)
 		}
 		assertNoDrill(t, rev, userID)
@@ -319,7 +319,7 @@ func TestConfusionDrills(t *testing.T) {
 		ctx := context.Background()
 		userID := mustUser(t, store, "learner@example.com")
 		for i := 0; i < 5; i++ {
-			if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ב/כ"); err != nil {
+			if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ב/כ", 0); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -332,14 +332,14 @@ func TestConfusionDrills(t *testing.T) {
 		rev, store, _ := openReview(t)
 		ctx := context.Background()
 		userID := mustUser(t, store, "learner@example.com")
-		if err := rev.RecordMiss(ctx, userID, "root", "ב/כ"); err == nil {
+		if err := rev.RecordMiss(ctx, userID, "root", "ב/כ", 0); err == nil {
 			t.Fatal("bad kind was accepted")
 		}
-		if err := rev.RecordMiss(ctx, userID, MissAgreement, ""); err == nil {
+		if err := rev.RecordMiss(ctx, userID, MissAgreement, "", 0); err == nil {
 			t.Fatal("empty key was accepted")
 		}
 		for i := 0; i < 2; i++ {
-			if err := rev.RecordMiss(ctx, userID, MissAgreement, "הוא/היא"); err != nil {
+			if err := rev.RecordMiss(ctx, userID, MissAgreement, "הוא/היא", 0); err != nil {
 				t.Fatal(err)
 			}
 		}
