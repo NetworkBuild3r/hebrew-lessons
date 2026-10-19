@@ -321,7 +321,7 @@ func NewApp(cfg Config) (*App, error) {
 	a.mcp = newMCP(cfg, health, version, svc, store, tts, audioDir)
 	sweepCtx, stop := context.WithCancel(context.Background())
 	a.stopSweep = stop
-	go sweepOAuth(sweepCtx, store, cfg.Clock)
+	go sweepOAuth(sweepCtx, svc, store, cfg.Clock)
 	return a, nil
 }
 
@@ -334,7 +334,7 @@ func oauthEnabled(cfg Config) bool {
 	return strings.TrimSpace(cfg.GoogleClientID) != "" && strings.TrimSpace(cfg.GoogleClientSecret) != ""
 }
 
-func sweepOAuth(ctx context.Context, store *db.Store, clk clock.Clock) {
+func sweepOAuth(ctx context.Context, svc *auth.Service, store *db.Store, clk clock.Clock) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
@@ -343,7 +343,10 @@ func sweepOAuth(ctx context.Context, store *db.Store, clk clock.Clock) {
 			return
 		case <-ticker.C:
 			now := clk.Now().UTC()
-			if err := store.SweepOAuth(ctx, now, now.Add(-auth.OAuthClientTTL)); err != nil && ctx.Err() == nil {
+			if svc != nil {
+				svc.PruneRateLimits(now)
+			}
+			if err := store.SweepOAuth(ctx, now, now.Add(-auth.OAuthClientTTL), now.Add(-auth.OAuthIdleClientTTL)); err != nil && ctx.Err() == nil {
 				slog.Error("mcp oauth sweep", "err", err)
 			}
 		}

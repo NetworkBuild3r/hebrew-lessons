@@ -197,12 +197,68 @@ func (s *Store) ConsumeOAuthRequest(ctx context.Context, id string, now time.Tim
 	return req, nil
 }
 
-// InsertOAuthCode writes one authorization code. Hash is the digest.
+// InsertOAuthCode writes one authorization code and marks the client issued,
+// in one transaction. Hash is the digest. A failed mark does not leave the code.
 func (s *Store) InsertOAuthCode(ctx context.Context, c OAuthCode) error {
 	if err := s.ready(); err != nil {
 		return err
 	}
-	_, err := s.exec(ctx, `
+	tx, err := s.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("db: begin oauth code: %w", err)
+	}
+	defer tx.Rollback()
+	if err := insertOAuthCodeTx(ctx, tx, c); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("db: commit oauth code: %w", err)
+	}
+	return nil
+}
+
+// IssueOAuthCode consumes the authorization request and inserts the code
+// in one transaction. The client is marked issued in that same transaction,
+// so a sweep cannot delete a never-issued client between dropping the
+// request and writing the code. The code's client id is the request's client.
+// ErrNotFound means the request is missing or expired. An expired row is deleted.
+func (s *Store) IssueOAuthCode(ctx context.Context, requestID string, now time.Time, c OAuthCode) (OAuthRequest, error) {
+	if err := s.ready(); err != nil {
+		return OAuthRequest{}, err
+	}
+	tx, err := s.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return OAuthRequest{}, fmt.Errorf("db: begin oauth code: %w", err)
+	}
+	defer tx.Rollback()
+	row := tx.QueryRowContext(ctx, `
+		SELECT id, client_id, redirect_uri, state, code_challenge, scope, resource, expires_at
+		FROM oauth_requests WHERE id = ?`, requestID)
+	req, err := scanOAuthRequest(row)
+	if err != nil {
+		return OAuthRequest{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM oauth_requests WHERE id = ?`, requestID); err != nil {
+		return OAuthRequest{}, fmt.Errorf("db: delete oauth request: %w", err)
+	}
+	if !req.ExpiresAt.After(now) {
+		if err := tx.Commit(); err != nil {
+			return OAuthRequest{}, fmt.Errorf("db: commit oauth request: %w", err)
+		}
+		return OAuthRequest{}, ErrNotFound
+	}
+	c.ClientID = req.ClientID
+	if err := insertOAuthCodeTx(ctx, tx, c); err != nil {
+		return OAuthRequest{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return OAuthRequest{}, fmt.Errorf("db: commit oauth code: %w", err)
+	}
+	return req, nil
+}
+
+func insertOAuthCodeTx(ctx context.Context, tx *sql.Tx, c OAuthCode) error {
+	_, err := tx.ExecContext(ctx, `
 		INSERT INTO oauth_codes (
 			code_hash, client_id, user_id, redirect_uri, code_challenge, scope, resource, expires_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -212,7 +268,7 @@ func (s *Store) InsertOAuthCode(ctx context.Context, c OAuthCode) error {
 	if err != nil {
 		return fmt.Errorf("db: insert oauth code: %w", err)
 	}
-	return nil
+	return markOAuthClientIssued(ctx, tx, c.ClientID)
 }
 
 // OAuthCode loads one code and the user's email. ErrNotFound means no row.
@@ -344,7 +400,7 @@ func insertOAuthTokenTx(ctx context.Context, tx *sql.Tx, t OAuthToken) error {
 	if err != nil {
 		return fmt.Errorf("db: insert oauth token: %w", err)
 	}
-	return nil
+	return markOAuthClientIssued(ctx, tx, t.ClientID)
 }
 
 type scanner interface {
@@ -488,12 +544,31 @@ func (s *Store) CountOAuthRequests(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// SweepOAuth deletes expired authorization requests, codes, and tokens,
-// and clients whose created_at is at or before clientCutoff.
+// SweepOAuth deletes expired authorization requests, codes, and tokens.
+// A client is deleted when created_at is at or before clientCutoff, and
+// also when it has never been issued a code or token and created_at is
+// at or before idleCutoff. A live authorization request keeps that
+// registration. Issued is derived from codes and tokens still in the
+// tables before those rows are deleted, so a used client keeps its
+// longer lifetime after the code or token itself expires.
 // Deleting a client cascades to its requests, codes, and tokens.
-func (s *Store) SweepOAuth(ctx context.Context, now, clientCutoff time.Time) error {
+func (s *Store) SweepOAuth(ctx context.Context, now, clientCutoff, idleCutoff time.Time) error {
 	if err := s.ready(); err != nil {
 		return err
+	}
+	tx, err := s.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("db: begin oauth sweep: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE oauth_clients SET issued = 1
+		WHERE issued = 0 AND client_id IN (
+			SELECT client_id FROM oauth_codes
+			UNION
+			SELECT client_id FROM oauth_tokens
+		)`); err != nil {
+		return fmt.Errorf("db: sweep oauth issued: %w", err)
 	}
 	ts := FormatTime(now)
 	for _, q := range []string{
@@ -501,12 +576,33 @@ func (s *Store) SweepOAuth(ctx context.Context, now, clientCutoff time.Time) err
 		`DELETE FROM oauth_codes WHERE expires_at <= ?`,
 		`DELETE FROM oauth_tokens WHERE expires_at <= ?`,
 	} {
-		if _, err := s.exec(ctx, q, ts); err != nil {
+		if _, err := tx.ExecContext(ctx, q, ts); err != nil {
 			return fmt.Errorf("db: sweep oauth: %w", err)
 		}
 	}
-	if _, err := s.exec(ctx, `DELETE FROM oauth_clients WHERE created_at <= ?`, FormatTime(clientCutoff)); err != nil {
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM oauth_clients
+		WHERE created_at <= ?
+		   OR (
+		     issued = 0
+		     AND created_at <= ?
+		     AND client_id NOT IN (SELECT client_id FROM oauth_requests)
+		   )`, FormatTime(clientCutoff), FormatTime(idleCutoff)); err != nil {
 		return fmt.Errorf("db: sweep oauth clients: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("db: commit oauth sweep: %w", err)
+	}
+	return nil
+}
+
+type oauthExecer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func markOAuthClientIssued(ctx context.Context, exec oauthExecer, clientID string) error {
+	if _, err := exec.ExecContext(ctx, `UPDATE oauth_clients SET issued = 1 WHERE client_id = ? AND issued = 0`, clientID); err != nil {
+		return fmt.Errorf("db: mark oauth client issued: %w", err)
 	}
 	return nil
 }
