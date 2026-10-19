@@ -120,6 +120,10 @@ func sqliteDSN(abs string) string {
 	q.Set("_busy_timeout", strconv.Itoa(busyTimeoutMS))
 	q.Set("_foreign_keys", "on")
 	q.Set("_journal_mode", "WAL")
+	// BEGIN IMMEDIATE. A deferred transaction can pass a read and then fail
+	// with SQLITE_BUSY when it upgrades to a write. Lesson starts rely on that
+	// lock so two connections cannot both miss the open run.
+	q.Set("_txlock", "immediate")
 	u.RawQuery = q.Encode()
 	return u.String()
 }

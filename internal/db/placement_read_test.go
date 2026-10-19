@@ -51,10 +51,10 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 	}
 	rateAnswer(t, s, runID, he, ids[he], Hard, when)
 	insertKnownCard(t, s, userID, ids[he], "he_en", Again, when)
-	// An en_he Easy is not known. A finished lesson's new word is, and it is not a placement answer.
+	// An en_he Easy is not known. Finishing a lesson does not mark its new word known.
 	insertKnownCard(t, s, userID, ids[dalet], "en_he", Easy, when)
 	_ = ids[vav]
-	// A finished lesson's new word is in the coverage set, and not in PlacementKnownLexemes.
+	// The lesson word is not a placement answer and is not known yet.
 	lessonWord := ids[gimel]
 	lessonUnit := insertUnitDoc(t, s, 0, "draft", `{"title":"t","newWords":["`+gimel+`"]}`)
 	if err := s.execLesson(ctx, lessonUnit, 0, lessonWord, "new", userID, &when); err != nil {
@@ -96,7 +96,8 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// No extra units yet: the lesson unit at position 0 lists only the lesson word, which is known.
+	// No extra units yet. The lesson unit at position 0 lists only the lesson
+	// word, and finishing the lesson did not mark it known, so the unit is uncovered.
 	place, ok, err = s.LatestPlacement(ctx, userID)
 	if err != nil || !ok {
 		t.Fatalf("finished: ok=%v err=%v", ok, err)
@@ -107,8 +108,25 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 	if place.EstimatedKnownWords != 42 || len(place.BandScores) != 1 || place.BandScores[0].GoodPlusRate != 0 || place.BandScores[0].Rated != 12 {
 		t.Fatalf("scores = %+v", place)
 	}
+	if place.SuggestedStartPosition != 0 {
+		t.Fatalf("uncovered lesson unit start = %d, want 0", place.SuggestedStartPosition)
+	}
+	beforeGrade, err := s.KnownLexemeIDs(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range beforeGrade {
+		if id == lessonWord {
+			t.Fatal("finishing the lesson marked its word known")
+		}
+	}
+	insertKnownCard(t, s, userID, lessonWord, "he_en", Good, when)
+	place, ok, err = s.LatestPlacement(ctx, userID)
+	if err != nil || !ok {
+		t.Fatal(err)
+	}
 	if place.SuggestedStartPosition != 1 {
-		t.Fatalf("covered lesson unit start = %d, want 1", place.SuggestedStartPosition)
+		t.Fatalf("after a Good review start = %d, want 1", place.SuggestedStartPosition)
 	}
 
 	// 4 of 5 is exactly 80% and counts as covered. 2 of 5 is not.
@@ -194,21 +212,16 @@ func TestLearnerKnownLexemes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"בַּיִת", "גֶּשֶׁם"}
-	if len(got) != len(want) {
+	want := []string{"בַּיִת"}
+	if len(got) != len(want) || got[0] != want[0] {
 		t.Fatalf("texts %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("texts %v, want %v", got, want)
-		}
 	}
 	ids, err := s.KnownLexemeIDs(ctx, userID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ids) != 2 || ids[0] != bet || ids[1] != gimel {
-		t.Fatalf("ids %v, want %d %d", ids, bet, gimel)
+	if len(ids) != 1 || ids[0] != bet {
+		t.Fatalf("ids %v, want %d", ids, bet)
 	}
 	none, err := s.LearnerKnownLexemes(ctx, otherID)
 	if err != nil || len(none) != 1 || none[0] != "גֶּשֶׁם" {
@@ -266,6 +279,46 @@ func TestSuggestedStartWithNoUnitsIsZero(t *testing.T) {
 	}
 	if place.SuggestedStartPosition != 7 {
 		t.Fatalf("all covered start = %d, want 7", place.SuggestedStartPosition)
+	}
+}
+
+func TestLessonFinishDoesNotMarkKnown(t *testing.T) {
+	when := time.Date(2026, 10, 18, 15, 0, 0, 0, time.UTC)
+	s := openStore(t, fixedClock{when})
+	ctx := context.Background()
+	userID := insertUser(t, s, "lesson-known@example.com", "sub-lesson-known", "learner")
+	word := insertLexeme(t, s, "כִּסֵּא")
+	other := insertLexeme(t, s, "שֻׁלְחָן")
+	unit := insertUnitDoc(t, s, 0, "published", `{"newWords":["כִּסֵּא","שֻׁלְחָן"]}`)
+	if err := s.execLesson(ctx, unit, 0, word, "new", userID, &when); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.execLesson(ctx, unit, 0, other, "new", userID, &when); err != nil {
+		t.Fatal(err)
+	}
+	ids, err := s.KnownLexemeIDs(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 0 {
+		t.Fatalf("known after the lesson = %v", ids)
+	}
+	texts, err := s.LearnerKnownLexemes(ctx, userID)
+	if err != nil || len(texts) != 0 {
+		t.Fatalf("texts after the lesson = %v %v", texts, err)
+	}
+	insertKnownCard(t, s, userID, word, "he_en", Good, when)
+	insertKnownCard(t, s, userID, other, "en_he", Good, when)
+	ids, err = s.KnownLexemeIDs(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 1 || ids[0] != word {
+		t.Fatalf("known after Good = %v, want [%d]", ids, word)
+	}
+	texts, err = s.LearnerKnownLexemes(ctx, userID)
+	if err != nil || len(texts) != 1 || texts[0] != "כִּסֵּא" {
+		t.Fatalf("texts after Good = %v %v", texts, err)
 	}
 }
 

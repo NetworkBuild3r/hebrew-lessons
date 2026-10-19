@@ -13,7 +13,7 @@ import (
 var itemsJSON []byte
 
 // fixtureItem is one row of items.json.
-// Verified stays false until a person checks the row.
+// Verified is true once a person has checked the row.
 // Gender is m, f, both, or empty when the form does not mark gender.
 type fixtureItem struct {
 	ID       string `json:"id"`
@@ -55,6 +55,22 @@ func (it fixtureItem) card() Card {
 		Translit: it.Translit,
 		Gender:   it.Gender,
 	}
+}
+
+// Lookup is the fixture row for an item id.
+// The band is 0 through 4. AudioURL is empty; the handler fills a clip
+// only for the card Next already presented.
+func Lookup(id string) (Card, int, bool) {
+	items, err := catalog()
+	if err != nil {
+		return Card{}, 0, false
+	}
+	for _, it := range items {
+		if it.ID == id {
+			return it.card(), it.Band, true
+		}
+	}
+	return Card{}, 0, false
 }
 
 // unpointed drops Hebrew points, leaving the letters.

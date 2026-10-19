@@ -1,4 +1,4 @@
-hebrew v2 (greenfield, ADR-R1). Publishes ghcr.io/networkbuild3r/hebrew. Never merges into main.
+hebrew v3 (greenfield, ADR-R1, ADR-0018). Publishes ghcr.io/networkbuild3r/hebrew. Never merges into main.
 
 ## Configuration
 

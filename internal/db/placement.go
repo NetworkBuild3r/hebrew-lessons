@@ -582,9 +582,11 @@ func (s *Store) AudioIDByText(ctx context.Context, textNFC string) (string, bool
 }
 
 // knownLexemeUnion is the learner's known set.
-// The first branch is a he_en card whose newest review is Good or Easy.
-// The second is a new word of a lesson this learner has finished.
-// A latest Again or Hard is learning, and an en_he card does not count.
+// A word is known when its he_en card's latest review is Good or Easy.
+// That review is a successful recall. Placement Good and Easy are the
+// same kind of review: Rate writes the he_en card and its log.
+// A latest Again or Hard is learning. An en_he card does not count.
+// Finishing a lesson does not mark its new words known.
 const knownLexemeUnion = `
 	SELECT c.lexeme_id AS lexeme_id
 	FROM cards AS c
@@ -597,19 +599,10 @@ const knownLexemeUnion = `
 	      WHERE rl2.card_id = c.id
 	      ORDER BY rl2.reviewed_at DESC, rl2.id DESC
 	      LIMIT 1
-	  )
-	UNION
-	SELECT li.lexeme_id
-	FROM lesson_items AS li
-	JOIN lesson_runs AS lr
-	  ON lr.unit_id = li.unit_id
-	 AND lr.lesson_ix = li.lesson_ix
-	 AND lr.user_id = ?
-	 AND lr.finished_at IS NOT NULL
-	WHERE li.role = 'new'`
+	  )`
 
-// KnownLexemeIDs returns the sorted union of he_en cards whose latest
-// rating is Good or Easy and new words from lessons this learner has finished.
+// KnownLexemeIDs returns the sorted ids of he_en cards whose latest
+// rating is Good or Easy. A finished lesson does not add its new words.
 func (s *Store) KnownLexemeIDs(ctx context.Context, userID int64) ([]int64, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -619,7 +612,7 @@ func (s *Store) KnownLexemeIDs(ctx context.Context, userID int64) ([]int64, erro
 		SELECT lexeme_id FROM (
 			`+knownLexemeUnion+`
 		)
-		ORDER BY lexeme_id`, userID, userID)
+		ORDER BY lexeme_id`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("db: known lexemes: %w", err)
 	}
@@ -639,8 +632,9 @@ func (s *Store) KnownLexemeIDs(ctx context.Context, userID int64) ([]int64, erro
 }
 
 // LearnerKnownLexemes returns the pointed NFC text of KnownLexemeIDs, sorted by that text.
-// It is the he_en cards whose latest rating is Good or Easy, plus new words of
-// lessons this learner has finished. There is no learner_lexemes table.
+// It is the he_en cards whose latest rating is Good or Easy, including a
+// placement rating of Good or Easy. A finished lesson does not add its
+// new words. There is no learner_lexemes table.
 func (s *Store) LearnerKnownLexemes(ctx context.Context, userID int64) ([]string, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -652,7 +646,7 @@ func (s *Store) LearnerKnownLexemes(ctx context.Context, userID int64) ([]string
 		WHERE l.id IN (
 			`+knownLexemeUnion+`
 		)
-		ORDER BY l.text_nfc`, userID, userID)
+		ORDER BY l.text_nfc`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("db: learner known lexemes: %w", err)
 	}
@@ -724,9 +718,10 @@ func (s *Store) LatestPlacement(ctx context.Context, userID int64) (Placement, b
 
 // PlacementKnownLexemes returns the pointed NFC text of the newest run's
 // answers rated Good or Easy, sorted by that text.
-// A word taught only by a finished lesson is not included; KnownLexemeIDs is
-// the union that contains those ids. units.Lookup.KnownLexemes(ctx,
-// beforePosition) is the shared-unit authoring view and is a different set.
+// A word taught only by a finished lesson is not included. KnownLexemeIDs
+// is the he_en Good or Easy set, which is where a placement Good or Easy
+// lands. units.Lookup.KnownLexemes(ctx, beforePosition) is the shared-unit
+// authoring view and is a different set.
 func (s *Store) PlacementKnownLexemes(ctx context.Context, userID int64) ([]string, error) {
 	return s.placementLexemeTexts(ctx, userID, Good, Easy)
 }
@@ -852,7 +847,7 @@ func (s *Store) knownTexts(ctx context.Context, userID int64) (map[string]struct
 		FROM lexemes AS l
 		WHERE l.id IN (
 			`+knownLexemeUnion+`
-		)`, userID, userID)
+		)`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("db: known texts: %w", err)
 	}

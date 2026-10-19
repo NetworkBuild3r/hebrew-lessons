@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -131,7 +132,7 @@ func drain(t *testing.T, sess *Session) []CardRef {
 			return out
 		}
 		out = append(out, card)
-		if len(out) > SessionCap+5 {
+		if len(out) > SessionCap+MaxNewPerSession+DrillCap+DrillSteps {
 			t.Fatalf("queue did not end (%s)", pattern(out))
 		}
 	}
@@ -279,9 +280,7 @@ func TestRequeueMissOnce(t *testing.T) {
 	if len(logs) != 1 {
 		t.Fatalf("unserved card gained a review: %+v", logs)
 	}
-	if err := sess.Record(ctx, first.CardID, fsrs.Again); err != nil {
-		t.Fatal(err)
-	}
+	revealAndRecord(t, sess, ctx, first.CardID, fsrs.Again)
 
 	between := 0
 	seen := 1
@@ -307,9 +306,7 @@ func TestRequeueMissOnce(t *testing.T) {
 		if seen > 2 {
 			t.Fatalf("card %d appeared %d times", first.CardID, seen)
 		}
-		if err := sess.Record(ctx, card.CardID, fsrs.Again); err != nil {
-			t.Fatal(err)
-		}
+		revealAndRecord(t, sess, ctx, card.CardID, fsrs.Again)
 	}
 	if seen != 2 {
 		t.Fatalf("appearances = %d, want 2", seen)
@@ -541,6 +538,9 @@ func TestConcurrentRecordWritesOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := sess.Reveal(first.CardID); err != nil {
+		t.Fatal(err)
+	}
 
 	const n = 4
 	start := make(chan struct{})
@@ -599,6 +599,9 @@ func TestRecordRestoresClaimWhenGradeFails(t *testing.T) {
 	if !ok || card.CardID != id {
 		t.Fatalf("first = %+v ok=%v", card, ok)
 	}
+	if err := sess.Reveal(card.CardID); err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if err := sess.Record(ctx, card.CardID, fsrs.Again); err == nil {
@@ -651,6 +654,548 @@ func TestBuildSessionUsesOneNow(t *testing.T) {
 	if !ok || card.CardID != id || card.Struggling {
 		t.Fatalf("card = %+v ok=%v, want the confusion aged out on the build clock", card, ok)
 	}
+}
+
+func TestDrillsFollowThePlan(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	ctx := context.Background()
+	userID := mustUser(t, store)
+	reviewed := clk.Now().Add(-48 * time.Hour)
+	for i := 0; i < 20; i++ {
+		due := clk.Now().Add(time.Duration(i)*time.Minute - 3*time.Hour)
+		addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+	}
+	for i := 0; i < 20; i++ {
+		due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
+		addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.DirEnHe, due, 0, int(fsrs.Hard), reviewed, false)
+	}
+	rev := fsrs.New(store, clk)
+	for i := 0; i < MinMissesForDrill; i++ {
+		if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, "ב/כ", 0); err != nil {
+			t.Fatal(err)
+		}
+		if err := rev.RecordMiss(ctx, userID, fsrs.MissAgreement, "הוא/היא", 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// One miss of another pair is under the threshold.
+	if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, "ג/ק", 0); err != nil {
+		t.Fatal(err)
+	}
+
+	got := drainAll(t, mustBuild(t, svc, userID))
+	// Twenty Good and twenty Hard reviews: accuracy 0.5, under the low band.
+	plan := PlanFor(0.5)
+	s, k, letters, patterns := 0, 0, 0, 0
+	letterSteps := map[int]string{}
+	patternSteps := map[int]string{}
+	for _, card := range got {
+		switch card.Kind {
+		case KindLetter:
+			letters++
+			letterSteps[card.Step] = card.Key
+			if card.CardID >= 0 {
+				t.Fatalf("letter drill used a real card id: %+v", card)
+			}
+		case KindPattern:
+			patterns++
+			patternSteps[card.Step] = card.Key
+		default:
+			if card.Struggling {
+				s++
+			} else {
+				k++
+			}
+		}
+	}
+	if k != plan.Known || s != plan.Struggle {
+		t.Fatalf("known=%d struggle=%d, plan %+v", k, s, plan)
+	}
+	if letters != DrillSteps || patterns != DrillSteps {
+		t.Fatalf("letters=%d patterns=%d, want %d each", letters, patterns, DrillSteps)
+	}
+	for step := 0; step < DrillSteps; step++ {
+		if letterSteps[step] != "ב/כ" || patternSteps[step] != "הוא/היא" {
+			t.Fatalf("step %d letter %q pattern %q", step, letterSteps[step], patternSteps[step])
+		}
+	}
+	// The study cards stay in their planned order, with a letter and a
+	// pattern woven after each of the first drill steps.
+	if got[0].Kind == KindLetter || got[0].Kind == KindPattern {
+		t.Fatalf("drills replaced the first study card: %+v", got[0])
+	}
+	if got[1].Kind != KindLetter || got[2].Kind != KindPattern {
+		t.Fatalf("weave = %s %s, want letter then pattern", got[1].Kind, got[2].Kind)
+	}
+}
+
+func TestDrillCap(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	ctx := context.Background()
+	userID := mustUser(t, store)
+	reviewed := clk.Now().Add(-48 * time.Hour)
+	for i := 0; i < 20; i++ {
+		due := clk.Now().Add(time.Duration(i)*time.Minute - 3*time.Hour)
+		addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+	}
+	for i := 0; i < 20; i++ {
+		due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
+		addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.DirEnHe, due, 0, int(fsrs.Hard), reviewed, false)
+	}
+	// Six pairs at the miss threshold are 24 letter steps. DrillCap keeps 20.
+	pairs := []string{"ב/כ", "ג/ק", "ד/ת", "א/ע", "ח/כ", "ט/ת"}
+	rev := fsrs.New(store, clk)
+	for _, key := range pairs {
+		for i := 0; i < MinMissesForDrill; i++ {
+			if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, key, 0); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	got := drainAll(t, mustBuild(t, svc, userID))
+	plan := PlanFor(0.5)
+	if plan.Known != 19 || plan.Struggle != 1 {
+		t.Fatalf("plan = %+v, want 19/1", plan)
+	}
+	s, k, letters := 0, 0, 0
+	for _, card := range got {
+		switch card.Kind {
+		case KindLetter:
+			letters++
+		case KindPattern:
+			t.Fatalf("pattern drill in a letter-only cap: %+v", card)
+		default:
+			if card.Struggling {
+				s++
+			} else {
+				k++
+			}
+		}
+	}
+	if k != plan.Known || s != plan.Struggle {
+		t.Fatalf("known=%d struggle=%d, plan %+v", k, s, plan)
+	}
+	if letters != DrillCap {
+		t.Fatalf("letters = %d, want DrillCap %d", letters, DrillCap)
+	}
+}
+
+func TestDrillsAtBandPlans(t *testing.T) {
+	cases := []struct {
+		name         string
+		good, again  int
+		wantK, wantS int
+	}{
+		{name: "in-band 16/4", good: 45, again: 5, wantK: 16, wantS: 4},
+		{name: "high 13/7", good: 48, again: 2, wantK: 13, wantS: 7},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, store, clk := openSvc(t, 1)
+			ctx := context.Background()
+			userID := mustUser(t, store)
+			now := clk.Now()
+			addAccuracy(t, store, userID, tc.good, tc.again, now)
+			reviewed := now.Add(-48 * time.Hour)
+			for i := 0; i < 20; i++ {
+				due := now.Add(time.Duration(i)*time.Minute - 3*time.Hour)
+				addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+			}
+			for i := 0; i < 20; i++ {
+				due := now.Add(time.Duration(i)*time.Minute - 2*time.Hour)
+				addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.DirEnHe, due, 0, int(fsrs.Hard), reviewed, false)
+			}
+			rev := fsrs.New(store, clk)
+			for i := 0; i < MinMissesForDrill; i++ {
+				if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, "ב/כ", 0); err != nil {
+					t.Fatal(err)
+				}
+				if err := rev.RecordMiss(ctx, userID, fsrs.MissAgreement, "הוא/היא", 0); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got := drainAll(t, mustBuild(t, svc, userID))
+			accuracy := float64(tc.good) / float64(tc.good+tc.again)
+			plan := PlanFor(accuracy)
+			if plan.Known != tc.wantK || plan.Struggle != tc.wantS {
+				t.Fatalf("plan = %+v, want %d/%d", plan, tc.wantK, tc.wantS)
+			}
+			s, k, letters, patterns := 0, 0, 0, 0
+			for _, card := range got {
+				switch card.Kind {
+				case KindLetter:
+					letters++
+				case KindPattern:
+					patterns++
+				default:
+					if card.Struggling {
+						s++
+					} else {
+						k++
+					}
+				}
+			}
+			if k != plan.Known || s != plan.Struggle {
+				t.Fatalf("known=%d struggle=%d, plan %+v", k, s, plan)
+			}
+			if letters != DrillSteps || patterns != DrillSteps {
+				t.Fatalf("letters=%d patterns=%d, want %d each", letters, patterns, DrillSteps)
+			}
+		})
+	}
+}
+
+func TestRecordRejectsUnrevealed(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	ctx := context.Background()
+	userID := mustUser(t, store)
+	reviewed := clk.Now().Add(-48 * time.Hour)
+	first := addCard(t, store, userID, "נסתר", fsrs.DirHeEn, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+	sess := mustBuild(t, svc, userID)
+	card, ok := sess.Next()
+	if !ok || card.CardID != first {
+		t.Fatalf("first = %+v ok=%v", card, ok)
+	}
+	before, err := store.GetCard(ctx, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = sess.Record(ctx, card.CardID, fsrs.Good)
+	if !errors.Is(err, ErrNotRevealed) {
+		t.Fatalf("unrevealed grade = %v", err)
+	}
+	logs := mustReviewLogs(t, store, first)
+	if len(logs) != 1 {
+		t.Fatalf("unrevealed grade wrote a log: %+v", logs)
+	}
+	after, err := store.GetCard(ctx, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Due != before.Due || after.Stability != before.Stability || after.Reps != before.Reps {
+		t.Fatalf("unrevealed grade changed the card: before %+v after %+v", before, after)
+	}
+	// The serve is still the current card, so reveal-then-grade can proceed.
+	if err := sess.Reveal(card.CardID); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Record(ctx, card.CardID, fsrs.Good); err != nil {
+		t.Fatalf("reveal after a rejected grade = %v", err)
+	}
+}
+
+func TestRevealThenGrade(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	ctx := context.Background()
+	userID := mustUser(t, store)
+	reviewed := clk.Now().Add(-48 * time.Hour)
+	first := addCard(t, store, userID, "גלוי", fsrs.DirHeEn, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+	sess := mustBuild(t, svc, userID)
+	shown, ok := sess.Next()
+	if !ok || shown.CardID != first {
+		t.Fatalf("first = %+v ok=%v", shown, ok)
+	}
+	if err := sess.Reveal(otherCard(shown.CardID)); !errors.Is(err, ErrNotServed) {
+		t.Fatalf("reveal of another card = %v", err)
+	}
+	if err := sess.Reveal(shown.CardID); err != nil {
+		t.Fatal(err)
+	}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := sess.Record(cancelled, shown.CardID, fsrs.Good); err == nil {
+		t.Fatal("cancelled context graded the revealed card")
+	}
+	if err := sess.Record(ctx, shown.CardID, fsrs.Good); err != nil {
+		t.Fatal(err)
+	}
+	shownLogs := mustReviewLogs(t, store, first)
+	if len(shownLogs) != 2 || !shownLogs[1].Peeked || shownLogs[1].Rating != int(fsrs.Good) {
+		t.Fatalf("revealed log = %+v, want peeked true", shownLogs)
+	}
+}
+
+func revealAndRecord(t *testing.T, sess *Session, ctx context.Context, cardID int64, rating fsrs.Rating) {
+	t.Helper()
+	if err := sess.Reveal(cardID); err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.Record(ctx, cardID, rating); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func otherCard(id int64) int64 {
+	if id == 0 {
+		return 1
+	}
+	return id + 1
+}
+
+func mustReviewLogs(t *testing.T, store *db.Store, cardID int64) []db.ReviewLog {
+	t.Helper()
+	logs, err := store.ReviewLogs(context.Background(), cardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return logs
+}
+
+func drainAll(t *testing.T, sess *Session) []CardRef {
+	t.Helper()
+	var out []CardRef
+	for {
+		card, ok := sess.Next()
+		if !ok {
+			return out
+		}
+		out = append(out, card)
+		if len(out) > SessionCap+DrillCap+DrillSteps {
+			t.Fatalf("queue did not end")
+		}
+	}
+}
+
+func TestFinishedLessonWordsEnterReview(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	ctx := context.Background()
+	userID := mustUser(t, store)
+	now := clk.Now()
+	// The later unit is enqueued first, so its card ids are lower.
+	// Lesson position has to win over that id order.
+	lateWord := mustLexeme(t, store, "מְאֻחָר")
+	earlyWord := mustLexeme(t, store, "מֻקְדָּם")
+	waitingWord := mustLexeme(t, store, "מַמְתִּין")
+	lateUnit := insertUnitAt(t, store, 4)
+	earlyUnit := insertUnitAt(t, store, 1)
+	waitingUnit := insertUnitAt(t, store, 0)
+	finishLesson(t, store, userID, lateUnit, 0, []int64{lateWord}, now)
+	finishLesson(t, store, userID, earlyUnit, 0, []int64{earlyWord}, now)
+	if err := testharness.InsertLessonItem(ctx, store, waitingUnit, 0, waitingWord, "new", "recall"); err != nil {
+		t.Fatal(err)
+	}
+	lateHe, lateEn := enqueuePair(t, store, userID, lateWord, now)
+	earlyHe, earlyEn := enqueuePair(t, store, userID, earlyWord, now)
+	waitingHe, waitingEn := enqueuePair(t, store, userID, waitingWord, now)
+
+	got := drain(t, mustBuild(t, svc, userID))
+	want := []int64{earlyHe, earlyEn, lateHe, lateEn}
+	if ids := idsOf(got); !sameIDs(ids, want) {
+		t.Fatalf("queue = %v, want %v", ids, want)
+	}
+	for _, card := range got {
+		if !card.New || (card.Dir != fsrs.DirHeEn && card.Dir != fsrs.DirEnHe) {
+			t.Fatalf("card %+v, want a new he_en or en_he card", card)
+		}
+	}
+	for _, id := range []int64{waitingHe, waitingEn} {
+		for _, card := range got {
+			if card.CardID == id {
+				t.Fatalf("unfinished lesson card %d was queued", id)
+			}
+		}
+	}
+}
+
+func TestNewCardCaps(t *testing.T) {
+	t.Run("five", func(t *testing.T) {
+		svc, store, clk := openSvc(t, 1)
+		userID := mustUser(t, store)
+		now := clk.Now()
+		unit := insertUnitAt(t, store, 1)
+		var words []int64
+		for i := 0; i < 4; i++ {
+			words = append(words, mustLexeme(t, store, fmt.Sprintf("חָדָשׁ-%d", i)))
+		}
+		finishLesson(t, store, userID, unit, 0, words, now)
+		var ids []int64
+		for _, word := range words {
+			he, en := enqueuePair(t, store, userID, word, now)
+			ids = append(ids, he, en)
+		}
+		got := drain(t, mustBuild(t, svc, userID))
+		if len(got) != MaxNewPerSession {
+			t.Fatalf("len = %d, want %d", len(got), MaxNewPerSession)
+		}
+		for i, card := range got {
+			if !card.New || card.CardID != ids[i] {
+				t.Fatalf("card %d = %+v, want new %d", i, card, ids[i])
+			}
+		}
+	})
+	t.Run("quarter", func(t *testing.T) {
+		svc, store, clk := openSvc(t, 1)
+		userID := mustUser(t, store)
+		now := clk.Now()
+		reviewed := now.Add(-48 * time.Hour)
+		known := map[int64]bool{}
+		for i := 0; i < 3; i++ {
+			id := addCard(t, store, userID, fmt.Sprintf("יָדוּעַ-%d", i), fsrs.DirHeEn, now.Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+			known[id] = true
+		}
+		unit := insertUnitAt(t, store, 2)
+		var words []int64
+		for i := 0; i < 4; i++ {
+			words = append(words, mustLexeme(t, store, fmt.Sprintf("קָטָן-%d", i)))
+		}
+		finishLesson(t, store, userID, unit, 0, words, now)
+		var fresh []int64
+		for _, word := range words {
+			he, en := enqueuePair(t, store, userID, word, now)
+			fresh = append(fresh, he, en)
+		}
+		got := drain(t, mustBuild(t, svc, userID))
+		var newIDs []int64
+		seenKnown := map[int64]bool{}
+		for _, card := range got {
+			if card.New {
+				newIDs = append(newIDs, card.CardID)
+				continue
+			}
+			if !known[card.CardID] {
+				t.Fatalf("unexpected card %+v", card)
+			}
+			seenKnown[card.CardID] = true
+		}
+		if len(seenKnown) != len(known) {
+			t.Fatalf("known cards = %v, want %v", seenKnown, known)
+		}
+		// 3 reviewed cards. sessionSize = 3+2 = 5.
+		// min(5, max(2, floor(0.25*5))) = min(5, max(2, 1)) = 2.
+		// The share alone admitted 1; MinNewPerSession raises it to 2.
+		if len(newIDs) != 2 || newIDs[0] != fresh[0] || newIDs[1] != fresh[1] {
+			t.Fatalf("new = %v, want the first two new cards %v", newIDs, fresh[:2])
+		}
+	})
+}
+
+func TestNewCardFloor(t *testing.T) {
+	// sessionSize is the reviewed cards in the built queue plus the new
+	// cards. newCount = min(5, max(2, floor(0.25 * sessionSize))) when
+	// reviews are due. Zero reviews uses the full cap of 5.
+	//
+	// Ten reviews: the consistent count is 3. sessionSize = 10+3 = 13,
+	// floor(0.25*13) = 3, min(5, max(2, 3)) = 3.
+	cases := []struct {
+		reviews int
+		wantNew int
+	}{
+		{reviews: 0, wantNew: 5},
+		{reviews: 1, wantNew: 2},
+		{reviews: 2, wantNew: 2},
+		{reviews: 10, wantNew: 3},
+	}
+	// Four finished-lesson words are eight unreviewed cards, more than
+	// every allowance in this table, so the cap is what limits the queue.
+	const newWords = 4
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("%d reviews", tc.reviews), func(t *testing.T) {
+			svc, store, clk := openSvc(t, 1)
+			userID := mustUser(t, store)
+			now := clk.Now()
+			reviewedAt := now.Add(-48 * time.Hour)
+			known := map[int64]bool{}
+			for i := 0; i < tc.reviews; i++ {
+				id := addCard(t, store, userID, fmt.Sprintf("נִסְקָר-%d", i), fsrs.DirHeEn, now.Add(-time.Hour), 0, int(fsrs.Good), reviewedAt, false)
+				known[id] = true
+			}
+			unit := insertUnitAt(t, store, 1)
+			var words []int64
+			for i := 0; i < newWords; i++ {
+				words = append(words, mustLexeme(t, store, fmt.Sprintf("חָדָשׁ-%d", i)))
+			}
+			finishLesson(t, store, userID, unit, 0, words, now)
+			var fresh []int64
+			for _, word := range words {
+				he, en := enqueuePair(t, store, userID, word, now)
+				fresh = append(fresh, he, en)
+			}
+			if tc.wantNew >= len(fresh) {
+				t.Fatalf("want %d new is not below the %d unreviewed candidates", tc.wantNew, len(fresh))
+			}
+			got := drain(t, mustBuild(t, svc, userID))
+			var newIDs []int64
+			seenKnown := map[int64]bool{}
+			for _, card := range got {
+				if card.New {
+					newIDs = append(newIDs, card.CardID)
+					continue
+				}
+				if card.Kind == KindLetter || card.Kind == KindPattern {
+					t.Fatalf("drill %+v is not part of this session", card)
+				}
+				if !known[card.CardID] {
+					t.Fatalf("unexpected card %+v", card)
+				}
+				seenKnown[card.CardID] = true
+			}
+			if len(seenKnown) != tc.reviews {
+				t.Fatalf("reviewed = %d, want %d", len(seenKnown), tc.reviews)
+			}
+			sessionSize := len(seenKnown) + len(newIDs)
+			if len(newIDs) != tc.wantNew {
+				t.Fatalf("new = %d, want %d (sessionSize %d, candidates %d)", len(newIDs), tc.wantNew, sessionSize, len(fresh))
+			}
+			for i, id := range newIDs {
+				if id != fresh[i] {
+					t.Fatalf("new[%d] = %d, want %d of %v", i, id, fresh[i], fresh)
+				}
+			}
+		})
+	}
+}
+
+func insertUnitAt(t *testing.T, store *db.Store, position int) int64 {
+	t.Helper()
+	res, err := store.ExecContext(context.Background(), `
+		INSERT INTO units (position, title, situation, concept, status, rev, doc)
+		VALUES (?, 't', 's', 'c', 'published', 1, '{"title":"t"}')`, position)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func finishLesson(t *testing.T, store *db.Store, userID, unitID int64, lessonIx int, words []int64, when time.Time) {
+	t.Helper()
+	ctx := context.Background()
+	for _, word := range words {
+		if err := testharness.InsertLessonItem(ctx, store, unitID, lessonIx, word, "new", "recall"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := testharness.InsertLessonRun(ctx, store, userID, unitID, lessonIx, when.Add(-time.Hour), &when); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// enqueuePair inserts the he_en card and then the en_he card, due now,
+// with state new and no review_log row. That is the row enqueueNewWords writes.
+func enqueuePair(t *testing.T, store *db.Store, userID, lexemeID int64, due time.Time) (he, en int64) {
+	t.Helper()
+	ctx := context.Background()
+	for _, dir := range []string{fsrs.DirHeEn, fsrs.DirEnHe} {
+		id, err := store.InsertCard(ctx, db.Card{
+			UserID:   userID,
+			LexemeID: lexemeID,
+			Dir:      dir,
+			State:    "new",
+			Due:      due,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if dir == fsrs.DirHeEn {
+			he = id
+		} else {
+			en = id
+		}
+	}
+	return he, en
 }
 
 func lexemeOf(t *testing.T, store *db.Store, cardID int64) int64 {

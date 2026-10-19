@@ -85,6 +85,16 @@
   /* motion */
   --dur-fast: 140ms; --dur-base: 240ms; --dur-slow: 420ms; --dur-word: 680ms;
   --ease-out: cubic-bezier(.2, .8, .2, 1); --ease-in-out: cubic-bezier(.6, 0, .3, 1); --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  /* Review flip and stack, reused by the placement deck. */
+  --spring-soft: cubic-bezier(.22, 1.2, .36, 1);
+  --motion-lift: 8px;
+  --motion-scale: .04;
+  --motion-flip: 90deg;
+  --dur-deck: 280ms;
+  /* Per-card progress. The element sets these; the keyframes only read them. */
+  --v: 0;
+  --v0: 0;
+  --o: 0;
 
   /* z-index */
   --z-base: 0; --z-sticky: 10; --z-nav: 20; --z-feedback: 30; --z-popover: 40; --z-toast: 50;
@@ -93,4 +103,4 @@
 :root[data-theme="dark"]  { color-scheme: dark; }
 @supports not (color: light-dark(#000, #fff)) { :root { color-scheme: light; } }   /* pre-2024 engines get the light palette */
 /* Reduced motion = subtle, not none: short opacity-only fades, no travel, no bounce. */
-@media (prefers-reduced-motion: reduce) { :root { --dur-fast: 100ms; --dur-base: 160ms; --dur-slow: 200ms; --dur-word: 200ms; --ease-spring: linear; --motion-shift: 0px; } }
+@media (prefers-reduced-motion: reduce) { :root { --dur-fast: 100ms; --dur-base: 160ms; --dur-slow: 200ms; --dur-word: 200ms; --ease-spring: linear; --motion-shift: 0px; --spring-soft: linear; --motion-lift: 0px; --motion-scale: 0; --motion-flip: 0deg; --dur-deck: 150ms; } }
