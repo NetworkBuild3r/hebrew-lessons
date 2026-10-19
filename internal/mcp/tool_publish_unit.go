@@ -14,7 +14,7 @@ const publishUnitDescription = "Publish one unit. Admin only, including the stat
 	"Workflow: call validate_unit, then put_unit to save a draft, then publish_unit for a shared unit. " +
 	"A learner-scoped unit (scope learner:<id>) may instead be published by put_unit with publish true, which runs this same check. " +
 	"Shared units ignore that flag and become published only through publish_unit. " +
-	"This tool publishes the unit's current revision, which is the latest draft unless you pass revision to publish a stored revision. " +
+	"This tool publishes the revision it validated. Omit revision to validate the current row; pass revision to validate a stored one. A save that lands after that check is not published in its place. " +
 	"It runs the same validator as validate_unit. Block issues are a tool error: nothing is published, and the result lists each issue's rule id and JSON pointer. " +
 	"Pedagogy warnings do not block, and they are included in issues. " +
 	"Publishing the same revision again reports unchanged and writes nothing."
@@ -71,12 +71,13 @@ func (s *service) publishUnit(ctx context.Context, _ *mcp.CallToolRequest, in pu
 		res.SetError(errors.New(publishBlockText(issues)))
 		return res, out, nil
 	}
-	saved, err := s.units.PublishUnit(ctx, in.UnitID, in.Revision)
+	pinned := snap.Revision
+	saved, err := s.units.PublishUnit(ctx, in.UnitID, &pinned)
 	if errors.Is(err, ErrUnitNotFound) {
 		return nil, publishOutput{}, fmt.Errorf("No unit has id %d.", in.UnitID)
 	}
 	if errors.Is(err, ErrRevisionNotFound) {
-		return nil, publishOutput{}, fmt.Errorf("Unit %d has no revision %d.", in.UnitID, *in.Revision)
+		return nil, publishOutput{}, fmt.Errorf("Unit %d has no revision %d.", in.UnitID, pinned)
 	}
 	if err != nil {
 		return nil, publishOutput{}, storeErr("The unit could not be published.", err)

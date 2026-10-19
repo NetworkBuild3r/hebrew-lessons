@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -160,6 +161,77 @@ func TestPutUnitPublishFlag(t *testing.T) {
 	if blocked.Published || mem.Status(blocked.UnitID) != "draft" || !hasRule(blocked.Issues, units.RuleSchemaRequired) {
 		t.Fatalf("blocked learner %+v status %s", blocked, mem.Status(blocked.UnitID))
 	}
+}
+
+func TestPublishUnitPinsValidatedRevision(t *testing.T) {
+	mem := NewMemory()
+	mem.AddLexeme(helloLexeme())
+	writer := &publishAfterSave{UnitWriter: mem}
+	session := connectMCP(t, Handler(Options{
+		AuthToken: testToken,
+		Course:    mem,
+		Lexicon:   mem,
+		Lookup:    mem,
+		Units:     writer,
+	}), testToken)
+
+	valid := call[putOutput](t, session, "put_unit", putInput{Scope: ScopeShared, Position: 0, Doc: helloDoc()})
+	writer.inject = func() {
+		bad := helloDoc()
+		bad.Title = ""
+		bad.Position = 0
+		id := valid.UnitID
+		if _, err := mem.PutUnit(t.Context(), &id, &bad, ScopeShared); err != nil {
+			t.Errorf("inject save: %v", err)
+		}
+	}
+	published := call[publishOutput](t, session, "publish_unit", publishInput{UnitID: valid.UnitID})
+	if published.Revision != valid.Revision || published.Status != "published" || published.Unchanged {
+		t.Fatalf("published %+v", published)
+	}
+	current := mem.byID(valid.UnitID)
+	if current == nil || current.status != "published" || current.rev != valid.Revision || current.doc.Title != "Hello" {
+		t.Fatalf("current rev %d title %q status %s", current.rev, current.doc.Title, current.status)
+	}
+}
+
+func TestPublishUnitOmittedRevisionDoesNotPanic(t *testing.T) {
+	mem := NewMemory()
+	mem.AddLexeme(helloLexeme())
+	session := connectMCP(t, Handler(Options{
+		AuthToken: testToken,
+		Course:    mem,
+		Lexicon:   mem,
+		Lookup:    mem,
+		Units:     missingRevision{UnitWriter: mem},
+	}), testToken)
+	draft := call[putOutput](t, session, "put_unit", putInput{Scope: ScopeShared, Position: 0, Doc: helloDoc()})
+	msg := callErr(t, session, "publish_unit", publishInput{UnitID: draft.UnitID})
+	if !strings.Contains(msg, "no revision 1") || mem.Status(draft.UnitID) != "draft" {
+		t.Fatalf("omitted revision %q status %s", msg, mem.Status(draft.UnitID))
+	}
+}
+
+// publishAfterSave writes a new draft between validation and publish.
+type publishAfterSave struct {
+	UnitWriter
+	inject func()
+}
+
+func (w *publishAfterSave) PublishUnit(ctx context.Context, id int64, revision *int) (PutResult, error) {
+	if w.inject != nil {
+		w.inject()
+		w.inject = nil
+	}
+	return w.UnitWriter.PublishUnit(ctx, id, revision)
+}
+
+// missingRevision makes PublishUnit report a missing revision. LoadUnit
+// still returns the current row, which is the omitted-revision path.
+type missingRevision struct{ UnitWriter }
+
+func (missingRevision) PublishUnit(context.Context, int64, *int) (PutResult, error) {
+	return PutResult{}, ErrRevisionNotFound
 }
 
 func TestPublishUnitDeniesLearnerAndAnonymous(t *testing.T) {
