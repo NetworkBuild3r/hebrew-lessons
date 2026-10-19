@@ -92,12 +92,17 @@ type Config struct {
 	Access        *auth.Access
 
 	// MCPAuthToken is the bearer secret for the authoring tools.
-	// cmd/hebrew copies MCP_AUTH_TOKEN without trimming. An empty token
-	// does not stop startup, and it rejects every MCP request.
-	// internal/mcp does not read the environment. GET /healthz stays open.
+	// cmd/hebrew copies MCP_AUTH_TOKEN and trims it. An empty token
+	// disables the static bearer: it accepts no request. Startup still
+	// proceeds. internal/mcp does not read the environment.
+	// GET /healthz stays open.
 	// MCPPublicURL is the public MCP origin. Empty does not stop startup.
-	MCPAuthToken string
-	MCPPublicURL string
+	// MCPAllowedOrigins are browser Origins allowed to call MCP.
+	// A request with no Origin header is allowed. cmd/hebrew reads
+	// MCP_ALLOWED_ORIGINS.
+	MCPAuthToken      string
+	MCPPublicURL      string
+	MCPAllowedOrigins []string
 
 	// ElevenLabsAPIKey gates the real TTS client. Empty leaves TTS unset
 	// unless TTS is set directly.
@@ -349,13 +354,18 @@ func newMCP(cfg Config, health http.Handler, sessions *auth.Service) http.Handle
 	// Tools answer with isError until those methods exist. The
 	// adapter belongs here, next to this call, so db does not import mcp.
 	//
-	// AuthToken is Config.MCPAuthToken. cmd/hebrew copied MCP_AUTH_TOKEN
-	// into that field, untrimmed. This function does not read the
-	// environment. Sessions is auth.Service.Lookup. OAuth later sets
-	// SessionFromToken; it does not resolve the user itself.
+	// AuthToken is Config.MCPAuthToken. cmd/hebrew trimmed MCP_AUTH_TOKEN
+	// into that field. An empty value disables the static bearer.
+	// This function does not read the environment. Sessions calls
+	// auth.Service.Lookup and copies users.role. OAuth later sets
+	// SessionFromToken; it must not read the web session cookie.
+	if cfg.MCPAuthToken == "" {
+		slog.Warn("mcp static token is disabled", "reason", "MCP_AUTH_TOKEN is empty")
+	}
 	authoring := mcp.Handler(mcp.Options{
-		AuthToken: cfg.MCPAuthToken,
-		Sessions:  sessions,
+		AuthToken:      cfg.MCPAuthToken,
+		AllowedOrigins: cfg.MCPAllowedOrigins,
+		Sessions:       sessionUsers{auth: sessions},
 	})
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)

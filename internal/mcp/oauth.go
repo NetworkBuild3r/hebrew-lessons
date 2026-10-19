@@ -15,9 +15,12 @@ type SessionUserResolver interface {
 
 // OAuthSessions is the OAuth bearer seam.
 // Tokens maps an access token to a raw session id. That function is the
-// only piece the authorization server still fills in. A nil Tokens, or a
-// token it does not own, returns ErrUnauthorized so Chain can try
-// StaticToken. Users is the session-or-user resolver and is wired now.
+// only piece the authorization server still fills in. It must not read
+// the web session cookie. A nil Tokens, or a token it does not own,
+// returns ErrUnauthorized so Chain can try StaticToken. Users is the
+// session-or-user resolver and is wired now. A failure other than
+// ErrUnauthorized is logged by the bearer middleware and replaced with
+// a fixed message before it reaches the client.
 type OAuthSessions struct {
 	Tokens func(ctx context.Context, token string, r *http.Request) (rawSessionID string, err error)
 	Users  SessionUserResolver

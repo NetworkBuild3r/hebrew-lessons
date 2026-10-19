@@ -428,6 +428,27 @@ func (m *Memory) PutUnit(ctx context.Context, id *int64, doc *units.Unit, scope 
 	return PutResult{UnitID: u.id, Revision: u.rev}, nil
 }
 
+// SetStatus sets the stored status. Tests use it to mark a unit published.
+// PutUnit leaves that status alone when the document, position, and scope
+// are unchanged, and sets it back to draft when they change.
+func (m *Memory) SetStatus(id int64, status string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if u := m.byID(id); u != nil {
+		u.status = status
+	}
+}
+
+// Status returns the stored status. An unknown id returns an empty string.
+func (m *Memory) Status(id int64) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if u := m.byID(id); u != nil {
+		return u.status
+	}
+	return ""
+}
+
 func (m *Memory) byID(id int64) *memUnit {
 	for i := range m.units {
 		if m.units[i].id == id {

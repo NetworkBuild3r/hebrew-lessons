@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	sdauth "github.com/modelcontextprotocol/go-sdk/auth"
@@ -21,18 +22,31 @@ const defaultActor = "mcp"
 // it to 401 rather than 500.
 var ErrUnauthorized = sdauth.ErrInvalidToken
 
+// RoleAdmin and RoleLearner match auth.RoleAdmin and auth.RoleLearner
+// from the sign-in work (#57). The static MCP_AUTH_TOKEN uses RoleAdmin.
+const (
+	RoleAdmin   = "admin"
+	RoleLearner = "learner"
+)
+
 // Principal is the caller a validator accepted.
 type Principal struct {
 	// Actor is stored on unit_revisions.actor.
 	Actor string
 	// UserID is the learner id passed to LatestPlacement,
 	// PlacementKnownLexemes, and PlacementLearningLexemes. The static
-	// token leaves it 0. OAuth sets it to users.id.
+	// token leaves it 0. A session sets it to users.id.
 	UserID int64
-	// Source is "token" for the static secret and "oauth" once that
-	// validator is composed in.
+	// Role is RoleAdmin or RoleLearner. The static token is RoleAdmin
+	// and has full access. A session copies users.role from Lookup.
+	Role string
+	// Source is "token" for the static secret and "oauth" for a session.
 	Source string
 }
+
+// errAuthUnavailable is the only authorization failure text a client sees
+// for a server-side error. The detail is logged and is not included here.
+var errAuthUnavailable = errors.New("authorization is unavailable")
 
 // Validator checks a raw bearer token.
 //
@@ -45,14 +59,18 @@ type Validator interface {
 }
 
 // StaticToken compares a bearer token with Token in constant time.
-// An empty Token rejects every request, including an empty bearer.
+// An empty Token is disabled: it accepts no bearer, including an empty one.
+// A match is an operator (Lesson Builder) and has RoleAdmin, full access,
+// unless Role is set.
 type StaticToken struct {
 	Token string
 	// Actor overrides defaultActor when it is not empty.
 	Actor string
 	// UserID is the learner id for placement reads. Zero is the
-	// static token until OAuth sets Principal.UserID.
+	// static token.
 	UserID int64
+	// Role overrides RoleAdmin when it is not empty.
+	Role string
 }
 
 // Validate implements Validator.
@@ -64,7 +82,11 @@ func (s StaticToken) Validate(_ context.Context, token string, _ *http.Request) 
 	if actor == "" {
 		actor = defaultActor
 	}
-	return Principal{Actor: actor, UserID: s.UserID, Source: "token"}, nil
+	role := s.Role
+	if role == "" {
+		role = RoleAdmin
+	}
+	return Principal{Actor: actor, UserID: s.UserID, Source: "token", Role: role}, nil
 }
 
 // Chain tries each validator until one accepts the token.
@@ -108,6 +130,10 @@ func requireBearer(v Validator, next http.Handler) http.Handler {
 	verifier := func(ctx context.Context, token string, r *http.Request) (*sdauth.TokenInfo, error) {
 		p, err := v.Validate(ctx, token, r)
 		if err != nil {
+			if !errors.Is(err, ErrUnauthorized) {
+				slog.Error("mcp auth", "err", err)
+				err = errAuthUnavailable
+			}
 			return nil, err
 		}
 		if p.Actor == "" {
@@ -118,6 +144,7 @@ func requireBearer(v Validator, next http.Handler) http.Handler {
 			Extra: map[string]any{
 				"source": p.Source,
 				"userID": p.UserID,
+				"role":   p.Role,
 			},
 		}
 		return info, nil
@@ -149,11 +176,25 @@ func actorFrom(ctx context.Context) string {
 	return info.UserID
 }
 
-func userIDFrom(ctx context.Context) int64 {
+func principalFrom(ctx context.Context) Principal {
 	info := sdauth.TokenInfoFromContext(ctx)
-	if info == nil || info.Extra == nil {
-		return 0
+	if info == nil {
+		return Principal{}
 	}
-	id, _ := info.Extra["userID"].(int64)
-	return id
+	p := Principal{Actor: info.UserID}
+	if info.Extra != nil {
+		if id, ok := info.Extra["userID"].(int64); ok {
+			p.UserID = id
+		}
+		if role, ok := info.Extra["role"].(string); ok {
+			p.Role = role
+		}
+		if src, ok := info.Extra["source"].(string); ok {
+			p.Source = src
+		}
+	}
+	if p.Actor == "" {
+		p.Actor = defaultActor
+	}
+	return p
 }

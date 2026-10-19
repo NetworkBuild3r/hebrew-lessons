@@ -1,0 +1,308 @@
+package mcp
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+type roleTokens struct{}
+
+func (roleTokens) Validate(_ context.Context, token string, _ *http.Request) (Principal, error) {
+	switch token {
+	case "learner":
+		return Principal{Actor: "7", UserID: 7, Role: RoleLearner, Source: "oauth"}, nil
+	case "admin":
+		return Principal{Actor: "1", UserID: 1, Role: RoleAdmin, Source: "oauth"}, nil
+	default:
+		return Principal{}, ErrUnauthorized
+	}
+}
+
+func roleServer(t *testing.T) (*Memory, *httptest.Server) {
+	t.Helper()
+	mem := NewMemory()
+	mem.AddLexeme(helloLexeme())
+	mem.AddLexeme(Lexeme{TextNFC: coffee, Bare: "קפה", Gloss: "coffee", POS: "noun"})
+	mem.SetPlacement(7, Placement{Finished: true, Sittings: 1, StopReason: "exhausted"}, []string{hello}, nil)
+	mem.SetPlacement(9, Placement{Finished: true, Sittings: 1, StopReason: "exhausted"}, []string{coffee}, nil)
+	h := Handler(Options{
+		Validator: roleTokens{},
+		Course:    mem,
+		Lexicon:   mem,
+		Lookup:    mem,
+		Units:     mem,
+	})
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	return mem, srv
+}
+
+func TestLearnerPutUnitForbidden(t *testing.T) {
+	_, srv := roleServer(t)
+	for _, scope := range []string{ScopeShared, "learner:7"} {
+		res := postTool(t, srv.URL, "learner", "put_unit", map[string]any{
+			"scope": scope, "position": 0, "doc": helloDoc(),
+		}, nil)
+		body := readBody(t, res)
+		if res.StatusCode != http.StatusForbidden {
+			t.Fatalf("scope %s status %d body %s", scope, res.StatusCode, body)
+		}
+		if !strings.Contains(body, msgPutDenied) {
+			t.Fatalf("body %s", body)
+		}
+	}
+}
+
+func TestLearnerGetContextOtherLearnerForbidden(t *testing.T) {
+	_, srv := roleServer(t)
+	other := int64(9)
+	res := postTool(t, srv.URL, "learner", "get_context", getContextInput{Position: 0, LearnerID: &other}, nil)
+	body := readBody(t, res)
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("status %d body %s", res.StatusCode, body)
+	}
+	if !strings.Contains(body, msgOtherLearner) {
+		t.Fatalf("body %s", body)
+	}
+}
+
+func TestLearnerGetContextSelfOK(t *testing.T) {
+	_, srv := roleServer(t)
+	self := int64(7)
+	res := postTool(t, srv.URL, "learner", "get_context", getContextInput{Position: 0, LearnerID: &self}, nil)
+	body := readBody(t, res)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %d body %s", res.StatusCode, body)
+	}
+	if strings.Contains(body, `"isError":true`) || !strings.Contains(body, hello) {
+		t.Fatalf("body %s", body)
+	}
+}
+
+func TestAdminPutUnitShared(t *testing.T) {
+	mem, srv := roleServer(t)
+	res := postTool(t, srv.URL, "admin", "put_unit", map[string]any{
+		"scope": ScopeShared, "position": 0, "doc": helloDoc(),
+	}, nil)
+	body := readBody(t, res)
+	if res.StatusCode != http.StatusOK || strings.Contains(body, `"isError":true`) {
+		t.Fatalf("status %d body %s", res.StatusCode, body)
+	}
+	units, err := mem.ListUnits(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(units) != 1 || units[0].Scope != ScopeShared || units[0].Status != "draft" {
+		t.Fatalf("units %+v", units)
+	}
+}
+
+func TestAdminGetContextOtherLearner(t *testing.T) {
+	_, srv := roleServer(t)
+	other := int64(9)
+	res := postTool(t, srv.URL, "admin", "get_context", getContextInput{Position: 0, LearnerID: &other}, nil)
+	body := readBody(t, res)
+	if res.StatusCode != http.StatusOK || strings.Contains(body, `"isError":true`) || !strings.Contains(body, coffee) {
+		t.Fatalf("status %d body %s", res.StatusCode, body)
+	}
+}
+
+func TestLearnerAndAdminMayLookupAndValidate(t *testing.T) {
+	_, srv := roleServer(t)
+	for _, token := range []string{"learner", "admin"} {
+		look := postTool(t, srv.URL, token, "lookup", lookupInput{Query: hello}, nil)
+		lookBody := readBody(t, look)
+		if look.StatusCode != http.StatusOK || strings.Contains(lookBody, `"isError":true`) {
+			t.Fatalf("%s lookup %d %s", token, look.StatusCode, lookBody)
+		}
+		dry := postTool(t, srv.URL, token, "validate_unit", validateInput{Position: 0, Doc: helloDoc()}, nil)
+		dryBody := readBody(t, dry)
+		if dry.StatusCode != http.StatusOK || strings.Contains(dryBody, `"isError":true`) {
+			t.Fatalf("%s validate %d %s", token, dry.StatusCode, dryBody)
+		}
+	}
+}
+
+func TestCrossOriginBrowserPostRejected(t *testing.T) {
+	h := Handler(Options{
+		AuthToken:      testToken,
+		AllowedOrigins: []string{"https://lessons.example"},
+	})
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+
+	cross := postInitializeHeader(t, srv.URL, testToken, map[string]string{
+		"Sec-Fetch-Site": "cross-site",
+		"Origin":         "https://evil.example",
+	})
+	if cross.StatusCode != http.StatusForbidden {
+		body := readBody(t, cross)
+		t.Fatalf("sec-fetch status %d body %s", cross.StatusCode, body)
+	}
+	cross.Body.Close()
+
+	mismatch := postInitializeHeader(t, srv.URL, testToken, map[string]string{
+		"Origin": "https://evil.example",
+	})
+	if mismatch.StatusCode != http.StatusForbidden {
+		body := readBody(t, mismatch)
+		t.Fatalf("origin status %d body %s", mismatch.StatusCode, body)
+	}
+	mismatch.Body.Close()
+
+	plain := postInitializeHeader(t, srv.URL, testToken, nil)
+	plainBody := readBody(t, plain)
+	if plain.StatusCode != http.StatusOK {
+		t.Fatalf("non-browser status %d body %s", plain.StatusCode, plainBody)
+	}
+
+	trusted := postInitializeHeader(t, srv.URL, testToken, map[string]string{
+		"Sec-Fetch-Site": "cross-site",
+		"Origin":         "https://lessons.example",
+	})
+	trustedBody := readBody(t, trusted)
+	if trusted.StatusCode != http.StatusOK {
+		t.Fatalf("trusted origin status %d body %s", trusted.StatusCode, trustedBody)
+	}
+}
+
+func TestAuthErrorDoesNotLeakStoreText(t *testing.T) {
+	h := Handler(Options{Validator: leakToken{}})
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	res := postInitialize(t, srv.URL, "anything")
+	body := readBody(t, res)
+	if res.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status %d body %s", res.StatusCode, body)
+	}
+	if strings.Contains(body, "store is closed") || strings.Contains(body, "db:") {
+		t.Fatalf("leaked body %s", body)
+	}
+	if !strings.Contains(body, errAuthUnavailable.Error()) {
+		t.Fatalf("body %s", body)
+	}
+}
+
+func TestSessionCookieAloneIsNotMCPAuth(t *testing.T) {
+	h := Handler(Options{AuthToken: testToken})
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	req, err := http.NewRequest(http.MethodPost, srv.URL, strings.NewReader(initializeBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("MCP-Protocol-Version", "2025-11-25")
+	req.AddCookie(&http.Cookie{Name: "hebrew_session", Value: "not-a-bearer"})
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := readBody(t, res)
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status %d body %s", res.StatusCode, body)
+	}
+}
+
+func TestPublishedStaysUntilTheDocumentChanges(t *testing.T) {
+	mem := NewMemory()
+	mem.AddLexeme(helloLexeme())
+	session := connectMCP(t, Handler(Options{
+		AuthToken: testToken,
+		Course:    mem,
+		Lexicon:   mem,
+		Lookup:    mem,
+		Units:     mem,
+	}), testToken)
+	doc := helloDoc()
+	first := call[putOutput](t, session, "put_unit", putInput{Scope: ScopeShared, Position: 0, Doc: doc})
+	mem.SetStatus(first.UnitID, "published")
+	same := call[putOutput](t, session, "put_unit", putInput{Scope: ScopeShared, UnitID: &first.UnitID, Position: 0, Doc: doc})
+	if !same.Unchanged || same.Revision != first.Revision || mem.Status(first.UnitID) != "published" {
+		t.Fatalf("unchanged %+v status %q", same, mem.Status(first.UnitID))
+	}
+	doc.Title = "Hello again"
+	changed := call[putOutput](t, session, "put_unit", putInput{Scope: ScopeShared, UnitID: &first.UnitID, Position: 0, Doc: doc})
+	if changed.Unchanged || changed.Revision != first.Revision+1 || mem.Status(first.UnitID) != "draft" {
+		t.Fatalf("changed %+v status %q", changed, mem.Status(first.UnitID))
+	}
+}
+
+type leakToken struct{}
+
+func (leakToken) Validate(context.Context, string, *http.Request) (Principal, error) {
+	return Principal{}, errors.New("db: store is closed")
+}
+
+func postTool(t *testing.T, url, token, name string, args any, hdr map[string]string) *http.Response {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      name,
+			"arguments": args,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(string(raw)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("MCP-Protocol-Version", "2025-11-25")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	for k, v := range hdr {
+		req.Header.Set(k, v)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
+}
+
+func postInitializeHeader(t *testing.T, url, token string, hdr map[string]string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(initializeBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("MCP-Protocol-Version", "2025-11-25")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	for k, v := range hdr {
+		req.Header.Set(k, v)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
+}
+
+func readBody(t *testing.T, res *http.Response) string {
+	t.Helper()
+	defer res.Body.Close()
+	b, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
