@@ -58,9 +58,9 @@ templ Today(h Home) {
 					<section class="lesson-card today-next" aria-labelledby="next-title">
 						<p class="eyebrow" lang={ h.Lang }>{ h.NextKicker }</p>
 						<h2 id="next-title" class="unit-title">
-							@H(h.UnitTitle)
-							if h.UnitGloss != "" {
-								<span class="unit-gloss">@E(h.UnitGloss)</span>
+							@H(h.LessonTitle)
+							if h.LessonGloss != "" {
+								<span class="unit-gloss">@E(h.LessonGloss)</span>
 							}
 						</h2>
 						if h.Situation != "" {
@@ -79,13 +79,14 @@ templ Today(h Home) {
 								</li>
 							}
 						</ul>
-						<a class={ BtnClass(h.Due == 0) } href={ templ.SafeURL(h.Href("/lesson")) }>
+						<a class={ BtnClass(h.Due == 0) } href={ templ.SafeURL(h.Href(h.LessonHref)) }>
 							<svg class={ iconClass(h.Dir == "rtl") } aria-hidden="true" focusable="false"><use href={ IconHref("next") }></use></svg>
 							<span lang={ h.Lang }>{ h.Open }</span>
 						</a>
 					</section>
 				} else {
 					<section class="quiet-card quiet-card--next">
+						<p class="eyebrow" lang={ h.Lang }>{ h.NextKicker }</p>
 						<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("lessons") }></use></svg>
 						<p class="quiet-card__line">
 							@Pair(h.Lang, h.NoneHE, h.NoneEN)
@@ -281,11 +282,3 @@ templ googleMark() {
 	</span>
 }
 
-templ Lesson(p Page) {
-	@Layout(p) {
-		<article class="sheet">
-			<h1 lang={ p.Lang }>{ p.LessonHeading }</h1>
-			<p class="lede" lang={ p.Lang }>{ p.LessonLede }</p>
-		</article>
-	}
-}

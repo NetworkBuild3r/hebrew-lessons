@@ -70,6 +70,9 @@ func TestTodayLayout(t *testing.T) {
 	if !strings.Contains(body, "quiet-card--due") || !strings.Contains(body, "quiet-card--next") {
 		t.Fatal("empty Today should show both quiet cards")
 	}
+	if !strings.Contains(body, "No lesson published yet") {
+		t.Fatal("empty Today should say no lesson is published")
+	}
 	if !strings.Contains(body, `aria-pressed="false"`) || strings.Contains(body, `id="theme-toggle"`) {
 		t.Fatal("theme toggle should use aria-pressed and no id")
 	}
@@ -102,8 +105,8 @@ func TestTodayLayout(t *testing.T) {
 	if strings.Contains(body, ">Start<") || strings.Contains(body, "הַתְחֵל") {
 		t.Fatal("empty Today should not offer a start button")
 	}
-	if !strings.Contains(body, "Nothing due") || !strings.Contains(body, "No lesson queued") {
-		t.Fatal("empty Today should say nothing is due and no lesson is queued")
+	if !strings.Contains(body, "Nothing due") || !strings.Contains(body, "No lesson published yet") {
+		t.Fatal("empty Today should say nothing is due and no lesson is published")
 	}
 	scriptAt := strings.Index(body, "localStorage")
 	cssAt := strings.Index(body, "/static/css/tokens.css")
@@ -111,7 +114,7 @@ func TestTodayLayout(t *testing.T) {
 		t.Fatal("theme script must run before the stylesheet")
 	}
 	if strings.Contains(body, `href="/lesson"`) {
-		t.Fatal("empty Today still links to the lesson player")
+		t.Fatal("empty Today should not link to a lesson")
 	}
 }
 
@@ -197,10 +200,16 @@ func TestZeroDueAndNoLesson(t *testing.T) {
 	if strings.Contains(body, "ink-card") || strings.Contains(body, "הַתְחֵל") || strings.Contains(body, "btn-primary") {
 		t.Fatal("empty Today still shows a review hero or a filled action")
 	}
+	if strings.Contains(body, "btn-tonal") {
+		t.Fatal("tonal CTA remains when nothing is due")
+	}
 	if strings.Contains(body, `href="/lesson"`) || strings.Contains(body, `class="unit-title"`) {
 		t.Fatal("empty Today still renders a lesson card")
 	}
 	assertPair(t, body, "אֵין חֲזָרוֹת עַכְשָׁיו", "Nothing due", "en")
+	if !strings.Contains(body, "No lesson published yet") {
+		t.Fatal("empty Today should say no lesson is published")
+	}
 	if !strings.Contains(body, "quiet-card--due") || !strings.Contains(body, "icon-check") {
 		t.Fatal("nothing due should use the check placeholder")
 	}
@@ -239,6 +248,9 @@ func TestEnglishShell(t *testing.T) {
 	}
 	if !strings.Contains(body, `<bdi lang="he" dir="rtl">`+views.AppName+`</bdi>`) {
 		t.Fatal("hebrew wordmark is not isolated in the english shell")
+	}
+	if !strings.Contains(body, "No lesson published yet") {
+		t.Fatal("empty lesson state left the english shell")
 	}
 }
 

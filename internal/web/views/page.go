@@ -105,7 +105,7 @@ func hebrewUI(addressGender string) UI {
 		NextKicker: "הַשִּׁעוּר הַבָּא",
 		Open:       "לַשִּׁעוּר",
 		ZeroHE:     "אֵין חֲזָרוֹת עַכְשָׁיו", ZeroEN: "Nothing due",
-		NoneHE: "אֵין שִׁעוּר בַּתּוֹר", NoneEN: "No lesson queued",
+		NoneHE: "אֵין שִׁעוּר בַּתּוֹר", NoneEN: "No lesson published yet",
 		NoneMoreHE: "הַשִּׁעוּר הַבָּא יוֹפִיעַ כָּאן", NoneMoreEN: "Your next lesson will appear here",
 		ReviewHeading: "חֲזָרָה", ReviewLede: "הַתּוֹר עוֹד רֵיק.",
 		ProgressHeading: "הִתְקַדְּמוּת", ProgressLede: "מִלִּים שֶׁאֶפְשָׁר לִזְכֹּר, וִיחִידוֹת שֶׁהֻשְׁלְמוּ.",
@@ -126,7 +126,7 @@ func englishUI() UI {
 		NextKicker: "Next lesson",
 		Open:       "Open lesson",
 		ZeroHE:     "אֵין חֲזָרוֹת עַכְשָׁיו", ZeroEN: "Nothing due",
-		NoneHE: "אֵין שִׁעוּר בַּתּוֹר", NoneEN: "No lesson queued",
+		NoneHE: "אֵין שִׁעוּר בַּתּוֹר", NoneEN: "No lesson published yet",
 		NoneMoreHE: "הַשִּׁעוּר הַבָּא יוֹפִיעַ כָּאן", NoneMoreEN: "Your next lesson will appear here",
 		ReviewHeading: "Review", ReviewLede: "The queue is still empty.",
 		ProgressHeading: "Progress", ProgressLede: "Words you can remember, and units you have finished.",
@@ -194,19 +194,24 @@ type PlacementVM struct {
 	TakenAt             time.Time
 }
 
-// Home is Today. Due is the review count. Lesson is false when no shared
-// unit is waiting. Words is empty until a lesson carries its new-word row.
-// Placement is the card. PlacementState is "", "active", or "finished".
+// Home is Today. Due is the review count from the scheduler.
+// Lesson is false when no published lesson is waiting. LessonTitle is that
+// lesson's unit title. LessonGloss is the transliteration and English
+// meaning, including the parentheses. LessonHref is the path of that lesson,
+// without a language query. Words are its new-word chips.
+// KnownText is the known-word count. Placement is nil when the learner has
+// never taken the check. PlacementState is "", "active", or "finished".
 type Home struct {
 	UI
 	CSRF           string
 	Due            int
 	DueText        string
-	Lesson         bool
-	Words          []Chip
-	UnitTitle      string
-	UnitGloss      string
 	KnownText      string
+	Lesson         bool
+	LessonTitle    string
+	LessonGloss    string
+	LessonHref     string
+	Words          []Chip
 	Placement      *PlacementVM
 	PlacementState string
 	PlacementWords string

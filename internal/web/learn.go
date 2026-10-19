@@ -27,10 +27,11 @@ const maxStudyQueues = 128
 // rebuilt when it is Done, and when the store clock's UTC date is no
 // longer the date it was built.
 type server struct {
-	store *db.Store
-	study *session.Service
-	deck  placementDeck
-	runs  placementRuns
+	store    *db.Store
+	audioDir string
+	study    *session.Service
+	deck     placementDeck
+	runs     placementRuns
 
 	mu     sync.Mutex
 	queues map[string]*studyQueue
@@ -217,10 +218,6 @@ func homeToView(lang, csrf, gender, situation string, vm HomeVM) views.Home {
 		DueText:   strconv.Itoa(vm.DueCount),
 		KnownText: strconv.Itoa(vm.KnownWords),
 		Words:     []views.Chip{},
-	}
-	if vm.NextUnit != nil {
-		home.Lesson = true
-		home.UnitTitle = vm.NextUnit.Title
 	}
 	fillPlacement(&home, vm.Placement)
 	return home

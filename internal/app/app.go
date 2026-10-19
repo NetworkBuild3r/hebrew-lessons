@@ -278,7 +278,12 @@ func NewApp(cfg Config) (*App, error) {
 		tts:       tts,
 	}
 	health := a.healthHandler()
-	a.web = web.NewWithPlacement(health, svc, a.placement, store)
+	a.web = web.NewOptions(health, svc, web.Options{
+		Store:    store,
+		AudioDir: audioDir,
+		Deck:     a.placement,
+		Runs:     store,
+	})
 	a.mcp = newMCP(cfg, health, svc, store, tts, audioDir)
 	sweepCtx, stop := context.WithCancel(context.Background())
 	a.stopSweep = stop

@@ -32,37 +32,58 @@ var Assets embed.FS
 // /lesson, or /placement redirects to /signin (303 for a full page, 401 and
 // HX-Redirect for htmx). Reads stay on those page URLs. /_hx/ is for
 // htmx writes, and this router does not register read routes there.
-// New does not deal placement. NewWithPlacement wires the deck and the
-// run store the handlers read for ownership and the Today card.
-// Tests pass a fake to newMux; production does not. The ungated router
-// still serves those pages.
-// Audio bytes are served at /audio/<sha256>.mp3; this router does not
-// register that path.
+// New does not deal placement. NewWithStore reads Today, Review, and
+// Progress from the learner database. NewWithPlacement wires the deck and
+// the run store. NewOptions wires those plus the lesson store and the audio
+// directory. Tests pass a fake to newMux; production does not. The ungated
+// router still serves those pages.
+// Audio bytes are served at /audio/<sha256>.mp3 from Options.AudioDir.
 func New(health http.Handler, sessions *auth.Service) http.Handler {
-	return newHandler(health, sessions, nil, nil, nil)
+	return NewOptions(health, sessions, Options{})
+}
+
+// Options is the data the learner pages read. A nil Store leaves Today,
+// Review, and Progress on the empty real state, and /lesson on the empty
+// published-lesson state. Deck and Runs are the placement deck; a nil pair
+// still serves the read-only intro.
+type Options struct {
+	Store    *db.Store
+	AudioDir string
+	Deck     placementDeck
+	Runs     placementRuns
+}
+
+// NewOptions is New with the lesson store, the audio directory, and placement.
+func NewOptions(health http.Handler, sessions *auth.Service, opts Options) http.Handler {
+	return newHandler(health, sessions, opts)
 }
 
 // NewWithStore is New with the learner database. Today, Review, and Progress
 // read that store. The study queue is built by internal/session.
-// The store is also the placement run reader. Writes need NewWithPlacement.
+// The store is also the placement run reader and the lesson player store.
+// Writes need NewWithPlacement. Audio stays empty until NewOptions.
 func NewWithStore(health http.Handler, sessions *auth.Service, store *db.Store) http.Handler {
 	var runs placementRuns
 	if store != nil {
 		runs = store
 	}
-	return newHandler(health, sessions, nil, store, runs)
+	return newHandler(health, sessions, Options{Store: store, Runs: runs})
 }
 
 // NewWithPlacement is New plus the placement deck. deck deals cards.
 // runs is the store read for ownership and LatestPlacement. Both are
 // required for a POST; a nil pair still serves the read-only intro.
-// A *db.Store runs value is also the Today, Review, and Progress store.
+// When runs is the process store, Today, Review, Progress, and the lesson
+// player use it too.
 func NewWithPlacement(health http.Handler, sessions *auth.Service, deck placementDeck, runs placementRuns) http.Handler {
-	store, _ := runs.(*db.Store)
-	return newHandler(health, sessions, deck, store, runs)
+	opts := Options{Deck: deck, Runs: runs}
+	if store, ok := runs.(*db.Store); ok {
+		opts.Store = store
+	}
+	return newHandler(health, sessions, opts)
 }
 
-func newHandler(health http.Handler, sessions *auth.Service, deck placementDeck, store *db.Store, runs placementRuns) http.Handler {
+func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.Handler {
 	var tokens CSRFToken
 	secure := false
 	if sessions != nil {
@@ -70,16 +91,17 @@ func newHandler(health http.Handler, sessions *auth.Service, deck placementDeck,
 		// hebrew_lang uses the same COOKIE_SECURE flag as the session cookie.
 		secure = sessions.CookieSecure()
 	}
-	srv := newServer(store)
-	srv.deck = deck
-	srv.runs = runs
+	srv := newServer(opts.Store)
+	srv.audioDir = opts.AudioDir
+	srv.deck = opts.Deck
+	srv.runs = opts.Runs
 	mux := srv.routes(health, tokens, sessions != nil, secure)
 	if sessions != nil {
 		sessions.Register(mux)
 		// auth.Middleware loads the session and checks CSRF, including
-		// POST /auth/logout and POST /_hx/. The local csrf middleware is not
-		// stacked on top: it compares Origin to r.Host and would reject a
-		// same-origin post behind a host-rewriting proxy.
+		// POST /auth/logout, POST /lesson, and POST /_hx/. The local csrf
+		// middleware is not stacked on top: it compares Origin to r.Host and
+		// would reject a same-origin post behind a host-rewriting proxy.
 		return securityHeaders(sessions.Middleware(mux))
 	}
 	return securityHeaders(csrfMiddleware(nil, mux))
@@ -100,6 +122,7 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 		panic(err)
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
+	play := player{store: s.store, audioDir: s.audioDir}
 	mux.HandleFunc("GET /{$}", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
 		s.serveHome(w, r, secure, csrfValue(tokens, r))
 	}))
@@ -110,11 +133,22 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 		s.serveProgress(w, r, secure, csrfValue(tokens, r))
 	})
 	lesson := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
-		render(w, r, views.Lesson(views.NewPage(chooseLang(w, r, secure), csrfValue(tokens, r), "lesson")))
+		play.lessonIndex(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
+	})
+	lessonAt := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+		play.lessonAt(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
+	})
+	lessonPost := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+		play.lessonSubmit(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
 	})
 	mux.HandleFunc("GET /review", review)
 	mux.HandleFunc("GET /progress", progress)
 	mux.HandleFunc("GET /lesson", lesson)
+	mux.HandleFunc("GET /lesson/{unitID}/{lessonIx}", lessonAt)
+	mux.HandleFunc("POST /lesson/{unitID}/{lessonIx}", lessonPost)
+	mux.HandleFunc("GET /audio/{name}", func(w http.ResponseWriter, r *http.Request) {
+		serveAudio(s.audioDir, w, r)
+	})
 	mux.HandleFunc("POST /_hx/review/reveal", gated(gate, secure, s.reveal))
 	mux.HandleFunc("POST /_hx/review/grade", gated(gate, secure, s.grade))
 	mountPlacement(mux, tokens, gate, secure, s.deck, s.runs)
@@ -207,7 +241,45 @@ func (s *server) serveHome(w http.ResponseWriter, r *http.Request, secure bool, 
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+	if err := s.applyCourseLesson(r, &page); err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 	render(w, r, views.Today(page))
+}
+
+// applyCourseLesson puts the next published lesson in this learner's scope
+// on the Today card. The due count, known count, and placement stay on the
+// scheduler's page. No lesson leaves the empty card.
+func (s *server) applyCourseLesson(r *http.Request, home *views.Home) error {
+	if home == nil || s == nil || s.store == nil {
+		return nil
+	}
+	user, ok := auth.CurrentUser(r.Context())
+	if !ok || user == nil {
+		home.Lesson = false
+		return nil
+	}
+	lesson, found, err := s.store.NextCourseLesson(r.Context(), user.ID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		home.Lesson = false
+		home.Words = nil
+		return nil
+	}
+	gloss, err := titleGloss(r.Context(), s.store, lesson.Title)
+	if err != nil {
+		return err
+	}
+	home.Lesson = true
+	home.LessonTitle = lesson.Title
+	home.LessonGloss = gloss
+	home.LessonHref = lessonPath(lesson.UnitID, lesson.LessonIx)
+	home.UI.Situation = lesson.Situation
+	home.Words = chipsFor(lesson.NewWords)
+	return nil
 }
 
 func (s *server) serveReview(w http.ResponseWriter, r *http.Request, secure bool, csrf string) {

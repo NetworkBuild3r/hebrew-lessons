@@ -1,0 +1,121 @@
+package views
+
+// Lesson is the player. An empty screen says no lesson is published.
+// A lesson shows one activity. htmx swaps #activity; the shell stays.
+templ Lesson(p Page, s Screen) {
+	@Layout(p) {
+		<article class="sheet lesson-player">
+			<h1 lang={ p.Lang }>{ p.LessonHeading }</h1>
+			if s.Empty {
+				<section class="quiet-card quiet-card--next">
+					<p class="eyebrow" lang={ p.Lang }>{ p.NextKicker }</p>
+					<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("lessons") }></use></svg>
+					<p class="quiet-card__line">
+						@Pair(p.Lang, p.NoneHE, p.NoneEN)
+					</p>
+					<p class="quiet-card__hint">
+						@Pair(p.Lang, p.NoneMoreHE, p.NoneMoreEN)
+					</p>
+				</section>
+			} else {
+				<header class="lesson-player__head">
+					<h2 class="unit-title">
+						@H(s.Title)
+						if s.Gloss != "" {
+							<span class="unit-gloss">@E(s.Gloss)</span>
+						}
+					</h2>
+					if s.Situation != "" {
+						@Situation(s.Situation)
+					}
+				</header>
+				@ActivityBlock(s.Activity)
+			}
+		</article>
+	}
+}
+
+// ActivityBlock is the step htmx swaps. The completion panel uses the same id.
+templ ActivityBlock(a Activity) {
+	<div id="activity" class="activity">
+		if a.Done {
+			<p class="lede" lang="en">@E("Lesson complete.")</p>
+			if a.Score != "" {
+				<p class="count"><bdi lang="en" dir="ltr">{ a.Score }</bdi></p>
+			}
+			<a class="btn btn-primary" href={ templ.SafeURL(a.HomeHref) }>@E("Back to Today")</a>
+		} else {
+			if a.Progress != "" {
+				<p class="eyebrow" lang="en">@E(a.Progress)</p>
+			}
+			if a.Prompt != "" {
+				<p class="lede" lang="en">@E(a.Prompt)</p>
+			}
+			if a.Audio != "" {
+				@clip(a.Audio)
+			}
+			if len(a.Words) > 0 {
+				<div class="word-blocks">
+					for _, word := range a.Words {
+						@activityWord(word)
+					}
+				</div>
+			}
+			if a.Feedback != "" {
+				<p class={ a.FeedbackClass } lang="en">@E(a.Feedback)</p>
+			}
+			<form method="post" action={ templ.SafeURL(a.Post) } hx-post={ a.Post } hx-target="#activity" hx-swap="outerHTML" hx-boost="false">
+				<input type="hidden" name="_csrf" value={ a.CSRF }/>
+				<input type="hidden" name="run" value={ a.Run }/>
+				if a.Asking {
+					<div class="choices">
+						for _, choice := range a.Choices {
+							@choiceButton(choice)
+						}
+					</div>
+				} else {
+					<button type="submit" class="btn btn-primary" name="answer" value="continue">@E(a.Continue)</button>
+				}
+			</form>
+		}
+	</div>
+}
+
+// activityWord is one token. A gap is the cloze blank. A visible word uses
+// the shared word block, with any hidden field passed empty.
+templ activityWord(w Word) {
+	if w.Plain {
+		@E(w.Text)
+	} else if w.Gap {
+		<span class="word-block word-block--gap">@E("___")</span>
+	} else {
+		<span class="activity-word">
+			if w.ShowText || w.ShowTranslit || w.ShowGloss {
+				@WordBlock(shown(w.ShowText, w.Text), shown(w.ShowTranslit, w.Translit), shown(w.ShowGloss, w.Gloss), "card", "", !w.ShowGloss)
+			}
+			if w.ShowText && GenderLabel(w.Gender) != "" {
+				<span class="gchip">@H(GenderLabel(w.Gender))</span>
+			}
+			if w.Audio != "" {
+				@clip(w.Audio)
+			}
+		</span>
+	}
+}
+
+templ choiceButton(c Choice) {
+	<button type="submit" class="choice" name="answer" value={ c.Value }>
+		if c.Hebrew {
+			@WordBlock(c.Text, c.Translit, "", "chip", "", true)
+		} else {
+			@E(c.Label)
+		}
+	</button>
+}
+
+templ clip(src string) {
+	<div class="clip">
+		<p class="clip__label">@E("Play")</p>
+		<audio controls preload="none" src={ src } aria-label="Play"></audio>
+	</div>
+}

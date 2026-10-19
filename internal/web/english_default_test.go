@@ -285,7 +285,7 @@ func assertEnglishToday(t *testing.T, body string) {
 	}
 	for _, label := range []string{
 		"Skip to content", "Today", "Review", "Progress",
-		"Nothing due", "No lesson queued",
+		"Nothing due", "Next lesson", "No lesson published yet",
 	} {
 		if !strings.Contains(body, label) {
 			t.Fatalf("english label %q missing", label)
