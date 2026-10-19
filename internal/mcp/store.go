@@ -146,6 +146,16 @@ type CourseReader interface {
 	// Proposed for the top-level knownLexemes field. It does not read a
 	// learner_lexemes table; that table is dropped.
 	LearnerKnownLexemes(ctx context.Context, userID int64) ([]string, error)
+	// LearnerCards returns one page of this learner's cards, including
+	// suspended cards. Order is due ascending, then most recently reviewed
+	// (a card with no review is last), then card id. Limit is the page
+	// size. NextCursor is empty on the last page. An unreadable cursor
+	// returns ErrBadCardCursor.
+	LearnerCards(ctx context.Context, q CardQuery) (CardPage, error)
+	// RecentAccuracy counts Good and Easy reviews and finished lesson
+	// scores for this learner, using the store clock as the end of the
+	// window. Shape matches get_context recentAccuracy.
+	RecentAccuracy(ctx context.Context, userID int64) (RecentAccuracy, error)
 }
 
 // Struggle mirrors db.Struggle.

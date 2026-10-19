@@ -33,6 +33,17 @@ func currentBudgets() Budgets {
 	}
 }
 
+// MixTarget is the new-word budget get_context returns as mixTarget.
+// The numbers are the authoring constants, the same ones budgets uses.
+// There is no separate new-versus-review ratio in the course config.
+func currentMixTarget() MixTarget {
+	return MixTarget{
+		MaxNewWordsPerUnit:   units.MaxNewWordsPerUnit,
+		MinNewWordsPerLesson: units.MinNewWordsPerLesson,
+		MaxNewWordsPerLesson: units.MaxNewWordsPerLesson,
+	}
+}
+
 // unitDocumentSchema is the JSON Schema for the unit document.
 // It describes the shape an author should write. put_unit's tool schema
 // is the Go type, which still unmarshals an empty string, so a draft
