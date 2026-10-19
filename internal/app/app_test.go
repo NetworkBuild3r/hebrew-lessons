@@ -13,6 +13,9 @@ import (
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 )
 
 type fixedClock struct{ t time.Time }
@@ -49,21 +52,30 @@ func TestHealthzBothHandlers(t *testing.T) {
 	}
 }
 
-func TestDataDirFallback(t *testing.T) {
+func TestDataDirFailsClosed(t *testing.T) {
 	parent := t.TempDir()
 	blocked := filepath.Join(parent, "not-a-directory")
 	if err := os.WriteFile(blocked, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a, err := NewApp(Config{DataDir: blocked})
-	if err != nil {
+	if _, err := NewApp(Config{DataDir: blocked}); err == nil {
+		t.Fatal("expected DATA_DIR error")
+	}
+	missing := filepath.Join(parent, "missing")
+	if _, err := NewApp(Config{DataDir: missing}); err == nil {
+		t.Fatal("expected missing DATA_DIR error")
+	}
+}
+
+func TestDevCreatesMissingDataDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "missing")
+	a := newTestApp(t, Config{DataDir: dir, Dev: true})
+	if _, err := os.Stat(filepath.Join(dir, "hebrew.sqlite")); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = a.Close() })
-	if a.cfg.DataDir == blocked {
-		t.Fatal("startup used the blocked data dir")
+	if a.cfg.DataDir != dir {
+		t.Fatalf("data dir %q", a.cfg.DataDir)
 	}
-	getHealth(t, a.Web())
 }
 
 func TestHealthzWhenDBPingFails(t *testing.T) {
@@ -118,6 +130,43 @@ func TestConfigSeams(t *testing.T) {
 	if !a.store.Clock().Now().Equal(when) {
 		t.Fatal("store clock was not the injected clock")
 	}
+	if a.Review() == nil {
+		t.Fatal("review service is nil")
+	}
+}
+
+func TestReviewUsesConfigClock(t *testing.T) {
+	when := time.Date(2024, 5, 1, 8, 0, 0, 0, time.UTC)
+	a := newTestApp(t, Config{DataDir: t.TempDir(), Clock: fixedClock{when}})
+	ctx := context.Background()
+	userID, err := a.store.InsertUser(ctx, "learner@example.com", "sub-learner", "learner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lexemeID, err := testharness.InsertLexeme(ctx, a.store, "שלום")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cardID, err := a.store.InsertCard(ctx, db.Card{
+		UserID:   userID,
+		LexemeID: lexemeID,
+		Dir:      fsrs.DirHeEn,
+		State:    fsrs.StateNew,
+		Due:      when,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Review().Grade(ctx, cardID, fsrs.Good, false); err != nil {
+		t.Fatal(err)
+	}
+	card, err := a.Review().Card(ctx, cardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !card.LastReview.Equal(when) {
+		t.Fatalf("last review %s, want the config clock %s", card.LastReview, when)
+	}
 }
 
 func TestTTSFromAPIKey(t *testing.T) {
@@ -153,9 +202,13 @@ func TestApplyDefaults(t *testing.T) {
 
 func TestMCPHealthOpenAndToolsClosed(t *testing.T) {
 	a := newTestApp(t, Config{DataDir: t.TempDir(), MCPAuthToken: "test-token"})
-	getHealth(t, a.MCP())
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Del("Authorization")
+	if body := getHealthRequest(t, a.MCP(), req); !body.OK {
+		t.Fatalf("health = %+v", body)
+	}
 
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
+	req = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	rr := httptest.NewRecorder()
@@ -176,13 +229,6 @@ func newTestApp(t *testing.T, cfg Config) *App {
 	}
 	t.Cleanup(func() { _ = a.Close() })
 	return a
-}
-
-func getHealth(t *testing.T, h http.Handler) struct {
-	OK bool `json:"ok"`
-} {
-	t.Helper()
-	return getHealthRequest(t, h, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 }
 
 func getHealthRequest(t *testing.T, h http.Handler, req *http.Request) struct {

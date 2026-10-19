@@ -2,17 +2,21 @@ package units
 
 import "fmt"
 
-// Coverage is by token. Punctuation is not a token. A token counts as known
-// when it is a number, a name (lexicon part of speech name, propn, or
-// proper noun), a word introduced as new in an earlier unit
-// (Lookup.KnownLexemes), or one of this unit's newWords introduced in an
-// earlier activity. The introducing activity itself does not yet count the
-// word as known. Matching uses normalize and the niqqud-insensitive
+// Coverage is by token, and only on passages: story, and listen_pick as
+// the listening passage. Other activity types are not passages.
+// Punctuation is not a token. A token counts as known when it is a number,
+// a name (lexicon part of speech name, propn, or proper noun), a word
+// introduced as new in an earlier unit (Lookup.KnownLexemes), or one of
+// this unit's newWords from its introducing activity onward, including
+// that activity. Matching uses normalize and the niqqud-insensitive
 // skeleton described in validate_text.go.
 //
 // Percent is known/total, truncated to one decimal (not rounded). The
-// message also carries the exact fraction. Below 90% blocks. From 90% up
-// to but not including 95% warns. 95% is clean.
+// message also carries the exact fraction. Below CoverageBlockBelow
+// blocks. From CoverageBlockBelow up to but not including
+// CoverageWarnBelow warns. CoverageWarnBelow is clean. Listening uses
+// the same thresholds as story, and a miss below the block line is a
+// block.
 
 func coverageIssues(s *scan, doc *Unit, words []wordRef) []Issue {
 	var out []Issue
@@ -95,7 +99,7 @@ func coverageKnown(s *scan, tok string, words []wordRef, lesson, activity int) b
 		if w.norm != n && w.bare != b {
 			continue
 		}
-		if wordBefore(w, lesson, activity) {
+		if introducedBy(w, lesson, activity) {
 			return true
 		}
 	}

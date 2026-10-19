@@ -10,8 +10,11 @@ import "fmt"
 //
 // Ignored, and not reported:
 //   - punctuation (it is not a token)
-//   - numbers, including decimal digits and Hebrew numerals or
-//     abbreviations written with geresh or gershayim
+//   - numbers: decimal digits, or gematria in rank order (ה׳, תשפ״ז, ט״ו).
+//     Acronyms such as צה״ל and ע״י, and loanwords such as צ׳יפס, are
+//     words. ASCII quotes are punctuation, so י"ב is the two words י and ב,
+//     and each is flagged. Spellings that are also valid numerals, such as
+//     ת״א and ש״ס, are numbers.
 //   - names, meaning a lexicon entry whose part of speech is name, propn,
 //     or proper noun, matched on the normalized token or its consonant
 //     skeleton

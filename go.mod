@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/google/jsonschema-go v0.4.3
 	github.com/modelcontextprotocol/go-sdk v1.8.0
+	github.com/open-spaced-repetition/go-fsrs/v3 v3.3.1
 	golang.org/x/text v0.32.0
 	modernc.org/sqlite v1.60.1
 )

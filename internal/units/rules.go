@@ -1,12 +1,17 @@
 package units
 
-// Product thresholds. The numbers are the authoring rules from ADR-R1 and
-// the QA plan: 8 new words in a unit, each new word recycled at least 4
-// times across at least 3 later lessons, story and listening coverage
-// blocking under 90% and warning from 90% up to but not including 95%.
-// A lesson that introduces more than 3 new words blocks. A lesson that
-// introduces fewer than 2 warns, because a review or story lesson may
-// introduce 0 or 1. Checkpoints are exempt from both lesson budgets.
+import "fmt"
+
+// Product thresholds. The numbers live only in the constants below.
+// Descriptions and issue messages read those constants.
+// MaxNewWordsPerUnit is the unit budget. Each new word is recycled at
+// least RecycleMinCount times across at least RecycleMinLessons later
+// lessons. Story and listening passages block below CoverageBlockBelow
+// and warn from there up to but not including CoverageWarnBelow. A lesson
+// that introduces more than MaxNewWordsPerLesson new words blocks. A
+// lesson that introduces fewer than MinNewWordsPerLesson warns, because a
+// review or story lesson may introduce fewer than the minimum. Checkpoints
+// are exempt from both lesson budgets.
 const (
 	MaxNewWordsPerUnit   = 8
 	MinNewWordsPerLesson = 2
@@ -50,6 +55,17 @@ const (
 // on the activity token. The split keeps one finding per story token: story.unmapped
 // is what coverage and glosses need, because a gloss has to land on a
 // lexicon entry.
+//
+// A Hebrew numeral is gematria in rank order, written with geresh
+// (U+05F3) or gershayim (U+05F4): zero or more ת, then at most one of
+// ק/ר/ש, then at most one tens letter, then at most one units letter.
+// ט״ו and ט״ז are 15 and 16. Acronyms such as צה״ל and ע״י are words and
+// must map to a lexeme. A known limitation: spellings that are also
+// valid numerals, such as ת״א and ש״ס, cannot be told apart from numbers,
+// so they are treated as numerals. ASCII quotes are not numerals.
+// Tokenize splits י"ב into י and ב, and ה' into ה, and each letter is
+// flagged. Authors should use U+05F3 and U+05F4. ה׳תשפ״ו is a word;
+// write תשפ״ו.
 
 // Rule is one authoring check. The MCP rules resource can serve Rules.
 type Rule struct {
@@ -62,24 +78,24 @@ type Rule struct {
 // block or warn; Severity here is the block, and Description gives the band.
 var Rules = []Rule{
 	{ID: RuleAudioMissing, Severity: SeverityBlock, Description: "A Hebrew activity has no audio clip for its exact pointed text."},
-	{ID: RuleBudgetLesson, Severity: SeverityBlock, Description: "A lesson introduces more than 3 new words."},
-	{ID: RuleBudgetLessonFew, Severity: SeverityWarn, Description: "A lesson introduces fewer than 2 new words. Review and story lessons may introduce 0 or 1, so this warns. Checkpoints are exempt."},
-	{ID: RuleBudgetUnit, Severity: SeverityBlock, Description: "The unit lists more than 8 new words."},
-	{ID: RuleCoverageListening, Severity: SeverityBlock, Description: "Listening-text coverage is below 95%. Block under 90%; warn from 90% up to but not including 95%."},
-	{ID: RuleCoverageStory, Severity: SeverityBlock, Description: "Story coverage is below 95%. Block under 90%; warn from 90% up to but not including 95%."},
+	{ID: RuleBudgetLesson, Severity: SeverityBlock, Description: fmt.Sprintf("A lesson introduces more than %d new words.", MaxNewWordsPerLesson)},
+	{ID: RuleBudgetLessonFew, Severity: SeverityWarn, Description: fmt.Sprintf("A lesson introduces fewer than %d new words. Review and story lessons may introduce fewer than the minimum, so this warns. Checkpoints are exempt.", MinNewWordsPerLesson)},
+	{ID: RuleBudgetUnit, Severity: SeverityBlock, Description: fmt.Sprintf("The unit lists more than %d new words.", MaxNewWordsPerUnit)},
+	{ID: RuleCoverageListening, Severity: SeverityBlock, Description: fmt.Sprintf("A listening passage (listen_pick) is below %d%% known. Block under %d%%; warn from %d%% up to but not including %d%%. Same thresholds as a story. Other activity types are not passages.", CoverageWarnBelow, CoverageBlockBelow, CoverageBlockBelow, CoverageWarnBelow)},
+	{ID: RuleCoverageStory, Severity: SeverityBlock, Description: fmt.Sprintf("A story passage is below %d%% known. Block under %d%%; warn from %d%% up to but not including %d%%.", CoverageWarnBelow, CoverageBlockBelow, CoverageBlockBelow, CoverageWarnBelow)},
 	{ID: RuleLexemeUnknown, Severity: SeverityBlock, Description: "A new word, or a Hebrew token in an activity other than story, is not in the lexicon. A story token is story.unmapped instead."},
 	{ID: RuleNounGender, Severity: SeverityBlock, Description: "A new noun has no gender (m, f, or both)."},
 	{ID: RuleNounPlural, Severity: SeverityWarn, Description: "A new noun with an irregular plural does not show that plural in the unit."},
-	{ID: RuleRecycleCount, Severity: SeverityWarn, Description: "A new word appears fewer than 4 times in later lessons."},
-	{ID: RuleRecycleSpread, Severity: SeverityWarn, Description: "A new word appears in fewer than 3 later lessons."},
+	{ID: RuleRecycleCount, Severity: SeverityWarn, Description: fmt.Sprintf("A new word appears fewer than %d times in later lessons.", RecycleMinCount)},
+	{ID: RuleRecycleSpread, Severity: SeverityWarn, Description: fmt.Sprintf("A new word appears in fewer than %d later lessons.", RecycleMinLessons)},
 	{ID: RuleSchemaActivity, Severity: SeverityBlock, Description: "An activity type is not one of the seven lesson types."},
 	{ID: RuleSchemaCheckpoint, Severity: SeverityBlock, Description: "A checkpoint introduces a new word."},
 	{ID: RuleSchemaKind, Severity: SeverityBlock, Description: "A lesson kind is not lesson or checkpoint."},
 	{ID: RuleSchemaLookup, Severity: SeverityBlock, Description: "The lexicon or audio lookup failed."},
 	{ID: RuleSchemaRef, Severity: SeverityBlock, Description: "A new word is duplicated or never appears in a lesson."},
 	{ID: RuleSchemaRequired, Severity: SeverityBlock, Description: "A required field is missing or empty."},
-	{ID: RuleStoryUnmapped, Severity: SeverityBlock, Description: "A story content word does not map to a lexicon entry. Names and numbers are exempt. The same token is not also lexeme.unknown."},
-	{ID: RuleStoryUnpointed, Severity: SeverityBlock, Description: "A story contains a Hebrew word with no niqqud. Names, numbers, and punctuation are ignored. Homographs are not exempt."},
+	{ID: RuleStoryUnmapped, Severity: SeverityBlock, Description: "A story content word does not map to a lexicon entry. Names and numbers are exempt. A number is digits or gematria in rank order with U+05F3/U+05F4. Acronyms are words, except spellings that are also valid numerals (ת״א, ש״ס), which are treated as numerals. ASCII quotes are split into letters and flagged. The same token is not also lexeme.unknown."},
+	{ID: RuleStoryUnpointed, Severity: SeverityBlock, Description: "A story contains a Hebrew word with no niqqud. Names, numbers, and punctuation are ignored. A number is digits or gematria in rank order with U+05F3/U+05F4. Acronyms are words, except spellings that are also valid numerals (ת״א, ש״ס), which are treated as numerals. ASCII quotes are split into letters and flagged. Homographs are not exempt."},
 }
 
 // Guidance is one player rule for the model that writes units.

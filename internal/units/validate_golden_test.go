@@ -233,6 +233,8 @@ func goldenCases() []goldenCase {
 	v := validCase()
 	return []goldenCase{
 		v,
+		introducingListen(),
+		introducingStory(),
 		boundary23(),
 		budgetUnit(),
 		budgetLesson(),
@@ -259,6 +261,31 @@ func goldenCases() []goldenCase {
 		nounPlural(true),
 		storyUnpointed(),
 		storyUnmapped(),
+		storyAcronym(),
+	}
+}
+
+func introducingListen() goldenCase {
+	u, _ := base()
+	text := strings.Join(u.NewWords[:2], " ")
+	u.Lessons[0].Activities = append([]Activity{{Type: ActivityListenPick, Text: text}}, u.Lessons[0].Activities...)
+	return goldenCase{
+		file:   "introducing_listen.json",
+		name:   "A listen_pick that introduces its new words counts those words as known in that activity. Coverage is not 0%. Listening stays a passage, with the same thresholds as story.",
+		unit:   u,
+		lookup: lookupFor(vocab8, u, nil),
+	}
+}
+
+func introducingStory() goldenCase {
+	u, _ := base()
+	text := strings.Join(u.NewWords[:2], " ")
+	u.Lessons[0].Activities = append([]Activity{{Type: ActivityStory, Text: text}}, u.Lessons[0].Activities...)
+	return goldenCase{
+		file:   "introducing_story.json",
+		name:   "A story that introduces its new words counts those words as known in that activity. Coverage is not 0%.",
+		unit:   u,
+		lookup: lookupFor(vocab8, u, nil),
 	}
 }
 
@@ -552,6 +579,24 @@ func storyUnpointed() goldenCase {
 		msgContains:   []string{"בקר"},
 		msgNot:        []string{david},
 		homographBare: stripNiqqud(bakar),
+	}
+}
+
+func storyAcronym() goldenCase {
+	u, _ := base()
+	const acronym = "צה״ל"
+	text := repeatJoin(vocab8[0].text, 19) + " " + acronym
+	li, ai := addAct(&u, ActivityStory, text)
+	return goldenCase{
+		file:   "bad_story_acronym.json",
+		name:   "צה״ל is an acronym, not a gematria numeral, so an unmapped story token blocks as story.unmapped. It is also unpointed. Nineteen known words keep coverage at 95%.",
+		unit:   u,
+		lookup: lookupFor(vocab8, u, nil),
+		issues: []Issue{
+			iss(RuleStoryUnmapped, SeverityBlock, at("lessons", li, "activities", ai, "text")),
+			iss(RuleStoryUnpointed, SeverityBlock, at("lessons", li, "activities", ai, "text")),
+		},
+		msgContains: []string{acronym},
 	}
 }
 

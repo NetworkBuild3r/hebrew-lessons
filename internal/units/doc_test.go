@@ -18,7 +18,7 @@ func (lookup) Facts(context.Context, string) (LexemeFacts, bool, error) {
 	return LexemeFacts{}, false, nil
 }
 
-func TestValidateStub(t *testing.T) {
+func TestValidateIncompleteUnit(t *testing.T) {
 	doc := &Unit{
 		Title:     "Hello",
 		Situation: "street",

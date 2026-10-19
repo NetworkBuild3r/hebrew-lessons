@@ -9,6 +9,8 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 )
 
 // Assets is the embedded views/ and static/ trees.
@@ -17,10 +19,16 @@ import (
 var Assets embed.FS
 
 // New returns the learner mux. health handles GET /healthz.
-func New(health http.Handler) http.Handler {
+// sessions, when non-nil, registers Google sign-in and logout and wraps
+// the mux with the session and CSRF middleware.
+func New(health http.Handler, sessions *auth.Service) http.Handler {
 	mux := http.NewServeMux()
 	if health != nil {
 		mux.Handle("GET /healthz", health)
+	}
+	if sessions != nil {
+		sessions.Register(mux)
+		return sessions.Middleware(mux)
 	}
 	return mux
 }
