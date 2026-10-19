@@ -41,12 +41,17 @@ ALTER TABLE review_log ADD COLUMN chosen TEXT;
 ALTER TABLE confusion_misses ADD COLUMN lexeme_id INTEGER REFERENCES lexemes (id);
 
 -- shared is the course. learner:<id> is that learner's own unit.
--- The id is one or more digits: learner:1abc fails, learner:12 is allowed.
+-- <id> is digits with no leading zero, except exactly 0.
+-- learner:0, learner:7, and learner:123 pass. learner:01, learner:007, and learner:1abc fail.
 ALTER TABLE units ADD COLUMN scope TEXT NOT NULL DEFAULT 'shared' CHECK (
     scope = 'shared'
     OR (
         scope GLOB 'learner:[0-9]*'
         AND substr(scope, 9) NOT GLOB '*[^0-9]*'
+        AND (
+            substr(scope, 9) = '0'
+            OR substr(scope, 9) NOT GLOB '0*'
+        )
     )
 );
 

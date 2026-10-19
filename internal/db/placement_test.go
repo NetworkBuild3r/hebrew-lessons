@@ -167,11 +167,12 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 	rejectSQL(t, conn, "unit scope", `UPDATE units SET scope = 'private'`)
 	rejectSQL(t, conn, "unit scope learner", `UPDATE units SET scope = 'learner:'`)
 	rejectSQL(t, conn, "unit scope trailing junk", `UPDATE units SET scope = 'learner:1abc'`)
-	if _, err := conn.ExecContext(ctx, `UPDATE units SET scope = 'learner:4'`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := conn.ExecContext(ctx, `UPDATE units SET scope = 'learner:01'`); err != nil {
-		t.Fatal(err)
+	rejectSQL(t, conn, "unit scope leading zero", `UPDATE units SET scope = 'learner:01'`)
+	rejectSQL(t, conn, "unit scope leading zeros", `UPDATE units SET scope = 'learner:007'`)
+	for _, scope := range []string{"learner:0", "learner:7", "learner:123"} {
+		if _, err := conn.ExecContext(ctx, `UPDATE units SET scope = ?`, scope); err != nil {
+			t.Fatalf("scope %s: %v", scope, err)
+		}
 	}
 	rejectSQL(t, conn, "confusion lexeme", `
 		INSERT INTO confusion_misses (learner_id, kind, key, lexeme_id, at)

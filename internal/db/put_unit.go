@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
@@ -33,7 +34,8 @@ type PutResult struct {
 // Any difference, including a scope-only change, appends a revision, sets
 // status back to draft, and replaces that unit's lesson_items from the document.
 // actor is the caller's principal, stored on the new revision.
-// scope is "shared" or "learner:" followed by one or more digits.
+// scope is "shared" or "learner:<id>". <id> is a decimal integer with no
+// leading zero, except 0 itself, the same rule as mcp.CanonicalScope.
 func (s *Store) PutUnit(ctx context.Context, id *int64, doc units.Unit, scope, actor string) (PutResult, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -138,20 +140,21 @@ func insertUnitRevision(ctx context.Context, tx *sql.Tx, unitID int64, rev int, 
 	return nil
 }
 
-// validUnitScope accepts "shared" and "learner:" plus one or more ASCII digits.
-// The units.scope CHECK requires the same shape, so learner:1abc fails in SQL too.
+// validUnitScope accepts "shared" and "learner:<id>".
+// <id> round-trips through strconv.FormatInt, so learner:0 is valid and
+// learner:01 and learner:007 are not. This is the same rule as mcp.CanonicalScope.
+// The units.scope CHECK rejects the same leading zeros and non-digits.
 func validUnitScope(scope string) bool {
 	if scope == "shared" {
 		return true
 	}
-	rest, ok := strings.CutPrefix(scope, "learner:")
-	if !ok || rest == "" {
+	id, ok := strings.CutPrefix(scope, "learner:")
+	if !ok {
 		return false
 	}
-	for _, r := range rest {
-		if r < '0' || r > '9' {
-			return false
-		}
+	n, err := strconv.ParseInt(id, 10, 64)
+	if err != nil || n < 0 || strconv.FormatInt(n, 10) != id {
+		return false
 	}
 	return true
 }

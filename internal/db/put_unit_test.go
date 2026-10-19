@@ -16,7 +16,7 @@ func TestPutUnitNoop(t *testing.T) {
 	ctx := context.Background()
 	doc := units.Unit{Title: "One", Situation: "home", Concept: "hello", Position: 3}
 
-	for _, bad := range []string{"", "learner:", "learner:12a", "private", "SHARED", "learner:1abc"} {
+	for _, bad := range []string{"", "learner:", "learner:12a", "private", "SHARED", "learner:1abc", "learner:01", "learner:007"} {
 		if _, err := s.PutUnit(ctx, nil, doc, bad, "admin"); err == nil {
 			t.Fatalf("scope %q was accepted", bad)
 		}
@@ -126,13 +126,11 @@ func TestPutUnitScopeOnlyRevision(t *testing.T) {
 	assertRevision(t, s, first.UnitID, 2, mustJSON(t, doc), "admin-4", FormatTime(when))
 	assertUnitCounts(t, s, 1, 2)
 
-	zero := units.Unit{Title: "z", Situation: "s", Concept: "c", Position: 0}
-	if _, err := s.PutUnit(ctx, nil, zero, "learner:0", "admin-1"); err != nil {
-		t.Fatal(err)
-	}
-	one := units.Unit{Title: "o", Situation: "s", Concept: "c", Position: 1}
-	if _, err := s.PutUnit(ctx, nil, one, "learner:01", "admin-1"); err != nil {
-		t.Fatal(err)
+	for _, scope := range []string{"learner:0", "learner:7", "learner:123"} {
+		doc := units.Unit{Title: scope, Situation: "s", Concept: "c", Position: len(scope)}
+		if _, err := s.PutUnit(ctx, nil, doc, scope, "admin-1"); err != nil {
+			t.Fatalf("scope %s: %v", scope, err)
+		}
 	}
 }
 
