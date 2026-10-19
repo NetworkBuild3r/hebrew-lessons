@@ -26,8 +26,10 @@ var Assets embed.FS
 //
 // sessions, when non-nil, registers Google sign-in and logout and wraps
 // the mux with the session middleware. Page tokens come from
-// CSRFFunc(auth.CSRFToken). A signed-out GET / redirects to /signin.
-// Tests pass a fake to newMux; production does not.
+// CSRFFunc(auth.CSRFToken). A signed-out GET of /, /review, /progress,
+// /lesson, or their /_hx/ endpoints redirects to /signin (303 for a full
+// page, 401 and HX-Redirect for htmx). Tests pass a fake to newMux;
+// production does not. The ungated router still serves those pages.
 // Audio bytes are served at /audio/<sha256>.mp3; this router does not
 // register that path.
 func New(health http.Handler, sessions *auth.Service) http.Handler {
@@ -62,25 +64,24 @@ func routes(health http.Handler, tokens CSRFToken, gate bool) *http.ServeMux {
 		panic(err)
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		if gate {
-			if _, ok := auth.CurrentUser(r.Context()); !ok {
-				w.Header().Set("Cache-Control", "no-store")
-				http.Redirect(w, r, signInPath(r), http.StatusSeeOther)
-				return
-			}
-		}
+	mux.HandleFunc("GET /{$}", gated(gate, func(w http.ResponseWriter, r *http.Request) {
 		render(w, r, views.Today(homeFrom(r, csrfValue(tokens, r))))
-	})
-	mux.HandleFunc("GET /review", func(w http.ResponseWriter, r *http.Request) {
+	}))
+	review := gated(gate, func(w http.ResponseWriter, r *http.Request) {
 		render(w, r, views.Review(views.NewPage(r.URL.Query().Get("lang"), csrfValue(tokens, r), "review")))
 	})
-	mux.HandleFunc("GET /progress", func(w http.ResponseWriter, r *http.Request) {
+	progress := gated(gate, func(w http.ResponseWriter, r *http.Request) {
 		render(w, r, views.Progress(views.NewPage(r.URL.Query().Get("lang"), csrfValue(tokens, r), "progress")))
 	})
-	mux.HandleFunc("GET /lesson", func(w http.ResponseWriter, r *http.Request) {
+	lesson := gated(gate, func(w http.ResponseWriter, r *http.Request) {
 		render(w, r, views.Lesson(views.NewPage(r.URL.Query().Get("lang"), csrfValue(tokens, r), "lesson")))
 	})
+	mux.HandleFunc("GET /review", review)
+	mux.HandleFunc("GET /progress", progress)
+	mux.HandleFunc("GET /lesson", lesson)
+	mux.HandleFunc("GET /_hx/review", review)
+	mux.HandleFunc("GET /_hx/progress", progress)
+	mux.HandleFunc("GET /_hx/lesson", lesson)
 	mux.HandleFunc("GET /signin", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := auth.CurrentUser(r.Context()); ok {
 			w.Header().Set("Cache-Control", "no-store")
@@ -163,6 +164,30 @@ func signInPath(r *http.Request) string {
 		return "/signin?lang=en"
 	}
 	return "/signin"
+}
+
+// gated sends a signed-out request to /signin when the router has a
+// session service. A full page is 303. htmx gets 401 and HX-Redirect so
+// the shell does not swap the sign-in page into #app. The ungated test
+// router passes gate false and serves the page.
+func gated(gate bool, next http.HandlerFunc) http.HandlerFunc {
+	if !gate {
+		return next
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := auth.CurrentUser(r.Context()); !ok {
+			w.Header().Set("Cache-Control", "no-store")
+			loc := signInPath(r)
+			if r.Header.Get("HX-Request") == "true" {
+				w.Header().Set("HX-Redirect", loc)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			http.Redirect(w, r, loc, http.StatusSeeOther)
+			return
+		}
+		next(w, r)
+	}
 }
 
 func csrfValue(tokens CSRFToken, r *http.Request) string {
