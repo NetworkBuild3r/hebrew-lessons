@@ -67,10 +67,9 @@ type Activity struct {
 // the lexicon and the audio store; the validator does not touch the database.
 type Lookup interface {
 	// KnownLexemes returns the pointed NFC text of every word introduced as new
-	// in a unit whose position is lower than beforePosition. A true map value
-	// means that text was introduced earlier. Validation runs at authoring
-	// time and the course is global, so this is not scoped to a learner.
-	// Validate passes Unit.Position.
+	// in a shared unit whose position is lower than beforePosition. A true map
+	// value means that text was introduced earlier. The list is shared units
+	// only. Validate passes Unit.Position.
 	KnownLexemes(ctx context.Context, beforePosition int) (map[string]bool, error)
 	// HasAudio reports whether a clip exists for textNFC.
 	// Validate passes the activity text after normalize: Unicode NFC,

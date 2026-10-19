@@ -107,8 +107,8 @@
 // CSRF. They load the run, require run.UserID to be the session user, and
 // take that user id only from the session. A POST uses the existing CSRF check.
 //
-// units.Lookup.KnownLexemes(ctx, beforePosition) is the global authoring
-// view: words introduced as new in an earlier unit. It is a different set,
+// units.Lookup.KnownLexemes(ctx, beforePosition) is the shared-unit authoring
+// view: words introduced as new in an earlier shared unit. It is a different set,
 // and this package does not implement Lookup. There is no learner_lexemes
 // table.
 package placement
