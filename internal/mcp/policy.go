@@ -9,44 +9,39 @@ import (
 	"net/http"
 )
 
-// toolAccess is the role policy. Loosen a cell here when Hebrew Dev decides.
-// RoleAdmin includes the static MCP_AUTH_TOKEN. Anything else is denied.
-var toolAccess = map[string]struct {
-	admin   bool
-	learner bool
-}{
-	"get_context":   {admin: true, learner: true},
-	"lookup":        {admin: true, learner: true},
-	"validate_unit": {admin: true, learner: true},
-	"put_unit":      {admin: true, learner: false},
+// learnerTools are the only tools a non-admin session may call.
+// RoleAdmin, including the static MCP_AUTH_TOKEN, may call any tool
+// and any scope. A name that is not listed here is admin-only, which
+// is the default for every write tool added later.
+var learnerTools = map[string]bool{
+	"get_context":   true,
+	"lookup":        true,
+	"validate_unit": true,
 }
 
 const (
-	msgPutDenied    = "put_unit is not available for this account."
+	// msgAdminOnly is the fixed text for an admin-only tool. authorizeTools
+	// writes it as a plain HTTP 403 before the SDK starts its 200 stream.
+	// A tool isError cannot be an HTTP status: the SDK has already
+	// committed 200 by the time the tool function runs. gate returns the
+	// same sentence if a call reaches the tool without that middleware.
+	msgAdminOnly    = "forbidden: admin only"
 	msgOtherLearner = "learnerId must be your own id."
-	msgToolDenied   = "This account cannot use that tool."
 )
 
 func (p Principal) allowed(tool string) bool {
-	row, ok := toolAccess[tool]
-	if !ok {
-		return false
-	}
 	switch p.Role {
 	case RoleAdmin:
-		return row.admin
+		return true
 	case RoleLearner:
-		return row.learner
+		return learnerTools[tool]
 	default:
 		return false
 	}
 }
 
-func denialMessage(tool string) string {
-	if tool == "put_unit" {
-		return msgPutDenied
-	}
-	return msgToolDenied
+func denialMessage(string) string {
+	return msgAdminOnly
 }
 
 func (s *service) gate(ctx context.Context, tool string) (Principal, error) {
@@ -57,9 +52,10 @@ func (s *service) gate(ctx context.Context, tool string) (Principal, error) {
 	return p, nil
 }
 
-// authorizeTools rejects a learner's forbidden tool call with 403 before
-// the SDK writes a 200. Session resolution never reads the web cookie;
-// the bearer is the only credential.
+// authorizeTools rejects a forbidden tool call with a plain HTTP 403
+// before the SDK writes a 200. The body is msgAdminOnly, or
+// msgOtherLearner when a learner names someone else's id. Session
+// resolution never reads the web cookie; the bearer is the only credential.
 func authorizeTools(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.Body == nil {
