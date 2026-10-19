@@ -1,0 +1,795 @@
+package mcpstore
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
+	sdauth "github.com/modelcontextprotocol/go-sdk/auth"
+)
+
+const (
+	hello  = "שָׁלוֹם"
+	coffee = "קָפֶה"
+	book   = "סֵפֶר"
+	fish   = "דָּג"
+	house  = "בַּיִת"
+	whole  = "שָׁלֵם"
+)
+
+func TestUnitsInScopeFiltersAndOrders(t *testing.T) {
+	ctx := context.Background()
+	store, raw := openAdapter(t, nil)
+	early := mustPut(t, store, ctx, nil, unitDoc("Early", hello), mcp.ScopeShared, 0)
+	middle, err := testharness.InsertUnit(ctx, raw, "Middle", "draft")
+	if err != nil {
+		t.Fatal(err)
+	}
+	late := mustPut(t, store, ctx, nil, unitDoc("Late", coffee), mcp.ScopeShared, 2)
+	mine := mustPut(t, store, ctx, nil, unitDoc("Mine", book), "learner:7", 0)
+	theirs := mustPut(t, store, ctx, nil, unitDoc("Theirs", fish), "learner:8", 5)
+
+	shared, err := store.UnitsInScope(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ids(shared) != joinIDs(early.UnitID, middle, late.UnitID) {
+		t.Fatalf("shared = %+v", shared)
+	}
+	learner := int64(7)
+	mineRows, err := store.UnitsInScope(ctx, &learner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ids(mineRows) != joinIDs(early.UnitID, mine.UnitID, middle, late.UnitID) {
+		t.Fatalf("learner 7 = %+v", mineRows)
+	}
+	for _, row := range mineRows {
+		if row.Scope == "learner:8" || row.ID == theirs.UnitID {
+			t.Fatalf("learner 7 saw %+v", mineRows)
+		}
+	}
+	other := int64(8)
+	otherRows, err := store.UnitsInScope(ctx, &other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ids(otherRows) != joinIDs(early.UnitID, middle, late.UnitID, theirs.UnitID) {
+		t.Fatalf("learner 8 = %+v", otherRows)
+	}
+}
+
+func TestLatestPlacementMapsFinishedRun(t *testing.T) {
+	when := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	ctx := context.Background()
+	store, raw := openAdapter(t, fixedClock{when})
+	userID := mustUser(t, raw)
+
+	none, ok, err := store.LatestPlacement(ctx, userID)
+	if err != nil || ok || none.Sittings != 0 {
+		t.Fatalf("empty placement %+v ok=%v err=%v", none, ok, err)
+	}
+
+	if _, err := raw.ExecContext(ctx, `
+		INSERT INTO units (position, title, situation, concept, status, rev, doc)
+		VALUES (4, 'Later', 's', 'c', 'draft', 1, '{"title":"Later","newWords":["דָּג"]}')`); err != nil {
+		t.Fatal(err)
+	}
+	started := when.Add(-time.Hour)
+	runID, err := raw.InsertPlacementRun(ctx, userID, started, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const result = `{"bands":[{"band":0,"shown":4,"again":1,"hard":1,"good":1,"easy":1,"dontknow":0,"good_plus_rate":0.5}],"estimated_known_words":40}`
+	finished := when
+	if err := raw.FinishPlacement(ctx, runID, finished, 0, true, 2, "cards", result); err != nil {
+		t.Fatal(err)
+	}
+
+	row, ok, err := store.LatestPlacement(ctx, userID)
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if !row.Finished || row.Sittings != 1 || !row.TakenAt.Equal(finished) || row.Level != 2 || row.CardsRated != 4 || row.StopReason != "cap_cards" {
+		t.Fatalf("placement %+v", row)
+	}
+	if row.EstimatedKnownWords != 40 || row.SuggestedStartPosition != 4 {
+		t.Fatalf("estimate %+v", row)
+	}
+	if len(row.BandScores) != 1 || row.BandScores[0].Band != 0 || row.BandScores[0].Rated != 4 || row.BandScores[0].Again != 1 || row.BandScores[0].Hard != 1 || row.BandScores[0].Good != 1 || row.BandScores[0].Easy != 1 || row.BandScores[0].DontKnow != 0 || row.BandScores[0].GoodPlusRate != 0.5 {
+		t.Fatalf("bands %+v", row.BandScores)
+	}
+}
+
+func TestLatestPlacementInProgress(t *testing.T) {
+	when := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	ctx := context.Background()
+	store, raw := openAdapter(t, fixedClock{when})
+	userID := mustUser(t, raw)
+	runID, err := raw.InsertPlacementRun(ctx, userID, when, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.ExecContext(ctx, `
+		INSERT INTO placement_answers (run_id, item_id, rating, shown_at, answered_at)
+		VALUES (?, 'card-1', 3, ?, ?)`, runID, db.FormatTime(when), db.FormatTime(when)); err != nil {
+		t.Fatal(err)
+	}
+	row, ok, err := store.LatestPlacement(ctx, userID)
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if row.Finished || row.Sittings != 1 || row.CardsRated != 1 || row.Level != -1 || row.StopReason != "" || !row.TakenAt.Equal(when) {
+		t.Fatalf("in progress %+v", row)
+	}
+
+	finishedAt := when.Add(time.Minute)
+	if err := raw.FinishPlacement(ctx, runID, finishedAt, 0, true, 0, "band", `{"bands":[],"estimated_known_words":0}`); err != nil {
+		t.Fatal(err)
+	}
+	retakeAt := finishedAt.Add(time.Minute)
+	if _, err := raw.InsertPlacementRun(ctx, userID, retakeAt, 9); err != nil {
+		t.Fatal(err)
+	}
+	again, ok, err := store.LatestPlacement(ctx, userID)
+	if err != nil || !ok {
+		t.Fatalf("retake ok=%v err=%v", ok, err)
+	}
+	if again.Finished || again.Sittings != 2 || !again.TakenAt.Equal(retakeAt) || again.Level != -1 {
+		t.Fatalf("retake %+v", again)
+	}
+}
+
+func TestPlacementLexemeLists(t *testing.T) {
+	when := time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC)
+	ctx := context.Background()
+	store, raw := openAdapter(t, fixedClock{when})
+	userID := mustUser(t, raw)
+	knownID := mustLexeme(t, raw, coffee)
+	learnID := mustLexeme(t, raw, hello)
+	otherID := mustLexeme(t, raw, book)
+	if err := raw.SetPlacementLearner(ctx, userID, knownID, "known", when); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.SetPlacementLearner(ctx, userID, learnID, "learning", when); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.InsertLearnerLexeme(ctx, userID, otherID, "known", false, "manual", when); err != nil {
+		t.Fatal(err)
+	}
+
+	gotKnown, err := store.PlacementKnownLexemes(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantKnown, err := raw.PlacementKnownLexemes(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(gotKnown, ",") != strings.Join(pointedSorted(wantKnown), ",") || len(gotKnown) != 1 || gotKnown[0] != coffee {
+		t.Fatalf("known %+v store %+v", gotKnown, wantKnown)
+	}
+	gotLearn, err := store.PlacementLearningLexemes(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gotLearn) != 1 || gotLearn[0] != hello {
+		t.Fatalf("learning %+v", gotLearn)
+	}
+}
+
+func TestStruggleStats(t *testing.T) {
+	when := time.Date(2026, 10, 18, 15, 0, 0, 0, time.UTC)
+	ctx := context.Background()
+	store, raw := openAdapter(t, fixedClock{when})
+	userID := mustUser(t, raw)
+	recent := when.Add(-time.Hour)
+	old := when.Add(-9 * 24 * time.Hour)
+
+	alef := mustCard(t, raw, userID, mustLexeme(t, raw, "א"), 9)
+	bet := mustCard(t, raw, userID, mustLexeme(t, raw, "ב"), 0)
+	gimel := mustCard(t, raw, userID, mustLexeme(t, raw, "ג"), 3)
+	mustGloss(t, raw, "א", "alef")
+	mustGloss(t, raw, "ב", "bet")
+	mustGloss(t, raw, "ג", "gimel")
+	insertReviews(t, raw, alef, old, 1, 1)
+	insertReviews(t, raw, bet, recent, 1, 1, 3, 3)
+	insertReviews(t, raw, gimel, recent, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3)
+
+	if err := raw.InsertConfusionMiss(ctx, userID, "letter_pair", "ג/א", recent); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.InsertConfusionMiss(ctx, userID, "letter_pair", "ג/א", recent.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.InsertConfusionMiss(ctx, userID, "agreement", "א", recent); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.InsertConfusionMiss(ctx, userID, "letter_pair", "ב/כ", old); err != nil {
+		t.Fatal(err)
+	}
+
+	stats, err := store.StruggleStats(ctx, userID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stats.Lexemes) != 3 || stats.Lexemes[0].TextNFC != "א" || stats.Lexemes[1].TextNFC != "ב" || stats.Lexemes[2].TextNFC != "ג" {
+		t.Fatalf("sorted %+v", stats.Lexemes)
+	}
+	if len(stats.Top) != 1 || stats.Top[0] != "ג" {
+		t.Fatalf("top %+v", stats.Top)
+	}
+	gimelRow := stats.Lexemes[2]
+	if gimelRow.Gloss != "gimel" || gimelRow.Reviews != 10 || gimelRow.Lapses != 3 || gimelRow.Misses7d != 2 || gimelRow.AgainRate != float64(2)/float64(10) || !gimelRow.LastSeen.Equal(recent) {
+		t.Fatalf("gimel %+v", gimelRow)
+	}
+	if len(gimelRow.ConfusionKeys) != 1 || gimelRow.ConfusionKeys[0] != "ג/א" {
+		t.Fatalf("keys %+v", gimelRow.ConfusionKeys)
+	}
+	if len(stats.Confusions) != 2 {
+		t.Fatalf("confusions %+v", stats.Confusions)
+	}
+	var sawAgreement, sawPair bool
+	for _, row := range stats.Confusions {
+		switch row.Kind {
+		case "agreement":
+			sawAgreement = row.A == "א" && row.B == "" && row.Count == 1
+		case "letter_pair":
+			sawPair = row.A == "ג" && row.B == "א" && row.Count == 2
+		}
+	}
+	if !sawAgreement || !sawPair {
+		t.Fatalf("confusions %+v", stats.Confusions)
+	}
+	if len(stats.Lexemes[1].ConfusionKeys) != 0 {
+		t.Fatalf("bet keys %+v", stats.Lexemes[1].ConfusionKeys)
+	}
+}
+
+func TestCompletedSharedUnits(t *testing.T) {
+	when := time.Date(2026, 10, 18, 8, 0, 0, 0, time.UTC)
+	ctx := context.Background()
+	store, raw := openAdapter(t, fixedClock{when})
+	userID := mustUser(t, raw)
+	earlyID, err := testharness.InsertUnit(ctx, raw, "Early", "published")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lateID, err := testharness.InsertUnit(ctx, raw, "Late", "published")
+	if err != nil {
+		t.Fatal(err)
+	}
+	openID, err := testharness.InsertUnit(ctx, raw, "Open", "published")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.ExecContext(ctx, `UPDATE units SET position = 0 WHERE id = ?`, earlyID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.ExecContext(ctx, `UPDATE units SET position = 2 WHERE id = ?`, lateID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.ExecContext(ctx, `UPDATE units SET position = 1 WHERE id = ?`, openID); err != nil {
+		t.Fatal(err)
+	}
+	bookID := mustLexeme(t, raw, book)
+	coffeeID := mustLexeme(t, raw, coffee)
+	fishID := mustLexeme(t, raw, fish)
+	if err := testharness.InsertLessonItem(ctx, raw, earlyID, 0, bookID, "new", "recall"); err != nil {
+		t.Fatal(err)
+	}
+	if err := testharness.InsertLessonItem(ctx, raw, lateID, 0, coffeeID, "new", "recall"); err != nil {
+		t.Fatal(err)
+	}
+	if err := testharness.InsertLessonItem(ctx, raw, lateID, 1, coffeeID, "recycle", "produce"); err != nil {
+		t.Fatal(err)
+	}
+	if err := testharness.InsertLessonItem(ctx, raw, openID, 0, fishID, "new", "recall"); err != nil {
+		t.Fatal(err)
+	}
+	earlyDone := when.Add(-2 * time.Hour)
+	lateLesson0 := when.Add(-time.Hour)
+	lateLesson1 := when
+	if _, err := testharness.InsertLessonRun(ctx, raw, userID, earlyID, 0, earlyDone.Add(-time.Minute), &earlyDone); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testharness.InsertLessonRun(ctx, raw, userID, lateID, 0, lateLesson0.Add(-time.Minute), &lateLesson0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testharness.InsertLessonRun(ctx, raw, userID, lateID, 1, lateLesson1.Add(-time.Minute), &lateLesson1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testharness.InsertLessonRun(ctx, raw, userID, openID, 0, when, nil); err != nil {
+		t.Fatal(err)
+	}
+	custom := mustPut(t, store, ctx, nil, unitDoc("Custom", house), "learner:7", 0)
+	if _, err := testharness.InsertLessonRun(ctx, raw, userID, custom.UnitID, 0, when, &when); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := store.CompletedSharedUnits(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || rows[0].UnitID != earlyID || rows[0].Position != 0 || !rows[0].CompletedAt.Equal(earlyDone) || rows[1].UnitID != lateID || rows[1].Position != 2 || !rows[1].CompletedAt.Equal(lateLesson1) {
+		t.Fatalf("completed %+v", rows)
+	}
+}
+
+func TestLearnerKnownLexemes(t *testing.T) {
+	when := time.Date(2026, 10, 18, 8, 0, 0, 0, time.UTC)
+	ctx := context.Background()
+	store, raw := openAdapter(t, fixedClock{when})
+	userID := mustUser(t, raw)
+	helloID := mustLexeme(t, raw, hello)
+	coffeeID := mustLexeme(t, raw, coffee)
+	bookID := mustLexeme(t, raw, book)
+	fishID := mustLexeme(t, raw, fish)
+	mustLexeme(t, raw, house)
+
+	helloCard := mustCard(t, raw, userID, helloID, 0)
+	insertReviews(t, raw, helloCard, when.Add(-time.Hour), 1)
+	insertReviews(t, raw, helloCard, when, 4)
+	coffeeCard := mustCard(t, raw, userID, coffeeID, 0)
+	insertReviews(t, raw, coffeeCard, when, 1)
+	enHe := db.Card{UserID: userID, LexemeID: coffeeID, Dir: "en_he", State: "review", Due: when, LastReview: when}
+	enHeID, err := raw.InsertCard(ctx, enHe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	insertReviews(t, raw, enHeID, when, 4)
+
+	doneID, err := testharness.InsertUnit(ctx, raw, "Done", "published")
+	if err != nil {
+		t.Fatal(err)
+	}
+	openID, err := testharness.InsertUnit(ctx, raw, "Open", "published")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := testharness.InsertLessonItem(ctx, raw, doneID, 0, bookID, "new", "recall"); err != nil {
+		t.Fatal(err)
+	}
+	if err := testharness.InsertLessonItem(ctx, raw, openID, 0, fishID, "new", "recall"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testharness.InsertLessonRun(ctx, raw, userID, doneID, 0, when, &when); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testharness.InsertLessonRun(ctx, raw, userID, openID, 0, when, nil); err != nil {
+		t.Fatal(err)
+	}
+	custom := mustPut(t, store, ctx, nil, unitDoc("Custom", house), "learner:7", 3)
+	if _, err := testharness.InsertLessonRun(ctx, raw, userID, custom.UnitID, 0, when, &when); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := store.LearnerKnownLexemes(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, ",") != book+","+hello {
+		t.Fatalf("known %+v", got)
+	}
+}
+
+func TestSearchLexemes(t *testing.T) {
+	ctx := context.Background()
+	store, raw := openAdapter(t, nil)
+	helloID := mustLexeme(t, raw, hello)
+	if _, err := raw.ExecContext(ctx, `
+		UPDATE lexemes
+		SET bare = 'שלום', gloss_en = 'hello; peace', pos = 'interjection', gender = 'm', translit = 'shalom', root = 'שלם'
+		WHERE id = ?`, helloID); err != nil {
+		t.Fatal(err)
+	}
+	wholeID := mustLexeme(t, raw, whole)
+	if _, err := raw.ExecContext(ctx, `UPDATE lexemes SET bare = 'שלם', gloss_en = 'whole' WHERE id = ?`, wholeID); err != nil {
+		t.Fatal(err)
+	}
+	coffeeID := mustLexeme(t, raw, coffee)
+	if _, err := raw.ExecContext(ctx, `
+		UPDATE lexemes SET bare = 'קפה', gloss_en = 'coffee', gender = 'm', plural = 'קָפִים', irregular_plural = 1, translit = 'kafe'
+		WHERE id = ?`, coffeeID); err != nil {
+		t.Fatal(err)
+	}
+	audioID := strings.Repeat("ab", 32)
+	if _, err := raw.ExecContext(ctx, `
+		INSERT INTO audio_assets (id, text_nfc, voice, model, bytes, created_at)
+		VALUES (?, ?, 'voice', 'eleven_v3', 4, ?)`, audioID, hello, db.FormatTime(time.Date(2026, 10, 18, 0, 0, 0, 0, time.UTC))); err != nil {
+		t.Fatal(err)
+	}
+
+	hits, suggestions, err := store.SearchLexemes(ctx, "Peace", 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(suggestions) != 0 || len(hits) != 1 || hits[0].TextNFC != hello || hits[0].Gloss != "hello; peace" || hits[0].Gender != "m" || hits[0].Translit != "shalom" || hits[0].Plural != "" || !hits[0].AudioPresent || hits[0].Root != "שלם" || hits[0].Bare != "שלום" {
+		t.Fatalf("gloss hit %+v suggestions %+v", hits, suggestions)
+	}
+
+	hits, suggestions, err = store.SearchLexemes(ctx, "של", 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 2 || len(suggestions) != 0 || hits[0].TextNFC != whole || hits[1].TextNFC != hello {
+		t.Fatalf("prefix %+v suggestions %+v", hits, suggestions)
+	}
+	limited, _, err := store.SearchLexemes(ctx, "של", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(limited) != 1 || limited[0].TextNFC != whole {
+		t.Fatalf("limit %+v", limited)
+	}
+
+	hits, suggestions, err = store.SearchLexemes(ctx, "שלוכ", 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 0 || len(suggestions) != 1 || suggestions[0].TextNFC != hello {
+		t.Fatalf("suggestion hits %+v suggestions %+v", hits, suggestions)
+	}
+
+	coffeeHits, _, err := store.SearchLexemes(ctx, coffee, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(coffeeHits) != 1 || coffeeHits[0].Plural != "קָפִים" || coffeeHits[0].Translit != "kafe" || coffeeHits[0].AudioPresent {
+		t.Fatalf("coffee %+v", coffeeHits)
+	}
+}
+
+func TestPutUnitIdempotentScopeAndItems(t *testing.T) {
+	when := time.Date(2026, 10, 18, 11, 0, 0, 0, time.UTC)
+	store, raw := openAdapter(t, fixedClock{when})
+	helloID := mustLexeme(t, raw, hello)
+	ctx := withActor(t, "author-7")
+	doc := unitDoc("Hello", hello)
+	doc.Lessons = []units.Lesson{
+		{Kind: units.KindLesson, Activities: []units.Activity{
+			{Type: units.ActivityListenPick, Text: hello},
+			{Type: units.ActivityRecall, Text: hello},
+		}},
+		{Kind: units.KindLesson, Activities: []units.Activity{
+			{Type: units.ActivityProduce, Text: hello + " לֹא"},
+		}},
+	}
+	doc.NewWords = []string{hello, "לֹא"}
+
+	first, err := store.PutUnit(ctx, nil, &doc, mcp.ScopeShared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Revision != 1 || first.Unchanged || first.UnitID == 0 {
+		t.Fatalf("create %+v", first)
+	}
+	second, err := store.PutUnit(ctx, &first.UnitID, &doc, " shared ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !second.Unchanged || second.Revision != 1 || second.UnitID != first.UnitID {
+		t.Fatalf("idempotent %+v", second)
+	}
+	if _, err := raw.ExecContext(ctx, `UPDATE units SET status = 'published' WHERE id = ?`, first.UnitID); err != nil {
+		t.Fatal(err)
+	}
+	held, err := store.PutUnit(ctx, &first.UnitID, &doc, mcp.ScopeShared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !held.Unchanged || held.Revision != 1 || unitStatus(t, raw, first.UnitID) != "published" {
+		t.Fatalf("published hold %+v status %s", held, unitStatus(t, raw, first.UnitID))
+	}
+
+	retarget, err := store.PutUnit(withActor(t, "author-9"), &first.UnitID, &doc, "learner:7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retarget.Unchanged || retarget.Revision != 2 || unitStatus(t, raw, first.UnitID) != "draft" {
+		t.Fatalf("scope change %+v status %s", retarget, unitStatus(t, raw, first.UnitID))
+	}
+
+	revs := revisions(t, raw, first.UnitID)
+	if len(revs) != 2 || revs[0].actor != "author-7" || revs[1].actor != "author-9" || revs[0].scope != mcp.ScopeShared || revs[1].scope != "learner:7" || revs[0].doc != revs[1].doc || revs[0].at != db.FormatTime(when) || revs[1].at != db.FormatTime(when) {
+		t.Fatalf("revisions %+v", revs)
+	}
+	items := lessonItems(t, raw, first.UnitID)
+	if len(items) != 2 || items[0].lesson != 0 || items[0].lexeme != helloID || items[0].role != "new" || items[0].skill != units.ActivityListenPick || items[1].lesson != 1 || items[1].role != "recycle" || items[1].skill != units.ActivityProduce {
+		t.Fatalf("items %+v", items)
+	}
+
+	missing := int64(999)
+	_, err = store.PutUnit(ctx, &missing, &doc, mcp.ScopeShared)
+	if !errors.Is(err, mcp.ErrUnitNotFound) {
+		t.Fatalf("missing err = %v", err)
+	}
+	blocked := doc
+	blocked.Title = ""
+	saved, err := store.PutUnit(ctx, nil, &blocked, mcp.ScopeShared)
+	if err != nil || saved.UnitID == 0 || saved.Revision != 1 {
+		t.Fatalf("blocked draft %+v err=%v", saved, err)
+	}
+}
+
+func TestLookup(t *testing.T) {
+	ctx := context.Background()
+	store, raw := openAdapter(t, nil)
+	helloID := mustLexeme(t, raw, hello)
+	if _, err := raw.ExecContext(ctx, `
+		UPDATE lexemes SET pos = 'interjection', gender = 'm', bare = 'שלום', plural = NULL, irregular_plural = 0
+		WHERE id = ?`, helloID); err != nil {
+		t.Fatal(err)
+	}
+	coffeeID := mustLexeme(t, raw, coffee)
+	if _, err := raw.ExecContext(ctx, `
+		UPDATE lexemes SET pos = 'noun', gender = 'm', plural = 'קָפִים', irregular_plural = 1, bare = 'קפה'
+		WHERE id = ?`, coffeeID); err != nil {
+		t.Fatal(err)
+	}
+	audioID := strings.Repeat("cd", 32)
+	if _, err := raw.ExecContext(ctx, `
+		INSERT INTO audio_assets (id, text_nfc, voice, model, bytes, created_at)
+		VALUES (?, ?, 'voice', 'eleven_v3', 4, ?)`, audioID, hello, db.FormatTime(time.Date(2026, 10, 18, 0, 0, 0, 0, time.UTC))); err != nil {
+		t.Fatal(err)
+	}
+
+	id, ok, err := store.LexemeByText(ctx, hello)
+	if err != nil || !ok || id != helloID {
+		t.Fatalf("lexeme id=%d ok=%v err=%v", id, ok, err)
+	}
+	if _, ok, err := store.LexemeByText(ctx, "missing"); err != nil || ok {
+		t.Fatalf("missing ok=%v err=%v", ok, err)
+	}
+	has, err := store.HasAudio(ctx, hello)
+	if err != nil || !has {
+		t.Fatalf("audio %v %v", has, err)
+	}
+	has, err = store.HasAudio(ctx, coffee)
+	if err != nil || has {
+		t.Fatalf("coffee audio %v %v", has, err)
+	}
+	facts, ok, err := store.Facts(ctx, coffee)
+	if err != nil || !ok || facts.POS != "noun" || facts.Gender != "m" || facts.Plural != "קָפִים" || !facts.IrregularPlural || facts.Bare != "קפה" {
+		t.Fatalf("facts %+v ok=%v err=%v", facts, ok, err)
+	}
+	if _, ok, err := store.Facts(ctx, "missing"); err != nil || ok {
+		t.Fatalf("missing facts ok=%v err=%v", ok, err)
+	}
+
+	first := mustPut(t, store, ctx, nil, unitDoc("One", hello), mcp.ScopeShared, 0)
+	second := mustPut(t, store, ctx, nil, unitDoc("Two", coffee), mcp.ScopeShared, 3)
+	if first.UnitID == 0 || second.UnitID == 0 {
+		t.Fatal("units were not saved")
+	}
+	known, err := store.KnownLexemes(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(known) != 1 || !known[hello] {
+		t.Fatalf("before 1 %+v", known)
+	}
+	none, err := store.KnownLexemes(ctx, 0)
+	if err != nil || len(none) != 0 {
+		t.Fatalf("before 0 %+v err=%v", none, err)
+	}
+	both, err := store.KnownLexemes(ctx, 4)
+	if err != nil || !both[hello] || !both[coffee] {
+		t.Fatalf("before 4 %+v err=%v", both, err)
+	}
+}
+
+type fixedClock struct{ t time.Time }
+
+func (f fixedClock) Now() time.Time { return f.t }
+
+func openAdapter(t *testing.T, clk clock.Clock) (*Store, *db.Store) {
+	t.Helper()
+	raw, err := db.Open(context.Background(), filepath.Join(t.TempDir(), "hebrew.sqlite"), clk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	return New(raw), raw
+}
+
+func mustUser(t *testing.T, raw *db.Store) int64 {
+	t.Helper()
+	id, err := raw.InsertUser(context.Background(), "learner@example.com", "sub-learner", "learner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func mustLexeme(t *testing.T, raw *db.Store, text string) int64 {
+	t.Helper()
+	id, err := testharness.InsertLexeme(context.Background(), raw, text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func mustGloss(t *testing.T, raw *db.Store, text, gloss string) {
+	t.Helper()
+	if _, err := raw.ExecContext(context.Background(), `UPDATE lexemes SET gloss_en = ? WHERE text_nfc = ?`, gloss, text); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustCard(t *testing.T, raw *db.Store, userID, lexemeID int64, lapses int) int64 {
+	t.Helper()
+	when := time.Date(2026, 10, 18, 0, 0, 0, 0, time.UTC)
+	id, err := raw.InsertCard(context.Background(), db.Card{
+		UserID: userID, LexemeID: lexemeID, Dir: "he_en", State: "review",
+		Due: when, LastReview: when, Lapses: lapses, Reps: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func insertReviews(t *testing.T, raw *db.Store, cardID int64, at time.Time, ratings ...int) {
+	t.Helper()
+	for _, rating := range ratings {
+		if _, err := raw.ExecContext(context.Background(), `
+			INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days)
+			VALUES (?, ?, ?, 0, 1)`, cardID, rating, db.FormatTime(at)); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func unitDoc(title, word string) units.Unit {
+	return units.Unit{
+		Title: title, Situation: "Street", Concept: "One idea",
+		NewWords: []string{word},
+		Lessons: []units.Lesson{{
+			Kind:       units.KindLesson,
+			Activities: []units.Activity{{Type: units.ActivityRecall, Text: word}},
+		}},
+	}
+}
+
+func mustPut(t *testing.T, store *Store, ctx context.Context, id *int64, doc units.Unit, scope string, position int) mcp.PutResult {
+	t.Helper()
+	doc.Position = position
+	saved, err := store.PutUnit(ctx, id, &doc, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return saved
+}
+
+func ids(rows []mcp.UnitOutline) string {
+	parts := make([]string, len(rows))
+	for i, row := range rows {
+		parts[i] = strconv.FormatInt(row.ID, 10)
+	}
+	return strings.Join(parts, ",")
+}
+
+func joinIDs(ids ...int64) string {
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = strconv.FormatInt(id, 10)
+	}
+	return strings.Join(parts, ",")
+}
+
+type revisionRow struct {
+	actor string
+	scope string
+	doc   string
+	at    string
+}
+
+func revisions(t *testing.T, raw *db.Store, unitID int64) []revisionRow {
+	t.Helper()
+	conn, err := raw.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := conn.QueryContext(context.Background(), `
+		SELECT actor, scope, doc, created_at FROM unit_revisions
+		WHERE unit_id = ? ORDER BY rev`, unitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []revisionRow
+	for rows.Next() {
+		var row revisionRow
+		if err := rows.Scan(&row.actor, &row.scope, &row.doc, &row.at); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func unitStatus(t *testing.T, raw *db.Store, unitID int64) string {
+	t.Helper()
+	conn, err := raw.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var status string
+	if err := conn.QueryRowContext(context.Background(), `SELECT status FROM units WHERE id = ?`, unitID).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	return status
+}
+
+type itemRow struct {
+	lesson int
+	lexeme int64
+	role   string
+	skill  string
+}
+
+func lessonItems(t *testing.T, raw *db.Store, unitID int64) []itemRow {
+	t.Helper()
+	conn, err := raw.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := conn.QueryContext(context.Background(), `
+		SELECT lesson_ix, lexeme_id, role, skill FROM lesson_items
+		WHERE unit_id = ? ORDER BY lesson_ix, lexeme_id`, unitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []itemRow
+	for rows.Next() {
+		var row itemRow
+		if err := rows.Scan(&row.lesson, &row.lexeme, &row.role, &row.skill); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func withActor(t *testing.T, actor string) context.Context {
+	t.Helper()
+	var ctx context.Context
+	h := sdauth.RequireBearerToken(func(context.Context, string, *http.Request) (*sdauth.TokenInfo, error) {
+		return &sdauth.TokenInfo{
+			UserID:     actor,
+			Expiration: time.Now().Add(time.Hour),
+			Extra:      map[string]any{"source": "token"},
+		}, nil
+	}, &sdauth.RequireBearerTokenOptions{AllowMissingExpiration: true})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx = r.Context()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if ctx == nil || rr.Code != http.StatusNoContent {
+		t.Fatalf("principal context status %d", rr.Code)
+	}
+	return ctx
+}
