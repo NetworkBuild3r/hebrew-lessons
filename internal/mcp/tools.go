@@ -150,15 +150,19 @@ type putInput struct {
 	Position int        `json:"position" jsonschema:"Course position, 0 or greater. This is not a field inside doc. Changing it saves a new draft revision."`
 	Scope    string     `json:"scope" jsonschema:"Required. shared for every learner, or learner:<id> for one learner. <id> is the numeric learner id, such as learner:7. Scope is metadata, not a field of doc. Changing it saves a new draft revision."`
 	Doc      units.Unit `json:"doc" jsonschema:"Unit document. JSON that cannot be read as a unit is rejected. Warnings and block issues are returned, and the draft is still saved."`
-	Publish  bool       `json:"publish,omitempty" jsonschema:"When true, publish this save if scope is learner:<id> and there are no block issues. Shared scope ignores this flag. Warnings do not block it. Block issues still save the draft and leave it unpublished."`
+	Publish  bool       `json:"publish,omitempty" jsonschema:"When true, publish this save if scope is learner:<id>, briefId names that learner's unused brief, and there are no block issues, brief checks included. Shared scope ignores this flag. Warnings do not block it. Block issues, or no briefId, still save the draft and leave it unpublished, and publishReason says why."`
+	BriefID  string     `json:"briefId,omitempty" jsonschema:"The id of the lesson brief this unit was written from. Needed to publish a learner unit. The brief must belong to the learner of scope, be unexpired, and be unused. A brief builds one unit. Like scope it is metadata, not a field of doc."`
 }
 
 type putOutput struct {
-	UnitID    int64         `json:"unitId"`
-	Revision  int           `json:"revision"`
-	Unchanged bool          `json:"unchanged"`
-	Published bool          `json:"published"`
-	Issues    []units.Issue `json:"issues"`
+	UnitID    int64 `json:"unitId"`
+	Revision  int   `json:"revision"`
+	Unchanged bool  `json:"unchanged"`
+	Published bool  `json:"published"`
+	// PublishReason says why a publish true was not honored. It is empty when the unit
+	// was published or publish was not asked for.
+	PublishReason string        `json:"publishReason,omitempty"`
+	Issues        []units.Issue `json:"issues"`
 }
 
 func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in getContextInput) (*mcp.CallToolResult, getContextOutput, error) {
@@ -399,7 +403,7 @@ func (s *service) putUnit(ctx context.Context, _ *mcp.CallToolRequest, in putInp
 	}
 	published := false
 	if in.Publish {
-		saved, published, err = s.publishLearnerDraft(ctx, scope, saved, issues)
+		saved, published, issues, out.PublishReason, err = s.publishLearnerDraft(ctx, scope, in.BriefID, saved, issues)
 		if err != nil {
 			return nil, out, err
 		}
@@ -478,7 +482,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}, svc.validateUnit)
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "put_unit",
-		Description: "Save a draft revision. Admin only, including the static token: a learner call is a tool error, forbidden: admin only, even for scope learner:<their own id>. scope is required: shared, or learner:<id> for one learner. Scope is not inside the unit document. Send unitId to update; omit it to create. The same document, position, and scope do not create another revision. lesson_items are still rebuilt, so a unit saved before its words were in the lexicon gains those rows without a new revision. Changing scope does create a revision. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. publish true is honored only for scope learner:<id>, and only when there are no block issues. A shared unit ignores publish and stays a draft until publish_unit. Warnings do not block that learner-scope publish.",
+		Description: "Save a draft revision. Admin only, including the static token: a learner call is a tool error, forbidden: admin only, even for scope learner:<their own id>. scope is required: shared, or learner:<id> for one learner. Scope is not inside the unit document. Send unitId to update; omit it to create. The same document, position, and scope do not create another revision. lesson_items are still rebuilt, so a unit saved before its words were in the lexicon gains those rows without a new revision. Changing scope does create a revision. The draft is saved even when issues block publishing. Warnings are not a reason to skip the save. JSON that cannot be read as a unit is rejected and nothing is written. publish true is honored only for scope learner:<id>, with a briefId of that learner's unused, unexpired brief, and only when there are no block issues, including the brief checks (coverage, new-word intro and uses, struggle-word reuse, glosses, audio, no markup). A learner unit with no briefId is saved as a draft, and publishReason says so. A shared unit ignores publish and stays a draft until publish_unit. Warnings do not block that learner-scope publish. Every auto-publish is written to an audit trail.",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint:    false,
 			IdempotentHint:  true,

@@ -15,7 +15,12 @@ func Validate(ctx context.Context, doc *Unit, lk Lookup) []Issue {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	issues := collect(ctx, doc, lk)
+	return sortedIssues(collect(ctx, doc, lk))
+}
+
+// sortedIssues orders issues by JSON pointer, then rule id, then message.
+// It returns nil for an empty list.
+func sortedIssues(issues []Issue) []Issue {
 	sort.SliceStable(issues, func(i, j int) bool {
 		if issues[i].Pointer != issues[j].Pointer {
 			return issues[i].Pointer < issues[j].Pointer

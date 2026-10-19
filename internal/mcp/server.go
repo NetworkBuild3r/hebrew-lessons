@@ -31,7 +31,7 @@ const (
 		"put_unit requires scope shared or learner:<id>. Scope is not inside the document. " +
 		"put_unit saves even when issues block publishing. " +
 		"Call publish_unit to publish a shared unit once there are no block issues. " +
-		"put_unit with publish true publishes only a learner:<id> unit, and only when there are no block issues. A shared unit ignores that flag. " +
+		"put_unit with publish true publishes only a learner:<id> unit, only with a briefId of that learner's unused brief, and only when there are no block issues. A learner unit with no briefId stays a draft. A shared unit ignores that flag. " +
 		"Warnings do not block publishing. Publishing the same revision again reports unchanged. " +
 		"Send unitId when you save again so an unchanged document, position, and scope do not create a revision."
 )
