@@ -14,12 +14,9 @@ import (
 var ErrUnitNotFound = errors.New("unit not found")
 
 // defaultStruggleTop is how many struggled lexemes get_context returns
-// when topN is omitted. It does not limit confusion counts.
+// when topN is omitted. It does not limit confusions. The store's
+// confusion list is already the last 7 days.
 const defaultStruggleTop = 30
-
-// defaultWindowDays is how many days of confusion counts get_context
-// returns when window is omitted.
-const defaultWindowDays = 30
 
 // ScopeShared is the scope of a unit every learner receives.
 // A custom unit uses "learner:<id>", where id is that learner's numeric id.
@@ -59,9 +56,9 @@ type UnitOutline struct {
 
 // BandScore is one frequency band on a placement run.
 // Rated is how many words from the band were rated. Again, Hard, Good,
-// and Easy are those FSRS ratings. StruggleRate is the share that
-// struggled. Each rated word also gets a real FSRS card; this row is
-// only the band tally. get_context emits the slice as bands.
+// Easy, and DontKnow are those FSRS ratings. GoodPlusRate is the share
+// rated Good or Easy. Each rated word also gets a real FSRS card; this
+// row is only the band tally. get_context emits the slice as bands.
 type BandScore struct {
 	Band         int     `json:"band"`
 	Rated        int     `json:"rated"`
@@ -69,7 +66,8 @@ type BandScore struct {
 	Hard         int     `json:"hard"`
 	Good         int     `json:"good"`
 	Easy         int     `json:"easy"`
-	StruggleRate float64 `json:"struggleRate"`
+	DontKnow     int     `json:"dontKnow"`
+	GoodPlusRate float64 `json:"goodPlusRate"`
 }
 
 // Placement mirrors db.Placement. db.Placement is not on this branch.
@@ -78,8 +76,9 @@ type BandScore struct {
 // no row.
 //
 // Finished reports whether the run stopped. StopReason is band_stop,
-// cap, exhausted, or empty. Level is the highest passed band, or −1
-// when none passed. SuggestedStartPosition 0 is the first unit.
+// cap_cards, cap_time, exhausted, or empty. Level is the highest
+// passed band, or −1 when none passed. SuggestedStartPosition 0 is
+// the first unit.
 type Placement struct {
 	TakenAt                time.Time
 	Finished               bool
@@ -108,8 +107,7 @@ type Lexeme struct {
 	AudioPresent bool   `json:"audioPresent"`
 }
 
-// CourseReader is what get_context reads besides units.Lookup and
-// StruggleSource.
+// CourseReader is what get_context reads besides units.Lookup.
 type CourseReader interface {
 	// UnitsInScope returns the outline for learnerID, ordered by
 	// position ascending and then id ascending. A nil learnerID is
@@ -125,10 +123,17 @@ type CourseReader interface {
 	// NFC, sorted. There is no learner_lexemes table. These are the
 	// known words. Shape matches db.PlacementKnownLexemes.
 	PlacementKnownLexemes(ctx context.Context, userID int64) ([]string, error)
-	// PlacementLearningLexemes returns the Again and Hard words, pointed
-	// NFC, sorted. These are the learning words. Shape matches
-	// db.PlacementLearningLexemes.
+	// PlacementLearningLexemes returns the Again, Hard, and don't-know
+	// words, pointed NFC, sorted. These are the learning words. Shape
+	// matches db.PlacementLearningLexemes.
 	PlacementLearningLexemes(ctx context.Context, userID int64) ([]string, error)
+	// StruggleStats returns the learner's struggle rows.
+	// Lexemes are the raw rows, sorted by pointed text. Confusions
+	// cover 7 days. B is empty for the agreement kind. Top is the
+	// topN texts ordered by misses in 7 days, then lapses, then Again
+	// rate. get_context emits Top in that order and does not re-rank.
+	// Shape matches db.StruggleStats.
+	StruggleStats(ctx context.Context, userID int64, topN int) (Struggle, error)
 	// CompletedSharedUnits returns shared units this learner has finished,
 	// ordered by position, then unit id. A unit is complete when every
 	// lesson in it has a finished run. Shape matches db.CompletedSharedUnits.
@@ -140,41 +145,43 @@ type CourseReader interface {
 	LearnerKnownLexemes(ctx context.Context, userID int64) ([]string, error)
 }
 
-// StruggleSource returns the get_context struggles object.
-// The store method behind it is not settled. Callers see only this shape.
-type StruggleSource interface {
-	// Struggles returns struggled lexemes and confusion counts.
-	// Lexemes are already ordered, most-struggled first. topN limits
-	// that list. window limits confusions. Neither call re-ranks.
-	Struggles(ctx context.Context, userID int64, topN int, window time.Duration) (Struggles, error)
+// Struggle mirrors db.Struggle.
+// Lexemes are sorted by TextNFC. Top is the ranked text of those rows,
+// already limited to topN. get_context emits the Top rows and does not
+// re-rank them.
+type Struggle struct {
+	Lexemes    []StruggleLexeme
+	Confusions []StruggleConfusion
+	Top        []string
 }
 
 // Struggles is the get_context struggles object.
+// Lexemes are the Top rows, in Top order.
 type Struggles struct {
-	Lexemes    []LexemeStruggle `json:"lexemes"`
-	Confusions []ConfusionCount `json:"confusions"`
+	Lexemes    []StruggleLexeme    `json:"lexemes"`
+	Confusions []StruggleConfusion `json:"confusions"`
 }
 
-// LexemeStruggle is one word the learner is missing.
-// LexemeStruggles returns these already sorted, most-struggled first.
+// StruggleLexeme is one raw struggle row.
 // TextNFC is pointed NFC. get_context emits it as text and omits LexemeID.
-type LexemeStruggle struct {
-	LexemeID     int64     `json:"-"`
-	TextNFC      string    `json:"text"`
-	Gloss        string    `json:"gloss"`
-	Reviews      int       `json:"reviews"`
-	Lapses       int       `json:"lapses"`
-	AgainRate    float64   `json:"againRate"`
-	Misses7d     int       `json:"misses7d"`
-	LastReviewAt time.Time `json:"lastReviewAt"`
+type StruggleLexeme struct {
+	LexemeID      int64     `json:"-"`
+	TextNFC       string    `json:"text"`
+	Gloss         string    `json:"gloss"`
+	Reviews       int       `json:"reviews"`
+	Lapses        int       `json:"lapses"`
+	AgainRate     float64   `json:"againRate"`
+	Misses7d      int       `json:"misses7d"`
+	LastSeen      time.Time `json:"lastSeen"`
+	ConfusionKeys []string  `json:"confusionKeys"`
 }
 
-// ConfusionCount is one confusion the learner keeps making.
-// Kind and Key identify it. LastAt is the latest time it was recorded.
-// A zero LastAt is kept inside any window.
-type ConfusionCount struct {
+// StruggleConfusion is one confusion over the last 7 days.
+// B is empty for the agreement kind.
+type StruggleConfusion struct {
 	Kind   string    `json:"kind"`
-	Key    string    `json:"key"`
+	A      string    `json:"a"`
+	B      string    `json:"b"`
 	Count  int       `json:"count"`
 	LastAt time.Time `json:"lastAt"`
 }

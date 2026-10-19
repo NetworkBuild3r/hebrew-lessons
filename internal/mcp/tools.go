@@ -26,7 +26,6 @@ var (
 
 type service struct {
 	course    CourseReader
-	struggles StruggleSource
 	lexicon   LexiconReader
 	lexLookup units.Lookup
 	units     UnitWriter
@@ -35,8 +34,7 @@ type service struct {
 type getContextInput struct {
 	Position  int    `json:"position" jsonschema:"Course position you are about to write. Known lexemes are words introduced in units at a lower position. Zero is the first unit. Use the placement suggestedStartPosition when the learner has taken the vocabulary check."`
 	LearnerID *int64 `json:"learnerId,omitempty" jsonschema:"Optional. The learner whose custom units, placement, struggles, and completed shared units to include. Omit it to see shared units only, with no learner data. OAuth will later default this to the signed-in user."`
-	TopN      int    `json:"topN,omitempty" jsonschema:"How many struggled lexemes to return. Defaults to 30. Does not limit confusions. The list is already ordered, most-struggled first."`
-	Window    int    `json:"window,omitempty" jsonschema:"How many days of confusion counts to include. Defaults to 30. A confusion with no lastAt is always included. Does not limit struggled lexemes."`
+	TopN      int    `json:"topN,omitempty" jsonschema:"How many struggled lexemes to return. Defaults to 30. The store ranks them by misses in 7 days, then lapses, then Again rate. This tool keeps that order. It does not limit confusions, which already cover 7 days."`
 }
 
 type getContextOutput struct {
@@ -164,9 +162,6 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 	if in.TopN < 0 {
 		return nil, out, errors.New("topN must be 0 or greater. Omit it to use 30.")
 	}
-	if in.Window < 0 {
-		return nil, out, errors.New("window must be 0 or greater. Omit it to use 30 days.")
-	}
 	outline, err := s.course.UnitsInScope(ctx, in.LearnerID)
 	if err != nil {
 		return nil, out, storeErr("The course outline could not be read.", err)
@@ -210,22 +205,15 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 			slices.Sort(view.KnownLexemes)
 			slices.Sort(view.LearningLexemes)
 		}
-		if s.struggles == nil {
-			return nil, out, errors.New("Struggle storage is not connected.")
-		}
 		topN := in.TopN
 		if topN == 0 {
 			topN = defaultStruggleTop
 		}
-		days := in.Window
-		if days == 0 {
-			days = defaultWindowDays
-		}
-		struggles, err = s.struggles.Struggles(ctx, userID, topN, time.Duration(days)*24*time.Hour)
+		stats, err := s.course.StruggleStats(ctx, userID, topN)
 		if err != nil {
 			return nil, out, storeErr("The struggle list could not be read.", err)
 		}
-		struggles = fillStruggles(struggles)
+		struggles = strugglesFrom(stats)
 		completed, err = s.course.CompletedSharedUnits(ctx, userID)
 		if err != nil {
 			return nil, out, storeErr("The completed shared units could not be read.", err)
@@ -254,19 +242,50 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 
 func emptyStruggles() Struggles {
 	return Struggles{
-		Lexemes:    []LexemeStruggle{},
-		Confusions: []ConfusionCount{},
+		Lexemes:    []StruggleLexeme{},
+		Confusions: []StruggleConfusion{},
 	}
 }
 
 func fillStruggles(in Struggles) Struggles {
 	if in.Lexemes == nil {
-		in.Lexemes = []LexemeStruggle{}
+		in.Lexemes = []StruggleLexeme{}
 	}
 	if in.Confusions == nil {
-		in.Confusions = []ConfusionCount{}
+		in.Confusions = []StruggleConfusion{}
+	}
+	for i := range in.Lexemes {
+		if in.Lexemes[i].ConfusionKeys == nil {
+			in.Lexemes[i].ConfusionKeys = []string{}
+		}
 	}
 	return in
+}
+
+// strugglesFrom emits the store's Top rows in Top order.
+// It does not rank them again. Confusions are copied as returned.
+func strugglesFrom(stats Struggle) Struggles {
+	byText := make(map[string]StruggleLexeme, len(stats.Lexemes))
+	for _, row := range stats.Lexemes {
+		if _, ok := byText[row.TextNFC]; ok {
+			continue
+		}
+		row.ConfusionKeys = append([]string(nil), row.ConfusionKeys...)
+		if row.ConfusionKeys == nil {
+			row.ConfusionKeys = []string{}
+		}
+		byText[row.TextNFC] = row
+	}
+	lexemes := make([]StruggleLexeme, 0, len(stats.Top))
+	for _, text := range stats.Top {
+		row, ok := byText[text]
+		if !ok {
+			continue
+		}
+		lexemes = append(lexemes, row)
+	}
+	confusions := append([]StruggleConfusion(nil), stats.Confusions...)
+	return fillStruggles(Struggles{Lexemes: lexemes, Confusions: confusions})
 }
 
 func (s *service) lookup(ctx context.Context, _ *mcp.CallToolRequest, in lookupInput) (*mcp.CallToolResult, lookupOutput, error) {
@@ -393,7 +412,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_context",
-		Description: "Read the course before you draft a unit. The outline rows have position, title, status, and scope (shared, or learner:<id>). Omit learnerId to see shared units only, with empty struggles and placement taken false. knownLexemes is then the pointed text introduced before position. Pass learnerId to add that learner's custom units, their placement, their struggles, and the shared units they have finished. knownLexemes is then that learner's words: the union of placement Good and Easy words and words from completed units, sorted pointed NFC. topN defaults to 30 and limits struggled lexemes only. window defaults to 30 days and limits confusion counts by lastAt. The struggle list is already ordered, most-struggled first; do not re-rank it. Each lexeme has text, gloss, reviews, lapses, againRate, misses7d, and lastReviewAt. Each confusion has kind, key, count, and lastAt. Placement taken false means there is no row. A row includes takenAt, finished, level, cardsRated, stopReason (band_stop, cap, exhausted, or empty), bands (per band: band, rated, again, hard, good, easy, struggleRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy, pointed NFC, sorted), and learningLexemes (Again and Hard, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for budgets and for the shared-versus-custom guidance. That guidance is not an enforced rule.",
+		Description: "Read the course before you draft a unit. The outline rows have position, title, status, and scope (shared, or learner:<id>). Omit learnerId to see shared units only, with empty struggles and placement taken false. knownLexemes is then the pointed text introduced before position. Pass learnerId to add that learner's custom units, their placement, their struggles, and the shared units they have finished. knownLexemes is then that learner's words: the union of placement Good and Easy words and words from completed units, sorted pointed NFC. topN defaults to 30. Struggled lexemes are the store's Top rows, ordered by misses in 7 days, then lapses, then Again rate. Do not re-rank them. Each lexeme has text, gloss, reviews, lapses, againRate, misses7d, lastSeen, and confusionKeys. Confusions cover 7 days and are not limited by topN. Each has kind, a, b, count, and lastAt. b is empty for the agreement kind. Placement taken false means there is no row. A row includes takenAt, finished, level, cardsRated, stopReason (band_stop, cap_cards, cap_time, exhausted, or empty), bands (per band: band, rated, again, hard, good, easy, dontKnow, goodPlusRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy, pointed NFC, sorted), and learningLexemes (Again, Hard, and don't-know, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for budgets and for the shared-versus-custom guidance. That guidance is not an enforced rule.",
 		Annotations: readOnly,
 	}, svc.getContext)
 	mcp.AddTool(server, &mcp.Tool{

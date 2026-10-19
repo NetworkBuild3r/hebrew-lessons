@@ -34,13 +34,12 @@ const (
 // read the environment. Validator, when set, replaces that static check.
 // Compose an OAuth access-token validator with StaticToken in a Chain.
 //
-// Nil Course, Struggle, Lexicon, Lookup, or Units leaves the tools registered.
+// Nil Course, Lexicon, Lookup, or Units leaves the tools registered.
 // A call that needs a missing store returns a tool error and does not panic.
 type Options struct {
 	AuthToken string
 	Validator Validator
 	Course    CourseReader
-	Struggle  StruggleSource
 	Lexicon   LexiconReader
 	Lookup    units.Lookup
 	Units     UnitWriter
@@ -85,7 +84,6 @@ func newMCPServer(opts Options) *mcp.Server {
 	})
 	svc := &service{
 		course:    opts.Course,
-		struggles: opts.Struggle,
 		lexicon:   opts.Lexicon,
 		lexLookup: opts.Lookup,
 		units:     opts.Units,

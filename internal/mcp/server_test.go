@@ -102,7 +102,6 @@ func TestChainAcceptsStaticToken(t *testing.T) {
 	h := Handler(Options{
 		Validator: Chain{rejectToken{}, StaticToken{Token: testToken, Actor: "author-7"}},
 		Course:    mem,
-		Struggle:  mem,
 		Lexicon:   mem,
 		Lookup:    mem,
 		Units:     mem,
@@ -128,7 +127,6 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	session := connectMCP(t, Handler(Options{
 		AuthToken: testToken,
 		Course:    mem,
-		Struggle:  mem,
 		Lexicon:   mem,
 		Lookup:    mem,
 		Units:     mem,
@@ -330,22 +328,22 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 		Finished:   true,
 		Level:      0,
 		CardsRated: 4,
-		StopReason: "cap",
+		StopReason: "cap_cards",
 		BandScores: []BandScore{{
-			Band: 0, Rated: 4, Again: 1, Hard: 1, Good: 1, Easy: 1, StruggleRate: 0.5,
+			Band: 0, Rated: 4, Again: 1, Hard: 1, Good: 1, Easy: 1, DontKnow: 0, GoodPlusRate: 0.5,
 		}},
 		EstimatedKnownWords:    40,
 		SuggestedStartPosition: 0,
 	}, []string{hello, coffee}, []string{book, helloBare})
 	again := call[getContextOutput](t, session, "get_context", getContextInput{Position: 3, LearnerID: &learnerZero})
-	if !again.Placement.Taken || !again.Placement.TakenAt.Equal(takenAt) || !again.Placement.Finished || again.Placement.StopReason != "cap" || again.Placement.CardsRated != 4 {
+	if !again.Placement.Taken || !again.Placement.TakenAt.Equal(takenAt) || !again.Placement.Finished || again.Placement.StopReason != "cap_cards" || again.Placement.CardsRated != 4 {
 		t.Fatalf("placement %+v", again.Placement)
 	}
 	if again.Placement.Level != 0 || again.Placement.SuggestedStartPosition != 0 || again.Placement.EstimatedKnownWords != 40 {
 		t.Fatalf("placement zeros %+v", again.Placement)
 	}
 	band := again.Placement.Bands
-	if len(band) != 1 || band[0].Band != 0 || band[0].Rated != 4 || band[0].Again != 1 || band[0].Hard != 1 || band[0].Good != 1 || band[0].Easy != 1 || band[0].StruggleRate != 0.5 {
+	if len(band) != 1 || band[0].Band != 0 || band[0].Rated != 4 || band[0].Again != 1 || band[0].Hard != 1 || band[0].Good != 1 || band[0].Easy != 1 || band[0].DontKnow != 0 || band[0].GoodPlusRate != 0.5 {
 		t.Fatalf("bands %+v", band)
 	}
 	if len(again.Placement.KnownLexemes) != 2 || again.Placement.KnownLexemes[0] != coffee || again.Placement.KnownLexemes[1] != hello {
@@ -356,15 +354,15 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	}
 	takenText := callRaw(t, session, "get_context", getContextInput{Position: 3, LearnerID: &learnerZero})
 	for _, want := range []string{
-		`"taken":true`, `"finished":true`, `"level":0`, `"cardsRated":4`, `"stopReason":"cap"`,
+		`"taken":true`, `"finished":true`, `"level":0`, `"cardsRated":4`, `"stopReason":"cap_cards"`,
 		`"suggestedStartPosition":0`, `"bands":`, `"rated":4`, `"again":1`, `"hard":1`,
-		`"good":1`, `"easy":1`, `"struggleRate":0.5`, `"learningLexemes":`, hello, book,
+		`"good":1`, `"easy":1`, `"dontKnow":0`, `"goodPlusRate":0.5`, `"learningLexemes":`, hello, book,
 	} {
 		if !strings.Contains(takenText, want) {
 			t.Fatalf("taken placement missing %s in %s", want, takenText)
 		}
 	}
-	for _, gone := range []string{"adjustedScore", `"h":`, `"passed"`, `"reliable"`, `"falseAlarmRate"`, `"bandScores"`, `"shown"`, `"dontknow"`, `"goodPlusRate"`} {
+	for _, gone := range []string{"adjustedScore", `"h":`, `"passed"`, `"reliable"`, `"falseAlarmRate"`, `"bandScores"`, `"shown"`, `"dontknow"`, `"struggleRate"`} {
 		if strings.Contains(takenText, gone) {
 			t.Fatalf("old placement field %s in %s", gone, takenText)
 		}
@@ -395,7 +393,6 @@ func TestScopeStruggleAndGuidance(t *testing.T) {
 	session := connectMCP(t, Handler(Options{
 		AuthToken: testToken,
 		Course:    mem,
-		Struggle:  mem,
 		Lexicon:   mem,
 		Lookup:    mem,
 		Units:     mem,
@@ -451,18 +448,15 @@ func TestScopeStruggleAndGuidance(t *testing.T) {
 		t.Fatalf("shared known %+v", onlyShared.KnownLexemes)
 	}
 
-	recent := time.Now().Add(-48 * time.Hour).UTC()
-	old := time.Now().Add(-40 * 24 * time.Hour).UTC()
-	mem.SetLexemeStruggles(7, []LexemeStruggle{
-		{LexemeID: 11, TextNFC: "א", Gloss: "alef", Reviews: 2, Lapses: 0, AgainRate: 0.1, Misses7d: 0, LastReviewAt: recent},
-		{LexemeID: 12, TextNFC: "ג", Gloss: "gimel", Reviews: 9, Lapses: 8, AgainRate: 0.9, Misses7d: 3, LastReviewAt: recent},
-		{LexemeID: 13, TextNFC: "ב", Gloss: "bet", Reviews: 4, Lapses: 1, AgainRate: 0.9, Misses7d: 0, LastReviewAt: recent},
-		{LexemeID: 14, TextNFC: "ד", Gloss: "dalet", Reviews: 5, Lapses: 1, AgainRate: 0.9, Misses7d: 50, LastReviewAt: recent},
-	})
-	mem.SetConfusionCounts(7, []ConfusionCount{
-		{Kind: "pair", Key: "old", Count: 9, LastAt: old},
-		{Kind: "pair", Key: "recent", Count: 4, LastAt: recent},
-		{Kind: "root", Key: "zero", Count: 1},
+	recent := time.Date(2026, 10, 17, 0, 0, 0, 0, time.UTC)
+	mem.SetStruggle(7, []StruggleLexeme{
+		{LexemeID: 11, TextNFC: "א", Gloss: "alef", Reviews: 2, Lapses: 9, AgainRate: 1, Misses7d: 0, LastSeen: recent},
+		{LexemeID: 12, TextNFC: "ג", Gloss: "gimel", Reviews: 9, Lapses: 3, AgainRate: 0.1, Misses7d: 2, LastSeen: recent, ConfusionKeys: []string{"ג/א"}},
+		{LexemeID: 13, TextNFC: "ב", Gloss: "bet", Reviews: 4, Lapses: 0, AgainRate: 0.2, Misses7d: 2, LastSeen: recent},
+		{LexemeID: 14, TextNFC: "ד", Gloss: "dalet", Reviews: 5, Lapses: 0, AgainRate: 0.9, Misses7d: 1, LastSeen: recent},
+	}, []StruggleConfusion{
+		{Kind: "agreement", A: "א", Count: 2, LastAt: recent},
+		{Kind: "pair", A: "ב", B: "א", Count: 4, LastAt: recent},
 	})
 	early := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	later := time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC)
@@ -493,36 +487,50 @@ func TestScopeStruggleAndGuidance(t *testing.T) {
 	if !sawShared || !sawMine {
 		t.Fatalf("learner outline %+v", top.Outline)
 	}
-	if len(top.Struggles.Lexemes) != 1 || top.Struggles.Lexemes[0].TextNFC != "א" || top.Struggles.Lexemes[0].Gloss != "alef" || top.Struggles.Lexemes[0].Reviews != 2 || top.Struggles.Lexemes[0].Lapses != 0 {
-		t.Fatalf("top kept store order %+v", top.Struggles.Lexemes)
+	stats, err := mem.StruggleStats(t.Context(), 7, 1)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if len(top.Struggles.Confusions) != 2 || top.Struggles.Confusions[0].Key != "recent" || top.Struggles.Confusions[0].Count != 4 || top.Struggles.Confusions[1].Key != "zero" || !top.Struggles.Confusions[1].LastAt.IsZero() {
+	if len(stats.Lexemes) != 4 || stats.Lexemes[0].TextNFC != "א" || stats.Lexemes[1].TextNFC != "ב" || stats.Lexemes[2].TextNFC != "ג" || stats.Lexemes[3].TextNFC != "ד" {
+		t.Fatalf("raw lexemes sorted by text %+v", stats.Lexemes)
+	}
+	if len(stats.Top) != 1 || stats.Top[0] != "ג" || len(stats.Confusions) != 2 {
+		t.Fatalf("topN stats %+v", stats)
+	}
+	if len(top.Struggles.Lexemes) != 1 || top.Struggles.Lexemes[0].TextNFC != stats.Top[0] || top.Struggles.Lexemes[0].Gloss != "gimel" || top.Struggles.Lexemes[0].Reviews != 9 || top.Struggles.Lexemes[0].Lapses != 3 || top.Struggles.Lexemes[0].Misses7d != 2 || len(top.Struggles.Lexemes[0].ConfusionKeys) != 1 || top.Struggles.Lexemes[0].ConfusionKeys[0] != "ג/א" || !top.Struggles.Lexemes[0].LastSeen.Equal(recent) {
+		t.Fatalf("top row %+v", top.Struggles.Lexemes)
+	}
+	if len(top.Struggles.Confusions) != 2 || top.Struggles.Confusions[0].Kind != "agreement" || top.Struggles.Confusions[0].A != "א" || top.Struggles.Confusions[0].B != "" || top.Struggles.Confusions[1].Kind != "pair" || top.Struggles.Confusions[1].A != "ב" || top.Struggles.Confusions[1].B != "א" || top.Struggles.Confusions[1].Count != 4 {
 		t.Fatalf("confusions %+v", top.Struggles.Confusions)
 	}
 	topText := callRaw(t, session, "get_context", getContextInput{Position: 2, LearnerID: &learner7, TopN: 1})
-	if strings.Contains(topText, `"lexemeId"`) || strings.Contains(topText, `"top"`) {
+	if strings.Contains(topText, `"lexemeId"`) || strings.Contains(topText, `"top"`) || strings.Contains(topText, `"lastReviewAt"`) || strings.Contains(topText, `"struggleRate"`) {
 		t.Fatalf("struggle leaked store-only fields %s", topText)
+	}
+	if !strings.Contains(topText, `"lastSeen"`) || !strings.Contains(topText, `"confusionKeys"`) || !strings.Contains(topText, `"agreement"`) {
+		t.Fatalf("struggle shape %s", topText)
 	}
 
 	mem.SetPlacement(7, Placement{TakenAt: early, Finished: true, StopReason: "exhausted"}, []string{coffee}, nil)
 	mem.SetCompletedUnitLexemes(7, []string{book, coffee})
 	all := call[getContextOutput](t, session, "get_context", getContextInput{Position: 2, LearnerID: &learner7})
-	if len(all.Struggles.Lexemes) != 4 || all.Struggles.Lexemes[0].TextNFC != "א" || all.Struggles.Lexemes[1].TextNFC != "ג" || all.Struggles.Lexemes[2].TextNFC != "ב" || all.Struggles.Lexemes[3].TextNFC != "ד" {
-		t.Fatalf("default top kept store order %+v", all.Struggles.Lexemes)
+	full, err := mem.StruggleStats(t.Context(), 7, 30)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if all.Struggles.Lexemes[3].Misses7d != 50 || !all.Struggles.Lexemes[3].LastReviewAt.Equal(recent) {
+	if len(all.Struggles.Lexemes) != 4 || len(full.Top) != 4 {
+		t.Fatalf("default top %+v store %+v", all.Struggles.Lexemes, full.Top)
+	}
+	for i, text := range full.Top {
+		if all.Struggles.Lexemes[i].TextNFC != text {
+			t.Fatalf("tool order %d = %s, top %v", i, all.Struggles.Lexemes[i].TextNFC, full.Top)
+		}
+	}
+	if full.Top[0] != "ג" || full.Top[1] != "ב" || full.Top[2] != "ד" || full.Top[3] != "א" {
+		t.Fatalf("rank %+v", full.Top)
+	}
+	if all.Struggles.Lexemes[3].Misses7d != 0 || !all.Struggles.Lexemes[3].LastSeen.Equal(recent) {
 		t.Fatalf("row fields %+v", all.Struggles.Lexemes[3])
-	}
-	wide := call[getContextOutput](t, session, "get_context", getContextInput{Position: 2, LearnerID: &learner7, Window: 60})
-	if len(wide.Struggles.Confusions) != 3 || wide.Struggles.Confusions[0].Key != "old" || wide.Struggles.Confusions[1].Key != "recent" || wide.Struggles.Confusions[2].Key != "zero" {
-		t.Fatalf("wide window %+v", wide.Struggles.Confusions)
-	}
-	narrow := call[getContextOutput](t, session, "get_context", getContextInput{Position: 2, LearnerID: &learner7, Window: 1})
-	if len(narrow.Struggles.Confusions) != 1 || narrow.Struggles.Confusions[0].Key != "zero" || narrow.Struggles.Confusions[0].Kind != "root" {
-		t.Fatalf("narrow window %+v", narrow.Struggles.Confusions)
-	}
-	if len(narrow.Struggles.Lexemes) != 4 {
-		t.Fatalf("window trimmed lexemes %+v", narrow.Struggles.Lexemes)
 	}
 	if len(all.KnownLexemes) != 2 || all.KnownLexemes[0] != book || all.KnownLexemes[1] != coffee {
 		t.Fatalf("learner known %+v", all.KnownLexemes)
@@ -555,20 +563,12 @@ func TestScopeStruggleAndGuidance(t *testing.T) {
 	if msg := callErr(t, session, "get_context", getContextInput{TopN: -1}); !strings.Contains(msg, "topN must be 0 or greater") {
 		t.Fatalf("negative top %q", msg)
 	}
-	if msg := callErr(t, session, "get_context", getContextInput{Window: -1}); !strings.Contains(msg, "window must be 0 or greater") {
-		t.Fatalf("negative window %q", msg)
-	}
 }
 
 func TestNilStoresAreToolErrors(t *testing.T) {
 	session := connectMCP(t, Handler(Options{AuthToken: testToken}), testToken)
 	if msg := callErr(t, session, "get_context", getContextInput{}); !strings.Contains(msg, "not connected") {
 		t.Fatalf("get_context %q", msg)
-	}
-	learner := int64(1)
-	bare := connectMCP(t, Handler(Options{AuthToken: testToken, Course: NewMemory(), Lookup: NewMemory()}), testToken)
-	if msg := callErr(t, bare, "get_context", getContextInput{LearnerID: &learner}); !strings.Contains(msg, "Struggle storage is not connected") {
-		t.Fatalf("missing struggle %q", msg)
 	}
 	if msg := callErr(t, session, "put_unit", putInput{Scope: ScopeShared, Doc: helloDoc()}); !strings.Contains(msg, "not saved") {
 		t.Fatalf("put_unit %q", msg)
@@ -647,6 +647,7 @@ func TestPlacementJSONKeepsZeros(t *testing.T) {
 		SuggestedStartPosition: 0,
 		Finished:               false,
 		StopReason:             "",
+		Bands:                  []BandScore{{}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -659,7 +660,8 @@ func TestPlacementJSONKeepsZeros(t *testing.T) {
 		`"cardsRated":0`,
 		`"stopReason":""`,
 		`"suggestedStartPosition":0`,
-		`"bands":[]`,
+		`"dontKnow":0`,
+		`"goodPlusRate":0`,
 		`"knownLexemes":[]`,
 		`"learningLexemes":[]`,
 		`"estimatedKnownWords":0`,
@@ -668,7 +670,7 @@ func TestPlacementJSONKeepsZeros(t *testing.T) {
 			t.Fatalf("missing %s in %s", want, text)
 		}
 	}
-	for _, gone := range []string{"adjustedScore", `"reliable"`, `"falseAlarmRate"`, `"bandScores"`, `"dontknow"`, `"goodPlusRate"`} {
+	for _, gone := range []string{"adjustedScore", `"reliable"`, `"falseAlarmRate"`, `"bandScores"`, `"dontknow"`, `"struggleRate"`} {
 		if strings.Contains(text, gone) {
 			t.Fatalf("old field %s in %s", gone, text)
 		}
