@@ -326,6 +326,7 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	mem.SetPlacement(0, Placement{
 		TakenAt:    takenAt,
 		Finished:   true,
+		Sittings:   1,
 		Level:      0,
 		CardsRated: 4,
 		StopReason: "cap_cards",
@@ -336,7 +337,7 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 		SuggestedStartPosition: 0,
 	}, []string{hello, coffee}, []string{book, helloBare})
 	again := call[getContextOutput](t, session, "get_context", getContextInput{Position: 3, LearnerID: &learnerZero})
-	if !again.Placement.Taken || !again.Placement.TakenAt.Equal(takenAt) || !again.Placement.Finished || again.Placement.StopReason != "cap_cards" || again.Placement.CardsRated != 4 {
+	if !again.Placement.Taken || !again.Placement.TakenAt.Equal(takenAt) || !again.Placement.Finished || again.Placement.InProgress || again.Placement.Sittings != 1 || again.Placement.StopReason != "cap_cards" || again.Placement.CardsRated != 4 {
 		t.Fatalf("placement %+v", again.Placement)
 	}
 	if again.Placement.Level != 0 || again.Placement.SuggestedStartPosition != 0 || again.Placement.EstimatedKnownWords != 40 {
@@ -354,7 +355,7 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	}
 	takenText := callRaw(t, session, "get_context", getContextInput{Position: 3, LearnerID: &learnerZero})
 	for _, want := range []string{
-		`"taken":true`, `"finished":true`, `"level":0`, `"cardsRated":4`, `"stopReason":"cap_cards"`,
+		`"taken":true`, `"finished":true`, `"sittings":1`, `"inProgress":false`, `"level":0`, `"cardsRated":4`, `"stopReason":"cap_cards"`,
 		`"suggestedStartPosition":0`, `"bands":`, `"rated":4`, `"again":1`, `"hard":1`,
 		`"good":1`, `"easy":1`, `"dontKnow":0`, `"goodPlusRate":0.5`, `"learningLexemes":`, hello, book,
 	} {
@@ -362,10 +363,20 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 			t.Fatalf("taken placement missing %s in %s", want, takenText)
 		}
 	}
-	for _, gone := range []string{"adjustedScore", `"h":`, `"passed"`, `"reliable"`, `"falseAlarmRate"`, `"bandScores"`, `"shown"`, `"dontknow"`, `"struggleRate"`} {
+	for _, gone := range []string{"adjustedScore", `"h":`, `"passed"`, `"reliable"`, `"falseAlarmRate"`, `"bandScores"`, `"shown"`, `"dontknow"`, `"struggleRate"`, `"cap_time"`} {
 		if strings.Contains(takenText, gone) {
 			t.Fatalf("old placement field %s in %s", gone, takenText)
 		}
+	}
+	mem.SetPlacement(0, Placement{
+		TakenAt:    takenAt,
+		Finished:   false,
+		Sittings:   2,
+		CardsRated: 20,
+	}, nil, nil)
+	progress := call[getContextOutput](t, session, "get_context", getContextInput{Position: 3, LearnerID: &learnerZero})
+	if !progress.Placement.Taken || progress.Placement.Finished || !progress.Placement.InProgress || progress.Placement.Sittings != 2 || progress.Placement.StopReason != "" || progress.Placement.CardsRated != 20 {
+		t.Fatalf("in progress %+v", progress.Placement)
 	}
 	found := false
 	for _, word := range again.KnownLexemes {
@@ -656,6 +667,8 @@ func TestPlacementJSONKeepsZeros(t *testing.T) {
 	for _, want := range []string{
 		`"taken":true`,
 		`"finished":false`,
+		`"sittings":0`,
+		`"inProgress":false`,
 		`"level":-1`,
 		`"cardsRated":0`,
 		`"stopReason":""`,
@@ -670,10 +683,17 @@ func TestPlacementJSONKeepsZeros(t *testing.T) {
 			t.Fatalf("missing %s in %s", want, text)
 		}
 	}
-	for _, gone := range []string{"adjustedScore", `"reliable"`, `"falseAlarmRate"`, `"bandScores"`, `"dontknow"`, `"struggleRate"`} {
+	for _, gone := range []string{"adjustedScore", `"reliable"`, `"falseAlarmRate"`, `"bandScores"`, `"dontknow"`, `"struggleRate"`, `"cap_time"`} {
 		if strings.Contains(text, gone) {
 			t.Fatalf("old field %s in %s", gone, text)
 		}
+	}
+	raw, err = json.Marshal(placementView{Taken: true, Finished: false, Sittings: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"sittings":2`) || !strings.Contains(string(raw), `"inProgress":true`) || !strings.Contains(string(raw), `"finished":false`) {
+		t.Fatalf("in progress %s", raw)
 	}
 }
 

@@ -75,13 +75,16 @@ type BandScore struct {
 // Taken field: LatestPlacement's bool is false when the learner has
 // no row.
 //
-// Finished reports whether the run stopped. StopReason is band_stop,
-// cap_cards, cap_time, exhausted, or empty. Level is the highest
-// passed band, or −1 when none passed. SuggestedStartPosition 0 is
-// the first unit.
+// A placement is sittings of 20 cards. It can resume across days.
+// There is no time cap. Finished reports whether the run stopped.
+// Finished false with Sittings greater than 0 means the run is still
+// in progress. StopReason is band_stop, cap_cards, exhausted, or empty.
+// Level is the highest passed band, or −1 when none passed.
+// SuggestedStartPosition 0 is the first unit.
 type Placement struct {
 	TakenAt                time.Time
 	Finished               bool
+	Sittings               int
 	Level                  int
 	CardsRated             int
 	StopReason             string

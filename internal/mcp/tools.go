@@ -49,11 +49,14 @@ type getContextOutput struct {
 // placementView is the get_context placement object.
 // Taken false is the whole object when LatestPlacement reports no row.
 // A row keeps zero values: level −1, suggestedStartPosition 0, finished
-// false, and an empty stopReason are all meaningful.
+// false, sittings 0, and an empty stopReason are all meaningful.
+// inProgress is true when the row is not finished and sittings is greater than 0.
 type placementView struct {
 	Taken                  bool        `json:"taken"`
 	TakenAt                time.Time   `json:"takenAt,omitempty"`
 	Finished               bool        `json:"finished,omitempty"`
+	Sittings               int         `json:"sittings,omitempty"`
+	InProgress             bool        `json:"inProgress,omitempty"`
 	Level                  int         `json:"level,omitempty"`
 	CardsRated             int         `json:"cardsRated,omitempty"`
 	StopReason             string      `json:"stopReason,omitempty"`
@@ -86,6 +89,8 @@ func (p placementView) MarshalJSON() ([]byte, error) {
 		Taken                  bool        `json:"taken"`
 		TakenAt                time.Time   `json:"takenAt"`
 		Finished               bool        `json:"finished"`
+		Sittings               int         `json:"sittings"`
+		InProgress             bool        `json:"inProgress"`
 		Level                  int         `json:"level"`
 		CardsRated             int         `json:"cardsRated"`
 		StopReason             string      `json:"stopReason"`
@@ -98,6 +103,8 @@ func (p placementView) MarshalJSON() ([]byte, error) {
 		Taken:                  true,
 		TakenAt:                p.TakenAt,
 		Finished:               p.Finished,
+		Sittings:               p.Sittings,
+		InProgress:             !p.Finished && p.Sittings > 0,
 		Level:                  p.Level,
 		CardsRated:             p.CardsRated,
 		StopReason:             p.StopReason,
@@ -193,6 +200,8 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 				Taken:                  true,
 				TakenAt:                row.TakenAt,
 				Finished:               row.Finished,
+				Sittings:               row.Sittings,
+				InProgress:             !row.Finished && row.Sittings > 0,
 				Level:                  row.Level,
 				CardsRated:             row.CardsRated,
 				StopReason:             row.StopReason,
@@ -412,7 +421,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_context",
-		Description: "Read the course before you draft a unit. The outline rows have position, title, status, and scope (shared, or learner:<id>). Omit learnerId to see shared units only, with empty struggles and placement taken false. knownLexemes is then the pointed text introduced before position. Pass learnerId to add that learner's custom units, their placement, their struggles, and the shared units they have finished. knownLexemes is then that learner's words: the union of placement Good and Easy words and words from completed units, sorted pointed NFC. topN defaults to 30. Struggled lexemes are the store's Top rows, ordered by misses in 7 days, then lapses, then Again rate. Do not re-rank them. Each lexeme has text, gloss, reviews, lapses, againRate, misses7d, lastSeen, and confusionKeys. Confusions cover 7 days and are not limited by topN. Each has kind, a, b, count, and lastAt. b is empty for the agreement kind. Placement taken false means there is no row. A row includes takenAt, finished, level, cardsRated, stopReason (band_stop, cap_cards, cap_time, exhausted, or empty), bands (per band: band, rated, again, hard, good, easy, dontKnow, goodPlusRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy, pointed NFC, sorted), and learningLexemes (Again, Hard, and don't-know, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for budgets and for the shared-versus-custom guidance. That guidance is not an enforced rule.",
+		Description: "Read the course before you draft a unit. The outline rows have position, title, status, and scope (shared, or learner:<id>). Omit learnerId to see shared units only, with empty struggles and placement taken false. knownLexemes is then the pointed text introduced before position. Pass learnerId to add that learner's custom units, their placement, their struggles, and the shared units they have finished. knownLexemes is then that learner's words: the union of placement Good and Easy words and words from completed units, sorted pointed NFC. topN defaults to 30. Struggled lexemes are the store's Top rows, ordered by misses in 7 days, then lapses, then Again rate. Do not re-rank them. Each lexeme has text, gloss, reviews, lapses, againRate, misses7d, lastSeen, and confusionKeys. Confusions cover 7 days and are not limited by topN. Each has kind, a, b, count, and lastAt. b is empty for the agreement kind. Placement taken false means there is no row. A row includes takenAt, finished, sittings (20 cards each; a run can resume across days and has no time cap), inProgress (true when finished is false and sittings is greater than 0), level, cardsRated, stopReason (band_stop, cap_cards, exhausted, or empty), bands (per band: band, rated, again, hard, good, easy, dontKnow, goodPlusRate), estimatedKnownWords, suggestedStartPosition, knownLexemes (Good and Easy, pointed NFC, sorted), and learningLexemes (Again, Hard, and don't-know, pointed NFC, sorted). suggestedStartPosition 0 is the first unit. Read hebrew://rules for budgets and for the shared-versus-custom guidance. That guidance is not an enforced rule.",
 		Annotations: readOnly,
 	}, svc.getContext)
 	mcp.AddTool(server, &mcp.Tool{
