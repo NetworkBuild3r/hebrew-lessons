@@ -1,0 +1,57 @@
+package views
+
+// HebrewKeyboard is the on-screen Hebrew keyboard (Figma Placement / 5 Typing,
+// 145:62). target is the id of the text input it fills; build that input with
+// HebrewInput. lang is the language of the keyboard's own controls ("he" or
+// anything else for English).
+//
+// It brings its own stylesheet and script, so a page does not touch the
+// layout. One keyboard per page. The rows are always left to right, in the
+// physical order of a PC keyboard, even on a right-to-left page.
+templ HebrewKeyboard(target string, lang string) {
+	{{ c := KeyboardCopyFor(lang) }}
+	<link rel="stylesheet" href={ KeyboardCSS }/>
+	<div class="hk" data-hk data-target={ target } data-hints="off" role="group" aria-label={ c.Group } lang={ c.Lang } dir="ltr">
+		<button type="button" class="hk-hints" data-hk-hints aria-pressed="false" lang={ c.Lang } dir={ c.Dir }>{ c.Hints }</button>
+		for i, row := range HebrewKeyRows {
+			<div class="hk-row" dir="ltr">
+				for _, k := range row {
+					@hkLetter(k)
+				}
+				if i == 0 {
+					<button type="button" class="hk-key hk-key--act hk-key--back" data-act="back" aria-label={ c.Delete } lang={ c.Lang } dir={ c.Dir }>
+						<span class="hk-key__cap" aria-hidden="true">{ c.Back }</span>
+					</button>
+				}
+			</div>
+		}
+		<div class="hk-row" dir="ltr">
+			<button type="button" class="hk-key hk-key--act hk-key--space" data-act="space" lang={ c.Lang } dir={ c.Dir }>
+				<span class="hk-key__cap">{ c.Space }</span>
+			</button>
+			<button type="button" class="hk-key hk-key--act hk-key--enter" data-act="enter" lang={ c.Lang } dir={ c.Dir }>
+				<span class="hk-key__cap">{ c.Enter }</span>
+			</button>
+		</div>
+	</div>
+	<script src={ KeyboardJS } defer></script>
+}
+
+// hkLetter is one letter key. The button is the hit area; the cap inside it
+// is the drawn key. The Hebrew name is the accessible label, the letter and
+// the Latin hint are hidden from assistive tech.
+templ hkLetter(k HKey) {
+	<button type="button" class="hk-key" data-ch={ k.Ch } data-code={ k.Code } if k.Final { data-final="" } lang="he" aria-label={ k.Name }>
+		<span class="hk-key__cap" aria-hidden="true">{ k.Ch }</span>
+		<span class="hk-key__hint" aria-hidden="true" lang="en" dir="ltr">{ k.Latin }</span>
+	</button>
+}
+
+// HebrewInput is the text input a HebrewKeyboard fills. It is right to left,
+// lang="he", with the browser's helpers off so they do not rewrite a typed
+// Hebrew word. attrs adds name, required, aria-label, hx-*; it should not
+// repeat dir, lang, type, or id. On a touch screen hekbd.js sets
+// inputmode="none" so the system keyboard does not cover this one.
+templ HebrewInput(id string, name string, attrs templ.Attributes) {
+	<input type="text" id={ id } name={ name } class="hk-input" dir="rtl" lang="he" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done" data-hk-input { attrs... }/>
+}
