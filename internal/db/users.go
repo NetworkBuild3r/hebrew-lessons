@@ -28,7 +28,7 @@ func (s *Store) CreateUser(ctx context.Context, email, googleSub, role string) (
 	if err != nil {
 		return User{}, err
 	}
-	created := formatAuthTime(s.clock.Now())
+	created := FormatTime(s.clock.Now())
 	res, err := s.exec(ctx,
 		`INSERT INTO users (email, google_sub, role, created_at) VALUES (?, ?, ?, ?)`,
 		email, googleSub, role, created,
@@ -40,7 +40,7 @@ func (s *Store) CreateUser(ctx context.Context, email, googleSub, role string) (
 	if err != nil {
 		return User{}, fmt.Errorf("db: insert user id: %w", err)
 	}
-	createdAt, err := parseStoredTime(created)
+	createdAt, err := ParseTime(created)
 	if err != nil {
 		return User{}, err
 	}
@@ -73,7 +73,7 @@ func (s *Store) UpsertGoogleUser(ctx context.Context, email, googleSub, role str
 		u, err = findUserWhere(ctx, tx, "email = ?", email)
 	}
 	if errors.Is(err, ErrNotFound) {
-		created := formatAuthTime(s.clock.Now())
+		created := FormatTime(s.clock.Now())
 		res, err := tx.ExecContext(ctx,
 			`INSERT INTO users (email, google_sub, role, created_at) VALUES (?, ?, ?, ?)`,
 			email, googleSub, role, created,
@@ -88,7 +88,7 @@ func (s *Store) UpsertGoogleUser(ctx context.Context, email, googleSub, role str
 		if err := tx.Commit(); err != nil {
 			return User{}, fmt.Errorf("db: commit user: %w", err)
 		}
-		createdAt, err := parseStoredTime(created)
+		createdAt, err := ParseTime(created)
 		if err != nil {
 			return User{}, err
 		}
@@ -176,7 +176,7 @@ func scanUser(row *sql.Row) (User, error) {
 	if err != nil {
 		return User{}, fmt.Errorf("db: scan user: %w", err)
 	}
-	u.CreatedAt, err = parseStoredTime(created)
+	u.CreatedAt, err = ParseTime(created)
 	if err != nil {
 		return User{}, fmt.Errorf("db: user created_at: %w", err)
 	}
@@ -201,18 +201,4 @@ func (s *Store) ready() error {
 		return errors.New("db: store is closed")
 	}
 	return nil
-}
-
-// formatAuthTime is the session and user timestamp. It is truncated to a
-// second. Learning rows use formatTime, which keeps nine fractional digits
-// so those strings sort.
-func formatAuthTime(t time.Time) string {
-	return t.UTC().Truncate(time.Second).Format(time.RFC3339)
-}
-
-func parseStoredTime(v string) (time.Time, error) {
-	if t, err := time.Parse(time.RFC3339, v); err == nil {
-		return t, nil
-	}
-	return time.Parse(time.RFC3339Nano, v)
 }

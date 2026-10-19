@@ -130,7 +130,7 @@ func New(cfg Config) (*Service, error) {
 }
 
 func (s *Service) now() time.Time {
-	return s.clock.Now().UTC().Truncate(time.Second)
+	return s.clock.Now().UTC()
 }
 
 func (s *Service) googleOn() bool {

@@ -14,6 +14,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 )
 
 const (
@@ -25,7 +27,7 @@ type oidcState struct {
 	State    string `json:"state"`
 	Nonce    string `json:"nonce"`
 	Verifier string `json:"verifier"`
-	Exp      int64  `json:"exp"`
+	Exp      string `json:"exp"`
 }
 
 func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +54,7 @@ func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
 		State:    state,
 		Nonce:    nonce,
 		Verifier: verifier,
-		Exp:      s.now().Add(oidcStateTTL).Unix(),
+		Exp:      db.FormatTime(s.now().Add(oidcStateTTL)),
 	})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, "internal")
@@ -303,7 +305,8 @@ func (s *Service) openState(token string) (oidcState, error) {
 	if err := json.Unmarshal(body, &st); err != nil {
 		return oidcState{}, errBadState
 	}
-	if st.State == "" || st.Nonce == "" || st.Verifier == "" || st.Exp <= s.now().Unix() {
+	exp, err := db.ParseTime(st.Exp)
+	if err != nil || st.State == "" || st.Nonce == "" || st.Verifier == "" || !exp.After(s.now()) {
 		return oidcState{}, errBadState
 	}
 	return st, nil

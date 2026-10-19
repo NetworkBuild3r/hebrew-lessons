@@ -27,7 +27,7 @@ func LookupSession(ctx context.Context, store *db.Store, rawID string, now time.
 	if store == nil {
 		return User{}, Session{}, errors.New("auth: nil store")
 	}
-	now = now.UTC().Truncate(time.Second)
+	now = now.UTC()
 	if err := store.DeleteExpiredSessions(ctx, now); err != nil {
 		return User{}, Session{}, err
 	}

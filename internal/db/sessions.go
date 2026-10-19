@@ -17,14 +17,14 @@ type Session struct {
 	ExpiresAt time.Time
 }
 
-// InsertSession writes one session. expiresAt is stored as UTC RFC3339.
+// InsertSession writes one session. expiresAt is stored with FormatTime.
 func (s *Store) InsertSession(ctx context.Context, idHash string, userID int64, csrf string, expiresAt time.Time) error {
 	if err := s.ready(); err != nil {
 		return err
 	}
 	_, err := s.exec(ctx,
 		`INSERT INTO sessions (id_hash, user_id, csrf, expires_at) VALUES (?, ?, ?, ?)`,
-		idHash, userID, csrf, formatAuthTime(expiresAt),
+		idHash, userID, csrf, FormatTime(expiresAt),
 	)
 	if err != nil {
 		return fmt.Errorf("db: insert session: %w", err)
@@ -55,11 +55,11 @@ func (s *Store) SessionUser(ctx context.Context, idHash string) (Session, User, 
 	if err != nil {
 		return Session{}, User{}, fmt.Errorf("db: scan session: %w", err)
 	}
-	sess.ExpiresAt, err = parseStoredTime(exp)
+	sess.ExpiresAt, err = ParseTime(exp)
 	if err != nil {
 		return Session{}, User{}, fmt.Errorf("db: session expires_at: %w", err)
 	}
-	u.CreatedAt, err = parseStoredTime(created)
+	u.CreatedAt, err = ParseTime(created)
 	if err != nil {
 		return Session{}, User{}, fmt.Errorf("db: user created_at: %w", err)
 	}
@@ -71,7 +71,7 @@ func (s *Store) UpdateSessionExpiry(ctx context.Context, idHash string, expiresA
 	if err := s.ready(); err != nil {
 		return err
 	}
-	res, err := s.exec(ctx, `UPDATE sessions SET expires_at = ? WHERE id_hash = ?`, formatAuthTime(expiresAt), idHash)
+	res, err := s.exec(ctx, `UPDATE sessions SET expires_at = ? WHERE id_hash = ?`, FormatTime(expiresAt), idHash)
 	if err != nil {
 		return fmt.Errorf("db: update session: %w", err)
 	}
@@ -116,7 +116,7 @@ func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) error 
 	if err := s.ready(); err != nil {
 		return err
 	}
-	_, err := s.exec(ctx, `DELETE FROM sessions WHERE expires_at <= ?`, formatAuthTime(now))
+	_, err := s.exec(ctx, `DELETE FROM sessions WHERE expires_at <= ?`, FormatTime(now))
 	if err != nil {
 		return fmt.Errorf("db: delete expired sessions: %w", err)
 	}

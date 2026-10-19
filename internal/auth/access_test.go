@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 )
 
 func TestAccessRecheckedEachRequest(t *testing.T) {
@@ -106,7 +108,7 @@ func TestStateKeyIsNotTheClientSecret(t *testing.T) {
 	b := makeSvc()
 	sealed, err := a.sealState(oidcState{
 		State: "state", Nonce: "nonce", Verifier: "verifier",
-		Exp: a.now().Add(time.Minute).Unix(),
+		Exp: db.FormatTime(a.now().Add(time.Minute)),
 	})
 	if err != nil {
 		t.Fatal(err)
