@@ -1,6 +1,7 @@
 package session
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -11,8 +12,8 @@ func TestNoHistoryAccuracyIsTargetSuccess(t *testing.T) {
 	if accuracyOf(nil) != TargetSuccess || NoHistoryAccuracy != TargetSuccess {
 		t.Fatalf("no-history %v target %v", accuracyOf(nil), TargetSuccess)
 	}
-	if MaxNewPerSession != 5 || MaxNewShare != 0.25 {
-		t.Fatalf("new caps %d %v", MaxNewPerSession, MaxNewShare)
+	if MaxNewPerSession != 5 || MinNewPerSession != 2 || MaxNewShare != 0.25 {
+		t.Fatalf("new caps %d %d %v", MaxNewPerSession, MinNewPerSession, MaxNewShare)
 	}
 }
 
@@ -380,10 +381,12 @@ func TestNewCardOrderAndSmallQueueShare(t *testing.T) {
 	if reviewed != 3 {
 		t.Fatalf("reviewed = %d, want the three known cards", reviewed)
 	}
-	// 3 reviewed cards: new/(3+new) <= 0.25 means one new card.
-	// That card is the earliest unit position, then lesson, then rank, then id.
-	if len(fresh) != 1 || fresh[0] != 16 {
-		t.Fatalf("new = %v, want [16]", fresh)
+	// 3 reviewed cards. sessionSize = 3 + newCount.
+	// newCount = min(5, max(2, floor(0.25 * sessionSize))).
+	// newCount = 2, sessionSize = 5, floor(0.25*5) = 1, and the floor of 2 wins.
+	// The two cards are the earliest unit position, then lesson, then rank, then id.
+	if len(fresh) != 2 || fresh[0] != 16 || fresh[1] != 15 {
+		t.Fatalf("new = %v, want [16 15]", fresh)
 	}
 
 	only := mix([]Candidate{
@@ -402,20 +405,54 @@ func TestNewCardOrderAndSmallQueueShare(t *testing.T) {
 }
 
 func TestNewAllowance(t *testing.T) {
-	if newAllowance(0, 8) != MaxNewPerSession {
-		t.Fatalf("empty queue allowance %d", newAllowance(0, 8))
+	// Ten reviewed cards. sessionSize is those cards plus the new cards.
+	// newCount = min(5, max(2, floor(0.25 * sessionSize))).
+	// newCount = 3: sessionSize = 13, floor(0.25*13) = 3, min(5, max(2, 3)) = 3.
+	// Three reviewed cards used to admit 1 under the share alone
+	// (floor(0.25*4) = 1). The floor of 2 raises that to 2:
+	// sessionSize = 5, floor(0.25*5) = 1, min(5, max(2, 1)) = 2.
+	// Twenty reviewed cards still cap at 5: sessionSize = 25,
+	// floor(0.25*25) = 6, min(5, max(2, 6)) = 5.
+	cases := []struct {
+		name      string
+		planned   int
+		available int
+		want      int
+	}{
+		{name: "no reviews", planned: 0, available: 8, want: MaxNewPerSession},
+		{name: "one review", planned: 1, available: 8, want: 2},
+		{name: "two reviews", planned: 2, available: 8, want: 2},
+		{name: "three reviews", planned: 3, available: 8, want: 2},
+		{name: "ten reviews", planned: 10, available: 8, want: 3},
+		{name: "twelve reviews", planned: 12, available: 10, want: 4},
+		{name: "full queue", planned: 20, available: 8, want: MaxNewPerSession},
+		{name: "none available", planned: 3, available: 0, want: 0},
+		{name: "fewer than the floor", planned: 1, available: 1, want: 1},
 	}
-	if newAllowance(3, 8) != 1 {
-		t.Fatalf("small queue allowance %d, want 1", newAllowance(3, 8))
-	}
-	if newAllowance(12, 10) != 4 {
-		t.Fatalf("quarter of 12 is %d, want 4", newAllowance(12, 10))
-	}
-	if newAllowance(20, 8) != MaxNewPerSession {
-		t.Fatalf("full queue allowance %d, want %d", newAllowance(20, 8), MaxNewPerSession)
-	}
-	if newAllowance(3, 0) != 0 {
-		t.Fatal("no new cards still returned some")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := newAllowance(tc.planned, tc.available)
+			if got != tc.want {
+				t.Fatalf("newAllowance(%d, %d) = %d, want %d", tc.planned, tc.available, got, tc.want)
+			}
+			// The pool bound the count when it is no larger than the allowance.
+			// The share formula is checked on the count the session actually took.
+			if tc.planned <= 0 || tc.available <= got {
+				return
+			}
+			sessionSize := tc.planned + got
+			floorShare := int(math.Floor(MaxNewShare * float64(sessionSize)))
+			formula := floorShare
+			if formula < MinNewPerSession {
+				formula = MinNewPerSession
+			}
+			if formula > MaxNewPerSession {
+				formula = MaxNewPerSession
+			}
+			if formula != got {
+				t.Fatalf("sessionSize %d: floor(%.2f * sessionSize) = %d, formula %d, allowance %d", sessionSize, MaxNewShare, floorShare, formula, got)
+			}
+		})
 	}
 }
 
