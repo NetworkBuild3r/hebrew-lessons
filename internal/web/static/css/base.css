@@ -33,11 +33,11 @@ h1, h2, h3 { text-wrap: balance; }
 p { text-wrap: pretty; }
 bdi[lang="en"],
 bdi[lang="he"] { unicode-bidi: isolate; }
-::selection { background: var(--primary-soft); color: var(--text); }
+::selection { background: var(--surface-soft); color: var(--text); }
 
-/* Offset ring in the text colour. Text on paper is 15.2:1 light and 16.7:1 dark. */
+/* Offset ring in the focus colour (Figma focus/ring). */
 :focus-visible {
-  outline: var(--space-1) solid var(--text);
+  outline: var(--space-1) solid var(--focus-ring);
   outline-offset: var(--space-1);
 }
 @media (forced-colors: active) {
@@ -249,7 +249,7 @@ h1 {
 .unit-gloss,
 .chip__gloss {
   font-size: var(--fs-caption);
-  color: var(--note);
+  color: var(--muted);
 }
 .chip__gloss { white-space: nowrap; }
 .situation {
@@ -282,8 +282,8 @@ h1 {
   font-size: var(--fs-caption);
   font-weight: 600;
   line-height: var(--lh-he-body);
-  color: var(--note);
-  background: var(--note-soft);
+  color: var(--muted);
+  background: var(--surface-soft);
   border-radius: var(--radius-pill);
   padding-block: var(--space-1);
   padding-inline: var(--space-2);
@@ -306,8 +306,8 @@ h1 {
   gap: var(--space-2);
   padding-block: var(--space-2);
   padding-inline: var(--space-4);
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--surface-soft);
+  color: var(--text);
   border-radius: var(--radius-pill);
 }
 .quiet-card--due .icon {
@@ -342,9 +342,16 @@ h1 {
   font-size: var(--fs-small);
   line-height: var(--lh-he-body);
 }
-.btn-primary { background: var(--primary); color: var(--on-primary); }
-.btn-primary:hover { background: var(--primary-hover); }
-.btn-tonal { background: var(--primary-soft); color: var(--primary); }
+/* One main action per screen: slate in light, gold in dark (Figma action/*).
+   The night cards are slate in light, so the main action there stays gold. */
+.btn-primary { background: var(--action-bg); color: var(--action-text); }
+.btn-primary:hover { background: color-mix(in srgb, var(--action-bg) 88%, var(--action-text)); }
+.ink-card .btn-primary,
+.today-place--open .btn-primary { background: var(--lamp); color: var(--on-lamp); }
+.ink-card .btn-primary:hover,
+.today-place--open .btn-primary:hover { background: color-mix(in srgb, var(--lamp) 88%, var(--on-lamp)); }
+/* Secondary actions are neutral: outlined, no second fill colour. */
+.btn-tonal { background: transparent; color: var(--text); border: 1px solid var(--hairline-strong); }
 
 .icon {
   inline-size: var(--space-5);
@@ -394,11 +401,11 @@ h1 {
   text-align: center;
 }
 .dock__link[aria-current="page"] {
-  color: var(--primary);
+  color: var(--text);
   font-weight: 700;
-  background: var(--primary-soft);
+  background: var(--surface-soft);
 }
-.dock__link[aria-current="page"] .icon { color: var(--primary); }
+.dock__link[aria-current="page"] .icon { color: var(--text); }
 
 .sheet {
   background: var(--surface);
@@ -1069,7 +1076,7 @@ h1 {
 }
 .placement .btn { margin-block-start: 0; inline-size: 100%; }
 .btn--lg { min-block-size: var(--space-8); }
-.btn--lamp { background: var(--lamp); color: var(--on-lamp); }
+.btn--lamp { background: var(--action-bg); color: var(--action-text); }
 .btn--quiet {
   background: transparent;
   color: var(--muted);
@@ -1113,14 +1120,13 @@ h1 {
   padding-block: var(--space-2);
   padding-inline: var(--space-2);
   border-radius: var(--radius-control);
-  border: 1px solid transparent;
+  /* One neutral style for every self-grade button (north-star section 9). */
+  background: var(--surface-soft);
+  color: var(--text);
+  border: 1px solid var(--hairline-strong);
   font-weight: 700;
 }
 .grade small { font-weight: 500; font-size: var(--fs-caption); }
-.grade[data-tone="stop"] { background: var(--stop-soft); color: var(--stop); }
-.grade[data-tone="check"] { background: var(--check-soft); color: var(--check); }
-.grade[data-tone="go"] { background: var(--go-soft); color: var(--go); }
-.grade[data-tone="note"] { background: var(--note-soft); color: var(--note); }
 @container rcard (min-width: 560px) {
   .grades { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
@@ -1212,15 +1218,15 @@ h1 {
   background: transparent;
   border: 2px solid var(--muted);
 }
-.ladder li[data-state="solid"] .lad__dot { background: var(--go); border-color: var(--go); }
+.ladder li[data-state="solid"] .lad__dot { background: var(--text); border-color: var(--text); }
 .ladder li[data-state="here"] .lad__dot { background: var(--lamp); border-color: var(--lamp); inline-size: var(--space-4); block-size: var(--space-4); }
-.ladder li[data-state="seen"] .lad__dot { background: var(--primary); border-color: var(--primary); }
+.ladder li[data-state="seen"] .lad__dot { background: var(--muted); border-color: var(--muted); }
 .ladder li[data-state="ahead"] .lad__t b,
 .ladder li[data-state="ahead"] .lad__s { color: var(--muted); font-weight: 500; }
 .ladder li[data-state="here"] .lad__t b { font-weight: 800; }
 .ladder li[data-state="here"] .lad__s {
-  background: var(--check-soft);
-  color: var(--check);
+  background: var(--surface-soft);
+  color: var(--lamp-ink);
   border-radius: var(--radius-pill);
   padding-inline: var(--space-2);
 }

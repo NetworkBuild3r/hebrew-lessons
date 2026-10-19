@@ -1,0 +1,77 @@
+/* Hand-written tokens that have no Figma variable: fonts, type scale, motion,
+ * shadows, z-index, and a few layout sizes. cmd/tokens copies this file into
+ * the top of static/css/tokens.css. Edit here, then run: go run ./cmd/tokens
+ * Colour roles, radius, space, and size come from lamplight.tokens.json and
+ * are written after this section. */
+
+@font-face { font-family: "Noto Sans Hebrew"; font-weight: 300 800; font-display: swap;
+  src: url("../fonts/noto-sans-hebrew-hebrew.woff2") format("woff2"); unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F; }
+@font-face { font-family: "Noto Sans Hebrew"; font-weight: 300 800; font-display: swap;
+  src: url("../fonts/noto-sans-hebrew-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2190-2199, U+2212, U+2215; }
+/* Optional display face (large Hebrew/Latin headings only). Drop both files and --font-display falls back to Noto. */
+@font-face { font-family: "Frank Ruhl Libre"; font-weight: 400 900; font-display: swap;
+  src: url("../fonts/frank-ruhl-libre-hebrew.woff2") format("woff2"); unicode-range: U+0590-05FF, U+FB1D-FB4F; }
+@font-face { font-family: "Frank Ruhl Libre"; font-weight: 400 900; font-display: swap;
+  src: url("../fonts/frank-ruhl-libre-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+2000-206F; }
+
+:root {
+  /* colour with no Figma variable: cream letter tiles, text on the gold lamp */
+  --on-lamp: oklch(23.3% 0.049 77.5);                     /* #2A1A00 · text on --lamp when the fill must stay gold on slate */
+  --tile: oklch(96.9% 0.020 84.6);                        /* #FBF4E6 · cream letter tile */
+  --tile-2: oklch(90.8% 0.042 83.9);                      /* #EEDFC2 */
+  --on-ink-faint: oklch(77.9% 0.048 275.8);               /* #AEB5D6 · 8.7:1 on ink */
+
+  /* memory strength (FSRS buckets): never colour alone, always a count + label.
+   * Neutral and lamp ramp. Green and red are for right and wrong only (north-star section 9). */
+  --s1: var(--muted); --s2: var(--lamp-ink); --s3: var(--lamp); --s4: var(--text);
+
+  /* type */
+  --font-ui: "Noto Sans Hebrew", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-he: "Noto Sans Hebrew", "Arial Hebrew", sans-serif;      /* all pointed Hebrew: best nikud placement */
+  --font-display: "Frank Ruhl Libre", "Noto Sans Hebrew", Georgia, serif;
+  --fs-he-hero: clamp(72px, 5vw + 48px, 112px);   /* the one word on a prompt */
+  --fs-he-xl: clamp(44px, 2.4vw + 30px, 64px);    /* intro word, story title */
+  --fs-he-lg: clamp(28px, 1vw + 22px, 36px);      /* answers, tiles, story text */
+  --fs-he-md: 24px;                               /* list rows, chips */
+  --fs-display: clamp(40px, 2.6vw + 22px, 60px);  /* big numbers, page titles */
+  --fs-h1: clamp(30px, 1.4vw + 22px, 40px);
+  --fs-h2: clamp(22px, .6vw + 18px, 26px);
+  --fs-body: 17px; --lh-body: 1.6;
+  --motion-shift: 16px;   /* travel distance for enter/exit; 0 under reduced motion */
+  --lh-he-body: 1.6;      /* running pointed Hebrew (story, sentences) */
+  --lh-he-display: 1.3;   /* large pointed Hebrew; never below 1.25 for pointed text */
+  --fs-small: 15px; --fs-caption: 12.5px; --tracking-caps: .09em;
+
+  /* space: --space-1..8 are generated; the 96px step has no Figma variable */
+  --space-9: 96px;
+  --tap: var(--size-tap);                         /* legacy name for --size-tap (44px, WCAG 2.2 target floor); primary actions use --size-cta */
+  --content-max: 1080px; --player-max: 720px; --rail-w: 92px;
+
+  /* radius: --radius-control/card/hero/pill are generated */
+  --radius-sm: 10px;
+
+  /* shadow: ink-tinted in light; in dark a top highlight + deep drop */
+  --shadow-1: 0 1px 2px light-dark(oklch(20% .05 270 / .06), oklch(0% 0 0 / .4)), 0 4px 10px -6px light-dark(oklch(10% .05 270 / .25), oklch(0% 0 0 / .5));
+  --shadow-2: inset 0 1px 0 light-dark(oklch(100% 0 0 / 0), oklch(100% 0 0 / .05)), 0 1px 2px light-dark(oklch(20% .05 270 / .06), oklch(0% 0 0 / .35)), 0 8px 24px -12px light-dark(oklch(20% .06 270 / .22), oklch(0% 0 0 / .55));
+  --shadow-3: inset 0 1px 0 light-dark(oklch(100% 0 0 / 0), oklch(100% 0 0 / .06)), 0 2px 4px light-dark(oklch(20% .05 270 / .06), oklch(0% 0 0 / .35)), 0 24px 56px -24px light-dark(oklch(18% .07 270 / .38), oklch(0% 0 0 / .7));
+  --shadow-tile: inset 0 1px 0 #fff, inset 0 -3px 0 oklch(55% .07 75 / .16), 0 8px 18px -8px oklch(20% .08 270 / .45);
+
+  /* motion */
+  --dur-fast: 140ms; --dur-base: 240ms; --dur-slow: 420ms; --dur-word: 680ms;
+  --ease-out: cubic-bezier(.2, .8, .2, 1); --ease-in-out: cubic-bezier(.6, 0, .3, 1); --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  /* Review flip and stack, reused by the placement deck. */
+  --spring-soft: cubic-bezier(.22, 1.2, .36, 1);
+  --motion-lift: 8px;
+  --motion-scale: .04;
+  --motion-flip: 90deg;
+  --dur-deck: 280ms;
+  /* Per-card progress. The element sets these; the keyframes only read them. */
+  --v: 0;
+  --v0: 0;
+  --o: 0;
+
+  /* z-index */
+  --z-base: 0; --z-sticky: 10; --z-nav: 20; --z-feedback: 30; --z-popover: 40; --z-toast: 50;
+}
+/* Reduced motion = subtle, not none: short opacity-only fades, no travel, no bounce. */
+@media (prefers-reduced-motion: reduce) { :root { --dur-fast: 100ms; --dur-base: 160ms; --dur-slow: 200ms; --dur-word: 200ms; --ease-spring: linear; --motion-shift: 0px; --spring-soft: linear; --motion-lift: 0px; --motion-scale: 0; --motion-flip: 0deg; --dur-deck: 150ms; } }
