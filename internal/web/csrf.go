@@ -27,9 +27,22 @@ func (f CSRFFunc) CSRFToken(r *http.Request) string {
 	return f(r)
 }
 
+// csrfHeader is the name htmx sends. csrfField is the no-JS form field,
+// the same name auth.Middleware reads (_csrf). The header stays
+// X-CSRF-Token so boosted requests do not change.
+const (
+	csrfHeader = "X-CSRF-Token"
+	csrfField  = "_csrf"
+)
+
 // csrfMiddleware checks mutating requests for the X-CSRF-Token header or
-// the same form field, and for an Origin whose host matches the request.
+// the _csrf form field, and for an Origin whose host matches the request.
 // Safe methods pass through. A nil token source fails closed on writes.
+//
+// Once auth.Middleware wraps this mux, drop this check. That middleware
+// accepts a Referer fallback and does not require the Origin host to equal
+// r.Host, so running both rejects a same-origin post behind a host-rewriting
+// proxy.
 func csrfMiddleware(tokens CSRFToken, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -53,13 +66,13 @@ func csrfOK(tokens CSRFToken, r *http.Request) bool {
 }
 
 func providedToken(r *http.Request) string {
-	if v := r.Header.Get("X-CSRF-Token"); v != "" {
+	if v := r.Header.Get(csrfHeader); v != "" {
 		return v
 	}
 	if err := r.ParseForm(); err != nil {
 		return ""
 	}
-	return r.PostForm.Get("X-CSRF-Token")
+	return r.PostForm.Get(csrfField)
 }
 
 func tokenMatch(got, want string) bool {

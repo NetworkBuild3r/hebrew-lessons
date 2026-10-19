@@ -47,7 +47,7 @@ func TestTodayLayout(t *testing.T) {
 	if strings.Contains(body, "http://") || strings.Contains(body, "https://") || strings.Contains(body, "url(//") {
 		t.Fatal("rendered page has an external URL")
 	}
-	for _, src := range []string{`href="/static/css/tokens.css"`, `href="/static/css/base.css"`, `src="/static/js/htmx.min.js"`, `/static/icons/sprite.svg#icon-today`} {
+	for _, src := range []string{`href="/static/css/tokens.css"`, `href="/static/css/base.css"`, `src="/static/js/htmx.min.js"`, `<script src="/static/js/shell.js" defer></script>`, `/static/icons/sprite.svg#icon-today`} {
 		if !strings.Contains(body, src) {
 			t.Fatalf("missing local asset %s", src)
 		}
@@ -58,7 +58,7 @@ func TestTodayLayout(t *testing.T) {
 	if regexp.MustCompile(`(?i)\b(streak|xp)\b`).MatchString(body) {
 		t.Fatal("streak or xp copy is in the shell")
 	}
-	if strings.Contains(body, "good morning") || strings.Contains(body, "שָׁלוֹם") || strings.Contains(body, "he-proof") {
+	if strings.Contains(body, "good morning") || strings.Contains(body, "שָׁלוֹם") || strings.Contains(body, "he-proof") {
 		t.Fatal("sample paragraph or gloss is still on Today")
 	}
 	if !strings.Contains(body, views.UnitTitle) || !strings.Contains(body, `class="unit-title"`) {
@@ -90,13 +90,25 @@ func TestTodayLayout(t *testing.T) {
 	if label == nil || !strings.Contains(label[1], ui.Light) || strings.Contains(label[1], ui.Dark) {
 		t.Fatal("theme toggle should name the current mode")
 	}
-	if !strings.Contains(body, "globalViewTransitions") || !strings.Contains(body, `hx-swap="outerHTML transition:true"`) {
+	if !strings.Contains(body, `hx-swap="outerHTML transition:true"`) {
 		t.Fatal("htmx view transitions are not enabled")
 	}
-	if !strings.Contains(body, "defaultSwapDelay=0") || !strings.Contains(body, `typeof document.startViewTransition==="function"`) || !strings.Contains(body, "defaultSettleDelay=0") {
-		t.Fatal("view transitions should snapshot immediately, with no swap delay")
+	if strings.Contains(body, "globalViewTransitions") || strings.Contains(body, "defaultSwapDelay") {
+		t.Fatal("motion script must be a file, not an inline script")
 	}
-	if views.UIFor("he", "m").DueLabel != "מִלִּים מֻכָּנוֹת" {
+	if strings.Count(body, "<script") != 3 {
+		t.Fatalf("want the theme boot, htmx, and shell.js; found %d script tags", strings.Count(body, "<script"))
+	}
+	if !strings.Contains(body, "<script>"+views.ThemeBoot+"</script>") {
+		t.Fatal("theme boot script is not the inline head script")
+	}
+	shell := get(t, New(nil), "/static/js/shell.js")
+	for _, needle := range []string{"globalViewTransitions", "defaultSwapDelay=0", `typeof document.startViewTransition==="function"`, "defaultSettleDelay=0"} {
+		if !strings.Contains(shell, needle) {
+			t.Fatalf("shell.js missing %s", needle)
+		}
+	}
+	if views.UIFor("he", "m").DueLabel != "מִלִּים מֻכָּנוֹת" {
 		t.Fatalf("due label pointing: %s", views.UIFor("he", "m").DueLabel)
 	}
 	if !strings.Contains(body, "הַתְחֵל") || strings.Contains(body, "הַתְחִילִי") {
@@ -136,6 +148,7 @@ func TestStaticHasNoExternalURL(t *testing.T) {
 		"/static/css/tokens.css",
 		"/static/css/base.css",
 		"/static/js/htmx.min.js",
+		"/static/js/shell.js",
 		"/static/icons/sprite.svg",
 		"/static/fonts/noto-sans-hebrew-hebrew.woff2",
 		"/static/fonts/noto-sans-hebrew-latin.woff2",
@@ -179,9 +192,9 @@ func TestStaticHasNoExternalURL(t *testing.T) {
 func TestPairSeparatesRuns(t *testing.T) {
 	h := New(nil)
 	he := get(t, h, "/?due=0")
-	assertPair(t, he, "אֵין חֲזָרוֹת עַכְשָׁיו", "Nothing due", "he")
+	assertPair(t, he, "אֵין חֲזָרוֹת עַכְשָׁיו", "Nothing due", "he")
 	en := get(t, h, "/?lang=en&due=0")
-	assertPair(t, en, "אֵין חֲזָרוֹת עַכְשָׁיו", "Nothing due", "en")
+	assertPair(t, en, "אֵין חֲזָרוֹת עַכְשָׁיו", "Nothing due", "en")
 	if strings.Contains(he, "good morning") || strings.Contains(en, "good morning") {
 		t.Fatal("gloss line is still rendered")
 	}
@@ -203,11 +216,11 @@ func TestZeroDueAndNoLesson(t *testing.T) {
 	if strings.Contains(none, `href="/lesson"`) || strings.Contains(none, views.UnitTitle) {
 		t.Fatal("missing lesson still renders the lesson card")
 	}
-	assertPair(t, none, "אֵין שִׁיעוּר בַּתּוֹר", "No lesson queued", "he")
+	assertPair(t, none, "אֵין שִׁעוּר בַּתּוֹר", "No lesson queued", "he")
 	if !strings.Contains(none, "quiet-card--next") || !strings.Contains(none, "icon-lessons") {
 		t.Fatal("missing lesson should be a placeholder card")
 	}
-	if !strings.Contains(none, "הַשִּׁיעוּר הַבָּא יוֹפִיעַ כָּאן") || !strings.Contains(none, "Your next lesson will appear here") {
+	if !strings.Contains(none, "הַשִּׁעוּר הַבָּא יוֹפִיעַ כָּאן") || !strings.Contains(none, "Your next lesson will appear here") {
 		t.Fatal("missing lesson hint missing")
 	}
 	if !strings.Contains(zero, "quiet-card--due") || !strings.Contains(zero, "icon-check") {
@@ -292,7 +305,7 @@ func TestAddressGender(t *testing.T) {
 		t.Fatal("gender label")
 	}
 	she := views.UIFor("he", "f")
-	if she.Start != "הַתְחִילִי" || she.Skip != "דַּלְּגִי לַתֹּכֶן" {
+	if she.Start != "הַתְחִילִי" || she.Skip != "דַּלְּגִי לַתֹּכֶן" {
 		t.Fatalf("feminine shell: %s / %s", she.Start, she.Skip)
 	}
 	if views.FakeLearner().AddressGender != "m" {

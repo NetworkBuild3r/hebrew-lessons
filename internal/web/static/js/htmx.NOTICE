@@ -3,8 +3,9 @@ Vendored file: htmx.min.js
 Source: https://github.com/bigskysoftware/htmx/releases/tag/v2.0.10
 License: Zero-Clause BSD (0BSD)
 
-This is the only JavaScript file the shell ships. The theme toggle is a few
-inline lines in the layout, not a second file.
+The shell ships two JavaScript files: this one, and shell.js (theme toggle
+and htmx motion, deferred, at most 2048 bytes). The only inline script is
+the theme bootstrap in the document head.
 
 Zero-Clause BSD
 =============

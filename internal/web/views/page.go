@@ -8,10 +8,10 @@ import (
 
 // AppName is the pointed Hebrew wordmark. English sits beside mixed runs
 // in its own bdi, not inside this string.
-const AppName = "דֶּרֶךְ עִבְרִית"
+const AppName = "דֶּרֶךְ עִבְרִית"
 
 // UnitTitle is the one lesson the shell shows until the queue is wired.
-const UnitTitle = "הַבֹּקֶר שֶׁלִּי"
+const UnitTitle = "הַבֹּקֶר שֶׁלִּי"
 
 // UI is the shell copy for one language. Lang is he or en.
 type UI struct {
@@ -85,22 +85,22 @@ func UIFor(lang, addressGender string) UI {
 func hebrewUI(addressGender string) UI {
 	return UI{
 		Lang: "he", Dir: "rtl",
-		Skip: Address(addressGender, "דַּלֵּג לַתֹּכֶן", "דַּלְּגִי לַתֹּכֶן"), Nav: "רָאשִׁי",
-		Today: "הַיּוֹם", Review: "חֲזָרָה", Progress: "הִתְקַדְּמוּת",
-		Dark: "כֵּהֶה", Light: "בָּהִיר",
+		Skip: Address(addressGender, "דַּלֵּג לַתֹּכֶן", "דַּלְּגִי לַתֹּכֶן"), Nav: "רָאשִׁי",
+		Today: "הַיּוֹם", Review: "חֲזָרָה", Progress: "הִתְקַדְּמוּת",
+		Dark: "כֵּהֶה", Light: "בָּהִיר",
 		Heading:   "הַיּוֹם",
-		DueKicker: "לַחֲזָרָה", DueLabel: "מִלִּים מֻכָּנוֹת", DueHint: "עַד עֶשְׂרִים בְּיוֹם",
+		DueKicker: "לַחֲזָרָה", DueLabel: "מִלִּים מֻכָּנוֹת", DueHint: "עַד עֶשְׂרִים בְּיוֹם",
 		Start:      Address(addressGender, "הַתְחֵל", "הַתְחִילִי"),
-		NextKicker: "הַשִּׁיעוּר הַבָּא",
+		NextKicker: "הַשִּׁעוּר הַבָּא",
 		Situation:  "Getting ready in the morning.",
-		Open:       "לַשִּׁיעוּר",
-		ZeroHE:     "אֵין חֲזָרוֹת עַכְשָׁיו", ZeroEN: "Nothing due",
-		NoneHE: "אֵין שִׁיעוּר בַּתּוֹר", NoneEN: "No lesson queued",
-		NoneMoreHE: "הַשִּׁיעוּר הַבָּא יוֹפִיעַ כָּאן", NoneMoreEN: "Your next lesson will appear here",
+		Open:       "לַשִּׁעוּר",
+		ZeroHE:     "אֵין חֲזָרוֹת עַכְשָׁיו", ZeroEN: "Nothing due",
+		NoneHE: "אֵין שִׁעוּר בַּתּוֹר", NoneEN: "No lesson queued",
+		NoneMoreHE: "הַשִּׁעוּר הַבָּא יוֹפִיעַ כָּאן", NoneMoreEN: "Your next lesson will appear here",
 		ReviewHeading: "חֲזָרָה", ReviewLede: "הַתּוֹר עוֹד רֵיק.",
-		ProgressHeading: "הִתְקַדְּמוּת", ProgressLede: "מִלִּים שֶׁאֶפְשָׁר לִזְכֹּר, וִיחִידוֹת שֶׁהֻשְׁלְמוּ.",
-		WordsLabel: "מִלִּים", UnitsLabel: "יְחִידוֹת",
-		LessonHeading: "הַשִּׁיעוּר", LessonLede: "מִכָּאן נִכְנָסִים לַשִּׁיעוּר.",
+		ProgressHeading: "הִתְקַדְּמוּת", ProgressLede: "מִלִּים שֶׁאֶפְשָׁר לִזְכֹּר, וִיחִידוֹת שֶׁהֻשְׁלְמוּ.",
+		WordsLabel: "מִלִּים", UnitsLabel: "יְחִידוֹת",
+		LessonHeading: "הַשִּׁעוּר", LessonLede: "מִכָּאן נִכְנָסִים לַשִּׁעוּר.",
 	}
 }
 
@@ -116,9 +116,9 @@ func englishUI() UI {
 		NextKicker: "Next lesson",
 		Situation:  "Getting ready in the morning.",
 		Open:       "Open lesson",
-		ZeroHE:     "אֵין חֲזָרוֹת עַכְשָׁיו", ZeroEN: "Nothing due",
-		NoneHE: "אֵין שִׁיעוּר בַּתּוֹר", NoneEN: "No lesson queued",
-		NoneMoreHE: "הַשִּׁיעוּר הַבָּא יוֹפִיעַ כָּאן", NoneMoreEN: "Your next lesson will appear here",
+		ZeroHE:     "אֵין חֲזָרוֹת עַכְשָׁיו", ZeroEN: "Nothing due",
+		NoneHE: "אֵין שִׁעוּר בַּתּוֹר", NoneEN: "No lesson queued",
+		NoneMoreHE: "הַשִּׁעוּר הַבָּא יוֹפִיעַ כָּאן", NoneMoreEN: "Your next lesson will appear here",
 		ReviewHeading: "Review", ReviewLede: "The queue is still empty.",
 		ProgressHeading: "Progress", ProgressLede: "Words you can remember, and units you have finished.",
 		WordsLabel: "Words", UnitsLabel: "Units",
@@ -201,7 +201,7 @@ func GenderLabel(gender string) string {
 // Each one is a noun, so each one carries a gender chip.
 func SampleWords() []Chip {
 	return []Chip{
-		{Text: "כִּסֵּא", Gender: AddressMasculine},
+		{Text: "כִּסֵּא", Gender: AddressMasculine},
 		{Text: "חַלּוֹן", Gender: AddressMasculine},
 		{Text: "שֻׁלְחָן", Gender: AddressMasculine},
 	}
@@ -242,16 +242,16 @@ func iconClass(directional bool) string {
 	return "icon"
 }
 
-// themeHead is the only inline script: it applies a stored light/dark choice
-// before paint, and the toggle writes that choice back to localStorage.
-func themeHead() templ.Component {
-	return templ.Raw(`<script>(function(){var k="hebrew-theme";try{var t=localStorage.getItem(k);if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}function dark(){var t=document.documentElement.getAttribute("data-theme");return t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);}function paint(){var on=dark();document.querySelectorAll(".theme-toggle").forEach(function(b){b.setAttribute("aria-pressed",on?"true":"false");});}function apply(next){var go=function(){document.documentElement.setAttribute("data-theme",next);try{localStorage.setItem(k,next);}catch(err){}paint();};if(document.startViewTransition){document.startViewTransition(go);}else{go();}}document.addEventListener("click",function(ev){var node=ev.target&&ev.target.closest?ev.target:ev.target&&ev.target.parentElement;var b=node&&node.closest&&node.closest(".theme-toggle");if(!b)return;apply(dark()?"light":"dark");});document.addEventListener("DOMContentLoaded",paint);document.addEventListener("htmx:afterSwap",paint);})();</script>`)
-}
+// ThemeBoot is the only inline script. It applies a stored light or dark
+// choice before first paint. The toggle and the htmx motion live in
+// /static/js/shell.js. Keep this under 300 bytes; ThemeBootCSP is its hash.
+const ThemeBoot = `(function(){try{var t=localStorage.getItem("hebrew-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`
 
-// motionScript turns htmx swaps into view transitions.
-// Swap delay stays 0 so the old page is not faded out before the snapshot.
-// When view transitions exist, settle immediately so the new snapshot is the
-// painted page. Otherwise hold htmx-settling for --dur-base so the enter runs.
-func motionScript() templ.Component {
-	return templ.Raw(`<script>(function(){if(!window.htmx)return;htmx.config.globalViewTransitions=true;htmx.config.defaultSwapDelay=0;var dur=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--dur-base"));if(typeof document.startViewTransition==="function"){htmx.config.defaultSettleDelay=0;}else if(dur){htmx.config.defaultSettleDelay=dur;}})();</script>`)
+// ThemeBootCSP is the Content-Security-Policy script-src hash of ThemeBoot:
+// sha256 of the exact script bytes, standard base64, without quotes.
+const ThemeBootCSP = "sha256-J/VHwnDnlr+GqZg8u44o21pUuS0tshGfqO3bcm2kCfA="
+
+// themeHead prints ThemeBoot in the document head.
+func themeHead() templ.Component {
+	return templ.Raw("<script>" + ThemeBoot + "</script>")
 }

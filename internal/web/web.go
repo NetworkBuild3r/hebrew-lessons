@@ -1,8 +1,9 @@
 // Package web is the learner HTTP router, templ views, and embedded static
 // assets. Owned by Frontend.
 //
-// Views are templ sources in views/. Static files (css, icons, vendored
-// htmx) live in static/. Both trees are embedded here.
+// Views are templ sources in views/, compiled into this package. Static
+// files (css, icons, htmx, shell.js) live in static/ and are the only tree
+// embedded here.
 package web
 
 import (
@@ -15,9 +16,9 @@ import (
 	"github.com/a-h/templ"
 )
 
-// Assets is the embedded views/ and static/ trees.
+// Assets is the embedded static/ tree. Views are compiled, not embedded.
 //
-//go:embed static views
+//go:embed static
 var Assets embed.FS
 
 // New returns the learner mux. health handles GET /healthz.
@@ -39,7 +40,7 @@ func newMux(health http.Handler, tokens CSRFToken) http.Handler {
 	if err != nil {
 		panic(err)
 	}
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(static))))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		render(w, r, views.Today(homeFrom(r, csrfValue(tokens, r))))
 	})
@@ -52,7 +53,41 @@ func newMux(health http.Handler, tokens CSRFToken) http.Handler {
 	mux.HandleFunc("GET /lesson", func(w http.ResponseWriter, r *http.Request) {
 		render(w, r, views.Lesson(views.NewPage(r.URL.Query().Get("lang"), csrfValue(tokens, r), "lesson")))
 	})
-	return csrfMiddleware(tokens, mux)
+	return securityHeaders(csrfMiddleware(tokens, mux))
+}
+
+// securityHeaders sets the policy that has to be in place before a write
+// route exists. frame-ancestors none is part of the CSP. The inline theme
+// script is allowed by its sha256 hash; every other script is a file under
+// /static/js/.
+func securityHeaders(next http.Handler) http.Handler {
+	policy := "default-src 'self'; script-src 'self' '" + views.ThemeBootCSP + "'; style-src 'self'; img-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", policy)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// noDirFS hides directories so FileServer cannot list them.
+type noDirFS struct{ fs.FS }
+
+func (n noDirFS) Open(name string) (fs.File, error) {
+	f, err := n.FS.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	stat, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	if stat.IsDir() {
+		f.Close()
+		return nil, fs.ErrNotExist
+	}
+	return f, nil
 }
 
 // homeFrom is placeholder Today data until the review queue is wired.
