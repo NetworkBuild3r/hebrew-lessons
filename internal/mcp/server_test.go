@@ -574,7 +574,7 @@ func TestScopeStruggleAndGuidance(t *testing.T) {
 	if all.Struggles.Lexemes[3].Misses7d != 0 || !all.Struggles.Lexemes[3].LastSeen.Equal(recent) {
 		t.Fatalf("row fields %+v", all.Struggles.Lexemes[3])
 	}
-	if len(all.KnownLexemes) != 2 || all.KnownLexemes[0] != book || all.KnownLexemes[1] != coffee {
+	if len(all.KnownLexemes) != 1 || all.KnownLexemes[0] != coffee {
 		t.Fatalf("learner known %+v", all.KnownLexemes)
 	}
 	if len(all.CompletedSharedUnits) != 2 || all.CompletedSharedUnits[0].UnitID != 3 || !all.CompletedSharedUnits[0].CompletedAt.Equal(early) || all.CompletedSharedUnits[1].Position != 2 {

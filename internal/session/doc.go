@@ -51,7 +51,8 @@
 // rest of the build. A card is stable known when its latest rating is Good
 // or Easy and it has no Again inside that same window.
 // A he_en card also has to sit in KnownLexemeIDs, which is the latest-Good
-// or Easy he_en set plus new words of lessons this learner has finished.
+// or Easy he_en set. A placement Good or Easy is that review. Finishing a
+// lesson does not add the lesson's new words.
 // Struggling wins when a card matches both. A not-yet-due card is never
 // struggling. Suspended cards, and words whose intro lesson is unfinished,
 // stay out.

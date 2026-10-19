@@ -508,7 +508,7 @@ func TestLearnerKnownLexemes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(got, ",") != house+","+book+","+hello {
+	if strings.Join(got, ",") != hello {
 		t.Fatalf("known %+v", got)
 	}
 
@@ -526,7 +526,7 @@ func TestLearnerKnownLexemes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(got, ",") != house+","+book+","+hello || containsWord(got, fish) {
+	if strings.Join(got, ",") != hello || containsWord(got, fish) || containsWord(got, book) || containsWord(got, house) {
 		t.Fatalf("learner A known after B %+v", got)
 	}
 }

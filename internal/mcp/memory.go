@@ -286,8 +286,8 @@ func cloneStruggleLexeme(row StruggleLexeme) StruggleLexeme {
 }
 
 // SetCompletedUnitLexemes stores pointed NFC words from units this
-// learner has completed. LearnerKnownLexemes unions them with the
-// placement Good and Easy words.
+// learner has completed. Those words are not known. Known is a Good
+// or Easy review, including a placement rating of Good or Easy.
 func (m *Memory) SetCompletedUnitLexemes(userID int64, words []string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -308,7 +308,6 @@ func (m *Memory) LearnerKnownLexemes(ctx context.Context, userID int64) ([]strin
 	if stored, ok := m.placement[userID]; ok {
 		parts = append(parts, stored.known...)
 	}
-	parts = append(parts, m.completedWords[userID]...)
 	words := sortedCopy(parts)
 	if words == nil {
 		words = []string{}
