@@ -1,0 +1,30 @@
+Bands 1–4 of items.json take their word identities from Hermit Dave's
+FrequencyWords Hebrew list.
+
+  Project:  https://github.com/hermitdave/FrequencyWords
+  File:     content/2018/he/he_50k.txt
+  Commit:   34bb6447a96d4434dc2d4b24e0cf946c523090b3
+  Corpus:   OpenSubtitles (the 2018 Hebrew list)
+
+The list is ordered by frequency. Band cut-offs by rank (1 is the most
+frequent line):
+
+  band 1   1–500
+  band 2   501–1000
+  band 3   1001–2000
+  band 4   2001–4000
+
+Licence for that content: Creative Commons Attribution-ShareAlike 4.0
+International (CC BY-SA 4.0).
+https://creativecommons.org/licenses/by-sa/4.0/
+
+The project states "CC-by-sa-4.0 for content" at the commit above.
+Names, function words, particles, interjections, and junk tokens were
+dropped. The Hebrew pointing and the English glosses were added for this
+fixture. Every item is marked verified false until a person checks it.
+
+Band 0 words are copied, pointing included, from the tutor's existing
+lesson worksheets. They are not covered by the FrequencyWords licence.
+
+The pseudo-words were written for this test. They are not taken from the
+list, and they are not inserted into the lexicon.

@@ -133,6 +133,33 @@ func TestConfigSeams(t *testing.T) {
 	if a.Review() == nil {
 		t.Fatal("review service is nil")
 	}
+	if a.Placement() == nil {
+		t.Fatal("placement service is nil")
+	}
+}
+
+func TestPlacementUsesConfigClock(t *testing.T) {
+	when := time.Date(2026, 10, 18, 12, 30, 0, 0, time.UTC)
+	a := newTestApp(t, Config{DataDir: t.TempDir(), Clock: fixedClock{when}})
+	ctx := context.Background()
+	userID, err := a.store.InsertUser(ctx, "place@example.com", "sub-place", "learner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runID, items, err := a.Placement().Start(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runID == 0 || len(items) == 0 {
+		t.Fatalf("run %d items %d", runID, len(items))
+	}
+	run, err := a.store.GetPlacementRun(ctx, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !run.StartedAt.Equal(when) || run.Seed != when.UnixNano() {
+		t.Fatalf("run started %s seed %d, want the config clock", run.StartedAt, run.Seed)
+	}
 }
 
 func TestReviewUsesConfigClock(t *testing.T) {
