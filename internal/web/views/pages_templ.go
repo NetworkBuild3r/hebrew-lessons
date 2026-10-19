@@ -1229,7 +1229,7 @@ func ReviewBody(c ReviewCard) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			if c.Kind == "en_he" {
+			if c.Kind == "recall" {
 				templ_7745c5c3_Err = E(c.Gloss).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
@@ -1332,7 +1332,7 @@ func ReviewBody(c ReviewCard) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if c.Revealed {
-				if c.Kind == "en_he" {
+				if c.Kind == "recall" {
 					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 114, "<p class=\"ink-card__hint\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err

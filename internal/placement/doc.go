@@ -8,13 +8,13 @@
 // They are returned together. AudioURL is /audio/<id>.mp3 when a clip
 // exists for the exact pointed text, and empty otherwise.
 //
-// Each rating is that word's first real FSRS review. Rate writes the he_en
+// Each rating is that word's first real FSRS review. Rate writes the read
 // card, its review log, and the answer in one transaction. The schedule is
 // the one FSRS-5 assigns a new card. Rating 0 is stored as
 // DontKnow and graded as Again, so the card's latest rating is Again and
 // the word is learning. The initial stability is the one FSRS-5 assigns a
 // new card. There is no separate seeding step. A word that already has a
-// he_en card is skipped. Known and learning are read from that card: the
+// read card is skipped. Known and learning are read from that card: the
 // latest rating is Good or Easy when the word is known, and Again or Hard
 // when it is learning. Times come from the clock.Clock passed to New.
 //
@@ -48,7 +48,7 @@
 // not by Score: the lowest units.position whose doc newWords are less than
 // 80% covered by the learner's known set, one past the highest position
 // when every unit is covered, and 0 when there are no units. The known set
-// is KnownLexemeIDs: he_en cards whose latest rating is Good or Easy.
+// is KnownLexemeIDs: read cards whose latest rating is Good or Easy.
 // A placement Good or Easy is that review. Finishing a lesson does not
 // add the lesson's new words. An empty newWords list
 // is covered. A latest Again or Hard does not count. The position is

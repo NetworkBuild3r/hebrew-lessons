@@ -129,8 +129,8 @@ func TestMigration003AppliesAfter002(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := conn.ExecContext(ctx, `
-		INSERT INTO cards (user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses)
-		VALUES (?, ?, 'he_en', 'new', ?, 0, 0, 0, 0)`, userID, lexemeID, old); err != nil {
+		INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses)
+		VALUES (?, ?, 'read', 'new', ?, 0, 0, 0, 0)`, userID, lexemeID, old); err != nil {
 		t.Fatal(err)
 	}
 	var cardID int64

@@ -398,7 +398,7 @@ func TestDontKnowGradesAsAgain(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatal(err)
 	}
-	cardID, has, err := store.CardID(ctx, userID, id, fsrs.DirHeEn)
+	cardID, has, err := store.CardID(ctx, userID, id, fsrs.SkillRead)
 	if err != nil || !has {
 		t.Fatal(err)
 	}
@@ -547,7 +547,7 @@ func TestRatingIsTheFirstReview(t *testing.T) {
 		if text == "טוֹב" && (!verified || gloss != "gloss") {
 			t.Fatalf("verified lexeme gloss=%q verified=%v", gloss, verified)
 		}
-		cardID, has, err := store.CardID(ctx, userID, id, fsrs.DirHeEn)
+		cardID, has, err := store.CardID(ctx, userID, id, fsrs.SkillRead)
 		if err != nil || !has {
 			t.Fatalf("card %s has=%v err=%v", text, has, err)
 		}
@@ -603,7 +603,7 @@ func TestRatingIsTheFirstReview(t *testing.T) {
 		if err != nil || !ok {
 			t.Fatal(err)
 		}
-		cardID, has, err := store.CardID(ctx, userID, id, fsrs.DirHeEn)
+		cardID, has, err := store.CardID(ctx, userID, id, fsrs.SkillRead)
 		if err != nil || !has {
 			t.Fatal(err)
 		}
@@ -629,7 +629,7 @@ func TestSkipExistingCard(t *testing.T) {
 	cardID, err := store.InsertCard(ctx, db.Card{
 		UserID:   userID,
 		LexemeID: lexemeID,
-		Dir:      fsrs.DirHeEn,
+		Skill:    fsrs.SkillRead,
 		State:    fsrs.StateNew,
 		Due:      when,
 	})

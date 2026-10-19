@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const cardColumns = `id, user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, last_review, suspended`
+const cardColumns = `id, user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended`
 
 // introNotFinished keeps a card out while its lexeme is still a new word
 // of a lesson this learner has not finished. Recycled words, and words
@@ -35,7 +35,7 @@ type Card struct {
 	ID         int64
 	UserID     int64
 	LexemeID   int64
-	Dir        string
+	Skill      string
 	State      string
 	Due        time.Time
 	Stability  float64
@@ -58,7 +58,7 @@ type ReviewLog struct {
 	Chosen        string // Pointed NFC of the wrong option. Empty when the learner did not pick one.
 }
 
-// StudyCard is a learner's he_en or en_he card plus the fields the
+// StudyCard is a learner's read or recall card plus the fields the
 // post-placement mix reads. LatestRating is the newest review_log rating at
 // or before the now passed to ListStudyCards. HasRating is false when the
 // card has no such review. RecentLapse is true when an Again rating was
@@ -88,7 +88,7 @@ func scanCard(scan func(dest ...any) error) (Card, error) {
 	var due, last sql.NullString
 	var suspended int
 	err := scan(
-		&card.ID, &card.UserID, &card.LexemeID, &card.Dir, &card.State,
+		&card.ID, &card.UserID, &card.LexemeID, &card.Skill, &card.State,
 		&due, &card.Stability, &card.Difficulty, &card.Reps, &card.Lapses,
 		&last, &suspended,
 	)
@@ -180,9 +180,9 @@ func (s *Store) InsertCard(ctx context.Context, card Card) (int64, error) {
 	}
 	res, err := conn.ExecContext(ctx, `
 		INSERT INTO cards (
-			user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, last_review, suspended
+			user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		card.UserID, card.LexemeID, card.Dir, card.State, FormatTime(card.Due),
+		card.UserID, card.LexemeID, card.Skill, card.State, FormatTime(card.Due),
 		card.Stability, card.Difficulty, card.Reps, card.Lapses, last, suspended,
 	)
 	if err != nil {
@@ -398,7 +398,7 @@ func (s *Store) InsertUser(ctx context.Context, email, sub, role string) (int64,
 	return id, nil
 }
 
-// ListStudyCards returns the learner's unsuspended he_en and en_he cards,
+// ListStudyCards returns the learner's unsuspended read and recall cards,
 // including cards that are not yet due. Words still waiting on their intro
 // lesson are left out, the same way ListDueCards leaves them out.
 // now caps the latest-rating lookup: a review_log row after now is ignored.
@@ -464,7 +464,7 @@ func (s *Store) ListStudyCards(ctx context.Context, userID int64, now, lapseSinc
 		FROM cards AS c
 		WHERE c.user_id = ?
 		  AND c.suspended = 0
-		  AND c.dir IN ('he_en', 'en_he')
+		  AND c.skill IN ('read', 'recall')
 `+introNotFinished+`
 		ORDER BY c.due, c.id`, FormatTime(now), FormatTime(lapseSince), userID)
 	if err != nil {

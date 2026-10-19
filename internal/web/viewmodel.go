@@ -44,9 +44,9 @@ type CardBackVM struct {
 }
 
 // ReviewCardVM is one visit in the study session.
-// Kind is he_en, en_he, letter, or pattern.
+// Kind is read, recall, letter, or pattern.
 // Pointed is the pointed Hebrew. Unpointed is the same word with niqqud removed.
-// ShowUnpointed follows fsrs.ShowUnpointed: he_en only, stability at least 21
+// ShowUnpointed follows fsrs.ShowUnpointed: read only, stability at least 21
 // days, and no Again in the last three ratings. Translit is on the prompt,
 // before the flip. Back keeps the gloss, the same transliteration, and gender.
 type ReviewCardVM struct {

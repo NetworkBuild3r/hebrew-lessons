@@ -444,23 +444,23 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 	vm.Unpointed = units.Plain(face.TextNFC)
 	vm.Translit = face.Translit
 	vm.Back = CardBackVM{Translit: face.Translit, Gender: face.Gender, Gloss: face.Gloss}
-	show, err := s.showUnpointed(ctx, ref.CardID, ref.Dir)
+	show, err := s.showUnpointed(ctx, ref.CardID, ref.Skill)
 	if err != nil {
 		return ReviewCardVM{}, err
 	}
 	vm.ShowUnpointed = show
-	if ref.Dir == fsrs.DirEnHe || ref.Kind == fsrs.DirEnHe {
-		vm.Kind = fsrs.DirEnHe
+	if ref.Skill == fsrs.SkillRecall || ref.Kind == fsrs.SkillRecall {
+		vm.Kind = fsrs.SkillRecall
 		return vm, nil
 	}
-	vm.Kind = fsrs.DirHeEn
+	vm.Kind = fsrs.SkillRead
 	return vm, nil
 }
 
-// showUnpointed uses fsrs.ShowUnpointed. An en_he card, a drill, and a card
+// showUnpointed uses fsrs.ShowUnpointed. A recall card, a drill, and a card
 // below 21 days of stability stay pointed.
-func (s *server) showUnpointed(ctx context.Context, cardID int64, dir string) (bool, error) {
-	if s == nil || s.store == nil || cardID <= 0 || dir != fsrs.DirHeEn {
+func (s *server) showUnpointed(ctx context.Context, cardID int64, skill string) (bool, error) {
+	if s == nil || s.store == nil || cardID <= 0 || skill != fsrs.SkillRead {
 		return false, nil
 	}
 	row, err := s.store.GetCard(ctx, cardID)
@@ -476,7 +476,7 @@ func (s *server) showUnpointed(ctx context.Context, cardID int64, dir string) (b
 		ratings[i] = fsrs.Rating(log.Rating)
 	}
 	return fsrs.ShowUnpointed(fsrs.Card{
-		Dir:       row.Dir,
+		Skill:     row.Skill,
 		Stability: row.Stability,
 		Ratings:   ratings,
 	}), nil
@@ -508,12 +508,12 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 		return card
 	}
 	// Anything that reveals the answer side is post-reveal only.
-	// he_en: the Hebrew is the prompt, so pointed text, translit, and audio stay.
+	// read: the Hebrew is the prompt, so pointed text, translit, and audio stay.
 	// The English gloss and the gender chip wait.
-	// en_he: the English gloss is the prompt. The Hebrew, its transliteration,
+	// recall: the English gloss is the prompt. The Hebrew, its transliteration,
 	// its audio, and the gender chip all identify the answer, so they wait.
 	card.Gender = ""
-	if vm.Kind == fsrs.DirEnHe || vm.Kind == "en_he" {
+	if vm.Kind == fsrs.SkillRecall || vm.Kind == "recall" {
 		card.Pointed = ""
 		card.Unpointed = ""
 		card.Translit = ""

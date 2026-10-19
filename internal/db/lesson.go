@@ -540,7 +540,7 @@ func (s *Store) stepPlayerRun(ctx context.Context, userID, runID int64, kind str
 	return updated, true, nil
 }
 
-// enqueueNewWords inserts a new he_en card and a new en_he card for each
+// enqueueNewWords inserts a new read card and a new recall card for each
 // new word in the lesson, due at now. A card the learner already has is
 // left unchanged. ListDueCards keeps these out until finished_at is set,
 // which this transaction has just done.
@@ -568,12 +568,12 @@ func enqueueNewWords(ctx context.Context, tx *sql.Tx, userID, unitID int64, less
 
 	due := FormatTime(now)
 	for _, id := range ids {
-		for _, dir := range []string{"he_en", "en_he"} {
+		for _, skill := range []string{"read", "recall"} {
 			if _, err := tx.ExecContext(ctx, `
 				INSERT OR IGNORE INTO cards (
-					user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses
+					user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses
 				) VALUES (?, ?, ?, 'new', ?, 0, 0, 0, 0)`,
-				userID, id, dir, due,
+				userID, id, skill, due,
 			); err != nil {
 				return fmt.Errorf("db: lesson cards: %w", err)
 			}

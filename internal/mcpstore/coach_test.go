@@ -23,8 +23,8 @@ func TestCoachAdapterUsesClockAndNulls(t *testing.T) {
 		t.Fatal(err)
 	}
 	due := db.FormatTime(when.Add(time.Hour))
-	res, err = raw.ExecContext(ctx, `INSERT INTO cards (user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, suspended)
-		VALUES (?, ?, 'he_en', 'review', ?, 1, 2, 0, 1, 1)`, user, lex, due)
+	res, err = raw.ExecContext(ctx, `INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, suspended)
+		VALUES (?, ?, 'read', 'review', ?, 1, 2, 0, 1, 1)`, user, lex, due)
 	if err != nil {
 		t.Fatal(err)
 	}

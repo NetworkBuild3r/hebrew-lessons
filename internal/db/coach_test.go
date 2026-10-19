@@ -24,17 +24,17 @@ func TestCoachCardsOrderPageAndAccuracy(t *testing.T) {
 	extra := insertLexeme(t, s, "סֵפֶר")
 	otherLex := insertLexeme(t, s, "דָּג")
 
-	lateNew := insertCoachCard(t, s, user, pointed, "he_en", "review", dueLate, lastNew, 0)
-	lateOld := insertCoachCard(t, s, user, bare, "en_he", "learning", dueLate, lastOld, 0)
-	lateNone := insertCoachCard(t, s, user, extra, "he_en", "new", dueLate, "", 1)
-	early := insertCoachCard(t, s, user, pointed, "en_he", "relearning", dueEarly, "", 0)
-	insertCoachCard(t, s, other, otherLex, "he_en", "review", dueEarly, "", 0)
+	lateNew := insertCoachCard(t, s, user, pointed, "read", "review", dueLate, lastNew, 0)
+	lateOld := insertCoachCard(t, s, user, bare, "recall", "learning", dueLate, lastOld, 0)
+	lateNone := insertCoachCard(t, s, user, extra, "read", "new", dueLate, "", 1)
+	early := insertCoachCard(t, s, user, pointed, "recall", "relearning", dueEarly, "", 0)
+	insertCoachCard(t, s, other, otherLex, "read", "review", dueEarly, "", 0)
 
 	mustExec(t, s, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days) VALUES (?, 4, ?, 0, 0)`, lateNew, FormatTime(now.Add(-8*24*time.Hour)))
 	mustExec(t, s, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days) VALUES (?, 1, ?, 0, 0)`, lateNew, FormatTime(now.Add(-48*time.Hour)))
 	mustExec(t, s, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days) VALUES (?, 3, ?, 0, 0)`, lateNew, FormatTime(now.Add(-24*time.Hour)))
 	mustExec(t, s, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days) VALUES (?, 4, ?, 0, 0)`, early, FormatTime(now.Add(time.Hour)))
-	otherCard := insertCoachCard(t, s, other, otherLex, "en_he", "review", dueEarly, "", 0)
+	otherCard := insertCoachCard(t, s, other, otherLex, "recall", "review", dueEarly, "", 0)
 	mustExec(t, s, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days) VALUES (?, 3, ?, 0, 0)`, otherCard, FormatTime(now.Add(-time.Hour)))
 
 	unit := insertUnit(t, s, "published")
@@ -130,14 +130,14 @@ func TestCoachCardsOrderPageAndAccuracy(t *testing.T) {
 	}
 }
 
-func insertCoachCard(t *testing.T, s *Store, user, lex int64, dir, state, due, last string, suspended int) int64 {
+func insertCoachCard(t *testing.T, s *Store, user, lex int64, skill, state, due, last string, suspended int) int64 {
 	t.Helper()
 	var lastArg any
 	if last != "" {
 		lastArg = last
 	}
-	res := mustExec(t, s, `INSERT INTO cards (user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, last_review, suspended)
-		VALUES (?, ?, ?, ?, ?, 1.5, 2.5, 4, 3, ?, ?)`, user, lex, dir, state, due, lastArg, suspended)
+	res := mustExec(t, s, `INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended)
+		VALUES (?, ?, ?, ?, ?, 1.5, 2.5, 4, 3, ?, ?)`, user, lex, skill, state, due, lastArg, suspended)
 	id, err := res.LastInsertId()
 	if err != nil {
 		t.Fatal(err)

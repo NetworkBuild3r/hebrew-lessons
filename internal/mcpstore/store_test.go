@@ -469,7 +469,7 @@ func TestLearnerKnownLexemes(t *testing.T) {
 	insertReviews(t, raw, helloCard, when, 4)
 	coffeeCard := mustCard(t, raw, userID, coffeeID, 0)
 	insertReviews(t, raw, coffeeCard, when, 1)
-	enHe := db.Card{UserID: userID, LexemeID: coffeeID, Dir: "en_he", State: "review", Due: when, LastReview: when}
+	enHe := db.Card{UserID: userID, LexemeID: coffeeID, Skill: "recall", State: "review", Due: when, LastReview: when}
 	enHeID, err := raw.InsertCard(ctx, enHe)
 	if err != nil {
 		t.Fatal(err)
@@ -900,7 +900,7 @@ func mustCard(t *testing.T, raw *db.Store, userID, lexemeID int64, lapses int) i
 	t.Helper()
 	when := time.Date(2026, 10, 18, 0, 0, 0, 0, time.UTC)
 	id, err := raw.InsertCard(context.Background(), db.Card{
-		UserID: userID, LexemeID: lexemeID, Dir: "he_en", State: "review",
+		UserID: userID, LexemeID: lexemeID, Skill: "read", State: "review",
 		Due: when, LastReview: when, Lapses: lapses, Reps: 1,
 	})
 	if err != nil {

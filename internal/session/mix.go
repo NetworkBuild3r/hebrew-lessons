@@ -157,7 +157,7 @@ func PlanFor(accuracy float64) Plan {
 type Candidate struct {
 	ID          int64
 	LexemeID    int64
-	Dir         string
+	Skill       string
 	Due         time.Time
 	Lapses      int
 	Latest      int
@@ -323,7 +323,7 @@ func splitPools(cands []Candidate, now time.Time) (dueS, dueK, laterK, fresh []C
 }
 
 func classify(c Candidate, now time.Time) kind {
-	if c.Dir != fsrs.DirHeEn && c.Dir != fsrs.DirEnHe {
+	if c.Skill != fsrs.SkillRead && c.Skill != fsrs.SkillRecall {
 		return kindSkip
 	}
 	// A card with no review is new once it is due. It is not struggling
@@ -343,9 +343,9 @@ func classify(c Candidate, now time.Time) kind {
 	if !strong || c.RecentLapse || c.Confused {
 		return kindSkip
 	}
-	// he_en known cards are the KnownLexemeIDs set. en_he is known from
+	// read known cards are the KnownLexemeIDs set. recall is known from
 	// its own latest Good or Easy rating.
-	if c.Dir == fsrs.DirHeEn && !c.KnownLexeme {
+	if c.Skill == fsrs.SkillRead && !c.KnownLexeme {
 		return kindSkip
 	}
 	return kindKnown
@@ -466,8 +466,8 @@ func newRefs(cards []Candidate) []CardRef {
 		out[i] = CardRef{
 			CardID:   c.ID,
 			LexemeID: c.LexemeID,
-			Dir:      c.Dir,
-			Kind:     c.Dir,
+			Skill:    c.Skill,
+			Kind:     c.Skill,
 			New:      true,
 		}
 	}
@@ -480,9 +480,9 @@ func refs(cards []Candidate, struggling bool) []CardRef {
 		out[i] = CardRef{
 			CardID:     c.ID,
 			LexemeID:   c.LexemeID,
-			Dir:        c.Dir,
+			Skill:      c.Skill,
 			Struggling: struggling,
-			Kind:       c.Dir,
+			Kind:       c.Skill,
 		}
 	}
 	return out

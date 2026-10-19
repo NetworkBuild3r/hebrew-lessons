@@ -42,10 +42,10 @@ func TestHomeFromRealData(t *testing.T) {
 	later := addLexeme(t, store, "עֶרֶב", "evening", "erev", "m", "")
 	foreign := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
 	reviewed := now.Add(-48 * time.Hour)
-	addCard(t, store, learner.user.ID, known, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
-	addCard(t, store, learner.user.ID, hard, fsrs.DirHeEn, now.Add(-time.Minute), 1, int(fsrs.Hard), reviewed)
-	addCard(t, store, learner.user.ID, later, fsrs.DirHeEn, now.Add(24*time.Hour), 1, 0, time.Time{})
-	addCard(t, store, other.ID, foreign, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	addCard(t, store, learner.user.ID, known, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	addCard(t, store, learner.user.ID, hard, fsrs.SkillRead, now.Add(-time.Minute), 1, int(fsrs.Hard), reviewed)
+	addCard(t, store, learner.user.ID, later, fsrs.SkillRead, now.Add(24*time.Hour), 1, 0, time.Time{})
+	addCard(t, store, other.ID, foreign, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 
 	draft, err := testharness.InsertUnit(ctx, store, "Draft", "draft")
 	if err != nil {
@@ -156,11 +156,11 @@ func TestReviewBuildsSession(t *testing.T) {
 	first := addLexeme(t, store, firstText, "hello", "shalom", "m", audio)
 	second := addLexeme(t, store, secondText, "morning", "boker", "f", "")
 	reviewed := now.Add(-48 * time.Hour)
-	addCard(t, store, learner.user.ID, first, fsrs.DirHeEn, now.Add(-2*time.Hour), 1, int(fsrs.Good), reviewed)
-	addCard(t, store, learner.user.ID, second, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	addCard(t, store, learner.user.ID, first, fsrs.SkillRead, now.Add(-2*time.Hour), 1, int(fsrs.Good), reviewed)
+	addCard(t, store, learner.user.ID, second, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 
 	body := getLearner(t, h, learner, "/review")
-	if !strings.Contains(body, `data-kind="he_en"`) || !strings.Contains(body, `data-pointed="`+firstText+`"`) || !strings.Contains(body, `data-show-unpointed="false"`) || !strings.Contains(body, `data-translit="shalom"`) || !strings.Contains(body, `data-index="1"`) || !strings.Contains(body, `data-total="2"`) || !strings.Contains(body, `data-revealed="false"`) {
+	if !strings.Contains(body, `data-kind="read"`) || !strings.Contains(body, `data-pointed="`+firstText+`"`) || !strings.Contains(body, `data-show-unpointed="false"`) || !strings.Contains(body, `data-translit="shalom"`) || !strings.Contains(body, `data-index="1"`) || !strings.Contains(body, `data-total="2"`) || !strings.Contains(body, `data-revealed="false"`) {
 		t.Fatalf("first card: %s", cardAttrs(body))
 	}
 	if !strings.Contains(body, `href="/audio/`+audio+`.mp3"`) || !strings.Contains(body, "shalom") || !strings.Contains(body, `action="/_hx/review/reveal"`) {
@@ -186,18 +186,18 @@ func TestReviewBuildsSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	word := addLexeme(t, store, enText, "chair", "kise", "m", enAudio)
-	enCard := addCard(t, store, en.user.ID, word, fsrs.DirEnHe, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	enCard := addCard(t, store, en.user.ID, word, fsrs.SkillRecall, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 	prod := getLearner(t, h, en, "/review")
-	if !strings.Contains(prod, `data-kind="en_he"`) || strings.Contains(prod, enText) || !strings.Contains(prod, "chair") || !strings.Contains(prod, `data-revealed="false"`) {
-		t.Fatalf("en_he card leaked the answer: %s", cardAttrs(prod))
+	if !strings.Contains(prod, `data-kind="recall"`) || strings.Contains(prod, enText) || !strings.Contains(prod, "chair") || !strings.Contains(prod, `data-revealed="false"`) {
+		t.Fatalf("recall card leaked the answer: %s", cardAttrs(prod))
 	}
 	if strings.Contains(prod, "data-translit") || strings.Contains(prod, "kise") || strings.Contains(prod, "/audio/") {
-		t.Fatalf("en_he leaked translit or audio before reveal: %s", prod)
+		t.Fatalf("recall leaked translit or audio before reveal: %s", prod)
 	}
 	shown := postReveal(t, h, en, enCard, "https://learn.example")
 	shownBody := shown.Body.String()
 	if shown.Code != http.StatusOK || !strings.Contains(shownBody, `data-pointed="`+enText+`"`) || !strings.Contains(shownBody, "chair") || !strings.Contains(shownBody, `data-revealed="true"`) || !strings.Contains(shownBody, `name="rating"`) || !strings.Contains(shownBody, `data-translit="kise"`) || !strings.Contains(shownBody, "kise") || !strings.Contains(shownBody, `href="/audio/`+enAudio+`.mp3"`) {
-		t.Fatalf("en_he reveal = %d %s", shown.Code, shownBody)
+		t.Fatalf("recall reveal = %d %s", shown.Code, shownBody)
 	}
 }
 
@@ -207,7 +207,7 @@ func TestReviewShowUnpointed(t *testing.T) {
 	text := "שָׁלוֹם"
 	lex := addLexeme(t, store, text, "hello", "shalom", "m", "")
 	reviewed := now.Add(-48 * time.Hour)
-	id := addCard(t, store, learner.user.ID, lex, fsrs.DirHeEn, now.Add(-time.Hour), 21, int(fsrs.Good), reviewed)
+	id := addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, now.Add(-time.Hour), 21, int(fsrs.Good), reviewed)
 	insertReview(t, store, id, int(fsrs.Good), reviewed.Add(time.Minute))
 	insertReview(t, store, id, int(fsrs.Good), reviewed.Add(2*time.Minute))
 	body := getLearner(t, h, learner, "/review")
@@ -223,7 +223,7 @@ func TestReviewShowUnpointed(t *testing.T) {
 	store2, h2, now2 := openApp(t)
 	learner2 := addLearner(t, store2, "a@example.com", "sub-a", now2)
 	lex2 := addLexeme(t, store2, text, "hello", "shalom", "m", "")
-	lapsed := addCard(t, store2, learner2.user.ID, lex2, fsrs.DirHeEn, now2.Add(-time.Hour), 40, int(fsrs.Good), reviewed)
+	lapsed := addCard(t, store2, learner2.user.ID, lex2, fsrs.SkillRead, now2.Add(-time.Hour), 40, int(fsrs.Good), reviewed)
 	insertReview(t, store2, lapsed, int(fsrs.Good), reviewed.Add(time.Minute))
 	insertReview(t, store2, lapsed, int(fsrs.Again), reviewed.Add(2*time.Minute))
 	pointed := getLearner(t, h2, learner2, "/review")
@@ -245,9 +245,9 @@ func TestReviewGrade(t *testing.T) {
 	firstLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
 	secondLex := addLexeme(t, store, "בֹּקֶר", "morning", "boker", "m", "")
 	foreignLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
-	first := addCard(t, store, learner.user.ID, firstLex, fsrs.DirHeEn, now.Add(-2*time.Hour), 1, int(fsrs.Good), reviewed)
-	second := addCard(t, store, learner.user.ID, secondLex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
-	foreign := addCard(t, store, other.user.ID, foreignLex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	first := addCard(t, store, learner.user.ID, firstLex, fsrs.SkillRead, now.Add(-2*time.Hour), 1, int(fsrs.Good), reviewed)
+	second := addCard(t, store, learner.user.ID, secondLex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	foreign := addCard(t, store, other.user.ID, foreignLex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 	before, err := store.GetCard(ctx, first)
 	if err != nil {
 		t.Fatal(err)
@@ -338,7 +338,7 @@ func TestReviewGrade(t *testing.T) {
 	againStore, againH, againNow := openApp(t)
 	one := addLearner(t, againStore, "a@example.com", "sub-a", againNow)
 	lex := addLexeme(t, againStore, "שָׁלוֹם", "hello", "shalom", "m", "")
-	card := addCard(t, againStore, one.user.ID, lex, fsrs.DirHeEn, againNow.Add(-time.Hour), 1, int(fsrs.Good), againNow.Add(-48*time.Hour))
+	card := addCard(t, againStore, one.user.ID, lex, fsrs.SkillRead, againNow.Add(-time.Hour), 1, int(fsrs.Good), againNow.Add(-48*time.Hour))
 	getLearner(t, againH, one, "/review")
 	retry := gradeRevealed(t, againH, one, card, "1", "https://learn.example")
 	if retry.Code != http.StatusOK {
@@ -367,8 +367,8 @@ func TestReviewLearnersAreIsolated(t *testing.T) {
 	reviewed := now.Add(-48 * time.Hour)
 	aLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
 	bLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
-	aCard := addCard(t, store, a.user.ID, aLex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
-	bCard := addCard(t, store, b.user.ID, bLex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	aCard := addCard(t, store, a.user.ID, aLex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	bCard := addCard(t, store, b.user.ID, bLex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 
 	aPage := getLearner(t, h, a, "/review")
 	bPage := getLearner(t, h, b, "/review")
@@ -399,7 +399,7 @@ func TestReviewDrillKinds(t *testing.T) {
 	ctx := context.Background()
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
-	card := addCard(t, store, learner.user.ID, lex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
+	card := addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
 	rev := fsrs.New(store, store.Clock())
 	for i := 0; i < session.MinMissesForDrill; i++ {
 		if err := rev.RecordMiss(ctx, learner.user.ID, fsrs.MissLetterPair, "ב/כ", 0); err != nil {
@@ -413,7 +413,7 @@ func TestReviewDrillKinds(t *testing.T) {
 		t.Fatal(err)
 	}
 	page := getLearner(t, h, learner, "/review")
-	if attr(t, page, "data-kind") != fsrs.DirHeEn || attr(t, page, "data-card") != fmt.Sprint(card) {
+	if attr(t, page, "data-kind") != fsrs.SkillRead || attr(t, page, "data-card") != fmt.Sprint(card) {
 		t.Fatalf("drill replaced the study card: %s", cardAttrs(page))
 	}
 	letter := gradeRevealed(t, h, learner, card, "3", "https://learn.example")
@@ -438,7 +438,7 @@ func TestReviewReveal(t *testing.T) {
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	reviewed := now.Add(-48 * time.Hour)
 	lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
-	card := addCard(t, store, learner.user.ID, lex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	card := addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 	page := getLearner(t, h, learner, "/review")
 	if strings.Contains(page, "hello") || strings.Contains(page, "ז׳") || strings.Contains(page, `name="rating"`) {
 		t.Fatal("the back rendered before reveal")
@@ -481,7 +481,7 @@ func TestReviewDoneSessionRebuilds(t *testing.T) {
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	reviewed := now.Add(-48 * time.Hour)
 	firstLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
-	first := addCard(t, store, learner.user.ID, firstLex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	first := addCard(t, store, learner.user.ID, firstLex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 	getLearner(t, h, learner, "/review")
 	done := gradeRevealed(t, h, learner, first, "3", "https://learn.example")
 	if done.Code != http.StatusOK || !strings.Contains(done.Body.String(), `data-done="true"`) {
@@ -491,7 +491,7 @@ func TestReviewDoneSessionRebuilds(t *testing.T) {
 		t.Fatal(err)
 	}
 	secondLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
-	second := addCard(t, store, learner.user.ID, secondLex, fsrs.DirHeEn, now.Add(-time.Minute), 1, int(fsrs.Good), reviewed)
+	second := addCard(t, store, learner.user.ID, secondLex, fsrs.SkillRead, now.Add(-time.Minute), 1, int(fsrs.Good), reviewed)
 	page := getLearner(t, h, learner, "/review")
 	if attr(t, page, "data-card") != fmt.Sprint(second) || strings.Contains(page, "שָׁלוֹם") || !strings.Contains(page, "מַיִם") || strings.Contains(page, `data-done="true"`) {
 		t.Fatalf("rebuilt session: %s", cardAttrs(page))
@@ -507,7 +507,7 @@ func TestReviewStaleSessionRebuilds(t *testing.T) {
 	}
 	reviewed := start.Add(-48 * time.Hour)
 	firstLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
-	first := addCard(t, store, learner.user.ID, firstLex, fsrs.DirHeEn, start.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	first := addCard(t, store, learner.user.ID, firstLex, fsrs.SkillRead, start.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 	page := getLearner(t, h, learner, "/review")
 	if attr(t, page, "data-card") != fmt.Sprint(first) {
 		t.Fatalf("first serve = %s", cardAttrs(page))
@@ -525,7 +525,7 @@ func TestReviewStaleSessionRebuilds(t *testing.T) {
 		t.Fatal(err)
 	}
 	secondLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
-	second := addCard(t, store, learner.user.ID, secondLex, fsrs.DirHeEn, clk.Now().Add(-time.Minute), 1, int(fsrs.Good), reviewed)
+	second := addCard(t, store, learner.user.ID, secondLex, fsrs.SkillRead, clk.Now().Add(-time.Minute), 1, int(fsrs.Good), reviewed)
 	rebuilt := getLearner(t, h, learner, "/review")
 	if attr(t, rebuilt, "data-card") != fmt.Sprint(second) || strings.Contains(rebuilt, "שָׁלוֹם") || !strings.Contains(rebuilt, "מַיִם") {
 		t.Fatalf("stale rebuild: %s", cardAttrs(rebuilt))
@@ -578,7 +578,7 @@ func TestReviewGradeDBError(t *testing.T) {
 	store, h, now := openApp(t)
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
-	card := addCard(t, store, learner.user.ID, lex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
+	card := addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
 	getLearner(t, h, learner, "/review")
 	shown := postReveal(t, h, learner, card, "https://learn.example")
 	if shown.Code != http.StatusOK {
@@ -599,8 +599,8 @@ func TestReviewGradeWithoutHTMX(t *testing.T) {
 	reviewed := now.Add(-48 * time.Hour)
 	firstLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
 	secondLex := addLexeme(t, store, "בֹּקֶר", "morning", "boker", "m", "")
-	first := addCard(t, store, learner.user.ID, firstLex, fsrs.DirHeEn, now.Add(-2*time.Hour), 1, int(fsrs.Good), reviewed)
-	second := addCard(t, store, learner.user.ID, secondLex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	first := addCard(t, store, learner.user.ID, firstLex, fsrs.SkillRead, now.Add(-2*time.Hour), 1, int(fsrs.Good), reviewed)
+	second := addCard(t, store, learner.user.ID, secondLex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 	getLearner(t, h, learner, "/review")
 
 	shown := postRevealRaw(t, h, learner.cookie, learner.csrf, first, "https://learn.example", false)
@@ -731,12 +731,12 @@ func addLexeme(t *testing.T, store *db.Store, text, gloss, translit, gender, aud
 	return id
 }
 
-func addCard(t *testing.T, store *db.Store, userID, lexemeID int64, dir string, due time.Time, stability float64, rating int, reviewed time.Time) int64 {
+func addCard(t *testing.T, store *db.Store, userID, lexemeID int64, skill string, due time.Time, stability float64, rating int, reviewed time.Time) int64 {
 	t.Helper()
 	id, err := store.InsertCard(context.Background(), db.Card{
 		UserID:     userID,
 		LexemeID:   lexemeID,
-		Dir:        dir,
+		Skill:      skill,
 		State:      fsrs.StateReview,
 		Due:        due,
 		Stability:  stability,

@@ -124,7 +124,7 @@ templ ReviewBody(c ReviewCard) {
 			}
 		} else {
 			<p class="count">
-				if c.Kind == "en_he" {
+				if c.Kind == "recall" {
 					@E(c.Gloss)
 				} else if c.ShowUnpointed {
 					@H(c.Unpointed)
@@ -132,7 +132,7 @@ templ ReviewBody(c ReviewCard) {
 					@H(c.Pointed)
 				}
 			</p>
-			// Translit and audio name the Hebrew. On en_he that is the answer, so they wait for reveal. On he_en the Hebrew is the prompt, so both stay.
+			// Translit and audio name the Hebrew. On recall that is the answer, so they wait for reveal. On read the Hebrew is the prompt, so both stay.
 			if answerSide(c) {
 				if c.Translit != "" {
 					<p class="ink-card__hint">@E(c.Translit)</p>
@@ -147,7 +147,7 @@ templ ReviewBody(c ReviewCard) {
 				<bdi lang="en" dir="ltr">{ Num(c.Index) } / { Num(c.Total) }</bdi>
 			</p>
 			if c.Revealed {
-				if c.Kind == "en_he" {
+				if c.Kind == "recall" {
 					<p class="ink-card__hint">
 						if c.ShowUnpointed {
 							@H(c.Unpointed)

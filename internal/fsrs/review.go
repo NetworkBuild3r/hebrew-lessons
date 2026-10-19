@@ -47,7 +47,7 @@ func (r *Review) ready() error {
 }
 
 // ScheduleNew plans the first review of a new card. It does not write.
-// The result is what Grade stores after inserting a new he_en card and
+// The result is what Grade stores after inserting a new read card and
 // reviewing it at now. rating is 1 Again, 2 Hard, 3 Good, or 4 Easy.
 func (r *Review) ScheduleNew(now time.Time, rating Rating) (db.Card, db.ReviewLog, error) {
 	if r == nil || r.sched == nil {
@@ -187,7 +187,7 @@ func cardFromRow(row db.Card) Card {
 		ID:         row.ID,
 		UserID:     row.UserID,
 		LexemeID:   row.LexemeID,
-		Dir:        row.Dir,
+		Skill:      row.Skill,
 		State:      row.State,
 		Due:        row.Due,
 		Stability:  row.Stability,

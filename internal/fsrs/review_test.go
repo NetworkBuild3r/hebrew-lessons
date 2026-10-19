@@ -47,7 +47,7 @@ func TestGradeUpdatesCardAndLog(t *testing.T) {
 	cardID := mustCard(t, store, db.Card{
 		UserID:   userID,
 		LexemeID: lexemeID,
-		Dir:      DirHeEn,
+		Skill:    SkillRead,
 		State:    StateNew,
 		Due:      clk.Now(),
 	})
@@ -142,13 +142,13 @@ func TestSuspendExcludesFromQueue(t *testing.T) {
 	dueID := mustCard(t, store, db.Card{
 		UserID:   userID,
 		LexemeID: mustLexeme(t, store, "שלום"),
-		Dir:      DirHeEn,
+		Skill:    SkillRead,
 		Due:      clk.Now().Add(-time.Hour),
 	})
 	futureID := mustCard(t, store, db.Card{
 		UserID:   userID,
 		LexemeID: mustLexeme(t, store, "להתראות"),
-		Dir:      DirHeEn,
+		Skill:    SkillRead,
 		Due:      clk.Now().Add(time.Hour),
 	})
 
@@ -189,12 +189,12 @@ func TestShowUnpointed(t *testing.T) {
 		card Card
 		want bool
 	}{
-		{name: "20.9 days", card: Card{Dir: DirHeEn, Stability: 20.9, Ratings: good}, want: false},
-		{name: "21 days", card: Card{Dir: DirHeEn, Stability: 21, Ratings: good}, want: true},
-		{name: "again in the last 3", card: Card{Dir: DirHeEn, Stability: 40, Ratings: []Rating{Good, Again, Good, Easy}}, want: false},
-		{name: "again older than the last 3", card: Card{Dir: DirHeEn, Stability: 21, Ratings: []Rating{Again, Good, Hard, Easy}}, want: true},
-		{name: "en_he", card: Card{Dir: DirEnHe, Stability: 80, Ratings: good}, want: false},
-		{name: "no reviews yet", card: Card{Dir: DirHeEn, Stability: 21}, want: true},
+		{name: "20.9 days", card: Card{Skill: SkillRead, Stability: 20.9, Ratings: good}, want: false},
+		{name: "21 days", card: Card{Skill: SkillRead, Stability: 21, Ratings: good}, want: true},
+		{name: "again in the last 3", card: Card{Skill: SkillRead, Stability: 40, Ratings: []Rating{Good, Again, Good, Easy}}, want: false},
+		{name: "again older than the last 3", card: Card{Skill: SkillRead, Stability: 21, Ratings: []Rating{Again, Good, Hard, Easy}}, want: true},
+		{name: "recall", card: Card{Skill: SkillRecall, Stability: 80, Ratings: good}, want: false},
+		{name: "no reviews yet", card: Card{Skill: SkillRead, Stability: 21}, want: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -211,7 +211,7 @@ func TestShowUnpointedUsesReviewLog(t *testing.T) {
 	cardID := mustCard(t, store, db.Card{
 		UserID:   mustUser(t, store, "learner@example.com"),
 		LexemeID: mustLexeme(t, store, "שלום"),
-		Dir:      DirHeEn,
+		Skill:    SkillRead,
 		Due:      clk.Now(),
 	})
 	for _, rating := range []Rating{Good, Good, Again} {

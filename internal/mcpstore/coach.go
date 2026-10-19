@@ -66,7 +66,7 @@ func coachCard(row db.CoachCard) mcp.LearnerCard {
 		Lexeme:     row.Lexeme,
 		POS:        row.POS,
 		Gloss:      row.Gloss,
-		Dir:        row.Dir,
+		Skill:      row.Skill,
 		State:      row.State,
 		Stability:  row.Stability,
 		Difficulty: row.Difficulty,

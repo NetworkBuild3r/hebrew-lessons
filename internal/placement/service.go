@@ -12,7 +12,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 )
 
-// Service deals the placement deck. Each rating is that word's first he_en
+// Service deals the placement deck. Each rating is that word's first read
 // review. The stability is the one FSRS-5 assigns a new card.
 // The clock stamps the run, the answers, and the review.
 //
@@ -120,7 +120,7 @@ func (s *Service) Start(ctx context.Context, userID int64) (int64, error) {
 // Done is set when a band's Again rate has reached StopAgainRate, the run
 // has rated CardCap, or nothing dealable remains. That also scores the
 // run. Break is set when the current sitting has SittingSize answers and
-// the run is still open. A word that already has a he_en card is skipped.
+// the run is still open. A word that already has a read card is skipped.
 // A card already dealt is returned so the learner can rate it. A finished
 // run returns an error.
 func (s *Service) Next(ctx context.Context, runID int64) (NextResult, error) {
@@ -267,7 +267,7 @@ func (s *Service) pick(ctx context.Context, run db.PlacementRun, order []fixture
 	return fixtureItem{}, false, nil
 }
 
-// Rate stores the grade and makes it the word's first he_en review.
+// Rate stores the grade and makes it the word's first read review.
 // rating is 0 "I don't know this", 1 Again, 2 Hard, 3 Good, or 4 Easy.
 // 0 is stored as DontKnow and graded as Again.
 // A word that already has a card is not graded again.
@@ -317,7 +317,7 @@ func (s *Service) Rate(ctx context.Context, runID int64, itemID string, rating i
 		return err
 	}
 	card.UserID = run.UserID
-	card.Dir = fsrs.DirHeEn
+	card.Skill = fsrs.SkillRead
 	return s.store.CommitPlacementRating(ctx, db.PlacementLexeme{
 		TextNFC:  it.TextNFC,
 		Gloss:    it.GlossEN,
@@ -470,7 +470,7 @@ func (s *Service) hasCard(ctx context.Context, userID int64, text string) (bool,
 	if err != nil || !ok {
 		return false, err
 	}
-	_, has, err := s.store.CardID(ctx, userID, lexemeID, fsrs.DirHeEn)
+	_, has, err := s.store.CardID(ctx, userID, lexemeID, fsrs.SkillRead)
 	return has, err
 }
 

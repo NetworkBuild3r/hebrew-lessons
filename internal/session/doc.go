@@ -48,14 +48,14 @@
 //
 // # Algorithm
 //
-// A due he_en or en_he card is struggling when its lapse count is at least
+// A due read or recall card is struggling when its lapse count is at least
 // StruggleLapses, or its latest rating is Again or Hard, or StruggleStats
 // lists a confusion key for its lexeme. StruggleStatsAt reads
 // confusion_misses over ConfusionWindow ending at the same instant as the
 // rest of the build. A card is stable known when its latest rating is Good
 // or Easy and it has no Again inside that same window.
-// A he_en card also has to sit in KnownLexemeIDs, which is the latest-Good
-// or Easy he_en set. A placement Good or Easy is that review. Finishing a
+// A read card also has to sit in KnownLexemeIDs, which is the latest-Good
+// or Easy read set. A placement Good or Easy is that review. Finishing a
 // lesson does not add the lesson's new words.
 // Struggling wins when a card matches both. A not-yet-due card is never
 // struggling. Suspended cards, and words whose intro lesson is unfinished,
@@ -78,7 +78,7 @@
 // out or DrillCap steps have been woven. Study-card order and the known
 // and struggle counts stay as planned.
 //
-// A due he_en or en_he card with no review is a new card. It does not take
+// A due read or recall card with no review is a new card. It does not take
 // a known slot, a struggle slot, or a drill step. New cards are appended
 // after the woven queue. The allowance counts sessionSize as the reviewed
 // cards in the planned queue plus the new cards. Drill steps are not part

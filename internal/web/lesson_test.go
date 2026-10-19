@@ -114,8 +114,8 @@ func TestLessonPlayer(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := store.ExecContext(ctx, `
-		INSERT INTO cards (user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses)
-		VALUES (?, ?, 'he_en', 'new', ?, 0, 0, 0, 0)`,
+		INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses)
+		VALUES (?, ?, 'read', 'new', ?, 0, 0, 0, 0)`,
 		brian.ID, ids[hello], db.FormatTime(now),
 	); err != nil {
 		t.Fatal(err)
@@ -245,8 +245,8 @@ func TestLessonPlayer(t *testing.T) {
 	if score != 0.5 {
 		t.Fatalf("score = %v", score)
 	}
-	if scalar(t, dbPath, `SELECT COUNT(*) FROM cards WHERE user_id = ? AND lexeme_id = ? AND dir = 'he_en'`, brian.ID, ids[hello]) != 1 {
-		t.Fatal("finishing duplicated the he_en card")
+	if scalar(t, dbPath, `SELECT COUNT(*) FROM cards WHERE user_id = ? AND lexeme_id = ? AND skill = 'read'`, brian.ID, ids[hello]) != 1 {
+		t.Fatal("finishing duplicated the read card")
 	}
 	due, err := store.ListDueCards(ctx, brian.ID, now)
 	if err != nil {

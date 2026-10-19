@@ -177,7 +177,7 @@ func TestReviewUsesConfigClock(t *testing.T) {
 	cardID, err := a.store.InsertCard(ctx, db.Card{
 		UserID:   userID,
 		LexemeID: lexemeID,
-		Dir:      fsrs.DirHeEn,
+		Skill:    fsrs.SkillRead,
 		State:    fsrs.StateNew,
 		Due:      when,
 	})

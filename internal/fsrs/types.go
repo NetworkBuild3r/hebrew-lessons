@@ -18,10 +18,14 @@ const (
 )
 
 const (
-	// DirHeEn is Hebrew shown, English recalled.
-	DirHeEn = "he_en"
-	// DirEnHe is English shown, Hebrew produced.
-	DirEnHe = "en_he"
+	// SkillListen is Hebrew heard, meaning picked.
+	SkillListen = "listen"
+	// SkillRead is Hebrew shown, English recalled.
+	SkillRead = "read"
+	// SkillRecall is English shown, Hebrew produced.
+	SkillRecall = "recall"
+	// SkillSpell is a word spelled from memory.
+	SkillSpell = "spell"
 
 	// StateNew is a card that has not been reviewed.
 	StateNew = "new"
@@ -39,7 +43,7 @@ const (
 )
 
 const (
-	// unpointedStabilityDays is the he_en stability at which the spelling
+	// unpointedStabilityDays is the read stability at which the spelling
 	// may be shown without niqqud.
 	unpointedStabilityDays = 21
 
@@ -54,7 +58,7 @@ type Card struct {
 	ID         int64
 	UserID     int64
 	LexemeID   int64
-	Dir        string
+	Skill      string
 	State      string
 	Due        time.Time
 	Stability  float64
@@ -66,12 +70,12 @@ type Card struct {
 	Ratings    []Rating
 }
 
-// ShowUnpointed reports whether a he_en card may be shown without niqqud.
+// ShowUnpointed reports whether a read card may be shown without niqqud.
 // That is true only when stability is at least 21 days and none of the last
-// three ratings were Again. An en_he card is always pointed on the way in,
+// three ratings were Again. A recall card is always pointed on the way in,
 // so this is false for that direction.
 func ShowUnpointed(card Card) bool {
-	if card.Dir != DirHeEn {
+	if card.Skill != SkillRead {
 		return false
 	}
 	if card.Stability < unpointedStabilityDays {
