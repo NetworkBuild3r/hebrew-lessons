@@ -308,7 +308,10 @@ jobs:
     # needs.test success is required here because a job-level if replaces the
     # default success() check. packages: write is granted only when this job
     # runs, which is a push to v2, never a pull_request.
+    # v2 is frozen. v3 publishes this image now. See ADR-0018 (on branch v3).
+    # The false line keeps this job from running. To undo, remove that line.
     if: >-
+      false &&
       needs.test.result == 'success' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/v2'
