@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 	"github.com/a-h/templ"
 )
@@ -23,15 +24,34 @@ var Assets embed.FS
 
 // New returns the learner mux. health handles GET /healthz.
 //
-// The mux does not take a CSRF token yet: auth.CSRFToken is not on this
-// branch. newMux is what tests call with a CSRFFunc fake. Learner writes
-// belong under /_hx/ and pass through csrfMiddleware. Audio bytes are served
-// at /audio/<sha256>.mp3; this router does not register that path.
-func New(health http.Handler) http.Handler {
-	return newMux(health, nil)
+// sessions, when non-nil, registers Google sign-in and logout and wraps
+// the mux with the session middleware. Page tokens come from
+// CSRFFunc(auth.CSRFToken). Tests pass a fake to newMux; production does not.
+// Audio bytes are served at /audio/<sha256>.mp3; this router does not
+// register that path.
+func New(health http.Handler, sessions *auth.Service) http.Handler {
+	var tokens CSRFToken
+	if sessions != nil {
+		tokens = CSRFFunc(auth.CSRFToken)
+	}
+	mux := routes(health, tokens)
+	if sessions != nil {
+		sessions.Register(mux)
+		// auth.Middleware loads the session and checks CSRF, including
+		// POST /auth/logout. The local csrf middleware is not stacked on
+		// top: it compares Origin to r.Host and would reject a same-origin
+		// post behind a host-rewriting proxy.
+		return securityHeaders(sessions.Middleware(mux))
+	}
+	return securityHeaders(csrfMiddleware(nil, mux))
 }
 
+// newMux is the test router. tokens is a fake; production New does not use it.
 func newMux(health http.Handler, tokens CSRFToken) http.Handler {
+	return securityHeaders(csrfMiddleware(tokens, routes(health, tokens)))
+}
+
+func routes(health http.Handler, tokens CSRFToken) *http.ServeMux {
 	mux := http.NewServeMux()
 	if health != nil {
 		mux.Handle("GET /healthz", health)
@@ -53,7 +73,7 @@ func newMux(health http.Handler, tokens CSRFToken) http.Handler {
 	mux.HandleFunc("GET /lesson", func(w http.ResponseWriter, r *http.Request) {
 		render(w, r, views.Lesson(views.NewPage(r.URL.Query().Get("lang"), csrfValue(tokens, r), "lesson")))
 	})
-	return securityHeaders(csrfMiddleware(tokens, mux))
+	return mux
 }
 
 // securityHeaders sets the policy that has to be in place before a write

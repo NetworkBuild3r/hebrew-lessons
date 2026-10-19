@@ -7,10 +7,10 @@ import (
 	"strings"
 )
 
-// CSRFToken is the slice of auth this shell renders and checks.
-// auth.CSRFToken has the same shape, func(r *http.Request) string, but that
-// package is not merged yet. Adapt it with CSRFFunc(auth.CSRFToken).
-// This package does not implement sessions, and it does not call RequireUser.
+// CSRFToken is the slice of auth this shell renders and, in tests, checks.
+// Production New passes CSRFFunc(auth.CSRFToken) and lets auth.Middleware
+// check the token. This package does not implement sessions, and it does
+// not call RequireUser.
 type CSRFToken interface {
 	CSRFToken(*http.Request) string
 }
@@ -39,10 +39,11 @@ const (
 // the _csrf form field, and for an Origin whose host matches the request.
 // Safe methods pass through. A nil token source fails closed on writes.
 //
-// Once auth.Middleware wraps this mux, drop this check. That middleware
-// accepts a Referer fallback and does not require the Origin host to equal
-// r.Host, so running both rejects a same-origin post behind a host-rewriting
-// proxy.
+// Production New does not stack this middleware under auth.Middleware.
+// That middleware accepts a Referer fallback and does not require the
+// Origin host to equal r.Host, so running both rejects a same-origin post
+// behind a host-rewriting proxy. newMux still applies this check so tests
+// can pass a fake token without a session.
 func csrfMiddleware(tokens CSRFToken, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {

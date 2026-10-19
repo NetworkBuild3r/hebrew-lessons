@@ -30,7 +30,7 @@ func TestEmbeddedTrees(t *testing.T) {
 }
 
 func TestStaticDoesNotListDirectories(t *testing.T) {
-	h := New(nil)
+	h := New(nil, nil)
 	for _, path := range []string{"/static/", "/static/css/", "/static/js/", "/static/icons/", "/static/fonts/"} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
@@ -44,7 +44,7 @@ func TestStaticDoesNotListDirectories(t *testing.T) {
 }
 
 func TestSecurityHeaders(t *testing.T) {
-	h := New(nil)
+	h := New(nil, nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	assertSecurityHeaders(t, rec)
@@ -87,7 +87,7 @@ func assertSecurityHeaders(t *testing.T, rec *httptest.ResponseRecorder) {
 func TestHealthRoute(t *testing.T) {
 	h := New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}))
+	}), nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	if rr.Code != http.StatusNoContent {

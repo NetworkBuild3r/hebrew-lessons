@@ -137,7 +137,7 @@ func TestHebrewSourcesAreNFC(t *testing.T) {
 }
 
 func TestRenderedPagesAreNFC(t *testing.T) {
-	h := New(nil)
+	h := New(nil, nil)
 	for _, path := range []string{
 		"/", "/?lang=en", "/?due=0", "/?next=0",
 		"/?lang=en&due=0", "/?lang=en&next=0",

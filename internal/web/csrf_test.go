@@ -72,13 +72,13 @@ func TestCSRFMiddleware(t *testing.T) {
 }
 
 func TestCSRFNilTokenFailsClosed(t *testing.T) {
-	h := New(nil)
+	h := New(nil, nil)
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(""))
 	req.Host = "learn.example"
 	req.Header.Set("Origin", "https://learn.example")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
-		t.Fatalf("production New(nil) status = %d, want 403", rec.Code)
+		t.Fatalf("production New(nil, nil) status = %d, want 403", rec.Code)
 	}
 }

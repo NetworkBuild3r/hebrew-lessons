@@ -26,7 +26,7 @@ func TestMobileShowsOneBrandAndToggle(t *testing.T) {
 		t.Skip("playwright-core not available")
 	}
 
-	srv := httptest.NewServer(New(nil))
+	srv := httptest.NewServer(New(nil, nil))
 	t.Cleanup(srv.Close)
 
 	dir := t.TempDir()

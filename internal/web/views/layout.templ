@@ -26,12 +26,14 @@ templ Layout(p Page) {
 						</nav>
 					</div>
 					@themeButton(p, "theme-toggle rail-theme")
+					@logoutForm(p, "logout rail-logout")
 				</div>
 				<div class="stage">
 					<header class="top">
 						<div class="top__inner">
 							@brandLink(p, "brand")
 							@themeButton(p, "theme-toggle")
+							@logoutForm(p, "logout")
 						</div>
 					</header>
 					<main id="main" class="page" tabindex="-1">
@@ -61,6 +63,13 @@ templ themeButton(p Page, className string) {
 			<span class="when-dark">@uiRun(p.Lang, p.Dark)</span>
 		</span>
 	</button>
+}
+
+templ logoutForm(p Page, className string) {
+	<form method="post" action="/auth/logout" hx-boost="false" class={ className }>
+		<input type="hidden" name="_csrf" value={ p.CSRF }/>
+		<button type="submit" class="logout__btn">@uiRun(p.Lang, p.Logout)</button>
+	</form>
 }
 
 templ dockLink(href string, iconName string, label string, current string, id string, lang string) {

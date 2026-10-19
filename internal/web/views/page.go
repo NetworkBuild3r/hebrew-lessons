@@ -24,6 +24,7 @@ type UI struct {
 	Progress        string
 	Dark            string
 	Light           string
+	Logout          string
 	Heading         string
 	DueKicker       string
 	DueLabel        string
@@ -87,7 +88,7 @@ func hebrewUI(addressGender string) UI {
 		Lang: "he", Dir: "rtl",
 		Skip: Address(addressGender, "דַּלֵּג לַתֹּכֶן", "דַּלְּגִי לַתֹּכֶן"), Nav: "רָאשִׁי",
 		Today: "הַיּוֹם", Review: "חֲזָרָה", Progress: "הִתְקַדְּמוּת",
-		Dark: "כֵּהֶה", Light: "בָּהִיר",
+		Dark: "כֵּהֶה", Light: "בָּהִיר", Logout: "יְצִיאָה",
 		Heading:   "הַיּוֹם",
 		DueKicker: "לַחֲזָרָה", DueLabel: "מִלִּים מֻכָּנוֹת", DueHint: "עַד עֶשְׂרִים בְּיוֹם",
 		Start:      Address(addressGender, "הַתְחֵל", "הַתְחִילִי"),
@@ -109,7 +110,7 @@ func englishUI() UI {
 		Lang: "en", Dir: "ltr",
 		Skip: "Skip to content", Nav: "Main",
 		Today: "Today", Review: "Review", Progress: "Progress",
-		Dark: "Dark", Light: "Light",
+		Dark: "Dark", Light: "Light", Logout: "Log out",
 		Heading:   "Today",
 		DueKicker: "To review", DueLabel: "Words ready", DueHint: "Up to twenty a day",
 		Start:      "Start",

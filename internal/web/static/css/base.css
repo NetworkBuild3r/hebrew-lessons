@@ -75,7 +75,8 @@ bdi[lang="he"] { unicode-bidi: isolate; }
 /* Child combinator so this beats the later .brand and .theme-toggle rules.
    The desktop copies are shown again only at the 1024 rail. */
 .rail > .rail-brand,
-.rail > .rail-theme { display: none; }
+.rail > .rail-theme,
+.rail > .rail-logout { display: none; }
 .stage {
   inline-size: min(100%, var(--player-max));
   margin-inline: auto;
@@ -128,6 +129,21 @@ bdi[lang="he"] { unicode-bidi: isolate; }
   border-radius: var(--radius-pill);
   background: var(--surface);
   box-shadow: var(--shadow-1);
+  border: 1px solid var(--hairline);
+  font-size: var(--fs-small);
+  font-weight: 700;
+  line-height: var(--lh-he-body);
+}
+.logout { display: inline-flex; }
+.logout__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--tap);
+  min-inline-size: var(--tap);
+  padding-inline: var(--space-4);
+  border-radius: var(--radius-pill);
+  background: transparent;
   border: 1px solid var(--hairline);
   font-size: var(--fs-small);
   font-weight: 700;
@@ -437,6 +453,17 @@ h1 {
     min-inline-size: 0;
     padding-inline: var(--space-1);
     gap: var(--space-1);
+    font-size: var(--fs-caption);
+  }
+  .rail > .rail-logout {
+    display: flex;
+    justify-content: center;
+    margin-block-start: var(--space-2);
+  }
+  .rail > .rail-logout .logout__btn {
+    inline-size: 100%;
+    min-inline-size: 0;
+    padding-inline: var(--space-1);
     font-size: var(--fs-caption);
   }
   .top { display: none; }

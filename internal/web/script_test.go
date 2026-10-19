@@ -20,7 +20,7 @@ func TestThemeBootCSP(t *testing.T) {
 		t.Fatalf("ThemeBootCSP = %s, hash of the script = %s", views.ThemeBootCSP, got)
 	}
 
-	body := get(t, New(nil), "/")
+	body := get(t, New(nil, nil), "/")
 	const open = "<script>"
 	i := strings.Index(body, open)
 	if i < 0 {
@@ -51,7 +51,7 @@ func TestShellJSBudget(t *testing.T) {
 	if len(b) == 0 {
 		t.Fatal("shell.js is empty")
 	}
-	body := get(t, New(nil), "/static/js/shell.js")
+	body := get(t, New(nil, nil), "/static/js/shell.js")
 	if body != string(b) {
 		t.Fatal("served shell.js does not match the file")
 	}

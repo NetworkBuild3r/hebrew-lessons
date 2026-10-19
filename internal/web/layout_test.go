@@ -102,7 +102,7 @@ func TestTodayLayout(t *testing.T) {
 	if !strings.Contains(body, "<script>"+views.ThemeBoot+"</script>") {
 		t.Fatal("theme boot script is not the inline head script")
 	}
-	shell := get(t, New(nil), "/static/js/shell.js")
+	shell := get(t, New(nil, nil), "/static/js/shell.js")
 	for _, needle := range []string{"globalViewTransitions", "defaultSwapDelay=0", `typeof document.startViewTransition==="function"`, "defaultSettleDelay=0"} {
 		if !strings.Contains(shell, needle) {
 			t.Fatalf("shell.js missing %s", needle)
@@ -143,7 +143,7 @@ func TestNavCurrent(t *testing.T) {
 }
 
 func TestStaticHasNoExternalURL(t *testing.T) {
-	h := New(nil)
+	h := New(nil, nil)
 	for _, path := range []string{
 		"/static/css/tokens.css",
 		"/static/css/base.css",
@@ -190,7 +190,7 @@ func TestStaticHasNoExternalURL(t *testing.T) {
 }
 
 func TestPairSeparatesRuns(t *testing.T) {
-	h := New(nil)
+	h := New(nil, nil)
 	he := get(t, h, "/?due=0")
 	assertPair(t, he, "אֵין חֲזָרוֹת עַכְשָׁיו", "Nothing due", "he")
 	en := get(t, h, "/?lang=en&due=0")
@@ -201,7 +201,7 @@ func TestPairSeparatesRuns(t *testing.T) {
 }
 
 func TestZeroDueAndNoLesson(t *testing.T) {
-	h := New(nil)
+	h := New(nil, nil)
 	zero := get(t, h, "/?due=0")
 	if strings.Contains(zero, "ink-card") || strings.Contains(zero, "הַתְחֵל") {
 		t.Fatal("zero due still shows the review hero")
@@ -236,7 +236,7 @@ func TestZeroDueAndNoLesson(t *testing.T) {
 }
 
 func TestEnglishShell(t *testing.T) {
-	body := get(t, New(nil), "/?lang=en")
+	body := get(t, New(nil, nil), "/?lang=en")
 	if !strings.Contains(body, `<html lang="en" dir="ltr"`) {
 		t.Fatal("english shell lang/dir missing")
 	}
@@ -279,7 +279,7 @@ func assertPair(t *testing.T, body, he, en, first string) {
 }
 
 func TestForeignRuns(t *testing.T) {
-	h := New(nil)
+	h := New(nil, nil)
 	for _, path := range []string{"/", "/?due=0", "/?next=0", "/review", "/progress", "/lesson"} {
 		n := assertRunDir(t, get(t, h, path), "en", "ltr")
 		if path == "/" && n == 0 {
