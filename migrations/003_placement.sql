@@ -1,5 +1,6 @@
--- Placement runs, the ratings, and words a learner already has.
--- Applied after 002_learning.sql.
+-- Placement runs, the ratings, and the columns the struggle and scope reads need.
+-- Applied after 002_learning.sql. There is no learner_lexemes table:
+-- known and learning are read from cards.
 
 -- One sitting of the placement deck.
 CREATE TABLE placement_runs (
@@ -24,16 +25,17 @@ CREATE TABLE placement_answers (
     rating INTEGER CHECK (rating IS NULL OR rating BETWEEN 1 AND 4), -- 1 Again, 2 Hard, 3 Good, 4 Easy. Null until the learner rates the card.
     shown_at TEXT NOT NULL, -- UTC time the card was dealt, from the process clock.
     answered_at TEXT, -- UTC time the rating was stored. Null while the card is unanswered.
+    lexeme_id INTEGER REFERENCES lexemes (id), -- Word this rating graded. Null until the card is rated.
     PRIMARY KEY (run_id, item_id)
 );
 
--- A word this learner already has, before or aside from review cards.
-CREATE TABLE learner_lexemes (
-    user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE, -- Learner. Deleting the user deletes these rows.
-    lexeme_id INTEGER NOT NULL REFERENCES lexemes (id) ON DELETE RESTRICT, -- Word. A lexeme a learner still has cannot be deleted.
-    status TEXT NOT NULL CHECK (status IN ('known', 'learning')), -- known is Good or Easy. learning is Again or Hard.
-    seeded INTEGER NOT NULL DEFAULT 0 CHECK (seeded IN (0, 1)), -- 1 when a placement rating wrote this row.
-    source TEXT NOT NULL, -- Where the row came from. Placement writes placement.
-    created_at TEXT NOT NULL, -- UTC time the row was inserted, from the process clock.
-    PRIMARY KEY (user_id, lexeme_id)
-);
+-- The wrong option the learner picked, as pointed NFC. Null when they did not pick one.
+ALTER TABLE review_log ADD COLUMN chosen TEXT;
+
+-- The word a confusion was about. Null when the miss is not tied to a lexeme. 0 is stored as NULL.
+ALTER TABLE confusion_misses ADD COLUMN lexeme_id INTEGER REFERENCES lexemes (id);
+
+-- shared is the course. learner:<id> is that learner's own unit.
+ALTER TABLE units ADD COLUMN scope TEXT NOT NULL DEFAULT 'shared' CHECK (scope = 'shared' OR scope GLOB 'learner:[0-9]*');
+
+CREATE INDEX units_scope_position ON units (scope, position);

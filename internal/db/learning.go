@@ -35,6 +35,7 @@ type ReviewLog struct {
 	ElapsedDays   int
 	ScheduledDays int
 	Peeked        bool
+	Chosen        string // Pointed NFC of the wrong option. Empty when the learner did not pick one.
 }
 
 // ConfusionCount is how many times one learner missed one key inside a window.
@@ -171,10 +172,14 @@ func (s *Store) ApplyReview(ctx context.Context, card Card, log ReviewLog) error
 	if log.Peeked {
 		peeked = 1
 	}
+	var chosen any
+	if log.Chosen != "" {
+		chosen = log.Chosen
+	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		card.ID, log.Rating, FormatTime(log.ReviewedAt), log.ElapsedDays, log.ScheduledDays, peeked,
+		INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked, chosen)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		card.ID, log.Rating, FormatTime(log.ReviewedAt), log.ElapsedDays, log.ScheduledDays, peeked, chosen,
 	); err != nil {
 		return fmt.Errorf("db: insert review: %w", err)
 	}
@@ -266,7 +271,7 @@ func (s *Store) ReviewLogs(ctx context.Context, cardID int64) ([]ReviewLog, erro
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT id, card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked
+		SELECT id, card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked, chosen
 		FROM review_log
 		WHERE card_id = ?
 		ORDER BY id`, cardID)
@@ -279,7 +284,8 @@ func (s *Store) ReviewLogs(ctx context.Context, cardID int64) ([]ReviewLog, erro
 		var log ReviewLog
 		var reviewed string
 		var peeked int
-		if err := rows.Scan(&log.ID, &log.CardID, &log.Rating, &reviewed, &log.ElapsedDays, &log.ScheduledDays, &peeked); err != nil {
+		var chosen sql.NullString
+		if err := rows.Scan(&log.ID, &log.CardID, &log.Rating, &reviewed, &log.ElapsedDays, &log.ScheduledDays, &peeked, &chosen); err != nil {
 			return nil, fmt.Errorf("db: review log: %w", err)
 		}
 		log.ReviewedAt, err = ParseTime(reviewed)
@@ -287,6 +293,9 @@ func (s *Store) ReviewLogs(ctx context.Context, cardID int64) ([]ReviewLog, erro
 			return nil, fmt.Errorf("db: review log: %w", err)
 		}
 		log.Peeked = peeked != 0
+		if chosen.Valid {
+			log.Chosen = chosen.String
+		}
 		out = append(out, log)
 	}
 	if err := rows.Err(); err != nil {
@@ -296,15 +305,20 @@ func (s *Store) ReviewLogs(ctx context.Context, cardID int64) ([]ReviewLog, erro
 }
 
 // InsertConfusionMiss appends one miss. The 7-day total is not stored.
-func (s *Store) InsertConfusionMiss(ctx context.Context, learnerID int64, kind, key string, at time.Time) error {
+// lexemeID 0 is stored as NULL: the miss is not tied to a word.
+func (s *Store) InsertConfusionMiss(ctx context.Context, learnerID int64, kind, key string, lexemeID int64, at time.Time) error {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return err
 	}
+	var lexeme any
+	if lexemeID != 0 {
+		lexeme = lexemeID
+	}
 	if _, err := conn.ExecContext(ctx, `
-		INSERT INTO confusion_misses (learner_id, kind, key, at)
-		VALUES (?, ?, ?, ?)`,
-		learnerID, kind, key, FormatTime(at),
+		INSERT INTO confusion_misses (learner_id, kind, key, lexeme_id, at)
+		VALUES (?, ?, ?, ?, ?)`,
+		learnerID, kind, key, lexeme, FormatTime(at),
 	); err != nil {
 		return fmt.Errorf("db: insert confusion: %w", err)
 	}

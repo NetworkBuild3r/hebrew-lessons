@@ -16,7 +16,7 @@ const (
 	// stopAt is how many ratings a band needs before the struggle rule can fire.
 	stopAt = 10
 	// cardCap is the most cards one run rates.
-	cardCap = 80
+	cardCap = 100
 
 	stopBand      = "band_stop"
 	stopCap       = "cap"
@@ -38,7 +38,7 @@ type Card struct {
 }
 
 // BandScore is one frequency band on a run.
-// StruggleRate is (Again + Hard) / Rated. It is 0 when Rated is 0.
+// StruggleRate is Again / Rated. Hard does not count. It is 0 when Rated is 0.
 type BandScore struct {
 	Band         int     `json:"band"`
 	Rated        int     `json:"rated"`

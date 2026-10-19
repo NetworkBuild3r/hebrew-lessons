@@ -10,14 +10,14 @@ var bandRankSize = [bands]float64{0, 500, 500, 1000, 2000}
 // SuggestedStartPosition is 0. Finish fills it once the learner's units and
 // known set are known.
 //
-// A band trips once it has at least 10 ratings and (Again + Hard) / Rated
-// is at least 0.60. Exactly 0.60 trips. The run then stops, and every band
-// above the tripped band is left unrated. Level is the highest band whose
-// dealable words were all rated without tripping, or −1.
+// A band trips once it has at least 10 ratings and Again / Rated is at
+// least 0.60. Hard does not count. Exactly 0.60 trips. The run then stops,
+// and every band above the tripped band is left unrated. Level is the
+// highest band whose dealable words were all rated without tripping, or −1.
 //
-// StopReason is band_stop when a band tripped, cap when 80 cards were rated
+// StopReason is band_stop when a band tripped, cap when 100 cards were rated
 // and words remain, exhausted when nothing dealable remains, and empty when
-// the learner stopped first.
+// the learner finished a partial run first. A partial run is a valid placement.
 func Score(tallies [bands]BandTally) Result {
 	var counted [bands]bandCount
 	var cardsRated int
@@ -113,7 +113,7 @@ func (c *bandCount) add(rating int) {
 func (c bandCount) score(band int) BandScore {
 	rate := 0.0
 	if c.rated > 0 {
-		rate = float64(c.again+c.hard) / float64(c.rated)
+		rate = float64(c.again) / float64(c.rated)
 	}
 	return BandScore{
 		Band:         band,
@@ -126,12 +126,12 @@ func (c bandCount) score(band int) BandScore {
 	}
 }
 
-// struggling reports the stop rule: at least 10 ratings, and Again+Hard
-// is at least 60% of them. The comparison is integer, so 6 of 10 trips
-// and 5 of 10 does not.
+// struggling reports the stop rule: at least 10 ratings, and Again is at
+// least 60% of them. Hard does not count. The comparison is integer, so
+// 6 Agains of 10 trip and 5 of 10 do not.
 func struggling(c bandCount) bool {
 	if c.rated < stopAt {
 		return false
 	}
-	return (c.again+c.hard)*5 >= c.rated*3
+	return c.again*5 >= c.rated*3
 }

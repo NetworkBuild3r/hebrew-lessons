@@ -6,23 +6,23 @@ import (
 	"time"
 )
 
-func TestLexemeStrugglesOrderAndWindow(t *testing.T) {
+func TestStruggleStatsOrderWindowAndPairs(t *testing.T) {
 	when := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	s := openStore(t, fixedClock{when})
 	ctx := context.Background()
 	userID := insertUser(t, s, "struggle@example.com", "sub-struggle", "learner")
 	otherID := insertUser(t, s, "other-struggle@example.com", "sub-other-struggle", "learner")
 
-	if rows, err := s.LexemeStruggles(ctx, userID, 0); err != nil || len(rows) != 0 {
-		t.Fatalf("empty: %v %v", rows, err)
+	empty, err := s.StruggleStats(ctx, userID, 0)
+	if err != nil || len(empty.Lexemes) != 0 || len(empty.Top) != 0 || len(empty.Confusions) != 0 {
+		t.Fatalf("empty: %+v %v", empty, err)
 	}
 
 	alef := struggleCard(t, s, userID, "א", "alef", 1)
 	bet := struggleCard(t, s, userID, "ב", "bet", 5)
 	gimel := struggleCard(t, s, userID, "ג", "gimel", 5)
 	dalet := struggleCard(t, s, userID, "ד", "dalet", 5)
-	silent := struggleCard(t, s, userID, "ה", "silent", 9)
-	_ = silent
+	_ = struggleCard(t, s, userID, "ה", "silent", 9)
 	other := struggleCard(t, s, otherID, "ז", "other", 4)
 	insertReview(t, s, other, 1, when.Add(-time.Hour))
 
@@ -30,8 +30,7 @@ func TestLexemeStrugglesOrderAndWindow(t *testing.T) {
 	insertReview(t, s, alef, 1, when.Add(-8*24*time.Hour))
 	insertReview(t, s, alef, 1, when.Add(-week))
 	insertReview(t, s, alef, 1, when.Add(-time.Hour))
-	// One nanosecond before the window is not a 7-day miss. It still
-	// counts in AgainRate, which is why this review sits on alef.
+	// One nanosecond before the window is not a 7-day miss. It still counts in AgainRate.
 	insertReview(t, s, alef, 1, when.Add(-week-time.Nanosecond))
 	insertReview(t, s, bet, 1, when.Add(-8*24*time.Hour))
 	insertReview(t, s, bet, 3, when.Add(-2*24*time.Hour))
@@ -39,83 +38,139 @@ func TestLexemeStrugglesOrderAndWindow(t *testing.T) {
 	insertReview(t, s, dalet, 3, when.Add(-2*24*time.Hour))
 	insertReview(t, s, gimel, 3, when.Add(-time.Hour))
 
-	all, err := s.LexemeStruggles(ctx, userID, 0)
+	var alefID int64
+	if err := s.queryRow(ctx, `SELECT lexeme_id FROM cards WHERE id = ?`, alef).Scan(&alefID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertConfusionMiss(ctx, userID, "letter_pair", "ב/כ", alefID, when.Add(-week)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertConfusionMiss(ctx, userID, "letter_pair", "ב/כ", alefID, when.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	// Outside the window, and not on this lexeme's keys.
+	if err := s.InsertConfusionMiss(ctx, userID, "letter_pair", "ג/ק", alefID, when.Add(-week-time.Nanosecond)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertConfusionMiss(ctx, userID, "agreement", "הוא/היא", 0, when.Add(-2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertConfusionMiss(ctx, otherID, "letter_pair", "ב/כ", 0, when.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.StruggleStats(ctx, userID, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"א", "ב", "ד", "ג"}
-	if len(all) != len(want) {
-		t.Fatalf("struggles = %+v", all)
+	if texts := textsOf(got.Lexemes); !sameTexts(texts, []string{"א", "ב", "ג", "ד"}) {
+		t.Fatalf("lexemes = %v", texts)
 	}
-	for i, text := range want {
-		if all[i].TextNFC != text {
-			t.Fatalf("order = %v", textsOf(all))
-		}
+	alefRow := got.Lexemes[0]
+	if alefRow.Misses7d != 2 || alefRow.Reviews != 4 || alefRow.Lapses != 1 || alefRow.AgainRate != 1 || alefRow.Gloss != "alef" {
+		t.Fatalf("alef = %+v", alefRow)
 	}
-	if all[0].Misses7d != 2 || all[0].Reviews != 4 || all[0].Lapses != 1 || all[0].AgainRate != 1 || all[0].Gloss != "alef" {
-		t.Fatalf("alef = %+v", all[0])
+	if !alefRow.LastSeen.Equal(when.Add(-time.Hour)) {
+		t.Fatalf("alef last = %s", alefRow.LastSeen)
 	}
-	if !all[0].LastReviewAt.Equal(when.Add(-time.Hour)) {
-		t.Fatalf("alef last = %s", all[0].LastReviewAt)
+	if len(alefRow.ConfusionKeys) != 1 || alefRow.ConfusionKeys[0] != "ב/כ" {
+		t.Fatalf("alef keys = %v", alefRow.ConfusionKeys)
 	}
-	if all[1].Misses7d != 0 || all[1].AgainRate != 0.5 || all[1].Lapses != 5 {
-		t.Fatalf("bet = %+v", all[1])
+	if texts := textsOf(got.Top); !sameTexts(texts, []string{"א", "ב"}) {
+		t.Fatalf("top = %v", texts)
 	}
-	if all[3].Misses7d != 0 || all[3].AgainRate != 0 {
-		t.Fatalf("gimel = %+v", all[3])
+	if got.Top[1].Misses7d != 0 || got.Top[1].AgainRate != 0.5 || got.Top[1].Lapses != 5 {
+		t.Fatalf("bet = %+v", got.Top[1])
 	}
-	top, err := s.LexemeStruggles(ctx, userID, 2)
+
+	all, err := s.StruggleStats(ctx, userID, 0)
+	if err != nil || len(all.Top) != 0 || len(all.Lexemes) != 4 {
+		t.Fatalf("topN 0: top=%v lexemes=%v err=%v", textsOf(all.Top), textsOf(all.Lexemes), err)
+	}
+	ranked, err := s.StruggleStats(ctx, userID, len(all.Lexemes))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(top) != 2 || top[0].TextNFC != "א" || top[1].TextNFC != "ב" {
-		t.Fatalf("top = %v", textsOf(top))
+	if texts := textsOf(ranked.Top); !sameTexts(texts, []string{"א", "ב", "ד", "ג"}) {
+		t.Fatalf("ranked = %v", texts)
 	}
-	if rows, err := s.LexemeStruggles(ctx, userID, -1); err != nil || len(rows) != 4 {
-		t.Fatalf("all = %v %v", textsOf(rows), err)
+	gimelRow := ranked.Top[3]
+	if gimelRow.TextNFC != "ג" || gimelRow.Misses7d != 0 || gimelRow.AgainRate != 0 {
+		t.Fatalf("gimel = %+v", gimelRow)
+	}
+	none, err := s.StruggleStats(ctx, userID, -1)
+	if err != nil || len(none.Top) != 0 {
+		t.Fatalf("topN -1: %v %v", textsOf(none.Top), err)
+	}
+
+	if len(got.Confusions) != 2 {
+		t.Fatalf("confusions = %+v", got.Confusions)
+	}
+	pair := got.Confusions[0]
+	if pair.Kind != "letter_pair" || pair.A != "ב" || pair.B != "כ" || pair.Count != 2 || !pair.LastAt.Equal(when.Add(-time.Hour)) {
+		t.Fatalf("pair = %+v", pair)
+	}
+	agreement := got.Confusions[1]
+	if agreement.Kind != "agreement" || agreement.A != "הוא/היא" || agreement.B != "" || agreement.Count != 1 || !agreement.LastAt.Equal(when.Add(-2*time.Hour)) {
+		t.Fatalf("agreement = %+v", agreement)
 	}
 }
 
-func TestConfusionCountsWindow(t *testing.T) {
+func TestChosenAndConfusionLexeme(t *testing.T) {
 	when := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	s := openStore(t, fixedClock{when})
 	ctx := context.Background()
-	userID := insertUser(t, s, "confuse@example.com", "sub-confuse", "learner")
-	otherID := insertUser(t, s, "confuse-other@example.com", "sub-confuse-other", "learner")
-	week := 7 * 24 * time.Hour
-	for _, at := range []time.Time{
-		when.Add(-8 * 24 * time.Hour),
-		when.Add(-week - time.Nanosecond),
-	} {
-		if err := s.InsertConfusionMiss(ctx, userID, "letter_pair", "ב/כ", at); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := s.InsertConfusionMiss(ctx, userID, "letter_pair", "ב/כ", when.Add(-week)); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.InsertConfusionMiss(ctx, userID, "agreement", "ב/כ", when.Add(-time.Hour)); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.InsertConfusionMiss(ctx, userID, "agreement", "הוא/היא", when.Add(-2*time.Hour)); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.InsertConfusionMiss(ctx, otherID, "letter_pair", "ב/כ", when.Add(-time.Hour)); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := s.ConfusionCounts(ctx, userID, week)
+	userID := insertUser(t, s, "chosen@example.com", "sub-chosen", "learner")
+	lexemeID := insertLexeme(t, s, "שָׁלוֹם")
+	cardID, err := s.InsertCard(ctx, Card{
+		UserID: userID, LexemeID: lexemeID, Dir: "he_en", State: "new", Due: when,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 {
-		t.Fatalf("counts = %+v", got)
+	if err := s.ApplyReview(ctx, Card{
+		ID: cardID, State: "learning", Due: when, LastReview: when,
+	}, ReviewLog{CardID: cardID, Rating: 3, ReviewedAt: when}); err != nil {
+		t.Fatal(err)
 	}
-	if got[0].Key != "ב/כ" || got[0].Count != 2 || got[0].Kind != "agreement" || !got[0].LastAt.Equal(when.Add(-time.Hour)) {
-		t.Fatalf("first = %+v", got[0])
+	var raw *string
+	if err := s.queryRow(ctx, `SELECT chosen FROM review_log`).Scan(&raw); err != nil {
+		t.Fatal(err)
 	}
-	if got[1].Key != "הוא/היא" || got[1].Count != 1 || got[1].Kind != "agreement" || !got[1].LastAt.Equal(when.Add(-2*time.Hour)) {
-		t.Fatalf("second = %+v", got[1])
+	if raw != nil {
+		t.Fatalf("chosen = %q, want NULL", *raw)
+	}
+	if err := s.ApplyReview(ctx, Card{
+		ID: cardID, State: "learning", Due: when, LastReview: when,
+	}, ReviewLog{CardID: cardID, Rating: 1, ReviewedAt: when, Chosen: "שָׁלוֹם"}); err != nil {
+		t.Fatal(err)
+	}
+	logs, err := s.ReviewLogs(ctx, cardID)
+	if err != nil || len(logs) != 2 || logs[0].Chosen != "" || logs[1].Chosen != "שָׁלוֹם" {
+		t.Fatalf("logs = %+v %v", logs, err)
+	}
+
+	if err := s.InsertConfusionMiss(ctx, userID, "letter_pair", "ב/כ", 0, when); err != nil {
+		t.Fatal(err)
+	}
+	var stored *int64
+	if err := s.queryRow(ctx, `SELECT lexeme_id FROM confusion_misses`).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != nil {
+		t.Fatalf("lexeme_id = %v, want NULL", *stored)
+	}
+	if err := s.InsertConfusionMiss(ctx, userID, "agreement", "הוא/היא", lexemeID, when); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.queryRow(ctx, `SELECT lexeme_id FROM confusion_misses WHERE kind = 'agreement'`).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored == nil || *stored != lexemeID {
+		t.Fatalf("lexeme_id = %v, want %d", stored, lexemeID)
+	}
+	if _, err := s.exec(ctx, `INSERT INTO confusion_misses (learner_id, kind, key, lexeme_id, at) VALUES (?, 'letter_pair', 'ב/כ', 99999, ?)`, userID, FormatTime(when)); err == nil {
+		t.Fatal("unknown lexeme was accepted")
 	}
 }
 
@@ -154,4 +209,16 @@ func textsOf(rows []LexemeStruggle) []string {
 		out[i] = row.TextNFC
 	}
 	return out
+}
+
+func sameTexts(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }

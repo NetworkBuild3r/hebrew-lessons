@@ -85,10 +85,10 @@ func (s *Service) Start(ctx context.Context, userID int64) (int64, error) {
 }
 
 // Next returns the next card after the last answered one.
-// done is true when the deck has stopped: a band's struggle rate reached
-// 60% after 10 ratings, the run has rated 80 cards, or nothing dealable
-// remains. A word that already has a he_en card is skipped. A finished run
-// returns an error.
+// done is true when the deck has stopped: a band's Again rate reached 60%
+// after 10 ratings, the run has rated 100 cards, or nothing dealable
+// remains. Hard does not count toward the stop. A word that already has a
+// he_en card is skipped. A finished run returns an error.
 func (s *Service) Next(ctx context.Context, runID int64) (*Card, bool, error) {
 	if err := s.ready(); err != nil {
 		return nil, false, err
@@ -219,14 +219,7 @@ func (s *Service) Rate(ctx context.Context, runID int64, itemID string, rating i
 	if err != nil {
 		return err
 	}
-	status := "learning"
-	if rating == Good || rating == Easy {
-		status = "known"
-	}
 	now := s.clock.Now()
-	if err := s.store.SetPlacementLearner(ctx, run.UserID, lexemeID, status, now); err != nil {
-		return err
-	}
 	cardID, err := s.store.InsertCard(ctx, db.Card{
 		UserID:   run.UserID,
 		LexemeID: lexemeID,
@@ -240,7 +233,7 @@ func (s *Service) Rate(ctx context.Context, runID int64, itemID string, rating i
 	if err := s.review.Grade(ctx, cardID, fsrs.Rating(rating), false); err != nil {
 		return err
 	}
-	return s.store.RatePlacementAnswer(ctx, runID, itemID, rating, now)
+	return s.store.RatePlacementAnswer(ctx, runID, itemID, rating, lexemeID, now)
 }
 
 // Finish scores the run and marks it finished.

@@ -23,7 +23,7 @@ type fixedClock struct{ t time.Time }
 func (c fixedClock) Now() time.Time { return c.t }
 
 func TestStruggleStopOnARun(t *testing.T) {
-	if stopAt != 10 || cardCap != 80 {
+	if stopAt != 10 || cardCap != 100 {
 		t.Fatalf("stopAt=%d cardCap=%d", stopAt, cardCap)
 	}
 	svc, store := openSvc(t, fixedClock{when})
@@ -43,7 +43,7 @@ func TestStruggleStopOnARun(t *testing.T) {
 	}
 	ratePrefix(t, svc, runID, 10, func(i int) int {
 		if i < 6 {
-			return Hard
+			return Again
 		}
 		return Good
 	})
@@ -67,7 +67,7 @@ func TestStruggleStopOnARun(t *testing.T) {
 	againRun := start(t, again, againUser)
 	ratePrefix(t, again, againRun, 10, func(i int) int {
 		if i < 5 {
-			return Hard
+			return Again
 		}
 		return Good
 	})
@@ -78,11 +78,21 @@ func TestStruggleStopOnARun(t *testing.T) {
 	if mustFind(t, again, card.ID).Band != 0 {
 		t.Fatalf("11th card band %d", mustFind(t, again, card.ID).Band)
 	}
+
+	// Ten Hards stay under the Again rate, so the band continues.
+	hardSvc, _ := openSvc(t, fixedClock{when})
+	hardUser := insertLearner(t, hardSvc.store, "hard@example.com", "sub-hard")
+	hardRun := start(t, hardSvc, hardUser)
+	ratePrefix(t, hardSvc, hardRun, 10, func(int) int { return Hard })
+	card, done, err = hardSvc.Next(ctx, hardRun)
+	if err != nil || done || card == nil || mustFind(t, hardSvc, card.ID).Band != 0 {
+		t.Fatalf("after 10 hard: card=%v done=%v err=%v", card, done, err)
+	}
 }
 
 func TestCardCap(t *testing.T) {
 	svc, store := openSvc(t, fixedClock{when})
-	svc.fixture = many(20)
+	svc.fixture = many(25)
 	ctx := context.Background()
 	userID := insertLearner(t, store, "cap@example.com", "sub-cap")
 	runID := start(t, svc, userID)
@@ -175,7 +185,7 @@ func TestResumeAndIdempotentFinish(t *testing.T) {
 		t.Fatal(err)
 	}
 	place, ok, err := store.LatestPlacement(ctx, userID)
-	if err != nil || !ok || !place.Finished || place.SuggestedStartPosition != 2 || place.CardsRated != 2 {
+	if err != nil || !ok || !place.Finished || place.StopReason != "" || place.SuggestedStartPosition != 2 || place.CardsRated != 2 {
 		t.Fatalf("latest %+v ok=%v err=%v", place, ok, err)
 	}
 }

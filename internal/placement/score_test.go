@@ -3,7 +3,7 @@ package placement
 import "testing"
 
 func TestScoreStopsAtExactlySixtyPercent(t *testing.T) {
-	if stopAt != 10 || cardCap != 80 {
+	if stopAt != 10 || cardCap != 100 {
 		t.Fatalf("stopAt=%d cardCap=%d", stopAt, cardCap)
 	}
 	trip := Score(tally(0, 16, sixOfTen(6)))
@@ -57,13 +57,18 @@ func TestScoreEstimateCapAndExhausted(t *testing.T) {
 		t.Fatalf("one third of band 1: estimate=%d level=%d", got.EstimatedKnownWords, got.Level)
 	}
 
+	hard := Score(tally(0, 16, repeat(Hard, 10)))
+	if hard.StopReason != "" || hard.Bands[0].StruggleRate != 0 || hard.Bands[0].Hard != 10 {
+		t.Fatalf("hard does not stop: %+v", hard.Bands[0])
+	}
+
 	var capped [bands]BandTally
 	for band := 0; band < 4; band++ {
-		capped[band] = BandTally{Ratings: repeat(Good, 20), Dealable: 20}
+		capped[band] = BandTally{Ratings: repeat(Good, 25), Dealable: 25}
 	}
-	capped[4] = BandTally{Dealable: 20}
+	capped[4] = BandTally{Dealable: 25}
 	got := Score(capped)
-	if got.CardsRated != 80 || got.StopReason != stopCap || got.Level != 3 {
+	if got.CardsRated != 100 || got.StopReason != stopCap || got.Level != 3 {
 		t.Fatalf("cap: rated=%d stop=%s level=%d", got.CardsRated, got.StopReason, got.Level)
 	}
 
@@ -81,12 +86,12 @@ func tally(band, dealable int, ratings []int) [bands]BandTally {
 	return out
 }
 
-func sixOfTen(hard int) []int {
+func sixOfTen(agains int) []int {
 	out := make([]int, 10)
 	for i := range out {
 		out[i] = Good
-		if i < hard {
-			out[i] = Hard
+		if i < agains {
+			out[i] = Again
 		}
 	}
 	return out

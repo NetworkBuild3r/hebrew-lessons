@@ -89,8 +89,8 @@ func TestGradeUpdatesCardAndLog(t *testing.T) {
 		t.Fatalf("log rows = %d, want 1", len(logs))
 	}
 	log := logs[0]
-	if log.Rating != int(Good) || !log.Peeked {
-		t.Fatalf("log rating/peeked = %d/%v", log.Rating, log.Peeked)
+	if log.Rating != int(Good) || !log.Peeked || log.Chosen != "" {
+		t.Fatalf("log rating/peeked/chosen = %d/%v/%q", log.Rating, log.Peeked, log.Chosen)
 	}
 	if !log.ReviewedAt.Equal(clk.Now()) {
 		t.Fatalf("reviewed_at = %s, want %s", log.ReviewedAt, clk.Now())
@@ -111,6 +111,27 @@ func TestGradeUpdatesCardAndLog(t *testing.T) {
 	}
 	if err := rev.Grade(ctx, 99999, Good, false); err == nil {
 		t.Fatal("missing card should fail")
+	}
+
+	if err := rev.GradeWithChoice(ctx, cardID, Again, false, "שָׁלוֹם"); err != nil {
+		t.Fatal(err)
+	}
+	logs, err = store.ReviewLogs(ctx, cardID)
+	if err != nil || len(logs) != 2 || logs[1].Chosen != "שָׁלוֹם" || logs[1].Rating != int(Again) {
+		t.Fatalf("choice log = %+v %v", logs, err)
+	}
+	if err := rev.RecordMiss(ctx, userID, MissLetterPair, "ב/כ", lexemeID); err != nil {
+		t.Fatal(err)
+	}
+	stats, err := store.StruggleStats(ctx, userID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stats.Confusions) != 1 || stats.Confusions[0].A != "ב" || stats.Confusions[0].B != "כ" || stats.Confusions[0].Count != 1 {
+		t.Fatalf("confusions = %+v", stats.Confusions)
+	}
+	if len(stats.Lexemes) != 1 || len(stats.Lexemes[0].ConfusionKeys) != 1 || stats.Lexemes[0].ConfusionKeys[0] != "ב/כ" {
+		t.Fatalf("lexeme = %+v", stats.Lexemes)
 	}
 }
 

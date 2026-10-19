@@ -177,18 +177,18 @@ func (s *Store) ShowPlacementCard(ctx context.Context, runID int64, itemID strin
 	return nil
 }
 
-// RatePlacementAnswer stores the grade on the open card.
+// RatePlacementAnswer stores the grade and the word on the open card.
 // A card that was not dealt, or was already rated, returns an error.
-func (s *Store) RatePlacementAnswer(ctx context.Context, runID int64, itemID string, rating int, answered time.Time) error {
+func (s *Store) RatePlacementAnswer(ctx context.Context, runID int64, itemID string, rating int, lexemeID int64, answered time.Time) error {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return err
 	}
 	res, err := conn.ExecContext(ctx, `
 		UPDATE placement_answers
-		SET rating = ?, answered_at = ?
+		SET rating = ?, answered_at = ?, lexeme_id = ?
 		WHERE run_id = ? AND item_id = ? AND rating IS NULL`,
-		rating, placementTime(answered), runID, itemID,
+		rating, placementTime(answered), lexemeID, runID, itemID,
 	)
 	if err != nil {
 		return fmt.Errorf("db: rate placement card: %w", err)
@@ -371,27 +371,6 @@ func (s *Store) LatestRun(ctx context.Context, userID int64) (PlacementRun, erro
 	return run, nil
 }
 
-// InsertLearnerLexeme inserts one learner_lexemes row.
-// A row that already exists for the pair is left unchanged.
-func (s *Store) InsertLearnerLexeme(ctx context.Context, userID, lexemeID int64, status string, seeded bool, source string, at time.Time) error {
-	conn, err := s.connOrErr()
-	if err != nil {
-		return err
-	}
-	flag := 0
-	if seeded {
-		flag = 1
-	}
-	if _, err := conn.ExecContext(ctx, `
-		INSERT OR IGNORE INTO learner_lexemes (user_id, lexeme_id, status, seeded, source, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		userID, lexemeID, status, flag, source, placementTime(at),
-	); err != nil {
-		return fmt.Errorf("db: insert learner lexeme: %w", err)
-	}
-	return nil
-}
-
 // UpsertPlacementLexeme inserts the pointed word or updates its gloss, part of speech, transliteration, and gender.
 // verified is not changed on conflict. The new row is stored with verified 0.
 // An empty gender is stored as NULL.
@@ -424,27 +403,6 @@ func (s *Store) UpsertPlacementLexeme(ctx context.Context, textNFC, gloss, pos, 
 		return 0, fmt.Errorf("db: upsert placement lexeme: %w", err)
 	}
 	return id, nil
-}
-
-// SetPlacementLearner records the placement status for one learner and word.
-// A row that already exists is updated to this status, seeded 1, source placement.
-func (s *Store) SetPlacementLearner(ctx context.Context, userID, lexemeID int64, status string, at time.Time) error {
-	conn, err := s.connOrErr()
-	if err != nil {
-		return err
-	}
-	if _, err := conn.ExecContext(ctx, `
-		INSERT INTO learner_lexemes (user_id, lexeme_id, status, seeded, source, created_at)
-		VALUES (?, ?, ?, 1, 'placement', ?)
-		ON CONFLICT (user_id, lexeme_id) DO UPDATE SET
-			status = excluded.status,
-			seeded = 1,
-			source = 'placement'`,
-		userID, lexemeID, status, placementTime(at),
-	); err != nil {
-		return fmt.Errorf("db: set placement learner: %w", err)
-	}
-	return nil
 }
 
 // CardID returns the card for this learner, lexeme, and direction.
@@ -489,8 +447,35 @@ func (s *Store) AudioIDByText(ctx context.Context, textNFC string) (string, bool
 	return id, true, nil
 }
 
-// KnownLexemeIDs returns the sorted union of seeded-known learner_lexemes
-// and new words from lessons this learner has finished.
+// knownLexemeUnion is the learner's known set.
+// The first branch is a he_en card whose newest review is Good or Easy.
+// The second is a new word of a lesson this learner has finished.
+// A latest Again or Hard is learning, and an en_he card does not count.
+const knownLexemeUnion = `
+	SELECT c.lexeme_id AS lexeme_id
+	FROM cards AS c
+	JOIN review_log AS rl ON rl.card_id = c.id
+	WHERE c.user_id = ? AND c.dir = 'he_en'
+	  AND rl.rating IN (3, 4)
+	  AND rl.id = (
+	      SELECT rl2.id
+	      FROM review_log AS rl2
+	      WHERE rl2.card_id = c.id
+	      ORDER BY rl2.reviewed_at DESC, rl2.id DESC
+	      LIMIT 1
+	  )
+	UNION
+	SELECT li.lexeme_id
+	FROM lesson_items AS li
+	JOIN lesson_runs AS lr
+	  ON lr.unit_id = li.unit_id
+	 AND lr.lesson_ix = li.lesson_ix
+	 AND lr.user_id = ?
+	 AND lr.finished_at IS NOT NULL
+	WHERE li.role = 'new'`
+
+// KnownLexemeIDs returns the sorted union of he_en cards whose latest
+// rating is Good or Easy and new words from lessons this learner has finished.
 func (s *Store) KnownLexemeIDs(ctx context.Context, userID int64) ([]int64, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -498,18 +483,7 @@ func (s *Store) KnownLexemeIDs(ctx context.Context, userID int64) ([]int64, erro
 	}
 	rows, err := conn.QueryContext(ctx, `
 		SELECT lexeme_id FROM (
-			SELECT lexeme_id
-			FROM learner_lexemes
-			WHERE user_id = ? AND status = 'known' AND seeded = 1
-			UNION
-			SELECT li.lexeme_id
-			FROM lesson_items AS li
-			JOIN lesson_runs AS lr
-			  ON lr.unit_id = li.unit_id
-			 AND lr.lesson_ix = li.lesson_ix
-			 AND lr.user_id = ?
-			 AND lr.finished_at IS NOT NULL
-			WHERE li.role = 'new'
+			`+knownLexemeUnion+`
 		)
 		ORDER BY lexeme_id`, userID, userID)
 	if err != nil {
@@ -577,46 +551,57 @@ func (s *Store) LatestPlacement(ctx context.Context, userID int64) (Placement, b
 	}, true, nil
 }
 
-// PlacementKnownLexemes returns the pointed NFC text of learner_lexemes rows
-// with status known and seeded 1, sorted by that text.
+// PlacementKnownLexemes returns the pointed NFC text of the newest run's
+// answers rated Good or Easy, sorted by that text.
 // A word taught only by a finished lesson is not included; KnownLexemeIDs is
 // the union that contains those ids. units.Lookup.KnownLexemes(ctx,
 // beforePosition) is the global authoring view and is a different set.
 func (s *Store) PlacementKnownLexemes(ctx context.Context, userID int64) ([]string, error) {
-	return s.placementLexemeTexts(ctx, userID, "known")
+	return s.placementLexemeTexts(ctx, userID, Good, Easy)
 }
 
-// PlacementLearningLexemes returns the pointed NFC text of learner_lexemes rows
-// with status learning and seeded 1, sorted by that text.
+// PlacementLearningLexemes returns the pointed NFC text of the newest run's
+// answers rated Again or Hard, sorted by that text.
 func (s *Store) PlacementLearningLexemes(ctx context.Context, userID int64) ([]string, error) {
-	return s.placementLexemeTexts(ctx, userID, "learning")
+	return s.placementLexemeTexts(ctx, userID, Again, Hard)
 }
 
-func (s *Store) placementLexemeTexts(ctx context.Context, userID int64, status string) ([]string, error) {
+// Again, Hard, Good, and Easy match the FSRS grades stored on placement answers.
+const (
+	Again = 1
+	Hard  = 2
+	Good  = 3
+	Easy  = 4
+)
+
+func (s *Store) placementLexemeTexts(ctx context.Context, userID int64, ratings ...int) ([]string, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
 		SELECT l.text_nfc
-		FROM learner_lexemes AS ll
-		JOIN lexemes AS l ON l.id = ll.lexeme_id
-		WHERE ll.user_id = ? AND ll.status = ? AND ll.seeded = 1
-		ORDER BY l.text_nfc`, userID, status)
+		FROM placement_answers AS a
+		JOIN lexemes AS l ON l.id = a.lexeme_id
+		WHERE a.run_id = (
+		    SELECT id FROM placement_runs WHERE user_id = ? ORDER BY id DESC LIMIT 1
+		)
+		  AND a.rating IN (?, ?)
+		ORDER BY l.text_nfc`, userID, ratings[0], ratings[1])
 	if err != nil {
-		return nil, fmt.Errorf("db: placement %s lexemes: %w", status, err)
+		return nil, fmt.Errorf("db: placement lexemes: %w", err)
 	}
 	defer rows.Close()
 	var out []string
 	for rows.Next() {
 		var text string
 		if err := rows.Scan(&text); err != nil {
-			return nil, fmt.Errorf("db: placement %s lexemes: %w", status, err)
+			return nil, fmt.Errorf("db: placement lexemes: %w", err)
 		}
 		out = append(out, text)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("db: placement %s lexemes: %w", status, err)
+		return nil, fmt.Errorf("db: placement lexemes: %w", err)
 	}
 	return out, nil
 }
@@ -688,18 +673,7 @@ func (s *Store) knownTexts(ctx context.Context, userID int64) (map[string]struct
 		SELECT l.text_nfc
 		FROM lexemes AS l
 		WHERE l.id IN (
-			SELECT lexeme_id
-			FROM learner_lexemes
-			WHERE user_id = ? AND status = 'known' AND seeded = 1
-			UNION
-			SELECT li.lexeme_id
-			FROM lesson_items AS li
-			JOIN lesson_runs AS lr
-			  ON lr.unit_id = li.unit_id
-			 AND lr.lesson_ix = li.lesson_ix
-			 AND lr.user_id = ?
-			 AND lr.finished_at IS NOT NULL
-			WHERE li.role = 'new'
+			`+knownLexemeUnion+`
 		)`, userID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("db: known texts: %w", err)

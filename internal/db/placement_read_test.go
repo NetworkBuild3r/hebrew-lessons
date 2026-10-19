@@ -40,28 +40,22 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 		vav   = "וֶרֶד"
 		zayin = "זַיִת"
 	)
-	seeded := []string{alef, bet, zayin}
-	for _, text := range seeded {
-		id := insertLexeme(t, s, text)
-		if err := s.InsertLearnerLexeme(ctx, userID, id, "known", true, "placement", when); err != nil {
-			t.Fatal(err)
-		}
+	ids := map[string]int64{}
+	for _, text := range []string{alef, bet, gimel, dalet, he, vav, zayin} {
+		ids[text] = insertLexeme(t, s, text)
 	}
-	// Another learner's seeded word, a known-but-unseeded word, and a learning row stay out.
-	otherWord := insertLexeme(t, s, vav)
-	if err := s.InsertLearnerLexeme(ctx, otherID, otherWord, "known", true, "placement", when); err != nil {
-		t.Fatal(err)
+	// The newest run's answers are the placement lists. Cards are the known set.
+	for _, text := range []string{alef, bet, zayin} {
+		rateAnswer(t, s, runID, text, ids[text], Good, when)
+		insertKnownCard(t, s, userID, ids[text], "he_en", Good, when)
 	}
-	unseeded := insertLexeme(t, s, dalet)
-	if err := s.InsertLearnerLexeme(ctx, userID, unseeded, "known", false, "manual", when); err != nil {
-		t.Fatal(err)
-	}
-	learning := insertLexeme(t, s, he)
-	if err := s.InsertLearnerLexeme(ctx, userID, learning, "learning", true, "lesson", when); err != nil {
-		t.Fatal(err)
-	}
+	rateAnswer(t, s, runID, he, ids[he], Hard, when)
+	insertKnownCard(t, s, userID, ids[he], "he_en", Again, when)
+	// An en_he Easy is not known. A finished lesson's new word is, and it is not a placement answer.
+	insertKnownCard(t, s, userID, ids[dalet], "en_he", Easy, when)
+	_ = ids[vav]
 	// A finished lesson's new word is in the coverage set, and not in PlacementKnownLexemes.
-	lessonWord := insertLexeme(t, s, gimel)
+	lessonWord := ids[gimel]
 	lessonUnit := insertUnitDoc(t, s, 0, "draft", `{"title":"t","newWords":["`+gimel+`"]}`)
 	if err := s.execLesson(ctx, lessonUnit, 0, lessonWord, "new", userID, &when); err != nil {
 		t.Fatal(err)
@@ -161,8 +155,43 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 	if otherPlace.Level != -1 || !otherPlace.Finished || otherPlace.StopReason != "exhausted" || otherPlace.SuggestedStartPosition != 0 {
 		t.Fatalf("other = %+v", otherPlace)
 	}
+	rateAnswer(t, s, otherRun, vav, ids[vav], Easy, when)
 	if texts, err := s.PlacementKnownLexemes(ctx, otherID); err != nil || len(texts) != 1 || texts[0] != vav {
 		t.Fatalf("other texts = %v %v", texts, err)
+	}
+	knownIDs, err := s.KnownLexemeIDs(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantIDs := []int64{ids[alef], ids[bet], ids[gimel], ids[zayin]}
+	if len(knownIDs) != len(wantIDs) {
+		t.Fatalf("known ids = %v, want %v", knownIDs, wantIDs)
+	}
+	for i := range wantIDs {
+		if knownIDs[i] != wantIDs[i] {
+			t.Fatalf("known ids = %v, want %v", knownIDs, wantIDs)
+		}
+	}
+}
+
+func TestKnownLexemeIDsUsesLatestHeEnRating(t *testing.T) {
+	when := time.Date(2026, 10, 18, 15, 0, 0, 0, time.UTC)
+	s := openStore(t, fixedClock{when})
+	ctx := context.Background()
+	userID := insertUser(t, s, "latest@example.com", "sub-latest", "learner")
+	rose := insertLexeme(t, s, "וֶרֶד")
+	olive := insertLexeme(t, s, "זַיִת")
+	roseCard := insertKnownCard(t, s, userID, rose, "he_en", Good, when.Add(-time.Hour))
+	insertReview(t, s, roseCard, Again, when)
+	oliveCard := insertKnownCard(t, s, userID, olive, "he_en", Again, when.Add(-time.Hour))
+	insertReview(t, s, oliveCard, Easy, when)
+
+	got, err := s.KnownLexemeIDs(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != olive {
+		t.Fatalf("known = %v, want [%d]", got, olive)
 	}
 }
 
@@ -196,6 +225,33 @@ func TestSuggestedStartWithNoUnitsIsZero(t *testing.T) {
 	if place.SuggestedStartPosition != 7 {
 		t.Fatalf("all covered start = %d, want 7", place.SuggestedStartPosition)
 	}
+}
+
+func rateAnswer(t *testing.T, s *Store, runID int64, itemID string, lexemeID int64, rating int, at time.Time) {
+	t.Helper()
+	ctx := context.Background()
+	if err := s.ShowPlacementCard(ctx, runID, itemID, at); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RatePlacementAnswer(ctx, runID, itemID, rating, lexemeID, at); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func insertKnownCard(t *testing.T, s *Store, userID, lexemeID int64, dir string, rating int, at time.Time) int64 {
+	t.Helper()
+	cardID, err := s.InsertCard(context.Background(), Card{
+		UserID:   userID,
+		LexemeID: lexemeID,
+		Dir:      dir,
+		State:    "new",
+		Due:      at,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	insertReview(t, s, cardID, rating, at)
+	return cardID
 }
 
 func insertUnitDoc(t *testing.T, s *Store, position int, status, doc string) int64 {

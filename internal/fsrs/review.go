@@ -49,7 +49,14 @@ func (r *Review) ready() error {
 // rating is 1 Again, 2 Hard, 3 Good, or 4 Easy.
 // peeked is true when the learner revealed the answer first.
 // The review time is the configured clock, not the wall clock.
+// It stores no chosen option. GradeWithChoice does, when the learner picked one.
 func (r *Review) Grade(ctx context.Context, cardID int64, rating Rating, peeked bool) error {
+	return r.GradeWithChoice(ctx, cardID, rating, peeked, "")
+}
+
+// GradeWithChoice is Grade with the wrong option the learner picked.
+// chosen is pointed NFC. An empty chosen is stored as NULL.
+func (r *Review) GradeWithChoice(ctx context.Context, cardID int64, rating Rating, peeked bool, chosen string) error {
 	if err := r.ready(); err != nil {
 		return err
 	}
@@ -88,6 +95,7 @@ func (r *Review) Grade(ctx context.Context, cardID int64, rating Rating, peeked 
 		ElapsedDays:   int(info.ReviewLog.ElapsedDays),
 		ScheduledDays: int(info.Card.ScheduledDays),
 		Peeked:        peeked,
+		Chosen:        chosen,
 	}
 	return r.store.ApplyReview(ctx, next, log)
 }
@@ -103,7 +111,8 @@ func (r *Review) Suspend(ctx context.Context, cardID int64, suspended bool) erro
 
 // RecordMiss appends one confusion_misses row at the configured clock.
 // kind is letter_pair or agreement. key is the pair, for example ב/כ.
-func (r *Review) RecordMiss(ctx context.Context, learnerID int64, kind, key string) error {
+// lexemeID is the word the miss was about. 0 stores NULL.
+func (r *Review) RecordMiss(ctx context.Context, learnerID int64, kind, key string, lexemeID int64) error {
 	if err := r.ready(); err != nil {
 		return err
 	}
@@ -115,7 +124,7 @@ func (r *Review) RecordMiss(ctx context.Context, learnerID int64, kind, key stri
 	if key == "" {
 		return errors.New("fsrs: confusion key is empty")
 	}
-	return r.store.InsertConfusionMiss(ctx, learnerID, kind, key, r.clock.Now())
+	return r.store.InsertConfusionMiss(ctx, learnerID, kind, key, lexemeID, r.clock.Now())
 }
 
 // Card loads one card and its review ratings, oldest first.
