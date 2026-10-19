@@ -269,9 +269,11 @@ func TestReducedMotionHasNoMovement(t *testing.T) {
 	}
 }
 
-// TestMotionNeverBlocksInput is the static form of ac-4. The view-transition
-// overlay is click-through, nothing in motion.css turns off pointer events on
-// content, and nothing in the stylesheet or script disables or delays input.
+// TestMotionNeverBlocksInput is the static form of ac-4. Nothing in motion.css
+// turns off pointer events on content, and nothing in the stylesheet or script
+// disables or delays input. The overlay rule is belt and braces only: the
+// browser test showed Chromium ignores it, so the guarantee is the
+// htmx:beforeTransition handler in motion.js (checked below).
 func TestMotionNeverBlocksInput(t *testing.T) {
 	css := readStatic(t, "static/css/motion.css")
 	rules, _ := parseMotionCSS(css)
@@ -294,6 +296,19 @@ func TestMotionNeverBlocksInput(t *testing.T) {
 		}
 	}
 	js := readStatic(t, "static/js/motion.js")
+	// The one allowed preventDefault cancels a view transition (never an
+	// event the user caused). Chromium blocks every tap while a view
+	// transition runs, so a swap that brings in answer options must run
+	// without one; the browser test proves the first tap registers.
+	handler := regexp.MustCompile(`(?s)document\.addEventListener\("htmx:beforeTransition".*?\n  \}\);`)
+	loc := handler.FindStringIndex(js)
+	if loc == nil {
+		t.Fatal("motion.js has no htmx:beforeTransition handler; a swap that brings in answer options would swallow the first tap")
+	}
+	if !strings.Contains(js[loc[0]:loc[1]], "c-answer") {
+		t.Error("the htmx:beforeTransition handler does not look for c-answer")
+	}
+	js = js[:loc[0]] + js[loc[1]:]
 	for _, bad := range []string{"preventDefault", "stopPropagation", ".disabled", "pointer-events", "inert"} {
 		if strings.Contains(js, bad) {
 			t.Errorf("motion.js contains %q, which can swallow a tap", bad)

@@ -19,8 +19,9 @@ import (
 //
 // ac-3: with reduced motion emulated, a screen swap has only view-transition
 // animations of 150ms or less, and none of them has a transform.
-// ac-4: with motion on, a tap on an answer option while the swap runs is
-// registered on the first tap.
+// ac-4: with motion on, the first tap on an answer option registers. Chromium
+// blocks all taps for the length of a view transition, so a swap that brings
+// in an answer option runs without one (operator decision, 2026-10-19).
 func TestMotionInBrowser(t *testing.T) {
 	dir := os.Getenv("MOTION_PW_DIR")
 	if dir == "" {
@@ -55,9 +56,12 @@ func TestMotionInBrowser(t *testing.T) {
 			VT map[string]anim `json:"vt"`
 		} `json:"reduced"`
 		Full struct {
+			VT map[string]anim `json:"vt"`
+		} `json:"full"`
+		Options struct {
 			VT   map[string]anim `json:"vt"`
 			Taps *int            `json:"taps"`
-		} `json:"full"`
+		} `json:"options"`
 	}
 	if err := json.Unmarshal(out, &got); err != nil {
 		t.Fatalf("bad output %q: %v", out, err)
@@ -74,13 +78,16 @@ func TestMotionInBrowser(t *testing.T) {
 		}
 	}
 	if len(got.Full.VT) == 0 {
-		t.Fatal("ac-4: no view-transition ran with motion on, so the tap was not tested during one")
+		t.Fatal("ac-4: no view transition on a plain swap with motion on; transitions are broken, not just skipped")
 	}
-	if got.Full.Taps == nil || *got.Full.Taps != 1 {
+	if len(got.Options.VT) != 0 {
+		t.Errorf("ac-4: a view transition ran on a swap that brings in an answer option: %v", got.Options.VT)
+	}
+	if got.Options.Taps == nil || *got.Options.Taps != 1 {
 		taps := -1
-		if got.Full.Taps != nil {
-			taps = *got.Full.Taps
+		if got.Options.Taps != nil {
+			taps = *got.Options.Taps
 		}
-		t.Errorf("ac-4: taps = %d, want exactly 1 on the first tap during the swap", taps)
+		t.Errorf("ac-4: taps = %d, want exactly 1 on the first tap on the new answer option", taps)
 	}
 }

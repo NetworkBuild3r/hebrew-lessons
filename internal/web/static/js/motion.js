@@ -14,6 +14,17 @@
   views();
   mq.addEventListener("change", views);
 
+  /* A view transition makes the whole page untappable for its length (about
+     300ms in Chromium: hit-testing returns <html>, and turning pointer events
+     off on the overlay does not change it). So a swap that brings in answer options runs without one, and
+     the first tap on an option always registers. data-no-transition on any
+     element in the response does the same for other tap targets. */
+  document.addEventListener("htmx:beforeTransition", function (e) {
+    var d = e.detail || {};
+    var html = d.serverResponse || (d.xhr && d.xhr.responseText) || "";
+    if (/class="[^"]*\bc-answer\b|data-no-transition/.test(html)) e.preventDefault();
+  });
+
   function orbs(a) {
     if (a.id) return document.querySelectorAll('.c-orb[data-audio="' + CSS.escape(a.id) + '"]');
     var p = a.closest("[data-audio-scope]") || a.parentElement;
