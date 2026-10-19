@@ -2,6 +2,7 @@ package views
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/a-h/templ"
 )
@@ -197,15 +198,31 @@ func NewPage(lang, csrf, current string) Page {
 	return Page{UI: ui, Title: ui.DocTitle(current), CSRF: csrf, Current: current}
 }
 
+// PlacementVM is the Today placement field.
+// PR-B adds the same struct on internal/web/viewmodel.go and
+// HomeVM.Placement. Nil means the learner has never taken the check.
+// A non-nil value with Active false and Finished false is only the shell
+// built without a placement store, so the placeholder Today stays unchanged.
+type PlacementVM struct {
+	Active              bool
+	Finished            bool
+	CardsRated          int
+	Level               int
+	EstimatedKnownWords int
+	TakenAt             time.Time
+}
+
 // Home is the Today placeholder. Due is the review count. Lesson is false
 // when nothing is queued. Words are the new-word chips.
+// Placement is nil when the learner has never taken the check.
 type Home struct {
 	UI
-	CSRF    string
-	Due     int
-	DueText string
-	Lesson  bool
-	Words   []Chip
+	CSRF      string
+	Due       int
+	DueText   string
+	Lesson    bool
+	Words     []Chip
+	Placement *PlacementVM
 }
 
 // Page is the shell around Today.

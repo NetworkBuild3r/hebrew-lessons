@@ -27,14 +27,27 @@ var Assets embed.FS
 // sessions, when non-nil, registers Google sign-in and logout and wraps
 // the mux with the session middleware. Page tokens come from
 // CSRFFunc(auth.CSRFToken). A signed-out GET of /, /review, /progress,
-// or /lesson redirects to /signin (303 for a full page, 401 and
+// /lesson, or /placement redirects to /signin (303 for a full page, 401 and
 // HX-Redirect for htmx). Reads stay on those page URLs. /_hx/ is for
 // htmx writes, and this router does not register read routes there.
+// New does not deal placement. NewWithPlacement wires the deck and the
+// run store the handlers read for ownership and the Today card.
 // Tests pass a fake to newMux; production does not. The ungated router
 // still serves those pages.
 // Audio bytes are served at /audio/<sha256>.mp3; this router does not
 // register that path.
 func New(health http.Handler, sessions *auth.Service) http.Handler {
+	return newHandler(health, sessions, nil, nil)
+}
+
+// NewWithPlacement is New plus the placement deck. deck deals cards.
+// runs is the store read for ownership and LatestPlacement. Both are
+// required for a POST; a nil pair still serves the read-only intro.
+func NewWithPlacement(health http.Handler, sessions *auth.Service, deck placementDeck, runs placementRuns) http.Handler {
+	return newHandler(health, sessions, deck, runs)
+}
+
+func newHandler(health http.Handler, sessions *auth.Service, deck placementDeck, runs placementRuns) http.Handler {
 	var tokens CSRFToken
 	secure := false
 	if sessions != nil {
@@ -42,7 +55,7 @@ func New(health http.Handler, sessions *auth.Service) http.Handler {
 		// hebrew_lang uses the same COOKIE_SECURE flag as the session cookie.
 		secure = sessions.CookieSecure()
 	}
-	mux := routes(health, tokens, sessions != nil, secure)
+	mux := routes(health, tokens, sessions != nil, secure, deck, runs)
 	if sessions != nil {
 		sessions.Register(mux)
 		// auth.Middleware loads the session and checks CSRF, including
@@ -56,10 +69,10 @@ func New(health http.Handler, sessions *auth.Service) http.Handler {
 
 // newMux is the test router. tokens is a fake; production New does not use it.
 func newMux(health http.Handler, tokens CSRFToken) http.Handler {
-	return securityHeaders(csrfMiddleware(tokens, routes(health, tokens, false, false)))
+	return securityHeaders(csrfMiddleware(tokens, routes(health, tokens, false, false, nil, nil)))
 }
 
-func routes(health http.Handler, tokens CSRFToken, gate, secure bool) *http.ServeMux {
+func routes(health http.Handler, tokens CSRFToken, gate, secure bool, deck placementDeck, runs placementRuns) *http.ServeMux {
 	mux := http.NewServeMux()
 	if health != nil {
 		mux.Handle("GET /healthz", health)
@@ -70,7 +83,13 @@ func routes(health http.Handler, tokens CSRFToken, gate, secure bool) *http.Serv
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
 	mux.HandleFunc("GET /{$}", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
-		render(w, r, views.Today(homeFrom(r, chooseLang(w, r, secure), csrfValue(tokens, r))))
+		lang := chooseLang(w, r, secure)
+		state, err := todayPlacement(r, runs)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		render(w, r, views.Today(homeFrom(r, lang, csrfValue(tokens, r), state)))
 	}))
 	review := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
 		render(w, r, views.Review(views.NewPage(chooseLang(w, r, secure), csrfValue(tokens, r), "review")))
@@ -84,6 +103,7 @@ func routes(health http.Handler, tokens CSRFToken, gate, secure bool) *http.Serv
 	mux.HandleFunc("GET /review", review)
 	mux.HandleFunc("GET /progress", progress)
 	mux.HandleFunc("GET /lesson", lesson)
+	mountPlacement(mux, tokens, gate, secure, deck, runs)
 	mux.HandleFunc("GET /signin", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := auth.CurrentUser(r.Context()); ok {
 			w.Header().Set("Cache-Control", "no-store")
@@ -131,7 +151,9 @@ func (n noDirFS) Open(name string) (fs.File, error) {
 
 // homeFrom is placeholder Today data until the review queue is wired.
 // lang comes from chooseLang. ?due=0 clears the queue. ?next=0 hides the lesson.
-func homeFrom(r *http.Request, lang, csrf string) views.Home {
+// placement is the one field PR-B's HomeVM will carry. Nil means never taken.
+// The caller reads LatestPlacement; this function only copies the field.
+func homeFrom(r *http.Request, lang, csrf string, placement *views.PlacementVM) views.Home {
 	q := r.URL.Query()
 	ui := views.UIFor(lang, views.FakeLearner().AddressGender)
 	due := 12
@@ -139,12 +161,13 @@ func homeFrom(r *http.Request, lang, csrf string) views.Home {
 		due = 0
 	}
 	return views.Home{
-		UI:      ui,
-		CSRF:    csrf,
-		Due:     due,
-		DueText: strconv.Itoa(due),
-		Lesson:  q.Get("next") != "0",
-		Words:   views.SampleWords(),
+		UI:        ui,
+		CSRF:      csrf,
+		Due:       due,
+		DueText:   strconv.Itoa(due),
+		Lesson:    q.Get("next") != "0",
+		Words:     views.SampleWords(),
+		Placement: placement,
 	}
 }
 
