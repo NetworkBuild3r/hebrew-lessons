@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
@@ -163,7 +164,7 @@ func TestReviewBuildsSession(t *testing.T) {
 	if !strings.Contains(body, `data-kind="read"`) || !strings.Contains(body, `data-pointed="`+firstText+`"`) || !strings.Contains(body, `data-show-unpointed="false"`) || !strings.Contains(body, `data-translit="shalom"`) || !strings.Contains(body, `data-index="1"`) || !strings.Contains(body, `data-total="2"`) || !strings.Contains(body, `data-revealed="false"`) {
 		t.Fatalf("first card: %s", cardAttrs(body))
 	}
-	if !strings.Contains(body, `href="/audio/`+audio+`.mp3"`) || !strings.Contains(body, "shalom") || !strings.Contains(body, `action="/_hx/review/reveal"`) {
+	if !strings.Contains(body, `data-src="/audio/`+audio+`.mp3"`) || !strings.Contains(body, "shalom") || !strings.Contains(body, `action="/_hx/review/reveal"`) {
 		t.Fatal("prompt, audio, or reveal form missing")
 	}
 	if strings.Contains(body, "hello") || strings.Contains(body, "ז׳") || strings.Contains(body, `name="rating"`) {
@@ -196,7 +197,7 @@ func TestReviewBuildsSession(t *testing.T) {
 	}
 	shown := postReveal(t, h, en, enCard, "https://learn.example")
 	shownBody := shown.Body.String()
-	if shown.Code != http.StatusOK || !strings.Contains(shownBody, `data-pointed="`+enText+`"`) || !strings.Contains(shownBody, "chair") || !strings.Contains(shownBody, `data-revealed="true"`) || !strings.Contains(shownBody, `name="rating"`) || !strings.Contains(shownBody, `data-translit="kise"`) || !strings.Contains(shownBody, "kise") || !strings.Contains(shownBody, `href="/audio/`+enAudio+`.mp3"`) {
+	if shown.Code != http.StatusOK || !strings.Contains(shownBody, `data-pointed="`+enText+`"`) || !strings.Contains(shownBody, "chair") || !strings.Contains(shownBody, `data-revealed="true"`) || !strings.Contains(shownBody, `name="rating"`) || !strings.Contains(shownBody, `data-translit="kise"`) || !strings.Contains(shownBody, "kise") || !strings.Contains(shownBody, `data-src="/audio/`+enAudio+`.mp3"`) {
 		t.Fatalf("recall reveal = %d %s", shown.Code, shownBody)
 	}
 }
@@ -215,7 +216,7 @@ func TestReviewShowUnpointed(t *testing.T) {
 	if !strings.Contains(body, `data-show-unpointed="true"`) || !strings.Contains(body, `data-pointed="`+text+`"`) || !strings.Contains(body, `data-unpointed="`+plain+`"`) {
 		t.Fatalf("unpointed card: %s", cardAttrs(body))
 	}
-	count := regexp.MustCompile(`(?s)<p class="count">.*?</p>`).FindString(body)
+	count := regexp.MustCompile(`(?s)<div class="act__word">.*?</div>`).FindString(body)
 	if !strings.Contains(count, plain) || strings.Contains(count, text) {
 		t.Fatalf("prompt = %s, want the unpointed form", count)
 	}
@@ -230,7 +231,7 @@ func TestReviewShowUnpointed(t *testing.T) {
 	if !strings.Contains(pointed, `data-show-unpointed="false"`) || !strings.Contains(pointed, `data-pointed="`+text+`"`) {
 		t.Fatalf("lapsed card: %s", cardAttrs(pointed))
 	}
-	count = regexp.MustCompile(`(?s)<p class="count">.*?</p>`).FindString(pointed)
+	count = regexp.MustCompile(`(?s)<div class="act__word">.*?</div>`).FindString(pointed)
 	if !strings.Contains(count, text) {
 		t.Fatalf("prompt = %s, want the pointed form", count)
 	}
@@ -691,7 +692,13 @@ func openAt(t *testing.T, clk clock.Clock) (*db.Store, http.Handler) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return store, NewWithStore(nil, svc, store)
+	// These tests are about the self-graded card. A closed gate leaves only the
+	// listening skill, and these lexicons are too small to build a pick from, so every
+	// visit is a flashcard. The checked activities have their own tests (activity_test.go).
+	study := session.New(store, clk, 1, session.WithGate(func(context.Context, int64) (activity.Gate, error) {
+		return activity.Gate{LettersPassed: false}, nil
+	}))
+	return store, NewOptions(nil, svc, Options{Store: store, Runs: store, study: study})
 }
 
 func addLearner(t *testing.T, store *db.Store, email, sub string, now time.Time) learnerFix {

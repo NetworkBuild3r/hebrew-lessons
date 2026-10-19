@@ -9,8 +9,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
@@ -30,6 +32,7 @@ type server struct {
 	store    *db.Store
 	audioDir string
 	study    *session.Service
+	engine   *activity.Engine
 	deck     placementDeck
 	runs     placementRuns
 
@@ -51,6 +54,10 @@ type studyQueue struct {
 	done     bool
 	revealed bool
 	builtAt  time.Time
+	// item is the checked activity the current card is asked through. It is nil for a
+	// flashcard and a drill. fb is set from the checked answer until Continue.
+	item *activity.Item
+	fb   *answerState
 }
 
 func newServer(store *db.Store) *server {
@@ -60,8 +67,23 @@ func newServer(store *db.Store) *server {
 	}
 	if store != nil {
 		s.study = session.New(store, store.Clock(), 1)
+		s.useActivityKey(nil)
 	}
 	return s
+}
+
+// useActivityKey builds the activity engine. key signs the item tokens; nil gives a
+// random key for the life of the process (activity.KeyFromSecret("")).
+func (s *server) useActivityKey(key []byte) {
+	if s == nil || s.store == nil {
+		return
+	}
+	clk := s.store.Clock()
+	opts := []activity.Option{}
+	if len(key) > 0 {
+		opts = append(opts, activity.WithKey(key))
+	}
+	s.engine = activity.New(s.store, clk, evidence.New(s.store, fsrs.New(s.store, clk), clk), opts...)
 }
 
 func (s *server) loadHome(r *http.Request) (HomeVM, string, string, error) {
@@ -311,8 +333,15 @@ func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*st
 	if err != nil {
 		return nil, err
 	}
+	// The session was built for userID. The caller is the signed-in learner, and
+	// session/doc.go asks the handler to check that before it serves the queue.
+	if built.UserID() != userID {
+		return nil, fmt.Errorf("web: session belongs to learner %d, not %d", built.UserID(), userID)
+	}
 	q := &studyQueue{userID: userID, sess: built, builtAt: now}
-	s.advance(q)
+	if err := s.advance(ctx, q); err != nil {
+		return nil, err
+	}
 	s.rememberLocked(key, q, now)
 	return q, nil
 }
@@ -377,16 +406,22 @@ func sameStudyDay(built, now time.Time) bool {
 	return by == ny && bm == nm && bd == nd
 }
 
-func (s *server) advance(q *studyQueue) {
+// advance serves the next card. For a word card it records the exposure of a new
+// word, and for a card the mix chose a checked activity for, it builds the item the
+// screen asks. When the lexicon cannot support the activity after all, the visit falls
+// back to a flashcard, which the session grades through the card's own skill.
+func (s *server) advance(ctx context.Context, q *studyQueue) error {
 	if q != nil {
 		q.revealed = false
+		q.item = nil
+		q.fb = nil
 	}
 	if q == nil || q.sess == nil {
 		if q != nil {
 			q.done = true
 			q.has = false
 		}
-		return
+		return nil
 	}
 	card, ok := q.sess.Next()
 	if !ok {
@@ -396,12 +431,13 @@ func (s *server) advance(q *studyQueue) {
 		q.total = total
 		q.index = total
 		q.retry = false
-		return
+		return nil
 	}
 	q.cur = card
 	q.has = true
 	q.done = false
 	q.index, q.total, q.retry = q.sess.Place()
+	return s.prepareItem(ctx, q)
 }
 
 func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error) {
@@ -422,6 +458,13 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 	ref := q.cur
 	vm.CardID = ref.CardID
 	vm.Kind = ref.Kind
+	if q.item != nil {
+		// A checked activity carries its own prompt. Nothing about the word goes on
+		// the card: the answer is not in the page until Check has run.
+		vm.Item = q.item
+		vm.Answer = q.fb
+		return vm, nil
+	}
 	if ref.Kind == session.KindLetter || ref.Kind == session.KindPattern {
 		vm.Pointed = ref.Key
 		vm.Unpointed = units.Plain(ref.Key)
@@ -503,6 +546,10 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 		Revealed:      vm.Revealed,
 		Answered:      vm.Answered,
 		Correct:       vm.Correct,
+	}
+	if vm.Item != nil {
+		card.Act = activityView(lang, csrf, vm)
+		return card
 	}
 	if vm.Revealed {
 		return card
