@@ -70,18 +70,25 @@ type Options struct {
 // otherwise). A lesson is checked against <lesson>/audio/manifest.json
 // ({"version":1,"clips":{"audio/sentences/vocab-1.mp3":"<64-hex>",...}},
 // keys relative to the lesson directory). The digest and the map's textHash
-// must both equal manifest.clips[key]. A missing manifest, a missing key,
-// or an unparseable manifest is a text-mismatch. When hashText is present,
-// NormalizeText(hashText) must also equal text (text-mismatch, reason
-// nfc-differs, otherwise), and text is what is stored. When hashText is
-// absent, the stored text is NormalizeText(text).
+// must both equal manifest.clips[key]. A word is also checked against
+// _audio/words/manifest.json. That file's entries are voiceId|model|text
+// records with text, file, voiceId, and model. The digest must equal the
+// hash of the entry's voice, model, and text, and the entry's file must be
+// the clip. A missing manifest, a missing entry, or an unparseable manifest
+// is a text-mismatch. The stored model stays the map's eleven_v4 or
+// eleven_v3 label when the manifest names that same model. When hashText is
+// present, NormalizeText(hashText) must also equal text (text-mismatch,
+// reason nfc-differs, otherwise), and text is what is stored. When hashText
+// is absent, the stored text is NormalizeText(text).
 //
 // Unmapped entries are listed and not stored. The same bytes with two
 // different texts are a conflict: both paths and texts are reported, and
 // the second text is not written over the first. Distinct sha256 values are
-// all stored. The text index keeps one asset per (text, voice, model), the
-// lowest id, which is what AudioByText returns when created_at ties. The
-// other ids are aliases in the summary and the import manifest.
+// all stored. The text index keeps one asset per (text, voice): eleven_v4,
+// then eleven_v3, then legacy, then any other model, and within a model the
+// lowest id. AudioByText uses that model order, then the newest created_at,
+// then the lowest id. The other ids are aliases in the summary and the
+// import manifest.
 func Import(ctx context.Context, store *db.Store, dataDir, exportDir string, opts Options) (Report, error) {
 	if store == nil {
 		return Report{}, errors.New("audio: store is nil")
@@ -211,7 +218,7 @@ type builder struct {
 	manifest       []ManifestEntry
 }
 
-func plan(m clipMap, lessons map[string]lessonManifest) (*builder, error) {
+func plan(m clipMap, lessons map[string]lessonManifest, words wordManifest) (*builder, error) {
 	b := &builder{
 		mapped:   map[string]planned{},
 		textBad:  map[string]refusedText{},
@@ -268,6 +275,9 @@ func plan(m clipMap, lessons map[string]lessonManifest) (*builder, error) {
 				b.textBad[rel] = refusedText{item: Mismatch{Path: rel, Want: want, Got: path.Base(rel)}, sha: fileSHA}
 				continue
 			}
+			if !wordTextMatches(b, rel, got, voice, model, fileSHA, words) {
+				continue
+			}
 		default:
 			return nil, fmt.Errorf("audio: clip %s source %q", rel, clip.Source)
 		}
@@ -320,7 +330,11 @@ func importDir(ctx context.Context, store *db.Store, dataDir, exportDir string, 
 	if err != nil {
 		return Report{}, err
 	}
-	b, err := newBuilder(store, dataDir, opts, m, lessons)
+	words, err := loadWordManifest(exportDir, m.Words)
+	if err != nil {
+		return Report{}, err
+	}
+	b, err := newBuilder(store, dataDir, opts, m, lessons, words)
 	if err != nil {
 		return Report{}, err
 	}
@@ -392,7 +406,7 @@ func listMP3(exportDir string) ([]string, error) {
 }
 
 func importArchive(ctx context.Context, store *db.Store, dataDir, tarPath string, opts Options) (Report, error) {
-	m, root, bodies, err := mapFromArchive(tarPath)
+	m, root, bodies, wordBody, wordFound, err := mapFromArchive(tarPath)
 	if err != nil {
 		return Report{}, err
 	}
@@ -400,7 +414,11 @@ func importArchive(ctx context.Context, store *db.Store, dataDir, tarPath string
 	if err != nil {
 		return Report{}, err
 	}
-	b, err := newBuilder(store, dataDir, opts, m, lessons)
+	words, err := wordManifestFromBody(m.Words, wordBody, wordFound)
+	if err != nil {
+		return Report{}, err
+	}
+	b, err := newBuilder(store, dataDir, opts, m, lessons, words)
 	if err != nil {
 		return Report{}, err
 	}
@@ -469,8 +487,8 @@ func rejectSpecial(header *tar.Header) error {
 	}
 }
 
-func newBuilder(store *db.Store, dataDir string, opts Options, m clipMap, lessons map[string]lessonManifest) (*builder, error) {
-	b, err := plan(m, lessons)
+func newBuilder(store *db.Store, dataDir string, opts Options, m clipMap, lessons map[string]lessonManifest, words wordManifest) (*builder, error) {
+	b, err := plan(m, lessons, words)
 	if err != nil {
 		return nil, err
 	}
@@ -685,54 +703,60 @@ func (b *builder) finish() (Report, error) {
 	return rep, nil
 }
 
+// modelRank is the text-index order: eleven_v4, then eleven_v3, then
+// legacy, then any other model. AudioByText uses the same order.
+func modelRank(model string) int {
+	switch model {
+	case "eleven_v4":
+		return 0
+	case "eleven_v3":
+		return 1
+	case "legacy":
+		return 2
+	default:
+		return 3
+	}
+}
+
 func markAliases(entries []ManifestEntry) {
 	type key struct {
 		text  string
 		voice string
-		model string
 	}
-	best := map[key]string{}
+	type winner struct {
+		rank int
+		id   string
+	}
+	best := map[key]winner{}
 	for _, e := range entries {
 		if e.Conflict {
 			continue
 		}
-		k := key{e.Text, e.Voice, e.Model}
-		id, ok := best[k]
-		if !ok || e.ID < id {
-			best[k] = e.ID
+		k := key{e.Text, e.Voice}
+		rank := modelRank(e.Model)
+		cur, ok := best[k]
+		if !ok || rank < cur.rank || (rank == cur.rank && e.ID < cur.id) {
+			best[k] = winner{rank: rank, id: e.ID}
 		}
 	}
 	for i := range entries {
 		if entries[i].Conflict {
 			continue
 		}
-		k := key{entries[i].Text, entries[i].Voice, entries[i].Model}
-		entries[i].Alias = entries[i].ID != best[k]
+		k := key{entries[i].Text, entries[i].Voice}
+		entries[i].Alias = entries[i].ID != best[k].id
 	}
 }
 
 func countAliases(entries []ManifestEntry) int {
-	type key struct {
-		text  string
-		voice string
-		model string
-	}
-	ids := map[key]map[string]struct{}{}
+	ids := map[string]struct{}{}
 	for _, e := range entries {
 		if e.Conflict || !e.Alias {
 			continue
 		}
-		k := key{e.Text, e.Voice, e.Model}
-		if ids[k] == nil {
-			ids[k] = map[string]struct{}{}
-		}
-		ids[k][e.ID] = struct{}{}
+		ids[e.ID] = struct{}{}
 	}
-	n := 0
-	for _, set := range ids {
-		n += len(set)
-	}
-	return n
+	return len(ids)
 }
 
 func writeUnmappedReport(path string, rep Report) error {
@@ -936,12 +960,13 @@ func readLimitedN(r io.Reader, max int64) ([]byte, error) {
 	return body, nil
 }
 
-func mapFromArchive(tarPath string) (clipMap, string, map[string][]byte, error) {
+func mapFromArchive(tarPath string) (clipMap, string, map[string][]byte, []byte, bool, error) {
 	var (
-		raw      []byte
-		root     string
-		found    int
-		manifest = map[string][]byte{}
+		raw       []byte
+		root      string
+		found     int
+		manifest  = map[string][]byte{}
+		wordFiles = map[string][]byte{}
 	)
 	err := withGzipTar(tarPath, func(tr *tar.Reader) error {
 		for {
@@ -985,29 +1010,44 @@ func mapFromArchive(tarPath string) (clipMap, string, map[string][]byte, error) 
 				manifest[name] = body
 				continue
 			}
+			if tarRegular(header) && (name == "_audio/words/manifest.json" || strings.HasSuffix(name, "/_audio/words/manifest.json")) {
+				if _, dup := wordFiles[name]; dup {
+					return fmt.Errorf("audio: repeated path %s", name)
+				}
+				body, err := readLimitedN(tr, maxMapBytes)
+				if err != nil {
+					return fmt.Errorf("audio: read %s: %w", name, err)
+				}
+				wordFiles[name] = body
+				continue
+			}
 			if err := discardEntry(tr); err != nil {
 				return err
 			}
 		}
 	})
 	if err != nil {
-		return clipMap{}, "", nil, err
+		return clipMap{}, "", nil, nil, false, err
 	}
 	if found == 0 {
-		return clipMap{}, "", nil, errors.New("audio: clip-text-map.json not found in archive")
+		return clipMap{}, "", nil, nil, false, errors.New("audio: clip-text-map.json not found in archive")
 	}
 	if found > 1 {
-		return clipMap{}, "", nil, errors.New("audio: archive contains more than one clip-text-map.json")
+		return clipMap{}, "", nil, nil, false, errors.New("audio: archive contains more than one clip-text-map.json")
 	}
 	m, err := parseClipMap(raw)
 	if err != nil {
-		return clipMap{}, "", nil, err
+		return clipMap{}, "", nil, nil, false, err
 	}
 	byLesson, err := manifestBodiesByLesson(root, manifest)
 	if err != nil {
-		return clipMap{}, "", nil, err
+		return clipMap{}, "", nil, nil, false, err
 	}
-	return m, root, byLesson, nil
+	wordBody, wordFound, err := wordManifestBody(root, wordFiles)
+	if err != nil {
+		return clipMap{}, "", nil, nil, false, err
+	}
+	return m, root, byLesson, wordBody, wordFound, nil
 }
 
 func tarRegular(header *tar.Header) bool {

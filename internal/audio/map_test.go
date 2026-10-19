@@ -142,7 +142,9 @@ func TestImportRealMapDryRun(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, "clip-text-map.json"), raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	writeFixtureManifests(t, src, loadFixtureMap(t).Lessons)
+	fixture := loadFixtureMap(t)
+	writeFixtureManifests(t, src, fixture.Lessons)
+	writeFixtureWordManifest(t, src, fixture.Words)
 	bundle := packExport(t, src, "bundle")
 	data := t.TempDir()
 	store := openStoreAt(t, data, time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC))
@@ -272,6 +274,22 @@ func TestNormalizeTextStripsFormatCharacters(t *testing.T) {
 	if !norm.NFC.IsNormalString(got) {
 		t.Fatal("result is not NFC")
 	}
+}
+
+func writeFixtureWordManifest(t *testing.T, dir string, words []mappedClip) {
+	t.Helper()
+	items := make([]any, len(words))
+	for i, word := range words {
+		hashed := word.Text
+		if strings.TrimSpace(word.HashText) != "" {
+			hashed = word.HashText
+		}
+		items[i] = map[string]any{
+			"source": "word", "file": path.Base(word.Path), "text": hashed,
+			"hashText": hashed, "voiceId": word.VoiceID, "model": word.Model,
+		}
+	}
+	writeWordManifest(t, dir, items)
 }
 
 func writeFixtureManifests(t *testing.T, dir string, lessons []mappedClip) {

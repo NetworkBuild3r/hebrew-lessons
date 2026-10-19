@@ -105,6 +105,7 @@ func TestImportDirectory(t *testing.T) {
 	})
 	writeMap(t, export, lessons, words, unmapped)
 	writeLessonManifests(t, export, lessons)
+	writeWordManifest(t, export, words)
 
 	data := t.TempDir()
 	when := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
@@ -115,7 +116,7 @@ func TestImportDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dry.Imported != 8 || dry.Duplicate != 0 || dry.Unmapped != 3 || dry.HashMismatch != 0 || dry.TextMismatch != 0 || dry.Conflict != 1 || dry.Alias != 1 || dry.MissingFile != 1 {
+	if dry.Imported != 8 || dry.Duplicate != 0 || dry.Unmapped != 3 || dry.HashMismatch != 0 || dry.TextMismatch != 0 || dry.Conflict != 1 || dry.Alias != 2 || dry.MissingFile != 1 {
 		t.Fatalf("dry-run counts: %+v", dry)
 	}
 	if dry.ByModel["eleven_v4"] != 6 || dry.ByModel["eleven_v3"] != 2 {
@@ -133,7 +134,7 @@ func TestImportDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Imported != 8 || got.Duplicate != 0 || got.Unmapped != 3 || got.Conflict != 1 || got.Alias != 1 || got.MissingFile != 1 {
+	if got.Imported != 8 || got.Duplicate != 0 || got.Unmapped != 3 || got.Conflict != 1 || got.Alias != 2 || got.MissingFile != 1 {
 		t.Fatalf("import counts: %+v", got)
 	}
 	if mp3Count(t, filepath.Join(data, "audio")) != 8 {
@@ -215,6 +216,21 @@ func TestImportDirectory(t *testing.T) {
 	if aliasPaths != 1 {
 		t.Fatalf("alias manifest paths = %d", aliasPaths)
 	}
+	var sawV3, sawV4 bool
+	for _, clip := range manifest {
+		if clip.Text != "קָם" || clip.Voice != voice {
+			continue
+		}
+		switch clip.Model {
+		case "eleven_v3":
+			sawV3 = clip.Alias && clip.ID == shaID(v3)
+		case "eleven_v4":
+			sawV4 = !clip.Alias && clip.ID == shaID(v4)
+		}
+	}
+	if !sawV3 || !sawV4 {
+		t.Fatalf("model index: %+v", manifest)
+	}
 
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
@@ -224,7 +240,7 @@ func TestImportDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.Imported != 0 || again.Duplicate != 8 || again.Conflict != 1 || again.Alias != 1 || again.Unmapped != 3 || again.MissingFile != 1 {
+	if again.Imported != 0 || again.Duplicate != 8 || again.Conflict != 1 || again.Alias != 2 || again.Unmapped != 3 || again.MissingFile != 1 {
 		t.Fatalf("re-run counts: %+v", again)
 	}
 	if mp3Count(t, filepath.Join(data, "audio")) != 8 {
@@ -276,6 +292,7 @@ func TestImportStoresClipWhenSHA256IsAbsent(t *testing.T) {
 	export := t.TempDir()
 	writeFiles(t, export, map[string][]byte{word["path"].(string): body})
 	writeMap(t, export, nil, []any{word}, nil)
+	writeWordManifest(t, export, []any{word})
 	data := t.TempDir()
 	store := openStoreAt(t, data, time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC))
 	got, err := Import(context.Background(), store, data, export, Options{})
@@ -384,6 +401,7 @@ func importMap(t *testing.T, schema string, lessons, words []any, files map[stri
 	writeFiles(t, export, files)
 	writeMapVersion(t, export, schema, lessons, words, nil)
 	writeLessonManifests(t, export, lessons)
+	writeWordManifest(t, export, words)
 	data := t.TempDir()
 	store := openStoreAt(t, data, time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC))
 	rep, err := Import(context.Background(), store, data, export, Options{})
@@ -391,6 +409,107 @@ func importMap(t *testing.T, schema string, lessons, words []any, files map[stri
 		t.Fatal(err)
 	}
 	return rep, store
+}
+
+func TestMarkAliasesDeterministic(t *testing.T) {
+	base := []ManifestEntry{
+		{Path: "v3-low", ID: "00", Text: "קָם", Voice: "v", Model: "eleven_v3"},
+		{Path: "v4-high", ID: "ff", Text: "קָם", Voice: "v", Model: "eleven_v4"},
+		{Path: "v4-low", ID: "10", Text: "קָם", Voice: "v", Model: "eleven_v4"},
+		{Path: "legacy", ID: "01", Text: "קָם", Voice: "v", Model: "legacy"},
+		{Path: "unknown", ID: "02", Text: "קָם", Voice: "v", Model: "other"},
+		{Path: "other-voice", ID: "00", Text: "קָם", Voice: "other", Model: "eleven_v3"},
+	}
+	orders := [][]int{
+		{0, 1, 2, 3, 4, 5},
+		{5, 4, 3, 2, 1, 0},
+		{2, 0, 4, 1, 5, 3},
+	}
+	for _, order := range orders {
+		entries := make([]ManifestEntry, len(base))
+		for i, n := range order {
+			entries[i] = base[n]
+		}
+		markAliases(entries)
+		for _, e := range entries {
+			want := e.Path != "v4-low" && e.Path != "other-voice"
+			if e.Alias != want {
+				t.Fatalf("order %v path %s alias=%v", order, e.Path, e.Alias)
+			}
+		}
+	}
+}
+
+func TestWordManifest(t *testing.T) {
+	const voice = "voice-a"
+	body := []byte("word-bytes")
+	honest := wordObj("שָׁלוֹם", voice, "eleven_v4", body, "")
+	forged := wordObj("קָם", voice, "eleven_v4", body, "")
+	if honest["file"] == forged["file"] {
+		t.Fatal("forged word kept the honest file name")
+	}
+
+	t.Run("forged", func(t *testing.T) {
+		export := t.TempDir()
+		writeFiles(t, export, map[string][]byte{forged["path"].(string): body})
+		writeMap(t, export, nil, []any{forged}, nil)
+		writeWordManifest(t, export, []any{honest})
+		rep, store := importExport(t, export)
+		if rep.Imported != 0 || rep.TextMismatch != 1 || rep.HashMismatch != 0 || rep.MissingFile != 0 {
+			t.Fatalf("counts: %+v text=%+v", rep, rep.TextMismatches)
+		}
+		if mp3Count(t, filepath.Dir(rep.ReportPath)) != 0 {
+			t.Fatal("forged word wrote an mp3")
+		}
+		for _, text := range []string{"שָׁלוֹם", "קָם"} {
+			if _, ok, err := store.AudioByText(context.Background(), text); err != nil || ok {
+				t.Fatalf("stored %q ok=%v err=%v", text, ok, err)
+			}
+		}
+	})
+	t.Run("missing-manifest", func(t *testing.T) {
+		export := t.TempDir()
+		writeFiles(t, export, map[string][]byte{honest["path"].(string): body})
+		writeMap(t, export, nil, []any{honest}, nil)
+		rep, store := importExport(t, export)
+		assertWordRefusal(t, rep, store, "manifest-missing")
+	})
+	t.Run("missing-key", func(t *testing.T) {
+		export := t.TempDir()
+		writeFiles(t, export, map[string][]byte{honest["path"].(string): body})
+		writeMap(t, export, nil, []any{honest}, nil)
+		other := wordObj("קָם", voice, "eleven_v3", []byte("other"), "")
+		writeWordManifest(t, export, []any{other})
+		rep, store := importExport(t, export)
+		assertWordRefusal(t, rep, store, "missing-key")
+	})
+}
+
+func importExport(t *testing.T, export string) (Report, *db.Store) {
+	t.Helper()
+	data := t.TempDir()
+	store := openStoreAt(t, data, time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC))
+	rep, err := Import(context.Background(), store, data, export, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rep, store
+}
+
+func assertWordRefusal(t *testing.T, rep Report, store *db.Store, reason string) {
+	t.Helper()
+	if rep.Imported != 0 || rep.TextMismatch != 1 || rep.MissingFile != 0 {
+		t.Fatalf("counts: %+v text=%+v", rep, rep.TextMismatches)
+	}
+	if len(rep.TextMismatches) != 1 || rep.TextMismatches[0].Reason != reason {
+		t.Fatalf("mismatch %+v", rep.TextMismatches)
+	}
+	if mp3Count(t, filepath.Dir(rep.ReportPath)) != 0 {
+		t.Fatal("refused word wrote an mp3")
+	}
+	if _, ok, err := store.AudioByText(context.Background(), "שָׁלוֹם"); err != nil || ok {
+		t.Fatalf("stored a row ok=%v err=%v", ok, err)
+	}
 }
 
 func TestLessonManifestRejectsForgedTextHash(t *testing.T) {
@@ -577,6 +696,7 @@ func TestImportArchiveAndStdin(t *testing.T) {
 		map[string]string{"reason": "archive", "path": "demo/audio/_archive/old.mp3"},
 	})
 	writeLessonManifests(t, export, []any{lessonClip})
+	writeWordManifest(t, export, []any{wordClip})
 	tgz := packExport(t, export, "bundle")
 
 	data := t.TempDir()
@@ -690,6 +810,21 @@ func TestAudioByTextPreference(t *testing.T) {
 	if _, ok, err := store.AudioByText(ctx, "אֵין"); err != nil || ok {
 		t.Fatalf("missing text ok=%v err=%v", ok, err)
 	}
+
+	legacyID := strings.Repeat("e", 64)
+	unknownID := strings.Repeat("9", 64)
+	for _, row := range []db.Asset{
+		{ID: unknownID, TextNFC: "לֹא", Voice: "v", Model: "other", Bytes: 1, CreatedAt: newer},
+		{ID: legacyID, TextNFC: "לֹא", Voice: "v", Model: "legacy", Bytes: 1, CreatedAt: older},
+	} {
+		if _, err := store.InsertAudio(ctx, row); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, ok, err = store.AudioByText(ctx, "לֹא")
+	if err != nil || !ok || got.Model != "legacy" || got.ID != legacyID {
+		t.Fatalf("legacy over unknown = %+v ok=%v err=%v", got, ok, err)
+	}
 }
 
 func lessonObj(lesson, clip, text, voice, model string, body []byte, textHash, sha string) map[string]any {
@@ -730,6 +865,57 @@ func wordObj(text, voice, model string, body []byte, file string) map[string]any
 		"model":    model,
 		"sha256":   sha,
 		"verified": true,
+	}
+}
+
+func writeWordManifest(t *testing.T, dir string, words []any) {
+	t.Helper()
+	entries := map[string]any{}
+	var voice, model string
+	for _, item := range words {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if src, _ := obj["source"].(string); src != "" && src != "word" {
+			continue
+		}
+		file, _ := obj["file"].(string)
+		text, _ := obj["text"].(string)
+		if file == "" || text == "" && obj["hashText"] == nil {
+			continue
+		}
+		voice, _ = obj["voiceId"].(string)
+		model, _ = obj["model"].(string)
+		hashed := text
+		if ht, ok := obj["hashText"].(string); ok && strings.TrimSpace(ht) != "" {
+			hashed = ht
+		}
+		entries[voice+"|"+model+"|"+hashed] = map[string]any{
+			"text": hashed, "file": file, "voiceId": voice, "model": model,
+		}
+	}
+	if len(entries) == 0 {
+		return
+	}
+	if voice == "" {
+		voice = "voice"
+	}
+	if model == "" {
+		model = "eleven_v4"
+	}
+	manifestDir := filepath.Join(dir, "_audio", "words")
+	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(map[string]any{
+		"version": 1, "voiceId": voice, "model": model, "entries": entries,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(manifestDir, "manifest.json"), append(raw, '\n'), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

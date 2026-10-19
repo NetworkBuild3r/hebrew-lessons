@@ -60,8 +60,9 @@ type ConflictClip struct {
 }
 
 // ManifestEntry maps one export path to the sha256 id and the normalized text.
-// Alias is true when another stored asset with a lower id has the same
-// text, voice, and model. Conflict is true when this path's text was not
+// Alias is true when another stored asset with the same text and voice
+// wins the index: eleven_v4, then eleven_v3, then legacy, then any other
+// model, and within a model the lowest id. Conflict is true when this path's text was not
 // stored because the same bytes were already stored under a different text.
 type ManifestEntry struct {
 	Path     string `json:"path"`

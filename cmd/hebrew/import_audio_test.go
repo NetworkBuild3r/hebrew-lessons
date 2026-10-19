@@ -42,6 +42,7 @@ func TestImportCommand(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(export, "clip-text-map.json"), wordMap(file, body, "שָׁלוֹם", "v", "eleven_v3"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	writeWordsManifest(t, export, []wordEntry{{file: file, text: "שָׁלוֹם", voice: "v", model: "eleven_v3"}})
 	t.Setenv("DATA_DIR", data)
 
 	if err := runImport([]string{"--dry-run", "--from", export}); err != nil {
@@ -109,6 +110,7 @@ func tinyTGZ(t *testing.T) []byte {
 		}
 	}
 	writeTar("clip-text-map.json", wordMap(file, clip, "הֵי", "v", "legacy"))
+	writeTar("_audio/words/manifest.json", wordsManifestJSON([]wordEntry{{file: file, text: "הֵי", voice: "v", model: "legacy"}}))
 	writeTar("_audio/words/"+file, clip)
 	if err := tw.Close(); err != nil {
 		t.Fatal(err)
@@ -174,6 +176,7 @@ func TestImportCommandExitCode(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(export, "clip-text-map.json"), wordMap(file, []byte("gone"), "שָׁלוֹם", "v", "eleven_v3"), 0o644); err != nil {
 			t.Fatal(err)
 		}
+		writeWordsManifest(t, export, []wordEntry{{file: file, text: "שָׁלוֹם", voice: "v", model: "eleven_v3"}})
 		out, err := captureStdout(t, func() error {
 			return runImport([]string{"--from", export})
 		})
@@ -213,6 +216,14 @@ func TestImportCommandExitCode(t *testing.T) {
 		raw, err := json.Marshal(map[string]any{
 			"schema": "hebrew-clip-text-map/v2", "lessons": []any{}, "words": words, "unmapped": []any{},
 		})
+		entries := make([]wordEntry, 0, len(words))
+		for _, item := range words {
+			obj := item.(map[string]any)
+			entries = append(entries, wordEntry{
+				file: obj["file"].(string), text: obj["text"].(string), voice: "v", model: "eleven_v4",
+			})
+		}
+		writeWordsManifest(t, export, entries)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -279,6 +290,39 @@ func lessonExport(t *testing.T, forged, honest string) string {
 		t.Fatal(err)
 	}
 	return export
+}
+
+type wordEntry struct {
+	file, text, voice, model string
+}
+
+func writeWordsManifest(t *testing.T, dir string, entries []wordEntry) {
+	t.Helper()
+	manifestDir := filepath.Join(dir, "_audio", "words")
+	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(manifestDir, "manifest.json"), wordsManifestJSON(entries), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func wordsManifestJSON(entries []wordEntry) []byte {
+	out := map[string]any{}
+	voice, model := "v", "eleven_v4"
+	for _, ent := range entries {
+		voice, model = ent.voice, ent.model
+		out[ent.voice+"|"+ent.model+"|"+ent.text] = map[string]any{
+			"text": ent.text, "file": ent.file, "voiceId": ent.voice, "model": ent.model,
+		}
+	}
+	raw, err := json.Marshal(map[string]any{
+		"version": 1, "voiceId": voice, "model": model, "entries": out,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return raw
 }
 
 func textHash(voice, model, text string) string {
