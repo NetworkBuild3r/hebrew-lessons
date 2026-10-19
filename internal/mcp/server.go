@@ -24,6 +24,7 @@ const (
 		"Call get_context for the outline, the words already taught before a position, the budgets, and, when you pass learnerId, that learner's placement and struggles. " +
 		"Omit learnerId for a shared unit. Shared units assume no learner data. " +
 		"Call lookup before you invent a spelling or a gloss. " +
+		"Call upsert_lexemes to add or correct a lexicon entry. It is admin only. " +
 		"Call validate_unit as a dry run. Call put_unit to save a draft. " +
 		"Call generate_audio with texts, or a unitId, to store clips for the activity text. A text that already has a clip is skipped. " +
 		"put_unit requires scope shared or learner:<id>. Scope is not inside the document. " +
@@ -74,6 +75,7 @@ type Options struct {
 	extraTools func(*mcp.Server)
 	Course     CourseReader
 	Lexicon    LexiconReader
+	Lexemes    LexiconWriter
 	Lookup     units.Lookup
 	Units      UnitWriter
 	Audio      AudioGenerator
@@ -145,6 +147,7 @@ func newMCPServer(opts Options) *mcp.Server {
 	svc := &service{
 		course:    opts.Course,
 		lexicon:   opts.Lexicon,
+		lexemes:   opts.Lexemes,
 		lexLookup: opts.Lookup,
 		units:     opts.Units,
 		audio:     opts.Audio,
