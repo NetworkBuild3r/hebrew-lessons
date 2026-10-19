@@ -26,6 +26,7 @@ const (
 		"Call lookup before you invent a spelling or a gloss. " +
 		"Call upsert_lexemes to add or correct a lexicon entry. It is admin only. " +
 		"Call validate_unit as a dry run. Call put_unit to save a draft. " +
+		"Call generate_audio with texts, or a unitId, to store clips for the activity text. A text that already has a clip is skipped. " +
 		"put_unit requires scope shared or learner:<id>. Scope is not inside the document. " +
 		"put_unit saves even when issues block publishing. It does not publish. " +
 		"Send unitId when you save again so an unchanged document, position, and scope do not create a revision."
@@ -48,7 +49,8 @@ const (
 //
 // Nil Course, Lexicon, or Units makes the tools that need them return
 // isError. A nil Lookup does not: validate_unit still runs and reports
-// a schema.lookup block issue.
+// a schema.lookup block issue. A nil Audio makes generate_audio return
+// isError. The other tools do not call it.
 type Options struct {
 	AuthToken string
 	// SessionFromToken maps an OAuth access token to a raw session id.
@@ -73,6 +75,7 @@ type Options struct {
 	Lexemes    LexiconWriter
 	Lookup     units.Lookup
 	Units      UnitWriter
+	Audio      AudioGenerator
 }
 
 // Handler returns the streamable HTTP handler for the authoring server.
@@ -144,6 +147,7 @@ func newMCPServer(opts Options) *mcp.Server {
 		lexemes:   opts.Lexemes,
 		lexLookup: opts.Lookup,
 		units:     opts.Units,
+		audio:     opts.Audio,
 	}
 	registerTools(server, svc)
 	if opts.extraTools != nil {

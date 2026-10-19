@@ -84,7 +84,7 @@ func TestOAuthContract(t *testing.T) {
 	}
 
 	still := postMCPPath(t, env.base, "/mcp", oauthStaticToken, []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
-	if still.StatusCode != http.StatusOK || strings.Contains(still.Body, `"isError":true`) || !strings.Contains(still.Body, "get_context") {
+	if still.StatusCode != http.StatusOK || strings.Contains(still.Body, `"isError":true`) || !strings.Contains(still.Body, "get_context") || !strings.Contains(still.Body, "generate_audio") {
 		t.Fatalf("static %d %s", still.StatusCode, still.Body)
 	}
 }

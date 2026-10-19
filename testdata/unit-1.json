@@ -1,0 +1,333 @@
+{
+  "unitId": 1,
+  "revision": 1,
+  "position": 0,
+  "scope": "shared",
+  "savedAt": "2026-10-19 MDT (draft, unpublished)",
+  "sources": [
+    "Drive class doc 2025-02-26 (self-intro reading + Greetings and Introductions vocab)",
+    "Drive class doc 2025-03-12 (Introducing yourself; Welcome to Israel)",
+    "Krisp: Hebrew tutor recording 2025-02-26 (summary only: first class, pronouns and self-intro)"
+  ],
+  "lexiconSeedNeeded": [
+    {
+      "text": "אֲנִי",
+      "translit": "ani",
+      "gloss": "I",
+      "pos": "pron",
+      "pealim": "verified"
+    },
+    {
+      "text": "גָּר",
+      "translit": "gar",
+      "gloss": "live, reside (I/he lives; m.sg. present of לָגוּר)",
+      "pos": "verb",
+      "pealim": "verified /dict/4-lagur/"
+    },
+    {
+      "text": "פֹּה",
+      "translit": "po",
+      "gloss": "here",
+      "pos": "adv",
+      "pealim": "verified; homograph of פֶּה 'mouth', keep pointed"
+    },
+    {
+      "text": "אַתָּה",
+      "translit": "ata",
+      "gloss": "you (m.sg.)",
+      "pos": "pron",
+      "pealim": "verified /dict/4644-ata/"
+    },
+    {
+      "text": "אֵיפֹה",
+      "translit": "eifo",
+      "gloss": "where",
+      "pos": "adv",
+      "pealim": "verified"
+    },
+    {
+      "text": "עוֹבֵד",
+      "translit": "oved",
+      "gloss": "work(s) (m.sg. present of לַעֲבוֹד)",
+      "pos": "verb",
+      "pealim": "verified /dict/51-laavod/"
+    },
+    {
+      "text": "לוֹמֵד",
+      "translit": "lomed",
+      "gloss": "study, learn (m.sg. present of לִלְמוֹד)",
+      "pos": "verb",
+      "pealim": "verified /dict/41-lilmod/"
+    },
+    {
+      "text": "עִבְרִית",
+      "translit": "ivrit",
+      "gloss": "Hebrew (the language)",
+      "pos": "noun",
+      "gender": "f",
+      "plural": null,
+      "pealim": "verified as f.sg. of עִבְרִי /dict/4889-ivri/; language noun, no plural"
+    }
+  ],
+  "audioNeeded": [
+    "אֲנִי",
+    "אֲנִי גָּר פֹּה.",
+    "אֲנִי לוֹמֵד עִבְרִית פֹּה.",
+    "אֲנִי לוֹמֵד עִבְרִית.",
+    "אֲנִי עוֹבֵד פֹּה.",
+    "אֵיפֹה",
+    "אֵיפֹה אַתָּה גָּר?",
+    "אֵיפֹה אַתָּה גָּר? אֲנִי גָּר פֹּה. אֵיפֹה אַתָּה עוֹבֵד? אֲנִי עוֹבֵד פֹּה. אַתָּה לוֹמֵד עִבְרִית? אֲנִי לוֹמֵד עִבְרִית. אֵיפֹה אַתָּה לוֹמֵד עִבְרִית? פֹּה.",
+    "אֵיפֹה אַתָּה לוֹמֵד עִבְרִית?",
+    "אֵיפֹה אַתָּה לוֹמֵד?",
+    "אֵיפֹה אַתָּה עוֹבֵד?",
+    "אַתָּה",
+    "אַתָּה גָּר פֹּה?",
+    "אַתָּה לוֹמֵד עִבְרִית?",
+    "אַתָּה עוֹבֵד פֹּה?",
+    "גָּר",
+    "לוֹמֵד",
+    "עִבְרִית",
+    "עוֹבֵד",
+    "פֹּה"
+  ],
+  "doc": {
+    "title": "Hi, I live here",
+    "situation": "Meeting someone new and telling them where you live, where you work, and that you study Hebrew.",
+    "concept": "Present-tense verbs for 'I': אֲנִי + verb, with no word for 'am' (אֲנִי גָּר = I live). A question just puts אֵיפֹה (where) in front of the same sentence.",
+    "newWords": [
+      "אֲנִי",
+      "גָּר",
+      "פֹּה",
+      "אַתָּה",
+      "אֵיפֹה",
+      "עוֹבֵד",
+      "לוֹמֵד",
+      "עִבְרִית"
+    ],
+    "lessons": [
+      {
+        "kind": "lesson",
+        "activities": [
+          {
+            "type": "listen_pick",
+            "text": "אֲנִי"
+          },
+          {
+            "type": "recall",
+            "text": "אֲנִי"
+          },
+          {
+            "type": "listen_pick",
+            "text": "גָּר"
+          },
+          {
+            "type": "recall",
+            "text": "גָּר"
+          },
+          {
+            "type": "listen_pick",
+            "text": "פֹּה"
+          },
+          {
+            "type": "recall",
+            "text": "פֹּה"
+          },
+          {
+            "type": "pattern",
+            "text": "אֲנִי גָּר פֹּה."
+          },
+          {
+            "type": "listen_pick",
+            "text": "אֲנִי גָּר פֹּה."
+          },
+          {
+            "type": "shadow",
+            "text": "אֲנִי גָּר פֹּה."
+          },
+          {
+            "type": "produce",
+            "text": "אֲנִי גָּר פֹּה."
+          }
+        ]
+      },
+      {
+        "kind": "lesson",
+        "activities": [
+          {
+            "type": "recall",
+            "text": "אֲנִי גָּר פֹּה."
+          },
+          {
+            "type": "listen_pick",
+            "text": "אַתָּה"
+          },
+          {
+            "type": "recall",
+            "text": "אַתָּה"
+          },
+          {
+            "type": "listen_pick",
+            "text": "אֵיפֹה"
+          },
+          {
+            "type": "recall",
+            "text": "אֵיפֹה"
+          },
+          {
+            "type": "pattern",
+            "text": "אֵיפֹה אַתָּה גָּר?"
+          },
+          {
+            "type": "listen_pick",
+            "text": "אֵיפֹה אַתָּה גָּר?"
+          },
+          {
+            "type": "shadow",
+            "text": "אֵיפֹה אַתָּה גָּר?"
+          },
+          {
+            "type": "cloze",
+            "text": "אַתָּה גָּר פֹּה?"
+          },
+          {
+            "type": "produce",
+            "text": "אֵיפֹה אַתָּה גָּר?"
+          }
+        ]
+      },
+      {
+        "kind": "lesson",
+        "activities": [
+          {
+            "type": "listen_pick",
+            "text": "עוֹבֵד"
+          },
+          {
+            "type": "recall",
+            "text": "עוֹבֵד"
+          },
+          {
+            "type": "listen_pick",
+            "text": "לוֹמֵד"
+          },
+          {
+            "type": "recall",
+            "text": "לוֹמֵד"
+          },
+          {
+            "type": "listen_pick",
+            "text": "עִבְרִית"
+          },
+          {
+            "type": "recall",
+            "text": "עִבְרִית"
+          },
+          {
+            "type": "pattern",
+            "text": "אֲנִי לוֹמֵד עִבְרִית."
+          },
+          {
+            "type": "listen_pick",
+            "text": "אֲנִי עוֹבֵד פֹּה."
+          },
+          {
+            "type": "cloze",
+            "text": "אַתָּה לוֹמֵד עִבְרִית?"
+          },
+          {
+            "type": "produce",
+            "text": "אֲנִי לוֹמֵד עִבְרִית."
+          },
+          {
+            "type": "listen_pick",
+            "text": "אֵיפֹה אַתָּה עוֹבֵד?"
+          },
+          {
+            "type": "shadow",
+            "text": "אֵיפֹה אַתָּה עוֹבֵד?"
+          }
+        ]
+      },
+      {
+        "kind": "checkpoint",
+        "activities": [
+          {
+            "type": "listen_pick",
+            "text": "אֵיפֹה אַתָּה לוֹמֵד?"
+          },
+          {
+            "type": "recall",
+            "text": "אֲנִי עוֹבֵד פֹּה."
+          },
+          {
+            "type": "produce",
+            "text": "אֵיפֹה אַתָּה עוֹבֵד?"
+          },
+          {
+            "type": "cloze",
+            "text": "אֲנִי לוֹמֵד עִבְרִית פֹּה."
+          },
+          {
+            "type": "produce",
+            "text": "אַתָּה גָּר פֹּה?"
+          },
+          {
+            "type": "listen_pick",
+            "text": "אֲנִי גָּר פֹּה."
+          }
+        ]
+      },
+      {
+        "kind": "checkpoint",
+        "activities": [
+          {
+            "type": "listen_pick",
+            "text": "אַתָּה לוֹמֵד עִבְרִית?"
+          },
+          {
+            "type": "recall",
+            "text": "אַתָּה לוֹמֵד עִבְרִית?"
+          },
+          {
+            "type": "story",
+            "text": "אֵיפֹה אַתָּה גָּר? אֲנִי גָּר פֹּה. אֵיפֹה אַתָּה עוֹבֵד? אֲנִי עוֹבֵד פֹּה. אַתָּה לוֹמֵד עִבְרִית? אֲנִי לוֹמֵד עִבְרִית. אֵיפֹה אַתָּה לוֹמֵד עִבְרִית? פֹּה."
+          },
+          {
+            "type": "shadow",
+            "text": "אַתָּה לוֹמֵד עִבְרִית?"
+          }
+        ]
+      },
+      {
+        "kind": "checkpoint",
+        "activities": [
+          {
+            "type": "listen_pick",
+            "text": "אַתָּה עוֹבֵד פֹּה?"
+          },
+          {
+            "type": "recall",
+            "text": "אֵיפֹה אַתָּה גָּר?"
+          },
+          {
+            "type": "produce",
+            "text": "אֲנִי עוֹבֵד פֹּה."
+          },
+          {
+            "type": "produce",
+            "text": "אֲנִי לוֹמֵד עִבְרִית."
+          },
+          {
+            "type": "cloze",
+            "text": "אֵיפֹה אַתָּה לוֹמֵד עִבְרִית?"
+          },
+          {
+            "type": "produce",
+            "text": "אֲנִי גָּר פֹּה."
+          }
+        ]
+      }
+    ]
+  }
+}

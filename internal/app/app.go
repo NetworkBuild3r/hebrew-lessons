@@ -115,8 +115,13 @@ type Config struct {
 	MCPAllowedOrigins []string
 
 	// ElevenLabsAPIKey gates the real TTS client. Empty leaves TTS unset
-	// unless TTS is set directly.
+	// unless TTS is set directly. The key is read at synthesis time:
+	// an empty value does not stop New.
 	ElevenLabsAPIKey string
+	// ElevenLabsVoice is ELEVENLABS_VOICE_ID. Empty uses the legacy voice.
+	ElevenLabsVoice string
+	// ElevenLabsModel is ELEVENLABS_MODEL. Empty uses the legacy model.
+	ElevenLabsModel string
 
 	// Clock stamps database times. Nil uses the system clock.
 	Clock clock.Clock
@@ -160,6 +165,12 @@ func ApplyDefaults(cfg Config) Config {
 	}
 	if cfg.Clock == nil {
 		cfg.Clock = clock.System()
+	}
+	if cfg.ElevenLabsVoice == "" {
+		cfg.ElevenLabsVoice = audio.DefaultVoiceID
+	}
+	if cfg.ElevenLabsModel == "" {
+		cfg.ElevenLabsModel = audio.DefaultModel
 	}
 	return cfg
 }
@@ -250,7 +261,10 @@ func NewApp(cfg Config) (*App, error) {
 
 	tts := cfg.TTS
 	if tts == nil && cfg.ElevenLabsAPIKey != "" {
-		tts = audio.NewElevenLabs(cfg.ElevenLabsAPIKey)
+		client := audio.NewElevenLabs(cfg.ElevenLabsAPIKey)
+		client.Voice = cfg.ElevenLabsVoice
+		client.Model = cfg.ElevenLabsModel
+		tts = client
 	}
 
 	review := fsrs.New(store, cfg.Clock)
@@ -265,7 +279,7 @@ func NewApp(cfg Config) (*App, error) {
 	}
 	health := a.healthHandler()
 	a.web = web.New(health, svc)
-	a.mcp = newMCP(cfg, health, svc, store)
+	a.mcp = newMCP(cfg, health, svc, store, tts, audioDir)
 	sweepCtx, stop := context.WithCancel(context.Background())
 	a.stopSweep = stop
 	go sweepOAuth(sweepCtx, store, cfg.Clock)
@@ -399,7 +413,7 @@ func (a *App) healthHandler() http.Handler {
 	})
 }
 
-func newMCP(cfg Config, health http.Handler, sessions *auth.Service, store *db.Store) http.Handler {
+func newMCP(cfg Config, health http.Handler, sessions *auth.Service, store *db.Store, tts audio.TTS, audioDir string) http.Handler {
 	// The adapter is the *db.Store behind the authoring tools.
 	// It lives in internal/mcpstore so internal/db does not import internal/mcp.
 	//
@@ -451,6 +465,16 @@ func newMCP(cfg Config, health http.Handler, sessions *auth.Service, store *db.S
 		Lexemes: adapter,
 		Lookup:  adapter,
 		Units:   adapter,
+		Audio: audioGen{
+			gen: &audio.Generator{
+				TTS:   tts,
+				Store: store,
+				Dir:   audioDir,
+				Voice: cfg.ElevenLabsVoice,
+				Model: cfg.ElevenLabsModel,
+			},
+			store: store,
+		},
 	})
 	mux.Handle("/mcp", authoring)
 	mux.Handle("/mcp/{$}", authoring)

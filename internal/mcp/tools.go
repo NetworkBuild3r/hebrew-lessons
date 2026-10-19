@@ -30,6 +30,7 @@ type service struct {
 	lexemes   LexiconWriter
 	lexLookup units.Lookup
 	units     UnitWriter
+	audio     AudioGenerator
 }
 
 type getContextInput struct {
@@ -468,4 +469,5 @@ func registerTools(server *mcp.Server, svc *service) {
 		},
 	}, svc.putUnit)
 	registerUpsertLexemes(server, svc)
+	registerGenerateAudio(server, svc)
 }
