@@ -72,11 +72,11 @@ func TestLogoutFormUsesSessionToken(t *testing.T) {
 
 	anon := httptest.NewRecorder()
 	h.ServeHTTP(anon, httptest.NewRequest(http.MethodGet, "/", nil))
-	if anon.Code != http.StatusOK {
-		t.Fatalf("anon status %d", anon.Code)
+	if anon.Code != http.StatusSeeOther || anon.Header().Get("Location") != "/signin" {
+		t.Fatalf("signed-out GET / = %d %q", anon.Code, anon.Header().Get("Location"))
 	}
 	if strings.Contains(anon.Body.String(), csrf) {
-		t.Fatal("signed-out page rendered the session token")
+		t.Fatal("signed-out response included the session token")
 	}
 }
 

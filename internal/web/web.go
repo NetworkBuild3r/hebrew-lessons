@@ -26,7 +26,8 @@ var Assets embed.FS
 //
 // sessions, when non-nil, registers Google sign-in and logout and wraps
 // the mux with the session middleware. Page tokens come from
-// CSRFFunc(auth.CSRFToken). Tests pass a fake to newMux; production does not.
+// CSRFFunc(auth.CSRFToken). A signed-out GET / redirects to /signin.
+// Tests pass a fake to newMux; production does not.
 // Audio bytes are served at /audio/<sha256>.mp3; this router does not
 // register that path.
 func New(health http.Handler, sessions *auth.Service) http.Handler {
@@ -34,7 +35,7 @@ func New(health http.Handler, sessions *auth.Service) http.Handler {
 	if sessions != nil {
 		tokens = CSRFFunc(auth.CSRFToken)
 	}
-	mux := routes(health, tokens)
+	mux := routes(health, tokens, sessions != nil)
 	if sessions != nil {
 		sessions.Register(mux)
 		// auth.Middleware loads the session and checks CSRF, including
@@ -48,10 +49,10 @@ func New(health http.Handler, sessions *auth.Service) http.Handler {
 
 // newMux is the test router. tokens is a fake; production New does not use it.
 func newMux(health http.Handler, tokens CSRFToken) http.Handler {
-	return securityHeaders(csrfMiddleware(tokens, routes(health, tokens)))
+	return securityHeaders(csrfMiddleware(tokens, routes(health, tokens, false)))
 }
 
-func routes(health http.Handler, tokens CSRFToken) *http.ServeMux {
+func routes(health http.Handler, tokens CSRFToken, gate bool) *http.ServeMux {
 	mux := http.NewServeMux()
 	if health != nil {
 		mux.Handle("GET /healthz", health)
@@ -62,6 +63,13 @@ func routes(health http.Handler, tokens CSRFToken) *http.ServeMux {
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		if gate {
+			if _, ok := auth.CurrentUser(r.Context()); !ok {
+				w.Header().Set("Cache-Control", "no-store")
+				http.Redirect(w, r, signInPath(r), http.StatusSeeOther)
+				return
+			}
+		}
 		render(w, r, views.Today(homeFrom(r, csrfValue(tokens, r))))
 	})
 	mux.HandleFunc("GET /review", func(w http.ResponseWriter, r *http.Request) {
@@ -148,6 +156,13 @@ func render(w http.ResponseWriter, r *http.Request, page templ.Component) {
 	if err := page.Render(r.Context(), w); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
+}
+
+func signInPath(r *http.Request) string {
+	if r.URL.Query().Get("lang") == "en" {
+		return "/signin?lang=en"
+	}
+	return "/signin"
 }
 
 func csrfValue(tokens CSRFToken, r *http.Request) string {
