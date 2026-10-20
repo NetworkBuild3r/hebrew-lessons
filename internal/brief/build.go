@@ -18,6 +18,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
 // Version is the version of the payload shape, the "v" field of Plan.
@@ -26,8 +27,7 @@ const Version = 1
 // The hard limits. The word counts are north-star section 7.1 and SPEC-019.
 const (
 	// MinNewWords and MaxNewWords bound the new words of a brief. MaxNewWords is the unit
-	// budget (units.MaxNewWordsPerUnit, which a test pins). This package does not import
-	// internal/units, because the brief checks of SPEC-020 will live there.
+	// budget (units.MaxNewWordsPerUnit, which limits_test pins).
 	MinNewWords = 5
 	MaxNewWords = 8
 
@@ -98,23 +98,13 @@ const (
 	maxPoolPerBand = 1000
 )
 
-// The activity types of SPEC-015 that a brief names. flashcard is never named: a checked
-// activity is used wherever one exists (north-star 6).
-const (
-	ActivityListenPick = "listen_pick"
-	ActivityReadPick   = "read_pick"
-	ActivityWordMatch  = "word_match"
-	ActivityAudioMatch = "audio_match"
-	ActivityTypeIt     = "type_it"
-	ActivityDictation  = "dictation"
-)
-
-// skillActivities is the activity types that train each skill, in the order a brief lists them.
-var skillActivities = map[string][]string{
-	fsrs.SkillListen: {ActivityListenPick, ActivityAudioMatch},
-	fsrs.SkillRead:   {ActivityReadPick, ActivityWordMatch},
-	fsrs.SkillRecall: {ActivityTypeIt},
-	fsrs.SkillSpell:  {ActivityDictation},
+// skillActivities is the unit activity types that train a skill, in the order a brief
+// lists them. The list is units.ActivitiesForSkill, the same types validate_unit accepts.
+// flashcard is never named: a checked activity is used wherever one exists (north-star 6).
+// SPEC-015 review names (read_pick, word_match, audio_match, type_it, dictation) are not
+// unit types, so a brief does not suggest them.
+func skillActivities(skill string) []string {
+	return units.ActivitiesForSkill(skill)
 }
 
 // Tier names for Tier.Name.
@@ -543,7 +533,7 @@ func (b *Builder) struggleWords(ctx context.Context, userID int64) ([]StruggleWo
 		}
 		out = append(out, StruggleWord{
 			Word: word, State: string(r.w.State), Skill: skill, Cause: string(r.w.Cause),
-			Score: r.score, RequiredCount: uses, Activities: slices.Clone(skillActivities[skill]),
+			Score: r.score, RequiredCount: uses, Activities: slices.Clone(skillActivities(skill)),
 		})
 	}
 	return out, nil
@@ -575,9 +565,9 @@ func activitiesFor(focus string, struggle []StruggleWord) []string {
 			}
 		}
 	}
-	add(skillActivities[focus])
+	add(skillActivities(focus))
 	for _, w := range struggle {
-		add(skillActivities[w.Skill])
+		add(skillActivities(w.Skill))
 	}
 	return out
 }

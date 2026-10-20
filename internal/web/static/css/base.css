@@ -1377,18 +1377,28 @@ mark.target .wb__he {
 .activity .word-blocks { align-items: stretch; }
 .activity-word > .clip { margin-block-start: auto; }
 /* A multi-word recall shares one grid: Hebrew, transliteration, gloss, orb.
-   An empty transliteration row keeps its height, so the "?" slot cannot
-   lift the target's orb. The line is centred under the hero orb. Each
-   text row is one gloss line, and it grows if the slot is taller. */
+   Text rows are at least one line and grow when a gloss wraps, so the extra
+   line does not paint over the orb. The orb row is at least a tap target and
+   grows to the native bar. Four content-sized tracks fit a phone; a fifth
+   word starts the next band instead of overflowing sideways. Wider viewports
+   keep a longer line on one band. The line stays centred. */
 .word-blocks--recall {
   display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: auto calc(var(--fs-small) * var(--lh-body)) calc(var(--fs-small) * var(--lh-body)) var(--size-tap);
+  grid-template-columns: repeat(4, fit-content(7rem));
+  grid-auto-rows: auto minmax(1lh, auto) minmax(1lh, auto) minmax(var(--size-tap), auto);
+  grid-auto-flow: row;
   justify-content: center;
-  justify-items: center;
+  justify-items: stretch;
   align-items: stretch;
   column-gap: var(--space-2);
   row-gap: var(--space-1);
+  max-inline-size: 100%;
+}
+@media (min-width: 720px) {
+  .word-blocks--recall { grid-template-columns: repeat(8, fit-content(7rem)); }
+}
+@media (min-width: 1440px) {
+  .word-blocks--recall { column-gap: var(--space-4); }
 }
 .word-blocks--recall > .activity-word {
   display: grid;
@@ -1397,6 +1407,8 @@ mark.target .wb__he {
   align-items: center;
   justify-items: center;
   gap: 0;
+  min-inline-size: 0;
+  max-inline-size: 100%;
 }
 .word-blocks--recall > .activity-word > .wb {
   display: grid;
@@ -1406,7 +1418,33 @@ mark.target .wb__he {
   justify-items: center;
   gap: 0;
 }
-.word-blocks--recall > .activity-word > .clip { margin-block-start: 0; }
+/* The native bar sits in the orb row, under its word. It fills that column
+   instead of the 16rem default, so three bars do not set the column widths.
+   min-inline-size: 0 keeps the control's intrinsic minimum out of the track. */
+.word-blocks--recall > .activity-word > .clip {
+  margin-block-start: 0;
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+.word-blocks--recall .clip > audio {
+  inline-size: 0;
+  min-inline-size: 100%;
+  max-inline-size: 100%;
+}
+.word-blocks--recall .recall-tr,
+.word-blocks--recall .recall-gl {
+  max-inline-size: 100%;
+  padding-inline: var(--space-1);
+  text-align: center;
+}
+.word-blocks--recall .wb__tr,
+.word-blocks--recall .wb__gl {
+  display: block;
+  max-inline-size: 5.5rem;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
 .word-blocks--recall .wb__he {
   font-family: var(--font-he);
   font-size: var(--fs-he-lg);
@@ -1536,7 +1574,10 @@ html.js .orb--hero:hover { background: var(--surface-soft); }
   background: var(--surface-soft);
   border: 1px solid var(--hairline-strong);
 }
-html.js .orb--word:hover::before { background: var(--surface-soft); }
+html.js .orb--word:hover::before {
+  background: var(--surface-raised);
+  border-color: var(--text);
+}
 .orb--word[data-state="error"]::before {
   border-style: dashed;
   border-color: var(--muted);

@@ -35,6 +35,7 @@ const (
 // the catalog row records the blocking severity and the description states
 // the warn band.
 const (
+	RuleActivityTarget    = "activity.target"
 	RuleAudioMissing      = "audio.missing"
 	RuleBriefAudioAll     = "brief.audio_all"
 	RuleBriefCoverage     = "brief.coverage"
@@ -101,6 +102,7 @@ type Rule struct {
 // Rules is the validator catalog, sorted by id. Coverage ids fire as
 // block or warn; Severity here is the block, and Description gives the band.
 var Rules = []Rule{
+	{ID: RuleActivityTarget, Severity: SeverityBlock, Description: "A graded activity (recall, listen_pick, produce, or cloze) has a target that is not one of that activity's tokens, or that token's exact pointed text is not a lexicon entry. The unpointed spelling does not count. A target on any other activity type is the same rule. An empty or missing target is allowed."},
 	{ID: RuleAudioMissing, Severity: SeverityBlock, Description: "A Hebrew activity has no audio clip for its exact pointed text. A dialogue line needs a clip in its own speaker's voice, and a clip in the other voice does not count."},
 	{ID: RuleBriefAudioAll, Severity: SeverityBlock, Description: "Brief check. A new word, or a title, situation, or concept that contains Hebrew, has no audio clip for its exact pointed text. Activity text is covered by audio.missing."},
 	{ID: RuleBriefCoverage, Severity: SeverityBlock, Description: "Brief check. In a story or listen_pick passage, the share of Hebrew tokens that are known or solid for the learner, or in the brief, is below the brief's tier figure (0.60, 0.90, or 0.95). Function words, proper names, and numerals are left out of the count, and a token that matches no lexeme counts as unknown. Replaces coverage.story and coverage.listening when a brief is used."},
@@ -132,7 +134,7 @@ var Rules = []Rule{
 	{ID: RuleStoryUnpointed, Severity: SeverityBlock, Description: "A story contains a Hebrew word with no niqqud. Names, numbers, and punctuation are ignored. A number is digits or gematria in rank order with U+05F3/U+05F4. Acronyms are words, except spellings that are also valid numerals (ת״א, ש״ס), which are treated as numerals. ASCII quotes are split into letters and flagged. Homographs are not exempt."},
 	{ID: RuleUnitDialogueLines, Severity: SeverityBlock, Description: fmt.Sprintf("A dialogue has fewer than %d or more than %d lines, a dialogue carries text instead of lines, or an activity that is not a dialogue carries lines.", MinDialogueLines, MaxDialogueLines)},
 	{ID: RuleUnitDialogueSpeakers, Severity: SeverityBlock, Description: "A dialogue line has a speaker other than a (female voice) or b (male voice), or one of the two speakers has no line."},
-	{ID: RuleUnitNoMarkup, Severity: SeverityBlock, Description: "Brief check. A text field of the unit (title, situation, concept, a new word, a lesson kind, an activity type or text, a dialogue line's speaker or text) contains <, >, or javascript: in any letter case. The unit is plain text and the templates escape it again on output."},
+	{ID: RuleUnitNoMarkup, Severity: SeverityBlock, Description: "Brief check. A text field of the unit (title, situation, concept, a new word, a lesson kind, an activity type, text, or target, a dialogue line's speaker or text) contains <, >, or javascript: in any letter case. The unit is plain text and the templates escape it again on output."},
 }
 
 // Guidance is one player rule for the model that writes units.

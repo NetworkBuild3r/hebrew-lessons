@@ -66,6 +66,8 @@ A unit is plain JSON. It has no audio, gloss, or choices fields. Audio is the cl
 | `cloze` | The whole pointed sentence. The new word in it is the gap. | read | A question. |
 | `pattern` | One pointed example of a pattern. The concept is the rule. | read | A question. |
 
+A question (`recall`, `listen_pick`, `produce`, or `cloze`) may set `target` to the exact token it tests, the same spelling as one token of its text, and that token must be in the lexicon. Leave `target` out to test the first new token. An empty `target` is the same as leaving it out.
+
 Any conversation between people is a `dialogue`, never a `story`. A story stays one narrator. In a dialogue, speaker `a` is the female voice and speaker `b` is the male voice, the same for the whole unit. Both must speak. The speaker is exactly `a` or `b`. A voice id never goes in a unit or a request.
 
 ## Reading a brief
@@ -76,7 +78,7 @@ Any conversation between people is a `dialogue`, never a `story`. A story stays 
 - `struggleWords`: bring each one back at least `requiredCount` times, and at least once in an activity of its `skill`. The skill is the one the learner is failing.
 - `comfortableWords`: words the learner knows. Build the text from them and from the brief's other words.
 - `tier`: `name`, `knownWords`, `minKnownShare`, and `maxTextTokens`. Use these figures, not a table from memory.
-- `skillFocus` and `activities`: the skill that most needs work, and activity names to favour. Some of these names are not unit types. Map them like this: `listen_pick` and `audio_match` become `listen_pick` or `shadow`. `read_pick` and `word_match` become `story`, `dialogue`, `cloze`, or `pattern`. `type_it` becomes `recall`. `dictation` becomes `produce`.
+- `skillFocus` and `activities`: the skill that most needs work, and the unit activity types to favour. Every name is a type `validate_unit` accepts. Listen is `listen_pick` or `shadow`. Read is `story`, `dialogue`, `cloze`, or `pattern`. Recall is `recall`. Spell is `produce`.
 
 A struggle word needs an activity of its skill: listen is `listen_pick` or `shadow`, read is `story`, `dialogue`, `cloze`, or `pattern`, recall is `recall`, and spell is `produce`.
 
@@ -114,6 +116,7 @@ Every Hebrew text needs a clip for its exact pointed text. Do not change a text 
 
 | rule | severity | what it means | how to fix it |
 | --- | --- | --- | --- |
+| `activity.target` | block | A graded activity's `target` is not one of its tokens, or that token's exact pointed spelling is not a lexicon entry. The unpointed spelling does not count. A `target` on any other activity type is the same rule. An empty target is allowed. | Set `target` to the exact pointed spelling `lookup` returns for that token, or remove it. |
 | `audio.missing` | block | A Hebrew text has no clip for its exact pointed text. A dialogue line needs a clip in its own speaker's voice. | Call `generate_audio` with that exact text, or with the line and its speaker. |
 | `brief.audio_all` | block | A new word, or a title, situation, or concept that has Hebrew, has no clip. | Add the new words to `texts` in `generate_audio`, or keep Hebrew out of the title, situation, and concept. |
 | `brief.coverage` | block | A passage has too few known words for the tier. The message gives the share and what the tier needs. | Replace unknown words with comfortable words or brief words, or shorten the passage. |
@@ -135,7 +138,7 @@ Every Hebrew text needs a clip for its exact pointed text. Do not change a text 
 | `noun.plural` | warn | A new noun has an irregular plural that the unit does not show. | Use the plural once (it needs its own lexicon entry), or leave it. |
 | `recycle.count` | warn | A new word appears fewer than 4 times in later lessons. | Bring it back in later lessons or the checkpoint. The review schedule does the rest. |
 | `recycle.spread` | warn | A new word appears in fewer than 3 later lessons. | Same as `recycle.count`. |
-| `schema.activity` | block | An activity `type` is not one of the eight. | Use one of the eight types. The brief's names such as `read_pick` are not types. |
+| `schema.activity` | block | An activity `type` is not one of the eight. | Use one of the eight types. The brief's `activities` names are those types. |
 | `schema.checkpoint` | block | A checkpoint introduces a new word. | Make it a `lesson`, or introduce the word in an earlier lesson. |
 | `schema.kind` | block | A lesson `kind` is not `lesson` or `checkpoint`. | Use one of those two. |
 | `schema.lookup` | block | The server could not read the lexicon or the audio store. | Nothing in the unit is wrong. Call again, and tell the operator if it keeps failing. |
@@ -172,7 +175,7 @@ The learner struggles with four words, one in each skill, so the brief gives onl
     { "text": "אוֹ", "gloss": "or" }
   ],
   "skillFocus": "listen",
-  "activities": ["listen_pick", "audio_match", "read_pick", "word_match", "type_it", "dictation"]
+  "activities": ["listen_pick", "shadow", "story", "dialogue", "cloze", "pattern", "recall", "produce"]
 }
 ```
 
@@ -246,7 +249,7 @@ The learner is doing well and has no struggle words, so the brief gives four new
     { "text": "כֵּן", "gloss": "yes" }
   ],
   "skillFocus": "listen",
-  "activities": ["listen_pick", "audio_match"]
+  "activities": ["listen_pick", "shadow"]
 }
 ```
 

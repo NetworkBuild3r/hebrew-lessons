@@ -155,8 +155,8 @@ func TestNoMarkupCoversEveryStringField(t *testing.T) {
 	base := populated()
 	var fields []reflect.Value
 	collect(reflect.ValueOf(&base).Elem(), &fields)
-	if len(fields) != 7 {
-		t.Fatalf("the unit has %d string fields, want 7. A new field needs a markup check.", len(fields))
+	if len(fields) != 8 {
+		t.Fatalf("the unit has %d string fields, want 8. A new field needs a markup check.", len(fields))
 	}
 	for i := range fields {
 		for _, bad := range []string{"<", ">", "javascript:alert(1)", "JAVASCRIPT:x"} {
@@ -402,12 +402,63 @@ func TestBriefStruggleSkill(t *testing.T) {
 	}
 	for typ, want := range map[string]string{
 		ActivityListenPick: SkillListen, ActivityShadow: SkillListen, "audio_match": SkillListen,
-		ActivityStory: SkillRead, ActivityCloze: SkillRead, ActivityPattern: SkillRead, "read_pick": SkillRead, "word_match": SkillRead,
+		ActivityStory: SkillRead, ActivityDialogue: SkillRead, ActivityCloze: SkillRead, ActivityPattern: SkillRead, "read_pick": SkillRead, "word_match": SkillRead,
 		ActivityRecall: SkillRecall, "type_it": SkillRecall, ActivityProduce: SkillSpell, "dictation": SkillSpell, "other": "",
 	} {
 		if SkillOfActivity(typ) != want {
 			t.Errorf("SkillOfActivity(%s) = %q, want %q", typ, SkillOfActivity(typ), want)
 		}
+	}
+}
+
+func TestActivitiesForSkillMatchTheValidator(t *testing.T) {
+	known := []string{
+		ActivityListenPick, ActivityRecall, ActivityProduce, ActivityCloze,
+		ActivityPattern, ActivityStory, ActivityShadow, ActivityDialogue,
+	}
+	seen := map[string]bool{}
+	for _, skill := range []string{SkillListen, SkillRead, SkillRecall, SkillSpell} {
+		got := ActivitiesForSkill(skill)
+		if len(got) == 0 {
+			t.Errorf("%s has no activities", skill)
+		}
+		for _, typ := range got {
+			if !knownActivity(typ) {
+				t.Errorf("ActivitiesForSkill(%s) emits %q, which validate rejects", skill, typ)
+			}
+			if SkillOfActivity(typ) != skill {
+				t.Errorf("ActivitiesForSkill(%s) emits %q, skill %q", skill, typ, SkillOfActivity(typ))
+			}
+			seen[typ] = true
+		}
+	}
+	for _, typ := range known {
+		if !knownActivity(typ) {
+			t.Errorf("known list drifted: %s", typ)
+		}
+		if SkillOfActivity(typ) != "" && !seen[typ] {
+			t.Errorf("known type %s is not suggested for its skill", typ)
+		}
+	}
+	for _, alias := range []string{"read_pick", "word_match", "audio_match", "type_it", "dictation"} {
+		if knownActivity(alias) {
+			t.Errorf("%s was added to the validator", alias)
+		}
+		if seen[alias] {
+			t.Errorf("a brief would suggest %s", alias)
+		}
+	}
+	if !slices.Equal(ActivitiesForSkill(SkillListen), []string{ActivityListenPick, ActivityShadow}) {
+		t.Errorf("listen = %v", ActivitiesForSkill(SkillListen))
+	}
+	if !slices.Equal(ActivitiesForSkill(SkillRead), []string{ActivityStory, ActivityDialogue, ActivityCloze, ActivityPattern}) {
+		t.Errorf("read = %v", ActivitiesForSkill(SkillRead))
+	}
+	if !slices.Equal(ActivitiesForSkill(SkillRecall), []string{ActivityRecall}) || !slices.Equal(ActivitiesForSkill(SkillSpell), []string{ActivityProduce}) {
+		t.Errorf("recall %v spell %v", ActivitiesForSkill(SkillRecall), ActivitiesForSkill(SkillSpell))
+	}
+	if ActivitiesForSkill("") != nil || ActivitiesForSkill("flashcard") != nil {
+		t.Error("an unknown skill suggested activities")
 	}
 }
 

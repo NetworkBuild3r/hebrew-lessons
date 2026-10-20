@@ -885,6 +885,43 @@ func assertClipFallbackCSS(t *testing.T, css string) {
 	}
 }
 
+// assertRecallLineCSS checks the review of the recall grid. Text rows grow,
+// the orb row grows to the native bar, five words wrap because only four
+// tracks fit on a phone, and the wide gap is the 16px space token.
+func assertRecallLineCSS(t *testing.T, css string) {
+	t.Helper()
+	grid := cssRuleBody(t, css, ".word-blocks--recall")
+	for _, need := range []string{
+		"repeat(4, fit-content(7rem))",
+		"minmax(1lh, auto)",
+		"minmax(var(--size-tap), auto)",
+		"justify-content: center",
+	} {
+		if !strings.Contains(grid, need) {
+			t.Errorf("recall grid missing %s:\n%s", need, grid)
+		}
+	}
+	if strings.Contains(grid, "grid-auto-flow: column") {
+		t.Fatal("the recall line still flows in columns, so a long line cannot wrap")
+	}
+	if !strings.Contains(css, "repeat(8, fit-content(7rem))") {
+		t.Fatal("a wide viewport still wraps a five-word line")
+	}
+	wide := css[strings.Index(css, "@media (min-width: 1440px)"):]
+	wide = wide[:strings.Index(wide, "}")+1]
+	if !strings.Contains(wide, "column-gap: var(--space-4)") {
+		t.Fatalf("1440 column gap is not --space-4:\n%s", wide)
+	}
+	hover := cssRuleBody(t, css, "html.js .orb--word:hover::before")
+	if !strings.Contains(hover, "var(--surface-raised)") || !strings.Contains(hover, "border-color: var(--text)") {
+		t.Fatalf("word orb hover has no colour change:\n%s", hover)
+	}
+	bars := cssRuleBody(t, css, ".word-blocks--recall .clip > audio")
+	if strings.Contains(bars, "16rem") {
+		t.Fatalf("recall bars still use the 16rem width:\n%s", bars)
+	}
+}
+
 // cssRuleBody returns the declaration block of the rule whose selector is
 // exactly selector. A longer selector that merely contains it is skipped.
 func cssRuleBody(t *testing.T, css, selector string) string {
@@ -953,6 +990,7 @@ func TestClipScript(t *testing.T) {
 	}
 	css := readStatic(t, "static/css/base.css")
 	assertClipFallbackCSS(t, css)
+	assertRecallLineCSS(t, css)
 	if !strings.Contains(css, ".orb--hero") || !strings.Contains(css, "var(--size-cta)") || !strings.Contains(css, "var(--size-tap)") || !strings.Contains(css, "inline-size: 28px") {
 		t.Fatal("hero and word orb sizes are missing")
 	}
