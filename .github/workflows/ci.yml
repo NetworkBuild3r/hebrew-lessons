@@ -36,7 +36,7 @@
 # ghcr.io/networkbuild3r/hebrew:sha-<push sha>. Smoke and publish keep
 # fetch-depth 1. The test shards fetch the base ref on pull_request and
 # diff origin/$BASE...HEAD. A push to v3 and workflow_dispatch run every
-# package in all three shards. A pull_request tests only the affected
+# package in all four shards. A pull_request tests only the affected
 # packages. templ's git diff is the worktree against the checked-out commit.
 # There is no pull_request_target. External actions are pinned to a commit.
 name: ci
