@@ -155,24 +155,24 @@ func TestInvalidTZFallsBackOnce(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	denver := Load(DefaultTZ)
-	if denver.String() != DefaultTZ {
-		t.Fatalf("Load(%s) = %s", DefaultTZ, denver)
+	denver := Load(DefaultZone)
+	if denver.String() != DefaultZone {
+		t.Fatalf("Load(%s) = %s", DefaultZone, denver)
 	}
-	if Load("").String() != DefaultTZ {
+	if Load("").String() != DefaultZone {
 		t.Fatalf("empty tz = %s", Load(""))
 	}
 
 	bad := Load("Not/AZone")
-	if bad.String() != DefaultTZ {
-		t.Fatalf("invalid tz = %s, want %s", bad, DefaultTZ)
+	if bad.String() != DefaultZone {
+		t.Fatalf("invalid tz = %s, want %s", bad, DefaultZone)
 	}
 	now := time.Date(2026, 10, 19, 3, 59, 0, 0, denver)
 	if Key(now, bad) != Key(now, denver) || !Start(now, bad).Equal(Start(now, denver)) {
 		t.Fatalf("fallback study day key %s start %s", Key(now, bad), Start(now, bad))
 	}
 	again := Load("Also/Missing")
-	if again.String() != DefaultTZ {
+	if again.String() != DefaultZone {
 		t.Fatalf("second invalid tz = %s", again)
 	}
 	logs := buf.String()
@@ -182,16 +182,23 @@ func TestInvalidTZFallsBackOnce(t *testing.T) {
 }
 
 func TestDueCutoffIsTheNextRollover(t *testing.T) {
-	denver := mustLoc(t, "America/Denver")
+	denver := mustLoc(t, DefaultZone)
 	now := time.Date(2026, 10, 18, 22, 0, 0, 0, denver)
-	if DueRule != "rollover" {
-		t.Fatalf("DueRule = %q, want rollover", DueRule)
-	}
 	if !DueCutoff(now, denver).Equal(Next(now, denver)) {
 		t.Fatalf("cutoff %s, next rollover %s", DueCutoff(now, denver), Next(now, denver))
 	}
 	if !DueCutoff(now, nil).Equal(Next(now, nil)) {
-		t.Fatal("a nil zone did not use Denver")
+		t.Fatal("a nil zone did not use the default zone")
+	}
+	// 23:30 and 03:59 share the next 4:00. 04:01 starts the following study day.
+	night := time.Date(2026, 10, 18, 23, 30, 0, 0, denver)
+	before := time.Date(2026, 10, 19, 3, 59, 0, 0, denver)
+	after := time.Date(2026, 10, 19, 4, 1, 0, 0, denver)
+	if !DueCutoff(night, denver).Equal(DueCutoff(before, denver)) {
+		t.Fatal("23:30 and 03:59 do not share a cutoff")
+	}
+	if !DueCutoff(after, denver).After(DueCutoff(before, denver)) {
+		t.Fatal("04:01 did not move the cutoff to the next rollover")
 	}
 }
 

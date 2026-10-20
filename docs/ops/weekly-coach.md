@@ -6,15 +6,15 @@ Read **Open decision** first. As the server is built today, the automation canno
 
 ## What runs, and when
 
-| Time (America/Chicago) | What | Where |
+| Time | What | Where |
 | --- | --- | --- |
-| Daily 03:30 | The daily snapshot job writes yesterday. | The server (`hebrew serve`). |
-| Monday 04:00 | The weekly report job writes the report of the week that just ended (Monday to Sunday). | The server. `hebrew jobs weekly --week YYYY-MM-DD` runs it by hand. |
-| Monday 07:00 | This automation reads the week, builds the next lesson, and leaves one coach note. | Cursor. |
+| Daily 03:30 in the server zone | The daily snapshot job writes yesterday. | The server (`hebrew serve`). The zone is `TZ`. When `TZ` is unset it is America/Denver, the study-day default. |
+| Monday 04:00 in the server zone | The weekly report job writes the report of the week that just ended (Monday to Sunday). | The server. `hebrew jobs weekly --week YYYY-MM-DD` runs it by hand. |
+| Monday 07:00 America/Chicago | This automation reads the week, builds the next lesson, and leaves one coach note. | Cursor. |
 
 The server never calls a model. The report is three plain sentences from templates. The model work happens only in this automation, through the Hebrew MCP server.
 
-The automation runs three hours after the report, so `get_progress` already holds the report of the week that ended on Sunday. Setting `HEBREW_JOBS=off` on the server stops the report and the daily snapshot. It does not stop the automation. The automation still runs, builds a lesson, and finds no new report.
+The automation is Monday 07:00 America/Chicago, after the server writes the report at 04:00 in the server zone, so `get_progress` already holds the report of the week that ended on Sunday. Setting `HEBREW_JOBS=off` on the server stops the report and the daily snapshot. It does not stop the automation. The automation still runs, builds a lesson, and finds no new report.
 
 ## The definition
 

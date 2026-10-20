@@ -844,13 +844,13 @@ The weekly report and the coach automation are SPEC-023. It is a blocker for thi
 
 ### 6.4 Watch the first daily job
 
-The scheduler runs at 03:30 in `TZ` (the pod has no `TZ`, so the code default `America/Chicago` applies). It also runs a catch-up when the app starts, for up to 14 days. A catch-up writes today's state for the days it missed (SPEC-014 disclosure), so the first rows are approximate.
+The scheduler runs at 03:30 in `TZ` (the pod has no `TZ`, so the code default `America/Denver` applies, the same zone as the study day). It also runs a catch-up when the app starts, for up to 14 days. A catch-up writes today's state for the days it missed (SPEC-014 disclosure), so the first rows are approximate.
 
 ```sh
 kubectl -n hebrew logs deploy/hebrew -c hebrew --since=24h | grep -E 'daily job|jobs'
 ```
 
-Expected: a `daily job scheduled at=03:30 zone=America/Chicago` line at start, and the morning after, a `daily job day=<date> learners=<n> written=<n> ... events=<n> band_slips=<n>` line with no error. Then `get_progress` over MCP returns that day's snapshot.
+Expected: a `daily job scheduled at=03:30 zone=America/Denver` line at start, and the morning after, a `daily job day=<date> learners=<n> written=<n> ... events=<n> band_slips=<n>` line with no error. Then `get_progress` over MCP returns that day's snapshot.
 
 **STOP and look if** there is no `daily job` line the morning after, if it logs an error, or if the volume is close to full (`/data` is 2 Gi).
 

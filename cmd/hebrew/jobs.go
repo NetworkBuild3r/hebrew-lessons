@@ -18,20 +18,17 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/jobs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
-
-// defaultTimeZone is the server time zone when TZ is unset. The day boundary matches the
-// learner's evening study (INIT-015/SPEC-014 aud-1).
-const defaultTimeZone = "America/Chicago"
 
 const jobsUsage = "usage: hebrew jobs daily [--day YYYY-MM-DD] | hebrew jobs weekly [--week YYYY-MM-DD]"
 
 // jobsLocation reads the server time zone from the TZ value. An empty value is
-// America/Chicago.
+// studyday.DefaultZone, the same zone a learner gets.
 func jobsLocation(tz string) (*time.Location, error) {
 	tz = strings.TrimSpace(tz)
 	if tz == "" {
-		tz = defaultTimeZone
+		tz = studyday.DefaultZone
 	}
 	loc, err := time.LoadLocation(tz)
 	if err != nil {

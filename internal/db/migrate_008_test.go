@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/migrations"
 )
 
@@ -81,7 +82,7 @@ type m7State struct {
 // changes, so that one sqlite_master row is left out of both sides.
 func withoutLearnerTZ(st m7State) m7State {
 	rows := st.tables["users"]
-	if len(rows) > 0 && strings.HasSuffix(rows[0][len(rows[0])-1], "America/Denver") {
+	if len(rows) > 0 && strings.HasSuffix(rows[0][len(rows[0])-1], studyday.DefaultZone) {
 		trimmed := make([][]string, len(rows))
 		for i, row := range rows {
 			trimmed[i] = row[:len(row)-1]

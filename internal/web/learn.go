@@ -383,14 +383,14 @@ func (s *server) dueCount(ctx context.Context, userID int64, now time.Time, loc 
 	return len(due), nil
 }
 
-// sameStudyDay reports whether built and now fall in the same study day
-// in loc. The study queue is rebuilt when the store clock crosses
-// studyday.RolloverHour in that zone. A nil loc is America/Denver.
+// sameStudyDay reports whether built and now share a studyday.DueCutoff in loc.
+// The study queue is rebuilt when that cutoff moves, at 04:00 local.
+// A nil loc is the default zone. A zero built time is not a study day.
 func sameStudyDay(built, now time.Time, loc *time.Location) bool {
 	if built.IsZero() {
 		return false
 	}
-	return studyday.Key(built, loc) == studyday.Key(now, loc)
+	return studyday.DueCutoff(built, loc).Equal(studyday.DueCutoff(now, loc))
 }
 
 // advance serves the next card. For a word card it records the exposure of a new

@@ -17,13 +17,10 @@ const (
 	// RolloverHour is the local hour when a new study day starts.
 	RolloverHour = 4
 
-	// DefaultTZ is the zone used when a learner has none, or an unknown one.
-	DefaultTZ = "America/Denver"
-
-	// DueRule is the due cutoff for Today and Review.
-	// "rollover" (the Anki rule) is the next 4:00 local.
-	// "now" is the clock instant. Flip this one line to choose.
-	DueRule = "rollover"
+	// DefaultZone is the IANA zone for a learner with none, for an unknown
+	// zone, and for the job scheduler when TZ is unset. The migration that
+	// adds users.tz uses this same literal as its DEFAULT.
+	DefaultZone = "America/Denver"
 )
 
 var (
@@ -35,9 +32,9 @@ var (
 
 func denver() *time.Location {
 	denverOnce.Do(func() {
-		loc, err := time.LoadLocation(DefaultTZ)
+		loc, err := time.LoadLocation(DefaultZone)
 		if err != nil {
-			panic("studyday: " + DefaultTZ + ": " + err.Error())
+			panic("studyday: " + DefaultZone + ": " + err.Error())
 		}
 		denverLoc = loc
 	})
@@ -45,17 +42,17 @@ func denver() *time.Location {
 }
 
 // Load returns the IANA location for tz.
-// An empty name is America/Denver. An unknown name is America/Denver too,
+// An empty name is DefaultZone. An unknown name is DefaultZone too,
 // and the first unknown name in the process is logged.
 func Load(tz string) *time.Location {
 	tz = strings.TrimSpace(tz)
-	if tz == "" || tz == DefaultTZ {
+	if tz == "" || tz == DefaultZone {
 		return denver()
 	}
 	loc, err := time.LoadLocation(tz)
 	if err != nil || loc == nil {
 		fallbackOnce.Do(func() {
-			slog.Warn("studyday: invalid time zone, using America/Denver", "tz", tz, "err", err)
+			slog.Warn("studyday: invalid time zone, using "+DefaultZone, "tz", tz, "err", err)
 		})
 		return denver()
 	}
@@ -91,18 +88,10 @@ func Next(now time.Time, loc *time.Location) time.Time {
 	return time.Date(y, m, d+1, RolloverHour, 0, 0, 0, start.Location())
 }
 
-// DueCutoff is the latest due time that still counts in the study day of now.
-// Today’s due count and the Review queue both pass it to the same comparison
-// (due <= cutoff), so they list the same cards.
-//
-// "rollover" returns the next 4:00 local. Review then serves every card due
-// before that rollover, and a card due at 4:00 itself, which is the cutoff.
-// "now" returns the clock instant.
+// DueCutoff is the next RolloverHour:00 local after now. Today, Progress,
+// Review, and the activity day checks all use this instant, in the learner's
+// zone. A card counts for the study day when its due time is at or before
+// the cutoff, which is the next 4:00 local. A nil loc is DefaultZone.
 func DueCutoff(now time.Time, loc *time.Location) time.Time {
-	switch DueRule {
-	case "now":
-		return now
-	default:
-		return Next(now, loc)
-	}
+	return Next(now, loc)
 }

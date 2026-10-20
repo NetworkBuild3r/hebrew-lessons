@@ -85,8 +85,8 @@ func TestMigration013SetsLearnerTZ(t *testing.T) {
 	if err := conn.QueryRowContext(ctx, `SELECT tz FROM users WHERE email = 'old@example.com'`).Scan(&tz); err != nil {
 		t.Fatal(err)
 	}
-	if tz != studyday.DefaultTZ {
-		t.Fatalf("existing learner tz = %q, want %s", tz, studyday.DefaultTZ)
+	if tz != studyday.DefaultZone {
+		t.Fatalf("existing learner tz = %q, want %s", tz, studyday.DefaultZone)
 	}
 	var applied string
 	if err := conn.QueryRowContext(ctx, `SELECT applied_at FROM schema_migrations WHERE version = 13`).Scan(&applied); err != nil {
@@ -119,15 +119,66 @@ func TestMigration013SetsLearnerTZ(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if user.TZ != studyday.DefaultTZ {
+	if user.TZ != studyday.DefaultZone {
 		t.Fatalf("CreateUser tz = %q", user.TZ)
 	}
 	loaded, err := s.UserByID(ctx, user.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.TZ != studyday.DefaultTZ {
+	if loaded.TZ != studyday.DefaultZone {
 		t.Fatalf("UserByID tz = %q", loaded.TZ)
+	}
+
+	// A binary from before this column inserts and selects the old column list.
+	// NOT NULL DEFAULT fills tz, and the old query never names the new column.
+	if _, err := conn.ExecContext(ctx, `
+		INSERT INTO users (email, google_sub, role, created_at)
+		VALUES ('legacy@example.com', 'sub-legacy', 'learner', ?)`, FormatTime(when)); err != nil {
+		t.Fatal(err)
+	}
+	var legacy string
+	if err := conn.QueryRowContext(ctx, `SELECT tz FROM users WHERE email = 'legacy@example.com'`).Scan(&legacy); err != nil {
+		t.Fatal(err)
+	}
+	if legacy != studyday.DefaultZone {
+		t.Fatalf("legacy insert tz = %q, want %s", legacy, studyday.DefaultZone)
+	}
+	var oldEmail, oldSub, oldRole, oldCreated string
+	if err := conn.QueryRowContext(ctx, `
+		SELECT email, google_sub, role, created_at FROM users WHERE email = 'old@example.com'`).Scan(&oldEmail, &oldSub, &oldRole, &oldCreated); err != nil {
+		t.Fatal(err)
+	}
+	if oldEmail != "old@example.com" || oldSub != "sub-old" || oldRole != "learner" || oldCreated == "" {
+		t.Fatalf("old column list = %s %s %s %s", oldEmail, oldSub, oldRole, oldCreated)
+	}
+}
+
+// TestMigration013DefaultMatchesDefaultZone reads the migration as text.
+// The DEFAULT literal is the one Go constant, and the script only adds the column.
+func TestMigration013DefaultMatchesDefaultZone(t *testing.T) {
+	body, err := fs.ReadFile(migrations.FS, "013_learner_tz.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := string(body)
+	want := "DEFAULT '" + studyday.DefaultZone + "'"
+	if !strings.Contains(sql, want) {
+		t.Fatalf("013 DEFAULT = missing %s", want)
+	}
+	stmts := statements(sql)
+	if len(stmts) != 1 {
+		t.Fatalf("013 statements = %d, want 1", len(stmts))
+	}
+	stmt := strings.Join(strings.Fields(stmts[0]), " ")
+	upper := strings.ToUpper(stmt)
+	if !strings.Contains(upper, "ALTER TABLE USERS ADD COLUMN TZ TEXT NOT NULL "+strings.ToUpper(want)) {
+		t.Fatalf("013 statement = %s", stmt)
+	}
+	for _, bad := range []string{"CREATE TABLE", "DROP ", "UPDATE ", "DELETE ", "RENAME "} {
+		if strings.Contains(upper, bad) {
+			t.Fatalf("013 is not additive: contains %s", bad)
+		}
 	}
 }
 
@@ -139,7 +190,7 @@ func TestSetLearnerTZ(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if user.TZ != studyday.DefaultTZ {
+	if user.TZ != studyday.DefaultZone {
 		t.Fatalf("default tz = %q", user.TZ)
 	}
 	if err := s.InsertSession(ctx, "sess", user.ID, "csrf", when.Add(time.Hour)); err != nil {
@@ -149,7 +200,7 @@ func TestSetLearnerTZ(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.TZ != studyday.DefaultTZ {
+	if loaded.TZ != studyday.DefaultZone {
 		t.Fatalf("session user tz = %q", loaded.TZ)
 	}
 

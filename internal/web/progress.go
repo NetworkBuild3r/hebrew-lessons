@@ -15,6 +15,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
@@ -83,7 +84,7 @@ func (s *server) serveProgress(w http.ResponseWriter, r *http.Request, secure bo
 		v.Tabs = append(v.Tabs, views.SkillTab{Skill: sk, Label: skillTabLabels[sk], Current: sk == skill})
 	}
 	if ok && user != nil && s != nil && s.store != nil && s.store.Clock() != nil {
-		if err := s.fillProgress(r.Context(), user.ID, &v); err != nil {
+		if err := s.fillProgress(r.Context(), user.ID, user.TZ, &v); err != nil {
 			serverError(w)
 			return
 		}
@@ -172,9 +173,12 @@ func addDaysStr(day string, n int) string {
 
 // fillProgress reads everything the page shows for one learner. A failed read is the caller's
 // error: a chart that quietly leaves out a number would be a wrong picture.
-func (s *server) fillProgress(ctx context.Context, userID int64, v *views.ProgressView) error {
-	now := s.now().UTC()
-	today := now.Format(dayLayout)
+func (s *server) fillProgress(ctx context.Context, userID int64, tz string, v *views.ProgressView) error {
+	now := s.now()
+	loc := studyday.Load(tz)
+	// The snapshot window is the study day, not the UTC date. DueCutoff is the
+	// next 04:00 local, so the day itself is that instant minus one day.
+	today := studyday.DueCutoff(now, loc).AddDate(0, 0, -1).Format(dayLayout)
 
 	_, _, done, total, err := s.unitProgress(ctx, userID)
 	if err != nil {
@@ -224,7 +228,7 @@ func (s *server) fillProgress(ctx context.Context, userID int64, v *views.Progre
 	if err := s.fillWeek(ctx, userID, v, days, ref); err != nil {
 		return err
 	}
-	return s.fillPlacementHistory(ctx, userID, v, now)
+	return s.fillPlacementHistory(ctx, userID, v, now.UTC())
 }
 
 // fillSkillPanel fills the bar from the learner model now, and the two line charts from the

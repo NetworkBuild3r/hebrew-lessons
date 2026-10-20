@@ -617,6 +617,49 @@ func TestTodayCountMatchesReviewQueue(t *testing.T) {
 	}
 }
 
+// TestTodayCountMatchesReviewAcrossRollover pins Today’s due count to the
+// number of cards Review serves at 23:30, 03:59, and 04:01 local.
+//
+// Three new cards, due 20:00, 02:00, and 12:00. Under the 4:00 rollover the
+// counts are 2, 2, and 3. A cutoff of “due now” would be 1, 2, and 2.
+func TestTodayCountMatchesReviewAcrossRollover(t *testing.T) {
+	loc := mustDenver(t)
+	night := time.Date(2026, 10, 18, 23, 30, 0, 0, loc)
+	before := time.Date(2026, 10, 19, 3, 59, 0, 0, loc)
+	after := time.Date(2026, 10, 19, 4, 1, 0, 0, loc)
+	if !studyday.DueCutoff(night, loc).Equal(studyday.DueCutoff(before, loc)) || !studyday.DueCutoff(after, loc).After(studyday.DueCutoff(before, loc)) {
+		t.Fatal("the three clocks do not straddle one rollover")
+	}
+
+	store, h, clk := openStepped(t, night)
+	learner := addLearner(t, store, "a@example.com", "sub-a", night)
+	if _, err := store.ExecContext(context.Background(), `UPDATE sessions SET expires_at = ? WHERE user_id = ?`, db.FormatTime(night.Add(7*24*time.Hour)), learner.user.ID); err != nil {
+		t.Fatal(err)
+	}
+	overdueLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	earlyLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
+	laterLex := addLexeme(t, store, "בֹּקֶר", "morning", "boker", "m", "")
+	addCard(t, store, learner.user.ID, overdueLex, fsrs.SkillRead, time.Date(2026, 10, 18, 20, 0, 0, 0, loc), 1, 0, time.Time{})
+	addCard(t, store, learner.user.ID, earlyLex, fsrs.SkillRead, time.Date(2026, 10, 19, 2, 0, 0, 0, loc), 1, 0, time.Time{})
+	addCard(t, store, learner.user.ID, laterLex, fsrs.SkillRead, time.Date(2026, 10, 19, 12, 0, 0, 0, loc), 1, 0, time.Time{})
+
+	check := func(at time.Time, want string) {
+		t.Helper()
+		home := getLearner(t, h, learner, "/")
+		page := getLearner(t, h, learner, "/review")
+		due := attr(t, articleAttrs(home), "data-due")
+		served := attr(t, page, "data-total")
+		if due != want || served != want || due != served {
+			t.Fatalf("%s local: today %q review %q, want %s", at.Format("15:04"), due, served, want)
+		}
+	}
+	check(night, "2")
+	clk.Advance(before.Sub(night))
+	check(before, "2")
+	clk.Advance(after.Sub(before))
+	check(after, "3")
+}
+
 func TestStudyQueueMapIsBounded(t *testing.T) {
 	store, _, now := openApp(t)
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)

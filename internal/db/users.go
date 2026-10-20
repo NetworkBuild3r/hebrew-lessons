@@ -50,7 +50,7 @@ func (s *Store) CreateUser(ctx context.Context, email, googleSub, role string) (
 	if err != nil {
 		return User{}, err
 	}
-	return User{ID: id, Email: email, GoogleSub: googleSub, Role: role, CreatedAt: createdAt, TZ: studyday.DefaultTZ}, nil
+	return User{ID: id, Email: email, GoogleSub: googleSub, Role: role, CreatedAt: createdAt, TZ: studyday.DefaultZone}, nil
 }
 
 // UpsertGoogleUser inserts a user or updates the row found by google_sub.
@@ -98,7 +98,7 @@ func (s *Store) UpsertGoogleUser(ctx context.Context, email, googleSub, role str
 		if err != nil {
 			return User{}, err
 		}
-		return User{ID: id, Email: email, GoogleSub: googleSub, Role: role, CreatedAt: createdAt, TZ: studyday.DefaultTZ}, nil
+		return User{ID: id, Email: email, GoogleSub: googleSub, Role: role, CreatedAt: createdAt, TZ: studyday.DefaultZone}, nil
 	}
 	if err != nil {
 		return User{}, err
