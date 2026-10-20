@@ -99,6 +99,42 @@ func TestCSPThemeScriptBeforeStylesheet(t *testing.T) {
 	}
 }
 
+func TestCSPHeaderScriptSrcSelfOnly(t *testing.T) {
+	h := New(nil, nil)
+	for _, path := range cspPages {
+		t.Run(path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status %d", rec.Code)
+			}
+			csp := rec.Header().Get("Content-Security-Policy")
+			src, ok := cspDirective(csp, "script-src")
+			if !ok {
+				t.Fatalf("CSP missing script-src: %s", csp)
+			}
+			if src != "'self'" {
+				t.Fatalf("script-src = %q, want 'self'", src)
+			}
+			for _, bad := range []string{"sha256-", "nonce-", "'unsafe-inline'", "'unsafe-eval'"} {
+				if strings.Contains(csp, bad) {
+					t.Fatalf("CSP contains %s: %s", bad, csp)
+				}
+			}
+		})
+	}
+}
+
+func cspDirective(csp, name string) (string, bool) {
+	for _, part := range strings.Split(csp, ";") {
+		part = strings.TrimSpace(part)
+		if part == name || strings.HasPrefix(part, name+" ") {
+			return strings.TrimSpace(strings.TrimPrefix(part, name)), true
+		}
+	}
+	return "", false
+}
+
 func TestCSPThemeScriptServed(t *testing.T) {
 	h := New(nil, nil)
 	rec := httptest.NewRecorder()

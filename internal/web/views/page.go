@@ -343,11 +343,5 @@ func iconClass(directional bool) string {
 // The same bytes are now /static/js/theme.js, loaded as a blocking classic
 // script before the first stylesheet. The key, the data-theme attribute, and
 // the light/dark default (no attribute, so the system decides) are unchanged.
-// localStorage is already inside the try. ThemeBootCSP remains the sha256 of
-// these exact bytes; securityHeaders still sends that hash and this constant
-// stays so the Content-Security-Policy header does not change.
+// localStorage is already inside the try.
 const ThemeBoot = `(function(){try{var t=localStorage.getItem("hebrew-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`
-
-// ThemeBootCSP is the Content-Security-Policy script-src hash of ThemeBoot:
-// sha256 of the exact script bytes, standard base64, without quotes.
-const ThemeBootCSP = "sha256-J/VHwnDnlr+GqZg8u44o21pUuS0tshGfqO3bcm2kCfA="
