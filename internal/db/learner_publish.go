@@ -270,9 +270,9 @@ type ReportResult struct {
 //     goes back to draft for them and for anyone else, which is only them.
 //   - A shared unit is hidden for the reporter only. The shared unit is not touched.
 //     The hide is the unit_reports row: HiddenUnitIDs lists the units a learner has
-//     reported, and the Today and lesson lists must leave those out. No new table is
-//     needed, but no list reads HiddenUnitIDs yet. That filter is web code, outside
-//     SPEC-020, so until it lands a reported shared unit still shows for the reporter.
+//     reported. The next-lesson and course-lesson reads, the Lessons list and Progress
+//     leave those out (SPEC-017). The MCP learner outline does not yet, so a reported
+//     shared unit can still appear there for the reporter. It is a display gap only.
 //   - A unit that is another learner's, a shared draft, or missing is ErrUnitNotInScope.
 //
 // Each change of state writes a report_hide audit row whose actor is learner:<id>.
