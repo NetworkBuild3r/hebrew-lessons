@@ -3,7 +3,6 @@
 package web
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -40,13 +39,7 @@ import (
 // and a short silent MP3 on disk. The learners are put in the state a screen needs by driving the
 // engine over HTTP first (the same driver the render tests use), then the browser takes it from there.
 
-// silentMP3 is frames of MPEG-1 Layer III, 128 kbit/s at 44.1 kHz: 417 bytes and about 26 ms each,
-// with an empty payload. A decoder plays it as silence.
-func silentMP3(frames int) []byte {
-	frame := make([]byte, 417)
-	copy(frame, []byte{0xFF, 0xFB, 0x90, 0x00})
-	return bytes.Repeat(frame, frames)
-}
+// silentMP3 (frames of silent MPEG-1 Layer III audio) is shared with dialogue_browser_test.go.
 
 type plBrowserServer struct {
 	t      *testing.T
