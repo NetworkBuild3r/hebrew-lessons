@@ -290,6 +290,51 @@ func TestReviewWordMatchFeedbackClipFromAudioAsset(t *testing.T) {
 	}
 }
 
+// TestReviewNoJSAnswerShowsFeedbackClip is the plain form path. A checked
+// answer posted with no HX-Request header is a 303 to /review. The redirect
+// body is not the card. The follow-up GET, and a refresh of that GET, go
+// through currentReview, which is what attaches the fb-clip. The lexeme has
+// no audio_id. The clip is the audio_assets row AudioByText resolves.
+func TestReviewNoJSAnswerShowsFeedbackClip(t *testing.T) {
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	store, h := openReview(t, fixedClock(now), "https://learn.example")
+	learner := addLearner(t, store, "a@example.com", "sub-a", now)
+	words := seedAssetLexicon(t, store, learner.user.ID, now)
+	page := getLearner(t, h, learner, "/review")
+	if attr(t, page, "data-activity") != "read_pick" {
+		t.Fatalf("served %s, want read_pick: %s", attr(t, page, "data-activity"), cardAttrs(page))
+	}
+	if strings.Contains(page, "/audio/") || strings.Contains(page, "<audio") {
+		t.Fatal("a reading prompt rendered a clip")
+	}
+	asked := hebrewOnPage(t, page, words)
+	rec := actPostPlain(t, h, learner, "/_hx/review/answer", answerForm(page, "choice", pickChoice(t, page, asked.gloss)))
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/review" {
+		t.Fatalf("plain answer = %d location %q\n%s", rec.Code, rec.Header().Get("Location"), rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "fb-clip") || strings.Contains(rec.Body.String(), `id="review-card"`) {
+		t.Fatal("the redirect body carried the card")
+	}
+	followed := getLearner(t, h, learner, rec.Header().Get("Location"))
+	assertFBClip(t, store, followed, "fb-clip", asked.he)
+	refreshed := getLearner(t, h, learner, "/review")
+	assertFBClip(t, store, refreshed, "fb-clip", asked.he)
+}
+
+// actPostPlain is a form post with no HX-Request header. finishReview
+// answers that with 303 to /review. The clip is on the next GET.
+func actPostPlain(t *testing.T, h http.Handler, l learnerFix, path string, form url.Values) *httptest.ResponseRecorder {
+	t.Helper()
+	form.Set("_csrf", l.csrf)
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "https://learn.example")
+	req.AddCookie(l.cookie)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
 // seedAssetLexicon is five glossed words with no audio_id. Each has an
 // audio_assets row and an mp3 named by the sha256 of its bytes, which is how
 // import and generate store a clip. The first three are due and struggling
@@ -445,8 +490,10 @@ func tagAttr(tag, name string) string {
 }
 
 // TestReviewOrbSpacePlaysOnce runs activity.js and clips.js under Node.
-// Space on a review card starts the button.orb clip once. A click is left to
-// clips.js, so the two listeners do not both call play(). Space on a dialogue
+// Space on a review card starts the button.orb clip once. The fake orb's
+// click() fires the same click listeners a browser would, so a Space handler
+// that also clicks the orb is two plays: activity.js on keydown and clips.js
+// on click. The real handler plays and does not click. Space on a dialogue
 // c-orb still starts that clip.
 func TestReviewOrbSpacePlaysOnce(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
@@ -497,6 +544,10 @@ function makeEl(tag) {
   el.querySelector = (sel) => query(el, sel, false)[0] || null;
   el.querySelectorAll = (sel) => query(el, sel, false);
   el.play = () => { el.plays++; el.paused = false; const p = { then(ok) { if (ok) ok(); return p; } }; return p; };
+  el.pause = () => { el.paused = true; };
+  // HTMLElement.click() runs the listeners registered for click. A Space
+  // handler that calls this after play() is a second play from clips.js.
+  el.click = () => { fire("click", el); };
   return el;
 }
 function hasClass(el, name) { return (el.className || "").split(/\s+/).indexOf(name) >= 0; }
@@ -592,7 +643,7 @@ fire("keydown", body);
 check(word.plays === before + 1, "Space on the review orb played " + (word.plays - before) + " times, want 1");
 check(prompt.plays === 1, "Space on the review card also played the dialogue clip");
 const afterSpace = word.plays;
-fire("click", orb);
+orb.click();
 check(word.plays === afterSpace + 1, "clicking the review orb played " + (word.plays - afterSpace) + " times, want 1");
 fire("keydown", orb);
 check(word.plays === afterSpace + 1, "Space on the focused orb also started a play; the click from the button is the one play");
