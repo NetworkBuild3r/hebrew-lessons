@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"slices"
 	"strings"
 	"time"
 
+	"golang.org/x/text/unicode/norm"
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 )
@@ -417,15 +420,28 @@ func (s *Store) AdvancePlacementSitting(ctx context.Context, runID int64) error 
 }
 
 // CountPlacementRatings counts cards the learner has rated in the run.
+// A v2 run counts placement_answers. A v3 run counts answered listening,
+// reading, and typing items. Letters are the warm-up and are not cards.
 func (s *Store) CountPlacementRatings(ctx context.Context, runID int64) (int, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return 0, err
 	}
-	var n int
-	if err := conn.QueryRowContext(ctx, `
+	v3, err := s.runIsV3(ctx, runID)
+	if err != nil {
+		return 0, err
+	}
+	q := `
 		SELECT COUNT(*) FROM placement_answers
-		WHERE run_id = ? AND rating IS NOT NULL`, runID).Scan(&n); err != nil {
+		WHERE run_id = ? AND rating IS NOT NULL`
+	if v3 {
+		q = `
+		SELECT COUNT(*) FROM placement_items
+		WHERE run_id = ? AND outcome IS NOT NULL
+		  AND part IN ('listening', 'reading', 'typing')`
+	}
+	var n int
+	if err := conn.QueryRowContext(ctx, q, runID).Scan(&n); err != nil {
 		return 0, fmt.Errorf("db: count placement ratings: %w", err)
 	}
 	return n, nil
@@ -519,19 +535,16 @@ func (s *Store) FinishPlacement(ctx context.Context, id int64, finished time.Tim
 	return nil
 }
 
-// knownWordsInRun is the number of distinct lexemes rated Good in the run.
-// A right v3 answer is that rating: the recorder grades it Good and does not grade Easy.
-// The count is taken once, at finish, and stored. History does not run this again.
+// knownWordsInRun is how many distinct words v3LexemeTexts counts as Good or Easy.
+// That read is the known-lexeme computation: listening, reading, and typing items,
+// with right mapped to Good. Easy is included so a later Easy outcome counts too.
+// The count is taken once, at finish, on this transaction, and stored.
 func knownWordsInRun(ctx context.Context, q dbQuery, runID int64) (int, error) {
-	var n int
-	err := q.QueryRowContext(ctx, `
-		SELECT COUNT(DISTINCT lexeme_id)
-		FROM placement_items
-		WHERE run_id = ? AND outcome = 'right' AND lexeme_id IS NOT NULL`, runID).Scan(&n)
+	texts, err := v3LexemeTexts(ctx, q, runID, []int{Good, Easy})
 	if err != nil {
-		return 0, fmt.Errorf("db: placement known words: %w", err)
+		return 0, err
 	}
-	return n, nil
+	return len(texts), nil
 }
 
 // dbQuery is the part of a connection or a transaction these reads use.
@@ -747,9 +760,22 @@ func (s *Store) LatestPlacement(ctx context.Context, userID int64) (Placement, b
 	if run.Level.Valid {
 		level = int(run.Level.Int64)
 	}
+	v3, err := s.runIsV3(ctx, run.ID)
+	if err != nil {
+		return Placement{}, false, err
+	}
 	rated, err := s.CountPlacementRatings(ctx, run.ID)
 	if err != nil {
 		return Placement{}, false, err
+	}
+	bands := body.Bands
+	if v3 {
+		// Answered items are the record. A row finished before this read
+		// existed can still have an empty or all-zero result JSON.
+		bands, err = s.v3BandScores(ctx, run.ID)
+		if err != nil {
+			return Placement{}, false, err
+		}
 	}
 	start, err := s.suggestedStart(ctx, userID)
 	if err != nil {
@@ -766,7 +792,7 @@ func (s *Store) LatestPlacement(ctx context.Context, userID int64) (Placement, b
 		Level:                  level,
 		CardsRated:             rated,
 		StopReason:             run.StopReason,
-		BandScores:             body.Bands,
+		BandScores:             bands,
 		EstimatedKnownWords:    body.EstimatedKnownWords,
 		SuggestedStartPosition: start,
 		Sittings:               run.SittingNo,
@@ -774,17 +800,20 @@ func (s *Store) LatestPlacement(ctx context.Context, userID int64) (Placement, b
 }
 
 // PlacementKnownLexemes returns the pointed NFC text of the newest run's
-// answers rated Good or Easy, sorted by that text.
-// A word taught only by a finished lesson is not included. KnownLexemeIDs
-// is the read Good or Easy set, which is where a placement Good or Easy
-// lands. units.Lookup.KnownLexemes(ctx, beforePosition) is the shared-unit
-// authoring view and is a different set.
+// words rated Good or Easy, sorted by that text.
+// A v2 run reads placement_answers. A v3 run reads answered placement items:
+// right is Good. A word taught only by a finished lesson is not included.
+// KnownLexemeIDs is the read Good or Easy set, which is where a placement
+// Good or Easy lands. units.Lookup.KnownLexemes(ctx, beforePosition) is the
+// shared-unit authoring view and is a different set.
 func (s *Store) PlacementKnownLexemes(ctx context.Context, userID int64) ([]string, error) {
 	return s.placementLexemeTexts(ctx, userID, Good, Easy)
 }
 
 // PlacementLearningLexemes returns the pointed NFC text of the newest run's
-// answers rated "I don't know", Again, or Hard, sorted by that text.
+// words rated "I don't know", Again, or Hard, sorted by that text.
+// A v3 run reads answered placement items: wrong is Again and dont_know is
+// "I don't know".
 func (s *Store) PlacementLearningLexemes(ctx context.Context, userID int64) ([]string, error) {
 	return s.placementLexemeTexts(ctx, userID, 0, Again, Hard)
 }
@@ -801,6 +830,20 @@ func (s *Store) placementLexemeTexts(ctx context.Context, userID int64, ratings 
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
+	}
+	run, err := s.LatestRun(ctx, userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	v3, err := s.runIsV3(ctx, run.ID)
+	if err != nil {
+		return nil, err
+	}
+	if v3 {
+		return s.v3LexemeTexts(ctx, run.ID, ratings)
 	}
 	marks := make([]string, len(ratings))
 	args := make([]any, 0, 1+len(ratings))
@@ -834,6 +877,159 @@ func (s *Store) placementLexemeTexts(ctx context.Context, userID int64, ratings 
 		return nil, fmt.Errorf("db: placement lexemes: %w", err)
 	}
 	return out, nil
+}
+
+// v3GuessDivisor matches placement.GuessDivisor. toCompat stores good_plus_rate
+// as the guessing-corrected share, and a v3 read uses the same figure.
+const v3GuessDivisor = 3
+
+func (s *Store) runIsV3(ctx context.Context, runID int64) (bool, error) {
+	_, ok, err := s.GetPlacementV3Run(ctx, runID)
+	return ok, err
+}
+
+// v3BandScores pools answered listening and reading items into deck bands 0 to 4.
+// Typing is a card for cardsRated and is not a band. Letters are neither.
+func (s *Store) v3BandScores(ctx context.Context, runID int64) ([]BandScore, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT band, outcome FROM placement_items
+		WHERE run_id = ? AND outcome IS NOT NULL
+		  AND part IN ('listening', 'reading')
+		  AND band BETWEEN 1 AND 5`, runID)
+	if err != nil {
+		return nil, fmt.Errorf("db: placement v3 bands: %w", err)
+	}
+	defer rows.Close()
+	type tally struct {
+		rated, again, good, dont int
+	}
+	var tallies [5]tally
+	for rows.Next() {
+		var band int
+		var outcome string
+		if err := rows.Scan(&band, &outcome); err != nil {
+			return nil, fmt.Errorf("db: placement v3 bands: %w", err)
+		}
+		if band < 1 || band > len(tallies) {
+			continue
+		}
+		t := &tallies[band-1]
+		switch outcome {
+		case "right":
+			t.good++
+		case "wrong":
+			t.again++
+		case "dont_know":
+			t.dont++
+		default:
+			continue
+		}
+		t.rated++
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: placement v3 bands: %w", err)
+	}
+	var out []BandScore
+	for i, t := range tallies {
+		if t.rated == 0 {
+			continue
+		}
+		out = append(out, BandScore{
+			Band:         i,
+			Rated:        t.rated,
+			Again:        t.again,
+			Good:         t.good,
+			DontKnow:     t.dont,
+			GoodPlusRate: v3Share(t.good, t.again, t.rated),
+		})
+	}
+	return out, nil
+}
+
+func v3Share(right, wrong, asked int) float64 {
+	if asked == 0 {
+		return 0
+	}
+	return math.Max(0, (float64(right)-float64(wrong)/v3GuessDivisor)/float64(asked))
+}
+
+// v3LexemeTexts is the pointed NFC of answered word items whose outcome maps
+// onto one of ratings. right is Good, wrong is Again, dont_know is 0.
+func (s *Store) v3LexemeTexts(ctx context.Context, runID int64, ratings []int) ([]string, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	return v3LexemeTexts(ctx, conn, runID, ratings)
+}
+
+func v3LexemeTexts(ctx context.Context, q dbQuery, runID int64, ratings []int) ([]string, error) {
+	want := map[int]bool{}
+	for _, rating := range ratings {
+		want[rating] = true
+	}
+	rows, err := q.QueryContext(ctx, `
+		SELECT l.text_nfc, i.outcome
+		FROM placement_items AS i
+		JOIN lexemes AS l ON l.id = i.lexeme_id
+		WHERE i.run_id = ? AND i.outcome IS NOT NULL
+		  AND i.part IN ('listening', 'reading', 'typing')`, runID)
+	if err != nil {
+		return nil, fmt.Errorf("db: placement v3 lexemes: %w", err)
+	}
+	defer rows.Close()
+	var texts []string
+	for rows.Next() {
+		var text, outcome string
+		if err := rows.Scan(&text, &outcome); err != nil {
+			return nil, fmt.Errorf("db: placement v3 lexemes: %w", err)
+		}
+		rating, ok := v3OutcomeRating(outcome)
+		if !ok || !want[rating] {
+			continue
+		}
+		texts = append(texts, text)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: placement v3 lexemes: %w", err)
+	}
+	return pointedSorted(texts), nil
+}
+
+func v3OutcomeRating(outcome string) (int, bool) {
+	switch outcome {
+	case "right":
+		return Good, true
+	case "wrong":
+		return Again, true
+	case "dont_know":
+		return 0, true
+	default:
+		return 0, false
+	}
+}
+
+// pointedSorted returns the distinct pointed NFC forms, sorted by that text.
+func pointedSorted(texts []string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, text := range texts {
+		text = norm.NFC.String(strings.TrimSpace(text))
+		if text == "" {
+			continue
+		}
+		if _, ok := seen[text]; ok {
+			continue
+		}
+		seen[text] = struct{}{}
+		out = append(out, text)
+	}
+	slices.Sort(out)
+	return out
 }
 
 // suggestedStart is the course position a learner should open next.

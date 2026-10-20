@@ -434,6 +434,51 @@ func TestDontKnowGradesAsAgain(t *testing.T) {
 	}
 }
 
+func TestFinishRefusesZeroRatings(t *testing.T) {
+	svc, store := openSvc(t, fixedClock{when})
+	ctx := context.Background()
+	userID := insertLearner(t, store, "empty@example.com", "sub-empty")
+	runID := start(t, svc, userID)
+	if _, err := svc.Next(ctx, runID); err != nil {
+		t.Fatal(err)
+	}
+	before, err := store.CountCards(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Finish(ctx, runID); !errors.Is(err, ErrNothingRated) {
+		t.Fatalf("Finish with no ratings: %v, want ErrNothingRated", err)
+	}
+	run, err := store.GetPlacementRun(ctx, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !run.FinishedAt.IsZero() || run.Level.Valid || run.StopReason != "" || run.Result != "" {
+		t.Fatalf("empty finish wrote a score: finished=%v level=%v stop=%q result=%q", !run.FinishedAt.IsZero(), run.Level, run.StopReason, run.Result)
+	}
+	after, err := store.CountCards(ctx, userID)
+	if err != nil || after != before {
+		t.Fatalf("cards %d to %d (%v); a refused finish must not seed", before, after, err)
+	}
+	place, ok, err := store.LatestPlacement(ctx, userID)
+	if err != nil || !ok || place.Finished || place.CardsRated != 0 {
+		t.Fatalf("latest after refuse: %+v ok=%v err=%v", place, ok, err)
+	}
+
+	// One rating is enough to score. The refused call did not close the run.
+	rateNext(t, svc, runID, Good)
+	result, err := svc.Finish(ctx, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.FinishedAt.Equal(when) || result.CardsRated != 1 {
+		t.Fatalf("finish after one rating: %+v", result)
+	}
+	if n, err := store.CountCards(ctx, userID); err != nil || n != 1 {
+		t.Fatalf("cards after the rated finish = %d %v", n, err)
+	}
+}
+
 func TestResumeAndIdempotentFinish(t *testing.T) {
 	svc, store := openSvc(t, fixedClock{when})
 	svc.fixture = manyBand(0, 6)
