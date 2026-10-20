@@ -1,6 +1,10 @@
 package web
 
-import "time"
+import (
+	"time"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
+)
 
 // LearnerVM is the signed-in learner shown on Today.
 type LearnerVM struct {
@@ -44,9 +48,9 @@ type CardBackVM struct {
 }
 
 // ReviewCardVM is one visit in the study session.
-// Kind is he_en, en_he, letter, or pattern.
+// Kind is read, recall, letter, or pattern.
 // Pointed is the pointed Hebrew. Unpointed is the same word with niqqud removed.
-// ShowUnpointed follows fsrs.ShowUnpointed: he_en only, stability at least 21
+// ShowUnpointed follows fsrs.ShowUnpointed: read only, stability at least 21
 // days, and no Again in the last three ratings. Translit is on the prompt,
 // before the flip. Back keeps the gloss, the same transliteration, and gender.
 type ReviewCardVM struct {
@@ -65,13 +69,8 @@ type ReviewCardVM struct {
 	Revealed      bool
 	Answered      int
 	Correct       int
-}
-
-// ProgressVM is the Progress page.
-type ProgressVM struct {
-	KnownWords     int
-	UnitsCompleted int
-	UnitsTotal     int
-	DueCount       int
-	Placement      *PlacementVM
+	// Item is the checked activity this visit is asked through, with Answer set once
+	// it has been checked. Both are nil for a flashcard and a drill.
+	Item   *activity.Item
+	Answer *answerState
 }

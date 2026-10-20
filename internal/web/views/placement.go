@@ -1,474 +1,356 @@
 package views
 
 import (
-	"fmt"
 	"strconv"
+
+	"github.com/a-h/templ"
 )
 
-// Placement modes select the region rendered at /placement.
+// The placement screens (INIT-015/SPEC-012). The v3 engine (internal/placement) deals one item at a
+// time, and a screen shows one item. Every screen has one thing to do:
+//
+//   - intro, resume, break, offer: one primary Button;
+//   - letters, listening, reading: pick an option (the answers are the action; listening and letters
+//     also have one gold audio orb, and "I don't know" is a quiet button);
+//   - typing: the Hebrew keyboard, and one primary Check;
+//   - results and review: one primary Button.
+//
+// Placement gives no right or wrong feedback (D1): nothing here knows whether an answer was right. The
+// only answer states are Default and Selected. The practice screens (activity.templ) are separate on
+// purpose, and a build-time test (activity_test.go) checks that placement uses nothing that can show a
+// verdict. The language of these screens is English, as the practice screens are; Today's placement
+// card (PlacementFor) is the only part with Hebrew chrome.
+
+// Screens of the placement flow.
 const (
-	PlaceModeIntro  = "intro"
-	PlaceModeResume = "resume"
-	PlaceModeFront  = "front"
-	PlaceModeBack   = "back"
-	PlaceModeBreak  = "break"
-	PlaceModeResult = "result"
+	PlaceIntro     = "intro"
+	PlaceResume    = "resume"
+	PlaceLetters   = "letters"
+	PlaceListening = "listening"
+	PlaceReading   = "reading"
+	PlaceTyping    = "typing"
+	PlaceBreak     = "break"
+	PlaceOffer     = "offer"
+	PlaceResults   = "results"
+	PlaceReview    = "review"
 )
 
-// PlacementCopy is the placement chrome for one interface language.
-// Hebrew words on a card travel with the lexeme, each in a word block.
-// Deck chrome in Hebrew is unpointed masculine, the immersion layer.
+// Phases of a pick screen. Ask is the question. Picked is the neutral state after a tap: the chosen
+// option is Selected, the others dim, and the screen moves on by itself.
+const (
+	PlaceAsk    = "ask"
+	PlacePicked = "picked"
+)
+
+// Assets of the placement screens. The stylesheet is linked from the layout head, so a boosted
+// navigation does not flash unstyled. The script is loaded by the page.
+const (
+	PlacementCSS = "/static/css/placement.css"
+	PlacementJS  = "/static/js/placement.js"
+)
+
+// PlaceOptionCount is how many options a pick screen shows. It is placement.OptionCount, which views does
+// not import.
+const PlaceOptionCount = 4
+
+// PlaceMaxReplaceTries is how many times a screen asks for a new word when its clip will not play.
+// After that the screen says so and stays, so a broken audio path cannot loop.
+const PlaceMaxReplaceTries = 3
+
+// PlacementCopy is the placement chrome on Today's card, in the interface language. The placement
+// screens themselves are English only.
 type PlacementCopy struct {
 	Lang        string
-	Before      string
 	Kicker      string
 	TakeTitle   string
 	TakeHint    string
 	TodayResume string
 	Heading     string
-	Why         string
-	BulletSit   string
-	BulletFlip  string
-	BulletScore string
-	Start       string
-	Skip        string
-	Welcome     string
-	ResumeTitle string
-	KeepGoing   string
-	FinishNow   string
-	Direction   string
-	ShowMeaning string
-	Hint        string
-	Flip        string
-	Space       string
-	DontKnow    string
-	Listen      string
-	Slow        string
-	HowWell     string
-	Again       string
-	Hard        string
-	Good        string
-	Easy        string
-	AgainSub    string
-	HardSub     string
-	GoodSub     string
-	EasySub     string
-	Stop        string
-	ToastLead   string
-	BreakKicker string
-	BreakTitle  string
-	BreakBody   string
-	DoneToday   string
-	SoFar       string
-	Samples     string
-	AllDone     string
-	Results     string
-	Added       string
-	StartOver   string
-	Back        string
-	KnowThese   string
-	StartHere   string
-	StillAhead  string
-	Covered     string
-	NoteLeft    string
-	NoteChange  string
 }
 
 // PlacementFor returns the English chrome unless lang is he.
 func PlacementFor(lang string) PlacementCopy {
 	if lang == "he" {
-		return hebrewPlacement()
+		return PlacementCopy{
+			Lang:        "he",
+			Kicker:      "רשות",
+			TakeTitle:   "בְּדִיקַת רָמָה",
+			TakeHint:    "בְּדִיקָה קְצָרָה שֶׁל מִלִּים מוּכָּרוֹת. אֶפְשָׁר לַעֲזֹב וְלַחֲזֹר. הַיּוֹם נִשְׁאַר פָּתוּחַ.",
+			TodayResume: "חֲזָרָה לַבְּדִיקָה",
+			Heading:     "בוא נבדוק איפה אתה באמת",
+		}
 	}
-	return englishPlacement()
-}
-
-func englishPlacement() PlacementCopy {
 	return PlacementCopy{
 		Lang:        "en",
 		Kicker:      "Optional",
-		Before:      "Before you start",
 		TakeTitle:   "Take the placement check",
 		TakeHint:    "A short check of words you know. You can leave and come back. Today stays open.",
 		TodayResume: "Resume placement",
-		Heading:     "Let’s see what you already know",
-		Why:         "So you don’t spend time on words you already know.",
-		BulletSit:   "Short sittings of 20 cards, about 3 minutes each. Up to about 100 cards, spread over a few days if you like.",
-		BulletFlip:  "For each word: try to recall it, flip the card, and rate how well you knew it.",
-		BulletScore: "There’s no score. Each rating already counts as your first review of that word, and you can stop at any time.",
-		Start:       "Let’s start",
-		Skip:        "Skip and start from the beginning",
-		Welcome:     "Welcome back",
-		ResumeTitle: "Pick up where you left off",
-		KeepGoing:   "Keep going",
-		FinishNow:   "Finish now and see where I start",
-		Direction:   "Hebrew → English",
-		ShowMeaning: "Show the meaning",
-		Hint:        "Do you know what it means? Try to recall it, then flip the card.",
-		Flip:        "Flip",
-		Space:       "Space",
-		DontKnow:    "I don’t know this",
-		Listen:      "Listen",
-		Slow:        "0.75×",
-		HowWell:     "How well did you know it?",
-		Again:       "Again",
-		Hard:        "Hard",
-		Good:        "Good",
-		Easy:        "Easy",
-		AgainSub:    "Didn’t know",
-		HardSub:     "With effort",
-		GoodSub:     "Knew it",
-		EasySub:     "Instantly",
-		Stop:        "Stop here",
-		ToastLead:   "Added to your practice",
-		BreakTitle:  "Nice work. Call it a day?",
-		BreakBody:   "Everything you rated is in your practice now, and it’ll come back a few at a time.",
-		DoneToday:   "Done for today",
-		SoFar:       "So far",
-		Samples:     "Some words from this sitting",
-		AllDone:     "All done",
-		Results:     "Here’s where you are",
-		StartOver:   "Start from the beginning instead",
-		Back:        "Back to Today",
-		KnowThese:   "You know these",
-		StartHere:   "You start here",
-		StillAhead:  "Still ahead",
-		Covered:     "Covered",
-		NoteChange:  "You can change this any time on Progress.",
+		Heading:     "Let’s find where you really are.",
 	}
 }
 
-func hebrewPlacement() PlacementCopy {
-	return PlacementCopy{
-		Lang:        "he",
-		Before:      "לפני שמתחילים",
-		Kicker:      "רשות",
-		TakeTitle:   "בְּדִיקַת רָמָה",
-		TakeHint:    "בְּדִיקָה קְצָרָה שֶׁל מִלִּים מוּכָּרוֹת. אֶפְשָׁר לַעֲזֹב וְלַחֲזֹר. הַיּוֹם נִשְׁאַר פָּתוּחַ.",
-		TodayResume: "חֲזָרָה לַבְּדִיקָה",
-		Heading:     "בוא נבדוק מה אתה כבר יודע",
-		Why:         "כדי שלא תבזבז זמן על מילים שאתה כבר מכיר.",
-		BulletSit:   "סבבים קצרים של 20 כרטיסים, בערך 3 דקות כל אחד. עד כ־100 כרטיסים, אפשר לאורך כמה ימים.",
-		BulletFlip:  "לכל מילה: נסה להיזכר, הפוך את הכרטיס, ודרג כמה טוב ידעת.",
-		BulletScore: "אין ציון. כל דירוג הוא כבר החזרה הראשונה שלך על המילה, ואפשר לעצור בכל רגע.",
-		Start:       "בוא נתחיל",
-		Skip:        "לדלג ולהתחיל מההתחלה",
-		Welcome:     "ברוך שובך",
-		ResumeTitle: "נמשיך מאיפה שעצרת",
-		KeepGoing:   "להמשיך",
-		FinishNow:   "לסיים עכשיו ולראות מאיפה מתחילים",
-		Direction:   "עברית ← אנגלית",
-		ShowMeaning: "להציג את הפירוש",
-		Hint:        "אתה יודע מה זה אומר? נסה להיזכר, ואז הפוך את הכרטיס.",
-		Flip:        "להפוך",
-		Space:       "רווח",
-		DontKnow:    "אני לא מכיר את המילה",
-		Listen:      "השמעה",
-		Slow:        "0.75×",
-		HowWell:     "כמה טוב ידעת?",
-		Again:       "שוב",
-		Hard:        "קשה",
-		Good:        "טוב",
-		Easy:        "קל",
-		AgainSub:    "לא ידעתי",
-		HardSub:     "במאמץ",
-		GoodSub:     "ידעתי",
-		EasySub:     "מיד",
-		Stop:        "לעצור כאן",
-		ToastLead:   "נוסף לתרגול שלך",
-		BreakTitle:  "עבודה יפה. זה מספיק להיום?",
-		BreakBody:   "כל מה שדירגת נוסף לתרגול שלך ויחזור בהדרגה, כמה בכל יום.",
-		DoneToday:   "סיימתי להיום",
-		SoFar:       "עד עכשיו",
-		Samples:     "כמה מילים מהסבב",
-		AllDone:     "סיימת",
-		Results:     "הנה איפה אתה עומד",
-		StartOver:   "בעצם, להתחיל מההתחלה",
-		Back:        "חזרה להיום",
-		KnowThese:   "מוכר לך",
-		StartHere:   "כאן מתחילים",
-		StillAhead:  "עוד לפנינו",
-		Covered:     "עברנו על זה",
-		NoteChange:  "אפשר לשנות את זה בכל זמן בעמוד ההתקדמות.",
-	}
+// PlaceOptionView is one answer of a pick item. State is Default or Selected, never anything else.
+type PlaceOptionView struct {
+	ID     string
+	Text   string
+	Hebrew bool
+	Key    string
+	State  AnswerState
+	Dim    bool
 }
 
-// ResumeLine is the welcome-back sentence. done is sittings already finished.
-func (c PlacementCopy) ResumeLine(done int) string {
-	if c.Lang == "he" {
-		switch {
-		case done <= 0:
-			return "הסבב הבא: 20 כרטיסים, בערך 3 דקות."
-		case done == 1:
-			return "עשית כבר סבב אחד. הסבב הבא: 20 כרטיסים, בערך 3 דקות."
-		default:
-			return fmt.Sprintf("עשית כבר %d סבבים. הסבב הבא: 20 כרטיסים, בערך 3 דקות.", done)
-		}
-	}
-	switch {
-	case done <= 0:
-		return "You’re partway through a sitting. Next up: 20 cards, about 3 minutes."
-	case done == 1:
-		return "You’ve done one sitting so far. Next up: 20 cards, about 3 minutes."
-	default:
-		return fmt.Sprintf("You’ve done %d sittings so far. Next up: 20 cards, about 3 minutes.", done)
-	}
+// PlaceLevelView is one skill's card on the results screen.
+type PlaceLevelView struct {
+	Skill  string
+	Icon   string
+	Tested bool
+	Level  int
+	Blurb  string
+	Words  int
 }
 
-// SittingKicker is "Sitting N done".
-func (c PlacementCopy) SittingKicker(n int) string {
-	if c.Lang == "he" {
-		return fmt.Sprintf("סבב %d הושלם", n)
-	}
-	return fmt.Sprintf("Sitting %d done", n)
+// PlaceWorkView is one row of "We'll work on first".
+type PlaceWorkView struct {
+	Pointed string
+	Gloss   string
+	Note    string
 }
 
-// CoveredLine names how many words this sitting rated.
-func (c PlacementCopy) CoveredLine(n int) string {
-	if c.Lang == "he" {
-		return fmt.Sprintf("עברנו על %d מילים.", n)
-	}
-	return fmt.Sprintf("We covered %d words.", n)
+// PlaceResultView is the results screen.
+type PlaceResultView struct {
+	Headline  string
+	Sub       string
+	Words     int
+	Listening PlaceLevelView
+	Reading   PlaceLevelView
+	Work      []PlaceWorkView
+	Misses    int
+	ReviewURL string
 }
 
-// LeftNote is the "sittings left" line. left is the cap minus sittings done.
-func (c PlacementCopy) LeftNote(left int) string {
-	if left < 0 {
-		left = 0
-	}
-	if c.Lang == "he" {
-		return fmt.Sprintf("נמשיך בדיוק מכאן בפעם הבאה. נשארו עד %d סבבים, ואולי פחות.", left)
-	}
-	return fmt.Sprintf("Next time we’ll pick up right here. Up to %d sittings left, maybe fewer.", left)
+// PlaceReviewRow is one missed word: what it means, what the learner picked, the pointed Hebrew, and
+// its clip. PickedKind is picked, typed, or idk.
+type PlaceReviewRow struct {
+	ID         string
+	Gloss      string
+	Pointed    string
+	AudioURL   string
+	Picked     string
+	PickedKind string
 }
 
-// BarLabel is the sitting progress name. card is the 1-based card in the sitting.
-func (c PlacementCopy) BarLabel(sitting, card int) string {
-	if c.Lang == "he" {
-		return fmt.Sprintf("סבב %d: כרטיס %d מתוך 20", sitting, card)
-	}
-	return fmt.Sprintf("Sitting %d: card %d of 20", sitting, card)
+// PlaceReviewGroup is the misses of one part.
+type PlaceReviewGroup struct {
+	Title string
+	Rows  []PlaceReviewRow
 }
 
-// AddedLine is the result sentence. n is the count, outside the ladder.
-func (c PlacementCopy) AddedLine(n int) string {
-	if c.Lang == "he" {
-		return fmt.Sprintf("%d מילים נוספו לתרגול שלך. הן יחזרו בהדרגה, כמה בכל יום.", n)
-	}
-	return fmt.Sprintf("%d words added to your practice. They’ll come back a few at a time.", n)
+// PlaceReviewView is the review-of-misses screen.
+type PlaceReviewView struct {
+	Title  string
+	Total  int
+	Groups []PlaceReviewGroup
 }
 
-// UnitLine is "Unit N · Lesson 1".
-func (c PlacementCopy) UnitLine(unit int) string {
-	if unit < 1 {
-		unit = 1
-	}
-	if c.Lang == "he" {
-		return fmt.Sprintf("יחידה %d · שיעור 1", unit)
-	}
-	return fmt.Sprintf("Unit %d · Lesson 1", unit)
-}
-
-// StartUnit is the primary result button.
-func (c PlacementCopy) StartUnit(unit int) string {
-	if unit < 1 {
-		unit = 1
-	}
-	if c.Lang == "he" {
-		return fmt.Sprintf("להתחיל ביחידה %d", unit)
-	}
-	return fmt.Sprintf("Start Unit %d", unit)
-}
-
-// PlacementWord is one dealt lexeme. Text is pointed NFC Hebrew.
-type PlacementWord struct {
-	ID       string
-	Text     string
-	Translit string
-	Gloss    string
-	Gender   string
-	AudioURL string
-}
-
-// PlacementView is one render of /placement, full page or fragment.
+// PlacementView is one render of a placement screen, a full page or the fragment an htmx write
+// returns. Only the fields of its Screen are set.
 type PlacementView struct {
 	Page
-	Copy       PlacementCopy
-	Mode       string
-	RunIDText  string
-	Word       PlacementWord
-	Toast      PlacementWord
-	HasToast   bool
-	Samples    []PlacementWord
-	Ladder     []BandRow
-	Compact    bool
-	Sitting    int
-	CardIndex  int
-	DoneInSit  int
-	Fill       string
-	FillPrev   string
-	Overall    string
-	Added      int
-	AddedText  string
-	Unit       int
-	UnitLine   string
-	StartLabel string
-	ResumeLine string
-	BreakKick  string
-	Covered    string
-	LeftNote   string
-	CourseDone bool
+	Screen string
+	Phase  string
+	RunID  string
+	// Token is the item id the answer is posted for.
+	Token string
+	// Options are the answers of a pick item.
+	Options []PlaceOptionView
+	// AudioURL is the clip of a listening or letters item. Prompt is the pointed Hebrew of a reading
+	// item, or the English meaning of a typing item.
+	AudioURL string
+	Prompt   string
+	// Index and Total place the item in its part: "4 / 12".
+	Index int
+	Total int
+	// Tries is how many replacements this item has had. AudioFailed says a clip cannot be played and no
+	// replacement is coming, so the screen tells the learner.
+	Tries       int
+	AudioFailed bool
+	// Part is the number of the part just finished, on a break or an offer screen.
+	Part   int
+	Result *PlaceResultView
+	Review *PlaceReviewView
 }
 
-func fmtInt(n int) string {
-	if n < 0 {
-		n = 0
+// Asking is true on a pick screen before the tap.
+func (v PlacementView) Asking() bool { return v.Phase != PlacePicked }
+
+// Eyebrow is the small caps line above the title.
+func (v PlacementView) Eyebrow() string {
+	switch v.Screen {
+	case PlaceLetters:
+		return "Warm-up"
+	case PlaceListening:
+		return "Listening"
+	case PlaceReading:
+		return "Reading"
+	case PlaceTyping:
+		return "Typing"
 	}
-	return strconv.Itoa(n)
+	return ""
 }
 
-// Enter is the view-transition token for this face.
-func (v PlacementView) Enter() string {
-	if v.Mode == PlaceModeBack {
-		return "flip"
+// Question is the heading of an item screen.
+func (v PlacementView) Question() string {
+	switch v.Screen {
+	case PlaceLetters:
+		return "Which letter did you hear?"
+	case PlaceListening:
+		return "What did you hear?"
+	case PlaceReading:
+		return "What does this word mean?"
+	case PlaceTyping:
+		return "Type this word in Hebrew"
 	}
-	return "stack"
+	return ""
 }
 
-// Fraction is the sitting label, "7/20".
-func (v PlacementView) Fraction() string {
-	n := v.CardIndex
-	if n < 1 {
-		n = 1
+// Count is "4 / 12".
+func (v PlacementView) Count() string {
+	return strconv.Itoa(v.Index) + " / " + strconv.Itoa(v.Total)
+}
+
+// ProgressName is the accessible name of the progress bar.
+func (v PlacementView) ProgressName() string {
+	return v.Eyebrow() + ": item " + strconv.Itoa(v.Index) + " of " + strconv.Itoa(v.Total)
+}
+
+// HasAudio is true on a screen that plays a clip.
+func (v PlacementView) HasAudio() bool { return v.AudioURL != "" }
+
+// PlaceKey is the keyboard badge and hotkey of the nth option.
+func PlaceKey(i int) string { return strconv.Itoa(i + 1) }
+
+// plOptionAttrs are the attributes of one answer option. While asking it is a submit button that posts
+// the choice. After the tap it is an inert button, so the only thing a tap can do is move on.
+func plOptionAttrs(o PlaceOptionView, asking bool) templ.Attributes {
+	attrs := templ.Attributes{
+		"data-hotkey":       o.Key,
+		"aria-keyshortcuts": o.Key,
+		"data-pl-option":    o.ID,
 	}
-	if n > 20 {
-		n = 20
-	}
-	return fmt.Sprintf("%d/20", n)
-}
-
-// BarName is the progressbar accessible name.
-func (v PlacementView) BarName() string {
-	return v.Copy.BarLabel(v.Sitting, v.CardIndex)
-}
-
-// GenderChip is the short mark, the full word, and whether to show it.
-// English uses m/f. Hebrew uses ז׳/נ׳. The full word is the tooltip and the
-// accessible name.
-func GenderChip(lang, gender string) (short, full string, ok bool) {
-	switch gender {
-	case AddressMasculine:
-		if lang == "he" {
-			return "ז׳", "זכר", true
-		}
-		return "m", "masculine", true
-	case AddressFeminine:
-		if lang == "he" {
-			return "נ׳", "נקבה", true
-		}
-		return "f", "feminine", true
-	default:
-		return "", "", false
-	}
-}
-
-// BandRow is one rung of the five-band ladder. State is solid, here, ahead, or seen.
-type BandRow struct {
-	Title string
-	Units string
-	State string
-	Label string
-}
-
-type bandInfo struct {
-	titleEN, unitsEN, titleHE, unitsHE string
-	unit                               int
-}
-
-var courseBands = [5]bandInfo{
-	{"First words", "Unit 1", "מילים ראשונות", "יחידה 1", 1},
-	{"Home and kitchen", "Units 2–3", "בבית ובמטבח", "יחידות 2–3", 2},
-	{"Out in town", "Units 4–5", "בעיר", "יחידות 4–5", 4},
-	{"Daily life and work", "Units 6–7", "יום־יום ועבודה", "יחידות 6–7", 6},
-	{"Stories and opinions", "Units 8–10", "סיפורים ודעות", "יחידות 8–10", 8},
-}
-
-// UnitForBand maps a finished-band index to the first unit of the next band.
-// level is the highest completed band, or −1. The returned unit is where
-// the learner starts. All five bands completed stays on unit 8.
-func UnitForBand(level int) (unit int, courseDone bool) {
-	if level >= 4 {
-		return courseBands[4].unit, true
-	}
-	start := 0
-	if level >= 0 {
-		start = level + 1
-	}
-	return courseBands[start].unit, false
-}
-
-// ResultLadder is the verdict ladder. No scores. Highest band first.
-func ResultLadder(copy PlacementCopy, level int) []BandRow {
-	state := [5]string{}
-	for i := range state {
-		state[i] = "ahead"
-	}
-	if level >= 4 {
-		for i := range state {
-			state[i] = "solid"
-		}
+	if asking {
+		attrs["type"] = "submit"
+		attrs["name"] = "option"
+		attrs["value"] = o.ID
 	} else {
-		start := 0
-		if level >= 0 {
-			start = level + 1
+		attrs["type"] = "button"
+		attrs["aria-disabled"] = "true"
+		if o.Dim {
+			attrs["data-dim"] = ""
 		}
-		for i := 0; i < start; i++ {
-			state[i] = "solid"
-		}
-		state[start] = "here"
 	}
-	return ladderRows(copy, state[:])
+	return attrs
 }
 
-// ProgressLadder is the "so far" ladder. seen marks bands with any rating.
-func ProgressLadder(copy PlacementCopy, seen [5]bool) []BandRow {
-	state := [5]string{}
-	for i := range state {
-		if seen[i] {
-			state[i] = "seen"
-		} else {
-			state[i] = "ahead"
-		}
+// plOrbAttrs are the attributes of the gold audio orb. It names the clip it plays, so motion.js can mark
+// it as playing. After the tap the orb is inert.
+func plOrbAttrs(asking bool) templ.Attributes {
+	attrs := templ.Attributes{"data-audio": "pl-clip", "data-gold": "", "data-pl-play": ""}
+	if !asking {
+		attrs["aria-disabled"] = "true"
 	}
-	return ladderRows(copy, state[:])
+	return attrs
 }
 
-func ladderRows(copy PlacementCopy, state []string) []BandRow {
-	rows := make([]BandRow, 0, 5)
-	for i := 4; i >= 0; i-- {
-		info := courseBands[i]
-		title, units := info.titleEN, info.unitsEN
-		if copy.Lang == "he" {
-			title, units = info.titleHE, info.unitsHE
-		}
-		rows = append(rows, BandRow{
-			Title: title,
-			Units: units,
-			State: state[i],
-			Label: ladderLabel(copy, state[i]),
-		})
+// plChipAttrs are the attributes of a Replay or Slower chip. marker is its data attribute. After the tap
+// a chip is inert, and a tap on it moves the screen on like a tap anywhere else.
+func plChipAttrs(marker string, live bool) templ.Attributes {
+	attrs := templ.Attributes{marker: ""}
+	if !live {
+		attrs["aria-disabled"] = "true"
 	}
-	return rows
+	return attrs
 }
 
-func ladderLabel(copy PlacementCopy, state string) string {
-	switch state {
-	case "solid":
-		return copy.KnowThese
-	case "here":
-		return copy.StartHere
-	case "seen":
-		return copy.Covered
-	default:
-		return copy.StillAhead
+// plRootAttrs are the data attributes of the #placement root: the screen, the phase of a pick screen, and
+// the state of its clip, which the script updates as the clip loads and plays.
+func plRootAttrs(v PlacementView) templ.Attributes {
+	attrs := templ.Attributes{"data-screen": v.Screen}
+	if v.Phase != "" {
+		attrs["data-phase"] = v.Phase
 	}
+	switch {
+	case v.AudioFailed:
+		attrs["data-audio-state"] = "error"
+	case v.HasAudio() && v.Asking():
+		attrs["data-audio-state"] = "idle"
+	}
+	return attrs
+}
+
+// plPrimaryAttrs is the one primary action of a screen: a submit button.
+func plPrimaryAttrs(extra templ.Attributes) templ.Attributes {
+	attrs := templ.Attributes{"type": "submit", "data-pl-primary": ""}
+	for k, v := range extra {
+		attrs[k] = v
+	}
+	return attrs
+}
+
+// plQuietAttrs is a secondary submit button. formnovalidate lets it through a required field.
+func plQuietAttrs(name, value string) templ.Attributes {
+	attrs := templ.Attributes{"type": "submit", "formnovalidate": true}
+	if name != "" {
+		attrs["name"] = name
+		attrs["value"] = value
+	}
+	return attrs
+}
+
+// plBreakTitle is the heading of a break screen.
+func plBreakTitle(part int) string { return "Part " + strconv.Itoa(part) + " done. Take a breath." }
+
+// plWords formats a count of words with a thousands separator below ten thousand.
+func plWords(n int) string {
+	s := strconv.Itoa(n)
+	if n >= 1000 && n < 1000000 {
+		return s[:len(s)-3] + "," + s[len(s)-3:]
+	}
+	return s
+}
+
+// plSegments is the five-step meter of a level.
+func plSegments(level int) []bool {
+	out := make([]bool, 5)
+	for i := range out {
+		out[i] = i < level
+	}
+	return out
+}
+
+// plLevelName is "Level 3", or "Not tested yet".
+func plLevelName(l PlaceLevelView) string {
+	if !l.Tested {
+		return "Not tested yet"
+	}
+	return "Level " + strconv.Itoa(l.Level)
+}
+
+// plMisses is "Review my 6 misses".
+func plMisses(n int) string {
+	if n == 1 {
+		return "Review my 1 miss"
+	}
+	return "Review my " + strconv.Itoa(n) + " misses"
+}
+
+// plPickedLead is the start of the line under a missed word: "You picked “door”", "You said “I don’t know”", or "You typed".
+func plPickedLead(kind string) string {
+	switch kind {
+	case "idk":
+		return "You said “I don’t know”"
+	case "typed":
+		return "You typed"
+	}
+	return "You picked"
 }

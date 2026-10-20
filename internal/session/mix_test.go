@@ -190,13 +190,13 @@ func TestClassify(t *testing.T) {
 	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	due := now.Add(-time.Minute)
 	later := now.Add(time.Hour)
-	base := Candidate{Dir: fsrs.DirHeEn, Due: due, HasRating: true, Latest: int(fsrs.Good), KnownLexeme: true}
+	base := Candidate{Skill: fsrs.SkillRead, Due: due, HasRating: true, Latest: int(fsrs.Good), KnownLexeme: true}
 	cases := []struct {
 		name string
 		edit func(*Candidate)
 		want kind
 	}{
-		{name: "good he_en", edit: func(*Candidate) {}, want: kindKnown},
+		{name: "good read", edit: func(*Candidate) {}, want: kindKnown},
 		{name: "lapses", edit: func(c *Candidate) { c.Lapses = StruggleLapses }, want: kindStruggle},
 		{name: "hard", edit: func(c *Candidate) { c.Latest = int(fsrs.Hard) }, want: kindStruggle},
 		{name: "again", edit: func(c *Candidate) { c.Latest = int(fsrs.Again) }, want: kindStruggle},
@@ -209,9 +209,9 @@ func TestClassify(t *testing.T) {
 			c.RecentLapse = true
 			c.Lapses = 1
 		}, want: kindSkip},
-		{name: "he_en outside the known set", edit: func(c *Candidate) { c.KnownLexeme = false }, want: kindSkip},
-		{name: "en_he good", edit: func(c *Candidate) {
-			c.Dir = fsrs.DirEnHe
+		{name: "read outside the known set", edit: func(c *Candidate) { c.KnownLexeme = false }, want: kindSkip},
+		{name: "recall good", edit: func(c *Candidate) {
+			c.Skill = fsrs.SkillRecall
 			c.KnownLexeme = false
 			c.Due = later
 		}, want: kindKnown},
@@ -239,14 +239,14 @@ func TestClassify(t *testing.T) {
 
 func knownCand(id int64, due time.Time) Candidate {
 	return Candidate{
-		ID: id, LexemeID: id, Dir: fsrs.DirHeEn, Due: due,
+		ID: id, LexemeID: id, Skill: fsrs.SkillRead, Due: due,
 		HasRating: true, Latest: int(fsrs.Good), KnownLexeme: true,
 	}
 }
 
 func struggleCand(id int64, due time.Time) Candidate {
 	return Candidate{
-		ID: id, LexemeID: id, Dir: fsrs.DirHeEn, Due: due,
+		ID: id, LexemeID: id, Skill: fsrs.SkillRead, Due: due,
 		HasRating: true, Latest: int(fsrs.Hard),
 	}
 }
@@ -458,7 +458,7 @@ func TestNewAllowance(t *testing.T) {
 
 func newCand(id int64, due time.Time, position, lesson int, ranked bool, rank int) Candidate {
 	return Candidate{
-		ID: id, LexemeID: id, Dir: fsrs.DirHeEn, Due: due,
+		ID: id, LexemeID: id, Skill: fsrs.SkillRead, Due: due,
 		HasIntro: true, IntroPosition: position, IntroLesson: lesson,
 		HasFreq: ranked, FreqRank: rank,
 	}

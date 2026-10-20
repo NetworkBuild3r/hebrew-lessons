@@ -52,8 +52,8 @@ func TestMigrateEmptyAndIdempotent(t *testing.T) {
 	}
 
 	s = openAt(t, dir, fixedClock{when})
-	if got := count(t, s, `SELECT COUNT(*) FROM schema_migrations`); got != 6 {
-		t.Fatalf("schema_migrations rows = %d, want 6", got)
+	if got := count(t, s, `SELECT COUNT(*) FROM schema_migrations`); got != 12 {
+		t.Fatalf("schema_migrations rows = %d, want 12", got)
 	}
 	wantApplied := FormatTime(when)
 	rows, err := s.conn.QueryContext(ctx, `SELECT version, applied_at FROM schema_migrations ORDER BY version`)
@@ -76,9 +76,8 @@ func TestMigrateEmptyAndIdempotent(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	// 006 is reserved. This branch's client marker is version 7.
-	if len(versions) != 6 || versions[0] != 1 || versions[1] != 2 || versions[2] != 3 || versions[3] != 4 || versions[4] != 5 || versions[5] != 7 {
-		t.Fatalf("versions = %v, want [1 2 3 4 5 7]", versions)
+	if len(versions) != 12 || versions[0] != 1 || versions[1] != 2 || versions[2] != 3 || versions[3] != 4 || versions[4] != 5 || versions[5] != 6 || versions[6] != 7 || versions[7] != 8 || versions[8] != 9 || versions[9] != 10 || versions[10] != 11 || versions[11] != 12 {
+		t.Fatalf("versions = %v, want [1 2 3 4 5 6 7 8 9 10 11 12]", versions)
 	}
 	if got := count(t, s, `SELECT COUNT(*) FROM users`); got != 1 {
 		t.Fatalf("users = %d, want 1 after a second open", got)
@@ -105,9 +104,15 @@ func TestTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
+		"attempts",
 		"audio_assets",
 		"cards",
+		"coach_notes",
 		"confusion_misses",
+		"daily_snapshots",
+		"exposures",
+		"job_state",
+		"lesson_briefs",
 		"lesson_items",
 		"lesson_runs",
 		"lexemes",
@@ -116,15 +121,21 @@ func TestTables(t *testing.T) {
 		"oauth_requests",
 		"oauth_tokens",
 		"placement_answers",
+		"placement_items",
 		"placement_runs",
+		"placement_v3_runs",
+		"publish_audit",
+		"regression_events",
 		"review_log",
 		"schema_migrations",
 		"sessions",
 		"tanakh_meta",
 		"tanakh_verses",
+		"unit_reports",
 		"unit_revisions",
 		"units",
 		"users",
+		"weekly_reports",
 	}
 	for _, name := range want {
 		if !got[name] {
@@ -169,8 +180,8 @@ func TestCheckConstraints(t *testing.T) {
 	mustExec(t, s, `INSERT INTO oauth_clients (client_id, client_name, redirect_uris, token_endpoint_auth_method, grant_types, response_types, created_at)
 		VALUES ('client-ok', 'ok', '[]', 'none', '["authorization_code"]', '["code"]', ?)`, ts)
 
-	mustExec(t, s, `INSERT INTO cards (user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, suspended)
-		VALUES (?, ?, 'he_en', 'new', ?, 0, 0, 0, 0, 0)`, userID, lexemeID, ts)
+	mustExec(t, s, `INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, suspended)
+		VALUES (?, ?, 'read', 'new', ?, 0, 0, 0, 0, 0)`, userID, lexemeID, ts)
 	var cardID int64
 	if err := s.queryRow(ctx, `SELECT id FROM cards WHERE user_id = ?`, userID).Scan(&cardID); err != nil {
 		t.Fatal(err)
@@ -183,8 +194,8 @@ func TestCheckConstraints(t *testing.T) {
 	}{
 		{"user role", `INSERT INTO users (email, google_sub, role, created_at) VALUES ('b@example.com', 'sub-b', 'teacher', ?)`, []any{ts}},
 		{"unit status", `INSERT INTO units (position, title, situation, concept, status, rev, doc) VALUES (2, 't', 's', 'c', 'archived', 1, '{"title":"t"}')`, nil},
-		{"card dir", `INSERT INTO cards (user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, suspended) VALUES (?, ?, 'he_he', 'new', ?, 0, 0, 0, 0, 0)`, []any{userID, lexemeID, ts}},
-		{"card state", `INSERT INTO cards (user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, suspended) VALUES (?, ?, 'en_he', 'sm2', ?, 0, 0, 0, 0, 0)`, []any{userID, lexemeID, ts}},
+		{"card skill", `INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, suspended) VALUES (?, ?, 'he_he', 'new', ?, 0, 0, 0, 0, 0)`, []any{userID, lexemeID, ts}},
+		{"card state", `INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, suspended) VALUES (?, ?, 'recall', 'sm2', ?, 0, 0, 0, 0, 0)`, []any{userID, lexemeID, ts}},
 		{"review rating", `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days) VALUES (?, 5, ?, 0, 0)`, []any{cardID, ts}},
 		{"lesson role", `INSERT INTO lesson_items (unit_id, lesson_ix, lexeme_id, role, skill) VALUES (?, 0, ?, 'old', 'recall')`, []any{unitID, lexemeID}},
 		{"oauth auth method", `INSERT INTO oauth_clients (client_id, client_name, redirect_uris, token_endpoint_auth_method, grant_types, response_types, created_at) VALUES ('c', 'n', '[]', 'client_secret_jwt', '["authorization_code"]', '["code"]', ?)`, []any{ts}},
@@ -208,15 +219,15 @@ func TestCardsUniquePerDirection(t *testing.T) {
 	s := openStore(t, nil)
 	userID := insertUser(t, s, "a@example.com", "sub-a", "learner")
 	lexemeID := insertLexeme(t, s, "שָׁלוֹם")
-	mustExec(t, s, `INSERT INTO cards (user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, suspended)
-		VALUES (?, ?, 'he_en', 'new', ?, 0, 0, 0, 0, 0)`, userID, lexemeID, ts)
-	_, err := s.exec(context.Background(), `INSERT INTO cards (user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, suspended)
-		VALUES (?, ?, 'he_en', 'new', ?, 0, 0, 0, 0, 0)`, userID, lexemeID, ts)
+	mustExec(t, s, `INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, suspended)
+		VALUES (?, ?, 'read', 'new', ?, 0, 0, 0, 0, 0)`, userID, lexemeID, ts)
+	_, err := s.exec(context.Background(), `INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, suspended)
+		VALUES (?, ?, 'read', 'new', ?, 0, 0, 0, 0, 0)`, userID, lexemeID, ts)
 	if err == nil || !strings.Contains(err.Error(), "UNIQUE") {
 		t.Fatalf("duplicate card error = %v", err)
 	}
-	mustExec(t, s, `INSERT INTO cards (user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, suspended)
-		VALUES (?, ?, 'en_he', 'learning', ?, 1, 5, 1, 0, 0)`, userID, lexemeID, ts)
+	mustExec(t, s, `INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, suspended)
+		VALUES (?, ?, 'recall', 'learning', ?, 1, 5, 1, 0, 0)`, userID, lexemeID, ts)
 }
 
 func TestOnDelete(t *testing.T) {

@@ -1,0 +1,210 @@
+/* Lamplight components (views/components.templ). One rule set per Figma
+   component. Colours come from tokens.css, radius from --radius-*, spacing
+   from --space-*, tap targets from --size-tap and --size-cta. No literal
+   colours. Logical properties only. Motion is SPEC-009's, so nothing here
+   transitions. Green and red appear only under [data-state=correct|wrong]. */
+
+/* Button. Primary is the one main action (slate in light, gold in dark).
+   Quiet is outlined and has no fill. */
+.c-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-block-size: var(--size-tap);
+  min-inline-size: var(--size-tap);
+  padding-inline: var(--space-5);
+  border: 2px solid transparent;
+  border-radius: var(--radius-control);
+  font-weight: 700;
+  font-size: var(--fs-body);
+  line-height: var(--lh-he-body);
+  text-align: center;
+  text-decoration: none;
+}
+.c-button[data-kind="primary"] {
+  min-block-size: var(--size-cta);
+  background: var(--action-bg);
+  color: var(--action-text);
+}
+.c-button[data-kind="primary"]:hover {
+  background: color-mix(in srgb, var(--action-bg) 88%, var(--action-text));
+}
+.c-button[data-kind="quiet"] {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--hairline-strong);
+}
+.c-button[data-kind="quiet"]:hover { background: var(--surface-soft); }
+.c-button:disabled { opacity: .5; cursor: not-allowed; }
+
+/* AnswerOption. Four states. Selected is neutral: a strong border and a soft
+   surface. Correct and Wrong add a drawn mark, so colour is never alone. */
+.c-answer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  inline-size: 100%;
+  min-block-size: var(--size-tap);
+  padding-block: var(--space-3);
+  padding-inline: var(--space-4);
+  background: var(--surface);
+  color: var(--text);
+  border: 2px solid var(--hairline);
+  border-radius: var(--radius-control);
+  font: inherit;
+  text-align: start;
+}
+.c-answer__key {
+  display: grid;
+  place-items: center;
+  flex: none;
+  min-inline-size: calc(var(--space-5) + var(--space-1));
+  block-size: calc(var(--space-5) + var(--space-1));
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.c-answer__label { flex: 1 1 auto; min-inline-size: 0; line-height: var(--lh-he-body); }
+.c-answer[data-state="selected"] {
+  background: var(--surface-soft);
+  border-color: var(--hairline-strong);
+}
+.c-answer[data-state="selected"] .c-answer__key {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.c-answer[data-state="correct"] {
+  background: var(--go-soft);
+  border-color: var(--go);
+}
+.c-answer[data-state="wrong"] {
+  background: var(--stop-soft);
+  border-color: var(--stop);
+}
+/* Marks are drawn, not icons (icons are SPEC-010). The box is centred with
+   auto margins, so it reads the same in a right-to-left page. */
+.c-answer__mark {
+  position: relative;
+  flex: none;
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+}
+.c-answer__mark::before,
+.c-answer__mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+}
+.c-answer[data-state="correct"] .c-answer__mark { color: var(--go); }
+.c-answer[data-state="correct"] .c-answer__mark::after {
+  inline-size: var(--space-2);
+  block-size: var(--space-4);
+  border-inline-end: 3px solid currentcolor;
+  border-block-end: 3px solid currentcolor;
+  translate: 0 -10%;
+  rotate: 45deg;
+}
+.c-answer[data-state="wrong"] .c-answer__mark { color: var(--stop); }
+.c-answer[data-state="wrong"] .c-answer__mark::before,
+.c-answer[data-state="wrong"] .c-answer__mark::after {
+  inline-size: var(--space-5);
+  block-size: 3px;
+  background: currentcolor;
+  border-radius: var(--radius-pill);
+}
+.c-answer[data-state="wrong"] .c-answer__mark::before { rotate: 45deg; }
+.c-answer[data-state="wrong"] .c-answer__mark::after { rotate: -45deg; }
+
+/* ProgressBar. A native progress element, so there is no inline style. */
+.c-progress {
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  inline-size: 100%;
+  block-size: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--hairline-strong);
+  color: var(--lamp);
+}
+.c-progress::-webkit-progress-bar {
+  background: var(--hairline-strong);
+  border-radius: var(--radius-pill);
+}
+.c-progress::-webkit-progress-value {
+  background: var(--lamp);
+  border-radius: var(--radius-pill);
+}
+.c-progress::-moz-progress-bar {
+  background: var(--lamp);
+  border-radius: var(--radius-pill);
+}
+
+/* AudioOrb. A neutral slate disc: the gold stays on the one main action. */
+.c-orb {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: var(--size-cta);
+  block-size: var(--size-cta);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--ink-soft);
+  color: var(--on-ink);
+}
+.c-orb .icon {
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+}
+
+/* Chip. A small neutral label. */
+.c-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-block: var(--space-1);
+  padding-inline: var(--space-3);
+  background: var(--surface-soft);
+  color: var(--text);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  line-height: var(--lh-he-body);
+}
+
+/* Card. */
+.c-card {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-1);
+  padding: var(--space-5);
+}
+
+/* Sheet. Raised, with the large corner radius on top only. */
+.c-sheet {
+  display: grid;
+  gap: var(--space-4);
+  background: var(--surface-raised);
+  color: var(--text);
+  border: 1px solid var(--hairline);
+  border-start-start-radius: var(--radius-hero);
+  border-start-end-radius: var(--radius-hero);
+  box-shadow: var(--shadow-3);
+  padding-block: var(--space-3) var(--space-6);
+  padding-inline: var(--space-5);
+}
+.c-sheet__handle {
+  justify-self: center;
+  inline-size: var(--space-7);
+  block-size: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--hairline-strong);
+}

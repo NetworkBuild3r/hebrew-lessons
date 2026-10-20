@@ -43,7 +43,7 @@ type LexemeStruggle struct {
 }
 
 // ConfusionPair is one kind of miss inside the 7-day window.
-// A letter_pair key x/y splits into A and B. An agreement key is A, and B is empty.
+// A letter_pair or other key x/y splits into A and B. An agreement key is A, and B is empty.
 type ConfusionPair struct {
 	Kind   string
 	A      string
@@ -53,6 +53,9 @@ type ConfusionPair struct {
 }
 
 // StruggleStats returns the learner's struggle picture.
+// get_context no longer reads it: internal/mcpstore lists the words internal/learner
+// calls struggling instead (INIT-015/SPEC-013). The session mix still reads
+// StruggleStatsAt, which counts every reviewed word.
 // The 7-day window is read from the store clock. StruggleStatsAt takes the
 // instant instead, so a caller that already read the clock can pass that
 // same value.
@@ -227,9 +230,9 @@ func (s *Store) confusionPairs(ctx context.Context, userID int64, since string) 
 }
 
 // splitConfusion turns a stored key into the pair the consumer reads.
-// letter_pair splits on the first slash. agreement keeps the key in A.
+// letter_pair and other split on the first slash. agreement keeps the key in A.
 func splitConfusion(kind, key string) (string, string) {
-	if kind == "letter_pair" {
+	if kind == "letter_pair" || kind == "other" {
 		a, b, _ := strings.Cut(key, "/")
 		return a, b
 	}

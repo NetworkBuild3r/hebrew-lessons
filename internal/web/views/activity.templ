@@ -1,0 +1,325 @@
+package views
+
+// ActivityFrame is the one frame every checked activity shares: progress at the
+// top, the prompt in the middle, the answers in the thumb zone, and one gold
+// action. Before the answer the gold action is Check. After it, the feedback
+// sheet rises with the right response, and Continue is the gold action.
+//
+// The root carries data-no-transition. Chromium makes the whole page untappable
+// for the length of a view transition, so motion.js cancels the transition for
+// any response that holds an answer option or this attribute. That way the
+// first tap on an option, a tile, or Continue always registers.
+templ ActivityFrame(a ActivityView) {
+	<section class="act" data-activity={ a.Kind } data-phase={ a.Phase } aria-label={ a.Region() }>
+		@actTop(a.Lang, a.Done(), a.Total, a.Index)
+		if a.Asking() {
+			<form class="act__form" method="post" action="/_hx/review/answer" hx-post="/_hx/review/answer" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
+				<input type="hidden" name="_csrf" value={ a.CSRF }/>
+				<input type="hidden" name="card_id" value={ Num64(a.CardID) }/>
+				<input type="hidden" name="token" value={ a.Token }/>
+				<input type="hidden" name="hinted" value="0"/>
+				<div class="act__stage">
+					@actPrompt(a)
+				</div>
+				<div class="act__thumb">
+					@actAnswers(a)
+					<div class="act__actions">
+						@ButtonWith(ButtonPrimary, primaryAttrs(true)) {
+							@E("Check")
+						}
+						<div class="act__more">
+							if a.Match() {
+								@ButtonWith(ButtonQuiet, templ.Attributes{"data-act-reset": ""}) {
+									@E("Start over")
+								}
+							}
+							@ButtonWith(ButtonQuiet, quietSubmit("dont_know", "1")) {
+								@E("I don't know")
+							}
+						</div>
+					</div>
+				</div>
+			</form>
+		} else {
+			<div class="act__form">
+				<div class="act__stage">
+					@actPrompt(a)
+				</div>
+				<div class="act__thumb">
+					@actAnswers(a)
+					@Sheet("Feedback") {
+						@actFeedback(a)
+						<form method="post" action="/_hx/review/next" hx-post="/_hx/review/next" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
+							<input type="hidden" name="_csrf" value={ a.CSRF }/>
+							<input type="hidden" name="card_id" value={ Num64(a.CardID) }/>
+							@ButtonWith(ButtonPrimary, submitAttrs(templ.Attributes{"data-act-primary": "", "aria-keyshortcuts": "Enter"})) {
+								@E("Continue")
+							}
+						</form>
+					}
+				</div>
+			</div>
+		}
+	</section>
+}
+
+// actTop is the top of every frame: a way out, the progress bar, and the count.
+templ actTop(lang string, done, total, index int) {
+	<header class="act__top">
+		<a class="act__close" href={ templ.SafeURL(homeHref(lang)) } aria-label="Back to Today">
+			@Icon("x", "")
+		</a>
+		@ProgressBar(done, total, "Progress")
+		<span class="act__count"><bdi lang="en" dir="ltr">{ Num(index) } / { Num(total) }</bdi></span>
+	</header>
+}
+
+// actPrompt is the middle of the frame. Which of Hebrew, gloss and clip it
+// shows is the skill's rule: a listening item has audio and no Hebrew, a reading
+// item has pointed Hebrew and no audio, typing from English has the gloss only.
+templ actPrompt(a ActivityView) {
+	<p class="act__lead" id="act-lead" lang="en">{ a.Lead }</p>
+	switch a.Kind {
+		case KindReadPick:
+			<div class="act__word">
+				@WordBlock(a.Hebrew, "", "", "display", "", true)
+			</div>
+		case KindTypeIt:
+			<p class="act__gloss" lang="en" dir="ltr">{ a.Gloss }</p>
+		case KindListenPick, KindDictation:
+			<div class="act__orb">
+				@actClip("act-prompt", a.AudioURL, true, true, "Play the word")
+			</div>
+		case KindWordMatch:
+			<p class="act__hint" lang="en">Tap a word, then its meaning. A made pair stays.</p>
+		case KindAudioMatch:
+			<p class="act__hint" lang="en">Tap a clip, then its meaning. A made pair stays.</p>
+	}
+}
+
+// actClip is an audio element and the orb that plays it. autoplay asks the
+// script to start it when the screen arrives. prompt marks the clip the question
+// is about: playing it again before the answer counts as a hint.
+templ actClip(id, url string, autoplay, prompt bool, label string) {
+	if url != "" {
+		<audio id={ id } src={ templ.SafeURL(url) } preload="auto" if autoplay { data-autoplay="" } if prompt { data-prompt="" }></audio>
+		@AudioOrb(label, orbAttrs(id, url, prompt))
+	}
+}
+
+// actAnswers is the thumb zone above the gold action: the options, the match
+// board, or the Hebrew input and keyboard.
+templ actAnswers(a ActivityView) {
+	switch {
+		case a.Pick():
+			if a.Asking() {
+				<input type="hidden" name="choice" value=""/>
+			}
+			<div class="act__answers" role="group" aria-label="Answers">
+				for i, o := range a.Options {
+					@AnswerOptionWith(o.State, OptionKeys[i], optionAttrs(OptionKeys[i], i, a.Asking())) {
+						@E(o.Text)
+					}
+				}
+			</div>
+		case a.Match():
+			if a.Asking() {
+				for i := range a.Left {
+					<input type="hidden" name={ "pair_" + Num(i) } value=""/>
+				}
+			}
+			<div class="act__board" data-board role="group" aria-label="Pairs">
+				<div class="act__col" role="group" if a.HebrewCol { dir="rtl" lang="he" } aria-label="Words">
+					for _, t := range a.Left {
+						@actTile(t, "l", a.Asking())
+					}
+				</div>
+				<div class="act__col" role="group" aria-label="Meanings">
+					for _, t := range a.Right {
+						@actTile(t, "r", a.Asking())
+					}
+				</div>
+			</div>
+		case a.Typed():
+			if a.Asking() {
+				<label class="vh" for="act-answer" lang="en">Your answer in Hebrew</label>
+				@HebrewInput("act-answer", "text", templ.Attributes{"aria-describedby": "act-lead"})
+				@HebrewKeyboard("act-answer", a.Lang)
+			}
+	}
+}
+
+// actTile is one tile of a match board. It is an AnswerOption: a button with a
+// key badge, so the board uses the same component as a pick, and it is operable
+// by keyboard: Tab to a tile, Enter or Space to take it, or press its badge.
+templ actTile(t TileView, side string, asking bool) {
+	@AnswerOptionWith(t.State, t.Key, tileAttrs(t, side, asking)) {
+		if t.AudioURL != "" {
+			<span class="act-tile__clip">
+				@Icon("speaker", "")
+				<audio id={ "act-clip-" + Num(t.Index) } src={ templ.SafeURL(t.AudioURL) } preload="auto" data-tile-clip=""></audio>
+			</span>
+		} else if t.Hebrew {
+			@H(t.Text)
+		} else {
+			@E(t.Text)
+		}
+		<span class="act-pair" data-pair aria-hidden="true">{ t.Pair }</span>
+	}
+}
+
+// actFeedback is the body of the feedback sheet: the outcome, the right response
+// with its pointed form and a clip, and what the learner mixed up.
+templ actFeedback(a ActivityView) {
+	if a.Feedback != nil {
+		<div class={ feedbackClass(a.Feedback) }>
+			<h2 class="fb__title" lang="en">{ a.Feedback.Title }</h2>
+			switch {
+				case a.Match():
+					if len(a.Feedback.Pairs) > 0 {
+						<ul class="fb__pairs" role="list">
+							for i, p := range a.Feedback.Pairs {
+								<li class="fb__pair">
+									@H(p.Hebrew)
+									<span class="fb__gloss">@E(p.Gloss)</span>
+									@actClip("fb-clip-" + Num(i), p.AudioURL, false, false, "Play the word")
+								</li>
+							}
+						</ul>
+					} else {
+						<p class="fb__line" lang="en">Every pair was right.</p>
+					}
+				default:
+					<div class="fb__answer">
+						<span class="fb__label" lang="en">Right answer</span>
+						<span class="fb__word">@H(a.Feedback.Hebrew)</span>
+						<span class="fb__gloss">@E(a.Feedback.Gloss)</span>
+						@actClip("fb-clip", a.Feedback.AudioURL, false, false, "Play the word")
+					</div>
+			}
+			if len(a.Feedback.Typed) > 0 {
+				<p class="fb__line fb__typed">
+					<span lang="en">{ a.Feedback.TypedLabel }</span>
+					{ " " }
+					<bdi lang="he" dir="rtl">
+						for _, s := range a.Feedback.Typed {
+							if s.Missing {
+								<u class="fb__bad fb__gap"><span class="vh" lang="en">missing letter</span>{ "\u00a0" }</u>
+							} else if s.Wrong {
+								<u class="fb__bad">{ s.Text }</u>
+							} else {
+								{ s.Text }
+							}
+						}
+					</bdi>
+				</p>
+			}
+			for _, c := range a.Feedback.Confusions {
+				<p class="fb__line fb__confused">
+					<span lang="en">{ c.Lead }</span>
+					{ " " }
+					if c.PickedHebrew {
+						@H(c.Picked)
+					} else {
+						@E(c.Picked)
+					}
+					<span lang="en">{ ". That's " }</span>
+					@H(c.Thats)
+					<span lang="en">{ "." }</span>
+				</p>
+			}
+		</div>
+	}
+}
+
+// flashFrame is the self-graded card in the same frame. Before the reveal the
+// gold action is Show answer. After it the four grade buttons are the actions,
+// and they share one neutral style: a grade is the learner's own report, and a
+// colour would call it right or wrong.
+templ flashFrame(c ReviewCard) {
+	<section class="act act--flash" data-activity="flashcard" data-phase={ flashPhase(c) } aria-label={ flashLead(c) }>
+		@actTop(c.Lang, flashDone(c), c.Total, c.Index)
+		if c.Revealed {
+			<form class="act__form" method="post" action="/_hx/review/grade" hx-post="/_hx/review/grade" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
+				<input type="hidden" name="_csrf" value={ c.CSRF }/>
+				<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
+				<div class="act__stage">
+					@flashCard(c)
+				</div>
+				<div class="act__thumb">
+					<p class="act__lead" id="act-grade-lead" lang="en">{ flashLead(c) }</p>
+					<div class="act__grades" role="group" aria-labelledby="act-grade-lead">
+						for i, label := range GradeLabels {
+							@selfGrade(Num(i+1), label)
+						}
+					</div>
+				</div>
+			</form>
+		} else {
+			<form class="act__form" method="post" action="/_hx/review/reveal" hx-post="/_hx/review/reveal" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
+				<input type="hidden" name="_csrf" value={ c.CSRF }/>
+				<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
+				<div class="act__stage">
+					@flashCard(c)
+				</div>
+				<div class="act__thumb">
+					<div class="act__actions">
+						@ButtonWith(ButtonPrimary, submitAttrs(templ.Attributes{"data-act-primary": "", "aria-keyshortcuts": "Enter"})) {
+							@E("Show answer")
+						}
+					</div>
+				</div>
+			</form>
+		}
+	</section>
+}
+
+// flashCard is the card face. Read cards show the Hebrew and name the meaning
+// after the flip. Recall cards show the meaning and name the Hebrew after it.
+templ flashCard(c ReviewCard) {
+	<div class="act__card" if c.Revealed { data-motion="card-flip" }>
+		if c.Kind == "recall" {
+			<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
+			if c.Revealed {
+				<div class="act__word act__answer">
+					@WordBlock(flashHebrew(c), flashTranslit(c), "", "display", "", true)
+					@flashAudio(c)
+				</div>
+			}
+		} else {
+			<div class="act__word">
+				@WordBlock(flashHebrew(c), flashTranslit(c), "", "display", "", true)
+				@flashAudio(c)
+			</div>
+			if c.Revealed && c.Gloss != "" {
+				<div class="act__answer">
+					<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
+					if c.Gender != "" {
+						<span class="gchip">@H(GenderLabel(c.Gender))</span>
+					}
+				</div>
+			}
+		}
+		if c.Kind == "recall" && c.Revealed && c.Gender != "" {
+			<span class="gchip">@H(GenderLabel(c.Gender))</span>
+		}
+		if !c.Revealed {
+			<p class="act__lead" lang="en">{ flashLead(c) }</p>
+		}
+	</div>
+}
+
+// flashAudio is the card's clip, when it may be played on this render.
+templ flashAudio(c ReviewCard) {
+	if answerSide(c) {
+		@actClip("act-card-clip", c.AudioURL, false, false, "Play the word")
+	}
+}
+
+// selfGrade is one of the four self-grade buttons. Every one has the same
+// class and no colour of its own.
+templ selfGrade(value, label string) {
+	<button type="submit" class="act-grade" name="rating" value={ value } data-motion="press" data-hotkey={ value } aria-keyshortcuts={ value }>
+		<span lang="en">{ label }</span>
+	</button>
+}

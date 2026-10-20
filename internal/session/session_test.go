@@ -60,12 +60,12 @@ func insertReview(t *testing.T, store *db.Store, cardID int64, rating int, at ti
 	}
 }
 
-func addCard(t *testing.T, store *db.Store, userID int64, text, dir string, due time.Time, lapses, rating int, reviewed time.Time, suspended bool) int64 {
+func addCard(t *testing.T, store *db.Store, userID int64, text, skill string, due time.Time, lapses, rating int, reviewed time.Time, suspended bool) int64 {
 	t.Helper()
 	id, err := store.InsertCard(context.Background(), db.Card{
 		UserID:     userID,
 		LexemeID:   mustLexeme(t, store, text),
-		Dir:        dir,
+		Skill:      skill,
 		State:      fsrs.StateReview,
 		Due:        due,
 		Stability:  1,
@@ -89,7 +89,7 @@ func addAccuracy(t *testing.T, store *db.Store, userID int64, good, again int, n
 	id, err := store.InsertCard(context.Background(), db.Card{
 		UserID:     userID,
 		LexemeID:   mustLexeme(t, store, "hist"),
-		Dir:        fsrs.DirHeEn,
+		Skill:      fsrs.SkillRead,
 		State:      fsrs.StateReview,
 		Due:        now.Add(365 * 24 * time.Hour),
 		Stability:  1,
@@ -173,7 +173,7 @@ func TestSessionCap(t *testing.T) {
 		if i >= 12 {
 			rating = int(fsrs.Hard)
 		}
-		addCard(t, store, userID, fmt.Sprintf("cap-%02d", i), fsrs.DirHeEn, due, 0, rating, reviewed, false)
+		addCard(t, store, userID, fmt.Sprintf("cap-%02d", i), fsrs.SkillRead, due, 0, rating, reviewed, false)
 	}
 	got := drain(t, mustBuild(t, svc, userID))
 	if len(got) != SessionCap {
@@ -195,11 +195,11 @@ func TestInterleaveStruggleRun(t *testing.T) {
 	reviewed := clk.Now().Add(-48 * time.Hour)
 	for i := 0; i < 15; i++ {
 		due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
-		addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Hard), reviewed, false)
+		addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Hard), reviewed, false)
 	}
 	for i := 0; i < 2; i++ {
 		due := clk.Now().Add(time.Duration(i)*time.Minute - 30*time.Minute)
-		addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+		addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
 	}
 	got := drain(t, mustBuild(t, svc, userID))
 	s, k := counts(got)
@@ -230,11 +230,11 @@ func TestMixFollowsAccuracy(t *testing.T) {
 			reviewed := clk.Now().Add(-48 * time.Hour)
 			for i := 0; i < 20; i++ {
 				due := clk.Now().Add(time.Duration(i)*time.Minute - 3*time.Hour)
-				addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+				addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
 			}
 			for i := 0; i < 20; i++ {
 				due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
-				addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.DirEnHe, due, 0, int(fsrs.Hard), reviewed, false)
+				addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.SkillRecall, due, 0, int(fsrs.Hard), reviewed, false)
 			}
 			addAccuracy(t, store, userID, tc.good, tc.again, clk.Now())
 			got := drain(t, mustBuild(t, svc, userID))
@@ -263,7 +263,7 @@ func TestRequeueMissOnce(t *testing.T) {
 	var ids []int64
 	for i := 0; i < SessionCap+5; i++ {
 		due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
-		ids = append(ids, addCard(t, store, userID, fmt.Sprintf("q-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false))
+		ids = append(ids, addCard(t, store, userID, fmt.Sprintf("q-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false))
 	}
 	sess := mustBuild(t, svc, userID)
 	first, ok := sess.Next()
@@ -332,18 +332,18 @@ func TestConfusionMarksStruggling(t *testing.T) {
 	userID := mustUser(t, store)
 	reviewed := clk.Now().Add(-time.Hour)
 	due := clk.Now().Add(-time.Minute)
-	he := addCard(t, store, userID, "בלבול", fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+	he := addCard(t, store, userID, "בלבול", fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
 	// Same lexeme, other direction. Insert directly so the text stays unique.
 	lexemeID := lexemeOf(t, store, he)
 	en, err := store.InsertCard(ctx, db.Card{
-		UserID: userID, LexemeID: lexemeID, Dir: fsrs.DirEnHe, State: fsrs.StateReview,
+		UserID: userID, LexemeID: lexemeID, Skill: fsrs.SkillRecall, State: fsrs.StateReview,
 		Due: due, Stability: 1, Difficulty: 5, Reps: 1, LastReview: reviewed,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	insertReview(t, store, en, int(fsrs.Good), reviewed)
-	other := addCard(t, store, userID, "יציב", fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+	other := addCard(t, store, userID, "יציב", fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
 	if err := fsrs.New(store, clk).RecordMiss(ctx, userID, fsrs.MissLetterPair, "ב/כ", lexemeID); err != nil {
 		t.Fatal(err)
 	}
@@ -382,12 +382,12 @@ func TestLapseRules(t *testing.T) {
 	userID := mustUser(t, store)
 	now := clk.Now()
 	due := now.Add(-time.Minute)
-	lapsed := addCard(t, store, userID, "נפילות", fsrs.DirHeEn, due, StruggleLapses, int(fsrs.Good), now.Add(-time.Hour), false)
-	recent := addCard(t, store, userID, "טרי", fsrs.DirHeEn, due, 1, int(fsrs.Again), now.Add(-48*time.Hour), false)
+	lapsed := addCard(t, store, userID, "נפילות", fsrs.SkillRead, due, StruggleLapses, int(fsrs.Good), now.Add(-time.Hour), false)
+	recent := addCard(t, store, userID, "טרי", fsrs.SkillRead, due, 1, int(fsrs.Again), now.Add(-48*time.Hour), false)
 	insertReview(t, store, recent, int(fsrs.Good), now.Add(-24*time.Hour))
-	old := addCard(t, store, userID, "ישן", fsrs.DirHeEn, due, 1, int(fsrs.Again), now.Add(-8*24*time.Hour), false)
+	old := addCard(t, store, userID, "ישן", fsrs.SkillRead, due, 1, int(fsrs.Again), now.Add(-8*24*time.Hour), false)
 	insertReview(t, store, old, int(fsrs.Good), now.Add(-time.Hour))
-	clean := addCard(t, store, userID, "נקי", fsrs.DirHeEn, due, 0, int(fsrs.Good), now.Add(-time.Hour), false)
+	clean := addCard(t, store, userID, "נקי", fsrs.SkillRead, due, 0, int(fsrs.Good), now.Add(-time.Hour), false)
 
 	got := drain(t, mustBuild(t, svc, userID))
 	flags := map[int64]bool{}
@@ -419,11 +419,11 @@ func TestNotDueKnownOnlyFillTheGap(t *testing.T) {
 		var dueIDs, laterIDs []int64
 		for i := 0; i < 2; i++ {
 			due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
-			dueIDs = append(dueIDs, addCard(t, store, userID, fmt.Sprintf("due-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false))
+			dueIDs = append(dueIDs, addCard(t, store, userID, fmt.Sprintf("due-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false))
 		}
 		for i := 0; i < 30; i++ {
 			due := clk.Now().Add(time.Duration(i+1) * time.Minute)
-			laterIDs = append(laterIDs, addCard(t, store, userID, fmt.Sprintf("later-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false))
+			laterIDs = append(laterIDs, addCard(t, store, userID, fmt.Sprintf("later-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false))
 		}
 		got := drain(t, mustBuild(t, svc, userID))
 		want := PlanFor(1).Known
@@ -462,11 +462,11 @@ func TestNotDueKnownOnlyFillTheGap(t *testing.T) {
 		dueSet := map[int64]bool{}
 		for i := 0; i < 20; i++ {
 			due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
-			dueSet[addCard(t, store, userID, fmt.Sprintf("due-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)] = true
+			dueSet[addCard(t, store, userID, fmt.Sprintf("due-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)] = true
 		}
 		for i := 0; i < 10; i++ {
 			due := clk.Now().Add(time.Duration(i+1) * time.Hour)
-			addCard(t, store, userID, fmt.Sprintf("later-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+			addCard(t, store, userID, fmt.Sprintf("later-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
 		}
 		got := drain(t, mustBuild(t, svc, userID))
 		if len(got) != SessionCap {
@@ -490,7 +490,7 @@ func TestEmptyDeck(t *testing.T) {
 	if _, ok := sess.Next(); ok {
 		t.Fatal("second next on an empty deck returned a card")
 	}
-	suspended := addCard(t, store, userID, "מוסתר", fsrs.DirHeEn, time.Date(2026, 3, 1, 8, 0, 0, 0, time.UTC), 0, int(fsrs.Good), time.Date(2026, 3, 1, 7, 0, 0, 0, time.UTC), true)
+	suspended := addCard(t, store, userID, "מוסתר", fsrs.SkillRead, time.Date(2026, 3, 1, 8, 0, 0, 0, time.UTC), 0, int(fsrs.Good), time.Date(2026, 3, 1, 7, 0, 0, 0, time.UTC), true)
 	sess = mustBuild(t, svc, userID)
 	if card, ok := sess.Next(); ok {
 		t.Fatalf("suspended card %d served as %+v", suspended, card)
@@ -503,7 +503,7 @@ func TestDeterministic(t *testing.T) {
 	reviewed := clk.Now().Add(-2 * time.Hour)
 	due := clk.Now().Add(-time.Hour)
 	for i := 0; i < 25; i++ {
-		addCard(t, store, userID, fmt.Sprintf("tie-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+		addCard(t, store, userID, fmt.Sprintf("tie-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
 	}
 	a := idsOf(drain(t, mustBuild(t, New(store, clk, 1), userID)))
 	b := idsOf(drain(t, mustBuild(t, New(store, clk, 1), userID)))
@@ -527,7 +527,7 @@ func TestConcurrentRecordWritesOnce(t *testing.T) {
 	var ids []int64
 	for i := 0; i < 8; i++ {
 		due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
-		ids = append(ids, addCard(t, store, userID, fmt.Sprintf("race-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false))
+		ids = append(ids, addCard(t, store, userID, fmt.Sprintf("race-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false))
 	}
 	sess := mustBuild(t, svc, userID)
 	first, ok := sess.Next()
@@ -593,7 +593,7 @@ func TestRecordRestoresClaimWhenGradeFails(t *testing.T) {
 	userID := mustUser(t, store)
 	reviewed := clk.Now().Add(-time.Hour)
 	due := clk.Now().Add(-time.Minute)
-	id := addCard(t, store, userID, "נכשל", fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+	id := addCard(t, store, userID, "נכשל", fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
 	sess := mustBuild(t, svc, userID)
 	card, ok := sess.Next()
 	if !ok || card.CardID != id {
@@ -623,7 +623,7 @@ func TestLatestRatingIgnoresTheFuture(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	userID := mustUser(t, store)
 	now := clk.Now()
-	id := addCard(t, store, userID, "עתיד", fsrs.DirEnHe, now.Add(-time.Minute), 0, int(fsrs.Good), now.Add(-time.Hour), false)
+	id := addCard(t, store, userID, "עתיד", fsrs.SkillRecall, now.Add(-time.Minute), 0, int(fsrs.Good), now.Add(-time.Hour), false)
 	insertReview(t, store, id, int(fsrs.Hard), now.Add(24*time.Hour))
 	sess := mustBuild(t, svc, userID)
 	card, ok := sess.Next()
@@ -645,7 +645,7 @@ func TestBuildSessionUsesOneNow(t *testing.T) {
 	svc := New(store, svcClk, 1)
 	userID := mustUser(t, store)
 	now := svcClk.Now()
-	id := addCard(t, store, userID, "שעון", fsrs.DirEnHe, now.Add(-time.Minute), 0, int(fsrs.Good), now.Add(-time.Hour), false)
+	id := addCard(t, store, userID, "שעון", fsrs.SkillRecall, now.Add(-time.Minute), 0, int(fsrs.Good), now.Add(-time.Hour), false)
 	if err := fsrs.New(store, storeClk).RecordMiss(context.Background(), userID, fsrs.MissLetterPair, "ב/כ", lexemeOf(t, store, id)); err != nil {
 		t.Fatal(err)
 	}
@@ -663,11 +663,11 @@ func TestDrillsFollowThePlan(t *testing.T) {
 	reviewed := clk.Now().Add(-48 * time.Hour)
 	for i := 0; i < 20; i++ {
 		due := clk.Now().Add(time.Duration(i)*time.Minute - 3*time.Hour)
-		addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+		addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
 	}
 	for i := 0; i < 20; i++ {
 		due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
-		addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.DirEnHe, due, 0, int(fsrs.Hard), reviewed, false)
+		addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.SkillRecall, due, 0, int(fsrs.Hard), reviewed, false)
 	}
 	rev := fsrs.New(store, clk)
 	for i := 0; i < MinMissesForDrill; i++ {
@@ -736,11 +736,11 @@ func TestDrillCap(t *testing.T) {
 	reviewed := clk.Now().Add(-48 * time.Hour)
 	for i := 0; i < 20; i++ {
 		due := clk.Now().Add(time.Duration(i)*time.Minute - 3*time.Hour)
-		addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+		addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
 	}
 	for i := 0; i < 20; i++ {
 		due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
-		addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.DirEnHe, due, 0, int(fsrs.Hard), reviewed, false)
+		addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.SkillRecall, due, 0, int(fsrs.Hard), reviewed, false)
 	}
 	// Six pairs at the miss threshold are 24 letter steps. DrillCap keeps 20.
 	pairs := []string{"ב/כ", "ג/ק", "ד/ת", "א/ע", "ח/כ", "ט/ת"}
@@ -799,11 +799,11 @@ func TestDrillsAtBandPlans(t *testing.T) {
 			reviewed := now.Add(-48 * time.Hour)
 			for i := 0; i < 20; i++ {
 				due := now.Add(time.Duration(i)*time.Minute - 3*time.Hour)
-				addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.DirHeEn, due, 0, int(fsrs.Good), reviewed, false)
+				addCard(t, store, userID, fmt.Sprintf("k-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
 			}
 			for i := 0; i < 20; i++ {
 				due := now.Add(time.Duration(i)*time.Minute - 2*time.Hour)
-				addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.DirEnHe, due, 0, int(fsrs.Hard), reviewed, false)
+				addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.SkillRecall, due, 0, int(fsrs.Hard), reviewed, false)
 			}
 			rev := fsrs.New(store, clk)
 			for i := 0; i < MinMissesForDrill; i++ {
@@ -850,7 +850,7 @@ func TestRecordRejectsUnrevealed(t *testing.T) {
 	ctx := context.Background()
 	userID := mustUser(t, store)
 	reviewed := clk.Now().Add(-48 * time.Hour)
-	first := addCard(t, store, userID, "נסתר", fsrs.DirHeEn, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+	first := addCard(t, store, userID, "נסתר", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
 	sess := mustBuild(t, svc, userID)
 	card, ok := sess.Next()
 	if !ok || card.CardID != first {
@@ -889,7 +889,7 @@ func TestRevealThenGrade(t *testing.T) {
 	ctx := context.Background()
 	userID := mustUser(t, store)
 	reviewed := clk.Now().Add(-48 * time.Hour)
-	first := addCard(t, store, userID, "גלוי", fsrs.DirHeEn, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+	first := addCard(t, store, userID, "גלוי", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
 	sess := mustBuild(t, svc, userID)
 	shown, ok := sess.Next()
 	if !ok || shown.CardID != first {
@@ -984,8 +984,8 @@ func TestFinishedLessonWordsEnterReview(t *testing.T) {
 		t.Fatalf("queue = %v, want %v", ids, want)
 	}
 	for _, card := range got {
-		if !card.New || (card.Dir != fsrs.DirHeEn && card.Dir != fsrs.DirEnHe) {
-			t.Fatalf("card %+v, want a new he_en or en_he card", card)
+		if !card.New || (card.Skill != fsrs.SkillRead && card.Skill != fsrs.SkillRecall) {
+			t.Fatalf("card %+v, want a new read or recall card", card)
 		}
 	}
 	for _, id := range []int64{waitingHe, waitingEn} {
@@ -1030,7 +1030,7 @@ func TestNewCardCaps(t *testing.T) {
 		reviewed := now.Add(-48 * time.Hour)
 		known := map[int64]bool{}
 		for i := 0; i < 3; i++ {
-			id := addCard(t, store, userID, fmt.Sprintf("יָדוּעַ-%d", i), fsrs.DirHeEn, now.Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+			id := addCard(t, store, userID, fmt.Sprintf("יָדוּעַ-%d", i), fsrs.SkillRead, now.Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
 			known[id] = true
 		}
 		unit := insertUnitAt(t, store, 2)
@@ -1096,7 +1096,7 @@ func TestNewCardFloor(t *testing.T) {
 			reviewedAt := now.Add(-48 * time.Hour)
 			known := map[int64]bool{}
 			for i := 0; i < tc.reviews; i++ {
-				id := addCard(t, store, userID, fmt.Sprintf("נִסְקָר-%d", i), fsrs.DirHeEn, now.Add(-time.Hour), 0, int(fsrs.Good), reviewedAt, false)
+				id := addCard(t, store, userID, fmt.Sprintf("נִסְקָר-%d", i), fsrs.SkillRead, now.Add(-time.Hour), 0, int(fsrs.Good), reviewedAt, false)
 				known[id] = true
 			}
 			unit := insertUnitAt(t, store, 1)
@@ -1173,23 +1173,23 @@ func finishLesson(t *testing.T, store *db.Store, userID, unitID int64, lessonIx 
 	}
 }
 
-// enqueuePair inserts the he_en card and then the en_he card, due now,
+// enqueuePair inserts the read card and then the recall card, due now,
 // with state new and no review_log row. That is the row enqueueNewWords writes.
 func enqueuePair(t *testing.T, store *db.Store, userID, lexemeID int64, due time.Time) (he, en int64) {
 	t.Helper()
 	ctx := context.Background()
-	for _, dir := range []string{fsrs.DirHeEn, fsrs.DirEnHe} {
+	for _, skill := range []string{fsrs.SkillRead, fsrs.SkillRecall} {
 		id, err := store.InsertCard(ctx, db.Card{
 			UserID:   userID,
 			LexemeID: lexemeID,
-			Dir:      dir,
+			Skill:    skill,
 			State:    "new",
 			Due:      due,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if dir == fsrs.DirHeEn {
+		if skill == fsrs.SkillRead {
 			he = id
 		} else {
 			en = id

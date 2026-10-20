@@ -64,7 +64,7 @@ func TestHomeServesTodayWhenSignedIn(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `class="today"`) {
 		t.Fatalf("signed-in GET / = %d", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), `value="signin-csrf"`) {
+	if !strings.Contains(rec.Body.String(), `name="csrf-token" content="signin-csrf"`) {
 		t.Fatal("signed-in Today did not render auth.CSRFToken")
 	}
 	if !strings.Contains(get(t, New(nil, nil), "/"), `class="today"`) {

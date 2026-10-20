@@ -79,8 +79,10 @@ func assertSecurityHeaders(t *testing.T, rec *httptest.ResponseRecorder) {
 	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatal("missing nosniff")
 	}
-	if rec.Header().Get("Referrer-Policy") != "no-referrer" {
-		t.Fatal("missing referrer policy")
+	// same-origin keeps referrers off other sites and lets a native form POST carry its real Origin.
+	// no-referrer would make the browser send "Origin: null", which the CSRF check refuses.
+	if got := rec.Header().Get("Referrer-Policy"); got != "same-origin" {
+		t.Fatalf("Referrer-Policy = %q, want same-origin", got)
 	}
 }
 

@@ -64,6 +64,24 @@ func (s *Store) HasAudio(ctx context.Context, textNFC string) (bool, error) {
 	return ok, err
 }
 
+// HasAudioForSpeaker reports a clip for this exact text in the voice of speaker
+// a or b, from the voices set by WithVoices. A speaker with no voice, or one that
+// is not a or b, has no clip. A clip in the other speaker's voice never counts.
+func (s *Store) HasAudioForSpeaker(ctx context.Context, textNFC, speaker string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if s == nil || s.db == nil {
+		return false, errors.New("mcpstore: database is not open")
+	}
+	voice, err := s.voices.ForSpeaker(speaker)
+	if err != nil {
+		return false, nil
+	}
+	_, ok, err := s.db.AudioByTextVoice(ctx, textNFC, voice)
+	return ok, err
+}
+
 // LexemeByText returns the lexicon id for the exact pointed text.
 func (s *Store) LexemeByText(ctx context.Context, textNFC string) (int64, bool, error) {
 	if err := ctx.Err(); err != nil {
@@ -87,9 +105,9 @@ func (s *Store) Facts(ctx context.Context, textNFC string) (units.LexemeFacts, b
 	var gender, plural sql.NullString
 	var irregular int
 	err = conn.QueryRowContext(ctx, `
-		SELECT pos, gender, plural, irregular_plural, bare
+		SELECT pos, gender, plural, irregular_plural, bare, gloss_en
 		FROM lexemes WHERE text_nfc = ?`, textNFC,
-	).Scan(&facts.POS, &gender, &plural, &irregular, &facts.Bare)
+	).Scan(&facts.POS, &gender, &plural, &irregular, &facts.Bare, &facts.Gloss)
 	if errors.Is(err, sql.ErrNoRows) {
 		return units.LexemeFacts{}, false, nil
 	}

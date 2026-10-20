@@ -46,7 +46,7 @@ func storyUnmappedIssues(s *scan, doc *Unit) []Issue {
 	var out []Issue
 	for i, les := range doc.Lessons {
 		for j, act := range les.Activities {
-			if act.Type != ActivityStory {
+			if !storyLike(act.Type) {
 				continue
 			}
 			var bad []string
@@ -88,7 +88,7 @@ func storyPointIssues(s *scan, doc *Unit) []Issue {
 	var out []Issue
 	for i, les := range doc.Lessons {
 		for j, act := range les.Activities {
-			if act.Type != ActivityStory {
+			if !storyLike(act.Type) {
 				continue
 			}
 			var bad []string

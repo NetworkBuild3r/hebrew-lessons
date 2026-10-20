@@ -223,25 +223,28 @@ func deriveLessonItems(ctx context.Context, tx *sql.Tx, doc units.Unit) ([]lesso
 	var out []lessonItemRow
 	for li, lesson := range doc.Lessons {
 		for _, act := range lesson.Activities {
-			for _, tok := range lessonTokens(act.Text) {
-				id, ok, err := lookupLexemeID(ctx, tx, tok)
-				if err != nil {
-					return nil, err
+			// A dialogue has one text per line; every other activity has one text.
+			for _, text := range act.Texts() {
+				for _, tok := range lessonTokens(text) {
+					id, ok, err := lookupLexemeID(ctx, tx, tok)
+					if err != nil {
+						return nil, err
+					}
+					if !ok {
+						continue
+					}
+					key := [2]int64{int64(li), id}
+					if seen[key] {
+						continue
+					}
+					seen[key] = true
+					role := "recycle"
+					if fresh[tok] && !introduced[tok] {
+						role = "new"
+						introduced[tok] = true
+					}
+					out = append(out, lessonItemRow{lesson: li, lexemeID: id, role: role, skill: act.Type})
 				}
-				if !ok {
-					continue
-				}
-				key := [2]int64{int64(li), id}
-				if seen[key] {
-					continue
-				}
-				seen[key] = true
-				role := "recycle"
-				if fresh[tok] && !introduced[tok] {
-					role = "new"
-					introduced[tok] = true
-				}
-				out = append(out, lessonItemRow{lesson: li, lexemeID: id, role: role, skill: act.Type})
 			}
 		}
 	}

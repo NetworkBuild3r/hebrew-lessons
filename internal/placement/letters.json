@@ -1,0 +1,68 @@
+[
+  {
+    "id": "letter-da",
+    "letter_nfc": "דָ",
+    "syllable_text": "דָ",
+    "sound": "da",
+    "distractors": [
+      "דִ",
+      "רָ",
+      "תֵ"
+    ]
+  },
+  {
+    "id": "letter-re",
+    "letter_nfc": "רֵ",
+    "syllable_text": "רֵ",
+    "sound": "re",
+    "distractors": [
+      "רָ",
+      "דֵ",
+      "לֹ"
+    ]
+  },
+  {
+    "id": "letter-mi",
+    "letter_nfc": "מִ",
+    "syllable_text": "מִ",
+    "sound": "mi",
+    "distractors": [
+      "מֵ",
+      "נִ",
+      "לֻ"
+    ]
+  },
+  {
+    "id": "letter-no",
+    "letter_nfc": "נֹ",
+    "syllable_text": "נֹ",
+    "sound": "no",
+    "distractors": [
+      "נָ",
+      "מֹ",
+      "לִ"
+    ]
+  },
+  {
+    "id": "letter-su",
+    "letter_nfc": "סֻ",
+    "syllable_text": "סֻ",
+    "sound": "su",
+    "distractors": [
+      "סֹ",
+      "לֻ",
+      "קִ"
+    ]
+  },
+  {
+    "id": "letter-ga",
+    "letter_nfc": "גָ",
+    "syllable_text": "גָ",
+    "sound": "ga",
+    "distractors": [
+      "גִ",
+      "נָ",
+      "קֵ"
+    ]
+  }
+]

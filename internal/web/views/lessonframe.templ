@@ -1,0 +1,106 @@
+package views
+
+// LessonFrameView is the player: a bar with the way back, the progress bar, and the
+// report flag; the step heading in the top third; the step; and, from 1024px, the outline
+// of the lesson. htmx swaps the whole frame on every answer, so the bar and the outline
+// move with the step. The frame is data-no-transition: a swap that brings in answer
+// options must not start a view transition (motion.js).
+templ LessonFrameView(p Page, s Screen) {
+	<article id="lesson-frame" class="lesson-frame" data-step={ Num(s.Frame.Step) } data-total={ Num(s.Frame.Total) } data-no-transition>
+		<header class="lf-bar">
+			<a class="lf-back" href={ templ.SafeURL(s.Frame.BackHref) } aria-label="Back to Today">
+				@Icon("close", "")
+				<span class="lf-back__label" aria-hidden="true">@E("Today")</span>
+			</a>
+			<div class="lf-progress">
+				@ProgressBar(s.Frame.Value, s.Frame.Total, "Lesson progress")
+				<span class="lf-count"><bdi lang="en" dir="ltr">{ Num(s.Frame.Value) } / { Num(s.Frame.Total) }</bdi></span>
+			</div>
+			<a class="lf-flag" href={ templ.SafeURL(s.Frame.ReportHref) } hx-boost="false" data-sheet="report-sheet" aria-haspopup="dialog" aria-label="Report a problem">
+				@Icon("flag", "")
+			</a>
+		</header>
+		<div class="lf-body">
+			<div class="lf-main">
+				<header class="lf-head">
+					<p class="eyebrow" lang="en" dir="ltr">
+						if s.Frame.Done {
+							@E("Lesson complete")
+						} else {
+							@E(StepText(s.Frame.Step, s.Frame.Total))
+						}
+					</p>
+					<h1 class="lf-title" lang="en" dir="ltr">{ s.Frame.Kind }</h1>
+					if s.Frame.Step == 1 || s.Frame.Done {
+						<p class="lf-unit">
+							@H(s.Title)
+							if s.Gloss != "" {
+								<span class="unit-gloss">@E(s.Gloss)</span>
+							}
+						</p>
+						if s.Situation != "" {
+							@Situation(s.Situation)
+						}
+					}
+				</header>
+				@ActivityBlock(s.Activity)
+			</div>
+			<aside class="lf-outline" aria-label="Lesson outline">
+				<p class="eyebrow" lang="en" dir="ltr">@E("In this lesson")</p>
+				<ol class="lf-steps">
+					for _, step := range s.Frame.Outline {
+						<li class="lf-step" data-state={ step.State } if step.State == "current" { aria-current="step" }>
+							<span class="lf-step__dot" aria-hidden="true"></span>
+							<span class="lf-step__label">@E(step.Label)</span>
+							if step.State == "done" {
+								<span class="vh" lang="en" dir="ltr">done</span>
+							}
+						</li>
+					}
+				</ol>
+			</aside>
+		</div>
+		@ReportSheet(p, s.Frame)
+	</article>
+}
+
+// ReportSheet is the "Report a problem" dialog. Without script the flag is a link to the
+// report page, so the sheet is only an upgrade.
+templ ReportSheet(p Page, f LessonFrame) {
+	<dialog id="report-sheet" class="report-sheet" aria-labelledby="report-title">
+		@Sheet("Report a problem") {
+			<h2 id="report-title" class="report__title" lang="en" dir="ltr">Report a problem</h2>
+			@reportForm(p, f.UnitID, "", "", "sheet")
+		}
+	</dialog>
+}
+
+// reportForm is the form of the sheet and of the report page. where is "sheet" or "page".
+// The note is capped at 500 characters in the markup and again on the server.
+templ reportForm(p Page, unitID int64, reason, note, where string) {
+	<form class="report" method="post" action={ templ.SafeURL(ReportPath(unitID)) } data-where={ where }>
+		<input type="hidden" name="_csrf" value={ p.CSRF }/>
+		<fieldset class="report__reasons">
+			<legend lang="en" dir="ltr">What went wrong?</legend>
+			for _, r := range ReportReasons {
+				<label class="report__reason">
+					<input type="radio" name="reason" value={ r.Code } required if r.Code == reason { checked }/>
+					<span>@E(r.Label)</span>
+				</label>
+			}
+		</fieldset>
+		<label class="report__note">
+			<span lang="en" dir="ltr">Anything to add? (optional)</span>
+			<textarea name="note" rows="3" maxlength="500">{ note }</textarea>
+		</label>
+		<p class="report__hint" lang="en" dir="ltr">This lesson is hidden for you as soon as you send this.</p>
+		<div class="report__actions">
+			<button type="submit" class="btn btn-primary"><span>@E("Send and hide this lesson")</span></button>
+			if where == "sheet" {
+				<button type="button" class="btn btn-tonal" data-close-sheet><span>@E("Cancel")</span></button>
+			} else {
+				<a class="btn btn-tonal" href={ templ.SafeURL(p.Href("/lesson")) }><span>@E("Back to the lesson")</span></a>
+			}
+		</div>
+	</form>
+}

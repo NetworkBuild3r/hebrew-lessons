@@ -50,8 +50,16 @@ func run(args []string) error {
 		switch args[0] {
 		case "import-audio":
 			return runImport(args[1:])
+		case "audio-ensure":
+			return runAudioEnsure(args[1:])
 		case "import-tanakh":
 			return runImportTanakh(args[1:])
+		case "jobs":
+			return runJobs(args[1:])
+		case "migrate":
+			return runMigrate(args[1:])
+		case "backup":
+			return runBackup(args[1:])
 		default:
 			return fmt.Errorf("unknown command %q", args[0])
 		}
@@ -80,9 +88,17 @@ func runServer() error {
 		"cookie_secure", cfg.CookieSecure,
 		"trusted_proxies", len(cfg.TrustedProxies),
 		"tts", application.TTS() != nil,
+		// Whether speaker b of a dialogue has a voice. Never the voice id.
+		"male_voice", cfg.ElevenLabsVoiceMale != "",
 	)
 
+	stopJobs, err := startJobs(cfg, application)
+	if err != nil {
+		application.Close()
+		return err
+	}
 	err = serve(cfg, application)
+	stopJobs()
 	closeErr := application.Close()
 	if err != nil {
 		return err

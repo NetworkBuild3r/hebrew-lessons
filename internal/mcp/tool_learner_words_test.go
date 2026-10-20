@@ -80,7 +80,7 @@ func TestGetContextCoachFieldsKeepExistingShape(t *testing.T) {
 	reviewed := when.Add(time.Hour)
 	mem.AddCard(7, LearnerCard{
 		Lexeme: hello, Translit: &translit, POS: "interjection", Gloss: "hello; peace",
-		Dir: "he_en", State: "review", Stability: 4, Difficulty: 5,
+		Skill: "read", State: "review", Stability: 4, Difficulty: 5,
 		Due: reviewed, Lapses: 2, Reps: 6, LastRating: &rating, LastReview: &reviewed,
 	})
 
@@ -117,7 +117,7 @@ func TestGetContextCoachFieldsKeepExistingShape(t *testing.T) {
 		t.Fatalf("coach %+v", out)
 	}
 	card := out.Cards[0]
-	if card.Lexeme != hello || card.Translit == nil || *card.Translit != "shalom" || card.POS != "interjection" || card.Gloss != "hello; peace" || card.Dir != "he_en" || card.State != "review" || card.Lapses != 2 || card.Reps != 6 || card.LastRating == nil || *card.LastRating != ratingGood || card.LastReview == nil || !card.LastReview.Equal(reviewed) {
+	if card.Lexeme != hello || card.Translit == nil || *card.Translit != "shalom" || card.POS != "interjection" || card.Gloss != "hello; peace" || card.Skill != "read" || card.State != "review" || card.Lapses != 2 || card.Reps != 6 || card.LastRating == nil || *card.LastRating != ratingGood || card.LastReview == nil || !card.LastReview.Equal(reviewed) {
 		t.Fatalf("card %+v", card)
 	}
 	if out.RecentAccuracy.WindowDays != AccuracyWindowDays || out.RecentAccuracy.LastReviewLimit != AccuracyReviewCap || out.RecentAccuracy.Reviews7d.Rate != nil || out.RecentAccuracy.Lessons7d.MeanScore != nil {
@@ -130,7 +130,7 @@ func TestGetContextCardCapAndAccuracy(t *testing.T) {
 	base := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 	for i := 0; i < contextCardCap+1; i++ {
 		mem.AddCard(4, LearnerCard{
-			Lexeme: cardName(i), POS: "noun", Gloss: "g", Dir: "he_en", State: "review",
+			Lexeme: cardName(i), POS: "noun", Gloss: "g", Skill: "read", State: "review",
 			Due: base.Add(time.Duration(i) * time.Second),
 		})
 	}
@@ -196,17 +196,17 @@ func TestLearnerWordsPagesFiltersAndOrder(t *testing.T) {
 			state = "learning"
 		}
 		mem.AddCard(3, LearnerCard{
-			Lexeme: cardName(i), Gloss: "g", Dir: "en_he", State: state,
+			Lexeme: cardName(i), Gloss: "g", Skill: "recall", State: state,
 			Due: base.Add(time.Duration(i) * time.Second),
 		})
 	}
 	newer := base.Add(time.Hour)
 	older := base.Add(30 * time.Minute)
 	same := base
-	mem.AddCard(3, LearnerCard{Lexeme: "tie-new", Gloss: "new", Dir: "he_en", State: "new", Due: same, LastReview: &newer})
-	mem.AddCard(3, LearnerCard{Lexeme: "tie-old", Gloss: "old", Dir: "he_en", State: "new", Due: same, LastReview: &older})
-	mem.AddCard(3, LearnerCard{Lexeme: "tie-none", Gloss: "none", Dir: "he_en", State: "new", Due: same})
-	mem.AddCard(8, LearnerCard{Lexeme: "other", Gloss: "other", Dir: "he_en", State: "review", Due: base})
+	mem.AddCard(3, LearnerCard{Lexeme: "tie-new", Gloss: "new", Skill: "read", State: "new", Due: same, LastReview: &newer})
+	mem.AddCard(3, LearnerCard{Lexeme: "tie-old", Gloss: "old", Skill: "read", State: "new", Due: same, LastReview: &older})
+	mem.AddCard(3, LearnerCard{Lexeme: "tie-none", Gloss: "none", Skill: "read", State: "new", Due: same})
+	mem.AddCard(8, LearnerCard{Lexeme: "other", Gloss: "other", Skill: "read", State: "review", Due: base})
 
 	session := connectMCP(t, Handler(Options{
 		AuthToken: testToken, Course: mem, Lexicon: mem, Lookup: mem, Units: mem,
@@ -290,8 +290,8 @@ func TestLearnerWordsPagesFiltersAndOrder(t *testing.T) {
 
 func TestLearnerGetContextOmittedIDSeesOwnCards(t *testing.T) {
 	mem, srv := roleServer(t)
-	mem.AddCard(7, LearnerCard{Lexeme: hello, Gloss: "own-card", Dir: "he_en", State: "review", Due: time.Now().UTC()})
-	mem.AddCard(9, LearnerCard{Lexeme: coffee, Gloss: "secret-card", Dir: "he_en", State: "review", Due: time.Now().UTC()})
+	mem.AddCard(7, LearnerCard{Lexeme: hello, Gloss: "own-card", Skill: "read", State: "review", Due: time.Now().UTC()})
+	mem.AddCard(9, LearnerCard{Lexeme: coffee, Gloss: "secret-card", Skill: "read", State: "review", Due: time.Now().UTC()})
 	res := postTool(t, srv.URL, "learner", "get_context", getContextInput{Position: 0}, nil)
 	body := readBody(t, res)
 	if res.StatusCode != http.StatusOK || strings.Contains(body, `"isError":true`) || !strings.Contains(body, "own-card") || strings.Contains(body, "secret-card") {
@@ -301,8 +301,8 @@ func TestLearnerGetContextOmittedIDSeesOwnCards(t *testing.T) {
 
 func TestLearnerWordsRole(t *testing.T) {
 	mem, srv := roleServer(t)
-	mem.AddCard(9, LearnerCard{Lexeme: coffee, Gloss: "secret-latte", Dir: "he_en", State: "review", Due: time.Now().UTC()})
-	mem.AddCard(7, LearnerCard{Lexeme: hello, Gloss: "own-word", Dir: "he_en", State: "learning", Due: time.Now().UTC()})
+	mem.AddCard(9, LearnerCard{Lexeme: coffee, Gloss: "secret-latte", Skill: "read", State: "review", Due: time.Now().UTC()})
+	mem.AddCard(7, LearnerCard{Lexeme: hello, Gloss: "own-word", Skill: "read", State: "learning", Due: time.Now().UTC()})
 
 	other := int64(9)
 	denied := postTool(t, srv.URL, "learner", "get_learner_words", learnerWordsInput{LearnerID: &other}, nil)
