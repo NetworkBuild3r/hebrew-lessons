@@ -60,7 +60,7 @@ templ ActivityBlock(a Activity) {
 				@showMeanings(a)
 			}
 			if len(a.Words) > 0 {
-				<div class={ wordBlocksClass(a) } dir="rtl" lang="he">
+				<div class={ wordBlocksClass(a) } dir="rtl">
 					for i, word := range a.Words {
 						@activityWord(word, "word-clip-"+Num(i), a.PromptWord != "")
 					}
@@ -113,7 +113,7 @@ templ ActivityBlock(a Activity) {
 templ activityWord(w Word, audioID string, rows bool) {
 	if w.Plain {
 		if w.Flip {
-			<span class="wpunct">{ w.Text }</span>
+			<span class="wpunct" lang="he">{ w.Text }</span>
 		} else {
 			@E(w.Text)
 		}
@@ -217,18 +217,17 @@ templ flipHint() {
 	</p>
 }
 
-// showMeanings opens every card. Without script it is a GET form, so Enter
-// and Space submit ?meanings=all. wcards.js turns the click into a toggle.
+// showMeanings opens every card. Without script it is a plain link: closed
+// steps go to ?meanings=all, and an open step drops that parameter. wcards.js
+// turns the click into a toggle and adds role=button. The server sets neither
+// role nor aria-pressed.
 templ showMeanings(a Activity) {
-	<form class="wline-tools" method="get" action={ templ.SafeURL(meaningsAction(a.MeaningsHref)) }>
-		for _, field := range meaningsFields(a.MeaningsHref) {
-			<input type="hidden" name={ field.Name } value={ field.Value }/>
-		}
-		<button type="submit" class="c-button" data-kind="text" data-wcards-all>
+	<div class="wline-tools">
+		<a class="c-button" data-kind="text" href={ templ.SafeURL(a.MeaningsHref) } data-wcards-all>
 			@Icon("eye", "")
 			<span data-wcards-label>{ meaningsLabel(a.MeaningsOpen) }</span>
-		</button>
-	</form>
+		</a>
+	</div>
 }
 
 // targetWord is the word a multi-word recall asks about. The mark is how a
@@ -278,7 +277,7 @@ templ dialogueBlock(d *Dialogue) {
 				<li class={ dialogueLineClass(line.Speaker) } data-speaker={ line.Speaker } data-line={ Num(line.Index) }>
 					<p class="dlg__who" lang="en">{ line.Name }</p>
 					<div class="dlg__bubble">
-						<div class={ dialogueWordsClass(line.Words) } dir="rtl" lang="he">
+						<div class={ dialogueWordsClass(line.Words) } dir="rtl">
 							for _, word := range line.Words {
 								@activityWord(word, "", false)
 							}
@@ -330,14 +329,15 @@ templ clip(id, src, label string, hero bool) {
 }
 
 // orbButton is the lesson orb. audioID, when set, names the audio element
-// played for a word whose bar lives in .clip-rows.
+// played for a word whose bar lives in .clip-rows. lang=en keeps the English
+// name from inheriting a Hebrew line.
 templ orbButton(className, label, src, audioID string) {
 	if audioID != "" {
-		<button type="button" class={ className } aria-label={ label } data-label={ label } data-src={ src } data-audio={ audioID } data-state="idle">
+		<button type="button" class={ className } lang="en" aria-label={ label } data-label={ label } data-src={ src } data-audio={ audioID } data-state="idle">
 			@orbGlyphs()
 		</button>
 	} else {
-		<button type="button" class={ className } aria-label={ label } data-label={ label } data-src={ src } data-state="idle">
+		<button type="button" class={ className } lang="en" aria-label={ label } data-label={ label } data-src={ src } data-state="idle">
 			@orbGlyphs()
 		</button>
 	}

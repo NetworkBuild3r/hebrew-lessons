@@ -1307,9 +1307,11 @@ func lessonPath(unitID int64, lessonIx int) string {
 }
 
 // lessonQuery is the teach-step flip state read from the request.
-// meaningsAll opens every card. meaningsHref is the same path with
-// meanings=all, and with the other query parameters kept. A Hebrew shell
-// whose request omitted lang gets lang=he, so the reload stays Hebrew.
+// meaningsAll opens every card. meaningsHref is the other state of this
+// step: closed pages link to meanings=all, and an open page drops that
+// parameter so the no-JS control can close them. Other query parameters
+// stay. A Hebrew shell whose request omitted lang gets lang=he, so the
+// reload stays Hebrew.
 type lessonQuery struct {
 	meaningsAll  bool
 	meaningsHref string
@@ -1321,7 +1323,11 @@ func lessonQueryFrom(r *http.Request, lang string) lessonQuery {
 	if q.Get("lang") == "" && lang == "he" {
 		q.Set("lang", "he")
 	}
-	q.Set("meanings", "all")
+	if all {
+		q.Del("meanings")
+	} else {
+		q.Set("meanings", "all")
+	}
 	href := r.URL.Path
 	if enc := q.Encode(); enc != "" {
 		href += "?" + enc

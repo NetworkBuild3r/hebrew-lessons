@@ -3,6 +3,8 @@ package web
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -66,7 +68,7 @@ func flipLesson(t *testing.T, doc units.Unit, withAudio bool) (h http.Handler, c
 	if _, _, err := store.UpsertLexemes(ctx, []lexicon.Input{
 		{TextNFC: flipHello, Gloss: "hello", Translit: sp("shalom"), Gender: sp("m"), POS: sp("noun")},
 		{TextNFC: flipMorning, Gloss: "morning", Translit: sp("boker"), Gender: sp("m"), POS: sp("noun")},
-		{TextNFC: flipEvening, Gloss: "evening", Translit: sp("erev"), Gender: sp("m"), POS: sp("verb")},
+		{TextNFC: flipEvening, Gloss: "evening", Translit: sp("erev"), Gender: sp("m"), POS: sp("noun")},
 		{TextNFC: flipNight, Gloss: "night", Translit: sp("layla"), Gender: sp("f"), POS: sp("noun")},
 		{TextNFC: flipWater, Gloss: "water", Translit: sp("mayim"), POS: sp("noun")},
 	}); err != nil {
@@ -142,18 +144,23 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 				t.Fatalf("new card has no New label:\n%s", card)
 			}
 		}
-		if strings.Contains(card, flipEvening) && strings.Contains(card, "verb · m") {
+		if strings.Contains(card, flipEvening) && strings.Contains(card, "noun · m") {
 			sawPlain = true
 		}
 	}
 	if !sawNew || !sawPlain {
-		t.Fatalf("want a new card and a verb · m card:\n%s", act)
+		t.Fatalf("want a new card and a noun · m card:\n%s", act)
 	}
-	if !strings.Contains(act, `<span class="wpunct">OK</span>`) {
+	if !strings.Contains(act, `<span class="wpunct" lang="he">OK</span>`) {
 		t.Fatalf("plain token is not outside a card:\n%s", act)
 	}
-	if !strings.Contains(act, `class="orb orb--word"`) || !strings.Contains(act, "/static/js/clips.js") {
+	if !strings.Contains(act, `class="orb orb--word"`) || !strings.Contains(act, `lang="en" aria-label="Play `) || !strings.Contains(act, "/static/js/clips.js") {
 		t.Fatalf("word orb or clips.js missing:\n%s", act)
+	}
+	lineTag := act[strings.Index(act, `<div class="wline"`):]
+	lineTag = lineTag[:strings.Index(lineTag, ">")]
+	if strings.Contains(lineTag, "lang=") {
+		t.Fatalf("the line sets a language on the orbs: %s", lineTag)
 	}
 	rowsAt := strings.Index(act, `class="clip-rows"`)
 	lineAt := strings.Index(act, `class="wline"`)
@@ -185,23 +192,21 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 	if !strings.Contains(act, `name="answer" value="continue"`) {
 		t.Fatalf("continue is missing while cards are closed:\n%s", act)
 	}
-	if !strings.Contains(act, `<button type="submit" class="c-button" data-kind="text" data-wcards-all>`) || !strings.Contains(act, "Show all meanings") {
-		t.Fatalf("show-all button missing:\n%s", act)
+	if strings.Contains(act, `role="button"`) || strings.Contains(act, "aria-pressed") {
+		t.Fatalf("server HTML upgrades the show-all link:\n%s", act)
 	}
-	if strings.Contains(act, "aria-pressed") {
-		t.Fatalf("show-all still exposes aria-pressed:\n%s", act)
-	}
-	if !strings.Contains(act, `name="meanings" value="all"`) {
-		t.Fatalf("show-all form missing meanings=all:\n%s", act)
+	closedHref := showAllHref(t, act)
+	if !strings.Contains(closedHref, "meanings=all") || !strings.Contains(act, "Show all meanings") {
+		t.Fatalf("closed show-all href = %q\n%s", closedHref, act)
 	}
 	if strings.Contains(act, "style=") || strings.Contains(act, "hx-on") || regexp.MustCompile(`(?i)\son[a-z]+\s*=`).MatchString(act) {
 		t.Fatal("activity has an inline style or handler")
 	}
 
 	kept := getAuthed(t, h, cookie, storyPath+"?lang=en&from=today")
-	keptAct := activityHTML(t, kept)
-	if !strings.Contains(keptAct, `name="from" value="today"`) || !strings.Contains(keptAct, `name="lang" value="en"`) || !strings.Contains(keptAct, `name="meanings" value="all"`) {
-		t.Fatalf("show-all dropped a query param:\n%s", keptAct)
+	keptHref := showAllHref(t, activityHTML(t, kept))
+	if !strings.Contains(keptHref, "from=today") || !strings.Contains(keptHref, "lang=en") || !strings.Contains(keptHref, "meanings=all") {
+		t.Fatalf("show-all dropped a query param: %q", keptHref)
 	}
 
 	before := scalar(t, dbPath, `SELECT COUNT(*) FROM attempts`)
@@ -224,8 +229,15 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 			t.Fatalf("card not open: %s", tag)
 		}
 	}
-	if !strings.Contains(opened, "Hide meanings") || !strings.Contains(opened, `data-wcards-all`) || strings.Contains(opened, "aria-pressed") {
-		t.Fatalf("open state label missing:\n%s", opened)
+	openHref := showAllHref(t, opened)
+	if strings.Contains(openHref, "meanings=all") || !strings.Contains(opened, "Hide meanings") || strings.Contains(opened, "aria-pressed") || strings.Contains(opened, `role="button"`) {
+		t.Fatalf("open show-all href = %q\n%s", openHref, opened)
+	}
+	closedAgain := activityHTML(t, getAuthed(t, h, cookie, openHref))
+	for _, tag := range regexp.MustCompile(`<details class="wcard[^"]*"[^>]*>`).FindAllString(closedAgain, -1) {
+		if strings.Contains(tag, " open") || strings.HasSuffix(tag, " open>") {
+			t.Fatalf("hide link left a card open: %s", tag)
+		}
 	}
 
 	oneH, oneCookie, onePath, _ := flipLesson(t, units.Unit{
@@ -327,6 +339,229 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 	}, "hello", "shalom")
 }
 
+func TestFlipCardIsNativeDisclosure(t *testing.T) {
+	h, cookie, path, _ := flipLesson(t, units.Unit{
+		Title: "Cards", Position: 1,
+		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
+			{Type: units.ActivityStory, Text: flipHello + " " + flipMorning + " " + flipEvening},
+		}}},
+	}, false)
+	act := activityHTML(t, getAuthed(t, h, cookie, path))
+	cards := regexp.MustCompile(`(?s)<details class="wcard[^"]*"[^>]*>.*?</details>`).FindAllString(act, -1)
+	if len(cards) != 3 {
+		t.Fatalf("cards = %d:\n%s", len(cards), act)
+	}
+	for _, card := range cards {
+		body := strings.TrimSpace(card[strings.Index(card, ">")+1:])
+		if !strings.HasPrefix(body, "<summary") {
+			t.Fatalf("summary is not the first child:\n%s", card)
+		}
+		front, back, ok := strings.Cut(card, "</summary>")
+		if !ok || strings.Contains(front, "wcard__gl") || !strings.Contains(back, "wcard__gl") {
+			t.Fatalf("gloss is not inside details and outside summary:\n%s", card)
+		}
+		for _, bad := range []string{" hidden", "hidden=", " inert", "inert=", "aria-hidden", "style="} {
+			if strings.Contains(card, bad) {
+				t.Fatalf("card has %s:\n%s", bad, card)
+			}
+		}
+	}
+}
+
+func TestFlipCardsFullPageShowAll(t *testing.T) {
+	h, cookie, path, _ := flipStory(t)
+	for _, p := range []string{path, "/lesson"} {
+		body := getAuthed(t, h, cookie, p)
+		if !strings.Contains(body, "<html") {
+			t.Fatalf("GET %s is not a full page", p)
+		}
+		assertTeachShowAll(t, body)
+	}
+}
+
+func TestFlipCardsHTMXContinueShowAll(t *testing.T) {
+	h, cookie, path, dbPath := flipAfterRecall(t)
+	body := continueIntoTeach(t, h, cookie, path, dbPath, true)
+	if strings.Contains(body, "<html") {
+		t.Fatalf("htmx continue returned a full page:\n%s", body[:400])
+	}
+	assertTeachShowAll(t, body)
+	if !strings.Contains(body, ">evening<") {
+		t.Fatalf("htmx teach step is missing the back-face meaning:\n%s", body)
+	}
+}
+
+func TestFlipCardsPlainContinueShowAll(t *testing.T) {
+	h, cookie, path, dbPath := flipAfterRecall(t)
+	body := continueIntoTeach(t, h, cookie, path, dbPath, false)
+	if !strings.Contains(body, "<html") {
+		t.Fatalf("plain continue did not return a full page:\n%s", body[:400])
+	}
+	assertTeachShowAll(t, body)
+	if !strings.Contains(body, ">evening<") {
+		t.Fatalf("plain continue is missing the back-face meaning:\n%s", body)
+	}
+}
+
+func TestFlipCardsContinueAdvances(t *testing.T) {
+	h, cookie, path, dbPath := flipThreeStories(t)
+	body := getAuthed(t, h, cookie, path)
+	runID := runValue(t, body)
+	if code := postLesson(t, h, cookie, path, runID, "continue", true, lessonCSRF).Code; code != http.StatusOK {
+		t.Fatalf("first continue = %d", code)
+	}
+	if got := scalar(t, dbPath, `SELECT activity_ix FROM lesson_runs WHERE id = ?`, runID); got != 1 {
+		t.Fatalf("activity_ix after the first continue = %d, want 1", got)
+	}
+	page := getAuthed(t, h, cookie, path)
+	const want = `<button type="submit" class="btn btn-primary" name="answer" value="continue">`
+	if !strings.Contains(page, want) {
+		t.Fatalf("Continue is missing or blocked:\n%s", activityHTML(t, page))
+	}
+	if code := postLesson(t, h, cookie, path, runID, "continue", true, lessonCSRF).Code; code != http.StatusOK {
+		t.Fatalf("second continue = %d", code)
+	}
+	if got := scalar(t, dbPath, `SELECT activity_ix FROM lesson_runs WHERE id = ?`, runID); got != 2 {
+		t.Fatalf("activity_ix after Continue = %d, want 2", got)
+	}
+	if scalar(t, dbPath, `SELECT finished_at IS NULL FROM lesson_runs WHERE id = ?`, runID) != 1 {
+		t.Fatal("Continue finished the lesson")
+	}
+}
+
+func TestMeaningsAllDoesNotAdvance(t *testing.T) {
+	h, cookie, path, dbPath := flipThreeStories(t)
+	body := getAuthed(t, h, cookie, path)
+	runID := runValue(t, body)
+	if code := postLesson(t, h, cookie, path, runID, "continue", true, lessonCSRF).Code; code != http.StatusOK {
+		t.Fatalf("continue = %d", code)
+	}
+	before := scalar(t, dbPath, `SELECT activity_ix FROM lesson_runs WHERE id = ?`, runID)
+	if before != 1 {
+		t.Fatalf("fixture is not past step 0: ix %d", before)
+	}
+	if scalar(t, dbPath, `SELECT finished_at IS NULL FROM lesson_runs WHERE id = ?`, runID) != 1 {
+		t.Fatal("the run was already finished")
+	}
+	attempts := scalar(t, dbPath, `SELECT COUNT(*) FROM attempts`)
+	_ = getAuthed(t, h, cookie, path+"?meanings=all")
+	if got := scalar(t, dbPath, `SELECT activity_ix FROM lesson_runs WHERE id = ?`, runID); got != before {
+		t.Fatalf("?meanings=all moved activity_ix from %d to %d", before, got)
+	}
+	if scalar(t, dbPath, `SELECT finished_at IS NULL FROM lesson_runs WHERE id = ?`, runID) != 1 {
+		t.Fatal("?meanings=all finished the run")
+	}
+	if scalar(t, dbPath, `SELECT COUNT(*) FROM attempts`) != attempts {
+		t.Fatal("?meanings=all wrote an attempt")
+	}
+}
+
+func flipStory(t *testing.T) (http.Handler, *http.Cookie, string, string) {
+	t.Helper()
+	return flipLesson(t, units.Unit{
+		Title: "Story", Position: 1,
+		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
+			{Type: units.ActivityStory, Text: flipHello + " " + flipMorning + " " + flipEvening},
+		}}},
+	}, false)
+}
+
+func flipThreeStories(t *testing.T) (http.Handler, *http.Cookie, string, string) {
+	t.Helper()
+	return flipLesson(t, units.Unit{
+		Title: "Three", Position: 1,
+		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
+			{Type: units.ActivityStory, Text: flipHello + " " + flipMorning},
+			{Type: units.ActivityStory, Text: flipEvening + " " + flipNight + " " + flipWater},
+			{Type: units.ActivityStory, Text: flipHello + " " + flipMorning},
+		}}},
+	}, false)
+}
+
+func flipAfterRecall(t *testing.T) (http.Handler, *http.Cookie, string, string) {
+	t.Helper()
+	return flipLesson(t, units.Unit{
+		Title: "After", Position: 1, NewWords: []string{flipHello},
+		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
+			{Type: units.ActivityRecall, Text: flipHello},
+			{Type: units.ActivityStory, Text: flipEvening + " " + flipNight + " " + flipWater},
+			{Type: units.ActivityStory, Text: flipHello + " " + flipMorning},
+		}}},
+	}, false)
+}
+
+func continueIntoTeach(t *testing.T, h http.Handler, cookie *http.Cookie, path, dbPath string, hx bool) string {
+	t.Helper()
+	body := getAuthed(t, h, cookie, path)
+	runID := runValue(t, body)
+	id := scalar(t, dbPath, `SELECT id FROM lexemes WHERE text_nfc = ?`, flipHello)
+	ans := postLesson(t, h, cookie, path, runID, itoa(int64(id)), true, lessonCSRF)
+	if ans.Code != http.StatusOK {
+		t.Fatalf("answer = %d\n%s", ans.Code, ans.Body.String())
+	}
+	var cont *httptest.ResponseRecorder
+	if hx {
+		cont = postLesson(t, h, cookie, path, runID, "continue", true, lessonCSRF)
+	} else {
+		cont = postLessonPlain(t, h, cookie, path, runID, "continue")
+	}
+	if cont.Code != http.StatusOK {
+		t.Fatalf("continue = %d\n%s", cont.Code, cont.Body.String())
+	}
+	if scalar(t, dbPath, `SELECT activity_ix FROM lesson_runs WHERE id = ?`, runID) != 1 {
+		t.Fatalf("continue did not reach the teach step")
+	}
+	return cont.Body.String()
+}
+
+func postLessonPlain(t *testing.T, h http.Handler, cookie *http.Cookie, path, runID, answer string) *httptest.ResponseRecorder {
+	t.Helper()
+	form := url.Values{}
+	form.Set("run", runID)
+	form.Set("answer", answer)
+	form.Set("_csrf", lessonCSRF)
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+	req.Host = "learn.example"
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "https://learn.example")
+	req.Header.Set("X-CSRF-Token", lessonCSRF)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+func assertTeachShowAll(t *testing.T, body string) {
+	t.Helper()
+	act := activityHTML(t, body)
+	href := showAllHref(t, act)
+	if !strings.Contains(href, "meanings=all") || !strings.HasPrefix(href, "/lesson") {
+		t.Fatalf("show-all href = %q", href)
+	}
+	if !strings.Contains(act, "<details class=\"wcard") || !strings.Contains(act, "wcard__gl") {
+		t.Fatalf("teach step has no cards:\n%s", act)
+	}
+	if !strings.Contains(act, `/static/js/wcards.js`) {
+		t.Fatal("wcards.js missing")
+	}
+	if strings.Contains(act, `role="button"`) || strings.Contains(act, "aria-pressed") {
+		t.Fatalf("server HTML upgrades the link:\n%s", act)
+	}
+}
+
+func showAllHref(t *testing.T, html string) string {
+	t.Helper()
+	tag := regexp.MustCompile(`<a\b[^>]*\bdata-wcards-all\b[^>]*>`).FindString(html)
+	if tag == "" {
+		t.Fatalf("show-all link missing:\n%s", html)
+	}
+	m := regexp.MustCompile(`href="([^"]*)"`).FindStringSubmatch(tag)
+	if m == nil {
+		t.Fatalf("show-all href missing: %s", tag)
+	}
+	return strings.NewReplacer("&amp;", "&", "&#34;", `"`, "&#39;", "'").Replace(m[1])
+}
+
 // TestWCardsLabelFollowsToggle runs wcards.js under node. Show all sets the
 // label to "Hide meanings". Closing one card fires a capture-phase toggle,
 // and the label returns to "Show all meanings". Space activates the button.
@@ -389,8 +624,7 @@ function fire(name, target, extra) {
 }
 
 const activity = add(doc, el("div", { id: "activity" }));
-const form = add(activity, el("form"));
-const btn = add(form, el("button", { "data-wcards-all": "" }));
+const btn = add(activity, el("a", { "data-wcards-all": "" }));
 const label = add(btn, el("span", { "data-wcards-label": "" }));
 label.text = "Show all meanings";
 const a = add(activity, el("details", {}, "wcard"));
@@ -398,6 +632,8 @@ const b = add(activity, el("details", {}, "wcard"));
 
 const sandbox = { document: doc };
 vm.runInNewContext(src, sandbox);
+check(btn.getAttribute("role") === "button", "load did not set role=button");
+check(btn.getAttribute("aria-pressed") === null, "load set aria-pressed");
 
 fire("click", btn);
 check(a.open && b.open, "Show all did not open both cards");
@@ -408,9 +644,19 @@ fire("toggle", b);
 check(label.text === "Show all meanings", "closing one card left the label as " + label.text);
 check(a.open && !b.open, "the toggle listener changed which cards are open");
 
+fire("keydown", btn, { key: " ", repeat: true });
+check(a.open && !b.open, "a repeated Space toggled the cards");
+check(label.text === "Show all meanings", "a repeated Space changed the label");
+
 fire("keydown", btn, { key: " " });
 check(a.open && b.open, "Space did not open the remaining card");
 check(label.text === "Hide meanings", "Space left the label as " + label.text);
+
+const swapped = add(activity, el("div"));
+const late = add(swapped, el("a", { "data-wcards-all": "" }));
+fire("htmx:load", swapped, { detail: { elt: swapped } });
+check(late.getAttribute("role") === "button", "htmx:load did not set role=button");
+check(late.getAttribute("aria-pressed") === null, "htmx:load set aria-pressed");
 
 const before = listeners.length;
 vm.runInNewContext(src, sandbox);
@@ -418,9 +664,6 @@ fire("keydown", btn, { key: " " });
 check(listeners.length === before, "loading the script again added listeners");
 check(!a.open && !b.open, "a doubled Space listener toggled twice");
 check(label.text === "Show all meanings", "Space close left the label as " + label.text);
-
-const submit = fire("submit", form);
-check(label.text === "Show all meanings", "a stray submit changed the label");
 
 if (fails.length) {
   console.error(fails.join("\n"));

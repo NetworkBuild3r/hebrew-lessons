@@ -1,8 +1,6 @@
 package views
 
 import (
-	"net/url"
-	"sort"
 	"strings"
 
 	"github.com/a-h/templ"
@@ -176,46 +174,6 @@ func meaningsLabel(open bool) string {
 		return "Hide meanings"
 	}
 	return "Show all meanings"
-}
-
-// meaningsAction is the path of the show-all form. The query is posted as
-// hidden fields, because a GET form drops a query that lives on the action.
-func meaningsAction(href string) string {
-	u, err := url.Parse(href)
-	if err != nil {
-		return href
-	}
-	u.RawQuery = ""
-	u.Fragment = ""
-	return u.String()
-}
-
-// queryField is one hidden input of the show-all form.
-type queryField struct {
-	Name  string
-	Value string
-}
-
-// meaningsFields keeps every query parameter of the show-all link, including
-// meanings=all, so a submit without script reloads this step with the cards open.
-func meaningsFields(href string) []queryField {
-	u, err := url.Parse(href)
-	if err != nil {
-		return []queryField{{Name: "meanings", Value: "all"}}
-	}
-	q := u.Query()
-	keys := make([]string, 0, len(q))
-	for k := range q {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	var out []queryField
-	for _, k := range keys {
-		for _, v := range q[k] {
-			out = append(out, queryField{Name: k, Value: v})
-		}
-	}
-	return out
 }
 
 // clipRows is true when the step has a no-JS play bar under the line.
