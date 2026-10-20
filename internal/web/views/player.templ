@@ -44,14 +44,23 @@ templ ActivityBlock(a Activity) {
 			} else if a.Prompt != "" {
 				<p class="lede" lang="en">@E(a.Prompt)</p>
 			}
+			if flipCount(a) > 0 {
+				@flipHint()
+			}
+			if a.Dialogue != nil && flipCount(a) >= 2 {
+				@showMeanings(a)
+			}
 			if a.Dialogue != nil {
 				@dialogueBlock(a.Dialogue)
 			}
 			if a.Audio != "" {
 				@clip("line-clip", a.Audio, a.AudioLabel, true)
 			}
+			if a.Dialogue == nil && flipCount(a) >= 2 {
+				@showMeanings(a)
+			}
 			if len(a.Words) > 0 {
-				<div class={ wordBlocksClass(a) } dir="rtl">
+				<div class={ wordBlocksClass(a) } dir="rtl" lang="he">
 					for i, word := range a.Words {
 						@activityWord(word, "word-clip-"+Num(i), a.PromptWord != "")
 					}
@@ -89,6 +98,9 @@ templ ActivityBlock(a Activity) {
 			if hasClip(a) {
 				<script src="/static/js/clips.js" defer></script>
 			}
+			if flipCount(a) > 0 {
+				<script type="module" src="/static/js/wcards.js"></script>
+			}
 		}
 	</div>
 }
@@ -100,7 +112,11 @@ templ ActivityBlock(a Activity) {
 // that recall line on a shared grid: Hebrew, transliteration, gloss, orb.
 templ activityWord(w Word, audioID string, rows bool) {
 	if w.Plain {
-		@E(w.Text)
+		if w.Flip {
+			<span class="wpunct">{ w.Text }</span>
+		} else {
+			@E(w.Text)
+		}
 	} else if w.Gap {
 		<span class="word-block word-block--gap">@E("___")</span>
 	} else if rows {
@@ -139,6 +155,13 @@ templ activityWord(w Word, audioID string, rows bool) {
 				<span class="recall-clip"></span>
 			}
 		</span>
+	} else if w.Flip {
+		<div class="wslot">
+			@wordCard(w)
+			if w.Audio != "" {
+				@clip(audioID, w.Audio, "Play "+w.Text, false)
+			}
+		</div>
 	} else {
 		<span class="activity-word">
 			if w.Target {
@@ -154,6 +177,53 @@ templ activityWord(w Word, audioID string, rows bool) {
 			}
 		</span>
 	}
+}
+
+// wordCard is one teach-step word. The summary is the front (Hebrew and
+// transliteration). The meaning sits in the details, so a tap flips it and
+// a browser without script still opens it. The play control stays outside.
+templ wordCard(w Word) {
+	<details class={ wcardClass(w) } open?={ w.Open }>
+		<summary class="wcard__hit">
+			<span class="wcard__face wcard__front">
+				if w.New {
+					<span class="wcard__new" lang="en">New</span>
+				}
+				<bdi class="wcard__he" lang="he" dir="rtl">{ w.Text }</bdi>
+				if w.Translit != "" {
+					<bdi class="wcard__tr" lang="he-Latn" dir="ltr">{ w.Translit }</bdi>
+				}
+			</span>
+		</summary>
+		<div class="wcard__face wcard__back" lang="en" dir="ltr">
+			<bdi class="wcard__he-sm" lang="he" dir="rtl">{ w.Text }</bdi>
+			if w.Gloss != "" {
+				<span class="wcard__gl">{ w.Gloss }</span>
+			}
+			if meta := CardMeta(w.POS, w.Gender); meta != "" {
+				<span class="wcard__pos">{ meta }</span>
+			}
+		</div>
+	</details>
+}
+
+// flipHint is the quiet line under a teach prompt.
+templ flipHint() {
+	<p class="wprompt-hint" lang="en">
+		@Icon("flip", "")
+		<span>@E("Tap a word to see what it means.")</span>
+	</p>
+}
+
+// showMeanings opens every card. Without script it is a link to this step
+// with ?meanings=all. wcards.js turns the click into a toggle.
+templ showMeanings(a Activity) {
+	<div class="wline-tools">
+		<a class="c-button" data-kind="text" role="button" href={ templ.SafeURL(a.MeaningsHref) } aria-pressed={ Flag(a.MeaningsOpen) } data-wcards-all>
+			@Icon("eye", "")
+			<span data-wcards-label>{ meaningsLabel(a.MeaningsOpen) }</span>
+		</a>
+	</div>
 }
 
 // targetWord is the word a multi-word recall asks about. The mark is how a
@@ -203,7 +273,7 @@ templ dialogueBlock(d *Dialogue) {
 				<li class={ dialogueLineClass(line.Speaker) } data-speaker={ line.Speaker } data-line={ Num(line.Index) }>
 					<p class="dlg__who" lang="en">{ line.Name }</p>
 					<div class="dlg__bubble">
-						<div class="word-blocks" dir="rtl">
+						<div class={ dialogueWordsClass(line.Words) } dir="rtl" lang="he">
 							for _, word := range line.Words {
 								@activityWord(word, "", false)
 							}

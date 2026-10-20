@@ -191,8 +191,8 @@ func TestLessonPlayer(t *testing.T) {
 
 	body := getAuthed(t, h, brianCookie, "/lesson")
 	runID := runValue(t, body)
-	if !strings.Contains(body, "wb__gl") || !strings.Contains(body, "wb__tr") || !strings.Contains(body, hello) {
-		t.Fatal("story step is missing the word block")
+	if !strings.Contains(body, `class="wcard`) || !strings.Contains(body, "wcard__gl") || !strings.Contains(body, "wcard__tr") || !strings.Contains(body, hello) {
+		t.Fatal("story step is missing the word card")
 	}
 	if !strings.Contains(body, "/audio/"+phraseID+".mp3") || !strings.Contains(body, "/audio/"+wordID+".mp3") {
 		t.Fatal("story step is missing its clips")

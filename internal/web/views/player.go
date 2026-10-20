@@ -1,6 +1,10 @@
 package views
 
-import "github.com/a-h/templ"
+import (
+	"strings"
+
+	"github.com/a-h/templ"
+)
 
 // Screen is one lesson page. Empty is the honest state when nothing
 // published is waiting. Title, Gloss, and Situation describe the unit.
@@ -47,6 +51,12 @@ type Activity struct {
 	HomeHref      string
 	// Dialogue is set for a dialogue step. It replaces Words and Audio.
 	Dialogue *Dialogue
+	// MeaningsOpen is true when the teach step was opened with ?meanings=all,
+	// so every flip card is rendered open. MeaningsHref is that same URL,
+	// keeping the other query parameters. Both are unused when the step has
+	// fewer than two flip cards.
+	MeaningsOpen bool
+	MeaningsHref string
 }
 
 // Dialogue is a conversation between two people, shown line by line in order.
@@ -106,11 +116,114 @@ func dialogueOrbAttrs(i int) templ.Attributes {
 
 // wordBlocksClass is the activity line. A multi-word recall centres that line
 // under the hero orb and lays transliteration, gloss, and orb on one grid.
+// A teach line of flip cards is a wline, so the cards share one row.
 func wordBlocksClass(a Activity) string {
 	if a.PromptWord != "" {
 		return "word-blocks word-blocks--recall"
 	}
+	if hasFlipWords(a.Words) {
+		return "wline"
+	}
 	return "word-blocks"
+}
+
+// dialogueWordsClass is one dialogue line. Teach lines are flip cards.
+func dialogueWordsClass(words []Word) string {
+	if hasFlipWords(words) {
+		return "wline"
+	}
+	return "word-blocks"
+}
+
+// flipCount is how many tap-to-flip cards the step renders.
+func flipCount(a Activity) int {
+	n := countFlip(a.Words)
+	if a.Dialogue != nil {
+		for _, line := range a.Dialogue.Lines {
+			n += countFlip(line.Words)
+		}
+	}
+	return n
+}
+
+func countFlip(words []Word) int {
+	n := 0
+	for _, w := range words {
+		if w.Flip && !w.Plain && !w.Gap {
+			n++
+		}
+	}
+	return n
+}
+
+func hasFlipWords(words []Word) bool {
+	return countFlip(words) > 0
+}
+
+// wcardClass is the card. A new word of this lesson adds the lamp tint.
+func wcardClass(w Word) string {
+	if w.New {
+		return "wcard wcard--new"
+	}
+	return "wcard"
+}
+
+// meaningsLabel is the show-all control. Open reads as the way to close them.
+func meaningsLabel(open bool) string {
+	if open {
+		return "Hide meanings"
+	}
+	return "Show all meanings"
+}
+
+// POSLabel is the short English part of speech on the back of a card.
+// An empty part of speech stays empty. An unknown one is shown in lowercase.
+func POSLabel(pos string) string {
+	switch strings.ToLower(strings.TrimSpace(pos)) {
+	case "":
+		return ""
+	case "n", "noun":
+		return "noun"
+	case "v", "verb":
+		return "verb"
+	case "adj", "adjective":
+		return "adjective"
+	case "adv", "adverb":
+		return "adverb"
+	case "pron", "pronoun":
+		return "pronoun"
+	case "phrase":
+		return "phrase"
+	case "prep", "preposition":
+		return "preposition"
+	case "name":
+		return "name"
+	case "interjection":
+		return "interjection"
+	case "q", "question", "question word":
+		return "question word"
+	default:
+		return strings.ToLower(strings.TrimSpace(pos))
+	}
+}
+
+// CardMeta is the caption under the meaning: a part of speech, a gender
+// mark, or both. Gender is the stored "m" or "f", and only when GenderLabel
+// would show a chip. An empty pair is omitted.
+func CardMeta(pos, gender string) string {
+	label := POSLabel(pos)
+	g := ""
+	if GenderLabel(gender) != "" {
+		g = gender
+	}
+	switch {
+	case label != "" && g != "":
+		return label + " · " + g
+	case label != "":
+		return label
+	default:
+		return g
+	}
 }
 
 // orbClass is the lesson clip button. The hero is the line (56px). A word orb
@@ -160,6 +273,15 @@ type Word struct {
 	// Target is the word a multi-word recall is asking about. The line marks
 	// it, and its transliteration and gloss stay hidden until the answer.
 	Target bool
+	// POS is the lexicon part of speech, shown on the back of a flip card.
+	POS string
+	// Flip is a teach-step card: the meaning starts hidden behind a tap.
+	// Graded steps leave it false and keep the plain word block.
+	Flip bool
+	// New marks a word this lesson introduces. The card tints and says New.
+	New bool
+	// Open renders the card already flipped, for ?meanings=all.
+	Open bool
 }
 
 // shown returns value when the field is visible.
