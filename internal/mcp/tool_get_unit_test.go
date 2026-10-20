@@ -72,6 +72,16 @@ func TestTargetOptionalInToolSchema(t *testing.T) {
 		if !strings.Contains(desc, "more than one token") || !strings.Contains(desc, "exact pointed") {
 			t.Fatalf("%s target description %q", name, desc)
 		}
+		tr, _ := props["translation"].(map[string]any)
+		trDesc, _ := tr["description"].(string)
+		if !strings.Contains(trDesc, "two or more Hebrew words") || !strings.Contains(trDesc, "120") {
+			t.Fatalf("%s translation description %q", name, trDesc)
+		}
+		for _, item := range required {
+			if item == "translation" {
+				t.Fatalf("%s marks translation required: %s", name, raw)
+			}
+		}
 	}
 	schemaText := readResource(t, session, resourceUnitSchema)
 	if !strings.Contains(schemaText, `"target"`) {
@@ -86,7 +96,68 @@ func TestTargetOptionalInToolSchema(t *testing.T) {
 			t.Fatal("unit schema marks target required")
 		}
 	}
-	_ = props
+	tr, _ := props["translation"].(map[string]any)
+	trDesc, _ := tr["description"].(string)
+	if !strings.Contains(trDesc, "two or more Hebrew words") || !strings.Contains(schemaText, `"translation"`) {
+		t.Fatalf("unit schema translation %q", trDesc)
+	}
+	for _, item := range required {
+		if item == "translation" {
+			t.Fatal("unit schema marks translation required")
+		}
+	}
+	var lines map[string]any
+	if items, ok := props["lines"].(map[string]any); ok {
+		if itemSchema, ok := items["items"].(map[string]any); ok {
+			if lineProps, ok := itemSchema["properties"].(map[string]any); ok {
+				lines = lineProps
+			}
+		}
+	}
+	lineTr, _ := lines["translation"].(map[string]any)
+	lineDesc, _ := lineTr["description"].(string)
+	if !strings.Contains(lineDesc, "sentence-choice distractor") {
+		t.Fatalf("line translation description %q", lineDesc)
+	}
+
+	catalogText := readResource(t, session, resourceActivities)
+	if strings.Contains(catalogText, "no separate") {
+		t.Fatalf("catalog still says there is no separate field: %s", catalogText)
+	}
+	var catalog struct {
+		Activities []struct {
+			Type   string `json:"type"`
+			Fields []struct {
+				Name        string `json:"name"`
+				Required    bool   `json:"required"`
+				Description string `json:"description"`
+			} `json:"fields"`
+		} `json:"activities"`
+	}
+	if err := json.Unmarshal([]byte(catalogText), &catalog); err != nil {
+		t.Fatal(err)
+	}
+	var saw bool
+	for _, info := range catalog.Activities {
+		if info.Type != "listen_pick" {
+			continue
+		}
+		for _, field := range info.Fields {
+			if field.Name != "translation" {
+				continue
+			}
+			saw = true
+			if field.Required {
+				t.Fatal("catalog marks listen_pick translation required")
+			}
+			if !strings.Contains(field.Description, "two or more lexicon tokens") {
+				t.Fatalf("catalog translation description %q", field.Description)
+			}
+		}
+	}
+	if !saw {
+		t.Fatal("catalog listen_pick has no translation field")
+	}
 }
 
 func TestGetUnit(t *testing.T) {

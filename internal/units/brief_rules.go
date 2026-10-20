@@ -150,7 +150,8 @@ func ValidateWithBrief(ctx context.Context, doc *Unit, lk Lookup, facts *BriefFa
 
 // ValidateWithBriefIn is ValidateWithBrief with an explicit mode.
 // ModeWrite is new input. ModePublished rechecks a revision that is already
-// published, and a graded line of several words may omit target.
+// published. A graded line of several words may omit target, and a
+// listen_pick of several lexicon tokens may omit translation.
 func ValidateWithBriefIn(ctx context.Context, doc *Unit, lk Lookup, facts *BriefFacts, mode Mode) []Issue {
 	if ctx == nil {
 		ctx = context.Background()
@@ -222,9 +223,11 @@ func markupIssues(doc *Unit) []Issue {
 			check(at("lessons", i, "activities", j, "type"), act.Type)
 			check(at("lessons", i, "activities", j, "text"), act.Text)
 			check(at("lessons", i, "activities", j, "target"), act.Target)
+			check(at("lessons", i, "activities", j, "translation"), act.Translation)
 			for k, line := range act.Lines {
 				check(at("lessons", i, "activities", j, "lines", k, "speaker"), line.Speaker)
 				check(at("lessons", i, "activities", j, "lines", k, "text"), line.Text)
+				check(at("lessons", i, "activities", j, "lines", k, "translation"), line.Translation)
 			}
 		}
 	}

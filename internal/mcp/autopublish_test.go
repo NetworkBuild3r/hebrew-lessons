@@ -217,11 +217,12 @@ func apDoc(title string) units.Unit {
 			fields := strings.Fields(text)
 			if len(fields) > 1 {
 				a.Target = fields[0]
+				a.Translation = "a short line"
 			}
 		}
 		return a
 	}
-	return units.Unit{
+	doc := units.Unit{
 		Title: title, Situation: "A cafe", Concept: "Greetings",
 		NewWords: []string{apShalom, apBoker, apToda},
 		Lessons: []units.Lesson{
@@ -237,6 +238,47 @@ func apDoc(title string) units.Unit {
 			}},
 		},
 	}
+	return withSentenceTranslations(doc)
+}
+
+// withSentenceTranslations fills a short English line on every multi-word
+// listen_pick, then other activities, until a unit that has one has four
+// translated lines. The autopublish fixtures are about coverage, not sentences.
+func withSentenceTranslations(doc units.Unit) units.Unit {
+	n := 0
+	sentence := false
+	for i := range doc.Lessons {
+		for j := range doc.Lessons[i].Activities {
+			a := &doc.Lessons[i].Activities[j]
+			if strings.TrimSpace(a.Translation) != "" {
+				n++
+			}
+			if a.Type == units.ActivityListenPick && len(strings.Fields(a.Text)) > 1 {
+				sentence = true
+				if strings.TrimSpace(a.Translation) == "" {
+					a.Translation = "a short line"
+					n++
+				}
+			}
+		}
+	}
+	if !sentence {
+		return doc
+	}
+	for i := range doc.Lessons {
+		for j := range doc.Lessons[i].Activities {
+			if n >= 4 {
+				return doc
+			}
+			a := &doc.Lessons[i].Activities[j]
+			if strings.TrimSpace(a.Translation) != "" {
+				continue
+			}
+			a.Translation = "another line"
+			n++
+		}
+	}
+	return doc
 }
 
 func (e *apEnv) put(scope string, unitID *int64, doc units.Unit, briefID string, publish bool) apPut {
@@ -628,7 +670,8 @@ func TestAutoPublishCountsTheLearnersKnownWords(t *testing.T) {
 	e.goodBrief(apBriefB, e.b)
 	doc := apDoc("Cafe")
 	doc.Lessons[1].Activities = append(doc.Lessons[1].Activities,
-		units.Activity{Type: units.ActivityListenPick, Text: lechem + " " + lechem + " " + lechem + " " + lechem, Target: lechem})
+		units.Activity{Type: units.ActivityListenPick, Text: lechem + " " + lechem + " " + lechem + " " + lechem, Target: lechem, Translation: "bread"})
+	doc = withSentenceTranslations(doc)
 	e.audio(doc)
 
 	// Learner A does not know the word: the passage is all unknown, and the word has a

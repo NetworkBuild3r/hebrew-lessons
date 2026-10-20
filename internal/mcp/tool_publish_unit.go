@@ -21,6 +21,7 @@ const publishUnitDescription = "Publish one unit. Admin only, including the stat
 	"This tool publishes the revision it validated. Omit revision to validate the current row; pass revision to validate a stored one. A save that lands after that check is not published in its place. " +
 	"It runs the same validator as validate_unit. Block issues are a tool error: nothing is published, and the result lists each issue's rule id and JSON pointer. " +
 	"A graded activity whose line has several words and no target blocks a new draft. Checking a revision that is already published reports that missing target as a warning. " +
+	"A listen_pick of two or more lexicon tokens with no translation blocks a new draft. Checking a revision that is already published reports that missing translation as a warning. " +
 	"Pedagogy warnings do not block, and they are included in issues. " +
 	"Publishing the same revision again reports unchanged and writes nothing. " +
 	"A learner-scoped unit is refused here: it publishes only through put_unit with a briefId."

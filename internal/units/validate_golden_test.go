@@ -686,13 +686,15 @@ func assemble(words []string, groups [][]int, repeats [][]int) Unit {
 		}
 		lessons = append(lessons, Lesson{Kind: KindCheckpoint, Activities: acts})
 	}
-	return Unit{
+	u := Unit{
 		Title:     "Cafe morning",
 		Situation: "Ordering at a cafe",
 		Concept:   "Greetings and food",
 		NewWords:  append([]string(nil), words...),
 		Lessons:   lessons,
 	}
+	padFixtureTranslations(&u)
+	return u
 }
 
 func joinIdx(words []string, idx []int) string {
@@ -746,7 +748,53 @@ func withGradedTarget(act Activity) Activity {
 	if n > 1 {
 		act.Target = first
 	}
+	// A multi-word listen_pick in a fixture also carries a short English line,
+	// so the sentence-translation rule does not land on a golden that is
+	// about something else. A test that wants a missing translation builds
+	// the activity itself, or clears this field.
+	if act.Type == ActivityListenPick && n > 1 && strings.TrimSpace(act.Translation) == "" {
+		act.Translation = "a short line"
+	}
 	return act
+}
+
+// padFixtureTranslations fills translations on other activities until a unit
+// that has a multi-word listen_pick has four. The distractor warning would
+// otherwise rewrite every golden that introduces fewer than four sentences.
+func padFixtureTranslations(u *Unit) {
+	sentences := 0
+	translated := 0
+	for _, les := range u.Lessons {
+		for _, act := range les.Activities {
+			if strings.TrimSpace(act.Translation) != "" {
+				translated++
+			}
+			for _, line := range act.Lines {
+				if strings.TrimSpace(line.Translation) != "" {
+					translated++
+				}
+			}
+			if act.Type == ActivityListenPick && hebrewWordCount(act) > 1 {
+				sentences++
+			}
+		}
+	}
+	if sentences == 0 || translated >= MinTranslatedLines {
+		return
+	}
+	for i := range u.Lessons {
+		for j := range u.Lessons[i].Activities {
+			if translated >= MinTranslatedLines {
+				return
+			}
+			act := &u.Lessons[i].Activities[j]
+			if strings.TrimSpace(act.Translation) != "" || act.Type == ActivityDialogue {
+				continue
+			}
+			act.Translation = "another line"
+			translated++
+		}
+	}
 }
 
 func repeatJoin(word string, n int) string {

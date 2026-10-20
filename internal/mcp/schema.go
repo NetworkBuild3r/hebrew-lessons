@@ -110,6 +110,11 @@ func annotateUnitSchema(s *jsonschema.Schema) error {
 	}
 	typ.Description = "One of the eight activity types."
 	text.Description = "Pointed Hebrew this screen speaks or asks about. Audio is looked up from this exact text. Every type has it except dialogue, which has lines instead."
+	// translation stays out of the required array. The validator requires it
+	// on a listen_pick of two or more lexicon tokens, and nowhere else.
+	if tr := prop(act, "translation"); tr != nil {
+		tr.Description = "Natural English translation of the whole text, written by the author. Required on a listen_pick whose text has two or more Hebrew words. Optional on every other type. English only, no markup, at most 120 characters."
+	}
 	// target stays out of the required array. A single-token line may omit it.
 	// A line of several tokens must set it; the validator enforces that.
 	if target := prop(act, "target"); target != nil {
@@ -127,6 +132,9 @@ func annotateUnitSchema(s *jsonschema.Schema) error {
 			}
 			if tx := prop(lines.Items, "text"); tx != nil {
 				tx.Description = "Pointed Hebrew in NFC that this speaker says. Audio is the clip for this exact text in this speaker's voice."
+			}
+			if tr := prop(lines.Items, "translation"); tr != nil {
+				tr.Description = "Natural English translation of this line. Optional; used as a sentence-choice distractor and for future line reveals."
 			}
 			if !slices.Contains(lines.Items.Required, "speaker") {
 				lines.Items.Required = append(lines.Items.Required, "speaker")
@@ -166,10 +174,14 @@ type activityInfo struct {
 
 func activityCatalog() []activityInfo {
 	text := activityField{
-		Name:     "text",
-		Required: true,
-		Description: "Pointed Hebrew in NFC. There is no separate audio, gloss, or choices field. " +
-			"Audio is the clip for this exact text. The English gloss comes from the lexicon.",
+		Name:        "text",
+		Required:    true,
+		Description: "Pointed Hebrew in NFC. Audio is the clip for this exact text. The English gloss comes from the lexicon.",
+	}
+	translation := activityField{
+		Name:        "translation",
+		Required:    false,
+		Description: "Natural English translation of the whole text, written by the author. Required when the text has two or more lexicon tokens. Optional on a one-word line. English only, no markup, at most 120 characters.",
 	}
 	typ := func(description string) activityField {
 		return activityField{Name: "type", Required: true, Description: description}
@@ -186,6 +198,7 @@ func activityCatalog() []activityInfo {
 			Fields: []activityField{
 				typ("listen_pick"),
 				text,
+				translation,
 				target,
 			},
 		},
@@ -248,7 +261,7 @@ func activityCatalog() []activityInfo {
 				{
 					Name:        "lines",
 					Required:    true,
-					Description: "2 to 8 objects {speaker: a or b, text: pointed Hebrew in NFC}. A dialogue has no text field.",
+					Description: "2 to 8 objects {speaker: a or b, text: pointed Hebrew in NFC, translation: optional English of that line}. A dialogue has no text field.",
 				},
 			},
 		},

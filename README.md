@@ -4,6 +4,8 @@ hebrew v3 (greenfield, ADR-R1, ADR-0018). Publishes ghcr.io/networkbuild3r/hebre
 
 A graded activity (`recall`, `listen_pick`, `produce`, or `cloze`) whose line has more than one word sets `target` to the exact pointed word it grades. That spelling must be a lexicon entry. The unpointed spelling does not count. A single-word line may omit `target`. A new `validate_unit`, `put_unit`, or `publish_unit` blocks a missing target. A revision that is already published without one still serves, and checking that stored revision again reports a warning.
 
+A `listen_pick` whose text has two or more lexicon tokens sets `translation` to the author's English for the whole line. A dialogue line may set `translation` too. A new `validate_unit`, `put_unit`, or `publish_unit` blocks an empty translation on that listen_pick. A revision that is already published without one still serves, and checking that stored revision again reports a warning. The player reads earlier lines with `EarlierUnitTranslations`.
+
 Passage coverage counts the brief's words, the learner's known words, and this unit's `newWords` when each is an exact pointed lexicon entry. Those `newWords` stay new for the intro and the minimum uses. A word in none of those sets is unknown.
 
 ## Configuration

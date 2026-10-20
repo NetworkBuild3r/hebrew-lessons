@@ -9,18 +9,21 @@ import (
 	"strings"
 )
 
-// Mode chooses how a missing graded target is reported.
-// The zero value is ModeWrite, so a caller that forgets the flag blocks.
+// Mode chooses how a missing graded target, and a missing sentence
+// translation, are reported. The zero value is ModeWrite, so a caller that
+// forgets the flag blocks.
 type Mode int
 
 const (
 	// ModeWrite is a new validate_unit, put_unit, or publish_unit input.
-	// A graded line of several words with no target is a block.
+	// A graded line of several words with no target is a block, and so is a
+	// listen_pick of two or more lexicon tokens with no translation.
 	ModeWrite Mode = iota
 	// ModePublished rechecks a revision that is already published.
-	// The same missing target is a warning, so that revision keeps serving.
-	// A target that is not a token, or whose token has no exact lexicon entry,
-	// stays a block in both modes.
+	// The same missing target, and the same missing translation, are warnings,
+	// so that revision keeps serving. A target that is not a token, or whose
+	// token has no exact lexicon entry, stays a block in both modes. A
+	// translation that is Hebrew or markup stays a block in both modes.
 	ModePublished
 )
 
@@ -33,8 +36,9 @@ func Validate(ctx context.Context, doc *Unit, lk Lookup) []Issue {
 
 // ValidateIn is Validate with an explicit mode. ModeWrite is the check for
 // new input. ModePublished is the check for a revision that is already
-// published: a graded line of several words may omit target, and that
-// finding is a warning.
+// published: a graded line of several words may omit target, and a
+// listen_pick of several lexicon tokens may omit translation. Each of those
+// findings is a warning.
 func ValidateIn(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue {
 	if ctx == nil {
 		ctx = context.Background()
@@ -70,10 +74,13 @@ func collect(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue {
 	issues := schemaIssues(doc)
 	issues = append(issues, dialogueIssues(doc)...)
 	issues = append(issues, remapIssues(textIssues(ctx, flat, lk), refs)...)
-	// Target is checked on the real activities. A flattened dialogue would
-	// drop the field, and remapping those pointers would point at a line.
-	// A failed lookup is one issue even when both passes ask the lexicon.
-	return dedupeLookup(append(issues, targetIssues(ctx, doc, lk, mode)...))
+	// Target and translation are checked on the real activities. A flattened
+	// dialogue would drop the fields, and remapping those pointers would
+	// point at a line. A failed lookup is one issue even when more than one
+	// pass asks the lexicon.
+	issues = append(issues, targetIssues(ctx, doc, lk, mode)...)
+	issues = append(issues, translationIssues(ctx, doc, lk, mode)...)
+	return dedupeLookup(issues)
 }
 
 // dedupeLookup keeps the first schema.lookup. The text rules and the target

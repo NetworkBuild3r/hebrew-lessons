@@ -1,0 +1,311 @@
+package units
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+	"testing"
+)
+
+func TestTranslationRulesAreCataloged(t *testing.T) {
+	doc, err := os.ReadFile("doc.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		RuleUnitTranslationMissing:     SeverityBlock,
+		RuleUnitTranslationLang:        SeverityBlock,
+		RuleUnitTranslationLength:      SeverityWarn,
+		RuleUnitTranslationDistractors: SeverityWarn,
+	}
+	var order []string
+	seen := map[string]Rule{}
+	for _, r := range Rules {
+		order = append(order, r.ID)
+		if _, ok := seen[r.ID]; ok {
+			t.Fatalf("duplicate rule %s", r.ID)
+		}
+		seen[r.ID] = r
+	}
+	if !slices.IsSorted(order) {
+		t.Fatalf("catalog is not sorted: %v", order)
+	}
+	for id, sev := range want {
+		r, ok := seen[id]
+		if !ok {
+			t.Errorf("catalog has no %s", id)
+			continue
+		}
+		if r.Severity != sev {
+			t.Errorf("%s severity %s, want %s", id, r.Severity, sev)
+		}
+		if !strings.Contains(string(doc), id) {
+			t.Errorf("doc.go does not list %s", id)
+		}
+	}
+}
+
+func TestTranslationMissing(t *testing.T) {
+	ctx := context.Background()
+	u, lk := v1()
+	if got := byRule(Validate(ctx, &u, lk), RuleUnitTranslationMissing); len(got) != 0 {
+		t.Fatalf("fixture %s", mustJSON(got))
+	}
+	li, ai := firstSentence(t, u)
+	line := &u.Lessons[li].Activities[ai]
+	line.Translation = ""
+	wantPtr := at("lessons", li, "activities", ai, "translation")
+	wantMsg := fmt.Sprintf("activity %d: this listen_pick has several words in the lexicon; set translation to the English of the whole line.", ai+1)
+
+	got := byRule(Validate(ctx, &u, lk), RuleUnitTranslationMissing)
+	if len(got) != 1 || got[0].Severity != SeverityBlock || got[0].Pointer != wantPtr || got[0].Msg != wantMsg {
+		t.Fatalf("missing %#v", got)
+	}
+	pub := byRule(ValidateIn(ctx, &u, lk, ModePublished), RuleUnitTranslationMissing)
+	if len(pub) != 1 || pub[0].Severity != SeverityWarn || pub[0].Pointer != wantPtr || pub[0].Msg != wantMsg {
+		t.Fatalf("published recheck %#v", pub)
+	}
+	for _, is := range ValidateIn(ctx, &u, lk, ModePublished) {
+		if is.Severity == SeverityBlock {
+			t.Fatalf("published recheck blocked: %+v", is)
+		}
+	}
+
+	line.Translation = "  \t"
+	got = byRule(Validate(ctx, &u, lk), RuleUnitTranslationMissing)
+	if len(got) != 1 || got[0].Severity != SeverityBlock {
+		t.Fatalf("whitespace %#v", got)
+	}
+
+	line.Translation = "good morning"
+	if got := byRule(Validate(ctx, &u, lk), RuleUnitTranslationMissing); len(got) != 0 {
+		t.Fatalf("filled %#v", got)
+	}
+
+	// One lexicon token, even beside an unknown word or a numeral, needs no translation.
+	line.Text = vocab8[0].text + " גָּר"
+	line.Target = vocab8[0].text
+	line.Translation = ""
+	if got := byRule(Validate(ctx, &u, lk), RuleUnitTranslationMissing); len(got) != 0 {
+		t.Fatalf("one lexicon token %#v", got)
+	}
+	line.Text = vocab8[0].text + " 12"
+	if got := byRule(Validate(ctx, &u, lk), RuleUnitTranslationMissing); len(got) != 0 {
+		t.Fatalf("numeral %#v", got)
+	}
+
+	// The unpointed spelling counts as a lexicon token, unlike a graded target.
+	u, lk = v1()
+	li, ai = firstSentence(t, u)
+	act := u.Lessons[li].Activities[ai]
+	toks := tokenize(act.Text)
+	if len(toks) < 2 {
+		t.Fatal(toks)
+	}
+	lk.lex = map[string]glex{}
+	for i, tok := range toks[:2] {
+		bare := stripNiqqud(tok)
+		lk.lex[bare] = glex{ID: int64(i + 1), POS: "noun", Gender: "m", Bare: bare}
+	}
+	act.Translation = ""
+	u.Lessons[li].Activities[ai] = act
+	got = byRule(Validate(ctx, &u, lk), RuleUnitTranslationMissing)
+	if len(got) != 1 || got[0].Severity != SeverityBlock {
+		t.Fatalf("unpointed lexicon %#v", got)
+	}
+}
+
+func TestTranslationLang(t *testing.T) {
+	ctx := context.Background()
+	u, lk := v1()
+	li, ai := firstSentence(t, u)
+	ptr := at("lessons", li, "activities", ai, "translation")
+	for _, bad := range []string{"שָׁלוֹם", "a\u05B0", "<", ">", "javascript:alert(1)", "JAVASCRIPT:x", "\uFF1C"} {
+		u.Lessons[li].Activities[ai].Translation = bad
+		got := byRule(Validate(ctx, &u, lk), RuleUnitTranslationLang)
+		if len(got) != 1 || got[0].Severity != SeverityBlock || got[0].Pointer != ptr || !strings.HasSuffix(got[0].Msg, ".") {
+			t.Fatalf("%q %#v", bad, got)
+		}
+		pub := byRule(ValidateIn(ctx, &u, lk, ModePublished), RuleUnitTranslationLang)
+		if len(pub) != 1 || pub[0].Severity != SeverityBlock {
+			t.Fatalf("published %q %#v", bad, pub)
+		}
+	}
+	u.Lessons[li].Activities[ai].Translation = "good morning"
+	if got := byRule(Validate(ctx, &u, lk), RuleUnitTranslationLang); len(got) != 0 {
+		t.Fatalf("english %#v", got)
+	}
+
+	u.Lessons[0].Activities = append(u.Lessons[0].Activities, Activity{
+		Type: ActivityDialogue,
+		Lines: []DialogueLine{
+			{Speaker: SpeakerA, Text: vocab8[0].text, Translation: "hello ש"},
+			{Speaker: SpeakerB, Text: vocab8[1].text, Translation: "morning"},
+		},
+	})
+	di := len(u.Lessons[0].Activities) - 1
+	got := byRule(Validate(ctx, &u, lk), RuleUnitTranslationLang)
+	want := at("lessons", 0, "activities", di, "lines", 0, "translation")
+	if len(got) != 1 || got[0].Pointer != want || got[0].Severity != SeverityBlock {
+		t.Fatalf("line %#v", got)
+	}
+
+	// A recall may carry a translation, and Hebrew there is the same block.
+	u, lk = v1()
+	u.Lessons[0].Activities[0].Translation = "ש"
+	got = byRule(Validate(ctx, &u, lk), RuleUnitTranslationLang)
+	if len(got) != 1 || got[0].Pointer != at("lessons", 0, "activities", 0, "translation") {
+		t.Fatalf("recall %#v", got)
+	}
+}
+
+func TestTranslationLength(t *testing.T) {
+	ctx := context.Background()
+	u, lk := v1()
+	li, ai := firstSentence(t, u)
+	ptr := at("lessons", li, "activities", ai, "translation")
+	u.Lessons[li].Activities[ai].Translation = strings.Repeat("a", TranslationMaxLen)
+	if got := byRule(Validate(ctx, &u, lk), RuleUnitTranslationLength); len(got) != 0 {
+		t.Fatalf("120 %#v", got)
+	}
+	u.Lessons[li].Activities[ai].Translation = strings.Repeat("a", TranslationMaxLen+1)
+	got := byRule(Validate(ctx, &u, lk), RuleUnitTranslationLength)
+	if len(got) != 1 || got[0].Severity != SeverityWarn || got[0].Pointer != ptr || !strings.Contains(got[0].Msg, "120") {
+		t.Fatalf("121 %#v", got)
+	}
+	// Hebrew over the limit is both rules.
+	u.Lessons[li].Activities[ai].Translation = strings.Repeat("א", TranslationMaxLen+1)
+	if len(byRule(Validate(ctx, &u, lk), RuleUnitTranslationLength)) != 1 || len(byRule(Validate(ctx, &u, lk), RuleUnitTranslationLang)) != 1 {
+		t.Fatal("hebrew over the limit should warn and block")
+	}
+
+	u, lk = v1()
+	u.Lessons[0].Activities = append(u.Lessons[0].Activities, Activity{
+		Type: ActivityDialogue,
+		Lines: []DialogueLine{
+			{Speaker: SpeakerA, Text: vocab8[0].text, Translation: strings.Repeat("b", TranslationMaxLen+1)},
+			{Speaker: SpeakerB, Text: vocab8[1].text, Translation: "ok"},
+		},
+	})
+	di := len(u.Lessons[0].Activities) - 1
+	got = byRule(Validate(ctx, &u, lk), RuleUnitTranslationLength)
+	want := at("lessons", 0, "activities", di, "lines", 0, "translation")
+	if len(got) != 1 || got[0].Severity != SeverityWarn || got[0].Pointer != want {
+		t.Fatalf("line length %#v", got)
+	}
+}
+
+func TestTranslationDistractors(t *testing.T) {
+	ctx := context.Background()
+	_, lk := v1()
+	w1, w2 := vocab8[0].text, vocab8[1].text
+	sentence := Activity{Type: ActivityListenPick, Text: w1 + " " + w2, Target: w1, Translation: "good morning"}
+	extra := func(n int) []Activity {
+		out := make([]Activity, n)
+		for i := range out {
+			out[i] = Activity{Type: ActivityRecall, Text: w1, Translation: "hello"}
+		}
+		return out
+	}
+	unit := func(acts ...Activity) Unit {
+		return Unit{
+			Title: "Cafe", Situation: "Ordering", Concept: "Greeting",
+			NewWords: []string{w1, w2},
+			Lessons:  []Lesson{{Kind: KindLesson, Activities: acts}},
+		}
+	}
+
+	three := unit(append([]Activity{sentence}, extra(2)...)...)
+	got := byRule(Validate(ctx, &three, lk), RuleUnitTranslationDistractors)
+	ptr := at("lessons", 0, "activities", 0, "translation")
+	if len(got) != 1 || got[0].Severity != SeverityWarn || got[0].Pointer != ptr || !strings.Contains(got[0].Msg, "4") {
+		t.Fatalf("three lines %#v", got)
+	}
+	if len(byRule(Validate(ctx, &three, lk), RuleUnitTranslationMissing)) != 0 {
+		t.Fatal("a filled sentence should not be missing")
+	}
+
+	four := unit(append([]Activity{sentence}, extra(3)...)...)
+	if got := byRule(Validate(ctx, &four, lk), RuleUnitTranslationDistractors); len(got) != 0 {
+		t.Fatalf("four lines %#v", got)
+	}
+
+	// Dialogue line translations count, including the sentence itself.
+	withLines := unit(
+		sentence,
+		Activity{Type: ActivityDialogue, Lines: []DialogueLine{
+			{Speaker: SpeakerA, Text: w1, Translation: "hello"},
+			{Speaker: SpeakerB, Text: w2, Translation: "morning"},
+			{Speaker: SpeakerA, Text: w1, Translation: "again"},
+		}},
+	)
+	if got := byRule(Validate(ctx, &withLines, lk), RuleUnitTranslationDistractors); len(got) != 0 {
+		t.Fatalf("dialogue lines %#v", got)
+	}
+	withLines.Lessons[0].Activities[1].Lines[2].Translation = ""
+	got = byRule(Validate(ctx, &withLines, lk), RuleUnitTranslationDistractors)
+	if len(got) != 1 || got[0].Pointer != ptr {
+		t.Fatalf("dropped line %#v", got)
+	}
+
+	oneWord := unit(Activity{Type: ActivityListenPick, Text: w1})
+	if got := byRule(Validate(ctx, &oneWord, lk), RuleUnitTranslationDistractors); len(got) != 0 {
+		t.Fatalf("one word %#v", got)
+	}
+	if got := byRule(Validate(ctx, &oneWord, lk), RuleUnitTranslationMissing); len(got) != 0 {
+		t.Fatalf("one word missing %#v", got)
+	}
+
+	empty := sentence
+	empty.Translation = ""
+	bare := unit(empty)
+	if len(byRule(Validate(ctx, &bare, lk), RuleUnitTranslationMissing)) != 1 {
+		t.Fatal("empty sentence should be missing")
+	}
+	if len(byRule(Validate(ctx, &bare, lk), RuleUnitTranslationDistractors)) != 1 {
+		t.Fatal("empty sentence should also warn about distractors")
+	}
+}
+
+func TestTranslationMarkupAlsoNoMarkup(t *testing.T) {
+	u, lk, f := briefFixture()
+	li, ai := firstSentence(t, u)
+	u.Lessons[li].Activities[ai].Translation = "a < b"
+	ptr := at("lessons", li, "activities", ai, "translation")
+	var got []string
+	for _, is := range validateBrief(&u, lk, &f) {
+		if is.Pointer == ptr && (is.Rule == RuleUnitNoMarkup || is.Rule == RuleUnitTranslationLang) {
+			got = append(got, is.Rule)
+		}
+	}
+	slices.Sort(got)
+	want := []string{RuleUnitNoMarkup, RuleUnitTranslationLang}
+	if !slices.Equal(got, want) {
+		t.Fatalf("markup rules %v", got)
+	}
+}
+
+func firstSentence(t *testing.T, u Unit) (int, int) {
+	t.Helper()
+	for i, les := range u.Lessons {
+		for j, act := range les.Activities {
+			if act.Type == ActivityListenPick && hebrewWordCount(act) > 1 {
+				return i, j
+			}
+		}
+	}
+	t.Fatal("fixture has no sentence listen_pick")
+	return 0, 0
+}
+
+func byRule(issues []Issue, rule string) []Issue {
+	var out []Issue
+	for _, is := range issues {
+		if is.Rule == rule {
+			out = append(out, is)
+		}
+	}
+	return out
+}

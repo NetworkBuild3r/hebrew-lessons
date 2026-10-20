@@ -144,6 +144,7 @@
           {
             "type": "listen_pick",
             "text": "שָׁלוֹם בֹּקֶר",
+            "translation": "a short line",
             "target": "שָׁלוֹם"
           },
           {
@@ -166,6 +167,7 @@
           {
             "type": "listen_pick",
             "text": "תּוֹדָה מַיִם",
+            "translation": "a short line",
             "target": "תּוֹדָה"
           },
           {
@@ -188,6 +190,7 @@
           {
             "type": "listen_pick",
             "text": "לֶחֶם חָלָב",
+            "translation": "a short line",
             "target": "לֶחֶם"
           },
           {
@@ -210,6 +213,7 @@
           {
             "type": "listen_pick",
             "text": "סוּס פָּרָה",
+            "translation": "a short line",
             "target": "סוּס"
           },
           {
