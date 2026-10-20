@@ -342,8 +342,13 @@ func TestCallBudgetStopsAndResumes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if took := time.Since(start); took > 3*g.Budget {
-		t.Fatalf("a call with a %v budget took %v", g.Budget, took)
+	// 3x the 250ms stand-in is not a stable ceiling. Under -race on CI a
+	// call that did stop still took 2.3s, because the in-flight fake sleep
+	// was descheduled. The limit this stands in for is the 30s server write
+	// timeout named above. made/cut below is what proves the budget stopped
+	// the rest of the texts.
+	if took := time.Since(start); took >= 30*time.Second {
+		t.Fatalf("a call with a %v budget took %v, past the 30s server write timeout", g.Budget, took)
 	}
 	if len(first) != MaxTexts {
 		t.Fatalf("results = %d, want one per text", len(first))
