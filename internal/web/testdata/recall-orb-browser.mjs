@@ -68,18 +68,27 @@ const clipFacts = () => {
     const r = el.getBoundingClientRect();
     return s.display !== "none" && s.visibility !== "hidden" && Number(s.opacity) > 0 && r.width > 1 && r.height > 1;
   };
-  return [...document.querySelectorAll(".clip")].map((clip) => {
-    const audio = clip.querySelector("audio");
-    const orb = clip.querySelector("button.orb, .orb");
-    const s = audio ? getComputedStyle(audio) : null;
-    const r = audio ? audio.getBoundingClientRect() : { width: 0, height: 0 };
+  // A recall word's bar lives in .clip-rows and its orb stays under the word,
+  // joined by data-audio. The line clip still holds both.
+  const orbFor = (audio) => {
+    if (audio.id) {
+      const named = document.querySelector('.orb[data-audio="' + audio.id + '"]');
+      if (named) return named;
+    }
+    const clip = audio.closest(".clip");
+    return clip ? clip.querySelector("button.orb, .orb") : null;
+  };
+  return [...document.querySelectorAll(".clip audio")].map((audio) => {
+    const orb = orbFor(audio);
+    const s = getComputedStyle(audio);
+    const r = audio.getBoundingClientRect();
     return {
-      id: audio ? audio.id : "",
-      controls: !!(audio && audio.controls),
-      hiddenAttr: !!(audio && audio.hasAttribute("hidden")),
-      display: s ? s.display : "",
-      opacity: s ? s.opacity : "",
-      position: s ? s.position : "",
+      id: audio.id,
+      controls: !!audio.controls,
+      hiddenAttr: audio.hasAttribute("hidden"),
+      display: s.display,
+      opacity: s.opacity,
+      position: s.position,
       w: r.width,
       h: r.height,
       audioVisible: visible(audio),

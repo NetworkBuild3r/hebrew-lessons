@@ -571,10 +571,11 @@ func TestOneWordRecallPromptUnchangedFromV3(t *testing.T) {
 }
 
 // TestRecallNoJSFallbackMarkup is the no-JS contract for a lesson clip.
-// The server HTML of every clip contains exactly one native audio element
-// with controls and exactly one orb button. Without clips.js the bar is the
-// control. This is the fallback the lead allowed. It does not assert that
-// the controls are absent: that stricter rule was withdrawn.
+// The line clip holds one native audio element with controls and one orb.
+// A recall word's orb stays under the word and names its bar with
+// data-audio. That bar is the only control in a .clip-rows row, so the
+// no-JS audio is not squeezed into the word column. Without clips.js the
+// bar is the control. This is the fallback the lead allowed.
 func TestRecallNoJSFallbackMarkup(t *testing.T) {
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	ctx := context.Background()
@@ -622,52 +623,56 @@ func TestRecallNoJSFallbackMarkup(t *testing.T) {
 	cookie := mintSession(t, store, user.ID, "csrf-clips", now.Add(time.Hour))
 	body := getAuthed(t, h, cookie, "/lesson/"+itoa(unitID)+"/0")
 	ask := activityHTML(t, body)
-	clips := splitClips(ask)
-	if len(clips) != 4 {
-		t.Fatalf("clips = %d, want the line and three words\n%s", len(clips), ask)
+	heroes := regexp.MustCompile(`(?s)<div class="clip clip--hero">(.*?)</div>`).FindAllStringSubmatch(ask, -1)
+	if len(heroes) != 1 {
+		t.Fatalf("hero clips = %d, want the line\n%s", len(heroes), ask)
 	}
-	for i, clip := range clips {
-		audioN := strings.Count(clip, "<audio ")
-		buttonN := strings.Count(clip, "<button ")
-		if audioN != 1 || buttonN != 1 {
-			t.Fatalf("clip %d has %d audio and %d buttons, want one of each:\n%s", i, audioN, buttonN, clip)
+	hero := heroes[0][1]
+	if strings.Count(hero, "<audio ") != 1 || strings.Count(hero, "<button ") != 1 || !strings.Contains(hero, `class="orb orb--hero"`) {
+		t.Fatalf("the line clip is not one audio and one orb:\n%s", hero)
+	}
+	if !regexp.MustCompile(`<audio\b[^>]*\bcontrols\b`).MatchString(hero) || !strings.Contains(hero, `preload="none"`) || !strings.Contains(hero, `id="line-clip"`) {
+		t.Fatalf("the line audio is not a preload=none control:\n%s", hero)
+	}
+	rowsAt := strings.Index(ask, `<div class="clip-rows">`)
+	if rowsAt < 0 {
+		t.Fatalf("recall words have no .clip-rows fallback:\n%s", ask)
+	}
+	rowsHTML := ask[rowsAt:]
+	rowAudios := regexp.MustCompile(`<div class="clip"><audio\b([^>]*)></audio></div>`).FindAllStringSubmatch(rowsHTML, -1)
+	wordOrbs := regexp.MustCompile(`<button type="button" class="orb orb--word"[^>]*data-audio="([^"]+)"`).FindAllStringSubmatch(ask, -1)
+	if len(rowAudios) != 3 || len(wordOrbs) != 3 {
+		t.Fatalf("word bars = %d, word orbs = %d, want one of each for three words\n%s", len(rowAudios), len(wordOrbs), ask)
+	}
+	for _, audio := range rowAudios {
+		if strings.Contains(audio[0], "<button ") {
+			t.Fatalf("a no-JS word row also contains an orb:\n%s", audio[0])
 		}
-		if !strings.Contains(clip, " controls") && !strings.Contains(clip, " controls>") && !strings.Contains(clip, ` controls=""`) {
-			// templ writes a boolean attribute as " controls" or " controls".
-			if !regexp.MustCompile(`<audio\b[^>]*\bcontrols\b`).MatchString(clip) {
-				t.Fatalf("clip %d native audio has no controls (the no-JS bar):\n%s", i, clip)
-			}
+	}
+	seen := map[string]int{}
+	for _, orb := range wordOrbs {
+		seen[orb[1]]++
+	}
+	for _, audio := range rowAudios {
+		attrs := audio[1]
+		if !regexp.MustCompile(`\bcontrols\b`).MatchString(attrs) || !strings.Contains(attrs, `preload="none"`) {
+			t.Fatalf("word bar is not a preload=none control:\n%s", attrs)
 		}
-		if !strings.Contains(clip, `preload="none"`) {
-			t.Fatalf("clip %d audio is not preload=none:\n%s", i, clip)
+		id := regexp.MustCompile(`\bid="([^"]+)"`).FindStringSubmatch(attrs)
+		if id == nil {
+			t.Fatalf("word bar has no id:\n%s", attrs)
 		}
-		if !strings.Contains(clip, `type="button"`) || !strings.Contains(clip, `class="orb `) {
-			t.Fatalf("clip %d orb is not a button.orb:\n%s", i, clip)
+		seen[id[1]]++
+	}
+	for id, n := range seen {
+		if n != 2 {
+			t.Fatalf("clip %s is referenced %d times, want one orb and one bar", id, n)
 		}
-		if strings.Count(clip, "<audio ") != 1 {
-			t.Fatalf("clip %d does not have exactly one way to play in the HTML", i)
-		}
+	}
+	if strings.Count(ask, "<audio ") != 4 {
+		t.Fatalf("audio elements = %d, want the line and three words\n%s", strings.Count(ask, "<audio "), ask)
 	}
 	if !strings.Contains(ask, "/static/js/clips.js") {
 		t.Fatal("clips.js is missing; the JS-on orb has nothing to upgrade")
 	}
-}
-
-func splitClips(html string) []string {
-	re := regexp.MustCompile(`<div class="clip(?: clip--hero)?">`)
-	idx := re.FindAllStringIndex(html, -1)
-	var out []string
-	for i, pair := range idx {
-		end := len(html)
-		if i+1 < len(idx) {
-			end = idx[i+1][0]
-		}
-		chunk := html[pair[0]:end]
-		// The clip div contains no nested div. Cut at its close.
-		if close := strings.Index(chunk, "</div>"); close >= 0 {
-			chunk = chunk[:close+len("</div>")]
-		}
-		out = append(out, chunk)
-	}
-	return out
 }
