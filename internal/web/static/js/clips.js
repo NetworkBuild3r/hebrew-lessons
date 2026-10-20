@@ -57,11 +57,9 @@
   function idleOthers(except) {
     Array.prototype.forEach.call(D.querySelectorAll(".orb"), function (orb) {
       if (orb === except) return;
+      clearLoad(orb);
       var state = orb.getAttribute("data-state");
-      if (state === "playing" || state === "loading") {
-        clearLoad(orb);
-        paint(orb, "idle");
-      }
+      if (state === "playing" || state === "loading") paint(orb, "idle");
     });
   }
 
@@ -79,6 +77,14 @@
     paint(orb, "error");
   }
 
+  // pause() rejects a play() that has not started yet. Those two names are
+  // that interruption, not a broken file, so the orb that was starting stays
+  // idle instead of flipping to error.
+  function playIgnored(err) {
+    var name = err && err.name;
+    return name === "AbortError" || name === "NotAllowedError";
+  }
+
   function play(orb) {
     var audio = audioOf(orb);
     if (!audio) {
@@ -92,6 +98,7 @@
       paint(orb, "idle");
       return;
     }
+    var fromError = state === "error";
     stopOthers(audio);
     clearLoad(orb);
     paint(orb, "idle");
@@ -102,9 +109,16 @@
     timers.set(orb, timer);
     var pending;
     try {
-      audio.currentTime = 0;
+      if (fromError && audio.load) audio.load();
+      else {
+        try { audio.currentTime = 0; } catch (seekErr) { /* not seekable yet */ }
+      }
       pending = audio.play();
     } catch (e) {
+      if (playIgnored(e)) {
+        clearLoad(orb);
+        return;
+      }
       fail(orb);
       return;
     }
@@ -112,7 +126,12 @@
       pending.then(function () {
         clearLoad(orb);
         paint(orb, "playing");
-      }, function () {
+      }, function (err) {
+        if (playIgnored(err)) {
+          clearLoad(orb);
+          if (orb.getAttribute("data-state") === "loading") paint(orb, "idle");
+          return;
+        }
         fail(orb);
       });
     }
@@ -152,6 +171,11 @@
     fail(orb);
   });
 
+  // Click handling is on document, so an orb swapped in later still plays.
+  // afterSwap hides the new native bars. A second run of this file (the
+  // swapped step includes the script again) returns at g.__clips above,
+  // and these listeners from the first run stay in place.
   upgrade();
   D.addEventListener("htmx:afterSwap", upgrade);
+  D.addEventListener("htmx:afterSettle", upgrade);
 })(window);

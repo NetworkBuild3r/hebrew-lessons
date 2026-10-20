@@ -457,13 +457,12 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 	if empty || run.Phase != "ask" || !gradedActivity(act.Type) || target.ID == 0 {
 		return activity
 	}
-	hebrew := act.Type == units.ActivityProduce || act.Type == units.ActivityCloze
-	activity.Choices = lessonChoices(pool, earlier, target, choices.ChoiceSeed{
+	activity.Choices = askChoices(act.Type, pool, earlier, target, choices.ChoiceSeed{
 		RunID:    run.ID,
 		Step:     run.ActivityIx,
 		Attempt:  0, // lesson_runs has no attempt counter
 		TargetID: target.ID,
-	}, hebrew, act.Type == units.ActivityCloze, lineMateExclude(act, lex, target))
+	}, lineMateExclude(act, lex, target))
 	activity.Asking = len(activity.Choices) > 0
 	if !activity.Asking {
 		activity.Continue = continueLabel(run.ActivityIx, total)
@@ -707,20 +706,57 @@ func gapToken(tokens []string, lex map[string]db.LexemeView, newWords []db.Lexem
 	return first
 }
 
-// lessonChoiceButtons is the target plus two distractors, the count the
-// player has always shown.
-const lessonChoiceButtons = 3
+// lessonChoiceButtons is the target plus two distractors. listen_pick and
+// produce still use it. lessonWideChoices is four buttons: recall and cloze
+// draw three distractors from outside the line.
+const (
+	lessonChoiceButtons = 3
+	lessonWideChoices   = 4
+)
+
+// askChoices is the buttons for one graded activity. recall and cloze ask for
+// four, and their distractors are the target's part of speech: this unit
+// first, then the learned set (earlier units). Other parts of speech are not
+// used. block drops the line's own lexemes and glosses before that pick.
+func askChoices(typ string, unit, earlier []db.LexemeView, target db.LexemeView, seed choices.ChoiceSeed, block choiceExclude) []views.Choice {
+	hebrew := typ == units.ActivityProduce || typ == units.ActivityCloze
+	n := lessonChoiceButtons
+	if typ == units.ActivityRecall || typ == units.ActivityCloze {
+		n = lessonWideChoices
+		unit = samePOS(unit, target)
+		earlier = samePOS(earlier, target)
+	}
+	return lessonChoices(unit, earlier, target, seed, hebrew, typ == units.ActivityCloze, n, block)
+}
+
+// samePOS keeps the target and rows that share its part of speech. A target
+// with no part of speech keeps the whole list, so the ask still has buttons.
+func samePOS(rows []db.LexemeView, target db.LexemeView) []db.LexemeView {
+	if target.POS == "" {
+		return rows
+	}
+	out := make([]db.LexemeView, 0, len(rows))
+	for _, lex := range rows {
+		if lex.ID == target.ID || lex.POS == target.POS {
+			out = append(out, lex)
+		}
+	}
+	return out
+}
 
 // lessonChoices builds the buttons for a graded ask. recall, listen_pick,
 // produce, and cloze all use it. A checkpoint lesson is a sequence of those
 // activities, so it has no choice builder of its own. Order and membership
-// come from choices.Pick. The button value stays the lexeme id. block drops
-// line-mates the learner can already see.
-func lessonChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed choices.ChoiceSeed, hebrew, translit bool, block choiceExclude) []views.Choice {
+// come from choices.Pick. n is the button count, target included. The button
+// value stays the lexeme id. block drops line-mates the learner can already see.
+func lessonChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed choices.ChoiceSeed, hebrew, translit bool, n int, block choiceExclude) []views.Choice {
 	if target.ID == 0 {
 		return nil
 	}
-	picked := choices.Pick(seed, choiceLexeme(target, false), choicePool(unit, earlier, target, hebrew, block), lessonChoiceButtons)
+	if n < 1 {
+		n = lessonChoiceButtons
+	}
+	picked := choices.Pick(seed, choiceLexeme(target, false), choicePool(unit, earlier, target, hebrew, block), n)
 	byID := make(map[int64]db.LexemeView, len(unit)+len(earlier)+1)
 	byID[target.ID] = target
 	for _, lex := range unit {

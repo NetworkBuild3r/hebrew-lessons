@@ -28,7 +28,7 @@ func TestLessonChoicesSkipEmptyEnglishGloss(t *testing.T) {
 	unit := []db.LexemeView{target, blank, other, verb}
 	seed := choices.ChoiceSeed{RunID: 1, Step: 0, Attempt: 0, TargetID: target.ID}
 
-	english := lessonChoices(unit, nil, target, seed, false, false, choiceExclude{})
+	english := lessonChoices(unit, nil, target, seed, false, false, lessonChoiceButtons, choiceExclude{})
 	if choiceHas(english, "2") || !choiceHas(english, "3") || !choiceHas(english, "4") || !choiceHas(english, "1") {
 		t.Fatalf("english buttons = %+v", english)
 	}
@@ -38,7 +38,7 @@ func TestLessonChoicesSkipEmptyEnglishGloss(t *testing.T) {
 		}
 	}
 
-	hebrew := lessonChoices(unit, nil, target, seed, true, true, choiceExclude{})
+	hebrew := lessonChoices(unit, nil, target, seed, true, true, lessonChoiceButtons, choiceExclude{})
 	if !choiceHas(hebrew, "2") || !choiceHas(hebrew, "3") || choiceHas(hebrew, "4") {
 		t.Fatalf("hebrew buttons = %+v", hebrew)
 	}
@@ -174,9 +174,9 @@ func TestLessonChoicesUseEarlierLexemes(t *testing.T) {
 	}
 	target := viewByText(t, append(append([]db.LexemeView{}, pool...), earlier...), "ד")
 	runID := mustRunID(t, again)
-	want := buttonIDs(choices.Pick(choices.ChoiceSeed{
+	want := choiceIDs(askChoices(units.ActivityRecall, pool, earlier, target, choices.ChoiceSeed{
 		RunID: runID, Step: 0, Attempt: 0, TargetID: target.ID,
-	}, choiceLexeme(target, false), choicePool(pool, earlier, target, false, choiceExclude{}), lessonChoiceButtons))
+	}, choiceExclude{}))
 	if !slices.Equal(got, want) {
 		t.Fatalf("buttons %v want %v", got, want)
 	}
@@ -247,10 +247,9 @@ func playChoiceSteps(t *testing.T, fx lessonFixture, path string, acts []units.A
 		}
 		runID := mustRunID(t, again)
 		target := viewByText(t, pool, act.Text)
-		hebrew := act.Type == units.ActivityProduce || act.Type == units.ActivityCloze
-		want := buttonIDs(choices.Pick(choices.ChoiceSeed{
+		want := choiceIDs(askChoices(act.Type, pool, earlier, target, choices.ChoiceSeed{
 			RunID: runID, Step: step, Attempt: 0, TargetID: target.ID,
-		}, choiceLexeme(target, false), choicePool(pool, earlier, target, hebrew, choiceExclude{}), lessonChoiceButtons))
+		}, choiceExclude{}))
 		if !slices.Equal(got, want) {
 			t.Fatalf("%s step %d %s buttons %v want %v", path, step, act.Type, got, want)
 		}
@@ -296,10 +295,10 @@ func choiceValues(t *testing.T, body string) []string {
 	return out
 }
 
-func buttonIDs(picked []choices.Lexeme) []string {
+func choiceIDs(picked []views.Choice) []string {
 	out := make([]string, len(picked))
-	for i, lex := range picked {
-		out[i] = itoa(lex.ID)
+	for i, choice := range picked {
+		out[i] = choice.Value
 	}
 	return out
 }
