@@ -1472,9 +1472,11 @@ mark.target .wb__he {
 }
 .choice .word-block--choice { background: transparent; padding: 0; }
 /* Lesson clip. The native audio is the control until clips.js adds class js
-   on html. Then the orb shows and the bar is hidden. The orb is not gold:
-   gold stays the one primary action. --hairline is the spec's --line, and
-   --text is the icon ink (--ink in this palette is a slate surface). */
+   on html. Then the orb shows and the bar is display:none, so it leaves the
+   tab order and the accessibility tree. Opacity or off-screen placement
+   would leave it focusable. The orb is not gold: gold stays the one primary
+   action. --hairline is the spec's --line, and --text is the icon ink
+   (--ink in this palette is a slate surface). */
 .clip {
   display: flex;
   position: relative;
@@ -1488,14 +1490,7 @@ mark.target .wb__he {
   max-inline-size: 100%;
 }
 html.js .clip > audio {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  max-inline-size: none;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  opacity: 0;
+  display: none;
 }
 .orb {
   display: none;

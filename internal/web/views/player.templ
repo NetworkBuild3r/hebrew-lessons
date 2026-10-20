@@ -210,8 +210,9 @@ templ dialogueBlock(d *Dialogue) {
 }
 
 // clip is one recording in the lesson player. The server always renders the
-// native audio (the no-JS bar) and a button.orb. clips.js adds class js on
-// html, which shows the orb and hides the bar. hero is the line control.
+// native audio (the no-JS bar) and a button.orb. The orb is display:none
+// until clips.js adds class js on html, which shows the orb and sets the bar
+// to display:none. One of those two is the play control. hero is the line control.
 // label is the button's accessible name, such as "Play אֲנִי" or "Play the line".
 templ clip(id, src, label string, hero bool) {
 	<div class={ clipClass(hero) }>

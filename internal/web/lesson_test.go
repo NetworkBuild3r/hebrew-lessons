@@ -645,6 +645,7 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	if strings.Count(ask, "<audio ") != 4 || strings.Count(ask, `preload="none"`) != 4 {
 		t.Fatalf("native audio is not present for every clip without JS:\n%s", ask)
 	}
+	assertOneClipControl(t, ask)
 	if strings.Contains(ask, "onclick=") || strings.Contains(ask, "hx-on") || strings.Count(ask, "/static/js/clips.js") != 1 {
 		t.Fatalf("clip markup:\n%s", ask)
 	}
@@ -667,6 +668,7 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	if !strings.Contains(alone, gar) || !strings.Contains(alone, ">lives<") || !strings.Contains(alone, `aria-label="Play `+gar+`"`) {
 		t.Fatalf("single-word recall missing the word, its gloss, or its play button:\n%s", alone)
 	}
+	assertOneClipControl(t, alone)
 	if strings.Contains(alone, ani) || strings.Contains(alone, po) {
 		t.Fatalf("single-word recall shows the rest of the line:\n%s", alone)
 	}
@@ -827,6 +829,92 @@ func TestChoicesSkipVisibleHelperGlosses(t *testing.T) {
 	}
 }
 
+// assertOneClipControl checks the no-JS document. Each lesson clip renders
+// exactly one native audio[controls] and exactly one button.orb. The audio
+// is not hidden, so the bar is the play control. The orb stays in the markup
+// and CSS keeps it display:none until html.js.
+func assertOneClipControl(t *testing.T, html string) {
+	t.Helper()
+	clips := regexp.MustCompile(`(?s)<div class="clip(?: clip--hero)?">.*?</div>`).FindAllString(html, -1)
+	if len(clips) == 0 {
+		t.Fatalf("no lesson clips:\n%s", html)
+	}
+	audioTag := regexp.MustCompile(`<audio\b[^>]*>`)
+	buttonTag := regexp.MustCompile(`<button\b[^>]*>`)
+	hiddenAttr := regexp.MustCompile(`(?:\s)hidden(?:[\s=/>]|$)`)
+	for _, block := range clips {
+		audios := audioTag.FindAllString(block, -1)
+		buttons := buttonTag.FindAllString(block, -1)
+		if len(audios) != 1 || len(buttons) != 1 {
+			t.Fatalf("clip has %d audio and %d buttons, want one of each:\n%s", len(audios), len(buttons), block)
+		}
+		if !strings.Contains(audios[0], "controls") || hiddenAttr.MatchString(audios[0]) {
+			t.Fatalf("no-JS bar is not the single play control:\n%s", audios[0])
+		}
+		if !strings.Contains(buttons[0], `class="orb`) || hiddenAttr.MatchString(buttons[0]) {
+			t.Fatalf("clip button is not an unhidden orb:\n%s", buttons[0])
+		}
+	}
+}
+
+// assertClipFallbackCSS checks the two modes. With html.js the native bar is
+// display:none (not opacity or off-screen). Without it the bar stays shown
+// and button.orb is display:none until html.js reveals it.
+func assertClipFallbackCSS(t *testing.T, css string) {
+	t.Helper()
+	bar := cssRuleBody(t, css, ".clip > audio")
+	if !regexp.MustCompile(`(?i)display\s*:\s*block\b`).MatchString(bar) || regexp.MustCompile(`(?i)display\s*:\s*none\b`).MatchString(bar) {
+		t.Fatalf("no-JS native bar is not shown:\n%s", bar)
+	}
+	hiddenBar := cssRuleBody(t, css, "html.js .clip > audio")
+	if !regexp.MustCompile(`(?i)display\s*:\s*none\b`).MatchString(hiddenBar) {
+		t.Fatalf("with JS the native bar is not display:none:\n%s", hiddenBar)
+	}
+	for _, bad := range []string{"opacity", "position", "clip-path", "visibility", "inset", "translate", "1px", "z-index"} {
+		if strings.Contains(strings.ToLower(hiddenBar), bad) {
+			t.Errorf("with JS the native bar is hidden by %s:\n%s", bad, hiddenBar)
+		}
+	}
+	orb := cssRuleBody(t, css, ".orb")
+	if !regexp.MustCompile(`(?i)display\s*:\s*none\b`).MatchString(orb) {
+		t.Fatalf("the orb is focusable without JS:\n%s", orb)
+	}
+	shown := cssRuleBody(t, css, "html.js .orb")
+	if regexp.MustCompile(`(?i)display\s*:\s*none\b`).MatchString(shown) || !regexp.MustCompile(`(?i)display\s*:\s*grid\b`).MatchString(shown) {
+		t.Fatalf("html.js does not show the orb:\n%s", shown)
+	}
+}
+
+// cssRuleBody returns the declaration block of the rule whose selector is
+// exactly selector. A longer selector that merely contains it is skipped.
+func cssRuleBody(t *testing.T, css, selector string) string {
+	t.Helper()
+	needle := selector + " {"
+	from := 0
+	for from < len(css) {
+		i := strings.Index(css[from:], needle)
+		if i < 0 {
+			break
+		}
+		i += from
+		if i == 0 || cssRuleBoundary(css[i-1]) {
+			start := i + len(needle)
+			end := strings.Index(css[start:], "}")
+			if end < 0 {
+				t.Fatalf("rule %s is unclosed", selector)
+			}
+			return css[start : start+end]
+		}
+		from = i + len(needle)
+	}
+	t.Fatalf("missing rule %s", selector)
+	return ""
+}
+
+func cssRuleBoundary(b byte) bool {
+	return b == '\n' || b == '\r' || b == '{' || b == '}' || b == ',' || b == '/'
+}
+
 func slicesContains(items []string, want string) bool {
 	for _, item := range items {
 		if item == want {
@@ -852,7 +940,7 @@ func TestClipScript(t *testing.T) {
 	for _, need := range []string{
 		`classList.add("js")`, `querySelectorAll("audio")`, ".pause()", `closest(".orb")`, "150",
 		`Audio unavailable, tap to retry`, `aria-pressed`, `aria-busy`,
-		"AbortError", "NotAllowedError", "audio.load",
+		"AbortError", "NotAllowedError", "audio.load", `setAttribute("hidden"`,
 		`addEventListener("click"`, `addEventListener("htmx:afterSwap"`, `addEventListener("htmx:afterSettle"`,
 	} {
 		if !strings.Contains(b, need) {
@@ -864,9 +952,7 @@ func TestClipScript(t *testing.T) {
 		t.Fatal("playing a dialogue line does not stop other audio")
 	}
 	css := readStatic(t, "static/css/base.css")
-	if !strings.Contains(css, "html.js .orb") || !strings.Contains(css, "html.js .clip > audio") {
-		t.Fatal("the orb is not gated on html.js, so the native bar cannot stay without script")
-	}
+	assertClipFallbackCSS(t, css)
 	if !strings.Contains(css, ".orb--hero") || !strings.Contains(css, "var(--size-cta)") || !strings.Contains(css, "var(--size-tap)") || !strings.Contains(css, "inline-size: 28px") {
 		t.Fatal("hero and word orb sizes are missing")
 	}
@@ -1032,6 +1118,7 @@ check(tail[0] === "load" && tail[1] === "play", "retry did not load before play:
 
 const swapped = addClip();
 fire("htmx:afterSwap", doc);
+check(swapped.audio.getAttribute("hidden") !== null, "afterSwap did not set hidden on the new bar");
 check(swapped.audio.getAttribute("aria-hidden") === "true", "afterSwap did not hide the new bar");
 check(swapped.audio.tabIndex === -1, "afterSwap left the new bar tabbable");
 const playsBefore = swapped.audio.plays.length;

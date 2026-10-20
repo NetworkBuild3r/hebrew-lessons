@@ -1,6 +1,8 @@
 /* Lesson clip orb. No dependency. Loaded by a lesson step that has a clip.
    The server renders button.orb beside a native audio control. This script
-   adds class js on html, which shows the orb and hides the native bar.
+   adds class js on html, which shows the orb and sets the native bar to
+   display:none. quiet() also sets the hidden attribute, so a swapped bar
+   is out of the tab order and the accessibility tree.
    Without this script the bar stays. One clip plays at a time.
    Loading is shown only after 150ms, so a clip that starts at once does not flicker.
    Reduced motion is entirely CSS (no spin, no pulse). This file does not animate,
@@ -46,6 +48,7 @@
   }
 
   function quiet(audio) {
+    audio.setAttribute("hidden", "");
     audio.setAttribute("aria-hidden", "true");
     audio.tabIndex = -1;
   }
