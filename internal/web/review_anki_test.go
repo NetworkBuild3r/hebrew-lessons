@@ -146,14 +146,14 @@ func TestReviewModesShareOneRevealPath(t *testing.T) {
 	}
 
 	frontHTML := renderMode(t, views.ReviewModeFor("letter").Front(letter))
-	if strings.Contains(frontHTML, "גימל") || strings.Contains(frontHTML, "פא") || strings.Contains(frontHTML, `name="rating"`) || strings.Contains(frontHTML, "act__answer") {
+	if strings.Contains(frontHTML, "גימל") || strings.Contains(frontHTML, "פא") || strings.Contains(frontHTML, `name="rating"`) || strings.Contains(frontHTML, "act__answer") || strings.Contains(frontHTML, "Tell them apart") {
 		t.Fatalf("letter front face rendered the answer: %s", frontHTML)
 	}
 	if !strings.Contains(frontHTML, "ג") {
 		t.Fatalf("letter front face dropped the letter: %s", frontHTML)
 	}
 	backHTML := renderMode(t, views.ReviewModeFor("letter").Back(letter))
-	if !strings.Contains(backHTML, "גימל") || !strings.Contains(backHTML, ">Answer</h2>") || !strings.Contains(backHTML, "גשם") {
+	if !strings.Contains(backHTML, "גימל") || !strings.Contains(backHTML, ">Answer</h2>") || !strings.Contains(backHTML, "גשם") || !strings.Contains(backHTML, "Tell them apart: cue") || !strings.Contains(backHTML, "With the dot: p. Without: f.") {
 		t.Fatalf("letter back face dropped the answer: %s", backHTML)
 	}
 	if strings.Contains(backHTML, `name="rating"`) {
@@ -424,8 +424,8 @@ func assertAnkiBack(t *testing.T, body string, spec ankiSpec, clipID string, ful
 	if !strings.Contains(body, `name="rating"`) || !strings.Contains(body, "Forgot") || !strings.Contains(body, "Easy") || !strings.Contains(body, `data-revealed="true"`) {
 		t.Fatalf("back is missing the grades\n%s", body)
 	}
-	if !strings.Contains(body, `id="act-answer"`) || !strings.Contains(body, `tabindex="-1"`) || !strings.Contains(body, ">Answer</h2>") {
-		t.Fatal("back has no answer heading")
+	if !strings.Contains(body, `id="act-answer" tabindex="-1" autofocus`) || !strings.Contains(body, ">Answer</h2>") {
+		t.Fatal("back has no autofocused answer heading")
 	}
 	for _, want := range spec.answers {
 		if !strings.Contains(body, want) {
