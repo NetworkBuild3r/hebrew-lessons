@@ -56,6 +56,12 @@ func (userEngine) NewRecheck(context.Context, int64, string) (int64, error) { re
 // cookies maps a learner's name to the value of its session cookie.
 func startShellServer(t *testing.T) (origin string, cookies map[string]string) {
 	t.Helper()
+	return startShellServerN(t, 8)
+}
+
+// startShellServerN is startShellServer with n fresh learners for the lesson frame, lesson0 to lesson<n-1>.
+func startShellServerN(t *testing.T, n int) (origin string, cookies map[string]string) {
+	t.Helper()
 	srv := httptest.NewUnstartedServer(nil)
 	origin = "http://" + srv.Listener.Addr().String()
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
@@ -68,10 +74,10 @@ func startShellServer(t *testing.T) (origin string, cookies map[string]string) {
 	t.Cleanup(srv.Close)
 	ctx := context.Background()
 	cookies = map[string]string{}
-	n := 0
+	made := 0
 	learner := func(name string) learnerFix {
-		n++
-		l := addLearner(t, store, fmt.Sprintf("learner%d@example.com", n), fmt.Sprintf("sub-%d", n), now)
+		made++
+		l := addLearner(t, store, fmt.Sprintf("learner%d@example.com", made), fmt.Sprintf("sub-%d", made), now)
 		cookies[name] = l.cookie.Value
 		return l
 	}
@@ -151,7 +157,7 @@ func startShellServer(t *testing.T) (origin string, cookies map[string]string) {
 	}
 
 	// Fresh learners for the lesson frame: each run of a lesson moves its learner on.
-	for i := 0; i < 8; i++ {
+	for i := 0; i < n; i++ {
 		l := learner(fmt.Sprintf("lesson%d", i))
 		finishPlacement(t, store, l.user.ID, now.Add(-time.Hour))
 	}

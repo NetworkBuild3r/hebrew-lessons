@@ -1,0 +1,21 @@
+axe-core 4.10.2 (vendored for tests only)
+
+axe.min.js is the unmodified build from the npm package "axe-core" version 4.10.2
+(https://github.com/dequelabs/axe-core), copyright (c) Deque Systems, Inc.
+It is licensed under the Mozilla Public License, version 2.0 (MPL-2.0); the licence
+text is in LICENSE next to this file. LICENSE-3RD-PARTY.txt lists the notices of the
+libraries bundled inside it.
+
+It is used only by TestShots (internal/web/shots_test.go), which injects it into a
+page in headless Chromium to check WCAG 2.2 AA rules. It is not served by the app,
+not embedded in the binary, and not a Go dependency.
+
+How it was fetched (inside the Playwright container, no change to go.mod):
+
+    npm pack axe-core@4.10.2 && tar xzf axe-core-4.10.2.tgz
+    sha256sum package/axe.min.js
+    b511cd9dec01c76f4b2ad1723b66b6db37d4c2eb4ed199076e1829d9ee7b75e3
+
+TestShots refuses to run when axe.min.js does not hash to the value above, so the file
+cannot drift unnoticed. To upgrade, fetch the new version the same way, replace the three
+files, and change the version and hash here and in shots_test.go.

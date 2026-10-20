@@ -27,13 +27,13 @@ import (
 
 // SPEC-012 in a real browser. These stay out of go test ./... (no browser tag). Run them with:
 //
-//	MOTION_PW_DIR=<dir with node_modules/playwright and Chromium> go test -tags browser -run 'TestPlacementInBrowser|TestPlacementScreenshots' ./internal/web
+//	MOTION_PW_DIR=<dir with node_modules/playwright and Chromium> go test -tags browser -run TestPlacementInBrowser ./internal/web
 //
 // TestPlacementInBrowser is ac-4 (the clip plays on load, and a clip that 404s is replaced by the server)
 // and ac-5 (keys 1 to 4, ?, Space; focus order and a visible focus ring), plus the picked state, the
 // close dialog, the first-tap rule on every answer screen, the typing part and the review's clips.
-// TestPlacementScreenshots (SHOTS_DIR set) saves a PNG of every screen at phone and desktop size,
-// light and dark.
+// The captures of every placement screen are TestShots's (shots_test.go), with the other SPEC-016, SPEC-017 and
+// SPEC-018 screens and the checks that run on them.
 //
 // The server is the real app wiring: the v3 engine on a real store, every clip a row in audio_assets
 // and a short silent MP3 on disk. The learners are put in the state a screen needs by driving the
