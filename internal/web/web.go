@@ -207,7 +207,10 @@ func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", policy)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Referrer-Policy", "no-referrer")
+		// same-origin, not no-referrer: under no-referrer a browser sends "Origin: null" on a native
+		// form POST, and the CSRF check refuses that on purpose. same-origin sends the real Origin to
+		// this site and sends no referrer at all to any other site, so nothing leaks.
+		w.Header().Set("Referrer-Policy", "same-origin")
 		next.ServeHTTP(w, r)
 	})
 }

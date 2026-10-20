@@ -141,6 +141,10 @@ func startShellServer(t *testing.T) (origin string, cookies map[string]string) {
 	out := learner("logout")
 	finishPlacement(t, store, out.user.ID, now.Add(-time.Hour))
 
+	// A second learner to log out with a native form POST (the "native form post" section).
+	native := learner("logout-native")
+	finishPlacement(t, store, native.user.ID, now.Add(-time.Hour))
+
 	resume := learner("resume")
 	if _, err := store.InsertPlacementRun(ctx, resume.user.ID, now, 1); err != nil {
 		t.Fatal(err)

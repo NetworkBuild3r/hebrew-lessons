@@ -516,5 +516,24 @@ await section("log out", async () => {
   await ctx.close();
 });
 
+// ---- A native form POST carries a real Origin (Referrer-Policy: same-origin) ----
+// form.submit() does not fire the submit event, so shell.js's fetch handler is skipped and the
+// browser itself posts the form. Under Referrer-Policy: no-referrer that post carried Origin: null
+// and the CSRF check answered 403.
+
+await section("native form post", async () => {
+  const { ctx, page } = await open("logout-native", { width: 390, height: 844 });
+  await page.goto(origin + "/me", { waitUntil: "networkidle" });
+  const posted = page.waitForResponse((r) => r.url().endsWith("/auth/logout") && r.request().method() === "POST", { timeout: 5000 }).catch(() => null);
+  await page.evaluate(() => document.querySelector(".me form[action='/auth/logout']").submit());
+  const resp = await posted;
+  const sent = resp ? await resp.request().headerValue("origin") : null;
+  check("native post: the request carries this site's own Origin, not null", sent === origin, String(sent));
+  check("native post: the CSRF check does not refuse it", !!resp && resp.status() !== 403, resp ? String(resp.status()) : "no response");
+  await page.waitForTimeout(500);
+  check("native post: the learner ends on the sign-in page", /\/signin/.test(page.url()), page.url());
+  await ctx.close();
+});
+
 await browser.close();
 console.log(JSON.stringify({ checks, errors }));
