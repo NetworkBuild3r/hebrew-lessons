@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"strings"
@@ -493,6 +494,7 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 	parts := splitDrillKey(vm.Pointed)
 	switch vm.Kind {
 	case session.KindLetter:
+		vm.Asked = pickPart(vm.CardID, parts)
 		sides := make([]views.DrillSide, 0, len(parts))
 		for _, part := range parts {
 			sound, err := s.letterSound(ctx, part)
@@ -506,6 +508,7 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 			})
 		}
 		vm.Sides = sides
+		vm.DageshNote = views.DageshNote(sides)
 		ex, ok, err := s.confusionExample(ctx, userID, fsrs.MissLetterPair, vm.Pointed)
 		if err != nil {
 			return err
@@ -598,6 +601,19 @@ func (s *server) confusionExample(ctx context.Context, userID int64, kind, key s
 		return db.LexemeRef{}, false, err
 	}
 	return s.store.LexemeByID(ctx, id)
+}
+
+// pickPart chooses one part of a pair. The seed is the card id, so a refresh
+// and the no-JS page show the same letter. One part is returned as itself.
+func pickPart(cardID int64, parts []string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	src := rand.NewPCG(uint64(cardID), 0x72657665616c)
+	return parts[rand.New(src).Uint64N(uint64(len(parts)))]
 }
 
 func splitDrillKey(key string) []string {
@@ -715,6 +731,10 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 		Answered:      vm.Answered,
 		Correct:       vm.Correct,
 	}
+	if vm.Kind == session.KindLetter && vm.Asked != "" {
+		card.Pointed = vm.Asked
+		card.Unpointed = units.Plain(vm.Asked)
+	}
 	if vm.Item != nil {
 		card.Act = activityView(lang, csrf, vm)
 		return card
@@ -724,6 +744,8 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 		card.ExampleText = vm.ExampleText
 		card.ExampleTranslit = vm.ExampleTranslit
 		card.ExampleGloss = vm.ExampleGloss
+		card.TellApart = vm.TellApart
+		card.DageshNote = vm.DageshNote
 		return card
 	}
 	// Anything that reveals the answer side is post-reveal only.

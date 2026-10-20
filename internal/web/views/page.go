@@ -258,21 +258,28 @@ type ReviewCard struct {
 	Act *ActivityView
 	// Sides, ExampleText, ExampleTranslit, and ExampleGloss are the drill answer.
 	// They are empty until the card is revealed, so the front has no answer markup.
+	// TellApart and DageshNote are the same: empty when the data has no cue.
 	Sides           []DrillSide
 	ExampleText     string
 	ExampleTranslit string
 	ExampleGloss    string
+	TellApart       string
+	DageshNote      string
 }
 
 // DrillSide is one letter, or one agreement form, on the back of a drill card.
-// Name is the Hebrew letter name. Sound is a Latin reading when one is stored.
-// Translit and Gloss are the lexicon reading and meaning of an agreement form.
+// Name is the Hebrew letter name from the keyboard table. That table has no
+// niqqud and no transliteration of the name, so NameTranslit stays empty
+// until a source for it exists. Sound is a stored reading, not a phrase
+// invented for the card. Translit and Gloss are the lexicon reading and
+// meaning of an agreement form or an example is carried separately.
 type DrillSide struct {
-	Hebrew   string
-	Name     string
-	Sound    string
-	Translit string
-	Gloss    string
+	Hebrew       string
+	Name         string
+	NameTranslit string
+	Sound        string
+	Translit     string
+	Gloss        string
 }
 
 // answerSide reports whether this render may show the answer side.

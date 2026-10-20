@@ -283,31 +283,81 @@ const (
 	PromptRead       = "What does this word mean?"
 	PromptRecall     = "How do you say this in Hebrew?"
 	PromptLetter     = "What sound does this letter make?"
-	PromptLetterPair = "What sound does each of these letters make?"
-	PromptPattern    = "Which form is which?"
-	PromptPatternOne = "What does this form mean?"
+	PromptPattern    = "What does this pattern mean?"
+	PromptPatternSay = "How do you say this in Hebrew?"
 	PromptGrade      = "How well did you remember it?"
 	PromptListen     = "What does the word you hear mean?"
 	PromptSpell      = "How do you spell this word?"
 )
 
 // LetterPrompt is the question for a letter drill.
-// A key with a slash is a letter pair the learner mixed up, so the question
-// asks for each letter's sound. One letter asks for that letter's sound.
-func LetterPrompt(key string) string {
-	if strings.Contains(key, "/") {
-		return PromptLetterPair
-	}
+// A pair is still one letter on the front, so the question does not change.
+func LetterPrompt(string) string {
 	return PromptLetter
 }
 
-// PatternPrompt is the question for an agreement drill.
-// A key with a slash is two forms, for example הוא/היא. One form asks for its meaning.
+// PatternPrompt is the one question for an agreement drill.
+// A Hebrew key asks for the meaning. A key with no Hebrew letter asks how
+// to say that English in Hebrew.
 func PatternPrompt(key string) string {
-	if strings.Contains(key, "/") {
+	if hasHebrew(key) || key == "" {
 		return PromptPattern
 	}
-	return PromptPatternOne
+	return PromptPatternSay
+}
+
+func hasHebrew(s string) bool {
+	for _, r := range s {
+		if r >= 0x0590 && r <= 0x05FF {
+			return true
+		}
+	}
+	return false
+}
+
+// askedSide is the letter the front showed.
+func askedSide(c ReviewCard) DrillSide {
+	for _, side := range c.Sides {
+		if side.Hebrew == c.Pointed {
+			return side
+		}
+	}
+	if len(c.Sides) == 1 {
+		return c.Sides[0]
+	}
+	return DrillSide{Hebrew: c.Pointed}
+}
+
+// DageshNote is the one-line contrast for a pair that is the same letter
+// with and without a dagesh. Both sounds have to be stored. A missing sound
+// returns empty rather than a guessed consonant.
+func DageshNote(sides []DrillSide) string {
+	if len(sides) != 2 {
+		return ""
+	}
+	a, b := sides[0], sides[1]
+	if a.Sound == "" || b.Sound == "" || stripDagesh(a.Hebrew) != stripDagesh(b.Hebrew) {
+		return ""
+	}
+	aDot := strings.ContainsRune(a.Hebrew, '\u05BC')
+	bDot := strings.ContainsRune(b.Hebrew, '\u05BC')
+	if aDot == bDot {
+		return ""
+	}
+	with, without := a, b
+	if !aDot {
+		with, without = b, a
+	}
+	return "With the dot: " + with.Sound + ". Without: " + without.Sound + "."
+}
+
+func stripDagesh(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\u05BC' {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // flashLead is the line under the prompt of a flashcard.

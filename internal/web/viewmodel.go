@@ -80,4 +80,9 @@ type ReviewCardVM struct {
 	ExampleText     string
 	ExampleTranslit string
 	ExampleGloss    string
+	// Asked is the one letter a pair card shows. TellApart and DageshNote are
+	// empty when the stored data has no cue and no sounds.
+	Asked      string
+	TellApart  string
+	DageshNote string
 }

@@ -418,8 +418,10 @@ func TestReviewDrillKinds(t *testing.T) {
 		t.Fatalf("drill replaced the study card: %s", cardAttrs(page))
 	}
 	letter := gradeRevealed(t, h, learner, card, "3", "https://learn.example")
-	if letter.Code != http.StatusOK || attr(t, letter.Body.String(), "data-kind") != session.KindLetter || !strings.Contains(letter.Body.String(), "ב/כ") {
-		t.Fatalf("letter drill: %d %s", letter.Code, letter.Body.String())
+	letterBody := letter.Body.String()
+	hasBet, hasKaf := strings.Contains(letterBody, "ב"), strings.Contains(letterBody, "כ")
+	if letter.Code != http.StatusOK || attr(t, letterBody, "data-kind") != session.KindLetter || hasBet == hasKaf || strings.Contains(letterBody, "ב/כ") {
+		t.Fatalf("letter drill: %d %s", letter.Code, letterBody)
 	}
 	if strings.Contains(letter.Body.String(), "ג/ק") {
 		t.Fatal("a pair under the miss threshold was drilled")

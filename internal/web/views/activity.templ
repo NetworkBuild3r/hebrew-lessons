@@ -256,8 +256,7 @@ templ flashFrame(c ReviewCard) {
 				</div>
 			</form>
 		} else {
-			<form class="act__form" method="post" action="/_hx/review/reveal" hx-post="/_hx/review/reveal" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
-				<input type="hidden" name="_csrf" value={ c.CSRF }/>
+			<form class="act__form" method="get" action="/_hx/review/reveal" hx-get="/_hx/review/reveal" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
 				<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
 				<div class="act__stage">
 					@flashCard(c)
@@ -278,19 +277,58 @@ templ flashFrame(c ReviewCard) {
 // after the flip. Recall cards show the meaning and name the Hebrew after it.
 templ flashCard(c ReviewCard) {
 	<div class="act__card" if c.Revealed { data-motion="card-flip" }>
-		if c.Kind == "letter" || c.Kind == "pattern" {
+		if c.Kind == "letter" {
 			@WordBlock(flashHebrew(c), "", "", "display", "", true)
 			if c.Revealed {
 				<div class="act__answer">
+					@answerHeading()
+					{{ asked := askedSide(c) }}
+					<p class="act__side">
+						if asked.Name != "" {
+							@H(asked.Name)
+						}
+						if asked.NameTranslit != "" {
+							<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ asked.NameTranslit }</bdi>
+						}
+						if asked.Sound != "" {
+							<bdi class="wb__tr" lang="en" dir="ltr">{ asked.Sound }</bdi>
+						}
+					</p>
+					if c.ExampleText != "" {
+						@WordBlock(c.ExampleText, c.ExampleTranslit, c.ExampleGloss, "card", "", false)
+					}
+					@flashAudio(c)
+					if len(c.Sides) > 1 {
+						<div class="act__pair">
+							for _, side := range c.Sides {
+								<p class="act__side">
+									@H(side.Hebrew)
+									if side.Name != "" {
+										@H(side.Name)
+									}
+									if side.Sound != "" {
+										<bdi class="wb__tr" lang="en" dir="ltr">{ side.Sound }</bdi>
+									}
+								</p>
+							}
+						</div>
+					}
+					if c.TellApart != "" {
+						<p class="act__cue" lang="en">Tell them apart: { c.TellApart }</p>
+					}
+					if c.DageshNote != "" {
+						<p class="act__cue" lang="en">{ c.DageshNote }</p>
+					}
+				</div>
+			}
+		} else if c.Kind == "pattern" {
+			@WordBlock(flashHebrew(c), "", "", "display", "", true)
+			if c.Revealed {
+				<div class="act__answer">
+					@answerHeading()
 					for _, side := range c.Sides {
 						<p class="act__side">
 							@H(side.Hebrew)
-							if side.Name != "" {
-								@H(side.Name)
-							}
-							if side.Sound != "" {
-								<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ side.Sound }</bdi>
-							}
 							if side.Translit != "" {
 								<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ side.Translit }</bdi>
 							}
@@ -299,9 +337,6 @@ templ flashCard(c ReviewCard) {
 							}
 						</p>
 					}
-					if c.ExampleText != "" {
-						@WordBlock(c.ExampleText, c.ExampleTranslit, c.ExampleGloss, "card", "", false)
-					}
 					@flashAudio(c)
 				</div>
 			}
@@ -309,6 +344,7 @@ templ flashCard(c ReviewCard) {
 			<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
 			if c.Revealed {
 				<div class="act__word act__answer">
+					@answerHeading()
 					@WordBlock(flashHebrew(c), flashTranslit(c), "", "display", "", true)
 					@flashAudio(c)
 				</div>
@@ -320,6 +356,7 @@ templ flashCard(c ReviewCard) {
 			</div>
 			if c.Revealed && c.Gloss != "" {
 				<div class="act__answer">
+					@answerHeading()
 					<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
 					if c.Gender != "" {
 						<span class="gchip">@H(GenderLabel(c.Gender))</span>
@@ -334,6 +371,12 @@ templ flashCard(c ReviewCard) {
 			<p class="act__lead" lang="en">{ flashLead(c) }</p>
 		}
 	</div>
+}
+
+// answerHeading is where focus lands after Show answer. htmx focuses the
+// autofocus element in the swap. tabindex=-1 lets that focus stick on a heading.
+templ answerHeading() {
+	<h2 class="act__answer-h" id="act-answer" tabindex="-1" autofocus lang="en">Answer</h2>
 }
 
 // flashAudio is the card's clip, when it may be played on this render.

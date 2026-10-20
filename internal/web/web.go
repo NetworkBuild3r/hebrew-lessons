@@ -181,6 +181,7 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 	mux.HandleFunc("GET /audio/{name}", func(w http.ResponseWriter, r *http.Request) {
 		serveAudio(s.audioDir, w, r)
 	})
+	mux.HandleFunc("GET /_hx/review/reveal", gated(gate, secure, s.reveal))
 	mux.HandleFunc("POST /_hx/review/reveal", gated(gate, secure, s.reveal))
 	mux.HandleFunc("POST /_hx/review/grade", gated(gate, secure, s.grade))
 	mux.HandleFunc("POST /_hx/review/answer", gated(gate, secure, s.answer))
@@ -479,7 +480,7 @@ func reviewCardID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return 0, false
 	}
-	cardID, err := strconv.ParseInt(r.PostForm.Get("card_id"), 10, 64)
+	cardID, err := strconv.ParseInt(r.Form.Get("card_id"), 10, 64)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return 0, false
