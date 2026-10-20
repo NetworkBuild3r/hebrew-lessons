@@ -16,19 +16,30 @@ import (
 // RoleAdmin, including the static MCP_AUTH_TOKEN, may call any tool
 // and any scope. A name that is not listed here is admin-only, which
 // is the default for every write tool added later.
+//
+// get_lesson_brief and add_coach_note are not here, so they are admin-only. A brief is
+// a stored row that only put_unit, which is admin-only, can use, and a coach note is read
+// into the next lesson's prompt, so a learner must not be able to write one (SPEC-021).
 var learnerTools = map[string]bool{
 	"get_context":       true,
 	"get_learner_words": true,
+	"get_learner_model": true,
+	"get_progress":      true,
 	"lookup":            true,
 	"validate_unit":     true,
+	"unpublish_unit":    true,
 }
 
-// learnerOwnDataTools are the reads a learner may make only for their
+// learnerOwnDataTools are the tools a learner may call only for their
 // own learnerId. Omitting the id uses that caller's id. Another id is
-// rejected before the handler runs.
+// rejected before the handler runs. A tool that takes no learnerId does not belong here.
 var learnerOwnDataTools = map[string]bool{
 	"get_context":       true,
 	"get_learner_words": true,
+	"get_learner_model": true,
+	"get_progress":      true,
+	"validate_unit":     true,
+	"unpublish_unit":    true,
 }
 
 const (

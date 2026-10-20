@@ -35,6 +35,7 @@ type Memory struct {
 	reviews        []storedReview
 	lessons        []storedLesson
 	nextCard       int64
+	learn          memLearn
 }
 
 type storedPlacement struct {
