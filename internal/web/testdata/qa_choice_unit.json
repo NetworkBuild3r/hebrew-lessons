@@ -1,0 +1,37 @@
+{
+  "lexemes": [
+    {"text": "א", "gloss": "alef", "translit": "alef", "pos": "noun", "gender": "m"},
+    {"text": "ב", "gloss": "bet", "translit": "bet", "pos": "noun", "gender": "m"},
+    {"text": "ג", "gloss": "gimel", "translit": "gimel", "pos": "noun", "gender": "m"},
+    {"text": "ד", "gloss": "dalet", "translit": "dalet", "pos": "noun", "gender": "m"},
+    {"text": "ה", "gloss": "he", "translit": "he", "pos": "noun", "gender": "m"}
+  ],
+  "unit": {
+    "title": "QA choices",
+    "situation": "A five-word choice fixture.",
+    "concept": "The answer is not always the third button.",
+    "newWords": ["א", "ב", "ג", "ד", "ה"],
+    "lessons": [
+      {
+        "kind": "lesson",
+        "activities": [
+          {"type": "recall", "text": "א"},
+          {"type": "listen_pick", "text": "ב"},
+          {"type": "produce", "text": "ג"},
+          {"type": "cloze", "text": "ד"},
+          {"type": "recall", "text": "ה"}
+        ]
+      },
+      {
+        "kind": "checkpoint",
+        "activities": [
+          {"type": "recall", "text": "א"},
+          {"type": "listen_pick", "text": "ב"},
+          {"type": "produce", "text": "ג"},
+          {"type": "cloze", "text": "ד"},
+          {"type": "recall", "text": "ה"}
+        ]
+      }
+    ]
+  }
+}
