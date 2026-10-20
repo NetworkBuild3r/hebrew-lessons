@@ -19,6 +19,11 @@ const (
 
 	// DefaultTZ is the zone used when a learner has none, or an unknown one.
 	DefaultTZ = "America/Denver"
+
+	// DueRule is the due cutoff for Today and Review.
+	// "rollover" (the Anki rule) is the next 4:00 local.
+	// "now" is the clock instant. Flip this one line to choose.
+	DueRule = "rollover"
 )
 
 var (
@@ -79,9 +84,25 @@ func Key(now time.Time, loc *time.Location) string {
 }
 
 // Next is the next rollover strictly after now: RolloverHour:00 local
-// on the calendar day after Start. A card due before Next is due today.
+// on the calendar day after Start.
 func Next(now time.Time, loc *time.Location) time.Time {
 	start := Start(now, loc)
 	y, m, d := start.Date()
 	return time.Date(y, m, d+1, RolloverHour, 0, 0, 0, start.Location())
+}
+
+// DueCutoff is the latest due time that still counts in the study day of now.
+// Today’s due count and the Review queue both pass it to the same comparison
+// (due <= cutoff), so they list the same cards.
+//
+// "rollover" returns the next 4:00 local. Review then serves every card due
+// before that rollover, and a card due at 4:00 itself, which is the cutoff.
+// "now" returns the clock instant.
+func DueCutoff(now time.Time, loc *time.Location) time.Time {
+	switch DueRule {
+	case "now":
+		return now
+	default:
+		return Next(now, loc)
+	}
 }

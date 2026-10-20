@@ -9,9 +9,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
@@ -31,9 +35,13 @@ const maxStudyQueues = 128
 type server struct {
 	store    *db.Store
 	audioDir string
+	voices   audio.Voices
 	study    *session.Service
+	engine   *activity.Engine
 	deck     placementDeck
 	runs     placementRuns
+	recheck  PlacementEngine
+	bands    learner.BandSource
 
 	mu     sync.Mutex
 	queues map[string]*studyQueue
@@ -54,6 +62,10 @@ type studyQueue struct {
 	revealed bool
 	builtAt  time.Time
 	loc      *time.Location // zone the queue was built in; eviction uses it
+	// item is the checked activity the current card is asked through. It is nil for a
+	// flashcard and a drill. fb is set from the checked answer until Continue.
+	item *activity.Item
+	fb   *answerState
 }
 
 func newServer(store *db.Store) *server {
@@ -63,8 +75,23 @@ func newServer(store *db.Store) *server {
 	}
 	if store != nil {
 		s.study = session.New(store, store.Clock(), 1)
+		s.useActivityKey(nil)
 	}
 	return s
+}
+
+// useActivityKey builds the activity engine. key signs the item tokens; nil gives a
+// random key for the life of the process (activity.KeyFromSecret("")).
+func (s *server) useActivityKey(key []byte) {
+	if s == nil || s.store == nil {
+		return
+	}
+	clk := s.store.Clock()
+	opts := []activity.Option{}
+	if len(key) > 0 {
+		opts = append(opts, activity.WithKey(key))
+	}
+	s.engine = activity.New(s.store, clk, evidence.New(s.store, fsrs.New(s.store, clk), clk), opts...)
 }
 
 func (s *server) loadHome(r *http.Request) (HomeVM, string, string, error) {
@@ -72,7 +99,7 @@ func (s *server) loadHome(r *http.Request) (HomeVM, string, string, error) {
 	if !ok || s == nil || s.store == nil {
 		return HomeVM{}, views.AddressMasculine, "", nil
 	}
-	vm, situation, err := s.learnerHome(r.Context(), user.ID, user.Email)
+	vm, situation, err := s.learnerHome(r.Context(), user.ID, user.Email, user.TZ)
 	if err != nil {
 		return HomeVM{}, "", "", err
 	}
@@ -83,13 +110,13 @@ func (s *server) loadHome(r *http.Request) (HomeVM, string, string, error) {
 	return vm, gender, situation, nil
 }
 
-func (s *server) learnerHome(ctx context.Context, userID int64, name string) (HomeVM, string, error) {
+func (s *server) learnerHome(ctx context.Context, userID int64, name, tz string) (HomeVM, string, error) {
 	vm := HomeVM{Learner: LearnerVM{ID: userID, Name: name}}
 	if s == nil || s.store == nil || s.store.Clock() == nil {
 		return vm, "", fmt.Errorf("web: store clock is not configured")
 	}
 	now := s.store.Clock().Now()
-	n, err := s.dueCount(ctx, userID, now)
+	n, err := s.dueCount(ctx, userID, now, studyday.Load(tz))
 	if err != nil {
 		return HomeVM{}, "", err
 	}
@@ -114,35 +141,6 @@ func (s *server) learnerHome(ctx context.Context, userID int64, name string) (Ho
 	return vm, situation, nil
 }
 
-func (s *server) progressVM(ctx context.Context, userID int64) (ProgressVM, error) {
-	var vm ProgressVM
-	if s == nil || s.store == nil || s.store.Clock() == nil {
-		return vm, fmt.Errorf("web: store clock is not configured")
-	}
-	now := s.store.Clock().Now()
-	n, err := s.dueCount(ctx, userID, now)
-	if err != nil {
-		return ProgressVM{}, err
-	}
-	vm.DueCount = n
-	known, err := s.store.KnownLexemeIDs(ctx, userID)
-	if err != nil {
-		return ProgressVM{}, err
-	}
-	vm.KnownWords = len(known)
-	_, _, completed, total, err := s.unitProgress(ctx, userID)
-	if err != nil {
-		return ProgressVM{}, err
-	}
-	vm.UnitsCompleted = completed
-	vm.UnitsTotal = total
-	vm.Placement, err = s.placementVM(ctx, userID)
-	if err != nil {
-		return ProgressVM{}, err
-	}
-	return vm, nil
-}
-
 // unitProgress returns the next published shared unit this learner has not
 // finished, that unit's situation line, and the published shared counts.
 func (s *server) unitProgress(ctx context.Context, userID int64) (*UnitRefVM, string, int, int, error) {
@@ -158,11 +156,21 @@ func (s *server) unitProgress(ctx context.Context, userID int64) (*UnitRefVM, st
 	for _, unit := range done {
 		finished[unit.UnitID] = true
 	}
+	// A shared unit the learner reported is hidden for them: it is not next, and it does
+	// not count in their totals.
+	reported, err := s.store.HiddenUnitIDs(ctx, userID)
+	if err != nil {
+		return nil, "", 0, 0, err
+	}
+	hidden := map[int64]bool{}
+	for _, id := range reported {
+		hidden[id] = true
+	}
 	var next *UnitRefVM
 	situation := ""
 	completed, total := 0, 0
 	for _, unit := range units {
-		if unit.Scope != "shared" || unit.Status != "published" {
+		if unit.Scope != "shared" || unit.Status != "published" || hidden[unit.ID] {
 			continue
 		}
 		total++
@@ -254,24 +262,6 @@ func fillPlacement(home *views.Home, p *PlacementVM) {
 	}
 }
 
-func progressToView(lang, csrf, gender string, vm ProgressVM) views.ProgressPage {
-	ui := views.UIFor(lang, gender)
-	page := views.ProgressPage{
-		Page:      views.Page{UI: ui, Title: ui.DocTitle("progress"), CSRF: csrf, Current: "progress"},
-		KnownText: strconv.Itoa(vm.KnownWords),
-		UnitsText: strconv.Itoa(vm.UnitsCompleted) + "/" + strconv.Itoa(vm.UnitsTotal),
-		DueText:   strconv.Itoa(vm.DueCount),
-	}
-	if vm.Placement != nil {
-		page.Placement = placementState(vm.Placement)
-		page.PlacementWords = strconv.Itoa(vm.Placement.EstimatedKnownWords)
-		page.PlacementLevel = strconv.Itoa(vm.Placement.Level)
-		page.PlacementRated = strconv.Itoa(vm.Placement.CardsRated)
-		page.PlacementAt = db.FormatTime(vm.Placement.TakenAt)
-	}
-	return page
-}
-
 func placementState(p *PlacementVM) string {
 	if p == nil {
 		return ""
@@ -299,12 +289,12 @@ func (s *server) sessionKey(r *http.Request) (string, *auth.User, bool) {
 
 // queueLocked returns the study queue for this auth session.
 // A Done queue, or one built on another study day, is rebuilt.
+// loc is the signed-in learner's zone (auth.User.TZ). A nil loc is Denver.
 // The caller holds s.mu.
-func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*studyQueue, error) {
+func (s *server) queueLocked(ctx context.Context, key string, userID int64, loc *time.Location) (*studyQueue, error) {
 	now := s.now()
-	loc, err := s.learnerLoc(ctx, userID)
-	if err != nil {
-		return nil, err
+	if loc == nil {
+		loc = studyday.Load("")
 	}
 	if q := s.queues[key]; q != nil && q.userID == userID && !q.done && sameStudyDay(q.builtAt, now, loc) {
 		q.loc = loc
@@ -315,12 +305,19 @@ func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*st
 		s.rememberLocked(key, q, now)
 		return q, nil
 	}
-	built, err := s.study.BuildSession(ctx, userID)
+	built, err := s.study.BuildSessionAt(ctx, userID, studyday.DueCutoff(now, loc))
 	if err != nil {
 		return nil, err
 	}
+	// The session was built for userID. The caller is the signed-in learner, and
+	// session/doc.go asks the handler to check that before it serves the queue.
+	if built.UserID() != userID {
+		return nil, fmt.Errorf("web: session belongs to learner %d, not %d", built.UserID(), userID)
+	}
 	q := &studyQueue{userID: userID, sess: built, builtAt: now, loc: loc}
-	s.advance(q)
+	if err := s.advance(ctx, q); err != nil {
+		return nil, err
+	}
 	s.rememberLocked(key, q, now)
 	return q, nil
 }
@@ -375,39 +372,15 @@ func (s *server) now() time.Time {
 	return time.Now().UTC()
 }
 
-// learnerLoc is the signed-in learner's time zone.
-// An unknown stored name falls back inside studyday.Load.
-func (s *server) learnerLoc(ctx context.Context, userID int64) (*time.Location, error) {
-	if s == nil || s.store == nil || userID == 0 {
-		return studyday.Load(""), nil
-	}
-	user, err := s.store.UserByID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	return studyday.Load(user.TZ), nil
-}
-
-// dueCount is cards due before the next study-day rollover.
-// ListDueCards keeps due <= cutoff, so a card due at Next itself is dropped.
-// A card scheduled for 02:00 local is due today when this is called at 22:00.
-func (s *server) dueCount(ctx context.Context, userID int64, now time.Time) (int, error) {
-	loc, err := s.learnerLoc(ctx, userID)
+// dueCount is cards due at or before studyday.DueCutoff.
+// ListDueCards uses due <= cutoff, the same comparison the review mix uses,
+// so the count is the set Review will serve when nothing else fills the queue.
+func (s *server) dueCount(ctx context.Context, userID int64, now time.Time, loc *time.Location) (int, error) {
+	due, err := s.store.ListDueCards(ctx, userID, studyday.DueCutoff(now, loc))
 	if err != nil {
 		return 0, err
 	}
-	horizon := studyday.Next(now, loc)
-	due, err := s.store.ListDueCards(ctx, userID, horizon)
-	if err != nil {
-		return 0, err
-	}
-	n := 0
-	for _, card := range due {
-		if card.Due.Before(horizon) {
-			n++
-		}
-	}
-	return n, nil
+	return len(due), nil
 }
 
 // sameStudyDay reports whether built and now fall in the same study day
@@ -420,16 +393,22 @@ func sameStudyDay(built, now time.Time, loc *time.Location) bool {
 	return studyday.Key(built, loc) == studyday.Key(now, loc)
 }
 
-func (s *server) advance(q *studyQueue) {
+// advance serves the next card. For a word card it records the exposure of a new
+// word, and for a card the mix chose a checked activity for, it builds the item the
+// screen asks. When the lexicon cannot support the activity after all, the visit falls
+// back to a flashcard, which the session grades through the card's own skill.
+func (s *server) advance(ctx context.Context, q *studyQueue) error {
 	if q != nil {
 		q.revealed = false
+		q.item = nil
+		q.fb = nil
 	}
 	if q == nil || q.sess == nil {
 		if q != nil {
 			q.done = true
 			q.has = false
 		}
-		return
+		return nil
 	}
 	card, ok := q.sess.Next()
 	if !ok {
@@ -439,12 +418,13 @@ func (s *server) advance(q *studyQueue) {
 		q.total = total
 		q.index = total
 		q.retry = false
-		return
+		return nil
 	}
 	q.cur = card
 	q.has = true
 	q.done = false
 	q.index, q.total, q.retry = q.sess.Place()
+	return s.prepareItem(ctx, q)
 }
 
 func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error) {
@@ -465,6 +445,13 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 	ref := q.cur
 	vm.CardID = ref.CardID
 	vm.Kind = ref.Kind
+	if q.item != nil {
+		// A checked activity carries its own prompt. Nothing about the word goes on
+		// the card: the answer is not in the page until Check has run.
+		vm.Item = q.item
+		vm.Answer = q.fb
+		return vm, nil
+	}
 	if ref.Kind == session.KindLetter || ref.Kind == session.KindPattern {
 		vm.Pointed = ref.Key
 		vm.Unpointed = units.Plain(ref.Key)
@@ -487,23 +474,23 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 	vm.Unpointed = units.Plain(face.TextNFC)
 	vm.Translit = face.Translit
 	vm.Back = CardBackVM{Translit: face.Translit, Gender: face.Gender, Gloss: face.Gloss}
-	show, err := s.showUnpointed(ctx, ref.CardID, ref.Dir)
+	show, err := s.showUnpointed(ctx, ref.CardID, ref.Skill)
 	if err != nil {
 		return ReviewCardVM{}, err
 	}
 	vm.ShowUnpointed = show
-	if ref.Dir == fsrs.DirEnHe || ref.Kind == fsrs.DirEnHe {
-		vm.Kind = fsrs.DirEnHe
+	if ref.Skill == fsrs.SkillRecall || ref.Kind == fsrs.SkillRecall {
+		vm.Kind = fsrs.SkillRecall
 		return vm, nil
 	}
-	vm.Kind = fsrs.DirHeEn
+	vm.Kind = fsrs.SkillRead
 	return vm, nil
 }
 
-// showUnpointed uses fsrs.ShowUnpointed. An en_he card, a drill, and a card
+// showUnpointed uses fsrs.ShowUnpointed. A recall card, a drill, and a card
 // below 21 days of stability stay pointed.
-func (s *server) showUnpointed(ctx context.Context, cardID int64, dir string) (bool, error) {
-	if s == nil || s.store == nil || cardID <= 0 || dir != fsrs.DirHeEn {
+func (s *server) showUnpointed(ctx context.Context, cardID int64, skill string) (bool, error) {
+	if s == nil || s.store == nil || cardID <= 0 || skill != fsrs.SkillRead {
 		return false, nil
 	}
 	row, err := s.store.GetCard(ctx, cardID)
@@ -519,7 +506,7 @@ func (s *server) showUnpointed(ctx context.Context, cardID int64, dir string) (b
 		ratings[i] = fsrs.Rating(log.Rating)
 	}
 	return fsrs.ShowUnpointed(fsrs.Card{
-		Dir:       row.Dir,
+		Skill:     row.Skill,
 		Stability: row.Stability,
 		Ratings:   ratings,
 	}), nil
@@ -547,16 +534,20 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 		Answered:      vm.Answered,
 		Correct:       vm.Correct,
 	}
+	if vm.Item != nil {
+		card.Act = activityView(lang, csrf, vm)
+		return card
+	}
 	if vm.Revealed {
 		return card
 	}
 	// Anything that reveals the answer side is post-reveal only.
-	// he_en: the Hebrew is the prompt, so pointed text, translit, and audio stay.
+	// read: the Hebrew is the prompt, so pointed text, translit, and audio stay.
 	// The English gloss and the gender chip wait.
-	// en_he: the English gloss is the prompt. The Hebrew, its transliteration,
+	// recall: the English gloss is the prompt. The Hebrew, its transliteration,
 	// its audio, and the gender chip all identify the answer, so they wait.
 	card.Gender = ""
-	if vm.Kind == fsrs.DirEnHe || vm.Kind == "en_he" {
+	if vm.Kind == fsrs.SkillRecall || vm.Kind == "recall" {
 		card.Pointed = ""
 		card.Unpointed = ""
 		card.Translit = ""

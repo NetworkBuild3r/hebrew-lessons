@@ -12,9 +12,14 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 	"github.com/a-h/templ"
 )
@@ -49,8 +54,23 @@ func New(health http.Handler, sessions *auth.Service) http.Handler {
 type Options struct {
 	Store    *db.Store
 	AudioDir string
-	Deck     placementDeck
-	Runs     placementRuns
+	// Voices is the speaker table of a dialogue (INIT-015/SPEC-026): a line is
+	// played from the clip in its speaker's voice. A zero value means the default
+	// female voice and no male voice, so a speaker b line is silent.
+	Voices audio.Voices
+	Deck   placementDeck
+	Runs   placementRuns
+	// SessionSecret is HEBREW_SESSION_SECRET. The key of the activity item tokens is
+	// derived from it (activity.KeyFromSecret), so a token cannot be forged and one
+	// issued before a restart still verifies. Empty gives a random key per process.
+	SessionSecret string
+	// Placement is the placement engine, for the check-in on Today. Nil leaves the
+	// check-in off. See PlacementEngine.
+	Placement PlacementEngine
+	// study replaces the review session service. It is for tests in this package.
+	study *session.Service
+	// bands replaces where the learner model gets placement bands. For tests.
+	bands learner.BandSource
 }
 
 // NewOptions is New with the lesson store, the audio directory, and placement.
@@ -92,9 +112,22 @@ func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.
 		secure = sessions.CookieSecure()
 	}
 	srv := newServer(opts.Store)
+	if opts.Store != nil {
+		key, err := activity.KeyFromSecret(opts.SessionSecret)
+		if err != nil {
+			panic(err)
+		}
+		srv.useActivityKey(key)
+		if opts.study != nil {
+			srv.study = opts.study
+		}
+	}
 	srv.audioDir = opts.AudioDir
+	srv.voices = opts.Voices
 	srv.deck = opts.Deck
 	srv.runs = opts.Runs
+	srv.recheck = opts.Placement
+	srv.bands = opts.bands
 	mux := srv.routes(health, tokens, sessions != nil, secure)
 	if sessions != nil {
 		sessions.Register(mux)
@@ -122,7 +155,7 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 		panic(err)
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
-	play := player{store: s.store, audioDir: s.audioDir}
+	play := player{store: s.store, audioDir: s.audioDir, voices: s.voices}
 	mux.HandleFunc("GET /{$}", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
 		s.serveHome(w, r, secure, csrfValue(tokens, r))
 	}))
@@ -151,7 +184,10 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 	})
 	mux.HandleFunc("POST /_hx/review/reveal", gated(gate, secure, s.reveal))
 	mux.HandleFunc("POST /_hx/review/grade", gated(gate, secure, s.grade))
+	mux.HandleFunc("POST /_hx/review/answer", gated(gate, secure, s.answer))
+	mux.HandleFunc("POST /_hx/review/next", gated(gate, secure, s.next))
 	mountPlacement(mux, tokens, gate, secure, s.deck, s.runs)
+	s.mountShell(mux, tokens, gate, secure)
 	mux.HandleFunc("GET /signin", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := auth.CurrentUser(r.Context()); ok {
 			w.Header().Set("Cache-Control", "no-store")
@@ -172,7 +208,10 @@ func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", policy)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Referrer-Policy", "no-referrer")
+		// same-origin, not no-referrer: under no-referrer a browser sends "Origin: null" on a native
+		// form POST, and the CSRF check refuses that on purpose. same-origin sends the real Origin to
+		// this site and sends no referrer at all to any other site, so nothing leaks.
+		w.Header().Set("Referrer-Policy", "same-origin")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -233,6 +272,7 @@ func (s *server) serveHome(w http.ResponseWriter, r *http.Request, secure bool, 
 				})
 			}
 		}
+		s.fillToday(r, &page)
 		render(w, r, views.Today(page))
 		return
 	}
@@ -245,6 +285,7 @@ func (s *server) serveHome(w http.ResponseWriter, r *http.Request, secure bool, 
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+	s.fillToday(r, &page)
 	render(w, r, views.Today(page))
 }
 
@@ -279,6 +320,16 @@ func (s *server) applyCourseLesson(r *http.Request, home *views.Home) error {
 	home.LessonHref = lessonPath(lesson.UnitID, lesson.LessonIx)
 	home.UI.Situation = lesson.Situation
 	home.Words = chipsFor(lesson.NewWords)
+	// A lesson the learner has answered something in is one to continue, not to start.
+	run, started, err := s.store.InProgressLessonRun(r.Context(), user.ID, lesson.UnitID, lesson.LessonIx)
+	if err != nil {
+		return err
+	}
+	if started {
+		total := max(len(lesson.Activities), 1)
+		home.Today.Step = min(run.ActivityIx+1, total)
+		home.Today.Steps = total
+	}
 	return nil
 }
 
@@ -302,27 +353,6 @@ func (s *server) serveReview(w http.ResponseWriter, r *http.Request, secure bool
 	render(w, r, views.Review(page, card))
 }
 
-func (s *server) serveProgress(w http.ResponseWriter, r *http.Request, secure bool, csrf string) {
-	lang := chooseLang(w, r, secure)
-	user, ok := auth.CurrentUser(r.Context())
-	gender := views.AddressMasculine
-	var vm ProgressVM
-	if ok && s != nil && s.store != nil {
-		var err error
-		vm, err = s.progressVM(r.Context(), user.ID)
-		if err != nil {
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-		gender, err = s.addressGender(r.Context(), user.ID)
-		if err != nil {
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-	}
-	render(w, r, views.Progress(progressToView(lang, csrf, gender, vm)))
-}
-
 func (s *server) currentReview(r *http.Request, lang, csrf string) (views.ReviewCard, error) {
 	lede := views.UIFor(lang, views.AddressMasculine).ReviewLede
 	key, user, ok := s.sessionKey(r)
@@ -331,7 +361,7 @@ func (s *server) currentReview(r *http.Request, lang, csrf string) (views.Review
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	q, err := s.queueLocked(r.Context(), key, user.ID)
+	q, err := s.queueLocked(r.Context(), key, user.ID, studyday.Load(user.TZ))
 	if err != nil {
 		return views.ReviewCard{}, err
 	}
@@ -356,13 +386,14 @@ func (s *server) reveal(w http.ResponseWriter, r *http.Request) {
 	}
 	lang := reviewLang(r)
 	s.mu.Lock()
-	q, err := s.queueLocked(r.Context(), key, user.ID)
+	q, err := s.queueLocked(r.Context(), key, user.ID, studyday.Load(user.TZ))
 	if err != nil {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	if q == nil || q.sess == nil || !q.has || q.cur.CardID != cardID {
+	// A checked activity is answered through /_hx/review/answer, never self-graded.
+	if q == nil || q.sess == nil || !q.has || q.cur.CardID != cardID || q.item != nil {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -407,14 +438,28 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 	}
 	lang := reviewLang(r)
 	s.mu.Lock()
-	loc, locErr := s.learnerLoc(r.Context(), user.ID)
-	if locErr != nil {
+	loc := studyday.Load(user.TZ)
+	q := s.queues[key]
+	// A grade from the previous study day does not write a review. The queue
+	// is rebuilt and the learner sees the new card, the same way a fresh visit
+	// to /review would.
+	if q != nil && q.userID == user.ID && q.sess != nil && !q.done && q.has && q.cur.CardID == cardID && q.item == nil && !sameStudyDay(q.builtAt, s.now(), loc) {
+		rebuilt, err := s.queueLocked(r.Context(), key, user.ID, loc)
+		if err != nil {
+			s.mu.Unlock()
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		vm, err := s.cardVM(r.Context(), rebuilt)
 		s.mu.Unlock()
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		s.finishReview(w, r, lang, vm)
 		return
 	}
-	q := s.queues[key]
-	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID || !sameStudyDay(q.builtAt, s.now(), loc) {
+	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID || q.item != nil || !sameStudyDay(q.builtAt, s.now(), loc) {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -432,7 +477,11 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 	if rating >= int(fsrs.Good) {
 		q.correct++
 	}
-	s.advance(q)
+	if err := s.advance(r.Context(), q); err != nil {
+		s.mu.Unlock()
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 	vm, err := s.cardVM(r.Context(), q)
 	s.mu.Unlock()
 	if err != nil {

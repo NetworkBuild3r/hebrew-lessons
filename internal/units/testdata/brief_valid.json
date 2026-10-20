@@ -1,0 +1,446 @@
+{
+  "case": "A unit that passes every v2 rule and every brief rule. It is the base of each brief_bad_* fixture.",
+  "lookup": {
+    "lexemes": {
+      "בֹּקֶר": {
+        "id": 2,
+        "pos": "noun",
+        "gender": "m",
+        "bare": "בקר",
+        "gloss": "gloss 2"
+      },
+      "חָלָב": {
+        "id": 6,
+        "pos": "noun",
+        "gender": "m",
+        "bare": "חלב",
+        "gloss": "gloss 6"
+      },
+      "כּוֹס": {
+        "id": 9,
+        "pos": "noun",
+        "gender": "f",
+        "bare": "כוס",
+        "gloss": "cup"
+      },
+      "לֶחֶם": {
+        "id": 5,
+        "pos": "noun",
+        "gender": "m",
+        "bare": "לחם",
+        "gloss": "gloss 5"
+      },
+      "מַיִם": {
+        "id": 4,
+        "pos": "noun",
+        "gender": "m",
+        "bare": "מים",
+        "gloss": "gloss 4"
+      },
+      "נַעַל": {
+        "id": 50,
+        "pos": "noun",
+        "gender": "f",
+        "bare": "נעל",
+        "gloss": "sandal"
+      },
+      "סוּס": {
+        "id": 7,
+        "pos": "noun",
+        "gender": "m",
+        "bare": "סוס",
+        "gloss": "gloss 7"
+      },
+      "פָּרָה": {
+        "id": 8,
+        "pos": "noun",
+        "gender": "f",
+        "bare": "פרה",
+        "gloss": "gloss 8"
+      },
+      "שָׁלוֹם": {
+        "id": 1,
+        "pos": "noun",
+        "gender": "m",
+        "bare": "שׁלום",
+        "gloss": "gloss 1"
+      },
+      "תּוֹדָה": {
+        "id": 3,
+        "pos": "noun",
+        "gender": "f",
+        "bare": "תודה",
+        "gloss": "gloss 3"
+      }
+    },
+    "audio": [
+      "בֹּקֶר",
+      "חָלָב",
+      "כּוֹס",
+      "לֶחֶם",
+      "לֶחֶם חָלָב",
+      "מַיִם",
+      "סוּס",
+      "סוּס פָּרָה",
+      "פָּרָה",
+      "שָׁלוֹם",
+      "שָׁלוֹם בֹּקֶר",
+      "תּוֹדָה",
+      "תּוֹדָה מַיִם"
+    ]
+  },
+  "brief": {
+    "tier": "established",
+    "minKnownShare": 0.95,
+    "newWords": [
+      {
+        "lexemeId": 1,
+        "text": "שָׁלוֹם",
+        "minUses": 3
+      },
+      {
+        "lexemeId": 2,
+        "text": "בֹּקֶר",
+        "minUses": 3
+      },
+      {
+        "lexemeId": 3,
+        "text": "תּוֹדָה",
+        "minUses": 3
+      },
+      {
+        "lexemeId": 4,
+        "text": "מַיִם",
+        "minUses": 3
+      },
+      {
+        "lexemeId": 5,
+        "text": "לֶחֶם",
+        "minUses": 3
+      },
+      {
+        "lexemeId": 6,
+        "text": "חָלָב",
+        "minUses": 3
+      },
+      {
+        "lexemeId": 7,
+        "text": "סוּס",
+        "minUses": 3
+      },
+      {
+        "lexemeId": 8,
+        "text": "פָּרָה",
+        "minUses": 3
+      }
+    ],
+    "struggleWords": [
+      {
+        "lexemeId": 9,
+        "text": "כּוֹס",
+        "requiredCount": 3,
+        "skill": "listen"
+      }
+    ],
+    "briefLexemeIds": {
+      "1": true,
+      "2": true,
+      "3": true,
+      "4": true,
+      "5": true,
+      "6": true,
+      "7": true,
+      "8": true,
+      "9": true
+    }
+  },
+  "issues": [],
+  "unit": {
+    "title": "Cafe morning",
+    "situation": "Ordering at a cafe",
+    "concept": "Greetings and food",
+    "newWords": [
+      "שָׁלוֹם",
+      "בֹּקֶר",
+      "תּוֹדָה",
+      "מַיִם",
+      "לֶחֶם",
+      "חָלָב",
+      "סוּס",
+      "פָּרָה"
+    ],
+    "lessons": [
+      {
+        "kind": "lesson",
+        "activities": [
+          {
+            "type": "shadow",
+            "text": "שָׁלוֹם"
+          },
+          {
+            "type": "shadow",
+            "text": "בֹּקֶר"
+          },
+          {
+            "type": "recall",
+            "text": "שָׁלוֹם"
+          },
+          {
+            "type": "recall",
+            "text": "בֹּקֶר"
+          },
+          {
+            "type": "listen_pick",
+            "text": "שָׁלוֹם בֹּקֶר"
+          },
+          {
+            "type": "story",
+            "text": "שָׁלוֹם בֹּקֶר"
+          }
+        ]
+      },
+      {
+        "kind": "lesson",
+        "activities": [
+          {
+            "type": "shadow",
+            "text": "תּוֹדָה"
+          },
+          {
+            "type": "shadow",
+            "text": "מַיִם"
+          },
+          {
+            "type": "recall",
+            "text": "תּוֹדָה"
+          },
+          {
+            "type": "recall",
+            "text": "מַיִם"
+          },
+          {
+            "type": "listen_pick",
+            "text": "תּוֹדָה מַיִם"
+          },
+          {
+            "type": "story",
+            "text": "תּוֹדָה מַיִם"
+          }
+        ]
+      },
+      {
+        "kind": "lesson",
+        "activities": [
+          {
+            "type": "shadow",
+            "text": "לֶחֶם"
+          },
+          {
+            "type": "shadow",
+            "text": "חָלָב"
+          },
+          {
+            "type": "recall",
+            "text": "לֶחֶם"
+          },
+          {
+            "type": "recall",
+            "text": "חָלָב"
+          },
+          {
+            "type": "listen_pick",
+            "text": "לֶחֶם חָלָב"
+          },
+          {
+            "type": "story",
+            "text": "לֶחֶם חָלָב"
+          }
+        ]
+      },
+      {
+        "kind": "lesson",
+        "activities": [
+          {
+            "type": "shadow",
+            "text": "סוּס"
+          },
+          {
+            "type": "shadow",
+            "text": "פָּרָה"
+          },
+          {
+            "type": "recall",
+            "text": "סוּס"
+          },
+          {
+            "type": "recall",
+            "text": "פָּרָה"
+          },
+          {
+            "type": "listen_pick",
+            "text": "סוּס פָּרָה"
+          },
+          {
+            "type": "story",
+            "text": "סוּס פָּרָה"
+          }
+        ]
+      },
+      {
+        "kind": "checkpoint",
+        "activities": [
+          {
+            "type": "recall",
+            "text": "שָׁלוֹם"
+          },
+          {
+            "type": "recall",
+            "text": "שָׁלוֹם"
+          },
+          {
+            "type": "recall",
+            "text": "בֹּקֶר"
+          },
+          {
+            "type": "recall",
+            "text": "בֹּקֶר"
+          },
+          {
+            "type": "recall",
+            "text": "תּוֹדָה"
+          },
+          {
+            "type": "recall",
+            "text": "תּוֹדָה"
+          },
+          {
+            "type": "recall",
+            "text": "מַיִם"
+          },
+          {
+            "type": "recall",
+            "text": "מַיִם"
+          },
+          {
+            "type": "recall",
+            "text": "לֶחֶם"
+          },
+          {
+            "type": "recall",
+            "text": "לֶחֶם"
+          },
+          {
+            "type": "recall",
+            "text": "חָלָב"
+          },
+          {
+            "type": "recall",
+            "text": "חָלָב"
+          },
+          {
+            "type": "recall",
+            "text": "סוּס"
+          },
+          {
+            "type": "recall",
+            "text": "סוּס"
+          },
+          {
+            "type": "recall",
+            "text": "פָּרָה"
+          },
+          {
+            "type": "recall",
+            "text": "פָּרָה"
+          }
+        ]
+      },
+      {
+        "kind": "checkpoint",
+        "activities": [
+          {
+            "type": "recall",
+            "text": "שָׁלוֹם"
+          },
+          {
+            "type": "recall",
+            "text": "בֹּקֶר"
+          },
+          {
+            "type": "recall",
+            "text": "תּוֹדָה"
+          },
+          {
+            "type": "recall",
+            "text": "מַיִם"
+          },
+          {
+            "type": "recall",
+            "text": "לֶחֶם"
+          },
+          {
+            "type": "recall",
+            "text": "חָלָב"
+          },
+          {
+            "type": "recall",
+            "text": "סוּס"
+          },
+          {
+            "type": "recall",
+            "text": "פָּרָה"
+          }
+        ]
+      },
+      {
+        "kind": "checkpoint",
+        "activities": [
+          {
+            "type": "recall",
+            "text": "שָׁלוֹם"
+          },
+          {
+            "type": "recall",
+            "text": "בֹּקֶר"
+          },
+          {
+            "type": "recall",
+            "text": "תּוֹדָה"
+          },
+          {
+            "type": "recall",
+            "text": "מַיִם"
+          },
+          {
+            "type": "recall",
+            "text": "לֶחֶם"
+          },
+          {
+            "type": "recall",
+            "text": "חָלָב"
+          },
+          {
+            "type": "recall",
+            "text": "סוּס"
+          },
+          {
+            "type": "recall",
+            "text": "פָּרָה"
+          },
+          {
+            "type": "listen_pick",
+            "text": "כּוֹס"
+          },
+          {
+            "type": "listen_pick",
+            "text": "כּוֹס"
+          },
+          {
+            "type": "listen_pick",
+            "text": "כּוֹס"
+          }
+        ]
+      }
+    ]
+  }
+}

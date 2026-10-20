@@ -106,11 +106,35 @@ func annotateUnitSchema(s *jsonschema.Schema) error {
 		units.ActivityPattern,
 		units.ActivityStory,
 		units.ActivityShadow,
+		units.ActivityDialogue,
 	}
-	typ.Description = "One of the seven activity types."
-	text.Description = "Pointed Hebrew this screen speaks or asks about. Audio is looked up from this exact text."
-	if !slices.Contains(act.Required, "text") {
-		act.Required = append(act.Required, "text")
+	typ.Description = "One of the eight activity types."
+	text.Description = "Pointed Hebrew this screen speaks or asks about. Audio is looked up from this exact text. Every type has it except dialogue, which has lines instead."
+	// target stays optional. An empty value is omitted, and a unit that has
+	// no target validates and plays as it did before this field existed.
+	if target := prop(act, "target"); target != nil {
+		target.Description = "Optional. The exact token this graded activity tests, pointed Hebrew in NFC, one of the tokens of text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Omit it, or leave it empty, and the player tests the first new token. Used by recall, listen_pick, produce, and cloze."
+	}
+	// text is not marked required here, because a dialogue has lines instead. The
+	// validator enforces it for every other type (schema.required) and enforces
+	// the shape of a dialogue (unit.dialogue_lines, unit.dialogue_speakers).
+	if lines := prop(act, "lines"); lines != nil {
+		lines.Description = "Dialogue only. 2 to 8 lines, in the order they are spoken. Both speakers must speak. Use a dialogue, not a story, for any conversation."
+		if lines.Items != nil {
+			if sp := prop(lines.Items, "speaker"); sp != nil {
+				sp.Enum = []any{units.SpeakerA, units.SpeakerB}
+				sp.Description = "a is the female voice and b is the male voice, the same for the whole unit."
+			}
+			if tx := prop(lines.Items, "text"); tx != nil {
+				tx.Description = "Pointed Hebrew in NFC that this speaker says. Audio is the clip for this exact text in this speaker's voice."
+			}
+			if !slices.Contains(lines.Items.Required, "speaker") {
+				lines.Items.Required = append(lines.Items.Required, "speaker")
+			}
+			if !slices.Contains(lines.Items.Required, "text") {
+				lines.Items.Required = append(lines.Items.Required, "text")
+			}
+		}
 	}
 	return nil
 }
@@ -150,6 +174,11 @@ func activityCatalog() []activityInfo {
 	typ := func(description string) activityField {
 		return activityField{Name: "type", Required: true, Description: description}
 	}
+	target := activityField{
+		Name:        "target",
+		Required:    false,
+		Description: "Optional. The exact token this activity tests, pointed Hebrew in NFC, one of the tokens of text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Omit it and the player tests the first new token.",
+	}
 	return []activityInfo{
 		{
 			Type:    units.ActivityListenPick,
@@ -157,6 +186,7 @@ func activityCatalog() []activityInfo {
 			Fields: []activityField{
 				typ("listen_pick"),
 				text,
+				target,
 			},
 		},
 		{
@@ -165,6 +195,7 @@ func activityCatalog() []activityInfo {
 			Fields: []activityField{
 				typ("recall"),
 				text,
+				target,
 			},
 		},
 		{
@@ -173,14 +204,16 @@ func activityCatalog() []activityInfo {
 			Fields: []activityField{
 				typ("produce"),
 				text,
+				target,
 			},
 		},
 		{
 			Type:    units.ActivityCloze,
-			Purpose: "A pointed sentence with a gap. text is the whole sentence. The new word that appears in it is the gap. There is no blank marker yet.",
+			Purpose: "A pointed sentence with a gap. text is the whole sentence. target, when set, is the gap. Otherwise the first new word in the sentence is the gap. There is no blank marker yet.",
 			Fields: []activityField{
 				typ("cloze"),
 				text,
+				target,
 			},
 		},
 		{
@@ -205,6 +238,18 @@ func activityCatalog() []activityInfo {
 			Fields: []activityField{
 				typ("shadow"),
 				text,
+			},
+		},
+		{
+			Type:    units.ActivityDialogue,
+			Purpose: "A conversation between two people, one woman and one man. Use it for every conversation, and use story only for narration. lines is 2 to 8 entries of {speaker, text} in spoken order. Speaker a is the female voice and b is the male voice for the whole unit. Both must speak. Each line is judged like a story passage: pointed, mapped to the lexicon, covered by the brief, and under the length limit, and each needs a clip in its own speaker's voice (generate_audio with unitId makes them).",
+			Fields: []activityField{
+				typ("dialogue"),
+				{
+					Name:        "lines",
+					Required:    true,
+					Description: "2 to 8 objects {speaker: a or b, text: pointed Hebrew in NFC}. A dialogue has no text field.",
+				},
 			},
 		},
 	}

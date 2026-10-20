@@ -49,8 +49,8 @@ func TestFormatTimeTextCompareOrdersAcrossSecondAndSubsecond(t *testing.T) {
 			t.Fatalf("ParseTime(%s) = %s", text, back)
 		}
 		lexemeID := insertLexeme(t, s, "due-"+text)
-		mustExec(t, s, `INSERT INTO cards (user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, suspended)
-			VALUES (?, ?, 'he_en', 'new', ?, 0, 0, 0, 0, 0)`, userID, lexemeID, text)
+		mustExec(t, s, `INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, suspended)
+			VALUES (?, ?, 'read', 'new', ?, 0, 0, 0, 0, 0)`, userID, lexemeID, text)
 	}
 
 	for _, cutoff := range times {

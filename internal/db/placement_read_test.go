@@ -47,12 +47,12 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 	// The newest run's answers are the placement lists. Cards are the known set.
 	for _, text := range []string{alef, bet, zayin} {
 		rateAnswer(t, s, runID, text, ids[text], Good, when)
-		insertKnownCard(t, s, userID, ids[text], "he_en", Good, when)
+		insertKnownCard(t, s, userID, ids[text], "read", Good, when)
 	}
 	rateAnswer(t, s, runID, he, ids[he], Hard, when)
-	insertKnownCard(t, s, userID, ids[he], "he_en", Again, when)
-	// An en_he Easy is not known. Finishing a lesson does not mark its new word known.
-	insertKnownCard(t, s, userID, ids[dalet], "en_he", Easy, when)
+	insertKnownCard(t, s, userID, ids[he], "read", Again, when)
+	// A recall Easy is not known. Finishing a lesson does not mark its new word known.
+	insertKnownCard(t, s, userID, ids[dalet], "recall", Easy, when)
 	_ = ids[vav]
 	// The lesson word is not a placement answer and is not known yet.
 	lessonWord := ids[gimel]
@@ -120,7 +120,7 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 			t.Fatal("finishing the lesson marked its word known")
 		}
 	}
-	insertKnownCard(t, s, userID, lessonWord, "he_en", Good, when)
+	insertKnownCard(t, s, userID, lessonWord, "read", Good, when)
 	place, ok, err = s.LatestPlacement(ctx, userID)
 	if err != nil || !ok {
 		t.Fatal(err)
@@ -201,9 +201,9 @@ func TestLearnerKnownLexemes(t *testing.T) {
 	alef := insertLexeme(t, s, "אֶחָד")
 	bet := insertLexeme(t, s, "בַּיִת")
 	gimel := insertLexeme(t, s, "גֶּשֶׁם")
-	insertKnownCard(t, s, userID, bet, "he_en", Good, when)
-	insertKnownCard(t, s, userID, alef, "he_en", Again, when)
-	insertKnownCard(t, s, otherID, gimel, "he_en", Easy, when)
+	insertKnownCard(t, s, userID, bet, "read", Good, when)
+	insertKnownCard(t, s, userID, alef, "read", Again, when)
+	insertKnownCard(t, s, otherID, gimel, "read", Easy, when)
 	unitID := insertUnitDoc(t, s, 0, "draft", `{"title":"t"}`)
 	if err := s.execLesson(ctx, unitID, 0, gimel, "new", userID, &when); err != nil {
 		t.Fatal(err)
@@ -236,9 +236,9 @@ func TestKnownLexemeIDsUsesLatestHeEnRating(t *testing.T) {
 	userID := insertUser(t, s, "latest@example.com", "sub-latest", "learner")
 	rose := insertLexeme(t, s, "וֶרֶד")
 	olive := insertLexeme(t, s, "זַיִת")
-	roseCard := insertKnownCard(t, s, userID, rose, "he_en", Good, when.Add(-time.Hour))
+	roseCard := insertKnownCard(t, s, userID, rose, "read", Good, when.Add(-time.Hour))
 	insertReview(t, s, roseCard, Again, when)
-	oliveCard := insertKnownCard(t, s, userID, olive, "he_en", Again, when.Add(-time.Hour))
+	oliveCard := insertKnownCard(t, s, userID, olive, "read", Again, when.Add(-time.Hour))
 	insertReview(t, s, oliveCard, Easy, when)
 
 	got, err := s.KnownLexemeIDs(ctx, userID)
@@ -307,8 +307,8 @@ func TestLessonFinishDoesNotMarkKnown(t *testing.T) {
 	if err != nil || len(texts) != 0 {
 		t.Fatalf("texts after the lesson = %v %v", texts, err)
 	}
-	insertKnownCard(t, s, userID, word, "he_en", Good, when)
-	insertKnownCard(t, s, userID, other, "en_he", Good, when)
+	insertKnownCard(t, s, userID, word, "read", Good, when)
+	insertKnownCard(t, s, userID, other, "recall", Good, when)
 	ids, err = s.KnownLexemeIDs(ctx, userID)
 	if err != nil {
 		t.Fatal(err)
@@ -333,12 +333,12 @@ func rateAnswer(t *testing.T, s *Store, runID int64, itemID string, lexemeID int
 	}
 }
 
-func insertKnownCard(t *testing.T, s *Store, userID, lexemeID int64, dir string, rating int, at time.Time) int64 {
+func insertKnownCard(t *testing.T, s *Store, userID, lexemeID int64, skill string, rating int, at time.Time) int64 {
 	t.Helper()
 	cardID, err := s.InsertCard(context.Background(), Card{
 		UserID:   userID,
 		LexemeID: lexemeID,
-		Dir:      dir,
+		Skill:    skill,
 		State:    "new",
 		Due:      at,
 	})

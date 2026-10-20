@@ -138,16 +138,26 @@ func TestPutUnitPublishFlag(t *testing.T) {
 		Units:     mem,
 	}), testToken)
 
+	// SPEC-020: a learner unit with no briefId is saved as a draft and not published.
+	// The v2 rules pass here, so it is the missing brief that holds it back.
 	learner := call[putOutput](t, session, "put_unit", putInput{Scope: "learner:7", Position: 0, Doc: helloDoc(), Publish: true})
-	if !learner.Published || learner.Unchanged || mem.Status(learner.UnitID) != "published" {
-		t.Fatalf("learner publish %+v status %s", learner, mem.Status(learner.UnitID))
+	if learner.Published || learner.Unchanged || mem.Status(learner.UnitID) != "draft" {
+		t.Fatalf("learner without briefId %+v status %s", learner, mem.Status(learner.UnitID))
+	}
+	if !strings.Contains(learner.PublishReason, "briefId") {
+		t.Fatalf("reason %q", learner.PublishReason)
 	}
 	if !hasRule(learner.Issues, units.RuleBudgetLessonFew) || hasBlock(learner.Issues) {
 		t.Fatalf("learner warnings %+v", learner.Issues)
 	}
 	again := call[putOutput](t, session, "put_unit", putInput{Scope: "learner:7", UnitID: &learner.UnitID, Position: 0, Doc: helloDoc(), Publish: true})
-	if !again.Published || !again.Unchanged || again.Revision != learner.Revision || mem.Status(learner.UnitID) != "published" {
-		t.Fatalf("learner republish %+v status %s", again, mem.Status(learner.UnitID))
+	if again.Published || !again.Unchanged || again.Revision != learner.Revision || mem.Status(learner.UnitID) != "draft" {
+		t.Fatalf("learner re-save %+v status %s", again, mem.Status(learner.UnitID))
+	}
+	// A store that cannot auto-publish keeps the draft even when a briefId is sent.
+	noStore := call[putOutput](t, session, "put_unit", putInput{Scope: "learner:7", UnitID: &learner.UnitID, Position: 0, Doc: helloDoc(), Publish: true, BriefID: "0123456789012345678901"})
+	if noStore.Published || mem.Status(learner.UnitID) != "draft" || !strings.Contains(noStore.PublishReason, "not available") {
+		t.Fatalf("store without LearnerUnits %+v status %s", noStore, mem.Status(learner.UnitID))
 	}
 
 	shared := call[putOutput](t, session, "put_unit", putInput{Scope: ScopeShared, Position: 1, Doc: helloDoc(), Publish: true})

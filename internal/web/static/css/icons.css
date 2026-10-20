@@ -1,0 +1,37 @@
+/* Icons, brand mark, and illustrations (INIT-015/SPEC-010).
+   Colour comes from currentColor and var(--role) only; tokens.css owns values.
+   Loaded after base.css and components.css. */
+
+/* 20px icon for dense rows. .icon (base.css) is the 24px default. */
+.icon-sm {
+  inline-size: 20px;
+  block-size: 20px;
+}
+
+/* Sprite symbols carry their own stroke; the icon colour is the text colour. */
+.icon,
+.icon-sm {
+  color: inherit;
+}
+
+/* The lamp glyph inside the dark .brand__mark tile. */
+.brand__mark .brand__glyph {
+  inline-size: 72%;
+  block-size: 72%;
+  display: block;
+}
+
+/* Themed illustration: a calm, centred, decorative picture. */
+.illo {
+  display: block;
+  inline-size: 100%;
+  max-inline-size: 320px;
+  block-size: auto;
+  aspect-ratio: 3 / 2;
+  margin-inline: auto;
+  color: var(--lamp-ink);
+  pointer-events: none;
+}
+.illo--sm {
+  max-inline-size: 200px;
+}

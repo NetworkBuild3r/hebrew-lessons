@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
@@ -29,7 +30,8 @@ const nearMissDistance = 2
 
 // Store implements the authoring interfaces on *db.Store.
 type Store struct {
-	db *db.Store
+	db     *db.Store
+	voices audio.Voices
 }
 
 // New wraps store. A nil store fails on the first call.
@@ -37,12 +39,21 @@ func New(store *db.Store) *Store {
 	return &Store{db: store}
 }
 
+// WithVoices sets the speaker table that validate_unit uses to find a dialogue
+// line's clip in its speaker's voice (INIT-015/SPEC-026). It returns s. Without
+// it a speaker b line has no clip, and a unit with a dialogue fails audio.missing.
+func (s *Store) WithVoices(v audio.Voices) *Store {
+	s.voices = v
+	return s
+}
+
 var (
-	_ mcp.CourseReader  = (*Store)(nil)
-	_ mcp.LexiconReader = (*Store)(nil)
-	_ mcp.UnitWriter    = (*Store)(nil)
-	_ mcp.LexiconWriter = (*Store)(nil)
-	_ units.Lookup      = (*Store)(nil)
+	_ mcp.CourseReader    = (*Store)(nil)
+	_ mcp.LexiconReader   = (*Store)(nil)
+	_ mcp.UnitWriter      = (*Store)(nil)
+	_ mcp.LexiconWriter   = (*Store)(nil)
+	_ units.Lookup        = (*Store)(nil)
+	_ units.SpeakerLookup = (*Store)(nil)
 )
 
 func (s *Store) ready(ctx context.Context) error {

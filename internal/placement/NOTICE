@@ -24,9 +24,23 @@ distributed under CC BY-SA 4.0 (ShareAlike).
 The project states "CC-by-sa-4.0 for content" at the commit above.
 Names, function words, particles, interjections, and junk tokens were
 dropped. The Hebrew pointing and the English glosses were added for this
-fixture. Every item is marked verified false until a person checks it.
+fixture.
 
 Band 0 words are copied, pointing included, from the tutor's existing
-lesson worksheets. They are not covered by the FrequencyWords licence.
+lesson worksheets and class lexicon. They are not covered by the
+FrequencyWords licence.
 
-Transliteration and gender were added for this fixture and are unverified.
+Verification. Every item is marked verified true. The first 100 items were
+checked by hand. Each of the 100 items added later (INIT-015/SPEC-006, 20 in
+each band) was checked against Pealim, https://www.pealim.com, for its
+pointing, part of speech, gender, and English meaning. gen/curated.go records
+the Pealim dictionary path that confirmed each one. Pealim was read as a
+reference. Its text and audio are not copied into this directory. A word
+Pealim could not confirm was left out.
+
+Transliteration was written for this fixture. Gender is Pealim's for the
+items added in SPEC-006.
+
+letters.json (Part 0 syllable items) and audio-manifest.json (the text of
+every clip the deck needs) are written for this project and carry no
+third-party content.

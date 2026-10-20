@@ -24,6 +24,13 @@ Please confirm in `home_k3`:
 
 Record the answer here or in SPEC-025.
 
+## Answer (checked 2026-10-19, read only)
+
+1. Both hosts track `ghcr.io/networkbuild3r/hebrew`. Two Argo CD Image Updater objects (`hebrew` and `hebrew-next` in `home_k3` `apps/argocd-image-updater/manifests/`) each follow the newest `sha-<40 hex>` tag. Production (`hebrew.ibhacked.us`, PVC `hebrew-v2-data`) runs the v3-line image, not `hebrew-lessons`.
+2. `hebrew-next.ibhacked.us` already follows v3. That also means a push to `v3` rolls production, so staging is not a separate stage. `docs/ops/v3-cutover.md` pauses the production updater before the push.
+
+The cutover plan is `docs/ops/v3-cutover.md`.
+
 ## Status of this assumption
 
 - This is assumption `aud-1` in INIT-015 SPEC-002.

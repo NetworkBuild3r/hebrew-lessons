@@ -13,7 +13,10 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/migrations"
 )
 
-func TestMigration006SetsLearnerTZ(t *testing.T) {
+// TestMigration013SetsLearnerTZ upgrades a database that already has v3's
+// schema (migrations 001 through 012) and a users row. The row gains
+// tz = America/Denver, and the file stays intact.
+func TestMigration013SetsLearnerTZ(t *testing.T) {
 	ctx := context.Background()
 	conn := openRaw(t)
 	entries, err := fs.ReadDir(migrations.FS, ".")
@@ -22,14 +25,14 @@ func TestMigration006SetsLearnerTZ(t *testing.T) {
 	}
 	var names []string
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") || strings.HasPrefix(entry.Name(), "006") {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") || entry.Name() == "013_learner_tz.sql" {
 			continue
 		}
 		names = append(names, entry.Name())
 	}
 	sort.Strings(names)
-	if len(names) != 6 || names[0] != "001_init.sql" || names[len(names)-1] != "007_oauth_client_issued.sql" {
-		t.Fatalf("migrations besides 006 = %v", names)
+	if len(names) != 12 || names[0] != "001_init.sql" || names[len(names)-1] != "012_attempt_list_index.sql" {
+		t.Fatalf("v3 migrations = %v", names)
 	}
 	var versions []int
 	for _, name := range names {
@@ -66,6 +69,13 @@ func TestMigration006SetsLearnerTZ(t *testing.T) {
 		VALUES ('old@example.com', 'sub-old', 'learner', ?)`, FormatTime(created)); err != nil {
 		t.Fatal(err)
 	}
+	var tzCols int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('users') WHERE name = 'tz'`).Scan(&tzCols); err != nil {
+		t.Fatal(err)
+	}
+	if tzCols != 0 {
+		t.Fatal("users.tz exists before migration 013")
+	}
 
 	when := time.Date(2026, 10, 18, 16, 0, 0, 0, time.UTC)
 	if err := Migrate(ctx, conn, fixedClock{when}); err != nil {
@@ -79,11 +89,29 @@ func TestMigration006SetsLearnerTZ(t *testing.T) {
 		t.Fatalf("existing learner tz = %q, want %s", tz, studyday.DefaultTZ)
 	}
 	var applied string
-	if err := conn.QueryRowContext(ctx, `SELECT applied_at FROM schema_migrations WHERE version = 6`).Scan(&applied); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT applied_at FROM schema_migrations WHERE version = 13`).Scan(&applied); err != nil {
 		t.Fatal(err)
 	}
 	if applied != FormatTime(when) {
-		t.Fatalf("version 6 applied_at = %s", applied)
+		t.Fatalf("version 13 applied_at = %s", applied)
+	}
+	var integrity string
+	if err := conn.QueryRowContext(ctx, `PRAGMA integrity_check`).Scan(&integrity); err != nil {
+		t.Fatal(err)
+	}
+	if integrity != "ok" {
+		t.Fatalf("integrity_check = %q", integrity)
+	}
+	fk, err := conn.QueryContext(ctx, `PRAGMA foreign_key_check`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fk.Close()
+	if fk.Next() {
+		t.Fatal("foreign_key_check reported a row")
+	}
+	if err := fk.Err(); err != nil {
+		t.Fatal(err)
 	}
 
 	s := &Store{conn: conn, clock: fixedClock{when}}

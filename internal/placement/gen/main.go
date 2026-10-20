@@ -1,10 +1,15 @@
-// Command gen writes internal/placement/items.json.
+// Command gen writes internal/placement/items.json and
+// internal/placement/audio-manifest.json.
 //
 //	go run ./internal/placement/gen
 //
 // Run it from the module root. It downloads Hermit Dave's Hebrew frequency
 // list from the commit pinned by freqURL and checks each frequency item's
 // rank. The 50k list is not written into the repository.
+//
+// The manifest lists the text of every clip the deck needs: one per word in
+// items.json and one per syllable in letters.json. Audio generation reads it
+// to learn exactly what to synthesize.
 package main
 
 import (
@@ -15,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -22,6 +28,12 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 )
+
+// minBandWords is the fewest words a band may hold. The target is 40.
+const minBandWords = 36
+
+// pealimPath is the shape of a Pealim dictionary path.
+var pealimPath = regexp.MustCompile(`^/dict/[0-9]+-[a-z0-9-]+/$`)
 
 const (
 	// freqCommit is the FrequencyWords commit that states CC-BY-SA 4.0
@@ -50,6 +62,11 @@ type rawItem struct {
 	Rank     int
 	List     string
 	Verified bool
+	// Pealim is the dictionary path (for example /dict/4939-shulchan/) of
+	// the entry that confirmed the pointing, part of speech, and gloss.
+	// Rows added for SPEC-006 carry it. The earlier rows were checked by
+	// hand and leave it empty.
+	Pealim string
 }
 
 type outItem struct {
@@ -124,6 +141,12 @@ func run() error {
 		if item.Band == nil {
 			return fmt.Errorf("%s: band is required", item.ID)
 		}
+		if item.Pealim != "" && !pealimPath.MatchString(item.Pealim) {
+			return fmt.Errorf("%s: pealim path %q", item.ID, item.Pealim)
+		}
+		if item.Pealim != "" && !item.Verified {
+			return fmt.Errorf("%s: a row with a Pealim path must be verified", item.ID)
+		}
 
 		switch item.Source {
 		case "tutor":
@@ -169,6 +192,9 @@ func run() error {
 		if counts[band] < placement.BandMax {
 			return fmt.Errorf("band %d has %d items, want at least %d", band, counts[band], placement.BandMax)
 		}
+		if counts[band] < minBandWords {
+			return fmt.Errorf("band %d has %d items, want at least %d", band, counts[band], minBandWords)
+		}
 	}
 	if len(out) < 5*placement.BandMax {
 		return fmt.Errorf("items = %d, want at least %d", len(out), 5*placement.BandMax)
@@ -186,6 +212,24 @@ func run() error {
 		return err
 	}
 	fmt.Printf("wrote %s (%d items)\n", path, len(out))
+
+	letters, err := os.ReadFile(filepath.Join(dir, "letters.json"))
+	if err != nil {
+		return err
+	}
+	manifest, err := placement.BuildManifest(buf.Bytes(), letters)
+	if err != nil {
+		return err
+	}
+	body, err := manifest.Marshal()
+	if err != nil {
+		return err
+	}
+	mpath := filepath.Join(dir, "audio-manifest.json")
+	if err := os.WriteFile(mpath, body, 0o644); err != nil {
+		return err
+	}
+	fmt.Printf("wrote %s (%d clips)\n", mpath, manifest.Count)
 	return nil
 }
 

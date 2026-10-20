@@ -1,6 +1,5 @@
 -- Learner time zone for the study day.
--- Applied after 005_lesson_progress.sql. Version 7 may already be recorded;
--- this file does not depend on it.
+-- Applied after 012_attempt_list_index.sql.
 --
 -- The study day rolls over at 04:00 in this IANA zone.
 -- Existing rows and new inserts use America/Denver until a setter changes the column.

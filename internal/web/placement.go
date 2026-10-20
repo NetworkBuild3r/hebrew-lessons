@@ -2,43 +2,52 @@ package web
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
-	"golang.org/x/text/unicode/norm"
 )
 
-// placementDeck is the slice of placement.Service the writes call.
-// The service does not read the session. The handler does.
+// The placement screens (INIT-015/SPEC-012). The v3 engine deals the test; this file serves it. The
+// engine takes the learner's id from the session on every call, and treats a run that is not theirs as
+// not found, so this file never looks at whose run it is.
+//
+// D1: nothing on the way through says whether an answer was right. The reply to an answer is the
+// "picked" screen, built from the item that was open and the option that was tapped, and nothing else.
+// The engine's Step carries no correctness, and this file reads none.
+
+// placementDeck is the part of placement.Engine the screens call.
 type placementDeck interface {
 	Start(ctx context.Context, userID int64) (int64, error)
-	Next(ctx context.Context, runID int64) (placement.NextResult, error)
-	ContinueSitting(ctx context.Context, userID int64) error
-	Rate(ctx context.Context, runID int64, itemID string, rating int) error
-	Finish(ctx context.Context, runID int64) (placement.Result, error)
+	Next(ctx context.Context, userID, runID int64) (placement.Step, error)
+	Answer(ctx context.Context, userID, runID int64, itemID string, in placement.AnswerIn) (placement.Step, error)
+	StartTyping(ctx context.Context, userID, runID int64) (placement.Step, error)
+	Replace(ctx context.Context, userID, runID int64, itemID string) (placement.Step, error)
+	Finish(ctx context.Context, userID, runID int64) (placement.RunResult, error)
+	Result(ctx context.Context, userID, runID int64) (placement.RunResult, error)
+	Latest(ctx context.Context, userID int64) (placement.RunResult, bool, error)
 }
 
-// placementRuns is the store read for ownership and the Today card.
-// placement.Service does not return the run's owner. The handler loads
-// the row and requires UserID to be the session user.
+// placementRuns is the store read for the Today card, the resume screen, and the progress count.
 type placementRuns interface {
-	GetPlacementRun(ctx context.Context, id int64) (db.PlacementRun, error)
 	OpenPlacementRun(ctx context.Context, userID int64) (db.PlacementRun, bool, error)
 	LatestPlacement(ctx context.Context, userID int64) (db.Placement, bool, error)
-	ListPlacementAnswers(ctx context.Context, runID int64) ([]db.PlacementAnswer, error)
+	ListPlacementItems(ctx context.Context, runID int64) ([]db.PlacementItem, error)
 }
 
 var (
-	_ placementDeck = (*placement.Service)(nil)
+	_ placementDeck = (*placement.Engine)(nil)
 	_ placementRuns = (*db.Store)(nil)
 )
+
+// maxTyped is the longest typed answer the form accepts, in letters. The longest deck word is far shorter.
+const maxTyped = 64
 
 type placementHTTP struct {
 	deck   placementDeck
@@ -47,18 +56,18 @@ type placementHTTP struct {
 	secure bool
 }
 
+// mountPlacement registers the placement routes. Reads are page URLs. Writes are POSTs under /_hx/ and
+// are CSRF checked by the middleware in front of the mux (ADR-0016).
 func mountPlacement(mux *http.ServeMux, tokens CSRFToken, gate, secure bool, deck placementDeck, runs placementRuns) {
 	h := &placementHTTP{deck: deck, runs: runs, tokens: tokens, secure: secure}
 	mux.HandleFunc("GET /placement", gated(gate, secure, h.page))
-	// Writes only. A GET under /_hx/ is not registered (ADR-0016).
+	mux.HandleFunc("GET /placement/review", gated(gate, secure, h.review))
 	mux.HandleFunc("POST /_hx/placement/start", h.start)
-	mux.HandleFunc("POST /_hx/placement/flip", h.flip)
-	mux.HandleFunc("POST /_hx/placement/rate", h.rate)
-	mux.HandleFunc("POST /_hx/placement/continue", h.cont)
+	mux.HandleFunc("POST /_hx/placement/answer", h.answer)
+	mux.HandleFunc("POST /_hx/placement/next", h.next)
+	mux.HandleFunc("POST /_hx/placement/typing", h.typing)
 	mux.HandleFunc("POST /_hx/placement/finish", h.finish)
-	// No service method sets the start unit back to 1, or skips the deck.
-	mux.HandleFunc("POST /_hx/placement/skip", h.unavailable)
-	mux.HandleFunc("POST /_hx/placement/start-over", h.unavailable)
+	mux.HandleFunc("POST /_hx/placement/replace", h.replace)
 }
 
 // todayPlacement is the Today card.
@@ -90,14 +99,12 @@ func todayPlacement(r *http.Request, runs placementRuns) (*views.PlacementVM, er
 	}, nil
 }
 
+// page is GET /placement. It reads and deals nothing. A learner with answers in an open run lands on the
+// resume screen, one with a finished run on the results, and anyone else on the intro.
 func (h *placementHTTP) page(w http.ResponseWriter, r *http.Request) {
-	if h.runs == nil {
-		render(w, r, views.Placement(h.view(w, r, views.PlaceModeIntro, 0, views.PlacementWord{})))
-		return
-	}
 	user, ok := auth.CurrentUser(r.Context())
-	if !ok || user == nil {
-		render(w, r, views.Placement(h.view(w, r, views.PlaceModeIntro, 0, views.PlacementWord{})))
+	if h.deck == nil || h.runs == nil || !ok || user == nil {
+		h.writePage(w, r, h.base(w, r, views.PlaceIntro, 0))
 		return
 	}
 	open, found, err := h.runs.OpenPlacementRun(r.Context(), user.ID)
@@ -106,383 +113,333 @@ func (h *placementHTTP) page(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if found {
-		v, err := h.enrich(r.Context(), h.view(w, r, views.PlaceModeResume, open.ID, views.PlacementWord{}))
+		items, err := h.runs.ListPlacementItems(r.Context(), open.ID)
 		if err != nil {
 			fail(w, http.StatusInternalServerError)
 			return
 		}
-		render(w, r, views.Placement(v))
+		if placementAnswered(items) > 0 {
+			h.writePage(w, r, h.base(w, r, views.PlaceResume, open.ID))
+			return
+		}
+		h.writePage(w, r, h.base(w, r, views.PlaceIntro, 0))
 		return
 	}
-	latest, found, err := h.runs.LatestPlacement(r.Context(), user.ID)
+	res, found, err := h.deck.Latest(r.Context(), user.ID)
 	if err != nil {
 		fail(w, http.StatusInternalServerError)
 		return
 	}
-	if found && latest.Finished {
-		v := applyResult(h.view(w, r, views.PlaceModeResult, 0, views.PlacementWord{}), latest.Level, bandAdded(latest.BandScores))
-		render(w, r, views.Placement(v))
+	if found {
+		h.writePage(w, r, h.resultsView(w, r, res))
 		return
 	}
-	render(w, r, views.Placement(h.view(w, r, views.PlaceModeIntro, 0, views.PlacementWord{})))
+	h.writePage(w, r, h.base(w, r, views.PlaceIntro, 0))
 }
 
+// review is GET /placement/review: every miss of one finished run, with its right answer. The run is the
+// one in ?run=, or the learner's latest. The engine refuses another learner's run as not found.
+func (h *placementHTTP) review(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.CurrentUser(r.Context())
+	if h.deck == nil || !ok || user == nil {
+		http.Redirect(w, r, views.NewPage(chooseLang(w, r, h.secure), "", "placement").Href("/placement"), http.StatusSeeOther)
+		return
+	}
+	var res placement.RunResult
+	if raw := r.URL.Query().Get("run"); raw != "" {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || id <= 0 {
+			fail(w, http.StatusBadRequest)
+			return
+		}
+		if res, err = h.deck.Result(r.Context(), user.ID, id); err != nil {
+			if errors.Is(err, placement.ErrNotReady) {
+				http.Redirect(w, r, "/placement", http.StatusSeeOther)
+				return
+			}
+			failPlacement(w, err)
+			return
+		}
+	} else {
+		var found bool
+		var err error
+		if res, found, err = h.deck.Latest(r.Context(), user.ID); err != nil {
+			fail(w, http.StatusInternalServerError)
+			return
+		} else if !found {
+			http.Redirect(w, r, "/placement", http.StatusSeeOther)
+			return
+		}
+	}
+	v := h.base(w, r, views.PlaceReview, res.RunID)
+	v.Review = placementReview(res)
+	v.Page.Title = "Review · " + views.AppName
+	h.writePage(w, r, v)
+}
+
+// start is POST /_hx/placement/start. It opens the learner's run, or returns the one they left, and
+// shows its next screen.
 func (h *placementHTTP) start(w http.ResponseWriter, r *http.Request) {
 	user, ok := h.user(w, r)
-	if !ok {
+	if !ok || !h.ready(w) || !readForm(w, r) {
 		return
-	}
-	if !h.ready(w) || !readForm(w, r) {
-		return
-	}
-	if r.PostForm.Get("run_id") != "" {
-		id, ok := h.postedRun(w, r)
-		if !ok {
-			return
-		}
-		run, ok := h.owns(w, r, user.ID, id)
-		if !ok {
-			return
-		}
-		if !run.FinishedAt.IsZero() {
-			fail(w, http.StatusConflict)
-			return
-		}
 	}
 	runID, err := h.deck.Start(r.Context(), user.ID)
 	if err != nil {
 		failPlacement(w, err)
 		return
 	}
-	if _, ok := h.owns(w, r, user.ID, runID); !ok {
-		return
-	}
-	h.step(w, r, runID, views.PlacementWord{}, false, "region")
-}
-
-func (h *placementHTTP) flip(w http.ResponseWriter, r *http.Request) {
-	user, ok := h.user(w, r)
-	if !ok {
-		return
-	}
-	if !h.ready(w) || !readForm(w, r) {
-		return
-	}
-	runID, ok := h.postedRun(w, r)
-	if !ok {
-		return
-	}
-	if _, ok := h.owns(w, r, user.ID, runID); !ok {
-		return
-	}
-	res, err := h.deck.Next(r.Context(), runID)
+	step, err := h.deck.Next(r.Context(), user.ID, runID)
 	if err != nil {
 		failPlacement(w, err)
 		return
 	}
-	if res.Card == nil {
-		h.stepResult(w, r, runID, res, views.PlacementWord{}, false, "card")
-		return
-	}
-	itemID := r.PostForm.Get("item_id")
-	if itemID != "" && itemID != res.Card.ID {
-		fail(w, http.StatusConflict)
-		return
-	}
-	v, err := h.enrich(r.Context(), h.view(w, r, views.PlaceModeBack, runID, wordFrom(*res.Card)))
-	if err != nil {
-		fail(w, http.StatusInternalServerError)
-		return
-	}
-	h.write(w, r, v, "card")
+	h.renderStep(w, r, user.ID, runID, step, stepOpts{})
 }
 
-func (h *placementHTTP) rate(w http.ResponseWriter, r *http.Request) {
+// next is POST /_hx/placement/next: the screen after the picked one, after a break, and on resume. It
+// deals nothing the learner has not been dealt: the engine returns the open item again.
+func (h *placementHTTP) next(w http.ResponseWriter, r *http.Request) {
 	user, ok := h.user(w, r)
+	if !ok || !h.ready(w) || !readForm(w, r) {
+		return
+	}
+	runID, ok := postedRun(w, r)
 	if !ok {
 		return
 	}
-	if !h.ready(w) || !readForm(w, r) {
+	step, err := h.deck.Next(r.Context(), user.ID, runID)
+	if err != nil {
+		failPlacement(w, err)
 		return
 	}
-	runID, ok := h.postedRun(w, r)
+	h.renderStep(w, r, user.ID, runID, step, stepOpts{cont: r.PostForm.Get("cont") == "1"})
+}
+
+// answer is POST /_hx/placement/answer. The reply to a pick is the picked screen: the chosen option is
+// Selected, the others dim, and it says the answer is saved. It does not depend on the outcome. A post
+// for an item that is not the open one (a double tap, an old tab) shows where the run is instead.
+func (h *placementHTTP) answer(w http.ResponseWriter, r *http.Request) {
+	user, ok := h.user(w, r)
+	if !ok || !h.ready(w) || !readForm(w, r) {
+		return
+	}
+	runID, ok := postedRun(w, r)
 	if !ok {
 		return
 	}
-	if _, ok := h.owns(w, r, user.ID, runID); !ok {
-		return
-	}
-	itemID := r.PostForm.Get("item_id")
-	rating, err := strconv.Atoi(r.PostForm.Get("rating"))
-	if itemID == "" || err != nil || rating < placement.DontKnow || rating > placement.Easy {
+	token := r.PostForm.Get("item")
+	typed := strings.TrimSpace(r.PostForm.Get("typed"))
+	if utf8.RuneCountInString(typed) > maxTyped {
 		fail(w, http.StatusBadRequest)
 		return
 	}
-	var toast views.PlacementWord
-	idk := rating == placement.DontKnow
-	if idk {
-		if card, _, ok := placement.Lookup(itemID); ok {
-			toast = wordFrom(card)
-		}
-	}
-	if err := h.deck.Rate(r.Context(), runID, itemID, rating); err != nil {
-		failPlacement(w, err)
-		return
-	}
-	h.step(w, r, runID, toast, idk, "card")
-}
+	in := placement.AnswerIn{Option: r.PostForm.Get("option"), Typed: typed, DontKnow: r.PostForm.Get("dont_know") == "1"}
 
-func (h *placementHTTP) cont(w http.ResponseWriter, r *http.Request) {
-	user, ok := h.user(w, r)
-	if !ok {
-		return
-	}
-	if !h.ready(w) || !readForm(w, r) {
-		return
-	}
-	runID, ok := h.postedRun(w, r)
-	if !ok {
-		return
-	}
-	run, ok := h.owns(w, r, user.ID, runID)
-	if !ok {
-		return
-	}
-	if !run.FinishedAt.IsZero() {
-		fail(w, http.StatusConflict)
-		return
-	}
-	if err := h.deck.ContinueSitting(r.Context(), user.ID); err != nil {
-		failPlacement(w, err)
-		return
-	}
-	h.step(w, r, runID, views.PlacementWord{}, false, "region")
-}
-
-func (h *placementHTTP) unavailable(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.user(w, r); !ok {
-		return
-	}
-	if !readForm(w, r) {
-		return
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	http.Error(w, "placement cannot change the start unit yet", http.StatusNotImplemented)
-}
-
-func (h *placementHTTP) finish(w http.ResponseWriter, r *http.Request) {
-	user, ok := h.user(w, r)
-	if !ok {
-		return
-	}
-	if !h.ready(w) || !readForm(w, r) {
-		return
-	}
-	runID, ok := h.postedRun(w, r)
-	if !ok {
-		return
-	}
-	if _, ok := h.owns(w, r, user.ID, runID); !ok {
-		return
-	}
-	result, err := h.deck.Finish(r.Context(), runID)
+	cur, err := h.deck.Next(r.Context(), user.ID, runID)
 	if err != nil {
 		failPlacement(w, err)
 		return
 	}
-	if result.UserID != user.ID {
-		fail(w, http.StatusForbidden)
+	if cur.Item == nil || cur.Item.ID != token {
+		h.renderStep(w, r, user.ID, runID, cur, stepOpts{})
 		return
 	}
-	v := applyResult(h.view(w, r, views.PlaceModeResult, runID, views.PlacementWord{}), result.Level, addedFromBands(result.Bands))
-	h.write(w, r, v, "region")
-}
-
-// step renders the next card, the sitting break, or the scored result.
-// Next may finish the run. Finish then only reads that stored result.
-// swap is "card" when the form targets .rcard, and "region" otherwise.
-func (h *placementHTTP) step(w http.ResponseWriter, r *http.Request, runID int64, toast views.PlacementWord, hasToast bool, swap string) {
-	res, err := h.deck.Next(r.Context(), runID)
-	if err != nil {
-		failPlacement(w, err)
+	if cur.Item.Kind == placement.KindType && in.Typed == "" && !in.DontKnow {
+		// A typing answer with nothing typed is not an answer: show the same item.
+		h.renderStep(w, r, user.ID, runID, cur, stepOpts{})
 		return
 	}
-	h.stepResult(w, r, runID, res, toast, hasToast, swap)
-}
-
-func (h *placementHTTP) stepResult(w http.ResponseWriter, r *http.Request, runID int64, res placement.NextResult, toast views.PlacementWord, hasToast bool, swap string) {
-	if res.Done {
-		result, err := h.deck.Finish(r.Context(), runID)
-		if err != nil {
+	step, err := h.deck.Answer(r.Context(), user.ID, runID, token, in)
+	switch {
+	case errors.Is(err, placement.ErrWrongItem):
+		// Another request answered first. Show where the run is.
+		if cur, err = h.deck.Next(r.Context(), user.ID, runID); err != nil {
 			failPlacement(w, err)
 			return
 		}
-		v := applyResult(h.view(w, r, views.PlaceModeResult, runID, views.PlacementWord{}), result.Level, addedFromBands(result.Bands))
-		if swap == "card" && r.Header.Get("HX-Request") == "true" {
-			w.Header().Set("HX-Retarget", "#placement")
-			w.Header().Set("HX-Reswap", "outerHTML transition:true")
-		}
-		h.write(w, r, v, "region")
+		h.renderStep(w, r, user.ID, runID, cur, stepOpts{})
+		return
+	case err != nil:
+		failPlacement(w, err)
 		return
 	}
-	if res.Break {
-		v, err := h.enrich(r.Context(), h.view(w, r, views.PlaceModeBreak, runID, views.PlacementWord{}))
-		if err != nil {
-			fail(w, http.StatusInternalServerError)
+	if cur.Item.Kind == placement.KindType {
+		h.renderStep(w, r, user.ID, runID, step, stepOpts{})
+		return
+	}
+	v, ok := h.itemView(w, r, runID, *cur.Item, stepOpts{})
+	if !ok {
+		return
+	}
+	v.Phase = views.PlacePicked
+	for i := range v.Options {
+		if v.Options[i].ID == in.Option && !in.DontKnow {
+			v.Options[i].State = views.AnswerSelected
+		} else {
+			v.Options[i].Dim = true
+		}
+	}
+	v.AudioURL = ""
+	h.write(w, r, v)
+}
+
+// typing is POST /_hx/placement/typing: the learner takes the optional typing part.
+func (h *placementHTTP) typing(w http.ResponseWriter, r *http.Request) {
+	user, ok := h.user(w, r)
+	if !ok || !h.ready(w) || !readForm(w, r) {
+		return
+	}
+	runID, ok := postedRun(w, r)
+	if !ok {
+		return
+	}
+	step, err := h.deck.StartTyping(r.Context(), user.ID, runID)
+	if err != nil {
+		failPlacement(w, err)
+		return
+	}
+	h.renderStep(w, r, user.ID, runID, step, stepOpts{})
+}
+
+// finish is POST /_hx/placement/finish: skip the typing part, or stop it, and see the results.
+func (h *placementHTTP) finish(w http.ResponseWriter, r *http.Request) {
+	user, ok := h.user(w, r)
+	if !ok || !h.ready(w) || !readForm(w, r) {
+		return
+	}
+	runID, ok := postedRun(w, r)
+	if !ok {
+		return
+	}
+	res, err := h.deck.Finish(r.Context(), user.ID, runID)
+	if err != nil {
+		failPlacement(w, err)
+		return
+	}
+	h.write(w, r, h.resultsView(w, r, res))
+}
+
+// replace is POST /_hx/placement/replace: the clip of a listening item would not play, so the engine
+// deals another word in its place. When it cannot, the same item comes back and says its clip is broken.
+func (h *placementHTTP) replace(w http.ResponseWriter, r *http.Request) {
+	user, ok := h.user(w, r)
+	if !ok || !h.ready(w) || !readForm(w, r) {
+		return
+	}
+	runID, ok := postedRun(w, r)
+	if !ok {
+		return
+	}
+	tries, err := strconv.Atoi(r.PostForm.Get("tries"))
+	if err != nil || tries < 1 {
+		tries = 1
+	}
+	if tries > views.PlaceMaxReplaceTries {
+		tries = views.PlaceMaxReplaceTries
+	}
+	step, err := h.deck.Replace(r.Context(), user.ID, runID, r.PostForm.Get("item"))
+	switch {
+	case err == nil:
+		h.renderStep(w, r, user.ID, runID, step, stepOpts{cont: true, tries: tries})
+	case errors.Is(err, placement.ErrNoAudio), errors.Is(err, placement.ErrNotReady), errors.Is(err, placement.ErrWrongItem):
+		cur, nerr := h.deck.Next(r.Context(), user.ID, runID)
+		if nerr != nil {
+			failPlacement(w, nerr)
 			return
 		}
-		if swap == "card" && r.Header.Get("HX-Request") == "true" {
-			w.Header().Set("HX-Retarget", "#placement")
-			w.Header().Set("HX-Reswap", "outerHTML transition:true")
+		h.renderStep(w, r, user.ID, runID, cur, stepOpts{cont: true, tries: views.PlaceMaxReplaceTries, audioFailed: !errors.Is(err, placement.ErrWrongItem)})
+	default:
+		failPlacement(w, err)
+	}
+}
+
+// stepOpts says how to render a step. cont skips the break before reading: the learner already took it.
+// tries and audioFailed are for a screen that came from a replacement.
+type stepOpts struct {
+	cont        bool
+	tries       int
+	audioFailed bool
+}
+
+// renderStep shows what the engine says comes next: an item, the break before reading, the offer of the
+// typing part, or the results.
+func (h *placementHTTP) renderStep(w http.ResponseWriter, r *http.Request, userID, runID int64, step placement.Step, o stepOpts) {
+	switch {
+	case step.Done && step.Result != nil:
+		h.write(w, r, h.resultsView(w, r, *step.Result))
+	case step.TypingOffer:
+		v := h.base(w, r, views.PlaceOffer, runID)
+		v.Part = 2
+		h.write(w, r, v)
+	case step.Item != nil:
+		it := *step.Item
+		if it.NewPart && it.Part == placement.PartReading && !o.cont {
+			v := h.base(w, r, views.PlaceBreak, runID)
+			v.Part = 1
+			h.write(w, r, v)
+			return
 		}
-		h.write(w, r, v, "region")
-		return
-	}
-	if res.Card == nil {
+		if v, ok := h.itemView(w, r, runID, it, o); ok {
+			h.write(w, r, v)
+		}
+	default:
 		fail(w, http.StatusInternalServerError)
-		return
 	}
-	v, err := h.enrich(r.Context(), h.view(w, r, views.PlaceModeFront, runID, wordFrom(*res.Card)))
+}
+
+// itemView builds the screen of one item, with its place in its part.
+func (h *placementHTTP) itemView(w http.ResponseWriter, r *http.Request, runID int64, it placement.Item, o stepOpts) (views.PlacementView, bool) {
+	items, err := h.runs.ListPlacementItems(r.Context(), runID)
 	if err != nil {
 		fail(w, http.StatusInternalServerError)
-		return
+		return views.PlacementView{}, false
 	}
-	v.Toast = toast
-	v.HasToast = hasToast && toast.Text != ""
-	h.write(w, r, v, swap)
+	v := h.base(w, r, placementScreen(it.Part), runID)
+	v.Phase = views.PlaceAsk
+	v.Token = it.ID
+	v.AudioURL = it.AudioURL
+	v.Prompt = it.Prompt
+	v.Tries = o.tries
+	v.AudioFailed = o.audioFailed
+	v.Index, v.Total = placementProgress(items, it)
+	for i, opt := range it.Options {
+		v.Options = append(v.Options, views.PlaceOptionView{
+			ID:     opt.ID,
+			Text:   opt.Text,
+			Hebrew: it.Part == placement.PartLetters,
+			Key:    views.PlaceKey(i),
+			State:  views.AnswerDefault,
+		})
+	}
+	return v, true
 }
 
-func (h *placementHTTP) write(w http.ResponseWriter, r *http.Request, v views.PlacementView, swap string) {
-	if r.Header.Get("HX-Request") == "true" {
-		if swap == "card" && (v.Mode == views.PlaceModeFront || v.Mode == views.PlaceModeBack) {
-			render(w, r, views.PlacementCardSwap(v))
-			return
-		}
-		render(w, r, views.PlacementRegion(v))
-		return
-	}
-	render(w, r, views.Placement(v))
-}
-
-func (h *placementHTTP) view(w http.ResponseWriter, r *http.Request, mode string, runID int64, word views.PlacementWord) views.PlacementView {
+// base is a view with its page chrome and run id set.
+func (h *placementHTTP) base(w http.ResponseWriter, r *http.Request, screen string, runID int64) views.PlacementView {
 	lang := chooseLang(w, r, h.secure)
-	copy := views.PlacementFor(lang)
 	page := views.NewPage(lang, csrfValue(h.tokens, r), "placement")
-	title := copy.Heading
-	switch mode {
-	case views.PlaceModeResult:
-		title = copy.Results
-	case views.PlaceModeResume:
-		title = copy.Welcome
-	case views.PlaceModeBreak:
-		title = copy.BreakTitle
-	}
-	page.Title = title + " · " + views.AppName
-	idText := ""
+	page.Title = views.PlacementFor("en").Heading + " · " + views.AppName
+	v := views.PlacementView{Page: page, Screen: screen}
 	if runID > 0 {
-		idText = strconv.FormatInt(runID, 10)
-	}
-	v := views.PlacementView{
-		Page:      page,
-		Copy:      copy,
-		Mode:      mode,
-		RunIDText: idText,
-		Word:      word,
-		Sitting:   1,
-		CardIndex: 1,
-		Fill:      "0",
-		FillPrev:  "0",
-		Overall:   "0",
-	}
-	if mode == views.PlaceModeResume || mode == views.PlaceModeBreak {
-		v.Compact = true
-		v.Ladder = views.ProgressLadder(copy, [5]bool{})
-		v.ResumeLine = copy.ResumeLine(0)
-	}
-	if mode == views.PlaceModeResult {
-		v = applyResult(v, -1, 0)
+		v.RunID = strconv.FormatInt(runID, 10)
 	}
 	return v
 }
 
-func (h *placementHTTP) enrich(ctx context.Context, v views.PlacementView) (views.PlacementView, error) {
-	if h.runs == nil || v.RunIDText == "" {
-		return v, nil
+// writePage sends a whole page. A GET is always a page, even when htmx boosted it: the body selects #app
+// out of the response, and a bare fragment would swap in nothing.
+func (h *placementHTTP) writePage(w http.ResponseWriter, r *http.Request, v views.PlacementView) {
+	render(w, r, views.Placement(v))
+}
+
+// write sends a screen: the fragment for an htmx write, the whole page otherwise.
+func (h *placementHTTP) write(w http.ResponseWriter, r *http.Request, v views.PlacementView) {
+	if r.Header.Get("HX-Request") == "true" {
+		render(w, r, views.PlacementRegion(v))
+		return
 	}
-	runID, err := strconv.ParseInt(v.RunIDText, 10, 64)
-	if err != nil {
-		return v, err
-	}
-	run, err := h.runs.GetPlacementRun(ctx, runID)
-	if err != nil {
-		return v, err
-	}
-	rows, err := h.runs.ListPlacementAnswers(ctx, runID)
-	if err != nil {
-		return v, err
-	}
-	sitting := run.SittingNo
-	if sitting < 1 {
-		sitting = 1
-	}
-	var rated, total int
-	var seen [5]bool
-	var samples []views.PlacementWord
-	for _, row := range rows {
-		if !row.Rating.Valid {
-			continue
-		}
-		total++
-		card, band, ok := placement.Lookup(row.ItemID)
-		if ok && band >= 0 && band < len(seen) {
-			seen[band] = true
-		}
-		if row.SittingNo != sitting {
-			continue
-		}
-		rated++
-		if ok {
-			samples = append(samples, wordFrom(card))
-		}
-	}
-	if len(samples) > 6 {
-		samples = samples[len(samples)-6:]
-	}
-	done := sitting - 1
-	if rated >= placement.SittingSize {
-		done = sitting
-	}
-	if done < 0 {
-		done = 0
-	}
-	left := placement.CardCap/placement.SittingSize - done
-	index := rated + 1
-	if v.Mode == views.PlaceModeBreak {
-		index = rated
-	}
-	if index < 1 {
-		index = 1
-	}
-	prev := rated - 1
-	if prev < 0 {
-		prev = 0
-	}
-	v.Sitting = sitting
-	v.DoneInSit = rated
-	v.CardIndex = index
-	v.Samples = samples
-	v.Fill = ratio(rated, placement.SittingSize)
-	v.FillPrev = ratio(prev, placement.SittingSize)
-	v.Overall = ratio(total, placement.CardCap)
-	v.ResumeLine = v.Copy.ResumeLine(done)
-	v.BreakKick = v.Copy.SittingKicker(sitting)
-	v.Covered = v.Copy.CoveredLine(rated)
-	v.LeftNote = v.Copy.LeftNote(left)
-	if v.Mode == views.PlaceModeResume || v.Mode == views.PlaceModeBreak {
-		v.Compact = true
-		v.Ladder = views.ProgressLadder(v.Copy, seen)
-	}
-	return v, nil
+	render(w, r, views.Placement(v))
 }
 
 func (h *placementHTTP) user(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
@@ -509,9 +466,8 @@ func (h *placementHTTP) ready(w http.ResponseWriter) bool {
 	return true
 }
 
-func (h *placementHTTP) postedRun(w http.ResponseWriter, r *http.Request) (int64, bool) {
-	raw := r.PostForm.Get("run_id")
-	id, err := strconv.ParseInt(raw, 10, 64)
+func postedRun(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, err := strconv.ParseInt(r.PostForm.Get("run_id"), 10, 64)
 	if err != nil || id <= 0 {
 		fail(w, http.StatusBadRequest)
 		return 0, false
@@ -519,86 +475,8 @@ func (h *placementHTTP) postedRun(w http.ResponseWriter, r *http.Request) (int64
 	return id, true
 }
 
-// owns loads the run and requires it to belong to the session user.
-// A missing id is 404. Another learner's run is 403.
-func (h *placementHTTP) owns(w http.ResponseWriter, r *http.Request, userID, runID int64) (db.PlacementRun, bool) {
-	run, err := h.runs.GetPlacementRun(r.Context(), runID)
-	if errors.Is(err, sql.ErrNoRows) {
-		fail(w, http.StatusNotFound)
-		return db.PlacementRun{}, false
-	}
-	if err != nil {
-		fail(w, http.StatusInternalServerError)
-		return db.PlacementRun{}, false
-	}
-	if run.UserID != userID {
-		fail(w, http.StatusForbidden)
-		return db.PlacementRun{}, false
-	}
-	return run, true
-}
-
-func wordFrom(c placement.Card) views.PlacementWord {
-	return views.PlacementWord{
-		ID:       c.ID,
-		Text:     norm.NFC.String(c.TextNFC),
-		Translit: c.Translit,
-		Gloss:    c.GlossEN,
-		Gender:   c.Gender,
-		AudioURL: audioPath(c.AudioURL),
-	}
-}
-
-func audioPath(raw string) string {
-	if raw == "" || !strings.HasPrefix(raw, "/audio/") {
-		return ""
-	}
-	if strings.Contains(raw, "..") || strings.Contains(raw, "://") || strings.ContainsAny(raw, "\\?#") {
-		return ""
-	}
-	return raw
-}
-
-func applyResult(v views.PlacementView, level, added int) views.PlacementView {
-	unit, done := views.UnitForBand(level)
-	v.Ladder = views.ResultLadder(v.Copy, level)
-	v.Compact = false
-	v.Unit = unit
-	v.CourseDone = done
-	v.UnitLine = v.Copy.UnitLine(unit)
-	v.StartLabel = v.Copy.StartUnit(unit)
-	v.Added = added
-	v.AddedText = v.Copy.AddedLine(added)
-	return v
-}
-
-func addedFromBands(bands []placement.BandScore) int {
-	n := 0
-	for _, band := range bands {
-		n += band.Again + band.Hard + band.DontKnow
-	}
-	return n
-}
-
-func bandAdded(bands []db.BandScore) int {
-	n := 0
-	for _, band := range bands {
-		n += band.Again + band.Hard + band.DontKnow
-	}
-	return n
-}
-
-func ratio(n, d int) string {
-	if d <= 0 || n <= 0 {
-		return "0.000"
-	}
-	if n > d {
-		n = d
-	}
-	return strconv.FormatFloat(float64(n)/float64(d), 'f', 3, 64)
-}
-
 func readForm(w http.ResponseWriter, r *http.Request) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
 		fail(w, http.StatusBadRequest)
 		return false
@@ -611,23 +489,17 @@ func fail(w http.ResponseWriter, status int) {
 	http.Error(w, http.StatusText(status), status)
 }
 
-// failPlacement maps service errors onto status codes. The service has
-// no exported sentinels, so the match is on the text it already returns.
+// failPlacement maps an engine error to a status. None of the messages names an answer.
 func failPlacement(w http.ResponseWriter, err error) {
-	if errors.Is(err, sql.ErrNoRows) || strings.Contains(err.Error(), "not found") {
-		fail(w, http.StatusNotFound)
-		return
-	}
-	msg := err.Error()
 	switch {
-	case strings.Contains(msg, "outside 0..4"), strings.Contains(msg, "item id is empty"):
+	case errors.Is(err, placement.ErrNotYourRun):
+		fail(w, http.StatusNotFound)
+	case errors.Is(err, placement.ErrBadAnswer):
 		fail(w, http.StatusBadRequest)
-	case strings.Contains(msg, "already finished"),
-		strings.Contains(msg, "not the open card"),
-		strings.Contains(msg, "not full"),
-		strings.Contains(msg, "no open run"),
-		strings.Contains(msg, "already has a card"):
+	case errors.Is(err, placement.ErrWrongItem), errors.Is(err, placement.ErrFinished), errors.Is(err, placement.ErrNotReady):
 		fail(w, http.StatusConflict)
+	case errors.Is(err, placement.ErrNoAudio), errors.Is(err, placement.ErrDeckShort):
+		fail(w, http.StatusServiceUnavailable)
 	default:
 		fail(w, http.StatusInternalServerError)
 	}

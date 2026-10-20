@@ -1,0 +1,93 @@
+package views
+
+// Lamplight components. Each maps to a component in the Figma file
+// (frame 141:2) and styles itself with classes in static/css/components.css.
+// Colours, radius, space, and tap size come from tokens.css only.
+//
+// Children are the visible content, so a caller can pass a pair run with the
+// right lang attribute. State and kind are data attributes so CSS and the lint
+// can key on them.
+
+// Button is Figma Button. Primary is the one main action on a screen. Quiet is
+// every other action. Both are at least --size-tap tall; Primary is --size-cta.
+templ Button(kind ButtonKind) {
+	@ButtonWith(kind, nil) {
+		{ children... }
+	}
+}
+
+// ButtonWith is Button with extra attributes (name, value, hx-*, disabled).
+// type defaults to "button".
+templ ButtonWith(kind ButtonKind, attrs templ.Attributes) {
+	<button class="c-button" data-kind={ string(kind.normal()) } { buttonAttrs(attrs)... }>
+		{ children... }
+	</button>
+}
+
+// AnswerOption is Figma AnswerOption, with exactly four states: Default,
+// Selected, Correct, Wrong. key is the keyboard badge ("1", "A"). Correct and
+// Wrong add a mark and a hidden word, so colour is never the only signal.
+templ AnswerOption(state AnswerState, key string) {
+	@AnswerOptionWith(state, key, nil) {
+		{ children... }
+	}
+}
+
+// AnswerOptionWith is AnswerOption with extra attributes (data-*, aria-*). type
+// defaults to "button". The activity screens use it for the hotkey and the
+// accessible name of a pick option or a match tile (SPEC-016).
+templ AnswerOptionWith(state AnswerState, key string, attrs templ.Attributes) {
+	<button { buttonAttrs(attrs)... } class="c-answer" data-state={ string(state.normal()) } if state.normal() == AnswerSelected { aria-pressed="true" }>
+		<span class="c-answer__key" aria-hidden="true">{ key }</span>
+		<span class="c-answer__label">
+			{ children... }
+		</span>
+		if state.normal() == AnswerCorrect {
+			<span class="c-answer__mark" aria-hidden="true"></span>
+			<span class="vh" lang="en">Correct</span>
+		}
+		if state.normal() == AnswerWrong {
+			<span class="c-answer__mark" aria-hidden="true"></span>
+			<span class="vh" lang="en">Wrong</span>
+		}
+	</button>
+}
+
+// ProgressBar is Figma ProgressBar. It is a native progress element, so it
+// needs no inline style. label is its accessible name.
+templ ProgressBar(value int, max int, label string) {
+	{{ v, m := progressRange(value, max) }}
+	<progress class="c-progress" value={ v } max={ m } aria-label={ label }>{ v }/{ m }</progress>
+}
+
+// AudioOrb is Figma AudioOrb: the round play control. label is its accessible
+// name. Pass data-* or hx-* attributes in attrs. The glyph is the sprite's play icon.
+templ AudioOrb(label string, attrs templ.Attributes) {
+	<button class="c-orb" aria-label={ label } { buttonAttrs(attrs)... }>
+		<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("play") }></use></svg>
+	</button>
+}
+
+// ChipLabel is Figma chip: a small neutral label such as a gender tag. It is
+// not named Chip because views.Chip is already the new-word view model.
+templ ChipLabel() {
+	<span class="c-chip">
+		{ children... }
+	</span>
+}
+
+// Card is the neutral surface that holds one idea.
+templ Card() {
+	<section class="c-card">
+		{ children... }
+	</section>
+}
+
+// Sheet is the raised panel at the bottom of a screen, such as the feedback
+// sheet. label is its accessible name.
+templ Sheet(label string) {
+	<section class="c-sheet" aria-label={ label }>
+		<span class="c-sheet__handle" aria-hidden="true"></span>
+		{ children... }
+	</section>
+}

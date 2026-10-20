@@ -6,10 +6,14 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 )
 
 // Service loads a learner's cards and grades the answers.
@@ -17,23 +21,49 @@ import (
 // given database. New takes the clock the store was opened with.
 type Service struct {
 	store  *db.Store
-	review *fsrs.Review
+	record *evidence.Recorder
 	clock  clock.Clock
 	seed   int64
+	gate   func(ctx context.Context, userID int64) (activity.Gate, error)
+	bands  learner.BandSource
+}
+
+// Option changes how New builds a Service.
+type Option func(*Service)
+
+// WithGate sets how the service learns which skills the learner can be asked through.
+// The default opens every skill: no code decides the letters check yet (north-star
+// section 4.1), so the default is what the mix did before the gate existed.
+func WithGate(gate func(ctx context.Context, userID int64) (activity.Gate, error)) Option {
+	return func(s *Service) { s.gate = gate }
+}
+
+// WithBands sets where the learner model gets placement bands. The default is the
+// placement deck.
+func WithBands(b learner.BandSource) Option {
+	return func(s *Service) { s.bands = b }
 }
 
 // New builds a service. A nil clock uses the clock on store.
 // seed breaks ties between cards that are due at the same time.
-func New(store *db.Store, clk clock.Clock, seed int64) *Service {
+func New(store *db.Store, clk clock.Clock, seed int64, opts ...Option) *Service {
 	if clk == nil && store != nil {
 		clk = store.Clock()
 	}
-	return &Service{
+	s := &Service{
 		store:  store,
-		review: fsrs.New(store, clk),
+		record: evidence.New(store, fsrs.New(store, clk), clk),
 		clock:  clk,
 		seed:   seed,
+		gate: func(context.Context, int64) (activity.Gate, error) {
+			return activity.OpenGate(), nil
+		},
+		bands: activity.PlacementBands(store),
 	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 func (s *Service) ready() error {
@@ -43,8 +73,8 @@ func (s *Service) ready() error {
 	if s.clock == nil {
 		return errors.New("session: clock is not configured")
 	}
-	if s.review == nil {
-		return errors.New("session: review is not configured")
+	if s.record == nil {
+		return errors.New("session: recorder is not configured")
 	}
 	return nil
 }
@@ -52,18 +82,29 @@ func (s *Service) ready() error {
 // CardRef is one visit in the queue.
 // Struggling is true when the card was selected as a struggling card.
 // New is true when the card has no review yet. A new card is not a known
-// card and not a struggling card. Kind is the card direction (he_en or
-// en_he) or letter or pattern. Key and Step are set on a drill. A drill's
+// card and not a struggling card. Kind is the card skill (read, recall, listen
+// or spell) or letter or pattern. Key and Step are set on a drill. A drill's
 // CardID is negative and is not an FSRS card.
+//
+// Activity is the activity the mix chose for the visit (activity.Kind) and AskSkill the
+// skill it asks through. They are empty on a drill. CardID and Skill stay the card the
+// mix selected, which is what a flashcard grades: AskSkill is the card's own skill only
+// when the word's weakest skill is that one. A checked activity is built with
+// activity.Engine.Build for LexemeID, answered with Check, and the visit is closed with
+// Session.Answered. Flashcard is graded with Record, as before. Intro is true on a new
+// card whose word has not been shown yet: the screen records Engine.Expose first.
 type CardRef struct {
 	CardID     int64
 	LexemeID   int64
-	Dir        string
+	Skill      string
 	Struggling bool
 	New        bool
 	Kind       string
 	Key        string
 	Step       int
+	Activity   activity.Kind
+	AskSkill   string
+	Intro      bool
 }
 
 type gradeFunc func(context.Context, int64, fsrs.Rating, bool) error
@@ -102,22 +143,58 @@ func (s *Session) UserID() int64 {
 }
 
 // BuildSession queues at most SessionCap cards for userID.
-// now is read once and passed to every load, including StruggleStats.
-// The caller checks that userID is the signed-in learner.
+// now is read once and passed to every load, including the learner model.
+// Cards are due at that same instant. The caller checks that userID is the signed-in learner.
 func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, error) {
+	return s.build(ctx, userID, nil, time.Time{})
+}
+
+// BuildSessionAt is BuildSession with due as the cutoff for which cards are due.
+// Loads, including the learner model and the lapse window, still read the clock once.
+// A zero due uses that clock instant.
+func (s *Service) BuildSessionAt(ctx context.Context, userID int64, due time.Time) (*Session, error) {
+	return s.build(ctx, userID, nil, due)
+}
+
+// BuildSessionFor is BuildSession for a review set: only the cards of the given words are
+// queued, and no letter or pattern drill is woven in. The mix is the same, so the cap, the
+// known and struggle shares and the activity choice still apply. A word with no card
+// leaves nothing to queue, and an empty set builds an empty session. This is what the
+// band-slip alert on Today links to (INIT-015/SPEC-017).
+func (s *Service) BuildSessionFor(ctx context.Context, userID int64, lexemeIDs []int64) (*Session, error) {
+	return s.BuildSessionForAt(ctx, userID, lexemeIDs, time.Time{})
+}
+
+// BuildSessionForAt is BuildSessionFor with due as the cutoff for which cards are due.
+func (s *Service) BuildSessionForAt(ctx context.Context, userID int64, lexemeIDs []int64, due time.Time) (*Session, error) {
+	only := make(map[int64]struct{}, len(lexemeIDs))
+	for _, id := range lexemeIDs {
+		only[id] = struct{}{}
+	}
+	return s.build(ctx, userID, only, due)
+}
+
+// build is BuildSession. only, when not nil, keeps the cards of those words and no drill.
+// due is the cutoff passed to the mix. The zero time uses the clock instant already read.
+func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct{}, due time.Time) (*Session, error) {
 	if err := s.ready(); err != nil {
 		return nil, err
 	}
 	now := s.clock.Now()
+	if due.IsZero() {
+		due = now
+	}
 	cards, err := s.store.ListStudyCards(ctx, userID, now, now.Add(-ConfusionWindow))
 	if err != nil {
 		return nil, err
 	}
-	ratings, err := s.store.RecentReviewRatings(ctx, userID, now, RecentReviews)
-	if err != nil {
-		return nil, err
+	if only != nil {
+		cards = slices.DeleteFunc(cards, func(c db.StudyCard) bool {
+			_, keep := only[c.LexemeID]
+			return !keep
+		})
 	}
-	stats, err := s.store.StruggleStatsAt(ctx, userID, 0, now)
+	ratings, err := s.store.RecentReviewRatings(ctx, userID, now, RecentReviews)
 	if err != nil {
 		return nil, err
 	}
@@ -125,42 +202,63 @@ func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, err
 	if err != nil {
 		return nil, err
 	}
-	confused := map[int64]struct{}{}
-	for _, lex := range stats.Lexemes {
-		if len(lex.ConfusionKeys) > 0 {
-			confused[lex.LexemeID] = struct{}{}
-		}
+	gate, err := s.gate(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	facts, err := s.factsByLexeme(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	// The learner model reads at the same instant as everything above.
+	model := learner.New(s.store, fixedClock{now}, learner.WithBands(&onceBands{src: s.bands}))
+	pairs, err := model.ConfusionPairs(ctx, userID, ConfusionWindow)
+	if err != nil {
+		return nil, err
 	}
 	known := map[int64]struct{}{}
 	for _, id := range knownIDs {
 		known[id] = struct{}{}
 	}
+	words := map[int64]learner.WordState{}
 	cands := make([]Candidate, 0, len(cards))
 	for _, card := range cards {
+		w, ok := words[card.LexemeID]
+		if !ok {
+			w, err = model.Word(ctx, userID, card.LexemeID)
+			if err != nil {
+				return nil, err
+			}
+			words[card.LexemeID] = w
+		}
 		_, isKnown := known[card.LexemeID]
-		_, isConfused := confused[card.LexemeID]
 		cands = append(cands, Candidate{
 			ID:            card.ID,
 			LexemeID:      card.LexemeID,
-			Dir:           card.Dir,
+			Skill:         card.Skill,
 			Due:           card.Due,
 			Lapses:        card.Lapses,
 			Latest:        card.LatestRating,
 			HasRating:     card.HasRating,
 			RecentLapse:   card.RecentLapse,
-			Confused:      isConfused,
+			Confused:      len(w.Review.ConfusionKeys) > 0,
 			KnownLexeme:   isKnown,
 			HasIntro:      card.HasIntro,
 			IntroPosition: card.IntroPosition,
 			IntroLesson:   card.IntroLesson,
+			Skills:        activity.ViewsOf(w),
+			Facts:         facts.of(card.LexemeID),
+			Exposed:       w.Exposures > 0,
 		})
 	}
-	cands = append(cands, drillCandidates(stats.Confusions)...)
-	review := s.review
+	if only == nil {
+		cands = append(cands, drillCandidates(pairs)...)
+	}
+	record := s.record
 	return &Session{
 		userID: userID,
-		cards:  mix(cands, accuracyOf(ratings), now, s.seed),
-		grade: func(ctx context.Context, cardID int64, rating fsrs.Rating, peeked bool) error {
+		cards:  mixGate(cands, accuracyOf(ratings), due, s.seed, gate),
+		grade: func(ctx context.Context, cardID int64, rating fsrs.Rating, _ bool) error {
 			if rating < fsrs.Again || rating > fsrs.Easy {
 				return fmt.Errorf("session: rating %d is outside 1..4", rating)
 			}
@@ -168,7 +266,7 @@ func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, err
 			if cardID <= 0 {
 				return nil
 			}
-			return review.GradeWithChoice(ctx, cardID, rating, peeked, "")
+			return record.SelfGrade(ctx, cardID, rating)
 		},
 	}, nil
 }
@@ -270,8 +368,9 @@ func (s *Session) Reveal(cardID int64) error {
 	return nil
 }
 
-// Record grades cardID through GradeWithChoice and, on Again, re-queues it
-// once. cardID is the card Next just returned. The handler has already
+// Record grades cardID through evidence.Recorder.SelfGrade, which writes the
+// attempts row, the card update, and the review_log row together, and, on
+// Again, re-queues it once. cardID is the card Next just returned. The handler has already
 // checked ownership and CSRF. A second Again on the same card is graded
 // and is not inserted again.
 //
@@ -309,11 +408,18 @@ func (s *Session) Record(ctx context.Context, cardID int64, rating fsrs.Rating) 
 	if rating != fsrs.Again {
 		return nil
 	}
+	s.requeueLocked(cardID)
+	return nil
+}
+
+// requeueLocked inserts the served card RequeueGap visits ahead, once per card.
+// The caller holds mu.
+func (s *Session) requeueLocked(cardID int64) {
 	if s.requeued == nil {
 		s.requeued = map[int64]struct{}{}
 	}
 	if _, done := s.requeued[cardID]; done {
-		return nil
+		return
 	}
 	s.requeued[cardID] = struct{}{}
 	at := s.i + RequeueGap
@@ -321,5 +427,33 @@ func (s *Session) Record(ctx context.Context, cardID int64, rating fsrs.Rating) 
 		at = len(s.cards)
 	}
 	s.cards = slices.Insert(s.cards, at, s.last)
+}
+
+// ErrNotChecked means Answered was given a visit that has no checked activity: a flashcard
+// or a drill step. Those are graded with Record.
+var ErrNotChecked = errors.New("session: visit has no checked activity")
+
+// Answered closes the visit of the card Next just served after the learner answered its
+// checked activity. activity.Engine.Check has already written the evidence, so nothing is
+// graded here. A wrong answer puts the visit back once, RequeueGap visits ahead, as an
+// Again does for a flashcard. cardID is the card Next returned, and a second call for the
+// same serve is refused with ErrNotServed.
+func (s *Session) Answered(cardID int64, correct bool) error {
+	if s == nil {
+		return errors.New("session: session is not configured")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.hasLast || cardID != s.last.CardID {
+		return fmt.Errorf("session: card %d: %w", cardID, ErrNotServed)
+	}
+	if s.last.Activity == "" || s.last.Activity == activity.Flashcard {
+		return fmt.Errorf("session: card %d: %w", cardID, ErrNotChecked)
+	}
+	s.hasLast = false
+	s.peeked = false
+	if !correct {
+		s.requeueLocked(cardID)
+	}
 	return nil
 }

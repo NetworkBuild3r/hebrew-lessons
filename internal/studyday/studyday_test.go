@@ -181,6 +181,20 @@ func TestInvalidTZFallsBackOnce(t *testing.T) {
 	}
 }
 
+func TestDueCutoffIsTheNextRollover(t *testing.T) {
+	denver := mustLoc(t, "America/Denver")
+	now := time.Date(2026, 10, 18, 22, 0, 0, 0, denver)
+	if DueRule != "rollover" {
+		t.Fatalf("DueRule = %q, want rollover", DueRule)
+	}
+	if !DueCutoff(now, denver).Equal(Next(now, denver)) {
+		t.Fatalf("cutoff %s, next rollover %s", DueCutoff(now, denver), Next(now, denver))
+	}
+	if !DueCutoff(now, nil).Equal(Next(now, nil)) {
+		t.Fatal("a nil zone did not use Denver")
+	}
+}
+
 func mustLoc(t *testing.T, name string) *time.Location {
 	t.Helper()
 	loc, err := time.LoadLocation(name)

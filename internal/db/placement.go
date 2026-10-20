@@ -219,7 +219,7 @@ type PlacementLexeme struct {
 	Gender   string
 }
 
-// CommitPlacementRating writes the lexeme, the first he_en card, its review
+// CommitPlacementRating writes the lexeme, the first read card, its review
 // log, and the placement answer in one transaction. A failure rolls all of
 // them back. The answer update matches only a card that is still unrated.
 func (s *Store) CommitPlacementRating(ctx context.Context, lexeme PlacementLexeme, card Card, log ReviewLog, runID int64, itemID string, answerRating int) error {
@@ -265,9 +265,9 @@ func (s *Store) CommitPlacementRating(ctx context.Context, lexeme PlacementLexem
 	}
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO cards (
-			user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, last_review, suspended
+			user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-		card.UserID, lexemeID, card.Dir, card.State, FormatTime(card.Due),
+		card.UserID, lexemeID, card.Skill, card.State, FormatTime(card.Due),
 		card.Stability, card.Difficulty, card.Reps, card.Lapses, last,
 	)
 	if err != nil {
@@ -541,15 +541,15 @@ func (s *Store) UpsertPlacementLexeme(ctx context.Context, textNFC, gloss, pos, 
 
 // CardID returns the card for this learner, lexeme, and direction.
 // ok is false when that card does not exist.
-func (s *Store) CardID(ctx context.Context, userID, lexemeID int64, dir string) (int64, bool, error) {
+func (s *Store) CardID(ctx context.Context, userID, lexemeID int64, skill string) (int64, bool, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return 0, false, err
 	}
 	var id int64
 	err = conn.QueryRowContext(ctx, `
-		SELECT id FROM cards WHERE user_id = ? AND lexeme_id = ? AND dir = ?`,
-		userID, lexemeID, dir,
+		SELECT id FROM cards WHERE user_id = ? AND lexeme_id = ? AND skill = ?`,
+		userID, lexemeID, skill,
 	).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, false, nil
@@ -582,16 +582,16 @@ func (s *Store) AudioIDByText(ctx context.Context, textNFC string) (string, bool
 }
 
 // knownLexemeUnion is the learner's known set.
-// A word is known when its he_en card's latest review is Good or Easy.
+// A word is known when its read card's latest review is Good or Easy.
 // That review is a successful recall. Placement Good and Easy are the
-// same kind of review: Rate writes the he_en card and its log.
-// A latest Again or Hard is learning. An en_he card does not count.
+// same kind of review: Rate writes the read card and its log.
+// A latest Again or Hard is learning. A recall card does not count.
 // Finishing a lesson does not mark its new words known.
 const knownLexemeUnion = `
 	SELECT c.lexeme_id AS lexeme_id
 	FROM cards AS c
 	JOIN review_log AS rl ON rl.card_id = c.id
-	WHERE c.user_id = ? AND c.dir = 'he_en'
+	WHERE c.user_id = ? AND c.skill = 'read'
 	  AND rl.rating IN (3, 4)
 	  AND rl.id = (
 	      SELECT rl2.id
@@ -601,7 +601,7 @@ const knownLexemeUnion = `
 	      LIMIT 1
 	  )`
 
-// KnownLexemeIDs returns the sorted ids of he_en cards whose latest
+// KnownLexemeIDs returns the sorted ids of read cards whose latest
 // rating is Good or Easy. A finished lesson does not add its new words.
 func (s *Store) KnownLexemeIDs(ctx context.Context, userID int64) ([]int64, error) {
 	conn, err := s.connOrErr()
@@ -632,7 +632,7 @@ func (s *Store) KnownLexemeIDs(ctx context.Context, userID int64) ([]int64, erro
 }
 
 // LearnerKnownLexemes returns the pointed NFC text of KnownLexemeIDs, sorted by that text.
-// It is the he_en cards whose latest rating is Good or Easy, including a
+// It is the read cards whose latest rating is Good or Easy, including a
 // placement rating of Good or Easy. A finished lesson does not add its
 // new words. There is no learner_lexemes table.
 func (s *Store) LearnerKnownLexemes(ctx context.Context, userID int64) ([]string, error) {
@@ -719,7 +719,7 @@ func (s *Store) LatestPlacement(ctx context.Context, userID int64) (Placement, b
 // PlacementKnownLexemes returns the pointed NFC text of the newest run's
 // answers rated Good or Easy, sorted by that text.
 // A word taught only by a finished lesson is not included. KnownLexemeIDs
-// is the he_en Good or Easy set, which is where a placement Good or Easy
+// is the read Good or Easy set, which is where a placement Good or Easy
 // lands. units.Lookup.KnownLexemes(ctx, beforePosition) is the shared-unit
 // authoring view and is a different set.
 func (s *Store) PlacementKnownLexemes(ctx context.Context, userID int64) ([]string, error) {

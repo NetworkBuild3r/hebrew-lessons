@@ -1,0 +1,1036 @@
+{
+  "schema": "placement-audio-manifest/v1",
+  "count": 206,
+  "clips": [
+    {
+      "kind": "word",
+      "id": "boker",
+      "text_nfc": "בֹּקֶר"
+    },
+    {
+      "kind": "word",
+      "id": "kafe",
+      "text_nfc": "קָפֶה"
+    },
+    {
+      "kind": "word",
+      "id": "seret",
+      "text_nfc": "סֶרֶט"
+    },
+    {
+      "kind": "word",
+      "id": "marak",
+      "text_nfc": "מָרָק"
+    },
+    {
+      "kind": "word",
+      "id": "misrad",
+      "text_nfc": "מִשְׂרָד"
+    },
+    {
+      "kind": "word",
+      "id": "ohel",
+      "text_nfc": "אֹהֶל"
+    },
+    {
+      "kind": "word",
+      "id": "kam",
+      "text_nfc": "קָם"
+    },
+    {
+      "kind": "word",
+      "id": "shote",
+      "text_nfc": "שׁוֹתֶה"
+    },
+    {
+      "kind": "word",
+      "id": "yodea",
+      "text_nfc": "יוֹדֵעַ"
+    },
+    {
+      "kind": "word",
+      "id": "levashel",
+      "text_nfc": "לְבַשֵּׁל"
+    },
+    {
+      "kind": "word",
+      "id": "meyuchad",
+      "text_nfc": "מְיוּחָד"
+    },
+    {
+      "kind": "word",
+      "id": "batuach",
+      "text_nfc": "בָּטוּחַ"
+    },
+    {
+      "kind": "word",
+      "id": "shalom",
+      "text_nfc": "שָׁלוֹם"
+    },
+    {
+      "kind": "word",
+      "id": "toda",
+      "text_nfc": "תּוֹדָה"
+    },
+    {
+      "kind": "word",
+      "id": "sefer",
+      "text_nfc": "סֵפֶר"
+    },
+    {
+      "kind": "word",
+      "id": "bayit",
+      "text_nfc": "בַּיִת"
+    },
+    {
+      "kind": "word",
+      "id": "ima",
+      "text_nfc": "אִמָּא"
+    },
+    {
+      "kind": "word",
+      "id": "aba",
+      "text_nfc": "אַבָּא"
+    },
+    {
+      "kind": "word",
+      "id": "chalon",
+      "text_nfc": "חַלּוֹן"
+    },
+    {
+      "kind": "word",
+      "id": "kise",
+      "text_nfc": "כִּסֵּא"
+    },
+    {
+      "kind": "word",
+      "id": "te",
+      "text_nfc": "תֵּה"
+    },
+    {
+      "kind": "word",
+      "id": "ben",
+      "text_nfc": "בֵּן"
+    },
+    {
+      "kind": "word",
+      "id": "bat",
+      "text_nfc": "בַּת"
+    },
+    {
+      "kind": "word",
+      "id": "shem",
+      "text_nfc": "שֵׁם"
+    },
+    {
+      "kind": "word",
+      "id": "cheshbon",
+      "text_nfc": "חֶשְׁבּוֹן"
+    },
+    {
+      "kind": "word",
+      "id": "slicha",
+      "text_nfc": "סְלִיחָה"
+    },
+    {
+      "kind": "word",
+      "id": "raayon",
+      "text_nfc": "רַעֲיוֹן"
+    },
+    {
+      "kind": "word",
+      "id": "teva",
+      "text_nfc": "טֶבַע"
+    },
+    {
+      "kind": "word",
+      "id": "tov",
+      "text_nfc": "טוֹב"
+    },
+    {
+      "kind": "word",
+      "id": "ken",
+      "text_nfc": "כֵּן"
+    },
+    {
+      "kind": "word",
+      "id": "kama",
+      "text_nfc": "כַּמָּה"
+    },
+    {
+      "kind": "word",
+      "id": "eifo",
+      "text_nfc": "אֵיפֹה"
+    },
+    {
+      "kind": "word",
+      "id": "gar",
+      "text_nfc": "גָּר"
+    },
+    {
+      "kind": "word",
+      "id": "rotze",
+      "text_nfc": "רוֹצֶה"
+    },
+    {
+      "kind": "word",
+      "id": "yotze",
+      "text_nfc": "יוֹצֵא"
+    },
+    {
+      "kind": "word",
+      "id": "lenasot",
+      "text_nfc": "לְנַסּוֹת"
+    },
+    {
+      "kind": "word",
+      "id": "lehachin",
+      "text_nfc": "לְהָכִין"
+    },
+    {
+      "kind": "word",
+      "id": "noach",
+      "text_nfc": "נוֹחַ"
+    },
+    {
+      "kind": "word",
+      "id": "mamlitz",
+      "text_nfc": "מַמְלִיץ"
+    },
+    {
+      "kind": "word",
+      "id": "keday",
+      "text_nfc": "כְּדַאי"
+    },
+    {
+      "kind": "word",
+      "id": "nachon",
+      "text_nfc": "נָכוֹן"
+    },
+    {
+      "kind": "word",
+      "id": "laasot",
+      "text_nfc": "לַעֲשׂוֹת"
+    },
+    {
+      "kind": "word",
+      "id": "davar",
+      "text_nfc": "דָּבָר"
+    },
+    {
+      "kind": "word",
+      "id": "lirot",
+      "text_nfc": "לִרְאוֹת"
+    },
+    {
+      "kind": "word",
+      "id": "lalechet",
+      "text_nfc": "לָלֶכֶת"
+    },
+    {
+      "kind": "word",
+      "id": "ohev",
+      "text_nfc": "אוֹהֵב"
+    },
+    {
+      "kind": "word",
+      "id": "yom",
+      "text_nfc": "יוֹם"
+    },
+    {
+      "kind": "word",
+      "id": "chaver",
+      "text_nfc": "חָבֵר"
+    },
+    {
+      "kind": "word",
+      "id": "makom",
+      "text_nfc": "מָקוֹם"
+    },
+    {
+      "kind": "word",
+      "id": "layla",
+      "text_nfc": "לַיְלָה"
+    },
+    {
+      "kind": "word",
+      "id": "katan",
+      "text_nfc": "קָטָן"
+    },
+    {
+      "kind": "word",
+      "id": "chadash",
+      "text_nfc": "חָדָשׁ"
+    },
+    {
+      "kind": "word",
+      "id": "gadol",
+      "text_nfc": "גָּדוֹל"
+    },
+    {
+      "kind": "word",
+      "id": "yeled",
+      "text_nfc": "יֶלֶד"
+    },
+    {
+      "kind": "word",
+      "id": "yafa",
+      "text_nfc": "יָפֶה"
+    },
+    {
+      "kind": "word",
+      "id": "isha",
+      "text_nfc": "אִישָּׁה"
+    },
+    {
+      "kind": "word",
+      "id": "achshav",
+      "text_nfc": "עַכְשָׁיו"
+    },
+    {
+      "kind": "word",
+      "id": "tamid",
+      "text_nfc": "תָּמִיד"
+    },
+    {
+      "kind": "word",
+      "id": "kesef",
+      "text_nfc": "כֶּסֶף"
+    },
+    {
+      "kind": "word",
+      "id": "ish",
+      "text_nfc": "אִישׁ"
+    },
+    {
+      "kind": "word",
+      "id": "shana",
+      "text_nfc": "שָׁנָה"
+    },
+    {
+      "kind": "word",
+      "id": "zman",
+      "text_nfc": "זְמַן"
+    },
+    {
+      "kind": "word",
+      "id": "adam",
+      "text_nfc": "אָדָם"
+    },
+    {
+      "kind": "word",
+      "id": "derech",
+      "text_nfc": "דֶּרֶךְ"
+    },
+    {
+      "kind": "word",
+      "id": "lev",
+      "text_nfc": "לֵב"
+    },
+    {
+      "kind": "word",
+      "id": "avoda",
+      "text_nfc": "עֲבוֹדָה"
+    },
+    {
+      "kind": "word",
+      "id": "beaya",
+      "text_nfc": "בְּעָיָה"
+    },
+    {
+      "kind": "word",
+      "id": "sof",
+      "text_nfc": "סוֹף"
+    },
+    {
+      "kind": "word",
+      "id": "ladaat",
+      "text_nfc": "לָדַעַת"
+    },
+    {
+      "kind": "word",
+      "id": "lomar",
+      "text_nfc": "לוֹמַר"
+    },
+    {
+      "kind": "word",
+      "id": "latet",
+      "text_nfc": "לָתֵת"
+    },
+    {
+      "kind": "word",
+      "id": "lavo",
+      "text_nfc": "לָבוֹא"
+    },
+    {
+      "kind": "word",
+      "id": "ledaber",
+      "text_nfc": "לְדַבֵּר"
+    },
+    {
+      "kind": "word",
+      "id": "lachshov",
+      "text_nfc": "לַחְשׁוֹב"
+    },
+    {
+      "kind": "word",
+      "id": "ra",
+      "text_nfc": "רַע"
+    },
+    {
+      "kind": "word",
+      "id": "acher",
+      "text_nfc": "אַחֵר"
+    },
+    {
+      "kind": "word",
+      "id": "kan",
+      "text_nfc": "כָּאן"
+    },
+    {
+      "kind": "word",
+      "id": "meod",
+      "text_nfc": "מְאוֹד"
+    },
+    {
+      "kind": "word",
+      "id": "od",
+      "text_nfc": "עוֹד"
+    },
+    {
+      "kind": "word",
+      "id": "shuv",
+      "text_nfc": "שׁוּב"
+    },
+    {
+      "kind": "word",
+      "id": "leechol",
+      "text_nfc": "לֶאֱכוֹל"
+    },
+    {
+      "kind": "word",
+      "id": "lishmor",
+      "text_nfc": "לִשְׁמוֹר"
+    },
+    {
+      "kind": "word",
+      "id": "lehavin",
+      "text_nfc": "לְהָבִין"
+    },
+    {
+      "kind": "word",
+      "id": "kal",
+      "text_nfc": "קַל"
+    },
+    {
+      "kind": "word",
+      "id": "chazak",
+      "text_nfc": "חָזָק"
+    },
+    {
+      "kind": "word",
+      "id": "rosh",
+      "text_nfc": "רֹאשׁ"
+    },
+    {
+      "kind": "word",
+      "id": "yalda",
+      "text_nfc": "יַלְדָּה"
+    },
+    {
+      "kind": "word",
+      "id": "shaa",
+      "text_nfc": "שָׁעָה"
+    },
+    {
+      "kind": "word",
+      "id": "mayim",
+      "text_nfc": "מַיִם"
+    },
+    {
+      "kind": "word",
+      "id": "cheder",
+      "text_nfc": "חֶדֶר"
+    },
+    {
+      "kind": "word",
+      "id": "rachok",
+      "text_nfc": "רָחוֹק"
+    },
+    {
+      "kind": "word",
+      "id": "kelev",
+      "text_nfc": "כֶּלֶב"
+    },
+    {
+      "kind": "word",
+      "id": "karov",
+      "text_nfc": "קָרוֹב"
+    },
+    {
+      "kind": "word",
+      "id": "mishpacha",
+      "text_nfc": "מִשְׁפָּחָה"
+    },
+    {
+      "kind": "word",
+      "id": "shavua",
+      "text_nfc": "שָׁבוּעַ"
+    },
+    {
+      "kind": "word",
+      "id": "ach",
+      "text_nfc": "אָח"
+    },
+    {
+      "kind": "word",
+      "id": "yad",
+      "text_nfc": "יָד"
+    },
+    {
+      "kind": "word",
+      "id": "yam",
+      "text_nfc": "יָם"
+    },
+    {
+      "kind": "word",
+      "id": "telefon",
+      "text_nfc": "טֶלֶפוֹן"
+    },
+    {
+      "kind": "word",
+      "id": "lilmod",
+      "text_nfc": "לִלְמוֹד"
+    },
+    {
+      "kind": "word",
+      "id": "mila",
+      "text_nfc": "מִילָּה"
+    },
+    {
+      "kind": "word",
+      "id": "sheela",
+      "text_nfc": "שְׁאֵלָה"
+    },
+    {
+      "kind": "word",
+      "id": "chag",
+      "text_nfc": "חַג"
+    },
+    {
+      "kind": "word",
+      "id": "yayin",
+      "text_nfc": "יַיִן"
+    },
+    {
+      "kind": "word",
+      "id": "matsav",
+      "text_nfc": "מַצָּב"
+    },
+    {
+      "kind": "word",
+      "id": "sipur",
+      "text_nfc": "סִיפּוּר"
+    },
+    {
+      "kind": "word",
+      "id": "siba",
+      "text_nfc": "סִיבָּה"
+    },
+    {
+      "kind": "word",
+      "id": "shoter",
+      "text_nfc": "שׁוֹטֵר"
+    },
+    {
+      "kind": "word",
+      "id": "lechakot",
+      "text_nfc": "לְחַכּוֹת"
+    },
+    {
+      "kind": "word",
+      "id": "lesachek",
+      "text_nfc": "לְשַׂחֵק"
+    },
+    {
+      "kind": "word",
+      "id": "leshalem",
+      "text_nfc": "לְשַׁלֵּם"
+    },
+    {
+      "kind": "word",
+      "id": "lishon",
+      "text_nfc": "לִישׁוֹן"
+    },
+    {
+      "kind": "word",
+      "id": "liknot",
+      "text_nfc": "לִקְנוֹת"
+    },
+    {
+      "kind": "word",
+      "id": "likro",
+      "text_nfc": "לִקְרוֹא"
+    },
+    {
+      "kind": "word",
+      "id": "lehatchil",
+      "text_nfc": "לְהַתְחִיל"
+    },
+    {
+      "kind": "word",
+      "id": "rishon",
+      "text_nfc": "רִאשׁוֹן"
+    },
+    {
+      "kind": "word",
+      "id": "amiti",
+      "text_nfc": "אֲמִיתִּי"
+    },
+    {
+      "kind": "word",
+      "id": "matzchik",
+      "text_nfc": "מַצְחִיק"
+    },
+    {
+      "kind": "word",
+      "id": "male",
+      "text_nfc": "מָלֵא"
+    },
+    {
+      "kind": "word",
+      "id": "bekarov",
+      "text_nfc": "בְּקָרוֹב"
+    },
+    {
+      "kind": "word",
+      "id": "laamod",
+      "text_nfc": "לַעֲמוֹד"
+    },
+    {
+      "kind": "word",
+      "id": "tsair",
+      "text_nfc": "צָעִיר"
+    },
+    {
+      "kind": "word",
+      "id": "gavoah",
+      "text_nfc": "גָּבוֹהַּ"
+    },
+    {
+      "kind": "word",
+      "id": "tinok",
+      "text_nfc": "תִּינוֹק"
+    },
+    {
+      "kind": "word",
+      "id": "lesayem",
+      "text_nfc": "לְסַיֵּם"
+    },
+    {
+      "kind": "word",
+      "id": "liftoach",
+      "text_nfc": "לִפְתּוֹחַ"
+    },
+    {
+      "kind": "word",
+      "id": "mechonit",
+      "text_nfc": "מְכוֹנִית"
+    },
+    {
+      "kind": "word",
+      "id": "aroch",
+      "text_nfc": "אָרוֹךְ"
+    },
+    {
+      "kind": "word",
+      "id": "olam",
+      "text_nfc": "עוֹלָם"
+    },
+    {
+      "kind": "word",
+      "id": "delet",
+      "text_nfc": "דֶּלֶת"
+    },
+    {
+      "kind": "word",
+      "id": "ets",
+      "text_nfc": "עֵץ"
+    },
+    {
+      "kind": "word",
+      "id": "ir",
+      "text_nfc": "עִיר"
+    },
+    {
+      "kind": "word",
+      "id": "daka",
+      "text_nfc": "דַּקָּה"
+    },
+    {
+      "kind": "word",
+      "id": "rofe",
+      "text_nfc": "רוֹפֵא"
+    },
+    {
+      "kind": "word",
+      "id": "achot",
+      "text_nfc": "אָחוֹת"
+    },
+    {
+      "kind": "word",
+      "id": "rechov",
+      "text_nfc": "רְחוֹב"
+    },
+    {
+      "kind": "word",
+      "id": "ayin",
+      "text_nfc": "עַיִן"
+    },
+    {
+      "kind": "word",
+      "id": "regel",
+      "text_nfc": "רֶגֶל"
+    },
+    {
+      "kind": "word",
+      "id": "cham",
+      "text_nfc": "חַם"
+    },
+    {
+      "kind": "word",
+      "id": "shachor",
+      "text_nfc": "שָׁחוֹר"
+    },
+    {
+      "kind": "word",
+      "id": "milchama",
+      "text_nfc": "מִלְחָמָה"
+    },
+    {
+      "kind": "word",
+      "id": "or",
+      "text_nfc": "אוֹר"
+    },
+    {
+      "kind": "word",
+      "id": "chalom",
+      "text_nfc": "חָלוֹם"
+    },
+    {
+      "kind": "word",
+      "id": "michtav",
+      "text_nfc": "מִכְתָּב"
+    },
+    {
+      "kind": "word",
+      "id": "shir",
+      "text_nfc": "שִׁיר"
+    },
+    {
+      "kind": "word",
+      "id": "tmuna",
+      "text_nfc": "תְּמוּנָה"
+    },
+    {
+      "kind": "word",
+      "id": "kochav",
+      "text_nfc": "כּוֹכָב"
+    },
+    {
+      "kind": "word",
+      "id": "chodesh",
+      "text_nfc": "חוֹדֶשׁ"
+    },
+    {
+      "kind": "word",
+      "id": "linsoa",
+      "text_nfc": "לִנְסוֹעַ"
+    },
+    {
+      "kind": "word",
+      "id": "lichtov",
+      "text_nfc": "לִכְתּוֹב"
+    },
+    {
+      "kind": "word",
+      "id": "lishloach",
+      "text_nfc": "לִשְׁלוֹחַ"
+    },
+    {
+      "kind": "word",
+      "id": "larutz",
+      "text_nfc": "לָרוּץ"
+    },
+    {
+      "kind": "word",
+      "id": "lishkoach",
+      "text_nfc": "לִשְׁכּוֹחַ"
+    },
+    {
+      "kind": "word",
+      "id": "lizkor",
+      "text_nfc": "לִזְכּוֹר"
+    },
+    {
+      "kind": "word",
+      "id": "livnot",
+      "text_nfc": "לִבְנוֹת"
+    },
+    {
+      "kind": "word",
+      "id": "atsuv",
+      "text_nfc": "עָצוּב"
+    },
+    {
+      "kind": "word",
+      "id": "adom",
+      "text_nfc": "אָדוֹם"
+    },
+    {
+      "kind": "word",
+      "id": "yakar",
+      "text_nfc": "יָקָר"
+    },
+    {
+      "kind": "word",
+      "id": "matok",
+      "text_nfc": "מָתוֹק"
+    },
+    {
+      "kind": "word",
+      "id": "pitom",
+      "text_nfc": "פִּתְאוֹם"
+    },
+    {
+      "kind": "word",
+      "id": "sachkan",
+      "text_nfc": "שַׂחְקָן"
+    },
+    {
+      "kind": "word",
+      "id": "linhog",
+      "text_nfc": "לִנְהוֹג"
+    },
+    {
+      "kind": "word",
+      "id": "tshuva",
+      "text_nfc": "תְּשׁוּבָה"
+    },
+    {
+      "kind": "word",
+      "id": "tseva",
+      "text_nfc": "צֶבַע"
+    },
+    {
+      "kind": "word",
+      "id": "lashir",
+      "text_nfc": "לָשִׁיר"
+    },
+    {
+      "kind": "word",
+      "id": "lehachlit",
+      "text_nfc": "לְהַחְלִיט"
+    },
+    {
+      "kind": "word",
+      "id": "taim",
+      "text_nfc": "טָעִים"
+    },
+    {
+      "kind": "word",
+      "id": "panuy",
+      "text_nfc": "פָּנוּי"
+    },
+    {
+      "kind": "word",
+      "id": "ayef",
+      "text_nfc": "עָיֵף"
+    },
+    {
+      "kind": "word",
+      "id": "shulchan",
+      "text_nfc": "שֻׁלְחָן"
+    },
+    {
+      "kind": "word",
+      "id": "shaon",
+      "text_nfc": "שָׁעוֹן"
+    },
+    {
+      "kind": "word",
+      "id": "shemesh",
+      "text_nfc": "שֶׁמֶשׁ"
+    },
+    {
+      "kind": "word",
+      "id": "more",
+      "text_nfc": "מוֹרֶה"
+    },
+    {
+      "kind": "word",
+      "id": "chatul",
+      "text_nfc": "חָתוּל"
+    },
+    {
+      "kind": "word",
+      "id": "chalav",
+      "text_nfc": "חָלָב"
+    },
+    {
+      "kind": "word",
+      "id": "lechem",
+      "text_nfc": "לֶחֶם"
+    },
+    {
+      "kind": "word",
+      "id": "kova",
+      "text_nfc": "כּוֹבַע"
+    },
+    {
+      "kind": "word",
+      "id": "machshev",
+      "text_nfc": "מַחְשֵׁב"
+    },
+    {
+      "kind": "word",
+      "id": "matos",
+      "text_nfc": "מָטוֹס"
+    },
+    {
+      "kind": "word",
+      "id": "gan",
+      "text_nfc": "גַּן"
+    },
+    {
+      "kind": "word",
+      "id": "mafteach",
+      "text_nfc": "מַפְתֵּחַ"
+    },
+    {
+      "kind": "word",
+      "id": "rakevet",
+      "text_nfc": "רַכֶּבֶת"
+    },
+    {
+      "kind": "word",
+      "id": "bakbuk",
+      "text_nfc": "בַּקְבּוּק"
+    },
+    {
+      "kind": "word",
+      "id": "etsba",
+      "text_nfc": "אֶצְבַּע"
+    },
+    {
+      "kind": "word",
+      "id": "sakin",
+      "text_nfc": "סַכִּין"
+    },
+    {
+      "kind": "word",
+      "id": "dag",
+      "text_nfc": "דָּג"
+    },
+    {
+      "kind": "word",
+      "id": "geshem",
+      "text_nfc": "גֶּשֶׁם"
+    },
+    {
+      "kind": "word",
+      "id": "uga",
+      "text_nfc": "עוּגָה"
+    },
+    {
+      "kind": "word",
+      "id": "litzchok",
+      "text_nfc": "לִצְחוֹק"
+    },
+    {
+      "kind": "word",
+      "id": "livkot",
+      "text_nfc": "לִבְכּוֹת"
+    },
+    {
+      "kind": "word",
+      "id": "likpotz",
+      "text_nfc": "לִקְפּוֹץ"
+    },
+    {
+      "kind": "word",
+      "id": "letzalem",
+      "text_nfc": "לְצַלֵּם"
+    },
+    {
+      "kind": "word",
+      "id": "lishbor",
+      "text_nfc": "לִשְׁבּוֹר"
+    },
+    {
+      "kind": "word",
+      "id": "lanuach",
+      "text_nfc": "לָנוּחַ"
+    },
+    {
+      "kind": "word",
+      "id": "latus",
+      "text_nfc": "לָטוּס"
+    },
+    {
+      "kind": "word",
+      "id": "amitz",
+      "text_nfc": "אַמִּיץ"
+    },
+    {
+      "kind": "word",
+      "id": "yarok",
+      "text_nfc": "יָרוֹק"
+    },
+    {
+      "kind": "word",
+      "id": "kachol",
+      "text_nfc": "כָּחוֹל"
+    },
+    {
+      "kind": "word",
+      "id": "ashir",
+      "text_nfc": "עָשִׁיר"
+    },
+    {
+      "kind": "word",
+      "id": "chalash",
+      "text_nfc": "חַלָּשׁ"
+    },
+    {
+      "kind": "letter",
+      "id": "letter-da",
+      "text_nfc": "דָ"
+    },
+    {
+      "kind": "letter",
+      "id": "letter-re",
+      "text_nfc": "רֵ"
+    },
+    {
+      "kind": "letter",
+      "id": "letter-mi",
+      "text_nfc": "מִ"
+    },
+    {
+      "kind": "letter",
+      "id": "letter-no",
+      "text_nfc": "נֹ"
+    },
+    {
+      "kind": "letter",
+      "id": "letter-su",
+      "text_nfc": "סֻ"
+    },
+    {
+      "kind": "letter",
+      "id": "letter-ga",
+      "text_nfc": "גָ"
+    }
+  ]
+}

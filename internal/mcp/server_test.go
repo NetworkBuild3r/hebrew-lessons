@@ -55,7 +55,9 @@ func TestAuthRejectAndAccept(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 8 {
+	// 9 authoring tools (the original eight plus get_unit), and 5 from SPEC-021:
+	// get_learner_model, get_progress, get_lesson_brief, add_coach_note, and unpublish_unit.
+	if len(tools.Tools) != 14 {
 		t.Fatalf("tools = %d", len(tools.Tools))
 	}
 }
@@ -149,11 +151,13 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 		if !strings.Contains(string(raw), "additionalProperties") {
 			t.Fatalf("%s schema is not closed: %s", tool.Name, raw)
 		}
-		if tool.Annotations == nil || (!tool.Annotations.ReadOnlyHint && tool.Name != "put_unit" && tool.Name != "upsert_lexemes" && tool.Name != "publish_unit" && tool.Name != "generate_audio") {
+		if tool.Annotations == nil || (!tool.Annotations.ReadOnlyHint && tool.Name != "put_unit" && tool.Name != "upsert_lexemes" && tool.Name != "publish_unit" && tool.Name != "generate_audio" &&
+			tool.Name != "get_lesson_brief" && tool.Name != "add_coach_note" && tool.Name != "unpublish_unit") {
 			t.Fatalf("%s annotations %#v", tool.Name, tool.Annotations)
 		}
 	}
-	for _, name := range []string{"get_context", "lookup", "validate_unit", "put_unit", "upsert_lexemes", "generate_audio", "publish_unit", "get_learner_words"} {
+	for _, name := range []string{"get_context", "lookup", "validate_unit", "put_unit", "upsert_lexemes", "generate_audio", "publish_unit", "get_learner_words", "get_unit",
+		"get_learner_model", "get_progress", "get_lesson_brief", "add_coach_note", "unpublish_unit"} {
 		if !gotNames[name] {
 			t.Fatalf("missing %s in %#v", name, gotNames)
 		}
@@ -191,7 +195,7 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resources.Resources) != 3 {
+	if len(resources.Resources) != 4 { // schema, catalog, rules, and hebrew://authoring (SPEC-021)
 		t.Fatalf("resources = %d", len(resources.Resources))
 	}
 	schemaText := readResource(t, session, resourceUnitSchema)

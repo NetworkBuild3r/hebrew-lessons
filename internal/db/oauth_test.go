@@ -21,13 +21,13 @@ func TestOAuthIssuedBackfillSurvivesSweep(t *testing.T) {
 	}
 	var names []string
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") || strings.HasPrefix(entry.Name(), "007") {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") || entry.Name() >= "007" {
 			continue
 		}
 		names = append(names, entry.Name())
 	}
 	sort.Strings(names)
-	if len(names) != 6 || names[len(names)-1] != "006_learner_tz.sql" {
+	if len(names) != 6 {
 		t.Fatalf("migrations before 007 = %v", names)
 	}
 	var versions []int

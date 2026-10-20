@@ -41,6 +41,8 @@ type UI struct {
 	Today           string
 	Review          string
 	Progress        string
+	Lessons         string
+	Me              string
 	Dark            string
 	Light           string
 	Logout          string
@@ -96,6 +98,8 @@ func UIFor(lang, addressGender string) UI {
 func hebrewUI(addressGender string) UI {
 	return UI{
 		Lang: "he", Dir: "rtl",
+		// Lessons and Me are the two destinations SPEC-017 added. Not yet checked against Pealim.
+		Lessons: "שִׁעוּרִים", Me: "אֲנִי",
 		Skip: Address(addressGender, "דַּלֵּג לַתֹּכֶן", "דַּלְּגִי לַתֹּכֶן"), Nav: "רָאשִׁי",
 		Today: "הַיּוֹם", Review: "חֲזָרָה", Progress: "הִתְקַדְּמוּת",
 		Dark: "כֵּהֶה", Light: "בָּהִיר", Logout: "יְצִיאָה",
@@ -119,6 +123,7 @@ func englishUI() UI {
 		Lang: "en", Dir: "ltr",
 		Skip: "Skip to content", Nav: "Main",
 		Today: "Today", Review: "Review", Progress: "Progress",
+		Lessons: "Lessons", Me: "Me",
 		Dark: "Dark", Light: "Light", Logout: "Log out",
 		Heading:   "Today",
 		DueKicker: "To review", DueLabel: "Words ready", DueHint: "Up to twenty a day",
@@ -145,6 +150,10 @@ func (u UI) DocTitle(current string) string {
 		name = u.ProgressHeading
 	case "lesson":
 		name = u.LessonHeading
+	case "lessons":
+		name = u.Lessons
+	case "me":
+		name = u.Me
 	case "signin":
 		if u.Lang == "en" {
 			name = SignInTitleEN
@@ -218,19 +227,9 @@ type Home struct {
 	PlacementLevel string
 	PlacementRated string
 	PlacementAt    string
-}
-
-// ProgressPage is the progress shell plus the real counts.
-type ProgressPage struct {
-	Page
-	KnownText      string
-	UnitsText      string
-	DueText        string
-	Placement      string
-	PlacementWords string
-	PlacementLevel string
-	PlacementRated string
-	PlacementAt    string
+	// Today is what the shell decided for this visit: the one next action and the
+	// cards beside it (INIT-015/SPEC-017).
+	Today TodayView
 }
 
 // ReviewCard is one study visit, or Done when the queue is finished.
@@ -254,14 +253,17 @@ type ReviewCard struct {
 	Revealed      bool
 	Answered      int
 	Correct       int
+	// Act is the checked activity this visit is asked through. Nil means the card is
+	// a flashcard (or a drill), graded by the learner.
+	Act *ActivityView
 }
 
 // answerSide reports whether this render may show the answer side.
 // Anything that reveals the answer is post-reveal only.
-// On he_en the Hebrew is the prompt, so its transliteration and audio stay.
-// On en_he the Hebrew is the answer, so the word, its transliteration, and its audio wait.
+// On read the Hebrew is the prompt, so its transliteration and audio stay.
+// On recall the Hebrew is the answer, so the word, its transliteration, and its audio wait.
 func answerSide(c ReviewCard) bool {
-	if c.Kind == "en_he" && !c.Revealed {
+	if c.Kind == "recall" && !c.Revealed {
 		return false
 	}
 	return true
@@ -327,12 +329,7 @@ func HXHeaders(token string) string {
 // IconHref points at one symbol in the vendored sprite. Unknown names fall
 // back to help so a typo cannot request streak or xp.
 func IconHref(name string) templ.SafeURL {
-	switch name {
-	case "today", "review", "progress", "theme", "next", "play", "sound", "help", "check", "lessons":
-		return templ.SafeURL("/static/icons/sprite.svg#icon-" + name)
-	default:
-		return templ.SafeURL("/static/icons/sprite.svg#icon-help")
-	}
+	return templ.SafeURL(iconRef(name))
 }
 
 func iconClass(directional bool) string {

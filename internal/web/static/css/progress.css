@@ -1,0 +1,172 @@
+/* Progress (INIT-015/SPEC-018): the skill choice, the state bar, the line charts, This week,
+   and the placement history. Linked after shell.css. Colours, radius, space, and tap size come
+   from tokens.css only, through var(--role) and color-mix of roles. Logical properties only.
+   Nothing here moves: the cards enter with SPEC-009's data-motion="stagger".
+
+   The state bar is one hue, from the paper to the ink, with the lamp for solid. Green and red
+   mean right and wrong, so they are not used here (aud-1). The two states that need a second look
+   (struggling and slipping) also carry a hatch, so the bar never depends on colour alone, and
+   the legend and the table beside it give every count as text. */
+
+.progress {
+  --st-seen: color-mix(in srgb, var(--text) 16%, var(--surface));
+  --st-struggling: color-mix(in srgb, var(--text) 30%, var(--surface));
+  --st-regressed: color-mix(in srgb, var(--text) 44%, var(--surface));
+  --st-learning: color-mix(in srgb, var(--text) 58%, var(--surface));
+  --st-known: color-mix(in srgb, var(--text) 76%, var(--surface));
+  display: grid;
+  gap: var(--space-5);
+  align-content: start;
+  min-inline-size: 0;
+}
+.progress__head { display: grid; gap: var(--space-1); }
+.progress__lede { color: var(--muted); font-size: var(--fs-body); line-height: var(--lh-he-body); max-inline-size: var(--player-max); }
+.progress__units { color: var(--muted); font-size: var(--fs-small); }
+.progress__units-n { color: var(--text); font-weight: 700; margin-inline-start: var(--space-1); }
+
+/* Nothing to chart yet. */
+.progress-empty { justify-items: center; text-align: center; padding-block: var(--space-6); }
+.progress-empty .quiet-card__hint { max-inline-size: 32rem; }
+.progress-empty .btn { inline-size: auto; margin-block-start: var(--space-2); padding-inline: var(--space-6); }
+
+/* The newest weekly report. */
+.pweekly { display: grid; gap: var(--space-2); }
+.pweekly .eyebrow { text-transform: uppercase; letter-spacing: var(--tracking-caps); font-weight: 700; }
+.pweekly__text { font-size: var(--fs-body); line-height: var(--lh-body); max-inline-size: var(--player-max); }
+
+/* The skill choice: four c-answer buttons in a GET form. The chosen one is filled with the text colour,\n   so it reads in light and in dark, and it is also aria-pressed. */
+.ptabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); max-inline-size: calc(var(--space-9) * 4); }
+.ptabs .c-answer {
+  justify-content: center;
+  padding-inline: var(--space-2);
+  font-weight: 700;
+  font-size: var(--fs-small);
+  text-align: center;
+}
+.ptabs .c-answer__key:empty { display: none; }
+.ptabs .c-answer__label { flex: 0 1 auto; text-align: center; }
+.ptabs .c-answer[data-state="selected"] { background: var(--text); color: var(--surface); border-color: var(--text); }
+@media (max-width: 359px) {
+  .ptabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* The cards. */
+.progress__grid { display: grid; gap: var(--space-5); align-items: start; }
+.pknow, .pchart, .pweek, .pplace { display: grid; gap: var(--space-3); align-content: start; min-inline-size: 0; }
+.pknow .eyebrow { text-transform: uppercase; letter-spacing: var(--tracking-caps); font-weight: 700; }
+.pknow__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
+.pknow__unit { color: var(--muted); font-size: var(--fs-body); font-weight: 600; }
+.pchart__title { font-family: var(--font-display); font-size: var(--fs-h2); font-weight: 700; line-height: var(--lh-he-body); }
+.pchart__note, .pweek__none, .pweek__sub { color: var(--muted); font-size: var(--fs-small); line-height: var(--lh-he-body); }
+.pchart__summary { font-size: var(--fs-small); font-weight: 700; line-height: var(--lh-he-body); }
+.pchart__key { list-style: none; padding: 0; color: var(--muted); font-size: var(--fs-small); }
+.pchart__empty { display: grid; justify-items: center; gap: var(--space-2); padding-block: var(--space-4); text-align: center; color: var(--muted); }
+.pchart__empty .illo { max-inline-size: calc(var(--space-9) * 1.5); block-size: auto; }
+.pchart__hint { font-size: var(--fs-small); line-height: var(--lh-he-body); }
+@media (min-width: 1024px) {
+  .progress { max-inline-size: var(--content-max); }
+  .progress__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pknow { grid-column: 1 / -1; }
+}
+
+/* The charts. Every shape is painted from its class. */
+.pbar { max-inline-size: calc(var(--space-9) * 7); }
+.pc { display: block; inline-size: 100%; block-size: auto; overflow: visible; }
+.pc__seg { stroke: none; fill: var(--surface-soft); }
+.pc__seg[data-state="unseen"] { fill: var(--surface-soft); stroke: var(--hairline-strong); stroke-width: 1; }
+.pc__seg[data-state="seen"] { fill: var(--st-seen); }
+.pc__seg[data-state="struggling"] { fill: var(--st-struggling); }
+.pc__seg[data-state="regressed"] { fill: var(--st-regressed); }
+.pc__seg[data-state="learning"] { fill: var(--st-learning); }
+.pc__seg[data-state="known"] { fill: var(--st-known); }
+.pc__seg[data-state="solid"] { fill: var(--lamp); }
+.pc__seg-hatch { stroke: none; }
+.pc__hatch { stroke: var(--surface); stroke-width: 2; }
+
+.pc__grid { stroke: var(--hairline-strong); stroke-width: 1; }
+.pc__tick { fill: var(--muted); font-family: var(--font-ui); font-size: 11px; font-variant-numeric: tabular-nums; }
+.pc__line { fill: none; stroke: var(--lamp-ink); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.pc__dot { fill: var(--surface); stroke: var(--lamp-ink); stroke-width: 2; }
+.pc__dot--last { fill: var(--lamp-ink); }
+.pchart[data-chart="ret"] .pc__line { stroke: var(--text); }
+.pchart[data-chart="ret"] .pc__dot { stroke: var(--text); }
+.pchart[data-chart="ret"] .pc__dot--last { fill: var(--text); }
+.pc__band { fill: var(--text); fill-opacity: .08; }
+.pc__band-edge { stroke: var(--text); stroke-width: 1.5; stroke-dasharray: 4 4; }
+
+/* The legend under the bar. */
+.pc__legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-4); list-style: none; padding: 0; }
+@media (min-width: 640px) {
+  .pc__legend { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.pc__legend-item { display: flex; align-items: center; gap: var(--space-2); min-inline-size: 0; font-size: var(--fs-small); }
+.pc__legend-label { color: var(--muted); }
+.pc__legend-n { font-weight: 700; font-variant-numeric: tabular-nums; }
+.pc__sw {
+  flex: none;
+  inline-size: var(--space-3);
+  block-size: var(--space-3);
+  border-radius: var(--space-1);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-soft);
+}
+.pc__sw[data-state="seen"] { background: var(--st-seen); }
+.pc__sw[data-state="struggling"] {
+  background-color: var(--st-struggling);
+  background-image: repeating-linear-gradient(135deg, transparent 0 2px, var(--surface) 2px 3px);
+}
+.pc__sw[data-state="regressed"] {
+  background-color: var(--st-regressed);
+  background-image: repeating-linear-gradient(45deg, transparent 0 2px, var(--surface) 2px 3px);
+}
+.pc__sw[data-state="learning"] { background: var(--st-learning); }
+.pc__sw[data-state="known"] { background: var(--st-known); }
+.pc__sw[data-state="solid"] { background: var(--lamp); }
+
+/* The table that carries a chart's values. */
+.pc-table summary {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--size-tap);
+  font-weight: 700;
+  font-size: var(--fs-small);
+  cursor: pointer;
+}
+.pc-table__scroll { overflow: auto; max-block-size: calc(var(--space-9) * 3); }
+.pc-table table, .pweek__table { inline-size: 100%; border-collapse: collapse; font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
+.pc-table caption { text-align: start; color: var(--muted); padding-block: var(--space-2); }
+.pc-table th, .pc-table td, .pweek__table th, .pweek__table td {
+  padding-block: var(--space-2);
+  padding-inline: var(--space-2);
+  text-align: start;
+  border-block-end: 1px solid var(--hairline);
+}
+.pc-table thead th, .pweek__table thead th { color: var(--muted); font-weight: 600; }
+.pc-table tbody th, .pweek__table tbody th { font-weight: 700; }
+
+/* This week. */
+.pweek__h3 { font-family: var(--font-display); font-size: var(--fs-body); font-weight: 700; margin-block-start: var(--space-2); }
+.pweek__list { display: grid; gap: var(--space-2); list-style: none; padding: 0; }
+.pweek__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  padding-block: var(--space-2);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--surface-soft);
+}
+.pweek__he { font-family: var(--font-he); font-size: var(--fs-he-md); font-weight: 700; line-height: var(--lh-he-display); padding-block: .1em; }
+.pweek__gloss { color: var(--muted); font-size: var(--fs-small); }
+.pweek__skill { background: var(--surface); border: 1px solid var(--hairline); margin-inline-start: auto; }
+.pweek__cause { flex-basis: 100%; color: var(--muted); font-size: var(--fs-small); }
+.pweek__text { font-size: var(--fs-small); font-weight: 600; }
+
+/* Placement history. */
+.pplace__list { display: grid; gap: var(--space-3); list-style: none; padding: 0; }
+.pplace__item { display: grid; gap: var(--space-1); padding-block-end: var(--space-3); border-block-end: 1px solid var(--hairline); }
+.pplace__item:last-child { border-block-end: 0; padding-block-end: 0; }
+.pplace__title { font-weight: 700; }
+.pplace__detail { color: var(--muted); font-size: var(--fs-small); }
+.pplace .btn { inline-size: auto; justify-self: start; padding-inline: var(--space-6); margin-block-start: 0; }
