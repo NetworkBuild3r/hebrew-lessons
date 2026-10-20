@@ -30,8 +30,8 @@ func TestMigrateFromTheDeployedV3Database(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}) {
-		t.Fatalf("versions after migrate = %v, want 1..11", got)
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}) {
+		t.Fatalf("versions after migrate = %v, want 1..12", got)
 	}
 	// One table from each INIT-015 migration is there, so none was skipped as already applied.
 	for _, table := range []string{"attempts", "daily_snapshots", "weekly_reports", "job_state", "placement_v3_runs", "placement_items"} {
@@ -47,7 +47,7 @@ func TestMigrateFromTheDeployedV3Database(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("second migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); len(got) != 11 {
+	if got := m6Applied(t, conn); len(got) != 12 {
 		t.Fatalf("versions after a second migrate = %v", got)
 	}
 }

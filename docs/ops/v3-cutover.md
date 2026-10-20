@@ -351,7 +351,7 @@ kubectl -n hebrew-next get pod -l app=hebrew-next -o jsonpath='{.items[0].status
 kubectl -n hebrew-next exec deploy/hebrew-next -c hebrew -- /usr/local/bin/hebrew migrate --check
 ```
 
-Expected: the init container finishes (this is where 006, 008, 009, 010, 011 run, one transaction each). The two timestamps give the time the migrations and the import took. Write it down: production will be down for about that long plus the image pull and the app start, because the strategy is `Recreate`. `migrate --check` then prints `applied: 1 2 3 4 5 6 7 8 9 10 11`, `pending: (none)`, `integrity: ok`, `result: ok`.
+Expected: the init container finishes (this is where 006, 008, 009, 010, 011, and 012 run, one transaction each). The two timestamps give the time the migrations and the import took. Write it down: production will be down for about that long plus the image pull and the app start, because the strategy is `Recreate`. `migrate --check` then prints `applied: 1 2 3 4 5 6 7 8 9 10 11 12`, `pending: (none)`, `integrity: ok`, `result: ok`.
 
 Run the daily job once on the copy:
 
@@ -826,7 +826,7 @@ SMOKE_STRICT=1 sh scripts/smoke-v3.sh
 kubectl -n hebrew exec deploy/hebrew -c hebrew -- /usr/local/bin/hebrew migrate --check
 ```
 
-Expected: `7 passed, 0 failed, 0 skipped`. `applied: 1 2 3 4 5 6 7 8 9 10 11`, `pending: (none)`, `result: ok`. Then sign in and do the manual checks from 3.4, including starting a placement.
+Expected: `7 passed, 0 failed, 0 skipped`. `applied: 1 2 3 4 5 6 7 8 9 10 11 12`, `pending: (none)`, `result: ok`. Then sign in and do the manual checks from 3.4, including starting a placement.
 
 Take a post-cutover backup now, with the running pod (the v3 image has the command):
 
