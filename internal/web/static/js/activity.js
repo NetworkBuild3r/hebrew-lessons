@@ -5,7 +5,7 @@
    - a clip plays from its orb. Playing the prompt clip a second time before the
      answer sets hinted=1, which is what the engine reads as a hint;
    - keys: 1 to 4 pick (and grade on the flashcard), 1 to 5 and A to E on a match
-     board, Enter takes the gold action, Space replays the prompt clip.
+     board, Enter takes the gold action, Space replays the clip.
    Nothing here decides right or wrong. The answer is posted and the server checks. */
 (function (g) {
   "use strict";
@@ -46,7 +46,16 @@
   }
   function clipOf(el) {
     var id = el.getAttribute("data-audio");
-    return (id && D.getElementById(id)) || one("audio", el);
+    if (id) {
+      var named = D.getElementById(id);
+      if (named) return named;
+    }
+    var inner = one("audio", el);
+    if (inner) return inner;
+    // The review flashcard orb sits beside its audio in .clip, and clips.js
+    // plays that button on click. Space uses the same element, once.
+    var clip = el.closest && el.closest(".clip");
+    return clip ? one("audio", clip) : null;
   }
 
   /* Pick. */
@@ -160,7 +169,10 @@
     }
     if (e.key === " " || e.key === "Spacebar") {
       if (interactive(target)) return;
-      var orb = one(".c-orb[data-hint]", f) || one(".c-orb[data-src]", f);
+      // A focused orb keeps the key: the browser clicks it, and clips.js
+      // plays button.orb. Space anywhere else starts the clip once, and does
+      // not click the button, so the two scripts do not both call play().
+      var orb = one(".c-orb[data-hint]", f) || one(".c-orb[data-src]", f) || one(".orb[data-src]", f);
       if (orb) { e.preventDefault(); play(clipOf(orb)); }
       return;
     }
