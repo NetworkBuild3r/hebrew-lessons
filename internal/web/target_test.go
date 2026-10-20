@@ -66,3 +66,42 @@ func TestTargetFromAndGapToken(t *testing.T) {
 		t.Fatalf("cloze gap %q", gap)
 	}
 }
+
+func TestTargetFallsBackWhenItDoesNotResolve(t *testing.T) {
+	const (
+		ani = "אֲנִי"
+		gar = "גָּר"
+		po  = "פֹּה"
+	)
+	text := ani + " " + gar + " " + po
+	// The pointed verb is not in this map. The unpointed spelling is a different key.
+	lex := map[string]db.LexemeView{
+		ani:             {ID: 1, Text: ani, Gloss: "I"},
+		po:              {ID: 3, Text: po, Gloss: "here"},
+		stripMarks(gar): {ID: 9, Text: stripMarks(gar), Gloss: "lives"},
+	}
+	newWords := []db.LexemeView{{ID: 1, Text: ani}, {ID: 2, Text: gar}}
+	tokens := units.Tokenize(text)
+	act := units.Activity{Type: units.ActivityRecall, Text: text, Target: gar}
+
+	got, err := targetFrom(act, lex, newWords)
+	if err != nil || got.ID != 1 || got.Text != ani {
+		t.Fatalf("missing lexeme fell back to %+v %v", got, err)
+	}
+	if gap := gapToken(tokens, lex, newWords, gar); gap != ani {
+		t.Fatalf("missing lexeme gap %q", gap)
+	}
+
+	act.Target = "אַחֵר"
+	got, err = targetFrom(act, lex, newWords)
+	if err != nil || got.Text != ani {
+		t.Fatalf("missing token fell back to %+v %v", got, err)
+	}
+	if gap := gapToken(tokens, lex, newWords, act.Target); gap != ani {
+		t.Fatalf("missing token gap %q", gap)
+	}
+}
+
+func stripMarks(s string) string {
+	return units.StripNiqqud(s)
+}

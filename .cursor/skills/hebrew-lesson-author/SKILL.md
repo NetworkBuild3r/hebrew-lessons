@@ -126,7 +126,7 @@ Every Hebrew text needs a clip for its exact pointed text. Do not change a text 
 
 | rule | severity | what it means | how to fix it |
 | --- | --- | --- | --- |
-| `activity.target` | block | A graded activity's `target` is not one of its tokens, or that token is not in the lexicon. A `target` on any other activity type is the same rule. An empty target is allowed. | Set `target` to a token of that activity's text that `lookup` knows, or remove it. |
+| `activity.target` | block | A graded activity's `target` is not one of its tokens, or that token's exact pointed spelling is not a lexicon entry. The unpointed spelling does not count. A `target` on any other activity type is the same rule. An empty target is allowed. | Set `target` to the exact pointed spelling `lookup` returns for that token, or remove it. |
 | `audio.missing` | block | A Hebrew text has no clip for its exact pointed text. A dialogue line needs a clip in its own speaker's voice. | Call `generate_audio` with that exact text, or with the line and its speaker. |
 | `brief.audio_all` | block | A new word, or a title, situation, or concept that has Hebrew, has no clip. | Add the new words to `texts` in `generate_audio`, or keep Hebrew out of the title, situation, and concept. |
 | `brief.coverage` | block | A passage has too few known words for the tier. The message gives the share and what the tier needs. | Replace unknown words with comfortable words or brief words, or shorten the passage. |

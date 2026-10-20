@@ -76,7 +76,10 @@ func targetIssues(ctx context.Context, doc *Unit, lk Lookup) []Issue {
 	}
 	s := &scan{ctx: ctx, lk: lk, position: doc.Position, cache: map[string]*probe{}}
 	for _, h := range need {
-		if s.inLexicon(h.tok) {
+		// The player looks the token up by its exact pointed text (LexemesByText).
+		// The consonant skeleton that inLexicon accepts is not enough: a lexicon
+		// row for גר does not render choices for a target גָּר.
+		if s.probeLex(normalize(h.tok)) {
 			continue
 		}
 		if s.err != nil {

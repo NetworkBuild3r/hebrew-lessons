@@ -653,10 +653,6 @@ func targetFrom(act units.Activity, lex map[string]db.LexemeView, newWords []db.
 		if view, found := lex[tok]; found {
 			return view, nil
 		}
-		return db.LexemeView{}, nil
-	}
-	if units.Normalize(act.Target) != "" {
-		return db.LexemeView{}, nil
 	}
 	fresh := map[string]bool{}
 	for _, word := range newWords {
@@ -680,10 +676,9 @@ func targetFrom(act units.Activity, lex map[string]db.LexemeView, newWords []db.
 
 func gapToken(tokens []string, lex map[string]db.LexemeView, newWords []db.LexemeView, target string) string {
 	if tok, ok := tokenForTarget(tokens, target); ok {
-		return tok
-	}
-	if units.Normalize(target) != "" {
-		return ""
+		if _, found := lex[tok]; found {
+			return tok
+		}
 	}
 	fresh := map[string]bool{}
 	for _, word := range newWords {

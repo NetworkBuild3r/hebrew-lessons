@@ -159,6 +159,41 @@ func TestGetUnit(t *testing.T) {
 	assertDenied(t, bad, "unitId must be a positive id")
 }
 
+func TestGetUnitAfterPublishThenEdit(t *testing.T) {
+	mem, srv := roleServer(t)
+	doc := helloDoc()
+	saved, err := mem.PutUnit(context.Background(), nil, &doc, ScopeShared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mem.PublishUnit(context.Background(), saved.UnitID, nil); err != nil {
+		t.Fatal(err)
+	}
+	live := postTool(t, srv.URL, "admin", "get_unit", getUnitInput{UnitID: saved.UnitID}, nil)
+	body := readBody(t, live)
+	if live.StatusCode != 200 || strings.Contains(body, `"isError":true`) || !strings.Contains(body, `"status":"published"`) || !strings.Contains(body, "Hello") {
+		t.Fatalf("published read %s", body)
+	}
+
+	edited := doc
+	edited.Title = "DraftOnlyTitle"
+	edit := postTool(t, srv.URL, "admin", "put_unit", putInput{
+		UnitID: &saved.UnitID, Scope: ScopeShared, Position: 0, Doc: edited,
+	}, nil)
+	body = readBody(t, edit)
+	if edit.StatusCode != 200 || strings.Contains(body, `"isError":true`) {
+		t.Fatalf("edit %s", body)
+	}
+	if mem.Status(saved.UnitID) != "draft" {
+		t.Fatalf("status after edit %q", mem.Status(saved.UnitID))
+	}
+	got := postTool(t, srv.URL, "admin", "get_unit", getUnitInput{UnitID: saved.UnitID}, nil)
+	body = assertDenied(t, got, msgUnitNotPublished)
+	if strings.Contains(body, "DraftOnlyTitle") {
+		t.Fatalf("draft leaked %s", body)
+	}
+}
+
 func TestReadOnlyTokenCanGetUnit(t *testing.T) {
 	mem, srv := readOnlyHandler(t, false)
 	doc := helloDoc()

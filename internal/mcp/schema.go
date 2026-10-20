@@ -113,7 +113,7 @@ func annotateUnitSchema(s *jsonschema.Schema) error {
 	// target stays optional. An empty value is omitted, and a unit that has
 	// no target validates and plays as it did before this field existed.
 	if target := prop(act, "target"); target != nil {
-		target.Description = "Optional. The exact token this graded activity tests, pointed Hebrew in NFC, one of the tokens of text. That token must be in the lexicon. Omit it, or leave it empty, and the player tests the first new token. Used by recall, listen_pick, produce, and cloze."
+		target.Description = "Optional. The exact token this graded activity tests, pointed Hebrew in NFC, one of the tokens of text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Omit it, or leave it empty, and the player tests the first new token. Used by recall, listen_pick, produce, and cloze."
 	}
 	// text is not marked required here, because a dialogue has lines instead. The
 	// validator enforces it for every other type (schema.required) and enforces
@@ -177,7 +177,7 @@ func activityCatalog() []activityInfo {
 	target := activityField{
 		Name:        "target",
 		Required:    false,
-		Description: "Optional. The exact token this activity tests, pointed Hebrew in NFC, one of the tokens of text. That token must be in the lexicon. Omit it and the player tests the first new token.",
+		Description: "Optional. The exact token this activity tests, pointed Hebrew in NFC, one of the tokens of text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Omit it and the player tests the first new token.",
 	}
 	return []activityInfo{
 		{

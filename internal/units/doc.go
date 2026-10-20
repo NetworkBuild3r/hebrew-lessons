@@ -137,7 +137,7 @@ type Activity struct {
 	Type   string         `json:"type"`
 	Text   string         `json:"text,omitempty"`
 	Lines  []DialogueLine `json:"lines,omitempty"`
-	Target string         `json:"target,omitempty" jsonschema:"Optional. The exact token this graded activity tests, pointed Hebrew in NFC, one of the tokens of text. That token must be in the lexicon. Omit it, or leave it empty, and the player tests the first new token. Used by recall, listen_pick, produce, and cloze."`
+	Target string         `json:"target,omitempty" jsonschema:"Optional. The exact token this graded activity tests, pointed Hebrew in NFC, one of the tokens of text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Omit it, or leave it empty, and the player tests the first new token. Used by recall, listen_pick, produce, and cloze."`
 
 	// speaker is set only on the one-line views of a dialogue that the validator
 	// builds (see flatten). It is never read from or written to JSON.

@@ -52,6 +52,30 @@ func TestActivityTarget(t *testing.T) {
 		t.Fatalf("no lexeme %#v", got)
 	}
 
+	// The lexicon has only the unpointed spelling. inLexicon would accept it.
+	// The player looks up the exact pointed token, so the target is rejected.
+	const gar = "גָּר"
+	bare := stripNiqqud(gar)
+	if bare == gar || bare == "" {
+		t.Fatalf("bare %q", bare)
+	}
+	u, lk = v1()
+	lk.lex[normalize(bare)] = glex{ID: 90, POS: "verb", Bare: bare}
+	u.Lessons[li].Activities[ai].Text = u.Lessons[li].Activities[ai].Text + " " + gar
+	u.Lessons[li].Activities[ai].Target = gar
+	probe := &scan{ctx: context.Background(), lk: lk, cache: map[string]*probe{}}
+	if !probe.inLexicon(gar) {
+		t.Fatal("fixture: the unpointed row should satisfy inLexicon")
+	}
+	got = targetOnly(Validate(context.Background(), &u, lk))
+	if len(got) != 1 || got[0].Rule != RuleActivityTarget {
+		t.Fatalf("unpointed lexicon %#v", got)
+	}
+	msg := got[0].Msg
+	if !strings.Contains(msg, ActivityListenPick) || !strings.Contains(msg, "no lexicon entry") || !strings.HasSuffix(strings.TrimSpace(msg), ".") {
+		t.Fatalf("unpointed message %q", msg)
+	}
+
 	u, lk = v1()
 	story := -1
 	for i, a := range u.Lessons[0].Activities {
