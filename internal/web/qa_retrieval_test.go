@@ -28,22 +28,22 @@ func TestQARetrievalBeforeReveal(t *testing.T) {
 		t.Skip("needs practice item tool: owner MCP Builder")
 	})
 	t.Run("typed answer", func(t *testing.T) {
-		t.Skip("needs a typed-answer practice handler: owner Brian (North Star UI)")
+		t.Skip("needs a typed-answer practice handler: owner Hebrew Frontend Dev (North Star UI)")
 	})
 	t.Run("recall omits gloss", func(t *testing.T) {
-		t.Skip("needs a recall response that omits the gloss before the attempt: owner Brian (North Star UI)")
+		t.Skip("needs a recall response that omits the gloss before the attempt: owner Hebrew Frontend Dev (North Star UI)")
 	})
 	t.Run("listen_pick omits gloss", func(t *testing.T) {
-		t.Skip("needs a listen_pick response that omits the gloss before the attempt: owner Brian (North Star UI)")
+		t.Skip("needs a listen_pick response that omits the gloss before the attempt: owner Hebrew Frontend Dev (North Star UI)")
 	})
 	t.Run("produce omits Hebrew", func(t *testing.T) {
-		t.Skip("needs an en→he produce response that omits the Hebrew before the attempt: owner Brian (North Star UI)")
+		t.Skip("needs an en→he produce response that omits the Hebrew before the attempt: owner Hebrew Frontend Dev (North Star UI)")
 	})
 	t.Run("cloze omits Hebrew option", func(t *testing.T) {
-		t.Skip("needs a cloze response that omits the gapped Hebrew before the attempt: owner Brian (North Star UI)")
+		t.Skip("needs a cloze response that omits the gapped Hebrew before the attempt: owner Hebrew Frontend Dev (North Star UI)")
 	})
 	t.Run("checkpoint omits answer choice", func(t *testing.T) {
-		t.Skip("needs a checkpoint response that omits the answer choice before the attempt: owner Brian (North Star UI)")
+		t.Skip("needs a checkpoint response that omits the answer choice before the attempt: owner Hebrew Frontend Dev (North Star UI)")
 	})
 
 	t.Run("review", func(t *testing.T) {
