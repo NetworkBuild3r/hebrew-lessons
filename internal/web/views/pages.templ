@@ -35,34 +35,7 @@ templ ReviewBody(c ReviewCard) {
 	</div>
 }
 
-templ Progress(p ProgressPage) {
-	@Layout(p.Page) {
-		<article class="sheet" if p.Placement != "" {
-			data-placement={ p.Placement }
-			data-placement-words={ p.PlacementWords }
-			data-placement-level={ p.PlacementLevel }
-			data-placement-rated={ p.PlacementRated }
-			data-placement-at={ p.PlacementAt }
-		}>
-			<h1 lang={ p.Lang }>{ p.ProgressHeading }</h1>
-			<p class="lede" lang={ p.Lang }>{ p.ProgressLede }</p>
-			<ul class="stats">
-				<li>
-					<span class="count"><bdi lang="en" dir="ltr">{ p.KnownText }</bdi></span>
-					<span lang={ p.Lang }>{ p.WordsLabel }</span>
-				</li>
-				<li>
-					<span class="count"><bdi lang="en" dir="ltr">{ p.UnitsText }</bdi></span>
-					<span lang={ p.Lang }>{ p.UnitsLabel }</span>
-				</li>
-				<li>
-					<span class="count"><bdi lang="en" dir="ltr">{ p.DueText }</bdi></span>
-					<span lang={ p.Lang }>{ p.DueLabel }</span>
-				</li>
-			</ul>
-		</article>
-	}
-}
+// Progress moved to progress.templ (INIT-015/SPEC-018).
 
 // SignIn is the signed-out page. No rail, dock, or other navigation:
 // logout lands here, and the only action is auth's Google start route.

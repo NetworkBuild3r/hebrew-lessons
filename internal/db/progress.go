@@ -165,10 +165,12 @@ func (s *Store) SnapshotRows(ctx context.Context, userID int64, from, to string)
 	return out, nil
 }
 
-// RegressionRow is a regression event with its word's text. Text is empty for a band_slip.
+// RegressionRow is a regression event with its word's text. Text is empty and LexemeID is 0
+// for a band_slip.
 type RegressionRow struct {
 	Day       string
 	Kind      string
+	LexemeID  int64
 	Text      string
 	Skill     string
 	FromState string
@@ -184,7 +186,7 @@ func (s *Store) RegressionRows(ctx context.Context, userID int64, from, to strin
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT e.day, e.kind, COALESCE(l.text_nfc, ''), COALESCE(e.skill, ''), COALESCE(e.from_state, ''),
+		SELECT e.day, e.kind, COALESCE(e.lexeme_id, 0), COALESCE(l.text_nfc, ''), COALESCE(e.skill, ''), COALESCE(e.from_state, ''),
 		       COALESCE(e.to_state, ''), e.cause
 		FROM regression_events AS e
 		LEFT JOIN lexemes AS l ON l.id = e.lexeme_id
@@ -197,7 +199,7 @@ func (s *Store) RegressionRows(ctx context.Context, userID int64, from, to strin
 	out := []RegressionRow{}
 	for rows.Next() {
 		var r RegressionRow
-		if err := rows.Scan(&r.Day, &r.Kind, &r.Text, &r.Skill, &r.FromState, &r.ToState, &r.Cause); err != nil {
+		if err := rows.Scan(&r.Day, &r.Kind, &r.LexemeID, &r.Text, &r.Skill, &r.FromState, &r.ToState, &r.Cause); err != nil {
 			return nil, fmt.Errorf("db: regression rows: %w", err)
 		}
 		out = append(out, r)

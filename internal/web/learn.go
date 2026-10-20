@@ -138,35 +138,6 @@ func (s *server) learnerHome(ctx context.Context, userID int64, name string) (Ho
 	return vm, situation, nil
 }
 
-func (s *server) progressVM(ctx context.Context, userID int64) (ProgressVM, error) {
-	var vm ProgressVM
-	if s == nil || s.store == nil || s.store.Clock() == nil {
-		return vm, fmt.Errorf("web: store clock is not configured")
-	}
-	now := s.store.Clock().Now()
-	due, err := s.store.ListDueCards(ctx, userID, now)
-	if err != nil {
-		return ProgressVM{}, err
-	}
-	vm.DueCount = len(due)
-	known, err := s.store.KnownLexemeIDs(ctx, userID)
-	if err != nil {
-		return ProgressVM{}, err
-	}
-	vm.KnownWords = len(known)
-	_, _, completed, total, err := s.unitProgress(ctx, userID)
-	if err != nil {
-		return ProgressVM{}, err
-	}
-	vm.UnitsCompleted = completed
-	vm.UnitsTotal = total
-	vm.Placement, err = s.placementVM(ctx, userID)
-	if err != nil {
-		return ProgressVM{}, err
-	}
-	return vm, nil
-}
-
 // unitProgress returns the next published shared unit this learner has not
 // finished, that unit's situation line, and the published shared counts.
 func (s *server) unitProgress(ctx context.Context, userID int64) (*UnitRefVM, string, int, int, error) {
@@ -286,24 +257,6 @@ func fillPlacement(home *views.Home, p *PlacementVM) {
 	if !p.TakenAt.IsZero() {
 		home.PlacementAt = db.FormatTime(p.TakenAt)
 	}
-}
-
-func progressToView(lang, csrf, gender string, vm ProgressVM) views.ProgressPage {
-	ui := views.UIFor(lang, gender)
-	page := views.ProgressPage{
-		Page:      views.Page{UI: ui, Title: ui.DocTitle("progress"), CSRF: csrf, Current: "progress"},
-		KnownText: strconv.Itoa(vm.KnownWords),
-		UnitsText: strconv.Itoa(vm.UnitsCompleted) + "/" + strconv.Itoa(vm.UnitsTotal),
-		DueText:   strconv.Itoa(vm.DueCount),
-	}
-	if vm.Placement != nil {
-		page.Placement = placementState(vm.Placement)
-		page.PlacementWords = strconv.Itoa(vm.Placement.EstimatedKnownWords)
-		page.PlacementLevel = strconv.Itoa(vm.Placement.Level)
-		page.PlacementRated = strconv.Itoa(vm.Placement.CardsRated)
-		page.PlacementAt = db.FormatTime(vm.Placement.TakenAt)
-	}
-	return page
 }
 
 func placementState(p *PlacementVM) string {

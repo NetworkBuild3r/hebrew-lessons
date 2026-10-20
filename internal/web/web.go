@@ -352,27 +352,6 @@ func (s *server) serveReview(w http.ResponseWriter, r *http.Request, secure bool
 	render(w, r, views.Review(page, card))
 }
 
-func (s *server) serveProgress(w http.ResponseWriter, r *http.Request, secure bool, csrf string) {
-	lang := chooseLang(w, r, secure)
-	user, ok := auth.CurrentUser(r.Context())
-	gender := views.AddressMasculine
-	var vm ProgressVM
-	if ok && s != nil && s.store != nil {
-		var err error
-		vm, err = s.progressVM(r.Context(), user.ID)
-		if err != nil {
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-		gender, err = s.addressGender(r.Context(), user.ID)
-		if err != nil {
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-	}
-	render(w, r, views.Progress(progressToView(lang, csrf, gender, vm)))
-}
-
 func (s *server) currentReview(r *http.Request, lang, csrf string) (views.ReviewCard, error) {
 	lede := views.UIFor(lang, views.AddressMasculine).ReviewLede
 	key, user, ok := s.sessionKey(r)
