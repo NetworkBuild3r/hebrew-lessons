@@ -744,14 +744,9 @@ jobs:
           set -euo pipefail
           set -o pipefail
           go test -count=1 -v -run '^(TestClipPlayAfterSwap|TestKeyboardNode|TestReviewOrbSpacePlaysOnce)$' ./internal/web | tee node.out
-          # A renamed test matches nothing, prints [no tests to run], and exits 0
-          # with no --- SKIP line. Require the PASS lines. errexit ignores a
-          # bare "! grep", so the skip check is an explicit if.
-          # TestReviewOrbSpacePlaysOnce is added by #115 and is not on v3 yet.
-          # Until `func TestReviewOrbSpacePlaysOnce` is in internal/web, a
-          # missing PASS line means the test is absent, not skipped. Any
-          # --- SKIP, including that test's "node not installed" skip once
-          # it exists, still fails this step.
+          # A renamed or deleted test matches nothing, prints [no tests to run],
+          # and exits 0 with no --- SKIP line. Require each PASS line.
+          # errexit ignores a bare "! grep", so each check is an explicit if.
           if grep -q -- '--- SKIP' node.out; then
             echo "::error::a node test printed --- SKIP"
             exit 1
@@ -764,13 +759,9 @@ jobs:
             echo "::error::missing --- PASS: TestKeyboardNode"
             exit 1
           fi
-          if grep -R --include='*_test.go' -q -F 'func TestReviewOrbSpacePlaysOnce' internal/web; then
-            if ! grep -q -- '--- PASS: TestReviewOrbSpacePlaysOnce' node.out; then
-              echo "::error::missing --- PASS: TestReviewOrbSpacePlaysOnce"
-              exit 1
-            fi
-          else
-            echo "TestReviewOrbSpacePlaysOnce is not in this tree yet; not required"
+          if ! grep -q -- '--- PASS: TestReviewOrbSpacePlaysOnce' node.out; then
+            echo "::error::missing --- PASS: TestReviewOrbSpacePlaysOnce"
+            exit 1
           fi
 
   # The check name is exactly `test`. Branch protection and publish both
