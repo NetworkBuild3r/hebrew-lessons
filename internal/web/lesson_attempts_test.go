@@ -41,9 +41,15 @@ func TestLessonChecksWriteAttempts(t *testing.T) {
 		t.Fatal(err)
 	}
 	sp := func(s string) *string { return &s }
+	const (
+		evening = "עֶרֶב"
+		night   = "לַיְלָה"
+	)
 	saved, _, err := store.UpsertLexemes(ctx, []lexicon.Input{
 		{TextNFC: hello, Gloss: "hello", Translit: sp("shalom"), Gender: sp("m"), POS: sp("noun")},
 		{TextNFC: morning, Gloss: "morning", Translit: sp("boker"), Gender: sp("m"), POS: sp("noun")},
+		{TextNFC: evening, Gloss: "evening", Translit: sp("erev"), Gender: sp("m"), POS: sp("noun")},
+		{TextNFC: night, Gloss: "night", Translit: sp("layla"), Gender: sp("m"), POS: sp("verb")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -61,7 +67,7 @@ func TestLessonChecksWriteAttempts(t *testing.T) {
 			{Type: units.ActivityListenPick, Text: line},
 			{Type: units.ActivityProduce, Text: hello},
 			{Type: units.ActivityCloze, Text: line},
-			{Type: units.ActivityStory, Text: line},
+			{Type: units.ActivityStory, Text: line + " " + evening + " " + night},
 		}}},
 	}, "shared")
 	publish(t, store, unitID)
@@ -177,8 +183,14 @@ func TestLessonForgedAnswerIsStoredBounded(t *testing.T) {
 		t.Fatal(err)
 	}
 	sp := func(s string) *string { return &s }
+	const (
+		other   = "בֹּקֶר"
+		evening = "עֶרֶב"
+	)
 	saved, _, err := store.UpsertLexemes(ctx, []lexicon.Input{
 		{TextNFC: hello, Gloss: "hello", Translit: sp("shalom"), Gender: sp("m"), POS: sp("noun")},
+		{TextNFC: other, Gloss: "morning", Translit: sp("boker"), Gender: sp("m"), POS: sp("noun")},
+		{TextNFC: evening, Gloss: "evening", Translit: sp("erev"), Gender: sp("m"), POS: sp("noun")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -187,6 +199,8 @@ func TestLessonForgedAnswerIsStoredBounded(t *testing.T) {
 		Title: "Greetings", Position: 1, NewWords: []string{hello},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityRecall, Text: hello},
+			{Type: units.ActivityRecall, Text: other},
+			{Type: units.ActivityRecall, Text: evening},
 		}}},
 	}, "shared")
 	publish(t, store, unitID)
@@ -206,7 +220,13 @@ func TestLessonForgedAnswerIsStoredBounded(t *testing.T) {
 	if rec := postLesson(t, h, cookie, path, runID, forged, true, "brian-csrf"); rec.Code != http.StatusOK {
 		t.Fatalf("forged answer = %d", rec.Code)
 	}
-	rows, err := store.ListAttempts(ctx, brian.ID, saved[0].ID)
+	helloID := saved[0].ID
+	for _, row := range saved {
+		if row.TextNFC == hello {
+			helloID = row.ID
+		}
+	}
+	rows, err := store.ListAttempts(ctx, brian.ID, helloID)
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("attempts = %+v, %v", rows, err)
 	}

@@ -841,9 +841,11 @@ func TestLessonFrame(t *testing.T) {
 	store, h := openShell(t, fixedClock(now), nil, nil)
 	l := addLearner(t, store, "a@example.com", "sub-a", now)
 	sp := func(s string) *string { return &s }
+	const evening = "עֶרֶב"
 	_, _, err := store.UpsertLexemes(context.Background(), []lexicon.Input{
 		{TextNFC: hello, Gloss: "hello", Translit: sp("shalom"), Gender: sp("m"), POS: sp("noun")},
 		{TextNFC: morning, Gloss: "morning", Translit: sp("boker"), Gender: sp("m"), POS: sp("noun")},
+		{TextNFC: evening, Gloss: "evening", Translit: sp("erev"), Gender: sp("m"), POS: sp("noun")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -851,7 +853,7 @@ func TestLessonFrame(t *testing.T) {
 	id := putLesson(t, store, nil, units.Unit{
 		Title: "Greetings", Position: 1, NewWords: []string{hello, morning},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
-			{Type: units.ActivityStory, Text: hello + " " + morning},
+			{Type: units.ActivityStory, Text: hello + " " + morning + " " + evening},
 			{Type: units.ActivityRecall, Text: hello},
 			{Type: units.ActivityListenPick, Text: morning},
 		}}},
@@ -902,8 +904,8 @@ func TestLessonFrame(t *testing.T) {
 
 	// Every answer is a c-answer submit button with a key, and nothing else is an answer.
 	buttons := regexp.MustCompile(`<button [^>]*class="c-answer"[^>]*>`).FindAllString(step2, -1)
-	if len(buttons) != 2 {
-		t.Fatalf("%d c-answer buttons, want 2:\n%s", len(buttons), step2)
+	if len(buttons) != lessonMinChoices {
+		t.Fatalf("%d c-answer buttons, want %d:\n%s", len(buttons), lessonMinChoices, step2)
 	}
 	for _, b := range buttons {
 		if !strings.Contains(b, `type="submit"`) || !strings.Contains(b, `name="answer"`) || !strings.Contains(b, `value="`) {
@@ -913,10 +915,8 @@ func TestLessonFrame(t *testing.T) {
 	if strings.Contains(step2, `class="choice"`) {
 		t.Error("an answer still uses the old .choice class")
 	}
-	for _, key := range []string{`<span class="c-answer__key" aria-hidden="true">1</span>`, `<span class="c-answer__key" aria-hidden="true">2</span>`} {
-		if !strings.Contains(step2, key) {
-			t.Errorf("missing key badge %s", key)
-		}
+	if strings.Contains(step2, `c-answer__key" aria-hidden="true">1<`) || strings.Contains(step2, `c-answer__key" aria-hidden="true">2<`) {
+		t.Error("lesson choices show key badges, and the lesson has no shortcut legend")
 	}
 
 	// Answering shows the result in a sheet with the one gold button, and the bar fills.
