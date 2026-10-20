@@ -590,8 +590,8 @@ func visibleText(inner string) string {
 
 // TestQAChoiceFloor is the two-option pool. The unit has the target and one
 // other lexeme, so a recall or a cloze can fill exactly two buttons. Three is
-// still the floor: that pool is a reveal. assertChoiceInvariants rejects an
-// ask that renders fewer than three, which is what a floor of two would do.
+// the floor, so that page is a reveal: no choice buttons, and posting the
+// target id or Continue records no attempt.
 func TestQAChoiceFloor(t *testing.T) {
 	fx := openLessonPlayer(t)
 	emails := []string{"brian@example.com", "qa-floor-a@example.com", "qa-floor-b@example.com"}
@@ -614,35 +614,62 @@ func TestQAChoiceFloor(t *testing.T) {
 		t.Fatalf("two-option fixture activities = %+v", lesson.Activities)
 	}
 	byText := qaLexemeIndex(doc)
-	clients := []qaClient{{h: fx.h, cookie: fx.cookie, csrf: lessonCSRF}}
-	clients = append(clients,
-		qaNamedLearner(t, fx, emails[1], "floor-a-csrf"),
-		qaNamedLearner(t, fx, emails[2], "floor-b-csrf"),
-	)
+	type floorLearner struct {
+		client qaClient
+		userID int64
+	}
+	learners := []floorLearner{{
+		client: qaClient{h: fx.h, cookie: fx.cookie, csrf: lessonCSRF},
+		userID: fx.userID,
+	}}
+	for i, email := range emails[1:] {
+		client := qaNamedLearner(t, fx, email, fmt.Sprintf("floor-%d-csrf", i))
+		user, err := fx.store.UserByEmail(fx.ctx, email)
+		if err != nil {
+			t.Fatal(err)
+		}
+		learners = append(learners, floorLearner{client: client, userID: user.ID})
+	}
 	path := "/lesson/" + itoa(doc.UnitID) + "/0"
 	runs := map[string]bool{}
-	for li, client := range clients {
+	for li, learner := range learners {
+		client := learner.client
 		for step, act := range lesson.Activities {
 			body := getAuthed(t, client.h, client.cookie, path)
 			if !qaSawPrompt(act.Type, body, act.Text) {
 				t.Fatalf("learner %d step %d is not %s %s", li, step, act.Type, act.Text)
 			}
-			runs[runValue(t, body)] = true
-			if !strings.Contains(body, `<div class="choices">`) {
-				if !strings.Contains(body, `value="continue"`) {
-					t.Fatalf("learner %d %s step %d reveal has no Continue", li, act.Type, step)
-				}
-				advanceChoice(t, client, path, runValue(t, body))
-				continue
+			runID := runValue(t, body)
+			runs[runID] = true
+			if strings.Contains(body, `<div class="choices">`) {
+				t.Fatalf("learner %d %s step %d rendered choices; two eligible options are a reveal", li, act.Type, step)
 			}
-			ask := qaReadAsk(t, body, act, byText)
-			assertChoiceInvariants(t, step, act.Type, ask)
-			gradeChoice(t, client, path, ask.runID, ask.targetID, "feedback--right")
-			advanceChoice(t, client, path, ask.runID)
+			if !strings.Contains(body, `value="continue"`) {
+				t.Fatalf("learner %d %s step %d reveal has no Continue", li, act.Type, step)
+			}
+			lex, ok := qaActivityLexeme(act, byText)
+			if !ok {
+				t.Fatalf("learner %d step %d target %s is missing", li, step, act.Text)
+			}
+			posted := postLesson(t, client.h, client.cookie, path, runID, lex.ID, true, client.csrf)
+			if posted.Code != http.StatusOK {
+				t.Fatalf("learner %d %s step %d post id: %d\n%s", li, act.Type, step, posted.Code, posted.Body.String())
+			}
+			got := posted.Body.String()
+			if strings.Contains(got, "feedback--right") || strings.Contains(got, `class="choices"`) {
+				t.Fatalf("learner %d %s step %d graded a reveal:\n%s", li, act.Type, step, got)
+			}
+			if n := countRows(t, fx.store, `SELECT COUNT(*) FROM attempts WHERE user_id = ?`, learner.userID); n != 0 {
+				t.Fatalf("learner %d %s step %d recorded %d attempts after posting the target", li, act.Type, step, n)
+			}
+			advanceChoice(t, client, path, runID)
+			if n := countRows(t, fx.store, `SELECT COUNT(*) FROM attempts WHERE user_id = ?`, learner.userID); n != 0 {
+				t.Fatalf("learner %d %s step %d recorded %d attempts after Continue", li, act.Type, step, n)
+			}
 		}
 	}
-	if len(runs) < len(clients) {
-		t.Fatalf("two-option learners shared runs: %d runs for %d learners", len(runs), len(clients))
+	if len(runs) < len(learners) {
+		t.Fatalf("two-option learners shared runs: %d runs for %d learners", len(runs), len(learners))
 	}
 }
 
@@ -659,6 +686,7 @@ func TestQAChoicePromptGlosses(t *testing.T) {
 		t.Fatalf("prompt fixture has %d lessons", len(doc.Unit.Lessons))
 	}
 	lesson := doc.Unit.Lessons[0]
+	assertPromptDecoys(t, fx, doc, lesson.Activities)
 	qaInsertPromptClips(t, fx, lesson.Activities)
 	byText := qaLexemeIndex(doc)
 	byID := map[string]qaLexeme{}
@@ -692,6 +720,83 @@ func TestQAChoicePromptGlosses(t *testing.T) {
 	}
 	if len(runs) < len(clients) {
 		t.Fatalf("prompt learners shared runs: %v", runs)
+	}
+}
+
+// assertPromptDecoys requires every gloss twin to be a unit word, and each
+// twin to sit on a line the other twin is not on. A word that is only in
+// newWords never reaches UnitLexemes, so it cannot be a distractor.
+func assertPromptDecoys(t *testing.T, fx lessonFixture, doc qaChoiceDoc, acts []units.Activity) {
+	t.Helper()
+	rows, err := fx.store.UnitLexemes(fx.ctx, doc.UnitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inUnit := map[string]bool{}
+	for _, row := range rows {
+		inUnit[row.Text] = true
+	}
+	byGloss := map[string][]string{}
+	for _, lex := range doc.Lexemes {
+		gloss := qaNormGloss(lex.Gloss)
+		if gloss == "" {
+			t.Fatalf("lexeme %s has no gloss", lex.Text)
+		}
+		byGloss[gloss] = append(byGloss[gloss], lex.Text)
+	}
+	decoys := 0
+	for gloss, texts := range byGloss {
+		if len(texts) < 2 {
+			continue
+		}
+		for _, text := range texts {
+			if !inUnit[text] {
+				t.Fatalf("decoy %s (gloss %q) is not in the unit words", text, gloss)
+			}
+			decoys++
+		}
+	}
+	if decoys < 2 {
+		t.Fatal("prompt fixture has no gloss decoy in the unit words")
+	}
+	outside := map[string]bool{}
+	for _, act := range acts {
+		onLine := map[string]bool{}
+		for _, tok := range units.Tokenize(act.Text) {
+			onLine[tok] = true
+		}
+		for gloss, texts := range byGloss {
+			if len(texts) < 2 {
+				continue
+			}
+			var present, absent []string
+			for _, text := range texts {
+				if onLine[text] {
+					present = append(present, text)
+				} else {
+					absent = append(absent, text)
+				}
+			}
+			if len(present) == 0 || len(absent) == 0 {
+				continue
+			}
+			for _, text := range absent {
+				outside[text] = true
+				if !inUnit[text] {
+					t.Fatalf("%s step gloss %q decoy %s is not a unit word", act.Type, gloss, text)
+				}
+			}
+		}
+	}
+	for gloss, texts := range byGloss {
+		if len(texts) < 2 {
+			continue
+		}
+		for _, text := range texts {
+			if !outside[text] {
+				t.Fatalf("decoy %s (gloss %q) is never outside a line that shows that gloss", text, gloss)
+			}
+		}
 	}
 }
 

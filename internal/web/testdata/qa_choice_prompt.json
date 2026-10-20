@@ -2,25 +2,23 @@
   "lexemes": [
     {"text": "א", "gloss": "Alef", "translit": "alef", "pos": "noun", "gender": "m"},
     {"text": "ב", "gloss": "  Bet  ", "translit": "bet", "pos": "noun", "gender": "m"},
-    {"text": "ג", "gloss": "Gimel", "translit": "gimel", "pos": "noun", "gender": "m"},
-    {"text": "ד", "gloss": "Dalet", "translit": "dalet", "pos": "noun", "gender": "m"},
-    {"text": "ה", "gloss": "He", "translit": "he", "pos": "noun", "gender": "m"},
-    {"text": "ו", "gloss": "Vav", "translit": "vav", "pos": "noun", "gender": "m"},
-    {"text": "ז", "gloss": "BET", "translit": "zayin", "pos": "noun", "gender": "m"}
+    {"text": "ז", "gloss": "BET", "translit": "zayin", "pos": "noun", "gender": "m"},
+    {"text": "ה", "gloss": "He", "translit": "he", "pos": "verb", "gender": "m"},
+    {"text": "ג", "gloss": "Gimel", "translit": "gimel", "pos": "verb", "gender": "m"}
   ],
   "unit": {
     "title": "QA prompt glosses",
     "situation": "A line shows and plays the other word.",
     "concept": "A wrong button does not repeat a gloss the prompt already shows or plays.",
-    "newWords": ["א", "ב", "ג", "ד", "ה", "ו", "ז"],
+    "newWords": ["א", "ב", "ז", "ה", "ג"],
     "lessons": [
       {
         "kind": "lesson",
         "activities": [
           {"type": "recall", "text": "א ב", "target": "א"},
           {"type": "cloze", "text": "א ב", "target": "ב"},
-          {"type": "recall", "text": "ג ד", "target": "ג"},
-          {"type": "cloze", "text": "ה ו", "target": "ו"}
+          {"type": "recall", "text": "ה ז", "target": "ה"},
+          {"type": "cloze", "text": "ה ג", "target": "ג"}
         ]
       }
     ]
