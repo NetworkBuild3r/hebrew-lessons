@@ -130,7 +130,10 @@ func TestListFirstPageOver50kAttempts(t *testing.T) {
 	}
 	t.Logf("ac-3: List(state=struggling) first page over %d words and %d attempts: first run %v, best of %d %v, last %v (budget %v, asserted limit %v)",
 		perfWords, perfAttempts, first, perfRuns, best, last, perfBudget, perfLimit)
-	if best > perfLimit {
+	// The race detector makes this scan many times slower. The limit is the
+	// production binary's limit, which go test checks. go test -race still
+	// checks that the page is right.
+	if best > perfLimit && !raceEnabled {
 		t.Fatalf("first page took %v at best, over the limit of %v (budget %v)", best, perfLimit, perfBudget)
 	}
 
