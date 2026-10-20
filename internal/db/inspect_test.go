@@ -122,7 +122,7 @@ func TestCheckMigrationsOnAFullyMigratedDatabase(t *testing.T) {
 }
 
 // The deployed production database: versions 1 to 5 and 7, built the way the migration test
-// builds it. The report must say 6, 8, 9, 10, 11 are pending and that 6 is below 7.
+// builds it. The report must say 6, 8, 9, 10, 11, 12 are pending and that 6 is below 7.
 func TestCheckMigrationsOnTheDeployedV3Database(t *testing.T) {
 	conn := m6At005(t)
 	body, err := fs.ReadFile(migrations.FS, "007_oauth_client_issued.sql")
@@ -144,7 +144,7 @@ func TestCheckMigrationsOnTheDeployedV3Database(t *testing.T) {
 	if want := []int{1, 2, 3, 4, 5, 7}; !reflect.DeepEqual(rep.Applied, want) {
 		t.Errorf("Applied = %v, want %v", rep.Applied, want)
 	}
-	if want := []int{6, 8, 9, 10, 11}; !reflect.DeepEqual(versions(rep.Pending), want) {
+	if want := []int{6, 8, 9, 10, 11, 12}; !reflect.DeepEqual(versions(rep.Pending), want) {
 		t.Errorf("Pending = %v, want %v", versions(rep.Pending), want)
 	}
 	if want := []int{6}; !reflect.DeepEqual(rep.OutOfOrder, want) {

@@ -166,7 +166,7 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 	if err := func() error {
 		rows, err := conn.QueryContext(ctx, `
 			SELECT lexeme_id, skill, correct, created_at
-			FROM attempts
+			FROM attempts INDEXED BY attempts_user_lexeme_skill_id
 			WHERE user_id = ?`+attemptWhere+`
 			ORDER BY lexeme_id DESC, skill DESC, created_at DESC, id DESC`, lexemeArg([]any{userID})...)
 		if err != nil {

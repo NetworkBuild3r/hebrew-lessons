@@ -14,13 +14,13 @@ func TestMigrate012AttemptListIndexAvoidsASort(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatal(err)
 	}
-	if got := indexColumns(t, conn, "attempts_user_lexeme_skill_id"); !reflect.DeepEqual(got, []string{"user_id", "lexeme_id", "skill", "created_at", "id"}) {
+	if got := indexColumns(t, conn, "attempts_user_lexeme_skill_id"); !reflect.DeepEqual(got, []string{"user_id", "lexeme_id", "skill", "created_at", "id", "correct"}) {
 		t.Fatalf("index columns = %v", got)
 	}
 	rows, err := conn.QueryContext(context.Background(), `
 		EXPLAIN QUERY PLAN
 		SELECT lexeme_id, skill, correct, created_at
-		FROM attempts
+		FROM attempts INDEXED BY attempts_user_lexeme_skill_id
 		WHERE user_id = ?
 		ORDER BY lexeme_id DESC, skill DESC, created_at DESC, id DESC`, 1)
 	if err != nil {
