@@ -145,10 +145,17 @@ const briefPointer = "/briefId"
 // v2 coverage rules are replaced by brief.coverage; see the package comment.
 // unit.no_markup runs on every call, whatever the lookup does.
 func ValidateWithBrief(ctx context.Context, doc *Unit, lk Lookup, facts *BriefFacts) []Issue {
+	return ValidateWithBriefIn(ctx, doc, lk, facts, ModeWrite)
+}
+
+// ValidateWithBriefIn is ValidateWithBrief with an explicit mode.
+// ModeWrite is new input. ModePublished rechecks a revision that is already
+// published, and a graded line of several words may omit target.
+func ValidateWithBriefIn(ctx context.Context, doc *Unit, lk Lookup, facts *BriefFacts, mode Mode) []Issue {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	issues := collect(ctx, doc, lk)
+	issues := collect(ctx, doc, lk, mode)
 	if doc == nil {
 		return sortedIssues(issues)
 	}
@@ -322,7 +329,7 @@ func briefIssuesFlat(ctx context.Context, doc *Unit, lk Lookup, f *BriefFacts) [
 
 	var out []Issue
 	out = append(out, b.audioAllIssues(doc)...)
-	out = append(out, b.passageIssues(acts, f)...)
+	out = append(out, b.passageIssues(doc, acts, f)...)
 	out = append(out, b.newWordIssues(doc, acts, f)...)
 	out = append(out, struggleIssues(acts, f)...)
 	out = append(out, b.glossIssues(acts, f)...)
@@ -360,7 +367,13 @@ func (b *briefScan) audioAllIssues(doc *Unit) []Issue {
 
 // passageIssues applies brief.coverage and brief.text_too_long to each story
 // and listen_pick passage, the same two activity types the v2 coverage rules use.
-func (b *briefScan) passageIssues(acts []actTokens, f *BriefFacts) []Issue {
+// A token also counts as covered when its lexeme is one of this unit's newWords
+// resolved by exact pointed text. Intro and minimum uses still read the brief.
+func (b *briefScan) passageIssues(doc *Unit, acts []actTokens, f *BriefFacts) []Issue {
+	covered := b.exactNewWordIDs(doc)
+	if b.err != nil {
+		return nil
+	}
 	share := f.MinKnownShare
 	if share <= 0 {
 		share = DefaultMinKnownShare
@@ -383,7 +396,7 @@ func (b *briefScan) passageIssues(acts []actTokens, f *BriefFacts) []Issue {
 				continue
 			}
 			total++
-			if t.ref.ok && (f.BriefLexemeIDs[t.ref.id] || f.KnownLexemeIDs[t.ref.id]) {
+			if t.ref.ok && (f.BriefLexemeIDs[t.ref.id] || f.KnownLexemeIDs[t.ref.id] || covered[t.ref.id]) {
 				known++
 			}
 		}
@@ -402,6 +415,33 @@ func (b *briefScan) passageIssues(acts []actTokens, f *BriefFacts) []Issue {
 				formatPercent(known, total), known, total, tierLabel(f), formatShare(share))))
 	}
 	return out
+}
+
+// exactNewWordIDs is the lexicon ids of this unit's newWords, matched by
+// LexemeByText on the normalized pointed spelling. The consonant skeleton
+// that inLexicon accepts does not count: a row for גר does not cover גָּר.
+func (b *briefScan) exactNewWordIDs(doc *Unit) map[int64]bool {
+	ids := map[int64]bool{}
+	if doc == nil {
+		return ids
+	}
+	for _, w := range doc.NewWords {
+		n := normalize(w)
+		if n == "" || !b.probeLex(n) {
+			if b.err != nil {
+				return nil
+			}
+			continue
+		}
+		id, ok := b.lexID(n)
+		if b.err != nil {
+			return nil
+		}
+		if ok {
+			ids[id] = true
+		}
+	}
+	return ids
 }
 
 func tierLabel(f *BriefFacts) string {

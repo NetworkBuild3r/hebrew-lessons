@@ -35,11 +35,14 @@ func targetToken(act Activity) (string, bool) {
 	return "", false
 }
 
-// targetIssues checks a non-empty target. An empty or missing target is valid.
-// A target that is not one of the activity's tokens, or whose token has no
-// lexicon entry, is a block. The two cases are separate sentences.
-// The check runs on the real document, not the flattened copy.
-func targetIssues(ctx context.Context, doc *Unit, lk Lookup) []Issue {
+// targetIssues checks every graded activity's target.
+// A line of more than one Hebrew word must name the word it grades.
+// ModeWrite blocks a missing target. ModePublished warns, which is how a
+// revision published before the field was required keeps validating.
+// A target that is set and is not one of the activity's tokens, or whose
+// token has no lexicon entry, is a block in both modes. The two cases are
+// separate sentences. The check runs on the real document, not the flattened copy.
+func targetIssues(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue {
 	if doc == nil {
 		return nil
 	}
@@ -52,10 +55,18 @@ func targetIssues(ctx context.Context, doc *Unit, lk Lookup) []Issue {
 	var need []hit
 	for i, les := range doc.Lessons {
 		for j, act := range les.Activities {
+			ptr := at("lessons", i, "activities", j, "target")
 			if normalize(act.Target) == "" {
+				if gradedActivity(act.Type) && hebrewWordCount(act) > 1 {
+					sev := SeverityBlock
+					if mode == ModePublished {
+						sev = SeverityWarn
+					}
+					out = append(out, issue(RuleActivityTarget, sev, ptr,
+						fmt.Sprintf("activity %d: this line has several words; set target to the exact pointed word to grade.", j+1)))
+				}
 				continue
 			}
-			ptr := at("lessons", i, "activities", j, "target")
 			where := fmt.Sprintf("The %s activity in lesson %d, activity %d,", act.Type, i+1, j+1)
 			if !gradedActivity(act.Type) {
 				out = append(out, issue(RuleActivityTarget, SeverityBlock, ptr,
@@ -91,4 +102,19 @@ func targetIssues(ctx context.Context, doc *Unit, lk Lookup) []Issue {
 			fmt.Sprintf("%s has a target %s whose token has no lexicon entry.", where, strconvQuote(h.tok))))
 	}
 	return out
+}
+
+// hebrewWordCount is the number of tokens in the activity that contain a
+// Hebrew letter. Punctuation and numerals are tokens of tokenize and are
+// not words here, so a one-word line with a number does not need a target.
+func hebrewWordCount(act Activity) int {
+	n := 0
+	for _, text := range act.Texts() {
+		for _, tok := range tokenize(text) {
+			if isHebrewWord(tok) {
+				n++
+			}
+		}
+	}
+	return n
 }

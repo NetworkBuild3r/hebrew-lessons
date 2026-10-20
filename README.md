@@ -1,5 +1,11 @@
 hebrew v3 (greenfield, ADR-R1, ADR-0018). Publishes ghcr.io/networkbuild3r/hebrew. Never merges into main.
 
+## Authoring
+
+A graded activity (`recall`, `listen_pick`, `produce`, or `cloze`) whose line has more than one word sets `target` to the exact pointed word it grades. That spelling must be a lexicon entry. The unpointed spelling does not count. A single-word line may omit `target`. A new `validate_unit`, `put_unit`, or `publish_unit` blocks a missing target. A revision that is already published without one still serves, and checking that stored revision again reports a warning.
+
+Passage coverage counts the brief's words, the learner's known words, and this unit's `newWords` when each is an exact pointed lexicon entry. Those `newWords` stay new for the intro and the minimum uses. A word in none of those sets is unknown.
+
 ## Configuration
 
 `cmd/hebrew` reads the process environment. `HEBREW_SESSION_SECRET` is the input key for the OAuth state cookie. The process derives a 32-byte HMAC key with HKDF-SHA256 (no salt, info `hebrew-lessons oauth-state v1`). Set the same value on every replica so a callback can be served by a different process than the one that started sign-in. When the variable is unset, the process generates a random key and logs a warning once; those state cookies do not survive a restart or another replica.

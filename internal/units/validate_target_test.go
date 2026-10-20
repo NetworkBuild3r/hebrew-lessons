@@ -23,7 +23,8 @@ func TestActivityTarget(t *testing.T) {
 		t.Fatalf("baseline %s", mustJSON(got))
 	}
 	u.Lessons[li].Activities[ai].Target = "   "
-	if got := Validate(context.Background(), &u, lk); len(got) != 0 {
+	got := targetOnly(Validate(context.Background(), &u, lk))
+	if len(got) != 1 || got[0].Severity != SeverityBlock || !strings.Contains(got[0].Msg, "several words") {
 		t.Fatalf("blank target %s", mustJSON(got))
 	}
 	// Dagesh before the vowel is the same letters as the NFC token.
@@ -37,7 +38,7 @@ func TestActivityTarget(t *testing.T) {
 	}
 
 	u.Lessons[li].Activities[ai].Target = "גָּר"
-	got := targetOnly(Validate(context.Background(), &u, lk))
+	got = targetOnly(Validate(context.Background(), &u, lk))
 	if len(got) != 1 || got[0].Rule != RuleActivityTarget || got[0].Pointer != at("lessons", li, "activities", ai, "target") {
 		t.Fatalf("non-token %#v", got)
 	}
@@ -124,4 +125,71 @@ func targetOnly(issues []Issue) []Issue {
 		}
 	}
 	return out
+}
+
+func TestMissingGradedTarget(t *testing.T) {
+	u, lk := v1()
+	ctx := context.Background()
+	single := u.Lessons[0].Activities[0]
+	if single.Type != ActivityRecall || hebrewWordCount(single) != 1 || normalize(single.Target) != "" {
+		t.Fatalf("fixture activity 0: %+v words %d", single, hebrewWordCount(single))
+	}
+	if got := targetOnly(Validate(ctx, &u, lk)); len(got) != 0 {
+		t.Fatalf("single-token recall %s", mustJSON(got))
+	}
+
+	li, ai := 0, 2
+	line := &u.Lessons[li].Activities[ai]
+	if line.Type != ActivityListenPick || hebrewWordCount(*line) < 2 {
+		t.Fatalf("fixture activity 2: %+v", line)
+	}
+	wantPtr := at("lessons", li, "activities", ai, "target")
+	wantMsg := "activity 3: this line has several words; set target to the exact pointed word to grade."
+	line.Target = ""
+	got := targetOnly(Validate(ctx, &u, lk))
+	if len(got) != 1 || got[0].Severity != SeverityBlock || got[0].Pointer != wantPtr || got[0].Msg != wantMsg {
+		t.Fatalf("missing target %#v", got)
+	}
+	for _, typ := range []string{ActivityRecall, ActivityProduce, ActivityCloze, ActivityListenPick} {
+		line.Type = typ
+		got = targetOnly(Validate(ctx, &u, lk))
+		if len(got) != 1 || got[0].Severity != SeverityBlock || got[0].Msg != wantMsg {
+			t.Fatalf("%s %#v", typ, got)
+		}
+	}
+	line.Type = ActivityListenPick
+
+	pub := targetOnly(ValidateIn(ctx, &u, lk, ModePublished))
+	if len(pub) != 1 || pub[0].Severity != SeverityWarn || pub[0].Pointer != wantPtr || pub[0].Msg != wantMsg {
+		t.Fatalf("published recheck %#v", pub)
+	}
+	for _, is := range ValidateIn(ctx, &u, lk, ModePublished) {
+		if is.Severity == SeverityBlock {
+			t.Fatalf("published recheck blocked: %+v", is)
+		}
+	}
+
+	toks := tokenize(line.Text)
+	line.Target = toks[0]
+	if got := targetOnly(Validate(ctx, &u, lk)); len(got) != 0 {
+		t.Fatalf("exact target %s", mustJSON(got))
+	}
+
+	// A numeral beside one Hebrew word is still one word.
+	u, lk = v1()
+	u.Lessons[0].Activities[0].Text += " 12"
+	if hebrewWordCount(u.Lessons[0].Activities[0]) != 1 {
+		t.Fatal("numeral counted as a word")
+	}
+	if got := targetOnly(Validate(ctx, &u, lk)); len(got) != 0 {
+		t.Fatalf("one word plus a numeral %s", mustJSON(got))
+	}
+
+	// A target that is set and wrong stays a block when the revision is already published.
+	u, lk = v1()
+	u.Lessons[li].Activities[ai].Target = "גָּר"
+	got = targetOnly(ValidateIn(ctx, &u, lk, ModePublished))
+	if len(got) != 1 || got[0].Severity != SeverityBlock || !strings.Contains(got[0].Msg, "not one of that activity's tokens") {
+		t.Fatalf("published wrong target %#v", got)
+	}
 }

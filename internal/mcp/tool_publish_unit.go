@@ -20,6 +20,7 @@ const publishUnitDescription = "Publish one unit. Admin only, including the stat
 	"Shared units ignore that flag and become published only through publish_unit. " +
 	"This tool publishes the revision it validated. Omit revision to validate the current row; pass revision to validate a stored one. A save that lands after that check is not published in its place. " +
 	"It runs the same validator as validate_unit. Block issues are a tool error: nothing is published, and the result lists each issue's rule id and JSON pointer. " +
+	"A graded activity whose line has several words and no target blocks a new draft. Checking a revision that is already published reports that missing target as a warning. " +
 	"Pedagogy warnings do not block, and they are included in issues. " +
 	"Publishing the same revision again reports unchanged and writes nothing. " +
 	"A learner-scoped unit is refused here: it publishes only through put_unit with a briefId."
@@ -70,7 +71,7 @@ func (s *service) publishUnit(ctx context.Context, _ *mcp.CallToolRequest, in pu
 	}
 	doc := snap.Doc
 	doc.Position = snap.Position
-	issues := units.Validate(ctx, &doc, s.lexLookup)
+	issues := units.ValidateIn(ctx, &doc, s.lexLookup, publishMode(snap.Status))
 	out = publishOutput{
 		UnitID:    snap.UnitID,
 		Revision:  snap.Revision,
@@ -159,10 +160,10 @@ func (s *service) publishLearnerDraft(ctx context.Context, scope, briefID string
 	facts, err := lu.BriefFacts(ctx, learnerID, briefID)
 	switch {
 	case errors.Is(err, ErrBriefNotFound):
-		out := briefMissingIssues(ctx, s, &doc, units.RuleBriefNotFound, "no brief was found for this learner with that id")
+		out := briefMissingIssues(ctx, s, &doc, units.RuleBriefNotFound, "no brief was found for this learner with that id", publishMode(snap.Status))
 		return saved, false, out, blockedReason(out), nil
 	case errors.Is(err, ErrBriefExpired):
-		out := briefMissingIssues(ctx, s, &doc, units.RuleBriefExpired, "this brief is too old to use")
+		out := briefMissingIssues(ctx, s, &doc, units.RuleBriefExpired, "this brief is too old to use", publishMode(snap.Status))
 		return saved, false, out, blockedReason(out), nil
 	case err != nil:
 		return PutResult{}, false, nil, "", storeErr("The brief could not be read.", err)
@@ -174,7 +175,7 @@ func (s *service) publishLearnerDraft(ctx context.Context, scope, briefID string
 		return saved, true, []units.Issue{}, "", nil
 	}
 
-	checked := units.ValidateWithBrief(ctx, &doc, s.lexLookup, &facts)
+	checked := units.ValidateWithBriefIn(ctx, &doc, s.lexLookup, &facts, publishMode(snap.Status))
 	if !summarize(checked).OK {
 		return saved, false, checked, blockedReason(checked), nil
 	}
@@ -201,10 +202,20 @@ func (s *service) publishLearnerDraft(ctx context.Context, scope, briefID string
 	return published, true, checked, "", nil
 }
 
+// publishMode is strict for a draft and lenient for a revision that is
+// already published. A missing graded target blocks only the draft.
+func publishMode(status string) units.Mode {
+	if status == "published" {
+		return units.ModePublished
+	}
+	return units.ModeWrite
+}
+
 // briefMissingIssues is what a unit gets when its brief cannot be read: the
-// rules that need no brief, and one brief issue.
-func briefMissingIssues(ctx context.Context, s *service, doc *units.Unit, rule, msg string) []units.Issue {
-	base := units.ValidateWithBrief(ctx, doc, s.lexLookup, nil)
+// rules that need no brief, and one brief issue. mode is the same mode the
+// publish of this document would have used.
+func briefMissingIssues(ctx context.Context, s *service, doc *units.Unit, rule, msg string, mode units.Mode) []units.Issue {
+	base := units.ValidateWithBriefIn(ctx, doc, s.lexLookup, nil, mode)
 	out := make([]units.Issue, 0, len(base)+1)
 	for _, is := range base {
 		if is.Rule != units.RuleBriefNotFound {

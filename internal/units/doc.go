@@ -14,13 +14,15 @@
 // ValidateWithBrief replaces the two v2 coverage rules (coverage.story and
 // coverage.listening). They judge a passage against the words of earlier
 // shared units, which says nothing about one learner. brief.coverage judges the
-// same passages against what this learner knows and the words of the brief.
+// same passages against what this learner knows, the words of the brief, and
+// this unit's newWords when each resolves to a lexicon entry in its exact
+// pointed form. Those newWords stay new for the intro and the minimum uses.
 //
 // The rule ids below are stable strings. A client, an audit row, and a test
 // may match on them, so a rename needs a new id.
 //
 //	brief.audio_all             A Hebrew field has no audio clip for its exact pointed text (block).
-//	brief.coverage              A story or listen_pick passage has too few known words (block).
+//	brief.coverage              A story or listen_pick passage has too few known words (block). The unit's own newWords count when each is an exact pointed lexicon entry.
 //	brief.expired               The brief is older than its time to live (block).
 //	brief.gloss_out_of_brief    A word outside the brief and outside known or solid has no gloss (block).
 //	brief.new_intro_before_test A new word is checked before any intro or exposure step (block).
@@ -130,14 +132,16 @@ type Lesson struct {
 // Text is the Hebrew the activity speaks or asks about, when it has any.
 // A dialogue has Lines instead of Text.
 // Target, on a graded activity (recall, listen_pick, produce, cloze), is the
-// token that activity tests. It is that token's exact text, compared after
-// Normalize, the same way a token is matched to a lexeme. Empty means the
-// player keeps the first new token.
+// token that activity grades. It is that token's exact text, compared after
+// Normalize, the same way LexemeByText matches a token. A line of more than
+// one Hebrew word must set it. A single-word line may leave it empty, and an
+// empty value is the same as omitting it. A new write blocks a missing target.
+// Rechecking a revision that is already published warns instead.
 type Activity struct {
 	Type   string         `json:"type"`
 	Text   string         `json:"text,omitempty"`
 	Lines  []DialogueLine `json:"lines,omitempty"`
-	Target string         `json:"target,omitempty" jsonschema:"Optional. The exact token this graded activity tests, pointed Hebrew in NFC, one of the tokens of text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Omit it, or leave it empty, and the player tests the first new token. Used by recall, listen_pick, produce, and cloze."`
+	Target string         `json:"target,omitempty" jsonschema:"The exact pointed token this graded activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required when the line has more than one token. A single-token line may omit it, and an empty value is the same as omitting it. Used by recall, listen_pick, produce, and cloze."`
 
 	// speaker is set only on the one-line views of a dialogue that the validator
 	// builds (see flatten). It is never read from or written to JSON.
