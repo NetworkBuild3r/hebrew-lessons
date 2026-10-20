@@ -609,8 +609,15 @@ func TestBriefCoverageCountsDeclaredNewWords(t *testing.T) {
 	introduced.Lessons = []Lesson{{Kind: KindLesson, Activities: []Activity{
 		{Type: ActivityListenPick, Text: word},
 	}}}
-	if got := validateBrief(&introduced, lk, &f); !hasRule(got, RuleBriefIntro) {
-		t.Fatalf("a newWord is still new for the intro: %v", ruleSet(got))
+	got := validateBrief(&introduced, lk, &f)
+	intros := 0
+	for _, is := range got {
+		if is.Rule == RuleBriefIntro {
+			intros++
+		}
+	}
+	if intros != 1 {
+		t.Fatalf("a brief newWord is reported %d times, want 1: %v", intros, ruleSet(got))
 	}
 	if hasRule(validateBrief(&introduced, lk, &f), RuleBriefCoverage) {
 		t.Fatal("coverage should still pass once the word is declared")
@@ -629,7 +636,7 @@ func TestBriefCoverageCountsDeclaredNewWords(t *testing.T) {
 		{Type: ActivityListenPick, Text: other},
 	}}}
 	lk = goldenLookup{Lexemes: lex, Audio: []string{normalize(word), normalize(other)}}.fake()
-	got := validateBrief(&outsider, lk, &f)
+	got = validateBrief(&outsider, lk, &f)
 	var cov []Issue
 	for _, is := range got {
 		if is.Rule == RuleBriefCoverage {
@@ -673,6 +680,50 @@ func TestBriefCoverageCountsDeclaredNewWords(t *testing.T) {
 	for _, is := range got {
 		if is.Rule == RuleBriefCoverage && (is.Pointer != at("lessons", 0, "activities", 1) || is.Severity != SeverityBlock) {
 			t.Fatalf("unpointed coverage issue %+v", is)
+		}
+	}
+}
+
+func TestOutOfBriefNewWordNeedsIntroAndUses(t *testing.T) {
+	word := vocab8[0].text
+	lex := map[string]glex{
+		normalize(word): {ID: 1, POS: "noun", Gender: "m", Gloss: "hello", Bare: stripNiqqud(word)},
+	}
+	lk := goldenLookup{Lexemes: lex, Audio: []string{normalize(word)}}.fake()
+	f := BriefFacts{
+		Tier: "established", MinKnownShare: 0.95,
+		BriefLexemeIDs: map[int64]bool{}, KnownLexemeIDs: map[int64]bool{},
+	}
+	tested := Unit{
+		Title: "Cafe", Situation: "Ordering at a cafe", Concept: "A greeting",
+		NewWords: []string{word},
+		Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{
+			{Type: ActivityListenPick, Text: word},
+		}}},
+	}
+	got := validateBrief(&tested, lk, &f)
+	if !hasRule(got, RuleBriefIntro) || !hasRule(got, RuleBriefNewMinUses) {
+		t.Fatalf("out-of-brief newWord with no intro: %v", ruleSet(got))
+	}
+	for _, is := range got {
+		if (is.Rule == RuleBriefIntro || is.Rule == RuleBriefNewMinUses) && is.Severity != SeverityBlock {
+			t.Fatalf("severity %+v", is)
+		}
+	}
+	if hasRule(got, RuleBriefCoverage) {
+		t.Fatal("coverage should credit the declared newWord")
+	}
+
+	shown := tested
+	shown.Lessons = []Lesson{{Kind: KindLesson, Activities: []Activity{
+		{Type: ActivityShadow, Text: word},
+		{Type: ActivityListenPick, Text: word},
+		{Type: ActivityRecall, Text: word},
+	}}}
+	got = validateBrief(&shown, lk, &f)
+	for _, rule := range []string{RuleBriefIntro, RuleBriefNewMinUses, RuleBriefCoverage} {
+		if hasRule(got, rule) {
+			t.Fatalf("a credited newWord with an intro and enough uses should pass %s: %v", rule, ruleSet(got))
 		}
 	}
 }

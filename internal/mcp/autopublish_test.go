@@ -274,7 +274,7 @@ func withSentenceTranslations(doc units.Unit) units.Unit {
 			if strings.TrimSpace(a.Translation) != "" {
 				continue
 			}
-			a.Translation = "another line"
+			a.Translation = fmt.Sprintf("another line %d", n+1)
 			n++
 		}
 	}

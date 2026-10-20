@@ -96,7 +96,7 @@ func TestTranslationMissing(t *testing.T) {
 		t.Fatalf("numeral %#v", got)
 	}
 
-	// The unpointed spelling counts as a lexicon token, unlike a graded target.
+	// The unpointed spelling does not count, the same as a graded target.
 	u, lk = v1()
 	li, ai = firstSentence(t, u)
 	act := u.Lessons[li].Activities[ai]
@@ -111,8 +111,7 @@ func TestTranslationMissing(t *testing.T) {
 	}
 	act.Translation = ""
 	u.Lessons[li].Activities[ai] = act
-	got = byRule(Validate(ctx, &u, lk), RuleUnitTranslationMissing)
-	if len(got) != 1 || got[0].Severity != SeverityBlock {
+	if got := byRule(Validate(ctx, &u, lk), RuleUnitTranslationMissing); len(got) != 0 {
 		t.Fatalf("unpointed lexicon %#v", got)
 	}
 }
@@ -205,7 +204,7 @@ func TestTranslationDistractors(t *testing.T) {
 	extra := func(n int) []Activity {
 		out := make([]Activity, n)
 		for i := range out {
-			out[i] = Activity{Type: ActivityRecall, Text: w1, Translation: "hello"}
+			out[i] = Activity{Type: ActivityRecall, Text: w1, Translation: fmt.Sprintf("hello %d", i+1)}
 		}
 		return out
 	}
@@ -267,6 +266,18 @@ func TestTranslationDistractors(t *testing.T) {
 	if len(byRule(Validate(ctx, &bare, lk), RuleUnitTranslationDistractors)) != 1 {
 		t.Fatal("empty sentence should also warn about distractors")
 	}
+
+	// Four copies of the same English, once punctuation and case are folded, are one line.
+	folded := unit(
+		sentence,
+		Activity{Type: ActivityRecall, Text: w1, Translation: "Hello!"},
+		Activity{Type: ActivityRecall, Text: w1, Translation: "hello"},
+		Activity{Type: ActivityRecall, Text: w1, Translation: " HELLO "},
+	)
+	got = byRule(Validate(ctx, &folded, lk), RuleUnitTranslationDistractors)
+	if len(got) != 1 || got[0].Severity != SeverityWarn || got[0].Pointer != ptr {
+		t.Fatalf("folded duplicates %#v", got)
+	}
 }
 
 func TestTranslationMarkupAlsoNoMarkup(t *testing.T) {
@@ -287,11 +298,68 @@ func TestTranslationMarkupAlsoNoMarkup(t *testing.T) {
 	}
 }
 
+// TestTargetAndTranslationShareMultiWord checks that activity.target and
+// unit.translation_missing use one count: two or more exact lexicon entries.
+func TestTargetAndTranslationShareMultiWord(t *testing.T) {
+	ctx := context.Background()
+	const (
+		one = "שָׁלוֹם"
+		two = "קָפֶה"
+		gar = "גָּר"
+	)
+	bare := stripNiqqud(gar)
+	lk := fakeLookup{lex: map[string]glex{
+		normalize(one):  {ID: 1, POS: "noun", Gender: "m", Gloss: "hello", Bare: stripNiqqud(one)},
+		normalize(two):  {ID: 2, POS: "noun", Gender: "m", Gloss: "coffee", Bare: stripNiqqud(two)},
+		normalize(bare): {ID: 3, POS: "verb", Gloss: "lives", Bare: bare},
+	}}
+	s := &scan{ctx: ctx, lk: lk, cache: map[string]*probe{}}
+	cases := []struct {
+		text  string
+		multi bool
+	}{
+		{one + " " + two, true},
+		{one, false},
+		{one + " " + gar, false},
+		{one + " 12", false},
+		{one + " אַלְמוֹנִי", false},
+	}
+	for _, c := range cases {
+		n := lexemeTokenCount(s, Activity{Text: c.text})
+		if s.err != nil {
+			t.Fatal(s.err)
+		}
+		if (n > 1) != c.multi {
+			t.Fatalf("%q count %d, want multi %v", c.text, n, c.multi)
+		}
+		base := Unit{
+			Title: "Cafe", Situation: "Ordering", Concept: "Greeting",
+			NewWords: []string{one, two},
+			Lessons:  []Lesson{{Kind: KindLesson}},
+		}
+		for _, typ := range []string{ActivityRecall, ActivityProduce, ActivityCloze} {
+			doc := base
+			doc.Lessons[0].Activities = []Activity{{Type: typ, Text: c.text, Translation: "a line"}}
+			if got := len(targetOnly(Validate(ctx, &doc, lk))) > 0; got != c.multi {
+				t.Fatalf("%s %q target required %v, want %v", typ, c.text, got, c.multi)
+			}
+		}
+		doc := base
+		doc.Lessons[0].Activities = []Activity{{Type: ActivityListenPick, Text: c.text}}
+		if got := len(byRule(Validate(ctx, &doc, lk), RuleUnitTranslationMissing)) > 0; got != c.multi {
+			t.Fatalf("listen_pick %q translation required %v, want %v", c.text, got, c.multi)
+		}
+		if got := targetOnly(Validate(ctx, &doc, lk)); len(got) != 0 {
+			t.Fatalf("listen_pick %q target %#v", c.text, got)
+		}
+	}
+}
+
 func firstSentence(t *testing.T, u Unit) (int, int) {
 	t.Helper()
 	for i, les := range u.Lessons {
 		for j, act := range les.Activities {
-			if act.Type == ActivityListenPick && hebrewWordCount(act) > 1 {
+			if act.Type == ActivityListenPick && fixtureHebrewWords(act) > 1 {
 				return i, j
 			}
 		}

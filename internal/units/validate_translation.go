@@ -4,15 +4,17 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"golang.org/x/text/unicode/norm"
 )
 
 // translationIssues checks author-written line translations.
-// A listen_pick of two or more lexicon tokens must set translation.
-// ModeWrite blocks a missing translation. ModePublished warns, which is how
-// a revision published before the field was required keeps validating.
+// A listen_pick of two or more words that are in the lexicon must set
+// translation. The count is lexemeTokenCount, the same one activity.target
+// uses. ModeWrite blocks a missing translation. ModePublished warns, which
+// is how the current published revision keeps validating.
 // Language and length apply to every translation, on any activity and on
 // every dialogue line, and they keep their catalog severity in both modes.
 func translationIssues(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue {
@@ -39,7 +41,7 @@ func translationIssues(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []I
 			if act.Type != ActivityListenPick {
 				continue
 			}
-			n := lexiconTokenCount(s, act)
+			n := lexemeTokenCount(s, act)
 			if s.err != nil {
 				return append(out, lookupIssue(s.err))
 			}
@@ -104,44 +106,51 @@ func translationNotEnglish(s string) bool {
 	return false
 }
 
-// lexiconTokenCount is how many tokens of the activity are Hebrew words in
-// the lexicon. An exact pointed entry counts, and so does the unpointed
-// spelling, the same match inLexicon uses. A number is not a lexicon token.
-// A word that is not in the lexicon is not one either.
-func lexiconTokenCount(s *scan, act Activity) int {
-	n := 0
-	for _, text := range act.Texts() {
-		for _, tok := range tokenize(text) {
-			if s.err != nil {
-				return n
-			}
-			if !isHebrewWord(tok) || isNumberTok(tok) {
-				continue
-			}
-			if s.inLexicon(tok) {
-				n++
+// translatedLineCount is the number of different English lines in the unit.
+// Each activity translation and each dialogue-line translation is folded
+// first: lowercase, strip punctuation, collapse spaces. Blank space is
+// empty. Two lines that fold to the same English count once.
+func translatedLineCount(doc *Unit) int {
+	seen := map[string]bool{}
+	var lines []string
+	for _, les := range doc.Lessons {
+		for _, act := range les.Activities {
+			lines = append(lines, act.Translation)
+			for _, line := range act.Lines {
+				lines = append(lines, line.Translation)
 			}
 		}
+	}
+	n := 0
+	for _, text := range lines {
+		key := foldTranslation(text)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		n++
 	}
 	return n
 }
 
-// translatedLineCount is every non-empty translation in the unit: each
-// activity, then each dialogue line. Blank space is empty. The same English
-// on two lines counts twice.
-func translatedLineCount(doc *Unit) int {
-	n := 0
-	for _, les := range doc.Lessons {
-		for _, act := range les.Activities {
-			if strings.TrimSpace(act.Translation) != "" {
-				n++
-			}
-			for _, line := range act.Lines {
-				if strings.TrimSpace(line.Translation) != "" {
-					n++
-				}
-			}
+// foldTranslation is the key used to tell English lines apart: lowercase,
+// punctuation removed, and runs of space collapsed to one.
+func foldTranslation(s string) string {
+	var b strings.Builder
+	gap := false
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsPunct(r) {
+			continue
 		}
+		if unicode.IsSpace(r) {
+			gap = true
+			continue
+		}
+		if gap && b.Len() > 0 {
+			b.WriteByte(' ')
+		}
+		gap = false
+		b.WriteRune(r)
 	}
-	return n
+	return b.String()
 }

@@ -108,7 +108,7 @@
           {
             "type": "recall",
             "text": "שָׁלוֹם",
-            "translation": "another line"
+            "translation": "another line 1"
           },
           {
             "type": "recall",
@@ -117,7 +117,7 @@
           {
             "type": "listen_pick",
             "text": "שָׁלוֹם בֹּקֶר",
-            "translation": "a short line",
+            "translation": "a short line 1143536665240042828",
             "target": "שָׁלוֹם"
           },
           {
@@ -140,7 +140,7 @@
           {
             "type": "listen_pick",
             "text": "תּוֹדָה מַיִם",
-            "translation": "a short line",
+            "translation": "a short line 746425136180471026",
             "target": "תּוֹדָה"
           },
           {
@@ -163,7 +163,7 @@
           {
             "type": "listen_pick",
             "text": "לֶחֶם חָלָב",
-            "translation": "a short line",
+            "translation": "a short line 2367388898713232464",
             "target": "לֶחֶם"
           },
           {

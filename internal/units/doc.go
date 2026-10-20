@@ -16,7 +16,8 @@
 // shared units, which says nothing about one learner. brief.coverage judges the
 // same passages against what this learner knows, the words of the brief, and
 // this unit's newWords when each resolves to a lexicon entry in its exact
-// pointed form. Those newWords stay new for the intro and the minimum uses.
+// pointed form. The intro and the minimum uses run on the brief's new words
+// and on every newWord that coverage credited, including one outside the brief.
 //
 // The rule ids below are stable strings. A client, an audit row, and a test
 // may match on them, so a rename needs a new id.
@@ -25,17 +26,17 @@
 //	brief.coverage              A story or listen_pick passage has too few known words (block). The unit's own newWords count when each is an exact pointed lexicon entry.
 //	brief.expired               The brief is older than its time to live (block).
 //	brief.gloss_out_of_brief    A word outside the brief and outside known or solid has no gloss (block).
-//	brief.new_intro_before_test A new word is checked before any intro or exposure step (block).
-//	brief.new_min_uses          A new word appears fewer times than the brief asks (block).
+//	brief.new_intro_before_test A new word of the brief, or a unit newWord that coverage credited, is checked before any intro or exposure step (block).
+//	brief.new_min_uses          A new word appears fewer times than the brief asks. A credited newWord outside the brief uses the same floor (block).
 //	brief.not_found             The brief is missing, malformed, or another learner's (block).
 //	brief.struggle_reuse        A struggle word is reused too few times, or not in its failing skill (block).
 //	brief.text_too_long         A passage has more tokens than the tier allows (block).
 //	brief.used                  The brief already built a unit (block).
 //	unit.no_markup               A text field contains <, >, or javascript: (block).
-//	unit.translation_distractors A unit with a sentence listen_pick has fewer than 4 translated lines (warn).
+//	unit.translation_distractors A unit with a sentence listen_pick has fewer than 4 different English lines (warn). Lines that fold to the same English count once.
 //	unit.translation_lang        A translation contains Hebrew or markup (block).
 //	unit.translation_length      A translation is longer than 120 characters (warn).
-//	unit.translation_missing     A listen_pick of two or more lexicon tokens has no translation (block on a new write, warning on an already-published revision).
+//	unit.translation_missing     A listen_pick of two or more words that are in the lexicon has no translation (block on a new write and on an older revision, warning on the current published revision).
 //
 // brief.coverage deliberately enforces the staged tier.min_known_share of the
 // brief (0.60 under 100 known words, 0.90 for 100 to 299, 0.95 from 300), not
@@ -70,11 +71,13 @@
 //
 // An activity may carry translation, the author's English for the whole
 // text. A dialogue line may carry its own. A listen_pick whose text has two
-// or more lexicon tokens must set it on a new write. Rechecking a revision
-// that is already published warns instead. The translation is English plain
-// text of at most 120 characters. A unit that uses a sentence listen_pick
-// should carry at least four translated lines, counting activity translations
-// and dialogue line translations, so the player can offer three other choices.
+// or more words that are in the lexicon must set it on a new write and on
+// any revision other than the current published one. Rechecking that
+// current published revision warns instead. The translation is English
+// plain text of at most 120 characters. A unit that uses a sentence
+// listen_pick should carry at least four different English lines, counting
+// activity translations and dialogue line translations after folding, so
+// the player can offer three other choices.
 package units
 
 import "context"
@@ -145,22 +148,25 @@ type Lesson struct {
 // Activity is one screen. Type is one of the Activity* constants.
 // Text is the Hebrew the activity speaks or asks about, when it has any.
 // A dialogue has Lines instead of Text.
-// Target, on a graded activity (recall, listen_pick, produce, cloze), is the
-// token that activity grades. It is that token's exact text, compared after
-// Normalize, the same way LexemeByText matches a token. A line of more than
-// one Hebrew word must set it. A single-word line may leave it empty, and an
-// empty value is the same as omitting it. A new write blocks a missing target.
-// Rechecking a revision that is already published warns instead.
-// Translation is the author's English for the whole text. A listen_pick whose
-// text has two or more lexicon tokens must set it on a new write. Rechecking
-// a revision that is already published warns instead. Every other activity
-// may omit it.
+// Target, on recall, produce, and cloze, is the token that activity grades
+// when the line has two or more words that are in the lexicon. It is that
+// token's exact text, compared after Normalize, the same way LexemeByText
+// matches a token. A line with fewer lexicon words may leave it empty, and
+// an empty value is the same as omitting it. A new write blocks a missing
+// target, and so does an older revision. Rechecking the current published
+// revision warns instead. On listen_pick, target is optional: if target is
+// set, only that word gets credit; if not, nothing is credited and the step
+// is logged as an exposure.
+// Translation is the author's English for the whole text. A listen_pick
+// whose text has two or more words that are in the lexicon must set it on
+// a new write and on an older revision. Rechecking the current published
+// revision warns instead. Every other activity may omit it.
 type Activity struct {
 	Type        string         `json:"type"`
 	Text        string         `json:"text,omitempty"`
-	Translation string         `json:"translation,omitempty" jsonschema:"Natural English translation of the whole text, written by the author. Required on a listen_pick whose text has two or more Hebrew words. Optional on every other type. English only, no markup, at most 120 characters."`
+	Translation string         `json:"translation,omitempty" jsonschema:"Natural English translation of the whole text, written by the author. Required on a listen_pick whose text has two or more words that are in the lexicon. Optional on every other type. English only, no markup, at most 120 characters."`
 	Lines       []DialogueLine `json:"lines,omitempty"`
-	Target      string         `json:"target,omitempty" jsonschema:"The exact pointed token this graded activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required when the line has more than one token. A single-token line may omit it, and an empty value is the same as omitting it. Used by recall, listen_pick, produce, and cloze."`
+	Target      string         `json:"target,omitempty" jsonschema:"The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, and cloze when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure."`
 
 	// speaker is set only on the one-line views of a dialogue that the validator
 	// builds (see flatten). It is never read from or written to JSON.

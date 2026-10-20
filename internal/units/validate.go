@@ -15,15 +15,18 @@ import (
 type Mode int
 
 const (
-	// ModeWrite is a new validate_unit, put_unit, or publish_unit input.
-	// A graded line of several words with no target is a block, and so is a
-	// listen_pick of two or more lexicon tokens with no translation.
+	// ModeWrite is a new validate_unit, put_unit, or publish_unit input,
+	// and any revision that is not the unit's current published revision.
+	// A recall, produce, or cloze of two or more lexicon words with no
+	// target is a block, and so is a listen_pick of two or more lexicon
+	// words with no translation. listen_pick may omit target.
 	ModeWrite Mode = iota
-	// ModePublished rechecks a revision that is already published.
-	// The same missing target, and the same missing translation, are warnings,
-	// so that revision keeps serving. A target that is not a token, or whose
-	// token has no exact lexicon entry, stays a block in both modes. A
-	// translation that is Hebrew or markup stays a block in both modes.
+	// ModePublished rechecks the unit's current published revision, the
+	// same revision id as the units row. The same missing target, and the
+	// same missing translation, are warnings, so that revision keeps
+	// serving. A target that is not a token, or whose token has no exact
+	// lexicon entry, stays a block in both modes. A translation that is
+	// Hebrew or markup stays a block in both modes.
 	ModePublished
 )
 
@@ -35,10 +38,11 @@ func Validate(ctx context.Context, doc *Unit, lk Lookup) []Issue {
 }
 
 // ValidateIn is Validate with an explicit mode. ModeWrite is the check for
-// new input. ModePublished is the check for a revision that is already
-// published: a graded line of several words may omit target, and a
-// listen_pick of several lexicon tokens may omit translation. Each of those
-// findings is a warning.
+// new input and for every revision other than the current published one.
+// ModePublished is the check for that current published revision: a
+// recall, produce, or cloze of two or more lexicon words may omit target,
+// and a listen_pick of two or more lexicon words may omit translation.
+// Each of those findings is a warning. listen_pick may omit target in both modes.
 func ValidateIn(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue {
 	if ctx == nil {
 		ctx = context.Background()

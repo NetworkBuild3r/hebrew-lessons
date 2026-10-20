@@ -20,8 +20,9 @@ const publishUnitDescription = "Publish one unit. Admin only, including the stat
 	"Shared units ignore that flag and become published only through publish_unit. " +
 	"This tool publishes the revision it validated. Omit revision to validate the current row; pass revision to validate a stored one. A save that lands after that check is not published in its place. " +
 	"It runs the same validator as validate_unit. Block issues are a tool error: nothing is published, and the result lists each issue's rule id and JSON pointer. " +
-	"A graded activity whose line has several words and no target blocks a new draft. Checking a revision that is already published reports that missing target as a warning. " +
-	"A listen_pick of two or more lexicon tokens with no translation blocks a new draft. Checking a revision that is already published reports that missing translation as a warning. " +
+	"A recall, produce, or cloze whose line has two or more words that are in the lexicon and no target blocks a new draft, and it blocks an older revision. Checking the current published revision, the same revision id as the units row, reports that missing target as a warning. " +
+	"On listen_pick, target is optional: if target is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure. " +
+	"A listen_pick of two or more words that are in the lexicon with no translation blocks a new draft, and it blocks an older revision. Checking the current published revision reports that missing translation as a warning. " +
 	"Pedagogy warnings do not block, and they are included in issues. " +
 	"Publishing the same revision again reports unchanged and writes nothing. " +
 	"A learner-scoped unit is refused here: it publishes only through put_unit with a briefId."
@@ -72,7 +73,7 @@ func (s *service) publishUnit(ctx context.Context, _ *mcp.CallToolRequest, in pu
 	}
 	doc := snap.Doc
 	doc.Position = snap.Position
-	issues := units.ValidateIn(ctx, &doc, s.lexLookup, publishMode(snap.Status))
+	issues := units.ValidateIn(ctx, &doc, s.lexLookup, publishMode(snap))
 	out = publishOutput{
 		UnitID:    snap.UnitID,
 		Revision:  snap.Revision,
@@ -161,10 +162,10 @@ func (s *service) publishLearnerDraft(ctx context.Context, scope, briefID string
 	facts, err := lu.BriefFacts(ctx, learnerID, briefID)
 	switch {
 	case errors.Is(err, ErrBriefNotFound):
-		out := briefMissingIssues(ctx, s, &doc, units.RuleBriefNotFound, "no brief was found for this learner with that id", publishMode(snap.Status))
+		out := briefMissingIssues(ctx, s, &doc, units.RuleBriefNotFound, "no brief was found for this learner with that id", publishMode(snap))
 		return saved, false, out, blockedReason(out), nil
 	case errors.Is(err, ErrBriefExpired):
-		out := briefMissingIssues(ctx, s, &doc, units.RuleBriefExpired, "this brief is too old to use", publishMode(snap.Status))
+		out := briefMissingIssues(ctx, s, &doc, units.RuleBriefExpired, "this brief is too old to use", publishMode(snap))
 		return saved, false, out, blockedReason(out), nil
 	case err != nil:
 		return PutResult{}, false, nil, "", storeErr("The brief could not be read.", err)
@@ -176,7 +177,7 @@ func (s *service) publishLearnerDraft(ctx context.Context, scope, briefID string
 		return saved, true, []units.Issue{}, "", nil
 	}
 
-	checked := units.ValidateWithBriefIn(ctx, &doc, s.lexLookup, &facts, publishMode(snap.Status))
+	checked := units.ValidateWithBriefIn(ctx, &doc, s.lexLookup, &facts, publishMode(snap))
 	if !summarize(checked).OK {
 		return saved, false, checked, blockedReason(checked), nil
 	}
@@ -203,10 +204,13 @@ func (s *service) publishLearnerDraft(ctx context.Context, scope, briefID string
 	return published, true, checked, "", nil
 }
 
-// publishMode is strict for a draft and lenient for a revision that is
-// already published. A missing graded target blocks only the draft.
-func publishMode(status string) units.Mode {
-	if status == "published" {
+// publishMode is lenient only when the revision being validated is the
+// units row's current published revision, the same revision id. A draft,
+// a new save, and an older revision — including one that was never
+// published — stay strict. A missing target on recall, produce, or cloze
+// blocks those. The current published revision warns.
+func publishMode(snap UnitView) units.Mode {
+	if snap.Status == "published" && snap.Revision == snap.CurrentRevision {
 		return units.ModePublished
 	}
 	return units.ModeWrite

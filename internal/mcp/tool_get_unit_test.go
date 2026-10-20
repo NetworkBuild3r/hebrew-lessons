@@ -69,12 +69,12 @@ func TestTargetOptionalInToolSchema(t *testing.T) {
 		}
 		field, _ := props["target"].(map[string]any)
 		desc, _ := field["description"].(string)
-		if !strings.Contains(desc, "more than one token") || !strings.Contains(desc, "exact pointed") {
+		if !strings.Contains(desc, "two or more words that are in the lexicon") || !strings.Contains(desc, "exact pointed") || !strings.Contains(desc, "logged as an exposure") {
 			t.Fatalf("%s target description %q", name, desc)
 		}
 		tr, _ := props["translation"].(map[string]any)
 		trDesc, _ := tr["description"].(string)
-		if !strings.Contains(trDesc, "two or more Hebrew words") || !strings.Contains(trDesc, "120") {
+		if !strings.Contains(trDesc, "two or more words that are in the lexicon") || !strings.Contains(trDesc, "120") {
 			t.Fatalf("%s translation description %q", name, trDesc)
 		}
 		for _, item := range required {
@@ -98,7 +98,7 @@ func TestTargetOptionalInToolSchema(t *testing.T) {
 	}
 	tr, _ := props["translation"].(map[string]any)
 	trDesc, _ := tr["description"].(string)
-	if !strings.Contains(trDesc, "two or more Hebrew words") || !strings.Contains(schemaText, `"translation"`) {
+	if !strings.Contains(trDesc, "two or more words that are in the lexicon") || !strings.Contains(schemaText, `"translation"`) {
 		t.Fatalf("unit schema translation %q", trDesc)
 	}
 	for _, item := range required {
@@ -150,7 +150,7 @@ func TestTargetOptionalInToolSchema(t *testing.T) {
 			if field.Required {
 				t.Fatal("catalog marks listen_pick translation required")
 			}
-			if !strings.Contains(field.Description, "two or more lexicon tokens") {
+			if !strings.Contains(field.Description, "two or more words that are in the lexicon") {
 				t.Fatalf("catalog translation description %q", field.Description)
 			}
 		}

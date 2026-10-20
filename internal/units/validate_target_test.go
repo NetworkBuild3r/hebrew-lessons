@@ -23,10 +23,15 @@ func TestActivityTarget(t *testing.T) {
 		t.Fatalf("baseline %s", mustJSON(got))
 	}
 	u.Lessons[li].Activities[ai].Target = "   "
+	if got := targetOnly(Validate(context.Background(), &u, lk)); len(got) != 0 {
+		t.Fatalf("listen_pick may omit target %s", mustJSON(got))
+	}
+	u.Lessons[li].Activities[ai].Type = ActivityRecall
 	got := targetOnly(Validate(context.Background(), &u, lk))
 	if len(got) != 1 || got[0].Severity != SeverityBlock || !strings.Contains(got[0].Msg, "several words") {
 		t.Fatalf("blank target %s", mustJSON(got))
 	}
+	u.Lessons[li].Activities[ai].Type = ActivityListenPick
 	// Dagesh before the vowel is the same letters as the NFC token.
 	swapped := swapDagesh(second)
 	if swapped == second || normalize(swapped) != second {
@@ -131,8 +136,8 @@ func TestMissingGradedTarget(t *testing.T) {
 	u, lk := v1()
 	ctx := context.Background()
 	single := u.Lessons[0].Activities[0]
-	if single.Type != ActivityRecall || hebrewWordCount(single) != 1 || normalize(single.Target) != "" {
-		t.Fatalf("fixture activity 0: %+v words %d", single, hebrewWordCount(single))
+	if single.Type != ActivityRecall || normalize(single.Target) != "" {
+		t.Fatalf("fixture activity 0: %+v", single)
 	}
 	if got := targetOnly(Validate(ctx, &u, lk)); len(got) != 0 {
 		t.Fatalf("single-token recall %s", mustJSON(got))
@@ -140,24 +145,24 @@ func TestMissingGradedTarget(t *testing.T) {
 
 	li, ai := 0, 2
 	line := &u.Lessons[li].Activities[ai]
-	if line.Type != ActivityListenPick || hebrewWordCount(*line) < 2 {
+	if line.Type != ActivityListenPick {
 		t.Fatalf("fixture activity 2: %+v", line)
 	}
 	wantPtr := at("lessons", li, "activities", ai, "target")
 	wantMsg := "activity 3: this line has several words; set target to the exact pointed word to grade."
 	line.Target = ""
-	got := targetOnly(Validate(ctx, &u, lk))
-	if len(got) != 1 || got[0].Severity != SeverityBlock || got[0].Pointer != wantPtr || got[0].Msg != wantMsg {
-		t.Fatalf("missing target %#v", got)
+	if got := targetOnly(Validate(ctx, &u, lk)); len(got) != 0 {
+		t.Fatalf("listen_pick omits target %#v", got)
 	}
-	for _, typ := range []string{ActivityRecall, ActivityProduce, ActivityCloze, ActivityListenPick} {
+	var got []Issue
+	for _, typ := range []string{ActivityRecall, ActivityProduce, ActivityCloze} {
 		line.Type = typ
 		got = targetOnly(Validate(ctx, &u, lk))
-		if len(got) != 1 || got[0].Severity != SeverityBlock || got[0].Msg != wantMsg {
+		if len(got) != 1 || got[0].Severity != SeverityBlock || got[0].Pointer != wantPtr || got[0].Msg != wantMsg {
 			t.Fatalf("%s %#v", typ, got)
 		}
 	}
-	line.Type = ActivityListenPick
+	line.Type = ActivityRecall
 
 	pub := targetOnly(ValidateIn(ctx, &u, lk, ModePublished))
 	if len(pub) != 1 || pub[0].Severity != SeverityWarn || pub[0].Pointer != wantPtr || pub[0].Msg != wantMsg {
@@ -175,12 +180,10 @@ func TestMissingGradedTarget(t *testing.T) {
 		t.Fatalf("exact target %s", mustJSON(got))
 	}
 
-	// A numeral beside one Hebrew word is still one word.
+	// A numeral beside one lexicon word is still one word.
 	u, lk = v1()
 	u.Lessons[0].Activities[0].Text += " 12"
-	if hebrewWordCount(u.Lessons[0].Activities[0]) != 1 {
-		t.Fatal("numeral counted as a word")
-	}
+	u.Lessons[0].Activities[0].Type = ActivityRecall
 	if got := targetOnly(Validate(ctx, &u, lk)); len(got) != 0 {
 		t.Fatalf("one word plus a numeral %s", mustJSON(got))
 	}
@@ -193,3 +196,62 @@ func TestMissingGradedTarget(t *testing.T) {
 		t.Fatalf("published wrong target %#v", got)
 	}
 }
+
+// TestLexemeTokenCount is the shared multi-word count. A line is multi-word
+// when two or more tokens are exact lexicon entries, the same lookup the
+// player uses. Punctuation, numerals, unknown words, and an unpointed-only
+// lexicon row do not count. recall, produce, and cloze require target at
+// that count. listen_pick does not.
+func TestLexemeTokenCount(t *testing.T) {
+	const (
+		one = "שָׁלוֹם"
+		two = "קָפֶה"
+		gar = "גָּר"
+	)
+	bare := stripNiqqud(gar)
+	lk := fakeLookup{lex: map[string]glex{
+		normalize(one):  {ID: 1, POS: "noun", Gloss: "hello", Bare: stripNiqqud(one)},
+		normalize(two):  {ID: 2, POS: "noun", Gloss: "coffee", Bare: stripNiqqud(two)},
+		normalize(bare): {ID: 3, POS: "verb", Gloss: "lives", Bare: bare},
+	}}
+	ctx := context.Background()
+	s := &scan{ctx: ctx, lk: lk, cache: map[string]*probe{}}
+	line := one + " " + two
+	if n := lexemeTokenCount(s, Activity{Text: line}); n != 2 || s.err != nil {
+		t.Fatalf("two lexicon words = %d err %v", n, s.err)
+	}
+	if n := lexemeTokenCount(s, Activity{Text: one + " " + gar}); n != 1 {
+		t.Fatalf("unpointed-only word counted: %d", n)
+	}
+	if n := lexemeTokenCount(s, Activity{Text: one + ", 12!"}); n != 1 {
+		t.Fatalf("punctuation or numeral counted: %d", n)
+	}
+	unknown := "אַלְמוֹנִי"
+	if n := lexemeTokenCount(s, Activity{Text: one + " " + unknown}); n != 1 {
+		t.Fatalf("unknown word counted: %d", n)
+	}
+
+	doc := func(typ, text, target string) Unit {
+		return Unit{
+			Title: "Cafe", Situation: "Ordering", Concept: "A greeting",
+			NewWords: []string{one, two},
+			Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{{
+				Type: typ, Text: text, Target: target,
+			}}}},
+		}
+	}
+	for _, typ := range []string{ActivityRecall, ActivityProduce, ActivityCloze} {
+		got := targetOnly(Validate(ctx, ptrUnit(doc(typ, line, "")), lk))
+		if len(got) != 1 || got[0].Severity != SeverityBlock {
+			t.Fatalf("%s two lexicon words %#v", typ, got)
+		}
+		if got := targetOnly(Validate(ctx, ptrUnit(doc(typ, one+" "+unknown, "")), lk)); len(got) != 0 {
+			t.Fatalf("%s one lexicon word %#v", typ, got)
+		}
+	}
+	if got := targetOnly(Validate(ctx, ptrUnit(doc(ActivityListenPick, line, "")), lk)); len(got) != 0 {
+		t.Fatalf("listen_pick %#v", got)
+	}
+}
+
+func ptrUnit(u Unit) *Unit { return &u }
