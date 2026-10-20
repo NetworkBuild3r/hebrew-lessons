@@ -448,8 +448,14 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 	if !ok {
 		return ReviewCardVM{}, fmt.Errorf("web: lexeme %d: not found", ref.LexemeID)
 	}
-	if face.AudioID != "" {
-		vm.AudioURL = "/audio/" + face.AudioID + ".mp3"
+	// The same clip the lesson player and the listening drills use: the
+	// audio_assets row for this exact text, then lexemes.audio_id.
+	id, found, err := s.store.ResolveLexemeAudio(ctx, db.LexemeAudio{Text: face.TextNFC, AudioID: face.AudioID})
+	if err != nil {
+		return ReviewCardVM{}, err
+	}
+	if found {
+		vm.AudioURL = audioURL(id)
 	}
 	vm.Pointed = face.TextNFC
 	vm.Unpointed = units.Plain(face.TextNFC)
