@@ -21,7 +21,7 @@ import (
 
 func TestLogoutForm(t *testing.T) {
 	const token = `tok"en<script>`
-	body := get(t, newMux(nil, CSRFFunc(func(*http.Request) string { return token })), "/")
+	body := get(t, newMux(nil, CSRFFunc(func(*http.Request) string { return token })), "/me")
 	assertLogoutForms(t, body, "tok&#34;en&lt;script&gt;")
 	shell := get(t, newMux(nil, CSRFFunc(func(*http.Request) string { return token })), "/static/js/shell.js")
 	if strings.Contains(shell, "/auth/logout") || strings.Contains(shell, "/signin") || strings.Contains(shell, "HX-Redirect") {
@@ -61,7 +61,7 @@ func TestLogoutFormUsesSessionToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := New(nil, svc)
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/me", nil)
 	req.AddCookie(&http.Cookie{Name: "hebrew_session", Value: base64.RawURLEncoding.EncodeToString(id)})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -89,8 +89,9 @@ func assertLogoutForms(t *testing.T, body, csrf string) {
 			logout = append(logout, form)
 		}
 	}
-	if len(logout) != 2 {
-		t.Fatalf("logout forms = %d, want the header and the rail", len(logout))
+	// Log out lives on Me, so the header and the rail have no copy to wrap (SPEC-017).
+	if len(logout) != 1 {
+		t.Fatalf("logout forms = %d, want the one on Me", len(logout))
 	}
 	for _, form := range logout {
 		if !strings.Contains(form, `method="post"`) {

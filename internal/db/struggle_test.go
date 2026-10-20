@@ -123,7 +123,7 @@ func TestChosenAndConfusionLexeme(t *testing.T) {
 	userID := insertUser(t, s, "chosen@example.com", "sub-chosen", "learner")
 	lexemeID := insertLexeme(t, s, "שָׁלוֹם")
 	cardID, err := s.InsertCard(ctx, Card{
-		UserID: userID, LexemeID: lexemeID, Dir: "he_en", State: "new", Due: when,
+		UserID: userID, LexemeID: lexemeID, Skill: "read", State: "new", Due: when,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -183,7 +183,7 @@ func struggleCard(t *testing.T, s *Store, userID int64, text, gloss string, laps
 	cardID, err := s.InsertCard(context.Background(), Card{
 		UserID:   userID,
 		LexemeID: id,
-		Dir:      "he_en",
+		Skill:    "read",
 		State:    "new",
 		Due:      time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC),
 		Lapses:   lapses,

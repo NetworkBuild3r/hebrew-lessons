@@ -66,6 +66,9 @@ func coverageRule(typ string) (string, string) {
 	switch typ {
 	case ActivityStory:
 		return RuleCoverageStory, "story"
+	case ActivityDialogue:
+		// One line is one passage here: validate flattens a dialogue first.
+		return RuleCoverageStory, "dialogue line"
 	case ActivityListenPick:
 		return RuleCoverageListening, "listening"
 	default:

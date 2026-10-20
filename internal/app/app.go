@@ -25,6 +25,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/buildinfo"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcpstore"
@@ -129,6 +130,12 @@ type Config struct {
 	ElevenLabsAPIKey string
 	// ElevenLabsVoice is ELEVENLABS_VOICE_ID. Empty uses the legacy voice.
 	ElevenLabsVoice string
+	// ElevenLabsVoiceMale is ELEVENLABS_VOICE_ID_MALE, the voice of speaker b in a
+	// dialogue (INIT-015/SPEC-026). Speaker a is ElevenLabsVoice, the female voice.
+	// Empty means there is no male voice: a speaker b clip fails with an error that
+	// names this setting, and nothing falls back to the female voice. It has no
+	// default, and its value is never logged.
+	ElevenLabsVoiceMale string
 	// ElevenLabsModel is ELEVENLABS_MODEL. Empty uses the legacy model.
 	ElevenLabsModel string
 
@@ -184,6 +191,12 @@ func ApplyDefaults(cfg Config) Config {
 	return cfg
 }
 
+// Voices is the speaker table for a dialogue: a is the female voice and b is the
+// male voice. It holds the ids and is never printed.
+func (c Config) Voices() audio.Voices {
+	return audio.Voices{Female: c.ElevenLabsVoice, Male: c.ElevenLabsVoiceMale}
+}
+
 // ConfigureMCPReadOnly parses the smoke-token environment values.
 // An empty token is off and returns zero values, ignoring learnerRaw.
 // A set token must parse as a learner id and pass CheckReadOnlyToken.
@@ -210,6 +223,10 @@ type App struct {
 	authSvc   *auth.Service
 	review    *fsrs.Review
 	placement *placement.Service
+
+	// placementEngine is the v3 placement test that the /placement screens serve (INIT-015/SPEC-012).
+	placementEngine *placement.Engine
+
 	audioDir  string
 	tts       audio.TTS
 	web       http.Handler
@@ -310,13 +327,22 @@ func NewApp(cfg Config) (*App, error) {
 		audioDir:  audioDir,
 		tts:       tts,
 	}
+	// The engine records through the same evidence recorder, and reads the same clock, as the activity screens.
+	a.placementEngine = placement.NewEngine(store, evidence.New(store, review, cfg.Clock), cfg.Clock)
 	health := a.healthHandler()
 	version := versionHandler()
 	a.web = mountVersion(web.NewOptions(health, svc, web.Options{
 		Store:    store,
 		AudioDir: audioDir,
-		Deck:     a.placement,
+		Deck:     a.placementEngine,
 		Runs:     store,
+		// A dialogue line is played from the clip in its speaker's voice.
+		Voices: cfg.Voices(),
+		// The activity item tokens are signed with a key derived from this secret.
+		SessionSecret: cfg.StateSecret,
+		// Today offers the check-in when the engine says it is due (INIT-015/SPEC-017).
+		// The same engine as Deck: Today starts a re-check and /placement resumes it, so they must share one.
+		Placement: a.placementEngine,
 	}))
 	a.mcp = newMCP(cfg, health, version, svc, store, tts, audioDir)
 	sweepCtx, stop := context.WithCancel(context.Background())
@@ -378,6 +404,10 @@ func (a *App) Review() *fsrs.Review { return a.review }
 // Placement is the vocabulary placement deck.
 // It uses the clock from Config, the same clock the store and the review service use.
 func (a *App) Placement() *placement.Service { return a.placement }
+
+// PlacementEngine is the v3 placement test: letters, listening, reading, and typing.
+// It uses the clock from Config.
+func (a *App) PlacementEngine() *placement.Engine { return a.placementEngine }
 
 // Close releases the database. /healthz answers 503 after Close returns.
 func (a *App) Close() error {
@@ -479,7 +509,7 @@ func newMCP(cfg Config, health, version http.Handler, sessions *auth.Service, st
 	// proxy's public host is the fallback when it is unset. The pod
 	// address is never advertised. Only /mcp reaches the authoring
 	// handler. Every other unmatched path is 404.
-	adapter := mcpstore.New(store)
+	adapter := mcpstore.New(store).WithVoices(cfg.Voices())
 	users := sessionUsers{auth: sessions}
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
@@ -521,7 +551,12 @@ func newMCP(cfg Config, health, version http.Handler, sessions *auth.Service, st
 				Store: store,
 				Dir:   audioDir,
 				Voice: cfg.ElevenLabsVoice,
-				Model: cfg.ElevenLabsModel,
+				// The male voice for speaker b. Empty leaves speaker b with no voice.
+				VoiceMale: cfg.ElevenLabsVoiceMale,
+				Model:     cfg.ElevenLabsModel,
+				// The server's write timeout is 30 s. A call that runs past it loses
+				// its reply, so a call stops with the provider after audio.CallBudget.
+				Budget: audio.CallBudget,
 			},
 			store: store,
 		},

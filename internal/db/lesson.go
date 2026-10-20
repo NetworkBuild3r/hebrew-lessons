@@ -57,8 +57,9 @@ const playerRunColumns = `id, user_id, unit_id, lesson_ix, activity_ix, correct_
 
 // NextCourseLesson is the unfinished lesson of the earliest published unit
 // in this learner's scope. Scope is shared, or learner:<id> for this id.
-// Drafts and another learner's units are left out. A unit with no lessons
-// is skipped. ok is false when every published lesson in scope is finished.
+// Drafts and another learner's units are left out, and so is a unit this
+// learner reported (unit_reports), which is hidden for them. A unit with no
+// lessons is skipped. ok is false when every published lesson in scope is finished.
 func (s *Store) NextCourseLesson(ctx context.Context, learnerID int64) (CourseLesson, bool, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -68,7 +69,8 @@ func (s *Store) NextCourseLesson(ctx context.Context, learnerID int64) (CourseLe
 		SELECT id, position, title, situation, concept, doc, scope
 		FROM units
 		WHERE status = 'published' AND (scope = 'shared' OR scope = ?)
-		ORDER BY position, id`, fmt.Sprintf("learner:%d", learnerID))
+		  AND id NOT IN (SELECT unit_id FROM unit_reports WHERE user_id = ?)
+		ORDER BY position, id`, fmt.Sprintf("learner:%d", learnerID), learnerID)
 	if err != nil {
 		return CourseLesson{}, false, fmt.Errorf("db: next lesson: %w", err)
 	}
@@ -124,8 +126,8 @@ func (s *Store) NextCourseLesson(ctx context.Context, learnerID int64) (CourseLe
 }
 
 // CourseLesson reads one published lesson in this learner's scope.
-// A draft, another learner's unit, a missing unit, or a lesson index past
-// the end is ErrNotFound.
+// A draft, another learner's unit, a unit this learner reported, a missing
+// unit, or a lesson index past the end is ErrNotFound.
 func (s *Store) CourseLesson(ctx context.Context, learnerID, unitID int64, lessonIx int) (CourseLesson, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -145,8 +147,9 @@ func (s *Store) CourseLesson(ctx context.Context, learnerID, unitID int64, lesso
 	err = conn.QueryRowContext(ctx, `
 		SELECT position, title, situation, concept, doc, scope
 		FROM units
-		WHERE id = ? AND status = 'published' AND (scope = 'shared' OR scope = ?)`,
-		unitID, fmt.Sprintf("learner:%d", learnerID),
+		WHERE id = ? AND status = 'published' AND (scope = 'shared' OR scope = ?)
+		  AND id NOT IN (SELECT unit_id FROM unit_reports WHERE user_id = ?)`,
+		unitID, fmt.Sprintf("learner:%d", learnerID), learnerID,
 	).Scan(&item.position, &item.title, &item.situation, &item.concept, &item.doc, &item.scope)
 	if errors.Is(err, sql.ErrNoRows) {
 		return CourseLesson{}, fmt.Errorf("db: unit %d: %w", unitID, ErrNotFound)
@@ -567,7 +570,7 @@ func (s *Store) stepPlayerRun(ctx context.Context, userID, runID int64, kind str
 	return updated, true, nil
 }
 
-// enqueueNewWords inserts a new he_en card and a new en_he card for each
+// enqueueNewWords inserts a new read card and a new recall card for each
 // new word in the lesson, due at now. A card the learner already has is
 // left unchanged. ListDueCards keeps these out until finished_at is set,
 // which this transaction has just done.
@@ -595,12 +598,12 @@ func enqueueNewWords(ctx context.Context, tx *sql.Tx, userID, unitID int64, less
 
 	due := FormatTime(now)
 	for _, id := range ids {
-		for _, dir := range []string{"he_en", "en_he"} {
+		for _, skill := range []string{"read", "recall"} {
 			if _, err := tx.ExecContext(ctx, `
 				INSERT OR IGNORE INTO cards (
-					user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses
+					user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses
 				) VALUES (?, ?, ?, 'new', ?, 0, 0, 0, 0)`,
-				userID, id, dir, due,
+				userID, id, skill, due,
 			); err != nil {
 				return fmt.Errorf("db: lesson cards: %w", err)
 			}

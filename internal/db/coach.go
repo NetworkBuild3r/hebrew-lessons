@@ -37,7 +37,7 @@ type CoachCard struct {
 	HasTranslit bool
 	POS         string
 	Gloss       string
-	Dir         string
+	Skill       string
 	State       string
 	Stability   float64
 	Difficulty  float64
@@ -119,7 +119,7 @@ func (s *Store) CoachCards(ctx context.Context, q CoachQuery) (CoachPage, error)
 	}
 	rows, err := conn.QueryContext(ctx, `
 		SELECT l.text_nfc, l.translit, l.pos, l.gloss_en,
-			c.id, c.dir, c.state, c.stability, c.difficulty, c.due, c.lapses, c.reps, c.last_review,
+			c.id, c.skill, c.state, c.stability, c.difficulty, c.due, c.lapses, c.reps, c.last_review,
 			(
 				SELECT rl.rating
 				FROM review_log AS rl
@@ -239,7 +239,7 @@ func scanCoachCard(scan func(dest ...any) error) (CoachCard, error) {
 	var rating sql.NullInt64
 	err := scan(
 		&card.Lexeme, &translit, &card.POS, &card.Gloss,
-		&card.ID, &card.Dir, &card.State, &card.Stability, &card.Difficulty,
+		&card.ID, &card.Skill, &card.State, &card.Stability, &card.Difficulty,
 		&due, &card.Lapses, &card.Reps, &last, &rating,
 	)
 	if err != nil {

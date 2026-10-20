@@ -145,6 +145,11 @@ func (e *ElevenLabs) endpoint(voice string) (string, error) {
 	if base == "" {
 		base = elevenLabsHost
 	}
+	// The voice id is one path segment. A slash, a dot-dot, or an escape would
+	// change which endpoint is called, so only letters, digits, - and _ pass.
+	if !ValidVoiceID(voice) {
+		return "", errors.New("audio: elevenlabs voice id is not a valid path")
+	}
 	raw, err := url.JoinPath(base, "v1", "text-to-speech", voice)
 	if err != nil {
 		return "", errors.New("audio: elevenlabs voice id is not a valid path")

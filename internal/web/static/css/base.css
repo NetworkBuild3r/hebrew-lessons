@@ -33,11 +33,11 @@ h1, h2, h3 { text-wrap: balance; }
 p { text-wrap: pretty; }
 bdi[lang="en"],
 bdi[lang="he"] { unicode-bidi: isolate; }
-::selection { background: var(--primary-soft); color: var(--text); }
+::selection { background: var(--surface-soft); color: var(--text); }
 
-/* Offset ring in the text colour. Text on paper is 15.2:1 light and 16.7:1 dark. */
+/* Offset ring in the focus colour (Figma focus/ring). */
 :focus-visible {
-  outline: var(--space-1) solid var(--text);
+  outline: var(--space-1) solid var(--focus-ring);
   outline-offset: var(--space-1);
 }
 @media (forced-colors: active) {
@@ -72,11 +72,9 @@ bdi[lang="he"] { unicode-bidi: isolate; }
   min-block-size: 100dvb;
 }
 .rail { display: contents; }
-/* Child combinator so this beats the later .brand and .theme-toggle rules.
-   The desktop copies are shown again only at the 1024 rail. */
-.rail > .rail-brand,
-.rail > .rail-theme,
-.rail > .rail-logout { display: none; }
+/* Child combinator so this beats the later .brand rule.
+   The desktop copy is shown again only at the 1024 rail. */
+.rail > .rail-brand { display: none; }
 .stage {
   inline-size: min(100%, var(--player-max));
   margin-inline: auto;
@@ -249,7 +247,7 @@ h1 {
 .unit-gloss,
 .chip__gloss {
   font-size: var(--fs-caption);
-  color: var(--note);
+  color: var(--muted);
 }
 .chip__gloss { white-space: nowrap; }
 .situation {
@@ -282,8 +280,8 @@ h1 {
   font-size: var(--fs-caption);
   font-weight: 600;
   line-height: var(--lh-he-body);
-  color: var(--note);
-  background: var(--note-soft);
+  color: var(--muted);
+  background: var(--surface-soft);
   border-radius: var(--radius-pill);
   padding-block: var(--space-1);
   padding-inline: var(--space-2);
@@ -306,8 +304,8 @@ h1 {
   gap: var(--space-2);
   padding-block: var(--space-2);
   padding-inline: var(--space-4);
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--surface-soft);
+  color: var(--text);
   border-radius: var(--radius-pill);
 }
 .quiet-card--due .icon {
@@ -342,9 +340,16 @@ h1 {
   font-size: var(--fs-small);
   line-height: var(--lh-he-body);
 }
-.btn-primary { background: var(--primary); color: var(--on-primary); }
-.btn-primary:hover { background: var(--primary-hover); }
-.btn-tonal { background: var(--primary-soft); color: var(--primary); }
+/* One main action per screen: slate in light, gold in dark (Figma action/*).
+   The night cards are slate in light, so the main action there stays gold. */
+.btn-primary { background: var(--action-bg); color: var(--action-text); }
+.btn-primary:hover { background: color-mix(in srgb, var(--action-bg) 88%, var(--action-text)); }
+.ink-card .btn-primary,
+.today-place--open .btn-primary { background: var(--lamp); color: var(--on-lamp); }
+.ink-card .btn-primary:hover,
+.today-place--open .btn-primary:hover { background: color-mix(in srgb, var(--lamp) 88%, var(--on-lamp)); }
+/* Secondary actions are neutral: outlined, no second fill colour. */
+.btn-tonal { background: transparent; color: var(--text); border: 1px solid var(--hairline-strong); }
 
 .icon {
   inline-size: var(--space-5);
@@ -394,11 +399,11 @@ h1 {
   text-align: center;
 }
 .dock__link[aria-current="page"] {
-  color: var(--primary);
+  color: var(--text);
   font-weight: 700;
-  background: var(--primary-soft);
+  background: var(--surface-soft);
 }
-.dock__link[aria-current="page"] .icon { color: var(--primary); }
+.dock__link[aria-current="page"] .icon { color: var(--text); }
 
 .sheet {
   background: var(--surface);
@@ -628,27 +633,6 @@ h1 {
     font-size: var(--fs-small);
     max-inline-size: 100%;
   }
-  .rail > .rail-theme {
-    display: inline-flex;
-    flex-direction: column;
-    margin-block-start: auto;
-    inline-size: 100%;
-    min-inline-size: 0;
-    padding-inline: var(--space-1);
-    gap: var(--space-1);
-    font-size: var(--fs-caption);
-  }
-  .rail > .rail-logout {
-    display: flex;
-    justify-content: center;
-    margin-block-start: var(--space-2);
-  }
-  .rail > .rail-logout .logout__btn {
-    inline-size: 100%;
-    min-inline-size: 0;
-    padding-inline: var(--space-1);
-    font-size: var(--fs-caption);
-  }
   .top { display: none; }
   .dock-wrap {
     position: static;
@@ -689,7 +673,6 @@ h1 {
     inline-size: min(100%, var(--content-max));
     padding-block-end: var(--space-7);
   }
-  .today__head { display: none; }
   .today__cols { grid-template-columns: 1fr 1fr; }
   .ink-card, .lesson-card, .sheet, .quiet-card {
     padding: var(--space-6);
@@ -1069,7 +1052,7 @@ h1 {
 }
 .placement .btn { margin-block-start: 0; inline-size: 100%; }
 .btn--lg { min-block-size: var(--space-8); }
-.btn--lamp { background: var(--lamp); color: var(--on-lamp); }
+.btn--lamp { background: var(--action-bg); color: var(--action-text); }
 .btn--quiet {
   background: transparent;
   color: var(--muted);
@@ -1113,14 +1096,13 @@ h1 {
   padding-block: var(--space-2);
   padding-inline: var(--space-2);
   border-radius: var(--radius-control);
-  border: 1px solid transparent;
+  /* One neutral style for every self-grade button (north-star section 9). */
+  background: var(--surface-soft);
+  color: var(--text);
+  border: 1px solid var(--hairline-strong);
   font-weight: 700;
 }
 .grade small { font-weight: 500; font-size: var(--fs-caption); }
-.grade[data-tone="stop"] { background: var(--stop-soft); color: var(--stop); }
-.grade[data-tone="check"] { background: var(--check-soft); color: var(--check); }
-.grade[data-tone="go"] { background: var(--go-soft); color: var(--go); }
-.grade[data-tone="note"] { background: var(--note-soft); color: var(--note); }
 @container rcard (min-width: 560px) {
   .grades { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
@@ -1156,6 +1138,10 @@ h1 {
   padding: 0;
   margin: 0;
   clip-path: inset(50%);
+  /* Without this the nowrap text runs out of its 1px box and widens the page (a 4px sideways scroll at 360px).
+     clip rather than the usual value, which csslint keeps out of this file so pointed text is never cut:
+     this box is invisible and holds no pointed text. */
+  overflow: clip;
   white-space: nowrap;
 }
 .pltoast {
@@ -1212,15 +1198,15 @@ h1 {
   background: transparent;
   border: 2px solid var(--muted);
 }
-.ladder li[data-state="solid"] .lad__dot { background: var(--go); border-color: var(--go); }
+.ladder li[data-state="solid"] .lad__dot { background: var(--text); border-color: var(--text); }
 .ladder li[data-state="here"] .lad__dot { background: var(--lamp); border-color: var(--lamp); inline-size: var(--space-4); block-size: var(--space-4); }
-.ladder li[data-state="seen"] .lad__dot { background: var(--primary); border-color: var(--primary); }
+.ladder li[data-state="seen"] .lad__dot { background: var(--muted); border-color: var(--muted); }
 .ladder li[data-state="ahead"] .lad__t b,
 .ladder li[data-state="ahead"] .lad__s { color: var(--muted); font-weight: 500; }
 .ladder li[data-state="here"] .lad__t b { font-weight: 800; }
 .ladder li[data-state="here"] .lad__s {
-  background: var(--check-soft);
-  color: var(--check);
+  background: var(--surface-soft);
+  color: var(--lamp-ink);
   border-radius: var(--radius-pill);
   padding-inline: var(--space-2);
 }
@@ -1314,15 +1300,219 @@ h1 {
 }
 
 /* Word block: pointed Hebrew, transliteration, and English gloss.
-   A recall prompt hides the gloss and the transliteration until the answer. */
+   A recall of one word hides the gloss and the transliteration until the
+   answer. A recall of a line marks the tested word and hides only that word;
+   the other words show both, as help, until the answer reveals every word.
+   The line itself carries dir="rtl" (word-block rule 12). */
 .lesson-player { display: grid; gap: var(--space-5); }
 .lesson-player__head { display: grid; gap: var(--space-2); }
 .activity { display: grid; gap: var(--space-4); }
+.activity-word {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+.activity-word .wb--card { align-items: center; }
+/* The tested word. --focus-ring stands in for the spec's --primary: that
+   name was removed from the palette. No underline, tracking, or italic,
+   because they collide with niqqud. */
+mark.target {
+  background: color-mix(in oklch, var(--focus-ring) 22%, transparent);
+  border-radius: var(--radius-sm);
+  padding-inline: .2em;
+  padding-block: .1em;
+  color: inherit;
+  font-weight: 800;
+  font-style: normal;
+  letter-spacing: normal;
+  text-decoration: none;
+}
+/* The named word in "What does גָּר mean?" keeps its niqqud at the chip size. */
+.recall-prompt {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-md);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+}
+mark.target .wb__he {
+  font-weight: 800;
+  font-style: normal;
+  letter-spacing: normal;
+  text-decoration: none;
+}
+/* Help under the other words. The spec says --ink-soft; in this palette that
+   token is a slate surface, so the muted text role is the softer ink. */
+.activity-word .wb__tr,
+.activity-word .wb__gl { color: var(--muted); }
+.target-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  inline-size: 2.5em;
+  min-block-size: 1.25em;
+  padding-inline: var(--space-1);
+  border: 1px dashed var(--muted);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-style: normal;
+  line-height: var(--lh-body);
+}
+.activity-word .target-slot--filled {
+  inline-size: auto;
+  min-inline-size: 2.5em;
+  border-color: transparent;
+  color: var(--text);
+}
 .word-blocks {
   display: flex;
   flex-wrap: wrap;
-  align-items: stretch;
+  align-items: flex-start;
   gap: var(--space-2);
+}
+/* Other lines still pin the clip to the end of a stretched column. */
+.activity .word-blocks { align-items: stretch; }
+.activity-word > .clip { margin-block-start: auto; }
+/* A multi-word recall shares one grid: Hebrew, transliteration, gloss, orb.
+   Text rows are at least one line and grow when a gloss wraps, so the extra
+   line does not paint over the orb. The orb row is at least a tap target and
+   grows to the native bar. Four content-sized tracks fit a phone; a fifth
+   word starts the next band instead of overflowing sideways. Wider viewports
+   keep a longer line on one band. The line stays centred. */
+.word-blocks--recall {
+  display: grid;
+  grid-template-columns: repeat(4, fit-content(7rem));
+  grid-auto-rows: auto minmax(1lh, auto) minmax(1lh, auto) minmax(var(--size-tap), auto);
+  grid-auto-flow: row;
+  justify-content: center;
+  justify-items: stretch;
+  align-items: stretch;
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
+  max-inline-size: 100%;
+}
+@media (min-width: 720px) {
+  .word-blocks--recall { grid-template-columns: repeat(8, fit-content(7rem)); }
+}
+@media (min-width: 1440px) {
+  .word-blocks--recall { column-gap: var(--space-4); }
+}
+.word-blocks--recall > .activity-word {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 4;
+  align-items: center;
+  justify-items: center;
+  gap: 0;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+.word-blocks--recall > .activity-word > .wb {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 3;
+  align-items: center;
+  justify-items: center;
+  gap: 0;
+}
+/* The native bar sits in the orb row, under its word. It fills that column
+   instead of the 16rem default, so three bars do not set the column widths.
+   min-inline-size: 0 keeps the control's intrinsic minimum out of the track. */
+.word-blocks--recall > .activity-word > .clip {
+  margin-block-start: 0;
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+.word-blocks--recall .clip > audio {
+  inline-size: 0;
+  min-inline-size: 100%;
+  max-inline-size: 100%;
+}
+/* Without JS the orb row is not reserved: the bar is a labelled row under
+   the line (.clip-rows), not a control squeezed into the word column. */
+html:not(.js) .word-blocks--recall {
+  grid-auto-rows: auto minmax(1lh, auto) minmax(1lh, auto);
+}
+html:not(.js) .word-blocks--recall > .activity-word {
+  grid-row: span 3;
+}
+html:not(.js) .word-blocks--recall > .activity-word > .clip {
+  display: none;
+}
+.clip-rows {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
+  inline-size: 100%;
+  margin-block-start: var(--space-4);
+}
+html.js .clip-rows {
+  display: none;
+}
+.clip-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+.clip-row__label {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-small);
+  line-height: var(--lh-body);
+}
+.clip-row__he {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-md);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+}
+.clip-row__tr {
+  font-family: var(--font-ui);
+  color: var(--muted);
+}
+.clip-rows .clip {
+  align-items: stretch;
+  inline-size: 100%;
+}
+.clip-rows .clip > audio {
+  inline-size: 100%;
+  min-inline-size: 100%;
+  max-inline-size: 100%;
+}
+.word-blocks--recall .recall-tr,
+.word-blocks--recall .recall-gl {
+  max-inline-size: 100%;
+  padding-inline: var(--space-1);
+  text-align: center;
+}
+.word-blocks--recall .wb__tr,
+.word-blocks--recall .wb__gl {
+  display: block;
+  max-inline-size: 5.5rem;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+.word-blocks--recall .wb__he {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-lg);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+}
+.recall-he,
+.recall-tr,
+.recall-gl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-inline-size: 100%;
 }
 .word-block {
   display: inline-flex;
@@ -1356,6 +1546,8 @@ h1 {
   border: 1px dashed var(--hairline);
 }
 .choices { display: grid; gap: var(--space-2); }
+/* The lesson does not show 1/2/3 badges. The keys are for placement and drills. */
+.choices .c-answer__key { display: none; }
 .choice {
   display: flex;
   flex-direction: column;
@@ -1372,15 +1564,100 @@ h1 {
   text-align: start;
 }
 .choice .word-block--choice { background: transparent; padding: 0; }
-.clip audio,
-.word-block audio {
-  inline-size: min(100%, calc(var(--space-9) * 3));
-  min-block-size: var(--tap);
+/* Lesson clip. The native audio is the control until clips.js adds class js
+   on html. Then the orb shows and the bar is display:none, so it leaves the
+   tab order and the accessibility tree. Opacity or off-screen placement
+   would leave it focusable. The orb is not gold: gold stays the one primary
+   action. --hairline is the spec's --line, and --text is the icon ink
+   (--ink in this palette is a slate surface). */
+.clip {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  align-items: center;
+  max-inline-size: 100%;
 }
-.clip__label {
-  font-size: var(--fs-small);
-  line-height: var(--lh-body);
-  color: var(--muted);
+.clip > audio {
+  display: block;
+  inline-size: 16rem;
+  max-inline-size: 100%;
 }
+html.js .clip > audio {
+  display: none;
+}
+.orb {
+  display: none;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--text);
+}
+html.js .orb {
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+.orb:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.orb--hero {
+  inline-size: var(--size-cta);
+  block-size: var(--size-cta);
+  background: var(--surface-raised);
+  border: 1px solid var(--hairline);
+}
+html.js .orb--hero:hover { background: var(--surface-soft); }
+.orb--hero[data-state="error"] {
+  background: var(--surface-soft);
+  border-style: dashed;
+  border-color: var(--muted);
+}
+/* Per-word: a 28px disc centred in a 44px hit box, under the word, never
+   between words in the line. */
+.orb--word {
+  inline-size: var(--size-tap);
+  block-size: var(--size-tap);
+  background: transparent;
+  border: 0;
+}
+.orb--word::before {
+  content: "";
+  grid-area: 1 / 1;
+  inline-size: 28px;
+  block-size: 28px;
+  border-radius: 50%;
+  background: var(--surface-soft);
+  border: 1px solid var(--hairline-strong);
+}
+html.js .orb--word:hover::before {
+  background: var(--surface-raised);
+  border-color: var(--text);
+}
+.orb--word[data-state="error"]::before {
+  border-style: dashed;
+  border-color: var(--muted);
+}
+.orb[data-state="error"] { color: var(--muted); }
+.orb__glyph {
+  grid-area: 1 / 1;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+}
+.orb--hero .icon { inline-size: 22px; block-size: 22px; }
+.orb--word .icon { inline-size: 14px; block-size: 14px; }
+.orb__glyph--load {
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid color-mix(in oklch, var(--focus-ring) 30%, transparent);
+  border-block-start-color: var(--focus-ring);
+}
+.orb--hero .orb__glyph--load { inline-size: 22px; block-size: 22px; }
+.orb--word .orb__glyph--load { inline-size: 14px; block-size: 14px; }
+.orb[data-state="idle"] .orb__glyph--play,
+.orb:not([data-state]) .orb__glyph--play { opacity: 1; }
+.orb[data-state="loading"] .orb__glyph--load { opacity: 1; }
+.orb[data-state="playing"] .orb__glyph--stop { opacity: 1; }
+.orb[data-state="error"] .orb__glyph--off { opacity: 1; }
 .feedback--right { color: var(--go); }
 .feedback--wrong { color: var(--stop); }

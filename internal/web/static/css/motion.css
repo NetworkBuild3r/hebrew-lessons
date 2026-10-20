@@ -1,0 +1,346 @@
+/* Motion system (INIT-015/SPEC-009). Linked after components.css.
+   Motion explains a change; it never carries the meaning and never makes the
+   learner wait. Rules:
+   - Only transform and opacity move. Durations and easings are tokens.
+   - Every movement sits inside prefers-reduced-motion: no-preference, so the
+     default is still.
+   - Every pattern has a reduce rule below. Under reduce nothing scales,
+     slides, flips, or pulses. State still shows: by opacity, or by the colour,
+     border, mark, and ring that components.css and this file set at all times.
+   - Nothing here sets pointer-events on content or disables a control, so a
+     tap lands on the first try while a transition runs.
+   Patterns: screen-enter, screen-exit, option-press, option-picked,
+   answer-correct, answer-wrong, feedback-rise, sheet-out, card-flip,
+   progress-fill, orb-pulse, stagger-in.
+   Opt in with data-motion="card-flip | progress-fill | stagger" where a
+   component has no state attribute of its own. Screens choose the patterns
+   (SPEC-012, SPEC-016, SPEC-017). */
+
+/* The view-transition overlay must not take taps. Without this, a tap during a
+   swap hits the document root instead of the control under the finger. */
+::view-transition { pointer-events: none; }
+
+/* Static signs that never depend on motion. */
+.c-orb[data-playing] {
+  outline: 3px solid var(--lamp);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes screen-enter {
+    from { opacity: 0; transform: translateY(var(--motion-shift)); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes screen-exit {
+    from { opacity: 1; transform: none; }
+    to { opacity: 0; transform: translateY(calc(var(--motion-shift) * -.5)); }
+  }
+  @keyframes option-picked {
+    from { transform: scale(var(--motion-press)); }
+    to { transform: none; }
+  }
+  @keyframes answer-correct {
+    0% { transform: scale(var(--motion-press)); }
+    60% { transform: scale(1.015); }
+    100% { transform: none; }
+  }
+  @keyframes answer-wrong {
+    0%, 100% { transform: none; }
+    25% { transform: translateX(calc(var(--space-1) * -1)); }
+    50% { transform: translateX(var(--space-1)); }
+    75% { transform: translateX(calc(var(--space-1) * -.5)); }
+  }
+  @keyframes feedback-rise {
+    from { opacity: 0; transform: translateY(100%); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes sheet-out {
+    from { opacity: 1; transform: none; }
+    to { opacity: 0; transform: translateY(100%); }
+  }
+  @keyframes card-flip {
+    from { opacity: .2; transform: perspective(1200px) rotateY(calc(var(--motion-flip) * -1)); }
+    to { opacity: 1; transform: perspective(1200px) rotateY(0deg); }
+  }
+  /* Starts at a fraction of the final width (--v0, default empty) and ends at
+     the element's own transform, so it works for a native progress value
+     (no transform) and for a bar that sets scaleX(var(--v)) itself. */
+  @keyframes progress-fill {
+    from { transform: scaleX(var(--v0, 0)); }
+  }
+  @keyframes orb-pulse {
+    from { transform: none; }
+    to { transform: scale(calc(1 + var(--motion-scale) * 2)); }
+  }
+  @keyframes stagger-in {
+    from { opacity: 0; transform: translateY(var(--motion-lift)); }
+    to { opacity: 1; transform: none; }
+  }
+
+  /* screen-exit and screen-enter: htmx swaps use transition:true, so the page
+     body is the view-transition group named page-main (base.css). */
+  ::view-transition-old(page-main) {
+    animation: screen-exit var(--dur-fast) var(--ease-in-out) both;
+  }
+  ::view-transition-new(page-main) {
+    animation: screen-enter var(--dur) var(--ease-out) both;
+  }
+
+  /* option-press: scale on press. The release springs back. */
+  .c-answer,
+  .c-button,
+  .c-orb,
+  [data-motion~="press"] {
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  .c-answer:active,
+  .c-button:not(:disabled):active,
+  .c-orb:active,
+  [data-motion~="press"]:active {
+    transform: scale(var(--motion-press));
+  }
+
+  /* option-picked: the border and fill change is in components.css. This
+     adds a short settle when the state arrives. */
+  .c-answer[data-state="selected"] {
+    animation: option-picked var(--dur-fast) var(--ease-spring);
+  }
+
+  /* answer-correct and answer-wrong: the colour and the mark are in
+     components.css; the motion only underlines them. */
+  .c-answer[data-state="correct"] {
+    animation: answer-correct var(--dur) var(--ease-spring);
+  }
+  .c-answer[data-state="wrong"] {
+    animation: answer-wrong var(--dur) var(--ease-out);
+  }
+
+  /* feedback-rise (in) and sheet-out (out). */
+  .c-sheet {
+    animation: feedback-rise var(--dur) var(--ease-out) both;
+  }
+  .c-sheet[data-leaving] {
+    animation: sheet-out var(--dur-fast) var(--ease-in-out) both;
+  }
+
+  /* card-flip. */
+  [data-motion~="card-flip"] {
+    backface-visibility: hidden;
+    animation: card-flip var(--dur) var(--ease-out) both;
+  }
+
+  /* progress-fill. The origin follows the reading direction. */
+  /* Vendor pseudo-elements get their own rules: one unknown selector in a
+     list would drop the whole rule. */
+  .c-progress::-webkit-progress-value {
+    transform-origin: 0 50%;
+    animation: progress-fill var(--dur) var(--ease-out);
+  }
+  .c-progress::-moz-progress-bar {
+    transform-origin: 0 50%;
+    animation: progress-fill var(--dur) var(--ease-out);
+  }
+  [data-motion~="progress-fill"] {
+    transform-origin: 0 50%;
+    animation: progress-fill var(--dur) var(--ease-out);
+  }
+  :root[dir="rtl"] .c-progress::-webkit-progress-value { transform-origin: 100% 50%; }
+  :root[dir="rtl"] .c-progress::-moz-progress-bar { transform-origin: 100% 50%; }
+  :root[dir="rtl"] [data-motion~="progress-fill"] { transform-origin: 100% 50%; }
+
+  /* orb-pulse: only while audio plays. motion.js sets data-playing. */
+  .c-orb[data-playing] {
+    animation: orb-pulse calc(var(--dur-slow) * 2) var(--ease-in-out) infinite alternate;
+  }
+
+  /* Lesson orb. The 900ms spin and the 1.2s ring use the slow token the way
+     orb-pulse does: no duration token may pass 400ms. --dur-fast is the
+     shortest token, standing in for the spec's --dur-instant. */
+  @keyframes orb-spin {
+    to { transform: rotate(1turn); }
+  }
+  @keyframes orb-ring {
+    from { transform: scale(1); opacity: .6; }
+    to { transform: scale(1.18); opacity: 0; }
+  }
+  @keyframes slot-fill {
+    from { opacity: 0; transform: translateY(var(--space-1)); }
+    to { opacity: 1; transform: none; }
+  }
+  html.js .orb {
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  html.js .orb:hover { transform: translateY(-1px); }
+  html.js .orb:active {
+    transform: scale(.96);
+    transition-timing-function: var(--ease-spring);
+  }
+  .orb__glyph {
+    transform: scale(.8);
+    transition: opacity var(--dur-fast) var(--ease-spring), transform var(--dur-fast) var(--ease-spring);
+  }
+  .orb[data-state="idle"] .orb__glyph--play,
+  .orb:not([data-state]) .orb__glyph--play,
+  .orb[data-state="loading"] .orb__glyph--load,
+  .orb[data-state="playing"] .orb__glyph--stop,
+  .orb[data-state="error"] .orb__glyph--off {
+    transform: none;
+  }
+  .orb[data-state="loading"] .orb__glyph--load {
+    animation: orb-spin calc(var(--dur-slow) * 2.25) linear infinite;
+  }
+  .orb[data-state="playing"]::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    border: 2px solid color-mix(in oklch, var(--focus-ring) 55%, transparent);
+    animation: orb-ring calc(var(--dur-slow) * 3) var(--ease-out) infinite;
+  }
+  .orb--hero[data-state="playing"]::after { inset: 0; }
+  .orb--word[data-state="playing"]::after {
+    inline-size: 28px;
+    block-size: 28px;
+    inset: 0;
+    margin: auto;
+  }
+  .target-slot--filled {
+    animation: slot-fill var(--dur-base) var(--ease-out) both;
+  }
+
+  /* stagger-in: each child waits one step longer than the one before, up to
+     the eighth. Items take taps from the first frame; only paint is delayed. */
+  [data-motion~="stagger"] > * {
+    animation: stagger-in var(--dur) var(--ease-out) backwards;
+    animation-delay: calc(var(--i, 0) * var(--dur-stagger));
+  }
+  [data-motion~="stagger"] > :nth-child(2) { --i: 1; }
+  [data-motion~="stagger"] > :nth-child(3) { --i: 2; }
+  [data-motion~="stagger"] > :nth-child(4) { --i: 3; }
+  [data-motion~="stagger"] > :nth-child(5) { --i: 4; }
+  [data-motion~="stagger"] > :nth-child(6) { --i: 5; }
+  [data-motion~="stagger"] > :nth-child(7) { --i: 6; }
+  [data-motion~="stagger"] > :nth-child(n + 8) { --i: 7; }
+}
+
+/* Reduced motion. Opacity only, 120ms or less (the reduce tokens), no
+   transform of any kind. */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes motion-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes motion-fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  @keyframes motion-settle {
+    from { opacity: .6; }
+    to { opacity: 1; }
+  }
+
+  /* screen-enter and screen-exit become a short cross-fade. */
+  ::view-transition-old(page-main) {
+    animation: motion-fade-out var(--dur-base) linear both;
+  }
+  ::view-transition-new(page-main) {
+    animation: motion-fade-in var(--dur-base) linear both;
+  }
+  /* The browser animates every group between the old and new position and
+     size with a 250ms transform of its own. Reduced motion switches that
+     off; the group snaps and only the fades above remain. */
+  ::view-transition-group(*) {
+    animation: none;
+  }
+  /* The placement deck (base.css) names its own view transitions. They fade
+     too, with no flip, no stack, and no delay. */
+  ::view-transition-old(rcard),
+  ::view-transition-old(rcard-next) {
+    animation: motion-fade-out var(--dur-fast) linear both;
+  }
+  ::view-transition-new(rcard),
+  ::view-transition-new(rcard-next) {
+    animation: motion-fade-in var(--dur-fast) linear both;
+  }
+  .rcard[data-enter="flip"].htmx-added,
+  .rcard[data-enter="stack"].htmx-added {
+    animation: motion-fade-in var(--dur-fast) linear;
+  }
+
+  /* option-press: a dip in opacity while pressed, with no scale. */
+  .c-answer:active,
+  .c-button:not(:disabled):active,
+  .c-orb:active,
+  [data-motion~="press"]:active {
+    opacity: .85;
+  }
+
+  /* option-picked, answer-correct, answer-wrong: the border, fill, and mark
+     already show the state. They arrive with a short fade instead of a move. */
+  .c-answer[data-state="selected"],
+  .c-answer[data-state="correct"],
+  .c-answer[data-state="wrong"] {
+    animation: motion-settle var(--dur-fast) linear;
+  }
+
+  /* feedback-rise and sheet-out fade. */
+  .c-sheet {
+    animation: motion-fade-in var(--dur-fast) linear both;
+  }
+  .c-sheet[data-leaving] {
+    animation: motion-fade-out var(--dur-fast) linear both;
+  }
+
+  /* card-flip does not flip. The new face fades in. */
+  [data-motion~="card-flip"] {
+    animation: motion-settle var(--dur-fast) linear both;
+  }
+
+  /* progress-fill: the bar is at its new length at once. The length is the state. */
+  .c-progress::-webkit-progress-value { animation: none; }
+  .c-progress::-moz-progress-bar { animation: none; }
+  [data-motion~="progress-fill"],
+  .plprog i {
+    animation: none;
+  }
+
+  /* orb-pulse: none. The ring set above marks a playing orb. */
+  .c-orb[data-playing] {
+    animation: none;
+  }
+
+  /* stagger-in: all items fade in together. */
+  [data-motion~="stagger"] > * {
+    animation: motion-fade-in var(--dur-fast) linear;
+  }
+
+  /* Placement toast (base.css) fades in. */
+  .pltoast {
+    animation: motion-fade-in var(--dur-fast) linear;
+  }
+
+  /* Lesson orb: no lift, no spin, no pulse. Playing is a filled disc, which
+     is not the 2px offset focus ring. Loading is the three-dot glyph at 60%.
+     The gloss slot still fades in. */
+  html.js .orb:active { opacity: .85; }
+  .orb__glyph {
+    transform: none;
+    transition: opacity var(--dur-fast) linear;
+  }
+  .orb[data-state="loading"] .orb__glyph--load { opacity: 0; animation: none; }
+  .orb[data-state="loading"] .orb__glyph--dots { opacity: .6; }
+  .orb--hero[data-state="playing"] {
+    background: var(--focus-ring);
+    color: var(--on-ink);
+    outline: 3px solid var(--focus-ring);
+    animation: none;
+  }
+  .orb--word[data-state="playing"] { outline: none; color: var(--on-ink); }
+  .orb--word[data-state="playing"]::before {
+    background: var(--focus-ring);
+    border-color: var(--focus-ring);
+    outline: none;
+  }
+  .target-slot--filled {
+    animation: motion-fade-in var(--dur-fast) linear both;
+  }
+}

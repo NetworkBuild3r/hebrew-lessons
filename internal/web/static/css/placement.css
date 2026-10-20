@@ -1,0 +1,508 @@
+/* Placement screens (INIT-015/SPEC-012, views/placement.templ). One screen at a time, each with one
+   thing to do. Colours, radius, space, type and tap sizes come from tokens.css. Logical properties
+   only. The motion is SPEC-009's (screen swaps through hx-swap transition:true, option states, the
+   orb pulse through data-playing); the two small movements here sit inside
+   prefers-reduced-motion: no-preference, so reduced motion is the default state.
+
+   No placement screen shows a verdict, so nothing in this file uses the green or red roles: the only
+   answer states are Default and Selected, and Selected is neutral. */
+
+/* A focused flow, as the activity screens are: the shell's chrome steps aside. */
+.shell:has(.pl) .top,
+.shell:has(.pl) .dock-wrap,
+.shell:has(.pl) .rail { display: none; }
+.shell:has(.pl) .page {
+  padding: 0;
+  inline-size: 100%;
+  max-inline-size: none;
+}
+
+/* The skip link waits above the page, and its shadow would show at the top of a screen with no chrome. */
+#app:has(.pl) .skip:not(:focus-visible) { box-shadow: none; }
+
+.pl {
+  display: grid;
+  background: var(--paper);
+  color: var(--text);
+  min-block-size: 100dvb;
+}
+.pl__frame {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  inline-size: min(100%, 34rem);
+  min-block-size: 100dvb;
+  margin-inline: auto;
+  padding-block: var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+  padding-inline: var(--space-4);
+}
+@media (min-width: 1024px) {
+  .pl { place-items: center; }
+  .pl__frame {
+    min-block-size: 0;
+    padding-block: var(--space-7);
+  }
+}
+
+/* Top: a way out, the progress, the count. */
+.pl__top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: var(--size-tap);
+}
+.pl__close,
+.pl__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  flex: none;
+  min-inline-size: var(--size-tap);
+  block-size: var(--size-tap);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-weight: 600;
+  text-decoration: none;
+}
+.pl__back { padding-inline: var(--space-3); }
+.pl__top .c-progress { flex: 1 1 auto; min-inline-size: 0; }
+.pl__count {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Text. */
+.pl__eyebrow {
+  color: var(--lamp-ink);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.pl__eyebrow--on-ink { color: var(--kicker-on-ink); }
+.pl__title,
+.pl__gloss,
+.pl-hero__title,
+.pl-level__name,
+.pl-confirm__box h2 { font-family: var(--font-ui); }
+.pl__title {
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+.pl__title--lead {
+  font-size: var(--fs-h1);
+  line-height: 1.15;
+}
+.pl__lede {
+  color: var(--muted);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.pl__tip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+.pl__hint {
+  min-block-size: calc(var(--fs-small) * 1.6);
+  color: var(--muted);
+  font-size: var(--fs-small);
+  line-height: 1.6;
+  text-align: center;
+}
+.pl .icon { flex: none; }
+
+/* Body of a screen that is mostly words. */
+.pl__body {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+}
+.pl__body--centre { align-content: center; flex: 1 1 auto; }
+
+/* The stage of an item. */
+.pl__stage {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: var(--space-3);
+  text-align: center;
+}
+.pl__gloss {
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  line-height: var(--lh-he-body);
+}
+
+/* The orb: gold, with a halo. It is the one gold thing on a listening screen. */
+.pl__audio {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  padding-block: var(--space-3) var(--space-1);
+}
+.pl .c-orb[data-gold] {
+  inline-size: calc(var(--space-8) * 1.5);
+  block-size: calc(var(--space-8) * 1.5);
+  margin-block: var(--space-4);
+  background: var(--lamp);
+  color: var(--on-lamp);
+  box-shadow:
+    0 0 0 var(--space-3) color-mix(in srgb, var(--lamp) 24%, transparent),
+    0 0 0 var(--space-5) color-mix(in srgb, var(--lamp) 10%, transparent),
+    0 var(--space-3) var(--space-6) calc(var(--space-2) * -1) color-mix(in srgb, var(--lamp) 55%, transparent);
+}
+/* The sprite's play glyph is an outline, and the Figma orb draws a solid triangle, so the orb draws its own. */
+.pl .c-orb[data-gold] .icon { display: none; }
+.pl .c-orb[data-gold]::before {
+  content: "";
+  inline-size: var(--space-6);
+  block-size: var(--space-6);
+  background: currentcolor;
+  clip-path: polygon(18% 6%, 94% 50%, 18% 94%);
+}
+.pl .c-orb[aria-disabled="true"] { cursor: default; }
+
+.pl__chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+.pl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--size-tap);
+  padding-inline: var(--space-4);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-size: var(--fs-small);
+  font-weight: 700;
+}
+.pl-chip:hover { background: var(--surface-soft); }
+.pl-chip[aria-disabled="true"] { opacity: .5; cursor: default; }
+
+/* Reading: the pointed word on a card. Niqqud keeps the display line height plus a little padding, so
+   nothing clips. */
+.pl__word {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  inline-size: 100%;
+  padding-block: var(--space-6) var(--space-5);
+  padding-inline: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-2);
+}
+.pl__he { overflow: visible; }
+.pl__he bdi {
+  display: inline-block;
+  font-family: var(--font-he);
+  font-size: var(--fs-he-xl);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  padding-block: .1em;
+}
+.pl__nosound {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+/* The answers. */
+.pl__answers {
+  display: grid;
+  gap: var(--space-3);
+}
+.pl .c-answer {
+  min-block-size: var(--size-cta);
+  font-size: var(--fs-body);
+}
+/* Selected is the action colour, navy in light and gold in dark, as the Figma picked frames draw it. It is
+   neutral: it says what was tapped, not whether it was right. */
+.pl .c-answer[data-state="selected"] { border-color: var(--action-bg); }
+.pl .c-answer[data-state="selected"] .c-answer__key {
+  background: var(--action-bg);
+  color: var(--action-text);
+}
+.pl .c-answer[data-dim] { opacity: .5; }
+.pl__answers--letters {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.pl__answers--letters .c-answer {
+  min-block-size: calc(var(--size-cta) * 1.5);
+  justify-content: center;
+}
+.pl__answers--letters .c-answer__label {
+  text-align: center;
+  font-size: var(--fs-he-lg);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+}
+.pl__answers--letters .c-answer__label bdi { padding-block: .1em; font-family: var(--font-he); }
+
+/* Under the answers: the saved line, and the way out of a question. */
+.pl__foot {
+  display: grid;
+  gap: var(--space-2);
+  margin-block-start: auto;
+}
+.pl__foot .c-button { inline-size: 100%; }
+.pl__saved {
+  min-block-size: calc(var(--fs-small) * 1.6);
+  color: var(--muted);
+  font-size: var(--fs-small);
+  line-height: 1.6;
+  text-align: center;
+}
+
+/* Actions: one main action, then quieter ones. */
+.pl__actions {
+  display: grid;
+  gap: var(--space-2);
+  margin-block-start: auto;
+}
+.pl__actions .c-button { inline-size: 100%; }
+.pl__more {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.pl__more .c-button { padding-inline: var(--space-3); }
+.pl .c-button .icon { flex: none; }
+
+/* Typing. The keyboard is the component's own; it sits at the foot of the screen. */
+.pl .hk-input { inline-size: 100%; }
+.pl .hk { margin-block-start: var(--space-2); }
+
+/* Intro: the three parts. */
+.pl-steps {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+.pl-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-1);
+}
+.pl-step__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: var(--space-7);
+  block-size: var(--space-7);
+  background: var(--surface-soft);
+  color: var(--text);
+  border-radius: var(--radius-control);
+}
+.pl-step__text { display: grid; flex: 1 1 auto; min-inline-size: 0; }
+.pl-step__text b { font-size: var(--fs-body); }
+.pl-step__text small { color: var(--muted); font-size: var(--fs-small); line-height: 1.5; }
+.pl-step__n {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--fs-small);
+  font-weight: 700;
+}
+
+/* Results. */
+.pl__frame--results,
+.pl__frame--review { padding-block-start: var(--space-5); }
+.pl-hero {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--ink);
+  color: var(--on-ink);
+  border-radius: var(--radius-hero);
+  box-shadow: var(--shadow-2);
+}
+.pl-hero__title {
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+.pl-hero__words {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  color: var(--on-ink-muted);
+}
+.pl-hero__words b {
+  color: var(--lamp);
+  font-size: var(--fs-display);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.pl-hero__approx { color: var(--lamp); font-size: var(--fs-h1); }
+.pl-hero__sub { color: var(--on-ink-muted); font-size: var(--fs-body); line-height: var(--lh-body); }
+.pl-levels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.pl-level {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+.pl-level__skill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.pl-level__name { font-size: var(--fs-h2); font-weight: 700; line-height: 1.2; }
+.pl-level__blurb { color: var(--muted); font-size: var(--fs-small); line-height: 1.5; }
+.pl-meter {
+  display: flex;
+  gap: var(--space-1);
+}
+.pl-meter i {
+  flex: 1 1 0;
+  block-size: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--hairline-strong);
+}
+.pl-meter i[data-on] { background: var(--lamp); }
+.pl-work { display: grid; gap: var(--space-3); padding: var(--space-4); }
+.pl-work h2 { color: var(--muted); font-size: var(--fs-small); font-weight: 700; }
+.pl-work ul { display: grid; gap: var(--space-3); padding: 0; list-style: none; }
+.pl-work__row {
+  display: grid;
+  grid-template-columns: var(--space-9) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+}
+.pl-work__he {
+  display: grid;
+  place-items: center;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-soft);
+  border-radius: var(--radius-control);
+}
+.pl-work__he bdi {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-md);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  padding-block: .1em;
+}
+.pl-work__text { display: grid; min-inline-size: 0; }
+.pl-work__text small { color: var(--muted); font-size: var(--fs-small); }
+
+/* Review of misses. The list can be long, so the way out stays at the foot of the screen. */
+.pl__frame--review .pl__actions {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: var(--z-sticky);
+  padding-block: var(--space-3) calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  background: var(--paper);
+}
+.pl-review { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); }
+.pl-group__title {
+  padding-block: var(--space-2);
+  color: var(--muted);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.pl-group ul { padding: 0; list-style: none; }
+.pl-miss {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding-block: var(--space-3);
+  border-block-start: 1px solid var(--hairline);
+}
+.pl-miss:first-child { border-block-start: 0; }
+.pl-play {
+  display: grid;
+  place-items: center;
+  inline-size: var(--space-7);
+  block-size: var(--space-7);
+  padding: 0;
+  background: var(--surface-soft);
+  color: var(--text);
+  border: 0;
+  border-radius: var(--radius-pill);
+}
+.pl-play[data-playing] { background: var(--lamp); color: var(--on-lamp); }
+.pl-play--none { background: none; }
+.pl-miss__text { display: grid; min-inline-size: 0; }
+.pl-miss__text small { color: var(--muted); font-size: var(--fs-small); line-height: 1.5; }
+.pl-miss__he bdi {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-lg);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  padding-block: .1em;
+}
+
+/* The way out: a native dialog. The script opens it. */
+.pl-confirm {
+  /* The shell resets margins, which would pin a modal dialog to the corner: auto centres it again. */
+  margin: auto;
+  inline-size: min(calc(100% - var(--space-5)), 26rem);
+  padding: 0;
+  background: var(--surface-raised);
+  color: var(--text);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-3);
+}
+.pl-confirm::backdrop { background: color-mix(in srgb, var(--ink) 62%, transparent); }
+.pl-confirm__box { display: grid; gap: var(--space-3); padding: var(--space-5); }
+.pl-confirm__box h2 { font-size: var(--fs-h2); font-weight: 700; line-height: 1.25; }
+.pl-confirm__box p { color: var(--muted); line-height: var(--lh-body); }
+.pl-confirm__actions { display: grid; gap: var(--space-2); }
+.pl-confirm__actions .c-button { inline-size: 100%; }
+
+/* Two small movements, only when motion is welcome. A clip the browser blocked pulses the orb twice,
+   and the saved line rises in. Under reduced motion the words say the same. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes pl-nudge {
+    to { transform: scale(1.08); }
+  }
+  @keyframes pl-rise {
+    from { opacity: 0; }
+  }
+  .pl[data-audio-state="blocked"] .c-orb[data-gold] {
+    animation: pl-nudge var(--dur-slow) var(--ease-in-out) 2 alternate;
+  }
+  .pl[data-phase="picked"] .pl__saved {
+    animation: pl-rise var(--dur) var(--ease-out) both;
+  }
+}

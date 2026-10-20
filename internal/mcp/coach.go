@@ -43,7 +43,7 @@ type LearnerCard struct {
 	Translit   *string    `json:"translit"`
 	POS        string     `json:"pos"`
 	Gloss      string     `json:"gloss"`
-	Dir        string     `json:"dir"`
+	Skill      string     `json:"skill"`
 	State      string     `json:"state"`
 	Stability  float64    `json:"stability"`
 	Difficulty float64    `json:"difficulty"`
@@ -153,7 +153,7 @@ func validCardState(state string) bool {
 
 func coachContextDescription() string {
 	mix := currentMixTarget()
-	return fmt.Sprintf("When learnerId is set, cards lists that learner's FSRS cards, one per card, including suspended cards. Order is due soonest first, then most recently reviewed, then card id. The list is capped at %d. cardsTruncated is true when cards were left out; call get_learner_words to page the rest. Each card has lexeme (pointed NFC), translit, pos, gloss, dir, state, stability, difficulty, due, lapses, reps, lastRating, and lastReview. Times are UTC RFC3339. translit, lastRating, and lastReview are null when unknown. Recycle cards that are due. Reinforce words with high lapses. recentAccuracy is null when learnerId is omitted. Otherwise the review half counts Good and Easy ratings over the last %d days and over the last %d reviews. The lesson half, lessons7d counts and meanScore, stays zero until the lesson player writes lesson_runs. Coach from the review half until then. rate and meanScore are null when the count is 0. mixTarget keeps the unit budgets, at most %d new words in a unit and %d to %d per lesson, and the session mix: targetSuccess %g, maxNewPerSession %d, and maxNewShare %g. With reviews due, new cards are min(maxNewPerSession, max(%d, floor(maxNewShare * sessionSize))), where sessionSize is the reviewed cards plus the new cards. No reviews still allows the full maxNewPerSession.",
+	return fmt.Sprintf("When learnerId is set, cards lists that learner's FSRS cards, one per card, including suspended cards. Order is due soonest first, then most recently reviewed, then card id. The list is capped at %d. cardsTruncated is true when cards were left out; call get_learner_words to page the rest. Each card has lexeme (pointed NFC), translit, pos, gloss, skill, state, stability, difficulty, due, lapses, reps, lastRating, and lastReview. Times are UTC RFC3339. translit, lastRating, and lastReview are null when unknown. Recycle cards that are due. Reinforce words with high lapses. recentAccuracy is null when learnerId is omitted. Otherwise the review half counts Good and Easy ratings over the last %d days and over the last %d reviews. The lesson half, lessons7d counts and meanScore, stays zero until the lesson player writes lesson_runs. Coach from the review half until then. rate and meanScore are null when the count is 0. mixTarget keeps the unit budgets, at most %d new words in a unit and %d to %d per lesson, and the session mix: targetSuccess %g, maxNewPerSession %d, and maxNewShare %g. With reviews due, new cards are min(maxNewPerSession, max(%d, floor(maxNewShare * sessionSize))), where sessionSize is the reviewed cards plus the new cards. No reviews still allows the full maxNewPerSession.",
 		contextCardCap, AccuracyWindowDays, AccuracyReviewCap,
 		mix.MaxNewWordsPerUnit, mix.MinNewWordsPerLesson, mix.MaxNewWordsPerLesson,
 		mix.TargetSuccess, mix.MaxNewPerSession, mix.MaxNewShare, sessionlimits.MinNewPerSession)

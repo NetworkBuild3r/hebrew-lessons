@@ -1,118 +1,23 @@
 package views
 
-// Today is the learner home: due reviews, and one next lesson.
-// The count is shell copy until the review queue is wired.
-templ Today(h Home) {
-	@Layout(h.Page()) {
-		<article class="today" data-due={ h.DueText } data-known={ h.KnownText } if h.PlacementState != "" {
-			data-placement={ h.PlacementState }
-			data-placement-words={ h.PlacementWords }
-			data-placement-level={ h.PlacementLevel }
-			data-placement-rated={ h.PlacementRated }
-			data-placement-at={ h.PlacementAt }
-		}>
-			<header class="today__head">
-				<h1 lang={ h.Lang }>{ h.Heading }</h1>
-			</header>
-			<div class="today__cols">
-				if h.Placement == nil {
-					<section class="today-place today-place--open" aria-labelledby="place-title">
-						<p class="eyebrow" lang={ h.Lang }>{ PlacementFor(h.Lang).Kicker }</p>
-						<h2 id="place-title" lang={ h.Lang }>{ PlacementFor(h.Lang).TakeTitle }</h2>
-						<p class="today-place__hint" lang={ h.Lang }>{ PlacementFor(h.Lang).TakeHint }</p>
-						<a class="btn btn-primary" href={ templ.SafeURL(h.Href("/placement")) }>
-							<span lang={ h.Lang }>{ PlacementFor(h.Lang).TakeTitle }</span>
-						</a>
-					</section>
-				}
-				if h.Placement != nil && h.Placement.Active {
-					<section class="today-place today-place--resume" aria-labelledby="place-title">
-						<p class="eyebrow" lang={ h.Lang }>{ PlacementFor(h.Lang).Kicker }</p>
-						<h2 id="place-title" lang={ h.Lang }>{ PlacementFor(h.Lang).TodayResume }</h2>
-						<p class="today-place__hint" lang={ h.Lang }>{ PlacementFor(h.Lang).TakeHint }</p>
-						<a class="btn btn-tonal" href={ templ.SafeURL(h.Href("/placement")) }>
-							<span lang={ h.Lang }>{ PlacementFor(h.Lang).TodayResume }</span>
-						</a>
-					</section>
-				}
-				if h.Due > 0 {
-					<section class="ink-card today-due" aria-labelledby="due-title">
-						<p class="eyebrow" id="due-title" lang={ h.Lang }>{ h.DueKicker }</p>
-						<p class="count"><bdi lang="en" dir="ltr">{ h.DueText }</bdi></p>
-						<p class="ink-card__label" lang={ h.Lang }>{ h.DueLabel }</p>
-						<p class="ink-card__hint" lang={ h.Lang }>{ h.DueHint }</p>
-						<a class="btn btn-primary" href={ templ.SafeURL(h.Href("/review")) }>
-							<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("play") }></use></svg>
-							<span lang={ h.Lang }>{ h.Start }</span>
-						</a>
-					</section>
-				} else {
-					<section class="quiet-card quiet-card--due">
-						<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("check") }></use></svg>
-						<p class="quiet-card__line">
-							@Pair(h.Lang, h.ZeroHE, h.ZeroEN)
-						</p>
-					</section>
-				}
-				if h.Lesson {
-					<section class="lesson-card today-next" aria-labelledby="next-title">
-						<p class="eyebrow" lang={ h.Lang }>{ h.NextKicker }</p>
-						<h2 id="next-title" class="unit-title">
-							@H(h.LessonTitle)
-							if h.LessonGloss != "" {
-								<span class="unit-gloss">@E(h.LessonGloss)</span>
-							}
-						</h2>
-						if h.Situation != "" {
-							@Situation(h.Situation)
-						}
-						<ul class="chips">
-							for _, word := range h.Words {
-								<li class="chip">
-									@H(word.Text)
-									if word.Gloss != "" {
-										<span class="chip__gloss">@E(word.Gloss)</span>
-									}
-									if word.Gender != "" {
-										<span class="gchip">@H(GenderLabel(word.Gender))</span>
-									}
-								</li>
-							}
-						</ul>
-						<a class={ BtnClass(h.Due == 0) } href={ templ.SafeURL(h.Href(h.LessonHref)) }>
-							<svg class={ iconClass(h.Dir == "rtl") } aria-hidden="true" focusable="false"><use href={ IconHref("next") }></use></svg>
-							<span lang={ h.Lang }>{ h.Open }</span>
-						</a>
-					</section>
-				} else {
-					<section class="quiet-card quiet-card--next">
-						<p class="eyebrow" lang={ h.Lang }>{ h.NextKicker }</p>
-						<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("lessons") }></use></svg>
-						<p class="quiet-card__line">
-							@Pair(h.Lang, h.NoneHE, h.NoneEN)
-						</p>
-						<p class="quiet-card__hint">
-							@Pair(h.Lang, h.NoneMoreHE, h.NoneMoreEN)
-						</p>
-					</section>
-				}
-			</div>
-		</article>
-	}
-}
-
 templ Review(p Page, c ReviewCard) {
 	@Layout(p) {
-		<article class="sheet">
-			<h1 lang={ p.Lang }>{ p.ReviewHeading }</h1>
+		<article class="review sheet">
+			<h1 class="review__h1" lang={ p.Lang }>{ p.ReviewHeading }</h1>
 			@ReviewBody(c)
+			<script src="/static/js/activity.js" defer></script>
 		</article>
 	}
 }
 
+// ReviewBody is the card htmx swaps. A checked activity and the flashcard share
+// one frame (activity.templ). Done is the end of the queue. The root keeps its
+// data attributes and, with the frame, data-no-transition: see ActivityFrame.
 templ ReviewBody(c ReviewCard) {
 	<div id="review-card" data-kind={ c.Kind } data-card={ Num64(c.CardID) } data-pointed={ c.Pointed } data-unpointed={ c.Unpointed } data-show-unpointed={ Flag(c.ShowUnpointed) } data-index={ Num(c.Index) } data-total={ Num(c.Total) } data-answered={ Num(c.Answered) } data-correct={ Num(c.Correct) } data-retry={ Flag(c.Retry) } data-done={ Flag(c.Done) } data-revealed={ Flag(c.Revealed) } if c.Translit != "" && answerSide(c) {
 		data-translit={ c.Translit }
+	} if !c.Done {
+		data-no-transition
 	}>
 		if c.Done {
 			if c.Answered == 0 {
@@ -122,92 +27,15 @@ templ ReviewBody(c ReviewCard) {
 					<bdi lang="en" dir="ltr">{ Num(c.Correct) } / { Num(c.Answered) }</bdi>
 				</p>
 			}
+		} else if c.Act != nil {
+			@ActivityFrame(*c.Act)
 		} else {
-			<p class="count">
-				if c.Kind == "en_he" {
-					@E(c.Gloss)
-				} else if c.ShowUnpointed {
-					@H(c.Unpointed)
-				} else {
-					@H(c.Pointed)
-				}
-			</p>
-			// Translit and audio name the Hebrew. On en_he that is the answer, so they wait for reveal. On he_en the Hebrew is the prompt, so both stay.
-			if answerSide(c) {
-				if c.Translit != "" {
-					<p class="ink-card__hint">@E(c.Translit)</p>
-				}
-				if c.AudioURL != "" {
-					<a href={ templ.SafeURL(c.AudioURL) }>
-						<svg class="icon" aria-hidden="true" focusable="false"><use href={ IconHref("sound") }></use></svg>
-					</a>
-				}
-			}
-			<p class="ink-card__hint">
-				<bdi lang="en" dir="ltr">{ Num(c.Index) } / { Num(c.Total) }</bdi>
-			</p>
-			if c.Revealed {
-				if c.Kind == "en_he" {
-					<p class="ink-card__hint">
-						if c.ShowUnpointed {
-							@H(c.Unpointed)
-						} else {
-							@H(c.Pointed)
-						}
-					</p>
-				} else if c.Gloss != "" {
-					<p class="ink-card__hint">@E(c.Gloss)</p>
-				}
-				if c.Gender != "" {
-					<span class="gchip">@H(GenderLabel(c.Gender))</span>
-				}
-				<form method="post" action="/_hx/review/grade" hx-post="/_hx/review/grade" hx-target="#review-card" hx-swap="outerHTML" hx-boost="false">
-					<input type="hidden" name="_csrf" value={ c.CSRF }/>
-					<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
-					<button type="submit" class="btn btn-tonal" name="rating" value="1">@E("Again")</button>
-					<button type="submit" class="btn btn-tonal" name="rating" value="2">@E("Hard")</button>
-					<button type="submit" class="btn btn-tonal" name="rating" value="3">@E("Good")</button>
-					<button type="submit" class="btn btn-tonal" name="rating" value="4">@E("Easy")</button>
-				</form>
-			} else {
-				<form method="post" action="/_hx/review/reveal" hx-post="/_hx/review/reveal" hx-target="#review-card" hx-swap="outerHTML" hx-boost="false">
-					<input type="hidden" name="_csrf" value={ c.CSRF }/>
-					<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
-					<button type="submit" class="btn btn-tonal">@E("Show")</button>
-				</form>
-			}
+			@flashFrame(c)
 		}
 	</div>
 }
 
-templ Progress(p ProgressPage) {
-	@Layout(p.Page) {
-		<article class="sheet" if p.Placement != "" {
-			data-placement={ p.Placement }
-			data-placement-words={ p.PlacementWords }
-			data-placement-level={ p.PlacementLevel }
-			data-placement-rated={ p.PlacementRated }
-			data-placement-at={ p.PlacementAt }
-		}>
-			<h1 lang={ p.Lang }>{ p.ProgressHeading }</h1>
-			<p class="lede" lang={ p.Lang }>{ p.ProgressLede }</p>
-			<ul class="stats">
-				<li>
-					<span class="count"><bdi lang="en" dir="ltr">{ p.KnownText }</bdi></span>
-					<span lang={ p.Lang }>{ p.WordsLabel }</span>
-				</li>
-				<li>
-					<span class="count"><bdi lang="en" dir="ltr">{ p.UnitsText }</bdi></span>
-					<span lang={ p.Lang }>{ p.UnitsLabel }</span>
-				</li>
-				<li>
-					<span class="count"><bdi lang="en" dir="ltr">{ p.DueText }</bdi></span>
-					<span lang={ p.Lang }>{ p.DueLabel }</span>
-				</li>
-			</ul>
-		</article>
-	}
-}
+// Progress moved to progress.templ (INIT-015/SPEC-018).
 
 // SignIn is the signed-out page. No rail, dock, or other navigation:
 // logout lands here, and the only action is auth's Google start route.
@@ -222,6 +50,7 @@ templ SignIn(p Page) {
 			@themeHead()
 			<link rel="stylesheet" href="/static/css/tokens.css"/>
 			<link rel="stylesheet" href="/static/css/base.css"/>
+			@brandHead()
 			<title>{ p.Title }</title>
 		</head>
 		<body>
@@ -235,7 +64,7 @@ templ SignIn(p Page) {
 				</div>
 				<section class="signin__card">
 					<h1 class="brand signin__brand">
-						<span class="brand__mark" aria-hidden="true">ע</span>
+						<span class="brand__mark" aria-hidden="true">@BrandMark()</span>
 						<span class="brand__name">@H(AppName)</span>
 					</h1>
 					<p class="signin__title">
@@ -268,17 +97,3 @@ templ SignIn(p Page) {
 		</body>
 	</html>
 }
-
-// googleMark is the official multicolour G. The paths are unmodified.
-templ googleMark() {
-	<span class="gbtn__mark" aria-hidden="true">
-		<svg class="gbtn__logo" viewBox="0 0 48 48" focusable="false">
-			<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
-			<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
-			<path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
-			<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
-			<path fill="none" d="M0 0h48v48H0z"></path>
-		</svg>
-	</span>
-}
-

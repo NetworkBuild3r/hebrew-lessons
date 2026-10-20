@@ -464,3 +464,69 @@ func readBody(t *testing.T, res *http.Response) string {
 	}
 	return string(b)
 }
+
+// SPEC-021 ac-1: a row for every new tool, for a learner on its own id, a learner on another
+// learner's id, an admin, the static token, and no token. A tool a learner may call is
+// open on the learner's own id and shut on another's. A tool that writes what the next
+// prompt reads is shut to a learner on every id. Each row names the exact text it expects.
+func TestAuthzRowsForTheLearnerTools(t *testing.T) {
+	e := newLT(t)
+	unit := e.seedAuthz()
+	doc := helloDoc()
+	rows := []struct {
+		tool       string
+		learnerMay bool
+		args       func(id *int64) map[string]any
+	}{
+		{"get_learner_model", true, func(id *int64) map[string]any { return withID(map[string]any{}, id) }},
+		{"get_progress", true, func(id *int64) map[string]any { return withID(map[string]any{}, id) }},
+		{"unpublish_unit", true, func(id *int64) map[string]any { return withID(map[string]any{"unitId": unit}, id) }},
+		{"validate_unit", true, func(id *int64) map[string]any {
+			return withID(map[string]any{"position": 0, "doc": doc, "briefId": "BRIEF7"}, id)
+		}},
+		{"get_lesson_brief", false, func(id *int64) map[string]any { return withID(map[string]any{}, id) }},
+		{"add_coach_note", false, func(id *int64) map[string]any { return withID(map[string]any{"body": "note"}, id) }},
+	}
+	allowed := func(name string, res *http.Response) {
+		t.Helper()
+		body := readBody(t, res)
+		if res.StatusCode != http.StatusOK || strings.Contains(body, `"isError":true`) {
+			t.Fatalf("%s: status %d body %s", name, res.StatusCode, body)
+		}
+	}
+	for _, row := range rows {
+		own, other := int64(7), int64(9)
+		if row.learnerMay {
+			allowed(row.tool+" learner own id", postTool(t, e.srv.URL, "learner-a", row.tool, row.args(&own), nil))
+			allowed(row.tool+" learner omitted id", postTool(t, e.srv.URL, "learner-a", row.tool, row.args(nil), nil))
+			assertDenied(t, postTool(t, e.srv.URL, "learner-a", row.tool, row.args(&other), nil), msgOtherLearner)
+			assertDenied(t, postTool(t, e.srv.URL, "learner-b", row.tool, row.args(&own), nil), msgOtherLearner)
+		} else {
+			assertDenied(t, postTool(t, e.srv.URL, "learner-a", row.tool, row.args(&own), nil), msgAdminOnly)
+			assertDenied(t, postTool(t, e.srv.URL, "learner-a", row.tool, row.args(nil), nil), msgAdminOnly)
+			assertDenied(t, postTool(t, e.srv.URL, "learner-a", row.tool, row.args(&other), nil), msgAdminOnly)
+		}
+		allowed(row.tool+" admin", postTool(t, e.srv.URL, "admin", row.tool, row.args(&own), nil))
+		allowed(row.tool+" static token", postTool(t, e.srv.URL, "static", row.tool, row.args(&own), nil))
+		for _, token := range []string{"admin", "static"} {
+			assertDenied(t, postTool(t, e.srv.URL, token, row.tool, row.args(nil), nil), msgLearnerRequired)
+		}
+		none := postTool(t, e.srv.URL, "", row.tool, row.args(&own), nil)
+		if none.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("%s with no token: status %d", row.tool, none.StatusCode)
+		}
+		none.Body.Close()
+		bad := postTool(t, e.srv.URL, "not-a-token", row.tool, row.args(&own), nil)
+		if bad.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("%s with a wrong token: status %d", row.tool, bad.StatusCode)
+		}
+		bad.Body.Close()
+	}
+}
+
+func withID(m map[string]any, id *int64) map[string]any {
+	if id != nil {
+		m["learnerId"] = *id
+	}
+	return m
+}

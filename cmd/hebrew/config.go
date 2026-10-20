@@ -60,7 +60,10 @@ func configFromEnv() (app.Config, error) {
 		MCPAllowedOrigins:    splitList(os.Getenv("MCP_ALLOWED_ORIGINS")),
 		ElevenLabsAPIKey:     os.Getenv("ELEVENLABS_API_KEY"),
 		ElevenLabsVoice:      strings.TrimSpace(os.Getenv("ELEVENLABS_VOICE_ID")),
-		ElevenLabsModel:      strings.TrimSpace(os.Getenv("ELEVENLABS_MODEL")),
+		// The male voice for speaker b of a dialogue. No default: an unset value
+		// means no male voice, and a speaker b clip fails rather than use the other voice.
+		ElevenLabsVoiceMale: strings.TrimSpace(os.Getenv("ELEVENLABS_VOICE_ID_MALE")),
+		ElevenLabsModel:     strings.TrimSpace(os.Getenv("ELEVENLABS_MODEL")),
 	}
 	return app.ApplyDefaults(cfg), nil
 }

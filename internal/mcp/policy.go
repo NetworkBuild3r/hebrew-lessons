@@ -15,21 +15,38 @@ import (
 // learnerTools are the only tools a non-admin session may call.
 // RoleAdmin, including the static MCP_AUTH_TOKEN, may call any tool
 // and any scope. MCP_READONLY_TOKEN is RoleLearner and uses this same
-// list. A name that is not listed here is admin-only, which is the
+// list, minus learnerWriteTools. A name that is not listed here is admin-only, which is the
 // default for every write tool added later.
+//
+// get_lesson_brief and add_coach_note are not here, so they are admin-only. A brief is
+// a stored row that only put_unit, which is admin-only, can use, and a coach note is read
+// into the next lesson's prompt, so a learner must not be able to write one (SPEC-021).
 var learnerTools = map[string]bool{
 	"get_context":       true,
 	"get_learner_words": true,
+	"get_learner_model": true,
+	"get_progress":      true,
+	"get_unit":          true,
 	"lookup":            true,
 	"validate_unit":     true,
+	"unpublish_unit":    true,
 }
 
-// learnerOwnDataTools are the reads a learner may make only for their
+// learnerWriteTools are the learnerTools that change data. MCP_READONLY_TOKEN may not call them.
+var learnerWriteTools = map[string]bool{
+	"unpublish_unit": true,
+}
+
+// learnerOwnDataTools are the tools a learner may call only for their
 // own learnerId. Omitting the id uses that caller's id. Another id is
-// rejected before the handler runs.
+// rejected before the handler runs. A tool that takes no learnerId does not belong here.
 var learnerOwnDataTools = map[string]bool{
 	"get_context":       true,
 	"get_learner_words": true,
+	"get_learner_model": true,
+	"get_progress":      true,
+	"validate_unit":     true,
+	"unpublish_unit":    true,
 }
 
 const (
@@ -52,6 +69,11 @@ func (p Principal) allowed(tool string) bool {
 	case RoleAdmin:
 		return true
 	case RoleLearner:
+		// The smoke bearer is a learner for reads only. unpublish_unit changes a unit, so it
+		// is for a signed-in learner or an admin, never for MCP_READONLY_TOKEN.
+		if p.Actor == readOnlyActor && learnerWriteTools[tool] {
+			return false
+		}
 		return learnerTools[tool]
 	default:
 		return false

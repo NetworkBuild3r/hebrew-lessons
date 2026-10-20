@@ -1,128 +1,186 @@
 package placement
 
-import "testing"
+import (
+	"math"
+	"testing"
+	"time"
+)
 
-func TestScoreAgainStop(t *testing.T) {
-	if BandMax != 20 || StopMinRated != 10 || StopAgainRate != 0.60 || SittingSize != 20 || CardCap != 100 {
-		t.Fatalf("BandMax=%d minRated=%d again=%v sitting=%d cards=%d", BandMax, StopMinRated, StopAgainRate, SittingSize, CardCap)
+// TestV3TuningNumbers pins the v3 tuning numbers. Changing one is a decision about the test itself
+// (north-star section 5.2), so it has to be a decision in this file too.
+func TestV3TuningNumbers(t *testing.T) {
+	got := []int{BandCount, FirstSize, ExtraSize, MoveUpFirst, RetryFirst, MoveUpTwelve, OptionCount, GuessDivisor, LettersAsked, LettersPass, TypingMax}
+	want := []int{5, 6, 6, 5, 3, 8, 4, 3, 6, 5, 8}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("tuning number %d = %d, want %d (all: %v)", i, got[i], want[i], got)
+		}
 	}
-
-	// Exactly 6/10 stops. Later bands stay unrated.
-	trip := openTail()
-	trip[0] = BandTally{Ratings: append(repeat(Again, 6), repeat(Good, 4)...), Dealable: BandMax}
-	got := Score(trip)
-	if got.StopReason != stopBand || got.Level != -1 || got.Bands[0].Rated != 10 || got.Bands[0].Again != 6 {
-		t.Fatalf("6/10: stop=%s level=%d band=%+v", got.StopReason, got.Level, got.Bands[0])
+	if LevelShare != 0.5 {
+		t.Errorf("LevelShare = %v, want 0.5", LevelShare)
 	}
-
-	// Nine Agains are under the minimum, so the band does not stop.
-	nine := openTail()
-	nine[0] = BandTally{Ratings: repeat(Again, 9), Dealable: BandMax}
-	got = Score(nine)
-	if got.StopReason != "" || got.Level != -1 || got.Bands[0].Rated != 9 || got.Bands[0].Again != 9 {
-		t.Fatalf("9 agains: stop=%s level=%d band=%+v", got.StopReason, got.Level, got.Bands[0])
+	if RecheckAfter != 28*24*time.Hour || RecheckSoftUntil != 42*24*time.Hour {
+		t.Errorf("recheck window = %v to %v, want 28 to 42 days", RecheckAfter, RecheckSoftUntil)
 	}
-
-	// 5/10 is under the line, so the band stays open.
-	below := openTail()
-	below[0] = BandTally{Ratings: append(repeat(Again, 5), repeat(Good, 5)...), Dealable: BandMax}
-	got = Score(below)
-	if got.StopReason != "" || got.Level != -1 || got.Bands[0].Rated != 10 {
-		t.Fatalf("5/10: stop=%s level=%d band=%+v", got.StopReason, got.Level, got.Bands[0])
-	}
-
-	// "I don't know" counts as Again for the stop, and stays in DontKnow.
-	dont := openTail()
-	dont[0] = BandTally{Ratings: append(repeat(DontKnow, 6), repeat(Good, 4)...), Dealable: BandMax}
-	got = Score(dont)
-	if got.StopReason != stopBand || got.Level != -1 || got.Bands[0].DontKnow != 6 || got.Bands[0].Again != 0 {
-		t.Fatalf("dont know: stop=%s level=%d band=%+v", got.StopReason, got.Level, got.Bands[0])
-	}
-
-	// Hard is not Again, so ten Hards do not stop.
-	hard := openTail()
-	hard[0] = BandTally{Ratings: repeat(Hard, StopMinRated), Dealable: BandMax}
-	got = Score(hard)
-	if got.StopReason != "" || got.Bands[0].Hard != StopMinRated || got.Bands[0].Again != 0 {
-		t.Fatalf("hard: stop=%s band=%+v", got.StopReason, got.Bands[0])
-	}
-
-	// A finished earlier band still sets the level when the next one trips.
-	var both [bands]BandTally
-	both[0] = BandTally{Ratings: repeat(Good, BandMax), Dealable: BandMax}
-	both[1] = BandTally{Ratings: append(repeat(Again, 6), repeat(Good, 4)...), Dealable: BandMax}
-	got = Score(both)
-	if got.Level != 0 || got.StopReason != stopBand {
-		t.Fatalf("band 1 trip: level=%d stop=%s", got.Level, got.StopReason)
+	if BandWidth != [BandCount]float64{40, 500, 500, 1000, 2000} {
+		t.Errorf("BandWidth = %v", BandWidth)
 	}
 }
 
-func TestScoreEstimateCapAndExhausted(t *testing.T) {
-	for _, tc := range []struct {
-		band int
-		want int
+// ac-6: six asked, four right, one wrong, one "I don't know" is (4 − 1/3) ÷ 6.
+func TestScoreGuessingCorrection(t *testing.T) {
+	var tally Tally
+	for _, o := range []string{OutcomeRight, OutcomeRight, OutcomeRight, OutcomeRight, OutcomeWrong, OutcomeDontKnow} {
+		tally.Add(o)
+	}
+	if tally != (Tally{Asked: 6, Right: 4, Wrong: 1, DontKnow: 1}) {
+		t.Fatalf("tally = %+v", tally)
+	}
+	want := (4.0 - 1.0/3.0) / 6.0
+	if got := Share(tally); math.Abs(got-want) > 1e-12 || math.Abs(got-0.6111) > 1e-4 {
+		t.Fatalf("Share = %v, want %v (about 0.611)", got, want)
+	}
+
+	cases := []struct {
+		name string
+		t    Tally
+		want float64
 	}{
-		{1, 500},
-		{2, 500},
-		{3, 1000},
-		{4, 2000},
-	} {
-		var tallies [bands]BandTally
-		tallies[tc.band] = BandTally{Ratings: []int{Good}, Dealable: 1}
-		got := Score(tallies)
-		if got.EstimatedKnownWords != tc.want || got.Level != tc.band || got.StopReason != stopExhausted {
-			t.Fatalf("band %d: estimate=%d level=%d stop=%s", tc.band, got.EstimatedKnownWords, got.Level, got.StopReason)
+		{"nothing asked", Tally{}, 0},
+		{"all right", Tally{Asked: 6, Right: 6}, 1},
+		// "I don't know" is neither right nor wrong: it adds to asked and takes nothing away.
+		{"idk costs only the asking", Tally{Asked: 6, Right: 4, DontKnow: 2}, 4.0 / 6.0},
+		{"a wrong costs a third of a right", Tally{Asked: 6, Right: 4, Wrong: 2}, (4 - 2.0/3.0) / 6},
+		// Blind guessing on four options is one right in four: it must score about zero.
+		{"chance scores zero", Tally{Asked: 12, Right: 3, Wrong: 9}, 0},
+		{"below chance is floored at zero", Tally{Asked: 6, Right: 0, Wrong: 6}, 0},
+	}
+	for _, c := range cases {
+		if got := Share(c.t); math.Abs(got-c.want) > 1e-12 {
+			t.Errorf("%s: Share(%+v) = %v, want %v", c.name, c.t, got, c.want)
 		}
-		if got.SuggestedStartPosition != 0 {
-			t.Fatalf("band %d set a start position of %d", tc.band, got.SuggestedStartPosition)
-		}
 	}
-
-	var band0 [bands]BandTally
-	band0[0] = BandTally{Ratings: []int{Easy, Easy, Again}, Dealable: 3}
-	if got := Score(band0); got.EstimatedKnownWords != 2 || got.Level != 0 || got.StopReason != stopExhausted {
-		t.Fatalf("band 0 count: estimate=%d level=%d stop=%s", got.EstimatedKnownWords, got.Level, got.StopReason)
-	}
-
-	// Three ratings are under the stop minimum, so the band counts.
-	var third [bands]BandTally
-	third[1] = BandTally{Ratings: []int{Good, Hard, Again}, Dealable: 3}
-	if got := Score(third); got.EstimatedKnownWords != 167 || got.Level != 1 || got.StopReason != stopExhausted {
-		t.Fatalf("one third of band 1: estimate=%d level=%d stop=%s", got.EstimatedKnownWords, got.Level, got.StopReason)
-	}
-
-	// Ratings past the band still count toward the card cap while a later band is open.
-	var capped [bands]BandTally
-	capped[0] = BandTally{Ratings: repeat(Good, 40), Dealable: 40}
-	for band := 1; band < 4; band++ {
-		capped[band] = BandTally{Ratings: repeat(Good, BandMax), Dealable: BandMax}
-	}
-	capped[4] = BandTally{Dealable: BandMax}
-	got := Score(capped)
-	if got.CardsRated != CardCap || got.StopReason != stopCards || got.Level != 3 {
-		t.Fatalf("cap: rated=%d stop=%s level=%d", got.CardsRated, got.StopReason, got.Level)
-	}
-
-	var done [bands]BandTally
-	done[0] = BandTally{Ratings: repeat(Good, BandMax), Dealable: BandMax}
-	got = Score(done)
-	if got.StopReason != stopExhausted || got.Level != 0 {
-		t.Fatalf("exhausted: stop=%s level=%d", got.StopReason, got.Level)
+	var none Tally
+	none.Add("maybe")
+	if none.Asked != 0 {
+		t.Error("an unknown outcome was counted")
 	}
 }
 
-func openTail() [bands]BandTally {
-	var out [bands]BandTally
-	for band := 1; band < bands; band++ {
-		out[band] = BandTally{Dealable: BandMax}
+func TestScoreEstimateAndLevel(t *testing.T) {
+	var tallies [BandCount]Tally
+	for i := 0; i < 3; i++ {
+		tallies[i] = Tally{Asked: 6, Right: 6}
 	}
-	return out
+	tallies[3] = Tally{Asked: 6, Right: 2, Wrong: 4}
+	if got, want := EstimateWords(tallies), 40.0+500+500+(2-4.0/3)/6*1000; math.Abs(got-want) > 1e-9 {
+		t.Errorf("EstimateWords = %v, want %v", got, want)
+	}
+	if got := LevelOf(tallies); got != 3 {
+		t.Errorf("LevelOf = %d, want 3", got)
+	}
+
+	// A share of exactly 0.5 counts. Three right of six, none wrong.
+	if got := LevelOf([BandCount]Tally{{Asked: 6, Right: 3, DontKnow: 3}}); got != 1 {
+		t.Errorf("share 0.5 gave level %d, want 1", got)
+	}
+	// Just under does not.
+	if got := LevelOf([BandCount]Tally{{Asked: 6, Right: 3, Wrong: 1, DontKnow: 2}}); got != 0 {
+		t.Errorf("share under 0.5 gave level %d, want 0", got)
+	}
+	// The level is the highest band that clears the bar, not the number of bands that do.
+	if got := LevelOf([BandCount]Tally{{Asked: 6, Right: 6}, {Asked: 6}, {Asked: 6, Right: 6}}); got != 3 {
+		t.Errorf("level with a gap = %d, want 3", got)
+	}
+	if got := LevelOf([BandCount]Tally{}); got != 0 {
+		t.Errorf("empty level = %d", got)
+	}
+	if got := EstimateWords([BandCount]Tally{}); got != 0 {
+		t.Errorf("empty estimate = %v", got)
+	}
 }
 
-func repeat(rating, n int) []int {
-	out := make([]int, n)
-	for i := range out {
-		out[i] = rating
+// The adaptive rule at each count, including the 8-of-12 bar of aud-2.
+func TestScoreAdaptiveRule(t *testing.T) {
+	right := func(asked, r int) Tally { return Tally{Asked: asked, Right: r, Wrong: asked - r} }
+	cases := []struct {
+		asked, right int
+		want         Decision
+	}{
+		{0, 0, Deal}, {3, 3, Deal}, {5, 5, Deal},
+		{6, 6, Up}, {6, 5, Up}, {6, 4, Deal}, {6, 3, Deal}, {6, 2, Stop}, {6, 1, Stop}, {6, 0, Stop},
+		{7, 0, Deal}, {9, 4, Deal}, {11, 11, Deal},
+		{12, 12, Up}, {12, 8, Up}, {12, 7, Stop}, {12, 4, Stop}, {12, 0, Stop},
 	}
-	return out
+	for _, c := range cases {
+		if got := Decide(right(c.asked, c.right)); got != c.want {
+			t.Errorf("Decide(%d asked, %d right) = %v, want %v", c.asked, c.right, got, c.want)
+		}
+	}
+	// "I don't know" is not right: five right and one "I don't know" still moves up, four right and two do not.
+	if got := Decide(Tally{Asked: 6, Right: 5, DontKnow: 1}); got != Up {
+		t.Errorf("5 right and 1 idk = %v, want Up", got)
+	}
+	if got := Decide(Tally{Asked: 6, Right: 4, DontKnow: 2}); got != Deal {
+		t.Errorf("4 right and 2 idk = %v, want Deal", got)
+	}
+}
+
+func TestScoreReplay(t *testing.T) {
+	run := func(band int, outcomes string) []bandOutcome {
+		var out []bandOutcome
+		for _, c := range outcomes {
+			o := map[rune]string{'R': OutcomeRight, 'W': OutcomeWrong, 'I': OutcomeDontKnow}[c]
+			out = append(out, bandOutcome{Band: band, Outcome: o})
+		}
+		return out
+	}
+	cat := func(parts ...[]bandOutcome) []bandOutcome {
+		var out []bandOutcome
+		for _, p := range parts {
+			out = append(out, p...)
+		}
+		return out
+	}
+
+	if st := replay(run(1, "RRRRRR"), 1, false); st.Band != 2 || st.Done {
+		t.Errorf("6/6 in band 1: %+v, want band 2", st)
+	}
+	if st := replay(run(1, "RRRRWW"), 1, false); st.Band != 1 || st.Done {
+		t.Errorf("4/6: %+v, want six more in band 1", st)
+	}
+	if st := replay(run(1, "RRRRWWRRRR"+"WW"), 1, false); st.Band != 2 || st.Done {
+		t.Errorf("8/12: %+v, want band 2", st)
+	}
+	if st := replay(run(1, "RRRRWWRRRW"+"WW"), 1, false); !st.Done || st.Band != 1 {
+		t.Errorf("7/12: %+v, want stopped in band 1", st)
+	}
+	if st := replay(run(1, "RWWWWW"), 1, false); !st.Done {
+		t.Errorf("1/6: %+v, want stopped", st)
+	}
+	if st := replay(run(1, "RRIIII"), 1, false); !st.Done {
+		t.Errorf("2 right and 4 idk: %+v, want stopped", st)
+	}
+	// Clearing band 5 ends the skill.
+	all := cat(run(1, "RRRRRR"), run(2, "RRRRRR"), run(3, "RRRRRR"), run(4, "RRRRRR"), run(5, "RRRRRR"))
+	if st := replay(all, 1, false); !st.Done || !st.Cleared {
+		t.Errorf("all bands right: %+v, want done and cleared", st)
+	}
+	if st := replay(cat(run(1, "RRRRRR"), run(2, "RRRWWW"), run(2, "RRRRRR")[:3]), 1, false); st.Band != 2 || st.Done {
+		t.Errorf("band 2 at 6 right of 9: %+v, want to keep dealing in band 2", st)
+	}
+	// A single-band re-check ends on the first decision, up or down.
+	if st := replay(run(4, "RRRRRR"), 4, true); !st.Done || st.Cleared {
+		t.Errorf("re-check 6/6: %+v, want done", st)
+	}
+	if st := replay(run(4, "RRRWWW"), 4, true); st.Done {
+		t.Errorf("re-check 3/6: %+v, want six more", st)
+	}
+	if st := replay(run(4, "WWWWWW"), 4, true); !st.Done {
+		t.Errorf("re-check 0/6: %+v, want done", st)
+	}
+	// An answer dealt in some other band is not trusted.
+	if st := replay(run(3, "RRRRRR"), 1, false); st.Band != 1 || st.Tallies[0].Asked != 0 {
+		t.Errorf("stray answers moved the skill: %+v", st)
+	}
 }

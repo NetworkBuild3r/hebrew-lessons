@@ -26,6 +26,7 @@ type Memory struct {
 	units          []memUnit
 	lexemes        []storedLexeme
 	audio          map[string]bool
+	speakerAudio   map[string]bool
 	placement      map[int64]storedPlacement
 	struggle       map[int64]storedStruggle
 	completed      map[int64][]UnitCompletion
@@ -34,6 +35,7 @@ type Memory struct {
 	reviews        []storedReview
 	lessons        []storedLesson
 	nextCard       int64
+	learn          memLearn
 }
 
 type storedPlacement struct {
@@ -97,6 +99,27 @@ func (m *Memory) SetAudio(text string) {
 		m.audio = map[string]bool{}
 	}
 	m.audio[text] = true
+}
+
+// SetSpeakerAudio marks an exact text as having a clip in the voice of speaker
+// a or b. It does not mark the text for HasAudio, which is any voice.
+func (m *Memory) SetSpeakerAudio(text, speaker string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.speakerAudio == nil {
+		m.speakerAudio = map[string]bool{}
+	}
+	m.speakerAudio[speaker+"\x00"+text] = true
+}
+
+// HasAudioForSpeaker implements units.SpeakerLookup.
+func (m *Memory) HasAudioForSpeaker(ctx context.Context, textNFC, speaker string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.speakerAudio[speaker+"\x00"+textNFC], nil
 }
 
 // Actor returns the actor stored on the latest revision.
@@ -727,6 +750,7 @@ func (m *Memory) Facts(ctx context.Context, textNFC string) (units.LexemeFacts, 
 			Plural:          row.lx.Plural,
 			IrregularPlural: row.lx.Plural != "",
 			Bare:            row.lx.Bare,
+			Gloss:           row.lx.Gloss,
 		}, true, nil
 	}
 	return units.LexemeFacts{}, false, nil

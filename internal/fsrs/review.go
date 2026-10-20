@@ -47,7 +47,7 @@ func (r *Review) ready() error {
 }
 
 // ScheduleNew plans the first review of a new card. It does not write.
-// The result is what Grade stores after inserting a new he_en card and
+// The result is what Grade stores after inserting a new read card and
 // reviewing it at now. rating is 1 Again, 2 Hard, 3 Good, or 4 Easy.
 func (r *Review) ScheduleNew(now time.Time, rating Rating) (db.Card, db.ReviewLog, error) {
 	if r == nil || r.sched == nil {
@@ -77,6 +77,49 @@ func (r *Review) ScheduleNew(now time.Time, rating Rating) (db.Card, db.ReviewLo
 		ScheduledDays: int(info.Card.ScheduledDays),
 	}
 	return card, log, nil
+}
+
+// ScheduleNext plans the next review of a card at now. It does not write.
+// A nil prev is a card the learner does not have yet: the result is what
+// ScheduleNew returns. Otherwise prev is the stored card, and the result keeps
+// its identity and moves the schedule forward, as GradeWithChoice does.
+// internal/evidence calls it inside the transaction that also writes the attempt.
+// rating is 1 Again, 2 Hard, 3 Good, or 4 Easy.
+func (r *Review) ScheduleNext(prev *db.Card, now time.Time, rating Rating) (db.Card, db.ReviewLog, error) {
+	if prev == nil {
+		return r.ScheduleNew(now, rating)
+	}
+	if r == nil || r.sched == nil {
+		return db.Card{}, db.ReviewLog{}, errors.New("fsrs: review is not configured")
+	}
+	if rating < Again || rating > Easy {
+		return db.Card{}, db.ReviewLog{}, fmt.Errorf("fsrs: rating %d is outside 1..4", rating)
+	}
+	card, err := schedulerCard(*prev)
+	if err != nil {
+		return db.Card{}, db.ReviewLog{}, err
+	}
+	info := r.sched.Next(card, now, gofsrs.Rating(rating))
+	state, err := stateName(info.Card.State)
+	if err != nil {
+		return db.Card{}, db.ReviewLog{}, err
+	}
+	next := *prev
+	next.State = state
+	next.Due = info.Card.Due
+	next.Stability = info.Card.Stability
+	next.Difficulty = info.Card.Difficulty
+	next.Reps = int(info.Card.Reps)
+	next.Lapses = int(info.Card.Lapses)
+	next.LastReview = info.Card.LastReview
+	log := db.ReviewLog{
+		CardID:        prev.ID,
+		Rating:        int(rating),
+		ReviewedAt:    now,
+		ElapsedDays:   int(info.ReviewLog.ElapsedDays),
+		ScheduledDays: int(info.Card.ScheduledDays),
+	}
+	return next, log, nil
 }
 
 // Grade applies one rating to a card and appends a review_log row.
@@ -187,7 +230,7 @@ func cardFromRow(row db.Card) Card {
 		ID:         row.ID,
 		UserID:     row.UserID,
 		LexemeID:   row.LexemeID,
-		Dir:        row.Dir,
+		Skill:      row.Skill,
 		State:      row.State,
 		Due:        row.Due,
 		Stability:  row.Stability,

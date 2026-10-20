@@ -95,7 +95,7 @@ func runFSRSSteps(t *testing.T, start time.Time, steps []fsrsRef) {
 	cardID := mustCard(t, store, db.Card{
 		UserID:   mustUser(t, store, "learner@example.com"),
 		LexemeID: mustLexeme(t, store, "שָׁלוֹם"),
-		Dir:      DirHeEn,
+		Skill:    SkillRead,
 		State:    StateNew,
 		Due:      start,
 	})
