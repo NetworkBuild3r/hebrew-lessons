@@ -523,6 +523,30 @@ jobs:
           go test -count=1 -timeout 20m "${pkgs[@]}"
           echo "placement non-race finished in $(( $(date +%s) - start ))s"
 
+      # TestListFirstPageOver50kAttempts asserts its time limit only when the
+      # race detector is off. Learner lives in shard B, so this non-race pass
+      # runs here, on the learner packages in this shard's affected set.
+      - name: learner tests
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.run_tests == 'true' && matrix.shard == 'app'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t all < "${RUNNER_TEMP}/test-packages.txt"
+          pkgs=()
+          for p in "${all[@]}"; do
+            case "$p" in
+              */internal/learner | */internal/learner/*) pkgs+=("$p") ;;
+            esac
+          done
+          if [ "${#pkgs[@]}" -eq 0 ]; then
+            echo "no affected learner packages"
+            exit 0
+          fi
+          echo "non-race learner: ${pkgs[*]}"
+          start=$(date +%s)
+          go test -count=1 -timeout 20m "${pkgs[@]}"
+          echo "learner non-race finished in $(( $(date +%s) - start ))s"
+
       - name: go test -race
         if: steps.module.outputs.present == 'true' && steps.affected.outputs.run_tests == 'true'
         shell: bash
@@ -557,7 +581,21 @@ jobs:
           set -euo pipefail
           set -o pipefail
           go test -count=1 -v -run '^(TestClipPlayAfterSwap|TestKeyboardNode)$' ./internal/web | tee node.out
-          ! grep -q -- '--- SKIP' node.out
+          # A renamed test matches nothing, prints [no tests to run], and exits 0
+          # with no --- SKIP line. Require both PASS lines. errexit ignores a
+          # bare "! grep", so the skip check is an explicit if.
+          if grep -q -- '--- SKIP' node.out; then
+            echo "::error::a node test printed --- SKIP"
+            exit 1
+          fi
+          if ! grep -q -- '--- PASS: TestClipPlayAfterSwap' node.out; then
+            echo "::error::missing --- PASS: TestClipPlayAfterSwap"
+            exit 1
+          fi
+          if ! grep -q -- '--- PASS: TestKeyboardNode' node.out; then
+            echo "::error::missing --- PASS: TestKeyboardNode"
+            exit 1
+          fi
 
   build-and-smoke:
     needs: test
