@@ -677,10 +677,13 @@ func TestRecallNoJSFallbackMarkup(t *testing.T) {
 	}
 }
 
-// TestGradedRecallAndClozeNeedThreeChoices locks the floor #105 enforces.
-// A graded recall or cloze renders at least three choice buttons. Fewer than
-// three is a reveal: no answer buttons, and posting a lexeme id does not
-// record an attempt. The floor is #105's; this test only checks it.
+// TestGradedRecallAndClozeNeedThreeChoices locks the floor at three.
+// Three eligible options (the target and two words from outside the line)
+// is a graded ask with at least three buttons. Exactly two eligible options
+// is a reveal: no answer buttons, and posting a lexeme id does not record
+// an attempt. A line whose only other word is on the line is also a reveal,
+// because that word is not an eligible option. The floor is production's;
+// this test only checks it.
 func TestGradedRecallAndClozeNeedThreeChoices(t *testing.T) {
 	const learners = 6
 	orders := map[string]map[string]int{}
@@ -694,6 +697,9 @@ func TestGradedRecallAndClozeNeedThreeChoices(t *testing.T) {
 		{Type: units.ActivityRecall, Text: rwOkhel},
 		{Type: units.ActivityRecall, Text: rwShote},
 	}, []string{rwGar, rwOkhel, rwShote})
+	if n := unitLexemeCount(t, fx); n != 3 {
+		t.Fatalf("three-option fixture has %d unit lexemes, want the target and two outside words", n)
+	}
 	for i := 0; i < learners; i++ {
 		email := fmt.Sprintf("floor%d@example.com", i)
 		csrf := fmt.Sprintf("csrf-floor-%d", i)
@@ -707,8 +713,8 @@ func TestGradedRecallAndClozeNeedThreeChoices(t *testing.T) {
 		for step, typ := range []string{units.ActivityRecall, units.ActivityCloze} {
 			ask := activityHTML(t, body)
 			ids := gradedChoiceValues(ask)
-			if len(ids) < lessonMinChoices {
-				t.Fatalf("%s learner %d step %d has %d buttons, a graded ask needs at least %d:\n%s", typ, i, step, len(ids), lessonMinChoices, ask)
+			if len(ids) < 3 {
+				t.Fatalf("%s learner %d step %d has %d buttons, 3 eligible options must be a graded ask with at least 3:\n%s", typ, i, step, len(ids), ask)
 			}
 			if !containsString(ids, itoa(fx.targetID)) {
 				t.Fatalf("%s learner %d step %d buttons %v omit the target %d", typ, i, step, ids, fx.targetID)
@@ -738,39 +744,65 @@ func TestGradedRecallAndClozeNeedThreeChoices(t *testing.T) {
 		}
 	}
 
+	// Exactly two eligible options: the target, plus one other verb that is a
+	// lesson item and not on this line. Two is a reveal. Three is the first
+	// count that is graded, which is what the fixture above locks.
+	for i := 0; i < 4; i++ {
+		for _, typ := range []string{units.ActivityRecall, units.ActivityCloze} {
+			email := fmt.Sprintf("pair-%s-%d@example.com", typ, i)
+			csrf := fmt.Sprintf("csrf-pair-%s-%d", typ, i)
+			fx := openTwoOptionFixture(t, email, typ)
+			if n := unitLexemeCount(t, fx); n != 2 {
+				t.Fatalf("%s learner %d has %d unit lexemes, want exactly 2 eligible options", typ, i, n)
+			}
+			assertUngradedReveal(t, fx, email, csrf, typ, i, "exactly 2 eligible options", false)
+		}
+	}
+
 	for i := 0; i < 4; i++ {
 		for _, typ := range []string{units.ActivityRecall, units.ActivityCloze} {
 			email := fmt.Sprintf("thin-%s-%d@example.com", typ, i)
 			csrf := fmt.Sprintf("csrf-thin-%s-%d", typ, i)
 			fx := openThinChoiceFixture(t, email, typ)
-			cookie := recallSession(t, fx.recallFixture, email, csrf)
-			path := "/lesson/" + itoa(fx.unitID) + "/0"
-			body := getAuthed(t, fx.h, cookie, path)
-			ask := activityHTML(t, body)
-			if ids := gradedChoiceValues(ask); len(ids) > 0 || strings.Contains(ask, `class="choices"`) {
-				t.Fatalf("%s learner %d rendered %v buttons; fewer than 3 must be a reveal:\n%s", typ, i, ids, ask)
-			}
-			if !strings.Contains(ask, `value="continue"`) {
-				t.Fatalf("%s learner %d reveal has no Continue:\n%s", typ, i, ask)
-			}
-			posted := postLesson(t, fx.h, cookie, path, runValue(t, body), itoa(fx.targetID), true, csrf)
-			if posted.Code != http.StatusOK {
-				t.Fatalf("%s learner %d post id: %d\n%s", typ, i, posted.Code, posted.Body.String())
-			}
-			if strings.Contains(posted.Body.String(), "feedback--right") || strings.Contains(posted.Body.String(), `class="choices"`) {
-				t.Fatalf("%s learner %d graded a reveal:\n%s", typ, i, posted.Body.String())
-			}
-			if n := countRows(t, fx.store, `SELECT COUNT(*) FROM attempts WHERE user_id = ?`, fx.userID); n != 0 {
-				t.Fatalf("%s learner %d recorded %d attempts on a reveal", typ, i, n)
-			}
-			done := postLesson(t, fx.h, cookie, path, runValue(t, body), "continue", true, csrf)
-			if done.Code != http.StatusOK || !strings.Contains(done.Body.String(), "Lesson complete.") {
-				t.Fatalf("%s learner %d continue: %d\n%s", typ, i, done.Code, done.Body.String())
-			}
-			if n := countRows(t, fx.store, `SELECT COUNT(*) FROM attempts WHERE user_id = ?`, fx.userID); n != 0 {
-				t.Fatalf("%s learner %d continue recorded %d attempts", typ, i, n)
-			}
+			assertUngradedReveal(t, fx, email, csrf, typ, i, "a line-mate is not an outside option", true)
 		}
+	}
+}
+
+// assertUngradedReveal checks that this ask has no answer buttons and that
+// posting the target lexeme id does not record an attempt. complete is set
+// when this is the only activity, so Continue ends the lesson.
+func assertUngradedReveal(t *testing.T, fx choiceFixture, email, csrf, typ string, learner int, why string, complete bool) {
+	t.Helper()
+	cookie := recallSession(t, fx.recallFixture, email, csrf)
+	path := "/lesson/" + itoa(fx.unitID) + "/0"
+	body := getAuthed(t, fx.h, cookie, path)
+	ask := activityHTML(t, body)
+	if ids := gradedChoiceValues(ask); len(ids) > 0 || strings.Contains(ask, `class="choices"`) {
+		t.Fatalf("%s learner %d rendered %v buttons; %s must be a reveal:\n%s", typ, learner, ids, why, ask)
+	}
+	if !strings.Contains(ask, `value="continue"`) {
+		t.Fatalf("%s learner %d reveal has no Continue:\n%s", typ, learner, ask)
+	}
+	posted := postLesson(t, fx.h, cookie, path, runValue(t, body), itoa(fx.targetID), true, csrf)
+	if posted.Code != http.StatusOK {
+		t.Fatalf("%s learner %d post id: %d\n%s", typ, learner, posted.Code, posted.Body.String())
+	}
+	if strings.Contains(posted.Body.String(), "feedback--right") || strings.Contains(posted.Body.String(), `class="choices"`) {
+		t.Fatalf("%s learner %d graded a reveal (%s):\n%s", typ, learner, why, posted.Body.String())
+	}
+	if n := countRows(t, fx.store, `SELECT COUNT(*) FROM attempts WHERE user_id = ?`, fx.userID); n != 0 {
+		t.Fatalf("%s learner %d recorded %d attempts on a reveal (%s)", typ, learner, n, why)
+	}
+	done := postLesson(t, fx.h, cookie, path, runValue(t, body), "continue", true, csrf)
+	if done.Code != http.StatusOK || (complete && !strings.Contains(done.Body.String(), "Lesson complete.")) {
+		t.Fatalf("%s learner %d continue: %d\n%s", typ, learner, done.Code, done.Body.String())
+	}
+	if strings.Contains(done.Body.String(), "feedback--right") {
+		t.Fatalf("%s learner %d continue graded the reveal:\n%s", typ, learner, done.Body.String())
+	}
+	if n := countRows(t, fx.store, `SELECT COUNT(*) FROM attempts WHERE user_id = ?`, fx.userID); n != 0 {
+		t.Fatalf("%s learner %d continue recorded %d attempts", typ, learner, n)
 	}
 }
 
@@ -784,6 +816,27 @@ func openThinChoiceFixture(t *testing.T, email, typ string) choiceFixture {
 	return openVerbChoiceFixture(t, []string{email}, []units.Activity{
 		{Type: typ, Text: rwGar + " " + rwPo},
 	}, []string{rwGar, rwPo})
+}
+
+// openTwoOptionFixture is a one-word ask plus one other verb. The other verb
+// is in the unit, and it is not on the ask's line, so the eligible options
+// are exactly the target and that verb. A second activity is how the other
+// verb becomes a lesson item without joining this line.
+func openTwoOptionFixture(t *testing.T, email, typ string) choiceFixture {
+	t.Helper()
+	return openVerbChoiceFixture(t, []string{email}, []units.Activity{
+		{Type: typ, Text: rwGar},
+		{Type: units.ActivityRecall, Text: rwOkhel},
+	}, []string{rwGar, rwOkhel})
+}
+
+func unitLexemeCount(t *testing.T, fx choiceFixture) int {
+	t.Helper()
+	rows, err := fx.store.UnitLexemes(context.Background(), fx.unitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(rows)
 }
 
 func openVerbChoiceFixture(t *testing.T, emails []string, acts []units.Activity, words []string) choiceFixture {

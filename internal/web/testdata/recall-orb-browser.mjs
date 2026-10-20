@@ -7,7 +7,9 @@
 //   mode-js-on-hidden-mutation replaces that rule with opacity:0 and a 1px
 //   box and requires the strict check to fail, then removes the override.
 //   JS off: each bar is at least 200px wide at 390 and at 1440. A real click
-//   on the native play control starts playback. Tab reaches a visible bar,
+//   on the native play control starts playback, and that check also requires
+//   the 390px width floor, so a 39px bar cannot pass on playback alone.
+//   Tab reaches a visible bar,
 //   which is the positive control that the Tab walk can see a focusable bar.
 //   Each clip has exactly one way to play in that mode. Never both a bar and an orb.
 // Orbs (hero, word, dialogue .c-orb) are buttons with a name and a 44px hit area.
@@ -204,10 +206,10 @@ const activateNativeBar = async (page, id) => {
   const loc = page.locator("#" + id);
   await loc.scrollIntoViewIfNeeded();
   const box = await loc.boundingBox();
-  if (!box) return { ok: false, how: "no box", paused: true, t: 0 };
+  if (!box) return { ok: false, how: "no box", paused: true, t: 0, w: 0 };
   const finish = async (how) => {
     const state = await playbackState(page, id);
-    return { ok: true, how, paused: state.paused, t: state.t };
+    return { ok: true, how, paused: state.paused, t: state.t, w: box.width };
   };
   // A real pointer click on the native play glyph, not audio.play().
   await page.mouse.click(box.x + 18, box.y + box.height / 2);
@@ -219,7 +221,7 @@ const activateNativeBar = async (page, id) => {
   await page.keyboard.press("Enter");
   if (await startedPlaying(page, id)) return finish("enter");
   const state = await playbackState(page, id);
-  return { ok: false, how: "no-gesture", paused: state.paused, t: state.t };
+  return { ok: false, how: "no-gesture", paused: state.paused, t: state.t, w: box.width };
 };
 
 const tabTags = async (page) => {
@@ -494,10 +496,13 @@ try {
     const result = await activateNativeBar(bare, fact.id);
     played.push({ id: fact.id, ...result });
   }
+  // Width is measured at 390, where the click happens. Playback alone is not
+  // enough: a 39px bar that still plays fails this check.
+  const playsAtFloor = played.length > 0 && played.every((p) => p.ok && p.w >= 200);
   check(
     "mode-js-off-plays",
-    played.length > 0 && played.every((p) => p.ok),
-    played.map((p) => `${p.id} ok=${p.ok} via=${p.how} paused=${p.paused} t=${Number(p.t).toFixed(2)}`).join("; ") || "no audio",
+    playsAtFloor,
+    played.map((p) => `${p.id} ok=${p.ok} via=${p.how} paused=${p.paused} t=${Number(p.t).toFixed(2)} w390=${Number(p.w).toFixed(0)}`).join("; ") || "no audio",
   );
   const tabsOff = await tabTags(bare);
   const orbTab = tabsOff.filter((t) => String(t.cls).includes("orb"));
