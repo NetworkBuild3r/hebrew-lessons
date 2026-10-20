@@ -31,6 +31,11 @@ func (s *service) attachCoach(ctx context.Context, out *getContextOutput, learne
 	if s.course == nil {
 		return errors.New("Course storage is not connected.")
 	}
+	due, err := s.course.CardsDueNow(ctx, *learnerID)
+	if err != nil {
+		return storeErr("The cards due now could not be read.", err)
+	}
+	out.CardsDueNow = &due
 	page, err := s.course.LearnerCards(ctx, CardQuery{UserID: *learnerID, Limit: contextCardCap})
 	if err != nil {
 		return coachStoreErr(err, "The learner's cards could not be read.")

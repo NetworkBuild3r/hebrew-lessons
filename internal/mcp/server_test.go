@@ -163,7 +163,7 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 		}
 	}
 	contextTool := tools.Tools[indexOf(tools, "get_context")]
-	if !strings.Contains(contextTool.Description, "cardsTruncated") || !strings.Contains(contextTool.Description, "get_learner_words") || !strings.Contains(contextTool.Description, "mixTarget") || !strings.Contains(contextTool.Description, "lapses") || !strings.Contains(contextTool.Description, "lesson player") || !strings.Contains(contextTool.Description, "review half") {
+	if !strings.Contains(contextTool.Description, "cardsTruncated") || !strings.Contains(contextTool.Description, "get_learner_words") || !strings.Contains(contextTool.Description, "mixTarget") || !strings.Contains(contextTool.Description, "lapses") || !strings.Contains(contextTool.Description, "lesson player") || !strings.Contains(contextTool.Description, "review half") || !strings.Contains(contextTool.Description, "model.dueReviews") || !strings.Contains(contextTool.Description, "cardsDueNow") || !strings.Contains(contextTool.Description, "older v3 placement rows") || !strings.Contains(contextTool.Description, "minNewPerSession") {
 		t.Fatalf("get_context description %s", contextTool.Description)
 	}
 	outSchema, err := json.Marshal(contextTool.OutputSchema)

@@ -136,6 +136,27 @@ func (m *Memory) LearnerCards(ctx context.Context, q CardQuery) (CardPage, error
 	return page, nil
 }
 
+// CardsDueNow implements CourseReader.
+// Memory stores no suspended flag and no intro-lesson rows, so every
+// stored card whose due is at or before the wall clock is counted.
+// The database reader calls ListDueCards instead.
+func (m *Memory) CardsDueNow(ctx context.Context, userID int64) (CardsDueNow, error) {
+	if err := ctx.Err(); err != nil {
+		return CardsDueNow{}, err
+	}
+	now := time.Now().UTC()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	states := make([]string, 0)
+	for _, row := range m.cards {
+		if row.user != userID || row.card.Due.After(now) {
+			continue
+		}
+		states = append(states, row.card.State)
+	}
+	return CardsDueNowFromStates(states), nil
+}
+
 // RecentAccuracy implements CourseReader.
 // The window ends at the wall clock. Reviews and finished lessons after
 // that instant are ignored.
