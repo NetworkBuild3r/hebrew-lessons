@@ -369,7 +369,11 @@ func (s *server) currentReview(r *http.Request, lang, csrf string) (views.Review
 	if err != nil {
 		return views.ReviewCard{}, err
 	}
-	return reviewView(lang, csrf, lede, vm), nil
+	card := reviewView(lang, csrf, lede, vm)
+	if err := s.attachReviewClips(r.Context(), &card); err != nil {
+		return views.ReviewCard{}, err
+	}
+	return card, nil
 }
 
 // reveal records that this serve was shown the answer, then returns the
@@ -516,7 +520,12 @@ func (s *server) finishReview(w http.ResponseWriter, r *http.Request, lang strin
 		return
 	}
 	lede := views.UIFor(lang, views.AddressMasculine).ReviewLede
-	render(w, r, views.ReviewBody(reviewView(lang, auth.CSRFToken(r), lede, vm)))
+	card := reviewView(lang, auth.CSRFToken(r), lede, vm)
+	if err := s.attachReviewClips(r.Context(), &card); err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	render(w, r, views.ReviewBody(card))
 }
 
 func reviewLang(r *http.Request) string {

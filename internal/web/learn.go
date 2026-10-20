@@ -467,9 +467,14 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 	if !ok {
 		return ReviewCardVM{}, fmt.Errorf("web: lexeme %d: not found", ref.LexemeID)
 	}
-	if face.AudioID != "" {
-		vm.AudioURL = "/audio/" + face.AudioID + ".mp3"
+	// Lessons play the clip AudioByText finds. lexemes.audio_id stays empty:
+	// import and generate write audio_assets, and nothing copies that id onto
+	// the lexeme. A review that only read audio_id rendered no <audio> and no orb.
+	audioURL, err := s.clipURL(ctx, face.TextNFC, face.AudioID)
+	if err != nil {
+		return ReviewCardVM{}, err
 	}
+	vm.AudioURL = audioURL
 	vm.Pointed = face.TextNFC
 	vm.Unpointed = units.Plain(face.TextNFC)
 	vm.Translit = face.Translit
@@ -510,6 +515,57 @@ func (s *server) showUnpointed(ctx context.Context, cardID int64, skill string) 
 		Stability: row.Stability,
 		Ratings:   ratings,
 	}), nil
+}
+
+// clipURL is the clip the lesson player would use for this pointed text.
+// AudioByText prefers the newest eleven_v4, then eleven_v3, then legacy.
+// audioID is the lexeme column, used only when no asset is stored for the text,
+// so a fixture that sets audio_id and does not insert audio_assets still plays.
+func (s *server) clipURL(ctx context.Context, text, audioID string) (string, error) {
+	if s != nil && s.store != nil {
+		key := units.Normalize(text)
+		if key != "" {
+			asset, ok, err := s.store.AudioByText(ctx, key)
+			if err != nil {
+				return "", err
+			}
+			if ok && asset.ID != "" {
+				return "/audio/" + asset.ID + ".mp3", nil
+			}
+		}
+	}
+	if audioID != "" {
+		return "/audio/" + audioID + ".mp3", nil
+	}
+	return "", nil
+}
+
+// attachReviewClips fills a checked activity's answer clips from audio_assets
+// when the lexicon column is empty. The prompt of a reading item stays without
+// a clip: the Hebrew is the question, and the sound belongs on the answer.
+func (s *server) attachReviewClips(ctx context.Context, card *views.ReviewCard) error {
+	if card == nil || card.Act == nil || card.Act.Feedback == nil {
+		return nil
+	}
+	fb := card.Act.Feedback
+	if fb.AudioURL == "" {
+		url, err := s.clipURL(ctx, fb.Hebrew, "")
+		if err != nil {
+			return err
+		}
+		fb.AudioURL = url
+	}
+	for i := range fb.Pairs {
+		if fb.Pairs[i].AudioURL != "" || fb.Pairs[i].Hebrew == "" {
+			continue
+		}
+		url, err := s.clipURL(ctx, fb.Pairs[i].Hebrew, "")
+		if err != nil {
+			return err
+		}
+		fb.Pairs[i].AudioURL = url
+	}
+	return nil
 }
 
 func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
