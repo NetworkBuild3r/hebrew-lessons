@@ -554,7 +554,7 @@ func (p player) dialogueView(ctx context.Context, act units.Activity, lex map[st
 				}
 			}
 		}
-		view.Words = wordsForText(line.Text, units.ActivityDialogue, lex, newWords, "reveal", clipSet{}, false)
+		view.Words = wordsForText(line.Text, units.ActivityDialogue, lex, newWords, "reveal", clipSet{}, false, "")
 		d.Lines = append(d.Lines, view)
 	}
 	return d, nil
@@ -569,7 +569,7 @@ func (p player) targetOf(ctx context.Context, lesson db.CourseLesson, act units.
 }
 
 func wordsFor(act units.Activity, lex map[string]db.LexemeView, newWords []db.LexemeView, phase string, clips clipSet, target db.LexemeView) []views.Word {
-	words := wordsForText(act.Text, act.Type, lex, newWords, phase, clips, act.Type == units.ActivityCloze && phase == "ask")
+	words := wordsForText(act.Text, act.Type, lex, newWords, phase, clips, act.Type == units.ActivityCloze && phase == "ask", act.Target)
 	if act.Type == units.ActivityRecall {
 		markRecallTarget(words, lexemeTokenCount(act, lex), target.Text, phase)
 	}
@@ -577,8 +577,9 @@ func wordsFor(act units.Activity, lex map[string]db.LexemeView, newWords []db.Le
 }
 
 // wordsForText is wordsFor for one string of Hebrew: an activity's text, or one
-// line of a dialogue. blank gaps the first new word, for a cloze in its ask phase.
-func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.LexemeView, phase string, clips clipSet, blank bool) []views.Word {
+// line of a dialogue. blank gaps the target token when the activity sets one,
+// and otherwise the first new word, for a cloze in its ask phase.
+func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.LexemeView, phase string, clips clipSet, blank bool, target string) []views.Word {
 	tokens := units.Tokenize(text)
 	if len(tokens) == 0 {
 		return nil
@@ -586,7 +587,7 @@ func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.
 	show := visibleFields(typ, phase)
 	gap := ""
 	if blank {
-		gap = gapToken(tokens, lex, newWords)
+		gap = gapToken(tokens, lex, newWords, target)
 	}
 	hebrewN := 0
 	for _, tok := range tokens {
@@ -666,6 +667,11 @@ func gradedActivity(typ string) bool {
 }
 
 func targetFrom(act units.Activity, lex map[string]db.LexemeView, newWords []db.LexemeView) (db.LexemeView, error) {
+	if tok, ok := tokenForTarget(actTokens(act), act.Target); ok {
+		if view, found := lex[tok]; found {
+			return view, nil
+		}
+	}
 	fresh := map[string]bool{}
 	for _, word := range newWords {
 		fresh[word.Text] = true
@@ -686,7 +692,12 @@ func targetFrom(act units.Activity, lex map[string]db.LexemeView, newWords []db.
 	return first, nil
 }
 
-func gapToken(tokens []string, lex map[string]db.LexemeView, newWords []db.LexemeView) string {
+func gapToken(tokens []string, lex map[string]db.LexemeView, newWords []db.LexemeView, target string) string {
+	if tok, ok := tokenForTarget(tokens, target); ok {
+		if _, found := lex[tok]; found {
+			return tok
+		}
+	}
 	fresh := map[string]bool{}
 	for _, word := range newWords {
 		fresh[word.Text] = true
@@ -742,6 +753,22 @@ func samePOS(rows []db.LexemeView, target db.LexemeView) []db.LexemeView {
 		}
 	}
 	return out
+}
+
+// tokenForTarget matches target to one of tokens by units.Normalize, the same
+// key a token uses when it is looked up as a lexeme. The result is the token
+// from the activity, so a differently composed target still gaps that token.
+func tokenForTarget(tokens []string, target string) (string, bool) {
+	want := units.Normalize(target)
+	if want == "" {
+		return "", false
+	}
+	for _, tok := range tokens {
+		if units.Normalize(tok) == want {
+			return tok, true
+		}
+	}
+	return "", false
 }
 
 // lessonChoices builds the buttons for a graded ask. recall, listen_pick,

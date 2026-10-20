@@ -448,8 +448,8 @@ func TestDialogueMarkupInEveryStringField(t *testing.T) {
 	base := populated()
 	var fields []reflect.Value
 	collect(reflect.ValueOf(&base).Elem(), &fields)
-	if len(fields) != 9 {
-		t.Fatalf("the unit has %d string fields with a dialogue, want 9. A new field needs a markup check.", len(fields))
+	if len(fields) != 10 {
+		t.Fatalf("the unit has %d string fields with a dialogue, want 10. A new field needs a markup check.", len(fields))
 	}
 	for i := range fields {
 		for _, bad := range []string{"<", ">", "javascript:alert(1)"} {
