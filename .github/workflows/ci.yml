@@ -58,15 +58,17 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
-    name: test (${{ matrix.title }})
+  shard:
+    name: shard (${{ matrix.title }})
     runs-on: k8-build
     timeout-minutes: 45
     # Three shards fill the three k8-build pods. fail-fast stays off so one
-    # shard's failure still leaves the other timings in the log. needs: test
-    # on build-and-smoke and publish waits for every shard. An empty shard
-    # exits success; the job is never skipped, so a docs-only pull request
-    # does not block needs.
+    # shard's failure still leaves the other timings in the log. The job
+    # named test, below, needs this matrix and is what build-and-smoke and
+    # publish wait on. An empty shard exits success; the job is never
+    # skipped for an empty package list, so a docs-only pull request does
+    # not block needs. Web is on shard C so its race time is not piled on
+    # shard B. Shard C can still wait for a free pod: the ARC set has three.
     strategy:
       fail-fast: false
       matrix:
@@ -74,9 +76,9 @@ jobs:
           - shard: placement
             title: A placement
           - shard: app
-            title: B activity brief web learner
+            title: B activity brief learner
           - shard: rest
-            title: C rest
+            title: C rest and web
     env:
       CGO_ENABLED: "0"
     # github.base_ref is empty on a push, so a push to v3 still runs.
@@ -180,7 +182,8 @@ jobs:
               mode=full
               reason="no merge base between origin/${base} and HEAD"
             else
-              git diff --name-only "origin/${base}...HEAD" >"$changed_file"
+              # --no-renames lists both sides of a move, so the old package stays selected.
+              git diff --no-renames --name-only "origin/${base}...HEAD" >"$changed_file"
               mode=decide
               reason="diff origin/${base}...HEAD"
             fi
@@ -194,10 +197,13 @@ jobs:
             while IFS= read -r line; do
               specs=${line##*go:embed}
               specs=${specs#" "}
+              # Specs are embed patterns, not shell globs. set -f stops * from expanding.
+              set -f
               for spec in $specs; do
                 spec=${spec#all:}
                 printf '%s\n' "${dir}/${spec}" >>"$embed_file"
               done
+              set +f
             done < <(grep -h '//go:embed' "$gopath" || true)
           done < <(git grep -l -e '//go:embed' -- '*.go' || true)
 
@@ -214,9 +220,12 @@ jobs:
             return 1
           }
 
+          # Top-level README and license files are the only markdown we skip.
+          # docs/**/*.md and .cursor/** are not here: tests read some of them,
+          # and anything unmapped falls through to the full suite.
           is_ignorable() {
             case "$1" in
-              *.md | docs/* | LICENSE | LICENSE.* | .gitignore | .gitattributes | .editorconfig | *.png | *.jpg | *.jpeg | *.gif | *.svg | *.webp)
+              README.md | LICENSE | LICENSE.* | .gitignore | .gitattributes | .editorconfig | *.png | *.jpg | *.jpeg | *.gif | *.svg | *.webp)
                 return 0
                 ;;
             esac
@@ -265,6 +274,76 @@ jobs:
             return 1
           }
 
+          # Non-Go paths named by tests, resolved from the test file's directory.
+          # A changed file that matches one selects that package. A file no
+          # package reads, and that is not ignorable, still forces the full suite.
+          reads_file="${RUNNER_TEMP}/reads.txt"
+          : >"$reads_file"
+          record_read() {
+            local lit="$1" tdir="$2" pkg="$3" rel
+            [ -z "$lit" ] && return 0
+            case "$lit" in
+              *'*'*|*'?'*|*'['*|*'${'*|*' '*|*'%'*) return 0 ;;
+            esac
+            case "$lit" in
+              ../*|./*|docs/*|.cursor/*|testdata/*|templates/*|fixtures/*|resources/*|static/*|internal/*|cmd/*|*.md|*.json|*.html|*.css|*.js|*.txt|*.templ|*.sql)
+                ;;
+              *) return 0 ;;
+            esac
+            rel=$(realpath -m --relative-to="$PWD" "$PWD/$tdir/$lit")
+            case "$rel" in
+              ""|..|../*) ;;
+              *) printf '%s\t%s\n' "$rel" "$pkg" >>"$reads_file" ;;
+            esac
+            # A literal that already starts at the repo root is not relative
+            # to the test file. docs/ and .cursor/ are the cross-package cases.
+            case "$lit" in
+              docs/*|.cursor/*)
+                printf '%s\t%s\n' "$lit" "$pkg" >>"$reads_file"
+                ;;
+            esac
+          }
+          while IFS= read -r tg; do
+            [ -z "$tg" ] && continue
+            tdir=$(dirname "$tg")
+            if ! pkg=$(pkg_of_go "$tg"); then
+              continue
+            fi
+            while IFS= read -r lit; do
+              record_read "$lit" "$tdir" "$pkg"
+            done < <(grep -oE '"[^"]{1,240}"|`[^`]{1,240}`' "$tg" | tr -d '"`' || true)
+          done < <(git ls-files '*_test.go' || true)
+
+          # TestHebrewSourcesAreNFC reads testdata, templates, and fixtures
+          # outside internal/web. clip-text-map.json is the one file it skips.
+          nfc_extra() {
+            case "$1" in
+              internal/audio/testdata/clip-text-map.json) return 1 ;;
+            esac
+            case "$1" in
+              */testdata/*|*/templates/*|*/fixtures/*)
+                case "$1" in
+                  *.templ|*.go|*.json|*.html|*.txt|*.md) return 0 ;;
+                esac
+                ;;
+            esac
+            return 1
+          }
+          web_pkg=$(pkg_of_dir "${PWD}/internal/web" || true)
+
+          map_readers() {
+            local f="$1" rpath rpkg hit=1
+            [ -s "$reads_file" ] || return 1
+            while IFS=$'\t' read -r rpath rpkg; do
+              [ -z "$rpath" ] && continue
+              if [ "$f" = "$rpath" ] || { [ -d "$rpath" ] && [[ "$f" == "$rpath"/* ]]; }; then
+                printf '%s\n' "$rpkg" >>"$affected_file"
+                hit=0
+              fi
+            done <"$reads_file"
+            return "$hit"
+          }
+
           if [ "$mode" = "decide" ]; then
             full_reason=""
             go_changed=0
@@ -287,10 +366,21 @@ jobs:
               if [[ "$f" == */testdata/* || "$f" == */testdata ]]; then
                 if pkg=$(pkg_of_testdata "$f"); then
                   printf '%s\n' "$pkg" >>"$affected_file"
+                  map_readers "$f" || true
+                  if nfc_extra "$f" && [ -n "$web_pkg" ]; then
+                    printf '%s\n' "$web_pkg" >>"$affected_file"
+                  fi
                   continue
                 fi
                 full_reason="unmapped testdata ${f}"
                 break
+              fi
+              if map_readers "$f"; then
+                continue
+              fi
+              if nfc_extra "$f" && [ -n "$web_pkg" ]; then
+                printf '%s\n' "$web_pkg" >>"$affected_file"
+                continue
               fi
               if is_ignorable "$f"; then
                 continue
@@ -346,10 +436,11 @@ jobs:
               go list ./internal/placement/... >"$shard_file"
               ;;
             app)
-              go list ./internal/activity/... ./internal/brief/... ./internal/web/... ./internal/learner/... >"$shard_file"
+              # web is shard C. Its race time was the long part of shard B.
+              go list ./internal/activity/... ./internal/brief/... ./internal/learner/... >"$shard_file"
               ;;
             rest)
-              go list ./... | grep -v -E '/internal/(placement|activity|brief|web|learner)(/|$)' >"$shard_file" || true
+              go list ./... | grep -v -E '/internal/(placement|activity|brief|learner)(/|$)' >"$shard_file" || true
               ;;
             *)
               echo "::error::unknown shard ${shard}"
@@ -461,7 +552,7 @@ jobs:
         if: >-
           steps.module.outputs.present == 'true' &&
           (steps.affected.outputs.lint == 'true' ||
-            (matrix.shard == 'app' && steps.affected.outputs.web == 'true' && steps.affected.outputs.run_tests == 'true'))
+            (matrix.shard == 'rest' && steps.affected.outputs.web == 'true' && steps.affected.outputs.run_tests == 'true'))
         shell: bash
         run: |
           set -euo pipefail
@@ -487,6 +578,16 @@ jobs:
         if: steps.module.outputs.present == 'true' && steps.affected.outputs.lint == 'true'
         shell: bash
         run: go vet ./...
+
+      # TestNotLinkedIntoHebrewBinary runs `go list -deps ./cmd/hebrew`.
+      # Nothing in the import graph reaches that subprocess, so shard C runs
+      # the guard on every change, including a docs-only pull request.
+      - name: testharness not linked
+        if: steps.module.outputs.present == 'true' && matrix.shard == 'rest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -count=1 -timeout 20m -run '^TestNotLinkedIntoHebrewBinary$' ./internal/db/testharness
 
       # The k8-build image does not ship gcc. Run 39473171758 (#111) and
       # run 39479442471 both printed "gcc is not on PATH" and apt installed
@@ -574,17 +675,17 @@ jobs:
           echo "race ${{ matrix.shard }} finished in $(( $(date +%s) - start ))s"
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'app'
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'rest'
         with:
           node-version: '22'
 
       - name: node version
-        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'app'
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'rest'
         shell: bash
         run: node --version
 
       - name: node tests
-        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'app'
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'rest'
         shell: bash
         run: |
           set -euo pipefail
@@ -603,6 +704,35 @@ jobs:
           fi
           if ! grep -q -- '--- PASS: TestKeyboardNode' node.out; then
             echo "::error::missing --- PASS: TestKeyboardNode"
+            exit 1
+          fi
+
+  # The check name is exactly `test`. Branch protection and publish both
+  # wait on it. always() is required so a failed shard still runs this job;
+  # without it, a failure would skip `test` and the check would not go red.
+  # The same base/fork guard as the shards is the only intended skip: a pull
+  # request into main, or from a fork, skips every shard and skips `test`
+  # too, so a skip is not reported as success. Any other result (failure,
+  # cancelled, or a skipped matrix) fails the gate. A matrix leg that runs
+  # and finds no packages exits 0; that is success, not a skip.
+  test:
+    name: test
+    needs: shard
+    runs-on: k8-build
+    timeout-minutes: 5
+    if: >-
+      always() &&
+      github.base_ref != 'main' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - name: Require every shard to succeed
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="${{ needs.shard.result }}"
+          echo "shard result: ${result}"
+          if [ "$result" != "success" ]; then
+            echo "::error::shard result is ${result}. A skipped, failed, or cancelled shard does not pass."
             exit 1
           fi
 
