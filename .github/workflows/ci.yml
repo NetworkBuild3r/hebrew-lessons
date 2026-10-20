@@ -140,10 +140,24 @@ jobs:
         shell: bash
         run: go vet ./...
 
+      # Tests such as TestClipPlayAfterSwap call exec.LookPath("node") and
+      # skip when it is missing. setup-node adds its bin directory to PATH
+      # for every later step, which is what LookPath searches. Same pin as
+      # main's k8-build workflows. The runner sets RUNNER_TOOL_CACHE; that
+      # directory is the cache setup-node writes (main already has Node 22
+      # there). build-and-smoke and publish do not run these tests.
+      - uses: actions/setup-node@v4
+        if: steps.module.outputs.present == 'true'
+        with:
+          node-version: '22'
+
       - name: go test
         if: steps.module.outputs.present == 'true'
         shell: bash
-        run: go test ./...
+        run: |
+          set -euo pipefail
+          go test -count=1 -v -run '^(TestClipPlayAfterSwap|TestKeyboardNode)$' ./internal/web
+          go test ./...
 
       # -race needs cgo and a C toolchain. CGO_ENABLED=1 is this step only.
       # gofmt, go vet, and go test stay on the job default CGO_ENABLED=0.
