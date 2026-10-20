@@ -56,6 +56,15 @@ templ ActivityBlock(a Activity) {
 						@activityWord(word, "word-clip-"+Num(i), a.PromptWord != "")
 					}
 				</div>
+				if a.PromptWord != "" {
+					<div class="clip-rows">
+						for i, word := range a.Words {
+							if word.Audio != "" {
+								@wordClipRow(word, "word-clip-"+Num(i))
+							}
+						}
+					</div>
+				}
 			}
 			<form method="post" action={ templ.SafeURL(a.Post) } hx-post={ a.Post } hx-target="#lesson-frame" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
 				<input type="hidden" name="_csrf" value={ a.CSRF }/>
@@ -123,7 +132,9 @@ templ activityWord(w Word, audioID string, rows bool) {
 				</span>
 			</span>
 			if w.Audio != "" {
-				@clip(audioID, w.Audio, "Play "+w.Text, false)
+				<div class="clip">
+					@orbButton(orbClass(false), "Play "+w.Text, w.Audio, audioID)
+				</div>
 			} else {
 				<span class="recall-clip"></span>
 			}
@@ -209,20 +220,56 @@ templ dialogueBlock(d *Dialogue) {
 	<script src="/static/js/dialogue.js" defer></script>
 }
 
+// wordClipRow is the no-JS play control for one word of a recall line.
+// The pointed word, a separator, and the transliteration name the bar.
+// html.js hides .clip-rows; the orb under the word is the control then.
+templ wordClipRow(w Word, audioID string) {
+	<div class="clip-row">
+		<p class="clip-row__label">
+			<bdi class="clip-row__he" lang="he" dir="rtl">{ w.Text }</bdi>
+			if w.Translit != "" {
+				<span class="clip-row__sep">{ " · " }</span>
+				<bdi class="clip-row__tr" lang="he-Latn" dir="ltr">{ w.Translit }</bdi>
+			}
+		</p>
+		<div class="clip">
+			<audio id={ audioID } src={ templ.SafeURL(w.Audio) } preload="none" controls aria-label={ "Play " + w.Text }></audio>
+		</div>
+	</div>
+}
+
 // clip is one recording in the lesson player. The server always renders the
 // native audio (the no-JS bar) and a button.orb. The orb is display:none
 // until clips.js adds class js on html, which shows the orb and sets the bar
 // to display:none. One of those two is the play control. hero is the line control.
 // label is the button's accessible name, such as "Play אֲנִי" or "Play the line".
+// A recall word does not use this: its orb stays in the line and its bar is a
+// wordClipRow, so the no-JS bar is not squeezed into the word column.
 templ clip(id, src, label string, hero bool) {
 	<div class={ clipClass(hero) }>
 		<audio id={ id } src={ templ.SafeURL(src) } preload="none" controls></audio>
-		<button type="button" class={ orbClass(hero) } aria-label={ label } data-label={ label } data-src={ src } data-state="idle">
-			<span class="orb__glyph orb__glyph--play">@Icon("play", "")</span>
-			<span class="orb__glyph orb__glyph--load" aria-hidden="true"></span>
-			<span class="orb__glyph orb__glyph--dots">@Icon("dots", "")</span>
-			<span class="orb__glyph orb__glyph--stop">@Icon("stop", "")</span>
-			<span class="orb__glyph orb__glyph--off">@Icon("audio-off", "")</span>
-		</button>
+		@orbButton(orbClass(hero), label, src, "")
 	</div>
+}
+
+// orbButton is the lesson orb. audioID, when set, names the audio element
+// played for a recall word whose bar lives in .clip-rows.
+templ orbButton(className, label, src, audioID string) {
+	if audioID != "" {
+		<button type="button" class={ className } aria-label={ label } data-label={ label } data-src={ src } data-audio={ audioID } data-state="idle">
+			@orbGlyphs()
+		</button>
+	} else {
+		<button type="button" class={ className } aria-label={ label } data-label={ label } data-src={ src } data-state="idle">
+			@orbGlyphs()
+		</button>
+	}
+}
+
+templ orbGlyphs() {
+	<span class="orb__glyph orb__glyph--play">@Icon("play", "")</span>
+	<span class="orb__glyph orb__glyph--load" aria-hidden="true"></span>
+	<span class="orb__glyph orb__glyph--dots">@Icon("dots", "")</span>
+	<span class="orb__glyph orb__glyph--stop">@Icon("stop", "")</span>
+	<span class="orb__glyph orb__glyph--off">@Icon("audio-off", "")</span>
 }

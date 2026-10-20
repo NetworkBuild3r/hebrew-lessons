@@ -20,12 +20,22 @@
   var timers = new WeakMap();
 
   function audioOf(orb) {
+    var id = orb.getAttribute("data-audio");
+    if (id) {
+      var named = D.getElementById(id);
+      if (named) return named;
+    }
     var clip = orb.closest(".clip");
     return clip ? clip.querySelector("audio") : null;
   }
 
   function orbOf(audio) {
-    if (!audio || !audio.closest) return null;
+    if (!audio) return null;
+    if (audio.id) {
+      var named = D.querySelector('.orb[data-audio="' + audio.id + '"]');
+      if (named) return named;
+    }
+    if (!audio.closest) return null;
     var clip = audio.closest(".clip");
     return clip ? clip.querySelector(".orb") : null;
   }
