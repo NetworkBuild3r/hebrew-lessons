@@ -318,8 +318,9 @@
     animation: motion-fade-in var(--dur-fast) linear;
   }
 
-  /* Lesson orb: no lift, no spin, no pulse. Playing keeps a static ring.
-     Loading is the three-dot glyph at 60%. The gloss slot still fades in. */
+  /* Lesson orb: no lift, no spin, no pulse. Playing is a filled disc, which
+     is not the 2px offset focus ring. Loading is the three-dot glyph at 60%.
+     The gloss slot still fades in. */
   html.js .orb:active { opacity: .85; }
   .orb__glyph {
     transform: none;
@@ -327,15 +328,17 @@
   }
   .orb[data-state="loading"] .orb__glyph--load { opacity: 0; animation: none; }
   .orb[data-state="loading"] .orb__glyph--dots { opacity: .6; }
-  .orb[data-state="playing"] {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+  .orb--hero[data-state="playing"] {
+    background: var(--focus-ring);
+    color: var(--on-ink);
+    outline: 3px solid var(--focus-ring);
     animation: none;
   }
-  .orb--word[data-state="playing"] { outline: none; }
+  .orb--word[data-state="playing"] { outline: none; color: var(--on-ink); }
   .orb--word[data-state="playing"]::before {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    background: var(--focus-ring);
+    border-color: var(--focus-ring);
+    outline: none;
   }
   .target-slot--filled {
     animation: motion-fade-in var(--dur-fast) linear both;

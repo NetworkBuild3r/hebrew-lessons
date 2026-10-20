@@ -1323,11 +1323,19 @@ mark.target {
   background: color-mix(in oklch, var(--focus-ring) 22%, transparent);
   border-radius: var(--radius-sm);
   padding-inline: .2em;
+  padding-block: .1em;
   color: inherit;
   font-weight: 800;
   font-style: normal;
   letter-spacing: normal;
   text-decoration: none;
+}
+/* The named word in "What does גָּר mean?" keeps its niqqud at the chip size. */
+.recall-prompt {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-md);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
 }
 mark.target .wb__he {
   font-weight: 800;
@@ -1365,6 +1373,54 @@ mark.target .wb__he {
   align-items: flex-start;
   gap: var(--space-2);
 }
+/* Other lines still pin the clip to the end of a stretched column. */
+.activity .word-blocks { align-items: stretch; }
+.activity-word > .clip { margin-block-start: auto; }
+/* A multi-word recall shares one grid: Hebrew, transliteration, gloss, orb.
+   An empty transliteration row keeps its height, so the "?" slot cannot
+   lift the target's orb. The line is centred under the hero orb. Each
+   text row is one gloss line, and it grows if the slot is taller. */
+.word-blocks--recall {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: auto calc(var(--fs-small) * var(--lh-body)) calc(var(--fs-small) * var(--lh-body)) var(--size-tap);
+  justify-content: center;
+  justify-items: center;
+  align-items: stretch;
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
+}
+.word-blocks--recall > .activity-word {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 4;
+  align-items: center;
+  justify-items: center;
+  gap: 0;
+}
+.word-blocks--recall > .activity-word > .wb {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 3;
+  align-items: center;
+  justify-items: center;
+  gap: 0;
+}
+.word-blocks--recall > .activity-word > .clip { margin-block-start: 0; }
+.word-blocks--recall .wb__he {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-lg);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+}
+.recall-he,
+.recall-tr,
+.recall-gl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-inline-size: 100%;
+}
 .word-block {
   display: inline-flex;
   flex-direction: column;
@@ -1397,6 +1453,8 @@ mark.target .wb__he {
   border: 1px dashed var(--hairline);
 }
 .choices { display: grid; gap: var(--space-2); }
+/* The lesson does not show 1/2/3 badges. The keys are for placement and drills. */
+.choices .c-answer__key { display: none; }
 .choice {
   display: flex;
   flex-direction: column;
@@ -1414,9 +1472,11 @@ mark.target .wb__he {
 }
 .choice .word-block--choice { background: transparent; padding: 0; }
 /* Lesson clip. The native audio is the control until clips.js adds class js
-   on html. Then the orb shows and the bar is hidden. The orb is not gold:
-   gold stays the one primary action. --hairline is the spec's --line, and
-   --text is the icon ink (--ink in this palette is a slate surface). */
+   on html. Then the orb shows and the bar is display:none, so it leaves the
+   tab order and the accessibility tree. Opacity or off-screen placement
+   would leave it focusable. The orb is not gold: gold stays the one primary
+   action. --hairline is the spec's --line, and --text is the icon ink
+   (--ink in this palette is a slate surface). */
 .clip {
   display: flex;
   position: relative;
@@ -1430,14 +1490,7 @@ mark.target .wb__he {
   max-inline-size: 100%;
 }
 html.js .clip > audio {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  max-inline-size: none;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  opacity: 0;
+  display: none;
 }
 .orb {
   display: none;
@@ -1462,6 +1515,7 @@ html.js .orb {
 }
 html.js .orb--hero:hover { background: var(--surface-soft); }
 .orb--hero[data-state="error"] {
+  background: var(--surface-soft);
   border-style: dashed;
   border-color: var(--muted);
 }
@@ -1479,8 +1533,8 @@ html.js .orb--hero:hover { background: var(--surface-soft); }
   inline-size: 28px;
   block-size: 28px;
   border-radius: 50%;
-  background: var(--surface-raised);
-  border: 1px solid var(--hairline);
+  background: var(--surface-soft);
+  border: 1px solid var(--hairline-strong);
 }
 html.js .orb--word:hover::before { background: var(--surface-soft); }
 .orb--word[data-state="error"]::before {

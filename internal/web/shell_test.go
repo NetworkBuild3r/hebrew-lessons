@@ -913,10 +913,8 @@ func TestLessonFrame(t *testing.T) {
 	if strings.Contains(step2, `class="choice"`) {
 		t.Error("an answer still uses the old .choice class")
 	}
-	for _, key := range []string{`<span class="c-answer__key" aria-hidden="true">1</span>`, `<span class="c-answer__key" aria-hidden="true">2</span>`} {
-		if !strings.Contains(step2, key) {
-			t.Errorf("missing key badge %s", key)
-		}
+	if strings.Contains(step2, `c-answer__key" aria-hidden="true">1<`) || strings.Contains(step2, `c-answer__key" aria-hidden="true">2<`) {
+		t.Error("lesson choices show key badges, and the lesson has no shortcut legend")
 	}
 
 	// Answering shows the result in a sheet with the one gold button, and the bar fills.

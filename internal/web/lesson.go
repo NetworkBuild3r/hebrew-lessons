@@ -457,13 +457,12 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 	if empty || run.Phase != "ask" || !gradedActivity(act.Type) || target.ID == 0 {
 		return activity
 	}
-	hebrew := act.Type == units.ActivityProduce || act.Type == units.ActivityCloze
-	activity.Choices = lessonChoices(pool, earlier, target, choices.ChoiceSeed{
+	activity.Choices = askChoices(act.Type, pool, earlier, target, choices.ChoiceSeed{
 		RunID:    run.ID,
 		Step:     run.ActivityIx,
 		Attempt:  0, // lesson_runs has no attempt counter
 		TargetID: target.ID,
-	}, hebrew, act.Type == units.ActivityCloze)
+	}, lineMateExclude(act, lex, target))
 	activity.Asking = len(activity.Choices) > 0
 	if !activity.Asking {
 		activity.Continue = continueLabel(run.ActivityIx, total)
@@ -707,19 +706,57 @@ func gapToken(tokens []string, lex map[string]db.LexemeView, newWords []db.Lexem
 	return first
 }
 
-// lessonChoiceButtons is the target plus two distractors, the count the
-// player has always shown.
-const lessonChoiceButtons = 3
+// lessonChoiceButtons is the target plus two distractors. listen_pick and
+// produce still use it. lessonWideChoices is four buttons: recall and cloze
+// draw three distractors from outside the line.
+const (
+	lessonChoiceButtons = 3
+	lessonWideChoices   = 4
+)
+
+// askChoices is the buttons for one graded activity. recall and cloze ask for
+// four, and their distractors are the target's part of speech: this unit
+// first, then the learned set (earlier units). Other parts of speech are not
+// used. block drops the line's own lexemes and glosses before that pick.
+func askChoices(typ string, unit, earlier []db.LexemeView, target db.LexemeView, seed choices.ChoiceSeed, block choiceExclude) []views.Choice {
+	hebrew := typ == units.ActivityProduce || typ == units.ActivityCloze
+	n := lessonChoiceButtons
+	if typ == units.ActivityRecall || typ == units.ActivityCloze {
+		n = lessonWideChoices
+		unit = samePOS(unit, target)
+		earlier = samePOS(earlier, target)
+	}
+	return lessonChoices(unit, earlier, target, seed, hebrew, typ == units.ActivityCloze, n, block)
+}
+
+// samePOS keeps the target and rows that share its part of speech. A target
+// with no part of speech keeps the whole list, so the ask still has buttons.
+func samePOS(rows []db.LexemeView, target db.LexemeView) []db.LexemeView {
+	if target.POS == "" {
+		return rows
+	}
+	out := make([]db.LexemeView, 0, len(rows))
+	for _, lex := range rows {
+		if lex.ID == target.ID || lex.POS == target.POS {
+			out = append(out, lex)
+		}
+	}
+	return out
+}
 
 // lessonChoices builds the buttons for a graded ask. recall, listen_pick,
 // produce, and cloze all use it. A checkpoint lesson is a sequence of those
 // activities, so it has no choice builder of its own. Order and membership
-// come from choices.Pick. The button value stays the lexeme id.
-func lessonChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed choices.ChoiceSeed, hebrew, translit bool) []views.Choice {
+// come from choices.Pick. n is the button count, target included. The button
+// value stays the lexeme id. block drops line-mates the learner can already see.
+func lessonChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed choices.ChoiceSeed, hebrew, translit bool, n int, block choiceExclude) []views.Choice {
 	if target.ID == 0 {
 		return nil
 	}
-	picked := choices.Pick(seed, choiceLexeme(target, false), choicePool(unit, earlier, target, hebrew), lessonChoiceButtons)
+	if n < 1 {
+		n = lessonChoiceButtons
+	}
+	picked := choices.Pick(seed, choiceLexeme(target, false), choicePool(unit, earlier, target, hebrew, block), n)
 	byID := make(map[int64]db.LexemeView, len(unit)+len(earlier)+1)
 	byID[target.ID] = target
 	for _, lex := range unit {
@@ -751,23 +788,90 @@ func lessonChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed cho
 	return out
 }
 
+// choiceExclude is the set of distractors a learner could dismiss because the
+// line already shows them. ids are the other lexemes in the line. glosses are
+// those words' meanings, folded, so a different spelling with the same gloss
+// is excluded too. Matching the token text alone does not catch that.
+type choiceExclude struct {
+	ids     map[int64]bool
+	glosses map[string]bool
+}
+
 // choicePool is the unit, then earlier units. An English button needs a gloss,
 // so a blank gloss is left out of that pool. The target is kept either way.
-func choicePool(unit, earlier []db.LexemeView, target db.LexemeView, hebrew bool) []choices.Lexeme {
+// A blocked line-mate is left out of both tiers. What remains is the fallback:
+// other words from this unit, then earlier lexicon words. The line's own
+// words are not put back.
+func choicePool(unit, earlier []db.LexemeView, target db.LexemeView, hebrew bool, block choiceExclude) []choices.Lexeme {
 	pool := make([]choices.Lexeme, 0, len(unit)+len(earlier))
 	for _, lex := range unit {
+		if choiceBlocked(lex, target, block) {
+			continue
+		}
 		if !hebrew && lex.ID != target.ID && strings.TrimSpace(lex.Gloss) == "" {
 			continue
 		}
 		pool = append(pool, choiceLexeme(lex, false))
 	}
 	for _, lex := range earlier {
+		if choiceBlocked(lex, target, block) {
+			continue
+		}
 		if !hebrew && strings.TrimSpace(lex.Gloss) == "" {
 			continue
 		}
 		pool = append(pool, choiceLexeme(lex, true))
 	}
 	return pool
+}
+
+func choiceBlocked(lex, target db.LexemeView, block choiceExclude) bool {
+	if lex.ID == 0 || lex.ID == target.ID {
+		return false
+	}
+	if block.ids[lex.ID] {
+		return true
+	}
+	key := glossKey(lex.Gloss)
+	return key != "" && block.glosses[key]
+}
+
+// lineMateExclude builds the block for an ask that shows the line's other
+// words as help. A multi-word recall shows their gloss. A cloze shows the
+// other words, and its choices are words, so those lexemes and any word with
+// their gloss would give the gap away. A single-word recall, listen-and-pick,
+// and produce hide that help, so they do not block.
+func lineMateExclude(act units.Activity, lex map[string]db.LexemeView, target db.LexemeView) choiceExclude {
+	if !showsLineHelp(act, lex) {
+		return choiceExclude{}
+	}
+	block := choiceExclude{ids: map[int64]bool{}, glosses: map[string]bool{}}
+	for _, tok := range actTokens(act) {
+		view, ok := lex[tok]
+		if !ok || view.ID == 0 || view.ID == target.ID || block.ids[view.ID] {
+			continue
+		}
+		block.ids[view.ID] = true
+		if key := glossKey(view.Gloss); key != "" {
+			block.glosses[key] = true
+		}
+	}
+	return block
+}
+
+func showsLineHelp(act units.Activity, lex map[string]db.LexemeView) bool {
+	switch act.Type {
+	case units.ActivityRecall:
+		return lexemeTokenCount(act, lex) > 1
+	case units.ActivityCloze:
+		return true
+	default:
+		return false
+	}
+}
+
+func glossKey(gloss string) string {
+	return strings.ToLower(strings.TrimSpace(gloss))
 }
 
 func choiceLexeme(view db.LexemeView, earlier bool) choices.Lexeme {

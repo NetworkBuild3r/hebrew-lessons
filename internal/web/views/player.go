@@ -104,6 +104,15 @@ func dialogueOrbAttrs(i int) templ.Attributes {
 	return templ.Attributes{"data-audio": dialogueClipID(i), "data-dlg-line": Num(i)}
 }
 
+// wordBlocksClass is the activity line. A multi-word recall centres that line
+// under the hero orb and lays transliteration, gloss, and orb on one grid.
+func wordBlocksClass(a Activity) string {
+	if a.PromptWord != "" {
+		return "word-blocks word-blocks--recall"
+	}
+	return "word-blocks"
+}
+
 // orbClass is the lesson clip button. The hero is the line (56px). A word orb
 // is the 28px disc inside a 44px hit box. Neither is the dialogue c-orb.
 func orbClass(hero bool) string {

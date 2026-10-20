@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -491,8 +492,9 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 
 // A recall of several words still asks for one word: the first new word in
 // the line. The question names that word, the other words are shown with
-// their sound and meaning, and the buttons are word glosses. A following
-// recall of that word alone keeps the single-word question.
+// their sound and meaning, and the buttons are word glosses of words that
+// are not already on screen. A following recall of that word alone keeps
+// the single-word question.
 func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	const (
 		ani = "אֲנִי"
@@ -568,7 +570,7 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	}
 	// English runs stay in their own bdi, the way every other prompt is isolated.
 	// The word itself is the spec's <bdi lang=he dir=rtl>.
-	prompt := `<bdi lang="en" dir="ltr">What does </bdi><bdi lang="he" dir="rtl">` + gar + `</bdi><bdi lang="en" dir="ltr"> mean?</bdi>`
+	prompt := `<bdi lang="en" dir="ltr">What does </bdi><bdi class="recall-prompt" lang="he" dir="rtl">` + gar + `</bdi><bdi lang="en" dir="ltr"> mean?</bdi>`
 	if !strings.Contains(head, prompt) || strings.Contains(ask, "What does this Hebrew mean?") {
 		t.Fatalf("prompt = %q, want the target word named:\n%s", prompt, head)
 	}
@@ -578,8 +580,8 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	if !strings.Contains(head, `<mark class="target"><bdi class="wb__he" lang="he" dir="rtl">`+gar+`</bdi></mark>`) {
 		t.Fatalf("the mark does not wrap only the target word:\n%s", head)
 	}
-	if !strings.Contains(head, `class="word-blocks" dir="rtl"`) {
-		t.Fatalf("the line is not dir=rtl:\n%s", head)
+	if !strings.Contains(head, `class="word-blocks word-blocks--recall" dir="rtl"`) {
+		t.Fatalf("the line is not a centred recall row:\n%s", head)
 	}
 	if !strings.Contains(head, `class="target-slot"`) || !strings.Contains(head, ">?</span>") {
 		t.Fatalf("the target is missing its dashed slot:\n%s", head)
@@ -597,10 +599,19 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	if !strings.Contains(head, gar) {
 		t.Fatal("the tested word's Hebrew is hidden")
 	}
-	for _, gloss := range []string{">I<", ">lives<", ">here<"} {
-		if !strings.Contains(choices, gloss) {
-			t.Errorf("choice missing word gloss %s", gloss)
+	if !strings.Contains(choices, ">lives<") {
+		t.Errorf("choice missing the target gloss")
+	}
+	// The other words' glosses are on screen as help. Offering them as
+	// buttons would give the answer away. This unit has no other words,
+	// so the only button left is the target.
+	for _, gloss := range []string{">I<", ">here<"} {
+		if strings.Contains(choices, gloss) {
+			t.Errorf("choice equals a visible helper gloss %s", gloss)
 		}
+	}
+	if strings.Contains(choices, `c-answer__key" aria-hidden="true">1<`) || strings.Contains(choices, `c-answer__key" aria-hidden="true">2<`) {
+		t.Fatalf("lesson choices still show key badges:\n%s", choices)
 	}
 	if strings.Contains(choices, "I live here") || strings.Contains(choices, `value="`+gar+`"`) || strings.Contains(choices, `value="`+line+`"`) {
 		t.Fatalf("choices are not word glosses:\n%s", choices)
@@ -634,6 +645,7 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	if strings.Count(ask, "<audio ") != 4 || strings.Count(ask, `preload="none"`) != 4 {
 		t.Fatalf("native audio is not present for every clip without JS:\n%s", ask)
 	}
+	assertOneClipControl(t, ask)
 	if strings.Contains(ask, "onclick=") || strings.Contains(ask, "hx-on") || strings.Count(ask, "/static/js/clips.js") != 1 {
 		t.Fatalf("clip markup:\n%s", ask)
 	}
@@ -656,9 +668,260 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	if !strings.Contains(alone, gar) || !strings.Contains(alone, ">lives<") || !strings.Contains(alone, `aria-label="Play `+gar+`"`) {
 		t.Fatalf("single-word recall missing the word, its gloss, or its play button:\n%s", alone)
 	}
+	assertOneClipControl(t, alone)
 	if strings.Contains(alone, ani) || strings.Contains(alone, po) {
 		t.Fatalf("single-word recall shows the rest of the line:\n%s", alone)
 	}
+}
+
+// A multi-word recall and a cloze both show the line's other words as help.
+// Those glosses, and a different lexeme with the same gloss, are not choices.
+// The four buttons are the target plus same-part-of-speech words from this
+// unit and the earlier learned set. Another part of speech is left out.
+func TestChoicesSkipVisibleHelperGlosses(t *testing.T) {
+	const (
+		ani    = "אֲנִי"
+		anokhi = "אָנֹכִי"
+		gar    = "גָּר"
+		po     = "פֹּה"
+		kotev  = "כּוֹתֵב"
+		nimtsa = "נִמְצָא"
+		okhel  = "אוֹכֵל"
+		shoteh = "שׁוֹתֶה"
+		mayim  = "מַיִם"
+	)
+	for _, typ := range []string{units.ActivityRecall, units.ActivityCloze} {
+		t.Run(typ, func(t *testing.T) {
+			now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+			ctx := context.Background()
+			store, err := db.Open(ctx, filepath.Join(t.TempDir(), "hebrew.sqlite"), fixedClock(now))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = store.Close() })
+			brian, err := store.CreateUser(ctx, "brian@example.com", "sub-brian", auth.RoleLearner)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sp := func(s string) *string { return &s }
+			saved, _, err := store.UpsertLexemes(ctx, []lexicon.Input{
+				{TextNFC: ani, Gloss: "I", Translit: sp("ani"), POS: sp("pron")},
+				{TextNFC: anokhi, Gloss: "I", Translit: sp("anokhi"), POS: sp("pron")},
+				{TextNFC: gar, Gloss: "lives", Translit: sp("gar"), POS: sp("verb")},
+				{TextNFC: po, Gloss: "here", Translit: sp("po"), POS: sp("adv")},
+				{TextNFC: kotev, Gloss: "writes", Translit: sp("kotev"), POS: sp("verb")},
+				{TextNFC: nimtsa, Gloss: "here", Translit: sp("nimtsa"), POS: sp("verb")},
+				{TextNFC: okhel, Gloss: "eats", Translit: sp("okhel"), POS: sp("verb")},
+				{TextNFC: shoteh, Gloss: "drinks", Translit: sp("shoteh"), POS: sp("verb")},
+				{TextNFC: mayim, Gloss: "water", Translit: sp("mayim"), POS: sp("noun")},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ids := map[string]int64{}
+			for _, row := range saved {
+				ids[row.TextNFC] = row.ID
+			}
+			glossByID := map[string]string{}
+			for text, id := range ids {
+				switch text {
+				case ani, anokhi:
+					glossByID[itoa(id)] = "I"
+				case gar:
+					glossByID[itoa(id)] = "lives"
+				case po:
+					glossByID[itoa(id)] = "here"
+				case kotev:
+					glossByID[itoa(id)] = "writes"
+				case nimtsa:
+					glossByID[itoa(id)] = "here"
+				case okhel:
+					glossByID[itoa(id)] = "eats"
+				case shoteh:
+					glossByID[itoa(id)] = "drinks"
+				case mayim:
+					glossByID[itoa(id)] = "water"
+				}
+			}
+			line := ani + " " + gar + " " + po
+			earlierID := putLesson(t, store, nil, units.Unit{
+				Title: "Earlier", Position: 0, NewWords: []string{okhel, shoteh},
+				Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
+					{Type: units.ActivityRecall, Text: okhel + " " + shoteh},
+				}}},
+			}, "shared")
+			// anokhi shares the helper gloss "I" and is a different lexeme.
+			// nimtsa is the target's part of speech but glosses "here", which
+			// is on screen. kotev is the only other verb in this unit, so two
+			// buttons come from the earlier learned set. mayim is another
+			// part of speech and must not fill a button.
+			unitID := putLesson(t, store, nil, units.Unit{
+				Title: "At home", Situation: "Saying where you live.", Position: 1,
+				NewWords: []string{gar},
+				Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
+					{Type: typ, Text: line},
+					{Type: units.ActivityRecall, Text: anokhi},
+					{Type: units.ActivityRecall, Text: kotev},
+					{Type: units.ActivityRecall, Text: nimtsa},
+					{Type: units.ActivityRecall, Text: mayim},
+				}}},
+			}, "shared")
+			publish(t, store, earlierID, unitID)
+			when := db.FormatTime(now)
+			if _, err := store.ExecContext(ctx, `
+				INSERT INTO lesson_runs (user_id, unit_id, lesson_ix, started_at, finished_at, score)
+				VALUES (?, ?, 0, ?, ?, 1)`, brian.ID, earlierID, when, when); err != nil {
+				t.Fatal(err)
+			}
+
+			svc, err := auth.New(auth.Config{
+				PublicOrigin: "https://learn.example", Clock: fixedClock(now), Store: store,
+				AllowedEmails: []string{"brian@example.com"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := NewOptions(nil, svc, Options{Store: store})
+			cookie := mintSession(t, store, brian.ID, "brian-csrf", now.Add(time.Hour))
+			body := getAuthed(t, h, cookie, "/lesson/"+itoa(unitID)+"/0")
+			ask := activityHTML(t, body)
+			head, choiceHTML, ok := strings.Cut(ask, `class="choices"`)
+			if !ok {
+				t.Fatalf("missing choices:\n%s", ask)
+			}
+			for _, help := range []string{ani, po} {
+				if !strings.Contains(head, help) {
+					t.Errorf("helper word %s is not on screen", help)
+				}
+			}
+			if typ == units.ActivityRecall {
+				for _, gloss := range []string{">I<", ">here<"} {
+					if !strings.Contains(head, gloss) {
+						t.Errorf("helper gloss %s is not visible", gloss)
+					}
+				}
+			}
+			helperGloss := map[string]bool{"i": true, "here": true}
+			for _, gloss := range []string{">I<", ">here<"} {
+				if strings.Contains(choiceHTML, gloss) {
+					t.Errorf("choice equals a visible helper gloss %s\n%s", gloss, choiceHTML)
+				}
+			}
+			got := choiceValues(t, ask)
+			if len(got) != lessonWideChoices {
+				t.Fatalf("buttons = %d, want %d: %v\n%s", len(got), lessonWideChoices, got, choiceHTML)
+			}
+			for _, id := range got {
+				gloss := glossByID[id]
+				if helperGloss[glossKey(gloss)] {
+					t.Errorf("choice %s gloss %q equals a visible helper gloss", id, gloss)
+				}
+				if id == itoa(ids[ani]) || id == itoa(ids[po]) || id == itoa(ids[anokhi]) || id == itoa(ids[nimtsa]) || id == itoa(ids[mayim]) {
+					t.Errorf("choice is a line word, the same gloss, or another part of speech: %s %s", id, gloss)
+				}
+			}
+			for _, text := range []string{gar, kotev, okhel, shoteh} {
+				if !slicesContains(got, itoa(ids[text])) {
+					t.Errorf("missing same-POS choice %s (%s): %v", text, glossByID[itoa(ids[text])], got)
+				}
+			}
+		})
+	}
+}
+
+// assertOneClipControl checks the no-JS document. Each lesson clip renders
+// exactly one native audio[controls] and exactly one button.orb. The audio
+// is not hidden, so the bar is the play control. The orb stays in the markup
+// and CSS keeps it display:none until html.js.
+func assertOneClipControl(t *testing.T, html string) {
+	t.Helper()
+	clips := regexp.MustCompile(`(?s)<div class="clip(?: clip--hero)?">.*?</div>`).FindAllString(html, -1)
+	if len(clips) == 0 {
+		t.Fatalf("no lesson clips:\n%s", html)
+	}
+	audioTag := regexp.MustCompile(`<audio\b[^>]*>`)
+	buttonTag := regexp.MustCompile(`<button\b[^>]*>`)
+	hiddenAttr := regexp.MustCompile(`(?:\s)hidden(?:[\s=/>]|$)`)
+	for _, block := range clips {
+		audios := audioTag.FindAllString(block, -1)
+		buttons := buttonTag.FindAllString(block, -1)
+		if len(audios) != 1 || len(buttons) != 1 {
+			t.Fatalf("clip has %d audio and %d buttons, want one of each:\n%s", len(audios), len(buttons), block)
+		}
+		if !strings.Contains(audios[0], "controls") || hiddenAttr.MatchString(audios[0]) {
+			t.Fatalf("no-JS bar is not the single play control:\n%s", audios[0])
+		}
+		if !strings.Contains(buttons[0], `class="orb`) || hiddenAttr.MatchString(buttons[0]) {
+			t.Fatalf("clip button is not an unhidden orb:\n%s", buttons[0])
+		}
+	}
+}
+
+// assertClipFallbackCSS checks the two modes. With html.js the native bar is
+// display:none (not opacity or off-screen). Without it the bar stays shown
+// and button.orb is display:none until html.js reveals it.
+func assertClipFallbackCSS(t *testing.T, css string) {
+	t.Helper()
+	bar := cssRuleBody(t, css, ".clip > audio")
+	if !regexp.MustCompile(`(?i)display\s*:\s*block\b`).MatchString(bar) || regexp.MustCompile(`(?i)display\s*:\s*none\b`).MatchString(bar) {
+		t.Fatalf("no-JS native bar is not shown:\n%s", bar)
+	}
+	hiddenBar := cssRuleBody(t, css, "html.js .clip > audio")
+	if !regexp.MustCompile(`(?i)display\s*:\s*none\b`).MatchString(hiddenBar) {
+		t.Fatalf("with JS the native bar is not display:none:\n%s", hiddenBar)
+	}
+	for _, bad := range []string{"opacity", "position", "clip-path", "visibility", "inset", "translate", "1px", "z-index"} {
+		if strings.Contains(strings.ToLower(hiddenBar), bad) {
+			t.Errorf("with JS the native bar is hidden by %s:\n%s", bad, hiddenBar)
+		}
+	}
+	orb := cssRuleBody(t, css, ".orb")
+	if !regexp.MustCompile(`(?i)display\s*:\s*none\b`).MatchString(orb) {
+		t.Fatalf("the orb is focusable without JS:\n%s", orb)
+	}
+	shown := cssRuleBody(t, css, "html.js .orb")
+	if regexp.MustCompile(`(?i)display\s*:\s*none\b`).MatchString(shown) || !regexp.MustCompile(`(?i)display\s*:\s*grid\b`).MatchString(shown) {
+		t.Fatalf("html.js does not show the orb:\n%s", shown)
+	}
+}
+
+// cssRuleBody returns the declaration block of the rule whose selector is
+// exactly selector. A longer selector that merely contains it is skipped.
+func cssRuleBody(t *testing.T, css, selector string) string {
+	t.Helper()
+	needle := selector + " {"
+	from := 0
+	for from < len(css) {
+		i := strings.Index(css[from:], needle)
+		if i < 0 {
+			break
+		}
+		i += from
+		if i == 0 || cssRuleBoundary(css[i-1]) {
+			start := i + len(needle)
+			end := strings.Index(css[start:], "}")
+			if end < 0 {
+				t.Fatalf("rule %s is unclosed", selector)
+			}
+			return css[start : start+end]
+		}
+		from = i + len(needle)
+	}
+	t.Fatalf("missing rule %s", selector)
+	return ""
+}
+
+func cssRuleBoundary(b byte) bool {
+	return b == '\n' || b == '\r' || b == '{' || b == '}' || b == ',' || b == '/'
+}
+
+func slicesContains(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestClipScript(t *testing.T) {
@@ -674,7 +937,12 @@ func TestClipScript(t *testing.T) {
 			t.Errorf("clips.js uses %s", bad)
 		}
 	}
-	for _, need := range []string{`classList.add("js")`, `querySelectorAll("audio")`, ".pause()", `closest(".orb")`, "150", `Audio unavailable, tap to retry`, `aria-pressed`, `aria-busy`} {
+	for _, need := range []string{
+		`classList.add("js")`, `querySelectorAll("audio")`, ".pause()", `closest(".orb")`, "150",
+		`Audio unavailable, tap to retry`, `aria-pressed`, `aria-busy`,
+		"AbortError", "NotAllowedError", "audio.load", `setAttribute("hidden"`,
+		`addEventListener("click"`, `addEventListener("htmx:afterSwap"`, `addEventListener("htmx:afterSettle"`,
+	} {
 		if !strings.Contains(b, need) {
 			t.Errorf("clips.js missing %s", need)
 		}
@@ -684,9 +952,7 @@ func TestClipScript(t *testing.T) {
 		t.Fatal("playing a dialogue line does not stop other audio")
 	}
 	css := readStatic(t, "static/css/base.css")
-	if !strings.Contains(css, "html.js .orb") || !strings.Contains(css, "html.js .clip > audio") {
-		t.Fatal("the orb is not gated on html.js, so the native bar cannot stay without script")
-	}
+	assertClipFallbackCSS(t, css)
 	if !strings.Contains(css, ".orb--hero") || !strings.Contains(css, "var(--size-cta)") || !strings.Contains(css, "var(--size-tap)") || !strings.Contains(css, "inline-size: 28px") {
 		t.Fatal("hero and word orb sizes are missing")
 	}
@@ -696,17 +962,179 @@ func TestClipScript(t *testing.T) {
 	if hero := css[strings.Index(css, ".orb--hero"):]; strings.Contains(hero[:strings.Index(hero, ".orb--word")], "var(--action-bg)") || strings.Contains(hero[:strings.Index(hero, ".orb--word")], "var(--lamp)") {
 		t.Fatal("the lesson orb is gold")
 	}
+	if !strings.Contains(css, `outline: 2px solid var(--focus-ring)`) || !strings.Contains(css, ".word-blocks--recall") || !strings.Contains(css, "justify-content: center") || !strings.Contains(css, ".recall-prompt") || !strings.Contains(css, "padding-block: .1em") || !strings.Contains(css, ".choices .c-answer__key") {
+		t.Fatal("recall line, focus ring, or choice badges drifted")
+	}
 	motion := readStatic(t, "static/css/motion.css")
-	for _, need := range []string{"orb-spin", "orb-ring", "slot-fill", `prefers-reduced-motion: reduce`, ".orb__glyph--dots", `outline: 2px solid var(--focus-ring)`} {
+	for _, need := range []string{"orb-spin", "orb-ring", "slot-fill", `prefers-reduced-motion: reduce`, ".orb__glyph--dots", `background: var(--focus-ring)`, `color: var(--on-ink)`, `outline: 3px solid var(--focus-ring)`} {
 		if !strings.Contains(motion, need) {
 			t.Errorf("motion.css missing %s", need)
 		}
+	}
+	if strings.Contains(motion, `outline: 2px solid var(--focus-ring)`) {
+		t.Fatal("reduced-motion playing still uses the focus outline")
 	}
 	orb := readStatic(t, "static/css/components.css")
 	if !strings.Contains(orb, ".c-orb") || !strings.Contains(orb, "var(--size-cta)") {
 		t.Fatal("the dialogue orb was restyled")
 	}
 }
+
+// TestClipPlayAfterSwap runs clips.js under Node. Tapping a second orb while
+// the first play() is still starting rejects that promise with AbortError or
+// NotAllowedError, and the first orb must stay out of the error state. A retry
+// from error calls load() before play(). An htmx:afterSwap hides audio that
+// arrived in the swap. Click handling is delegated, so the new orb plays too.
+func TestClipPlayAfterSwap(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Fatal("node is required to run clips.js")
+	}
+	script := filepath.Join(t.TempDir(), "clips-check.js")
+	if err := os.WriteFile(script, []byte(clipPlayCheckJS), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("node", script, filepath.Join("static", "js", "clips.js")).CombinedOutput()
+	if err != nil {
+		t.Fatalf("clips.js behaviour: %v\n%s", err, out)
+	}
+}
+
+const clipPlayCheckJS = `
+const fs = require("fs");
+const vm = require("vm");
+const src = fs.readFileSync(process.argv[2], "utf8");
+const fails = [];
+function check(cond, msg) { if (!cond) fails.push(msg); }
+
+function makeEl(tag) {
+  const el = {
+    tagName: String(tag).toUpperCase(),
+    attrs: {},
+    kids: [],
+    parent: null,
+    isConnected: true,
+    className: "",
+    tabIndex: 0,
+    paused: true,
+    currentTime: 0,
+    ended: false,
+    loads: 0,
+    order: [],
+    plays: [],
+  };
+  el.classList = { add(c) { el.className = (el.className + " " + c).trim(); } };
+  el.setAttribute = (k, v) => { el.attrs[k] = String(v); };
+  el.getAttribute = (k) => (Object.prototype.hasOwnProperty.call(el.attrs, k) ? el.attrs[k] : null);
+  el.hasAttribute = (k) => Object.prototype.hasOwnProperty.call(el.attrs, k);
+  el.removeAttribute = (k) => { delete el.attrs[k]; };
+  el.append = (child) => { child.parent = el; el.kids.push(child); };
+  el.closest = (sel) => { let n = el; while (n) { if (matches(n, sel)) return n; n = n.parent; } return null; };
+  el.querySelector = (sel) => query(el, sel)[0] || null;
+  el.pause = () => { el.paused = true; };
+  el.load = () => { el.loads++; el.order.push("load"); };
+  el.play = () => {
+    el.order.push("play");
+    const box = {};
+    const p = { then(ok, bad) { box.ok = ok; box.bad = bad; return p; } };
+    el.plays.push(box);
+    el.paused = false;
+    return p;
+  };
+  return el;
+}
+function hasClass(el, name) { return (el.className || "").split(/\s+/).indexOf(name) >= 0; }
+function matches(el, sel) {
+  if (sel === "audio") return el.tagName === "AUDIO";
+  if (sel === ".orb") return hasClass(el, "orb");
+  if (sel === ".clip") return hasClass(el, "clip");
+  return false;
+}
+function query(root, sel) {
+  const out = [];
+  (function rec(n) {
+    if (sel === ".clip > audio" && hasClass(n, "clip")) {
+      n.kids.forEach((k) => { if (k.tagName === "AUDIO") out.push(k); });
+    } else if (n !== root && matches(n, sel)) out.push(n);
+    n.kids.forEach(rec);
+  })(root);
+  return out;
+}
+
+const listeners = [];
+const doc = makeEl("#document");
+doc.documentElement = makeEl("html");
+doc.append(doc.documentElement);
+doc.addEventListener = (name, fn) => { listeners.push({ name, fn }); };
+doc.querySelectorAll = (sel) => query(doc, sel);
+function fire(name, target) {
+  listeners.filter((l) => l.name === name).forEach((l) => l.fn({ target, preventDefault() {} }));
+}
+
+const windowMock = {
+  document: doc,
+  setTimeout(fn) { return 1; },
+  clearTimeout() {},
+};
+windowMock.window = windowMock;
+vm.runInNewContext(src, { window: windowMock });
+check(doc.documentElement.className.indexOf("js") >= 0, "html did not gain class js");
+
+function addClip() {
+  const wrap = makeEl("div");
+  wrap.className = "clip";
+  const audio = makeEl("audio");
+  const orb = makeEl("button");
+  orb.className = "orb";
+  orb.setAttribute("data-src", "/a.mp3");
+  orb.setAttribute("data-state", "idle");
+  orb.setAttribute("data-label", "Play word");
+  wrap.append(audio);
+  wrap.append(orb);
+  doc.append(wrap);
+  return { audio, orb };
+}
+const a = addClip();
+const b = addClip();
+fire("click", a.orb);
+check(a.audio.plays.length === 1, "first tap did not play");
+fire("click", b.orb);
+check(a.audio.paused === true, "starting A was not paused");
+a.audio.plays[0].bad({ name: "AbortError" });
+check(a.orb.getAttribute("data-state") !== "error", "AbortError put A into error: " + a.orb.getAttribute("data-state"));
+const c = addClip();
+fire("click", c.orb);
+c.audio.plays[0].bad({ name: "NotAllowedError" });
+check(c.orb.getAttribute("data-state") !== "error", "NotAllowedError put the orb into error");
+const d = addClip();
+fire("click", d.orb);
+d.audio.plays[0].bad({ name: "NotSupportedError" });
+check(d.orb.getAttribute("data-state") === "error", "a real play failure did not reach error");
+
+a.orb.setAttribute("data-state", "error");
+const before = a.audio.order.length;
+fire("click", a.orb);
+const tail = a.audio.order.slice(before);
+check(tail[0] === "load" && tail[1] === "play", "retry did not load before play: " + tail.join(","));
+
+const swapped = addClip();
+fire("htmx:afterSwap", doc);
+check(swapped.audio.getAttribute("hidden") !== null, "afterSwap did not set hidden on the new bar");
+check(swapped.audio.getAttribute("aria-hidden") === "true", "afterSwap did not hide the new bar");
+check(swapped.audio.tabIndex === -1, "afterSwap left the new bar tabbable");
+const playsBefore = swapped.audio.plays.length;
+fire("click", swapped.orb);
+check(swapped.audio.plays.length === playsBefore + 1, "a swapped orb did not play through the document listener");
+
+vm.runInNewContext(src, { window: windowMock });
+const plays = b.audio.plays.length;
+fire("click", b.orb);
+check(b.audio.plays.length === plays + 1, "loading the script again doubled the click listener");
+
+if (fails.length) {
+  console.error(fails.join("\n"));
+  process.exit(1);
+}
+`
 
 func TestLessonPostRequiresCSRF(t *testing.T) {
 	h := newMux(nil, CSRFFunc(func(*http.Request) string { return "tok" }))

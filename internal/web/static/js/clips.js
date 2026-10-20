@@ -1,6 +1,8 @@
 /* Lesson clip orb. No dependency. Loaded by a lesson step that has a clip.
    The server renders button.orb beside a native audio control. This script
-   adds class js on html, which shows the orb and hides the native bar.
+   adds class js on html, which shows the orb and sets the native bar to
+   display:none. quiet() also sets the hidden attribute, so a swapped bar
+   is out of the tab order and the accessibility tree.
    Without this script the bar stays. One clip plays at a time.
    Loading is shown only after 150ms, so a clip that starts at once does not flicker.
    Reduced motion is entirely CSS (no spin, no pulse). This file does not animate,
@@ -46,6 +48,7 @@
   }
 
   function quiet(audio) {
+    audio.setAttribute("hidden", "");
     audio.setAttribute("aria-hidden", "true");
     audio.tabIndex = -1;
   }
@@ -57,11 +60,9 @@
   function idleOthers(except) {
     Array.prototype.forEach.call(D.querySelectorAll(".orb"), function (orb) {
       if (orb === except) return;
+      clearLoad(orb);
       var state = orb.getAttribute("data-state");
-      if (state === "playing" || state === "loading") {
-        clearLoad(orb);
-        paint(orb, "idle");
-      }
+      if (state === "playing" || state === "loading") paint(orb, "idle");
     });
   }
 
@@ -79,6 +80,14 @@
     paint(orb, "error");
   }
 
+  // pause() rejects a play() that has not started yet. Those two names are
+  // that interruption, not a broken file, so the orb that was starting stays
+  // idle instead of flipping to error.
+  function playIgnored(err) {
+    var name = err && err.name;
+    return name === "AbortError" || name === "NotAllowedError";
+  }
+
   function play(orb) {
     var audio = audioOf(orb);
     if (!audio) {
@@ -92,6 +101,7 @@
       paint(orb, "idle");
       return;
     }
+    var fromError = state === "error";
     stopOthers(audio);
     clearLoad(orb);
     paint(orb, "idle");
@@ -102,9 +112,16 @@
     timers.set(orb, timer);
     var pending;
     try {
-      audio.currentTime = 0;
+      if (fromError && audio.load) audio.load();
+      else {
+        try { audio.currentTime = 0; } catch (seekErr) { /* not seekable yet */ }
+      }
       pending = audio.play();
     } catch (e) {
+      if (playIgnored(e)) {
+        clearLoad(orb);
+        return;
+      }
       fail(orb);
       return;
     }
@@ -112,7 +129,12 @@
       pending.then(function () {
         clearLoad(orb);
         paint(orb, "playing");
-      }, function () {
+      }, function (err) {
+        if (playIgnored(err)) {
+          clearLoad(orb);
+          if (orb.getAttribute("data-state") === "loading") paint(orb, "idle");
+          return;
+        }
         fail(orb);
       });
     }
@@ -152,6 +174,11 @@
     fail(orb);
   });
 
+  // Click handling is on document, so an orb swapped in later still plays.
+  // afterSwap hides the new native bars. A second run of this file (the
+  // swapped step includes the script again) returns at g.__clips above,
+  // and these listeners from the first run stay in place.
   upgrade();
   D.addEventListener("htmx:afterSwap", upgrade);
+  D.addEventListener("htmx:afterSettle", upgrade);
 })(window);
