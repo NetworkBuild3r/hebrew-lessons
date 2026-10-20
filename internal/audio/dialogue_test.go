@@ -367,7 +367,9 @@ func TestCallBudgetStopsAndResumes(t *testing.T) {
 	// let a 29s stop pass. A call that runs several extra items after the
 	// budget exceeds one item plus 2s and fails here.
 	const budgetSlack = 2 * time.Second
-	if took > g.Budget+oneItem+budgetSlack {
+	ceiling := g.Budget + oneItem + budgetSlack
+	t.Logf("budget call took %v, one item %v, ceiling %v", took, oneItem, ceiling)
+	if took > ceiling {
 		t.Fatalf("a call with a %v budget took %v, one item took %v, ceiling is budget plus one item plus %v", g.Budget, took, oneItem, budgetSlack)
 	}
 	if len(first) != MaxTexts {
@@ -390,7 +392,7 @@ func TestCallBudgetStopsAndResumes(t *testing.T) {
 	if made == 0 || cut == 0 {
 		t.Fatalf("made %d, cut %d: the budget did not bite, or nothing was made", made, cut)
 	}
-	t.Logf("budget call took %v, one item %v, made %d, cut %d", took, oneItem, made, cut)
+	t.Logf("budget call took %v, one item %v, ceiling %v, made %d, cut %d", took, oneItem, ceiling, made, cut)
 	if countRows(t, store) != made {
 		t.Fatalf("rows %d, made %d: a cut clip was stored", countRows(t, store), made)
 	}
