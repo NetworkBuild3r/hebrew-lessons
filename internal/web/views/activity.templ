@@ -232,10 +232,11 @@ templ actFeedback(a ActivityView) {
 	}
 }
 
-// flashFrame is the self-graded card in the same frame. Before the reveal the
-// gold action is Show answer. After it the four grade buttons are the actions,
-// and they share one neutral style: a grade is the learner's own report, and a
-// colour would call it right or wrong.
+// flashFrame is the one self-graded frame. Every review mode uses it.
+// Before the reveal the gold action is Show answer. After it the four grade
+// buttons are the actions, and they share one neutral style: a grade is the
+// learner's own report, and a colour would call it right or wrong.
+// A new mode does not add a frame, a route, or a grade button.
 templ flashFrame(c ReviewCard) {
 	<section class="act act--flash" data-activity="flashcard" data-phase={ flashPhase(c) } aria-label={ flashLead(c) }>
 		@actTop(c.Lang, flashDone(c), c.Total, c.Index)
@@ -273,104 +274,130 @@ templ flashFrame(c ReviewCard) {
 	</section>
 }
 
-// flashCard is the card face. Read cards show the Hebrew and name the meaning
-// after the flip. Recall cards show the meaning and name the Hebrew after it.
+// flashCard is the shared shell around one mode's face. The mode table picks
+// the front or the back. The question sits under the front for every mode.
 templ flashCard(c ReviewCard) {
 	<div class="act__card" if c.Revealed { data-motion="card-flip" }>
-		if c.Kind == "letter" {
-			@WordBlock(flashHebrew(c), "", "", "display", "", true)
-			if c.Revealed {
-				<div class="act__answer">
-					@answerHeading()
-					{{ asked := askedSide(c) }}
-					<p class="act__side">
-						if asked.Name != "" {
-							@H(asked.Name)
-						}
-						if asked.NameTranslit != "" {
-							<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ asked.NameTranslit }</bdi>
-						}
-						if asked.Sound != "" {
-							<bdi class="wb__tr" lang="en" dir="ltr">{ asked.Sound }</bdi>
-						}
-					</p>
-					if c.ExampleText != "" {
-						@WordBlock(c.ExampleText, c.ExampleTranslit, c.ExampleGloss, "card", "", false)
-					}
-					@flashAudio(c)
-					if len(c.Sides) > 1 {
-						<div class="act__pair">
-							for _, side := range c.Sides {
-								<p class="act__side">
-									@H(side.Hebrew)
-									if side.Name != "" {
-										@H(side.Name)
-									}
-									if side.Sound != "" {
-										<bdi class="wb__tr" lang="en" dir="ltr">{ side.Sound }</bdi>
-									}
-								</p>
-							}
-						</div>
-					}
-					if c.TellApart != "" {
-						<p class="act__cue" lang="en">Tell them apart: { c.TellApart }</p>
-					}
-					if c.DageshNote != "" {
-						<p class="act__cue" lang="en">{ c.DageshNote }</p>
-					}
-				</div>
-			}
-		} else if c.Kind == "pattern" {
-			@WordBlock(flashHebrew(c), "", "", "display", "", true)
-			if c.Revealed {
-				<div class="act__answer">
-					@answerHeading()
-					for _, side := range c.Sides {
-						<p class="act__side">
-							@H(side.Hebrew)
-							if side.Translit != "" {
-								<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ side.Translit }</bdi>
-							}
-							if side.Gloss != "" {
-								@E(side.Gloss)
-							}
-						</p>
-					}
-					@flashAudio(c)
-				</div>
-			}
-		} else if c.Kind == "recall" || c.Kind == "spell" {
-			<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
-			if c.Revealed {
-				<div class="act__word act__answer">
-					@answerHeading()
-					@WordBlock(flashHebrew(c), flashTranslit(c), "", "display", "", true)
-					@flashAudio(c)
-				</div>
-			}
-		} else {
-			<div class="act__word">
-				@WordBlock(flashHebrew(c), flashTranslit(c), "", "display", "", true)
-				@flashAudio(c)
-			</div>
-			if c.Revealed && c.Gloss != "" {
-				<div class="act__answer">
-					@answerHeading()
-					<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
-					if c.Gender != "" {
-						<span class="gchip">@H(GenderLabel(c.Gender))</span>
-					}
-				</div>
-			}
-		}
-		if (c.Kind == "recall" || c.Kind == "spell") && c.Revealed && c.Gender != "" {
-			<span class="gchip">@H(GenderLabel(c.Gender))</span>
-		}
+		@renderFace(c)
 		if !c.Revealed {
 			<p class="act__lead" lang="en">{ flashLead(c) }</p>
 		}
 	</div>
+}
+
+// letterFront shows one letter. A pair still shows one of its letters.
+// The name, the sound, and the example stay on letterBack.
+templ letterFront(c ReviewCard) {
+	@WordBlock(flashHebrew(c), "", "", "display", "", true)
+}
+
+templ letterBack(c ReviewCard) {
+	@WordBlock(flashHebrew(c), "", "", "display", "", true)
+	<div class="act__answer">
+		@answerHeading()
+		{{ asked := askedSide(c) }}
+		<p class="act__side">
+			if asked.Name != "" {
+				@H(asked.Name)
+			}
+			if asked.NameTranslit != "" {
+				<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ asked.NameTranslit }</bdi>
+			}
+			if asked.Sound != "" {
+				<bdi class="wb__tr" lang="en" dir="ltr">{ asked.Sound }</bdi>
+			}
+		</p>
+		if c.ExampleText != "" {
+			@WordBlock(c.ExampleText, c.ExampleTranslit, c.ExampleGloss, "card", "", false)
+		}
+		@flashAudio(c)
+		if len(c.Sides) > 1 {
+			<div class="act__pair">
+				for _, side := range c.Sides {
+					<p class="act__side">
+						@H(side.Hebrew)
+						if side.Name != "" {
+							@H(side.Name)
+						}
+						if side.Sound != "" {
+							<bdi class="wb__tr" lang="en" dir="ltr">{ side.Sound }</bdi>
+						}
+					</p>
+				}
+			</div>
+		}
+		if c.TellApart != "" {
+			<p class="act__cue" lang="en">Tell them apart: { c.TellApart }</p>
+		}
+		if c.DageshNote != "" {
+			<p class="act__cue" lang="en">{ c.DageshNote }</p>
+		}
+	</div>
+}
+
+// patternFront shows the pattern key. The forms' readings wait for patternBack.
+templ patternFront(c ReviewCard) {
+	@WordBlock(flashHebrew(c), "", "", "display", "", true)
+}
+
+templ patternBack(c ReviewCard) {
+	@WordBlock(flashHebrew(c), "", "", "display", "", true)
+	<div class="act__answer">
+		@answerHeading()
+		for _, side := range c.Sides {
+			<p class="act__side">
+				@H(side.Hebrew)
+				if side.Translit != "" {
+					<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ side.Translit }</bdi>
+				}
+				if side.Gloss != "" {
+					@E(side.Gloss)
+				}
+			</p>
+		}
+		@flashAudio(c)
+	</div>
+}
+
+// glossFront is the English prompt for recall and spell.
+templ glossFront(c ReviewCard) {
+	<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
+}
+
+templ glossBack(c ReviewCard) {
+	<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
+	<div class="act__word act__answer">
+		@answerHeading()
+		@WordBlock(flashHebrew(c), flashTranslit(c), "", "display", "", true)
+		@flashAudio(c)
+	</div>
+	if c.Gender != "" {
+		<span class="gchip">@H(GenderLabel(c.Gender))</span>
+	}
+}
+
+// wordFront is the Hebrew prompt for read and listen, including its clip.
+templ wordFront(c ReviewCard) {
+	<div class="act__word">
+		@WordBlock(flashHebrew(c), flashTranslit(c), "", "display", "", true)
+		@flashAudio(c)
+	</div>
+}
+
+templ wordBack(c ReviewCard) {
+	<div class="act__word">
+		@WordBlock(flashHebrew(c), flashTranslit(c), "", "display", "", true)
+		@flashAudio(c)
+	</div>
+	if c.Gloss != "" {
+		<div class="act__answer">
+			@answerHeading()
+			<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
+			if c.Gender != "" {
+				<span class="gchip">@H(GenderLabel(c.Gender))</span>
+			}
+		</div>
+	}
 }
 
 // answerHeading is where focus lands after Show answer. htmx focuses the

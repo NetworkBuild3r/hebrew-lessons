@@ -436,7 +436,9 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 		vm.Answer = q.fb
 		return vm, nil
 	}
-	if ref.Kind == session.KindLetter || ref.Kind == session.KindPattern {
+	// A mode that is not a lexeme loads from its key. Letter and pattern are
+	// those modes today. A later one is the same path once its entry says so.
+	if mode, ok := views.LookupReviewMode(ref.Kind); ok && !mode.Lexeme {
 		vm.Pointed = ref.Key
 		vm.Unpointed = units.Plain(ref.Key)
 		if err := s.fillDrill(ctx, q.userID, &vm); err != nil {
@@ -471,6 +473,13 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 		return ReviewCardVM{}, err
 	}
 	vm.ShowUnpointed = show
+	// The four study skills keep the fallback below, including a recall skill
+	// forcing the recall face. Any other registered mode keeps the kind the
+	// queue put on the card, so adding the mode entry is enough.
+	if _, ok := views.LookupReviewMode(ref.Kind); ok && !studySkillKind(ref.Kind) {
+		vm.Kind = ref.Kind
+		return vm, nil
+	}
 	switch ref.Kind {
 	case fsrs.SkillRead, fsrs.SkillRecall, fsrs.SkillListen, fsrs.SkillSpell:
 		vm.Kind = ref.Kind
@@ -487,11 +496,25 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 	return vm, nil
 }
 
-// fillDrill loads the letter or pattern answer from the card key and the lexicon.
-// The key stays the prompt. Names, sounds, glosses, the example word, and its clip
-// are answer fields. reviewView keeps them off the page until the reveal.
+func studySkillKind(kind string) bool {
+	switch kind {
+	case fsrs.SkillRead, fsrs.SkillRecall, fsrs.SkillListen, fsrs.SkillSpell:
+		return true
+	default:
+		return false
+	}
+}
+
+// fillDrill loads a card that is not a lexeme. Letter and pattern are the
+// modes that need it. A later mode whose card is a lexeme does not come
+// through here. A mode that is not a lexeme adds a branch in this switch.
+// The reveal route and the grade guard do not grow a branch for it.
+// The key stays the prompt. Names, sounds, glosses, the example word, and
+// its clip are answer fields. ConcealFront keeps them off the page until
+// the reveal.
 func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) error {
-	parts := splitDrillKey(vm.Pointed)
+	key := vm.Pointed
+	parts := splitDrillKey(key)
 	switch vm.Kind {
 	case session.KindLetter:
 		vm.Asked = pickPart(vm.CardID, parts)
@@ -509,7 +532,7 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 		}
 		vm.Sides = sides
 		vm.DageshNote = views.DageshNote(sides)
-		ex, ok, err := s.confusionExample(ctx, userID, fsrs.MissLetterPair, vm.Pointed)
+		ex, ok, err := s.confusionExample(ctx, userID, fsrs.MissLetterPair, key)
 		if err != nil {
 			return err
 		}
@@ -561,6 +584,11 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 				break
 			}
 		}
+	}
+	// The front shows the asked letter. The pair key was the lookup above.
+	if vm.Kind == session.KindLetter && vm.Asked != "" {
+		vm.Pointed = vm.Asked
+		vm.Unpointed = units.Plain(vm.Asked)
 	}
 	return nil
 }
@@ -731,46 +759,18 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 		Answered:      vm.Answered,
 		Correct:       vm.Correct,
 	}
-	if vm.Kind == session.KindLetter && vm.Asked != "" {
-		card.Pointed = vm.Asked
-		card.Unpointed = units.Plain(vm.Asked)
-	}
 	if vm.Item != nil {
 		card.Act = activityView(lang, csrf, vm)
 		return card
 	}
-	if vm.Revealed {
-		card.Sides = vm.Sides
-		card.ExampleText = vm.ExampleText
-		card.ExampleTranslit = vm.ExampleTranslit
-		card.ExampleGloss = vm.ExampleGloss
-		card.TellApart = vm.TellApart
-		card.DageshNote = vm.DageshNote
-		return card
-	}
-	// Anything that reveals the answer side is post-reveal only.
-	// read and listen: the Hebrew is the prompt, so pointed text, translit, and audio stay.
-	// The English gloss and the gender chip wait.
-	// recall and spell: the English gloss is the prompt. The Hebrew, its transliteration,
-	// its audio, and the gender chip all identify the answer, so they wait.
-	// letter and pattern: the key is the prompt. Names, sounds, glosses, the example
-	// word, and the clip wait.
-	card.Gender = ""
-	if vm.Kind == fsrs.SkillRecall || vm.Kind == fsrs.SkillSpell || vm.Kind == "recall" || vm.Kind == "spell" {
-		card.Pointed = ""
-		card.Unpointed = ""
-		card.Translit = ""
-		card.AudioURL = ""
-		return card
-	}
-	if vm.Kind == session.KindLetter || vm.Kind == session.KindPattern {
-		card.Translit = ""
-		card.Gloss = ""
-		card.AudioURL = ""
-		return card
-	}
-	card.Gloss = ""
-	return card
+	card.Sides = vm.Sides
+	card.ExampleText = vm.ExampleText
+	card.ExampleTranslit = vm.ExampleTranslit
+	card.ExampleGloss = vm.ExampleGloss
+	card.TellApart = vm.TellApart
+	card.DageshNote = vm.DageshNote
+	// The mode's hold decides what the front may carry. A revealed card passes through.
+	return views.ConcealFront(card)
 }
 
 func reviewStatus(err error) int {

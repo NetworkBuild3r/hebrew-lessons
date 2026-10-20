@@ -338,6 +338,7 @@ func (s *Session) Next() (CardRef, bool) {
 
 // Reveal marks the served card as peeked. Record then stores that flag.
 // A grade without Reveal is rejected with ErrNotRevealed.
+// The mark does not depend on the card type. Every review mode uses it.
 func (s *Session) Reveal(cardID int64) error {
 	if s == nil {
 		return errors.New("session: session is not configured")
@@ -375,6 +376,8 @@ func (s *Session) Record(ctx context.Context, cardID int64, rating fsrs.Rating) 
 	if !s.hasLast || cardID != s.last.CardID {
 		return fmt.Errorf("session: card %d: %w", cardID, ErrNotServed)
 	}
+	// The grade guard is this peeked flag. It does not look at the card kind.
+	// A new review mode does not add a guard.
 	if !s.peeked {
 		return fmt.Errorf("session: card %d: %w", cardID, ErrNotRevealed)
 	}

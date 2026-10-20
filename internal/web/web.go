@@ -181,6 +181,8 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 	mux.HandleFunc("GET /audio/{name}", func(w http.ResponseWriter, r *http.Request) {
 		serveAudio(s.audioDir, w, r)
 	})
+	// One reveal route and one grade route for every review mode.
+	// A new mode adds a views.ReviewModes entry, not a route.
 	mux.HandleFunc("GET /_hx/review/reveal", gated(gate, secure, s.reveal))
 	mux.HandleFunc("POST /_hx/review/reveal", gated(gate, secure, s.reveal))
 	mux.HandleFunc("POST /_hx/review/grade", gated(gate, secure, s.grade))
@@ -376,8 +378,9 @@ func (s *server) currentReview(r *http.Request, lang, csrf string) (views.Review
 	return card, nil
 }
 
-// reveal records that this serve was shown the answer, then returns the
-// back and the grade buttons. CSRF and Origin are the checks on /_hx/.
+// reveal is the one reveal path for every review mode. It records the peek
+// and renders the back the mode table names. A new mode does not add a
+// handler. CSRF and Origin are the checks on /_hx/.
 func (s *server) reveal(w http.ResponseWriter, r *http.Request) {
 	cardID, ok := reviewCardID(w, r)
 	if !ok {

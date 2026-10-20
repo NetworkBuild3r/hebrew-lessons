@@ -16,6 +16,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
+	"github.com/a-h/templ"
 )
 
 // TestReviewAnkiReveal is the Anki contract for every self-graded review card.
@@ -53,6 +54,125 @@ func TestReviewPromptFollowsTheKey(t *testing.T) {
 	if views.LetterName("ג") != "גימל" || views.LetterName("פ") != "פא" || views.LetterName("X") != "" {
 		t.Fatalf("letter names ג=%q פ=%q", views.LetterName("ג"), views.LetterName("פ"))
 	}
+}
+
+// TestReviewModesShareOneRevealPath locks the plug-in. Each current kind is
+// one table entry with a prompt, a front, and a back. ConcealFront is the
+// hold for that entry. Match and picture match are not entries. The reveal
+// route and the peeked grade guard are not per kind.
+func TestReviewModesShareOneRevealPath(t *testing.T) {
+	seen := map[string]int{}
+	for _, mode := range views.ReviewModes {
+		seen[mode.Kind]++
+		if mode.Prompt == nil || mode.Front == nil || mode.Back == nil {
+			t.Errorf("%s: a mode needs a prompt, a front, and a back", mode.Kind)
+		}
+		if mode.Prompt != nil && mode.Prompt("שלום") == "" {
+			t.Errorf("%s: prompt is empty", mode.Kind)
+		}
+	}
+	for _, kind := range []string{"read", "recall", "listen", "spell", "letter", "pattern"} {
+		if seen[kind] != 1 {
+			t.Errorf("%s registered %d times", kind, seen[kind])
+		}
+	}
+	for _, kind := range []string{"match", "picture_match"} {
+		if seen[kind] != 0 {
+			t.Errorf("%s is registered; it is not a mode yet", kind)
+		}
+		if _, ok := views.LookupReviewMode(kind); ok {
+			t.Errorf("lookup found %s", kind)
+		}
+	}
+	for _, kind := range []string{"read", "recall", "listen", "spell"} {
+		mode, ok := views.LookupReviewMode(kind)
+		if !ok || !mode.Lexeme {
+			t.Errorf("%s should load as a lexeme card", kind)
+		}
+	}
+	for _, kind := range []string{"letter", "pattern"} {
+		mode, ok := views.LookupReviewMode(kind)
+		if !ok || mode.Lexeme {
+			t.Errorf("%s should load from its key", kind)
+		}
+	}
+	if views.ReviewModeFor("letter").Prompt("ג/פ") != views.PromptLetter {
+		t.Fatal("letter mode prompt drifted from PromptLetter")
+	}
+	if views.ReviewModeFor("pattern").Prompt("הוא/היא") != views.PromptPattern || views.ReviewModeFor("pattern").Prompt("he/she") != views.PromptPatternSay {
+		t.Fatal("pattern mode prompt drifted")
+	}
+
+	recall := views.ReviewCard{
+		Kind: "recall", Pointed: "שלום", Unpointed: "שלום",
+		Translit: "shalom", AudioURL: "/audio/x.mp3", Gloss: "hello", Gender: "m",
+	}
+	hidden := views.ConcealFront(recall)
+	if hidden.Pointed != "" || hidden.Unpointed != "" || hidden.Translit != "" || hidden.AudioURL != "" || hidden.Gender != "" {
+		t.Fatalf("recall front kept the answer: %+v", hidden)
+	}
+	if hidden.Gloss != "hello" {
+		t.Fatalf("recall front gloss = %q", hidden.Gloss)
+	}
+	recall.Revealed = true
+	if shown := views.ConcealFront(recall); shown.Pointed != "שלום" || shown.AudioURL != "/audio/x.mp3" || shown.Gloss != "hello" {
+		t.Fatalf("revealed recall was concealed: %+v", shown)
+	}
+
+	read := views.ReviewCard{
+		Kind: "read", Pointed: "שלום", Unpointed: "שלום",
+		Translit: "shalom", AudioURL: "/audio/x.mp3", Gloss: "hello", Gender: "m",
+	}
+	readFront := views.ConcealFront(read)
+	if readFront.Pointed != "שלום" || readFront.Translit != "shalom" || readFront.AudioURL != "/audio/x.mp3" {
+		t.Fatalf("read front lost the prompt: %+v", readFront)
+	}
+	if readFront.Gloss != "" || readFront.Gender != "" {
+		t.Fatalf("read front kept the gloss: %+v", readFront)
+	}
+
+	letter := views.ReviewCard{
+		Kind: "letter", Pointed: "ג", Translit: "g", AudioURL: "/audio/x.mp3", Gloss: "gimel", Gender: "m",
+		Sides:       []views.DrillSide{{Hebrew: "ג", Name: "גימל", Sound: "ga"}, {Hebrew: "פ", Name: "פא"}},
+		ExampleText: "גשם", ExampleGloss: "rain", TellApart: "cue", DageshNote: "With the dot: p. Without: f.",
+	}
+	letterFront := views.ConcealFront(letter)
+	if letterFront.Pointed != "ג" {
+		t.Fatalf("letter front pointed = %q", letterFront.Pointed)
+	}
+	if letterFront.Gloss != "" || letterFront.Translit != "" || letterFront.AudioURL != "" || letterFront.Gender != "" ||
+		len(letterFront.Sides) != 0 || letterFront.ExampleText != "" || letterFront.TellApart != "" || letterFront.DageshNote != "" {
+		t.Fatalf("letter front kept the answer: %+v", letterFront)
+	}
+
+	frontHTML := renderMode(t, views.ReviewModeFor("letter").Front(letter))
+	if strings.Contains(frontHTML, "גימל") || strings.Contains(frontHTML, "פא") || strings.Contains(frontHTML, `name="rating"`) || strings.Contains(frontHTML, "act__answer") {
+		t.Fatalf("letter front face rendered the answer: %s", frontHTML)
+	}
+	if !strings.Contains(frontHTML, "ג") {
+		t.Fatalf("letter front face dropped the letter: %s", frontHTML)
+	}
+	backHTML := renderMode(t, views.ReviewModeFor("letter").Back(letter))
+	if !strings.Contains(backHTML, "גימל") || !strings.Contains(backHTML, ">Answer</h2>") || !strings.Contains(backHTML, "גשם") {
+		t.Fatalf("letter back face dropped the answer: %s", backHTML)
+	}
+	if strings.Contains(backHTML, `name="rating"`) {
+		t.Fatalf("letter back face owns the grade buttons: %s", backHTML)
+	}
+
+	unknown := views.ConcealFront(views.ReviewCard{Kind: "picture_match", Pointed: "שלום", Gloss: "hello", AudioURL: "/audio/x.mp3"})
+	if unknown.Pointed != "שלום" || unknown.AudioURL != "/audio/x.mp3" || unknown.Gloss != "" {
+		t.Fatalf("unknown kind should use the read hold: %+v", unknown)
+	}
+}
+
+func renderMode(t *testing.T, c templ.Component) string {
+	t.Helper()
+	var b strings.Builder
+	if err := c.Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	return b.String()
 }
 
 type ankiSpec struct {

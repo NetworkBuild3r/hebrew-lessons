@@ -282,21 +282,16 @@ type DrillSide struct {
 	Gloss        string
 }
 
-// answerSide reports whether this render may show the answer side.
-// Anything that reveals the answer is post-reveal only.
-// On read the Hebrew is the prompt, so its transliteration and audio stay.
-// On recall the Hebrew is the answer, so the word, its transliteration, and its audio wait.
-// On a letter or pattern drill the key is the prompt. Its name, sound, gloss, and clip wait.
+// answerSide reports whether this render may show the transliteration and the clip.
+// That follows the mode's hold, not a list of card types. A revealed card may.
+// Read and listen hold neither the transliteration nor the clip, so both stay
+// on the front. Every other current mode holds both, so both wait.
 func answerSide(c ReviewCard) bool {
 	if c.Revealed {
 		return true
 	}
-	switch c.Kind {
-	case "recall", "spell", "letter", "pattern":
-		return false
-	default:
-		return true
-	}
+	hold := ReviewModeFor(c.Kind).Hold
+	return !hold.Translit && !hold.Audio
 }
 
 // Flag is the attribute value for a bool.

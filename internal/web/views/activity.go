@@ -290,6 +290,132 @@ const (
 	PromptSpell      = "How do you spell this word?"
 )
 
+// FrontHold is the answer fields a mode keeps off the unrevealed card.
+// Hebrew clears the pointed text. Drill clears the sides, the example, and
+// the cues. The clip and data-translit stay on the front only when the mode
+// holds neither Translit nor Audio. Read and listen are that case.
+type FrontHold struct {
+	Hebrew   bool
+	Translit bool
+	Audio    bool
+	Gloss    bool
+	Gender   bool
+	Drill    bool
+}
+
+// ReviewMode is one self-graded card type.
+// Prompt, Front, Back, and Hold are the whole of what a mode owns.
+// Match and picture match are not entries yet. Adding either one is a new
+// element of ReviewModes. The reveal route and the grade guard do not change.
+// Lexeme is true when the study loader already has the word. A mode with
+// Lexeme false is loaded from its key beside fillDrill.
+type ReviewMode struct {
+	Kind   string
+	Prompt func(key string) string
+	Front  func(ReviewCard) templ.Component
+	Back   func(ReviewCard) templ.Component
+	Hold   FrontHold
+	Lexeme bool
+}
+
+// ReviewModes is where a new review mode plugs in.
+// One entry: the prompt, the front view, the back view, and the fields the
+// front hides. GET /_hx/review/reveal and Session.Record stay the shared path.
+// The slice is filled from init. A package-level literal would cycle: the
+// faces call answerSide, and answerSide reads this table.
+var ReviewModes []ReviewMode
+
+func init() {
+	ReviewModes = []ReviewMode{
+		{Kind: "read", Prompt: constPrompt(PromptRead), Front: wordFront, Back: wordBack, Hold: holdGloss, Lexeme: true},
+		{Kind: "listen", Prompt: constPrompt(PromptListen), Front: wordFront, Back: wordBack, Hold: holdGloss, Lexeme: true},
+		{Kind: "recall", Prompt: constPrompt(PromptRecall), Front: glossFront, Back: glossBack, Hold: holdHebrew, Lexeme: true},
+		{Kind: "spell", Prompt: constPrompt(PromptSpell), Front: glossFront, Back: glossBack, Hold: holdHebrew, Lexeme: true},
+		{Kind: "letter", Prompt: LetterPrompt, Front: letterFront, Back: letterBack, Hold: holdDrill},
+		{Kind: "pattern", Prompt: PatternPrompt, Front: patternFront, Back: patternBack, Hold: holdDrill},
+	}
+}
+
+var (
+	holdGloss  = FrontHold{Gloss: true, Gender: true}
+	holdHebrew = FrontHold{Hebrew: true, Translit: true, Audio: true, Gender: true}
+	holdDrill  = FrontHold{Translit: true, Audio: true, Gloss: true, Gender: true, Drill: true}
+)
+
+func constPrompt(text string) func(string) string {
+	return func(string) string { return text }
+}
+
+// LookupReviewMode reports the entry for kind. An unknown kind, including a
+// mode that has not been added yet, is not found.
+func LookupReviewMode(kind string) (ReviewMode, bool) {
+	for _, mode := range ReviewModes {
+		if mode.Kind == kind {
+			return mode, true
+		}
+	}
+	return ReviewMode{}, false
+}
+
+// ReviewModeFor is the mode that renders kind. An unknown kind uses read,
+// so the gloss stays off the front and the Hebrew stays.
+func ReviewModeFor(kind string) ReviewMode {
+	if mode, ok := LookupReviewMode(kind); ok {
+		return mode
+	}
+	if mode, ok := LookupReviewMode("read"); ok {
+		return mode
+	}
+	return ReviewMode{Kind: "read", Prompt: constPrompt(PromptRead), Hold: holdGloss, Lexeme: true}
+}
+
+// ConcealFront clears the fields the mode holds back. A revealed card is
+// returned unchanged. The reveal handler does not do this itself.
+func ConcealFront(card ReviewCard) ReviewCard {
+	if card.Revealed {
+		return card
+	}
+	hold := ReviewModeFor(card.Kind).Hold
+	if hold.Hebrew {
+		card.Pointed = ""
+		card.Unpointed = ""
+	}
+	if hold.Translit {
+		card.Translit = ""
+	}
+	if hold.Audio {
+		card.AudioURL = ""
+	}
+	if hold.Gloss {
+		card.Gloss = ""
+	}
+	if hold.Gender {
+		card.Gender = ""
+	}
+	if hold.Drill {
+		card.Sides = nil
+		card.ExampleText = ""
+		card.ExampleTranslit = ""
+		card.ExampleGloss = ""
+		card.TellApart = ""
+		card.DageshNote = ""
+	}
+	return card
+}
+
+// renderFace is the one face choice. The frame calls it for every mode.
+func renderFace(c ReviewCard) templ.Component {
+	mode := ReviewModeFor(c.Kind)
+	face := mode.Front
+	if c.Revealed {
+		face = mode.Back
+	}
+	if face == nil {
+		return templ.NopComponent
+	}
+	return face(c)
+}
+
 // LetterPrompt is the question for a letter drill.
 // A pair is still one letter on the front, so the question does not change.
 func LetterPrompt(string) string {
@@ -361,28 +487,17 @@ func stripDagesh(s string) string {
 }
 
 // flashLead is the line under the prompt of a flashcard.
+// The wording comes from the mode table. After the reveal every mode asks
+// the same grade question.
 func flashLead(c ReviewCard) string {
 	if c.Revealed {
 		return PromptGrade
 	}
-	return flashPrompt(c.Kind, c.Pointed)
-}
-
-func flashPrompt(kind, key string) string {
-	switch kind {
-	case "recall":
-		return PromptRecall
-	case "letter":
-		return LetterPrompt(key)
-	case "pattern":
-		return PatternPrompt(key)
-	case "listen":
-		return PromptListen
-	case "spell":
-		return PromptSpell
-	default:
+	prompt := ReviewModeFor(c.Kind).Prompt
+	if prompt == nil {
 		return PromptRead
 	}
+	return prompt(c.Pointed)
 }
 
 // flashHebrew is the Hebrew a flashcard shows: unpointed once the card is
