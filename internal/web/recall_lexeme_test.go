@@ -676,3 +676,194 @@ func TestRecallNoJSFallbackMarkup(t *testing.T) {
 		t.Fatal("clips.js is missing; the JS-on orb has nothing to upgrade")
 	}
 }
+
+// TestGradedRecallAndClozeNeedThreeChoices locks the floor #105 enforces.
+// A graded recall or cloze renders at least three choice buttons. Fewer than
+// three is a reveal: no answer buttons, and posting a lexeme id does not
+// record an attempt. The floor is #105's; this test only checks it.
+func TestGradedRecallAndClozeNeedThreeChoices(t *testing.T) {
+	const learners = 6
+	orders := map[string]map[string]int{}
+	emails := make([]string, learners)
+	for i := range emails {
+		emails[i] = fmt.Sprintf("floor%d@example.com", i)
+	}
+	fx := openVerbChoiceFixture(t, emails, []units.Activity{
+		{Type: units.ActivityRecall, Text: rwGar},
+		{Type: units.ActivityCloze, Text: rwGar},
+		{Type: units.ActivityRecall, Text: rwOkhel},
+		{Type: units.ActivityRecall, Text: rwShote},
+	}, []string{rwGar, rwOkhel, rwShote})
+	for i := 0; i < learners; i++ {
+		email := fmt.Sprintf("floor%d@example.com", i)
+		csrf := fmt.Sprintf("csrf-floor-%d", i)
+		user, err := fx.store.UserByEmail(context.Background(), email)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cookie := recallSession(t, fx.recallFixture, email, csrf)
+		path := "/lesson/" + itoa(fx.unitID) + "/0"
+		body := getAuthed(t, fx.h, cookie, path)
+		for step, typ := range []string{units.ActivityRecall, units.ActivityCloze} {
+			ask := activityHTML(t, body)
+			ids := gradedChoiceValues(ask)
+			if len(ids) < lessonMinChoices {
+				t.Fatalf("%s learner %d step %d has %d buttons, a graded ask needs at least %d:\n%s", typ, i, step, len(ids), lessonMinChoices, ask)
+			}
+			if !containsString(ids, itoa(fx.targetID)) {
+				t.Fatalf("%s learner %d step %d buttons %v omit the target %d", typ, i, step, ids, fx.targetID)
+			}
+			key := typ
+			if orders[key] == nil {
+				orders[key] = map[string]int{}
+			}
+			orders[key][strings.Join(ids, ",")]++
+			graded := postLesson(t, fx.h, cookie, path, runValue(t, body), itoa(fx.targetID), true, csrf)
+			if graded.Code != http.StatusOK || !strings.Contains(graded.Body.String(), "feedback--right") {
+				t.Fatalf("%s learner %d grade: %d\n%s", typ, i, graded.Code, graded.Body.String())
+			}
+			if n := countRows(t, fx.store, `SELECT COUNT(*) FROM attempts WHERE user_id = ?`, user.ID); n != step+1 {
+				t.Fatalf("%s learner %d attempts = %d, want %d", typ, i, n, step+1)
+			}
+			next := postLesson(t, fx.h, cookie, path, runValue(t, body), "continue", true, csrf)
+			if next.Code != http.StatusOK {
+				t.Fatalf("%s learner %d continue: %d\n%s", typ, i, next.Code, next.Body.String())
+			}
+			body = next.Body.String()
+		}
+	}
+	for typ, set := range orders {
+		if len(set) < 2 {
+			t.Fatalf("%s button order did not vary across %d learners: %+v", typ, learners, set)
+		}
+	}
+
+	for i := 0; i < 4; i++ {
+		for _, typ := range []string{units.ActivityRecall, units.ActivityCloze} {
+			email := fmt.Sprintf("thin-%s-%d@example.com", typ, i)
+			csrf := fmt.Sprintf("csrf-thin-%s-%d", typ, i)
+			fx := openThinChoiceFixture(t, email, typ)
+			cookie := recallSession(t, fx.recallFixture, email, csrf)
+			path := "/lesson/" + itoa(fx.unitID) + "/0"
+			body := getAuthed(t, fx.h, cookie, path)
+			ask := activityHTML(t, body)
+			if ids := gradedChoiceValues(ask); len(ids) > 0 || strings.Contains(ask, `class="choices"`) {
+				t.Fatalf("%s learner %d rendered %v buttons; fewer than 3 must be a reveal:\n%s", typ, i, ids, ask)
+			}
+			if !strings.Contains(ask, `value="continue"`) {
+				t.Fatalf("%s learner %d reveal has no Continue:\n%s", typ, i, ask)
+			}
+			posted := postLesson(t, fx.h, cookie, path, runValue(t, body), itoa(fx.targetID), true, csrf)
+			if posted.Code != http.StatusOK {
+				t.Fatalf("%s learner %d post id: %d\n%s", typ, i, posted.Code, posted.Body.String())
+			}
+			if strings.Contains(posted.Body.String(), "feedback--right") || strings.Contains(posted.Body.String(), `class="choices"`) {
+				t.Fatalf("%s learner %d graded a reveal:\n%s", typ, i, posted.Body.String())
+			}
+			if n := countRows(t, fx.store, `SELECT COUNT(*) FROM attempts WHERE user_id = ?`, fx.userID); n != 0 {
+				t.Fatalf("%s learner %d recorded %d attempts on a reveal", typ, i, n)
+			}
+			done := postLesson(t, fx.h, cookie, path, runValue(t, body), "continue", true, csrf)
+			if done.Code != http.StatusOK || !strings.Contains(done.Body.String(), "Lesson complete.") {
+				t.Fatalf("%s learner %d continue: %d\n%s", typ, i, done.Code, done.Body.String())
+			}
+			if n := countRows(t, fx.store, `SELECT COUNT(*) FROM attempts WHERE user_id = ?`, fx.userID); n != 0 {
+				t.Fatalf("%s learner %d continue recorded %d attempts", typ, i, n)
+			}
+		}
+	}
+}
+
+type choiceFixture struct {
+	recallFixture
+	unitID, userID, targetID int64
+}
+
+func openThinChoiceFixture(t *testing.T, email, typ string) choiceFixture {
+	t.Helper()
+	return openVerbChoiceFixture(t, []string{email}, []units.Activity{
+		{Type: typ, Text: rwGar + " " + rwPo},
+	}, []string{rwGar, rwPo})
+}
+
+func openVerbChoiceFixture(t *testing.T, emails []string, acts []units.Activity, words []string) choiceFixture {
+	t.Helper()
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	ctx := context.Background()
+	store, err := db.Open(ctx, filepath.Join(t.TempDir(), "hebrew.sqlite"), fixedClock(now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	var user db.User
+	for _, email := range emails {
+		created, err := store.CreateUser(ctx, email, "sub-"+email, auth.RoleLearner)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if user.ID == 0 {
+			user = created
+		}
+	}
+	var inputs []lexicon.Input
+	for _, w := range recallLexicon() {
+		inputs = append(inputs, w.input())
+	}
+	if _, _, err := store.UpsertLexemes(ctx, inputs); err != nil {
+		t.Fatal(err)
+	}
+	unitID := putLesson(t, store, nil, units.Unit{
+		Title: "Choices", Situation: "Recall.", Position: 0,
+		NewWords: words,
+		Lessons:  []units.Lesson{{Kind: units.KindLesson, Activities: acts}},
+	}, "shared")
+	publish(t, store, unitID)
+	target := rwGar
+	lex, err := store.LexemesByText(ctx, []string{units.Normalize(target)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, ok := lex[units.Normalize(target)]
+	if !ok {
+		t.Fatal("target missing")
+	}
+	svc, err := auth.New(auth.Config{
+		PublicOrigin: "https://learn.example", Clock: fixedClock(now), Store: store,
+		AllowedEmails: emails,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := NewOptions(nil, svc, Options{Store: store})
+	return choiceFixture{
+		recallFixture: recallFixture{h: h, store: store},
+		unitID:        unitID,
+		userID:        user.ID,
+		targetID:      view.ID,
+	}
+}
+
+func gradedChoiceValues(html string) []string {
+	var out []string
+	for _, m := range regexp.MustCompile(`(?s)<button\b([^>]*)>`).FindAllStringSubmatch(html, -1) {
+		open := m[1]
+		if !strings.Contains(open, `name="answer"`) {
+			continue
+		}
+		vm := regexp.MustCompile(`value="(\d+)"`).FindStringSubmatch(open)
+		if vm == nil {
+			continue
+		}
+		out = append(out, vm[1])
+	}
+	return out
+}
+
+func containsString(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}

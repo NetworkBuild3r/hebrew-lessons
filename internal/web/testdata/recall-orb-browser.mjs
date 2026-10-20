@@ -2,10 +2,13 @@
 // Prints one JSON object: { checks: [{name, ok, detail}], errors }.
 //
 // The lead's ruling on a clip:
-//   JS on (html.js): the native audio is not visible, not focusable, and not in
-//   the accessibility tree. It is hidden with display:none or the hidden
-//   attribute. Opacity and a 1px off-screen box do not count.
-//   JS off (clips.js not loaded): the native bar is visible and plays.
+//   JS on (html.js): every native bar's computed display is "none".
+//   The hidden attribute is not an alternative: clips.js always sets it.
+//   mode-js-on-hidden-mutation replaces that rule with opacity:0 and a 1px
+//   box and requires the strict check to fail, then removes the override.
+//   JS off: each bar is at least 200px wide at 390 and at 1440. A real click
+//   on the native play control starts playback. Tab reaches a visible bar,
+//   which is the positive control that the Tab walk can see a focusable bar.
 //   Each clip has exactly one way to play in that mode. Never both a bar and an orb.
 // Orbs (hero, word, dialogue .c-orb) are buttons with a name and a 44px hit area.
 // One clip plays at a time. States run idle -> loading -> playing.
@@ -134,6 +137,91 @@ const axAudio = async (page) => {
   return exposed;
 };
 
+// activateNativeBar starts one native control the way a person would.
+// It never calls audio.play(). The play glyph sits at the left of Chromium's
+// media controls. If that click misses, CDP clicks the play button inside the
+// closed shadow root, then Space and Enter are the keyboard fallback.
+const startedPlaying = (page, id) => page.waitForFunction((id) => {
+  const a = document.getElementById(id);
+  return !!(a && (!a.paused || a.currentTime > 0));
+}, id, { timeout: 1500 }).then(() => true).catch(() => false);
+
+const playbackState = (page, id) => page.evaluate((id) => {
+  const a = document.getElementById(id);
+  return a ? { paused: a.paused, t: a.currentTime } : { paused: true, t: 0 };
+}, id);
+
+const clickPlayInShadow = async (page, id) => {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    const doc = await cdp.send("DOM.getDocument", { depth: -1, pierce: true });
+    const button = findPlayButton(doc.root, id);
+    if (!button) return false;
+    const model = await cdp.send("DOM.getBoxModel", { nodeId: button.nodeId });
+    const q = model.model.content;
+    const x = (q[0] + q[2] + q[4] + q[6]) / 4;
+    const y = (q[1] + q[3] + q[5] + q[7]) / 4;
+    await page.mouse.click(x, y);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await cdp.detach().catch(() => {});
+  }
+};
+
+const nodeAttr = (node, name) => {
+  const attrs = node.attributes || [];
+  for (let i = 0; i < attrs.length; i += 2) {
+    if (attrs[i] === name) return attrs[i + 1] || "";
+  }
+  return "";
+};
+
+const findPlayButton = (root, audioId) => {
+  let host = null;
+  const walk = (node, fn) => {
+    fn(node);
+    for (const child of node.children || []) walk(child, fn);
+    for (const shadow of node.shadowRoots || []) walk(shadow, fn);
+  };
+  walk(root, (node) => {
+    if (!host && nodeAttr(node, "id") === audioId) host = node;
+  });
+  if (!host) return null;
+  let play = null;
+  walk(host, (node) => {
+    if (play) return;
+    const label = (nodeAttr(node, "aria-label") + " " + (node.nodeName || "")).toLowerCase();
+    const role = nodeAttr(node, "role").toLowerCase();
+    const looksButton = node.nodeName === "BUTTON" || role === "button";
+    if (looksButton && label.includes("play")) play = node;
+  });
+  return play;
+};
+
+const activateNativeBar = async (page, id) => {
+  const loc = page.locator("#" + id);
+  await loc.scrollIntoViewIfNeeded();
+  const box = await loc.boundingBox();
+  if (!box) return { ok: false, how: "no box", paused: true, t: 0 };
+  const finish = async (how) => {
+    const state = await playbackState(page, id);
+    return { ok: true, how, paused: state.paused, t: state.t };
+  };
+  // A real pointer click on the native play glyph, not audio.play().
+  await page.mouse.click(box.x + 18, box.y + box.height / 2);
+  if (await startedPlaying(page, id)) return finish("click");
+  if (await clickPlayInShadow(page, id) && await startedPlaying(page, id)) return finish("cdp-play");
+  await loc.focus();
+  await page.keyboard.press("Space");
+  if (await startedPlaying(page, id)) return finish("space");
+  await page.keyboard.press("Enter");
+  if (await startedPlaying(page, id)) return finish("enter");
+  const state = await playbackState(page, id);
+  return { ok: false, how: "no-gesture", paused: state.paused, t: state.t };
+};
+
 const tabTags = async (page) => {
   await page.evaluate(() => {
     document.body.setAttribute("tabindex", "-1");
@@ -144,8 +232,16 @@ const tabTags = async (page) => {
     await page.keyboard.press("Tab");
     const info = await page.evaluate(() => {
       const el = document.activeElement;
-      if (!el) return { tag: "", id: "", cls: "" };
-      return { tag: el.tagName, id: el.id || "", cls: String(el.className || "") };
+      if (!el) return { tag: "", id: "", cls: "", display: "", w: 0, h: 0 };
+      const r = el.getBoundingClientRect();
+      return {
+        tag: el.tagName,
+        id: el.id || "",
+        cls: String(el.className || ""),
+        display: getComputedStyle(el).display,
+        w: r.width,
+        h: r.height,
+      };
     });
     seen.push(info);
     if (info.tag === "BODY") break;
@@ -202,17 +298,57 @@ try {
   );
 
   const onFacts = await page.evaluate(clipFacts);
-  const hiddenProperly = onFacts.every((c) => c.display === "none" || c.hiddenAttr);
-  const opacityOrOffscreen = onFacts.filter((c) => c.display !== "none" && !c.hiddenAttr && (Number(c.opacity) === 0 || (c.position === "absolute" && c.w <= 1)));
+  const displayNone = onFacts.length > 0 && onFacts.every((c) => c.display === "none");
   check(
     "mode-js-on-hidden",
-    onFacts.length > 0 && hiddenProperly,
-    hiddenProperly
+    displayNone,
+    displayNone
       ? onFacts.map((c) => c.id + " display=" + c.display).join("; ")
-      : "native audio is not display:none and has no hidden attribute. " +
-        opacityOrOffscreen.map((c) => `${c.id} display=${c.display} opacity=${c.opacity} position=${c.position} ${c.w.toFixed(1)}x${c.h.toFixed(1)}`).join("; ") +
-        ". html.js .clip > audio in internal/web/static/css/base.css hides with opacity:0 and a 1px box (the rule at .clip > audio / html.js .clip > audio), which the lead ruled out.",
+      : "native audio computed display is not none. The hidden attribute does not count. " +
+        onFacts.map((c) => `${c.id} display=${c.display} opacity=${c.opacity} hiddenAttr=${c.hiddenAttr} ${c.w.toFixed(1)}x${c.h.toFixed(1)}`).join("; "),
   );
+  // Mutation: the ruled-out hide (opacity 0 and a 1px box) must make the
+  // strict display check fail. clips.js still sets hidden; that must not save it.
+  await page.evaluate(() => {
+    const style = document.createElement("style");
+    style.id = "qa-hide-mutation";
+    style.textContent = [
+      "html.js .clip > audio {",
+      "  display: block !important;",
+      "  position: absolute !important;",
+      "  inline-size: 1px !important;",
+      "  block-size: 1px !important;",
+      "  margin: 0 !important;",
+      "  padding: 0 !important;",
+      "  border: 0 !important;",
+      "  opacity: 0 !important;",
+      "}",
+      "html.js .clip-rows {",
+      "  display: flex !important;",
+      "  position: absolute !important;",
+      "  inline-size: 1px !important;",
+      "  block-size: 1px !important;",
+      "  opacity: 0 !important;",
+      "  overflow: hidden !important;",
+      "}",
+    ].join("\n");
+    document.head.appendChild(style);
+  });
+  const mutated = await page.evaluate(clipFacts);
+  const mutationFailsStrict = mutated.length > 0 && mutated.some((c) => c.display !== "none");
+  check(
+    "mode-js-on-hidden-mutation",
+    mutationFailsStrict,
+    mutationFailsStrict
+      ? "replacing display:none with opacity:0 and a 1px box makes display===none fail. " +
+        mutated.map((c) => `${c.id} display=${c.display} opacity=${c.opacity} hiddenAttr=${c.hiddenAttr} ${c.w.toFixed(1)}x${c.h.toFixed(1)}`).join("; ")
+      : "the strict check still passed under opacity:0 and a 1px box. " +
+        mutated.map((c) => `${c.id} display=${c.display} hiddenAttr=${c.hiddenAttr}`).join("; "),
+  );
+  await page.evaluate(() => {
+    const style = document.getElementById("qa-hide-mutation");
+    if (style) style.remove();
+  });
   const exposed = await axAudio(page);
   check("mode-js-on-a11y", exposed.length === 0, exposed.length ? "accessibility tree still has " + exposed.join(",") : "no audio role in the accessibility tree");
   const tabsOn = await tabTags(page);
@@ -343,42 +479,41 @@ try {
   await bare.goto(origin + "/lesson/" + unit + "/0", { waitUntil: "domcontentloaded" });
   await bare.waitForSelector(".clip audio");
   const jsClass = await bare.evaluate(() => document.documentElement.classList.contains("js"));
+  const usable = (facts) => facts.length > 0 && facts.every((c) => c.controls && c.audioVisible && c.w >= 200 && c.h >= 16 && !c.orbVisible);
+  const describe = (facts) => facts.map((c) => `${c.id} controls=${c.controls} bar=${c.audioVisible} ${c.w.toFixed(0)}x${c.h.toFixed(0)} orb=${c.orbVisible} display=${c.display}`).join("; ");
   const offFacts = await bare.evaluate(clipFacts);
-  // A word bar fills its column, so a short word is narrower than 40px.
-  // The native control is the controls attribute plus a bar taller than a
-  // 1px hide (audioVisible already rejects display:none, opacity 0, and a
-  // 1×1 box).
-  const bars = offFacts.length > 0 && offFacts.every((c) => c.controls && c.audioVisible && c.h >= 16 && !c.orbVisible);
-  check(
-    "mode-js-off-bar",
-    !jsClass && bars,
-    `html.js=${jsClass}; ` + offFacts.map((c) => `${c.id} controls=${c.controls} bar=${c.audioVisible} ${c.w.toFixed(0)}x${c.h.toFixed(0)} orb=${c.orbVisible} display=${c.display}`).join("; "),
-  );
-  const played = await bare.evaluate(async () => {
-    const out = [];
-    for (const audio of document.querySelectorAll(".clip audio")) {
-      try {
-        await audio.play();
-        out.push({ id: audio.id, ok: !audio.paused && !audio.error, paused: audio.paused, err: audio.error && String(audio.error.code) });
-      } catch (e) {
-        out.push({ id: audio.id, ok: false, err: String(e) });
-      }
-    }
-    return out;
-  });
+  const bars390 = usable(offFacts);
+  check("mode-js-off-bar-390", !jsClass && bars390, `viewport=390 html.js=${jsClass}; ` + describe(offFacts));
+  await bare.setViewportSize({ width: 1440, height: 900 });
+  const wideFacts = await bare.evaluate(clipFacts);
+  const bars1440 = usable(wideFacts);
+  check("mode-js-off-bar-1440", !jsClass && bars1440, `viewport=1440 html.js=${jsClass}; ` + describe(wideFacts));
+  await bare.setViewportSize({ width: 390, height: 844 });
+  const played = [];
+  for (const fact of offFacts) {
+    const result = await activateNativeBar(bare, fact.id);
+    played.push({ id: fact.id, ...result });
+  }
   check(
     "mode-js-off-plays",
     played.length > 0 && played.every((p) => p.ok),
-    played.map((p) => `${p.id} ok=${p.ok} ${p.err || ""}`).join("; ") || "no audio",
+    played.map((p) => `${p.id} ok=${p.ok} via=${p.how} paused=${p.paused} t=${Number(p.t).toFixed(2)}`).join("; ") || "no audio",
   );
   const tabsOff = await tabTags(bare);
   const orbTab = tabsOff.filter((t) => String(t.cls).includes("orb"));
-  const audioReached = tabsOff.some((t) => t.tag === "AUDIO");
+  const visibleAudio = tabsOff.filter((t) => t.tag === "AUDIO" && t.display !== "none" && t.w >= 200 && t.h >= 16);
   const bothOff = offFacts.filter((c) => c.audioVisible && c.orbVisible);
   check(
+    "mode-js-off-tab-reaches-bar",
+    visibleAudio.length >= 1,
+    visibleAudio.length
+      ? "positive control: Tab reached a visible bar " + visibleAudio.map((t) => `${t.id} ${t.w.toFixed(0)}x${t.h.toFixed(0)} display=${t.display}`).join("; ")
+      : "Tab did not reach a visible native bar. Walk: " + JSON.stringify(tabsOff.filter((t) => t.tag === "AUDIO" || t.tag === "BUTTON").slice(0, 8)),
+  );
+  check(
     "mode-js-off-one-way",
-    bars && bothOff.length === 0 && orbTab.length === 0 && audioReached,
-    `orb focused=${orbTab.length} audio focused=${audioReached}; ` + offFacts.map((c) => `${c.id} bar=${c.audioVisible} orb=${c.orbVisible}`).join("; "),
+    bars390 && bothOff.length === 0 && orbTab.length === 0 && visibleAudio.length >= 1,
+    `orb focused=${orbTab.length} visible audio focused=${visibleAudio.length}; ` + offFacts.map((c) => `${c.id} bar=${c.audioVisible} orb=${c.orbVisible}`).join("; "),
   );
   await off.close();
 } catch (e) {
