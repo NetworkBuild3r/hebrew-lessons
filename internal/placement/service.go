@@ -408,6 +408,64 @@ func (e *Engine) lexeme(ctx context.Context, w Word) (int64, error) {
 	return e.store.UpsertPlacementLexeme(ctx, w.Text, w.Gloss, w.POS, w.Translit, w.Gender)
 }
 
+// Replace swaps the open listening item for another word of the same band, when the client could not play
+// its clip (INIT-015/SPEC-012). The item keeps its id and place in the run. The word that was swapped out is
+// remembered on the item, so it is not dealt again, and nothing about it is stored as an answer. A word is
+// chosen only if it has a clip. With none left, Replace returns ErrNoAudio and leaves the item as it was.
+// Only a listening item can be replaced: a letters item has no spare clip (the six letters are the part), and
+// reading and typing items play none. Those return ErrNotReady. An id that is not the open item is ErrWrongItem.
+func (e *Engine) Replace(ctx context.Context, userID, runID int64, itemID string) (Step, error) {
+	if err := e.ready(); err != nil {
+		return Step{}, err
+	}
+	d, err := e.loadDeck()
+	if err != nil {
+		return Step{}, err
+	}
+	rc, err := e.load(ctx, userID, runID, false)
+	if err != nil {
+		return Step{}, err
+	}
+	open := openItem(rc.items)
+	if open == nil || itemToken(*open) != itemID {
+		return Step{}, ErrWrongItem
+	}
+	if open.Part != string(PartListening) {
+		return Step{}, ErrNotReady
+	}
+	prev, err := parseStored(open.Options)
+	if err != nil {
+		return Step{}, err
+	}
+	it, ok, err := e.dealWord(ctx, d, &rc, PartListening, SkillListen, open.Band)
+	if err != nil {
+		return Step{}, err
+	}
+	if !ok {
+		return Step{}, ErrNoAudio
+	}
+	next, err := parseStored(it.Options)
+	if err != nil {
+		return Step{}, err
+	}
+	next.Skipped = append(append([]string{}, prev.Skipped...), open.ItemID)
+	body, err := json.Marshal(next)
+	if err != nil {
+		return Step{}, err
+	}
+	done, err := e.store.ReplacePlacementItem(ctx, runID, open.Seq, it.ItemID, it.Band, string(body), int(it.CorrectIdx.Int64), e.clock.Now())
+	if err != nil {
+		return Step{}, err
+	}
+	if !done {
+		return Step{}, ErrWrongItem
+	}
+	if rc.items, err = e.store.ListPlacementItems(ctx, runID); err != nil {
+		return Step{}, err
+	}
+	return e.advance(ctx, d, rc)
+}
+
 // StartTyping opens the optional typing part. It is valid once the reading part is over, when Step
 // has TypingOffer set. With no word to ask, the run finishes and the step is Done.
 func (e *Engine) StartTyping(ctx context.Context, userID, runID int64) (Step, error) {
@@ -684,6 +742,12 @@ func (e *Engine) dealWord(ctx context.Context, d *deckV3, rc *runCtx, part Part,
 	for _, it := range rc.items {
 		if it.Part == string(PartListening) || it.Part == string(PartReading) {
 			asked[it.ItemID] = true
+			// A word swapped out of an item (Replace) is never dealt again.
+			if si, err := parseStored(it.Options); err == nil {
+				for _, id := range si.Skipped {
+					asked[id] = true
+				}
+			}
 		}
 	}
 	var clip string
@@ -735,6 +799,8 @@ func (e *Engine) dealWord(ctx context.Context, d *deckV3, rc *runCtx, part Part,
 type storedItem struct {
 	Audio   string         `json:"audio,omitempty"`
 	Options []storedOption `json:"options"`
+	// Skipped is the fixture ids of words swapped out of this item because their clip would not play.
+	Skipped []string `json:"skipped,omitempty"`
 }
 
 type storedOption struct {

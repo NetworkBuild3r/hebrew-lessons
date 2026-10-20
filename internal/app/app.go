@@ -24,6 +24,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcpstore"
@@ -194,6 +195,10 @@ type App struct {
 	authSvc   *auth.Service
 	review    *fsrs.Review
 	placement *placement.Service
+
+	// placementEngine is the v3 placement test that the /placement screens serve (INIT-015/SPEC-012).
+	placementEngine *placement.Engine
+
 	audioDir  string
 	tts       audio.TTS
 	web       http.Handler
@@ -289,11 +294,13 @@ func NewApp(cfg Config) (*App, error) {
 		audioDir:  audioDir,
 		tts:       tts,
 	}
+	// The engine records through the same evidence recorder, and reads the same clock, as the activity screens.
+	a.placementEngine = placement.NewEngine(store, evidence.New(store, review, cfg.Clock), cfg.Clock)
 	health := a.healthHandler()
 	a.web = web.NewOptions(health, svc, web.Options{
 		Store:    store,
 		AudioDir: audioDir,
-		Deck:     a.placement,
+		Deck:     a.placementEngine,
 		Runs:     store,
 		// A dialogue line is played from the clip in its speaker's voice.
 		Voices: cfg.Voices(),
@@ -359,6 +366,10 @@ func (a *App) Review() *fsrs.Review { return a.review }
 // Placement is the vocabulary placement deck.
 // It uses the clock from Config, the same clock the store and the review service use.
 func (a *App) Placement() *placement.Service { return a.placement }
+
+// PlacementEngine is the v3 placement test: letters, listening, reading, and typing.
+// It uses the clock from Config.
+func (a *App) PlacementEngine() *placement.Engine { return a.placementEngine }
 
 // Close releases the database. /healthz answers 503 after Close returns.
 func (a *App) Close() error {

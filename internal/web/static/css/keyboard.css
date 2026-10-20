@@ -38,6 +38,8 @@
   display: grid;
   place-items: center;
   min-inline-size: 0;
+  /* A button does not stretch its content to its own height, so the cap is as tall as the hit area. */
+  block-size: calc(var(--size-tap) - var(--space-1));
   background: var(--surface);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-sm);

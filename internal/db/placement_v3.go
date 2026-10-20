@@ -248,6 +248,33 @@ func (s *Store) ClaimPlacementItem(ctx context.Context, runID int64, seq int, ou
 	return n > 0, nil
 }
 
+// ReplacePlacementItem swaps the word of an open item for another, keeping its sequence number, so the
+// client's item id is unchanged. It is for a listening clip that cannot be played (INIT-015/SPEC-012). It
+// returns false, and writes nothing, when the item is answered or does not exist. correctIdx is the index of
+// the right option in options. The word that was replaced is named in options by the caller.
+func (s *Store) ReplacePlacementItem(ctx context.Context, runID int64, seq int, itemID string, band int, options string, correctIdx int, shown time.Time) (bool, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return false, err
+	}
+	res, err := conn.ExecContext(ctx, `
+		UPDATE placement_items
+		SET item_id = ?, band = ?, options = ?, correct_idx = ?, shown_at = ?
+		WHERE run_id = ? AND seq = ? AND outcome IS NULL`,
+		itemID, band, options, correctIdx, FormatTime(shown), runID, seq)
+	if isUniqueConstraint(err) {
+		return false, fmt.Errorf("db: replace placement item: %w", ErrPlacementItemExists)
+	}
+	if err != nil {
+		return false, fmt.Errorf("db: replace placement item: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("db: replace placement item: %w", err)
+	}
+	return n > 0, nil
+}
+
 // ReleasePlacementItem reopens an item whose answer was claimed but could not be recorded,
 // so the learner can answer it again.
 func (s *Store) ReleasePlacementItem(ctx context.Context, runID int64, seq int) error {
