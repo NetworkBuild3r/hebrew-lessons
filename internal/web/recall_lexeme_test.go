@@ -22,14 +22,25 @@ import (
 // single words on purpose: a recall choice that shows a phrase or a sentence
 // is a failure even when the button value is some lexeme id.
 const (
-	rwShalom = "שָׁלוֹם"
-	rwBoker  = "בֹּקֶר"
-	rwSefer  = "סֵפֶר"
-	rwAni    = "אֲנִי"
-	rwGar    = "גָּר"
-	rwPo     = "פֹּה"
-	rwKen    = "כֵּן"
-	rwLo     = "לֹא"
+	rwShalom  = "שָׁלוֹם"
+	rwBoker   = "בֹּקֶר"
+	rwSefer   = "סֵפֶר"
+	rwAni     = "אֲנִי"
+	rwGar     = "גָּר"
+	rwPo      = "פֹּה"
+	rwKen     = "כֵּן"
+	rwLo      = "לֹא"
+	rwMayim   = "מַיִם"
+	rwBayit   = "בַּיִת"
+	rwGam     = "גַּם"
+	rwRak     = "רַק"
+	rwAval    = "אֲבָל"
+	rwOkhel   = "אוֹכֵל"
+	rwShote   = "שׁוֹתֶה"
+	rwRoeh    = "רוֹאֶה"
+	rwEifo    = "אֵיפֹה"
+	rwAkhshav = "עַכְשָׁיו"
+	rwSham    = "שָׁם"
 )
 
 // v3OneWordPrompt is the ask sentence a recall of one word has rendered
@@ -60,6 +71,17 @@ func recallLexicon() []recallWord {
 		{rwPo, "here", "po", "adv", ""},
 		{rwKen, "yes", "ken", "particle", ""},
 		{rwLo, "no", "lo", "particle", ""},
+		{rwMayim, "water", "mayim", "noun", "m"},
+		{rwBayit, "house", "bayit", "noun", "m"},
+		{rwGam, "also", "gam", "particle", ""},
+		{rwRak, "only", "rak", "particle", ""},
+		{rwAval, "but", "aval", "particle", ""},
+		{rwOkhel, "eats", "okhel", "verb", ""},
+		{rwShote, "drinks", "shote", "verb", ""},
+		{rwRoeh, "sees", "roeh", "verb", ""},
+		{rwEifo, "where", "eifo", "adv", ""},
+		{rwAkhshav, "now", "akhshav", "adv", ""},
+		{rwSham, "there", "sham", "adv", ""},
 	}
 }
 
@@ -83,12 +105,34 @@ func recallCourse() []recallUnit {
 	return []recallUnit{
 		{
 			title: "One word", position: 0,
-			newWords: []string{rwShalom, rwBoker, rwSefer, rwKen},
+			// At least four words of each part of speech, so a recall can draw
+			// three same-POS distractors from this unit. Later units draw
+			// those words once the line's own glosses are blocked.
+			newWords: []string{
+				rwShalom, rwBoker, rwSefer, rwKen,
+				rwMayim, rwBayit, rwGam, rwRak, rwAval,
+				rwOkhel, rwShote, rwRoeh, rwGar,
+				rwEifo, rwAkhshav, rwSham, rwPo, rwLo,
+			},
 			steps: []recallStep{
 				{line: rwShalom, target: rwShalom},
 				{line: rwBoker, target: rwBoker},
 				{line: rwSefer, target: rwSefer},
 				{line: rwKen, target: rwKen},
+				{line: rwMayim, target: rwMayim},
+				{line: rwBayit, target: rwBayit},
+				{line: rwGam, target: rwGam},
+				{line: rwRak, target: rwRak},
+				{line: rwAval, target: rwAval},
+				{line: rwOkhel, target: rwOkhel},
+				{line: rwShote, target: rwShote},
+				{line: rwRoeh, target: rwRoeh},
+				{line: rwGar, target: rwGar},
+				{line: rwEifo, target: rwEifo},
+				{line: rwAkhshav, target: rwAkhshav},
+				{line: rwSham, target: rwSham},
+				{line: rwPo, target: rwPo},
+				{line: rwLo, target: rwLo},
 			},
 		},
 		{
@@ -273,10 +317,11 @@ func walkRecallUnit(t *testing.T, fx recallFixture, cookie *http.Cookie, csrf st
 		ask := activityHTML(t, body)
 		checkRecallAsk(t, ask, specStep, target, byID)
 		seed := choices.ChoiceSeed{RunID: runN, Step: step, Attempt: 0, TargetID: target.ID}
-		want := lessonChoices(unitLex, earlier, target, seed, false, false)
+		act := units.Activity{Type: units.ActivityRecall, Text: specStep.line}
+		want := askChoices(act.Type, unitLex, earlier, target, seed, lineMateExclude(act, fx.lex, target))
 		got := parseRecallChoices(t, ask)
-		if len(got) != len(want) || len(got) < 2 {
-			t.Fatalf("unit %d step %d seed %+v: %d buttons, Pick returned %d (want at least 2)\n%s", position, step, seed, len(got), len(want), ask)
+		if len(got) != len(want) || len(got) != lessonWideChoices {
+			t.Fatalf("unit %d step %d seed %+v: %d buttons, askChoices returned %d (recall asks for %d)\n%s", position, step, seed, len(got), len(want), lessonWideChoices, ask)
 		}
 		ids := make([]string, len(got))
 		for i := range got {
@@ -347,11 +392,11 @@ func checkRecallAsk(t *testing.T, ask string, step recallStep, target db.LexemeV
 		t.Fatalf("recall has no choices:\n%s", ask)
 	}
 	if step.multi {
-		prompt := `<bdi lang="en" dir="ltr">What does </bdi><bdi lang="he" dir="rtl">` + target.Text + `</bdi><bdi lang="en" dir="ltr"> mean?</bdi>`
+		prompt := `<bdi lang="en" dir="ltr">What does </bdi><bdi class="recall-prompt" lang="he" dir="rtl">` + target.Text + `</bdi><bdi lang="en" dir="ltr"> mean?</bdi>`
 		if !strings.Contains(head, prompt) || strings.Contains(ask, "What does this Hebrew mean?") {
 			t.Fatalf("multi-word prompt is not the target word %q:\n%s", target.Text, head)
 		}
-		card := elementFrom(head, `<span class="wb wb--card"><mark class="target">`)
+		card := elementFrom(head, `<span class="wb wb--card"><span class="recall-he"><mark class="target">`)
 		if card == "" || strings.Count(head, `class="target"`) != 1 {
 			t.Fatalf("multi-word recall does not mark exactly one target:\n%s", head)
 		}
@@ -411,7 +456,7 @@ func checkRecallAsk(t *testing.T, ask string, step recallStep, target db.LexemeV
 func checkRecallReveal(t *testing.T, revealed string, step recallStep, target db.LexemeView) {
 	t.Helper()
 	if step.multi {
-		card := elementFrom(revealed, `<span class="wb wb--card"><mark class="target">`)
+		card := elementFrom(revealed, `<span class="wb wb--card"><span class="recall-he"><mark class="target">`)
 		if card == "" {
 			t.Fatalf("the target mark is gone after the answer:\n%s", revealed)
 		}
