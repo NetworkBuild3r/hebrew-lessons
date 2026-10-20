@@ -21,7 +21,7 @@ const (
 	m9Ins2   = `INSERT INTO regression_events (user_id, kind, lexeme_id, skill, from_state, to_state, day, cause) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 )
 
-var m9Versions = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
+var m9Versions = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14}
 
 // m9At008 builds a database at version 009 with data in every older table, then adds
 // regression_events rows of a few shapes and a gap in the ids.
@@ -111,6 +111,7 @@ func TestMigrate009KeepsRowsIdsAndIndexes(t *testing.T) {
 		delete(after.rowCnts, name)
 		after.schema = m8SchemaWithout(after.schema, name)
 	}
+	others, after = m14Align(t, others, after)
 	if !reflect.DeepEqual(after.tables, others.tables) {
 		t.Fatal("rows of another table changed")
 	}

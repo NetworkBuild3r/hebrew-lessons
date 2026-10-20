@@ -1023,6 +1023,8 @@ func (e *Engine) finish(ctx context.Context, d *deckV3, rc runCtx) (RunResult, e
 	if err != nil {
 		return RunResult{}, err
 	}
+	// FinishPlacement writes the finish, the stored start unit, the stored count of
+	// distinct Good lexemes, and users.onboarded_at, in one transaction.
 	err = e.store.FinishPlacement(ctx, rc.run.ID, now, legacyLevel(res), "", string(body))
 	if err != nil {
 		run, gerr := e.store.GetPlacementRun(ctx, rc.run.ID)

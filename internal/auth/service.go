@@ -230,11 +230,12 @@ func normalizeEmail(s string) string {
 
 // User is a signed-in account.
 type User struct {
-	ID        int64
-	Email     string
-	GoogleSub string
-	Role      string
-	CreatedAt time.Time
+	ID          int64
+	Email       string
+	GoogleSub   string
+	Role        string
+	CreatedAt   time.Time
+	OnboardedAt *time.Time // Nil until the learner finishes a placement. The first finish wins.
 }
 
 // Session is a browser session. IDHash is what the database stores.
@@ -246,13 +247,18 @@ type Session struct {
 }
 
 func mapUser(u db.User) User {
-	return User{
+	out := User{
 		ID:        u.ID,
 		Email:     u.Email,
 		GoogleSub: u.GoogleSub,
 		Role:      u.Role,
 		CreatedAt: u.CreatedAt,
 	}
+	if u.OnboardedAt != nil {
+		at := u.OnboardedAt.UTC()
+		out.OnboardedAt = &at
+	}
+	return out
 }
 
 func mapSession(s db.Session) Session {
