@@ -32,7 +32,10 @@
     var f = frame();
     var replay = a.hasAttribute("data-played");
     var p;
-    try { a.currentTime = 0; p = a.play(); } catch (e) { return; }
+    // Setting currentTime while readyState is HAVE_NOTHING throws (HTML spec).
+    // A throw must not skip play(): that is what starts the load.
+    try { a.currentTime = 0; } catch (e) { /* not seekable yet */ }
+    try { p = a.play(); } catch (e) { return; }
     if (p && p.then) {
       p.then(function () {
         if (!a.hasAttribute("data-prompt")) return;
