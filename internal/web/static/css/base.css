@@ -1302,27 +1302,67 @@ h1 {
 /* Word block: pointed Hebrew, transliteration, and English gloss.
    A recall of one word hides the gloss and the transliteration until the
    answer. A recall of a line marks the tested word and hides only that word;
-   the other words show both, as help, until the answer reveals every word. */
+   the other words show both, as help, until the answer reveals every word.
+   The line itself carries dir="rtl" (word-block rule 12). */
 .lesson-player { display: grid; gap: var(--space-5); }
 .lesson-player__head { display: grid; gap: var(--space-2); }
 .activity { display: grid; gap: var(--space-4); }
 .activity-word {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-2);
   min-inline-size: 0;
+  max-inline-size: 100%;
 }
-.activity-word[data-target="true"] {
-  padding: var(--space-2);
-  border-radius: var(--radius-control);
-  background: color-mix(in oklch, var(--lamp) 16%, var(--surface));
-  box-shadow: inset 0 0 0 2px var(--lamp);
+.activity-word .wb--card { align-items: center; }
+/* The tested word. --focus-ring stands in for the spec's --primary: that
+   name was removed from the palette. No underline, tracking, or italic,
+   because they collide with niqqud. */
+mark.target {
+  background: color-mix(in oklch, var(--focus-ring) 22%, transparent);
+  border-radius: var(--radius-sm);
+  padding-inline: .2em;
+  color: inherit;
+  font-weight: 800;
+  font-style: normal;
+  letter-spacing: normal;
+  text-decoration: none;
+}
+mark.target .wb__he {
+  font-weight: 800;
+  font-style: normal;
+  letter-spacing: normal;
+  text-decoration: none;
+}
+/* Help under the other words. The spec says --ink-soft; in this palette that
+   token is a slate surface, so the muted text role is the softer ink. */
+.activity-word .wb__tr,
+.activity-word .wb__gl { color: var(--muted); }
+.target-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  inline-size: 2.5em;
+  min-block-size: 1.25em;
+  padding-inline: var(--space-1);
+  border: 1px dashed var(--muted);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-style: normal;
+  line-height: var(--lh-body);
+}
+.activity-word .target-slot--filled {
+  inline-size: auto;
+  min-inline-size: 2.5em;
+  border-color: transparent;
+  color: var(--text);
 }
 .word-blocks {
   display: flex;
   flex-wrap: wrap;
-  align-items: stretch;
+  align-items: flex-start;
   gap: var(--space-2);
 }
 .word-block {
@@ -1373,37 +1413,101 @@ h1 {
   text-align: start;
 }
 .choice .word-block--choice { background: transparent; padding: 0; }
+/* Lesson clip. The native audio is the control until clips.js adds class js
+   on html. Then the orb shows and the bar is hidden. The orb is not gold:
+   gold stays the one primary action. --hairline is the spec's --line, and
+   --text is the icon ink (--ink in this palette is a slate surface). */
 .clip {
   display: flex;
   position: relative;
+  flex-direction: column;
   align-items: center;
+  max-inline-size: 100%;
 }
-/* The element stays in the page so it can play, and takes no space of its own.
-   The orb is the control. A native player here was squeezed down to its menu. */
 .clip > audio {
+  display: block;
+  inline-size: 16rem;
+  max-inline-size: 100%;
+}
+html.js .clip > audio {
   position: absolute;
   inline-size: 1px;
   block-size: 1px;
+  max-inline-size: none;
   margin: 0;
   padding: 0;
   border: 0;
   opacity: 0;
-  pointer-events: none;
 }
-.clip__fallback {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-block-size: var(--tap);
-  min-inline-size: var(--tap);
-  padding-inline: var(--space-3);
-  border-radius: var(--radius-pill);
-  background: var(--ink-soft);
-  color: var(--on-ink);
-  font-size: var(--fs-small);
-  font-weight: 600;
-  line-height: var(--lh-body);
-  text-decoration: none;
+.orb {
+  display: none;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--text);
 }
+html.js .orb {
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+.orb:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.orb--hero {
+  inline-size: var(--size-cta);
+  block-size: var(--size-cta);
+  background: var(--surface-raised);
+  border: 1px solid var(--hairline);
+}
+html.js .orb--hero:hover { background: var(--surface-soft); }
+.orb--hero[data-state="error"] {
+  border-style: dashed;
+  border-color: var(--muted);
+}
+/* Per-word: a 28px disc centred in a 44px hit box, under the word, never
+   between words in the line. */
+.orb--word {
+  inline-size: var(--size-tap);
+  block-size: var(--size-tap);
+  background: transparent;
+  border: 0;
+}
+.orb--word::before {
+  content: "";
+  grid-area: 1 / 1;
+  inline-size: 28px;
+  block-size: 28px;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  border: 1px solid var(--hairline);
+}
+html.js .orb--word:hover::before { background: var(--surface-soft); }
+.orb--word[data-state="error"]::before {
+  border-style: dashed;
+  border-color: var(--muted);
+}
+.orb[data-state="error"] { color: var(--muted); }
+.orb__glyph {
+  grid-area: 1 / 1;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+}
+.orb--hero .icon { inline-size: 22px; block-size: 22px; }
+.orb--word .icon { inline-size: 14px; block-size: 14px; }
+.orb__glyph--load {
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid color-mix(in oklch, var(--focus-ring) 30%, transparent);
+  border-block-start-color: var(--focus-ring);
+}
+.orb--hero .orb__glyph--load { inline-size: 22px; block-size: 22px; }
+.orb--word .orb__glyph--load { inline-size: 14px; block-size: 14px; }
+.orb[data-state="idle"] .orb__glyph--play,
+.orb:not([data-state]) .orb__glyph--play { opacity: 1; }
+.orb[data-state="loading"] .orb__glyph--load { opacity: 1; }
+.orb[data-state="playing"] .orb__glyph--stop { opacity: 1; }
+.orb[data-state="error"] .orb__glyph--off { opacity: 1; }
 .feedback--right { color: var(--go); }
 .feedback--wrong { color: var(--stop); }

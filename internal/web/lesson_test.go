@@ -195,16 +195,19 @@ func TestLessonPlayer(t *testing.T) {
 		t.Fatal("story step is missing its clips")
 	}
 	for _, want := range []string{
-		`class="c-orb"`, `data-clip="true"`, `aria-label="Play the line"`,
-		`aria-label="Play ` + hello + `"`, `/static/js/clips.js`, `<noscript>`,
-		`class="clip__fallback"`, `href="/audio/` + phraseID + `.mp3"`,
+		`class="orb orb--hero"`, `data-src="/audio/` + phraseID + `.mp3"`, `aria-label="Play the line"`,
+		`aria-label="Play ` + hello + `"`, `/static/js/clips.js`, `preload="none"`,
+		`<audio id="line-clip"`, ` controls`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("story clip missing %s", want)
 		}
 	}
-	if strings.Contains(body, "<audio controls") || strings.Contains(body, "clip__label") || strings.Contains(body, "onclick=") {
-		t.Fatal("story clip still uses a native player or an inline handler")
+	if strings.Contains(body, "clip__label") || strings.Contains(body, "onclick=") || strings.Contains(body, "hx-on") {
+		t.Fatal("story clip uses an inline handler")
+	}
+	if strings.Contains(body, `class="c-orb"`) {
+		t.Fatal("the lesson clip reused the dialogue orb")
 	}
 	if strings.Count(body, "/static/js/clips.js") != 1 {
 		t.Fatalf("clips.js included %d times", strings.Count(body, "/static/js/clips.js"))
@@ -412,11 +415,11 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 	if !strings.Contains(listen, `/audio/`+phraseID+`.mp3`) || !strings.Contains(listen, `aria-label="Play"`) {
 		t.Fatalf("listen_pick missing the phrase clip:\n%s", listen)
 	}
-	if strings.Contains(listen, `aria-label="Play the line"`) || strings.Contains(listen, "Play "+hello) || strings.Contains(listen, "<audio controls") {
-		t.Fatalf("listen_pick names the hidden Hebrew or uses a native player:\n%s", listen)
+	if strings.Contains(listen, `aria-label="Play the line"`) || strings.Contains(listen, "Play "+hello) {
+		t.Fatalf("listen_pick names the hidden Hebrew:\n%s", listen)
 	}
-	if !strings.Contains(listen, `class="c-orb"`) || !strings.Contains(listen, `data-clip="true"`) {
-		t.Fatalf("listen_pick clip is not an audio orb:\n%s", listen)
+	if !strings.Contains(listen, `class="orb orb--hero"`) || !strings.Contains(listen, `preload="none"`) || !strings.Contains(listen, " controls") {
+		t.Fatalf("listen_pick clip is not a native audio plus orb:\n%s", listen)
 	}
 	if strings.Contains(listen, helloID) || strings.Contains(listen, morningID) {
 		t.Fatal("listen_pick prompt includes a word clip")
@@ -563,12 +566,23 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	if !ok {
 		t.Fatalf("recall missing choices:\n%s", ask)
 	}
-	prompt := "What does “" + gar + "” mean?"
+	// English runs stay in their own bdi, the way every other prompt is isolated.
+	// The word itself is the spec's <bdi lang=he dir=rtl>.
+	prompt := `<bdi lang="en" dir="ltr">What does </bdi><bdi lang="he" dir="rtl">` + gar + `</bdi><bdi lang="en" dir="ltr"> mean?</bdi>`
 	if !strings.Contains(head, prompt) || strings.Contains(ask, "What does this Hebrew mean?") {
 		t.Fatalf("prompt = %q, want the target word named:\n%s", prompt, head)
 	}
-	if strings.Count(head, `data-target="true"`) != 1 || !strings.Contains(head, "This word") {
-		t.Fatalf("the target word is not marked:\n%s", head)
+	if strings.Count(head, `class="target"`) != 1 || strings.Contains(head, "data-target") || strings.Contains(head, "This word") {
+		t.Fatalf("the target word is not the one mark:\n%s", head)
+	}
+	if !strings.Contains(head, `<mark class="target"><bdi class="wb__he" lang="he" dir="rtl">`+gar+`</bdi></mark>`) {
+		t.Fatalf("the mark does not wrap only the target word:\n%s", head)
+	}
+	if !strings.Contains(head, `class="word-blocks" dir="rtl"`) {
+		t.Fatalf("the line is not dir=rtl:\n%s", head)
+	}
+	if !strings.Contains(head, `class="target-slot"`) || !strings.Contains(head, ">?</span>") {
+		t.Fatalf("the target is missing its dashed slot:\n%s", head)
 	}
 	for _, help := range []string{">ani<", ">I<", ">po<", ">here<", ani, po} {
 		if !strings.Contains(head, help) {
@@ -599,37 +613,44 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 		`aria-label="Play ` + ani + `"`,
 		`aria-label="Play ` + gar + `"`,
 		`aria-label="Play ` + po + `"`,
-		`data-audio="line-clip"`,
-		`data-audio="word-clip-0"`,
-		`data-audio="word-clip-1"`,
-		`data-audio="word-clip-2"`,
-		`class="c-orb"`,
+		`id="line-clip"`,
+		`id="word-clip-0"`,
+		`id="word-clip-1"`,
+		`id="word-clip-2"`,
+		`class="orb orb--hero"`,
+		`class="orb orb--word"`,
 		`type="button"`,
-		`<noscript>`,
-		`class="clip__fallback"`,
+		`preload="none"`,
+		` controls`,
+		`data-src="/audio/` + phraseID + `.mp3"`,
 		`/static/js/clips.js`,
 	} {
 		if !strings.Contains(ask, want) {
 			t.Errorf("clip missing %s", want)
 		}
 	}
-	if strings.Contains(ask, "<audio controls") || strings.Contains(ask, "onclick=") || strings.Count(ask, "/static/js/clips.js") != 1 {
+	// The handler is an HTTP document, so this is the no-JS baseline: the
+	// native audio is in the markup, and the script is not required to see it.
+	if strings.Count(ask, "<audio ") != 4 || strings.Count(ask, `preload="none"`) != 4 {
+		t.Fatalf("native audio is not present for every clip without JS:\n%s", ask)
+	}
+	if strings.Contains(ask, "onclick=") || strings.Contains(ask, "hx-on") || strings.Count(ask, "/static/js/clips.js") != 1 {
 		t.Fatalf("clip markup:\n%s", ask)
 	}
-	if strings.Count(ask, `class="c-orb"`) != 4 {
-		t.Fatalf("%d play buttons, want the line and three words", strings.Count(ask, `class="c-orb"`))
+	if strings.Count(ask, `class="orb orb--word"`) != 3 || strings.Count(ask, `class="orb orb--hero"`) != 1 {
+		t.Fatalf("orbs: hero %d word %d, want 1 and 3", strings.Count(ask, `class="orb orb--hero"`), strings.Count(ask, `class="orb orb--word"`))
 	}
 
 	runID := runValue(t, body)
 	revealed := activityHTML(t, postLesson(t, h, cookie, path, runID, itoa(ids[gar]), true, "brian-csrf").Body.String())
-	for _, shown := range []string{">ani<", ">gar<", ">po<", ">I<", ">lives<", ">here<", `data-target="true"`} {
+	for _, shown := range []string{">ani<", ">gar<", ">po<", ">I<", ">lives<", ">here<", `class="target"`, `target-slot--filled`} {
 		if !strings.Contains(revealed, shown) {
 			t.Errorf("after the answer, missing %s", shown)
 		}
 	}
 
 	alone := activityHTML(t, postLesson(t, h, cookie, path, runID, "continue", true, "brian-csrf").Body.String())
-	if !strings.Contains(alone, "What does this Hebrew mean?") || strings.Contains(alone, "What does “") || strings.Contains(alone, "data-target") || strings.Contains(alone, ">gar<") {
+	if !strings.Contains(alone, "What does this Hebrew mean?") || strings.Contains(alone, "What does <bdi") || strings.Contains(alone, "data-target") || strings.Contains(alone, `class="target"`) || strings.Contains(alone, ">gar<") {
 		t.Fatalf("single-word recall changed:\n%s", alone)
 	}
 	if !strings.Contains(alone, gar) || !strings.Contains(alone, ">lives<") || !strings.Contains(alone, `aria-label="Play `+gar+`"`) {
@@ -648,12 +669,12 @@ func TestClipScript(t *testing.T) {
 	if body := get(t, New(nil, nil), "/static/js/clips.js"); body != b {
 		t.Fatal("served clips.js does not match the file")
 	}
-	for _, bad := range []string{"eval(", "new Function", "innerHTML", "document.write", "onclick", "requestAnimationFrame", ".animate("} {
+	for _, bad := range []string{"eval(", "new Function", "innerHTML", "document.write", "onclick", "requestAnimationFrame", ".animate(", "hx-on"} {
 		if strings.Contains(b, bad) {
 			t.Errorf("clips.js uses %s", bad)
 		}
 	}
-	for _, need := range []string{`querySelectorAll("audio")`, ".pause()", `closest(".c-orb[data-clip]")`, "prefers-reduced-motion"} {
+	for _, need := range []string{`classList.add("js")`, `querySelectorAll("audio")`, ".pause()", `closest(".orb")`, "150", `Audio unavailable, tap to retry`, `aria-pressed`, `aria-busy`} {
 		if !strings.Contains(b, need) {
 			t.Errorf("clips.js missing %s", need)
 		}
@@ -663,15 +684,27 @@ func TestClipScript(t *testing.T) {
 		t.Fatal("playing a dialogue line does not stop other audio")
 	}
 	css := readStatic(t, "static/css/base.css")
-	if !strings.Contains(css, ".clip__fallback") || !strings.Contains(css, "min-block-size: var(--tap)") || !strings.Contains(css, "min-inline-size: var(--tap)") {
-		t.Fatal("the no-JS clip link is not a 44px target")
+	if !strings.Contains(css, "html.js .orb") || !strings.Contains(css, "html.js .clip > audio") {
+		t.Fatal("the orb is not gated on html.js, so the native bar cannot stay without script")
 	}
-	if strings.Contains(css, "<audio controls") || strings.Contains(css, ".clip__label") {
-		t.Fatal("the squashed native player style is still in the stylesheet")
+	if !strings.Contains(css, ".orb--hero") || !strings.Contains(css, "var(--size-cta)") || !strings.Contains(css, "var(--size-tap)") || !strings.Contains(css, "inline-size: 28px") {
+		t.Fatal("hero and word orb sizes are missing")
+	}
+	if strings.Contains(css, ".clip__label") || strings.Contains(css, "var(--primary)") {
+		t.Fatal("the lesson orb uses a removed token")
+	}
+	if hero := css[strings.Index(css, ".orb--hero"):]; strings.Contains(hero[:strings.Index(hero, ".orb--word")], "var(--action-bg)") || strings.Contains(hero[:strings.Index(hero, ".orb--word")], "var(--lamp)") {
+		t.Fatal("the lesson orb is gold")
+	}
+	motion := readStatic(t, "static/css/motion.css")
+	for _, need := range []string{"orb-spin", "orb-ring", "slot-fill", `prefers-reduced-motion: reduce`, ".orb__glyph--dots", `outline: 2px solid var(--focus-ring)`} {
+		if !strings.Contains(motion, need) {
+			t.Errorf("motion.css missing %s", need)
+		}
 	}
 	orb := readStatic(t, "static/css/components.css")
 	if !strings.Contains(orb, ".c-orb") || !strings.Contains(orb, "var(--size-cta)") {
-		t.Fatal("the play orb is no longer the tap-sized control")
+		t.Fatal("the dialogue orb was restyled")
 	}
 }
 

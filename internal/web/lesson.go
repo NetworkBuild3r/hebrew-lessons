@@ -434,8 +434,17 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 	total := len(lesson.Activities)
 	post := lessonPath(lesson.UnitID, lesson.LessonIx)
 	feedback, class := feedbackFor(run)
+	prompt := activityPrompt(lesson, act, target, lex, empty)
+	var promptWord string
+	if !empty && act.Type == units.ActivityRecall && lexemeTokenCount(act, lex) > 1 && target.Text != "" {
+		// The question is HTML (a bdi around the word), so the plain prompt
+		// stays empty and the template writes the sentence.
+		promptWord = target.Text
+		prompt = ""
+	}
 	activity := views.Activity{
-		Prompt:        activityPrompt(lesson, act, target, lex, empty),
+		Prompt:        prompt,
+		PromptWord:    promptWord,
 		Progress:      progressText(run.ActivityIx, total),
 		Feedback:      feedback,
 		FeedbackClass: class,
@@ -842,13 +851,9 @@ func activityPrompt(lesson db.CourseLesson, act units.Activity, target db.Lexeme
 	case units.ActivityDialogue:
 		return "Listen to the conversation. Tap a line to hear it again."
 	case units.ActivityRecall:
-		// A line of several words is still a question about one word. The
-		// choices are that word's gloss. Naming the word is what makes the
-		// question and the answers about the same thing. A whole-line meaning
-		// question is a different activity.
-		if lexemeTokenCount(act, lex) > 1 && target.Text != "" {
-			return "What does “" + target.Text + "” mean?"
-		}
+		// A line of several words is still a question about one word. step
+		// names that word in the template. A whole-line meaning question is
+		// a different activity. A single word keeps this sentence.
 		return "What does this Hebrew mean?"
 	case units.ActivityListenPick:
 		return "Listen, then pick the meaning."

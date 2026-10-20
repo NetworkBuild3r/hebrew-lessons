@@ -20,11 +20,15 @@ type Screen struct {
 // with the score. Post is the lesson path the form submits to. HomeHref
 // is Today, including a language query when the shell is Hebrew.
 type Activity struct {
-	Done     bool
-	Score    string
-	Prompt   string
-	Progress string
-	Audio    string
+	Done   bool
+	Score  string
+	Prompt string
+	// PromptWord is the Hebrew word a multi-word recall names. The template
+	// writes it as: What does <bdi lang="he" dir="rtl">WORD</bdi> mean?
+	// Empty for every other prompt, including a recall of one word.
+	PromptWord string
+	Progress   string
+	Audio      string
 	// AudioLabel is the accessible name of the line clip, such as "Play the line"
 	// or "Play" while the spelling is hidden. AudioHebrew is the one word in
 	// that name, when the line is a single word and the spelling is shown.
@@ -100,11 +104,21 @@ func dialogueOrbAttrs(i int) templ.Attributes {
 	return templ.Attributes{"data-audio": dialogueClipID(i), "data-dlg-line": Num(i)}
 }
 
-// clipOrbAttrs are the attributes of a lesson clip's play control. data-clip
-// marks it for clips.js, and data-audio names its element so the orb pulses
-// while the clip plays (motion.js).
-func clipOrbAttrs(id string) templ.Attributes {
-	return templ.Attributes{"data-audio": id, "data-clip": "true"}
+// orbClass is the lesson clip button. The hero is the line (56px). A word orb
+// is the 28px disc inside a 44px hit box. Neither is the dialogue c-orb.
+func orbClass(hero bool) string {
+	if hero {
+		return "orb orb--hero"
+	}
+	return "orb orb--word"
+}
+
+// clipClass groups the native audio and its orb. The hero sits on the prompt.
+func clipClass(hero bool) string {
+	if hero {
+		return "clip clip--hero"
+	}
+	return "clip"
 }
 
 // hasClip reports whether the step has a line clip or a per-word clip.

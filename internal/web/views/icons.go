@@ -21,7 +21,7 @@ const (
 // with the same glyphs. The test suite keeps this list and the sprite equal.
 var IconNames = []string{
 	"home", "book", "layers", "chart", "user",
-	"speaker", "replay", "slower", "play",
+	"speaker", "replay", "slower", "play", "stop", "audio-off", "dots",
 	"x", "check", "arrow-right", "arrow-left",
 	"keyboard", "flag", "lamp", "spark",
 	"theme", "help", "tip",
