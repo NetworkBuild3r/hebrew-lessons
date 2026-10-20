@@ -7,8 +7,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
-// The new-word cap is the unit budget. internal/brief does not import internal/units, so this
-// external test keeps the two numbers equal.
+// The new-word cap is the unit budget. This external test keeps the two numbers equal.
 func TestMaxNewWordsIsTheUnitBudget(t *testing.T) {
 	if brief.MaxNewWords != units.MaxNewWordsPerUnit {
 		t.Errorf("MaxNewWords = %d, units.MaxNewWordsPerUnit = %d", brief.MaxNewWords, units.MaxNewWordsPerUnit)

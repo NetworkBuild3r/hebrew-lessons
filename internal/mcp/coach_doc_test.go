@@ -25,8 +25,9 @@ import (
 const coachDocPath = "../../docs/ops/weekly-coach.md"
 
 // coachDocNotTools are snake_case words in backticks that the page uses and that are not tools.
-// They are names of activity labels in a brief, quoted to say they are not unit types.
-var coachDocNotTools = []string{"read_pick", "type_it"}
+// The brief now names unit types, so this list is empty. A quoted activity name that is not a
+// tool belongs here.
+var coachDocNotTools = []string{}
 
 var (
 	coachBackticked = regexp.MustCompile("`([^`\n]+)`")
@@ -175,7 +176,7 @@ func coachDocProblems(doc string, f coachFacts) []string {
 		if a, b, c := at("get_progress"), at("hebrew://authoring"), at("add_coach_note"); a < 0 || b < 0 || c < 0 || !(a < b && b < c) {
 			add("the prompt does not name get_progress, then hebrew://authoring, then add_coach_note, in that order")
 		}
-		for _, want := range []string{"<LEARNER_ID>", "get_lesson_brief", "put_unit", "are not unit types", "Reading a brief", "7 days"} {
+		for _, want := range []string{"<LEARNER_ID>", "get_lesson_brief", "put_unit", "unit types", "Reading a brief", "7 days"} {
 			if !strings.Contains(prompt, want) {
 				add("the prompt does not say %q", want)
 			}
@@ -380,11 +381,11 @@ func TestCoachDocPromptFollowsTheRealGuide(t *testing.T) {
 	if !strings.Contains(guide, "### Reading a brief") && !strings.Contains(guide, "## Reading a brief") {
 		t.Error("the guide has no section named Reading a brief")
 	}
-	if !strings.Contains(guide, "are not unit types") {
-		t.Error("the guide no longer says that some activities names are not unit types")
+	if !strings.Contains(guide, "Every name is a type") {
+		t.Error("the guide no longer says the brief's activity names are unit types")
 	}
 	prompt := coachPrompt(coachDoc(t))
-	for _, want := range []string{"step 7", "Step 8 of hebrew://authoring is add_coach_note", "are not unit types", "section Reading a brief"} {
+	for _, want := range []string{"step 7", "Step 8 of hebrew://authoring is add_coach_note", "unit types", "section Reading a brief"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("the prompt does not say %q", want)
 		}
@@ -451,7 +452,7 @@ func TestCoachDocChecksCanFail(t *testing.T) {
 			return strings.Replace(s, "## Turn it off", "## Stop", 1)
 		}, "Turn it off"},
 		{"the prompt loses the activities warning", func(s string) string {
-			return strings.Replace(s, "The activities names in the brief are not unit types, so do not copy them into the unit.", "", 1)
+			return strings.Replace(s, "The activities in the brief are unit types validate_unit accepts.", "", 1)
 		}, "unit types"},
 		{"the prompt loses the order", func(s string) string {
 			return strings.Replace(s, "3. Leave one coach note. Step 8 of hebrew://authoring is add_coach_note.", "3. Leave one coach note.", 1)

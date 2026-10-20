@@ -71,10 +71,12 @@ type BriefStruggleWord struct {
 }
 
 // SkillOfActivity is the skill an activity type trains, or "" when it has none.
-// listen_pick and shadow train listen. story, cloze, and pattern train read.
-// recall trains recall. produce, which the learner types, trains spell. The
-// SPEC-015 activity names a brief lists are mapped too: audio_match is listen,
-// read_pick and word_match are read, type_it is recall, and dictation is spell.
+// listen_pick and shadow train listen. story, dialogue, cloze, and pattern train
+// read. recall trains recall. produce, which the learner types, trains spell.
+// Older stored briefs named SPEC-015 review activities. Those names still map,
+// so a stored brief keeps its skill, and a new brief does not emit them:
+// audio_match is listen, read_pick and word_match are read, type_it is recall,
+// and dictation is spell.
 func SkillOfActivity(typ string) string {
 	switch typ {
 	case ActivityListenPick, ActivityShadow, "audio_match":
@@ -88,6 +90,34 @@ func SkillOfActivity(typ string) string {
 	default:
 		return ""
 	}
+}
+
+// activitySkillOrder is the unit types a brief may suggest, in the order a brief
+// lists them. ActivitiesForSkill keeps a name only when knownActivity accepts it
+// and SkillOfActivity assigns it to the skill, so the list cannot drift ahead of
+// the validator. SPEC-015 review names are not in this order.
+var activitySkillOrder = []string{
+	ActivityListenPick,
+	ActivityShadow,
+	ActivityStory,
+	ActivityDialogue,
+	ActivityCloze,
+	ActivityPattern,
+	ActivityRecall,
+	ActivityProduce,
+}
+
+// ActivitiesForSkill returns the unit activity types that train skill, in the
+// order a lesson brief lists them. Every name is one the validator accepts.
+// An unknown skill returns nil.
+func ActivitiesForSkill(skill string) []string {
+	var out []string
+	for _, typ := range activitySkillOrder {
+		if knownActivity(typ) && SkillOfActivity(typ) == skill {
+			out = append(out, typ)
+		}
+	}
+	return out
 }
 
 // exposureActivity reports an activity that shows a word without checking it.
