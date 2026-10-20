@@ -3,6 +3,8 @@ package web
 import (
 	"context"
 	"net/http"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -109,11 +111,11 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 	}, true)
 	body := getAuthed(t, h, cookie, storyPath)
 	act := activityHTML(t, body)
-	if !strings.Contains(act, "Read the story. Tap a word to see what it means.") {
-		t.Fatalf("story prompt missing the flip sentence:\n%s", act)
+	if !strings.Contains(act, "Read the story. Each word shows its sound and its meaning.") {
+		t.Fatalf("story prompt missing:\n%s", act)
 	}
-	if !strings.Contains(act, "Tap a word to see what it means.") || !strings.Contains(act, "icon-flip") {
-		t.Fatalf("flip hint missing:\n%s", act)
+	if strings.Count(act, "Tap a word to see what it means.") != 1 || !strings.Contains(act, "icon-flip") {
+		t.Fatalf("flip hint should be the only tap sentence:\n%s", act)
 	}
 	cards := regexp.MustCompile(`(?s)<details class="wcard[^"]*".*?</details>`).FindAllString(act, -1)
 	if len(cards) != 3 {
@@ -153,25 +155,53 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 	if !strings.Contains(act, `class="orb orb--word"`) || !strings.Contains(act, "/static/js/clips.js") {
 		t.Fatalf("word orb or clips.js missing:\n%s", act)
 	}
+	rowsAt := strings.Index(act, `class="clip-rows"`)
+	lineAt := strings.Index(act, `class="wline"`)
+	if rowsAt < 0 || lineAt < 0 || rowsAt < lineAt {
+		t.Fatalf("no-JS word rows are missing under the line:\n%s", act)
+	}
+	line := act[lineAt:rowsAt]
+	if strings.Contains(line, "<audio") {
+		t.Fatalf("the card slot still holds the native bar:\n%s", line)
+	}
+	rows := act[rowsAt:]
+	if end := strings.Index(rows, "<form"); end >= 0 {
+		rows = rows[:end]
+	}
+	if strings.Count(rows, `class="clip-row"`) != 1 {
+		t.Fatalf("no-JS word rows = %d, want 1:\n%s", strings.Count(rows, `class="clip-row"`), rows)
+	}
+	for _, need := range []string{flipHello, "shalom", "controls", `aria-label="Play ` + flipHello + `"`, `id="word-clip-0"`} {
+		if !strings.Contains(rows, need) {
+			t.Fatalf("word row missing %s:\n%s", need, rows)
+		}
+	}
+	if !strings.Contains(line, `data-audio="word-clip-0"`) {
+		t.Fatalf("word orb does not name its bar:\n%s", line)
+	}
 	if !strings.Contains(act, `<script type="module" src="/static/js/wcards.js"></script>`) {
 		t.Fatalf("wcards.js missing:\n%s", act)
 	}
 	if !strings.Contains(act, `name="answer" value="continue"`) {
 		t.Fatalf("continue is missing while cards are closed:\n%s", act)
 	}
-	if !strings.Contains(act, `data-wcards-all`) || !strings.Contains(act, "Show all meanings") || !strings.Contains(act, `aria-pressed="false"`) {
-		t.Fatalf("show-all link missing:\n%s", act)
+	if !strings.Contains(act, `<button type="submit" class="c-button" data-kind="text" data-wcards-all>`) || !strings.Contains(act, "Show all meanings") {
+		t.Fatalf("show-all button missing:\n%s", act)
 	}
-	if !strings.Contains(act, "meanings=all") {
-		t.Fatalf("show-all href missing meanings=all:\n%s", act)
+	if strings.Contains(act, "aria-pressed") {
+		t.Fatalf("show-all still exposes aria-pressed:\n%s", act)
+	}
+	if !strings.Contains(act, `name="meanings" value="all"`) {
+		t.Fatalf("show-all form missing meanings=all:\n%s", act)
 	}
 	if strings.Contains(act, "style=") || strings.Contains(act, "hx-on") || regexp.MustCompile(`(?i)\son[a-z]+\s*=`).MatchString(act) {
 		t.Fatal("activity has an inline style or handler")
 	}
 
 	kept := getAuthed(t, h, cookie, storyPath+"?lang=en&from=today")
-	if !strings.Contains(kept, "from=today") || !strings.Contains(kept, "lang=en") || !strings.Contains(kept, "meanings=all") {
-		t.Fatalf("show-all dropped a query param:\n%s", activityHTML(t, kept))
+	keptAct := activityHTML(t, kept)
+	if !strings.Contains(keptAct, `name="from" value="today"`) || !strings.Contains(keptAct, `name="lang" value="en"`) || !strings.Contains(keptAct, `name="meanings" value="all"`) {
+		t.Fatalf("show-all dropped a query param:\n%s", keptAct)
 	}
 
 	before := scalar(t, dbPath, `SELECT COUNT(*) FROM attempts`)
@@ -194,7 +224,7 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 			t.Fatalf("card not open: %s", tag)
 		}
 	}
-	if !strings.Contains(opened, `aria-pressed="true"`) || !strings.Contains(opened, "Hide meanings") || !strings.Contains(opened, `data-wcards-all`) {
+	if !strings.Contains(opened, "Hide meanings") || !strings.Contains(opened, `data-wcards-all`) || strings.Contains(opened, "aria-pressed") {
 		t.Fatalf("open state label missing:\n%s", opened)
 	}
 
@@ -219,13 +249,13 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 			Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 				{Type: units.ActivityPattern, Text: flipHello + " " + flipMorning},
 			}}},
-		}, "A greeting. Tap a word to see what it means."},
+		}, "A greeting"},
 		{units.Unit{
 			Title: "Shadow", Position: 1,
 			Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 				{Type: units.ActivityShadow, Text: flipHello + " " + flipMorning},
 			}}},
-		}, "Listen, then say the line. Tap a word to see what it means."},
+		}, "Listen, then say the line."},
 	} {
 		hh, ck, p, _ := flipLesson(t, c.doc, false)
 		page := activityHTML(t, getAuthed(t, hh, ck, p))
@@ -249,8 +279,11 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 	if strings.Count(dlg, "<details class=\"wcard") < 2 || strings.Contains(dlg, "orb--word") {
 		t.Fatalf("dialogue cards or a per-word orb:\n%s", dlg)
 	}
-	if !strings.Contains(dlg, "Listen to the conversation. Tap a word to see what it means.") || !strings.Contains(dlg, "data-wcards-all") {
+	if !strings.Contains(dlg, "Listen to the conversation. Tap a line to hear it again.") || !strings.Contains(dlg, "data-wcards-all") {
 		t.Fatalf("dialogue flip copy missing:\n%s", dlg)
+	}
+	if strings.Count(dlg, "Tap a word to see what it means.") != 1 {
+		t.Fatalf("dialogue repeats the tap sentence:\n%s", dlg)
 	}
 	if strings.Contains(dlg, `wcard--new`) && !strings.Contains(dlg, ">New<") {
 		t.Fatal("dialogue new word has no label")
@@ -293,3 +326,104 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 		}, distractors...)}},
 	}, "hello", "shalom")
 }
+
+// TestWCardsLabelFollowsToggle runs wcards.js under node. Show all sets the
+// label to "Hide meanings". Closing one card fires a capture-phase toggle,
+// and the label returns to "Show all meanings". Space activates the button.
+func TestWCardsLabelFollowsToggle(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+	script := filepath.Join(t.TempDir(), "wcards-check.js")
+	if err := os.WriteFile(script, []byte(wcardCheckJS), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("node", script, filepath.Join("static", "js", "wcards.js")).CombinedOutput()
+	if err != nil {
+		t.Fatalf("wcards.js: %v\n%s", err, out)
+	}
+}
+
+const wcardCheckJS = `
+const fs = require("fs");
+const vm = require("vm");
+const src = fs.readFileSync(process.argv[2], "utf8");
+const fails = [];
+function check(cond, msg) { if (!cond) fails.push(msg); }
+
+function el(tag, attrs, className) {
+  const node = { tag: tag, attrs: attrs || {}, className: className || "", kids: [], parent: null, text: "" };
+  node.setAttribute = (k, v) => { node.attrs[k] = String(v); };
+  node.getAttribute = (k) => (Object.prototype.hasOwnProperty.call(node.attrs, k) ? node.attrs[k] : null);
+  node.hasAttribute = (k) => Object.prototype.hasOwnProperty.call(node.attrs, k);
+  node.closest = (sel) => { let n = node; while (n) { if (matches(n, sel)) return n; n = n.parent; } return null; };
+  node.querySelector = (sel) => query(node, sel)[0] || null;
+  node.querySelectorAll = (sel) => query(node, sel);
+  node.matches = (sel) => matches(node, sel);
+  Object.defineProperty(node, "textContent", { get() { return node.text; }, set(v) { node.text = String(v); } });
+  Object.defineProperty(node, "open", { get() { return !!node._open; }, set(v) { node._open = !!v; }, configurable: true });
+  return node;
+}
+function add(parent, child) { child.parent = parent; parent.kids.push(child); return child; }
+function hasClass(node, name) { return (node.className || "").split(/\s+/).indexOf(name) >= 0; }
+function matches(node, sel) {
+  if (sel === "#activity") return node.attrs.id === "activity";
+  if (sel === "details.wcard") return node.tag === "details" && hasClass(node, "wcard");
+  if (sel === "[data-wcards-all]") return node.hasAttribute("data-wcards-all");
+  if (sel === "[data-wcards-label]") return node.hasAttribute("data-wcards-label");
+  return false;
+}
+function query(root, sel) {
+  const out = [];
+  (function rec(n) { n.kids.forEach((k) => { if (matches(k, sel)) out.push(k); rec(k); }); })(root);
+  return out;
+}
+
+const listeners = [];
+const doc = el("#document");
+doc.addEventListener = (name, fn) => { listeners.push({ name, fn }); };
+function fire(name, target, extra) {
+  const ev = Object.assign({ target, preventDefault() {}, stopPropagation() {} }, extra || {});
+  listeners.filter((l) => l.name === name).forEach((l) => l.fn(ev));
+  return ev;
+}
+
+const activity = add(doc, el("div", { id: "activity" }));
+const form = add(activity, el("form"));
+const btn = add(form, el("button", { "data-wcards-all": "" }));
+const label = add(btn, el("span", { "data-wcards-label": "" }));
+label.text = "Show all meanings";
+const a = add(activity, el("details", {}, "wcard"));
+const b = add(activity, el("details", {}, "wcard"));
+
+const sandbox = { document: doc };
+vm.runInNewContext(src, sandbox);
+
+fire("click", btn);
+check(a.open && b.open, "Show all did not open both cards");
+check(label.text === "Hide meanings", "Show all left the label as " + label.text);
+
+b.open = false;
+fire("toggle", b);
+check(label.text === "Show all meanings", "closing one card left the label as " + label.text);
+check(a.open && !b.open, "the toggle listener changed which cards are open");
+
+fire("keydown", btn, { key: " " });
+check(a.open && b.open, "Space did not open the remaining card");
+check(label.text === "Hide meanings", "Space left the label as " + label.text);
+
+const before = listeners.length;
+vm.runInNewContext(src, sandbox);
+fire("keydown", btn, { key: " " });
+check(listeners.length === before, "loading the script again added listeners");
+check(!a.open && !b.open, "a doubled Space listener toggled twice");
+check(label.text === "Show all meanings", "Space close left the label as " + label.text);
+
+const submit = fire("submit", form);
+check(label.text === "Show all meanings", "a stray submit changed the label");
+
+if (fails.length) {
+  console.error(fails.join("\n"));
+  process.exit(1);
+}
+`

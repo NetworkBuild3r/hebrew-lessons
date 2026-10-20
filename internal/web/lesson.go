@@ -1192,40 +1192,22 @@ func phrasePlayLabel(act units.Activity, phase string) (label, hebrew string) {
 	return "Play the line", ""
 }
 
-const tapWordMeaning = "Tap a word to see what it means."
-
-// withTapMeaning appends the flip hint to a teach prompt. A prompt that
-// already says it is left as it is.
-func withTapMeaning(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return tapWordMeaning
-	}
-	if strings.Contains(s, tapWordMeaning) {
-		return s
-	}
-	if !strings.HasSuffix(s, ".") && !strings.HasSuffix(s, "!") && !strings.HasSuffix(s, "?") {
-		s += "."
-	}
-	return s + " " + tapWordMeaning
-}
-
 func activityPrompt(lesson db.CourseLesson, act units.Activity, target db.LexemeView, lex map[string]db.LexemeView, empty bool) string {
 	if empty {
 		return "This lesson has nothing to practise."
 	}
 	switch act.Type {
 	case units.ActivityStory:
-		return "Read the story. " + tapWordMeaning
+		return "Read the story. Each word shows its sound and its meaning."
 	case units.ActivityPattern:
 		if strings.TrimSpace(lesson.Concept) != "" {
-			return withTapMeaning(lesson.Concept)
+			return lesson.Concept
 		}
-		return "Read the example. " + tapWordMeaning
+		return "Read the example."
 	case units.ActivityShadow:
-		return "Listen, then say the line. " + tapWordMeaning
+		return "Listen, then say the line."
 	case units.ActivityDialogue:
-		return "Listen to the conversation. " + tapWordMeaning
+		return "Listen to the conversation. Tap a line to hear it again."
 	case units.ActivityRecall:
 		// A line of several words is still a question about one word. step
 		// names that word in the template. A whole-line meaning question is

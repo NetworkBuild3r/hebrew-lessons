@@ -65,10 +65,10 @@ templ ActivityBlock(a Activity) {
 						@activityWord(word, "word-clip-"+Num(i), a.PromptWord != "")
 					}
 				</div>
-				if a.PromptWord != "" {
+				if clipRows(a) {
 					<div class="clip-rows">
 						for i, word := range a.Words {
-							if word.Audio != "" {
+							if word.Audio != "" && (a.PromptWord != "" || word.Flip) {
 								@wordClipRow(word, "word-clip-"+Num(i))
 							}
 						}
@@ -159,7 +159,9 @@ templ activityWord(w Word, audioID string, rows bool) {
 		<div class="wslot">
 			@wordCard(w)
 			if w.Audio != "" {
-				@clip(audioID, w.Audio, "Play "+w.Text, false)
+				<div class="clip">
+					@orbButton(orbClass(false), "Play "+w.Text, w.Audio, audioID)
+				</div>
 			}
 		</div>
 	} else {
@@ -215,15 +217,18 @@ templ flipHint() {
 	</p>
 }
 
-// showMeanings opens every card. Without script it is a link to this step
-// with ?meanings=all. wcards.js turns the click into a toggle.
+// showMeanings opens every card. Without script it is a GET form, so Enter
+// and Space submit ?meanings=all. wcards.js turns the click into a toggle.
 templ showMeanings(a Activity) {
-	<div class="wline-tools">
-		<a class="c-button" data-kind="text" role="button" href={ templ.SafeURL(a.MeaningsHref) } aria-pressed={ Flag(a.MeaningsOpen) } data-wcards-all>
+	<form class="wline-tools" method="get" action={ templ.SafeURL(meaningsAction(a.MeaningsHref)) }>
+		for _, field := range meaningsFields(a.MeaningsHref) {
+			<input type="hidden" name={ field.Name } value={ field.Value }/>
+		}
+		<button type="submit" class="c-button" data-kind="text" data-wcards-all>
 			@Icon("eye", "")
 			<span data-wcards-label>{ meaningsLabel(a.MeaningsOpen) }</span>
-		</a>
-	</div>
+		</button>
+	</form>
 }
 
 // targetWord is the word a multi-word recall asks about. The mark is how a
@@ -290,11 +295,11 @@ templ dialogueBlock(d *Dialogue) {
 	<script src="/static/js/dialogue.js" defer></script>
 }
 
-// wordClipRow is the no-JS play control for one word of a recall line.
-// The pointed word names the bar. Transliteration is printed only when the
-// line already shows it for that token, so a recall target stays the pointed
-// Hebrew and the bar until the answer. html.js hides .clip-rows; the orb
-// under the word is the control then.
+// wordClipRow is the no-JS play control for one word of a recall line or a
+// flip card. The pointed word names the bar, then its transliteration when
+// the line already shows it, so a recall target stays the pointed Hebrew and
+// the bar until the answer. html.js hides .clip-rows; the orb under the word
+// is the control then.
 templ wordClipRow(w Word, audioID string) {
 	<div class="clip-row">
 		<p class="clip-row__label">
@@ -315,8 +320,8 @@ templ wordClipRow(w Word, audioID string) {
 // until clips.js adds class js on html, which shows the orb and sets the bar
 // to display:none. One of those two is the play control. hero is the line control.
 // label is the button's accessible name, such as "Play אֲנִי" or "Play the line".
-// A recall word does not use this: its orb stays in the line and its bar is a
-// wordClipRow, so the no-JS bar is not squeezed into the word column.
+// A recall word and a flip card do not use this: the orb stays in the line
+// and the bar is a wordClipRow, so the no-JS bar is not squeezed into the word column.
 templ clip(id, src, label string, hero bool) {
 	<div class={ clipClass(hero) }>
 		<audio id={ id } src={ templ.SafeURL(src) } preload="none" controls></audio>
@@ -325,7 +330,7 @@ templ clip(id, src, label string, hero bool) {
 }
 
 // orbButton is the lesson orb. audioID, when set, names the audio element
-// played for a recall word whose bar lives in .clip-rows.
+// played for a word whose bar lives in .clip-rows.
 templ orbButton(className, label, src, audioID string) {
 	if audioID != "" {
 		<button type="button" class={ className } aria-label={ label } data-label={ label } data-src={ src } data-audio={ audioID } data-state="idle">
