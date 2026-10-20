@@ -490,13 +490,14 @@ func fail(w http.ResponseWriter, status int) {
 }
 
 // failPlacement maps an engine error to a status. None of the messages names an answer.
+// ErrNothingRated is a v2 finish that has nothing to score. It is a conflict, not a server error.
 func failPlacement(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, placement.ErrNotYourRun):
 		fail(w, http.StatusNotFound)
 	case errors.Is(err, placement.ErrBadAnswer):
 		fail(w, http.StatusBadRequest)
-	case errors.Is(err, placement.ErrWrongItem), errors.Is(err, placement.ErrFinished), errors.Is(err, placement.ErrNotReady):
+	case errors.Is(err, placement.ErrWrongItem), errors.Is(err, placement.ErrFinished), errors.Is(err, placement.ErrNotReady), errors.Is(err, placement.ErrNothingRated):
 		fail(w, http.StatusConflict)
 	case errors.Is(err, placement.ErrNoAudio), errors.Is(err, placement.ErrDeckShort):
 		fail(w, http.StatusServiceUnavailable)
