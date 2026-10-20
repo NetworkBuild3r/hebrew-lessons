@@ -25,7 +25,7 @@ func TestQADesiredRetentionAndGoodIntervals(t *testing.T) {
 	cardID := mustCard(t, store, db.Card{
 		UserID:   mustUser(t, store, "learner@example.com"),
 		LexemeID: mustLexeme(t, store, "שָׁלוֹם"),
-		Dir:      DirHeEn,
+		Skill:    SkillRead,
 		State:    StateNew,
 		Due:      clk.Now(),
 	})
@@ -92,7 +92,7 @@ func TestQALapseShortensInterval(t *testing.T) {
 	cardID := mustCard(t, store, db.Card{
 		UserID:   mustUser(t, store, "learner@example.com"),
 		LexemeID: mustLexeme(t, store, "בֹּקֶר"),
-		Dir:      DirHeEn,
+		Skill:    SkillRead,
 		State:    StateNew,
 		Due:      clk.Now(),
 	})
@@ -163,7 +163,7 @@ func TestQAHardGoodEasyOrder(t *testing.T) {
 	cardID := mustCard(t, store, db.Card{
 		UserID:   userID,
 		LexemeID: mustLexeme(t, store, "עֶרֶב"),
-		Dir:      DirHeEn,
+		Skill:    SkillRead,
 		State:    StateNew,
 		Due:      clk.Now(),
 	})

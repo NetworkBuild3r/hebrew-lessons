@@ -23,7 +23,7 @@ func TestQAReviewGradeRejectsInvalidRating(t *testing.T) {
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	reviewed := now.Add(-48 * time.Hour)
 	lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
-	cardID := addCard(t, store, learner.user.ID, lex, fsrs.DirHeEn, now.Add(-time.Hour), 4, int(fsrs.Good), reviewed)
+	cardID := addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, now.Add(-time.Hour), 4, int(fsrs.Good), reviewed)
 	before := mustGetCard(t, store, cardID)
 	logsBefore := len(mustLogs(t, store, cardID))
 	if logsBefore != 1 {

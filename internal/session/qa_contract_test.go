@@ -23,7 +23,3 @@ func TestQueueContractConstants(t *testing.T) {
 		t.Fatalf("ConfusionWindow = %s, want 7d", ConfusionWindow)
 	}
 }
-
-func TestLexemeSeparationAndDirectionAlternation(t *testing.T) {
-	t.Skip("needs lexeme separation and direction alternation in session.BuildSession: owner Backend Dev")
-}

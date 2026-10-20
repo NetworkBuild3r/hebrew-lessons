@@ -20,7 +20,7 @@ func TestQAGradeRejectsOutOfRange(t *testing.T) {
 			cardID := mustCard(t, store, db.Card{
 				UserID:     mustUser(t, store, "learner@example.com"),
 				LexemeID:   mustLexeme(t, store, "שָׁלוֹם"),
-				Dir:        DirHeEn,
+				Skill:      SkillRead,
 				State:      StateReview,
 				Due:        clk.Now(),
 				Stability:  4,

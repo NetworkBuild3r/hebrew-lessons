@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,7 +14,9 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
 // Retrieval paths that exist hide the answer string the product already
@@ -70,7 +72,7 @@ func testQAReviewHidesAnswer(t *testing.T) {
 
 	heLearner := addLearner(t, store, "a@example.com", "sub-a", now)
 	heLex := addLexeme(t, store, heText, heGloss, heLat, "m", "")
-	heCard := addCard(t, store, heLearner.user.ID, heLex, fsrs.DirHeEn, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	heCard := addCard(t, store, heLearner.user.ID, heLex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 	front := getLearner(t, h, heLearner, "/review")
 	if strings.Contains(front, heGloss) {
 		t.Fatalf("he→en review shows the gloss before the attempt:\n%s", front)
@@ -89,7 +91,7 @@ func testQAReviewHidesAnswer(t *testing.T) {
 
 	enLearner := addLearner(t, store, "en@example.com", "sub-en", now)
 	enLex := addLexeme(t, store, enText, enGloss, enLat, "m", "")
-	enCard := addCard(t, store, enLearner.user.ID, enLex, fsrs.DirEnHe, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	enCard := addCard(t, store, enLearner.user.ID, enLex, fsrs.SkillRecall, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 	prod := getLearner(t, h, enLearner, "/review")
 	if strings.Contains(prod, enText) || strings.Contains(prod, enLat) {
 		t.Fatalf("en→he review shows the Hebrew before the attempt:\n%s", prod)
@@ -116,6 +118,11 @@ func testQALessonHidesAnswer(t *testing.T) {
 		gapGl      = "lumenwort"
 		gapLat     = "xlumen"
 	)
+	// Outside every activity line, so recall and cloze stay graded.
+	// Fewer than three buttons is a reveal (#105), and a reveal shows the gloss.
+	outHe := [3]string{"נֵר", "גֶּשֶׁר", "דֶּלֶת"}
+	outGl := [3]string{"lampwick", "stonebridge", "oakdoor"}
+	outLat := [3]string{"xner", "xgesher", "xdelet"}
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	ctx := t.Context()
 	store, err := db.Open(ctx, filepath.Join(t.TempDir(), "hebrew.sqlite"), fixedClock(now))
@@ -130,12 +137,17 @@ func testQALessonHidesAnswer(t *testing.T) {
 	promptID := addLexeme(t, store, promptHe, promptGl, promptLat, "m", "")
 	produceID := addLexeme(t, store, produceHe, produceGl, produceLat, "m", "")
 	gapID := addLexeme(t, store, gapHe, gapGl, gapLat, "m", "")
+	for i := range outHe {
+		addLexeme(t, store, outHe[i], outGl[i], outLat[i], "m", "")
+	}
 	unitID := putLesson(t, store, nil, units.Unit{
 		Title: "Probe", Situation: "A probe.", Concept: "Probe concept.", Position: 0,
-		NewWords: []string{promptHe, produceHe, gapHe},
+		NewWords: []string{promptHe, produceHe, gapHe, outHe[0], outHe[1], outHe[2]},
 		Lessons: []units.Lesson{
 			{Kind: units.KindLesson, Activities: []units.Activity{
-				{Type: units.ActivityListenPick, Text: promptHe},
+				// The outside words have to appear in an activity or they are
+				// not lesson items, and the cloze then has no pool to grade from.
+				{Type: units.ActivityListenPick, Text: promptHe + " " + outHe[0] + " " + outHe[1] + " " + outHe[2]},
 				{Type: units.ActivityRecall, Text: promptHe},
 				{Type: units.ActivityProduce, Text: produceHe},
 				{Type: units.ActivityCloze, Text: gapHe + " " + promptHe},
@@ -178,7 +190,7 @@ func testQALessonHidesAnswer(t *testing.T) {
 
 	recall := postLesson(t, h, cookie, lessonPath, runID, "continue", true, "qa-csrf")
 	recallBody := recall.Body.String()
-	if recall.Code != http.StatusOK || !strings.Contains(recallBody, promptHe) {
+	if recall.Code != http.StatusOK || !strings.Contains(recallBody, promptHe) || !strings.Contains(recallBody, `class="choices"`) {
 		t.Fatalf("recall prompt = %d %s", recall.Code, recallBody)
 	}
 	for _, hidden := range []string{promptLat, produceLat, gapLat} {
@@ -193,7 +205,7 @@ func testQALessonHidesAnswer(t *testing.T) {
 
 	produce := postLesson(t, h, cookie, lessonPath, runID, "continue", true, "qa-csrf")
 	produceBody := produce.Body.String()
-	if produce.Code != http.StatusOK || !strings.Contains(produceBody, produceHe) || !strings.Contains(produceBody, produceGl) {
+	if produce.Code != http.StatusOK || !strings.Contains(produceBody, produceHe) || !strings.Contains(produceBody, produceGl) || !strings.Contains(produceBody, `class="choices"`) {
 		t.Fatalf("produce prompt = %d %s", produce.Code, produceBody)
 	}
 	for _, hidden := range []string{promptLat, produceLat, gapLat} {
@@ -208,7 +220,7 @@ func testQALessonHidesAnswer(t *testing.T) {
 
 	cloze := postLesson(t, h, cookie, lessonPath, runID, "continue", true, "qa-csrf")
 	clozeBody := cloze.Body.String()
-	if cloze.Code != http.StatusOK || strings.Contains(clozeBody, gapGl) {
+	if cloze.Code != http.StatusOK || strings.Contains(clozeBody, gapGl) || !strings.Contains(clozeBody, `class="choices"`) {
 		t.Fatalf("cloze shows the gap gloss before the attempt: %d %s", cloze.Code, clozeBody)
 	}
 	if !strings.Contains(clozeBody, gapHe) || !strings.Contains(clozeBody, promptHe) {
@@ -226,7 +238,7 @@ func testQALessonHidesAnswer(t *testing.T) {
 
 	check := getAuthed(t, h, cookie, "/lesson")
 	checkRun := runValue(t, check)
-	if strings.Contains(check, promptLat) || !strings.Contains(check, promptHe) {
+	if strings.Contains(check, promptLat) || !strings.Contains(check, promptHe) || !strings.Contains(check, `class="choices"`) {
 		t.Fatalf("checkpoint recall transliteration before the attempt:\n%s", check)
 	}
 	checkAnswer := postLesson(t, h, cookie, checkPath, checkRun, itoa(promptID), true, "qa-csrf")
@@ -234,58 +246,134 @@ func testQALessonHidesAnswer(t *testing.T) {
 		t.Fatalf("checkpoint answer = %d %s", checkAnswer.Code, checkAnswer.Body.String())
 	}
 	checkProduce := postLesson(t, h, cookie, checkPath, checkRun, "continue", true, "qa-csrf")
-	if checkProduce.Code != http.StatusOK || strings.Contains(checkProduce.Body.String(), produceLat) || !strings.Contains(checkProduce.Body.String(), produceHe) {
+	if checkProduce.Code != http.StatusOK || strings.Contains(checkProduce.Body.String(), produceLat) || !strings.Contains(checkProduce.Body.String(), produceHe) || !strings.Contains(checkProduce.Body.String(), `class="choices"`) {
 		t.Fatalf("checkpoint produce = %d %s", checkProduce.Code, checkProduce.Body.String())
 	}
 }
 
+// The warm-up opens on a letters item: the learner hears a syllable and picks
+// the letter. The Latin sound is the answer key. It stays off the screen
+// before the attempt and after it, because a placement pick does not say
+// whether the choice was right. The heard letter is one of the buttons.
 func testQAPlacementHidesGloss(t *testing.T) {
 	t.Helper()
-	h, _, learner, _ := newPlacementRouter(t)
+	h, store, learner, _ := newPlacementRouter(t)
 	start := learner.post(t, h, "/_hx/placement/start", url.Values{"_csrf": {learner.csrf}}, "", true)
 	if start.Code != http.StatusOK {
 		t.Fatalf("start = %d %s", start.Code, start.Body.String())
 	}
 	body := start.Body.String()
-	he := regexp.MustCompile(`<bdi class="wb__he heword" lang="he" dir="rtl"[^>]*>([^<]*)</bdi>`).FindStringSubmatch(body)
-	if he == nil || he[1] == "" {
-		t.Fatalf("placement front has no Hebrew word:\n%s", body)
+	if screenOf(body) != views.PlaceLetters || phaseOf(body) != views.PlaceAsk {
+		t.Fatalf("opening is %q %q, want letters ask:\n%s", screenOf(body), phaseOf(body), body)
 	}
-	gloss := placementGloss(t, he[1])
-	if strings.Contains(body, gloss) {
-		t.Fatalf("placement front contains the gloss %q:\n%s", gloss, body)
+	if !strings.Contains(body, "Warm-up") || !strings.Contains(body, "Which letter did you hear?") {
+		t.Fatalf("letters opening is missing its question:\n%s", body)
 	}
-	flip := learner.post(t, h, "/_hx/placement/flip", url.Values{
-		"run_id":  {hidden(t, body, "run_id")},
-		"item_id": {hidden(t, body, "item_id")},
-		"_csrf":   {learner.csrf},
+	if strings.Contains(body, `class="pl__he"`) {
+		t.Fatalf("letters opening shows a Hebrew word:\n%s", body)
+	}
+	if strings.Contains(body, "Answer saved") {
+		t.Fatalf("letters opening already says the answer was saved:\n%s", body)
+	}
+	if n := strings.Count(body, "data-pl-option"); n != 4 {
+		t.Fatalf("letter buttons = %d, want 4", n)
+	}
+	letter, correct, wrong := openLetter(t, store, body)
+	if !strings.Contains(body, correct) {
+		t.Fatalf("the heard letter %q is not a choice:\n%s", correct, body)
+	}
+	if soundShown(body, letter.Sound) {
+		t.Fatalf("the ask shows the sound %q:\n%s", letter.Sound, body)
+	}
+
+	picked := learner.post(t, h, "/_hx/placement/answer", url.Values{
+		"run_id": {hidden(t, body, "run_id")},
+		"item":   {hidden(t, body, "item")},
+		"option": {wrong},
+		"_csrf":  {learner.csrf},
 	}, "", true)
-	if flip.Code != http.StatusOK || !strings.Contains(flip.Body.String(), gloss) {
-		t.Fatalf("placement flip did not show %q: %d %s", gloss, flip.Code, flip.Body.String())
+	if picked.Code != http.StatusOK {
+		t.Fatalf("answer = %d %s", picked.Code, picked.Body.String())
+	}
+	after := picked.Body.String()
+	if screenOf(after) != views.PlaceLetters || phaseOf(after) != views.PlacePicked {
+		t.Fatalf("after the pick is %q %q, want letters picked", screenOf(after), phaseOf(after))
+	}
+	if !strings.Contains(after, "Answer saved") {
+		t.Fatalf("the pick did not confirm the answer was saved:\n%s", after)
+	}
+	if soundShown(after, letter.Sound) || verdictShown(after) {
+		t.Fatalf("the pick revealed the sound %q or a verdict:\n%s", letter.Sound, after)
 	}
 }
 
-func placementGloss(t *testing.T, text string) string {
+func openLetter(t *testing.T, store *db.Store, body string) (placement.Letter, string, string) {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "internal", "placement", "items.json"))
+	runID, err := strconv.ParseInt(hidden(t, body, "run_id"), 10, 64)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var items []struct {
-		Text  string `json:"text_nfc"`
-		Gloss string `json:"gloss_en"`
-	}
-	if err := json.Unmarshal(raw, &items); err != nil {
+	items, err := store.ListPlacementItems(t.Context(), runID)
+	if err != nil {
 		t.Fatal(err)
 	}
-	for _, item := range items {
-		if item.Text == text {
-			if item.Gloss == "" {
-				t.Fatalf("placement item %q has an empty gloss", text)
-			}
-			return item.Gloss
+	var open db.PlacementItem
+	found := false
+	for _, it := range items {
+		if it.Outcome == "" {
+			open, found = it, true
+			break
 		}
 	}
-	t.Fatalf("placement deck has no gloss for %q", text)
-	return ""
+	if !found || open.Part != "letters" || !open.CorrectIdx.Valid {
+		t.Fatalf("open item = %+v", open)
+	}
+	var stored struct {
+		Options []struct {
+			ID   string `json:"id"`
+			Text string `json:"text"`
+		} `json:"options"`
+	}
+	if err := json.Unmarshal([]byte(open.Options), &stored); err != nil {
+		t.Fatal(err)
+	}
+	if int(open.CorrectIdx.Int64) >= len(stored.Options) {
+		t.Fatalf("correct index %d of %d", open.CorrectIdx.Int64, len(stored.Options))
+	}
+	correct := stored.Options[open.CorrectIdx.Int64]
+	var wrong string
+	for _, opt := range stored.Options {
+		if opt.ID != correct.ID {
+			wrong = opt.ID
+			break
+		}
+	}
+	if wrong == "" || correct.Text == "" {
+		t.Fatalf("options = %+v", stored.Options)
+	}
+	letters, err := placement.Letters()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, letter := range letters {
+		if letter.ID == open.ItemID {
+			if letter.LetterNFC != correct.Text || letter.Sound == "" {
+				t.Fatalf("letter %s text %q sound %q, correct option %q", letter.ID, letter.LetterNFC, letter.Sound, correct.Text)
+			}
+			return letter, correct.Text, wrong
+		}
+	}
+	t.Fatalf("letters.json has no %s", open.ItemID)
+	return placement.Letter{}, "", ""
+}
+
+func soundShown(html, sound string) bool {
+	text := regexp.MustCompile(`(?s)<script\b.*?</script>`).ReplaceAllString(html, " ")
+	text = regexp.MustCompile(`<[^>]+>`).ReplaceAllString(text, " ")
+	return regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(sound) + `\b`).MatchString(text)
+}
+
+func verdictShown(html string) bool {
+	text := regexp.MustCompile(`<[^>]+>`).ReplaceAllString(html, " ")
+	return regexp.MustCompile(`(?i)\b(correct|incorrect|not quite|right answer)\b`).MatchString(text)
 }

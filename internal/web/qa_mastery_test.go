@@ -1,6 +1,7 @@
 package web
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -95,8 +96,9 @@ func TestQALessonFinishIsNotMastery(t *testing.T) {
 		t.Fatalf("Today counts the finished lesson as known:\n%s", home)
 	}
 	progress := getAuthed(t, h, learner.cookie, "/progress")
-	if !strings.Contains(progress, `>0</bdi></span> <span lang="en">Words</span>`) {
-		t.Fatalf("progress counts the finished lesson as words you can remember:\n%s", progress)
+	known := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`).FindStringSubmatch(progress)
+	if known == nil || known[1] != "0" || !strings.Contains(progress, "words estimated known") {
+		t.Fatalf("progress known count = %v, want 0 words estimated known:\n%s", known, progress)
 	}
 	if strings.Contains(progress, "mastered") || strings.Contains(home, "mastered") {
 		t.Fatal("a finished lesson is labeled mastered")
