@@ -5,6 +5,7 @@ templ Review(p Page, c ReviewCard) {
 		<article class="review sheet">
 			<h1 class="review__h1" lang={ p.Lang }>{ p.ReviewHeading }</h1>
 			@ReviewBody(c)
+			<script src="/static/js/clips.js" defer></script>
 			<script src="/static/js/activity.js" defer></script>
 		</article>
 	}
