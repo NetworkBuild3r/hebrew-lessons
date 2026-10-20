@@ -310,9 +310,12 @@ templ flashCard(c ReviewCard) {
 }
 
 // flashAudio is the card's clip, when it may be played on this render.
+// The same clip as a lesson step: a native bar for no-JS, and button.orb
+// that clips.js plays. The bar is display:none only after that script adds
+// class js, so the card never hides the audio without a control.
 templ flashAudio(c ReviewCard) {
-	if answerSide(c) {
-		@actClip("act-card-clip", c.AudioURL, false, false, "Play the word")
+	if answerSide(c) && c.AudioURL != "" {
+		@clip("act-card-clip", c.AudioURL, "Play the word", true)
 	}
 }
 
