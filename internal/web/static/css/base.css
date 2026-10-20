@@ -1138,6 +1138,10 @@ h1 {
   padding: 0;
   margin: 0;
   clip-path: inset(50%);
+  /* Without this the nowrap text runs out of its 1px box and widens the page (a 4px sideways scroll at 360px).
+     clip rather than the usual value, which csslint keeps out of this file so pointed text is never cut:
+     this box is invisible and holds no pointed text. */
+  overflow: clip;
   white-space: nowrap;
 }
 .pltoast {
