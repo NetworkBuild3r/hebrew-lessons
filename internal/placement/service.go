@@ -408,6 +408,10 @@ func (e *Engine) lexeme(ctx context.Context, w Word) (int64, error) {
 	return e.store.UpsertPlacementLexeme(ctx, w.Text, w.Gloss, w.POS, w.Translit, w.Gender)
 }
 
+// MaxReplaces is how many times one listening item may swap its word for another. The web screen's
+// PlaceMaxReplaceTries is the same number; a web test keeps the two equal.
+const MaxReplaces = 3
+
 // Replace swaps the open listening item for another word of the same band, when the client could not play
 // its clip (INIT-015/SPEC-012). The item keeps its id and place in the run. The word that was swapped out is
 // remembered on the item, so it is not dealt again, and nothing about it is stored as an answer. A word is
@@ -436,6 +440,12 @@ func (e *Engine) Replace(ctx context.Context, userID, runID int64, itemID string
 	prev, err := parseStored(open.Options)
 	if err != nil {
 		return Step{}, err
+	}
+	// The screen stops offering a new word after MaxReplaces, but the cap is held here, because a
+	// client can post replace as often as it likes. Without it a learner could skip words until a
+	// familiar one came up and so raise the estimate.
+	if len(prev.Skipped) >= MaxReplaces {
+		return Step{}, ErrNotReady
 	}
 	it, ok, err := e.dealWord(ctx, d, &rc, PartListening, SkillListen, open.Band)
 	if err != nil {

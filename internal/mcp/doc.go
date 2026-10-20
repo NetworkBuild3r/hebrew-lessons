@@ -24,9 +24,10 @@
 // users.role. The static MCP_AUTH_TOKEN stays RoleAdmin.
 // MCP_READONLY_TOKEN, when set, is a second static bearer. A match is
 // RoleLearner bound to MCP_READONLY_LEARNER_ID. Its actor is
-// mcp-readonly; the admin static token stays mcp. It may call only
-// get_context, lookup, get_learner_words, and validate_unit. get_context
-// and get_learner_words are limited to that learner id. The process does
+// mcp-readonly; the admin static token stays mcp. It may call only the
+// read tools: get_context, lookup, get_learner_words, get_learner_model,
+// get_progress and validate_unit. It may not call unpublish_unit or any
+// admin tool. The tools that take a learner id are limited to that id. The process does
 // not create a users row. Point the id at a dedicated smoke learner so
 // the smoke does not read a real student. get_context still succeeds
 // when that learner has no placement row and reports an empty placement.

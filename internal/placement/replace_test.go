@@ -170,3 +170,27 @@ func TestReplaceWithNoClipLeftKeepsTheItem(t *testing.T) {
 		t.Errorf("a refused replacement changed the item: %+v then %+v", before, after)
 	}
 }
+
+// The screen hides its button after MaxReplaces, but a client can post replace as often as it
+// likes, so the engine holds the cap: a learner cannot skip words until a familiar one comes up.
+func TestReplaceIsCappedPerItem(t *testing.T) {
+	e, _ := openEngine(t, fixedClock{when}, 44)
+	ctx := context.Background()
+	runID, user, step := toListening(t, e, "cap")
+	id := step.Item.ID
+	for i := 0; i < MaxReplaces; i++ {
+		if _, err := e.Replace(ctx, user, runID, id); err != nil {
+			t.Fatalf("replace %d: %v", i+1, err)
+		}
+	}
+	before := openRow(t, e, runID, id)
+	for i := 0; i < 5; i++ {
+		if _, err := e.Replace(ctx, user, runID, id); !errors.Is(err, ErrNotReady) {
+			t.Fatalf("replace past the cap = %v, want ErrNotReady", err)
+		}
+	}
+	after := openRow(t, e, runID, id)
+	if after.ItemID != before.ItemID || after.Options != before.Options {
+		t.Errorf("a refused replacement changed the item: %+v then %+v", before, after)
+	}
+}
