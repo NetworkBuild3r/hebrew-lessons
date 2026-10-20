@@ -46,7 +46,10 @@ func collect(ctx context.Context, doc *Unit, lk Lookup) []Issue {
 	flat, refs := flatten(doc)
 	issues := schemaIssues(doc)
 	issues = append(issues, dialogueIssues(doc)...)
-	return append(issues, remapIssues(textIssues(ctx, flat, lk), refs)...)
+	issues = append(issues, remapIssues(textIssues(ctx, flat, lk), refs)...)
+	// Target is checked on the real activities. A flattened dialogue would
+	// drop the field, and remapping those pointers would point at a line.
+	return append(issues, targetIssues(ctx, doc, lk)...)
 }
 
 // textIssues runs the rules that read activity text, on a flattened document.

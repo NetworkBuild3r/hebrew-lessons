@@ -309,8 +309,8 @@ func coachRegistry(t *testing.T, e *ltEnv) coachFacts {
 	for _, r := range res.Resources {
 		f.resources = append(f.resources, r.URI)
 	}
-	if len(f.tools) < 13 || len(f.resources) < 4 {
-		t.Fatalf("the registry has %d tools and %d resources, want at least 13 and 4", len(f.tools), len(f.resources))
+	if len(f.tools) < 14 || len(f.resources) < 4 {
+		t.Fatalf("the registry has %d tools and %d resources, want at least 14 and 4", len(f.tools), len(f.resources))
 	}
 	return f
 }

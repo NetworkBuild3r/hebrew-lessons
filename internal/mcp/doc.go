@@ -1,14 +1,15 @@
 // Package mcp is the authoring server.
 //
-// This slice serves thirteen tools and four resources over streamable HTTP.
+// This slice serves fourteen tools and four resources over streamable HTTP.
 // The authoring tools are get_context, lookup, validate_unit, put_unit,
-// upsert_lexemes, generate_audio, publish_unit, and get_learner_words.
-// The learner tools (INIT-015/SPEC-021) are get_learner_model, get_progress,
-// get_lesson_brief, add_coach_note, and unpublish_unit. The resources are
-// hebrew://schema/unit, hebrew://catalog/activities, hebrew://rules, and
-// hebrew://authoring. The other three tools (get_unit, unit_history,
-// delete_unit) register on the same server later. They are not stubbed
-// here, so tools/list shows only what runs.
+// upsert_lexemes, generate_audio, publish_unit, get_learner_words, and
+// get_unit. get_unit reads one unit's published document by id. It does
+// not return a draft. The learner tools (INIT-015/SPEC-021) are
+// get_learner_model, get_progress, get_lesson_brief, add_coach_note, and
+// unpublish_unit. The resources are hebrew://schema/unit,
+// hebrew://catalog/activities, hebrew://rules, and hebrew://authoring.
+// The other two tools (unit_history, delete_unit) register on the same
+// server later. They are not stubbed here, so tools/list shows only what runs.
 //
 // The learner tools read a store that a CourseReader may also implement
 // (LearnerData), found with a type assertion, so Options has no field for it.
@@ -26,7 +27,7 @@
 // RoleLearner bound to MCP_READONLY_LEARNER_ID. Its actor is
 // mcp-readonly; the admin static token stays mcp. It may call only the
 // read tools: get_context, lookup, get_learner_words, get_learner_model,
-// get_progress and validate_unit. It may not call unpublish_unit or any
+// get_progress, validate_unit, and get_unit. It may not call unpublish_unit or any
 // admin tool. The tools that take a learner id are limited to that id. The process does
 // not create a users row. Point the id at a dedicated smoke learner so
 // the smoke does not read a real student. get_context still succeeds

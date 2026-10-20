@@ -76,6 +76,8 @@ A unit is plain JSON. It has no audio, gloss, or choices fields. Audio is the cl
 | `cloze` | The whole pointed sentence. The new word in it is the gap. | read | A question. |
 | `pattern` | One pointed example of a pattern. The concept is the rule. | read | A question. |
 
+A question (`recall`, `listen_pick`, `produce`, or `cloze`) may set `target` to the exact token it tests, the same spelling as one token of its text, and that token must be in the lexicon. Leave `target` out to test the first new token. An empty `target` is the same as leaving it out.
+
 Any conversation between people is a `dialogue`, never a `story`. A story stays one narrator. In a dialogue, speaker `a` is the female voice and speaker `b` is the male voice, the same for the whole unit. Both must speak. The speaker is exactly `a` or `b`. A voice id never goes in a unit or a request.
 
 ## Reading a brief
@@ -124,6 +126,7 @@ Every Hebrew text needs a clip for its exact pointed text. Do not change a text 
 
 | rule | severity | what it means | how to fix it |
 | --- | --- | --- | --- |
+| `activity.target` | block | A graded activity's `target` is not one of its tokens, or that token is not in the lexicon. A `target` on any other activity type is the same rule. An empty target is allowed. | Set `target` to a token of that activity's text that `lookup` knows, or remove it. |
 | `audio.missing` | block | A Hebrew text has no clip for its exact pointed text. A dialogue line needs a clip in its own speaker's voice. | Call `generate_audio` with that exact text, or with the line and its speaker. |
 | `brief.audio_all` | block | A new word, or a title, situation, or concept that has Hebrew, has no clip. | Add the new words to `texts` in `generate_audio`, or keep Hebrew out of the title, situation, and concept. |
 | `brief.coverage` | block | A passage has too few known words for the tier. The message gives the share and what the tier needs. | Replace unknown words with comfortable words or brief words, or shorten the passage. |

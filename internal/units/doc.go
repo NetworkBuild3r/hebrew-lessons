@@ -129,10 +129,15 @@ type Lesson struct {
 // Activity is one screen. Type is one of the Activity* constants.
 // Text is the Hebrew the activity speaks or asks about, when it has any.
 // A dialogue has Lines instead of Text.
+// Target, on a graded activity (recall, listen_pick, produce, cloze), is the
+// token that activity tests. It is that token's exact text, compared after
+// Normalize, the same way a token is matched to a lexeme. Empty means the
+// player keeps the first new token.
 type Activity struct {
-	Type  string         `json:"type"`
-	Text  string         `json:"text,omitempty"`
-	Lines []DialogueLine `json:"lines,omitempty"`
+	Type   string         `json:"type"`
+	Text   string         `json:"text,omitempty"`
+	Lines  []DialogueLine `json:"lines,omitempty"`
+	Target string         `json:"target,omitempty" jsonschema:"Optional. The exact token this graded activity tests, pointed Hebrew in NFC, one of the tokens of text. That token must be in the lexicon. Omit it, or leave it empty, and the player tests the first new token. Used by recall, listen_pick, produce, and cloze."`
 
 	// speaker is set only on the one-line views of a dialogue that the validator
 	// builds (see flatten). It is never read from or written to JSON.

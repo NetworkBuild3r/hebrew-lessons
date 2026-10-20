@@ -184,6 +184,7 @@ func markupIssues(doc *Unit) []Issue {
 		for j, act := range les.Activities {
 			check(at("lessons", i, "activities", j, "type"), act.Type)
 			check(at("lessons", i, "activities", j, "text"), act.Text)
+			check(at("lessons", i, "activities", j, "target"), act.Target)
 			for k, line := range act.Lines {
 				check(at("lessons", i, "activities", j, "lines", k, "speaker"), line.Speaker)
 				check(at("lessons", i, "activities", j, "lines", k, "text"), line.Text)
