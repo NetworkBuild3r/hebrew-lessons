@@ -1,0 +1,21 @@
+{
+  "lexemes": [
+    {"text": "א", "gloss": "Alef", "translit": "alef", "pos": "noun", "gender": "m"},
+    {"text": "ב", "gloss": "Bet", "translit": "bet", "pos": "noun", "gender": "m"}
+  ],
+  "unit": {
+    "title": "QA two options",
+    "situation": "The target and one other word.",
+    "concept": "Two eligible options are not an ask.",
+    "newWords": ["א", "ב"],
+    "lessons": [
+      {
+        "kind": "lesson",
+        "activities": [
+          {"type": "recall", "text": "א"},
+          {"type": "cloze", "text": "ב"}
+        ]
+      }
+    ]
+  }
+}
