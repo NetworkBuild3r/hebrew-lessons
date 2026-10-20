@@ -26,6 +26,7 @@ var learnerTools = map[string]bool{
 	"get_learner_words": true,
 	"get_learner_model": true,
 	"get_progress":      true,
+	"get_unit":          true,
 	"lookup":            true,
 	"validate_unit":     true,
 	"unpublish_unit":    true,

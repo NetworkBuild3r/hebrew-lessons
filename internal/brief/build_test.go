@@ -14,6 +14,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
 type fakeClock struct{ t time.Time }
@@ -305,7 +306,7 @@ func TestAC2StruggleWordsCarrySkillAndCount(t *testing.T) {
 		if w.State != string(learner.Struggling) {
 			t.Errorf("word %d state %q", w.LexemeID, w.State)
 		}
-		if !slices.Equal(w.Activities, []string{ActivityReadPick, ActivityWordMatch}) {
+		if !slices.Equal(w.Activities, units.ActivitiesForSkill(units.SkillRead)) {
 			t.Errorf("word %d activities %v", w.LexemeID, w.Activities)
 		}
 		// Worst first: 0 right answers, then 1, 2, 3, 4.
@@ -351,7 +352,7 @@ func TestSelectionRules(t *testing.T) {
 		}
 	})
 	t.Run("activities train the focus and each failing skill, without repeats", func(t *testing.T) {
-		want := []string{ActivityReadPick, ActivityWordMatch}
+		want := units.ActivitiesForSkill(units.SkillRead)
 		if !slices.Equal(br.Activities, want) {
 			t.Errorf("activities = %v, want %v", br.Activities, want)
 		}
@@ -546,19 +547,31 @@ func TestSkillFocus(t *testing.T) {
 }
 
 func TestActivitiesNeverNameFlashcard(t *testing.T) {
-	for skill, types := range skillActivities {
+	banned := []string{"flashcard", "read_pick", "word_match", "audio_match", "type_it", "dictation"}
+	for _, skill := range learner.Skills {
+		types := skillActivities(skill)
 		if len(types) == 0 {
 			t.Errorf("skill %s has no activity", skill)
 		}
-		for _, a := range types {
-			if a == "flashcard" {
-				t.Errorf("skill %s names flashcard", skill)
-			}
+		if !slices.Equal(types, units.ActivitiesForSkill(skill)) {
+			t.Errorf("skill %s activities %v, want the validator's list", skill, types)
 		}
-	}
-	for _, s := range learner.Skills {
-		if _, ok := skillActivities[s]; !ok {
-			t.Errorf("no activities for %s", s)
+		for _, a := range types {
+			if slices.Contains(banned, a) {
+				t.Errorf("skill %s names %s", skill, a)
+			}
+			u := &units.Unit{
+				Title: "t", Situation: "s", Concept: "c",
+				Lessons: []units.Lesson{{
+					Kind:       units.KindLesson,
+					Activities: []units.Activity{{Type: a, Text: "שָׁלוֹם"}},
+				}},
+			}
+			for _, is := range units.Validate(context.Background(), u, nil) {
+				if is.Rule == units.RuleSchemaActivity {
+					t.Errorf("validate rejects the brief activity %s: %s", a, is.Msg)
+				}
+			}
 		}
 	}
 }
@@ -751,7 +764,7 @@ func TestNewLearnerFallback(t *testing.T) {
 	if len(br.StruggleWords) != 0 || len(br.ComfortableWords) != 0 || br.FocusCause != "" {
 		t.Errorf("a new learner has no struggle or comfortable words: %+v", br.Plan)
 	}
-	if br.SkillFocus != DefaultSkillFocus || !slices.Equal(br.Activities, []string{ActivityListenPick, ActivityAudioMatch}) {
+	if br.SkillFocus != DefaultSkillFocus || !slices.Equal(br.Activities, units.ActivitiesForSkill(units.SkillListen)) {
 		t.Errorf("focus %q activities %v, want listening", br.SkillFocus, br.Activities)
 	}
 	payload := storedPayload(t, e, br.ID)
