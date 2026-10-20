@@ -591,10 +591,8 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 			t.Errorf("help word missing %s", help)
 		}
 	}
-	for _, hidden := range []string{">gar<", ">lives<"} {
-		if strings.Contains(head, hidden) {
-			t.Errorf("the tested word shows %s before the answer", hidden)
-		}
+	if strings.Contains(head, ">lives<") || strings.Contains(head, `class="wb__tr" lang="he-Latn" dir="ltr">gar<`) {
+		t.Errorf("the tested word shows its gloss or transliteration before the answer:\n%s", head)
 	}
 	if !strings.Contains(head, gar) {
 		t.Fatal("the tested word's Hebrew is hidden")
@@ -602,13 +600,17 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	if !strings.Contains(choices, ">lives<") {
 		t.Errorf("choice missing the target gloss")
 	}
-	// The other words' glosses are on screen as help. Offering them as
-	// buttons would give the answer away. This unit has no other words,
-	// so the only button left is the target.
-	for _, gloss := range []string{">I<", ">here<"} {
-		if strings.Contains(choices, gloss) {
-			t.Errorf("choice equals a visible helper gloss %s", gloss)
-		}
+	// This unit has no word outside the line, so the other parts of speech
+	// on the line fill the ask. One button, the answer alone, is not a question.
+	gotChoices := choiceValues(t, ask)
+	if len(gotChoices) < 2 {
+		t.Fatalf("tiny recall rendered %d buttons, want at least 2:\n%s", len(gotChoices), choices)
+	}
+	if !slicesContains(gotChoices, itoa(ids[gar])) {
+		t.Fatalf("the answer is not a button: %v", gotChoices)
+	}
+	if !slicesContains(gotChoices, itoa(ids[ani])) && !slicesContains(gotChoices, itoa(ids[po])) {
+		t.Fatalf("other parts of speech did not fill the ask: %v", gotChoices)
 	}
 	if strings.Contains(choices, `c-answer__key" aria-hidden="true">1<`) || strings.Contains(choices, `c-answer__key" aria-hidden="true">2<`) {
 		t.Fatalf("lesson choices still show key badges:\n%s", choices)
@@ -618,6 +620,15 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	}
 	if !strings.Contains(choices, `value="`+itoa(ids[gar])+`"`) {
 		t.Fatalf("the target choice is not the lexeme id:\n%s", choices)
+	}
+	for _, word := range []struct{ he, tr string }{{ani, "ani"}, {gar, "gar"}, {po, "po"}} {
+		label := `<bdi class="clip-row__he" lang="he" dir="rtl">` + word.he + `</bdi> <span class="clip-row__sep"> · </span> <bdi class="clip-row__tr" lang="he-Latn" dir="ltr">` + word.tr + `</bdi>`
+		if !strings.Contains(ask, label) {
+			t.Errorf("no-JS row does not name %s · %s", word.he, word.tr)
+		}
+	}
+	if !strings.Contains(ask, `class="clip-rows"`) {
+		t.Fatal("per-word bars are not a list under the line")
 	}
 	for _, want := range []string{
 		`aria-label="Play the line"`,
@@ -671,6 +682,10 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	assertOneClipControl(t, alone)
 	if strings.Contains(alone, ani) || strings.Contains(alone, po) {
 		t.Fatalf("single-word recall shows the rest of the line:\n%s", alone)
+	}
+	aloneChoices := choiceValues(t, alone)
+	if len(aloneChoices) < 2 {
+		t.Fatalf("single-word recall rendered %d buttons, want more than 1: %v", len(aloneChoices), aloneChoices)
 	}
 }
 
@@ -829,10 +844,92 @@ func TestChoicesSkipVisibleHelperGlosses(t *testing.T) {
 	}
 }
 
-// assertOneClipControl checks the no-JS document. Each lesson clip renders
-// exactly one native audio[controls] and exactly one button.orb. The audio
-// is not hidden, so the bar is the play control. The orb stays in the markup
-// and CSS keeps it display:none until html.js.
+// An author's Target names a word that is not the first token. That word is
+// the one marked, and its gloss stays hidden while the earlier words show.
+func TestRecallTargetMarksALaterWord(t *testing.T) {
+	const (
+		ani = "אֲנִי"
+		gar = "גָּר"
+		po  = "פֹּה"
+	)
+	fx := openLessonPlayer(t)
+	sp := func(s string) *string { return &s }
+	if _, _, err := fx.store.UpsertLexemes(fx.ctx, []lexicon.Input{
+		{TextNFC: ani, Gloss: "I", Translit: sp("ani"), POS: sp("pron")},
+		{TextNFC: gar, Gloss: "lives", Translit: sp("gar"), POS: sp("verb")},
+		{TextNFC: po, Gloss: "here", Translit: sp("po"), POS: sp("adv")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	line := ani + " " + gar + " " + po
+	unitID := putLesson(t, fx.store, nil, units.Unit{
+		Title: "At home", Position: 1, NewWords: []string{gar},
+		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
+			{Type: units.ActivityRecall, Text: line, Target: po},
+		}}},
+	}, "shared")
+	publish(t, fx.store, unitID)
+	body := getAuthed(t, fx.h, fx.cookie, "/lesson/"+itoa(unitID)+"/0")
+	ask := activityHTML(t, body)
+	head, _, ok := strings.Cut(ask, `class="choices"`)
+	if !ok {
+		t.Fatalf("target recall missing choices:\n%s", ask)
+	}
+	if !strings.Contains(head, `<mark class="target"><bdi class="wb__he" lang="he" dir="rtl">`+po+`</bdi></mark>`) {
+		t.Fatalf("the named target is not the mark:\n%s", head)
+	}
+	if strings.Contains(head, `<mark class="target"><bdi class="wb__he" lang="he" dir="rtl">`+gar+`</bdi></mark>`) {
+		t.Fatal("the first new word is marked instead of the named target")
+	}
+	if !strings.Contains(head, ">lives<") || !strings.Contains(head, ">I<") {
+		t.Fatalf("earlier words are not shown as help:\n%s", head)
+	}
+	if strings.Contains(head, ">here<") || strings.Contains(head, ">po<") {
+		t.Fatalf("the named target shows its gloss or transliteration:\n%s", head)
+	}
+	if len(choiceValues(t, ask)) < 2 {
+		t.Fatal("the named-target recall has fewer than 2 buttons")
+	}
+}
+
+// One lexicon word cannot fill a second button. The step shows the gloss
+// and Continue, and posting Continue moves on without a grade.
+func TestRecallDegradesWithoutASecondChoice(t *testing.T) {
+	const gar = "גָּר"
+	fx := openLessonPlayer(t)
+	sp := func(s string) *string { return &s }
+	if _, _, err := fx.store.UpsertLexemes(fx.ctx, []lexicon.Input{
+		{TextNFC: gar, Gloss: "lives", Translit: sp("gar"), POS: sp("verb")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	unitID := putLesson(t, fx.store, nil, units.Unit{
+		Title: "Alone", Position: 1, NewWords: []string{gar},
+		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
+			{Type: units.ActivityRecall, Text: gar},
+		}}},
+	}, "shared")
+	publish(t, fx.store, unitID)
+	path := "/lesson/" + itoa(unitID) + "/0"
+	body := getAuthed(t, fx.h, fx.cookie, path)
+	ask := activityHTML(t, body)
+	if strings.Contains(ask, `class="choices"`) {
+		t.Fatalf("a one-word lexicon still asks:\n%s", ask)
+	}
+	if !strings.Contains(ask, ">lives<") {
+		t.Fatalf("the reveal hides the gloss:\n%s", ask)
+	}
+	runID := runValue(t, body)
+	cont := postLesson(t, fx.h, fx.cookie, path, runID, "continue", true, lessonCSRF)
+	if cont.Code != http.StatusOK || !strings.Contains(cont.Body.String(), "Lesson complete.") {
+		t.Fatalf("continue on a reveal: %d %s", cont.Code, cont.Body.String())
+	}
+}
+
+// assertOneClipControl checks the no-JS document. Every clip has one native
+// audio[controls] and one button.orb, and neither carries hidden. A recall
+// word keeps the orb in the line and the bar in .clip-rows; data-audio joins
+// them. Every other clip keeps the bar and the orb in the same div.
 func assertOneClipControl(t *testing.T, html string) {
 	t.Helper()
 	clips := regexp.MustCompile(`(?s)<div class="clip(?: clip--hero)?">.*?</div>`).FindAllString(html, -1)
@@ -842,17 +939,49 @@ func assertOneClipControl(t *testing.T, html string) {
 	audioTag := regexp.MustCompile(`<audio\b[^>]*>`)
 	buttonTag := regexp.MustCompile(`<button\b[^>]*>`)
 	hiddenAttr := regexp.MustCompile(`(?:\s)hidden(?:[\s=/>]|$)`)
+	idAttr := regexp.MustCompile(`\bid="([^"]+)"`)
+	dataAudio := regexp.MustCompile(`data-audio="([^"]+)"`)
+	seenAudio := map[string]bool{}
+	seenOrb := map[string]int{}
 	for _, block := range clips {
 		audios := audioTag.FindAllString(block, -1)
 		buttons := buttonTag.FindAllString(block, -1)
-		if len(audios) != 1 || len(buttons) != 1 {
-			t.Fatalf("clip has %d audio and %d buttons, want one of each:\n%s", len(audios), len(buttons), block)
+		switch {
+		case len(audios) == 1 && len(buttons) == 1:
+			if !strings.Contains(audios[0], "controls") || hiddenAttr.MatchString(audios[0]) {
+				t.Fatalf("no-JS bar is not the single play control:\n%s", audios[0])
+			}
+			if !strings.Contains(buttons[0], `class="orb`) || hiddenAttr.MatchString(buttons[0]) {
+				t.Fatalf("clip button is not an unhidden orb:\n%s", buttons[0])
+			}
+			if id := idAttr.FindStringSubmatch(audios[0]); id != nil {
+				seenAudio[id[1]] = true
+			}
+		case len(audios) == 1 && len(buttons) == 0:
+			if !strings.Contains(audios[0], "controls") || hiddenAttr.MatchString(audios[0]) || !strings.Contains(audios[0], "aria-label=") {
+				t.Fatalf("labelled bar is missing:\n%s", audios[0])
+			}
+			id := idAttr.FindStringSubmatch(audios[0])
+			if id == nil {
+				t.Fatalf("word bar has no id:\n%s", audios[0])
+			}
+			seenAudio[id[1]] = true
+		case len(audios) == 0 && len(buttons) == 1:
+			if !strings.Contains(buttons[0], `class="orb`) || hiddenAttr.MatchString(buttons[0]) {
+				t.Fatalf("clip button is not an unhidden orb:\n%s", buttons[0])
+			}
+			ref := dataAudio.FindStringSubmatch(buttons[0])
+			if ref == nil {
+				t.Fatalf("word orb does not name its bar:\n%s", buttons[0])
+			}
+			seenOrb[ref[1]]++
+		default:
+			t.Fatalf("clip has %d audio and %d buttons:\n%s", len(audios), len(buttons), block)
 		}
-		if !strings.Contains(audios[0], "controls") || hiddenAttr.MatchString(audios[0]) {
-			t.Fatalf("no-JS bar is not the single play control:\n%s", audios[0])
-		}
-		if !strings.Contains(buttons[0], `class="orb`) || hiddenAttr.MatchString(buttons[0]) {
-			t.Fatalf("clip button is not an unhidden orb:\n%s", buttons[0])
+	}
+	for id, n := range seenOrb {
+		if n != 1 || !seenAudio[id] {
+			t.Fatalf("orb data-audio=%s matches %d bars", id, n)
 		}
 	}
 }
@@ -919,6 +1048,14 @@ func assertRecallLineCSS(t *testing.T, css string) {
 	bars := cssRuleBody(t, css, ".word-blocks--recall .clip > audio")
 	if strings.Contains(bars, "16rem") {
 		t.Fatalf("recall bars still use the 16rem width:\n%s", bars)
+	}
+	rows := cssRuleBody(t, css, ".clip-rows .clip > audio")
+	if !strings.Contains(rows, "inline-size: 100%") {
+		t.Fatalf("no-JS word bars are not full width:\n%s", rows)
+	}
+	hiddenRows := cssRuleBody(t, css, "html.js .clip-rows")
+	if !regexp.MustCompile(`(?i)display\s*:\s*none\b`).MatchString(hiddenRows) {
+		t.Fatalf("JS still shows the no-JS word rows:\n%s", hiddenRows)
 	}
 }
 

@@ -20,6 +20,77 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
+// TestAskChoicesFallback is the reviewer's fill order.
+// (a) a pronoun, a verb target, and an adverb reach at least two buttons,
+// filled from another part of speech or an earlier unit.
+// (b) a single-word recall of that verb has more than one button.
+// (c) when enough same-part-of-speech words exist, other parts and the
+// line's own words stay off the buttons.
+// A second word with the answer's gloss is never a button.
+func TestAskChoicesFallback(t *testing.T) {
+	pron := db.LexemeView{ID: 1, Text: "אֲנִי", Gloss: "I", POS: "pron", Translit: "ani"}
+	verb := db.LexemeView{ID: 2, Text: "גָּר", Gloss: "lives", POS: "verb", Translit: "gar"}
+	adv := db.LexemeView{ID: 3, Text: "פֹּה", Gloss: "here", POS: "adv", Translit: "po"}
+	noun := db.LexemeView{ID: 4, Text: "מַיִם", Gloss: "water", POS: "noun", Translit: "mayim"}
+	twin := db.LexemeView{ID: 5, Text: "יוֹשֵׁב", Gloss: "lives", POS: "verb", Translit: "yoshev"}
+	other := db.LexemeView{ID: 6, Text: "כּוֹתֵב", Gloss: "writes", POS: "verb", Translit: "kotev"}
+	eats := db.LexemeView{ID: 7, Text: "אוֹכֵל", Gloss: "eats", POS: "verb", Translit: "okhel"}
+	drinks := db.LexemeView{ID: 8, Text: "שׁוֹתֶה", Gloss: "drinks", POS: "verb", Translit: "shoteh"}
+	seed := choices.ChoiceSeed{RunID: 9, Step: 0, TargetID: verb.ID}
+	line := choiceExclude{ids: map[int64]bool{pron.ID: true, adv.ID: true}, glosses: map[string]bool{"i": true, "here": true}}
+
+	t.Run("tiny unit", func(t *testing.T) {
+		got := askChoices(units.ActivityRecall, []db.LexemeView{pron, verb, adv}, []db.LexemeView{noun}, verb, seed, line)
+		if len(got) < 2 {
+			t.Fatalf("buttons = %d, want at least 2: %+v", len(got), got)
+		}
+		if !choiceHas(got, "4") {
+			t.Fatalf("earlier other-POS word did not fill before the line: %+v", got)
+		}
+		if choiceHas(got, "5") {
+			t.Fatal("a gloss duplicate of the answer was a button")
+		}
+	})
+
+	t.Run("single word", func(t *testing.T) {
+		got := askChoices(units.ActivityRecall, []db.LexemeView{pron, verb, adv}, nil, verb, seed, choiceExclude{})
+		if len(got) < 2 {
+			t.Fatalf("single-word buttons = %d: %+v", len(got), got)
+		}
+		if !choiceHas(got, "1") || !choiceHas(got, "3") {
+			t.Fatalf("other parts of speech in the unit were not offered: %+v", got)
+		}
+	})
+
+	t.Run("same POS preferred", func(t *testing.T) {
+		unit := []db.LexemeView{pron, verb, adv, other, twin}
+		earlier := []db.LexemeView{eats, drinks, noun}
+		got := askChoices(units.ActivityRecall, unit, earlier, verb, seed, line)
+		if len(got) != lessonWideChoices {
+			t.Fatalf("buttons = %d, want %d: %+v", len(got), lessonWideChoices, got)
+		}
+		for _, id := range []string{"2", "6", "7", "8"} {
+			if !choiceHas(got, id) {
+				t.Errorf("missing same-POS %s in %+v", id, got)
+			}
+		}
+		for _, id := range []string{"1", "3", "4", "5"} {
+			if choiceHas(got, id) {
+				t.Errorf("button %s is the line, another POS, or the answer's gloss", id)
+			}
+		}
+	})
+
+	t.Run("alone is not graded", func(t *testing.T) {
+		if got := askChoices(units.ActivityRecall, []db.LexemeView{verb}, nil, verb, seed, choiceExclude{}); got != nil {
+			t.Fatalf("a one-word lexicon still asks: %+v", got)
+		}
+		if got := askChoices(units.ActivityCloze, []db.LexemeView{verb, twin}, nil, verb, seed, choiceExclude{}); got != nil {
+			t.Fatalf("a gloss duplicate still counts as a second option: %+v", got)
+		}
+	})
+}
+
 func TestLessonChoicesSkipEmptyEnglishGloss(t *testing.T) {
 	target := db.LexemeView{ID: 1, Text: "א", Gloss: "aleph", POS: "noun", Translit: "alef"}
 	blank := db.LexemeView{ID: 2, Text: "ב", Gloss: "  ", POS: "noun", Translit: "bet"}
@@ -180,11 +251,16 @@ func TestLessonChoicesUseEarlierLexemes(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Fatalf("buttons %v want %v", got, want)
 	}
+	if len(got) != lessonWideChoices {
+		t.Fatalf("buttons = %d, want %d: %v", len(got), lessonWideChoices, got)
+	}
 	if !slices.Contains(got, itoa(ids["ג"])) {
 		t.Fatalf("same part of speech from the earlier unit missing: %v", got)
 	}
-	if slices.Contains(got, itoa(ids["א"])) && slices.Contains(got, itoa(ids["ב"])) {
-		t.Fatalf("both nouns were used before the same part of speech was filled: %v", got)
+	// The one earlier verb is preferred. The two nouns fill the remaining
+	// buttons so the ask still has four.
+	if !slices.Contains(got, itoa(ids["א"])) || !slices.Contains(got, itoa(ids["ב"])) {
+		t.Fatalf("other parts of speech did not fill the remaining buttons: %v", got)
 	}
 	ans := postLesson(t, fx.h, fx.cookie, path, itoa(runID), itoa(ids["ד"]), true, lessonCSRF)
 	if ans.Code != http.StatusOK || !strings.Contains(ans.Body.String(), "feedback--right") {

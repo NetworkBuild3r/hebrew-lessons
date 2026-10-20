@@ -1432,6 +1432,61 @@ mark.target .wb__he {
   min-inline-size: 100%;
   max-inline-size: 100%;
 }
+/* Without JS the orb row is not reserved: the bar is a labelled row under
+   the line (.clip-rows), not a control squeezed into the word column. */
+html:not(.js) .word-blocks--recall {
+  grid-auto-rows: auto minmax(1lh, auto) minmax(1lh, auto);
+}
+html:not(.js) .word-blocks--recall > .activity-word {
+  grid-row: span 3;
+}
+html:not(.js) .word-blocks--recall > .activity-word > .clip {
+  display: none;
+}
+.clip-rows {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
+  inline-size: 100%;
+  margin-block-start: var(--space-4);
+}
+html.js .clip-rows {
+  display: none;
+}
+.clip-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+.clip-row__label {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-small);
+  line-height: var(--lh-body);
+}
+.clip-row__he {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-md);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+}
+.clip-row__tr {
+  font-family: var(--font-ui);
+  color: var(--muted);
+}
+.clip-rows .clip {
+  align-items: stretch;
+  inline-size: 100%;
+}
+.clip-rows .clip > audio {
+  inline-size: 100%;
+  min-inline-size: 100%;
+  max-inline-size: 100%;
+}
 .word-blocks--recall .recall-tr,
 .word-blocks--recall .recall-gl {
   max-inline-size: 100%;
