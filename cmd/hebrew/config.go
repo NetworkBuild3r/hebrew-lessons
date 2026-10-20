@@ -28,31 +28,38 @@ func configFromEnv() (app.Config, error) {
 	if dataDir == "" && !dev {
 		return app.Config{}, fmt.Errorf("DATA_DIR is unset")
 	}
+	adminToken := strings.TrimSpace(os.Getenv("MCP_AUTH_TOKEN"))
+	readOnlyToken, readOnlyLearner, err := app.ConfigureMCPReadOnly(adminToken, os.Getenv("MCP_READONLY_TOKEN"), os.Getenv("MCP_READONLY_LEARNER_ID"))
+	if err != nil {
+		return app.Config{}, err
+	}
 	cfg := app.Config{
-		DataDir:            dataDir,
-		HTTPAddr:           os.Getenv("HTTP_ADDR"),
-		MCPAddr:            os.Getenv("MCP_ADDR"),
-		PublicOrigin:       strings.TrimSpace(os.Getenv("PUBLIC_ORIGIN")),
-		TrustedProxies:     splitList(os.Getenv("TRUSTED_PROXIES")),
-		CookieSecure:       cookieSecure,
-		Dev:                dev,
-		LogLevel:           logLevel,
-		GoogleClientID:     firstSet("GOOGLE_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_ID", "web_client_id", "client_id"),
-		GoogleClientSecret: firstSet("GOOGLE_CLIENT_SECRET", "GOOGLE_OAUTH_CLIENT_SECRET", "web_client_secret", "client_secret"),
-		GoogleAuthURL:      firstSet("GOOGLE_AUTH_URL", "GOOGLE_OAUTH_AUTH_URL"),
-		GoogleTokenURL:     firstSet("GOOGLE_TOKEN_URL", "GOOGLE_OAUTH_TOKEN_URL"),
-		GoogleUserinfoURL:  firstSet("GOOGLE_USERINFO_URL", "GOOGLE_OAUTH_USERINFO_URL"),
-		GoogleJWKSURL:      strings.TrimSpace(os.Getenv("GOOGLE_JWKS_URL")),
-		GoogleIssuer:       strings.TrimSpace(os.Getenv("GOOGLE_ISSUER")),
-		StateSecret:        strings.TrimSpace(os.Getenv("HEBREW_SESSION_SECRET")),
-		OAuthRedirectURIs:  splitList(os.Getenv("MCP_OAUTH_REDIRECT_URIS")),
-		AllowedEmails:      splitList(os.Getenv("MCP_OAUTH_ALLOWED_EMAILS")),
-		AdminEmails:        splitList(os.Getenv("ADMIN_EMAILS")),
-		MCPAuthToken:       strings.TrimSpace(os.Getenv("MCP_AUTH_TOKEN")),
-		MCPPublicURL:       strings.TrimSpace(os.Getenv("MCP_PUBLIC_URL")),
-		MCPAllowedOrigins:  splitList(os.Getenv("MCP_ALLOWED_ORIGINS")),
-		ElevenLabsAPIKey:   os.Getenv("ELEVENLABS_API_KEY"),
-		ElevenLabsVoice:    strings.TrimSpace(os.Getenv("ELEVENLABS_VOICE_ID")),
+		DataDir:              dataDir,
+		HTTPAddr:             os.Getenv("HTTP_ADDR"),
+		MCPAddr:              os.Getenv("MCP_ADDR"),
+		PublicOrigin:         strings.TrimSpace(os.Getenv("PUBLIC_ORIGIN")),
+		TrustedProxies:       splitList(os.Getenv("TRUSTED_PROXIES")),
+		CookieSecure:         cookieSecure,
+		Dev:                  dev,
+		LogLevel:             logLevel,
+		GoogleClientID:       firstSet("GOOGLE_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_ID", "web_client_id", "client_id"),
+		GoogleClientSecret:   firstSet("GOOGLE_CLIENT_SECRET", "GOOGLE_OAUTH_CLIENT_SECRET", "web_client_secret", "client_secret"),
+		GoogleAuthURL:        firstSet("GOOGLE_AUTH_URL", "GOOGLE_OAUTH_AUTH_URL"),
+		GoogleTokenURL:       firstSet("GOOGLE_TOKEN_URL", "GOOGLE_OAUTH_TOKEN_URL"),
+		GoogleUserinfoURL:    firstSet("GOOGLE_USERINFO_URL", "GOOGLE_OAUTH_USERINFO_URL"),
+		GoogleJWKSURL:        strings.TrimSpace(os.Getenv("GOOGLE_JWKS_URL")),
+		GoogleIssuer:         strings.TrimSpace(os.Getenv("GOOGLE_ISSUER")),
+		StateSecret:          strings.TrimSpace(os.Getenv("HEBREW_SESSION_SECRET")),
+		OAuthRedirectURIs:    splitList(os.Getenv("MCP_OAUTH_REDIRECT_URIS")),
+		AllowedEmails:        splitList(os.Getenv("MCP_OAUTH_ALLOWED_EMAILS")),
+		AdminEmails:          splitList(os.Getenv("ADMIN_EMAILS")),
+		MCPAuthToken:         adminToken,
+		MCPReadOnlyToken:     readOnlyToken,
+		MCPReadOnlyLearnerID: readOnlyLearner,
+		MCPPublicURL:         strings.TrimSpace(os.Getenv("MCP_PUBLIC_URL")),
+		MCPAllowedOrigins:    splitList(os.Getenv("MCP_ALLOWED_ORIGINS")),
+		ElevenLabsAPIKey:     os.Getenv("ELEVENLABS_API_KEY"),
+		ElevenLabsVoice:      strings.TrimSpace(os.Getenv("ELEVENLABS_VOICE_ID")),
 		// The male voice for speaker b of a dialogue. No default: an unset value
 		// means no male voice, and a speaker b clip fails rather than use the other voice.
 		ElevenLabsVoiceMale: strings.TrimSpace(os.Getenv("ELEVENLABS_VOICE_ID_MALE")),

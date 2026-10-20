@@ -86,7 +86,7 @@
 // # State
 //
 // An Engine keeps no run state. A run is its placement_runs row, its placement_v3_runs row, and its
-// placement_items rows (migration 010). The deal is a pure function of the run's seed, drawn from the
+// placement_items rows (migration 011). The deal is a pure function of the run's seed, drawn from the
 // injected rand.Source, and the answers so far, so any process can serve the next request. Two requests
 // that answer one item at once count once: the answer is claimed with an update that matches an open item.
 //

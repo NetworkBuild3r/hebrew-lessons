@@ -5,7 +5,7 @@
 -- Nothing references confusion_misses (no foreign key points at it, and there is no view or trigger on it),
 -- so dropping it cascades nowhere. The runner holds foreign_keys on inside its transaction and the pragma
 -- cannot change there, which is why this was checked before choosing a plain drop.
--- The runner applies this file in one transaction. If any statement fails, the database stays at 007.
+-- The runner applies this file in one transaction. If any statement fails, the database stays at 008.
 -- There is no down migration. To roll back, restore the pre-migration SQLite file.
 -- This is a db_migration gate item. Do not run it on real data without the operator.
 

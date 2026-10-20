@@ -14,8 +14,9 @@ import (
 
 // learnerTools are the only tools a non-admin session may call.
 // RoleAdmin, including the static MCP_AUTH_TOKEN, may call any tool
-// and any scope. A name that is not listed here is admin-only, which
-// is the default for every write tool added later.
+// and any scope. MCP_READONLY_TOKEN is RoleLearner and uses this same
+// list. A name that is not listed here is admin-only, which is the
+// default for every write tool added later.
 //
 // get_lesson_brief and add_coach_note are not here, so they are admin-only. A brief is
 // a stored row that only put_unit, which is admin-only, can use, and a coach note is read

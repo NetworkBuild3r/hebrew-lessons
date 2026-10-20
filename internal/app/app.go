@@ -22,6 +22,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/buildinfo"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
@@ -105,15 +106,23 @@ type Config struct {
 	// cmd/hebrew copies MCP_AUTH_TOKEN and trims it. An empty token
 	// disables the static bearer: it accepts no request. Startup still
 	// proceeds. internal/mcp does not read the environment.
-	// GET /healthz stays open.
+	// GET /healthz and GET /version stay open.
+	// MCPReadOnlyToken is MCP_READONLY_TOKEN, trimmed. Empty disables
+	// the smoke bearer. MCPReadOnlyLearnerID is MCP_READONLY_LEARNER_ID.
+	// A set token must be at least 32 characters, must differ from
+	// MCPAuthToken, and must name a positive learner id. Startup
+	// refuses otherwise. The process does not create a users row.
+	// Point the id at a dedicated smoke learner.
 	// MCPPublicURL is the public MCP origin. When it is set, it is the
 	// OAuth issuer. Empty does not stop startup; the trusted proxy's
 	// public host is the issuer then. MCPAllowedOrigins are browser
 	// Origins allowed to call MCP. A request with no Origin header is
 	// allowed. cmd/hebrew reads MCP_ALLOWED_ORIGINS.
-	MCPAuthToken      string
-	MCPPublicURL      string
-	MCPAllowedOrigins []string
+	MCPAuthToken         string
+	MCPReadOnlyToken     string
+	MCPReadOnlyLearnerID int64
+	MCPPublicURL         string
+	MCPAllowedOrigins    []string
 
 	// ElevenLabsAPIKey gates the real TTS client. Empty leaves TTS unset
 	// unless TTS is set directly. The key is read at synthesis time:
@@ -188,6 +197,25 @@ func (c Config) Voices() audio.Voices {
 	return audio.Voices{Female: c.ElevenLabsVoice, Male: c.ElevenLabsVoiceMale}
 }
 
+// ConfigureMCPReadOnly parses the smoke-token environment values.
+// An empty token is off and returns zero values, ignoring learnerRaw.
+// A set token must parse as a learner id and pass CheckReadOnlyToken.
+// The returned error is the logged sentence and does not contain the token.
+func ConfigureMCPReadOnly(adminToken, readOnlyToken, learnerRaw string) (string, int64, error) {
+	token := strings.TrimSpace(readOnlyToken)
+	if token == "" {
+		return "", 0, nil
+	}
+	id, err := mcp.ParseReadOnlyLearnerID(learnerRaw)
+	if err != nil {
+		return "", 0, err
+	}
+	if err := mcp.CheckReadOnlyToken(adminToken, token, id); err != nil {
+		return "", 0, err
+	}
+	return token, id, nil
+}
+
 // App is the running process core.
 type App struct {
 	cfg       Config
@@ -209,9 +237,9 @@ type App struct {
 }
 
 // New opens the database, applies migrations, and returns the two handlers.
-// GET /healthz on either handler is unauthenticated. Missing Google,
-// ElevenLabs, and OAuth settings do not fail New; the process logs those
-// separately. Cleanup is NewApp's Close. New wraps NewApp.
+// GET /healthz and GET /version on either handler are unauthenticated.
+// Missing Google, ElevenLabs, and OAuth settings do not fail New; the
+// process logs those separately. Cleanup is NewApp's Close. New wraps NewApp.
 func New(cfg Config) (web, mcp http.Handler, err error) {
 	a, err := NewApp(cfg)
 	if err != nil {
@@ -224,6 +252,11 @@ func New(cfg Config) (web, mcp http.Handler, err error) {
 // Close releases the database. /healthz answers 503 after Close returns.
 func NewApp(cfg Config) (*App, error) {
 	cfg = ApplyDefaults(cfg)
+	cfg.MCPAuthToken = strings.TrimSpace(cfg.MCPAuthToken)
+	cfg.MCPReadOnlyToken = strings.TrimSpace(cfg.MCPReadOnlyToken)
+	if err := mcp.CheckReadOnlyToken(cfg.MCPAuthToken, cfg.MCPReadOnlyToken, cfg.MCPReadOnlyLearnerID); err != nil {
+		return nil, err
+	}
 	if oauthEnabled(cfg) && strings.TrimSpace(cfg.StateSecret) == "" {
 		return nil, fmt.Errorf("HEBREW_SESSION_SECRET is required when OAuth is enabled")
 	}
@@ -297,7 +330,8 @@ func NewApp(cfg Config) (*App, error) {
 	// The engine records through the same evidence recorder, and reads the same clock, as the activity screens.
 	a.placementEngine = placement.NewEngine(store, evidence.New(store, review, cfg.Clock), cfg.Clock)
 	health := a.healthHandler()
-	a.web = web.NewOptions(health, svc, web.Options{
+	version := versionHandler()
+	a.web = mountVersion(web.NewOptions(health, svc, web.Options{
 		Store:    store,
 		AudioDir: audioDir,
 		Deck:     a.placementEngine,
@@ -309,11 +343,11 @@ func NewApp(cfg Config) (*App, error) {
 		// Today offers the check-in when the engine says it is due (INIT-015/SPEC-017).
 		// The same engine as Deck: Today starts a re-check and /placement resumes it, so they must share one.
 		Placement: a.placementEngine,
-	})
-	a.mcp = newMCP(cfg, health, svc, store, tts, audioDir)
+	}))
+	a.mcp = newMCP(cfg, health, version, svc, store, tts, audioDir)
 	sweepCtx, stop := context.WithCancel(context.Background())
 	a.stopSweep = stop
-	go sweepOAuth(sweepCtx, store, cfg.Clock)
+	go sweepOAuth(sweepCtx, svc, store, cfg.Clock)
 	return a, nil
 }
 
@@ -326,7 +360,7 @@ func oauthEnabled(cfg Config) bool {
 	return strings.TrimSpace(cfg.GoogleClientID) != "" && strings.TrimSpace(cfg.GoogleClientSecret) != ""
 }
 
-func sweepOAuth(ctx context.Context, store *db.Store, clk clock.Clock) {
+func sweepOAuth(ctx context.Context, svc *auth.Service, store *db.Store, clk clock.Clock) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
@@ -335,7 +369,10 @@ func sweepOAuth(ctx context.Context, store *db.Store, clk clock.Clock) {
 			return
 		case <-ticker.C:
 			now := clk.Now().UTC()
-			if err := store.SweepOAuth(ctx, now, now.Add(-auth.OAuthClientTTL)); err != nil && ctx.Err() == nil {
+			if svc != nil {
+				svc.PruneRateLimits(now)
+			}
+			if err := store.SweepOAuth(ctx, now, now.Add(-auth.OAuthClientTTL), now.Add(-auth.OAuthIdleClientTTL)); err != nil && ctx.Err() == nil {
 				slog.Error("mcp oauth sweep", "err", err)
 			}
 		}
@@ -345,9 +382,9 @@ func sweepOAuth(ctx context.Context, store *db.Store, clk clock.Clock) {
 // Web is the learner handler.
 func (a *App) Web() http.Handler { return a.web }
 
-// MCP is the authoring handler. GET /healthz is unauthenticated.
-// /mcp is the streamable MCP server. OAuth routes are mounted beside it.
-// Any other path is 404.
+// MCP is the authoring handler. GET /healthz and GET /version are
+// unauthenticated. /mcp is the streamable MCP server. OAuth routes are
+// mounted beside it. Any other path is 404.
 func (a *App) MCP() http.Handler { return a.mcp }
 
 // Store is the process database. QA and MCP Builder use it for users and sessions.
@@ -432,6 +469,8 @@ func writableDir(dir string) error {
 func (a *App) healthHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// No session, cookie, or bearer check. Probes call this with an empty request.
+		// Status stays 200 or 503. commit is added beside ok; probes that
+		// decode only ok still match.
 		ctx, cancel := context.WithTimeout(r.Context(), healthTimeout)
 		defer cancel()
 		err := a.store.Ping(ctx)
@@ -443,18 +482,21 @@ func (a *App) healthHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(struct {
-			OK bool `json:"ok"`
-		}{OK: err == nil})
+			OK     bool   `json:"ok"`
+			Commit string `json:"commit"`
+		}{OK: err == nil, Commit: buildinfo.Current().Commit})
 	})
 }
 
-func newMCP(cfg Config, health http.Handler, sessions *auth.Service, store *db.Store, tts audio.TTS, audioDir string) http.Handler {
+func newMCP(cfg Config, health, version http.Handler, sessions *auth.Service, store *db.Store, tts audio.TTS, audioDir string) http.Handler {
 	// The adapter is the *db.Store behind the authoring tools.
 	// It lives in internal/mcpstore so internal/db does not import internal/mcp.
 	//
 	// AuthToken is Config.MCPAuthToken. cmd/hebrew trimmed MCP_AUTH_TOKEN
 	// into that field and logs once when it is empty. An empty value
-	// disables the static bearer. This function does not read the
+	// disables the static bearer. ReadOnlyToken is MCP_READONLY_TOKEN.
+	// Empty disables the smoke bearer. A match is RoleLearner for
+	// MCPReadOnlyLearnerID. This function does not read the
 	// environment and does not log that warning again. sessionUsers calls
 	// auth.Service.Lookup and copies users.role. SessionFromToken maps an
 	// OAuth access token onto that same Lookup path. It does not read the
@@ -471,6 +513,7 @@ func newMCP(cfg Config, health http.Handler, sessions *auth.Service, store *db.S
 	users := sessionUsers{auth: sessions}
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
+	mux.Handle("GET /version", version)
 	if sessions != nil {
 		sessions.RegisterOAuth(mux, cfg.MCPPublicURL)
 	}
@@ -481,10 +524,12 @@ func newMCP(cfg Config, health http.Handler, sessions *auth.Service, store *db.S
 		_, _ = w.Write([]byte("Not found"))
 	})
 	authoring := mcp.Handler(mcp.Options{
-		AuthToken:        cfg.MCPAuthToken,
-		AllowedOrigins:   cfg.MCPAllowedOrigins,
-		Sessions:         users,
-		SessionFromToken: users.SessionFromToken,
+		AuthToken:         cfg.MCPAuthToken,
+		ReadOnlyToken:     cfg.MCPReadOnlyToken,
+		ReadOnlyLearnerID: cfg.MCPReadOnlyLearnerID,
+		AllowedOrigins:    cfg.MCPAllowedOrigins,
+		Sessions:          users,
+		SessionFromToken:  users.SessionFromToken,
 		MetadataURL: func(r *http.Request) string {
 			if sessions == nil {
 				return ""

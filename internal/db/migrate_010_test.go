@@ -12,185 +12,301 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/migrations"
 )
 
-// Tests for migration 010 (INIT-015/SPEC-007): placement_v3_runs and placement_items are new, and
-// nothing that exists is changed. They run on temporary databases only. The runner applies the file in one
-// transaction, so a database at 009 is the only starting point that matters besides an empty one.
+// Tests for migration 010 (INIT-015/SPEC-014): job_state is new, and regression_events is
+// rebuilt so a band_slip row can leave out its word. They run on temporary databases only.
 
-const m10SeedRun = `INSERT INTO placement_runs (user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+const (
+	m9Select = `SELECT id, user_id, lexeme_id, skill, from_state, to_state, day, cause FROM regression_events ORDER BY id`
+	m9Ins    = `INSERT INTO regression_events (user_id, lexeme_id, skill, from_state, to_state, day, cause) VALUES (?, ?, ?, ?, ?, ?, ?)`
+	m9Ins2   = `INSERT INTO regression_events (user_id, kind, lexeme_id, skill, from_state, to_state, day, cause) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+)
 
-// m10At009 builds a database at version 009 with a finished v2 run, an open v2 run, and answers on both.
-func m10At009(t *testing.T) *sql.DB {
+var m9Versions = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
+
+// m9At008 builds a database at version 009 with data in every older table, then adds
+// regression_events rows of a few shapes and a gap in the ids.
+func m9At008(t *testing.T) *sql.DB {
 	t.Helper()
-	conn := m9At008(t)
-	body, err := fs.ReadFile(migrations.FS, "009_daily_job.sql")
+	conn := m8At007(t)
+	body, err := fs.ReadFile(migrations.FS, "009_confusion_other.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := apply(context.Background(), conn, "009_daily_job.sql", 9, string(body), time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+	if err := apply(context.Background(), conn, "009_confusion_other.sql", 9, string(body), time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatalf("apply 009: %v", err)
 	}
-	mustSQL(t, conn, m10SeedRun, 1, "2026-10-01T08:00:00.000000000Z", "2026-10-01T08:10:00.000000000Z", 2, "band_stop",
-		`{"bands":[{"band":0,"rated":10,"again":0,"hard":0,"good":10,"easy":0,"dont_know":0,"good_plus_rate":1}],"estimated_known_words":10}`, 41, 1)
-	mustSQL(t, conn, m10SeedRun, 2, "2026-10-02T08:00:00.000000000Z", nil, nil, nil, nil, 42, 2)
-	mustSQL(t, conn, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at, answered_at, lexeme_id, sitting_no) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		1, "boker", 3, "2026-10-01T08:01:00.000000000Z", "2026-10-01T08:01:05.000000000Z", 1, 1)
-	mustSQL(t, conn, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at, answered_at, lexeme_id, sitting_no) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		2, "kafe", nil, "2026-10-02T08:01:00.000000000Z", nil, nil, 1)
+	mustSQL(t, conn, m9Ins, 1, 1, "read", "known", "struggling", "2026-10-01", "decoding")
+	mustSQL(t, conn, m9Ins, 1, 1, "listen", "solid", "regressed", "2026-10-02", "unexplained")
+	mustSQL(t, conn, m9Ins, 2, 2, "spell", "known", "struggling", "2026-10-03", "spelling")
+	mustSQL(t, conn, m9Ins, 3, 4, "recall", "unseen", "seen", "2026-10-04", "first answer")
+	mustSQL(t, conn, m9Ins, 1, 2, "read", "learning", "known", "2026-10-05", "learned")
+	// Leave a gap in the ids, as a deleted row would.
+	mustSQL(t, conn, `DELETE FROM regression_events WHERE id = 2`)
 	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
 		t.Fatalf("seed database versions = %v, want 1..9", got)
 	}
 	return conn
 }
 
-// A database already at 009 gets the two tables, and every v2 run and answer is exactly as it was.
-func TestMigrate010OnA009DatabaseKeepsV2Placement(t *testing.T) {
-	conn := m10At009(t)
-	runs := m6Dump(t, conn, `SELECT * FROM placement_runs ORDER BY id`)
-	answers := m6Dump(t, conn, `SELECT * FROM placement_answers ORDER BY run_id, item_id`)
-	before := m7Capture(t, conn)
+// Every row and id survives, as a word row, and the indexes and keys are back.
+func TestMigrate009KeepsRowsIdsAndIndexes(t *testing.T) {
+	conn := m9At008(t)
+	before := m6Dump(t, conn, m9Select)
+	if len(before) != 4 {
+		t.Fatalf("seed has %d event rows, want 4", len(before))
+	}
+	others := m7Capture(t, conn)
 
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate 010: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) {
-		t.Fatalf("versions = %v, want 1..10", got)
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, m9Versions) {
+		t.Fatalf("versions = %v, want 1..11", got)
 	}
-	if got := m6Dump(t, conn, `SELECT * FROM placement_runs ORDER BY id`); !reflect.DeepEqual(got, runs) {
-		t.Fatalf("placement_runs changed\n got: %v\nwant: %v", got, runs)
+	if got := m6Dump(t, conn, m9Select); !reflect.DeepEqual(got, before) {
+		t.Fatalf("rows changed\n got: %v\nwant: %v", got, before)
 	}
-	if got := m6Dump(t, conn, `SELECT * FROM placement_answers ORDER BY run_id, item_id`); !reflect.DeepEqual(got, answers) {
-		t.Fatalf("placement_answers changed\n got: %v\nwant: %v", got, answers)
+	if n := m6One(t, conn, `SELECT COUNT(*) FROM regression_events WHERE kind = 'word'`); n != 4 {
+		t.Fatalf("%d rows have kind word, want 4", n)
 	}
-	for _, table := range []string{"placement_v3_runs", "placement_items"} {
-		if n := m6One(t, conn, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table); n != 1 {
-			t.Fatalf("table %s is missing", table)
+	if got := indexColumns(t, conn, "regression_events_user_day"); !reflect.DeepEqual(got, []string{"user_id", "day"}) {
+		t.Fatalf("index regression_events_user_day columns = %v", got)
+	}
+	if got := indexColumns(t, conn, "regression_events_user_lexeme_skill"); !reflect.DeepEqual(got, []string{"user_id", "lexeme_id", "skill"}) {
+		t.Fatalf("index regression_events_user_lexeme_skill columns = %v", got)
+	}
+	for _, idx := range []string{"regression_events_user_day", "regression_events_user_lexeme_skill"} {
+		if n := m6One(t, conn, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ? AND tbl_name = 'regression_events'`, idx); n != 1 {
+			t.Fatalf("index %s is not on regression_events", idx)
 		}
-		if n := m6One(t, conn, `SELECT COUNT(*) FROM `+table); n != 0 {
-			t.Fatalf("table %s has %d rows after the migration, want 0", table, n)
-		}
 	}
-	// A v2 run has no v3 row, which is how the engine tells the two apart.
-	if n := m6One(t, conn, `SELECT COUNT(*) FROM placement_runs AS r JOIN placement_v3_runs AS v ON v.run_id = r.id`); n != 0 {
-		t.Fatalf("%d old runs look like v3 runs", n)
+	if n := m6One(t, conn, `SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'regression_events_new%'`); n != 0 {
+		t.Fatal("regression_events_new was left behind")
+	}
+	cols := m6Dump(t, conn, `SELECT name FROM pragma_table_info('regression_events') ORDER BY cid`)
+	want := [][]string{{"string:id"}, {"string:user_id"}, {"string:lexeme_id"}, {"string:skill"}, {"string:from_state"}, {"string:to_state"}, {"string:day"}, {"string:cause"}, {"string:kind"}}
+	if !reflect.DeepEqual(cols, want) {
+		t.Fatalf("columns = %v", cols)
+	}
+	if fk := m6Dump(t, conn, `PRAGMA foreign_key_check`); len(fk) != 0 {
+		t.Fatalf("foreign_key_check: %v", fk)
+	}
+	if got := m6One(t, conn, `PRAGMA foreign_keys`); got != 1 {
+		t.Fatalf("foreign_keys = %d, want 1", got)
+	}
+	// The new rows get ids after the old ones.
+	mustSQL(t, conn, m9Ins, 1, 1, "read", "known", "struggling", "2026-10-06", "decoding")
+	if got := m6One(t, conn, `SELECT MAX(id) FROM regression_events`); got != 6 {
+		t.Fatalf("next id = %d, want 6", got)
 	}
 
-	// Every existing table, row, and index is as it was. m7Capture covers all tables but the 007 ones, which 010 does not touch.
+	// Every other table that existed before, with its rows and indexes, is exactly as it was.
+	// m7Capture leaves out the 008 tables, and the new job_state table is not in the old capture.
 	after := m7Capture(t, conn)
+	delete(after.tables, "job_state")
+	delete(after.rowCnts, "job_state")
+	// 011 adds placement_v3_runs and placement_items, which no earlier migration may touch.
 	for _, name := range []string{"placement_v3_runs", "placement_items"} {
 		delete(after.tables, name)
 		delete(after.rowCnts, name)
 		after.schema = m8SchemaWithout(after.schema, name)
 	}
-	if !reflect.DeepEqual(after.tables, before.tables) {
-		t.Fatal("rows of an existing table changed")
+	if !reflect.DeepEqual(after.tables, others.tables) {
+		t.Fatal("rows of another table changed")
 	}
-	if !reflect.DeepEqual(after.rowCnts, before.rowCnts) {
-		t.Fatalf("row counts changed\n got: %v\nwant: %v", after.rowCnts, before.rowCnts)
+	if !reflect.DeepEqual(after.rowCnts, others.rowCnts) {
+		t.Fatalf("row counts changed\n got: %v\nwant: %v", after.rowCnts, others.rowCnts)
 	}
-	if !reflect.DeepEqual(after.schema, before.schema) {
-		t.Fatal("the schema of an existing object changed")
+	gotSchema := m8SchemaWithout(m8SchemaWithout(after.schema, "regression_events"), "job_state")
+	wantSchema := m8SchemaWithout(others.schema, "regression_events")
+	if !reflect.DeepEqual(gotSchema, wantSchema) {
+		t.Fatal("schema of another object changed")
+	}
+}
+
+// The rebuilt table takes a band_slip row with no word, and still refuses what 008 refused.
+func TestMigrate009KindsNullsAndChecks(t *testing.T) {
+	conn := m9At008(t)
+	if err := m6Migrate(conn); err != nil {
+		t.Fatal(err)
+	}
+	const day = "2026-10-19"
+	skills := []string{"listen", "read", "recall", "spell"}
+	states := []string{"unseen", "seen", "learning", "struggling", "known", "solid", "regressed"}
+
+	// Word rows work as in 008, and kind defaults to word.
+	for _, skill := range skills {
+		mustSQL(t, conn, m9Ins, 1, 1, skill, "solid", "regressed", day, "decay")
+	}
+	for _, to := range states[1:] {
+		mustSQL(t, conn, m9Ins, 1, 2, "read", states[0], to, day, "first answer")
+	}
+	if n := m6One(t, conn, `SELECT COUNT(*) FROM regression_events WHERE kind <> 'word' AND day = ?`, day); n != 0 {
+		t.Fatalf("%d rows without the default kind", n)
+	}
+	// A band_slip row names no word, skill, or state.
+	mustSQL(t, conn, m9Ins2, 1, "band_slip", nil, nil, nil, nil, day, "band_slip band=2 known share 100% to 80% since 2026-10-12")
+	mustSQL(t, conn, m9Ins2, 1, "band_slip", nil, nil, nil, nil, day, "band_slip band=3 known share 50% to 30% since 2026-10-12")
+
+	for _, bad := range []string{"write", "", "he_en"} {
+		rejectSQL(t, conn, "skill "+bad, m9Ins, 1, 1, bad, "known", "regressed", day, "decay")
+	}
+	rejectSQL(t, conn, "from_state", m9Ins, 1, 1, "read", "mastered", "regressed", day, "decay")
+	rejectSQL(t, conn, "to_state", m9Ins, 1, 1, "read", "known", "forgotten", day, "decay")
+	// The check that from and to differ still holds.
+	rejectSQL(t, conn, "from_state = to_state", m9Ins, 1, 1, "read", "known", "known", day, "decay")
+	rejectSQL(t, conn, "band_slip with equal states", m9Ins2, 1, "band_slip", nil, nil, "known", "known", day, "x")
+	rejectSQL(t, conn, "day", m9Ins, 1, 1, "read", "known", "regressed", "yesterday", "decay")
+	rejectSQL(t, conn, "day not a date", m9Ins, 1, 1, "read", "known", "regressed", "2026-02-30", "decay")
+	rejectSQL(t, conn, "empty cause", m9Ins, 1, 1, "read", "known", "regressed", day, "")
+	rejectSQL(t, conn, "null cause", m9Ins, 1, 1, "read", "known", "regressed", day, nil)
+	rejectSQL(t, conn, "unknown kind", m9Ins2, 1, "other", 1, "read", "known", "regressed", day, "decay")
+	rejectSQL(t, conn, "null kind", m9Ins2, 1, nil, 1, "read", "known", "regressed", day, "decay")
+
+	// A word row must still name its word, skill, and both states.
+	rejectSQL(t, conn, "word without lexeme", m9Ins, 1, nil, "read", "known", "regressed", day, "decay")
+	rejectSQL(t, conn, "word without skill", m9Ins, 1, 1, nil, "known", "regressed", day, "decay")
+	rejectSQL(t, conn, "word without from_state", m9Ins, 1, 1, "read", nil, "regressed", day, "decay")
+	rejectSQL(t, conn, "word without to_state", m9Ins, 1, 1, "read", "known", nil, day, "decay")
+	// A band_slip row must not name a word, a skill, or a state.
+	rejectSQL(t, conn, "band_slip with lexeme", m9Ins2, 1, "band_slip", 1, nil, nil, nil, day, "x")
+	rejectSQL(t, conn, "band_slip with skill", m9Ins2, 1, "band_slip", nil, "read", nil, nil, day, "x")
+	rejectSQL(t, conn, "band_slip with from_state", m9Ins2, 1, "band_slip", nil, nil, "known", nil, day, "x")
+	rejectSQL(t, conn, "band_slip with to_state", m9Ins2, 1, "band_slip", nil, nil, nil, "regressed", day, "x")
+
+	// Keys still hold.
+	rejectSQL(t, conn, "missing learner", m9Ins, 99, 1, "read", "known", "regressed", day, "decay")
+	rejectSQL(t, conn, "missing lexeme", m9Ins, 1, 99999, "read", "known", "regressed", day, "decay")
+	rejectSQL(t, conn, "band_slip missing learner", m9Ins2, 99, "band_slip", nil, nil, nil, nil, day, "x")
+
+	// A word with events cannot be deleted, as before. This word has no other references.
+	mustSQL(t, conn, `INSERT INTO lexemes (text_nfc) VALUES ('fresh')`)
+	fresh := m6One(t, conn, `SELECT id FROM lexemes WHERE text_nfc = 'fresh'`)
+	mustSQL(t, conn, m9Ins, 3, fresh, "read", "known", "struggling", day, "decay")
+	if _, err := conn.ExecContext(context.Background(), `DELETE FROM lexemes WHERE id = ?`, fresh); err == nil {
+		t.Error("lexeme with an event was deleted")
+	}
+	// Deleting the learner deletes their events, band_slip rows included.
+	mustSQL(t, conn, `DELETE FROM users WHERE id = 1`)
+	if n := m6One(t, conn, `SELECT COUNT(*) FROM regression_events WHERE user_id = 1`); n != 0 {
+		t.Fatalf("%d events of a deleted learner remain", n)
+	}
+	if n := m6One(t, conn, `SELECT COUNT(*) FROM regression_events WHERE user_id = 3`); n != 2 {
+		t.Fatalf("another learner's events = %d, want 2", n)
 	}
 	if fk := m6Dump(t, conn, `PRAGMA foreign_key_check`); len(fk) != 0 {
 		t.Fatalf("foreign_key_check: %v", fk)
 	}
+}
 
-	// A new v3 run can be opened beside the old ones: the finished v2 run does not block it, and the open one must be closed first.
-	mustSQL(t, conn, `UPDATE placement_runs SET finished_at = ? WHERE id = 2`, "2026-10-03T08:00:00.000000000Z")
-	mustSQL(t, conn, m10SeedRun, 1, "2026-10-04T08:00:00.000000000Z", nil, nil, nil, nil, 43, 1)
-	mustSQL(t, conn, `INSERT INTO placement_v3_runs (run_id, kind) VALUES (3, 'initial')`)
-	if got := m6One(t, conn, `SELECT COUNT(*) FROM placement_v3_runs`); got != 1 {
-		t.Fatalf("v3 runs = %d, want 1", got)
+// job_state is a key-value table with a text key, a text value, and a time.
+func TestMigrate009JobState(t *testing.T) {
+	conn := m7Fresh(t)
+	const ins = `INSERT INTO job_state (key, value, updated_at) VALUES (?, ?, ?)`
+	mustSQL(t, conn, ins, "daily.lock", "host-1", m6Seeded)
+	mustSQL(t, conn, ins, "daily.words.1", `{"day":"2026-10-19","w":{}}`, m6Seeded)
+	rejectSQL(t, conn, "duplicate key", ins, "daily.lock", "host-2", m6Seeded)
+	rejectSQL(t, conn, "empty key", ins, "", "v", m6Seeded)
+	rejectSQL(t, conn, "null key", ins, nil, "v", m6Seeded)
+	rejectSQL(t, conn, "null value", ins, "k", nil, m6Seeded)
+	rejectSQL(t, conn, "blob value", ins, "k", []byte{1, 2}, m6Seeded)
+	rejectSQL(t, conn, "null time", ins, "k", "v", nil)
+	rejectSQL(t, conn, "long key", ins, strings.Repeat("k", 201), "v", m6Seeded)
+	mustSQL(t, conn, ins, strings.Repeat("k", 200), "v", m6Seeded)
+	cols := m6Dump(t, conn, `SELECT name FROM pragma_table_info('job_state') ORDER BY cid`)
+	if want := [][]string{{"string:key"}, {"string:value"}, {"string:updated_at"}}; !reflect.DeepEqual(cols, want) {
+		t.Fatalf("columns = %v", cols)
 	}
 }
 
-// An empty database gets the same two tables from the full chain.
-func TestMigrate010OnAFreshDatabase(t *testing.T) {
+// 010 applies on a new database through the real runner, and a second run does nothing.
+func TestMigrate009AppliesOnEmptyDatabase(t *testing.T) {
 	conn := openRaw(t)
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) {
-		t.Fatalf("versions = %v, want 1..10", got)
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, m9Versions) {
+		t.Fatalf("versions = %v, want 1..11", got)
 	}
-	cols := m6Dump(t, conn, `SELECT name FROM pragma_table_info('placement_items') ORDER BY cid`)
-	want := [][]string{{"string:id"}, {"string:run_id"}, {"string:seq"}, {"string:part"}, {"string:skill"}, {"string:band"}, {"string:item_id"},
-		{"string:options"}, {"string:correct_idx"}, {"string:outcome"}, {"string:picked"}, {"string:lexeme_id"}, {"string:shown_at"},
-		{"string:answered_at"}, {"string:latency_ms"}}
-	if !reflect.DeepEqual(cols, want) {
-		t.Fatalf("placement_items columns = %v", cols)
+	for _, table := range []string{"job_state", "regression_events", "daily_snapshots"} {
+		if !tableExists(t, conn, table) {
+			t.Errorf("table %s is missing", table)
+		}
+		if n := m6One(t, conn, `SELECT COUNT(*) FROM "`+table+`"`); n != 0 {
+			t.Errorf("table %s has %d rows on a new database", table, n)
+		}
 	}
-	// Running the chain again changes nothing.
+	mustSQL(t, conn, `INSERT INTO users (email, google_sub, role, created_at) VALUES ('a@example.com', 'sub-a', 'learner', ?)`, m6Seeded)
+	mustSQL(t, conn, m9Ins2, 1, "band_slip", nil, nil, nil, nil, "2026-10-19", "band_slip band=1 known share 90% to 70% since 2026-10-12")
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("second migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); len(got) != 10 {
-		t.Fatalf("versions after a second migrate = %v", got)
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, m9Versions) {
+		t.Fatalf("versions after rerun = %v", got)
+	}
+	if n := m6One(t, conn, `SELECT COUNT(*) FROM regression_events`); n != 1 {
+		t.Fatalf("rerun changed the rows: %d", n)
 	}
 }
 
-// The tables refuse what the engine must never write.
-func TestMigrate010Constraints(t *testing.T) {
-	conn := m10At009(t)
+// The rebuild is only safe because nothing points at regression_events. This fails if that changes.
+func TestMigrate009NothingReferencesRegressionEvents(t *testing.T) {
+	for name, conn := range map[string]*sql.DB{"at 009": m9At008(t), "at 010": m7Fresh(t)} {
+		if n := m6One(t, conn, `SELECT COUNT(*) FROM sqlite_master WHERE sql LIKE '%REFERENCES regression_events%' OR sql LIKE '%REFERENCES "regression_events"%'`); n != 0 {
+			t.Fatalf("%s: %d objects reference regression_events, so dropping it could cascade", name, n)
+		}
+		if n := m6One(t, conn, `SELECT COUNT(*) FROM sqlite_master WHERE type IN ('view', 'trigger') AND sql LIKE '%regression_events%'`); n != 0 {
+			t.Fatalf("%s: %d views or triggers use regression_events", name, n)
+		}
+		// Child tables found, by foreign key list, across every table.
+		var children []string
+		for _, row := range m6Dump(t, conn, `SELECT m.name FROM sqlite_master AS m, pragma_foreign_key_list(m.name) AS f WHERE m.type = 'table' AND f."table" = 'regression_events'`) {
+			children = append(children, row[0])
+		}
+		if len(children) != 0 {
+			t.Fatalf("%s: tables with a foreign key to regression_events: %v", name, children)
+		}
+		if n := m6One(t, conn, `SELECT COUNT(*) FROM pragma_foreign_key_list('regression_events')`); n != 2 {
+			t.Fatalf("%s: regression_events has %d foreign keys, want 2 (users and lexemes)", name, n)
+		}
+	}
+}
+
+// A failure after the old table was dropped still leaves the database at 009. A view on
+// regression_events makes the rename fail, which is after the DROP TABLE.
+func TestMigrate009AtomicWhenFailureComesAfterTheDrop(t *testing.T) {
+	conn := m9At008(t)
+	mustSQL(t, conn, `CREATE VIEW m9_events AS SELECT id, cause FROM regression_events`)
+	wantRows := m6Dump(t, conn, m9Select)
+	const schemaQ = `SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name <> 'schema_migrations' ORDER BY name`
+	wantSchema := m6Dump(t, conn, schemaQ)
+
+	err := m6Migrate(conn)
+	if err == nil {
+		t.Fatal("migration 010 succeeded with a view on regression_events")
+	}
+	if !strings.Contains(err.Error(), "010_daily_job.sql") {
+		t.Fatalf("error = %v, want it to name 010_daily_job.sql", err)
+	}
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9}) {
+		t.Fatalf("versions = %v, want 1..9", got)
+	}
+	if got := m6Dump(t, conn, m9Select); !reflect.DeepEqual(got, wantRows) {
+		t.Fatalf("rows changed\n got: %v\nwant: %v", got, wantRows)
+	}
+	if got := m6Dump(t, conn, schemaQ); !reflect.DeepEqual(got, wantSchema) {
+		t.Fatal("schema changed after the rollback (job_state or regression_events_new survived)")
+	}
+	rejectSQL(t, conn, "a row with no word before 010", m9Ins, 1, nil, nil, nil, nil, "2026-10-19", "x")
+
+	mustSQL(t, conn, `DROP VIEW m9_events`)
 	if err := m6Migrate(conn); err != nil {
-		t.Fatal(err)
+		t.Fatalf("retry: %v", err)
 	}
-	mustSQL(t, conn, `UPDATE placement_runs SET finished_at = '2026-10-03T08:00:00.000000000Z' WHERE id = 2`)
-	mustSQL(t, conn, m10SeedRun, 1, "2026-10-04T08:00:00.000000000Z", nil, nil, nil, nil, 43, 1)
-	const run = 3
-	mustSQL(t, conn, `INSERT INTO placement_v3_runs (run_id, kind) VALUES (?, 'initial')`, run)
-
-	refuse := func(name, query string, args ...any) {
-		t.Helper()
-		if _, err := conn.Exec(query, args...); err == nil {
-			t.Errorf("%s: the insert was accepted", name)
-		}
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, m9Versions) {
+		t.Fatalf("versions after retry = %v", got)
 	}
-	// A run is described once, a recheck names its skill and band, an initial run names neither.
-	refuse("second v3 row for a run", `INSERT INTO placement_v3_runs (run_id, kind) VALUES (?, 'initial')`, run)
-	refuse("v3 row for no run", `INSERT INTO placement_v3_runs (run_id, kind) VALUES (999, 'initial')`)
-	refuse("unknown kind", `INSERT INTO placement_v3_runs (run_id, kind) VALUES (1, 'weekly')`)
-	refuse("recheck without a band", `INSERT INTO placement_v3_runs (run_id, kind, recheck_skill) VALUES (1, 'recheck', 'read')`)
-	refuse("initial with a band", `INSERT INTO placement_v3_runs (run_id, kind, recheck_skill, recheck_band) VALUES (1, 'initial', 'read', 2)`)
-	refuse("recheck of recall", `INSERT INTO placement_v3_runs (run_id, kind, recheck_skill, recheck_band) VALUES (1, 'recheck', 'recall', 2)`)
-	refuse("recheck of band 6", `INSERT INTO placement_v3_runs (run_id, kind, recheck_skill, recheck_band) VALUES (1, 'recheck', 'read', 6)`)
-	refuse("unknown phase", `UPDATE placement_v3_runs SET phase = 'done' WHERE run_id = 3`)
-
-	const ins = `INSERT INTO placement_items (run_id, seq, part, skill, band, item_id, options, correct_idx, shown_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	const at = "2026-10-04T08:01:00.000000000Z"
-	mustSQL(t, conn, ins, run, 1, "listening", "listen", 1, "boker", `{"options":[]}`, 2, at)
-	refuse("same word twice in listening", ins, run, 2, "listening", "listen", 1, "boker", `{"options":[]}`, 2, at)
-	refuse("same word in reading after listening", ins, run, 2, "reading", "read", 1, "boker", `{"options":[]}`, 2, at)
-	refuse("same sequence twice", ins, run, 1, "listening", "listen", 1, "kafe", `{"options":[]}`, 2, at)
-	refuse("unknown part", ins, run, 2, "speaking", "listen", 1, "kafe", `{"options":[]}`, 2, at)
-	refuse("unknown skill", ins, run, 2, "listening", "spell", 1, "kafe", `{"options":[]}`, 2, at)
-	refuse("band 6", ins, run, 2, "listening", "listen", 6, "kafe", `{"options":[]}`, 2, at)
-	refuse("options that are not JSON", ins, run, 2, "listening", "listen", 1, "kafe", `not json`, 2, at)
-	refuse("item for no run", ins, 999, 1, "listening", "listen", 1, "kafe", `{"options":[]}`, 2, at)
-	// The typing part asks a word again on purpose.
-	mustSQL(t, conn, ins, run, 2, "typing", "recall", 1, "boker", `{"options":[]}`, nil, at)
-	// An item has an outcome exactly when it has an answer time.
-	refuse("outcome without a time", `UPDATE placement_items SET outcome = 'right' WHERE run_id = 3 AND seq = 2`)
-	refuse("unknown outcome", `UPDATE placement_items SET outcome = 'maybe', answered_at = ? WHERE run_id = 3 AND seq = 2`, at)
-	mustSQL(t, conn, `UPDATE placement_items SET outcome = 'dont_know', answered_at = ? WHERE run_id = 3 AND seq = 2`, at)
-
-	// Deleting the run deletes both the v3 row and the items.
-	mustSQL(t, conn, `DELETE FROM placement_runs WHERE id = 3`)
-	for _, table := range []string{"placement_v3_runs", "placement_items"} {
-		if n := m6One(t, conn, `SELECT COUNT(*) FROM `+table); n != 0 {
-			t.Errorf("%s keeps %d rows after its run was deleted", table, n)
-		}
+	if got := m6Dump(t, conn, m9Select); !reflect.DeepEqual(got, wantRows) {
+		t.Fatalf("rows after retry\n got: %v\nwant: %v", got, wantRows)
 	}
-	if !strings.Contains(m6SQLOf(t, conn, "placement_items_no_repeat"), "WHERE part IN") {
-		t.Error("the no-repeat index is not partial")
-	}
-}
-
-func m6SQLOf(t *testing.T, conn *sql.DB, name string) string {
-	t.Helper()
-	var s string
-	if err := conn.QueryRow(`SELECT sql FROM sqlite_master WHERE name = ?`, name).Scan(&s); err != nil {
-		t.Fatal(err)
-	}
-	return s
 }

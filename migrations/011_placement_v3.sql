@@ -1,8 +1,8 @@
--- Placement engine v3 (INIT-015/SPEC-007). Applied after 009_daily_job.sql.
+-- Placement engine v3 (INIT-015/SPEC-008). Applied after 009_daily_job.sql.
 -- Two new tables, and nothing else. No existing table, column, index, or row is changed, so a database
--- at 009 keeps every v2 placement run and answer exactly as it was. A run is a v3 run when it has a
+-- at 010 keeps every v2 placement run and answer exactly as it was. A run is a v3 run when it has a
 -- row in placement_v3_runs. A v2 run has none and is still read through placement_runs and placement_answers.
--- The runner applies this file in one transaction. If any statement fails, the database stays at 009.
+-- The runner applies this file in one transaction. If any statement fails, the database stays at 010.
 -- There is no down migration. To roll back, restore the pre-migration SQLite file, or drop both tables:
 -- nothing else refers to them.
 

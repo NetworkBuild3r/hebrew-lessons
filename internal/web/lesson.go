@@ -8,12 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/choices"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
@@ -204,6 +204,7 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 	graded := gradedActivity(act.Type) && target.ID != 0
 	switch {
 	case run.Phase == "ask" && graded && answer != "" && answer != "continue":
+		// Grade the lexeme id on the button. Position and label are not the answer.
 		picked, parseErr := strconv.ParseInt(answer, 10, 64)
 		correct := parseErr == nil && picked == target.ID
 		var applied bool
@@ -377,7 +378,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	}
 	total := len(lesson.Activities)
 	if total == 0 {
-		screen.Activity = p.step(page, lesson, run, units.Activity{}, db.LexemeView{}, nil, nil, true)
+		screen.Activity = p.step(page, lesson, run, units.Activity{}, db.LexemeView{}, nil, nil, nil, true)
 		return screen, nil
 	}
 	if run.ActivityIx < 0 || run.ActivityIx >= total {
@@ -402,24 +403,31 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		return views.Screen{}, err
 	}
 	if act.Type == units.ActivityDialogue {
-		screen.Activity = p.step(page, lesson, run, act, target, lex, pool, false)
+		screen.Activity = p.step(page, lesson, run, act, target, lex, pool, nil, false)
 		screen.Activity.Dialogue, err = p.dialogueView(ctx, act, lex, lesson.NewWords)
 		if err != nil {
 			return views.Screen{}, err
 		}
 		return screen, nil
 	}
+	var earlier []db.LexemeView
+	if run.Phase == "ask" && gradedActivity(act.Type) && target.ID != 0 {
+		earlier, err = p.store.EarlierUnitLexemes(ctx, run.UserID, lesson.Position)
+		if err != nil {
+			return views.Screen{}, err
+		}
+	}
 	clips, err := p.clips(ctx, act)
 	if err != nil {
 		return views.Screen{}, err
 	}
-	screen.Activity = p.step(page, lesson, run, act, target, lex, pool, false)
+	screen.Activity = p.step(page, lesson, run, act, target, lex, pool, earlier, false)
 	screen.Activity.Audio = phraseAudio(act, run.Phase, clips.phrase)
 	screen.Activity.Words = wordsFor(act, lex, lesson.NewWords, run.Phase, clips)
 	return screen, nil
 }
 
-func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView, lex map[string]db.LexemeView, pool []db.LexemeView, empty bool) views.Activity {
+func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView, lex map[string]db.LexemeView, pool, earlier []db.LexemeView, empty bool) views.Activity {
 	total := len(lesson.Activities)
 	post := lessonPath(lesson.UnitID, lesson.LessonIx)
 	feedback, class := feedbackFor(run)
@@ -438,7 +446,12 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 		return activity
 	}
 	hebrew := act.Type == units.ActivityProduce || act.Type == units.ActivityCloze
-	activity.Choices = choicesFor(pool, target, hebrew, act.Type == units.ActivityCloze)
+	activity.Choices = lessonChoices(pool, earlier, target, choices.ChoiceSeed{
+		RunID:    run.ID,
+		Step:     run.ActivityIx,
+		Attempt:  0, // lesson_runs has no attempt counter
+		TargetID: target.ID,
+	}, hebrew, act.Type == units.ActivityCloze)
 	activity.Asking = len(activity.Choices) > 0
 	if !activity.Asking {
 		activity.Continue = continueLabel(run.ActivityIx, total)
@@ -675,44 +688,71 @@ func gapToken(tokens []string, lex map[string]db.LexemeView, newWords []db.Lexem
 	return first
 }
 
-func choicesFor(pool []db.LexemeView, target db.LexemeView, hebrew, translit bool) []views.Choice {
+// lessonChoiceButtons is the target plus two distractors, the count the
+// player has always shown.
+const lessonChoiceButtons = 3
+
+// lessonChoices builds the buttons for a graded ask. recall, listen_pick,
+// produce, and cloze all use it. A checkpoint lesson is a sequence of those
+// activities, so it has no choice builder of its own. Order and membership
+// come from choices.Pick. The button value stays the lexeme id.
+func lessonChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed choices.ChoiceSeed, hebrew, translit bool) []views.Choice {
 	if target.ID == 0 {
 		return nil
 	}
-	picked := []db.LexemeView{target}
-	for _, lex := range pool {
-		if len(picked) == 3 {
-			break
-		}
-		if lex.ID == target.ID || lex.Text == target.Text {
-			continue
-		}
-		if !hebrew && strings.TrimSpace(lex.Gloss) == "" {
-			continue
-		}
-		picked = append(picked, lex)
+	picked := choices.Pick(seed, choiceLexeme(target, false), choicePool(unit, earlier, target, hebrew), lessonChoiceButtons)
+	byID := make(map[int64]db.LexemeView, len(unit)+len(earlier)+1)
+	byID[target.ID] = target
+	for _, lex := range unit {
+		byID[lex.ID] = lex
 	}
-	sort.Slice(picked, func(i, j int) bool {
-		if picked[i].Text == picked[j].Text {
-			return picked[i].ID < picked[j].ID
+	for _, lex := range earlier {
+		if _, ok := byID[lex.ID]; !ok {
+			byID[lex.ID] = lex
 		}
-		return picked[i].Text < picked[j].Text
-	})
+	}
 	out := make([]views.Choice, 0, len(picked))
 	for _, lex := range picked {
-		choice := views.Choice{Value: strconv.FormatInt(lex.ID, 10)}
+		view, ok := byID[lex.ID]
+		if !ok {
+			view = db.LexemeView{ID: lex.ID, Text: lex.Text, POS: lex.POS}
+		}
+		choice := views.Choice{Value: strconv.FormatInt(view.ID, 10)}
 		if hebrew {
 			choice.Hebrew = true
-			choice.Text = lex.Text
+			choice.Text = view.Text
 			if translit {
-				choice.Translit = lex.Translit
+				choice.Translit = view.Translit
 			}
 		} else {
-			choice.Label = lex.Gloss
+			choice.Label = view.Gloss
 		}
 		out = append(out, choice)
 	}
 	return out
+}
+
+// choicePool is the unit, then earlier units. An English button needs a gloss,
+// so a blank gloss is left out of that pool. The target is kept either way.
+func choicePool(unit, earlier []db.LexemeView, target db.LexemeView, hebrew bool) []choices.Lexeme {
+	pool := make([]choices.Lexeme, 0, len(unit)+len(earlier))
+	for _, lex := range unit {
+		if !hebrew && lex.ID != target.ID && strings.TrimSpace(lex.Gloss) == "" {
+			continue
+		}
+		pool = append(pool, choiceLexeme(lex, false))
+	}
+	for _, lex := range earlier {
+		if !hebrew && strings.TrimSpace(lex.Gloss) == "" {
+			continue
+		}
+		pool = append(pool, choiceLexeme(lex, true))
+	}
+	return pool
+}
+
+func choiceLexeme(view db.LexemeView, earlier bool) choices.Lexeme {
+	return choices.Lexeme{ID: view.ID, Text: view.Text, POS: view.POS, Earlier: earlier}
 }
 
 func activityPrompt(lesson db.CourseLesson, act units.Activity, target db.LexemeView, empty bool) string {
