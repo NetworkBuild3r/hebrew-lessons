@@ -585,6 +585,9 @@ func wordsFor(act units.Activity, lex map[string]db.LexemeView, newWords []db.Le
 	if act.Type == units.ActivityRecall {
 		markRecallTarget(words, lexemeTokenCount(act, lex), target.Text, phase)
 	}
+	if recallOrCloze(act.Type) {
+		dropBorrowedGloss(words, target.Text, target.Gloss)
+	}
 	return words
 }
 
@@ -618,6 +621,8 @@ func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.
 			words = append(words, views.Word{Gap: true})
 			continue
 		}
+		// A token missing from the lexicon keeps an empty gloss. The
+		// activity and the target are not a fallback for that field.
 		view := lex[tok]
 		word := views.Word{
 			Text:         tok,
@@ -1116,6 +1121,25 @@ func lexemeTokenCount(act units.Activity, lex map[string]db.LexemeView) int {
 		}
 	}
 	return n
+}
+
+// dropBorrowedGloss stops a helper token from showing the answer.
+// The tested word keeps its own gloss (hidden until the reveal). Every
+// other token keeps only the gloss stored on its own lexeme. The same
+// gloss as the answer is cleared, and an empty gloss stays empty.
+func dropBorrowedGloss(words []views.Word, targetText, targetGloss string) {
+	key := glossKey(targetGloss)
+	if key == "" {
+		return
+	}
+	for i := range words {
+		if words[i].Plain || words[i].Gap || words[i].Target || words[i].Text == targetText {
+			continue
+		}
+		if glossKey(words[i].Gloss) == key {
+			words[i].Gloss = ""
+		}
+	}
 }
 
 // markRecallTarget applies the multi-word recall rule. The tested word keeps

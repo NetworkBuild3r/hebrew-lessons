@@ -689,6 +689,100 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	}
 }
 
+// The line אֲנִי גָּר פֹּה עַכְשָׁיו בְּשָׁלוֹם asks for גָּר. The target gloss
+// is an answer, so it stays off every other token. A token with no lexicon
+// row shows no gloss. A token whose own gloss is the answer's gloss shows
+// nothing rather than repeating it. The answer button still says it.
+func TestRecallLineDoesNotShowTheTargetGloss(t *testing.T) {
+	const (
+		ani      = "אֲנִי"
+		gar      = "גָּר"
+		po       = "פֹּה"
+		achshav  = "עַכְשָׁיו"
+		beshalom = "בְּשָׁלוֹם"
+		gloss    = "to live, reside"
+	)
+	line := ani + " " + gar + " " + po + " " + achshav + " " + beshalom
+	for _, tc := range []struct {
+		name          string
+		beshalomGloss string
+		wantInLine    string
+	}{
+		{name: "unknown and own gloss", beshalomGloss: "in peace", wantInLine: ">in peace<"},
+		{name: "lexeme repeats the answer", beshalomGloss: gloss},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+			ctx := context.Background()
+			store, err := db.Open(ctx, filepath.Join(t.TempDir(), "hebrew.sqlite"), fixedClock(now))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = store.Close() })
+			brian, err := store.CreateUser(ctx, "brian@example.com", "sub-brian", auth.RoleLearner)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sp := func(s string) *string { return &s }
+			rows := []lexicon.Input{
+				{TextNFC: ani, Gloss: "I", Translit: sp("ani"), POS: sp("pron")},
+				{TextNFC: gar, Gloss: gloss, Translit: sp("gar"), POS: sp("verb")},
+				{TextNFC: po, Gloss: "here", Translit: sp("po"), POS: sp("adv")},
+				{TextNFC: beshalom, Gloss: tc.beshalomGloss, Translit: sp("beshalom"), POS: sp("noun")},
+			}
+			if _, _, err := store.UpsertLexemes(ctx, rows); err != nil {
+				t.Fatal(err)
+			}
+			unitID := putLesson(t, store, nil, units.Unit{
+				Title: "At home", Situation: "Saying where you live.", Position: 1,
+				NewWords: []string{gar},
+				Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
+					{Type: units.ActivityRecall, Text: line, Target: gar},
+				}}},
+			}, "shared")
+			publish(t, store, unitID)
+
+			svc, err := auth.New(auth.Config{
+				PublicOrigin: "https://learn.example", Clock: fixedClock(now), Store: store,
+				AllowedEmails: []string{"brian@example.com"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := NewOptions(nil, svc, Options{Store: store})
+			cookie := mintSession(t, store, brian.ID, "brian-csrf", now.Add(time.Hour))
+			body := getAuthed(t, h, cookie, "/lesson/"+itoa(unitID)+"/0")
+			ask := activityHTML(t, body)
+			head, choices, ok := strings.Cut(ask, `class="choices"`)
+			if !ok {
+				t.Fatalf("recall missing choices:\n%s", ask)
+			}
+			if strings.Contains(head, gloss) {
+				t.Fatalf("the line shows the target gloss %q:\n%s", gloss, head)
+			}
+			if !strings.Contains(choices, ">"+gloss+"<") {
+				t.Fatalf("the answer choices dropped the target gloss:\n%s", choices)
+			}
+			if tc.wantInLine != "" && !strings.Contains(head, tc.wantInLine) {
+				t.Fatalf("the line dropped %s:\n%s", tc.wantInLine, head)
+			}
+			if !strings.Contains(head, beshalom) || !strings.Contains(head, achshav) {
+				t.Fatalf("the line dropped a token:\n%s", head)
+			}
+			// עַכְשָׁיו is not a lexeme. Its gloss slot stays empty.
+			if i := strings.Index(head, achshav); i >= 0 {
+				rest := head[i:]
+				if end := strings.Index(rest, `class="recall-clip"`); end > 0 {
+					rest = rest[:end]
+				}
+				if strings.Contains(rest, `class="wb__gl"`) || strings.Contains(rest, gloss) {
+					t.Fatalf("unknown token borrowed a gloss:\n%s", rest)
+				}
+			}
+		})
+	}
+}
+
 // A multi-word recall and a cloze both show the line's other words as help.
 // Those glosses, and a different lexeme with the same gloss, are not choices.
 // The four buttons are the target plus same-part-of-speech words from this
