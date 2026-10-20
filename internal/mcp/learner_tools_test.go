@@ -799,6 +799,40 @@ func TestRateLimitIsPerCaller(t *testing.T) {
 	e.ok("learner-b", "get_learner_model", map[string]any{})
 }
 
+// The review of the v3 line found that validate_unit without a briefId and lookup were outside the
+// limit. A learner session is counted on both. An admin authoring a lesson is not limited on them.
+func TestRateLimitCountsLearnerValidateAndLookup(t *testing.T) {
+	validate := map[string]any{"position": 0, "doc": helloDoc()}
+	lookup := map[string]any{"query": "שלום"}
+	for _, tool := range []struct {
+		name string
+		args map[string]any
+	}{{"validate_unit", validate}, {"lookup", lookup}} {
+		t.Run(tool.name, func(t *testing.T) {
+			e := newLT(t)
+			for i := range learnerToolsPerMinute {
+				if text, _ := e.raw("learner-a", tool.name, tool.args); text == msgRateLimited {
+					t.Fatalf("call %d was limited too soon", i+1)
+				}
+			}
+			if msg := e.fail("learner-a", tool.name, tool.args); msg != msgRateLimited {
+				t.Fatalf("call 61: %q", msg)
+			}
+			// The budget is shared with the other learner tools.
+			if msg := e.fail("learner-a", "get_learner_model", map[string]any{}); msg != msgRateLimited {
+				t.Fatalf("another learner tool: %q", msg)
+			}
+			// Another learner still has theirs, and an admin is not counted on these two tools.
+			e.raw("learner-b", tool.name, tool.args)
+			for i := 0; i < learnerToolsPerMinute+20; i++ {
+				if text, _ := e.raw("admin", tool.name, tool.args); text == msgRateLimited {
+					t.Fatalf("admin call %d was limited", i+1)
+				}
+			}
+		})
+	}
+}
+
 func TestLimiterWindow(t *testing.T) {
 	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
 	l := newLimiter(func() time.Time { return now }, 3, time.Minute)

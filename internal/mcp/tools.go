@@ -363,8 +363,16 @@ func strugglesFrom(stats Struggle) Struggles {
 
 func (s *service) lookup(ctx context.Context, _ *mcp.CallToolRequest, in lookupInput) (*mcp.CallToolResult, lookupOutput, error) {
 	var out lookupOutput
-	if _, err := s.gate(ctx, "lookup"); err != nil {
+	caller, err := s.gate(ctx, "lookup")
+	if err != nil {
 		return nil, out, err
+	}
+	// A learner session is counted like the other learner tools. An admin authoring a lesson
+	// looks up many forms in a row and is not limited here.
+	if caller.Role == RoleLearner {
+		if err := s.limit(caller); err != nil {
+			return nil, out, err
+		}
 	}
 	query := strings.TrimSpace(in.Query)
 	if query == "" {
@@ -411,6 +419,13 @@ func (s *service) validateUnit(ctx context.Context, _ *mcp.CallToolRequest, in v
 			return nil, validateOutput{}, err
 		}
 		return nil, summarize(issues), nil
+	}
+	// With a briefId the call was counted above. Without one it is counted for a learner
+	// session here, so a learner cannot validate in a loop. An admin is not limited.
+	if caller.Role == RoleLearner {
+		if err := s.limit(caller); err != nil {
+			return nil, validateOutput{}, err
+		}
 	}
 	issues := units.Validate(ctx, &doc, s.lexLookup)
 	return nil, summarize(issues), nil
