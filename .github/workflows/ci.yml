@@ -57,7 +57,7 @@ concurrency:
 jobs:
   test:
     runs-on: k8-build
-    timeout-minutes: 30
+    timeout-minutes: 45
     # Module github.com/NetworkBuild3r/hebrew-lessons at the repository root
     # (not go/). setup-go reads Go 1.26 from go.mod. The job default is
     # CGO_ENABLED=0. The race step sets CGO_ENABLED=1 for that step only.
@@ -142,25 +142,44 @@ jobs:
 
       # Tests such as TestClipPlayAfterSwap call exec.LookPath("node") and
       # skip when it is missing. setup-node adds its bin directory to PATH
-      # for every later step, which is what LookPath searches. Same pin as
-      # main's k8-build workflows. The runner sets RUNNER_TOOL_CACHE; that
-      # directory is the cache setup-node writes (main already has Node 22
-      # there). build-and-smoke and publish do not run these tests.
-      - uses: actions/setup-node@v4
+      # for every later step, which is what LookPath searches. Pinned to
+      # v4.4.0. The runner sets RUNNER_TOOL_CACHE; that directory is the
+      # cache setup-node writes. build-and-smoke and publish do not run
+      # these tests.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         if: steps.module.outputs.present == 'true'
         with:
           node-version: '22'
 
-      - name: go test
+      - name: node version
+        if: steps.module.outputs.present == 'true'
+        shell: bash
+        run: node --version
+
+      # Fail if either node test skips. A missing node binary is a skip, and
+      # a skip must not leave this job green.
+      - name: node tests
         if: steps.module.outputs.present == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          go test -count=1 -v -run '^(TestClipPlayAfterSwap|TestKeyboardNode)$' ./internal/web
-          go test ./...
+          set -o pipefail
+          go test -count=1 -v -run '^(TestClipPlayAfterSwap|TestKeyboardNode)$' ./internal/web | tee node.out
+          ! grep -q -- '--- SKIP' node.out
+
+      # Full seed counts (race build tag off). The race step below covers
+      # the rest of the module, so the plain go test ./... pass is gone.
+      - name: placement tests
+        if: steps.module.outputs.present == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -count=1 -timeout 20m ./internal/placement/...
 
       # -race needs cgo and a C toolchain. CGO_ENABLED=1 is this step only.
-      # gofmt, go vet, and go test stay on the job default CGO_ENABLED=0.
+      # gofmt, go vet, and placement tests stay on the job default
+      # CGO_ENABLED=0. -timeout 20m is per test binary; the default 10m is
+      # what killed publish on v3 when placement ran under race.
       # Main's k8-build workflows (go.yml, test.yml, image-go.yml) do not
       # install gcc; they use the ARC image's git, setup-go, setup-node, and
       # docker. Install gcc and libc6-dev only when command -v gcc fails.
@@ -182,7 +201,7 @@ jobs:
           else
             echo "gcc is $(command -v gcc)"
           fi
-          go test -race ./...
+          go test -race -count=1 -timeout 20m ./...
 
   build-and-smoke:
     needs: test
