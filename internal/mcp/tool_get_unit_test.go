@@ -69,7 +69,7 @@ func TestTargetOptionalInToolSchema(t *testing.T) {
 		}
 		field, _ := props["target"].(map[string]any)
 		desc, _ := field["description"].(string)
-		if !strings.Contains(desc, "more than one token") || !strings.Contains(desc, "exact pointed") {
+		if !strings.Contains(desc, "two or more words that are in the lexicon") || !strings.Contains(desc, "exact pointed") || !strings.Contains(desc, "logged as an exposure") {
 			t.Fatalf("%s target description %q", name, desc)
 		}
 	}

@@ -2,9 +2,9 @@ hebrew v3 (greenfield, ADR-R1, ADR-0018). Publishes ghcr.io/networkbuild3r/hebre
 
 ## Authoring
 
-A graded activity (`recall`, `listen_pick`, `produce`, or `cloze`) whose line has more than one word sets `target` to the exact pointed word it grades. That spelling must be a lexicon entry. The unpointed spelling does not count. A single-word line may omit `target`. A new `validate_unit`, `put_unit`, or `publish_unit` blocks a missing target. A revision that is already published without one still serves, and checking that stored revision again reports a warning.
+A `recall`, `produce`, or `cloze` whose line has two or more words that are in the lexicon sets `target` to the exact pointed word it grades. That spelling must be a lexicon entry. The unpointed spelling does not count. A line with fewer lexicon words may omit `target`. On `listen_pick`, `target` is optional: if `target` is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure. A new `validate_unit`, `put_unit`, or `publish_unit` blocks a missing target on `recall`, `produce`, or `cloze`, and so does publishing an older revision. The current published revision still serves, and checking that same revision again reports a warning.
 
-Passage coverage counts the brief's words, the learner's known words, and this unit's `newWords` when each is an exact pointed lexicon entry. Those `newWords` stay new for the intro and the minimum uses. A word in none of those sets is unknown.
+Passage coverage counts the brief's words, the learner's known words, and this unit's `newWords` when each is an exact pointed lexicon entry. The intro and the minimum uses run on the brief's new words and on every `newWord` that coverage credited, including one outside the brief. A word in none of those sets is unknown.
 
 ## Configuration
 

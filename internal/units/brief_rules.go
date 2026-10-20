@@ -149,8 +149,10 @@ func ValidateWithBrief(ctx context.Context, doc *Unit, lk Lookup, facts *BriefFa
 }
 
 // ValidateWithBriefIn is ValidateWithBrief with an explicit mode.
-// ModeWrite is new input. ModePublished rechecks a revision that is already
-// published, and a graded line of several words may omit target.
+// ModeWrite is new input and every revision other than the current
+// published one. ModePublished rechecks that current published revision,
+// and a recall, produce, or cloze of two or more lexicon words may omit
+// target. listen_pick may omit target in both modes.
 func ValidateWithBriefIn(ctx context.Context, doc *Unit, lk Lookup, facts *BriefFacts, mode Mode) []Issue {
 	if ctx == nil {
 		ctx = context.Background()
@@ -368,7 +370,8 @@ func (b *briefScan) audioAllIssues(doc *Unit) []Issue {
 // passageIssues applies brief.coverage and brief.text_too_long to each story
 // and listen_pick passage, the same two activity types the v2 coverage rules use.
 // A token also counts as covered when its lexeme is one of this unit's newWords
-// resolved by exact pointed text. Intro and minimum uses still read the brief.
+// resolved by exact pointed text. Intro and minimum uses run on the brief's
+// new words and on every newWord that this credit covers.
 func (b *briefScan) passageIssues(doc *Unit, acts []actTokens, f *BriefFacts) []Issue {
 	covered := b.exactNewWordIDs(doc)
 	if b.err != nil {
@@ -479,37 +482,70 @@ func functionPOS(pos string) bool {
 	}
 }
 
-// newWordIssues applies brief.new_min_uses and brief.new_intro_before_test.
+// newWordIssues applies brief.new_min_uses and brief.new_intro_before_test
+// to the brief's new words and to every unit newWord that coverage credits.
+// A word in both is reported once, from the brief. A credited word outside
+// the brief uses DefaultNewWordMinUses.
 func (b *briefScan) newWordIssues(doc *Unit, acts []actTokens, f *BriefFacts) []Issue {
 	var out []Issue
+	seen := map[int64]bool{}
 	for _, w := range f.NewWords {
-		want := w.MinUses
-		if want < DefaultNewWordMinUses {
-			want = DefaultNewWordMinUses
-		}
-		uses := 0
-		for _, a := range acts {
-			uses += a.count(w.LexemeID)
-		}
-		if uses < want {
-			out = append(out, issue(RuleBriefNewMinUses, SeverityBlock, b.newWordPointer(doc, w.LexemeID),
-				fmt.Sprintf("new word %s appears %d times, and the brief asks for at least %d", w.Text, uses, want)))
-		}
-		exposed := false
-		for _, a := range acts {
-			if a.count(w.LexemeID) == 0 {
-				continue
+		seen[w.LexemeID] = true
+		out = append(out, b.oneNewWord(doc, acts, w.LexemeID, w.Text, w.MinUses)...)
+	}
+	credited := b.exactNewWordIDs(doc)
+	if b.err != nil {
+		return out
+	}
+	for _, w := range doc.NewWords {
+		n := normalize(w)
+		if n == "" || !b.probeLex(n) {
+			if b.err != nil {
+				return out
 			}
-			if exposureActivity(a.typ) {
-				exposed = true
-				continue
-			}
-			if !exposed {
-				out = append(out, issue(RuleBriefIntro, SeverityBlock, a.pointer(),
-					fmt.Sprintf("new word %s is checked here before any story or shadow step shows it", w.Text)))
-			}
-			break
+			continue
 		}
+		id, ok := b.lexID(n)
+		if b.err != nil {
+			return out
+		}
+		if !ok || !credited[id] || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, b.oneNewWord(doc, acts, id, w, DefaultNewWordMinUses)...)
+	}
+	return out
+}
+
+func (b *briefScan) oneNewWord(doc *Unit, acts []actTokens, id int64, text string, minUses int) []Issue {
+	want := minUses
+	if want < DefaultNewWordMinUses {
+		want = DefaultNewWordMinUses
+	}
+	uses := 0
+	for _, a := range acts {
+		uses += a.count(id)
+	}
+	var out []Issue
+	if uses < want {
+		out = append(out, issue(RuleBriefNewMinUses, SeverityBlock, b.newWordPointer(doc, id),
+			fmt.Sprintf("new word %s appears %d times, and the brief asks for at least %d", text, uses, want)))
+	}
+	exposed := false
+	for _, a := range acts {
+		if a.count(id) == 0 {
+			continue
+		}
+		if exposureActivity(a.typ) {
+			exposed = true
+			continue
+		}
+		if !exposed {
+			out = append(out, issue(RuleBriefIntro, SeverityBlock, a.pointer(),
+				fmt.Sprintf("new word %s is checked here before any story or shadow step shows it", text)))
+		}
+		break
 	}
 	return out
 }

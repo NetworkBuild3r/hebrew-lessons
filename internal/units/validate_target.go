@@ -16,6 +16,18 @@ func gradedActivity(typ string) bool {
 	}
 }
 
+// targetRequired is a graded activity that grades one word of a multi-word
+// line. listen_pick grades the whole sentence, so target stays optional there.
+// produce grades one word, the same as recall and cloze.
+func targetRequired(typ string) bool {
+	switch typ {
+	case ActivityRecall, ActivityProduce, ActivityCloze:
+		return true
+	default:
+		return false
+	}
+}
+
 // targetToken returns the activity token whose normalized text equals the
 // target. The comparison is Normalize on both sides, the same key LexemeByText
 // uses. The returned token is the activity's own spelling, so a
@@ -36,12 +48,13 @@ func targetToken(act Activity) (string, bool) {
 }
 
 // targetIssues checks every graded activity's target.
-// A line of more than one Hebrew word must name the word it grades.
-// ModeWrite blocks a missing target. ModePublished warns, which is how a
-// revision published before the field was required keeps validating.
-// A target that is set and is not one of the activity's tokens, or whose
-// token has no lexicon entry, is a block in both modes. The two cases are
-// separate sentences. The check runs on the real document, not the flattened copy.
+// A recall, produce, or cloze of more than one lexicon word must name the
+// word it grades. listen_pick may omit target. ModeWrite blocks a missing
+// target. ModePublished warns, which is how the current published revision
+// keeps validating. A target that is set and is not one of the activity's
+// tokens, or whose token has no lexicon entry, is a block in both modes.
+// The two cases are separate sentences. The check runs on the real document,
+// not the flattened copy.
 func targetIssues(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue {
 	if doc == nil {
 		return nil
@@ -53,11 +66,22 @@ func targetIssues(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue 
 		act              Activity
 	}
 	var need []hit
+	var s *scan
+	if lk != nil {
+		s = &scan{ctx: ctx, lk: lk, position: doc.Position, cache: map[string]*probe{}}
+	}
 	for i, les := range doc.Lessons {
 		for j, act := range les.Activities {
 			ptr := at("lessons", i, "activities", j, "target")
 			if normalize(act.Target) == "" {
-				if gradedActivity(act.Type) && hebrewWordCount(act) > 1 {
+				if s == nil || !targetRequired(act.Type) {
+					continue
+				}
+				n := lexemeTokenCount(s, act)
+				if s.err != nil {
+					return append(out, lookupIssue(s.err))
+				}
+				if n > 1 {
 					sev := SeverityBlock
 					if mode == ModePublished {
 						sev = SeverityWarn
@@ -82,10 +106,9 @@ func targetIssues(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue 
 			need = append(need, hit{lesson: i, activity: j, tok: tok, act: act})
 		}
 	}
-	if len(need) == 0 || lk == nil {
+	if len(need) == 0 || s == nil {
 		return out
 	}
-	s := &scan{ctx: ctx, lk: lk, position: doc.Position, cache: map[string]*probe{}}
 	for _, h := range need {
 		// The player looks the token up by its exact pointed text (LexemesByText).
 		// The consonant skeleton that inLexicon accepts is not enough: a lexicon
@@ -104,14 +127,21 @@ func targetIssues(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue 
 	return out
 }
 
-// hebrewWordCount is the number of tokens in the activity that contain a
-// Hebrew letter. Punctuation and numerals are tokens of tokenize and are
-// not words here, so a one-word line with a number does not need a target.
-func hebrewWordCount(act Activity) int {
+// lexemeTokenCount is how many tokens of the activity are lexicon entries.
+// The match is LexemeByText on the token's exact pointed text, the same
+// lookup the player uses (LexemesByText on each token of the activity).
+// Punctuation is not a token. A numeral, an unknown word, and a word whose
+// only lexicon row is the unpointed spelling are not counted. The unpointed
+// fallback that inLexicon accepts does not count here. translation_missing
+// uses this same count.
+func lexemeTokenCount(s *scan, act Activity) int {
 	n := 0
 	for _, text := range act.Texts() {
 		for _, tok := range tokenize(text) {
-			if isHebrewWord(tok) {
+			if s.err != nil {
+				return n
+			}
+			if s.probeLex(normalize(tok)) {
 				n++
 			}
 		}

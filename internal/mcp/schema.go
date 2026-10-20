@@ -110,10 +110,10 @@ func annotateUnitSchema(s *jsonschema.Schema) error {
 	}
 	typ.Description = "One of the eight activity types."
 	text.Description = "Pointed Hebrew this screen speaks or asks about. Audio is looked up from this exact text. Every type has it except dialogue, which has lines instead."
-	// target stays out of the required array. A single-token line may omit it.
-	// A line of several tokens must set it; the validator enforces that.
+	// target stays out of the required array. recall, produce, and cloze must
+	// set it when the line has two or more lexicon words. listen_pick may omit it.
 	if target := prop(act, "target"); target != nil {
-		target.Description = "The exact pointed token this graded activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required when the line has more than one token. A single-token line may omit it, and an empty value is the same as omitting it. Used by recall, listen_pick, produce, and cloze."
+		target.Description = "The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, and cloze when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure."
 	}
 	// text is not marked required here, because a dialogue has lines instead. The
 	// validator enforces it for every other type (schema.required) and enforces
@@ -177,16 +177,21 @@ func activityCatalog() []activityInfo {
 	target := activityField{
 		Name:        "target",
 		Required:    false,
-		Description: "The exact pointed token this activity grades, in NFC, and one token of text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required when the line has more than one token. A single-token line may omit it, and an empty value is the same as omitting it.",
+		Description: "The exact pointed token this activity grades, in NFC, and one token of text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it.",
+	}
+	listenTarget := activityField{
+		Name:        "target",
+		Required:    false,
+		Description: "Optional. If target is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure. When set, it is one exact pointed token of text, and that token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count.",
 	}
 	return []activityInfo{
 		{
 			Type:    units.ActivityListenPick,
-			Purpose: "The learner hears the clip and picks the meaning. The spelling stays hidden until the answer.",
+			Purpose: "The learner hears the clip and picks the meaning of the whole line. The spelling stays hidden until the answer. target is optional.",
 			Fields: []activityField{
 				typ("listen_pick"),
 				text,
-				target,
+				listenTarget,
 			},
 		},
 		{
@@ -209,7 +214,7 @@ func activityCatalog() []activityInfo {
 		},
 		{
 			Type:    units.ActivityCloze,
-			Purpose: "A pointed sentence with a gap. text is the whole sentence. When the sentence has more than one token, target is the gap and is the exact pointed word to grade. A single-token sentence may omit target. There is no blank marker yet.",
+			Purpose: "A pointed sentence with a gap. text is the whole sentence. When the sentence has two or more words that are in the lexicon, target is the gap and is the exact pointed word to grade. A line with fewer may omit target. There is no blank marker yet.",
 			Fields: []activityField{
 				typ("cloze"),
 				text,
