@@ -335,7 +335,11 @@ try {
   await bare.waitForSelector(".clip audio");
   const jsClass = await bare.evaluate(() => document.documentElement.classList.contains("js"));
   const offFacts = await bare.evaluate(clipFacts);
-  const bars = offFacts.length > 0 && offFacts.every((c) => c.controls && c.audioVisible && c.w >= 40 && c.h >= 16 && !c.orbVisible);
+  // A word bar fills its column, so a short word is narrower than 40px.
+  // The native control is the controls attribute plus a bar taller than a
+  // 1px hide (audioVisible already rejects display:none, opacity 0, and a
+  // 1×1 box).
+  const bars = offFacts.length > 0 && offFacts.every((c) => c.controls && c.audioVisible && c.h >= 16 && !c.orbVisible);
   check(
     "mode-js-off-bar",
     !jsClass && bars,
