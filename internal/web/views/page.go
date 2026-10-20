@@ -41,6 +41,8 @@ type UI struct {
 	Today           string
 	Review          string
 	Progress        string
+	Lessons         string
+	Me              string
 	Dark            string
 	Light           string
 	Logout          string
@@ -96,6 +98,8 @@ func UIFor(lang, addressGender string) UI {
 func hebrewUI(addressGender string) UI {
 	return UI{
 		Lang: "he", Dir: "rtl",
+		// Lessons and Me are the two destinations SPEC-017 added. Not yet checked against Pealim.
+		Lessons: "שִׁעוּרִים", Me: "אֲנִי",
 		Skip: Address(addressGender, "דַּלֵּג לַתֹּכֶן", "דַּלְּגִי לַתֹּכֶן"), Nav: "רָאשִׁי",
 		Today: "הַיּוֹם", Review: "חֲזָרָה", Progress: "הִתְקַדְּמוּת",
 		Dark: "כֵּהֶה", Light: "בָּהִיר", Logout: "יְצִיאָה",
@@ -119,6 +123,7 @@ func englishUI() UI {
 		Lang: "en", Dir: "ltr",
 		Skip: "Skip to content", Nav: "Main",
 		Today: "Today", Review: "Review", Progress: "Progress",
+		Lessons: "Lessons", Me: "Me",
 		Dark: "Dark", Light: "Light", Logout: "Log out",
 		Heading:   "Today",
 		DueKicker: "To review", DueLabel: "Words ready", DueHint: "Up to twenty a day",
@@ -145,6 +150,10 @@ func (u UI) DocTitle(current string) string {
 		name = u.ProgressHeading
 	case "lesson":
 		name = u.LessonHeading
+	case "lessons":
+		name = u.Lessons
+	case "me":
+		name = u.Me
 	case "signin":
 		if u.Lang == "en" {
 			name = SignInTitleEN
@@ -218,6 +227,9 @@ type Home struct {
 	PlacementLevel string
 	PlacementRated string
 	PlacementAt    string
+	// Today is what the shell decided for this visit: the one next action and the
+	// cards beside it (INIT-015/SPEC-017).
+	Today TodayView
 }
 
 // ProgressPage is the progress shell plus the real counts.

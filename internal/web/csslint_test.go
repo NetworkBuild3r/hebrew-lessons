@@ -73,7 +73,7 @@ func TestShippedCSSHasNoPhysicalProperties(t *testing.T) {
 	if strings.Contains(text, "overflow:hidden") || strings.Contains(text, "overflow: hidden") {
 		t.Error("base.css hides overflow; pointed text must stay visible")
 	}
-	for _, token := range []string{"var(--font-ui)", "var(--font-display)", "var(--lh-he-body)", "var(--lh-he-display)", "padding-block: .1em", ".htmx-settling", ".htmx-added", "view-transition-name: page-main", ".rail > .rail-brand", ".rail > .rail-theme"} {
+	for _, token := range []string{"var(--font-ui)", "var(--font-display)", "var(--lh-he-body)", "var(--lh-he-display)", "padding-block: .1em", ".htmx-settling", ".htmx-added", "view-transition-name: page-main", ".rail > .rail-brand"} {
 		if !strings.Contains(text, token) {
 			t.Errorf("base.css missing %s", token)
 		}

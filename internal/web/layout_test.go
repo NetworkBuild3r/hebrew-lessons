@@ -20,7 +20,7 @@ func TestTodayLayout(t *testing.T) {
 	if !strings.Contains(body, `href="#main"`) || !strings.Contains(body, `id="main"`) {
 		t.Fatal("skip link or main landmark missing")
 	}
-	for _, href := range []string{`href="/"`, `href="/review"`, `href="/progress"`} {
+	for _, href := range []string{`href="/"`, `href="/lessons"`, `href="/review"`, `href="/progress"`, `href="/me"`} {
 		if !strings.Contains(body, href) {
 			t.Fatalf("nav href %s missing", href)
 		}
@@ -73,13 +73,9 @@ func TestTodayLayout(t *testing.T) {
 	if !strings.Contains(body, "No lesson published yet") {
 		t.Fatal("empty Today should say no lesson is published")
 	}
-	if !strings.Contains(body, `aria-pressed="false"`) || strings.Contains(body, `id="theme-toggle"`) {
-		t.Fatal("theme toggle should use aria-pressed and no id")
-	}
-	ui := views.UIFor("en", "m")
-	label := regexp.MustCompile(`(?s)class="when-light">(.*?)</span>`).FindStringSubmatch(body)
-	if label == nil || !strings.Contains(label[1], ui.Light) || strings.Contains(label[1], ui.Dark) {
-		t.Fatal("theme toggle should name the current mode")
+	// The theme and log out live on Me (SPEC-017), so nothing in the header can wrap.
+	if strings.Contains(body, "theme-toggle") || strings.Contains(body, "data-theme-choice") || strings.Contains(body, "/auth/logout") {
+		t.Fatal("the theme choice and log out belong on Me, not in the shell")
 	}
 	if !strings.Contains(body, `hx-swap="outerHTML transition:true"`) {
 		t.Fatal("htmx view transitions are not enabled")
@@ -130,9 +126,16 @@ func TestNavCurrent(t *testing.T) {
 			t.Fatalf("%s missing csrf header wiring", path)
 		}
 	}
+	// The lesson player belongs to Lessons, so that is the one current item there.
 	lesson := get(t, h, "/lesson")
-	if strings.Contains(lesson, `aria-current="page"`) {
-		t.Fatal("lesson player should not mark a nav item current")
+	if !strings.Contains(dockHref(lesson, "/lessons"), `aria-current="page"`) || strings.Count(lesson, `aria-current="page"`) != 1 {
+		t.Fatal("the lesson player should mark Lessons, and only Lessons, current")
+	}
+	for _, path := range []string{"/lessons", "/me"} {
+		body := get(t, h, path)
+		if !strings.Contains(dockHref(body, path), `aria-current="page"`) || strings.Count(body, `aria-current="page"`) != 1 {
+			t.Fatalf("%s is not the one current item: %s", path, dockHref(body, path))
+		}
 	}
 }
 

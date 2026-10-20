@@ -11,6 +11,9 @@ type Screen struct {
 	Gloss     string
 	Situation string
 	Activity  Activity
+	// Frame is the lesson frame around the step: progress bar, step heading, outline,
+	// and the report sheet (INIT-015/SPEC-017).
+	Frame LessonFrame
 }
 
 // Activity is one step, swapped in place by htmx. Done replaces the step

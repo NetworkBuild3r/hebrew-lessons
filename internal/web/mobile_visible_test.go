@@ -10,9 +10,9 @@ import (
 )
 
 // TestMobileShowsOneBrandAndToggle loads the shell in a real browser at 390
-// and checks that the desktop rail copies are not visible. Exactly one brand
-// and one theme toggle may paint; the same holds at 1440, where the header
-// copies are the ones hidden.
+// and checks that the desktop rail copy of the brand is not visible. Exactly one
+// brand may paint; the same holds at 1440, where the header copy is the one hidden.
+// The theme choice and log out are on Me (SPEC-017), so neither paints in the shell.
 func TestMobileShowsOneBrandAndToggle(t *testing.T) {
 	chrome := "/usr/bin/google-chrome-stable"
 	if _, err := os.Stat(chrome); err != nil {
@@ -48,9 +48,9 @@ for (const width of [390, 1440]) {
   for (const path of ["/", "/?due=0", "/?lang=en"]) {
     await page.goto(%q + path, { waitUntil: "networkidle" });
     const brand = await page.evaluate(vis, ".brand");
-    const theme = await page.evaluate(vis, ".theme-toggle");
-    if (brand !== 1 || theme !== 1) {
-      failures.push(width + " " + path + " brand=" + brand + " theme=" + theme);
+    const theme = await page.evaluate(vis, ".theme-toggle, .logout");
+    if (brand !== 1 || theme !== 0) {
+      failures.push(width + " " + path + " brand=" + brand + " theme-or-logout=" + theme);
     }
   }
 }

@@ -72,11 +72,9 @@ bdi[lang="he"] { unicode-bidi: isolate; }
   min-block-size: 100dvb;
 }
 .rail { display: contents; }
-/* Child combinator so this beats the later .brand and .theme-toggle rules.
-   The desktop copies are shown again only at the 1024 rail. */
-.rail > .rail-brand,
-.rail > .rail-theme,
-.rail > .rail-logout { display: none; }
+/* Child combinator so this beats the later .brand rule.
+   The desktop copy is shown again only at the 1024 rail. */
+.rail > .rail-brand { display: none; }
 .stage {
   inline-size: min(100%, var(--player-max));
   margin-inline: auto;
@@ -635,27 +633,6 @@ h1 {
     font-size: var(--fs-small);
     max-inline-size: 100%;
   }
-  .rail > .rail-theme {
-    display: inline-flex;
-    flex-direction: column;
-    margin-block-start: auto;
-    inline-size: 100%;
-    min-inline-size: 0;
-    padding-inline: var(--space-1);
-    gap: var(--space-1);
-    font-size: var(--fs-caption);
-  }
-  .rail > .rail-logout {
-    display: flex;
-    justify-content: center;
-    margin-block-start: var(--space-2);
-  }
-  .rail > .rail-logout .logout__btn {
-    inline-size: 100%;
-    min-inline-size: 0;
-    padding-inline: var(--space-1);
-    font-size: var(--fs-caption);
-  }
   .top { display: none; }
   .dock-wrap {
     position: static;
@@ -696,7 +673,6 @@ h1 {
     inline-size: min(100%, var(--content-max));
     padding-block-end: var(--space-7);
   }
-  .today__head { display: none; }
   .today__cols { grid-template-columns: 1fr 1fr; }
   .ink-card, .lesson-card, .sheet, .quiet-card {
     padding: var(--space-6);

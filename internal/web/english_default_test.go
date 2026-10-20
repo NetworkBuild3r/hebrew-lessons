@@ -318,12 +318,12 @@ func assertEnglishNav(t *testing.T, body string) {
 	if !strings.Contains(body, `<nav class="dock"`) {
 		t.Fatal("nav missing")
 	}
-	for _, label := range []string{"Today", "Review", "Progress", "Dark", "Light", "Log out"} {
+	for _, label := range []string{"Today", "Lessons", "Review", "Progress", "Me"} {
 		if !strings.Contains(body, `<bdi lang="en" dir="ltr">`+label+`</bdi>`) {
 			t.Fatalf("nav chrome %q is not an English run", label)
 		}
 	}
-	for _, href := range []string{`href="/"`, `href="/review"`, `href="/progress"`} {
+	for _, href := range []string{`href="/"`, `href="/lessons"`, `href="/review"`, `href="/progress"`, `href="/me"`} {
 		if !strings.Contains(body, href) {
 			t.Fatalf("nav %s missing", href)
 		}
