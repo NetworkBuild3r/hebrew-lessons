@@ -477,13 +477,22 @@ func TestNoSnapshotsShowsTheEmptyStateAndNoChart(t *testing.T) {
 			t.Errorf("the empty page has no %q", want)
 		}
 	}
-	for _, bad := range []string{`<svg class="pc `, `data-chart=`, `class="ptabs"`, "pweek", "pplace"} {
+	for _, bad := range []string{`<svg class="pc `, `data-chart=`, `class="ptabs"`, "pweek"} {
 		if strings.Contains(body, bad) {
 			t.Errorf("the empty page still has %q", bad)
 		}
 	}
 	if m := brokenChart.FindString(body); m != "" {
 		t.Errorf("broken chart text %q", m)
+	}
+	card := section(t, body, "c-card pplace", "")
+	for _, want := range []string{"Your level", "No placement yet", "Take placement", `href="/placement"`, "No results yet."} {
+		if !strings.Contains(card, want) {
+			t.Errorf("the empty page's level card has no %q:\n%s", want, card)
+		}
+	}
+	if strings.Contains(card, "Retaking won’t erase") || strings.Contains(card, "Retake placement") || strings.Contains(card, "Show all") {
+		t.Errorf("the empty level card offers a retake:\n%s", card)
 	}
 }
 
@@ -647,21 +656,27 @@ func TestPlacementHistoryListsEachRunWithItsLevels(t *testing.T) {
 	_, _, _, _, get := progressApp(t)
 	body := get("/progress")
 	card := section(t, body, "c-card pplace", "")
-	items := regexp.MustCompile(`(?s)<li class="pplace__item">.*?</li>`).FindAllString(card, -1)
+	items := regexp.MustCompile(`(?s)<li class="pplace__row">.*?</li>`).FindAllString(card, -1)
 	if len(items) != 2 {
 		t.Fatalf("%d placement rows, want 2:\n%s", len(items), card)
 	}
 	check, first := items[0], items[1] // newest first
-	for _, w := range []string{"Sep 4", "Oct 2", "Check-in", "First placement"} {
+	for _, w := range []string{"Sep 4", "Oct 2", "Past results", "Retake placement", "Unit 3", "Latest", "Retaking won’t erase anything you’ve learned."} {
 		if !strings.Contains(card, w) {
 			t.Errorf("no %q", w)
 		}
 	}
-	if !strings.Contains(check, "Oct 2") || !strings.Contains(check, "Check-in") || !strings.Contains(check, "Listening level 3, about 164 words") || strings.Contains(check, "Reading") {
-		t.Errorf("check-in row:\n%s", check)
+	if strings.Contains(card, "Show all") {
+		t.Error("two runs must not offer Show all")
 	}
-	if !strings.Contains(first, "Sep 4") || !strings.Contains(first, "First placement") || !strings.Contains(first, "Listening level 3, about 142 words") || !strings.Contains(first, "Reading level 2, about 90 words") {
-		t.Errorf("first placement row:\n%s", first)
+	if strings.Contains(card, "Unit 3:") || strings.Contains(card, "142") || strings.Contains(card, "164") {
+		t.Error("the history row names a unit or a word count the card does not show")
+	}
+	if !strings.Contains(check, "Oct 2") || !strings.Contains(check, "Latest") || !strings.Contains(check, "Unit 3") {
+		t.Errorf("newest row:\n%s", check)
+	}
+	if strings.Contains(first, "Latest") || !strings.Contains(first, "Sep 4") || !strings.Contains(first, "Unit 3") {
+		t.Errorf("older row:\n%s", first)
 	}
 }
 
@@ -672,8 +687,11 @@ func TestPlacementHistoryEmptyStateSaysWhatToDo(t *testing.T) {
 	seedLexicon(t, store, progNow, 3, false, true)
 	seedProgressSnapshots(t, store, l.user.ID, 90, progEst)
 	card := section(t, getLearner(t, h, l, "/progress"), "c-card pplace", "")
-	if !strings.Contains(card, "No placement yet. Take the placement check from Today") || !strings.Contains(card, `href="/"`) {
+	if !strings.Contains(card, "No placement yet") || !strings.Contains(card, "Take placement") || !strings.Contains(card, `href="/placement"`) || !strings.Contains(card, "No results yet.") {
 		t.Errorf("placement empty state:\n%s", card)
+	}
+	if strings.Contains(card, "Retaking won’t erase") || strings.Contains(card, "Retake placement") {
+		t.Error("an unplaced learner sees the retake line")
 	}
 }
 

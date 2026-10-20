@@ -84,12 +84,11 @@ type WeekView struct {
 	Back []WeekWord
 }
 
-// PlacementRow is one finished placement run or check-in.
+// PlacementRow is one finished placement, newest first.
 type PlacementRow struct {
-	Date   string
-	Kind   string // First placement, Check-in, Placement
-	Level  string // "Level 3" or ""
-	Detail string // "about 164 words · Listening level 3, about 164 words · ..."
+	Date   string // "Oct 19", or "Jan 2, 2006" when the year is not this year
+	Unit   string // "Unit 3: At home", or "Unit 3" when there is no title
+	Latest bool
 }
 
 // WeeklyCard is the newest weekly report.
@@ -119,6 +118,23 @@ type ProgressView struct {
 	Retention ChartView
 	Week      WeekView
 	Placement []PlacementRow
+	// Placed is true when the learner has at least one finished run.
+	Placed bool
+	// PlacementStatus is "Placed at Unit {n}, {Mon d}" or "No placement yet".
+	PlacementStatus string
+	// PlacementBody is the line under the status when the learner is not placed.
+	PlacementBody string
+	// PlacementLink is "Retake placement" or "Take placement".
+	PlacementLink string
+	// PlacementKeep is the reassurance under Retake. Empty unless Placed.
+	PlacementKeep string
+	// PlacementTotal is the finished-run count. PlacementMore is "Show all ({n})"
+	// when the page is showing a short list and the count is over 3.
+	PlacementTotal    int
+	PlacementMore     string
+	PlacementMoreHref string
+	// PlacementAll is the full history page: no "Show all" link.
+	PlacementAll bool
 }
 
 // SignedGain is "+9" for a gain, and "0" for none.

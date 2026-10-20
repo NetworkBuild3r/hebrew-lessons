@@ -1,8 +1,8 @@
 package views
 
 // Today is the learner home. It offers one next action in gold, and nothing else is gold.
-// The action is chosen by web.ChooseTodayAction: resume a placement, start a placement,
-// continue a lesson, take the check-in, do the due reviews, or open the next lesson. The
+// The action is chosen by web.ChooseTodayAction: continue a lesson, take the check-in,
+// do the due reviews, or open the next lesson. Placement is not offered here. The
 // cards beside it are quiet: what is due, the next lesson, a band slipping, and the words
 // to watch. There is no streak and no score.
 templ Today(h Home) {
@@ -43,26 +43,6 @@ templ Today(h Home) {
 // todayHero is the one next action. ActionNone draws nothing.
 templ todayHero(h Home) {
 	switch h.Today.Action {
-		case ActionResumePlacement:
-			<section class="today-place today-place--resume" aria-labelledby="hero-title">
-				<p class="eyebrow">@T(h.Lang, "", "Placement")</p>
-				<h2 id="hero-title" class="today-hero__title">@T(h.Lang, "חֲזָרָה לַבְּדִיקָה", "Resume placement")</h2>
-				<p class="today-place__hint">@T(h.Lang, "", "Pick up where you left off. Your answers so far are saved.")</p>
-				<a class="btn btn-primary" href={ templ.SafeURL(h.Href("/placement")) }>
-					@Icon("play", "")
-					<span>@T(h.Lang, "חֲזָרָה לַבְּדִיקָה", "Resume placement")</span>
-				</a>
-			</section>
-		case ActionStartPlacement:
-			<section class="today-place today-place--open" aria-labelledby="hero-title">
-				<p class="eyebrow">@T(h.Lang, "", "Start here")</p>
-				<h2 id="hero-title" class="today-hero__title">@T(h.Lang, "בְּדִיקַת רָמָה", "Take the placement check")</h2>
-				<p class="today-place__hint">@T(h.Lang, "", "A short check of the words you know, so lessons fit you. You can leave and come back.")</p>
-				<a class="btn btn-primary" href={ templ.SafeURL(h.Href("/placement")) }>
-					@Icon("play", "")
-					<span>@T(h.Lang, "בְּדִיקַת רָמָה", "Take the placement check")</span>
-				</a>
-			</section>
 		case ActionContinueLesson:
 			<section class="ink-card today-hero" aria-labelledby="hero-title">
 				<p class="eyebrow">@E(StepText(h.Today.Step, h.Today.Steps))</p>

@@ -274,7 +274,7 @@ for (const scheme of ["light", "dark"]) {
 
 await section("today states", async () => {
   const { ctx, page } = await open("start", { width: 390, height: 844 });
-  for (const [who, action, gold] of [["start", "start_placement", 1], ["resume", "resume_placement", 1], ["continue", "continue_lesson", 1], ["checkin", "checkin", 1], ["next", "next_lesson", 1], ["idle", "none", 0]]) {
+  for (const [who, action, gold] of [["start", "next_lesson", 1], ["resume", "next_lesson", 1], ["continue", "continue_lesson", 1], ["checkin", "checkin", 1], ["next", "next_lesson", 1], ["idle", "none", 0]]) {
     await ctx.clearCookies();
     await ctx.addCookies([{ name: "hebrew_session", value: cookies[who], url: origin }]);
     await page.goto(origin + "/", { waitUntil: "networkidle" });

@@ -53,8 +53,13 @@ templ plTop(v PlacementView, progress bool) {
 			@Icon("x", "")
 		</a>
 		if progress {
+			<div class="pl__countline">
+				<span class="pl__count"><bdi lang="en" dir="ltr">{ v.Count() }</bdi></span>
+				if v.PartLabel() != "" {
+					<span class="pl__part" lang="en">{ v.PartLabel() }</span>
+				}
+			</div>
 			@ProgressBar(v.Index, v.Total, v.ProgressName())
-			<span class="pl__count"><bdi lang="en" dir="ltr">{ v.Count() }</bdi></span>
 		}
 	</header>
 }
@@ -205,7 +210,7 @@ templ plPickBody(v PlacementView) {
 						if v.AudioFailed {
 							{ "We couldn’t play this clip. Tap “I don’t know” to move on." }
 						} else if v.Asking() {
-							{ "Listen, then pick." }
+							{ v.AskHint() }
 						}
 					</span>
 				</p>
@@ -235,8 +240,9 @@ templ plPickBody(v PlacementView) {
 		</p>
 		if v.Asking() {
 			@ButtonWith(ButtonQuiet, plQuietAttrs("dont_know", "1")) {
-				@E("I don’t know this one")
+				@E(SkipLabel)
 			}
+			<p class="pl__skip" lang="en">{ SkipHint }</p>
 		}
 	</div>
 }
@@ -279,8 +285,9 @@ templ plTyping(v PlacementView) {
 			}
 			<div class="pl__more">
 				@ButtonWith(ButtonQuiet, plQuietAttrs("dont_know", "1")) {
-					@E("Skip this word")
+					@E(SkipLabel)
 				}
+				<p class="pl__skip" lang="en">{ SkipHint }</p>
 				@ButtonWith(ButtonQuiet, templ.Attributes{"type": "submit", "formnovalidate": true, "formaction": "/_hx/placement/finish", "hx-post": "/_hx/placement/finish"}) {
 					@E("I’m done typing")
 				}
@@ -333,58 +340,64 @@ templ plOffer(v PlacementView) {
 	@plConfirm(v)
 }
 
-// plResults is the end of the test: where the learner starts, by ear and by eye, what to work on first,
-// and one gold way into the first lesson.
+// plResults is the end of the test. One gold Start, and a text control that
+// moves the start back to the basics. Letters that were not passed keep the
+// level meters. A learner who knew nothing gets no failure language.
 templ plResults(v PlacementView) {
 	<div class="pl__frame pl__frame--results">
-		<section class="pl-hero" aria-labelledby="pl-title">
-			<p class="pl__eyebrow pl__eyebrow--on-ink" lang="en">Your starting point</p>
-			<h1 class="pl-hero__title" id="pl-title" lang="en">{ v.Result.Headline }</h1>
-			if v.Result.Words > 0 {
-				<p class="pl-hero__words" lang="en">
-					<span class="pl-hero__approx" aria-hidden="true">≈</span>
-					<b>{ plWords(v.Result.Words) }</b>
-					<span>words you likely know</span>
-				</p>
-			}
-			if v.Result.Sub != "" {
-				<p class="pl-hero__sub" lang="en">{ v.Result.Sub }</p>
-			}
-		</section>
-		<div class="pl-levels">
-			@plLevel(v.Result.Listening)
-			@plLevel(v.Result.Reading)
-		</div>
-		if len(v.Result.Work) > 0 {
-			<section class="c-card pl-work" aria-labelledby="pl-work-title">
-				<h2 id="pl-work-title" lang="en">We’ll work on first</h2>
-				<ul role="list">
-					for _, w := range v.Result.Work {
-						<li class="pl-work__row">
-							<span class="pl-work__he">
-								@H(w.Pointed)
-							</span>
-							<span class="pl-work__text">
-								<b lang="en">{ w.Gloss }</b>
-								<small lang="en">{ w.Note }</small>
-							</span>
-						</li>
-					}
-				</ul>
-			</section>
+		<header class="pl__top">
+			<a class="pl__close" href={ templ.SafeURL(v.Href("/")) } aria-label="Close placement">
+				@Icon("x", "")
+			</a>
+			<span class="pl__count" lang="en">Placement</span>
+			<span class="pl__part" lang="en">Done</span>
+		</header>
+		<h1 class="pl__title pl__title--lead" id="pl-title" lang="en" tabindex="-1">{ v.Result.Headline }</h1>
+		if v.Result.Sub != "" {
+			<p class="pl__lede" lang="en">{ v.Result.Sub }</p>
+		}
+		if v.Result.LettersFirst {
+			<div class="pl-levels">
+				@plLevel(v.Result.Listening)
+				@plLevel(v.Result.Reading)
+			</div>
+		} else if len(v.Result.Path) > 0 {
+			<ol class="pl-path">
+				for _, row := range v.Result.Path {
+					<li class={ "pl-path__row pl-path__row--" + row.Kind }>
+						<span class="pl-path__label">@E(row.Label)</span>
+						<span class="pl-path__note">@E(row.Note)</span>
+					</li>
+				}
+			</ol>
+		}
+		if !v.Result.LettersFirst {
+			<div class="pl-stats">
+				@plStat("sound", "Listening", v.Result.Listening.Words)
+				@plStat("book", "Reading", v.Result.Reading.Words)
+			</div>
 		}
 		<div class="pl__actions">
-			<a class="c-button" data-kind="primary" data-pl-primary href={ templ.SafeURL(v.Href("/")) }>
-				@E("Start my first lesson")
+			<a class="c-button" data-kind="primary" data-pl-primary href={ templ.SafeURL(v.Result.StartHref) }>
+				@E(ResultStart)
 				@IconClass("arrow-right", "icon icon-directional", "")
 			</a>
-			if v.Result.Misses > 0 {
-				<a class="c-button" data-kind="quiet" href={ templ.SafeURL(v.Result.ReviewURL) }>
-					@E(plMisses(v.Result.Misses))
-				</a>
-			}
+			<form method="post" action="/onboarding/basics" hx-boost="false" class="pl-basics">
+				<input type="hidden" name="_csrf" value={ v.CSRF }/>
+				<button type="submit" class="pl-basics__btn">@E(ResultBasics)</button>
+			</form>
 		</div>
 	</div>
+}
+
+templ plStat(icon, skill string, words int) {
+	<section class="c-card pl-stat">
+		<h2 class="pl-stat__skill" lang="en">
+			@Icon(icon, "")
+			<span>{ skill }</span>
+		</h2>
+		<p class="pl-stat__n" lang="en">≈{ plWords(words) } words</p>
+	</section>
 }
 
 // plLevel is one skill's level card.
@@ -462,7 +475,7 @@ templ plReview(v PlacementView) {
 		</div>
 		<div class="pl__actions">
 			<a class="c-button" data-kind="primary" data-pl-primary href={ templ.SafeURL(v.Href("/")) }>
-				@E("Start my first lesson")
+				@E(ResultStart)
 				@IconClass("arrow-right", "icon icon-directional", "")
 			</a>
 		</div>

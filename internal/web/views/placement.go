@@ -117,16 +117,27 @@ type PlaceWorkView struct {
 	Note    string
 }
 
+// PlacePathRow is one unit on the result path.
+type PlacePathRow struct {
+	Label string // "Unit 3: At home" or "Unit 3"
+	Note  string
+	Kind  string // past, start, next
+}
+
 // PlaceResultView is the results screen.
 type PlaceResultView struct {
-	Headline  string
-	Sub       string
-	Words     int
-	Listening PlaceLevelView
-	Reading   PlaceLevelView
-	Work      []PlaceWorkView
-	Misses    int
-	ReviewURL string
+	Headline     string
+	Sub          string
+	Words        int
+	Listening    PlaceLevelView
+	Reading      PlaceLevelView
+	Work         []PlaceWorkView
+	Misses       int
+	ReviewURL    string
+	LettersFirst bool
+	KnewNothing  bool
+	StartHref    string
+	Path         []PlacePathRow
 }
 
 // PlaceReviewRow is one missed word: what it means, what the learner picked, the pointed Hebrew, and
@@ -205,7 +216,7 @@ func (v PlacementView) Question() string {
 	case PlaceLetters:
 		return "Which letter did you hear?"
 	case PlaceListening:
-		return "What did you hear?"
+		return "Listen, then pick the meaning."
 	case PlaceReading:
 		return "What does this word mean?"
 	case PlaceTyping:
@@ -214,9 +225,32 @@ func (v PlacementView) Question() string {
 	return ""
 }
 
-// Count is "4 / 12".
+// Count is "Placement, 4 of 12". The part's length is still the engine's.
 func (v PlacementView) Count() string {
-	return strconv.Itoa(v.Index) + " / " + strconv.Itoa(v.Total)
+	return "Placement, " + strconv.Itoa(v.Index) + " of " + strconv.Itoa(v.Total)
+}
+
+// PartLabel is the part name in the header: Letters, Listening, Reading, Typing.
+func (v PlacementView) PartLabel() string {
+	switch v.Screen {
+	case PlaceLetters:
+		return "Letters"
+	case PlaceListening:
+		return "Listening"
+	case PlaceReading:
+		return "Reading"
+	case PlaceTyping:
+		return "Typing"
+	}
+	return ""
+}
+
+// AskHint is the line under a listening prompt. Other parts keep the shorter line.
+func (v PlacementView) AskHint() string {
+	if v.Screen == PlaceListening {
+		return "Pick the meaning, or skip it"
+	}
+	return "Listen, then pick."
 }
 
 // ProgressName is the accessible name of the progress bar.

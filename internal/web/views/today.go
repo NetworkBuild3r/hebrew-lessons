@@ -22,9 +22,9 @@ const (
 )
 
 // TodayActions lists every action in the order the shell prefers them.
+// Placement is not among them.
 var TodayActions = []TodayAction{
-	ActionResumePlacement, ActionStartPlacement, ActionContinueLesson,
-	ActionCheckin, ActionReviews, ActionNextLesson, ActionNone,
+	ActionContinueLesson, ActionCheckin, ActionReviews, ActionNextLesson, ActionNone,
 }
 
 // WatchWord is one row of "Words to watch": a struggling word and the skill that fails.
