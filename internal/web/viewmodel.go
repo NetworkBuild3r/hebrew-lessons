@@ -74,12 +74,3 @@ type ReviewCardVM struct {
 	Item   *activity.Item
 	Answer *answerState
 }
-
-// ProgressVM is the Progress page.
-type ProgressVM struct {
-	KnownWords     int
-	UnitsCompleted int
-	UnitsTotal     int
-	DueCount       int
-	Placement      *PlacementVM
-}

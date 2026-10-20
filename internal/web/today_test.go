@@ -79,10 +79,10 @@ func TestHomeFromRealData(t *testing.T) {
 		t.Fatal("a learner with no run rendered a placement")
 	}
 	progress := getLearner(t, h, learner, "/progress")
-	for _, want := range []string{`>1</bdi>`, `>1/2</bdi>`, `>2</bdi>`} {
-		if !strings.Contains(progress, want) {
-			t.Fatalf("progress missing %s\n%s", want, progress)
-		}
+	// Progress (SPEC-018) shows the learner model by skill. What is left of the old three counts
+	// is the lessons finished; the known count and the due count are on Today.
+	if !strings.Contains(progress, `>1/2</bdi>`) {
+		t.Fatalf("progress missing the lessons finished\n%s", progress)
 	}
 
 	runID, err := store.InsertPlacementRun(ctx, learner.user.ID, now, 1)

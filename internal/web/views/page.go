@@ -232,19 +232,6 @@ type Home struct {
 	Today TodayView
 }
 
-// ProgressPage is the progress shell plus the real counts.
-type ProgressPage struct {
-	Page
-	KnownText      string
-	UnitsText      string
-	DueText        string
-	Placement      string
-	PlacementWords string
-	PlacementLevel string
-	PlacementRated string
-	PlacementAt    string
-}
-
 // ReviewCard is one study visit, or Done when the queue is finished.
 type ReviewCard struct {
 	CSRF          string
