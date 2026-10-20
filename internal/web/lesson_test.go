@@ -348,11 +348,15 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 		t.Fatal(err)
 	}
 	sp := func(s string) *string { return &s }
-	const evening = "עֶרֶב"
+	const (
+		evening = "עֶרֶב"
+		night   = "לַיְלָה"
+	)
 	saved, _, err := store.UpsertLexemes(ctx, []lexicon.Input{
 		{TextNFC: hello, Gloss: "hello", Translit: sp("shalom"), Gender: sp("m"), POS: sp("noun")},
 		{TextNFC: morning, Gloss: "morning", Translit: sp("boker"), Gender: sp("m"), POS: sp("noun")},
 		{TextNFC: evening, Gloss: "evening", Translit: sp("erev"), Gender: sp("m"), POS: sp("noun")},
+		{TextNFC: night, Gloss: "night", Translit: sp("layla"), Gender: sp("m"), POS: sp("verb")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -369,7 +373,7 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 			{Type: units.ActivityListenPick, Text: line},
 			{Type: units.ActivityProduce, Text: hello},
 			{Type: units.ActivityCloze, Text: line},
-			{Type: units.ActivityStory, Text: evening},
+			{Type: units.ActivityStory, Text: evening + " " + night},
 		}}},
 	}, "shared")
 	publish(t, store, unitID)
@@ -502,9 +506,11 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 // the single-word question.
 func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	const (
-		ani = "אֲנִי"
-		gar = "גָּר"
-		po  = "פֹּה"
+		ani   = "אֲנִי"
+		gar   = "גָּר"
+		po    = "פֹּה"
+		kotev = "כּוֹתֵב"
+		mayim = "מַיִם"
 	)
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	ctx := context.Background()
@@ -522,6 +528,8 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 		{TextNFC: ani, Gloss: "I", Translit: sp("ani"), POS: sp("pron")},
 		{TextNFC: gar, Gloss: "lives", Translit: sp("gar"), POS: sp("verb")},
 		{TextNFC: po, Gloss: "here", Translit: sp("po"), POS: sp("adv")},
+		{TextNFC: kotev, Gloss: "writes", Translit: sp("kotev"), POS: sp("verb")},
+		{TextNFC: mayim, Gloss: "water", Translit: sp("mayim"), POS: sp("noun")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -537,6 +545,8 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityRecall, Text: line},
 			{Type: units.ActivityRecall, Text: gar},
+			{Type: units.ActivityRecall, Text: kotev},
+			{Type: units.ActivityRecall, Text: mayim},
 		}}},
 	}, "shared")
 	publish(t, store, unitID)
@@ -605,17 +615,29 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	if !strings.Contains(choices, ">lives<") {
 		t.Errorf("choice missing the target gloss")
 	}
-	// This unit has no word outside the line, so the other parts of speech
-	// on the line fill the ask. One button, the answer alone, is not a question.
+	// Words already on the line are not buttons. Two words from the rest of
+	// the unit fill the ask with the answer.
 	gotChoices := choiceValues(t, ask)
 	if len(gotChoices) < lessonMinChoices {
-		t.Fatalf("tiny recall rendered %d buttons, want at least %d:\n%s", len(gotChoices), lessonMinChoices, choices)
+		t.Fatalf("recall rendered %d buttons, want at least %d:\n%s", len(gotChoices), lessonMinChoices, choices)
 	}
 	if !slicesContains(gotChoices, itoa(ids[gar])) {
 		t.Fatalf("the answer is not a button: %v", gotChoices)
 	}
-	if !slicesContains(gotChoices, itoa(ids[ani])) && !slicesContains(gotChoices, itoa(ids[po])) {
-		t.Fatalf("other parts of speech did not fill the ask: %v", gotChoices)
+	for _, text := range []string{kotev, mayim} {
+		if !slicesContains(gotChoices, itoa(ids[text])) {
+			t.Errorf("outside word %s is not a button: %v", text, gotChoices)
+		}
+	}
+	for _, text := range []string{ani, po} {
+		if slicesContains(gotChoices, itoa(ids[text])) {
+			t.Errorf("line word %s is a button: %v", text, gotChoices)
+		}
+	}
+	for _, gloss := range []string{">I<", ">here<"} {
+		if strings.Contains(choices, gloss) {
+			t.Errorf("button gloss matches a non-target line token %s", gloss)
+		}
 	}
 	if strings.Contains(choices, `c-answer__key" aria-hidden="true">1<`) || strings.Contains(choices, `c-answer__key" aria-hidden="true">2<`) {
 		t.Fatalf("lesson choices still show key badges:\n%s", choices)
@@ -626,11 +648,18 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	if !strings.Contains(choices, `value="`+itoa(ids[gar])+`"`) {
 		t.Fatalf("the target choice is not the lexeme id:\n%s", choices)
 	}
-	for _, word := range []struct{ he, tr string }{{ani, "ani"}, {gar, "gar"}, {po, "po"}} {
+	for _, word := range []struct{ he, tr string }{{ani, "ani"}, {po, "po"}} {
 		label := `<bdi class="clip-row__he" lang="he" dir="rtl">` + word.he + `</bdi> <span class="clip-row__sep"> · </span> <bdi class="clip-row__tr" lang="he-Latn" dir="ltr">` + word.tr + `</bdi>`
 		if !strings.Contains(ask, label) {
 			t.Errorf("no-JS row does not name %s · %s", word.he, word.tr)
 		}
+	}
+	targetRow := `<bdi class="clip-row__he" lang="he" dir="rtl">` + gar + `</bdi>`
+	if !strings.Contains(ask, targetRow) {
+		t.Error("no-JS row does not name the target in pointed Hebrew")
+	}
+	if strings.Contains(ask, "gar") {
+		t.Fatalf("the recall target's translit appears before grading:\n%s", ask)
 	}
 	if !strings.Contains(ask, `class="clip-rows"`) {
 		t.Fatal("per-word bars are not a list under the line")
@@ -729,11 +758,17 @@ func TestRecallLineDoesNotShowTheTargetGloss(t *testing.T) {
 				t.Fatal(err)
 			}
 			sp := func(s string) *string { return &s }
+			const (
+				kotev = "כּוֹתֵב"
+				okhel = "אוֹכֵל"
+			)
 			rows := []lexicon.Input{
 				{TextNFC: ani, Gloss: "I", Translit: sp("ani"), POS: sp("pron")},
 				{TextNFC: gar, Gloss: gloss, Translit: sp("gar"), POS: sp("verb")},
 				{TextNFC: po, Gloss: "here", Translit: sp("po"), POS: sp("adv")},
 				{TextNFC: beshalom, Gloss: tc.beshalomGloss, Translit: sp("beshalom"), POS: sp("noun")},
+				{TextNFC: kotev, Gloss: "writes", Translit: sp("kotev"), POS: sp("verb")},
+				{TextNFC: okhel, Gloss: "eats", Translit: sp("okhel"), POS: sp("verb")},
 			}
 			if _, _, err := store.UpsertLexemes(ctx, rows); err != nil {
 				t.Fatal(err)
@@ -743,6 +778,8 @@ func TestRecallLineDoesNotShowTheTargetGloss(t *testing.T) {
 				NewWords: []string{gar},
 				Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 					{Type: units.ActivityRecall, Text: line, Target: gar},
+					{Type: units.ActivityRecall, Text: kotev},
+					{Type: units.ActivityRecall, Text: okhel},
 				}}},
 			}, "shared")
 			publish(t, store, unitID)
@@ -953,10 +990,16 @@ func TestRecallTargetMarksALaterWord(t *testing.T) {
 	)
 	fx := openLessonPlayer(t)
 	sp := func(s string) *string { return &s }
+	const (
+		kotev = "כּוֹתֵב"
+		mayim = "מַיִם"
+	)
 	if _, _, err := fx.store.UpsertLexemes(fx.ctx, []lexicon.Input{
 		{TextNFC: ani, Gloss: "I", Translit: sp("ani"), POS: sp("pron")},
 		{TextNFC: gar, Gloss: "lives", Translit: sp("gar"), POS: sp("verb")},
 		{TextNFC: po, Gloss: "here", Translit: sp("po"), POS: sp("adv")},
+		{TextNFC: kotev, Gloss: "writes", Translit: sp("kotev"), POS: sp("verb")},
+		{TextNFC: mayim, Gloss: "water", Translit: sp("mayim"), POS: sp("noun")},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -965,6 +1008,8 @@ func TestRecallTargetMarksALaterWord(t *testing.T) {
 		Title: "At home", Position: 1, NewWords: []string{gar},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityRecall, Text: line, Target: po},
+			{Type: units.ActivityRecall, Text: kotev},
+			{Type: units.ActivityRecall, Text: mayim},
 		}}},
 	}, "shared")
 	publish(t, fx.store, unitID)
