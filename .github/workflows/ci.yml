@@ -62,13 +62,16 @@ jobs:
     name: shard (${{ matrix.title }})
     runs-on: k8-build
     timeout-minutes: 45
-    # Three shards fill the three k8-build pods. fail-fast stays off so one
-    # shard's failure still leaves the other timings in the log. The job
-    # named test, below, needs this matrix and is what build-and-smoke and
-    # publish wait on. An empty shard exits success; the job is never
-    # skipped for an empty package list, so a docs-only pull request does
-    # not block needs. Web is on shard C so its race time is not piled on
-    # shard B. Shard C can still wait for a free pod: the ARC set has three.
+    # Four shards. home_k3 #53 raised the runner cap to 5, so one pull
+    # request is these four plus build-and-smoke. The job named test, below,
+    # needs this whole matrix. fail-fast stays off so one shard's failure
+    # still leaves the other timings in the log. An empty shard exits
+    # success; the job is never skipped for an empty package list, so a
+    # docs-only pull request does not block needs. Web is its own shard.
+    # On run 39495509954 the race step on shard C was 623s, web 352s and
+    # db 214s, while A and B finished in about 7m15–7m30. db stays on the
+    # catch-all shard. A package that is not placement, activity, brief,
+    # learner, or web lands there on its own.
     strategy:
       fail-fast: false
       matrix:
@@ -78,7 +81,9 @@ jobs:
           - shard: app
             title: B activity brief learner
           - shard: rest
-            title: C rest and web
+            title: C rest
+          - shard: web
+            title: D web
     env:
       CGO_ENABLED: "0"
     # github.base_ref is empty on a push, so a push to v3 still runs.
@@ -87,6 +92,24 @@ jobs:
       github.base_ref != 'main' &&
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     steps:
+      # Read-only. continue-on-error and exit 0 so a missing mount or df
+      # cannot fail the shard. home_k3 #55 puts NODE_NAME in the runner env.
+      # mountinfo field 4 is the path inside the filesystem that was mounted.
+      # Field 4 equal to /opt/go-cache means that directory is on the node's
+      # root filesystem, not a volume whose own root is mounted there.
+      - name: Runner info
+        continue-on-error: true
+        shell: bash
+        run: |
+          echo "node=${NODE_NAME:-unset}"
+          echo "mountinfo:"
+          grep -F '/opt/go-cache' /proc/self/mountinfo || echo "(no /opt/go-cache line)"
+          echo "df /opt/go-cache:"
+          df -hT /opt/go-cache || echo "df /opt/go-cache failed"
+          echo "df /:"
+          df -hT / || echo "df / failed"
+          exit 0
+
       # No ref on purpose. pull_request checks out refs/pull/N/merge at
       # github.sha (the merge commit). A push checks out the pushed commit.
       # fetch-depth 0 so a pull_request can diff origin/$BASE...HEAD.
@@ -204,7 +227,9 @@ jobs:
                 printf '%s\n' "${dir}/${spec}" >>"$embed_file"
               done
               set +f
-            done < <(grep -h '//go:embed' "$gopath" || true)
+            # A real directive is //go:embed at the start of the line.
+            # "// //go:embed ..." in migrations/embed.go is a comment, not a pattern.
+            done < <(grep -E '^[[:space:]]*//go:embed([[:space:]]|$)' "$gopath" || true)
           done < <(git grep -l -e '//go:embed' -- '*.go' || true)
 
           is_embedded() {
@@ -279,12 +304,33 @@ jobs:
           # package reads, and that is not ignorable, still forces the full suite.
           reads_file="${RUNNER_TEMP}/reads.txt"
           : >"$reads_file"
+          # "./", "../", and "../../" name a directory, not a file. shots_test.go
+          # has "../" as a URL helper. Recording it selects every file under
+          # internal/. Drop those literals, and any path that resolves to the
+          # repo root or one top-level directory, so the change stays unmapped
+          # and the full suite runs.
+          dot_only() {
+            local s="$1" part
+            s=${s%/}
+            [ -z "$s" ] && return 0
+            local IFS=/
+            for part in $s; do
+              case "$part" in
+                ""|.|..) ;;
+                *) return 1 ;;
+              esac
+            done
+            return 0
+          }
           record_read() {
             local lit="$1" tdir="$2" pkg="$3" rel
             [ -z "$lit" ] && return 0
             case "$lit" in
               *'*'*|*'?'*|*'['*|*'${'*|*' '*|*'%'*) return 0 ;;
             esac
+            if dot_only "$lit"; then
+              return 0
+            fi
             case "$lit" in
               ../*|./*|docs/*|.cursor/*|testdata/*|templates/*|fixtures/*|resources/*|static/*|internal/*|cmd/*|*.md|*.json|*.html|*.css|*.js|*.txt|*.templ|*.sql)
                 ;;
@@ -292,9 +338,13 @@ jobs:
             esac
             rel=$(realpath -m --relative-to="$PWD" "$PWD/$tdir/$lit")
             case "$rel" in
-              ""|..|../*) ;;
-              *) printf '%s\t%s\n' "$rel" "$pkg" >>"$reads_file" ;;
+              ""|.|..|../*) return 0 ;;
             esac
+            # internal, cmd, docs, and any other single directory at the repo root.
+            if [[ "$rel" != */* ]] && [ -d "$rel" ]; then
+              return 0
+            fi
+            printf '%s\t%s\n' "$rel" "$pkg" >>"$reads_file"
             # A literal that already starts at the repo root is not relative
             # to the test file. docs/ and .cursor/ are the cross-package cases.
             case "$lit" in
@@ -436,11 +486,14 @@ jobs:
               go list ./internal/placement/... >"$shard_file"
               ;;
             app)
-              # web is shard C. Its race time was the long part of shard B.
               go list ./internal/activity/... ./internal/brief/... ./internal/learner/... >"$shard_file"
               ;;
+            web)
+              go list ./internal/web/... >"$shard_file"
+              ;;
             rest)
-              go list ./... | grep -v -E '/internal/(placement|activity|brief|learner)(/|$)' >"$shard_file" || true
+              # Catch-all. A new package is not named above, so it lands here.
+              go list ./... | grep -v -E '/internal/(placement|activity|brief|learner|web)(/|$)' >"$shard_file" || true
               ;;
             *)
               echo "::error::unknown shard ${shard}"
@@ -552,7 +605,7 @@ jobs:
         if: >-
           steps.module.outputs.present == 'true' &&
           (steps.affected.outputs.lint == 'true' ||
-            (matrix.shard == 'rest' && steps.affected.outputs.web == 'true' && steps.affected.outputs.run_tests == 'true'))
+            (matrix.shard == 'web' && steps.affected.outputs.web == 'true' && steps.affected.outputs.run_tests == 'true'))
         shell: bash
         run: |
           set -euo pipefail
@@ -675,25 +728,30 @@ jobs:
           echo "race ${{ matrix.shard }} finished in $(( $(date +%s) - start ))s"
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'rest'
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'web'
         with:
           node-version: '22'
 
       - name: node version
-        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'rest'
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'web'
         shell: bash
         run: node --version
 
       - name: node tests
-        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'rest'
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'web'
         shell: bash
         run: |
           set -euo pipefail
           set -o pipefail
-          go test -count=1 -v -run '^(TestClipPlayAfterSwap|TestKeyboardNode)$' ./internal/web | tee node.out
+          go test -count=1 -v -run '^(TestClipPlayAfterSwap|TestKeyboardNode|TestReviewOrbSpacePlaysOnce)$' ./internal/web | tee node.out
           # A renamed test matches nothing, prints [no tests to run], and exits 0
-          # with no --- SKIP line. Require both PASS lines. errexit ignores a
+          # with no --- SKIP line. Require the PASS lines. errexit ignores a
           # bare "! grep", so the skip check is an explicit if.
+          # TestReviewOrbSpacePlaysOnce is added by #115 and is not on v3 yet.
+          # Until `func TestReviewOrbSpacePlaysOnce` is in internal/web, a
+          # missing PASS line means the test is absent, not skipped. Any
+          # --- SKIP, including that test's "node not installed" skip once
+          # it exists, still fails this step.
           if grep -q -- '--- SKIP' node.out; then
             echo "::error::a node test printed --- SKIP"
             exit 1
@@ -705,6 +763,14 @@ jobs:
           if ! grep -q -- '--- PASS: TestKeyboardNode' node.out; then
             echo "::error::missing --- PASS: TestKeyboardNode"
             exit 1
+          fi
+          if grep -R --include='*_test.go' -q -F 'func TestReviewOrbSpacePlaysOnce' internal/web; then
+            if ! grep -q -- '--- PASS: TestReviewOrbSpacePlaysOnce' node.out; then
+              echo "::error::missing --- PASS: TestReviewOrbSpacePlaysOnce"
+              exit 1
+            fi
+          else
+            echo "TestReviewOrbSpacePlaysOnce is not in this tree yet; not required"
           fi
 
   # The check name is exactly `test`. Branch protection and publish both
