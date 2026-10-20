@@ -278,18 +278,60 @@ func flashDone(c ReviewCard) int {
 	return c.Index - 1
 }
 
+// One English question per card type. A Designer ruling changes one line.
+const (
+	PromptRead       = "What does this word mean?"
+	PromptRecall     = "How do you say this in Hebrew?"
+	PromptLetter     = "What sound does this letter make?"
+	PromptLetterPair = "What sound does each of these letters make?"
+	PromptPattern    = "Which form is which?"
+	PromptPatternOne = "What does this form mean?"
+	PromptGrade      = "How well did you remember it?"
+	PromptListen     = "What does the word you hear mean?"
+	PromptSpell      = "How do you spell this word?"
+)
+
+// LetterPrompt is the question for a letter drill.
+// A key with a slash is a letter pair the learner mixed up, so the question
+// asks for each letter's sound. One letter asks for that letter's sound.
+func LetterPrompt(key string) string {
+	if strings.Contains(key, "/") {
+		return PromptLetterPair
+	}
+	return PromptLetter
+}
+
+// PatternPrompt is the question for an agreement drill.
+// A key with a slash is two forms, for example הוא/היא. One form asks for its meaning.
+func PatternPrompt(key string) string {
+	if strings.Contains(key, "/") {
+		return PromptPattern
+	}
+	return PromptPatternOne
+}
+
 // flashLead is the line under the prompt of a flashcard.
 func flashLead(c ReviewCard) string {
 	if c.Revealed {
-		return "How well did you remember it?"
+		return PromptGrade
 	}
-	switch c.Kind {
+	return flashPrompt(c.Kind, c.Pointed)
+}
+
+func flashPrompt(kind, key string) string {
+	switch kind {
 	case "recall":
-		return "Say it in Hebrew, then check."
-	case "read":
-		return "Say what it means, then check."
+		return PromptRecall
+	case "letter":
+		return LetterPrompt(key)
+	case "pattern":
+		return PatternPrompt(key)
+	case "listen":
+		return PromptListen
+	case "spell":
+		return PromptSpell
 	default:
-		return "Say it, then check."
+		return PromptRead
 	}
 }
 

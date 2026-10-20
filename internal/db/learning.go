@@ -352,6 +352,19 @@ func (s *Store) ReviewLogs(ctx context.Context, cardID int64) ([]ReviewLog, erro
 	return out, nil
 }
 
+// CountReviewLogs is how many review_log rows the store holds.
+func (s *Store) CountReviewLogs(ctx context.Context) (int, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return 0, err
+	}
+	var n int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM review_log`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("db: count review log: %w", err)
+	}
+	return n, nil
+}
+
 // InsertConfusionMiss appends one miss. The 7-day total is not stored.
 // lexemeID 0 is stored as NULL: the miss is not tied to a word.
 func (s *Store) InsertConfusionMiss(ctx context.Context, learnerID int64, kind, key string, lexemeID int64, at time.Time) error {

@@ -256,17 +256,40 @@ type ReviewCard struct {
 	// Act is the checked activity this visit is asked through. Nil means the card is
 	// a flashcard (or a drill), graded by the learner.
 	Act *ActivityView
+	// Sides, ExampleText, ExampleTranslit, and ExampleGloss are the drill answer.
+	// They are empty until the card is revealed, so the front has no answer markup.
+	Sides           []DrillSide
+	ExampleText     string
+	ExampleTranslit string
+	ExampleGloss    string
+}
+
+// DrillSide is one letter, or one agreement form, on the back of a drill card.
+// Name is the Hebrew letter name. Sound is a Latin reading when one is stored.
+// Translit and Gloss are the lexicon reading and meaning of an agreement form.
+type DrillSide struct {
+	Hebrew   string
+	Name     string
+	Sound    string
+	Translit string
+	Gloss    string
 }
 
 // answerSide reports whether this render may show the answer side.
 // Anything that reveals the answer is post-reveal only.
 // On read the Hebrew is the prompt, so its transliteration and audio stay.
 // On recall the Hebrew is the answer, so the word, its transliteration, and its audio wait.
+// On a letter or pattern drill the key is the prompt. Its name, sound, gloss, and clip wait.
 func answerSide(c ReviewCard) bool {
-	if c.Kind == "recall" && !c.Revealed {
-		return false
+	if c.Revealed {
+		return true
 	}
-	return true
+	switch c.Kind {
+	case "recall", "spell", "letter", "pattern":
+		return false
+	default:
+		return true
+	}
 }
 
 // Flag is the attribute value for a bool.

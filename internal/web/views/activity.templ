@@ -264,7 +264,7 @@ templ flashFrame(c ReviewCard) {
 				</div>
 				<div class="act__thumb">
 					<div class="act__actions">
-						@ButtonWith(ButtonPrimary, submitAttrs(templ.Attributes{"data-act-primary": "", "aria-keyshortcuts": "Enter"})) {
+						@ButtonWith(ButtonPrimary, submitAttrs(templ.Attributes{"data-act-primary": "", "aria-keyshortcuts": "Enter", "autofocus": "autofocus"})) {
 							@E("Show answer")
 						}
 					</div>
@@ -278,7 +278,34 @@ templ flashFrame(c ReviewCard) {
 // after the flip. Recall cards show the meaning and name the Hebrew after it.
 templ flashCard(c ReviewCard) {
 	<div class="act__card" if c.Revealed { data-motion="card-flip" }>
-		if c.Kind == "recall" {
+		if c.Kind == "letter" || c.Kind == "pattern" {
+			@WordBlock(flashHebrew(c), "", "", "display", "", true)
+			if c.Revealed {
+				<div class="act__answer">
+					for _, side := range c.Sides {
+						<p class="act__side">
+							@H(side.Hebrew)
+							if side.Name != "" {
+								@H(side.Name)
+							}
+							if side.Sound != "" {
+								<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ side.Sound }</bdi>
+							}
+							if side.Translit != "" {
+								<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ side.Translit }</bdi>
+							}
+							if side.Gloss != "" {
+								@E(side.Gloss)
+							}
+						</p>
+					}
+					if c.ExampleText != "" {
+						@WordBlock(c.ExampleText, c.ExampleTranslit, c.ExampleGloss, "card", "", false)
+					}
+					@flashAudio(c)
+				</div>
+			}
+		} else if c.Kind == "recall" || c.Kind == "spell" {
 			<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
 			if c.Revealed {
 				<div class="act__word act__answer">
@@ -300,7 +327,7 @@ templ flashCard(c ReviewCard) {
 				</div>
 			}
 		}
-		if c.Kind == "recall" && c.Revealed && c.Gender != "" {
+		if (c.Kind == "recall" || c.Kind == "spell") && c.Revealed && c.Gender != "" {
 			<span class="gchip">@H(GenderLabel(c.Gender))</span>
 		}
 		if !c.Revealed {

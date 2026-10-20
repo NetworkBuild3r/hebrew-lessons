@@ -190,6 +190,24 @@
   text-align: center;
 }
 .act-grade:hover { background: var(--surface-raised); }
+/* Under 900px the drill answer and the grades stay at the foot of the screen. */
+@media (max-width: 899px) {
+  .act--flash .act__grades {
+    position: sticky;
+    inset-block-end: 0;
+    z-index: var(--z-sticky);
+    padding-block: var(--space-2) calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+    background: var(--paper);
+  }
+}
+.act__side {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+}
 
 /* Match: two columns of AnswerOption tiles. A made pair locks and shows its
    number on both tiles. */

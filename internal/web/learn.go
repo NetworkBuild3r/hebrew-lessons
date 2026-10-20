@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
@@ -436,6 +438,9 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 	if ref.Kind == session.KindLetter || ref.Kind == session.KindPattern {
 		vm.Pointed = ref.Key
 		vm.Unpointed = units.Plain(ref.Key)
+		if err := s.fillDrill(ctx, q.userID, &vm); err != nil {
+			return ReviewCardVM{}, err
+		}
 		return vm, nil
 	}
 	if s.store == nil || ref.LexemeID == 0 {
@@ -465,12 +470,151 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 		return ReviewCardVM{}, err
 	}
 	vm.ShowUnpointed = show
-	if ref.Skill == fsrs.SkillRecall || ref.Kind == fsrs.SkillRecall {
-		vm.Kind = fsrs.SkillRecall
-		return vm, nil
+	switch ref.Kind {
+	case fsrs.SkillRead, fsrs.SkillRecall, fsrs.SkillListen, fsrs.SkillSpell:
+		vm.Kind = ref.Kind
+	default:
+		if ref.Skill == fsrs.SkillRecall {
+			vm.Kind = fsrs.SkillRecall
+		} else {
+			vm.Kind = fsrs.SkillRead
+		}
 	}
-	vm.Kind = fsrs.SkillRead
+	if ref.Skill == fsrs.SkillRecall {
+		vm.Kind = fsrs.SkillRecall
+	}
 	return vm, nil
+}
+
+// fillDrill loads the letter or pattern answer from the card key and the lexicon.
+// The key stays the prompt. Names, sounds, glosses, the example word, and its clip
+// are answer fields. reviewView keeps them off the page until the reveal.
+func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) error {
+	parts := splitDrillKey(vm.Pointed)
+	switch vm.Kind {
+	case session.KindLetter:
+		sides := make([]views.DrillSide, 0, len(parts))
+		for _, part := range parts {
+			sound, err := s.letterSound(ctx, part)
+			if err != nil {
+				return err
+			}
+			sides = append(sides, views.DrillSide{
+				Hebrew: part,
+				Name:   views.LetterName(part),
+				Sound:  sound,
+			})
+		}
+		vm.Sides = sides
+		ex, ok, err := s.confusionExample(ctx, userID, fsrs.MissLetterPair, vm.Pointed)
+		if err != nil {
+			return err
+		}
+		if ok {
+			vm.ExampleText = ex.TextNFC
+			vm.ExampleTranslit = ex.Translit
+			vm.ExampleGloss = ex.Gloss
+			url, err := s.clipURL(ctx, ex.TextNFC, ex.AudioID)
+			if err != nil {
+				return err
+			}
+			vm.AudioURL = url
+		}
+	case session.KindPattern:
+		var found map[string]db.LexemeView
+		if s != nil && s.store != nil {
+			var err error
+			found, err = s.store.LexemesByText(ctx, parts)
+			if err != nil {
+				return err
+			}
+		}
+		sides := make([]views.DrillSide, 0, len(parts))
+		for _, part := range parts {
+			side := views.DrillSide{Hebrew: part}
+			if row, ok := found[part]; ok {
+				side.Translit = row.Translit
+				side.Gloss = row.Gloss
+			}
+			sides = append(sides, side)
+			if vm.AudioURL == "" {
+				url, err := s.clipURL(ctx, part, "")
+				if err != nil {
+					return err
+				}
+				vm.AudioURL = url
+			}
+		}
+		vm.Sides = sides
+	}
+	if vm.AudioURL == "" && vm.Kind == session.KindLetter {
+		for _, part := range parts {
+			url, err := s.clipURL(ctx, part, "")
+			if err != nil {
+				return err
+			}
+			if url != "" {
+				vm.AudioURL = url
+				break
+			}
+		}
+	}
+	return nil
+}
+
+// letterSound is a Latin reading stored for this exact letter.
+// Placement syllables match only when the text is the letter itself.
+// A lexicon row whose text is the letter contributes its transliteration.
+// A bare letter with neither has no sound, and the caller does not invent one.
+func (s *server) letterSound(ctx context.Context, letter string) (string, error) {
+	letters, err := placement.Letters()
+	if err != nil {
+		return "", err
+	}
+	for _, l := range letters {
+		if (l.LetterNFC == letter || l.SyllableText == letter) && l.Sound != "" {
+			return l.Sound, nil
+		}
+	}
+	if s == nil || s.store == nil || letter == "" {
+		return "", nil
+	}
+	found, err := s.store.LexemesByText(ctx, []string{letter})
+	if err != nil {
+		return "", err
+	}
+	if row, ok := found[letter]; ok {
+		return row.Translit, nil
+	}
+	return "", nil
+}
+
+func (s *server) confusionExample(ctx context.Context, userID int64, kind, key string) (db.LexemeRef, bool, error) {
+	if s == nil || s.store == nil || userID == 0 || key == "" {
+		return db.LexemeRef{}, false, nil
+	}
+	id, ok, err := s.store.LatestConfusionLexeme(ctx, userID, kind, key)
+	if err != nil || !ok {
+		return db.LexemeRef{}, false, err
+	}
+	return s.store.LexemeByID(ctx, id)
+}
+
+func splitDrillKey(key string) []string {
+	if key == "" {
+		return nil
+	}
+	parts := strings.Split(key, "/")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	if len(out) == 0 {
+		return []string{key}
+	}
+	return out
 }
 
 // showUnpointed uses fsrs.ShowUnpointed. A recall card, a drill, and a card
@@ -576,18 +720,30 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 		return card
 	}
 	if vm.Revealed {
+		card.Sides = vm.Sides
+		card.ExampleText = vm.ExampleText
+		card.ExampleTranslit = vm.ExampleTranslit
+		card.ExampleGloss = vm.ExampleGloss
 		return card
 	}
 	// Anything that reveals the answer side is post-reveal only.
-	// read: the Hebrew is the prompt, so pointed text, translit, and audio stay.
+	// read and listen: the Hebrew is the prompt, so pointed text, translit, and audio stay.
 	// The English gloss and the gender chip wait.
-	// recall: the English gloss is the prompt. The Hebrew, its transliteration,
+	// recall and spell: the English gloss is the prompt. The Hebrew, its transliteration,
 	// its audio, and the gender chip all identify the answer, so they wait.
+	// letter and pattern: the key is the prompt. Names, sounds, glosses, the example
+	// word, and the clip wait.
 	card.Gender = ""
-	if vm.Kind == fsrs.SkillRecall || vm.Kind == "recall" {
+	if vm.Kind == fsrs.SkillRecall || vm.Kind == fsrs.SkillSpell || vm.Kind == "recall" || vm.Kind == "spell" {
 		card.Pointed = ""
 		card.Unpointed = ""
 		card.Translit = ""
+		card.AudioURL = ""
+		return card
+	}
+	if vm.Kind == session.KindLetter || vm.Kind == session.KindPattern {
+		card.Translit = ""
+		card.Gloss = ""
 		card.AudioURL = ""
 		return card
 	}
