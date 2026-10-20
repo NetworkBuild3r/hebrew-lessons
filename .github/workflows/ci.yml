@@ -488,20 +488,25 @@ jobs:
         shell: bash
         run: go vet ./...
 
+      # The k8-build image does not ship gcc. Run 39473171758 (#111) and
+      # run 39479442471 both printed "gcc is not on PATH" and apt installed
+      # a previously unselected gcc package. Skip the install when it is
+      # already on PATH.
       - name: Install gcc
         if: steps.module.outputs.present == 'true' && steps.affected.outputs.run_tests == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          if ! command -v gcc >/dev/null 2>&1; then
+          if command -v gcc >/dev/null 2>&1; then
+            echo "gcc already present: $(command -v gcc)"
+          else
             echo "gcc is not on PATH; installing gcc and libc6-dev"
             if [ "$(id -u)" -eq 0 ]; then
               DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gcc libc6-dev
             else
               sudo DEBIAN_FRONTEND=noninteractive apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gcc libc6-dev
             fi
-          else
-            echo "gcc is $(command -v gcc)"
+            echo "installed gcc: $(command -v gcc)"
           fi
 
       # -count=1 on every go test. Runners keep a persistent GOCACHE
@@ -524,10 +529,14 @@ jobs:
           echo "placement non-race finished in $(( $(date +%s) - start ))s"
 
       # TestListFirstPageOver50kAttempts asserts its time limit only when the
-      # race detector is off. Learner lives in shard B, so this non-race pass
-      # runs here, on the learner packages in this shard's affected set.
+      # race detector is off. Learner lives in shard B. This step is before
+      # the race build so the sample is not competing with this shard's own
+      # race compile. LEARNER_PERF_SLACK=2 covers the other shards sharing
+      # the node; local runs leave it unset and keep the 200ms limit.
       - name: learner tests
         if: steps.module.outputs.present == 'true' && steps.affected.outputs.run_tests == 'true' && matrix.shard == 'app'
+        env:
+          LEARNER_PERF_SLACK: "2"
         shell: bash
         run: |
           set -euo pipefail

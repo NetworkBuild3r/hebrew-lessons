@@ -3,7 +3,9 @@ package learner
 import (
 	"context"
 	"math/rand"
+	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -17,13 +19,12 @@ const (
 
 	// perfBudget is the spec's budget for the first page of List (SPEC-013 ac-3).
 	perfBudget = 100 * time.Millisecond
-	// perfLimit is what the test asserts: the budget with room for a loaded CI runner.
-	// On k8-build, with the other test shards compiling, the best of five was 229ms, so
-	// twice the budget (200ms) fails a healthy run. A per-word query, or a scan with no
-	// index, takes whole seconds at this size, so five times the budget still catches
-	// that. The test asserts the fastest of perfRuns runs, so one slow moment on a
-	// shared runner does not fail it.
-	perfLimit = 5 * perfBudget
+	// perfLimit is what the test asserts: the budget with room for one loaded
+	// runner. A per-word query, or a scan with no index, takes whole seconds at
+	// this size, so this still catches that. The test asserts the fastest of
+	// perfRuns runs, so one slow moment does not fail it. CI multiplies this by
+	// LEARNER_PERF_SLACK because the other shards share the node.
+	perfLimit = 2 * perfBudget
 	perfRuns  = 5
 )
 
@@ -103,6 +104,24 @@ func seedLearner(tb testing.TB, words, attempts int) (*Model, int64) {
 	return New(store, clk, WithBands(fakeBands{})), user
 }
 
+// learnerPerfLimit is perfLimit times LEARNER_PERF_SLACK.
+// An empty value means 1, so a local run still asserts 200ms. CI sets 2.
+// On run 39479442471 the best of five was 229ms while the other shards
+// loaded the same node, and 200ms failed that healthy page. Slack 2 is
+// 400ms. A missing index still takes seconds, which 400ms does not hide.
+func learnerPerfLimit(t *testing.T) time.Duration {
+	t.Helper()
+	slack := 1
+	if raw := os.Getenv("LEARNER_PERF_SLACK"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 {
+			t.Fatalf("LEARNER_PERF_SLACK=%q, want a positive integer", raw)
+		}
+		slack = n
+	}
+	return perfLimit * time.Duration(slack)
+}
+
 // ac-3: List over 5,000 words and 50,000 attempts returns its first page quickly.
 func TestListFirstPageOver50kAttempts(t *testing.T) {
 	m, user := seedLearner(t, perfWords, perfAttempts)
@@ -130,13 +149,14 @@ func TestListFirstPageOver50kAttempts(t *testing.T) {
 	if len(page) != DefaultPageSize {
 		t.Fatalf("first page has %d words, want %d (the seed should leave more than that struggling)", len(page), DefaultPageSize)
 	}
+	limit := learnerPerfLimit(t)
 	t.Logf("ac-3: List(state=struggling) first page over %d words and %d attempts: first run %v, best of %d %v, last %v (budget %v, asserted limit %v)",
-		perfWords, perfAttempts, first, perfRuns, best, last, perfBudget, perfLimit)
+		perfWords, perfAttempts, first, perfRuns, best, last, perfBudget, limit)
 	// The race detector makes this scan many times slower. The limit is the
 	// production binary's limit, which go test checks. go test -race still
 	// checks that the page is right.
-	if best > perfLimit && !raceEnabled {
-		t.Fatalf("first page took %v at best, over the limit of %v (budget %v)", best, perfLimit, perfBudget)
+	if best > limit && !raceEnabled {
+		t.Fatalf("first page took %v at best, over the limit of %v (budget %v)", best, limit, perfBudget)
 	}
 
 	// Other first pages stay in the same range: no filter, and a skill and a band.
