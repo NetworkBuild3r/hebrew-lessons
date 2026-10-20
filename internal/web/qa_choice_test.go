@@ -1,7 +1,10 @@
 package web
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"html"
 	"net/http"
 	"os"
@@ -13,6 +16,7 @@ import (
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/lexicon"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
@@ -174,7 +178,12 @@ type qaClient struct {
 
 func loadQAChoiceUnit(t *testing.T, fx lessonFixture) qaChoiceDoc {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "internal", "web", "testdata", "qa_choice_unit.json"))
+	return loadQAChoiceFile(t, fx, "qa_choice_unit.json")
+}
+
+func loadQAChoiceFile(t *testing.T, fx lessonFixture, name string) qaChoiceDoc {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "internal", "web", "testdata", name))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +191,7 @@ func loadQAChoiceUnit(t *testing.T, fx lessonFixture) qaChoiceDoc {
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if len(doc.Unit.Lessons) != 2 {
+	if len(doc.Unit.Lessons) < 1 {
 		t.Fatalf("fixture lessons = %d", len(doc.Unit.Lessons))
 	}
 	inputs := make([]lexicon.Input, len(doc.Lexemes))
@@ -251,13 +260,12 @@ func assertGradedTypes(t *testing.T, acts []units.Activity) {
 
 func qaReadAsk(t *testing.T, body string, act units.Activity, byText map[string]qaLexeme) qaAsk {
 	t.Helper()
-	lex, ok := byText[act.Text]
+	lex, ok := qaActivityLexeme(act, byText)
 	if !ok {
-		t.Fatalf("activity %s text %s is not a fixture lexeme", act.Type, act.Text)
+		t.Fatalf("activity %s text %s target %s is not a fixture lexeme", act.Type, act.Text, act.Target)
 	}
-	prompt := qaPrompt(act.Type)
-	if prompt == "" || !strings.Contains(body, prompt) {
-		t.Fatalf("%s prompt %q missing:\n%s", act.Type, prompt, choiceRegion(body))
+	if !qaSawPrompt(act.Type, body, lex.Text) {
+		t.Fatalf("%s prompt missing for %s:\n%s", act.Type, lex.Text, choiceRegion(body))
 	}
 	buttons := parseChoiceButtons(t, body)
 	values := make([]string, len(buttons))
@@ -287,6 +295,22 @@ func qaReadAsk(t *testing.T, body string, act units.Activity, byText map[string]
 	}
 }
 
+func qaActivityLexeme(act units.Activity, byText map[string]qaLexeme) (qaLexeme, bool) {
+	if lex, ok := byText[act.Text]; ok {
+		return lex, true
+	}
+	tok := act.Target
+	if tok == "" {
+		tokens := units.Tokenize(act.Text)
+		if len(tokens) == 0 {
+			return qaLexeme{}, false
+		}
+		tok = tokens[0]
+	}
+	lex, ok := byText[tok]
+	return lex, ok
+}
+
 func qaPrompt(typ string) string {
 	switch typ {
 	case units.ActivityRecall:
@@ -299,6 +323,19 @@ func qaPrompt(typ string) string {
 		return "Pick the missing word."
 	default:
 		return ""
+	}
+}
+
+func qaSawPrompt(typ, body, target string) bool {
+	switch typ {
+	case units.ActivityRecall:
+		if strings.Contains(body, qaPrompt(typ)) {
+			return true
+		}
+		return target != "" && strings.Contains(body, "What does ") && strings.Contains(body, target) && strings.Contains(body, " mean?")
+	default:
+		prompt := qaPrompt(typ)
+		return prompt != "" && strings.Contains(body, prompt)
 	}
 }
 
@@ -326,8 +363,10 @@ func sameButtonOrder(a, b qaAsk) bool {
 
 func assertChoiceInvariants(t *testing.T, step int, typ string, ask qaAsk) {
 	t.Helper()
-	if len(ask.buttons) != 3 {
-		t.Fatalf("%s step %d has %d choice buttons, want 3: %v", typ, step, len(ask.buttons), ask.values)
+	// Recall and cloze aim for four. listen_pick and produce stay at three.
+	// The floor is three: two eligible options are a reveal, not an ask.
+	if len(ask.buttons) < 3 {
+		t.Fatalf("%s step %d has %d choice buttons, want at least 3: %v", typ, step, len(ask.buttons), ask.values)
 	}
 	if ask.pos < 0 || countValue(ask.values, ask.targetID) != 1 {
 		t.Fatalf("%s step %d target %s (%s) appears %d times in %v", typ, step, ask.targetText, ask.targetID, countValue(ask.values, ask.targetID), ask.values)
@@ -548,3 +587,334 @@ func visibleText(inner string) string {
 	plain := tagRE.ReplaceAllString(inner, " ")
 	return strings.Join(strings.Fields(html.UnescapeString(plain)), " ")
 }
+
+// TestQAChoiceFloor is the two-option pool. The unit has the target and one
+// other lexeme, so a recall or a cloze can fill exactly two buttons. Three is
+// still the floor: that pool is a reveal. assertChoiceInvariants rejects an
+// ask that renders fewer than three, which is what a floor of two would do.
+func TestQAChoiceFloor(t *testing.T) {
+	fx := openLessonPlayer(t)
+	emails := []string{"brian@example.com", "qa-floor-a@example.com", "qa-floor-b@example.com"}
+	fx.h = qaHandler(t, fx, emails)
+	doc := loadQAChoiceFile(t, fx, "qa_choice_two.json")
+	if len(doc.Lexemes) != 2 {
+		t.Fatalf("two-option fixture has %d lexemes, want 2", len(doc.Lexemes))
+	}
+	left := qaNormGloss(doc.Lexemes[0].Gloss)
+	right := qaNormGloss(doc.Lexemes[1].Gloss)
+	if left == "" || right == "" || left == right {
+		t.Fatalf("two-option fixture glosses %q and %q are not two distinct options", doc.Lexemes[0].Gloss, doc.Lexemes[1].Gloss)
+	}
+	lesson := doc.Unit.Lessons[0]
+	seen := map[string]bool{}
+	for _, act := range lesson.Activities {
+		seen[act.Type] = true
+	}
+	if !seen[units.ActivityRecall] || !seen[units.ActivityCloze] {
+		t.Fatalf("two-option fixture activities = %+v", lesson.Activities)
+	}
+	byText := qaLexemeIndex(doc)
+	clients := []qaClient{{h: fx.h, cookie: fx.cookie, csrf: lessonCSRF}}
+	clients = append(clients,
+		qaNamedLearner(t, fx, emails[1], "floor-a-csrf"),
+		qaNamedLearner(t, fx, emails[2], "floor-b-csrf"),
+	)
+	path := "/lesson/" + itoa(doc.UnitID) + "/0"
+	runs := map[string]bool{}
+	for li, client := range clients {
+		for step, act := range lesson.Activities {
+			body := getAuthed(t, client.h, client.cookie, path)
+			if !qaSawPrompt(act.Type, body, act.Text) {
+				t.Fatalf("learner %d step %d is not %s %s", li, step, act.Type, act.Text)
+			}
+			runs[runValue(t, body)] = true
+			if !strings.Contains(body, `<div class="choices">`) {
+				if !strings.Contains(body, `value="continue"`) {
+					t.Fatalf("learner %d %s step %d reveal has no Continue", li, act.Type, step)
+				}
+				advanceChoice(t, client, path, runValue(t, body))
+				continue
+			}
+			ask := qaReadAsk(t, body, act, byText)
+			assertChoiceInvariants(t, step, act.Type, ask)
+			gradeChoice(t, client, path, ask.runID, ask.targetID, "feedback--right")
+			advanceChoice(t, client, path, ask.runID)
+		}
+	}
+	if len(runs) < len(clients) {
+		t.Fatalf("two-option learners shared runs: %d runs for %d learners", len(runs), len(clients))
+	}
+}
+
+// TestQAChoicePromptGlosses checks recall and cloze distractors against the
+// glosses a learner can already see or hear. A multi-word line shows the
+// other words' glosses on a recall ask, and a clip's stored text resolves to
+// those glosses when the ask plays it. Comparison folds case and whitespace.
+func TestQAChoicePromptGlosses(t *testing.T) {
+	fx := openLessonPlayer(t)
+	emails := []string{"brian@example.com", "qa-gloss-a@example.com", "qa-gloss-b@example.com"}
+	fx.h = qaHandler(t, fx, emails)
+	doc := loadQAChoiceFile(t, fx, "qa_choice_prompt.json")
+	if len(doc.Unit.Lessons) < 1 || len(doc.Unit.Lessons[0].Activities) < 4 {
+		t.Fatalf("prompt fixture has %d lessons", len(doc.Unit.Lessons))
+	}
+	lesson := doc.Unit.Lessons[0]
+	qaInsertPromptClips(t, fx, lesson.Activities)
+	byText := qaLexemeIndex(doc)
+	byID := map[string]qaLexeme{}
+	for _, lex := range doc.Lexemes {
+		byID[lex.ID] = lex
+	}
+	clients := []qaClient{{h: fx.h, cookie: fx.cookie, csrf: lessonCSRF}}
+	clients = append(clients,
+		qaNamedLearner(t, fx, emails[1], "gloss-a-csrf"),
+		qaNamedLearner(t, fx, emails[2], "gloss-b-csrf"),
+	)
+	path := "/lesson/" + itoa(doc.UnitID) + "/0"
+	runs := map[string]bool{}
+	seen := map[string]int{}
+	for _, client := range clients {
+		for step, act := range lesson.Activities {
+			body := getAuthed(t, client.h, client.cookie, path)
+			ask := qaReadAsk(t, body, act, byText)
+			if ask.runID != "" {
+				runs[ask.runID] = true
+			}
+			seen[act.Type]++
+			assertChoiceInvariants(t, step, act.Type, ask)
+			assertPromptGlosses(t, step, act, body, ask, byText, byID, fx)
+			gradeChoice(t, client, path, ask.runID, ask.targetID, "feedback--right")
+			advanceChoice(t, client, path, ask.runID)
+		}
+	}
+	if seen[units.ActivityRecall] < len(clients) || seen[units.ActivityCloze] < len(clients) {
+		t.Fatalf("prompt coverage = %v", seen)
+	}
+	if len(runs) < len(clients) {
+		t.Fatalf("prompt learners shared runs: %v", runs)
+	}
+}
+
+func qaLexemeIndex(doc qaChoiceDoc) map[string]qaLexeme {
+	byText := map[string]qaLexeme{}
+	for _, lex := range doc.Lexemes {
+		byText[lex.Text] = lex
+	}
+	return byText
+}
+
+func qaHandler(t *testing.T, fx lessonFixture, emails []string) http.Handler {
+	t.Helper()
+	svc, err := auth.New(auth.Config{
+		PublicOrigin:  "https://learn.example",
+		Clock:         fixedClock(fx.now),
+		Store:         fx.store,
+		AllowedEmails: emails,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return NewOptions(nil, svc, Options{Store: fx.store})
+}
+
+func qaNamedLearner(t *testing.T, fx lessonFixture, email, csrf string) qaClient {
+	t.Helper()
+	user, err := fx.store.CreateUser(fx.ctx, email, "sub-"+email, auth.RoleLearner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return qaClient{
+		h:      fx.h,
+		cookie: mintSession(t, fx.store, user.ID, csrf, fx.now.Add(time.Hour)),
+		csrf:   csrf,
+	}
+}
+
+func qaInsertPromptClips(t *testing.T, fx lessonFixture, acts []units.Activity) {
+	t.Helper()
+	seen := map[string]bool{}
+	var texts []string
+	add := func(text string) {
+		text = units.Normalize(text)
+		if text == "" || seen[text] {
+			return
+		}
+		seen[text] = true
+		texts = append(texts, text)
+	}
+	for _, act := range acts {
+		add(act.Text)
+		for _, tok := range units.Tokenize(act.Text) {
+			add(tok)
+		}
+	}
+	for i, text := range texts {
+		id := fmt.Sprintf("%064x", i+1)
+		inserted, err := fx.store.InsertAudio(fx.ctx, db.Asset{
+			ID: id, TextNFC: text, Voice: "voice", Model: "eleven_v4", Bytes: 8,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !inserted {
+			t.Fatalf("clip %s for %s was already stored", id, text)
+		}
+	}
+}
+
+func assertPromptGlosses(t *testing.T, step int, act units.Activity, body string, ask qaAsk, byText map[string]qaLexeme, byID map[string]qaLexeme, fx lessonFixture) {
+	t.Helper()
+	var help []string
+	for _, tok := range units.Tokenize(act.Text) {
+		if tok == ask.targetText {
+			continue
+		}
+		lex, ok := byText[tok]
+		if !ok {
+			continue
+		}
+		gloss := qaNormGloss(lex.Gloss)
+		if gloss == "" {
+			t.Fatalf("%s step %d other word %s has no gloss", act.Type, step, tok)
+		}
+		help = append(help, gloss)
+	}
+	if len(help) == 0 {
+		t.Fatalf("%s step %d has no other word on the line", act.Type, step)
+	}
+	prompt := qaPromptRegion(t, body)
+	visible := qaVisibleGlosses(prompt)
+	heard := qaHeardGlosses(t, fx, prompt)
+	for _, gloss := range help {
+		switch act.Type {
+		case units.ActivityRecall:
+			if !visible[gloss] {
+				t.Fatalf("recall step %d hides the other word's gloss %q; visible %v", step, gloss, visible)
+			}
+			if !heard[gloss] {
+				t.Fatalf("recall step %d does not play the other word's gloss %q; heard %v", step, gloss, heard)
+			}
+		case units.ActivityCloze:
+			if !heard[gloss] {
+				t.Fatalf("cloze step %d does not play the other word's gloss %q; heard %v", step, gloss, heard)
+			}
+		default:
+			t.Fatalf("prompt gloss check is for recall and cloze, got %s", act.Type)
+		}
+	}
+	forbidden := map[string]bool{}
+	for gloss := range visible {
+		forbidden[gloss] = true
+	}
+	for gloss := range heard {
+		forbidden[gloss] = true
+	}
+	if len(forbidden) == 0 {
+		t.Fatalf("%s step %d prompt exposes no gloss", act.Type, step)
+	}
+	for _, button := range ask.buttons {
+		if button.value == ask.targetID {
+			continue
+		}
+		lex, ok := byID[button.value]
+		if !ok {
+			t.Fatalf("%s step %d distractor %s is not in the fixture", act.Type, step, button.value)
+		}
+		for _, candidate := range []string{qaNormGloss(lex.Gloss), qaNormGloss(button.text)} {
+			if candidate == "" || !forbidden[candidate] {
+				continue
+			}
+			t.Fatalf("%s step %d distractor %s (%q / %q) matches a prompt gloss %q\nvisible %v\nheard %v",
+				act.Type, step, button.value, lex.Gloss, button.text, candidate, visible, heard)
+		}
+	}
+}
+
+func qaPromptRegion(t *testing.T, body string) string {
+	t.Helper()
+	act := activityHTML(t, body)
+	if i := strings.Index(act, `<div class="choices">`); i >= 0 {
+		return act[:i]
+	}
+	return act
+}
+
+func qaVisibleGlosses(prompt string) map[string]bool {
+	out := map[string]bool{}
+	for _, m := range qaGlossRE.FindAllStringSubmatch(prompt, -1) {
+		if gloss := qaNormGloss(m[1]); gloss != "" {
+			out[gloss] = true
+		}
+	}
+	return out
+}
+
+func qaHeardGlosses(t *testing.T, fx lessonFixture, prompt string) map[string]bool {
+	t.Helper()
+	out := map[string]bool{}
+	ids := qaAudioRE.FindAllStringSubmatch(prompt, -1)
+	if len(ids) == 0 {
+		t.Fatalf("prompt has no clip:\n%s", prompt)
+	}
+	seen := map[string]bool{}
+	for _, m := range ids {
+		if seen[m[1]] {
+			continue
+		}
+		seen[m[1]] = true
+		text := qaClipText(t, fx, m[1])
+		add := func(token string) {
+			if gloss := qaNormGloss(qaStoredGloss(t, fx, token)); gloss != "" {
+				out[gloss] = true
+			}
+		}
+		add(text)
+		for _, tok := range units.Tokenize(text) {
+			add(tok)
+		}
+	}
+	return out
+}
+
+func qaClipText(t *testing.T, fx lessonFixture, id string) string {
+	t.Helper()
+	conn, err := fx.store.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var text string
+	err = conn.QueryRowContext(fx.ctx, `SELECT text_nfc FROM audio_assets WHERE id = ?`, id).Scan(&text)
+	if err != nil {
+		t.Fatalf("clip %s text: %v", id, err)
+	}
+	if strings.TrimSpace(text) == "" {
+		t.Fatalf("clip %s has no text", id)
+	}
+	return text
+}
+
+func qaStoredGloss(t *testing.T, fx lessonFixture, text string) string {
+	t.Helper()
+	conn, err := fx.store.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gloss string
+	err = conn.QueryRowContext(fx.ctx, `SELECT gloss_en FROM lexemes WHERE text_nfc = ?`, units.Normalize(text)).Scan(&gloss)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ""
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return gloss
+}
+
+func qaNormGloss(gloss string) string {
+	return strings.ToLower(strings.Join(strings.Fields(html.UnescapeString(gloss)), " "))
+}
+
+var (
+	qaGlossRE = regexp.MustCompile(`(?s)<bdi class="[^"]*\bwb__gl\b[^"]*"[^>]*>(.*?)</bdi>`)
+	qaAudioRE = regexp.MustCompile(`/audio/([0-9a-fA-F]{64})\.mp3`)
+)
