@@ -56,6 +56,10 @@ func run(args []string) error {
 			return runImportTanakh(args[1:])
 		case "jobs":
 			return runJobs(args[1:])
+		case "migrate":
+			return runMigrate(args[1:])
+		case "backup":
+			return runBackup(args[1:])
 		default:
 			return fmt.Errorf("unknown command %q", args[0])
 		}
