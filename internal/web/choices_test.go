@@ -20,13 +20,13 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
-// TestAskChoicesFallback is the reviewer's fill order.
-// (a) a pronoun, a verb target, and an adverb reach at least two buttons,
-// filled from another part of speech or an earlier unit.
-// (b) a single-word recall of that verb has more than one button.
-// (c) when enough same-part-of-speech words exist, other parts and the
-// line's own words stay off the buttons.
-// A second word with the answer's gloss is never a button.
+// TestAskChoicesFallback is the fill order for a graded recall.
+// A tiny unit with nothing earlier reaches at least three buttons from the
+// line's own words. The same unit with earlier words draws those three from
+// outside the line, before any line word. A single-word recall reaches at
+// least three. When enough same-part-of-speech words exist, other parts and
+// the line stay off the buttons. A gloss equal to the answer is never a
+// button, and two buttons never share a gloss. Fewer than three is not an ask.
 func TestAskChoicesFallback(t *testing.T) {
 	pron := db.LexemeView{ID: 1, Text: "אֲנִי", Gloss: "I", POS: "pron", Translit: "ani"}
 	verb := db.LexemeView{ID: 2, Text: "גָּר", Gloss: "lives", POS: "verb", Translit: "gar"}
@@ -39,25 +39,41 @@ func TestAskChoicesFallback(t *testing.T) {
 	seed := choices.ChoiceSeed{RunID: 9, Step: 0, TargetID: verb.ID}
 	line := choiceExclude{ids: map[int64]bool{pron.ID: true, adv.ID: true}, glosses: map[string]bool{"i": true, "here": true}}
 
-	t.Run("tiny unit", func(t *testing.T) {
-		got := askChoices(units.ActivityRecall, []db.LexemeView{pron, verb, adv}, []db.LexemeView{noun}, verb, seed, line)
-		if len(got) < 2 {
-			t.Fatalf("buttons = %d, want at least 2: %+v", len(got), got)
+	t.Run("tiny unit uses the line", func(t *testing.T) {
+		got := askChoices(units.ActivityRecall, []db.LexemeView{pron, verb, adv}, nil, verb, seed, line)
+		if len(got) < lessonMinChoices {
+			t.Fatalf("buttons = %d, want at least %d: %+v", len(got), lessonMinChoices, got)
 		}
-		if !choiceHas(got, "4") {
-			t.Fatalf("earlier other-POS word did not fill before the line: %+v", got)
+		if !choiceHas(got, "1") || !choiceHas(got, "2") || !choiceHas(got, "3") {
+			t.Fatalf("line words did not fill the ask: %+v", got)
 		}
-		if choiceHas(got, "5") {
-			t.Fatal("a gloss duplicate of the answer was a button")
+	})
+
+	t.Run("earlier words before the line", func(t *testing.T) {
+		unit := []db.LexemeView{pron, verb, adv, twin}
+		earlier := []db.LexemeView{noun, eats, drinks}
+		got := askChoices(units.ActivityRecall, unit, earlier, verb, seed, line)
+		if len(got) < lessonMinChoices {
+			t.Fatalf("buttons = %d, want at least %d: %+v", len(got), lessonMinChoices, got)
+		}
+		for _, id := range []string{"4", "7", "8"} {
+			if !choiceHas(got, id) {
+				t.Errorf("outside word %s missing from %+v", id, got)
+			}
+		}
+		for _, id := range []string{"1", "3", "5"} {
+			if choiceHas(got, id) {
+				t.Errorf("button %s is a line word or the answer's gloss", id)
+			}
 		}
 	})
 
 	t.Run("single word", func(t *testing.T) {
 		got := askChoices(units.ActivityRecall, []db.LexemeView{pron, verb, adv}, nil, verb, seed, choiceExclude{})
-		if len(got) < 2 {
-			t.Fatalf("single-word buttons = %d: %+v", len(got), got)
+		if len(got) < lessonMinChoices {
+			t.Fatalf("single-word buttons = %d, want at least %d: %+v", len(got), lessonMinChoices, got)
 		}
-		if !choiceHas(got, "1") || !choiceHas(got, "3") {
+		if !choiceHas(got, "1") || !choiceHas(got, "2") || !choiceHas(got, "3") {
 			t.Fatalf("other parts of speech in the unit were not offered: %+v", got)
 		}
 	})
@@ -81,12 +97,21 @@ func TestAskChoicesFallback(t *testing.T) {
 		}
 	})
 
-	t.Run("alone is not graded", func(t *testing.T) {
+	t.Run("fewer than three is not graded", func(t *testing.T) {
 		if got := askChoices(units.ActivityRecall, []db.LexemeView{verb}, nil, verb, seed, choiceExclude{}); got != nil {
 			t.Fatalf("a one-word lexicon still asks: %+v", got)
 		}
+		if got := askChoices(units.ActivityRecall, []db.LexemeView{verb, eats}, nil, verb, seed, choiceExclude{}); got != nil {
+			t.Fatalf("two buttons is still an ask: %+v", got)
+		}
 		if got := askChoices(units.ActivityCloze, []db.LexemeView{verb, twin}, nil, verb, seed, choiceExclude{}); got != nil {
-			t.Fatalf("a gloss duplicate still counts as a second option: %+v", got)
+			t.Fatalf("a gloss duplicate still counts as another option: %+v", got)
+		}
+		sea := noun
+		sea.ID = 9
+		sea.Text = "יָם"
+		if got := askChoices(units.ActivityRecall, []db.LexemeView{verb, noun, sea}, nil, verb, seed, choiceExclude{}); got != nil {
+			t.Fatalf("duplicate glosses counted as two buttons: %+v", got)
 		}
 	})
 }
