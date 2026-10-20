@@ -491,8 +491,9 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 
 // A recall of several words still asks for one word: the first new word in
 // the line. The question names that word, the other words are shown with
-// their sound and meaning, and the buttons are word glosses. A following
-// recall of that word alone keeps the single-word question.
+// their sound and meaning, and the buttons are word glosses of words that
+// are not already on screen. A following recall of that word alone keeps
+// the single-word question.
 func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	const (
 		ani = "אֲנִי"
@@ -597,9 +598,15 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	if !strings.Contains(head, gar) {
 		t.Fatal("the tested word's Hebrew is hidden")
 	}
-	for _, gloss := range []string{">I<", ">lives<", ">here<"} {
-		if !strings.Contains(choices, gloss) {
-			t.Errorf("choice missing word gloss %s", gloss)
+	if !strings.Contains(choices, ">lives<") {
+		t.Errorf("choice missing the target gloss")
+	}
+	// The other words' glosses are on screen as help. Offering them as
+	// buttons would give the answer away. This unit has no other words,
+	// so the only button left is the target.
+	for _, gloss := range []string{">I<", ">here<"} {
+		if strings.Contains(choices, gloss) {
+			t.Errorf("choice equals a visible helper gloss %s", gloss)
 		}
 	}
 	if strings.Contains(choices, "I live here") || strings.Contains(choices, `value="`+gar+`"`) || strings.Contains(choices, `value="`+line+`"`) {
@@ -659,6 +666,163 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	if strings.Contains(alone, ani) || strings.Contains(alone, po) {
 		t.Fatalf("single-word recall shows the rest of the line:\n%s", alone)
 	}
+}
+
+// A multi-word recall and a cloze both show the line's other words as help.
+// Those glosses, and a different lexeme with the same gloss, are not choices.
+// When the line used up the unit, the remaining buttons are other unit words
+// and earlier lexicon words.
+func TestChoicesSkipVisibleHelperGlosses(t *testing.T) {
+	const (
+		ani    = "אֲנִי"
+		anokhi = "אָנֹכִי"
+		gar    = "גָּר"
+		po     = "פֹּה"
+		ken    = "כֵּן"
+		sham   = "שָׁם"
+		mayim  = "מַיִם"
+	)
+	for _, typ := range []string{units.ActivityRecall, units.ActivityCloze} {
+		t.Run(typ, func(t *testing.T) {
+			now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+			ctx := context.Background()
+			store, err := db.Open(ctx, filepath.Join(t.TempDir(), "hebrew.sqlite"), fixedClock(now))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = store.Close() })
+			brian, err := store.CreateUser(ctx, "brian@example.com", "sub-brian", auth.RoleLearner)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sp := func(s string) *string { return &s }
+			saved, _, err := store.UpsertLexemes(ctx, []lexicon.Input{
+				{TextNFC: ani, Gloss: "I", Translit: sp("ani"), POS: sp("pron")},
+				{TextNFC: anokhi, Gloss: "I", Translit: sp("anokhi"), POS: sp("pron")},
+				{TextNFC: gar, Gloss: "lives", Translit: sp("gar"), POS: sp("verb")},
+				{TextNFC: po, Gloss: "here", Translit: sp("po"), POS: sp("adv")},
+				{TextNFC: ken, Gloss: "yes", Translit: sp("ken"), POS: sp("adv")},
+				{TextNFC: sham, Gloss: "there", Translit: sp("sham"), POS: sp("adv")},
+				{TextNFC: mayim, Gloss: "water", Translit: sp("mayim"), POS: sp("noun")},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ids := map[string]int64{}
+			for _, row := range saved {
+				ids[row.TextNFC] = row.ID
+			}
+			glossByID := map[string]string{}
+			for text, id := range ids {
+				switch text {
+				case ani, anokhi:
+					glossByID[itoa(id)] = "I"
+				case gar:
+					glossByID[itoa(id)] = "lives"
+				case po:
+					glossByID[itoa(id)] = "here"
+				case ken:
+					glossByID[itoa(id)] = "yes"
+				case sham:
+					glossByID[itoa(id)] = "there"
+				case mayim:
+					glossByID[itoa(id)] = "water"
+				}
+			}
+			line := ani + " " + gar + " " + po
+			earlierID := putLesson(t, store, nil, units.Unit{
+				Title: "Earlier", Position: 0, NewWords: []string{sham, mayim},
+				Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
+					{Type: units.ActivityRecall, Text: sham + " " + mayim},
+				}}},
+			}, "shared")
+			// anokhi shares the helper gloss "I" but is not in the line.
+			// ken is the only other word this unit can offer. One more
+			// button has to come from the earlier lexicon.
+			unitID := putLesson(t, store, nil, units.Unit{
+				Title: "At home", Situation: "Saying where you live.", Position: 1,
+				NewWords: []string{gar},
+				Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
+					{Type: typ, Text: line},
+					{Type: units.ActivityRecall, Text: anokhi},
+					{Type: units.ActivityRecall, Text: ken},
+				}}},
+			}, "shared")
+			publish(t, store, earlierID, unitID)
+			when := db.FormatTime(now)
+			if _, err := store.ExecContext(ctx, `
+				INSERT INTO lesson_runs (user_id, unit_id, lesson_ix, started_at, finished_at, score)
+				VALUES (?, ?, 0, ?, ?, 1)`, brian.ID, earlierID, when, when); err != nil {
+				t.Fatal(err)
+			}
+
+			svc, err := auth.New(auth.Config{
+				PublicOrigin: "https://learn.example", Clock: fixedClock(now), Store: store,
+				AllowedEmails: []string{"brian@example.com"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := NewOptions(nil, svc, Options{Store: store})
+			cookie := mintSession(t, store, brian.ID, "brian-csrf", now.Add(time.Hour))
+			body := getAuthed(t, h, cookie, "/lesson/"+itoa(unitID)+"/0")
+			ask := activityHTML(t, body)
+			head, choiceHTML, ok := strings.Cut(ask, `class="choices"`)
+			if !ok {
+				t.Fatalf("missing choices:\n%s", ask)
+			}
+			for _, help := range []string{ani, po} {
+				if !strings.Contains(head, help) {
+					t.Errorf("helper word %s is not on screen", help)
+				}
+			}
+			if typ == units.ActivityRecall {
+				for _, gloss := range []string{">I<", ">here<"} {
+					if !strings.Contains(head, gloss) {
+						t.Errorf("helper gloss %s is not visible", gloss)
+					}
+				}
+			}
+			helperGloss := map[string]bool{"i": true, "here": true}
+			for _, gloss := range []string{">I<", ">here<"} {
+				if strings.Contains(choiceHTML, gloss) {
+					t.Errorf("choice equals a visible helper gloss %s\n%s", gloss, choiceHTML)
+				}
+			}
+			got := choiceValues(t, ask)
+			if len(got) != 3 {
+				t.Fatalf("buttons = %d, want 3 (target, unit fallback, earlier fallback): %v\n%s", len(got), got, choiceHTML)
+			}
+			fallback := false
+			for _, id := range got {
+				gloss := glossByID[id]
+				if helperGloss[glossKey(gloss)] {
+					t.Errorf("choice %s gloss %q equals a visible helper gloss", id, gloss)
+				}
+				if id == itoa(ids[ani]) || id == itoa(ids[po]) || id == itoa(ids[anokhi]) {
+					t.Errorf("choice is a line word or the same gloss: %s %s", id, gloss)
+				}
+				if id == itoa(ids[sham]) || id == itoa(ids[mayim]) {
+					fallback = true
+				}
+			}
+			if !slicesContains(got, itoa(ids[gar])) || !slicesContains(got, itoa(ids[ken])) {
+				t.Fatalf("target or unit fallback missing: %v", got)
+			}
+			if !fallback {
+				t.Fatalf("earlier lexicon was not used to fill the buttons: %v", got)
+			}
+		})
+	}
+}
+
+func slicesContains(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestClipScript(t *testing.T) {
