@@ -33,16 +33,19 @@
 # head is what let #78 pass and then fail to compile once merged with v2.
 # On a push, the omitted ref resolves to the pushed commit. Publish sets
 # ref to github.sha, so the image tag stays
-# ghcr.io/networkbuild3r/hebrew:sha-<push sha>. fetch-depth stays 1. Nothing
-# in this file runs merge-base or diffs against origin/v3. templ's git diff
-# is the worktree against the checked-out commit, which does not need parents.
-# There is no pull_request_target.
+# ghcr.io/networkbuild3r/hebrew:sha-<push sha>. Smoke and publish keep
+# fetch-depth 1. The test shards fetch the base ref on pull_request and
+# diff origin/$BASE...HEAD. A push to v3 and workflow_dispatch run every
+# package in all three shards. A pull_request tests only the affected
+# packages. templ's git diff is the worktree against the checked-out commit.
+# There is no pull_request_target. External actions are pinned to a commit.
 name: ci
 
 on:
   push:
     branches: [v3]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -56,12 +59,24 @@ concurrency:
 
 jobs:
   test:
+    name: test (${{ matrix.title }})
     runs-on: k8-build
     timeout-minutes: 45
-    # Module github.com/NetworkBuild3r/hebrew-lessons at the repository root
-    # (not go/). setup-go reads Go 1.26 from go.mod. The job default is
-    # CGO_ENABLED=0. The race step sets CGO_ENABLED=1 for that step only.
-    # The image build stays CGO_ENABLED=0.
+    # Three shards fill the three k8-build pods. fail-fast stays off so one
+    # shard's failure still leaves the other timings in the log. needs: test
+    # on build-and-smoke and publish waits for every shard. An empty shard
+    # exits success; the job is never skipped, so a docs-only pull request
+    # does not block needs.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: placement
+            title: A placement
+          - shard: app
+            title: B activity brief web learner
+          - shard: rest
+            title: C rest
     env:
       CGO_ENABLED: "0"
     # github.base_ref is empty on a push, so a push to v3 still runs.
@@ -72,14 +87,12 @@ jobs:
     steps:
       # No ref on purpose. pull_request checks out refs/pull/N/merge at
       # github.sha (the merge commit). A push checks out the pushed commit.
-      # Do not pin pull_request.head.sha.
-      - uses: actions/checkout@v6
+      # fetch-depth 0 so a pull_request can diff origin/$BASE...HEAD.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-          fetch-depth: 1
+          fetch-depth: 0
 
-      # Green job when this commit has no module yet. ::notice:: does not fail
-      # the job. Later steps are skipped.
       - name: Skip when go.mod is absent
         id: module
         shell: bash
@@ -90,17 +103,350 @@ jobs:
             echo "go.mod is present."
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Go tests skipped::go.mod is not in this commit. gofmt, go vet, go test, and go test -race are skipped."
+            echo "::notice title=Go tests skipped::go.mod is not in this commit. Tests are skipped."
           fi
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         if: steps.module.outputs.present == 'true'
         with:
           go-version-file: go.mod
+          # The slow part of this job is the race detector, not module download.
+          # actions/cache would also need actions: write, which this workflow
+          # does not grant. Leave the module cache off.
           cache: false
 
-      - name: gofmt
+      - name: Affected packages
+        id: affected
         if: steps.module.outputs.present == 'true'
+        env:
+          SHARD: ${{ matrix.shard }}
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          # Decide which packages this shard tests.
+          # mode=full     push, workflow_dispatch, or a change we will not try to slice
+          # mode=affected pull_request diff mapped to packages and their importers
+          # mode=none     only docs or other non-code; the job stays green and runs nothing
+          set -euo pipefail
+
+          mod=$(go list -m)
+          shard="${SHARD:?shard is required}"
+          changed_file="${RUNNER_TEMP}/changed.txt"
+          affected_file="${RUNNER_TEMP}/affected.txt"
+          shard_file="${RUNNER_TEMP}/shard.txt"
+          run_file="${RUNNER_TEMP}/test-packages.txt"
+          pkgdirs="${RUNNER_TEMP}/pkgdirs.txt"
+          deps_file="${RUNNER_TEMP}/deps.txt"
+          embed_file="${RUNNER_TEMP}/embeds.txt"
+          : >"$changed_file"
+          : >"$affected_file"
+          : >"$run_file"
+          : >"$embed_file"
+
+          go list -f '{{.Dir}} {{.ImportPath}}' ./... >"$pkgdirs"
+
+          mode=full
+          reason="event ${GITHUB_EVENT_NAME}"
+
+          git_fetch() {
+            if [ -n "${GITHUB_TOKEN:-}" ]; then
+              local auth
+              auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)
+              git -c "http.extraheader=AUTHORIZATION: basic ${auth}" fetch --no-tags "$@"
+            else
+              git fetch --no-tags "$@"
+            fi
+          }
+
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            base="${GITHUB_BASE_REF:?pull_request without a base ref}"
+            echo "fetching origin/${base} so the diff is origin/${base}...HEAD"
+            # A failed fetch must not shrink the suite. Checkout may already have the
+            # base; if it does not, the missing merge base below selects the full suite.
+            git_fetch origin "+refs/heads/${base}:refs/remotes/origin/${base}" || echo "fetch of origin/${base} failed; using the history already on this runner"
+            depth=128
+            while ! git merge-base "origin/${base}" HEAD >/dev/null 2>&1; do
+              if [ "$depth" -gt 8192 ]; then
+                echo "deepen did not find a merge base; unshallowing"
+                git fetch --unshallow origin || true
+                git_fetch origin "+refs/heads/${base}:refs/remotes/origin/${base}"
+                break
+              fi
+              echo "no merge base yet; deepening by ${depth}"
+              git_fetch --deepen="${depth}" origin "+refs/heads/${base}:refs/remotes/origin/${base}" || git_fetch --deepen="${depth}" origin || true
+              depth=$((depth * 2))
+            done
+            if ! git merge-base "origin/${base}" HEAD >/dev/null 2>&1; then
+              mode=full
+              reason="no merge base between origin/${base} and HEAD"
+            else
+              git diff --name-only "origin/${base}...HEAD" >"$changed_file"
+              mode=decide
+              reason="diff origin/${base}...HEAD"
+            fi
+          fi
+
+          # //go:embed patterns, relative to the repo root. git grep stays inside the tree.
+          while IFS= read -r gopath; do
+            [ -z "$gopath" ] && continue
+            dir=$(dirname "$gopath")
+            dir=${dir#./}
+            while IFS= read -r line; do
+              specs=${line##*go:embed}
+              specs=${specs#" "}
+              for spec in $specs; do
+                spec=${spec#all:}
+                printf '%s\n' "${dir}/${spec}" >>"$embed_file"
+              done
+            done < <(grep -h '//go:embed' "$gopath" || true)
+          done < <(git grep -l -e '//go:embed' -- '*.go' || true)
+
+          is_embedded() {
+            local f="$1" root
+            while IFS= read -r root; do
+              [ -z "$root" ] && continue
+              # root is a go:embed pattern and may contain a glob on purpose.
+              # shellcheck disable=SC2053
+              if [[ "$f" == $root || "$f" == $root/* ]]; then
+                return 0
+              fi
+            done <"$embed_file"
+            return 1
+          }
+
+          is_ignorable() {
+            case "$1" in
+              *.md | docs/* | LICENSE | LICENSE.* | .gitignore | .gitattributes | .editorconfig | *.png | *.jpg | *.jpeg | *.gif | *.svg | *.webp)
+                return 0
+                ;;
+            esac
+            return 1
+          }
+
+          is_full_trigger() {
+            case "$1" in
+              go.mod | go.sum | Dockerfile | */Dockerfile | .github | .github/* | migrations | migrations/* | *.sql | *.templ)
+                return 0
+                ;;
+            esac
+            return 1
+          }
+
+          pkg_of_dir() {
+            local dir="$1" pdir ip
+            while read -r pdir ip; do
+              if [ "$dir" = "$pdir" ]; then
+                printf '%s\n' "$ip"
+                return 0
+              fi
+            done <"$pkgdirs"
+            return 1
+          }
+
+          # Package directory for a .go file is the directory that holds it.
+          pkg_of_go() {
+            local f="$1" dir
+            dir=$(dirname "$f")
+            dir="${PWD}/${dir}"
+            pkg_of_dir "$dir"
+          }
+
+          # testdata belongs to the nearest parent that is a Go package.
+          pkg_of_testdata() {
+            local f="$1" dir
+            dir="${f%%/testdata*}"
+            dir="${PWD}/${dir}"
+            while [ "$dir" != "/" ] && [ "$dir" != "${PWD}" ]; do
+              if pkg_of_dir "$dir"; then
+                return 0
+              fi
+              dir=$(dirname "$dir")
+            done
+            return 1
+          }
+
+          if [ "$mode" = "decide" ]; then
+            full_reason=""
+            go_changed=0
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              if is_full_trigger "$f" || is_embedded "$f"; then
+                full_reason="$f"
+                break
+              fi
+              if [[ "$f" == *.go ]]; then
+                go_changed=1
+                if pkg=$(pkg_of_go "$f"); then
+                  printf '%s\n' "$pkg" >>"$affected_file"
+                else
+                  full_reason="unmapped Go file ${f}"
+                  break
+                fi
+                continue
+              fi
+              if [[ "$f" == */testdata/* || "$f" == */testdata ]]; then
+                if pkg=$(pkg_of_testdata "$f"); then
+                  printf '%s\n' "$pkg" >>"$affected_file"
+                  continue
+                fi
+                full_reason="unmapped testdata ${f}"
+                break
+              fi
+              if is_ignorable "$f"; then
+                continue
+              fi
+              full_reason="unmapped ${f}"
+              break
+            done <"$changed_file"
+
+            if [ -n "$full_reason" ]; then
+              mode=full
+              reason="$full_reason"
+            elif [ "$go_changed" = 1 ] && [ ! -s "$affected_file" ]; then
+              mode=full
+              reason="Go files changed but no package was mapped"
+            elif [ ! -s "$affected_file" ]; then
+              mode=none
+              reason="no code changes"
+            else
+              mode=affected
+              sort -u "$affected_file" -o "$affected_file"
+              # Pipes separate Deps, TestImports, and XTestImports. Replace them so the
+              # last dependency is not glued to the next import path.
+              go list -f '{{.ImportPath}}|{{join .Deps " "}}|{{join .TestImports " "}}|{{join .XTestImports " "}}' ./... >"$deps_file"
+              changed=1
+              while [ "$changed" = 1 ]; do
+                changed=0
+                while IFS= read -r line; do
+                  ip=${line%%|*}
+                  case "$ip" in
+                    "${mod}"/*) ;;
+                    *) continue ;;
+                  esac
+                  if grep -qxF "$ip" "$affected_file"; then
+                    continue
+                  fi
+                  rest=${line#*|}
+                  rest=${rest//|/ }
+                  for dep in $rest; do
+                    if grep -qxF "$dep" "$affected_file"; then
+                      printf '%s\n' "$ip" >>"$affected_file"
+                      changed=1
+                      break
+                    fi
+                  done
+                done <"$deps_file"
+              done
+              sort -u "$affected_file" -o "$affected_file"
+            fi
+          fi
+
+          case "$shard" in
+            placement)
+              go list ./internal/placement/... >"$shard_file"
+              ;;
+            app)
+              go list ./internal/activity/... ./internal/brief/... ./internal/web/... ./internal/learner/... >"$shard_file"
+              ;;
+            rest)
+              go list ./... | grep -v -E '/internal/(placement|activity|brief|web|learner)(/|$)' >"$shard_file" || true
+              ;;
+            *)
+              echo "::error::unknown shard ${shard}"
+              exit 1
+              ;;
+          esac
+
+          if [ "$mode" = "full" ]; then
+            cp "$shard_file" "$run_file"
+            : >"$affected_file"
+            go list ./... >"$affected_file"
+          elif [ "$mode" = "affected" ]; then
+            grep -Fxf "$affected_file" "$shard_file" >"$run_file" || true
+          else
+            : >"$run_file"
+          fi
+
+          web=false
+          if [ "$mode" = "full" ] || grep -Eq '/internal/web(/|$)' "$affected_file"; then
+            web=true
+          fi
+          run_tests=false
+          if [ -s "$run_file" ]; then
+            run_tests=true
+          fi
+          lint=false
+          if [ "$shard" = "rest" ] && [ "$mode" != "none" ]; then
+            lint=true
+          fi
+
+          {
+            echo "mode=${mode}"
+            echo "run_tests=${run_tests}"
+            echo "web=${web}"
+            echo "lint=${lint}"
+          } >>"${GITHUB_OUTPUT}"
+
+          {
+            echo "### Affected packages (${shard})"
+            echo
+            echo "Mode: \`${mode}\` (${reason})."
+            echo
+            if [ -s "$changed_file" ]; then
+              echo "Changed files:"
+              echo
+              echo '```'
+              cat "$changed_file"
+              echo '```'
+              echo
+            fi
+            echo "Packages this run accounts for:"
+            echo
+            echo '```'
+            if [ "$mode" = "none" ]; then
+              echo "(none — docs or other non-code only)"
+            else
+              cat "$affected_file"
+            fi
+            echo '```'
+            echo
+            echo "This shard runs:"
+            echo
+            echo '```'
+            if [ -s "$run_file" ]; then
+              cat "$run_file"
+            else
+              echo "(none)"
+            fi
+            echo '```'
+          } >>"${GITHUB_STEP_SUMMARY}"
+
+          echo "affected-packages: mode=${mode} reason=${reason} web=${web} run_tests=${run_tests} lint=${lint}"
+          echo "changed files:"
+          if [ -s "$changed_file" ]; then
+            cat "$changed_file"
+          else
+            echo "(none recorded)"
+          fi
+          echo "affected packages:"
+          if [ "$mode" = "none" ]; then
+            echo "(none — docs or other non-code only)"
+          else
+            cat "$affected_file"
+          fi
+          echo "shard ${shard} runs:"
+          if [ -s "$run_file" ]; then
+            cat "$run_file"
+          else
+            echo "(none — no affected packages)"
+          fi
+
+      # gofmt, templ drift, and go vet run once, in shard C, on any run that
+      # is not docs-only. A docs-only pull request leaves lint false and the
+      # shard still succeeds. These checks already existed; this PR does not
+      # add a new gate.
+      - name: gofmt
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.lint == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -111,11 +457,11 @@ jobs:
             exit 1
           fi
 
-      # Generated *_templ.go must match the .templ sources at this commit.
-      # Install the templ version from go.mod with an explicit @version so
-      # this step does not rewrite go.mod or go.sum.
       - name: templ generate
-        if: steps.module.outputs.present == 'true'
+        if: >-
+          steps.module.outputs.present == 'true' &&
+          (steps.affected.outputs.lint == 'true' ||
+            (matrix.shard == 'app' && steps.affected.outputs.web == 'true' && steps.affected.outputs.run_tests == 'true'))
         shell: bash
         run: |
           set -euo pipefail
@@ -127,68 +473,24 @@ jobs:
           bindir=$(mktemp -d)
           GOBIN="$bindir" go install "github.com/a-h/templ/cmd/templ@${version}"
           "$bindir/templ" generate
-          drift=$(git diff --name-only)
-          if [ -n "$drift" ]; then
-            echo "templ generate changed checked-in files:"
-            echo "$drift"
-            git diff
-            exit 1
+          if [ "${{ matrix.shard }}" = "rest" ]; then
+            drift=$(git diff --name-only)
+            if [ -n "$drift" ]; then
+              echo "templ generate changed checked-in files:"
+              echo "$drift"
+              git diff
+              exit 1
+            fi
           fi
 
       - name: go vet
-        if: steps.module.outputs.present == 'true'
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.lint == 'true'
         shell: bash
         run: go vet ./...
 
-      # Tests such as TestClipPlayAfterSwap call exec.LookPath("node") and
-      # skip when it is missing. setup-node adds its bin directory to PATH
-      # for every later step, which is what LookPath searches. Pinned to
-      # v4.4.0. The runner sets RUNNER_TOOL_CACHE; that directory is the
-      # cache setup-node writes. build-and-smoke and publish do not run
-      # these tests.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        if: steps.module.outputs.present == 'true'
-        with:
-          node-version: '22'
-
-      - name: node version
-        if: steps.module.outputs.present == 'true'
+      - name: Install gcc
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.run_tests == 'true'
         shell: bash
-        run: node --version
-
-      # Fail if either node test skips. A missing node binary is a skip, and
-      # a skip must not leave this job green.
-      - name: node tests
-        if: steps.module.outputs.present == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          set -o pipefail
-          go test -count=1 -v -run '^(TestClipPlayAfterSwap|TestKeyboardNode)$' ./internal/web | tee node.out
-          ! grep -q -- '--- SKIP' node.out
-
-      # Full seed counts (race build tag off). The race step below covers
-      # the rest of the module, so the plain go test ./... pass is gone.
-      - name: placement tests
-        if: steps.module.outputs.present == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          go test -count=1 -timeout 20m ./internal/placement/...
-
-      # -race needs cgo and a C toolchain. CGO_ENABLED=1 is this step only.
-      # gofmt, go vet, and placement tests stay on the job default
-      # CGO_ENABLED=0. -timeout 20m is per test binary; the default 10m is
-      # what killed publish on v3 when placement ran under race.
-      # Main's k8-build workflows (go.yml, test.yml, image-go.yml) do not
-      # install gcc; they use the ARC image's git, setup-go, setup-node, and
-      # docker. Install gcc and libc6-dev only when command -v gcc fails.
-      # The image build stays CGO_ENABLED=0 in the Dockerfile.
-      - name: go test -race
-        if: steps.module.outputs.present == 'true'
-        shell: bash
-        env:
-          CGO_ENABLED: "1"
         run: |
           set -euo pipefail
           if ! command -v gcc >/dev/null 2>&1; then
@@ -201,7 +503,61 @@ jobs:
           else
             echo "gcc is $(command -v gcc)"
           fi
-          go test -race -count=1 -timeout 20m ./...
+
+      # -count=1 on every go test. Runners keep a persistent GOCACHE
+      # (home_k3 #51), and Go does not record files a child process such as
+      # node reads, so a cache hit can skip a real change.
+      # Full seed counts. The race build tag is off, so race_off_test.go applies.
+      - name: placement tests
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.run_tests == 'true' && matrix.shard == 'placement'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t pkgs < "${RUNNER_TEMP}/test-packages.txt"
+          if [ "${#pkgs[@]}" -eq 0 ]; then
+            echo "no affected packages"
+            exit 0
+          fi
+          echo "non-race placement: ${pkgs[*]}"
+          start=$(date +%s)
+          go test -count=1 -timeout 20m "${pkgs[@]}"
+          echo "placement non-race finished in $(( $(date +%s) - start ))s"
+
+      - name: go test -race
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.run_tests == 'true'
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          set -euo pipefail
+          mapfile -t pkgs < "${RUNNER_TEMP}/test-packages.txt"
+          if [ "${#pkgs[@]}" -eq 0 ]; then
+            echo "no affected packages"
+            exit 0
+          fi
+          echo "race ${{ matrix.shard }}: ${pkgs[*]}"
+          start=$(date +%s)
+          go test -race -count=1 -timeout 20m "${pkgs[@]}"
+          echo "race ${{ matrix.shard }} finished in $(( $(date +%s) - start ))s"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'app'
+        with:
+          node-version: '22'
+
+      - name: node version
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'app'
+        shell: bash
+        run: node --version
+
+      - name: node tests
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'app'
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -o pipefail
+          go test -count=1 -v -run '^(TestClipPlayAfterSwap|TestKeyboardNode)$' ./internal/web | tee node.out
+          ! grep -q -- '--- SKIP' node.out
 
   build-and-smoke:
     needs: test
@@ -221,7 +577,7 @@ jobs:
     steps:
       # pull_request only. No ref: refs/pull/N/merge at github.sha.
       # Do not pin pull_request.head.sha.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -272,14 +628,14 @@ jobs:
             echo "::notice title=Image skipped::Dockerfile or go.mod is absent. Build, smoke, and push are skipped."
           fi
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
         if: steps.scope.outputs.build == 'true'
 
       # No login and no cache-to: a pull request must not push, including the
       # buildcache tag. A cache miss is ignored.
       - name: Build (pull request, no push)
         if: steps.scope.outputs.build == 'true' && github.event_name == 'pull_request'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           platforms: linux/amd64
@@ -386,7 +742,7 @@ jobs:
       # Push to v3 only. ref is the pushed commit, which the sha- tag
       # records. This job does not run on pull_request, and it does not
       # read pull_request.head.sha.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
           ref: ${{ github.sha }}
@@ -436,19 +792,19 @@ jobs:
             echo "::notice title=Image skipped::Dockerfile or go.mod is absent. Build, smoke, and push are skipped."
           fi
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/v3'
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
         if: steps.scope.outputs.build == 'true'
 
       - name: Build
         if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/v3'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           platforms: linux/amd64
