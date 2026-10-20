@@ -20,23 +20,18 @@ func TestThemeBootCSP(t *testing.T) {
 		t.Fatalf("ThemeBootCSP = %s, hash of the script = %s", views.ThemeBootCSP, got)
 	}
 
-	body := get(t, New(nil, nil), "/")
-	const open = "<script>"
-	i := strings.Index(body, open)
-	if i < 0 {
-		t.Fatal("inline theme script missing")
+	served := get(t, New(nil, nil), "/static/js/theme.js")
+	if strings.TrimRight(served, "\n") != views.ThemeBoot {
+		t.Fatal("served theme.js does not match ThemeBoot")
 	}
-	rest := body[i+len(open):]
-	j := strings.Index(rest, "</script>")
-	if j < 0 {
-		t.Fatal("inline theme script is not closed")
+	page := get(t, New(nil, nil), "/")
+	if strings.Contains(page, "<script>"+views.ThemeBoot+"</script>") {
+		t.Fatal("theme boot is still inline")
 	}
-	if rest[:j] != views.ThemeBoot {
-		t.Fatal("served inline script does not match ThemeBoot")
-	}
-	cssAt := strings.Index(body, "/static/css/tokens.css")
-	if cssAt < 0 || i > cssAt {
-		t.Fatal("theme boot must sit before the stylesheet")
+	scriptAt := strings.Index(page, `<script src="/static/js/theme.js"></script>`)
+	cssAt := strings.Index(page, "/static/css/tokens.css")
+	if scriptAt < 0 || cssAt < 0 || scriptAt > cssAt {
+		t.Fatal("theme.js must sit before the stylesheet")
 	}
 }
 
