@@ -21,12 +21,13 @@ import (
 )
 
 // TestAskChoicesFallback is the fill order for a graded recall.
-// A tiny unit with nothing earlier reaches at least three buttons from the
-// line's own words. The same unit with earlier words draws those three from
-// outside the line, before any line word. A single-word recall reaches at
-// least three. When enough same-part-of-speech words exist, other parts and
-// the line stay off the buttons. A gloss equal to the answer is never a
-// button, and two buttons never share a gloss. Fewer than three is not an ask.
+// A tiny unit whose only other words are on the line is a reveal: those
+// words are already on screen. The same unit with earlier words draws at
+// least three buttons from outside the line. A single-word recall reaches
+// at least three. When enough same-part-of-speech words exist, other parts
+// stay off the buttons. A gloss equal to the answer is never a button, a
+// button never repeats a non-target line token's gloss, and two buttons
+// never share a gloss. Fewer than three is not an ask.
 func TestAskChoicesFallback(t *testing.T) {
 	pron := db.LexemeView{ID: 1, Text: "אֲנִי", Gloss: "I", POS: "pron", Translit: "ani"}
 	verb := db.LexemeView{ID: 2, Text: "גָּר", Gloss: "lives", POS: "verb", Translit: "gar"}
@@ -39,13 +40,10 @@ func TestAskChoicesFallback(t *testing.T) {
 	seed := choices.ChoiceSeed{RunID: 9, Step: 0, TargetID: verb.ID}
 	line := choiceExclude{ids: map[int64]bool{pron.ID: true, adv.ID: true}, glosses: map[string]bool{"i": true, "here": true}}
 
-	t.Run("tiny unit uses the line", func(t *testing.T) {
+	t.Run("tiny unit with no outside pool -> reveal", func(t *testing.T) {
 		got := askChoices(units.ActivityRecall, []db.LexemeView{pron, verb, adv}, nil, verb, seed, line)
-		if len(got) < lessonMinChoices {
-			t.Fatalf("buttons = %d, want at least %d: %+v", len(got), lessonMinChoices, got)
-		}
-		if !choiceHas(got, "1") || !choiceHas(got, "2") || !choiceHas(got, "3") {
-			t.Fatalf("line words did not fill the ask: %+v", got)
+		if got != nil {
+			t.Fatalf("no outside words still asks: %+v", got)
 		}
 	})
 
@@ -66,6 +64,7 @@ func TestAskChoicesFallback(t *testing.T) {
 				t.Errorf("button %s is a line word or the answer's gloss", id)
 			}
 		}
+		assertNoLineTokenGloss(t, got, pron.Gloss, adv.Gloss)
 	})
 
 	t.Run("single word", func(t *testing.T) {
@@ -95,6 +94,7 @@ func TestAskChoicesFallback(t *testing.T) {
 				t.Errorf("button %s is the line, another POS, or the answer's gloss", id)
 			}
 		}
+		assertNoLineTokenGloss(t, got, pron.Gloss, adv.Gloss)
 	})
 
 	t.Run("fewer than three is not graded", func(t *testing.T) {
@@ -422,6 +422,23 @@ func mustRunID(t *testing.T, body string) int64 {
 		t.Fatal(err)
 	}
 	return id
+}
+
+// assertNoLineTokenGloss fails when a button's gloss equals a non-target
+// token already shown on the line. The learner can rule that button out.
+func assertNoLineTokenGloss(t *testing.T, got []views.Choice, lineGlosses ...string) {
+	t.Helper()
+	banned := map[string]bool{}
+	for _, gloss := range lineGlosses {
+		if key := glossKey(gloss); key != "" {
+			banned[key] = true
+		}
+	}
+	for _, choice := range got {
+		if key := glossKey(choice.Label); key != "" && banned[key] {
+			t.Errorf("button gloss %q matches a non-target line token", choice.Label)
+		}
+	}
 }
 
 func choiceHas(buttons []views.Choice, value string) bool {

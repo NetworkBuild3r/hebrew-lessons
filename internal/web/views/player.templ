@@ -221,13 +221,15 @@ templ dialogueBlock(d *Dialogue) {
 }
 
 // wordClipRow is the no-JS play control for one word of a recall line.
-// The pointed word, a separator, and the transliteration name the bar.
-// html.js hides .clip-rows; the orb under the word is the control then.
+// The pointed word names the bar. Transliteration is printed only when the
+// line already shows it for that token, so a recall target stays the pointed
+// Hebrew and the bar until the answer. html.js hides .clip-rows; the orb
+// under the word is the control then.
 templ wordClipRow(w Word, audioID string) {
 	<div class="clip-row">
 		<p class="clip-row__label">
 			<bdi class="clip-row__he" lang="he" dir="rtl">{ w.Text }</bdi>
-			if w.Translit != "" {
+			if w.ShowTranslit && w.Translit != "" {
 				<span class="clip-row__sep">{ " · " }</span>
 				<bdi class="clip-row__tr" lang="he-Latn" dir="ltr">{ w.Translit }</bdi>
 			}

@@ -776,12 +776,12 @@ func choiceSeed(run db.PlayerRun, target db.LexemeView) choices.ChoiceSeed {
 }
 
 // askChoices is the buttons for one graded activity. listen_pick and produce
-// stay at three. recall and cloze aim for four:
+// stay at three. recall and cloze aim for four, and never use a word that is
+// already on the line:
 //
 //  1. same part of speech, outside the line, this unit first
 //  2. same part of speech, outside the line, from earlier units
 //  3. any other part of speech, outside the line (unit, then earlier)
-//  4. the line's other words, only when the tiers above are short
 //
 // A distractor whose gloss equals the answer is never used, and two buttons
 // never share a gloss. Fewer than three buttons is not an ask: the caller
@@ -794,12 +794,12 @@ func askChoices(typ string, unit, earlier []db.LexemeView, target db.LexemeView,
 	return wideChoices(unit, earlier, target, seed, hebrew, typ == units.ActivityCloze, block)
 }
 
-// wideChoices fills a recall or cloze ask. Same part of speech from outside
-// the line comes first (this unit, then earlier units). Other parts of speech
-// from outside the line are next. The line's own words are the last resort,
-// and only once every outside tier is used up. The answer's gloss is never
-// repeated, and neither is any other gloss. The result is nil when three
-// buttons cannot be filled.
+// wideChoices fills a recall or cloze ask from outside the line only. Same
+// part of speech comes first (this unit, then earlier units). Other parts of
+// speech from outside the line are next. Words on the line are help, or are
+// the rest of a cloze sentence, so they are never buttons. The answer's gloss
+// is never repeated, and neither is any other gloss. The result is nil when
+// three buttons cannot be filled.
 func wideChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed choices.ChoiceSeed, hebrew, translit bool, block choiceExclude) []views.Choice {
 	if target.ID == 0 {
 		return nil
@@ -816,7 +816,6 @@ func wideChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed choic
 		outsideTier(earlier, target, hebrew, block, true),
 		outsideTier(unit, target, hebrew, block, false),
 		outsideTier(earlier, target, hebrew, block, false),
-		lineTier(unit, earlier, target, hebrew, block),
 	}
 	for _, tier := range tiers {
 		if len(distractors) >= want {
@@ -868,35 +867,6 @@ func outsideTier(rows []db.LexemeView, target db.LexemeView, hebrew bool, block 
 		out = append(out, lex)
 	}
 	return out
-}
-
-// lineTier is the last resort: the line's other words. Their glosses may be
-// on screen as help. A word that glosses the same as the answer is still out.
-func lineTier(unit, earlier []db.LexemeView, target db.LexemeView, hebrew bool, block choiceExclude) []db.LexemeView {
-	out := make([]db.LexemeView, 0, len(block.ids))
-	seen := map[int64]bool{}
-	for _, lex := range unit {
-		if !lineFallback(lex, target, hebrew, block, seen) {
-			continue
-		}
-		seen[lex.ID] = true
-		out = append(out, lex)
-	}
-	for _, lex := range earlier {
-		if !lineFallback(lex, target, hebrew, block, seen) {
-			continue
-		}
-		seen[lex.ID] = true
-		out = append(out, lex)
-	}
-	return out
-}
-
-func lineFallback(lex, target db.LexemeView, hebrew bool, block choiceExclude, seen map[int64]bool) bool {
-	if seen[lex.ID] || !block.ids[lex.ID] {
-		return false
-	}
-	return choiceUsable(lex, target, hebrew)
 }
 
 func samePOSAs(lex, target db.LexemeView) bool {
