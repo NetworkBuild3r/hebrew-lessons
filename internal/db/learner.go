@@ -159,9 +159,10 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 		GROUP BY lexeme_id, skill`, q.AccuracyWindow, q.AgainWindow, q.RecentWindow)
 
 	// Attempts, newest first inside each word and skill. The query walks
-	// attempts_user_lexeme_skill backwards, so rows arrive grouped by word and skill and
+	// attempts_user_lexeme_skill_id backwards, so rows arrive grouped by word and skill and
 	// newest first with no sort, and the counts are made in one pass here. A window
 	// function would make SQLite sort every row, which is the slowest part at 50,000 rows.
+	// The ORDER BY includes id. The index has to include id too, or SQLite sorts.
 	if err := func() error {
 		rows, err := conn.QueryContext(ctx, `
 			SELECT lexeme_id, skill, correct, created_at

@@ -86,8 +86,8 @@ func TestMigrateCheckReportsAFullyMigratedDatabase(t *testing.T) {
 	}
 	got := out.String()
 	for _, want := range []string{
-		"migrate-check: files=11 applied=11 pending=0\n",
-		"applied: 1 2 3 4 5 6 7 8 9 10 11\n",
+		"migrate-check: files=12 applied=12 pending=0\n",
+		"applied: 1 2 3 4 5 6 7 8 9 10 11 12\n",
 		"pending: (none)\n",
 		"integrity: ok\n",
 		"result: ok\n",
@@ -101,16 +101,16 @@ func TestMigrateCheckReportsAFullyMigratedDatabase(t *testing.T) {
 func TestMigrateCheckListsPendingMigrationsOnTheDeployedDatabase(t *testing.T) {
 	path := opsDB(t)
 	// The production database: 006 and 008 to 011 not recorded.
-	opsExec(t, path, `DELETE FROM schema_migrations WHERE version IN (6, 8, 9, 10, 11)`)
+	opsExec(t, path, `DELETE FROM schema_migrations WHERE version IN (6, 8, 9, 10, 11, 12)`)
 	var out, errOut bytes.Buffer
 	if err := migrateCommand([]string{"--check"}, &out, &errOut); err != nil {
 		t.Fatalf("pending migrations are not a failure: %v", err)
 	}
 	got := out.String()
 	for _, want := range []string{
-		"applied=6 pending=5",
+		"applied=6 pending=6",
 		"applied: 1 2 3 4 5 7\n",
-		"pending: 006_evidence.sql 008_learner_model.sql 009_confusion_other.sql 010_daily_job.sql 011_placement_v3.sql\n",
+		"pending: 006_evidence.sql 008_learner_model.sql 009_confusion_other.sql 010_daily_job.sql 011_placement_v3.sql 012_attempt_list_index.sql\n",
 		"pending-below-applied: 6 ",
 		"result: ok\n",
 	} {
@@ -241,7 +241,7 @@ func TestBackupRequiresTo(t *testing.T) {
 
 func TestBackupDoesNotChangeTheSource(t *testing.T) {
 	src := opsDB(t)
-	opsExec(t, src, `DELETE FROM schema_migrations WHERE version IN (9, 10, 11)`)
+	opsExec(t, src, `DELETE FROM schema_migrations WHERE version IN (9, 10, 11, 12)`)
 	before := opsDigest(t, src)
 	var out, errOut bytes.Buffer
 	if err := backupCommand([]string{"--to", filepath.Join(t.TempDir(), "b.sqlite")}, &out, &errOut); err != nil {

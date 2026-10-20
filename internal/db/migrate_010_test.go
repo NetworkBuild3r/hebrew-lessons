@@ -21,7 +21,7 @@ const (
 	m9Ins2   = `INSERT INTO regression_events (user_id, kind, lexeme_id, skill, from_state, to_state, day, cause) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 )
 
-var m9Versions = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
+var m9Versions = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
 
 // m9At008 builds a database at version 009 with data in every older table, then adds
 // regression_events rows of a few shapes and a gap in the ids.
@@ -61,7 +61,7 @@ func TestMigrate009KeepsRowsIdsAndIndexes(t *testing.T) {
 		t.Fatalf("migrate 010: %v", err)
 	}
 	if got := m6Applied(t, conn); !reflect.DeepEqual(got, m9Versions) {
-		t.Fatalf("versions = %v, want 1..11", got)
+		t.Fatalf("versions = %v, want 1..12", got)
 	}
 	if got := m6Dump(t, conn, m9Select); !reflect.DeepEqual(got, before) {
 		t.Fatalf("rows changed\n got: %v\nwant: %v", got, before)
@@ -117,7 +117,7 @@ func TestMigrate009KeepsRowsIdsAndIndexes(t *testing.T) {
 	if !reflect.DeepEqual(after.rowCnts, others.rowCnts) {
 		t.Fatalf("row counts changed\n got: %v\nwant: %v", after.rowCnts, others.rowCnts)
 	}
-	gotSchema := m8SchemaWithout(m8SchemaWithout(after.schema, "regression_events"), "job_state")
+	gotSchema := m8SchemaWithoutName(m8SchemaWithout(m8SchemaWithout(after.schema, "regression_events"), "job_state"), "attempts_user_lexeme_skill_id")
 	wantSchema := m8SchemaWithout(others.schema, "regression_events")
 	if !reflect.DeepEqual(gotSchema, wantSchema) {
 		t.Fatal("schema of another object changed")
@@ -226,7 +226,7 @@ func TestMigrate009AppliesOnEmptyDatabase(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 	if got := m6Applied(t, conn); !reflect.DeepEqual(got, m9Versions) {
-		t.Fatalf("versions = %v, want 1..11", got)
+		t.Fatalf("versions = %v, want 1..12", got)
 	}
 	for _, table := range []string{"job_state", "regression_events", "daily_snapshots"} {
 		if !tableExists(t, conn, table) {

@@ -103,7 +103,7 @@ func TestCheckMigrationsOnAFullyMigratedDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
+	want := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
 	if !reflect.DeepEqual(rep.Applied, want) {
 		t.Errorf("Applied = %v, want %v", rep.Applied, want)
 	}
@@ -277,7 +277,7 @@ func TestReadOnlyConnectionRefusesWrites(t *testing.T) {
 	if err == nil {
 		t.Fatal("a write on the read-only connection succeeded")
 	}
-	if rawCount(t, path, `SELECT COUNT(*) FROM schema_migrations`) != 11 {
+	if rawCount(t, path, `SELECT COUNT(*) FROM schema_migrations`) != 12 {
 		t.Fatal("schema_migrations changed")
 	}
 }
@@ -367,8 +367,8 @@ func TestBackupCopiesTheDatabaseAndReportsItsDigest(t *testing.T) {
 	if got := rawCount(t, dst, `SELECT COUNT(*) FROM users WHERE email = 'marker-person@example.invalid'`); got != 1 {
 		t.Errorf("users in the backup = %d, want 1", got)
 	}
-	if got := rawCount(t, dst, `SELECT COUNT(*) FROM schema_migrations`); got != 11 {
-		t.Errorf("schema_migrations in the backup = %d, want 11", got)
+	if got := rawCount(t, dst, `SELECT COUNT(*) FROM schema_migrations`); got != 12 {
+		t.Errorf("schema_migrations in the backup = %d, want 12", got)
 	}
 	rep, err := CheckMigrations(context.Background(), dst)
 	if err != nil || rep.Integrity != "ok" || len(rep.Problems()) != 0 {
