@@ -194,6 +194,21 @@ func TestLessonPlayer(t *testing.T) {
 	if !strings.Contains(body, "/audio/"+phraseID+".mp3") || !strings.Contains(body, "/audio/"+wordID+".mp3") {
 		t.Fatal("story step is missing its clips")
 	}
+	for _, want := range []string{
+		`class="c-orb"`, `data-clip="true"`, `aria-label="Play the line"`,
+		`aria-label="Play ` + hello + `"`, `/static/js/clips.js`, `<noscript>`,
+		`class="clip__fallback"`, `href="/audio/` + phraseID + `.mp3"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("story clip missing %s", want)
+		}
+	}
+	if strings.Contains(body, "<audio controls") || strings.Contains(body, "clip__label") || strings.Contains(body, "onclick=") {
+		t.Fatal("story clip still uses a native player or an inline handler")
+	}
+	if strings.Count(body, "/static/js/clips.js") != 1 {
+		t.Fatalf("clips.js included %d times", strings.Count(body, "/static/js/clips.js"))
+	}
 	if scalar(t, dbPath, `SELECT COUNT(*) FROM lesson_runs WHERE user_id = ? AND finished_at IS NULL`, brian.ID) != 1 {
 		t.Fatal("opening the lesson did not write one open run")
 	}
@@ -218,8 +233,14 @@ func TestLessonPlayer(t *testing.T) {
 	if strings.Contains(recall, "<html") || strings.Contains(recall, "wb__gl") || strings.Contains(recall, "wb__tr") || strings.Contains(recall, "shalom") {
 		t.Fatalf("recall prompt shows the answer:\n%s", recall)
 	}
+	if strings.Contains(recall, "data-target") || strings.Contains(recall, "This word") {
+		t.Fatalf("a single-word recall marks a target:\n%s", recall)
+	}
 	if !strings.Contains(recall, hello) || !strings.Contains(recall, "hello") || !strings.Contains(recall, "What does this Hebrew mean?") {
 		t.Fatalf("recall prompt missing: %s", recall)
+	}
+	if strings.Contains(recall, "What does “") {
+		t.Fatalf("a single-word recall names a word in the question:\n%s", recall)
 	}
 	if strings.Contains(recall, `value="`+hello+`"`) || strings.Contains(recall, `value="`+morning+`"`) {
 		t.Fatalf("recall choice value leaks Hebrew:\n%s", recall)
@@ -391,6 +412,12 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 	if !strings.Contains(listen, `/audio/`+phraseID+`.mp3`) || !strings.Contains(listen, `aria-label="Play"`) {
 		t.Fatalf("listen_pick missing the phrase clip:\n%s", listen)
 	}
+	if strings.Contains(listen, `aria-label="Play the line"`) || strings.Contains(listen, "Play "+hello) || strings.Contains(listen, "<audio controls") {
+		t.Fatalf("listen_pick names the hidden Hebrew or uses a native player:\n%s", listen)
+	}
+	if !strings.Contains(listen, `class="c-orb"`) || !strings.Contains(listen, `data-clip="true"`) {
+		t.Fatalf("listen_pick clip is not an audio orb:\n%s", listen)
+	}
 	if strings.Contains(listen, helloID) || strings.Contains(listen, morningID) {
 		t.Fatal("listen_pick prompt includes a word clip")
 	}
@@ -437,8 +464,11 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 	if !strings.Contains(cloze, `/audio/`+morningID+`.mp3`) {
 		t.Fatalf("cloze hid the other word's clip:\n%s", cloze)
 	}
-	if containsHebrew(attrValues(cloze)) || strings.Contains(attrValues(cloze), "shalom") || strings.Contains(attrValues(cloze), "hello") {
+	if strings.Contains(attrValues(cloze), hello) || strings.Contains(attrValues(cloze), "shalom") || strings.Contains(attrValues(cloze), "hello") {
 		t.Fatalf("cloze attributes leak the gap:\n%s", attrValues(cloze))
+	}
+	if !strings.Contains(cloze, `aria-label="Play `+morning+`"`) {
+		t.Fatalf("the other word's play button is not named:\n%s", cloze)
 	}
 	if !strings.Contains(choices, hello) || !strings.Contains(choices, "shalom") {
 		t.Fatalf("cloze choices should show pointed Hebrew and translit:\n%s", choices)
@@ -453,6 +483,195 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 	}
 	if !strings.Contains(filled, `/audio/`+phraseID+`.mp3`) {
 		t.Fatalf("cloze answer should play the sentence:\n%s", filled)
+	}
+}
+
+// A recall of several words still asks for one word: the first new word in
+// the line. The question names that word, the other words are shown with
+// their sound and meaning, and the buttons are word glosses. A following
+// recall of that word alone keeps the single-word question.
+func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
+	const (
+		ani = "אֲנִי"
+		gar = "גָּר"
+		po  = "פֹּה"
+	)
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	ctx := context.Background()
+	store, err := db.Open(ctx, filepath.Join(t.TempDir(), "hebrew.sqlite"), fixedClock(now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	brian, err := store.CreateUser(ctx, "brian@example.com", "sub-brian", auth.RoleLearner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sp := func(s string) *string { return &s }
+	saved, _, err := store.UpsertLexemes(ctx, []lexicon.Input{
+		{TextNFC: ani, Gloss: "I", Translit: sp("ani"), POS: sp("pron")},
+		{TextNFC: gar, Gloss: "lives", Translit: sp("gar"), POS: sp("verb")},
+		{TextNFC: po, Gloss: "here", Translit: sp("po"), POS: sp("adv")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]int64{}
+	for _, row := range saved {
+		ids[row.TextNFC] = row.ID
+	}
+	line := ani + " " + gar + " " + po
+	unitID := putLesson(t, store, nil, units.Unit{
+		Title: "At home", Situation: "Saying where you live.", Position: 1,
+		NewWords: []string{gar},
+		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
+			{Type: units.ActivityRecall, Text: line},
+			{Type: units.ActivityRecall, Text: gar},
+		}}},
+	}, "shared")
+	publish(t, store, unitID)
+
+	phraseID := strings.Repeat("ab", 32)
+	aniID := strings.Repeat("cd", 32)
+	garID := strings.Repeat("ef", 32)
+	poID := strings.Repeat("a1", 32)
+	for _, asset := range []db.Asset{
+		{ID: phraseID, TextNFC: units.Normalize(line), Voice: "voice", Model: "eleven_v4", Bytes: 4},
+		{ID: aniID, TextNFC: ani, Voice: "voice", Model: "eleven_v4", Bytes: 4},
+		{ID: garID, TextNFC: gar, Voice: "voice", Model: "eleven_v4", Bytes: 4},
+		{ID: poID, TextNFC: po, Voice: "voice", Model: "eleven_v4", Bytes: 4},
+	} {
+		if _, err := store.InsertAudio(ctx, asset); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	svc, err := auth.New(auth.Config{
+		PublicOrigin: "https://learn.example", Clock: fixedClock(now), Store: store,
+		AllowedEmails: []string{"brian@example.com"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := NewOptions(nil, svc, Options{Store: store})
+	cookie := mintSession(t, store, brian.ID, "brian-csrf", now.Add(time.Hour))
+	path := "/lesson/" + itoa(unitID) + "/0"
+
+	body := getAuthed(t, h, cookie, path)
+	ask := activityHTML(t, body)
+	head, choices, ok := strings.Cut(ask, `class="choices"`)
+	if !ok {
+		t.Fatalf("recall missing choices:\n%s", ask)
+	}
+	prompt := "What does “" + gar + "” mean?"
+	if !strings.Contains(head, prompt) || strings.Contains(ask, "What does this Hebrew mean?") {
+		t.Fatalf("prompt = %q, want the target word named:\n%s", prompt, head)
+	}
+	if strings.Count(head, `data-target="true"`) != 1 || !strings.Contains(head, "This word") {
+		t.Fatalf("the target word is not marked:\n%s", head)
+	}
+	for _, help := range []string{">ani<", ">I<", ">po<", ">here<", ani, po} {
+		if !strings.Contains(head, help) {
+			t.Errorf("help word missing %s", help)
+		}
+	}
+	for _, hidden := range []string{">gar<", ">lives<"} {
+		if strings.Contains(head, hidden) {
+			t.Errorf("the tested word shows %s before the answer", hidden)
+		}
+	}
+	if !strings.Contains(head, gar) {
+		t.Fatal("the tested word's Hebrew is hidden")
+	}
+	for _, gloss := range []string{">I<", ">lives<", ">here<"} {
+		if !strings.Contains(choices, gloss) {
+			t.Errorf("choice missing word gloss %s", gloss)
+		}
+	}
+	if strings.Contains(choices, "I live here") || strings.Contains(choices, `value="`+gar+`"`) || strings.Contains(choices, `value="`+line+`"`) {
+		t.Fatalf("choices are not word glosses:\n%s", choices)
+	}
+	if !strings.Contains(choices, `value="`+itoa(ids[gar])+`"`) {
+		t.Fatalf("the target choice is not the lexeme id:\n%s", choices)
+	}
+	for _, want := range []string{
+		`aria-label="Play the line"`,
+		`aria-label="Play ` + ani + `"`,
+		`aria-label="Play ` + gar + `"`,
+		`aria-label="Play ` + po + `"`,
+		`data-audio="line-clip"`,
+		`data-audio="word-clip-0"`,
+		`data-audio="word-clip-1"`,
+		`data-audio="word-clip-2"`,
+		`class="c-orb"`,
+		`type="button"`,
+		`<noscript>`,
+		`class="clip__fallback"`,
+		`/static/js/clips.js`,
+	} {
+		if !strings.Contains(ask, want) {
+			t.Errorf("clip missing %s", want)
+		}
+	}
+	if strings.Contains(ask, "<audio controls") || strings.Contains(ask, "onclick=") || strings.Count(ask, "/static/js/clips.js") != 1 {
+		t.Fatalf("clip markup:\n%s", ask)
+	}
+	if strings.Count(ask, `class="c-orb"`) != 4 {
+		t.Fatalf("%d play buttons, want the line and three words", strings.Count(ask, `class="c-orb"`))
+	}
+
+	runID := runValue(t, body)
+	revealed := activityHTML(t, postLesson(t, h, cookie, path, runID, itoa(ids[gar]), true, "brian-csrf").Body.String())
+	for _, shown := range []string{">ani<", ">gar<", ">po<", ">I<", ">lives<", ">here<", `data-target="true"`} {
+		if !strings.Contains(revealed, shown) {
+			t.Errorf("after the answer, missing %s", shown)
+		}
+	}
+
+	alone := activityHTML(t, postLesson(t, h, cookie, path, runID, "continue", true, "brian-csrf").Body.String())
+	if !strings.Contains(alone, "What does this Hebrew mean?") || strings.Contains(alone, "What does “") || strings.Contains(alone, "data-target") || strings.Contains(alone, ">gar<") {
+		t.Fatalf("single-word recall changed:\n%s", alone)
+	}
+	if !strings.Contains(alone, gar) || !strings.Contains(alone, ">lives<") || !strings.Contains(alone, `aria-label="Play `+gar+`"`) {
+		t.Fatalf("single-word recall missing the word, its gloss, or its play button:\n%s", alone)
+	}
+	if strings.Contains(alone, ani) || strings.Contains(alone, po) {
+		t.Fatalf("single-word recall shows the rest of the line:\n%s", alone)
+	}
+}
+
+func TestClipScript(t *testing.T) {
+	b := readStatic(t, "static/js/clips.js")
+	if strings.TrimSpace(b) == "" {
+		t.Fatal("clips.js is empty")
+	}
+	if body := get(t, New(nil, nil), "/static/js/clips.js"); body != b {
+		t.Fatal("served clips.js does not match the file")
+	}
+	for _, bad := range []string{"eval(", "new Function", "innerHTML", "document.write", "onclick", "requestAnimationFrame", ".animate("} {
+		if strings.Contains(b, bad) {
+			t.Errorf("clips.js uses %s", bad)
+		}
+	}
+	for _, need := range []string{`querySelectorAll("audio")`, ".pause()", `closest(".c-orb[data-clip]")`, "prefers-reduced-motion"} {
+		if !strings.Contains(b, need) {
+			t.Errorf("clips.js missing %s", need)
+		}
+	}
+	dlg := readStatic(t, "static/js/dialogue.js")
+	if !strings.Contains(dlg, `querySelectorAll("audio")`) {
+		t.Fatal("playing a dialogue line does not stop other audio")
+	}
+	css := readStatic(t, "static/css/base.css")
+	if !strings.Contains(css, ".clip__fallback") || !strings.Contains(css, "min-block-size: var(--tap)") || !strings.Contains(css, "min-inline-size: var(--tap)") {
+		t.Fatal("the no-JS clip link is not a 44px target")
+	}
+	if strings.Contains(css, "<audio controls") || strings.Contains(css, ".clip__label") {
+		t.Fatal("the squashed native player style is still in the stylesheet")
+	}
+	orb := readStatic(t, "static/css/components.css")
+	if !strings.Contains(orb, ".c-orb") || !strings.Contains(orb, "var(--size-cta)") {
+		t.Fatal("the play orb is no longer the tap-sized control")
 	}
 }
 

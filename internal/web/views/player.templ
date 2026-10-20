@@ -46,12 +46,12 @@ templ ActivityBlock(a Activity) {
 				@dialogueBlock(a.Dialogue)
 			}
 			if a.Audio != "" {
-				@clip(a.Audio)
+				@clip("line-clip", a.Audio, a.AudioLabel, a.AudioHebrew)
 			}
 			if len(a.Words) > 0 {
 				<div class="word-blocks">
-					for _, word := range a.Words {
-						@activityWord(word)
+					for i, word := range a.Words {
+						@activityWord(word, "word-clip-"+Num(i))
 					}
 				</div>
 			}
@@ -75,19 +75,27 @@ templ ActivityBlock(a Activity) {
 					<button type="submit" class="btn btn-primary" name="answer" value="continue">@E(a.Continue)</button>
 				}
 			</form>
+			if hasClip(a) {
+				<script src="/static/js/clips.js" defer></script>
+			}
 		}
 	</div>
 }
 
 // activityWord is one token. A gap is the cloze blank. A visible word uses
-// the shared word block, with any hidden field passed empty.
-templ activityWord(w Word) {
+// the shared word block, with any hidden field passed empty. audioID names
+// the clip element when the word has one. A tested word in a multi-word
+// recall carries data-target, and a note for assistive tech.
+templ activityWord(w Word, audioID string) {
 	if w.Plain {
 		@E(w.Text)
 	} else if w.Gap {
 		<span class="word-block word-block--gap">@E("___")</span>
 	} else {
-		<span class="activity-word">
+		<span class="activity-word" if w.Target { data-target="true" }>
+			if w.Target {
+				<span class="vh" lang="en">@E("This word")</span>
+			}
 			if w.ShowText || w.ShowTranslit || w.ShowGloss {
 				@WordBlock(shown(w.ShowText, w.Text), shown(w.ShowTranslit, w.Translit), shown(w.ShowGloss, w.Gloss), "card", "", !w.ShowGloss)
 			}
@@ -95,7 +103,7 @@ templ activityWord(w Word) {
 				<span class="gchip">@H(GenderLabel(w.Gender))</span>
 			}
 			if w.Audio != "" {
-				@clip(w.Audio)
+				@clip(audioID, w.Audio, "Play "+w.Text, w.Text)
 			}
 		</span>
 	}
@@ -132,7 +140,7 @@ templ dialogueBlock(d *Dialogue) {
 					<div class="dlg__bubble">
 						<div class="word-blocks">
 							for _, word := range line.Words {
-								@activityWord(word)
+								@activityWord(word, "")
 							}
 						</div>
 						if line.Audio != "" {
@@ -147,9 +155,23 @@ templ dialogueBlock(d *Dialogue) {
 	<script src="/static/js/dialogue.js" defer></script>
 }
 
-templ clip(src string) {
+// clip is one recording in the lesson player: the round play button the
+// dialogue lines use, and a link that still opens the file when script does
+// not run. The audio element is not itself a control. label is the button's
+// accessible name, such as "Play אֲנִי" or "Play the line". hebrew is that
+// word when the name includes one, so the fallback can mark it as Hebrew.
+templ clip(id, src, label, hebrew string) {
 	<div class="clip">
-		<p class="clip__label">@E("Play")</p>
-		<audio controls preload="none" src={ src } aria-label="Play"></audio>
+		<audio id={ id } src={ templ.SafeURL(src) } preload="none" aria-hidden="true"></audio>
+		@AudioOrb(label, clipOrbAttrs(id))
+		<noscript>
+			<a class="clip__fallback" href={ templ.SafeURL(src) }>
+				if hebrew != "" {
+					@E("Play ")<bdi lang="he" dir="rtl">{ hebrew }</bdi>
+				} else {
+					{ label }
+				}
+			</a>
+		</noscript>
 	</div>
 }

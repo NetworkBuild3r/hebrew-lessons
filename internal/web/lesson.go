@@ -423,7 +423,10 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	}
 	screen.Activity = p.step(page, lesson, run, act, target, lex, pool, earlier, false)
 	screen.Activity.Audio = phraseAudio(act, run.Phase, clips.phrase)
-	screen.Activity.Words = wordsFor(act, lex, lesson.NewWords, run.Phase, clips)
+	screen.Activity.Words = wordsFor(act, lex, lesson.NewWords, run.Phase, clips, target)
+	if screen.Activity.Audio != "" {
+		screen.Activity.AudioLabel, screen.Activity.AudioHebrew = phrasePlayLabel(act, run.Phase)
+	}
 	return screen, nil
 }
 
@@ -432,7 +435,7 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 	post := lessonPath(lesson.UnitID, lesson.LessonIx)
 	feedback, class := feedbackFor(run)
 	activity := views.Activity{
-		Prompt:        activityPrompt(lesson, act, target, empty),
+		Prompt:        activityPrompt(lesson, act, target, lex, empty),
 		Progress:      progressText(run.ActivityIx, total),
 		Feedback:      feedback,
 		FeedbackClass: class,
@@ -557,8 +560,12 @@ func (p player) targetOf(ctx context.Context, lesson db.CourseLesson, act units.
 	return targetFrom(act, lex, lesson.NewWords)
 }
 
-func wordsFor(act units.Activity, lex map[string]db.LexemeView, newWords []db.LexemeView, phase string, clips clipSet) []views.Word {
-	return wordsForText(act.Text, act.Type, lex, newWords, phase, clips, act.Type == units.ActivityCloze && phase == "ask")
+func wordsFor(act units.Activity, lex map[string]db.LexemeView, newWords []db.LexemeView, phase string, clips clipSet, target db.LexemeView) []views.Word {
+	words := wordsForText(act.Text, act.Type, lex, newWords, phase, clips, act.Type == units.ActivityCloze && phase == "ask")
+	if act.Type == units.ActivityRecall {
+		markRecallTarget(words, lexemeTokenCount(act, lex), target.Text, phase)
+	}
+	return words
 }
 
 // wordsForText is wordsFor for one string of Hebrew: an activity's text, or one
@@ -626,6 +633,9 @@ func visibleFields(typ, phase string) fieldVis {
 	revealed := phase != "ask"
 	switch typ {
 	case units.ActivityRecall:
+		// A single word hides its sound and meaning until the answer.
+		// A line of several words is adjusted afterwards: the tested word
+		// stays hidden, and the other words are shown as help.
 		return fieldVis{text: true, translit: revealed, gloss: revealed}
 	case units.ActivityListenPick, units.ActivityProduce:
 		return fieldVis{text: revealed, translit: revealed, gloss: revealed}
@@ -755,7 +765,67 @@ func choiceLexeme(view db.LexemeView, earlier bool) choices.Lexeme {
 	return choices.Lexeme{ID: view.ID, Text: view.Text, POS: view.POS, Earlier: earlier}
 }
 
-func activityPrompt(lesson db.CourseLesson, act units.Activity, target db.LexemeView, empty bool) string {
+// lexemeTokenCount is how many tokens of the activity are lexicon entries.
+// Punctuation and unknown words are not counted.
+func lexemeTokenCount(act units.Activity, lex map[string]db.LexemeView) int {
+	n := 0
+	for _, tok := range actTokens(act) {
+		if _, ok := lex[tok]; ok {
+			n++
+		}
+	}
+	return n
+}
+
+// markRecallTarget applies the multi-word recall rule. The tested word keeps
+// its transliteration and gloss hidden until the answer, and is marked in the
+// line. Every other word is help, so both show during the ask. After the
+// answer, visibleFields has already turned both on for every word. A recall
+// of one lexeme is left exactly as visibleFields set it.
+func markRecallTarget(words []views.Word, n int, target, phase string) {
+	if n < 2 || target == "" {
+		return
+	}
+	ask := phase == "ask"
+	for i := range words {
+		if words[i].Plain || words[i].Gap {
+			continue
+		}
+		if words[i].Text == target {
+			words[i].Target = true
+			if ask {
+				words[i].ShowTranslit = false
+				words[i].ShowGloss = false
+			}
+			continue
+		}
+		if ask {
+			words[i].ShowTranslit = true
+			words[i].ShowGloss = true
+		}
+	}
+}
+
+// phrasePlayLabel is the accessible name of the line clip, and the one Hebrew
+// word in that name when the line is a single word. While the spelling is
+// hidden, the name is "Play" and does not speak the Hebrew.
+func phrasePlayLabel(act units.Activity, phase string) (label, hebrew string) {
+	if !visibleFields(act.Type, phase).text {
+		return "Play", ""
+	}
+	var he []string
+	for _, tok := range units.Tokenize(act.Text) {
+		if hebrewToken(tok) {
+			he = append(he, tok)
+		}
+	}
+	if len(he) == 1 {
+		return "Play " + he[0], he[0]
+	}
+	return "Play the line", ""
+}
+
+func activityPrompt(lesson db.CourseLesson, act units.Activity, target db.LexemeView, lex map[string]db.LexemeView, empty bool) string {
 	if empty {
 		return "This lesson has nothing to practise."
 	}
@@ -772,6 +842,13 @@ func activityPrompt(lesson db.CourseLesson, act units.Activity, target db.Lexeme
 	case units.ActivityDialogue:
 		return "Listen to the conversation. Tap a line to hear it again."
 	case units.ActivityRecall:
+		// A line of several words is still a question about one word. The
+		// choices are that word's gloss. Naming the word is what makes the
+		// question and the answers about the same thing. A whole-line meaning
+		// question is a different activity.
+		if lexemeTokenCount(act, lex) > 1 && target.Text != "" {
+			return "What does “" + target.Text + "” mean?"
+		}
 		return "What does this Hebrew mean?"
 	case units.ActivityListenPick:
 		return "Listen, then pick the meaning."

@@ -20,11 +20,17 @@ type Screen struct {
 // with the score. Post is the lesson path the form submits to. HomeHref
 // is Today, including a language query when the shell is Hebrew.
 type Activity struct {
-	Done          bool
-	Score         string
-	Prompt        string
-	Progress      string
-	Audio         string
+	Done     bool
+	Score    string
+	Prompt   string
+	Progress string
+	Audio    string
+	// AudioLabel is the accessible name of the line clip, such as "Play the line"
+	// or "Play" while the spelling is hidden. AudioHebrew is the one word in
+	// that name, when the line is a single word and the spelling is shown.
+	// Both are empty when Audio is empty.
+	AudioLabel    string
+	AudioHebrew   string
 	Words         []Word
 	Feedback      string
 	FeedbackClass string
@@ -94,6 +100,26 @@ func dialogueOrbAttrs(i int) templ.Attributes {
 	return templ.Attributes{"data-audio": dialogueClipID(i), "data-dlg-line": Num(i)}
 }
 
+// clipOrbAttrs are the attributes of a lesson clip's play control. data-clip
+// marks it for clips.js, and data-audio names its element so the orb pulses
+// while the clip plays (motion.js).
+func clipOrbAttrs(id string) templ.Attributes {
+	return templ.Attributes{"data-audio": id, "data-clip": "true"}
+}
+
+// hasClip reports whether the step has a line clip or a per-word clip.
+func hasClip(a Activity) bool {
+	if a.Audio != "" {
+		return true
+	}
+	for _, w := range a.Words {
+		if w.Audio != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // Word is one token in an activity. Plain is a number or a Latin token.
 // Gap is the cloze blank. Show* gates the three learner fields: pointed
 // Hebrew, transliteration, and the English gloss.
@@ -108,6 +134,9 @@ type Word struct {
 	ShowGloss    bool
 	Gap          bool
 	Plain        bool
+	// Target is the word a multi-word recall is asking about. The line marks
+	// it, and its transliteration and gloss stay hidden until the answer.
+	Target bool
 }
 
 // shown returns value when the field is visible.
