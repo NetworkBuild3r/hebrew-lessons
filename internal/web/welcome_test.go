@@ -200,16 +200,16 @@ func TestFinishedPlacementOpensTheAppAndShowsHistory(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("%d rows, want 2:\n%s", len(rows), card)
 	}
-	for _, want := range []string{"Retake placement", views.RetakeKeep, "Past results", "Latest", "Placed at Unit 3, Oct 16", "Unit 3: At home", "Unit 2: First words", "Oct 4"} {
+	for _, want := range []string{"Placement", "Retake placement", views.RetakeKeep, "Past results", "Latest", "Unit 3: At home", "Placed Oct 16", "80 words", "40 words", "Oct 4"} {
 		if !strings.Contains(card, want) {
 			t.Errorf("history card missing %q", want)
 		}
 	}
-	if strings.Contains(rows[1], "Latest") || !strings.Contains(rows[0], "Latest") || !strings.Contains(rows[0], "Oct 16") {
-		t.Errorf("Latest is not only on the newest row:\n%s", card)
+	if strings.Contains(rows[1], "Latest") || !strings.Contains(rows[0], "Latest") || !strings.Contains(rows[0], "Oct 16") || !strings.Contains(rows[0], "80 words") || !strings.Contains(rows[1], "40 words") {
+		t.Errorf("Latest or words are not on the right row:\n%s", card)
 	}
-	if strings.Contains(card, "At home,") || strings.Contains(card, "80") || strings.Contains(card, "40") || strings.Contains(card, "Show all") {
-		t.Errorf("status, word count, or Show all leaked:\n%s", card)
+	if strings.Contains(card, "Unit 2: First words") || strings.Contains(card, "Show all") || strings.Contains(card, "Your level") {
+		t.Errorf("history column, Show all, or the old title leaked:\n%s", card)
 	}
 	if strings.Count(card, "Latest") != 1 {
 		t.Errorf("Latest appears %d times", strings.Count(card, "Latest"))
@@ -233,7 +233,7 @@ func TestLessonAttemptsSkipTheWelcome(t *testing.T) {
 		t.Errorf("Today with only lesson attempts has %q", bad)
 	}
 	card := section(t, welcomeGet(t, h, l, "/progress", false).Body.String(), "c-card pplace", "")
-	for _, want := range []string{"No placement yet", "Take placement", `href="/placement"`, "No results yet."} {
+	for _, want := range []string{"Not placed yet", "Take placement", `href="/placement"`, "No results yet."} {
 		if !strings.Contains(card, want) {
 			t.Errorf("unplaced progress missing %q", want)
 		}
@@ -383,7 +383,7 @@ func TestPlacementHistoryShapes(t *testing.T) {
 				t.Fatalf("%d rows, want %d:\n%s", len(rows), wantRows, card)
 			}
 			if tc.n == 0 {
-				for _, want := range []string{"No placement yet", "Take placement", "No results yet."} {
+				for _, want := range []string{"Placement", "Not placed yet", "Take placement", "No results yet."} {
 					if !strings.Contains(card, want) {
 						t.Errorf("empty card missing %q", want)
 					}
@@ -405,8 +405,13 @@ func TestPlacementHistoryShapes(t *testing.T) {
 				t.Error("a placed learner has no retake line")
 			}
 			newestDay := fmt.Sprintf("Oct %d", tc.n)
-			if !strings.Contains(rows[0], newestDay) {
-				t.Errorf("newest row is not %s:\n%s", newestDay, rows[0])
+			words := fmt.Sprintf("%d words", 100+tc.n)
+			unit := fmt.Sprintf("Unit %d", tc.n)
+			if !strings.Contains(rows[0], newestDay) || !strings.Contains(rows[0], words) || !strings.Contains(rows[0], unit) {
+				t.Errorf("newest row is not %s %s %s:\n%s", newestDay, unit, words, rows[0])
+			}
+			if !strings.Contains(card, "Unit "+fmt.Sprint(tc.n)+": At home") || !strings.Contains(card, "Placed "+newestDay) {
+				t.Errorf("status line:\n%s", card)
 			}
 			if tc.n > 3 {
 				if !strings.Contains(card, "Show all (5)") || !strings.Contains(card, `/progress/placements?lang=he&amp;skill=read`) {
@@ -444,8 +449,11 @@ func TestPlacementHistoryYear(t *testing.T) {
 	if strings.Contains(card, "Oct 2, 2026") || !strings.Contains(card, "Oct 2") {
 		t.Errorf("this year printed a year:\n%s", card)
 	}
-	if !strings.Contains(card, "Placed at Unit 2, Oct 2") {
+	if !strings.Contains(card, "Unit 2: Home") || !strings.Contains(card, "Placed Oct 2") {
 		t.Errorf("status:\n%s", card)
+	}
+	if strings.Contains(card, "Placed at Unit") {
+		t.Errorf("old status line:\n%s", card)
 	}
 }
 
@@ -455,24 +463,56 @@ func TestPlacementHistoryEmptyUnitTitle(t *testing.T) {
 	l := addLearner(t, store, "a@example.com", "sub-a", welcomeNow)
 	mem.RecordFinish(l.user.ID, PlacementRun{ID: 1, FinishedAt: welcomeNow.AddDate(0, 0, -1), StartUnit: 4, WordsKnown: 12})
 	card := section(t, welcomeGet(t, h, l, "/progress", false).Body.String(), "c-card pplace", "")
-	if !strings.Contains(card, ">Unit 4</bdi>") {
-		t.Errorf("empty title:\n%s", card)
+	if !strings.Contains(card, ">Unit 4</bdi>") || !strings.Contains(card, "12 words") {
+		t.Errorf("empty title or words:\n%s", card)
 	}
 	if strings.Contains(card, "Unit 4:") {
 		t.Errorf("empty title still has a colon:\n%s", card)
 	}
-	if strings.Contains(card, "12") {
-		t.Errorf("words known is on the row:\n%s", card)
+	when := regexp.MustCompile(`(?s)<p class="pplace__when">.*?</p>`).FindString(card)
+	if !strings.Contains(when, "Placed Oct 17") {
+		t.Errorf("placed line:\n%s", when)
 	}
 
-	mem.RecordFinish(l.user.ID, PlacementRun{ID: 2, FinishedAt: welcomeNow, StartUnit: 4, StartUnitTitle: "At home"})
+	mem.RecordFinish(l.user.ID, PlacementRun{ID: 2, FinishedAt: welcomeNow, StartUnit: 4, StartUnitTitle: "At home", WordsKnown: 20})
 	card = section(t, welcomeGet(t, h, l, "/progress", false).Body.String(), "c-card pplace", "")
-	if !strings.Contains(card, "Unit 4: At home") {
-		t.Errorf("titled unit:\n%s", card)
-	}
 	line := regexp.MustCompile(`(?s)<p class="pplace__line">.*?</p>`).FindString(card)
-	if strings.Contains(line, "At home") || !strings.Contains(line, "Placed at Unit 4, Oct 18") {
-		t.Errorf("status line carries the unit name:\n%s", line)
+	if !strings.Contains(line, "Unit 4: At home") {
+		t.Errorf("status line:\n%s", line)
+	}
+	rows := regexp.MustCompile(`(?s)<li class="pplace__row">.*?</li>`).FindAllString(card, -1)
+	if len(rows) != 2 || !strings.Contains(rows[0], "20 words") || !strings.Contains(rows[0], ">Unit 4</bdi>") || strings.Contains(rows[0], "At home") {
+		t.Errorf("history keeps the title out of the unit column:\n%s", card)
+	}
+	if !strings.Contains(rows[1], "12 words") {
+		t.Errorf("older words:\n%s", rows[1])
+	}
+}
+
+func TestPlacementHistoryShowsWordsKnown(t *testing.T) {
+	mem := newMemOnboard()
+	store, h := openWelcome(t, fixedClock(welcomeNow), mem)
+	l := addLearner(t, store, "a@example.com", "sub-a", welcomeNow)
+	mem.RecordFinish(l.user.ID, PlacementRun{ID: 1, FinishedAt: time.Date(2025, 10, 19, 9, 0, 0, 0, time.UTC), StartUnit: 1, WordsKnown: 7})
+	mem.RecordFinish(l.user.ID, PlacementRun{ID: 2, FinishedAt: time.Date(2026, 10, 19, 9, 0, 0, 0, time.UTC), StartUnit: 3, StartUnitTitle: "At home", WordsKnown: 42})
+	card := section(t, welcomeGet(t, h, l, "/progress", false).Body.String(), "c-card pplace", "")
+	rows := regexp.MustCompile(`(?s)<li class="pplace__row">.*?</li>`).FindAllString(card, -1)
+	if len(rows) != 2 {
+		t.Fatalf("%d rows:\n%s", len(rows), card)
+	}
+	for _, class := range []string{"pplace__date", "pplace__unit", "pplace__words"} {
+		if !strings.Contains(rows[0], class) {
+			t.Errorf("newest row has no %s:\n%s", class, rows[0])
+		}
+	}
+	if !strings.Contains(rows[0], "Oct 19") || strings.Contains(rows[0], "2026") || !strings.Contains(rows[0], ">Unit 3</bdi>") || !strings.Contains(rows[0], "42 words") || !strings.Contains(rows[0], "Latest") {
+		t.Errorf("newest row:\n%s", rows[0])
+	}
+	if strings.Contains(rows[0], "At home") {
+		t.Errorf("the history unit column includes the title:\n%s", rows[0])
+	}
+	if !strings.Contains(rows[1], "Oct 19, 2025") || !strings.Contains(rows[1], "7 words") || strings.Contains(rows[1], "Latest") {
+		t.Errorf("older row:\n%s", rows[1])
 	}
 }
 

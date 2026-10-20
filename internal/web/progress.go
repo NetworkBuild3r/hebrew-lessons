@@ -80,7 +80,6 @@ func (s *server) serveProgress(w http.ResponseWriter, r *http.Request, secure bo
 		Skill:           skill,
 		SkillName:       views.SkillLabel(skill),
 		PlacementStatus: views.PlacedNone,
-		PlacementBody:   views.ChoiceFindBody,
 		PlacementLink:   views.LinkTake,
 		PlacementAll:    r.URL.Path == "/progress/placements",
 	}
@@ -484,10 +483,11 @@ func (s *server) weekWord(ctx context.Context, e db.RegressionRow) (views.WeekWo
 	return w, nil
 }
 
-// fillPlacementHistory fills the level card from Onboarding. Finished runs
-// only, newest first, three on this page unless the path is the full list.
-// A negative StartUnit (a legacy row whose level column is null) has no
-// "Unit {n}" text.
+// fillPlacementHistory fills the placement card from Onboarding. Finished
+// runs only, newest first, three on this page unless the path is the full
+// list. The status line is "Unit {n}: {title}" with "Placed {Mon d}" under
+// it. Each history row is the date, "Unit {n}", and "{n} words". A negative
+// StartUnit (a legacy row whose level column is null) has no "Unit {n}" text.
 func (s *server) fillPlacementHistory(ctx context.Context, userID int64, v *views.ProgressView, now time.Time) error {
 	if s.onboard == nil {
 		return nil
@@ -511,25 +511,26 @@ func (s *server) fillPlacementHistory(ctx context.Context, userID int64, v *view
 	if v.Placed && len(runs) > 0 {
 		v.PlacementLink = views.LinkRetake
 		v.PlacementKeep = views.RetakeKeep
-		v.PlacementBody = ""
 		newest := runs[0]
 		when := dateText(newest.FinishedAt, now)
 		if newest.StartUnit >= 0 {
-			v.PlacementStatus = views.PlacedAtLine(newest.StartUnit, when)
+			v.PlacementStatus = views.UnitLabel(newest.StartUnit, newest.StartUnitTitle)
+			v.PlacementWhen = views.PlacedOn(when)
 		} else {
-			v.PlacementStatus = "Placed " + when
+			v.PlacementStatus = views.PlacedOn(when)
 		}
 	} else {
 		v.PlacementStatus = views.PlacedNone
-		v.PlacementBody = views.ChoiceFindBody
+		v.PlacementWhen = ""
 		v.PlacementLink = views.LinkTake
 		v.PlacementKeep = ""
 	}
 	for i, run := range runs {
 		row := views.PlacementRow{Date: dateText(run.FinishedAt, now), Latest: i == 0}
 		if run.StartUnit >= 0 {
-			row.Unit = views.UnitLabel(run.StartUnit, run.StartUnitTitle)
+			row.Unit = views.UnitLabel(run.StartUnit, "")
 		}
+		row.Words = views.WordsKnownLabel(run.WordsKnown)
 		v.Placement = append(v.Placement, row)
 	}
 	if !all && total > placementPageMax {

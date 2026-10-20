@@ -52,9 +52,21 @@ type Onboarding interface {
 }
 
 // lessonAttempts is not in Backend Dev's signatures. The welcome gate needs
-// it (OnboardedAt is null AND no finished run AND no lesson attempts). The
-// in-memory fake records it. storeOnboard does not, so the gate stays off
-// until a store method exists. See the report.
+// it (OnboardedAt is null AND no finished run AND no lesson attempts).
+// The in-memory fake records it.
+//
+// storeOnboard does not implement it, so the gate stays off on the real
+// store. Nothing already exported answers "any lesson attempt or any
+// lesson completion" without also counting a placement attempt:
+//   - LearnerUnitProgress / CompletedSharedUnits count finished lessons of
+//     published units, not an attempt that never finished a lesson.
+//   - CoachAccuracy.Lessons7d is finished lesson_runs inside a window.
+//   - AttemptTimes and LearnerEvidence count every attempt, including
+//     placement, so an abandoned run would open the gate.
+//   - ListAttempts, InProgressLessonRun, and FinishedLessonScore need a
+//     lexeme or a unit and a lesson index.
+//
+// Backend Dev's HasLessonAttempt is the missing read. Do not add one here.
 type lessonAttempts interface {
 	HasLessonAttempt(ctx context.Context, userID int64) (bool, error)
 }

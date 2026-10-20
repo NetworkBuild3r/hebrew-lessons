@@ -85,9 +85,12 @@ type WeekView struct {
 }
 
 // PlacementRow is one finished placement, newest first.
+// The three columns are the date, "Unit {n}", and "{n} words".
+// The unit title is on the card's status line, not in the row.
 type PlacementRow struct {
 	Date   string // "Oct 19", or "Jan 2, 2006" when the year is not this year
-	Unit   string // "Unit 3: At home", or "Unit 3" when there is no title
+	Unit   string // "Unit 3"
+	Words  string // "42 words"
 	Latest bool
 }
 
@@ -120,10 +123,11 @@ type ProgressView struct {
 	Placement []PlacementRow
 	// Placed is true when the learner has at least one finished run.
 	Placed bool
-	// PlacementStatus is "Placed at Unit {n}, {Mon d}" or "No placement yet".
+	// PlacementStatus is "Unit {n}: {title}", "Unit {n}", or "Not placed yet".
 	PlacementStatus string
-	// PlacementBody is the line under the status when the learner is not placed.
-	PlacementBody string
+	// PlacementWhen is the muted "Placed {Mon d}" under the unit. Empty when
+	// the learner has not been placed.
+	PlacementWhen string
 	// PlacementLink is "Retake placement" or "Take placement".
 	PlacementLink string
 	// PlacementKeep is the reassurance under Retake. Empty unless Placed.

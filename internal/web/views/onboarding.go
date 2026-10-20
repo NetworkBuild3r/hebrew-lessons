@@ -21,23 +21,23 @@ const (
 
 	WelcomeNote = "You can take placement any time from Progress."
 
-	LevelLabel   = "Your level"
-	PlacedNone   = "No placement yet"
-	LinkRetake   = "Retake placement"
-	LinkTake     = "Take placement"
-	RetakeKeep   = "Retaking won’t erase anything you’ve learned."
-	PastResults  = "Past results"
-	LatestTag    = "Latest"
-	NoResultsYet = "No results yet."
-	ResultLede   = "We’ll review anything you missed along the way."
-	ResultBasics = "Start from the basics instead"
-	ResultStart  = "Start"
-	KnewNothingH = "Let’s start from the basics"
-	SkipLabel    = "I don’t know"
-	SkipHint     = "It’s fine to skip. Guessing makes your level less accurate."
-	PathPast     = "Placed past. Its words come back in review."
-	PathStart    = "You start here"
-	PathNext     = "Next"
+	PlacementTitle = "Placement"
+	PlacedNone     = "Not placed yet"
+	LinkRetake     = "Retake placement"
+	LinkTake       = "Take placement"
+	RetakeKeep     = "Retaking won’t erase anything you’ve learned."
+	PastResults    = "Past results"
+	LatestTag      = "Latest"
+	NoResultsYet   = "No results yet."
+	ResultLede     = "We’ll review anything you missed along the way."
+	ResultBasics   = "Start from the basics instead"
+	ResultStart    = "Start"
+	KnewNothingH   = "Let’s start from the basics"
+	SkipLabel      = "I don’t know"
+	SkipHint       = "It’s fine to skip. Guessing makes your level less accurate."
+	PathPast       = "Placed past. Its words come back in review."
+	PathStart      = "You start here"
+	PathNext       = "Next"
 )
 
 // WelcomeMeta is the primary card's meta row. No time estimate: see the
@@ -53,10 +53,14 @@ func UnitLabel(n int, title string) string {
 	return label + ": " + title
 }
 
-// PlacedAtLine is "Placed at Unit {n}, {Mon d}". The unit name is not in
-// this slot; the history row carries UnitLabel.
-func PlacedAtLine(n int, when string) string {
-	return "Placed at Unit " + strconv.Itoa(n) + ", " + when
+// PlacedOn is the muted line under the unit, "Placed {Mon d}".
+func PlacedOn(when string) string {
+	return "Placed " + when
+}
+
+// WordsKnownLabel is the history column "{n} words".
+func WordsKnownLabel(n int) string {
+	return strconv.Itoa(n) + " words"
 }
 
 // ShowAllLabel is "Show all ({n})".

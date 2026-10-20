@@ -18,9 +18,9 @@ templ Progress(v ProgressView) {
 					</p>
 				}
 			</header>
-			@placementCard2(v)
 			if v.Empty {
 				@progressEmpty(v)
+				@placementCard2(v)
 			} else {
 				if v.Weekly != nil {
 					@weeklyCard(v)
@@ -28,6 +28,7 @@ templ Progress(v ProgressView) {
 				@skillTabs(v)
 				<div class="progress__grid" data-motion="stagger">
 					@knowCard(v)
+					@placementCard2(v)
 					@chartCard(v, v.Est)
 					@chartCard(v, v.Retention)
 					@weekCard(v)
@@ -244,20 +245,21 @@ templ weekWord(w WeekWord) {
 	</li>
 }
 
-// placementCard2 is the level card: where the learner was placed, the way
-// back into the test, and the finished runs. The link is quiet text, never
-// a button, and the reassurance sits under Retake only.
+// placementCard2 is the placement card: the unit the learner starts from,
+// the quiet way back into the test, and the finished runs. It sits after
+// the skills overview. The link is quiet text, never a button, and the
+// reassurance sits under Retake only.
 templ placementCard2(v ProgressView) {
 	<section class="c-card pplace" aria-labelledby="place-h">
 		<p class="pplace__label" id="place-h">
 			@IconClass("layers", "icon icon-sm", "")
-			<span>@E(LevelLabel)</span>
+			<span>@E(PlacementTitle)</span>
 		</p>
 		<div class="pplace__top">
 			<div class="pplace__status">
 				<p class="pplace__line">@E(v.PlacementStatus)</p>
-				if v.PlacementBody != "" {
-					<p class="pplace__body">@E(v.PlacementBody)</p>
+				if v.PlacementWhen != "" {
+					<p class="pplace__when">@E(v.PlacementWhen)</p>
 				}
 			</div>
 			<div class="pplace__action">
@@ -287,9 +289,8 @@ templ placementCard2(v ProgressView) {
 								<span class="pplace__latest">@E(LatestTag)</span>
 							}
 						</span>
-						if r.Unit != "" {
-							<span class="pplace__unit">@E(r.Unit)</span>
-						}
+						<span class="pplace__unit">@E(r.Unit)</span>
+						<span class="pplace__words">@E(r.Words)</span>
 					</li>
 				}
 			</ol>
