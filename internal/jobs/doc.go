@@ -48,4 +48,41 @@
 // to compare). A band_slip is not repeated for the same band within 7 days.
 //
 // All times come from internal/clock. The day boundary is the server time zone.
+//
+// # The weekly report (INIT-015/SPEC-023)
+//
+// Weekly.Run writes one weekly_reports row for each learner and each finished week. A week is
+// Monday to Sunday in the server time zone, the same zone the daily job files its days under,
+// so a regression event and a snapshot land in the week their local day says. Minutes studied
+// are counted over the same local days (Monday 00:00 to the next Monday 00:00 local), not over
+// UTC days, so an evening session is not moved a day. The scheduler writes the report on Monday
+// at 04:00, half an hour after the daily job wrote Sunday. A week that has not ended is refused.
+//
+// What the payload holds:
+//
+//   - lost: each regression event of the week (a word that fell from known or solid to
+//     struggling or regressed in one skill), with the cause the daily job stored, and whether
+//     the word is known again at the end of the week;
+//   - gained: each word and skill that was not known at the start and is known or solid now;
+//   - cleared: each word and skill that was struggling at the start and is neither struggling
+//     nor regressed now;
+//   - retention: the mean of the skills' retention on the newest snapshot of the week, against
+//     the fixed 85% target (the learner has no per-learner target in the schema);
+//   - minutes studied: the time spent answering, from attempts (see activeMinutes);
+//   - band slips: the band_slip events of the week.
+//
+// The summary is three plain sentences from templates. No model is called.
+//
+// Gained and cleared words are a comparison, and nothing keeps old per-word states except
+// daily.words.<user>, which holds only the newest. So the weekly job keeps its own copy of the
+// states it ended each report at (job_state key weekly.words.<user>) and compares the next
+// week with it. A first report has nothing to compare with, so it names no gains and says so.
+// The states are those of the newest daily snapshot at the time the report is written, which
+// is Sunday for the scheduled run and later for a catch-up or a back-filled week, and the
+// payload names that day (stateDay). A week written late is therefore not a recomputation of
+// that week. Lost words do not have this limit, because the events carry their own day.
+//
+// Idempotence: a learner with a report for the week is skipped, and the row is only ever
+// inserted. The report, and the move of the baseline, are one transaction. The weekly job
+// takes the daily job's lock, so the two never run at once.
 package jobs

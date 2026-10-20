@@ -22,20 +22,28 @@ const (
 // ErrStopTimeout means the scheduler did not stop within StopTimeout.
 var ErrStopTimeout = errors.New("jobs: scheduler did not stop in time")
 
-// Scheduler runs the daily job at 03:30 in the server time zone, and once at start.
+// Scheduler runs the daily job at 03:30 in the server time zone, and once at start. With
+// WithWeekly it also writes the weekly report on Monday at 04:00 and at start.
 type Scheduler struct {
-	daily *Daily
-	clock clock.Clock
-	loc   *time.Location
-	hour  int
-	min   int
-	after func(time.Duration) <-chan time.Time
-	log   *slog.Logger
-	wait  time.Duration
+	daily  *Daily
+	weekly *Weekly
+	clock  clock.Clock
+	loc    *time.Location
+	hour   int
+	min    int
+	after  func(time.Duration) <-chan time.Time
+	log    *slog.Logger
+	wait   time.Duration
 }
 
 // SchedulerOption changes how NewScheduler builds a Scheduler.
 type SchedulerOption func(*Scheduler)
+
+// WithWeekly adds the weekly report. The scheduler then wakes for the earlier of the next
+// 03:30 and the next Monday 04:00, catches up the daily snapshots at each wake, and then
+// catches up the weekly report, so Sunday's snapshot is always written before the report that
+// needs it. The weekly job must be built on the same daily job as the scheduler.
+func WithWeekly(w *Weekly) SchedulerOption { return func(s *Scheduler) { s.weekly = w } }
 
 // WithWakeTime sets the time of day the scheduler wakes, in the server time zone.
 func WithWakeTime(hour, minute int) SchedulerOption {
@@ -81,17 +89,45 @@ func (s *Scheduler) Next(now time.Time) time.Time {
 // and a run that finds the lock held is skipped.
 func (s *Scheduler) Run(ctx context.Context) error {
 	s.tick(ctx)
+	s.tickWeekly(ctx)
 	for {
 		now := s.clock.Now()
+		wake := s.Next(now)
+		if s.weekly != nil {
+			if w := NextWeekly(now, s.loc); w.Before(wake) {
+				wake = w
+			}
+		}
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-s.after(s.Next(now).Sub(now)):
+		case <-s.after(wake.Sub(now)):
 		}
 		if ctx.Err() != nil {
 			return nil
 		}
 		s.tick(ctx)
+		s.tickWeekly(ctx)
+	}
+}
+
+// tickWeekly catches up the weekly report. It logs counts only.
+func (s *Scheduler) tickWeekly(ctx context.Context) {
+	if s.weekly == nil || ctx.Err() != nil {
+		return
+	}
+	res, err := s.weekly.CatchUp(ctx)
+	switch {
+	case errors.Is(err, ErrLocked):
+		s.log.Info("weekly job: another process holds the lock, skipping")
+	case ctx.Err() != nil:
+		s.log.Info("weekly job: stopped", "written", res.Written)
+	case err != nil:
+		s.log.Error("weekly job failed", "err", err, "week", res.Week, "written", res.Written)
+	default:
+		s.log.Info("weekly job", "week", res.Week, "learners", res.Learners, "written", res.Written,
+			"skipped", res.Skipped, "gained", res.Gained, "lost", res.Lost, "cleared", res.Cleared,
+			"band_slips", res.BandSlips)
 	}
 }
 

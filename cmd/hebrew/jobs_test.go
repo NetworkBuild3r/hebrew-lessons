@@ -111,7 +111,7 @@ func TestJobsCommandRefusesBadInput(t *testing.T) {
 	clk := jobsClock{time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)}
 	for name, args := range map[string][]string{
 		"no job":          {},
-		"unknown job":     {"weekly"},
+		"unknown job":     {"monthly"},
 		"bad day":         {"daily", "--day", "2026-02-30"},
 		"future day":      {"daily", "--day", "2026-10-25"},
 		"extra argument":  {"daily", "extra"},
@@ -121,6 +121,72 @@ func TestJobsCommandRefusesBadInput(t *testing.T) {
 		if err := jobsCommand(args, clk); err == nil {
 			t.Errorf("%s: accepted %v", name, args)
 		}
+	}
+}
+
+// hebrew jobs weekly --week writes the report of that finished week for every learner, in the
+// temporary data directory only, and a second run writes nothing more.
+func TestJobsWeeklyCommandWritesTheReport(t *testing.T) {
+	path := jobsEnv(t)
+	clk := jobsClock{time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)}
+	store, err := db.Open(context.Background(), path, clk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.InsertUser(context.Background(), "a@example.com", "sub-a", "learner"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.InsertUser(context.Background(), "b@example.com", "sub-b", "learner"); err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+
+	if err := jobsCommand([]string{"weekly", "--week", "2026-10-12"}, clk); err != nil {
+		t.Fatal(err)
+	}
+	if n := countRows(t, path, `SELECT COUNT(*) FROM weekly_reports WHERE week_start = '2026-10-12'`); n != 2 {
+		t.Fatalf("%d reports, want 2", n)
+	}
+	if err := jobsCommand([]string{"weekly", "--week", "2026-10-12"}, clk); err != nil {
+		t.Fatal(err)
+	}
+	if n := countRows(t, path, `SELECT COUNT(*) FROM weekly_reports`); n != 2 {
+		t.Fatalf("%d reports after a second run, want 2", n)
+	}
+	// Without --week it writes the last finished week, which on the 26th is the week of the 19th.
+	clk = jobsClock{time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)}
+	if err := jobsCommand([]string{"weekly"}, clk); err != nil {
+		t.Fatal(err)
+	}
+	if n := countRows(t, path, `SELECT COUNT(*) FROM weekly_reports WHERE week_start = '2026-10-19'`); n != 2 {
+		t.Fatalf("%d reports for the 19th, want 2", n)
+	}
+	if n := countRows(t, path, `SELECT COUNT(*) FROM job_state WHERE key = 'daily.lock'`); n != 0 {
+		t.Fatal("the lock was left behind")
+	}
+}
+
+func TestJobsWeeklyRefusesBadInput(t *testing.T) {
+	path := jobsEnv(t)
+	clk := jobsClock{time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)}
+	for name, args := range map[string][]string{
+		"not a date":      {"weekly", "--week", "2026-02-30"},
+		"garbage":         {"weekly", "--week", "last-week"},
+		"a Tuesday":       {"weekly", "--week", "2026-10-13"},
+		"an open week":    {"weekly", "--week", "2026-10-19"},
+		"a future week":   {"weekly", "--week", "2026-10-26"},
+		"with a time":     {"weekly", "--week", "2026-10-12T00:00:00Z"},
+		"the daily flag":  {"weekly", "--day", "2026-10-12"},
+		"extra argument":  {"weekly", "extra"},
+		"unknown flag":    {"weekly", "--net", "x"},
+		"daily with week": {"daily", "--week", "2026-10-12"},
+	} {
+		if err := jobsCommand(args, clk); err == nil {
+			t.Errorf("%s: accepted %v", name, args)
+		}
+	}
+	if n := countRows(t, path, `SELECT COUNT(*) FROM weekly_reports`); n != 0 {
+		t.Fatalf("%d reports after refused runs", n)
 	}
 }
 
