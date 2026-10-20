@@ -283,7 +283,8 @@ func (p player) writePlaying(w http.ResponseWriter, r *http.Request, page views.
 
 func (p player) writeScreen(w http.ResponseWriter, r *http.Request, page views.Page, screen views.Screen, partial bool) {
 	if partial {
-		render(w, r, views.ActivityBlock(screen.Activity))
+		// The whole frame comes back, so the progress bar and the outline move with the step.
+		render(w, r, views.LessonFrameView(page, screen))
 		return
 	}
 	render(w, r, views.Lesson(page, screen))
@@ -300,7 +301,59 @@ func (p player) learnerID(r *http.Request) (int64, bool) {
 	return user.ID, true
 }
 
+// screenFor is the screen for one run: the step, and the frame around it.
 func (p player) screenFor(ctx context.Context, page views.Page, lesson db.CourseLesson, run db.PlayerRun) (views.Screen, error) {
+	screen, err := p.stepScreen(ctx, page, lesson, run)
+	if err != nil {
+		return views.Screen{}, err
+	}
+	screen.Frame = frameFor(page, lesson, run, screen.Activity.Done)
+	return screen, nil
+}
+
+// frameFor is the lesson frame: the bar, the step's name, and the outline. It holds
+// labels and counts only. Activity types become learner names, so no internal name shows.
+func frameFor(page views.Page, lesson db.CourseLesson, run db.PlayerRun, done bool) views.LessonFrame {
+	total := len(lesson.Activities)
+	f := views.LessonFrame{
+		UnitID:       lesson.UnitID,
+		Total:        max(total, 1),
+		BackHref:     page.Href("/"),
+		ReportHref:   page.Href(views.ReportPath(lesson.UnitID)),
+		ReportAction: views.ReportPath(lesson.UnitID),
+		CSRF:         page.CSRF,
+	}
+	for _, act := range lesson.Activities {
+		f.Outline = append(f.Outline, views.OutlineStep{Label: views.LessonLabel(act.Type), State: "todo"})
+	}
+	if done || run.Finished || (total > 0 && run.ActivityIx >= total) {
+		f.Done, f.Step, f.Value, f.Kind = true, f.Total, f.Total, "All done"
+		for i := range f.Outline {
+			f.Outline[i].State = "done"
+		}
+		return f
+	}
+	f.Step = min(max(run.ActivityIx, 0)+1, f.Total)
+	f.Value = f.Step - 1
+	if run.Phase == "reveal" {
+		f.Value = f.Step
+	}
+	f.Kind = "Practice"
+	if total > 0 {
+		f.Kind = views.LessonLabel(lesson.Activities[run.ActivityIx].Type)
+		for i := range f.Outline {
+			switch {
+			case i < run.ActivityIx:
+				f.Outline[i].State = "done"
+			case i == run.ActivityIx:
+				f.Outline[i].State = "current"
+			}
+		}
+	}
+	return f
+}
+
+func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.CourseLesson, run db.PlayerRun) (views.Screen, error) {
 	gloss, err := titleGloss(ctx, p.store, lesson.Title)
 	if err != nil {
 		return views.Screen{}, err
@@ -661,6 +714,7 @@ func doneScreen(page views.Page, lesson db.CourseLesson, score float64) views.Sc
 		Title:     lesson.Title,
 		Situation: lesson.Situation,
 		Activity:  doneActivity(page, score),
+		Frame:     frameFor(page, lesson, db.PlayerRun{Finished: true}, true),
 	}
 }
 

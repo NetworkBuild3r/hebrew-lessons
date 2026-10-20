@@ -14,6 +14,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
@@ -35,6 +36,8 @@ type server struct {
 	engine   *activity.Engine
 	deck     placementDeck
 	runs     placementRuns
+	recheck  PlacementEngine
+	bands    learner.BandSource
 
 	mu     sync.Mutex
 	queues map[string]*studyQueue
@@ -177,11 +180,21 @@ func (s *server) unitProgress(ctx context.Context, userID int64) (*UnitRefVM, st
 	for _, unit := range done {
 		finished[unit.UnitID] = true
 	}
+	// A shared unit the learner reported is hidden for them: it is not next, and it does
+	// not count in their totals.
+	reported, err := s.store.HiddenUnitIDs(ctx, userID)
+	if err != nil {
+		return nil, "", 0, 0, err
+	}
+	hidden := map[int64]bool{}
+	for _, id := range reported {
+		hidden[id] = true
+	}
 	var next *UnitRefVM
 	situation := ""
 	completed, total := 0, 0
 	for _, unit := range units {
-		if unit.Scope != "shared" || unit.Status != "published" {
+		if unit.Scope != "shared" || unit.Status != "published" || hidden[unit.ID] {
 			continue
 		}
 		total++

@@ -57,8 +57,9 @@ const playerRunColumns = `id, user_id, unit_id, lesson_ix, activity_ix, correct_
 
 // NextCourseLesson is the unfinished lesson of the earliest published unit
 // in this learner's scope. Scope is shared, or learner:<id> for this id.
-// Drafts and another learner's units are left out. A unit with no lessons
-// is skipped. ok is false when every published lesson in scope is finished.
+// Drafts and another learner's units are left out, and so is a unit this
+// learner reported (unit_reports), which is hidden for them. A unit with no
+// lessons is skipped. ok is false when every published lesson in scope is finished.
 func (s *Store) NextCourseLesson(ctx context.Context, learnerID int64) (CourseLesson, bool, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -68,7 +69,8 @@ func (s *Store) NextCourseLesson(ctx context.Context, learnerID int64) (CourseLe
 		SELECT id, position, title, situation, concept, doc, scope
 		FROM units
 		WHERE status = 'published' AND (scope = 'shared' OR scope = ?)
-		ORDER BY position, id`, fmt.Sprintf("learner:%d", learnerID))
+		  AND id NOT IN (SELECT unit_id FROM unit_reports WHERE user_id = ?)
+		ORDER BY position, id`, fmt.Sprintf("learner:%d", learnerID), learnerID)
 	if err != nil {
 		return CourseLesson{}, false, fmt.Errorf("db: next lesson: %w", err)
 	}
@@ -124,8 +126,8 @@ func (s *Store) NextCourseLesson(ctx context.Context, learnerID int64) (CourseLe
 }
 
 // CourseLesson reads one published lesson in this learner's scope.
-// A draft, another learner's unit, a missing unit, or a lesson index past
-// the end is ErrNotFound.
+// A draft, another learner's unit, a unit this learner reported, a missing
+// unit, or a lesson index past the end is ErrNotFound.
 func (s *Store) CourseLesson(ctx context.Context, learnerID, unitID int64, lessonIx int) (CourseLesson, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -145,8 +147,9 @@ func (s *Store) CourseLesson(ctx context.Context, learnerID, unitID int64, lesso
 	err = conn.QueryRowContext(ctx, `
 		SELECT position, title, situation, concept, doc, scope
 		FROM units
-		WHERE id = ? AND status = 'published' AND (scope = 'shared' OR scope = ?)`,
-		unitID, fmt.Sprintf("learner:%d", learnerID),
+		WHERE id = ? AND status = 'published' AND (scope = 'shared' OR scope = ?)
+		  AND id NOT IN (SELECT unit_id FROM unit_reports WHERE user_id = ?)`,
+		unitID, fmt.Sprintf("learner:%d", learnerID), learnerID,
 	).Scan(&item.position, &item.title, &item.situation, &item.concept, &item.doc, &item.scope)
 	if errors.Is(err, sql.ErrNoRows) {
 		return CourseLesson{}, fmt.Errorf("db: unit %d: %w", unitID, ErrNotFound)

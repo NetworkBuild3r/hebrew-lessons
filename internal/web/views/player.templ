@@ -1,12 +1,13 @@
 package views
 
 // Lesson is the player. An empty screen says no lesson is published.
-// A lesson shows one activity. htmx swaps #activity; the shell stays.
+// A lesson shows one activity inside the lesson frame (lessonframe.templ).
+// htmx swaps #lesson-frame; the shell stays.
 templ Lesson(p Page, s Screen) {
 	@Layout(p) {
-		<article class="sheet lesson-player">
-			<h1 lang={ p.Lang }>{ p.LessonHeading }</h1>
-			if s.Empty {
+		if s.Empty {
+			<article class="sheet lesson-player">
+				<h1 lang={ p.Lang }>{ p.LessonHeading }</h1>
 				<section class="quiet-card quiet-card--next">
 					<p class="eyebrow" lang={ p.Lang }>{ p.NextKicker }</p>
 					@Icon("lessons", "")
@@ -16,26 +17,19 @@ templ Lesson(p Page, s Screen) {
 					<p class="quiet-card__hint">
 						@Pair(p.Lang, p.NoneMoreHE, p.NoneMoreEN)
 					</p>
+					<a class="btn btn-tonal" href={ templ.SafeURL(p.Href("/progress")) }>
+						<span>@uiRun(p.Lang, p.Progress)</span>
+					</a>
 				</section>
-			} else {
-				<header class="lesson-player__head">
-					<h2 class="unit-title">
-						@H(s.Title)
-						if s.Gloss != "" {
-							<span class="unit-gloss">@E(s.Gloss)</span>
-						}
-					</h2>
-					if s.Situation != "" {
-						@Situation(s.Situation)
-					}
-				</header>
-				@ActivityBlock(s.Activity)
-			}
-		</article>
+			</article>
+		} else {
+			@LessonFrameView(p, s)
+		}
 	}
 }
 
-// ActivityBlock is the step htmx swaps. The completion panel uses the same id.
+// ActivityBlock is the step inside the lesson frame. The completion panel uses the same id.
+// An answer is a c-answer button: it posts the form, and the frame comes back swapped.
 templ ActivityBlock(a Activity) {
 	<div id="activity" class="activity">
 		if a.Done {
@@ -45,9 +39,6 @@ templ ActivityBlock(a Activity) {
 			}
 			<a class="btn btn-primary" href={ templ.SafeURL(a.HomeHref) }>@E("Back to Today")</a>
 		} else {
-			if a.Progress != "" {
-				<p class="eyebrow" lang="en">@E(a.Progress)</p>
-			}
 			if a.Prompt != "" {
 				<p class="lede" lang="en">@E(a.Prompt)</p>
 			}
@@ -61,16 +52,20 @@ templ ActivityBlock(a Activity) {
 					}
 				</div>
 			}
-			if a.Feedback != "" {
-				<p class={ a.FeedbackClass } lang="en">@E(a.Feedback)</p>
-			}
-			<form method="post" action={ templ.SafeURL(a.Post) } hx-post={ a.Post } hx-target="#activity" hx-swap="outerHTML" hx-boost="false">
+			<form method="post" action={ templ.SafeURL(a.Post) } hx-post={ a.Post } hx-target="#lesson-frame" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
 				<input type="hidden" name="_csrf" value={ a.CSRF }/>
 				<input type="hidden" name="run" value={ a.Run }/>
 				if a.Asking {
 					<div class="choices">
-						for _, choice := range a.Choices {
-							@choiceButton(choice)
+						for i, choice := range a.Choices {
+							@choiceButton(choice, i)
+						}
+					</div>
+				} else if a.Feedback != "" {
+					<div class="lf-result">
+						@Sheet("Answer") {
+							<p class={ a.FeedbackClass } lang="en">@E(a.Feedback)</p>
+							<button type="submit" class="btn btn-primary" name="answer" value="continue" autofocus>@E(a.Continue)</button>
 						}
 					</div>
 				} else {
@@ -103,14 +98,16 @@ templ activityWord(w Word) {
 	}
 }
 
-templ choiceButton(c Choice) {
-	<button type="submit" class="choice" name="answer" value={ c.Value }>
+// choiceButton is one answer: a c-answer submit button, key 1 to 4. Its value is the
+// lexeme id, never the pointed text.
+templ choiceButton(c Choice, i int) {
+	@AnswerOptionWith(AnswerDefault, Num(i+1), templ.Attributes{"type": "submit", "name": "answer", "value": c.Value}) {
 		if c.Hebrew {
 			@WordBlock(c.Text, c.Translit, "", "chip", "", true)
 		} else {
 			@E(c.Label)
 		}
-	</button>
+	}
 }
 
 templ clip(src string) {

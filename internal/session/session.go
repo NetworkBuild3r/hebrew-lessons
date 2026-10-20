@@ -145,6 +145,24 @@ func (s *Session) UserID() int64 {
 // now is read once and passed to every load, including the learner model.
 // The caller checks that userID is the signed-in learner.
 func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, error) {
+	return s.build(ctx, userID, nil)
+}
+
+// BuildSessionFor is BuildSession for a review set: only the cards of the given words are
+// queued, and no letter or pattern drill is woven in. The mix is the same, so the cap, the
+// known and struggle shares and the activity choice still apply. A word with no card
+// leaves nothing to queue, and an empty set builds an empty session. This is what the
+// band-slip alert on Today links to (INIT-015/SPEC-017).
+func (s *Service) BuildSessionFor(ctx context.Context, userID int64, lexemeIDs []int64) (*Session, error) {
+	only := make(map[int64]struct{}, len(lexemeIDs))
+	for _, id := range lexemeIDs {
+		only[id] = struct{}{}
+	}
+	return s.build(ctx, userID, only)
+}
+
+// build is BuildSession. only, when not nil, keeps the cards of those words and no drill.
+func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct{}) (*Session, error) {
 	if err := s.ready(); err != nil {
 		return nil, err
 	}
@@ -152,6 +170,12 @@ func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, err
 	cards, err := s.store.ListStudyCards(ctx, userID, now, now.Add(-ConfusionWindow))
 	if err != nil {
 		return nil, err
+	}
+	if only != nil {
+		cards = slices.DeleteFunc(cards, func(c db.StudyCard) bool {
+			_, keep := only[c.LexemeID]
+			return !keep
+		})
 	}
 	ratings, err := s.store.RecentReviewRatings(ctx, userID, now, RecentReviews)
 	if err != nil {
@@ -210,7 +234,9 @@ func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, err
 			Exposed:       w.Exposures > 0,
 		})
 	}
-	cands = append(cands, drillCandidates(pairs)...)
+	if only == nil {
+		cands = append(cands, drillCandidates(pairs)...)
+	}
 	record := s.record
 	return &Session{
 		userID: userID,

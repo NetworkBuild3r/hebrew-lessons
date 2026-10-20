@@ -16,6 +16,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 	"github.com/a-h/templ"
@@ -57,8 +58,13 @@ type Options struct {
 	// derived from it (activity.KeyFromSecret), so a token cannot be forged and one
 	// issued before a restart still verifies. Empty gives a random key per process.
 	SessionSecret string
+	// Placement is the placement engine, for the check-in on Today. Nil leaves the
+	// check-in off. See PlacementEngine.
+	Placement PlacementEngine
 	// study replaces the review session service. It is for tests in this package.
 	study *session.Service
+	// bands replaces where the learner model gets placement bands. For tests.
+	bands learner.BandSource
 }
 
 // NewOptions is New with the lesson store, the audio directory, and placement.
@@ -113,6 +119,8 @@ func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.
 	srv.audioDir = opts.AudioDir
 	srv.deck = opts.Deck
 	srv.runs = opts.Runs
+	srv.recheck = opts.Placement
+	srv.bands = opts.bands
 	mux := srv.routes(health, tokens, sessions != nil, secure)
 	if sessions != nil {
 		sessions.Register(mux)
@@ -172,6 +180,7 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 	mux.HandleFunc("POST /_hx/review/answer", gated(gate, secure, s.answer))
 	mux.HandleFunc("POST /_hx/review/next", gated(gate, secure, s.next))
 	mountPlacement(mux, tokens, gate, secure, s.deck, s.runs)
+	s.mountShell(mux, tokens, gate, secure)
 	mux.HandleFunc("GET /signin", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := auth.CurrentUser(r.Context()); ok {
 			w.Header().Set("Cache-Control", "no-store")
@@ -253,6 +262,7 @@ func (s *server) serveHome(w http.ResponseWriter, r *http.Request, secure bool, 
 				})
 			}
 		}
+		s.fillToday(r, &page)
 		render(w, r, views.Today(page))
 		return
 	}
@@ -265,6 +275,7 @@ func (s *server) serveHome(w http.ResponseWriter, r *http.Request, secure bool, 
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+	s.fillToday(r, &page)
 	render(w, r, views.Today(page))
 }
 
@@ -299,6 +310,16 @@ func (s *server) applyCourseLesson(r *http.Request, home *views.Home) error {
 	home.LessonHref = lessonPath(lesson.UnitID, lesson.LessonIx)
 	home.UI.Situation = lesson.Situation
 	home.Words = chipsFor(lesson.NewWords)
+	// A lesson the learner has answered something in is one to continue, not to start.
+	run, started, err := s.store.InProgressLessonRun(r.Context(), user.ID, lesson.UnitID, lesson.LessonIx)
+	if err != nil {
+		return err
+	}
+	if started {
+		total := max(len(lesson.Activities), 1)
+		home.Today.Step = min(run.ActivityIx+1, total)
+		home.Today.Steps = total
+	}
 	return nil
 }
 

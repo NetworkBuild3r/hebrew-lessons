@@ -285,6 +285,8 @@ func NewApp(cfg Config) (*App, error) {
 		Runs:     store,
 		// The activity item tokens are signed with a key derived from this secret.
 		SessionSecret: cfg.StateSecret,
+		// Today offers the check-in when the engine says it is due (INIT-015/SPEC-017).
+		Placement: placement.NewEngine(store, nil, cfg.Clock),
 	})
 	a.mcp = newMCP(cfg, health, svc, store, tts, audioDir)
 	sweepCtx, stop := context.WithCancel(context.Background())
