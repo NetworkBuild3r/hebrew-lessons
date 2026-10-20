@@ -208,8 +208,8 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 			serverError(w)
 			return
 		}
-		// Fewer than two options is a reveal, not a question. Continue advances.
-		if n < 2 {
+		// Fewer than three options is a reveal, not a question. Continue advances.
+		if n < lessonMinChoices {
 			graded = false
 		}
 	}
@@ -434,7 +434,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	}
 	screen.Activity = p.step(page, lesson, run, act, target, lex, pool, earlier, false)
 	phase := run.Phase
-	// A recall or cloze that cannot find a second option is not a graded ask.
+	// A recall or cloze that cannot find three options is not a graded ask.
 	// Show the word the way a reveal does, and let Continue move on.
 	if recallOrCloze(act.Type) && run.Phase == "ask" && target.ID != 0 && !screen.Activity.Asking {
 		phase = "reveal"
@@ -739,6 +739,9 @@ func gapToken(tokens []string, lex map[string]db.LexemeView, newWords []db.Lexem
 const (
 	lessonChoiceButtons = 3
 	lessonWideChoices   = 4
+	// lessonMinChoices is the smallest graded recall or cloze. Four is the
+	// target. Fewer than three is a reveal with Continue.
+	lessonMinChoices = 3
 )
 
 func recallOrCloze(typ string) bool {
@@ -746,7 +749,7 @@ func recallOrCloze(typ string) bool {
 }
 
 // askChoiceCount is how many buttons this ask would render. The post path
-// uses it so a recall or cloze that cannot reach two options is not graded.
+// uses it so a recall or cloze that cannot reach three options is not graded.
 func (p player) askChoiceCount(ctx context.Context, userID int64, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView) (int, error) {
 	lex, err := p.store.LexemesByText(ctx, actTokens(act))
 	if err != nil {
@@ -780,8 +783,9 @@ func choiceSeed(run db.PlayerRun, target db.LexemeView) choices.ChoiceSeed {
 //  3. any other part of speech, outside the line (unit, then earlier)
 //  4. the line's other words, only when the tiers above are short
 //
-// A distractor whose gloss equals the answer is never used. Fewer than two
-// buttons is not an ask: the caller shows a reveal instead.
+// A distractor whose gloss equals the answer is never used, and two buttons
+// never share a gloss. Fewer than three buttons is not an ask: the caller
+// shows a reveal instead.
 func askChoices(typ string, unit, earlier []db.LexemeView, target db.LexemeView, seed choices.ChoiceSeed, block choiceExclude) []views.Choice {
 	hebrew := typ == units.ActivityProduce || typ == units.ActivityCloze
 	if !recallOrCloze(typ) {
@@ -792,15 +796,20 @@ func askChoices(typ string, unit, earlier []db.LexemeView, target db.LexemeView,
 
 // wideChoices fills a recall or cloze ask. Same part of speech from outside
 // the line comes first (this unit, then earlier units). Other parts of speech
-// from outside the line are next. The line's own words are the last resort.
-// The answer's gloss is never repeated on another button. The result is nil
-// when a second option cannot be found.
+// from outside the line are next. The line's own words are the last resort,
+// and only once every outside tier is used up. The answer's gloss is never
+// repeated, and neither is any other gloss. The result is nil when three
+// buttons cannot be filled.
 func wideChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed choices.ChoiceSeed, hebrew, translit bool, block choiceExclude) []views.Choice {
 	if target.ID == 0 {
 		return nil
 	}
 	want := lessonWideChoices - 1
 	seen := map[int64]bool{target.ID: true}
+	usedGloss := map[string]bool{}
+	if key := glossKey(target.Gloss); key != "" {
+		usedGloss[key] = true
+	}
 	var distractors []db.LexemeView
 	tiers := [][]db.LexemeView{
 		outsideTier(unit, target, hebrew, block, true),
@@ -818,17 +827,27 @@ func wideChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed choic
 			if seen[lex.ID] {
 				continue
 			}
+			if key := glossKey(lex.Gloss); key != "" && usedGloss[key] {
+				continue
+			}
 			fresh = append(fresh, lex)
 		}
 		for _, lex := range takeDistractors(seed, target, fresh, want-len(distractors)) {
 			if seen[lex.ID] {
 				continue
 			}
+			key := glossKey(lex.Gloss)
+			if key != "" && usedGloss[key] {
+				continue
+			}
 			seen[lex.ID] = true
+			if key != "" {
+				usedGloss[key] = true
+			}
 			distractors = append(distractors, lex)
 		}
 	}
-	if len(distractors) < 1 {
+	if len(distractors) < lessonMinChoices-1 {
 		return nil
 	}
 	return lessonViews(shuffleWithTarget(seed, target, distractors), hebrew, translit)

@@ -55,10 +55,12 @@ func TestLessonPlayer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	const evening = "עֶרֶב"
 	sp := func(s string) *string { return &s }
 	saved, _, err := store.UpsertLexemes(ctx, []lexicon.Input{
 		{TextNFC: hello, Gloss: "hello", Translit: sp("shalom"), Gender: sp("m"), POS: sp("noun")},
 		{TextNFC: morning, Gloss: "morning", Translit: sp("boker"), Gender: sp("m"), POS: sp("noun")},
+		{TextNFC: evening, Gloss: "evening", Translit: sp("erev"), Gender: sp("m"), POS: sp("noun")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -87,7 +89,7 @@ func TestLessonPlayer(t *testing.T) {
 		Title: "Shared hello", Situation: "Saying hello.", Concept: "Greeting", Position: 2,
 		NewWords: []string{hello, morning},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
-			{Type: units.ActivityStory, Text: hello + " " + morning},
+			{Type: units.ActivityStory, Text: hello + " " + morning + " " + evening},
 			{Type: units.ActivityRecall, Text: hello},
 		}}},
 	}, "shared")
@@ -102,7 +104,7 @@ func TestLessonPlayer(t *testing.T) {
 	phraseID := strings.Repeat("ab", 32)
 	wordID := strings.Repeat("cd", 32)
 	if _, err := store.InsertAudio(ctx, db.Asset{
-		ID: phraseID, TextNFC: units.Normalize(hello + " " + morning), Voice: "voice", Model: "eleven_v4", Bytes: 4,
+		ID: phraseID, TextNFC: units.Normalize(hello + " " + morning + " " + evening), Voice: "voice", Model: "eleven_v4", Bytes: 4,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -346,9 +348,11 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 		t.Fatal(err)
 	}
 	sp := func(s string) *string { return &s }
+	const evening = "עֶרֶב"
 	saved, _, err := store.UpsertLexemes(ctx, []lexicon.Input{
 		{TextNFC: hello, Gloss: "hello", Translit: sp("shalom"), Gender: sp("m"), POS: sp("noun")},
 		{TextNFC: morning, Gloss: "morning", Translit: sp("boker"), Gender: sp("m"), POS: sp("noun")},
+		{TextNFC: evening, Gloss: "evening", Translit: sp("erev"), Gender: sp("m"), POS: sp("noun")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -365,6 +369,7 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 			{Type: units.ActivityListenPick, Text: line},
 			{Type: units.ActivityProduce, Text: hello},
 			{Type: units.ActivityCloze, Text: line},
+			{Type: units.ActivityStory, Text: evening},
 		}}},
 	}, "shared")
 	publish(t, store, unitID)
@@ -603,8 +608,8 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	// This unit has no word outside the line, so the other parts of speech
 	// on the line fill the ask. One button, the answer alone, is not a question.
 	gotChoices := choiceValues(t, ask)
-	if len(gotChoices) < 2 {
-		t.Fatalf("tiny recall rendered %d buttons, want at least 2:\n%s", len(gotChoices), choices)
+	if len(gotChoices) < lessonMinChoices {
+		t.Fatalf("tiny recall rendered %d buttons, want at least %d:\n%s", len(gotChoices), lessonMinChoices, choices)
 	}
 	if !slicesContains(gotChoices, itoa(ids[gar])) {
 		t.Fatalf("the answer is not a button: %v", gotChoices)
@@ -684,8 +689,8 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 		t.Fatalf("single-word recall shows the rest of the line:\n%s", alone)
 	}
 	aloneChoices := choiceValues(t, alone)
-	if len(aloneChoices) < 2 {
-		t.Fatalf("single-word recall rendered %d buttons, want more than 1: %v", len(aloneChoices), aloneChoices)
+	if len(aloneChoices) < lessonMinChoices {
+		t.Fatalf("single-word recall rendered %d buttons, want at least %d: %v", len(aloneChoices), lessonMinChoices, aloneChoices)
 	}
 }
 
@@ -981,26 +986,31 @@ func TestRecallTargetMarksALaterWord(t *testing.T) {
 	if strings.Contains(head, ">here<") || strings.Contains(head, ">po<") {
 		t.Fatalf("the named target shows its gloss or transliteration:\n%s", head)
 	}
-	if len(choiceValues(t, ask)) < 2 {
-		t.Fatal("the named-target recall has fewer than 2 buttons")
+	if len(choiceValues(t, ask)) < lessonMinChoices {
+		t.Fatal("the named-target recall has fewer than 3 buttons")
 	}
 }
 
-// One lexicon word cannot fill a second button. The step shows the gloss
-// and Continue, and posting Continue moves on without a grade.
+// Fewer than three buttons is a reveal. Two lexicon words cannot fill a
+// third button. The step shows the gloss and Continue, and posting Continue
+// moves on without a grade.
 func TestRecallDegradesWithoutASecondChoice(t *testing.T) {
-	const gar = "גָּר"
+	const (
+		gar = "גָּר"
+		po  = "פֹּה"
+	)
 	fx := openLessonPlayer(t)
 	sp := func(s string) *string { return &s }
 	if _, _, err := fx.store.UpsertLexemes(fx.ctx, []lexicon.Input{
 		{TextNFC: gar, Gloss: "lives", Translit: sp("gar"), POS: sp("verb")},
+		{TextNFC: po, Gloss: "here", Translit: sp("po"), POS: sp("adv")},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	unitID := putLesson(t, fx.store, nil, units.Unit{
 		Title: "Alone", Position: 1, NewWords: []string{gar},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
-			{Type: units.ActivityRecall, Text: gar},
+			{Type: units.ActivityRecall, Text: gar + " " + po, Target: gar},
 		}}},
 	}, "shared")
 	publish(t, fx.store, unitID)

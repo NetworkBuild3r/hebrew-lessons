@@ -41,9 +41,11 @@ func TestLessonChecksWriteAttempts(t *testing.T) {
 		t.Fatal(err)
 	}
 	sp := func(s string) *string { return &s }
+	const evening = "עֶרֶב"
 	saved, _, err := store.UpsertLexemes(ctx, []lexicon.Input{
 		{TextNFC: hello, Gloss: "hello", Translit: sp("shalom"), Gender: sp("m"), POS: sp("noun")},
 		{TextNFC: morning, Gloss: "morning", Translit: sp("boker"), Gender: sp("m"), POS: sp("noun")},
+		{TextNFC: evening, Gloss: "evening", Translit: sp("erev"), Gender: sp("m"), POS: sp("noun")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -61,7 +63,7 @@ func TestLessonChecksWriteAttempts(t *testing.T) {
 			{Type: units.ActivityListenPick, Text: line},
 			{Type: units.ActivityProduce, Text: hello},
 			{Type: units.ActivityCloze, Text: line},
-			{Type: units.ActivityStory, Text: line},
+			{Type: units.ActivityStory, Text: line + " " + evening},
 		}}},
 	}, "shared")
 	publish(t, store, unitID)
@@ -177,10 +179,14 @@ func TestLessonForgedAnswerIsStoredBounded(t *testing.T) {
 		t.Fatal(err)
 	}
 	sp := func(s string) *string { return &s }
-	const other = "בֹּקֶר"
+	const (
+		other   = "בֹּקֶר"
+		evening = "עֶרֶב"
+	)
 	saved, _, err := store.UpsertLexemes(ctx, []lexicon.Input{
 		{TextNFC: hello, Gloss: "hello", Translit: sp("shalom"), Gender: sp("m"), POS: sp("noun")},
 		{TextNFC: other, Gloss: "morning", Translit: sp("boker"), Gender: sp("m"), POS: sp("noun")},
+		{TextNFC: evening, Gloss: "evening", Translit: sp("erev"), Gender: sp("m"), POS: sp("noun")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -190,6 +196,7 @@ func TestLessonForgedAnswerIsStoredBounded(t *testing.T) {
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityRecall, Text: hello},
 			{Type: units.ActivityRecall, Text: other},
+			{Type: units.ActivityRecall, Text: evening},
 		}}},
 	}, "shared")
 	publish(t, store, unitID)
