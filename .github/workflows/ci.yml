@@ -1,0 +1,523 @@
+# hebrew v3. Publishes ghcr.io/networkbuild3r/hebrew only.
+# Never ghcr.io/networkbuild3r/hebrew-lessons: Argo Image Updater deploys
+# the newest sha- tag of that image to production.
+#
+# v3 is the line that publishes (ADR-0018, D6). v2 is frozen and no longer
+# publishes. Only one branch may publish sha- tags at a time, because Argo
+# Image Updater deploys whichever sha- tag was pushed last.
+#
+# Runs only on the local ARC scale set registered to this repo (see home_k3
+# apps/arc-runner-set-hebrew). Never use GitHub-hosted runners.
+#
+# k8-build talks to the shared docker-builder daemon
+# (DOCKER_HOST=tcp://docker-builder.arc-runners.svc:2375), not a dind sidecar.
+# That node keeps a buildx cache on disk. The registry cache below is what
+# still hits if the job lands on another node. type=gha is not used here.
+# Do not set DOCKER_HOST here.
+#
+# Do not publish ports. DOCKER_HOST is the shared remote daemon, so -p is not
+# reachable from this runner and a fixed port collides with another job. The
+# smoke step joins the app container's network (--network container:) instead.
+#
+# pull_request on k8-build is refused when the head repository is a fork.
+# pull_request has no base-branch filter, so a stacked pull request (its base
+# is another PR branch, not v3) still runs. Jobs skip when github.base_ref is
+# main; main's own workflows cover those. A pull request builds and smokes
+# with contents: read and never logs in or pushes. packages: write is only
+# on the publish job, which runs on a push to v3.
+#
+# Checkouts do not pin pull_request.head.sha. Omitting ref is the
+# pull_request default: actions/checkout uses github.ref
+# (refs/pull/N/merge) and github.sha, the test merge of the head into the
+# base when that event fired. A green check is that merged tree. Pinning the
+# head is what let #78 pass and then fail to compile once merged with v2.
+# On a push, the omitted ref resolves to the pushed commit. Publish sets
+# ref to github.sha, so the image tag stays
+# ghcr.io/networkbuild3r/hebrew:sha-<push sha>. fetch-depth stays 1. Nothing
+# in this file runs merge-base or diffs against origin/v3. templ's git diff
+# is the worktree against the checked-out commit, which does not need parents.
+# There is no pull_request_target.
+name: ci
+
+on:
+  push:
+    branches: [v3]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/networkbuild3r/hebrew
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: k8-build
+    timeout-minutes: 30
+    # Module github.com/NetworkBuild3r/hebrew-lessons at the repository root
+    # (not go/). setup-go reads Go 1.26 from go.mod. The job default is
+    # CGO_ENABLED=0. The race step sets CGO_ENABLED=1 for that step only.
+    # The image build stays CGO_ENABLED=0.
+    env:
+      CGO_ENABLED: "0"
+    # github.base_ref is empty on a push, so a push to v3 still runs.
+    # Fork pull requests never reach this runner.
+    if: >-
+      github.base_ref != 'main' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      # No ref on purpose. pull_request checks out refs/pull/N/merge at
+      # github.sha (the merge commit). A push checks out the pushed commit.
+      # Do not pin pull_request.head.sha.
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # Green job when this commit has no module yet. ::notice:: does not fail
+      # the job. Later steps are skipped.
+      - name: Skip when go.mod is absent
+        id: module
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f go.mod ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "go.mod is present."
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Go tests skipped::go.mod is not in this commit. gofmt, go vet, go test, and go test -race are skipped."
+          fi
+
+      - uses: actions/setup-go@v7
+        if: steps.module.outputs.present == 'true'
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: gofmt
+        if: steps.module.outputs.present == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt would change:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      # Generated *_templ.go must match the .templ sources at this commit.
+      # Install the templ version from go.mod with an explicit @version so
+      # this step does not rewrite go.mod or go.sum.
+      - name: templ generate
+        if: steps.module.outputs.present == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(awk '/^[[:space:]]*github.com\/a-h\/templ / { print $2; exit }' go.mod)
+          if [ -z "$version" ]; then
+            echo "templ is not a module dependency"
+            exit 1
+          fi
+          bindir=$(mktemp -d)
+          GOBIN="$bindir" go install "github.com/a-h/templ/cmd/templ@${version}"
+          "$bindir/templ" generate
+          drift=$(git diff --name-only)
+          if [ -n "$drift" ]; then
+            echo "templ generate changed checked-in files:"
+            echo "$drift"
+            git diff
+            exit 1
+          fi
+
+      - name: go vet
+        if: steps.module.outputs.present == 'true'
+        shell: bash
+        run: go vet ./...
+
+      - name: go test
+        if: steps.module.outputs.present == 'true'
+        shell: bash
+        run: go test ./...
+
+      # -race needs cgo and a C toolchain. CGO_ENABLED=1 is this step only.
+      # gofmt, go vet, and go test stay on the job default CGO_ENABLED=0.
+      # Main's k8-build workflows (go.yml, test.yml, image-go.yml) do not
+      # install gcc; they use the ARC image's git, setup-go, setup-node, and
+      # docker. Install gcc and libc6-dev only when command -v gcc fails.
+      # The image build stays CGO_ENABLED=0 in the Dockerfile.
+      - name: go test -race
+        if: steps.module.outputs.present == 'true'
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          set -euo pipefail
+          if ! command -v gcc >/dev/null 2>&1; then
+            echo "gcc is not on PATH; installing gcc and libc6-dev"
+            if [ "$(id -u)" -eq 0 ]; then
+              DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gcc libc6-dev
+            else
+              sudo DEBIAN_FRONTEND=noninteractive apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gcc libc6-dev
+            fi
+          else
+            echo "gcc is $(command -v gcc)"
+          fi
+          go test -race ./...
+
+  build-and-smoke:
+    needs: test
+    runs-on: k8-build
+    timeout-minutes: 30
+    # needs.test success is required here because a job-level if replaces the
+    # default success() check. Pull requests only. contents: read, so this
+    # job cannot be granted packages: write. Fork pull requests never reach
+    # this runner. No login and no push.
+    if: >-
+      github.base_ref != 'main' &&
+      needs.test.result == 'success' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+    steps:
+      # pull_request only. No ref: refs/pull/N/merge at github.sha.
+      # Do not pin pull_request.head.sha.
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # The tag is sha-<full 40-character commit>. On this job that commit is
+      # the merge ref: git rev-parse HEAD, which is github.sha for the event.
+      # The tag is local. This job never logs in or pushes. Fail before the
+      # build if that name contains hebrew-lessons.
+      - name: Refuse a hebrew-lessons image name
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          if ! printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::refusing to tag; HEAD is not a full 40-character sha"
+            exit 1
+          fi
+          computed="${IMAGE}:sha-${sha}"
+          case "$computed" in
+            *hebrew-lessons*)
+              echo "::error::refusing to publish ${computed}"
+              exit 1
+              ;;
+          esac
+          # The skeleton may add this script later. The inline check above
+          # always runs, whether or not the script is in the tree.
+          if [ -f scripts/check-image-name.sh ]; then
+            bash scripts/check-image-name.sh "$computed"
+          fi
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "tag=${computed}" >> "$GITHUB_OUTPUT"
+          echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "Image name ${computed} does not contain hebrew-lessons."
+
+      # This job never pushes. With either file absent, it stays green and
+      # the build is skipped.
+      - name: Skip unless Dockerfile and go.mod exist
+        id: scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f Dockerfile ] && [ -f go.mod ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "Dockerfile and go.mod are present."
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Image skipped::Dockerfile or go.mod is absent. Build, smoke, and push are skipped."
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.scope.outputs.build == 'true'
+
+      # No login and no cache-to: a pull request must not push, including the
+      # buildcache tag. A cache miss is ignored.
+      - name: Build (pull request, no push)
+        if: steps.scope.outputs.build == 'true' && github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          provenance: false
+          tags: ${{ steps.guard.outputs.tag }}
+          build-args: |
+            GIT_SHA=${{ steps.guard.outputs.sha }}
+            BUILT_AT=${{ steps.guard.outputs.built_at }}
+          labels: |
+            org.opencontainers.image.revision=${{ steps.guard.outputs.sha }}
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache,ignore-error=true
+
+      # Start the image and wait until GET /healthz on port 8080 returns 200.
+      # The probe shares the app network namespace. Nothing is published with -p.
+      - name: Smoke the image
+        if: steps.scope.outputs.build == 'true'
+        shell: bash
+        env:
+          TAG: ${{ steps.guard.outputs.tag }}
+          EXPECT_SHA: ${{ steps.guard.outputs.sha }}
+        run: |
+          set -euo pipefail
+          run_id="${GITHUB_RUN_ID:-0}"
+          attempt="${GITHUB_RUN_ATTEMPT:-0}"
+          name="hebrew-v2-${run_id}-${attempt}-$$"
+          probe="hebrew-v2-probe-${run_id}-${attempt}-$$"
+          cleanup() {
+            code=$?
+            docker rm -f "$probe" "$name" >/dev/null 2>&1 || true
+            exit "$code"
+          }
+          trap cleanup EXIT
+          docker rm -f "$probe" "$name" >/dev/null 2>&1 || true
+          echo "smoke: app ${name}, probe ${probe}, network container:${name}, no published ports"
+          docker run -d --name "$name" "$TAG"
+          if ! docker run -d --name "$probe" --network "container:${name}" busybox:1.36.1 sleep 90; then
+            echo "smoke probe failed to start" >&2
+            docker logs "$name" >&2 || true
+            exit 1
+          fi
+          deadline=$((SECONDS + 60))
+          last=""
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            output="$(docker exec "$probe" wget -S -O /dev/null "http://127.0.0.1:8080/healthz" 2>&1 || true)"
+            code="$(printf '%s\n' "$output" | awk '/HTTP\//{ print $2; exit }')"
+            if [ "$code" = "200" ]; then
+              echo "GET /healthz 200"
+              # EXPECT_SHA is git rev-parse HEAD, the same value passed as
+              # GIT_SHA. On pull_request that is github.sha, the merge ref
+              # this job checked out, not pull_request.head.sha.
+              if [ -z "${EXPECT_SHA}" ]; then
+                echo "::error::EXPECT_SHA is empty" >&2
+                exit 1
+              fi
+              voutput="$(docker exec "$probe" wget -S -O - "http://127.0.0.1:8080/version" 2>&1 || true)"
+              vcode="$(printf '%s\n' "$voutput" | awk '/HTTP\//{ print $2; exit }')"
+              if [ "$vcode" != "200" ]; then
+                echo "::error::GET /version status ${vcode:-none}" >&2
+                printf '%s\n' "$voutput" >&2
+                exit 1
+              fi
+              if ! printf '%s\n' "$voutput" | grep -q "Cache-Control: no-store"; then
+                echo "::error::/version missing Cache-Control: no-store" >&2
+                printf '%s\n' "$voutput" >&2
+                exit 1
+              fi
+              if ! printf '%s\n' "$voutput" | grep -Fq "\"commit\":\"${EXPECT_SHA}\""; then
+                echo "::error::/version commit is not ${EXPECT_SHA}" >&2
+                printf '%s\n' "$voutput" >&2
+                exit 1
+              fi
+              echo "GET /version commit=${EXPECT_SHA}"
+              exit 0
+            fi
+            last="$code"
+            sleep 1
+          done
+          echo "::error::/healthz did not return 200 on port 8080 within 60s (last: ${last:-none})" >&2
+          docker logs "$name" >&2 || true
+          exit 1
+
+      - name: Remove the local image
+        if: always() && steps.scope.outputs.build == 'true' && github.event_name == 'pull_request'
+        shell: bash
+        run: docker image rm "${{ steps.guard.outputs.tag }}" || true
+
+  publish:
+    needs: test
+    runs-on: k8-build
+    timeout-minutes: 30
+    # needs.test success is required here because a job-level if replaces the
+    # default success() check. packages: write is granted only when this job
+    # runs, which is a push to v3, never a pull_request.
+    if: >-
+      needs.test.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/v3'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      # Push to v3 only. ref is the pushed commit, which the sha- tag
+      # records. This job does not run on pull_request, and it does not
+      # read pull_request.head.sha.
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      # The tag is sha-<full 40-character commit>. Fail before login, build,
+      # or push if that name contains hebrew-lessons.
+      - name: Refuse a hebrew-lessons image name
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          if ! printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::refusing to tag; HEAD is not a full 40-character sha"
+            exit 1
+          fi
+          computed="${IMAGE}:sha-${sha}"
+          case "$computed" in
+            *hebrew-lessons*)
+              echo "::error::refusing to publish ${computed}"
+              exit 1
+              ;;
+          esac
+          # The skeleton may add this script later. The inline check above
+          # always runs, whether or not the script is in the tree.
+          if [ -f scripts/check-image-name.sh ]; then
+            bash scripts/check-image-name.sh "$computed"
+          fi
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "tag=${computed}" >> "$GITHUB_OUTPUT"
+          echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "Image name ${computed} does not contain hebrew-lessons."
+
+      # Push to the registry only on a push to v3, and only when both files
+      # exist. With neither file yet, the job stays green and the build is skipped.
+      - name: Skip unless Dockerfile and go.mod exist
+        id: scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f Dockerfile ] && [ -f go.mod ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "Dockerfile and go.mod are present."
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Image skipped::Dockerfile or go.mod is absent. Build, smoke, and push are skipped."
+          fi
+
+      - uses: docker/login-action@v3
+        if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/v3'
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.scope.outputs.build == 'true'
+
+      - name: Build
+        if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/v3'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          provenance: false
+          tags: ${{ steps.guard.outputs.tag }}
+          build-args: |
+            GIT_SHA=${{ steps.guard.outputs.sha }}
+            BUILT_AT=${{ steps.guard.outputs.built_at }}
+          labels: |
+            org.opencontainers.image.revision=${{ steps.guard.outputs.sha }}
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max,ignore-error=true
+
+      # Start the image and wait until GET /healthz on port 8080 returns 200.
+      # The probe shares the app network namespace. Nothing is published with -p.
+      - name: Smoke the image
+        if: steps.scope.outputs.build == 'true'
+        shell: bash
+        env:
+          TAG: ${{ steps.guard.outputs.tag }}
+          EXPECT_SHA: ${{ steps.guard.outputs.sha }}
+        run: |
+          set -euo pipefail
+          run_id="${GITHUB_RUN_ID:-0}"
+          attempt="${GITHUB_RUN_ATTEMPT:-0}"
+          name="hebrew-v2-${run_id}-${attempt}-$$"
+          probe="hebrew-v2-probe-${run_id}-${attempt}-$$"
+          cleanup() {
+            code=$?
+            docker rm -f "$probe" "$name" >/dev/null 2>&1 || true
+            exit "$code"
+          }
+          trap cleanup EXIT
+          docker rm -f "$probe" "$name" >/dev/null 2>&1 || true
+          echo "smoke: app ${name}, probe ${probe}, network container:${name}, no published ports"
+          docker run -d --name "$name" "$TAG"
+          if ! docker run -d --name "$probe" --network "container:${name}" busybox:1.36.1 sleep 90; then
+            echo "smoke probe failed to start" >&2
+            docker logs "$name" >&2 || true
+            exit 1
+          fi
+          deadline=$((SECONDS + 60))
+          last=""
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            output="$(docker exec "$probe" wget -S -O /dev/null "http://127.0.0.1:8080/healthz" 2>&1 || true)"
+            code="$(printf '%s\n' "$output" | awk '/HTTP\//{ print $2; exit }')"
+            if [ "$code" = "200" ]; then
+              echo "GET /healthz 200"
+              # EXPECT_SHA is git rev-parse HEAD, the same value passed as
+              # GIT_SHA. On pull_request that is github.sha, the merge ref
+              # this job checked out, not pull_request.head.sha.
+              if [ -z "${EXPECT_SHA}" ]; then
+                echo "::error::EXPECT_SHA is empty" >&2
+                exit 1
+              fi
+              voutput="$(docker exec "$probe" wget -S -O - "http://127.0.0.1:8080/version" 2>&1 || true)"
+              vcode="$(printf '%s\n' "$voutput" | awk '/HTTP\//{ print $2; exit }')"
+              if [ "$vcode" != "200" ]; then
+                echo "::error::GET /version status ${vcode:-none}" >&2
+                printf '%s\n' "$voutput" >&2
+                exit 1
+              fi
+              if ! printf '%s\n' "$voutput" | grep -q "Cache-Control: no-store"; then
+                echo "::error::/version missing Cache-Control: no-store" >&2
+                printf '%s\n' "$voutput" >&2
+                exit 1
+              fi
+              if ! printf '%s\n' "$voutput" | grep -Fq "\"commit\":\"${EXPECT_SHA}\""; then
+                echo "::error::/version commit is not ${EXPECT_SHA}" >&2
+                printf '%s\n' "$voutput" >&2
+                exit 1
+              fi
+              echo "GET /version commit=${EXPECT_SHA}"
+              exit 0
+            fi
+            last="$code"
+            sleep 1
+          done
+          echo "::error::/healthz did not return 200 on port 8080 within 60s (last: ${last:-none})" >&2
+          docker logs "$name" >&2 || true
+          exit 1
+
+      - name: Push the image
+        if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/v3'
+        shell: bash
+        env:
+          TAG: ${{ steps.guard.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" != "push" ] || [ "$GITHUB_REF" != "refs/heads/v3" ]; then
+            echo "::error::refusing to push except on a push to v3"
+            exit 1
+          fi
+          case "$TAG" in
+            *hebrew-lessons*)
+              echo "::error::refusing to publish ${TAG}"
+              exit 1
+              ;;
+          esac
+          if [ -f scripts/check-image-name.sh ]; then
+            bash scripts/check-image-name.sh "$TAG"
+          fi
+          docker push "$TAG"

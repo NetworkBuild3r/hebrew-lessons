@@ -1,0 +1,99 @@
+package views
+
+templ Review(p Page, c ReviewCard) {
+	@Layout(p) {
+		<article class="review sheet">
+			<h1 class="review__h1" lang={ p.Lang }>{ p.ReviewHeading }</h1>
+			@ReviewBody(c)
+			<script src="/static/js/activity.js" defer></script>
+		</article>
+	}
+}
+
+// ReviewBody is the card htmx swaps. A checked activity and the flashcard share
+// one frame (activity.templ). Done is the end of the queue. The root keeps its
+// data attributes and, with the frame, data-no-transition: see ActivityFrame.
+templ ReviewBody(c ReviewCard) {
+	<div id="review-card" data-kind={ c.Kind } data-card={ Num64(c.CardID) } data-pointed={ c.Pointed } data-unpointed={ c.Unpointed } data-show-unpointed={ Flag(c.ShowUnpointed) } data-index={ Num(c.Index) } data-total={ Num(c.Total) } data-answered={ Num(c.Answered) } data-correct={ Num(c.Correct) } data-retry={ Flag(c.Retry) } data-done={ Flag(c.Done) } data-revealed={ Flag(c.Revealed) } if c.Translit != "" && answerSide(c) {
+		data-translit={ c.Translit }
+	} if !c.Done {
+		data-no-transition
+	}>
+		if c.Done {
+			if c.Answered == 0 {
+				<p class="lede" lang={ c.Lang }>{ c.Lede }</p>
+			} else {
+				<p class="lede" lang="en" dir="ltr">
+					<bdi lang="en" dir="ltr">{ Num(c.Correct) } / { Num(c.Answered) }</bdi>
+				</p>
+			}
+		} else if c.Act != nil {
+			@ActivityFrame(*c.Act)
+		} else {
+			@flashFrame(c)
+		}
+	</div>
+}
+
+// Progress moved to progress.templ (INIT-015/SPEC-018).
+
+// SignIn is the signed-out page. No rail, dock, or other navigation:
+// logout lands here, and the only action is auth's Google start route.
+// Copy follows the interface language. The button is Google's sign-in
+// control, not the app's primary button.
+templ SignIn(p Page) {
+	<!DOCTYPE html>
+	<html lang={ p.Lang } dir={ p.Dir } translate="no">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+			@themeHead()
+			<link rel="stylesheet" href="/static/css/tokens.css"/>
+			<link rel="stylesheet" href="/static/css/base.css"/>
+			@brandHead()
+			<title>{ p.Title }</title>
+		</head>
+		<body>
+			<main id="main" class="signin">
+				<div class="signin__slate">
+					<img class="signin__sky" src="/static/illustrations/hero-skyline-night.svg" alt="" aria-hidden="true"/>
+					<p class="signin__word">
+						@H(SignInWord)
+						<span class="signin__gloss">@E(SignInWordGloss)</span>
+					</p>
+				</div>
+				<section class="signin__card">
+					<h1 class="brand signin__brand">
+						<span class="brand__mark" aria-hidden="true">@BrandMark()</span>
+						<span class="brand__name">@H(AppName)</span>
+					</h1>
+					<p class="signin__title">
+						if p.Lang == "en" {
+							@E(SignInTitleEN)
+						} else {
+							@H(SignInTitleHE)
+						}
+					</p>
+					<p class="signin__lede">
+						if p.Lang == "en" {
+							@E(SignInLedeEN)
+						} else {
+							@H(SignInLedeHE)
+						}
+					</p>
+					<a class="gbtn" href={ templ.SafeURL(GoogleSignInStart) }>
+						@googleMark()
+						<span class="gbtn__label">
+							if p.Lang == "en" {
+								@E(SignInGoogleEN)
+							} else {
+								@H(SignInGoogleHE)
+								@E("Google")
+							}
+						</span>
+					</a>
+				</section>
+			</main>
+		</body>
+	</html>
+}

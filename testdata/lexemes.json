@@ -1,0 +1,284 @@
+{
+  "lexemes": [
+    {
+      "textNfc": "שָׁלוֹם",
+      "bare": "שלום",
+      "glossEn": "hello; peace",
+      "pos": "noun",
+      "root": "שלם"
+    },
+    {
+      "textNfc": "בֹּקֶר",
+      "bare": "בקר",
+      "glossEn": "morning",
+      "pos": "noun",
+      "root": "בקר"
+    },
+    {
+      "textNfc": "טוֹב",
+      "bare": "טוב",
+      "glossEn": "good",
+      "pos": "adjective",
+      "root": "טוב"
+    },
+    {
+      "textNfc": "לַיְלָה",
+      "bare": "לילה",
+      "glossEn": "night",
+      "pos": "noun",
+      "root": "ליל"
+    },
+    {
+      "textNfc": "תּוֹדָה",
+      "bare": "תודה",
+      "glossEn": "thank you",
+      "pos": "noun",
+      "root": "ידה"
+    },
+    {
+      "textNfc": "בְבַקָּשָׁה",
+      "bare": "בבקשה",
+      "glossEn": "please",
+      "pos": "interjection",
+      "root": "בקש"
+    },
+    {
+      "textNfc": "סְלִחָה",
+      "bare": "סלחה",
+      "glossEn": "excuse me",
+      "pos": "noun",
+      "root": "סלח"
+    },
+    {
+      "textNfc": "כֵּן",
+      "bare": "כן",
+      "glossEn": "yes",
+      "pos": "adverb",
+      "root": ""
+    },
+    {
+      "textNfc": "לֹא",
+      "bare": "לא",
+      "glossEn": "no",
+      "pos": "adverb",
+      "root": ""
+    },
+    {
+      "textNfc": "שֵׁם",
+      "bare": "שם",
+      "glossEn": "name",
+      "pos": "noun",
+      "root": "שם"
+    },
+    {
+      "textNfc": "קָפֶה",
+      "bare": "קפה",
+      "glossEn": "coffee",
+      "pos": "noun",
+      "root": ""
+    },
+    {
+      "textNfc": "תֵּה",
+      "bare": "תה",
+      "glossEn": "tea",
+      "pos": "noun",
+      "root": ""
+    },
+    {
+      "textNfc": "מַיִם",
+      "bare": "מים",
+      "glossEn": "water",
+      "pos": "noun",
+      "root": ""
+    },
+    {
+      "textNfc": "לֶחֶם",
+      "bare": "לחם",
+      "glossEn": "bread",
+      "pos": "noun",
+      "root": "לחם"
+    },
+    {
+      "textNfc": "חָלָב",
+      "bare": "חלב",
+      "glossEn": "milk",
+      "pos": "noun",
+      "root": "חלב"
+    },
+    {
+      "textNfc": "סוּכָּר",
+      "bare": "סוכר",
+      "glossEn": "sugar",
+      "pos": "noun",
+      "root": ""
+    },
+    {
+      "textNfc": "חֶשְבּוֹן",
+      "bare": "חשבון",
+      "glossEn": "bill",
+      "pos": "noun",
+      "root": "חשב"
+    },
+    {
+      "textNfc": "כַּמָּה",
+      "bare": "כמה",
+      "glossEn": "how much",
+      "pos": "adverb",
+      "root": ""
+    },
+    {
+      "textNfc": "זֵה",
+      "bare": "זה",
+      "glossEn": "this",
+      "pos": "pronoun",
+      "root": ""
+    },
+    {
+      "textNfc": "יוֹם",
+      "bare": "יום",
+      "glossEn": "day",
+      "pos": "noun",
+      "root": "יום"
+    },
+    {
+      "textNfc": "אִמָּא",
+      "bare": "אמא",
+      "glossEn": "mom",
+      "pos": "noun",
+      "root": "אם"
+    },
+    {
+      "textNfc": "אַבָּא",
+      "bare": "אבא",
+      "glossEn": "dad",
+      "pos": "noun",
+      "root": "אב"
+    },
+    {
+      "textNfc": "אָח",
+      "bare": "אח",
+      "glossEn": "brother",
+      "pos": "noun",
+      "root": "אח"
+    },
+    {
+      "textNfc": "אָחוֹת",
+      "bare": "אחות",
+      "glossEn": "sister",
+      "pos": "noun",
+      "root": "אח"
+    },
+    {
+      "textNfc": "בֵּן",
+      "bare": "בן",
+      "glossEn": "son",
+      "pos": "noun",
+      "root": "בן"
+    },
+    {
+      "textNfc": "בַּת",
+      "bare": "בת",
+      "glossEn": "daughter",
+      "pos": "noun",
+      "root": "בת"
+    },
+    {
+      "textNfc": "מִשְפָּחָה",
+      "bare": "משפחה",
+      "glossEn": "family",
+      "pos": "noun",
+      "root": "שפח"
+    },
+    {
+      "textNfc": "יֶלֶד",
+      "bare": "ילד",
+      "glossEn": "child",
+      "pos": "noun",
+      "root": "ילד"
+    },
+    {
+      "textNfc": "יַלְדָּה",
+      "bare": "ילדה",
+      "glossEn": "girl",
+      "pos": "noun",
+      "root": "ילד"
+    },
+    {
+      "textNfc": "בַּיִת",
+      "bare": "בית",
+      "glossEn": "home",
+      "pos": "noun",
+      "root": "בית"
+    },
+    {
+      "textNfc": "אֶחָד",
+      "bare": "אחד",
+      "glossEn": "one",
+      "pos": "numeral",
+      "root": "אחד"
+    },
+    {
+      "textNfc": "שְנַיִם",
+      "bare": "שנים",
+      "glossEn": "two",
+      "pos": "numeral",
+      "root": ""
+    },
+    {
+      "textNfc": "שָׁלוֹשׁ",
+      "bare": "שלוש",
+      "glossEn": "three",
+      "pos": "numeral",
+      "root": "שלש"
+    },
+    {
+      "textNfc": "אַרְבַּע",
+      "bare": "ארבע",
+      "glossEn": "four",
+      "pos": "numeral",
+      "root": "רבע"
+    },
+    {
+      "textNfc": "חָמֵשׁ",
+      "bare": "חמש",
+      "glossEn": "five",
+      "pos": "numeral",
+      "root": "חמש"
+    },
+    {
+      "textNfc": "שֵׁשׁ",
+      "bare": "שש",
+      "glossEn": "six",
+      "pos": "numeral",
+      "root": "שש"
+    },
+    {
+      "textNfc": "שֶׁבַע",
+      "bare": "שבע",
+      "glossEn": "seven",
+      "pos": "numeral",
+      "root": "שבע"
+    },
+    {
+      "textNfc": "שְמוֹנֶה",
+      "bare": "שמונה",
+      "glossEn": "eight",
+      "pos": "numeral",
+      "root": ""
+    },
+    {
+      "textNfc": "תֵּשַׁע",
+      "bare": "תשע",
+      "glossEn": "nine",
+      "pos": "numeral",
+      "root": "תשע"
+    },
+    {
+      "textNfc": "עֶשֶׂר",
+      "bare": "עשר",
+      "glossEn": "ten",
+      "pos": "numeral",
+      "root": "עשר"
+    }
+  ]
+}

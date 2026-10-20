@@ -1,0 +1,470 @@
+package views
+
+// Placement is the full placement page. PlacementRegion is what an htmx write swaps: one screen at a
+// time, into #placement. Every screen is one form or one block with one thing to do. See placement.go.
+templ Placement(v PlacementView) {
+	@Layout(v.Page) {
+		@PlacementRegion(v)
+		<script src={ PlacementJS } defer></script>
+	}
+}
+
+// PlacementRegion is one screen. The root says which, so the script and the stylesheet can key on it.
+templ PlacementRegion(v PlacementView) {
+	<div id="placement" class="pl" { plRootAttrs(v)... }>
+		switch v.Screen {
+			case PlaceResume:
+				@plResume(v)
+			case PlaceLetters, PlaceListening, PlaceReading:
+				@plPick(v)
+			case PlaceTyping:
+				@plTyping(v)
+			case PlaceBreak:
+				@plBreak(v)
+			case PlaceOffer:
+				@plOffer(v)
+			case PlaceResults:
+				@plResults(v)
+			case PlaceReview:
+				@plReview(v)
+			default:
+				@plIntro(v)
+		}
+	</div>
+}
+
+// plForm is a screen that posts. hx-select is unset so the body's #app selector does not drop a
+// fragment. hx-boost is off so the form is this post and not a shell navigation. hx-sync drops a second
+// submit while one is on its way, so a double tap cannot post twice.
+templ plForm(v PlacementView, action string, attrs templ.Attributes) {
+	<form class="pl__frame" method="post" action={ templ.SafeURL(action) } hx-post={ action } hx-target="#placement" hx-swap="outerHTML transition:true" hx-select="unset" hx-boost="false" hx-sync="this:drop" { attrs... }>
+		<input type="hidden" name="_csrf" value={ v.CSRF }/>
+		if v.RunID != "" {
+			<input type="hidden" name="run_id" value={ v.RunID }/>
+		}
+		{ children... }
+	</form>
+}
+
+// plTop is the top of a screen: a way out, and on an item screen the progress and its count.
+templ plTop(v PlacementView, progress bool) {
+	<header class="pl__top">
+		<a class="pl__close" href={ templ.SafeURL(v.Href("/")) } data-pl-close aria-label="Close placement">
+			@Icon("x", "")
+		</a>
+		if progress {
+			@ProgressBar(v.Index, v.Total, v.ProgressName())
+			<span class="pl__count"><bdi lang="en" dir="ltr">{ v.Count() }</bdi></span>
+		}
+	</header>
+}
+
+// plConfirm is the dialog behind the close control. Closing keeps the run: the answers are saved and the
+// Today card offers to resume. The script opens it. Without the script the close control is a link home.
+templ plConfirm(v PlacementView) {
+	<dialog class="pl-confirm" data-pl-confirm aria-labelledby="pl-confirm-title">
+		<div class="pl-confirm__box">
+			<h2 id="pl-confirm-title" lang="en">Leave the check for now?</h2>
+			<p lang="en">Your answers are saved. Come back any time and pick up where you left off.</p>
+			<div class="pl-confirm__actions">
+				@ButtonWith(ButtonQuiet, templ.Attributes{"data-pl-keep": ""}) {
+					@E("Keep going")
+				}
+				<a class="c-button" data-kind="quiet" href={ templ.SafeURL(v.Href("/")) }>
+					@E("Leave for now")
+				</a>
+			</div>
+		</div>
+	</dialog>
+}
+
+// plIntro says what the test is, how long it takes, and has one gold Start.
+templ plIntro(v PlacementView) {
+	@plForm(v, "/_hx/placement/start", nil) {
+		@plTop(v, false)
+		<div class="pl__body">
+			<p class="pl__eyebrow" lang="en">Placement · about 10–12 minutes</p>
+			<h1 class="pl__title pl__title--lead" id="pl-title" lang="en">{ PlacementFor("en").Heading }</h1>
+			<p class="pl__lede" lang="en">A one-minute letters check, then three short parts. No grading yourself, just answer. If you don’t know, say so: guessing makes your plan worse.</p>
+			<ol class="pl-steps" role="list">
+				@plStep("sound", "Listening", "Hear a word, pick its meaning", "1")
+				@plStep("book", "Reading", "Pointed Hebrew, no sound, no hints", "2")
+				@plStep("keyboard", "Typing", "Type words you know. Optional.", "3")
+			</ol>
+			<p class="pl__tip" lang="en">
+				@IconClass("sound", "icon icon-sm", "")
+				<span>Headphones help. Find somewhere quiet.</span>
+			</p>
+		</div>
+		<div class="pl__actions">
+			@ButtonWith(ButtonPrimary, plPrimaryAttrs(nil)) {
+				@E("Start")
+				@IconClass("arrow-right", "icon icon-directional", "")
+			}
+			<a class="c-button" data-kind="quiet" href={ templ.SafeURL(v.Href("/")) }>
+				@E("I’m brand new. Skip to lesson 1")
+			</a>
+		</div>
+	}
+	@plConfirm(v)
+}
+
+// plStep is one of the three parts on the intro.
+templ plStep(icon, name, about, n string) {
+	<li class="pl-step">
+		<span class="pl-step__icon">
+			@Icon(icon, "")
+		</span>
+		<span class="pl-step__text">
+			<b lang="en">{ name }</b>
+			<small lang="en">{ about }</small>
+		</span>
+		<span class="pl-step__n" aria-hidden="true">{ n }</span>
+	</li>
+}
+
+// plResume is where a learner who left partway lands. One gold Continue.
+templ plResume(v PlacementView) {
+	@plForm(v, "/_hx/placement/next", nil) {
+		@plTop(v, false)
+		<div class="pl__body">
+			<p class="pl__eyebrow" lang="en">Welcome back</p>
+			<h1 class="pl__title pl__title--lead" id="pl-title" lang="en">Pick up where you left off</h1>
+			<p class="pl__lede" lang="en">Your answers are saved. We’ll carry on with the next word.</p>
+		</div>
+		<div class="pl__actions">
+			@ButtonWith(ButtonPrimary, plPrimaryAttrs(nil)) {
+				@E("Continue")
+				@IconClass("arrow-right", "icon icon-directional", "")
+			}
+			<a class="c-button" data-kind="quiet" href={ templ.SafeURL(v.Href("/")) }>
+				@E("Finish later")
+			</a>
+		</div>
+	}
+	@plConfirm(v)
+}
+
+// plPick is a letters, listening or reading item. Asking, it is a form that posts the tapped option.
+// After the tap it is a form that moves on by itself after 0.8s, or at once on a tap, and shows only that
+// the answer was saved: no verdict.
+templ plPick(v PlacementView) {
+	if v.Asking() {
+		@plForm(v, "/_hx/placement/answer", templ.Attributes{"data-pl-form": ""}) {
+			<input type="hidden" name="item" value={ v.Token }/>
+			@plPickBody(v)
+		}
+		if v.HasAudio() && v.Screen == PlaceListening && v.Tries < PlaceMaxReplaceTries && !v.AudioFailed {
+			@plReplace(v)
+		}
+	} else {
+		@plForm(v, "/_hx/placement/next", templ.Attributes{"data-advance": "800", "data-pl-advance": ""}) {
+			@plPickBody(v)
+		}
+	}
+	@plConfirm(v)
+}
+
+// plReplace is the form the script posts when the clip will not play. The server deals another word.
+templ plReplace(v PlacementView) {
+	<form class="pl__replace" hidden method="post" action="/_hx/placement/replace" hx-post="/_hx/placement/replace" hx-target="#placement" hx-swap="outerHTML transition:true" hx-select="unset" hx-boost="false" data-pl-replace>
+		<input type="hidden" name="_csrf" value={ v.CSRF }/>
+		<input type="hidden" name="run_id" value={ v.RunID }/>
+		<input type="hidden" name="item" value={ v.Token }/>
+		<input type="hidden" name="tries" value={ Num(v.Tries + 1) }/>
+	</form>
+}
+
+templ plPickBody(v PlacementView) {
+	@plTop(v, true)
+	<section class="pl__stage" aria-labelledby="pl-title">
+		<p class="pl__eyebrow" lang="en">{ v.Eyebrow() }</p>
+		<h1 class="pl__title" id="pl-title" lang="en">{ v.Question() }</h1>
+		if v.Screen == PlaceReading {
+			<div class="pl__word">
+				<p class="pl__he">
+					@H(v.Prompt)
+				</p>
+				<p class="pl__nosound" lang="en">
+					@IconClass("speaker", "icon icon-sm", "")
+					<span>No sound in this part</span>
+				</p>
+			</div>
+		} else {
+			<div class="pl__audio" data-audio-scope>
+				if v.Asking() && v.HasAudio() {
+					<audio id="pl-clip" src={ templ.SafeURL(v.AudioURL) } autoplay preload="auto" data-autoplay data-pl-clip></audio>
+				}
+				if v.Screen == PlaceLetters {
+					@AudioOrb("Play the sound", plOrbAttrs(v.Asking()))
+				} else {
+					@AudioOrb("Play the word", plOrbAttrs(v.Asking()))
+				}
+				<p class="pl__hint" role="status" lang="en" data-pl-hint>
+					<span data-pl-hint-text>
+						if v.AudioFailed {
+							{ "We couldn’t play this clip. Tap “I don’t know” to move on." }
+						} else if v.Asking() {
+							{ "Listen, then pick." }
+						}
+					</span>
+				</p>
+				<div class="pl__chips">
+					@plChip("replay", "Replay", "data-pl-replay", v.Asking())
+					@plChip("slower", "Slower", "data-pl-slower", v.Asking())
+				</div>
+			</div>
+		}
+	</section>
+	<div class={ plAnswersClass(v) } role="group" aria-labelledby="pl-title">
+		for _, o := range v.Options {
+			@AnswerOptionWith(o.State, o.Key, plOptionAttrs(o, v.Asking())) {
+				if o.Hebrew {
+					@H(o.Text)
+				} else {
+					@E(o.Text)
+				}
+			}
+		}
+	</div>
+	<div class="pl__foot">
+		<p class="pl__saved" role="status" lang="en">
+			if !v.Asking() {
+				{ "Answer saved. Next word coming." }
+			}
+		</p>
+		if v.Asking() {
+			@ButtonWith(ButtonQuiet, plQuietAttrs("dont_know", "1")) {
+				@E("I don’t know this one")
+			}
+		}
+	</div>
+}
+
+func plAnswersClass(v PlacementView) string {
+	if v.Screen == PlaceLetters {
+		return "pl__answers pl__answers--letters"
+	}
+	return "pl__answers"
+}
+
+// plChip is a small replay or slower control under the orb.
+templ plChip(icon, label, marker string, live bool) {
+	<button type="button" class="pl-chip" { plChipAttrs(marker, live)... }>
+		@IconClass(icon, "icon icon-sm", "")
+		<span lang="en">{ label }</span>
+	</button>
+}
+
+// plTyping is the optional typing item: the English meaning, the Hebrew keyboard, one gold Next, and Skip.
+// Its keys are tapped at once, so the screen carries data-no-transition: motion.js then runs no view
+// transition on the swap, and the first tap on a key is not lost (SPEC-009).
+templ plTyping(v PlacementView) {
+	@plForm(v, "/_hx/placement/answer", templ.Attributes{"data-pl-form": "", "data-no-transition": ""}) {
+		<input type="hidden" name="item" value={ v.Token }/>
+		@plTop(v, true)
+		<section class="pl__stage" aria-labelledby="pl-title">
+			<p class="pl__eyebrow" lang="en">{ v.Eyebrow() }</p>
+			<h1 class="pl__title" id="pl-title" lang="en">{ v.Question() }</h1>
+			<p class="pl__gloss" lang="en" dir="ltr">
+				@E(v.Prompt)
+			</p>
+			<label class="vh" for="pl-typed" lang="en">Your answer in Hebrew</label>
+			@HebrewInput("pl-typed", "typed", templ.Attributes{"required": true, "aria-describedby": "pl-typed-hint"})
+			<p class="pl__hint" id="pl-typed-hint" lang="en">Vowel marks are optional. We check the letters.</p>
+		</section>
+		<div class="pl__actions pl__actions--typing">
+			@ButtonWith(ButtonPrimary, plPrimaryAttrs(nil)) {
+				@E("Next")
+			}
+			<div class="pl__more">
+				@ButtonWith(ButtonQuiet, plQuietAttrs("dont_know", "1")) {
+					@E("Skip this word")
+				}
+				@ButtonWith(ButtonQuiet, templ.Attributes{"type": "submit", "formnovalidate": true, "formaction": "/_hx/placement/finish", "hx-post": "/_hx/placement/finish"}) {
+					@E("I’m done typing")
+				}
+			</div>
+		</div>
+		@HebrewKeyboard("pl-typed", "en")
+	}
+	@plConfirm(v)
+}
+
+// plBreak is the pause at the end of a part. One gold Continue.
+templ plBreak(v PlacementView) {
+	@plForm(v, "/_hx/placement/next", nil) {
+		<input type="hidden" name="cont" value="1"/>
+		@plTop(v, false)
+		<div class="pl__body pl__body--centre">
+			<p class="pl__eyebrow" lang="en">Next: Reading</p>
+			<h1 class="pl__title pl__title--lead" id="pl-title" lang="en">{ plBreakTitle(v.Part) }</h1>
+			<p class="pl__lede" lang="en">Take as long as you like. Next is reading: pointed Hebrew, no sound, no hints.</p>
+		</div>
+		<div class="pl__actions">
+			@ButtonWith(ButtonPrimary, plPrimaryAttrs(nil)) {
+				@E("Continue")
+				@IconClass("arrow-right", "icon icon-directional", "")
+			}
+		</div>
+	}
+	@plConfirm(v)
+}
+
+// plOffer is the pause before the optional typing part. One gold Continue, and a quiet way to skip it.
+templ plOffer(v PlacementView) {
+	@plForm(v, "/_hx/placement/typing", nil) {
+		@plTop(v, false)
+		<div class="pl__body pl__body--centre">
+			<p class="pl__eyebrow" lang="en">One part left, optional</p>
+			<h1 class="pl__title pl__title--lead" id="pl-title" lang="en">{ plBreakTitle(v.Part) }</h1>
+			<p class="pl__lede" lang="en">Typing is words you already got right, written with an on-screen Hebrew keyboard. About 2 minutes. Skip it and nothing is lost.</p>
+		</div>
+		<div class="pl__actions">
+			@ButtonWith(ButtonPrimary, plPrimaryAttrs(nil)) {
+				@E("Continue to typing")
+				@IconClass("arrow-right", "icon icon-directional", "")
+			}
+			@ButtonWith(ButtonQuiet, templ.Attributes{"type": "submit", "formnovalidate": true, "formaction": "/_hx/placement/finish", "hx-post": "/_hx/placement/finish"}) {
+				@E("Skip and see my results")
+			}
+		</div>
+	}
+	@plConfirm(v)
+}
+
+// plResults is the end of the test: where the learner starts, by ear and by eye, what to work on first,
+// and one gold way into the first lesson.
+templ plResults(v PlacementView) {
+	<div class="pl__frame pl__frame--results">
+		<section class="pl-hero" aria-labelledby="pl-title">
+			<p class="pl__eyebrow pl__eyebrow--on-ink" lang="en">Your starting point</p>
+			<h1 class="pl-hero__title" id="pl-title" lang="en">{ v.Result.Headline }</h1>
+			if v.Result.Words > 0 {
+				<p class="pl-hero__words" lang="en">
+					<span class="pl-hero__approx" aria-hidden="true">≈</span>
+					<b>{ plWords(v.Result.Words) }</b>
+					<span>words you likely know</span>
+				</p>
+			}
+			if v.Result.Sub != "" {
+				<p class="pl-hero__sub" lang="en">{ v.Result.Sub }</p>
+			}
+		</section>
+		<div class="pl-levels">
+			@plLevel(v.Result.Listening)
+			@plLevel(v.Result.Reading)
+		</div>
+		if len(v.Result.Work) > 0 {
+			<section class="c-card pl-work" aria-labelledby="pl-work-title">
+				<h2 id="pl-work-title" lang="en">We’ll work on first</h2>
+				<ul role="list">
+					for _, w := range v.Result.Work {
+						<li class="pl-work__row">
+							<span class="pl-work__he">
+								@H(w.Pointed)
+							</span>
+							<span class="pl-work__text">
+								<b lang="en">{ w.Gloss }</b>
+								<small lang="en">{ w.Note }</small>
+							</span>
+						</li>
+					}
+				</ul>
+			</section>
+		}
+		<div class="pl__actions">
+			<a class="c-button" data-kind="primary" data-pl-primary href={ templ.SafeURL(v.Href("/")) }>
+				@E("Start my first lesson")
+				@IconClass("arrow-right", "icon icon-directional", "")
+			</a>
+			if v.Result.Misses > 0 {
+				<a class="c-button" data-kind="quiet" href={ templ.SafeURL(v.Result.ReviewURL) }>
+					@E(plMisses(v.Result.Misses))
+				</a>
+			}
+		</div>
+	</div>
+}
+
+// plLevel is one skill's level card.
+templ plLevel(l PlaceLevelView) {
+	<section class="c-card pl-level" data-skill={ l.Skill }>
+		<h2 class="pl-level__skill" lang="en">
+			@Icon(l.Icon, "")
+			<span>{ l.Skill }</span>
+		</h2>
+		<p class="pl-level__name" lang="en">{ plLevelName(l) }</p>
+		<div class="pl-meter" role="img" aria-label={ plLevelName(l) + " of 5" }>
+			for _, on := range plSegments(l.Level) {
+				<i if on && l.Tested {
+					data-on
+				}></i>
+			}
+		</div>
+		<p class="pl-level__blurb" lang="en">{ l.Blurb }</p>
+	</section>
+}
+
+// plReview lists every miss with the right answer: a clip, the meaning, what was picked, and the pointed
+// form. It is shown after the test, so showing the right answers breaks nothing.
+templ plReview(v PlacementView) {
+	<div class="pl__frame pl__frame--review">
+		<header class="pl__top">
+			<a class="pl__back" href={ templ.SafeURL(v.Href("/placement")) }>
+				@IconClass("arrow-left", "icon icon-directional", "")
+				<span lang="en">Results</span>
+			</a>
+		</header>
+		<div class="pl__body">
+			<p class="pl__eyebrow" lang="en">After the test</p>
+			<h1 class="pl__title pl__title--lead" id="pl-title" lang="en">{ v.Review.Title }</h1>
+			if v.Review.Total > 0 {
+				<p class="pl__lede" lang="en">Here is each right answer. Tap play to hear it. They come back in your first lessons, taught before they are tested.</p>
+				<div class="c-card pl-review">
+					for _, g := range v.Review.Groups {
+						<section class="pl-group" aria-labelledby={ "pl-group-" + g.Title }>
+							<h2 class="pl-group__title" id={ "pl-group-" + g.Title } lang="en">{ g.Title }</h2>
+							<ul role="list">
+								for _, r := range g.Rows {
+									<li class="pl-miss">
+										if r.AudioURL != "" {
+											<audio id={ "pl-miss-" + r.ID } src={ templ.SafeURL(r.AudioURL) } preload="none"></audio>
+											<button type="button" class="pl-play" data-pl-listen={ "pl-miss-" + r.ID } aria-label={ "Play " + r.Gloss }>
+												@Icon("speaker", "")
+											</button>
+										} else {
+											<span class="pl-play pl-play--none" aria-hidden="true"></span>
+										}
+										<span class="pl-miss__text">
+											<b lang="en">{ r.Gloss }</b>
+											<small lang="en">
+												{ plPickedLead(r.PickedKind) }
+												if r.PickedKind == "picked" {
+													{ "“" + r.Picked + "”" }
+												} else if r.PickedKind == "typed" {
+													@H(r.Picked)
+												}
+											</small>
+										</span>
+										<span class="pl-miss__he">
+											@H(r.Pointed)
+										</span>
+									</li>
+								}
+							</ul>
+						</section>
+					}
+				</div>
+			} else {
+				<p class="pl__lede" lang="en">Every answer was right. Nothing to review.</p>
+			}
+		</div>
+		<div class="pl__actions">
+			<a class="c-button" data-kind="primary" data-pl-primary href={ templ.SafeURL(v.Href("/")) }>
+				@E("Start my first lesson")
+				@IconClass("arrow-right", "icon icon-directional", "")
+			</a>
+		</div>
+	</div>
+}

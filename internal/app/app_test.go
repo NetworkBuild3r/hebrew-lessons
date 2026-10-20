@@ -1,0 +1,425 @@
+package app
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+)
+
+type fixedClock struct{ t time.Time }
+
+func (f fixedClock) Now() time.Time { return f.t }
+
+type fakeTTS struct{}
+
+func (fakeTTS) Synthesize(context.Context, string, string, string) ([]byte, error) {
+	return []byte("mp3"), nil
+}
+
+func TestHealthzBothHandlers(t *testing.T) {
+	dir := t.TempDir()
+	// No Google, ElevenLabs, or OAuth fields. New must still boot.
+	webH, mcpH, err := New(Config{DataDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "audio")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "hebrew.sqlite")); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, h := range map[string]http.Handler{"web": webH, "mcp": mcpH} {
+		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+		req.Header.Del("Authorization")
+		body := getHealthRequest(t, h, req)
+		if !body.OK {
+			t.Fatalf("%s health = %+v", name, body)
+		}
+	}
+}
+
+func TestDataDirFailsClosed(t *testing.T) {
+	parent := t.TempDir()
+	blocked := filepath.Join(parent, "not-a-directory")
+	if err := os.WriteFile(blocked, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewApp(Config{DataDir: blocked}); err == nil {
+		t.Fatal("expected DATA_DIR error")
+	}
+	missing := filepath.Join(parent, "missing")
+	if _, err := NewApp(Config{DataDir: missing}); err == nil {
+		t.Fatal("expected missing DATA_DIR error")
+	}
+}
+
+func TestDevCreatesMissingDataDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "missing")
+	a := newTestApp(t, Config{DataDir: dir, Dev: true})
+	if _, err := os.Stat(filepath.Join(dir, "hebrew.sqlite")); err != nil {
+		t.Fatal(err)
+	}
+	if a.cfg.DataDir != dir {
+		t.Fatalf("data dir %q", a.cfg.DataDir)
+	}
+}
+
+func TestHealthzWhenDBPingFails(t *testing.T) {
+	a := newTestApp(t, Config{DataDir: t.TempDir()})
+	if err := a.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range []http.Handler{a.Web(), a.MCP()} {
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+		if rr.Code != http.StatusServiceUnavailable {
+			t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+		}
+		var body struct {
+			OK bool `json:"ok"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body.OK {
+			t.Fatal("ok = true, want false")
+		}
+	}
+}
+
+func TestConfigSeams(t *testing.T) {
+	fake := fakeTTS{}
+	when := time.Date(2026, 10, 18, 16, 0, 0, 0, time.UTC)
+	a := newTestApp(t, Config{
+		DataDir:           t.TempDir(),
+		PublicOrigin:      "https://hebrew.example",
+		TrustedProxies:    []string{"10.42.0.0/16"},
+		CookieSecure:      true,
+		GoogleIssuer:      "http://127.0.0.1:9",
+		GoogleAuthURL:     "http://127.0.0.1:9/auth",
+		GoogleTokenURL:    "http://127.0.0.1:9/token",
+		GoogleUserinfoURL: "http://127.0.0.1:9/userinfo",
+		GoogleJWKSURL:     "http://127.0.0.1:9/jwks",
+		ElevenLabsAPIKey:  "ignored-because-tts-is-set",
+		Clock:             fixedClock{when},
+		TTS:               fake,
+	})
+	if a.cfg.GoogleIssuer != "http://127.0.0.1:9" || a.cfg.GoogleJWKSURL != "http://127.0.0.1:9/jwks" {
+		t.Fatalf("google endpoints were replaced: %+v", a.cfg)
+	}
+	if !a.cfg.CookieSecure || len(a.cfg.TrustedProxies) != 1 || a.cfg.PublicOrigin != "https://hebrew.example" {
+		t.Fatalf("config not kept: %+v", a.cfg)
+	}
+	if got := a.TTS(); got != fake {
+		t.Fatalf("tts = %#v, want the override", got)
+	}
+	if !a.store.Clock().Now().Equal(when) {
+		t.Fatal("store clock was not the injected clock")
+	}
+	if a.Review() == nil {
+		t.Fatal("review service is nil")
+	}
+	if a.Placement() == nil {
+		t.Fatal("placement service is nil")
+	}
+}
+
+func TestPlacementUsesConfigClock(t *testing.T) {
+	when := time.Date(2026, 10, 18, 12, 30, 0, 0, time.UTC)
+	a := newTestApp(t, Config{DataDir: t.TempDir(), Clock: fixedClock{when}})
+	ctx := context.Background()
+	userID, err := a.store.InsertUser(ctx, "place@example.com", "sub-place", "learner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runID, err := a.Placement().Start(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runID == 0 {
+		t.Fatal("run id is 0")
+	}
+	run, err := a.store.GetPlacementRun(ctx, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !run.StartedAt.Equal(when) || run.Seed != when.UnixNano() {
+		t.Fatalf("run started %s seed %d, want the config clock", run.StartedAt, run.Seed)
+	}
+}
+
+func TestReviewUsesConfigClock(t *testing.T) {
+	when := time.Date(2024, 5, 1, 8, 0, 0, 0, time.UTC)
+	a := newTestApp(t, Config{DataDir: t.TempDir(), Clock: fixedClock{when}})
+	ctx := context.Background()
+	userID, err := a.store.InsertUser(ctx, "learner@example.com", "sub-learner", "learner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lexemeID, err := testharness.InsertLexeme(ctx, a.store, "שלום")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cardID, err := a.store.InsertCard(ctx, db.Card{
+		UserID:   userID,
+		LexemeID: lexemeID,
+		Skill:    fsrs.SkillRead,
+		State:    fsrs.StateNew,
+		Due:      when,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Review().Grade(ctx, cardID, fsrs.Good, false); err != nil {
+		t.Fatal(err)
+	}
+	card, err := a.Review().Card(ctx, cardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !card.LastReview.Equal(when) {
+		t.Fatalf("last review %s, want the config clock %s", card.LastReview, when)
+	}
+}
+
+func TestTTSFromAPIKey(t *testing.T) {
+	withKey := newTestApp(t, Config{DataDir: t.TempDir(), ElevenLabsAPIKey: "test-key"})
+	el, ok := withKey.TTS().(*audio.ElevenLabs)
+	if !ok || el.APIKey != "test-key" || el.Voice != audio.DefaultVoiceID || el.Model != audio.DefaultModel {
+		t.Fatalf("tts = %#v, want *audio.ElevenLabs", withKey.TTS())
+	}
+
+	unset := newTestApp(t, Config{DataDir: t.TempDir()})
+	if unset.TTS() != nil {
+		t.Fatalf("tts = %#v, want nil without a key", unset.TTS())
+	}
+}
+
+func TestMCPOAuthDiscoveryAndChallenge(t *testing.T) {
+	const public = "https://mcp.example"
+	a := newTestApp(t, Config{
+		DataDir:      t.TempDir(),
+		PublicOrigin: "https://hebrew.example",
+		StateSecret:  "mcp-test-secret",
+		MCPPublicURL: public,
+		MCPAuthToken: "static-secret",
+	})
+	rr := httptest.NewRecorder()
+	a.MCP().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server", nil))
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"issuer":"`+public+`"`) {
+		t.Fatalf("discovery %d %s", rr.Code, rr.Body.String())
+	}
+	rr = httptest.NewRecorder()
+	a.MCP().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("healthz %d", rr.Code)
+	}
+	rr = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	a.MCP().ServeHTTP(rr, req)
+	want := `Bearer realm="hebrew-lessons", resource_metadata="` + public + `/.well-known/oauth-protected-resource"`
+	if rr.Code != http.StatusUnauthorized || rr.Header().Get("WWW-Authenticate") != want || rr.Body.String() != "Unauthorized" {
+		t.Fatalf("challenge %d %q %s", rr.Code, rr.Header().Get("WWW-Authenticate"), rr.Body.String())
+	}
+}
+
+func TestOAuthRefusesToStartWithoutSessionSecret(t *testing.T) {
+	_, err := NewApp(Config{
+		DataDir:      t.TempDir(),
+		MCPPublicURL: "https://hebrew-mcp.ibhacked.us",
+	})
+	if err == nil || !strings.Contains(err.Error(), "HEBREW_SESSION_SECRET is required when OAuth is enabled") {
+		t.Fatalf("public url: %v", err)
+	}
+	_, err = NewApp(Config{
+		DataDir:            t.TempDir(),
+		GoogleClientID:     "id",
+		GoogleClientSecret: "secret",
+	})
+	if err == nil || !strings.Contains(err.Error(), "HEBREW_SESSION_SECRET") {
+		t.Fatalf("google: %v", err)
+	}
+	a := newTestApp(t, Config{DataDir: t.TempDir()})
+	if a.MCP() == nil {
+		t.Fatal("oauth off should still start")
+	}
+}
+
+func TestReadOnlyTokenRefusesToStart(t *testing.T) {
+	const admin = "admin-token-admin-token-admin-tok"
+	const smoke = "smoke-token-smoke-token-smoke-tok"
+	cases := []struct {
+		name string
+		cfg  Config
+		want string
+	}{
+		{
+			name: "missing learner",
+			cfg:  Config{DataDir: t.TempDir(), MCPAuthToken: admin, MCPReadOnlyToken: smoke},
+			want: "MCP_READONLY_LEARNER_ID must be a positive integer when MCP_READONLY_TOKEN is set",
+		},
+		{
+			name: "negative learner",
+			cfg:  Config{DataDir: t.TempDir(), MCPAuthToken: admin, MCPReadOnlyToken: smoke, MCPReadOnlyLearnerID: -3},
+			want: "MCP_READONLY_LEARNER_ID must be a positive integer when MCP_READONLY_TOKEN is set",
+		},
+		{
+			name: "equals admin",
+			cfg:  Config{DataDir: t.TempDir(), MCPAuthToken: admin, MCPReadOnlyToken: admin, MCPReadOnlyLearnerID: 7},
+			want: "MCP_READONLY_TOKEN must not equal MCP_AUTH_TOKEN",
+		},
+		{
+			name: "too short",
+			cfg:  Config{DataDir: t.TempDir(), MCPAuthToken: admin, MCPReadOnlyToken: "smoke-token-smoke-token-smoke-t", MCPReadOnlyLearnerID: 7},
+			want: "MCP_READONLY_TOKEN must be at least 32 characters",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			prev := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+			t.Cleanup(func() { slog.SetDefault(prev) })
+			_, err := NewApp(tc.cfg)
+			if err == nil || err.Error() != tc.want {
+				t.Fatalf("err %v", err)
+			}
+			if !strings.Contains(buf.String(), tc.want) {
+				t.Fatalf("log %q", buf.String())
+			}
+			if strings.Contains(err.Error(), tc.cfg.MCPReadOnlyToken) || strings.Contains(buf.String(), tc.cfg.MCPReadOnlyToken) {
+				t.Fatal("refusal exposed the token")
+			}
+		})
+	}
+}
+
+func TestReadOnlyTokenAcceptedAtStartup(t *testing.T) {
+	const admin = "admin-token-admin-token-admin-tok"
+	const smoke = "smoke-token-smoke-token-smoke-tok"
+	a := newTestApp(t, Config{
+		DataDir:              t.TempDir(),
+		StateSecret:          "state-secret-state-secret-ok",
+		MCPPublicURL:         "https://mcp.example",
+		MCPAuthToken:         admin,
+		MCPReadOnlyToken:     smoke,
+		MCPReadOnlyLearnerID: 7,
+	})
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}`
+	for _, token := range []string{admin, smoke} {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("MCP-Protocol-Version", "2025-11-25")
+		req.Header.Set("Authorization", "Bearer "+token)
+		a.MCP().ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status %d %s", rr.Code, rr.Body.String())
+		}
+	}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("MCP-Protocol-Version", "2025-11-25")
+	req.Header.Set("Authorization", "Bearer nope")
+	a.MCP().ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized || rr.Body.String() != "Unauthorized" {
+		t.Fatalf("wrong token %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestApplyDefaults(t *testing.T) {
+	cfg := ApplyDefaults(Config{})
+	if cfg.DataDir != "/data" || cfg.HTTPAddr != ":8080" || cfg.MCPAddr != ":8787" {
+		t.Fatalf("addrs: %+v", cfg)
+	}
+	if cfg.LogLevel != "info" {
+		t.Fatalf("log level %q", cfg.LogLevel)
+	}
+	if cfg.GoogleAuthURL != defaultGoogleAuthURL || cfg.GoogleTokenURL != defaultGoogleTokenURL ||
+		cfg.GoogleUserinfoURL != defaultGoogleUserinfoURL || cfg.GoogleJWKSURL != defaultGoogleJWKSURL ||
+		cfg.GoogleIssuer != defaultGoogleIssuer {
+		t.Fatalf("google defaults: %+v", cfg)
+	}
+	if cfg.Clock == nil {
+		t.Fatal("clock default is nil")
+	}
+}
+
+func TestMCPHealthOpenAndToolsClosed(t *testing.T) {
+	a := newTestApp(t, Config{DataDir: t.TempDir(), MCPAuthToken: "test-token"})
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.Header.Del("Authorization")
+	if body := getHealthRequest(t, a.MCP(), req); !body.OK {
+		t.Fatalf("health = %+v", body)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	rr := httptest.NewRecorder()
+	a.MCP().ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized || rr.Body.String() != "Unauthorized" {
+		t.Fatalf("status = %d body %s", rr.Code, rr.Body.String())
+	}
+	if rr.Header().Get("WWW-Authenticate") != `Bearer realm="hebrew-lessons"` {
+		t.Fatalf("challenge %q", rr.Header().Get("WWW-Authenticate"))
+	}
+	unknown := httptest.NewRecorder()
+	a.MCP().ServeHTTP(unknown, httptest.NewRequest(http.MethodGet, "/", nil))
+	if unknown.Code != http.StatusNotFound || unknown.Body.String() != "Not found" || unknown.Header().Get("WWW-Authenticate") != "" {
+		t.Fatalf("root %d %q %q", unknown.Code, unknown.Header().Get("WWW-Authenticate"), unknown.Body.String())
+	}
+}
+
+func newTestApp(t *testing.T, cfg Config) *App {
+	t.Helper()
+	a, err := NewApp(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = a.Close() })
+	return a
+}
+
+func getHealthRequest(t *testing.T, h http.Handler, req *http.Request) struct {
+	OK bool `json:"ok"`
+} {
+	t.Helper()
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if ct := rr.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("content-type %q", ct)
+	}
+	var body struct {
+		OK bool `json:"ok"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		b, _ := io.ReadAll(rr.Body)
+		t.Fatalf("json: %v (%s)", err, b)
+	}
+	return body
+}

@@ -1,0 +1,46 @@
+Bands 1–4 of items.json take their word identities from Hermit Dave's
+FrequencyWords Hebrew list.
+
+  Project:  https://github.com/hermitdave/FrequencyWords
+  File:     content/2018/he/he_50k.txt
+  Commit:   34bb6447a96d4434dc2d4b24e0cf946c523090b3
+  Corpus:   OpenSubtitles (the 2018 Hebrew list)
+
+The list is ordered by frequency. Band cut-offs by rank (1 is the most
+frequent line):
+
+  band 1   1–500
+  band 2   501–1000
+  band 3   1001–2000
+  band 4   2001–4000
+
+Licence for that content: Creative Commons Attribution-ShareAlike 4.0
+International (CC BY-SA 4.0).
+https://creativecommons.org/licenses/by-sa/4.0/
+
+The band 1–4 entries in items.json are an adaptation of that list and are
+distributed under CC BY-SA 4.0 (ShareAlike).
+
+The project states "CC-by-sa-4.0 for content" at the commit above.
+Names, function words, particles, interjections, and junk tokens were
+dropped. The Hebrew pointing and the English glosses were added for this
+fixture.
+
+Band 0 words are copied, pointing included, from the tutor's existing
+lesson worksheets and class lexicon. They are not covered by the
+FrequencyWords licence.
+
+Verification. Every item is marked verified true. The first 100 items were
+checked by hand. Each of the 100 items added later (INIT-015/SPEC-006, 20 in
+each band) was checked against Pealim, https://www.pealim.com, for its
+pointing, part of speech, gender, and English meaning. gen/curated.go records
+the Pealim dictionary path that confirmed each one. Pealim was read as a
+reference. Its text and audio are not copied into this directory. A word
+Pealim could not confirm was left out.
+
+Transliteration was written for this fixture. Gender is Pealim's for the
+items added in SPEC-006.
+
+letters.json (Part 0 syllable items) and audio-manifest.json (the text of
+every clip the deck needs) are written for this project and carry no
+third-party content.

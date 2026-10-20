@@ -1,0 +1,342 @@
+package web
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"regexp"
+	"strings"
+	"testing"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
+)
+
+func TestTodayLayout(t *testing.T) {
+	const token = `tok"en<script>`
+	body := get(t, newMux(nil, CSRFFunc(func(*http.Request) string { return token })), "/")
+
+	if !strings.Contains(body, `<html lang="en" dir="ltr"`) {
+		t.Fatalf("html lang/dir missing:\n%s", body[:min(400, len(body))])
+	}
+	if !strings.Contains(body, `href="#main"`) || !strings.Contains(body, `id="main"`) {
+		t.Fatal("skip link or main landmark missing")
+	}
+	for _, href := range []string{`href="/"`, `href="/lessons"`, `href="/review"`, `href="/progress"`, `href="/me"`} {
+		if !strings.Contains(body, href) {
+			t.Fatalf("nav href %s missing", href)
+		}
+	}
+	tag := dockHref(body, "/")
+	if !strings.Contains(tag, `aria-current="page"`) {
+		t.Fatalf("today link is not current: %s", tag)
+	}
+	if strings.Contains(dockHref(body, "/review"), `aria-current="page"`) {
+		t.Fatal("review link is current on Today")
+	}
+	if !strings.Contains(body, `name="csrf-token"`) || !strings.Contains(body, `content="tok&#34;en&lt;script&gt;"`) {
+		t.Fatal("csrf meta was not escaped")
+	}
+	if !strings.Contains(body, "X-CSRF-Token") || !strings.Contains(body, "hx-headers") {
+		t.Fatal("hx-headers missing X-CSRF-Token")
+	}
+	if !strings.Contains(body, `tok&#34;en&lt;script&gt;`) {
+		t.Fatal("token was not escaped into hx-headers")
+	}
+	if strings.Contains(body, "<script>") && strings.Contains(body, token) {
+		t.Fatal("raw token broke out of an attribute")
+	}
+	if strings.Contains(body, "http://") || strings.Contains(body, "https://") || strings.Contains(body, "url(//") {
+		t.Fatal("rendered page has an external URL")
+	}
+	for _, src := range []string{`href="/static/css/tokens.css"`, `href="/static/css/base.css"`, `src="/static/js/htmx.min.js"`, `<script src="/static/js/shell.js" defer></script>`, `/static/icons/sprite.svg#icon-today`} {
+		if !strings.Contains(body, src) {
+			t.Fatalf("missing local asset %s", src)
+		}
+	}
+	if strings.Contains(body, "icon-streak") || strings.Contains(body, "icon-xp") {
+		t.Fatal("streak or xp icon is in the shell")
+	}
+	if regexp.MustCompile(`(?i)\b(streak|xp)\b`).MatchString(body) {
+		t.Fatal("streak or xp copy is in the shell")
+	}
+	if strings.Contains(body, "good morning") || strings.Contains(body, "שָׁלוֹם") || strings.Contains(body, "he-proof") {
+		t.Fatal("sample paragraph or gloss is still on Today")
+	}
+	if strings.Contains(body, `class="unit-title"`) || strings.Contains(body, "Getting ready in the morning") {
+		t.Fatal("empty Today still renders a sample lesson")
+	}
+	if strings.Contains(body, "btn-primary") || strings.Contains(body, `href="/lesson"`) {
+		t.Fatal("empty Today still offers a lesson or a filled action")
+	}
+	if !strings.Contains(body, "quiet-card--due") || !strings.Contains(body, "quiet-card--next") {
+		t.Fatal("empty Today should show both quiet cards")
+	}
+	if !strings.Contains(body, "No lesson published yet") {
+		t.Fatal("empty Today should say no lesson is published")
+	}
+	// The theme and log out live on Me (SPEC-017), so nothing in the header can wrap.
+	if strings.Contains(body, "theme-toggle") || strings.Contains(body, "data-theme-choice") || strings.Contains(body, "/auth/logout") {
+		t.Fatal("the theme choice and log out belong on Me, not in the shell")
+	}
+	if !strings.Contains(body, `hx-swap="outerHTML transition:true"`) {
+		t.Fatal("htmx view transitions are not enabled")
+	}
+	if strings.Contains(body, "globalViewTransitions") || strings.Contains(body, "defaultSwapDelay") {
+		t.Fatal("motion script must be a file, not an inline script")
+	}
+	if strings.Count(body, "<script") != 4 {
+		t.Fatalf("want the theme boot, htmx, shell.js, and motion.js; found %d script tags", strings.Count(body, "<script"))
+	}
+	if !strings.Contains(body, "<script>"+views.ThemeBoot+"</script>") {
+		t.Fatal("theme boot script is not the inline head script")
+	}
+	shell := get(t, New(nil, nil), "/static/js/shell.js")
+	for _, needle := range []string{"globalViewTransitions", "defaultSwapDelay=0", `typeof document.startViewTransition==="function"`, "defaultSettleDelay=0"} {
+		if !strings.Contains(shell, needle) {
+			t.Fatalf("shell.js missing %s", needle)
+		}
+	}
+	if views.UIFor("he", "m").DueLabel != "מִלִּים מֻכָּנוֹת" {
+		t.Fatalf("due label pointing: %s", views.UIFor("he", "m").DueLabel)
+	}
+	if strings.Contains(body, ">Start<") || strings.Contains(body, "הַתְחֵל") {
+		t.Fatal("empty Today should not offer a start button")
+	}
+	if !strings.Contains(body, "Nothing due") || !strings.Contains(body, "No lesson published yet") {
+		t.Fatal("empty Today should say nothing is due and no lesson is published")
+	}
+	scriptAt := strings.Index(body, "localStorage")
+	cssAt := strings.Index(body, "/static/css/tokens.css")
+	if scriptAt < 0 || cssAt < 0 || scriptAt > cssAt {
+		t.Fatal("theme script must run before the stylesheet")
+	}
+	if strings.Contains(body, `href="/lesson"`) {
+		t.Fatal("empty Today should not link to a lesson")
+	}
+}
+
+func TestNavCurrent(t *testing.T) {
+	h := newMux(nil, CSRFFunc(func(*http.Request) string { return "t" }))
+	for _, path := range []string{"/review", "/progress"} {
+		body := get(t, h, path)
+		tag := dockHref(body, path)
+		if !strings.Contains(tag, `aria-current="page"`) {
+			t.Fatalf("%s is not current: %s", path, tag)
+		}
+		if !strings.Contains(body, "X-CSRF-Token") {
+			t.Fatalf("%s missing csrf header wiring", path)
+		}
+	}
+	// The lesson player belongs to Lessons, so that is the one current item there.
+	lesson := get(t, h, "/lesson")
+	if !strings.Contains(dockHref(lesson, "/lessons"), `aria-current="page"`) || strings.Count(lesson, `aria-current="page"`) != 1 {
+		t.Fatal("the lesson player should mark Lessons, and only Lessons, current")
+	}
+	for _, path := range []string{"/lessons", "/me"} {
+		body := get(t, h, path)
+		if !strings.Contains(dockHref(body, path), `aria-current="page"`) || strings.Count(body, `aria-current="page"`) != 1 {
+			t.Fatalf("%s is not the one current item: %s", path, dockHref(body, path))
+		}
+	}
+}
+
+func TestStaticHasNoExternalURL(t *testing.T) {
+	h := New(nil, nil)
+	for _, path := range []string{
+		"/static/css/tokens.css",
+		"/static/css/base.css",
+		"/static/css/components.css",
+		"/static/css/motion.css",
+		"/static/js/htmx.min.js",
+		"/static/js/shell.js",
+		"/static/js/motion.js",
+		"/static/icons/sprite.svg",
+		"/static/fonts/noto-sans-hebrew-hebrew.woff2",
+		"/static/fonts/noto-sans-hebrew-latin.woff2",
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status %d", path, rec.Code)
+		}
+		text := strings.ReplaceAll(rec.Body.String(), "http://www.w3.org/2000/svg", "")
+		if strings.Contains(text, "http://") || strings.Contains(text, "https://") {
+			t.Fatalf("%s contains an external URL", path)
+		}
+	}
+	css := get(t, h, "/static/css/tokens.css")
+	if !strings.Contains(css, "oklch(") || !strings.Contains(css, "--space-9: 96px") {
+		t.Fatal("tokens missing oklch or the 96px step")
+	}
+	if !strings.Contains(css, "light-dark(") || !strings.Contains(css, `color-scheme: light dark`) || !strings.Contains(css, `[data-theme="dark"]`) {
+		t.Fatal("tokens missing scheme override")
+	}
+	if !strings.Contains(css, "--lh-he-body: 1.6") || !strings.Contains(css, "--lh-he-display: 1.3") {
+		t.Fatal("pointed line-height tokens missing")
+	}
+	for _, token := range []string{"--fs-he-xl:", "--fs-he-md: 24px", "--fs-small: 15px", "--content-max: 1080px", "--rail-w: 92px", "--tap: var(--size-tap)", "--size-tap: 44px", "--size-cta: 56px", "--motion-shift: 16px", "--motion-shift: 0px", `url("../fonts/noto-sans-hebrew-hebrew.woff2")`} {
+		if !strings.Contains(css, token) {
+			t.Fatalf("tokens missing %s", token)
+		}
+	}
+	for _, gone := range []string{"--step-4:", "--fs-eyebrow:", "--tap-btn:", "--shell-max:", "--fw-semibold:", `url("design/assets/fonts`} {
+		if strings.Contains(css, gone) {
+			t.Fatalf("tokens still contain %s", gone)
+		}
+	}
+	sprite := get(t, h, "/static/icons/sprite.svg")
+	if strings.Contains(sprite, "icon-streak") || strings.Contains(sprite, "icon-xp") {
+		t.Fatal("sprite still ships streak or xp")
+	}
+}
+
+func TestPairSeparatesRuns(t *testing.T) {
+	h := New(nil, nil)
+	he := get(t, h, "/?lang=he&due=0")
+	assertPair(t, he, "אֵין חֲזָרוֹת עַכְשָׁיו", "Nothing due", "he")
+	en := get(t, h, "/?due=0")
+	assertPair(t, en, "אֵין חֲזָרוֹת עַכְשָׁיו", "Nothing due", "en")
+	if strings.Contains(he, "good morning") || strings.Contains(en, "good morning") {
+		t.Fatal("gloss line is still rendered")
+	}
+}
+
+func TestZeroDueAndNoLesson(t *testing.T) {
+	h := New(nil, nil)
+	body := get(t, h, "/")
+	if strings.Contains(body, "ink-card") || strings.Contains(body, "הַתְחֵל") || strings.Contains(body, "btn-primary") {
+		t.Fatal("empty Today still shows a review hero or a filled action")
+	}
+	if strings.Contains(body, "btn-tonal") {
+		t.Fatal("tonal CTA remains when nothing is due")
+	}
+	if strings.Contains(body, `href="/lesson"`) || strings.Contains(body, `class="unit-title"`) {
+		t.Fatal("empty Today still renders a lesson card")
+	}
+	assertPair(t, body, "אֵין חֲזָרוֹת עַכְשָׁיו", "Nothing due", "en")
+	if !strings.Contains(body, "No lesson published yet") {
+		t.Fatal("empty Today should say no lesson is published")
+	}
+	if !strings.Contains(body, "quiet-card--due") || !strings.Contains(body, "icon-check") {
+		t.Fatal("nothing due should use the check placeholder")
+	}
+	if !strings.Contains(body, "quiet-card--next") || !strings.Contains(body, "icon-lessons") {
+		t.Fatal("missing lesson should be a placeholder card")
+	}
+	if !strings.Contains(body, "הַשִּׁעוּר הַבָּא יוֹפִיעַ כָּאן") || !strings.Contains(body, "Your next lesson will appear here") {
+		t.Fatal("missing lesson hint missing")
+	}
+	pill := regexp.MustCompile(`(?s)<section class="quiet-card quiet-card--due">.*?</section>`).FindString(body)
+	if !strings.Contains(pill, `<bdi lang="en" dir="ltr">Nothing due</bdi>`) {
+		t.Fatal("nothing-due english run must be an ltr bdi inside the pill")
+	}
+}
+
+func TestEnglishShell(t *testing.T) {
+	body := get(t, New(nil, nil), "/")
+	if !strings.Contains(body, `<html lang="en" dir="ltr"`) {
+		t.Fatal("english shell lang/dir missing")
+	}
+	if !strings.Contains(body, `<bdi lang="en" dir="ltr">Today</bdi>`) {
+		t.Fatal("english nav label missing")
+	}
+	if strings.Contains(body, `href="/review?lang=`) || strings.Contains(body, `href="/?lang=`) {
+		t.Fatal("english shell should keep bare links")
+	}
+	if !strings.Contains(body, `href="/review"`) || !strings.Contains(body, `href="/"`) {
+		t.Fatal("english shell dropped a nav link")
+	}
+	he := get(t, New(nil, nil), "/?lang=he")
+	if !strings.Contains(he, `<html lang="he" dir="rtl"`) || !strings.Contains(he, `href="/review?lang=he"`) {
+		t.Fatal("hebrew opt-in did not stick on links")
+	}
+	if !strings.Contains(he, "דַּלֵּג לַתֹּכֶן") || strings.Contains(he, "דַּלְּגִי לַתֹּכֶן") {
+		t.Fatal("hebrew opt-in should address the learner in the masculine")
+	}
+	if !strings.Contains(body, `<bdi lang="he" dir="rtl">`+views.AppName+`</bdi>`) {
+		t.Fatal("hebrew wordmark is not isolated in the english shell")
+	}
+	if !strings.Contains(body, "No lesson published yet") {
+		t.Fatal("empty lesson state left the english shell")
+	}
+}
+
+func assertPair(t *testing.T, body, he, en, first string) {
+	t.Helper()
+	m := regexp.MustCompile(`(?s)<span class="pair">(.*?)</span>`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatal("pair component missing")
+	}
+	inner := m[1]
+	gap := regexp.MustCompile(`</bdi>(.*?)<bdi`).FindStringSubmatch(inner)
+	if gap == nil || strings.TrimSpace(gap[1]) != "" {
+		t.Fatalf("pair runs are not separated by a gap: %s", inner)
+	}
+	heAt := strings.Index(inner, `lang="he"`)
+	enAt := strings.Index(inner, `lang="en"`)
+	if heAt < 0 || enAt < 0 || !strings.Contains(inner, he) || !strings.Contains(inner, en) {
+		t.Fatalf("pair runs missing: %s", inner)
+	}
+	if first == "en" && enAt > heAt {
+		t.Fatal("english shell pair does not lead with English")
+	}
+	if first == "he" && heAt > enAt {
+		t.Fatal("hebrew shell pair does not lead with Hebrew")
+	}
+}
+
+func TestForeignRuns(t *testing.T) {
+	h := New(nil, nil)
+	for _, path := range []string{"/?lang=he", "/?lang=he&due=0", "/?lang=he&next=0", "/review?lang=he", "/progress?lang=he", "/lesson?lang=he"} {
+		n := assertRunDir(t, get(t, h, path), "en", "ltr")
+		if path == "/?lang=he" && n == 0 {
+			t.Fatal("hebrew shell should isolate its english runs")
+		}
+	}
+	for _, path := range []string{"/", "/?lang=en", "/?due=0", "/?next=0", "/review", "/progress", "/lesson"} {
+		n := assertRunDir(t, get(t, h, path), "he", "rtl")
+		if path == "/" && n == 0 {
+			t.Fatal("english shell should isolate its hebrew runs")
+		}
+	}
+}
+
+func TestAddressGender(t *testing.T) {
+	if views.Address("m", "הַתְחֵל", "הַתְחִילִי") != "הַתְחֵל" {
+		t.Fatal("masculine address")
+	}
+	if views.Address("f", "הַתְחֵל", "הַתְחִילִי") != "הַתְחִילִי" {
+		t.Fatal("feminine address")
+	}
+	if views.GenderLabel("f") != "נ׳" || views.GenderLabel("m") != "ז׳" || views.GenderLabel("") != "" {
+		t.Fatal("gender label")
+	}
+	she := views.UIFor("he", "f")
+	if she.Start != "הַתְחִילִי" || she.Skip != "דַּלְּגִי לַתֹּכֶן" {
+		t.Fatalf("feminine shell: %s / %s", she.Start, she.Skip)
+	}
+}
+
+func assertRunDir(t *testing.T, body, lang, dir string) int {
+	t.Helper()
+	tags := regexp.MustCompile(`<[a-zA-Z0-9]+[^>]*\blang="`+lang+`"[^>]*>`).FindAllString(body, -1)
+	for _, tag := range tags {
+		if !strings.Contains(tag, `dir="`+dir+`"`) {
+			t.Fatalf("lang=%s missing dir=%s: %s", lang, dir, tag)
+		}
+	}
+	return len(tags)
+}
+
+func dockHref(body, href string) string {
+	return regexp.MustCompile(`<a\b[^>]*href="` + regexp.QuoteMeta(href) + `"[^>]*class="dock__link"[^>]*>|<a\b[^>]*class="dock__link"[^>]*href="` + regexp.QuoteMeta(href) + `"[^>]*>`).FindString(body)
+}
+
+func get(t *testing.T, h http.Handler, path string) string {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%s status %d", path, rec.Code)
+	}
+	return rec.Body.String()
+}

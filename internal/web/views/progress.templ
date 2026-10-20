@@ -1,0 +1,277 @@
+package views
+
+// Progress answers the six questions of the north star for one skill at a time: what do I
+// know, what have I seen, what do I struggle with, am I improving, what did I lose, and why.
+// Every number is the learner model's or a daily snapshot's, and every chart has a table.
+// The skill is a GET form of four c-answer buttons, so it works with no script and the page
+// is the same one the AI reads through get_progress.
+templ Progress(v ProgressView) {
+	@Layout(v.Page) {
+		<article class="progress" data-skill={ v.Skill } data-empty={ Flag(v.Empty) }>
+			<header class="progress__head">
+				<h1 lang={ v.Lang }>{ v.ProgressHeading }</h1>
+				<p class="progress__lede">@T(v.Lang, "", "What you know, what you have seen, and how it is changing.")</p>
+				if v.UnitsText != "" {
+					<p class="progress__units">
+						@T(v.Lang, "", "Lessons finished")
+						<bdi class="progress__units-n" lang="en" dir="ltr">{ v.UnitsText }</bdi>
+					</p>
+				}
+			</header>
+			if v.Empty {
+				@progressEmpty(v)
+			} else {
+				if v.Weekly != nil {
+					@weeklyCard(v)
+				}
+				@skillTabs(v)
+				<div class="progress__grid" data-motion="stagger">
+					@knowCard(v)
+					@chartCard(v, v.Est)
+					@chartCard(v, v.Retention)
+					@weekCard(v)
+					@placementCard2(v)
+				</div>
+			}
+		</article>
+	}
+}
+
+// progressEmpty is the page of a learner with no snapshot and no word seen. It says what to
+// do: practise, and come back.
+templ progressEmpty(v ProgressView) {
+	<section class="quiet-card progress-empty" aria-labelledby="progress-empty-h">
+		@Illustration("empty-progress", "")
+		<h2 id="progress-empty-h" class="quiet-card__line">@T(v.Lang, "", "Practice a few days and your chart starts here")</h2>
+		<p class="quiet-card__hint">@T(v.Lang, "", "Each night the app saves a picture of the words you know. Do a review or a lesson today, and your first point appears tomorrow.")</p>
+		<a class="btn btn-tonal" href={ templ.SafeURL(v.Href("/")) }>
+			@IconClass("next", iconClass(v.Dir == "rtl"), "")
+			<span>@T(v.Lang, "", "Go to Today")</span>
+		</a>
+	</section>
+}
+
+templ weeklyCard(v ProgressView) {
+	<section class="c-card pweekly" aria-labelledby="weekly-h">
+		<p class="eyebrow" id="weekly-h">@E("Weekly report · " + v.Weekly.WeekOf)</p>
+		<p class="pweekly__text">@E(v.Weekly.Summary)</p>
+	</section>
+}
+
+// skillTabs is the choice of skill. Each button is a c-answer in a GET form: the chosen one is
+// selected (aria-pressed), and the key badge is left out.
+templ skillTabs(v ProgressView) {
+	<form class="ptabs" method="get" action="/progress" role="group" aria-label="Skill">
+		if v.Lang == "he" {
+			<input type="hidden" name="lang" value="he"/>
+		}
+		for _, tab := range v.Tabs {
+			@AnswerOptionWith(tabState(tab), "", templ.Attributes{"type": "submit", "name": "skill", "value": tab.Skill}) {
+				@E(tab.Label)
+			}
+		}
+	</form>
+}
+
+func tabState(t SkillTab) AnswerState {
+	if t.Current {
+		return AnswerSelected
+	}
+	return AnswerDefault
+}
+
+// knowCard is the stacked bar of states for the skill, as of now, with its legend and table.
+templ knowCard(v ProgressView) {
+	<section class="c-card pknow" aria-labelledby="know-h">
+		<p class="eyebrow" id="know-h">@E("What you know · " + v.SkillName)</p>
+		<p class="pknow__head">
+			<span class="count"><bdi lang="en" dir="ltr">{ v.Known }</bdi></span>
+			<span class="pknow__unit">@T(v.Lang, "", "words estimated known")</span>
+		</p>
+		<div class="pbar" dir="ltr">
+			@templ.Raw(v.BarSVG)
+		</div>
+		<ul class="pc__legend">
+			for _, item := range v.Legend {
+				<li class="pc__legend-item" data-state={ item.State }>
+					<span class="pc__sw" data-state={ item.State } aria-hidden="true"></span>
+					<span class="pc__legend-label">@E(item.Label)</span>
+					<span class="pc__legend-n"><bdi lang="en" dir="ltr">{ Num(item.Count) }</bdi></span>
+				</li>
+			}
+		</ul>
+		@chartTable(v, v.BarTable)
+	</section>
+}
+
+// chartCard is a line chart card: title, note, the chart or what to do, its summary, and a table.
+templ chartCard(v ProgressView, c ChartView) {
+	<section class="c-card pchart" aria-labelledby={ c.ID + "-h" } data-chart={ c.ID }>
+		<h2 id={ c.ID + "-h" } class="pchart__title">@E(c.Title)</h2>
+		if c.Note != "" {
+			<p class="pchart__note">@E(c.Note)</p>
+		}
+		if c.SVG != "" {
+			<div class="pchart__plot" dir="ltr">
+				@templ.Raw(c.SVG)
+			</div>
+			if len(c.Key) > 0 {
+				<ul class="pchart__key">
+					for _, k := range c.Key {
+						<li>@E(k)</li>
+					}
+				</ul>
+			}
+			if c.Summary != "" {
+				<p class="pchart__summary">@E(c.Summary)</p>
+			}
+			@chartTable(v, c.Table)
+		} else {
+			<div class="pchart__empty">
+				@Illustration("empty-progress", "")
+				<p class="pchart__hint">@E(c.Hint)</p>
+			</div>
+		}
+	</section>
+}
+
+// chartTable is the same values as the chart, for a screen reader and for anyone who wants the numbers.
+templ chartTable(v ProgressView, t ChartTable) {
+	if len(t.Rows) > 0 {
+		<details class="pc-table">
+			<summary>@T(v.Lang, "", "Show as a table")</summary>
+			<div class="pc-table__scroll" role="region" tabindex="0" aria-label={ t.Caption }>
+				<table>
+					<caption>@E(t.Caption)</caption>
+					<thead>
+						<tr>
+							for _, h := range t.Head {
+								<th scope="col">@E(h)</th>
+							}
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range t.Rows {
+							<tr>
+								for i, cell := range row {
+									if i == 0 {
+										<th scope="row">@E(cell)</th>
+									} else {
+										<td>@E(cell)</td>
+									}
+								}
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</details>
+	}
+}
+
+// weekCard is the last seven days: words gained and lost per skill, the words that slipped
+// and why, and the words that came back.
+templ weekCard(v ProgressView) {
+	<section class="c-card pweek" aria-labelledby="week-h">
+		<h2 id="week-h" class="pchart__title">@T(v.Lang, "", "This week")</h2>
+		if v.Week.Compared {
+			<p class="pchart__note">@E("Words known, from " + shortDayOf(v.Week.From) + " to " + shortDayOf(v.Week.To) + ".")</p>
+			<div class="pc-table__scroll" role="region" tabindex="0" aria-label="Words gained and lost this week, by skill">
+				<table class="pweek__table">
+					<caption class="vh">@E("Words gained and lost this week, by skill")</caption>
+					<thead>
+						<tr>
+							<th scope="col">@T(v.Lang, "", "Skill")</th>
+							<th scope="col">@T(v.Lang, "", "Gained")</th>
+							<th scope="col">@T(v.Lang, "", "Lost")</th>
+							<th scope="col">@T(v.Lang, "", "Struggling")</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, s := range v.Week.Skills {
+							<tr data-skill={ s.Skill }>
+								<th scope="row">@E(s.Label)</th>
+								<td><bdi lang="en" dir="ltr">{ SignedGain(s.Gained) }</bdi></td>
+								<td><bdi lang="en" dir="ltr">{ SignedLoss(s.Lost) }</bdi></td>
+								<td><bdi lang="en" dir="ltr">{ Num(s.StruggleStart) } to { Num(s.StruggleEnd) }</bdi></td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		} else {
+			<p class="pchart__note">@T(v.Lang, "", "Your week fills in after two days of practice.")</p>
+		}
+		<h3 class="pweek__h3">@T(v.Lang, "", "Slipped back")</h3>
+		if len(v.Week.Slipped) == 0 && len(v.Week.Bands) == 0 {
+			<p class="pweek__none">@T(v.Lang, "", "Nothing slipped this week.")</p>
+		} else {
+			<ul class="pweek__list" data-list="slipped">
+				for _, b := range v.Week.Bands {
+					<li class="pweek__item" data-kind="band">
+						<span class="pweek__text">@E("Some level " + Num(b) + " words are slipping")</span>
+					</li>
+				}
+				for _, w := range v.Week.Slipped {
+					@weekWord(w)
+				}
+			</ul>
+		}
+		<h3 class="pweek__h3">@T(v.Lang, "", "Back on track")</h3>
+		if len(v.Week.Back) == 0 {
+			<p class="pweek__none">@T(v.Lang, "", "No words have recovered yet.")</p>
+		} else {
+			<p class="pweek__sub">@T(v.Lang, "", "Slipped in the last four weeks, and no longer struggling.")</p>
+			<ul class="pweek__list" data-list="back">
+				for _, w := range v.Week.Back {
+					@weekWord(w)
+				}
+			</ul>
+		}
+	</section>
+}
+
+templ weekWord(w WeekWord) {
+	<li class="pweek__item" data-skill={ w.Skill }>
+		<span class="pweek__he">@H(w.Text)</span>
+		if w.Gloss != "" {
+			<span class="pweek__gloss">@E(w.Gloss)</span>
+		}
+		<span class="c-chip pweek__skill">@E(w.SkillLabel)</span>
+		if w.CauseLabel != "" {
+			<span class="pweek__cause">@E(w.CauseLabel)</span>
+		}
+	</li>
+}
+
+// placementCard2 is the finished placement runs and check-ins, newest first.
+templ placementCard2(v ProgressView) {
+	<section class="c-card pplace" aria-labelledby="place-h">
+		<h2 id="place-h" class="pchart__title">@T(v.Lang, "", "Placement history")</h2>
+		if len(v.Placement) == 0 {
+			<p class="pweek__none">@T(v.Lang, "", "No placement yet. Take the placement check from Today, so lessons fit you.")</p>
+			<a class="btn btn-tonal" href={ templ.SafeURL(v.Href("/")) }>
+				<span>@T(v.Lang, "", "Go to Today")</span>
+			</a>
+		} else {
+			<ol class="pplace__list">
+				for _, r := range v.Placement {
+					<li class="pplace__item">
+						<p class="pplace__title">
+							@E(r.Date)
+							<span aria-hidden="true"> · </span>
+							@E(r.Kind)
+							if r.Level != "" {
+								<span aria-hidden="true"> · </span>
+								@E(r.Level)
+							}
+						</p>
+						if r.Detail != "" {
+							<p class="pplace__detail">@E(r.Detail)</p>
+						}
+					</li>
+				}
+			</ol>
+		}
+	</section>
+}

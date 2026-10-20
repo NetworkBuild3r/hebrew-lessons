@@ -1,0 +1,134 @@
+package views
+
+// T is a run of UI copy. English is the default. A Hebrew string, when the shell has one,
+// is used in the Hebrew shell. A string with no Hebrew yet stays an English run in its own
+// bdi, so it never takes the page direction.
+templ T(lang, he, en string) {
+	if lang == "he" && he != "" {
+		@H(he)
+	} else {
+		@E(en)
+	}
+}
+
+// Me is the fifth destination. The theme choice is here, so the header has nothing that wraps.
+templ Me(v MeView) {
+	@Layout(v.Page) {
+		<article class="me">
+			<header class="me__head">
+				<span class="me__avatar" aria-hidden="true">{ Initials(v.Name) }</span>
+				<div class="me__who">
+					<h1 lang={ v.Lang }>{ v.Me }</h1>
+					if v.Name != "" {
+						<p class="me__mail"><bdi lang="en" dir="ltr">{ v.Name }</bdi></p>
+					}
+				</div>
+			</header>
+			<section class="c-card me__card" aria-labelledby="me-theme">
+				<h2 id="me-theme" class="me__h2">@T(v.Lang, "", "Appearance")</h2>
+				<p class="me__hint">@T(v.Lang, "", "Light, dark, or follow your device.")</p>
+				@themeChoice(v.Page)
+			</section>
+			<section class="c-card me__card" aria-labelledby="me-lang">
+				<h2 id="me-lang" class="me__h2">@T(v.Lang, "", "Language of the app")</h2>
+				<p class="me__hint">@T(v.Lang, "", "The words you learn stay in Hebrew either way.")</p>
+				<div class="seg" role="group" aria-label="Language">
+					<a class="seg__btn" href="/me?lang=en" hx-boost="false" if v.Lang == "en" { aria-current="true" }>
+						@E("English")
+					</a>
+					<a class="seg__btn" href="/me?lang=he" hx-boost="false" if v.Lang == "he" { aria-current="true" }>
+						@H("עברית")
+					</a>
+				</div>
+			</section>
+			<section class="c-card me__card" aria-labelledby="me-out">
+				<h2 id="me-out" class="me__h2">@T(v.Lang, "", "Account")</h2>
+				<p class="me__hint">@T(v.Lang, "", "Your place and your words stay saved when you log out.")</p>
+				@logoutForm(v.Page, "logout")
+			</section>
+		</article>
+	}
+}
+
+// Lessons is the list of the learner's lessons, in order. Guides, verbs, and words were
+// meant to sit here as tabs (aud-1), but this line has no such pages yet.
+templ Lessons(v LessonsView) {
+	@Layout(v.Page) {
+		<article class="lessons">
+			<header class="lessons__head">
+				<h1 lang={ v.Lang }>{ v.Page.Lessons }</h1>
+			</header>
+			if len(v.Rows) == 0 {
+				<section class="quiet-card quiet-card--next">
+					@Illustration("empty-words", "")
+					<p class="quiet-card__line">
+						@Pair(v.Lang, v.NoneHE, v.NoneEN)
+					</p>
+					<p class="quiet-card__hint">@T(v.Lang, "", "Ask your tutor to build one from what you know, or check your progress while you wait.")</p>
+					<a class="btn btn-tonal" href={ templ.SafeURL(v.Href("/progress")) }>
+						<span>@uiRun(v.Lang, v.Progress)</span>
+					</a>
+				</section>
+			} else {
+				<ol class="lesson-list">
+					for _, row := range v.Rows {
+						<li class="lesson-row" data-state={ row.State }>
+							<span class="lesson-row__mark" aria-hidden="true">
+								if row.State == "done" {
+									@Icon("check", "")
+								} else if row.State == "next" {
+									@Icon("play", "")
+								} else {
+									@Icon("book", "")
+								}
+							</span>
+							<div class="lesson-row__text">
+								<p class="lesson-row__title">
+									@H(row.Title)
+									if row.Gloss != "" {
+										<span class="unit-gloss">@E(row.Gloss)</span>
+									}
+								</p>
+								<p class="lesson-row__meta">
+									if row.Mine {
+										@ChipLabelText("Made for you")
+									}
+									<span>
+										@E(StepsDone(row.Done, row.Lessons))
+									</span>
+								</p>
+							</div>
+							if row.State == "next" {
+								<a class="btn btn-tonal lesson-row__go" href={ templ.SafeURL(row.Href) }>
+									<span>@T(v.Lang, "", "Open")</span>
+								</a>
+							} else if row.State == "done" {
+								<span class="lesson-row__state">@T(v.Lang, "", "Done")</span>
+							} else {
+								<span class="lesson-row__state">@T(v.Lang, "", "Later")</span>
+							}
+						</li>
+					}
+				</ol>
+			}
+		</article>
+	}
+}
+
+templ ChipLabelText(text string) {
+	<span class="c-chip">@E(text)</span>
+}
+
+// ReportPage is the report form as a page. It is the no-script path: the flag in the lesson
+// bar links here, and shell.js turns the same link into the sheet.
+templ ReportPage(v ReportView) {
+	@Layout(v.Page) {
+		<article class="sheet report-page">
+			<h1 lang={ v.Lang }>@T(v.Lang, "", "Report a problem")</h1>
+			if v.Error != "" {
+				<p class="report__error" role="alert">@E(v.Error)</p>
+			}
+			@reportForm(v.Page, v.UnitID, v.Reason, v.Note, "page")
+		</article>
+	}
+}

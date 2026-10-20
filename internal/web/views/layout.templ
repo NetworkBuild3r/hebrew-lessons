@@ -1,0 +1,100 @@
+package views
+
+// Layout is the shell: a bottom dock on a phone, a left rail from 1024px, and the page
+// between. The five destinations are Today, Lessons, Review, Progress, and Me. The theme
+// and log out live on Me, so the phone header holds the wordmark and nothing that can wrap.
+templ Layout(p Page) {
+	<!DOCTYPE html>
+	<html lang={ p.Lang } dir={ p.Dir } translate="no">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+			<meta name="csrf-token" content={ p.CSRF }/>
+			@themeHead()
+			<link rel="stylesheet" href="/static/css/tokens.css"/>
+			<link rel="stylesheet" href="/static/css/base.css"/>
+			<link rel="stylesheet" href="/static/css/components.css"/>
+			@brandHead()
+			<link rel="stylesheet" href="/static/css/motion.css"/>
+			<link rel="stylesheet" href="/static/css/activity.css"/>
+			<link rel="stylesheet" href="/static/css/shell.css"/>
+			<link rel="stylesheet" href="/static/css/placement.css"/>
+			<link rel="stylesheet" href="/static/css/progress.css"/>
+			<title>{ p.Title }</title>
+		</head>
+		<body hx-boost="true" hx-target="#app" hx-select="#app" hx-swap="outerHTML transition:true" hx-headers={ HXHeaders(p.CSRF) }>
+			<div id="app">
+				<a class="skip" href="#main" lang={ p.Lang }>{ p.Skip }</a>
+				<div class="shell">
+					<div class="rail">
+						@brandLink(p, "brand rail-brand")
+						<div class="dock-wrap">
+							<nav class="dock" aria-label={ p.Nav }>
+								@dockLink(p.Href("/"), "today", p.Today, p.Current, "today", p.Lang)
+								@dockLink(p.Href("/lessons"), "lessons", p.Lessons, p.Current, "lessons", p.Lang)
+								@dockLink(p.Href("/review"), "review", p.Review, p.Current, "review", p.Lang)
+								@dockLink(p.Href("/progress"), "progress", p.Progress, p.Current, "progress", p.Lang)
+								@dockLink(p.Href("/me"), "user", p.Me, p.Current, "me", p.Lang)
+							</nav>
+						</div>
+					</div>
+					<div class="stage">
+						<header class="top">
+							<div class="top__inner">
+								@brandLink(p, "brand")
+							</div>
+						</header>
+						<main id="main" class="page" tabindex="-1">
+							{ children... }
+						</main>
+					</div>
+				</div>
+			</div>
+			<script src="/static/js/htmx.min.js"></script>
+			<script src="/static/js/shell.js" defer></script>
+			<script src="/static/js/motion.js" defer></script>
+		</body>
+	</html>
+}
+
+templ brandLink(p Page, className string) {
+	<a class={ className } href={ templ.SafeURL(p.Href("/")) }>
+		<span class="brand__mark" aria-hidden="true">@BrandMark()</span>
+		<span class="brand__name">@H(AppName)</span>
+	</a>
+}
+
+// themeChoice is the Light, Dark, Auto group on Me. shell.js writes data-theme and the
+// stored choice. Auto removes both and lets the system decide.
+templ themeChoice(p Page) {
+	<div class="seg" role="group" aria-label={ ThemeGroupLabel }>
+		<button type="button" class="seg__btn" data-theme-choice="light" aria-pressed="false">
+			@Icon("theme", "")
+			@uiRun(p.Lang, p.Light)
+		</button>
+		<button type="button" class="seg__btn" data-theme-choice="dark" aria-pressed="false">
+			@Icon("lamp", "")
+			@uiRun(p.Lang, p.Dark)
+		</button>
+		<button type="button" class="seg__btn" data-theme-choice="auto" aria-pressed="false">
+			@Icon("spark", "")
+			@E("Auto")
+		</button>
+	</div>
+}
+
+// logoutForm posts to /auth/logout. shell.js sends it with fetch (data-logout): a native
+// form post under Referrer-Policy: no-referrer carries Origin: null, which the CSRF check refuses.
+templ logoutForm(p Page, className string) {
+	<form method="post" action="/auth/logout" hx-boost="false" data-logout="/signin" class={ className }>
+		<input type="hidden" name="_csrf" value={ p.CSRF }/>
+		<button type="submit" class="logout__btn">@uiRun(p.Lang, p.Logout)</button>
+	</form>
+}
+
+templ dockLink(href string, iconName string, label string, current string, id string, lang string) {
+	<a href={ templ.SafeURL(href) } class="dock__link" if navCurrent(current, id) { aria-current="page" }>
+		@Icon(iconName, "")
+		<span class="dock__label">@uiRun(lang, label)</span>
+	</a>
+}
