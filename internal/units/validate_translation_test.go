@@ -552,6 +552,61 @@ func TestTranslationDistractorPointerIsFirstSentence(t *testing.T) {
 	}
 }
 
+// TestTranslationMissingSkipsEarlierLines keeps going after a one-word
+// listen_pick and after a sentence that already has a translation. The
+// missing line is the third activity.
+func TestTranslationMissingSkipsEarlierLines(t *testing.T) {
+	ctx := context.Background()
+	_, lk := v1()
+	w1, w2 := vocab8[0].text, vocab8[1].text
+	sentence := w1 + " " + w2
+	doc := Unit{
+		Title: "Cafe", Situation: "Ordering", Concept: "Greeting",
+		NewWords: []string{w1, w2},
+		Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{
+			{Type: ActivityListenPick, Text: w1},
+			{Type: ActivityListenPick, Text: sentence, Translation: "good morning"},
+			{Type: ActivityListenPick, Text: sentence},
+		}}},
+	}
+	got := byRule(Validate(ctx, &doc, lk), RuleUnitTranslationMissing)
+	want := "/lessons/0/activities/2/translation"
+	if len(got) != 1 || got[0].Severity != SeverityBlock || got[0].Pointer != want {
+		t.Fatalf("translation_missing %#v", got)
+	}
+}
+
+// TestTranslationFoldComma keeps the words on either side of a comma distinct.
+func TestTranslationFoldComma(t *testing.T) {
+	if foldTranslation("Hello, world") == foldTranslation("Hello, friend") {
+		t.Fatalf("folded to one line: %q", foldTranslation("Hello, world"))
+	}
+	if foldTranslation("Hello, world") != "hello world" || foldTranslation("Hello, friend") != "hello friend" {
+		t.Fatalf("world %q friend %q", foldTranslation("Hello, world"), foldTranslation("Hello, friend"))
+	}
+}
+
+// TestTranslationLangBlockEdges checks the Hebrew block and the runes on either side.
+func TestTranslationLangBlockEdges(t *testing.T) {
+	ctx := context.Background()
+	u, lk := v1()
+	li, ai := firstSentence(t, u)
+	ptr := at("lessons", li, "activities", ai, "translation")
+	for _, bad := range []rune{0x0590, 0x05FF} {
+		u.Lessons[li].Activities[ai].Translation = string(bad)
+		got := byRule(Validate(ctx, &u, lk), RuleUnitTranslationLang)
+		if len(got) != 1 || got[0].Severity != SeverityBlock || got[0].Pointer != ptr {
+			t.Fatalf("%U %#v", bad, got)
+		}
+	}
+	for _, ok := range []rune{0x058F, 0x0600} {
+		u.Lessons[li].Activities[ai].Translation = string(ok)
+		if got := byRule(Validate(ctx, &u, lk), RuleUnitTranslationLang); len(got) != 0 {
+			t.Fatalf("%U %#v", ok, got)
+		}
+	}
+}
+
 func assertDistractorWarn(t *testing.T, translations ...string) {
 	t.Helper()
 	ctx := context.Background()
