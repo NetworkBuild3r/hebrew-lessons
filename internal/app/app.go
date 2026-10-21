@@ -144,6 +144,11 @@ type Config struct {
 	// TTS overrides the synthesizer. Nil selects ElevenLabs when
 	// ElevenLabsAPIKey is set, and selects nothing when it is empty.
 	TTS audio.TTS
+	// AudioBudget overrides the generate_audio call budget. Zero uses
+	// audio.CallBudget, the production 22s. A test with an instant fake voice
+	// sets a budget that voice cannot spend, so the deadline is not a race
+	// against the machine.
+	AudioBudget time.Duration
 }
 
 // ApplyDefaults fills zero fields. It does not replace a set field.
@@ -488,6 +493,15 @@ func (a *App) healthHandler() http.Handler {
 	})
 }
 
+// audioBudget is the generate_audio call budget. An unset AudioBudget keeps
+// the production default, audio.CallBudget.
+func audioBudget(cfg Config) time.Duration {
+	if cfg.AudioBudget > 0 {
+		return cfg.AudioBudget
+	}
+	return audio.CallBudget
+}
+
 func newMCP(cfg Config, health, version http.Handler, sessions *auth.Service, store *db.Store, tts audio.TTS, audioDir string) http.Handler {
 	// The adapter is the *db.Store behind the authoring tools.
 	// It lives in internal/mcpstore so internal/db does not import internal/mcp.
@@ -556,7 +570,8 @@ func newMCP(cfg Config, health, version http.Handler, sessions *auth.Service, st
 				Model:     cfg.ElevenLabsModel,
 				// The server's write timeout is 30 s. A call that runs past it loses
 				// its reply, so a call stops with the provider after audio.CallBudget.
-				Budget: audio.CallBudget,
+				// AudioBudget, when set, replaces that default for a test.
+				Budget: audioBudget(cfg),
 			},
 			store: store,
 		},
