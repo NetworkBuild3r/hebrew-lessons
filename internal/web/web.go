@@ -202,11 +202,11 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 }
 
 // securityHeaders sets the policy that has to be in place before a write
-// route exists. frame-ancestors none is part of the CSP. The inline theme
-// script is allowed by its sha256 hash; every other script is a file under
-// /static/js/.
+// route exists. frame-ancestors none is part of the CSP. script-src is
+// 'self' only: the theme boot is /static/js/theme.js, and a sha256 of the
+// old inline script would still allow that script to run.
 func securityHeaders(next http.Handler) http.Handler {
-	policy := "default-src 'self'; script-src 'self' '" + views.ThemeBootCSP + "'; style-src 'self'; img-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	policy := "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", policy)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
