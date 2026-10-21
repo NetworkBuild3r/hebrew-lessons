@@ -1002,6 +1002,75 @@ func legacyLevel(r RunResult) int {
 	return level - 1
 }
 
+// runStopReason is why a v3 run is finishing. It stores one of the three values
+// migration 003 allows, and it is never empty.
+//
+// band_stop wins when a tested skill stopped on the adaptive rule, including
+// when the typing cap also applies. cap_cards means typing asked TypingMax
+// words and a word that was right in listening or reading is still untyped.
+// exhausted is every other finish: the learner skipped the typing offer,
+// stopped typing before the cap, a skill cleared the top band, or nothing is
+// left to deal.
+//
+// Migration 003 stores NULL when the learner finished before a stop, and
+// while the run is still open. This function does not write that NULL.
+func runStopReason(d *deckV3, rc runCtx) string {
+	if adaptiveStop(d, rc) {
+		return stopBand
+	}
+	if typingCapped(rc) {
+		return stopCards
+	}
+	return stopExhausted
+}
+
+// adaptiveStop reports that listening or reading, whichever was tested, stopped
+// because the adaptive rule said the band was not known.
+func adaptiveStop(d *deckV3, rc runCtx) bool {
+	if rc.meta.Kind == db.RunRecheck {
+		part := PartListening
+		if rc.meta.RecheckSkill == SkillRead {
+			part = PartReading
+		}
+		band := rc.meta.RecheckBand
+		if band < 1 {
+			band = 1
+		}
+		return replay(answersOf(rc.items, part), band, true).Stopped
+	}
+	if replay(answersOf(rc.items, PartListening), 1, false).Stopped {
+		return true
+	}
+	letters := 0
+	if d != nil {
+		letters = len(d.letters)
+	}
+	if readingReady(rc.items, letters) && replay(answersOf(rc.items, PartReading), 1, false).Stopped {
+		return true
+	}
+	return false
+}
+
+// typingCapped reports that the optional typing part asked TypingMax words
+// while a word that was right earlier was not typed yet.
+func typingCapped(rc runCtx) bool {
+	typed := map[string]bool{}
+	for _, it := range rc.items {
+		if it.Part == string(PartTyping) && it.Outcome != "" {
+			typed[it.ItemID] = true
+		}
+	}
+	if len(typed) < TypingMax {
+		return false
+	}
+	for _, id := range rightWords(rc.items) {
+		if !typed[id] {
+			return true
+		}
+	}
+	return false
+}
+
 // finish scores the run, writes the review exposures, and marks the run finished. Two callers that
 // finish together get the same stored result: the one that loses reads what the winner stored.
 func (e *Engine) finish(ctx context.Context, d *deckV3, rc runCtx) (RunResult, error) {
@@ -1023,7 +1092,7 @@ func (e *Engine) finish(ctx context.Context, d *deckV3, rc runCtx) (RunResult, e
 	if err != nil {
 		return RunResult{}, err
 	}
-	err = e.store.FinishPlacement(ctx, rc.run.ID, now, legacyLevel(res), "", string(body))
+	err = e.store.FinishPlacement(ctx, rc.run.ID, now, legacyLevel(res), runStopReason(d, rc), string(body))
 	if err != nil {
 		run, gerr := e.store.GetPlacementRun(ctx, rc.run.ID)
 		if gerr == nil && !run.FinishedAt.IsZero() {
