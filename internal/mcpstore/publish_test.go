@@ -45,7 +45,7 @@ func TestPublishUnitSkipsDraftsInKnownLexemes(t *testing.T) {
 		t.Fatalf("republish %+v %v", again, err)
 	}
 	view, err := store.LoadUnit(ctx, saved.UnitID, nil)
-	if err != nil || view.Status != "published" || view.Revision != 1 || view.Doc.Title != "Hello" {
+	if err != nil || view.Status != "published" || view.Revision != 1 || view.CurrentRevision != 1 || view.Doc.Title != "Hello" {
 		t.Fatalf("load %+v %v", view, err)
 	}
 }
