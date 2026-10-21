@@ -11,13 +11,23 @@ import (
 )
 
 // TestSentenceListenLastChoiceClearsTheSheet loads a graded sentence in Chrome
-// at 390×844 and at 1440×900. The choices are one column, and after the answer
-// the last choice is not covered by the sticky sheet.
+// with reduced motion at 390×844 and at 1440. It measures the viewport as the
+// answer arrives. The test does not scroll looking for a clear position.
 func TestSentenceListenLastChoiceClearsTheSheet(t *testing.T) {
-	chrome := chromeBin()
-	puppet := puppeteerCore()
-	if chrome == "" || puppet == "" {
-		t.Skip("chrome or puppeteer-core is not available")
+	runSentenceLayout(t, "cover")
+}
+
+// TestSentenceListenChoicesStayPut checks the first choice does not jump when
+// the reveal replaces its reserved slot.
+func TestSentenceListenChoicesStayPut(t *testing.T) {
+	runSentenceLayout(t, "stay")
+}
+
+func runSentenceLayout(t *testing.T, mode string) {
+	t.Helper()
+	chrome, puppet, missing := sentenceBrowser()
+	if missing != "" {
+		t.Skip("sentence layout: missing " + missing)
 	}
 	srv := httptest.NewUnstartedServer(nil)
 	origin := "http://" + srv.Listener.Addr().String()
@@ -32,6 +42,7 @@ func TestSentenceListenLastChoiceClearsTheSheet(t *testing.T) {
 		"path":   env.path,
 		"chrome": chrome,
 		"puppet": puppet,
+		"mode":   mode,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -44,8 +55,23 @@ func TestSentenceListenLastChoiceClearsTheSheet(t *testing.T) {
 	cmd := exec.Command("node", script, string(cfg))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("sentence layout: %v\n%s", err, out)
+		t.Fatalf("sentence layout %s: %v\n%s", mode, err, out)
 	}
+}
+
+// sentenceBrowser names the chrome binary and the puppeteer-core module.
+// missing lists whichever of those is absent, so a skip says what to install.
+func sentenceBrowser() (chrome, puppet, missing string) {
+	chrome = chromeBin()
+	puppet = puppeteerCore()
+	var gaps []string
+	if chrome == "" {
+		gaps = append(gaps, "chrome (checked /usr/bin/google-chrome, /usr/bin/google-chrome-stable, /usr/local/bin/google-chrome, /usr/bin/chromium, /usr/bin/chromium-browser)")
+	}
+	if puppet == "" {
+		gaps = append(gaps, "puppeteer-core (set PUPPETEER_CORE to puppeteer-core.js; also checked /tmp/shot/node_modules/puppeteer-core/lib/esm/puppeteer/puppeteer-core.js and /tmp/video/node_modules/puppeteer-core/lib/esm/puppeteer/puppeteer-core.js)")
+	}
+	return chrome, puppet, strings.Join(gaps, "; ")
 }
 
 func chromeBin() string {
@@ -65,7 +91,7 @@ func chromeBin() string {
 
 func puppeteerCore() string {
 	if path := os.Getenv("PUPPETEER_CORE"); path != "" {
-		if _, err := os.Stat(path); err == nil {
+		if st, err := os.Stat(path); err == nil && !st.IsDir() {
 			return path
 		}
 	}
@@ -73,7 +99,7 @@ func puppeteerCore() string {
 		"/tmp/shot/node_modules/puppeteer-core/lib/esm/puppeteer/puppeteer-core.js",
 		"/tmp/video/node_modules/puppeteer-core/lib/esm/puppeteer/puppeteer-core.js",
 	} {
-		if _, err := os.Stat(path); err == nil {
+		if st, err := os.Stat(path); err == nil && !st.IsDir() {
 			return path
 		}
 	}
@@ -89,92 +115,102 @@ const browser = await puppeteer.launch({
   args: ["--no-sandbox", "--disable-dev-shm-usage"],
 });
 const page = await browser.newPage();
+await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
 const seen = [];
 page.on("response", (res) => { seen.push(res.status() + " " + res.request().method() + " " + res.url()); });
 page.on("pageerror", (err) => { seen.push("pageerror " + err.message); });
 await page.setCookie({ name: "hebrew_session", value: cfg.cookie, url: cfg.origin });
 const failures = [];
-async function columns(width, height) {
-  await page.setViewport({ width, height });
+async function answerAt(width, height) {
+  await page.setViewport({ width, height, deviceScaleFactor: 1 });
   const res = await page.goto(cfg.origin + cfg.path, { waitUntil: "networkidle0" });
   if (!res || res.status() !== 200) {
     failures.push(width + " ask status " + (res && res.status()));
     return;
   }
-  const info = await page.evaluate(() => {
+  const ask = await page.evaluate(() => {
     const grid = document.querySelector(".choices--sentence");
-    if (!grid) return { err: "no grid" };
+    const first = document.querySelector(".choices--sentence .c-answer");
+    const frame = document.querySelector(".lesson-frame");
+    const slot = document.querySelector(".lp-reveal");
+    if (!grid || !first || !frame || !slot) return { err: "ask missing" };
     const cols = getComputedStyle(grid).gridTemplateColumns.split(" ").filter(Boolean);
     const boxes = [...grid.querySelectorAll(".c-answer")].map((el) => el.getBoundingClientRect());
     let stacked = boxes.length > 1;
     for (let i = 1; i < boxes.length; i++) {
       if (boxes[i].top < boxes[i - 1].bottom - 1) stacked = false;
     }
-    return { cols: cols.length, stacked, n: boxes.length };
+    const fr = first.getBoundingClientRect();
+    const frameTop = frame.getBoundingClientRect().top;
+    return { cols: cols.length, stacked, n: boxes.length, top: fr.top - frameTop, slot: slot.getBoundingClientRect().height };
   });
-  if (info.err || info.cols !== 1 || !info.stacked || info.n !== 4) {
-    failures.push(width + " ask " + JSON.stringify(info));
+  if (ask.err || ask.cols !== 1 || !ask.stacked || ask.n !== 4) {
+    failures.push(width + " ask " + JSON.stringify(ask));
+    return;
   }
-}
-await columns(390, 844);
-await columns(1440, 900);
-await page.setViewport({ width: 390, height: 844 });
-await page.goto(cfg.origin + cfg.path, { waitUntil: "networkidle0" });
-const clicked = await page.evaluate(() => {
-  const btn = document.querySelector(".choices--sentence .c-answer");
-  if (!btn) return "no button";
-  btn.click();
-  return btn.value || btn.textContent;
-});
-try {
-  await page.waitForSelector(".lf-result", { timeout: 8000 });
-} catch (err) {
-  const snap = await page.evaluate(() => ({
-    url: location.href,
-    text: document.body ? document.body.innerText.slice(0, 600) : "",
-  }));
-  console.error("clicked " + clicked);
-  console.error(seen.join("\n"));
-  console.error(JSON.stringify(snap));
-  throw err;
-}
-await page.evaluate(async () => {
-  if (document.fonts) await document.fonts.ready;
-  await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {})));
-});
-await new Promise((r) => setTimeout(r, 400));
-async function coverage(width, height) {
-  await page.setViewport({ width, height });
-  const info = await page.evaluate(() => {
-    const root = document.scrollingElement || document.documentElement;
+  const clicked = await page.evaluate(() => {
+    const btn = document.querySelector(".choices--sentence .c-answer");
+    if (!btn) return "no button";
+    btn.click();
+    return "ok";
+  });
+  if (clicked !== "ok") {
+    failures.push(width + " click " + clicked);
+    return;
+  }
+  try {
+    await page.waitForSelector(".lf-result", { timeout: 8000 });
+  } catch (err) {
+    const snap = await page.evaluate(() => ({
+      url: location.href,
+      text: document.body ? document.body.innerText.slice(0, 600) : "",
+    }));
+    console.error(seen.join("\n"));
+    console.error(JSON.stringify(snap));
+    throw err;
+  }
+  await page.waitForFunction(() => {
     const last = document.querySelector(".choices--sentence .c-answer:last-child");
     const sheet = document.querySelector(".lf-result");
-    const grid = document.querySelector(".choices--sentence");
-    const btn = document.querySelector(".lf-result .btn-primary");
-    if (!last || !sheet || !grid) return { err: "missing" };
-    const cols = getComputedStyle(grid).gridTemplateColumns.split(" ").filter(Boolean).length;
-    const bh = btn ? btn.getBoundingClientRect().height : 0;
-    const max = Math.max(0, root.scrollHeight - window.innerHeight);
-    let clear = null;
-    for (let y = 0; y <= max; y += 24) {
-      root.scrollTop = y;
-      const lr = last.getBoundingClientRect();
-      const sr = sheet.getBoundingClientRect();
-      const above = lr.top >= 0 && lr.bottom <= sr.top + 1 && lr.height > 20;
-      if (above) {
-        clear = { lastBottom: lr.bottom, sheetTop: sr.top, y };
-        break;
-      }
-    }
-    root.scrollTop = max;
-    return { clear: clear !== null, cols, bh, sample: clear, max };
-  });
-  if (info.err || !info.clear || info.cols !== 1 || info.bh < 55) {
-    failures.push(width + " reveal " + JSON.stringify(info));
+    if (!last || !sheet) return false;
+    const lr = last.getBoundingClientRect();
+    const sr = sheet.getBoundingClientRect();
+    return lr.height > 20 && lr.top >= 0 && lr.bottom <= sr.top + 1;
+  }, { timeout: 2000 }).catch(() => {});
+  const info = await page.evaluate((askTop) => {
+    const root = document.scrollingElement || document.documentElement;
+    const first = document.querySelector(".choices--sentence .c-answer");
+    const last = document.querySelector(".choices--sentence .c-answer:last-child");
+    const sheet = document.querySelector(".lf-result");
+    const frame = document.querySelector(".lesson-frame");
+    const reveal = document.querySelector(".lp-reveal");
+    if (!first || !last || !sheet || !frame) return { err: "missing" };
+    const fr = first.getBoundingClientRect();
+    const lr = last.getBoundingClientRect();
+    const sr = sheet.getBoundingClientRect();
+    const top = fr.top - frame.getBoundingClientRect().top;
+    return {
+      clear: lr.top >= 0 && lr.bottom <= sr.top + 1 && lr.height > 20,
+      lastTop: lr.top,
+      lastBottom: lr.bottom,
+      lastHeight: lr.height,
+      sheetTop: sr.top,
+      delta: Math.abs(top - askTop),
+      askTop,
+      answerTop: top,
+      reveal: reveal ? reveal.getBoundingClientRect().height : 0,
+      scroll: root.scrollTop,
+    };
+  }, ask.top);
+  if (cfg.mode === "cover") {
+    if (info.err || !info.clear) failures.push(width + " reveal " + JSON.stringify(info));
+  }
+  if (cfg.mode === "stay") {
+    if (info.err || info.delta > 2) failures.push(width + " jump " + JSON.stringify(info));
   }
 }
-await coverage(390, 844);
-await coverage(1440, 900);
+await answerAt(390, 844);
+await answerAt(1440, 900);
 await browser.close();
 if (failures.length) {
   console.error(failures.join("\n"));

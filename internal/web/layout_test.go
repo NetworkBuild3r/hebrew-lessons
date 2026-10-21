@@ -83,8 +83,11 @@ func TestTodayLayout(t *testing.T) {
 	if strings.Contains(body, "globalViewTransitions") || strings.Contains(body, "defaultSwapDelay") {
 		t.Fatal("motion script must be a file, not an inline script")
 	}
-	if strings.Count(body, "<script") != 4 {
-		t.Fatalf("want theme.js, htmx, shell.js, and motion.js; found %d script tags", strings.Count(body, "<script"))
+	if strings.Count(body, "<script") != 5 {
+		t.Fatalf("want theme.js, htmx, shell.js, sentence.js, and motion.js; found %d script tags", strings.Count(body, "<script"))
+	}
+	if !strings.Contains(body, `<script src="/static/js/sentence.js" defer></script>`) {
+		t.Fatal("sentence.js is not a deferred shell script")
 	}
 	if !strings.Contains(body, `<script src="/static/js/theme.js"></script>`) {
 		t.Fatal("theme boot is not the blocking head script")

@@ -1,7 +1,9 @@
 package views
 
 import (
+	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/a-h/templ"
 )
@@ -52,14 +54,12 @@ type Activity struct {
 	// Sentence is a listen_pick of two or more lexicon words whose translation
 	// is the question. Reveal shows the line under the orb. Sheet is the
 	// status panel with Continue. Translation is the author's English of that
-	// line. GlossWords are the muted per-word glosses under it. Contrast is
-	// the miss line that names a Hebrew word the heard line has and the
-	// picked line lacks.
+	// line. Each revealed word carries its own gloss. Contrast is the miss
+	// line that names a Hebrew word the heard line has and the picked line lacks.
 	Sentence    bool
 	Reveal      bool
 	Sheet       bool
 	Translation string
-	GlossWords  []Word
 	Contrast    *ChoiceContrast
 	// Stage is a listening question: the clip is the whole prompt, so its play control is big.
 	// Spotlight is a step whose Hebrew is the one thing on screen: big, centered, play below.
@@ -122,6 +122,27 @@ func dialogueClipID(i int) string { return "dlg-clip-" + Num(i) }
 // while the clip plays (motion.js).
 func dialogueOrbAttrs(i int) templ.Attributes {
 	return templ.Attributes{"data-audio": dialogueClipID(i), "data-dlg-line": Num(i)}
+}
+
+// pickedLead opens the miss note, through "This line has ".
+// A pick that already ends the sentence does not gain a second period.
+func pickedLead(picked string) string {
+	picked = strings.TrimSpace(picked)
+	lead := "You picked “" + picked + "”"
+	if endsSentence(picked) {
+		return lead + " This line has "
+	}
+	return lead + ". This line has "
+}
+
+func endsSentence(s string) bool {
+	r, _ := utf8.DecodeLastRuneInString(strings.TrimSpace(s))
+	switch r {
+	case '.', '!', '?', '…':
+		return true
+	default:
+		return false
+	}
 }
 
 // contrastTail is the transliteration and gloss after the Hebrew word.

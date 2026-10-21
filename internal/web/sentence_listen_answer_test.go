@@ -239,13 +239,17 @@ func TestSentenceListenFewerThanThreePlaysUngraded(t *testing.T) {
 func TestSentenceListenKeepsMarkedChoices(t *testing.T) {
 	env := openSentenceLesson(t, sentenceActivities(false), &listenRec{})
 	body := getAuthed(t, env.h, env.cookie, env.path)
-	if strings.Contains(body, `class="activity-word"`) || strings.Contains(body, `class="lp-reveal"`) {
-		t.Fatal("the ask shows the line or an empty word slot")
-	}
 	right := postLesson(t, env.h, env.cookie, env.path, runValue(t, body), choiceValue(t, body, slAnswer), true, env.csrf)
 	assertMarked(t, right.Body.String(), slAnswer, "")
+	ask := activityHTML(t, body)
+	if strings.Contains(ask, `class="activity-word"`) || strings.Contains(ask, `class="wb__he"`) || strings.Contains(ask, `class="lp-fb__tr"`) {
+		t.Fatal("the ask shows the line")
+	}
+	if !strings.Contains(ask, `class="lp-reveal"`) {
+		t.Fatal("the ask does not reserve the reveal slot")
+	}
 	reload := getAuthed(t, env.h, env.cookie, env.path)
-	assertMarked(t, reload, slAnswer, "")
+	assertNeutralReveal(t, reload)
 
 	missEnv := openSentenceLesson(t, sentenceActivities(false), &listenRec{})
 	missBody := getAuthed(t, missEnv.h, missEnv.cookie, missEnv.path)
@@ -271,8 +275,8 @@ func TestSentenceListenRevealShowsTheTranslation(t *testing.T) {
 		"clip--hero",
 		`class="lp-reveal"`,
 		`class="word-blocks" dir="rtl"`,
+		`class="wb__gl"`,
 		`class="lp-fb__tr"`,
-		`class="word-blocks fbline"`,
 		`class="choices choices--sentence"`,
 		`class="lf-result"`,
 		`role="status"`,
@@ -281,14 +285,71 @@ func TestSentenceListenRevealShowsTheTranslation(t *testing.T) {
 	if !strings.Contains(tr, "“I live here”") || strings.Contains(tr, "lives") {
 		t.Fatalf("translation line = %q", tr)
 	}
-	glosses := between(t, got, `class="word-blocks fbline"`, "</div>")
-	for _, g := range []string{">I<", ">lives<", ">here<"} {
-		if !strings.Contains(glosses, g) {
-			t.Fatalf("muted glosses missing %s:\n%s", g, glosses)
-		}
+	if strings.Contains(got, "fbline") {
+		t.Fatal("glosses are a separate row")
 	}
 	if strings.Contains(got, "I lives here") || strings.Contains(got, "I / lives") {
 		t.Fatal("the reveal stitches the glosses into the English line")
+	}
+}
+
+func TestSentenceListenGlossSitsInItsWord(t *testing.T) {
+	env := openSentenceLesson(t, sentenceActivities(false), &listenRec{})
+	body := getAuthed(t, env.h, env.cookie, env.path)
+	rec := postLesson(t, env.h, env.cookie, env.path, runValue(t, body), choiceValue(t, body, slAnswer), true, env.csrf)
+	got := rec.Body.String()
+	reveal := between(t, got, `class="lp-reveal"`, `class="lp-fb__tr"`)
+	words := regexp.MustCompile(`(?s)<span class="activity-word">(.*?)</span>`).FindAllStringSubmatch(reveal, -1)
+	want := [][3]string{
+		{slAni, "ani", "I"},
+		{slGar, "gar", "lives"},
+		{slPo, "po", "here"},
+	}
+	if len(words) != len(want) {
+		t.Fatalf("word blocks = %d, want %d\n%s", len(words), len(want), reveal)
+	}
+	for i, w := range want {
+		block := words[i][1]
+		he := strings.Index(block, w[0])
+		tr := strings.Index(block, ">"+w[1]+"<")
+		gl := strings.Index(block, ">"+w[2]+"<")
+		if he < 0 || tr < 0 || gl < 0 || he >= tr || tr >= gl || !strings.Contains(block, `class="wb__gl"`) {
+			t.Fatalf("word %d gloss is not under its translit (he %d tr %d gl %d)\n%s", i, he, tr, gl, block)
+		}
+	}
+}
+
+func TestSentenceListenReloadIsNeutral(t *testing.T) {
+	for _, hx := range []bool{true, false} {
+		env := openSentenceLesson(t, sentenceActivities(false), &listenRec{})
+		body := getAuthed(t, env.h, env.cookie, env.path)
+		rec := postSentence(t, env, runValue(t, body), choiceValue(t, body, slAnswer), hx)
+		posted := rec.Body.String()
+		if !strings.Contains(posted, "Right. “I live here.”") || !strings.Contains(posted, "feedback--right") {
+			t.Fatalf("hx %v answer was not Right\n%s", hx, posted)
+		}
+		reload := getAuthed(t, env.h, env.cookie, env.path)
+		assertNeutralReveal(t, reload)
+	}
+}
+
+func TestSentenceListenMissDoesNotDoubleThePeriod(t *testing.T) {
+	line := slAni + " " + slGar + " " + slPo
+	house := "I have a house."
+	env := openSentenceLesson(t, []units.Activity{
+		{Type: units.ActivityListenPick, Text: line, Translation: slAnswer},
+		{Type: units.ActivityStory, Text: slBayit, Translation: house},
+		{Type: units.ActivityStory, Text: slMayim, Translation: slCold},
+		{Type: units.ActivityStory, Text: "עֶרֶב", Translation: slEvening},
+	}, &listenRec{})
+	body := getAuthed(t, env.h, env.cookie, env.path)
+	rec := postLesson(t, env.h, env.cookie, env.path, runValue(t, body), choiceValue(t, body, house), true, env.csrf)
+	got := rec.Body.String()
+	if strings.Contains(got, "“"+house+"”.") {
+		t.Fatalf("miss note doubled the period:\n%s", got)
+	}
+	if !strings.Contains(got, "You picked “"+house+"” This line has ") {
+		t.Fatalf("miss note missing the single period inside the quote:\n%s", got)
 	}
 }
 
@@ -402,8 +463,32 @@ func TestSentenceChoicesStayOneColumn(t *testing.T) {
 	if !strings.Contains(readStatic(t, "static/css/tokens.css"), "--size-cta: 56px;") {
 		t.Fatal("--size-cta is not 56px")
 	}
-	if !strings.Contains(css, ".fbline .wb__gl { font-size: var(--fs-small); color: var(--muted); }") {
+	if !strings.Contains(css, ".lp-reveal .wb__gl { font-size: var(--fs-small); color: var(--muted); }") {
 		t.Fatal("reveal glosses are not muted")
+	}
+	if !strings.Contains(css, ".lp-reveal {\n  display: grid;") || !strings.Contains(between(t, css, ".lp-reveal {", "}"), "min-block-size: 11rem;") {
+		t.Fatal("the reveal slot does not reserve its block size")
+	}
+}
+
+func assertNeutralReveal(t *testing.T, body string) {
+	t.Helper()
+	if !strings.Contains(body, "It says “I live here.”") {
+		t.Fatalf("neutral copy missing:\n%s", body)
+	}
+	for _, banned := range []string{"Not quite", "feedback--wrong", "feedback--right", ">Right<", "Your pick", "You picked"} {
+		if strings.Contains(body, banned) {
+			t.Fatalf("reload contains %q\n%s", banned, body)
+		}
+	}
+	got := markedChoices(t, body)
+	if len(got) != 4 {
+		t.Fatalf("reload choices = %+v, want 4", got)
+	}
+	for _, c := range got {
+		if !c.disabled || c.state == "correct" || c.state == "wrong" || c.tag != "" || c.mark {
+			t.Fatalf("reload verdict = %+v", c)
+		}
 	}
 }
 

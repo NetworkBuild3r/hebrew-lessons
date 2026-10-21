@@ -79,16 +79,9 @@ templ ActivityBlock(a Activity) {
 					if a.Translation != "" {
 						<p class="lp-fb__tr" lang="en">@E("“" + a.Translation + "”")</p>
 					}
-					if len(a.GlossWords) > 0 {
-						<div class="word-blocks fbline" dir="ltr">
-							for _, word := range a.GlossWords {
-								if word.Gloss != "" {
-									<bdi class="wb__gl" lang="en" dir="ltr">{ word.Gloss }</bdi>
-								}
-							}
-						</div>
-					}
 				</div>
+			} else if a.Sentence {
+				<div class="lp-reveal" aria-hidden="true"></div>
 			} else if len(a.Words) > 0 && !a.Spotlight {
 				<div class={ wordBlocksClass(a) } dir="rtl">
 					for i, word := range a.Words {
@@ -127,7 +120,7 @@ templ ActivityBlock(a Activity) {
 							}
 							if a.Contrast != nil {
 								<p class="lp-miss" lang="en">
-									@E("You picked “" + a.Contrast.Picked + "”. This line has ")
+									@E(pickedLead(a.Contrast.Picked))
 									<bdi lang="he" dir="rtl">{ a.Contrast.Hebrew }</bdi>
 									@E(contrastTail(a.Contrast))
 								</p>
@@ -226,14 +219,18 @@ templ targetWord(w Word) {
 	</span>
 }
 
-// sentenceHebrew is one word of a sentence reveal: pointed text and
-// transliteration, no gloss. The glosses sit on their own muted line.
+// sentenceHebrew is one word of a sentence reveal. The column is the pointed
+// word, then its transliteration, then its muted gloss, so reading down stays
+// on that word.
 templ sentenceHebrew(w Word) {
 	<span class="activity-word">
 		<span class="wb wb--card">
 			<bdi class="wb__he" lang="he" dir="rtl">{ w.Text }</bdi>
 			if w.Translit != "" {
 				<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ w.Translit }</bdi>
+			}
+			if w.ShowGloss && w.Gloss != "" {
+				<bdi class="wb__gl" lang="en" dir="ltr">{ w.Gloss }</bdi>
 			}
 		</span>
 	</span>

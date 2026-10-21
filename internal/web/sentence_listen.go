@@ -340,17 +340,25 @@ func sentenceChoiceIndex(key []byte, run db.PlayerRun, choices []views.Choice, p
 }
 
 // markSentenceChoices keeps every button after the answer, disabled.
-// The translation is correct ("Right"). The learner's other pick is wrong
-// ("Your pick"). The rest are dim.
+// A known pick marks the translation Right and the other pick Your pick.
+// An unknown pick, such as a reload that did not store the button, marks
+// nothing: no Right and no Your pick.
 func markSentenceChoices(choices []views.Choice, translation, picked string) []views.Choice {
+	known := false
+	for _, c := range choices {
+		if picked != "" && c.Value == picked {
+			known = true
+			break
+		}
+	}
 	out := append([]views.Choice(nil), choices...)
 	for i := range out {
 		out[i].Disabled = true
 		switch {
-		case out[i].Label == translation:
+		case known && out[i].Label == translation:
 			out[i].State = "correct"
 			out[i].Tag = "Right"
-		case picked != "" && out[i].Value == picked:
+		case known && out[i].Value == picked && out[i].Label != translation:
 			out[i].State = "wrong"
 			out[i].Tag = "Your pick"
 		default:
@@ -361,11 +369,15 @@ func markSentenceChoices(choices []views.Choice, translation, picked string) []v
 }
 
 // sentenceGradeCopy is the status-sheet text.
-// A miss names one Hebrew word the heard line has and the picked line lacks,
+// A known miss names one Hebrew word the heard line has and the picked line lacks,
 // and leaves that sentence out when no such word can be found.
-func sentenceGradeCopy(act units.Activity, lex map[string]db.LexemeView, pool []spokenLine, pickedEnglish string, correct bool) (lead, class string, contrast *views.ChoiceContrast) {
+// An unknown pick is neutral: the line, with no Right or Not quite.
+func sentenceGradeCopy(act units.Activity, lex map[string]db.LexemeView, pool []spokenLine, pickedEnglish string, known bool) (lead, class string, contrast *views.ChoiceContrast) {
 	quoted := sentenceQuote(act.Translation)
-	if correct {
+	if !known {
+		return "It says " + quoted, "feedback", nil
+	}
+	if pickedEnglish == act.Translation {
 		return "Right. " + quoted, "feedback feedback--right", nil
 	}
 	lead = "Not quite. It says " + quoted
@@ -518,7 +530,7 @@ func (p player) applySentence(ctx context.Context, lesson db.CourseLesson, run d
 	}
 	activity.Reveal = true
 	activity.Translation = act.Translation
-	activity.Words, activity.GlossWords = sentenceRevealWords(act, lex)
+	activity.Words = sentenceRevealWords(act, lex)
 	activity.Sheet = true
 	activity.Asking = false
 	if !graded {
@@ -527,30 +539,37 @@ func (p player) applySentence(ctx context.Context, lesson db.CourseLesson, run d
 	}
 	activity.Choices = markSentenceChoices(choices, act.Translation, picked)
 	pickedEnglish := ""
+	known := false
 	for _, c := range choices {
-		if c.Value == picked {
+		if picked != "" && c.Value == picked {
 			pickedEnglish = c.Label
+			known = true
+			break
 		}
 	}
-	correct := pickedEnglish != "" && pickedEnglish == act.Translation
 	pool := append(append([]spokenLine{}, same...), earlier...)
-	activity.Feedback, activity.FeedbackClass, activity.Contrast = sentenceGradeCopy(act, lex, pool, pickedEnglish, correct)
+	activity.Feedback, activity.FeedbackClass, activity.Contrast = sentenceGradeCopy(act, lex, pool, pickedEnglish, known)
 	return nil
 }
 
-// sentenceRevealWords is the Hebrew line and, separately, the muted glosses.
-// The author's translation is the main English, so the glosses are not the
-// meaning line.
-func sentenceRevealWords(act units.Activity, lex map[string]db.LexemeView) (line, glosses []views.Word) {
+// sentenceRevealWords is the Hebrew line. Each word carries its transliteration
+// and its lexicon gloss, so the gloss sits in that word's column. The author's
+// translation is the main English, so the glosses are not the meaning line.
+func sentenceRevealWords(act units.Activity, lex map[string]db.LexemeView) []views.Word {
+	var line []views.Word
 	for _, tok := range units.Tokenize(act.Text) {
 		if !hebrewToken(tok) {
 			continue
 		}
 		view := lex[tok]
-		line = append(line, views.Word{Text: tok, Translit: view.Translit, ShowText: true, ShowTranslit: view.Translit != ""})
-		if view.Gloss != "" {
-			glosses = append(glosses, views.Word{Gloss: view.Gloss, ShowGloss: true})
-		}
+		line = append(line, views.Word{
+			Text:         tok,
+			Translit:     view.Translit,
+			Gloss:        view.Gloss,
+			ShowText:     true,
+			ShowTranslit: view.Translit != "",
+			ShowGloss:    view.Gloss != "",
+		})
 	}
-	return line, glosses
+	return line
 }
