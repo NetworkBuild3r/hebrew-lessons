@@ -1,0 +1,1244 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "lesson-plan.schema.json",
+  "title": "LessonPlan",
+  "description": "Course and lesson-plan language, schemaVersion 1.0.0, 1.1.0, and 1.2.0. Prose contract: docs/decisions/ADR-0003-course-and-lesson-plan-language.md; 1.1.0 adds the five blocks, the lesson recipe, and the introduction-word group of docs/decisions/ADR-0009-learner-model-and-language-program.md §7; 1.2.0 adds the exercise block (ADR-0014). JSON Schema draft-07. Unknown properties are rejected. A document below the construct's version is rejected.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "revision",
+    "status",
+    "audience",
+    "assigneeId",
+    "title",
+    "language",
+    "units"
+  ],
+  "properties": {
+    "schemaVersion": { "enum": ["1.0.0", "1.1.0", "1.2.0"] },
+    "id": { "$ref": "#/definitions/slug" },
+    "revision": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+    "status": { "enum": ["draft", "published"] },
+    "audience": { "enum": ["shared", "personal"] },
+    "assigneeId": { "type": ["string", "null"] },
+    "title": { "$ref": "#/definitions/plainText" },
+    "subtitle": { "$ref": "#/definitions/plainText" },
+    "language": { "$ref": "#/definitions/language" },
+    "migration": { "$ref": "#/definitions/migration" },
+    "units": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 24,
+      "items": { "$ref": "#/definitions/unit" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "audience": { "const": "personal" } },
+        "required": ["audience"]
+      },
+      "then": {
+        "properties": {
+          "assigneeId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{7,63}$"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "audience": { "const": "shared" } },
+        "required": ["audience"]
+      },
+      "then": {
+        "properties": { "assigneeId": { "type": "null" } }
+      }
+    },
+    {
+      "if": {
+        "properties": { "schemaVersion": { "const": "1.0.0" } },
+        "required": ["schemaVersion"]
+      },
+      "then": {
+        "properties": {
+          "units": { "items": { "$ref": "#/definitions/v100Unit" } }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "schemaVersion": { "const": "1.1.0" } },
+        "required": ["schemaVersion"]
+      },
+      "then": {
+        "properties": {
+          "units": { "items": { "$ref": "#/definitions/v110Unit" } }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "slug": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "entryId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "plainText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "not": { "pattern": "<\\s*[A-Za-z/!]" }
+    },
+    "altText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "not": { "pattern": "<\\s*[A-Za-z/!]" }
+    },
+    "audioPath": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 240,
+      "pattern": "^(?:\\.\\./)?(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\\.mp3$"
+    },
+    "language": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "gloss"],
+      "properties": {
+        "target": { "const": "he" },
+        "gloss": { "const": "en" }
+      }
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["legacy", "sourceWorksheet", "activityOrder"],
+      "properties": {
+        "legacy": { "type": "boolean" },
+        "sourceWorksheet": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "activityOrder": {
+          "type": "array",
+          "maxItems": 24,
+          "items": { "type": "string", "minLength": 1, "maxLength": 40 }
+        },
+        "retiredActivityTypes": {
+          "type": "array",
+          "maxItems": 12,
+          "items": { "type": "string", "minLength": 1, "maxLength": 40 }
+        },
+        "retiredFields": {
+          "type": "array",
+          "maxItems": 12,
+          "items": { "type": "string", "minLength": 1, "maxLength": 80 }
+        }
+      }
+    },
+    "unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "theme", "lessons"],
+      "properties": {
+        "id": { "$ref": "#/definitions/slug" },
+        "title": { "$ref": "#/definitions/plainText" },
+        "theme": { "$ref": "#/definitions/plainText" },
+        "frequencyBand": { "$ref": "#/definitions/plainText" },
+        "lessons": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/lesson" }
+        }
+      }
+    },
+    "lesson": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "level",
+        "visibility",
+        "buildsOn",
+        "newWords",
+        "recycles",
+        "blocks"
+      ],
+      "properties": {
+        "id": { "$ref": "#/definitions/slug" },
+        "title": { "$ref": "#/definitions/plainText" },
+        "subtitle": { "$ref": "#/definitions/plainText" },
+        "footer": { "$ref": "#/definitions/plainText" },
+        "level": { "enum": ["basic", "intermediate", "advanced"] },
+        "visibility": { "enum": ["hidden", "everyone", "selected"] },
+        "recipe": { "$ref": "#/definitions/recipe" },
+        "legacyStorageKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "buildsOn": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/slug" }
+        },
+        "newWords": {
+          "type": "array",
+          "maxItems": 24,
+          "items": { "$ref": "#/definitions/plainText" }
+        },
+        "recycles": {
+          "type": "array",
+          "maxItems": 48,
+          "items": { "$ref": "#/definitions/recycle" }
+        },
+        "blocks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": { "$ref": "#/definitions/block" }
+        }
+      }
+    },
+    "recycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["word", "fromLessonId"],
+      "properties": {
+        "word": { "$ref": "#/definitions/plainText" },
+        "fromLessonId": { "$ref": "#/definitions/slug" }
+      }
+    },
+    "block": {
+      "oneOf": [
+        { "$ref": "#/definitions/introductionBlock" },
+        { "$ref": "#/definitions/gradedStoryBlock" },
+        { "$ref": "#/definitions/listeningBlock" },
+        { "$ref": "#/definitions/shortDialogueBlock" },
+        { "$ref": "#/definitions/fluencyPassBlock" },
+        { "$ref": "#/definitions/checkpointBlock" },
+        { "$ref": "#/definitions/explainerBlock" },
+        { "$ref": "#/definitions/conjugationTableBlock" },
+        { "$ref": "#/definitions/personalQuestionBlock" },
+        { "$ref": "#/definitions/verseReadingBlock" },
+        { "$ref": "#/definitions/letterIntroBlock" },
+        { "$ref": "#/definitions/typeItBlock" },
+        { "$ref": "#/definitions/exerciseBlock" },
+        { "$ref": "#/definitions/assignmentBlock" }
+      ]
+    },
+    "typeItBlock": {
+      "description": "Type it recall (INIT-010/SPEC-002). Minimal shape so picture-on-recall can warn; player comes later.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "type-it" },
+        "image": { "$ref": "#/definitions/imageRef" },
+        "picture": { "$ref": "#/definitions/imageRef" },
+        "mediaId": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        },
+        "prompt": { "$ref": "#/definitions/plainText" },
+        "answer": { "$ref": "#/definitions/plainText" }
+      }
+    },
+    "imageRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mediaId", "alt"],
+      "properties": {
+        "mediaId": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        },
+        "alt": { "$ref": "#/definitions/altText" }
+      }
+    },
+    "wordEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "word", "meaning"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "word": { "$ref": "#/definitions/plainText" },
+        "meaning": { "$ref": "#/definitions/plainText" },
+        "sound": { "$ref": "#/definitions/plainText" },
+        "translit": { "$ref": "#/definitions/plainText" },
+        "pos": { "$ref": "#/definitions/plainText" },
+        "trap": { "$ref": "#/definitions/plainText" },
+        "infinitive": { "$ref": "#/definitions/plainText" },
+        "sentence": { "$ref": "#/definitions/plainText" },
+        "audioPath": { "$ref": "#/definitions/audioPath" },
+        "sentenceAudioPath": { "$ref": "#/definitions/audioPath" },
+        "fromLessonId": { "$ref": "#/definitions/slug" },
+        "image": { "$ref": "#/definitions/imageRef" },
+        "group": { "type": "integer", "minimum": 1, "maximum": 3 }
+      }
+    },
+    "pattern": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["heading", "rules"],
+      "properties": {
+        "tabLabel": { "$ref": "#/definitions/plainText" },
+        "heading": { "$ref": "#/definitions/plainText" },
+        "lede": { "$ref": "#/definitions/plainText" },
+        "prompt": { "$ref": "#/definitions/plainText" },
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": { "$ref": "#/definitions/patternRule" }
+        },
+        "reminders": {
+          "type": "array",
+          "maxItems": 12,
+          "items": { "$ref": "#/definitions/plainText" }
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 12,
+          "items": { "$ref": "#/definitions/patternItem" }
+        }
+      }
+    },
+    "patternRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "english", "example"],
+      "properties": {
+        "title": { "$ref": "#/definitions/plainText" },
+        "english": { "$ref": "#/definitions/plainText" },
+        "example": { "$ref": "#/definitions/plainText" },
+        "focus": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/definitions/plainText" }
+        }
+      }
+    },
+    "patternItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "choices", "answer", "pointed"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "direct": { "$ref": "#/definitions/plainText" },
+        "choices": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 6,
+          "items": { "$ref": "#/definitions/plainText" }
+        },
+        "answer": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "pointed": { "$ref": "#/definitions/plainText" },
+        "why": { "$ref": "#/definitions/plainText" },
+        "audioPath": { "$ref": "#/definitions/audioPath" }
+      }
+    },
+    "glossPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "he", "en"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "he": { "$ref": "#/definitions/plainText" },
+        "en": { "$ref": "#/definitions/plainText" }
+      }
+    },
+    "cloze": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": {
+        "bank": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 24,
+          "items": { "$ref": "#/definitions/plainText" }
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": { "$ref": "#/definitions/clozeItem" }
+        }
+      }
+    },
+    "clozeItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "textPre", "textPost", "answer"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "textPre": { "$ref": "#/definitions/plainText" },
+        "textPost": { "$ref": "#/definitions/plainText" },
+        "prefix": { "$ref": "#/definitions/plainText" },
+        "answer": { "$ref": "#/definitions/plainText" },
+        "english": { "$ref": "#/definitions/plainText" },
+        "gloss": {
+          "type": "array",
+          "maxItems": 12,
+          "items": { "$ref": "#/definitions/glossPair" }
+        }
+      }
+    },
+    "span": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "text"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "kind": { "enum": ["reported", "direct"] },
+        "text": { "$ref": "#/definitions/plainText" }
+      }
+    },
+    "paragraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "text": { "$ref": "#/definitions/plainText" },
+        "highlights": {
+          "type": "array",
+          "maxItems": 24,
+          "items": { "$ref": "#/definitions/plainText" }
+        },
+        "spans": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/definitions/span" }
+        },
+        "audioPath": { "$ref": "#/definitions/audioPath" }
+      }
+    },
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "question"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "question": { "$ref": "#/definitions/plainText" },
+        "sampleAnswer": { "$ref": "#/definitions/plainText" },
+        "audioPath": { "$ref": "#/definitions/audioPath" }
+      }
+    },
+    "line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "pointed"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "speaker": { "enum": ["prompt", "learner"] },
+        "question": { "$ref": "#/definitions/plainText" },
+        "pointed": { "$ref": "#/definitions/plainText" },
+        "youFeminine": { "$ref": "#/definitions/plainText" },
+        "speak": { "$ref": "#/definitions/plainText" },
+        "gloss": { "$ref": "#/definitions/plainText" },
+        "followUp": { "$ref": "#/definitions/plainText" },
+        "audioPath": { "$ref": "#/definitions/audioPath" }
+      }
+    },
+    "introductionBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "words"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "introduction" },
+        "heading": { "$ref": "#/definitions/plainText" },
+        "note": { "$ref": "#/definitions/plainText" },
+        "words": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 24,
+          "items": { "$ref": "#/definitions/wordEntry" }
+        },
+        "pattern": { "$ref": "#/definitions/pattern" },
+        "cloze": { "$ref": "#/definitions/cloze" }
+      }
+    },
+    "gradedStoryBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "paragraphs"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "graded-story" },
+        "notice": { "$ref": "#/definitions/plainText" },
+        "paragraphs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 24,
+          "items": { "$ref": "#/definitions/paragraph" }
+        },
+        "support": {
+          "type": "array",
+          "maxItems": 24,
+          "items": { "$ref": "#/definitions/glossPair" }
+        },
+        "glosses": {
+          "type": "object",
+          "maxProperties": 80,
+          "additionalProperties": { "$ref": "#/definitions/plainText" }
+        },
+        "questions": {
+          "type": "array",
+          "maxItems": 12,
+          "items": { "$ref": "#/definitions/question" }
+        }
+      }
+    },
+    "listeningBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "passage"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "listening" },
+        "passage": { "$ref": "#/definitions/plainText" },
+        "audioPath": { "$ref": "#/definitions/audioPath" },
+        "questions": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/definitions/question" }
+        }
+      }
+    },
+    "shortDialogueBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "lines"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "short-dialogue" },
+        "source": { "enum": ["story", "authored"] },
+        "count": { "type": "integer", "minimum": 1, "maximum": 12 },
+        "intro": { "$ref": "#/definitions/plainText" },
+        "introEn": { "$ref": "#/definitions/plainText" },
+        "lines": {
+          "type": "array",
+          "maxItems": 12,
+          "items": { "$ref": "#/definitions/line" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "source": { "const": "story" } },
+            "required": ["source"]
+          },
+          "then": { "required": ["count"] }
+        },
+        {
+          "if": {
+            "not": {
+              "properties": { "source": { "const": "story" } },
+              "required": ["source"]
+            }
+          },
+          "then": {
+            "properties": {
+              "lines": { "minItems": 1 }
+            }
+          }
+        }
+      ]
+    },
+    "fluencyPassBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "seconds", "source"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "fluency-pass" },
+        "seconds": { "type": "integer", "minimum": 1, "maximum": 600 },
+        "source": { "enum": ["vocab", "story"] },
+        "cues": {
+          "type": "array",
+          "maxItems": 24,
+          "items": { "$ref": "#/definitions/plainText" }
+        }
+      }
+    },
+    "checkpointBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "wordKeys", "fromLessons"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "spaced-review-checkpoint" },
+        "wordKeys": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 48,
+          "items": { "$ref": "#/definitions/plainText" }
+        },
+        "fromLessons": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": { "$ref": "#/definitions/slug" }
+        }
+      }
+    },
+    "recipe": {
+      "description": "ADR-0009 §7 lesson recipes. schemaVersion 1.1.0 only.",
+      "enum": [
+        "topic-conversation",
+        "review-worksheet",
+        "verse-reading",
+        "verb-workshop",
+        "letters-and-vowels",
+        "guide"
+      ]
+    },
+    "text80": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "not": { "pattern": "<\\s*[A-Za-z/!]" }
+    },
+    "text120": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "not": { "pattern": "<\\s*[A-Za-z/!]" }
+    },
+    "text200": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "not": { "pattern": "<\\s*[A-Za-z/!]" }
+    },
+    "text300": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "not": { "pattern": "<\\s*[A-Za-z/!]" }
+    },
+    "text600": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 600,
+      "not": { "pattern": "<\\s*[A-Za-z/!]" }
+    },
+    "text1500": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1500,
+      "not": { "pattern": "<\\s*[A-Za-z/!]" }
+    },
+    "tableCell": {
+      "description": "An explainer table cell. May be empty.",
+      "type": "string",
+      "maxLength": 200,
+      "not": { "pattern": "<\\s*[A-Za-z/!]" }
+    },
+    "lexiconKey": {
+      "description": "A lexicon key as ADR-0009 §6 writes it: at most 60 characters with a Hebrew letter. Matched by ADR-0001 exactKey.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60,
+      "pattern": "[\\u05D0-\\u05EA]",
+      "not": { "pattern": "<\\s*[A-Za-z/!]" }
+    },
+    "root": {
+      "description": "Two to four Hebrew letters joined by '.', as ADR-0009 §6.",
+      "type": "string",
+      "maxLength": 7,
+      "pattern": "^[\\u05D0-\\u05EA](?:\\.[\\u05D0-\\u05EA]){1,3}$"
+    },
+    "hebrewLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "he"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "he": { "$ref": "#/definitions/plainText" },
+        "en": { "$ref": "#/definitions/plainText" }
+      }
+    },
+    "explainerBlock": {
+      "description": "A reference page. Plain text only.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "title", "sections"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "explainer" },
+        "title": { "$ref": "#/definitions/text120" },
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": { "$ref": "#/definitions/explainerSection" }
+        }
+      }
+    },
+    "explainerSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "heading"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "heading": { "$ref": "#/definitions/text120" },
+        "paragraphs": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/definitions/text1500" }
+        },
+        "examples": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/definitions/explainerExample" }
+        },
+        "table": { "$ref": "#/definitions/explainerTable" },
+        "callouts": {
+          "type": "array",
+          "maxItems": 6,
+          "items": { "$ref": "#/definitions/explainerCallout" }
+        }
+      }
+    },
+    "explainerExample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "he", "en"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "he": { "$ref": "#/definitions/text200" },
+        "en": { "$ref": "#/definitions/text300" },
+        "translit": { "$ref": "#/definitions/text200" },
+        "root": { "$ref": "#/definitions/root" }
+      }
+    },
+    "explainerTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["columns", "rows"],
+      "properties": {
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": { "$ref": "#/definitions/tableCell" }
+        },
+        "rows": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": {
+            "type": "array",
+            "maxItems": 8,
+            "items": { "$ref": "#/definitions/tableCell" }
+          }
+        }
+      }
+    },
+    "explainerCallout": {
+      "description": "The tone is also shown in words or an icon, not by color alone.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tone", "title", "text"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "tone": { "enum": ["green", "yellow", "red", "info"] },
+        "title": { "$ref": "#/definitions/text80" },
+        "text": { "$ref": "#/definitions/text600" }
+      }
+    },
+    "conjugationTableBlock": {
+      "description": "The forms of one lemma in one tense, by cell. Each formKey names a stored lexicon form (N13).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "lemmaKey", "tense", "mode", "cells"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "conjugation-table" },
+        "lemmaKey": { "$ref": "#/definitions/lexiconKey" },
+        "tense": { "enum": ["present", "past", "future"] },
+        "mode": { "enum": ["study", "drill"] },
+        "cells": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 9,
+          "items": { "$ref": "#/definitions/conjugationCell" }
+        },
+        "sentences": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "$ref": "#/definitions/hebrewLine" }
+        },
+        "questions": {
+          "type": "array",
+          "maxItems": 4,
+          "items": { "$ref": "#/definitions/hebrewLine" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "tense": { "const": "present" } },
+            "required": ["tense"]
+          },
+          "then": {
+            "properties": {
+              "cells": { "items": { "properties": { "cell": { "$ref": "#/definitions/presentCell" } } } }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "tense": { "const": "past" } },
+            "required": ["tense"]
+          },
+          "then": {
+            "properties": {
+              "cells": { "items": { "properties": { "cell": { "$ref": "#/definitions/pastCell" } } } }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "tense": { "const": "future" } },
+            "required": ["tense"]
+          },
+          "then": {
+            "properties": {
+              "cells": { "items": { "properties": { "cell": { "$ref": "#/definitions/futureCell" } } } }
+            }
+          }
+        }
+      ]
+    },
+    "conjugationCell": {
+      "description": "The cell code is the entry's identity: a cell appears at most once in a table (N13).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cell", "formKey"],
+      "properties": {
+        "cell": { "$ref": "#/definitions/cellCode" },
+        "formKey": { "$ref": "#/definitions/lexiconKey" }
+      }
+    },
+    "cellCode": {
+      "description": "ADR-0009 Decision 4 cell codes for the present and past tenses.",
+      "enum": ["ms", "fs", "mp", "fp", "1s", "2ms", "2fs", "3ms", "3fs", "1p", "2mp", "2fp", "3p"]
+    },
+    "presentCell": { "enum": ["ms", "fs", "mp", "fp"] },
+    "pastCell": { "enum": ["1s", "2ms", "2fs", "3ms", "3fs", "1p", "2mp", "2fp", "3p"] },
+    "futureCell": { "enum": ["1s", "2ms", "2fs", "3ms", "3fs", "1p", "2mp", "2fp", "3p"] },
+    "personalQuestionBlock": {
+      "description": "Never scored. No field holds an answer: answer names how the learner answers, and answers are not sent to the server.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "prompts", "answer"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "personal-question" },
+        "prompts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": { "$ref": "#/definitions/hebrewLine" }
+        },
+        "answer": { "enum": ["speak", "type", "either"] }
+      }
+    },
+    "verseReadingBlock": {
+      "description": "One verse or a short range. No translation of the verse is stored.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "ref", "verse"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "verse-reading" },
+        "ref": { "$ref": "#/definitions/verseRef" },
+        "newWords": {
+          "type": "array",
+          "maxItems": 24,
+          "items": { "$ref": "#/definitions/lexiconKey" }
+        },
+        "verse": { "$ref": "#/definitions/plainText" },
+        "questions": {
+          "type": "array",
+          "maxItems": 4,
+          "items": { "$ref": "#/definitions/hebrewLine" }
+        },
+        "personalQuestion": { "$ref": "#/definitions/versePersonalQuestion" }
+      }
+    },
+    "verseRef": {
+      "description": "source names a public-domain pointed edition (N19).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["book", "chapter", "from", "to", "source"],
+      "properties": {
+        "book": { "$ref": "#/definitions/plainText" },
+        "chapter": { "type": "integer", "minimum": 1, "maximum": 150 },
+        "from": { "type": "integer", "minimum": 1, "maximum": 176 },
+        "to": { "type": "integer", "minimum": 1, "maximum": 176 },
+        "source": { "$ref": "#/definitions/plainText" }
+      }
+    },
+    "versePersonalQuestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["he"],
+      "properties": {
+        "he": { "$ref": "#/definitions/plainText" },
+        "en": { "$ref": "#/definitions/plainText" }
+      }
+    },
+    "letterIntroBlock": {
+      "description": "One letter. No picture field (ADR-0009 §7, Pictures). findIn words create no review rows and are exempt from N1 and N6.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "letter", "name", "sounds"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "letter-intro" },
+        "letter": { "$ref": "#/definitions/plainText" },
+        "name": { "$ref": "#/definitions/plainText" },
+        "sounds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/definitions/letterSound" }
+        },
+        "findIn": {
+          "type": "array",
+          "maxItems": 12,
+          "items": { "$ref": "#/definitions/letterFind" }
+        }
+      }
+    },
+    "letterSound": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "vowel", "pointed", "sound"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "vowel": { "$ref": "#/definitions/plainText" },
+        "pointed": { "$ref": "#/definitions/plainText" },
+        "sound": { "$ref": "#/definitions/plainText" }
+      }
+    },
+    "letterFind": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "word", "contains"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "word": { "$ref": "#/definitions/plainText" },
+        "contains": { "type": "boolean" }
+      }
+    },
+    "v100Unit": {
+      "description": "schemaVersion 1.0.0: no lesson of the unit holds a 1.1.0 construct.",
+      "properties": {
+        "lessons": { "items": { "$ref": "#/definitions/v100Lesson" } }
+      }
+    },
+    "v100Lesson": {
+      "properties": {
+        "recipe": { "$ref": "#/definitions/v110Only" },
+        "blocks": { "items": { "$ref": "#/definitions/v100Block" } }
+      }
+    },
+    "v100Block": {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "allOf": [
+                { "$ref": "#/definitions/v110BlockType" },
+                { "$ref": "#/definitions/v120BlockType" }
+              ]
+            },
+            "words": { "items": { "$ref": "#/definitions/v100Word" } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "const": "conjugation-table" },
+              "tense": { "const": "future" }
+            },
+            "required": ["type", "tense"]
+          },
+          "then": {
+            "properties": {
+              "tense": { "$ref": "#/definitions/v120Only" }
+            }
+          }
+        }
+      ]
+    },
+    "v110Unit": {
+      "description": "schemaVersion 1.1.0: no lesson holds a 1.2.0 construct.",
+      "properties": {
+        "lessons": { "items": { "$ref": "#/definitions/v110Lesson" } }
+      }
+    },
+    "v110Lesson": {
+      "properties": {
+        "blocks": { "items": { "$ref": "#/definitions/v110Block" } }
+      }
+    },
+    "v110Block": {
+      "allOf": [
+        {
+          "properties": {
+            "type": { "$ref": "#/definitions/v120BlockType" }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "const": "conjugation-table" },
+              "tense": { "const": "future" }
+            },
+            "required": ["type", "tense"]
+          },
+          "then": {
+            "properties": {
+              "tense": { "$ref": "#/definitions/v120Only" }
+            }
+          }
+        }
+      ]
+    },
+    "v100Word": {
+      "properties": {
+        "group": { "$ref": "#/definitions/v110Only" }
+      }
+    },
+    "v110Only": {
+      "description": "A field that exists only in a schemaVersion 1.1.0 document.",
+      "not": {}
+    },
+    "v110BlockType": {
+      "description": "Block types that exist only in a schemaVersion 1.1.0 document (ADR-0009 §7).",
+      "not": {
+        "enum": ["explainer", "conjugation-table", "personal-question", "verse-reading", "letter-intro"]
+      }
+    },
+    "v120Only": {
+      "description": "A field that exists only in a schemaVersion 1.2.0 document.",
+      "not": {}
+    },
+    "v120BlockType": {
+      "description": "Block types that exist only in a schemaVersion 1.2.0 document (ADR-0014).",
+      "not": {
+        "enum": ["exercise", "assignment"]
+      }
+    },
+    "acceptString": {
+      "description": "Unpointed alternate spelling for translate or dictation scoring (ADR-0014).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60,
+      "pattern": "[\u05D0-\u05EA]",
+      "not": { "pattern": "[\u0591-\u05C7]" }
+    },
+    "exerciseBlock": {
+      "description": "Deliberate exercise formats (ADR-0014). schemaVersion 1.2.0 only.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "kind", "items"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "exercise" },
+        "kind": {
+          "enum": ["choose", "true-false", "unscramble", "translate", "dictation"]
+        },
+        "heading": { "$ref": "#/definitions/text120" },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "kind": { "const": "choose" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "items": { "items": { "$ref": "#/definitions/exerciseChooseItem" } }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "true-false" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "items": { "items": { "$ref": "#/definitions/exerciseTrueFalseItem" } }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "unscramble" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "items": { "items": { "$ref": "#/definitions/exerciseUnscrambleItem" } }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "translate" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "items": { "items": { "$ref": "#/definitions/exerciseTranslateItem" } }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "dictation" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "items": { "items": { "$ref": "#/definitions/exerciseDictationItem" } }
+            }
+          }
+        }
+      ]
+    },
+    "exerciseChooseItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "prompt", "choices", "answer"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "prompt": { "$ref": "#/definitions/text200" },
+        "choices": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 5,
+          "items": { "$ref": "#/definitions/text120" }
+        },
+        "answer": { "$ref": "#/definitions/text120" },
+        "why": { "$ref": "#/definitions/text200" }
+      }
+    },
+    "exerciseTrueFalseItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "statement", "answer"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "statement": { "$ref": "#/definitions/text200" },
+        "answer": { "type": "boolean" },
+        "why": { "$ref": "#/definitions/text200" }
+      }
+    },
+    "exerciseUnscrambleItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "words"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "words": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 10,
+          "items": { "$ref": "#/definitions/text80" }
+        },
+        "alt": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 10,
+            "items": { "$ref": "#/definitions/text80" }
+          }
+        },
+        "english": { "$ref": "#/definitions/text120" }
+      }
+    },
+    "exerciseTranslateItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "english", "answer"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "english": { "$ref": "#/definitions/text120" },
+        "answer": { "$ref": "#/definitions/plainText" },
+        "accept": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/definitions/acceptString" }
+        }
+      }
+    },
+    "exerciseDictationItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "audioPath", "answer"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "audioPath": { "$ref": "#/definitions/audioPath" },
+        "answer": { "$ref": "#/definitions/plainText" },
+        "accept": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/definitions/acceptString" }
+        }
+      }
+    },
+    "assignmentBlock": {
+      "description": "Multi-sentence writing task with optional homework (ADR-0014). schemaVersion 1.2.0 only. Never scored.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "prompt", "minSentences"],
+      "properties": {
+        "id": { "$ref": "#/definitions/entryId" },
+        "type": { "const": "assignment" },
+        "prompt": { "$ref": "#/definitions/text300" },
+        "minSentences": { "type": "integer", "minimum": 1, "maximum": 12 },
+        "useWords": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": { "$ref": "#/definitions/text80" }
+        },
+        "homework": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": { "$ref": "#/definitions/text200" }
+        }
+      }
+    }
+  }
+}

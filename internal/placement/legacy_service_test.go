@@ -434,6 +434,96 @@ func TestDontKnowGradesAsAgain(t *testing.T) {
 	}
 }
 
+func TestFinishRefusesZeroRatings(t *testing.T) {
+	svc, store := openSvc(t, fixedClock{when})
+	ctx := context.Background()
+	userID := insertLearner(t, store, "empty@example.com", "sub-empty")
+	runID := start(t, svc, userID)
+	if _, err := svc.Next(ctx, runID); err != nil {
+		t.Fatal(err)
+	}
+	before, err := store.CountCards(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Finish(ctx, runID); !errors.Is(err, ErrNothingRated) {
+		t.Fatalf("Finish with no ratings: %v, want ErrNothingRated", err)
+	}
+	run, err := store.GetPlacementRun(ctx, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !run.FinishedAt.IsZero() || run.Level.Valid || run.StopReason != "" || run.Result != "" {
+		t.Fatalf("empty finish wrote a score: finished=%v level=%v stop=%q result=%q", !run.FinishedAt.IsZero(), run.Level, run.StopReason, run.Result)
+	}
+	after, err := store.CountCards(ctx, userID)
+	if err != nil || after != before {
+		t.Fatalf("cards %d to %d (%v); a refused finish must not seed", before, after, err)
+	}
+	place, ok, err := store.LatestPlacement(ctx, userID)
+	if err != nil || !ok || place.Finished || place.CardsRated != 0 {
+		t.Fatalf("latest after refuse: %+v ok=%v err=%v", place, ok, err)
+	}
+
+	// One rating is enough to score. The refused call did not close the run.
+	rateNext(t, svc, runID, Good)
+	result, err := svc.Finish(ctx, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.FinishedAt.Equal(when) || result.CardsRated != 1 {
+		t.Fatalf("finish after one rating: %+v", result)
+	}
+	if n, err := store.CountCards(ctx, userID); err != nil || n != 1 {
+		t.Fatalf("cards after the rated finish = %d %v", n, err)
+	}
+}
+
+// TestFinishNowClosesUntouchedRetakeAsExhausted is a second run whose every
+// word already has a read card. Next has nothing to deal, so it closes the
+// run as exhausted without a level and without seeding another card.
+func TestFinishNowClosesUntouchedRetakeAsExhausted(t *testing.T) {
+	svc, store := openSvc(t, fixedClock{when})
+	words := []fixtureItem{real("a", "אֶחָד", 0), real("b", "בַּיִת", 0)}
+	svc.fixture = words
+	ctx := context.Background()
+	userID := insertLearner(t, store, "retake@example.com", "sub-retake")
+	for _, w := range words {
+		lexemeID, err := testharness.InsertLexeme(ctx, store, w.TextNFC)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.InsertCard(ctx, db.Card{
+			UserID: userID, LexemeID: lexemeID, Skill: fsrs.SkillRead, State: fsrs.StateNew, Due: when,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before, err := store.CountCards(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runID := start(t, svc, userID)
+	res, err := svc.Next(ctx, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Done || res.Card != nil || res.Break {
+		t.Fatalf("next = %+v, want done with nothing dealt", res)
+	}
+	run, err := store.GetPlacementRun(ctx, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.FinishedAt.IsZero() || !run.Level.Valid || run.Level.Int64 != -1 || run.StopReason != stopExhausted || run.Result != `{"bands":[],"estimated_known_words":0}` {
+		t.Fatalf("retake close: finished=%v level=%v stop=%q result=%q", !run.FinishedAt.IsZero(), run.Level, run.StopReason, run.Result)
+	}
+	after, err := store.CountCards(ctx, userID)
+	if err != nil || after != before {
+		t.Fatalf("cards %d to %d (%v); a retake with nothing to deal must not seed", before, after, err)
+	}
+}
+
 func TestResumeAndIdempotentFinish(t *testing.T) {
 	svc, store := openSvc(t, fixedClock{when})
 	svc.fixture = manyBand(0, 6)

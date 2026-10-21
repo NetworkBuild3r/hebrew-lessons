@@ -100,7 +100,8 @@
         "activities": [
           {
             "type": "recall",
-            "text": "שָׁלוֹם"
+            "text": "שָׁלוֹם",
+            "translation": "another line 1"
           },
           {
             "type": "recall",
@@ -113,6 +114,7 @@
           {
             "type": "listen_pick",
             "text": "שָׁלוֹם בֹּקֶר תּוֹדָה",
+            "translation": "a short line 3272696341119261689",
             "target": "שָׁלוֹם"
           },
           {
@@ -139,6 +141,7 @@
           {
             "type": "listen_pick",
             "text": "מַיִם לֶחֶם חָלָב",
+            "translation": "a short line 4046357474994242481",
             "target": "מַיִם"
           },
           {
@@ -165,6 +168,7 @@
           {
             "type": "listen_pick",
             "text": "סוּס פָּרָה כּוֹס",
+            "translation": "a short line 1957189545824601797",
             "target": "סוּס"
           },
           {

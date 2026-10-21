@@ -173,7 +173,9 @@
 //
 //	(*db.Store).PlacementKnownLexemes(ctx, userID) ([]string, error)
 //	(*db.Store).PlacementLearningLexemes(ctx, userID) ([]string, error)
-//	  Pointed NFC text from the newest run's placement answers, sorted.
+//	  Pointed NFC text from the newest run, sorted. A v2 run reads
+//	  placement answers. A v3 run reads answered placement items: right is
+//	  Good, wrong is Again, and dont_know is "I don't know".
 //	  Good or Easy is known. "I don't know", Again, or Hard is learning.
 //
 //	(*db.Store).KnownLexemeIDs(ctx, userID) ([]int64, error)
