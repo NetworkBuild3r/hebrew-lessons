@@ -2,6 +2,7 @@ package units
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -379,6 +380,210 @@ func TestSingleLexemeListenPickOmitsTargetAndTranslation(t *testing.T) {
 	if issues := byRule(got, RuleUnitTranslationMissing); len(issues) != 0 {
 		t.Fatalf("translation_missing %#v", issues)
 	}
+}
+
+// TestListenPickCreditPhrases pins the player wording. A target-less line of
+// two or more lexicon words grades the first new word, or the first lexicon
+// word, and logs no exposure. Whole-sentence choices are planned with #139.
+func TestListenPickCreditPhrases(t *testing.T) {
+	phrases := []string{
+		"only that word gets credit",
+		"exactly one lexicon word credits that word",
+		"first new word",
+		"first lexicon word if there is no new word",
+		"logs no exposure",
+		"Planned with #139 and migration 015",
+		"credits nothing and logs a lesson_listen exposure",
+	}
+	var target string
+	for _, r := range Rules {
+		if r.ID == RuleActivityTarget {
+			target = r.Description
+		}
+	}
+	for _, phrase := range phrases {
+		if !strings.Contains(target, phrase) {
+			t.Errorf("activity.target description missing %q", phrase)
+		}
+	}
+	if strings.Contains(target, "logged as an exposure") {
+		t.Error("activity.target description still says an exposure is logged now")
+	}
+	files := []string{
+		"doc.go",
+		"rules.go",
+		"../mcp/schema.go",
+		"../mcp/tools.go",
+		"../mcp/server.go",
+		"../mcp/tool_publish_unit.go",
+		"../mcp/resources/authoring.md",
+		"../../README.md",
+		"../../.cursor/skills/hebrew-lesson-author/SKILL.md",
+	}
+	for _, path := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(body)
+		for _, phrase := range phrases {
+			if !strings.Contains(text, phrase) {
+				t.Errorf("%s missing %q", path, phrase)
+			}
+		}
+		if strings.Contains(text, "logged as an exposure") || strings.Contains(text, "picks the meaning of the whole line") || strings.Contains(text, "grades the whole sentence") {
+			t.Errorf("%s still describes the old listen_pick player", path)
+		}
+	}
+	purpose := []string{
+		"lexicon-gloss buttons",
+		"collected and validated now",
+		"whole-sentence choices are planned with #139",
+	}
+	for _, path := range []string{"../mcp/schema.go", "../mcp/resources/authoring.md", "../../.cursor/skills/hebrew-lesson-author/SKILL.md"} {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, phrase := range purpose {
+			if !strings.Contains(string(body), phrase) {
+				t.Errorf("%s missing %q", path, phrase)
+			}
+		}
+	}
+	logic, err := os.ReadFile("validate_translation.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(logic), "Hebrew Dev's ruling of 2026-10-20") {
+		t.Error("validate_translation.go does not cite Hebrew Dev's ruling of 2026-10-20")
+	}
+}
+
+// TestTranslationLangCompatibilityForms kills an NFKC-to-NFC swap.
+// U+FB2A and U+FB4B produce unit.translation_lang. In x/text v0.32.0 those
+// two also decompose under NFC, so the swap that the check can see is a
+// compatibility-only letter: U+FB20 stays outside the Hebrew block under
+// NFC and maps to ayin under NFKC.
+func TestTranslationLangCompatibilityForms(t *testing.T) {
+	ctx := context.Background()
+	u, lk := v1()
+	li, ai := firstSentence(t, u)
+	ptr := at("lessons", li, "activities", ai, "translation")
+	for _, bad := range []string{"\uFB2A", "\uFB4B", "\uFB20", "good \uFB20 morning"} {
+		u.Lessons[li].Activities[ai].Translation = bad
+		got := byRule(Validate(ctx, &u, lk), RuleUnitTranslationLang)
+		if len(got) != 1 || got[0].Severity != SeverityBlock || got[0].Pointer != ptr {
+			t.Fatalf("%U %#v", []rune(bad)[0], got)
+		}
+	}
+}
+
+// TestTranslationFoldPunctuation counts 'Good morning!' and 'good morning' as one line.
+func TestTranslationFoldPunctuation(t *testing.T) {
+	if foldTranslation("Good morning!") != "good morning" {
+		t.Fatalf("fold %q", foldTranslation("Good morning!"))
+	}
+	assertDistractorWarn(t, "good morning", "Good morning!", "hello", "thanks")
+}
+
+// TestTranslationFoldWhitespace counts a double space and a tab as 'good morning'.
+func TestTranslationFoldWhitespace(t *testing.T) {
+	if foldTranslation("good  morning") != "good morning" || foldTranslation("good\tmorning") != "good morning" {
+		t.Fatalf("double %q tab %q", foldTranslation("good  morning"), foldTranslation("good\tmorning"))
+	}
+	assertDistractorWarn(t, "good morning", "good  morning", "good\tmorning", "hello")
+}
+
+// TestTranslationFoldTrim drops a leading or trailing space so the line matches.
+func TestTranslationFoldTrim(t *testing.T) {
+	if foldTranslation("  hello") != "hello" || foldTranslation("hello ") != "hello" || foldTranslation("hello") != "hello" {
+		t.Fatalf("lead %q trail %q", foldTranslation("  hello"), foldTranslation("hello "))
+	}
+	assertDistractorWarn(t, "good morning", "hello", "  hello", "hello ")
+}
+
+// TestListenPickLookupFailure is one schema.lookup and no translation_missing
+// when a sentence listen_pick cannot read the lexicon.
+func TestListenPickLookupFailure(t *testing.T) {
+	ctx := context.Background()
+	_, base := v1()
+	w1, w2, w3 := vocab8[0].text, vocab8[1].text, vocab8[2].text
+	act := Activity{Type: ActivityListenPick, Text: w1 + " " + w2 + " " + w3}
+	s := &scan{ctx: ctx, lk: base, cache: map[string]*probe{}}
+	if n := lexemeTokenCount(s, act); n < 3 || s.err != nil {
+		t.Fatalf("fixture count %d err %v", n, s.err)
+	}
+	doc := Unit{
+		Title: "Cafe", Situation: "Ordering", Concept: "Greeting",
+		NewWords: []string{w1, w2, w3},
+		Lessons:  []Lesson{{Kind: KindLesson, Activities: []Activity{act}}},
+	}
+	got := Validate(ctx, &doc, failLexeme{fakeLookup: base, fail: w3})
+	if n := len(byRule(got, RuleSchemaLookup)); n != 1 {
+		t.Fatalf("schema.lookup count %d: %#v", n, got)
+	}
+	if missing := byRule(got, RuleUnitTranslationMissing); len(missing) != 0 {
+		t.Fatalf("translation_missing %#v", missing)
+	}
+}
+
+// TestTranslationDistractorPointerIsFirstSentence points the warn at the first
+// of two sentence listen_picks.
+func TestTranslationDistractorPointerIsFirstSentence(t *testing.T) {
+	ctx := context.Background()
+	_, lk := v1()
+	w1, w2 := vocab8[0].text, vocab8[1].text
+	line := func(translation string) Activity {
+		return Activity{Type: ActivityListenPick, Text: w1 + " " + w2, Translation: translation}
+	}
+	doc := Unit{
+		Title: "Cafe", Situation: "Ordering", Concept: "Greeting",
+		NewWords: []string{w1, w2},
+		Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{
+			line("good morning"),
+			line("hello"),
+		}}},
+	}
+	got := byRule(Validate(ctx, &doc, lk), RuleUnitTranslationDistractors)
+	want := "/lessons/0/activities/0/translation"
+	if len(got) != 1 || got[0].Severity != SeverityWarn || got[0].Pointer != want {
+		t.Fatalf("pointer %#v", got)
+	}
+}
+
+func assertDistractorWarn(t *testing.T, translations ...string) {
+	t.Helper()
+	ctx := context.Background()
+	_, lk := v1()
+	w1, w2 := vocab8[0].text, vocab8[1].text
+	acts := make([]Activity, len(translations))
+	acts[0] = Activity{Type: ActivityListenPick, Text: w1 + " " + w2, Translation: translations[0]}
+	for i, translation := range translations[1:] {
+		acts[i+1] = Activity{Type: ActivityRecall, Text: w1, Translation: translation}
+	}
+	doc := Unit{
+		Title: "Cafe", Situation: "Ordering", Concept: "Greeting",
+		NewWords: []string{w1, w2},
+		Lessons:  []Lesson{{Kind: KindLesson, Activities: acts}},
+	}
+	got := byRule(Validate(ctx, &doc, lk), RuleUnitTranslationDistractors)
+	if len(got) != 1 || got[0].Severity != SeverityWarn {
+		t.Fatalf("folded lines %#v", got)
+	}
+}
+
+// failLexeme answers the lexicon, except one spelling, which fails the lookup.
+type failLexeme struct {
+	fakeLookup
+	fail string
+}
+
+func (f failLexeme) LexemeByText(ctx context.Context, text string) (int64, bool, error) {
+	if normalize(text) == normalize(f.fail) {
+		return 0, false, errors.New("lexicon down")
+	}
+	return f.fakeLookup.LexemeByText(ctx, text)
 }
 
 func firstSentence(t *testing.T, u Unit) (int, int) {

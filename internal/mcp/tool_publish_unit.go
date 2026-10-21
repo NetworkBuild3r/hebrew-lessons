@@ -21,7 +21,7 @@ const publishUnitDescription = "Publish one unit. Admin only, including the stat
 	"This tool publishes the revision it validated. Omit revision to validate the current row; pass revision to validate a stored one. A save that lands after that check is not published in its place. " +
 	"It runs the same validator as validate_unit. Block issues are a tool error: nothing is published, and the result lists each issue's rule id and JSON pointer. " +
 	"A recall, produce, or cloze whose line has two or more words that are in the lexicon and no target blocks a new draft, and it blocks an older revision. Checking the current published revision, the same revision id as the units row, reports that missing target as a warning. " +
-	"On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word, and a line with two or more credits nothing and is logged as an exposure. " +
+	"On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure. " +
 	"A listen_pick of two or more words that are in the lexicon with no translation blocks a new draft, and it blocks an older revision. Checking the current published revision reports that missing translation as a warning. " +
 	"Pedagogy warnings do not block, and they are included in issues. " +
 	"Publishing the same revision again reports unchanged and writes nothing. " +

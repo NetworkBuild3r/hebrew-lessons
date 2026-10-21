@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
+	"golang.org/x/text/unicode/norm"
 )
 
 func TestEarlierUnitTranslations(t *testing.T) {
@@ -75,6 +76,26 @@ func TestEarlierUnitTranslations(t *testing.T) {
 
 	if sharedID == 0 || ownID == 0 {
 		t.Fatal("ids")
+	}
+}
+
+func TestEarlierUnitTranslationsNFD(t *testing.T) {
+	when := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	s := openStore(t, fixedClock{when})
+	raw := "שָׁלוֹם e\u0301"
+	want := "שָׁלוֹם é"
+	if norm.NFC.String(raw) != want || raw == want {
+		t.Fatalf("fixture raw %q nfc %q", raw, norm.NFC.String(raw))
+	}
+	doc := translationDoc(0, "good morning", "", "", "")
+	doc.Lessons[0].Activities[0].Text = raw
+	putPublished(t, s, doc, "shared")
+	got, err := s.EarlierUnitTranslations(context.Background(), 7, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].TextNFC != want || got[0].Translation != "good morning" {
+		t.Fatalf("NFD line %+v", got)
 	}
 }
 
