@@ -518,20 +518,27 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 	switch vm.Kind {
 	case session.KindLetter:
 		vm.Asked = pickPart(vm.CardID, parts)
+		stored := make([]string, 0, len(parts))
 		sides := make([]views.DrillSide, 0, len(parts))
 		for _, part := range parts {
 			sound, err := s.letterSound(ctx, part)
 			if err != nil {
 				return err
 			}
-			sides = append(sides, views.DrillSide{
-				Hebrew: part,
-				Name:   views.LetterName(part),
-				Sound:  sound,
-			})
+			stored = append(stored, sound)
+			side := views.DrillSide{Hebrew: part, Sound: sound}
+			if e, ok := views.LookupAlefbet(part); ok {
+				side.Name = e.Name
+				side.NameTranslit = e.Translit
+				side.Sound = e.Sound
+			} else {
+				side.Name = views.LetterName(part)
+			}
+			sides = append(sides, side)
 		}
 		vm.Sides = sides
-		vm.DageshNote = views.DageshNote(sides)
+		vm.TellApart = views.AlefbetTellApart(parts)
+		vm.DageshNote = views.LetterDageshNote(parts, stored)
 		ex, ok, err := s.confusionExample(ctx, userID, fsrs.MissLetterPair, key)
 		if err != nil {
 			return err

@@ -314,15 +314,18 @@ templ letterBack(c ReviewCard) {
 		if len(c.Sides) > 1 {
 			<div class="act__pair">
 				for _, side := range c.Sides {
-					<p class="act__side">
-						@H(side.Hebrew)
-						if side.Name != "" {
-							@H(side.Name)
-						}
-						if side.Sound != "" {
-							<bdi class="wb__tr" lang="en" dir="ltr">{ side.Sound }</bdi>
-						}
-					</p>
+								<p class="act__side">
+									@H(side.Hebrew)
+									if side.Name != "" {
+										@H(side.Name)
+									}
+									if side.NameTranslit != "" {
+										<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ side.NameTranslit }</bdi>
+									}
+									if side.Sound != "" {
+										<bdi class="wb__tr" lang="en" dir="ltr">{ side.Sound }</bdi>
+									}
+								</p>
 				}
 			</div>
 		}

@@ -175,6 +175,12 @@ func renderMode(t *testing.T, c templ.Component) string {
 	return b.String()
 }
 
+// The alef-bet names the letter back has to show. These are the NFC forms.
+const (
+	gimelName = "\u05d2\u05b4\u05bc\u05d9\u05de\u05b6\u05dc" // גִּימֶל
+	feName    = "\u05e4\u05b5\u05d0"                         // פֵא
+)
+
 type ankiSpec struct {
 	prompt  string
 	front   []string // must be on the front
@@ -317,8 +323,8 @@ func seedAnkiLexeme(t *testing.T, store *db.Store, now time.Time, kind string) (
 		spec.key = "ג"
 		spec.prompt = views.PromptLetter
 		spec.front = []string{"ג", spec.prompt}
-		spec.banned = []string{views.LetterName("ג"), "rain-shower", "geshem-ex", "/audio/", "ג/פ"}
-		spec.answers = []string{views.LetterName("ג"), "rain-shower", "geshem-ex", clipText}
+		spec.banned = []string{views.LetterName("ג"), gimelName, "gimel", "g as in go", "rain-shower", "geshem-ex", "/audio/", "ג/פ"}
+		spec.answers = []string{gimelName, "gimel", "g as in go", "rain-shower", "geshem-ex", clipText}
 		word.exampleID = addLexeme(t, store, clipText, "rain-shower", "geshem-ex", "m", "")
 	case "pair":
 		clipText = "גֶּשֶׁם"
@@ -326,8 +332,8 @@ func seedAnkiLexeme(t *testing.T, store *db.Store, now time.Time, kind string) (
 		spec.pair = []string{"ג", "פ"}
 		spec.prompt = views.PromptLetter
 		spec.front = []string{spec.prompt}
-		spec.banned = []string{views.LetterName("ג"), views.LetterName("פ"), "rain-shower", "geshem-ex", "/audio/", "ג/פ", "Tell them apart"}
-		spec.answers = []string{views.LetterName("ג"), views.LetterName("פ"), "ג", "פ", "rain-shower", "geshem-ex", clipText}
+		spec.banned = []string{views.LetterName("ג"), views.LetterName("פ"), gimelName, feName, "gimel", "g as in go", "f as in fun", "rain-shower", "geshem-ex", "/audio/", "ג/פ", "Tell them apart"}
+		spec.answers = []string{gimelName, "gimel", "g as in go", feName, "fe", "f as in fun", "ג", "פ", "rain-shower", "geshem-ex", clipText}
 		word.exampleID = addLexeme(t, store, clipText, "rain-shower", "geshem-ex", "m", "")
 	case "pattern":
 		clipText = "הוא"

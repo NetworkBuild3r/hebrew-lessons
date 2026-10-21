@@ -268,11 +268,11 @@ type ReviewCard struct {
 }
 
 // DrillSide is one letter, or one agreement form, on the back of a drill card.
-// Name is the Hebrew letter name from the keyboard table. That table has no
-// niqqud and no transliteration of the name, so NameTranslit stays empty
-// until a source for it exists. Sound is a stored reading, not a phrase
-// invented for the card. Translit and Gloss are the lexicon reading and
-// meaning of an agreement form or an example is carried separately.
+// For a letter, Name, NameTranslit, and Sound come from the alef-bet table:
+// the name with niqqud, its transliteration, and the plain-English sound.
+// The keyboard name table is separate and still has no niqqud. Translit and
+// Gloss are the lexicon reading and meaning of an agreement form. An example
+// word is carried on the card, not on the side.
 type DrillSide struct {
 	Hebrew       string
 	Name         string
