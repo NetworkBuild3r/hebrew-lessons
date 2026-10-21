@@ -622,6 +622,84 @@ func TestTodayCountMatchesReviewQueue(t *testing.T) {
 //
 // Three new cards, due 20:00, 02:00, and 12:00. Under the 4:00 rollover the
 // counts are 2, 2, and 3. A cutoff of “due now” would be 1, 2, and 2.
+// TestTodayAndReviewIncludeTheCardDueAtTheCutoff is the inclusive learn-ahead
+// cap. A new card due at the next 04:00 is in Today and in Review. A card due
+// one nanosecond later is in neither.
+func TestTodayAndReviewIncludeTheCardDueAtTheCutoff(t *testing.T) {
+	loc := mustDenver(t)
+	now := time.Date(2026, 10, 18, 22, 0, 0, 0, loc)
+	cutoff := studyday.DueCutoff(now, loc)
+	store, h, _ := openStepped(t, now)
+	learner := addLearner(t, store, "a@example.com", "sub-a", now)
+	onLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	offLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
+	on := addCard(t, store, learner.user.ID, onLex, fsrs.SkillRead, cutoff, 1, 0, time.Time{})
+	addCard(t, store, learner.user.ID, offLex, fsrs.SkillRead, cutoff.Add(time.Nanosecond), 1, 0, time.Time{})
+
+	home := getLearner(t, h, learner, "/")
+	page := getLearner(t, h, learner, "/review")
+	due := attr(t, articleAttrs(home), "data-due")
+	if due != "1" || attr(t, page, "data-total") != "1" || attr(t, page, "data-card") != fmt.Sprint(on) || strings.Contains(page, "מַיִם") {
+		t.Fatalf("cutoff %s: today %q review %s", cutoff, due, cardAttrs(page))
+	}
+}
+
+// TestReviewUsesTheLearnerZoneNotDenver is 04:30 in Jerusalem, which is still
+// the previous evening in Denver. The card is due for Jerusalem's cutoff and
+// not for Denver's.
+func TestReviewUsesTheLearnerZoneNotDenver(t *testing.T) {
+	jerusalem, err := time.LoadLocation("Asia/Jerusalem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	denver := mustDenver(t)
+	now := time.Date(2026, 1, 15, 4, 30, 0, 0, jerusalem)
+	due := time.Date(2026, 1, 15, 18, 0, 0, 0, time.UTC)
+	if !due.After(studyday.DueCutoff(now, denver)) || due.After(studyday.DueCutoff(now, jerusalem)) {
+		t.Fatalf("denver cutoff %s jerusalem cutoff %s due %s", studyday.DueCutoff(now, denver), studyday.DueCutoff(now, jerusalem), due)
+	}
+	store, h, _ := openStepped(t, now)
+	learner := addLearner(t, store, "a@example.com", "sub-a", now)
+	if err := store.SetLearnerTZ(context.Background(), learner.user.ID, "Asia/Jerusalem"); err != nil {
+		t.Fatal(err)
+	}
+	lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	card := addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, due, 1, 0, time.Time{})
+
+	home := getLearner(t, h, learner, "/")
+	page := getLearner(t, h, learner, "/review")
+	if attr(t, articleAttrs(home), "data-due") != "1" || attr(t, page, "data-total") != "1" || attr(t, page, "data-card") != fmt.Sprint(card) {
+		t.Fatalf("today %s review %s", articleAttrs(home), cardAttrs(page))
+	}
+}
+
+func TestLearnerHomeRejectsAMissingStore(t *testing.T) {
+	s := newServer(nil)
+	if _, _, err := s.learnerHome(context.Background(), 1, "learner", "Asia/Jerusalem"); err == nil || !strings.Contains(err.Error(), "store clock is not configured") {
+		t.Fatalf("nil store: %v", err)
+	}
+	var none *server
+	if _, _, err := none.learnerHome(context.Background(), 1, "learner", ""); err == nil || !strings.Contains(err.Error(), "store clock is not configured") {
+		t.Fatalf("nil server: %v", err)
+	}
+}
+
+func TestSameStudyDay(t *testing.T) {
+	denver := mustDenver(t)
+	night := time.Date(2026, 10, 18, 23, 30, 0, 0, denver)
+	before := time.Date(2026, 10, 19, 3, 59, 0, 0, denver)
+	at := time.Date(2026, 10, 19, 4, 0, 0, 0, denver)
+	if sameStudyDay(time.Time{}, night, denver) {
+		t.Fatal("a zero built time counted as this study day")
+	}
+	if !sameStudyDay(night, before, denver) || !sameStudyDay(night, before, nil) {
+		t.Fatal("23:30 and 03:59 are not the same study day")
+	}
+	if sameStudyDay(night, at, denver) {
+		t.Fatal("04:00 stayed on the previous study day")
+	}
+}
+
 func TestTodayCountMatchesReviewAcrossRollover(t *testing.T) {
 	loc := mustDenver(t)
 	night := time.Date(2026, 10, 18, 23, 30, 0, 0, loc)

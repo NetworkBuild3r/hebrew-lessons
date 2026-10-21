@@ -226,8 +226,12 @@ func TestSetLearnerTZ(t *testing.T) {
 	if err != nil || loaded.TZ != "Asia/Jerusalem" {
 		t.Fatalf("tz after rejection = %q %v", loaded.TZ, err)
 	}
-	if err := s.SetLearnerTZ(ctx, user.ID, " "); err == nil {
-		t.Fatal("empty zone was stored")
+	if err := s.SetLearnerTZ(ctx, user.ID, " "); err == nil || !strings.Contains(err.Error(), "time zone is required") {
+		t.Fatalf("empty zone err = %v", err)
+	}
+	loaded, err = s.UserByID(ctx, user.ID)
+	if err != nil || loaded.TZ != "Asia/Jerusalem" {
+		t.Fatalf("tz after empty = %q %v", loaded.TZ, err)
 	}
 	if err := s.SetLearnerTZ(ctx, 0, "UTC"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("missing user err = %v", err)

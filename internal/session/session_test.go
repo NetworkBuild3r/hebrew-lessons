@@ -632,6 +632,38 @@ func TestLatestRatingIgnoresTheFuture(t *testing.T) {
 	}
 }
 
+func TestBuildSessionAtIncludesTheCutoffAndExcludesTheNextInstant(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	userID := mustUser(t, store)
+	now := clk.Now()
+	cutoff := now.Add(2 * time.Hour)
+	past := addCard(t, store, userID, "עבר", fsrs.SkillRead, now.Add(-time.Hour), 0, 0, time.Time{}, false)
+	exact := addCard(t, store, userID, "גבול", fsrs.SkillRead, cutoff, 0, 0, time.Time{}, false)
+	after := addCard(t, store, userID, "אחר", fsrs.SkillRead, cutoff.Add(time.Nanosecond), 0, 0, time.Time{}, false)
+
+	gotNow := cardSet(t, mustBuild(t, svc, userID))
+	if !gotNow[past] || gotNow[exact] || gotNow[after] {
+		t.Fatalf("due now = %v, want only %d", gotNow, past)
+	}
+	at, err := svc.BuildSessionAt(context.Background(), userID, cutoff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotAt := cardSet(t, at)
+	if !gotAt[past] || !gotAt[exact] || gotAt[after] {
+		t.Fatalf("due at cutoff = %v, want %d and %d", gotAt, past, exact)
+	}
+}
+
+func cardSet(t *testing.T, sess *Session) map[int64]bool {
+	t.Helper()
+	got := map[int64]bool{}
+	for _, card := range drain(t, sess) {
+		got[card.CardID] = true
+	}
+	return got
+}
+
 func TestBuildSessionUsesOneNow(t *testing.T) {
 	storeClk := &fakeClock{t: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)}
 	store, err := db.Open(context.Background(), filepath.Join(t.TempDir(), "hebrew.sqlite"), storeClk)

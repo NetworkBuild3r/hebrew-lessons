@@ -181,6 +181,22 @@ func TestInvalidTZFallsBackOnce(t *testing.T) {
 	}
 }
 
+func TestLoadKeepsAValidZone(t *testing.T) {
+	loc := Load(" Asia/Jerusalem ")
+	if loc == nil || loc.String() != "Asia/Jerusalem" {
+		t.Fatalf("Load = %v", loc)
+	}
+	denver := Load(DefaultZone)
+	if denver == nil || denver.String() != DefaultZone {
+		t.Fatalf("Load(default) = %v", denver)
+	}
+	// 04:30 in Jerusalem is still the previous evening in Denver.
+	now := time.Date(2026, 1, 15, 4, 30, 0, 0, loc)
+	if Key(now, loc) == Key(now, denver) || DueCutoff(now, loc).Equal(DueCutoff(now, denver)) {
+		t.Fatalf("Jerusalem key %s cutoff %s, Denver key %s cutoff %s", Key(now, loc), DueCutoff(now, loc), Key(now, denver), DueCutoff(now, denver))
+	}
+}
+
 func TestDueCutoffIsTheNextRollover(t *testing.T) {
 	denver := mustLoc(t, DefaultZone)
 	now := time.Date(2026, 10, 18, 22, 0, 0, 0, denver)
