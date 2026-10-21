@@ -197,7 +197,8 @@
           },
           {
             "type": "listen_pick",
-            "text": "שָׁלוֹם בֹּקֶר"
+            "text": "שָׁלוֹם בֹּקֶר",
+            "target": "שָׁלוֹם"
           },
           {
             "type": "story",
@@ -226,7 +227,8 @@
           },
           {
             "type": "listen_pick",
-            "text": "תּוֹדָה מַיִם"
+            "text": "תּוֹדָה מַיִם",
+            "target": "תּוֹדָה"
           },
           {
             "type": "story",
@@ -255,7 +257,8 @@
           },
           {
             "type": "listen_pick",
-            "text": "לֶחֶם חָלָב"
+            "text": "לֶחֶם חָלָב",
+            "target": "לֶחֶם"
           },
           {
             "type": "story",
@@ -284,7 +287,8 @@
           },
           {
             "type": "listen_pick",
-            "text": "סוּס פָּרָה"
+            "text": "סוּס פָּרָה",
+            "target": "סוּס"
           },
           {
             "type": "story",
