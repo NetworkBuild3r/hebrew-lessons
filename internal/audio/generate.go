@@ -43,8 +43,20 @@ const (
 // The server's write timeout is 30 s, and a response written after it is lost
 // and the clips the caller waited for look like they were never made. 22 s
 // leaves room to store the last clip and write the reply. It is a variable only
-// so that a test can shorten it; nothing else changes it.
+// so that a test can shorten it; production does not change it. A test whose
+// provider returns immediately sets Generator.Budget above this default,
+// instead of raising it, so a busy CPU cannot trip the deadline.
 var CallBudget = 22 * time.Second
+
+// BudgetClock measures a Generator's Budget. A nil clock uses the wall clock
+// through context.WithTimeout, which is the production path. A test clock
+// moves only when the test advances it, so the deadline does not follow CPU load.
+type BudgetClock interface {
+	Now() time.Time
+	// AfterFunc runs f after d on this clock. stop reports whether f has not
+	// run. f runs on the goroutine that advances the clock.
+	AfterFunc(d time.Duration, f func()) (stop func() bool)
+}
 
 // Item is one clip to make: the text, and who says it. Speaker is "" for
 // narration or a single word (the default voice), or a or b for one line of a
@@ -87,6 +99,8 @@ type Generator struct {
 	// call does not reach come back failed with a "call again" detail. Zero means
 	// no limit, which is what the audio-ensure command uses.
 	Budget time.Duration
+	// BudgetClock measures Budget. Nil uses the wall clock.
+	BudgetClock BudgetClock
 }
 
 // Voices is the speaker table this generator uses.
@@ -138,12 +152,8 @@ func (g *Generator) GenerateItems(ctx context.Context, items []Item) ([]Result, 
 	voices := g.Voices()
 	// The budget bounds the whole call. The parent's own cancellation is not a
 	// budget stop, so the two are told apart below.
-	callCtx := ctx
-	if g.Budget > 0 {
-		var cancel context.CancelFunc
-		callCtx, cancel = context.WithTimeout(ctx, g.Budget)
-		defer cancel()
-	}
+	callCtx, cancel := g.callContext(ctx)
+	defer cancel()
 	out := make([]Result, 0, len(items))
 	for _, it := range items {
 		if err := callCtx.Err(); err != nil {
@@ -158,6 +168,24 @@ func (g *Generator) GenerateItems(ctx context.Context, items []Item) ([]Result, 
 		out = append(out, res)
 	}
 	return out, nil
+}
+
+// callContext is the context one call may spend. A nil BudgetClock is the
+// production path: context.WithTimeout for Budget of wall time. A test clock
+// cancels the context when that clock, not the wall clock, passes Budget.
+func (g *Generator) callContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if g == nil || g.Budget <= 0 {
+		return parent, func() {}
+	}
+	if g.BudgetClock == nil {
+		return context.WithTimeout(parent, g.Budget)
+	}
+	ctx, cancel := context.WithCancel(parent)
+	stop := g.BudgetClock.AfterFunc(g.Budget, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
+	}
 }
 
 // stopDetail is the failed detail for an item that was never tried: a budget

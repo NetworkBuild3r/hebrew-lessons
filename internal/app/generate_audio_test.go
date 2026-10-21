@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
@@ -60,6 +61,10 @@ func TestGenerateAudioUnit1ThenValidate(t *testing.T) {
 		DataDir:      t.TempDir(),
 		MCPAuthToken: "test-token",
 		TTS:          fake,
+		// Production stays at audio.CallBudget (22s of wall time). This fake
+		// returns immediately, and under shard load the sqlite work around it
+		// has exceeded 22s (item 12 failed at 31.8s). An hour cannot fire here.
+		AudioBudget: time.Hour,
 	})
 	session := connectAppMCP(t, a.MCP(), "test-token")
 	before := callAppTool(t, session, "validate_unit", map[string]any{"position": 0, "doc": fixture.Doc})

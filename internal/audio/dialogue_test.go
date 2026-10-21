@@ -418,6 +418,143 @@ func TestCallBudgetStopsAndResumes(t *testing.T) {
 	}
 }
 
+// manualClock is a BudgetClock a test advances. It does not read the wall clock.
+type manualClock struct {
+	mu      sync.Mutex
+	now     time.Time
+	waiters []*clockWaiter
+}
+
+type clockWaiter struct {
+	when time.Time
+	fn   func()
+	dead bool
+}
+
+func (c *manualClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *manualClock) AfterFunc(d time.Duration, f func()) (stop func() bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	w := &clockWaiter{when: c.now.Add(d), fn: f}
+	c.waiters = append(c.waiters, w)
+	return func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if w.dead {
+			return false
+		}
+		w.dead = true
+		return true
+	}
+}
+
+func (c *manualClock) Advance(d time.Duration) {
+	c.mu.Lock()
+	c.now = c.now.Add(d)
+	var due []func()
+	for _, w := range c.waiters {
+		if w.dead || c.now.Before(w.when) {
+			continue
+		}
+		w.dead = true
+		due = append(due, w.fn)
+	}
+	c.mu.Unlock()
+	for _, fn := range due {
+		fn()
+	}
+}
+
+// clockTTS advances a manual clock from inside the provider, then honors cancellation.
+type clockTTS struct {
+	mu sync.Mutex
+	n  int
+	on func(i int)
+}
+
+func (c *clockTTS) Synthesize(ctx context.Context, text, voice, model string) ([]byte, error) {
+	c.mu.Lock()
+	i := c.n
+	c.n++
+	c.mu.Unlock()
+	if c.on != nil {
+		c.on(i)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return []byte("mp3|" + voice + "|" + model + "|" + text), nil
+}
+
+func (c *clockTTS) calls() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.n
+}
+
+// The 22s production budget, measured on a clock the test moves. The fake voice
+// does not sleep. Advancing the clock by CallBudget inside one provider call
+// cuts that call and leaves every later text unattempted.
+func TestCallBudgetFollowsATestClock(t *testing.T) {
+	if CallBudget != 22*time.Second {
+		t.Fatalf("CallBudget = %v, production default is 22s", CallBudget)
+	}
+	clk := &manualClock{now: time.Unix(1_700_000_000, 0)}
+	fake := &clockTTS{}
+	const cutAt = 2
+	fake.on = func(i int) {
+		if i == cutAt {
+			clk.Advance(CallBudget)
+		}
+	}
+	g, _ := dialogueGen(t, fake, testMale)
+	g.Budget = CallBudget
+	g.BudgetClock = clk
+	items := make([]Item, 4)
+	for i := range items {
+		items[i] = Item{Text: strings.Repeat("\u05D0", i+1)}
+	}
+	start := time.Now()
+	got, err := g.GenerateItems(context.Background(), items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("a clock-driven budget took %v of wall time", took)
+	}
+	if len(got) != len(items) {
+		t.Fatalf("results %d", len(got))
+	}
+	for i, r := range got {
+		switch {
+		case i < cutAt:
+			if r.Status != StatusGenerated || r.AudioID == "" {
+				t.Fatalf("item %d %+v", i, r)
+			}
+		case i == cutAt:
+			if r.Status != StatusFailed || r.AudioID != "" || !strings.Contains(r.Detail, "time budget") {
+				t.Fatalf("in-flight item %+v", r)
+			}
+		default:
+			if r.Status != StatusFailed || r.AudioID != "" || !strings.Contains(r.Detail, "time budget") || !strings.Contains(r.Detail, "call again") {
+				t.Fatalf("unattempted item %d %+v", i, r)
+			}
+		}
+	}
+	// The cut call entered the provider. Later texts did not.
+	if n := fake.calls(); n != cutAt+1 {
+		t.Fatalf("provider calls = %d, want %d", n, cutAt+1)
+	}
+	if CallBudget != 22*time.Second {
+		t.Fatalf("CallBudget changed to %v", CallBudget)
+	}
+}
+
 // A caller that cancels is not a budget stop: the detail is the cause.
 func TestCancelledCallerIsNotABudgetStop(t *testing.T) {
 	g, _ := dialogueGen(t, &voiceTTS{}, testMale)
