@@ -381,7 +381,7 @@ func TestReviewPeDageshUsesAlefbet(t *testing.T) {
 	if strings.Contains(front, "With the dot") || strings.Contains(front, "almost always hard") {
 		t.Fatalf("dagesh note leaked onto the front\n%s", front)
 	}
-	shown := getReveal(t, h, learner, mustCardID(t, front))
+	shown := getReveal(t, h, learner, mustCardID(t, front), attr(t, front, "data-pointed"))
 	body := shown.Body.String()
 	note := "With the dot: p. Without: f."
 	if shown.Code != 200 || !strings.Contains(body, note) || strings.Index(body, note) > strings.Index(body, hardNoteHTML) {
@@ -422,7 +422,7 @@ func TestReviewGimelPeCue(t *testing.T) {
 	if strings.Contains(front, "curls back") || strings.Contains(front, "always f") || strings.Contains(front, "Tell them apart") {
 		t.Fatalf("pair cue leaked onto the front\n%s", front)
 	}
-	shown := getReveal(t, h, learner, mustCardID(t, front))
+	shown := getReveal(t, h, learner, mustCardID(t, front), attr(t, front, "data-pointed"))
 	body := shown.Body.String()
 	for _, want := range []string{
 		"<b>Tell them apart:</b>",

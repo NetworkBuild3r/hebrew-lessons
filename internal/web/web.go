@@ -410,12 +410,22 @@ func (s *server) reveal(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
+	parts := pairParts(q)
+	asked := postedAsked(r)
+	if parts != nil && !askedInPair(parts, asked) {
+		s.mu.Unlock()
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
 	if err := q.sess.Reveal(cardID); err != nil {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(reviewStatus(err)), reviewStatus(err))
 		return
 	}
 	q.revealed = true
+	if parts != nil {
+		q.asked = asked
+	}
 	vm, err := s.cardVM(r.Context(), q)
 	s.mu.Unlock()
 	if err != nil {
@@ -456,6 +466,16 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
+	// A pair grades the letter the reveal accepted. Anything else, including
+	// the other letter of the pair, is not that letter and is not graded.
+	if parts := pairParts(q); parts != nil {
+		asked := postedAsked(r)
+		if !askedInPair(parts, asked) || asked != q.asked {
+			s.mu.Unlock()
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+	}
 	// A positive id that belongs to someone else is not the card this
 	// session served. The id check above rejects it. Record then applies
 	// the review once; a second grade of the same serve does not match.
@@ -481,6 +501,37 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.finishReview(w, r, lang, vm)
+}
+
+// pairParts is the two letters of a letter drill. A single letter and
+// every other card return nil, and those requests do not carry asked.
+func pairParts(q *studyQueue) []string {
+	if q == nil || q.cur.Kind != session.KindLetter {
+		return nil
+	}
+	parts := splitDrillKey(q.cur.Key)
+	if len(parts) < 2 {
+		return nil
+	}
+	return parts
+}
+
+// postedAsked is the hidden letter on the reveal or grade form.
+// A POST reads the body, so a query value cannot replace it.
+func postedAsked(r *http.Request) string {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return r.PostForm.Get("asked")
+	}
+	return r.Form.Get("asked")
+}
+
+func askedInPair(parts []string, asked string) bool {
+	for _, part := range parts {
+		if part == asked {
+			return true
+		}
+	}
+	return false
 }
 
 func reviewCardID(w http.ResponseWriter, r *http.Request) (int64, bool) {

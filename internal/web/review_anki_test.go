@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -184,7 +185,7 @@ func TestReviewModesShareOneRevealPath(t *testing.T) {
 	}
 
 	frontHTML := renderMode(t, views.ReviewModeFor("letter").Front(letter))
-	if strings.Contains(frontHTML, "גימל") || strings.Contains(frontHTML, "פא") || strings.Contains(frontHTML, `name="rating"`) || strings.Contains(frontHTML, "act__answer") || strings.Contains(frontHTML, "Tell them apart") {
+	if strings.Contains(frontHTML, "גימל") || strings.Contains(frontHTML, "פא") || strings.Contains(frontHTML, `name="rating"`) || strings.Contains(frontHTML, "act__answer") || strings.Contains(frontHTML, "Tell them apart") || strings.Contains(frontHTML, "Asked") {
 		t.Fatalf("letter front face rendered the answer: %s", frontHTML)
 	}
 	if !strings.Contains(frontHTML, "ג") {
@@ -196,6 +197,9 @@ func TestReviewModesShareOneRevealPath(t *testing.T) {
 	}
 	if strings.Contains(backHTML, `name="rating"`) {
 		t.Fatalf("letter back face owns the grade buttons: %s", backHTML)
+	}
+	if strings.Count(backHTML, `aria-current="true"`) != 1 || strings.Count(backHTML, ">Asked<") != 1 {
+		t.Fatalf("pair back should mark the asked tile once\n%s", backHTML)
 	}
 
 	unknown := views.ConcealFront(views.ReviewCard{Kind: "picture_match", Pointed: "שלום", Gloss: "hello", AudioURL: "/audio/x.mp3"})
@@ -264,7 +268,7 @@ func testAnkiKind(t *testing.T, kind string) {
 		t.Fatalf("unrevealed grade moved the card: %s", cardAttrs(still))
 	}
 
-	shown := getReveal(t, h, hx, cardID)
+	shown := getReveal(t, h, hx, cardID, attr(t, front, "data-pointed"))
 	if shown.Code != http.StatusOK {
 		t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
 	}
@@ -273,7 +277,7 @@ func testAnkiKind(t *testing.T, kind string) {
 	plainFront := getLearner(t, h, plain, "/review")
 	assertAnkiFront(t, plainFront, spec)
 	plainID := mustCardID(t, plainFront)
-	got := getRevealRaw(t, h, plain.cookie, plainID, false)
+	got := getRevealRaw(t, h, plain.cookie, plainID, attr(t, plainFront, "data-pointed"), false)
 	if got.Code != http.StatusSeeOther || got.Header().Get("Location") != "/review" {
 		t.Fatalf("plain reveal = %d location %q", got.Code, got.Header().Get("Location"))
 	}
@@ -311,7 +315,7 @@ func TestReviewDageshPairUsesStoredSounds(t *testing.T) {
 	if hasDot == hasBare {
 		t.Fatalf("front should show exactly one of the dagesh pair\n%s", front)
 	}
-	shown := getReveal(t, h, learner, mustCardID(t, front))
+	shown := getReveal(t, h, learner, mustCardID(t, front), attr(t, front, "data-pointed"))
 	body := shown.Body.String()
 	if shown.Code != http.StatusOK || !strings.Contains(body, "With the dot: p. Without: f.") || !strings.Contains(body, dot) || !strings.Contains(body, "פ") {
 		t.Fatalf("dagesh back = %d\n%s", shown.Code, body)
@@ -487,14 +491,22 @@ func assertNoAnswerHeading(t *testing.T, body string) {
 	}
 }
 
-func getReveal(t *testing.T, h http.Handler, learner learnerFix, cardID int64) *httptest.ResponseRecorder {
+func getReveal(t *testing.T, h http.Handler, learner learnerFix, cardID int64, asked ...string) *httptest.ResponseRecorder {
 	t.Helper()
-	return getRevealRaw(t, h, learner.cookie, cardID, true)
+	letter := ""
+	if len(asked) > 0 {
+		letter = asked[0]
+	}
+	return getRevealRaw(t, h, learner.cookie, cardID, letter, true)
 }
 
-func getRevealRaw(t *testing.T, h http.Handler, cookie *http.Cookie, cardID int64, hx bool) *httptest.ResponseRecorder {
+func getRevealRaw(t *testing.T, h http.Handler, cookie *http.Cookie, cardID int64, asked string, hx bool) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/_hx/review/reveal?card_id="+strconv.FormatInt(cardID, 10), nil)
+	path := "/_hx/review/reveal?card_id=" + strconv.FormatInt(cardID, 10)
+	if asked != "" {
+		path += "&asked=" + url.QueryEscape(asked)
+	}
+	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Host = "learn.example"
 	req.Header.Set("Origin", "https://learn.example")
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
@@ -549,10 +561,14 @@ func TestReviewFrontHasNoAnswerHeading(t *testing.T) {
 			}
 			assertNoAnswerHeading(t, page)
 			id := mustCardID(t, page)
-			if shown := getReveal(t, h, hx, id); shown.Code != http.StatusOK {
+			asked := ""
+			if kind == "pair" {
+				asked = attr(t, page, "data-pointed")
+			}
+			if shown := getReveal(t, h, hx, id, asked); shown.Code != http.StatusOK {
 				t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
 			}
-			next := postGrade(t, h, hx, id, "3", "https://learn.example")
+			next := postGrade(t, h, hx, id, "3", "https://learn.example", asked)
 			if next.Code != http.StatusOK {
 				t.Fatalf("next front = %d\n%s", next.Code, next.Body.String())
 			}
@@ -588,41 +604,285 @@ func TestReviewFrontHasNoAnswerHeading(t *testing.T) {
 	}
 }
 
-// TestReviewPairAskFollowsTheDay keeps one letter across refreshes on the
-// same study day, and asks both letters of the pair across days.
-func TestReviewPairAskFollowsTheDay(t *testing.T) {
-	start := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+// TestStudyDayCutoffIsTheNextFourDenver locks the local helper to the
+// DueCutoff rule: the next 4:00 America/Denver, and 4:00 itself belongs to
+// the new study day.
+func TestStudyDayCutoffIsTheNextFourDenver(t *testing.T) {
+	loc, err := time.LoadLocation("America/Denver")
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := func(y int, m time.Month, d, hh, mm int) time.Time {
+		return time.Date(y, m, d, hh, mm, 0, 0, loc)
+	}
+	for _, tc := range []struct{ now, want time.Time }{
+		{at(2026, 10, 21, 3, 59), at(2026, 10, 21, 4, 0)},
+		{at(2026, 10, 21, 4, 0), at(2026, 10, 22, 4, 0)},
+		{at(2026, 10, 20, 22, 0), at(2026, 10, 21, 4, 0)},
+		{at(2026, 10, 21, 3, 30), at(2026, 10, 21, 4, 0)},
+	} {
+		if got := studyDayCutoff(tc.now); !got.Equal(tc.want) {
+			t.Fatalf("%s cutoff = %s, want %s", tc.now, got, tc.want)
+		}
+	}
+	early, late := at(2026, 10, 20, 17, 0), at(2026, 10, 20, 23, 0)
+	if !studyDayCutoff(early).Equal(studyDayCutoff(late)) {
+		t.Fatal("17:00 and 23:00 Denver are one study day")
+	}
+	ey, em, ed := early.UTC().Date()
+	ly, lm, ld := late.UTC().Date()
+	if ey == ly && em == lm && ed == ld {
+		t.Fatal("17:00 and 23:00 Denver were the same UTC date")
+	}
+}
+
+// TestReviewPairAskFollowsTheStudyDay asks both letters across ten study
+// days, and keeps one letter from 17:00 to 23:00 Denver. Those two times
+// are one study day and two UTC dates, so a rebuilt queue still asks the
+// same letter.
+func TestReviewPairAskFollowsTheStudyDay(t *testing.T) {
+	loc, err := time.LoadLocation("America/Denver")
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Date(2026, 10, 18, 12, 0, 0, 0, loc)
 	store, h, clk := openStepped(t, start)
 	learner := addLearner(t, store, "a@example.com", "sub-pair-day", start.Add(400*24*time.Hour))
+	parts := []string{"ג", "פ"}
 	seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
 
-	first := ""
-	for i := 0; i < 50; i++ {
-		asked := attr(t, getLearner(t, h, learner, "/review"), "data-pointed")
-		if asked != "ג" && asked != "פ" {
-			t.Fatalf("refresh %d asked %q", i, asked)
+	seen := map[string]bool{}
+	var cardID int64
+	var flipDay time.Time
+	crossed := false
+	for i := 0; i < 10; i++ {
+		if i > 0 {
+			seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
 		}
+		front := getLearner(t, h, learner, "/review")
+		letter := attr(t, front, "data-pointed")
+		if letter != "ג" && letter != "פ" {
+			t.Fatalf("day %d asked %q", i, letter)
+		}
+		if !strings.Contains(front, `name="asked" value="`+letter+`"`) {
+			t.Fatalf("day %d front hid a different letter\n%s", i, front)
+		}
+		id := mustCardID(t, front)
 		if i == 0 {
-			first = asked
+			if id >= 0 {
+				t.Fatalf("drill card id = %d", id)
+			}
+			cardID = id
+			flipDay = utcFlipEvening(cardID, start, parts)
+			if flipDay.IsZero() {
+				t.Fatal("no evening where a UTC date seed would change the letter")
+			}
+		} else if id != cardID {
+			t.Fatalf("day %d card = %d, want %d", i, id, cardID)
+		}
+		seen[letter] = true
+		if sameLocalDate(clk.Now(), flipDay) {
+			noon := letter
+			clk.Advance(5 * time.Hour)
+			at17 := attr(t, getLearner(t, h, learner, "/review"), "data-pointed")
+			clk.Advance(6 * time.Hour)
+			at23 := attr(t, getLearner(t, h, learner, "/review"), "data-pointed")
+			early, late := clk.Now().Add(-6*time.Hour), clk.Now()
+			ey, em, ed := early.UTC().Date()
+			ly, lm, ld := late.UTC().Date()
+			if ey == ly && em == lm && ed == ld {
+				t.Fatal("17:00 and 23:00 Denver were the same UTC date")
+			}
+			if at17 != noon || at23 != noon {
+				t.Fatalf("study day %s asked %s at noon, %s at 17:00, %s at 23:00", flipDay.Format("2006-01-02"), noon, at17, at23)
+			}
+			crossed = true
+			clk.Advance(13 * time.Hour)
 			continue
 		}
-		if asked != first {
-			t.Fatalf("refresh %d changed the letter from %s to %s", i, first, asked)
-		}
-	}
-	seen := map[string]bool{first: true}
-	for day := 1; day <= 40 && len(seen) < 2; day++ {
 		clk.Advance(24 * time.Hour)
-		seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
-		asked := attr(t, getLearner(t, h, learner, "/review"), "data-pointed")
-		if asked != "ג" && asked != "פ" {
-			t.Fatalf("day %d asked %q", day, asked)
-		}
-		seen[asked] = true
 	}
 	if !seen["ג"] || !seen["פ"] {
-		t.Fatalf("pair asked %v across days, want both letters", seen)
+		t.Fatalf("ten study days asked %v, want both letters", seen)
 	}
+	if !crossed {
+		t.Fatal("the ten days never rebuilt the queue inside one study day")
+	}
+}
+
+// TestReviewPairAskSurvivesRollover posts the 22:00 letter on the reveal
+// after 4:00. The back shows that letter and its answer, not the letter the
+// new study day would ask.
+func TestReviewPairAskSurvivesRollover(t *testing.T) {
+	loc, err := time.LoadLocation("America/Denver")
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Date(2026, 10, 20, 22, 0, 0, 0, loc)
+	store, h, clk := openStepped(t, start)
+	learner := addLearner(t, store, "a@example.com", "sub-pair-roll", start.Add(400*24*time.Hour))
+	parts := []string{"ג", "פ"}
+	for i := 0; i < 40; i++ {
+		seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
+		front := getLearner(t, h, learner, "/review")
+		asked := attr(t, front, "data-pointed")
+		cardID := mustCardID(t, front)
+		later := pickPart(cardID, studyDayCutoff(clk.Now().Add(6*time.Hour)), parts)
+		if later == asked {
+			clk.Advance(24 * time.Hour)
+			continue
+		}
+		if !strings.Contains(front, `name="asked" value="`+asked+`"`) {
+			t.Fatalf("front hid %q\n%s", asked, front)
+		}
+		clk.Advance(6 * time.Hour)
+		back := getReveal(t, h, learner, cardID, asked)
+		if back.Code != http.StatusOK {
+			t.Fatalf("reveal = %d\n%s", back.Code, back.Body.String())
+		}
+		body := back.Body.String()
+		if attr(t, body, "data-pointed") != asked {
+			t.Fatalf("reveal after 4:00 asked %s, front asked %s, new day asks %s", attr(t, body, "data-pointed"), asked, later)
+		}
+		assertAskedAnswer(t, body, asked)
+		if !strings.Contains(body, `name="asked" value="`+asked+`"`) {
+			t.Fatalf("grade form hid %q\n%s", asked, body)
+		}
+		return
+	}
+	t.Fatal("no night where 4:00 changes the asked letter")
+}
+
+// TestReviewPairGradeStaysTheAskedLetter reveals before 4:00 America/Denver
+// and grades after it. The grade is the letter the reveal accepted. The
+// other letter of the pair, and a letter outside the pair, are rejected,
+// and the card does not move.
+func TestReviewPairGradeStaysTheAskedLetter(t *testing.T) {
+	loc, err := time.LoadLocation("America/Denver")
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Date(2026, 10, 21, 3, 30, 0, 0, loc)
+	store, h, clk := openStepped(t, start)
+	learner := addLearner(t, store, "a@example.com", "sub-pair-grade", start.Add(400*24*time.Hour))
+	parts := []string{"ג", "פ"}
+	for i := 0; i < 40; i++ {
+		seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
+		front := getLearner(t, h, learner, "/review")
+		asked := attr(t, front, "data-pointed")
+		cardID := mustCardID(t, front)
+		later := pickPart(cardID, studyDayCutoff(clk.Now().Add(31*time.Minute)), parts)
+		if later == asked {
+			clk.Advance(24 * time.Hour)
+			continue
+		}
+		other := parts[0]
+		if other == asked {
+			other = parts[1]
+		}
+		forged := getReveal(t, h, learner, cardID, "ק")
+		if forged.Code != http.StatusBadRequest {
+			t.Fatalf("forged reveal = %d\n%s", forged.Code, forged.Body.String())
+		}
+		held := getLearner(t, h, learner, "/review")
+		if strings.Contains(held, `data-revealed="true"`) || attr(t, held, "data-pointed") != asked || mustCardID(t, held) != cardID {
+			t.Fatalf("forged reveal changed the card: %s", cardAttrs(held))
+		}
+		shown := getReveal(t, h, learner, cardID, asked)
+		if shown.Code != http.StatusOK {
+			t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
+		}
+		assertAskedAnswer(t, shown.Body.String(), asked)
+
+		clk.Advance(31 * time.Minute)
+		page := getLearner(t, h, learner, "/review")
+		if mustCardID(t, page) != cardID || attr(t, page, "data-pointed") != asked || !strings.Contains(page, `data-revealed="true"`) {
+			t.Fatalf("after 4:00 the card left %s: %s", asked, cardAttrs(page))
+		}
+		assertAskedAnswer(t, page, asked)
+		if strings.Contains(page, pairAnswerLine(later)) {
+			t.Fatalf("after 4:00 the answer became %s\n%s", later, page)
+		}
+
+		for _, bad := range []string{other, "ק"} {
+			got := postGrade(t, h, learner, cardID, "3", "https://learn.example", bad)
+			if got.Code != http.StatusBadRequest {
+				t.Fatalf("grade %s = %d, want 400\n%s", bad, got.Code, got.Body.String())
+			}
+		}
+		still := getLearner(t, h, learner, "/review")
+		if mustCardID(t, still) != cardID || attr(t, still, "data-pointed") != asked || !strings.Contains(still, `data-revealed="true"`) {
+			t.Fatalf("rejected grade moved the card: %s", cardAttrs(still))
+		}
+		assertAskedAnswer(t, still, asked)
+
+		ok := postGrade(t, h, learner, cardID, "3", "https://learn.example", asked)
+		if ok.Code != http.StatusOK {
+			t.Fatalf("grade %s = %d\n%s", asked, ok.Code, ok.Body.String())
+		}
+		next := ok.Body.String()
+		if mustCardID(t, next) == cardID && !strings.Contains(next, `data-done="true"`) {
+			t.Fatalf("grading %s left the card in place\n%s", asked, cardAttrs(next))
+		}
+		return
+	}
+	t.Fatal("no morning where 4:00 changes the asked letter")
+}
+
+func pairAnswerLine(letter string) string {
+	switch letter {
+	case "ג":
+		return "gimel · g as in go"
+	case "פ":
+		return "fe · f as in fun"
+	default:
+		return ""
+	}
+}
+
+func assertAskedAnswer(t *testing.T, body, asked string) {
+	t.Helper()
+	want := pairAnswerLine(asked)
+	other := pairAnswerLine("ג")
+	if asked == "ג" {
+		other = pairAnswerLine("פ")
+	}
+	if want == "" || !strings.Contains(body, want) || strings.Contains(body, other) {
+		t.Fatalf("answer does not match %s\n%s", asked, body)
+	}
+}
+
+// utcFlipEvening is a 17:00 America/Denver where a UTC-date seed would ask
+// the other letter than 23:00 the same evening, and the study-day seed would not.
+func utcFlipEvening(cardID int64, from time.Time, parts []string) time.Time {
+	loc := from.Location()
+	y, m, d := from.Date()
+	for i := 0; i < 40; i++ {
+		early := time.Date(y, m, d+i, 17, 0, 0, 0, loc)
+		late := time.Date(y, m, d+i, 23, 0, 0, 0, loc)
+		if pickPart(cardID, studyDayCutoff(early), parts) != pickPart(cardID, studyDayCutoff(late), parts) {
+			continue
+		}
+		if utcDatePick(cardID, early, parts) != utcDatePick(cardID, late, parts) {
+			return early
+		}
+	}
+	return time.Time{}
+}
+
+// utcDatePick is the letter a card-id plus UTC yyyymmdd seed would ask.
+// The study-day tests use it to choose an evening where that seed flips.
+func utcDatePick(cardID int64, now time.Time, parts []string) string {
+	y, m, d := now.UTC().Date()
+	lane := uint64(y*10000 + int(m)*100 + d)
+	src := rand.NewPCG(uint64(cardID), lane)
+	return parts[rand.New(src).Uint64N(uint64(len(parts)))]
+}
+
+func sameLocalDate(a, b time.Time) bool {
+	ay, am, ad := a.Date()
+	by, bm, bd := b.Date()
+	return ay == by && am == bm && ad == bd && a.Location().String() == b.Location().String()
 }
 
 // TestReviewRevealRejectsCrossSite rejects a GET reveal that the browser

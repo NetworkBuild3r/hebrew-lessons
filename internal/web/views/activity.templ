@@ -244,6 +244,9 @@ templ flashFrame(c ReviewCard) {
 			<form class="act__form" method="post" action="/_hx/review/grade" hx-post="/_hx/review/grade" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
 				<input type="hidden" name="_csrf" value={ c.CSRF }/>
 				<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
+				if c.Kind == "letter" {
+					<input type="hidden" name="asked" value={ c.Pointed }/>
+				}
 				<div class="act__stage">
 					@flashCard(c)
 				</div>
@@ -259,6 +262,9 @@ templ flashFrame(c ReviewCard) {
 		} else {
 			<form class="act__form" method="get" action="/_hx/review/reveal" hx-get="/_hx/review/reveal" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
 				<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
+				if c.Kind == "letter" {
+					<input type="hidden" name="asked" value={ c.Pointed }/>
+				}
 				<div class="act__stage">
 					@flashCard(c)
 				</div>
@@ -304,7 +310,12 @@ templ letterBack(c ReviewCard) {
 			</div>
 			<div class="act__pair">
 				for _, side := range c.Sides {
-					<div class="act__tile">
+					<div class="act__tile" if side.Hebrew == asked.Hebrew {
+						aria-current="true"
+					}>
+						if side.Hebrew == asked.Hebrew {
+							<p class="act__tile-asked" lang="en">Asked</p>
+						}
 						<p class="act__tile-letter">@H(side.Hebrew)</p>
 						if side.Name != "" {
 							<p class="act__tile-name">@H(side.Name)</p>

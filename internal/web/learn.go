@@ -62,6 +62,9 @@ type studyQueue struct {
 	done     bool
 	revealed bool
 	builtAt  time.Time
+	// asked is the pair letter the reveal posted. The back and the grade
+	// keep it, so a study-day rollover cannot switch the letter.
+	asked string
 	// item is the checked activity the current card is asked through. It is nil for a
 	// flashcard and a drill. fb is set from the checked answer until Continue.
 	item *activity.Item
@@ -384,6 +387,7 @@ func sameStudyDay(built, now time.Time) bool {
 func (s *server) advance(ctx context.Context, q *studyQueue) error {
 	if q != nil {
 		q.revealed = false
+		q.asked = ""
 		q.item = nil
 		q.fb = nil
 	}
@@ -443,6 +447,13 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 		vm.Unpointed = units.Plain(ref.Key)
 		if err := s.fillDrill(ctx, q.userID, &vm); err != nil {
 			return ReviewCardVM{}, err
+		}
+		// A reveal posted the letter. Later renders, including one after the
+		// study day rolls, show that letter instead of picking again.
+		if q.asked != "" {
+			vm.Asked = q.asked
+			vm.Pointed = q.asked
+			vm.Unpointed = units.Plain(q.asked)
 		}
 		return vm, nil
 	}
@@ -517,7 +528,7 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 	parts := splitDrillKey(key)
 	switch vm.Kind {
 	case session.KindLetter:
-		vm.Asked = pickPart(vm.CardID, s.now(), parts)
+		vm.Asked = pickPart(vm.CardID, studyDayCutoff(s.now()), parts)
 		stored := make([]string, 0, len(parts))
 		sides := make([]views.DrillSide, 0, len(parts))
 		for _, part := range parts {
@@ -646,19 +657,18 @@ func (s *server) confusionExample(ctx context.Context, userID int64, kind, key s
 }
 
 // pickPart chooses one part of a pair. The seed is the card id plus the
-// review clock's UTC date, the same day the study queue uses, so a refresh
-// and the no-JS page show the same letter, and another day can ask the
-// other one. One part is returned as itself.
-func pickPart(cardID int64, when time.Time, parts []string) string {
+// learner's study-day cutoff, the next 4:00 America/Denver. The same study
+// day asks the same letter. The next study day can ask the other one.
+// One part is returned as itself. The cutoff comes from studyDayCutoff.
+// A reveal does not call this again: the posted letter is what the back shows.
+func pickPart(cardID int64, cutoff time.Time, parts []string) string {
 	if len(parts) == 0 {
 		return ""
 	}
 	if len(parts) == 1 {
 		return parts[0]
 	}
-	y, m, d := when.UTC().Date()
-	day := uint64(y)*10000 + uint64(m)*100 + uint64(d)
-	src := rand.NewPCG(uint64(cardID), day)
+	src := rand.NewPCG(uint64(cardID), uint64(cutoff.Unix()))
 	return parts[rand.New(src).Uint64N(uint64(len(parts)))]
 }
 

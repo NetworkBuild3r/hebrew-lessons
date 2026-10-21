@@ -1198,6 +1198,37 @@ func enqueuePair(t *testing.T, store *db.Store, userID, lexemeID int64, due time
 	return he, en
 }
 
+func TestDrillCardIDsStayWithThePair(t *testing.T) {
+	pairs := []db.ConfusionPair{
+		{Kind: fsrs.MissLetterPair, A: "ג", B: "פ", Count: MinMissesForDrill},
+		{Kind: fsrs.MissLetterPair, A: "ב", B: "כ", Count: MinMissesForDrill},
+	}
+	first := drillCandidates(pairs)
+	second := drillCandidates(pairs)
+	if len(first) != DrillSteps*2 || len(second) != len(first) {
+		t.Fatalf("steps = %d and %d, want %d", len(first), len(second), DrillSteps*2)
+	}
+	seen := map[int64]string{}
+	for i, card := range first {
+		if card.ID >= 0 {
+			t.Fatalf("step %d id %d is not a drill id", card.Step, card.ID)
+		}
+		if second[i].ID != card.ID || second[i].Key != card.Key || second[i].Step != card.Step {
+			t.Fatalf("rebuild changed %+v to %+v", card, second[i])
+		}
+		if prev, ok := seen[card.ID]; ok {
+			t.Fatalf("id %d used by %s and %s/%d", card.ID, prev, card.Key, card.Step)
+		}
+		seen[card.ID] = card.Key + "/" + fmt.Sprint(card.Step)
+	}
+	if first[0].ID == first[DrillSteps].ID {
+		t.Fatal("two pairs share a card id")
+	}
+	if first[0].ID == -1 && first[1].ID == -2 {
+		t.Fatal("drill ids are still the sequential -1, -2 series")
+	}
+}
+
 func lexemeOf(t *testing.T, store *db.Store, cardID int64) int64 {
 	t.Helper()
 	card, err := store.GetCard(context.Background(), cardID)
