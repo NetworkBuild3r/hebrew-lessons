@@ -1089,3 +1089,54 @@ func TestReviewGradeIgnoresQueryAsked(t *testing.T) {
 		t.Fatalf("query asked moved the card: %s", cardAttrs(page))
 	}
 }
+
+// TestUnknownKindUsesTheCardSkill is the default face for a kind that is not
+// one of the four study skills. Recall skill uses the recall face. Any other
+// skill uses the read face.
+func TestUnknownKindUsesTheCardSkill(t *testing.T) {
+	store, _, now := openApp(t)
+	learner := addLearner(t, store, "a@example.com", "sub-unknown-kind", now)
+	lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	cardID := addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
+	s := newServer(store)
+	cases := []struct{ skill, want string }{
+		{fsrs.SkillRecall, fsrs.SkillRecall},
+		{fsrs.SkillRead, fsrs.SkillRead},
+		{fsrs.SkillListen, fsrs.SkillRead},
+	}
+	for _, tc := range cases {
+		vm, err := s.cardVM(context.Background(), &studyQueue{
+			has: true,
+			cur: session.CardRef{CardID: cardID, LexemeID: lex, Skill: tc.skill, Kind: "picture_match"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if vm.Kind != tc.want {
+			t.Fatalf("skill %s kind = %s, want %s", tc.skill, vm.Kind, tc.want)
+		}
+	}
+}
+
+// TestLetterSoundUsesPlacementThenLexicon prefers a placement reading over a
+// lexicon transliteration of the same text. A text that is not a placement
+// letter uses the lexicon transliteration.
+func TestLetterSoundUsesPlacementThenLexicon(t *testing.T) {
+	store, _, _ := openApp(t)
+	s := newServer(store)
+	ctx := context.Background()
+	addLexeme(t, store, "דָ", "dalet-a", "not-da", "m", "")
+	got, err := s.letterSound(ctx, "דָ")
+	if err != nil || got != "da" {
+		t.Fatalf("placement sound = %q err=%v", got, err)
+	}
+	addLexeme(t, store, "בַּיִת", "house", "lex-only", "m", "")
+	got, err = s.letterSound(ctx, "בַּיִת")
+	if err != nil || got != "lex-only" {
+		t.Fatalf("lexicon sound = %q err=%v", got, err)
+	}
+	got, err = s.letterSound(ctx, "זֻ")
+	if err != nil || got != "" {
+		t.Fatalf("missing sound = %q err=%v", got, err)
+	}
+}
