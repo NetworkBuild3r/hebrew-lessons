@@ -344,7 +344,7 @@ func wantChoiceLabel(act units.Activity, lex qaLexeme) string {
 	case units.ActivityProduce:
 		return lex.Text
 	case units.ActivityCloze:
-		return lex.Text + " " + lex.Translit
+		return lex.Text
 	default:
 		return lex.Gloss
 	}

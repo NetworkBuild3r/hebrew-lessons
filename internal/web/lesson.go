@@ -36,7 +36,8 @@ import (
 //     answer. Choices show pointed Hebrew. The button value is the lexeme id.
 //   - cloze gaps the first new word. Until the answer, the other words show
 //     pointed Hebrew and transliteration, with no gloss, and the sentence
-//     clip stays hidden. After the answer, every word shows its pointed
+//     clip stays hidden. The choices are pointed Hebrew with no
+//     transliteration. After the answer, every word shows its pointed
 //     text, transliteration, and gloss. Choice values are lexeme ids.
 //   - any other type shows the words and a continue button.
 //
@@ -796,7 +797,9 @@ func askChoices(typ string, unit, earlier []db.LexemeView, target db.LexemeView,
 	if !recallOrCloze(typ) {
 		return lessonChoices(unit, earlier, target, seed, hebrew, false, lessonChoiceButtons, block)
 	}
-	return wideChoices(unit, earlier, target, seed, hebrew, typ == units.ActivityCloze, block)
+	// Cloze buttons are pointed Hebrew only. The answer's reading is on the
+	// sentence after grading, not on the button before it.
+	return wideChoices(unit, earlier, target, seed, hebrew, false, block)
 }
 
 // wideChoices fills a recall or cloze ask from outside the line only. Same
