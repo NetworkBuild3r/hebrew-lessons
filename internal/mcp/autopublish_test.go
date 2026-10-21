@@ -211,7 +211,16 @@ func (e *apEnv) audio(doc units.Unit) {
 // shows each new word (shadow) before it is checked, then checks it, and reads a
 // story. A checkpoint recycles the new words and plays the struggle word three times.
 func apDoc(title string) units.Unit {
-	act := func(typ, text string) units.Activity { return units.Activity{Type: typ, Text: text} }
+	act := func(typ, text string) units.Activity {
+		a := units.Activity{Type: typ, Text: text}
+		if typ == units.ActivityListenPick {
+			fields := strings.Fields(text)
+			if len(fields) > 1 {
+				a.Target = fields[0]
+			}
+		}
+		return a
+	}
 	return units.Unit{
 		Title: title, Situation: "A cafe", Concept: "Greetings",
 		NewWords: []string{apShalom, apBoker, apToda},
@@ -619,7 +628,7 @@ func TestAutoPublishCountsTheLearnersKnownWords(t *testing.T) {
 	e.goodBrief(apBriefB, e.b)
 	doc := apDoc("Cafe")
 	doc.Lessons[1].Activities = append(doc.Lessons[1].Activities,
-		units.Activity{Type: units.ActivityListenPick, Text: lechem + " " + lechem + " " + lechem + " " + lechem})
+		units.Activity{Type: units.ActivityListenPick, Text: lechem + " " + lechem + " " + lechem + " " + lechem, Target: lechem})
 	e.audio(doc)
 
 	// Learner A does not know the word: the passage is all unknown, and the word has a
