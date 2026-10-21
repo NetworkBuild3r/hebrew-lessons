@@ -103,7 +103,7 @@ func TestCheckMigrationsOnAFullyMigratedDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
+	want := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15}
 	if !reflect.DeepEqual(rep.Applied, want) {
 		t.Errorf("Applied = %v, want %v", rep.Applied, want)
 	}
@@ -122,7 +122,7 @@ func TestCheckMigrationsOnAFullyMigratedDatabase(t *testing.T) {
 }
 
 // The deployed production database: versions 1 to 5 and 7, built the way the migration test
-// builds it. The report must say 6, 8, 9, 10, 11, 12 are pending and that 6 is below 7.
+// builds it. The report must say 6, 8, 9, 10, 11, 12, and 15 are pending and that 6 is below 7.
 func TestCheckMigrationsOnTheDeployedV3Database(t *testing.T) {
 	conn := m6At005(t)
 	body, err := fs.ReadFile(migrations.FS, "007_oauth_client_issued.sql")
@@ -144,7 +144,7 @@ func TestCheckMigrationsOnTheDeployedV3Database(t *testing.T) {
 	if want := []int{1, 2, 3, 4, 5, 7}; !reflect.DeepEqual(rep.Applied, want) {
 		t.Errorf("Applied = %v, want %v", rep.Applied, want)
 	}
-	if want := []int{6, 8, 9, 10, 11, 12}; !reflect.DeepEqual(versions(rep.Pending), want) {
+	if want := []int{6, 8, 9, 10, 11, 12, 15}; !reflect.DeepEqual(versions(rep.Pending), want) {
 		t.Errorf("Pending = %v, want %v", versions(rep.Pending), want)
 	}
 	if want := []int{6}; !reflect.DeepEqual(rep.OutOfOrder, want) {
@@ -277,7 +277,7 @@ func TestReadOnlyConnectionRefusesWrites(t *testing.T) {
 	if err == nil {
 		t.Fatal("a write on the read-only connection succeeded")
 	}
-	if rawCount(t, path, `SELECT COUNT(*) FROM schema_migrations`) != 12 {
+	if rawCount(t, path, `SELECT COUNT(*) FROM schema_migrations`) != 13 {
 		t.Fatal("schema_migrations changed")
 	}
 }
@@ -367,8 +367,8 @@ func TestBackupCopiesTheDatabaseAndReportsItsDigest(t *testing.T) {
 	if got := rawCount(t, dst, `SELECT COUNT(*) FROM users WHERE email = 'marker-person@example.invalid'`); got != 1 {
 		t.Errorf("users in the backup = %d, want 1", got)
 	}
-	if got := rawCount(t, dst, `SELECT COUNT(*) FROM schema_migrations`); got != 12 {
-		t.Errorf("schema_migrations in the backup = %d, want 12", got)
+	if got := rawCount(t, dst, `SELECT COUNT(*) FROM schema_migrations`); got != 13 {
+		t.Errorf("schema_migrations in the backup = %d, want 13", got)
 	}
 	rep, err := CheckMigrations(context.Background(), dst)
 	if err != nil || rep.Integrity != "ok" || len(rep.Problems()) != 0 {

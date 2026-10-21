@@ -21,7 +21,7 @@ const (
 	m9Ins2   = `INSERT INTO regression_events (user_id, kind, lexeme_id, skill, from_state, to_state, day, cause) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 )
 
-var m9Versions = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
+var m9Versions = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15}
 
 // m9At008 builds a database at version 009 with data in every older table, then adds
 // regression_events rows of a few shapes and a gap in the ids.
@@ -117,8 +117,9 @@ func TestMigrate009KeepsRowsIdsAndIndexes(t *testing.T) {
 	if !reflect.DeepEqual(after.rowCnts, others.rowCnts) {
 		t.Fatalf("row counts changed\n got: %v\nwant: %v", after.rowCnts, others.rowCnts)
 	}
-	gotSchema := m8SchemaWithoutName(m8SchemaWithout(m8SchemaWithout(after.schema, "regression_events"), "job_state"), "attempts_user_lexeme_skill_id")
-	wantSchema := m8SchemaWithout(others.schema, "regression_events")
+	// 015 rebuilds exposures, so its CREATE text is not part of what 010 must leave alone.
+	gotSchema := m8SchemaWithout(m8SchemaWithoutName(m8SchemaWithout(m8SchemaWithout(after.schema, "regression_events"), "job_state"), "attempts_user_lexeme_skill_id"), "exposures")
+	wantSchema := m8SchemaWithout(m8SchemaWithout(others.schema, "regression_events"), "exposures")
 	if !reflect.DeepEqual(gotSchema, wantSchema) {
 		t.Fatal("schema of another object changed")
 	}
