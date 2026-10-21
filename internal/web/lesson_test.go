@@ -70,17 +70,21 @@ func TestLessonPlayer(t *testing.T) {
 		ids[row.TextNFC] = row.ID
 	}
 
-	// A role=new row gates the card until THAT lesson is finished, including
-	// a draft or another learner's unit. These two units recycle the words
-	// so finishing the shared lesson is what lets the cards into the queue.
+	// A role=new row gates the card only when its unit is the published
+	// revision and in this learner's scope. A draft and another learner's
+	// unit do not, even when they introduce the word. These two units do
+	// introduce hello and morning as new; finishing the shared lesson is
+	// what lets the cards into the queue.
 	draftID := putLesson(t, store, nil, units.Unit{
 		Title: "Draft secret", Position: 0,
+		NewWords: []string{hello},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityStory, Text: hello},
 		}}},
 	}, "shared")
 	otherID := putLesson(t, store, nil, units.Unit{
 		Title: "Other morning", Position: 1,
+		NewWords: []string{morning},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityRecall, Text: morning},
 		}}},
@@ -100,6 +104,12 @@ func TestLessonPlayer(t *testing.T) {
 		}}},
 	}, "learner:"+itoa(brian.ID))
 	publish(t, store, otherID, sharedID, laterID)
+	if scalar(t, dbPath, `SELECT COUNT(*) FROM lesson_items WHERE unit_id = ? AND role = 'new'`, draftID) != 1 {
+		t.Fatal("draft intro row missing; this test pins that a draft does not gate")
+	}
+	if scalar(t, dbPath, `SELECT COUNT(*) FROM lesson_items WHERE unit_id = ? AND role = 'new'`, otherID) != 1 {
+		t.Fatal("other learner intro row missing; this test pins that another learner's unit does not gate")
+	}
 
 	phraseID := strings.Repeat("ab", 32)
 	wordID := strings.Repeat("cd", 32)
