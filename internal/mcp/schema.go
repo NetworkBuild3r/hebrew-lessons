@@ -110,10 +110,15 @@ func annotateUnitSchema(s *jsonschema.Schema) error {
 	}
 	typ.Description = "One of the eight activity types."
 	text.Description = "Pointed Hebrew this screen speaks or asks about. Audio is looked up from this exact text. Every type has it except dialogue, which has lines instead."
+	// translation stays out of the required array. The validator requires it
+	// on a listen_pick of two or more words that are in the lexicon, and nowhere else.
+	if tr := prop(act, "translation"); tr != nil {
+		tr.Description = "Natural English translation of the whole text, written by the author. Required on a listen_pick whose text has two or more words that are in the lexicon. Optional on every other type. English only, no markup, at most 120 characters."
+	}
 	// target stays out of the required array. recall, produce, and cloze must
 	// set it when the line has two or more lexicon words. listen_pick may omit it.
 	if target := prop(act, "target"); target != nil {
-		target.Description = "The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, and cloze when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure."
+		target.Description = "The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, and cloze when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure."
 	}
 	// text is not marked required here, because a dialogue has lines instead. The
 	// validator enforces it for every other type (schema.required) and enforces
@@ -127,6 +132,9 @@ func annotateUnitSchema(s *jsonschema.Schema) error {
 			}
 			if tx := prop(lines.Items, "text"); tx != nil {
 				tx.Description = "Pointed Hebrew in NFC that this speaker says. Audio is the clip for this exact text in this speaker's voice."
+			}
+			if tr := prop(lines.Items, "translation"); tr != nil {
+				tr.Description = "Natural English translation of this line. Optional; used as a sentence-choice distractor and for future line reveals."
 			}
 			if !slices.Contains(lines.Items.Required, "speaker") {
 				lines.Items.Required = append(lines.Items.Required, "speaker")
@@ -166,10 +174,14 @@ type activityInfo struct {
 
 func activityCatalog() []activityInfo {
 	text := activityField{
-		Name:     "text",
-		Required: true,
-		Description: "Pointed Hebrew in NFC. There is no separate audio, gloss, or choices field. " +
-			"Audio is the clip for this exact text. The English gloss comes from the lexicon.",
+		Name:        "text",
+		Required:    true,
+		Description: "Pointed Hebrew in NFC. Audio is the clip for this exact text. The English gloss comes from the lexicon.",
+	}
+	translation := activityField{
+		Name:        "translation",
+		Required:    false,
+		Description: "Natural English translation of the whole text, written by the author. Required when the text has two or more words that are in the lexicon. Optional on a one-word line. English only, no markup, at most 120 characters.",
 	}
 	typ := func(description string) activityField {
 		return activityField{Name: "type", Required: true, Description: description}
@@ -182,15 +194,16 @@ func activityCatalog() []activityInfo {
 	listenTarget := activityField{
 		Name:        "target",
 		Required:    false,
-		Description: "Optional. If target is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure. When set, it is one exact pointed token of text, and that token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count.",
+		Description: "Optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure. When set, it is one exact pointed token of text, and that token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count.",
 	}
 	return []activityInfo{
 		{
 			Type:    units.ActivityListenPick,
-			Purpose: "The learner hears the clip and picks the meaning of the whole line. The spelling stays hidden until the answer. target is optional.",
+			Purpose: "The learner hears the clip. The player still shows lexicon-gloss buttons. The translation is collected and validated now, and whole-sentence choices are planned with #139. The spelling stays hidden until the answer. target is optional.",
 			Fields: []activityField{
 				typ("listen_pick"),
 				text,
+				translation,
 				listenTarget,
 			},
 		},
@@ -253,7 +266,7 @@ func activityCatalog() []activityInfo {
 				{
 					Name:        "lines",
 					Required:    true,
-					Description: "2 to 8 objects {speaker: a or b, text: pointed Hebrew in NFC}. A dialogue has no text field.",
+					Description: "2 to 8 objects {speaker: a or b, text: pointed Hebrew in NFC, translation: optional English of that line}. A dialogue has no text field.",
 				},
 			},
 		},
