@@ -15,6 +15,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcpstore"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
 // Tests for the Progress page (INIT-015/SPEC-018). The fixture has 90 days of snapshots whose
@@ -752,5 +753,127 @@ func TestProgressNamesTheLessonsFinished(t *testing.T) {
 	}
 	if !strings.Contains(get("/progress"), `class="progress__units-n" lang="en" dir="ltr">1/2</bdi>`) {
 		t.Error("the lessons finished are not on the page")
+	}
+}
+
+// progressUnit is one unit in the finished-count fixture. lessons and finished
+// are the lesson rows this test inserts. count is whether that unit belongs
+// in the signed-in learner's totals. The expected fractions are summed from
+// these rows, not from the handler.
+type progressUnit struct {
+	lessons  int
+	finished int
+	count    bool
+}
+
+func TestProgressCountsLearnerUnitsAndWholeUnits(t *testing.T) {
+	store, learner1, _, _, get := progressApp(t)
+	learner2 := addLearner(t, store, "b@example.com", "sub-b", progNow)
+	scope1 := "learner:" + itoa(learner1.user.ID)
+	scope2 := "learner:" + itoa(learner2.user.ID)
+	rows := []progressUnit{
+		{lessons: 2, finished: 2, count: true},  // shared, every lesson finished
+		{lessons: 3, finished: 1, count: true},  // shared, a lesson still open
+		{lessons: 2, finished: 2, count: true},  // this learner's unit, finished
+		{lessons: 0, finished: 0, count: true},  // published shared, no lessons: counted, not finished
+		{lessons: 1, finished: 1, count: false}, // the other learner's unit
+		{lessons: 1, finished: 1, count: false}, // unpublished
+	}
+	scopes := []string{"shared", "shared", scope1, "shared", scope2, "shared"}
+	publishRow := []bool{true, true, true, true, true, false}
+	for i, row := range rows {
+		lessons := make([]units.Lesson, row.lessons)
+		for n := range lessons {
+			lessons[n] = units.Lesson{Kind: units.KindLesson, Activities: []units.Activity{{Type: units.ActivityStory, Text: "OK"}}}
+		}
+		id := putLesson(t, store, nil, units.Unit{
+			Title: "U", Position: 10 + i, Lessons: lessons,
+		}, scopes[i])
+		if publishRow[i] {
+			publish(t, store, id)
+		}
+		for n := 0; n < row.finished; n++ {
+			at := progNow.Add(-time.Duration(n+1) * time.Hour)
+			if _, err := testharness.InsertLessonRun(context.Background(), store, learner1.user.ID, id, n, at, &at); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	unitsDone, unitsTotal, lessonsDone, lessonsTotal := 0, 0, 0, 0
+	for _, row := range rows {
+		if !row.count {
+			continue
+		}
+		unitsTotal++
+		lessonsTotal += row.lessons
+		lessonsDone += row.finished
+		if row.lessons > 0 && row.finished == row.lessons {
+			unitsDone++
+		}
+	}
+	body := get("/progress")
+	unitsText := strconv.Itoa(unitsDone) + "/" + strconv.Itoa(unitsTotal)
+	lessonsText := strconv.Itoa(lessonsDone) + "/" + strconv.Itoa(lessonsTotal)
+	if unitsText == lessonsText {
+		t.Fatalf("fixture units %s and lessons %s match, so a swapped label would pass", unitsText, lessonsText)
+	}
+	if !strings.Contains(body, "Units finished") || !strings.Contains(body, `class="progress__units-n" lang="en" dir="ltr">`+unitsText+`</bdi>`) {
+		t.Fatalf("units finished, want %s:\n%s", unitsText, body)
+	}
+	if strings.Contains(body, "Lessons finished") && !strings.Contains(body, `class="progress__lessons-n" lang="en" dir="ltr">`+lessonsText+`</bdi>`) {
+		t.Fatalf("lessons finished, want %s", lessonsText)
+	}
+	if !strings.Contains(body, `class="progress__lessons-n" lang="en" dir="ltr">`+lessonsText+`</bdi>`) {
+		t.Fatalf("lessons finished, want %s:\n%s", lessonsText, body)
+	}
+	if strings.Contains(body, ">Lessons finished<") && strings.Contains(strings.Split(body, "Units finished")[0], "Lessons finished") {
+		t.Fatal("the units line is still labelled lessons")
+	}
+}
+
+func TestPlacementUnfinishedLevelSaysNotFinished(t *testing.T) {
+	store, l, _, _, get := progressApp(t)
+	// Dates and levels are the fixture. Oct 19 is the unfinished run.
+	unfinishedAt := time.Date(2026, 10, 19, 15, 0, 0, 0, time.UTC)
+	levelAt := time.Date(2026, 9, 3, 15, 0, 0, 0, time.UTC)
+	zeroAt := time.Date(2026, 8, 2, 15, 0, 0, 0, time.UTC)
+	const normalLevel = 4
+	insertPlacementLevel(t, store, l.user.ID, unfinishedAt, -1)
+	insertPlacementLevel(t, store, l.user.ID, levelAt, normalLevel)
+	insertPlacementLevel(t, store, l.user.ID, zeroAt, 0)
+	card := section(t, get("/progress"), "c-card pplace", "")
+	items := regexp.MustCompile(`(?s)<li class="pplace__item">.*?</li>`).FindAllString(card, -1)
+	row := func(date string) string {
+		t.Helper()
+		for _, item := range items {
+			if strings.Contains(item, date) {
+				return item
+			}
+		}
+		t.Fatalf("no placement row %s:\n%s", date, card)
+		return ""
+	}
+	unfinished := row("Oct 19")
+	if !strings.Contains(unfinished, "Not finished") || strings.Contains(unfinished, "Level") {
+		t.Fatalf("unfinished placement:\n%s", unfinished)
+	}
+	normal := row("Sep 3")
+	if !strings.Contains(normal, "Level "+strconv.Itoa(normalLevel)) || strings.Contains(normal, "Not finished") {
+		t.Fatalf("finished placement:\n%s", normal)
+	}
+	zero := row("Aug 2")
+	if !strings.Contains(zero, "Level 0") || strings.Contains(zero, "Not finished") {
+		t.Fatalf("level 0 placement:\n%s", zero)
+	}
+}
+
+func insertPlacementLevel(t *testing.T, store *db.Store, userID int64, at time.Time, level int) {
+	t.Helper()
+	run, err := store.InsertPlacementRun(context.Background(), userID, at, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.FinishPlacement(context.Background(), run, at, level, "exhausted", `{"bands":[]}`); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -138,6 +138,43 @@ func (s *Store) UnitsInScope(ctx context.Context, learnerID int64) ([]UnitRow, e
 	return out, nil
 }
 
+// AllUnits returns every unit row, published or not, shared or learner-scoped.
+// Callers decide which rows count. Order is position, then id.
+func (s *Store) AllUnits(ctx context.Context) ([]UnitRow, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT id, position, title, situation, concept, status, rev, doc, scope
+		FROM units
+		ORDER BY position, id`)
+	if err != nil {
+		return nil, fmt.Errorf("db: all units: %w", err)
+	}
+	defer rows.Close()
+	var out []UnitRow
+	for rows.Next() {
+		var row UnitRow
+		if err := rows.Scan(
+			&row.ID, &row.Position, &row.Title, &row.Situation, &row.Concept,
+			&row.Status, &row.Rev, &row.Doc, &row.Scope,
+		); err != nil {
+			return nil, fmt.Errorf("db: all units: %w", err)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: all units: %w", err)
+	}
+	return out, nil
+}
+
+// FinishedLessons maps each unit to the lesson indexes this learner has finished.
+func (s *Store) FinishedLessons(ctx context.Context, userID int64) (map[int64]map[int]time.Time, error) {
+	return s.finishedLessons(ctx, userID)
+}
+
 func (s *Store) finishedLessons(ctx context.Context, userID int64) (map[int64]map[int]time.Time, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -173,6 +210,12 @@ func (s *Store) finishedLessons(ctx context.Context, userID int64) (map[int64]ma
 		return nil, fmt.Errorf("db: finished lessons: %w", err)
 	}
 	return out, nil
+}
+
+// LessonCount is the number of lessons in a unit document.
+// A document that is not an object, or that has no lessons array, has none.
+func LessonCount(doc string) int {
+	return lessonCount(doc)
 }
 
 // lessonCount is the number of lessons in a unit document.

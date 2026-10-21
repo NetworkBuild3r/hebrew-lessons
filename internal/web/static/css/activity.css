@@ -25,7 +25,8 @@
   padding: 0;
   min-block-size: 0;
 }
-.review:has(.act) > .review__h1 {
+.review:has(.act) > .review__h1,
+.review:has([data-done=true]) > .review__h1 {
   position: absolute;
   inline-size: 1px;
   block-size: 1px;
@@ -33,6 +34,13 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+.review__done {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+.review__done .btn { inline-size: auto; }
 
 .act {
   display: grid;
