@@ -22,6 +22,7 @@ const publishUnitDescription = "Publish one unit. Admin only, including the stat
 	"It runs the same validator as validate_unit. Block issues are a tool error: nothing is published, and the result lists each issue's rule id and JSON pointer. " +
 	"A recall, produce, or cloze whose line has two or more words that are in the lexicon and no target blocks a new draft, and it blocks an older revision. Checking the current published revision, the same revision id as the units row, reports that missing target as a warning. " +
 	"On listen_pick, target is optional: if target is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure. " +
+	"A listen_pick of two or more words that are in the lexicon with no translation blocks a new draft, and it blocks an older revision. Checking the current published revision reports that missing translation as a warning. " +
 	"Pedagogy warnings do not block, and they are included in issues. " +
 	"Publishing the same revision again reports unchanged and writes nothing. " +
 	"A learner-scoped unit is refused here: it publishes only through put_unit with a briefId."

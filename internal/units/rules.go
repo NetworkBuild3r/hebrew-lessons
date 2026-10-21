@@ -21,6 +21,12 @@ const (
 	CoverageBlockBelow   = 90
 	CoverageWarnBelow    = 95
 
+	// TranslationMaxLen is the longest English line translation that does not
+	// warn. MinTranslatedLines is how many translated lines a unit needs once
+	// it has a sentence listen_pick, so three other choices exist.
+	TranslationMaxLen  = 120
+	MinTranslatedLines = 4
+
 	// Brief checks (INIT-015/SPEC-020). The brief's own numbers win when it
 	// carries them. These apply when it carries none, so a malformed brief
 	// fails closed instead of open.
@@ -35,37 +41,41 @@ const (
 // the catalog row records the blocking severity and the description states
 // the warn band.
 const (
-	RuleActivityTarget    = "activity.target"
-	RuleAudioMissing      = "audio.missing"
-	RuleBriefAudioAll     = "brief.audio_all"
-	RuleBriefCoverage     = "brief.coverage"
-	RuleBriefExpired      = "brief.expired"
-	RuleBriefGloss        = "brief.gloss_out_of_brief"
-	RuleBriefIntro        = "brief.new_intro_before_test"
-	RuleBriefNewMinUses   = "brief.new_min_uses"
-	RuleBriefNotFound     = "brief.not_found"
-	RuleBriefStruggle     = "brief.struggle_reuse"
-	RuleBriefTextTooLong  = "brief.text_too_long"
-	RuleBriefUsed         = "brief.used"
-	RuleBudgetLesson      = "budget.lesson"
-	RuleBudgetLessonFew   = "budget.lesson.few"
-	RuleBudgetUnit        = "budget.unit"
-	RuleCoverageListening = "coverage.listening"
-	RuleCoverageStory     = "coverage.story"
-	RuleLexemeUnknown     = "lexeme.unknown"
-	RuleNounGender        = "noun.gender"
-	RuleNounPlural        = "noun.plural"
-	RuleRecycleCount      = "recycle.count"
-	RuleRecycleSpread     = "recycle.spread"
-	RuleSchemaActivity    = "schema.activity"
-	RuleSchemaCheckpoint  = "schema.checkpoint"
-	RuleSchemaKind        = "schema.kind"
-	RuleSchemaLookup      = "schema.lookup"
-	RuleSchemaRef         = "schema.ref"
-	RuleSchemaRequired    = "schema.required"
-	RuleStoryUnmapped     = "story.unmapped"
-	RuleStoryUnpointed    = "story.unpointed"
-	RuleUnitNoMarkup      = "unit.no_markup"
+	RuleActivityTarget             = "activity.target"
+	RuleAudioMissing               = "audio.missing"
+	RuleBriefAudioAll              = "brief.audio_all"
+	RuleBriefCoverage              = "brief.coverage"
+	RuleBriefExpired               = "brief.expired"
+	RuleBriefGloss                 = "brief.gloss_out_of_brief"
+	RuleBriefIntro                 = "brief.new_intro_before_test"
+	RuleBriefNewMinUses            = "brief.new_min_uses"
+	RuleBriefNotFound              = "brief.not_found"
+	RuleBriefStruggle              = "brief.struggle_reuse"
+	RuleBriefTextTooLong           = "brief.text_too_long"
+	RuleBriefUsed                  = "brief.used"
+	RuleBudgetLesson               = "budget.lesson"
+	RuleBudgetLessonFew            = "budget.lesson.few"
+	RuleBudgetUnit                 = "budget.unit"
+	RuleCoverageListening          = "coverage.listening"
+	RuleCoverageStory              = "coverage.story"
+	RuleLexemeUnknown              = "lexeme.unknown"
+	RuleNounGender                 = "noun.gender"
+	RuleNounPlural                 = "noun.plural"
+	RuleRecycleCount               = "recycle.count"
+	RuleRecycleSpread              = "recycle.spread"
+	RuleSchemaActivity             = "schema.activity"
+	RuleSchemaCheckpoint           = "schema.checkpoint"
+	RuleSchemaKind                 = "schema.kind"
+	RuleSchemaLookup               = "schema.lookup"
+	RuleSchemaRef                  = "schema.ref"
+	RuleSchemaRequired             = "schema.required"
+	RuleStoryUnmapped              = "story.unmapped"
+	RuleStoryUnpointed             = "story.unpointed"
+	RuleUnitNoMarkup               = "unit.no_markup"
+	RuleUnitTranslationDistractors = "unit.translation_distractors"
+	RuleUnitTranslationLang        = "unit.translation_lang"
+	RuleUnitTranslationLength      = "unit.translation_length"
+	RuleUnitTranslationMissing     = "unit.translation_missing"
 
 	// Dialogue rules (INIT-015/SPEC-026).
 	RuleUnitDialogueLines    = "unit.dialogue_lines"
@@ -134,7 +144,11 @@ var Rules = []Rule{
 	{ID: RuleStoryUnpointed, Severity: SeverityBlock, Description: "A story contains a Hebrew word with no niqqud. Names, numbers, and punctuation are ignored. A number is digits or gematria in rank order with U+05F3/U+05F4. Acronyms are words, except spellings that are also valid numerals (ת״א, ש״ס), which are treated as numerals. ASCII quotes are split into letters and flagged. Homographs are not exempt."},
 	{ID: RuleUnitDialogueLines, Severity: SeverityBlock, Description: fmt.Sprintf("A dialogue has fewer than %d or more than %d lines, a dialogue carries text instead of lines, or an activity that is not a dialogue carries lines.", MinDialogueLines, MaxDialogueLines)},
 	{ID: RuleUnitDialogueSpeakers, Severity: SeverityBlock, Description: "A dialogue line has a speaker other than a (female voice) or b (male voice), or one of the two speakers has no line."},
-	{ID: RuleUnitNoMarkup, Severity: SeverityBlock, Description: "Brief check. A text field of the unit (title, situation, concept, a new word, a lesson kind, an activity type, text, or target, a dialogue line's speaker or text) contains <, >, or javascript: in any letter case. The unit is plain text and the templates escape it again on output."},
+	{ID: RuleUnitNoMarkup, Severity: SeverityBlock, Description: "Brief check. A text field of the unit (title, situation, concept, a new word, a lesson kind, an activity type, text, target, or translation, a dialogue line's speaker, text, or translation) contains <, >, or javascript: in any letter case. The unit is plain text and the templates escape it again on output."},
+	{ID: RuleUnitTranslationDistractors, Severity: SeverityWarn, Description: fmt.Sprintf("A unit with a listen_pick of two or more words that are in the lexicon has fewer than %d different English lines. A line is an activity translation or a dialogue line translation. Lines that match after lowercasing, stripping punctuation, and collapsing spaces count once, and the sentence's own translation counts.", MinTranslatedLines)},
+	{ID: RuleUnitTranslationLang, Severity: SeverityBlock, Description: "A translation contains a Hebrew character (U+0590 through U+05FF) or markup (<, >, or javascript:). A translation is English plain text. unit.no_markup also flags the markup."},
+	{ID: RuleUnitTranslationLength, Severity: SeverityWarn, Description: fmt.Sprintf("A translation is longer than %d characters.", TranslationMaxLen)},
+	{ID: RuleUnitTranslationMissing, Severity: SeverityBlock, Description: "A listen_pick whose text has two or more words that are in the lexicon has an empty translation. The count is the same exact pointed lexicon match as activity.target. The unpointed spelling does not count, and a number is not a word. On a new save or publish this is a block, and so is publishing an older revision. Checking the current published revision reports it as a warning."},
 }
 
 // Guidance is one player rule for the model that writes units.
