@@ -15,15 +15,8 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
 )
 
-// Real-store checks for the welcome gate and the history columns.
-//
-// The handler gates on IsOnboarded only. *db.Store does not have that method
-// on the merged #136 head, so storeOnboard falls back to HasLessonAttempt.
-// "Start from the basics" and a finished placement set onboarded_at, and the
-// tests below check that column. They do not treat the temporary fallback as
-// the gate for those two clauses. Those redirects are covered by the fake's
-// IsOnboarded in welcome_test.go, and they belong in Backend's db tests once
-// IsOnboarded is on the store.
+// Real-store checks for the welcome gate. The handler calls IsOnboarded
+// and does not combine onboarded_at, finished runs, and lesson attempts.
 
 func openStoreApp(t *testing.T, realGate bool) (*db.Store, http.Handler) {
 	t.Helper()
@@ -91,6 +84,10 @@ func TestStoreLessonRunSkipsWelcome(t *testing.T) {
 		l.user.ID, unit, db.FormatTime(welcomeNow)); err != nil {
 		t.Fatal(err)
 	}
+	user, err := store.UserByEmail(context.Background(), l.user.Email)
+	if err != nil || user.OnboardedAt != nil {
+		t.Fatalf("lesson run set onboarded_at before the gate %v %v", user.OnboardedAt, err)
+	}
 	home := welcomeGet(t, h, l, "/", false)
 	assertNotWelcome(t, home, "/")
 	if home.Code != http.StatusOK {
@@ -125,7 +122,7 @@ func TestStoreOtherLearnersLessonDoesNotOpenTheGate(t *testing.T) {
 }
 
 func TestStoreHistoryShowsTheWordsKnownColumn(t *testing.T) {
-	store, h := openStoreApp(t, false)
+	store, h := openStoreApp(t, true)
 	a := addLearner(t, store, "a@example.com", "sub-a", welcomeNow)
 	b := addLearner(t, store, "b@example.com", "sub-b", welcomeNow)
 	shellUnit(t, store, "At home", 4, "shared", 1)
@@ -151,9 +148,21 @@ func TestStoreHistoryShowsTheWordsKnownColumn(t *testing.T) {
 		t.Errorf("the card used the JSON estimate:\n%s", card)
 	}
 
-	other := welcomeGet(t, h, b, "/progress", false).Body.String()
-	if strings.Contains(other, "81 words") || strings.Contains(other, "At home") {
-		t.Fatalf("the other learner sees this history:\n%s", other)
+	other := welcomeGet(t, h, b, "/progress", false)
+	assertWelcome(t, other, "/progress")
+	if strings.Contains(other.Body.String(), "81") || strings.Contains(other.Body.String(), "At home") {
+		t.Fatalf("the redirect leaks this history:\n%s", other.Body.String())
+	}
+	basics := formPost(t, h, b, "/onboarding/basics", url.Values{"_csrf": {b.csrf}}, nil)
+	if basics.Code != http.StatusSeeOther {
+		t.Fatalf("other basics = %d", basics.Code)
+	}
+	page := welcomeGet(t, h, b, "/progress", false).Body.String()
+	if strings.Contains(page, "81 words") || strings.Contains(page, "At home") {
+		t.Fatalf("the other learner sees this history:\n%s", page)
+	}
+	if !strings.Contains(page, "No results yet.") {
+		t.Fatalf("the other learner has no empty history:\n%s", page)
 	}
 }
 
@@ -163,6 +172,17 @@ func TestStoreSetOnboardedKeepsTheFirstTime(t *testing.T) {
 	rec := formPost(t, h, l, "/onboarding/basics", url.Values{"_csrf": {l.csrf}}, nil)
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/" {
 		t.Fatalf("basics = %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	for _, path := range welcomeLandings() {
+		got := welcomeGet(t, h, l, path, false)
+		assertNotWelcome(t, got, path)
+		if path == "/" && got.Code != http.StatusOK {
+			t.Fatalf("Today after basics = %d", got.Code)
+		}
+	}
+	again := welcomeGet(t, h, l, "/welcome", false)
+	if again.Code != http.StatusSeeOther || again.Header().Get("Location") != "/" {
+		t.Errorf("GET /welcome after basics = %d %q", again.Code, again.Header().Get("Location"))
 	}
 	ctx := context.Background()
 	user, err := store.UserByEmail(ctx, l.user.Email)
@@ -176,6 +196,39 @@ func TestStoreSetOnboardedKeepsTheFirstTime(t *testing.T) {
 	user, err = store.UserByEmail(ctx, l.user.Email)
 	if err != nil || user.OnboardedAt == nil || !user.OnboardedAt.Equal(welcomeNow) {
 		t.Fatalf("second write moved onboarded_at to %v %v", user.OnboardedAt, err)
+	}
+}
+
+func TestStoreFinishedPlacementDoesNotRedirect(t *testing.T) {
+	store, h := openStoreApp(t, true)
+	l := addLearner(t, store, "a@example.com", "sub-a", welcomeNow)
+	ctx := context.Background()
+	finished := welcomeNow.Add(time.Hour)
+	id, err := store.StartPlacementV3(ctx, l.user.ID, welcomeNow, 1, "initial", "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.FinishPlacement(ctx, id, finished, 2, "cap_cards", `{"estimated_known_words":9}`); err != nil {
+		t.Fatal(err)
+	}
+	home := welcomeGet(t, h, l, "/", false)
+	assertNotWelcome(t, home, "/")
+	if home.Code != http.StatusOK {
+		t.Fatalf("Today after a finish = %d", home.Code)
+	}
+	// The finished run is enough on its own. Clearing the column must not
+	// send the learner back to /welcome.
+	if _, err := store.ExecContext(ctx, `UPDATE users SET onboarded_at = NULL WHERE id = ?`, l.user.ID); err != nil {
+		t.Fatal(err)
+	}
+	user, err := store.UserByEmail(ctx, l.user.Email)
+	if err != nil || user.OnboardedAt != nil {
+		t.Fatalf("column clear left onboarded_at %v %v", user.OnboardedAt, err)
+	}
+	again := welcomeGet(t, h, l, "/", false)
+	assertNotWelcome(t, again, "/")
+	if again.Code != http.StatusOK {
+		t.Fatalf("Today after clearing onboarded_at = %d %s", again.Code, again.Header().Get("Location"))
 	}
 }
 

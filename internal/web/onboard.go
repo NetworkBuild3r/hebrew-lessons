@@ -29,13 +29,6 @@ type PlacementRun struct {
 // Onboarding is the db API this feature calls. The welcome gate calls
 // IsOnboarded and nothing else. It does not OR onboarded_at, finished
 // runs, and lesson attempts itself.
-//
-// This tree merged cursor/v3-onboarding-placement-history at 0578f70.
-// That commit has SetOnboarded, PlacementHistory, PlacementHistoryCount,
-// and HasLessonAttempt. IsOnboarded arrived later, at b916704, and is not
-// merged here. storeOnboard calls the real methods and type-asserts
-// IsOnboarded, so merging b916704 starts calling it. Until then the
-// assertion misses and HasLessonAttempt is the temporary stand-in.
 type Onboarding interface {
 	// SetOnboarded records "Start from the basics". It is idempotent and
 	// keeps the first value.
@@ -51,17 +44,21 @@ type Onboarding interface {
 	PlacementHistoryCount(ctx context.Context, userID int64) (int, error)
 }
 
-// storeOnboard is *db.Store behind Onboarding.
-type storeOnboard struct {
-	store *db.Store
+// onboardStore is the *db.Store surface this adapter calls. A missing
+// method fails at compile time. The gate calls IsOnboarded and does not
+// combine the columns itself.
+type onboardStore interface {
+	SetOnboarded(ctx context.Context, userID int64, at time.Time) error
+	IsOnboarded(ctx context.Context, userID int64) (bool, error)
+	PlacementHistory(ctx context.Context, userID int64, limit int) ([]db.PlacementHistoryRow, error)
+	PlacementHistoryCount(ctx context.Context, userID int64) (int, error)
 }
 
-// isOnboardedStore is the method Backend is adding to *db.Store.
-// It is not on the merged branch yet. The assertion below is the compile-time
-// TODO: a direct call would not compile today, and this starts calling the
-// method as soon as *db.Store has it, without combining the three facts here.
-type isOnboardedStore interface {
-	IsOnboarded(context.Context, int64) (bool, error)
+var _ onboardStore = (*db.Store)(nil)
+
+// storeOnboard is *db.Store behind Onboarding.
+type storeOnboard struct {
+	store onboardStore
 }
 
 func (a storeOnboard) SetOnboarded(ctx context.Context, userID int64, at time.Time) error {
@@ -75,15 +72,7 @@ func (a storeOnboard) IsOnboarded(ctx context.Context, userID int64) (bool, erro
 	if a.store == nil {
 		return false, errors.New("onboarding: no store")
 	}
-	// TODO(#136): *db.Store.IsOnboarded is on
-	// origin/cursor/v3-onboarding-placement-history at b916704 and not in
-	// this tree (merged at 0578f70). This assertion calls it once that
-	// commit is merged. Until then the running path is HasLessonAttempt,
-	// which does not see onboarded_at or a finished placement.
-	if o, ok := any(a.store).(isOnboardedStore); ok {
-		return o.IsOnboarded(ctx, userID)
-	}
-	return a.store.HasLessonAttempt(ctx, userID)
+	return a.store.IsOnboarded(ctx, userID)
 }
 
 func (a storeOnboard) PlacementHistory(ctx context.Context, userID int64, limit int) ([]PlacementRun, error) {
