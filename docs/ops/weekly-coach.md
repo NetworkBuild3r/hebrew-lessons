@@ -8,7 +8,7 @@ Read **Open decision** first. As the server is built today, the automation canno
 
 | Time | What | Where |
 | --- | --- | --- |
-| Daily 03:30 in the server zone | The daily snapshot job writes yesterday. | The server (`hebrew serve`). The zone is `TZ`. When `TZ` is unset it is America/Denver, the study-day default. |
+| Daily 04:30 in the server zone | The daily snapshot job writes yesterday, after the 04:00 study-day rollover, so yesterday is a closed study day. | The server (`hebrew serve`). The zone is `TZ`. When `TZ` is unset it is America/Denver, the study-day default. |
 | Monday 04:00 in the server zone | The weekly report job writes the report of the week that just ended (Monday to Sunday). | The server. `hebrew jobs weekly --week YYYY-MM-DD` runs it by hand. |
 | Monday 07:00 America/Chicago | This automation reads the week, builds the next lesson, and leaves one coach note. | Cursor. |
 

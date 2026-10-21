@@ -246,7 +246,7 @@ func TestClassify(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := base
 			tc.edit(&c)
-			if got := classify(c, now); got != tc.want {
+			if got := classify(c, now, now); got != tc.want {
 				t.Fatalf("kind = %d, want %d", got, tc.want)
 			}
 		})
@@ -255,15 +255,15 @@ func TestClassify(t *testing.T) {
 
 func TestSplitPoolsKeepsACardDueAtTheCutoff(t *testing.T) {
 	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
-	_, dueK, laterK, fresh := splitPools([]Candidate{knownCand(1, now)}, now)
+	_, dueK, laterK, fresh := splitPools([]Candidate{knownCand(1, now)}, now, now)
 	if len(dueK) != 1 || len(laterK) != 0 || len(fresh) != 0 {
 		t.Fatalf("known at cutoff: dueK=%d laterK=%d fresh=%d", len(dueK), len(laterK), len(fresh))
 	}
-	_, dueK, laterK, fresh = splitPools([]Candidate{knownCand(2, now.Add(time.Nanosecond))}, now)
+	_, dueK, laterK, fresh = splitPools([]Candidate{knownCand(2, now.Add(time.Nanosecond))}, now, now)
 	if len(laterK) != 1 || len(dueK) != 0 || len(fresh) != 0 {
 		t.Fatalf("known after cutoff: dueK=%d laterK=%d fresh=%d", len(dueK), len(laterK), len(fresh))
 	}
-	_, _, _, fresh = splitPools([]Candidate{{ID: 3, Skill: fsrs.SkillRead, Due: now}}, now)
+	_, _, _, fresh = splitPools([]Candidate{{ID: 3, Skill: fsrs.SkillRead, Due: now}}, now, now)
 	if len(fresh) != 1 {
 		t.Fatalf("new at cutoff fresh=%d", len(fresh))
 	}

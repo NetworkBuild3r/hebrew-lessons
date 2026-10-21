@@ -175,14 +175,17 @@ func (s *Service) BuildSessionForAt(ctx context.Context, userID int64, lexemeIDs
 }
 
 // build is BuildSession. only, when not nil, keeps the cards of those words and no drill.
-// due is the cutoff passed to the mix. The zero time uses the clock instant already read.
+// due is the review-state cutoff passed to the mix. The zero time uses the
+// clock instant already read. Learning cards compare against that clock plus
+// the learn-ahead limit, not against this cutoff.
 func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct{}, due time.Time) (*Session, error) {
 	if err := s.ready(); err != nil {
 		return nil, err
 	}
 	now := s.clock.Now()
-	if due.IsZero() {
-		due = now
+	reviewLimit := due
+	if reviewLimit.IsZero() {
+		reviewLimit = now
 	}
 	cards, err := s.store.ListStudyCards(ctx, userID, now, now.Add(-ConfusionWindow))
 	if err != nil {
@@ -237,6 +240,7 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 			LexemeID:      card.LexemeID,
 			Skill:         card.Skill,
 			Due:           card.Due,
+			State:         card.State,
 			Lapses:        card.Lapses,
 			Latest:        card.LatestRating,
 			HasRating:     card.HasRating,
@@ -257,7 +261,7 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 	record := s.record
 	return &Session{
 		userID: userID,
-		cards:  mixGate(cands, accuracyOf(ratings), due, s.seed, gate),
+		cards:  mixGate(cands, accuracyOf(ratings), now, reviewLimit, s.seed, gate),
 		grade: func(ctx context.Context, cardID int64, rating fsrs.Rating, _ bool) error {
 			if rating < fsrs.Again || rating > fsrs.Easy {
 				return fmt.Errorf("session: rating %d is outside 1..4", rating)

@@ -372,15 +372,24 @@ func (s *server) now() time.Time {
 	return time.Now().UTC()
 }
 
-// dueCount is cards due at or before studyday.DueCutoff.
-// ListDueCards uses due <= cutoff, the same comparison the review mix uses,
-// so the count is the set Review will serve when nothing else fills the queue.
+// dueCount is the cards studyday.CardDue counts at now.
+// Review-state and new cards are due at or before the study-day cutoff.
+// Learning and relearning cards are due only within LearnAhead of now.
+// The query loads through DueFetchLimit so a learning card just past the
+// cutoff is still visible, then CardDue drops what the queue will not serve.
 func (s *server) dueCount(ctx context.Context, userID int64, now time.Time, loc *time.Location) (int, error) {
-	due, err := s.store.ListDueCards(ctx, userID, studyday.DueCutoff(now, loc))
+	due, err := s.store.ListDueCards(ctx, userID, studyday.DueFetchLimit(now, loc))
 	if err != nil {
 		return 0, err
 	}
-	return len(due), nil
+	cutoff := studyday.DueCutoff(now, loc)
+	n := 0
+	for _, c := range due {
+		if studyday.CardDue(c.State, c.Due, now, cutoff) {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // sameStudyDay reports whether built and now share a studyday.DueCutoff in loc.

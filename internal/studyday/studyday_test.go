@@ -218,6 +218,66 @@ func TestDueCutoffIsTheNextRollover(t *testing.T) {
 	}
 }
 
+func TestCardDueSplitsLearningFromTheStudyDay(t *testing.T) {
+	denver := mustLoc(t, DefaultZone)
+	now := time.Date(2026, 10, 18, 22, 0, 0, 0, denver)
+	cutoff := DueCutoff(now, denver)
+	inside := time.Date(2026, 10, 18, 22, 5, 0, 0, denver)
+	outside := time.Date(2026, 10, 18, 22, 30, 0, 0, denver)
+	exact := now.Add(LearnAhead)
+	pastExact := exact.Add(time.Nanosecond)
+	tomorrow := time.Date(2026, 10, 19, 3, 0, 0, 0, denver)
+	afterCutoff := time.Date(2026, 10, 19, 5, 0, 0, 0, denver)
+	if !tomorrow.Before(cutoff) || !afterCutoff.After(cutoff) || !outside.Before(cutoff) {
+		t.Fatalf("cutoff %s tomorrow %s outside %s after %s", cutoff, tomorrow, outside, afterCutoff)
+	}
+	cases := []struct {
+		name  string
+		state string
+		due   time.Time
+		want  bool
+	}{
+		{"learning inside learn-ahead", "learning", inside, true},
+		{"learning at the learn-ahead limit", "learning", exact, true},
+		{"learning one nanosecond past learn-ahead", "learning", pastExact, false},
+		{"learning outside learn-ahead", "learning", outside, false},
+		{"relearning inside learn-ahead", "relearning", inside, true},
+		{"relearning outside learn-ahead", "relearning", outside, false},
+		{"review before tomorrow's rollover", "review", tomorrow, true},
+		{"review after the cutoff", "review", afterCutoff, false},
+		{"new before tomorrow's rollover", "new", tomorrow, true},
+		{"new outside learn-ahead is still this study day", "new", outside, true},
+		{"new after the cutoff", "new", afterCutoff, false},
+		{"empty state uses the cutoff", "", outside, true},
+	}
+	for _, tc := range cases {
+		if got := CardDue(tc.state, tc.due, now, cutoff); got != tc.want {
+			t.Errorf("%s: CardDue = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+
+	// 03:50: learn-ahead reaches past the 04:00 cutoff. The fetch has to
+	// load that far, or Today would miss a learning card Review still serves.
+	late := time.Date(2026, 10, 19, 3, 50, 0, 0, denver)
+	lateCutoff := DueCutoff(late, denver)
+	learningPast := time.Date(2026, 10, 19, 4, 5, 0, 0, denver)
+	if !learningPast.After(lateCutoff) || learningPast.After(late.Add(LearnAhead)) {
+		t.Fatalf("04:05 is not past the cutoff and inside learn-ahead: cutoff %s", lateCutoff)
+	}
+	if !CardDue("learning", learningPast, late, lateCutoff) {
+		t.Fatal("a learning card 15 minutes away was not due")
+	}
+	if CardDue("review", learningPast, late, lateCutoff) {
+		t.Fatal("a review card past the cutoff was due")
+	}
+	if !DueFetchLimit(late, denver).Equal(late.Add(LearnAhead)) {
+		t.Fatalf("fetch limit %s, want %s", DueFetchLimit(late, denver), late.Add(LearnAhead))
+	}
+	if !DueFetchLimit(now, denver).Equal(cutoff) {
+		t.Fatalf("fetch limit at 22:00 = %s, want the cutoff %s", DueFetchLimit(now, denver), cutoff)
+	}
+}
+
 func mustLoc(t *testing.T, name string) *time.Location {
 	t.Helper()
 	loc, err := time.LoadLocation(name)

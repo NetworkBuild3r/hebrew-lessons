@@ -217,17 +217,17 @@ func TestMixHonoursTheGate(t *testing.T) {
 		skillView("listen", learner.Known, 0.95, 8), skillView("read", learner.Struggling, 0.1, 8),
 		skillView("recall", learner.Struggling, 0.1, 8), skillView("spell", learner.Struggling, 0.1, 8),
 	}
-	closed := mixGate([]Candidate{c}, TargetSuccess, now, 1, activity.Gate{})
+	closed := mixGate([]Candidate{c}, TargetSuccess, now, now, 1, activity.Gate{})
 	if closed[0].Activity != activity.ListenPick || closed[0].AskSkill != fsrs.SkillListen {
 		t.Fatalf("before the gate: %+v, want listening only", closed[0])
 	}
-	opened := mixGate([]Candidate{c}, TargetSuccess, now, 1, activity.OpenGate())
+	opened := mixGate([]Candidate{c}, TargetSuccess, now, now, 1, activity.OpenGate())
 	if opened[0].AskSkill == fsrs.SkillListen {
 		t.Fatalf("after the gate: %+v, want a failing skill", opened[0])
 	}
 	// With no clip, a closed gate leaves nothing to check: the card is a flashcard.
 	c.Facts.HasAudio = false
-	flash := mixGate([]Candidate{c}, TargetSuccess, now, 1, activity.Gate{})
+	flash := mixGate([]Candidate{c}, TargetSuccess, now, now, 1, activity.Gate{})
 	if flash[0].Activity != activity.Flashcard || flash[0].AskSkill != fsrs.SkillRecall {
 		t.Fatalf("no clip, closed gate: %+v", flash[0])
 	}
@@ -300,12 +300,12 @@ func TestClassifyListenAndSpellCards(t *testing.T) {
 		} {
 			c := base
 			tc.edit(&c)
-			if got := classify(c, now); got != tc.want {
+			if got := classify(c, now, now); got != tc.want {
 				t.Errorf("%s card, %s: kind %d, want %d", skill, name, got, tc.want)
 			}
 		}
 	}
-	if got := classify(Candidate{Skill: "speak", Due: due, HasRating: true, Latest: int(fsrs.Good)}, now); got != kindSkip {
+	if got := classify(Candidate{Skill: "speak", Due: due, HasRating: true, Latest: int(fsrs.Good)}, now, now); got != kindSkip {
 		t.Errorf("an unknown skill is kind %d, want skip", got)
 	}
 }

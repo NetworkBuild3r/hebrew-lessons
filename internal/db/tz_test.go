@@ -122,12 +122,8 @@ func TestMigration013SetsLearnerTZ(t *testing.T) {
 	if user.TZ != studyday.DefaultZone {
 		t.Fatalf("CreateUser tz = %q", user.TZ)
 	}
-	loaded, err := s.UserByID(ctx, user.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if loaded.TZ != studyday.DefaultZone {
-		t.Fatalf("UserByID tz = %q", loaded.TZ)
+	if got := storedTZ(t, s, user.ID); got != studyday.DefaultZone {
+		t.Fatalf("stored tz = %q", got)
 	}
 
 	// A binary from before this column inserts and selects the old column list.
@@ -207,12 +203,8 @@ func TestSetLearnerTZ(t *testing.T) {
 	if err := s.SetLearnerTZ(ctx, user.ID, " Asia/Jerusalem "); err != nil {
 		t.Fatal(err)
 	}
-	loaded, err = s.UserByID(ctx, user.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if loaded.TZ != "Asia/Jerusalem" {
-		t.Fatalf("tz = %q", loaded.TZ)
+	if got := storedTZ(t, s, user.ID); got != "Asia/Jerusalem" {
+		t.Fatalf("tz = %q", got)
 	}
 	_, loaded, err = s.SessionUser(ctx, "sess")
 	if err != nil || loaded.TZ != "Asia/Jerusalem" {
@@ -222,18 +214,25 @@ func TestSetLearnerTZ(t *testing.T) {
 	if err := s.SetLearnerTZ(ctx, user.ID, "Not/AZone"); err == nil {
 		t.Fatal("invalid zone was stored")
 	}
-	loaded, err = s.UserByID(ctx, user.ID)
-	if err != nil || loaded.TZ != "Asia/Jerusalem" {
-		t.Fatalf("tz after rejection = %q %v", loaded.TZ, err)
+	if got := storedTZ(t, s, user.ID); got != "Asia/Jerusalem" {
+		t.Fatalf("tz after rejection = %q", got)
 	}
 	if err := s.SetLearnerTZ(ctx, user.ID, " "); err == nil || !strings.Contains(err.Error(), "time zone is required") {
 		t.Fatalf("empty zone err = %v", err)
 	}
-	loaded, err = s.UserByID(ctx, user.ID)
-	if err != nil || loaded.TZ != "Asia/Jerusalem" {
-		t.Fatalf("tz after empty = %q %v", loaded.TZ, err)
+	if got := storedTZ(t, s, user.ID); got != "Asia/Jerusalem" {
+		t.Fatalf("tz after empty = %q", got)
 	}
 	if err := s.SetLearnerTZ(ctx, 0, "UTC"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("missing user err = %v", err)
 	}
+}
+
+func storedTZ(t *testing.T, s *Store, id int64) string {
+	t.Helper()
+	var tz string
+	if err := s.conn.QueryRowContext(context.Background(), `SELECT tz FROM users WHERE id = ?`, id).Scan(&tz); err != nil {
+		t.Fatal(err)
+	}
+	return tz
 }

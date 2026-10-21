@@ -109,7 +109,7 @@ func (s *server) answer(w http.ResponseWriter, r *http.Request) {
 	q := s.queues[key]
 	if q == nil || q.userID != user.ID || q.sess == nil || q.sess.UserID() != user.ID || q.done || !q.has ||
 		q.cur.CardID != cardID || q.item == nil || q.fb != nil || token == "" || token != q.item.Token ||
-		!studyday.DueCutoff(q.builtAt, loc).Equal(studyday.DueCutoff(s.now(), loc)) {
+		!sameStudyDay(q.builtAt, s.now(), loc) {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -186,7 +186,7 @@ func (s *server) next(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	q := s.queues[key]
 	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID ||
-		q.item == nil || q.fb == nil || !studyday.DueCutoff(q.builtAt, loc).Equal(studyday.DueCutoff(s.now(), loc)) {
+		q.item == nil || q.fb == nil || !sameStudyDay(q.builtAt, s.now(), loc) {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return

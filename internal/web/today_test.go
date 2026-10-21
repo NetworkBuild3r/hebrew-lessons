@@ -622,8 +622,8 @@ func TestTodayCountMatchesReviewQueue(t *testing.T) {
 //
 // Three new cards, due 20:00, 02:00, and 12:00. Under the 4:00 rollover the
 // counts are 2, 2, and 3. A cutoff of “due now” would be 1, 2, and 2.
-// TestTodayAndReviewIncludeTheCardDueAtTheCutoff is the inclusive learn-ahead
-// cap. A new card due at the next 04:00 is in Today and in Review. A card due
+// TestTodayAndReviewIncludeTheCardDueAtTheCutoff is the inclusive day cutoff.
+// A new card due at the next 04:00 is in Today and in Review. A card due
 // one nanosecond later is in neither.
 func TestTodayAndReviewIncludeTheCardDueAtTheCutoff(t *testing.T) {
 	loc := mustDenver(t)
@@ -736,6 +736,98 @@ func TestTodayCountMatchesReviewAcrossRollover(t *testing.T) {
 	check(before, "2")
 	clk.Advance(after.Sub(before))
 	check(after, "3")
+}
+
+// TestLearningStepsUseLearnAheadNotTheDayCutoff is 22:00 Denver.
+// A learning or relearning card due at 22:05 is inside the 20 minute
+// learn-ahead and is served. The same card due at 22:30 is not, even though
+// 22:30 is still before the 04:00 cutoff. A review card and a new card due
+// at 03:00 tomorrow are served tonight. A new card due at 22:30 is served
+// too: new cards stay on the day cutoff. Today's count equals the review
+// queue length in every case.
+func TestLearningStepsUseLearnAheadNotTheDayCutoff(t *testing.T) {
+	if fsrs.StateLearning != "learning" || fsrs.StateRelearning != "relearning" {
+		t.Fatal("studyday.CardDue compares the learning and relearning state strings")
+	}
+	loc := mustDenver(t)
+	now := time.Date(2026, 10, 18, 22, 0, 0, 0, loc)
+	inside := time.Date(2026, 10, 18, 22, 5, 0, 0, loc)
+	outside := time.Date(2026, 10, 18, 22, 30, 0, 0, loc)
+	tomorrow := time.Date(2026, 10, 19, 3, 0, 0, 0, loc)
+	after := time.Date(2026, 10, 19, 5, 0, 0, 0, loc)
+	if !inside.Before(now.Add(studyday.LearnAhead)) || !outside.After(now.Add(studyday.LearnAhead)) || !outside.Before(studyday.DueCutoff(now, loc)) {
+		t.Fatalf("22:05 and 22:30 do not straddle learn-ahead %s before cutoff %s", studyday.LearnAhead, studyday.DueCutoff(now, loc))
+	}
+	cases := []struct {
+		name   string
+		state  string
+		due    time.Time
+		rating int
+		want   string
+	}{
+		{"learning inside learn-ahead", fsrs.StateLearning, inside, int(fsrs.Again), "1"},
+		{"learning outside learn-ahead", fsrs.StateLearning, outside, int(fsrs.Again), "0"},
+		{"relearning inside learn-ahead", fsrs.StateRelearning, inside, int(fsrs.Again), "1"},
+		{"relearning outside learn-ahead", fsrs.StateRelearning, outside, int(fsrs.Again), "0"},
+		{"review before tomorrow's rollover", fsrs.StateReview, tomorrow, 0, "1"},
+		{"new before tomorrow's rollover", fsrs.StateNew, tomorrow, 0, "1"},
+		{"new outside learn-ahead is still this study day", fsrs.StateNew, outside, 0, "1"},
+		{"new after the cutoff", fsrs.StateNew, after, 0, "0"},
+	}
+	for _, tc := range cases {
+		store, h, _ := openStepped(t, now)
+		learner := addLearner(t, store, "a@example.com", "sub-a", now)
+		lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+		reviewed := time.Time{}
+		if tc.rating != 0 {
+			reviewed = now.Add(-time.Minute)
+		}
+		addStateCard(t, store, learner.user.ID, lex, fsrs.SkillRead, tc.state, tc.due, 1, tc.rating, reviewed)
+		home := getLearner(t, h, learner, "/")
+		page := getLearner(t, h, learner, "/review")
+		due := attr(t, articleAttrs(home), "data-due")
+		served := attr(t, page, "data-total")
+		if due != tc.want || served != tc.want || due != served {
+			t.Errorf("%s: today %q review %q, want %s", tc.name, due, served, tc.want)
+		}
+	}
+}
+
+// TestLearningCardPastTheCutoffStaysDueInsideLearnAhead is 03:50 Denver.
+// 04:05 is after the study-day cutoff and inside learn-ahead, so a learning
+// card is served and a review card is not. Today's count matches Review.
+func TestLearningCardPastTheCutoffStaysDueInsideLearnAhead(t *testing.T) {
+	loc := mustDenver(t)
+	now := time.Date(2026, 10, 19, 3, 50, 0, 0, loc)
+	due := time.Date(2026, 10, 19, 4, 5, 0, 0, loc)
+	if !due.After(studyday.DueCutoff(now, loc)) || due.After(now.Add(studyday.LearnAhead)) {
+		t.Fatalf("04:05 is not past the cutoff and inside learn-ahead")
+	}
+	cases := []struct {
+		name  string
+		state string
+		want  string
+	}{
+		{"learning past the cutoff", fsrs.StateLearning, "1"},
+		{"review past the cutoff", fsrs.StateReview, "0"},
+	}
+	for _, tc := range cases {
+		store, h, _ := openStepped(t, now)
+		learner := addLearner(t, store, "a@example.com", "sub-a", now)
+		lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+		rating, reviewed := 0, time.Time{}
+		if tc.state == fsrs.StateLearning {
+			rating, reviewed = int(fsrs.Again), now.Add(-time.Minute)
+		}
+		addStateCard(t, store, learner.user.ID, lex, fsrs.SkillRead, tc.state, due, 1, rating, reviewed)
+		home := getLearner(t, h, learner, "/")
+		page := getLearner(t, h, learner, "/review")
+		gotDue := attr(t, articleAttrs(home), "data-due")
+		served := attr(t, page, "data-total")
+		if gotDue != tc.want || served != tc.want {
+			t.Errorf("%s: today %q review %q, want %s", tc.name, gotDue, served, tc.want)
+		}
+	}
 }
 
 func TestStudyQueueMapIsBounded(t *testing.T) {
@@ -954,11 +1046,16 @@ func addLexeme(t *testing.T, store *db.Store, text, gloss, translit, gender, aud
 
 func addCard(t *testing.T, store *db.Store, userID, lexemeID int64, skill string, due time.Time, stability float64, rating int, reviewed time.Time) int64 {
 	t.Helper()
+	return addStateCard(t, store, userID, lexemeID, skill, fsrs.StateReview, due, stability, rating, reviewed)
+}
+
+func addStateCard(t *testing.T, store *db.Store, userID, lexemeID int64, skill, state string, due time.Time, stability float64, rating int, reviewed time.Time) int64 {
+	t.Helper()
 	id, err := store.InsertCard(context.Background(), db.Card{
 		UserID:     userID,
 		LexemeID:   lexemeID,
 		Skill:      skill,
-		State:      fsrs.StateReview,
+		State:      state,
 		Due:        due,
 		Stability:  stability,
 		Difficulty: 5,

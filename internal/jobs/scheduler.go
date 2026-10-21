@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	// DefaultHour and DefaultMinute are when the scheduler wakes: 03:30 server time.
-	DefaultHour   = 3
+	// DefaultHour and DefaultMinute are when the scheduler wakes: 04:30 server time,
+	// after the 04:00 study-day rollover, so yesterday is a closed study day.
+	DefaultHour   = 4
 	DefaultMinute = 30
 
 	// StopTimeout is the longest Stop waits for the scheduler to finish.
@@ -22,7 +23,7 @@ const (
 // ErrStopTimeout means the scheduler did not stop within StopTimeout.
 var ErrStopTimeout = errors.New("jobs: scheduler did not stop in time")
 
-// Scheduler runs the daily job at 03:30 in the server time zone, and once at start. With
+// Scheduler runs the daily job at 04:30 in the server time zone, and once at start. With
 // WithWeekly it also writes the weekly report on Monday at 04:00 and at start.
 type Scheduler struct {
 	daily  *Daily
@@ -40,7 +41,7 @@ type Scheduler struct {
 type SchedulerOption func(*Scheduler)
 
 // WithWeekly adds the weekly report. The scheduler then wakes for the earlier of the next
-// 03:30 and the next Monday 04:00, catches up the daily snapshots at each wake, and then
+// 04:30 and the next Monday 04:00, catches up the daily snapshots at each wake, and then
 // catches up the weekly report, so Sunday's snapshot is always written before the report that
 // needs it. The weekly job must be built on the same daily job as the scheduler.
 func WithWeekly(w *Weekly) SchedulerOption { return func(s *Scheduler) { s.weekly = w } }
@@ -74,7 +75,7 @@ func NewScheduler(d *Daily, opts ...SchedulerOption) *Scheduler {
 	return s
 }
 
-// Next is the first wake time after now: the next 03:30 in the server time zone.
+// Next is the first wake time after now: the next 04:30 in the server time zone.
 func (s *Scheduler) Next(now time.Time) time.Time {
 	local := now.In(s.loc)
 	next := time.Date(local.Year(), local.Month(), local.Day(), s.hour, s.min, 0, 0, s.loc)
@@ -84,7 +85,7 @@ func (s *Scheduler) Next(now time.Time) time.Time {
 	return next
 }
 
-// Run catches up at once, then wakes at each 03:30 and catches up again, until ctx is
+// Run catches up at once, then wakes at each 04:30 and catches up again, until ctx is
 // cancelled. It returns nil on cancel. A failed run is logged and retried at the next wake,
 // and a run that finds the lock held is skipped.
 func (s *Scheduler) Run(ctx context.Context) error {

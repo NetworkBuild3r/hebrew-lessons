@@ -177,15 +177,6 @@ func (s *Store) SetLearnerTZ(ctx context.Context, userID int64, tz string) error
 	return nil
 }
 
-// UserByID returns the user with that id, including tz.
-func (s *Store) UserByID(ctx context.Context, id int64) (User, error) {
-	if err := s.ready(); err != nil {
-		return User{}, err
-	}
-	row := s.queryRow(ctx, `SELECT `+userColumns+` FROM users WHERE id = ?`, id)
-	return scanUser(row)
-}
-
 // AddressGender is users.address_gender for this learner.
 // An unset column returns an empty string, which the shell treats as masculine.
 func (s *Store) AddressGender(ctx context.Context, userID int64) (string, error) {

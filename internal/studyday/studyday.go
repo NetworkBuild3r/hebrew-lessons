@@ -21,6 +21,11 @@ const (
 	// zone, and for the job scheduler when TZ is unset. The migration that
 	// adds users.tz uses this same literal as its DEFAULT.
 	DefaultZone = "America/Denver"
+
+	// LearnAhead is how far past now a learning or relearning card may be due
+	// and still be served. It is Anki's learn-ahead limit. Review and new
+	// cards do not use it; they use the study-day cutoff.
+	LearnAhead = 20 * time.Minute
 )
 
 var (
@@ -88,10 +93,36 @@ func Next(now time.Time, loc *time.Location) time.Time {
 	return time.Date(y, m, d+1, RolloverHour, 0, 0, 0, start.Location())
 }
 
-// DueCutoff is the next RolloverHour:00 local after now. Today, Progress,
-// Review, and the activity day checks all use this instant, in the learner's
-// zone. A card counts for the study day when its due time is at or before
-// the cutoff, which is the next 4:00 local. A nil loc is DefaultZone.
+// DueCutoff is the next RolloverHour:00 local after now. Progress and the
+// activity day checks use this instant. Review-state and new cards are due
+// for Today and Review when their due time is at or before it. Learning and
+// relearning cards use CardDue instead. A nil loc is DefaultZone.
 func DueCutoff(now time.Time, loc *time.Location) time.Time {
 	return Next(now, loc)
+}
+
+// CardDue is the one predicate Today and Review share.
+// A learning or relearning card is due only at or before now plus LearnAhead.
+// A review card, a new card, and any other state are due at or before
+// reviewLimit, which callers set to DueCutoff. The comparison is inclusive.
+// The state strings are fsrs.StateLearning and fsrs.StateRelearning. This
+// package cannot import fsrs: that package imports db, and db imports studyday.
+func CardDue(state string, due, now, reviewLimit time.Time) bool {
+	if state == "learning" || state == "relearning" {
+		return !due.After(now.Add(LearnAhead))
+	}
+	return !due.After(reviewLimit)
+}
+
+// DueFetchLimit is the latest due time a due-card query must load so CardDue
+// can see every card it might count. It is the later of the study-day cutoff
+// and now+LearnAhead. A learning card in the last LearnAhead minutes before
+// rollover is due after the cutoff, and a review card is not.
+func DueFetchLimit(now time.Time, loc *time.Location) time.Time {
+	cutoff := DueCutoff(now, loc)
+	ahead := now.Add(LearnAhead)
+	if ahead.After(cutoff) {
+		return ahead
+	}
+	return cutoff
 }
