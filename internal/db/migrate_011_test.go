@@ -46,17 +46,18 @@ func m10At009(t *testing.T) *sql.DB {
 // A database already at 010 gets the two tables, and every v2 run and answer is exactly as it was.
 func TestMigrate010OnA009DatabaseKeepsV2Placement(t *testing.T) {
 	conn := m10At009(t)
-	runs := m6Dump(t, conn, `SELECT * FROM placement_runs ORDER BY id`)
+	const runCols = `id, user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no`
+	runs := m6Dump(t, conn, `SELECT `+runCols+` FROM placement_runs ORDER BY id`)
 	answers := m6Dump(t, conn, `SELECT * FROM placement_answers ORDER BY run_id, item_id`)
 	before := m7Capture(t, conn)
 
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate 011: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14}) {
 		t.Fatalf("versions = %v, want 1..12", got)
 	}
-	if got := m6Dump(t, conn, `SELECT * FROM placement_runs ORDER BY id`); !reflect.DeepEqual(got, runs) {
+	if got := m6Dump(t, conn, `SELECT `+runCols+` FROM placement_runs ORDER BY id`); !reflect.DeepEqual(got, runs) {
 		t.Fatalf("placement_runs changed\n got: %v\nwant: %v", got, runs)
 	}
 	if got := m6Dump(t, conn, `SELECT * FROM placement_answers ORDER BY run_id, item_id`); !reflect.DeepEqual(got, answers) {
@@ -82,6 +83,7 @@ func TestMigrate010OnA009DatabaseKeepsV2Placement(t *testing.T) {
 		delete(after.rowCnts, name)
 		after.schema = m8SchemaWithout(after.schema, name)
 	}
+	before, after = m14Align(t, before, after)
 	if !reflect.DeepEqual(after.tables, before.tables) {
 		t.Fatal("rows of an existing table changed")
 	}
@@ -110,7 +112,7 @@ func TestMigrate010OnAFreshDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14}) {
 		t.Fatalf("versions = %v, want 1..12", got)
 	}
 	cols := m6Dump(t, conn, `SELECT name FROM pragma_table_info('placement_items') ORDER BY cid`)
@@ -124,7 +126,7 @@ func TestMigrate010OnAFreshDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("second migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); len(got) != 12 {
+	if got := m6Applied(t, conn); len(got) != 13 {
 		t.Fatalf("versions after a second migrate = %v", got)
 	}
 }

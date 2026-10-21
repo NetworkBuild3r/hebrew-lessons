@@ -117,6 +117,8 @@ type skillState struct {
 	Done    bool
 	// Cleared is true when the skill moved up out of the top band.
 	Cleared bool
+	// Stopped is true when the adaptive rule stopped the skill in a band.
+	Stopped bool
 }
 
 // bandOutcome is one answered item of a skill: the band it was dealt in and what happened.
@@ -152,6 +154,7 @@ func replay(answers []bandOutcome, start int, single bool) skillState {
 			st.Band++
 		case Stop:
 			st.Done = true
+			st.Stopped = true
 		}
 	}
 	return st

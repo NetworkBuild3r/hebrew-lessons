@@ -250,28 +250,61 @@ func (s *Store) WeeklyReportRows(ctx context.Context, userID int64, from, to str
 	return out, nil
 }
 
-// PlacementHistoryRow is one finished placement run. Kind is initial or recheck for a v3
-// run, and empty for a v2 run. Result is the stored result JSON.
+// PlacementHistoryRow is one finished placement run.
+//
+// ID, FinishedAt, StartUnit, StartUnitTitle, and WordsKnown are the onboarding
+// history. PlacementRun is the placement_runs row the open-run read returns, so
+// this value keeps its own name. Kind is initial or recheck for a v3 run and
+// empty for a v2 run. Level and Result are what Progress and get_progress read.
+// StartUnitTitle is the published unit at StartUnit in the learner's scope
+// (their own unit, or else a shared one). It is empty when there is none,
+// including when the only unit at that position is outside the learner's scope.
+// A NULL start_unit or words_known, from a run finished before those columns,
+// is read as 0 and an empty title.
 type PlacementHistoryRow struct {
-	RunID      int64
-	Kind       string
-	FinishedAt time.Time
-	Level      int
-	Result     string
+	ID             int64
+	RunID          int64
+	Kind           string
+	FinishedAt     time.Time
+	Level          int
+	Result         string
+	StartUnit      int
+	StartUnitTitle string
+	WordsKnown     int
 }
 
-// PlacementHistory returns the learner's finished runs, newest first, at most limit.
+// PlacementHistory returns the learner's finished runs, newest finish first.
+// A run counts when finished_at is set, except the v2 run Engine.Start closes
+// so a v3 run can start. An unfinished run is left out. limit <= 0 returns
+// every such run. The LIMIT is in the SQL.
 func (s *Store) PlacementHistory(ctx context.Context, userID int64, limit int) ([]PlacementHistoryRow, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
 	}
-	rows, err := conn.QueryContext(ctx, `
-		SELECT r.id, COALESCE(v.kind, ''), r.finished_at, COALESCE(r.level, -1), COALESCE(r.result, '')
+	query := `
+		SELECT r.id, COALESCE(v.kind, ''), r.finished_at, COALESCE(r.level, -1), COALESCE(r.result, ''),
+		       COALESCE(r.start_unit, 0), COALESCE(r.words_known, 0),
+		       CASE WHEN r.start_unit IS NULL THEN '' ELSE COALESCE((
+		           SELECT u.title
+		           FROM units AS u
+		           WHERE u.status = 'published'
+		             AND u.position = r.start_unit
+		             AND (u.scope = 'shared' OR u.scope = 'learner:' || r.user_id)
+		           ORDER BY CASE WHEN u.scope = 'shared' THEN 1 ELSE 0 END, u.id
+		           LIMIT 1
+		       ), '') END
 		FROM placement_runs AS r
 		LEFT JOIN placement_v3_runs AS v ON v.run_id = r.id
 		WHERE r.user_id = ? AND r.finished_at IS NOT NULL
-		ORDER BY r.id DESC LIMIT ?`, userID, limit)
+		  AND (` + placementNotAutoClosedSQL("r") + `)
+		ORDER BY r.finished_at DESC, r.id DESC`
+	args := []any{userID}
+	if limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, limit)
+	}
+	rows, err := conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("db: placement history: %w", err)
 	}
@@ -280,9 +313,10 @@ func (s *Store) PlacementHistory(ctx context.Context, userID int64, limit int) (
 	for rows.Next() {
 		var r PlacementHistoryRow
 		var at string
-		if err := rows.Scan(&r.RunID, &r.Kind, &at, &r.Level, &r.Result); err != nil {
+		if err := rows.Scan(&r.ID, &r.Kind, &at, &r.Level, &r.Result, &r.StartUnit, &r.WordsKnown, &r.StartUnitTitle); err != nil {
 			return nil, fmt.Errorf("db: placement history: %w", err)
 		}
+		r.RunID = r.ID
 		if r.FinishedAt, err = ParseTime(at); err != nil {
 			return nil, fmt.Errorf("db: placement history: %w", err)
 		}
@@ -292,4 +326,21 @@ func (s *Store) PlacementHistory(ctx context.Context, userID int64, limit int) (
 		return nil, fmt.Errorf("db: placement history: %w", err)
 	}
 	return out, nil
+}
+
+// PlacementHistoryCount is how many finished runs this learner has.
+// The v2 run Engine.Start closes is not counted, and neither is an unfinished run.
+func (s *Store) PlacementHistoryCount(ctx context.Context, userID int64) (int, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return 0, err
+	}
+	var n int
+	if err := conn.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM placement_runs AS r
+		WHERE r.user_id = ? AND r.finished_at IS NOT NULL
+		  AND (`+placementNotAutoClosedSQL("r")+`)`, userID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("db: placement history count: %w", err)
+	}
+	return n, nil
 }

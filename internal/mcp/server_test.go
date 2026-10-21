@@ -727,8 +727,44 @@ func TestPlacementJSONKeepsZeros(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), `"sittings":2`) || !strings.Contains(string(raw), `"inProgress":true`) || !strings.Contains(string(raw), `"finished":false`) {
+	if !strings.Contains(string(raw), `"sittings":2`) || !strings.Contains(string(raw), `"inProgress":true`) || !strings.Contains(string(raw), `"finished":false`) || strings.Contains(string(raw), `"incomplete"`) {
 		t.Fatalf("in progress %s", raw)
+	}
+	raw, err = json.Marshal(placementView{Taken: true, Finished: false, Incomplete: true, Sittings: 1, Level: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"incomplete":true`) || !strings.Contains(string(raw), `"finished":false`) || !strings.Contains(string(raw), `"inProgress":false`) || !strings.Contains(string(raw), `"sittings":1`) {
+		t.Fatalf("incomplete %s", raw)
+	}
+}
+
+func TestGetContextMarksAnUnscoredPlacementIncomplete(t *testing.T) {
+	mem := NewMemory()
+	session := connectMCP(t, Handler(Options{
+		Validator: StaticToken{Token: testToken, Actor: "author-7"},
+		Course:    mem,
+		Lexicon:   mem,
+		Lookup:    mem,
+		Units:     mem,
+	}), testToken)
+	learner := int64(0)
+	mem.SetPlacement(learner, Placement{
+		TakenAt:    time.Date(2026, 9, 2, 8, 5, 0, 0, time.UTC),
+		Finished:   false,
+		Incomplete: true,
+		Sittings:   1,
+		Level:      -1,
+	}, nil, nil)
+	out := call[getContextOutput](t, session, "get_context", getContextInput{Position: 0, LearnerID: &learner})
+	if !out.Placement.Taken || out.Placement.Finished || !out.Placement.Incomplete || out.Placement.InProgress || out.Placement.Sittings != 1 || out.Placement.Level != -1 {
+		t.Fatalf("placement %+v", out.Placement)
+	}
+	raw := callRaw(t, session, "get_context", getContextInput{Position: 0, LearnerID: &learner})
+	for _, want := range []string{`"incomplete":true`, `"finished":false`, `"inProgress":false`} {
+		if !strings.Contains(raw, want) {
+			t.Fatalf("missing %s in %s", want, raw)
+		}
 	}
 }
 

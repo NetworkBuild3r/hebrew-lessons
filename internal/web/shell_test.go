@@ -150,6 +150,11 @@ func finishPlacement(t *testing.T, store *db.Store, userID int64, at time.Time) 
 	if err := store.FinishPlacement(ctx, run, at, 2, "cap_cards", `{"estimated_known_words":40,"bands":[]}`); err != nil {
 		t.Fatal(err)
 	}
+	// A close with no rating is not a finished result. This helper is a real finish.
+	if _, err := store.ExecContext(ctx, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at, answered_at)
+		VALUES (?, 'rated', 3, ?, ?)`, run, db.FormatTime(at), db.FormatTime(at)); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // strugglingWord gives a word right answers first and then wrong ones, so the wrong ones are

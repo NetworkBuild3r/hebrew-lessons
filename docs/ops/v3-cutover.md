@@ -205,13 +205,15 @@ docker run --rm -v "$BK:/b" "$IMG:sha-$V3_SHA" migrate --check --db "/b/$BACKUP_
 Expected, for the production database as it is checked today:
 
 ```
-migrate-check: files=11 applied=6 pending=5
+migrate-check: files=13 applied=6 pending=7
 applied: 1 2 3 4 5 7
-pending: 006_evidence.sql 008_learner_model.sql 009_confusion_other.sql 010_daily_job.sql 011_placement_v3.sql
+pending: 006_evidence.sql 008_learner_model.sql 009_confusion_other.sql 010_daily_job.sql 011_placement_v3.sql 012_attempt_list_index.sql 014_onboarding_placement_history.sql
 pending-below-applied: 6 (the runner applies by number, so these still run)
 integrity: ok
 result: ok
 ```
+
+This build has no `013` file. `014_onboarding_placement_history.sql` is pending until the pod starts. After it starts, `applied:` is `1 2 3 4 5 6 7 8 9 10 11 12 14`.
 
 Then release the volume:
 
@@ -351,7 +353,7 @@ kubectl -n hebrew-next get pod -l app=hebrew-next -o jsonpath='{.items[0].status
 kubectl -n hebrew-next exec deploy/hebrew-next -c hebrew -- /usr/local/bin/hebrew migrate --check
 ```
 
-Expected: the init container finishes (this is where 006, 008, 009, 010, 011, and 012 run, one transaction each). The two timestamps give the time the migrations and the import took. Write it down: production will be down for about that long plus the image pull and the app start, because the strategy is `Recreate`. `migrate --check` then prints `applied: 1 2 3 4 5 6 7 8 9 10 11 12`, `pending: (none)`, `integrity: ok`, `result: ok`.
+Expected: the init container finishes (this is where 006, 008, 009, 010, 011, 012, and 014 run, one transaction each). The two timestamps give the time the migrations and the import took. Write it down: production will be down for about that long plus the image pull and the app start, because the strategy is `Recreate`. `migrate --check` then prints `applied: 1 2 3 4 5 6 7 8 9 10 11 12 14`, `pending: (none)`, `integrity: ok`, `result: ok`. There is no version 13 in this build.
 
 Run the daily job once on the copy:
 
@@ -675,6 +677,31 @@ Staging commits in order: **Diff 4** (3.1, freeze), **Diff 5** (3.3, start on th
 
 So a rollback is **the previous tag and the backup file together**. Every review, placement result, and snapshot written after the backup is lost, because the old schema cannot hold it. It stays in the file you set aside (`hebrew.sqlite.after-v3-*`), and nothing can merge it back.
 
+### Migration 014
+
+`014_onboarding_placement_history.sql` adds nullable columns (`users.onboarded_at`, `placement_runs.start_unit`, `placement_runs.words_known`) and the index `placement_runs_user_finished_desc`. It does not rebuild a table. It then fills `users.onboarded_at` once, where it is still null, from the earliest finished placement that is not the v2 run `Engine.Start` closes, or from the earliest lesson run or non-placement attempt.
+
+An older binary that does not embed that file, pointed at a database where version 14 is recorded, exits 1 from `hebrew migrate --check`. The report contains:
+
+```
+problem: version 14 is recorded in the database and has no migration file in this build
+result: problems=1
+```
+
+Startup does not drop the columns. Reads and writes that use the old column lists still work. Do not drop the columns to silence that check.
+
+To undo 014 on a copy and let a binary that contains the file apply it again, run this and then start that binary (or run `Migrate`). The `DELETE` is required. Without it the next start skips 014, `migrate --check` still prints `result: ok`, and `UserByEmail` and `SessionUser` fail with `no such column: onboarded_at`.
+
+```sql
+DROP INDEX placement_runs_user_finished_desc;
+ALTER TABLE placement_runs DROP COLUMN words_known;
+ALTER TABLE placement_runs DROP COLUMN start_unit;
+ALTER TABLE users DROP COLUMN onboarded_at;
+DELETE FROM schema_migrations WHERE version = 14;
+```
+
+SQLite 3.35 or newer is required for `DROP COLUMN`. The driver pinned in this repo reports `sqlite_version` 3.53.4. `TestMigrate014RollbackDropsTheAdditiveSchema` runs this recipe and then migrates forward again.
+
 **This rollback has NOT been rehearsed.** Staging was not touched by the person who wrote this runbook. 5.R is the rehearsal, and it is the operator's to run (it is acceptance criterion ac-4). Treat everything below as untested until 5.R has passed.
 
 ### 5.1 Production
@@ -826,7 +853,7 @@ SMOKE_STRICT=1 sh scripts/smoke-v3.sh
 kubectl -n hebrew exec deploy/hebrew -c hebrew -- /usr/local/bin/hebrew migrate --check
 ```
 
-Expected: `7 passed, 0 failed, 0 skipped`. `applied: 1 2 3 4 5 6 7 8 9 10 11 12`, `pending: (none)`, `result: ok`. Then sign in and do the manual checks from 3.4, including starting a placement.
+Expected: `7 passed, 0 failed, 0 skipped`. `applied: 1 2 3 4 5 6 7 8 9 10 11 12 14`, `pending: (none)`, `result: ok`. Then sign in and do the manual checks from 3.4, including starting a placement.
 
 Take a post-cutover backup now, with the running pod (the v3 image has the command):
 

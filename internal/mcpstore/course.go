@@ -70,6 +70,7 @@ func (s *Store) LatestPlacement(ctx context.Context, userID int64) (mcp.Placemen
 	return mcp.Placement{
 		TakenAt:                row.TakenAt,
 		Finished:               row.Finished,
+		Incomplete:             row.Incomplete,
 		Sittings:               row.Sittings,
 		Level:                  row.Level,
 		CardsRated:             row.CardsRated,

@@ -174,6 +174,46 @@ func TestSecureModeIgnoresPlainSessionCookie(t *testing.T) {
 	}
 }
 
+func TestLookupLoadsOnboardedAt(t *testing.T) {
+	start := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	clk := &manualClock{t: start}
+	store := openTestStore(t, clk)
+	ctx := context.Background()
+	user, err := store.CreateUser(ctx, "learner@example.com", "sub-1", RoleLearner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.OnboardedAt != nil {
+		t.Fatal("a new user is already onboarded")
+	}
+	at := start.Add(time.Hour)
+	if err := store.SetOnboarded(ctx, user.ID, at); err != nil {
+		t.Fatal(err)
+	}
+	svc, err := New(Config{
+		PublicOrigin:  "https://hebrew.example",
+		CookieSecure:  true,
+		Clock:         clk,
+		Store:         store,
+		AllowedEmails: []string{"learner@example.com"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _, err := svc.createSession(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := svc.Lookup(ctx, raw)
+	if err != nil || got.OnboardedAt == nil || !got.OnboardedAt.Equal(at) {
+		t.Fatalf("lookup onboarded %+v %v, want %s", got.OnboardedAt, err, at)
+	}
+	byEmail, err := svc.UserByEmail(ctx, "learner@example.com")
+	if err != nil || byEmail.OnboardedAt == nil || !byEmail.OnboardedAt.Equal(at) {
+		t.Fatalf("email onboarded %+v %v", byEmail.OnboardedAt, err)
+	}
+}
+
 func cookieNamed(t *testing.T, rr *httptest.ResponseRecorder, name string) *http.Cookie {
 	t.Helper()
 	for _, c := range rr.Result().Cookies() {

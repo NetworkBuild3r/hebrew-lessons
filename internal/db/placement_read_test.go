@@ -27,7 +27,7 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 		t.Fatal(err)
 	}
 	place, ok, err = s.LatestPlacement(ctx, userID)
-	if err != nil || !ok || place.Finished || !place.TakenAt.Equal(when) {
+	if err != nil || !ok || place.Finished || place.Incomplete || !place.TakenAt.Equal(when) {
 		t.Fatalf("in progress: %+v ok=%v err=%v", place, ok, err)
 	}
 
@@ -160,6 +160,7 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	rateAnswer(t, s, otherRun, vav, ids[vav], Easy, when)
 	if err := s.FinishPlacement(ctx, otherRun, finished, -1, "exhausted", `{"bands":[],"estimated_known_words":0}`); err != nil {
 		t.Fatal(err)
 	}
@@ -170,10 +171,9 @@ func TestLatestPlacementAndKnownTexts(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatal(err)
 	}
-	if otherPlace.Level != -1 || !otherPlace.Finished || otherPlace.StopReason != "exhausted" || otherPlace.SuggestedStartPosition != 0 {
+	if otherPlace.Level != -1 || !otherPlace.Finished || otherPlace.Incomplete || otherPlace.StopReason != "exhausted" || otherPlace.SuggestedStartPosition != 0 {
 		t.Fatalf("other = %+v", otherPlace)
 	}
-	rateAnswer(t, s, otherRun, vav, ids[vav], Easy, when)
 	if texts, err := s.PlacementKnownLexemes(ctx, otherID); err != nil || len(texts) != 1 || texts[0] != vav {
 		t.Fatalf("other texts = %v %v", texts, err)
 	}

@@ -139,11 +139,19 @@ func seedProgressLearner(t *testing.T, store *db.Store, clk clock.Clock, email, 
 	if err := store.FinishPlacement(ctx, first, progNow.AddDate(0, 0, -44), 3, "exhausted", `{"estimated_known_words":142,"listening":{"tested":true,"level":3,"estimate":142},"reading":{"tested":true,"level":2,"estimate":90}}`); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.ExecContext(ctx, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at, answered_at)
+		VALUES (?, 'rated', 3, ?, ?)`, first, db.FormatTime(progNow), db.FormatTime(progNow)); err != nil {
+		t.Fatal(err)
+	}
 	check, err := store.StartPlacementV3(ctx, l.user.ID, progNow.AddDate(0, 0, -16), 2, "recheck", "listen", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := store.FinishPlacement(ctx, check, progNow.AddDate(0, 0, -16), 3, "exhausted", `{"estimated_known_words":164,"listening":{"tested":true,"level":3,"estimate":164},"reading":{"tested":false,"level":0,"estimate":0}}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ExecContext(ctx, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at, answered_at)
+		VALUES (?, 'rated-check', 3, ?, ?)`, check, db.FormatTime(progNow), db.FormatTime(progNow)); err != nil {
 		t.Fatal(err)
 	}
 	return l, words

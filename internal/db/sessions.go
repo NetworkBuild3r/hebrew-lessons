@@ -39,7 +39,7 @@ func (s *Store) SessionUser(ctx context.Context, idHash string) (Session, User, 
 	}
 	row := s.queryRow(ctx, `
 		SELECT s.id_hash, s.user_id, s.csrf, s.expires_at,
-		       u.id, u.email, u.google_sub, u.role, u.created_at
+		       u.id, u.email, u.google_sub, u.role, u.created_at, u.onboarded_at
 		FROM sessions AS s
 		JOIN users AS u ON u.id = s.user_id
 		WHERE s.id_hash = ?`, idHash)
@@ -47,8 +47,9 @@ func (s *Store) SessionUser(ctx context.Context, idHash string) (Session, User, 
 	var exp string
 	var u User
 	var created string
+	var onboarded sql.NullString
 	err := row.Scan(&sess.IDHash, &sess.UserID, &sess.CSRF, &exp,
-		&u.ID, &u.Email, &u.GoogleSub, &u.Role, &created)
+		&u.ID, &u.Email, &u.GoogleSub, &u.Role, &created, &onboarded)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Session{}, User{}, ErrNotFound
 	}
@@ -62,6 +63,10 @@ func (s *Store) SessionUser(ctx context.Context, idHash string) (Session, User, 
 	u.CreatedAt, err = ParseTime(created)
 	if err != nil {
 		return Session{}, User{}, fmt.Errorf("db: user created_at: %w", err)
+	}
+	u.OnboardedAt, err = optionalTime(onboarded)
+	if err != nil {
+		return Session{}, User{}, fmt.Errorf("db: user onboarded_at: %w", err)
 	}
 	return sess, u, nil
 }
