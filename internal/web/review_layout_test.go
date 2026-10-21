@@ -1,9 +1,12 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -25,10 +28,7 @@ func TestReviewGradesStayInView(t *testing.T) {
 
 func reviewGradesStayInView(t *testing.T) {
 	skipUnlessNode22(t)
-	chrome := "/usr/bin/google-chrome-stable"
-	if _, err := os.Stat(chrome); err != nil {
-		t.Skipf("chrome not available at %s", chrome)
-	}
+	chrome := chromeForLayout(t)
 
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	store, h, _ := openApp(t)
@@ -113,6 +113,117 @@ func skipUnlessNode22(t *testing.T) {
 	if convErr != nil || n < 22 {
 		t.Skipf("node %s is older than 22; the global WebSocket is not defined", ver)
 	}
+}
+
+// chromeForLayout returns a Chrome or Chromium binary. The k8-build image
+// does not ship one, and the Node 22 CI step fails the job on any --- SKIP
+// line. Install the stable package there. .github/workflows is left alone.
+func chromeForLayout(t *testing.T) string {
+	t.Helper()
+	if path := findChrome(); path != "" {
+		return path
+	}
+	if !canAptInstall() {
+		t.Skipf("chrome not available at /usr/bin/google-chrome-stable")
+	}
+	path, err := installChromeStable(t)
+	if err != nil {
+		t.Fatalf("install chrome: %v", err)
+	}
+	return path
+}
+
+func findChrome() string {
+	candidates := []string{
+		"/usr/bin/google-chrome-stable",
+		"/usr/bin/google-chrome",
+		"/opt/google/chrome/chrome",
+		"/usr/bin/chromium",
+		"/usr/bin/chromium-browser",
+	}
+	for _, p := range candidates {
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
+			return p
+		}
+	}
+	for _, name := range []string{"google-chrome-stable", "google-chrome", "chromium", "chromium-browser"} {
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+func canAptInstall() bool {
+	if _, err := exec.LookPath("apt-get"); err != nil {
+		return false
+	}
+	if os.Geteuid() == 0 {
+		return true
+	}
+	_, err := exec.LookPath("sudo")
+	return err == nil
+}
+
+func installChromeStable(t *testing.T) (string, error) {
+	t.Helper()
+	t.Log("chrome is not installed; installing google-chrome-stable")
+	deb := filepath.Join(t.TempDir(), "google-chrome-stable_current_amd64.deb")
+	if err := downloadFile("https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb", deb); err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	if out, err := apt(ctx, "update"); err != nil {
+		return "", fmt.Errorf("apt-get update: %v\n%s", err, out)
+	}
+	out, err := apt(ctx, "install", "-y", deb)
+	if err != nil {
+		return "", fmt.Errorf("apt-get install: %v\n%s", err, out)
+	}
+	if path := findChrome(); path != "" {
+		t.Logf("installed chrome at %s", path)
+		return path, nil
+	}
+	return "", fmt.Errorf("package installed but no chrome binary found\n%s", out)
+}
+
+func apt(ctx context.Context, args ...string) ([]byte, error) {
+	var cmd *exec.Cmd
+	if os.Geteuid() == 0 {
+		cmd = exec.CommandContext(ctx, "apt-get", args...)
+	} else {
+		cmd = exec.CommandContext(ctx, "sudo", append([]string{"-E", "apt-get"}, args...)...)
+	}
+	cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+	return cmd.CombinedOutput()
+}
+
+func downloadFile(url, dest string) error {
+	client := &http.Client{Timeout: 3 * time.Minute}
+	res, err := client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s: %s", url, res.Status)
+	}
+	f, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	n, err := io.Copy(f, res.Body)
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	if n < 20<<20 {
+		return fmt.Errorf("chrome package is only %d bytes", n)
+	}
+	return nil
 }
 
 type gradeBox struct {
