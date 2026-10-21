@@ -2,6 +2,8 @@ package web
 
 import (
 	"context"
+	cryptorand "crypto/rand"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/rand/v2"
@@ -46,6 +48,10 @@ type server struct {
 
 	mu     sync.Mutex
 	queues map[string]*studyQueue
+	// fixedReviewSeed keeps the service seed for every sitting. Tests that
+	// inject a Service set it so the queue stays deterministic. Production
+	// draws a seed once per sitting.
+	fixedReviewSeed bool
 }
 
 // studyQueue is one auth session's review, including the counts the card view shows.
@@ -62,6 +68,10 @@ type studyQueue struct {
 	done     bool
 	revealed bool
 	builtAt  time.Time
+	// seed is the mix seed for this sitting. It is drawn once, when the queue
+	// is built, and kept until the queue is Done or the UTC day changes, so a
+	// reload serves the same order.
+	seed int64
 	// asked is the pair letter the reveal posted. The back and the grade
 	// keep it, so a study-day rollover cannot switch the letter.
 	asked string
@@ -77,6 +87,9 @@ func newServer(store *db.Store) *server {
 		queues: map[string]*studyQueue{},
 	}
 	if store != nil {
+		// 1 is the band-slip tie-break (BuildSessionFor) and the seed an
+		// injected service replaces. GET /review does not use it: queueLocked
+		// draws a seed for the sitting and passes that to BuildSessionWithSeed.
 		s.study = session.New(store, store.Clock(), 1)
 		s.useActivityKey(nil)
 	}
@@ -317,7 +330,11 @@ func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*st
 		s.rememberLocked(key, q, now)
 		return q, nil
 	}
-	built, err := s.study.BuildSession(ctx, userID)
+	seed, err := s.reviewSeedLocked()
+	if err != nil {
+		return nil, err
+	}
+	built, err := s.study.BuildSessionWithSeed(ctx, userID, seed)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +343,7 @@ func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*st
 	if built.UserID() != userID {
 		return nil, fmt.Errorf("web: session belongs to learner %d, not %d", built.UserID(), userID)
 	}
-	q := &studyQueue{userID: userID, sess: built, builtAt: now}
+	q := &studyQueue{userID: userID, sess: built, builtAt: now, seed: seed}
 	if err := s.advance(ctx, q); err != nil {
 		return nil, err
 	}
@@ -379,6 +396,28 @@ func (s *server) dropOldestLocked() {
 	if oldestKey != "" {
 		delete(s.queues, oldestKey)
 	}
+}
+
+// reviewSeedLocked is the mix seed for a new sitting. The caller holds s.mu.
+// A fixed seed is the one the service was built with, so tests that inject
+// a Service keep a deterministic queue. Otherwise the seed is drawn once
+// and stored on the queue.
+func (s *server) reviewSeedLocked() (int64, error) {
+	if s.fixedReviewSeed && s.study != nil {
+		return s.study.Seed(), nil
+	}
+	return drawReviewSeed()
+}
+
+// drawReviewSeed reads 8 bytes from crypto/rand. The value is the sitting
+// seed. Zero is a valid seed. The queue stores it, so later requests in
+// the sitting do not draw again.
+func drawReviewSeed() (int64, error) {
+	var buf [8]byte
+	if _, err := cryptorand.Read(buf[:]); err != nil {
+		return 0, fmt.Errorf("web: review seed: %w", err)
+	}
+	return int64(binary.LittleEndian.Uint64(buf[:])), nil
 }
 
 func (s *server) now() time.Time {

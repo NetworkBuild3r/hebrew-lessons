@@ -367,7 +367,7 @@ func TestReviewGrade(t *testing.T) {
 		t.Fatalf("second grade wrote another log, count %d", n)
 	}
 
-	// Again puts the served card back once.
+	// One lexeme ends the session. The grade is stored and the card is not served again.
 	againStore, againH, againNow := openApp(t)
 	one := addLearner(t, againStore, "a@example.com", "sub-a", againNow)
 	lex := addLexeme(t, againStore, "שָׁלוֹם", "hello", "shalom", "m", "")
@@ -377,8 +377,8 @@ func TestReviewGrade(t *testing.T) {
 	if retry.Code != http.StatusOK {
 		t.Fatalf("again = %d\n%s", retry.Code, retry.Body.String())
 	}
-	if !strings.Contains(retry.Body.String(), `data-card="`+fmt.Sprint(card)+`"`) || !strings.Contains(retry.Body.String(), `data-retry="true"`) || !strings.Contains(retry.Body.String(), `data-correct="0"`) || !strings.Contains(retry.Body.String(), `data-answered="1"`) {
-		t.Fatalf("requeue: %s", retry.Body.String())
+	if !strings.Contains(retry.Body.String(), `data-done="true"`) || strings.Contains(retry.Body.String(), `data-retry="true"`) {
+		t.Fatalf("one lexeme should end, not come back: %s", retry.Body.String())
 	}
 	againLogs := mustLogs(t, againStore, card)
 	if len(againLogs) != 2 || againLogs[1].Rating != int(fsrs.Again) {
