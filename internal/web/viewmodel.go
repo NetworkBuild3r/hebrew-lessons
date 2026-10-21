@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
 // LearnerVM is the signed-in learner shown on Today.
@@ -48,7 +49,7 @@ type CardBackVM struct {
 }
 
 // ReviewCardVM is one visit in the study session.
-// Kind is read, recall, letter, or pattern.
+// Kind is read, recall, listen, spell, letter, or pattern.
 // Pointed is the pointed Hebrew. Unpointed is the same word with niqqud removed.
 // ShowUnpointed follows fsrs.ShowUnpointed: read only, stability at least 21
 // days, and no Again in the last three ratings. Translit is on the prompt,
@@ -73,4 +74,20 @@ type ReviewCardVM struct {
 	// it has been checked. Both are nil for a flashcard and a drill.
 	Item   *activity.Item
 	Answer *answerState
+	// Sides and Example* are the letter or pattern answer. reviewView copies them
+	// onto the page only after the reveal.
+	Sides           []views.DrillSide
+	ExampleText     string
+	ExampleTranslit string
+	ExampleGloss    string
+	// Asked is the one letter a pair card shows. TellApart and DageshNote are
+	// empty when the stored data has no cue and no sounds. LooksLike is the
+	// first cue of a single letter. PairNote sits under a pair cue. DageshHard
+	// is the word-initial line for a single ב, כ, or פ, and for a dagesh pair.
+	Asked      string
+	LooksLike  string
+	TellApart  string
+	PairNote   string
+	DageshNote string
+	DageshHard string
 }
