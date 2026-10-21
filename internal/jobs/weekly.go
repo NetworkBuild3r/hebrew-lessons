@@ -21,8 +21,9 @@ import (
 
 const (
 	// WeeklyDay, WeeklyHour, and WeeklyMinute are when the scheduler writes the report of the
-	// week that just ended: Monday 04:00 in the server time zone. The daily job has written
-	// Sunday's snapshot at 03:30, half an hour before.
+	// week that just ended: Monday 04:00 in the server time zone. That wake runs the daily
+	// catch-up first, so Sunday's snapshot exists before the report reads it. The daily
+	// wake itself is 04:30, after the 04:00 study-day rollover.
 	WeeklyDay    = time.Monday
 	WeeklyHour   = 4
 	WeeklyMinute = 0

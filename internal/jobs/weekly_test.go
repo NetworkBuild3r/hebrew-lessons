@@ -624,8 +624,9 @@ func TestWeeklySummaryIsThreePlainSentences(t *testing.T) {
 	}
 }
 
-// Through the scheduler: it writes the report at Monday 04:00 and not at 03:30, after the daily
-// snapshot of Sunday. The log says counts and never a learner's words.
+// Through the scheduler: Monday's first wake is 04:00, earlier than the 04:30 daily
+// wake. That wake writes Sunday's snapshot and then the report. Monday 03:30 does
+// not open the new week. The log says counts and never a learner's words.
 func TestSchedulerWritesTheWeeklyReportMondayAtFour(t *testing.T) {
 	e := newEnv(t)
 	var logs bytes.Buffer
@@ -648,35 +649,39 @@ func TestSchedulerWritesTheWeeklyReportMondayAtFour(t *testing.T) {
 	if _, ok := e.report(e.user, "2026-10-19"); ok {
 		t.Fatal("the week that has not ended was written")
 	}
-	if first.d != 20*time.Hour+30*time.Minute {
-		t.Fatalf("first wait = %v, want 20h30m to Monday 03:30", first.d)
+	if first.d != 21*time.Hour {
+		t.Fatalf("first wait = %v, want 21h to Monday 04:00", first.d)
 	}
 
-	e.clk.advance(first.d) // Monday 03:30.
+	// Monday 03:30 is before the weekly boundary, so the week that ended Sunday stays closed.
+	e.clk.set(time.Date(2026, 10, 26, 3, 30, 0, 0, e.loc))
+	if got := NewWeekly(daily).DueWeek(); got != week1 {
+		t.Fatalf("DueWeek at Monday 03:30 = %s, want %s", got, week1)
+	}
+	e.clk.set(time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC))
+
+	e.clk.advance(first.d) // Monday 04:00. Daily catch-up runs first, then the report.
 	first.fire <- e.clk.Now()
 	second := nextReq(t, reqs)
-	if _, ok := e.report(e.user, "2026-10-19"); ok {
-		t.Fatal("the report was written at 03:30, before 04:00")
-	}
 	if got := e.snapshotDays(e.user); got[len(got)-1] != "2026-10-25" {
-		t.Fatalf("Sunday's snapshot is missing at 03:30: %v", got)
+		t.Fatalf("Sunday's snapshot is missing at Monday 04:00: %v", got)
 	}
-	if second.d != 30*time.Minute {
-		t.Fatalf("second wait = %v, want 30m to Monday 04:00", second.d)
-	}
-
-	e.clk.advance(second.d) // Monday 04:00.
-	second.fire <- e.clk.Now()
-	third := nextReq(t, reqs)
 	r, ok := e.report(e.user, "2026-10-19")
 	if !ok {
-		t.Fatal("the report was not written at 04:00")
+		t.Fatal("the report was not written at Monday 04:00")
 	}
 	if len(r.Payload.Lost) != 1 || r.Payload.Lost[0].Cause != "spelling" {
 		t.Fatalf("lost = %+v", r.Payload.Lost)
 	}
-	if third.d != 23*time.Hour+30*time.Minute {
-		t.Errorf("third wait = %v, want 23h30m to Tuesday 03:30", third.d)
+	if second.d != 30*time.Minute {
+		t.Fatalf("second wait = %v, want 30m to Monday 04:30", second.d)
+	}
+
+	e.clk.advance(second.d) // Monday 04:30.
+	second.fire <- e.clk.Now()
+	third := nextReq(t, reqs)
+	if third.d != 24*time.Hour {
+		t.Errorf("third wait = %v, want 24h to Tuesday 04:30", third.d)
 	}
 	stopScheduler(t, stop)
 

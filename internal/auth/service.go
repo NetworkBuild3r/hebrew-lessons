@@ -235,6 +235,7 @@ type User struct {
 	GoogleSub string
 	Role      string
 	CreatedAt time.Time
+	TZ        string // IANA zone loaded with the user row. Empty only before a lookup.
 }
 
 // Session is a browser session. IDHash is what the database stores.
@@ -252,6 +253,7 @@ func mapUser(u db.User) User {
 		GoogleSub: u.GoogleSub,
 		Role:      u.Role,
 		CreatedAt: u.CreatedAt,
+		TZ:        u.TZ,
 	}
 }
 

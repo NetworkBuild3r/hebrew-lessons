@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
@@ -143,9 +144,16 @@ func (s *Session) UserID() int64 {
 
 // BuildSession queues at most SessionCap cards for userID.
 // now is read once and passed to every load, including the learner model.
-// The caller checks that userID is the signed-in learner.
+// Cards are due at that same instant. The caller checks that userID is the signed-in learner.
 func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, error) {
-	return s.build(ctx, userID, nil)
+	return s.build(ctx, userID, nil, time.Time{})
+}
+
+// BuildSessionAt is BuildSession with due as the cutoff for which cards are due.
+// Loads, including the learner model and the lapse window, still read the clock once.
+// A zero due uses that clock instant.
+func (s *Service) BuildSessionAt(ctx context.Context, userID int64, due time.Time) (*Session, error) {
+	return s.build(ctx, userID, nil, due)
 }
 
 // BuildSessionFor is BuildSession for a review set: only the cards of the given words are
@@ -154,19 +162,31 @@ func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, err
 // leaves nothing to queue, and an empty set builds an empty session. This is what the
 // band-slip alert on Today links to (INIT-015/SPEC-017).
 func (s *Service) BuildSessionFor(ctx context.Context, userID int64, lexemeIDs []int64) (*Session, error) {
+	return s.BuildSessionForAt(ctx, userID, lexemeIDs, time.Time{})
+}
+
+// BuildSessionForAt is BuildSessionFor with due as the cutoff for which cards are due.
+func (s *Service) BuildSessionForAt(ctx context.Context, userID int64, lexemeIDs []int64, due time.Time) (*Session, error) {
 	only := make(map[int64]struct{}, len(lexemeIDs))
 	for _, id := range lexemeIDs {
 		only[id] = struct{}{}
 	}
-	return s.build(ctx, userID, only)
+	return s.build(ctx, userID, only, due)
 }
 
 // build is BuildSession. only, when not nil, keeps the cards of those words and no drill.
-func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct{}) (*Session, error) {
+// due is the review-state cutoff passed to the mix. The zero time uses the
+// clock instant already read. New, learning, and relearning cards are
+// decided against that clock. Learn-ahead uses sessionlimits.LearnAheadCap.
+func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct{}, due time.Time) (*Session, error) {
 	if err := s.ready(); err != nil {
 		return nil, err
 	}
 	now := s.clock.Now()
+	reviewLimit := due
+	if reviewLimit.IsZero() {
+		reviewLimit = now
+	}
 	cards, err := s.store.ListStudyCards(ctx, userID, now, now.Add(-ConfusionWindow))
 	if err != nil {
 		return nil, err
@@ -220,6 +240,7 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 			LexemeID:      card.LexemeID,
 			Skill:         card.Skill,
 			Due:           card.Due,
+			State:         card.State,
 			Lapses:        card.Lapses,
 			Latest:        card.LatestRating,
 			HasRating:     card.HasRating,
@@ -240,7 +261,7 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 	record := s.record
 	return &Session{
 		userID: userID,
-		cards:  mixGate(cands, accuracyOf(ratings), now, s.seed, gate),
+		cards:  mixGate(cands, accuracyOf(ratings), now, reviewLimit, s.seed, gate),
 		grade: func(ctx context.Context, cardID int64, rating fsrs.Rating, _ bool) error {
 			if rating < fsrs.Again || rating > fsrs.Easy {
 				return fmt.Errorf("session: rating %d is outside 1..4", rating)

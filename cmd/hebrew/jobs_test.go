@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 type jobsClock struct{ t time.Time }
@@ -17,8 +18,8 @@ func (c jobsClock) Now() time.Time { return c.t }
 
 func TestJobsLocation(t *testing.T) {
 	loc, err := jobsLocation("")
-	if err != nil || loc.String() != "America/Chicago" {
-		t.Fatalf("default = %v, %v", loc, err)
+	if err != nil || loc.String() != studyday.DefaultZone {
+		t.Fatalf("default = %v, %v, want %s", loc, err, studyday.DefaultZone)
 	}
 	loc, err = jobsLocation(" Europe/Paris ")
 	if err != nil || loc.String() != "Europe/Paris" {

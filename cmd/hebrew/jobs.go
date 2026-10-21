@@ -18,20 +18,17 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/jobs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
-
-// defaultTimeZone is the server time zone when TZ is unset. The day boundary matches the
-// learner's evening study (INIT-015/SPEC-014 aud-1).
-const defaultTimeZone = "America/Chicago"
 
 const jobsUsage = "usage: hebrew jobs daily [--day YYYY-MM-DD] | hebrew jobs weekly [--week YYYY-MM-DD]"
 
 // jobsLocation reads the server time zone from the TZ value. An empty value is
-// America/Chicago.
+// studyday.DefaultZone, the same zone a learner gets.
 func jobsLocation(tz string) (*time.Location, error) {
 	tz = strings.TrimSpace(tz)
 	if tz == "" {
-		tz = defaultTimeZone
+		tz = studyday.DefaultZone
 	}
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
@@ -54,7 +51,7 @@ func jobsEnabled(raw string) (bool, error) {
 }
 
 // startJobs starts the scheduler for the server unless HEBREW_JOBS is off. It runs the daily
-// snapshot at 03:30 and the weekly report on Monday at 04:00. The returned stop function
+// snapshot at 04:30 and the weekly report on Monday at 04:00. The returned stop function
 // cancels it and waits at most 5 seconds. It is safe to call when the scheduler is off.
 func startJobs(cfg app.Config, application *app.App) (stop func(), err error) {
 	on, err := jobsEnabled(os.Getenv("HEBREW_JOBS"))
@@ -71,7 +68,7 @@ func startJobs(cfg app.Config, application *app.App) (stop func(), err error) {
 	}
 	daily := jobs.NewDaily(application.Store(), cfg.Clock, loc)
 	sched := jobs.NewScheduler(daily, jobs.WithWeekly(jobs.NewWeekly(daily)))
-	slog.Info("jobs scheduled", "daily_at", "03:30", "weekly_at", "Monday 04:00", "zone", loc.String())
+	slog.Info("jobs scheduled", "daily_at", "04:30", "weekly_at", "Monday 04:00", "zone", loc.String())
 	halt := sched.Start(context.Background())
 	return func() {
 		if err := halt(); err != nil {

@@ -12,6 +12,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
@@ -102,12 +103,13 @@ func (s *server) answer(w http.ResponseWriter, r *http.Request) {
 	}
 	token := r.PostForm.Get("token")
 	lang := reviewLang(r)
+	loc := studyday.Load(user.TZ)
 
 	s.mu.Lock()
 	q := s.queues[key]
 	if q == nil || q.userID != user.ID || q.sess == nil || q.sess.UserID() != user.ID || q.done || !q.has ||
 		q.cur.CardID != cardID || q.item == nil || q.fb != nil || token == "" || token != q.item.Token ||
-		!sameStudyDay(q.builtAt, s.now()) {
+		!sameStudyDay(q.builtAt, s.now(), loc) {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -180,10 +182,11 @@ func (s *server) next(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lang := reviewLang(r)
+	loc := studyday.Load(user.TZ)
 	s.mu.Lock()
 	q := s.queues[key]
 	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID ||
-		q.item == nil || q.fb == nil || !sameStudyDay(q.builtAt, s.now()) {
+		q.item == nil || q.fb == nil || !sameStudyDay(q.builtAt, s.now(), loc) {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return

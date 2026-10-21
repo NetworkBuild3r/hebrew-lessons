@@ -19,6 +19,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 	"github.com/a-h/templ"
 )
@@ -360,7 +361,7 @@ func (s *server) currentReview(r *http.Request, lang, csrf string) (views.Review
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	q, err := s.queueLocked(r.Context(), key, user.ID)
+	q, err := s.queueLocked(r.Context(), key, user.ID, studyday.Load(user.TZ))
 	if err != nil {
 		return views.ReviewCard{}, err
 	}
@@ -389,7 +390,7 @@ func (s *server) reveal(w http.ResponseWriter, r *http.Request) {
 	}
 	lang := reviewLang(r)
 	s.mu.Lock()
-	q, err := s.queueLocked(r.Context(), key, user.ID)
+	q, err := s.queueLocked(r.Context(), key, user.ID, studyday.Load(user.TZ))
 	if err != nil {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -441,8 +442,28 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 	}
 	lang := reviewLang(r)
 	s.mu.Lock()
+	loc := studyday.Load(user.TZ)
 	q := s.queues[key]
-	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID || q.item != nil || !sameStudyDay(q.builtAt, s.now()) {
+	// A grade from the previous study day does not write a review. The queue
+	// is rebuilt and the learner sees the new card, the same way a fresh visit
+	// to /review would.
+	if q != nil && q.userID == user.ID && q.sess != nil && !q.done && q.has && q.cur.CardID == cardID && q.item == nil && !sameStudyDay(q.builtAt, s.now(), loc) {
+		rebuilt, err := s.queueLocked(r.Context(), key, user.ID, loc)
+		if err != nil {
+			s.mu.Unlock()
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		vm, err := s.cardVM(r.Context(), rebuilt)
+		s.mu.Unlock()
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		s.finishReview(w, r, lang, vm)
+		return
+	}
+	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID || q.item != nil || !sameStudyDay(q.builtAt, s.now(), loc) {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return

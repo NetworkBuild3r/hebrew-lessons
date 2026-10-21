@@ -148,6 +148,7 @@ func (r *Review) GradeWithChoice(ctx context.Context, cardID int64, rating Ratin
 	if err != nil {
 		return err
 	}
+	// Elapsed time is this answer clock minus the card's last review.
 	now := r.clock.Now()
 	info := r.sched.Next(prev, now, gofsrs.Rating(rating))
 	state, err := stateName(info.Card.State)

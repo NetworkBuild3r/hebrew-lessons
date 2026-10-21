@@ -26,6 +26,8 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
@@ -499,8 +501,70 @@ func TestReviewDoneSessionRebuilds(t *testing.T) {
 	}
 }
 
-func TestReviewStaleSessionRebuilds(t *testing.T) {
-	start := time.Date(2026, 10, 18, 23, 0, 0, 0, time.UTC)
+func TestStudyQueueRollsOverAt4AM(t *testing.T) {
+	loc := mustDenver(t)
+	start := time.Date(2026, 10, 18, 23, 0, 0, 0, loc)
+	reuse := time.Date(2026, 10, 19, 3, 30, 0, 0, loc)
+	rebuild := time.Date(2026, 10, 19, 4, 1, 0, 0, loc)
+	store, h, clk := openStepped(t, start)
+	learner := addLearner(t, store, "a@example.com", "sub-a", start)
+	if _, err := store.ExecContext(context.Background(), `UPDATE sessions SET expires_at = ? WHERE user_id = ?`, db.FormatTime(start.Add(7*24*time.Hour)), learner.user.ID); err != nil {
+		t.Fatal(err)
+	}
+	reviewed := start.Add(-48 * time.Hour)
+	firstLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	first := addCard(t, store, learner.user.ID, firstLex, fsrs.SkillRead, start.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	page := getLearner(t, h, learner, "/review")
+	if attr(t, page, "data-card") != fmt.Sprint(first) {
+		t.Fatalf("first serve = %s", cardAttrs(page))
+	}
+	if shown := postReveal(t, h, learner, first, "https://learn.example"); shown.Code != http.StatusOK {
+		t.Fatalf("reveal = %d", shown.Code)
+	}
+
+	clk.Advance(reuse.Sub(start))
+	if err := store.SetCardSuspended(context.Background(), first, true); err != nil {
+		t.Fatal(err)
+	}
+	secondLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
+	second := addCard(t, store, learner.user.ID, secondLex, fsrs.SkillRead, reuse.Add(-time.Minute), 1, int(fsrs.Good), reviewed)
+	kept := getLearner(t, h, learner, "/review")
+	if attr(t, kept, "data-card") != fmt.Sprint(first) || !strings.Contains(kept, "שָׁלוֹם") {
+		t.Fatalf("03:30 local rebuilt the 23:00 queue: %s", cardAttrs(kept))
+	}
+
+	clk.Advance(rebuild.Sub(reuse))
+	stale := postGradeRawHX(t, h, learner.cookie, learner.csrf, first, "3", "https://learn.example", false)
+	if stale.Code != http.StatusSeeOther {
+		t.Fatalf("grade on a previous study day = %d, want 303", stale.Code)
+	}
+	if loc := stale.Header().Get("Location"); loc != "/review" {
+		t.Fatalf("Location = %q, want /review", loc)
+	}
+	if n := len(mustLogs(t, store, first)); n != 1 {
+		t.Fatalf("stale grade wrote a log, count %d", n)
+	}
+	rebuilt := getLearner(t, h, learner, "/review")
+	if attr(t, rebuilt, "data-card") != fmt.Sprint(second) || strings.Contains(rebuilt, "שָׁלוֹם") || !strings.Contains(rebuilt, "מַיִם") {
+		t.Fatalf("04:01 local did not rebuild: %s", cardAttrs(rebuilt))
+	}
+}
+
+func TestStudyQueueIgnoresUTCMidnight(t *testing.T) {
+	loc := mustDenver(t)
+	start := time.Date(2026, 10, 18, 17, 0, 0, 0, loc)
+	later := time.Date(2026, 10, 18, 19, 0, 0, 0, loc)
+	midnight := time.Date(2026, 10, 18, 18, 0, 0, 0, loc)
+	if !midnight.After(start) || !midnight.Before(later) {
+		t.Fatal("Denver 18:00 does not fall between the build and the check")
+	}
+	if !midnight.Equal(time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("Denver 18:00 = %s, want UTC midnight", midnight.UTC())
+	}
+	if studyday.Key(start, loc) != studyday.Key(later, loc) {
+		t.Fatal("17:00 and 19:00 Denver are not the same study day")
+	}
+
 	store, h, clk := openStepped(t, start)
 	learner := addLearner(t, store, "a@example.com", "sub-a", start)
 	if _, err := store.ExecContext(context.Background(), `UPDATE sessions SET expires_at = ? WHERE user_id = ?`, db.FormatTime(start.Add(7*24*time.Hour)), learner.user.ID); err != nil {
@@ -514,22 +578,374 @@ func TestReviewStaleSessionRebuilds(t *testing.T) {
 		t.Fatalf("first serve = %s", cardAttrs(page))
 	}
 
-	clk.Advance(2 * time.Hour)
-	stale := postGrade(t, h, learner, first, "3", "https://learn.example")
-	if stale.Code != http.StatusBadRequest {
-		t.Fatalf("grade on a stale queue = %d", stale.Code)
-	}
-	if n := len(mustLogs(t, store, first)); n != 1 {
-		t.Fatalf("stale grade wrote a log, count %d", n)
-	}
+	clk.Advance(later.Sub(start))
 	if err := store.SetCardSuspended(context.Background(), first, true); err != nil {
 		t.Fatal(err)
 	}
 	secondLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
-	second := addCard(t, store, learner.user.ID, secondLex, fsrs.SkillRead, clk.Now().Add(-time.Minute), 1, int(fsrs.Good), reviewed)
-	rebuilt := getLearner(t, h, learner, "/review")
-	if attr(t, rebuilt, "data-card") != fmt.Sprint(second) || strings.Contains(rebuilt, "שָׁלוֹם") || !strings.Contains(rebuilt, "מַיִם") {
-		t.Fatalf("stale rebuild: %s", cardAttrs(rebuilt))
+	addCard(t, store, learner.user.ID, secondLex, fsrs.SkillRead, later.Add(-time.Minute), 1, int(fsrs.Good), reviewed)
+	kept := getLearner(t, h, learner, "/review")
+	if attr(t, kept, "data-card") != fmt.Sprint(first) || !strings.Contains(kept, "שָׁלוֹם") || strings.Contains(kept, "מַיִם") {
+		t.Fatalf("UTC midnight rebuilt the queue: %s", cardAttrs(kept))
+	}
+}
+
+// TestTodayCountMatchesReviewQueue is 22:00 local. A card due at 02:00 tomorrow
+// is still this study day. A card due at 05:00 tomorrow is the next one.
+// Today’s count and the review queue are that one card.
+func TestTodayCountMatchesReviewQueue(t *testing.T) {
+	loc := mustDenver(t)
+	now := time.Date(2026, 10, 18, 22, 0, 0, 0, loc)
+	early := time.Date(2026, 10, 19, 2, 0, 0, 0, loc)
+	late := time.Date(2026, 10, 19, 5, 0, 0, 0, loc)
+	if !early.Before(studyday.DueCutoff(now, loc)) || !late.After(studyday.DueCutoff(now, loc)) {
+		t.Fatalf("cutoff %s early %s late %s", studyday.DueCutoff(now, loc), early, late)
+	}
+	store, h, _ := openStepped(t, now)
+	learner := addLearner(t, store, "a@example.com", "sub-a", now)
+	soonLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	soon := addCard(t, store, learner.user.ID, soonLex, fsrs.SkillRead, early, 1, 0, time.Time{})
+	laterLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
+	addCard(t, store, learner.user.ID, laterLex, fsrs.SkillRead, late, 1, 0, time.Time{})
+
+	home := getLearner(t, h, learner, "/")
+	if !strings.Contains(home, `data-due="1"`) {
+		t.Fatalf("home due count: %s", articleAttrs(home))
+	}
+	page := getLearner(t, h, learner, "/review")
+	if attr(t, page, "data-card") != fmt.Sprint(soon) || attr(t, page, "data-total") != "1" || strings.Contains(page, "מַיִם") || !strings.Contains(page, "שָׁלוֹם") {
+		t.Fatalf("review served %s", cardAttrs(page))
+	}
+}
+
+// TestTodayAndReviewIncludeTheCardDueAtTheCutoff is the inclusive day cutoff.
+// A review card due at the next 04:00 is in Today and in Review. A card due
+// one nanosecond later is in neither.
+func TestTodayAndReviewIncludeTheCardDueAtTheCutoff(t *testing.T) {
+	loc := mustDenver(t)
+	now := time.Date(2026, 10, 18, 22, 0, 0, 0, loc)
+	cutoff := studyday.DueCutoff(now, loc)
+	store, h, _ := openStepped(t, now)
+	learner := addLearner(t, store, "a@example.com", "sub-a", now)
+	onLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	offLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
+	on := addCard(t, store, learner.user.ID, onLex, fsrs.SkillRead, cutoff, 1, 0, time.Time{})
+	addCard(t, store, learner.user.ID, offLex, fsrs.SkillRead, cutoff.Add(time.Nanosecond), 1, 0, time.Time{})
+
+	home := getLearner(t, h, learner, "/")
+	page := getLearner(t, h, learner, "/review")
+	due := attr(t, articleAttrs(home), "data-due")
+	if due != "1" || attr(t, page, "data-total") != "1" || attr(t, page, "data-card") != fmt.Sprint(on) || strings.Contains(page, "מַיִם") {
+		t.Fatalf("cutoff %s: today %q review %s", cutoff, due, cardAttrs(page))
+	}
+}
+
+// TestReviewUsesTheLearnerZoneNotDenver is 04:30 in Jerusalem, which is still
+// the previous evening in Denver. The card is due for Jerusalem's cutoff and
+// not for Denver's.
+func TestReviewUsesTheLearnerZoneNotDenver(t *testing.T) {
+	jerusalem, err := time.LoadLocation("Asia/Jerusalem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	denver := mustDenver(t)
+	now := time.Date(2026, 1, 15, 4, 30, 0, 0, jerusalem)
+	due := time.Date(2026, 1, 15, 18, 0, 0, 0, time.UTC)
+	if !due.After(studyday.DueCutoff(now, denver)) || due.After(studyday.DueCutoff(now, jerusalem)) {
+		t.Fatalf("denver cutoff %s jerusalem cutoff %s due %s", studyday.DueCutoff(now, denver), studyday.DueCutoff(now, jerusalem), due)
+	}
+	store, h, _ := openStepped(t, now)
+	learner := addLearner(t, store, "a@example.com", "sub-a", now)
+	if err := store.SetLearnerTZ(context.Background(), learner.user.ID, "Asia/Jerusalem"); err != nil {
+		t.Fatal(err)
+	}
+	lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	card := addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, due, 1, 0, time.Time{})
+
+	home := getLearner(t, h, learner, "/")
+	page := getLearner(t, h, learner, "/review")
+	if attr(t, articleAttrs(home), "data-due") != "1" || attr(t, page, "data-total") != "1" || attr(t, page, "data-card") != fmt.Sprint(card) {
+		t.Fatalf("today %s review %s", articleAttrs(home), cardAttrs(page))
+	}
+}
+
+func TestLearnerHomeRejectsAMissingStore(t *testing.T) {
+	s := newServer(nil)
+	if _, _, err := s.learnerHome(context.Background(), 1, "learner", "Asia/Jerusalem"); err == nil || !strings.Contains(err.Error(), "store clock is not configured") {
+		t.Fatalf("nil store: %v", err)
+	}
+	var none *server
+	if _, _, err := none.learnerHome(context.Background(), 1, "learner", ""); err == nil || !strings.Contains(err.Error(), "store clock is not configured") {
+		t.Fatalf("nil server: %v", err)
+	}
+}
+
+func TestSameStudyDay(t *testing.T) {
+	denver := mustDenver(t)
+	night := time.Date(2026, 10, 18, 23, 30, 0, 0, denver)
+	before := time.Date(2026, 10, 19, 3, 59, 0, 0, denver)
+	at := time.Date(2026, 10, 19, 4, 0, 0, 0, denver)
+	if sameStudyDay(time.Time{}, night, denver) {
+		t.Fatal("a zero built time counted as this study day")
+	}
+	if !sameStudyDay(night, before, denver) || !sameStudyDay(night, before, nil) {
+		t.Fatal("23:30 and 03:59 are not the same study day")
+	}
+	if sameStudyDay(night, at, denver) {
+		t.Fatal("04:00 stayed on the previous study day")
+	}
+}
+
+// TestTodayCountMatchesReviewAcrossRollover pins Today’s due count to the
+// number of cards Review serves at 23:30, 03:59, and 04:01 local.
+// Three review-state cards with no rating yet, due 20:00, 02:00, and 12:00.
+// The mix files an unrated card as new. The state is review, so the 4:00
+// cutoff applies. The counts are 2, 2, and 3. A cutoff of due-now would be
+// 1, 2, and 2.
+func TestTodayCountMatchesReviewAcrossRollover(t *testing.T) {
+	loc := mustDenver(t)
+	night := time.Date(2026, 10, 18, 23, 30, 0, 0, loc)
+	before := time.Date(2026, 10, 19, 3, 59, 0, 0, loc)
+	after := time.Date(2026, 10, 19, 4, 1, 0, 0, loc)
+	if !studyday.DueCutoff(night, loc).Equal(studyday.DueCutoff(before, loc)) || !studyday.DueCutoff(after, loc).After(studyday.DueCutoff(before, loc)) {
+		t.Fatal("the three clocks do not straddle one rollover")
+	}
+
+	store, h, clk := openStepped(t, night)
+	learner := addLearner(t, store, "a@example.com", "sub-a", night)
+	if _, err := store.ExecContext(context.Background(), `UPDATE sessions SET expires_at = ? WHERE user_id = ?`, db.FormatTime(night.Add(7*24*time.Hour)), learner.user.ID); err != nil {
+		t.Fatal(err)
+	}
+	overdueLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	earlyLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
+	laterLex := addLexeme(t, store, "בֹּקֶר", "morning", "boker", "m", "")
+	addCard(t, store, learner.user.ID, overdueLex, fsrs.SkillRead, time.Date(2026, 10, 18, 20, 0, 0, 0, loc), 1, 0, time.Time{})
+	addCard(t, store, learner.user.ID, earlyLex, fsrs.SkillRead, time.Date(2026, 10, 19, 2, 0, 0, 0, loc), 1, 0, time.Time{})
+	addCard(t, store, learner.user.ID, laterLex, fsrs.SkillRead, time.Date(2026, 10, 19, 12, 0, 0, 0, loc), 1, 0, time.Time{})
+
+	check := func(at time.Time, want string) {
+		t.Helper()
+		home := getLearner(t, h, learner, "/")
+		page := getLearner(t, h, learner, "/review")
+		due := attr(t, articleAttrs(home), "data-due")
+		served := attr(t, page, "data-total")
+		if due != want || served != want || due != served {
+			t.Fatalf("%s local: today %q review %q, want %s", at.Format("15:04"), due, served, want)
+		}
+	}
+	check(night, "2")
+	clk.Advance(before.Sub(night))
+	check(before, "2")
+	clk.Advance(after.Sub(before))
+	check(after, "3")
+}
+
+// TestAgainStepDueAt2205 is a learning or relearning card graded Again at
+// 22:00, so the step is due at 22:05. At 21:59 the prior step is what is due.
+// At 22:01 the 22:05 step waits while another card is due, and it is served
+// when the session would otherwise be empty. At 22:05 it is due beside that
+// other card. Today's count equals the review queue at each clock.
+func TestAgainStepDueAt2205(t *testing.T) {
+	if fsrs.StateLearning != "learning" || fsrs.StateRelearning != "relearning" {
+		t.Fatal("Decide compares the learning and relearning state strings")
+	}
+	loc := mustDenver(t)
+	priorAt := time.Date(2026, 10, 18, 21, 59, 0, 0, loc)
+	graded := time.Date(2026, 10, 18, 22, 0, 0, 0, loc)
+	at2201 := time.Date(2026, 10, 18, 22, 1, 0, 0, loc)
+	step := time.Date(2026, 10, 18, 22, 5, 0, 0, loc)
+	for _, state := range []string{fsrs.StateLearning, fsrs.StateRelearning} {
+		t.Run(state, func(t *testing.T) {
+			t.Run("21:59 prior step", func(t *testing.T) {
+				store, h, _ := openStepped(t, priorAt)
+				learner := addLearner(t, store, "a@example.com", "sub-a", priorAt)
+				lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+				id := addStateCard(t, store, learner.user.ID, lex, fsrs.SkillRead, state, priorAt, 1, int(fsrs.Again), priorAt.Add(-time.Minute))
+				page := assertDueCount(t, h, learner, "1")
+				if attr(t, page, "data-card") != fmt.Sprint(id) {
+					t.Fatalf("prior step served %s", cardAttrs(page))
+				}
+			})
+			t.Run("22:01 waits for another due card", func(t *testing.T) {
+				store, h, _ := openStepped(t, at2201)
+				learner := addLearner(t, store, "a@example.com", "sub-a", at2201)
+				stepLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+				otherLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
+				addStateCard(t, store, learner.user.ID, stepLex, fsrs.SkillRead, state, step, 1, int(fsrs.Again), graded)
+				other := addCard(t, store, learner.user.ID, otherLex, fsrs.SkillRead, at2201.Add(-time.Hour), 1, 0, time.Time{})
+				page := assertDueCount(t, h, learner, "1")
+				if attr(t, page, "data-card") != fmt.Sprint(other) || strings.Contains(page, "שָׁלוֹם") || !strings.Contains(page, "מַיִם") {
+					t.Fatalf("learn-ahead ran beside a due card: %s", cardAttrs(page))
+				}
+			})
+			t.Run("22:01 learn-ahead when nothing else is due", func(t *testing.T) {
+				store, h, _ := openStepped(t, at2201)
+				learner := addLearner(t, store, "a@example.com", "sub-a", at2201)
+				lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+				id := addStateCard(t, store, learner.user.ID, lex, fsrs.SkillRead, state, step, 1, int(fsrs.Again), graded)
+				page := assertDueCount(t, h, learner, "1")
+				if attr(t, page, "data-card") != fmt.Sprint(id) || !strings.Contains(page, "שָׁלוֹם") {
+					t.Fatalf("empty session did not learn ahead: %s", cardAttrs(page))
+				}
+			})
+			t.Run("22:05 is due beside another card", func(t *testing.T) {
+				store, h, _ := openStepped(t, step)
+				learner := addLearner(t, store, "a@example.com", "sub-a", step)
+				stepLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+				otherLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
+				addStateCard(t, store, learner.user.ID, stepLex, fsrs.SkillRead, state, step, 1, int(fsrs.Again), graded)
+				addCard(t, store, learner.user.ID, otherLex, fsrs.SkillRead, step.Add(-time.Hour), 1, 0, time.Time{})
+				assertDueCount(t, h, learner, "2")
+			})
+		})
+	}
+}
+
+// TestLearnAheadCapBoundary is 22:00 Denver. A learning card due one
+// nanosecond inside the cap, and one due exactly at the cap, are served
+// when nothing else is due. A card due one nanosecond outside the cap is
+// not, even though that instant is still before the 04:00 cutoff.
+func TestLearnAheadCapBoundary(t *testing.T) {
+	if sessionlimits.LearnAheadCap != 20*time.Minute {
+		t.Fatalf("LearnAheadCap = %s, want 20m", sessionlimits.LearnAheadCap)
+	}
+	loc := mustDenver(t)
+	now := time.Date(2026, 10, 18, 22, 0, 0, 0, loc)
+	cap := sessionlimits.LearnAheadCap
+	if !now.Add(cap + time.Nanosecond).Before(studyday.DueCutoff(now, loc)) {
+		t.Fatal("the cap boundary is not still inside this study day")
+	}
+	cases := []struct {
+		name  string
+		state string
+		due   time.Time
+		want  string
+	}{
+		{"learning just inside", fsrs.StateLearning, now.Add(cap - time.Nanosecond), "1"},
+		{"learning at the cap", fsrs.StateLearning, now.Add(cap), "1"},
+		{"learning just outside", fsrs.StateLearning, now.Add(cap + time.Nanosecond), "0"},
+		{"relearning just inside", fsrs.StateRelearning, now.Add(cap - time.Nanosecond), "1"},
+		{"relearning just outside", fsrs.StateRelearning, now.Add(cap + time.Nanosecond), "0"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store, h, _ := openStepped(t, now)
+			learner := addLearner(t, store, "a@example.com", "sub-a", now)
+			lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+			addStateCard(t, store, learner.user.ID, lex, fsrs.SkillRead, tc.state, tc.due, 1, int(fsrs.Again), now.Add(-time.Minute))
+			assertDueCount(t, h, learner, tc.want)
+		})
+	}
+}
+
+// TestNewCardsUseTheClock keeps new cards on due <= now. A review-state
+// card at the same later instant is still this study day.
+func TestNewCardsUseTheClock(t *testing.T) {
+	if fsrs.StateNew != "new" || fsrs.StateReview != "review" {
+		t.Fatal("Decide compares the new and review state strings")
+	}
+	loc := mustDenver(t)
+	now := time.Date(2026, 10, 18, 22, 0, 0, 0, loc)
+	later := time.Date(2026, 10, 18, 22, 30, 0, 0, loc)
+	tomorrow := time.Date(2026, 10, 19, 3, 0, 0, 0, loc)
+	after := time.Date(2026, 10, 19, 5, 0, 0, 0, loc)
+	if !later.After(now) || !later.Before(studyday.DueCutoff(now, loc)) || !tomorrow.Before(studyday.DueCutoff(now, loc)) || !after.After(studyday.DueCutoff(now, loc)) {
+		t.Fatal("the fixtures do not sit where the clock and the cutoff disagree")
+	}
+	cases := []struct {
+		name  string
+		state string
+		due   time.Time
+		want  string
+	}{
+		{"new at the clock", fsrs.StateNew, now, "1"},
+		{"new later tonight", fsrs.StateNew, later, "0"},
+		{"new at 03:00", fsrs.StateNew, tomorrow, "0"},
+		{"new after the cutoff", fsrs.StateNew, after, "0"},
+		{"review at 03:00", fsrs.StateReview, tomorrow, "1"},
+		{"review at 22:30", fsrs.StateReview, later, "1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store, h, _ := openStepped(t, now)
+			learner := addLearner(t, store, "a@example.com", "sub-a", now)
+			lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+			addStateCard(t, store, learner.user.ID, lex, fsrs.SkillRead, tc.state, tc.due, 1, 0, time.Time{})
+			assertDueCount(t, h, learner, tc.want)
+		})
+	}
+}
+
+// TestReviewCutoffBothSidesAroundFour is a review card due at 03:00, one
+// due at 05:00 the same morning, and one due at 05:00 the next day.
+// At 03:59 only 03:00 is inside tonight's cutoff. At 04:01 the new cutoff
+// includes 05:00 this morning and still excludes 05:00 tomorrow.
+func TestReviewCutoffBothSidesAroundFour(t *testing.T) {
+	loc := mustDenver(t)
+	before := time.Date(2026, 10, 19, 3, 59, 0, 0, loc)
+	after := time.Date(2026, 10, 19, 4, 1, 0, 0, loc)
+	early := time.Date(2026, 10, 19, 3, 0, 0, 0, loc)
+	sameMorning := time.Date(2026, 10, 19, 5, 0, 0, 0, loc)
+	nextEvening := time.Date(2026, 10, 20, 5, 0, 0, 0, loc)
+	cutBefore := studyday.DueCutoff(before, loc)
+	cutAfter := studyday.DueCutoff(after, loc)
+	if early.After(cutBefore) || !sameMorning.After(cutBefore) || sameMorning.After(cutAfter) || !nextEvening.After(cutAfter) {
+		t.Fatalf("cutoffs %s %s do not split the three dues", cutBefore, cutAfter)
+	}
+	store, h, clk := openStepped(t, before)
+	learner := addLearner(t, store, "a@example.com", "sub-a", before)
+	earlyLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	morningLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
+	nextLex := addLexeme(t, store, "בֹּקֶר", "morning", "boker", "m", "")
+	earlyID := addCard(t, store, learner.user.ID, earlyLex, fsrs.SkillRead, early, 1, 0, time.Time{})
+	addCard(t, store, learner.user.ID, morningLex, fsrs.SkillRead, sameMorning, 1, 0, time.Time{})
+	addCard(t, store, learner.user.ID, nextLex, fsrs.SkillRead, nextEvening, 1, 0, time.Time{})
+
+	page := assertDueCount(t, h, learner, "1")
+	if attr(t, page, "data-card") != fmt.Sprint(earlyID) || strings.Contains(page, "מַיִם") || strings.Contains(page, "בֹּקֶר") {
+		t.Fatalf("03:59 served %s", cardAttrs(page))
+	}
+	clk.Advance(after.Sub(before))
+	page = assertDueCount(t, h, learner, "2")
+	if strings.Contains(page, "בֹּקֶר") {
+		t.Fatalf("04:01 included the card past the new cutoff: %s", cardAttrs(page))
+	}
+}
+
+// TestLearningCardPastTheCutoffStaysDueInsideLearnAhead is 03:50 Denver.
+// 04:05 is after the study-day cutoff and inside learn-ahead, so a learning
+// card is served and a review card is not. Today's count matches Review.
+func TestLearningCardPastTheCutoffStaysDueInsideLearnAhead(t *testing.T) {
+	loc := mustDenver(t)
+	now := time.Date(2026, 10, 19, 3, 50, 0, 0, loc)
+	due := time.Date(2026, 10, 19, 4, 5, 0, 0, loc)
+	if !due.After(studyday.DueCutoff(now, loc)) || due.After(now.Add(sessionlimits.LearnAheadCap)) {
+		t.Fatalf("04:05 is not past the cutoff and inside learn-ahead")
+	}
+	cases := []struct {
+		name  string
+		state string
+		want  string
+	}{
+		{"learning past the cutoff", fsrs.StateLearning, "1"},
+		{"review past the cutoff", fsrs.StateReview, "0"},
+	}
+	for _, tc := range cases {
+		store, h, _ := openStepped(t, now)
+		learner := addLearner(t, store, "a@example.com", "sub-a", now)
+		lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+		rating, reviewed := 0, time.Time{}
+		if tc.state == fsrs.StateLearning {
+			rating, reviewed = int(fsrs.Again), now.Add(-time.Minute)
+		}
+		addStateCard(t, store, learner.user.ID, lex, fsrs.SkillRead, tc.state, due, 1, rating, reviewed)
+		home := getLearner(t, h, learner, "/")
+		page := getLearner(t, h, learner, "/review")
+		gotDue := attr(t, articleAttrs(home), "data-due")
+		served := attr(t, page, "data-total")
+		if gotDue != tc.want || served != tc.want {
+			t.Errorf("%s: today %q review %q, want %s", tc.name, gotDue, served, tc.want)
+		}
 	}
 }
 
@@ -555,12 +971,12 @@ func TestStudyQueueMapIsBounded(t *testing.T) {
 		t.Fatal("the oldest queue stayed")
 	}
 	if _, ok := s.queues["old"]; ok {
-		t.Fatal("a queue from another UTC day stayed")
+		t.Fatal("a queue from another study day stayed")
 	}
 	if _, ok := s.queues["nil"]; ok {
 		t.Fatal("a nil queue stayed")
 	}
-	q, err := s.queueLocked(context.Background(), "fresh", learner.user.ID)
+	q, err := s.queueLocked(context.Background(), "fresh", learner.user.ID, studyday.Load(""))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -661,6 +1077,15 @@ func (c *stepClock) Advance(d time.Duration) {
 	c.t = c.t.Add(d)
 }
 
+func mustDenver(t *testing.T) *time.Location {
+	t.Helper()
+	loc, err := time.LoadLocation("America/Denver")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return loc
+}
+
 func openApp(t *testing.T) (*db.Store, http.Handler, time.Time) {
 	t.Helper()
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
@@ -738,13 +1163,30 @@ func addLexeme(t *testing.T, store *db.Store, text, gloss, translit, gender, aud
 	return id
 }
 
+func assertDueCount(t *testing.T, h http.Handler, learner learnerFix, want string) string {
+	t.Helper()
+	home := getLearner(t, h, learner, "/")
+	page := getLearner(t, h, learner, "/review")
+	due := attr(t, articleAttrs(home), "data-due")
+	served := attr(t, page, "data-total")
+	if due != want || served != want {
+		t.Fatalf("today %q review %q, want %s\nhome %s\nreview %s", due, served, want, articleAttrs(home), cardAttrs(page))
+	}
+	return page
+}
+
 func addCard(t *testing.T, store *db.Store, userID, lexemeID int64, skill string, due time.Time, stability float64, rating int, reviewed time.Time) int64 {
+	t.Helper()
+	return addStateCard(t, store, userID, lexemeID, skill, fsrs.StateReview, due, stability, rating, reviewed)
+}
+
+func addStateCard(t *testing.T, store *db.Store, userID, lexemeID int64, skill, state string, due time.Time, stability float64, rating int, reviewed time.Time) int64 {
 	t.Helper()
 	id, err := store.InsertCard(context.Background(), db.Card{
 		UserID:     userID,
 		LexemeID:   lexemeID,
 		Skill:      skill,
-		State:      fsrs.StateReview,
+		State:      state,
 		Due:        due,
 		Stability:  stability,
 		Difficulty: 5,

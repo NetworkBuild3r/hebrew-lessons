@@ -53,7 +53,7 @@ func TestMigrate010OnA009DatabaseKeepsV2Placement(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate 011: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}) {
 		t.Fatalf("versions = %v, want 1..12", got)
 	}
 	if got := m6Dump(t, conn, `SELECT * FROM placement_runs ORDER BY id`); !reflect.DeepEqual(got, runs) {
@@ -82,6 +82,8 @@ func TestMigrate010OnA009DatabaseKeepsV2Placement(t *testing.T) {
 		delete(after.rowCnts, name)
 		after.schema = m8SchemaWithout(after.schema, name)
 	}
+	after = withoutLearnerTZ(after)
+	before = withoutLearnerTZ(before)
 	if !reflect.DeepEqual(after.tables, before.tables) {
 		t.Fatal("rows of an existing table changed")
 	}
@@ -110,7 +112,7 @@ func TestMigrate010OnAFreshDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}) {
 		t.Fatalf("versions = %v, want 1..12", got)
 	}
 	cols := m6Dump(t, conn, `SELECT name FROM pragma_table_info('placement_items') ORDER BY cid`)
@@ -124,7 +126,7 @@ func TestMigrate010OnAFreshDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("second migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); len(got) != 12 {
+	if got := m6Applied(t, conn); len(got) != 13 {
 		t.Fatalf("versions after a second migrate = %v", got)
 	}
 }

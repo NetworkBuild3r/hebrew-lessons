@@ -15,6 +15,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcpstore"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 // Tests for the Progress page (INIT-015/SPEC-018). The fixture has 90 days of snapshots whose
@@ -752,5 +753,69 @@ func TestProgressNamesTheLessonsFinished(t *testing.T) {
 	}
 	if !strings.Contains(get("/progress"), `class="progress__units-n" lang="en" dir="ltr">1/2</bdi>`) {
 		t.Error("the lessons finished are not on the page")
+	}
+}
+
+// TestProgressWindowIsTheStudyDayNotTheUTCDate seeds the study-day date and
+// the UTC date with different estimates. Both clocks are inside the study day
+// that started 2026-10-18 04:00 Denver. 02:30 Denver is 08:30Z, so the UTC
+// date and the Denver calendar date are both Oct 19. 19:00 Denver is 01:00Z
+// the next UTC day, while the Denver calendar date is still Oct 18. A window
+// that ends on the UTC date, or on local midnight, shows Oct 19's 999.
+func TestProgressWindowIsTheStudyDayNotTheUTCDate(t *testing.T) {
+	denver := mustDenver(t)
+	cases := []struct {
+		name string
+		now  time.Time
+	}{
+		{"02:30 Denver is 08:30Z", time.Date(2026, 10, 19, 2, 30, 0, 0, denver)},
+		{"19:00 Denver is 01:00Z the next day", time.Date(2026, 10, 18, 19, 0, 0, 0, denver)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if studyday.Key(tc.now, denver) != "2026-10-18" {
+				t.Fatalf("study day = %s, want 2026-10-18", studyday.Key(tc.now, denver))
+			}
+			store, h := openShell(t, fixedClock(tc.now), nil, nil)
+			l := addLearner(t, store, "a@example.com", "sub-a", tc.now)
+			insertProgressDay(t, store, l.user.ID, "2026-10-18", 111)
+			insertProgressDay(t, store, l.user.ID, "2026-10-19", 999)
+			body := getLearner(t, h, l, "/progress")
+			est := section(t, body, "c-card pchart", `data-chart="est"`)
+			rows := tableRows(est)
+			found := false
+			for _, row := range rows {
+				if len(row) >= 1 && row[0] == "Oct 19" {
+					t.Fatalf("the window includes the UTC day: %v", rows)
+				}
+				if len(row) >= 2 && row[0] == "Oct 18" && row[1] == "111" {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("study day Oct 18 is missing: %v", rows)
+			}
+			if strings.Contains(est, "999") {
+				t.Fatalf("the other day's estimate is on the page:\n%s", est)
+			}
+		})
+	}
+}
+
+func insertProgressDay(t *testing.T, store *db.Store, userID int64, day string, est float64) {
+	t.Helper()
+	ret := 0.5
+	var rows []db.DailySnapshotRow
+	for _, skill := range learner.Skills {
+		for _, st := range learner.States {
+			rows = append(rows, db.DailySnapshotRow{
+				Skill: skill, State: string(st), Count: 1, EstKnown: est, Retention: &ret,
+			})
+		}
+	}
+	if err := store.InDailyTx(context.Background(), func(tx *db.DailyTx) error {
+		return tx.InsertSnapshot(context.Background(), userID, day, rows)
+	}); err != nil {
+		t.Fatal(err)
 	}
 }

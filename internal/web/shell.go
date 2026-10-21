@@ -14,6 +14,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
@@ -315,13 +316,13 @@ func (s *server) postBandReview(w http.ResponseWriter, r *http.Request, lang, _ 
 		return
 	}
 	if len(ids) > 0 {
-		built, err := s.study.BuildSessionFor(r.Context(), user.ID, ids)
+		built, err := s.study.BuildSessionForAt(r.Context(), user.ID, ids, studyday.DueCutoff(s.now(), studyday.Load(user.TZ)))
 		if err != nil {
 			serverError(w)
 			return
 		}
 		if _, total, _ := built.Place(); total > 0 {
-			if err := s.replaceQueue(r.Context(), key, user.ID, built); err != nil {
+			if err := s.replaceQueue(r.Context(), key, user.ID, studyday.Load(user.TZ), built); err != nil {
 				serverError(w)
 				return
 			}
@@ -340,11 +341,11 @@ func (s *server) model() *learner.Model {
 }
 
 // replaceQueue puts a built session in place of the learner's queue for this browser session.
-func (s *server) replaceQueue(ctx context.Context, key string, userID int64, built *session.Session) error {
+func (s *server) replaceQueue(ctx context.Context, key string, userID int64, loc *time.Location, built *session.Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.now()
-	q := &studyQueue{userID: userID, sess: built, builtAt: now}
+	q := &studyQueue{userID: userID, sess: built, builtAt: now, loc: loc}
 	if err := s.advance(ctx, q); err != nil {
 		return err
 	}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 // timerReq is one wait the scheduler asked for. The test fires it by sending on fire.
@@ -64,13 +65,13 @@ func TestNextWake(t *testing.T) {
 		now  time.Time
 		want string // In Chicago.
 	}{
-		{"morning", utc(2026, 10, 19, 12, 0), "2026-10-20 03:30 CDT"},        // 07:00 local.
-		{"before the wake", utc(2026, 10, 19, 7, 0), "2026-10-19 03:30 CDT"}, // 02:00 local.
-		{"at the wake", utc(2026, 10, 19, 8, 30), "2026-10-20 03:30 CDT"},    // 03:30 local exactly.
-		{"a second before", utc(2026, 10, 19, 8, 29), "2026-10-19 03:30 CDT"},
-		{"evening", utc(2026, 10, 20, 3, 0), "2026-10-20 03:30 CDT"},                     // 22:00 local on the 19th.
-		{"the night the clocks go back", utc(2026, 11, 1, 5, 0), "2026-11-01 03:30 CST"}, // 00:00 CDT.
-		{"after the clocks go back", utc(2026, 11, 1, 12, 0), "2026-11-02 03:30 CST"},
+		{"morning", utc(2026, 10, 19, 12, 0), "2026-10-20 04:30 CDT"},        // 07:00 local.
+		{"before the wake", utc(2026, 10, 19, 7, 0), "2026-10-19 04:30 CDT"}, // 02:00 local.
+		{"at the wake", utc(2026, 10, 19, 9, 30), "2026-10-20 04:30 CDT"},    // 04:30 local exactly.
+		{"a second before", utc(2026, 10, 19, 9, 29), "2026-10-19 04:30 CDT"},
+		{"evening", utc(2026, 10, 20, 3, 0), "2026-10-20 04:30 CDT"},                     // 22:00 local on the 19th.
+		{"the night the clocks go back", utc(2026, 11, 1, 5, 0), "2026-11-01 04:30 CST"}, // 00:00 CDT.
+		{"after the clocks go back", utc(2026, 11, 1, 12, 0), "2026-11-02 04:30 CST"},
 	}
 	for _, c := range cases {
 		if got := s.Next(c.now).In(e.loc).Format("2006-01-02 15:04 MST"); got != c.want {
@@ -80,7 +81,7 @@ func TestNextWake(t *testing.T) {
 }
 
 // ac-2 through the scheduler: after 5 idle days and a restart, every missed day has a snapshot,
-// and the wait that follows is until the next 03:30.
+// and the wait that follows is until the next 04:30.
 func TestSchedulerCatchesUpAfterAnIdleRestart(t *testing.T) {
 	e := newEnv(t)
 	id := e.lexeme()
@@ -102,21 +103,21 @@ func TestSchedulerCatchesUpAfterAnIdleRestart(t *testing.T) {
 	if got := e.snapshotDays(e.user); !reflect.DeepEqual(got, want) {
 		t.Fatalf("days after the restart = %v, want %v", got, want)
 	}
-	if r.d != 20*time.Hour+30*time.Minute {
-		t.Errorf("the wait after catching up = %v, want 20h30m to the next 03:30", r.d)
+	if r.d != 21*time.Hour+30*time.Minute {
+		t.Errorf("the wait after catching up = %v, want 21h30m to the next 04:30", r.d)
 	}
 	stopScheduler(t, stop)
 }
 
-// The scheduler wakes at 03:30 and writes the day that just ended.
-func TestSchedulerWakesAtThreeThirty(t *testing.T) {
+// The scheduler wakes at 04:30 and writes the day that just ended.
+func TestSchedulerWakesAtFourThirty(t *testing.T) {
 	e := newEnv(t)
 	e.lexeme()
 	s, reqs := e.scheduler("job-a")
 	stop := s.Start(context.Background())
 	first := nextReq(t, reqs)
-	if first.d != 20*time.Hour+30*time.Minute {
-		t.Fatalf("first wait = %v, want 20h30m (07:00 to 03:30)", first.d)
+	if first.d != 21*time.Hour+30*time.Minute {
+		t.Fatalf("first wait = %v, want 21h30m (07:00 to 04:30)", first.d)
 	}
 	e.clk.advance(first.d)
 	first.fire <- e.clk.Now()
@@ -229,11 +230,31 @@ func TestSchedulerStopGivesUpAfterTheTimeout(t *testing.T) {
 }
 
 func TestDefaultStopTimeoutIsFiveSeconds(t *testing.T) {
-	if StopTimeout != 5*time.Second || DefaultHour != 3 || DefaultMinute != 30 {
+	if StopTimeout != 5*time.Second || DefaultHour != 4 || DefaultMinute != 30 {
 		t.Fatalf("StopTimeout %v, wake %d:%d", StopTimeout, DefaultHour, DefaultMinute)
 	}
 	e := newEnv(t)
-	if s := NewScheduler(e.daily); s.wait != 5*time.Second || s.hour != 3 || s.min != 30 {
+	if s := NewScheduler(e.daily); s.wait != 5*time.Second || s.hour != 4 || s.min != 30 {
 		t.Fatalf("defaults: wait %v, wake %d:%d", s.wait, s.hour, s.min)
+	}
+}
+
+// TestDailyWakeFollowsTheStudyDayRollover starts at 02:00 local. A 03:30
+// schedule would wake before 04:00, and at that wake yesterday would still
+// be the open study day. 04:30 is after the rollover, so yesterday is closed.
+func TestDailyWakeFollowsTheStudyDayRollover(t *testing.T) {
+	e := newEnv(t)
+	s, _ := e.scheduler("job-a")
+	now := time.Date(2026, 10, 19, 2, 0, 0, 0, e.loc)
+	wake := s.Next(now)
+	rollover := time.Date(2026, 10, 19, studyday.RolloverHour, 0, 0, 0, e.loc)
+	if !wake.After(rollover) {
+		t.Fatalf("wake %s is not after the rollover %s", wake.In(e.loc).Format(time.RFC3339), rollover.Format(time.RFC3339))
+	}
+	e.clk.set(wake)
+	yesterday := e.daily.Yesterday()
+	key := studyday.Key(wake, e.loc)
+	if yesterday == key {
+		t.Fatalf("yesterday %s is still the open study day %s", yesterday, key)
 	}
 }

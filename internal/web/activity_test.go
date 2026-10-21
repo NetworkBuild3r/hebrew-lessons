@@ -23,6 +23,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
@@ -1274,4 +1275,63 @@ func TestReviewNewWordIsExposed(t *testing.T) {
 
 func learner0(store *db.Store, now time.Time) *learner.Model {
 	return learner.New(store, fixedClock(now))
+}
+
+// TestActivitySurvivesUTCMidnight answers a checked visit after UTC midnight
+// and before 4:00 local. The study day has not rolled, so answer and Continue
+// still belong to the queue built earlier that evening.
+func TestActivitySurvivesUTCMidnight(t *testing.T) {
+	loc := mustDenver(t)
+	// 17:40 is before UTC midnight. 18:05 is after it, still before 04:00,
+	// and inside the 30-minute activity token.
+	start := time.Date(2026, 10, 18, 17, 40, 0, 0, loc)
+	later := time.Date(2026, 10, 18, 18, 5, 0, 0, loc)
+	midnight := time.Date(2026, 10, 18, 18, 0, 0, 0, loc)
+	if !midnight.After(start) || !midnight.Before(later) {
+		t.Fatal("UTC midnight does not fall between the build and the answer")
+	}
+	if !midnight.Equal(time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("Denver 18:00 = %s, want UTC midnight", midnight.UTC())
+	}
+	if studyday.Key(start, loc) != studyday.Key(later, loc) {
+		t.Fatal("17:40 and 18:05 Denver are not the same study day")
+	}
+	clk := &stepClock{t: start}
+	store, h := openReview(t, clk, "https://learn.example")
+	learner := addLearner(t, store, "a@example.com", "sub-a", start)
+	if _, err := store.ExecContext(context.Background(), `UPDATE sessions SET expires_at = ? WHERE user_id = ?`, db.FormatTime(start.Add(7*24*time.Hour)), learner.user.ID); err != nil {
+		t.Fatal(err)
+	}
+	words := seedLexicon(t, store, start, 8, true, true)
+	giveCards(t, store, learner.user.ID, start, words)
+	byAudio := glossByAudio(words)
+
+	page := getLearner(t, h, learner, "/review")
+	if attr(t, page, "data-activity") != "listen_pick" {
+		t.Fatalf("the visit is not a listen_pick: %s", cardAttrs(page))
+	}
+	card := attr(t, page, "data-card")
+	first := byAudio[promptRe.FindStringSubmatch(page)[1]]
+	rightIx := -1
+	for _, o := range pickRe.FindAllStringSubmatch(page, -1) {
+		if o[2] == first.gloss {
+			rightIx, _ = strconv.Atoi(o[1])
+		}
+	}
+	if rightIx < 0 {
+		t.Fatalf("the right gloss %q is not on the page", first.gloss)
+	}
+
+	clk.Advance(later.Sub(start))
+	answered := actPost(t, h, learner, "/_hx/review/answer", answerForm(page, "choice", strconv.Itoa(rightIx)))
+	if answered.Code != http.StatusOK || !strings.Contains(answered.Body.String(), `data-state="correct"`) {
+		t.Fatalf("answer across UTC midnight = %d\n%s", answered.Code, answered.Body.String())
+	}
+	continued := actPost(t, h, learner, "/_hx/review/next", url.Values{"card_id": {card}})
+	if continued.Code != http.StatusOK {
+		t.Fatalf("continue across UTC midnight = %d\n%s", continued.Code, continued.Body.String())
+	}
+	if attr(t, continued.Body.String(), "data-card") == card {
+		t.Fatal("continue stayed on the card from before UTC midnight")
+	}
 }

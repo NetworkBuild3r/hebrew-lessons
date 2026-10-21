@@ -192,7 +192,7 @@ func (d *Daily) Run(ctx context.Context, day string) (Result, error) {
 
 // CatchUp fills the days each learner is missing, from the day after their newest snapshot
 // through yesterday, at most MaxCatchUpDays of the newest. A learner with no snapshot gets
-// yesterday only. It is what the scheduler runs at start and at 03:30, so a restart after
+// yesterday only. It is what the scheduler runs at start and at 04:30, so a restart after
 // idle days fills every one of them. It returns ErrLocked when another process holds the lock.
 func (d *Daily) CatchUp(ctx context.Context) (Result, error) {
 	var res Result

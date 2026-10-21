@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/migrations"
 )
 
@@ -75,6 +76,23 @@ type m7State struct {
 	rowCnts map[string]int
 }
 
+// withoutLearnerTZ drops users.tz, which migration 013 adds on a full Migrate.
+// A check that an earlier migration left every other table alone still compares
+// the users rows and the rest of the schema. The users CREATE statement itself
+// changes, so that one sqlite_master row is left out of both sides.
+func withoutLearnerTZ(st m7State) m7State {
+	rows := st.tables["users"]
+	if len(rows) > 0 && strings.HasSuffix(rows[0][len(rows[0])-1], studyday.DefaultZone) {
+		trimmed := make([][]string, len(rows))
+		for i, row := range rows {
+			trimmed[i] = row[:len(row)-1]
+		}
+		st.tables["users"] = trimmed
+	}
+	st.schema = m8SchemaWithoutName(st.schema, "users")
+	return st
+}
+
 func m7Capture(t *testing.T, conn *sql.DB) m7State {
 	t.Helper()
 	st := m7State{tables: map[string][][]string{}, rowCnts: map[string]int{}}
@@ -131,7 +149,7 @@ func TestMigrate007AppliesOnEmptyDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}) {
 		t.Fatalf("versions = %v, want 1..12", got)
 	}
 	for _, table := range m7Tables {
@@ -152,7 +170,7 @@ func TestMigrate007AppliesOnEmptyDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("second migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}) {
 		t.Fatalf("versions after rerun = %v", got)
 	}
 }
@@ -246,7 +264,7 @@ func TestMigrate007AtomicWhenAStatementFails(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("retry: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}) {
 		t.Fatalf("versions after retry = %v", got)
 	}
 }

@@ -11,6 +11,8 @@
 // with no reviews due still takes up to MaxNewPerSession.
 package sessionlimits
 
+import "time"
+
 const (
 	// TargetSuccess is the session success rate the default mix aims at.
 	TargetSuccess = 0.85
@@ -29,4 +31,10 @@ const (
 	// MinNewPerSession when reviews are due. A session with no reviews
 	// ignores this share and uses MaxNewPerSession.
 	MaxNewShare = 0.25
+
+	// LearnAheadCap is how far past now a learning or relearning card may
+	// be due and still be served, and only when the session would otherwise
+	// have nothing due. Review-state cards use the study-day cutoff.
+	// New cards use the clock. Callers pass this duration into studyday.Decide.
+	LearnAheadCap = 20 * time.Minute
 )

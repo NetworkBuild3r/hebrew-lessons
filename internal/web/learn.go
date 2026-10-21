@@ -17,6 +17,8 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
@@ -28,8 +30,9 @@ const maxStudyQueues = 128
 // server holds the learner's database and the in-memory study queues.
 // Queues are keyed by the auth session id hash. A restart drops them.
 // An auth session can slide for 30 days. A study queue does not: it is
-// rebuilt when it is Done, and when the store clock's UTC date is no
-// longer the date it was built.
+// rebuilt when it is Done, and when the learner's study day is no longer
+// the day it was built. The study day rolls over at studyday.RolloverHour
+// in the learner's time zone.
 type server struct {
 	store    *db.Store
 	audioDir string
@@ -59,6 +62,7 @@ type studyQueue struct {
 	done     bool
 	revealed bool
 	builtAt  time.Time
+	loc      *time.Location // zone the queue was built in; eviction uses it
 	// item is the checked activity the current card is asked through. It is nil for a
 	// flashcard and a drill. fb is set from the checked answer until Continue.
 	item *activity.Item
@@ -96,7 +100,7 @@ func (s *server) loadHome(r *http.Request) (HomeVM, string, string, error) {
 	if !ok || s == nil || s.store == nil {
 		return HomeVM{}, views.AddressMasculine, "", nil
 	}
-	vm, situation, err := s.learnerHome(r.Context(), user.ID, user.Email)
+	vm, situation, err := s.learnerHome(r.Context(), user.ID, user.Email, user.TZ)
 	if err != nil {
 		return HomeVM{}, "", "", err
 	}
@@ -107,17 +111,17 @@ func (s *server) loadHome(r *http.Request) (HomeVM, string, string, error) {
 	return vm, gender, situation, nil
 }
 
-func (s *server) learnerHome(ctx context.Context, userID int64, name string) (HomeVM, string, error) {
+func (s *server) learnerHome(ctx context.Context, userID int64, name, tz string) (HomeVM, string, error) {
 	vm := HomeVM{Learner: LearnerVM{ID: userID, Name: name}}
 	if s == nil || s.store == nil || s.store.Clock() == nil {
 		return vm, "", fmt.Errorf("web: store clock is not configured")
 	}
 	now := s.store.Clock().Now()
-	due, err := s.store.ListDueCards(ctx, userID, now)
+	n, err := s.dueCount(ctx, userID, now, studyday.Load(tz))
 	if err != nil {
 		return HomeVM{}, "", err
 	}
-	vm.DueCount = len(due)
+	vm.DueCount = n
 
 	known, err := s.store.KnownLexemeIDs(ctx, userID)
 	if err != nil {
@@ -285,19 +289,24 @@ func (s *server) sessionKey(r *http.Request) (string, *auth.User, bool) {
 }
 
 // queueLocked returns the study queue for this auth session.
-// A Done queue, or one built on another UTC day, is rebuilt.
+// A Done queue, or one built on another study day, is rebuilt.
+// loc is the signed-in learner's zone (auth.User.TZ). A nil loc is Denver.
 // The caller holds s.mu.
-func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*studyQueue, error) {
+func (s *server) queueLocked(ctx context.Context, key string, userID int64, loc *time.Location) (*studyQueue, error) {
 	now := s.now()
-	if q := s.queues[key]; q != nil && q.userID == userID && !q.done && sameStudyDay(q.builtAt, now) {
+	if loc == nil {
+		loc = studyday.Load("")
+	}
+	if q := s.queues[key]; q != nil && q.userID == userID && !q.done && sameStudyDay(q.builtAt, now, loc) {
+		q.loc = loc
 		return q, nil
 	}
 	if s.study == nil {
-		q := &studyQueue{userID: userID, done: true, builtAt: now}
+		q := &studyQueue{userID: userID, done: true, builtAt: now, loc: loc}
 		s.rememberLocked(key, q, now)
 		return q, nil
 	}
-	built, err := s.study.BuildSession(ctx, userID)
+	built, err := s.study.BuildSessionAt(ctx, userID, studyday.DueCutoff(now, loc))
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +315,7 @@ func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*st
 	if built.UserID() != userID {
 		return nil, fmt.Errorf("web: session belongs to learner %d, not %d", built.UserID(), userID)
 	}
-	q := &studyQueue{userID: userID, sess: built, builtAt: now}
+	q := &studyQueue{userID: userID, sess: built, builtAt: now, loc: loc}
 	if err := s.advance(ctx, q); err != nil {
 		return nil, err
 	}
@@ -315,7 +324,7 @@ func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*st
 }
 
 // rememberLocked stores q and keeps the map within maxStudyQueues.
-// Queues from another UTC day are dropped first. The caller holds s.mu.
+// Queues from another study day are dropped first. The caller holds s.mu.
 func (s *server) rememberLocked(key string, q *studyQueue, now time.Time) {
 	s.evictLocked(now)
 	delete(s.queues, key)
@@ -325,11 +334,12 @@ func (s *server) rememberLocked(key string, q *studyQueue, now time.Time) {
 	s.queues[key] = q
 }
 
-// evictLocked drops queues built on another UTC day, then the oldest
+// evictLocked drops queues built on another study day, then the oldest
 // until the map is within maxStudyQueues. The caller holds s.mu.
+// Each queue is judged in the zone it was built in. A nil zone is Denver.
 func (s *server) evictLocked(now time.Time) {
 	for key, q := range s.queues {
-		if q == nil || !sameStudyDay(q.builtAt, now) {
+		if q == nil || !sameStudyDay(q.builtAt, now, q.loc) {
 			delete(s.queues, key)
 		}
 	}
@@ -363,15 +373,38 @@ func (s *server) now() time.Time {
 	return time.Now().UTC()
 }
 
-// sameStudyDay reports whether built and now fall on the same UTC date.
-// The study queue is rebuilt when the store clock crosses that date.
-func sameStudyDay(built, now time.Time) bool {
+// dueCount is how many cards studyday.Decide marks due at now.
+// The query loads through DueFetchLimit so a learning card just past the
+// cutoff is still visible. Decide then drops what Review will not serve,
+// including a learn-ahead card when something else is already due.
+func (s *server) dueCount(ctx context.Context, userID int64, now time.Time, loc *time.Location) (int, error) {
+	learnAhead := sessionlimits.LearnAheadCap
+	rows, err := s.store.ListDueCards(ctx, userID, studyday.DueFetchLimit(now, loc, learnAhead))
+	if err != nil {
+		return 0, err
+	}
+	cards := make([]studyday.DueCard, len(rows))
+	for i, c := range rows {
+		cards[i] = studyday.DueCard{State: c.State, Due: c.Due}
+	}
+	decision := studyday.Decide(now, studyday.DueCutoff(now, loc), learnAhead, cards)
+	n := 0
+	for _, on := range decision.Due {
+		if on {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// sameStudyDay reports whether built and now share a studyday.DueCutoff in loc.
+// The study queue is rebuilt when that cutoff moves, at 04:00 local.
+// A nil loc is the default zone. A zero built time is not a study day.
+func sameStudyDay(built, now time.Time, loc *time.Location) bool {
 	if built.IsZero() {
 		return false
 	}
-	by, bm, bd := built.UTC().Date()
-	ny, nm, nd := now.UTC().Date()
-	return by == ny && bm == nm && bd == nd
+	return studyday.DueCutoff(built, loc).Equal(studyday.DueCutoff(now, loc))
 }
 
 // advance serves the next card. For a word card it records the exposure of a new

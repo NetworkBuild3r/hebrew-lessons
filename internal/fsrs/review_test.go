@@ -2,6 +2,7 @@ package fsrs
 
 import (
 	"context"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -263,5 +264,56 @@ func TestQueueSchedulerRemoved(t *testing.T) {
 		if strings.Contains(string(body), "func (r *Review) Queue") {
 			t.Fatalf("%s still builds a queue", name)
 		}
+	}
+}
+
+// TestLearnAheadElapsedUsesTheAnswerTime grades a learning card 15 minutes
+// before its due time. Last review was 23h50m earlier, so the real elapsed
+// day count is 0. The nominal due is 24h5m after the last review, which
+// would record 1. The log stores the answer time.
+func TestLearnAheadElapsedUsesTheAnswerTime(t *testing.T) {
+	last := time.Date(2026, 10, 18, 22, 0, 0, 0, time.UTC)
+	due := time.Date(2026, 10, 19, 22, 5, 0, 0, time.UTC)
+	answer := time.Date(2026, 10, 19, 21, 50, 0, 0, time.UTC)
+	nominal := int(math.Floor(due.Sub(last).Hours() / 24))
+	real := int(math.Floor(answer.Sub(last).Hours() / 24))
+	if nominal != 1 || real != 0 {
+		t.Fatalf("fixture nominal elapsed %d, real elapsed %d", nominal, real)
+	}
+	if answer.After(due) || due.Sub(answer) > 20*time.Minute {
+		t.Fatal("the answer is not inside a 20 minute learn-ahead of the due time")
+	}
+
+	rev, store, clk := openReview(t)
+	clk.t = answer
+	ctx := context.Background()
+	userID := mustUser(t, store, "learner@example.com")
+	lexemeID := mustLexeme(t, store, "שָׁלוֹם")
+	cardID := mustCard(t, store, db.Card{
+		UserID:     userID,
+		LexemeID:   lexemeID,
+		Skill:      SkillRead,
+		State:      StateLearning,
+		Due:        due,
+		Stability:  1,
+		Difficulty: 5,
+		Reps:       1,
+		LastReview: last,
+	})
+	if err := rev.Grade(ctx, cardID, Again, false); err != nil {
+		t.Fatal(err)
+	}
+	logs, err := store.ReviewLogs(ctx, cardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("log rows = %d, want 1", len(logs))
+	}
+	if logs[0].ElapsedDays != real {
+		t.Fatalf("elapsed_days = %d, want %d from the answer time", logs[0].ElapsedDays, real)
+	}
+	if !logs[0].ReviewedAt.Equal(answer) {
+		t.Fatalf("reviewed_at = %s, want %s", logs[0].ReviewedAt, answer)
 	}
 }
