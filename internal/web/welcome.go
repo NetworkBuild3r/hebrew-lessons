@@ -4,56 +4,29 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
-// The first-run welcome (onboarding frame A). A learner with no onboarded_at,
-// no finished placement, and no lesson attempt who GETs a landing route is
-// sent to GET /welcome. "Start from the basics" POSTs here and calls
-// SetOnboarded. Finishing a placement sets onboarded_at in the store's
-// transaction; this file does not.
+// The first-run welcome (onboarding frame A). A signed-in learner whose
+// IsOnboarded is false and who GETs a landing route is sent to GET /welcome.
+// The handler does not combine onboarded_at, finished runs, and lesson
+// attempts. "Start from the basics" POSTs here and calls SetOnboarded.
+// Finishing a placement sets onboarded_at in the store's transaction; this
+// file does not.
 
-// needsWelcome is the gate. It is false when the store cannot answer it yet
-// (no HasLessonAttempt), when any of the three facts says the learner has
-// already begun, and when a read fails. An abandoned run is not a finished
-// run, so it does not open the gate.
+// needsWelcome is the gate. It is true only when IsOnboarded is false.
+// A read error fails open (the caller does not redirect).
 func (s *server) needsWelcome(ctx context.Context, userID int64) (bool, error) {
 	if s == nil || s.onboard == nil {
 		return false, nil
 	}
-	facts, ok := s.onboard.(interface {
-		OnboardedAt(context.Context, int64) (*time.Time, error)
-		PlacementHistoryCount(context.Context, int64) (int, error)
-		HasLessonAttempt(context.Context, int64) (bool, error)
-	})
-	if !ok {
-		return false, nil
-	}
-	at, err := facts.OnboardedAt(ctx, userID)
+	on, err := s.onboard.IsOnboarded(ctx, userID)
 	if err != nil {
 		return false, err
 	}
-	if at != nil {
-		return false, nil
-	}
-	n, err := facts.PlacementHistoryCount(ctx, userID)
-	if err != nil {
-		return false, err
-	}
-	if n > 0 {
-		return false, nil
-	}
-	lesson, err := facts.HasLessonAttempt(ctx, userID)
-	if err != nil {
-		return false, err
-	}
-	if lesson {
-		return false, nil
-	}
-	return true, nil
+	return !on, nil
 }
 
 // welcomeGate redirects a learner who still needs the first-run choice.

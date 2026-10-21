@@ -67,8 +67,8 @@ type Options struct {
 	// check-in off. See PlacementEngine.
 	Placement PlacementEngine
 	// Onboard is the welcome gate and the Progress placement history.
-	// Nil with a Store uses storeOnboard (history from the existing query;
-	// the gate stays off until migration 014). Tests pass a *memOnboard.
+	// Nil with a Store uses storeOnboard, which gates on IsOnboarded.
+	// Tests pass a *memOnboard, or storeOnboard when they want the real store.
 	Onboard Onboarding
 	// study replaces the review session service. It is for tests in this package.
 	study *session.Service
@@ -135,6 +135,11 @@ func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.
 		srv.onboard = opts.Onboard
 	} else if opts.Store != nil {
 		srv.onboard = storeOnboard{opts.Store}
+		// testOnboard is nil outside tests. It lets page tests render
+		// without turning the production gate off.
+		if testOnboard != nil {
+			srv.onboard = testOnboard(opts.Store)
+		}
 	}
 	mux := srv.routes(health, tokens, sessions != nil, secure)
 	if sessions != nil {

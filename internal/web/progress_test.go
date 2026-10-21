@@ -130,7 +130,9 @@ func seedProgressLearner(t *testing.T, store *db.Store, clk clock.Clock, email, 
 		l.user.ID, db.FormatTime(progNow), l.user.ID, db.FormatTime(progNow)); err != nil {
 		t.Fatal(err)
 	}
-	// Placement: an initial v3 run and a check-in, and a v2 run.
+	// Placement: an initial v3 run and a check-in. Finish stores start_unit and
+	// words_known from the run, not the JSON estimate. This fixture has no
+	// units and no rated items, so both columns are 0.
 	ctx := context.Background()
 	first, err := store.StartPlacementV3(ctx, l.user.ID, progNow.AddDate(0, 0, -44), 1, "initial", "", 0)
 	if err != nil {
@@ -664,21 +666,21 @@ func TestPlacementHistoryListsEachRunWithItsLevels(t *testing.T) {
 		t.Fatalf("%d placement rows, want 2:\n%s", len(items), card)
 	}
 	check, first := items[0], items[1] // newest first
-	for _, w := range []string{"Sep 4", "Oct 2", "Past results", "Retake placement", "Unit 3", "Latest", "Retaking won’t erase anything you’ve learned.", "164 words", "142 words", "Placed Oct 2", "Placement"} {
+	for _, w := range []string{"Sep 4", "Oct 2", "Past results", "Retake placement", "Unit 0", "Latest", "Retaking won’t erase anything you’ve learned.", "0 words", "Placed Oct 2", "Placement"} {
 		if !strings.Contains(card, w) {
 			t.Errorf("no %q", w)
 		}
 	}
-	if strings.Contains(card, "Show all") || strings.Contains(card, "Your level") || strings.Contains(card, "Re-check my level") || strings.Contains(card, "Unit 3:") {
-		t.Error("the card shows Show all, the old title, or a unit name it does not have")
+	if strings.Contains(card, "Show all") || strings.Contains(card, "Your level") || strings.Contains(card, "Re-check my level") || strings.Contains(card, "Unit 0:") || strings.Contains(card, "164 words") || strings.Contains(card, "142 words") || strings.Contains(card, "Unit 3") {
+		t.Error("the card shows Show all, the old title, a unit name, or the JSON estimate")
 	}
 	if strings.Index(body, `class="c-card pknow"`) > strings.Index(body, `class="c-card pplace"`) || strings.Index(body, `class="c-card pplace"`) > strings.Index(body, `data-chart="est"`) {
 		t.Error("the placement card is not after the skills overview")
 	}
-	if !strings.Contains(check, "Oct 2") || !strings.Contains(check, "Latest") || !strings.Contains(check, "Unit 3") || !strings.Contains(check, "164 words") {
+	if !strings.Contains(check, "Oct 2") || !strings.Contains(check, "Latest") || !strings.Contains(check, "Unit 0") || !strings.Contains(check, "0 words") {
 		t.Errorf("newest row:\n%s", check)
 	}
-	if strings.Contains(first, "Latest") || !strings.Contains(first, "Sep 4") || !strings.Contains(first, "Unit 3") || !strings.Contains(first, "142 words") {
+	if strings.Contains(first, "Latest") || !strings.Contains(first, "Sep 4") || !strings.Contains(first, "Unit 0") || !strings.Contains(first, "0 words") {
 		t.Errorf("older row:\n%s", first)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -24,10 +25,29 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
-// The first-run welcome and the Progress level card. The store does not have
-// migration 014 yet, so these tests pass a *memOnboard. Finishing a run on
-// that fake sets onboarded_at and appends history. Abandon does neither.
-// The HTTP finish handler must not call SetOnboarded itself.
+// The first-run welcome and the Progress level card. Handler tests pass a
+// *memOnboard and call its IsOnboarded. Finishing a run on that fake sets
+// onboarded_at and appends history. Abandon does neither. The HTTP finish
+// handler must not call SetOnboarded itself.
+//
+// Page tests that are not about the gate use settledOnboard, installed here,
+// so a learner with no lesson attempt still reaches the page. A test of the
+// real store passes storeOnboard explicitly.
+
+func TestMain(m *testing.M) {
+	testOnboard = func(store *db.Store) Onboarding {
+		return settledOnboard{storeOnboard{store}}
+	}
+	os.Exit(m.Run())
+}
+
+// settledOnboard is the real history adapter with the welcome gate already
+// passed. Production newHandler does not use it unless a test set testOnboard.
+type settledOnboard struct{ storeOnboard }
+
+func (settledOnboard) IsOnboarded(context.Context, int64) (bool, error) {
+	return true, nil
+}
 
 var welcomeNow = time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 
@@ -262,6 +282,25 @@ func TestAbandonedRunStillGates(t *testing.T) {
 	}
 	if mem.Abandoned(l.user.ID) != 1 {
 		t.Fatal("the abandoned run was not recorded")
+	}
+}
+
+func TestFinishedRunOpensTheGateBeforeOnboardedAtIsSet(t *testing.T) {
+	mem := newMemOnboard()
+	store, h := openWelcome(t, fixedClock(welcomeNow), mem)
+	l := addLearner(t, store, "a@example.com", "sub-a", welcomeNow)
+	mem.recordRun(l.user.ID, PlacementRun{ID: 1, FinishedAt: welcomeNow.AddDate(0, 0, -1), StartUnit: 2, WordsKnown: 3})
+	at, err := mem.OnboardedAt(context.Background(), l.user.ID)
+	if err != nil || at != nil {
+		t.Fatalf("the run set onboarded_at before the gate %v", at)
+	}
+	home := welcomeGet(t, h, l, "/", false)
+	if home.Code != http.StatusOK {
+		t.Fatalf("Today after a finished run = %d %s", home.Code, home.Header().Get("Location"))
+	}
+	at, err = mem.OnboardedAt(context.Background(), l.user.ID)
+	if err != nil || at == nil {
+		t.Fatal("IsOnboarded did not backfill onboarded_at")
 	}
 }
 
