@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"testing"
 	"time"
 
@@ -32,24 +33,41 @@ func TestLatestPlacementV3ReadsAnsweredItems(t *testing.T) {
 		t.Fatal("stored bayit is already NFC; the check needs a non-canonical spelling")
 	}
 	const (
-		echad  = "אֶחָד"
-		geshem = "גֶּשֶׁם"
-		delet  = "דֶּלֶת"
+		echad   = "אֶחָד"
+		geshem  = "גֶּשֶׁם"
+		delet   = "דֶּלֶת"
+		mayim   = "מַיִם"
+		shemesh = "שֶׁמֶשׁ"
 	)
 	ids := map[string]int64{
 		bayitStored: mustLexemeText(t, s, bayitStored),
 		echad:       mustLexemeText(t, s, echad),
 		geshem:      mustLexemeText(t, s, geshem),
 		delet:       mustLexemeText(t, s, delet),
+		mayim:       mustLexemeText(t, s, mayim),
+		shemesh:     mustLexemeText(t, s, shemesh),
 	}
 
 	// A letters answer is the warm-up. It is not a word card.
 	claimItem(t, s, runID, 1, PartLetters, "", 0, "alef", "right", 0, when)
+	// Band 1 is mixed: two right and one wrong, so the guess correction is not clamped.
 	claimItem(t, s, runID, 2, PartListening, "listen", 1, "w-echad", "right", ids[echad], when)
 	claimItem(t, s, runID, 3, PartListening, "listen", 1, "w-bayit", "right", ids[bayitStored], when)
-	claimItem(t, s, runID, 4, PartReading, "read", 2, "w-delet", "wrong", ids[delet], when)
-	claimItem(t, s, runID, 5, PartReading, "read", 3, "w-geshem", "dont_know", ids[geshem], when)
-	claimItem(t, s, runID, 6, PartTyping, "recall", 1, "w-echad-type", "right", ids[echad], when)
+	claimItem(t, s, runID, 4, PartListening, "listen", 1, "w-mayim", "wrong", ids[mayim], when)
+	claimItem(t, s, runID, 5, PartReading, "read", 2, "w-delet", "wrong", ids[delet], when)
+	claimItem(t, s, runID, 6, PartReading, "read", 3, "w-geshem", "dont_know", ids[geshem], when)
+	// Band 5 is the top tally. A boundary of `band >= len` would drop it.
+	claimItem(t, s, runID, 10, PartListening, "listen", 5, "w-shemesh", "right", ids[shemesh], when)
+	claimItem(t, s, runID, 7, PartTyping, "recall", 1, "w-echad-type", "right", ids[echad], when)
+	// Right in listening and wrong in typing. Learning wins, so it is not known.
+	claimItem(t, s, runID, 8, PartTyping, "recall", 1, "w-bayit-type", "wrong", ids[bayitStored], when)
+	// Dealt and left open. outcome stays NULL, so it is not a rated card and not a band tally.
+	if err := s.InsertPlacementItem(ctx, PlacementItem{
+		RunID: runID, Seq: 9, Part: PartListening, Skill: "listen", Band: 1, ItemID: "w-open",
+		Options: `{"options":[]}`, ShownAt: when,
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	zeros := make([]BandScore, 5)
 	for i := range zeros {
@@ -72,14 +90,16 @@ func TestLatestPlacementV3ReadsAnsweredItems(t *testing.T) {
 	if err != nil || !ok || !place.Finished {
 		t.Fatalf("latest ok=%v finished=%v err=%v", ok, place.Finished, err)
 	}
-	if place.CardsRated != 5 {
-		t.Fatalf("cardsRated=%d, want 5 answered word cards (the letter is not one)", place.CardsRated)
+	if place.CardsRated != 8 {
+		t.Fatalf("cardsRated=%d, want 8 answered word cards (the letter and the open item are not cards)", place.CardsRated)
 	}
-	if len(place.BandScores) != 3 {
-		t.Fatalf("bands %+v, want the three bands the word items used", place.BandScores)
+	if len(place.BandScores) != 4 {
+		t.Fatalf("bands %+v, want bands 1, 2, 3, and 5", place.BandScores)
 	}
-	if b := place.BandScores[0]; b.Band != 0 || b.Rated != 2 || b.Good != 2 || b.Again != 0 || b.DontKnow != 0 || b.GoodPlusRate != 1 {
-		t.Fatalf("band 0 %+v, want 2 right", b)
+	// (2 − 1/3) / 3. Literal 3, so a copied divisor of 2 or 4 fails here.
+	wantShare := (float64(2) - float64(1)/3) / float64(3)
+	if b := place.BandScores[0]; b.Band != 0 || b.Rated != 3 || b.Good != 2 || b.Again != 1 || b.DontKnow != 0 || math.Abs(b.GoodPlusRate-wantShare) > 1e-12 {
+		t.Fatalf("band 0 %+v, want 2 right and 1 wrong at share %v", b, wantShare)
 	}
 	if b := place.BandScores[1]; b.Band != 1 || b.Rated != 1 || b.Again != 1 || b.Good != 0 || b.GoodPlusRate != 0 {
 		t.Fatalf("band 1 %+v, want 1 wrong", b)
@@ -87,12 +107,17 @@ func TestLatestPlacementV3ReadsAnsweredItems(t *testing.T) {
 	if b := place.BandScores[2]; b.Band != 2 || b.Rated != 1 || b.DontKnow != 1 || b.Good != 0 || b.Again != 0 {
 		t.Fatalf("band 2 %+v, want 1 don't-know", b)
 	}
+	if b := place.BandScores[3]; b.Band != 4 || b.Rated != 1 || b.Good != 1 || b.Again != 0 || b.GoodPlusRate != 1 {
+		t.Fatalf("band 4 %+v, want the top band's one right", b)
+	}
 
 	known, err := s.PlacementKnownLexemes(ctx, userID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantKnown := []string{echad, bayit}
+	// echad was right in listening and typing. bayit was right in listening
+	// and wrong in typing, so learning wins and the lists do not overlap.
+	wantKnown := []string{echad, shemesh}
 	if len(known) != len(wantKnown) {
 		t.Fatalf("known %v, want %v", known, wantKnown)
 	}
@@ -105,7 +130,7 @@ func TestLatestPlacementV3ReadsAnsweredItems(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantLearning := []string{geshem, delet}
+	wantLearning := []string{bayit, geshem, delet, mayim}
 	if len(learning) != len(wantLearning) {
 		t.Fatalf("learning %v, want %v", learning, wantLearning)
 	}

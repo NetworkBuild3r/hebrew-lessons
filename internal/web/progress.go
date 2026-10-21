@@ -180,12 +180,15 @@ func (s *server) fillProgress(ctx context.Context, userID int64, v *views.Progre
 	now := s.now().UTC()
 	today := now.Format(dayLayout)
 
-	_, _, done, total, err := s.unitProgress(ctx, userID)
+	_, _, done, total, lessonsDone, lessonsTotal, err := s.unitProgress(ctx, userID)
 	if err != nil {
 		return err
 	}
 	if total > 0 {
 		v.UnitsText = strconv.Itoa(done) + "/" + strconv.Itoa(total)
+	}
+	if lessonsTotal > 0 {
+		v.LessonsText = strconv.Itoa(lessonsDone) + "/" + strconv.Itoa(lessonsTotal)
 	}
 
 	// The job writes yesterday, so 90 snapshot days end the day before today and begin 90 days back.

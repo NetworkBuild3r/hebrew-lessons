@@ -256,17 +256,48 @@ type ReviewCard struct {
 	// Act is the checked activity this visit is asked through. Nil means the card is
 	// a flashcard (or a drill), graded by the learner.
 	Act *ActivityView
+	// Sides, ExampleText, ExampleTranslit, and ExampleGloss are the drill answer.
+	// They are empty until the card is revealed, so the front has no answer markup.
+	// TellApart and DageshNote are the same: empty when the data has no cue.
+	// LooksLike is the first cue of a single letter. PairNote is the line
+	// under a pair cue. DageshHard is the word-initial line for a single
+	// ב, כ, or פ, and for a dagesh pair of those letters.
+	Sides           []DrillSide
+	ExampleText     string
+	ExampleTranslit string
+	ExampleGloss    string
+	LooksLike       string
+	TellApart       string
+	PairNote        string
+	DageshNote      string
+	DageshHard      string
 }
 
-// answerSide reports whether this render may show the answer side.
-// Anything that reveals the answer is post-reveal only.
-// On read the Hebrew is the prompt, so its transliteration and audio stay.
-// On recall the Hebrew is the answer, so the word, its transliteration, and its audio wait.
+// DrillSide is one letter, or one agreement form, on the back of a drill card.
+// For a letter, Name, NameTranslit, and Sound come from the alef-bet table:
+// the name with niqqud, its transliteration, and the plain-English sound.
+// The keyboard name table is separate and still has no niqqud. Translit and
+// Gloss are the lexicon reading and meaning of an agreement form. An example
+// word is carried on the card, not on the side.
+type DrillSide struct {
+	Hebrew       string
+	Name         string
+	NameTranslit string
+	Sound        string
+	Translit     string
+	Gloss        string
+}
+
+// answerSide reports whether this render may show the transliteration and the clip.
+// That follows the mode's hold, not a list of card types. A revealed card may.
+// Read and listen hold neither the transliteration nor the clip, so both stay
+// on the front. Every other current mode holds both, so both wait.
 func answerSide(c ReviewCard) bool {
-	if c.Kind == "recall" && !c.Revealed {
-		return false
+	if c.Revealed {
+		return true
 	}
-	return true
+	hold := ReviewModeFor(c.Kind).Hold
+	return !hold.Translit && !hold.Audio
 }
 
 // Flag is the attribute value for a bool.

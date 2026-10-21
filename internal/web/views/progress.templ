@@ -13,8 +13,14 @@ templ Progress(v ProgressView) {
 				<p class="progress__lede">@T(v.Lang, "", "What you know, what you have seen, and how it is changing.")</p>
 				if v.UnitsText != "" {
 					<p class="progress__units">
-						@T(v.Lang, "", "Lessons finished")
+						@T(v.Lang, "", "Units finished")
 						<bdi class="progress__units-n" lang="en" dir="ltr">{ v.UnitsText }</bdi>
+					</p>
+				}
+				if v.LessonsText != "" {
+					<p class="progress__units">
+						@T(v.Lang, "", "Lessons finished")
+						<bdi class="progress__lessons-n" lang="en" dir="ltr">{ v.LessonsText }</bdi>
 					</p>
 				}
 			</header>

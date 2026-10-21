@@ -306,6 +306,13 @@ const lessonCSRF = "brian-csrf"
 
 func openLessonPlayer(t *testing.T) lessonFixture {
 	t.Helper()
+	return openLessonPlayerAt(t, "https://learn.example")
+}
+
+// openLessonPlayerAt is openLessonPlayer for a given public origin, which a browser test needs
+// so that the page's own posts pass the origin check.
+func openLessonPlayerAt(t *testing.T, origin string) lessonFixture {
+	t.Helper()
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	ctx := context.Background()
 	store, err := db.Open(ctx, filepath.Join(t.TempDir(), "hebrew.sqlite"), fixedClock(now))
@@ -318,7 +325,7 @@ func openLessonPlayer(t *testing.T) lessonFixture {
 		t.Fatal(err)
 	}
 	svc, err := auth.New(auth.Config{
-		PublicOrigin:  "https://learn.example",
+		PublicOrigin:  origin,
 		Clock:         fixedClock(now),
 		Store:         store,
 		AllowedEmails: []string{"brian@example.com"},
@@ -348,9 +355,13 @@ func playChoiceSteps(t *testing.T, fx lessonFixture, path string, acts []units.A
 		}
 		runID := mustRunID(t, again)
 		target := viewByText(t, pool, act.Text)
-		want := choiceIDs(askChoices(act.Type, pool, earlier, target, choices.ChoiceSeed{
-			RunID: runID, Step: step, Attempt: 0, TargetID: target.ID,
-		}, choiceExclude{}))
+		seed := choices.ChoiceSeed{RunID: runID, Step: step, Attempt: 0, TargetID: target.ID}
+		want := choiceIDs(askChoices(act.Type, pool, earlier, target, seed, choiceExclude{}))
+		if act.Type == units.ActivityListenPick {
+			if lines := listenLines(act, pool, earlier, target, seed, choiceExclude{}); lines != nil {
+				want = choiceIDs(lines)
+			}
+		}
 		if !slices.Equal(got, want) {
 			t.Fatalf("%s step %d %s buttons %v want %v", path, step, act.Type, got, want)
 		}

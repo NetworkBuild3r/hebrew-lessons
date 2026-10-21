@@ -22,7 +22,8 @@
 .progress__head { display: grid; gap: var(--space-1); }
 .progress__lede { color: var(--muted); font-size: var(--fs-body); line-height: var(--lh-he-body); max-inline-size: var(--player-max); }
 .progress__units { color: var(--muted); font-size: var(--fs-small); }
-.progress__units-n { color: var(--text); font-weight: 700; margin-inline-start: var(--space-1); }
+.progress__units-n,
+.progress__lessons-n { color: var(--text); font-weight: 700; margin-inline-start: var(--space-1); }
 
 /* Nothing to chart yet. */
 .progress-empty { justify-items: center; text-align: center; padding-block: var(--space-6); }

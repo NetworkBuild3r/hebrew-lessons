@@ -94,3 +94,29 @@ func originOK(r *http.Request) bool {
 	}
 	return strings.EqualFold(u.Host, r.Host)
 }
+
+// revealSameOrigin is the same-origin check for a state-changing GET.
+// CSRF middleware skips GET, so this runs in the reveal handler.
+// Sec-Fetch-Site is decisive when the browser sent it: same-origin and
+// none pass, and anything else (cross-site, same-site) is rejected.
+// When that header is absent, an Origin is checked the way originOK
+// checks it, and a request with neither header is allowed.
+func revealSameOrigin(r *http.Request) bool {
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "", "same-origin", "none":
+	default:
+		return false
+	}
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	if strings.EqualFold(origin, "null") {
+		return false
+	}
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	return strings.EqualFold(u.Host, r.Host)
+}

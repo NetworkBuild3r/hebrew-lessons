@@ -25,7 +25,8 @@
   padding: 0;
   min-block-size: 0;
 }
-.review:has(.act) > .review__h1 {
+.review:has(.act) > .review__h1,
+.review:has([data-done=true]) > .review__h1 {
   position: absolute;
   inline-size: 1px;
   block-size: 1px;
@@ -33,6 +34,13 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+.review__done {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+.review__done .btn { inline-size: auto; }
 
 .act {
   display: grid;
@@ -131,6 +139,11 @@
   padding-block-start: var(--space-4);
   border-block-start: 1px solid var(--hairline-strong);
 }
+/* A pair back's answer is the card's first child, so the card edge is the rule. */
+.act__card > .act__answer:first-child {
+  border-block-start: 0;
+  padding-block-start: 0;
+}
 
 /* Bottom: the thumb zone. */
 .act__thumb {
@@ -159,6 +172,13 @@
 .act__actions { display: grid; gap: var(--space-2); }
 .act__actions .c-button[data-kind="primary"],
 .c-sheet .c-button[data-kind="primary"] { inline-size: 100%; }
+/* Show answer is autofocused, so :focus-visible paints at load. One ring,
+   close to the button. The 4px outline with a 4px offset sat outside the
+   button border and read as a second ring. */
+.act__actions .c-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
 .act__more {
   display: flex;
   flex-wrap: wrap;
@@ -190,6 +210,128 @@
   text-align: center;
 }
 .act-grade:hover { background: var(--surface-raised); }
+/* Under 900px the question and the grades stick together at the foot of the screen.
+   The grades stay in the flow, so they cannot cover the question. --z-sticky is the
+   existing sticky layer. The shadow is the designer's rgb(0 0 0 / .18), written
+   with color-mix so this file keeps its colours in tokens. */
+@media (max-width: 899px) {
+  .act--flash[data-phase="feedback"] .act__thumb {
+    position: sticky;
+    inset-block-end: 0;
+    z-index: var(--z-sticky);
+    background: var(--paper);
+    padding-block: var(--space-2) calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -8px 16px -12px color-mix(in srgb, black 18%, transparent);
+  }
+  .act--flash .act__grades {
+    position: static;
+    padding: 0;
+    background: none;
+  }
+}
+.act__side {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+}
+.act__answer-h,
+.act__label {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--lh-he-body);
+  color: var(--lamp-ink);
+}
+/* The heading takes focus after the reveal so the answer is announced.
+   It is not a control, so it does not keep the focus ring. */
+.act__answer-h:focus { outline: none; }
+.act__answer-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.act__name {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+}
+.act__name bdi[lang="he"] {
+  font-family: var(--font-he);
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+}
+.act__tr { font-style: normal; color: var(--ink); }
+.act__sound {
+  margin: 0;
+  font-style: normal;
+  font-weight: 700;
+  font-size: var(--fs-h2);
+  line-height: var(--lh-he-body);
+  color: var(--ink);
+}
+.act__pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  inline-size: 100%;
+}
+.act__tile {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 0;
+  padding: var(--space-2);
+  background: var(--surface-soft);
+  border-radius: var(--radius-card);
+}
+.act__tile[aria-current="true"] { box-shadow: inset 0 0 0 2px var(--lamp); }
+.act__tile p { margin: 0; }
+.act__tile-asked {
+  font-family: var(--font-ui);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--lh-he-body);
+  color: var(--lamp-ink);
+}
+.act__tile-letter {
+  font-size: var(--fs-he-lg);
+  line-height: var(--lh-he-display);
+}
+.act__tile-letter bdi,
+.act__tile-name bdi {
+  font-family: var(--font-he);
+  font-weight: 700;
+}
+.act__tile-sound { font-style: normal; }
+.act__apart {
+  display: grid;
+  gap: var(--space-2);
+  inline-size: 100%;
+  padding: var(--space-3);
+  border: 2px solid var(--lamp);
+  border-radius: var(--radius-card);
+  text-align: start;
+}
+.act__apart p { margin: 0; }
+.act__note {
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+.act__cue {
+  margin: 0;
+  text-align: center;
+}
 
 /* Match: two columns of AnswerOption tiles. A made pair locks and shows its
    number on both tiles. */

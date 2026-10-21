@@ -1,0 +1,121 @@
+{
+  "overflow": {
+    "360": {
+      "/": {
+        "overflowX": false,
+        "scrollWidth": 360,
+        "innerWidth": 360
+      },
+      "/lessons/": {
+        "overflowX": false,
+        "scrollWidth": 360,
+        "innerWidth": 360
+      },
+      "/review/": {
+        "overflowX": false,
+        "scrollWidth": 360,
+        "innerWidth": 360
+      },
+      "/words/": {
+        "overflowX": false,
+        "scrollWidth": 360,
+        "innerWidth": 360
+      },
+      "/progress/": {
+        "overflowX": false,
+        "scrollWidth": 360,
+        "innerWidth": 360
+      },
+      "/verbs/": {
+        "overflowX": false,
+        "scrollWidth": 360,
+        "innerWidth": 360
+      },
+      "/guides/": {
+        "overflowX": false,
+        "scrollWidth": 360,
+        "innerWidth": 360
+      }
+    },
+    "1024": {
+      "/": {
+        "overflowX": false,
+        "scrollWidth": 1024,
+        "innerWidth": 1024
+      },
+      "/lessons/": {
+        "overflowX": false,
+        "scrollWidth": 1024,
+        "innerWidth": 1024
+      },
+      "/review/": {
+        "overflowX": false,
+        "scrollWidth": 1024,
+        "innerWidth": 1024
+      },
+      "/words/": {
+        "overflowX": false,
+        "scrollWidth": 1009,
+        "innerWidth": 1024
+      },
+      "/progress/": {
+        "overflowX": false,
+        "scrollWidth": 1009,
+        "innerWidth": 1024
+      },
+      "/verbs/": {
+        "overflowX": false,
+        "scrollWidth": 1024,
+        "innerWidth": 1024
+      },
+      "/guides/": {
+        "overflowX": false,
+        "scrollWidth": 1024,
+        "innerWidth": 1024
+      }
+    },
+    "1280": {
+      "/": {
+        "overflowX": false,
+        "scrollWidth": 1280,
+        "innerWidth": 1280
+      },
+      "/lessons/": {
+        "overflowX": false,
+        "scrollWidth": 1280,
+        "innerWidth": 1280
+      },
+      "/review/": {
+        "overflowX": false,
+        "scrollWidth": 1280,
+        "innerWidth": 1280
+      },
+      "/words/": {
+        "overflowX": false,
+        "scrollWidth": 1265,
+        "innerWidth": 1280
+      },
+      "/progress/": {
+        "overflowX": false,
+        "scrollWidth": 1265,
+        "innerWidth": 1280
+      },
+      "/verbs/": {
+        "overflowX": false,
+        "scrollWidth": 1280,
+        "innerWidth": 1280
+      },
+      "/guides/": {
+        "overflowX": false,
+        "scrollWidth": 1280,
+        "innerWidth": 1280
+      }
+    }
+  },
+  "phoneStep": {
+    "stepHeading": "מיליםWords",
+    "stepHeadingTop": 265,
+    "continueTop": 784,
+    "viewport": 844
+  }
+}

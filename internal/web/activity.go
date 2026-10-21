@@ -47,7 +47,12 @@ type answerState struct {
 // flashcard. The caller holds s.mu.
 func (s *server) prepareItem(ctx context.Context, q *studyQueue) error {
 	ref := q.cur
-	if s.engine == nil || ref.LexemeID <= 0 || ref.Kind == session.KindLetter || ref.Kind == session.KindPattern {
+	if s.engine == nil || ref.LexemeID <= 0 {
+		return nil
+	}
+	// A mode that is not a lexeme stays a flashcard. Letter and pattern are
+	// those modes. A later one is too, once its entry says Lexeme is false.
+	if mode, ok := views.LookupReviewMode(ref.Kind); ok && !mode.Lexeme {
 		return nil
 	}
 	// A visit that comes back after a miss has shown the word already.

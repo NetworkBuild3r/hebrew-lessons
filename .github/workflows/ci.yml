@@ -1,10 +1,9 @@
-# hebrew v3. Publishes ghcr.io/networkbuild3r/hebrew only.
+# hebrew. Publishes ghcr.io/networkbuild3r/hebrew only.
 # Never ghcr.io/networkbuild3r/hebrew-lessons: Argo Image Updater deploys
 # the newest sha- tag of that image to production.
 #
-# v3 is the line that publishes (ADR-0018, D6). v2 is frozen and no longer
-# publishes. Only one branch may publish sha- tags at a time, because Argo
-# Image Updater deploys whichever sha- tag was pushed last.
+# main is the only line and the only branch that publishes. There is no v1, v2, or v3
+# branch. Argo Image Updater deploys whichever sha- tag was pushed last.
 #
 # Runs only on the local ARC scale set registered to this repo (see home_k3
 # apps/arc-runner-set-hebrew). Never use GitHub-hosted runners.
@@ -21,21 +20,20 @@
 #
 # pull_request on k8-build is refused when the head repository is a fork.
 # pull_request has no base-branch filter, so a stacked pull request (its base
-# is another PR branch, not v3) still runs. Jobs skip when github.base_ref is
-# main; main's own workflows cover those. A pull request builds and smokes
+# is another PR branch, not main) still runs. A pull request builds and smokes
 # with contents: read and never logs in or pushes. packages: write is only
-# on the publish job, which runs on a push to v3.
+# on the publish job, which runs on a push to main.
 #
 # Checkouts do not pin pull_request.head.sha. Omitting ref is the
 # pull_request default: actions/checkout uses github.ref
 # (refs/pull/N/merge) and github.sha, the test merge of the head into the
 # base when that event fired. A green check is that merged tree. Pinning the
-# head is what let #78 pass and then fail to compile once merged with v2.
+# head is what let #78 pass and then fail to compile once merged.
 # On a push, the omitted ref resolves to the pushed commit. Publish sets
 # ref to github.sha, so the image tag stays
 # ghcr.io/networkbuild3r/hebrew:sha-<push sha>. Smoke and publish keep
 # fetch-depth 1. The test shards fetch the base ref on pull_request and
-# diff origin/$BASE...HEAD. A push to v3 and workflow_dispatch run every
+# diff origin/$BASE...HEAD. A push to main and workflow_dispatch run every
 # package in all three shards. A pull_request tests only the affected
 # packages. templ's git diff is the worktree against the checked-out commit.
 # There is no pull_request_target. External actions are pinned to a commit.
@@ -43,7 +41,7 @@ name: ci
 
 on:
   push:
-    branches: [v3]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -81,10 +79,9 @@ jobs:
             title: C rest and web
     env:
       CGO_ENABLED: "0"
-    # github.base_ref is empty on a push, so a push to v3 still runs.
+    # github.base_ref is empty on a push, so a push to main still runs.
     # Fork pull requests never reach this runner.
     if: >-
-      github.base_ref != 'main' &&
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       # No ref on purpose. pull_request checks out refs/pull/N/merge at
@@ -679,6 +676,48 @@ jobs:
         with:
           node-version: '22'
 
+      # ReviewGradesStayInView launches /usr/bin/google-chrome-stable over CDP.
+      # The k8-build image does not ship Chrome. PR #129 run 39537942560
+      # shard C (job 119019916626) skipped that subtest, and the no-SKIP
+      # guard failed the node tests step.
+      # These are UBUNTU_24_DEPENDENT_PACKAGES from setup-chrome v2.2.0
+      # (48ad9237). The action's own install replaces PATH, so apt-get is
+      # not found under sudo on this image. Install them here instead.
+      - name: install chrome dependencies
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'rest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          pkgs=(libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libexpat1 libgbm1 libglib2.0-0t64 libnss3 libpango-1.0-0 libxcomposite1 libxdamage1 libxfixes3 libxkbcommon0 libxrandr2)
+          echo "installing chrome libraries: ${pkgs[*]}"
+          if [ "$(id -u)" -eq 0 ]; then
+            DEBIAN_FRONTEND=noninteractive apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${pkgs[@]}"
+          else
+            sudo DEBIAN_FRONTEND=noninteractive apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${pkgs[@]}"
+          fi
+
+      - uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
+        id: chrome
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'rest'
+        with:
+          chrome-version: '156.0.8078.47'
+
+      - name: link chrome for node tests
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'rest'
+        shell: bash
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          set -euo pipefail
+          if [ "$(id -u)" -eq 0 ]; then
+            ln -sfn "$CHROME_PATH" /usr/bin/google-chrome-stable
+          else
+            sudo ln -sfn "$CHROME_PATH" /usr/bin/google-chrome-stable
+          fi
+          /usr/bin/google-chrome-stable --version
+
       - name: node version
         if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'rest'
         shell: bash
@@ -722,7 +761,6 @@ jobs:
     timeout-minutes: 5
     if: >-
       always() &&
-      github.base_ref != 'main' &&
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - name: Require every shard to succeed
@@ -745,7 +783,6 @@ jobs:
     # job cannot be granted packages: write. Fork pull requests never reach
     # this runner. No login and no push.
     if: >-
-      github.base_ref != 'main' &&
       needs.test.result == 'success' &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
@@ -907,16 +944,16 @@ jobs:
     timeout-minutes: 30
     # needs.test success is required here because a job-level if replaces the
     # default success() check. packages: write is granted only when this job
-    # runs, which is a push to v3, never a pull_request.
+    # runs, which is a push to main, never a pull_request.
     if: >-
       needs.test.result == 'success' &&
       github.event_name == 'push' &&
-      github.ref == 'refs/heads/v3'
+      github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
     steps:
-      # Push to v3 only. ref is the pushed commit, which the sha- tag
+      # Push to main only. ref is the pushed commit, which the sha- tag
       # records. This job does not run on pull_request, and it does not
       # read pull_request.head.sha.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -954,7 +991,7 @@ jobs:
           echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           echo "Image name ${computed} does not contain hebrew-lessons."
 
-      # Push to the registry only on a push to v3, and only when both files
+      # Push to the registry only on a push to main, and only when both files
       # exist. With neither file yet, the job stays green and the build is skipped.
       - name: Skip unless Dockerfile and go.mod exist
         id: scope
@@ -970,7 +1007,7 @@ jobs:
           fi
 
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
-        if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/v3'
+        if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -980,7 +1017,7 @@ jobs:
         if: steps.scope.outputs.build == 'true'
 
       - name: Build
-        if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/v3'
+        if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
@@ -1067,14 +1104,14 @@ jobs:
           exit 1
 
       - name: Push the image
-        if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/v3'
+        if: steps.scope.outputs.build == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         env:
           TAG: ${{ steps.guard.outputs.tag }}
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" != "push" ] || [ "$GITHUB_REF" != "refs/heads/v3" ]; then
-            echo "::error::refusing to push except on a push to v3"
+          if [ "$GITHUB_EVENT_NAME" != "push" ] || [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::refusing to push except on a push to main"
             exit 1
           fi
           case "$TAG" in

@@ -105,12 +105,14 @@ type ProgressView struct {
 	Page
 	// Empty is true when the learner has no snapshot and has seen no word: nothing to chart.
 	Empty bool
-	// UnitsText is "1/2" lessons finished, or "" when none are published.
+	// UnitsText is "2/3" units finished, or "" when none are published.
 	UnitsText string
-	Weekly    *WeeklyCard
-	Tabs      []SkillTab
-	Skill     string
-	SkillName string
+	// LessonsText is "5/7" lessons finished inside those units, or "" when there are none.
+	LessonsText string
+	Weekly      *WeeklyCard
+	Tabs        []SkillTab
+	Skill       string
+	SkillName   string
 	// Known is the estimated words known in the chosen skill now, as text.
 	Known     string
 	Legend    []LegendItem
