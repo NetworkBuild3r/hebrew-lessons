@@ -138,6 +138,11 @@ func (s *Store) UnitsInScope(ctx context.Context, learnerID int64) ([]UnitRow, e
 	return out, nil
 }
 
+// FinishedLessons maps each unit to the lesson indexes this learner has finished.
+func (s *Store) FinishedLessons(ctx context.Context, userID int64) (map[int64]map[int]time.Time, error) {
+	return s.finishedLessons(ctx, userID)
+}
+
 func (s *Store) finishedLessons(ctx context.Context, userID int64) (map[int64]map[int]time.Time, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -173,6 +178,12 @@ func (s *Store) finishedLessons(ctx context.Context, userID int64) (map[int64]ma
 		return nil, fmt.Errorf("db: finished lessons: %w", err)
 	}
 	return out, nil
+}
+
+// LessonCount is the number of lessons in a unit document.
+// A document that is not an object, or that has no lessons array, has none.
+func LessonCount(doc string) int {
+	return lessonCount(doc)
 }
 
 // lessonCount is the number of lessons in a unit document.

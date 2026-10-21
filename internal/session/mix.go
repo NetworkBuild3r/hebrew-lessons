@@ -279,12 +279,128 @@ func mixCards(cands []Candidate, accuracy float64, now time.Time, seed int64) []
 	sortCandidates(seed, ordered)
 	dueS, dueK, laterK, fresh := splitPools(ordered, now)
 	planned := assemble(dueS, dueK, laterK, accuracy)
-	// New cards do not take a known or struggle slot, and they are not
-	// woven into the drill pattern. The planned queue, including drills,
-	// stays as it was. New cards follow it, already capped and ordered.
+	// New cards do not take a known or struggle slot or a drill step.
+	// They keep their order and are seeded through the woven queue, so
+	// they are not a block at the end. A pass then separates two visits
+	// of one lexeme when another card can stand between them.
 	fresh = orderNew(fresh)
 	n := newAllowance(len(planned), len(fresh))
-	return append(weave(planned, drillCards(letters), drillCards(patterns)), newRefs(take(fresh, n))...)
+	woven := weave(planned, drillCards(letters), drillCards(patterns))
+	return separateLexemes(interleaveNew(woven, newRefs(take(fresh, n)), seed))
+}
+
+// newMixSalt is mixed into the sitting seed when new cards are placed.
+// It is not a card id, so it does not collide with the due-time tie break.
+const newMixSalt int64 = 0x4E4557
+
+// interleaveNew places fresh cards through base. The order of each list
+// stays as it was. The seed picks where the new cards sit. When base is
+// not empty, at least one of its cards stands after the new cards, so the
+// new cards are not a suffix. An empty side returns the other side.
+func interleaveNew(base, fresh []CardRef, seed int64) []CardRef {
+	if len(fresh) == 0 {
+		return append([]CardRef(nil), base...)
+	}
+	if len(base) == 0 {
+		return append([]CardRef(nil), fresh...)
+	}
+	phase := int(tieBreak(seed, newMixSalt) % uint64(len(base)))
+	out := make([]CardRef, 0, len(base)+len(fresh))
+	bi := 0
+	for fi := range fresh {
+		slot := ((fi+1)*len(base) + phase) / (len(fresh) + 1)
+		for bi < slot {
+			out = append(out, base[bi])
+			bi++
+		}
+		out = append(out, fresh[fi])
+	}
+	for bi < len(base) {
+		out = append(out, base[bi])
+		bi++
+	}
+	return out
+}
+
+// separateLexemes moves a card that shares a lexeme with the visit before
+// it to the nearest later seat where it is not beside that lexeme, the gap
+// it left is not that lexeme, and the struggle run stays within MaxStruggleRun.
+// A pair with no such seat stays: no other arrangement exists. Drills are
+// not lexeme visits.
+func separateLexemes(cards []CardRef) []CardRef {
+	out := append([]CardRef(nil), cards...)
+	for i := 1; i < len(out); i++ {
+		if !sameVisitLexeme(out[i-1], out[i]) {
+			continue
+		}
+		for dest := i + 1; dest < len(out); dest++ {
+			next := movedCard(out, i, dest)
+			if sameVisitLexeme(next[dest-1], next[dest]) {
+				continue
+			}
+			if dest+1 < len(next) && sameVisitLexeme(next[dest], next[dest+1]) {
+				continue
+			}
+			if sameVisitLexeme(next[i-1], next[i]) {
+				continue
+			}
+			if struggleRun(next) >= 0 {
+				continue
+			}
+			out = next
+			i--
+			break
+		}
+	}
+	return out
+}
+
+func movedCard(cards []CardRef, from, to int) []CardRef {
+	out := append([]CardRef(nil), cards...)
+	card := out[from]
+	copy(out[from:to], out[from+1:to+1])
+	out[to] = card
+	return out
+}
+
+func sameVisitLexeme(a, b CardRef) bool {
+	if a.LexemeID == 0 || b.LexemeID == 0 {
+		return false
+	}
+	if a.Kind == KindLetter || a.Kind == KindPattern || b.Kind == KindLetter || b.Kind == KindPattern {
+		return false
+	}
+	return a.LexemeID == b.LexemeID
+}
+
+// struggleRun is the index of a struggling card that extends a run past
+// MaxStruggleRun while a known card is still waiting. -1 means the queue
+// holds the cap. New cards and drills are not known cards and they break a run.
+func struggleRun(cards []CardRef) int {
+	run := 0
+	for i, card := range cards {
+		if !card.Struggling {
+			run = 0
+			continue
+		}
+		run++
+		if run > MaxStruggleRun && knownLater(cards, i) {
+			return i
+		}
+	}
+	return -1
+}
+
+func knownLater(cards []CardRef, i int) bool {
+	for _, card := range cards[i+1:] {
+		if card.New || card.Kind == KindLetter || card.Kind == KindPattern {
+			continue
+		}
+		if !card.Struggling {
+			return true
+		}
+	}
+	return false
 }
 
 func splitKinds(cands []Candidate) (study, letters, patterns []Candidate) {

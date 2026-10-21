@@ -60,13 +60,19 @@ A unit is plain JSON. It has no audio, gloss, or choices fields. Audio is the cl
 | `story` | The whole pointed narration, one voice. | read | Shows words with no question. It can introduce a new word. Judged for coverage and length. |
 | `dialogue` | Nothing. It has `lines` instead: 2 to 8 of `{speaker, text}`. | read | Shows words with no question. It can introduce a new word. Each line is judged on its own. |
 | `shadow` | The pointed line the learner repeats aloud. | listen | Shows words with no question. Put it after a `listen_pick` or `recall` of the same text. |
-| `listen_pick` | The pointed text the learner hears and then picks the meaning of. The spelling is hidden until they answer. | listen | A question. Judged for coverage and length. |
+| `listen_pick` | The pointed text the learner hears. The question is "What did you hear?" and the buttons are lines of Hebrew: the real line, and the same line with the practised word (`target`) swapped for another word of the unit. The spelling is shown only as those buttons. Set `translation` to the English of a multi-word line; it is kept and checked, and the player does not show it yet. | listen | A question. Judged for coverage and length. Every word of the unit needs a use in some activity, or there are too few words to swap in, and the step then asks for the meaning instead. |
 | `recall` | The pointed Hebrew prompt. The answer is the lexicon gloss. | recall | A question. |
 | `produce` | The pointed Hebrew the learner types. The prompt is the gloss. | spell | A question. |
-| `cloze` | The whole pointed sentence. The new word in it is the gap. | read | A question. |
+| `cloze` | The whole pointed sentence. When it has two or more words that are in the lexicon, `target` is the gap. | read | A question. |
 | `pattern` | One pointed example of a pattern. The concept is the rule. | read | A question. |
 
-A question (`recall`, `listen_pick`, `produce`, or `cloze`) may set `target` to the exact token it tests, the same spelling as one token of its text, and that token must be in the lexicon. Leave `target` out to test the first new token. An empty `target` is the same as leaving it out.
+A multi-word `listen_pick` has its translation collected and validated now. The player asks what was heard, with lines of Hebrew as the buttons. The English line is kept for later use. `target` on a `listen_pick` is optional. If `target` is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure. A multi-word `recall`, `produce`, or `cloze` grades one word. When its line has two or more words that are in the lexicon, set `target` to the exact pointed token it grades, the same spelling as one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. A line of one lexicon word may omit `target`, and an empty `target` is the same as omitting it. A new unit that leaves `target` off a multi-word `recall`, `produce`, or `cloze` is blocked. Only the unit's current published revision may omit it, and checking that same revision again reports a warning. An older revision that was never published is blocked. Re-publishing after `unpublish_unit` is strict: the grandfather leniency does not apply, because that revision is no longer the current published one.
+
+A `listen_pick` of one lexicon word may leave `translation` empty. The player uses the lexicon gloss. A `listen_pick` whose text has two or more words that are in the lexicon sets `translation` to the English of the whole line, written by you. That translation is collected and validated now. The player asks what was heard, with lines of Hebrew as the buttons. The English line is kept for later use. It is plain English, with no Hebrew and no markup, and at most 120 characters. A dialogue line may carry `translation` too. Those lines are kept for later use; the player does not show them. A unit that has a sentence `listen_pick` needs at least four different English lines, counting every activity `translation` and every dialogue line `translation`. Lines that match after lowercasing, stripping punctuation, and collapsing spaces count once. A new unit that leaves `translation` off a multi-word `listen_pick` is blocked, and so is an older revision. Only the unit's current published revision may omit it, and checking that same revision again reports a warning.
+
+```json
+{ "type": "listen_pick", "text": "אֲנִי שׁוֹתֶה מַיִם", "target": "מַיִם", "translation": "I drink water" }
+```
 
 Any conversation between people is a `dialogue`, never a `story`. A story stays one narrator. In a dialogue, speaker `a` is the female voice and speaker `b` is the male voice, the same for the whole unit. Both must speak. The speaker is exactly `a` or `b`. A voice id never goes in a unit or a request.
 
@@ -92,7 +98,7 @@ A passage is one `story` text, one `listen_pick` text, or one dialogue line. For
 | developing | 100 to 299 words | 0.90 | 60 words |
 | established | 300 or more | 0.95 | no limit |
 
-A word is known here when it is in the brief (new, struggle, or comfortable) or the learner already knows it. Function words (such as I, you, and, or, yes), proper names, and numerals are left out of the count. A word that is not in the lexicon counts as unknown. A long dialogue is fine as long as each line is short, because the check is per line.
+A word counts as covered when it is in the brief (new, struggle, or comfortable), the learner already knows it, or it is one of this unit's `newWords` and that spelling is an exact pointed lexicon entry. A `newWord` still counts as new: it still has to be shown before it is tested, and it still has to be used at least `minUses` times. That intro and that minimum also apply to a `newWord` outside the brief that coverage credited, and that word's minimum is 3. A word that is none of those is unknown. Function words (such as I, you, and, or, yes), proper names, and numerals are left out of the count. A word that is not in the lexicon counts as unknown. A long dialogue is fine as long as each line is short, because the check is per line.
 
 ### Budget and order
 
@@ -116,14 +122,14 @@ Every Hebrew text needs a clip for its exact pointed text. Do not change a text 
 
 | rule | severity | what it means | how to fix it |
 | --- | --- | --- | --- |
-| `activity.target` | block | A graded activity's `target` is not one of its tokens, or that token's exact pointed spelling is not a lexicon entry. The unpointed spelling does not count. A `target` on any other activity type is the same rule. An empty target is allowed. | Set `target` to the exact pointed spelling `lookup` returns for that token, or remove it. |
+| `activity.target` | block | A `recall`, `produce`, or `cloze` whose line has two or more words that are in the lexicon must set `target` to the exact pointed token it grades. That token must be one of the line's tokens, and that token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. A line with fewer lexicon words may omit `target`. `target` on a `listen_pick` is optional. If `target` is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure. A `target` on any other activity type is the same rule. A missing `target` blocks a new save or publish, and it blocks an older revision. Only the current published revision warns when that same revision is checked again. | Set `target` to the exact pointed spelling `lookup` returns for the word this question grades. On a `listen_pick` of two or more lexicon words with no `target`, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure. A line with exactly one lexicon word and no `target` credits that word. |
 | `audio.missing` | block | A Hebrew text has no clip for its exact pointed text. A dialogue line needs a clip in its own speaker's voice. | Call `generate_audio` with that exact text, or with the line and its speaker. |
 | `brief.audio_all` | block | A new word, or a title, situation, or concept that has Hebrew, has no clip. | Add the new words to `texts` in `generate_audio`, or keep Hebrew out of the title, situation, and concept. |
-| `brief.coverage` | block | A passage has too few known words for the tier. The message gives the share and what the tier needs. | Replace unknown words with comfortable words or brief words, or shorten the passage. |
+| `brief.coverage` | block | A passage has too few known words for the tier. The message gives the share and what the tier needs. This unit's `newWords` count as covered when each is an exact pointed lexicon entry. The intro and the minimum uses still run on those words, including a `newWord` outside the brief. | Replace unknown words with comfortable words, brief words, or this unit's `newWords`, or shorten the passage. |
 | `brief.expired` | block | The brief is older than 7 days. | Call `get_lesson_brief` again and write the unit from the new brief. |
 | `brief.gloss_out_of_brief` | block | A word outside the brief, and not known by the learner, has no gloss in the lexicon. | Call `lookup`. Then `upsert_lexemes` with `gloss_en`, or take the word out. |
-| `brief.new_intro_before_test` | block | A question uses a new word before a story, dialogue, or shadow shows it. | Put a `story`, `dialogue`, or `shadow` that has the word before the first question that uses it. |
-| `brief.new_min_uses` | block | A new word appears fewer times than the brief asks. The message gives the count. | Use the word more often, in the story, dialogue, and the checked activities. |
+| `brief.new_intro_before_test` | block | A question uses a new word of the brief, or a unit `newWord` that coverage credited, before a story, dialogue, or shadow shows it. | Put a `story`, `dialogue`, or `shadow` that has the word before the first question that uses it. |
+| `brief.new_min_uses` | block | A new word of the brief appears fewer times than the brief asks. A unit `newWord` outside the brief that coverage credited uses the same minimum of 3. The message gives the count. | Use the word more often, in the story, dialogue, and the checked activities. |
 | `brief.not_found` | block | The `briefId` is missing, malformed, unknown, or belongs to another learner. These cases are not told apart. | Pass the exact `briefId` from `get_lesson_brief`, with the `learnerId` it was built for. If you lost it, call `get_lesson_brief` again. |
 | `brief.struggle_reuse` | block | A struggle word appears fewer times than `requiredCount`, or never in an activity of its failing skill. | Use it more often, and add an activity of its skill (see "Reading a brief"). |
 | `brief.text_too_long` | block | A passage has more Hebrew words than `tier.maxTextTokens`. | Split it into shorter passages. For a dialogue, shorten the long line. |
@@ -148,7 +154,11 @@ Every Hebrew text needs a clip for its exact pointed text. Do not change a text 
 | `story.unpointed` | block | A word in a story or dialogue line has no niqqud. | Point the word. |
 | `unit.dialogue_lines` | block | A dialogue has under 2 or over 8 lines, it has `text`, or another type has `lines`. | Use 2 to 8 `lines` and no `text` on a dialogue, and no `lines` anywhere else. |
 | `unit.dialogue_speakers` | block | A speaker is not `a` or `b`, or one of them never speaks. | Use only `a` and `b`, and give each at least one line. |
-| `unit.no_markup` | block | A text has `<`, `>`, or `javascript:`. | Remove it. A unit is plain text. |
+| `unit.no_markup` | block | A text, including a `translation`, has `<`, `>`, or `javascript:`. | Remove it. A unit is plain text. |
+| `unit.translation_distractors` | warn | A unit with a sentence `listen_pick` has fewer than 4 different English lines, so the player cannot fill three other choices from this unit. Lines that match after lowercasing, stripping punctuation, and collapsing spaces count once. | Add a different `translation` on more activities or dialogue lines in this unit. |
+| `unit.translation_lang` | block | A `translation` contains Hebrew, or `<`, `>`, or `javascript:`. | Write it in English, with no markup. |
+| `unit.translation_length` | warn | A `translation` is longer than 120 characters. | Shorten it. |
+| `unit.translation_missing` | block | A `listen_pick` whose text has two or more words that are in the lexicon has no `translation`. A missing `translation` blocks a new save or publish, and it blocks an older revision. Only the current published revision warns when that same revision is checked again. | Set `translation` to the English of the whole line. |
 
 ## Example 1: a struggle-heavy brief
 
@@ -201,12 +211,12 @@ Each struggle word is used four times, and each one is used in an activity of it
     {
       "kind": "lesson",
       "activities": [
-        { "type": "story", "text": "בֹּקֶר טוֹב. אֲנִי אוֹכֵל לֶחֶם. אֲנִי שׁוֹתֶה תֵּה חַם. אֲנִי שׁוֹתֶה מַיִם." },
-        { "type": "listen_pick", "text": "אֲנִי שׁוֹתֶה מַיִם" },
-        { "type": "listen_pick", "text": "אֲנִי אוֹכֵל לֶחֶם" },
-        { "type": "recall", "text": "אֲנִי שׁוֹתֶה תֵּה" },
-        { "type": "recall", "text": "אֲנִי שׁוֹתֶה קָפֶה" },
-        { "type": "cloze", "text": "אֲנִי אוֹכֵל לֶחֶם טוֹב" },
+        { "type": "story", "text": "בֹּקֶר טוֹב. אֲנִי אוֹכֵל לֶחֶם. אֲנִי שׁוֹתֶה תֵּה חַם. אֲנִי שׁוֹתֶה מַיִם.", "translation": "Good morning. I eat bread. I drink hot tea. I drink water." },
+        { "type": "listen_pick", "text": "אֲנִי שׁוֹתֶה מַיִם", "target": "מַיִם", "translation": "I drink water" },
+        { "type": "listen_pick", "text": "אֲנִי אוֹכֵל לֶחֶם", "target": "לֶחֶם", "translation": "I eat bread" },
+        { "type": "recall", "text": "אֲנִי שׁוֹתֶה תֵּה", "target": "תֵּה" },
+        { "type": "recall", "text": "אֲנִי שׁוֹתֶה קָפֶה", "target": "קָפֶה" },
+        { "type": "cloze", "text": "אֲנִי אוֹכֵל לֶחֶם טוֹב", "target": "לֶחֶם" },
         { "type": "produce", "text": "חָלָב" }
       ]
     },
@@ -218,7 +228,7 @@ Each struggle word is used four times, and each one is used in an activity of it
         { "type": "recall", "text": "קָפֶה" },
         { "type": "produce", "text": "חָלָב" },
         { "type": "story", "text": "אֲנִי אוֹכֵל לֶחֶם. אֲנִי שׁוֹתֶה מַיִם. אֲנִי שׁוֹתֶה קָפֶה. אֲנִי שׁוֹתֶה חָלָב." },
-        { "type": "listen_pick", "text": "קָפֶה אוֹ חָלָב" }
+        { "type": "listen_pick", "text": "קָפֶה אוֹ חָלָב", "target": "קָפֶה", "translation": "coffee or milk" }
       ]
     }
   ]
@@ -268,13 +278,13 @@ Each dialogue line is its own passage, so each is short and mostly known. Each d
         {
           "type": "dialogue",
           "lines": [
-            { "speaker": "a", "text": "שָׁלוֹם. תֵּה אוֹ קָפֶה?" },
+            { "speaker": "a", "text": "שָׁלוֹם. תֵּה אוֹ קָפֶה?", "translation": "Hello. Tea or coffee?" },
             { "speaker": "b", "text": "שָׁלוֹם. קָפֶה." },
             { "speaker": "a", "text": "קָפֶה, כֵּן?" },
             { "speaker": "b", "text": "כֵּן." }
           ]
         },
-        { "type": "listen_pick", "text": "תֵּה אוֹ קָפֶה" },
+        { "type": "listen_pick", "text": "תֵּה אוֹ קָפֶה", "target": "תֵּה", "translation": "tea or coffee" },
         { "type": "shadow", "text": "תֵּה אוֹ קָפֶה" },
         { "type": "recall", "text": "תֵּה" },
         { "type": "recall", "text": "קָפֶה" }
@@ -286,13 +296,13 @@ Each dialogue line is its own passage, so each is short and mostly known. Each d
         {
           "type": "dialogue",
           "lines": [
-            { "speaker": "a", "text": "קָפֶה, חָלָב?" },
+            { "speaker": "a", "text": "קָפֶה, חָלָב?", "translation": "Coffee, with milk?" },
             { "speaker": "b", "text": "כֵּן, חָלָב. תּוֹדָה." },
             { "speaker": "a", "text": "תּוֹדָה. שָׁלוֹם." },
             { "speaker": "b", "text": "שָׁלוֹם, תּוֹדָה." }
           ]
         },
-        { "type": "listen_pick", "text": "חָלָב אוֹ תֵּה" },
+        { "type": "listen_pick", "text": "חָלָב אוֹ תֵּה", "target": "חָלָב", "translation": "milk or tea" },
         { "type": "recall", "text": "חָלָב" },
         { "type": "recall", "text": "תּוֹדָה" }
       ]

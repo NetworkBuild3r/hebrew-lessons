@@ -38,7 +38,8 @@ import (
 //     answer. Choices show pointed Hebrew. The button value is the lexeme id.
 //   - cloze gaps the first new word. Until the answer, the other words show
 //     pointed Hebrew and transliteration, with no gloss, and the sentence
-//     clip stays hidden. After the answer, every word shows its pointed
+//     clip stays hidden. The choices are pointed Hebrew with no
+//     transliteration. After the answer, every word shows its pointed
 //     text, transliteration, and gloss. Choice values are lexeme ids.
 //   - any other type shows the words and a continue button.
 //
@@ -446,6 +447,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	if screen.Activity.Audio != "" {
 		screen.Activity.AudioLabel, screen.Activity.AudioHebrew = phrasePlayLabel(act, phase)
 	}
+	screen.Activity.Spotlight = spotlight(act.Type, screen.Activity)
 	return screen, nil
 }
 
@@ -475,10 +477,25 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 		MeaningsOpen:  q.meaningsAll,
 		MeaningsHref:  q.meaningsHref,
 	}
+	if !empty && act.Type == units.ActivityListenPick && run.Phase != "ask" {
+		activity.Prompt = listenRevealPrompt
+	}
 	if empty || run.Phase != "ask" || !gradedActivity(act.Type) || target.ID == 0 {
 		return activity
 	}
-	activity.Choices = askChoices(act.Type, pool, earlier, target, choiceSeed(run, target), lineMateExclude(act, lex, target))
+	seed, block := choiceSeed(run, target), lineMateExclude(act, lex, target)
+	activity.Choices = askChoices(act.Type, pool, earlier, target, seed, block)
+	if act.Type == units.ActivityListenPick {
+		// The learner heard a line, so the buttons are lines of Hebrew. A lesson with too
+		// few other words cannot make wrong lines. Then the step asks for the meaning.
+		if lines := listenLines(act, pool, earlier, target, seed, block); lines != nil {
+			activity.Choices = lines
+			activity.Prompt = listenAskPrompt
+			activity.Stage = true
+		} else {
+			activity.Prompt = listenMeaningPrompt
+		}
+	}
 	activity.Asking = len(activity.Choices) > 0
 	if !activity.Asking {
 		activity.Continue = continueLabel(run.ActivityIx, total)
@@ -696,6 +713,11 @@ func gradedActivity(typ string) bool {
 	}
 }
 
+// targetFrom grades act.Target when that token is in the lexicon.
+// A published lesson can omit target. The player then grades the first new
+// token, which is how a revision published before target was required keeps
+// playing. Rechecking that current published revision uses units.ModePublished.
+// An older revision does not. The player does not apply that check.
 func targetFrom(act units.Activity, lex map[string]db.LexemeView, newWords []db.LexemeView) (db.LexemeView, error) {
 	if tok, ok := tokenForTarget(actTokens(act), act.Target); ok {
 		if view, found := lex[tok]; found {
@@ -804,7 +826,9 @@ func askChoices(typ string, unit, earlier []db.LexemeView, target db.LexemeView,
 	if !recallOrCloze(typ) {
 		return lessonChoices(unit, earlier, target, seed, hebrew, false, lessonChoiceButtons, block)
 	}
-	return wideChoices(unit, earlier, target, seed, hebrew, typ == units.ActivityCloze, block)
+	// Cloze buttons are pointed Hebrew only. The answer's reading is on the
+	// sentence after grading, not on the button before it.
+	return wideChoices(unit, earlier, target, seed, hebrew, false, block)
 }
 
 // wideChoices fills a recall or cloze ask from outside the line only. Same
@@ -956,7 +980,7 @@ func lessonViews(rows []db.LexemeView, hebrew, translit bool) []views.Choice {
 				choice.Translit = view.Translit
 			}
 		} else {
-			choice.Label = view.Gloss
+			choice.Label = learnerGloss(view.Gloss)
 		}
 		out = append(out, choice)
 	}
@@ -1016,7 +1040,7 @@ func lessonChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed cho
 				choice.Translit = view.Translit
 			}
 		} else {
-			choice.Label = view.Gloss
+			choice.Label = learnerGloss(view.Gloss)
 		}
 		out = append(out, choice)
 	}

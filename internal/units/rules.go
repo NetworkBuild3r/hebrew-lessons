@@ -21,6 +21,12 @@ const (
 	CoverageBlockBelow   = 90
 	CoverageWarnBelow    = 95
 
+	// TranslationMaxLen is the longest English line translation that does not
+	// warn. MinTranslatedLines is how many translated lines a unit needs once
+	// it has a sentence listen_pick, so three other choices exist.
+	TranslationMaxLen  = 120
+	MinTranslatedLines = 4
+
 	// Brief checks (INIT-015/SPEC-020). The brief's own numbers win when it
 	// carries them. These apply when it carries none, so a malformed brief
 	// fails closed instead of open.
@@ -35,37 +41,41 @@ const (
 // the catalog row records the blocking severity and the description states
 // the warn band.
 const (
-	RuleActivityTarget    = "activity.target"
-	RuleAudioMissing      = "audio.missing"
-	RuleBriefAudioAll     = "brief.audio_all"
-	RuleBriefCoverage     = "brief.coverage"
-	RuleBriefExpired      = "brief.expired"
-	RuleBriefGloss        = "brief.gloss_out_of_brief"
-	RuleBriefIntro        = "brief.new_intro_before_test"
-	RuleBriefNewMinUses   = "brief.new_min_uses"
-	RuleBriefNotFound     = "brief.not_found"
-	RuleBriefStruggle     = "brief.struggle_reuse"
-	RuleBriefTextTooLong  = "brief.text_too_long"
-	RuleBriefUsed         = "brief.used"
-	RuleBudgetLesson      = "budget.lesson"
-	RuleBudgetLessonFew   = "budget.lesson.few"
-	RuleBudgetUnit        = "budget.unit"
-	RuleCoverageListening = "coverage.listening"
-	RuleCoverageStory     = "coverage.story"
-	RuleLexemeUnknown     = "lexeme.unknown"
-	RuleNounGender        = "noun.gender"
-	RuleNounPlural        = "noun.plural"
-	RuleRecycleCount      = "recycle.count"
-	RuleRecycleSpread     = "recycle.spread"
-	RuleSchemaActivity    = "schema.activity"
-	RuleSchemaCheckpoint  = "schema.checkpoint"
-	RuleSchemaKind        = "schema.kind"
-	RuleSchemaLookup      = "schema.lookup"
-	RuleSchemaRef         = "schema.ref"
-	RuleSchemaRequired    = "schema.required"
-	RuleStoryUnmapped     = "story.unmapped"
-	RuleStoryUnpointed    = "story.unpointed"
-	RuleUnitNoMarkup      = "unit.no_markup"
+	RuleActivityTarget             = "activity.target"
+	RuleAudioMissing               = "audio.missing"
+	RuleBriefAudioAll              = "brief.audio_all"
+	RuleBriefCoverage              = "brief.coverage"
+	RuleBriefExpired               = "brief.expired"
+	RuleBriefGloss                 = "brief.gloss_out_of_brief"
+	RuleBriefIntro                 = "brief.new_intro_before_test"
+	RuleBriefNewMinUses            = "brief.new_min_uses"
+	RuleBriefNotFound              = "brief.not_found"
+	RuleBriefStruggle              = "brief.struggle_reuse"
+	RuleBriefTextTooLong           = "brief.text_too_long"
+	RuleBriefUsed                  = "brief.used"
+	RuleBudgetLesson               = "budget.lesson"
+	RuleBudgetLessonFew            = "budget.lesson.few"
+	RuleBudgetUnit                 = "budget.unit"
+	RuleCoverageListening          = "coverage.listening"
+	RuleCoverageStory              = "coverage.story"
+	RuleLexemeUnknown              = "lexeme.unknown"
+	RuleNounGender                 = "noun.gender"
+	RuleNounPlural                 = "noun.plural"
+	RuleRecycleCount               = "recycle.count"
+	RuleRecycleSpread              = "recycle.spread"
+	RuleSchemaActivity             = "schema.activity"
+	RuleSchemaCheckpoint           = "schema.checkpoint"
+	RuleSchemaKind                 = "schema.kind"
+	RuleSchemaLookup               = "schema.lookup"
+	RuleSchemaRef                  = "schema.ref"
+	RuleSchemaRequired             = "schema.required"
+	RuleStoryUnmapped              = "story.unmapped"
+	RuleStoryUnpointed             = "story.unpointed"
+	RuleUnitNoMarkup               = "unit.no_markup"
+	RuleUnitTranslationDistractors = "unit.translation_distractors"
+	RuleUnitTranslationLang        = "unit.translation_lang"
+	RuleUnitTranslationLength      = "unit.translation_length"
+	RuleUnitTranslationMissing     = "unit.translation_missing"
 
 	// Dialogue rules (INIT-015/SPEC-026).
 	RuleUnitDialogueLines    = "unit.dialogue_lines"
@@ -102,14 +112,14 @@ type Rule struct {
 // Rules is the validator catalog, sorted by id. Coverage ids fire as
 // block or warn; Severity here is the block, and Description gives the band.
 var Rules = []Rule{
-	{ID: RuleActivityTarget, Severity: SeverityBlock, Description: "A graded activity (recall, listen_pick, produce, or cloze) has a target that is not one of that activity's tokens, or that token's exact pointed text is not a lexicon entry. The unpointed spelling does not count. A target on any other activity type is the same rule. An empty or missing target is allowed."},
+	{ID: RuleActivityTarget, Severity: SeverityBlock, Description: "A recall, produce, or cloze whose line has two or more words that are in the lexicon must set target to the exact pointed token it grades. That token must be one of the line's tokens, and that token's exact pointed text must be a lexicon entry. The unpointed spelling does not count. A line with fewer lexicon words may omit target. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure. A target on any other activity type is the same rule. On a new save or publish a missing target is a block, and so is publishing an older revision. Checking the current published revision reports it as a warning."},
 	{ID: RuleAudioMissing, Severity: SeverityBlock, Description: "A Hebrew activity has no audio clip for its exact pointed text. A dialogue line needs a clip in its own speaker's voice, and a clip in the other voice does not count."},
 	{ID: RuleBriefAudioAll, Severity: SeverityBlock, Description: "Brief check. A new word, or a title, situation, or concept that contains Hebrew, has no audio clip for its exact pointed text. Activity text is covered by audio.missing."},
-	{ID: RuleBriefCoverage, Severity: SeverityBlock, Description: "Brief check. In a story or listen_pick passage, the share of Hebrew tokens that are known or solid for the learner, or in the brief, is below the brief's tier figure (0.60, 0.90, or 0.95). Function words, proper names, and numerals are left out of the count, and a token that matches no lexeme counts as unknown. Replaces coverage.story and coverage.listening when a brief is used."},
+	{ID: RuleBriefCoverage, Severity: SeverityBlock, Description: "Brief check. In a story or listen_pick passage, the share of Hebrew tokens that are known or solid for the learner, in the brief, or one of this unit's newWords with an exact pointed lexicon entry, is below the brief's tier figure (0.60, 0.90, or 0.95). The intro and the minimum uses run on the brief's new words and on every newWord that coverage credited, including one outside the brief. Function words, proper names, and numerals are left out of the count, and a token that matches no lexeme counts as unknown. Replaces coverage.story and coverage.listening when a brief is used."},
 	{ID: RuleBriefExpired, Severity: SeverityBlock, Description: "Brief check. The brief is older than its time to live and cannot be used."},
 	{ID: RuleBriefGloss, Severity: SeverityBlock, Description: "Brief check. A word that is outside the brief and not known or solid for the learner has no English gloss in the lexicon."},
-	{ID: RuleBriefIntro, Severity: SeverityBlock, Description: "Brief check. A new word reaches its first checked activity with no story or shadow step that shows it earlier."},
-	{ID: RuleBriefNewMinUses, Severity: SeverityBlock, Description: fmt.Sprintf("Brief check. A new word of the brief appears fewer times in the unit than the brief asks, and at least %d.", DefaultNewWordMinUses)},
+	{ID: RuleBriefIntro, Severity: SeverityBlock, Description: "Brief check. A new word of the brief, or a unit newWord that coverage credited, reaches its first checked activity with no story, dialogue, or shadow step that shows it earlier."},
+	{ID: RuleBriefNewMinUses, Severity: SeverityBlock, Description: fmt.Sprintf("Brief check. A new word of the brief appears fewer times in the unit than the brief asks, and at least %d. A unit newWord that coverage credited and that is not in the brief uses that same floor.", DefaultNewWordMinUses)},
 	{ID: RuleBriefNotFound, Severity: SeverityBlock, Description: "Brief check. The brief id is missing, malformed, unknown, or belongs to another learner. The cases are not told apart."},
 	{ID: RuleBriefStruggle, Severity: SeverityBlock, Description: "Brief check. A struggle word appears fewer times than the brief requires, or never in an activity of its failing skill."},
 	{ID: RuleBriefTextTooLong, Severity: SeverityBlock, Description: "Brief check. A story or listen_pick passage has more Hebrew tokens than the tier's limit, when the tier sets one."},
@@ -134,7 +144,11 @@ var Rules = []Rule{
 	{ID: RuleStoryUnpointed, Severity: SeverityBlock, Description: "A story contains a Hebrew word with no niqqud. Names, numbers, and punctuation are ignored. A number is digits or gematria in rank order with U+05F3/U+05F4. Acronyms are words, except spellings that are also valid numerals (ת״א, ש״ס), which are treated as numerals. ASCII quotes are split into letters and flagged. Homographs are not exempt."},
 	{ID: RuleUnitDialogueLines, Severity: SeverityBlock, Description: fmt.Sprintf("A dialogue has fewer than %d or more than %d lines, a dialogue carries text instead of lines, or an activity that is not a dialogue carries lines.", MinDialogueLines, MaxDialogueLines)},
 	{ID: RuleUnitDialogueSpeakers, Severity: SeverityBlock, Description: "A dialogue line has a speaker other than a (female voice) or b (male voice), or one of the two speakers has no line."},
-	{ID: RuleUnitNoMarkup, Severity: SeverityBlock, Description: "Brief check. A text field of the unit (title, situation, concept, a new word, a lesson kind, an activity type, text, or target, a dialogue line's speaker or text) contains <, >, or javascript: in any letter case. The unit is plain text and the templates escape it again on output."},
+	{ID: RuleUnitNoMarkup, Severity: SeverityBlock, Description: "Brief check. A text field of the unit (title, situation, concept, a new word, a lesson kind, an activity type, text, target, or translation, a dialogue line's speaker, text, or translation) contains <, >, or javascript: in any letter case. The unit is plain text and the templates escape it again on output."},
+	{ID: RuleUnitTranslationDistractors, Severity: SeverityWarn, Description: fmt.Sprintf("A unit with a listen_pick of two or more words that are in the lexicon has fewer than %d different English lines. A line is an activity translation or a dialogue line translation. Lines that match after lowercasing, stripping punctuation, and collapsing spaces count once, and the sentence's own translation counts.", MinTranslatedLines)},
+	{ID: RuleUnitTranslationLang, Severity: SeverityBlock, Description: "A translation contains a Hebrew character (U+0590 through U+05FF) or markup (<, >, or javascript:). A translation is English plain text. unit.no_markup also flags the markup."},
+	{ID: RuleUnitTranslationLength, Severity: SeverityWarn, Description: fmt.Sprintf("A translation is longer than %d characters.", TranslationMaxLen)},
+	{ID: RuleUnitTranslationMissing, Severity: SeverityBlock, Description: "A listen_pick whose text has two or more words that are in the lexicon has an empty translation. The count is the same exact pointed lexicon match as activity.target. The unpointed spelling does not count, and a number is not a word. On a new save or publish this is a block, and so is publishing an older revision. Checking the current published revision reports it as a warning."},
 }
 
 // Guidance is one player rule for the model that writes units.

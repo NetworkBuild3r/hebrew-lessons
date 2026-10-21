@@ -189,10 +189,12 @@ func phaseOf(body string) string {
 
 // plScript says how the learner answers. letters is how many of the six letters are right. pick says
 // what a word item gets: "right", "wrong", or "idk". typing is "take" or "skip" at the offer.
+// typingRight types the word correctly on every typing card. Without it, only the first is right.
 type plScript struct {
-	letters int
-	pick    func(it db.PlacementItem, n int) string
-	typing  string
+	letters     int
+	pick        func(it db.PlacementItem, n int) string
+	typing      string
+	typingRight bool
 }
 
 // plShot is one response the server sent.
@@ -211,6 +213,9 @@ type plDriver struct {
 	letters int
 	words   int
 	typed   int
+	// plain posts with no HX-Request header, the way a browser with JavaScript off does.
+	// The handler then returns the whole page. Leave it false for the htmx fragment path.
+	plain bool
 }
 
 func newDriver(t *testing.T, h http.Handler, store *db.Store, u placedUser) *plDriver {
@@ -220,7 +225,7 @@ func newDriver(t *testing.T, h http.Handler, store *db.Store, u placedUser) *plD
 func (d *plDriver) post(path string, form url.Values) string {
 	d.t.Helper()
 	form.Set("_csrf", d.u.csrf)
-	rec := d.u.post(d.t, d.h, path, form, "", true)
+	rec := d.u.post(d.t, d.h, path, form, "", !d.plain)
 	if rec.Code != http.StatusOK {
 		d.t.Fatalf("POST %s %v = %d %s", path, form, rec.Code, rec.Body.String())
 	}
@@ -281,6 +286,10 @@ func (d *plDriver) answer(sc plScript) string {
 	case "typing":
 		w, _, _ := placement.Lookup(it.ItemID)
 		d.typed++
+		if sc.typingRight {
+			form.Set("typed", unpointedHebrew(w.TextNFC))
+			break
+		}
 		switch d.typed {
 		case 1:
 			form.Set("typed", unpointedHebrew(w.TextNFC))

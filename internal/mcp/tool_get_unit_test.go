@@ -69,8 +69,18 @@ func TestTargetOptionalInToolSchema(t *testing.T) {
 		}
 		field, _ := props["target"].(map[string]any)
 		desc, _ := field["description"].(string)
-		if !strings.Contains(desc, "Optional") {
+		if !strings.Contains(desc, "two or more words that are in the lexicon") || !strings.Contains(desc, "exact pointed") || !listenPickCreditPinned(desc) {
 			t.Fatalf("%s target description %q", name, desc)
+		}
+		tr, _ := props["translation"].(map[string]any)
+		trDesc, _ := tr["description"].(string)
+		if !strings.Contains(trDesc, "two or more words that are in the lexicon") || !strings.Contains(trDesc, "120") {
+			t.Fatalf("%s translation description %q", name, trDesc)
+		}
+		for _, item := range required {
+			if item == "translation" {
+				t.Fatalf("%s marks translation required: %s", name, raw)
+			}
 		}
 	}
 	schemaText := readResource(t, session, resourceUnitSchema)
@@ -86,7 +96,95 @@ func TestTargetOptionalInToolSchema(t *testing.T) {
 			t.Fatal("unit schema marks target required")
 		}
 	}
-	_ = props
+	tr, _ := props["translation"].(map[string]any)
+	trDesc, _ := tr["description"].(string)
+	if !strings.Contains(trDesc, "two or more words that are in the lexicon") || !strings.Contains(schemaText, `"translation"`) {
+		t.Fatalf("unit schema translation %q", trDesc)
+	}
+	for _, item := range required {
+		if item == "translation" {
+			t.Fatal("unit schema marks translation required")
+		}
+	}
+	var lines map[string]any
+	if items, ok := props["lines"].(map[string]any); ok {
+		if itemSchema, ok := items["items"].(map[string]any); ok {
+			if lineProps, ok := itemSchema["properties"].(map[string]any); ok {
+				lines = lineProps
+			}
+		}
+	}
+	lineTr, _ := lines["translation"].(map[string]any)
+	lineDesc, _ := lineTr["description"].(string)
+	if !strings.Contains(lineDesc, "sentence-choice distractor") {
+		t.Fatalf("line translation description %q", lineDesc)
+	}
+
+	catalogText := readResource(t, session, resourceActivities)
+	if strings.Contains(catalogText, "no separate") {
+		t.Fatalf("catalog still says there is no separate field: %s", catalogText)
+	}
+	var catalog struct {
+		Activities []struct {
+			Type    string `json:"type"`
+			Purpose string `json:"purpose"`
+			Fields  []struct {
+				Name        string `json:"name"`
+				Required    bool   `json:"required"`
+				Description string `json:"description"`
+			} `json:"fields"`
+		} `json:"activities"`
+	}
+	if err := json.Unmarshal([]byte(catalogText), &catalog); err != nil {
+		t.Fatal(err)
+	}
+	var saw bool
+	for _, info := range catalog.Activities {
+		if info.Type != "listen_pick" {
+			continue
+		}
+		if !strings.Contains(info.Purpose, "lines of Hebrew as the buttons") || !strings.Contains(info.Purpose, "collected and validated now") || !strings.Contains(info.Purpose, "English line is kept for later use") {
+			t.Fatalf("catalog listen_pick purpose %q", info.Purpose)
+		}
+		for _, field := range info.Fields {
+			if field.Name == "target" && !listenPickCreditPinned(field.Description) {
+				t.Fatalf("catalog target description %q", field.Description)
+			}
+			if field.Name != "translation" {
+				continue
+			}
+			saw = true
+			if field.Required {
+				t.Fatal("catalog marks listen_pick translation required")
+			}
+			if !strings.Contains(field.Description, "two or more words that are in the lexicon") {
+				t.Fatalf("catalog translation description %q", field.Description)
+			}
+		}
+	}
+	if !saw {
+		t.Fatal("catalog listen_pick has no translation field")
+	}
+}
+
+// listenPickCreditPinned is the player behavior Hebrew Dev described for a
+// listen_pick with no target: one lexicon word is credited, and two or more
+// grade the first new word (or the first lexicon word) and log no exposure.
+func listenPickCreditPinned(desc string) bool {
+	for _, phrase := range []string{
+		"only that word gets credit",
+		"exactly one lexicon word credits that word",
+		"first new word",
+		"first lexicon word if there is no new word",
+		"logs no exposure",
+		"Planned with #139 and migration 015",
+		"credits nothing and logs a lesson_listen exposure",
+	} {
+		if !strings.Contains(desc, phrase) {
+			return false
+		}
+	}
+	return !strings.Contains(desc, "logged as an exposure")
 }
 
 func TestGetUnit(t *testing.T) {

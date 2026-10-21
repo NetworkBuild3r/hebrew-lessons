@@ -1,0 +1,1551 @@
+{
+  "capturedAt": "2026-10-18T03:25:41.863Z",
+  "pages": {
+    "phone:signed-out": {
+      "url": "/login/",
+      "title": "כניסה — Sign in · דרך עברית",
+      "overflowX": false,
+      "scrollWidth": 390,
+      "pageHeight": 1035,
+      "viewport": "390x844",
+      "targets": 5,
+      "under24": [],
+      "under44": [],
+      "textChecked": 11,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "כניסהSign in"
+      ],
+      "headings": [
+        "H1: כניסהSign in"
+      ],
+      "h1Count": 1,
+      "navItems": [],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "phone:today": {
+      "url": "/",
+      "title": "Today · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 390,
+      "pageHeight": 844,
+      "viewport": "390x844",
+      "targets": 13,
+      "under24": [],
+      "under44": [
+        "דרך עבריתHebrew Way 366x37"
+      ],
+      "textChecked": 23,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "התחילו בשיעור הראשוןStart your first lesson"
+      ],
+      "headings": [
+        "H1: היוםToday",
+        "H2: שגרה 1 — הבוקר שלי",
+        "H2: ברוכים הבאיםWelcome"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "phone:lessons": {
+      "url": "/lessons/",
+      "title": "Lessons · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 390,
+      "pageHeight": 1266,
+      "viewport": "390x844",
+      "targets": 20,
+      "under24": [],
+      "under44": [
+        "דרך עבריתHebrew Way 366x37"
+      ],
+      "textChecked": 38,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [],
+      "headings": [
+        "H1: שיעוריםLessons",
+        "H2: שגרה 1 — הבוקר שלי",
+        "H2: המלצות 1 — הדייט של שי",
+        "H2: מילים אינטימיות — שיעור פרטי",
+        "H2: test"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "phone:review": {
+      "url": "/review/",
+      "title": "Review today · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 390,
+      "pageHeight": 844,
+      "viewport": "390x844",
+      "targets": 21,
+      "under24": [],
+      "under44": [
+        "דרך עבריתHebrew Way 366x37"
+      ],
+      "textChecked": 31,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "בחזרה להיוםBack to Today"
+      ],
+      "headings": [
+        "H1: חזרה היוםReview today",
+        "H2: הכול מעודכן!All caught up!"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "phone:words": {
+      "url": "/words/",
+      "title": "Words · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 390,
+      "pageHeight": 1448,
+      "viewport": "390x844",
+      "targets": 27,
+      "under24": [],
+      "under44": [
+        "דרך עבריתHebrew Way 366x37"
+      ],
+      "textChecked": 35,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "סנןFilter",
+        "הוספהAdd"
+      ],
+      "headings": [
+        "H1: מיליםWords",
+        "H2: עדיין אין מילים.No words yet.",
+        "H2: הוסיפו מילהAdd a word"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "phone:progress": {
+      "url": "/progress/",
+      "title": "Progress · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 390,
+      "pageHeight": 3126,
+      "viewport": "390x844",
+      "targets": 15,
+      "under24": [
+        "מילים חלשותWeak words 89x18",
+        "מילים חלשות מאודVery weak words 126x18"
+      ],
+      "under44": [
+        "דרך עבריתHebrew Way 366x37"
+      ],
+      "textChecked": 207,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [],
+      "headings": [
+        "H1: התקדמותProgress",
+        "H2: עדיין אין חזרות.No reviews yet.",
+        "H2: מה הבינה המלאכותית רואהWhat your AI sees",
+        "H3: שיעורים שהושלמוLessons finished",
+        "H3: זמנים שתורגלוTenses practiced",
+        "H3: בניינים שתורגלוBinyanim practiced",
+        "H3: מתכונים שהושלמוRecipes finished",
+        "H3: מילים חלשותWeak words",
+        "H3: מילים חלשות מאודVery weak words",
+        "H3: דקדוקGrammar",
+        "H3: בנייניםBinyanim",
+        "H3: זמניםTenses",
+        "H3: גופיםPerson cells",
+        "H3: גזרותRoot classes",
+        "H3: מיליםWords"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "phone:verbs": {
+      "url": "/verbs/",
+      "title": "Verbs · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 390,
+      "pageHeight": 844,
+      "viewport": "390x844",
+      "targets": 13,
+      "under24": [],
+      "under44": [
+        "דרך עבריתHebrew Way 366x37"
+      ],
+      "textChecked": 21,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [],
+      "headings": [
+        "H1: פעליםVerbs"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "phone:guides": {
+      "url": "/guides/",
+      "title": "Guides · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 390,
+      "pageHeight": 844,
+      "viewport": "390x844",
+      "targets": 12,
+      "under24": [],
+      "under44": [
+        "דרך עבריתHebrew Way 366x37"
+      ],
+      "textChecked": 17,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [],
+      "headings": [
+        "H1: מדריכיםGuides"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "phone:lessonHref": "http://127.0.0.1:59834/worksheets/my-morning/",
+    "phone:lesson-step1": {
+      "url": "/worksheets/my-morning/",
+      "title": "שגרה 1 — הבוקר שלי",
+      "overflowX": false,
+      "scrollWidth": 390,
+      "pageHeight": 1170,
+      "viewport": "390x844",
+      "targets": 46,
+      "under24": [
+        "שגרה 42x22",
+        "הבוקר 47x22",
+        "שלי 28x22",
+        "פועל 24x15",
+        "אחד 22x15",
+        "שני 17x15",
+        "פעלים 31x15",
+        "סיבוב 28x15",
+        "לומדים 33x15",
+        "כרבע 26x15",
+        "מהזמן 30x15",
+        "על 14x15",
+        "המילים 34x15",
+        "ועל 17x15",
+        "דפוס 24x15",
+        "אחד 21x15",
+        "והשאר 32x15",
+        "הסיפור 34x15",
+        "והדיבור 36x15",
+        "מסלול 42x20",
+        "השיעור 48x20"
+      ],
+      "under44": [
+        "דרך עבריתHebrew Way 366x37"
+      ],
+      "textChecked": 62,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "התחילוStart"
+      ],
+      "headings": [
+        "H1: שגרה 1 — הבוקר שלי",
+        "H2: מסלול השיעורLesson path"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "phone:lesson-tabs": [
+      "1 מיליםWords",
+      "2 התאמהMatch",
+      "3 הקשיבו ובחרוListen and pick",
+      "4 סיפורStory",
+      "5 חידון מהירSpeed quiz",
+      "6 בנו משפטBuild a sentence",
+      "7 דפוסPattern",
+      "8 שאלו חברAsk a Friend",
+      "התחילוStart"
+    ],
+    "phone:lesson-step2": {
+      "clicked": "התחילוStart",
+      "url": "/worksheets/my-morning/",
+      "title": "שגרה 1 — הבוקר שלי",
+      "overflowX": false,
+      "scrollWidth": 390,
+      "pageHeight": 3643,
+      "viewport": "390x844",
+      "targets": 118,
+      "under24": [
+        "סיבוב 28x15",
+        "לומדים 33x15",
+        "כרבע 26x15",
+        "מהזמן 30x15",
+        "על 14x15",
+        "המילים 34x15",
+        "ועל 17x15",
+        "דפוס 24x15",
+        "אחד 21x15",
+        "והשאר 32x15",
+        "הסיפור 34x15",
+        "והדיבור 36x15",
+        "שלב 30x20",
+        "מתוך 35x20",
+        "מילים 37x20",
+        "אוצר 40x23",
+        "מילים 47x23",
+        "קראו 34x20",
+        "את 22x20",
+        "המילה 43x20",
+        "בעברית 51x20",
+        "קודם 34x20",
+        "פתחו 35x20",
+        "את 22x20",
+        "ההגייה 46x20",
+        "רק 20x20",
+        "אם 21x20",
+        "נתקעתם 58x20",
+        "קַמְתִּי 31x19",
+        "אֲנִי 21x27",
+        "קָם 21x27",
+        "ה 10x19",
+        "לִשְׁתּוֹת 40x19",
+        "ה 10x19",
+        "תה 22x27",
+        "בַּבֹּקֶר 32x19",
+        "אֲנִי 21x27",
+        "קָם 21x27",
+        "אֲנִי 21x27",
+        "ח 10x19",
+        "אַחַר 25x19",
+        "כָּךְ 20x27",
+        "אֲנִי 21x27",
+        "צ 9x19",
+        "יוֹצֵאת 33x19",
+        "אֲנִי 21x27"
+      ],
+      "under44": [
+        "דרך עבריתHebrew Way 366x37",
+        "איך אומרים את זה?Show pronunciation 160x30",
+        "בַּבֹּקֶר 38x27",
+        "איך אומרים את זה?Show pronunciation 160x30",
+        "הִיא 25x27",
+        "קָמָה 31x27",
+        "בַּבֹּקֶר 38x27",
+        "איך אומרים את זה?Show pronunciation 160x30",
+        "הוּא 25x27",
+        "שׁוֹתֶה 37x27",
+        "קָפֶה 31x27",
+        "איך אומרים את זה?Show pronunciation 160x30",
+        "הִיא 25x27",
+        "שׁוֹתָה 37x27",
+        "איך אומרים את זה?Show pronunciation 160x30",
+        "בַּבֹּקֶר 38x27",
+        "איך אומרים את זה?Show pronunciation 160x30",
+        "שׁוֹתֶה 37x27",
+        "קָפֶה 31x27",
+        "איך אומרים את זה?Show pronunciation 160x30",
+        "אַחַר 30x27",
+        "יוֹצֵא 27x27",
+        "איך אומרים את זה?Show pronunciation 160x30",
+        "יוֹצֵא 27x27",
+        "לָעֲבוֹדָה 50x27"
+      ],
+      "textChecked": 135,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": 40,
+      "primaryButtonsVisible": [
+        "המשךContinue"
+      ],
+      "headings": [
+        "H2: מיליםWords",
+        "H3: אוצר מילים"
+      ],
+      "h1Count": 0,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "phone:lesson-step3": {
+      "clicked": "המשךContinue",
+      "url": "/worksheets/my-morning/",
+      "title": "שגרה 1 — הבוקר שלי",
+      "overflowX": false,
+      "scrollWidth": 390,
+      "pageHeight": 1462,
+      "viewport": "390x844",
+      "targets": 48,
+      "under24": [
+        "סיבוב 28x15",
+        "לומדים 33x15",
+        "כרבע 26x15",
+        "מהזמן 30x15",
+        "על 14x15",
+        "המילים 34x15",
+        "ועל 17x15",
+        "דפוס 24x15",
+        "אחד 21x15",
+        "והשאר 32x15",
+        "הסיפור 34x15",
+        "והדיבור 36x15",
+        "שלב 30x20",
+        "מתוך 35x20",
+        "התאמה 51x20"
+      ],
+      "under44": [
+        "דרך עבריתHebrew Way 366x37",
+        "עברית 48x25"
+      ],
+      "textChecked": 56,
+      "lowContrast": [
+        "English 2.56:1 @16.8px",
+        "עברית 2.56:1 @16.8px"
+      ],
+      "lowContrastCount": 2,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "המשךContinue"
+      ],
+      "headings": [
+        "H2: התאמהMatch",
+        "H3: English",
+        "H3: עברית"
+      ],
+      "h1Count": 0,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "phone:lesson-step4": {
+      "clicked": "המשךContinue",
+      "url": "/worksheets/my-morning/",
+      "title": "שגרה 1 — הבוקר שלי",
+      "overflowX": false,
+      "scrollWidth": 390,
+      "pageHeight": 844,
+      "viewport": "390x844",
+      "targets": 36,
+      "under24": [
+        "סיבוב 28x15",
+        "לומדים 33x15",
+        "כרבע 26x15",
+        "מהזמן 30x15",
+        "על 14x15",
+        "המילים 34x15",
+        "ועל 17x15",
+        "דפוס 24x15",
+        "אחד 21x15",
+        "והשאר 32x15",
+        "הסיפור 34x15",
+        "והדיבור 36x15",
+        "שלב 30x20",
+        "מתוך 35x20",
+        "הקשיבו 49x20",
+        "ובחרו 37x20"
+      ],
+      "under44": [
+        "דרך עבריתHebrew Way 366x37"
+      ],
+      "textChecked": 44,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "המשךContinue"
+      ],
+      "headings": [
+        "H2: הקשיבו ובחרוListen and pick"
+      ],
+      "h1Count": 0,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "phone:today-dark": {
+      "url": "/",
+      "title": "Today · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 390,
+      "pageHeight": 1063,
+      "viewport": "390x844",
+      "targets": 14,
+      "under24": [],
+      "under44": [
+        "דרך עבריתHebrew Way 366x37"
+      ],
+      "textChecked": 33,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "המשיכוContinue",
+        "שיעור חדשNext new lesson"
+      ],
+      "headings": [
+        "H1: היוםToday",
+        "H2: חזרהReview",
+        "H2: שגרה 1 — הבוקר שלי",
+        "H2: המלצות 1 — הדייט של שי"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב בהירLight mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "desktop:signed-out": {
+      "url": "/login/",
+      "title": "כניסה — Sign in · דרך עברית",
+      "overflowX": false,
+      "scrollWidth": 1425,
+      "pageHeight": 981,
+      "viewport": "1440x900",
+      "targets": 5,
+      "under24": [],
+      "under44": [],
+      "textChecked": 11,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "כניסהSign in"
+      ],
+      "headings": [
+        "H1: כניסהSign in"
+      ],
+      "h1Count": 1,
+      "navItems": [],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "desktop:today": {
+      "url": "/",
+      "title": "Today · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 1440,
+      "pageHeight": 900,
+      "viewport": "1440x900",
+      "targets": 14,
+      "under24": [],
+      "under44": [
+        "דרך עבריתHebrew Way 227x38"
+      ],
+      "textChecked": 33,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "המשיכוContinue",
+        "שיעור חדשNext new lesson"
+      ],
+      "headings": [
+        "H1: היוםToday",
+        "H2: חזרהReview",
+        "H2: שגרה 1 — הבוקר שלי",
+        "H2: המלצות 1 — הדייט של שי"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "desktop:lessons": {
+      "url": "/lessons/",
+      "title": "Lessons · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 1440,
+      "pageHeight": 900,
+      "viewport": "1440x900",
+      "targets": 20,
+      "under24": [],
+      "under44": [
+        "דרך עבריתHebrew Way 227x38"
+      ],
+      "textChecked": 38,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [],
+      "headings": [
+        "H1: שיעוריםLessons",
+        "H2: המלצות 1 — הדייט של שי",
+        "H2: מילים אינטימיות — שיעור פרטי",
+        "H2: test",
+        "H2: שגרה 1 — הבוקר שלי"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "desktop:review": {
+      "url": "/review/",
+      "title": "Review today · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 1440,
+      "pageHeight": 900,
+      "viewport": "1440x900",
+      "targets": 21,
+      "under24": [],
+      "under44": [
+        "דרך עבריתHebrew Way 227x38"
+      ],
+      "textChecked": 31,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "בחזרה להיוםBack to Today"
+      ],
+      "headings": [
+        "H1: חזרה היוםReview today",
+        "H2: הכול מעודכן!All caught up!"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "desktop:words": {
+      "url": "/words/",
+      "title": "Words · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 1440,
+      "pageHeight": 916,
+      "viewport": "1440x900",
+      "targets": 27,
+      "under24": [],
+      "under44": [
+        "דרך עבריתHebrew Way 227x38"
+      ],
+      "textChecked": 35,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "סנןFilter",
+        "הוספהAdd"
+      ],
+      "headings": [
+        "H1: מיליםWords",
+        "H2: עדיין אין מילים.No words yet.",
+        "H2: הוסיפו מילהAdd a word"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "desktop:progress": {
+      "url": "/progress/",
+      "title": "Progress · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 1440,
+      "pageHeight": 2719,
+      "viewport": "1440x900",
+      "targets": 15,
+      "under24": [
+        "מילים חלשותWeak words 89x18",
+        "מילים חלשות מאודVery weak words 126x18"
+      ],
+      "under44": [
+        "דרך עבריתHebrew Way 227x38"
+      ],
+      "textChecked": 207,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [],
+      "headings": [
+        "H1: התקדמותProgress",
+        "H2: עדיין אין חזרות.No reviews yet.",
+        "H2: מה הבינה המלאכותית רואהWhat your AI sees",
+        "H3: שיעורים שהושלמוLessons finished",
+        "H3: זמנים שתורגלוTenses practiced",
+        "H3: בניינים שתורגלוBinyanim practiced",
+        "H3: מתכונים שהושלמוRecipes finished",
+        "H3: מילים חלשותWeak words",
+        "H3: מילים חלשות מאודVery weak words",
+        "H3: דקדוקGrammar",
+        "H3: בנייניםBinyanim",
+        "H3: זמניםTenses",
+        "H3: גופיםPerson cells",
+        "H3: גזרותRoot classes",
+        "H3: מיליםWords"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "desktop:verbs": {
+      "url": "/verbs/",
+      "title": "Verbs · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 1440,
+      "pageHeight": 900,
+      "viewport": "1440x900",
+      "targets": 13,
+      "under24": [],
+      "under44": [
+        "דרך עבריתHebrew Way 227x38"
+      ],
+      "textChecked": 21,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [],
+      "headings": [
+        "H1: פעליםVerbs"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "desktop:guides": {
+      "url": "/guides/",
+      "title": "Guides · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 1440,
+      "pageHeight": 900,
+      "viewport": "1440x900",
+      "targets": 12,
+      "under24": [],
+      "under44": [
+        "דרך עבריתHebrew Way 227x38"
+      ],
+      "textChecked": 17,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [],
+      "headings": [
+        "H1: מדריכיםGuides"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "desktop:lessonHref": "http://127.0.0.1:59834/worksheets/my-morning/",
+    "desktop:lesson-step1": {
+      "url": "/worksheets/my-morning/",
+      "title": "שגרה 1 — הבוקר שלי",
+      "overflowX": false,
+      "scrollWidth": 1440,
+      "pageHeight": 1145,
+      "viewport": "1440x900",
+      "targets": 46,
+      "under24": [
+        "שגרה 42x22",
+        "הבוקר 47x22",
+        "שלי 28x22",
+        "פועל 24x15",
+        "אחד 22x15",
+        "שני 17x15",
+        "פעלים 31x15",
+        "סיבוב 28x15",
+        "לומדים 33x15",
+        "כרבע 26x15",
+        "מהזמן 30x15",
+        "על 14x15",
+        "המילים 34x15",
+        "ועל 17x15",
+        "דפוס 24x15",
+        "אחד 21x15",
+        "והשאר 32x15",
+        "הסיפור 34x15",
+        "והדיבור 36x15",
+        "מסלול 42x20",
+        "השיעור 48x20"
+      ],
+      "under44": [
+        "דרך עבריתHebrew Way 583x38"
+      ],
+      "textChecked": 61,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "המשיכו מהמקום שעצרתםContinue where you left off"
+      ],
+      "headings": [
+        "H1: שגרה 1 — הבוקר שלי",
+        "H2: מסלול השיעורLesson path"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "desktop:lesson-tabs": [
+      "מיליםWords",
+      "התאמהMatch",
+      "3 הקשיבו ובחרוListen and pick",
+      "4 סיפורStory",
+      "5 חידון מהירSpeed quiz",
+      "6 בנו משפטBuild a sentence",
+      "7 דפוסPattern",
+      "8 שאלו חברAsk a Friend",
+      "המשיכו מהמקום שעצרתםContinue w"
+    ],
+    "desktop:lesson-step2": {
+      "clicked": "המשיכו מהמקום שעצרתםContinue w",
+      "url": "/worksheets/my-morning/",
+      "title": "שגרה 1 — הבוקר שלי",
+      "overflowX": false,
+      "scrollWidth": 1440,
+      "pageHeight": 900,
+      "viewport": "1440x900",
+      "targets": 36,
+      "under24": [
+        "סיבוב 28x15",
+        "לומדים 33x15",
+        "כרבע 26x15",
+        "מהזמן 30x15",
+        "על 14x15",
+        "המילים 34x15",
+        "ועל 17x15",
+        "דפוס 24x15",
+        "אחד 21x15",
+        "והשאר 32x15",
+        "הסיפור 34x15",
+        "והדיבור 36x15",
+        "שלב 30x20",
+        "מתוך 35x20",
+        "הקשיבו 49x20",
+        "ובחרו 37x20"
+      ],
+      "under44": [
+        "דרך עבריתHebrew Way 583x38"
+      ],
+      "textChecked": 44,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "המשךContinue"
+      ],
+      "headings": [
+        "H2: הקשיבו ובחרוListen and pick"
+      ],
+      "h1Count": 0,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "desktop:lesson-step3": {
+      "clicked": "המשךContinue",
+      "url": "/worksheets/my-morning/",
+      "title": "שגרה 1 — הבוקר שלי",
+      "overflowX": false,
+      "scrollWidth": 1440,
+      "pageHeight": 900,
+      "viewport": "1440x900",
+      "targets": 55,
+      "under24": [
+        "סיבוב 28x15",
+        "לומדים 33x15",
+        "כרבע 26x15",
+        "מהזמן 30x15",
+        "על 14x15",
+        "המילים 34x15",
+        "ועל 17x15",
+        "דפוס 24x15",
+        "אחד 21x15",
+        "והשאר 32x15",
+        "הסיפור 34x15",
+        "והדיבור 36x15",
+        "שלב 30x20",
+        "מתוך 35x20",
+        "סיפור 37x20",
+        "on 18x18",
+        "Gloss: בַּ 10x27",
+        "Gloss: אֲנִי 21x27",
+        "Gloss: קָם 21x27",
+        "Gloss: גַּם 19x27",
+        "Gloss: אֲנִי 21x27",
+        "Gloss: גַּם 19x27",
+        "Gloss: כָּךְ 20x27",
+        "Gloss: אֲנִי 21x27"
+      ],
+      "under44": [
+        "דרך עבריתHebrew Way 583x38",
+        "Gloss: בֹּקֶר 29x27",
+        "Gloss: הִיא 25x27",
+        "Gloss: קָמָה 31x27",
+        "Gloss: בַּבֹּקֶר 38x27",
+        "Gloss: שׁוֹתֶה 37x27",
+        "Gloss: קָפֶה 31x27",
+        "Gloss: הִיא 25x27",
+        "Gloss: שׁוֹתָה 37x27",
+        "Gloss: קָפֶה 31x27",
+        "Gloss: אַחַר 30x27",
+        "Gloss: יוֹצֵא 27x27",
+        "Gloss: לָעֲבוֹדָה 50x27"
+      ],
+      "textChecked": 70,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "המשךContinue"
+      ],
+      "headings": [
+        "H2: סיפורStory",
+        "H3: קראו את הטקסטRead the text"
+      ],
+      "h1Count": 0,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "desktop:lesson-step4": {
+      "clicked": "המשךContinue",
+      "url": "/worksheets/my-morning/",
+      "title": "שגרה 1 — הבוקר שלי",
+      "overflowX": false,
+      "scrollWidth": 1440,
+      "pageHeight": 900,
+      "viewport": "1440x900",
+      "targets": 37,
+      "under24": [
+        "סיבוב 28x15",
+        "לומדים 33x15",
+        "כרבע 26x15",
+        "מהזמן 30x15",
+        "על 14x15",
+        "המילים 34x15",
+        "ועל 17x15",
+        "דפוס 24x15",
+        "אחד 21x15",
+        "והשאר 32x15",
+        "הסיפור 34x15",
+        "והדיבור 36x15",
+        "שלב 30x20",
+        "מתוך 35x20",
+        "חידון 32x20",
+        "מהיר 34x20"
+      ],
+      "under44": [
+        "דרך עבריתHebrew Way 583x38",
+        "היא 30x30",
+        "תה 26x30"
+      ],
+      "textChecked": 47,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "המשךContinue"
+      ],
+      "headings": [
+        "H2: חידון מהירSpeed quiz"
+      ],
+      "h1Count": 0,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "desktop:today-dark": {
+      "url": "/",
+      "title": "Today · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 1440,
+      "pageHeight": 900,
+      "viewport": "1440x900",
+      "targets": 14,
+      "under24": [],
+      "under44": [
+        "דרך עבריתHebrew Way 227x38"
+      ],
+      "textChecked": 33,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "המשיכוContinue",
+        "שיעור חדשNext new lesson"
+      ],
+      "headings": [
+        "H1: היוםToday",
+        "H2: חזרהReview",
+        "H2: שגרה 1 — הבוקר שלי",
+        "H2: המלצות 1 — הדייט של שי"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "EN",
+        "עב",
+        "מצב בהירLight mode",
+        "Learner▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "desktop:admin": {
+      "url": "/admin/",
+      "title": "Admin · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 1440,
+      "pageHeight": 900,
+      "viewport": "1440x900",
+      "targets": 29,
+      "under24": [
+        "admin 45x18",
+        "learner 53x18"
+      ],
+      "under44": [
+        "דרך עבריתHebrew Way 227x38",
+        "תכנון בינהAI planning: כבויoff 133x36",
+        "GoogleGoogle 71x36",
+        "איפוס סיסמהReset password 128x36",
+        "הפוך למשתמשMake user 91x36",
+        "השבתהDisable 73x36",
+        "תכנון בינהAI planning: כבויoff 133x36",
+        "GoogleGoogle 71x36",
+        "איפוס סיסמהReset password 128x36",
+        "הפוך למנהלMake admin 102x36",
+        "השבתהDisable 73x36"
+      ],
+      "textChecked": 52,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "יצירת משתמשCreate user"
+      ],
+      "headings": [
+        "H1: ניהולAdmin",
+        "H2: משתמשיםUsers"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "עריכהEditor",
+        "ניהולAdmin",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Admin▾",
+        "משתמשיםUsers"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    },
+    "desktop:editor": {
+      "url": "/editor/",
+      "title": "Editor · Hebrew Way",
+      "overflowX": false,
+      "scrollWidth": 1440,
+      "pageHeight": 900,
+      "viewport": "1440x900",
+      "targets": 22,
+      "under24": [],
+      "under44": [
+        "דרך עבריתHebrew Way 227x38"
+      ],
+      "textChecked": 27,
+      "lowContrast": [],
+      "lowContrastCount": 0,
+      "bodyFontPx": 16,
+      "heWordPx": null,
+      "primaryButtonsVisible": [
+        "תוכנית חדשהNew plan",
+        "יצירהCreate"
+      ],
+      "headings": [
+        "H1: עריכהEditor",
+        "H2: ספריית תוכניותPlan library",
+        "H3: תוכנית חדשהNew plan"
+      ],
+      "h1Count": 1,
+      "navItems": [
+        "דרך עבריתHebrew Way",
+        "היוםToday",
+        "שיעוריםLessons",
+        "מדריכיםGuides",
+        "פעליםVerbs",
+        "חזרהReview",
+        "מיליםWords",
+        "התקדמותProgress",
+        "עריכהEditor",
+        "ניהולAdmin",
+        "EN",
+        "עב",
+        "מצב כההDark mode",
+        "Admin▾"
+      ],
+      "htmlLang": "he",
+      "htmlDir": "rtl",
+      "imagesWithoutAlt": 0
+    }
+  },
+  "reflow320": {
+    "today": {
+      "overflowX": false,
+      "scrollWidth": 320
+    },
+    "lessons": {
+      "overflowX": false,
+      "scrollWidth": 320
+    },
+    "review": {
+      "overflowX": false,
+      "scrollWidth": 320
+    },
+    "words": {
+      "overflowX": false,
+      "scrollWidth": 320
+    },
+    "progress": {
+      "overflowX": false,
+      "scrollWidth": 320
+    },
+    "verbs": {
+      "overflowX": false,
+      "scrollWidth": 320
+    },
+    "guides": {
+      "overflowX": false,
+      "scrollWidth": 320
+    }
+  },
+  "focus": [
+    {
+      "el": "המשיכוContinue",
+      "outline": "3px solid",
+      "shadow": true
+    },
+    {
+      "el": "שיעור חדשNext new lesson",
+      "outline": "3px solid",
+      "shadow": true
+    },
+    null,
+    {
+      "el": "דרך עבריתHebrew Way",
+      "outline": "3px solid",
+      "shadow": false
+    },
+    {
+      "el": "היוםToday",
+      "outline": "3px solid",
+      "shadow": false
+    },
+    {
+      "el": "שיעוריםLessons",
+      "outline": "3px solid",
+      "shadow": false
+    },
+    {
+      "el": "מדריכיםGuides",
+      "outline": "3px solid",
+      "shadow": false
+    },
+    {
+      "el": "פעליםVerbs",
+      "outline": "3px solid",
+      "shadow": false
+    }
+  ],
+  "consoleErrors": []
+}

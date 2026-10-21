@@ -33,6 +33,17 @@ templ uiRun(lang, text string) {
 	}
 }
 
+// MixedEN renders an English sentence. Each Hebrew run is its own bdi.
+templ MixedEN(text string) {
+	for _, run := range MixedRuns(text) {
+		if run.Hebrew {
+			@H(run.Text)
+		} else {
+			{ run.Text }
+		}
+	}
+}
+
 // Situation is the English line under a Hebrew lesson title.
 // The block itself is LTR so the sentence's punctuation stays at the end.
 templ Situation(text string) {

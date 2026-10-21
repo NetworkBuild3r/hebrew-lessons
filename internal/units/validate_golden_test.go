@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -270,7 +271,7 @@ func goldenCases() []goldenCase {
 func introducingListen() goldenCase {
 	u, _ := base()
 	text := strings.Join(u.NewWords[:2], " ")
-	u.Lessons[0].Activities = append([]Activity{{Type: ActivityListenPick, Text: text}}, u.Lessons[0].Activities...)
+	u.Lessons[0].Activities = append([]Activity{withGradedTarget(Activity{Type: ActivityListenPick, Text: text})}, u.Lessons[0].Activities...)
 	return goldenCase{
 		file:   "introducing_listen.json",
 		name:   "A listen_pick that introduces its new words counts those words as known in that activity. Coverage is not 0%. Listening stays a passage, with the same thresholds as story.",
@@ -671,7 +672,7 @@ func assemble(words []string, groups [][]int, repeats [][]int) Unit {
 		if len(g) > 0 {
 			text := joinIdx(words, g)
 			acts = append(acts,
-				Activity{Type: ActivityListenPick, Text: text},
+				withGradedTarget(Activity{Type: ActivityListenPick, Text: text}),
 				Activity{Type: ActivityStory, Text: text},
 			)
 		}
@@ -686,13 +687,15 @@ func assemble(words []string, groups [][]int, repeats [][]int) Unit {
 		}
 		lessons = append(lessons, Lesson{Kind: KindCheckpoint, Activities: acts})
 	}
-	return Unit{
+	u := Unit{
 		Title:     "Cafe morning",
 		Situation: "Ordering at a cafe",
 		Concept:   "Greetings and food",
 		NewWords:  append([]string(nil), words...),
 		Lessons:   lessons,
 	}
+	padFixtureTranslations(&u)
+	return u
 }
 
 func joinIdx(words []string, idx []int) string {
@@ -718,8 +721,100 @@ func addAct(u *Unit, typ, text string) (int, int) {
 }
 
 func addActAt(u *Unit, li int, typ, text string) int {
-	u.Lessons[li].Activities = append(u.Lessons[li].Activities, Activity{Type: typ, Text: text})
+	u.Lessons[li].Activities = append(u.Lessons[li].Activities, withGradedTarget(Activity{Type: typ, Text: text}))
 	return len(u.Lessons[li].Activities) - 1
+}
+
+// withGradedTarget sets Target to the first Hebrew word when a graded line
+// has several words and no target. Golden fixtures and brief fixtures stay
+// clean under the multi-token rule. A test that wants a missing target builds
+// the activity itself.
+func withGradedTarget(act Activity) Activity {
+	if normalize(act.Target) != "" || !gradedActivity(act.Type) {
+		return act
+	}
+	n := 0
+	var first string
+	for _, text := range act.Texts() {
+		for _, tok := range tokenize(text) {
+			if !isHebrewWord(tok) {
+				continue
+			}
+			if n == 0 {
+				first = tok
+			}
+			n++
+		}
+	}
+	if n > 1 {
+		act.Target = first
+	}
+	// A multi-word listen_pick in a fixture also carries a short English line,
+	// so the sentence-translation rule does not land on a golden that is
+	// about something else. A test that wants a missing translation builds
+	// the activity itself, or clears this field.
+	if act.Type == ActivityListenPick && n > 1 && strings.TrimSpace(act.Translation) == "" {
+		act.Translation = fixtureTranslation(act.Text)
+	}
+	return act
+}
+
+// padFixtureTranslations fills distinct translations on other activities
+// until a unit that has a multi-word listen_pick has four different English
+// lines. The distractor warning would otherwise rewrite every golden that
+// introduces fewer than four sentences. fixtureHebrewWords is only how a
+// fixture finds a sentence; the rule counts lexicon entries.
+func padFixtureTranslations(u *Unit) {
+	sentences := 0
+	for _, les := range u.Lessons {
+		for _, act := range les.Activities {
+			if act.Type == ActivityListenPick && fixtureHebrewWords(act) > 1 {
+				sentences++
+			}
+		}
+	}
+	if sentences == 0 {
+		return
+	}
+	n := 0
+	for i := range u.Lessons {
+		for j := range u.Lessons[i].Activities {
+			if translatedLineCount(u) >= MinTranslatedLines {
+				return
+			}
+			act := &u.Lessons[i].Activities[j]
+			if strings.TrimSpace(act.Translation) != "" || act.Type == ActivityDialogue {
+				continue
+			}
+			n++
+			act.Translation = fmt.Sprintf("another line %d", n)
+		}
+	}
+}
+
+// fixtureHebrewWords counts Hebrew-letter tokens. Fixtures use it to spot a
+// sentence before the lexicon is consulted. It is not the multi-word rule.
+func fixtureHebrewWords(act Activity) int {
+	n := 0
+	for _, text := range act.Texts() {
+		for _, tok := range tokenize(text) {
+			if isHebrewWord(tok) {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+func fixtureTranslation(text string) string {
+	sum := 0
+	for _, r := range text {
+		sum = sum*33 + int(r)
+	}
+	if sum < 0 {
+		sum = -sum
+	}
+	return fmt.Sprintf("a short line %d", sum)
 }
 
 func repeatJoin(word string, n int) string {

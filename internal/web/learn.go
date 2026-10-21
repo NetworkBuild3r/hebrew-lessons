@@ -2,10 +2,14 @@ package web
 
 import (
 	"context"
+	cryptorand "crypto/rand"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,6 +20,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
@@ -43,6 +48,10 @@ type server struct {
 
 	mu     sync.Mutex
 	queues map[string]*studyQueue
+	// fixedReviewSeed keeps the service seed for every sitting. Tests that
+	// inject a Service set it so the queue stays deterministic. Production
+	// draws a seed once per sitting.
+	fixedReviewSeed bool
 }
 
 // studyQueue is one auth session's review, including the counts the card view shows.
@@ -59,6 +68,13 @@ type studyQueue struct {
 	done     bool
 	revealed bool
 	builtAt  time.Time
+	// seed is the mix seed for this sitting. It is drawn once, when the queue
+	// is built, and kept until the queue is Done or the UTC day changes, so a
+	// reload serves the same order.
+	seed int64
+	// asked is the pair letter the reveal posted. The back and the grade
+	// keep it, so a study-day rollover cannot switch the letter.
+	asked string
 	// item is the checked activity the current card is asked through. It is nil for a
 	// flashcard and a drill. fb is set from the checked answer until Continue.
 	item *activity.Item
@@ -71,6 +87,9 @@ func newServer(store *db.Store) *server {
 		queues: map[string]*studyQueue{},
 	}
 	if store != nil {
+		// 1 is the band-slip tie-break (BuildSessionFor) and the seed an
+		// injected service replaces. GET /review does not use it: queueLocked
+		// draws a seed for the sitting and passes that to BuildSessionWithSeed.
 		s.study = session.New(store, store.Clock(), 1)
 		s.useActivityKey(nil)
 	}
@@ -125,7 +144,7 @@ func (s *server) learnerHome(ctx context.Context, userID int64, name string) (Ho
 	}
 	vm.KnownWords = len(known)
 
-	next, situation, _, _, err := s.unitProgress(ctx, userID)
+	next, situation, _, _, _, _, err := s.unitProgress(ctx, userID)
 	if err != nil {
 		return HomeVM{}, "", err
 	}
@@ -139,25 +158,28 @@ func (s *server) learnerHome(ctx context.Context, userID int64, name string) (Ho
 }
 
 // unitProgress returns the next published shared unit this learner has not
-// finished, that unit's situation line, and the published shared counts.
-func (s *server) unitProgress(ctx context.Context, userID int64) (*UnitRefVM, string, int, int, error) {
+// finished, that unit's situation line, and the finished counts.
+// UnitsInScope already leaves another learner's units out. Totals then keep
+// published shared units and this learner's own published units. Unpublished
+// units and units they reported are left out. A unit is finished only when it
+// has at least one lesson and every one of those lessons is finished. A
+// finished run whose index is past the current lesson count does not count.
+// The lesson counts are the lessons inside the units that count. The next
+// unit stays the first unfinished shared unit.
+func (s *server) unitProgress(ctx context.Context, userID int64) (*UnitRefVM, string, int, int, int, int, error) {
 	units, err := s.store.UnitsInScope(ctx, userID)
 	if err != nil {
-		return nil, "", 0, 0, err
+		return nil, "", 0, 0, 0, 0, err
 	}
-	done, err := s.store.CompletedSharedUnits(ctx, userID)
+	finishes, err := s.store.FinishedLessons(ctx, userID)
 	if err != nil {
-		return nil, "", 0, 0, err
+		return nil, "", 0, 0, 0, 0, err
 	}
-	finished := map[int64]bool{}
-	for _, unit := range done {
-		finished[unit.UnitID] = true
-	}
-	// A shared unit the learner reported is hidden for them: it is not next, and it does
+	// A unit the learner reported is hidden for them: it is not next, and it does
 	// not count in their totals.
 	reported, err := s.store.HiddenUnitIDs(ctx, userID)
 	if err != nil {
-		return nil, "", 0, 0, err
+		return nil, "", 0, 0, 0, 0, err
 	}
 	hidden := map[int64]bool{}
 	for _, id := range reported {
@@ -165,22 +187,31 @@ func (s *server) unitProgress(ctx context.Context, userID int64) (*UnitRefVM, st
 	}
 	var next *UnitRefVM
 	situation := ""
-	completed, total := 0, 0
+	unitsDone, unitsTotal, lessonsDone, lessonsTotal := 0, 0, 0, 0
 	for _, unit := range units {
-		if unit.Scope != "shared" || unit.Status != "published" || hidden[unit.ID] {
+		if hidden[unit.ID] || unit.Status != "published" {
 			continue
 		}
-		total++
-		if finished[unit.ID] {
-			completed++
-			continue
+		n := db.LessonCount(unit.Doc)
+		unitsTotal++
+		lessonsTotal += n
+		got := 0
+		for ix := 0; ix < n; ix++ {
+			if _, ok := finishes[unit.ID][ix]; ok {
+				got++
+			}
 		}
-		if next == nil {
+		lessonsDone += got
+		whole := n > 0 && got == n
+		if whole {
+			unitsDone++
+		}
+		if unit.Scope == "shared" && !whole && next == nil {
 			next = &UnitRefVM{ID: unit.ID, Position: unit.Position, Title: unit.Title}
 			situation = unit.Situation
 		}
 	}
-	return next, situation, completed, total, nil
+	return next, situation, unitsDone, unitsTotal, lessonsDone, lessonsTotal, nil
 }
 
 func (s *server) placementVM(ctx context.Context, userID int64) (*PlacementVM, error) {
@@ -285,19 +316,25 @@ func (s *server) sessionKey(r *http.Request) (string, *auth.User, bool) {
 }
 
 // queueLocked returns the study queue for this auth session.
-// A Done queue, or one built on another UTC day, is rebuilt.
+// A queue built on another UTC day is rebuilt. A finished sitting is kept
+// when the rebuild is also finished, so its count stays on the done screen.
 // The caller holds s.mu.
 func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*studyQueue, error) {
 	now := s.now()
-	if q := s.queues[key]; q != nil && q.userID == userID && !q.done && sameStudyDay(q.builtAt, now) {
-		return q, nil
+	prev := s.queues[key]
+	if prev != nil && prev.userID == userID && !prev.done && sameStudyDay(prev.builtAt, now) {
+		return prev, nil
 	}
 	if s.study == nil {
 		q := &studyQueue{userID: userID, done: true, builtAt: now}
 		s.rememberLocked(key, q, now)
 		return q, nil
 	}
-	built, err := s.study.BuildSession(ctx, userID)
+	seed, err := s.reviewSeedLocked()
+	if err != nil {
+		return nil, err
+	}
+	built, err := s.study.BuildSessionWithSeed(ctx, userID, seed)
 	if err != nil {
 		return nil, err
 	}
@@ -306,9 +343,14 @@ func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*st
 	if built.UserID() != userID {
 		return nil, fmt.Errorf("web: session belongs to learner %d, not %d", built.UserID(), userID)
 	}
-	q := &studyQueue{userID: userID, sess: built, builtAt: now}
+	q := &studyQueue{userID: userID, sess: built, builtAt: now, seed: seed}
 	if err := s.advance(ctx, q); err != nil {
 		return nil, err
+	}
+	// A finished sitting stays on the next read when nothing new is due, so the
+	// done screen can still name how many cards that sitting reviewed.
+	if q.done && prev != nil && prev.userID == userID && prev.done && prev.answered > 0 && sameStudyDay(prev.builtAt, now) {
+		return prev, nil
 	}
 	s.rememberLocked(key, q, now)
 	return q, nil
@@ -356,6 +398,28 @@ func (s *server) dropOldestLocked() {
 	}
 }
 
+// reviewSeedLocked is the mix seed for a new sitting. The caller holds s.mu.
+// A fixed seed is the one the service was built with, so tests that inject
+// a Service keep a deterministic queue. Otherwise the seed is drawn once
+// and stored on the queue.
+func (s *server) reviewSeedLocked() (int64, error) {
+	if s.fixedReviewSeed && s.study != nil {
+		return s.study.Seed(), nil
+	}
+	return drawReviewSeed()
+}
+
+// drawReviewSeed reads 8 bytes from crypto/rand. The value is the sitting
+// seed. Zero is a valid seed. The queue stores it, so later requests in
+// the sitting do not draw again.
+func drawReviewSeed() (int64, error) {
+	var buf [8]byte
+	if _, err := cryptorand.Read(buf[:]); err != nil {
+		return 0, fmt.Errorf("web: review seed: %w", err)
+	}
+	return int64(binary.LittleEndian.Uint64(buf[:])), nil
+}
+
 func (s *server) now() time.Time {
 	if s != nil && s.store != nil && s.store.Clock() != nil {
 		return s.store.Clock().Now()
@@ -381,6 +445,7 @@ func sameStudyDay(built, now time.Time) bool {
 func (s *server) advance(ctx context.Context, q *studyQueue) error {
 	if q != nil {
 		q.revealed = false
+		q.asked = ""
 		q.item = nil
 		q.fb = nil
 	}
@@ -433,9 +498,21 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 		vm.Answer = q.fb
 		return vm, nil
 	}
-	if ref.Kind == session.KindLetter || ref.Kind == session.KindPattern {
+	// A mode that is not a lexeme loads from its key. Letter and pattern are
+	// those modes today. A later one is the same path once its entry says so.
+	if mode, ok := views.LookupReviewMode(ref.Kind); ok && !mode.Lexeme {
 		vm.Pointed = ref.Key
 		vm.Unpointed = units.Plain(ref.Key)
+		if err := s.fillDrill(ctx, q.userID, &vm); err != nil {
+			return ReviewCardVM{}, err
+		}
+		// A reveal posted the letter. Later renders, including one after the
+		// study day rolls, show that letter instead of picking again.
+		if q.asked != "" {
+			vm.Asked = q.asked
+			vm.Pointed = q.asked
+			vm.Unpointed = units.Plain(q.asked)
+		}
 		return vm, nil
 	}
 	if s.store == nil || ref.LexemeID == 0 {
@@ -465,12 +542,209 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 		return ReviewCardVM{}, err
 	}
 	vm.ShowUnpointed = show
-	if ref.Skill == fsrs.SkillRecall || ref.Kind == fsrs.SkillRecall {
-		vm.Kind = fsrs.SkillRecall
+	// The four study skills keep the fallback below, including a recall skill
+	// forcing the recall face. Any other registered mode keeps the kind the
+	// queue put on the card, so adding the mode entry is enough.
+	if _, ok := views.LookupReviewMode(ref.Kind); ok && !studySkillKind(ref.Kind) {
+		vm.Kind = ref.Kind
 		return vm, nil
 	}
-	vm.Kind = fsrs.SkillRead
+	switch ref.Kind {
+	case fsrs.SkillRead, fsrs.SkillRecall, fsrs.SkillListen, fsrs.SkillSpell:
+		vm.Kind = ref.Kind
+	default:
+		if ref.Skill == fsrs.SkillRecall {
+			vm.Kind = fsrs.SkillRecall
+		} else {
+			vm.Kind = fsrs.SkillRead
+		}
+	}
+	if ref.Skill == fsrs.SkillRecall {
+		vm.Kind = fsrs.SkillRecall
+	}
 	return vm, nil
+}
+
+func studySkillKind(kind string) bool {
+	switch kind {
+	case fsrs.SkillRead, fsrs.SkillRecall, fsrs.SkillListen, fsrs.SkillSpell:
+		return true
+	default:
+		return false
+	}
+}
+
+// fillDrill loads a card that is not a lexeme. Letter and pattern are the
+// modes that need it. A later mode whose card is a lexeme does not come
+// through here. A mode that is not a lexeme adds a branch in this switch.
+// The reveal route and the grade guard do not grow a branch for it.
+// The key stays the prompt. Names, sounds, glosses, the example word, and
+// its clip are answer fields. ConcealFront keeps them off the page until
+// the reveal.
+func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) error {
+	key := vm.Pointed
+	parts := splitDrillKey(key)
+	switch vm.Kind {
+	case session.KindLetter:
+		vm.Asked = pickPart(vm.CardID, studyDayCutoff(s.now()), parts)
+		stored := make([]string, 0, len(parts))
+		sides := make([]views.DrillSide, 0, len(parts))
+		for _, part := range parts {
+			sound, err := s.letterSound(ctx, part)
+			if err != nil {
+				return err
+			}
+			stored = append(stored, sound)
+			side := views.DrillSide{Hebrew: part, Sound: sound}
+			if e, ok := views.LookupAlefbet(part); ok {
+				side.Name = e.Name
+				side.NameTranslit = e.Translit
+				side.Sound = e.Sound
+			} else {
+				side.Name = views.LetterName(part)
+			}
+			sides = append(sides, side)
+		}
+		vm.Sides = sides
+		if len(parts) == 1 {
+			if e, ok := views.LookupAlefbet(parts[0]); ok {
+				vm.LooksLike = views.FirstAlefbetCue(e.Cue)
+			}
+		}
+		vm.TellApart = views.AlefbetTellApart(parts)
+		vm.PairNote = views.AlefbetPairNote(parts)
+		vm.DageshNote = views.LetterDageshNote(parts, stored)
+		vm.DageshHard = views.DageshHardNote(parts)
+		ex, ok, err := s.confusionExample(ctx, userID, fsrs.MissLetterPair, key)
+		if err != nil {
+			return err
+		}
+		if ok {
+			vm.ExampleText = ex.TextNFC
+			vm.ExampleTranslit = ex.Translit
+			vm.ExampleGloss = ex.Gloss
+			url, err := s.clipURL(ctx, ex.TextNFC, ex.AudioID)
+			if err != nil {
+				return err
+			}
+			vm.AudioURL = url
+		}
+	case session.KindPattern:
+		var found map[string]db.LexemeView
+		if s != nil && s.store != nil {
+			var err error
+			found, err = s.store.LexemesByText(ctx, parts)
+			if err != nil {
+				return err
+			}
+		}
+		sides := make([]views.DrillSide, 0, len(parts))
+		for _, part := range parts {
+			side := views.DrillSide{Hebrew: part}
+			if row, ok := found[part]; ok {
+				side.Translit = row.Translit
+				side.Gloss = row.Gloss
+			}
+			sides = append(sides, side)
+			if vm.AudioURL == "" {
+				url, err := s.clipURL(ctx, part, "")
+				if err != nil {
+					return err
+				}
+				vm.AudioURL = url
+			}
+		}
+		vm.Sides = sides
+	}
+	if vm.AudioURL == "" && vm.Kind == session.KindLetter {
+		for _, part := range parts {
+			url, err := s.clipURL(ctx, part, "")
+			if err != nil {
+				return err
+			}
+			if url != "" {
+				vm.AudioURL = url
+				break
+			}
+		}
+	}
+	// The front shows the asked letter. The pair key was the lookup above.
+	if vm.Kind == session.KindLetter && vm.Asked != "" {
+		vm.Pointed = vm.Asked
+		vm.Unpointed = units.Plain(vm.Asked)
+	}
+	return nil
+}
+
+// letterSound is a Latin reading stored for this exact letter.
+// Placement syllables match only when the text is the letter itself.
+// A lexicon row whose text is the letter contributes its transliteration.
+// A bare letter with neither has no sound, and the caller does not invent one.
+func (s *server) letterSound(ctx context.Context, letter string) (string, error) {
+	letters, err := placement.Letters()
+	if err != nil {
+		return "", err
+	}
+	for _, l := range letters {
+		if (l.LetterNFC == letter || l.SyllableText == letter) && l.Sound != "" {
+			return l.Sound, nil
+		}
+	}
+	if s == nil || s.store == nil || letter == "" {
+		return "", nil
+	}
+	found, err := s.store.LexemesByText(ctx, []string{letter})
+	if err != nil {
+		return "", err
+	}
+	if row, ok := found[letter]; ok {
+		return row.Translit, nil
+	}
+	return "", nil
+}
+
+func (s *server) confusionExample(ctx context.Context, userID int64, kind, key string) (db.LexemeRef, bool, error) {
+	if s == nil || s.store == nil || userID == 0 || key == "" {
+		return db.LexemeRef{}, false, nil
+	}
+	id, ok, err := s.store.LatestConfusionLexeme(ctx, userID, kind, key)
+	if err != nil || !ok {
+		return db.LexemeRef{}, false, err
+	}
+	return s.store.LexemeByID(ctx, id)
+}
+
+// pickPart chooses one part of a pair. The seed is the card id plus the
+// learner's study-day cutoff, the next 4:00 America/Denver. The same study
+// day asks the same letter. The next study day can ask the other one.
+// One part is returned as itself. The cutoff comes from studyDayCutoff.
+// A reveal does not call this again: the posted letter is what the back shows.
+func pickPart(cardID int64, cutoff time.Time, parts []string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	src := rand.NewPCG(uint64(cardID), uint64(cutoff.Unix()))
+	return parts[rand.New(src).Uint64N(uint64(len(parts)))]
+}
+
+func splitDrillKey(key string) []string {
+	if key == "" {
+		return nil
+	}
+	parts := strings.Split(key, "/")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	if len(out) == 0 {
+		return []string{key}
+	}
+	return out
 }
 
 // showUnpointed uses fsrs.ShowUnpointed. A recall card, a drill, and a card
@@ -575,24 +849,17 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 		card.Act = activityView(lang, csrf, vm)
 		return card
 	}
-	if vm.Revealed {
-		return card
-	}
-	// Anything that reveals the answer side is post-reveal only.
-	// read: the Hebrew is the prompt, so pointed text, translit, and audio stay.
-	// The English gloss and the gender chip wait.
-	// recall: the English gloss is the prompt. The Hebrew, its transliteration,
-	// its audio, and the gender chip all identify the answer, so they wait.
-	card.Gender = ""
-	if vm.Kind == fsrs.SkillRecall || vm.Kind == "recall" {
-		card.Pointed = ""
-		card.Unpointed = ""
-		card.Translit = ""
-		card.AudioURL = ""
-		return card
-	}
-	card.Gloss = ""
-	return card
+	card.Sides = vm.Sides
+	card.ExampleText = vm.ExampleText
+	card.ExampleTranslit = vm.ExampleTranslit
+	card.ExampleGloss = vm.ExampleGloss
+	card.LooksLike = vm.LooksLike
+	card.TellApart = vm.TellApart
+	card.PairNote = vm.PairNote
+	card.DageshNote = vm.DageshNote
+	card.DageshHard = vm.DageshHard
+	// The mode's hold decides what the front may carry. A revealed card passes through.
+	return views.ConcealFront(card)
 }
 
 func reviewStatus(err error) int {

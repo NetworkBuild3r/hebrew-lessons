@@ -53,13 +53,30 @@ templ ActivityBlock(a Activity) {
 			if a.Dialogue != nil {
 				@dialogueBlock(a.Dialogue)
 			}
-			if a.Audio != "" {
-				@clip("line-clip", a.Audio, a.AudioLabel, true)
+			if a.Spotlight && len(a.Words) > 0 {
+				<section class="spotlight">
+					<div class="word-blocks word-blocks--spot" dir="rtl">
+						for i, word := range a.Words {
+							@activityWord(word, "word-clip-"+Num(i), false)
+						}
+					</div>
+					if a.Audio != "" {
+						@clip("line-clip", a.Audio, a.AudioLabel, true)
+					}
+				</section>
+			} else {
+				if a.Stage && a.Audio != "" {
+					<div class="listen-stage">
+						@clip("line-clip", a.Audio, a.AudioLabel, true)
+					</div>
+				} else if a.Audio != "" {
+					@clip("line-clip", a.Audio, a.AudioLabel, true)
+				}
 			}
 			if a.Dialogue == nil && flipCount(a) >= 2 {
 				@showMeanings(a)
 			}
-			if len(a.Words) > 0 {
+			if len(a.Words) > 0 && !a.Spotlight {
 				<div class={ wordBlocksClass(a) } dir="rtl">
 					for i, word := range a.Words {
 						@activityWord(word, "word-clip-"+Num(i), a.PromptWord != "")
@@ -252,7 +269,9 @@ templ targetWord(w Word) {
 // The value is the lexeme id, never the pointed text.
 templ choiceButton(c Choice) {
 	@AnswerOptionWith(AnswerDefault, "", templ.Attributes{"type": "submit", "name": "answer", "value": c.Value}) {
-		if c.Hebrew {
+		if c.Sentence {
+			<span class="choice-he">@H(c.Text)</span>
+		} else if c.Hebrew {
 			@WordBlock(c.Text, c.Translit, "", "chip", "", true)
 		} else {
 			@E(c.Label)

@@ -449,6 +449,30 @@ func TestItemsLetters(t *testing.T) {
 	}
 }
 
+// TestLetterRowsAreTheSyllable pins the letters.json shape letterSound
+// treats as one reading: each row's letter is its syllable, both are NFC,
+// and the sound is set.
+func TestLetterRowsAreTheSyllable(t *testing.T) {
+	letters, err := Letters()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(letters) == 0 {
+		t.Fatal("letters.json has no rows")
+	}
+	for _, l := range letters {
+		if l.LetterNFC != l.SyllableText {
+			t.Errorf("%s: letter_nfc %q != syllable_text %q", l.ID, l.LetterNFC, l.SyllableText)
+		}
+		if !isNFC(l.LetterNFC) || !isNFC(l.SyllableText) {
+			t.Errorf("%s: letter_nfc %q or syllable_text %q is not NFC", l.ID, l.LetterNFC, l.SyllableText)
+		}
+		if l.Sound == "" {
+			t.Errorf("%s: sound is empty", l.ID)
+		}
+	}
+}
+
 func TestItemsAudioManifestMatchesDeck(t *testing.T) {
 	_, committed := readManifest(t)
 	want, err := BuildManifest(itemsJSON, lettersJSON)
