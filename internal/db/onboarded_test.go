@@ -13,10 +13,10 @@ import (
 )
 
 // An existing learner finished placement and started lessons before migration
-// 014, so onboarded_at is null. EnsureOnboarded is still true, and the null is
-// filled with the earliest lesson or finished-placement time, not "now" and
-// not a placement attempt.
-func TestEnsureOnboardedBackfillsAnExistingUserAt013(t *testing.T) {
+// 014. The migration fills onboarded_at with the earliest lesson attempt or
+// finished-placement time, not "now" and not a placement attempt. IsOnboarded
+// only reads that column.
+func TestIsOnboardedBackfillsAnExistingUserAt013(t *testing.T) {
 	conn := openRaw(t)
 	applyThrough(t, conn, 12)
 	mustSQL(t, conn, `INSERT INTO schema_migrations (version, applied_at) VALUES (13, '2026-10-19T12:00:00.000000000Z')`)
@@ -64,18 +64,18 @@ func TestEnsureOnboardedBackfillsAnExistingUserAt013(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 
 	ctx := context.Background()
-	yes, err := store.EnsureOnboarded(ctx, userID)
-	if err != nil || !yes {
-		t.Fatalf("EnsureOnboarded = %v, %v; want true", yes, err)
-	}
 	want := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
 	u, err := store.UserByEmail(ctx, "brian@example.com")
 	if err != nil || u.OnboardedAt == nil || !u.OnboardedAt.Equal(want) {
-		t.Fatalf("onboarded_at %+v %v, want %s", u.OnboardedAt, err, want)
+		t.Fatalf("migration onboarded_at %+v %v, want %s", u.OnboardedAt, err, want)
 	}
-	again, err := store.EnsureOnboarded(ctx, userID)
+	yes, err := store.IsOnboarded(ctx, userID)
+	if err != nil || !yes {
+		t.Fatalf("IsOnboarded = %v, %v; want true", yes, err)
+	}
+	again, err := store.IsOnboarded(ctx, userID)
 	if err != nil || !again {
-		t.Fatalf("second EnsureOnboarded = %v, %v", again, err)
+		t.Fatalf("second IsOnboarded = %v, %v", again, err)
 	}
 	u, err = store.UserByEmail(ctx, "brian@example.com")
 	if err != nil || u.OnboardedAt == nil || !u.OnboardedAt.Equal(want) {
@@ -83,31 +83,17 @@ func TestEnsureOnboardedBackfillsAnExistingUserAt013(t *testing.T) {
 	}
 }
 
-func TestEnsureOnboardedOnlyLessonAttempts(t *testing.T) {
+// Rows written after 014 do not move onboarded_at. The backfill runs once, inside the migration.
+func TestIsOnboardedDoesNotBackfillRowsWrittenAfter014(t *testing.T) {
 	now := time.Date(2026, 10, 21, 15, 0, 0, 0, time.UTC)
 	s := openStore(t, fixedClock{now})
 	ctx := context.Background()
-	user := insertUser(t, s, "lesson@example.com", "sub-lesson", "learner")
+	user := insertUser(t, s, "later@example.com", "sub-later", "learner")
 	lex := insertLexeme(t, s, "שָׁלוֹם")
-	at := "2026-10-08T11:00:00.000000000Z"
+	unit := insertUnit(t, s, "published")
 	mustExec(t, s, `INSERT INTO attempts (user_id, lexeme_id, skill, activity, source, prompt, response, correct, dont_know, hint_used, latency_ms, created_at)
-		VALUES (?, ?, 'read', 'pick', 'lesson', 'p', 'r', 1, 0, 0, 10, ?)`, user, lex, at)
-	yes, err := s.EnsureOnboarded(ctx, user)
-	if err != nil || !yes {
-		t.Fatalf("EnsureOnboarded = %v, %v; want true", yes, err)
-	}
-	u, err := s.UserByEmail(ctx, "lesson@example.com")
-	want := time.Date(2026, 10, 8, 11, 0, 0, 0, time.UTC)
-	if err != nil || u.OnboardedAt == nil || !u.OnboardedAt.Equal(want) {
-		t.Fatalf("onboarded_at %+v %v, want %s", u.OnboardedAt, err, want)
-	}
-}
-
-func TestEnsureOnboardedOnlyFinishedPlacement(t *testing.T) {
-	now := time.Date(2026, 10, 21, 15, 0, 0, 0, time.UTC)
-	s := openStore(t, fixedClock{now})
-	ctx := context.Background()
-	user := insertUser(t, s, "placed@example.com", "sub-placed", "learner")
+		VALUES (?, ?, 'read', 'pick', 'lesson', 'p', 'r', 1, 0, 0, 10, '2026-10-08T11:00:00.000000000Z')`, user, lex)
+	mustExec(t, s, `INSERT INTO lesson_runs (user_id, unit_id, lesson_ix, started_at) VALUES (?, ?, 0, '2026-10-07T08:30:00.000000000Z')`, user, unit)
 	res := mustExec(t, s, `INSERT INTO placement_runs (user_id, started_at, finished_at, level, result, seed, sitting_no)
 		VALUES (?, '2026-10-04T08:00:00.000000000Z', '2026-10-04T10:00:00.000000000Z', 1, '{"bands":[]}', 1, 1)`, user)
 	runID, err := res.LastInsertId()
@@ -116,18 +102,17 @@ func TestEnsureOnboardedOnlyFinishedPlacement(t *testing.T) {
 	}
 	mustExec(t, s, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at, answered_at)
 		VALUES (?, 'rated', 3, '2026-10-04T10:00:00.000000000Z', '2026-10-04T10:00:00.000000000Z')`, runID)
-	yes, err := s.EnsureOnboarded(ctx, user)
-	if err != nil || !yes {
-		t.Fatalf("EnsureOnboarded = %v, %v; want true", yes, err)
+	yes, err := s.IsOnboarded(ctx, user)
+	if err != nil || yes {
+		t.Fatalf("IsOnboarded = %v, %v; want false", yes, err)
 	}
-	u, err := s.UserByEmail(ctx, "placed@example.com")
-	want := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
-	if err != nil || u.OnboardedAt == nil || !u.OnboardedAt.Equal(want) {
-		t.Fatalf("onboarded_at %+v %v, want %s", u.OnboardedAt, err, want)
+	u, err := s.UserByEmail(ctx, "later@example.com")
+	if err != nil || u.OnboardedAt != nil {
+		t.Fatalf("onboarded_at %+v %v, want NULL", u.OnboardedAt, err)
 	}
 }
 
-func TestEnsureOnboardedAbandonedPlacementIsFalse(t *testing.T) {
+func TestIsOnboardedAbandonedPlacementIsFalse(t *testing.T) {
 	s := openStore(t, fixedClock{time.Date(2026, 10, 21, 15, 0, 0, 0, time.UTC)})
 	ctx := context.Background()
 	user := insertUser(t, s, "left@example.com", "sub-left", "learner")
@@ -135,9 +120,9 @@ func TestEnsureOnboardedAbandonedPlacementIsFalse(t *testing.T) {
 	mustExec(t, s, `INSERT INTO placement_runs (user_id, started_at, seed, sitting_no) VALUES (?, ?, 1, 1)`, user, ts)
 	mustExec(t, s, `INSERT INTO attempts (user_id, lexeme_id, skill, activity, source, prompt, response, correct, dont_know, hint_used, latency_ms, created_at)
 		VALUES (?, ?, 'read', 'pick', 'placement', 'p', 'r', 1, 0, 0, 10, ?)`, user, lex, ts)
-	yes, err := s.EnsureOnboarded(ctx, user)
+	yes, err := s.IsOnboarded(ctx, user)
 	if err != nil || yes {
-		t.Fatalf("EnsureOnboarded = %v, %v; want false", yes, err)
+		t.Fatalf("IsOnboarded = %v, %v; want false", yes, err)
 	}
 	u, err := s.UserByEmail(ctx, "left@example.com")
 	if err != nil || u.OnboardedAt != nil {
@@ -145,13 +130,13 @@ func TestEnsureOnboardedAbandonedPlacementIsFalse(t *testing.T) {
 	}
 }
 
-func TestEnsureOnboardedFreshUserIsFalse(t *testing.T) {
+func TestIsOnboardedFreshUserIsFalse(t *testing.T) {
 	s := openStore(t, fixedClock{time.Date(2026, 10, 21, 15, 0, 0, 0, time.UTC)})
 	ctx := context.Background()
 	user := insertUser(t, s, "new@example.com", "sub-new", "learner")
-	yes, err := s.EnsureOnboarded(ctx, user)
+	yes, err := s.IsOnboarded(ctx, user)
 	if err != nil || yes {
-		t.Fatalf("EnsureOnboarded = %v, %v; want false", yes, err)
+		t.Fatalf("IsOnboarded = %v, %v; want false", yes, err)
 	}
 	u, err := s.UserByEmail(ctx, "new@example.com")
 	if err != nil || u.OnboardedAt != nil {
@@ -161,7 +146,7 @@ func TestEnsureOnboardedFreshUserIsFalse(t *testing.T) {
 
 // SetOnboarded alone is the "Start from the basics" path: no placement and no
 // lesson. The onboarded_at leg is what lets that learner skip the gate.
-func TestEnsureOnboardedSetOnboardedOnly(t *testing.T) {
+func TestIsOnboardedSetOnboardedOnly(t *testing.T) {
 	now := time.Date(2026, 10, 21, 15, 0, 0, 0, time.UTC)
 	s := openStore(t, fixedClock{now})
 	ctx := context.Background()
@@ -170,9 +155,9 @@ func TestEnsureOnboardedSetOnboardedOnly(t *testing.T) {
 	if err := s.SetOnboarded(ctx, user, kept); err != nil {
 		t.Fatal(err)
 	}
-	yes, err := s.EnsureOnboarded(ctx, user)
+	yes, err := s.IsOnboarded(ctx, user)
 	if err != nil || !yes {
-		t.Fatalf("EnsureOnboarded = %v, %v; want true", yes, err)
+		t.Fatalf("IsOnboarded = %v, %v; want true", yes, err)
 	}
 	u, err := s.UserByEmail(ctx, "basics@example.com")
 	if err != nil || u.OnboardedAt == nil || !u.OnboardedAt.Equal(kept) {
@@ -180,70 +165,19 @@ func TestEnsureOnboardedSetOnboardedOnly(t *testing.T) {
 	}
 }
 
-// A lesson run with no attempts and no placement is enough.
-func TestEnsureOnboardedOnlyLessonRun(t *testing.T) {
-	now := time.Date(2026, 10, 21, 15, 0, 0, 0, time.UTC)
-	s := openStore(t, fixedClock{now})
-	ctx := context.Background()
-	user := insertUser(t, s, "run@example.com", "sub-run", "learner")
-	unit := insertUnit(t, s, "published")
-	started := "2026-10-07T08:30:00.000000000Z"
-	mustExec(t, s, `INSERT INTO lesson_runs (user_id, unit_id, lesson_ix, started_at) VALUES (?, ?, 0, ?)`, user, unit, started)
-	yes, err := s.EnsureOnboarded(ctx, user)
-	if err != nil || !yes {
-		t.Fatalf("EnsureOnboarded = %v, %v; want true", yes, err)
-	}
-	u, err := s.UserByEmail(ctx, "run@example.com")
-	want := time.Date(2026, 10, 7, 8, 30, 0, 0, time.UTC)
-	if err != nil || u.OnboardedAt == nil || !u.OnboardedAt.Equal(want) {
-		t.Fatalf("onboarded_at %+v %v, want %s", u.OnboardedAt, err, want)
-	}
-}
-
-// The lesson run started before the lesson attempt and the finished placement.
-// The stored time has to be the lesson run, so dropping that MIN leg fails.
-func TestEnsureOnboardedBackfillUsesTheEarliestLessonRun(t *testing.T) {
-	now := time.Date(2026, 10, 21, 15, 0, 0, 0, time.UTC)
-	s := openStore(t, fixedClock{now})
-	ctx := context.Background()
-	user := insertUser(t, s, "early-run@example.com", "sub-early-run", "learner")
-	unit := insertUnit(t, s, "published")
-	lex := insertLexeme(t, s, "שָׁלוֹם")
-	mustExec(t, s, `INSERT INTO lesson_runs (user_id, unit_id, lesson_ix, started_at) VALUES (?, ?, 0, '2026-09-15T08:00:00.000000000Z')`, user, unit)
-	mustExec(t, s, `INSERT INTO attempts (user_id, lexeme_id, skill, activity, source, prompt, response, correct, dont_know, hint_used, latency_ms, created_at)
-		VALUES (?, ?, 'read', 'pick', 'lesson', 'p', 'r', 1, 0, 0, 10, '2026-10-01T09:00:00.000000000Z')`, user, lex)
-	res := mustExec(t, s, `INSERT INTO placement_runs (user_id, started_at, finished_at, level, result, seed, sitting_no)
-		VALUES (?, '2026-10-02T08:00:00.000000000Z', '2026-10-02T09:00:00.000000000Z', 1, '{"bands":[]}', 1, 1)`, user)
-	runID, err := res.LastInsertId()
-	if err != nil {
-		t.Fatal(err)
-	}
-	mustExec(t, s, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at, answered_at)
-		VALUES (?, 'rated', 3, '2026-10-02T09:00:00.000000000Z', '2026-10-02T09:00:00.000000000Z')`, runID)
-	yes, err := s.EnsureOnboarded(ctx, user)
-	if err != nil || !yes {
-		t.Fatalf("EnsureOnboarded = %v, %v; want true", yes, err)
-	}
-	u, err := s.UserByEmail(ctx, "early-run@example.com")
-	want := time.Date(2026, 9, 15, 8, 0, 0, 0, time.UTC)
-	if err != nil || u.OnboardedAt == nil || !u.OnboardedAt.Equal(want) {
-		t.Fatalf("onboarded_at %+v %v, want %s", u.OnboardedAt, err, want)
-	}
-}
-
 // A missing user is not onboarded. There is no UserByID. UserByEmail and
 // SetOnboarded return ErrNotFound, and UserExists returns false, nil. This
 // method is a predicate, so a missing id is false and not an error.
-func TestEnsureOnboardedMissingUserIsFalse(t *testing.T) {
+func TestIsOnboardedMissingUserIsFalse(t *testing.T) {
 	s := openStore(t, fixedClock{time.Date(2026, 10, 21, 15, 0, 0, 0, time.UTC)})
-	yes, err := s.EnsureOnboarded(context.Background(), 424242)
+	yes, err := s.IsOnboarded(context.Background(), 424242)
 	if err != nil || yes {
-		t.Fatalf("EnsureOnboarded = %v, %v; want false, nil", yes, err)
+		t.Fatalf("IsOnboarded = %v, %v; want false, nil", yes, err)
 	}
 }
 
 // onboarded_at is already set, so the call must not take the write lock.
-func TestEnsureOnboardedAlreadySetDoesNotWrite(t *testing.T) {
+func TestIsOnboardedAlreadySetDoesNotWrite(t *testing.T) {
 	now := time.Date(2026, 10, 21, 15, 0, 0, 0, time.UTC)
 	dir := t.TempDir()
 	s := openAt(t, dir, fixedClock{now})
@@ -264,9 +198,9 @@ func TestEnsureOnboardedAlreadySetDoesNotWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = hold.Rollback() })
-	yes, err := s.EnsureOnboarded(ctx, user)
+	yes, err := s.IsOnboarded(ctx, user)
 	if err != nil || !yes {
-		t.Fatalf("EnsureOnboarded = %v, %v; want true with no write", yes, err)
+		t.Fatalf("IsOnboarded = %v, %v; want true with no write", yes, err)
 	}
 	u, err := s.UserByEmail(ctx, "locked@example.com")
 	if err != nil || u.OnboardedAt == nil || !u.OnboardedAt.Equal(kept) {
@@ -274,7 +208,7 @@ func TestEnsureOnboardedAlreadySetDoesNotWrite(t *testing.T) {
 	}
 }
 
-func TestEnsureOnboardedKeepsAnExistingTime(t *testing.T) {
+func TestIsOnboardedKeepsAnExistingTime(t *testing.T) {
 	s := openStore(t, fixedClock{time.Date(2026, 10, 21, 15, 0, 0, 0, time.UTC)})
 	ctx := context.Background()
 	user := insertUser(t, s, "kept@example.com", "sub-kept", "learner")
@@ -284,9 +218,9 @@ func TestEnsureOnboardedKeepsAnExistingTime(t *testing.T) {
 	}
 	mustExec(t, s, `INSERT INTO placement_runs (user_id, started_at, finished_at, level, result, seed, sitting_no)
 		VALUES (?, '2026-10-01T08:00:00.000000000Z', '2026-10-01T09:00:00.000000000Z', 1, '{"bands":[]}', 1, 1)`, user)
-	yes, err := s.EnsureOnboarded(ctx, user)
+	yes, err := s.IsOnboarded(ctx, user)
 	if err != nil || !yes {
-		t.Fatalf("EnsureOnboarded = %v, %v; want true", yes, err)
+		t.Fatalf("IsOnboarded = %v, %v; want true", yes, err)
 	}
 	u, err := s.UserByEmail(ctx, "kept@example.com")
 	if err != nil || u.OnboardedAt == nil || !u.OnboardedAt.Equal(kept) {

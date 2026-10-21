@@ -1143,8 +1143,18 @@ func TestProgressSkipsUnscoredPlacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(prog.Placements) != 1 || prog.Placements[0].Kind != "v2" || prog.Placements[0].Level != 2 || prog.Placements[0].EstimatedKW != 80 {
-		t.Fatalf("placements %+v, want the scored run only", prog.Placements)
+	autoAt := time.Date(2026, 9, 1, 8, 5, 0, 0, time.UTC)
+	sawScored := false
+	for _, p := range prog.Placements {
+		if p.FinishedAt.Equal(autoAt) {
+			t.Fatalf("auto-close is in placements: %+v", prog.Placements)
+		}
+		if p.Level == 2 && p.EstimatedKW == 80 {
+			sawScored = true
+		}
+	}
+	if !sawScored || len(prog.Placements) != 4 {
+		t.Fatalf("placements %+v, want 4 runs including the scored one and not the auto-close", prog.Placements)
 	}
 }
 

@@ -679,7 +679,7 @@ So a rollback is **the previous tag and the backup file together**. Every review
 
 ### Migration 014
 
-`014_onboarding_placement_history.sql` only adds nullable columns (`users.onboarded_at`, `placement_runs.start_unit`, `placement_runs.words_known`) and the index `placement_runs_user_finished_desc`. It does not rebuild a table.
+`014_onboarding_placement_history.sql` adds nullable columns (`users.onboarded_at`, `placement_runs.start_unit`, `placement_runs.words_known`) and the index `placement_runs_user_finished_desc`. It does not rebuild a table. It then fills `users.onboarded_at` once, where it is still null, from the earliest finished placement that is not the v2 run `Engine.Start` closes, or from the earliest lesson run or non-placement attempt.
 
 An older binary that does not embed that file, pointed at a database where version 14 is recorded, exits 1 from `hebrew migrate --check`. The report contains:
 

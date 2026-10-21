@@ -111,9 +111,9 @@ func TestRetiringAnOpenV2RunDoesNotOnboard(t *testing.T) {
 	if _, err := store.InsertPlacementRun(ctx, user, when.Add(-time.Hour), 6); err != nil {
 		t.Fatal(err)
 	}
-	before, err := store.EnsureOnboarded(ctx, user)
+	before, err := store.IsOnboarded(ctx, user)
 	if err != nil || before {
-		t.Fatalf("open v2 run EnsureOnboarded = %v %v, want false", before, err)
+		t.Fatalf("open v2 run IsOnboarded = %v %v, want false", before, err)
 	}
 	runID, err := e.Start(ctx, user)
 	if err != nil {
@@ -123,9 +123,9 @@ func TestRetiringAnOpenV2RunDoesNotOnboard(t *testing.T) {
 	if n := countRows(t, store, `SELECT COUNT(*) FROM placement_items WHERE run_id = ? AND outcome IS NOT NULL`, runID); n != 0 {
 		t.Fatalf("abandoned v3 run has %d answers", n)
 	}
-	after, err := store.EnsureOnboarded(ctx, user)
+	after, err := store.IsOnboarded(ctx, user)
 	if err != nil || after {
-		t.Fatalf("after Start and abandon EnsureOnboarded = %v %v, want false", after, err)
+		t.Fatalf("after Start and abandon IsOnboarded = %v %v, want false", after, err)
 	}
 	u, err := store.UserByEmail(ctx, "retire@example.com")
 	if err != nil || u.OnboardedAt != nil {

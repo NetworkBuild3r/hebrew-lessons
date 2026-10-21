@@ -7,9 +7,10 @@ import (
 	"time"
 )
 
-// The three closes that set finished_at and leave no ratings. None of them is
-// a finished result: history and the onboarding backfill skip them, and
-// LatestPlacement marks the newest one incomplete.
+// History keeps a finished run unless it is the v2 close Engine.Start writes
+// (level -1, stop_reason NULL, empty bands, no answers). The old v2 Finish
+// and the exhausted close stay in the list. LatestPlacement still marks a
+// zero-rating close incomplete.
 func TestPlacementHistoryAndCountSkipUnscoredFinishes(t *testing.T) {
 	s := openStore(t, fixedClock{time.Date(2026, 10, 21, 15, 0, 0, 0, time.UTC)})
 	ctx := context.Background()
@@ -35,11 +36,11 @@ func TestPlacementHistoryAndCountSkipUnscoredFinishes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !sameIDs(idsOfRuns(runs), []int64{v3, v2}) {
-		t.Fatalf("history %v, want scored runs %d %d and not %d %d %d %d %d", idsOfRuns(runs), v3, v2, closes.auto, closes.oldFinish, closes.exhausted, nullRating, unanswered)
+	if !sameIDs(idsOfRuns(runs), []int64{v3, v2, closes.exhausted, closes.oldFinish}) {
+		t.Fatalf("history %v, want %d %d %d %d and not the auto-close %d or %d %d", idsOfRuns(runs), v3, v2, closes.exhausted, closes.oldFinish, closes.auto, nullRating, unanswered)
 	}
-	if n, err := s.PlacementHistoryCount(ctx, user); err != nil || n != 2 {
-		t.Fatalf("count %d %v, want 2", n, err)
+	if n, err := s.PlacementHistoryCount(ctx, user); err != nil || n != 4 {
+		t.Fatalf("count %d %v, want 4", n, err)
 	}
 	var kept int
 	if err := s.queryRow(ctx, `SELECT COUNT(*) FROM placement_runs WHERE user_id = ? AND finished_at IS NOT NULL`, user).Scan(&kept); err != nil {
@@ -50,7 +51,7 @@ func TestPlacementHistoryAndCountSkipUnscoredFinishes(t *testing.T) {
 	}
 }
 
-func TestEnsureOnboardedIgnoresUnscoredFinishes(t *testing.T) {
+func TestIsOnboardedIgnoresUnscoredFinishes(t *testing.T) {
 	now := time.Date(2026, 10, 21, 15, 0, 0, 0, time.UTC)
 	for _, shape := range []string{"auto-close", "old finish", "exhausted"} {
 		t.Run(shape, func(t *testing.T) {
@@ -68,9 +69,9 @@ func TestEnsureOnboardedIgnoresUnscoredFinishes(t *testing.T) {
 				keep = closes.exhausted
 			}
 			mustExec(t, s, `DELETE FROM placement_runs WHERE user_id = ? AND id <> ?`, user, keep)
-			yes, err := s.EnsureOnboarded(ctx, user)
+			yes, err := s.IsOnboarded(ctx, user)
 			if err != nil || yes {
-				t.Fatalf("EnsureOnboarded = %v, %v; want false", yes, err)
+				t.Fatalf("IsOnboarded = %v, %v; want false", yes, err)
 			}
 			u, err := s.UserByEmail(ctx, shape+"@example.com")
 			if err != nil || u.OnboardedAt != nil {
@@ -84,17 +85,15 @@ func TestEnsureOnboardedIgnoresUnscoredFinishes(t *testing.T) {
 	user := insertUser(t, s, "brian@example.com", "sub-brian", "learner")
 	insertUnscoredCloses(t, s, user)
 	lex := insertLexeme(t, s, "שָׁלוֹם")
-	const lessonAt = "2026-10-01T09:00:00.000000000Z"
 	mustExec(t, s, `INSERT INTO attempts (user_id, lexeme_id, skill, activity, source, prompt, response, correct, dont_know, hint_used, latency_ms, created_at)
-		VALUES (?, ?, 'read', 'pick', 'lesson', 'p', 'r', 1, 0, 0, 10, ?)`, user, lex, lessonAt)
-	yes, err := s.EnsureOnboarded(ctx, user)
-	if err != nil || !yes {
-		t.Fatalf("EnsureOnboarded = %v, %v; want true", yes, err)
+		VALUES (?, ?, 'read', 'pick', 'lesson', 'p', 'r', 1, 0, 0, 10, '2026-10-01T09:00:00.000000000Z')`, user, lex)
+	yes, err := s.IsOnboarded(ctx, user)
+	if err != nil || yes {
+		t.Fatalf("IsOnboarded = %v, %v; want false", yes, err)
 	}
-	want := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
 	u, err := s.UserByEmail(ctx, "brian@example.com")
-	if err != nil || u.OnboardedAt == nil || !u.OnboardedAt.Equal(want) {
-		t.Fatalf("onboarded_at %+v %v, want the lesson time %s", u.OnboardedAt, err, want)
+	if err != nil || u.OnboardedAt != nil {
+		t.Fatalf("onboarded_at %+v %v, want NULL", u.OnboardedAt, err)
 	}
 }
 
@@ -119,8 +118,16 @@ func TestLatestPlacementMarksUnscoredFinishIncomplete(t *testing.T) {
 		t.Fatalf("bands %+v, want the empty exhausted result", place.BandScores)
 	}
 	runs, err := s.PlacementHistory(ctx, user, 0)
-	if err != nil || len(runs) != 1 || runs[0].ID != scored {
-		t.Fatalf("history %+v %v, want the scored run %d", runs, err, scored)
+	if err != nil || len(runs) != 3 {
+		t.Fatalf("history %+v %v, want the scored run and the two non-auto closes", runs, err)
+	}
+	for _, r := range runs {
+		if r.ID == closes.auto {
+			t.Fatalf("auto-close %d is in history", closes.auto)
+		}
+	}
+	if runs[2].ID != scored {
+		t.Fatalf("oldest history id %d, want scored %d", runs[2].ID, scored)
 	}
 	_ = closes
 }

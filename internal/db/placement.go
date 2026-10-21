@@ -90,6 +90,21 @@ type placementResultJSON struct {
 
 const placementRunColumns = `id, user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no`
 
+// engineStartAutoCloseResult is the result JSON resumeOpen writes when
+// Engine.Start closes an open v2 run: level -1, stop_reason NULL, and no answers.
+const engineStartAutoCloseResult = `{"bands":[],"estimated_known_words":0}`
+
+// placementNotAutoClosedSQL is true when alias is not that v2 close.
+// level is -1, stop_reason is NULL, the result is engineStartAutoCloseResult,
+// and the run has no rating and no answered item.
+func placementNotAutoClosedSQL(alias string) string {
+	return `NOT (` + alias + `.level = -1
+		AND ` + alias + `.stop_reason IS NULL
+		AND ` + alias + `.result = '` + engineStartAutoCloseResult + `'
+		AND NOT EXISTS (SELECT 1 FROM placement_answers AS a WHERE a.run_id = ` + alias + `.id AND a.rating IS NOT NULL)
+		AND NOT EXISTS (SELECT 1 FROM placement_items AS i WHERE i.run_id = ` + alias + `.id AND i.outcome IS NOT NULL))`
+}
+
 // placementScoredSQL is true for a placement_runs alias when the learner
 // rated a v2 card or answered a v3 item. finished_at alone is not enough.
 // Three closes write finished_at and no ratings, and all three fail this
@@ -468,8 +483,8 @@ func (s *Store) CountPlacementRatings(ctx context.Context, runID int64) (int, er
 }
 
 // placementRunScored reports whether the run has a v2 rating or an answered
-// v3 item. The check is placementScoredSQL, the same one history and the
-// onboarding backfill use.
+// v3 item. LatestPlacement uses this. History and the 014 backfill use
+// placementNotAutoClosedSQL, which still counts an old finish that rated nothing.
 func (s *Store) placementRunScored(ctx context.Context, runID int64) (bool, error) {
 	conn, err := s.connOrErr()
 	if err != nil {

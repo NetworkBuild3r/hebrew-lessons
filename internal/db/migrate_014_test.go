@@ -56,12 +56,33 @@ func TestMigrate014OnADatabaseAt013KeepsNullsAndOldReads(t *testing.T) {
 	// Three closes that set finished_at and rate nothing. They stay in the table
 	// and are not a finished result: Start's auto-close, the old v2 Finish, and
 	// finishNow's exhausted close.
-	mustSQL(t, conn, `INSERT INTO placement_runs (user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no)
+	autoRes, err := conn.ExecContext(context.Background(), `INSERT INTO placement_runs (user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no)
 		VALUES (?, '2026-09-01T08:00:00.000000000Z', '2026-09-01T08:05:00.000000000Z', -1, NULL, '{"bands":[],"estimated_known_words":0}', 1, 1)`, userID)
-	mustSQL(t, conn, `INSERT INTO placement_runs (user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no)
+	if err != nil {
+		t.Fatal(err)
+	}
+	autoID, err := autoRes.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldRes, err := conn.ExecContext(context.Background(), `INSERT INTO placement_runs (user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no)
 		VALUES (?, '2026-09-02T08:00:00.000000000Z', '2026-09-02T08:05:00.000000000Z', -1, NULL, ?, 2, 1)`, userID, fiveZeroBands(t))
-	mustSQL(t, conn, `INSERT INTO placement_runs (user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldID, err := oldRes.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	exRes, err := conn.ExecContext(context.Background(), `INSERT INTO placement_runs (user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no)
 		VALUES (?, '2026-09-03T08:00:00.000000000Z', '2026-09-03T08:05:00.000000000Z', -1, 'exhausted', '{"bands":[],"estimated_known_words":0}', 3, 1)`, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exhaustedID, err := exRes.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
 	mustSQL(t, conn, `INSERT INTO placement_runs (user_id, started_at, seed, sitting_no)
 		VALUES (?, '2026-10-03T08:00:00.000000000Z', 8, 1)`, userID)
 
@@ -79,7 +100,7 @@ func TestMigrate014OnADatabaseAt013KeepsNullsAndOldReads(t *testing.T) {
 	if err := conn.QueryRowContext(context.Background(), `SELECT email, google_sub, role, created_at, onboarded_at FROM users WHERE id = ?`, userID).Scan(&email, new(string), &role, &created, &onboarded); err != nil {
 		t.Fatal(err)
 	}
-	if email != "old@example.com" || role != "learner" || created != "2026-10-01T00:00:00.000000000Z" || onboarded.Valid {
+	if email != "old@example.com" || role != "learner" || created != "2026-10-01T00:00:00.000000000Z" || !onboarded.Valid || onboarded.String != "2026-09-02T08:05:00.000000000Z" {
 		t.Fatalf("old user email=%s role=%s created=%s onboarded=%v", email, role, created, onboarded)
 	}
 
@@ -120,15 +141,207 @@ func TestMigrate014OnADatabaseAt013KeepsNullsAndOldReads(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	u, err := store.UserByEmail(context.Background(), "old@example.com")
-	if err != nil || u.OnboardedAt != nil || u.Email != "old@example.com" {
+	wantOnboarded := time.Date(2026, 9, 2, 8, 5, 0, 0, time.UTC)
+	if err != nil || u.OnboardedAt == nil || !u.OnboardedAt.Equal(wantOnboarded) || u.Email != "old@example.com" {
 		t.Fatalf("loaded user %+v %v", u, err)
 	}
 	runs, err := store.PlacementHistory(context.Background(), u.ID, 0)
-	if err != nil || len(runs) != 1 || runs[0].ID != scoredID || runs[0].StartUnit != 0 || runs[0].WordsKnown != 0 || runs[0].StartUnitTitle != "" || runs[0].FinishedAt.IsZero() {
-		t.Fatalf("history %+v %v, want only run %d", runs, err, scoredID)
+	if err != nil || !sameIDs(idsOfRuns(runs), []int64{scoredID, exhaustedID, oldID}) {
+		t.Fatalf("history %+v %v, want %d %d %d and not the auto-close %d", runs, err, scoredID, exhaustedID, oldID, autoID)
 	}
-	if n, err := store.PlacementHistoryCount(context.Background(), u.ID); err != nil || n != 1 {
-		t.Fatalf("count %d %v", n, err)
+	if n, err := store.PlacementHistoryCount(context.Background(), u.ID); err != nil || n != 3 {
+		t.Fatalf("count %d %v, want 3", n, err)
+	}
+}
+
+// Migration 014 backfills onboarded_at once, from rows written before the
+// column existed. Each learner is seeded through the store methods that write
+// those rows. IsOnboarded only reads the column afterwards.
+func TestMigrate014BackfillsOnboardedAt(t *testing.T) {
+	conn := openRaw(t)
+	applyThrough(t, conn, 12)
+	mustSQL(t, conn, `INSERT INTO schema_migrations (version, applied_at) VALUES (13, '2026-10-19T12:00:00.000000000Z')`)
+
+	body, err := fs.ReadFile(migrations.FS, "014_onboarding_placement_history.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), engineStartAutoCloseResult) {
+		t.Fatal("014 backfill does not exclude the Engine.Start close result")
+	}
+
+	clk := &setClock{t: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)}
+	s := &Store{conn: conn, clock: clk}
+	ctx := context.Background()
+	unit := insertUnit(t, s, "published")
+	lex, err := s.UpsertPlacementLexeme(ctx, "שָׁלוֹם", "peace", "noun", "shalom", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	finishedAt := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	attemptAt := time.Date(2026, 10, 8, 11, 0, 0, 0, time.UTC)
+	lessonAt := time.Date(2026, 10, 7, 8, 30, 0, 0, time.UTC)
+	autoAt := time.Date(2026, 9, 1, 8, 5, 0, 0, time.UTC)
+	brianLesson := time.Date(2026, 9, 10, 8, 0, 0, 0, time.UTC)
+	brianAttempt := time.Date(2026, 9, 20, 9, 0, 0, 0, time.UTC)
+	brianFinish := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	brianPlacementAttempt := time.Date(2026, 8, 15, 9, 0, 0, 0, time.UTC)
+
+	type seeded struct {
+		id      int64
+		want    *time.Time
+		history int
+	}
+	cases := map[string]*seeded{}
+	seed := func(name, email string) int64 {
+		t.Helper()
+		clk.t = time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+		u, err := s.CreateUser(ctx, email, "sub-"+email, "learner")
+		if err != nil {
+			t.Fatal(err)
+		}
+		cases[name] = &seeded{id: u.ID}
+		return u.ID
+	}
+
+	finishedUser := seed("finished_placement", "finished@example.com")
+	finishScoredV2(t, s, finishedUser, finishedAt)
+	cases["finished_placement"].want = &finishedAt
+	cases["finished_placement"].history = 1
+
+	autoUser := seed("auto_close_alone", "auto@example.com")
+	closeLikeStart(t, s, autoUser, autoAt)
+
+	autoV3 := seed("auto_close_and_abandoned_v3", "autov3@example.com")
+	closeLikeStart(t, s, autoV3, autoAt)
+	if _, err := s.StartPlacementV3(ctx, autoV3, autoAt.Add(time.Hour), 9, RunInitial, "", 0); err != nil {
+		t.Fatal(err)
+	}
+
+	attemptUser := seed("lesson_attempt_only", "attempt@example.com")
+	writeLessonAttempt(t, s, attemptUser, lex, "lesson", attemptAt)
+	cases["lesson_attempt_only"].want = &attemptAt
+
+	lessonUser := seed("lesson_run_only", "lesson@example.com")
+	clk.t = lessonAt
+	if _, err := s.StartPlayerRun(ctx, lessonUser, unit, 0); err != nil {
+		t.Fatal(err)
+	}
+	cases["lesson_run_only"].want = &lessonAt
+
+	seed("nothing", "nothing@example.com")
+
+	brian := seed("brian", "brian-shape@example.com")
+	closeLikeStart(t, s, brian, autoAt)
+	writeLessonAttempt(t, s, brian, lex, "placement", brianPlacementAttempt)
+	clk.t = brianLesson
+	if _, err := s.StartPlayerRun(ctx, brian, unit, 0); err != nil {
+		t.Fatal(err)
+	}
+	writeLessonAttempt(t, s, brian, lex, "lesson", brianAttempt)
+	finishScoredV2(t, s, brian, brianFinish)
+	cases["brian"].want = &brianLesson
+	cases["brian"].history = 1
+
+	if err := apply(ctx, conn, "014_onboarding_placement_history.sql", 14, string(body), time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, name := range []string{
+		"finished_placement",
+		"auto_close_alone",
+		"auto_close_and_abandoned_v3",
+		"lesson_attempt_only",
+		"lesson_run_only",
+		"nothing",
+		"brian",
+	} {
+		c := cases[name]
+		t.Run(name, func(t *testing.T) {
+			var got sql.NullString
+			if err := conn.QueryRowContext(ctx, `SELECT onboarded_at FROM users WHERE id = ?`, c.id).Scan(&got); err != nil {
+				t.Fatal(err)
+			}
+			if c.want == nil {
+				if got.Valid {
+					t.Fatalf("onboarded_at = %s, want NULL", got.String)
+				}
+			} else if !got.Valid || got.String != FormatTime(*c.want) {
+				t.Fatalf("onboarded_at = %v, want %s", got, FormatTime(*c.want))
+			}
+			yes, err := s.IsOnboarded(ctx, c.id)
+			if err != nil || yes != (c.want != nil) {
+				t.Fatalf("IsOnboarded = %v, %v; want %v", yes, err, c.want != nil)
+			}
+			n, err := s.PlacementHistoryCount(ctx, c.id)
+			if err != nil || n != c.history {
+				t.Fatalf("PlacementHistoryCount = %d, %v; want %d", n, err, c.history)
+			}
+		})
+	}
+
+	var openV3 int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM placement_runs WHERE user_id = ? AND finished_at IS NULL`, autoV3).Scan(&openV3); err != nil {
+		t.Fatal(err)
+	}
+	if openV3 != 1 {
+		t.Fatalf("abandoned v3 runs = %d, want 1", openV3)
+	}
+	var autoKept int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM placement_runs WHERE user_id = ? AND finished_at IS NOT NULL`, autoUser).Scan(&autoKept); err != nil {
+		t.Fatal(err)
+	}
+	if autoKept != 1 {
+		t.Fatalf("auto-closed rows kept = %d, want 1", autoKept)
+	}
+}
+
+type setClock struct{ t time.Time }
+
+func (c *setClock) Now() time.Time { return c.t }
+
+func finishScoredV2(t *testing.T, s *Store, user int64, finished time.Time) {
+	t.Helper()
+	ctx := context.Background()
+	lex, err := s.UpsertPlacementLexeme(ctx, "שָׁלוֹם", "peace", "noun", "shalom", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := s.InsertPlacementRun(ctx, user, finished.Add(-time.Hour), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ShowPlacementCard(ctx, run, "card", 1, finished.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RatePlacementAnswer(ctx, run, "card", 3, lex, finished); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishPlacement(ctx, run, finished, 1, "band_stop", `{"bands":[{"band":0,"good":1}]}`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func closeLikeStart(t *testing.T, s *Store, user int64, finished time.Time) {
+	t.Helper()
+	ctx := context.Background()
+	run, err := s.InsertPlacementRun(ctx, user, finished.Add(-5*time.Minute), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishPlacement(ctx, run, finished, -1, "", engineStartAutoCloseResult); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeLessonAttempt(t *testing.T, s *Store, user, lex int64, source string, at time.Time) {
+	t.Helper()
+	if _, err := s.WriteAttempt(context.Background(), AttemptWrite{Attempt: Attempt{
+		UserID: user, LexemeID: lex, Skill: "read", Activity: "pick", Source: source,
+		Prompt: "p", Response: "r", Correct: true, CreatedAt: at,
+	}}); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -238,8 +451,10 @@ func columnNotNull(t *testing.T, conn *sql.DB, table, column string) bool {
 	return n != 0
 }
 
-// m14Align drops the additive schema of migration 014 and trims the null columns
+// m14Align drops the additive schema of migration 014 and trims the columns
 // it appends, so a test of an older migration can still compare the rest.
+// start_unit and words_known stay null. users.onboarded_at may be a time:
+// the backfill writes it when a qualifying placement or lesson already exists.
 func m14Align(t *testing.T, before, after m7State) (m7State, m7State) {
 	t.Helper()
 	for _, table := range []string{"users", "placement_runs"} {
@@ -256,10 +471,14 @@ func m14Align(t *testing.T, before, after m7State) (m7State, m7State) {
 			if len(row) < width {
 				t.Fatalf("%s row has %d columns, before has %d", table, len(row), width)
 			}
-			for _, extra := range row[width:] {
-				if extra != "<nil>:<nil>" {
-					t.Fatalf("%s extra column %q is not null", table, extra)
+			for j, extra := range row[width:] {
+				if extra == "<nil>:<nil>" {
+					continue
 				}
+				if table == "users" && j == 0 && strings.HasPrefix(extra, "string:") && len(extra) > len("string:") {
+					continue
+				}
+				t.Fatalf("%s extra column %q is not null", table, extra)
 			}
 			arows[i] = row[:width]
 		}
