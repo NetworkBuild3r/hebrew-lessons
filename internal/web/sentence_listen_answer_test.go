@@ -245,8 +245,8 @@ func TestSentenceListenKeepsMarkedChoices(t *testing.T) {
 	if strings.Contains(ask, `class="activity-word"`) || strings.Contains(ask, `class="wb__he"`) || strings.Contains(ask, `class="lp-fb__tr"`) {
 		t.Fatal("the ask shows the line")
 	}
-	if !strings.Contains(ask, `class="lp-reveal"`) {
-		t.Fatal("the ask does not reserve the reveal slot")
+	if !strings.Contains(ask, `class="lp-reveal lp-reveal--1 lp-reveal--ask"`) {
+		t.Fatal("the ask does not reserve a one-line stage")
 	}
 	reload := getAuthed(t, env.h, env.cookie, env.path)
 	assertNeutralReveal(t, reload)
@@ -272,8 +272,8 @@ func TestSentenceListenRevealShowsTheTranslation(t *testing.T) {
 		t.Fatalf("answer = %d\n%s", rec.Code, got)
 	}
 	mustOrder(t, got,
+		`class="lp-reveal lp-reveal--1"`,
 		"clip--hero",
-		`class="lp-reveal"`,
 		`class="word-blocks" dir="rtl"`,
 		`class="wb__gl"`,
 		`class="lp-fb__tr"`,
@@ -298,7 +298,7 @@ func TestSentenceListenGlossSitsInItsWord(t *testing.T) {
 	body := getAuthed(t, env.h, env.cookie, env.path)
 	rec := postLesson(t, env.h, env.cookie, env.path, runValue(t, body), choiceValue(t, body, slAnswer), true, env.csrf)
 	got := rec.Body.String()
-	reveal := between(t, got, `class="lp-reveal"`, `class="lp-fb__tr"`)
+	reveal := between(t, got, `class="lp-reveal lp-reveal--1"`, `class="lp-fb__tr"`)
 	words := regexp.MustCompile(`(?s)<span class="activity-word">(.*?)</span>`).FindAllStringSubmatch(reveal, -1)
 	want := [][3]string{
 		{slAni, "ani", "I"},
@@ -466,8 +466,18 @@ func TestSentenceChoicesStayOneColumn(t *testing.T) {
 	if !strings.Contains(css, ".lp-reveal .wb__gl { font-size: var(--fs-small); color: var(--muted); }") {
 		t.Fatal("reveal glosses are not muted")
 	}
-	if !strings.Contains(css, ".lp-reveal {\n  display: grid;") || !strings.Contains(between(t, css, ".lp-reveal {", "}"), "min-block-size: 11rem;") {
-		t.Fatal("the reveal slot does not reserve its block size")
+	if !strings.Contains(css, ".lp-reveal {\n  display: grid;") {
+		t.Fatal("the reveal is not a grid")
+	}
+	for _, want := range []string{
+		".lp-reveal--1 { min-block-size: 200px; }",
+		".lp-reveal--2 { min-block-size: 236px; }",
+		".lp-reveal--3 { min-block-size: 272px; }",
+		".lp-reveal--ask {\n  align-content: center;",
+	} {
+		if !strings.Contains(css, want) {
+			t.Fatalf("reveal box missing %q", want)
+		}
 	}
 }
 

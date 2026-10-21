@@ -270,7 +270,12 @@
 .lf-count { flex: none; color: var(--muted); font-size: var(--fs-small); font-weight: 600; font-variant-numeric: tabular-nums; }
 .lf-body { display: grid; grid-template-rows: 1fr; gap: var(--space-5); }
 .lf-main { display: flex; flex-direction: column; gap: var(--space-5); min-inline-size: 0; }
+/* A sentence ask centres the orb in a box sized for the line. On a phone that
+   box, four choices, and the lesson head share one screen, so this step uses
+   the tighter gaps. */
+.lf-main:has(.lp-reveal) { gap: var(--space-3); }
 .lesson-frame .activity { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--space-4); }
+.lesson-frame .activity:has(.lp-reveal) { gap: var(--space-2); }
 .lesson-frame .activity > form { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--space-4); }
 .lf-head { display: grid; gap: var(--space-2); padding-block-start: var(--space-3); }
 .lf-head .eyebrow { text-transform: uppercase; letter-spacing: .06em; font-size: var(--fs-caption); }
@@ -304,9 +309,11 @@
 .choices--sentence {
   display: grid;
   grid-template-columns: 1fr;
-  gap: var(--space-3);
+  gap: var(--space-2);
   max-inline-size: 40rem;
 }
+/* .lesson-frame .choices sets a wider gap and wins on specificity. */
+.lesson-frame .choices--sentence { gap: var(--space-2); }
 .choices--sentence .c-answer {
   min-block-size: var(--size-cta);
   text-align: start;
@@ -322,10 +329,25 @@
   justify-items: center;
   align-content: start;
   gap: var(--space-2);
-  /* The ask renders this same box empty, so the choices do not drop when the
-     line arrives. Tall enough for the Hebrew, the translation, and the glosses. */
-  min-block-size: 11rem;
 }
+/* One box for the ask and the reveal, so the choices do not move. The height
+   is the orb, the Hebrew line, and the translation at 390px: one, two, or
+   three lines. On the ask the orb is centred, the way a listening stage is.
+   After the answer it sits at the top and the line fills the rest. */
+.lp-reveal--1 { min-block-size: 200px; }
+.lp-reveal--2 { min-block-size: 236px; }
+.lp-reveal--3 { min-block-size: 272px; }
+.lp-reveal--ask {
+  align-content: center;
+  background: var(--ink);
+  border-radius: var(--radius-hero);
+}
+.lp-reveal--ask .orb--hero {
+  inline-size: calc(var(--space-8) + var(--space-5));
+  block-size: calc(var(--space-8) + var(--space-5));
+}
+.lp-reveal--ask .orb--hero .icon,
+.lp-reveal--ask .orb--hero .orb__glyph--load { inline-size: var(--space-6); block-size: var(--space-6); }
 .lp-reveal .word-blocks { justify-content: center; }
 .lp-reveal .wb__gl { font-size: var(--fs-small); color: var(--muted); }
 .lp-fb__tr {

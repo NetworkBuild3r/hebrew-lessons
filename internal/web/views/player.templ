@@ -58,6 +58,24 @@ templ ActivityBlock(a Activity) {
 						@clip("line-clip", a.Audio, a.AudioLabel, true)
 					}
 				</section>
+			} else if a.Sentence {
+				<div class={ revealClass(a) }>
+					if a.Audio != "" {
+						@clip("line-clip", a.Audio, a.AudioLabel, true)
+					}
+					if a.Reveal {
+						if len(a.Words) > 0 {
+							<div class="word-blocks" dir="rtl">
+								for _, word := range a.Words {
+									@sentenceHebrew(word)
+								}
+							</div>
+						}
+						if a.Translation != "" {
+							<p class="lp-fb__tr" lang="en">@E("“" + a.Translation + "”")</p>
+						}
+					}
+				</div>
 			} else {
 				if a.Stage && a.Audio != "" {
 					<div class="listen-stage">
@@ -67,22 +85,7 @@ templ ActivityBlock(a Activity) {
 					@clip("line-clip", a.Audio, a.AudioLabel, true)
 				}
 			}
-			if a.Reveal {
-				<div class="lp-reveal">
-					if len(a.Words) > 0 {
-						<div class="word-blocks" dir="rtl">
-							for _, word := range a.Words {
-								@sentenceHebrew(word)
-							}
-						</div>
-					}
-					if a.Translation != "" {
-						<p class="lp-fb__tr" lang="en">@E("“" + a.Translation + "”")</p>
-					}
-				</div>
-			} else if a.Sentence {
-				<div class="lp-reveal" aria-hidden="true"></div>
-			} else if len(a.Words) > 0 && !a.Spotlight {
+			if len(a.Words) > 0 && !a.Spotlight && !a.Sentence {
 				<div class={ wordBlocksClass(a) } dir="rtl">
 					for i, word := range a.Words {
 						@activityWord(word, "word-clip-"+Num(i), a.PromptWord != "")

@@ -60,6 +60,9 @@ type Activity struct {
 	Reveal      bool
 	Sheet       bool
 	Translation string
+	// RevealLines is 1, 2, or 3: the lines the translation takes at 390px.
+	// The ask and the reveal use the same class, so the choices do not move.
+	RevealLines int
 	Contrast    *ChoiceContrast
 	// Stage is a listening question: the clip is the whole prompt, so its play control is big.
 	// Spotlight is a step whose Hebrew is the one thing on screen: big, centered, play below.
@@ -160,6 +163,22 @@ func contrastTail(c *ChoiceContrast) string {
 		return " " + c.Gloss + "."
 	}
 	return "."
+}
+
+// revealClass is the sentence box. The line count is the translation at 390px.
+// On the ask the orb is centred in that box; after the answer the line fills it.
+func revealClass(a Activity) string {
+	size := "lp-reveal--1"
+	switch a.RevealLines {
+	case 2:
+		size = "lp-reveal--2"
+	case 3:
+		size = "lp-reveal--3"
+	}
+	if a.Reveal {
+		return "lp-reveal " + size
+	}
+	return "lp-reveal " + size + " lp-reveal--ask"
 }
 
 // choiceWrap is the choice list. A sentence listen_pick is one column.

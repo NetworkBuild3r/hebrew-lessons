@@ -38,6 +38,12 @@ const (
 	slEvening2 = "good evening"
 	slAnswer2  = "I live here!"
 	slFifth    = "A fifth line stays off the buttons"
+
+	// Two lines and three lines at 390px, measured with the reveal face.
+	slTwoA  = "I have a small house with a garden behind it."
+	slTwoB  = "The water for the garden is here by the door."
+	slTwoC  = "This is a big house, the biggest one on our street."
+	slThree = "I have a small house with a garden behind it and a tree in front."
 )
 
 // slPool is every distinct English line that may be a distractor.

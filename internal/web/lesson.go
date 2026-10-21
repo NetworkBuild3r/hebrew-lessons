@@ -244,15 +244,20 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		}
 	}
 	var picked string
-	switch {
-	case run.Phase == "ask" && sentence && !graded && answer == "continue":
-		// Listen, then reveal. The step is not a question, so nothing is credited.
-		// Moving to reveal (rather than past the item) is what shows the line.
+	// Listen, then reveal. The step is not a question, so nothing is credited.
+	// Moving to reveal (rather than past the item) is what shows the line.
+	listenThenReveal := false
+	if run.Phase == "ask" && sentence && !graded && answer == "continue" {
+		listenThenReveal = true
 		var applied bool
 		run, applied, err = p.store.AnswerPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, true)
 		if err == nil && applied {
 			err = p.recorder().Expose(r.Context(), userID, listenLexemeIDs(act, lex), evidence.ContextLessonListen, lesson.UnitID)
 		}
+	}
+	switch {
+	case listenThenReveal:
+		// Already applied. The continue below would move past the reveal.
 	case run.Phase == "ask" && graded && answer != "" && answer != "continue":
 		var correct bool
 		response := answer

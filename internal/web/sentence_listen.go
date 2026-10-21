@@ -354,14 +354,13 @@ func markSentenceChoices(choices []views.Choice, translation, picked string) []v
 	out := append([]views.Choice(nil), choices...)
 	for i := range out {
 		out[i].Disabled = true
-		switch {
-		case known && out[i].Label == translation:
+		if known && out[i].Label == translation {
 			out[i].State = "correct"
 			out[i].Tag = "Right"
-		case known && out[i].Value == picked && out[i].Label != translation:
+		} else if known && out[i].Value == picked && out[i].Label != translation {
 			out[i].State = "wrong"
 			out[i].Tag = "Your pick"
-		default:
+		} else {
 			out[i].State = "dim"
 		}
 	}
@@ -521,6 +520,7 @@ func (p player) applySentence(ctx context.Context, lesson db.CourseLesson, run d
 	activity.Feedback = ""
 	activity.FeedbackClass = ""
 	activity.Words = nil
+	activity.RevealLines = sentenceRevealLines(act.Translation)
 	if run.Phase == "ask" {
 		activity.Choices = choices
 		activity.Asking = graded
@@ -572,4 +572,81 @@ func sentenceRevealWords(act units.Activity, lex map[string]db.LexemeView) []vie
 		})
 	}
 	return line
+}
+
+// sentenceLowerWidth and sentenceUpperWidth are the advance, in tenths of a
+// pixel, of Noto Sans Hebrew at 600/22px. sentenceRevealLines wraps with them.
+var sentenceLowerWidth = [26]int{
+	128, 137, 113, 137, 130, 79, 137, 139, 62, 62, 128, 62, 208,
+	139, 135, 137, 137, 95, 109, 90, 139, 119, 182, 126, 119, 107,
+}
+
+var sentenceUpperWidth = [26]int{
+	148, 143, 140, 158, 121, 115, 161, 164, 84, 68, 140, 122, 202,
+	172, 172, 134, 172, 141, 124, 123, 163, 142, 215, 141, 133, 132,
+}
+
+// sentenceRevealCol is the translation column at a 390px lesson: the viewport
+// minus the page padding. A wider window wraps to fewer lines, so this count
+// is the tall box.
+// 3333 tenths is the widest line that still classifies the measured fixtures
+// the way a 390px column does, and it is exact for the boundary sentence below.
+const sentenceRevealCol = 3333
+
+// sentenceRevealLines is 1, 2, or 3. The ask and the reveal share that class.
+// Anything longer than three lines still uses the three-line box.
+func sentenceRevealLines(translation string) int {
+	shown := "“" + strings.TrimSpace(translation) + "”"
+	lines := 1
+	var line int
+	for _, word := range strings.Fields(shown) {
+		w := sentenceWordWidth(word)
+		gap := 0
+		if line > 0 {
+			gap = 59
+		}
+		if line > 0 && line+gap+w > sentenceRevealCol {
+			lines++
+			line = w
+		} else {
+			line += gap + w
+		}
+	}
+	if lines <= 1 {
+		return 1
+	}
+	if lines == 2 {
+		return 2
+	}
+	return 3
+}
+
+func sentenceWordWidth(word string) int {
+	w := 0
+	for _, r := range word {
+		w += sentenceRuneWidth(r)
+	}
+	return w
+}
+
+func sentenceRuneWidth(r rune) int {
+	if r >= 'a' && r <= 'z' {
+		return sentenceLowerWidth[r-'a']
+	}
+	if r >= 'A' && r <= 'Z' {
+		return sentenceUpperWidth[r-'A']
+	}
+	if r == ' ' {
+		return 59
+	}
+	if r == '“' || r == '”' {
+		return 91
+	}
+	if r == '.' || r == ',' {
+		return 58
+	}
+	if r == '\'' {
+		return 54
+	}
+	return 130
 }
