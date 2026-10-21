@@ -17,6 +17,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
@@ -372,20 +373,24 @@ func (s *server) now() time.Time {
 	return time.Now().UTC()
 }
 
-// dueCount is the cards studyday.CardDue counts at now.
-// Review-state and new cards are due at or before the study-day cutoff.
-// Learning and relearning cards are due only within LearnAhead of now.
+// dueCount is how many cards studyday.Decide marks due at now.
 // The query loads through DueFetchLimit so a learning card just past the
-// cutoff is still visible, then CardDue drops what the queue will not serve.
+// cutoff is still visible. Decide then drops what Review will not serve,
+// including a learn-ahead card when something else is already due.
 func (s *server) dueCount(ctx context.Context, userID int64, now time.Time, loc *time.Location) (int, error) {
-	due, err := s.store.ListDueCards(ctx, userID, studyday.DueFetchLimit(now, loc))
+	learnAhead := sessionlimits.LearnAheadCap
+	rows, err := s.store.ListDueCards(ctx, userID, studyday.DueFetchLimit(now, loc, learnAhead))
 	if err != nil {
 		return 0, err
 	}
-	cutoff := studyday.DueCutoff(now, loc)
+	cards := make([]studyday.DueCard, len(rows))
+	for i, c := range rows {
+		cards[i] = studyday.DueCard{State: c.State, Due: c.Due}
+	}
+	decision := studyday.Decide(now, studyday.DueCutoff(now, loc), learnAhead, cards)
 	n := 0
-	for _, c := range due {
-		if studyday.CardDue(c.State, c.Due, now, cutoff) {
+	for _, on := range decision.Due {
+		if on {
 			n++
 		}
 	}

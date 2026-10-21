@@ -176,8 +176,8 @@ func (s *Service) BuildSessionForAt(ctx context.Context, userID int64, lexemeIDs
 
 // build is BuildSession. only, when not nil, keeps the cards of those words and no drill.
 // due is the review-state cutoff passed to the mix. The zero time uses the
-// clock instant already read. Learning cards compare against that clock plus
-// the learn-ahead limit, not against this cutoff.
+// clock instant already read. New, learning, and relearning cards are
+// decided against that clock. Learn-ahead uses sessionlimits.LearnAheadCap.
 func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct{}, due time.Time) (*Session, error) {
 	if err := s.ready(); err != nil {
 		return nil, err

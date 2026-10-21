@@ -176,9 +176,9 @@ func addDaysStr(day string, n int) string {
 func (s *server) fillProgress(ctx context.Context, userID int64, tz string, v *views.ProgressView) error {
 	now := s.now()
 	loc := studyday.Load(tz)
-	// The snapshot window is the study day, not the UTC date. DueCutoff is the
-	// next 04:00 local, so the day itself is that instant minus one day.
-	today := studyday.DueCutoff(now, loc).AddDate(0, 0, -1).Format(dayLayout)
+	// The snapshot window is the study day Decide reports. That is the same
+	// cutoff Today and Review use for review-state cards, minus one day.
+	today := studyday.Decide(now, studyday.DueCutoff(now, loc), sessionlimits.LearnAheadCap, nil).Day
 
 	_, _, done, total, err := s.unitProgress(ctx, userID)
 	if err != nil {

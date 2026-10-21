@@ -228,8 +228,8 @@ func mix(cands []Candidate, accuracy float64, now time.Time, seed int64) []CardR
 // mixGate is mix for a learner whose skills are open as gate says. Choosing cards is
 // the old mix. Each card is then asked through the weakest skill of its word that has a
 // checked activity, as annotate does.
-// now is the clock. reviewLimit is the study-day cutoff for review and new cards.
-// Learning and relearning cards compare against now+LearnAhead instead.
+// now is the clock. reviewLimit is the study-day cutoff for review-state cards.
+// Learning, relearning, and new cards are decided by studyday.Decide.
 func mixGate(cands []Candidate, accuracy float64, now, reviewLimit time.Time, seed int64, gate activity.Gate) []CardRef {
 	queue := mixCards(cands, accuracy, now, reviewLimit, seed)
 	byID := make(map[int64]Candidate, len(cands))
@@ -380,12 +380,13 @@ func tieBreak(seed, id int64) uint64 {
 }
 
 func splitPools(cands []Candidate, now, reviewLimit time.Time) (dueS, dueK, laterK, fresh []Candidate) {
-	for _, c := range cands {
-		switch classify(c, now, reviewLimit) {
+	due := dueOf(cands, now, reviewLimit)
+	for i, c := range cands {
+		switch classifyDue(c, due[i]) {
 		case kindStruggle:
 			dueS = append(dueS, c)
 		case kindKnown:
-			if studyday.CardDue(c.State, c.Due, now, reviewLimit) {
+			if due[i] {
 				dueK = append(dueK, c)
 			} else {
 				laterK = append(laterK, c)
@@ -397,7 +398,22 @@ func splitPools(cands []Candidate, now, reviewLimit time.Time) (dueS, dueK, late
 	return dueS, dueK, laterK, fresh
 }
 
+// dueOf is studyday.Decide for this candidate list. The learn-ahead cap is
+// the session limit, and the decision sees the whole list, so a learning
+// card inside the cap is due only when nothing else in the list is.
+func dueOf(cands []Candidate, now, reviewLimit time.Time) []bool {
+	cards := make([]studyday.DueCard, len(cands))
+	for i, c := range cands {
+		cards[i] = studyday.DueCard{State: c.State, Due: c.Due}
+	}
+	return studyday.Decide(now, reviewLimit, sessionlimits.LearnAheadCap, cards).Due
+}
+
 func classify(c Candidate, now, reviewLimit time.Time) kind {
+	return classifyDue(c, dueOf([]Candidate{c}, now, reviewLimit)[0])
+}
+
+func classifyDue(c Candidate, due bool) kind {
 	switch c.Skill {
 	case fsrs.SkillRead, fsrs.SkillRecall, fsrs.SkillListen, fsrs.SkillSpell:
 	default:
@@ -406,12 +422,11 @@ func classify(c Candidate, now, reviewLimit time.Time) kind {
 	// A card with no review is new once it is due. It is not struggling
 	// and it is not known. A future due date waits.
 	if !c.HasRating {
-		if !studyday.CardDue(c.State, c.Due, now, reviewLimit) {
+		if !due {
 			return kindSkip
 		}
 		return kindNew
 	}
-	due := studyday.CardDue(c.State, c.Due, now, reviewLimit)
 	weak := c.HasRating && (c.Latest == int(fsrs.Again) || c.Latest == int(fsrs.Hard))
 	if due && (c.Lapses >= StruggleLapses || weak || c.Confused) {
 		return kindStruggle

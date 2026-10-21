@@ -5,7 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
 )
 
 func TestNoHistoryAccuracyIsTargetSuccess(t *testing.T) {
@@ -266,6 +268,43 @@ func TestSplitPoolsKeepsACardDueAtTheCutoff(t *testing.T) {
 	_, _, _, fresh = splitPools([]Candidate{{ID: 3, Skill: fsrs.SkillRead, Due: now}}, now, now)
 	if len(fresh) != 1 {
 		t.Fatalf("new at cutoff fresh=%d", len(fresh))
+	}
+}
+
+func TestLearnAheadWaitsForAnEmptySession(t *testing.T) {
+	now := time.Date(2026, 10, 18, 22, 1, 0, 0, time.UTC)
+	step := time.Date(2026, 10, 18, 22, 5, 0, 0, time.UTC)
+	cutoff := now.Add(6 * time.Hour)
+	learning := Candidate{
+		ID: 1, LexemeID: 1, Skill: fsrs.SkillRead, State: fsrs.StateLearning, Due: step,
+		HasRating: true, Latest: int(fsrs.Again),
+	}
+	review := Candidate{
+		ID: 2, LexemeID: 2, Skill: fsrs.SkillRead, State: fsrs.StateReview, Due: now.Add(-time.Hour),
+		HasRating: true, Latest: int(fsrs.Again),
+	}
+	alone := mixGate([]Candidate{learning}, 0.5, now, cutoff, 1, activity.OpenGate())
+	if ids := idsOf(alone); len(ids) != 1 || ids[0] != 1 {
+		t.Fatalf("empty session = %v, want the learning card", ids)
+	}
+	with := mixGate([]Candidate{learning, review}, 0.5, now, cutoff, 1, activity.OpenGate())
+	if ids := idsOf(with); len(ids) != 1 || ids[0] != 2 {
+		t.Fatalf("session with a due review = %v, want only the review card", ids)
+	}
+	atStep := step
+	both := mixGate([]Candidate{learning, review}, 0.5, atStep, cutoff, 1, activity.OpenGate())
+	if len(idsOf(both)) != 2 {
+		t.Fatalf("at the step = %v, want both cards", idsOf(both))
+	}
+	outside := learning
+	outside.Due = now.Add(sessionlimits.LearnAheadCap + time.Nanosecond)
+	if ids := idsOf(mixGate([]Candidate{outside}, 0.5, now, cutoff, 1, activity.OpenGate())); len(ids) != 0 {
+		t.Fatalf("past the cap = %v", ids)
+	}
+	exact := learning
+	exact.Due = now.Add(sessionlimits.LearnAheadCap)
+	if ids := idsOf(mixGate([]Candidate{exact}, 0.5, now, cutoff, 1, activity.OpenGate())); len(ids) != 1 || ids[0] != 1 {
+		t.Fatalf("at the cap = %v", ids)
 	}
 }
 

@@ -218,18 +218,28 @@ func TestDueCutoffIsTheNextRollover(t *testing.T) {
 	}
 }
 
-func TestCardDueSplitsLearningFromTheStudyDay(t *testing.T) {
+func TestDecideSplitsReviewLearningAndNew(t *testing.T) {
 	denver := mustLoc(t, DefaultZone)
 	now := time.Date(2026, 10, 18, 22, 0, 0, 0, denver)
 	cutoff := DueCutoff(now, denver)
+	ahead := 20 * time.Minute
 	inside := time.Date(2026, 10, 18, 22, 5, 0, 0, denver)
 	outside := time.Date(2026, 10, 18, 22, 30, 0, 0, denver)
-	exact := now.Add(LearnAhead)
+	exact := now.Add(ahead)
+	justInside := exact.Add(-time.Nanosecond)
 	pastExact := exact.Add(time.Nanosecond)
 	tomorrow := time.Date(2026, 10, 19, 3, 0, 0, 0, denver)
 	afterCutoff := time.Date(2026, 10, 19, 5, 0, 0, 0, denver)
 	if !tomorrow.Before(cutoff) || !afterCutoff.After(cutoff) || !outside.Before(cutoff) {
 		t.Fatalf("cutoff %s tomorrow %s outside %s after %s", cutoff, tomorrow, outside, afterCutoff)
+	}
+	one := func(state string, due time.Time) bool {
+		t.Helper()
+		got := Decide(now, cutoff, ahead, []DueCard{{State: state, Due: due}})
+		if len(got.Due) != 1 {
+			t.Fatalf("%s %s: len %d", state, due, len(got.Due))
+		}
+		return got.Due[0]
 	}
 	cases := []struct {
 		name  string
@@ -238,22 +248,111 @@ func TestCardDueSplitsLearningFromTheStudyDay(t *testing.T) {
 		want  bool
 	}{
 		{"learning inside learn-ahead", "learning", inside, true},
+		{"learning just inside the cap", "learning", justInside, true},
 		{"learning at the learn-ahead limit", "learning", exact, true},
 		{"learning one nanosecond past learn-ahead", "learning", pastExact, false},
 		{"learning outside learn-ahead", "learning", outside, false},
 		{"relearning inside learn-ahead", "relearning", inside, true},
+		{"relearning just outside the cap", "relearning", pastExact, false},
 		{"relearning outside learn-ahead", "relearning", outside, false},
 		{"review before tomorrow's rollover", "review", tomorrow, true},
 		{"review after the cutoff", "review", afterCutoff, false},
-		{"new before tomorrow's rollover", "new", tomorrow, true},
-		{"new outside learn-ahead is still this study day", "new", outside, true},
+		{"new at the clock", "new", now, true},
+		{"new before tomorrow's rollover", "new", tomorrow, false},
+		{"new outside the clock stays off the day cutoff", "new", outside, false},
 		{"new after the cutoff", "new", afterCutoff, false},
-		{"empty state uses the cutoff", "", outside, true},
+		{"empty state uses the clock", "", outside, false},
 	}
 	for _, tc := range cases {
-		if got := CardDue(tc.state, tc.due, now, cutoff); got != tc.want {
-			t.Errorf("%s: CardDue = %v, want %v", tc.name, got, tc.want)
+		if got := one(tc.state, tc.due); got != tc.want {
+			t.Errorf("%s: due = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+
+	// A learning card inside the cap waits while any other card is due.
+	withReview := Decide(now, cutoff, ahead, []DueCard{
+		{State: "learning", Due: inside},
+		{State: "review", Due: now},
+	})
+	if withReview.Due[0] || !withReview.Due[1] {
+		t.Fatalf("learn-ahead while a review card is due: %v", withReview.Due)
+	}
+	// A new card that is not yet due does not count as something else due.
+	withFutureNew := Decide(now, cutoff, ahead, []DueCard{
+		{State: "learning", Due: inside},
+		{State: "new", Due: outside},
+	})
+	if !withFutureNew.Due[0] || withFutureNew.Due[1] {
+		t.Fatalf("a future new card blocked learn-ahead: %v", withFutureNew.Due)
+	}
+	dueNew := Decide(now, cutoff, ahead, []DueCard{
+		{State: "relearning", Due: inside},
+		{State: "new", Due: now},
+	})
+	if dueNew.Due[0] || !dueNew.Due[1] {
+		t.Fatalf("a due new card left the relearning card in learn-ahead: %v", dueNew.Due)
+	}
+	// The cap is the duration the caller passes.
+	short := Decide(now, cutoff, 10*time.Minute, []DueCard{{State: "learning", Due: now.Add(15 * time.Minute)}})
+	if short.Due[0] {
+		t.Fatal("a 15 minute step was due under a 10 minute cap")
+	}
+
+	// 22:01 is before the 22:05 step. 22:05 is the step itself.
+	at2201 := time.Date(2026, 10, 18, 22, 1, 0, 0, denver)
+	step := time.Date(2026, 10, 18, 22, 5, 0, 0, denver)
+	cut2201 := DueCutoff(at2201, denver)
+	if Decide(at2201, cut2201, ahead, []DueCard{{State: "learning", Due: step}}).Due[0] != true {
+		t.Fatal("22:01 did not serve a lone learning card due at 22:05")
+	}
+	blocked := Decide(at2201, cut2201, ahead, []DueCard{
+		{State: "learning", Due: step},
+		{State: "review", Due: at2201},
+	})
+	if blocked.Due[0] || !blocked.Due[1] {
+		t.Fatalf("22:01 served learn-ahead beside a due review card: %v", blocked.Due)
+	}
+	at2205 := time.Date(2026, 10, 18, 22, 5, 0, 0, denver)
+	dueNow := Decide(at2205, DueCutoff(at2205, denver), ahead, []DueCard{
+		{State: "learning", Due: step},
+		{State: "review", Due: at2205},
+	})
+	if !dueNow.Due[0] || !dueNow.Due[1] {
+		t.Fatalf("22:05 left a due learning card out: %v", dueNow.Due)
+	}
+	at2159 := time.Date(2026, 10, 18, 21, 59, 0, 0, denver)
+	if !Decide(at2159, DueCutoff(at2159, denver), ahead, []DueCard{{State: "learning", Due: at2159}}).Due[0] {
+		t.Fatal("21:59 did not serve the step that is due now, before the Again")
+	}
+
+	// 03:59 and 04:01 each have a review card on either side of that cutoff.
+	at359 := time.Date(2026, 10, 19, 3, 59, 0, 0, denver)
+	at401 := time.Date(2026, 10, 19, 4, 1, 0, 0, denver)
+	cut359 := DueCutoff(at359, denver)
+	cut401 := DueCutoff(at401, denver)
+	early := time.Date(2026, 10, 19, 3, 0, 0, 0, denver)
+	laterToday := time.Date(2026, 10, 19, 5, 0, 0, 0, denver)
+	nextEvening := time.Date(2026, 10, 20, 5, 0, 0, 0, denver)
+	if early.After(cut359) || !laterToday.After(cut359) || laterToday.After(cut401) || !nextEvening.After(cut401) {
+		t.Fatalf("cutoffs %s %s do not split 03:00, 05:00, and the next 05:00", cut359, cut401)
+	}
+	side359 := Decide(at359, cut359, ahead, []DueCard{
+		{State: "review", Due: early},
+		{State: "review", Due: laterToday},
+	})
+	if !side359.Due[0] || side359.Due[1] {
+		t.Fatalf("03:59 sides: %v", side359.Due)
+	}
+	side401 := Decide(at401, cut401, ahead, []DueCard{
+		{State: "review", Due: early},
+		{State: "review", Due: laterToday},
+		{State: "review", Due: nextEvening},
+	})
+	if !side401.Due[0] || !side401.Due[1] || side401.Due[2] {
+		t.Fatalf("04:01 sides: %v", side401.Due)
+	}
+	if Decide(at359, cut359, ahead, nil).Day != "2026-10-18" || Decide(at401, cut401, ahead, nil).Day != "2026-10-19" {
+		t.Fatalf("study day 03:59 %s 04:01 %s", Decide(at359, cut359, ahead, nil).Day, Decide(at401, cut401, ahead, nil).Day)
 	}
 
 	// 03:50: learn-ahead reaches past the 04:00 cutoff. The fetch has to
@@ -261,20 +360,23 @@ func TestCardDueSplitsLearningFromTheStudyDay(t *testing.T) {
 	late := time.Date(2026, 10, 19, 3, 50, 0, 0, denver)
 	lateCutoff := DueCutoff(late, denver)
 	learningPast := time.Date(2026, 10, 19, 4, 5, 0, 0, denver)
-	if !learningPast.After(lateCutoff) || learningPast.After(late.Add(LearnAhead)) {
+	if !learningPast.After(lateCutoff) || learningPast.After(late.Add(ahead)) {
 		t.Fatalf("04:05 is not past the cutoff and inside learn-ahead: cutoff %s", lateCutoff)
 	}
-	if !CardDue("learning", learningPast, late, lateCutoff) {
+	if !Decide(late, lateCutoff, ahead, []DueCard{{State: "learning", Due: learningPast}}).Due[0] {
 		t.Fatal("a learning card 15 minutes away was not due")
 	}
-	if CardDue("review", learningPast, late, lateCutoff) {
+	if Decide(late, lateCutoff, ahead, []DueCard{{State: "review", Due: learningPast}}).Due[0] {
 		t.Fatal("a review card past the cutoff was due")
 	}
-	if !DueFetchLimit(late, denver).Equal(late.Add(LearnAhead)) {
-		t.Fatalf("fetch limit %s, want %s", DueFetchLimit(late, denver), late.Add(LearnAhead))
+	if !DueFetchLimit(late, denver, ahead).Equal(late.Add(ahead)) {
+		t.Fatalf("fetch limit %s, want %s", DueFetchLimit(late, denver, ahead), late.Add(ahead))
 	}
-	if !DueFetchLimit(now, denver).Equal(cutoff) {
-		t.Fatalf("fetch limit at 22:00 = %s, want the cutoff %s", DueFetchLimit(now, denver), cutoff)
+	if !DueFetchLimit(late, denver, 0).Equal(lateCutoff) {
+		t.Fatalf("zero cap fetch %s, want the cutoff %s", DueFetchLimit(late, denver, 0), lateCutoff)
+	}
+	if !DueFetchLimit(now, denver, ahead).Equal(cutoff) {
+		t.Fatalf("fetch limit at 22:00 = %s, want the cutoff %s", DueFetchLimit(now, denver, ahead), cutoff)
 	}
 }
 
