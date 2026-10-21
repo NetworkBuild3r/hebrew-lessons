@@ -17,7 +17,8 @@ func gradedActivity(typ string) bool {
 }
 
 // targetRequired is a graded activity that grades one word of a multi-word
-// line. listen_pick grades the whole sentence, so target stays optional there.
+// line. listen_pick may omit target. Its translation is collected and
+// validated now, and whole-sentence choices are planned with #139.
 // produce grades one word, the same as recall and cloze.
 func targetRequired(typ string) bool {
 	switch typ {

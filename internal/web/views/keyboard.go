@@ -62,6 +62,19 @@ var HebrewKeyRows = [][]HKey{
 	},
 }
 
+// LetterName is the Hebrew name of ch in the keyboard table.
+// A letter that is not on the table has an empty name.
+func LetterName(ch string) string {
+	for _, row := range HebrewKeyRows {
+		for _, k := range row {
+			if k.Ch == ch {
+				return k.Name
+			}
+		}
+	}
+	return ""
+}
+
 // KeyboardCopy is the words on the keyboard's own controls. Lang is the
 // language of those words, set on the controls so a screen reader switches voice.
 type KeyboardCopy struct {

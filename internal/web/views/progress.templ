@@ -13,8 +13,14 @@ templ Progress(v ProgressView) {
 				<p class="progress__lede">@T(v.Lang, "", "What you know, what you have seen, and how it is changing.")</p>
 				if v.UnitsText != "" {
 					<p class="progress__units">
-						@T(v.Lang, "", "Lessons finished")
+						@T(v.Lang, "", "Units finished")
 						<bdi class="progress__units-n" lang="en" dir="ltr">{ v.UnitsText }</bdi>
+					</p>
+				}
+				if v.LessonsText != "" {
+					<p class="progress__units">
+						@T(v.Lang, "", "Lessons finished")
+						<bdi class="progress__lessons-n" lang="en" dir="ltr">{ v.LessonsText }</bdi>
 					</p>
 				}
 			</header>
@@ -259,10 +265,10 @@ templ placementCard2(v ProgressView) {
 					<li class="pplace__item">
 						<p class="pplace__title">
 							@E(r.Date)
-							<span aria-hidden="true"> · </span>
+							<span aria-hidden="true">{ " · " }</span>
 							@E(r.Kind)
 							if r.Level != "" {
-								<span aria-hidden="true"> · </span>
+								<span aria-hidden="true">{ " · " }</span>
 								@E(r.Level)
 							}
 						</p>
@@ -273,5 +279,16 @@ templ placementCard2(v ProgressView) {
 				}
 			</ol>
 		}
+		@retakePlacement(v)
 	</section>
+}
+
+// retakePlacement is a normal POST. Progress has no #placement node, so an
+// htmx target there never sends. hx-boost="false" keeps the click off the
+// shell's boosted navigation. The handler returns the full placement page.
+templ retakePlacement(v ProgressView) {
+	<form class="pplace__retake" method="post" action={ templ.SafeURL("/_hx/placement/start") } hx-boost="false">
+		<input type="hidden" name="_csrf" value={ v.CSRF }/>
+		<button type="submit" class="btn btn-primary">@E("Retake placement")</button>
+	</form>
 }

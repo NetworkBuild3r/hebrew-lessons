@@ -154,9 +154,7 @@ type Lesson struct {
 // matches a token. A line with fewer lexicon words may leave it empty, and
 // an empty value is the same as omitting it. A new write blocks a missing
 // target, and so does an older revision. Rechecking the current published
-// revision warns instead. On listen_pick, target is optional: if target is
-// set, only that word gets credit; if not, nothing is credited and the step
-// is logged as an exposure.
+// revision warns instead. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. A line of two or more lexicon words with no translation and no target grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. A line of two or more lexicon words with a translation and no target credits nothing and logs one lesson_listen exposure.
 // Translation is the author's English for the whole text. A listen_pick
 // whose text has two or more words that are in the lexicon must set it on
 // a new write and on an older revision. Rechecking the current published
@@ -166,7 +164,7 @@ type Activity struct {
 	Text        string         `json:"text,omitempty"`
 	Translation string         `json:"translation,omitempty" jsonschema:"Natural English translation of the whole text, written by the author. Required on a listen_pick whose text has two or more words that are in the lexicon. Optional on every other type. English only, no markup, at most 120 characters."`
 	Lines       []DialogueLine `json:"lines,omitempty"`
-	Target      string         `json:"target,omitempty" jsonschema:"The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, and cloze when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure."`
+	Target      string         `json:"target,omitempty" jsonschema:"The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, and cloze when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. A line of two or more lexicon words with no translation and no target grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. A line of two or more lexicon words with a translation and no target credits nothing and logs one lesson_listen exposure."`
 
 	// speaker is set only on the one-line views of a dialogue that the validator
 	// builds (see flatten). It is never read from or written to JSON.

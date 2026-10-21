@@ -69,7 +69,7 @@ func TestTargetOptionalInToolSchema(t *testing.T) {
 		}
 		field, _ := props["target"].(map[string]any)
 		desc, _ := field["description"].(string)
-		if !strings.Contains(desc, "two or more words that are in the lexicon") || !strings.Contains(desc, "exact pointed") || !strings.Contains(desc, "logged as an exposure") {
+		if !strings.Contains(desc, "two or more words that are in the lexicon") || !strings.Contains(desc, "exact pointed") || !listenPickCreditPinned(desc) {
 			t.Fatalf("%s target description %q", name, desc)
 		}
 		tr, _ := props["translation"].(map[string]any)
@@ -126,8 +126,9 @@ func TestTargetOptionalInToolSchema(t *testing.T) {
 	}
 	var catalog struct {
 		Activities []struct {
-			Type   string `json:"type"`
-			Fields []struct {
+			Type    string `json:"type"`
+			Purpose string `json:"purpose"`
+			Fields  []struct {
 				Name        string `json:"name"`
 				Required    bool   `json:"required"`
 				Description string `json:"description"`
@@ -142,7 +143,13 @@ func TestTargetOptionalInToolSchema(t *testing.T) {
 		if info.Type != "listen_pick" {
 			continue
 		}
+		if !strings.Contains(info.Purpose, "lines of Hebrew as the buttons") || !strings.Contains(info.Purpose, "collected and validated now") || !strings.Contains(info.Purpose, "picks the author's English of the whole line") {
+			t.Fatalf("catalog listen_pick purpose %q", info.Purpose)
+		}
 		for _, field := range info.Fields {
+			if field.Name == "target" && !listenPickCreditPinned(field.Description) {
+				t.Fatalf("catalog target description %q", field.Description)
+			}
 			if field.Name != "translation" {
 				continue
 			}
@@ -158,6 +165,26 @@ func TestTargetOptionalInToolSchema(t *testing.T) {
 	if !saw {
 		t.Fatal("catalog listen_pick has no translation field")
 	}
+}
+
+// listenPickCreditPinned is the player behavior for a listen_pick with no
+// target. One lexicon word is credited. Two or more with no translation
+// grade the first new word, or the first lexicon word, and log no exposure.
+// Two or more with a translation credit nothing and log one lesson_listen.
+func listenPickCreditPinned(desc string) bool {
+	for _, phrase := range []string{
+		"only that word gets credit",
+		"exactly one lexicon word credits that word",
+		"first new word",
+		"first lexicon word if there is no new word",
+		"logs no exposure",
+		"credits nothing and logs one lesson_listen exposure",
+	} {
+		if !strings.Contains(desc, phrase) {
+			return false
+		}
+	}
+	return !strings.Contains(desc, "logged as an exposure") && !strings.Contains(desc, "Planned with #139")
 }
 
 func TestGetUnit(t *testing.T) {

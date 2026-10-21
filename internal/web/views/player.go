@@ -49,17 +49,22 @@ type Activity struct {
 	Continue      string
 	Asking        bool
 	HomeHref      string
-	// Sentence is a listen_pick of two or more lexicon words. Reveal shows
-	// the line under the orb. Sheet is the status panel with Continue.
-	// Translation is the author's English of that line. GlossWords are the
-	// muted per-word glosses under it. Contrast is the miss line that names
-	// a Hebrew word the heard line has and the picked line lacks.
+	// Sentence is a listen_pick of two or more lexicon words whose translation
+	// is the question. Reveal shows the line under the orb. Sheet is the
+	// status panel with Continue. Translation is the author's English of that
+	// line. GlossWords are the muted per-word glosses under it. Contrast is
+	// the miss line that names a Hebrew word the heard line has and the
+	// picked line lacks.
 	Sentence    bool
 	Reveal      bool
 	Sheet       bool
 	Translation string
 	GlossWords  []Word
 	Contrast    *ChoiceContrast
+	// Stage is a listening question: the clip is the whole prompt, so its play control is big.
+	// Spotlight is a step whose Hebrew is the one thing on screen: big, centered, play below.
+	Stage     bool
+	Spotlight bool
 	// Dialogue is set for a dialogue step. It replaces Words and Audio.
 	Dialogue *Dialogue
 }
@@ -225,6 +230,8 @@ type Choice struct {
 	State    string
 	Tag      string
 	Disabled bool
+	// Sentence is a button that is a whole line of Hebrew, the line the learner heard.
+	Sentence bool
 }
 
 // ChoiceContrast is the second sentence of a missed sentence listen_pick.

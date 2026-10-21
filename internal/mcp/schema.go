@@ -118,7 +118,7 @@ func annotateUnitSchema(s *jsonschema.Schema) error {
 	// target stays out of the required array. recall, produce, and cloze must
 	// set it when the line has two or more lexicon words. listen_pick may omit it.
 	if target := prop(act, "target"); target != nil {
-		target.Description = "The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, and cloze when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure."
+		target.Description = "The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, and cloze when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. A line of two or more lexicon words with no translation and no target grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. A line of two or more lexicon words with a translation and no target credits nothing and logs one lesson_listen exposure."
 	}
 	// text is not marked required here, because a dialogue has lines instead. The
 	// validator enforces it for every other type (schema.required) and enforces
@@ -194,12 +194,12 @@ func activityCatalog() []activityInfo {
 	listenTarget := activityField{
 		Name:        "target",
 		Required:    false,
-		Description: "Optional. If target is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure. When set, it is one exact pointed token of text, and that token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count.",
+		Description: "Optional. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. A line of two or more lexicon words with no translation and no target grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. A line of two or more lexicon words with a translation and no target credits nothing and logs one lesson_listen exposure. When set, it is one exact pointed token of text, and that token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count.",
 	}
 	return []activityInfo{
 		{
 			Type:    units.ActivityListenPick,
-			Purpose: "The learner hears the clip and picks the meaning of the whole line. The spelling stays hidden until the answer. target is optional.",
+			Purpose: "The learner hears the clip. With no translation, the player asks what was heard, with lines of Hebrew as the buttons. With a translation on two or more lexicon words, the learner picks the author's English of the whole line. The translation is collected and validated now. target is optional.",
 			Fields: []activityField{
 				typ("listen_pick"),
 				text,

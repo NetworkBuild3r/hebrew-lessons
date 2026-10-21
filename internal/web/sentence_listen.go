@@ -31,9 +31,14 @@ const sentenceChoiceCount = 4
 const sentenceMinChoices = 3
 
 // sentenceListenPick reports a listen_pick whose choices are whole-line
-// English. A single lexicon word stays on the gloss buttons.
+// English. That is a line of two or more lexicon words with an author
+// translation. A single lexicon word, and a multi-word line with no
+// translation, stay on the heard-line buttons.
 func sentenceListenPick(act units.Activity, lex map[string]db.LexemeView) bool {
 	if act.Type != units.ActivityListenPick || lexemeTokenCount(act, lex) < 2 {
+		return false
+	}
+	if strings.TrimSpace(act.Translation) == "" {
 		return false
 	}
 	if strings.TrimSpace(act.Target) != "" && !sentenceListenChoicesAreTranslations {

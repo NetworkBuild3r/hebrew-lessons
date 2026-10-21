@@ -45,6 +45,7 @@ func translationIssues(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []I
 			if s.err != nil {
 				return append(out, lookupIssue(s.err))
 			}
+			// Hebrew Dev's ruling of 2026-10-20: a line with exactly one lexicon word credits that word.
 			if n < 2 {
 				continue
 			}
