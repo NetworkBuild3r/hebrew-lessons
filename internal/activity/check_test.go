@@ -2,6 +2,8 @@ package activity
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -161,7 +163,9 @@ func TestItemsShowOnlyWhatTheSkillAllows(t *testing.T) {
 }
 
 // The answer is kept on the server. Nothing in the item says which option is right, and the
-// right option does not sit in a fixed place.
+// right option does not sit in a fixed place. The signed payload must not spell the gloss or
+// the Hebrew. The signature is not part of that check: it is random base64 and can spell a
+// short gloss by chance.
 func TestItemDoesNotGiveTheAnswerAway(t *testing.T) {
 	w := newWorld(t)
 	a := w.anchor()
@@ -176,12 +180,82 @@ func TestItemDoesNotGiveTheAnswerAway(t *testing.T) {
 				t.Fatalf("item json mentions %q: %s", banned, body)
 			}
 		}
-		if strings.Contains(b.item.Token, a.Gloss) || strings.Contains(b.item.Token, a.Text) {
-			t.Fatalf("token spells the answer: %s", b.item.Token)
+		if payloadSpellsAnswer(t, b.item.Token, a.Gloss, a.Text) {
+			t.Fatalf("token payload spells the answer: %s", tokenPayload(t, b.item.Token))
 		}
 	}
 	if len(places) < 3 {
 		t.Fatalf("the right option sat in %d places over 80 items", len(places))
+	}
+}
+
+// tokenPayload is the decoded JSON of a payload.signature token. The signature is ignored:
+// a gloss can occur in that base64 by chance, as "lao" did in RlWpePDwyesSGNTlao3c3-...
+func tokenPayload(t *testing.T, token string) string {
+	t.Helper()
+	body64, sig64, ok := strings.Cut(token, ".")
+	if !ok || body64 == "" || sig64 == "" {
+		t.Fatalf("token is not payload.signature: %s", token)
+	}
+	body, err := base64.RawURLEncoding.DecodeString(body64)
+	if err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	return string(body)
+}
+
+// payloadSpellsAnswer reports whether the decoded payload contains the gloss or the Hebrew.
+// It does not look at the signature.
+func payloadSpellsAnswer(t *testing.T, token, gloss, text string) bool {
+	t.Helper()
+	payload := tokenPayload(t, token)
+	return strings.Contains(payload, gloss) || strings.Contains(payload, text)
+}
+
+// TestItemTokenSignatureMayContainTheGloss signs one fixed claim with keys 0, 1, 2, …
+// until the signature segment contains the gloss. The raw token then contains it, which
+// is the flake, and the decoded payload does not, so the item check still passes.
+func TestItemTokenSignatureMayContainTheGloss(t *testing.T) {
+	const gloss = "lao"
+	const text = "אבגדה"
+	c := claims{
+		ID:     "0123456789abcdef0123456789abcdef",
+		User:   1,
+		Lexeme: 4,
+		Kind:   ReadPick,
+		Exp:    1_700_000_000,
+	}
+	var token string
+	var key []byte
+	var n uint64
+	for n = 0; n < 1<<20; n++ {
+		key = make([]byte, 32)
+		binary.LittleEndian.PutUint64(key, n)
+		signed, err := signClaims(key, c)
+		mustf(t, err, "sign")
+		_, sig, ok := strings.Cut(signed, ".")
+		if !ok {
+			t.Fatalf("token is not payload.signature: %s", signed)
+		}
+		if strings.Contains(sig, gloss) {
+			token = signed
+			break
+		}
+	}
+	if token == "" {
+		t.Fatalf("no key in %d tries put %q in the signature", n, gloss)
+	}
+	t.Logf("key %d signature contains %q: %s", n, gloss, token)
+	if !strings.Contains(token, gloss) {
+		t.Fatalf("raw token lost %q: %s", gloss, token)
+	}
+	if payloadSpellsAnswer(t, token, gloss, text) {
+		t.Fatalf("payload spells the answer, so this is not the signature flake: %s", tokenPayload(t, token))
+	}
+	got, err := verifyClaims(key, token)
+	mustf(t, err, "verify")
+	if got != c {
+		t.Fatalf("claims = %+v, want %+v", got, c)
 	}
 }
 
