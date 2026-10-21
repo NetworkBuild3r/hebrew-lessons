@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
+	"golang.org/x/text/unicode/norm"
 )
 
 var alefbetTranslit = regexp.MustCompile(`^[a-z' -]+$`)
@@ -192,6 +193,127 @@ func TestAlefbetReference(t *testing.T) {
 	}
 }
 
+// cueLabel is a "glyph (name)" in a tell-apart line. The glyph may include
+// dagesh (U+05BC) or a shin/sin dot.
+var cueLabel = regexp.MustCompile(`([\p{Hebrew}]+) \(([^)]+)\)`)
+
+// TestAlefbetPairLabels checks every pair variant: the name in each label is
+// the name of the glyph that label shows. Dagesh is U+05BC. The expected
+// names are written here, not taken from the cue constants.
+func TestAlefbetPairLabels(t *testing.T) {
+	const dagesh = "\u05BC"
+	names := map[string]string{
+		"\u05D1":          "vet",
+		"\u05D1" + dagesh: "bet",
+		"\u05DB":          "khaf",
+		"\u05DB" + dagesh: "kaf",
+		"\u05E4":          "fe",
+		"\u05E4" + dagesh: "pe",
+		"\u05DA":          "khaf sofit",
+		"\u05E3":          "fe sofit",
+		"\u05DD":          "mem sofit",
+		"\u05DF":          "nun sofit",
+		"\u05E5":          "tsadi sofit",
+		"\u05D2":          "gimel",
+		"\u05D3":          "dalet",
+		"\u05D4":          "he",
+		"\u05D5":          "vav",
+		"\u05D6":          "zayin",
+		"\u05D7":          "khet",
+		"\u05D8":          "tet",
+		"\u05DE":          "mem",
+		"\u05E0":          "nun",
+		"\u05E1":          "samekh",
+		"\u05E2":          "ayin",
+		"\u05E6":          "tsadi",
+		"\u05E8":          "resh",
+		"\u05EA":          "tav",
+		"\u05E9\u05C1":    "shin",
+		"\u05E9\u05C2":    "sin",
+	}
+	variants := [][2]string{
+		{"\u05D1", "\u05DB"},
+		{"\u05D1" + dagesh, "\u05DB"},
+		{"\u05D1", "\u05DB" + dagesh},
+		{"\u05D1" + dagesh, "\u05DB" + dagesh},
+		{"\u05D3", "\u05E8"},
+		{"\u05D4", "\u05D7"},
+		{"\u05D7", "\u05EA"},
+		{"\u05D5", "\u05D6"},
+		{"\u05D5", "\u05DF"},
+		{"\u05D8", "\u05DE"},
+		{"\u05E1", "\u05DD"},
+		{"\u05D2", "\u05E0"},
+		{"\u05E6", "\u05E2"},
+		{"\u05E4", "\u05DB"},
+		{"\u05E4" + dagesh, "\u05DB"},
+		{"\u05E4", "\u05DB" + dagesh},
+		{"\u05E4" + dagesh, "\u05DB" + dagesh},
+		{"\u05E3", "\u05DA"},
+		{"\u05E9\u05C1", "\u05E9\u05C2"},
+		{"\u05DE", "\u05DD"},
+		{"\u05E0", "\u05DF"},
+		{"\u05DB", "\u05DA"},
+		{"\u05DB" + dagesh, "\u05DA"},
+		{"\u05E4", "\u05E3"},
+		{"\u05E4" + dagesh, "\u05E3"},
+		{"\u05E6", "\u05E5"},
+		{"\u05D2", "\u05E4"},
+		{"\u05D2", "\u05E4" + dagesh},
+	}
+	if len(variants) != 28 {
+		t.Fatalf("pair variants = %d, want 28", len(variants))
+	}
+	exact := map[string]string{
+		"\u05D1" + dagesh + "/\u05DB": "\u05D1" + dagesh + " (bet) has a little tail at the bottom right; \u05DB (khaf) is round.",
+		"\u05DB" + dagesh + "/\u05DA": "\u05DB" + dagesh + " (kaf) sits on the line; \u05DA (khaf sofit) drops below the line.",
+		"\u05E4" + dagesh + "/\u05E3": "\u05E4" + dagesh + " (pe) sits on the line; \u05E3 (fe sofit) drops below the line.",
+		"\u05D2/\u05E4":               "\u05D2 (gimel) stands on one leg, with a small foot kicking out to the left at the bottom. \u05E4 (fe) curls back into itself, with a little curl hanging inside from the top. With a dot inside (\u05E4" + dagesh + "), it's p, as in pet.",
+		"\u05D2/\u05E4" + dagesh:      "\u05D2 (gimel) stands on one leg, with a small foot kicking out to the left at the bottom. \u05E4" + dagesh + " (pe) curls back into itself, with a dot inside. Without the dot, \u05E4 is f, as in fun.",
+	}
+	wantNote := "At the end of a word it's \u05E3, almost always f."
+	for _, pair := range variants {
+		cue := views.AlefbetTellApart([]string{pair[0], pair[1]})
+		if cue == "" {
+			t.Fatalf("%q/%q has no cue", pair[0], pair[1])
+		}
+		key := pair[0] + "/" + pair[1]
+		if want, ok := exact[key]; ok && cue != want {
+			t.Fatalf("%s cue = %q", key, cue)
+		}
+		seen := map[string]string{}
+		for _, m := range cueLabel.FindAllStringSubmatch(cue, -1) {
+			glyph := norm.NFC.String(m[1])
+			want, ok := names[glyph]
+			if !ok {
+				t.Fatalf("%s labels unknown glyph %q as %q", key, glyph, m[2])
+			}
+			if m[2] != want {
+				t.Fatalf("%s label %q wants %q, got %q", key, glyph, want, m[2])
+			}
+			seen[glyph] = m[2]
+		}
+		if len(seen) == 0 {
+			t.Fatalf("%s cue has no glyph label: %q", key, cue)
+		}
+		for _, letter := range pair {
+			glyph := norm.NFC.String(letter)
+			want, ok := names[glyph]
+			if !ok {
+				t.Fatalf("%s has no name for %q", key, glyph)
+			}
+			if seen[glyph] != want {
+				t.Fatalf("%s does not label %q as %q: %q", key, glyph, want, cue)
+			}
+		}
+	}
+	for _, pair := range [][2]string{{"\u05D2", "\u05E4"}, {"\u05D2", "\u05E4" + dagesh}} {
+		if got := views.AlefbetPairNote([]string{pair[0], pair[1]}); got != wantNote {
+			t.Fatalf("%q/%q note = %q", pair[0], pair[1], got)
+		}
+	}
+}
+
 func nameHasNiqqud(s string) bool {
 	for _, r := range s {
 		if unicode.Is(unicode.Mn, r) {
@@ -272,21 +394,25 @@ func TestReviewPeDageshUsesAlefbet(t *testing.T) {
 
 const (
 	gimelPeCue   = "ג (gimel) stands on one leg, with a small foot kicking out to the left at the bottom. פּ (pe) curls back into itself, with a dot inside. Without the dot, פ is f, as in fun."
-	gimelPeNote  = "At the end of a word it's ף, always f."
+	gimelFeCue   = "ג (gimel) stands on one leg, with a small foot kicking out to the left at the bottom. פ (fe) curls back into itself, with a little curl hanging inside from the top. With a dot inside (פּ), it's p, as in pet."
+	gimelPeNote  = "At the end of a word it's ף, almost always f."
 	hardNoteHTML = `At the start of a word, <bdi lang="he" dir="rtl">ב</bdi>, <bdi lang="he" dir="rtl">כ</bdi>, and <bdi lang="he" dir="rtl">פ</bdi> are almost always hard (b, k, p).`
 )
 
 // TestReviewGimelPeCue renders Brian's ג/פ cue and the final-pe note.
 func TestReviewGimelPeCue(t *testing.T) {
-	if !strings.Contains(gimelPeCue, "\u05e4\u05bc (pe)") || !strings.Contains(gimelPeNote, "\u05e3") {
-		t.Fatal("gimel/pe cue must name פּ and the note must name ף")
+	if !strings.Contains(gimelPeCue, "\u05e4\u05bc (pe)") || !strings.Contains(gimelFeCue, "\u05e4 (fe)") || !strings.Contains(gimelPeNote, "almost always f") {
+		t.Fatal("gimel/pe cues must name the letter the card shows, and the note must say almost always f")
 	}
-	for _, key := range []string{"ג/פ", "ג/פ\u05BC"} {
-		if views.AlefbetTellApart(strings.Split(key, "/")) != gimelPeCue {
-			t.Fatalf("%s cue = %q", key, views.AlefbetTellApart(strings.Split(key, "/")))
+	for _, row := range []struct{ key, cue string }{
+		{"ג/פ", gimelFeCue},
+		{"ג/פ\u05BC", gimelPeCue},
+	} {
+		if views.AlefbetTellApart(strings.Split(row.key, "/")) != row.cue {
+			t.Fatalf("%s cue = %q", row.key, views.AlefbetTellApart(strings.Split(row.key, "/")))
 		}
-		if views.AlefbetPairNote(strings.Split(key, "/")) != gimelPeNote {
-			t.Fatalf("%s note = %q", key, views.AlefbetPairNote(strings.Split(key, "/")))
+		if views.AlefbetPairNote(strings.Split(row.key, "/")) != gimelPeNote {
+			t.Fatalf("%s note = %q", row.key, views.AlefbetPairNote(strings.Split(row.key, "/")))
 		}
 	}
 	store, h, now := openApp(t)
@@ -301,10 +427,10 @@ func TestReviewGimelPeCue(t *testing.T) {
 	for _, want := range []string{
 		"<b>Tell them apart:</b>",
 		"stands on one leg, with a small foot kicking out to the left at the bottom.",
-		"(pe) curls back into itself, with a dot inside.",
-		"is f, as in fun.",
+		"(fe) curls back into itself, with a little curl hanging inside from the top.",
+		"p, as in pet",
 		"At the end of a word it&#39;s",
-		"always f.",
+		"almost always f.",
 		`<bdi lang="he" dir="rtl">ג</bdi>`,
 		`<bdi lang="he" dir="rtl">פּ</bdi>`,
 		`<bdi lang="he" dir="rtl">ף</bdi>`,

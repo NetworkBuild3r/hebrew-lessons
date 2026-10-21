@@ -97,9 +97,11 @@ const (
 	cueKafSof    = "כ (khaf) sits on the line; ך (khaf sofit) drops below the line."
 	cuePeSof     = "פ (fe) sits on the line; ף (fe sofit) drops below the line."
 	cueTsadiSof  = "צ (tsadi) sits on the line; ץ (tsadi sofit) drops below the line."
-	// cueGimelPe is Brian's ג/פ confusion. The same wording covers ג/פּ.
+	// cueGimelPe is the dotted pair ג/פּ. cueGimelFe is the undotted pair ג/פ.
+	// The shape of each sentence is its own; a dagesh rewrite does not turn one into the other.
 	cueGimelPe  = "ג (gimel) stands on one leg, with a small foot kicking out to the left at the bottom. פּ (pe) curls back into itself, with a dot inside. Without the dot, פ is f, as in fun."
-	noteGimelPe = "At the end of a word it's ף, always f."
+	cueGimelFe  = "ג (gimel) stands on one leg, with a small foot kicking out to the left at the bottom. פ (fe) curls back into itself, with a little curl hanging inside from the top. With a dot inside (פּ), it's p, as in pet."
+	noteGimelPe = "At the end of a word it's ף, almost always f."
 )
 
 var alefbetPairs = []alefbetPair{
@@ -129,18 +131,42 @@ var alefbetPairs = []alefbetPair{
 	{letters: [2]string{"פ", "ף"}, cue: cuePeSof},
 	{letters: [2]string{"פּ", "ף"}, cue: cuePeSof},
 	{letters: [2]string{"צ", "ץ"}, cue: cueTsadiSof},
-	{letters: [2]string{"ג", "פ"}, cue: cueGimelPe, note: noteGimelPe},
+	{letters: [2]string{"ג", "פ"}, cue: cueGimelFe, note: noteGimelPe},
 	{letters: [2]string{"ג", "פּ"}, cue: cueGimelPe, note: noteGimelPe},
 }
 
 var alefbetBy map[string]AlefbetEntry
 
 func init() {
+	for i := range alefbetPairs {
+		alefbetPairs[i].cue = dottedCue(alefbetPairs[i])
+	}
 	alefbetBy = make(map[string]AlefbetEntry, len(Alefbet))
 	for i := range Alefbet {
 		Alefbet[i].Cue = alefbetCues(Alefbet[i].Letter)
 		alefbetBy[norm.NFC.String(Alefbet[i].Letter)] = Alefbet[i]
 	}
+}
+
+// dottedCue keeps the signed-off shape and rewrites a label when that side
+// of the pair is the dotted letter. בּ is bet, כּ is kaf, פּ is pe.
+// Undotted sides stay vet, khaf, and fe. ג/פ is not produced this way.
+func dottedCue(pair alefbetPair) string {
+	cue := pair.cue
+	for _, letter := range pair.letters {
+		if !strings.ContainsRune(letter, '\u05BC') {
+			continue
+		}
+		switch stripDagesh(norm.NFC.String(letter)) {
+		case "ב":
+			cue = strings.ReplaceAll(cue, "ב (vet)", "ב\u05BC (bet)")
+		case "כ":
+			cue = strings.ReplaceAll(cue, "כ (khaf)", "כ\u05BC (kaf)")
+		case "פ":
+			cue = strings.ReplaceAll(cue, "פ (fe)", "פ\u05BC (pe)")
+		}
+	}
+	return cue
 }
 
 // AlefbetForms is the twenty-two letters and the five final forms.

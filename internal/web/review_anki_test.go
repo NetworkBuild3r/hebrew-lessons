@@ -564,6 +564,26 @@ func TestReviewFrontHasNoAnswerHeading(t *testing.T) {
 			if !strings.Contains(body, "Show answer") || strings.Contains(body, `name="rating"`) {
 				t.Fatalf("htmx response was not the next front\n%s", body)
 			}
+			// Read and listen clear the gloss before the HTTP render, so a
+			// back rendered on the front stays invisible there. This render
+			// still has the gloss and goes through the same face choice.
+			if kind == "read" || kind == "listen" {
+				gloss := kind + "-meaning"
+				tr := kind + "-tr"
+				card := views.ReviewCard{
+					Kind: kind, Lang: "en",
+					Pointed: "שלום", Unpointed: "שלום",
+					Translit: tr, AudioURL: "/audio/x.mp3",
+					Gloss: gloss, Gender: "m",
+				}
+				html := renderMode(t, views.ReviewBody(card))
+				if strings.Contains(html, gloss) || strings.Contains(html, `class="act__answer"`) {
+					t.Fatalf("%s front rendered the back\n%s", kind, html)
+				}
+				if !strings.Contains(html, tr) || !strings.Contains(html, "שלום") {
+					t.Fatalf("%s front dropped the prompt\n%s", kind, html)
+				}
+			}
 		})
 	}
 }
