@@ -522,12 +522,13 @@ func (m *Memory) LoadUnit(ctx context.Context, id int64, revision *int) (UnitVie
 	}
 	doc.Position = u.position
 	return UnitView{
-		UnitID:   u.id,
-		Revision: rev,
-		Position: u.position,
-		Scope:    u.scope,
-		Status:   u.status,
-		Doc:      doc,
+		UnitID:          u.id,
+		Revision:        rev,
+		CurrentRevision: u.rev,
+		Position:        u.position,
+		Scope:           u.scope,
+		Status:          u.status,
+		Doc:             doc,
 	}, nil
 }
 
