@@ -11,11 +11,12 @@ import (
 
 // User is a row in users.
 type User struct {
-	ID        int64
-	Email     string
-	GoogleSub string
-	Role      string
-	CreatedAt time.Time
+	ID          int64
+	Email       string
+	GoogleSub   string
+	Role        string
+	CreatedAt   time.Time
+	OnboardedAt *time.Time // Nil until the learner finishes a placement. The first finish wins.
 }
 
 // CreateUser inserts one user. role must be learner or admin.
@@ -144,6 +145,35 @@ func (s *Store) UpdateUserRole(ctx context.Context, id int64, role string) error
 	return nil
 }
 
+// SetOnboarded records the first time this learner finished onboarding.
+// A later call keeps the stored time. A missing user returns ErrNotFound.
+func (s *Store) SetOnboarded(ctx context.Context, userID int64, at time.Time) error {
+	if err := s.ready(); err != nil {
+		return err
+	}
+	res, err := s.exec(ctx, `UPDATE users SET onboarded_at = COALESCE(onboarded_at, ?) WHERE id = ?`, FormatTime(at), userID)
+	if err != nil {
+		return fmt.Errorf("db: set onboarded: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("db: set onboarded: %w", err)
+	}
+	if n > 0 {
+		return nil
+	}
+	// SQLite counts rows whose value changed. A second call changes nothing.
+	var one int
+	err = s.queryRow(ctx, `SELECT 1 FROM users WHERE id = ?`, userID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("db: set onboarded: %w", err)
+	}
+	return nil
+}
+
 // AddressGender is users.address_gender for this learner.
 // An unset column returns an empty string, which the shell treats as masculine.
 func (s *Store) AddressGender(ctx context.Context, userID int64) (string, error) {
@@ -180,14 +210,15 @@ type rowQuery interface {
 
 func findUserWhere(ctx context.Context, q rowQuery, clause, arg string) (User, error) {
 	row := q.QueryRowContext(ctx,
-		`SELECT id, email, google_sub, role, created_at FROM users WHERE `+clause, arg)
+		`SELECT id, email, google_sub, role, created_at, onboarded_at FROM users WHERE `+clause, arg)
 	return scanUser(row)
 }
 
 func scanUser(row *sql.Row) (User, error) {
 	var u User
 	var created string
-	err := row.Scan(&u.ID, &u.Email, &u.GoogleSub, &u.Role, &created)
+	var onboarded sql.NullString
+	err := row.Scan(&u.ID, &u.Email, &u.GoogleSub, &u.Role, &created, &onboarded)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
@@ -198,7 +229,22 @@ func scanUser(row *sql.Row) (User, error) {
 	if err != nil {
 		return User{}, fmt.Errorf("db: user created_at: %w", err)
 	}
+	u.OnboardedAt, err = optionalTime(onboarded)
+	if err != nil {
+		return User{}, fmt.Errorf("db: user onboarded_at: %w", err)
+	}
 	return u, nil
+}
+
+func optionalTime(v sql.NullString) (*time.Time, error) {
+	if !v.Valid || v.String == "" {
+		return nil, nil
+	}
+	parsed, err := ParseTime(v.String)
+	if err != nil {
+		return nil, err
+	}
+	return &parsed, nil
 }
 
 func normalizeUser(email, googleSub, role string) (string, string, string, error) {

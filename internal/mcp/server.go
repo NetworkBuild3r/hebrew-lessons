@@ -30,6 +30,7 @@ const (
 		"Call lookup before you invent a spelling or a gloss. " +
 		"Call upsert_lexemes to add or correct a lexicon entry. It is admin only. " +
 		"Call validate_unit as a dry run. Call put_unit to save a draft. " +
+		"A recall, produce, or cloze with two or more words that are in the lexicon sets target to the exact pointed word it grades. A line with fewer may omit target. On listen_pick, target is optional: if target is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure. A unit's newWords count toward passage coverage when each is an exact pointed lexicon entry. The intro and the minimum uses also run on every newWord that coverage credited, including one outside the brief. " +
 		"Call generate_audio with texts, or a unitId, to store clips for the activity text. A text that already has a clip is skipped. " +
 		"put_unit requires scope shared or learner:<id>. Scope is not inside the document. " +
 		"put_unit saves even when issues block publishing. " +

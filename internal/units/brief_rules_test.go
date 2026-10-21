@@ -579,6 +579,155 @@ func TestBriefTokenMatching(t *testing.T) {
 	}
 }
 
+func TestBriefCoverageCountsDeclaredNewWords(t *testing.T) {
+	word := vocab8[0].text
+	other := naal
+	u := Unit{
+		Title: "Cafe", Situation: "Ordering at a cafe", Concept: "A greeting",
+		NewWords: []string{word},
+		Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{
+			{Type: ActivityShadow, Text: word},
+			{Type: ActivityListenPick, Text: word},
+		}}},
+	}
+	lex := map[string]glex{
+		normalize(word): {ID: 1, POS: "noun", Gender: "m", Gloss: "hello", Bare: stripNiqqud(word)},
+	}
+	lk := goldenLookup{Lexemes: lex, Audio: []string{normalize(word)}}.fake()
+	f := BriefFacts{
+		Tier: "established", MinKnownShare: 0.95,
+		BriefLexemeIDs: map[int64]bool{}, KnownLexemeIDs: map[int64]bool{},
+	}
+	if got := validateBrief(&u, lk, &f); hasRule(got, RuleBriefCoverage) {
+		t.Fatalf("a unit newWord with an exact lexicon entry should cover a one-word listen_pick: %v", ruleSet(got))
+	}
+
+	// The same word stays new for the brief's intro rule.
+	f.NewWords = []BriefNewWord{{LexemeID: 1, Text: word, MinUses: 1}}
+	f.BriefLexemeIDs[1] = true
+	introduced := u
+	introduced.Lessons = []Lesson{{Kind: KindLesson, Activities: []Activity{
+		{Type: ActivityListenPick, Text: word},
+	}}}
+	got := validateBrief(&introduced, lk, &f)
+	intros := 0
+	for _, is := range got {
+		if is.Rule == RuleBriefIntro {
+			intros++
+		}
+	}
+	if intros != 1 {
+		t.Fatalf("a brief newWord is reported %d times, want 1: %v", intros, ruleSet(got))
+	}
+	if hasRule(validateBrief(&introduced, lk, &f), RuleBriefCoverage) {
+		t.Fatal("coverage should still pass once the word is declared")
+	}
+
+	// A word in none of the three sets fails coverage.
+	f = BriefFacts{
+		Tier: "established", MinKnownShare: 0.95,
+		BriefLexemeIDs: map[int64]bool{}, KnownLexemeIDs: map[int64]bool{},
+	}
+	lex[normalize(other)] = glex{ID: 2, POS: "noun", Gender: "f", Gloss: "shoe", Bare: stripNiqqud(other)}
+	outsider := u
+	outsider.Lessons = []Lesson{{Kind: KindLesson, Activities: []Activity{
+		{Type: ActivityShadow, Text: word},
+		{Type: ActivityListenPick, Text: word},
+		{Type: ActivityListenPick, Text: other},
+	}}}
+	lk = goldenLookup{Lexemes: lex, Audio: []string{normalize(word), normalize(other)}}.fake()
+	got = validateBrief(&outsider, lk, &f)
+	var cov []Issue
+	for _, is := range got {
+		if is.Rule == RuleBriefCoverage {
+			cov = append(cov, is)
+		}
+	}
+	if len(cov) != 1 || cov[0].Pointer != at("lessons", 0, "activities", 2) || cov[0].Severity != SeverityBlock {
+		t.Fatalf("outsider coverage: %v", ruleSet(got))
+	}
+
+	// A newWord whose only lexicon row is the unpointed spelling does not count.
+	const gar = "גָּר"
+	bare := stripNiqqud(gar)
+	if bare == gar {
+		t.Fatal("bare form")
+	}
+	pointed := Unit{
+		Title: "Home", Situation: "Saying where you live", Concept: "I live here",
+		NewWords: []string{gar},
+		Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{
+			{Type: ActivityShadow, Text: gar},
+			{Type: ActivityListenPick, Text: gar},
+		}}},
+	}
+	bareLex := map[string]glex{
+		normalize(bare): {ID: 3, POS: "verb", Gloss: "lives", Bare: bare},
+	}
+	blk := goldenLookup{Lexemes: bareLex, Audio: []string{normalize(gar)}}.fake()
+	bf := BriefFacts{
+		Tier: "established", MinKnownShare: 0.95,
+		BriefLexemeIDs: map[int64]bool{}, KnownLexemeIDs: map[int64]bool{},
+	}
+	probe := &scan{ctx: context.Background(), lk: blk, cache: map[string]*probe{}}
+	if !probe.inLexicon(gar) || probe.probeLex(normalize(gar)) {
+		t.Fatal("fixture: the unpointed row should satisfy inLexicon and miss the exact key")
+	}
+	got = validateBrief(&pointed, blk, &bf)
+	if !hasRule(got, RuleBriefCoverage) {
+		t.Fatalf("unpointed newWord should fail coverage: %v", ruleSet(got))
+	}
+	for _, is := range got {
+		if is.Rule == RuleBriefCoverage && (is.Pointer != at("lessons", 0, "activities", 1) || is.Severity != SeverityBlock) {
+			t.Fatalf("unpointed coverage issue %+v", is)
+		}
+	}
+}
+
+func TestOutOfBriefNewWordNeedsIntroAndUses(t *testing.T) {
+	word := vocab8[0].text
+	lex := map[string]glex{
+		normalize(word): {ID: 1, POS: "noun", Gender: "m", Gloss: "hello", Bare: stripNiqqud(word)},
+	}
+	lk := goldenLookup{Lexemes: lex, Audio: []string{normalize(word)}}.fake()
+	f := BriefFacts{
+		Tier: "established", MinKnownShare: 0.95,
+		BriefLexemeIDs: map[int64]bool{}, KnownLexemeIDs: map[int64]bool{},
+	}
+	tested := Unit{
+		Title: "Cafe", Situation: "Ordering at a cafe", Concept: "A greeting",
+		NewWords: []string{word},
+		Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{
+			{Type: ActivityListenPick, Text: word},
+		}}},
+	}
+	got := validateBrief(&tested, lk, &f)
+	if !hasRule(got, RuleBriefIntro) || !hasRule(got, RuleBriefNewMinUses) {
+		t.Fatalf("out-of-brief newWord with no intro: %v", ruleSet(got))
+	}
+	for _, is := range got {
+		if (is.Rule == RuleBriefIntro || is.Rule == RuleBriefNewMinUses) && is.Severity != SeverityBlock {
+			t.Fatalf("severity %+v", is)
+		}
+	}
+	if hasRule(got, RuleBriefCoverage) {
+		t.Fatal("coverage should credit the declared newWord")
+	}
+
+	shown := tested
+	shown.Lessons = []Lesson{{Kind: KindLesson, Activities: []Activity{
+		{Type: ActivityShadow, Text: word},
+		{Type: ActivityListenPick, Text: word},
+		{Type: ActivityRecall, Text: word},
+	}}}
+	got = validateBrief(&shown, lk, &f)
+	for _, rule := range []string{RuleBriefIntro, RuleBriefNewMinUses, RuleBriefCoverage} {
+		if hasRule(got, rule) {
+			t.Fatalf("a credited newWord with an intro and enough uses should pass %s: %v", rule, ruleSet(got))
+		}
+	}
+}
+
 func TestDropFirstDageshAndCutPrefix(t *testing.T) {
 	if got := dropFirstDagesh("\u05DC\u05BC\u05B6\u05D7\u05B6\u05BC\u05DD"); got != "\u05DC\u05B6\u05D7\u05B6\u05BC\u05DD" {
 		t.Fatalf("dropFirstDagesh = %+q", got)
