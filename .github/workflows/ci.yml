@@ -679,6 +679,30 @@ jobs:
         with:
           node-version: '22'
 
+      # ReviewGradesStayInView launches /usr/bin/google-chrome-stable over CDP.
+      # The k8-build image does not ship Chrome. PR #129 run 39537942560
+      # shard C (job 119019916626) skipped that subtest, and the no-SKIP
+      # guard failed the node tests step.
+      - uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
+        id: chrome
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'rest'
+        with:
+          install-dependencies: true
+
+      - name: link chrome for node tests
+        if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'rest'
+        shell: bash
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          set -euo pipefail
+          if [ "$(id -u)" -eq 0 ]; then
+            ln -sfn "$CHROME_PATH" /usr/bin/google-chrome-stable
+          else
+            sudo ln -sfn "$CHROME_PATH" /usr/bin/google-chrome-stable
+          fi
+          /usr/bin/google-chrome-stable --version
+
       - name: node version
         if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'rest'
         shell: bash
