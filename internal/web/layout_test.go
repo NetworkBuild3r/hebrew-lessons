@@ -84,10 +84,13 @@ func TestTodayLayout(t *testing.T) {
 		t.Fatal("motion script must be a file, not an inline script")
 	}
 	if strings.Count(body, "<script") != 4 {
-		t.Fatalf("want the theme boot, htmx, shell.js, and motion.js; found %d script tags", strings.Count(body, "<script"))
+		t.Fatalf("want theme.js, htmx, shell.js, and motion.js; found %d script tags", strings.Count(body, "<script"))
 	}
-	if !strings.Contains(body, "<script>"+views.ThemeBoot+"</script>") {
-		t.Fatal("theme boot script is not the inline head script")
+	if !strings.Contains(body, `<script src="/static/js/theme.js"></script>`) {
+		t.Fatal("theme boot is not the blocking head script")
+	}
+	if strings.Contains(body, "<script>"+views.ThemeBoot+"</script>") {
+		t.Fatal("theme boot is still an inline script")
 	}
 	shell := get(t, New(nil, nil), "/static/js/shell.js")
 	for _, needle := range []string{"globalViewTransitions", "defaultSwapDelay=0", `typeof document.startViewTransition==="function"`, "defaultSettleDelay=0"} {
@@ -104,7 +107,7 @@ func TestTodayLayout(t *testing.T) {
 	if !strings.Contains(body, "Nothing due") || !strings.Contains(body, "No lesson published yet") {
 		t.Fatal("empty Today should say nothing is due and no lesson is published")
 	}
-	scriptAt := strings.Index(body, "localStorage")
+	scriptAt := strings.Index(body, `/static/js/theme.js`)
 	cssAt := strings.Index(body, "/static/css/tokens.css")
 	if scriptAt < 0 || cssAt < 0 || scriptAt > cssAt {
 		t.Fatal("theme script must run before the stylesheet")
