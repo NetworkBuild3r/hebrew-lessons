@@ -191,6 +191,18 @@ func TestAlefbetReference(t *testing.T) {
 	if views.DageshHardNote([]string{"ג"}) != "" || views.DageshHardNote([]string{"ג", "פ"}) != "" || views.DageshHardNote([]string{"שׁ", "שׂ"}) != "" {
 		t.Fatal("a letter that is not ב, כ, or פ produced the position line")
 	}
+	// בּ/כ and כּ/פ are different letters. Dropping the same-letter check
+	// would say "With the dot" for a pair that is not a dagesh pair.
+	if got := views.LetterDageshNote([]string{"ב\u05BC", "כ"}, nil); got != "" {
+		t.Fatalf("bet/khaf dagesh note = %q", got)
+	}
+	if got := views.LetterDageshNote([]string{"כ\u05BC", "פ"}, nil); got != "" {
+		t.Fatalf("kaf/fe dagesh note = %q", got)
+	}
+	// ג/גּ is a dagesh pair of a letter that is not ב, כ, or פ.
+	if got := views.DageshHardNote([]string{"ג\u05BC", "ג"}); got != "" {
+		t.Fatalf("gimel dagesh hard note = %q", got)
+	}
 }
 
 // cueLabel is a "glyph (name)" in a tell-apart line. The glyph may include

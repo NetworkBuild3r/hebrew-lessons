@@ -1229,6 +1229,35 @@ func TestDrillCardIDsStayWithThePair(t *testing.T) {
 	}
 }
 
+// TestDrillCardIDSkipsATakenHash asks for an id that is already used.
+// The next id is the one below it, and it stays negative.
+func TestDrillCardIDSkipsATakenHash(t *testing.T) {
+	fresh := map[int64]struct{}{}
+	hashed := drillCardID(KindLetter, "ג/פ", 0, fresh)
+	if hashed >= 0 {
+		t.Fatalf("hashed id %d is not negative", hashed)
+	}
+	used := map[int64]struct{}{hashed: {}}
+	got := drillCardID(KindLetter, "ג/פ", 0, used)
+	want := hashed - 1
+	if want == 0 {
+		want = -1
+	}
+	if got != want || got == 0 || got >= 0 {
+		t.Fatalf("collision id = %d, want %d", got, want)
+	}
+}
+
+// TestDrillCardIDZeroHashIsNegativeOne is the hash whose low 31 bits are 0.
+// 1980525264 is that step for letter ג/פ. The id is -1, not 0 and not 1.
+func TestDrillCardIDZeroHashIsNegativeOne(t *testing.T) {
+	used := map[int64]struct{}{}
+	got := drillCardID(KindLetter, "ג/פ", 1980525264, used)
+	if got != -1 {
+		t.Fatalf("zero hash id = %d, want -1", got)
+	}
+}
+
 func lexemeOf(t *testing.T, store *db.Store, cardID int64) int64 {
 	t.Helper()
 	card, err := store.GetCard(context.Background(), cardID)

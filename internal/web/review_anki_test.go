@@ -906,6 +906,8 @@ func TestReviewRevealRejectsCrossSite(t *testing.T) {
 		{"learn.example", "", "same-site"},
 		{"learn.example", "https://evil.example", ""},
 		{"learn.example", "null", ""},
+		// Unparseable. Treating a parse error as success would read a nil URL.
+		{"learn.example", "http://[::1", ""},
 	}
 	for _, tc := range rejects {
 		rec := revealGet(t, h, a.cookie, id, tc.host, tc.origin, tc.site, true)
@@ -1000,5 +1002,90 @@ func TestReviewGradeIgnoresQueryCardID(t *testing.T) {
 	}
 	if n := reviewLogCount(t, store); n != before+1 {
 		t.Fatalf("body card_id wrote %d new review logs, want 1", n-before)
+	}
+}
+
+// TestReviewLetterClipWithoutExample is the letter clip when the drill has
+// no confusion example. The clip is the letter's own asset: on the back,
+// and not on the front.
+func TestReviewLetterClipWithoutExample(t *testing.T) {
+	store, h, now := openApp(t)
+	learner := addLearner(t, store, "a@example.com", "sub-letter-clip", now)
+	clipID := seedAnkiClip(t, store, "ג", now)
+	seedDrill(t, store, learner.user.ID, "letter", "ג", 0)
+	front := getLearner(t, h, learner, "/review")
+	clip := "/audio/" + clipID + ".mp3"
+	if strings.Contains(front, "/audio/") {
+		t.Fatalf("front played the letter clip\n%s", front)
+	}
+	shown := getReveal(t, h, learner, mustCardID(t, front))
+	if shown.Code != http.StatusOK {
+		t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
+	}
+	if !strings.Contains(shown.Body.String(), clip) {
+		t.Fatalf("back missing letter clip %s\n%s", clip, shown.Body.String())
+	}
+}
+
+// TestReviewLetterBackUsesTheNewestMiss pins the example to the newest
+// confusion row. An older miss of a different word stays off the back.
+func TestReviewLetterBackUsesTheNewestMiss(t *testing.T) {
+	store, h, now := openApp(t)
+	learner := addLearner(t, store, "a@example.com", "sub-newest-miss", now)
+	older := addLexeme(t, store, "גֶּשֶׁם", "older-rain", "geshem-old", "m", "")
+	newer := addLexeme(t, store, "בַּיִת", "newer-house", "bayit-new", "m", "")
+	ctx := context.Background()
+	if err := store.InsertConfusionMiss(ctx, learner.user.ID, fsrs.MissLetterPair, "ג", older, now.Add(-48*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.InsertConfusionMiss(ctx, learner.user.ID, fsrs.MissLetterPair, "ג", newer, now.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	front := getLearner(t, h, learner, "/review")
+	shown := getReveal(t, h, learner, mustCardID(t, front))
+	if shown.Code != http.StatusOK {
+		t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
+	}
+	body := shown.Body.String()
+	if !strings.Contains(body, "newer-house") || strings.Contains(body, "older-rain") {
+		t.Fatalf("back did not use the newest miss\n%s", body)
+	}
+}
+
+// TestReviewGradeIgnoresQueryAsked grades the asked letter in the POST body.
+// The same letter on the query string does not satisfy the check.
+func TestReviewGradeIgnoresQueryAsked(t *testing.T) {
+	store, h, now := openApp(t)
+	_, _, word := seedAnkiLexeme(t, store, now, "pair")
+	learner := addLearner(t, store, "a@example.com", "sub-asked-query", now)
+	seedDrill(t, store, learner.user.ID, "pair", "ג/פ", word.exampleID)
+	front := getLearner(t, h, learner, "/review")
+	asked := attr(t, front, "data-pointed")
+	cardID := mustCardID(t, front)
+	if asked != "ג" && asked != "פ" {
+		t.Fatalf("front asked %q", asked)
+	}
+	shown := getReveal(t, h, learner, cardID, asked)
+	if shown.Code != http.StatusOK {
+		t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
+	}
+
+	form := url.Values{}
+	form.Set("rating", "3")
+	form.Set("card_id", strconv.FormatInt(cardID, 10))
+	form.Set("_csrf", learner.csrf)
+	req := httptest.NewRequest(http.MethodPost, "/_hx/review/grade?asked="+url.QueryEscape(asked), strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "https://learn.example")
+	req.Header.Set("HX-Request", "true")
+	req.AddCookie(learner.cookie)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("grade read asked from the query: %d\n%s", rec.Code, rec.Body.String())
+	}
+	page := getLearner(t, h, learner, "/review")
+	if mustCardID(t, page) != cardID || attr(t, page, "data-pointed") != asked {
+		t.Fatalf("query asked moved the card: %s", cardAttrs(page))
 	}
 }
