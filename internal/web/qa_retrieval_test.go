@@ -175,17 +175,27 @@ func testQALessonHidesAnswer(t *testing.T) {
 
 	listen := getAuthed(t, h, cookie, "/lesson")
 	runID := runValue(t, listen)
-	for _, hidden := range []string{promptHe, produceHe, gapHe, promptLat, produceLat, gapLat} {
+	// The step asks what was heard. Its buttons are Hebrew lines, so the
+	// practised word is a choice. The gloss and the transliteration stay off
+	// the page until the answer.
+	ask := activityHTML(t, listen)
+	above, buttons, cut := strings.Cut(ask, `class="choices"`)
+	if !cut || containsHebrew(above) || !strings.Contains(ask, "What did you hear?") {
+		t.Fatalf("listen_pick shows Hebrew above the choices:\n%s", ask)
+	}
+	heard := promptHe + " " + outHe[0] + " " + outHe[1] + " " + outHe[2]
+	if !strings.Contains(buttons, `<bdi lang="he" dir="rtl">`+heard+`</bdi>`) || strings.Contains(ask, `value="`+promptHe+`"`) {
+		t.Fatalf("listen_pick did not offer the heard line as a lexeme id:\n%s", ask)
+	}
+	for _, hidden := range []string{promptGl, produceGl, gapGl, promptLat, produceLat, gapLat, outGl[0], outGl[1], outGl[2], outLat[0], outLat[1], outLat[2]} {
 		if strings.Contains(listen, hidden) {
 			t.Fatalf("listen_pick shows %q before the attempt:\n%s", hidden, listen)
 		}
 	}
-	if !strings.Contains(listen, promptGl) {
-		t.Fatalf("listen_pick did not render the gloss choices:\n%s", listen)
-	}
 	listenAnswer := postLesson(t, h, cookie, lessonPath, runID, itoa(promptID), true, "qa-csrf")
-	if listenAnswer.Code != http.StatusOK || !strings.Contains(listenAnswer.Body.String(), promptHe) || !strings.Contains(listenAnswer.Body.String(), promptLat) {
-		t.Fatalf("listen_pick answer = %d %s", listenAnswer.Code, listenAnswer.Body.String())
+	answered := listenAnswer.Body.String()
+	if listenAnswer.Code != http.StatusOK || !strings.Contains(answered, promptHe) || !strings.Contains(answered, promptLat) || !strings.Contains(answered, promptGl) {
+		t.Fatalf("listen_pick answer = %d %s", listenAnswer.Code, answered)
 	}
 
 	recall := postLesson(t, h, cookie, lessonPath, runID, "continue", true, "qa-csrf")
