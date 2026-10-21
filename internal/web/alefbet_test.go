@@ -203,6 +203,11 @@ func TestAlefbetReference(t *testing.T) {
 	if got := views.DageshHardNote([]string{"ג\u05BC", "ג"}); got != "" {
 		t.Fatalf("gimel dagesh hard note = %q", got)
 	}
+	// בּ/כ is two begadkefat letters. The same-letter guard is what keeps
+	// the word-initial line off that pair.
+	if got := views.DageshHardNote([]string{"ב\u05BC", "כ"}); got != "" {
+		t.Fatalf("bet/khaf dagesh hard note = %q", got)
+	}
 }
 
 // cueLabel is a "glyph (name)" in a tell-apart line. The glyph may include
