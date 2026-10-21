@@ -254,13 +254,16 @@ type PutResult struct {
 
 // UnitView is the revision publish_unit validates. Position is the
 // units.position column. A revision row does not store it.
+// CurrentRevision is the units row's rev. Revision is the revision loaded
+// for validation. They differ when an older revision was requested.
 type UnitView struct {
-	UnitID   int64
-	Revision int
-	Position int
-	Scope    string
-	Status   string
-	Doc      units.Unit
+	UnitID          int64
+	Revision        int
+	CurrentRevision int
+	Position        int
+	Scope           string
+	Status          string
+	Doc             units.Unit
 }
 
 // UnitWriter is what put_unit and publish_unit write.
