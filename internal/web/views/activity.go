@@ -399,6 +399,7 @@ func ConcealFront(card ReviewCard) ReviewCard {
 		card.ExampleGloss = ""
 		card.TellApart = ""
 		card.DageshNote = ""
+		card.DageshHard = ""
 	}
 	return card
 }

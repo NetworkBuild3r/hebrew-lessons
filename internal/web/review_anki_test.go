@@ -135,13 +135,14 @@ func TestReviewModesShareOneRevealPath(t *testing.T) {
 		Kind: "letter", Pointed: "ג", Translit: "g", AudioURL: "/audio/x.mp3", Gloss: "gimel", Gender: "m",
 		Sides:       []views.DrillSide{{Hebrew: "ג", Name: "גימל", Sound: "ga"}, {Hebrew: "פ", Name: "פא"}},
 		ExampleText: "גשם", ExampleGloss: "rain", TellApart: "cue", DageshNote: "With the dot: p. Without: f.",
+		DageshHard: "At the start of a word, ב, כ, and פ are almost always hard (b, k, p).",
 	}
 	letterFront := views.ConcealFront(letter)
 	if letterFront.Pointed != "ג" {
 		t.Fatalf("letter front pointed = %q", letterFront.Pointed)
 	}
 	if letterFront.Gloss != "" || letterFront.Translit != "" || letterFront.AudioURL != "" || letterFront.Gender != "" ||
-		len(letterFront.Sides) != 0 || letterFront.ExampleText != "" || letterFront.TellApart != "" || letterFront.DageshNote != "" {
+		len(letterFront.Sides) != 0 || letterFront.ExampleText != "" || letterFront.TellApart != "" || letterFront.DageshNote != "" || letterFront.DageshHard != "" {
 		t.Fatalf("letter front kept the answer: %+v", letterFront)
 	}
 
@@ -153,7 +154,7 @@ func TestReviewModesShareOneRevealPath(t *testing.T) {
 		t.Fatalf("letter front face dropped the letter: %s", frontHTML)
 	}
 	backHTML := renderMode(t, views.ReviewModeFor("letter").Back(letter))
-	if !strings.Contains(backHTML, "גימל") || !strings.Contains(backHTML, ">Answer</h2>") || !strings.Contains(backHTML, "גשם") || !strings.Contains(backHTML, "Tell them apart: cue") || !strings.Contains(backHTML, "With the dot: p. Without: f.") {
+	if !strings.Contains(backHTML, "גימל") || !strings.Contains(backHTML, ">Answer</h2>") || !strings.Contains(backHTML, "גשם") || !strings.Contains(backHTML, "Tell them apart: cue") || !strings.Contains(backHTML, "With the dot: p. Without: f.") || !strings.Contains(backHTML, "almost always hard") {
 		t.Fatalf("letter back face dropped the answer: %s", backHTML)
 	}
 	if strings.Contains(backHTML, `name="rating"`) {

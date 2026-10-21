@@ -81,8 +81,10 @@ type ReviewCardVM struct {
 	ExampleTranslit string
 	ExampleGloss    string
 	// Asked is the one letter a pair card shows. TellApart and DageshNote are
-	// empty when the stored data has no cue and no sounds.
+	// empty when the stored data has no cue and no sounds. DageshHard is the
+	// position line for בּ/ב, כּ/כ, and פּ/פ.
 	Asked      string
 	TellApart  string
 	DageshNote string
+	DageshHard string
 }

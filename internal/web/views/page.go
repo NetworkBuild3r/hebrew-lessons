@@ -259,12 +259,14 @@ type ReviewCard struct {
 	// Sides, ExampleText, ExampleTranslit, and ExampleGloss are the drill answer.
 	// They are empty until the card is revealed, so the front has no answer markup.
 	// TellApart and DageshNote are the same: empty when the data has no cue.
+	// DageshHard is the position line after DageshNote for בּ/ב, כּ/כ, and פּ/פ.
 	Sides           []DrillSide
 	ExampleText     string
 	ExampleTranslit string
 	ExampleGloss    string
 	TellApart       string
 	DageshNote      string
+	DageshHard      string
 }
 
 // DrillSide is one letter, or one agreement form, on the back of a drill card.

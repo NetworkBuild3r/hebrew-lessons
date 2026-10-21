@@ -32,16 +32,16 @@ type AlefbetEntry struct {
 
 // Alefbet is every letter form the review card can name.
 var Alefbet = []AlefbetEntry{
-	{Letter: "א", Name: "אַלֶף", Translit: "alef", Sound: "silent (carries a vowel)", Short: "", Form: true},
+	{Letter: "א", Name: "אָלֶף", Translit: "alef", Sound: "silent (carries a vowel)", Short: "", Form: true},
 	{Letter: "ב", Name: "בֵית", Translit: "vet", Sound: "v as in van", Short: "v", Form: true},
 	{Letter: "ג", Name: "גִּימֶל", Translit: "gimel", Sound: "g as in go", Short: "", Form: true},
 	{Letter: "ד", Name: "דָּלֶת", Translit: "dalet", Sound: "d as in dog", Short: "", Form: true},
 	{Letter: "ה", Name: "הֵא", Translit: "he", Sound: "h as in hat", Short: "", Form: true},
-	{Letter: "ו", Name: "וָו", Translit: "vav", Sound: "v as in van", Short: "", Form: true},
+	{Letter: "ו", Name: "וָו", Translit: "vav", Sound: "v as in van; also the vowel letter for o (וֹ) and u (וּ)", Short: "", Form: true},
 	{Letter: "ז", Name: "זַיִן", Translit: "zayin", Sound: "z as in zoo", Short: "", Form: true},
 	{Letter: "ח", Name: "חֵית", Translit: "khet", Sound: "kh as in Bach", Short: "", Form: true},
 	{Letter: "ט", Name: "טֵית", Translit: "tet", Sound: "t as in top", Short: "", Form: true},
-	{Letter: "י", Name: "יוֹד", Translit: "yod", Sound: "y as in yes", Short: "", Form: true},
+	{Letter: "י", Name: "יוֹד", Translit: "yod", Sound: "y as in yes; also the vowel letter for i (and sometimes e)", Short: "", Form: true},
 	{Letter: "כ", Name: "כַף", Translit: "khaf", Sound: "kh as in Bach", Short: "kh", Form: true},
 	{Letter: "ל", Name: "לָמֶד", Translit: "lamed", Sound: "l as in let", Short: "", Form: true},
 	{Letter: "מ", Name: "מֵם", Translit: "mem", Sound: "m as in mom", Short: "", Form: true},
@@ -49,16 +49,16 @@ var Alefbet = []AlefbetEntry{
 	{Letter: "ס", Name: "סָמֶךְ", Translit: "samekh", Sound: "s as in sun", Short: "", Form: true},
 	{Letter: "ע", Name: "עַיִן", Translit: "'ayin", Sound: "silent (carries a vowel)", Short: "", Form: true},
 	{Letter: "פ", Name: "פֵא", Translit: "fe", Sound: "f as in fun", Short: "f", Form: true},
-	{Letter: "צ", Name: "צַדִּי", Translit: "tsadi", Sound: "ts as in cats", Short: "", Form: true},
-	{Letter: "ק", Name: "קוֹף", Translit: "kuf", Sound: "k as in kite", Short: "", Form: true},
-	{Letter: "ר", Name: "רֵיש", Translit: "resh", Sound: "guttural r, as in the French rue", Short: "", Form: true},
-	{Letter: "ש", Name: "שִׁין", Translit: "shin", Sound: "sh as in ship", Short: "", Form: true},
+	{Letter: "צ", Name: "צָדי", Translit: "tsadi", Sound: "ts as in cats", Short: "", Form: true},
+	{Letter: "ק", Name: "קוֹף", Translit: "kof", Sound: "k as in kite", Short: "", Form: true},
+	{Letter: "ר", Name: "רֵישׁ", Translit: "resh", Sound: "guttural r, as in the French rue", Short: "", Form: true},
+	{Letter: "ש", Name: "שִׁין", Translit: "shin", Sound: "sh as in ship (s when the dot is on the left: שׂ)", Short: "", Form: true},
 	{Letter: "ת", Name: "תָּו", Translit: "tav", Sound: "t as in top", Short: "", Form: true},
 	{Letter: "ך", Name: "כַף סוֹפִית", Translit: "khaf sofit", Sound: "kh as in Bach", Short: "", Form: true},
 	{Letter: "ם", Name: "מֵם סוֹפִית", Translit: "mem sofit", Sound: "m as in mom", Short: "", Form: true},
 	{Letter: "ן", Name: "נוּן סוֹפִית", Translit: "nun sofit", Sound: "n as in no", Short: "", Form: true},
 	{Letter: "ף", Name: "פֵא סוֹפִית", Translit: "fe sofit", Sound: "f as in fun", Short: "", Form: true},
-	{Letter: "ץ", Name: "צַדִּי סוֹפִית", Translit: "tsadi sofit", Sound: "ts as in cats", Short: "", Form: true},
+	{Letter: "ץ", Name: "צָדי סוֹפִית", Translit: "tsadi sofit", Sound: "ts as in cats", Short: "", Form: true},
 	{Letter: "בּ", Name: "בֵּית", Translit: "bet", Sound: "b as in boy", Short: "b", Form: false},
 	{Letter: "כּ", Name: "כַּף", Translit: "kaf", Sound: "k as in kite", Short: "k", Form: false},
 	{Letter: "פּ", Name: "פֵּא", Translit: "pe", Sound: "p as in pet", Short: "p", Form: false},
@@ -76,19 +76,20 @@ var alefbetPairs = []alefbetPair{
 	{letters: [2]string{"בּ", "כ"}, cue: "ב has a little tail at the bottom right; כ is round."},
 	{letters: [2]string{"ב", "כּ"}, cue: "ב has a little tail at the bottom right; כ is round."},
 	{letters: [2]string{"בּ", "כּ"}, cue: "ב has a little tail at the bottom right; כ is round."},
-	{letters: [2]string{"ד", "ר"}, cue: "ד has a sharp corner and a foot; ר is round on top."},
+	{letters: [2]string{"ד", "ר"}, cue: "ד has a sharp corner at the top right, where the roof sticks out past the leg; ר is rounded at the top."},
 	{letters: [2]string{"ה", "ח"}, cue: "ה is open at the upper left; ח is closed."},
+	{letters: [2]string{"ח", "ת"}, cue: "ת has a little foot kicking out at the bottom left; ח has none."},
 	{letters: [2]string{"ו", "ז"}, cue: "ו is a straight line; ז has a bar across the top."},
 	{letters: [2]string{"ו", "ן"}, cue: "ו stays on the line; ן drops below the line."},
-	{letters: [2]string{"ט", "מ"}, cue: "ט is closed, with a foot inside; מ is open at the bottom."},
+	{letters: [2]string{"ט", "מ"}, cue: "ט is round at the bottom and open at the top, with its right arm curling inward; מ has a flat bottom with a small gap at the bottom left."},
 	{letters: [2]string{"ס", "ם"}, cue: "ס is round; ם is square."},
-	{letters: [2]string{"ג", "נ"}, cue: "ג bends in the middle and kicks left; נ has a straight leg and a flat foot."},
-	{letters: [2]string{"צ", "ע"}, cue: "צ has a yod-like tail on the right; ע is two strokes that meet."},
-	{letters: [2]string{"פ", "כ"}, cue: "פ has a tail inside the curve; כ is a smooth curve."},
-	{letters: [2]string{"פּ", "כ"}, cue: "פ has a tail inside the curve; כ is a smooth curve."},
-	{letters: [2]string{"פ", "כּ"}, cue: "פ has a tail inside the curve; כ is a smooth curve."},
-	{letters: [2]string{"פּ", "כּ"}, cue: "פ has a tail inside the curve; כ is a smooth curve."},
-	{letters: [2]string{"ף", "ך"}, cue: "ף drops straight below the line; ך curves as it drops."},
+	{letters: [2]string{"ג", "נ"}, cue: "ג stands on one leg, with a small foot kicking out to the left at the bottom; נ is narrow, with a flat base running left along the line."},
+	{letters: [2]string{"צ", "ע"}, cue: "צ has a small yod-shaped arm on the upper right and sits on a flat base; ע is two arms that meet low on the left, with a tail sweeping down-left and no flat base."},
+	{letters: [2]string{"פ", "כ"}, cue: "פ has a little curl hanging inside from the top; כ is a plain open curve."},
+	{letters: [2]string{"פּ", "כ"}, cue: "פ has a little curl hanging inside from the top; כ is a plain open curve."},
+	{letters: [2]string{"פ", "כּ"}, cue: "פ has a little curl hanging inside from the top; כ is a plain open curve."},
+	{letters: [2]string{"פּ", "כּ"}, cue: "פ has a little curl hanging inside from the top; כ is a plain open curve."},
+	{letters: [2]string{"ף", "ך"}, cue: "ך is a roof with a plain straight leg dropping below the line; ף has the same drop but with a little curl hanging inside at the top."},
 	{letters: [2]string{"שׁ", "שׂ"}, cue: "שׁ has the dot on the upper right; שׂ has the dot on the upper left."},
 	{letters: [2]string{"מ", "ם"}, cue: "מ is open at the bottom left; ם is closed."},
 	{letters: [2]string{"נ", "ן"}, cue: "נ sits on the line; ן drops below the line."},
@@ -177,4 +178,27 @@ func LetterDageshNote(parts, stored []string) string {
 		sides[i].Sound = sound
 	}
 	return DageshNote(sides)
+}
+
+// DageshHardNote is the line after the with-dot sentence for בּ/ב, כּ/כ, and פּ/פ.
+func DageshHardNote(parts []string) string {
+	if len(parts) != 2 {
+		return ""
+	}
+	a := stripDagesh(norm.NFC.String(parts[0]))
+	b := stripDagesh(norm.NFC.String(parts[1]))
+	if a != b {
+		return ""
+	}
+	aDot := strings.ContainsRune(parts[0], '\u05BC')
+	bDot := strings.ContainsRune(parts[1], '\u05BC')
+	if aDot == bDot {
+		return ""
+	}
+	switch a {
+	case "ב", "כ", "פ":
+		return "At the start of a word, ב, כ, and פ are almost always hard (b, k, p)."
+	default:
+		return ""
+	}
 }

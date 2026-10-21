@@ -539,6 +539,7 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 		vm.Sides = sides
 		vm.TellApart = views.AlefbetTellApart(parts)
 		vm.DageshNote = views.LetterDageshNote(parts, stored)
+		vm.DageshHard = views.DageshHardNote(parts)
 		ex, ok, err := s.confusionExample(ctx, userID, fsrs.MissLetterPair, key)
 		if err != nil {
 			return err
@@ -776,6 +777,7 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 	card.ExampleGloss = vm.ExampleGloss
 	card.TellApart = vm.TellApart
 	card.DageshNote = vm.DageshNote
+	card.DageshHard = vm.DageshHard
 	// The mode's hold decides what the front may carry. A revealed card passes through.
 	return views.ConcealFront(card)
 }
