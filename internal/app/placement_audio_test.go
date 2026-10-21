@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -102,12 +103,64 @@ func TestNewAppLogsMissingPlacementClips(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	_ = newTestApp(t, Config{DataDir: t.TempDir()})
-	got := buf.waitFor(t, "placement audio")
+	a := newTestApp(t, Config{DataDir: t.TempDir()})
+	// The done signal, not a poll. Waiting here does not cancel, so the
+	// count still logs. Close cancels first and would suppress the line.
+	a.clipWG.Wait()
+	got := buf.String()
 	if !strings.Contains(got, "level=WARN") || !strings.Contains(got, fmt.Sprintf("missing=%d", len(manifest.Clips))) {
 		t.Fatalf("log %q", got)
 	}
 	assertNoClipText(t, got, manifest)
+
+	if err := a.Close(); err != nil {
+		t.Fatal(err)
+	}
+	assertNoLogAfterClose(t, &buf)
+}
+
+// TestCloseJoinsPlacementAudio closes during the manifest count. Close must
+// join that goroutine before it clears Store.conn, and nothing may log after
+// Close returns. go.uber.org/goleak is not a module dependency.
+//
+// One thread makes the count read Store.conn after Close has cleared it,
+// unless Wait orders the two. With more threads the read often finishes
+// inside the query and the race detector misses it.
+func TestCloseJoinsPlacementAudio(t *testing.T) {
+	prevProcs := runtime.GOMAXPROCS(1)
+	t.Cleanup(func() { runtime.GOMAXPROCS(prevProcs) })
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	for i := 0; i < 8; i++ {
+		var buf lockedBuffer
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+		a, err := NewApp(Config{DataDir: t.TempDir()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := a.Close(); err != nil {
+			t.Fatal(err)
+		}
+		assertNoLogAfterClose(t, &buf)
+	}
+}
+
+// assertNoLogAfterClose fails when a goroutine writes a log line after Close
+// has returned. The pause gives a leaked count time to reach the handler.
+func assertNoLogAfterClose(t *testing.T, buf *lockedBuffer) {
+	t.Helper()
+	before := buf.String()
+	buf.Seal()
+	for range 5 {
+		runtime.Gosched()
+	}
+	time.Sleep(20 * time.Millisecond)
+	if late := buf.Late(); late != "" {
+		t.Fatalf("logged after Close: %q", late)
+	}
+	if got := buf.String(); got != before {
+		t.Fatalf("log changed after Close: %q", got)
+	}
 }
 
 func letterClip(t *testing.T, manifest placement.ClipManifest) placement.Clip {
@@ -178,14 +231,20 @@ func assertNoClipText(t *testing.T, log string, manifest placement.ClipManifest)
 }
 
 // lockedBuffer is a bytes.Buffer the startup goroutine can write while the test reads.
+// Seal marks Close as returned. A later Write is kept apart so the test can see it.
 type lockedBuffer struct {
-	mu sync.Mutex
-	b  bytes.Buffer
+	mu     sync.Mutex
+	b      bytes.Buffer
+	late   bytes.Buffer
+	sealed bool
 }
 
 func (l *lockedBuffer) Write(p []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.sealed {
+		return l.late.Write(p)
+	}
 	return l.b.Write(p)
 }
 
@@ -199,19 +258,18 @@ func (l *lockedBuffer) Reset() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.b.Reset()
+	l.late.Reset()
+	l.sealed = false
 }
 
-func (l *lockedBuffer) waitFor(t *testing.T, sub string) string {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		got := l.String()
-		if strings.Contains(got, sub) {
-			return got
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("log %q missing %q", got, sub)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+func (l *lockedBuffer) Seal() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.sealed = true
+}
+
+func (l *lockedBuffer) Late() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.late.String()
 }

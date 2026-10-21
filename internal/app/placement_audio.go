@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"log/slog"
+	"sync"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
@@ -11,10 +12,15 @@ import (
 // logMissingPlacementAudio starts a background count of placement-manifest
 // clips that have no audio_assets row. NewApp does not wait for it. The line
 // is a count: it never includes clip text, a letter id, or a secret.
-// Cancel, including App.Close, produces no line.
-func logMissingPlacementAudio(ctx context.Context, store *db.Store) {
+// App.Close cancels ctx, waits for this goroutine, then closes the store.
+// A cancel produces no line.
+func logMissingPlacementAudio(ctx context.Context, wg *sync.WaitGroup, store *db.Store) {
 	logger := slog.Default()
-	go reportMissingPlacementAudio(ctx, store, logger)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		reportMissingPlacementAudio(ctx, store, logger)
+	}()
 }
 
 // reportMissingPlacementAudio writes one line. missing is how many manifest
