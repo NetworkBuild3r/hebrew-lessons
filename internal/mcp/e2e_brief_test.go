@@ -96,7 +96,11 @@ func docFromBrief(t *testing.T, b mcp.LessonBrief) (units.Unit, []string) {
 	}
 	passage := strings.Join(words, " ")
 	pair := strings.Join(words[:min(2, len(words))], " ")
-	first = append(first, act(units.ActivityListenPick, pair), act(units.ActivityStory, passage))
+	pick := act(units.ActivityListenPick, pair)
+	if len(words) > 1 {
+		pick.Target = words[0]
+	}
+	first = append(first, pick, act(units.ActivityStory, passage))
 	check := []units.Activity{}
 	for _, w := range words {
 		check = append(check, act(units.ActivityRecall, w))

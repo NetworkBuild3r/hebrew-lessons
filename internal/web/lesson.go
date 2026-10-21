@@ -683,6 +683,11 @@ func gradedActivity(typ string) bool {
 	}
 }
 
+// targetFrom grades act.Target when that token is in the lexicon.
+// A published lesson can omit target. The player then grades the first new
+// token, which is how a revision published before target was required keeps
+// playing. Rechecking that current published revision uses units.ModePublished.
+// An older revision does not. The player does not apply that check.
 func targetFrom(act units.Activity, lex map[string]db.LexemeView, newWords []db.LexemeView) (db.LexemeView, error) {
 	if tok, ok := tokenForTarget(actTokens(act), act.Target); ok {
 		if view, found := lex[tok]; found {
