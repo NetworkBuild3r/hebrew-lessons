@@ -1002,10 +1002,18 @@ func legacyLevel(r RunResult) int {
 	return level - 1
 }
 
-// runStopReason is why a v3 run is finishing. band_stop wins when a tested skill
-// stopped on the adaptive rule. cap_cards is the typing cap with words still
-// untyped. Otherwise the deck has nothing left to deal, which is exhausted.
-// The placement_runs column allows only these three values, so this is never empty.
+// runStopReason is why a v3 run is finishing. It stores one of the three values
+// migration 003 allows, and it is never empty.
+//
+// band_stop wins when a tested skill stopped on the adaptive rule, including
+// when the typing cap also applies. cap_cards means typing asked TypingMax
+// words and a word that was right in listening or reading is still untyped.
+// exhausted is every other finish: the learner skipped the typing offer,
+// stopped typing before the cap, a skill cleared the top band, or nothing is
+// left to deal.
+//
+// Migration 003 stores NULL when the learner finished before a stop, and
+// while the run is still open. This function does not write that NULL.
 func runStopReason(d *deckV3, rc runCtx) string {
 	if adaptiveStop(d, rc) {
 		return stopBand

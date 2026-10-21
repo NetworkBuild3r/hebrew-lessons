@@ -748,7 +748,11 @@ func (s *Store) LatestPlacement(ctx context.Context, userID int64) (Placement, b
 // PlacementKnownLexemes returns the pointed NFC text of the newest run's
 // words rated Good or Easy, sorted by that text.
 // A v2 run reads placement_answers. A v3 run reads answered placement items:
-// right is Good. A word taught only by a finished lesson is not included.
+// right is Good. A word that was also wrong or "I don't know" in listening,
+// reading, or typing is learning instead, and is left out of this list, so
+// the two lists never share a word. A production miss means it is not fully
+// known, and this list seeds Lesson Builder. A word taught only by a finished
+// lesson is not included.
 // KnownLexemeIDs is the read Good or Easy set, which is where a placement
 // Good or Easy lands. units.Lookup.KnownLexemes(ctx, beforePosition) is the
 // shared-unit authoring view and is a different set.
@@ -759,7 +763,9 @@ func (s *Store) PlacementKnownLexemes(ctx context.Context, userID int64) ([]stri
 // PlacementLearningLexemes returns the pointed NFC text of the newest run's
 // words rated "I don't know", Again, or Hard, sorted by that text.
 // A v3 run reads answered placement items: wrong is Again and dont_know is
-// "I don't know".
+// "I don't know", in listening, reading, or typing. One of those outcomes
+// puts the word here even when another part was right. Learning wins, so
+// the word is not also returned by PlacementKnownLexemes.
 func (s *Store) PlacementLearningLexemes(ctx context.Context, userID int64) ([]string, error) {
 	return s.placementLexemeTexts(ctx, userID, 0, Again, Hard)
 }
@@ -827,6 +833,8 @@ func (s *Store) placementLexemeTexts(ctx context.Context, userID int64, ratings 
 
 // v3GuessDivisor matches placement.GuessDivisor. toCompat stores good_plus_rate
 // as the guessing-corrected share, and a v3 read uses the same figure.
+// internal/db cannot import internal/placement: that package already imports
+// this one. TestLatestPlacementBandsMatchStoredShare fails if the two drift.
 const v3GuessDivisor = 3
 
 func (s *Store) runIsV3(ctx context.Context, runID int64) (bool, error) {
@@ -905,10 +913,18 @@ func v3Share(right, wrong, asked int) float64 {
 
 // v3LexemeTexts is the pointed NFC of answered word items whose outcome maps
 // onto one of ratings. right is Good, wrong is Again, dont_know is 0.
+// A word with any wrong or don't-know outcome, including in typing, is
+// learning and is not also known. Learning wins, so a word is never in both
+// lists. Typing is included: a miss there is a production miss.
 func (s *Store) v3LexemeTexts(ctx context.Context, runID int64, ratings []int) ([]string, error) {
-	want := map[int]bool{}
+	wantKnown := false
+	wantLearning := false
 	for _, rating := range ratings {
-		want[rating] = true
+		if rating == Good || rating == Easy {
+			wantKnown = true
+		} else {
+			wantLearning = true
+		}
 	}
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -924,20 +940,41 @@ func (s *Store) v3LexemeTexts(ctx context.Context, runID int64, ratings []int) (
 		return nil, fmt.Errorf("db: placement v3 lexemes: %w", err)
 	}
 	defer rows.Close()
-	var texts []string
+	type seen struct {
+		known, learning bool
+	}
+	byText := map[string]*seen{}
 	for rows.Next() {
 		var text, outcome string
 		if err := rows.Scan(&text, &outcome); err != nil {
 			return nil, fmt.Errorf("db: placement v3 lexemes: %w", err)
 		}
 		rating, ok := v3OutcomeRating(outcome)
-		if !ok || !want[rating] {
+		if !ok {
 			continue
 		}
-		texts = append(texts, text)
+		st := byText[text]
+		if st == nil {
+			st = &seen{}
+			byText[text] = st
+		}
+		if rating == Good || rating == Easy {
+			st.known = true
+		} else {
+			st.learning = true
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("db: placement v3 lexemes: %w", err)
+	}
+	var texts []string
+	for text, st := range byText {
+		switch {
+		case st.learning && wantLearning:
+			texts = append(texts, text)
+		case !st.learning && st.known && wantKnown:
+			texts = append(texts, text)
+		}
 	}
 	return pointedSorted(texts), nil
 }
