@@ -1325,8 +1325,8 @@ func TestLearner1ReviewIsShuffledPerSeed(t *testing.T) {
 
 func assertLearner1Queue(t *testing.T, cards []CardRef, fix learner1) {
 	t.Helper()
-	if lexemeCount(cards) < 2 {
-		t.Fatalf("lexemes = %d, want more than one (%s)", lexemeCount(cards), describeQueue(cards))
+	if sessionLexemeCount(cards) < 2 {
+		t.Fatalf("lexemes = %d, want more than one (%s)", sessionLexemeCount(cards), describeQueue(cards))
 	}
 	if i, id := adjacentLexemeAt(cards); i >= 0 {
 		t.Fatalf("lexeme %d sits adjacent at %d: %s", id, i, describeQueue(cards))
@@ -1511,6 +1511,40 @@ func TestOneLexemePoolEnds(t *testing.T) {
 			t.Fatalf("one lexeme queued %+v after the pair", extra)
 		}
 	})
+	t.Run("word beside a letter drill", func(t *testing.T) {
+		svc, store, clk := openSvc(t, 1)
+		ctx := context.Background()
+		userID := mustUser(t, store)
+		id := addCard(t, store, userID, "בּוֹדֵד", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), clk.Now().Add(-48*time.Hour), false)
+		rev := fsrs.New(store, clk)
+		for i := 0; i < MinMissesForDrill; i++ {
+			if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, "ב/כ", 0); err != nil {
+				t.Fatal(err)
+			}
+		}
+		sess := mustBuild(t, svc, userID)
+		card, ok := sess.Next()
+		if !ok || card.CardID != id {
+			t.Fatalf("first = %+v ok=%v", card, ok)
+		}
+		revealAndRecord(t, sess, ctx, id, fsrs.Again)
+		sawDrill := false
+		for n := 0; n < DrillSteps+2; n++ {
+			next, ok := sess.Next()
+			if !ok {
+				break
+			}
+			if next.CardID == id {
+				t.Fatalf("Again on the only word was requeued as %+v", next)
+			}
+			if next.Kind == KindLetter {
+				sawDrill = true
+			}
+		}
+		if !sawDrill {
+			t.Fatal("the letter drill was not in the queue")
+		}
+	})
 }
 
 func TestDrillStillRequeuesInAOneLexemePool(t *testing.T) {
@@ -1596,7 +1630,7 @@ func studiedIDs(cards []CardRef) []int64 {
 	return out
 }
 
-func lexemeCount(cards []CardRef) int {
+func sessionLexemeCount(cards []CardRef) int {
 	seen := map[int64]struct{}{}
 	for _, card := range cards {
 		if card.LexemeID == 0 || card.Kind == KindLetter || card.Kind == KindPattern {

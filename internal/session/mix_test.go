@@ -423,6 +423,50 @@ func TestSeparateLexemes(t *testing.T) {
 	if !sameIDs(idsOf(again), []int64{1, 3, 5, 4, 2}) {
 		t.Fatalf("recheck = %v, want 1 3 5 4 2", idsOf(again))
 	}
+	// Seat 3 sits beside the following A, and seat 4 sits beside the A
+	// before it. The pair splits only at the end. Lexemes B, A, A, C, A, D.
+	past := separateLexemes([]CardRef{
+		{CardID: 1, LexemeID: 2, Kind: fsrs.SkillRead},
+		{CardID: 2, LexemeID: 1, Kind: fsrs.SkillRead},
+		{CardID: 3, LexemeID: 1, Kind: fsrs.SkillRecall},
+		{CardID: 4, LexemeID: 3, Kind: fsrs.SkillRead},
+		{CardID: 5, LexemeID: 1, Kind: fsrs.SkillRead},
+		{CardID: 6, LexemeID: 4, Kind: fsrs.SkillRead},
+	})
+	if !sameIDs(idsOf(past), []int64{1, 2, 4, 5, 6, 3}) {
+		t.Fatalf("past a rejected seat = %v, want B A C A D A", idsOf(past))
+	}
+}
+
+func TestStruggleRunTreatsNewAndDrillsAsBreaks(t *testing.T) {
+	struggling := func(id int64) CardRef {
+		return CardRef{CardID: id, LexemeID: id, Kind: fsrs.SkillRead, Struggling: true}
+	}
+	cases := []struct {
+		name string
+		tail []CardRef
+		want int
+	}{
+		{name: "new", tail: []CardRef{{CardID: 4, LexemeID: 4, Kind: fsrs.SkillRead, New: true}}, want: -1},
+		{name: "letter", tail: []CardRef{{CardID: -1, Kind: KindLetter, Key: "ב/כ"}}, want: -1},
+		{name: "pattern", tail: []CardRef{{CardID: -2, Kind: KindPattern, Key: "gender"}}, want: -1},
+		{name: "known", tail: []CardRef{{CardID: 4, LexemeID: 4, Kind: fsrs.SkillRead}}, want: 2},
+		// A known card after a new card is still waiting. Skipping the new
+		// card has to keep looking.
+		{name: "new then known", tail: []CardRef{
+			{CardID: 4, LexemeID: 4, Kind: fsrs.SkillRead, New: true},
+			{CardID: 5, LexemeID: 5, Kind: fsrs.SkillRead},
+		}, want: 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cards := []CardRef{struggling(1), struggling(2), struggling(3)}
+			cards = append(cards, tc.tail...)
+			if got := struggleRun(cards); got != tc.want {
+				t.Fatalf("struggleRun = %d, want %d", got, tc.want)
+			}
+		})
+	}
 }
 
 func TestKnownLaterStartsAfterTheIndex(t *testing.T) {
