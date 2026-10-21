@@ -143,7 +143,7 @@ func TestTargetOptionalInToolSchema(t *testing.T) {
 		if info.Type != "listen_pick" {
 			continue
 		}
-		if !strings.Contains(info.Purpose, "lexicon-gloss buttons") || !strings.Contains(info.Purpose, "collected and validated now") || !strings.Contains(info.Purpose, "whole-sentence choices are planned with #139") {
+		if !strings.Contains(info.Purpose, "lines of Hebrew as the buttons") || !strings.Contains(info.Purpose, "collected and validated now") || !strings.Contains(info.Purpose, "English line is kept for later use") {
 			t.Fatalf("catalog listen_pick purpose %q", info.Purpose)
 		}
 		for _, field := range info.Fields {

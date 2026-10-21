@@ -436,9 +436,9 @@ func TestListenPickCreditPhrases(t *testing.T) {
 		}
 	}
 	purpose := []string{
-		"lexicon-gloss buttons",
+		"lines of Hebrew as the buttons",
 		"collected and validated now",
-		"whole-sentence choices are planned with #139",
+		"English line is kept for later use",
 	}
 	for _, path := range []string{"../mcp/schema.go", "../mcp/resources/authoring.md", "../../.cursor/skills/hebrew-lesson-author/SKILL.md"} {
 		body, err := os.ReadFile(path)

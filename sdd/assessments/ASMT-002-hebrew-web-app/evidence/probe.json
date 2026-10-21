@@ -1,0 +1,550 @@
+{
+  "freshLessonButtons": [
+    {
+      "text": "התחילוStart",
+      "cls": "btn btn-primary"
+    }
+  ],
+  "phoneLessonChrome": {
+    "firstHeadingTop": 210,
+    "viewport": 844
+  },
+  "dock390": [
+    {
+      "text": "היוםToday",
+      "w": 52,
+      "h": 44,
+      "truncated": false,
+      "hasIcon": true
+    },
+    {
+      "text": "שיעוריםLessons",
+      "w": 52,
+      "h": 44,
+      "truncated": false,
+      "hasIcon": true
+    },
+    {
+      "text": "מדריכיםGuides",
+      "w": 52,
+      "h": 44,
+      "truncated": false,
+      "hasIcon": false
+    },
+    {
+      "text": "פעליםVerbs",
+      "w": 52,
+      "h": 44,
+      "truncated": false,
+      "hasIcon": false
+    },
+    {
+      "text": "חזרהReview",
+      "w": 52,
+      "h": 44,
+      "truncated": false,
+      "hasIcon": true
+    },
+    {
+      "text": "מיליםWords",
+      "w": 52,
+      "h": 44,
+      "truncated": false,
+      "hasIcon": true
+    },
+    {
+      "text": "התקדמותProgress",
+      "w": 52,
+      "h": 44,
+      "truncated": false,
+      "hasIcon": true
+    }
+  ],
+  "dock360": [
+    {
+      "text": "היוםToday",
+      "w": 48,
+      "h": 44,
+      "truncated": false,
+      "hasIcon": true
+    },
+    {
+      "text": "שיעוריםLessons",
+      "w": 48,
+      "h": 44,
+      "truncated": false,
+      "hasIcon": true
+    },
+    {
+      "text": "מדריכיםGuides",
+      "w": 48,
+      "h": 44,
+      "truncated": false,
+      "hasIcon": false
+    },
+    {
+      "text": "פעליםVerbs",
+      "w": 48,
+      "h": 44,
+      "truncated": false,
+      "hasIcon": false
+    },
+    {
+      "text": "חזרהReview",
+      "w": 48,
+      "h": 44,
+      "truncated": false,
+      "hasIcon": true
+    },
+    {
+      "text": "מיליםWords",
+      "w": 48,
+      "h": 44,
+      "truncated": false,
+      "hasIcon": true
+    },
+    {
+      "text": "התקדמותProgress",
+      "w": 48,
+      "h": 44,
+      "truncated": true,
+      "hasIcon": true
+    }
+  ],
+  "clip-today-1440": {
+    "vw": 1440,
+    "docScrollWidth": 1440,
+    "mainScrollWidth": 1180,
+    "mainClientWidth": 1180,
+    "mainOverflowX": "visible",
+    "bodyOverflowX": "visible",
+    "htmlOverflowX": "visible",
+    "dir": "rtl",
+    "rects": {
+      "#app-main": [
+        {
+          "l": 260,
+          "r": 1440,
+          "w": 1180
+        }
+      ],
+      ".wrap": [
+        {
+          "l": 260,
+          "r": 1440,
+          "w": 1180
+        }
+      ],
+      "#today-review-card": [
+        {
+          "l": 300,
+          "r": 748,
+          "w": 448
+        }
+      ],
+      "#today-continue-card": [
+        {
+          "l": 772,
+          "r": 1400,
+          "w": 628
+        }
+      ],
+      "#today-next-card": [
+        {
+          "l": 772,
+          "r": 1400,
+          "w": 628
+        }
+      ],
+      ".lesson-card": [
+        {
+          "l": 300,
+          "r": 748,
+          "w": 448
+        },
+        {
+          "l": 772,
+          "r": 1400,
+          "w": 628
+        },
+        {
+          "l": 772,
+          "r": 1400,
+          "w": 628
+        }
+      ]
+    },
+    "offRight": []
+  },
+  "clip-lessons-1440": {
+    "vw": 1440,
+    "docScrollWidth": 1440,
+    "mainScrollWidth": 1180,
+    "mainClientWidth": 1180,
+    "mainOverflowX": "visible",
+    "bodyOverflowX": "visible",
+    "htmlOverflowX": "visible",
+    "dir": "rtl",
+    "rects": {
+      "#app-main": [
+        {
+          "l": 260,
+          "r": 1440,
+          "w": 1180
+        }
+      ],
+      ".wrap": [
+        {
+          "l": 260,
+          "r": 1440,
+          "w": 1180
+        }
+      ],
+      ".lesson-card": [
+        {
+          "l": 1047,
+          "r": 1400,
+          "w": 353
+        },
+        {
+          "l": 673,
+          "r": 1027,
+          "w": 353
+        },
+        {
+          "l": 300,
+          "r": 653,
+          "w": 353
+        },
+        {
+          "l": 1047,
+          "r": 1400,
+          "w": 353
+        }
+      ],
+      "[data-level-filter]": [
+        {
+          "l": 1348,
+          "r": 1400,
+          "w": 52
+        },
+        {
+          "l": 1266,
+          "r": 1340,
+          "w": 73
+        },
+        {
+          "l": 1130,
+          "r": 1258,
+          "w": 128
+        },
+        {
+          "l": 1016,
+          "r": 1122,
+          "w": 106
+        }
+      ]
+    },
+    "offRight": []
+  },
+  "clip-today-1280": {
+    "vw": 1280,
+    "docScrollWidth": 1280,
+    "mainScrollWidth": 1020,
+    "mainClientWidth": 1020,
+    "mainOverflowX": "visible",
+    "bodyOverflowX": "visible",
+    "htmlOverflowX": "visible",
+    "dir": "rtl",
+    "rects": {
+      "#app-main": [
+        {
+          "l": 260,
+          "r": 1280,
+          "w": 1020
+        }
+      ],
+      ".wrap": [
+        {
+          "l": 260,
+          "r": 1280,
+          "w": 1020
+        }
+      ],
+      "#today-review-card": [
+        {
+          "l": 300,
+          "r": 682,
+          "w": 382
+        }
+      ],
+      "#today-continue-card": [
+        {
+          "l": 706,
+          "r": 1240,
+          "w": 534
+        }
+      ],
+      "#today-next-card": [
+        {
+          "l": 706,
+          "r": 1240,
+          "w": 534
+        }
+      ],
+      ".lesson-card": [
+        {
+          "l": 300,
+          "r": 682,
+          "w": 382
+        },
+        {
+          "l": 706,
+          "r": 1240,
+          "w": 534
+        },
+        {
+          "l": 706,
+          "r": 1240,
+          "w": 534
+        }
+      ]
+    },
+    "offRight": []
+  },
+  "clip-lessons-1280": {
+    "vw": 1280,
+    "docScrollWidth": 1280,
+    "mainScrollWidth": 1020,
+    "mainClientWidth": 1020,
+    "mainOverflowX": "visible",
+    "bodyOverflowX": "visible",
+    "htmlOverflowX": "visible",
+    "dir": "rtl",
+    "rects": {
+      "#app-main": [
+        {
+          "l": 260,
+          "r": 1280,
+          "w": 1020
+        }
+      ],
+      ".wrap": [
+        {
+          "l": 260,
+          "r": 1280,
+          "w": 1020
+        }
+      ],
+      ".lesson-card": [
+        {
+          "l": 940,
+          "r": 1240,
+          "w": 300
+        },
+        {
+          "l": 620,
+          "r": 920,
+          "w": 300
+        },
+        {
+          "l": 300,
+          "r": 600,
+          "w": 300
+        },
+        {
+          "l": 940,
+          "r": 1240,
+          "w": 300
+        }
+      ],
+      "[data-level-filter]": [
+        {
+          "l": 1188,
+          "r": 1240,
+          "w": 52
+        },
+        {
+          "l": 1106,
+          "r": 1180,
+          "w": 73
+        },
+        {
+          "l": 970,
+          "r": 1098,
+          "w": 128
+        },
+        {
+          "l": 856,
+          "r": 962,
+          "w": 106
+        }
+      ]
+    },
+    "offRight": []
+  },
+  "clip-today-1024": {
+    "vw": 1024,
+    "docScrollWidth": 1009,
+    "mainScrollWidth": 749,
+    "mainClientWidth": 749,
+    "mainOverflowX": "visible",
+    "bodyOverflowX": "visible",
+    "htmlOverflowX": "visible",
+    "dir": "rtl",
+    "rects": {
+      "#app-main": [
+        {
+          "l": 260,
+          "r": 1009,
+          "w": 749
+        }
+      ],
+      ".wrap": [
+        {
+          "l": 260,
+          "r": 1009,
+          "w": 749
+        }
+      ],
+      "#today-review-card": [
+        {
+          "l": 300,
+          "r": 569,
+          "w": 269
+        }
+      ],
+      "#today-continue-card": [
+        {
+          "l": 593,
+          "r": 969,
+          "w": 376
+        }
+      ],
+      "#today-next-card": [
+        {
+          "l": 593,
+          "r": 969,
+          "w": 376
+        }
+      ],
+      ".lesson-card": [
+        {
+          "l": 300,
+          "r": 569,
+          "w": 269
+        },
+        {
+          "l": 593,
+          "r": 969,
+          "w": 376
+        },
+        {
+          "l": 593,
+          "r": 969,
+          "w": 376
+        }
+      ]
+    },
+    "offRight": []
+  },
+  "clip-lessons-1024": {
+    "vw": 1024,
+    "docScrollWidth": 1024,
+    "mainScrollWidth": 764,
+    "mainClientWidth": 764,
+    "mainOverflowX": "visible",
+    "bodyOverflowX": "visible",
+    "htmlOverflowX": "visible",
+    "dir": "rtl",
+    "rects": {
+      "#app-main": [
+        {
+          "l": 260,
+          "r": 1024,
+          "w": 764
+        }
+      ],
+      ".wrap": [
+        {
+          "l": 260,
+          "r": 1024,
+          "w": 764
+        }
+      ],
+      ".lesson-card": [
+        {
+          "l": 652,
+          "r": 984,
+          "w": 332
+        },
+        {
+          "l": 300,
+          "r": 632,
+          "w": 332
+        },
+        {
+          "l": 652,
+          "r": 984,
+          "w": 332
+        },
+        {
+          "l": 300,
+          "r": 632,
+          "w": 332
+        }
+      ],
+      "[data-level-filter]": [
+        {
+          "l": 932,
+          "r": 984,
+          "w": 52
+        },
+        {
+          "l": 850,
+          "r": 924,
+          "w": 73
+        },
+        {
+          "l": 714,
+          "r": 842,
+          "w": 128
+        },
+        {
+          "l": 600,
+          "r": 706,
+          "w": 106
+        }
+      ]
+    },
+    "offRight": []
+  },
+  "playerShell": {
+    "w": 1425,
+    "h": 111,
+    "top": 0,
+    "cls": "hebrew-shell ui-chrome",
+    "bodyCls": "has-hebrew-shell"
+  },
+  "appShell": {
+    "w": 260,
+    "h": 900,
+    "top": 0,
+    "cls": "hebrew-shell ui-chrome",
+    "bodyCls": "hebrew-spa has-hebrew-shell today-page"
+  },
+  "langBefore": {
+    "title": "Today · Hebrew Way",
+    "h1": " היוםToday"
+  },
+  "langAfter": {
+    "title": "היום · דרך עברית",
+    "h1": " היוםToday",
+    "sample": [
+      "יש להחליף סיסמהChange your password",
+      "שמירהSave",
+      "חזרהReview",
+      "שגרה 1 — הבוקר שלי"
+    ]
+  }
+}

@@ -44,7 +44,11 @@ type Activity struct {
 	Post          string
 	Continue      string
 	Asking        bool
-	HomeHref      string
+	// Stage is a listening question: the clip is the whole prompt, so its play control is big.
+	// Spotlight is a step whose Hebrew is the one thing on screen: big, centered, play below.
+	Stage     bool
+	Spotlight bool
+	HomeHref  string
 	// Dialogue is set for a dialogue step. It replaces Words and Audio.
 	Dialogue *Dialogue
 }
@@ -179,4 +183,6 @@ type Choice struct {
 	Text     string
 	Translit string
 	Hebrew   bool
+	// Sentence is a button that is a whole line of Hebrew, the line the learner heard.
+	Sentence bool
 }

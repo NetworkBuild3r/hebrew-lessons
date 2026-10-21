@@ -1,0 +1,505 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "beginner-unit-1",
+  "revision": 1,
+  "status": "draft",
+  "audience": "shared",
+  "assigneeId": null,
+  "title": "יחידה 1 — בבית הקפה",
+  "subtitle": "Three lessons. Each one uses the words from the one before.",
+  "language": {
+    "target": "he",
+    "gloss": "en"
+  },
+  "units": [
+    {
+      "id": "unit-1",
+      "title": "יחידה 1 — בבית הקפה",
+      "theme": "ordering at a café",
+      "lessons": [
+        {
+          "id": "cafe-order",
+          "title": "בבית הקפה 1 — מה רוצים",
+          "subtitle": "אֲנִי רוֹצֶה",
+          "level": "basic",
+          "visibility": "hidden",
+          "buildsOn": [],
+          "newWords": [
+            "רוֹצֶה",
+            "קָפֶה",
+            "מַיִם",
+            "בְּבַקָּשָׁה",
+            "תּוֹדָה",
+            "חָלָב",
+            "עִם",
+            "חַם"
+          ],
+          "recycles": [],
+          "blocks": [
+            {
+              "id": "introduction",
+              "type": "introduction",
+              "words": [
+                {
+                  "id": "1",
+                  "word": "רוֹצֶה",
+                  "meaning": "wants (m. sg.)",
+                  "sound": "ro-TZE",
+                  "translit": "rotze",
+                  "pos": "verb, present",
+                  "sentence": "אֲנִי רוֹצֶה מַיִם."
+                },
+                {
+                  "id": "2",
+                  "word": "קָפֶה",
+                  "meaning": "coffee",
+                  "sound": "ka-FE",
+                  "translit": "kafe",
+                  "pos": "noun (m.)",
+                  "sentence": "אֲנִי רוֹצֶה קָפֶה.",
+                  "image": {
+                    "mediaId": "coffee-cup",
+                    "alt": "coffee"
+                  }
+                },
+                {
+                  "id": "3",
+                  "word": "מַיִם",
+                  "meaning": "water",
+                  "sound": "MA-yim",
+                  "translit": "mayim",
+                  "pos": "noun (m.)",
+                  "sentence": "אֲנִי רוֹצֶה מַיִם.",
+                  "image": {
+                    "mediaId": "water-glass",
+                    "alt": "water"
+                  }
+                },
+                {
+                  "id": "4",
+                  "word": "בְּבַקָּשָׁה",
+                  "meaning": "please",
+                  "sound": "be-va-ka-SHA",
+                  "translit": "bevakasha",
+                  "pos": "interjection",
+                  "sentence": "קָפֶה, בְּבַקָּשָׁה."
+                },
+                {
+                  "id": "5",
+                  "word": "תּוֹדָה",
+                  "meaning": "thank you",
+                  "sound": "to-DA",
+                  "translit": "toda",
+                  "pos": "interjection",
+                  "sentence": "תּוֹדָה."
+                },
+                {
+                  "id": "6",
+                  "word": "חָלָב",
+                  "meaning": "milk",
+                  "sound": "cha-LAV",
+                  "translit": "chalav",
+                  "pos": "noun (m.)",
+                  "sentence": "אֲנִי רוֹצֶה חָלָב.",
+                  "image": {
+                    "mediaId": "milk",
+                    "alt": "milk"
+                  }
+                },
+                {
+                  "id": "7",
+                  "word": "עִם",
+                  "meaning": "with",
+                  "sound": "im",
+                  "translit": "im",
+                  "pos": "preposition",
+                  "sentence": "קָפֶה עִם חָלָב."
+                },
+                {
+                  "id": "8",
+                  "word": "חַם",
+                  "meaning": "hot",
+                  "sound": "cham",
+                  "translit": "cham",
+                  "pos": "adjective",
+                  "sentence": "קָפֶה חַם."
+                }
+              ],
+              "pattern": {
+                "heading": "אֲנִי רוֹצֶה",
+                "lede": "Say what you want: אֲנִי רוֹצֶה, then the thing.",
+                "rules": [
+                  {
+                    "title": "אֲנִי רוֹצֶה + thing",
+                    "english": "אֲנִי רוֹצֶה comes first. Then coffee, water, or milk.",
+                    "example": "אֲנִי רוֹצֶה מַיִם.",
+                    "focus": [
+                      "רוֹצֶה"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "id": "story",
+              "type": "graded-story",
+              "paragraphs": [
+                {
+                  "id": "p1",
+                  "text": "אֲנִי רוֹצֶה קָפֶה."
+                },
+                {
+                  "id": "p2",
+                  "text": "קָפֶה חַם."
+                },
+                {
+                  "id": "p3",
+                  "text": "אֲנִי רוֹצֶה קָפֶה עִם חָלָב."
+                },
+                {
+                  "id": "p4",
+                  "text": "מַיִם, בְּבַקָּשָׁה."
+                },
+                {
+                  "id": "p5",
+                  "text": "תּוֹדָה."
+                }
+              ],
+              "questions": [
+                {
+                  "id": "q1",
+                  "question": "What does he want with the coffee?",
+                  "sampleAnswer": "Milk."
+                }
+              ]
+            },
+            {
+              "id": "listen",
+              "type": "listening",
+              "passage": "אֲנִי רוֹצֶה קָפֶה. קָפֶה חַם. אֲנִי רוֹצֶה קָפֶה עִם חָלָב. מַיִם, בְּבַקָּשָׁה. תּוֹדָה."
+            },
+            {
+              "id": "dialogue",
+              "type": "short-dialogue",
+              "lines": [
+                {
+                  "id": "l1",
+                  "speaker": "learner",
+                  "pointed": "אֲנִי רוֹצֶה קָפֶה, בְּבַקָּשָׁה."
+                },
+                {
+                  "id": "l2",
+                  "speaker": "learner",
+                  "pointed": "תּוֹדָה."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "cafe-again",
+          "title": "בבית הקפה 2 — עוד אחד",
+          "subtitle": "בְּלִי / עוֹד",
+          "level": "basic",
+          "visibility": "hidden",
+          "buildsOn": [
+            "cafe-order"
+          ],
+          "newWords": [
+            "עוֹד",
+            "בְּלִי",
+            "סוּכָּר",
+            "רֶגַע",
+            "חֶשְׁבּוֹן"
+          ],
+          "recycles": [
+            {
+              "word": "רוֹצֶה",
+              "fromLessonId": "cafe-order"
+            },
+            {
+              "word": "קָפֶה",
+              "fromLessonId": "cafe-order"
+            },
+            {
+              "word": "מַיִם",
+              "fromLessonId": "cafe-order"
+            },
+            {
+              "word": "בְּבַקָּשָׁה",
+              "fromLessonId": "cafe-order"
+            },
+            {
+              "word": "תּוֹדָה",
+              "fromLessonId": "cafe-order"
+            },
+            {
+              "word": "חָלָב",
+              "fromLessonId": "cafe-order"
+            },
+            {
+              "word": "עִם",
+              "fromLessonId": "cafe-order"
+            },
+            {
+              "word": "חַם",
+              "fromLessonId": "cafe-order"
+            }
+          ],
+          "blocks": [
+            {
+              "id": "introduction",
+              "type": "introduction",
+              "words": [
+                {
+                  "id": "1",
+                  "word": "עוֹד",
+                  "meaning": "more / another",
+                  "sound": "od",
+                  "translit": "od",
+                  "pos": "adverb",
+                  "sentence": "עוֹד קָפֶה, בְּבַקָּשָׁה."
+                },
+                {
+                  "id": "2",
+                  "word": "בְּלִי",
+                  "meaning": "without",
+                  "sound": "bli",
+                  "translit": "bli",
+                  "pos": "preposition",
+                  "sentence": "קָפֶה בְּלִי חָלָב."
+                },
+                {
+                  "id": "3",
+                  "word": "סוּכָּר",
+                  "meaning": "sugar",
+                  "sound": "su-KAR",
+                  "translit": "sukar",
+                  "pos": "noun (m.)",
+                  "sentence": "קָפֶה עִם סוּכָּר.",
+                  "image": {
+                    "mediaId": "sugar",
+                    "alt": "sugar"
+                  }
+                },
+                {
+                  "id": "4",
+                  "word": "רֶגַע",
+                  "meaning": "a moment",
+                  "sound": "RE-ga",
+                  "translit": "rega",
+                  "pos": "noun (m.)",
+                  "sentence": "רֶגַע, בְּבַקָּשָׁה."
+                },
+                {
+                  "id": "5",
+                  "word": "חֶשְׁבּוֹן",
+                  "meaning": "the bill",
+                  "sound": "khesh-BON",
+                  "translit": "kheshbon",
+                  "pos": "noun (m.)",
+                  "sentence": "חֶשְׁבּוֹן, בְּבַקָּשָׁה."
+                }
+              ],
+              "pattern": {
+                "heading": "בְּלִי",
+                "lede": "בְּלִי says what is left out.",
+                "rules": [
+                  {
+                    "title": "thing + בְּלִי + thing",
+                    "english": "Name the drink, then בְּלִי, then what you do not want.",
+                    "example": "קָפֶה בְּלִי סוּכָּר.",
+                    "focus": [
+                      "בְּלִי"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "id": "story",
+              "type": "graded-story",
+              "paragraphs": [
+                {
+                  "id": "p1",
+                  "text": "אֲנִי רוֹצֶה עוֹד קָפֶה."
+                },
+                {
+                  "id": "p2",
+                  "text": "קָפֶה עִם סוּכָּר."
+                },
+                {
+                  "id": "p3",
+                  "text": "קָפֶה חַם בְּלִי חָלָב."
+                },
+                {
+                  "id": "p4",
+                  "text": "עוֹד מַיִם, בְּבַקָּשָׁה."
+                },
+                {
+                  "id": "p5",
+                  "text": "תּוֹדָה. רֶגַע."
+                },
+                {
+                  "id": "p6",
+                  "text": "חֶשְׁבּוֹן, בְּבַקָּשָׁה."
+                }
+              ]
+            },
+            {
+              "id": "listen",
+              "type": "listening",
+              "passage": "אֲנִי רוֹצֶה עוֹד קָפֶה. קָפֶה עִם סוּכָּר. קָפֶה חַם בְּלִי חָלָב. עוֹד מַיִם, בְּבַקָּשָׁה. תּוֹדָה. רֶגַע. חֶשְׁבּוֹן, בְּבַקָּשָׁה."
+            },
+            {
+              "id": "dialogue",
+              "type": "short-dialogue",
+              "lines": [
+                {
+                  "id": "l1",
+                  "speaker": "learner",
+                  "pointed": "אֲנִי רוֹצֶה קָפֶה בְּלִי סוּכָּר, בְּבַקָּשָׁה."
+                },
+                {
+                  "id": "l2",
+                  "speaker": "learner",
+                  "pointed": "תּוֹדָה."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "cafe-recall",
+          "title": "בבית הקפה 3 — שוב",
+          "subtitle": "Fluency and recall. No new words.",
+          "level": "basic",
+          "visibility": "hidden",
+          "buildsOn": [
+            "cafe-order",
+            "cafe-again"
+          ],
+          "newWords": [],
+          "recycles": [
+            {
+              "word": "רוֹצֶה",
+              "fromLessonId": "cafe-order"
+            },
+            {
+              "word": "קָפֶה",
+              "fromLessonId": "cafe-order"
+            },
+            {
+              "word": "מַיִם",
+              "fromLessonId": "cafe-order"
+            },
+            {
+              "word": "בְּבַקָּשָׁה",
+              "fromLessonId": "cafe-order"
+            },
+            {
+              "word": "תּוֹדָה",
+              "fromLessonId": "cafe-order"
+            },
+            {
+              "word": "חָלָב",
+              "fromLessonId": "cafe-order"
+            },
+            {
+              "word": "עִם",
+              "fromLessonId": "cafe-order"
+            },
+            {
+              "word": "חַם",
+              "fromLessonId": "cafe-order"
+            },
+            {
+              "word": "עוֹד",
+              "fromLessonId": "cafe-again"
+            },
+            {
+              "word": "בְּלִי",
+              "fromLessonId": "cafe-again"
+            },
+            {
+              "word": "סוּכָּר",
+              "fromLessonId": "cafe-again"
+            },
+            {
+              "word": "רֶגַע",
+              "fromLessonId": "cafe-again"
+            },
+            {
+              "word": "חֶשְׁבּוֹן",
+              "fromLessonId": "cafe-again"
+            }
+          ],
+          "blocks": [
+            {
+              "id": "fluency",
+              "type": "fluency-pass",
+              "seconds": 60,
+              "source": "story",
+              "cues": [
+                "רוֹצֶה",
+                "קָפֶה",
+                "מַיִם",
+                "עוֹד",
+                "חֶשְׁבּוֹן"
+              ]
+            },
+            {
+              "id": "dialogue",
+              "type": "short-dialogue",
+              "lines": [
+                {
+                  "id": "l1",
+                  "speaker": "learner",
+                  "pointed": "אֲנִי רוֹצֶה עוֹד מַיִם."
+                },
+                {
+                  "id": "l2",
+                  "speaker": "learner",
+                  "pointed": "קָפֶה בְּלִי סוּכָּר."
+                },
+                {
+                  "id": "l3",
+                  "speaker": "learner",
+                  "pointed": "רֶגַע, תּוֹדָה."
+                },
+                {
+                  "id": "l4",
+                  "speaker": "learner",
+                  "pointed": "חֶשְׁבּוֹן. תּוֹדָה."
+                }
+              ]
+            },
+            {
+              "id": "checkpoint",
+              "type": "spaced-review-checkpoint",
+              "wordKeys": [
+                "רוֹצֶה",
+                "קָפֶה",
+                "מַיִם",
+                "בְּבַקָּשָׁה",
+                "תּוֹדָה",
+                "חָלָב",
+                "עִם",
+                "חַם",
+                "עוֹד",
+                "בְּלִי",
+                "סוּכָּר",
+                "רֶגַע",
+                "חֶשְׁבּוֹן"
+              ],
+              "fromLessons": [
+                "cafe-order",
+                "cafe-again"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -445,6 +445,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	if screen.Activity.Audio != "" {
 		screen.Activity.AudioLabel, screen.Activity.AudioHebrew = phrasePlayLabel(act, phase)
 	}
+	screen.Activity.Spotlight = spotlight(act.Type, screen.Activity)
 	return screen, nil
 }
 
@@ -472,10 +473,25 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 		Continue:      continueLabel(run.ActivityIx, total),
 		HomeHref:      page.Href("/"),
 	}
+	if !empty && act.Type == units.ActivityListenPick && run.Phase != "ask" {
+		activity.Prompt = listenRevealPrompt
+	}
 	if empty || run.Phase != "ask" || !gradedActivity(act.Type) || target.ID == 0 {
 		return activity
 	}
-	activity.Choices = askChoices(act.Type, pool, earlier, target, choiceSeed(run, target), lineMateExclude(act, lex, target))
+	seed, block := choiceSeed(run, target), lineMateExclude(act, lex, target)
+	activity.Choices = askChoices(act.Type, pool, earlier, target, seed, block)
+	if act.Type == units.ActivityListenPick {
+		// The learner heard a line, so the buttons are lines of Hebrew. A lesson with too
+		// few other words cannot make wrong lines. Then the step asks for the meaning.
+		if lines := listenLines(act, pool, earlier, target, seed, block); lines != nil {
+			activity.Choices = lines
+			activity.Prompt = listenAskPrompt
+			activity.Stage = true
+		} else {
+			activity.Prompt = listenMeaningPrompt
+		}
+	}
 	activity.Asking = len(activity.Choices) > 0
 	if !activity.Asking {
 		activity.Continue = continueLabel(run.ActivityIx, total)
@@ -951,7 +967,7 @@ func lessonViews(rows []db.LexemeView, hebrew, translit bool) []views.Choice {
 				choice.Translit = view.Translit
 			}
 		} else {
-			choice.Label = view.Gloss
+			choice.Label = learnerGloss(view.Gloss)
 		}
 		out = append(out, choice)
 	}
@@ -1011,7 +1027,7 @@ func lessonChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed cho
 				choice.Translit = view.Translit
 			}
 		} else {
-			choice.Label = view.Gloss
+			choice.Label = learnerGloss(view.Gloss)
 		}
 		out = append(out, choice)
 	}
