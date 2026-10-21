@@ -38,6 +38,10 @@ type getUnitOutput struct {
 	Doc      units.Unit `json:"doc"`
 }
 
+// getUnit returns the published document and does not re-run the validator.
+// A caller that checks that current published revision again uses
+// units.ModePublished, so a recall, produce, or cloze published without a
+// target warns and the document still serves. An older revision does not.
 func (s *service) getUnit(ctx context.Context, _ *mcp.CallToolRequest, in getUnitInput) (*mcp.CallToolResult, getUnitOutput, error) {
 	var out getUnitOutput
 	caller, err := s.gate(ctx, "get_unit")

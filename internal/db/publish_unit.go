@@ -16,13 +16,16 @@ var ErrRevisionNotFound = errors.New("db: unit revision not found")
 
 // UnitSnapshot is one revision of a unit. Doc.Position is the units.position
 // column. A revision row does not store position or scope.
+// CurrentRevision is the units row's rev. Revision is the revision this
+// snapshot loaded. They are equal when the snapshot is the current row.
 type UnitSnapshot struct {
-	UnitID   int64
-	Revision int
-	Position int
-	Scope    string
-	Status   string
-	Doc      units.Unit
+	UnitID          int64
+	Revision        int
+	CurrentRevision int
+	Position        int
+	Scope           string
+	Status          string
+	Doc             units.Unit
 }
 
 // LoadUnit reads the current units row, or one unit_revisions row.
@@ -143,12 +146,13 @@ func readUnit(ctx context.Context, q unitQueryer, id int64, revision *int) (load
 	}
 	return loadedUnit{
 		UnitSnapshot: UnitSnapshot{
-			UnitID:   id,
-			Revision: rev,
-			Position: current.position,
-			Scope:    current.scope,
-			Status:   current.status,
-			Doc:      doc,
+			UnitID:          id,
+			Revision:        rev,
+			CurrentRevision: current.rev,
+			Position:        current.position,
+			Scope:           current.scope,
+			Status:          current.status,
+			Doc:             doc,
 		},
 		body: body,
 	}, current, nil
