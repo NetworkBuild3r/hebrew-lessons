@@ -397,7 +397,9 @@ func ConcealFront(card ReviewCard) ReviewCard {
 		card.ExampleText = ""
 		card.ExampleTranslit = ""
 		card.ExampleGloss = ""
+		card.LooksLike = ""
 		card.TellApart = ""
+		card.PairNote = ""
 		card.DageshNote = ""
 		card.DageshHard = ""
 	}
@@ -440,6 +442,18 @@ func hasHebrew(s string) bool {
 		}
 	}
 	return false
+}
+
+// answerLine is the pair back's one-line reading: translit, then sound.
+func answerLine(side DrillSide) string {
+	switch {
+	case side.NameTranslit != "" && side.Sound != "":
+		return side.NameTranslit + " · " + side.Sound
+	case side.NameTranslit != "":
+		return side.NameTranslit
+	default:
+		return side.Sound
+	}
 }
 
 // askedSide is the letter the front showed.

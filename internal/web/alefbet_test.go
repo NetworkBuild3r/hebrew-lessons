@@ -117,11 +117,11 @@ func TestAlefbetReference(t *testing.T) {
 			t.Fatalf("%q name %q translit %q, want name %q translit %q", e.Letter, e.Name, e.Translit, w.name, w.translit)
 		}
 	}
-	const daletResh = "ד has a sharp corner at the top right, where the roof sticks out past the leg; ר is rounded at the top."
+	const daletResh = "ד (dalet) has a sharp corner at the top right, where the roof sticks out past the leg; ר (resh) is rounded at the top."
 	if views.AlefbetTellApart([]string{"ד", "ר"}) != daletResh {
 		t.Fatalf("dalet/resh cue = %q", views.AlefbetTellApart([]string{"ד", "ר"}))
 	}
-	const feCurl = "ך is a roof with a plain straight leg dropping below the line; ף has the same drop but with a little curl hanging inside at the top."
+	const feCurl = "ך (khaf sofit) is a roof with a plain straight leg dropping below the line; ף (fe sofit) has the same drop but with a little curl hanging inside at the top."
 	if views.AlefbetTellApart([]string{"ף", "ך"}) != feCurl {
 		t.Fatalf("fe sofit cue = %q", views.AlefbetTellApart([]string{"ף", "ך"}))
 	}
@@ -136,11 +136,45 @@ func TestAlefbetReference(t *testing.T) {
 	if got := views.LetterDageshNote([]string{dot, "פ"}, []string{"p", "f"}); got != "With the dot: p. Without: f." {
 		t.Fatalf("stored dagesh note = %q", got)
 	}
-	if views.AlefbetTellApart([]string{"ב", "כ"}) != "ב has a little tail at the bottom right; כ is round." {
-		t.Fatal("bet/kaf cue missing")
+	cues := []struct {
+		a, b, cue string
+	}{
+		{"ב", "כ", "ב (vet) has a little tail at the bottom right; כ (khaf) is round."},
+		{"ד", "ר", "ד (dalet) has a sharp corner at the top right, where the roof sticks out past the leg; ר (resh) is rounded at the top."},
+		{"ה", "ח", "ה (he) is open at the upper left; ח (khet) is closed."},
+		{"ח", "ת", "ת (tav) has a little foot kicking out at the bottom left; ח (khet) has none."},
+		{"ו", "ז", "ו (vav) is a straight line; ז (zayin) has a bar across the top."},
+		{"ו", "ן", "ו (vav) stays on the line; ן (nun sofit) drops below the line."},
+		{"ט", "מ", "ט (tet) is round at the bottom and open at the top, with its right arm curling inward; מ (mem) has a flat bottom with a small gap at the bottom left."},
+		{"ס", "ם", "ס (samekh) is round; ם (mem sofit) is square."},
+		{"ג", "נ", "ג (gimel) stands on one leg, with a small foot kicking out to the left at the bottom; נ (nun) is narrow, with a flat base running left along the line."},
+		{"צ", "ע", "צ (tsadi) has a small yod-shaped arm on the upper right and sits on a flat base; ע (ayin) is two arms that meet low on the left, with a tail sweeping down-left and no flat base."},
+		{"פ", "כ", "פ (fe) has a little curl hanging inside from the top; כ (khaf) is a plain open curve."},
+		{"ף", "ך", "ך (khaf sofit) is a roof with a plain straight leg dropping below the line; ף (fe sofit) has the same drop but with a little curl hanging inside at the top."},
+		{"שׁ", "שׂ", "שׁ (shin) has the dot on the upper right; שׂ (sin) has the dot on the upper left."},
+		{"מ", "ם", "מ (mem) is open at the bottom left; ם (mem sofit) is closed."},
+		{"נ", "ן", "נ (nun) sits on the line; ן (nun sofit) drops below the line."},
+		{"כ", "ך", "כ (khaf) sits on the line; ך (khaf sofit) drops below the line."},
+		{"פ", "ף", "פ (fe) sits on the line; ף (fe sofit) drops below the line."},
+		{"צ", "ץ", "צ (tsadi) sits on the line; ץ (tsadi sofit) drops below the line."},
 	}
-	if views.AlefbetTellApart([]string{"ג"}) != "" || views.AlefbetTellApart([]string{"ג", "פ"}) != "" {
+	for _, row := range cues {
+		if got := views.AlefbetTellApart([]string{row.a, row.b}); got != row.cue {
+			t.Fatalf("%s/%s cue = %q", row.a, row.b, got)
+		}
+	}
+	if views.AlefbetTellApart([]string{"ג"}) != "" || views.AlefbetTellApart([]string{"א", "ל"}) != "" {
 		t.Fatal("a pair without a standard visual difference produced a cue")
+	}
+	gimel, gimelOK := views.LookupAlefbet("ג")
+	if !gimelOK {
+		t.Fatal("gimel missing")
+	}
+	if got := views.FirstAlefbetCue(gimel.Cue); !strings.Contains(got, "(nun)") || strings.Contains(got, "curls back") {
+		t.Fatalf("gimel first cue = %q", got)
+	}
+	if !strings.Contains(gimel.Cue, "curls back into itself") {
+		t.Fatal("gimel lost the pe cue behind the first line")
 	}
 	hard := "At the start of a word, ב, כ, and פ are almost always hard (b, k, p)."
 	for _, letter := range []string{"ב", "כ", "פ", "ב\u05BC", "כ\u05BC", dot} {
@@ -195,7 +229,6 @@ func TestReviewLetterBackUsesAlefbet(t *testing.T) {
 // TestReviewHardNoteOnBegadkefat renders the word-initial line on a single
 // ב, כ, or פ, with or without the dot, and keeps it off the front.
 func TestReviewHardNoteOnBegadkefat(t *testing.T) {
-	hard := "At the start of a word, ב, כ, and פ are almost always hard (b, k, p)."
 	letters := []string{"ב", "כ", "פ", "ב\u05BC", "כ\u05BC", "פ\u05BC"}
 	for i, letter := range letters {
 		t.Run(letter, func(t *testing.T) {
@@ -208,7 +241,7 @@ func TestReviewHardNoteOnBegadkefat(t *testing.T) {
 			}
 			shown := getReveal(t, h, learner, mustCardID(t, front))
 			body := shown.Body.String()
-			if shown.Code != 200 || !strings.Contains(body, hard) {
+			if shown.Code != 200 || !strings.Contains(body, hardNoteHTML) {
 				t.Fatalf("single %q back = %d\n%s", letter, shown.Code, body)
 			}
 		})
@@ -229,8 +262,98 @@ func TestReviewPeDageshUsesAlefbet(t *testing.T) {
 	shown := getReveal(t, h, learner, mustCardID(t, front))
 	body := shown.Body.String()
 	note := "With the dot: p. Without: f."
-	hard := "At the start of a word, ב, כ, and פ are almost always hard (b, k, p)."
-	if shown.Code != 200 || !strings.Contains(body, note) || !strings.Contains(body, hard) || strings.Index(body, note) > strings.Index(body, hard) {
+	if shown.Code != 200 || !strings.Contains(body, note) || strings.Index(body, note) > strings.Index(body, hardNoteHTML) {
 		t.Fatalf("dagesh back = %d\n%s", shown.Code, body)
+	}
+	if !strings.Contains(body, hardNoteHTML) {
+		t.Fatalf("dagesh back dropped the isolated letters\n%s", body)
+	}
+}
+
+const (
+	gimelPeCue   = "ג (gimel) stands on one leg, with a small foot kicking out to the left at the bottom. פּ (pe) curls back into itself, with a dot inside. Without the dot, פ is f, as in fun."
+	gimelPeNote  = "At the end of a word it's ף, always f."
+	hardNoteHTML = `At the start of a word, <bdi lang="he" dir="rtl">ב</bdi>, <bdi lang="he" dir="rtl">כ</bdi>, and <bdi lang="he" dir="rtl">פ</bdi> are almost always hard (b, k, p).`
+)
+
+// TestReviewGimelPeCue renders Brian's ג/פ cue and the final-pe note.
+func TestReviewGimelPeCue(t *testing.T) {
+	if !strings.Contains(gimelPeCue, "\u05e4\u05bc (pe)") || !strings.Contains(gimelPeNote, "\u05e3") {
+		t.Fatal("gimel/pe cue must name פּ and the note must name ף")
+	}
+	for _, key := range []string{"ג/פ", "ג/פ\u05BC"} {
+		if views.AlefbetTellApart(strings.Split(key, "/")) != gimelPeCue {
+			t.Fatalf("%s cue = %q", key, views.AlefbetTellApart(strings.Split(key, "/")))
+		}
+		if views.AlefbetPairNote(strings.Split(key, "/")) != gimelPeNote {
+			t.Fatalf("%s note = %q", key, views.AlefbetPairNote(strings.Split(key, "/")))
+		}
+	}
+	store, h, now := openApp(t)
+	learner := addLearner(t, store, "a@example.com", "sub-gimel-pe", now)
+	seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
+	front := getLearner(t, h, learner, "/review")
+	if strings.Contains(front, "curls back") || strings.Contains(front, "always f") || strings.Contains(front, "Tell them apart") {
+		t.Fatalf("pair cue leaked onto the front\n%s", front)
+	}
+	shown := getReveal(t, h, learner, mustCardID(t, front))
+	body := shown.Body.String()
+	for _, want := range []string{
+		"<b>Tell them apart:</b>",
+		"stands on one leg, with a small foot kicking out to the left at the bottom.",
+		"(pe) curls back into itself, with a dot inside.",
+		"is f, as in fun.",
+		"At the end of a word it&#39;s",
+		"always f.",
+		`<bdi lang="he" dir="rtl">ג</bdi>`,
+		`<bdi lang="he" dir="rtl">פּ</bdi>`,
+		`<bdi lang="he" dir="rtl">ף</bdi>`,
+		`class="act__tile"`,
+		`class="act__apart"`,
+		"g as in go",
+		"f as in fun",
+	} {
+		if shown.Code != 200 || !strings.Contains(body, want) {
+			t.Fatalf("pair back missing %q\n%s", want, body)
+		}
+	}
+}
+
+// TestReviewLetterLooksLike shows only the first cue on a single letter.
+func TestReviewLetterLooksLike(t *testing.T) {
+	store, h, now := openApp(t)
+	word := addLexeme(t, store, "גֶּשֶׁם", "rain", "geshem", "m", "")
+	learner := addLearner(t, store, "a@example.com", "sub-looks", now)
+	seedDrill(t, store, learner.user.ID, "letter", "ג", word)
+	front := getLearner(t, h, learner, "/review")
+	if strings.Contains(front, "Looks like") {
+		t.Fatalf("looks-like leaked onto the front\n%s", front)
+	}
+	shown := getReveal(t, h, learner, mustCardID(t, front))
+	body := shown.Body.String()
+	if shown.Code != 200 || !strings.Contains(body, "<b>Looks like:</b>") || !strings.Contains(body, "(nun) is narrow") {
+		t.Fatalf("letter back missing the first cue\n%s", body)
+	}
+	if strings.Contains(body, "curls back into itself") {
+		t.Fatalf("letter back showed a later cue\n%s", body)
+	}
+	if !strings.Contains(body, ">Sound</p>") || !strings.Contains(body, `class="act__sound"`) || !strings.Contains(body, ">Example</p>") {
+		t.Fatalf("letter back missing the sound and example labels\n%s", body)
+	}
+}
+
+// TestReviewHardNoteBidi keeps each letter of the position line in its own bdi.
+func TestReviewHardNoteBdi(t *testing.T) {
+	store, h, now := openApp(t)
+	learner := addLearner(t, store, "a@example.com", "sub-bidi", now)
+	seedDrill(t, store, learner.user.ID, "letter", "ב\u05BC", 0)
+	front := getLearner(t, h, learner, "/review")
+	shown := getReveal(t, h, learner, mustCardID(t, front))
+	body := shown.Body.String()
+	if shown.Code != 200 || !strings.Contains(body, hardNoteHTML) {
+		t.Fatalf("hard note bdi = %d\n%s", shown.Code, body)
+	}
+	if strings.Contains(body, "ב, כ") || strings.Contains(body, "כ ,ב") {
+		t.Fatalf("hard note left the letters in one run\n%s", body)
 	}
 }

@@ -81,10 +81,13 @@ type ReviewCardVM struct {
 	ExampleTranslit string
 	ExampleGloss    string
 	// Asked is the one letter a pair card shows. TellApart and DageshNote are
-	// empty when the stored data has no cue and no sounds. DageshHard is the
-	// word-initial line for a single ב, כ, or פ, and for a dagesh pair of them.
+	// empty when the stored data has no cue and no sounds. LooksLike is the
+	// first cue of a single letter. PairNote sits under a pair cue. DageshHard
+	// is the word-initial line for a single ב, כ, or פ, and for a dagesh pair.
 	Asked      string
+	LooksLike  string
 	TellApart  string
+	PairNote   string
 	DageshNote string
 	DageshHard string
 }

@@ -134,7 +134,8 @@ func TestReviewModesShareOneRevealPath(t *testing.T) {
 	letter := views.ReviewCard{
 		Kind: "letter", Pointed: "ג", Translit: "g", AudioURL: "/audio/x.mp3", Gloss: "gimel", Gender: "m",
 		Sides:       []views.DrillSide{{Hebrew: "ג", Name: "גימל", Sound: "ga"}, {Hebrew: "פ", Name: "פא"}},
-		ExampleText: "גשם", ExampleGloss: "rain", TellApart: "cue", DageshNote: "With the dot: p. Without: f.",
+		ExampleText: "גשם", ExampleGloss: "rain", LooksLike: "looks", TellApart: "cue", PairNote: "final note",
+		DageshNote: "With the dot: p. Without: f.",
 		DageshHard: "At the start of a word, ב, כ, and פ are almost always hard (b, k, p).",
 	}
 	letterFront := views.ConcealFront(letter)
@@ -142,7 +143,7 @@ func TestReviewModesShareOneRevealPath(t *testing.T) {
 		t.Fatalf("letter front pointed = %q", letterFront.Pointed)
 	}
 	if letterFront.Gloss != "" || letterFront.Translit != "" || letterFront.AudioURL != "" || letterFront.Gender != "" ||
-		len(letterFront.Sides) != 0 || letterFront.ExampleText != "" || letterFront.TellApart != "" || letterFront.DageshNote != "" || letterFront.DageshHard != "" {
+		len(letterFront.Sides) != 0 || letterFront.ExampleText != "" || letterFront.LooksLike != "" || letterFront.TellApart != "" || letterFront.PairNote != "" || letterFront.DageshNote != "" || letterFront.DageshHard != "" {
 		t.Fatalf("letter front kept the answer: %+v", letterFront)
 	}
 
@@ -154,7 +155,7 @@ func TestReviewModesShareOneRevealPath(t *testing.T) {
 		t.Fatalf("letter front face dropped the letter: %s", frontHTML)
 	}
 	backHTML := renderMode(t, views.ReviewModeFor("letter").Back(letter))
-	if !strings.Contains(backHTML, "גימל") || !strings.Contains(backHTML, ">Answer</h2>") || !strings.Contains(backHTML, "גשם") || !strings.Contains(backHTML, "Tell them apart: cue") || !strings.Contains(backHTML, "With the dot: p. Without: f.") || !strings.Contains(backHTML, "almost always hard") {
+	if !strings.Contains(backHTML, "גימל") || !strings.Contains(backHTML, ">Answer</h2>") || !strings.Contains(backHTML, "גשם") || !strings.Contains(backHTML, "<b>Tell them apart:</b>") || !strings.Contains(backHTML, "cue") || !strings.Contains(backHTML, "final note") || !strings.Contains(backHTML, "With the dot: p. Without: f.") || !strings.Contains(backHTML, "almost always hard") {
 		t.Fatalf("letter back face dropped the answer: %s", backHTML)
 	}
 	if strings.Contains(backHTML, `name="rating"`) {

@@ -69,35 +69,62 @@ var Alefbet = []AlefbetEntry{
 type alefbetPair struct {
 	letters [2]string
 	cue     string
+	note    string
 }
 
+const (
+	cueBetKaf    = "ב (vet) has a little tail at the bottom right; כ (khaf) is round."
+	cueDaletResh = "ד (dalet) has a sharp corner at the top right, where the roof sticks out past the leg; ר (resh) is rounded at the top."
+	cueHeHet     = "ה (he) is open at the upper left; ח (khet) is closed."
+	cueHetTav    = "ת (tav) has a little foot kicking out at the bottom left; ח (khet) has none."
+	cueVavZayin  = "ו (vav) is a straight line; ז (zayin) has a bar across the top."
+	cueVavNun    = "ו (vav) stays on the line; ן (nun sofit) drops below the line."
+	cueTetMem    = "ט (tet) is round at the bottom and open at the top, with its right arm curling inward; מ (mem) has a flat bottom with a small gap at the bottom left."
+	cueSamekhMem = "ס (samekh) is round; ם (mem sofit) is square."
+	cueGimelNun  = "ג (gimel) stands on one leg, with a small foot kicking out to the left at the bottom; נ (nun) is narrow, with a flat base running left along the line."
+	cueTsadiAyin = "צ (tsadi) has a small yod-shaped arm on the upper right and sits on a flat base; ע (ayin) is two arms that meet low on the left, with a tail sweeping down-left and no flat base."
+	cuePeKaf     = "פ (fe) has a little curl hanging inside from the top; כ (khaf) is a plain open curve."
+	cueFeKafSof  = "ך (khaf sofit) is a roof with a plain straight leg dropping below the line; ף (fe sofit) has the same drop but with a little curl hanging inside at the top."
+	cueShinSin   = "שׁ (shin) has the dot on the upper right; שׂ (sin) has the dot on the upper left."
+	cueMemSof    = "מ (mem) is open at the bottom left; ם (mem sofit) is closed."
+	cueNunSof    = "נ (nun) sits on the line; ן (nun sofit) drops below the line."
+	cueKafSof    = "כ (khaf) sits on the line; ך (khaf sofit) drops below the line."
+	cuePeSof     = "פ (fe) sits on the line; ף (fe sofit) drops below the line."
+	cueTsadiSof  = "צ (tsadi) sits on the line; ץ (tsadi sofit) drops below the line."
+	// cueGimelPe is Brian's ג/פ confusion. The same wording covers ג/פּ.
+	cueGimelPe  = "ג (gimel) stands on one leg, with a small foot kicking out to the left at the bottom. פּ (pe) curls back into itself, with a dot inside. Without the dot, פ is f, as in fun."
+	noteGimelPe = "At the end of a word it's ף, always f."
+)
+
 var alefbetPairs = []alefbetPair{
-	{letters: [2]string{"ב", "כ"}, cue: "ב has a little tail at the bottom right; כ is round."},
-	{letters: [2]string{"בּ", "כ"}, cue: "ב has a little tail at the bottom right; כ is round."},
-	{letters: [2]string{"ב", "כּ"}, cue: "ב has a little tail at the bottom right; כ is round."},
-	{letters: [2]string{"בּ", "כּ"}, cue: "ב has a little tail at the bottom right; כ is round."},
-	{letters: [2]string{"ד", "ר"}, cue: "ד has a sharp corner at the top right, where the roof sticks out past the leg; ר is rounded at the top."},
-	{letters: [2]string{"ה", "ח"}, cue: "ה is open at the upper left; ח is closed."},
-	{letters: [2]string{"ח", "ת"}, cue: "ת has a little foot kicking out at the bottom left; ח has none."},
-	{letters: [2]string{"ו", "ז"}, cue: "ו is a straight line; ז has a bar across the top."},
-	{letters: [2]string{"ו", "ן"}, cue: "ו stays on the line; ן drops below the line."},
-	{letters: [2]string{"ט", "מ"}, cue: "ט is round at the bottom and open at the top, with its right arm curling inward; מ has a flat bottom with a small gap at the bottom left."},
-	{letters: [2]string{"ס", "ם"}, cue: "ס is round; ם is square."},
-	{letters: [2]string{"ג", "נ"}, cue: "ג stands on one leg, with a small foot kicking out to the left at the bottom; נ is narrow, with a flat base running left along the line."},
-	{letters: [2]string{"צ", "ע"}, cue: "צ has a small yod-shaped arm on the upper right and sits on a flat base; ע is two arms that meet low on the left, with a tail sweeping down-left and no flat base."},
-	{letters: [2]string{"פ", "כ"}, cue: "פ has a little curl hanging inside from the top; כ is a plain open curve."},
-	{letters: [2]string{"פּ", "כ"}, cue: "פ has a little curl hanging inside from the top; כ is a plain open curve."},
-	{letters: [2]string{"פ", "כּ"}, cue: "פ has a little curl hanging inside from the top; כ is a plain open curve."},
-	{letters: [2]string{"פּ", "כּ"}, cue: "פ has a little curl hanging inside from the top; כ is a plain open curve."},
-	{letters: [2]string{"ף", "ך"}, cue: "ך is a roof with a plain straight leg dropping below the line; ף has the same drop but with a little curl hanging inside at the top."},
-	{letters: [2]string{"שׁ", "שׂ"}, cue: "שׁ has the dot on the upper right; שׂ has the dot on the upper left."},
-	{letters: [2]string{"מ", "ם"}, cue: "מ is open at the bottom left; ם is closed."},
-	{letters: [2]string{"נ", "ן"}, cue: "נ sits on the line; ן drops below the line."},
-	{letters: [2]string{"כ", "ך"}, cue: "כ sits on the line; ך drops below the line."},
-	{letters: [2]string{"כּ", "ך"}, cue: "כ sits on the line; ך drops below the line."},
-	{letters: [2]string{"פ", "ף"}, cue: "פ sits on the line; ף drops below the line."},
-	{letters: [2]string{"פּ", "ף"}, cue: "פ sits on the line; ף drops below the line."},
-	{letters: [2]string{"צ", "ץ"}, cue: "צ sits on the line; ץ drops below the line."},
+	{letters: [2]string{"ב", "כ"}, cue: cueBetKaf},
+	{letters: [2]string{"בּ", "כ"}, cue: cueBetKaf},
+	{letters: [2]string{"ב", "כּ"}, cue: cueBetKaf},
+	{letters: [2]string{"בּ", "כּ"}, cue: cueBetKaf},
+	{letters: [2]string{"ד", "ר"}, cue: cueDaletResh},
+	{letters: [2]string{"ה", "ח"}, cue: cueHeHet},
+	{letters: [2]string{"ח", "ת"}, cue: cueHetTav},
+	{letters: [2]string{"ו", "ז"}, cue: cueVavZayin},
+	{letters: [2]string{"ו", "ן"}, cue: cueVavNun},
+	{letters: [2]string{"ט", "מ"}, cue: cueTetMem},
+	{letters: [2]string{"ס", "ם"}, cue: cueSamekhMem},
+	{letters: [2]string{"ג", "נ"}, cue: cueGimelNun},
+	{letters: [2]string{"צ", "ע"}, cue: cueTsadiAyin},
+	{letters: [2]string{"פ", "כ"}, cue: cuePeKaf},
+	{letters: [2]string{"פּ", "כ"}, cue: cuePeKaf},
+	{letters: [2]string{"פ", "כּ"}, cue: cuePeKaf},
+	{letters: [2]string{"פּ", "כּ"}, cue: cuePeKaf},
+	{letters: [2]string{"ף", "ך"}, cue: cueFeKafSof},
+	{letters: [2]string{"שׁ", "שׂ"}, cue: cueShinSin},
+	{letters: [2]string{"מ", "ם"}, cue: cueMemSof},
+	{letters: [2]string{"נ", "ן"}, cue: cueNunSof},
+	{letters: [2]string{"כ", "ך"}, cue: cueKafSof},
+	{letters: [2]string{"כּ", "ך"}, cue: cueKafSof},
+	{letters: [2]string{"פ", "ף"}, cue: cuePeSof},
+	{letters: [2]string{"פּ", "ף"}, cue: cuePeSof},
+	{letters: [2]string{"צ", "ץ"}, cue: cueTsadiSof},
+	{letters: [2]string{"ג", "פ"}, cue: cueGimelPe, note: noteGimelPe},
+	{letters: [2]string{"ג", "פּ"}, cue: cueGimelPe, note: noteGimelPe},
 }
 
 var alefbetBy map[string]AlefbetEntry
@@ -130,17 +157,40 @@ func LookupAlefbet(letter string) (AlefbetEntry, bool) {
 // AlefbetTellApart is the cue when parts are one confusable pair.
 // A single letter, or a pair with no standard visual difference, is empty.
 func AlefbetTellApart(parts []string) string {
+	if pair, ok := matchAlefbetPair(parts); ok {
+		return pair.cue
+	}
+	return ""
+}
+
+// AlefbetPairNote is the secondary line under a pair cue.
+// ג/פ and ג/פּ use it for the final pe. Every other pair is empty.
+func AlefbetPairNote(parts []string) string {
+	if pair, ok := matchAlefbetPair(parts); ok {
+		return pair.note
+	}
+	return ""
+}
+
+func matchAlefbetPair(parts []string) (alefbetPair, bool) {
 	if len(parts) != 2 {
-		return ""
+		return alefbetPair{}, false
 	}
 	a, b := norm.NFC.String(parts[0]), norm.NFC.String(parts[1])
 	for _, pair := range alefbetPairs {
 		x, y := norm.NFC.String(pair.letters[0]), norm.NFC.String(pair.letters[1])
 		if (a == x && b == y) || (a == y && b == x) {
-			return pair.cue
+			return pair, true
 		}
 	}
-	return ""
+	return alefbetPair{}, false
+}
+
+// FirstAlefbetCue is the first tell-apart line joined onto a letter.
+// Later lines are other pairs. A single-letter card shows only this one.
+func FirstAlefbetCue(cue string) string {
+	head, _, _ := strings.Cut(cue, " / ")
+	return head
 }
 
 func alefbetCues(letter string) string {

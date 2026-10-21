@@ -259,13 +259,16 @@ type ReviewCard struct {
 	// Sides, ExampleText, ExampleTranslit, and ExampleGloss are the drill answer.
 	// They are empty until the card is revealed, so the front has no answer markup.
 	// TellApart and DageshNote are the same: empty when the data has no cue.
-	// DageshHard is the word-initial line for a single ב, כ, or פ, and for a
-	// dagesh pair of those letters. It is empty on every other card.
+	// LooksLike is the first cue of a single letter. PairNote is the line
+	// under a pair cue. DageshHard is the word-initial line for a single
+	// ב, כ, or פ, and for a dagesh pair of those letters.
 	Sides           []DrillSide
 	ExampleText     string
 	ExampleTranslit string
 	ExampleGloss    string
+	LooksLike       string
 	TellApart       string
+	PairNote        string
 	DageshNote      string
 	DageshHard      string
 }

@@ -292,52 +292,79 @@ templ letterFront(c ReviewCard) {
 }
 
 templ letterBack(c ReviewCard) {
-	@WordBlock(flashHebrew(c), "", "", "display", "", true)
+	{{ asked := askedSide(c) }}
+	if len(c.Sides) < 2 {
+		@WordBlock(flashHebrew(c), "", "", "display", "", true)
+	}
 	<div class="act__answer">
-		@answerHeading()
-		{{ asked := askedSide(c) }}
-		<p class="act__side">
-			if asked.Name != "" {
-				@H(asked.Name)
-			}
-			if asked.NameTranslit != "" {
-				<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ asked.NameTranslit }</bdi>
-			}
-			if asked.Sound != "" {
-				<bdi class="wb__tr" lang="en" dir="ltr">{ asked.Sound }</bdi>
-			}
-		</p>
-		if c.ExampleText != "" {
-			@WordBlock(c.ExampleText, c.ExampleTranslit, c.ExampleGloss, "card", "", false)
-		}
-		@flashAudio(c)
 		if len(c.Sides) > 1 {
+			<div class="act__answer-line">
+				@answerHeading()
+				<p class="act__sound" lang="en">{ answerLine(asked) }</p>
+			</div>
 			<div class="act__pair">
 				for _, side := range c.Sides {
-								<p class="act__side">
-									@H(side.Hebrew)
-									if side.Name != "" {
-										@H(side.Name)
-									}
-									if side.NameTranslit != "" {
-										<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ side.NameTranslit }</bdi>
-									}
-									if side.Sound != "" {
-										<bdi class="wb__tr" lang="en" dir="ltr">{ side.Sound }</bdi>
-									}
-								</p>
+					<div class="act__tile">
+						<p class="act__tile-letter">@H(side.Hebrew)</p>
+						if side.Name != "" {
+							<p class="act__tile-name">@H(side.Name)</p>
+						}
+						if side.NameTranslit != "" {
+							<p class="act__tile-tr" lang="he-Latn">{ side.NameTranslit }</p>
+						}
+						if side.Sound != "" {
+							<p class="act__tile-sound" lang="en">{ side.Sound }</p>
+						}
+					</div>
+				}
+			</div>
+		} else {
+			@answerHeading()
+			if asked.Name != "" || asked.NameTranslit != "" {
+				<p class="act__name">
+					if asked.Name != "" {
+						@H(asked.Name)
+					}
+					if asked.NameTranslit != "" {
+						<span class="act__tr" lang="he-Latn">{ asked.NameTranslit }</span>
+					}
+				</p>
+			}
+			if asked.Sound != "" {
+				<p class="act__label">Sound</p>
+				<p class="act__sound" lang="en">{ asked.Sound }</p>
+			}
+			if c.LooksLike != "" {
+				<p class="act__cue" lang="en" dir="ltr"><b>Looks like:</b>{ " " }@MixedEN(c.LooksLike)</p>
+			}
+		}
+		if c.TellApart != "" {
+			<div class="act__apart" lang="en" dir="ltr">
+				<p><b>Tell them apart:</b>{ " " }@MixedEN(c.TellApart)</p>
+				if c.PairNote != "" {
+					<p class="act__note">@MixedEN(c.PairNote)</p>
 				}
 			</div>
 		}
-		if c.TellApart != "" {
-			<p class="act__cue" lang="en">Tell them apart: { c.TellApart }</p>
-		}
 		if c.DageshNote != "" {
-			<p class="act__cue" lang="en">{ c.DageshNote }</p>
+			<p class="act__cue" lang="en" dir="ltr">@MixedEN(c.DageshNote)</p>
 		}
 		if c.DageshHard != "" {
-			<p class="act__cue" lang="en">{ c.DageshHard }</p>
+			<p class="act__cue" lang="en" dir="ltr">
+				{ "At the start of a word, " }
+				@H("ב")
+				{ ", " }
+				@H("כ")
+				{ ", and " }
+				@H("פ")
+				{ " are almost always hard (b, k, p)." }
+			</p>
 		}
+		if c.ExampleText != "" {
+			<p class="act__label">Example</p>
+			@WordBlock(c.ExampleText, c.ExampleTranslit, c.ExampleGloss, "card", "", false)
+		}
+		@flashAudio(c)
 	</div>
 }
 

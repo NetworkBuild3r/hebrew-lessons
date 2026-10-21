@@ -537,7 +537,13 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 			sides = append(sides, side)
 		}
 		vm.Sides = sides
+		if len(parts) == 1 {
+			if e, ok := views.LookupAlefbet(parts[0]); ok {
+				vm.LooksLike = views.FirstAlefbetCue(e.Cue)
+			}
+		}
 		vm.TellApart = views.AlefbetTellApart(parts)
+		vm.PairNote = views.AlefbetPairNote(parts)
 		vm.DageshNote = views.LetterDageshNote(parts, stored)
 		vm.DageshHard = views.DageshHardNote(parts)
 		ex, ok, err := s.confusionExample(ctx, userID, fsrs.MissLetterPair, key)
@@ -775,7 +781,9 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 	card.ExampleText = vm.ExampleText
 	card.ExampleTranslit = vm.ExampleTranslit
 	card.ExampleGloss = vm.ExampleGloss
+	card.LooksLike = vm.LooksLike
 	card.TellApart = vm.TellApart
+	card.PairNote = vm.PairNote
 	card.DageshNote = vm.DageshNote
 	card.DageshHard = vm.DageshHard
 	// The mode's hold decides what the front may carry. A revealed card passes through.
