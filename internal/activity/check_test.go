@@ -2,6 +2,7 @@ package activity
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -176,8 +177,17 @@ func TestItemDoesNotGiveTheAnswerAway(t *testing.T) {
 				t.Fatalf("item json mentions %q: %s", banned, body)
 			}
 		}
-		if strings.Contains(b.item.Token, a.Gloss) || strings.Contains(b.item.Token, a.Text) {
-			t.Fatalf("token spells the answer: %s", b.item.Token)
+		// The signature is random base64. A three-letter gloss such as "lao" can
+		// appear there by chance, so the check is the decoded claims, which
+		// hold the item id, the learner, and the activity, and not the answer.
+		body64, _, ok := strings.Cut(b.item.Token, ".")
+		if !ok {
+			t.Fatalf("token has no claims: %s", b.item.Token)
+		}
+		raw, err := base64.RawURLEncoding.DecodeString(body64)
+		mustf(t, err, "decode token")
+		if strings.Contains(string(raw), a.Gloss) || strings.Contains(string(raw), a.Text) {
+			t.Fatalf("token spells the answer: %s", raw)
 		}
 	}
 	if len(places) < 3 {

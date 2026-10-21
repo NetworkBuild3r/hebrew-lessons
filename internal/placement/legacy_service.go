@@ -231,7 +231,22 @@ func (s *Service) resumeSitting(ctx context.Context, run db.PlacementRun) error 
 
 func (s *Service) finishNow(ctx context.Context, runID int64) (NextResult, error) {
 	if _, err := s.Finish(ctx, runID); err != nil {
-		return NextResult{}, err
+		if !errors.Is(err, ErrNothingRated) {
+			return NextResult{}, err
+		}
+		// Next reaches here only when nothing is left to deal. A retake rates
+		// nothing because every word already has a card. Close that run as
+		// exhausted so it does not stay open, and do not seed cards. Finish
+		// itself still refuses: it does not choose a level.
+		run, gerr := s.store.GetPlacementRun(ctx, runID)
+		if gerr != nil {
+			return NextResult{}, gerr
+		}
+		if run.FinishedAt.IsZero() {
+			if err := s.store.FinishPlacement(ctx, runID, s.clock.Now(), -1, stopExhausted, `{"bands":[],"estimated_known_words":0}`); err != nil {
+				return NextResult{}, err
+			}
+		}
 	}
 	return NextResult{Done: true}, nil
 }
@@ -327,11 +342,17 @@ func (s *Service) Rate(ctx context.Context, runID int64, itemID string, rating i
 	}, card, log, runID, itemID, rating)
 }
 
+// ErrNothingRated means Finish was asked to score a run that has no ratings.
+// The run stays unfinished: no level, no result, and no cards are seeded.
+// The placement handler maps it to 409 Conflict.
+var ErrNothingRated = errors.New("placement: the run has no ratings to score")
+
 // Finish scores the run and marks it finished.
 // A second call returns the stored result and does not grade anything again.
 // SuggestedStartPosition is computed from the units and known words now.
 // The handler must check that the run belongs to the session user, and the
 // POST must pass the existing CSRF check.
+// A run with no ratings returns ErrNothingRated and writes nothing.
 func (s *Service) Finish(ctx context.Context, runID int64) (Result, error) {
 	if err := s.ready(); err != nil {
 		return Result{}, err
@@ -379,6 +400,9 @@ func (s *Service) Finish(ctx context.Context, runID int64) (Result, error) {
 		if tallies[band].Dealable > BandMax {
 			tallies[band].Dealable = BandMax
 		}
+	}
+	if len(answered) == 0 {
+		return Result{}, ErrNothingRated
 	}
 	result := Score(tallies)
 	now := s.clock.Now()
