@@ -348,6 +348,9 @@ func NewApp(cfg Config) (*App, error) {
 	sweepCtx, stop := context.WithCancel(context.Background())
 	a.stopSweep = stop
 	go sweepOAuth(sweepCtx, svc, store, cfg.Clock)
+	// One count of manifest clips that have no row yet. The check runs after
+	// NewApp returns, on the same cancel as the sweep, so Close stops it.
+	logMissingPlacementAudio(sweepCtx, store)
 	return a, nil
 }
 
