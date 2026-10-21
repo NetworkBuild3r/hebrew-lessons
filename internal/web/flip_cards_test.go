@@ -33,6 +33,9 @@ func TestCardMeta(t *testing.T) {
 	if got := views.CardMeta("", ""); got != "" {
 		t.Fatalf("CardMeta empty = %q", got)
 	}
+	if got := views.CardMeta("", "m"); got != "m" {
+		t.Fatalf("CardMeta gender only = %q", got)
+	}
 	if got := views.CardMeta("", "x"); got != "" {
 		t.Fatalf("CardMeta unknown gender = %q", got)
 	}
@@ -250,6 +253,12 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 	one := activityHTML(t, getAuthed(t, oneH, oneCookie, onePath))
 	if !strings.Contains(one, "<details class=\"wcard") || strings.Contains(one, "data-wcards-all") {
 		t.Fatalf("a single card should have no show-all control:\n%s", one)
+	}
+	if !strings.Contains(one, `class="wline"`) {
+		t.Fatalf("one flip word should share the flip line:\n%s", one)
+	}
+	if strings.Contains(one, "clip-rows") {
+		t.Fatalf("a flip word with no audio has clip rows:\n%s", one)
 	}
 
 	for _, c := range []struct {
@@ -529,6 +538,84 @@ func postLessonPlain(t *testing.T, h http.Handler, cookie *http.Cookie, path, ru
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
+}
+
+// TestFlipShellDefaults pins the shell and the show-all query.
+// An empty lang is the English shell. lang=he is the Hebrew shell.
+// Any other value stays English: Hebrew is opt-in. A Hebrew page whose
+// request omitted lang puts lang=he on the show-all link, and an English
+// page does not grow one.
+func TestFlipShellDefaults(t *testing.T) {
+	empty := lessonQueryFrom(httptest.NewRequest(http.MethodGet, "/lesson/1/0", nil), "")
+	if empty.meaningsHref != "/lesson/1/0?meanings=all" {
+		t.Fatalf("empty lang href = %q", empty.meaningsHref)
+	}
+	english := lessonQueryFrom(httptest.NewRequest(http.MethodGet, "/lesson/1/0", nil), "en")
+	if english.meaningsHref != "/lesson/1/0?meanings=all" {
+		t.Fatalf("english href = %q", english.meaningsHref)
+	}
+	hebrew := lessonQueryFrom(httptest.NewRequest(http.MethodGet, "/lesson/1/0", nil), "he")
+	if hebrew.meaningsHref != "/lesson/1/0?lang=he&meanings=all" {
+		t.Fatalf("hebrew href = %q", hebrew.meaningsHref)
+	}
+	other := lessonQueryFrom(httptest.NewRequest(http.MethodGet, "/lesson/1/0?lang=fr", nil), "en")
+	if other.meaningsHref != "/lesson/1/0?lang=fr&meanings=all" {
+		t.Fatalf("other href = %q", other.meaningsHref)
+	}
+
+	h, cookie, path, _ := flipLesson(t, units.Unit{
+		Title: "Shell", Position: 1,
+		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
+			{Type: units.ActivityStory, Text: flipHello + " " + flipMorning},
+		}}},
+	}, false)
+
+	plain := getAuthed(t, h, cookie, path)
+	if !strings.Contains(plain, `<html lang="en" dir="ltr"`) {
+		t.Fatal("empty lang is not the English shell")
+	}
+	plainHref := showAllHref(t, activityHTML(t, plain))
+	if strings.Contains(plainHref, "lang=") {
+		t.Fatalf("English show-all gained lang: %q", plainHref)
+	}
+
+	heBody := getAuthedCookies(t, h, path, cookie, &http.Cookie{Name: langCookieName, Value: "he"})
+	if !strings.Contains(heBody, `<html lang="he" dir="rtl"`) {
+		t.Fatal("a Hebrew choice is not the Hebrew shell")
+	}
+	heHref := showAllHref(t, activityHTML(t, heBody))
+	if !strings.Contains(heHref, "lang=he") {
+		t.Fatalf("Hebrew show-all dropped lang: %q", heHref)
+	}
+
+	optIn := getAuthed(t, h, cookie, path+"?lang=he")
+	if !strings.Contains(optIn, `<html lang="he" dir="rtl"`) {
+		t.Fatal("lang=he is not the Hebrew shell")
+	}
+
+	foreign := getAuthed(t, h, cookie, path+"?lang=fr")
+	if !strings.Contains(foreign, `<html lang="en" dir="ltr"`) {
+		t.Fatal("lang=fr is not the English shell")
+	}
+	foreignHref := showAllHref(t, activityHTML(t, foreign))
+	if !strings.Contains(foreignHref, "lang=fr") || strings.Contains(foreignHref, "lang=he") {
+		t.Fatalf("lang=fr href = %q", foreignHref)
+	}
+}
+
+func getAuthedCookies(t *testing.T, h http.Handler, path string, cookies ...*http.Cookie) string {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Host = "learn.example"
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET %s = %d\n%s", path, rec.Code, rec.Body.String())
+	}
+	return rec.Body.String()
 }
 
 func assertTeachShowAll(t *testing.T, body string) {

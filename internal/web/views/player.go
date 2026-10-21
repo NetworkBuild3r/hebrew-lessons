@@ -233,14 +233,13 @@ func CardMeta(pos, gender string) string {
 	if GenderLabel(gender) != "" {
 		g = gender
 	}
-	switch {
-	case label != "" && g != "":
+	if label != "" && g != "" {
 		return label + " · " + g
-	case label != "":
-		return label
-	default:
-		return g
 	}
+	if label != "" {
+		return label
+	}
+	return g
 }
 
 // orbClass is the lesson clip button. The hero is the line (56px). A word orb
