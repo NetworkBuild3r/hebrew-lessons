@@ -1,4 +1,4 @@
-// verified by Hebrew Tutor YYYY-MM-DD: pending
+// verified by Hebrew Tutor 2026-10-20
 //
 // Alefbet is reference data for the twenty-two Hebrew letters, the five
 // final forms, and the dagesh and shin/sin variants. It is not lesson
@@ -180,9 +180,18 @@ func LetterDageshNote(parts, stored []string) string {
 	return DageshNote(sides)
 }
 
-// DageshHardNote is the line after the with-dot sentence for בּ/ב, כּ/כ, and פּ/פ.
+// DageshHardNote is the word-initial line for ב, כ, and פ.
+// A single letter shows it with or without the dot. A pair shows it when
+// the two sides are that letter with and without the dot.
 func DageshHardNote(parts []string) string {
-	if len(parts) != 2 {
+	const note = "At the start of a word, ב, כ, and פ are almost always hard (b, k, p)."
+	if len(parts) == 1 {
+		if begadkefat(parts[0]) {
+			return note
+		}
+		return ""
+	}
+	if len(parts) != 2 || !begadkefat(parts[0]) || !begadkefat(parts[1]) {
 		return ""
 	}
 	a := stripDagesh(norm.NFC.String(parts[0]))
@@ -195,10 +204,14 @@ func DageshHardNote(parts []string) string {
 	if aDot == bDot {
 		return ""
 	}
-	switch a {
+	return note
+}
+
+func begadkefat(part string) bool {
+	switch stripDagesh(norm.NFC.String(part)) {
 	case "ב", "כ", "פ":
-		return "At the start of a word, ב, כ, and פ are almost always hard (b, k, p)."
+		return true
 	default:
-		return ""
+		return false
 	}
 }

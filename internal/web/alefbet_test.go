@@ -143,13 +143,18 @@ func TestAlefbetReference(t *testing.T) {
 		t.Fatal("a pair without a standard visual difference produced a cue")
 	}
 	hard := "At the start of a word, ב, כ, and פ are almost always hard (b, k, p)."
+	for _, letter := range []string{"ב", "כ", "פ", "ב\u05BC", "כ\u05BC", dot} {
+		if got := views.DageshHardNote([]string{letter}); got != hard {
+			t.Fatalf("single %q hard note = %q", letter, got)
+		}
+	}
 	for _, pair := range [][]string{{"ב\u05BC", "ב"}, {"כ\u05BC", "כ"}, {dot, "פ"}} {
 		if got := views.DageshHardNote(pair); got != hard {
 			t.Fatalf("hard note %q = %q", pair, got)
 		}
 	}
-	if views.DageshHardNote([]string{"ג", "פ"}) != "" || views.DageshHardNote([]string{"שׁ", "שׂ"}) != "" {
-		t.Fatal("a pair that is not ב כ פ with a dagesh produced the position line")
+	if views.DageshHardNote([]string{"ג"}) != "" || views.DageshHardNote([]string{"ג", "פ"}) != "" || views.DageshHardNote([]string{"שׁ", "שׂ"}) != "" {
+		t.Fatal("a letter that is not ב, כ, or פ produced the position line")
 	}
 }
 
@@ -181,6 +186,32 @@ func TestReviewLetterBackUsesAlefbet(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("back missing %q\n%s", want, body)
 		}
+	}
+	if strings.Contains(body, "almost always hard") {
+		t.Fatal("gimel back showed the bet/kaf/pe position line")
+	}
+}
+
+// TestReviewHardNoteOnBegadkefat renders the word-initial line on a single
+// ב, כ, or פ, with or without the dot, and keeps it off the front.
+func TestReviewHardNoteOnBegadkefat(t *testing.T) {
+	hard := "At the start of a word, ב, כ, and פ are almost always hard (b, k, p)."
+	letters := []string{"ב", "כ", "פ", "ב\u05BC", "כ\u05BC", "פ\u05BC"}
+	for i, letter := range letters {
+		t.Run(letter, func(t *testing.T) {
+			store, h, now := openApp(t)
+			learner := addLearner(t, store, "a@example.com", "sub-hard-"+string(rune('a'+i)), now)
+			seedDrill(t, store, learner.user.ID, "letter", letter, 0)
+			front := getLearner(t, h, learner, "/review")
+			if strings.Contains(front, "almost always hard") {
+				t.Fatalf("position line leaked onto the front\n%s", front)
+			}
+			shown := getReveal(t, h, learner, mustCardID(t, front))
+			body := shown.Body.String()
+			if shown.Code != 200 || !strings.Contains(body, hard) {
+				t.Fatalf("single %q back = %d\n%s", letter, shown.Code, body)
+			}
+		})
 	}
 }
 
