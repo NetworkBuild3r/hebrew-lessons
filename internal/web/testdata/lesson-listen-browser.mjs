@@ -77,17 +77,17 @@ await shot("ask");
 await page.locator(".choices .c-answer").first().click();
 await page.waitForSelector(".spotlight");
 await page.waitForTimeout(500);
-const w = await page.locator(".spotlight .wb__he").first().boundingBox();
+const w = await page.locator(".spotlight .wcard__he").first().boundingBox();
 const box = await page.locator(".spotlight").boundingBox();
-const play = await page.locator(".spotlight > .clip .orb").boundingBox();
-const wfs = await page.locator(".spotlight .wb__he").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-check("the word is big", wfs >= 44, wfs);
+const play = await page.locator(".spotlight .orb--hero").boundingBox();
+const wfs = await page.locator(".spotlight .wcard__he").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+check("the word is big", wfs >= 26, wfs);
 check("the play control is below the word", play && w && play.y >= w.y + w.height - 2, JSON.stringify({ play, w }));
 check("the play control is centered", play && box && Math.abs(center(play) - center(box)) <= 2, JSON.stringify({ play, box }));
-const words = await page.locator(".spotlight .word-blocks--spot").boundingBox();
+const words = await page.locator(".spotlight .wline").boundingBox();
 check("the words are centered", words && box && Math.abs(center(words) - center(box)) <= 4, JSON.stringify({ words, box }));
 const before = await plays();
-await page.locator(".spotlight > .clip .orb").click();
+await page.locator(".spotlight .orb--hero").click();
 check("the play control below the word plays", (await plays()) === before + 1, `${before} -> ${await plays()}`);
 await shot("answered");
 
@@ -96,14 +96,33 @@ await page.locator('button[name="answer"][value="continue"]').click();
 await page.waitForSelector(".choices .c-answer");
 await page.waitForSelector(".spotlight");
 await page.waitForTimeout(500);
-const rw = await page.locator(".spotlight .wb__he").first().boundingBox();
+const rw = await page.locator(".spotlight .wcard__he").first().boundingBox();
 const rbox = await page.locator(".spotlight").boundingBox();
-const rfs = await page.locator(".spotlight .wb__he").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+const rfs = await page.locator(".spotlight .wcard__he").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
 check("the recall word is the biggest Hebrew on a prompt", rfs >= 64, rfs);
 check("the recall word is centered", rw && rbox && Math.abs(center(rw) - center(rbox)) <= 4, JSON.stringify({ rw, rbox }));
-const rplay = await page.locator(".spotlight > .clip .orb").boundingBox();
+const rplay = await page.locator(".spotlight .orb").first().boundingBox();
 check("the recall play control is below the word", rplay && rw && rplay.y >= rw.y + rw.height - 2, JSON.stringify({ rplay, rw }));
 await shot("recall");
+
+// ---- The recall word is a card: tap it before answering and it shows how the word sounds, never what it means.
+await page.locator(".spotlight details.wcard summary").first().click();
+await page.waitForTimeout(400);
+const openBefore = await page.locator(".spotlight details.wcard[open]").count();
+const backBefore = (await page.locator(".spotlight .wcard__back").first().innerText()).trim();
+check("the recall card opens before answering", openBefore === 1, openBefore);
+check("the card shows the sound before answering", (await page.locator(".spotlight .wcard__sound").count()) === 1 && backBefore.length > 0, backBefore);
+check("the card does not give the meaning away", (await page.locator(".spotlight .wcard__gl").count()) === 0, backBefore);
+await shot("recall-open");
+
+// ---- Answer: the same card is still tappable and now shows the meaning.
+await page.locator(".choices .c-answer").first().click();
+await page.waitForSelector(".spotlight details.wcard");
+await page.waitForTimeout(500);
+await page.locator(".spotlight details.wcard summary").first().click();
+await page.waitForTimeout(400);
+check("the card reveals the meaning after answering", (await page.locator(".spotlight .wcard__gl").first().innerText()).trim().length > 0);
+await shot("recall-answered");
 
 await browser.close();
 console.log(JSON.stringify({ checks, errors }));

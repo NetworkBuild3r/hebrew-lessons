@@ -418,7 +418,7 @@ func checkRecallAsk(t *testing.T, ask string, step recallStep, target db.LexemeV
 		if !strings.Contains(head, block) {
 			t.Fatalf("one-word recall is not the v3 word block %s:\n%s", block, head)
 		}
-		if strings.Contains(head, `class="wb__tr"`) || strings.Contains(head, ">"+target.Translit+"<") {
+		if strings.Contains(head, `class="wb__tr"`) || strings.Contains(stripSound(head), ">"+target.Translit+"<") {
 			t.Fatalf("one-word transliteration is visible before the answer:\n%s", head)
 		}
 	}
@@ -474,12 +474,22 @@ func checkRecallReveal(t *testing.T, revealed string, step recallStep, target db
 	}
 }
 
+// v3AskWordBlock is the front of the card a one-word recall shows before the answer: the
+// pointed word, and no reading. The word is a card the learner can tap.
 func v3AskWordBlock(text string) string {
-	return `<span class="wb wb--card"><bdi class="wb__he" lang="he" dir="rtl">` + text + `</bdi> </span>`
+	return `<bdi class="wcard__he" lang="he" dir="rtl">` + text + `</bdi> </span>`
 }
 
+// stripSound removes the card's back before the answer, which is only how the word sounds.
+func stripSound(s string) string {
+	return regexp.MustCompile(`<span class="wcard__sound"[^>]*>[^<]*</span>`).ReplaceAllString(s, "")
+}
+
+// v3RevealWordBlock is the card after the answer: the word and its reading on the front, and
+// the meaning on the back.
 func v3RevealWordBlock(text, translit, gloss string) string {
-	return `<span class="wb wb--card"><bdi class="wb__he" lang="he" dir="rtl">` + text + `</bdi> <bdi class="wb__tr" lang="he-Latn" dir="ltr">` + translit + `</bdi> <bdi class="wb__gl" lang="en" dir="ltr">` + gloss + `</bdi></span>`
+	return `<bdi class="wcard__he" lang="he" dir="rtl">` + text + `</bdi> <bdi class="wcard__tr" lang="he-Latn" dir="ltr">` + translit + `</bdi></span></summary>` +
+		`<div class="wcard__face wcard__back" lang="en" dir="ltr"><bdi class="wcard__he-sm" lang="he" dir="rtl">` + text + `</bdi> <span class="wcard__gl">` + gloss + `</span>`
 }
 
 func markedWord(card string) string {
@@ -552,7 +562,7 @@ func TestOneWordRecallPromptUnchangedFromV3(t *testing.T) {
 		}
 	}
 	for _, gone := range []string{`class="wb__tr"`, `class="wb__gl"`, ">" + target.Translit + "<", ">" + target.Gloss + "<"} {
-		if strings.Contains(head, gone) {
+		if strings.Contains(stripSound(head), gone) {
 			t.Errorf("one-word prompt shows %q before the answer", gone)
 		}
 	}

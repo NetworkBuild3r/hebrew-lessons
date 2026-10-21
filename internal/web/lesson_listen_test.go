@@ -176,8 +176,8 @@ func TestListenPickGradesAndSpotlightsTheAnswer(t *testing.T) {
 	if strings.Contains(missed, `class="choices"`) {
 		t.Fatal("the answers are still offered after the step was answered")
 	}
-	_, words, ok := strings.Cut(missed, `class="spotlight"`)
-	if !ok || !strings.Contains(words, "word-blocks--spot") {
+	_, words, ok := strings.Cut(missed, `class="spotlight spotlight--cards"`)
+	if !ok || !strings.Contains(words, "wcard") {
 		t.Fatalf("the answered step has no spotlight:\n%s", missed)
 	}
 	for _, want := range []string{lsHello, lsMorning} {
@@ -195,8 +195,8 @@ func TestListenPickGradesAndSpotlightsTheAnswer(t *testing.T) {
 
 	// The next step is a recall: its Hebrew word is big and centered with the play control below.
 	recall := activityHTML(t, postLesson(t, fx.h, fx.cookie, path, runID, "continue", true, lessonCSRF).Body.String())
-	_, words, ok = strings.Cut(recall, `class="spotlight"`)
-	if !ok || !strings.Contains(words, lsHello) || !strings.Contains(words, "word-blocks--spot") {
+	_, words, ok = strings.Cut(recall, `class="spotlight spotlight--cards"`)
+	if !ok || !strings.Contains(words, lsHello) || !strings.Contains(words, "wcard") {
 		t.Fatalf("the recall prompt has no spotlight on its word:\n%s", recall)
 	}
 	if strings.Index(words, `id="line-clip"`) < strings.Index(words, lsHello) {

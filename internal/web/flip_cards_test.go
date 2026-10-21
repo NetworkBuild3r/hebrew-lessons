@@ -314,12 +314,20 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 		t.Helper()
 		hh, ck, p, _ := flipLesson(t, doc, false)
 		page := activityHTML(t, getAuthed(t, hh, ck, p))
-		if strings.Contains(page, "<details") || strings.Contains(page, "wcard") {
+		// A recall word is a card the learner can tap. Its back is only how the word sounds:
+		// the meaning is never in the markup before the answer.
+		if name != "recall" && (strings.Contains(page, "<details") || strings.Contains(page, "wcard")) {
 			t.Fatalf("%s rendered a flip card:\n%s", name, page)
 		}
+		if name == "recall" && strings.Contains(page, "wcard__gl") {
+			t.Fatalf("recall put the meaning on the card before grading:\n%s", page)
+		}
 		head := page
-		if i := strings.Index(page, `class="choices"`); i >= 0 {
-			head = page[:i]
+		if name == "recall" {
+			head = stripSound(page)
+		}
+		if i := strings.Index(head, `class="choices"`); i >= 0 {
+			head = head[:i]
 		}
 		for _, leak := range []string{gloss, translit, "wcard__gl", "wb__gl"} {
 			if leak != "" && strings.Contains(head, leak) {

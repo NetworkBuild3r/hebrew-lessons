@@ -45,7 +45,7 @@ templ ActivityBlock(a Activity) {
 				<p class="lede" lang="en">@E(a.Prompt)</p>
 			}
 			if flipCount(a) > 0 {
-				@flipHint()
+				@flipHint(a)
 			}
 			if a.Dialogue != nil && flipCount(a) >= 2 {
 				@showMeanings(a)
@@ -54,13 +54,13 @@ templ ActivityBlock(a Activity) {
 				@dialogueBlock(a.Dialogue)
 			}
 			if a.Spotlight && len(a.Words) > 0 {
-				<section class="spotlight">
-					<div class="word-blocks word-blocks--spot" dir="rtl">
+				<section class="spotlight spotlight--cards">
+					<div class="wline" dir="rtl">
 						for i, word := range a.Words {
 							@activityWord(word, "word-clip-"+Num(i), false)
 						}
 					</div>
-					if a.Audio != "" {
+					if a.Audio != "" && (len(a.Words) > 1 || a.Words[0].Audio == "") {
 						@clip("line-clip", a.Audio, a.AudioLabel, true)
 					}
 				</section>
@@ -118,10 +118,10 @@ templ ActivityBlock(a Activity) {
 				}
 			</form>
 			if hasClip(a) {
-				<script src="/static/js/clips.js" defer></script>
+				<script src={ Asset("/static/js/clips.js") } defer></script>
 			}
 			if flipCount(a) > 0 {
-				<script type="module" src="/static/js/wcards.js"></script>
+				<script type="module" src={ Asset("/static/js/wcards.js") }></script>
 			}
 		}
 	</div>
@@ -214,41 +214,50 @@ templ wordCard(w Word) {
 					<span class="wcard__new" lang="en">New</span>
 				}
 				<bdi class="wcard__he" lang="he" dir="rtl">{ w.Text }</bdi>
-				if w.Translit != "" {
+				if w.ShowTranslit && w.Translit != "" {
 					<bdi class="wcard__tr" lang="he-Latn" dir="ltr">{ w.Translit }</bdi>
 				}
 			</span>
 		</summary>
 		<div class="wcard__face wcard__back" lang="en" dir="ltr">
 			<bdi class="wcard__he-sm" lang="he" dir="rtl">{ w.Text }</bdi>
-			if meaning, note, lemma := SplitGloss(w.Gloss); meaning != "" {
-				<span class="wcard__gl">{ meaning }</span>
-				if note != "" || lemma != "" {
-					<span class="wcard__note">
-						if note != "" {
-							{ note }
-						}
-						if note != "" && lemma != "" {
-							{ " · " }
-						}
-						if lemma != "" {
-							<bdi lang="he" dir="rtl">{ lemma }</bdi>
-						}
-					</span>
+			if w.ShowGloss {
+				if meaning, note, lemma := SplitGloss(w.Gloss); meaning != "" {
+					<span class="wcard__gl">{ meaning }</span>
+					if note != "" || lemma != "" {
+						<span class="wcard__note">
+							if note != "" {
+								{ note }
+							}
+							if note != "" && lemma != "" {
+								{ " · " }
+							}
+							if lemma != "" {
+								<bdi lang="he" dir="rtl">{ lemma }</bdi>
+							}
+						</span>
+					}
 				}
-			}
-			if meta := CardMeta(w.POS, w.Gender); meta != "" {
-				<span class="wcard__pos">{ meta }</span>
+				if meta := CardMeta(w.POS, w.Gender); meta != "" {
+					<span class="wcard__pos">{ meta }</span>
+				}
+			} else if w.Translit != "" {
+				<span class="wcard__sound" lang="he-Latn" dir="ltr">{ w.Translit }</span>
+				<span class="wcard__pos">@E("how it sounds")</span>
 			}
 		</div>
 	</details>
 }
 
 // flipHint is the quiet line under a teach prompt.
-templ flipHint() {
+templ flipHint(a Activity) {
 	<p class="wprompt-hint" lang="en">
 		@Icon("flip", "")
-		<span>@E("Tap a word to see what it means.")</span>
+		if a.Asking {
+			<span>@E("Tap the word to hear how it sounds, then pick the meaning.")</span>
+		} else {
+			<span>@E("Tap a word to see what it means.")</span>
+		}
 	</p>
 }
 
@@ -328,7 +337,7 @@ templ dialogueBlock(d *Dialogue) {
 			}
 		</ol>
 	</div>
-	<script src="/static/js/dialogue.js" defer></script>
+	<script src={ Asset("/static/js/dialogue.js") } defer></script>
 }
 
 // wordClipRow is the no-JS play control for one word of a recall line or a

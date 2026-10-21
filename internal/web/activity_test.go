@@ -613,7 +613,7 @@ func TestActivityCSS(t *testing.T) {
 			t.Errorf("%s uses a feedback colour outside a feedback rule", r.Selector)
 		}
 	}
-	if !strings.Contains(string(mustRead(t, "views/layout.templ")), `href="/static/css/activity.css"`) {
+	if !strings.Contains(string(mustRead(t, "views/layout.templ")), `Asset("/static/css/activity.css")`) {
 		t.Error("the layout does not link activity.css")
 	}
 }

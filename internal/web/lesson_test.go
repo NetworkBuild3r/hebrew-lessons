@@ -246,7 +246,7 @@ func TestLessonPlayer(t *testing.T) {
 		t.Fatalf("continue = %d %s", story.Code, story.Body.String())
 	}
 	recall := story.Body.String()
-	if strings.Contains(recall, "<html") || strings.Contains(recall, "wb__gl") || strings.Contains(recall, "wb__tr") || strings.Contains(recall, "shalom") {
+	if strings.Contains(recall, "<html") || strings.Contains(recall, "wb__gl") || strings.Contains(recall, "wb__tr") || strings.Contains(recall, "wcard__gl") || strings.Contains(recall, "wcard__tr") {
 		t.Fatalf("recall prompt shows the answer:\n%s", recall)
 	}
 	if strings.Contains(recall, "data-target") || strings.Contains(recall, "This word") {
@@ -267,7 +267,7 @@ func TestLessonPlayer(t *testing.T) {
 
 	wrong := postLesson(t, h, brianCookie, link, runID, itoa(ids[morning]), true, "brian-csrf")
 	revealed := wrong.Body.String()
-	if wrong.Code != http.StatusOK || !strings.Contains(revealed, "Not quite") || !strings.Contains(revealed, "shalom") || !strings.Contains(revealed, "wb__gl") {
+	if wrong.Code != http.StatusOK || !strings.Contains(revealed, "Not quite") || !strings.Contains(revealed, "shalom") || !strings.Contains(revealed, "wcard__gl") {
 		t.Fatalf("wrong answer did not reveal the word: %d %s", wrong.Code, revealed)
 	}
 	done := postLesson(t, h, brianCookie, link, runID, "continue", true, "brian-csrf")
@@ -455,7 +455,7 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 
 	runID := runValue(t, listen)
 	revealed := activityHTML(t, postLesson(t, h, cookie, path, runID, itoa(ids[hello]), true, "brian-csrf").Body.String())
-	if !strings.Contains(revealed, hello) || !strings.Contains(revealed, morning) || !strings.Contains(revealed, "shalom") || !strings.Contains(revealed, "boker") || !strings.Contains(revealed, "wb__gl") {
+	if !strings.Contains(revealed, hello) || !strings.Contains(revealed, morning) || !strings.Contains(revealed, "shalom") || !strings.Contains(revealed, "boker") || !strings.Contains(revealed, "wcard__gl") {
 		t.Fatalf("listen_pick answer did not reveal the words:\n%s", revealed)
 	}
 
@@ -725,7 +725,7 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	}
 
 	alone := activityHTML(t, postLesson(t, h, cookie, path, runID, "continue", true, "brian-csrf").Body.String())
-	if !strings.Contains(alone, "What does this Hebrew mean?") || strings.Contains(alone, "What does <bdi") || strings.Contains(alone, "data-target") || strings.Contains(alone, `class="target"`) || strings.Contains(alone, ">gar<") {
+	if !strings.Contains(alone, "What does this Hebrew mean?") || strings.Contains(alone, "What does <bdi") || strings.Contains(alone, "data-target") || strings.Contains(alone, `class="target"`) || strings.Contains(stripSound(alone), ">gar<") {
 		t.Fatalf("single-word recall changed:\n%s", alone)
 	}
 	if !strings.Contains(alone, gar) || !strings.Contains(alone, ">lives<") || !strings.Contains(alone, `aria-label="Play `+gar+`"`) {

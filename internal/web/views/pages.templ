@@ -5,8 +5,8 @@ templ Review(p Page, c ReviewCard) {
 		<article class="review sheet">
 			<h1 class="review__h1" lang={ p.Lang }>{ p.ReviewHeading }</h1>
 			@ReviewBody(c)
-			<script src="/static/js/clips.js" defer></script>
-			<script src="/static/js/activity.js" defer></script>
+			<script src={ Asset("/static/js/clips.js") } defer></script>
+			<script src={ Asset("/static/js/activity.js") } defer></script>
 		</article>
 	}
 }
@@ -46,9 +46,9 @@ templ SignIn(p Page) {
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-			<script src="/static/js/theme.js"></script>
-			<link rel="stylesheet" href="/static/css/tokens.css"/>
-			<link rel="stylesheet" href="/static/css/base.css"/>
+			<script src={ Asset("/static/js/theme.js") }></script>
+			<link rel="stylesheet" href={ Asset("/static/css/tokens.css") }/>
+			<link rel="stylesheet" href={ Asset("/static/css/base.css") }/>
 			@brandHead()
 			<title>{ p.Title }</title>
 		</head>

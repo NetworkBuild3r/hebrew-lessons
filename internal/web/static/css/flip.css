@@ -237,7 +237,7 @@ html:not(.js) .wslot > .clip { display: none; }
   position: relative;
   z-index: 1;
 }
-.wline:has(.wslot:only-of-type) .wcard { min-inline-size: 12rem; max-inline-size: 18rem; }
+.wline:has(.wslot:only-of-type) .wcard { min-inline-size: 12rem; max-inline-size: min(100%, 24rem); }
 .wline:has(.wslot:only-of-type) .wcard__face { min-block-size: 10rem; padding: var(--space-5); gap: var(--space-2); }
 .wline:has(.wslot:only-of-type) .wcard__he { font-size: var(--fs-he-hero); }
 .wline:has(.wslot:only-of-type) .wcard__tr { font-size: 18px; }
@@ -251,3 +251,12 @@ html:not(.js) .wslot > .clip { display: none; }
 }
 .wcard__he-sm { order: 2; }
 .wcard__back .wcard__pos { order: 3; }
+/* A recall word is a card too. Its section is only a place for the card, so it has no frame of
+   its own. Before the answer the back is how the word sounds, set as big as the meaning is. */
+.spotlight--cards { background: none; border: 0; padding: 0; }
+.wcard__sound {
+  font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2rem);
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1.2;
+}

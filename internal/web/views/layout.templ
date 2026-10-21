@@ -10,17 +10,17 @@ templ Layout(p Page) {
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 			<meta name="csrf-token" content={ p.CSRF }/>
-			<script src="/static/js/theme.js"></script>
-			<link rel="stylesheet" href="/static/css/tokens.css"/>
-			<link rel="stylesheet" href="/static/css/base.css"/>
-			<link rel="stylesheet" href="/static/css/components.css"/>
+			<script src={ Asset("/static/js/theme.js") }></script>
+			<link rel="stylesheet" href={ Asset("/static/css/tokens.css") }/>
+			<link rel="stylesheet" href={ Asset("/static/css/base.css") }/>
+			<link rel="stylesheet" href={ Asset("/static/css/components.css") }/>
 			@brandHead()
-			<link rel="stylesheet" href="/static/css/motion.css"/>
-			<link rel="stylesheet" href="/static/css/activity.css"/>
-			<link rel="stylesheet" href="/static/css/flip.css"/>
-			<link rel="stylesheet" href="/static/css/shell.css"/>
-			<link rel="stylesheet" href="/static/css/placement.css"/>
-			<link rel="stylesheet" href="/static/css/progress.css"/>
+			<link rel="stylesheet" href={ Asset("/static/css/motion.css") }/>
+			<link rel="stylesheet" href={ Asset("/static/css/activity.css") }/>
+			<link rel="stylesheet" href={ Asset("/static/css/flip.css") }/>
+			<link rel="stylesheet" href={ Asset("/static/css/shell.css") }/>
+			<link rel="stylesheet" href={ Asset("/static/css/placement.css") }/>
+			<link rel="stylesheet" href={ Asset("/static/css/progress.css") }/>
 			<title>{ p.Title }</title>
 		</head>
 		<body hx-boost="true" hx-target="#app" hx-select="#app" hx-swap="outerHTML transition:true" hx-headers={ HXHeaders(p.CSRF) }>
@@ -51,9 +51,9 @@ templ Layout(p Page) {
 					</div>
 				</div>
 			</div>
-			<script src="/static/js/htmx.min.js"></script>
-			<script src="/static/js/shell.js" defer></script>
-			<script src="/static/js/motion.js" defer></script>
+			<script src={ Asset("/static/js/htmx.min.js") }></script>
+			<script src={ Asset("/static/js/shell.js") } defer></script>
+			<script src={ Asset("/static/js/motion.js") } defer></script>
 		</body>
 	</html>
 }
