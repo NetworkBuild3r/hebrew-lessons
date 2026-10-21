@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
@@ -55,6 +56,13 @@ func TestGenerateAudioUnit1ThenValidate(t *testing.T) {
 	if len(fixture.AudioNeeded) != 20 {
 		t.Fatalf("texts = %d", len(fixture.AudioNeeded))
 	}
+	// CallBudget is a wall clock for a live provider, copied when the app is built.
+	// This fake returns at once. The test checks that every unit-1 line is stored,
+	// and TestGenerateAudioCallStopsAtItsBudget covers the stop. A saturated -race
+	// shard can spend the 22s clock on the database and mark a later line failed.
+	prev := audio.CallBudget
+	audio.CallBudget = 2 * time.Minute
+	t.Cleanup(func() { audio.CallBudget = prev })
 	fake := &countingTTS{}
 	a := newTestApp(t, Config{
 		DataDir:      t.TempDir(),
@@ -78,6 +86,7 @@ func TestGenerateAudioUnit1ThenValidate(t *testing.T) {
 			TextNFC string `json:"textNfc"`
 			Status  string `json:"status"`
 			AudioID string `json:"audioId"`
+			Error   string `json:"error"`
 		} `json:"results"`
 	}
 	decodeStructured(t, made, &gen)
