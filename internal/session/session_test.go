@@ -1585,6 +1585,39 @@ func TestDrillStillRequeuesInAOneLexemePool(t *testing.T) {
 	}
 }
 
+// A letter step sits between two words. Skipping that step has to keep
+// scanning, or the second word is invisible and the miss is not put back.
+func TestMissRequeuesWhenADrillSitsBetweenTwoWords(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	ctx := context.Background()
+	userID := mustUser(t, store)
+	reviewed := clk.Now().Add(-48 * time.Hour)
+	first := addCard(t, store, userID, "רִאשׁוֹן", fsrs.SkillRead, clk.Now().Add(-2*time.Hour), 0, int(fsrs.Good), reviewed, false)
+	addCard(t, store, userID, "שֵׁנִי", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+	rev := fsrs.New(store, clk)
+	for i := 0; i < MinMissesForDrill; i++ {
+		if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, "ב/כ", 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sess := mustBuild(t, svc, userID)
+	card, ok := sess.Next()
+	if !ok || card.CardID != first {
+		t.Fatalf("first = %+v ok=%v, want %d", card, ok, first)
+	}
+	revealAndRecord(t, sess, ctx, first, fsrs.Again)
+	for n := 0; n < DrillSteps+4; n++ {
+		next, ok := sess.Next()
+		if !ok {
+			t.Fatal("the miss was not put back")
+		}
+		if next.CardID == first {
+			return
+		}
+	}
+	t.Fatal("the miss was not put back")
+}
+
 type againMeasure struct {
 	between     int
 	appearances int
