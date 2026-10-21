@@ -664,6 +664,12 @@ func TestPlacementHistoryListsEachRunWithItsLevels(t *testing.T) {
 	if !strings.Contains(first, "Sep 4") || !strings.Contains(first, "First placement") || !strings.Contains(first, "Listening level 3, about 142 words") || !strings.Contains(first, "Reading level 2, about 90 words") {
 		t.Errorf("first placement row:\n%s", first)
 	}
+	if got := placementTitle(t, check); got != "Oct 2 · Check-in" {
+		t.Errorf("check-in title %q", got)
+	}
+	if got := placementTitle(t, first); got != "Sep 4 · First placement" {
+		t.Errorf("first placement title %q", got)
+	}
 }
 
 func TestPlacementHistoryEmptyStateSaysWhatToDo(t *testing.T) {
@@ -854,17 +860,48 @@ func TestPlacementUnfinishedLevelSaysNotFinished(t *testing.T) {
 		return ""
 	}
 	unfinished := row("Oct 19")
-	if !strings.Contains(unfinished, "Not finished") || strings.Contains(unfinished, "Level") {
-		t.Fatalf("unfinished placement:\n%s", unfinished)
+	if got := placementTitle(t, unfinished); got != "Oct 19 · Placement · Not finished" {
+		t.Fatalf("unfinished placement title %q", got)
 	}
 	normal := row("Sep 3")
-	if !strings.Contains(normal, "Level "+strconv.Itoa(normalLevel)) || strings.Contains(normal, "Not finished") {
-		t.Fatalf("finished placement:\n%s", normal)
+	if got := placementTitle(t, normal); got != "Sep 3 · Placement · Level "+strconv.Itoa(normalLevel) {
+		t.Fatalf("finished placement title %q", got)
 	}
 	zero := row("Aug 2")
-	if !strings.Contains(zero, "Level 0") || strings.Contains(zero, "Not finished") {
-		t.Fatalf("level 0 placement:\n%s", zero)
+	if got := placementTitle(t, zero); got != "Aug 2 · Placement · Level 0" {
+		t.Fatalf("level 0 placement title %q", got)
 	}
+}
+
+// placementTitle is the visible title of one history row, with the tags removed.
+func placementTitle(t *testing.T, item string) string {
+	t.Helper()
+	const open = `<p class="pplace__title">`
+	i := strings.Index(item, open)
+	if i < 0 {
+		t.Fatalf("no placement title:\n%s", item)
+	}
+	rest := item[i+len(open):]
+	j := strings.Index(rest, "</p>")
+	if j < 0 {
+		t.Fatalf("placement title is not closed:\n%s", item)
+	}
+	inner := rest[:j]
+	var b strings.Builder
+	for {
+		start := strings.IndexByte(inner, '<')
+		if start < 0 {
+			b.WriteString(inner)
+			break
+		}
+		b.WriteString(inner[:start])
+		end := strings.IndexByte(inner[start:], '>')
+		if end < 0 {
+			t.Fatalf("unclosed tag in placement title:\n%s", item)
+		}
+		inner = inner[start+end+1:]
+	}
+	return b.String()
 }
 
 func insertPlacementLevel(t *testing.T, store *db.Store, userID int64, at time.Time, level int) {

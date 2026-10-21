@@ -265,10 +265,10 @@ templ placementCard2(v ProgressView) {
 					<li class="pplace__item">
 						<p class="pplace__title">
 							@E(r.Date)
-							<span aria-hidden="true"> · </span>
+							<span aria-hidden="true">{ " · " }</span>
 							@E(r.Kind)
 							if r.Level != "" {
-								<span aria-hidden="true"> · </span>
+								<span aria-hidden="true">{ " · " }</span>
 								@E(r.Level)
 							}
 						</p>
