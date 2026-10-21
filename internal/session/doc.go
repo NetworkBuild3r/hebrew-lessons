@@ -44,7 +44,8 @@
 //	(TargetSuccess - StruggleSuccess) / (KnownSuccess - StruggleSuccess)
 //
 // AccuracyShareShift (0.15) is how far the known-card share moves outside
-// that band. MaxStruggleRun is 2. RequeueGap is 3. StruggleLapses is 2.
+// that band. MaxStruggleRun is 2. RequeueGap is 3, and a sitting's miss
+// gap is 3, 4, or 5. StruggleLapses is 2.
 // ConfusionWindow is 7 days, the same span StruggleStats counts.
 //
 // # Algorithm
@@ -81,8 +82,10 @@
 // and struggle counts stay as planned.
 //
 // A due read or recall card with no review is a new card. It does not take
-// a known slot, a struggle slot, or a drill step. New cards are appended
-// after the woven queue. The allowance counts sessionSize as the reviewed
+// a known slot, a struggle slot, or a drill step. New cards keep the order
+// from the intro lesson and are seeded through the woven queue, so they are
+// not a block at the end. When the woven queue is not empty, one of its
+// cards stands after the new cards. The allowance counts sessionSize as the reviewed
 // cards in the planned queue plus the new cards. Drill steps are not part
 // of that count. With no reviewed cards, the allowance is MaxNewPerSession.
 // With reviews due, it is min(MaxNewPerSession, max(MinNewPerSession,
@@ -93,6 +96,12 @@
 // intro lesson sorts after every card that has one. A card with no frequency
 // rank sorts after every card that has one. The lexicon does not store a
 // rank, so ListStudyCards leaves that key unset.
+//
+// A pass then walks the queue. Two consecutive study visits that share a
+// lexeme are split when a later card can take the second visit's seat
+// without sitting beside that lexeme and without a struggle run longer
+// than MaxStruggleRun. A pair with no such seat stays. Drills are not
+// lexeme visits.
 //
 // # Activities and skills (INIT-015/SPEC-015)
 //
@@ -130,8 +139,10 @@
 // activity flashcard. A grade is only accepted after Reveal on this serve, so
 // the review_log row is peeked. A grade with no Reveal
 // returns ErrNotRevealed, writes nothing, and leaves the serve in place.
-// Again inserts that same card
-// RequeueGap places after the cursor, at most once. The inserted visit does
-// not take a second SessionCap slot. When fewer than RequeueGap cards remain,
-// the miss is placed at the end of the queue.
+// Again inserts that same card once. The gap is 3, 4, or 5 other visits,
+// chosen from the sitting seed (RequeueGap plus the seed mixed modulo 3).
+// The inserted visit does not take a second SessionCap slot. When fewer
+// than that many cards remain, the miss is placed at the end of the queue.
+// A queue whose study visits are all one lexeme is not requeued. The
+// session ends instead of serving that word on the next Continue.
 package session

@@ -283,33 +283,6 @@ func pattern(cards []CardRef) string {
 	return string(b)
 }
 
-func struggleRun(cards []CardRef) int {
-	run := 0
-	for i, card := range cards {
-		if !card.Struggling {
-			run = 0
-			continue
-		}
-		run++
-		if run > MaxStruggleRun && knownLater(cards, i) {
-			return i
-		}
-	}
-	return -1
-}
-
-func knownLater(cards []CardRef, i int) bool {
-	for _, card := range cards[i+1:] {
-		if card.New || card.Kind == KindLetter || card.Kind == KindPattern {
-			continue
-		}
-		if !card.Struggling {
-			return true
-		}
-	}
-	return false
-}
-
 func TestNewCardsDoNotChangeThePlan(t *testing.T) {
 	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	var cands []Candidate
@@ -347,8 +320,167 @@ func TestNewCardsDoNotChangeThePlan(t *testing.T) {
 	if letters != 1 {
 		t.Fatalf("letters = %d, want the one drill step", letters)
 	}
-	if got[len(got)-1].CardID != 204 || !got[len(got)-1].New {
-		t.Fatalf("tail = %+v, want the fifth new card", got[len(got)-1])
+	if newCardsAreSuffix(got) {
+		t.Fatalf("new cards are a suffix: %v", idsOf(got))
+	}
+	saw := false
+	for _, card := range got {
+		if card.CardID == 204 && card.New {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Fatal("the fifth new card was dropped")
+	}
+}
+
+func TestSeparateLexemes(t *testing.T) {
+	pair := []CardRef{
+		{CardID: 1, LexemeID: 10, Kind: fsrs.SkillRead},
+		{CardID: 2, LexemeID: 10, Kind: fsrs.SkillRecall},
+		{CardID: 3, LexemeID: 20, Kind: fsrs.SkillRead},
+		{CardID: 4, LexemeID: 20, Kind: fsrs.SkillRecall},
+	}
+	got := separateLexemes(pair)
+	if !sameIDs(idsOf(got), []int64{1, 3, 2, 4}) {
+		t.Fatalf("separated = %v, want 1 3 2 4", idsOf(got))
+	}
+	if i, id := adjacentLexemeAt(got); i >= 0 {
+		t.Fatalf("lexeme %d still adjacent at %d", id, i)
+	}
+	// Two visits and no third card: no other arrangement.
+	stuck := separateLexemes([]CardRef{
+		{CardID: 1, LexemeID: 7, Kind: fsrs.SkillRead},
+		{CardID: 2, LexemeID: 7, Kind: fsrs.SkillRecall},
+	})
+	if !sameIDs(idsOf(stuck), []int64{1, 2}) {
+		t.Fatalf("unavoidable pair = %v", idsOf(stuck))
+	}
+	// A drill is not a lexeme visit, and a unique queue is left alone.
+	left := separateLexemes([]CardRef{
+		{CardID: 1, LexemeID: 1, Kind: fsrs.SkillRead},
+		{CardID: -1, LexemeID: 1, Kind: KindLetter, Key: "ב/כ"},
+		{CardID: 2, LexemeID: 2, Kind: fsrs.SkillRead},
+	})
+	if !sameIDs(idsOf(left), []int64{1, -1, 2}) {
+		t.Fatalf("drills moved: %v", idsOf(left))
+	}
+	// The nearest later seat would make a struggle run of three while a known
+	// card is still waiting. The pass takes a later seat that keeps the cap.
+	struggle := []CardRef{
+		{CardID: 1, LexemeID: 10, Kind: fsrs.SkillRead, Struggling: true},
+		{CardID: 2, LexemeID: 10, Kind: fsrs.SkillRead, Struggling: true},
+		{CardID: 3, LexemeID: 20, Kind: fsrs.SkillRead},
+		{CardID: 4, LexemeID: 30, Kind: fsrs.SkillRead, Struggling: true},
+		{CardID: 5, LexemeID: 40, Kind: fsrs.SkillRead, Struggling: true},
+		{CardID: 6, LexemeID: 50, Kind: fsrs.SkillRead},
+	}
+	split := separateLexemes(struggle)
+	if struggleRun(split) >= 0 {
+		t.Fatalf("struggle run after split: %v", idsOf(split))
+	}
+	if i, id := adjacentLexemeAt(split); i >= 0 {
+		t.Fatalf("lexeme %d still adjacent at %d: %v", id, i, idsOf(split))
+	}
+	if !sameIDs(idsOf(split), []int64{1, 3, 4, 5, 6, 2}) {
+		t.Fatalf("split = %v, want the seat that keeps the run", idsOf(split))
+	}
+	// The nearest later seat puts the card beside another visit of its own
+	// lexeme. That seat is refused, and no later seat is legal, so the queue
+	// stays. Lexemes 10, 10, 20, 10.
+	blocked := separateLexemes([]CardRef{
+		{CardID: 1, LexemeID: 10, Kind: fsrs.SkillRead},
+		{CardID: 2, LexemeID: 10, Kind: fsrs.SkillRecall},
+		{CardID: 3, LexemeID: 20, Kind: fsrs.SkillRead},
+		{CardID: 4, LexemeID: 10, Kind: fsrs.SkillRecall},
+	})
+	if !sameIDs(idsOf(blocked), []int64{1, 2, 3, 4}) {
+		t.Fatalf("right neighbor blocked = %v, want the original queue", idsOf(blocked))
+	}
+	// Moving the second visit one seat leaves the first and the third, which
+	// are the same lexeme, in the gap. The only legal seat is the one that
+	// keeps that gap apart. Lexemes 10, 10, 10, 20.
+	gap := separateLexemes([]CardRef{
+		{CardID: 1, LexemeID: 10, Kind: fsrs.SkillRead},
+		{CardID: 2, LexemeID: 10, Kind: fsrs.SkillRecall},
+		{CardID: 3, LexemeID: 10, Kind: fsrs.SkillRead},
+		{CardID: 4, LexemeID: 20, Kind: fsrs.SkillRecall},
+	})
+	if !sameIDs(idsOf(gap), []int64{1, 2, 4, 3}) {
+		t.Fatalf("gap = %v, want 1 2 4 3", idsOf(gap))
+	}
+	// The first legal seat is not the last word. The pass has to look again
+	// at the pair that seat left behind, which is struggling cards 3 and 4.
+	// A known card is still waiting, so the struggle cap sends card 4 one
+	// seat further. Lexemes 10, 10, 20, 20, 30.
+	again := separateLexemes([]CardRef{
+		{CardID: 1, LexemeID: 10, Kind: fsrs.SkillRead},
+		{CardID: 2, LexemeID: 10, Kind: fsrs.SkillRead, Struggling: true},
+		{CardID: 3, LexemeID: 20, Kind: fsrs.SkillRead, Struggling: true},
+		{CardID: 4, LexemeID: 20, Kind: fsrs.SkillRead, Struggling: true},
+		{CardID: 5, LexemeID: 30, Kind: fsrs.SkillRead},
+	})
+	if !sameIDs(idsOf(again), []int64{1, 3, 5, 4, 2}) {
+		t.Fatalf("recheck = %v, want 1 3 5 4 2", idsOf(again))
+	}
+	// Seat 3 sits beside the following A, and seat 4 sits beside the A
+	// before it. The pair splits only at the end. Lexemes B, A, A, C, A, D.
+	past := separateLexemes([]CardRef{
+		{CardID: 1, LexemeID: 2, Kind: fsrs.SkillRead},
+		{CardID: 2, LexemeID: 1, Kind: fsrs.SkillRead},
+		{CardID: 3, LexemeID: 1, Kind: fsrs.SkillRecall},
+		{CardID: 4, LexemeID: 3, Kind: fsrs.SkillRead},
+		{CardID: 5, LexemeID: 1, Kind: fsrs.SkillRead},
+		{CardID: 6, LexemeID: 4, Kind: fsrs.SkillRead},
+	})
+	if !sameIDs(idsOf(past), []int64{1, 2, 4, 5, 6, 3}) {
+		t.Fatalf("past a rejected seat = %v, want B A C A D A", idsOf(past))
+	}
+}
+
+func TestStruggleRunTreatsNewAndDrillsAsBreaks(t *testing.T) {
+	struggling := func(id int64) CardRef {
+		return CardRef{CardID: id, LexemeID: id, Kind: fsrs.SkillRead, Struggling: true}
+	}
+	cases := []struct {
+		name string
+		tail []CardRef
+		want int
+	}{
+		{name: "new", tail: []CardRef{{CardID: 4, LexemeID: 4, Kind: fsrs.SkillRead, New: true}}, want: -1},
+		{name: "letter", tail: []CardRef{{CardID: -1, Kind: KindLetter, Key: "ב/כ"}}, want: -1},
+		{name: "pattern", tail: []CardRef{{CardID: -2, Kind: KindPattern, Key: "gender"}}, want: -1},
+		{name: "known", tail: []CardRef{{CardID: 4, LexemeID: 4, Kind: fsrs.SkillRead}}, want: 2},
+		// A known card after a new card is still waiting. Skipping the new
+		// card has to keep looking.
+		{name: "new then known", tail: []CardRef{
+			{CardID: 4, LexemeID: 4, Kind: fsrs.SkillRead, New: true},
+			{CardID: 5, LexemeID: 5, Kind: fsrs.SkillRead},
+		}, want: 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cards := []CardRef{struggling(1), struggling(2), struggling(3)}
+			cards = append(cards, tc.tail...)
+			if got := struggleRun(cards); got != tc.want {
+				t.Fatalf("struggleRun = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestKnownLaterStartsAfterTheIndex(t *testing.T) {
+	cards := []CardRef{
+		{CardID: 1, Kind: fsrs.SkillRead},
+		{CardID: 2, Kind: fsrs.SkillRead, Struggling: true},
+		{CardID: 3, Kind: fsrs.SkillRead, Struggling: true},
+	}
+	if knownLater(cards, 1) {
+		t.Fatal("a known card before the index is not later")
+	}
+	cards = append(cards, CardRef{CardID: 4, Kind: fsrs.SkillRead})
+	if !knownLater(cards, 1) {
+		t.Fatal("a known card after the index is later")
 	}
 }
 

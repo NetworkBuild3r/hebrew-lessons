@@ -119,6 +119,9 @@ func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.
 		srv.useActivityKey(key)
 		if opts.study != nil {
 			srv.study = opts.study
+			// The injected service carries the test seed. Keep it for every
+			// sitting so a reload and a rebuilt queue stay on that seed.
+			srv.fixedReviewSeed = true
 		}
 	}
 	srv.audioDir = opts.AudioDir
