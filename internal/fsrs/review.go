@@ -149,7 +149,6 @@ func (r *Review) GradeWithChoice(ctx context.Context, cardID int64, rating Ratin
 		return err
 	}
 	// Elapsed time is this answer clock minus the card's last review.
-	// The step's nominal due time is not the review instant.
 	now := r.clock.Now()
 	info := r.sched.Next(prev, now, gofsrs.Rating(rating))
 	state, err := stateName(info.Card.State)
