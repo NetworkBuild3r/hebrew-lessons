@@ -9,6 +9,7 @@
 --   ALTER TABLE placement_runs DROP COLUMN words_known;
 --   ALTER TABLE placement_runs DROP COLUMN start_unit;
 --   ALTER TABLE users DROP COLUMN onboarded_at;
+--   DELETE FROM schema_migrations WHERE version = 14;
 
 -- UTC RFC3339 time the learner finished a placement for the first time. Null until then.
 ALTER TABLE users ADD COLUMN onboarded_at TEXT;

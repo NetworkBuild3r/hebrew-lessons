@@ -111,21 +111,32 @@ func TestRetiringAnOpenV2RunDoesNotOnboard(t *testing.T) {
 	if _, err := store.InsertPlacementRun(ctx, user, when.Add(-time.Hour), 6); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.Start(ctx, user); err != nil {
+	before, err := store.EnsureOnboarded(ctx, user)
+	if err != nil || before {
+		t.Fatalf("open v2 run EnsureOnboarded = %v %v, want false", before, err)
+	}
+	runID, err := e.Start(ctx, user)
+	if err != nil {
 		t.Fatal(err)
+	}
+	// The new v3 run is left open with no answers. That is the abandon.
+	if n := countRows(t, store, `SELECT COUNT(*) FROM placement_items WHERE run_id = ? AND outcome IS NOT NULL`, runID); n != 0 {
+		t.Fatalf("abandoned v3 run has %d answers", n)
+	}
+	after, err := store.EnsureOnboarded(ctx, user)
+	if err != nil || after {
+		t.Fatalf("after Start and abandon EnsureOnboarded = %v %v, want false", after, err)
 	}
 	u, err := store.UserByEmail(ctx, "retire@example.com")
 	if err != nil || u.OnboardedAt != nil {
 		t.Fatalf("retiring the v2 run set onboarded_at %+v %v", u.OnboardedAt, err)
 	}
-	runs, err := store.PlacementHistory(ctx, user, 0)
-	if err != nil {
-		t.Fatal(err)
+	if n, err := store.PlacementHistoryCount(ctx, user); err != nil || n != 0 {
+		t.Fatalf("history count %d %v, want 0", n, err)
 	}
-	for _, r := range runs {
-		if r.WordsKnown != 0 || r.StartUnit != 0 {
-			t.Fatalf("retired run was snapshotted: %+v", r)
-		}
+	runs, err := store.PlacementHistory(ctx, user, 0)
+	if err != nil || len(runs) != 0 {
+		t.Fatalf("history %+v %v, want none", runs, err)
 	}
 }
 

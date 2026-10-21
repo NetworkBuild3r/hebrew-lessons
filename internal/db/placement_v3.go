@@ -293,8 +293,9 @@ func (s *Store) ReleasePlacementItem(ctx context.Context, runID int64, seq int) 
 
 // LatestFinishedPlacementV3 returns the learner's newest finished v3 run, an initial one or a recheck,
 // among the runs with an id below beforeRunID. A beforeRunID of 0 means every run.
-// ok is false when there is none. Runs that are unfinished and v2 runs are not considered.
-// A learner has one open run at a time, so id order is also finish order.
+// ok is false when there is none. Runs that are unfinished, v2 runs, and a close with no
+// rating and no answered item are not considered. A learner has one open run at a time,
+// so id order is also finish order.
 func (s *Store) LatestFinishedPlacementV3(ctx context.Context, userID, beforeRunID int64) (PlacementRun, PlacementV3Run, bool, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -305,6 +306,7 @@ func (s *Store) LatestFinishedPlacementV3(ctx context.Context, userID, beforeRun
 		FROM placement_runs AS r
 		JOIN placement_v3_runs AS v ON v.run_id = r.id
 		WHERE r.user_id = ? AND r.finished_at IS NOT NULL AND (? = 0 OR r.id < ?)
+		  AND (`+placementScoredSQL("r")+`)
 		ORDER BY r.id DESC
 		LIMIT 1`, userID, beforeRunID, beforeRunID).Scan)
 	if errors.Is(err, sql.ErrNoRows) {

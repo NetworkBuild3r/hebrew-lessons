@@ -174,7 +174,10 @@ func (s *Store) SetOnboarded(ctx context.Context, userID int64, at time.Time) er
 	return nil
 }
 
-// IsOnboarded reports whether this learner should skip the first-visit gate.
+// EnsureOnboarded reports whether this learner should skip the first-visit gate.
+// It writes onboarded_at when the learner is already past the gate and the
+// column is still null.
+//
 // It is true when onboarded_at is set, when a placement run finished with at
 // least one rating or answered item, or when HasLessonAttempt would be true.
 // An abandoned placement does not count, and neither does a close that wrote
@@ -183,65 +186,79 @@ func (s *Store) SetOnboarded(ctx context.Context, userID int64, at time.Time) er
 // started_at, and the first non-placement attempt. When none of those times
 // exist, the store clock is stored instead. COALESCE keeps a time that is
 // already stored.
-func (s *Store) IsOnboarded(ctx context.Context, userID int64) (bool, error) {
+//
+// The onboarded_at check is a read. When the column is already set, this
+// returns true and does not begin a transaction. That is what makes
+// SetOnboarded on its own ("Start from the basics") count.
+//
+// A missing user returns false, nil. There is no UserByID. UserByEmail and
+// SetOnboarded return ErrNotFound for a missing row, and UserExists returns
+// false, nil. This method is a predicate, same as UserExists, so a missing id
+// is not onboarded and is not an error.
+func (s *Store) EnsureOnboarded(ctx context.Context, userID int64) (bool, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return false, err
 	}
-	tx, err := conn.BeginTx(ctx, nil)
-	if err != nil {
-		return false, fmt.Errorf("db: onboarded: %w", err)
-	}
-	defer tx.Rollback()
-
 	var onboarded sql.NullString
-	var yes bool
-	err = tx.QueryRowContext(ctx, `
-		SELECT onboarded_at,
-			onboarded_at IS NOT NULL
-			OR EXISTS (
-				SELECT 1 FROM placement_runs AS r
-				WHERE r.user_id = ? AND r.finished_at IS NOT NULL
-				  AND (`+placementScoredSQL("r")+`)
-			)
-			OR EXISTS (SELECT 1 FROM lesson_runs WHERE user_id = ?)
-			OR EXISTS (SELECT 1 FROM attempts WHERE user_id = ? AND source <> 'placement')
-		FROM users WHERE id = ?`, userID, userID, userID, userID).Scan(&onboarded, &yes)
+	err = conn.QueryRowContext(ctx, `SELECT onboarded_at FROM users WHERE id = ?`, userID).Scan(&onboarded)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, fmt.Errorf("db: onboarded: %w", err)
 	}
+	// This is the onboarded_at IS NOT NULL leg. It does not take the write lock.
+	if onboarded.Valid {
+		return true, nil
+	}
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("db: onboarded: %w", err)
+	}
+	defer tx.Rollback()
+
+	var yes bool
+	err = tx.QueryRowContext(ctx, `
+		SELECT EXISTS (
+				SELECT 1 FROM placement_runs AS r
+				WHERE r.user_id = ? AND r.finished_at IS NOT NULL
+				  AND (`+placementScoredSQL("r")+`)
+			)
+			OR EXISTS (SELECT 1 FROM lesson_runs WHERE user_id = ?)
+			OR EXISTS (SELECT 1 FROM attempts WHERE user_id = ? AND source <> 'placement')
+		`, userID, userID, userID).Scan(&yes)
+	if err != nil {
+		return false, fmt.Errorf("db: onboarded: %w", err)
+	}
 	if !yes {
 		return false, nil
 	}
-	if !onboarded.Valid {
-		var earliest sql.NullString
-		err = tx.QueryRowContext(ctx, `
-			SELECT MIN(t) FROM (
-				SELECT MIN(finished_at) AS t FROM placement_runs AS r
-				WHERE r.user_id = ? AND r.finished_at IS NOT NULL
-				  AND (`+placementScoredSQL("r")+`)
-				UNION ALL
-				SELECT MIN(started_at) FROM lesson_runs WHERE user_id = ?
-				UNION ALL
-				SELECT MIN(created_at) FROM attempts WHERE user_id = ? AND source <> 'placement'
-			)`, userID, userID, userID).Scan(&earliest)
-		if err != nil {
-			return false, fmt.Errorf("db: onboarded: %w", err)
+	var earliest sql.NullString
+	err = tx.QueryRowContext(ctx, `
+		SELECT MIN(t) FROM (
+			SELECT MIN(finished_at) AS t FROM placement_runs AS r
+			WHERE r.user_id = ? AND r.finished_at IS NOT NULL
+			  AND (`+placementScoredSQL("r")+`)
+			UNION ALL
+			SELECT MIN(started_at) FROM lesson_runs WHERE user_id = ?
+			UNION ALL
+			SELECT MIN(created_at) FROM attempts WHERE user_id = ? AND source <> 'placement'
+		)`, userID, userID, userID).Scan(&earliest)
+	if err != nil {
+		return false, fmt.Errorf("db: onboarded: %w", err)
+	}
+	at := earliest.String
+	if !earliest.Valid || at == "" {
+		now := time.Now()
+		if s.clock != nil {
+			now = s.clock.Now()
 		}
-		at := earliest.String
-		if !earliest.Valid || at == "" {
-			now := time.Now()
-			if s.clock != nil {
-				now = s.clock.Now()
-			}
-			at = FormatTime(now)
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE users SET onboarded_at = COALESCE(onboarded_at, ?) WHERE id = ?`, at, userID); err != nil {
-			return false, fmt.Errorf("db: onboarded: %w", err)
-		}
+		at = FormatTime(now)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET onboarded_at = COALESCE(onboarded_at, ?) WHERE id = ?`, at, userID); err != nil {
+		return false, fmt.Errorf("db: onboarded: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("db: onboarded: %w", err)

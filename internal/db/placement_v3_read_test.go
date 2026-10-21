@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"testing"
 	"time"
@@ -154,6 +155,117 @@ func claimItem(t *testing.T, s *Store, runID int64, seq int, part, skill string,
 	ok, err := s.ClaimPlacementItem(ctx, runID, seq, outcome, "", lexemeID, at, 0)
 	if err != nil || !ok {
 		t.Fatalf("claim %s: ok=%v err=%v", itemID, ok, err)
+	}
+}
+
+// A fault during the finish rolls the snapshot and onboarded_at back together.
+// A retry after the fault is gone writes finished_at, start_unit, words_known,
+// and onboarded_at.
+func TestFinishPlacementRollsBackTheSnapshotAndOnboardedAt(t *testing.T) {
+	when := time.Date(2026, 10, 6, 9, 0, 0, 0, time.UTC)
+	s := openStore(t, fixedClock{when})
+	ctx := context.Background()
+	user := insertUser(t, s, "atomic@example.com", "sub-atomic", "learner")
+	insertUnit(t, s, "published")
+	runID, err := s.StartPlacementV3(ctx, user, when, 4, RunInitial, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimItem(t, s, runID, 1, PartListening, "listen", 1, "w-atomic", "right", mustLexemeText(t, s, "אֶחָד"), when)
+
+	mustExec(t, s, `CREATE TRIGGER abort_onboard BEFORE UPDATE ON users BEGIN SELECT RAISE(ABORT, 'injected'); END`)
+	if err := s.FinishPlacement(ctx, runID, when.Add(time.Minute), 2, "", `{"bands":[{"band":0,"good":1}]}`); err == nil {
+		t.Fatal("users update fault was ignored")
+	}
+	assertFinishUnset(t, s, user, runID)
+	mustExec(t, s, `DROP TRIGGER abort_onboard`)
+
+	mustExec(t, s, `CREATE TRIGGER abort_snapshot BEFORE UPDATE ON placement_runs WHEN NEW.words_known IS NOT NULL BEGIN SELECT RAISE(ABORT, 'injected'); END`)
+	if err := s.FinishPlacement(ctx, runID, when.Add(time.Minute), 2, "", `{"bands":[{"band":0,"good":1}]}`); err == nil {
+		t.Fatal("snapshot update fault was ignored")
+	}
+	assertFinishUnset(t, s, user, runID)
+	mustExec(t, s, `DROP TRIGGER abort_snapshot`)
+
+	if err := s.FinishPlacement(ctx, runID, when.Add(time.Minute), 2, "", `{"bands":[{"band":0,"good":1}]}`); err != nil {
+		t.Fatal(err)
+	}
+	var finished string
+	var startUnit, wordsKnown sql.NullInt64
+	var onboarded sql.NullString
+	if err := s.queryRow(ctx, `SELECT finished_at, start_unit, words_known FROM placement_runs WHERE id = ?`, runID).Scan(&finished, &startUnit, &wordsKnown); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.queryRow(ctx, `SELECT onboarded_at FROM users WHERE id = ?`, user).Scan(&onboarded); err != nil {
+		t.Fatal(err)
+	}
+	if finished == "" || !startUnit.Valid || !wordsKnown.Valid || wordsKnown.Int64 < 1 || !onboarded.Valid {
+		t.Fatalf("retry left finished=%q start=%v words=%v onboarded=%v", finished, startUnit, wordsKnown, onboarded)
+	}
+}
+
+func assertFinishUnset(t *testing.T, s *Store, user, runID int64) {
+	t.Helper()
+	ctx := context.Background()
+	var finished, startUnit, wordsKnown, onboarded sql.NullString
+	if err := s.queryRow(ctx, `SELECT finished_at, start_unit, words_known FROM placement_runs WHERE id = ?`, runID).Scan(&finished, &startUnit, &wordsKnown); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.queryRow(ctx, `SELECT onboarded_at FROM users WHERE id = ?`, user).Scan(&onboarded); err != nil {
+		t.Fatal(err)
+	}
+	if finished.Valid || startUnit.Valid || wordsKnown.Valid || onboarded.Valid {
+		t.Fatalf("partial finish survived: finished=%v start=%v words=%v onboarded=%v", finished, startUnit, wordsKnown, onboarded)
+	}
+}
+
+// A finished v3 run with no answered item is the same class as the v2 auto-close:
+// finished_at is set and nothing was rated. It is not the learner's latest result.
+// An older run that has an answered item is.
+func TestLatestFinishedPlacementV3SkipsAnUnscoredClose(t *testing.T) {
+	when := time.Date(2026, 10, 5, 9, 0, 0, 0, time.UTC)
+	s := openStore(t, fixedClock{when})
+	ctx := context.Background()
+	user := insertUser(t, s, "unscored-v3@example.com", "sub-unscored-v3", "learner")
+
+	scored, err := s.StartPlacementV3(ctx, user, when, 1, RunInitial, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimItem(t, s, scored, 1, PartListening, "listen", 1, "w-one", "right", mustLexemeText(t, s, "אֶחָד"), when)
+	if err := s.FinishPlacement(ctx, scored, when.Add(time.Minute), 1, "", `{"bands":[{"band":0,"good":1}]}`); err != nil {
+		t.Fatal(err)
+	}
+
+	blank, err := s.StartPlacementV3(ctx, user, when.Add(2*time.Minute), 2, RunInitial, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertPlacementItem(ctx, PlacementItem{
+		RunID: blank, Seq: 1, Part: PartListening, Skill: "listen", Band: 1, ItemID: "w-blank",
+		Options: `{"options":[]}`, ShownAt: when,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishPlacement(ctx, blank, when.Add(3*time.Minute), -1, "", `{"bands":[],"estimated_known_words":0}`); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _, ok, err := s.LatestFinishedPlacementV3(ctx, user, 0)
+	if err != nil || !ok || got.ID != scored {
+		t.Fatalf("latest finished v3 = id %d ok %v err %v, want scored run %d", got.ID, ok, err, scored)
+	}
+
+	v2 := insertUser(t, s, "v2-close@example.com", "sub-v2-close", "learner")
+	closed, err := s.InsertPlacementRun(ctx, v2, when, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishPlacement(ctx, closed, when.Add(time.Minute), -1, "", `{"bands":[],"estimated_known_words":0}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok, err := s.LatestFinishedPlacementV3(ctx, v2, 0); err != nil || ok {
+		t.Fatalf("v2 auto-close returned ok=%v err=%v", ok, err)
 	}
 }
 

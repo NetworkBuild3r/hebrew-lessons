@@ -50,7 +50,7 @@ func TestPlacementHistoryAndCountSkipUnscoredFinishes(t *testing.T) {
 	}
 }
 
-func TestIsOnboardedIgnoresUnscoredFinishes(t *testing.T) {
+func TestEnsureOnboardedIgnoresUnscoredFinishes(t *testing.T) {
 	now := time.Date(2026, 10, 21, 15, 0, 0, 0, time.UTC)
 	for _, shape := range []string{"auto-close", "old finish", "exhausted"} {
 		t.Run(shape, func(t *testing.T) {
@@ -68,9 +68,9 @@ func TestIsOnboardedIgnoresUnscoredFinishes(t *testing.T) {
 				keep = closes.exhausted
 			}
 			mustExec(t, s, `DELETE FROM placement_runs WHERE user_id = ? AND id <> ?`, user, keep)
-			yes, err := s.IsOnboarded(ctx, user)
+			yes, err := s.EnsureOnboarded(ctx, user)
 			if err != nil || yes {
-				t.Fatalf("IsOnboarded = %v, %v; want false", yes, err)
+				t.Fatalf("EnsureOnboarded = %v, %v; want false", yes, err)
 			}
 			u, err := s.UserByEmail(ctx, shape+"@example.com")
 			if err != nil || u.OnboardedAt != nil {
@@ -87,9 +87,9 @@ func TestIsOnboardedIgnoresUnscoredFinishes(t *testing.T) {
 	const lessonAt = "2026-10-01T09:00:00.000000000Z"
 	mustExec(t, s, `INSERT INTO attempts (user_id, lexeme_id, skill, activity, source, prompt, response, correct, dont_know, hint_used, latency_ms, created_at)
 		VALUES (?, ?, 'read', 'pick', 'lesson', 'p', 'r', 1, 0, 0, 10, ?)`, user, lex, lessonAt)
-	yes, err := s.IsOnboarded(ctx, user)
+	yes, err := s.EnsureOnboarded(ctx, user)
 	if err != nil || !yes {
-		t.Fatalf("IsOnboarded = %v, %v; want true", yes, err)
+		t.Fatalf("EnsureOnboarded = %v, %v; want true", yes, err)
 	}
 	want := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
 	u, err := s.UserByEmail(ctx, "brian@example.com")
