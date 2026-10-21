@@ -316,6 +316,7 @@ func TestProgressOverSQLite(t *testing.T) {
 	if err := e.store.FinishPlacement(t.Context(), run, apNow.Add(-47*time.Hour), 2, "band_stop", `{"bands":[],"estimated_known_words":120}`); err != nil {
 		t.Fatal(err)
 	}
+	e.exec(`INSERT INTO placement_answers (run_id, item_id, rating, shown_at, answered_at) VALUES (?, 'rated', 3, ?, ?)`, run, db.FormatTime(apNow), db.FormatTime(apNow))
 	// Learner B has data that must never show in A's.
 	e.snapshot(e.b, "2026-10-17", "listen", "known", 99, 987654, 0.1)
 	e.exec(`INSERT INTO regression_events (user_id, lexeme_id, skill, from_state, to_state, day, cause, kind) VALUES (?, ?, 'read', 'solid', 'regressed', '2026-10-15', 'BSECRET', 'word')`, e.b, e.ids[apShalom])
@@ -327,6 +328,7 @@ func TestProgressOverSQLite(t *testing.T) {
 	if err := e.store.FinishPlacement(t.Context(), runB, apNow.Add(-47*time.Hour), 4, "band_stop", `{"bands":[],"estimated_known_words":424242}`); err != nil {
 		t.Fatal(err)
 	}
+	e.exec(`INSERT INTO placement_answers (run_id, item_id, rating, shown_at, answered_at) VALUES (?, 'rated', 3, ?, ?)`, runB, db.FormatTime(apNow), db.FormatTime(apNow))
 
 	type progress struct {
 		From      string `json:"from"`

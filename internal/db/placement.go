@@ -60,8 +60,9 @@ type BandScore struct {
 }
 
 // Placement is the newest run for one learner, finished or not.
-// TakenAt is finished_at when the run is finished, and started_at otherwise.
-// Finished is false while the run is still in progress.
+// TakenAt is finished_at when the run has closed, and started_at otherwise.
+// Finished is false while the run is still in progress, and when it closed
+// with no ratings. Incomplete is that closed run. It is not a result.
 // SuggestedStartPosition is computed when this value is read: the lowest
 // units.position whose doc newWords are less than 80% covered by the
 // learner's known set, one past the highest position when every unit is
@@ -71,6 +72,7 @@ type BandScore struct {
 type Placement struct {
 	TakenAt                time.Time
 	Finished               bool
+	Incomplete             bool
 	Level                  int
 	CardsRated             int
 	StopReason             string
@@ -87,6 +89,24 @@ type placementResultJSON struct {
 }
 
 const placementRunColumns = `id, user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no`
+
+// placementScoredSQL is true for a placement_runs alias when the learner
+// rated a v2 card or answered a v3 item. finished_at alone is not enough.
+// Three closes write finished_at and no ratings, and all three fail this
+// check: Engine.Start's auto-close (stop_reason NULL, empty bands), the old
+// v2 Finish (stop_reason NULL, five zero bands, no placement_answers), and
+// finishNow's exhausted close of a run that rated nothing (stop_reason
+// exhausted, level -1, empty bands).
+func placementScoredSQL(alias string) string {
+	return `EXISTS (SELECT 1 FROM placement_answers AS a WHERE a.run_id = ` + alias + `.id AND a.rating IS NOT NULL)
+		OR EXISTS (SELECT 1 FROM placement_items AS i WHERE i.run_id = ` + alias + `.id AND i.outcome IS NOT NULL)`
+}
+
+// placementClosedFlags says whether a run is a real finish or an unscored
+// close. An open run is neither. Both flags require the run to have closed.
+func placementClosedFlags(closed, scored bool) (finished, incomplete bool) {
+	return closed && scored, closed && !scored
+}
 
 // ErrOpenPlacementRun means this learner already has a run with no finished_at.
 // Start reads that run and returns it.
@@ -447,6 +467,25 @@ func (s *Store) CountPlacementRatings(ctx context.Context, runID int64) (int, er
 	return n, nil
 }
 
+// placementRunScored reports whether the run has a v2 rating or an answered
+// v3 item. The check is placementScoredSQL, the same one history and the
+// onboarding backfill use.
+func (s *Store) placementRunScored(ctx context.Context, runID int64) (bool, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return false, err
+	}
+	var scored bool
+	err = conn.QueryRowContext(ctx, `
+		SELECT `+placementScoredSQL("r")+`
+		FROM placement_runs AS r
+		WHERE r.id = ?`, runID).Scan(&scored)
+	if err != nil {
+		return false, fmt.Errorf("db: placement scored: %w", err)
+	}
+	return scored, nil
+}
+
 // FinishPlacement marks the run finished.
 // An already-finished run returns an error.
 // An empty stop reason is stored as NULL.
@@ -781,14 +820,20 @@ func (s *Store) LatestPlacement(ctx context.Context, userID int64) (Placement, b
 	if err != nil {
 		return Placement{}, false, err
 	}
+	scored, err := s.placementRunScored(ctx, run.ID)
+	if err != nil {
+		return Placement{}, false, err
+	}
 	taken := run.StartedAt
-	finished := !run.FinishedAt.IsZero()
-	if finished {
+	closed := !run.FinishedAt.IsZero()
+	if closed {
 		taken = run.FinishedAt
 	}
+	finished, incomplete := placementClosedFlags(closed, scored)
 	return Placement{
 		TakenAt:                taken,
 		Finished:               finished,
+		Incomplete:             incomplete,
 		Level:                  level,
 		CardsRated:             rated,
 		StopReason:             run.StopReason,

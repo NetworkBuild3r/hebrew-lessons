@@ -80,14 +80,17 @@ type BandScore struct {
 // no row.
 //
 // A placement is sittings of 20 cards. It can resume across days.
-// There is no time cap. Finished reports whether the run stopped.
-// Finished false with Sittings greater than 0 means the run is still
-// in progress. StopReason is band_stop, cap_cards, exhausted, or empty.
-// Level is the highest passed band, or −1 when none passed.
+// There is no time cap. Finished reports whether the run stopped
+// with at least one rating. Finished false with Sittings greater than 0
+// means the run is still in progress, unless Incomplete is set.
+// Incomplete is a closed run with no ratings. It is not a result, and
+// it is not in progress. StopReason is band_stop, cap_cards, exhausted,
+// or empty. Level is the highest passed band, or −1 when none passed.
 // SuggestedStartPosition 0 is the first unit.
 type Placement struct {
 	TakenAt                time.Time
 	Finished               bool
+	Incomplete             bool
 	Sittings               int
 	Level                  int
 	CardsRated             int

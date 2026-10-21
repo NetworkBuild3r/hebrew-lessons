@@ -42,8 +42,26 @@ func TestMigrate014OnADatabaseAt013KeepsNullsAndOldReads(t *testing.T) {
 	if err := conn.QueryRowContext(context.Background(), `SELECT id FROM users WHERE email = 'old@example.com'`).Scan(&userID); err != nil {
 		t.Fatal(err)
 	}
-	mustSQL(t, conn, `INSERT INTO placement_runs (user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no)
+	scoredRes, err := conn.ExecContext(context.Background(), `INSERT INTO placement_runs (user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no)
 		VALUES (?, '2026-10-02T08:00:00.000000000Z', '2026-10-02T08:10:00.000000000Z', 1, 'exhausted', '{"bands":[],"estimated_known_words":4}', 7, 1)`, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scoredID, err := scoredRes.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustSQL(t, conn, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at, answered_at)
+		VALUES (?, 'rated', 3, '2026-10-02T08:10:00.000000000Z', '2026-10-02T08:10:00.000000000Z')`, scoredID)
+	// Three closes that set finished_at and rate nothing. They stay in the table
+	// and are not a finished result: Start's auto-close, the old v2 Finish, and
+	// finishNow's exhausted close.
+	mustSQL(t, conn, `INSERT INTO placement_runs (user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no)
+		VALUES (?, '2026-09-01T08:00:00.000000000Z', '2026-09-01T08:05:00.000000000Z', -1, NULL, '{"bands":[],"estimated_known_words":0}', 1, 1)`, userID)
+	mustSQL(t, conn, `INSERT INTO placement_runs (user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no)
+		VALUES (?, '2026-09-02T08:00:00.000000000Z', '2026-09-02T08:05:00.000000000Z', -1, NULL, ?, 2, 1)`, userID, fiveZeroBands(t))
+	mustSQL(t, conn, `INSERT INTO placement_runs (user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no)
+		VALUES (?, '2026-09-03T08:00:00.000000000Z', '2026-09-03T08:05:00.000000000Z', -1, 'exhausted', '{"bands":[],"estimated_known_words":0}', 3, 1)`, userID)
 	mustSQL(t, conn, `INSERT INTO placement_runs (user_id, started_at, seed, sitting_no)
 		VALUES (?, '2026-10-03T08:00:00.000000000Z', 8, 1)`, userID)
 
@@ -68,9 +86,16 @@ func TestMigrate014OnADatabaseAt013KeepsNullsAndOldReads(t *testing.T) {
 	var started, finished string
 	var level int
 	var startUnit, wordsKnown sql.NullInt64
+	var finishedRows int
+	if err := conn.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM placement_runs WHERE finished_at IS NOT NULL`).Scan(&finishedRows); err != nil {
+		t.Fatal(err)
+	}
+	if finishedRows != 4 {
+		t.Fatalf("finished rows = %d, want the scored run and the three unscored closes kept", finishedRows)
+	}
 	if err := conn.QueryRowContext(context.Background(), `
 		SELECT started_at, finished_at, level, start_unit, words_known
-		FROM placement_runs WHERE finished_at IS NOT NULL`).Scan(&started, &finished, &level, &startUnit, &wordsKnown); err != nil {
+		FROM placement_runs WHERE id = ?`, scoredID).Scan(&started, &finished, &level, &startUnit, &wordsKnown); err != nil {
 		t.Fatal(err)
 	}
 	if started != "2026-10-02T08:00:00.000000000Z" || finished != "2026-10-02T08:10:00.000000000Z" || level != 1 || startUnit.Valid || wordsKnown.Valid {
@@ -99,8 +124,8 @@ func TestMigrate014OnADatabaseAt013KeepsNullsAndOldReads(t *testing.T) {
 		t.Fatalf("loaded user %+v %v", u, err)
 	}
 	runs, err := store.PlacementHistory(context.Background(), u.ID, 0)
-	if err != nil || len(runs) != 1 || runs[0].StartUnit != 0 || runs[0].WordsKnown != 0 || runs[0].StartUnitTitle != "" || runs[0].FinishedAt.IsZero() {
-		t.Fatalf("history %+v %v", runs, err)
+	if err != nil || len(runs) != 1 || runs[0].ID != scoredID || runs[0].StartUnit != 0 || runs[0].WordsKnown != 0 || runs[0].StartUnitTitle != "" || runs[0].FinishedAt.IsZero() {
+		t.Fatalf("history %+v %v, want only run %d", runs, err, scoredID)
 	}
 	if n, err := store.PlacementHistoryCount(context.Background(), u.ID); err != nil || n != 1 {
 		t.Fatalf("count %d %v", n, err)

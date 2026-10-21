@@ -65,11 +65,14 @@ type getContextOutput struct {
 // Taken false is the whole object when LatestPlacement reports no row.
 // A row keeps zero values: level −1, suggestedStartPosition 0, finished
 // false, sittings 0, and an empty stopReason are all meaningful.
-// inProgress is true when the row is not finished and sittings is greater than 0.
+// inProgress is true when the row is not finished, not an unscored close,
+// and sittings is greater than 0. incomplete is additive: true when the
+// newest run closed with no ratings. finished is then false.
 type placementView struct {
 	Taken                  bool        `json:"taken"`
 	TakenAt                time.Time   `json:"takenAt,omitempty"`
 	Finished               bool        `json:"finished,omitempty"`
+	Incomplete             bool        `json:"incomplete,omitempty"`
 	Sittings               int         `json:"sittings,omitempty"`
 	InProgress             bool        `json:"inProgress,omitempty"`
 	Level                  int         `json:"level,omitempty"`
@@ -104,6 +107,7 @@ func (p placementView) MarshalJSON() ([]byte, error) {
 		Taken                  bool        `json:"taken"`
 		TakenAt                time.Time   `json:"takenAt"`
 		Finished               bool        `json:"finished"`
+		Incomplete             bool        `json:"incomplete,omitempty"`
 		Sittings               int         `json:"sittings"`
 		InProgress             bool        `json:"inProgress"`
 		Level                  int         `json:"level"`
@@ -118,8 +122,9 @@ func (p placementView) MarshalJSON() ([]byte, error) {
 		Taken:                  true,
 		TakenAt:                p.TakenAt,
 		Finished:               p.Finished,
+		Incomplete:             p.Incomplete,
 		Sittings:               p.Sittings,
-		InProgress:             !p.Finished && p.Sittings > 0,
+		InProgress:             !p.Finished && !p.Incomplete && p.Sittings > 0,
 		Level:                  p.Level,
 		CardsRated:             p.CardsRated,
 		StopReason:             p.StopReason,
@@ -236,8 +241,9 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 				Taken:                  true,
 				TakenAt:                row.TakenAt,
 				Finished:               row.Finished,
+				Incomplete:             row.Incomplete,
 				Sittings:               row.Sittings,
-				InProgress:             !row.Finished && row.Sittings > 0,
+				InProgress:             !row.Finished && !row.Incomplete && row.Sittings > 0,
 				Level:                  row.Level,
 				CardsRated:             row.CardsRated,
 				StopReason:             row.StopReason,

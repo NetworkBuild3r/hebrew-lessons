@@ -121,6 +121,9 @@ func insertFinishedRun(t *testing.T, s *Store, userID int64, finished string, st
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A finish with no rating is incomplete and is left out of history.
+	mustExec(t, s, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at, answered_at)
+		VALUES (?, 'rated', 3, ?, ?)`, id, finished, finished)
 	return id
 }
 

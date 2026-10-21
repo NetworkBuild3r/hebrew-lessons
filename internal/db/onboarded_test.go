@@ -105,8 +105,14 @@ func TestIsOnboardedOnlyFinishedPlacement(t *testing.T) {
 	s := openStore(t, fixedClock{now})
 	ctx := context.Background()
 	user := insertUser(t, s, "placed@example.com", "sub-placed", "learner")
-	mustExec(t, s, `INSERT INTO placement_runs (user_id, started_at, finished_at, level, result, seed, sitting_no)
+	res := mustExec(t, s, `INSERT INTO placement_runs (user_id, started_at, finished_at, level, result, seed, sitting_no)
 		VALUES (?, '2026-10-04T08:00:00.000000000Z', '2026-10-04T10:00:00.000000000Z', 1, '{"bands":[]}', 1, 1)`, user)
+	runID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustExec(t, s, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at, answered_at)
+		VALUES (?, 'rated', 3, '2026-10-04T10:00:00.000000000Z', '2026-10-04T10:00:00.000000000Z')`, runID)
 	yes, err := s.IsOnboarded(ctx, user)
 	if err != nil || !yes {
 		t.Fatalf("IsOnboarded = %v, %v; want true", yes, err)

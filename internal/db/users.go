@@ -175,12 +175,14 @@ func (s *Store) SetOnboarded(ctx context.Context, userID int64, at time.Time) er
 }
 
 // IsOnboarded reports whether this learner should skip the first-visit gate.
-// It is true when onboarded_at is set, when any placement run has finished,
-// or when HasLessonAttempt would be true. An abandoned placement does not count.
-// A true result with a null onboarded_at stores the earliest of the first
-// finished placement's finished_at, the first lesson run's started_at, and
-// the first non-placement attempt. When none of those times exist, the store
-// clock is stored instead. COALESCE keeps a time that is already stored.
+// It is true when onboarded_at is set, when a placement run finished with at
+// least one rating or answered item, or when HasLessonAttempt would be true.
+// An abandoned placement does not count, and neither does a close that wrote
+// finished_at with no ratings. A true result with a null onboarded_at stores
+// the earliest of the first such finish's finished_at, the first lesson run's
+// started_at, and the first non-placement attempt. When none of those times
+// exist, the store clock is stored instead. COALESCE keeps a time that is
+// already stored.
 func (s *Store) IsOnboarded(ctx context.Context, userID int64) (bool, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -197,7 +199,11 @@ func (s *Store) IsOnboarded(ctx context.Context, userID int64) (bool, error) {
 	err = tx.QueryRowContext(ctx, `
 		SELECT onboarded_at,
 			onboarded_at IS NOT NULL
-			OR EXISTS (SELECT 1 FROM placement_runs WHERE user_id = ? AND finished_at IS NOT NULL)
+			OR EXISTS (
+				SELECT 1 FROM placement_runs AS r
+				WHERE r.user_id = ? AND r.finished_at IS NOT NULL
+				  AND (`+placementScoredSQL("r")+`)
+			)
 			OR EXISTS (SELECT 1 FROM lesson_runs WHERE user_id = ?)
 			OR EXISTS (SELECT 1 FROM attempts WHERE user_id = ? AND source <> 'placement')
 		FROM users WHERE id = ?`, userID, userID, userID, userID).Scan(&onboarded, &yes)
@@ -214,7 +220,9 @@ func (s *Store) IsOnboarded(ctx context.Context, userID int64) (bool, error) {
 		var earliest sql.NullString
 		err = tx.QueryRowContext(ctx, `
 			SELECT MIN(t) FROM (
-				SELECT MIN(finished_at) AS t FROM placement_runs WHERE user_id = ? AND finished_at IS NOT NULL
+				SELECT MIN(finished_at) AS t FROM placement_runs AS r
+				WHERE r.user_id = ? AND r.finished_at IS NOT NULL
+				  AND (`+placementScoredSQL("r")+`)
 				UNION ALL
 				SELECT MIN(started_at) FROM lesson_runs WHERE user_id = ?
 				UNION ALL

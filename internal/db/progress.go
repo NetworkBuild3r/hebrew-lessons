@@ -274,8 +274,9 @@ type PlacementHistoryRow struct {
 }
 
 // PlacementHistory returns the learner's finished runs, newest finish first.
-// Unfinished runs are left out. limit <= 0 returns every finished run. The
-// LIMIT is in the SQL.
+// A run counts when finished_at is set and the learner rated a card or
+// answered an item. An unfinished run, and a close with no ratings, are left
+// out. limit <= 0 returns every such run. The LIMIT is in the SQL.
 func (s *Store) PlacementHistory(ctx context.Context, userID int64, limit int) ([]PlacementHistoryRow, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -296,6 +297,7 @@ func (s *Store) PlacementHistory(ctx context.Context, userID int64, limit int) (
 		FROM placement_runs AS r
 		LEFT JOIN placement_v3_runs AS v ON v.run_id = r.id
 		WHERE r.user_id = ? AND r.finished_at IS NOT NULL
+		  AND (` + placementScoredSQL("r") + `)
 		ORDER BY r.finished_at DESC, r.id DESC`
 	args := []any{userID}
 	if limit > 0 {
@@ -327,7 +329,7 @@ func (s *Store) PlacementHistory(ctx context.Context, userID int64, limit int) (
 }
 
 // PlacementHistoryCount is how many finished runs this learner has.
-// Unfinished runs are not counted.
+// A close with no ratings is not counted, and neither is an unfinished run.
 func (s *Store) PlacementHistoryCount(ctx context.Context, userID int64) (int, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -335,8 +337,9 @@ func (s *Store) PlacementHistoryCount(ctx context.Context, userID int64) (int, e
 	}
 	var n int
 	if err := conn.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM placement_runs
-		WHERE user_id = ? AND finished_at IS NOT NULL`, userID).Scan(&n); err != nil {
+		SELECT COUNT(*) FROM placement_runs AS r
+		WHERE r.user_id = ? AND r.finished_at IS NOT NULL
+		  AND (`+placementScoredSQL("r")+`)`, userID).Scan(&n); err != nil {
 		return 0, fmt.Errorf("db: placement history count: %w", err)
 	}
 	return n, nil

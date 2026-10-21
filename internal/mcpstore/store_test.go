@@ -1080,6 +1080,74 @@ func lessonItems(t *testing.T, raw *db.Store, unitID int64) []itemRow {
 	return out
 }
 
+func TestProgressSkipsUnscoredPlacement(t *testing.T) {
+	when := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	ctx := context.Background()
+	store, raw := openAdapter(t, fixedClock{when})
+	userID := mustUser(t, raw)
+	insertClosed := func(finished, stop, result string) int64 {
+		t.Helper()
+		var stopArg any
+		if stop != "" {
+			stopArg = stop
+		}
+		res, err := raw.ExecContext(ctx, `INSERT INTO placement_runs (user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no)
+			VALUES (?, ?, ?, -1, ?, ?, 1, 1)`, userID, finished, finished, stopArg, result)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	bands := make([]db.BandScore, 5)
+	for i := range bands {
+		bands[i].Band = i
+	}
+	rawBands, err := json.Marshal(struct {
+		Bands               []db.BandScore `json:"bands"`
+		EstimatedKnownWords int            `json:"estimated_known_words"`
+	}{Bands: bands})
+	if err != nil {
+		t.Fatal(err)
+	}
+	insertClosed("2026-09-01T08:05:00.000000000Z", "", `{"bands":[],"estimated_known_words":0}`)
+	insertClosed("2026-09-02T08:05:00.000000000Z", "", string(rawBands))
+	insertClosed("2026-09-03T08:05:00.000000000Z", "exhausted", `{"bands":[],"estimated_known_words":0}`)
+	scored := insertClosed("2026-10-04T09:00:00.000000000Z", "band_stop", `{"bands":[],"estimated_known_words":80}`)
+	if _, err := raw.ExecContext(ctx, `UPDATE placement_runs SET level = 2 WHERE id = ?`, scored); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.ExecContext(ctx, `INSERT INTO placement_answers (run_id, item_id, rating, shown_at, answered_at)
+		VALUES (?, 'rated', 3, '2026-10-04T09:00:00.000000000Z', '2026-10-04T09:00:00.000000000Z')`, scored); err != nil {
+		t.Fatal(err)
+	}
+
+	row, ok, err := store.LatestPlacement(ctx, userID)
+	if err != nil || !ok || !row.Finished || row.Incomplete || row.Level != 2 {
+		t.Fatalf("latest %+v ok=%v err=%v, want the scored run", row, ok, err)
+	}
+	// A later unscored close is the newest row. It is marked incomplete, and
+	// get_progress still falls back to the scored run.
+	newest := insertClosed("2026-11-01T09:00:00.000000000Z", "exhausted", `{"bands":[],"estimated_known_words":0}`)
+	if newest == 0 {
+		t.Fatal("unscored close was not stored")
+	}
+	row, ok, err = store.LatestPlacement(ctx, userID)
+	if err != nil || !ok || row.Finished || !row.Incomplete || row.Level != -1 || row.StopReason != "exhausted" {
+		t.Fatalf("newest unscored %+v ok=%v err=%v", row, ok, err)
+	}
+	prog, err := store.Progress(ctx, userID, "2026-01-01", "2026-12-31")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prog.Placements) != 1 || prog.Placements[0].Kind != "v2" || prog.Placements[0].Level != 2 || prog.Placements[0].EstimatedKW != 80 {
+		t.Fatalf("placements %+v, want the scored run only", prog.Placements)
+	}
+}
+
 func withActor(t *testing.T, actor string) context.Context {
 	t.Helper()
 	var ctx context.Context
