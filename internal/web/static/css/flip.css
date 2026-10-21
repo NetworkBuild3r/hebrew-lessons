@@ -1,0 +1,253 @@
+/* Teach-step word cards. Both faces share one grid cell where
+   ::details-content can be styled, so a flip never changes the card's size.
+   Older engines get a plain disclosure that grows in normal flow.
+   Movement sits inside prefers-reduced-motion: no-preference. Reduced motion
+   cross-fades opacity only. Durations are tokens. */
+
+.wline {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: var(--space-4) var(--space-3);
+  perspective: 1000px;
+  padding-block: var(--space-2);
+}
+.dlg__bubble .wline {
+  justify-content: flex-start;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+.wslot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+.wslot > .clip {
+  inline-size: 100%;
+  max-inline-size: 12rem;
+}
+/* The native bar for a card lives in .clip-rows, full width. The slot only
+   holds the orb, and that orb stays hidden until script runs. */
+html:not(.js) .wslot > .clip { display: none; }
+.wcard {
+  position: relative;
+  display: grid;
+  min-inline-size: 5.25rem;
+  max-inline-size: 12rem;
+  -webkit-tap-highlight-color: transparent;
+}
+.wcard > summary { list-style: none; }
+.wcard > summary::-webkit-details-marker { display: none; }
+.wcard__hit {
+  display: grid;
+  cursor: pointer;
+  border-radius: var(--radius-control);
+  outline: none;
+  user-select: none;
+  min-block-size: var(--size-tap);
+}
+.wcard__hit:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.wcard__face {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-block-size: clamp(6.25rem, 4vw + 5rem, 7.25rem);
+  padding: var(--space-3);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-1);
+  text-align: center;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.wcard__he {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-lg);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  padding-block: .05em;
+  white-space: nowrap;
+}
+.wcard__tr {
+  font-style: italic;
+  color: var(--muted);
+  font-size: 14.5px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.wcard__new {
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline: 0;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--lamp-ink);
+  line-height: 1;
+}
+.wcard--new .wcard__front {
+  background: light-dark(
+    color-mix(in oklab, var(--lamp) 14%, var(--surface-raised)),
+    color-mix(in oklab, var(--lamp) 7%, var(--surface-raised))
+  );
+  border-color: color-mix(in oklab, var(--lamp-ink) 55%, transparent);
+}
+.wcard__back {
+  background: color-mix(in oklab, var(--focus-ring) 7%, var(--surface-raised));
+  border-color: color-mix(in oklab, var(--focus-ring) 28%, transparent);
+  gap: var(--space-1);
+}
+.wcard__he-sm {
+  font-family: var(--font-he);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.wcard__gl {
+  font-weight: 700;
+  font-size: var(--fs-body);
+  line-height: 1.3;
+  color: var(--text);
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+.wcard__pos {
+  font-size: var(--fs-caption);
+  color: var(--muted);
+  line-height: 1.3;
+}
+.wline-tools { display: flex; justify-content: center; margin: 0; }
+.wprompt-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: var(--fs-small);
+  margin: 0;
+}
+.wprompt-hint .icon { inline-size: 16px; block-size: 16px; }
+.wpunct {
+  color: var(--muted);
+  font-family: var(--font-he);
+  font-size: var(--fs-he-lg);
+  line-height: var(--lh-he-display);
+  align-self: center;
+}
+
+/* Stacked faces. Gated so an engine without ::details-content lays the
+   meaning out under the Hebrew instead of on top of it. */
+@supports selector(::details-content) {
+  .wcard__hit,
+  .wcard::details-content { grid-area: 1 / 1; }
+  .wcard::details-content {
+    display: grid;
+    content-visibility: visible;
+    pointer-events: none;
+  }
+  .wcard__face { grid-area: 1 / 1; }
+  .wcard__back {
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+  }
+  .wcard__front { opacity: 1; }
+  .wcard[open] .wcard__front { opacity: 0; }
+  .wcard[open] .wcard__back { opacity: 1; visibility: visible; }
+  .wcard__hit:hover .wcard__front,
+  .wcard[open]:has(.wcard__hit:hover) .wcard__back {
+    box-shadow: var(--shadow-2);
+    border-color: color-mix(in oklab, var(--text) 30%, transparent);
+  }
+  .wcard[open]:has(.wcard__hit:focus-visible) .wcard__back {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  .wcard[open] .wcard__hit:focus-visible { outline: none; }
+}
+
+@supports not selector(::details-content) {
+  .wcard__back { margin-block-start: var(--space-2); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports selector(::details-content) {
+    .wline .wcard .wcard__front,
+    .wline .wcard .wcard__back {
+      opacity: 1;
+      transition-property: transform, translate, scale, box-shadow, border-color, visibility;
+      transition-duration: var(--dur-slow), var(--dur-fast), var(--dur-fast), var(--dur-fast), var(--dur-fast), calc(var(--dur-stagger) * 0);
+      transition-timing-function: var(--ease-spring), var(--ease-out), var(--ease-out), var(--ease-out), var(--ease-out), linear;
+      transition-delay: calc(var(--dur-stagger) * 0), calc(var(--dur-stagger) * 0), calc(var(--dur-stagger) * 0), calc(var(--dur-stagger) * 0), calc(var(--dur-stagger) * 0), calc(var(--dur-slow) / 2);
+    }
+    .wline .wcard .wcard__front { transform: rotateY(0deg); }
+    .wline .wcard .wcard__back { transform: rotateY(180deg); }
+    .wline .wcard[open] .wcard__front { transform: rotateY(-180deg); }
+    .wline .wcard[open] .wcard__back {
+      transform: rotateY(0deg);
+      visibility: visible;
+      transition-delay: calc(var(--dur-stagger) * 0);
+    }
+    .wline .wcard .wcard__hit:hover .wcard__front,
+    .wline .wcard[open]:has(.wcard__hit:hover) .wcard__back {
+      translate: 0 -2px;
+    }
+    .wline .wcard .wcard__hit:active .wcard__front,
+    .wline .wcard[open]:has(.wcard__hit:active) .wcard__back {
+      scale: var(--motion-press);
+      translate: 0 0;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @supports selector(::details-content) {
+    .wline .wcard .wcard__front,
+    .wline .wcard .wcard__back { transform: none; translate: none; scale: none; transition: none; }
+    .wline .wcard .wcard__front { opacity: 1; }
+    .wline .wcard .wcard__back { opacity: 0; }
+    .wline .wcard[open] .wcard__front,
+    .wline .wcard[open] .wcard__back { transition: opacity var(--dur-fast) linear; }
+    .wline .wcard[open] .wcard__front { opacity: 0; }
+    .wline .wcard[open] .wcard__back { opacity: 1; }
+  }
+}
+
+/* The cards, bigger and centered, with the play control joined to them.
+   A single word is the one thing on screen: a large card. The control for a word is a disc
+   that straddles the card's bottom edge, so it reads as part of the card. The line's own
+   control sits under the row of cards. The back of a card leads with the meaning. */
+.wline-play { display: flex; justify-content: center; margin-block-start: var(--space-2); }
+.wslot { gap: 0; }
+.wslot > .clip {
+  margin-block-start: -22px;
+  position: relative;
+  z-index: 1;
+}
+.wline:has(.wslot:only-of-type) .wcard { min-inline-size: 12rem; max-inline-size: 18rem; }
+.wline:has(.wslot:only-of-type) .wcard__face { min-block-size: 10rem; padding: var(--space-5); gap: var(--space-2); }
+.wline:has(.wslot:only-of-type) .wcard__he { font-size: var(--fs-he-hero); }
+.wline:has(.wslot:only-of-type) .wcard__tr { font-size: 18px; }
+.wcard__gl { font-size: clamp(1.25rem, 1rem + 1vw, 1.625rem); line-height: 1.2; }
+.wline:has(.wslot:only-of-type) .wcard__gl { font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2rem); }
+.wcard__note {
+  font-size: var(--fs-caption);
+  color: var(--muted);
+  line-height: 1.35;
+  text-wrap: balance;
+}
+.wcard__he-sm { order: 2; }
+.wcard__back .wcard__pos { order: 3; }

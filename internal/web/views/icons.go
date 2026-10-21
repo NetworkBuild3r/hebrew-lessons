@@ -23,7 +23,7 @@ var IconNames = []string{
 	"home", "book", "layers", "chart", "user",
 	"speaker", "replay", "slower", "play", "stop", "audio-off", "dots",
 	"x", "check", "arrow-right", "arrow-left",
-	"keyboard", "flag", "lamp", "spark",
+	"keyboard", "flag", "lamp", "spark", "eye", "flip",
 	"theme", "help", "tip",
 	// Older ids, kept so existing views and links keep working.
 	"today", "lessons", "review", "progress", "sound", "next", "close",

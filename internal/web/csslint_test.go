@@ -300,3 +300,101 @@ func TestComponentsCSS(t *testing.T) {
 		t.Errorf("components.css styles states %v; default is the bare .c-answer, so want selected, correct, wrong, and dim", states)
 	}
 }
+
+// TestFlipCSSScope pins the no-JS disclosure. Hiding the back or stacking
+// the faces stays inside @supports selector(::details-content). Movement
+// stays inside prefers-reduced-motion: no-preference. The reduce block may
+// reset transform, translate, and scale to none.
+func TestFlipCSSScope(t *testing.T) {
+	css, err := os.ReadFile(filepath.Join("static", "css", "flip.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hits := flipCSSViolations(string(css)); len(hits) != 0 {
+		t.Fatalf("flip.css: %s", strings.Join(hits, "; "))
+	}
+	bad := string(css) + "\n.wcard { transform: rotateY(90deg); }\n"
+	if hits := flipCSSViolations(bad); len(hits) == 0 {
+		t.Fatal("a rotation outside prefers-reduced-motion: no-preference was allowed")
+	}
+}
+
+func flipCSSViolations(css string) []string {
+	css = cssComment.ReplaceAllString(css, " ")
+	var hits []string
+	var walk func(s string, supports bool, motion string)
+	walk = func(s string, supports bool, motion string) {
+		start := 0
+		for i := 0; i < len(s); {
+			switch s[i] {
+			case '"', '\'':
+				i = skipCSSString(s, i)
+				continue
+			case ';':
+				start = i + 1
+			case '{':
+				end := matchCSSBrace(s, i)
+				prelude := strings.TrimSpace(s[start:i])
+				body := s[i+1 : end]
+				fields := strings.Fields(prelude + " ")
+				name := strings.ToLower(fields[0])
+				switch {
+				case name == "@media":
+					next := motion
+					low := strings.ToLower(prelude)
+					if strings.Contains(low, "prefers-reduced-motion") {
+						if strings.Contains(low, "no-preference") {
+							next = "no-preference"
+						} else if strings.Contains(low, "reduce") {
+							next = "reduce"
+						}
+					}
+					walk(body, supports, next)
+				case name == "@supports":
+					next := supports
+					low := strings.ToLower(prelude)
+					if strings.Contains(low, "selector(::details-content)") && !strings.Contains(low, "not") {
+						next = true
+					}
+					walk(body, next, motion)
+				case strings.HasPrefix(name, "@"):
+				default:
+					flipCSSRule(prelude, body, supports, motion, &hits)
+				}
+				i = end + 1
+				start = i
+				continue
+			}
+			i++
+		}
+	}
+	walk(css, false, "")
+	return hits
+}
+
+func flipCSSRule(sel, body string, supports bool, motion string, hits *[]string) {
+	for _, decl := range strings.Split(body, ";") {
+		decl = strings.TrimSpace(decl)
+		if decl == "" || !strings.Contains(decl, ":") {
+			continue
+		}
+		prop, val, _ := strings.Cut(decl, ":")
+		prop = strings.ToLower(strings.TrimSpace(prop))
+		val = strings.TrimSpace(val)
+		low := strings.ToLower(val)
+		if (prop == "opacity" && low == "0") || (prop == "visibility" && strings.Contains(low, "hidden")) || prop == "grid-area" {
+			if !supports {
+				*hits = append(*hits, sel+" "+prop+" outside @supports selector(::details-content)")
+			}
+		}
+		moves := prop == "transform" || prop == "translate" || prop == "scale" || prop == "rotate" ||
+			strings.Contains(low, "rotate") || strings.Contains(low, "translate") || strings.Contains(low, "scale(")
+		if !moves || motion == "no-preference" {
+			continue
+		}
+		if motion == "reduce" && low == "none" && (prop == "transform" || prop == "translate" || prop == "scale" || prop == "rotate") {
+			continue
+		}
+		*hits = append(*hits, sel+" "+prop+": "+val+" outside prefers-reduced-motion: no-preference")
+	}
+}

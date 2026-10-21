@@ -25,8 +25,10 @@ import (
 // The stored document only has an activity type and a Hebrew text, so the
 // screen for each type is derived here:
 //
-//   - story, pattern, and shadow show every Hebrew word with its pointed
-//     text, transliteration, and gloss. Continue counts the step correct.
+//   - story, pattern, shadow, and dialogue show every Hebrew word as a
+//     tap-to-flip card: pointed text and transliteration in front, meaning
+//     behind the tap. Continue counts the step correct. Flipping is not an
+//     answer and writes no attempt.
 //   - recall shows the pointed Hebrew and hides the transliteration and
 //     gloss until the answer. Choices are English glosses.
 //   - listen_pick hides the Hebrew, the transliteration, and the gloss
@@ -199,7 +201,7 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 				return
 			}
 		}
-		screen, err := p.screenFor(r.Context(), page, lesson, run, "")
+		screen, err := p.screenFor(r.Context(), page, lesson, run, "", lessonQueryFrom(r, page.Lang))
 		if err != nil {
 			serverError(w)
 			return
@@ -295,7 +297,7 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		serverError(w)
 		return
 	}
-	screen, err := p.screenFor(r.Context(), page, lesson, run, picked)
+	screen, err := p.screenFor(r.Context(), page, lesson, run, picked, lessonQueryFrom(r, page.Lang))
 	if err != nil {
 		serverError(w)
 		return
@@ -365,7 +367,7 @@ func (p player) writePlaying(w http.ResponseWriter, r *http.Request, page views.
 		serverError(w)
 		return
 	}
-	screen, err := p.screenFor(r.Context(), page, lesson, run, "")
+	screen, err := p.screenFor(r.Context(), page, lesson, run, "", lessonQueryFrom(r, page.Lang))
 	if err != nil {
 		serverError(w)
 		return
@@ -394,8 +396,8 @@ func (p player) learnerID(r *http.Request) (int64, bool) {
 }
 
 // screenFor is the screen for one run: the step, and the frame around it.
-func (p player) screenFor(ctx context.Context, page views.Page, lesson db.CourseLesson, run db.PlayerRun, picked string) (views.Screen, error) {
-	screen, err := p.stepScreen(ctx, page, lesson, run, picked)
+func (p player) screenFor(ctx context.Context, page views.Page, lesson db.CourseLesson, run db.PlayerRun, picked string, q lessonQuery) (views.Screen, error) {
+	screen, err := p.stepScreen(ctx, page, lesson, run, picked, q)
 	if err != nil {
 		return views.Screen{}, err
 	}
@@ -445,7 +447,7 @@ func frameFor(page views.Page, lesson db.CourseLesson, run db.PlayerRun, done bo
 	return f
 }
 
-func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.CourseLesson, run db.PlayerRun, picked string) (views.Screen, error) {
+func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.CourseLesson, run db.PlayerRun, picked string, q lessonQuery) (views.Screen, error) {
 	gloss, err := titleGloss(ctx, p.store, lesson.Title)
 	if err != nil {
 		return views.Screen{}, err
@@ -461,7 +463,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	}
 	total := len(lesson.Activities)
 	if total == 0 {
-		screen.Activity = p.step(page, lesson, run, units.Activity{}, db.LexemeView{}, nil, nil, nil, true)
+		screen.Activity = p.step(page, lesson, run, units.Activity{}, db.LexemeView{}, nil, nil, nil, true, q)
 		return screen, nil
 	}
 	if run.ActivityIx < 0 || run.ActivityIx >= total {
@@ -486,8 +488,8 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		return views.Screen{}, err
 	}
 	if act.Type == units.ActivityDialogue {
-		screen.Activity = p.step(page, lesson, run, act, target, lex, pool, nil, false)
-		screen.Activity.Dialogue, err = p.dialogueView(ctx, act, lex, lesson.NewWords)
+		screen.Activity = p.step(page, lesson, run, act, target, lex, pool, nil, false, q)
+		screen.Activity.Dialogue, err = p.dialogueView(ctx, act, lex, lesson.NewWords, q.meaningsAll)
 		if err != nil {
 			return views.Screen{}, err
 		}
@@ -504,7 +506,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	if err != nil {
 		return views.Screen{}, err
 	}
-	screen.Activity = p.step(page, lesson, run, act, target, lex, pool, earlier, false)
+	screen.Activity = p.step(page, lesson, run, act, target, lex, pool, earlier, false, q)
 	phase := run.Phase
 	// A recall or cloze that cannot find three options is not a graded ask.
 	// Show the word the way a reveal does, and let Continue move on.
@@ -512,7 +514,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		phase = "reveal"
 	}
 	screen.Activity.Audio = phraseAudio(act, phase, clips.phrase)
-	screen.Activity.Words = wordsFor(act, lex, lesson.NewWords, phase, clips, target)
+	screen.Activity.Words = wordsFor(act, lex, lesson.NewWords, phase, clips, target, q.meaningsAll)
 	if sentenceListenPick(act, lex) {
 		if err := p.applySentence(ctx, lesson, run, act, lex, &screen.Activity, picked); err != nil {
 			return views.Screen{}, err
@@ -525,7 +527,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	return screen, nil
 }
 
-func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView, lex map[string]db.LexemeView, pool, earlier []db.LexemeView, empty bool) views.Activity {
+func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView, lex map[string]db.LexemeView, pool, earlier []db.LexemeView, empty bool, q lessonQuery) views.Activity {
 	total := len(lesson.Activities)
 	post := lessonPath(lesson.UnitID, lesson.LessonIx)
 	feedback, class := feedbackFor(run)
@@ -548,6 +550,8 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 		Post:          post,
 		Continue:      continueLabel(run.ActivityIx, total),
 		HomeHref:      page.Href("/"),
+		MeaningsOpen:  q.meaningsAll,
+		MeaningsHref:  q.meaningsHref,
 	}
 	if !empty && sentenceListenPick(act, lex) {
 		activity.Sentence = true
@@ -646,7 +650,7 @@ func actTokens(act units.Activity) []string {
 // its words, and the clip in its speaker's voice. A line whose speaker is not a
 // or b, whose voice is not configured, or that has no clip in that voice has no
 // audio. It is never played in the other voice: the lookup is by voice id.
-func (p player) dialogueView(ctx context.Context, act units.Activity, lex map[string]db.LexemeView, newWords []db.LexemeView) (*views.Dialogue, error) {
+func (p player) dialogueView(ctx context.Context, act units.Activity, lex map[string]db.LexemeView, newWords []db.LexemeView, open bool) (*views.Dialogue, error) {
 	d := &views.Dialogue{}
 	for i, line := range act.Lines {
 		view := views.DialogueLine{
@@ -665,7 +669,7 @@ func (p player) dialogueView(ctx context.Context, act units.Activity, lex map[st
 				}
 			}
 		}
-		view.Words = wordsForText(line.Text, units.ActivityDialogue, lex, newWords, "reveal", clipSet{}, false, "")
+		view.Words = wordsForText(line.Text, units.ActivityDialogue, lex, newWords, "reveal", clipSet{}, false, "", open)
 		d.Lines = append(d.Lines, view)
 	}
 	return d, nil
@@ -680,8 +684,8 @@ func (p player) targetOf(ctx context.Context, lesson db.CourseLesson, act units.
 	return view, lex, err
 }
 
-func wordsFor(act units.Activity, lex map[string]db.LexemeView, newWords []db.LexemeView, phase string, clips clipSet, target db.LexemeView) []views.Word {
-	words := wordsForText(act.Text, act.Type, lex, newWords, phase, clips, act.Type == units.ActivityCloze && phase == "ask", act.Target)
+func wordsFor(act units.Activity, lex map[string]db.LexemeView, newWords []db.LexemeView, phase string, clips clipSet, target db.LexemeView, open bool) []views.Word {
+	words := wordsForText(act.Text, act.Type, lex, newWords, phase, clips, act.Type == units.ActivityCloze && phase == "ask", act.Target, open)
 	if act.Type == units.ActivityRecall {
 		markRecallTarget(words, lexemeTokenCount(act, lex), target.Text, phase)
 	}
@@ -694,12 +698,17 @@ func wordsFor(act units.Activity, lex map[string]db.LexemeView, newWords []db.Le
 // wordsForText is wordsFor for one string of Hebrew: an activity's text, or one
 // line of a dialogue. blank gaps the target token when the activity sets one,
 // and otherwise the first new word, for a cloze in its ask phase.
-func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.LexemeView, phase string, clips clipSet, blank bool, target string) []views.Word {
+func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.LexemeView, phase string, clips clipSet, blank bool, target string, open bool) []views.Word {
 	tokens := units.Tokenize(text)
 	if len(tokens) == 0 {
 		return nil
 	}
 	show := visibleFields(typ, phase)
+	flip := !gradedActivity(typ)
+	fresh := map[string]bool{}
+	for _, word := range newWords {
+		fresh[word.Text] = true
+	}
 	gap := ""
 	if blank {
 		gap = gapToken(tokens, lex, newWords, target)
@@ -714,7 +723,7 @@ func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.
 	var words []views.Word
 	for _, tok := range tokens {
 		if !hebrewToken(tok) {
-			words = append(words, views.Word{Text: tok, Plain: true})
+			words = append(words, views.Word{Text: tok, Plain: true, Flip: flip})
 			continue
 		}
 		if tok == gap {
@@ -729,9 +738,13 @@ func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.
 			Translit:     view.Translit,
 			Gloss:        view.Gloss,
 			Gender:       view.Gender,
+			POS:          view.POS,
 			ShowText:     show.text,
 			ShowTranslit: show.translit,
 			ShowGloss:    show.gloss,
+			Flip:         flip,
+			New:          fresh[tok],
+			Open:         open && flip,
 		}
 		if show.text && !skipWordAudio {
 			word.Audio = clips.words[tok]
@@ -1405,6 +1418,35 @@ func parseLessonPath(r *http.Request) (int64, int, bool) {
 
 func lessonPath(unitID int64, lessonIx int) string {
 	return fmt.Sprintf("/lesson/%d/%d", unitID, lessonIx)
+}
+
+// lessonQuery is the teach-step flip state read from the request.
+// meaningsAll opens every card. meaningsHref is the other state of this
+// step: closed pages link to meanings=all, and an open page drops that
+// parameter so the no-JS control can close them. Other query parameters
+// stay. A Hebrew shell whose request omitted lang gets lang=he, so the
+// reload stays Hebrew.
+type lessonQuery struct {
+	meaningsAll  bool
+	meaningsHref string
+}
+
+func lessonQueryFrom(r *http.Request, lang string) lessonQuery {
+	q := r.URL.Query()
+	all := q.Get("meanings") == "all"
+	if q.Get("lang") == "" && lang == "he" {
+		q.Set("lang", "he")
+	}
+	if all {
+		q.Del("meanings")
+	} else {
+		q.Set("meanings", "all")
+	}
+	href := r.URL.Path
+	if enc := q.Encode(); enc != "" {
+		href += "?" + enc
+	}
+	return lessonQuery{meaningsAll: all, meaningsHref: href}
 }
 
 func chipsFor(words []db.LexemeView) []views.Chip {

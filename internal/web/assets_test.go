@@ -828,7 +828,8 @@ func TestSVGSizes(t *testing.T) {
 		}
 		limit := int64(6 * 1024)
 		if strings.HasSuffix(f, "icons/sprite.svg") {
-			limit = 8 * 1024
+			// eye and flip, for the teach-step word cards, take the sprite past 8KB.
+			limit = 9 * 1024
 		}
 		if strings.HasSuffix(f, "hero-skyline-night.svg") {
 			limit = 9 * 1024 // predates this spec; unchanged

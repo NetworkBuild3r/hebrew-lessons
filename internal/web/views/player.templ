@@ -44,6 +44,12 @@ templ ActivityBlock(a Activity) {
 			} else if a.Prompt != "" {
 				<p class="lede" lang="en">@E(a.Prompt)</p>
 			}
+			if flipCount(a) > 0 {
+				@flipHint()
+			}
+			if a.Dialogue != nil && flipCount(a) >= 2 {
+				@showMeanings(a)
+			}
 			if a.Dialogue != nil {
 				@dialogueBlock(a.Dialogue)
 			}
@@ -81,9 +87,12 @@ templ ActivityBlock(a Activity) {
 					<div class="listen-stage">
 						@clip("line-clip", a.Audio, a.AudioLabel, true)
 					</div>
-				} else if a.Audio != "" {
+				} else if a.Audio != "" && !teachLine(a) {
 					@clip("line-clip", a.Audio, a.AudioLabel, true)
 				}
+			}
+			if a.Dialogue == nil && flipCount(a) >= 2 {
+				@showMeanings(a)
 			}
 			if len(a.Words) > 0 && !a.Spotlight && !a.Sentence {
 				<div class={ wordBlocksClass(a) } dir="rtl">
@@ -91,10 +100,15 @@ templ ActivityBlock(a Activity) {
 						@activityWord(word, "word-clip-"+Num(i), a.PromptWord != "")
 					}
 				</div>
-				if a.PromptWord != "" {
+				if teachLine(a) && a.Audio != "" {
+					<div class="wline-play">
+						@clip("line-clip", a.Audio, a.AudioLabel, true)
+					</div>
+				}
+				if clipRows(a) {
 					<div class="clip-rows">
 						for i, word := range a.Words {
-							if word.Audio != "" {
+							if word.Audio != "" && (a.PromptWord != "" || word.Flip) {
 								@wordClipRow(word, "word-clip-"+Num(i))
 							}
 						}
@@ -138,6 +152,9 @@ templ ActivityBlock(a Activity) {
 			if hasClip(a) {
 				<script src="/static/js/clips.js" defer></script>
 			}
+			if flipCount(a) > 0 {
+				<script type="module" src="/static/js/wcards.js"></script>
+			}
 		}
 	</div>
 }
@@ -149,7 +166,11 @@ templ ActivityBlock(a Activity) {
 // that recall line on a shared grid: Hebrew, transliteration, gloss, orb.
 templ activityWord(w Word, audioID string, rows bool) {
 	if w.Plain {
-		@E(w.Text)
+		if w.Flip {
+			<span class="wpunct" lang="he">{ w.Text }</span>
+		} else {
+			@E(w.Text)
+		}
 	} else if w.Gap {
 		<span class="word-block word-block--gap">@E("___")</span>
 	} else if rows {
@@ -188,6 +209,15 @@ templ activityWord(w Word, audioID string, rows bool) {
 				<span class="recall-clip"></span>
 			}
 		</span>
+	} else if w.Flip {
+		<div class="wslot">
+			@wordCard(w)
+			if w.Audio != "" {
+				<div class="clip">
+					@orbButton(orbClass(false), "Play "+w.Text, w.Audio, audioID)
+				</div>
+			}
+		</div>
 	} else {
 		<span class="activity-word">
 			if w.Target {
@@ -203,6 +233,68 @@ templ activityWord(w Word, audioID string, rows bool) {
 			}
 		</span>
 	}
+}
+
+// wordCard is one teach-step word. The summary is the front (Hebrew and
+// transliteration). The meaning sits in the details, so a tap flips it and
+// a browser without script still opens it. The play control stays outside.
+templ wordCard(w Word) {
+	<details class={ wcardClass(w) } open?={ w.Open }>
+		<summary class="wcard__hit">
+			<span class="wcard__face wcard__front">
+				if w.New {
+					<span class="wcard__new" lang="en">New</span>
+				}
+				<bdi class="wcard__he" lang="he" dir="rtl">{ w.Text }</bdi>
+				if w.Translit != "" {
+					<bdi class="wcard__tr" lang="he-Latn" dir="ltr">{ w.Translit }</bdi>
+				}
+			</span>
+		</summary>
+		<div class="wcard__face wcard__back" lang="en" dir="ltr">
+			<bdi class="wcard__he-sm" lang="he" dir="rtl">{ w.Text }</bdi>
+			if meaning, note, lemma := SplitGloss(w.Gloss); meaning != "" {
+				<span class="wcard__gl">{ meaning }</span>
+				if note != "" || lemma != "" {
+					<span class="wcard__note">
+						if note != "" {
+							{ note }
+						}
+						if note != "" && lemma != "" {
+							{ " · " }
+						}
+						if lemma != "" {
+							<bdi lang="he" dir="rtl">{ lemma }</bdi>
+						}
+					</span>
+				}
+			}
+			if meta := CardMeta(w.POS, w.Gender); meta != "" {
+				<span class="wcard__pos">{ meta }</span>
+			}
+		</div>
+	</details>
+}
+
+// flipHint is the quiet line under a teach prompt.
+templ flipHint() {
+	<p class="wprompt-hint" lang="en">
+		@Icon("flip", "")
+		<span>@E("Tap a word to see what it means.")</span>
+	</p>
+}
+
+// showMeanings opens every card. Without script it is a plain link: closed
+// steps go to ?meanings=all, and an open step drops that parameter. wcards.js
+// turns the click into a toggle and adds role=button. The server sets neither
+// role nor aria-pressed.
+templ showMeanings(a Activity) {
+	<div class="wline-tools">
+		<a class="c-button" data-kind="text" href={ templ.SafeURL(a.MeaningsHref) } data-wcards-all>
+			@Icon("eye", "")
+			<span data-wcards-label>{ meaningsLabel(a.MeaningsOpen) }</span>
+		</a>
+	</div>
 }
 
 // targetWord is the word a multi-word recall asks about. The mark is how a
@@ -291,7 +383,7 @@ templ dialogueBlock(d *Dialogue) {
 				<li class={ dialogueLineClass(line.Speaker) } data-speaker={ line.Speaker } data-line={ Num(line.Index) }>
 					<p class="dlg__who" lang="en">{ line.Name }</p>
 					<div class="dlg__bubble">
-						<div class="word-blocks" dir="rtl">
+						<div class={ dialogueWordsClass(line.Words) } dir="rtl">
 							for _, word := range line.Words {
 								@activityWord(word, "", false)
 							}
@@ -308,11 +400,11 @@ templ dialogueBlock(d *Dialogue) {
 	<script src="/static/js/dialogue.js" defer></script>
 }
 
-// wordClipRow is the no-JS play control for one word of a recall line.
-// The pointed word names the bar. Transliteration is printed only when the
-// line already shows it for that token, so a recall target stays the pointed
-// Hebrew and the bar until the answer. html.js hides .clip-rows; the orb
-// under the word is the control then.
+// wordClipRow is the no-JS play control for one word of a recall line or a
+// flip card. The pointed word names the bar, then its transliteration when
+// the line already shows it, so a recall target stays the pointed Hebrew and
+// the bar until the answer. html.js hides .clip-rows; the orb under the word
+// is the control then.
 templ wordClipRow(w Word, audioID string) {
 	<div class="clip-row">
 		<p class="clip-row__label">
@@ -333,8 +425,8 @@ templ wordClipRow(w Word, audioID string) {
 // until clips.js adds class js on html, which shows the orb and sets the bar
 // to display:none. One of those two is the play control. hero is the line control.
 // label is the button's accessible name, such as "Play אֲנִי" or "Play the line".
-// A recall word does not use this: its orb stays in the line and its bar is a
-// wordClipRow, so the no-JS bar is not squeezed into the word column.
+// A recall word and a flip card do not use this: the orb stays in the line
+// and the bar is a wordClipRow, so the no-JS bar is not squeezed into the word column.
 templ clip(id, src, label string, hero bool) {
 	<div class={ clipClass(hero) }>
 		<audio id={ id } src={ templ.SafeURL(src) } preload="none" controls></audio>
@@ -343,14 +435,15 @@ templ clip(id, src, label string, hero bool) {
 }
 
 // orbButton is the lesson orb. audioID, when set, names the audio element
-// played for a recall word whose bar lives in .clip-rows.
+// played for a word whose bar lives in .clip-rows. lang=en keeps the English
+// name from inheriting a Hebrew line.
 templ orbButton(className, label, src, audioID string) {
 	if audioID != "" {
-		<button type="button" class={ className } aria-label={ label } data-label={ label } data-src={ src } data-audio={ audioID } data-state="idle">
+		<button type="button" class={ className } lang="en" aria-label={ label } data-label={ label } data-src={ src } data-audio={ audioID } data-state="idle">
 			@orbGlyphs()
 		</button>
 	} else {
-		<button type="button" class={ className } aria-label={ label } data-label={ label } data-src={ src } data-state="idle">
+		<button type="button" class={ className } lang="en" aria-label={ label } data-label={ label } data-src={ src } data-state="idle">
 			@orbGlyphs()
 		</button>
 	}

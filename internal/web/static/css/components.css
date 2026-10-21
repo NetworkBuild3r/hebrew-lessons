@@ -36,6 +36,18 @@
   border-color: var(--hairline-strong);
 }
 .c-button[data-kind="quiet"]:hover { background: var(--surface-soft); }
+.c-button[data-kind="text"] {
+  background: transparent;
+  color: var(--text);
+  padding-inline: var(--space-3);
+  border-color: transparent;
+  font-weight: 600;
+  font-size: var(--fs-small);
+  gap: var(--space-2);
+  cursor: pointer;
+}
+.c-button[data-kind="text"]:hover { background: var(--surface-soft); }
+.c-button[data-kind="text"] .icon { inline-size: 18px; block-size: 18px; }
 .c-button:disabled { opacity: .5; cursor: not-allowed; }
 
 /* AnswerOption. Selected is neutral: a strong border and a soft surface.
