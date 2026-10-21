@@ -155,8 +155,8 @@ func TestNoMarkupCoversEveryStringField(t *testing.T) {
 	base := populated()
 	var fields []reflect.Value
 	collect(reflect.ValueOf(&base).Elem(), &fields)
-	if len(fields) != 8 {
-		t.Fatalf("the unit has %d string fields, want 8. A new field needs a markup check.", len(fields))
+	if len(fields) != 9 {
+		t.Fatalf("the unit has %d string fields, want 9. A new field needs a markup check.", len(fields))
 	}
 	for i := range fields {
 		for _, bad := range []string{"<", ">", "javascript:alert(1)", "JAVASCRIPT:x"} {
@@ -726,6 +726,42 @@ func TestOutOfBriefNewWordNeedsIntroAndUses(t *testing.T) {
 			t.Fatalf("a credited newWord with an intro and enough uses should pass %s: %v", rule, ruleSet(got))
 		}
 	}
+
+	// Two uses, introduced: the only block is the floor of 3.
+	short := tested
+	short.Lessons = []Lesson{{Kind: KindLesson, Activities: []Activity{
+		{Type: ActivityShadow, Text: word},
+		{Type: ActivityListenPick, Text: word},
+	}}}
+	got = validateBrief(&short, lk, &f)
+	if blocks := blockRules(got); len(blocks) != 1 || blocks[0] != RuleBriefNewMinUses {
+		t.Fatalf("two uses with an intro, blocks %v, issues %v", blocks, ruleSet(got))
+	}
+
+	// Three uses, but the first step tests the word and the intro comes after.
+	late := tested
+	late.Lessons = []Lesson{{Kind: KindLesson, Activities: []Activity{
+		{Type: ActivityListenPick, Text: word},
+		{Type: ActivityShadow, Text: word},
+		{Type: ActivityRecall, Text: word},
+	}}}
+	got = validateBrief(&late, lk, &f)
+	if blocks := blockRules(got); len(blocks) != 1 || blocks[0] != RuleBriefIntro {
+		t.Fatalf("intro after the test, blocks %v, issues %v", blocks, ruleSet(got))
+	}
+}
+
+func blockRules(issues []Issue) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, is := range issues {
+		if is.Severity != SeverityBlock || seen[is.Rule] {
+			continue
+		}
+		seen[is.Rule] = true
+		out = append(out, is.Rule)
+	}
+	return out
 }
 
 func TestDropFirstDageshAndCutPrefix(t *testing.T) {

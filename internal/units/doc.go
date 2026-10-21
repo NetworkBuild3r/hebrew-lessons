@@ -32,7 +32,11 @@
 //	brief.struggle_reuse        A struggle word is reused too few times, or not in its failing skill (block).
 //	brief.text_too_long         A passage has more tokens than the tier allows (block).
 //	brief.used                  The brief already built a unit (block).
-//	unit.no_markup              A text field contains <, >, or javascript: (block).
+//	unit.no_markup               A text field contains <, >, or javascript: (block).
+//	unit.translation_distractors A unit with a sentence listen_pick has fewer than 4 different English lines (warn). Lines that fold to the same English count once.
+//	unit.translation_lang        A translation contains Hebrew or markup (block).
+//	unit.translation_length      A translation is longer than 120 characters (warn).
+//	unit.translation_missing     A listen_pick of two or more words that are in the lexicon has no translation (block on a new write and on an older revision, warning on the current published revision).
 //
 // brief.coverage deliberately enforces the staged tier.min_known_share of the
 // brief (0.60 under 100 known words, 0.90 for 100 to 299, 0.95 from 300), not
@@ -62,6 +66,18 @@
 // A lookup that can check a clip in a speaker's voice implements
 // SpeakerLookup. One that cannot makes a unit with a dialogue fail with
 // schema.lookup. It never answers from a clip in the wrong voice.
+//
+// # Line translation
+//
+// An activity may carry translation, the author's English for the whole
+// text. A dialogue line may carry its own. A listen_pick whose text has two
+// or more words that are in the lexicon must set it on a new write and on
+// any revision other than the current published one. Rechecking that
+// current published revision warns instead. The translation is English
+// plain text of at most 120 characters. A unit that uses a sentence
+// listen_pick should carry at least four different English lines, counting
+// activity translations and dialogue line translations after folding, so
+// the player can offer three other choices.
 package units
 
 import "context"
@@ -138,14 +154,23 @@ type Lesson struct {
 // matches a token. A line with fewer lexicon words may leave it empty, and
 // an empty value is the same as omitting it. A new write blocks a missing
 // target, and so does an older revision. Rechecking the current published
-// revision warns instead. On listen_pick, target is optional: if target is
-// set, only that word gets credit; if not, nothing is credited and the step
-// is logged as an exposure.
+// revision warns instead. On listen_pick, target is optional. If target is
+// set, only that word gets credit. If not, a line with exactly one lexicon
+// word credits that word. With no target on a line with two or more lexicon
+// words, the player grades the first new word on the line, or the first
+// lexicon word if there is no new word, and logs no exposure. Planned with
+// #139 and migration 015: such a step credits nothing and logs a lesson_listen
+// exposure.
+// Translation is the author's English for the whole text. A listen_pick
+// whose text has two or more words that are in the lexicon must set it on
+// a new write and on an older revision. Rechecking the current published
+// revision warns instead. Every other activity may omit it.
 type Activity struct {
-	Type   string         `json:"type"`
-	Text   string         `json:"text,omitempty"`
-	Lines  []DialogueLine `json:"lines,omitempty"`
-	Target string         `json:"target,omitempty" jsonschema:"The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, and cloze when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure."`
+	Type        string         `json:"type"`
+	Text        string         `json:"text,omitempty"`
+	Translation string         `json:"translation,omitempty" jsonschema:"Natural English translation of the whole text, written by the author. Required on a listen_pick whose text has two or more words that are in the lexicon. Optional on every other type. English only, no markup, at most 120 characters."`
+	Lines       []DialogueLine `json:"lines,omitempty"`
+	Target      string         `json:"target,omitempty" jsonschema:"The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, and cloze when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure."`
 
 	// speaker is set only on the one-line views of a dialogue that the validator
 	// builds (see flatten). It is never read from or written to JSON.
@@ -153,10 +178,12 @@ type Activity struct {
 }
 
 // DialogueLine is one line of a dialogue. Speaker is a (female voice) or b
-// (male voice). Text is pointed Hebrew in NFC.
+// (male voice). Text is pointed Hebrew in NFC. Translation is optional English
+// for this line, used as a sentence-choice distractor.
 type DialogueLine struct {
-	Speaker string `json:"speaker"`
-	Text    string `json:"text"`
+	Speaker     string `json:"speaker"`
+	Text        string `json:"text"`
+	Translation string `json:"translation,omitempty" jsonschema:"Natural English translation of this line. Optional; used as a sentence-choice distractor and for future line reveals."`
 }
 
 // Texts returns every Hebrew string the activity speaks, in order: Text for an
