@@ -68,6 +68,9 @@ type Options struct {
 	Placement PlacementEngine
 	// study replaces the review session service. It is for tests in this package.
 	study *session.Service
+	// lessonRec replaces the lesson player's evidence recorder. Nil builds one
+	// from the store. Tests set a fake while exposures reject lesson_listen.
+	lessonRec lessonRecorder
 	// bands replaces where the learner model gets placement bands. For tests.
 	bands learner.BandSource
 }
@@ -127,6 +130,7 @@ func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.
 	srv.runs = opts.Runs
 	srv.recheck = opts.Placement
 	srv.bands = opts.bands
+	srv.lessonRec = opts.lessonRec
 	mux := srv.routes(health, tokens, sessions != nil, secure)
 	if sessions != nil {
 		sessions.Register(mux)
@@ -154,7 +158,7 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 		panic(err)
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
-	play := player{store: s.store, audioDir: s.audioDir, voices: s.voices}
+	play := player{store: s.store, audioDir: s.audioDir, voices: s.voices, rec: s.lessonRec}
 	mux.HandleFunc("GET /{$}", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
 		s.serveHome(w, r, secure, csrfValue(tokens, r))
 	}))

@@ -31,15 +31,16 @@ const maxStudyQueues = 128
 // rebuilt when it is Done, and when the store clock's UTC date is no
 // longer the date it was built.
 type server struct {
-	store    *db.Store
-	audioDir string
-	voices   audio.Voices
-	study    *session.Service
-	engine   *activity.Engine
-	deck     placementDeck
-	runs     placementRuns
-	recheck  PlacementEngine
-	bands    learner.BandSource
+	store     *db.Store
+	audioDir  string
+	voices    audio.Voices
+	study     *session.Service
+	engine    *activity.Engine
+	deck      placementDeck
+	runs      placementRuns
+	recheck   PlacementEngine
+	bands     learner.BandSource
+	lessonRec lessonRecorder
 
 	mu     sync.Mutex
 	queues map[string]*studyQueue

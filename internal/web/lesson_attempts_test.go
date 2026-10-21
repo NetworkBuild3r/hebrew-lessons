@@ -64,7 +64,7 @@ func TestLessonChecksWriteAttempts(t *testing.T) {
 		NewWords: []string{hello, morning},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityRecall, Text: hello},
-			{Type: units.ActivityListenPick, Text: line},
+			{Type: units.ActivityListenPick, Text: hello},
 			{Type: units.ActivityProduce, Text: hello},
 			{Type: units.ActivityCloze, Text: line},
 			{Type: units.ActivityStory, Text: line + " " + evening + " " + night},

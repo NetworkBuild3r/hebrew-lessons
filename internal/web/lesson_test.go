@@ -370,7 +370,7 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 		Title: "Greetings", Situation: "Saying hello.", Position: 1,
 		NewWords: []string{hello, morning},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
-			{Type: units.ActivityListenPick, Text: line},
+			{Type: units.ActivityListenPick, Text: hello},
 			{Type: units.ActivityProduce, Text: hello},
 			{Type: units.ActivityCloze, Text: line},
 			{Type: units.ActivityStory, Text: evening + " " + night},
@@ -411,34 +411,29 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 	if containsHebrew(attrValues(listen)) {
 		t.Fatalf("listen_pick attributes leak Hebrew:\n%s", attrValues(listen))
 	}
-	for _, gloss := range []string{">hello<", ">morning<"} {
-		if !strings.Contains(listen, gloss) {
-			t.Fatalf("listen_pick missing gloss %s:\n%s", gloss, listen)
-		}
+	if !strings.Contains(listen, ">hello<") {
+		t.Fatalf("listen_pick missing the gloss:\n%s", listen)
 	}
-	if !strings.Contains(listen, `value="`+itoa(ids[hello])+`"`) || !strings.Contains(listen, `value="`+itoa(ids[morning])+`"`) {
+	if !strings.Contains(listen, `value="`+itoa(ids[hello])+`"`) {
 		t.Fatalf("listen_pick choices should be lexeme ids:\n%s", listen)
 	}
 	if strings.Contains(listen, `value="`+hello+`"`) || strings.Contains(listen, `value="`+morning+`"`) {
 		t.Fatal("listen_pick value is pointed Hebrew")
 	}
-	if !strings.Contains(listen, `/audio/`+phraseID+`.mp3`) || !strings.Contains(listen, `aria-label="Play"`) {
-		t.Fatalf("listen_pick missing the phrase clip:\n%s", listen)
+	if !strings.Contains(listen, `/audio/`+helloID+`.mp3`) || !strings.Contains(listen, `aria-label="Play"`) {
+		t.Fatalf("listen_pick missing the word clip:\n%s", listen)
 	}
-	if strings.Contains(listen, `aria-label="Play the line"`) || strings.Contains(listen, "Play "+hello) {
-		t.Fatalf("listen_pick names the hidden Hebrew:\n%s", listen)
+	if strings.Contains(listen, `aria-label="Play the line"`) || strings.Contains(listen, "Play "+hello) || strings.Contains(listen, phraseID) || strings.Contains(listen, morningID) {
+		t.Fatalf("listen_pick names the hidden Hebrew or plays another clip:\n%s", listen)
 	}
 	if !strings.Contains(listen, `class="orb orb--hero"`) || !strings.Contains(listen, `preload="none"`) || !strings.Contains(listen, " controls") {
 		t.Fatalf("listen_pick clip is not a native audio plus orb:\n%s", listen)
 	}
-	if strings.Contains(listen, helloID) || strings.Contains(listen, morningID) {
-		t.Fatal("listen_pick prompt includes a word clip")
-	}
 
 	runID := runValue(t, listen)
 	revealed := activityHTML(t, postLesson(t, h, cookie, path, runID, itoa(ids[hello]), true, "brian-csrf").Body.String())
-	if !strings.Contains(revealed, hello) || !strings.Contains(revealed, morning) || !strings.Contains(revealed, "shalom") || !strings.Contains(revealed, "boker") || !strings.Contains(revealed, "wb__gl") {
-		t.Fatalf("listen_pick answer did not reveal the words:\n%s", revealed)
+	if !strings.Contains(revealed, hello) || !strings.Contains(revealed, "shalom") || !strings.Contains(revealed, "wb__gl") {
+		t.Fatalf("listen_pick answer did not reveal the word:\n%s", revealed)
 	}
 
 	produce := activityHTML(t, postLesson(t, h, cookie, path, runID, "continue", true, "brian-csrf").Body.String())

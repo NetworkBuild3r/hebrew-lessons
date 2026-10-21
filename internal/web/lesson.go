@@ -30,8 +30,10 @@ import (
 //   - recall shows the pointed Hebrew and hides the transliteration and
 //     gloss until the answer. Choices are English glosses.
 //   - listen_pick hides the Hebrew, the transliteration, and the gloss
-//     until the answer. The clip is the prompt. Choices are English glosses.
-//     The button value is the lexeme id, so the pointed word is not in the markup.
+//     until the answer. The clip is the prompt. A single lexicon word uses
+//     English glosses, and the button value is the lexeme id. A line of two
+//     or more lexicon words uses the author's English of the whole line, plus
+//     other English lines from the same unit. The button value is that English.
 //   - produce hides the Hebrew, the transliteration, and the clip until the
 //     answer. Choices show pointed Hebrew. The button value is the lexeme id.
 //   - cloze gaps the first new word. Until the answer, the other words show
@@ -47,10 +49,20 @@ import (
 //     speaker's voice, and the learner can replay one line or the whole
 //     conversation. Continue counts the step correct. A line with no clip in
 //     its voice has no play control, and is never played in the other voice.
+//
+// lessonRecorder is the evidence write the lesson player uses.
+// *evidence.Recorder implements it. Tests set a fake while the exposures
+// table does not yet allow lesson_listen.
+type lessonRecorder interface {
+	Attempt(ctx context.Context, a evidence.Attempt) (fsrs.Rating, error)
+	Expose(ctx context.Context, learnerID int64, lexemeIDs []int64, where string, unitID int64) error
+}
+
 type player struct {
 	store    *db.Store
 	audioDir string
 	voices   audio.Voices
+	rec      lessonRecorder
 }
 
 func (p player) lessonIndex(w http.ResponseWriter, r *http.Request, lang, csrf string) {
@@ -196,36 +208,58 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 	}
 
 	act := lesson.Activities[run.ActivityIx]
-	target, err := p.targetOf(r.Context(), lesson, act)
+	target, lex, err := p.targetOf(r.Context(), lesson, act)
 	if err != nil {
 		serverError(w)
 		return
 	}
-	graded := gradedActivity(act.Type) && target.ID != 0
-	if graded && recallOrCloze(act.Type) {
-		n, countErr := p.askChoiceCount(r.Context(), userID, lesson, run, act, target)
-		if countErr != nil {
-			serverError(w)
-			return
-		}
-		// Fewer than three options is a reveal, not a question. Continue advances.
-		if n < lessonMinChoices {
-			graded = false
+	sentence := sentenceListenPick(act, lex)
+	graded := false
+	if sentence {
+		graded = foldTranslation(act.Translation) != ""
+	} else if gradedActivity(act.Type) && target.ID != 0 {
+		graded = true
+		if recallOrCloze(act.Type) {
+			n, countErr := p.askChoiceCount(r.Context(), userID, lesson, run, act, target)
+			if countErr != nil {
+				serverError(w)
+				return
+			}
+			// Fewer than three options is a reveal, not a question. Continue advances.
+			if n < lessonMinChoices {
+				graded = false
+			}
 		}
 	}
 	switch {
 	case run.Phase == "ask" && graded && answer != "" && answer != "continue":
-		// Grade the lexeme id on the button. Position and label are not the answer.
-		picked, parseErr := strconv.ParseInt(answer, 10, 64)
-		correct := parseErr == nil && picked == target.ID
+		var correct bool
+		if sentence {
+			// The button value is the author's English, not a lexeme id.
+			correct = answer == act.Translation
+		} else {
+			// Grade the lexeme id on the button. Position and label are not the answer.
+			picked, parseErr := strconv.ParseInt(answer, 10, 64)
+			correct = parseErr == nil && picked == target.ID
+		}
 		var applied bool
 		run, applied, err = p.store.AnswerPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, correct)
 		// A repeated post is not applied, and it is not a second answer.
 		if err == nil && applied {
-			err = p.recordAnswer(r.Context(), userID, lesson, act, target, answer, correct)
+			if sentence && target.ID == 0 {
+				err = p.recorder().Expose(r.Context(), userID, listenLexemeIDs(act, lex), evidence.ContextLessonListen, lesson.UnitID)
+			} else {
+				err = p.recordAnswer(r.Context(), userID, lesson, act, target, answer, correct)
+			}
 		}
 	case answer == "continue" && (run.Phase == "reveal" || (run.Phase == "ask" && !graded)):
-		run, _, err = p.store.ContinuePlayerRun(r.Context(), userID, run.ID, run.ActivityIx, total)
+		// A sentence with no translation and no credited word is still an exposure.
+		expose := sentence && target.ID == 0 && run.Phase == "ask"
+		var applied bool
+		run, applied, err = p.store.ContinuePlayerRun(r.Context(), userID, run.ID, run.ActivityIx, total)
+		if err == nil && applied && expose {
+			err = p.recorder().Expose(r.Context(), userID, listenLexemeIDs(act, lex), evidence.ContextLessonListen, lesson.UnitID)
+		}
 	}
 	if err != nil {
 		serverError(w)
@@ -239,10 +273,18 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 	p.writeScreen(w, r, page, screen, partial)
 }
 
+func (p player) recorder() lessonRecorder {
+	if p.rec != nil {
+		return p.rec
+	}
+	return evidence.New(p.store, nil, nil)
+}
+
 // recordAnswer writes one checked lesson answer through evidence.Recorder.
-// userID is the signed-in learner. answer is the lexeme id the learner picked.
-// The response stored is that word's pointed text, or the raw form value when
-// no such word exists. The recorder caps its length.
+// userID is the signed-in learner. answer is the lexeme id the learner picked,
+// or the English line of a sentence listen_pick. The response stored is that
+// word's pointed text when the value is a lexeme id, or the raw form value
+// otherwise. The recorder caps its length.
 func (p player) recordAnswer(ctx context.Context, userID int64, lesson db.CourseLesson, act units.Activity, target db.LexemeView, answer string, correct bool) error {
 	picked, _ := strconv.ParseInt(answer, 10, 64)
 	response := answer
@@ -255,7 +297,7 @@ func (p player) recordAnswer(ctx context.Context, userID int64, lesson db.Course
 			response = face.TextNFC
 		}
 	}
-	_, err := evidence.New(p.store, nil, nil).Attempt(ctx, evidence.Attempt{
+	_, err := p.recorder().Attempt(ctx, evidence.Attempt{
 		UserID:         userID,
 		LexemeID:       target.ID,
 		Skill:          lessonSkill(act.Type),
@@ -389,7 +431,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	}
 	total := len(lesson.Activities)
 	if total == 0 {
-		screen.Activity = p.step(page, lesson, run, units.Activity{}, db.LexemeView{}, nil, nil, nil, true)
+		screen.Activity = p.step(page, lesson, run, units.Activity{}, db.LexemeView{}, nil, nil, nil, true, nil)
 		return screen, nil
 	}
 	if run.ActivityIx < 0 || run.ActivityIx >= total {
@@ -414,7 +456,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		return views.Screen{}, err
 	}
 	if act.Type == units.ActivityDialogue {
-		screen.Activity = p.step(page, lesson, run, act, target, lex, pool, nil, false)
+		screen.Activity = p.step(page, lesson, run, act, target, lex, pool, nil, false, nil)
 		screen.Activity.Dialogue, err = p.dialogueView(ctx, act, lex, lesson.NewWords)
 		if err != nil {
 			return views.Screen{}, err
@@ -422,7 +464,13 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		return screen, nil
 	}
 	var earlier []db.LexemeView
-	if run.Phase == "ask" && gradedActivity(act.Type) && target.ID != 0 {
+	var english []string
+	if run.Phase == "ask" && sentenceListenPick(act, lex) {
+		english, err = p.unitEnglishLines(ctx, lesson.UnitID)
+		if err != nil {
+			return views.Screen{}, err
+		}
+	} else if run.Phase == "ask" && gradedActivity(act.Type) && target.ID != 0 {
 		earlier, err = p.store.EarlierUnitLexemes(ctx, run.UserID, lesson.Position)
 		if err != nil {
 			return views.Screen{}, err
@@ -432,7 +480,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	if err != nil {
 		return views.Screen{}, err
 	}
-	screen.Activity = p.step(page, lesson, run, act, target, lex, pool, earlier, false)
+	screen.Activity = p.step(page, lesson, run, act, target, lex, pool, earlier, false, english)
 	phase := run.Phase
 	// A recall or cloze that cannot find three options is not a graded ask.
 	// Show the word the way a reveal does, and let Continue move on.
@@ -447,7 +495,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	return screen, nil
 }
 
-func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView, lex map[string]db.LexemeView, pool, earlier []db.LexemeView, empty bool) views.Activity {
+func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView, lex map[string]db.LexemeView, pool, earlier []db.LexemeView, empty bool, english []string) views.Activity {
 	total := len(lesson.Activities)
 	post := lessonPath(lesson.UnitID, lesson.LessonIx)
 	feedback, class := feedbackFor(run)
@@ -470,6 +518,11 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 		Post:          post,
 		Continue:      continueLabel(run.ActivityIx, total),
 		HomeHref:      page.Href("/"),
+	}
+	if !empty && run.Phase == "ask" && sentenceListenPick(act, lex) {
+		activity.Choices = sentenceChoices(act.Translation, english, sentenceChoiceRand(run, act))
+		activity.Asking = len(activity.Choices) > 0
+		return activity
 	}
 	if empty || run.Phase != "ask" || !gradedActivity(act.Type) || target.ID == 0 {
 		return activity
@@ -572,12 +625,13 @@ func (p player) dialogueView(ctx context.Context, act units.Activity, lex map[st
 	return d, nil
 }
 
-func (p player) targetOf(ctx context.Context, lesson db.CourseLesson, act units.Activity) (db.LexemeView, error) {
+func (p player) targetOf(ctx context.Context, lesson db.CourseLesson, act units.Activity) (db.LexemeView, map[string]db.LexemeView, error) {
 	lex, err := p.store.LexemesByText(ctx, actTokens(act))
 	if err != nil {
-		return db.LexemeView{}, err
+		return db.LexemeView{}, nil, err
 	}
-	return targetFrom(act, lex, lesson.NewWords)
+	view, err := targetFrom(act, lex, lesson.NewWords)
+	return view, lex, err
 }
 
 func wordsFor(act units.Activity, lex map[string]db.LexemeView, newWords []db.LexemeView, phase string, clips clipSet, target db.LexemeView) []views.Word {
@@ -688,7 +742,11 @@ func gradedActivity(typ string) bool {
 // token, which is how a revision published before target was required keeps
 // playing. Rechecking that current published revision uses units.ModePublished.
 // An older revision does not. The player does not apply that check.
+// listen_pick does not use that fallback. See listenPickTarget.
 func targetFrom(act units.Activity, lex map[string]db.LexemeView, newWords []db.LexemeView) (db.LexemeView, error) {
+	if act.Type == units.ActivityListenPick {
+		return listenPickTarget(act, lex), nil
+	}
 	if tok, ok := tokenForTarget(actTokens(act), act.Target); ok {
 		if view, found := lex[tok]; found {
 			return view, nil
