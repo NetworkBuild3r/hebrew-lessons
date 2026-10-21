@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -819,6 +820,54 @@ func TestExpose(t *testing.T) {
 	if n := e.count(`SELECT COUNT(*) FROM attempts`) + e.count(`SELECT COUNT(*) FROM cards`); n != 0 {
 		t.Fatal("an exposure wrote an attempt or a card")
 	}
+}
+
+func TestExposeAcceptsLessonListen(t *testing.T) {
+	e := newEnv(t)
+	lex := e.lexeme(kelev)
+	sink := &captureExposures{}
+	e.rec.exposureSink = sink
+	ctx := context.Background()
+	if err := e.rec.Expose(ctx, e.user, []int64{lex}, ContextLessonListen, 7); err != nil {
+		t.Fatalf("lesson_listen: %v", err)
+	}
+	if ContextLessonListen != "lesson_listen" {
+		t.Fatalf("context constant = %q", ContextLessonListen)
+	}
+	if len(sink.calls) != 1 || sink.calls[0].where != ContextLessonListen || sink.calls[0].unit != 7 || sink.calls[0].user != e.user {
+		t.Fatalf("write = %+v", sink.calls)
+	}
+	if !slices.Equal(sink.calls[0].ids, []int64{lex}) {
+		t.Fatalf("ids = %v", sink.calls[0].ids)
+	}
+	if err := e.rec.Expose(ctx, e.user, []int64{lex}, "not_a_context", 7); err == nil || !strings.Contains(err.Error(), "unknown") {
+		t.Fatalf("unknown context: %v", err)
+	}
+	if len(sink.calls) != 1 {
+		t.Fatal("an unknown context was written")
+	}
+	if n := e.count(`SELECT COUNT(*) FROM exposures`); n != 0 {
+		t.Fatalf("exposures = %d, the fake sink should have taken the write", n)
+	}
+}
+
+type captureExposures struct {
+	calls []struct {
+		user  int64
+		ids   []int64
+		where string
+		unit  int64
+	}
+}
+
+func (c *captureExposures) InsertExposures(_ context.Context, userID int64, lexemeIDs []int64, where string, unitID int64, _ time.Time) error {
+	c.calls = append(c.calls, struct {
+		user  int64
+		ids   []int64
+		where string
+		unit  int64
+	}{userID, append([]int64(nil), lexemeIDs...), where, unitID})
+	return nil
 }
 
 func TestExposeRefusesBadInput(t *testing.T) {

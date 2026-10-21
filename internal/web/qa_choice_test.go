@@ -516,7 +516,7 @@ func parseChoiceButtons(t *testing.T, body string) []qaButton {
 }
 
 func choiceRegion(body string) string {
-	const open = `<div class="choices">`
+	const open = `<div class="choices`
 	i := strings.Index(body, open)
 	if i < 0 {
 		return body

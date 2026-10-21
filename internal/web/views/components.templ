@@ -86,7 +86,20 @@ templ Card() {
 // Sheet is the raised panel at the bottom of a screen, such as the feedback
 // sheet. label is its accessible name.
 templ Sheet(label string) {
-	<section class="c-sheet" aria-label={ label }>
+	@sheet(label, false) {
+		{ children... }
+	}
+}
+
+// StatusSheet is Sheet with role=status, so a lesson answer is announced.
+templ StatusSheet(label string) {
+	@sheet(label, true) {
+		{ children... }
+	}
+}
+
+templ sheet(label string, status bool) {
+	<section class="c-sheet" aria-label={ label } if status { role="status" }>
 		<span class="c-sheet__handle" aria-hidden="true"></span>
 		{ children... }
 	</section>

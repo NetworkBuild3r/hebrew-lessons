@@ -36,15 +36,17 @@ const maxStudyQueues = 128
 // rebuilt when it is Done, and when the store clock's UTC date is no
 // longer the date it was built.
 type server struct {
-	store    *db.Store
-	audioDir string
-	voices   audio.Voices
-	study    *session.Service
-	engine   *activity.Engine
-	deck     placementDeck
-	runs     placementRuns
-	recheck  PlacementEngine
-	bands    learner.BandSource
+	store     *db.Store
+	audioDir  string
+	voices    audio.Voices
+	study     *session.Service
+	engine    *activity.Engine
+	deck      placementDeck
+	runs      placementRuns
+	recheck   PlacementEngine
+	bands     learner.BandSource
+	lessonRec lessonRecorder
+	choiceKey []byte
 
 	mu     sync.Mutex
 	queues map[string]*studyQueue
@@ -102,12 +104,16 @@ func (s *server) useActivityKey(key []byte) {
 	if s == nil || s.store == nil {
 		return
 	}
-	clk := s.store.Clock()
-	opts := []activity.Option{}
-	if len(key) > 0 {
-		opts = append(opts, activity.WithKey(key))
+	if len(key) == 0 {
+		var err error
+		key, err = activity.KeyFromSecret("")
+		if err != nil {
+			panic(err)
+		}
 	}
-	s.engine = activity.New(s.store, clk, evidence.New(s.store, fsrs.New(s.store, clk), clk), opts...)
+	s.choiceKey = key
+	clk := s.store.Clock()
+	s.engine = activity.New(s.store, clk, evidence.New(s.store, fsrs.New(s.store, clk), clk), activity.WithKey(key))
 }
 
 func (s *server) loadHome(r *http.Request) (HomeVM, string, string, error) {

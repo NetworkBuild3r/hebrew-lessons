@@ -33,6 +33,7 @@ const (
 	ContextGlossTap        = "gloss_tap"
 	ContextPlacementReview = "placement_review"
 	ContextLessonIntro     = "lesson_intro"
+	ContextLessonListen    = "lesson_listen"
 )
 
 const (
@@ -91,6 +92,12 @@ type Recorder struct {
 	store  *db.Store
 	review *fsrs.Review
 	clock  clock.Clock
+	// exposureSink, when set, receives Expose's write instead of the store.
+	// Production leaves it nil. A test sets it for a context the exposures
+	// CHECK does not allow yet.
+	exposureSink interface {
+		InsertExposures(ctx context.Context, userID int64, lexemeIDs []int64, where string, unitID int64, at time.Time) error
+	}
 }
 
 // New builds a recorder. A nil clk uses the clock the store was opened with.
@@ -260,7 +267,7 @@ func (r *Recorder) Expose(ctx context.Context, learnerID int64, lexemeIDs []int6
 		return errors.New("evidence: exposure has no learner")
 	}
 	switch where {
-	case ContextStory, ContextDialogue, ContextGlossTap, ContextPlacementReview, ContextLessonIntro:
+	case ContextStory, ContextDialogue, ContextGlossTap, ContextPlacementReview, ContextLessonIntro, ContextLessonListen:
 	default:
 		return fmt.Errorf("evidence: exposure context %q is unknown", where)
 	}
@@ -275,6 +282,9 @@ func (r *Recorder) Expose(ctx context.Context, learnerID int64, lexemeIDs []int6
 		}
 		seen[id] = struct{}{}
 		ids = append(ids, id)
+	}
+	if r.exposureSink != nil {
+		return r.exposureSink.InsertExposures(ctx, learnerID, ids, where, unitID, r.clock.Now())
 	}
 	return r.store.InsertExposures(ctx, learnerID, ids, where, unitID, r.clock.Now())
 }

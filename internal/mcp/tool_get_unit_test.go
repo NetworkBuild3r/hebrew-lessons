@@ -143,7 +143,7 @@ func TestTargetOptionalInToolSchema(t *testing.T) {
 		if info.Type != "listen_pick" {
 			continue
 		}
-		if !strings.Contains(info.Purpose, "lines of Hebrew as the buttons") || !strings.Contains(info.Purpose, "collected and validated now") || !strings.Contains(info.Purpose, "English line is kept for later use") {
+		if !strings.Contains(info.Purpose, "lines of Hebrew as the buttons") || !strings.Contains(info.Purpose, "collected and validated now") || !strings.Contains(info.Purpose, "picks the author's English of the whole line") {
 			t.Fatalf("catalog listen_pick purpose %q", info.Purpose)
 		}
 		for _, field := range info.Fields {
@@ -167,9 +167,10 @@ func TestTargetOptionalInToolSchema(t *testing.T) {
 	}
 }
 
-// listenPickCreditPinned is the player behavior Hebrew Dev described for a
-// listen_pick with no target: one lexicon word is credited, and two or more
-// grade the first new word (or the first lexicon word) and log no exposure.
+// listenPickCreditPinned is the player behavior for a listen_pick with no
+// target. One lexicon word is credited. Two or more with no translation
+// grade the first new word, or the first lexicon word, and log no exposure.
+// Two or more with a translation credit nothing and log one lesson_listen.
 func listenPickCreditPinned(desc string) bool {
 	for _, phrase := range []string{
 		"only that word gets credit",
@@ -177,14 +178,13 @@ func listenPickCreditPinned(desc string) bool {
 		"first new word",
 		"first lexicon word if there is no new word",
 		"logs no exposure",
-		"Planned with #139 and migration 015",
-		"credits nothing and logs a lesson_listen exposure",
+		"credits nothing and logs one lesson_listen exposure",
 	} {
 		if !strings.Contains(desc, phrase) {
 			return false
 		}
 	}
-	return !strings.Contains(desc, "logged as an exposure")
+	return !strings.Contains(desc, "logged as an exposure") && !strings.Contains(desc, "Planned with #139")
 }
 
 func TestGetUnit(t *testing.T) {

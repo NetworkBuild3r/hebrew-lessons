@@ -3,6 +3,8 @@ package views
 import (
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/a-h/templ"
 )
@@ -49,11 +51,24 @@ type Activity struct {
 	Post          string
 	Continue      string
 	Asking        bool
+	HomeHref      string
+	// Sentence is a listen_pick of two or more lexicon words whose translation
+	// is the question. Reveal shows the line under the orb. Sheet is the
+	// status panel with Continue. Translation is the author's English of that
+	// line. Each revealed word carries its own gloss. Contrast is the miss
+	// line that names a Hebrew word the heard line has and the picked line lacks.
+	Sentence    bool
+	Reveal      bool
+	Sheet       bool
+	Translation string
+	// RevealLines is 1, 2, or 3: the lines the translation takes at 390px.
+	// The ask and the reveal use the same class, so the choices do not move.
+	RevealLines int
+	Contrast    *ChoiceContrast
 	// Stage is a listening question: the clip is the whole prompt, so its play control is big.
 	// Spotlight is a step whose Hebrew is the one thing on screen: big, centered, play below.
 	Stage     bool
 	Spotlight bool
-	HomeHref  string
 	// Dialogue is set for a dialogue step. It replaces Words and Audio.
 	Dialogue *Dialogue
 	// MeaningsOpen is true when the teach step was opened with ?meanings=all,
@@ -117,6 +132,68 @@ func dialogueClipID(i int) string { return "dlg-clip-" + Num(i) }
 // while the clip plays (motion.js).
 func dialogueOrbAttrs(i int) templ.Attributes {
 	return templ.Attributes{"data-audio": dialogueClipID(i), "data-dlg-line": Num(i)}
+}
+
+// pickedLead opens the miss note, through "This line has ".
+// A pick that already ends the sentence does not gain a second period.
+func pickedLead(picked string) string {
+	picked = strings.TrimSpace(picked)
+	lead := "You picked “" + picked + "”"
+	if endsSentence(picked) {
+		return lead + " This line has "
+	}
+	return lead + ". This line has "
+}
+
+func endsSentence(s string) bool {
+	r, _ := utf8.DecodeLastRuneInString(strings.TrimSpace(s))
+	switch r {
+	case '.', '!', '?', '…':
+		return true
+	default:
+		return false
+	}
+}
+
+// contrastTail is the transliteration and gloss after the Hebrew word.
+func contrastTail(c *ChoiceContrast) string {
+	if c == nil {
+		return ""
+	}
+	if c.Translit != "" && c.Gloss != "" {
+		return " " + c.Translit + ", " + c.Gloss + "."
+	}
+	if c.Translit != "" {
+		return " " + c.Translit + "."
+	}
+	if c.Gloss != "" {
+		return " " + c.Gloss + "."
+	}
+	return "."
+}
+
+// revealClass is the sentence box. The line count is the translation at 390px.
+// On the ask the orb is centred in that box; after the answer the line fills it.
+func revealClass(a Activity) string {
+	size := "lp-reveal--1"
+	switch a.RevealLines {
+	case 2:
+		size = "lp-reveal--2"
+	case 3:
+		size = "lp-reveal--3"
+	}
+	if a.Reveal {
+		return "lp-reveal " + size
+	}
+	return "lp-reveal " + size + " lp-reveal--ask"
+}
+
+// choiceWrap is the choice list. A sentence listen_pick is one column.
+func choiceWrap(a Activity) string {
+	if a.Sentence {
+		return "choices choices--sentence"
+	}
+	return "choices"
 }
 
 // wordBlocksClass is the activity line. A multi-word recall centres that line
@@ -332,15 +409,40 @@ func shown(ok bool, value string) string {
 	return value
 }
 
-// Choice is one answer button. Value is the lexeme id, never the pointed text.
-// Hebrew choices show the pointed word. Translit is set only when that
-// choice should show a transliteration. English choices show Label, the gloss.
+// Choice is one answer button. Value is the lexeme id, or an opaque choice id
+// for a sentence listen_pick, never the pointed text. Hebrew choices show the
+// pointed word. Translit is set only when that choice should show a
+// transliteration. English choices show Label, the gloss or the whole line.
+// After a sentence answer, Disabled is set, State is correct, wrong, or dim,
+// and Tag is the visible "Right" or "Your pick".
 type Choice struct {
 	Value    string
 	Label    string
 	Text     string
 	Translit string
 	Hebrew   bool
+	State    string
+	Tag      string
+	Disabled bool
 	// Sentence is a button that is a whole line of Hebrew, the line the learner heard.
 	Sentence bool
+}
+
+// ChoiceContrast is the second sentence of a missed sentence listen_pick.
+type ChoiceContrast struct {
+	Picked   string
+	Hebrew   string
+	Translit string
+	Gloss    string
+}
+
+// HasHebrew reports whether s contains a Hebrew letter. An English unit
+// title is not wrapped as Hebrew.
+func HasHebrew(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Hebrew, r) {
+			return true
+		}
+	}
+	return false
 }

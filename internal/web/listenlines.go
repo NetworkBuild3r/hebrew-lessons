@@ -140,6 +140,9 @@ func without(lexemes []db.LexemeView, said map[string]bool, target db.LexemeView
 // centered, with the play control under it. That is a recall of one word, and a listening
 // step once the line is shown. A recall of a line names one word and has its own layout.
 func spotlight(typ string, a views.Activity) bool {
+	if a.Sentence || a.Reveal {
+		return false
+	}
 	if typ != units.ActivityRecall && typ != units.ActivityListenPick {
 		return false
 	}

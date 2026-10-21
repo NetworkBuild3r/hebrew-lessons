@@ -383,8 +383,9 @@ func TestSingleLexemeListenPickOmitsTargetAndTranslation(t *testing.T) {
 }
 
 // TestListenPickCreditPhrases pins the player wording. A target-less line of
-// two or more lexicon words grades the first new word, or the first lexicon
-// word, and logs no exposure. Whole-sentence choices are planned with #139.
+// two or more lexicon words with no translation grades the first new word,
+// or the first lexicon word, and logs no exposure. The same line with a
+// translation credits nothing and logs one lesson_listen exposure.
 func TestListenPickCreditPhrases(t *testing.T) {
 	phrases := []string{
 		"only that word gets credit",
@@ -392,8 +393,7 @@ func TestListenPickCreditPhrases(t *testing.T) {
 		"first new word",
 		"first lexicon word if there is no new word",
 		"logs no exposure",
-		"Planned with #139 and migration 015",
-		"credits nothing and logs a lesson_listen exposure",
+		"credits nothing and logs one lesson_listen exposure",
 	}
 	var target string
 	for _, r := range Rules {
@@ -431,14 +431,14 @@ func TestListenPickCreditPhrases(t *testing.T) {
 				t.Errorf("%s missing %q", path, phrase)
 			}
 		}
-		if strings.Contains(text, "logged as an exposure") || strings.Contains(text, "picks the meaning of the whole line") || strings.Contains(text, "grades the whole sentence") {
+		if strings.Contains(text, "logged as an exposure") || strings.Contains(text, "Planned with #139") || strings.Contains(text, "kept for later use") {
 			t.Errorf("%s still describes the old listen_pick player", path)
 		}
 	}
 	purpose := []string{
 		"lines of Hebrew as the buttons",
 		"collected and validated now",
-		"English line is kept for later use",
+		"picks the author's English of the whole line",
 	}
 	for _, path := range []string{"../mcp/schema.go", "../mcp/resources/authoring.md", "../../.cursor/skills/hebrew-lesson-author/SKILL.md"} {
 		body, err := os.ReadFile(path)
