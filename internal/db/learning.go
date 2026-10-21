@@ -11,15 +11,22 @@ import (
 const cardColumns = `id, user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended`
 
 // introNotFinished keeps a card out while its lexeme is still a new word
-// of a lesson this learner has not finished. Recycled words, and words
-// with no intro row, stay in the queue. ListDueCards and ListStudyCards
-// share it.
+// of a published lesson in this learner's scope that they have not
+// finished. lesson_items are rebuilt from the current units row on every
+// put and publish, so they are the published revision only while
+// units.status is published. A draft, a newer unpublished revision, and
+// another learner's unit do not count. Recycled words, and words with no
+// in-scope intro row, stay in the queue. ListDueCards and ListStudyCards
+// share it. The caller binds LearnerScope(userID) to the scope placeholder.
 const introNotFinished = `
 		  AND NOT EXISTS (
 		    SELECT 1
 		    FROM lesson_items AS li
+		    JOIN units AS u ON u.id = li.unit_id
 		    WHERE li.lexeme_id = c.lexeme_id
 		      AND li.role = 'new'
+		      AND u.status = 'published'
+		      AND (u.scope = 'shared' OR u.scope = ?)
 		      AND NOT EXISTS (
 		        SELECT 1
 		        FROM lesson_runs AS lr
@@ -278,9 +285,12 @@ func (s *Store) SetCardSuspended(ctx context.Context, id int64, suspended bool) 
 // ListDueCards returns cards that are due, not suspended, and not still
 // waiting on an intro lesson.
 //
-// A lexeme listed as lesson_items.role = 'new' is excluded until this learner
+// A lexeme listed as lesson_items.role = 'new' on a published unit in this
+// learner's scope (shared, or LearnerScope) is excluded until this learner
 // has a lesson_runs row for that unit and lesson with finished_at set.
-// Recycled words, and words with no intro row, are not excluded.
+// A draft, an unpublished revision, and another learner's unit are not
+// an intro. Recycled words, and words with no in-scope intro row, are not
+// excluded. ListStudyCards uses the same predicate.
 func (s *Store) ListDueCards(ctx context.Context, userID int64, now time.Time) ([]Card, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -293,7 +303,7 @@ func (s *Store) ListDueCards(ctx context.Context, userID int64, now time.Time) (
 		  AND c.suspended = 0
 		  AND c.due <= ?
 `+introNotFinished+`
-		ORDER BY c.due, c.id`, userID, FormatTime(now))
+		ORDER BY c.due, c.id`, userID, FormatTime(now), LearnerScope(userID))
 	if err != nil {
 		return nil, fmt.Errorf("db: list due cards: %w", err)
 	}
@@ -399,8 +409,8 @@ func (s *Store) InsertUser(ctx context.Context, email, sub, role string) (int64,
 }
 
 // ListStudyCards returns the learner's unsuspended cards in every skill (read,
-// recall, listen, spell), including cards that are not yet due. Words still waiting on their intro
-// lesson are left out, the same way ListDueCards leaves them out.
+// recall, listen, spell), including cards that are not yet due. Words still waiting on a
+// published in-scope intro lesson are left out, the same way ListDueCards leaves them out.
 // now caps the latest-rating lookup: a review_log row after now is ignored.
 // lapseSince is the start of the recent-lapse window. An Again at that
 // time or later sets RecentLapse. The clock that produced now and lapseSince
@@ -466,7 +476,7 @@ func (s *Store) ListStudyCards(ctx context.Context, userID int64, now, lapseSinc
 		  AND c.suspended = 0
 		  AND c.skill IN ('read', 'recall', 'listen', 'spell')
 `+introNotFinished+`
-		ORDER BY c.due, c.id`, FormatTime(now), FormatTime(lapseSince), userID)
+		ORDER BY c.due, c.id`, FormatTime(now), FormatTime(lapseSince), userID, LearnerScope(userID))
 	if err != nil {
 		return nil, fmt.Errorf("db: study cards: %w", err)
 	}
