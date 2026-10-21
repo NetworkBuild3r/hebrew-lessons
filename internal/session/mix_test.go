@@ -385,6 +385,59 @@ func TestSeparateLexemes(t *testing.T) {
 	if !sameIDs(idsOf(split), []int64{1, 3, 4, 5, 6, 2}) {
 		t.Fatalf("split = %v, want the seat that keeps the run", idsOf(split))
 	}
+	// The nearest later seat puts the card beside another visit of its own
+	// lexeme. That seat is refused, and no later seat is legal, so the queue
+	// stays. Lexemes 10, 10, 20, 10.
+	blocked := separateLexemes([]CardRef{
+		{CardID: 1, LexemeID: 10, Kind: fsrs.SkillRead},
+		{CardID: 2, LexemeID: 10, Kind: fsrs.SkillRecall},
+		{CardID: 3, LexemeID: 20, Kind: fsrs.SkillRead},
+		{CardID: 4, LexemeID: 10, Kind: fsrs.SkillRecall},
+	})
+	if !sameIDs(idsOf(blocked), []int64{1, 2, 3, 4}) {
+		t.Fatalf("right neighbor blocked = %v, want the original queue", idsOf(blocked))
+	}
+	// Moving the second visit one seat leaves the first and the third, which
+	// are the same lexeme, in the gap. The only legal seat is the one that
+	// keeps that gap apart. Lexemes 10, 10, 10, 20.
+	gap := separateLexemes([]CardRef{
+		{CardID: 1, LexemeID: 10, Kind: fsrs.SkillRead},
+		{CardID: 2, LexemeID: 10, Kind: fsrs.SkillRecall},
+		{CardID: 3, LexemeID: 10, Kind: fsrs.SkillRead},
+		{CardID: 4, LexemeID: 20, Kind: fsrs.SkillRecall},
+	})
+	if !sameIDs(idsOf(gap), []int64{1, 2, 4, 3}) {
+		t.Fatalf("gap = %v, want 1 2 4 3", idsOf(gap))
+	}
+	// The first legal seat is not the last word. The pass has to look again
+	// at the pair that seat left behind, which is struggling cards 3 and 4.
+	// A known card is still waiting, so the struggle cap sends card 4 one
+	// seat further. Lexemes 10, 10, 20, 20, 30.
+	again := separateLexemes([]CardRef{
+		{CardID: 1, LexemeID: 10, Kind: fsrs.SkillRead},
+		{CardID: 2, LexemeID: 10, Kind: fsrs.SkillRead, Struggling: true},
+		{CardID: 3, LexemeID: 20, Kind: fsrs.SkillRead, Struggling: true},
+		{CardID: 4, LexemeID: 20, Kind: fsrs.SkillRead, Struggling: true},
+		{CardID: 5, LexemeID: 30, Kind: fsrs.SkillRead},
+	})
+	if !sameIDs(idsOf(again), []int64{1, 3, 5, 4, 2}) {
+		t.Fatalf("recheck = %v, want 1 3 5 4 2", idsOf(again))
+	}
+}
+
+func TestKnownLaterStartsAfterTheIndex(t *testing.T) {
+	cards := []CardRef{
+		{CardID: 1, Kind: fsrs.SkillRead},
+		{CardID: 2, Kind: fsrs.SkillRead, Struggling: true},
+		{CardID: 3, Kind: fsrs.SkillRead, Struggling: true},
+	}
+	if knownLater(cards, 1) {
+		t.Fatal("a known card before the index is not later")
+	}
+	cards = append(cards, CardRef{CardID: 4, Kind: fsrs.SkillRead})
+	if !knownLater(cards, 1) {
+		t.Fatal("a known card after the index is later")
+	}
 }
 
 func TestNewCardOrderAndSmallQueueShare(t *testing.T) {

@@ -21,6 +21,24 @@ func (f *fakeClock) Now() time.Time { return f.t }
 
 func (f *fakeClock) Advance(d time.Duration) { f.t = f.t.Add(d) }
 
+func TestNilServiceSeed(t *testing.T) {
+	var s *Service
+	if got := s.Seed(); got != 0 {
+		t.Fatalf("nil service seed = %d, want 0", got)
+	}
+}
+
+func TestSeedReportsTheConstructorSeed(t *testing.T) {
+	svc, _, _ := openSvc(t, 42)
+	if svc.Seed() != 42 {
+		t.Fatalf("seed = %d, want 42", svc.Seed())
+	}
+	over := New(nil, nil, 1, WithSeed(7))
+	if over.Seed() != 7 {
+		t.Fatalf("WithSeed = %d, want 7", over.Seed())
+	}
+}
+
 func openSvc(t *testing.T, seed int64) (*Service, *db.Store, *fakeClock) {
 	t.Helper()
 	clk := &fakeClock{t: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)}
