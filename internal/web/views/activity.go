@@ -1,6 +1,7 @@
 package views
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/a-h/templ"
@@ -178,6 +179,14 @@ func homeHref(lang string) string {
 		return "/?lang=he"
 	}
 	return "/"
+}
+
+// ReviewedLine is the done-screen summary. Zero is an empty queue.
+func ReviewedLine(n int) string {
+	if n == 1 {
+		return "You reviewed 1 card."
+	}
+	return "You reviewed " + strconv.Itoa(n) + " cards."
 }
 
 // lowerKey is the data-hotkey of a badge: digits stay, letters go lower case.

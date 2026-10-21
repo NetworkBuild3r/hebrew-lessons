@@ -144,7 +144,7 @@ func (s *server) learnerHome(ctx context.Context, userID int64, name string) (Ho
 	}
 	vm.KnownWords = len(known)
 
-	next, situation, _, _, err := s.unitProgress(ctx, userID)
+	next, situation, _, _, _, _, err := s.unitProgress(ctx, userID)
 	if err != nil {
 		return HomeVM{}, "", err
 	}
@@ -158,25 +158,28 @@ func (s *server) learnerHome(ctx context.Context, userID int64, name string) (Ho
 }
 
 // unitProgress returns the next published shared unit this learner has not
-// finished, that unit's situation line, and the published shared counts.
-func (s *server) unitProgress(ctx context.Context, userID int64) (*UnitRefVM, string, int, int, error) {
+// finished, that unit's situation line, and the finished counts.
+// UnitsInScope already leaves another learner's units out. Totals then keep
+// published shared units and this learner's own published units. Unpublished
+// units and units they reported are left out. A unit is finished only when it
+// has at least one lesson and every one of those lessons is finished. A
+// finished run whose index is past the current lesson count does not count.
+// The lesson counts are the lessons inside the units that count. The next
+// unit stays the first unfinished shared unit.
+func (s *server) unitProgress(ctx context.Context, userID int64) (*UnitRefVM, string, int, int, int, int, error) {
 	units, err := s.store.UnitsInScope(ctx, userID)
 	if err != nil {
-		return nil, "", 0, 0, err
+		return nil, "", 0, 0, 0, 0, err
 	}
-	done, err := s.store.CompletedSharedUnits(ctx, userID)
+	finishes, err := s.store.FinishedLessons(ctx, userID)
 	if err != nil {
-		return nil, "", 0, 0, err
+		return nil, "", 0, 0, 0, 0, err
 	}
-	finished := map[int64]bool{}
-	for _, unit := range done {
-		finished[unit.UnitID] = true
-	}
-	// A shared unit the learner reported is hidden for them: it is not next, and it does
+	// A unit the learner reported is hidden for them: it is not next, and it does
 	// not count in their totals.
 	reported, err := s.store.HiddenUnitIDs(ctx, userID)
 	if err != nil {
-		return nil, "", 0, 0, err
+		return nil, "", 0, 0, 0, 0, err
 	}
 	hidden := map[int64]bool{}
 	for _, id := range reported {
@@ -184,22 +187,31 @@ func (s *server) unitProgress(ctx context.Context, userID int64) (*UnitRefVM, st
 	}
 	var next *UnitRefVM
 	situation := ""
-	completed, total := 0, 0
+	unitsDone, unitsTotal, lessonsDone, lessonsTotal := 0, 0, 0, 0
 	for _, unit := range units {
-		if unit.Scope != "shared" || unit.Status != "published" || hidden[unit.ID] {
+		if hidden[unit.ID] || unit.Status != "published" {
 			continue
 		}
-		total++
-		if finished[unit.ID] {
-			completed++
-			continue
+		n := db.LessonCount(unit.Doc)
+		unitsTotal++
+		lessonsTotal += n
+		got := 0
+		for ix := 0; ix < n; ix++ {
+			if _, ok := finishes[unit.ID][ix]; ok {
+				got++
+			}
 		}
-		if next == nil {
+		lessonsDone += got
+		whole := n > 0 && got == n
+		if whole {
+			unitsDone++
+		}
+		if unit.Scope == "shared" && !whole && next == nil {
 			next = &UnitRefVM{ID: unit.ID, Position: unit.Position, Title: unit.Title}
 			situation = unit.Situation
 		}
 	}
-	return next, situation, completed, total, nil
+	return next, situation, unitsDone, unitsTotal, lessonsDone, lessonsTotal, nil
 }
 
 func (s *server) placementVM(ctx context.Context, userID int64) (*PlacementVM, error) {
@@ -304,12 +316,14 @@ func (s *server) sessionKey(r *http.Request) (string, *auth.User, bool) {
 }
 
 // queueLocked returns the study queue for this auth session.
-// A Done queue, or one built on another UTC day, is rebuilt.
+// A queue built on another UTC day is rebuilt. A finished sitting is kept
+// when the rebuild is also finished, so its count stays on the done screen.
 // The caller holds s.mu.
 func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*studyQueue, error) {
 	now := s.now()
-	if q := s.queues[key]; q != nil && q.userID == userID && !q.done && sameStudyDay(q.builtAt, now) {
-		return q, nil
+	prev := s.queues[key]
+	if prev != nil && prev.userID == userID && !prev.done && sameStudyDay(prev.builtAt, now) {
+		return prev, nil
 	}
 	if s.study == nil {
 		q := &studyQueue{userID: userID, done: true, builtAt: now}
@@ -332,6 +346,11 @@ func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*st
 	q := &studyQueue{userID: userID, sess: built, builtAt: now, seed: seed}
 	if err := s.advance(ctx, q); err != nil {
 		return nil, err
+	}
+	// A finished sitting stays on the next read when nothing new is due, so the
+	// done screen can still name how many cards that sitting reviewed.
+	if q.done && prev != nil && prev.userID == userID && prev.done && prev.answered > 0 && sameStudyDay(prev.builtAt, now) {
+		return prev, nil
 	}
 	s.rememberLocked(key, q, now)
 	return q, nil

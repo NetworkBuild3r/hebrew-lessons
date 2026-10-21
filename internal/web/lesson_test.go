@@ -493,8 +493,8 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 	if !strings.Contains(cloze, `aria-label="Play `+morning+`"`) {
 		t.Fatalf("the other word's play button is not named:\n%s", cloze)
 	}
-	if !strings.Contains(choices, hello) || !strings.Contains(choices, "shalom") {
-		t.Fatalf("cloze choices should show pointed Hebrew and translit:\n%s", choices)
+	if !strings.Contains(choices, hello) || strings.Contains(choices, "shalom") {
+		t.Fatalf("cloze choices should show pointed Hebrew without translit:\n%s", choices)
 	}
 
 	filled := activityHTML(t, postLesson(t, h, cookie, path, runID, itoa(ids[hello]), true, "brian-csrf").Body.String())

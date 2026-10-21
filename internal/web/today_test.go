@@ -109,6 +109,38 @@ func TestHomeFromRealData(t *testing.T) {
 	}
 }
 
+// TestNextSharedUnitSkipsFinishedAndOwn covers unitProgress's next unit.
+// Today's lesson card is NextCourseLesson, which may offer this learner's
+// own unit. The next shared unit here skips a finished shared unit, skips
+// the learner's own unit, and keeps the first unfinished shared unit.
+func TestNextSharedUnitSkipsFinishedAndOwn(t *testing.T) {
+	store, _, now := openApp(t)
+	learner := addLearner(t, store, "a@example.com", "sub-a", now)
+	own := "learner:" + itoa(learner.user.ID)
+	one := []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{{Type: units.ActivityStory, Text: "OK"}}}}
+	finished := putLesson(t, store, nil, units.Unit{Title: "Finished street", Position: 1, Lessons: one}, "shared")
+	mine := putLesson(t, store, nil, units.Unit{Title: "Own morning", Position: 2, Lessons: one}, own)
+	cafe := putLesson(t, store, nil, units.Unit{Title: "Cafe next", Position: 3, Lessons: one}, "shared")
+	later := putLesson(t, store, nil, units.Unit{Title: "Later market", Position: 4, Lessons: one}, "shared")
+	publish(t, store, finished, mine, cafe, later)
+	at := now
+	if _, err := testharness.InsertLessonRun(context.Background(), store, learner.user.ID, finished, 0, at, &at); err != nil {
+		t.Fatal(err)
+	}
+	s := newServer(store)
+	next, _, _, _, _, _, err := s.unitProgress(context.Background(), learner.user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next == nil || next.ID != cafe || next.Title != "Cafe next" {
+		got := "<nil>"
+		if next != nil {
+			got = next.Title
+		}
+		t.Fatalf("next shared unit = %s, want Cafe next", got)
+	}
+}
+
 func TestFakeTodayDataIsGone(t *testing.T) {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
