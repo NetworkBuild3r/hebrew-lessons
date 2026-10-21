@@ -621,6 +621,29 @@ func playerRunTx(ctx context.Context, tx *sql.Tx, userID, runID int64) (PlayerRu
 	return run, nil
 }
 
+// HasLessonAttempt reports whether this learner has started a lesson, finished
+// one, or recorded an attempt outside placement. An open lesson_runs row is
+// enough, and so is a finished one. attempts.source = placement does not count,
+// and neither does a placement run that was abandoned or scored.
+func (s *Store) HasLessonAttempt(ctx context.Context, userID int64) (bool, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return false, err
+	}
+	var yes bool
+	err = conn.QueryRowContext(ctx, `
+		SELECT
+			EXISTS (SELECT 1 FROM lesson_runs WHERE user_id = ?)
+			OR EXISTS (
+				SELECT 1 FROM attempts
+				WHERE user_id = ? AND source <> 'placement'
+			)`, userID, userID).Scan(&yes)
+	if err != nil {
+		return false, fmt.Errorf("db: lesson attempt: %w", err)
+	}
+	return yes, nil
+}
+
 func scanPlayerRun(scan func(dest ...any) error) (PlayerRun, error) {
 	var run PlayerRun
 	var pending int
