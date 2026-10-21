@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -19,6 +20,24 @@ type fakeClock struct{ t time.Time }
 func (f *fakeClock) Now() time.Time { return f.t }
 
 func (f *fakeClock) Advance(d time.Duration) { f.t = f.t.Add(d) }
+
+func TestNilServiceSeed(t *testing.T) {
+	var s *Service
+	if got := s.Seed(); got != 0 {
+		t.Fatalf("nil service seed = %d, want 0", got)
+	}
+}
+
+func TestSeedReportsTheConstructorSeed(t *testing.T) {
+	svc, _, _ := openSvc(t, 42)
+	if svc.Seed() != 42 {
+		t.Fatalf("seed = %d, want 42", svc.Seed())
+	}
+	over := New(nil, nil, 1, WithSeed(7))
+	if over.Seed() != 7 {
+		t.Fatalf("WithSeed = %d, want 7", over.Seed())
+	}
+}
 
 func openSvc(t *testing.T, seed int64) (*Service, *db.Store, *fakeClock) {
 	t.Helper()
@@ -979,9 +998,14 @@ func TestFinishedLessonWordsEnterReview(t *testing.T) {
 	waitingHe, waitingEn := enqueuePair(t, store, userID, waitingWord, now)
 
 	got := drain(t, mustBuild(t, svc, userID))
-	want := []int64{earlyHe, earlyEn, lateHe, lateEn}
+	// Lesson position still beats card id. The two skills of one word are
+	// not left adjacent: early read, late read, early recall, late recall.
+	want := []int64{earlyHe, lateHe, earlyEn, lateEn}
 	if ids := idsOf(got); !sameIDs(ids, want) {
 		t.Fatalf("queue = %v, want %v", ids, want)
+	}
+	if i, id := adjacentLexemeAt(got); i >= 0 {
+		t.Fatalf("lexeme %d sits adjacent at %d", id, i)
 	}
 	for _, card := range got {
 		if !card.New || (card.Skill != fsrs.SkillRead && card.Skill != fsrs.SkillRecall) {
@@ -1017,10 +1041,18 @@ func TestNewCardCaps(t *testing.T) {
 		if len(got) != MaxNewPerSession {
 			t.Fatalf("len = %d, want %d", len(got), MaxNewPerSession)
 		}
-		for i, card := range got {
-			if !card.New || card.CardID != ids[i] {
-				t.Fatalf("card %d = %+v, want new %d", i, card, ids[i])
+		// The five earliest new cards, with the two skills of one word split.
+		want := []int64{ids[0], ids[2], ids[1], ids[3], ids[4]}
+		if !sameIDs(idsOf(got), want) {
+			t.Fatalf("queue = %v, want %v", idsOf(got), want)
+		}
+		for _, card := range got {
+			if !card.New {
+				t.Fatalf("card %+v, want a new card", card)
 			}
+		}
+		if i, id := adjacentLexemeAt(got); i >= 0 {
+			t.Fatalf("lexeme %d sits adjacent at %d", id, i)
 		}
 	})
 	t.Run("quarter", func(t *testing.T) {
@@ -1136,9 +1168,13 @@ func TestNewCardFloor(t *testing.T) {
 			if len(newIDs) != tc.wantNew {
 				t.Fatalf("new = %d, want %d (sessionSize %d, candidates %d)", len(newIDs), tc.wantNew, sessionSize, len(fresh))
 			}
-			for i, id := range newIDs {
-				if id != fresh[i] {
-					t.Fatalf("new[%d] = %d, want %d of %v", i, id, fresh[i], fresh)
+			allowed := map[int64]bool{}
+			for _, id := range fresh[:tc.wantNew] {
+				allowed[id] = true
+			}
+			for _, id := range newIDs {
+				if !allowed[id] {
+					t.Fatalf("new card %d is outside the earliest %d of %v", id, tc.wantNew, fresh)
 				}
 			}
 		})
@@ -1265,4 +1301,498 @@ func lexemeOf(t *testing.T, store *db.Store, cardID int64) int64 {
 		t.Fatal(err)
 	}
 	return card.LexemeID
+}
+
+// learner1 is the review shape that used to come out in one fixed order:
+// one due learning card, ten new cards (five words, read and recall), and
+// six future review cards.
+type learner1 struct {
+	learning int64
+	future   []int64
+	firstNew []int64 // the earliest new pair, one lexeme
+}
+
+func seedLearner1(t *testing.T, store *db.Store, now time.Time, userID int64) learner1 {
+	t.Helper()
+	ctx := context.Background()
+	var fix learner1
+	lex := mustLexeme(t, store, "לָמַד")
+	var err error
+	fix.learning, err = store.InsertCard(ctx, db.Card{
+		UserID: userID, LexemeID: lex, Skill: fsrs.SkillRead, State: fsrs.StateLearning,
+		Due: now.Add(-time.Minute), Stability: 0.5, Difficulty: 5, Reps: 1, Lapses: 0,
+		LastReview: now.Add(-2 * time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	insertReview(t, store, fix.learning, int(fsrs.Hard), now.Add(-2*time.Hour))
+
+	for i := 0; i < 6; i++ {
+		id := addCard(t, store, userID, fmt.Sprintf("עָתִיד-%d", i), fsrs.SkillRead,
+			now.Add(time.Duration(i+1)*time.Hour), 0, int(fsrs.Good), now.Add(-48*time.Hour), false)
+		fix.future = append(fix.future, id)
+	}
+
+	unit := insertUnitAt(t, store, 1)
+	var words []int64
+	for i := 0; i < 5; i++ {
+		words = append(words, mustLexeme(t, store, fmt.Sprintf("חָדָשׁ-%d", i)))
+	}
+	finishLesson(t, store, userID, unit, 0, words, now)
+	for i, word := range words {
+		he, en := enqueuePair(t, store, userID, word, now)
+		if i == 0 {
+			fix.firstNew = []int64{he, en}
+		}
+	}
+	return fix
+}
+
+func queueLearner1(t *testing.T, seed int64) ([]CardRef, learner1) {
+	t.Helper()
+	svc, store, clk := openSvc(t, 0)
+	svc = New(store, clk, 0, WithSeed(seed))
+	userID := mustUser(t, store)
+	fix := seedLearner1(t, store, clk.Now(), userID)
+	return drain(t, mustBuild(t, svc, userID)), fix
+}
+
+func TestLearner1ReviewIsShuffledPerSeed(t *testing.T) {
+	a, fix := queueLearner1(t, 1)
+	b, _ := queueLearner1(t, 1)
+	c, _ := queueLearner1(t, 2)
+	assertLearner1Queue(t, a, fix)
+	assertLearner1Queue(t, c, fix)
+	if !sameIDs(idsOf(a), idsOf(b)) {
+		t.Fatalf("same seed differed\n%v\n%v", idsOf(a), idsOf(b))
+	}
+	if sameIDs(idsOf(a), idsOf(c)) {
+		t.Fatalf("seeds 1 and 2 built the same queue: %v", idsOf(a))
+	}
+	// Seats for this fixture. The studied cards stay in due order.
+	// Seed 1 places the new pair at slots 2 and 6. Seed 2 places them at 3 and 6.
+	if !sameIDs(idsOf(a), []int64{1, 2, 8, 3, 4, 5, 9, 6, 7}) {
+		t.Fatalf("seed 1 = %v", idsOf(a))
+	}
+	if !sameIDs(idsOf(c), []int64{1, 2, 3, 8, 4, 5, 9, 6, 7}) {
+		t.Fatalf("seed 2 = %v", idsOf(c))
+	}
+	if !sameIDs(studiedIDs(a), studiedIDs(c)) {
+		t.Fatalf("seed changed the known/struggle order\n%v\n%v", studiedIDs(a), studiedIDs(c))
+	}
+}
+
+func assertLearner1Queue(t *testing.T, cards []CardRef, fix learner1) {
+	t.Helper()
+	if sessionLexemeCount(cards) < 2 {
+		t.Fatalf("lexemes = %d, want more than one (%s)", sessionLexemeCount(cards), describeQueue(cards))
+	}
+	if i, id := adjacentLexemeAt(cards); i >= 0 {
+		t.Fatalf("lexeme %d sits adjacent at %d: %s", id, i, describeQueue(cards))
+	}
+	if newCardsAreSuffix(cards) {
+		t.Fatalf("new cards are a suffix: %s", describeQueue(cards))
+	}
+	fresh := 0
+	seen := map[int64]int{}
+	for _, card := range cards {
+		if card.Kind == KindLetter || card.Kind == KindPattern {
+			t.Fatalf("drill %+v is not part of this shape", card)
+		}
+		seen[card.CardID]++
+		if seen[card.CardID] != 1 {
+			t.Fatalf("card %d queued %d times before a miss", card.CardID, seen[card.CardID])
+		}
+		if card.New {
+			fresh++
+			if fresh > MaxNewPerSession {
+				t.Fatalf("new cards = %d, cap %d", fresh, MaxNewPerSession)
+			}
+		}
+	}
+	studied := 0
+	for _, card := range cards {
+		if !card.New {
+			studied++
+		}
+	}
+	if studied > SessionCap {
+		t.Fatalf("studied = %d, cap %d", studied, SessionCap)
+	}
+	if fresh != newAllowance(studied, 10) {
+		t.Fatalf("new = %d, allowance %d for %d studied", fresh, newAllowance(studied, 10), studied)
+	}
+	if seen[fix.learning] != 1 {
+		t.Fatalf("learning card %d seen %d times", fix.learning, seen[fix.learning])
+	}
+	for _, id := range fix.future {
+		if seen[id] != 1 {
+			t.Fatalf("future card %d seen %d times", id, seen[id])
+		}
+	}
+	for _, id := range fix.firstNew {
+		if seen[id] != 1 {
+			t.Fatalf("first new card %d was not queued (seen %d)", id, seen[id])
+		}
+	}
+	if lexemeOfCards(cards, fix.firstNew[0]) != lexemeOfCards(cards, fix.firstNew[1]) {
+		t.Fatal("the first new pair is not one lexeme")
+	}
+	if i := struggleRun(cards); i >= 0 {
+		t.Fatalf("struggle run at %d: %s", i, describeQueue(cards))
+	}
+	// The read card of a new pair stays ahead of its recall card.
+	if indexOf(cards, fix.firstNew[0]) > indexOf(cards, fix.firstNew[1]) {
+		t.Fatalf("new pair order flipped: %s", describeQueue(cards))
+	}
+}
+
+func TestAgainReturnsOnceAfterSeededGap(t *testing.T) {
+	_, store, clk := openSvc(t, 1)
+	userID := mustUser(t, store)
+	reviewed := clk.Now().Add(-48 * time.Hour)
+	for i := 0; i < 12; i++ {
+		due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
+		addCard(t, store, userID, fmt.Sprintf("פַּעַר-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
+	}
+	// Build every sitting before any grade so the rows stay the fixture.
+	seen := map[int][]int64{}
+	var sessions []*Session
+	var seeds []int64
+	for seed := int64(0); seed < 80 && len(seen) < 3; seed++ {
+		span := requeueSpan(seed)
+		if span < RequeueGap || span > RequeueGap+2 {
+			t.Fatalf("seed %d span %d, want 3..5", seed, span)
+		}
+		if _, ok := seen[span]; ok {
+			continue
+		}
+		seen[span] = append([]int64(nil), seed)
+		seeds = append(seeds, seed)
+		sessions = append(sessions, mustBuild(t, New(store, clk, seed), userID))
+	}
+	if len(seen) != 3 {
+		t.Fatalf("spans = %v, want a sitting gap of 3, 4, and 5", seen)
+	}
+	for i, seed := range seeds {
+		again := measureAgain(t, sessions[i])
+		if again.appearances != 2 {
+			t.Fatalf("seed %d appearances = %d, want 2", seed, again.appearances)
+		}
+		if again.between != requeueSpan(seed) {
+			t.Fatalf("seed %d gap = %d, want %d", seed, again.between, requeueSpan(seed))
+		}
+		if again.between < 3 || again.between > 5 {
+			t.Fatalf("seed %d gap = %d, want 3..5", seed, again.between)
+		}
+	}
+	// The same seed queues the miss the same distance away.
+	again := measureAgain(t, mustBuild(t, New(store, clk, seeds[0]), userID))
+	if again.between != requeueSpan(seeds[0]) || again.appearances != 2 {
+		t.Fatalf("repeat seed %+v", again)
+	}
+}
+
+func TestAgainClampsToTheQueueEnd(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	ctx := context.Background()
+	userID := mustUser(t, store)
+	reviewed := clk.Now().Add(-48 * time.Hour)
+	first := addCard(t, store, userID, "רִאשׁוֹן", fsrs.SkillRead, clk.Now().Add(-2*time.Hour), 0, int(fsrs.Good), reviewed, false)
+	second := addCard(t, store, userID, "שֵׁנִי", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+	sess := mustBuild(t, svc, userID)
+	card, ok := sess.Next()
+	if !ok || card.CardID != first {
+		t.Fatalf("first = %+v ok=%v, want %d", card, ok, first)
+	}
+	revealAndRecord(t, sess, ctx, first, fsrs.Again)
+	next, ok := sess.Next()
+	if !ok || next.CardID != second {
+		t.Fatalf("next = %+v ok=%v, want %d", next, ok, second)
+	}
+	back, ok := sess.Next()
+	if !ok || back.CardID != first {
+		t.Fatalf("requeue = %+v ok=%v, want the miss at the end", back, ok)
+	}
+	if _, ok := sess.Next(); ok {
+		t.Fatal("the clamped miss was queued again")
+	}
+}
+
+func TestOneLexemePoolEnds(t *testing.T) {
+	t.Run("one card", func(t *testing.T) {
+		svc, store, clk := openSvc(t, 1)
+		userID := mustUser(t, store)
+		id := addCard(t, store, userID, "יָחִיד", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), clk.Now().Add(-48*time.Hour), false)
+		sess := mustBuild(t, svc, userID)
+		card, ok := sess.Next()
+		if !ok || card.CardID != id {
+			t.Fatalf("first = %+v ok=%v", card, ok)
+		}
+		revealAndRecord(t, sess, context.Background(), id, fsrs.Again)
+		if again, ok := sess.Next(); ok {
+			t.Fatalf("one lexeme came back as %+v", again)
+		}
+	})
+	t.Run("two cards one lexeme", func(t *testing.T) {
+		svc, store, clk := openSvc(t, 1)
+		ctx := context.Background()
+		userID := mustUser(t, store)
+		lex := mustLexeme(t, store, "זּוּג")
+		reviewed := clk.Now().Add(-48 * time.Hour)
+		read, err := store.InsertCard(ctx, db.Card{
+			UserID: userID, LexemeID: lex, Skill: fsrs.SkillRead, State: fsrs.StateReview,
+			Due: clk.Now().Add(-2 * time.Hour), Stability: 1, Difficulty: 5, Reps: 1, LastReview: reviewed,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		insertReview(t, store, read, int(fsrs.Good), reviewed)
+		recall, err := store.InsertCard(ctx, db.Card{
+			UserID: userID, LexemeID: lex, Skill: fsrs.SkillRecall, State: fsrs.StateReview,
+			Due: clk.Now().Add(-time.Hour), Stability: 1, Difficulty: 5, Reps: 1, LastReview: reviewed,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		insertReview(t, store, recall, int(fsrs.Good), reviewed)
+		sess := mustBuild(t, svc, userID)
+		first, ok := sess.Next()
+		if !ok || first.CardID != read {
+			t.Fatalf("first = %+v ok=%v, want %d", first, ok, read)
+		}
+		revealAndRecord(t, sess, ctx, read, fsrs.Again)
+		second, ok := sess.Next()
+		if !ok || second.CardID != recall {
+			t.Fatalf("second = %+v ok=%v, want %d", second, ok, recall)
+		}
+		if extra, ok := sess.Next(); ok {
+			t.Fatalf("one lexeme queued %+v after the pair", extra)
+		}
+	})
+	t.Run("word beside a letter drill", func(t *testing.T) {
+		svc, store, clk := openSvc(t, 1)
+		ctx := context.Background()
+		userID := mustUser(t, store)
+		id := addCard(t, store, userID, "בּוֹדֵד", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), clk.Now().Add(-48*time.Hour), false)
+		rev := fsrs.New(store, clk)
+		for i := 0; i < MinMissesForDrill; i++ {
+			if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, "ב/כ", 0); err != nil {
+				t.Fatal(err)
+			}
+		}
+		sess := mustBuild(t, svc, userID)
+		card, ok := sess.Next()
+		if !ok || card.CardID != id {
+			t.Fatalf("first = %+v ok=%v", card, ok)
+		}
+		revealAndRecord(t, sess, ctx, id, fsrs.Again)
+		sawDrill := false
+		for n := 0; n < DrillSteps+2; n++ {
+			next, ok := sess.Next()
+			if !ok {
+				break
+			}
+			if next.CardID == id {
+				t.Fatalf("Again on the only word was requeued as %+v", next)
+			}
+			if next.Kind == KindLetter {
+				sawDrill = true
+			}
+		}
+		if !sawDrill {
+			t.Fatal("the letter drill was not in the queue")
+		}
+	})
+}
+
+func TestDrillStillRequeuesInAOneLexemePool(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	ctx := context.Background()
+	userID := mustUser(t, store)
+	id := addCard(t, store, userID, "קֶדֶם", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), clk.Now().Add(-48*time.Hour), false)
+	rev := fsrs.New(store, clk)
+	for i := 0; i < MinMissesForDrill; i++ {
+		if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, "ב/כ", 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sess := mustBuild(t, svc, userID)
+	card, ok := sess.Next()
+	if !ok || card.CardID != id {
+		t.Fatalf("first = %+v ok=%v", card, ok)
+	}
+	revealAndRecord(t, sess, ctx, id, fsrs.Good)
+	drill, ok := sess.Next()
+	if !ok || drill.Kind != KindLetter || drill.CardID >= 0 {
+		t.Fatalf("drill = %+v ok=%v", drill, ok)
+	}
+	revealAndRecord(t, sess, ctx, drill.CardID, fsrs.Again)
+	found := false
+	for n := 0; n < DrillSteps+2; n++ {
+		next, ok := sess.Next()
+		if !ok {
+			break
+		}
+		if next.CardID == drill.CardID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("a missed drill in a one-lexeme pool was not queued again")
+	}
+}
+
+// A letter step sits between two words. Skipping that step has to keep
+// scanning, or the second word is invisible and the miss is not put back.
+func TestMissRequeuesWhenADrillSitsBetweenTwoWords(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	ctx := context.Background()
+	userID := mustUser(t, store)
+	reviewed := clk.Now().Add(-48 * time.Hour)
+	first := addCard(t, store, userID, "רִאשׁוֹן", fsrs.SkillRead, clk.Now().Add(-2*time.Hour), 0, int(fsrs.Good), reviewed, false)
+	addCard(t, store, userID, "שֵׁנִי", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+	rev := fsrs.New(store, clk)
+	for i := 0; i < MinMissesForDrill; i++ {
+		if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, "ב/כ", 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sess := mustBuild(t, svc, userID)
+	card, ok := sess.Next()
+	if !ok || card.CardID != first {
+		t.Fatalf("first = %+v ok=%v, want %d", card, ok, first)
+	}
+	revealAndRecord(t, sess, ctx, first, fsrs.Again)
+	for n := 0; n < DrillSteps+4; n++ {
+		next, ok := sess.Next()
+		if !ok {
+			t.Fatal("the miss was not put back")
+		}
+		if next.CardID == first {
+			return
+		}
+	}
+	t.Fatal("the miss was not put back")
+}
+
+type againMeasure struct {
+	between     int
+	appearances int
+}
+
+func measureAgain(t *testing.T, sess *Session) againMeasure {
+	t.Helper()
+	ctx := context.Background()
+	first, ok := sess.Next()
+	if !ok {
+		t.Fatal("empty queue")
+	}
+	revealAndRecord(t, sess, ctx, first.CardID, fsrs.Again)
+	got := againMeasure{appearances: 1}
+	for n := 0; n < SessionCap+5; n++ {
+		card, ok := sess.Next()
+		if !ok {
+			return got
+		}
+		if card.CardID != first.CardID {
+			if got.appearances == 1 {
+				got.between++
+			}
+			continue
+		}
+		got.appearances++
+		if got.appearances > 2 {
+			t.Fatalf("card %d appeared %d times", first.CardID, got.appearances)
+		}
+	}
+	t.Fatal("queue did not end")
+	return got
+}
+
+func studiedIDs(cards []CardRef) []int64 {
+	var out []int64
+	for _, card := range cards {
+		if card.New || card.Kind == KindLetter || card.Kind == KindPattern {
+			continue
+		}
+		out = append(out, card.CardID)
+	}
+	return out
+}
+
+func sessionLexemeCount(cards []CardRef) int {
+	seen := map[int64]struct{}{}
+	for _, card := range cards {
+		if card.LexemeID == 0 || card.Kind == KindLetter || card.Kind == KindPattern {
+			continue
+		}
+		seen[card.LexemeID] = struct{}{}
+	}
+	return len(seen)
+}
+
+func adjacentLexemeAt(cards []CardRef) (int, int64) {
+	for i := 1; i < len(cards); i++ {
+		a, b := cards[i-1], cards[i]
+		if a.LexemeID == 0 || b.LexemeID == 0 {
+			continue
+		}
+		if a.Kind == KindLetter || a.Kind == KindPattern || b.Kind == KindLetter || b.Kind == KindPattern {
+			continue
+		}
+		if a.LexemeID == b.LexemeID {
+			return i, a.LexemeID
+		}
+	}
+	return -1, 0
+}
+
+func newCardsAreSuffix(cards []CardRef) bool {
+	seenNew := false
+	for _, card := range cards {
+		if card.New {
+			seenNew = true
+			continue
+		}
+		if seenNew {
+			return false
+		}
+	}
+	return seenNew
+}
+
+func lexemeOfCards(cards []CardRef, id int64) int64 {
+	for _, card := range cards {
+		if card.CardID == id {
+			return card.LexemeID
+		}
+	}
+	return 0
+}
+
+func indexOf(cards []CardRef, id int64) int {
+	for i, card := range cards {
+		if card.CardID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func describeQueue(cards []CardRef) string {
+	parts := make([]string, len(cards))
+	for i, card := range cards {
+		mark := "K"
+		if card.Struggling {
+			mark = "S"
+		}
+		if card.New {
+			mark = "N"
+		}
+		parts[i] = fmt.Sprintf("%d:%s/%d", card.CardID, mark, card.LexemeID)
+	}
+	return strings.Join(parts, " ")
 }

@@ -64,3 +64,34 @@ func TestBuildSessionForKeepsOnlyThoseWords(t *testing.T) {
 		t.Fatalf("a word with no card holds %d cards", total)
 	}
 }
+
+// The band review uses the service seed for its miss gap, the same seed
+// BuildSession would use.
+func TestBuildSessionForUsesTheServiceSeed(t *testing.T) {
+	const seed int64 = 1
+	svc, store, clk := openSvc(t, seed)
+	if svc.Seed() != seed {
+		t.Fatalf("service seed = %d, want %d", svc.Seed(), seed)
+	}
+	ctx := context.Background()
+	user := mustUser(t, store)
+	now := clk.Now()
+	lex := make([]int64, 8)
+	for i := range lex {
+		id := addCard(t, store, user, "seed-"+string(rune('a'+i)), fsrs.SkillRead, now.Add(-time.Duration(i+1)*time.Hour), 0, int(fsrs.Good), now.Add(-48*time.Hour), false)
+		card, err := store.GetCard(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lex[i] = card.LexemeID
+	}
+	sess, err := svc.BuildSessionFor(ctx, user, lex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again := measureAgain(t, sess)
+	want := requeueSpan(svc.Seed())
+	if again.appearances != 2 || again.between != want {
+		t.Fatalf("band miss = %+v, want 2 appearances %d apart", again, want)
+	}
+}
