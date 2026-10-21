@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/lexicon"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
 // listenClip is one word in the review fixture. speak is what generate-audio
@@ -292,6 +294,93 @@ func TestReviewListeningDrillsFollowAudioAssets(t *testing.T) {
 	}
 	if nullAudio.Valid {
 		t.Fatalf("shalom audio_id = %q", nullAudio.String)
+	}
+}
+
+// TestClipURLResolvesFeedbackFromAudioAssets is the clipURL call site.
+// attachReviewClips asks it with an empty lexeme column. The clip is the
+// audio_assets row for the exact NFC text. A text with no row stays silent.
+// clipURL itself still falls back to the column when the text misses.
+func TestClipURLResolvesFeedbackFromAudioAssets(t *testing.T) {
+	const text = "שָׁלוֹם"
+	messy := "\u200e " + norm.NFD.String(text) + " \u200f "
+	if units.Normalize(messy) != text {
+		t.Fatalf("normalize %q = %q", messy, units.Normalize(messy))
+	}
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	ctx := context.Background()
+	dir := t.TempDir()
+	store, err := db.Open(ctx, filepath.Join(dir, "hebrew.sqlite"), fixedClock(now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	audioDir := filepath.Join(dir, "audio")
+	if err := os.MkdirAll(audioDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gen := &audio.Generator{
+		TTS: listenTTS{}, Store: store, Dir: audioDir,
+		Voice: audio.DefaultVoiceID, Model: audio.DefaultModel,
+	}
+	generated, err := gen.Generate(ctx, []string{messy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(generated) != 1 || generated[0].Status != audio.StatusGenerated || generated[0].TextNFC != text {
+		t.Fatalf("generate %+v", generated)
+	}
+	assetID := generated[0].AudioID
+	want := "/audio/" + assetID + ".mp3"
+	stale := strings.Repeat("ab", 32)
+	srv := newServer(store)
+
+	got, err := srv.clipURL(ctx, messy, stale)
+	if err != nil || got != want {
+		t.Fatalf("clipURL text = %q err %v, want %s", got, err, want)
+	}
+	fallback, err := srv.clipURL(ctx, "אֵין", stale)
+	if err != nil || fallback != "/audio/"+stale+".mp3" {
+		t.Fatalf("clipURL fallback = %q err %v", fallback, err)
+	}
+	none, err := srv.clipURL(ctx, "אֵין", "")
+	if err != nil || none != "" {
+		t.Fatalf("clipURL none = %q err %v", none, err)
+	}
+	bare := &server{}
+	fromColumn, err := bare.clipURL(ctx, text, stale)
+	if err != nil || fromColumn != "/audio/"+stale+".mp3" {
+		t.Fatalf("clipURL without a store = %q err %v", fromColumn, err)
+	}
+
+	other := "בֹּקֶר"
+	card := &views.ReviewCard{Act: &views.ActivityView{Feedback: &views.FeedbackView{
+		Hebrew:   messy,
+		AudioURL: "",
+		Pairs: []views.PairView{
+			{Hebrew: text, Gloss: "hello"},
+			{Hebrew: other, Gloss: "morning"},
+			{Hebrew: text, Gloss: "hello", AudioURL: "/audio/kept.mp3"},
+		},
+	}}}
+	if err := srv.attachReviewClips(ctx, card); err != nil {
+		t.Fatal(err)
+	}
+	fb := card.Act.Feedback
+	if fb.AudioURL != want || fb.Pairs[0].AudioURL != want {
+		t.Fatalf("feedback clips = %q %q, want %s", fb.AudioURL, fb.Pairs[0].AudioURL, want)
+	}
+	if fb.Pairs[1].AudioURL != "" {
+		t.Fatalf("a word with no clip got %q", fb.Pairs[1].AudioURL)
+	}
+	if fb.Pairs[2].AudioURL != "/audio/kept.mp3" {
+		t.Fatalf("a clip already on the pair was replaced: %q", fb.Pairs[2].AudioURL)
+	}
+	if err := srv.attachReviewClips(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.attachReviewClips(ctx, &views.ReviewCard{}); err != nil {
+		t.Fatal(err)
 	}
 }
 
