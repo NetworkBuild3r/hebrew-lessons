@@ -1,9 +1,12 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
 )
@@ -143,6 +146,87 @@ func TestGetContextContractAddsDueFields(t *testing.T) {
 	}
 	if with.MixTarget != currentMixTarget() {
 		t.Fatalf("mix %+v", with.MixTarget)
+	}
+}
+
+func TestCardsDueNowFromStatesCountsEachState(t *testing.T) {
+	got := CardsDueNowFromStates([]string{"new", "learning", "review", "relearning", "other", ""})
+	want := CardsDueNow{New: 1, Learning: 1, Review: 1, Relearning: 1, Total: 6}
+	if got != want {
+		t.Fatalf("counts %+v", got)
+	}
+	if empty := CardsDueNowFromStates(nil); empty != (CardsDueNow{}) {
+		t.Fatalf("empty %+v", empty)
+	}
+}
+
+func TestCountsTowardDueNowLegsAndBoundary(t *testing.T) {
+	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name   string
+		user   int64
+		due    time.Time
+		userID int64
+		want   bool
+	}{
+		{name: "other user at now", user: 2, due: now, userID: 1, want: false},
+		{name: "same user one nanosecond before", user: 1, due: now.Add(-time.Nanosecond), userID: 1, want: true},
+		{name: "same user at now", user: 1, due: now, userID: 1, want: true},
+		{name: "same user one nanosecond after", user: 1, due: now.Add(time.Nanosecond), userID: 1, want: false},
+		{name: "other user one nanosecond before", user: 2, due: now.Add(-time.Nanosecond), userID: 1, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := countsTowardDueNow(tc.user, tc.due, tc.userID, now); got != tc.want {
+				t.Fatalf("got %v", got)
+			}
+		})
+	}
+}
+
+func TestMemoryCardsDueNowAppliesPredicate(t *testing.T) {
+	mem := NewMemory()
+	now := time.Now().UTC()
+	mem.AddCard(1, LearnerCard{State: "new", Due: now.Add(-time.Hour)})
+	mem.AddCard(1, LearnerCard{State: "learning", Due: now.Add(-time.Second)})
+	mem.AddCard(1, LearnerCard{State: "review", Due: now.Add(time.Hour)})
+	mem.AddCard(1, LearnerCard{State: "relearning", Due: now})
+	mem.AddCard(1, LearnerCard{State: "other", Due: now.Add(-time.Minute)})
+	mem.AddCard(2, LearnerCard{State: "new", Due: now.Add(-time.Hour)})
+
+	got, err := mem.CardsDueNow(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := CardsDueNow{New: 1, Learning: 1, Review: 0, Relearning: 1, Total: 4}
+	if got != want {
+		t.Fatalf("due %+v", got)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := mem.CardsDueNow(ctx, 1); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled %v", err)
+	}
+}
+
+type dueErrorCourse struct {
+	*Memory
+}
+
+func (dueErrorCourse) CardsDueNow(context.Context, int64) (CardsDueNow, error) {
+	return CardsDueNow{}, errors.New("due failed")
+}
+
+func TestGetContextReportsCardsDueNowStoreError(t *testing.T) {
+	mem := NewMemory()
+	session := connectMCP(t, Handler(Options{
+		AuthToken: testToken, Course: dueErrorCourse{Memory: mem}, Lexicon: mem, Lookup: mem, Units: mem,
+	}), testToken)
+	id := int64(7)
+	msg := callErr(t, session, "get_context", getContextInput{LearnerID: &id})
+	if !strings.Contains(msg, "The cards due now could not be read.") {
+		t.Fatalf("error %s", msg)
 	}
 }
 

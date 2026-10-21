@@ -95,19 +95,19 @@ type CardsDueNow struct {
 }
 
 // CardsDueNowFromStates counts states returned by the due-card query.
-// Total is len(states).
+// Total is len(states). Each state is its own predicate so a card of one
+// state cannot be counted as another. Any other state still counts in Total.
 func CardsDueNowFromStates(states []string) CardsDueNow {
 	var out CardsDueNow
 	out.Total = len(states)
 	for _, state := range states {
-		switch state {
-		case "new":
+		if state == "new" {
 			out.New++
-		case "learning":
+		} else if state == "learning" {
 			out.Learning++
-		case "review":
+		} else if state == "review" {
 			out.Review++
-		case "relearning":
+		} else if state == "relearning" {
 			out.Relearning++
 		}
 	}

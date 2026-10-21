@@ -149,12 +149,26 @@ func (m *Memory) CardsDueNow(ctx context.Context, userID int64) (CardsDueNow, er
 	defer m.mu.Unlock()
 	states := make([]string, 0)
 	for _, row := range m.cards {
-		if row.user != userID || row.card.Due.After(now) {
+		if !countsTowardDueNow(row.user, row.card.Due, userID, now) {
 			continue
 		}
 		states = append(states, row.card.State)
 	}
 	return CardsDueNowFromStates(states), nil
+}
+
+// countsTowardDueNow is the in-memory due predicate, one leg at a time.
+// A card counts only for its own user. due.Compare(now) > 0 is strictly
+// after now, so a card due at now counts and a card due one instant later
+// does not.
+func countsTowardDueNow(user int64, due time.Time, userID int64, now time.Time) bool {
+	if user != userID {
+		return false
+	}
+	if due.Compare(now) > 0 {
+		return false
+	}
+	return true
 }
 
 // RecentAccuracy implements CourseReader.
