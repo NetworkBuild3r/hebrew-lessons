@@ -44,32 +44,78 @@ func TestAlefbetReference(t *testing.T) {
 	if !ok || gimel.Name != gimelName || gimel.Translit != "gimel" || gimel.Sound != "g as in go" {
 		t.Fatalf("gimel = %+v", gimel)
 	}
-	// Pinned spellings from the Hebrew Tutor review. Soft kaf is patah, with no dagesh.
-	pins := []struct {
-		letter, name, translit, sound string
+	// Canonical letter names. A final form is the base name plus סוֹפִית
+	// and the base transliteration plus " sofit".
+	canonical := []struct {
+		letter, name, translit string
 	}{
-		{"א", "אָלֶף", "alef", "silent (carries a vowel)"},
-		{"ב", "בֵית", "vet", "v as in van"},
-		{"ו", "וָו", "vav", "v as in van; also the vowel letter for o (וֹ) and u (וּ)"},
-		{"י", "יוֹד", "yod", "y as in yes; also the vowel letter for i (and sometimes e)"},
-		{"כ", "כַף", "khaf", "kh as in Bach"},
-		{"ך", "כַף סוֹפִית", "khaf sofit", "kh as in Bach"},
-		{"פ", "פֵא", "fe", "f as in fun"},
-		{"צ", "צָדי", "tsadi", "ts as in cats"},
-		{"ץ", "צָדי סוֹפִית", "tsadi sofit", "ts as in cats"},
-		{"ק", "קוֹף", "kof", "k as in kite"},
-		{"ר", "רֵישׁ", "resh", "guttural r, as in the French rue"},
-		{"ש", "שִׁין", "shin", "sh as in ship (s when the dot is on the left: שׂ)"},
+		{"\u05d0", "\u05d0\u05b8\u05dc\u05b6\u05e3", "alef"},
+		{"\u05d1\u05bc", "\u05d1\u05b5\u05bc\u05d9\u05ea", "bet"},
+		{"\u05d1", "\u05d5\u05b5\u05d9\u05ea", "vet"},
+		{"\u05d2", "\u05d2\u05b4\u05bc\u05d9\u05de\u05b6\u05dc", "gimel"},
+		{"\u05d3", "\u05d3\u05b8\u05bc\u05dc\u05b6\u05ea", "dalet"},
+		{"\u05d4", "\u05d4\u05b5\u05d0", "he"},
+		{"\u05d5", "\u05d5\u05b8\u05d5", "vav"},
+		{"\u05d6", "\u05d6\u05b7\u05d9\u05b4\u05df", "zayin"},
+		{"\u05d7", "\u05d7\u05b5\u05d9\u05ea", "khet"},
+		{"\u05d8", "\u05d8\u05b5\u05d9\u05ea", "tet"},
+		{"\u05d9", "\u05d9\u05d5\u05b9\u05d3", "yod"},
+		{"\u05db\u05bc", "\u05db\u05b7\u05bc\u05e3", "kaf"},
+		{"\u05db", "\u05db\u05b8\u05e3", "khaf"},
+		{"\u05dc", "\u05dc\u05b8\u05de\u05b6\u05d3", "lamed"},
+		{"\u05de", "\u05de\u05b5\u05dd", "mem"},
+		{"\u05e0", "\u05e0\u05d5\u05bc\u05df", "nun"},
+		{"\u05e1", "\u05e1\u05b8\u05de\u05b6\u05da\u05b0", "samekh"},
+		{"\u05e2", "\u05e2\u05b7\u05d9\u05b4\u05df", "ayin"},
+		{"\u05e4\u05bc", "\u05e4\u05b5\u05bc\u05d0", "pe"},
+		{"\u05e4", "\u05e4\u05b5\u05d0", "fe"},
+		{"\u05e6", "\u05e6\u05b8\u05d3\u05d9", "tsadi"},
+		{"\u05e7", "\u05e7\u05d5\u05b9\u05e3", "kof"},
+		{"\u05e8", "\u05e8\u05b5\u05d9\u05e9\u05c1", "resh"},
+		{"\u05e9", "\u05e9\u05b4\u05c1\u05d9\u05df", "shin"},
+		{"\u05e9\u05c1", "\u05e9\u05b4\u05c1\u05d9\u05df", "shin"},
+		{"\u05e9\u05c2", "\u05e9\u05b4\u05c2\u05d9\u05df", "sin"},
+		{"\u05ea", "\u05ea\u05b8\u05bc\u05d5", "tav"},
 	}
-	for _, pin := range pins {
-		e, ok := views.LookupAlefbet(pin.letter)
-		if !ok || e.Name != pin.name || e.Translit != pin.translit || e.Sound != pin.sound {
-			t.Fatalf("%s = name %q translit %q sound %q", pin.letter, e.Name, e.Translit, e.Sound)
+	sofit := "\u05e1\u05d5\u05b9\u05e4\u05b4\u05d9\u05ea"
+	finalOf := map[string]string{
+		"\u05da": "\u05db",
+		"\u05dd": "\u05de",
+		"\u05df": "\u05e0",
+		"\u05e3": "\u05e4",
+		"\u05e5": "\u05e6",
+	}
+	type nameTr struct{ name, translit string }
+	want := map[string]nameTr{}
+	for _, row := range canonical {
+		if _, ok := want[row.letter]; ok {
+			t.Fatalf("duplicate canonical letter %q", row.letter)
 		}
+		want[row.letter] = nameTr{row.name, row.translit}
 	}
-	khaf, _ := views.LookupAlefbet("כ")
-	if []rune(khaf.Name)[1] != 0x05B7 || strings.ContainsRune(khaf.Name, 0x05BC) || strings.ContainsRune(khaf.Name, 0x05B8) {
-		t.Fatalf("soft kaf name = %q, want patah and no dagesh", khaf.Name)
+	for final, base := range finalOf {
+		b, ok := want[base]
+		if !ok {
+			t.Fatalf("final %q has no base name", final)
+		}
+		want[final] = nameTr{b.name + " " + sofit, b.translit + " sofit"}
+	}
+	if len(views.Alefbet) != len(want) {
+		t.Fatalf("table has %d letters, canonical list %d", len(views.Alefbet), len(want))
+	}
+	seenLetter := map[string]bool{}
+	for _, e := range views.Alefbet {
+		w, ok := want[e.Letter]
+		if !ok {
+			t.Fatalf("letter %q is not in the canonical list", e.Letter)
+		}
+		if seenLetter[e.Letter] {
+			t.Fatalf("duplicate letter %q", e.Letter)
+		}
+		seenLetter[e.Letter] = true
+		if e.Name != w.name || e.Translit != w.translit {
+			t.Fatalf("%q name %q translit %q, want name %q translit %q", e.Letter, e.Name, e.Translit, w.name, w.translit)
+		}
 	}
 	const daletResh = "ד has a sharp corner at the top right, where the roof sticks out past the leg; ר is rounded at the top."
 	if views.AlefbetTellApart([]string{"ד", "ר"}) != daletResh {
