@@ -225,3 +225,29 @@ html:not(.js) .wslot > .clip { display: none; }
     .wline .wcard[open] .wcard__back { opacity: 1; }
   }
 }
+
+/* The cards, bigger and centered, with the play control joined to them.
+   A single word is the one thing on screen: a large card. The control for a word is a disc
+   that straddles the card's bottom edge, so it reads as part of the card. The line's own
+   control sits under the row of cards. The back of a card leads with the meaning. */
+.wline-play { display: flex; justify-content: center; margin-block-start: var(--space-2); }
+.wslot { gap: 0; }
+.wslot > .clip {
+  margin-block-start: -22px;
+  position: relative;
+  z-index: 1;
+}
+.wline:has(.wslot:only-of-type) .wcard { min-inline-size: 12rem; max-inline-size: 18rem; }
+.wline:has(.wslot:only-of-type) .wcard__face { min-block-size: 10rem; padding: var(--space-5); gap: var(--space-2); }
+.wline:has(.wslot:only-of-type) .wcard__he { font-size: var(--fs-he-hero); }
+.wline:has(.wslot:only-of-type) .wcard__tr { font-size: 18px; }
+.wcard__gl { font-size: clamp(1.25rem, 1rem + 1vw, 1.625rem); line-height: 1.2; }
+.wline:has(.wslot:only-of-type) .wcard__gl { font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2rem); }
+.wcard__note {
+  font-size: var(--fs-caption);
+  color: var(--muted);
+  line-height: 1.35;
+  text-wrap: balance;
+}
+.wcard__he-sm { order: 2; }
+.wcard__back .wcard__pos { order: 3; }

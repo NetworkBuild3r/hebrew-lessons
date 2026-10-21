@@ -69,7 +69,7 @@ templ ActivityBlock(a Activity) {
 					<div class="listen-stage">
 						@clip("line-clip", a.Audio, a.AudioLabel, true)
 					</div>
-				} else if a.Audio != "" {
+				} else if a.Audio != "" && !teachLine(a) {
 					@clip("line-clip", a.Audio, a.AudioLabel, true)
 				}
 			}
@@ -82,6 +82,11 @@ templ ActivityBlock(a Activity) {
 						@activityWord(word, "word-clip-"+Num(i), a.PromptWord != "")
 					}
 				</div>
+				if teachLine(a) && a.Audio != "" {
+					<div class="wline-play">
+						@clip("line-clip", a.Audio, a.AudioLabel, true)
+					</div>
+				}
 				if clipRows(a) {
 					<div class="clip-rows">
 						for i, word := range a.Words {
@@ -216,8 +221,21 @@ templ wordCard(w Word) {
 		</summary>
 		<div class="wcard__face wcard__back" lang="en" dir="ltr">
 			<bdi class="wcard__he-sm" lang="he" dir="rtl">{ w.Text }</bdi>
-			if w.Gloss != "" {
-				<span class="wcard__gl">{ w.Gloss }</span>
+			if meaning, note, lemma := SplitGloss(w.Gloss); meaning != "" {
+				<span class="wcard__gl">{ meaning }</span>
+				if note != "" || lemma != "" {
+					<span class="wcard__note">
+						if note != "" {
+							{ note }
+						}
+						if note != "" && lemma != "" {
+							{ " · " }
+						}
+						if lemma != "" {
+							<bdi lang="he" dir="rtl">{ lemma }</bdi>
+						}
+					</span>
+				}
 			}
 			if meta := CardMeta(w.POS, w.Gender); meta != "" {
 				<span class="wcard__pos">{ meta }</span>

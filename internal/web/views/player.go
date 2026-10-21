@@ -1,6 +1,7 @@
 package views
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/a-h/templ"
@@ -137,6 +138,29 @@ func dialogueWordsClass(words []Word) string {
 		return "wline"
 	}
 	return "word-blocks"
+}
+
+// teachLine is a step whose words are flip cards in one row and whose line clip plays them
+// all. The clip sits under the cards, not above them: the learner looks at the word, then
+// plays it.
+func teachLine(a Activity) bool {
+	return a.Dialogue == nil && hasFlipWords(a.Words)
+}
+
+var glossNoteRE = regexp.MustCompile(`^(.*\S)\s*\(([^()]*?)\s*\bof\s+([\x{0590}-\x{05FF}][\x{0590}-\x{05FF}\s]*)\)\s*$`)
+
+// SplitGloss separates a lexicon gloss from the grammar note some forms carry:
+// "choose(s) (m.sg. present of לִבְחוֹר)" is the meaning "choose(s)", the note
+// "m.sg. present", and the word it is a form of. The meaning is what the learner is
+// there to take in, so a card shows it large, with the note small beneath. A gloss with no
+// such note is returned as it is.
+func SplitGloss(gloss string) (meaning, note, lemma string) {
+	gloss = strings.TrimSpace(gloss)
+	m := glossNoteRE.FindStringSubmatch(gloss)
+	if m == nil {
+		return gloss, "", ""
+	}
+	return strings.TrimSpace(m[1]), strings.TrimSpace(m[2]), strings.TrimSpace(m[3])
 }
 
 // flipCount is how many tap-to-flip cards the step renders.
