@@ -73,11 +73,105 @@ func TestReviewQueueStillGatedByOwnUnfinishedLesson(t *testing.T) {
 	if len(due) != 0 {
 		t.Fatalf("due = %d, want the unfinished lesson to gate the card", len(due))
 	}
-	for _, ref := range drain(t, mustBuild(t, svc, user)) {
-		if ref.LexemeID == word {
-			t.Fatalf("Review served gated card %+v", ref)
-		}
+	assertWordGated(t, svc, store, user, word, clk.Now())
+}
+
+// TestReviewQueueStillGatedBySharedUnfinishedLesson pins the shared side of
+// the scope disjunction. The learner's own intro is finished, and a published
+// shared lesson introduces the word again and is not finished.
+func TestReviewQueueStillGatedBySharedUnfinishedLesson(t *testing.T) {
+	svc, store, clk, user, word := gateWord(t, "לַיְלָה", "night", "layla")
+	own := putPublished(t, store, oneWordUnit("Own night", 0, "לַיְלָה"), db.LearnerScope(user))
+	finishPublishedLesson(t, store, user, own)
+	shared := putPublished(t, store, oneWordUnit("Shared night", 1, "לַיְלָה"), "shared")
+	if n := roleNewCount(t, store, shared, word); n != 1 || unitScope(t, store, shared) != "shared" || unitStatus(t, store, shared) != "published" {
+		t.Fatalf("shared unit scope %s status %s role=new %d", unitScope(t, store, shared), unitStatus(t, store, shared), n)
 	}
+	assertWordGated(t, svc, store, user, word, clk.Now())
+}
+
+// TestReviewQueueNotHiddenByRecycleRow pins role = 'new'. An unfinished
+// published lesson that only recycles the word does not gate it.
+func TestReviewQueueNotHiddenByRecycleRow(t *testing.T) {
+	svc, store, clk, user, word := gateWord(t, "מַיִם", "water", "mayim")
+	cup := mustUpsert(t, store, "כּוֹס", "cup", "kos")
+	shared := putPublished(t, store, oneWordUnit("Shared water", 0, "מַיִם"), "shared")
+	finishPublishedLesson(t, store, user, shared)
+	doc := oneWordUnit("Recycle water", 1, "כּוֹס")
+	doc.Lessons[0].Activities[0].Text = "מַיִם כּוֹס"
+	recycle := putPublished(t, store, doc, "shared")
+	if roleNewCount(t, store, recycle, word) != 0 || roleCount(t, store, recycle, word, "recycle") != 1 {
+		t.Fatalf("recycle unit new %d recycle %d", roleNewCount(t, store, recycle, word), roleCount(t, store, recycle, word, "recycle"))
+	}
+	if roleNewCount(t, store, recycle, cup) != 1 || unitStatus(t, store, recycle) != "published" {
+		t.Fatalf("cup role=new %d status %s", roleNewCount(t, store, recycle, cup), unitStatus(t, store, recycle))
+	}
+	assertWordServed(t, svc, store, user, word, clk.Now())
+}
+
+// TestReviewQueueStillGatedByOpenRun pins finished_at IS NOT NULL. A run
+// that has been started and not finished is still an open intro.
+func TestReviewQueueStillGatedByOpenRun(t *testing.T) {
+	svc, store, clk, user, word := gateWord(t, "בַּיִת", "house", "bayit")
+	shared := putPublished(t, store, oneWordUnit("Shared house", 0, "בַּיִת"), "shared")
+	finishPublishedLesson(t, store, user, shared)
+	own := putPublished(t, store, oneWordUnit("Own house", 1, "בַּיִת"), db.LearnerScope(user))
+	startLesson(t, store, user, own, 0)
+	if open := openRunCount(t, store, user, own); open != 1 {
+		t.Fatalf("open runs = %d, want 1", open)
+	}
+	assertWordGated(t, svc, store, user, word, clk.Now())
+}
+
+// TestReviewQueueStillGatedWhenAnotherLearnerFinishes pins the run's user_id.
+// Another learner finishing the same lesson does not finish it for this one.
+func TestReviewQueueStillGatedWhenAnotherLearnerFinishes(t *testing.T) {
+	svc, store, clk, user, word := gateWord(t, "סֵפֶר", "book", "sefer")
+	other, err := store.InsertUser(context.Background(), "reader@example.com", "sub-reader", "learner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared := putPublished(t, store, oneWordUnit("Shared book", 0, "סֵפֶר"), "shared")
+	finishPublishedLesson(t, store, user, shared)
+	again := putPublished(t, store, oneWordUnit("Shared book again", 1, "סֵפֶר"), "shared")
+	finishPublishedLesson(t, store, other, again)
+	if n := roleNewCount(t, store, again, word); n != 1 || openRunCount(t, store, user, again) != 0 {
+		t.Fatalf("again role=new %d, learner open runs %d", n, openRunCount(t, store, user, again))
+	}
+	assertWordGated(t, svc, store, user, word, clk.Now())
+}
+
+// TestReviewQueueStillGatedUntilIntroLessonFinishes pins lesson_ix. Finishing
+// an earlier lesson of the same unit does not finish the lesson that
+// introduces the word.
+func TestReviewQueueStillGatedUntilIntroLessonFinishes(t *testing.T) {
+	svc, store, clk, user, word := gateWord(t, "יוֹם", "day", "yom")
+	year := mustUpsert(t, store, "שָׁנָה", "year", "shana")
+	shared := putPublished(t, store, oneWordUnit("Shared day", 0, "יוֹם"), "shared")
+	finishPublishedLesson(t, store, user, shared)
+	later := putPublished(t, store, twoLessonUnit("Day and year", 1, "שָׁנָה", "יוֹם", []string{"שָׁנָה", "יוֹם"}), "shared")
+	if got := itemRole(t, store, later, word, 1); got != "new" {
+		t.Fatalf("lesson 1 role = %q, want new", got)
+	}
+	if got := itemRole(t, store, later, year, 0); got != "new" {
+		t.Fatalf("lesson 0 role = %q, want new", got)
+	}
+	finishPublishedLessonAt(t, store, user, later, 0)
+	assertWordGated(t, svc, store, user, word, clk.Now())
+}
+
+// TestReviewQueueNotHiddenByAnotherWordsIntro pins the lexeme match. An
+// unfinished published intro of a different word does not hide this card.
+func TestReviewQueueNotHiddenByAnotherWordsIntro(t *testing.T) {
+	svc, store, clk, user, word := gateWord(t, "אֹכֶל", "food", "ochel")
+	milk := mustUpsert(t, store, "חָלָב", "milk", "chalav")
+	shared := putPublished(t, store, oneWordUnit("Shared food", 0, "אֹכֶל"), "shared")
+	finishPublishedLesson(t, store, user, shared)
+	other := putPublished(t, store, oneWordUnit("Shared milk", 1, "חָלָב"), "shared")
+	if roleNewCount(t, store, other, milk) != 1 || roleNewCount(t, store, other, word) != 0 {
+		t.Fatalf("milk new %d, food new on milk unit %d", roleNewCount(t, store, other, milk), roleNewCount(t, store, other, word))
+	}
+	assertWordServed(t, svc, store, user, word, clk.Now())
 }
 
 // TestLearner1OneCardQueueReproduces is the production shape: learner 1 had
@@ -264,6 +358,15 @@ func oneWordUnit(title string, position int, word string) units.Unit {
 	return wordsUnit(title, position, []string{word})
 }
 
+func twoLessonUnit(title string, position int, first, second string, newWords []string) units.Unit {
+	doc := wordsUnit(title, position, newWords)
+	doc.Lessons = []units.Lesson{
+		{Kind: units.KindLesson, Activities: []units.Activity{{Type: units.ActivityStory, Text: first}}},
+		{Kind: units.KindLesson, Activities: []units.Activity{{Type: units.ActivityStory, Text: second}}},
+	}
+	return doc
+}
+
 func wordsUnit(title string, position int, words []string) units.Unit {
 	return units.Unit{
 		Title:     title,
@@ -301,8 +404,13 @@ func putDraft(t *testing.T, store *db.Store, doc units.Unit, scope string) int64
 
 func finishPublishedLesson(t *testing.T, store *db.Store, userID, unitID int64) {
 	t.Helper()
+	finishPublishedLessonAt(t, store, userID, unitID, 0)
+}
+
+func finishPublishedLessonAt(t *testing.T, store *db.Store, userID, unitID int64, lessonIx int) {
+	t.Helper()
 	ctx := context.Background()
-	run, err := store.StartPlayerRun(ctx, userID, unitID, 0)
+	run, err := store.StartPlayerRun(ctx, userID, unitID, lessonIx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,6 +420,17 @@ func finishPublishedLesson(t *testing.T, store *db.Store, userID, unitID int64) 
 	}
 	if !applied || !got.Finished {
 		t.Fatalf("finish applied=%v finished=%v", applied, got.Finished)
+	}
+}
+
+func startLesson(t *testing.T, store *db.Store, userID, unitID int64, lessonIx int) {
+	t.Helper()
+	run, err := store.StartPlayerRun(context.Background(), userID, unitID, lessonIx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Finished {
+		t.Fatal("run finished at start")
 	}
 }
 
@@ -380,7 +499,43 @@ func assertWordServed(t *testing.T, svc *Service, store *db.Store, userID, lexem
 	}
 }
 
+func assertWordGated(t *testing.T, svc *Service, store *db.Store, userID, lexemeID int64, now time.Time) {
+	t.Helper()
+	due, err := store.ListDueCards(context.Background(), userID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	study, err := store.ListStudyCards(context.Background(), userID, now, now.Add(-ConfusionWindow))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dueN, studyN := 0, 0
+	for _, card := range due {
+		if card.LexemeID == lexemeID {
+			dueN++
+		}
+	}
+	for _, card := range study {
+		if card.LexemeID == lexemeID && !card.Due.After(now) {
+			studyN++
+		}
+	}
+	if dueN != 0 || studyN != 0 {
+		t.Fatalf("Today due %d, Review due %d for lexeme %d, want both gated", dueN, studyN, lexemeID)
+	}
+	for _, ref := range drain(t, mustBuild(t, svc, userID)) {
+		if ref.LexemeID == lexemeID {
+			t.Fatalf("Review served gated card %+v", ref)
+		}
+	}
+}
+
 func roleNewCount(t *testing.T, store *db.Store, unitID, lexemeID int64) int {
+	t.Helper()
+	return roleCount(t, store, unitID, lexemeID, "new")
+}
+
+func roleCount(t *testing.T, store *db.Store, unitID, lexemeID int64, role string) int {
 	t.Helper()
 	conn, err := store.DB()
 	if err != nil {
@@ -388,8 +543,41 @@ func roleNewCount(t *testing.T, store *db.Store, unitID, lexemeID int64) int {
 	}
 	var n int
 	if err := conn.QueryRow(
-		`SELECT COUNT(*) FROM lesson_items WHERE unit_id = ? AND lexeme_id = ? AND role = 'new'`,
-		unitID, lexemeID,
+		`SELECT COUNT(*) FROM lesson_items WHERE unit_id = ? AND lexeme_id = ? AND role = ?`,
+		unitID, lexemeID, role,
+	).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func itemRole(t *testing.T, store *db.Store, unitID, lexemeID int64, lessonIx int) string {
+	t.Helper()
+	conn, err := store.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var role string
+	err = conn.QueryRow(
+		`SELECT role FROM lesson_items WHERE unit_id = ? AND lexeme_id = ? AND lesson_ix = ?`,
+		unitID, lexemeID, lessonIx,
+	).Scan(&role)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return role
+}
+
+func openRunCount(t *testing.T, store *db.Store, userID, unitID int64) int {
+	t.Helper()
+	conn, err := store.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := conn.QueryRow(
+		`SELECT COUNT(*) FROM lesson_runs WHERE user_id = ? AND unit_id = ? AND finished_at IS NULL`,
+		userID, unitID,
 	).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
