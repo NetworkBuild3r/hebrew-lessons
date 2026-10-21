@@ -804,6 +804,14 @@ func TestProgressCountsLearnerUnitsAndWholeUnits(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		// A run at index == lesson count is a lesson the unit no longer has.
+		// It must not raise the finished-lesson count or finish the unit.
+		if i == 0 {
+			at := progNow
+			if _, err := testharness.InsertLessonRun(context.Background(), store, learner1.user.ID, id, row.lessons, at, &at); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 	unitsDone, unitsTotal, lessonsDone, lessonsTotal := 0, 0, 0, 0
 	for _, row := range rows {
@@ -834,6 +842,21 @@ func TestProgressCountsLearnerUnitsAndWholeUnits(t *testing.T) {
 	}
 	if strings.Contains(body, ">Lessons finished<") && strings.Contains(strings.Split(body, "Units finished")[0], "Lessons finished") {
 		t.Fatal("the units line is still labelled lessons")
+	}
+}
+
+func TestProgressHidesLessonsWhenNoneExist(t *testing.T) {
+	store, _, _, _, get := progressApp(t)
+	id := putLesson(t, store, nil, units.Unit{
+		Title: "Empty", Position: 1, Lessons: nil,
+	}, "shared")
+	publish(t, store, id)
+	body := get("/progress")
+	if strings.Contains(body, "Lessons finished") || strings.Contains(body, "progress__lessons-n") {
+		t.Fatalf("a unit with no lessons still shows a lessons line:\n%s", body)
+	}
+	if !strings.Contains(body, `class="progress__units-n" lang="en" dir="ltr">0/1</bdi>`) {
+		t.Fatalf("the empty unit is not in the unit total:\n%s", body)
 	}
 }
 

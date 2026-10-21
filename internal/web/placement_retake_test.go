@@ -45,8 +45,7 @@ func TestRetakePlacement(t *testing.T) {
 	for _, want := range []string{
 		`method="post"`,
 		`action="/_hx/placement/start"`,
-		`hx-post="/_hx/placement/start"`,
-		`hx-target="#placement"`,
+		`hx-boost="false"`,
 		`name="_csrf" value="` + user.csrf + `"`,
 		`class="btn btn-primary"`,
 		"Retake placement",
@@ -54,6 +53,9 @@ func TestRetakePlacement(t *testing.T) {
 		if !strings.Contains(form, want) {
 			t.Errorf("retake form missing %s:\n%s", want, form)
 		}
+	}
+	if strings.Contains(form, "hx-post") || strings.Contains(form, "hx-target") {
+		t.Errorf("retake form still targets an htmx node:\n%s", form)
 	}
 
 	card := section(t, body, "c-card pplace", "")

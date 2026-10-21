@@ -92,6 +92,37 @@ func TestReviewDoneNamesTheSitting(t *testing.T) {
 }
 
 // reviewedSentence is the summary this test expects. It is not the handler.
+// TestFinishedSittingStaysOnItsStudyDay pins the keep guard. Yesterday's
+// count is a different UTC study day. Another learner's finished queue,
+// even under the same key, is not this learner's sitting.
+func TestFinishedSittingStaysOnItsStudyDay(t *testing.T) {
+	store, _, now := openApp(t)
+	learner := addLearner(t, store, "a@example.com", "sub-a", now)
+	other := addLearner(t, store, "b@example.com", "sub-b", now)
+	s := newServer(store)
+	yesterday := time.Date(2026, 10, 17, 23, 30, 0, 0, time.UTC)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.queues["day"] = &studyQueue{userID: learner.user.ID, done: true, answered: 4, builtAt: yesterday}
+	kept, err := s.queueLocked(context.Background(), "day", learner.user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kept.answered != 0 || kept.userID != learner.user.ID {
+		t.Fatalf("yesterday's sitting stayed: user %d answered %d", kept.userID, kept.answered)
+	}
+
+	s.queues["other"] = &studyQueue{userID: other.user.ID, done: true, answered: 4, builtAt: now}
+	fresh, err := s.queueLocked(context.Background(), "other", learner.user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh.answered != 0 || fresh.userID != learner.user.ID {
+		t.Fatalf("another learner's sitting was kept: user %d answered %d", fresh.userID, fresh.answered)
+	}
+}
+
 func reviewedSentence(n int) string {
 	if n == 1 {
 		return "You reviewed 1 card."

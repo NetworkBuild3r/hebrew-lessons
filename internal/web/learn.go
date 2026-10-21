@@ -146,13 +146,15 @@ func (s *server) learnerHome(ctx context.Context, userID int64, name string) (Ho
 
 // unitProgress returns the next published shared unit this learner has not
 // finished, that unit's situation line, and the finished counts.
-// Totals include published shared units and this learner's own published
-// units. Another learner's units, unpublished units, and units they reported
-// are left out. A unit is finished only when it has at least one lesson and
-// every one of those lessons is finished. The lesson counts are the lessons
-// inside the units that count. The next unit stays a shared unit.
+// UnitsInScope already leaves another learner's units out. Totals then keep
+// published shared units and this learner's own published units. Unpublished
+// units and units they reported are left out. A unit is finished only when it
+// has at least one lesson and every one of those lessons is finished. A
+// finished run whose index is past the current lesson count does not count.
+// The lesson counts are the lessons inside the units that count. The next
+// unit stays the first unfinished shared unit.
 func (s *server) unitProgress(ctx context.Context, userID int64) (*UnitRefVM, string, int, int, int, int, error) {
-	units, err := s.store.AllUnits(ctx)
+	units, err := s.store.UnitsInScope(ctx, userID)
 	if err != nil {
 		return nil, "", 0, 0, 0, 0, err
 	}
@@ -170,15 +172,11 @@ func (s *server) unitProgress(ctx context.Context, userID int64) (*UnitRefVM, st
 	for _, id := range reported {
 		hidden[id] = true
 	}
-	own := "learner:" + strconv.FormatInt(userID, 10)
 	var next *UnitRefVM
 	situation := ""
 	unitsDone, unitsTotal, lessonsDone, lessonsTotal := 0, 0, 0, 0
 	for _, unit := range units {
 		if hidden[unit.ID] || unit.Status != "published" {
-			continue
-		}
-		if unit.Scope != "shared" && unit.Scope != own {
 			continue
 		}
 		n := db.LessonCount(unit.Doc)

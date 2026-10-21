@@ -283,10 +283,11 @@ templ placementCard2(v ProgressView) {
 	</section>
 }
 
-// retakePlacement posts the same way the placement intro starts a run.
-// Without a script the form still posts, and the handler returns the full page.
+// retakePlacement is a normal POST. Progress has no #placement node, so an
+// htmx target there never sends. hx-boost="false" keeps the click off the
+// shell's boosted navigation. The handler returns the full placement page.
 templ retakePlacement(v ProgressView) {
-	<form class="pplace__retake" method="post" action={ templ.SafeURL("/_hx/placement/start") } hx-post="/_hx/placement/start" hx-target="#placement" hx-swap="outerHTML transition:true" hx-select="unset" hx-boost="false" hx-sync="this:drop">
+	<form class="pplace__retake" method="post" action={ templ.SafeURL("/_hx/placement/start") } hx-boost="false">
 		<input type="hidden" name="_csrf" value={ v.CSRF }/>
 		<button type="submit" class="btn btn-primary">@E("Retake placement")</button>
 	</form>
