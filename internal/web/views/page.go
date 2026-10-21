@@ -339,16 +339,9 @@ func iconClass(directional bool) string {
 	return "icon"
 }
 
-// ThemeBoot is the only inline script. It applies a stored light or dark
-// choice before first paint. The toggle and the htmx motion live in
-// /static/js/shell.js. Keep this under 300 bytes; ThemeBootCSP is its hash.
+// ThemeBoot is the theme script that used to run inline in the document head.
+// The same bytes are now /static/js/theme.js, loaded as a blocking classic
+// script before the first stylesheet. The key, the data-theme attribute, and
+// the light/dark default (no attribute, so the system decides) are unchanged.
+// localStorage is already inside the try.
 const ThemeBoot = `(function(){try{var t=localStorage.getItem("hebrew-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}})()`
-
-// ThemeBootCSP is the Content-Security-Policy script-src hash of ThemeBoot:
-// sha256 of the exact script bytes, standard base64, without quotes.
-const ThemeBootCSP = "sha256-J/VHwnDnlr+GqZg8u44o21pUuS0tshGfqO3bcm2kCfA="
-
-// themeHead prints ThemeBoot in the document head.
-func themeHead() templ.Component {
-	return templ.Raw("<script>" + ThemeBoot + "</script>")
-}

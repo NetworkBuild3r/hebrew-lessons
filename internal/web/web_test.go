@@ -7,8 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
 func TestEmbeddedTrees(t *testing.T) {
@@ -65,7 +63,7 @@ func assertSecurityHeaders(t *testing.T, rec *httptest.ResponseRecorder) {
 	csp := rec.Header().Get("Content-Security-Policy")
 	for _, part := range []string{
 		"default-src 'self'",
-		"script-src 'self' '" + views.ThemeBootCSP + "'",
+		"script-src 'self';",
 		"frame-ancestors 'none'",
 		"object-src 'none'",
 	} {

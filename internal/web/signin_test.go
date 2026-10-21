@@ -29,11 +29,14 @@ func TestSignInPage(t *testing.T) {
 	if strings.Contains(body, "<form") || strings.Contains(body, "hx-post") || strings.Contains(body, "hx-boost") {
 		t.Fatal("sign-in page must be a plain link, not a form or an htmx post")
 	}
-	if strings.Contains(body, "/static/js/") {
+	if strings.Contains(body, "/static/js/htmx") || strings.Contains(body, "/static/js/shell.js") || strings.Contains(body, "/static/js/motion.js") {
 		t.Fatal("sign-in page should not load the shell scripts")
 	}
-	if !strings.Contains(body, "<script>"+views.ThemeBoot+"</script>") {
+	if !strings.Contains(body, `<script src="/static/js/theme.js"></script>`) {
 		t.Fatal("theme boot script missing")
+	}
+	if strings.Contains(body, "<script>"+views.ThemeBoot+"</script>") {
+		t.Fatal("theme boot is still an inline script")
 	}
 	if strings.Count(body, "<script") != 1 {
 		t.Fatalf("sign-in scripts = %d, want the theme boot only", strings.Count(body, "<script"))
