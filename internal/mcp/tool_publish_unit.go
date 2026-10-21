@@ -20,6 +20,8 @@ const publishUnitDescription = "Publish one unit. Admin only, including the stat
 	"Shared units ignore that flag and become published only through publish_unit. " +
 	"This tool publishes the revision it validated. Omit revision to validate the current row; pass revision to validate a stored one. A save that lands after that check is not published in its place. " +
 	"It runs the same validator as validate_unit. Block issues are a tool error: nothing is published, and the result lists each issue's rule id and JSON pointer. " +
+	"A recall, produce, or cloze whose line has two or more words that are in the lexicon and no target blocks a new draft, and it blocks an older revision. Checking the current published revision, the same revision id as the units row, reports that missing target as a warning. " +
+	"On listen_pick, target is optional: if target is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure. " +
 	"Pedagogy warnings do not block, and they are included in issues. " +
 	"Publishing the same revision again reports unchanged and writes nothing. " +
 	"A learner-scoped unit is refused here: it publishes only through put_unit with a briefId."
@@ -70,7 +72,7 @@ func (s *service) publishUnit(ctx context.Context, _ *mcp.CallToolRequest, in pu
 	}
 	doc := snap.Doc
 	doc.Position = snap.Position
-	issues := units.Validate(ctx, &doc, s.lexLookup)
+	issues := units.ValidateIn(ctx, &doc, s.lexLookup, publishMode(snap))
 	out = publishOutput{
 		UnitID:    snap.UnitID,
 		Revision:  snap.Revision,
@@ -159,10 +161,10 @@ func (s *service) publishLearnerDraft(ctx context.Context, scope, briefID string
 	facts, err := lu.BriefFacts(ctx, learnerID, briefID)
 	switch {
 	case errors.Is(err, ErrBriefNotFound):
-		out := briefMissingIssues(ctx, s, &doc, units.RuleBriefNotFound, "no brief was found for this learner with that id")
+		out := briefMissingIssues(ctx, s, &doc, units.RuleBriefNotFound, "no brief was found for this learner with that id", publishMode(snap))
 		return saved, false, out, blockedReason(out), nil
 	case errors.Is(err, ErrBriefExpired):
-		out := briefMissingIssues(ctx, s, &doc, units.RuleBriefExpired, "this brief is too old to use")
+		out := briefMissingIssues(ctx, s, &doc, units.RuleBriefExpired, "this brief is too old to use", publishMode(snap))
 		return saved, false, out, blockedReason(out), nil
 	case err != nil:
 		return PutResult{}, false, nil, "", storeErr("The brief could not be read.", err)
@@ -174,7 +176,7 @@ func (s *service) publishLearnerDraft(ctx context.Context, scope, briefID string
 		return saved, true, []units.Issue{}, "", nil
 	}
 
-	checked := units.ValidateWithBrief(ctx, &doc, s.lexLookup, &facts)
+	checked := units.ValidateWithBriefIn(ctx, &doc, s.lexLookup, &facts, publishMode(snap))
 	if !summarize(checked).OK {
 		return saved, false, checked, blockedReason(checked), nil
 	}
@@ -201,10 +203,23 @@ func (s *service) publishLearnerDraft(ctx context.Context, scope, briefID string
 	return published, true, checked, "", nil
 }
 
+// publishMode is lenient only when the revision being validated is the
+// units row's current published revision, the same revision id. A draft,
+// a new save, and an older revision — including one that was never
+// published — stay strict. A missing target on recall, produce, or cloze
+// blocks those. The current published revision warns.
+func publishMode(snap UnitView) units.Mode {
+	if snap.Status == "published" && snap.Revision == snap.CurrentRevision {
+		return units.ModePublished
+	}
+	return units.ModeWrite
+}
+
 // briefMissingIssues is what a unit gets when its brief cannot be read: the
-// rules that need no brief, and one brief issue.
-func briefMissingIssues(ctx context.Context, s *service, doc *units.Unit, rule, msg string) []units.Issue {
-	base := units.ValidateWithBrief(ctx, doc, s.lexLookup, nil)
+// rules that need no brief, and one brief issue. mode is the same mode the
+// publish of this document would have used.
+func briefMissingIssues(ctx context.Context, s *service, doc *units.Unit, rule, msg string, mode units.Mode) []units.Issue {
+	base := units.ValidateWithBriefIn(ctx, doc, s.lexLookup, nil, mode)
 	out := make([]units.Issue, 0, len(base)+1)
 	for _, is := range base {
 		if is.Rule != units.RuleBriefNotFound {

@@ -63,10 +63,10 @@ A unit is plain JSON. It has no audio, gloss, or choices fields. Audio is the cl
 | `listen_pick` | The pointed text the learner hears and then picks the meaning of. The spelling is hidden until they answer. | listen | A question. Judged for coverage and length. |
 | `recall` | The pointed Hebrew prompt. The answer is the lexicon gloss. | recall | A question. |
 | `produce` | The pointed Hebrew the learner types. The prompt is the gloss. | spell | A question. |
-| `cloze` | The whole pointed sentence. The new word in it is the gap. | read | A question. |
+| `cloze` | The whole pointed sentence. When it has two or more words that are in the lexicon, `target` is the gap. | read | A question. |
 | `pattern` | One pointed example of a pattern. The concept is the rule. | read | A question. |
 
-A question (`recall`, `listen_pick`, `produce`, or `cloze`) may set `target` to the exact token it tests, the same spelling as one token of its text, and that token must be in the lexicon. Leave `target` out to test the first new token. An empty `target` is the same as leaving it out.
+A multi-word `listen_pick` grades the whole sentence's meaning. `target` on a `listen_pick` is optional. If `target` is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure. A multi-word `recall`, `produce`, or `cloze` grades one word. When its line has two or more words that are in the lexicon, set `target` to the exact pointed token it grades, the same spelling as one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. A line of one lexicon word may omit `target`, and an empty `target` is the same as omitting it. A new unit that leaves `target` off a multi-word `recall`, `produce`, or `cloze` is blocked. Only the unit's current published revision may omit it, and checking that same revision again reports a warning. An older revision that was never published is blocked.
 
 Any conversation between people is a `dialogue`, never a `story`. A story stays one narrator. In a dialogue, speaker `a` is the female voice and speaker `b` is the male voice, the same for the whole unit. Both must speak. The speaker is exactly `a` or `b`. A voice id never goes in a unit or a request.
 
@@ -92,7 +92,7 @@ A passage is one `story` text, one `listen_pick` text, or one dialogue line. For
 | developing | 100 to 299 words | 0.90 | 60 words |
 | established | 300 or more | 0.95 | no limit |
 
-A word is known here when it is in the brief (new, struggle, or comfortable) or the learner already knows it. Function words (such as I, you, and, or, yes), proper names, and numerals are left out of the count. A word that is not in the lexicon counts as unknown. A long dialogue is fine as long as each line is short, because the check is per line.
+A word counts as covered when it is in the brief (new, struggle, or comfortable), the learner already knows it, or it is one of this unit's `newWords` and that spelling is an exact pointed lexicon entry. A `newWord` still counts as new: it still has to be shown before it is tested, and it still has to be used at least `minUses` times. That intro and that minimum also apply to a `newWord` outside the brief that coverage credited, and that word's minimum is 3. A word that is none of those is unknown. Function words (such as I, you, and, or, yes), proper names, and numerals are left out of the count. A word that is not in the lexicon counts as unknown. A long dialogue is fine as long as each line is short, because the check is per line.
 
 ### Budget and order
 
@@ -116,14 +116,14 @@ Every Hebrew text needs a clip for its exact pointed text. Do not change a text 
 
 | rule | severity | what it means | how to fix it |
 | --- | --- | --- | --- |
-| `activity.target` | block | A graded activity's `target` is not one of its tokens, or that token's exact pointed spelling is not a lexicon entry. The unpointed spelling does not count. A `target` on any other activity type is the same rule. An empty target is allowed. | Set `target` to the exact pointed spelling `lookup` returns for that token, or remove it. |
+| `activity.target` | block | A `recall`, `produce`, or `cloze` whose line has two or more words that are in the lexicon must set `target` to the exact pointed token it grades. That token must be one of the line's tokens, and that token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. A line with fewer lexicon words may omit `target`. `target` on a `listen_pick` is optional: if `target` is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure. A `target` on any other activity type is the same rule. A missing `target` blocks a new save or publish, and it blocks an older revision. Only the current published revision warns when that same revision is checked again. | Set `target` to the exact pointed spelling `lookup` returns for the word this question grades. On a `listen_pick`, omit `target` when the step should log an exposure. |
 | `audio.missing` | block | A Hebrew text has no clip for its exact pointed text. A dialogue line needs a clip in its own speaker's voice. | Call `generate_audio` with that exact text, or with the line and its speaker. |
 | `brief.audio_all` | block | A new word, or a title, situation, or concept that has Hebrew, has no clip. | Add the new words to `texts` in `generate_audio`, or keep Hebrew out of the title, situation, and concept. |
-| `brief.coverage` | block | A passage has too few known words for the tier. The message gives the share and what the tier needs. | Replace unknown words with comfortable words or brief words, or shorten the passage. |
+| `brief.coverage` | block | A passage has too few known words for the tier. The message gives the share and what the tier needs. This unit's `newWords` count as covered when each is an exact pointed lexicon entry. The intro and the minimum uses still run on those words, including a `newWord` outside the brief. | Replace unknown words with comfortable words, brief words, or this unit's `newWords`, or shorten the passage. |
 | `brief.expired` | block | The brief is older than 7 days. | Call `get_lesson_brief` again and write the unit from the new brief. |
 | `brief.gloss_out_of_brief` | block | A word outside the brief, and not known by the learner, has no gloss in the lexicon. | Call `lookup`. Then `upsert_lexemes` with `gloss_en`, or take the word out. |
-| `brief.new_intro_before_test` | block | A question uses a new word before a story, dialogue, or shadow shows it. | Put a `story`, `dialogue`, or `shadow` that has the word before the first question that uses it. |
-| `brief.new_min_uses` | block | A new word appears fewer times than the brief asks. The message gives the count. | Use the word more often, in the story, dialogue, and the checked activities. |
+| `brief.new_intro_before_test` | block | A question uses a new word of the brief, or a unit `newWord` that coverage credited, before a story, dialogue, or shadow shows it. | Put a `story`, `dialogue`, or `shadow` that has the word before the first question that uses it. |
+| `brief.new_min_uses` | block | A new word of the brief appears fewer times than the brief asks. A unit `newWord` outside the brief that coverage credited uses the same minimum of 3. The message gives the count. | Use the word more often, in the story, dialogue, and the checked activities. |
 | `brief.not_found` | block | The `briefId` is missing, malformed, unknown, or belongs to another learner. These cases are not told apart. | Pass the exact `briefId` from `get_lesson_brief`, with the `learnerId` it was built for. If you lost it, call `get_lesson_brief` again. |
 | `brief.struggle_reuse` | block | A struggle word appears fewer times than `requiredCount`, or never in an activity of its failing skill. | Use it more often, and add an activity of its skill (see "Reading a brief"). |
 | `brief.text_too_long` | block | A passage has more Hebrew words than `tier.maxTextTokens`. | Split it into shorter passages. For a dialogue, shorten the long line. |
@@ -202,11 +202,11 @@ Each struggle word is used four times, and each one is used in an activity of it
       "kind": "lesson",
       "activities": [
         { "type": "story", "text": "בֹּקֶר טוֹב. אֲנִי אוֹכֵל לֶחֶם. אֲנִי שׁוֹתֶה תֵּה חַם. אֲנִי שׁוֹתֶה מַיִם." },
-        { "type": "listen_pick", "text": "אֲנִי שׁוֹתֶה מַיִם" },
-        { "type": "listen_pick", "text": "אֲנִי אוֹכֵל לֶחֶם" },
-        { "type": "recall", "text": "אֲנִי שׁוֹתֶה תֵּה" },
-        { "type": "recall", "text": "אֲנִי שׁוֹתֶה קָפֶה" },
-        { "type": "cloze", "text": "אֲנִי אוֹכֵל לֶחֶם טוֹב" },
+        { "type": "listen_pick", "text": "אֲנִי שׁוֹתֶה מַיִם", "target": "מַיִם" },
+        { "type": "listen_pick", "text": "אֲנִי אוֹכֵל לֶחֶם", "target": "לֶחֶם" },
+        { "type": "recall", "text": "אֲנִי שׁוֹתֶה תֵּה", "target": "תֵּה" },
+        { "type": "recall", "text": "אֲנִי שׁוֹתֶה קָפֶה", "target": "קָפֶה" },
+        { "type": "cloze", "text": "אֲנִי אוֹכֵל לֶחֶם טוֹב", "target": "לֶחֶם" },
         { "type": "produce", "text": "חָלָב" }
       ]
     },
@@ -218,7 +218,7 @@ Each struggle word is used four times, and each one is used in an activity of it
         { "type": "recall", "text": "קָפֶה" },
         { "type": "produce", "text": "חָלָב" },
         { "type": "story", "text": "אֲנִי אוֹכֵל לֶחֶם. אֲנִי שׁוֹתֶה מַיִם. אֲנִי שׁוֹתֶה קָפֶה. אֲנִי שׁוֹתֶה חָלָב." },
-        { "type": "listen_pick", "text": "קָפֶה אוֹ חָלָב" }
+        { "type": "listen_pick", "text": "קָפֶה אוֹ חָלָב", "target": "קָפֶה" }
       ]
     }
   ]
@@ -274,7 +274,7 @@ Each dialogue line is its own passage, so each is short and mostly known. Each d
             { "speaker": "b", "text": "כֵּן." }
           ]
         },
-        { "type": "listen_pick", "text": "תֵּה אוֹ קָפֶה" },
+        { "type": "listen_pick", "text": "תֵּה אוֹ קָפֶה", "target": "תֵּה" },
         { "type": "shadow", "text": "תֵּה אוֹ קָפֶה" },
         { "type": "recall", "text": "תֵּה" },
         { "type": "recall", "text": "קָפֶה" }
@@ -292,7 +292,7 @@ Each dialogue line is its own passage, so each is short and mostly known. Each d
             { "speaker": "b", "text": "שָׁלוֹם, תּוֹדָה." }
           ]
         },
-        { "type": "listen_pick", "text": "חָלָב אוֹ תֵּה" },
+        { "type": "listen_pick", "text": "חָלָב אוֹ תֵּה", "target": "חָלָב" },
         { "type": "recall", "text": "חָלָב" },
         { "type": "recall", "text": "תּוֹדָה" }
       ]
