@@ -412,4 +412,5 @@ func TestKeyboardNode(t *testing.T) {
 	if !strings.Contains(string(out), "all passed") {
 		t.Fatalf("hekbd.test.js did not finish:\n%s", out)
 	}
+	t.Run("ReviewGradesStayInView", reviewGradesStayInView)
 }

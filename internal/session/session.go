@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"slices"
 	"sync"
 
@@ -255,11 +256,13 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 }
 
 // drillCandidates is one drill per confusion key that reached the miss
-// threshold. The steps are negative card ids, unique inside this build,
-// so Record can tell them apart. They do not enter the known or struggle plan.
+// threshold. The steps are negative card ids, stable for a kind, key, and
+// step, and unique inside this build, so Record can tell them apart and two
+// pairs do not share the id the letter picker seeds from. They do not enter
+// the known or struggle plan.
 func drillCandidates(pairs []db.ConfusionPair) []Candidate {
 	var out []Candidate
-	n := 0
+	used := map[int64]struct{}{}
 	for _, pair := range pairs {
 		if pair.Count < MinMissesForDrill {
 			continue
@@ -276,9 +279,8 @@ func drillCandidates(pairs []db.ConfusionPair) []Candidate {
 			if len(out) >= DrillCap {
 				return out
 			}
-			n++
 			out = append(out, Candidate{
-				ID:   -int64(n),
+				ID:   drillCardID(kind, key, step, used),
 				Kind: kind,
 				Key:  key,
 				Step: step,
@@ -286,6 +288,28 @@ func drillCandidates(pairs []db.ConfusionPair) []Candidate {
 		}
 	}
 	return out
+}
+
+// drillCardID is a negative id that stays the same for this kind, key, and
+// step across queue rebuilds. Sequential ids restarted at -1, so every pair's
+// first step rendered data-card="-1" and the letter picker chose the same side.
+func drillCardID(kind, key string, step int, used map[int64]struct{}) int64 {
+	h := fnv.New64a()
+	fmt.Fprintf(h, "%s\x00%s\x00%d", kind, key, step)
+	id := -int64(h.Sum64() & 0x7fffffff)
+	if id == 0 {
+		id = -1
+	}
+	for {
+		if _, taken := used[id]; !taken {
+			used[id] = struct{}{}
+			return id
+		}
+		id--
+		if id == 0 {
+			id = -1
+		}
+	}
 }
 
 func drillKind(confusionKind string) (string, bool) {
@@ -338,6 +362,7 @@ func (s *Session) Next() (CardRef, bool) {
 
 // Reveal marks the served card as peeked. Record then stores that flag.
 // A grade without Reveal is rejected with ErrNotRevealed.
+// The mark does not depend on the card type. Every review mode uses it.
 func (s *Session) Reveal(cardID int64) error {
 	if s == nil {
 		return errors.New("session: session is not configured")
@@ -375,6 +400,8 @@ func (s *Session) Record(ctx context.Context, cardID int64, rating fsrs.Rating) 
 	if !s.hasLast || cardID != s.last.CardID {
 		return fmt.Errorf("session: card %d: %w", cardID, ErrNotServed)
 	}
+	// The grade guard is this peeked flag. It does not look at the card kind.
+	// A new review mode does not add a guard.
 	if !s.peeked {
 		return fmt.Errorf("session: card %d: %w", cardID, ErrNotRevealed)
 	}

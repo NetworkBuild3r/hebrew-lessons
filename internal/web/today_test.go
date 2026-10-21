@@ -418,14 +418,16 @@ func TestReviewDrillKinds(t *testing.T) {
 		t.Fatalf("drill replaced the study card: %s", cardAttrs(page))
 	}
 	letter := gradeRevealed(t, h, learner, card, "3", "https://learn.example")
-	if letter.Code != http.StatusOK || attr(t, letter.Body.String(), "data-kind") != session.KindLetter || !strings.Contains(letter.Body.String(), "ב/כ") {
-		t.Fatalf("letter drill: %d %s", letter.Code, letter.Body.String())
+	letterBody := letter.Body.String()
+	hasBet, hasKaf := strings.Contains(letterBody, "ב"), strings.Contains(letterBody, "כ")
+	if letter.Code != http.StatusOK || attr(t, letterBody, "data-kind") != session.KindLetter || hasBet == hasKaf || strings.Contains(letterBody, "ב/כ") {
+		t.Fatalf("letter drill: %d %s", letter.Code, letterBody)
 	}
 	if strings.Contains(letter.Body.String(), "ג/ק") {
 		t.Fatal("a pair under the miss threshold was drilled")
 	}
 	letterID := attr(t, letter.Body.String(), "data-card")
-	pattern := gradeRevealed(t, h, learner, mustInt(t, letterID), "3", "https://learn.example")
+	pattern := gradeRevealed(t, h, learner, mustInt(t, letterID), "3", "https://learn.example", attr(t, letterBody, "data-pointed"))
 	if pattern.Code != http.StatusOK || attr(t, pattern.Body.String(), "data-kind") != session.KindPattern || !strings.Contains(pattern.Body.String(), "הוא/היא") {
 		t.Fatalf("pattern drill: %d %s", pattern.Code, pattern.Body.String())
 	}
@@ -791,38 +793,41 @@ func getLearner(t *testing.T, h http.Handler, learner learnerFix, path string) s
 	return rec.Body.String()
 }
 
-func postGrade(t *testing.T, h http.Handler, learner learnerFix, cardID int64, rating, origin string) *httptest.ResponseRecorder {
+func postGrade(t *testing.T, h http.Handler, learner learnerFix, cardID int64, rating, origin string, asked ...string) *httptest.ResponseRecorder {
 	t.Helper()
-	return postGradeRaw(t, h, learner.cookie, learner.csrf, cardID, rating, origin)
+	return postGradeRaw(t, h, learner.cookie, learner.csrf, cardID, rating, origin, asked...)
 }
 
-func gradeRevealed(t *testing.T, h http.Handler, learner learnerFix, cardID int64, rating, origin string) *httptest.ResponseRecorder {
+func gradeRevealed(t *testing.T, h http.Handler, learner learnerFix, cardID int64, rating, origin string, asked ...string) *httptest.ResponseRecorder {
 	t.Helper()
-	shown := postReveal(t, h, learner, cardID, origin)
+	shown := postReveal(t, h, learner, cardID, origin, asked...)
 	if shown.Code != http.StatusOK {
 		t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
 	}
-	return postGrade(t, h, learner, cardID, rating, origin)
+	return postGrade(t, h, learner, cardID, rating, origin, asked...)
 }
 
-func postGradeRaw(t *testing.T, h http.Handler, cookie *http.Cookie, csrf string, cardID int64, rating, origin string) *httptest.ResponseRecorder {
+func postGradeRaw(t *testing.T, h http.Handler, cookie *http.Cookie, csrf string, cardID int64, rating, origin string, asked ...string) *httptest.ResponseRecorder {
 	t.Helper()
-	return postGradeRawHX(t, h, cookie, csrf, cardID, rating, origin, true)
+	return postGradeRawHX(t, h, cookie, csrf, cardID, rating, origin, true, asked...)
 }
 
-func postGradeRawHX(t *testing.T, h http.Handler, cookie *http.Cookie, csrf string, cardID int64, rating, origin string, hx bool) *httptest.ResponseRecorder {
+func postGradeRawHX(t *testing.T, h http.Handler, cookie *http.Cookie, csrf string, cardID int64, rating, origin string, hx bool, asked ...string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := gradeRequest(t, cookie, csrf, cardID, rating, origin, hx)
+	req := gradeRequest(t, cookie, csrf, cardID, rating, origin, hx, asked...)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
 }
 
-func gradeRequest(t *testing.T, cookie *http.Cookie, csrf string, cardID int64, rating, origin string, hx bool) *http.Request {
+func gradeRequest(t *testing.T, cookie *http.Cookie, csrf string, cardID int64, rating, origin string, hx bool, asked ...string) *http.Request {
 	t.Helper()
 	form := url.Values{}
 	form.Set("card_id", fmt.Sprint(cardID))
 	form.Set("rating", rating)
+	if len(asked) > 0 && asked[0] != "" {
+		form.Set("asked", asked[0])
+	}
 	if csrf != "" {
 		form.Set("_csrf", csrf)
 	}
@@ -838,15 +843,18 @@ func gradeRequest(t *testing.T, cookie *http.Cookie, csrf string, cardID int64, 
 	return req
 }
 
-func postReveal(t *testing.T, h http.Handler, learner learnerFix, cardID int64, origin string) *httptest.ResponseRecorder {
+func postReveal(t *testing.T, h http.Handler, learner learnerFix, cardID int64, origin string, asked ...string) *httptest.ResponseRecorder {
 	t.Helper()
-	return postRevealRaw(t, h, learner.cookie, learner.csrf, cardID, origin, true)
+	return postRevealRaw(t, h, learner.cookie, learner.csrf, cardID, origin, true, asked...)
 }
 
-func postRevealRaw(t *testing.T, h http.Handler, cookie *http.Cookie, csrf string, cardID int64, origin string, hx bool) *httptest.ResponseRecorder {
+func postRevealRaw(t *testing.T, h http.Handler, cookie *http.Cookie, csrf string, cardID int64, origin string, hx bool, asked ...string) *httptest.ResponseRecorder {
 	t.Helper()
 	form := url.Values{}
 	form.Set("card_id", fmt.Sprint(cardID))
+	if len(asked) > 0 && asked[0] != "" {
+		form.Set("asked", asked[0])
+	}
 	if csrf != "" {
 		form.Set("_csrf", csrf)
 	}

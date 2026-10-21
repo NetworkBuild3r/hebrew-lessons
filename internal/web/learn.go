@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
@@ -59,6 +62,9 @@ type studyQueue struct {
 	done     bool
 	revealed bool
 	builtAt  time.Time
+	// asked is the pair letter the reveal posted. The back and the grade
+	// keep it, so a study-day rollover cannot switch the letter.
+	asked string
 	// item is the checked activity the current card is asked through. It is nil for a
 	// flashcard and a drill. fb is set from the checked answer until Continue.
 	item *activity.Item
@@ -381,6 +387,7 @@ func sameStudyDay(built, now time.Time) bool {
 func (s *server) advance(ctx context.Context, q *studyQueue) error {
 	if q != nil {
 		q.revealed = false
+		q.asked = ""
 		q.item = nil
 		q.fb = nil
 	}
@@ -433,9 +440,21 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 		vm.Answer = q.fb
 		return vm, nil
 	}
-	if ref.Kind == session.KindLetter || ref.Kind == session.KindPattern {
+	// A mode that is not a lexeme loads from its key. Letter and pattern are
+	// those modes today. A later one is the same path once its entry says so.
+	if mode, ok := views.LookupReviewMode(ref.Kind); ok && !mode.Lexeme {
 		vm.Pointed = ref.Key
 		vm.Unpointed = units.Plain(ref.Key)
+		if err := s.fillDrill(ctx, q.userID, &vm); err != nil {
+			return ReviewCardVM{}, err
+		}
+		// A reveal posted the letter. Later renders, including one after the
+		// study day rolls, show that letter instead of picking again.
+		if q.asked != "" {
+			vm.Asked = q.asked
+			vm.Pointed = q.asked
+			vm.Unpointed = units.Plain(q.asked)
+		}
 		return vm, nil
 	}
 	if s.store == nil || ref.LexemeID == 0 {
@@ -465,12 +484,209 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 		return ReviewCardVM{}, err
 	}
 	vm.ShowUnpointed = show
-	if ref.Skill == fsrs.SkillRecall || ref.Kind == fsrs.SkillRecall {
-		vm.Kind = fsrs.SkillRecall
+	// The four study skills keep the fallback below, including a recall skill
+	// forcing the recall face. Any other registered mode keeps the kind the
+	// queue put on the card, so adding the mode entry is enough.
+	if _, ok := views.LookupReviewMode(ref.Kind); ok && !studySkillKind(ref.Kind) {
+		vm.Kind = ref.Kind
 		return vm, nil
 	}
-	vm.Kind = fsrs.SkillRead
+	switch ref.Kind {
+	case fsrs.SkillRead, fsrs.SkillRecall, fsrs.SkillListen, fsrs.SkillSpell:
+		vm.Kind = ref.Kind
+	default:
+		if ref.Skill == fsrs.SkillRecall {
+			vm.Kind = fsrs.SkillRecall
+		} else {
+			vm.Kind = fsrs.SkillRead
+		}
+	}
+	if ref.Skill == fsrs.SkillRecall {
+		vm.Kind = fsrs.SkillRecall
+	}
 	return vm, nil
+}
+
+func studySkillKind(kind string) bool {
+	switch kind {
+	case fsrs.SkillRead, fsrs.SkillRecall, fsrs.SkillListen, fsrs.SkillSpell:
+		return true
+	default:
+		return false
+	}
+}
+
+// fillDrill loads a card that is not a lexeme. Letter and pattern are the
+// modes that need it. A later mode whose card is a lexeme does not come
+// through here. A mode that is not a lexeme adds a branch in this switch.
+// The reveal route and the grade guard do not grow a branch for it.
+// The key stays the prompt. Names, sounds, glosses, the example word, and
+// its clip are answer fields. ConcealFront keeps them off the page until
+// the reveal.
+func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) error {
+	key := vm.Pointed
+	parts := splitDrillKey(key)
+	switch vm.Kind {
+	case session.KindLetter:
+		vm.Asked = pickPart(vm.CardID, studyDayCutoff(s.now()), parts)
+		stored := make([]string, 0, len(parts))
+		sides := make([]views.DrillSide, 0, len(parts))
+		for _, part := range parts {
+			sound, err := s.letterSound(ctx, part)
+			if err != nil {
+				return err
+			}
+			stored = append(stored, sound)
+			side := views.DrillSide{Hebrew: part, Sound: sound}
+			if e, ok := views.LookupAlefbet(part); ok {
+				side.Name = e.Name
+				side.NameTranslit = e.Translit
+				side.Sound = e.Sound
+			} else {
+				side.Name = views.LetterName(part)
+			}
+			sides = append(sides, side)
+		}
+		vm.Sides = sides
+		if len(parts) == 1 {
+			if e, ok := views.LookupAlefbet(parts[0]); ok {
+				vm.LooksLike = views.FirstAlefbetCue(e.Cue)
+			}
+		}
+		vm.TellApart = views.AlefbetTellApart(parts)
+		vm.PairNote = views.AlefbetPairNote(parts)
+		vm.DageshNote = views.LetterDageshNote(parts, stored)
+		vm.DageshHard = views.DageshHardNote(parts)
+		ex, ok, err := s.confusionExample(ctx, userID, fsrs.MissLetterPair, key)
+		if err != nil {
+			return err
+		}
+		if ok {
+			vm.ExampleText = ex.TextNFC
+			vm.ExampleTranslit = ex.Translit
+			vm.ExampleGloss = ex.Gloss
+			url, err := s.clipURL(ctx, ex.TextNFC, ex.AudioID)
+			if err != nil {
+				return err
+			}
+			vm.AudioURL = url
+		}
+	case session.KindPattern:
+		var found map[string]db.LexemeView
+		if s != nil && s.store != nil {
+			var err error
+			found, err = s.store.LexemesByText(ctx, parts)
+			if err != nil {
+				return err
+			}
+		}
+		sides := make([]views.DrillSide, 0, len(parts))
+		for _, part := range parts {
+			side := views.DrillSide{Hebrew: part}
+			if row, ok := found[part]; ok {
+				side.Translit = row.Translit
+				side.Gloss = row.Gloss
+			}
+			sides = append(sides, side)
+			if vm.AudioURL == "" {
+				url, err := s.clipURL(ctx, part, "")
+				if err != nil {
+					return err
+				}
+				vm.AudioURL = url
+			}
+		}
+		vm.Sides = sides
+	}
+	if vm.AudioURL == "" && vm.Kind == session.KindLetter {
+		for _, part := range parts {
+			url, err := s.clipURL(ctx, part, "")
+			if err != nil {
+				return err
+			}
+			if url != "" {
+				vm.AudioURL = url
+				break
+			}
+		}
+	}
+	// The front shows the asked letter. The pair key was the lookup above.
+	if vm.Kind == session.KindLetter && vm.Asked != "" {
+		vm.Pointed = vm.Asked
+		vm.Unpointed = units.Plain(vm.Asked)
+	}
+	return nil
+}
+
+// letterSound is a Latin reading stored for this exact letter.
+// Placement syllables match only when the text is the letter itself.
+// A lexicon row whose text is the letter contributes its transliteration.
+// A bare letter with neither has no sound, and the caller does not invent one.
+func (s *server) letterSound(ctx context.Context, letter string) (string, error) {
+	letters, err := placement.Letters()
+	if err != nil {
+		return "", err
+	}
+	for _, l := range letters {
+		if (l.LetterNFC == letter || l.SyllableText == letter) && l.Sound != "" {
+			return l.Sound, nil
+		}
+	}
+	if s == nil || s.store == nil || letter == "" {
+		return "", nil
+	}
+	found, err := s.store.LexemesByText(ctx, []string{letter})
+	if err != nil {
+		return "", err
+	}
+	if row, ok := found[letter]; ok {
+		return row.Translit, nil
+	}
+	return "", nil
+}
+
+func (s *server) confusionExample(ctx context.Context, userID int64, kind, key string) (db.LexemeRef, bool, error) {
+	if s == nil || s.store == nil || userID == 0 || key == "" {
+		return db.LexemeRef{}, false, nil
+	}
+	id, ok, err := s.store.LatestConfusionLexeme(ctx, userID, kind, key)
+	if err != nil || !ok {
+		return db.LexemeRef{}, false, err
+	}
+	return s.store.LexemeByID(ctx, id)
+}
+
+// pickPart chooses one part of a pair. The seed is the card id plus the
+// learner's study-day cutoff, the next 4:00 America/Denver. The same study
+// day asks the same letter. The next study day can ask the other one.
+// One part is returned as itself. The cutoff comes from studyDayCutoff.
+// A reveal does not call this again: the posted letter is what the back shows.
+func pickPart(cardID int64, cutoff time.Time, parts []string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	src := rand.NewPCG(uint64(cardID), uint64(cutoff.Unix()))
+	return parts[rand.New(src).Uint64N(uint64(len(parts)))]
+}
+
+func splitDrillKey(key string) []string {
+	if key == "" {
+		return nil
+	}
+	parts := strings.Split(key, "/")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	if len(out) == 0 {
+		return []string{key}
+	}
+	return out
 }
 
 // showUnpointed uses fsrs.ShowUnpointed. A recall card, a drill, and a card
@@ -575,24 +791,17 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 		card.Act = activityView(lang, csrf, vm)
 		return card
 	}
-	if vm.Revealed {
-		return card
-	}
-	// Anything that reveals the answer side is post-reveal only.
-	// read: the Hebrew is the prompt, so pointed text, translit, and audio stay.
-	// The English gloss and the gender chip wait.
-	// recall: the English gloss is the prompt. The Hebrew, its transliteration,
-	// its audio, and the gender chip all identify the answer, so they wait.
-	card.Gender = ""
-	if vm.Kind == fsrs.SkillRecall || vm.Kind == "recall" {
-		card.Pointed = ""
-		card.Unpointed = ""
-		card.Translit = ""
-		card.AudioURL = ""
-		return card
-	}
-	card.Gloss = ""
-	return card
+	card.Sides = vm.Sides
+	card.ExampleText = vm.ExampleText
+	card.ExampleTranslit = vm.ExampleTranslit
+	card.ExampleGloss = vm.ExampleGloss
+	card.LooksLike = vm.LooksLike
+	card.TellApart = vm.TellApart
+	card.PairNote = vm.PairNote
+	card.DageshNote = vm.DageshNote
+	card.DageshHard = vm.DageshHard
+	// The mode's hold decides what the front may carry. A revealed card passes through.
+	return views.ConcealFront(card)
 }
 
 func reviewStatus(err error) int {

@@ -278,19 +278,241 @@ func flashDone(c ReviewCard) int {
 	return c.Index - 1
 }
 
+// One English question per card type. A Designer ruling changes one line.
+const (
+	PromptRead       = "What does this word mean?"
+	PromptRecall     = "How do you say this in Hebrew?"
+	PromptLetter     = "What sound does this letter make?"
+	PromptPattern    = "What does this pattern mean?"
+	PromptPatternSay = "How do you say this in Hebrew?"
+	PromptGrade      = "How well did you remember it?"
+	PromptListen     = "What does the word you hear mean?"
+	PromptSpell      = "How do you spell this word?"
+)
+
+// FrontHold is the answer fields a mode keeps off the unrevealed card.
+// Hebrew clears the pointed text. Drill clears the sides, the example, and
+// the cues. The clip and data-translit stay on the front only when the mode
+// holds neither Translit nor Audio. Read and listen are that case.
+type FrontHold struct {
+	Hebrew   bool
+	Translit bool
+	Audio    bool
+	Gloss    bool
+	Gender   bool
+	Drill    bool
+}
+
+// ReviewMode is one self-graded card type.
+// Prompt, Front, Back, and Hold are the whole of what a mode owns.
+// Match and picture match are not entries yet. Adding either one is a new
+// element of ReviewModes. The reveal route and the grade guard do not change.
+// Lexeme is true when the study loader already has the word. A mode with
+// Lexeme false is loaded from its key beside fillDrill.
+type ReviewMode struct {
+	Kind   string
+	Prompt func(key string) string
+	Front  func(ReviewCard) templ.Component
+	Back   func(ReviewCard) templ.Component
+	Hold   FrontHold
+	Lexeme bool
+}
+
+// ReviewModes is where a new review mode plugs in.
+// One entry: the prompt, the front view, the back view, and the fields the
+// front hides. GET /_hx/review/reveal and Session.Record stay the shared path.
+// The slice is filled from init. A package-level literal would cycle: the
+// faces call answerSide, and answerSide reads this table.
+var ReviewModes []ReviewMode
+
+func init() {
+	ReviewModes = []ReviewMode{
+		{Kind: "read", Prompt: constPrompt(PromptRead), Front: wordFront, Back: wordBack, Hold: holdGloss, Lexeme: true},
+		{Kind: "listen", Prompt: constPrompt(PromptListen), Front: wordFront, Back: wordBack, Hold: holdGloss, Lexeme: true},
+		{Kind: "recall", Prompt: constPrompt(PromptRecall), Front: glossFront, Back: glossBack, Hold: holdHebrew, Lexeme: true},
+		{Kind: "spell", Prompt: constPrompt(PromptSpell), Front: glossFront, Back: glossBack, Hold: holdHebrew, Lexeme: true},
+		{Kind: "letter", Prompt: LetterPrompt, Front: letterFront, Back: letterBack, Hold: holdDrill},
+		{Kind: "pattern", Prompt: PatternPrompt, Front: patternFront, Back: patternBack, Hold: holdDrill},
+	}
+}
+
+var (
+	holdGloss  = FrontHold{Gloss: true, Gender: true}
+	holdHebrew = FrontHold{Hebrew: true, Translit: true, Audio: true, Gender: true}
+	holdDrill  = FrontHold{Translit: true, Audio: true, Gloss: true, Gender: true, Drill: true}
+)
+
+func constPrompt(text string) func(string) string {
+	return func(string) string { return text }
+}
+
+// LookupReviewMode reports the entry for kind. An unknown kind, including a
+// mode that has not been added yet, is not found.
+func LookupReviewMode(kind string) (ReviewMode, bool) {
+	for _, mode := range ReviewModes {
+		if mode.Kind == kind {
+			return mode, true
+		}
+	}
+	return ReviewMode{}, false
+}
+
+// ReviewModeFor is the mode that renders kind. An unknown kind uses read,
+// so the gloss stays off the front and the Hebrew stays.
+func ReviewModeFor(kind string) ReviewMode {
+	if mode, ok := LookupReviewMode(kind); ok {
+		return mode
+	}
+	if mode, ok := LookupReviewMode("read"); ok {
+		return mode
+	}
+	return ReviewMode{Kind: "read", Prompt: constPrompt(PromptRead), Hold: holdGloss, Lexeme: true}
+}
+
+// ConcealFront clears the fields the mode holds back. A revealed card is
+// returned unchanged. The reveal handler does not do this itself.
+func ConcealFront(card ReviewCard) ReviewCard {
+	if card.Revealed {
+		return card
+	}
+	hold := ReviewModeFor(card.Kind).Hold
+	if hold.Hebrew {
+		card.Pointed = ""
+		card.Unpointed = ""
+	}
+	if hold.Translit {
+		card.Translit = ""
+	}
+	if hold.Audio {
+		card.AudioURL = ""
+	}
+	if hold.Gloss {
+		card.Gloss = ""
+	}
+	if hold.Gender {
+		card.Gender = ""
+	}
+	if hold.Drill {
+		card.Sides = nil
+		card.ExampleText = ""
+		card.ExampleTranslit = ""
+		card.ExampleGloss = ""
+		card.LooksLike = ""
+		card.TellApart = ""
+		card.PairNote = ""
+		card.DageshNote = ""
+		card.DageshHard = ""
+	}
+	return card
+}
+
+// renderFace is the one face choice. The frame calls it for every mode.
+func renderFace(c ReviewCard) templ.Component {
+	mode := ReviewModeFor(c.Kind)
+	face := mode.Front
+	if c.Revealed {
+		face = mode.Back
+	}
+	if face == nil {
+		return templ.NopComponent
+	}
+	return face(c)
+}
+
+// LetterPrompt is the question for a letter drill.
+// A pair is still one letter on the front, so the question does not change.
+func LetterPrompt(string) string {
+	return PromptLetter
+}
+
+// PatternPrompt is the one question for an agreement drill.
+// A Hebrew key asks for the meaning. A key with no Hebrew letter asks how
+// to say that English in Hebrew.
+func PatternPrompt(key string) string {
+	if hasHebrew(key) || key == "" {
+		return PromptPattern
+	}
+	return PromptPatternSay
+}
+
+func hasHebrew(s string) bool {
+	for _, r := range s {
+		if r >= 0x0590 && r <= 0x05FF {
+			return true
+		}
+	}
+	return false
+}
+
+// answerLine is the pair back's one-line reading: translit, then sound.
+func answerLine(side DrillSide) string {
+	switch {
+	case side.NameTranslit != "" && side.Sound != "":
+		return side.NameTranslit + " · " + side.Sound
+	case side.NameTranslit != "":
+		return side.NameTranslit
+	default:
+		return side.Sound
+	}
+}
+
+// askedSide is the letter the front showed.
+func askedSide(c ReviewCard) DrillSide {
+	for _, side := range c.Sides {
+		if side.Hebrew == c.Pointed {
+			return side
+		}
+	}
+	if len(c.Sides) == 1 {
+		return c.Sides[0]
+	}
+	return DrillSide{Hebrew: c.Pointed}
+}
+
+// DageshNote is the one-line contrast for a pair that is the same letter
+// with and without a dagesh. Both sounds have to be stored. A missing sound
+// returns empty rather than a guessed consonant.
+func DageshNote(sides []DrillSide) string {
+	if len(sides) != 2 {
+		return ""
+	}
+	a, b := sides[0], sides[1]
+	if a.Sound == "" || b.Sound == "" || stripDagesh(a.Hebrew) != stripDagesh(b.Hebrew) {
+		return ""
+	}
+	aDot := strings.ContainsRune(a.Hebrew, '\u05BC')
+	bDot := strings.ContainsRune(b.Hebrew, '\u05BC')
+	if aDot == bDot {
+		return ""
+	}
+	with, without := a, b
+	if !aDot {
+		with, without = b, a
+	}
+	return "With the dot: " + with.Sound + ". Without: " + without.Sound + "."
+}
+
+func stripDagesh(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\u05BC' {
+			return -1
+		}
+		return r
+	}, s)
+}
+
 // flashLead is the line under the prompt of a flashcard.
+// The wording comes from the mode table. After the reveal every mode asks
+// the same grade question.
 func flashLead(c ReviewCard) string {
 	if c.Revealed {
-		return "How well did you remember it?"
+		return PromptGrade
 	}
-	switch c.Kind {
-	case "recall":
-		return "Say it in Hebrew, then check."
-	case "read":
-		return "Say what it means, then check."
-	default:
-		return "Say it, then check."
+	prompt := ReviewModeFor(c.Kind).Prompt
+	if prompt == nil {
+		return PromptRead
 	}
+	return prompt(c.Pointed)
 }
 
 // flashHebrew is the Hebrew a flashcard shows: unpointed once the card is
