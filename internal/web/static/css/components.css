@@ -38,8 +38,9 @@
 .c-button[data-kind="quiet"]:hover { background: var(--surface-soft); }
 .c-button:disabled { opacity: .5; cursor: not-allowed; }
 
-/* AnswerOption. Four states. Selected is neutral: a strong border and a soft
-   surface. Correct and Wrong add a drawn mark, so colour is never alone. */
+/* AnswerOption. Selected is neutral: a strong border and a soft surface.
+   Correct and Wrong add a drawn mark, so colour is never alone. Dim is an
+   unpicked sentence choice after the answer, and it takes no grade colour. */
 .c-answer {
   display: flex;
   align-items: center;
@@ -119,6 +120,14 @@
 }
 .c-answer[data-state="wrong"] .c-answer__mark::before { rotate: 45deg; }
 .c-answer[data-state="wrong"] .c-answer__mark::after { rotate: -45deg; }
+/* Dim is an unpicked sentence choice after the answer. It is not a grade,
+   so it takes no go or stop colour. The text tag and the mark carry the grade. */
+.c-answer[data-state="dim"] {
+  background: var(--surface);
+  border-color: var(--hairline);
+  color: var(--muted);
+}
+.c-answer[data-state="dim"] .c-answer__label { color: var(--muted); }
 
 /* ProgressBar. A native progress element, so there is no inline style. */
 .c-progress {

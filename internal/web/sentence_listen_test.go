@@ -40,20 +40,19 @@ const (
 	slFifth    = "A fifth line stays off the buttons"
 )
 
-// slWant is the answer plus the four distractors that survive folding.
-// The fixture lists a folded duplicate of the answer, a folded duplicate of
-// Good evening, and a fifth distinct line, in that order, so dropping the
-// fold drops one of these into the four slots.
-var slWant = []string{slAnswer, slEvening, slHouse, slCold, slTomorrow}
+// slPool is every distinct English line that may be a distractor.
+// slCold uses the heard Hebrew, so it is excluded. slAnswer2 and slEvening2
+// fold onto lines already kept.
+var slPool = []string{slEvening, slHouse, slTomorrow, slFifth}
 
 func TestSentenceListenCreditsNothingAndExposesOnce(t *testing.T) {
 	env := openSentenceLesson(t, sentenceActivities(false), &listenRec{})
 	body := getAuthed(t, env.h, env.cookie, env.path)
-	rec := postLesson(t, env.h, env.cookie, env.path, runValue(t, body), slAnswer, true, env.csrf)
+	rec := postLesson(t, env.h, env.cookie, env.path, runValue(t, body), choiceValue(t, body, slAnswer), true, env.csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("answer = %d\n%s", rec.Code, rec.Body.String())
 	}
-	again := postLesson(t, env.h, env.cookie, env.path, runValue(t, body), slAnswer, true, env.csrf)
+	again := postLesson(t, env.h, env.cookie, env.path, runValue(t, body), choiceValue(t, body, slAnswer), true, env.csrf)
 	if again.Code != http.StatusOK {
 		t.Fatalf("repeat = %d", again.Code)
 	}
@@ -81,20 +80,24 @@ func TestSentenceListenCreditsNothingAndExposesOnce(t *testing.T) {
 func TestSentenceListenChoicesAreTranslations(t *testing.T) {
 	env := openSentenceLesson(t, sentenceActivities(false), nil)
 	labels := sentenceLabels(t, getAuthed(t, env.h, env.cookie, env.path))
-	if len(labels) < 5 {
-		t.Fatalf("choices = %q, want at least 5", labels)
+	if sentenceChoiceCount != 4 || sentenceMinChoices != 3 {
+		t.Fatalf("choice count = %d, minimum = %d, want 4 and 3", sentenceChoiceCount, sentenceMinChoices)
 	}
-	if !sameStrings(labels, slWant) {
-		t.Fatalf("choices = %q, want %q", labels, slWant)
+	if len(labels) != 4 {
+		t.Fatalf("choices = %q, want 4", labels)
+	}
+	if !slices.Contains(labels, slAnswer) {
+		t.Fatalf("choices = %q, missing the translation", labels)
 	}
 	glosses := []string{"I", "lives", "here", "house", "water"}
+	seen := map[string]int{}
 	for _, label := range labels {
 		if slices.Contains(glosses, label) {
 			t.Fatalf("choice %q is a lexicon gloss", label)
 		}
-	}
-	seen := map[string]int{}
-	for _, label := range labels {
+		if label != slAnswer && !slices.Contains(slPool, label) {
+			t.Fatalf("choice %q is outside the unit pool", label)
+		}
 		seen[foldTranslation(label)]++
 	}
 	for key, n := range seen {
@@ -102,9 +105,9 @@ func TestSentenceListenChoicesAreTranslations(t *testing.T) {
 			t.Fatalf("folded %q appears %d times in %q", key, n, labels)
 		}
 	}
-	for _, banned := range []string{slAnswer2, slEvening2, slFifth} {
+	for _, banned := range []string{slAnswer2, slEvening2, slCold} {
 		if slices.Contains(labels, banned) {
-			t.Fatalf("choice %q should have been folded away or capped", banned)
+			t.Fatalf("choice %q should have been excluded", banned)
 		}
 	}
 }
@@ -114,8 +117,8 @@ func TestSentenceListenOrderIsStablePerRun(t *testing.T) {
 	var first []string
 	for i := 0; i < 8; i++ {
 		labels := sentenceLabels(t, getAuthed(t, env.h, env.cookie, env.path))
-		if !sameStrings(labels, slWant) {
-			t.Fatalf("render %d choices = %q, want the sentence set %q", i, labels, slWant)
+		if len(labels) != sentenceChoiceCount || !slices.Contains(labels, slAnswer) {
+			t.Fatalf("render %d choices = %q", i, labels)
 		}
 		if i == 0 {
 			first = labels
@@ -148,7 +151,7 @@ func TestSentenceListenOrderIsStablePerRun(t *testing.T) {
 		}
 		cookie := mintSession(t, env.store, user.ID, "csrf-"+email, env.now.Add(time.Hour))
 		labels := sentenceLabels(t, getAuthed(t, h, cookie, env.path))
-		if !sameStrings(labels, slWant) {
+		if len(labels) != sentenceChoiceCount || !slices.Contains(labels, slAnswer) {
 			t.Fatalf("session %d choices = %q", i, labels)
 		}
 		orders[strings.Join(labels, "|")]++
@@ -167,13 +170,13 @@ func TestSentenceListenGradesTranslationOnBothPaths(t *testing.T) {
 		t.Run(name+" correct", func(t *testing.T) {
 			env := openSentenceLesson(t, sentenceActivities(false), &listenRec{})
 			body := getAuthed(t, env.h, env.cookie, env.path)
-			rec := postSentence(t, env, runValue(t, body), slAnswer, hx)
+			rec := postSentence(t, env, runValue(t, body), choiceValue(t, body, slAnswer), hx)
 			assertGrade(t, rec, hx, "feedback--right")
 		})
 		t.Run(name+" distractor", func(t *testing.T) {
 			env := openSentenceLesson(t, sentenceActivities(false), &listenRec{})
 			body := getAuthed(t, env.h, env.cookie, env.path)
-			rec := postSentence(t, env, runValue(t, body), slHouse, hx)
+			rec := postSentence(t, env, runValue(t, body), choiceValue(t, body, slHouse), hx)
 			assertGrade(t, rec, hx, "feedback--wrong")
 		})
 	}
@@ -189,7 +192,7 @@ func TestSentenceListenDoesNotRevealTheAnswer(t *testing.T) {
 	if !slices.Contains(labels, slAnswer) {
 		t.Fatalf("the translation is not one of the choices: %q", labels)
 	}
-	i := strings.Index(body, `class="choices"`)
+	i := strings.Index(body, `class="choices `)
 	if i < 0 {
 		t.Fatalf("choices missing:\n%s", body)
 	}
@@ -210,6 +213,9 @@ func TestSingleWordListenWithoutTargetCreditsThatWord(t *testing.T) {
 	const hello = "שָׁלוֹם"
 	env := openWordListen(t, units.Activity{Type: units.ActivityListenPick, Text: hello})
 	body := getAuthed(t, env.h, env.cookie, env.path)
+	if !strings.Contains(body, "Listen, then pick the meaning.") || strings.Contains(body, "Listen, then pick what it means.") {
+		t.Fatalf("single-word prompt:\n%s", activityHTML(t, body))
+	}
 	rec := postLesson(t, env.h, env.cookie, env.path, runValue(t, body), itoa(env.ids[hello]), true, env.csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("answer = %d\n%s", rec.Code, rec.Body.String())
@@ -232,10 +238,10 @@ func TestSentenceListenTargetCreditsOnlyThatWord(t *testing.T) {
 	env := openSentenceLesson(t, sentenceActivities(true), nil)
 	body := getAuthed(t, env.h, env.cookie, env.path)
 	labels := sentenceLabels(t, body)
-	if !sameStrings(labels, slWant) {
+	if len(labels) != sentenceChoiceCount || !slices.Contains(labels, slAnswer) {
 		t.Fatalf("a targeted sentence used glosses: %q", labels)
 	}
-	rec := postLesson(t, env.h, env.cookie, env.path, runValue(t, body), slAnswer, true, env.csrf)
+	rec := postLesson(t, env.h, env.cookie, env.path, runValue(t, body), choiceValue(t, body, slAnswer), true, env.csrf)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "feedback--right") {
 		t.Fatalf("targeted sentence answer = %d\n%s", rec.Code, rec.Body.String())
 	}
@@ -297,6 +303,11 @@ func (r *listenRec) Expose(_ context.Context, learnerID int64, lexemeIDs []int64
 
 func openSentenceLesson(t *testing.T, activities []units.Activity, rec *listenRec) sentenceEnv {
 	t.Helper()
+	return openSentenceLessonOrigin(t, activities, rec, "https://learn.example")
+}
+
+func openSentenceLessonOrigin(t *testing.T, activities []units.Activity, rec *listenRec, origin string) sentenceEnv {
+	t.Helper()
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "hebrew.sqlite")
@@ -321,7 +332,7 @@ func openSentenceLesson(t *testing.T, activities []units.Activity, rec *listenRe
 		t.Fatalf("fixture text = %q", activities[0].Text)
 	}
 	svc, err := auth.New(auth.Config{
-		PublicOrigin: "https://learn.example", Clock: fixedClock(now), Store: store,
+		PublicOrigin: origin, Clock: fixedClock(now), Store: store,
 		AllowedEmails: []string{"brian@example.com"},
 	})
 	if err != nil {
@@ -493,11 +504,8 @@ func sentenceLabels(t *testing.T, body string) []string {
 	for _, m := range sentenceButton.FindAllStringSubmatch(choiceRegion(body), -1) {
 		value := html.UnescapeString(attrFromTag(m[1], "value"))
 		label := html.UnescapeString(strings.TrimSpace(stripTags(labelSpan(m[2]))))
-		if value == "continue" {
+		if value == "continue" || value == "" {
 			continue
-		}
-		if value != label {
-			t.Fatalf("button value %q, label %q", value, label)
 		}
 		labels = append(labels, label)
 	}
@@ -505,6 +513,23 @@ func sentenceLabels(t *testing.T, body string) []string {
 		t.Fatalf("no sentence choices:\n%s", choiceRegion(body))
 	}
 	return labels
+}
+
+func choiceValue(t *testing.T, body, label string) string {
+	t.Helper()
+	for _, m := range sentenceButton.FindAllStringSubmatch(choiceRegion(body), -1) {
+		got := html.UnescapeString(strings.TrimSpace(stripTags(labelSpan(m[2]))))
+		if got != label {
+			continue
+		}
+		value := html.UnescapeString(attrFromTag(m[1], "value"))
+		if value == "" || value == label {
+			t.Fatalf("choice %q value = %q, want an opaque id", label, value)
+		}
+		return value
+	}
+	t.Fatalf("no choice %q", label)
+	return ""
 }
 
 func labelSpan(inner string) string {

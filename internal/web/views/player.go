@@ -1,6 +1,10 @@
 package views
 
-import "github.com/a-h/templ"
+import (
+	"unicode"
+
+	"github.com/a-h/templ"
+)
 
 // Screen is one lesson page. Empty is the honest state when nothing
 // published is waiting. Title, Gloss, and Situation describe the unit.
@@ -45,6 +49,17 @@ type Activity struct {
 	Continue      string
 	Asking        bool
 	HomeHref      string
+	// Sentence is a listen_pick of two or more lexicon words. Reveal shows
+	// the line under the orb. Sheet is the status panel with Continue.
+	// Translation is the author's English of that line. GlossWords are the
+	// muted per-word glosses under it. Contrast is the miss line that names
+	// a Hebrew word the heard line has and the picked line lacks.
+	Sentence    bool
+	Reveal      bool
+	Sheet       bool
+	Translation string
+	GlossWords  []Word
+	Contrast    *ChoiceContrast
 	// Dialogue is set for a dialogue step. It replaces Words and Audio.
 	Dialogue *Dialogue
 }
@@ -102,6 +117,31 @@ func dialogueClipID(i int) string { return "dlg-clip-" + Num(i) }
 // while the clip plays (motion.js).
 func dialogueOrbAttrs(i int) templ.Attributes {
 	return templ.Attributes{"data-audio": dialogueClipID(i), "data-dlg-line": Num(i)}
+}
+
+// contrastTail is the transliteration and gloss after the Hebrew word.
+func contrastTail(c *ChoiceContrast) string {
+	if c == nil {
+		return ""
+	}
+	if c.Translit != "" && c.Gloss != "" {
+		return " " + c.Translit + ", " + c.Gloss + "."
+	}
+	if c.Translit != "" {
+		return " " + c.Translit + "."
+	}
+	if c.Gloss != "" {
+		return " " + c.Gloss + "."
+	}
+	return "."
+}
+
+// choiceWrap is the choice list. A sentence listen_pick is one column.
+func choiceWrap(a Activity) string {
+	if a.Sentence {
+		return "choices choices--sentence"
+	}
+	return "choices"
 }
 
 // wordBlocksClass is the activity line. A multi-word recall centres that line
@@ -170,13 +210,38 @@ func shown(ok bool, value string) string {
 	return value
 }
 
-// Choice is one answer button. Value is the lexeme id, never the pointed text.
-// Hebrew choices show the pointed word. Translit is set only when that
-// choice should show a transliteration. English choices show Label, the gloss.
+// Choice is one answer button. Value is the lexeme id, or an opaque choice id
+// for a sentence listen_pick, never the pointed text. Hebrew choices show the
+// pointed word. Translit is set only when that choice should show a
+// transliteration. English choices show Label, the gloss or the whole line.
+// After a sentence answer, Disabled is set, State is correct, wrong, or dim,
+// and Tag is the visible "Right" or "Your pick".
 type Choice struct {
 	Value    string
 	Label    string
 	Text     string
 	Translit string
 	Hebrew   bool
+	State    string
+	Tag      string
+	Disabled bool
+}
+
+// ChoiceContrast is the second sentence of a missed sentence listen_pick.
+type ChoiceContrast struct {
+	Picked   string
+	Hebrew   string
+	Translit string
+	Gloss    string
+}
+
+// HasHebrew reports whether s contains a Hebrew letter. An English unit
+// title is not wrapped as Hebrew.
+func HasHebrew(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Hebrew, r) {
+			return true
+		}
+	}
+	return false
 }

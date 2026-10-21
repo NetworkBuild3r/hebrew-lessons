@@ -32,8 +32,11 @@ import (
 //   - listen_pick hides the Hebrew, the transliteration, and the gloss
 //     until the answer. The clip is the prompt. A single lexicon word uses
 //     English glosses, and the button value is the lexeme id. A line of two
-//     or more lexicon words uses the author's English of the whole line, plus
-//     other English lines from the same unit. The button value is that English.
+//     or more lexicon words asks the author's English of the whole line.
+//     The buttons are that translation plus three other lines, same unit
+//     first, and the value is an HMAC of the choice index. After the answer
+//     the buttons stay, disabled and marked. Fewer than three lines plays
+//     ungraded.
 //   - produce hides the Hebrew, the transliteration, and the clip until the
 //     answer. Choices show pointed Hebrew. The button value is the lexeme id.
 //   - cloze gaps the first new word. Until the answer, the other words show
@@ -59,10 +62,11 @@ type lessonRecorder interface {
 }
 
 type player struct {
-	store    *db.Store
-	audioDir string
-	voices   audio.Voices
-	rec      lessonRecorder
+	store     *db.Store
+	audioDir  string
+	voices    audio.Voices
+	rec       lessonRecorder
+	choiceKey []byte
 }
 
 func (p player) lessonIndex(w http.ResponseWriter, r *http.Request, lang, csrf string) {
@@ -194,7 +198,7 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 				return
 			}
 		}
-		screen, err := p.screenFor(r.Context(), page, lesson, run)
+		screen, err := p.screenFor(r.Context(), page, lesson, run, "")
 		if err != nil {
 			serverError(w)
 			return
@@ -214,9 +218,16 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		return
 	}
 	sentence := sentenceListenPick(act, lex)
+	var sentenceChoices []views.Choice
 	graded := false
 	if sentence {
-		graded = foldTranslation(act.Translation) != ""
+		same, earlierLines, lineErr := p.spokenLines(r.Context(), userID, lesson)
+		if lineErr != nil {
+			serverError(w)
+			return
+		}
+		sentenceChoices = sentenceAsk(p.choiceKey, run, act, same, earlierLines)
+		graded = len(sentenceChoices) >= sentenceMinChoices
 	} else if gradedActivity(act.Type) && target.ID != 0 {
 		graded = true
 		if recallOrCloze(act.Type) {
@@ -231,16 +242,32 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 			}
 		}
 	}
+	var picked string
 	switch {
+	case run.Phase == "ask" && sentence && !graded && answer == "continue":
+		// Listen, then reveal. The step is not a question, so nothing is credited.
+		// Moving to reveal (rather than past the item) is what shows the line.
+		var applied bool
+		run, applied, err = p.store.AnswerPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, true)
+		if err == nil && applied {
+			err = p.recorder().Expose(r.Context(), userID, listenLexemeIDs(act, lex), evidence.ContextLessonListen, lesson.UnitID)
+		}
 	case run.Phase == "ask" && graded && answer != "" && answer != "continue":
 		var correct bool
+		response := answer
 		if sentence {
-			// The button value is the author's English, not a lexeme id.
-			correct = answer == act.Translation
+			// Grade the HMAC choice id. The English string is not the answer.
+			ix, ok := sentenceChoiceIndex(p.choiceKey, run, sentenceChoices, answer)
+			if !ok {
+				break
+			}
+			correct = sentenceChoices[ix].Label == act.Translation
+			response = sentenceChoices[ix].Label
+			picked = answer
 		} else {
 			// Grade the lexeme id on the button. Position and label are not the answer.
-			picked, parseErr := strconv.ParseInt(answer, 10, 64)
-			correct = parseErr == nil && picked == target.ID
+			id, parseErr := strconv.ParseInt(answer, 10, 64)
+			correct = parseErr == nil && id == target.ID
 		}
 		var applied bool
 		run, applied, err = p.store.AnswerPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, correct)
@@ -249,23 +276,20 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 			if sentence && target.ID == 0 {
 				err = p.recorder().Expose(r.Context(), userID, listenLexemeIDs(act, lex), evidence.ContextLessonListen, lesson.UnitID)
 			} else {
-				err = p.recordAnswer(r.Context(), userID, lesson, act, target, answer, correct)
+				err = p.recordAnswer(r.Context(), userID, lesson, act, target, response, correct)
 			}
 		}
 	case answer == "continue" && (run.Phase == "reveal" || (run.Phase == "ask" && !graded)):
-		// A sentence with no translation and no credited word is still an exposure.
-		expose := sentence && target.ID == 0 && run.Phase == "ask"
-		var applied bool
-		run, applied, err = p.store.ContinuePlayerRun(r.Context(), userID, run.ID, run.ActivityIx, total)
-		if err == nil && applied && expose {
-			err = p.recorder().Expose(r.Context(), userID, listenLexemeIDs(act, lex), evidence.ContextLessonListen, lesson.UnitID)
+		_, _, err = p.store.ContinuePlayerRun(r.Context(), userID, run.ID, run.ActivityIx, total)
+		if err == nil {
+			run, err = p.store.PlayerRunFor(r.Context(), userID, run.ID)
 		}
 	}
 	if err != nil {
 		serverError(w)
 		return
 	}
-	screen, err := p.screenFor(r.Context(), page, lesson, run)
+	screen, err := p.screenFor(r.Context(), page, lesson, run, picked)
 	if err != nil {
 		serverError(w)
 		return
@@ -335,7 +359,7 @@ func (p player) writePlaying(w http.ResponseWriter, r *http.Request, page views.
 		serverError(w)
 		return
 	}
-	screen, err := p.screenFor(r.Context(), page, lesson, run)
+	screen, err := p.screenFor(r.Context(), page, lesson, run, "")
 	if err != nil {
 		serverError(w)
 		return
@@ -364,8 +388,8 @@ func (p player) learnerID(r *http.Request) (int64, bool) {
 }
 
 // screenFor is the screen for one run: the step, and the frame around it.
-func (p player) screenFor(ctx context.Context, page views.Page, lesson db.CourseLesson, run db.PlayerRun) (views.Screen, error) {
-	screen, err := p.stepScreen(ctx, page, lesson, run)
+func (p player) screenFor(ctx context.Context, page views.Page, lesson db.CourseLesson, run db.PlayerRun, picked string) (views.Screen, error) {
+	screen, err := p.stepScreen(ctx, page, lesson, run, picked)
 	if err != nil {
 		return views.Screen{}, err
 	}
@@ -415,7 +439,7 @@ func frameFor(page views.Page, lesson db.CourseLesson, run db.PlayerRun, done bo
 	return f
 }
 
-func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.CourseLesson, run db.PlayerRun) (views.Screen, error) {
+func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.CourseLesson, run db.PlayerRun, picked string) (views.Screen, error) {
 	gloss, err := titleGloss(ctx, p.store, lesson.Title)
 	if err != nil {
 		return views.Screen{}, err
@@ -431,7 +455,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	}
 	total := len(lesson.Activities)
 	if total == 0 {
-		screen.Activity = p.step(page, lesson, run, units.Activity{}, db.LexemeView{}, nil, nil, nil, true, nil)
+		screen.Activity = p.step(page, lesson, run, units.Activity{}, db.LexemeView{}, nil, nil, nil, true)
 		return screen, nil
 	}
 	if run.ActivityIx < 0 || run.ActivityIx >= total {
@@ -456,7 +480,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		return views.Screen{}, err
 	}
 	if act.Type == units.ActivityDialogue {
-		screen.Activity = p.step(page, lesson, run, act, target, lex, pool, nil, false, nil)
+		screen.Activity = p.step(page, lesson, run, act, target, lex, pool, nil, false)
 		screen.Activity.Dialogue, err = p.dialogueView(ctx, act, lex, lesson.NewWords)
 		if err != nil {
 			return views.Screen{}, err
@@ -464,13 +488,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		return screen, nil
 	}
 	var earlier []db.LexemeView
-	var english []string
-	if run.Phase == "ask" && sentenceListenPick(act, lex) {
-		english, err = p.unitEnglishLines(ctx, lesson.UnitID)
-		if err != nil {
-			return views.Screen{}, err
-		}
-	} else if run.Phase == "ask" && gradedActivity(act.Type) && target.ID != 0 {
+	if run.Phase == "ask" && gradedActivity(act.Type) && target.ID != 0 && !sentenceListenPick(act, lex) {
 		earlier, err = p.store.EarlierUnitLexemes(ctx, run.UserID, lesson.Position)
 		if err != nil {
 			return views.Screen{}, err
@@ -480,7 +498,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	if err != nil {
 		return views.Screen{}, err
 	}
-	screen.Activity = p.step(page, lesson, run, act, target, lex, pool, earlier, false, english)
+	screen.Activity = p.step(page, lesson, run, act, target, lex, pool, earlier, false)
 	phase := run.Phase
 	// A recall or cloze that cannot find three options is not a graded ask.
 	// Show the word the way a reveal does, and let Continue move on.
@@ -489,13 +507,18 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	}
 	screen.Activity.Audio = phraseAudio(act, phase, clips.phrase)
 	screen.Activity.Words = wordsFor(act, lex, lesson.NewWords, phase, clips, target)
+	if sentenceListenPick(act, lex) {
+		if err := p.applySentence(ctx, lesson, run, act, lex, &screen.Activity, picked); err != nil {
+			return views.Screen{}, err
+		}
+	}
 	if screen.Activity.Audio != "" {
 		screen.Activity.AudioLabel, screen.Activity.AudioHebrew = phrasePlayLabel(act, phase)
 	}
 	return screen, nil
 }
 
-func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView, lex map[string]db.LexemeView, pool, earlier []db.LexemeView, empty bool, english []string) views.Activity {
+func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView, lex map[string]db.LexemeView, pool, earlier []db.LexemeView, empty bool) views.Activity {
 	total := len(lesson.Activities)
 	post := lessonPath(lesson.UnitID, lesson.LessonIx)
 	feedback, class := feedbackFor(run)
@@ -519,9 +542,10 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 		Continue:      continueLabel(run.ActivityIx, total),
 		HomeHref:      page.Href("/"),
 	}
-	if !empty && run.Phase == "ask" && sentenceListenPick(act, lex) {
-		activity.Choices = sentenceChoices(act.Translation, english, sentenceChoiceRand(run, act))
-		activity.Asking = len(activity.Choices) > 0
+	if !empty && sentenceListenPick(act, lex) {
+		activity.Sentence = true
+		activity.Feedback = ""
+		activity.FeedbackClass = ""
 		return activity
 	}
 	if empty || run.Phase != "ask" || !gradedActivity(act.Type) || target.ID == 0 {
@@ -1264,6 +1288,9 @@ func activityPrompt(lesson db.CourseLesson, act units.Activity, target db.Lexeme
 		// a different activity. A single word keeps this sentence.
 		return "What does this Hebrew mean?"
 	case units.ActivityListenPick:
+		if lexemeTokenCount(act, lex) >= 2 {
+			return "Listen, then pick what it means."
+		}
 		return "Listen, then pick the meaning."
 	case units.ActivityProduce:
 		if target.Gloss != "" {

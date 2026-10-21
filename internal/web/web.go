@@ -158,7 +158,7 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 		panic(err)
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
-	play := player{store: s.store, audioDir: s.audioDir, voices: s.voices, rec: s.lessonRec}
+	play := player{store: s.store, audioDir: s.audioDir, voices: s.voices, rec: s.lessonRec, choiceKey: s.choiceKey}
 	mux.HandleFunc("GET /{$}", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
 		s.serveHome(w, r, secure, csrfValue(tokens, r))
 	}))

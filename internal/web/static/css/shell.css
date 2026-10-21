@@ -299,6 +299,53 @@
 .lf-step[data-state="current"] { background: var(--surface-soft); color: var(--text); font-weight: 700; }
 .lf-step[data-state="current"] .lf-step__dot { background: var(--ink); border-color: var(--ink); }
 .lesson-frame .choices { gap: var(--space-3); }
+/* A sentence listen_pick is one column at every width. The 1024px rule below
+   sets two columns on .choices; this class wins. */
+.choices--sentence {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  max-inline-size: 40rem;
+}
+.choices--sentence .c-answer {
+  min-block-size: var(--size-cta);
+  text-align: start;
+  line-height: 1.45;
+}
+.lp-tag {
+  flex: none;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+}
+.lp-reveal {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  min-block-size: 7.5rem;
+}
+.lp-reveal .word-blocks { justify-content: center; }
+.lp-fb__tr {
+  margin: 0;
+  font: 600 var(--fs-h2)/1.3 var(--font-ui);
+  color: var(--text);
+  text-align: center;
+  text-wrap: balance;
+}
+.fbline .wb__gl { font-size: var(--fs-small); color: var(--muted); }
+.lp-miss { margin: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .lp-reveal > * { animation: lp-in var(--dur-base) var(--ease-out) both; }
+}
+@keyframes lp-in { from { opacity: 0; transform: translate(0, 6px); } }
+@media (prefers-reduced-motion: reduce) {
+  .lp-reveal > * { animation: lp-fade var(--dur-fast) linear both; }
+}
+@keyframes lp-fade { from { opacity: 0; } }
+/* The sheet is sticky. This padding is its height, and the negative margin
+   parks the sheet in that padding, so the last choice can sit above it. */
+.lesson-frame form:has(.lf-result) { padding-block-end: 16rem; }
+.lesson-frame form:has(.lf-result) .lf-result { margin-block-end: -16rem; }
+.lesson-frame .lf-result .btn-primary { min-block-size: var(--size-cta); }
 .lesson-frame .c-answer .word-block--choice,
 .lesson-frame .c-answer .wb { background: transparent; padding: 0; }
 .lf-result { position: sticky; inset-block-end: var(--space-4); z-index: var(--z-sticky); margin-block-start: auto; }
@@ -318,6 +365,7 @@
   }
   .lf-result .btn { inline-size: auto; justify-self: end; }
   .lesson-frame .choices { grid-template-columns: 1fr 1fr; }
+  .lesson-frame .choices--sentence { grid-template-columns: 1fr; }
 }
 
 /* Report a problem. A dialog is the sheet; without script the flag is a link to the page. */

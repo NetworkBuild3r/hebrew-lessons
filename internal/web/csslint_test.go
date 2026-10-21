@@ -285,17 +285,18 @@ func TestComponentsCSS(t *testing.T) {
 	if hits := transitionOffenders(css); len(hits) != 0 {
 		t.Errorf("components.css transitions: %v", hits)
 	}
-	// AnswerOption styles exactly four states.
+	// AnswerOption styles selected, correct, and wrong. Dim is the unpicked
+	// sentence choice after the answer, and it takes no go or stop colour.
 	states := map[string]bool{}
 	for _, m := range regexp.MustCompile(`\.c-answer\[data-state="([a-z]+)"\]`).FindAllStringSubmatch(css, -1) {
 		states[m[1]] = true
 	}
-	for _, s := range []string{"selected", "correct", "wrong"} {
+	for _, s := range []string{"selected", "correct", "wrong", "dim"} {
 		if !states[s] {
 			t.Errorf("components.css has no .c-answer[data-state=%q] rule", s)
 		}
 	}
-	if len(states) != 3 {
-		t.Errorf("components.css styles states %v; default is the bare .c-answer, so want exactly selected, correct, wrong", states)
+	if len(states) != 4 {
+		t.Errorf("components.css styles states %v; default is the bare .c-answer, so want selected, correct, wrong, and dim", states)
 	}
 }
