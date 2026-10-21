@@ -16,7 +16,7 @@ type User struct {
 	GoogleSub   string
 	Role        string
 	CreatedAt   time.Time
-	OnboardedAt *time.Time // Nil until the learner finishes a placement. The first finish wins.
+	OnboardedAt *time.Time // Nil until onboarding is recorded. The first time wins.
 }
 
 // CreateUser inserts one user. role must be learner or admin.
@@ -172,6 +172,73 @@ func (s *Store) SetOnboarded(ctx context.Context, userID int64, at time.Time) er
 		return fmt.Errorf("db: set onboarded: %w", err)
 	}
 	return nil
+}
+
+// IsOnboarded reports whether this learner should skip the first-visit gate.
+// It is true when onboarded_at is set, when any placement run has finished,
+// or when HasLessonAttempt would be true. An abandoned placement does not count.
+// A true result with a null onboarded_at stores the earliest of the first
+// finished placement's finished_at, the first lesson run's started_at, and
+// the first non-placement attempt. When none of those times exist, the store
+// clock is stored instead. COALESCE keeps a time that is already stored.
+func (s *Store) IsOnboarded(ctx context.Context, userID int64) (bool, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return false, err
+	}
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("db: onboarded: %w", err)
+	}
+	defer tx.Rollback()
+
+	var onboarded sql.NullString
+	var yes bool
+	err = tx.QueryRowContext(ctx, `
+		SELECT onboarded_at,
+			onboarded_at IS NOT NULL
+			OR EXISTS (SELECT 1 FROM placement_runs WHERE user_id = ? AND finished_at IS NOT NULL)
+			OR EXISTS (SELECT 1 FROM lesson_runs WHERE user_id = ?)
+			OR EXISTS (SELECT 1 FROM attempts WHERE user_id = ? AND source <> 'placement')
+		FROM users WHERE id = ?`, userID, userID, userID, userID).Scan(&onboarded, &yes)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("db: onboarded: %w", err)
+	}
+	if !yes {
+		return false, nil
+	}
+	if !onboarded.Valid {
+		var earliest sql.NullString
+		err = tx.QueryRowContext(ctx, `
+			SELECT MIN(t) FROM (
+				SELECT MIN(finished_at) AS t FROM placement_runs WHERE user_id = ? AND finished_at IS NOT NULL
+				UNION ALL
+				SELECT MIN(started_at) FROM lesson_runs WHERE user_id = ?
+				UNION ALL
+				SELECT MIN(created_at) FROM attempts WHERE user_id = ? AND source <> 'placement'
+			)`, userID, userID, userID).Scan(&earliest)
+		if err != nil {
+			return false, fmt.Errorf("db: onboarded: %w", err)
+		}
+		at := earliest.String
+		if !earliest.Valid || at == "" {
+			now := time.Now()
+			if s.clock != nil {
+				now = s.clock.Now()
+			}
+			at = FormatTime(now)
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET onboarded_at = COALESCE(onboarded_at, ?) WHERE id = ?`, at, userID); err != nil {
+			return false, fmt.Errorf("db: onboarded: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("db: onboarded: %w", err)
+	}
+	return true, nil
 }
 
 // AddressGender is users.address_gender for this learner.

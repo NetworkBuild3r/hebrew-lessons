@@ -235,7 +235,7 @@ type User struct {
 	GoogleSub   string
 	Role        string
 	CreatedAt   time.Time
-	OnboardedAt *time.Time // Nil until the learner finishes a placement. The first finish wins.
+	OnboardedAt *time.Time // Nil until onboarding is recorded. The first time wins.
 }
 
 // Session is a browser session. IDHash is what the database stores.
