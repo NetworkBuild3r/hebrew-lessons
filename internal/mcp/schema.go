@@ -118,7 +118,7 @@ func annotateUnitSchema(s *jsonschema.Schema) error {
 	// target stays out of the required array. recall, produce, and cloze must
 	// set it when the line has two or more lexicon words. listen_pick may omit it.
 	if target := prop(act, "target"); target != nil {
-		target.Description = "The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, and cloze when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure."
+		target.Description = "The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, and cloze when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word, and a line with two or more credits nothing and is logged as an exposure."
 	}
 	// text is not marked required here, because a dialogue has lines instead. The
 	// validator enforces it for every other type (schema.required) and enforces
@@ -194,7 +194,7 @@ func activityCatalog() []activityInfo {
 	listenTarget := activityField{
 		Name:        "target",
 		Required:    false,
-		Description: "Optional. If target is set, only that word gets credit; if not, nothing is credited and the step is logged as an exposure. When set, it is one exact pointed token of text, and that token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count.",
+		Description: "Optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word, and a line with two or more credits nothing and is logged as an exposure. When set, it is one exact pointed token of text, and that token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count.",
 	}
 	return []activityInfo{
 		{

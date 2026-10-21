@@ -355,6 +355,32 @@ func TestTargetAndTranslationShareMultiWord(t *testing.T) {
 	}
 }
 
+// TestSingleLexemeListenPickOmitsTargetAndTranslation checks a listen_pick
+// of one lexicon word with neither field set. That word is credited, so
+// activity.target stays quiet, and translation_missing applies only at two
+// or more lexicon words.
+func TestSingleLexemeListenPickOmitsTargetAndTranslation(t *testing.T) {
+	ctx := context.Background()
+	const word = "שָׁלוֹם"
+	lk := fakeLookup{lex: map[string]glex{
+		normalize(word): {ID: 1, POS: "noun", Gender: "m", Gloss: "hello", Bare: stripNiqqud(word)},
+	}}
+	doc := Unit{
+		Title: "Cafe", Situation: "Ordering", Concept: "Greeting",
+		NewWords: []string{word},
+		Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{
+			{Type: ActivityListenPick, Text: word},
+		}}},
+	}
+	got := Validate(ctx, &doc, lk)
+	if issues := targetOnly(got); len(issues) != 0 {
+		t.Fatalf("activity.target %#v", issues)
+	}
+	if issues := byRule(got, RuleUnitTranslationMissing); len(issues) != 0 {
+		t.Fatalf("translation_missing %#v", issues)
+	}
+}
+
 func firstSentence(t *testing.T, u Unit) (int, int) {
 	t.Helper()
 	for i, les := range u.Lessons {
