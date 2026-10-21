@@ -286,7 +286,7 @@ func qaReadAsk(t *testing.T, body string, act units.Activity, byText map[string]
 		runID:       runValue(t, body),
 		targetID:    lex.ID,
 		targetText:  lex.Text,
-		wantLabel:   wantChoiceLabel(act, lex),
+		wantLabel:   wantChoiceLabelIn(body, act, lex),
 		pos:         pos,
 		values:      values,
 		texts:       texts,
@@ -333,10 +333,23 @@ func qaSawPrompt(typ, body, target string) bool {
 			return true
 		}
 		return target != "" && strings.Contains(body, "What does ") && strings.Contains(body, target) && strings.Contains(body, " mean?")
+	case units.ActivityListenPick:
+		// A listening step asks what was heard, or the meaning when the lesson has too few
+		// other words to make wrong lines.
+		return strings.Contains(body, listenAskPrompt) || strings.Contains(body, listenMeaningPrompt)
 	default:
 		prompt := qaPrompt(typ)
 		return prompt != "" && strings.Contains(body, prompt)
 	}
+}
+
+// wantChoiceLabelIn is the label of the right button. A listening step that asks what was
+// heard has the heard line on it.
+func wantChoiceLabelIn(body string, act units.Activity, lex qaLexeme) string {
+	if act.Type == units.ActivityListenPick && strings.Contains(body, listenAskPrompt) {
+		return units.Normalize(act.Text)
+	}
+	return wantChoiceLabel(act, lex)
 }
 
 func wantChoiceLabel(act units.Activity, lex qaLexeme) string {

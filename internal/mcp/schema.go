@@ -199,7 +199,7 @@ func activityCatalog() []activityInfo {
 	return []activityInfo{
 		{
 			Type:    units.ActivityListenPick,
-			Purpose: "The learner hears the clip. The player still shows lexicon-gloss buttons. The translation is collected and validated now, and whole-sentence choices are planned with #139. The spelling stays hidden until the answer. target is optional.",
+			Purpose: "The learner hears the clip. The player asks what was heard, with lines of Hebrew as the buttons. The translation is collected and validated now, and the English line is kept for later use. target is optional.",
 			Fields: []activityField{
 				typ("listen_pick"),
 				text,

@@ -415,19 +415,27 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 	path := "/lesson/" + itoa(unitID) + "/0"
 
 	listen := activityHTML(t, getAuthed(t, h, cookie, path))
-	if containsHebrew(listen) || strings.Contains(listen, "shalom") || strings.Contains(listen, "boker") {
+	// The learner hears the line. Above the buttons nothing says it, and no button gives
+	// a reading. The buttons are lines of Hebrew: the one that played, and others.
+	above, buttons, _ := strings.Cut(listen, `class="choices"`)
+	if containsHebrew(above) || strings.Contains(listen, "shalom") || strings.Contains(listen, "boker") {
 		t.Fatalf("listen_pick prompt leaks Hebrew or translit:\n%s", listen)
 	}
 	if containsHebrew(attrValues(listen)) {
 		t.Fatalf("listen_pick attributes leak Hebrew:\n%s", attrValues(listen))
 	}
-	for _, gloss := range []string{">hello<", ">morning<"} {
-		if !strings.Contains(listen, gloss) {
-			t.Fatalf("listen_pick missing gloss %s:\n%s", gloss, listen)
-		}
+	if !strings.Contains(listen, "What did you hear?") {
+		t.Fatalf("listen_pick does not ask what was heard:\n%s", listen)
 	}
-	if !strings.Contains(listen, `value="`+itoa(ids[hello])+`"`) || !strings.Contains(listen, `value="`+itoa(ids[morning])+`"`) {
-		t.Fatalf("listen_pick choices should be lexeme ids:\n%s", listen)
+	if !strings.Contains(buttons, `<bdi lang="he" dir="rtl">`+line+`</bdi>`) {
+		t.Fatalf("listen_pick has no button with the line that played:\n%s", buttons)
+	}
+	if strings.Contains(listen, ">hello<") || strings.Contains(listen, ">morning<") {
+		t.Fatalf("listen_pick shows English glosses beside Hebrew lines:\n%s", listen)
+	}
+	// The line's other word is never offered as the swap, so a wrong line never repeats it.
+	if !strings.Contains(listen, `value="`+itoa(ids[hello])+`"`) || strings.Contains(listen, `value="`+itoa(ids[morning])+`"`) {
+		t.Fatalf("listen_pick choices should be lexeme ids, without the line's other word:\n%s", listen)
 	}
 	if strings.Contains(listen, `value="`+hello+`"`) || strings.Contains(listen, `value="`+morning+`"`) {
 		t.Fatal("listen_pick value is pointed Hebrew")
