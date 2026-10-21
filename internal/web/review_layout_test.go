@@ -8,20 +8,26 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
 
+// Runs in CI as a subtest of TestKeyboardNode until the Node 22 step's -run filter lists it (CI/CD follow-up).
+//
 // TestReviewGradesStayInView loads the pair back and the letter back at
 // 390×844 after the reveal. The question and the Easy button are both inside
 // the viewport, and the buttons do not cover the question.
 func TestReviewGradesStayInView(t *testing.T) {
+	reviewGradesStayInView(t)
+}
+
+func reviewGradesStayInView(t *testing.T) {
+	skipUnlessNode22(t)
 	chrome := "/usr/bin/google-chrome-stable"
 	if _, err := os.Stat(chrome); err != nil {
-		t.Skip("chrome not available")
-	}
-	if _, err := exec.LookPath("node"); err != nil {
-		t.Skip("node not available")
+		t.Skipf("chrome not available at %s", chrome)
 	}
 
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
@@ -85,6 +91,27 @@ func TestReviewGradesStayInView(t *testing.T) {
 			t.Fatalf("%s question inside=%v easy inside=%v overlap=%v viewport=%.0fx%.0f question=%+v easy=%+v",
 				view.Name, view.QuestionInside, view.EasyInside, view.Overlap, view.VW, view.VH, view.Question, view.Easy)
 		}
+	}
+}
+
+// skipUnlessNode22 stops the test when node is missing or older than 22.
+// The script uses the global WebSocket, which Node 20 does not provide.
+// TestClipPlayAfterSwap and TestKeyboardNode only check that node is installed.
+func skipUnlessNode22(t *testing.T) {
+	t.Helper()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skipf("node is not installed; Node 22 or newer is required for the global WebSocket")
+	}
+	out, err := exec.Command(node, "--version").CombinedOutput()
+	ver := strings.TrimSpace(string(out))
+	if err != nil {
+		t.Skipf("node --version failed: %v; Node 22 or newer is required for the global WebSocket", err)
+	}
+	major, _, _ := strings.Cut(strings.TrimPrefix(ver, "v"), ".")
+	n, convErr := strconv.Atoi(major)
+	if convErr != nil || n < 22 {
+		t.Skipf("node %s is older than 22; the global WebSocket is not defined", ver)
 	}
 }
 
