@@ -43,6 +43,12 @@ func WithBands(b learner.BandSource) Option {
 	return func(s *Service) { s.bands = b }
 }
 
+// WithSeed overrides the seed passed to New. Tests inject it so a queue can
+// be built again. A review sitting passes its own seed to BuildSessionWithSeed.
+func WithSeed(seed int64) Option {
+	return func(s *Service) { s.seed = seed }
+}
+
 // New builds a service. A nil clock uses the clock on store.
 // seed breaks ties between cards that are due at the same time.
 func New(store *db.Store, clk clock.Clock, seed int64, opts ...Option) *Service {
@@ -63,6 +69,15 @@ func New(store *db.Store, clk clock.Clock, seed int64, opts ...Option) *Service 
 		o(s)
 	}
 	return s
+}
+
+// Seed is the mix seed New or WithSeed stored. BuildSession uses it.
+// A review sitting can pass a different seed to BuildSessionWithSeed.
+func (s *Service) Seed() int64 {
+	if s == nil {
+		return 0
+	}
+	return s.seed
 }
 
 func (s *Service) ready() error {
@@ -129,6 +144,7 @@ type Session struct {
 	peeked   bool
 	requeued map[int64]struct{}
 	grade    gradeFunc
+	span     int
 }
 
 // UserID is the learner this queue was built for.
@@ -145,7 +161,13 @@ func (s *Session) UserID() int64 {
 // now is read once and passed to every load, including the learner model.
 // The caller checks that userID is the signed-in learner.
 func (s *Service) BuildSession(ctx context.Context, userID int64) (*Session, error) {
-	return s.build(ctx, userID, nil)
+	return s.build(ctx, userID, nil, s.seed)
+}
+
+// BuildSessionWithSeed is BuildSession with the sitting's mix seed.
+// The same seed rebuilds the same queue. BuildSession uses the seed from New.
+func (s *Service) BuildSessionWithSeed(ctx context.Context, userID int64, seed int64) (*Session, error) {
+	return s.build(ctx, userID, nil, seed)
 }
 
 // BuildSessionFor is BuildSession for a review set: only the cards of the given words are
@@ -158,11 +180,13 @@ func (s *Service) BuildSessionFor(ctx context.Context, userID int64, lexemeIDs [
 	for _, id := range lexemeIDs {
 		only[id] = struct{}{}
 	}
-	return s.build(ctx, userID, only)
+	return s.build(ctx, userID, only, s.seed)
 }
 
 // build is BuildSession. only, when not nil, keeps the cards of those words and no drill.
-func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct{}) (*Session, error) {
+// seed is the sitting seed: it orders equal due times, places new cards, and
+// chooses the miss gap.
+func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct{}, seed int64) (*Session, error) {
 	if err := s.ready(); err != nil {
 		return nil, err
 	}
@@ -240,7 +264,8 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 	record := s.record
 	return &Session{
 		userID: userID,
-		cards:  mixGate(cands, accuracyOf(ratings), now, s.seed, gate),
+		cards:  mixGate(cands, accuracyOf(ratings), now, seed, gate),
+		span:   requeueSpan(seed),
 		grade: func(ctx context.Context, cardID int64, rating fsrs.Rating, _ bool) error {
 			if rating < fsrs.Again || rating > fsrs.Easy {
 				return fmt.Errorf("session: rating %d is outside 1..4", rating)
@@ -353,7 +378,7 @@ func (s *Session) Reveal(cardID int64) error {
 
 // Record grades cardID through evidence.Recorder.SelfGrade, which writes the
 // attempts row, the card update, and the review_log row together, and, on
-// Again, re-queues it once. cardID is the card Next just returned. The handler has already
+// Again, re-queues it once, unless the queue is a single lexeme. cardID is the card Next just returned. The handler has already
 // checked ownership and CSRF. A second Again on the same card is graded
 // and is not inserted again.
 //
@@ -395,8 +420,20 @@ func (s *Session) Record(ctx context.Context, cardID int64, rating fsrs.Rating) 
 	return nil
 }
 
-// requeueLocked inserts the served card RequeueGap visits ahead, once per card.
-// The caller holds mu.
+// requeueSalt mixes the sitting seed into the miss gap. It is not a card id.
+const requeueSalt int64 = 0x524551
+
+// requeueSpan is how many other visits sit between a miss and its one
+// requeue: RequeueGap, one more, or two more. The same seed always returns
+// the same span.
+func requeueSpan(seed int64) int {
+	return RequeueGap + int(tieBreak(seed, requeueSalt)%3)
+}
+
+// requeueLocked inserts the served card span visits ahead, once per card.
+// span is 3, 4, or 5. The insert is clamped to the end of the queue.
+// A queue of one study lexeme is not requeued: the same word would be the
+// next Continue. The caller holds mu.
 func (s *Session) requeueLocked(cardID int64) {
 	if s.requeued == nil {
 		s.requeued = map[int64]struct{}{}
@@ -404,12 +441,40 @@ func (s *Session) requeueLocked(cardID int64) {
 	if _, done := s.requeued[cardID]; done {
 		return
 	}
+	if s.oneLexemeLocked() {
+		return
+	}
 	s.requeued[cardID] = struct{}{}
-	at := s.i + RequeueGap
+	at := s.i + s.span
 	if at > len(s.cards) {
 		at = len(s.cards)
 	}
 	s.cards = slices.Insert(s.cards, at, s.last)
+}
+
+// oneLexemeLocked reports whether every study visit in the queue is the same
+// lexeme. Drills are not study visits. The caller holds mu.
+func (s *Session) oneLexemeLocked() bool {
+	// A drill step is not the word looping. It is requeued as before.
+	if s.last.LexemeID == 0 || s.last.Kind == KindLetter || s.last.Kind == KindPattern {
+		return false
+	}
+	var id int64
+	seen := false
+	for _, c := range s.cards {
+		if c.LexemeID == 0 || c.Kind == KindLetter || c.Kind == KindPattern {
+			continue
+		}
+		if !seen {
+			id = c.LexemeID
+			seen = true
+			continue
+		}
+		if c.LexemeID != id {
+			return false
+		}
+	}
+	return seen
 }
 
 // ErrNotChecked means Answered was given a visit that has no checked activity: a flashcard
@@ -418,8 +483,9 @@ var ErrNotChecked = errors.New("session: visit has no checked activity")
 
 // Answered closes the visit of the card Next just served after the learner answered its
 // checked activity. activity.Engine.Check has already written the evidence, so nothing is
-// graded here. A wrong answer puts the visit back once, RequeueGap visits ahead, as an
-// Again does for a flashcard. cardID is the card Next returned, and a second call for the
+// graded here. A wrong answer puts the visit back once, the sitting's gap of
+// 3, 4, or 5 visits ahead, as an Again does for a flashcard. A single lexeme
+// is not put back. cardID is the card Next returned, and a second call for the
 // same serve is refused with ErrNotServed.
 func (s *Session) Answered(cardID int64, correct bool) error {
 	if s == nil {
