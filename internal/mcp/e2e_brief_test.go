@@ -96,7 +96,12 @@ func docFromBrief(t *testing.T, b mcp.LessonBrief) (units.Unit, []string) {
 	}
 	passage := strings.Join(words, " ")
 	pair := strings.Join(words[:min(2, len(words))], " ")
-	first = append(first, act(units.ActivityListenPick, pair), act(units.ActivityStory, passage))
+	pick := act(units.ActivityListenPick, pair)
+	if len(words) > 1 {
+		pick.Target = words[0]
+		pick.Translation = "a short line"
+	}
+	first = append(first, pick, act(units.ActivityStory, passage))
 	check := []units.Activity{}
 	for _, w := range words {
 		check = append(check, act(units.ActivityRecall, w))
@@ -109,7 +114,7 @@ func docFromBrief(t *testing.T, b mcp.LessonBrief) (units.Unit, []string) {
 		Title: "Cafe", Situation: "A cafe", Concept: "Greetings", NewWords: words,
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: first}, {Kind: units.KindCheckpoint, Activities: check}},
 	}
-	return doc, texts
+	return withSentenceTranslations(doc), texts
 }
 
 func TestE2EBriefToToday(t *testing.T) {

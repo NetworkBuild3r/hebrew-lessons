@@ -153,6 +153,60 @@
     animation: orb-pulse calc(var(--dur-slow) * 2) var(--ease-in-out) infinite alternate;
   }
 
+  /* Lesson orb. The 900ms spin and the 1.2s ring use the slow token the way
+     orb-pulse does: no duration token may pass 400ms. --dur-fast is the
+     shortest token, standing in for the spec's --dur-instant. */
+  @keyframes orb-spin {
+    to { transform: rotate(1turn); }
+  }
+  @keyframes orb-ring {
+    from { transform: scale(1); opacity: .6; }
+    to { transform: scale(1.18); opacity: 0; }
+  }
+  @keyframes slot-fill {
+    from { opacity: 0; transform: translateY(var(--space-1)); }
+    to { opacity: 1; transform: none; }
+  }
+  html.js .orb {
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  html.js .orb:hover { transform: translateY(-1px); }
+  html.js .orb:active {
+    transform: scale(.96);
+    transition-timing-function: var(--ease-spring);
+  }
+  .orb__glyph {
+    transform: scale(.8);
+    transition: opacity var(--dur-fast) var(--ease-spring), transform var(--dur-fast) var(--ease-spring);
+  }
+  .orb[data-state="idle"] .orb__glyph--play,
+  .orb:not([data-state]) .orb__glyph--play,
+  .orb[data-state="loading"] .orb__glyph--load,
+  .orb[data-state="playing"] .orb__glyph--stop,
+  .orb[data-state="error"] .orb__glyph--off {
+    transform: none;
+  }
+  .orb[data-state="loading"] .orb__glyph--load {
+    animation: orb-spin calc(var(--dur-slow) * 2.25) linear infinite;
+  }
+  .orb[data-state="playing"]::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    border: 2px solid color-mix(in oklch, var(--focus-ring) 55%, transparent);
+    animation: orb-ring calc(var(--dur-slow) * 3) var(--ease-out) infinite;
+  }
+  .orb--hero[data-state="playing"]::after { inset: 0; }
+  .orb--word[data-state="playing"]::after {
+    inline-size: 28px;
+    block-size: 28px;
+    inset: 0;
+    margin: auto;
+  }
+  .target-slot--filled {
+    animation: slot-fill var(--dur-base) var(--ease-out) both;
+  }
+
   /* stagger-in: each child waits one step longer than the one before, up to
      the eighth. Items take taps from the first frame; only paint is delayed. */
   [data-motion~="stagger"] > * {
@@ -262,5 +316,31 @@
   /* Placement toast (base.css) fades in. */
   .pltoast {
     animation: motion-fade-in var(--dur-fast) linear;
+  }
+
+  /* Lesson orb: no lift, no spin, no pulse. Playing is a filled disc, which
+     is not the 2px offset focus ring. Loading is the three-dot glyph at 60%.
+     The gloss slot still fades in. */
+  html.js .orb:active { opacity: .85; }
+  .orb__glyph {
+    transform: none;
+    transition: opacity var(--dur-fast) linear;
+  }
+  .orb[data-state="loading"] .orb__glyph--load { opacity: 0; animation: none; }
+  .orb[data-state="loading"] .orb__glyph--dots { opacity: .6; }
+  .orb--hero[data-state="playing"] {
+    background: var(--focus-ring);
+    color: var(--on-ink);
+    outline: 3px solid var(--focus-ring);
+    animation: none;
+  }
+  .orb--word[data-state="playing"] { outline: none; color: var(--on-ink); }
+  .orb--word[data-state="playing"]::before {
+    background: var(--focus-ring);
+    border-color: var(--focus-ring);
+    outline: none;
+  }
+  .target-slot--filled {
+    animation: motion-fade-in var(--dur-fast) linear both;
   }
 }

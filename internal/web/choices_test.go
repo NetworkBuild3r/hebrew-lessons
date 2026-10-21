@@ -20,6 +20,102 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
+// TestAskChoicesFallback is the fill order for a graded recall.
+// A tiny unit whose only other words are on the line is a reveal: those
+// words are already on screen. The same unit with earlier words draws at
+// least three buttons from outside the line. A single-word recall reaches
+// at least three. When enough same-part-of-speech words exist, other parts
+// stay off the buttons. A gloss equal to the answer is never a button, a
+// button never repeats a non-target line token's gloss, and two buttons
+// never share a gloss. Fewer than three is not an ask.
+func TestAskChoicesFallback(t *testing.T) {
+	pron := db.LexemeView{ID: 1, Text: "אֲנִי", Gloss: "I", POS: "pron", Translit: "ani"}
+	verb := db.LexemeView{ID: 2, Text: "גָּר", Gloss: "lives", POS: "verb", Translit: "gar"}
+	adv := db.LexemeView{ID: 3, Text: "פֹּה", Gloss: "here", POS: "adv", Translit: "po"}
+	noun := db.LexemeView{ID: 4, Text: "מַיִם", Gloss: "water", POS: "noun", Translit: "mayim"}
+	twin := db.LexemeView{ID: 5, Text: "יוֹשֵׁב", Gloss: "lives", POS: "verb", Translit: "yoshev"}
+	other := db.LexemeView{ID: 6, Text: "כּוֹתֵב", Gloss: "writes", POS: "verb", Translit: "kotev"}
+	eats := db.LexemeView{ID: 7, Text: "אוֹכֵל", Gloss: "eats", POS: "verb", Translit: "okhel"}
+	drinks := db.LexemeView{ID: 8, Text: "שׁוֹתֶה", Gloss: "drinks", POS: "verb", Translit: "shoteh"}
+	seed := choices.ChoiceSeed{RunID: 9, Step: 0, TargetID: verb.ID}
+	line := choiceExclude{ids: map[int64]bool{pron.ID: true, adv.ID: true}, glosses: map[string]bool{"i": true, "here": true}}
+
+	t.Run("tiny unit with no outside pool -> reveal", func(t *testing.T) {
+		got := askChoices(units.ActivityRecall, []db.LexemeView{pron, verb, adv}, nil, verb, seed, line)
+		if got != nil {
+			t.Fatalf("no outside words still asks: %+v", got)
+		}
+	})
+
+	t.Run("earlier words before the line", func(t *testing.T) {
+		unit := []db.LexemeView{pron, verb, adv, twin}
+		earlier := []db.LexemeView{noun, eats, drinks}
+		got := askChoices(units.ActivityRecall, unit, earlier, verb, seed, line)
+		if len(got) < lessonMinChoices {
+			t.Fatalf("buttons = %d, want at least %d: %+v", len(got), lessonMinChoices, got)
+		}
+		for _, id := range []string{"4", "7", "8"} {
+			if !choiceHas(got, id) {
+				t.Errorf("outside word %s missing from %+v", id, got)
+			}
+		}
+		for _, id := range []string{"1", "3", "5"} {
+			if choiceHas(got, id) {
+				t.Errorf("button %s is a line word or the answer's gloss", id)
+			}
+		}
+		assertNoLineTokenGloss(t, got, pron.Gloss, adv.Gloss)
+	})
+
+	t.Run("single word", func(t *testing.T) {
+		got := askChoices(units.ActivityRecall, []db.LexemeView{pron, verb, adv}, nil, verb, seed, choiceExclude{})
+		if len(got) < lessonMinChoices {
+			t.Fatalf("single-word buttons = %d, want at least %d: %+v", len(got), lessonMinChoices, got)
+		}
+		if !choiceHas(got, "1") || !choiceHas(got, "2") || !choiceHas(got, "3") {
+			t.Fatalf("other parts of speech in the unit were not offered: %+v", got)
+		}
+	})
+
+	t.Run("same POS preferred", func(t *testing.T) {
+		unit := []db.LexemeView{pron, verb, adv, other, twin}
+		earlier := []db.LexemeView{eats, drinks, noun}
+		got := askChoices(units.ActivityRecall, unit, earlier, verb, seed, line)
+		if len(got) != lessonWideChoices {
+			t.Fatalf("buttons = %d, want %d: %+v", len(got), lessonWideChoices, got)
+		}
+		for _, id := range []string{"2", "6", "7", "8"} {
+			if !choiceHas(got, id) {
+				t.Errorf("missing same-POS %s in %+v", id, got)
+			}
+		}
+		for _, id := range []string{"1", "3", "4", "5"} {
+			if choiceHas(got, id) {
+				t.Errorf("button %s is the line, another POS, or the answer's gloss", id)
+			}
+		}
+		assertNoLineTokenGloss(t, got, pron.Gloss, adv.Gloss)
+	})
+
+	t.Run("fewer than three is not graded", func(t *testing.T) {
+		if got := askChoices(units.ActivityRecall, []db.LexemeView{verb}, nil, verb, seed, choiceExclude{}); got != nil {
+			t.Fatalf("a one-word lexicon still asks: %+v", got)
+		}
+		if got := askChoices(units.ActivityRecall, []db.LexemeView{verb, eats}, nil, verb, seed, choiceExclude{}); got != nil {
+			t.Fatalf("two buttons is still an ask: %+v", got)
+		}
+		if got := askChoices(units.ActivityCloze, []db.LexemeView{verb, twin}, nil, verb, seed, choiceExclude{}); got != nil {
+			t.Fatalf("a gloss duplicate still counts as another option: %+v", got)
+		}
+		sea := noun
+		sea.ID = 9
+		sea.Text = "יָם"
+		if got := askChoices(units.ActivityRecall, []db.LexemeView{verb, noun, sea}, nil, verb, seed, choiceExclude{}); got != nil {
+			t.Fatalf("duplicate glosses counted as two buttons: %+v", got)
+		}
+	})
+}
+
 func TestLessonChoicesSkipEmptyEnglishGloss(t *testing.T) {
 	target := db.LexemeView{ID: 1, Text: "א", Gloss: "aleph", POS: "noun", Translit: "alef"}
 	blank := db.LexemeView{ID: 2, Text: "ב", Gloss: "  ", POS: "noun", Translit: "bet"}
@@ -28,7 +124,7 @@ func TestLessonChoicesSkipEmptyEnglishGloss(t *testing.T) {
 	unit := []db.LexemeView{target, blank, other, verb}
 	seed := choices.ChoiceSeed{RunID: 1, Step: 0, Attempt: 0, TargetID: target.ID}
 
-	english := lessonChoices(unit, nil, target, seed, false, false)
+	english := lessonChoices(unit, nil, target, seed, false, false, lessonChoiceButtons, choiceExclude{})
 	if choiceHas(english, "2") || !choiceHas(english, "3") || !choiceHas(english, "4") || !choiceHas(english, "1") {
 		t.Fatalf("english buttons = %+v", english)
 	}
@@ -38,7 +134,7 @@ func TestLessonChoicesSkipEmptyEnglishGloss(t *testing.T) {
 		}
 	}
 
-	hebrew := lessonChoices(unit, nil, target, seed, true, true)
+	hebrew := lessonChoices(unit, nil, target, seed, true, true, lessonChoiceButtons, choiceExclude{})
 	if !choiceHas(hebrew, "2") || !choiceHas(hebrew, "3") || choiceHas(hebrew, "4") {
 		t.Fatalf("hebrew buttons = %+v", hebrew)
 	}
@@ -174,17 +270,22 @@ func TestLessonChoicesUseEarlierLexemes(t *testing.T) {
 	}
 	target := viewByText(t, append(append([]db.LexemeView{}, pool...), earlier...), "ד")
 	runID := mustRunID(t, again)
-	want := buttonIDs(choices.Pick(choices.ChoiceSeed{
+	want := choiceIDs(askChoices(units.ActivityRecall, pool, earlier, target, choices.ChoiceSeed{
 		RunID: runID, Step: 0, Attempt: 0, TargetID: target.ID,
-	}, choiceLexeme(target, false), choicePool(pool, earlier, target, false), lessonChoiceButtons))
+	}, choiceExclude{}))
 	if !slices.Equal(got, want) {
 		t.Fatalf("buttons %v want %v", got, want)
+	}
+	if len(got) != lessonWideChoices {
+		t.Fatalf("buttons = %d, want %d: %v", len(got), lessonWideChoices, got)
 	}
 	if !slices.Contains(got, itoa(ids["ג"])) {
 		t.Fatalf("same part of speech from the earlier unit missing: %v", got)
 	}
-	if slices.Contains(got, itoa(ids["א"])) && slices.Contains(got, itoa(ids["ב"])) {
-		t.Fatalf("both nouns were used before the same part of speech was filled: %v", got)
+	// The one earlier verb is preferred. The two nouns fill the remaining
+	// buttons so the ask still has four.
+	if !slices.Contains(got, itoa(ids["א"])) || !slices.Contains(got, itoa(ids["ב"])) {
+		t.Fatalf("other parts of speech did not fill the remaining buttons: %v", got)
 	}
 	ans := postLesson(t, fx.h, fx.cookie, path, itoa(runID), itoa(ids["ד"]), true, lessonCSRF)
 	if ans.Code != http.StatusOK || !strings.Contains(ans.Body.String(), "feedback--right") {
@@ -247,10 +348,9 @@ func playChoiceSteps(t *testing.T, fx lessonFixture, path string, acts []units.A
 		}
 		runID := mustRunID(t, again)
 		target := viewByText(t, pool, act.Text)
-		hebrew := act.Type == units.ActivityProduce || act.Type == units.ActivityCloze
-		want := buttonIDs(choices.Pick(choices.ChoiceSeed{
+		want := choiceIDs(askChoices(act.Type, pool, earlier, target, choices.ChoiceSeed{
 			RunID: runID, Step: step, Attempt: 0, TargetID: target.ID,
-		}, choiceLexeme(target, false), choicePool(pool, earlier, target, hebrew), lessonChoiceButtons))
+		}, choiceExclude{}))
 		if !slices.Equal(got, want) {
 			t.Fatalf("%s step %d %s buttons %v want %v", path, step, act.Type, got, want)
 		}
@@ -296,10 +396,10 @@ func choiceValues(t *testing.T, body string) []string {
 	return out
 }
 
-func buttonIDs(picked []choices.Lexeme) []string {
+func choiceIDs(picked []views.Choice) []string {
 	out := make([]string, len(picked))
-	for i, lex := range picked {
-		out[i] = itoa(lex.ID)
+	for i, choice := range picked {
+		out[i] = choice.Value
 	}
 	return out
 }
@@ -322,6 +422,23 @@ func mustRunID(t *testing.T, body string) int64 {
 		t.Fatal(err)
 	}
 	return id
+}
+
+// assertNoLineTokenGloss fails when a button's gloss equals a non-target
+// token already shown on the line. The learner can rule that button out.
+func assertNoLineTokenGloss(t *testing.T, got []views.Choice, lineGlosses ...string) {
+	t.Helper()
+	banned := map[string]bool{}
+	for _, gloss := range lineGlosses {
+		if key := glossKey(gloss); key != "" {
+			banned[key] = true
+		}
+	}
+	for _, choice := range got {
+		if key := glossKey(choice.Label); key != "" && banned[key] {
+			t.Errorf("button gloss %q matches a non-target line token", choice.Label)
+		}
+	}
 }
 
 func choiceHas(buttons []views.Choice, value string) bool {

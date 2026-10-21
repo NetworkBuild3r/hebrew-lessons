@@ -232,10 +232,11 @@ templ actFeedback(a ActivityView) {
 	}
 }
 
-// flashFrame is the self-graded card in the same frame. Before the reveal the
-// gold action is Show answer. After it the four grade buttons are the actions,
-// and they share one neutral style: a grade is the learner's own report, and a
-// colour would call it right or wrong.
+// flashFrame is the one self-graded frame. Every review mode uses it.
+// Before the reveal the gold action is Show answer. After it the four grade
+// buttons are the actions, and they share one neutral style: a grade is the
+// learner's own report, and a colour would call it right or wrong.
+// A new mode does not add a frame, a route, or a grade button.
 templ flashFrame(c ReviewCard) {
 	<section class="act act--flash" data-activity="flashcard" data-phase={ flashPhase(c) } aria-label={ flashLead(c) }>
 		@actTop(c.Lang, flashDone(c), c.Total, c.Index)
@@ -243,6 +244,9 @@ templ flashFrame(c ReviewCard) {
 			<form class="act__form" method="post" action="/_hx/review/grade" hx-post="/_hx/review/grade" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
 				<input type="hidden" name="_csrf" value={ c.CSRF }/>
 				<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
+				if c.Kind == "letter" {
+					<input type="hidden" name="asked" value={ c.Pointed }/>
+				}
 				<div class="act__stage">
 					@flashCard(c)
 				</div>
@@ -256,15 +260,17 @@ templ flashFrame(c ReviewCard) {
 				</div>
 			</form>
 		} else {
-			<form class="act__form" method="post" action="/_hx/review/reveal" hx-post="/_hx/review/reveal" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
-				<input type="hidden" name="_csrf" value={ c.CSRF }/>
+			<form class="act__form" method="get" action="/_hx/review/reveal" hx-get="/_hx/review/reveal" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
 				<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
+				if c.Kind == "letter" {
+					<input type="hidden" name="asked" value={ c.Pointed }/>
+				}
 				<div class="act__stage">
 					@flashCard(c)
 				</div>
 				<div class="act__thumb">
 					<div class="act__actions">
-						@ButtonWith(ButtonPrimary, submitAttrs(templ.Attributes{"data-act-primary": "", "aria-keyshortcuts": "Enter"})) {
+						@ButtonWith(ButtonPrimary, submitAttrs(templ.Attributes{"data-act-primary": "", "aria-keyshortcuts": "Enter", "autofocus": "autofocus"})) {
 							@E("Show answer")
 						}
 					</div>
@@ -274,45 +280,183 @@ templ flashFrame(c ReviewCard) {
 	</section>
 }
 
-// flashCard is the card face. Read cards show the Hebrew and name the meaning
-// after the flip. Recall cards show the meaning and name the Hebrew after it.
+// flashCard is the shared shell around one mode's face. The mode table picks
+// the front or the back. The question sits under the front for every mode.
 templ flashCard(c ReviewCard) {
 	<div class="act__card" if c.Revealed { data-motion="card-flip" }>
-		if c.Kind == "recall" {
-			<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
-			if c.Revealed {
-				<div class="act__word act__answer">
-					@WordBlock(flashHebrew(c), flashTranslit(c), "", "display", "", true)
-					@flashAudio(c)
-				</div>
-			}
-		} else {
-			<div class="act__word">
-				@WordBlock(flashHebrew(c), flashTranslit(c), "", "display", "", true)
-				@flashAudio(c)
-			</div>
-			if c.Revealed && c.Gloss != "" {
-				<div class="act__answer">
-					<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
-					if c.Gender != "" {
-						<span class="gchip">@H(GenderLabel(c.Gender))</span>
-					}
-				</div>
-			}
-		}
-		if c.Kind == "recall" && c.Revealed && c.Gender != "" {
-			<span class="gchip">@H(GenderLabel(c.Gender))</span>
-		}
+		@renderFace(c)
 		if !c.Revealed {
 			<p class="act__lead" lang="en">{ flashLead(c) }</p>
 		}
 	</div>
 }
 
+// letterFront shows one letter. A pair still shows one of its letters.
+// The name, the sound, and the example stay on letterBack.
+templ letterFront(c ReviewCard) {
+	@WordBlock(flashHebrew(c), "", "", "display", "", true)
+}
+
+templ letterBack(c ReviewCard) {
+	{{ asked := askedSide(c) }}
+	if len(c.Sides) < 2 {
+		@WordBlock(flashHebrew(c), "", "", "display", "", true)
+	}
+	<div class="act__answer">
+		if len(c.Sides) > 1 {
+			<div class="act__answer-line">
+				@answerHeading()
+				<p class="act__sound" lang="en">{ answerLine(asked) }</p>
+			</div>
+			<div class="act__pair">
+				for _, side := range c.Sides {
+					<div class="act__tile" if side.Hebrew == asked.Hebrew {
+						aria-current="true"
+					}>
+						if side.Hebrew == asked.Hebrew {
+							<p class="act__tile-asked" lang="en">Asked</p>
+						}
+						<p class="act__tile-letter">@H(side.Hebrew)</p>
+						if side.Name != "" {
+							<p class="act__tile-name">@H(side.Name)</p>
+						}
+						if side.NameTranslit != "" {
+							<p class="act__tile-tr" lang="he-Latn">{ side.NameTranslit }</p>
+						}
+						if side.Sound != "" {
+							<p class="act__tile-sound" lang="en">{ side.Sound }</p>
+						}
+					</div>
+				}
+			</div>
+		} else {
+			@answerHeading()
+			if asked.Name != "" || asked.NameTranslit != "" {
+				<p class="act__name">
+					if asked.Name != "" {
+						@H(asked.Name)
+					}
+					if asked.NameTranslit != "" {
+						<span class="act__tr" lang="he-Latn">{ asked.NameTranslit }</span>
+					}
+				</p>
+			}
+			if asked.Sound != "" {
+				<p class="act__label">Sound</p>
+				<p class="act__sound" lang="en">{ asked.Sound }</p>
+			}
+			if c.LooksLike != "" {
+				<p class="act__cue" lang="en" dir="ltr"><b>Looks like:</b>{ " " }@MixedEN(c.LooksLike)</p>
+			}
+		}
+		if c.TellApart != "" {
+			<div class="act__apart" lang="en" dir="ltr">
+				<p><b>Tell them apart:</b>{ " " }@MixedEN(c.TellApart)</p>
+				if c.PairNote != "" {
+					<p class="act__note">@MixedEN(c.PairNote)</p>
+				}
+			</div>
+		}
+		if c.DageshNote != "" {
+			<p class="act__cue" lang="en" dir="ltr">@MixedEN(c.DageshNote)</p>
+		}
+		if c.DageshHard != "" {
+			<p class="act__cue" lang="en" dir="ltr">
+				{ "At the start of a word, " }
+				@H("ב")
+				{ ", " }
+				@H("כ")
+				{ ", and " }
+				@H("פ")
+				{ " are almost always hard (b, k, p)." }
+			</p>
+		}
+		if c.ExampleText != "" {
+			<p class="act__label">Example</p>
+			@WordBlock(c.ExampleText, c.ExampleTranslit, c.ExampleGloss, "card", "", false)
+		}
+		@flashAudio(c)
+	</div>
+}
+
+// patternFront shows the pattern key. The forms' readings wait for patternBack.
+templ patternFront(c ReviewCard) {
+	@WordBlock(flashHebrew(c), "", "", "display", "", true)
+}
+
+templ patternBack(c ReviewCard) {
+	@WordBlock(flashHebrew(c), "", "", "display", "", true)
+	<div class="act__answer">
+		@answerHeading()
+		for _, side := range c.Sides {
+			<p class="act__side">
+				@H(side.Hebrew)
+				if side.Translit != "" {
+					<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ side.Translit }</bdi>
+				}
+				if side.Gloss != "" {
+					@E(side.Gloss)
+				}
+			</p>
+		}
+		@flashAudio(c)
+	</div>
+}
+
+// glossFront is the English prompt for recall and spell.
+templ glossFront(c ReviewCard) {
+	<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
+}
+
+templ glossBack(c ReviewCard) {
+	<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
+	<div class="act__word act__answer">
+		@answerHeading()
+		@WordBlock(flashHebrew(c), flashTranslit(c), "", "display", "", true)
+		@flashAudio(c)
+	</div>
+	if c.Gender != "" {
+		<span class="gchip">@H(GenderLabel(c.Gender))</span>
+	}
+}
+
+// wordFront is the Hebrew prompt for read and listen, including its clip.
+templ wordFront(c ReviewCard) {
+	<div class="act__word">
+		@WordBlock(flashHebrew(c), flashTranslit(c), "", "display", "", true)
+		@flashAudio(c)
+	</div>
+}
+
+templ wordBack(c ReviewCard) {
+	<div class="act__word">
+		@WordBlock(flashHebrew(c), flashTranslit(c), "", "display", "", true)
+		@flashAudio(c)
+	</div>
+	if c.Gloss != "" {
+		<div class="act__answer">
+			@answerHeading()
+			<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
+			if c.Gender != "" {
+				<span class="gchip">@H(GenderLabel(c.Gender))</span>
+			}
+		</div>
+	}
+}
+
+// answerHeading is where focus lands after Show answer. htmx focuses the
+// autofocus element in the swap. tabindex=-1 lets that focus stick on a heading.
+templ answerHeading() {
+	<h2 class="act__answer-h" id="act-answer" tabindex="-1" autofocus lang="en">Answer</h2>
+}
+
 // flashAudio is the card's clip, when it may be played on this render.
+// The same clip as a lesson step: a native bar for no-JS, and button.orb
+// that clips.js plays. The bar is display:none only after that script adds
+// class js, so the card never hides the audio without a control.
 templ flashAudio(c ReviewCard) {
-	if answerSide(c) {
-		@actClip("act-card-clip", c.AudioURL, false, false, "Play the word")
+	if answerSide(c) && c.AudioURL != "" {
+		@clip("act-card-clip", c.AudioURL, "Play the word", true)
 	}
 }
 

@@ -176,12 +176,15 @@ func (s *server) fillProgress(ctx context.Context, userID int64, v *views.Progre
 	now := s.now().UTC()
 	today := now.Format(dayLayout)
 
-	_, _, done, total, err := s.unitProgress(ctx, userID)
+	_, _, done, total, lessonsDone, lessonsTotal, err := s.unitProgress(ctx, userID)
 	if err != nil {
 		return err
 	}
 	if total > 0 {
 		v.UnitsText = strconv.Itoa(done) + "/" + strconv.Itoa(total)
+	}
+	if lessonsTotal > 0 {
+		v.LessonsText = strconv.Itoa(lessonsDone) + "/" + strconv.Itoa(lessonsTotal)
 	}
 
 	// The job writes yesterday, so 90 snapshot days end the day before today and begin 90 days back.
@@ -526,7 +529,10 @@ func (s *server) fillPlacementHistory(ctx context.Context, userID int64, v *view
 		if res.Reading != nil {
 			skill("Reading", res.Reading.Tested, res.Reading.Level, res.Reading.Estimate)
 		}
-		if r.Kind == "" && r.Level >= 0 {
+		switch {
+		case r.Level < 0:
+			row.Level = "Not finished"
+		case r.Kind == "":
 			row.Level = "Level " + strconv.Itoa(r.Level)
 		}
 		if res.EstimatedKnownWords > 0 && len(parts) == 0 {

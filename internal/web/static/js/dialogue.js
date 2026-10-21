@@ -1,6 +1,6 @@
 /* Dialogue playback (INIT-015/SPEC-026). No dependency. Loaded by the lesson page.
    The server renders the lines and picks each clip by speaker. This file only plays them:
-   - a line's orb ([data-dlg-line]) plays that one line, and stops anything else first;
+   - a line's orb ([data-dlg-line]) plays that one line, and stops any other audio first;
    - "Play the conversation" ([data-dlg-all]) plays every line in order, each one after
      the one before has ended. Press it again to stop;
    - a clip that cannot play is skipped, so one bad clip does not stop the conversation;
@@ -40,7 +40,7 @@
   }
   function silence(root) {
     run++;
-    Array.prototype.forEach.call(D.querySelectorAll("audio[data-dlg-clip]"), function (a) {
+    Array.prototype.forEach.call(D.querySelectorAll("audio"), function (a) {
       a.pause();
       try { a.currentTime = 0; } catch (e) { /* not seekable yet */ }
     });

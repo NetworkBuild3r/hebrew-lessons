@@ -9,14 +9,45 @@ import (
 	"strings"
 )
 
-// Validate checks doc against the authoring rules.
+// Mode chooses how a missing graded target, and a missing sentence
+// translation, are reported. The zero value is ModeWrite, so a caller that
+// forgets the flag blocks.
+type Mode int
+
+const (
+	// ModeWrite is a new validate_unit, put_unit, or publish_unit input,
+	// and any revision that is not the unit's current published revision.
+	// A recall, produce, or cloze of two or more lexicon words with no
+	// target is a block, and so is a listen_pick of two or more lexicon
+	// words with no translation. listen_pick may omit target.
+	ModeWrite Mode = iota
+	// ModePublished rechecks the unit's current published revision, the
+	// same revision id as the units row. The same missing target, and the
+	// same missing translation, are warnings, so that revision keeps
+	// serving. A target that is not a token, or whose token has no exact
+	// lexicon entry, stays a block in both modes. A translation that is
+	// Hebrew or markup stays a block in both modes.
+	ModePublished
+)
+
+// Validate checks doc against the authoring rules, as a new write.
 // The result is nil when the document is clean. Otherwise it is sorted by
 // JSON pointer, then by rule id.
 func Validate(ctx context.Context, doc *Unit, lk Lookup) []Issue {
+	return ValidateIn(ctx, doc, lk, ModeWrite)
+}
+
+// ValidateIn is Validate with an explicit mode. ModeWrite is the check for
+// new input and for every revision other than the current published one.
+// ModePublished is the check for that current published revision: a
+// recall, produce, or cloze of two or more lexicon words may omit target,
+// and a listen_pick of two or more lexicon words may omit translation.
+// Each of those findings is a warning. listen_pick may omit target in both modes.
+func ValidateIn(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return sortedIssues(collect(ctx, doc, lk))
+	return sortedIssues(collect(ctx, doc, lk, mode))
 }
 
 // sortedIssues orders issues by JSON pointer, then rule id, then message.
@@ -37,7 +68,7 @@ func sortedIssues(issues []Issue) []Issue {
 	return issues
 }
 
-func collect(ctx context.Context, doc *Unit, lk Lookup) []Issue {
+func collect(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue {
 	if doc == nil {
 		return []Issue{issue(RuleSchemaRequired, SeverityBlock, "", "unit document is missing")}
 	}
@@ -46,7 +77,31 @@ func collect(ctx context.Context, doc *Unit, lk Lookup) []Issue {
 	flat, refs := flatten(doc)
 	issues := schemaIssues(doc)
 	issues = append(issues, dialogueIssues(doc)...)
-	return append(issues, remapIssues(textIssues(ctx, flat, lk), refs)...)
+	issues = append(issues, remapIssues(textIssues(ctx, flat, lk), refs)...)
+	// Target and translation are checked on the real activities. A flattened
+	// dialogue would drop the fields, and remapping those pointers would
+	// point at a line. A failed lookup is one issue even when more than one
+	// pass asks the lexicon.
+	issues = append(issues, targetIssues(ctx, doc, lk, mode)...)
+	issues = append(issues, translationIssues(ctx, doc, lk, mode)...)
+	return dedupeLookup(issues)
+}
+
+// dedupeLookup keeps the first schema.lookup. The text rules and the target
+// check each open a lookup, and a dead lexicon should be reported once.
+func dedupeLookup(issues []Issue) []Issue {
+	seen := false
+	out := make([]Issue, 0, len(issues))
+	for _, is := range issues {
+		if is.Rule == RuleSchemaLookup {
+			if seen {
+				continue
+			}
+			seen = true
+		}
+		out = append(out, is)
+	}
+	return out
 }
 
 // textIssues runs the rules that read activity text, on a flattened document.

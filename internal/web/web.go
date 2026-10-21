@@ -119,6 +119,9 @@ func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.
 		srv.useActivityKey(key)
 		if opts.study != nil {
 			srv.study = opts.study
+			// The injected service carries the test seed. Keep it for every
+			// sitting so a reload and a rebuilt queue stay on that seed.
+			srv.fixedReviewSeed = true
 		}
 	}
 	srv.audioDir = opts.AudioDir
@@ -181,6 +184,9 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 	mux.HandleFunc("GET /audio/{name}", func(w http.ResponseWriter, r *http.Request) {
 		serveAudio(s.audioDir, w, r)
 	})
+	// One reveal route and one grade route for every review mode.
+	// A new mode adds a views.ReviewModes entry, not a route.
+	mux.HandleFunc("GET /_hx/review/reveal", gated(gate, secure, s.reveal))
 	mux.HandleFunc("POST /_hx/review/reveal", gated(gate, secure, s.reveal))
 	mux.HandleFunc("POST /_hx/review/grade", gated(gate, secure, s.grade))
 	mux.HandleFunc("POST /_hx/review/answer", gated(gate, secure, s.answer))
@@ -199,11 +205,11 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 }
 
 // securityHeaders sets the policy that has to be in place before a write
-// route exists. frame-ancestors none is part of the CSP. The inline theme
-// script is allowed by its sha256 hash; every other script is a file under
-// /static/js/.
+// route exists. frame-ancestors none is part of the CSP. script-src is
+// 'self' only: the theme boot is /static/js/theme.js, and a sha256 of the
+// old inline script would still allow that script to run.
 func securityHeaders(next http.Handler) http.Handler {
-	policy := "default-src 'self'; script-src 'self' '" + views.ThemeBootCSP + "'; style-src 'self'; img-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	policy := "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", policy)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -368,12 +374,22 @@ func (s *server) currentReview(r *http.Request, lang, csrf string) (views.Review
 	if err != nil {
 		return views.ReviewCard{}, err
 	}
-	return reviewView(lang, csrf, lede, vm), nil
+	card := reviewView(lang, csrf, lede, vm)
+	if err := s.attachReviewClips(r.Context(), &card); err != nil {
+		return views.ReviewCard{}, err
+	}
+	return card, nil
 }
 
-// reveal records that this serve was shown the answer, then returns the
-// back and the grade buttons. CSRF and Origin are the checks on /_hx/.
+// reveal is the one reveal path for every review mode. It records the peek
+// and renders the back the mode table names. A new mode does not add a
+// handler. POST is covered by the CSRF middleware. GET has no _csrf token;
+// a cross-site GET is rejected here before the peek is recorded.
 func (s *server) reveal(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet && !revealSameOrigin(r) {
+		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return
+	}
 	cardID, ok := reviewCardID(w, r)
 	if !ok {
 		return
@@ -397,12 +413,22 @@ func (s *server) reveal(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
+	parts := pairParts(q)
+	asked := postedAsked(r)
+	if parts != nil && !askedInPair(parts, asked) {
+		s.mu.Unlock()
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
 	if err := q.sess.Reveal(cardID); err != nil {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(reviewStatus(err)), reviewStatus(err))
 		return
 	}
 	q.revealed = true
+	if parts != nil {
+		q.asked = asked
+	}
 	vm, err := s.cardVM(r.Context(), q)
 	s.mu.Unlock()
 	if err != nil {
@@ -443,6 +469,16 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
+	// A pair grades the letter the reveal accepted. Anything else, including
+	// the other letter of the pair, is not that letter and is not graded.
+	if parts := pairParts(q); parts != nil {
+		asked := postedAsked(r)
+		if !askedInPair(parts, asked) || asked != q.asked {
+			s.mu.Unlock()
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+	}
 	// A positive id that belongs to someone else is not the card this
 	// session served. The id check above rejects it. Record then applies
 	// the review once; a second grade of the same serve does not match.
@@ -470,12 +506,50 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 	s.finishReview(w, r, lang, vm)
 }
 
+// pairParts is the two letters of a letter drill. A single letter and
+// every other card return nil, and those requests do not carry asked.
+func pairParts(q *studyQueue) []string {
+	if q == nil || q.cur.Kind != session.KindLetter {
+		return nil
+	}
+	parts := splitDrillKey(q.cur.Key)
+	if len(parts) < 2 {
+		return nil
+	}
+	return parts
+}
+
+// postedAsked is the hidden letter on the reveal or grade form.
+// A POST reads the body, so a query value cannot replace it.
+func postedAsked(r *http.Request) string {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return r.PostForm.Get("asked")
+	}
+	return r.Form.Get("asked")
+}
+
+func askedInPair(parts []string, asked string) bool {
+	for _, part := range parts {
+		if part == asked {
+			return true
+		}
+	}
+	return false
+}
+
 func reviewCardID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return 0, false
 	}
-	cardID, err := strconv.ParseInt(r.PostForm.Get("card_id"), 10, 64)
+	// A POST grades or answers the card id in the body. The query string
+	// is ignored, so a card_id on the URL cannot choose the card. A GET
+	// reveal has no body and reads the query.
+	raw := r.Form.Get("card_id")
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		raw = r.PostForm.Get("card_id")
+	}
+	cardID, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return 0, false
@@ -495,7 +569,12 @@ func (s *server) finishReview(w http.ResponseWriter, r *http.Request, lang strin
 		return
 	}
 	lede := views.UIFor(lang, views.AddressMasculine).ReviewLede
-	render(w, r, views.ReviewBody(reviewView(lang, auth.CSRFToken(r), lede, vm)))
+	card := reviewView(lang, auth.CSRFToken(r), lede, vm)
+	if err := s.attachReviewClips(r.Context(), &card); err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	render(w, r, views.ReviewBody(card))
 }
 
 func reviewLang(r *http.Request) string {

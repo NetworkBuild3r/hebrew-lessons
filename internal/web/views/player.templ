@@ -39,29 +39,40 @@ templ ActivityBlock(a Activity) {
 			}
 			<a class="btn btn-primary" href={ templ.SafeURL(a.HomeHref) }>@E("Back to Today")</a>
 		} else {
-			if a.Prompt != "" {
+			if a.PromptWord != "" {
+				<p class="lede" lang="en">@E("What does ")<bdi class="recall-prompt" lang="he" dir="rtl">{ a.PromptWord }</bdi>@E(" mean?")</p>
+			} else if a.Prompt != "" {
 				<p class="lede" lang="en">@E(a.Prompt)</p>
 			}
 			if a.Dialogue != nil {
 				@dialogueBlock(a.Dialogue)
 			}
 			if a.Audio != "" {
-				@clip(a.Audio)
+				@clip("line-clip", a.Audio, a.AudioLabel, true)
 			}
 			if len(a.Words) > 0 {
-				<div class="word-blocks">
-					for _, word := range a.Words {
-						@activityWord(word)
+				<div class={ wordBlocksClass(a) } dir="rtl">
+					for i, word := range a.Words {
+						@activityWord(word, "word-clip-"+Num(i), a.PromptWord != "")
 					}
 				</div>
+				if a.PromptWord != "" {
+					<div class="clip-rows">
+						for i, word := range a.Words {
+							if word.Audio != "" {
+								@wordClipRow(word, "word-clip-"+Num(i))
+							}
+						}
+					</div>
+				}
 			}
 			<form method="post" action={ templ.SafeURL(a.Post) } hx-post={ a.Post } hx-target="#lesson-frame" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
 				<input type="hidden" name="_csrf" value={ a.CSRF }/>
 				<input type="hidden" name="run" value={ a.Run }/>
 				if a.Asking {
 					<div class="choices">
-						for i, choice := range a.Choices {
-							@choiceButton(choice, i)
+						for _, choice := range a.Choices {
+							@choiceButton(choice)
 						}
 					</div>
 				} else if a.Feedback != "" {
@@ -75,36 +86,98 @@ templ ActivityBlock(a Activity) {
 					<button type="submit" class="btn btn-primary" name="answer" value="continue">@E(a.Continue)</button>
 				}
 			</form>
+			if hasClip(a) {
+				<script src="/static/js/clips.js" defer></script>
+			}
 		}
 	</div>
 }
 
 // activityWord is one token. A gap is the cloze blank. A visible word uses
-// the shared word block, with any hidden field passed empty.
-templ activityWord(w Word) {
+// the shared word block, with any hidden field passed empty. audioID names
+// the clip element when the word has one. A tested word in a multi-word
+// recall is a mark, with a dashed slot where its gloss will be. rows lays
+// that recall line on a shared grid: Hebrew, transliteration, gloss, orb.
+templ activityWord(w Word, audioID string, rows bool) {
 	if w.Plain {
 		@E(w.Text)
 	} else if w.Gap {
 		<span class="word-block word-block--gap">@E("___")</span>
+	} else if rows {
+		<span class="activity-word">
+			<span class="wb wb--card">
+				<span class="recall-he">
+					if w.Target {
+						<mark class="target"><bdi class="wb__he" lang="he" dir="rtl">{ w.Text }</bdi></mark>
+					} else {
+						<bdi class="wb__he" lang="he" dir="rtl">{ w.Text }</bdi>
+					}
+					if w.ShowText && GenderLabel(w.Gender) != "" {
+						<span class="gchip">@H(GenderLabel(w.Gender))</span>
+					}
+				</span>
+				<span class="recall-tr">
+					if w.ShowTranslit && w.Translit != "" {
+						<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ w.Translit }</bdi>
+					}
+				</span>
+				<span class="recall-gl">
+					if w.Target && w.ShowGloss && w.Gloss != "" {
+						<bdi class="wb__gl target-slot target-slot--filled" lang="en" dir="ltr">{ w.Gloss }</bdi>
+					} else if w.Target {
+						<span class="target-slot" lang="en" aria-hidden="true">?</span>
+					} else if w.ShowGloss && w.Gloss != "" {
+						<bdi class="wb__gl" lang="en" dir="ltr">{ w.Gloss }</bdi>
+					}
+				</span>
+			</span>
+			if w.Audio != "" {
+				<div class="clip">
+					@orbButton(orbClass(false), "Play "+w.Text, w.Audio, audioID)
+				</div>
+			} else {
+				<span class="recall-clip"></span>
+			}
+		</span>
 	} else {
 		<span class="activity-word">
-			if w.ShowText || w.ShowTranslit || w.ShowGloss {
+			if w.Target {
+				@targetWord(w)
+			} else if w.ShowText || w.ShowTranslit || w.ShowGloss {
 				@WordBlock(shown(w.ShowText, w.Text), shown(w.ShowTranslit, w.Translit), shown(w.ShowGloss, w.Gloss), "card", "", !w.ShowGloss)
 			}
 			if w.ShowText && GenderLabel(w.Gender) != "" {
 				<span class="gchip">@H(GenderLabel(w.Gender))</span>
 			}
 			if w.Audio != "" {
-				@clip(w.Audio)
+				@clip(audioID, w.Audio, "Play "+w.Text, false)
 			}
 		</span>
 	}
 }
 
-// choiceButton is one answer: a c-answer submit button, key 1 to 4. Its value is the
-// lexeme id, never the pointed text.
-templ choiceButton(c Choice, i int) {
-	@AnswerOptionWith(AnswerDefault, Num(i+1), templ.Attributes{"type": "submit", "name": "answer", "value": c.Value}) {
+// targetWord is the word a multi-word recall asks about. The mark is how a
+// screen reader hears it as highlighted. Its transliteration stays hidden
+// until the answer. The gloss is a dashed slot until then, then the meaning.
+templ targetWord(w Word) {
+	<span class="wb wb--card">
+		<mark class="target"><bdi class="wb__he" lang="he" dir="rtl">{ w.Text }</bdi></mark>
+		if w.ShowTranslit && w.Translit != "" {
+			<bdi class="wb__tr" lang="he-Latn" dir="ltr">{ w.Translit }</bdi>
+		}
+		if w.ShowGloss && w.Gloss != "" {
+			<bdi class="wb__gl target-slot target-slot--filled" lang="en" dir="ltr">{ w.Gloss }</bdi>
+		} else {
+			<span class="target-slot" lang="en" aria-hidden="true">?</span>
+		}
+	</span>
+}
+
+// choiceButton is one answer: a c-answer submit button. The lesson has no
+// key badge: nothing in the player tells the learner to press 1, 2, or 3.
+// The value is the lexeme id, never the pointed text.
+templ choiceButton(c Choice) {
+	@AnswerOptionWith(AnswerDefault, "", templ.Attributes{"type": "submit", "name": "answer", "value": c.Value}) {
 		if c.Hebrew {
 			@WordBlock(c.Text, c.Translit, "", "chip", "", true)
 		} else {
@@ -130,9 +203,9 @@ templ dialogueBlock(d *Dialogue) {
 				<li class={ dialogueLineClass(line.Speaker) } data-speaker={ line.Speaker } data-line={ Num(line.Index) }>
 					<p class="dlg__who" lang="en">{ line.Name }</p>
 					<div class="dlg__bubble">
-						<div class="word-blocks">
+						<div class="word-blocks" dir="rtl">
 							for _, word := range line.Words {
-								@activityWord(word)
+								@activityWord(word, "", false)
 							}
 						</div>
 						if line.Audio != "" {
@@ -147,9 +220,58 @@ templ dialogueBlock(d *Dialogue) {
 	<script src="/static/js/dialogue.js" defer></script>
 }
 
-templ clip(src string) {
-	<div class="clip">
-		<p class="clip__label">@E("Play")</p>
-		<audio controls preload="none" src={ src } aria-label="Play"></audio>
+// wordClipRow is the no-JS play control for one word of a recall line.
+// The pointed word names the bar. Transliteration is printed only when the
+// line already shows it for that token, so a recall target stays the pointed
+// Hebrew and the bar until the answer. html.js hides .clip-rows; the orb
+// under the word is the control then.
+templ wordClipRow(w Word, audioID string) {
+	<div class="clip-row">
+		<p class="clip-row__label">
+			<bdi class="clip-row__he" lang="he" dir="rtl">{ w.Text }</bdi>
+			if w.ShowTranslit && w.Translit != "" {
+				<span class="clip-row__sep">{ " · " }</span>
+				<bdi class="clip-row__tr" lang="he-Latn" dir="ltr">{ w.Translit }</bdi>
+			}
+		</p>
+		<div class="clip">
+			<audio id={ audioID } src={ templ.SafeURL(w.Audio) } preload="none" controls aria-label={ "Play " + w.Text }></audio>
+		</div>
 	</div>
+}
+
+// clip is one recording in the lesson player. The server always renders the
+// native audio (the no-JS bar) and a button.orb. The orb is display:none
+// until clips.js adds class js on html, which shows the orb and sets the bar
+// to display:none. One of those two is the play control. hero is the line control.
+// label is the button's accessible name, such as "Play אֲנִי" or "Play the line".
+// A recall word does not use this: its orb stays in the line and its bar is a
+// wordClipRow, so the no-JS bar is not squeezed into the word column.
+templ clip(id, src, label string, hero bool) {
+	<div class={ clipClass(hero) }>
+		<audio id={ id } src={ templ.SafeURL(src) } preload="none" controls></audio>
+		@orbButton(orbClass(hero), label, src, "")
+	</div>
+}
+
+// orbButton is the lesson orb. audioID, when set, names the audio element
+// played for a recall word whose bar lives in .clip-rows.
+templ orbButton(className, label, src, audioID string) {
+	if audioID != "" {
+		<button type="button" class={ className } aria-label={ label } data-label={ label } data-src={ src } data-audio={ audioID } data-state="idle">
+			@orbGlyphs()
+		</button>
+	} else {
+		<button type="button" class={ className } aria-label={ label } data-label={ label } data-src={ src } data-state="idle">
+			@orbGlyphs()
+		</button>
+	}
+}
+
+templ orbGlyphs() {
+	<span class="orb__glyph orb__glyph--play">@Icon("play", "")</span>
+	<span class="orb__glyph orb__glyph--load" aria-hidden="true"></span>
+	<span class="orb__glyph orb__glyph--dots">@Icon("dots", "")</span>
+	<span class="orb__glyph orb__glyph--stop">@Icon("stop", "")</span>
+	<span class="orb__glyph orb__glyph--off">@Icon("audio-off", "")</span>
 }

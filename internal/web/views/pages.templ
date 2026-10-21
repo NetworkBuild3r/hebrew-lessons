@@ -5,6 +5,7 @@ templ Review(p Page, c ReviewCard) {
 		<article class="review sheet">
 			<h1 class="review__h1" lang={ p.Lang }>{ p.ReviewHeading }</h1>
 			@ReviewBody(c)
+			<script src="/static/js/clips.js" defer></script>
 			<script src="/static/js/activity.js" defer></script>
 		</article>
 	}
@@ -20,13 +21,11 @@ templ ReviewBody(c ReviewCard) {
 		data-no-transition
 	}>
 		if c.Done {
-			if c.Answered == 0 {
-				<p class="lede" lang={ c.Lang }>{ c.Lede }</p>
-			} else {
-				<p class="lede" lang="en" dir="ltr">
-					<bdi lang="en" dir="ltr">{ Num(c.Correct) } / { Num(c.Answered) }</bdi>
-				</p>
-			}
+			<div class="review__done">
+				<h2>@E("Done for now")</h2>
+				<p class="lede" lang="en" dir="ltr">@E(ReviewedLine(c.Answered))</p>
+				<a class="btn btn-primary" href={ templ.SafeURL(homeHref(c.Lang)) }>@E("Back to Today")</a>
+			</div>
 		} else if c.Act != nil {
 			@ActivityFrame(*c.Act)
 		} else {
@@ -47,7 +46,7 @@ templ SignIn(p Page) {
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-			@themeHead()
+			<script src="/static/js/theme.js"></script>
 			<link rel="stylesheet" href="/static/css/tokens.css"/>
 			<link rel="stylesheet" href="/static/css/base.css"/>
 			@brandHead()

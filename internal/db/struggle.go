@@ -3,6 +3,8 @@ package db
 import (
 	"cmp"
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -227,6 +229,32 @@ func (s *Store) confusionPairs(ctx context.Context, userID int64, since string) 
 		return nil, fmt.Errorf("db: confusion pairs: %w", err)
 	}
 	return out, nil
+}
+
+// LatestConfusionLexeme is the newest word tied to this learner's confusion key.
+// kind is letter_pair or agreement, and key is the stored pair, for example ב/כ.
+// ok is false when every row for that key has a null lexeme.
+func (s *Store) LatestConfusionLexeme(ctx context.Context, learnerID int64, kind, key string) (int64, bool, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return 0, false, err
+	}
+	var id sql.NullInt64
+	err = conn.QueryRowContext(ctx, `
+		SELECT lexeme_id FROM confusion_misses
+		WHERE learner_id = ? AND kind = ? AND key = ? AND lexeme_id IS NOT NULL
+		ORDER BY at DESC, id DESC
+		LIMIT 1`, learnerID, kind, key).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("db: confusion example: %w", err)
+	}
+	if !id.Valid {
+		return 0, false, nil
+	}
+	return id.Int64, true, nil
 }
 
 // splitConfusion turns a stored key into the pair the consumer reads.

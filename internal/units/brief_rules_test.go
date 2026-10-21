@@ -155,8 +155,8 @@ func TestNoMarkupCoversEveryStringField(t *testing.T) {
 	base := populated()
 	var fields []reflect.Value
 	collect(reflect.ValueOf(&base).Elem(), &fields)
-	if len(fields) != 7 {
-		t.Fatalf("the unit has %d string fields, want 7. A new field needs a markup check.", len(fields))
+	if len(fields) != 9 {
+		t.Fatalf("the unit has %d string fields, want 9. A new field needs a markup check.", len(fields))
 	}
 	for i := range fields {
 		for _, bad := range []string{"<", ">", "javascript:alert(1)", "JAVASCRIPT:x"} {
@@ -402,12 +402,63 @@ func TestBriefStruggleSkill(t *testing.T) {
 	}
 	for typ, want := range map[string]string{
 		ActivityListenPick: SkillListen, ActivityShadow: SkillListen, "audio_match": SkillListen,
-		ActivityStory: SkillRead, ActivityCloze: SkillRead, ActivityPattern: SkillRead, "read_pick": SkillRead, "word_match": SkillRead,
+		ActivityStory: SkillRead, ActivityDialogue: SkillRead, ActivityCloze: SkillRead, ActivityPattern: SkillRead, "read_pick": SkillRead, "word_match": SkillRead,
 		ActivityRecall: SkillRecall, "type_it": SkillRecall, ActivityProduce: SkillSpell, "dictation": SkillSpell, "other": "",
 	} {
 		if SkillOfActivity(typ) != want {
 			t.Errorf("SkillOfActivity(%s) = %q, want %q", typ, SkillOfActivity(typ), want)
 		}
+	}
+}
+
+func TestActivitiesForSkillMatchTheValidator(t *testing.T) {
+	known := []string{
+		ActivityListenPick, ActivityRecall, ActivityProduce, ActivityCloze,
+		ActivityPattern, ActivityStory, ActivityShadow, ActivityDialogue,
+	}
+	seen := map[string]bool{}
+	for _, skill := range []string{SkillListen, SkillRead, SkillRecall, SkillSpell} {
+		got := ActivitiesForSkill(skill)
+		if len(got) == 0 {
+			t.Errorf("%s has no activities", skill)
+		}
+		for _, typ := range got {
+			if !knownActivity(typ) {
+				t.Errorf("ActivitiesForSkill(%s) emits %q, which validate rejects", skill, typ)
+			}
+			if SkillOfActivity(typ) != skill {
+				t.Errorf("ActivitiesForSkill(%s) emits %q, skill %q", skill, typ, SkillOfActivity(typ))
+			}
+			seen[typ] = true
+		}
+	}
+	for _, typ := range known {
+		if !knownActivity(typ) {
+			t.Errorf("known list drifted: %s", typ)
+		}
+		if SkillOfActivity(typ) != "" && !seen[typ] {
+			t.Errorf("known type %s is not suggested for its skill", typ)
+		}
+	}
+	for _, alias := range []string{"read_pick", "word_match", "audio_match", "type_it", "dictation"} {
+		if knownActivity(alias) {
+			t.Errorf("%s was added to the validator", alias)
+		}
+		if seen[alias] {
+			t.Errorf("a brief would suggest %s", alias)
+		}
+	}
+	if !slices.Equal(ActivitiesForSkill(SkillListen), []string{ActivityListenPick, ActivityShadow}) {
+		t.Errorf("listen = %v", ActivitiesForSkill(SkillListen))
+	}
+	if !slices.Equal(ActivitiesForSkill(SkillRead), []string{ActivityStory, ActivityDialogue, ActivityCloze, ActivityPattern}) {
+		t.Errorf("read = %v", ActivitiesForSkill(SkillRead))
+	}
+	if !slices.Equal(ActivitiesForSkill(SkillRecall), []string{ActivityRecall}) || !slices.Equal(ActivitiesForSkill(SkillSpell), []string{ActivityProduce}) {
+		t.Errorf("recall %v spell %v", ActivitiesForSkill(SkillRecall), ActivitiesForSkill(SkillSpell))
+	}
+	if ActivitiesForSkill("") != nil || ActivitiesForSkill("flashcard") != nil {
+		t.Error("an unknown skill suggested activities")
 	}
 }
 
@@ -526,6 +577,191 @@ func TestBriefTokenMatching(t *testing.T) {
 	if !cov {
 		t.Fatalf("unmatched token should count unknown: %v", ruleSet(got))
 	}
+}
+
+func TestBriefCoverageCountsDeclaredNewWords(t *testing.T) {
+	word := vocab8[0].text
+	other := naal
+	u := Unit{
+		Title: "Cafe", Situation: "Ordering at a cafe", Concept: "A greeting",
+		NewWords: []string{word},
+		Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{
+			{Type: ActivityShadow, Text: word},
+			{Type: ActivityListenPick, Text: word},
+		}}},
+	}
+	lex := map[string]glex{
+		normalize(word): {ID: 1, POS: "noun", Gender: "m", Gloss: "hello", Bare: stripNiqqud(word)},
+	}
+	lk := goldenLookup{Lexemes: lex, Audio: []string{normalize(word)}}.fake()
+	f := BriefFacts{
+		Tier: "established", MinKnownShare: 0.95,
+		BriefLexemeIDs: map[int64]bool{}, KnownLexemeIDs: map[int64]bool{},
+	}
+	if got := validateBrief(&u, lk, &f); hasRule(got, RuleBriefCoverage) {
+		t.Fatalf("a unit newWord with an exact lexicon entry should cover a one-word listen_pick: %v", ruleSet(got))
+	}
+
+	// The same word stays new for the brief's intro rule.
+	f.NewWords = []BriefNewWord{{LexemeID: 1, Text: word, MinUses: 1}}
+	f.BriefLexemeIDs[1] = true
+	introduced := u
+	introduced.Lessons = []Lesson{{Kind: KindLesson, Activities: []Activity{
+		{Type: ActivityListenPick, Text: word},
+	}}}
+	got := validateBrief(&introduced, lk, &f)
+	intros := 0
+	for _, is := range got {
+		if is.Rule == RuleBriefIntro {
+			intros++
+		}
+	}
+	if intros != 1 {
+		t.Fatalf("a brief newWord is reported %d times, want 1: %v", intros, ruleSet(got))
+	}
+	if hasRule(validateBrief(&introduced, lk, &f), RuleBriefCoverage) {
+		t.Fatal("coverage should still pass once the word is declared")
+	}
+
+	// A word in none of the three sets fails coverage.
+	f = BriefFacts{
+		Tier: "established", MinKnownShare: 0.95,
+		BriefLexemeIDs: map[int64]bool{}, KnownLexemeIDs: map[int64]bool{},
+	}
+	lex[normalize(other)] = glex{ID: 2, POS: "noun", Gender: "f", Gloss: "shoe", Bare: stripNiqqud(other)}
+	outsider := u
+	outsider.Lessons = []Lesson{{Kind: KindLesson, Activities: []Activity{
+		{Type: ActivityShadow, Text: word},
+		{Type: ActivityListenPick, Text: word},
+		{Type: ActivityListenPick, Text: other},
+	}}}
+	lk = goldenLookup{Lexemes: lex, Audio: []string{normalize(word), normalize(other)}}.fake()
+	got = validateBrief(&outsider, lk, &f)
+	var cov []Issue
+	for _, is := range got {
+		if is.Rule == RuleBriefCoverage {
+			cov = append(cov, is)
+		}
+	}
+	if len(cov) != 1 || cov[0].Pointer != at("lessons", 0, "activities", 2) || cov[0].Severity != SeverityBlock {
+		t.Fatalf("outsider coverage: %v", ruleSet(got))
+	}
+
+	// A newWord whose only lexicon row is the unpointed spelling does not count.
+	const gar = "גָּר"
+	bare := stripNiqqud(gar)
+	if bare == gar {
+		t.Fatal("bare form")
+	}
+	pointed := Unit{
+		Title: "Home", Situation: "Saying where you live", Concept: "I live here",
+		NewWords: []string{gar},
+		Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{
+			{Type: ActivityShadow, Text: gar},
+			{Type: ActivityListenPick, Text: gar},
+		}}},
+	}
+	bareLex := map[string]glex{
+		normalize(bare): {ID: 3, POS: "verb", Gloss: "lives", Bare: bare},
+	}
+	blk := goldenLookup{Lexemes: bareLex, Audio: []string{normalize(gar)}}.fake()
+	bf := BriefFacts{
+		Tier: "established", MinKnownShare: 0.95,
+		BriefLexemeIDs: map[int64]bool{}, KnownLexemeIDs: map[int64]bool{},
+	}
+	probe := &scan{ctx: context.Background(), lk: blk, cache: map[string]*probe{}}
+	if !probe.inLexicon(gar) || probe.probeLex(normalize(gar)) {
+		t.Fatal("fixture: the unpointed row should satisfy inLexicon and miss the exact key")
+	}
+	got = validateBrief(&pointed, blk, &bf)
+	if !hasRule(got, RuleBriefCoverage) {
+		t.Fatalf("unpointed newWord should fail coverage: %v", ruleSet(got))
+	}
+	for _, is := range got {
+		if is.Rule == RuleBriefCoverage && (is.Pointer != at("lessons", 0, "activities", 1) || is.Severity != SeverityBlock) {
+			t.Fatalf("unpointed coverage issue %+v", is)
+		}
+	}
+}
+
+func TestOutOfBriefNewWordNeedsIntroAndUses(t *testing.T) {
+	word := vocab8[0].text
+	lex := map[string]glex{
+		normalize(word): {ID: 1, POS: "noun", Gender: "m", Gloss: "hello", Bare: stripNiqqud(word)},
+	}
+	lk := goldenLookup{Lexemes: lex, Audio: []string{normalize(word)}}.fake()
+	f := BriefFacts{
+		Tier: "established", MinKnownShare: 0.95,
+		BriefLexemeIDs: map[int64]bool{}, KnownLexemeIDs: map[int64]bool{},
+	}
+	tested := Unit{
+		Title: "Cafe", Situation: "Ordering at a cafe", Concept: "A greeting",
+		NewWords: []string{word},
+		Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{
+			{Type: ActivityListenPick, Text: word},
+		}}},
+	}
+	got := validateBrief(&tested, lk, &f)
+	if !hasRule(got, RuleBriefIntro) || !hasRule(got, RuleBriefNewMinUses) {
+		t.Fatalf("out-of-brief newWord with no intro: %v", ruleSet(got))
+	}
+	for _, is := range got {
+		if (is.Rule == RuleBriefIntro || is.Rule == RuleBriefNewMinUses) && is.Severity != SeverityBlock {
+			t.Fatalf("severity %+v", is)
+		}
+	}
+	if hasRule(got, RuleBriefCoverage) {
+		t.Fatal("coverage should credit the declared newWord")
+	}
+
+	shown := tested
+	shown.Lessons = []Lesson{{Kind: KindLesson, Activities: []Activity{
+		{Type: ActivityShadow, Text: word},
+		{Type: ActivityListenPick, Text: word},
+		{Type: ActivityRecall, Text: word},
+	}}}
+	got = validateBrief(&shown, lk, &f)
+	for _, rule := range []string{RuleBriefIntro, RuleBriefNewMinUses, RuleBriefCoverage} {
+		if hasRule(got, rule) {
+			t.Fatalf("a credited newWord with an intro and enough uses should pass %s: %v", rule, ruleSet(got))
+		}
+	}
+
+	// Two uses, introduced: the only block is the floor of 3.
+	short := tested
+	short.Lessons = []Lesson{{Kind: KindLesson, Activities: []Activity{
+		{Type: ActivityShadow, Text: word},
+		{Type: ActivityListenPick, Text: word},
+	}}}
+	got = validateBrief(&short, lk, &f)
+	if blocks := blockRules(got); len(blocks) != 1 || blocks[0] != RuleBriefNewMinUses {
+		t.Fatalf("two uses with an intro, blocks %v, issues %v", blocks, ruleSet(got))
+	}
+
+	// Three uses, but the first step tests the word and the intro comes after.
+	late := tested
+	late.Lessons = []Lesson{{Kind: KindLesson, Activities: []Activity{
+		{Type: ActivityListenPick, Text: word},
+		{Type: ActivityShadow, Text: word},
+		{Type: ActivityRecall, Text: word},
+	}}}
+	got = validateBrief(&late, lk, &f)
+	if blocks := blockRules(got); len(blocks) != 1 || blocks[0] != RuleBriefIntro {
+		t.Fatalf("intro after the test, blocks %v, issues %v", blocks, ruleSet(got))
+	}
+}
+
+func blockRules(issues []Issue) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, is := range issues {
+		if is.Severity != SeverityBlock || seen[is.Rule] {
+			continue
+		}
+		seen[is.Rule] = true
+		out = append(out, is.Rule)
+	}
+	return out
 }
 
 func TestDropFirstDageshAndCutPrefix(t *testing.T) {

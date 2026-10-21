@@ -20,11 +20,21 @@ type Screen struct {
 // with the score. Post is the lesson path the form submits to. HomeHref
 // is Today, including a language query when the shell is Hebrew.
 type Activity struct {
-	Done          bool
-	Score         string
-	Prompt        string
-	Progress      string
-	Audio         string
+	Done   bool
+	Score  string
+	Prompt string
+	// PromptWord is the Hebrew word a multi-word recall names. The template
+	// writes it as: What does <bdi lang="he" dir="rtl">WORD</bdi> mean?
+	// Empty for every other prompt, including a recall of one word.
+	PromptWord string
+	Progress   string
+	Audio      string
+	// AudioLabel is the accessible name of the line clip, such as "Play the line"
+	// or "Play" while the spelling is hidden. AudioHebrew is the one word in
+	// that name, when the line is a single word and the spelling is shown.
+	// Both are empty when Audio is empty.
+	AudioLabel    string
+	AudioHebrew   string
 	Words         []Word
 	Feedback      string
 	FeedbackClass string
@@ -94,6 +104,45 @@ func dialogueOrbAttrs(i int) templ.Attributes {
 	return templ.Attributes{"data-audio": dialogueClipID(i), "data-dlg-line": Num(i)}
 }
 
+// wordBlocksClass is the activity line. A multi-word recall centres that line
+// under the hero orb and lays transliteration, gloss, and orb on one grid.
+func wordBlocksClass(a Activity) string {
+	if a.PromptWord != "" {
+		return "word-blocks word-blocks--recall"
+	}
+	return "word-blocks"
+}
+
+// orbClass is the lesson clip button. The hero is the line (56px). A word orb
+// is the 28px disc inside a 44px hit box. Neither is the dialogue c-orb.
+func orbClass(hero bool) string {
+	if hero {
+		return "orb orb--hero"
+	}
+	return "orb orb--word"
+}
+
+// clipClass groups the native audio and its orb. The hero sits on the prompt.
+func clipClass(hero bool) string {
+	if hero {
+		return "clip clip--hero"
+	}
+	return "clip"
+}
+
+// hasClip reports whether the step has a line clip or a per-word clip.
+func hasClip(a Activity) bool {
+	if a.Audio != "" {
+		return true
+	}
+	for _, w := range a.Words {
+		if w.Audio != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // Word is one token in an activity. Plain is a number or a Latin token.
 // Gap is the cloze blank. Show* gates the three learner fields: pointed
 // Hebrew, transliteration, and the English gloss.
@@ -108,6 +157,9 @@ type Word struct {
 	ShowGloss    bool
 	Gap          bool
 	Plain        bool
+	// Target is the word a multi-word recall is asking about. The line marks
+	// it, and its transliteration and gloss stay hidden until the answer.
+	Target bool
 }
 
 // shown returns value when the field is visible.

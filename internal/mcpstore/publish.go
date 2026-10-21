@@ -25,12 +25,13 @@ func (s *Store) LoadUnit(ctx context.Context, id int64, revision *int) (mcp.Unit
 		return mcp.UnitView{}, err
 	}
 	return mcp.UnitView{
-		UnitID:   row.UnitID,
-		Revision: row.Revision,
-		Position: row.Position,
-		Scope:    row.Scope,
-		Status:   row.Status,
-		Doc:      row.Doc,
+		UnitID:          row.UnitID,
+		Revision:        row.Revision,
+		CurrentRevision: row.CurrentRevision,
+		Position:        row.Position,
+		Scope:           row.Scope,
+		Status:          row.Status,
+		Doc:             row.Doc,
 	}, nil
 }
 
