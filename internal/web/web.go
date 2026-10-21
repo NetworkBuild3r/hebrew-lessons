@@ -380,8 +380,13 @@ func (s *server) currentReview(r *http.Request, lang, csrf string) (views.Review
 
 // reveal is the one reveal path for every review mode. It records the peek
 // and renders the back the mode table names. A new mode does not add a
-// handler. CSRF and Origin are the checks on /_hx/.
+// handler. POST is covered by the CSRF middleware. GET has no _csrf token;
+// a cross-site GET is rejected here before the peek is recorded.
 func (s *server) reveal(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet && !revealSameOrigin(r) {
+		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return
+	}
 	cardID, ok := reviewCardID(w, r)
 	if !ok {
 		return
@@ -483,7 +488,14 @@ func reviewCardID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return 0, false
 	}
-	cardID, err := strconv.ParseInt(r.Form.Get("card_id"), 10, 64)
+	// A POST grades or answers the card id in the body. The query string
+	// is ignored, so a card_id on the URL cannot choose the card. A GET
+	// reveal has no body and reads the query.
+	raw := r.Form.Get("card_id")
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		raw = r.PostForm.Get("card_id")
+	}
+	cardID, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return 0, false

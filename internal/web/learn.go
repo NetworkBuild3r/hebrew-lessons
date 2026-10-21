@@ -517,7 +517,7 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 	parts := splitDrillKey(key)
 	switch vm.Kind {
 	case session.KindLetter:
-		vm.Asked = pickPart(vm.CardID, parts)
+		vm.Asked = pickPart(vm.CardID, s.now(), parts)
 		stored := make([]string, 0, len(parts))
 		sides := make([]views.DrillSide, 0, len(parts))
 		for _, part := range parts {
@@ -645,16 +645,20 @@ func (s *server) confusionExample(ctx context.Context, userID int64, kind, key s
 	return s.store.LexemeByID(ctx, id)
 }
 
-// pickPart chooses one part of a pair. The seed is the card id, so a refresh
-// and the no-JS page show the same letter. One part is returned as itself.
-func pickPart(cardID int64, parts []string) string {
+// pickPart chooses one part of a pair. The seed is the card id plus the
+// review clock's UTC date, the same day the study queue uses, so a refresh
+// and the no-JS page show the same letter, and another day can ask the
+// other one. One part is returned as itself.
+func pickPart(cardID int64, when time.Time, parts []string) string {
 	if len(parts) == 0 {
 		return ""
 	}
 	if len(parts) == 1 {
 		return parts[0]
 	}
-	src := rand.NewPCG(uint64(cardID), 0x72657665616c)
+	y, m, d := when.UTC().Date()
+	day := uint64(y)*10000 + uint64(m)*100 + uint64(d)
+	src := rand.NewPCG(uint64(cardID), day)
 	return parts[rand.New(src).Uint64N(uint64(len(parts)))]
 }
 

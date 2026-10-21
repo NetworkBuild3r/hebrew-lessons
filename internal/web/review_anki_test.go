@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -129,6 +130,41 @@ func TestReviewModesShareOneRevealPath(t *testing.T) {
 	}
 	if readFront.Gloss != "" || readFront.Gender != "" {
 		t.Fatalf("read front kept the gloss: %+v", readFront)
+	}
+
+	listen := views.ReviewCard{
+		Kind: "listen", Pointed: "מַיִם", Unpointed: "מים",
+		Translit: "mayim", AudioURL: "/audio/x.mp3", Gloss: "water", Gender: "m",
+	}
+	listenFront := views.ConcealFront(listen)
+	if listenFront.Pointed != "מַיִם" || listenFront.Unpointed != "מים" || listenFront.Translit != "mayim" || listenFront.AudioURL != "/audio/x.mp3" {
+		t.Fatalf("listen front lost the prompt: %+v", listenFront)
+	}
+	if listenFront.Gloss != "" || listenFront.Gender != "" {
+		t.Fatalf("listen front kept the gloss: %+v", listenFront)
+	}
+	listen.Revealed = true
+	if shown := views.ConcealFront(listen); shown.Gloss != "water" || shown.AudioURL != "/audio/x.mp3" {
+		t.Fatalf("revealed listen was concealed: %+v", shown)
+	}
+
+	pattern := views.ReviewCard{
+		Kind: "pattern", Pointed: "הוא/היא", Translit: "hu", AudioURL: "/audio/x.mp3", Gloss: "he", Gender: "m",
+		Sides:       []views.DrillSide{{Hebrew: "הוא", Translit: "hu", Gloss: "he"}},
+		ExampleText: "הוא", LooksLike: "looks", TellApart: "cue", PairNote: "note",
+		DageshNote: "dot", DageshHard: "hard",
+	}
+	patternFront := views.ConcealFront(pattern)
+	if patternFront.Pointed != "הוא/היא" {
+		t.Fatalf("pattern front pointed = %q", patternFront.Pointed)
+	}
+	if patternFront.Translit != "" || patternFront.AudioURL != "" || patternFront.Gloss != "" || patternFront.Gender != "" ||
+		len(patternFront.Sides) != 0 || patternFront.ExampleText != "" || patternFront.LooksLike != "" || patternFront.TellApart != "" || patternFront.PairNote != "" || patternFront.DageshNote != "" || patternFront.DageshHard != "" {
+		t.Fatalf("pattern front kept the answer: %+v", patternFront)
+	}
+	pattern.Revealed = true
+	if shown := views.ConcealFront(pattern); len(shown.Sides) != 1 || shown.Gloss != "he" || shown.AudioURL != "/audio/x.mp3" {
+		t.Fatalf("revealed pattern was concealed: %+v", shown)
 	}
 
 	letter := views.ReviewCard{
@@ -414,6 +450,7 @@ func assertAnkiFront(t *testing.T, body string, spec ankiSpec) {
 	if strings.Contains(body, `name="rating"`) || strings.Contains(body, "Forgot") || strings.Contains(body, "Got it") {
 		t.Fatal("grade buttons rendered on the front")
 	}
+	assertNoAnswerHeading(t, body)
 	for _, banned := range spec.banned {
 		if banned != "" && strings.Contains(body, banned) {
 			t.Fatalf("front contains answer %q", banned)
@@ -443,6 +480,13 @@ func assertAnkiBack(t *testing.T, body string, spec ankiSpec, clipID string, ful
 	assertReviewClip(t, body, clipID, fullPage)
 }
 
+func assertNoAnswerHeading(t *testing.T, body string) {
+	t.Helper()
+	if strings.Contains(body, `id="act-answer"`) || strings.Contains(body, "act__answer-h") {
+		t.Fatalf("front rendered the answer heading\n%s", body)
+	}
+}
+
 func getReveal(t *testing.T, h http.Handler, learner learnerFix, cardID int64) *httptest.ResponseRecorder {
 	t.Helper()
 	return getRevealRaw(t, h, learner.cookie, cardID, true)
@@ -451,7 +495,9 @@ func getReveal(t *testing.T, h http.Handler, learner learnerFix, cardID int64) *
 func getRevealRaw(t *testing.T, h http.Handler, cookie *http.Cookie, cardID int64, hx bool) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/_hx/review/reveal?card_id="+strconv.FormatInt(cardID, 10), nil)
+	req.Host = "learn.example"
 	req.Header.Set("Origin", "https://learn.example")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	if hx {
 		req.Header.Set("HX-Request", "true")
 	}
@@ -479,4 +525,200 @@ func reviewLogCount(t *testing.T, store *db.Store) int {
 		t.Fatal(err)
 	}
 	return n
+}
+
+// TestReviewFrontHasNoAnswerHeading checks every mode's front on the full
+// page and on the htmx fragment the next card swaps in. The answer heading
+// belongs on the back.
+func TestReviewFrontHasNoAnswerHeading(t *testing.T) {
+	for _, kind := range []string{"read", "recall", "listen", "spell", "letter", "pair", "pattern"} {
+		t.Run(kind, func(t *testing.T) {
+			store, h, now := openApp(t)
+			spec, _, word := seedAnkiLexeme(t, store, now, kind)
+			hx := addLearner(t, store, "a@example.com", "sub-front-"+kind, now)
+			if kind == "letter" || kind == "pair" || kind == "pattern" {
+				seedDrill(t, store, hx.user.ID, kind, spec.key, word.exampleID)
+			} else {
+				addCard(t, store, hx.user.ID, word.lexemeID, word.skill, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
+				extra := addLexeme(t, store, "סֵפֶר", kind+"-extra", kind+"-tr", "m", "")
+				addCard(t, store, hx.user.ID, extra, word.skill, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
+			}
+			page := getLearner(t, h, hx, "/review")
+			if !strings.Contains(page, "<!doctype html>") {
+				t.Fatal("full page front was not a page")
+			}
+			assertNoAnswerHeading(t, page)
+			id := mustCardID(t, page)
+			if shown := getReveal(t, h, hx, id); shown.Code != http.StatusOK {
+				t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
+			}
+			next := postGrade(t, h, hx, id, "3", "https://learn.example")
+			if next.Code != http.StatusOK {
+				t.Fatalf("next front = %d\n%s", next.Code, next.Body.String())
+			}
+			body := next.Body.String()
+			if strings.Contains(body, "<!doctype html>") {
+				t.Fatal("htmx front rendered a full page")
+			}
+			assertNoAnswerHeading(t, body)
+			if !strings.Contains(body, "Show answer") || strings.Contains(body, `name="rating"`) {
+				t.Fatalf("htmx response was not the next front\n%s", body)
+			}
+		})
+	}
+}
+
+// TestReviewPairAskFollowsTheDay keeps one letter across refreshes on the
+// same study day, and asks both letters of the pair across days.
+func TestReviewPairAskFollowsTheDay(t *testing.T) {
+	start := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	store, h, clk := openStepped(t, start)
+	learner := addLearner(t, store, "a@example.com", "sub-pair-day", start.Add(400*24*time.Hour))
+	seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
+
+	first := ""
+	for i := 0; i < 50; i++ {
+		asked := attr(t, getLearner(t, h, learner, "/review"), "data-pointed")
+		if asked != "ג" && asked != "פ" {
+			t.Fatalf("refresh %d asked %q", i, asked)
+		}
+		if i == 0 {
+			first = asked
+			continue
+		}
+		if asked != first {
+			t.Fatalf("refresh %d changed the letter from %s to %s", i, first, asked)
+		}
+	}
+	seen := map[string]bool{first: true}
+	for day := 1; day <= 40 && len(seen) < 2; day++ {
+		clk.Advance(24 * time.Hour)
+		seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
+		asked := attr(t, getLearner(t, h, learner, "/review"), "data-pointed")
+		if asked != "ג" && asked != "פ" {
+			t.Fatalf("day %d asked %q", day, asked)
+		}
+		seen[asked] = true
+	}
+	if !seen["ג"] || !seen["פ"] {
+		t.Fatalf("pair asked %v across days, want both letters", seen)
+	}
+}
+
+// TestReviewRevealRejectsCrossSite rejects a GET reveal that the browser
+// marks cross-site, or whose Origin host is not the request host. A request
+// with neither header still reveals, and a rejected GET does not.
+func TestReviewRevealRejectsCrossSite(t *testing.T) {
+	store, h, now := openApp(t)
+	_, _, word := seedAnkiLexeme(t, store, now, "letter")
+	a := addLearner(t, store, "a@example.com", "sub-cross-a", now)
+	b := addLearner(t, store, "b@example.com", "sub-cross-b", now)
+	en := addLearner(t, store, "en@example.com", "sub-cross-en", now)
+	for _, learner := range []learnerFix{a, b, en} {
+		seedDrill(t, store, learner.user.ID, "letter", "ג", word.exampleID)
+	}
+	front := getLearner(t, h, a, "/review")
+	id := mustCardID(t, front)
+	rejects := []struct {
+		host, origin, site string
+	}{
+		{"learn.example", "https://learn.example", "cross-site"},
+		{"learn.example", "", "same-site"},
+		{"learn.example", "https://evil.example", ""},
+		{"learn.example", "null", ""},
+	}
+	for _, tc := range rejects {
+		rec := revealGet(t, h, a.cookie, id, tc.host, tc.origin, tc.site, true)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("reveal host %q origin %q site %q = %d, want 403\n%s", tc.host, tc.origin, tc.site, rec.Code, rec.Body.String())
+		}
+	}
+	page := getLearner(t, h, a, "/review")
+	if strings.Contains(page, `data-revealed="true"`) || strings.Contains(page, `name="rating"`) {
+		t.Fatal("a rejected reveal marked the card revealed")
+	}
+	allowed := revealGet(t, h, a.cookie, id, "", "", "", true)
+	if allowed.Code != http.StatusOK || !strings.Contains(allowed.Body.String(), `data-revealed="true"`) {
+		t.Fatalf("reveal with no origin headers = %d\n%s", allowed.Code, allowed.Body.String())
+	}
+
+	bFront := getLearner(t, h, b, "/review")
+	same := revealGet(t, h, b.cookie, mustCardID(t, bFront), "learn.example", "", "same-origin", true)
+	if same.Code != http.StatusOK || !strings.Contains(same.Body.String(), `data-revealed="true"`) {
+		t.Fatalf("same-origin reveal = %d\n%s", same.Code, same.Body.String())
+	}
+	enFront := getLearner(t, h, en, "/review")
+	match := revealGet(t, h, en.cookie, mustCardID(t, enFront), "learn.example", "https://learn.example", "", true)
+	if match.Code != http.StatusOK || !strings.Contains(match.Body.String(), `data-revealed="true"`) {
+		t.Fatalf("matching origin reveal = %d\n%s", match.Code, match.Body.String())
+	}
+}
+
+func revealGet(t *testing.T, h http.Handler, cookie *http.Cookie, cardID int64, host, origin, site string, hx bool) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/_hx/review/reveal?card_id="+strconv.FormatInt(cardID, 10), nil)
+	if host != "" {
+		req.Host = host
+	}
+	if origin != "" {
+		req.Header.Set("Origin", origin)
+	}
+	if site != "" {
+		req.Header.Set("Sec-Fetch-Site", site)
+	}
+	if hx {
+		req.Header.Set("HX-Request", "true")
+	}
+	if cookie != nil {
+		req.AddCookie(cookie)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+// TestReviewGradeIgnoresQueryCardID grades the card id in the POST body.
+// A different card_id on the query string does not choose the card.
+func TestReviewGradeIgnoresQueryCardID(t *testing.T) {
+	store, h, now := openApp(t)
+	_, _, word := seedAnkiLexeme(t, store, now, "read")
+	learner := addLearner(t, store, "a@example.com", "sub-grade-query", now)
+	addCard(t, store, learner.user.ID, word.lexemeID, word.skill, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
+	front := getLearner(t, h, learner, "/review")
+	id := mustCardID(t, front)
+	if shown := getReveal(t, h, learner, id); shown.Code != http.StatusOK {
+		t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
+	}
+	before := reviewLogCount(t, store)
+	other := id + 999
+
+	// card_id is only on the query string. The body has the grade and the
+	// token. PostForm does not see the query value, so this is not the card.
+	form := url.Values{}
+	form.Set("rating", "3")
+	form.Set("_csrf", learner.csrf)
+	req := httptest.NewRequest(http.MethodPost, "/_hx/review/grade?card_id="+strconv.FormatInt(id, 10), strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "https://learn.example")
+	req.Header.Set("HX-Request", "true")
+	req.AddCookie(learner.cookie)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("grade used the query card_id: %d\n%s", rec.Code, rec.Body.String())
+	}
+	if n := reviewLogCount(t, store); n != before {
+		t.Fatalf("query card_id wrote a review log, count %d want %d", n, before)
+	}
+
+	req = gradeRequest(t, learner.cookie, learner.csrf, id, "3", "https://learn.example", true)
+	req.URL.RawQuery = "card_id=" + strconv.FormatInt(other, 10)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("grade ignored the body card_id: %d\n%s", rec.Code, rec.Body.String())
+	}
+	if n := reviewLogCount(t, store); n != before+1 {
+		t.Fatalf("body card_id wrote %d new review logs, want 1", n-before)
+	}
 }

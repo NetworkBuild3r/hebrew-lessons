@@ -49,7 +49,7 @@ var Alefbet = []AlefbetEntry{
 	{Letter: "ס", Name: "סָמֶךְ", Translit: "samekh", Sound: "s as in sun", Short: "", Form: true},
 	{Letter: "ע", Name: "עַיִן", Translit: "ayin", Sound: "silent (carries a vowel)", Short: "", Form: true},
 	{Letter: "פ", Name: "פֵא", Translit: "fe", Sound: "f as in fun", Short: "f", Form: true},
-	{Letter: "צ", Name: "צָדי", Translit: "tsadi", Sound: "ts as in cats", Short: "", Form: true},
+	{Letter: "צ", Name: tsadiName, Translit: "tsadi", Sound: "ts as in cats", Short: "", Form: true},
 	{Letter: "ק", Name: "קוֹף", Translit: "kof", Sound: "k as in kite", Short: "", Form: true},
 	{Letter: "ר", Name: "רֵישׁ", Translit: "resh", Sound: "guttural r, as in the French rue", Short: "", Form: true},
 	{Letter: "ש", Name: "שִׁין", Translit: "shin", Sound: "sh as in ship (s when the dot is on the left: שׂ)", Short: "", Form: true},
@@ -58,7 +58,7 @@ var Alefbet = []AlefbetEntry{
 	{Letter: "ם", Name: "מֵם סוֹפִית", Translit: "mem sofit", Sound: "m as in mom", Short: "", Form: true},
 	{Letter: "ן", Name: "נוּן סוֹפִית", Translit: "nun sofit", Sound: "n as in no", Short: "", Form: true},
 	{Letter: "ף", Name: "פֵא סוֹפִית", Translit: "fe sofit", Sound: "f as in fun", Short: "", Form: true},
-	{Letter: "ץ", Name: "צָדי סוֹפִית", Translit: "tsadi sofit", Sound: "ts as in cats", Short: "", Form: true},
+	{Letter: "ץ", Name: tsadiSofitName, Translit: "tsadi sofit", Sound: "ts as in cats", Short: "", Form: true},
 	{Letter: "בּ", Name: "בֵּית", Translit: "bet", Sound: "b as in boy", Short: "b", Form: false},
 	{Letter: "כּ", Name: "כַּף", Translit: "kaf", Sound: "k as in kite", Short: "k", Form: false},
 	{Letter: "פּ", Name: "פֵּא", Translit: "pe", Sound: "p as in pet", Short: "p", Form: false},
@@ -73,6 +73,12 @@ type alefbetPair struct {
 }
 
 const (
+	// tsadiName is צָדִי: qamats, dalet, hiriq (U+05B4), yod. The hiriq sits
+	// under the dalet. tsadiSofitName is that name plus סוֹפִית, so the final
+	// form cannot drop the mark on its own.
+	tsadiName      = "\u05E6\u05B8\u05D3\u05B4\u05D9"
+	tsadiSofitName = tsadiName + " \u05E1\u05D5\u05B9\u05E4\u05B4\u05D9\u05EA"
+
 	cueBetKaf    = "ב (vet) has a little tail at the bottom right; כ (khaf) is round."
 	cueDaletResh = "ד (dalet) has a sharp corner at the top right, where the roof sticks out past the leg; ר (resh) is rounded at the top."
 	cueHeHet     = "ה (he) is open at the upper left; ח (khet) is closed."

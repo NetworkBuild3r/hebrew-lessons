@@ -69,7 +69,7 @@ func TestAlefbetReference(t *testing.T) {
 		{"\u05e2", "\u05e2\u05b7\u05d9\u05b4\u05df", "ayin"},
 		{"\u05e4\u05bc", "\u05e4\u05b5\u05bc\u05d0", "pe"},
 		{"\u05e4", "\u05e4\u05b5\u05d0", "fe"},
-		{"\u05e6", "\u05e6\u05b8\u05d3\u05d9", "tsadi"},
+		{"\u05e6", "\u05E6\u05B8\u05D3\u05B4\u05D9", "tsadi"},
 		{"\u05e7", "\u05e7\u05d5\u05b9\u05e3", "kof"},
 		{"\u05e8", "\u05e8\u05b5\u05d9\u05e9\u05c1", "resh"},
 		{"\u05e9", "\u05e9\u05b4\u05c1\u05d9\u05df", "shin"},
