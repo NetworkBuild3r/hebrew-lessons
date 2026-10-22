@@ -48,8 +48,15 @@ func (s *Service) factsByLexeme(ctx context.Context, userID int64) (factIndex, e
 	if err != nil {
 		return factIndex{}, err
 	}
+	// Production leaves lexemes.audio_id null. The clip is the audio_assets
+	// row for the exact NFC text, and the column is only the fallback.
+	ids, err := s.store.ResolveLexemeAudioBatch(ctx, lexemeAudioOf(pool))
+	if err != nil {
+		return factIndex{}, err
+	}
 	idx := factIndex{words: make(map[int64]db.PoolWord, len(pool))}
-	for _, w := range pool {
+	for i, w := range pool {
+		w.AudioID = ids[i]
 		idx.words[w.ID] = w
 		if strings.TrimSpace(w.Gloss) != "" {
 			idx.glossed++
@@ -59,6 +66,14 @@ func (s *Service) factsByLexeme(ctx context.Context, userID int64) (factIndex, e
 		}
 	}
 	return idx, nil
+}
+
+func lexemeAudioOf(pool []db.PoolWord) []db.LexemeAudio {
+	out := make([]db.LexemeAudio, len(pool))
+	for i, w := range pool {
+		out[i] = db.LexemeAudio{Text: w.TextNFC, AudioID: w.AudioID}
+	}
+	return out
 }
 
 // of is the facts of one lexeme. A word the lexicon does not have has none, so every visit

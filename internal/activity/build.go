@@ -193,6 +193,8 @@ func (e *Engine) build(ctx context.Context, userID, lexemeID int64, kind Kind, o
 	if needsGloss(kind) && strings.TrimSpace(anchor.Gloss) == "" {
 		return built{}, ErrNoGloss
 	}
+	// AudioID is empty only when the word has no clip. loadWords resolved it
+	// from audio_assets, then from lexemes.audio_id.
 	if needsAudio(kind) && anchor.AudioID == "" {
 		return built{}, ErrNoAudio
 	}
@@ -289,8 +291,18 @@ func needsGloss(k Kind) bool {
 }
 
 // loadWords reads the lexicon as Words with their placement bands.
+// AudioID is the clip ResolveLexemeAudio picks, so a listening item and its
+// distractors can use a clip that was never copied onto lexemes.audio_id.
 func (e *Engine) loadWords(ctx context.Context, userID int64) ([]Word, error) {
 	pool, err := e.store.ActivityPool(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	audios := make([]db.LexemeAudio, len(pool))
+	for i, w := range pool {
+		audios[i] = db.LexemeAudio{Text: w.TextNFC, AudioID: w.AudioID}
+	}
+	ids, err := e.store.ResolveLexemeAudioBatch(ctx, audios)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +316,7 @@ func (e *Engine) loadWords(ctx context.Context, userID int64) ([]Word, error) {
 		if b, ok := bands[w.ID]; ok {
 			band = b
 		}
-		words[i] = Word{ID: w.ID, Text: w.TextNFC, Gloss: w.Gloss, POS: w.POS, AudioID: w.AudioID, Band: band, Seen: w.Seen}
+		words[i] = Word{ID: w.ID, Text: w.TextNFC, Gloss: w.Gloss, POS: w.POS, AudioID: ids[i], Band: band, Seen: w.Seen}
 	}
 	return words, nil
 }
