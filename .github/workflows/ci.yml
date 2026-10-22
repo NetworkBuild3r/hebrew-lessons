@@ -588,8 +588,22 @@ jobs:
 
       # The k8-build image does not ship gcc. Run 39473171758 (#111) and
       # run 39479442471 both printed "gcc is not on PATH" and apt installed
-      # a previously unselected gcc package. Skip the install when it is
+      # a previously unselected gcc package. Skip the install when gcc is
       # already on PATH.
+      #
+      # The image also enables ppa:git-core/ppa. apt-get update then fetches
+      # ppa.launchpadcontent.net. Shard C's Install gcc step on runs
+      # 39639982142 and 39641093951 got 503 Service Unavailable. update
+      # failed before gcc was installed. `update && install` under set -e
+      # does not abort when update is the failing command, so the step
+      # printed "installed gcc:" with an empty path and exited 0. go test
+      # -race then died with cgo: C compiler "gcc" not found.
+      # gcc and libc6-dev come from the Ubuntu archive. This runner's git
+      # is already 2.55.0, and actions/checkout (git >= 2.18) had already
+      # succeeded, so this step does not need the PPA and does not replace
+      # git. Drop that source before update. Acquire::Retries plus the
+      # attempt loop cover a blip in the archive itself. A failed install
+      # fails the step.
       - name: Install gcc
         if: steps.module.outputs.present == 'true' && steps.affected.outputs.run_tests == 'true'
         shell: bash
@@ -597,15 +611,81 @@ jobs:
           set -euo pipefail
           if command -v gcc >/dev/null 2>&1; then
             echo "gcc already present: $(command -v gcc)"
-          else
-            echo "gcc is not on PATH; installing gcc and libc6-dev"
-            if [ "$(id -u)" -eq 0 ]; then
-              DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gcc libc6-dev
-            else
-              sudo DEBIAN_FRONTEND=noninteractive apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gcc libc6-dev
-            fi
-            echo "installed gcc: $(command -v gcc)"
+            exit 0
           fi
+          echo "gcc is not on PATH; installing gcc and libc6-dev from the Ubuntu archive"
+
+          as_root() {
+            if [ "$(id -u)" -eq 0 ]; then
+              "$@"
+            else
+              sudo "$@"
+            fi
+          }
+
+          # Dedicated PPA files are removed. A list that also carries the
+          # Ubuntu archive only loses the git-core lines, and the rewrite
+          # is refused if that would drop the archive too.
+          disable_git_core_ppa() {
+            local f tmp
+            shopt -s nullglob
+            for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do
+              [ -f "$f" ] || continue
+              grep -q -E 'ppa\.launchpadcontent\.net/git-core|git-core/ppa' "$f" || continue
+              echo "disabling git-core PPA source: $f"
+              if grep -q -E 'archive\.ubuntu\.com|security\.ubuntu\.com|ports\.ubuntu\.com' "$f"; then
+                tmp=$(mktemp)
+                if [[ "$f" == *.sources ]]; then
+                  awk 'BEGIN { RS = ""; ORS = "\n\n" } !/ppa\.launchpadcontent\.net\/git-core/ && !/git-core\/ppa/ { print }' "$f" >"$tmp"
+                else
+                  sed -E '/ppa\.launchpadcontent\.net\/git-core|git-core\/ppa/d' "$f" >"$tmp"
+                fi
+                if ! grep -q -E 'archive\.ubuntu\.com|security\.ubuntu\.com|ports\.ubuntu\.com' "$tmp"; then
+                  echo "::error::refusing to rewrite ${f}; filter would drop the Ubuntu archive"
+                  rm -f "$tmp"
+                  exit 1
+                fi
+                as_root cp "$tmp" "$f"
+                rm -f "$tmp"
+              else
+                as_root rm -f "$f"
+              fi
+            done
+            shopt -u nullglob
+          }
+
+          run_apt() {
+            if [ "$(id -u)" -eq 0 ]; then
+              DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 "$@"
+            else
+              sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 "$@"
+            fi
+          }
+
+          apt_with_retries() {
+            local attempt
+            for attempt in 1 2 3 4 5; do
+              if run_apt update && run_apt "$@"; then
+                return 0
+              fi
+              echo "apt-get failed (attempt ${attempt}/5)"
+              if [ "$attempt" -lt 5 ]; then
+                sleep $((attempt * 5))
+              fi
+            done
+            return 1
+          }
+
+          disable_git_core_ppa
+          if ! apt_with_retries install -y --no-install-recommends gcc libc6-dev; then
+            echo "::error::apt-get could not install gcc from the Ubuntu archive"
+            exit 1
+          fi
+          if ! command -v gcc >/dev/null 2>&1; then
+            echo "::error::gcc is still not on PATH after apt-get install"
+            exit 1
+          fi
+          echo "installed gcc: $(command -v gcc)"
 
       # -count=1 on every go test. Runners keep a persistent GOCACHE
       # (home_k3 #51), and Go does not record files a child process such as
@@ -690,12 +770,73 @@ jobs:
           set -euo pipefail
           pkgs=(libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libexpat1 libgbm1 libglib2.0-0t64 libnss3 libpango-1.0-0 libxcomposite1 libxdamage1 libxfixes3 libxkbcommon0 libxrandr2)
           echo "installing chrome libraries: ${pkgs[*]}"
-          if [ "$(id -u)" -eq 0 ]; then
-            DEBIAN_FRONTEND=noninteractive apt-get update
-            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${pkgs[@]}"
-          else
-            sudo DEBIAN_FRONTEND=noninteractive apt-get update
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${pkgs[@]}"
+
+          as_root() {
+            if [ "$(id -u)" -eq 0 ]; then
+              "$@"
+            else
+              sudo "$@"
+            fi
+          }
+
+          # Same Launchpad PPA as Install gcc. Shard C reaches this step
+          # only after that one, including when gcc was already on PATH and
+          # the PPA source was left in place. These libraries come from the
+          # Ubuntu archive. Drop the PPA so a 503 cannot fail the update.
+          disable_git_core_ppa() {
+            local f tmp
+            shopt -s nullglob
+            for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do
+              [ -f "$f" ] || continue
+              grep -q -E 'ppa\.launchpadcontent\.net/git-core|git-core/ppa' "$f" || continue
+              echo "disabling git-core PPA source: $f"
+              if grep -q -E 'archive\.ubuntu\.com|security\.ubuntu\.com|ports\.ubuntu\.com' "$f"; then
+                tmp=$(mktemp)
+                if [[ "$f" == *.sources ]]; then
+                  awk 'BEGIN { RS = ""; ORS = "\n\n" } !/ppa\.launchpadcontent\.net\/git-core/ && !/git-core\/ppa/ { print }' "$f" >"$tmp"
+                else
+                  sed -E '/ppa\.launchpadcontent\.net\/git-core|git-core\/ppa/d' "$f" >"$tmp"
+                fi
+                if ! grep -q -E 'archive\.ubuntu\.com|security\.ubuntu\.com|ports\.ubuntu\.com' "$tmp"; then
+                  echo "::error::refusing to rewrite ${f}; filter would drop the Ubuntu archive"
+                  rm -f "$tmp"
+                  exit 1
+                fi
+                as_root cp "$tmp" "$f"
+                rm -f "$tmp"
+              else
+                as_root rm -f "$f"
+              fi
+            done
+            shopt -u nullglob
+          }
+
+          run_apt() {
+            if [ "$(id -u)" -eq 0 ]; then
+              DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 "$@"
+            else
+              sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 "$@"
+            fi
+          }
+
+          apt_with_retries() {
+            local attempt
+            for attempt in 1 2 3 4 5; do
+              if run_apt update && run_apt "$@"; then
+                return 0
+              fi
+              echo "apt-get failed (attempt ${attempt}/5)"
+              if [ "$attempt" -lt 5 ]; then
+                sleep $((attempt * 5))
+              fi
+            done
+            return 1
+          }
+
+          disable_git_core_ppa
+          if ! apt_with_retries install -y --no-install-recommends "${pkgs[@]}"; then
+            echo "::error::apt-get could not install chrome libraries from the Ubuntu archive"
+            exit 1
           fi
 
       - uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
