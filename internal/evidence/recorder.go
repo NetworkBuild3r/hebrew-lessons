@@ -33,6 +33,7 @@ const (
 	ContextGlossTap        = "gloss_tap"
 	ContextPlacementReview = "placement_review"
 	ContextLessonIntro     = "lesson_intro"
+	ContextLessonListen    = "lesson_listen"
 )
 
 const (
@@ -260,7 +261,7 @@ func (r *Recorder) Expose(ctx context.Context, learnerID int64, lexemeIDs []int6
 		return errors.New("evidence: exposure has no learner")
 	}
 	switch where {
-	case ContextStory, ContextDialogue, ContextGlossTap, ContextPlacementReview, ContextLessonIntro:
+	case ContextStory, ContextDialogue, ContextGlossTap, ContextPlacementReview, ContextLessonIntro, ContextLessonListen:
 	default:
 		return fmt.Errorf("evidence: exposure context %q is unknown", where)
 	}

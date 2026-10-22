@@ -790,6 +790,12 @@ func TestSelfGradeRefusesBadInput(t *testing.T) {
 	}
 }
 
+func TestLessonListenContextValue(t *testing.T) {
+	if ContextLessonListen != "lesson_listen" {
+		t.Fatalf("ContextLessonListen = %q", ContextLessonListen)
+	}
+}
+
 func TestExpose(t *testing.T) {
 	e := newEnv(t)
 	a, b := e.lexeme(kelev), e.lexeme(kala)

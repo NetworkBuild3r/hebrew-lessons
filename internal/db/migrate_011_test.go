@@ -53,7 +53,7 @@ func TestMigrate010OnA009DatabaseKeepsV2Placement(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate 011: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15}) {
 		t.Fatalf("versions = %v, want 1..12", got)
 	}
 	if got := m6Dump(t, conn, `SELECT * FROM placement_runs ORDER BY id`); !reflect.DeepEqual(got, runs) {
@@ -88,7 +88,8 @@ func TestMigrate010OnA009DatabaseKeepsV2Placement(t *testing.T) {
 	if !reflect.DeepEqual(after.rowCnts, before.rowCnts) {
 		t.Fatalf("row counts changed\n got: %v\nwant: %v", after.rowCnts, before.rowCnts)
 	}
-	if !reflect.DeepEqual(m8SchemaWithoutName(after.schema, "attempts_user_lexeme_skill_id"), before.schema) {
+	// 015 rebuilds exposures, so its CREATE text is not part of what 011 must leave alone.
+	if !reflect.DeepEqual(m8SchemaWithout(m8SchemaWithoutName(after.schema, "attempts_user_lexeme_skill_id"), "exposures"), m8SchemaWithout(before.schema, "exposures")) {
 		t.Fatal("the schema of an existing object changed")
 	}
 	if fk := m6Dump(t, conn, `PRAGMA foreign_key_check`); len(fk) != 0 {
@@ -110,7 +111,7 @@ func TestMigrate010OnAFreshDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15}) {
 		t.Fatalf("versions = %v, want 1..12", got)
 	}
 	cols := m6Dump(t, conn, `SELECT name FROM pragma_table_info('placement_items') ORDER BY cid`)
@@ -124,7 +125,7 @@ func TestMigrate010OnAFreshDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("second migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); len(got) != 12 {
+	if got := m6Applied(t, conn); len(got) != 13 {
 		t.Fatalf("versions after a second migrate = %v", got)
 	}
 }

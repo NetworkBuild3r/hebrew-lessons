@@ -673,7 +673,9 @@ Staging commits in order: **Diff 4** (3.1, freeze), **Diff 5** (3.3, start on th
 - But migration 006 replaced `cards.dir` with `cards.skill`, and the old code selects `dir`. Against the migrated file, `ListDueCards` and `ListStudyCards` failed with `SQL logic error: no such column: dir`. Reviews and Today would be broken while the pod looks healthy.
 - Against the pre-migration copy of the same file, the same two calls returned the card.
 
-So a rollback is **the previous tag and the backup file together**. Every review, placement result, and snapshot written after the backup is lost, because the old schema cannot hold it. It stays in the file you set aside (`hebrew.sqlite.after-v3-*`), and nothing can merge it back.
+So a rollback of the cutover is **the previous tag and the backup file together**. Every review, placement result, and snapshot written after the backup is lost, because the old schema cannot hold it. It stays in the file you set aside (`hebrew.sqlite.after-v3-*`), and nothing can merge it back.
+
+Migration 015 is narrower. It only adds `lesson_listen` to the `exposures.context` check. Undoing that one migration, without restoring the pre-v3 file, is [5.2](#52-undo-migration-015-only). It is not a way back to the pre-v3 image. Migration 006 still requires the backup.
 
 **This rollback has NOT been rehearsed.** Staging was not touched by the person who wrote this runbook. 5.R is the rehearsal, and it is the operator's to run (it is acceptance criterion ac-4). Treat everything below as untested until 5.R has passed.
 
@@ -794,6 +796,38 @@ kubectl -n hebrew-next delete pod v3-shell
 
 If 5.R passes, the rollback in 5.1 is rehearsed as far as a staging copy can show. The Argo CD commits, the restore script, and the old image on the restored file are all exercised. What it cannot show is production's own timing and load.
 
+### 5.2 Undo migration 015 only
+
+Use this only to take `lesson_listen` back out of `exposures.context` while keeping every exposures row. Do not use it to return to the pre-v3 image. That is still 5.1.
+
+`lesson_intro` is already a legal context. `migrations/006_evidence.sql` created the check as `('story', 'dialogue', 'gloss_tap', 'placement_review', 'lesson_intro')`.
+
+Stop the writer first (scale the deployment to 0, as in 5.1, and wait until no pod holds the file). The pod image has no `sqlite3`. Copy `hebrew.sqlite` off the volume, run the SQL below with `sqlite3` on that copy, then put the file back and remove `hebrew.sqlite-wal` and `hebrew.sqlite-shm` before you start the pod. Do not delete exposures rows.
+
+```sql
+UPDATE exposures SET context = 'lesson_intro' WHERE context = 'lesson_listen';
+
+CREATE TABLE exposures_old (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    lexeme_id INTEGER NOT NULL REFERENCES lexemes (id) ON DELETE RESTRICT,
+    context TEXT NOT NULL CHECK (context IN ('story', 'dialogue', 'gloss_tap', 'placement_review', 'lesson_intro')),
+    unit_id INTEGER REFERENCES units (id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL
+);
+INSERT INTO exposures_old (id, user_id, lexeme_id, context, unit_id, created_at)
+SELECT id, user_id, lexeme_id, context, unit_id, created_at
+FROM exposures;
+DROP TABLE exposures;
+ALTER TABLE exposures_old RENAME TO exposures;
+CREATE INDEX exposures_user_lexeme ON exposures (user_id, lexeme_id);
+DELETE FROM schema_migrations WHERE version = 15;
+```
+
+Confirm `SELECT COUNT(*) FROM exposures WHERE context = 'lesson_listen'` is 0, the row count is unchanged, and `PRAGMA foreign_key_check` prints nothing. The next start of a binary that still contains `015_exposures_lesson_listen.sql` will apply 015 again. To stay on the old check, run a binary that does not embed that file.
+
+Alternatively, restore the backup taken before 015 was applied. That drops every write made after the backup, not only the context change.
+
 ## Step 6. After the cutover
 
 ### 6.1 Make the placement clips (R9)
@@ -826,7 +860,7 @@ SMOKE_STRICT=1 sh scripts/smoke-v3.sh
 kubectl -n hebrew exec deploy/hebrew -c hebrew -- /usr/local/bin/hebrew migrate --check
 ```
 
-Expected: `7 passed, 0 failed, 0 skipped`. `applied: 1 2 3 4 5 6 7 8 9 10 11 12`, `pending: (none)`, `result: ok`. Then sign in and do the manual checks from 3.4, including starting a placement.
+Expected: `7 passed, 0 failed, 0 skipped`. `applied: 1 2 3 4 5 6 7 8 9 10 11 12 15`, `pending: (none)`, `result: ok`. Then sign in and do the manual checks from 3.4, including starting a placement. 013 and 014 are not in this tree.
 
 Take a post-cutover backup now, with the running pod (the v3 image has the command):
 
