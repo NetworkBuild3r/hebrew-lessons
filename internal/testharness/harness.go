@@ -13,6 +13,10 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/app"
 )
 
+// MCPToken is the static bearer Start installs on the authoring server.
+// An empty token leaves the MCP tools closed, so the harness sets one.
+const MCPToken = "testharness-mcp"
+
 // Account is a user a seed helper would insert.
 // ID stays zero until the app exposes a way to insert one.
 type Account struct {
@@ -58,6 +62,7 @@ func Start(t *testing.T) *Env {
 		GoogleIssuer:      idp.Issuer,
 		Clock:             clk,
 		TTS:               speech,
+		MCPAuthToken:      MCPToken,
 	})
 	if err != nil {
 		idp.Close()
