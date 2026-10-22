@@ -26,6 +26,7 @@ templ Progress(v ProgressView) {
 			</header>
 			if v.Empty {
 				@progressEmpty(v)
+				@placementCard2(v)
 			} else {
 				if v.Weekly != nil {
 					@weeklyCard(v)
@@ -33,10 +34,10 @@ templ Progress(v ProgressView) {
 				@skillTabs(v)
 				<div class="progress__grid" data-motion="stagger">
 					@knowCard(v)
+					@placementCard2(v)
 					@chartCard(v, v.Est)
 					@chartCard(v, v.Retention)
 					@weekCard(v)
-					@placementCard2(v)
 				</div>
 			}
 		</article>
@@ -250,45 +251,58 @@ templ weekWord(w WeekWord) {
 	</li>
 }
 
-// placementCard2 is the finished placement runs and check-ins, newest first.
+// placementCard2 is the placement card: the unit the learner starts from,
+// the quiet way back into the test, and the finished runs. It sits after
+// the skills overview. The link is quiet text, never a button, and the
+// reassurance sits under Retake only.
 templ placementCard2(v ProgressView) {
 	<section class="c-card pplace" aria-labelledby="place-h">
-		<h2 id="place-h" class="pchart__title">@T(v.Lang, "", "Placement history")</h2>
+		<p class="pplace__label" id="place-h">
+			@IconClass("layers", "icon icon-sm", "")
+			<span>@E(PlacementTitle)</span>
+		</p>
+		<div class="pplace__top">
+			<div class="pplace__status">
+				<p class="pplace__line">@E(v.PlacementStatus)</p>
+				if v.PlacementWhen != "" {
+					<p class="pplace__when">@E(v.PlacementWhen)</p>
+				}
+			</div>
+			<div class="pplace__action">
+				<a class="pplace__link" href={ templ.SafeURL(v.Href("/placement")) }>
+					<span>@E(v.PlacementLink)</span>
+					@IconClass("arrow-right", "icon icon-sm icon-directional", "")
+				</a>
+				if v.PlacementKeep != "" {
+					<p class="pplace__keep">@E(v.PlacementKeep)</p>
+				}
+			</div>
+		</div>
+		<hr class="pplace__rule"/>
+		<p class="pplace__past">@E(PastResults)</p>
 		if len(v.Placement) == 0 {
-			<p class="pweek__none">@T(v.Lang, "", "No placement yet. Take the placement check from Today, so lessons fit you.")</p>
-			<a class="btn btn-tonal" href={ templ.SafeURL(v.Href("/")) }>
-				<span>@T(v.Lang, "", "Go to Today")</span>
-			</a>
+			<p class="pplace__empty">
+				@IconClass("replay", "icon icon-sm", "")
+				<span>@E(NoResultsYet)</span>
+			</p>
 		} else {
 			<ol class="pplace__list">
 				for _, r := range v.Placement {
-					<li class="pplace__item">
-						<p class="pplace__title">
+					<li class="pplace__row">
+						<span class="pplace__date">
 							@E(r.Date)
-							<span aria-hidden="true">{ " · " }</span>
-							@E(r.Kind)
-							if r.Level != "" {
-								<span aria-hidden="true">{ " · " }</span>
-								@E(r.Level)
+							if r.Latest {
+								<span class="pplace__latest">@E(LatestTag)</span>
 							}
-						</p>
-						if r.Detail != "" {
-							<p class="pplace__detail">@E(r.Detail)</p>
-						}
+						</span>
+						<span class="pplace__unit">@E(r.Unit)</span>
+						<span class="pplace__words">@E(r.Words)</span>
 					</li>
 				}
 			</ol>
+			if v.PlacementMore != "" {
+				<a class="pplace__more" href={ templ.SafeURL(v.PlacementMoreHref) }>@E(v.PlacementMore)</a>
+			}
 		}
-		@retakePlacement(v)
 	</section>
-}
-
-// retakePlacement is a normal POST. Progress has no #placement node, so an
-// htmx target there never sends. hx-boost="false" keeps the click off the
-// shell's boosted navigation. The handler returns the full placement page.
-templ retakePlacement(v ProgressView) {
-	<form class="pplace__retake" method="post" action={ templ.SafeURL("/_hx/placement/start") } hx-boost="false">
-		<input type="hidden" name="_csrf" value={ v.CSRF }/>
-		<button type="submit" class="btn btn-primary">@E("Retake placement")</button>
-	</form>
 }

@@ -22,6 +22,7 @@ var cspPages = []string{
 	"/me",
 	"/placement",
 	"/signin",
+	"/welcome",
 }
 
 // cspOtherGETs are learner GET routes that do not render a full page on the

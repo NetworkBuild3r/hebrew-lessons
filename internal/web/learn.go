@@ -45,6 +45,10 @@ type server struct {
 	runs     placementRuns
 	recheck  PlacementEngine
 	bands    learner.BandSource
+	// onboard is the placement-history and IsOnboarded API. Nil leaves the
+	// welcome gate off. storeOnboard gates on IsOnboarded. Tests pass a
+	// *memOnboard.
+	onboard Onboarding
 
 	mu     sync.Mutex
 	queues map[string]*studyQueue

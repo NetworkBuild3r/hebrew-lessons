@@ -450,6 +450,9 @@ func (s *Store) CountPlacementRatings(ctx context.Context, runID int64) (int, er
 // FinishPlacement marks the run finished.
 // An already-finished run returns an error.
 // An empty stop reason is stored as NULL.
+// A v3 run, in this same transaction, stores start_unit and words_known and sets
+// users.onboarded_at when it is still null. A v2 run, including one closed so a
+// v3 run can start, does not.
 func (s *Store) FinishPlacement(ctx context.Context, id int64, finished time.Time, level int, stopReason, resultJSON string) error {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -461,8 +464,9 @@ func (s *Store) FinishPlacement(ctx context.Context, id int64, finished time.Tim
 	}
 	defer tx.Rollback()
 
+	var userID int64
 	var done sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT finished_at FROM placement_runs WHERE id = ?`, id).Scan(&done)
+	err = tx.QueryRowContext(ctx, `SELECT user_id, finished_at FROM placement_runs WHERE id = ?`, id).Scan(&userID, &done)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("db: placement run %d: %w", id, sql.ErrNoRows)
 	}
@@ -473,18 +477,45 @@ func (s *Store) FinishPlacement(ctx context.Context, id int64, finished time.Tim
 		return fmt.Errorf("db: placement run %d is already finished", id)
 	}
 
+	var v3 int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM placement_v3_runs WHERE run_id = ?`, id).Scan(&v3); err != nil {
+		return fmt.Errorf("db: finish placement: %w", err)
+	}
+
 	var stop any
 	if stopReason != "" {
 		stop = stopReason
 	}
-	res, err := tx.ExecContext(ctx, `
-		UPDATE placement_runs
-		SET finished_at = ?, level = ?, stop_reason = ?, result = ?
-		WHERE id = ? AND finished_at IS NULL`,
-		FormatTime(finished), level, stop, resultJSON, id,
-	)
-	if err != nil {
-		return fmt.Errorf("db: finish placement: %w", err)
+	finishedAt := FormatTime(finished)
+	var res sql.Result
+	if v3 > 0 {
+		words, err := knownWordsInRun(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		start, err := suggestedStart(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
+		res, err = tx.ExecContext(ctx, `
+			UPDATE placement_runs
+			SET finished_at = ?, level = ?, stop_reason = ?, result = ?, start_unit = ?, words_known = ?
+			WHERE id = ? AND finished_at IS NULL`,
+			finishedAt, level, stop, resultJSON, start, words, id,
+		)
+		if err != nil {
+			return fmt.Errorf("db: finish placement: %w", err)
+		}
+	} else {
+		res, err = tx.ExecContext(ctx, `
+			UPDATE placement_runs
+			SET finished_at = ?, level = ?, stop_reason = ?, result = ?
+			WHERE id = ? AND finished_at IS NULL`,
+			finishedAt, level, stop, resultJSON, id,
+		)
+		if err != nil {
+			return fmt.Errorf("db: finish placement: %w", err)
+		}
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -493,10 +524,32 @@ func (s *Store) FinishPlacement(ctx context.Context, id int64, finished time.Tim
 	if n == 0 {
 		return fmt.Errorf("db: placement run %d is already finished", id)
 	}
+	if v3 > 0 {
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET onboarded_at = COALESCE(onboarded_at, ?) WHERE id = ?`, finishedAt, userID); err != nil {
+			return fmt.Errorf("db: finish placement: %w", err)
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("db: commit placement: %w", err)
 	}
 	return nil
+}
+
+// knownWordsInRun is how many distinct words v3LexemeTexts counts as known.
+// Learning wins: a word that was also wrong or "I don't know" is not counted.
+// The count is taken once, at finish, on this transaction, and stored.
+func knownWordsInRun(ctx context.Context, q dbQuery, runID int64) (int, error) {
+	texts, err := v3LexemeTexts(ctx, q, runID, []int{Good, Easy})
+	if err != nil {
+		return 0, err
+	}
+	return len(texts), nil
+}
+
+// dbQuery is the part of a connection or a transaction these reads use.
+type dbQuery interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
 // LatestRun returns the learner's newest placement run, finished or not.
@@ -917,6 +970,14 @@ func v3Share(right, wrong, asked int) float64 {
 // learning and is not also known. Learning wins, so a word is never in both
 // lists. Typing is included: a miss there is a production miss.
 func (s *Store) v3LexemeTexts(ctx context.Context, runID int64, ratings []int) ([]string, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	return v3LexemeTexts(ctx, conn, runID, ratings)
+}
+
+func v3LexemeTexts(ctx context.Context, q dbQuery, runID int64, ratings []int) ([]string, error) {
 	wantKnown := false
 	wantLearning := false
 	for _, rating := range ratings {
@@ -926,11 +987,7 @@ func (s *Store) v3LexemeTexts(ctx context.Context, runID int64, ratings []int) (
 			wantLearning = true
 		}
 	}
-	conn, err := s.connOrErr()
-	if err != nil {
-		return nil, err
-	}
-	rows, err := conn.QueryContext(ctx, `
+	rows, err := q.QueryContext(ctx, `
 		SELECT l.text_nfc, i.outcome
 		FROM placement_items AS i
 		JOIN lexemes AS l ON l.id = i.lexeme_id
@@ -1018,7 +1075,11 @@ func (s *Store) suggestedStart(ctx context.Context, userID int64) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	rows, err := conn.QueryContext(ctx, `SELECT position, doc FROM units`)
+	return suggestedStart(ctx, conn, userID)
+}
+
+func suggestedStart(ctx context.Context, q dbQuery, userID int64) (int, error) {
+	rows, err := q.QueryContext(ctx, `SELECT position, doc FROM units`)
 	if err != nil {
 		return 0, fmt.Errorf("db: suggested start: %w", err)
 	}
@@ -1043,7 +1104,7 @@ func (s *Store) suggestedStart(ctx context.Context, userID int64) (int, error) {
 	if len(units) == 0 {
 		return 0, nil
 	}
-	known, err := s.knownTexts(ctx, userID)
+	known, err := knownTexts(ctx, q, userID)
 	if err != nil {
 		return 0, err
 	}
@@ -1069,12 +1130,8 @@ func (s *Store) suggestedStart(ctx context.Context, userID int64) (int, error) {
 }
 
 // knownTexts is the pointed NFC text of the KnownLexemeIDs union.
-func (s *Store) knownTexts(ctx context.Context, userID int64) (map[string]struct{}, error) {
-	conn, err := s.connOrErr()
-	if err != nil {
-		return nil, err
-	}
-	rows, err := conn.QueryContext(ctx, `
+func knownTexts(ctx context.Context, q dbQuery, userID int64) (map[string]struct{}, error) {
+	rows, err := q.QueryContext(ctx, `
 		SELECT l.text_nfc
 		FROM lexemes AS l
 		WHERE l.id IN (

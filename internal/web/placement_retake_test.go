@@ -16,11 +16,10 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 )
 
-// TestRetakePlacement is the Progress button. The two finished runs are the
-// fixture: an earlier placement and a later retake, with different levels and
-// finish times. The page, Today, LatestPlacement, and the deck's Latest all
-// name the later one. Posting the button opens another run and leaves the
-// finished rows as they were.
+// TestRetakePlacement is two finished runs: an earlier placement and a later
+// retake, with different levels and finish times. The page, Today,
+// LatestPlacement, and the deck's Latest all name the later one. Posting
+// /_hx/placement/start opens another run and leaves the finished rows as they were.
 func TestRetakePlacement(t *testing.T) {
 	const (
 		firstLevel  = 2
@@ -30,8 +29,6 @@ func TestRetakePlacement(t *testing.T) {
 	)
 	firstAt := time.Date(2026, 8, 2, 9, 0, 0, 0, time.UTC)
 	retakeAt := time.Date(2026, 10, 2, 15, 30, 0, 0, time.UTC)
-	wantDetail := "Listening level " + strconv.Itoa(retakeLevel) + ", about " + strconv.Itoa(retakeWords) + " words"
-	wantOlder := "Listening level " + strconv.Itoa(firstLevel) + ", about " + strconv.Itoa(firstWords) + " words"
 	wantAt := db.FormatTime(retakeAt)
 
 	h, store, user, _ := newPlacementRouter(t)
@@ -41,33 +38,22 @@ func TestRetakePlacement(t *testing.T) {
 	retakeID := finishV3(t, store, user.id, retakeAt, retakeLevel, retakeWords)
 
 	body := getPlaced(t, h, user, "/progress")
-	form := retakeForm(t, body)
-	for _, want := range []string{
-		`method="post"`,
-		`action="/_hx/placement/start"`,
-		`hx-boost="false"`,
-		`name="_csrf" value="` + user.csrf + `"`,
-		`class="btn btn-primary"`,
-		"Retake placement",
-	} {
-		if !strings.Contains(form, want) {
-			t.Errorf("retake form missing %s:\n%s", want, form)
-		}
-	}
-	if strings.Contains(form, "hx-post") || strings.Contains(form, "hx-target") {
-		t.Errorf("retake form still targets an htmx node:\n%s", form)
-	}
-
 	card := section(t, body, "c-card pplace", "")
-	items := placementItems(t, card)
+	if !strings.Contains(card, `href="/placement"`) || !strings.Contains(card, "Retake placement") {
+		t.Fatalf("placement card missing the quiet retake link:\n%s", card)
+	}
+	if strings.Contains(card, `action="/_hx/placement/start"`) || strings.Contains(card, "btn-primary") {
+		t.Fatalf("placement card still has the old retake button:\n%s", card)
+	}
+	items := strings.Split(card, `<li class="pplace__row">`)[1:]
 	if len(items) < 2 {
 		t.Fatalf("%d placement rows, want the two finished runs:\n%s", len(items), card)
 	}
-	if !strings.Contains(items[0], "Oct 2") || !strings.Contains(items[0], wantDetail) || strings.Contains(items[0], wantOlder) {
-		t.Fatalf("newest placement row, want %s:\n%s", wantDetail, items[0])
+	if !strings.Contains(items[0], "Oct 2") || !strings.Contains(items[0], "Latest") || strings.Contains(items[0], "Aug 2") {
+		t.Fatalf("newest placement row:\n%s", items[0])
 	}
-	if !strings.Contains(items[1], "Aug 2") || !strings.Contains(items[1], wantOlder) {
-		t.Fatalf("older placement row, want %s:\n%s", wantOlder, items[1])
+	if !strings.Contains(items[1], "Aug 2") || strings.Contains(items[1], "Latest") {
+		t.Fatalf("older placement row:\n%s", items[1])
 	}
 
 	today := getPlaced(t, h, user, "/")
@@ -143,29 +129,6 @@ func getPlaced(t *testing.T, h http.Handler, user placedUser, path string) strin
 		t.Fatalf("GET %s = %d\n%s", path, rec.Code, rec.Body.String())
 	}
 	return rec.Body.String()
-}
-
-func retakeForm(t *testing.T, body string) string {
-	t.Helper()
-	const action = `action="/_hx/placement/start"`
-	i := strings.Index(body, action)
-	if i < 0 {
-		t.Fatalf("no retake form:\n%s", body)
-	}
-	start := strings.LastIndex(body[:i], "<form")
-	if start < 0 {
-		t.Fatalf("retake action is not in a form:\n%s", body)
-	}
-	end := strings.Index(body[start:], "</form>")
-	if end < 0 {
-		t.Fatalf("retake form is not closed:\n%s", body[start:])
-	}
-	return body[start : start+end]
-}
-
-func placementItems(t *testing.T, card string) []string {
-	t.Helper()
-	return strings.Split(card, `<li class="pplace__item">`)[1:]
 }
 
 func finishedRunText(t *testing.T, store *db.Store, id int64) string {

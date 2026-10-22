@@ -131,7 +131,9 @@ func seedProgressLearner(t *testing.T, store *db.Store, clk clock.Clock, email, 
 		l.user.ID, db.FormatTime(progNow), l.user.ID, db.FormatTime(progNow)); err != nil {
 		t.Fatal(err)
 	}
-	// Placement: an initial v3 run and a check-in, and a v2 run.
+	// Placement: an initial v3 run and a check-in. Finish stores start_unit and
+	// words_known from the run, not the JSON estimate. This fixture has no
+	// units and no rated items, so both columns are 0.
 	ctx := context.Background()
 	first, err := store.StartPlacementV3(ctx, l.user.ID, progNow.AddDate(0, 0, -44), 1, "initial", "", 0)
 	if err != nil {
@@ -478,13 +480,25 @@ func TestNoSnapshotsShowsTheEmptyStateAndNoChart(t *testing.T) {
 			t.Errorf("the empty page has no %q", want)
 		}
 	}
-	for _, bad := range []string{`<svg class="pc `, `data-chart=`, `class="ptabs"`, "pweek", "pplace"} {
+	for _, bad := range []string{`<svg class="pc `, `data-chart=`, `class="ptabs"`, "pweek"} {
 		if strings.Contains(body, bad) {
 			t.Errorf("the empty page still has %q", bad)
 		}
 	}
 	if m := brokenChart.FindString(body); m != "" {
 		t.Errorf("broken chart text %q", m)
+	}
+	card := section(t, body, "c-card pplace", "")
+	for _, want := range []string{"Placement", "Not placed yet", "Take placement", `href="/placement"`, "No results yet."} {
+		if !strings.Contains(card, want) {
+			t.Errorf("the empty page's level card has no %q:\n%s", want, card)
+		}
+	}
+	if strings.Contains(card, "Your level") || strings.Contains(card, "Re-check my level") || strings.Contains(card, "Retaking won’t erase") || strings.Contains(card, "Retake placement") || strings.Contains(card, "Show all") {
+		t.Errorf("the empty level card offers a retake:\n%s", card)
+	}
+	if strings.Index(body, "progress-empty") > strings.Index(body, "c-card pplace") {
+		t.Error("the placement card is above the empty state")
 	}
 }
 
@@ -648,27 +662,27 @@ func TestPlacementHistoryListsEachRunWithItsLevels(t *testing.T) {
 	_, _, _, _, get := progressApp(t)
 	body := get("/progress")
 	card := section(t, body, "c-card pplace", "")
-	items := regexp.MustCompile(`(?s)<li class="pplace__item">.*?</li>`).FindAllString(card, -1)
+	items := regexp.MustCompile(`(?s)<li class="pplace__row">.*?</li>`).FindAllString(card, -1)
 	if len(items) != 2 {
 		t.Fatalf("%d placement rows, want 2:\n%s", len(items), card)
 	}
 	check, first := items[0], items[1] // newest first
-	for _, w := range []string{"Sep 4", "Oct 2", "Check-in", "First placement"} {
+	for _, w := range []string{"Sep 4", "Oct 2", "Past results", "Retake placement", "Unit 0", "Latest", "Retaking won’t erase anything you’ve learned.", "0 words", "Placed Oct 2", "Placement"} {
 		if !strings.Contains(card, w) {
 			t.Errorf("no %q", w)
 		}
 	}
-	if !strings.Contains(check, "Oct 2") || !strings.Contains(check, "Check-in") || !strings.Contains(check, "Listening level 3, about 164 words") || strings.Contains(check, "Reading") {
-		t.Errorf("check-in row:\n%s", check)
+	if strings.Contains(card, "Show all") || strings.Contains(card, "Your level") || strings.Contains(card, "Re-check my level") || strings.Contains(card, "Unit 0:") || strings.Contains(card, "164 words") || strings.Contains(card, "142 words") || strings.Contains(card, "Unit 3") {
+		t.Error("the card shows Show all, the old title, a unit name, or the JSON estimate")
 	}
-	if !strings.Contains(first, "Sep 4") || !strings.Contains(first, "First placement") || !strings.Contains(first, "Listening level 3, about 142 words") || !strings.Contains(first, "Reading level 2, about 90 words") {
-		t.Errorf("first placement row:\n%s", first)
+	if strings.Index(body, `class="c-card pknow"`) > strings.Index(body, `class="c-card pplace"`) || strings.Index(body, `class="c-card pplace"`) > strings.Index(body, `data-chart="est"`) {
+		t.Error("the placement card is not after the skills overview")
 	}
-	if got := placementTitle(t, check); got != "Oct 2 · Check-in" {
-		t.Errorf("check-in title %q", got)
+	if !strings.Contains(check, "Oct 2") || !strings.Contains(check, "Latest") || !strings.Contains(check, "Unit 0") || !strings.Contains(check, "0 words") {
+		t.Errorf("newest row:\n%s", check)
 	}
-	if got := placementTitle(t, first); got != "Sep 4 · First placement" {
-		t.Errorf("first placement title %q", got)
+	if strings.Contains(first, "Latest") || !strings.Contains(first, "Sep 4") || !strings.Contains(first, "Unit 0") || !strings.Contains(first, "0 words") {
+		t.Errorf("older row:\n%s", first)
 	}
 }
 
@@ -679,8 +693,11 @@ func TestPlacementHistoryEmptyStateSaysWhatToDo(t *testing.T) {
 	seedLexicon(t, store, progNow, 3, false, true)
 	seedProgressSnapshots(t, store, l.user.ID, 90, progEst)
 	card := section(t, getLearner(t, h, l, "/progress"), "c-card pplace", "")
-	if !strings.Contains(card, "No placement yet. Take the placement check from Today") || !strings.Contains(card, `href="/"`) {
+	if !strings.Contains(card, "Not placed yet") || !strings.Contains(card, "Take placement") || !strings.Contains(card, `href="/placement"`) || !strings.Contains(card, "No results yet.") {
 		t.Errorf("placement empty state:\n%s", card)
+	}
+	if strings.Contains(card, "Retaking won’t erase") || strings.Contains(card, "Retake placement") {
+		t.Error("an unplaced learner sees the retake line")
 	}
 }
 
@@ -860,71 +877,32 @@ func TestProgressHidesLessonsWhenNoneExist(t *testing.T) {
 	}
 }
 
-func TestPlacementUnfinishedLevelSaysNotFinished(t *testing.T) {
-	store, l, _, _, get := progressApp(t)
-	// Dates and levels are the fixture. Oct 19 is the unfinished run.
-	unfinishedAt := time.Date(2026, 10, 19, 15, 0, 0, 0, time.UTC)
-	levelAt := time.Date(2026, 9, 3, 15, 0, 0, 0, time.UTC)
-	zeroAt := time.Date(2026, 8, 2, 15, 0, 0, 0, time.UTC)
-	const normalLevel = 4
-	insertPlacementLevel(t, store, l.user.ID, unfinishedAt, -1)
-	insertPlacementLevel(t, store, l.user.ID, levelAt, normalLevel)
-	insertPlacementLevel(t, store, l.user.ID, zeroAt, 0)
-	card := section(t, get("/progress"), "c-card pplace", "")
-	items := regexp.MustCompile(`(?s)<li class="pplace__item">.*?</li>`).FindAllString(card, -1)
-	row := func(date string) string {
-		t.Helper()
-		for _, item := range items {
-			if strings.Contains(item, date) {
-				return item
-			}
+func TestPlacementV2FinishShowsStoredUnitNotTheLevelColumn(t *testing.T) {
+	clk := fixedClock(progNow)
+	store, h := openShell(t, clk, nil, nil)
+	l := addLearner(t, store, "a@example.com", "sub-a", progNow)
+	// A v2 finish stores level and leaves start_unit and words_known null.
+	// The card reads those columns, so every row is Unit 0 and 0 words.
+	// The level column is not printed as "Not finished" or "Level N".
+	insertPlacementLevel(t, store, l.user.ID, time.Date(2026, 10, 19, 15, 0, 0, 0, time.UTC), -1)
+	insertPlacementLevel(t, store, l.user.ID, time.Date(2026, 9, 3, 15, 0, 0, 0, time.UTC), 4)
+	insertPlacementLevel(t, store, l.user.ID, time.Date(2026, 8, 2, 15, 0, 0, 0, time.UTC), 0)
+	card := section(t, getLearner(t, h, l, "/progress"), "c-card pplace", "")
+	items := regexp.MustCompile(`(?s)<li class="pplace__row">.*?</li>`).FindAllString(card, -1)
+	if len(items) != 3 {
+		t.Fatalf("%d rows, want 3:\n%s", len(items), card)
+	}
+	for _, date := range []string{"Oct 19", "Sep 3", "Aug 2"} {
+		if !strings.Contains(card, date) {
+			t.Fatalf("card missing %s:\n%s", date, card)
 		}
-		t.Fatalf("no placement row %s:\n%s", date, card)
-		return ""
 	}
-	unfinished := row("Oct 19")
-	if got := placementTitle(t, unfinished); got != "Oct 19 · Placement · Not finished" {
-		t.Fatalf("unfinished placement title %q", got)
+	if !strings.Contains(items[0], "Oct 19") || !strings.Contains(items[0], "Latest") || !strings.Contains(items[0], "Unit 0") || !strings.Contains(items[0], "0 words") {
+		t.Fatalf("newest row:\n%s", items[0])
 	}
-	normal := row("Sep 3")
-	if got := placementTitle(t, normal); got != "Sep 3 · Placement · Level "+strconv.Itoa(normalLevel) {
-		t.Fatalf("finished placement title %q", got)
+	if strings.Contains(card, "Not finished") || strings.Contains(card, "Level 4") || strings.Contains(card, "Level 0") {
+		t.Fatalf("the level column is on the card:\n%s", card)
 	}
-	zero := row("Aug 2")
-	if got := placementTitle(t, zero); got != "Aug 2 · Placement · Level 0" {
-		t.Fatalf("level 0 placement title %q", got)
-	}
-}
-
-// placementTitle is the visible title of one history row, with the tags removed.
-func placementTitle(t *testing.T, item string) string {
-	t.Helper()
-	const open = `<p class="pplace__title">`
-	i := strings.Index(item, open)
-	if i < 0 {
-		t.Fatalf("no placement title:\n%s", item)
-	}
-	rest := item[i+len(open):]
-	j := strings.Index(rest, "</p>")
-	if j < 0 {
-		t.Fatalf("placement title is not closed:\n%s", item)
-	}
-	inner := rest[:j]
-	var b strings.Builder
-	for {
-		start := strings.IndexByte(inner, '<')
-		if start < 0 {
-			b.WriteString(inner)
-			break
-		}
-		b.WriteString(inner[:start])
-		end := strings.IndexByte(inner[start:], '>')
-		if end < 0 {
-			t.Fatalf("unclosed tag in placement title:\n%s", item)
-		}
-		inner = inner[start+end+1:]
-	}
-	return b.String()
 }
 
 func insertPlacementLevel(t *testing.T, store *db.Store, userID int64, at time.Time, level int) {

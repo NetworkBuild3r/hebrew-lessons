@@ -2,10 +2,10 @@ package web
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,10 +35,11 @@ const (
 	backWindowDays = 28
 	// eventCap is the most regression events one page reads.
 	eventCap = 200
-	// slippedMax, backMax, and placementMax cap the lists on the page.
-	slippedMax   = 8
-	backMax      = 6
-	placementMax = 6
+	// slippedMax, backMax, and placementPageMax cap the lists on the page.
+	// History shows three rows; the rest are on /progress/placements.
+	slippedMax       = 8
+	backMax          = 6
+	placementPageMax = 3
 
 	// retentionBandHigh is the top of the retention target band. The bottom is the session target,
 	// sessionlimits.TargetSuccess (85%). The band is 85 to 90%.
@@ -74,10 +75,13 @@ func (s *server) serveProgress(w http.ResponseWriter, r *http.Request, secure bo
 	ui := views.UIFor(lang, gender)
 	skill := chooseSkill(r.URL.Query().Get("skill"))
 	v := views.ProgressView{
-		Page:      views.Page{UI: ui, Title: ui.DocTitle("progress"), CSRF: csrf, Current: "progress"},
-		Empty:     true,
-		Skill:     skill,
-		SkillName: views.SkillLabel(skill),
+		Page:            views.Page{UI: ui, Title: ui.DocTitle("progress"), CSRF: csrf, Current: "progress"},
+		Empty:           true,
+		Skill:           skill,
+		SkillName:       views.SkillLabel(skill),
+		PlacementStatus: views.PlacedNone,
+		PlacementLink:   views.LinkTake,
+		PlacementAll:    r.URL.Path == "/progress/placements",
 	}
 	for _, sk := range learner.Skills {
 		v.Tabs = append(v.Tabs, views.SkillTab{Skill: sk, Label: skillTabLabels[sk], Current: sk == skill})
@@ -219,6 +223,11 @@ func (s *server) fillProgress(ctx context.Context, userID int64, v *views.Progre
 		}
 	}
 	v.Empty = len(days) == 0 && seen == 0 && v.Weekly == nil
+	// The level card is on the empty page too: a learner who started from
+	// the basics has no chart yet and still needs Take placement.
+	if err := s.fillPlacementHistory(ctx, userID, v, now); err != nil {
+		return err
+	}
 	if v.Empty {
 		return nil
 	}
@@ -227,7 +236,7 @@ func (s *server) fillProgress(ctx context.Context, userID int64, v *views.Progre
 	if err := s.fillWeek(ctx, userID, v, days, ref); err != nil {
 		return err
 	}
-	return s.fillPlacementHistory(ctx, userID, v, now)
+	return nil
 }
 
 // fillSkillPanel fills the bar from the learner model now, and the two line charts from the
@@ -477,71 +486,75 @@ func (s *server) weekWord(ctx context.Context, e db.RegressionRow) (views.WeekWo
 	return w, nil
 }
 
-// placementResult is the part of placement_runs.result this page reads. A v2 run has no
-// listening or reading.
-type placementResult struct {
-	EstimatedKnownWords int `json:"estimated_known_words"`
-	Listening           *struct {
-		Tested   bool `json:"tested"`
-		Level    int  `json:"level"`
-		Estimate int  `json:"estimate"`
-	} `json:"listening"`
-	Reading *struct {
-		Tested   bool `json:"tested"`
-		Level    int  `json:"level"`
-		Estimate int  `json:"estimate"`
-	} `json:"reading"`
-}
-
-// fillPlacementHistory fills the placement history: each finished run or check-in, newest first,
-// with the level it found in each skill it tested.
+// fillPlacementHistory fills the placement card from Onboarding. Finished
+// runs only, newest first, three on this page unless the path is the full
+// list. The status line is "Unit {n}: {title}" with "Placed {Mon d}" under
+// it. Each history row is the date, "Unit {n}", and "{n} words". A negative
+// StartUnit (a legacy row whose level column is null) has no "Unit {n}" text.
 func (s *server) fillPlacementHistory(ctx context.Context, userID int64, v *views.ProgressView, now time.Time) error {
-	runs, err := s.store.PlacementHistory(ctx, userID, placementMax)
+	if s.onboard == nil {
+		return nil
+	}
+	all := v.PlacementAll
+	limit := placementPageMax
+	if all {
+		limit = 0
+	}
+	total, err := s.onboard.PlacementHistoryCount(ctx, userID)
 	if err != nil {
 		return err
 	}
-	for _, r := range runs {
-		row := views.PlacementRow{Date: dateText(r.FinishedAt, now), Kind: "Placement"}
-		switch r.Kind {
-		case "initial":
-			row.Kind = "First placement"
-		case "recheck":
-			row.Kind = "Check-in"
+	runs, err := s.onboard.PlacementHistory(ctx, userID, limit)
+	if err != nil {
+		return err
+	}
+	v.PlacementTotal = total
+	v.PlacementAll = all
+	v.Placed = total > 0
+	if v.Placed && len(runs) > 0 {
+		v.PlacementLink = views.LinkRetake
+		v.PlacementKeep = views.RetakeKeep
+		newest := runs[0]
+		when := dateText(newest.FinishedAt, now)
+		if newest.StartUnit >= 0 {
+			v.PlacementStatus = views.UnitLabel(newest.StartUnit, newest.StartUnitTitle)
+			v.PlacementWhen = views.PlacedOn(when)
+		} else {
+			v.PlacementStatus = views.PlacedOn(when)
 		}
-		var res placementResult
-		if r.Result != "" {
-			_ = json.Unmarshal([]byte(r.Result), &res)
+	} else {
+		v.PlacementStatus = views.PlacedNone
+		v.PlacementWhen = ""
+		v.PlacementLink = views.LinkTake
+		v.PlacementKeep = ""
+	}
+	for i, run := range runs {
+		row := views.PlacementRow{Date: dateText(run.FinishedAt, now), Latest: i == 0}
+		if run.StartUnit >= 0 {
+			row.Unit = views.UnitLabel(run.StartUnit, "")
 		}
-		var parts []string
-		skill := func(label string, tested bool, level, estimate int) {
-			if !tested {
-				return
-			}
-			p := label
-			if level > 0 {
-				p += " level " + strconv.Itoa(level)
-			}
-			parts = append(parts, p+", about "+views.CountText(estimate, "word", "words"))
-		}
-		if res.Listening != nil {
-			skill("Listening", res.Listening.Tested, res.Listening.Level, res.Listening.Estimate)
-		}
-		if res.Reading != nil {
-			skill("Reading", res.Reading.Tested, res.Reading.Level, res.Reading.Estimate)
-		}
-		switch {
-		case r.Level < 0:
-			row.Level = "Not finished"
-		case r.Kind == "":
-			row.Level = "Level " + strconv.Itoa(r.Level)
-		}
-		if res.EstimatedKnownWords > 0 && len(parts) == 0 {
-			parts = append(parts, "about "+views.CountText(res.EstimatedKnownWords, "word", "words")+" known")
-		}
-		row.Detail = strings.Join(parts, " · ")
+		row.Words = views.WordsKnownLabel(run.WordsKnown)
 		v.Placement = append(v.Placement, row)
 	}
+	if !all && total > placementPageMax {
+		v.PlacementMore = views.ShowAllLabel(total)
+		v.PlacementMoreHref = placementMoreHref(v.Lang, v.Skill)
+	}
 	return nil
+}
+
+func placementMoreHref(lang, skill string) string {
+	q := url.Values{}
+	if lang == "he" {
+		q.Set("lang", "he")
+	}
+	if skill != "" {
+		q.Set("skill", skill)
+	}
+	if len(q) == 0 {
+		return "/progress/placements"
+	}
+	return "/progress/placements?" + q.Encode()
 }
 
 // dateText is "Oct 2", with the year when it is not this year.

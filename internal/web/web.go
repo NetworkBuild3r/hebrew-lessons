@@ -66,6 +66,10 @@ type Options struct {
 	// Placement is the placement engine, for the check-in on Today. Nil leaves the
 	// check-in off. See PlacementEngine.
 	Placement PlacementEngine
+	// Onboard is the welcome gate and the Progress placement history.
+	// Nil with a Store uses storeOnboard, which gates on IsOnboarded.
+	// Tests pass a *memOnboard, or storeOnboard when they want the real store.
+	Onboard Onboarding
 	// study replaces the review session service. It is for tests in this package.
 	study *session.Service
 	// bands replaces where the learner model gets placement bands. For tests.
@@ -130,6 +134,16 @@ func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.
 	srv.runs = opts.Runs
 	srv.recheck = opts.Placement
 	srv.bands = opts.bands
+	if opts.Onboard != nil {
+		srv.onboard = opts.Onboard
+	} else if opts.Store != nil {
+		srv.onboard = storeOnboard{opts.Store}
+		// testOnboard is nil outside tests. It lets page tests render
+		// without turning the production gate off.
+		if testOnboard != nil {
+			srv.onboard = testOnboard(opts.Store)
+		}
+	}
 	mux := srv.routes(health, tokens, sessions != nil, secure)
 	if sessions != nil {
 		sessions.Register(mux)
@@ -158,26 +172,35 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
 	play := player{store: s.store, audioDir: s.audioDir, voices: s.voices}
-	mux.HandleFunc("GET /{$}", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /{$}", gated(gate, secure, s.welcomeGate(func(w http.ResponseWriter, r *http.Request) {
 		s.serveHome(w, r, secure, csrfValue(tokens, r))
-	}))
-	review := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+	})))
+	review := gated(gate, secure, s.welcomeGate(func(w http.ResponseWriter, r *http.Request) {
 		s.serveReview(w, r, secure, csrfValue(tokens, r))
-	})
-	progress := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+	}))
+	progress := gated(gate, secure, s.welcomeGate(func(w http.ResponseWriter, r *http.Request) {
 		s.serveProgress(w, r, secure, csrfValue(tokens, r))
-	})
-	lesson := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+	}))
+	lesson := gated(gate, secure, s.welcomeGate(func(w http.ResponseWriter, r *http.Request) {
 		play.lessonIndex(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
-	})
-	lessonAt := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+	}))
+	lessonAt := gated(gate, secure, s.welcomeGate(func(w http.ResponseWriter, r *http.Request) {
 		play.lessonAt(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
-	})
+	}))
 	lessonPost := gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
 		play.lessonSubmit(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
 	})
+	mux.HandleFunc("GET /welcome", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+		s.serveWelcome(w, r, secure, csrfValue(tokens, r))
+	}))
+	mux.HandleFunc("POST /onboarding/basics", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+		s.postBasics(w, r, secure, csrfValue(tokens, r))
+	}))
 	mux.HandleFunc("GET /review", review)
 	mux.HandleFunc("GET /progress", progress)
+	mux.HandleFunc("GET /progress/placements", gated(gate, secure, s.welcomeGate(func(w http.ResponseWriter, r *http.Request) {
+		s.serveProgress(w, r, secure, csrfValue(tokens, r))
+	})))
 	mux.HandleFunc("GET /lesson", lesson)
 	mux.HandleFunc("GET /lesson/{unitID}/{lessonIx}", lessonAt)
 	mux.HandleFunc("POST /lesson/{unitID}/{lessonIx}", lessonPost)

@@ -75,6 +75,9 @@ func TestPublishedRevisionServesWithoutTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The welcome gate sends a learner with no lesson attempt to /welcome.
+	// This check is about the published lesson, so the learner has already started.
+	noteLessonAttempt(t, store, user.ID)
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
 		t.Fatal(err)
@@ -255,6 +258,7 @@ func TestOlderRevisionWithNoTargetCannotPublish(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	noteLessonAttempt(t, store, user.ID)
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
 		t.Fatal(err)
@@ -271,6 +275,27 @@ func TestOlderRevisionWithNoTargetCannotPublish(t *testing.T) {
 	a.Web().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), gar) || !strings.Contains(rec.Body.String(), ani) {
 		t.Fatalf("current published revision did not serve %d\n%s", rec.Code, rec.Body.String())
+	}
+}
+
+// noteLessonAttempt records one lesson-source attempt so the welcome gate,
+// which is HasLessonAttempt until *db.Store.IsOnboarded lands, lets this
+// learner open the lesson. It does not start a lesson_run.
+func noteLessonAttempt(t *testing.T, store *db.Store, userID int64) {
+	t.Helper()
+	conn, err := store.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lexID int64
+	if err := conn.QueryRowContext(context.Background(), `SELECT id FROM lexemes LIMIT 1`).Scan(&lexID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ExecContext(context.Background(), `INSERT INTO attempts (
+		user_id, lexeme_id, skill, activity, source, prompt, response, correct, dont_know, hint_used, latency_ms, created_at
+	) VALUES (?, ?, 'read', 'pick', 'lesson', 'p', 'r', 1, 0, 0, 10, ?)`,
+		userID, lexID, db.FormatTime(time.Now().UTC())); err != nil {
+		t.Fatal(err)
 	}
 }
 

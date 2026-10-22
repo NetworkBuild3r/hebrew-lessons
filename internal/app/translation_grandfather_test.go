@@ -74,6 +74,9 @@ func TestPublishedRevisionServesWithoutTranslation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The welcome gate sends a learner with no lesson attempt to /welcome.
+	// This check is about the published lesson, so the learner has already started.
+	noteLessonAttempt(t, store, user.ID)
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
 		t.Fatal(err)

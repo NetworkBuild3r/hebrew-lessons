@@ -218,8 +218,9 @@ func TestChooseTodayAction(t *testing.T) {
 		in   TodayInputs
 		want views.TodayAction
 	}{
-		{"open placement resumes", TodayInputs{PlacementActive: true, LessonInProgress: true, CheckinDue: true, Due: 9, HasLesson: true}, views.ActionResumePlacement},
-		{"no placement starts one", TodayInputs{PlacementNever: true, LessonInProgress: true, CheckinDue: true, Due: 9, HasLesson: true}, views.ActionStartPlacement},
+		{"an open placement does not outrank a lesson", TodayInputs{PlacementActive: true, LessonInProgress: true, CheckinDue: true, Due: 9, HasLesson: true}, views.ActionContinueLesson},
+		{"never placed does not outrank a lesson", TodayInputs{PlacementNever: true, LessonInProgress: true, CheckinDue: true, Due: 9, HasLesson: true}, views.ActionContinueLesson},
+		{"placement alone is not a Today action", TodayInputs{PlacementActive: true, PlacementNever: true}, views.ActionNone},
 		{"a lesson in progress continues", TodayInputs{LessonInProgress: true, Due: 9, HasLesson: true}, views.ActionContinueLesson},
 		{"the check-in never outranks a lesson in progress", TodayInputs{LessonInProgress: true, CheckinDue: true, Due: 9, HasLesson: true}, views.ActionContinueLesson},
 		{"the check-in outranks reviews", TodayInputs{CheckinDue: true, Due: 9, HasLesson: true}, views.ActionCheckin},
@@ -248,15 +249,6 @@ func TestTodayStatesRenderOneGoldAction(t *testing.T) {
 	}
 	var lessonLink string
 	states := []state{
-		{
-			name: "resume placement", action: "resume_placement", target: `href="/placement"`,
-			setup: func(store *db.Store, l learnerFix) {
-				if _, err := store.InsertPlacementRun(ctx, l.user.ID, now, 1); err != nil {
-					t.Fatal(err)
-				}
-			},
-		},
-		{name: "start placement", action: "start_placement", target: `href="/placement"`, setup: func(*db.Store, learnerFix) {}},
 		{
 			name: "continue a lesson", action: "continue_lesson",
 			setup: func(store *db.Store, l learnerFix) {
@@ -1060,13 +1052,13 @@ func TestTodayHebrewShellKeepsDirections(t *testing.T) {
 	store, h := openShell(t, fixedClock(now), nil, nil)
 	l := addLearner(t, store, "a@example.com", "sub-a", now)
 	body := getLearner(t, h, l, "/?lang=he")
-	if !strings.Contains(body, `<html lang="he" dir="rtl"`) || !strings.Contains(body, `href="/placement?lang=he"`) {
+	if !strings.Contains(body, `<html lang="he" dir="rtl"`) || !strings.Contains(body, "הַיּוֹם") {
 		t.Fatal("the Hebrew shell lost its language")
 	}
 	if n := assertRunDir(t, body, "en", "ltr"); n == 0 {
 		t.Fatal("no isolated English runs on the Hebrew Today")
 	}
-	if !strings.Contains(body, "בְּדִיקַת רָמָה") {
-		t.Fatal("the placement action has no Hebrew title")
+	if strings.Contains(body, `href="/placement`) || strings.Contains(body, "בְּדִיקַת רָמָה") || strings.Contains(body, "Take the placement check") {
+		t.Fatal("Today still offers placement")
 	}
 }

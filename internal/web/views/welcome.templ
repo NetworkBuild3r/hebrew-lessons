@@ -1,0 +1,81 @@
+package views
+
+// Welcome is the first-run choice. It is not the app shell: the dock would
+// link back to routes that send the learner here again. Both choices work
+// with no script. The gold line is a span inside the card link, never a
+// button inside an anchor.
+templ Welcome(p Page) {
+	<!DOCTYPE html>
+	<html lang={ p.Lang } dir={ p.Dir } translate="no">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+			<meta name="csrf-token" content={ p.CSRF }/>
+			<script src="/static/js/theme.js"></script>
+			<link rel="stylesheet" href="/static/css/tokens.css"/>
+			<link rel="stylesheet" href="/static/css/base.css"/>
+			<link rel="stylesheet" href="/static/css/components.css"/>
+			@brandHead()
+			<link rel="stylesheet" href="/static/css/welcome.css"/>
+			<title>{ p.Title }</title>
+		</head>
+		<body class="welcome-body">
+			<main id="main" class="welcome">
+				<div class="welcome__spacer" aria-hidden="true"></div>
+				<div class="welcome__mark" aria-hidden="true">
+					@BrandMark()
+				</div>
+				<div class="welcome__intro">
+					<h1 class="welcome__title">{ WelcomeTitle }</h1>
+					<p class="welcome__lede">{ WelcomeLede }</p>
+				</div>
+				<div class="welcome__choices">
+					<a class="choice-card choice-card--primary" href={ templ.SafeURL(p.Href("/placement")) }>
+						<span class="choice-card__head">
+							<span class="choice-tile choice-tile--lamp" aria-hidden="true">
+								@Icon("spark", "")
+							</span>
+							<span class="choice-card__text">
+								<span class="choice-card__title">{ ChoiceFindTitle }</span>
+								<span class="choice-card__body">{ ChoiceFindBody }</span>
+							</span>
+						</span>
+						<span class="choice-meta">
+							for _, item := range WelcomeMeta {
+								<span class="choice-meta__item">
+									if item == "Listening" {
+										@IconClass("sound", "icon icon-sm", "")
+									} else {
+										@IconClass("book", "icon icon-sm", "")
+									}
+									<span>{ item }</span>
+								</span>
+							}
+						</span>
+						<span class="choice-cta">
+							<span>{ ChoiceFindCTA }</span>
+							@IconClass("arrow-right", "icon icon-sm icon-directional", "")
+						</span>
+					</a>
+					<form method="post" action="/onboarding/basics" hx-boost="false">
+						<input type="hidden" name="_csrf" value={ p.CSRF }/>
+						<button type="submit" class="choice-card choice-card--quiet">
+							<span class="choice-tile choice-tile--soft" aria-hidden="true">
+								<span class="choice-tile__letter" lang="he">א</span>
+							</span>
+							<span class="choice-card__text">
+								<span class="choice-card__title choice-card__title--quiet">{ ChoiceBasicsTitle }</span>
+								<span class="choice-card__body choice-card__body--quiet">{ ChoiceBasicsBody }</span>
+							</span>
+							@IconClass("arrow-right", "icon icon-sm icon-directional", "")
+						</button>
+					</form>
+				</div>
+				<p class="welcome__note">
+					@IconClass("chart", "icon icon-sm", "")
+					<span>{ WelcomeNote }</span>
+				</p>
+			</main>
+		</body>
+	</html>
+}

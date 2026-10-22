@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
@@ -72,7 +73,89 @@ func (h *placementHTTP) resultsView(w http.ResponseWriter, r *http.Request, res 
 	v := h.base(w, r, views.PlaceResults, res.RunID)
 	v.Page.Title = "Your starting point · " + views.AppName
 	v.Result = resultView(res)
+	h.fillResultPath(r, v.Result, res)
 	return v
+}
+
+// fillResultPath sets the unit title, the start link, and the path rows from
+// published units already in the store. An empty title stays empty: the
+// headline is then "You’re starting at Unit {n}" with no ": {name}".
+func (h *placementHTTP) fillResultPath(r *http.Request, out *views.PlaceResultView, res placement.RunResult) {
+	if out == nil {
+		return
+	}
+	out.StartHref = "/"
+	if out.LettersFirst || out.KnewNothing {
+		// The letters-failed headline stays. Knew-nothing stays "Let’s start
+		// from the basics". The start link still opens the first unit when
+		// one is published.
+	}
+	store, ok := h.runs.(*db.Store)
+	if !ok || store == nil {
+		if !out.LettersFirst && !out.KnewNothing {
+			out.Headline = views.ResultHeadline(res.StartUnit, "")
+		}
+		return
+	}
+	user, _ := auth.CurrentUser(r.Context())
+	if user == nil {
+		if !out.LettersFirst && !out.KnewNothing {
+			out.Headline = views.ResultHeadline(res.StartUnit, "")
+		}
+		return
+	}
+	units, err := store.UnitsInScope(r.Context(), user.ID)
+	if err != nil {
+		if !out.LettersFirst && !out.KnewNothing {
+			out.Headline = views.ResultHeadline(res.StartUnit, "")
+		}
+		return
+	}
+	start := res.StartUnit
+	if start == 0 {
+		if place, ok, err := h.runs.LatestPlacement(r.Context(), user.ID); err == nil && ok {
+			start = place.SuggestedStartPosition
+		}
+	}
+	var title string
+	var startID int64
+	for _, u := range units {
+		if u.Status != "published" {
+			continue
+		}
+		if u.Position == start {
+			title = u.Title
+			startID = u.ID
+			break
+		}
+	}
+	if startID != 0 {
+		out.StartHref = "/lesson/" + strconv.FormatInt(startID, 10) + "/0"
+	}
+	if !out.LettersFirst && !out.KnewNothing {
+		out.Headline = views.ResultHeadline(start, title)
+	}
+	if out.KnewNothing || out.LettersFirst {
+		return
+	}
+	for _, u := range units {
+		if u.Status != "published" || u.Scope != "shared" {
+			continue
+		}
+		row := views.PlacePathRow{Label: views.UnitLabel(u.Position, u.Title)}
+		switch {
+		case u.Position < start:
+			row.Kind = "past"
+			row.Note = views.PathPast
+		case u.Position == start:
+			row.Kind = "start"
+			row.Note = views.PathStart
+		default:
+			row.Kind = "next"
+			row.Note = views.PathNext
+		}
+		out.Path = append(out.Path, row)
+	}
 }
 
 // placementBands are the band names a level is described by. Level 0 is "none yet".
@@ -111,42 +194,21 @@ func resultView(res placement.RunResult) *views.PlaceResultView {
 	if res.ReadingReady && res.Reading.Tested {
 		out.Words = res.Reading.Estimate
 	}
-	l, rd := res.Listening.Level, res.Reading.Level
+	out.StartHref = "/"
 	switch {
 	case !res.ReadingReady:
+		out.LettersFirst = true
 		out.Headline = "Letters first, then reading."
 		out.Sub = "Reading comes once the letters feel solid, so your first lessons start with them."
-	case l > rd:
-		out.Headline = "You know more by ear than by eye."
-	case rd > l:
-		out.Headline = "You read better than you hear."
-	case l == 0:
-		out.Headline = "Let’s start from the very beginning."
+	case res.Listening.Level == 0 && res.Reading.Level == 0:
+		out.KnewNothing = true
+		out.Headline = views.KnewNothingH
+		out.Sub = ""
 	default:
-		out.Headline = "You hear and read about the same."
-	}
-	seen := map[int64]bool{}
-	for _, m := range res.Misses {
-		if len(out.Work) == 3 {
-			break
-		}
-		if seen[m.LexemeID] {
-			continue
-		}
-		seen[m.LexemeID] = true
-		out.Work = append(out.Work, views.PlaceWorkView{Pointed: m.Pointed, Gloss: m.RightGloss, Note: workNote(m.Skill)})
+		out.Headline = views.ResultHeadline(res.StartUnit, "")
+		out.Sub = views.ResultLede
 	}
 	return out
-}
-
-func workNote(skill string) string {
-	switch skill {
-	case placement.SkillRead:
-		return "You missed this one by eye."
-	case placement.SkillRecall:
-		return "You couldn’t type this one yet."
-	}
-	return "You missed this one by ear."
 }
 
 // placementReview groups every miss of the run under Listening, Reading and Typing, in the order asked.

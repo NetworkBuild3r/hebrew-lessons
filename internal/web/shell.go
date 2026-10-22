@@ -63,16 +63,18 @@ type TodayInputs struct {
 	HasLesson bool
 }
 
-// ChooseTodayAction is the one next action Today offers, in this order: resume a
-// placement, start a placement, continue a lesson, take the check-in, do the due reviews,
-// open the next lesson. A learner with none of these has ActionNone and no gold button.
-// The check-in sits below a lesson in progress, so it never takes a learner out of one.
+// ChooseTodayAction is the one next action Today offers, in this order:
+// continue a lesson, take the check-in, do the due reviews, open the next
+// lesson. A learner with none of these has ActionNone and no gold button.
+// The check-in sits below a lesson in progress, so it never takes a learner
+// out of one.
+//
+// Placement is not a Today action. The first-run choice is /welcome, and
+// after that the only way back in is the link on Progress. PlacementActive
+// and PlacementNever are still filled (the article's data-placement
+// attributes read them) and do not change this choice.
 func ChooseTodayAction(in TodayInputs) views.TodayAction {
 	switch {
-	case in.PlacementActive:
-		return views.ActionResumePlacement
-	case in.PlacementNever:
-		return views.ActionStartPlacement
 	case in.LessonInProgress:
 		return views.ActionContinueLesson
 	case in.CheckinDue:
@@ -93,8 +95,12 @@ func (s *server) mountShell(mux *http.ServeMux, tokens CSRFToken, gate, secure b
 			fn(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
 		})
 	}
-	mux.HandleFunc("GET /lessons", page(s.serveLessons))
-	mux.HandleFunc("GET /me", page(s.serveMe))
+	mux.HandleFunc("GET /lessons", gated(gate, secure, s.welcomeGate(func(w http.ResponseWriter, r *http.Request) {
+		s.serveLessons(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
+	})))
+	mux.HandleFunc("GET /me", gated(gate, secure, s.welcomeGate(func(w http.ResponseWriter, r *http.Request) {
+		s.serveMe(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
+	})))
 	mux.HandleFunc("GET /lessons/{id}/report", page(s.serveReportForm))
 	mux.HandleFunc("POST /lessons/{id}/report", page(s.postReport))
 	mux.HandleFunc("POST /_hx/review/band", page(s.postBandReview))
