@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
 )
 
 const (
@@ -80,7 +78,40 @@ type MixTarget struct {
 	MaxNewWordsPerLesson int     `json:"maxNewWordsPerLesson"`
 	TargetSuccess        float64 `json:"targetSuccess"`
 	MaxNewPerSession     int     `json:"maxNewPerSession"`
+	MinNewPerSession     int     `json:"minNewPerSession" jsonschema:"Fewest new cards a session introduces when a review is due and that many unreviewed cards are waiting."`
 	MaxNewShare          float64 `json:"maxNewShare"`
+}
+
+// CardsDueNow counts the learner's unsuspended cards due at or before now.
+// Total is the size of that set. New, Learning, Review, and Relearning are
+// its FSRS states. A state outside those four still counts in Total.
+// It is null on get_context when learnerId is omitted.
+type CardsDueNow struct {
+	New        int `json:"new"`
+	Learning   int `json:"learning"`
+	Review     int `json:"review"`
+	Relearning int `json:"relearning"`
+	Total      int `json:"total"`
+}
+
+// CardsDueNowFromStates counts states returned by the due-card query.
+// Total is len(states). Each state is its own predicate so a card of one
+// state cannot be counted as another. Any other state still counts in Total.
+func CardsDueNowFromStates(states []string) CardsDueNow {
+	var out CardsDueNow
+	out.Total = len(states)
+	for _, state := range states {
+		if state == "new" {
+			out.New++
+		} else if state == "learning" {
+			out.Learning++
+		} else if state == "review" {
+			out.Review++
+		} else if state == "relearning" {
+			out.Relearning++
+		}
+	}
+	return out
 }
 
 // RecentAccuracy is the learner's recent review and lesson record.
@@ -153,8 +184,8 @@ func validCardState(state string) bool {
 
 func coachContextDescription() string {
 	mix := currentMixTarget()
-	return fmt.Sprintf("When learnerId is set, cards lists that learner's FSRS cards, one per card, including suspended cards. Order is due soonest first, then most recently reviewed, then card id. The list is capped at %d. cardsTruncated is true when cards were left out; call get_learner_words to page the rest. Each card has lexeme (pointed NFC), translit, pos, gloss, skill, state, stability, difficulty, due, lapses, reps, lastRating, and lastReview. Times are UTC RFC3339. translit, lastRating, and lastReview are null when unknown. Recycle cards that are due. Reinforce words with high lapses. recentAccuracy is null when learnerId is omitted. Otherwise the review half counts Good and Easy ratings over the last %d days and over the last %d reviews. The lesson half, lessons7d counts and meanScore, stays zero until the lesson player writes lesson_runs. Coach from the review half until then. rate and meanScore are null when the count is 0. mixTarget keeps the unit budgets, at most %d new words in a unit and %d to %d per lesson, and the session mix: targetSuccess %g, maxNewPerSession %d, and maxNewShare %g. With reviews due, new cards are min(maxNewPerSession, max(%d, floor(maxNewShare * sessionSize))), where sessionSize is the reviewed cards plus the new cards. No reviews still allows the full maxNewPerSession.",
+	return fmt.Sprintf("When learnerId is set, cards lists that learner's FSRS cards, one per card, including suspended cards. Order is due soonest first, then most recently reviewed, then card id. The list is capped at %d. cardsTruncated is true when cards were left out; call get_learner_words to page the rest. Each card has lexeme (pointed NFC), translit, pos, gloss, skill, state, stability, difficulty, due, lapses, reps, lastRating, and lastReview. Times are UTC RFC3339. translit, lastRating, and lastReview are null when unknown. Recycle cards that are due. Reinforce words with high lapses. recentAccuracy is null when learnerId is omitted. Otherwise the review half counts Good and Easy ratings over the last %d days and over the last %d reviews. The lesson half, lessons7d counts and meanScore, stays zero until the lesson player writes lesson_runs. Coach from the review half until then. rate and meanScore are null when the count is 0. mixTarget keeps the unit budgets, at most %d new words in a unit and %d to %d per lesson, and the session mix: targetSuccess %g, maxNewPerSession %d, minNewPerSession %d, and maxNewShare %g. With reviews due, new cards are min(maxNewPerSession, max(minNewPerSession, floor(maxNewShare * sessionSize))), where sessionSize is the reviewed cards plus the new cards. No reviews still allows the full maxNewPerSession.",
 		contextCardCap, AccuracyWindowDays, AccuracyReviewCap,
 		mix.MaxNewWordsPerUnit, mix.MinNewWordsPerLesson, mix.MaxNewWordsPerLesson,
-		mix.TargetSuccess, mix.MaxNewPerSession, mix.MaxNewShare, sessionlimits.MinNewPerSession)
+		mix.TargetSuccess, mix.MaxNewPerSession, mix.MinNewPerSession, mix.MaxNewShare)
 }

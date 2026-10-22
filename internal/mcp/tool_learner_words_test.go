@@ -44,6 +44,9 @@ func TestMixTargetMatchesBuildSession(t *testing.T) {
 	if got.MaxNewShare != sessionlimits.MaxNewShare {
 		t.Fatalf("maxNewShare %v shared %v", got.MaxNewShare, sessionlimits.MaxNewShare)
 	}
+	if got.MinNewPerSession != sessionlimits.MinNewPerSession {
+		t.Fatalf("minNewPerSession %d shared %d", got.MinNewPerSession, sessionlimits.MinNewPerSession)
+	}
 	if got.MaxNewShare != 0.25 {
 		t.Fatalf("maxNewShare %v", got.MaxNewShare)
 	}
@@ -98,8 +101,11 @@ func TestGetContextCoachFieldsKeepExistingShape(t *testing.T) {
 	if shared.Budgets != currentBudgets() || shared.MixTarget != currentMixTarget() || shared.RecentAccuracy != nil || len(shared.Cards) != 0 || shared.CardsTruncated || len(shared.Outline) != 0 || len(shared.KnownLexemes) != 0 || shared.Placement.Taken {
 		t.Fatalf("shared %+v", shared)
 	}
-	if shared.MixTarget.MaxNewWordsPerUnit != 8 || shared.MixTarget.MinNewWordsPerLesson != 2 || shared.MixTarget.MaxNewWordsPerLesson != 3 || shared.MixTarget.TargetSuccess != 0.85 || shared.MixTarget.MaxNewPerSession != 5 || shared.MixTarget.MaxNewShare != 0.25 {
+	if shared.MixTarget.MaxNewWordsPerUnit != 8 || shared.MixTarget.MinNewWordsPerLesson != 2 || shared.MixTarget.MaxNewWordsPerLesson != 3 || shared.MixTarget.TargetSuccess != 0.85 || shared.MixTarget.MaxNewPerSession != 5 || shared.MixTarget.MinNewPerSession != 2 || shared.MixTarget.MaxNewShare != 0.25 {
 		t.Fatalf("mix %+v", shared.MixTarget)
+	}
+	if shared.CardsDueNow != nil {
+		t.Fatalf("shared cardsDueNow %+v", shared.CardsDueNow)
 	}
 
 	id := int64(7)

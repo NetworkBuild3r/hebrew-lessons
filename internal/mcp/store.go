@@ -160,6 +160,15 @@ type CourseReader interface {
 	// scores for this learner, using the store clock as the end of the
 	// window. Shape matches get_context recentAccuracy.
 	RecentAccuracy(ctx context.Context, userID int64) (RecentAccuracy, error)
+	// CardsDueNow counts unsuspended cards due at or before now.
+	// The database reader calls db.ListDueCards with the store clock,
+	// the same instant Today uses, so the intro-lesson gate and the
+	// suspended filter are not reimplemented. v3's due predicate is
+	// due <= now. It does not widen now to the end of the UTC study day.
+	// The in-memory reader has no intro-lesson rows and no suspended
+	// flag, so it counts stored cards whose due is at or before the
+	// wall clock.
+	CardsDueNow(ctx context.Context, userID int64) (CardsDueNow, error)
 }
 
 // Struggle mirrors db.Struggle.

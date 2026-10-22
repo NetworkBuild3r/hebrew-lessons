@@ -35,6 +35,24 @@ func (s *Store) LearnerCards(ctx context.Context, q mcp.CardQuery) (mcp.CardPage
 	return out, nil
 }
 
+// CardsDueNow calls ListDueCards with the store clock and counts the
+// rows. The due predicate, the suspended filter, and the intro-lesson
+// gate are that function's. This method does not write its own SQL.
+func (s *Store) CardsDueNow(ctx context.Context, userID int64) (mcp.CardsDueNow, error) {
+	if err := s.ready(ctx); err != nil {
+		return mcp.CardsDueNow{}, err
+	}
+	cards, err := s.db.ListDueCards(ctx, userID, s.now())
+	if err != nil {
+		return mcp.CardsDueNow{}, err
+	}
+	states := make([]string, len(cards))
+	for i, card := range cards {
+		states[i] = card.State
+	}
+	return mcp.CardsDueNowFromStates(states), nil
+}
+
 // RecentAccuracy maps db.CoachAccuracy. The window ends at the database clock.
 // Good and Easy are ratings 3 and 4. The last-50 ratings are any age.
 // Lesson scores are finished lesson_runs in the same 7 days.

@@ -110,7 +110,7 @@ type ModelSkillSummary struct {
 	Counts         map[string]int `json:"counts"`
 	EstimatedKnown float64        `json:"estimatedKnown"`
 	Retention      *float64       `json:"retention" jsonschema:"Share of due reviews in the last 30 days not rated Again. Null when there were none."`
-	DueReviews     int            `json:"dueReviews"`
+	DueReviews     int            `json:"dueReviews" jsonschema:"Past reviews of this skill that waited at least a day, in the last 30 days. Not the number of cards due now."`
 }
 
 // ModelSummary is the learner's picture across all words.
@@ -118,7 +118,7 @@ type ModelSummary struct {
 	Words      map[string]int      `json:"words" jsonschema:"Words per overall state."`
 	Skills     []ModelSkillSummary `json:"skills"`
 	Retention  *float64            `json:"retention"`
-	DueReviews int                 `json:"dueReviews"`
+	DueReviews int                 `json:"dueReviews" jsonschema:"Past reviews that waited at least a day, in the last 30 days, across every skill. Not the number of cards due now."`
 }
 
 // SkillDay is one skill on one day of a snapshot.
