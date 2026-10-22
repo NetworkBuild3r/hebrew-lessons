@@ -721,7 +721,22 @@ jobs:
       - name: node version
         if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'rest'
         shell: bash
-        run: node --version
+        run: |
+          set -euo pipefail
+          ver=$(node --version)
+          echo "$ver"
+          major=${ver#v}
+          major=${major%%.*}
+          case "$major" in
+            ''|*[!0-9]*)
+              echo "::error::node version is not numeric: ${ver}"
+              exit 1
+              ;;
+          esac
+          if [ "$major" -lt 22 ]; then
+            echo "::error::node ${ver} is older than 22"
+            exit 1
+          fi
 
       - name: node tests
         if: steps.module.outputs.present == 'true' && steps.affected.outputs.web == 'true' && matrix.shard == 'rest'
@@ -729,22 +744,24 @@ jobs:
         run: |
           set -euo pipefail
           set -o pipefail
-          go test -count=1 -v -run '^(TestClipPlayAfterSwap|TestKeyboardNode)$' ./internal/web | tee node.out
-          # A renamed test matches nothing, prints [no tests to run], and exits 0
-          # with no --- SKIP line. Require both PASS lines. errexit ignores a
-          # bare "! grep", so the skip check is an explicit if.
+          go test -count=1 -v -run '^(TestClipPlayAfterSwap|TestKeyboardNode|TestReviewGradesStayInView)$' ./internal/web | tee node.out
+          # A renamed test matches nothing, prints [no tests to run], and exits 0.
+          # Require each named test to start and pass. A --- SKIP is a failure
+          # even when another line passed. errexit ignores a bare "! grep".
           if grep -q -- '--- SKIP' node.out; then
             echo "::error::a node test printed --- SKIP"
             exit 1
           fi
-          if ! grep -q -- '--- PASS: TestClipPlayAfterSwap' node.out; then
-            echo "::error::missing --- PASS: TestClipPlayAfterSwap"
-            exit 1
-          fi
-          if ! grep -q -- '--- PASS: TestKeyboardNode' node.out; then
-            echo "::error::missing --- PASS: TestKeyboardNode"
-            exit 1
-          fi
+          for name in TestClipPlayAfterSwap TestKeyboardNode TestReviewGradesStayInView; do
+            if ! grep -q -- "=== RUN   ${name}" node.out; then
+              echo "::error::missing === RUN   ${name}"
+              exit 1
+            fi
+            if ! grep -q -- "--- PASS: ${name}" node.out; then
+              echo "::error::missing --- PASS: ${name}"
+              exit 1
+            fi
+          done
 
   # The check name is exactly `test`. Branch protection and publish both
   # wait on it. always() is required so a failed shard still runs this job;
