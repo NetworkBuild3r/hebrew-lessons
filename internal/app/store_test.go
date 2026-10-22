@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"log/slog"
 	"strings"
@@ -40,7 +39,9 @@ func TestAppStoreCreatesUsers(t *testing.T) {
 }
 
 func TestStartupWarnings(t *testing.T) {
-	var buf bytes.Buffer
+	// The placement-audio count is logged from a goroutine. A locked buffer
+	// keeps that write from racing the reads below.
+	var buf lockedBuffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
