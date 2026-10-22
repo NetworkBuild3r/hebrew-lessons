@@ -1,10 +1,12 @@
 package activity
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -170,29 +172,177 @@ func TestItemDoesNotGiveTheAnswerAway(t *testing.T) {
 	for i := 0; i < 80; i++ {
 		b := w.build(t, a.ID, ReadPick)
 		places[b.p.correct] = true
-		body, err := json.Marshal(b.item)
-		mustf(t, err, "marshal")
-		for _, banned := range []string{"correct", "answer", "lexeme", "\"id\""} {
-			if strings.Contains(string(body), banned) {
-				t.Fatalf("item json mentions %q: %s", banned, body)
-			}
-		}
-		// The signature is random base64. A three-letter gloss such as "lao" can
-		// appear there by chance, so the check is the decoded claims, which
-		// hold the item id, the learner, and the activity, and not the answer.
-		body64, _, ok := strings.Cut(b.item.Token, ".")
-		if !ok {
-			t.Fatalf("token has no claims: %s", b.item.Token)
-		}
-		raw, err := base64.RawURLEncoding.DecodeString(body64)
-		mustf(t, err, "decode token")
-		if strings.Contains(string(raw), a.Gloss) || strings.Contains(string(raw), a.Text) {
-			t.Fatalf("token spells the answer: %s", raw)
+		if why := answerLeak(t, b.item, a.Gloss, a.Text); why != "" {
+			t.Fatal(why)
 		}
 	}
 	if len(places) < 3 {
 		t.Fatalf("the right option sat in %d places over 80 items", len(places))
 	}
+}
+
+// answerLeakWords are labels that would tell the client which option is right.
+// They are matched against the decoded payload and the rendered item, never
+// against the HMAC signature.
+var answerLeakWords = []string{"correct", "answer", "lexeme", "\"id\""}
+
+// answerLeak reports how an item gives the answer away. The HMAC signature is
+// not inspected: it is random base64, and a short gloss such as "lao" can
+// occur there by chance. verifyClaims splits the token the same way and then
+// returns only the claim fields, so a gloss stuffed into some other payload
+// byte would slip past it. This check decodes the payload bytes and searches
+// those, and it searches the item fields the client renders.
+//
+// The choice list and the prompt cue are the question, so the gloss and the
+// pointed text are allowed there. They are not allowed in the payload, and
+// the rendered item must not carry a label for the right choice.
+func answerLeak(t *testing.T, it Item, gloss, text string) string {
+	t.Helper()
+	payload := decodedTokenPayload(t, it.Token)
+	if containsText(payload, gloss) || containsText(payload, text) {
+		return "token payload spells the answer: " + payload
+	}
+	visible := visibleItemJSON(t, it)
+	for _, banned := range answerLeakWords {
+		if containsText(payload, banned) {
+			return fmt.Sprintf("token payload mentions %q: %s", banned, payload)
+		}
+		if containsText(visible, banned) {
+			return fmt.Sprintf("item json mentions %q: %s", banned, visible)
+		}
+	}
+	return ""
+}
+
+// decodedTokenPayload is the JSON body of a payload.signature token. The
+// signature is split off the same way verifyClaims does, then base64-decoded.
+func decodedTokenPayload(t *testing.T, token string) string {
+	t.Helper()
+	body64, sig64, ok := strings.Cut(token, ".")
+	if !ok || body64 == "" || sig64 == "" {
+		t.Fatalf("token is not payload.signature: %s", token)
+	}
+	body, err := base64.RawURLEncoding.DecodeString(body64)
+	mustf(t, err, "decode token payload")
+	return string(body)
+}
+
+// visibleItemJSON is the item the client renders, with the token omitted.
+// The token is checked through its decoded payload, not through the signature
+// bytes that ride along in the token field.
+func visibleItemJSON(t *testing.T, it Item) string {
+	t.Helper()
+	shown := it
+	shown.Token = ""
+	body, err := json.Marshal(shown)
+	mustf(t, err, "marshal item")
+	return string(body)
+}
+
+func containsText(hay, needle string) bool {
+	return needle != "" && strings.Contains(hay, needle)
+}
+
+// The signature may spell a gloss. That must not fail the leak check. The same
+// gloss placed in the payload must fail it. Both tokens are built from one
+// fixed key, so the signature bytes do not depend on the clock.
+func TestItemLeakCheckIgnoresTheSignature(t *testing.T) {
+	key := bytes.Repeat([]byte{0x11}, 32)
+	c := claims{
+		ID:     "0123456789abcdef0123456789abcdef",
+		User:   1,
+		Lexeme: 4,
+		Kind:   ReadPick,
+		Exp:    1_700_000_000,
+	}
+	token, err := signClaims(key, c)
+	mustf(t, err, "sign")
+	if _, err := verifyClaims(key, token); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	payload := decodedTokenPayload(t, token)
+	_, sig, _ := strings.Cut(token, ".")
+	it := Item{
+		Token:     token,
+		Kind:      ReadPick,
+		Skill:     fsrs.SkillRead,
+		Prompt:    Prompt{Hebrew: "שלום"},
+		Options:   []string{"door", "window", "table"},
+		ExpiresAt: time.Unix(1_700_000_000, 0).UTC(),
+	}
+	gloss := glossFromSignature(t, sig, payload, visibleItemJSON(t, it))
+	text := it.Prompt.Hebrew
+	if !strings.Contains(sig, gloss) || !strings.Contains(token, gloss) {
+		t.Fatalf("gloss %q is not in the signature: %s", gloss, token)
+	}
+	if why := answerLeak(t, it, gloss, text); why != "" {
+		t.Fatalf("gloss %q is only in the signature, but the check flagged it: %s", gloss, why)
+	}
+
+	// The word "answer" sitting in the signature is the same false alarm.
+	signed := it
+	body64, _, _ := strings.Cut(token, ".")
+	signed.Token = body64 + ".answeranswer"
+	if why := answerLeak(t, signed, gloss, text); why != "" {
+		t.Fatalf("banned word only in the signature was flagged: %s", why)
+	}
+
+	// The same gloss written into the payload is a real leak, including when
+	// it is not one of the claim fields verifyClaims would keep.
+	planted := strings.TrimSuffix(payload, "}") + `,"note":"` + gloss + `"}`
+	if !strings.HasPrefix(payload, "{") || !strings.HasSuffix(payload, "}") {
+		t.Fatalf("payload is not a JSON object: %s", payload)
+	}
+	leaking := it
+	leaking.Token = base64.RawURLEncoding.EncodeToString([]byte(planted)) + "." + sig
+	if got := decodedTokenPayload(t, leaking.Token); !strings.Contains(got, gloss) {
+		t.Fatalf("planted payload lost %q: %s", gloss, got)
+	}
+	if why := answerLeak(t, leaking, gloss, text); why == "" {
+		t.Fatalf("gloss %q is in the payload and was not flagged: %s", gloss, planted)
+	}
+
+	// A visible field that names the answer is still a leak. The choices
+	// themselves are the question and are not this field.
+	marked := it
+	marked.Skill = "answer"
+	if why := answerLeak(t, marked, gloss, text); why == "" {
+		t.Fatal("a visible field that says answer was not flagged")
+	}
+}
+
+// glossFromSignature returns a short alphabetic run from sig that does not
+// occur in the decoded payload or the rendered item. The run is the gloss
+// the leak check must ignore.
+func glossFromSignature(t *testing.T, sig, payload, visible string) string {
+	t.Helper()
+	for length := 6; length >= 3; length-- {
+		for i := 0; i+length <= len(sig); i++ {
+			g := sig[i : i+length]
+			if !asciiLetters(g) {
+				continue
+			}
+			if strings.Contains(payload, g) || strings.Contains(visible, g) {
+				continue
+			}
+			return g
+		}
+	}
+	t.Fatalf("signature %q has no letter run absent from the payload and the item", sig)
+	return ""
+}
+
+func asciiLetters(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') {
+			return false
+		}
+	}
+	return true
 }
 
 func TestPickIsGradedAndRecorded(t *testing.T) {
