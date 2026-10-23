@@ -29,13 +29,15 @@ var learnerTools = map[string]bool{
 	"get_progress":      true,
 	"get_unit":          true,
 	"lookup":            true,
+	"record_mistakes":   true,
 	"validate_unit":     true,
 	"unpublish_unit":    true,
 }
 
 // learnerWriteTools are the learnerTools that change data. MCP_READONLY_TOKEN may not call them.
 var learnerWriteTools = map[string]bool{
-	"unpublish_unit": true,
+	"record_mistakes": true,
+	"unpublish_unit":  true,
 }
 
 // learnerOwnDataTools are the tools a learner may call only for their
@@ -46,6 +48,7 @@ var learnerOwnDataTools = map[string]bool{
 	"get_learner_words": true,
 	"get_learner_model": true,
 	"get_progress":      true,
+	"record_mistakes":   true,
 	"validate_unit":     true,
 	"unpublish_unit":    true,
 }

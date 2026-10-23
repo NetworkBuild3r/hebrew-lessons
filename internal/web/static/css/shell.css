@@ -1,4 +1,4 @@
-/* App shell (INIT-015/SPEC-017): the five-destination dock and rail, Today, Lessons, Me,
+/* App shell (INIT-015/SPEC-017): the five-destination dock and rail, Today, Lessons, My stuff,
    the lesson frame, and the report sheet. Loaded after base.css, components.css, and
    activity.css. Colours, radius, space, and tap size come from tokens.css only. Logical
    properties only. Nothing here moves: motion is SPEC-009's. Gold is the one main action
@@ -30,6 +30,44 @@
   .dock { padding: var(--space-1); gap: 0; }
   .dock__link { padding-inline: 0; }
   .dock__label { letter-spacing: 0; }
+}
+.section-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block-end: var(--space-4);
+}
+.section-jump a, .rail__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--size-tap);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+.rail-more { display: none; }
+@media (min-width: 1024px) {
+  .section-jump { display: none; }
+  .rail-more {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding-inline: var(--space-2);
+  }
+  .rail__link {
+    flex-direction: column;
+    justify-content: center;
+    gap: 0;
+    padding-inline: 0;
+    border: 0;
+    background: transparent;
+    font-size: var(--fs-caption);
+  }
 }
 
 /* Today */

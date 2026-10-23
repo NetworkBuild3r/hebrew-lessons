@@ -39,6 +39,21 @@ templ RootPage(v RootPageView) {
 					@wordCard(w)
 				}
 			</div>
+			if len(v.Forms) > 0 {
+				<h2 lang="en">Forms</h2>
+				<div class="stuff-scroll">
+					<table>
+						<tbody>
+							for _, form := range v.Forms {
+								<tr>
+									<th scope="row" lang="en">{ form.Label }</th>
+									<td class="he" lang="he" dir="rtl" data-known={ knownAttr(form.Known) }>{ form.He }</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			}
 			if len(v.Lessons) > 0 {
 				<h2 lang="en">In your lessons</h2>
 				<ul class="roots__lessons">

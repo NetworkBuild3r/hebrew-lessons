@@ -92,6 +92,7 @@ Any conversation between people is a `dialogue`, never a `story`. A story stays 
 
 - `newWords`: teach each one. Use it at least `minUses` times in the unit, never fewer than 3.
 - `struggleWords`: bring each one back at least `requiredCount` times, and at least once in an activity of its `skill`. The skill is the one the learner is failing.
+- `fixMistakes`: up to three pairs the learner mixes up. Practise each `right` form in the unit, and show the contrast once, the wrong form beside the right one. A `right` form that is missing from the unit makes `brief.fix_contrast` block the publish.
 - `comfortableWords`: words the learner knows. Build the text from them and from the brief's other words.
 - `tier`: `name`, `knownWords`, `minKnownShare`, and `maxTextTokens`. Use these figures, not a table from memory.
 - `skillFocus` and `activities`: the skill that most needs work, and the unit activity types to favour. Every name is a type `validate_unit` accepts. Listen is `listen_pick` or `shadow`. Read is `story`, `dialogue`, `cloze`, or `pattern`. Recall is `recall`. Spell is `produce`.
@@ -137,6 +138,7 @@ Every Hebrew text needs a clip for its exact pointed text. Do not change a text 
 | `brief.audio_all` | block | A new word, or a title, situation, or concept that has Hebrew, has no clip. | Add the new words to `texts` in `generate_audio`, or keep Hebrew out of the title, situation, and concept. |
 | `brief.coverage` | block | A passage has too few known words for the tier. The message gives the share and what the tier needs. This unit's `newWords` count as covered when each is an exact pointed lexicon entry. The intro and the minimum uses still run on those words, including a `newWord` outside the brief. | Replace unknown words with comfortable words, brief words, or this unit's `newWords`, or shorten the passage. |
 | `brief.expired` | block | The brief is older than 7 days. | Call `get_lesson_brief` again and write the unit from the new brief. |
+| `brief.fix_contrast` | block | A right form from the brief's fixMistakes is not in the unit. | Use that pointed form in the story or an activity, and show the wrong form beside it once. |
 | `brief.gloss_out_of_brief` | block | A word outside the brief, and not known by the learner, has no gloss in the lexicon. | Call `lookup`. Then `upsert_lexemes` with `gloss_en`, or take the word out. |
 | `brief.new_intro_before_test` | block | A question uses a new word of the brief, or a unit `newWord` that coverage credited, before a story, dialogue, or shadow shows it. | Put a `story`, `dialogue`, or `shadow` that has the word before the first question that uses it. |
 | `brief.new_min_uses` | block | A new word of the brief appears fewer times than the brief asks. A unit `newWord` outside the brief that coverage credited uses the same minimum of 3. The message gives the count. | Use the word more often, in the story, dialogue, and the checked activities. |

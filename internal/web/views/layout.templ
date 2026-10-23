@@ -1,8 +1,9 @@
 package views
 
 // Layout is the shell: a bottom dock on a phone, a left rail from 1024px, and the page
-// between. The five destinations are Today, Lessons, Review, Progress, and Me. The theme
-// and log out live on Me, so the phone header holds the wordmark and nothing that can wrap.
+// between. The five destinations are Today, Lessons, Review, Progress, and My stuff.
+// Learn, Roots, and Isaiah appear only when they have something to show. The theme
+// and log out live on My stuff, so the phone header holds the wordmark and nothing that can wrap.
 templ Layout(p Page) {
 	<!DOCTYPE html>
 	<html lang={ p.Lang } dir={ p.Dir } translate="no">
@@ -38,6 +39,16 @@ templ Layout(p Page) {
 								@dockLink(p.Href("/progress"), "progress", p.Progress, p.Current, "progress", p.Lang)
 								@dockLink(p.Href("/me"), "user", p.Me, p.Current, "me", p.Lang)
 							</nav>
+							if len(p.Sections) > 0 {
+								<nav class="rail-more" aria-label="Sections">
+									for _, sec := range p.Sections {
+										<a class="rail__link" href={ templ.SafeURL(sec.Href) } if p.Current == sec.ID { aria-current="page" }>
+											@Icon(sec.Icon, "")
+											<span>{ sec.Label }</span>
+										</a>
+									}
+								</nav>
+							}
 						</div>
 					</div>
 					<div class="stage">
@@ -47,6 +58,16 @@ templ Layout(p Page) {
 							</div>
 						</header>
 						<main id="main" class="page" tabindex="-1">
+							if len(p.Sections) > 0 {
+								<nav class="section-jump" aria-label="Sections">
+									for _, sec := range p.Sections {
+										<a href={ templ.SafeURL(sec.Href) } if p.Current == sec.ID { aria-current="page" }>
+											@Icon(sec.Icon, "")
+											<span>{ sec.Label }</span>
+										</a>
+									}
+								</nav>
+							}
 							{ children... }
 						</main>
 					</div>

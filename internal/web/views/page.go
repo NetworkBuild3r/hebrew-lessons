@@ -99,7 +99,7 @@ func hebrewUI(addressGender string) UI {
 	return UI{
 		Lang: "he", Dir: "rtl",
 		// Lessons and Me are the two destinations SPEC-017 added. Not yet checked against Pealim.
-		Lessons: "שִׁעוּרִים", Me: "אֲנִי",
+		Lessons: "שִׁעוּרִים", Me: "\u05e9\u05b6\u05dc\u05bc\u05b4\u05d9",
 		Skip: Address(addressGender, "דַּלֵּג לַתֹּכֶן", "דַּלְּגִי לַתֹּכֶן"), Nav: "רָאשִׁי",
 		Today: "הַיּוֹם", Review: "חֲזָרָה", Progress: "הִתְקַדְּמוּת",
 		Dark: "כֵּהֶה", Light: "בָּהִיר", Logout: "יְצִיאָה",
@@ -123,7 +123,7 @@ func englishUI() UI {
 		Lang: "en", Dir: "ltr",
 		Skip: "Skip to content", Nav: "Main",
 		Today: "Today", Review: "Review", Progress: "Progress",
-		Lessons: "Lessons", Me: "Me",
+		Lessons: "Lessons", Me: "My stuff",
 		Dark: "Dark", Light: "Light", Logout: "Log out",
 		Heading:   "Today",
 		DueKicker: "To review", DueLabel: "Words ready", DueHint: "Up to twenty a day",
@@ -175,11 +175,21 @@ func (u UI) Href(path string) string {
 
 // Page is the data the layout shell needs. CSRF is the token auth.CSRFToken
 // returned for this request.
+// SectionLink is a section that has something to show. The phone reaches it
+// from the page. The desktop rail lists it beside the five destinations.
+type SectionLink struct {
+	Href  string
+	Label string
+	Icon  string
+	ID    string
+}
+
 type Page struct {
 	UI
-	Title   string
-	CSRF    string
-	Current string
+	Title    string
+	CSRF     string
+	Current  string
+	Sections []SectionLink
 }
 
 // NewPage builds a shell page. lang "he" selects the Hebrew UI. Any other
@@ -230,6 +240,8 @@ type Home struct {
 	// Today is what the shell decided for this visit: the one next action and the
 	// cards beside it (INIT-015/SPEC-017).
 	Today TodayView
+	// Sections are Learn, Roots, and Isaiah when those pages exist.
+	Sections []SectionLink
 }
 
 // ReviewCard is one study visit, or Done when the queue is finished.
@@ -316,7 +328,7 @@ func Num64(n int64) string { return strconv.FormatInt(n, 10) }
 
 // Page is the shell around Today.
 func (h Home) Page() Page {
-	return Page{UI: h.UI, Title: h.DocTitle("today"), CSRF: h.CSRF, Current: "today"}
+	return Page{UI: h.UI, Title: h.DocTitle("today"), CSRF: h.CSRF, Current: "today", Sections: h.Sections}
 }
 
 // Chip is one new-word chip. Gender is "m" or "f" for a noun, otherwise empty.

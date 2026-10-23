@@ -25,9 +25,9 @@ Load in this order. A later load depends on the earlier ones.
 | Explainers, one per pattern | shared | `upsert_explainer` | ready (INIT-017/SPEC-002). Five original starters are inserted when the table is empty. Class explainers are not loaded yet. |
 | Class order | shared | `put_unit` positions, then `check_path_order` | ready (INIT-017/SPEC-002). Not loaded yet. |
 | Phrases with an English speaking prompt | shared | `put_unit`, using the `say` step | not loaded yet — INIT-020/SPEC-002 |
-| Verb forms by tense and person | shared | verb forms tool | not loaded yet — INIT-019/SPEC-002 |
-| Mistakes, personal, with how often they return | one learner | `record_mistakes` | not loaded yet — INIT-019/SPEC-002 |
-| Mistakes, general | shared | general mistakes tool | not loaded yet — INIT-019/SPEC-002 |
+| Verb forms by tense and person | shared | `upsert_verb_forms` | ready (INIT-019/SPEC-002). Not loaded yet. |
+| Mistakes, personal, with how often they return | one learner | `record_mistakes` | ready (INIT-019/SPEC-002). Not loaded yet. |
+| Mistakes, general | shared | `upsert_common_mistakes` | ready (INIT-019/SPEC-002). Not loaded yet. |
 
 Lexicon first, then patterns, then units. Verb forms and mistakes can follow in either order once their tools exist.
 

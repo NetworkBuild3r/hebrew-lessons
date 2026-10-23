@@ -39,12 +39,20 @@ type RootSpan struct {
 	Mark bool
 }
 
+// RootFormView is one verb form of the family.
+type RootFormView struct {
+	Label string
+	He    string
+	Known bool
+}
+
 // RootPageView is one root.
 type RootPageView struct {
 	Page      Page
 	Root      string
 	Gloss     string
 	Words     []Word
+	Forms     []RootFormView
 	Lessons   []RootLessonLink
 	Verses    []RootVerseView
 	VerseHead string

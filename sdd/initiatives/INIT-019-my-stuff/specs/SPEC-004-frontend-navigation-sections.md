@@ -7,7 +7,7 @@ spec_id: SPEC-004
 initiative_id: INIT-019
 title: "Navigation around the sections"
 domain: frontend
-status: planned
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet

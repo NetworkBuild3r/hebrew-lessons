@@ -40,8 +40,23 @@ func (s *server) serveLearnOne(w http.ResponseWriter, r *http.Request, lang, csr
 	}
 	page.Title = row.Title + " · " + views.AppName
 	render(w, r, views.LearnPage(views.LearnPageView{
-		Page: page, Title: row.Title, Nodes: nodes, Used: s.usedIn(r, slug, user),
+		Page: page, Title: row.Title, Nodes: nodes, Used: s.usedIn(r, slug, user), Often: s.often(r, slug),
 	}))
+}
+
+func (s *server) often(r *http.Request, slug string) []views.LearnOften {
+	if s == nil || s.store == nil {
+		return nil
+	}
+	rows, err := s.store.CommonMistakesFor(r.Context(), slug, true)
+	if err != nil {
+		return nil
+	}
+	out := make([]views.LearnOften, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, views.LearnOften{Wrong: row.Wrong, Right: row.Right, Explain: row.Explain})
+	}
+	return out
 }
 
 func (s *server) serveLearnSheet(w http.ResponseWriter, r *http.Request, _, _ string) {

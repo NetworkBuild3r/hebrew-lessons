@@ -1,6 +1,6 @@
 # INIT-019: My stuff — mistakes, verb tables, and section navigation
 
-**Initiative ID:** INIT-019 · **Status:** planned · **Created:** 2026-10-23 · **Owner:** Brian Nelson
+**Initiative ID:** INIT-019 · **Status:** complete · **Created:** 2026-10-23 · **Owner:** Brian Nelson
 **Discipline Profile:** `software` · **Ticket:** none · **Branch:** `main`
 **Source:** [the hybrid model](../../../docs/design/learner-without-a-tutor.md), ADR-0019 (INIT-016/SPEC-001).
 

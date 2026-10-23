@@ -137,6 +137,11 @@ func briefCases() []briefCase {
 			f.UsedByUnitID = 41
 			return []Issue{iss(RuleBriefUsed, SeverityBlock, "/briefId")}
 		})
+	add("brief_bad_fix_contrast.json", "brief.fix_contrast: the brief asks for a right form the unit never uses.",
+		func(_ *Unit, _ map[string]glex, f *BriefFacts) []Issue {
+			f.FixMistakes = []BriefFix{{Right: "\u05D6\u05B4\u05D2\u05D5\u05BC\u05D2"}}
+			return []Issue{iss(RuleBriefFixContrast, SeverityBlock, "/fixMistakes/0")}
+		})
 	return out
 }
 
@@ -213,13 +218,13 @@ func TestBriefGoldenPerRule(t *testing.T) {
 	}
 	// brief.not_found and brief.expired come from the publish path, which cannot
 	// build a BriefFacts for a brief it cannot read. Their tests are in internal/mcp.
-	for _, rule := range []string{RuleBriefAudioAll, RuleBriefCoverage, RuleBriefGloss, RuleBriefIntro,
+	for _, rule := range []string{RuleBriefAudioAll, RuleBriefCoverage, RuleBriefFixContrast, RuleBriefGloss, RuleBriefIntro,
 		RuleBriefNewMinUses, RuleBriefStruggle, RuleBriefTextTooLong, RuleBriefUsed, RuleUnitNoMarkup} {
 		if !covered[rule] {
 			t.Errorf("no failing fixture for %s", rule)
 		}
 	}
-	if len(covered) != 9 {
+	if len(covered) != 10 {
 		t.Errorf("fixtures cover %d rules: %v", len(covered), covered)
 	}
 }

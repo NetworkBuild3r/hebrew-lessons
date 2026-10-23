@@ -1,0 +1,112 @@
+package views
+
+// WordsPage is the word bank, filterable by state.
+templ WordsPage(v WordsView) {
+	@Layout(v.Page) {
+		<article class="stuff">
+			<h1 lang="en">Words</h1>
+			<nav class="stuff-filters" aria-label="State">
+				<a href={ templ.SafeURL(v.AllHref) } if v.State == "" { aria-current="true" }>All</a>
+				<a href={ templ.SafeURL(v.LearningHref) } if v.State == "learning" { aria-current="true" }>Learning</a>
+				<a href={ templ.SafeURL(v.KnownHref) } if v.State == "known" { aria-current="true" }>Known</a>
+				<a href={ templ.SafeURL(v.StrugglingHref) } if v.State == "struggling" { aria-current="true" }>Struggling</a>
+			</nav>
+			if len(v.Words) == 0 {
+				<p class="stuff__empty" lang="en">{ v.Empty }</p>
+			} else {
+				<ul class="stuff-list">
+					for _, w := range v.Words {
+						<li>
+							<p>
+								<bdi class="he" lang="he" dir="rtl">{ w.Text }</bdi>
+								if w.Gloss != "" {
+									<span class="learn__summary" lang="en">{ w.Gloss }</span>
+								}
+								<span class="learn__summary" lang="en">{ w.State }</span>
+							</p>
+							if w.Href != "" {
+								<a href={ templ.SafeURL(w.Href) }>
+									<bdi class="he" lang="he" dir="rtl">{ w.Root }</bdi>
+								</a>
+							}
+						</li>
+					}
+				</ul>
+			}
+		</article>
+	}
+}
+
+// VerbsPage is one table per verb the learner knows.
+templ VerbsPage(v VerbsView) {
+	@Layout(v.Page) {
+		<article class="stuff">
+			<h1 lang="en">Verbs</h1>
+			if len(v.Verbs) == 0 {
+				<p class="stuff__empty" lang="en">{ v.Empty }</p>
+			} else {
+				for _, verb := range v.Verbs {
+					<section class="c-card">
+						<h2><bdi class="he" lang="he" dir="rtl">{ verb.Lemma }</bdi></h2>
+						<div class="stuff-scroll">
+							<table>
+								<tbody>
+									for _, row := range verb.Rows {
+										<tr data-known={ knownAttr(row.Known) }>
+											<th scope="row" lang="en">{ row.Label }</th>
+											<td class="he" lang="he" dir="rtl">{ row.He }</td>
+											if row.Translit != "" {
+												<td lang="en">{ row.Translit }</td>
+											}
+										</tr>
+									}
+								</tbody>
+							</table>
+						</div>
+					</section>
+				}
+			}
+		</article>
+	}
+}
+
+// MistakesPage is the signed-in learner's own mistakes.
+templ MistakesPage(v MistakesView) {
+	@Layout(v.Page) {
+		<article class="stuff">
+			<h1 lang="en">Mistakes</h1>
+			if len(v.Mistakes) == 0 {
+				<p class="stuff__empty" lang="en">{ v.Empty }</p>
+			} else {
+				<ul class="stuff-list">
+					for _, row := range v.Mistakes {
+						<li>
+							<p>
+								<bdi class="he" lang="he" dir="rtl">{ row.Wrong }</bdi>
+								@IconClass("arrow-right", "icon icon-sm", "")
+								<bdi class="he" lang="he" dir="rtl">{ row.Right }</bdi>
+							</p>
+							if row.Note != "" {
+								<p class="learn__summary" lang="en">{ row.Note }</p>
+							}
+							<p class="learn__summary" lang="en">{ row.Times }</p>
+							if row.HowHref != "" {
+								<a href={ templ.SafeURL(row.HowHref) }>{ row.How }</a>
+							}
+						</li>
+					}
+				</ul>
+			}
+		</article>
+	}
+}
+
+// IsaiahPage is the placeholder until the reader exists.
+templ IsaiahPage(v IsaiahView) {
+	@Layout(v.Page) {
+		<article class="stuff">
+			<h1 lang="en">Isaiah</h1>
+			<p class="stuff__empty" lang="en">Checked notes will open here.</p>
+		</article>
+	}
+}

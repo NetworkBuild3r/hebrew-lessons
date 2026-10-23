@@ -46,6 +46,13 @@ type BriefFacts struct {
 	BriefLexemeIDs map[int64]bool `json:"briefLexemeIds,omitempty"`
 	// KnownLexemeIDs is every word the learner knows now: known or solid.
 	KnownLexemeIDs map[int64]bool `json:"knownLexemeIds,omitempty"`
+	// FixMistakes are the right forms the brief asked the lesson to practise, at most three.
+	FixMistakes []BriefFix `json:"fixMistakes,omitempty"`
+}
+
+// BriefFix is one contrast the lesson must practise. Right is the pointed form.
+type BriefFix struct {
+	Right string `json:"right"`
 }
 
 // BriefNewWord is a word the unit must teach.
@@ -338,8 +345,36 @@ func briefIssuesFlat(ctx context.Context, doc *Unit, lk Lookup, f *BriefFacts) [
 	out = append(out, b.newWordIssues(doc, acts, f)...)
 	out = append(out, struggleIssues(acts, f)...)
 	out = append(out, b.glossIssues(acts, f)...)
+	out = append(out, fixContrastIssues(doc, acts, f)...)
 	if s.err != nil {
 		return []Issue{lookupIssue(s.err)}
+	}
+	return out
+}
+
+// fixContrastIssues blocks when a brief's right form is missing from the unit.
+// The wrong form is the contrast the author shows once; the check is the right form.
+func fixContrastIssues(doc *Unit, acts []actTokens, f *BriefFacts) []Issue {
+	if f == nil || len(f.FixMistakes) == 0 {
+		return nil
+	}
+	seen := map[string]bool{}
+	for _, w := range doc.NewWords {
+		seen[normalize(w)] = true
+	}
+	for _, a := range acts {
+		seen[normalize(a.text)] = true
+		for _, tok := range a.toks {
+			seen[normalize(tok.tok)] = true
+		}
+	}
+	var out []Issue
+	for i, m := range f.FixMistakes {
+		right := normalize(m.Right)
+		if right == "" || seen[right] {
+			continue
+		}
+		out = append(out, issue(RuleBriefFixContrast, SeverityBlock, fmt.Sprintf("/fixMistakes/%d", i), "The right form is not in the unit: "+right))
 	}
 	return out
 }

@@ -255,4 +255,14 @@ type LessonBrief struct {
 	Targets          BriefTargets        `json:"targets"`
 	Notes            []string            `json:"notes"`
 	CoachNotes       []CoachNote         `json:"coachNotes"`
+	// FixMistakes are up to three personal contrasts to practise. Empty when there are none.
+	FixMistakes []BriefFixMistake `json:"fixMistakes,omitempty"`
+}
+
+// BriefFixMistake is one wrong form and the right form to practise.
+type BriefFixMistake struct {
+	Wrong   string `json:"wrong"`
+	Right   string `json:"right"`
+	Note    string `json:"note,omitempty"`
+	Pattern string `json:"pattern,omitempty"`
 }

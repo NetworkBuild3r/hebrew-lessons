@@ -13,6 +13,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/roots"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
@@ -100,6 +101,10 @@ func (s *server) mountShell(mux *http.ServeMux, tokens CSRFToken, gate, secure b
 	mux.HandleFunc("GET /roots/{root}", page(s.serveRoot))
 	mux.HandleFunc("GET /lessons", page(s.serveLessons))
 	mux.HandleFunc("GET /me", page(s.serveMe))
+	mux.HandleFunc("GET /me/words", page(s.serveWords))
+	mux.HandleFunc("GET /me/verbs", page(s.serveVerbs))
+	mux.HandleFunc("GET /me/mistakes", page(s.serveMistakes))
+	mux.HandleFunc("GET /isaiah", page(s.serveIsaiah))
 	mux.HandleFunc("GET /lessons/{id}/report", page(s.serveReportForm))
 	mux.HandleFunc("POST /lessons/{id}/report", page(s.postReport))
 	mux.HandleFunc("POST /_hx/review/band", page(s.postBandReview))
@@ -122,7 +127,52 @@ func (s *server) pageFor(r *http.Request, lang, csrf, current string) (views.Pag
 		gender = g
 	}
 	ui := views.UIFor(lang, gender)
-	return views.Page{UI: ui, Title: ui.DocTitle(current), CSRF: csrf, Current: current}, user, nil
+	page := views.Page{UI: ui, Title: ui.DocTitle(current), CSRF: csrf, Current: current}
+	links, err := s.sectionLinks(r.Context(), ui)
+	if err != nil {
+		return views.Page{}, nil, err
+	}
+	page.Sections = links
+	return page, user, nil
+}
+
+// withSections adds Learn, Roots, and Isaiah when those pages exist.
+func (s *server) withSections(r *http.Request, page views.Page) (views.Page, error) {
+	links, err := s.sectionLinks(r.Context(), page.UI)
+	if err != nil {
+		return page, err
+	}
+	page.Sections = links
+	return page, nil
+}
+
+func (s *server) sectionLinks(ctx context.Context, ui views.UI) ([]views.SectionLink, error) {
+	if s == nil || s.store == nil {
+		return nil, nil
+	}
+	var out []views.SectionLink
+	published, err := s.store.PublishedExplainers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(published) > 0 {
+		out = append(out, views.SectionLink{Href: ui.Href("/learn"), Label: "Learn", Icon: "book", ID: "learn"})
+	}
+	list, err := roots.List(ctx, s.store)
+	if err != nil {
+		return nil, err
+	}
+	if len(list) > 0 {
+		out = append(out, views.SectionLink{Href: ui.Href("/roots"), Label: "Roots", Icon: "layers", ID: "roots"})
+	}
+	n, err := s.store.CheckedVerseCount(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if n > 0 {
+		out = append(out, views.SectionLink{Href: ui.Href("/isaiah"), Label: "Isaiah", Icon: "flag", ID: "isaiah"})
+	}
+	return out, nil
 }
 
 func (s *server) serveMe(w http.ResponseWriter, r *http.Request, lang, csrf string) {

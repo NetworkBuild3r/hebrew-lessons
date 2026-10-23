@@ -82,6 +82,12 @@ func (s *server) serveProgress(w http.ResponseWriter, r *http.Request, secure bo
 	for _, sk := range learner.Skills {
 		v.Tabs = append(v.Tabs, views.SkillTab{Skill: sk, Label: skillTabLabels[sk], Current: sk == skill})
 	}
+	sections, err := s.withSections(r, v.Page)
+	if err != nil {
+		serverError(w)
+		return
+	}
+	v.Page = sections
 	if ok && user != nil && s != nil && s.store != nil && s.store.Clock() != nil {
 		if err := s.fillProgress(r.Context(), user.ID, &v); err != nil {
 			serverError(w)

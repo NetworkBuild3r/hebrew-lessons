@@ -250,7 +250,13 @@ func (s *server) homeFrom(r *http.Request, lang, csrf string) (views.Home, error
 	if err != nil {
 		return views.Home{}, err
 	}
-	return homeToView(lang, csrf, gender, situation, vm), nil
+	home := homeToView(lang, csrf, gender, situation, vm)
+	links, err := s.sectionLinks(r.Context(), home.UI)
+	if err != nil {
+		return views.Home{}, err
+	}
+	home.Sections = links
+	return home, nil
 }
 
 func (s *server) serveHome(w http.ResponseWriter, r *http.Request, secure bool, csrf string) {
@@ -355,6 +361,11 @@ func (s *server) serveReview(w http.ResponseWriter, r *http.Request, secure bool
 	}
 	ui := views.UIFor(lang, gender)
 	page := views.Page{UI: ui, Title: ui.DocTitle("review"), CSRF: csrf, Current: "review"}
+	page, err = s.withSections(r, page)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 	render(w, r, views.Review(page, card))
 }
 

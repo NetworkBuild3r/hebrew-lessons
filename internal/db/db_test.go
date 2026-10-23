@@ -52,8 +52,8 @@ func TestMigrateEmptyAndIdempotent(t *testing.T) {
 	}
 
 	s = openAt(t, dir, fixedClock{when})
-	if got := count(t, s, `SELECT COUNT(*) FROM schema_migrations`); got != 13 {
-		t.Fatalf("schema_migrations rows = %d, want 13", got)
+	if got := count(t, s, `SELECT COUNT(*) FROM schema_migrations`); got != 14 {
+		t.Fatalf("schema_migrations rows = %d, want 14", got)
 	}
 	wantApplied := FormatTime(when)
 	rows, err := s.conn.QueryContext(ctx, `SELECT version, applied_at FROM schema_migrations ORDER BY version`)
@@ -76,8 +76,8 @@ func TestMigrateEmptyAndIdempotent(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if len(versions) != 13 || versions[0] != 1 || versions[11] != 12 || versions[12] != 13 {
-		t.Fatalf("versions = %v, want 1..13", versions)
+	if len(versions) != 14 || versions[0] != 1 || versions[12] != 13 || versions[13] != 14 {
+		t.Fatalf("versions = %v, want 1..14", versions)
 	}
 	if got := count(t, s, `SELECT COUNT(*) FROM users`); got != 1 {
 		t.Fatalf("users = %d, want 1 after a second open", got)
@@ -108,12 +108,14 @@ func TestTables(t *testing.T) {
 		"audio_assets",
 		"cards",
 		"coach_notes",
+		"common_mistakes",
 		"confusion_misses",
 		"daily_snapshots",
 		"explainers",
 		"exposures",
 		"grammar_patterns",
 		"job_state",
+		"learner_mistakes",
 		"lesson_briefs",
 		"lesson_items",
 		"lesson_runs",
@@ -138,6 +140,8 @@ func TestTables(t *testing.T) {
 		"unit_revisions",
 		"units",
 		"users",
+		"verb_forms",
+		"verse_notes",
 		"weekly_reports",
 	}
 	for _, name := range want {

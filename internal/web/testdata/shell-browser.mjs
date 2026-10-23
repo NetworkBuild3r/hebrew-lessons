@@ -195,7 +195,7 @@ const finishVT = (page) => page.evaluate(() => { cancelAnimationFrame(window.vtT
 
 // ---- ac-2: the dock at phone widths ----
 
-const expectLabels = { en: ["Today", "Lessons", "Review", "Progress", "Me"] };
+const expectLabels = { en: ["Today", "Lessons", "Review", "Progress", "My stuff"] };
 for (const width of [320, 360, 390]) {
   await section("dock " + width, async () => {
     const { ctx, page } = await open("full", { width, height: 700 });

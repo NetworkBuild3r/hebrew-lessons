@@ -68,6 +68,15 @@ func (s *server) serveRoot(w http.ResponseWriter, r *http.Request, lang, csrf st
 	view := views.RootPageView{
 		Page: page, Root: fam.Root, Gloss: fam.CoreGloss, VerseHead: "In Isaiah",
 	}
+	for _, form := range fam.Forms {
+		label := form.Tense
+		for _, part := range []string{form.Person, form.Number, form.Gender} {
+			if part != "" {
+				label += " " + part
+			}
+		}
+		view.Forms = append(view.Forms, views.RootFormView{Label: label, He: form.He, Known: form.Known})
+	}
 	for _, word := range fam.Words {
 		view.Words = append(view.Words, views.Word{
 			Text: word.Text, Translit: word.Translit, Gloss: word.Gloss, POS: word.POS,

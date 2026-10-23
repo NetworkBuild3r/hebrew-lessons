@@ -49,13 +49,24 @@ type Span struct {
 	Mark bool
 }
 
-// Page is everything the root page shows. Forms stays empty until verb
-// forms are loaded.
+// Form is one cell of a verb that belongs to the family.
+type Form struct {
+	Tense    string
+	Person   string
+	Number   string
+	Gender   string
+	He       string
+	Translit string
+	Known    bool
+}
+
+// Page is everything the root page shows. Forms is empty until verb forms
+// are stored for a word of the family.
 type Page struct {
 	Root      string
 	CoreGloss string
 	Words     []Word
-	Forms     []string
+	Forms     []Form
 	Lessons   []Lesson
 	Verses    []Verse
 }
@@ -77,8 +88,13 @@ type Store interface {
 	VersesForWords(ctx context.Context, plains []string, limit int) ([]db.Verse, error)
 }
 
-// Family loads one root for one learner. Forms is always empty.
-// A missing model leaves every state unseen.
+// formReader is optional. A store with verb forms fills Page.Forms.
+type formReader interface {
+	VerbFormsFor(ctx context.Context, lemmaID int64) ([]db.VerbForm, error)
+}
+
+// Family loads one root for one learner. Forms come from the verb-form
+// table when the store has one. A missing model leaves every state unseen.
 func Family(ctx context.Context, store Store, model *learner.Model, root string, userID int64) (Page, error) {
 	words, err := store.LexemesByRoot(ctx, root)
 	if err != nil {
@@ -112,7 +128,8 @@ func Family(ctx context.Context, store Store, model *learner.Model, root string,
 			plainSet[p] = true
 		}
 	}
-	out := Page{Root: root, Forms: []string{}, Words: make([]Word, len(words))}
+	out := Page{Root: root, Forms: []Form{}, Words: make([]Word, len(words))}
+	met := map[int64]bool{}
 	bestUses := -1
 	for i, w := range words {
 		state := string(learner.Unseen)
@@ -120,6 +137,9 @@ func Family(ctx context.Context, store Store, model *learner.Model, root string,
 			ws, err := model.Word(ctx, userID, w.ID)
 			if err == nil && ws.State != "" {
 				state = string(ws.State)
+				if ws.State == learner.Learning || ws.State == learner.Known || ws.State == learner.Solid {
+					met[w.ID] = true
+				}
 			}
 		}
 		out.Words[i] = Word{
@@ -133,6 +153,20 @@ func Family(ctx context.Context, store Store, model *learner.Model, root string,
 	}
 	if out.CoreGloss == "" && len(words) > 0 {
 		out.CoreGloss = words[0].Gloss
+	}
+	if reader, ok := store.(formReader); ok {
+		for _, w := range out.Words {
+			rows, err := reader.VerbFormsFor(ctx, w.ID)
+			if err != nil {
+				return Page{}, err
+			}
+			for _, row := range rows {
+				out.Forms = append(out.Forms, Form{
+					Tense: row.Tense, Person: row.Person, Number: row.Number, Gender: row.Gender,
+					He: row.FormHe, Translit: row.Translit, Known: row.FormLexemeID > 0 && met[row.FormLexemeID],
+				})
+			}
+		}
 	}
 	for _, les := range lessons {
 		out.Lessons = append(out.Lessons, Lesson{UnitID: les.UnitID, LessonIx: les.LessonIx, Title: les.Title})

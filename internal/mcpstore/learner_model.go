@@ -344,6 +344,9 @@ func lessonBrief(br brief.Brief) mcp.LessonBrief {
 	for _, n := range br.CoachNotes {
 		out.CoachNotes = append(out.CoachNotes, mcp.CoachNote{Author: n.Author, Body: n.Body, CreatedAt: n.At})
 	}
+	for _, m := range br.FixMistakes {
+		out.FixMistakes = append(out.FixMistakes, mcp.BriefFixMistake{Wrong: m.Wrong, Right: m.Right, Note: m.Note, Pattern: m.Pattern})
+	}
 	return out
 }
 

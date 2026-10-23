@@ -7,7 +7,7 @@ spec_id: SPEC-003
 initiative_id: INIT-019
 title: "My stuff: mistakes, verb tables, word bank"
 domain: frontend
-status: planned
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet

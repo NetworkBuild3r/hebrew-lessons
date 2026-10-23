@@ -34,6 +34,23 @@ templ LearnPage(v LearnPageView) {
 			<div class="learn__body">
 				@Rich(v.Nodes)
 			</div>
+			if len(v.Often) > 0 {
+				<h2 lang="en">Learners often say</h2>
+				<ul class="learn__often">
+					for _, row := range v.Often {
+						<li>
+							<p>
+								<bdi class="he" lang="he" dir="rtl">{ row.Wrong }</bdi>
+								@IconClass("arrow-right", "icon icon-sm", "")
+								<bdi class="he" lang="he" dir="rtl">{ row.Right }</bdi>
+							</p>
+							if row.Explain != "" {
+								<p class="learn__summary" lang="en">{ row.Explain }</p>
+							}
+						</li>
+					}
+				</ul>
+			}
 			if len(v.Used) > 0 {
 				<h2 lang="en">Used in</h2>
 				<ul class="learn__used">

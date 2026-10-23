@@ -177,3 +177,19 @@ func (b *Builder) coachNotes(ctx context.Context, userID int64, now time.Time) (
 	}
 	return out, nil
 }
+
+// fixMistakes reads up to three of the learner's own mistakes, most repeated first.
+func (b *Builder) fixMistakes(ctx context.Context, userID int64) ([]FixMistake, error) {
+	rows, err := b.store.MistakesFor(ctx, userID, 3)
+	if err != nil {
+		return nil, fmt.Errorf("brief: mistakes: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	out := make([]FixMistake, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, FixMistake{Wrong: row.Wrong, Right: row.Right, Note: row.Note, Pattern: row.Pattern})
+	}
+	return out, nil
+}

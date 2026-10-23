@@ -108,6 +108,9 @@ func factsFromBrief(br brief.Brief, known map[int64]bool) units.BriefFacts {
 	for _, w := range br.ComfortableWords {
 		f.BriefLexemeIDs[w.LexemeID] = true
 	}
+	for _, m := range br.FixMistakes {
+		f.FixMistakes = append(f.FixMistakes, units.BriefFix{Right: m.Right})
+	}
 	return f
 }
 

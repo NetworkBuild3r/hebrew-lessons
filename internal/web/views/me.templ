@@ -15,6 +15,12 @@ templ T(lang, he, en string) {
 templ Me(v MeView) {
 	@Layout(v.Page) {
 		<article class="me">
+			<nav class="me__hub" aria-label="My stuff">
+				<a href={ templ.SafeURL(v.Href("/me/words")) }>@T(v.Lang, "", "Words")</a>
+				<a href={ templ.SafeURL(v.Href("/me/verbs")) }>@T(v.Lang, "", "Verbs")</a>
+				<a href={ templ.SafeURL(v.Href("/me/mistakes")) }>@T(v.Lang, "", "Mistakes")</a>
+				<a href={ templ.SafeURL(v.Href("/progress")) }>@T(v.Lang, "", "You can now say")</a>
+			</nav>
 			<header class="me__head">
 				<span class="me__avatar" aria-hidden="true">{ Initials(v.Name) }</span>
 				<div class="me__who">

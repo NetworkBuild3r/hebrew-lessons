@@ -31,6 +31,7 @@ type service struct {
 	lexLookup units.Lookup
 	units     UnitWriter
 	patterns  patternStore
+	mistakes  mistakeStore
 	audio     AudioGenerator
 	// learner is the store of the learner tools. It is the Course store when that store
 	// implements LearnerData, and nil otherwise.
@@ -608,4 +609,5 @@ func registerTools(server *mcp.Server, svc *service) {
 	registerUnpublishUnit(server, svc)
 	registerGetUnit(server, svc)
 	registerPatternTools(server, svc)
+	registerMistakeTools(server, svc)
 }

@@ -29,6 +29,7 @@ const learnerModelDescription = "Read what the app knows about one learner's wor
 	"nextCursor is null on the last page. Send it back as cursor, with the same filters, to read the next page. " +
 	"An unknown state, skill, or band, a cursor that this server did not issue, or a cursor longer than 256 characters is an error. " +
 	"Workflow: call get_lesson_brief for the word plan, and call this tool to look at the words behind it. " +
+	"mistakes is that learner's top 10 personal mistakes, most repeated first and the latest of those first. Each has wrong, right, times, and lastAt, and note and pattern when they were recorded. Another learner's mistakes are not included. " +
 	"At most 60 calls a minute across the learner tools."
 
 type learnerModelInput struct {
@@ -40,10 +41,21 @@ type learnerModelInput struct {
 	Limit     int    `json:"limit,omitempty" jsonschema:"Page size. Defaults to 50 and is cut to 200. Zero or a negative value uses the default."`
 }
 
+// ModelMistake is one of the learner's own mistakes, most repeated first.
+type ModelMistake struct {
+	Wrong   string `json:"wrong"`
+	Right   string `json:"right"`
+	Note    string `json:"note,omitempty"`
+	Pattern string `json:"pattern,omitempty"`
+	Times   int    `json:"times"`
+	LastAt  string `json:"lastAt"`
+}
+
 type learnerModelOutput struct {
-	Words      []ModelWord `json:"words"`
-	NextCursor *string     `json:"nextCursor"`
-	Limit      int         `json:"limit" jsonschema:"The page size that was used."`
+	Words      []ModelWord    `json:"words"`
+	NextCursor *string        `json:"nextCursor"`
+	Limit      int            `json:"limit" jsonschema:"The page size that was used."`
+	Mistakes   []ModelMistake `json:"mistakes" jsonschema:"This learner's top 10 personal mistakes, most repeated first. Never another learner's."`
 }
 
 func (s *service) getLearnerModel(ctx context.Context, _ *mcp.CallToolRequest, in learnerModelInput) (*mcp.CallToolResult, learnerModelOutput, error) {
@@ -77,6 +89,18 @@ func (s *service) getLearnerModel(ctx context.Context, _ *mcp.CallToolRequest, i
 		out.NextCursor = &next
 	}
 	out.Limit = q.Limit
+	out.Mistakes = []ModelMistake{}
+	if s.mistakes != nil {
+		rows, err := s.mistakes.MistakesFor(ctx, id, 10)
+		if err != nil {
+			return nil, out, storeErr("The learner's mistakes could not be read.", err)
+		}
+		for _, row := range rows {
+			out.Mistakes = append(out.Mistakes, ModelMistake{
+				Wrong: row.Wrong, Right: row.Right, Note: row.Note, Pattern: row.Pattern, Times: row.Times, LastAt: row.LastAt,
+			})
+		}
+	}
 	return nil, out, nil
 }
 

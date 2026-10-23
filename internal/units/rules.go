@@ -46,6 +46,7 @@ const (
 	RuleBriefAudioAll              = "brief.audio_all"
 	RuleBriefCoverage              = "brief.coverage"
 	RuleBriefExpired               = "brief.expired"
+	RuleBriefFixContrast           = "brief.fix_contrast"
 	RuleBriefGloss                 = "brief.gloss_out_of_brief"
 	RuleBriefIntro                 = "brief.new_intro_before_test"
 	RuleBriefNewMinUses            = "brief.new_min_uses"
@@ -119,6 +120,7 @@ var Rules = []Rule{
 	{ID: RuleBriefAudioAll, Severity: SeverityBlock, Description: "Brief check. A new word, or a title, situation, or concept that contains Hebrew, has no audio clip for its exact pointed text. Activity text is covered by audio.missing."},
 	{ID: RuleBriefCoverage, Severity: SeverityBlock, Description: "Brief check. In a story or listen_pick passage, the share of Hebrew tokens that are known or solid for the learner, in the brief, or one of this unit's newWords with an exact pointed lexicon entry, is below the brief's tier figure (0.60, 0.90, or 0.95). The intro and the minimum uses run on the brief's new words and on every newWord that coverage credited, including one outside the brief. Function words, proper names, and numerals are left out of the count, and a token that matches no lexeme counts as unknown. Replaces coverage.story and coverage.listening when a brief is used."},
 	{ID: RuleBriefExpired, Severity: SeverityBlock, Description: "Brief check. The brief is older than its time to live and cannot be used."},
+	{ID: RuleBriefFixContrast, Severity: SeverityBlock, Description: "Brief check. A right form from the brief's fixMistakes does not appear in the unit. Practise that form, and show the wrong form beside it once."},
 	{ID: RuleBriefGloss, Severity: SeverityBlock, Description: "Brief check. A word that is outside the brief and not known or solid for the learner has no English gloss in the lexicon."},
 	{ID: RuleBriefIntro, Severity: SeverityBlock, Description: "Brief check. A new word of the brief, or a unit newWord that coverage credited, reaches its first checked activity with no story, dialogue, or shadow step that shows it earlier."},
 	{ID: RuleBriefNewMinUses, Severity: SeverityBlock, Description: fmt.Sprintf("Brief check. A new word of the brief appears fewer times in the unit than the brief asks, and at least %d. A unit newWord that coverage credited and that is not in the brief uses that same floor.", DefaultNewWordMinUses)},

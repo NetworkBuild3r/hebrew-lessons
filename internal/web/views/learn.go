@@ -22,12 +22,20 @@ type LearnUsed struct {
 	Title string
 }
 
+// LearnOften is one published shared mistake for an explainer.
+type LearnOften struct {
+	Wrong   string
+	Right   string
+	Explain string
+}
+
 // LearnPageView is one explainer.
 type LearnPageView struct {
 	Page  Page
 	Title string
 	Nodes []richtext.Node
 	Used  []LearnUsed
+	Often []LearnOften
 }
 
 // LearnSheetView is the explainer fragment the lesson sheet loads.

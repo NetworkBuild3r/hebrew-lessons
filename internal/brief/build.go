@@ -200,6 +200,17 @@ type Plan struct {
 	Targets    Targets     `json:"targets"`
 	Notes      []string    `json:"notes"`
 	CoachNotes []CoachNote `json:"coach_notes"`
+	// FixMistakes are up to three personal mistakes to practise, most repeated first.
+	// Each carries the wrong form and the right form. Empty when the learner has none.
+	FixMistakes []FixMistake `json:"fixMistakes,omitempty"`
+}
+
+// FixMistake is one contrast the next lesson should practise.
+type FixMistake struct {
+	Wrong   string `json:"wrong"`
+	Right   string `json:"right"`
+	Note    string `json:"note,omitempty"`
+	Pattern string `json:"pattern,omitempty"`
 }
 
 // Brief is a stored Plan. The id, times, and use are the table's columns.
@@ -407,6 +418,10 @@ func (b *Builder) Build(ctx context.Context, userID int64, theme string) (Brief,
 	plan.ComfortableWords = comfortable
 
 	plan.Activities = activitiesFor(plan.SkillFocus, struggle)
+	plan.FixMistakes, err = b.fixMistakes(ctx, userID)
+	if err != nil {
+		return Brief{}, err
+	}
 	plan.CoachNotes, err = b.coachNotes(ctx, userID, now)
 	if err != nil {
 		return Brief{}, err
