@@ -339,6 +339,7 @@ The colors are inconsistent today. The tokens define both a gold action color an
 | 3 · Activities | Listen-and-pick, read-and-pick, word match, audio match, type it, dictation (behind the letters gate), prefix, agreement, and root-family drills, the added letter pairs, and the Hebrew keyboard. The session mix chooses the skill. | A review session uses the weakest skill for each word. |
 | 4 · Built-for-me lessons | `LessonBrief`, `get_lesson_brief`, validator brief checks (with the staged coverage tiers), and the shared authoring skill. | An AI over MCP builds a lesson from my brief, it passes validation, and it appears on Today. |
 | 5 · Coaching | Weekly report, coach notes, boundary re-checks, and band-slip alerts. | Each week I get a report naming what I gained, what I lost, and why. |
+| 6 · Hybrid | The course around the brief: a default path for a learner without a tutor, tutor input through MCP, explainers, roots, mistakes lists, success-rate tuning. Planned in [the hybrid model](design/learner-without-a-tutor.md). | A learner with or without a tutor gets lessons tuned to their record, and a tutor's class data changes the next lesson. |
 
 ## 11. How we'll know it works
 
