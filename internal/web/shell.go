@@ -447,6 +447,11 @@ func (s *server) fillToday(r *http.Request, page *views.Home) {
 			s.fillCheckin(ctx, user.ID, t, &in)
 		}
 		s.fillModelCards(ctx, user.ID, t)
+		if _, line, err := s.canSayView(ctx, user.ID); err != nil {
+			slog.Warn("today: can say", "err", err)
+		} else {
+			t.CanSayLine = line
+		}
 	}
 	t.Action = ChooseTodayAction(in)
 }

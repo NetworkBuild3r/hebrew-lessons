@@ -25,13 +25,14 @@ const (
 	maxTranslit = 64
 	maxPOS      = 16
 	maxPlural   = 64
+	maxRoot     = 16
 )
 
 // Input is one upsert_lexemes entry before normalization.
 // A nil pointer means the caller omitted the field. On an update, an
-// omitted pos, gender, plural, translit, or verified keeps the stored
-// value. A non-nil pointer replaces it, and an empty string clears a
-// text column. A new lexeme requires translit: a missing or empty value
+// omitted pos, gender, plural, translit, root, binyan, or verified keeps
+// the stored value. A non-nil pointer replaces it, and an empty string
+// clears a text column. A new lexeme requires translit: a missing or empty value
 // is rejected by the writer, which can see whether the row already
 // exists. An empty bare pointer is treated as omitted, and the
 // consonant skeleton is derived.
@@ -43,14 +44,17 @@ type Input struct {
 	POS      *string
 	Gender   *string
 	Plural   *string
+	Root     *string
+	Binyan   *string
 	Verified *bool
 }
 
 // Row is one entry ready to store.
 // TextNFC is units.Normalize, the same string audio.NormalizeText stores.
-// Bare is units.StripNiqqud of that text. A nil POS, Gender, or Plural
-// means the caller omitted it: a new row stores empty, and an existing
-// row keeps the column. A nil or empty Translit is rejected for a new
+// Bare is units.StripNiqqud of that text. A nil POS, Gender, Plural, Root,
+// or Binyan means the caller omitted it: a new row stores empty, and an
+// existing row keeps the column. Root, when set, is stored as consonants
+// joined by a maqaf. A nil or empty Translit is rejected for a new
 // row. An existing row keeps translit when it is omitted. Verified nil
 // means a new row is unverified and an existing row keeps its flag.
 type Row struct {
@@ -61,6 +65,8 @@ type Row struct {
 	POS      *string
 	Gender   *string
 	Plural   *string
+	Root     *string
+	Binyan   *string
 	Verified *bool
 }
 
@@ -116,7 +122,9 @@ func Prepare(entries []Input) ([]Row, *Invalid) {
 		translit, translitOK := limited(i, "translit", "The translit value", in.Translit, maxTranslit, &issues)
 		plural, pluralOK := pluralOf(i, in.Plural, &issues)
 		gender, genderOK := genderOf(i, in.Gender, &issues)
-		if !textOK || !glossOK || !posOK || !translitOK || !pluralOK || !genderOK {
+		root, rootOK := rootOf(i, in.Root, &issues)
+		binyan, binyanOK := binyanOf(i, in.Binyan, &issues)
+		if !textOK || !glossOK || !posOK || !translitOK || !pluralOK || !genderOK || !rootOK || !binyanOK {
 			continue
 		}
 		bare, bareOK := bareOf(i, text, in.Bare, &issues)
@@ -139,6 +147,8 @@ func Prepare(entries []Input) ([]Row, *Invalid) {
 			POS:      pos,
 			Gender:   gender,
 			Plural:   plural,
+			Root:     root,
+			Binyan:   binyan,
 			Verified: in.Verified,
 		})
 	}
@@ -289,5 +299,115 @@ func NewTranslitIssue(i int) Issue {
 	return Issue{
 		Pointer: fieldPtr(i, "translit"),
 		Msg:     "A new lexeme requires a transliteration.",
+	}
+}
+
+// binyanim are the verb patterns a lexicon row may name. The empty string clears the column.
+var binyanim = map[string]bool{
+	"paal": true, "nifal": true, "piel": true, "pual": true,
+	"hifil": true, "hufal": true, "hitpael": true,
+}
+
+const rootMsg = "A root is 2 to 4 Hebrew consonants separated by a maqaf or a hyphen. Shin and sin dots stay, and other points are removed."
+
+// rootOf normalizes a root. Nil keeps the stored value. An empty string clears it.
+// A set value is stored as its consonants joined by a maqaf (U+05BE), with the shin
+// and sin dots kept and every other point removed.
+func rootOf(i int, raw *string, issues *[]Issue) (*string, bool) {
+	if raw == nil {
+		return nil, true
+	}
+	v := strings.TrimSpace(*raw)
+	if v == "" {
+		return &v, true
+	}
+	if utf8.RuneCountInString(v) > maxRoot {
+		*issues = append(*issues, Issue{Pointer: fieldPtr(i, "root"), Msg: "The root value is longer than 16 characters."})
+		return nil, false
+	}
+	norm, ok := normalizeRoot(v)
+	if !ok {
+		*issues = append(*issues, Issue{Pointer: fieldPtr(i, "root"), Msg: rootMsg})
+		return nil, false
+	}
+	return &norm, true
+}
+
+// binyanOf checks a verb pattern. Nil keeps the stored value. An empty string clears it.
+func binyanOf(i int, raw *string, issues *[]Issue) (*string, bool) {
+	if raw == nil {
+		return nil, true
+	}
+	v := strings.ToLower(strings.TrimSpace(*raw))
+	if v == "" || binyanim[v] {
+		return &v, true
+	}
+	*issues = append(*issues, Issue{
+		Pointer: fieldPtr(i, "binyan"),
+		Msg:     "Binyan must be paal, nifal, piel, pual, hifil, hufal, hitpael, or empty.",
+	})
+	return nil, false
+}
+
+// normalizeRoot splits a root into its consonants. A separator is a maqaf, a hyphen, or a
+// space. A shin or sin dot stays on its letter. Niqqud is dropped. Anything else, or a count
+// outside 2 to 4, is rejected.
+func normalizeRoot(s string) (string, bool) {
+	var letters [][]rune
+	var cur []rune
+	flush := func() {
+		if cur != nil {
+			letters = append(letters, cur)
+			cur = nil
+		}
+	}
+	for _, r := range units.Normalize(s) {
+		switch {
+		case r >= 0x05D0 && r <= 0x05EA:
+			flush()
+			cur = []rune{r}
+		case r == 0x05C1 || r == 0x05C2:
+			if cur == nil {
+				return "", false
+			}
+			cur = append(cur, r)
+		case isRootPoint(r):
+		case r == 0x05BE || r == '-' || r == ' ':
+			if cur == nil {
+				return "", false
+			}
+			flush()
+		default:
+			return "", false
+		}
+	}
+	flush()
+	if len(letters) < 2 || len(letters) > 4 {
+		return "", false
+	}
+	var b strings.Builder
+	for i, c := range letters {
+		if i > 0 {
+			b.WriteRune(0x05BE)
+		}
+		for _, r := range c {
+			b.WriteRune(r)
+		}
+	}
+	return b.String(), true
+}
+
+// isRootPoint is a Hebrew point a root ignores: the vowel and cantillation marks, but not the
+// shin and sin dots, which distinguish letters.
+func isRootPoint(r rune) bool {
+	switch {
+	case r >= 0x0591 && r <= 0x05AF:
+		return true
+	case r >= 0x05B0 && r <= 0x05BD:
+		return true
+	case r == 0x05BF || r == 0x05C4 || r == 0x05C5 || r == 0x05C7:
+		return true
+	default:
+		return false
 	}
 }

@@ -7,7 +7,7 @@ spec_id: SPEC-006
 initiative_id: INIT-016
 title: "You can now say on Progress and Today"
 domain: frontend
-status: planned
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet

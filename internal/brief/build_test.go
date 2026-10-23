@@ -245,6 +245,10 @@ func newFixture(t *testing.T, opts ...Option) *fixture {
 		}
 		f.regressedID = f.word("regressed", 1)
 		f.regressed(f.user, f.regressedID, fsrs.SkillRead)
+		// The newest attempts set the brief's load. A seen word at 80% right keeps it steady, so
+		// these tests keep measuring the selection rules rather than the accuracy tuning.
+		anchor := f.word("steady", -1)
+		f.attempts(f.user, anchor, fsrs.SkillListen, strings.Repeat("W", 8)+strings.Repeat("R", 32), time.Minute)
 	})
 	return f
 }
@@ -439,6 +443,8 @@ func TestStruggleTiesBreakByLexemeID(t *testing.T) {
 		made = append(made, id)
 		e.struggling(e.user, id, fsrs.SkillRead, 3)
 	}
+	anchor := e.word("steady", -1)
+	e.attempts(e.user, anchor, fsrs.SkillRead, strings.Repeat("W", 8)+strings.Repeat("R", 32), time.Minute)
 	br := e.build("")
 	if got := ids(br.StruggleWords); !slices.Equal(got, made) {
 		t.Errorf("tied words = %v, want ascending ids %v", got, made)
@@ -1040,13 +1046,13 @@ func TestPayloadSchemaV1(t *testing.T) {
 		slices.Sort(out)
 		return out
 	}
-	want := []string{"activities", "coach_notes", "comfortable_words", "focus_cause", "new_words", "notes",
-		"skill_focus", "struggle_words", "targets", "theme", "tier", "v"}
+	want := []string{"activities", "coach_notes", "comfortable_words", "focus_cause", "load", "new_words", "notes",
+		"recentAccuracy", "skill_focus", "struggle_words", "targets", "theme", "tier", "v"}
 	if got := keys(doc); !slices.Equal(got, want) {
 		t.Errorf("payload keys = %v, want %v", got, want)
 	}
-	if string(doc["v"]) != "1" {
-		t.Errorf(`"v" = %s, want 1`, doc["v"])
+	if string(doc["v"]) != "2" {
+		t.Errorf(`"v" = %s, want 2`, doc["v"])
 	}
 	first := func(name string) map[string]json.RawMessage {
 		var list []map[string]json.RawMessage

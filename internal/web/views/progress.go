@@ -121,6 +121,24 @@ type ProgressView struct {
 	Retention ChartView
 	Week      WeekView
 	Placement []PlacementRow
+	// CanSay is what the learner can produce from memory. Nil when there is no signed-in learner.
+	CanSay *CanSayPanel
+}
+
+// CanSayWord is one word in the "you can now say" list. Audio is the clip src, empty without one.
+type CanSayWord struct {
+	He    string
+	Gloss string
+	Audio string
+}
+
+// CanSayPanel is the Progress section. Empty is true before any word is known.
+type CanSayPanel struct {
+	Empty     bool
+	TotalText string
+	AddedText string
+	Items     []CanSayWord
+	Next      []CanSayWord
 }
 
 // SignedGain is "+9" for a gain, and "0" for none.

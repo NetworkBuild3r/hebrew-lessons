@@ -24,6 +24,9 @@ templ Progress(v ProgressView) {
 					</p>
 				}
 			</header>
+			if v.CanSay != nil {
+				@canSaySection(v)
+			}
 			if v.Empty {
 				@progressEmpty(v)
 			} else {
@@ -291,4 +294,45 @@ templ retakePlacement(v ProgressView) {
 		<input type="hidden" name="_csrf" value={ v.CSRF }/>
 		<button type="submit" class="btn btn-primary">@E("Retake placement")</button>
 	</form>
+}
+
+// canSaySection lists what the learner can produce from memory, and the words that are close.
+// Hebrew is the text form, with a play orb where a clip exists.
+templ canSaySection(v ProgressView) {
+	<section class="cansay" id="cansay" aria-labelledby="cansay-h">
+		<h2 id="cansay-h">@T(v.Lang, "", "You can now say")</h2>
+		if v.CanSay.Empty {
+			<p class="cansay__empty">@T(v.Lang, "", "Words you can say from memory gather here as you learn them.")</p>
+		} else {
+			<p class="cansay__count">
+				<span class="cansay__total">{ v.CanSay.TotalText }</span>
+				<span class="cansay__added">{ v.CanSay.AddedText }</span>
+			</p>
+			<ul class="cansay__list">
+				for _, w := range v.CanSay.Items {
+					@canSayItem(w)
+				}
+			</ul>
+			if len(v.CanSay.Next) > 0 {
+				<h3 class="cansay__next">@T(v.Lang, "", "Almost there")</h3>
+				<ul class="cansay__list">
+					for _, w := range v.CanSay.Next {
+						@canSayItem(w)
+					}
+				</ul>
+			}
+		}
+	</section>
+}
+
+templ canSayItem(w CanSayWord) {
+	<li class="cansay__item">
+		<bdi class="cansay__he" lang="he" dir="rtl">{ w.He }</bdi>
+		if w.Gloss != "" {
+			<span class="cansay__gloss" lang="en" dir="ltr">{ w.Gloss }</span>
+		}
+		if w.Audio != "" {
+			@orbButton("orb", "Play "+w.Gloss, w.Audio, "")
+		}
+	</li>
 }

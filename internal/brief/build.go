@@ -22,7 +22,7 @@ import (
 )
 
 // Version is the version of the payload shape, the "v" field of Plan.
-const Version = 1
+const Version = 2
 
 // The hard limits. The word counts are north-star section 7.1 and SPEC-019.
 const (
@@ -179,7 +179,12 @@ type CoachNote struct {
 
 // Plan is the versioned payload of a brief: lesson_briefs.payload_json.
 type Plan struct {
-	V                int            `json:"v"`
+	V int `json:"v"`
+	// Load is how hard this lesson pushes, from recent accuracy: ease, steady, or stretch.
+	Load Load `json:"load,omitempty"`
+	// RecentAccuracy is the share of the newest checked attempts that were right, over at most
+	// LoadWindow of them. It is 0 when there are none.
+	RecentAccuracy   float64        `json:"recentAccuracy"`
 	Theme            string         `json:"theme"`
 	Tier             Tier           `json:"tier"`
 	NewWords         []NewWord      `json:"new_words"`
@@ -366,14 +371,28 @@ func (b *Builder) Build(ctx context.Context, userID int64, theme string) (Brief,
 		Targets: Targets{Coverage: CoverageTarget, NewWordMinUses: NewWordMinUses}}
 	plan.SkillFocus = skillFocus(sum, skills)
 
+	rate, checked, err := b.recentAccuracy(ctx, userID)
+	if err != nil {
+		return Brief{}, err
+	}
+	prev, err := b.previousLoad(ctx, userID)
+	if err != nil {
+		return Brief{}, err
+	}
+	plan.Load = LoadFor(rate, checked, prev)
+	plan.RecentAccuracy = rate
+
 	struggle, err := b.struggleWords(ctx, userID)
 	if err != nil {
 		return Brief{}, err
 	}
+	if plan.Load == LoadEase && len(struggle) > EaseStruggleCap {
+		struggle = struggle[:EaseStruggleCap]
+	}
 	plan.StruggleWords = struggle
 	plan.FocusCause = focusCause(struggle)
 
-	want := NewWordCount(tier, len(struggle))
+	want := TunedNewWords(tier, len(struggle), plan.Load)
 	newWords, notes, err := b.newWords(ctx, userID, day, want, keywords)
 	if err != nil {
 		return Brief{}, err
@@ -381,7 +400,7 @@ func (b *Builder) Build(ctx context.Context, userID int64, theme string) (Brief,
 	plan.NewWords = newWords
 	plan.Notes = append(plan.Notes, notes...)
 
-	comfortable, err := b.comfortableWords(ctx, userID, keywords)
+	comfortable, err := b.comfortableWords(ctx, userID, keywords, ComfortableCap(plan.Load))
 	if err != nil {
 		return Brief{}, err
 	}
@@ -746,9 +765,9 @@ func (b *Builder) unseenInBand(ctx context.Context, userID int64, band int) ([]l
 	return out, nil
 }
 
-// comfortableWords picks up to MaxComfortableWords known or solid words, themed ones first,
-// then the most recently seen, then by id.
-func (b *Builder) comfortableWords(ctx context.Context, userID int64, keywords []string) ([]Word, error) {
+// comfortableWords picks up to cap known or solid words, themed ones first, then the most
+// recently seen, then by id.
+func (b *Builder) comfortableWords(ctx context.Context, userID int64, keywords []string, cap int) ([]Word, error) {
 	var pool []learner.WordState
 	for _, state := range []learner.State{learner.Known, learner.Solid} {
 		got, err := b.listAll(ctx, userID, learner.Filter{State: state}, maxScanWords)
@@ -778,7 +797,7 @@ func (b *Builder) comfortableWords(ctx context.Context, userID int64, keywords [
 	})
 	out := []Word{}
 	for _, w := range pool {
-		if len(out) == MaxComfortableWords {
+		if len(out) == cap {
 			break
 		}
 		if word, ok := briefWord(w); ok {

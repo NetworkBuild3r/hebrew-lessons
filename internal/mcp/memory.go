@@ -664,7 +664,7 @@ func (m *Memory) UpsertLexemes(ctx context.Context, entries []lexicon.Input) ([]
 	return out, []int64{}, nil
 }
 
-// memoryLexeme keeps omitted pos, gender, plural, and translit.
+// memoryLexeme keeps omitted pos, gender, plural, translit, root, and binyan.
 // A set pointer replaces the stored value, including an empty string.
 func memoryLexeme(cur Lexeme, row lexicon.Row) Lexeme {
 	out := cur
@@ -682,6 +682,12 @@ func memoryLexeme(cur Lexeme, row lexicon.Row) Lexeme {
 	}
 	if row.Translit != nil {
 		out.Translit = *row.Translit
+	}
+	if row.Root != nil {
+		out.Root = *row.Root
+	}
+	if row.Binyan != nil {
+		out.Binyan = *row.Binyan
 	}
 	return out
 }

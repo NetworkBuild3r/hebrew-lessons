@@ -62,6 +62,8 @@ type TodayView struct {
 	Slips []SlipAlert
 	// Reported is true on the visit right after a report, so Today can say the lesson is hidden.
 	Reported bool
+	// CanSayLine is "You can now say 23 things · 4 this week". Empty when nothing is known yet.
+	CanSayLine string
 }
 
 // CheckinHint is the line under the check-in title: how long it has been, and what the
@@ -99,6 +101,14 @@ func CountText(n int, one, many string) string {
 		return "1 " + one
 	}
 	return strconv.Itoa(n) + " " + many
+}
+
+// CanSayLineText is Today's one line. It is empty when the learner can say nothing yet.
+func CanSayLineText(total, added int) string {
+	if total == 0 {
+		return ""
+	}
+	return "You can now say " + CountText(total, "thing", "things") + " · " + strconv.Itoa(added) + " this week"
 }
 
 // MinutesFor is the time a day of reviews takes: half a minute a review, at least one

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -158,4 +159,43 @@ func (s *Store) AudioByText(ctx context.Context, textNFC string) (Asset, bool, e
 		return Asset{}, false, fmt.Errorf("db: audio by text: %w", err)
 	}
 	return a, true, nil
+}
+
+// AudioIDs returns the clip id for each text that has one. A text with several clips keeps
+// the greatest id, which is stable. A text with none is left out.
+func (s *Store) AudioIDs(ctx context.Context, texts []string) (map[string]string, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	const chunk = 500
+	for start := 0; start < len(texts); start += chunk {
+		end := min(start+chunk, len(texts))
+		part := texts[start:end]
+		marks := strings.TrimSuffix(strings.Repeat("?,", len(part)), ",")
+		args := make([]any, len(part))
+		for i, text := range part {
+			args[i] = text
+		}
+		rows, err := conn.QueryContext(ctx,
+			`SELECT text_nfc, MAX(id) FROM audio_assets WHERE text_nfc IN (`+marks+`) GROUP BY text_nfc`, args...)
+		if err != nil {
+			return nil, fmt.Errorf("db: audio ids: %w", err)
+		}
+		for rows.Next() {
+			var text, id string
+			if err := rows.Scan(&text, &id); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("db: audio ids: %w", err)
+			}
+			out[text] = id
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, fmt.Errorf("db: audio ids: %w", err)
+		}
+	}
+	return out, nil
 }

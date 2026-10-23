@@ -99,6 +99,58 @@ func TestUpsertLexemesOverCapWritesNothing(t *testing.T) {
 	}
 }
 
+func TestUpsertLexemesRootAndBinyan(t *testing.T) {
+	s := openStore(t, fixedClock{time.Date(2026, 10, 23, 0, 0, 0, 0, time.UTC)})
+	ctx := context.Background()
+	tr := "shama"
+	root, binyan := "שׁ-מ-ע", "paal"
+	root2, binyan2 := "כ־ת־ב", "Paal"
+	first, _, err := s.UpsertLexemes(ctx, []lexicon.Input{
+		{TextNFC: "שָׁמַע", Gloss: "he heard", Translit: &tr, Root: &root, Binyan: &binyan},
+		{TextNFC: "כָּתַב", Gloss: "he wrote", Translit: &tr, Root: &root2, Binyan: &binyan2},
+	})
+	if err != nil || len(first) != 2 {
+		t.Fatalf("create %+v %v", first, err)
+	}
+	stored := readStoredLexeme(t, s, first[0].ID)
+	if stored.root != "שׁ־מ־ע" || stored.binyan != "paal" {
+		t.Fatalf("normalized %+v", stored)
+	}
+
+	second, _, err := s.UpsertLexemes(ctx, []lexicon.Input{{TextNFC: "שָׁמַע", Gloss: "heard"}})
+	if err != nil || second[0].Status != lexicon.StatusUpdated {
+		t.Fatalf("omit %+v %v", second, err)
+	}
+	if got := readStoredLexeme(t, s, first[0].ID); got.root != "שׁ־מ־ע" || got.binyan != "paal" {
+		t.Fatalf("omitted fields changed %+v", got)
+	}
+
+	empty := ""
+	if _, _, err := s.UpsertLexemes(ctx, []lexicon.Input{{TextNFC: "שָׁמַע", Gloss: "heard", Root: &empty, Binyan: &empty}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := readStoredLexeme(t, s, first[0].ID); got.root != "" || got.binyan != "" {
+		t.Fatalf("cleared %+v", got)
+	}
+
+	byRoot, err := s.LexemesByRoot(ctx, "כ־ת־ב")
+	if err != nil || len(byRoot) != 1 || byRoot[0].Text != "כָּתַב" || byRoot[0].Binyan != "paal" {
+		t.Fatalf("by root %+v %v", byRoot, err)
+	}
+	counts, err := s.RootCounts(ctx)
+	if err != nil || counts["כ־ת־ב"] != 1 || counts["שׁ־מ־ע"] != 0 {
+		t.Fatalf("counts %+v %v", counts, err)
+	}
+
+	bad := "abc"
+	if _, _, err := s.UpsertLexemes(ctx, []lexicon.Input{{TextNFC: "שָׁמַע", Gloss: "heard", Root: &bad}}); err == nil {
+		t.Fatal("a non-Hebrew root was accepted")
+	}
+	if got := readStoredLexeme(t, s, first[0].ID); got.gloss != "heard" {
+		t.Fatalf("rejected batch wrote %+v", got)
+	}
+}
+
 func readStoredLexeme(t *testing.T, s *Store, id int64) storedLexeme {
 	t.Helper()
 	conn, err := s.DB()
@@ -109,9 +161,9 @@ func readStoredLexeme(t *testing.T, s *Store, id int64) storedLexeme {
 	var gender, plural, translit sql.NullString
 	var verified int
 	err = conn.QueryRowContext(context.Background(), `
-		SELECT id, bare, gloss_en, pos, gender, plural, translit, verified
+		SELECT id, bare, gloss_en, pos, gender, plural, translit, root, binyan, verified
 		FROM lexemes WHERE id = ?`, id,
-	).Scan(&row.id, &row.bare, &row.gloss, &row.pos, &gender, &plural, &translit, &verified)
+	).Scan(&row.id, &row.bare, &row.gloss, &row.pos, &gender, &plural, &translit, &row.root, &row.binyan, &verified)
 	if err != nil {
 		t.Fatal(err)
 	}

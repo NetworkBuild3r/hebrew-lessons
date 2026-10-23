@@ -172,3 +172,16 @@
 .pplace__detail { color: var(--muted); font-size: var(--fs-small); }
 .pplace .btn { inline-size: auto; justify-self: start; padding-inline: var(--space-6); margin-block-start: 0; }
 .pplace__retake { margin-block-start: var(--space-3); }
+
+/* What the learner can say from memory (INIT-016/SPEC-006). */
+.cansay { display: grid; gap: var(--space-3); padding: var(--space-5); background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius-card); }
+.cansay h2 { font-size: var(--fs-h2); }
+.cansay__count { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--muted); font-size: var(--fs-small); }
+.cansay__total { color: var(--text); font-weight: 700; }
+.cansay__empty { color: var(--muted); max-inline-size: var(--player-max); }
+.cansay__list { display: grid; gap: var(--space-2); list-style: none; padding: 0; margin: 0; }
+.cansay__item { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); min-inline-size: 0; }
+.cansay__he { font-family: var(--font-he); font-size: var(--fs-he-md); font-weight: 700; line-height: var(--lh-he-display); }
+.cansay__gloss { color: var(--muted); font-size: var(--fs-small); }
+.cansay__next { font-size: var(--fs-body); color: var(--muted); margin: 0; }
+.cansay .orb { flex: none; }

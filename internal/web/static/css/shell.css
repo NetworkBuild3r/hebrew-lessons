@@ -35,6 +35,7 @@
 /* Today */
 .today__head { display: grid; gap: var(--space-1); }
 .today__sub { color: var(--muted); font-size: var(--fs-body); line-height: var(--lh-he-body); }
+.today-say a { color: var(--text); font-weight: 700; text-decoration: underline; text-underline-offset: .15em; }
 .today__grid { display: grid; gap: var(--space-5); align-items: stretch; }
 .today__side { display: grid; gap: var(--space-5); align-content: start; }
 .today__side:empty { display: none; }

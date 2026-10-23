@@ -7,7 +7,7 @@ spec_id: SPEC-003
 initiative_id: INIT-016
 title: "MCP: root and binyan on upsert_lexemes and lookup"
 domain: api
-status: planned
+status: complete
 primary_prompt: .claude/agents/principal-backend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet

@@ -7,7 +7,7 @@ spec_id: SPEC-001
 initiative_id: INIT-016
 title: "ADR-0019: the hybrid model"
 domain: docs
-status: planned
+status: complete
 primary_prompt: .claude/agents/implementation-planner/AGENT.md
 supplement_prompts: []
 model: sonnet

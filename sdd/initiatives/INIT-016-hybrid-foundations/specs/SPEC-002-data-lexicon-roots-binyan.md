@@ -7,7 +7,7 @@ spec_id: SPEC-002
 initiative_id: INIT-016
 title: "Roots and verb patterns in the lexicon"
 domain: data
-status: planned
+status: complete
 primary_prompt: .claude/agents/database-architect/AGENT.md
 supplement_prompts: []
 model: sonnet

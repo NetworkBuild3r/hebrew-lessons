@@ -7,7 +7,7 @@ spec_id: SPEC-004
 initiative_id: INIT-016
 title: "Class backfill runbook through MCP"
 domain: docs
-status: planned
+status: complete
 primary_prompt: .claude/agents/implementation-planner/AGENT.md
 supplement_prompts: []
 model: sonnet

@@ -767,6 +767,12 @@ func resEnv(t *testing.T, ex resExample) (*apEnv, *sdkmcp.ClientSession, *resTTS
 	for _, w := range ex.brief.ComfortableWords {
 		resKnow(e, e.a, insert(w.Text))
 	}
+	// The newest attempts set the brief's load. This seen word at 80% right keeps it steady, so the
+	// brief stays the one the guide prints.
+	anchor := units.Normalize("עֹגֶן")
+	e.exec(`INSERT INTO lexemes (text_nfc, bare, gloss_en, translit) VALUES (?, ?, 'anchor', 'ogen')`, anchor, units.Plain(anchor))
+	e.ids[anchor] = int64(e.count(`SELECT id FROM lexemes WHERE text_nfc = ?`, anchor))
+	e.attempts(e.a, anchor, "listen", strings.Repeat("W", 8)+strings.Repeat("R", 32))
 
 	tts := &resTTS{}
 	gen := &audio.Generator{

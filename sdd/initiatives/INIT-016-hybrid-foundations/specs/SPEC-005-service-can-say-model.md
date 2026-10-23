@@ -7,7 +7,7 @@ spec_id: SPEC-005
 initiative_id: INIT-016
 title: "Can say read model"
 domain: service
-status: planned
+status: complete
 primary_prompt: .claude/agents/principal-backend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet

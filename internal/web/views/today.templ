@@ -19,6 +19,9 @@ templ Today(h Home) {
 				if h.Today.DailyLine != "" {
 					<p class="today__sub today-line">@E(h.Today.DailyLine)</p>
 				}
+				if h.Today.CanSayLine != "" {
+					<p class="today__sub today-say"><a href={ templ.SafeURL(h.Href("/progress")) }>@E(h.Today.CanSayLine)</a></p>
+				}
 			</header>
 			if h.Today.Reported {
 				<p class="today-notice" role="status">@T(h.Lang, "", "That lesson is hidden for you. Thank you for telling us.")</p>

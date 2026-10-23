@@ -87,6 +87,7 @@ func (s *server) serveProgress(w http.ResponseWriter, r *http.Request, secure bo
 			serverError(w)
 			return
 		}
+		s.fillCanSay(r.Context(), user.ID, &v)
 	}
 	render(w, r, views.Progress(v))
 }

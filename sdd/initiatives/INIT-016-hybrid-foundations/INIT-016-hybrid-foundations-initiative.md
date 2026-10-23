@@ -1,6 +1,6 @@
 # INIT-016: Hybrid foundations
 
-**Initiative ID:** INIT-016 · **Status:** planned · **Created:** 2026-10-23 · **Owner:** Brian Nelson
+**Initiative ID:** INIT-016 · **Status:** complete · **Created:** 2026-10-23 · **Owner:** Brian Nelson
 **Discipline Profile:** `software` · **Ticket:** none · **Branch:** `main` (the single line; push publishes, a tag bump in home_k3 deploys)
 **Source:** [the hybrid model](../../../docs/design/learner-without-a-tutor.md). First of six initiatives (see its Roadmap).
 

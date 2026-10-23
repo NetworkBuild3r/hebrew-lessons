@@ -20,6 +20,8 @@ type LexemeView struct {
 	Translit string
 	Gender   string
 	POS      string
+	Root     string
+	Binyan   string
 }
 
 // CourseLesson is one published lesson a learner is allowed to open.
@@ -200,7 +202,7 @@ func (s *Store) UnitLexemes(ctx context.Context, unitID int64) ([]LexemeView, er
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT DISTINCT l.id, l.text_nfc, l.gloss_en, l.translit, l.gender, l.pos
+		SELECT DISTINCT l.id, l.text_nfc, l.gloss_en, l.translit, l.gender, l.pos, l.root, l.binyan
 		FROM lesson_items AS li
 		JOIN lexemes AS l ON l.id = li.lexeme_id
 		WHERE li.unit_id = ?
@@ -223,7 +225,7 @@ func (s *Store) EarlierUnitLexemes(ctx context.Context, learnerID int64, beforeP
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT DISTINCT l.id, l.text_nfc, l.gloss_en, l.translit, l.gender, l.pos
+		SELECT DISTINCT l.id, l.text_nfc, l.gloss_en, l.translit, l.gender, l.pos, l.root, l.binyan
 		FROM lesson_items AS li
 		JOIN lexemes AS l ON l.id = li.lexeme_id
 		JOIN units AS u ON u.id = li.unit_id
@@ -266,7 +268,7 @@ func (s *Store) lessonNewWords(ctx context.Context, unitID int64, lessonIx int) 
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT l.id, l.text_nfc, l.gloss_en, l.translit, l.gender, l.pos
+		SELECT l.id, l.text_nfc, l.gloss_en, l.translit, l.gender, l.pos, l.root, l.binyan
 		FROM lesson_items AS li
 		JOIN lexemes AS l ON l.id = li.lexeme_id
 		WHERE li.unit_id = ? AND li.lesson_ix = ? AND li.role = 'new'
@@ -284,7 +286,7 @@ func (s *Store) lexemeView(ctx context.Context, text string) (LexemeView, bool, 
 		return LexemeView{}, false, err
 	}
 	row := conn.QueryRowContext(ctx, `
-		SELECT id, text_nfc, gloss_en, translit, gender, pos
+		SELECT id, text_nfc, gloss_en, translit, gender, pos, root, binyan
 		FROM lexemes WHERE text_nfc = ?`, text)
 	view, err := scanLexemeView(row.Scan)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -317,7 +319,7 @@ func scanLexemeViews(rows *sql.Rows) ([]LexemeView, error) {
 func scanLexemeView(scan func(dest ...any) error) (LexemeView, error) {
 	var view LexemeView
 	var translit, gender sql.NullString
-	err := scan(&view.ID, &view.Text, &view.Gloss, &translit, &gender, &view.POS)
+	err := scan(&view.ID, &view.Text, &view.Gloss, &translit, &gender, &view.POS, &view.Root, &view.Binyan)
 	if err != nil {
 		return LexemeView{}, err
 	}

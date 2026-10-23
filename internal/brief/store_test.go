@@ -386,9 +386,9 @@ func TestRowsFollowTheirParents(t *testing.T) {
 func TestUnsupportedVersionIsRefused(t *testing.T) {
 	e := newEnv(t)
 	br := e.build("")
-	e.exec(`UPDATE lesson_briefs SET payload_json = '{"v":2}' WHERE id = ?`, br.ID)
+	e.exec(`UPDATE lesson_briefs SET payload_json = '{"v":3}' WHERE id = ?`, br.ID)
 	if _, err := e.b.Get(context.Background(), e.user, br.ID); err == nil || errors.Is(err, ErrNotFound) {
-		t.Errorf("Get of a v2 payload = %v, want a version error", err)
+		t.Errorf("Get of a v3 payload = %v, want a version error", err)
 	}
 }
 

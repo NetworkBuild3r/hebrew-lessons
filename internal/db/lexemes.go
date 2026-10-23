@@ -88,6 +88,8 @@ type storedLexeme struct {
 	gender   string
 	plural   string
 	translit string
+	root     string
+	binyan   string
 	verified bool
 }
 
@@ -117,9 +119,9 @@ func readLexeme(ctx context.Context, tx *sql.Tx, text string) (storedLexeme, boo
 	var gender, plural, translit sql.NullString
 	var verified int
 	err := tx.QueryRowContext(ctx, `
-		SELECT id, bare, gloss_en, pos, gender, plural, translit, verified
+		SELECT id, bare, gloss_en, pos, gender, plural, translit, root, binyan, verified
 		FROM lexemes WHERE text_nfc = ?`, text,
-	).Scan(&row.id, &row.bare, &row.gloss, &row.pos, &gender, &plural, &translit, &verified)
+	).Scan(&row.id, &row.bare, &row.gloss, &row.pos, &gender, &plural, &translit, &row.root, &row.binyan, &verified)
 	if errors.Is(err, sql.ErrNoRows) {
 		return storedLexeme{}, false, nil
 	}
@@ -158,15 +160,22 @@ func mergedLexeme(cur storedLexeme, row lexicon.Row) storedLexeme {
 	if row.Verified != nil {
 		out.verified = *row.Verified
 	}
+	if row.Root != nil {
+		out.root = *row.Root
+	}
+	if row.Binyan != nil {
+		out.binyan = *row.Binyan
+	}
 	return out
 }
 
 func insertLexemeRow(ctx context.Context, tx *sql.Tx, row lexicon.Row) (int64, error) {
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO lexemes (text_nfc, bare, gloss_en, pos, gender, plural, translit, verified)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO lexemes (text_nfc, bare, gloss_en, pos, gender, plural, translit, root, binyan, verified)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		row.TextNFC, row.Bare, row.Gloss, strOrEmpty(row.POS),
-		nullIfEmpty(strOrEmpty(row.Gender)), nullIfEmpty(strOrEmpty(row.Plural)), nullIfEmpty(strOrEmpty(row.Translit)), verifiedBit(row.Verified),
+		nullIfEmpty(strOrEmpty(row.Gender)), nullIfEmpty(strOrEmpty(row.Plural)), nullIfEmpty(strOrEmpty(row.Translit)),
+		strOrEmpty(row.Root), strOrEmpty(row.Binyan), verifiedBit(row.Verified),
 	)
 	if err != nil {
 		return 0, fmt.Errorf("db: insert lexeme: %w", err)
@@ -182,10 +191,11 @@ func updateLexeme(ctx context.Context, tx *sql.Tx, cur storedLexeme, row lexicon
 	next := mergedLexeme(cur, row)
 	_, err := tx.ExecContext(ctx, `
 		UPDATE lexemes
-		SET bare = ?, gloss_en = ?, pos = ?, gender = ?, plural = ?, translit = ?, verified = ?
+		SET bare = ?, gloss_en = ?, pos = ?, gender = ?, plural = ?, translit = ?, root = ?, binyan = ?, verified = ?
 		WHERE id = ?`,
 		next.bare, next.gloss, next.pos,
-		nullIfEmpty(next.gender), nullIfEmpty(next.plural), nullIfEmpty(next.translit), verifiedBitBool(next.verified), next.id,
+		nullIfEmpty(next.gender), nullIfEmpty(next.plural), nullIfEmpty(next.translit), next.root, next.binyan,
+		verifiedBitBool(next.verified), next.id,
 	)
 	if err != nil {
 		return fmt.Errorf("db: update lexeme: %w", err)
@@ -290,4 +300,49 @@ func docReferences(doc units.Unit, keys map[string]bool) bool {
 		}
 	}
 	return false
+}
+
+// LexemesByRoot returns every lexeme stored with this root, pointed text then id.
+// The root is matched exactly, so the caller passes the normalized form upsert stores.
+func (s *Store) LexemesByRoot(ctx context.Context, root string) ([]LexemeView, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT id, text_nfc, gloss_en, translit, gender, pos, root, binyan
+		FROM lexemes WHERE root = ?
+		ORDER BY text_nfc, id`, root)
+	if err != nil {
+		return nil, fmt.Errorf("db: lexemes by root: %w", err)
+	}
+	defer rows.Close()
+	return scanLexemeViews(rows)
+}
+
+// RootCounts returns how many lexemes each stored root has. A lexeme with no root is left out.
+func (s *Store) RootCounts(ctx context.Context) (map[string]int, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT root, COUNT(*) FROM lexemes WHERE root <> '' GROUP BY root ORDER BY root`)
+	if err != nil {
+		return nil, fmt.Errorf("db: root counts: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var root string
+		var n int
+		if err := rows.Scan(&root, &n); err != nil {
+			return nil, fmt.Errorf("db: root counts: %w", err)
+		}
+		out[root] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: root counts: %w", err)
+	}
+	return out, nil
 }

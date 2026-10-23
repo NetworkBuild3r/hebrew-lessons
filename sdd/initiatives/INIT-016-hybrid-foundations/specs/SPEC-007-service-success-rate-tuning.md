@@ -7,7 +7,7 @@ spec_id: SPEC-007
 initiative_id: INIT-016
 title: "Success-rate tuning in the brief"
 domain: service
-status: planned
+status: complete
 primary_prompt: .claude/agents/principal-backend-developer/AGENT.md
 supplement_prompts: []
 model: opus

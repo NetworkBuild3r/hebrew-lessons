@@ -98,6 +98,8 @@ Tuning tools already there: `get_learner_model`, `get_learner_words`, `get_progr
 
 ## Decisions (2026-10-23)
 
+Recorded as [ADR-0019](../decisions/ADR-0019-hybrid-learning-model.md).
+
 - **Hybrid model**: research rules in code, tuned per learner from their record, with tutor input through MCP when there is a tutor.
 - **Class data source**: a four-class sample (ten tables; 57 of 94 content words have a root, 54 distinct roots). Loaded through MCP, not committed here. Not loaded until the backfill is under way.
 - **Root coverage in the site**: unknown. Needs a read of the production database. Likely close to none until roots can be written.

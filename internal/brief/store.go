@@ -97,8 +97,8 @@ func (b *Builder) Get(ctx context.Context, userID int64, id string) (Brief, erro
 	if err := json.Unmarshal([]byte(payload), &out.Plan); err != nil {
 		return Brief{}, fmt.Errorf("brief: read payload: %w", err)
 	}
-	if out.V != Version {
-		return Brief{}, fmt.Errorf("brief: payload version %d, want %d", out.V, Version)
+	if out.V < 1 || out.V > Version {
+		return Brief{}, fmt.Errorf("brief: payload version %d, want 1 to %d", out.V, Version)
 	}
 	if !b.clock.Now().Before(out.ExpiresAt) {
 		return Brief{}, ErrExpired

@@ -111,6 +111,7 @@ type Lexeme struct {
 	Plural       string `json:"plural"`
 	Translit     string `json:"translit"`
 	Root         string `json:"root"`
+	Binyan       string `json:"binyan"`
 	AudioPresent bool   `json:"audioPresent"`
 }
 

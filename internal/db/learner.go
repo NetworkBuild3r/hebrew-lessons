@@ -360,9 +360,10 @@ type skillKey struct {
 
 // LexemeText is the part of a lexeme the learner model shows.
 type LexemeText struct {
-	ID      int64
-	TextNFC string
-	Gloss   string
+	ID       int64
+	TextNFC  string
+	Gloss    string
+	Translit string
 }
 
 // LexemeIDs returns every lexeme id, ascending.
@@ -409,16 +410,18 @@ func (s *Store) LexemeTexts(ctx context.Context, ids []int64) (map[int64]LexemeT
 		for i, id := range part {
 			args[i] = id
 		}
-		rows, err := conn.QueryContext(ctx, `SELECT id, text_nfc, gloss_en FROM lexemes WHERE id IN (`+marks+`)`, args...)
+		rows, err := conn.QueryContext(ctx, `SELECT id, text_nfc, gloss_en, translit FROM lexemes WHERE id IN (`+marks+`)`, args...)
 		if err != nil {
 			return nil, fmt.Errorf("db: lexeme texts: %w", err)
 		}
 		for rows.Next() {
 			var l LexemeText
-			if err := rows.Scan(&l.ID, &l.TextNFC, &l.Gloss); err != nil {
+			var translit sql.NullString
+			if err := rows.Scan(&l.ID, &l.TextNFC, &l.Gloss, &translit); err != nil {
 				rows.Close()
 				return nil, fmt.Errorf("db: lexeme texts: %w", err)
 			}
+			l.Translit = translit.String
 			out[l.ID] = l
 		}
 		err = rows.Err()
@@ -428,6 +431,71 @@ func (s *Store) LexemeTexts(ctx context.Context, ids []int64) (map[int64]LexemeT
 		}
 	}
 	return out, nil
+}
+
+// RecallLearnedAt returns, for one learner, the time of the earliest recall review of each
+// word that has one. It is the closest record of when the word moved into known.
+func (s *Store) RecallLearnedAt(ctx context.Context, userID int64) (map[int64]time.Time, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT c.lexeme_id, MIN(r.reviewed_at)
+		FROM cards AS c JOIN review_log AS r ON r.card_id = c.id
+		WHERE c.user_id = ? AND c.skill = 'recall'
+		GROUP BY c.lexeme_id`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("db: recall learned at: %w", err)
+	}
+	defer rows.Close()
+	out := map[int64]time.Time{}
+	for rows.Next() {
+		var id int64
+		var at string
+		if err := rows.Scan(&id, &at); err != nil {
+			return nil, fmt.Errorf("db: recall learned at: %w", err)
+		}
+		when, err := ParseTime(at)
+		if err != nil {
+			return nil, fmt.Errorf("db: recall learned at: %w", err)
+		}
+		out[id] = when
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: recall learned at: %w", err)
+	}
+	return out, nil
+}
+
+// RecentChecked counts the newest n attempts of one learner: how many there are, and how many
+// were right. n under 1 reads nothing.
+func (s *Store) RecentChecked(ctx context.Context, userID int64, n int) (correct, total int, err error) {
+	if n < 1 {
+		return 0, 0, nil
+	}
+	conn, err := s.connOrErr()
+	if err != nil {
+		return 0, 0, err
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT correct FROM attempts WHERE user_id = ? ORDER BY id DESC LIMIT ?`, userID, n)
+	if err != nil {
+		return 0, 0, fmt.Errorf("db: recent checked: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var c int
+		if err := rows.Scan(&c); err != nil {
+			return 0, 0, fmt.Errorf("db: recent checked: %w", err)
+		}
+		total++
+		correct += c
+	}
+	if err := rows.Err(); err != nil {
+		return 0, 0, fmt.Errorf("db: recent checked: %w", err)
+	}
+	return correct, total, nil
 }
 
 // PlacementItemLexeme says which placement item a lexeme was dealt as.

@@ -32,7 +32,7 @@ func (s *Store) SearchLexemes(ctx context.Context, query string, limit int) ([]m
 	// Clip texts are joined once. audio_assets has no index on text_nfc,
 	// voice, or model; adding one needs a migration.
 	rows, err := conn.QueryContext(ctx, `
-		SELECT l.text_nfc, l.bare, l.gloss_en, l.pos, l.gender, l.plural, l.translit, l.root,
+		SELECT l.text_nfc, l.bare, l.gloss_en, l.pos, l.gender, l.plural, l.translit, l.root, l.binyan,
 		       CASE WHEN a.text_nfc IS NOT NULL THEN 1 ELSE 0 END
 		FROM lexemes AS l
 		LEFT JOIN (
@@ -106,7 +106,7 @@ func scanLexeme(rows rowScanner) (mcp.Lexeme, string, error) {
 	var audio int
 	if err := rows.Scan(
 		&lx.TextNFC, &lx.Bare, &lx.Gloss, &lx.POS, &gender, &plural,
-		&translit, &lx.Root, &audio,
+		&translit, &lx.Root, &lx.Binyan, &audio,
 	); err != nil {
 		return mcp.Lexeme{}, "", fmt.Errorf("mcpstore: search: %w", err)
 	}

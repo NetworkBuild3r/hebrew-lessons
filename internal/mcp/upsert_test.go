@@ -112,9 +112,31 @@ func TestUpsertLexemesSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	schema := string(raw)
-	for _, piece := range []string{"entries", "text_nfc", "gloss_en", "bare", "translit", "gender", "plural", "verified"} {
+	for _, piece := range []string{"entries", "text_nfc", "gloss_en", "bare", "translit", "gender", "plural", "verified",
+		`"root"`, "separated by a maqaf", `"binyan"`, "hitpael"} {
 		if !strings.Contains(schema, piece) {
 			t.Fatalf("upsert_lexemes schema missing %s: %s", piece, schema)
 		}
+	}
+}
+
+func TestUpsertThenLookupReturnsRootAndBinyan(t *testing.T) {
+	mem := NewMemory()
+	srv := httptest.NewServer(Handler(Options{Validator: roleTokens{}, Lexicon: mem, Lexemes: mem}))
+	t.Cleanup(srv.Close)
+	res := postTool(t, srv.URL, "admin", "upsert_lexemes", map[string]any{
+		"entries": []any{map[string]any{
+			"text_nfc": "שָׁמַע", "gloss_en": "he heard", "translit": "shama", "pos": "verb",
+			"root": "שׁ-מ-ע", "binyan": "paal",
+		}},
+	}, nil)
+	body := readBody(t, res)
+	if res.StatusCode != http.StatusOK || !strings.Contains(body, `"status":"created"`) {
+		t.Fatalf("upsert %d %s", res.StatusCode, body)
+	}
+	look := postTool(t, srv.URL, "admin", "lookup", lookupInput{Query: "שָׁמַע"}, nil)
+	got := readBody(t, look)
+	if look.StatusCode != http.StatusOK || !strings.Contains(got, "שׁ־מ־ע") || !strings.Contains(got, `"binyan":"paal"`) {
+		t.Fatalf("lookup %d %s", look.StatusCode, got)
 	}
 }
