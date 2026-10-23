@@ -64,6 +64,8 @@ func listenFixtureAt(t *testing.T, origin string, words ...string) (lessonFixtur
 	acts := []units.Activity{
 		{Type: units.ActivityListenPick, Text: line},
 		{Type: units.ActivityRecall, Text: lsHello},
+		// A recall of a line names one word and lays the line out as cards.
+		{Type: units.ActivityRecall, Text: line, Target: lsMorning},
 	}
 	// Every word of a real unit is used in some activity, which is what puts it in the pool.
 	for _, w := range words[min(2, len(words)):] {

@@ -416,13 +416,6 @@
   border-radius: var(--radius-card);
   text-align: center;
 }
-.word-blocks--spot { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: var(--space-4) var(--space-6); }
-.spotlight .activity-word { align-items: center; text-align: center; }
-.spotlight .wb--card { align-items: center; text-align: center; gap: var(--space-2); }
-.spotlight .wb--card .wb__he { font-size: var(--fs-he-xl); }
-.spotlight .wb--card .wb__tr { font-size: 18px; }
-.spotlight .wb--card .wb__gl { font-size: 20px; font-weight: 600; }
-.word-blocks--spot:has(.activity-word:only-child) .wb--card .wb__he { font-size: var(--fs-he-hero); }
 .lesson-frame .c-answer__label:has(.choice-he) { text-align: center; }
 .choice-he {
   display: block;

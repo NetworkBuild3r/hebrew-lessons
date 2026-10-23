@@ -1033,6 +1033,6 @@ func qaNormGloss(gloss string) string {
 }
 
 var (
-	qaGlossRE = regexp.MustCompile(`(?s)<bdi class="[^"]*\bwb__gl\b[^"]*"[^>]*>(.*?)</bdi>`)
+	qaGlossRE = regexp.MustCompile(`(?s)<(?:bdi|span) class="[^"]*\b(?:wb__gl|wcard__gl)\b[^"]*"[^>]*>(.*?)</(?:bdi|span)>`)
 	qaAudioRE = regexp.MustCompile(`/audio/([0-9a-fA-F]{64})\.mp3`)
 )

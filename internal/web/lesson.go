@@ -448,18 +448,6 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		screen.Activity.AudioLabel, screen.Activity.AudioHebrew = phrasePlayLabel(act, phase)
 	}
 	screen.Activity.Spotlight = spotlight(act.Type, screen.Activity)
-	if screen.Activity.Spotlight {
-		// The word is a card the learner can tap, as on a teach step. Before the answer the back
-		// is how the word sounds, and never what it means. After it, the back is the meaning.
-		for i := range screen.Activity.Words {
-			w := &screen.Activity.Words[i]
-			if w.Plain || w.Gap {
-				continue
-			}
-			w.Flip = true
-			w.Open = screen.Activity.MeaningsOpen && phase != "ask"
-		}
-	}
 	return screen, nil
 }
 
@@ -633,7 +621,7 @@ func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.
 		return nil
 	}
 	show := visibleFields(typ, phase)
-	flip := !gradedActivity(typ)
+	flip := cardsIn(typ, phase)
 	fresh := map[string]bool{}
 	for _, word := range newWords {
 		fresh[word.Text] = true

@@ -124,5 +124,27 @@ await page.waitForTimeout(400);
 check("the card reveals the meaning after answering", (await page.locator(".spotlight .wcard__gl").first().innerText()).trim().length > 0);
 await shot("recall-answered");
 
+// ---- A recall of a line: every word is a card, the asked word is marked and shows only its sound.
+await page.locator('button[name="answer"][value="continue"]').click();
+await page.waitForSelector(".choices .c-answer");
+await page.waitForSelector(".wline .wcard");
+await page.waitForTimeout(500);
+check("a line recall lays every word out as a card", (await page.locator(".wline details.wcard").count()) === 2, await page.locator(".wline details.wcard").count());
+check("the asked word is the one mark", (await page.locator(".wline mark.target").count()) === 1);
+const lineBoxes = await page.locator(".wline details.wcard").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().y));
+check("the cards of the line share a row", Math.abs(lineBoxes[0] - lineBoxes[1]) <= 2, lineBoxes.join(","));
+await page.locator(".wline details.wcard:has(mark.target) summary").click();
+await page.waitForTimeout(400);
+check("the asked word shows only its sound", (await page.locator(".wline details.wcard:has(mark.target) .wcard__sound").count()) === 1 && (await page.locator(".wline details.wcard:has(mark.target) .wcard__gl").count()) === 0);
+await page.locator(".wline details.wcard:not(:has(mark.target)) summary").click();
+await page.waitForTimeout(400);
+check("a help word shows its meaning on tap", (await page.locator(".wline details.wcard:not(:has(mark.target)) .wcard__gl").innerText()).trim().length > 0);
+check("no page scrolls sideways on a line recall", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+await shot("line-recall");
+await page.locator(".choices .c-answer").first().click();
+await page.waitForSelector(".wline details.wcard");
+await page.waitForTimeout(500);
+await shot("line-answered");
+
 await browser.close();
 console.log(JSON.stringify({ checks, errors }));

@@ -426,8 +426,9 @@ for (const [i, [width, height]] of [[390, 844], [1440, 900]].entries()) {
     check(`${tag}: the bar moved to 1 of 4`, (await value()) === 1 && (await page.evaluate(() => document.querySelector(".lf-bar progress").max)) === 4, await value());
     const cur = await page.locator('.lf-step[aria-current="step"] .lf-step__label').innerText();
     check(`${tag}: the outline's current step is the second`, cur === "Recall the meaning", cur);
-    const keys = await page.locator(".c-answer .c-answer__key").allInnerTexts();
-    check(`${tag}: answers carry keys 1, 2, 3`, JSON.stringify(keys) === '["1","2","3"]', keys.join(","));
+    // The lesson has no 1/2/3 badges: nothing tells the learner to press a key.
+    const keys = await page.locator(".c-answer .c-answer__key").evaluateAll((els) => els.map((el) => el.textContent.trim()));
+    check(`${tag}: answers carry no key badges`, keys.every((k) => k === ""), keys.join(","));
     c = await page.evaluate(contrastInfo);
     check(`${tag}: text contrast on a checked step`, c.bad.length === 0, c.bad.slice(0, 4).join(" | "));
     check(`${tag}: answers are 44px targets`, (await page.evaluate(targetInfo)).length === 0, (await page.evaluate(targetInfo)).join("; "));

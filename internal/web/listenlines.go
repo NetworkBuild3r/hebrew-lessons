@@ -136,24 +136,6 @@ func without(lexemes []db.LexemeView, said map[string]bool, target db.LexemeView
 	return out
 }
 
-// spotlight is a step that shows its Hebrew as the one thing on the screen: big and
-// centered, with the play control under it. That is a recall of one word, and a listening
-// step once the line is shown. A recall of a line names one word and has its own layout.
-func spotlight(typ string, a views.Activity) bool {
-	if typ != units.ActivityRecall && typ != units.ActivityListenPick {
-		return false
-	}
-	if a.PromptWord != "" || a.Dialogue != nil {
-		return false
-	}
-	for _, w := range a.Words {
-		if w.ShowText && !w.Plain && !w.Gap {
-			return true
-		}
-	}
-	return false
-}
-
 var glossNote = regexp.MustCompile(`\s+of\s+[\x{0590}-\x{05FF}]+`)
 
 // learnerGloss is a gloss as a button shows it. The lexicon keeps a form's grammar note,

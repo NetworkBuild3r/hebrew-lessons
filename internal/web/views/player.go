@@ -119,13 +119,9 @@ func dialogueOrbAttrs(i int) templ.Attributes {
 	return templ.Attributes{"data-audio": dialogueClipID(i), "data-dlg-line": Num(i)}
 }
 
-// wordBlocksClass is the activity line. A multi-word recall centres that line
-// under the hero orb and lays transliteration, gloss, and orb on one grid.
-// A teach line of flip cards is a wline, so the cards share one row.
+// wordBlocksClass is the activity line. A line of cards is a wline, so the cards share one row.
+// A step with no cards keeps its words as static blocks.
 func wordBlocksClass(a Activity) string {
-	if a.PromptWord != "" {
-		return "word-blocks word-blocks--recall"
-	}
 	if hasFlipWords(a.Words) {
 		return "wline"
 	}
@@ -206,9 +202,6 @@ func meaningsLabel(open bool) string {
 
 // clipRows is true when the step has a no-JS play bar under the line.
 func clipRows(a Activity) bool {
-	if a.PromptWord != "" {
-		return true
-	}
 	for _, w := range a.Words {
 		if w.Flip && w.Audio != "" {
 			return true

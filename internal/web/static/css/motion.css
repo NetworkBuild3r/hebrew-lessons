@@ -203,9 +203,6 @@
     inset: 0;
     margin: auto;
   }
-  .target-slot--filled {
-    animation: slot-fill var(--dur-base) var(--ease-out) both;
-  }
 
   /* stagger-in: each child waits one step longer than the one before, up to
      the eighth. Items take taps from the first frame; only paint is delayed. */
@@ -339,8 +336,5 @@
     background: var(--focus-ring);
     border-color: var(--focus-ring);
     outline: none;
-  }
-  .target-slot--filled {
-    animation: motion-fade-in var(--dur-fast) linear both;
   }
 }

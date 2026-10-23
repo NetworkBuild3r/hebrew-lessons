@@ -396,7 +396,7 @@ func checkRecallAsk(t *testing.T, ask string, step recallStep, target db.LexemeV
 		if !strings.Contains(head, prompt) || strings.Contains(ask, "What does this Hebrew mean?") {
 			t.Fatalf("multi-word prompt is not the target word %q:\n%s", target.Text, head)
 		}
-		card := elementFrom(head, `<span class="wb wb--card"><span class="recall-he"><mark class="target">`)
+		card := cardAround(head, `<mark class="target">`)
 		if card == "" || strings.Count(head, `class="target"`) != 1 {
 			t.Fatalf("multi-word recall does not mark exactly one target:\n%s", head)
 		}
@@ -404,11 +404,12 @@ func checkRecallAsk(t *testing.T, ask string, step recallStep, target db.LexemeV
 		if word != target.Text {
 			t.Fatalf("marked word = %q, want %q\n%s", word, target.Text, card)
 		}
-		if strings.Contains(card, `class="wb__tr"`) || strings.Contains(card, ">"+target.Translit+"<") || strings.Contains(card, `target-slot--filled`) || strings.Contains(card, ">"+target.Gloss+"<") {
+		// The target is a card too. Its front is the word, and its back is only how it sounds.
+		if strings.Contains(card, `class="wcard__tr"`) || strings.Contains(stripSound(card), ">"+target.Translit+"<") || strings.Contains(card, `class="wcard__gl"`) || strings.Contains(card, ">"+target.Gloss+"<") {
 			t.Fatalf("target transliteration or gloss is visible before the answer:\n%s", card)
 		}
-		if !strings.Contains(card, `class="target-slot"`) || !strings.Contains(card, ">?</span>") {
-			t.Fatalf("the target slot is not the empty dash:\n%s", card)
+		if !strings.Contains(card, `class="wcard__sound"`) {
+			t.Fatalf("the target card back is not how the word sounds:\n%s", card)
 		}
 	} else {
 		if !strings.Contains(head, v3OneWordPrompt) || strings.Contains(head, `class="target"`) || strings.Contains(head, "target-slot") || strings.Contains(head, `lang="he" dir="rtl">`+target.Text+`</bdi><bdi lang="en"`) {
@@ -418,7 +419,7 @@ func checkRecallAsk(t *testing.T, ask string, step recallStep, target db.LexemeV
 		if !strings.Contains(head, block) {
 			t.Fatalf("one-word recall is not the v3 word block %s:\n%s", block, head)
 		}
-		if strings.Contains(head, `class="wb__tr"`) || strings.Contains(stripSound(head), ">"+target.Translit+"<") {
+		if strings.Contains(head, `class="wcard__tr"`) || strings.Contains(stripSound(head), ">"+target.Translit+"<") {
 			t.Fatalf("one-word transliteration is visible before the answer:\n%s", head)
 		}
 	}
@@ -456,14 +457,14 @@ func checkRecallAsk(t *testing.T, ask string, step recallStep, target db.LexemeV
 func checkRecallReveal(t *testing.T, revealed string, step recallStep, target db.LexemeView) {
 	t.Helper()
 	if step.multi {
-		card := elementFrom(revealed, `<span class="wb wb--card"><span class="recall-he"><mark class="target">`)
+		card := cardAround(revealed, `<mark class="target">`)
 		if card == "" {
 			t.Fatalf("the target mark is gone after the answer:\n%s", revealed)
 		}
-		if !strings.Contains(card, `target-slot--filled`) || !strings.Contains(card, ">"+target.Gloss+"<") {
-			t.Fatalf("the slot did not fill with %q:\n%s", target.Gloss, card)
+		if !strings.Contains(card, `class="wcard__gl"`) || !strings.Contains(card, ">"+target.Gloss+"<") {
+			t.Fatalf("the card back did not show %q:\n%s", target.Gloss, card)
 		}
-		if !strings.Contains(card, `class="wb__tr"`) || !strings.Contains(card, ">"+target.Translit+"<") {
+		if !strings.Contains(card, `class="wcard__tr"`) || !strings.Contains(card, ">"+target.Translit+"<") {
 			t.Fatalf("the target transliteration did not appear after the answer:\n%s", card)
 		}
 		return
@@ -493,7 +494,7 @@ func v3RevealWordBlock(text, translit, gloss string) string {
 }
 
 func markedWord(card string) string {
-	const open = `<bdi class="wb__he" lang="he" dir="rtl">`
+	const open = `<bdi class="wcard__he" lang="he" dir="rtl">`
 	i := strings.Index(card, open)
 	if i < 0 {
 		return ""
@@ -501,6 +502,21 @@ func markedWord(card string) string {
 	rest := card[i+len(open):]
 	word, _, _ := strings.Cut(rest, "</bdi>")
 	return word
+}
+
+// cardAround returns the whole word card (a details element) that holds the first occurrence of
+// marker.
+func cardAround(html, marker string) string {
+	i := strings.Index(html, marker)
+	if i < 0 {
+		return ""
+	}
+	open := strings.LastIndex(html[:i], "<details")
+	end := strings.Index(html[i:], "</details>")
+	if open < 0 || end < 0 {
+		return ""
+	}
+	return html[open : i+end+len("</details>")]
 }
 
 // elementFrom returns the element that starts at the first occurrence of
@@ -561,7 +577,7 @@ func TestOneWordRecallPromptUnchangedFromV3(t *testing.T) {
 			t.Errorf("one-word recall contains %q", gone)
 		}
 	}
-	for _, gone := range []string{`class="wb__tr"`, `class="wb__gl"`, ">" + target.Translit + "<", ">" + target.Gloss + "<"} {
+	for _, gone := range []string{`class="wcard__tr"`, `class="wcard__gl"`, ">" + target.Translit + "<", ">" + target.Gloss + "<"} {
 		if strings.Contains(stripSound(head), gone) {
 			t.Errorf("one-word prompt shows %q before the answer", gone)
 		}

@@ -156,7 +156,7 @@ func assertGradedCloze(t *testing.T, body string) {
 	if !strings.Contains(body, "TL-lomed") {
 		t.Fatalf("graded cloze hides the answer translit:\n%s", body)
 	}
-	if !strings.Contains(body, `class="wb__tr"`) {
+	if !strings.Contains(body, `class="wcard__tr"`) {
 		t.Fatalf("graded cloze translit is not a reading:\n%s", body)
 	}
 }
