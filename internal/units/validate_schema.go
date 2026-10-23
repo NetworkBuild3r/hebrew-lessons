@@ -3,6 +3,7 @@ package units
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 func schemaIssues(doc *Unit) []Issue {
@@ -57,9 +58,27 @@ func schemaIssues(doc *Unit) []Issue {
 			if strings.TrimSpace(act.Text) == "" {
 				out = append(out, issue(RuleSchemaRequired, SeverityBlock, at("lessons", i, "activities", j, "text"), "activity text is required"))
 			}
+			if typ == ActivitySay {
+				out = append(out, sayPromptIssues(at("lessons", i, "activities", j, "prompt_en"), act.PromptEN)...)
+			}
 		}
 	}
 	return out
+}
+
+// sayPromptIssues checks the English cue on a say step.
+func sayPromptIssues(pointer, prompt string) []Issue {
+	prompt = strings.TrimSpace(prompt)
+	switch {
+	case prompt == "":
+		return []Issue{issue(RuleSayPrompt, SeverityBlock, pointer, "say step needs an English cue")}
+	case utf8.RuneCountInString(prompt) > PromptMaxRunes:
+		return []Issue{issue(RuleSayPrompt, SeverityBlock, pointer, fmt.Sprintf("say cue is longer than %d characters", PromptMaxRunes))}
+	case containsHebrew(prompt) || hasMarkup(prompt):
+		return []Issue{issue(RuleSayPrompt, SeverityBlock, pointer, "say cue is plain English, with no Hebrew and no markup")}
+	default:
+		return nil
+	}
 }
 
 func refIssues(words []wordRef) []Issue {

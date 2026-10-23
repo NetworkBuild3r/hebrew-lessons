@@ -9,7 +9,7 @@ import (
 // and they are the only types that may set Target.
 func gradedActivity(typ string) bool {
 	switch typ {
-	case ActivityRecall, ActivityListenPick, ActivityProduce, ActivityCloze:
+	case ActivityRecall, ActivityListenPick, ActivityProduce, ActivityCloze, ActivitySay:
 		return true
 	default:
 		return false
@@ -22,7 +22,7 @@ func gradedActivity(typ string) bool {
 // produce grades one word, the same as recall and cloze.
 func targetRequired(typ string) bool {
 	switch typ {
-	case ActivityRecall, ActivityProduce, ActivityCloze:
+	case ActivityRecall, ActivityProduce, ActivityCloze, ActivitySay:
 		return true
 	default:
 		return false
@@ -95,7 +95,7 @@ func targetIssues(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue 
 			where := fmt.Sprintf("The %s activity in lesson %d, activity %d,", act.Type, i+1, j+1)
 			if !gradedActivity(act.Type) {
 				out = append(out, issue(RuleActivityTarget, SeverityBlock, ptr,
-					fmt.Sprintf("%s has a target, and only a recall, listen_pick, produce, or cloze activity may set one.", where)))
+					fmt.Sprintf("%s has a target, and only a recall, listen_pick, produce, cloze, or say activity may set one.", where)))
 				continue
 			}
 			tok, ok := targetToken(act)

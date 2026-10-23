@@ -7,7 +7,7 @@ spec_id: SPEC-002
 initiative_id: INIT-020
 title: "Say-it-aloud activity type"
 domain: service
-status: planned
+status: complete
 primary_prompt: .claude/agents/principal-backend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet

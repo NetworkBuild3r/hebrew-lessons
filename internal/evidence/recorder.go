@@ -21,10 +21,14 @@ const (
 	SourceReview    = "review"
 	SourceLesson    = "lesson"
 	SourcePractice  = "practice"
+	SourceSelf      = "self"
 )
 
 // ActivityFlashcard is the activity SelfGrade writes.
 const ActivityFlashcard = "flashcard"
+
+// ActivitySay is the activity SayCheck writes.
+const ActivitySay = "say"
 
 // Contexts an exposure can come from. They match the exposures.context check.
 const (
@@ -249,6 +253,48 @@ func (r *Recorder) SelfGrade(ctx context.Context, cardID int64, rating fsrs.Rati
 	return err
 }
 
+// SayCheck records one say-it-aloud self-check.
+// gotIt is the learner's "Got it". The attempt is activity say, skill recall,
+// source self, and the rating is applied as given: Good when they got it, Again
+// when they did not. The review log is peeked, because the model was shown first.
+// A card for that word and skill is created when there is none.
+func (r *Recorder) SayCheck(ctx context.Context, userID, lexemeID, unitID int64, prompt string, gotIt bool) error {
+	if err := r.ready(); err != nil {
+		return err
+	}
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" || len([]rune(prompt)) > 200 {
+		return errors.New("evidence: say prompt is empty or too long")
+	}
+	rating := fsrs.Again
+	response := "not yet"
+	if gotIt {
+		rating = fsrs.Good
+		response = "got it"
+	}
+	now := r.clock.Now()
+	a := Attempt{
+		UserID:   userID,
+		LexemeID: lexemeID,
+		Skill:    fsrs.SkillRecall,
+		Activity: ActivitySay,
+		Source:   SourceSelf,
+		UnitID:   unitID,
+		Prompt:   prompt,
+		Response: response,
+		Correct:  gotIt,
+	}
+	_, err := r.store.WriteAttempt(ctx, db.AttemptWrite{
+		Attempt: a.row(now),
+		Step: func(prev *db.Card) (db.Card, db.ReviewLog, bool, error) {
+			next, log, err := r.review.ScheduleNext(prev, now, rating)
+			log.Peeked = true
+			return next, log, err == nil, err
+		},
+	})
+	return err
+}
+
 // Expose records that words were shown to the learner with no question asked.
 // where is one of the Context constants. unitID 0 means no unit. A word listed
 // twice is recorded once. An empty list writes nothing.
@@ -292,9 +338,9 @@ func (a Attempt) validate() error {
 		return fmt.Errorf("evidence: skill %q is not listen, read, recall, or spell", a.Skill)
 	}
 	switch a.Source {
-	case SourcePlacement, SourceReview, SourceLesson, SourcePractice:
+	case SourcePlacement, SourceReview, SourceLesson, SourcePractice, SourceSelf:
 	default:
-		return fmt.Errorf("evidence: source %q is not placement, review, lesson, or practice", a.Source)
+		return fmt.Errorf("evidence: source %q is not placement, review, lesson, practice, or self", a.Source)
 	}
 	if strings.TrimSpace(a.Activity) == "" {
 		return errors.New("evidence: attempt has no activity")

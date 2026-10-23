@@ -1,4 +1,4 @@
-# SPEC-001 · data: Isaiah verse notes (migration 015)
+# SPEC-001 · data: Isaiah verse notes (migration 016)
 
 ## Metadata
 
@@ -24,7 +24,7 @@ blocks: [SPEC-002]
 
 **Context:** `tanakh_verses` holds the pointed text and JPS 1917 English. Isaiah study layers four kinds of notes on each verse; they are drafted by an agent and checked by a person (D10).
 
-**Scope (in):** `migrations/015_verse_notes.sql` and store methods:
+**Scope (in):** `migrations/016_verse_notes.sql` and store methods:
 
 - `verse_notes`: `book`, `chapter`, `verse` (referencing `tanakh_verses`), `layer` (`gloss` | `roots` | `manner` | `bridge`), `body` (restricted markdown from INIT-017/SPEC-002's grammar, ≤ 8 000 bytes), `status` (`draft` | `checked`), `drafted_by`, `checked_by` (user id, nullable), `updated_at`. Primary key (book, chapter, verse, layer).
 - `verse_word_glosses`: (`book`, `chapter`, `verse`, `position`) → `word_he`, `gloss_en`, `root` (nullable), `lexeme_id` (nullable), `status`.
@@ -40,7 +40,7 @@ blocks: [SPEC-002]
 
 ## Deliverables
 
-- [ ] `migrations/015_verse_notes.sql`
+- [ ] `migrations/016_verse_notes.sql`
 - [ ] `internal/db/versenotes.go` and tests
 
 ## Gates & Controls

@@ -479,7 +479,7 @@ func genderOK(g string) bool {
 
 func knownActivity(typ string) bool {
 	switch typ {
-	case ActivityListenPick, ActivityRecall, ActivityProduce, ActivityCloze, ActivityPattern, ActivityStory, ActivityShadow, ActivityDialogue:
+	case ActivityListenPick, ActivityRecall, ActivityProduce, ActivityCloze, ActivityPattern, ActivityStory, ActivityShadow, ActivityDialogue, ActivitySay:
 		return true
 	default:
 		return false

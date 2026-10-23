@@ -122,7 +122,8 @@ Six small initiatives, each with a one-screen plan under `sdd/initiatives/`. Eac
 | [INIT-020 Speaking](../../sdd/initiatives/INIT-020-speaking/INIT-020-speaking-initiative.md) | Say it aloud; play one side of a dialogue | 4 | 16h | INIT-017, voice service |
 | [INIT-021 Isaiah](../../sdd/initiatives/INIT-021-isaiah/INIT-021-isaiah-initiative.md) | Verse-by-verse reader with checked layers | 3 | 12h | INIT-016, 017, 018, human checking |
 
-Order: INIT-016 through INIT-019 are in the app. The class backfill has not started. INIT-020 and INIT-021 go when their outside dependencies are ready.
+Order: INIT-016 through INIT-019 are in the app. A say step can be authored and graded. The voice account still blocks the player and playing one side of a dialogue. The class backfill has not started. INIT-021 still waits.
+
 ## Not in scope here
 
 Speech recognition, an AI conversation partner, and payments or accounts for other learners.

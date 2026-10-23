@@ -160,8 +160,8 @@ func TestDialogueIsInTheAuthoringResources(t *testing.T) {
 	if err := json.Unmarshal([]byte(catalog), &parsed); err != nil {
 		t.Fatal(err)
 	}
-	if len(parsed.Activities) != 8 {
-		t.Fatalf("catalog has %d activity types, want 8", len(parsed.Activities))
+	if len(parsed.Activities) != 9 {
+		t.Fatalf("catalog has %d activity types, want 9", len(parsed.Activities))
 	}
 	found := false
 	for _, a := range parsed.Activities {

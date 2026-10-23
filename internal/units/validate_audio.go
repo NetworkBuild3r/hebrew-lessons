@@ -18,6 +18,17 @@ func audioIssues(s *scan, doc *Unit) []Issue {
 			}
 			msg := "Hebrew text has no audio clip"
 			var has bool
+			if act.Type == ActivitySay {
+				has = s.hasAudio(act.Text)
+				if has {
+					continue
+				}
+				if s.err != nil {
+					return out
+				}
+				out = append(out, issue(RuleSayAudio, SeverityBlock, at("lessons", i, "activities", j, "text"), "say step has no audio clip for its text"))
+				continue
+			}
 			if act.Type == ActivityDialogue {
 				if !ValidSpeaker(act.speaker) {
 					continue

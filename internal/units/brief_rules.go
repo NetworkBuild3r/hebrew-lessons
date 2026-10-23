@@ -90,7 +90,7 @@ func SkillOfActivity(typ string) string {
 		return SkillListen
 	case ActivityStory, ActivityDialogue, ActivityCloze, ActivityPattern, "read_pick", "word_match":
 		return SkillRead
-	case ActivityRecall, "type_it":
+	case ActivityRecall, ActivitySay, "type_it":
 		return SkillRecall
 	case ActivityProduce, "dictation":
 		return SkillSpell
@@ -111,6 +111,7 @@ var activitySkillOrder = []string{
 	ActivityCloze,
 	ActivityPattern,
 	ActivityRecall,
+	ActivitySay,
 	ActivityProduce,
 }
 
@@ -138,7 +139,7 @@ func exposureActivity(typ string) bool {
 // the length limit judge. A dialogue is judged one line at a time, because
 // briefIssues reads the flattened document.
 func passageActivity(typ string) bool {
-	return typ == ActivityStory || typ == ActivityListenPick || typ == ActivityDialogue
+	return typ == ActivityStory || typ == ActivityListenPick || typ == ActivityDialogue || typ == ActivitySay
 }
 
 // briefPointer is where a brief issue about the brief itself points. The brief
@@ -233,6 +234,7 @@ func markupIssues(doc *Unit) []Issue {
 			check(at("lessons", i, "activities", j, "text"), act.Text)
 			check(at("lessons", i, "activities", j, "target"), act.Target)
 			check(at("lessons", i, "activities", j, "translation"), act.Translation)
+			check(at("lessons", i, "activities", j, "prompt_en"), act.PromptEN)
 			for k, line := range act.Lines {
 				check(at("lessons", i, "activities", j, "lines", k, "speaker"), line.Speaker)
 				check(at("lessons", i, "activities", j, "lines", k, "text"), line.Text)

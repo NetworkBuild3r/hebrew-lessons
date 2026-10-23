@@ -107,18 +107,22 @@ func annotateUnitSchema(s *jsonschema.Schema) error {
 		units.ActivityStory,
 		units.ActivityShadow,
 		units.ActivityDialogue,
+		units.ActivitySay,
 	}
-	typ.Description = "One of the eight activity types."
+	typ.Description = "One of the nine activity types."
 	text.Description = "Pointed Hebrew this screen speaks or asks about. Audio is looked up from this exact text. Every type has it except dialogue, which has lines instead."
 	// translation stays out of the required array. The validator requires it
 	// on a listen_pick of two or more words that are in the lexicon, and nowhere else.
 	if tr := prop(act, "translation"); tr != nil {
 		tr.Description = "Natural English translation of the whole text, written by the author. Required on a listen_pick whose text has two or more words that are in the lexicon. Optional on every other type. English only, no markup, at most 120 characters."
 	}
-	// target stays out of the required array. recall, produce, and cloze must
+	// target stays out of the required array. recall, produce, cloze, and say must
 	// set it when the line has two or more lexicon words. listen_pick may omit it.
+	if prompt := prop(act, "prompt_en"); prompt != nil {
+		prompt.Description = "English cue for a say step. Required on say. Plain English, no Hebrew and no markup, at most 200 characters."
+	}
 	if target := prop(act, "target"); target != nil {
-		target.Description = "The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, and cloze when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure."
+		target.Description = "The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, cloze, and say when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure."
 	}
 	// text is not marked required here, because a dialogue has lines instead. The
 	// validator enforces it for every other type (schema.required) and enforces
@@ -256,6 +260,20 @@ func activityCatalog() []activityInfo {
 			Fields: []activityField{
 				typ("shadow"),
 				text,
+			},
+		},
+		{
+			Type:    units.ActivitySay,
+			Purpose: "The learner says the Hebrew from an English cue, then hears the model. prompt_en is the cue. text is the pointed answer. No Hebrew is shown before they say it. They mark got it or not yet.",
+			Fields: []activityField{
+				typ("say"),
+				{
+					Name:        "prompt_en",
+					Required:    true,
+					Description: "English cue, plain text, at most 200 characters. No Hebrew and no markup.",
+				},
+				text,
+				target,
 			},
 		},
 		{

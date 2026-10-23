@@ -36,3 +36,4 @@
 - No recording and no speech recognition in this initiative; both need a microphone permission design first.
 - Self-grading is used only because nothing can check speech yet (north star decision 3).
 - Security: new unit fields from MCP are enum- and length-checked; no new learner data beyond attempts.
+- SPEC-002 is in the repo: a say step validates, and a self-check records one attempt with source `self`. The player and the dialogue side wait on SPEC-001 (voice credits and a male voice).

@@ -30,7 +30,7 @@ const (
 		"Call lookup before you invent a spelling or a gloss. " +
 		"Call upsert_lexemes to add or correct a lexicon entry. It is admin only. " +
 		"Call validate_unit as a dry run. Call put_unit to save a draft. " +
-		"A recall, produce, or cloze with two or more words that are in the lexicon sets target to the exact pointed word it grades. A line with fewer may omit target. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure. A listen_pick of two or more words that are in the lexicon sets translation to the author's English for the whole line. A new write blocks an empty translation, and so does an older revision. Checking the current published revision warns instead. A unit's newWords count toward passage coverage when each is an exact pointed lexicon entry. The intro and the minimum uses also run on every newWord that coverage credited, including one outside the brief. " +
+		"A recall, produce, cloze, or say with two or more words that are in the lexicon sets target to the exact pointed word it grades. A line with fewer may omit target. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure. A listen_pick of two or more words that are in the lexicon sets translation to the author's English for the whole line. A new write blocks an empty translation, and so does an older revision. Checking the current published revision warns instead. A unit's newWords count toward passage coverage when each is an exact pointed lexicon entry. The intro and the minimum uses also run on every newWord that coverage credited, including one outside the brief. " +
 		"Call generate_audio with texts, or a unitId, to store clips for the activity text. A text that already has a clip is skipped. " +
 		"put_unit requires scope shared or learner:<id>. Scope is not inside the document. " +
 		"put_unit saves even when issues block publishing. " +
@@ -226,7 +226,7 @@ func registerResources(server *mcp.Server) error {
 		URI:         resourceActivities,
 		Name:        "activity-catalog",
 		Title:       "Activity catalog",
-		Description: "The eight activity types and the fields each one stores. text is pointed Hebrew, and a dialogue has lines of {speaker, text} instead. Audio and glosses are not fields.",
+		Description: "The nine activity types and the fields each one stores. text is pointed Hebrew, and a dialogue has lines of {speaker, text} instead. Audio and glosses are not fields.",
 		MIMEType:    "application/json",
 	}, string(catalogJSON))
 	addTextResource(server, &mcp.Resource{
