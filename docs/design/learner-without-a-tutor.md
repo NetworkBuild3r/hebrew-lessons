@@ -107,22 +107,20 @@ Tuning tools already there: `get_learner_model`, `get_learner_words`, `get_progr
 - **Two mistakes lists**: general for the shared course, personal and private for the tuned path.
 - **Content is our own**: same structure and order as the class sheets, not the sheets themselves, unless the author agrees.
 
-## Build list
+## Roadmap
 
-Each step stands alone and ships on its own.
+Six small initiatives, each with a one-screen plan under `sdd/initiatives/`. Each ships on its own and gives the learner something visible.
 
-1. **Roots and patterns in the lexicon.** `upsert_lexemes` takes `root` and `binyan`, and `lookup` returns them. The backfill starts now.
-2. **"You can now say" list.** Built from the review data the site already keeps. Cheap, and it is the accountability piece.
-3. **Grammar patterns with prerequisites**, as a table and an MCP tool, with a check that flags a unit whose pattern comes before its prerequisite.
-4. **Explainer pages**, keyed by pattern, linked from the step where the pattern first appears.
-5. **Roots hub**, with the two-word rule, and a link from each word card to its root.
-6. **Success-rate tuning in the brief.** Lean on comfortable material when recent accuracy is low, add new material when it is high.
-7. **Mistakes lists**: the personal list feeds the brief and My stuff; the general list feeds the shared course.
-8. **Verb forms table and tool**, then verb tables in My stuff.
-9. **Say-it-aloud step**, once the voice service has credits and a second voice.
-10. **Isaiah**, one verse at a time, in parallel with the rest.
-11. **Scripted dialogues with a side to play**, then branching role-plays. The AI partner comes last.
+| Initiative | What you get | Specs | Effort | Waits on |
+| ---------- | ------------ | ----- | ------ | -------- |
+| [INIT-016 Hybrid foundations](../../sdd/initiatives/INIT-016-hybrid-foundations/INIT-016-hybrid-foundations-initiative.md) | "You can now say"; lessons that react to accuracy; roots loadable through MCP; backfill starts | 7 | 21h | nothing |
+| [INIT-017 Patterns and explainers](../../sdd/initiatives/INIT-017-patterns-and-explainers/INIT-017-patterns-and-explainers-initiative.md) | Explainer pages linked from lessons; prerequisite check on the path; worksheet templates | 4 | 21h | INIT-016 |
+| [INIT-018 Roots hub](../../sdd/initiatives/INIT-018-roots-hub/INIT-018-roots-hub-initiative.md) | A page per root; root link on word cards | 2 | 9h | INIT-016, backfill |
+| [INIT-019 My stuff](../../sdd/initiatives/INIT-019-my-stuff/INIT-019-my-stuff-initiative.md) | Your mistakes, verb tables, word bank; navigation by section | 4 | 21h | INIT-016, 017, 018, backfill |
+| [INIT-020 Speaking](../../sdd/initiatives/INIT-020-speaking/INIT-020-speaking-initiative.md) | Say it aloud; play one side of a dialogue | 4 | 16h | INIT-017, voice service |
+| [INIT-021 Isaiah](../../sdd/initiatives/INIT-021-isaiah/INIT-021-isaiah-initiative.md) | Verse-by-verse reader with checked layers | 3 | 12h | INIT-016, 017, 018, human checking |
 
+Order: INIT-016 first. INIT-017 and INIT-018 can run side by side after it. Then INIT-019. INIT-020 and INIT-021 go when their outside dependencies are ready.
 ## Not in scope here
 
 Speech recognition, an AI conversation partner, and payments or accounts for other learners.
