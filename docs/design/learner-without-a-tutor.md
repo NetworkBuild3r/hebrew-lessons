@@ -45,13 +45,46 @@ Each step stands alone and ships on its own.
 6. **Isaiah**, one verse at a time. Mostly writing, so it runs in parallel.
 7. **Scripted dialogues with a side to play**, then branching role-plays. The AI partner comes last.
 
-## Open questions
+## Two paths, one tool
 
-- **The class spreadsheet.** It is not in this repo. The path order, roots, verb tables and mistakes all assume it. Where does it live, and what columns does it have?
-- **Worksheets are someone else's work.** For a site others use, write our own material in the same structure and order. Do not republish the sheets unless the author agrees.
-- **Root coverage.** How many lexemes have a root today? A roots hub with few roots looks empty.
-- **Isaiah text and gloss source.** The glosses and the "manner of the Jews" layer are authored content, and each verse is real work.
+- **Default path.** Everything the tutored learner went through, written as our own material, in the same order, with the review schedule on top. A learner with no tutor takes it as is. It improves as we learn what works.
+- **Tuned path.** A tutor, or an agent working for one (a swarm system, a bot, any MCP client), reads a learner's model and writes units for that learner only. This already exists in the repo: a unit has `scope = 'shared'` (the course) or `learner:<id>` (that learner's own), and the MCP tools below read the learner and write the units.
+- **The tutor stays.** The tool does the drilling, spacing and recall between classes. The tutor's time goes to conversation and correction. The tutor's data (new words, mistakes) flows back in through MCP and changes the next units.
 
+## How class data gets in: MCP
+
+The class spreadsheet is not copied by hand and is not a repo file. Its ten tables arrive through the MCP server, so any client can load and tune. What the server has today and what it lacks:
+
+| Class table | MCP tool today | Gap |
+| ----------- | -------------- | --- |
+| Words (with root and verb pattern) | `upsert_lexemes` | **It cannot write `root` or `binyan`.** The database columns exist (`lexemes.root`, `lexemes.binyan`) but `lexicon.Input` has no field for them. This blocks the roots hub. |
+| Verb forms by tense and person | none | New table and tool. Feeds verb tables. |
+| Grammar patterns, each with what must come first | none (`put_unit` has a pattern step, no prerequisites) | New table and tool. Feeds explainer links and path order. |
+| Mistakes, with how often they come back | `add_coach_note` (free text), `get_learner_model` (reads confusions) | A general "learners often say X, it is Y" list, separate from any one learner. |
+| Phrases with an English speaking prompt | `put_unit` (`shadow`, `dialogue`) | A prompt field for the say-it-aloud step. |
+| Class order | `put_unit` (`position`) | None. |
+
+Tools already there for the tuning loop: `get_learner_model`, `get_learner_words`, `get_progress`, `get_lesson_brief`, `put_unit`, `validate_unit`, `publish_unit`, `generate_audio`, `lookup`, `get_context`.
+
+## Decisions (2026-10-23)
+
+- **Source of the class data.** A four-class sample exists (ten tables, 57 of 94 content words have a root, 54 distinct roots). The full backfill has not started. It is loaded through MCP, not committed here.
+- **Root coverage in the site.** Not known yet. It needs a read of the production database. Until `upsert_lexemes` can write `root`, the answer is likely "close to none".
+- **Explainers tie to grammar patterns.** Each explainer page is keyed to a pattern in the data, so a lesson links to the right page by data, not by hand.
+- **Roots pages appear only when a root has at least two words or a verse.** The hub does not look empty early.
+- **The mistakes list is general.** "Learners often say X, it is Y", drawn from patterns across mistakes, never a learner's actual answers. The recorded answers are a tutor's typing of speech, so they are weak evidence.
+- **Content is our own.** Same structure and order as the class sheets, not the sheets themselves, unless the author agrees. Names and transcripts stay out.
+- **Isaiah.** Drafted one verse at a time by an agent that knows the Masoretic text and the Jewish-reading side, and checked by a person who reads Hebrew.
+
+## First builds
+
+1. `upsert_lexemes` takes `root` and `binyan`, and `lookup` returns them. Small, and it unblocks the roots hub.
+2. Explainer pages, keyed by pattern, with the lesson link.
+3. Roots hub, with the two-word rule.
+4. Grammar patterns with prerequisites, as a table and an MCP tool.
+5. Verb forms table and tool, then verb tables in My stuff.
+6. General mistakes list.
+7. Prompt field and the say-it-aloud step.
 ## Not in scope here
 
 Speech recognition, an AI conversation partner, and payments or accounts for other learners.
