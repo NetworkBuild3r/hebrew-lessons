@@ -35,6 +35,7 @@ type CourseLesson struct {
 	Situation  string
 	Concept    string
 	Scope      string
+	Pattern    string
 	Kind       string
 	Activities []units.Activity
 	NewWords   []LexemeView
@@ -68,7 +69,7 @@ func (s *Store) NextCourseLesson(ctx context.Context, learnerID int64) (CourseLe
 		return CourseLesson{}, false, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT id, position, title, situation, concept, doc, scope
+		SELECT id, position, title, situation, concept, doc, scope, COALESCE(pattern_slug, '')
 		FROM units
 		WHERE status = 'published' AND (scope = 'shared' OR scope = ?)
 		  AND id NOT IN (SELECT unit_id FROM unit_reports WHERE user_id = ?)
@@ -84,11 +85,12 @@ func (s *Store) NextCourseLesson(ctx context.Context, learnerID int64) (CourseLe
 		concept   string
 		doc       string
 		scope     string
+		pattern   string
 	}
 	var list []row
 	for rows.Next() {
 		var item row
-		if err := rows.Scan(&item.id, &item.position, &item.title, &item.situation, &item.concept, &item.doc, &item.scope); err != nil {
+		if err := rows.Scan(&item.id, &item.position, &item.title, &item.situation, &item.concept, &item.doc, &item.scope, &item.pattern); err != nil {
 			rows.Close()
 			return CourseLesson{}, false, fmt.Errorf("db: next lesson: %w", err)
 		}
@@ -117,7 +119,7 @@ func (s *Store) NextCourseLesson(ctx context.Context, learnerID int64) (CourseLe
 			if _, ok := done[ix]; ok {
 				continue
 			}
-			lesson, err := s.courseLessonFrom(ctx, item.id, item.position, item.title, item.situation, item.concept, item.scope, doc, ix)
+			lesson, err := s.courseLessonFrom(ctx, item.id, item.position, item.title, item.situation, item.concept, item.scope, item.pattern, doc, ix)
 			if err != nil {
 				return CourseLesson{}, false, err
 			}
@@ -145,14 +147,15 @@ func (s *Store) CourseLesson(ctx context.Context, learnerID, unitID int64, lesso
 		concept   string
 		doc       string
 		scope     string
+		pattern   string
 	}
 	err = conn.QueryRowContext(ctx, `
-		SELECT position, title, situation, concept, doc, scope
+		SELECT position, title, situation, concept, doc, scope, COALESCE(pattern_slug, '')
 		FROM units
 		WHERE id = ? AND status = 'published' AND (scope = 'shared' OR scope = ?)
 		  AND id NOT IN (SELECT unit_id FROM unit_reports WHERE user_id = ?)`,
 		unitID, fmt.Sprintf("learner:%d", learnerID), learnerID,
-	).Scan(&item.position, &item.title, &item.situation, &item.concept, &item.doc, &item.scope)
+	).Scan(&item.position, &item.title, &item.situation, &item.concept, &item.doc, &item.scope, &item.pattern)
 	if errors.Is(err, sql.ErrNoRows) {
 		return CourseLesson{}, fmt.Errorf("db: unit %d: %w", unitID, ErrNotFound)
 	}
@@ -166,10 +169,10 @@ func (s *Store) CourseLesson(ctx context.Context, learnerID, unitID int64, lesso
 	if lessonIx >= len(doc.Lessons) {
 		return CourseLesson{}, fmt.Errorf("db: unit %d lesson %d: %w", unitID, lessonIx, ErrNotFound)
 	}
-	return s.courseLessonFrom(ctx, unitID, item.position, item.title, item.situation, item.concept, item.scope, doc, lessonIx)
+	return s.courseLessonFrom(ctx, unitID, item.position, item.title, item.situation, item.concept, item.scope, item.pattern, doc, lessonIx)
 }
 
-func (s *Store) courseLessonFrom(ctx context.Context, unitID int64, position int, title, situation, concept, scope string, doc units.Unit, lessonIx int) (CourseLesson, error) {
+func (s *Store) courseLessonFrom(ctx context.Context, unitID int64, position int, title, situation, concept, scope, pattern string, doc units.Unit, lessonIx int) (CourseLesson, error) {
 	words, err := s.lessonNewWords(ctx, unitID, lessonIx)
 	if err != nil {
 		return CourseLesson{}, err
@@ -187,6 +190,7 @@ func (s *Store) courseLessonFrom(ctx context.Context, unitID int64, position int
 		Situation:  situation,
 		Concept:    concept,
 		Scope:      scope,
+		Pattern:    pattern,
 		Kind:       lesson.Kind,
 		Activities: activities,
 		NewWords:   words,

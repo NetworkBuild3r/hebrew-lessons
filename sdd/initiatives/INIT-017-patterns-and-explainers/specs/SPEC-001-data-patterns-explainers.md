@@ -7,7 +7,7 @@ spec_id: SPEC-001
 initiative_id: INIT-017
 title: "Grammar patterns, prerequisites and explainers"
 domain: data
-status: planned
+status: complete
 primary_prompt: .claude/agents/database-architect/AGENT.md
 supplement_prompts: []
 model: sonnet

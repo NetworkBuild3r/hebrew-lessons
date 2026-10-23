@@ -1,0 +1,74 @@
+package views
+
+// RootsIndex lists the roots that have a page.
+templ RootsIndex(v RootsIndexView) {
+	@Layout(v.Page) {
+		<article class="roots">
+			<h1 lang="en">Roots</h1>
+			if len(v.Roots) == 0 {
+				<p class="roots__empty" lang="en">Roots appear here once two words share one, or a word shows up in a verse.</p>
+			} else {
+				<ul class="roots__list">
+					for _, row := range v.Roots {
+						<li>
+							<a class="roots__row" href={ templ.SafeURL(row.Href) }>
+								<bdi class="he" lang="he" dir="rtl">{ row.Root }</bdi>
+								if row.Gloss != "" {
+									<span class="roots__gloss">{ row.Gloss }</span>
+								}
+								<span class="roots__count">{ row.WordCount }</span>
+							</a>
+						</li>
+					}
+				</ul>
+			}
+		</article>
+	}
+}
+
+// RootPage is one family: word cards, lessons, and verses.
+templ RootPage(v RootPageView) {
+	@Layout(v.Page) {
+		<article class="roots">
+			<h1><bdi class="he" lang="he" dir="rtl">{ v.Root }</bdi></h1>
+			if v.Gloss != "" {
+				<p class="roots__gloss">{ v.Gloss }</p>
+			}
+			<div class="wline" dir="rtl">
+				for _, w := range v.Words {
+					@wordCard(w)
+				}
+			</div>
+			if len(v.Lessons) > 0 {
+				<h2 lang="en">In your lessons</h2>
+				<ul class="roots__lessons">
+					for _, les := range v.Lessons {
+						<li><a href={ templ.SafeURL(les.Href) }>{ les.Title }</a></li>
+					}
+				</ul>
+			}
+			if len(v.Verses) > 0 {
+				<h2 lang="en">{ v.VerseHead }</h2>
+				<ul class="roots__verses">
+					for _, verse := range v.Verses {
+						<li>
+							<p class="roots__ref">{ verse.Ref }</p>
+							<p class="roots__he" lang="he" dir="rtl">
+								for _, sp := range verse.Spans {
+									if sp.Mark {
+										<mark><bdi lang="he" dir="rtl">{ sp.Text }</bdi></mark>
+									} else {
+										{ sp.Text }
+									}
+								}
+							</p>
+							if verse.En != "" {
+								<p class="roots__en" lang="en">{ verse.En }</p>
+							}
+						</li>
+					}
+				</ul>
+			}
+		</article>
+	}
+}

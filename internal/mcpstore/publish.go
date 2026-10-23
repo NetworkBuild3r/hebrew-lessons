@@ -31,6 +31,8 @@ func (s *Store) LoadUnit(ctx context.Context, id int64, revision *int) (mcp.Unit
 		Position:        row.Position,
 		Scope:           row.Scope,
 		Status:          row.Status,
+		Pattern:         row.Pattern,
+		WorksheetType:   row.WorksheetType,
 		Doc:             row.Doc,
 	}, nil
 }

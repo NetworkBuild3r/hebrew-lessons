@@ -30,12 +30,14 @@ type getUnitInput struct {
 }
 
 type getUnitOutput struct {
-	UnitID   int64      `json:"unitId"`
-	Status   string     `json:"status"`
-	Revision int        `json:"revision"`
-	Scope    string     `json:"scope"`
-	Position int        `json:"position"`
-	Doc      units.Unit `json:"doc"`
+	UnitID        int64      `json:"unitId"`
+	Status        string     `json:"status"`
+	Revision      int        `json:"revision"`
+	Scope         string     `json:"scope"`
+	Position      int        `json:"position"`
+	Pattern       string     `json:"pattern,omitempty"`
+	WorksheetType string     `json:"worksheetType,omitempty"`
+	Doc           units.Unit `json:"doc"`
 }
 
 // getUnit returns the published document and does not re-run the validator.
@@ -70,12 +72,14 @@ func (s *service) getUnit(ctx context.Context, _ *mcp.CallToolRequest, in getUni
 	doc := snap.Doc
 	doc.Position = 0
 	return nil, getUnitOutput{
-		UnitID:   snap.UnitID,
-		Status:   snap.Status,
-		Revision: snap.Revision,
-		Scope:    snap.Scope,
-		Position: snap.Position,
-		Doc:      doc,
+		UnitID:        snap.UnitID,
+		Status:        snap.Status,
+		Revision:      snap.Revision,
+		Scope:         snap.Scope,
+		Position:      snap.Position,
+		Pattern:       snap.Pattern,
+		WorksheetType: snap.WorksheetType,
+		Doc:           doc,
 	}, nil
 }
 

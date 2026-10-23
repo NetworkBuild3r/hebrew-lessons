@@ -7,7 +7,7 @@ spec_id: SPEC-001
 initiative_id: INIT-018
 title: "Root family read model"
 domain: service
-status: planned
+status: complete
 primary_prompt: .claude/agents/principal-backend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet

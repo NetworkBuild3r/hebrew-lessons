@@ -24,6 +24,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/buildinfo"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/content"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
@@ -283,6 +284,10 @@ func NewApp(cfg Config) (*App, error) {
 	defer cancel()
 	store, err := db.Open(ctx, filepath.Join(cfg.DataDir, "hebrew.sqlite"), cfg.Clock)
 	if err != nil {
+		return nil, err
+	}
+	if err := content.Ensure(ctx, store); err != nil {
+		store.Close()
 		return nil, err
 	}
 

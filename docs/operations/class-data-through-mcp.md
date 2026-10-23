@@ -12,6 +12,8 @@ Loading waits for the operator's decision that the backfill is under way. Record
 
 Until that line is filled in, load nothing.
 
+The five starter explainers are original notes, not class rows: present tense agreement (`present-tense`), past tense with ti (`past-tense-ti`), going to plus a verb (`going-to`), efshar plus a verb (`efshar`), and prepositions with endings (`preposition-endings`). The app inserts them through the explainer store when none are stored. They name no person. Further explainers wait for the backfill and go through `upsert_explainer`.
+
 ## Which tool loads which table
 
 Load in this order. A later load depends on the earlier ones.
@@ -19,9 +21,9 @@ Load in this order. A later load depends on the earlier ones.
 | Class table | Scope | Tool | State |
 | ----------- | ----- | ---- | ----- |
 | Words, with root and verb pattern | shared | `upsert_lexemes` (`root`, `binyan`) | ready (INIT-016/SPEC-003) |
-| Grammar patterns, each with what must come first | shared | patterns tool | not loaded yet — INIT-017/SPEC-002 |
-| Explainers, one per pattern | shared | explainers tool | not loaded yet — INIT-017/SPEC-002 |
-| Class order | shared | `put_unit` positions, then `check_path_order` | not loaded yet — the path check is INIT-017/SPEC-002 |
+| Grammar patterns, each with what must come first | shared | `upsert_patterns` | ready (INIT-017/SPEC-002). Not loaded yet. |
+| Explainers, one per pattern | shared | `upsert_explainer` | ready (INIT-017/SPEC-002). Five original starters are inserted when the table is empty. Class explainers are not loaded yet. |
+| Class order | shared | `put_unit` positions, then `check_path_order` | ready (INIT-017/SPEC-002). Not loaded yet. |
 | Phrases with an English speaking prompt | shared | `put_unit`, using the `say` step | not loaded yet — INIT-020/SPEC-002 |
 | Verb forms by tense and person | shared | verb forms tool | not loaded yet — INIT-019/SPEC-002 |
 | Mistakes, personal, with how often they return | one learner | `record_mistakes` | not loaded yet — INIT-019/SPEC-002 |

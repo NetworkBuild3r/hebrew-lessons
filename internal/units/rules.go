@@ -72,10 +72,12 @@ const (
 	RuleStoryUnmapped              = "story.unmapped"
 	RuleStoryUnpointed             = "story.unpointed"
 	RuleUnitNoMarkup               = "unit.no_markup"
+	RulePatternOrder               = "unit.pattern_order"
 	RuleUnitTranslationDistractors = "unit.translation_distractors"
 	RuleUnitTranslationLang        = "unit.translation_lang"
 	RuleUnitTranslationLength      = "unit.translation_length"
 	RuleUnitTranslationMissing     = "unit.translation_missing"
+	RuleWorksheetShape             = "unit.worksheet_shape"
 
 	// Dialogue rules (INIT-015/SPEC-026).
 	RuleUnitDialogueLines    = "unit.dialogue_lines"
@@ -145,10 +147,12 @@ var Rules = []Rule{
 	{ID: RuleUnitDialogueLines, Severity: SeverityBlock, Description: fmt.Sprintf("A dialogue has fewer than %d or more than %d lines, a dialogue carries text instead of lines, or an activity that is not a dialogue carries lines.", MinDialogueLines, MaxDialogueLines)},
 	{ID: RuleUnitDialogueSpeakers, Severity: SeverityBlock, Description: "A dialogue line has a speaker other than a (female voice) or b (male voice), or one of the two speakers has no line."},
 	{ID: RuleUnitNoMarkup, Severity: SeverityBlock, Description: "Brief check. A text field of the unit (title, situation, concept, a new word, a lesson kind, an activity type, text, target, or translation, a dialogue line's speaker, text, or translation) contains <, >, or javascript: in any letter case. The unit is plain text and the templates escape it again on output."},
+	{ID: RulePatternOrder, Severity: SeverityBlock, Description: "A shared unit teaches a pattern before a pattern it requires. The issue names the unit that teaches the prerequisite later. A learner-scoped unit reports the same finding as a warning."},
 	{ID: RuleUnitTranslationDistractors, Severity: SeverityWarn, Description: fmt.Sprintf("A unit with a listen_pick of two or more words that are in the lexicon has fewer than %d different English lines. A line is an activity translation or a dialogue line translation. Lines that match after lowercasing, stripping punctuation, and collapsing spaces count once, and the sentence's own translation counts.", MinTranslatedLines)},
 	{ID: RuleUnitTranslationLang, Severity: SeverityBlock, Description: "A translation contains a Hebrew character (U+0590 through U+05FF) or markup (<, >, or javascript:). A translation is English plain text. unit.no_markup also flags the markup."},
 	{ID: RuleUnitTranslationLength, Severity: SeverityWarn, Description: fmt.Sprintf("A translation is longer than %d characters.", TranslationMaxLen)},
 	{ID: RuleUnitTranslationMissing, Severity: SeverityBlock, Description: "A listen_pick whose text has two or more words that are in the lexicon has an empty translation. The count is the same exact pointed lexicon match as activity.target. The unpointed spelling does not count, and a number is not a word. On a new save or publish this is a block, and so is publishing an older revision. Checking the current published revision reports it as a warning."},
+	{ID: RuleWorksheetShape, Severity: SeverityBlock, Description: "The unit's worksheet type does not match its shape. A short story needs a story step and at least three listen_pick items (the true/false questions). A topic conversation needs a dialogue. A verb workshop needs a pattern step. A review sheet introduces no new words. A foundations reading needs a story step."},
 }
 
 // Guidance is one player rule for the model that writes units.

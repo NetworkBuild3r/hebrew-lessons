@@ -55,9 +55,8 @@ func TestAuthRejectAndAccept(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 9 authoring tools (the original eight plus get_unit), and 5 from SPEC-021:
-	// get_learner_model, get_progress, get_lesson_brief, add_coach_note, and unpublish_unit.
-	if len(tools.Tools) != 14 {
+	// 9 authoring tools, 5 learner tools from SPEC-021, and 4 pattern tools.
+	if len(tools.Tools) != 18 {
 		t.Fatalf("tools = %d", len(tools.Tools))
 	}
 }
@@ -152,7 +151,8 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 			t.Fatalf("%s schema is not closed: %s", tool.Name, raw)
 		}
 		if tool.Annotations == nil || (!tool.Annotations.ReadOnlyHint && tool.Name != "put_unit" && tool.Name != "upsert_lexemes" && tool.Name != "publish_unit" && tool.Name != "generate_audio" &&
-			tool.Name != "get_lesson_brief" && tool.Name != "add_coach_note" && tool.Name != "unpublish_unit") {
+			tool.Name != "get_lesson_brief" && tool.Name != "add_coach_note" && tool.Name != "unpublish_unit" &&
+			tool.Name != "upsert_patterns" && tool.Name != "upsert_explainer") {
 			t.Fatalf("%s annotations %#v", tool.Name, tool.Annotations)
 		}
 	}
@@ -195,7 +195,7 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resources.Resources) != 4 { // schema, catalog, rules, and hebrew://authoring (SPEC-021)
+	if len(resources.Resources) != 9 { // schema, catalog, rules, authoring, and five worksheet templates
 		t.Fatalf("resources = %d", len(resources.Resources))
 	}
 	schemaText := readResource(t, session, resourceUnitSchema)

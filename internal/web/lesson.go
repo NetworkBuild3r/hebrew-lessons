@@ -17,6 +17,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/roots"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
@@ -448,7 +449,51 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		screen.Activity.AudioLabel, screen.Activity.AudioHebrew = phrasePlayLabel(act, phase)
 	}
 	screen.Activity.Spotlight = spotlight(act.Type, screen.Activity)
+	p.attachHow(ctx, lesson, run, &screen.Activity)
+	p.attachRoots(ctx, &screen.Activity)
 	return screen, nil
+}
+
+func (p player) attachHow(ctx context.Context, lesson db.CourseLesson, run db.PlayerRun, activity *views.Activity) {
+	if p.store == nil || lesson.Pattern == "" || lesson.LessonIx != 0 || run.ActivityIx != 0 {
+		return
+	}
+	row, err := p.store.ExplainerFor(ctx, lesson.Pattern, true)
+	if err != nil {
+		return
+	}
+	activity.HowHref = "/learn/" + row.Slug
+	activity.HowSheet = "/_hx/learn/" + row.Slug
+}
+
+func (p player) attachRoots(ctx context.Context, activity *views.Activity) {
+	if p.store == nil {
+		return
+	}
+	seen := map[string]bool{}
+	mark := func(words []views.Word) {
+		for i := range words {
+			root := words[i].Root
+			if root == "" {
+				continue
+			}
+			ok, known := seen[root]
+			if !known {
+				vis, err := roots.Visible(ctx, p.store, root)
+				ok = err == nil && vis
+				seen[root] = ok
+			}
+			if ok {
+				words[i].RootHref = "/roots/" + root
+			}
+		}
+	}
+	mark(activity.Words)
+	if activity.Dialogue != nil {
+		for i := range activity.Dialogue.Lines {
+			mark(activity.Dialogue.Lines[i].Words)
+		}
+	}
 }
 
 func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView, lex map[string]db.LexemeView, pool, earlier []db.LexemeView, empty bool, q lessonQuery) views.Activity {
@@ -656,6 +701,7 @@ func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.
 			Gloss:        view.Gloss,
 			Gender:       view.Gender,
 			POS:          view.POS,
+			Root:         view.Root,
 			ShowText:     show.text,
 			ShowTranslit: show.translit,
 			ShowGloss:    show.gloss,

@@ -1,0 +1,48 @@
+package views
+
+import "github.com/NetworkBuild3r/hebrew-lessons/internal/richtext"
+
+// Rich is an explainer body. Text is escaped by templ. A link is written
+// only when it is still on the allow-list.
+templ Rich(nodes []richtext.Node) {
+	for _, n := range nodes {
+		switch n.Kind {
+		case richtext.KindH2:
+			<h2>@richInline(n.Children)</h2>
+		case richtext.KindH3:
+			<h3>@richInline(n.Children)</h3>
+		case richtext.KindP:
+			<p>@richInline(n.Children)</p>
+		case richtext.KindUL:
+			<ul>
+				for _, item := range n.Children {
+					<li>@richInline(item.Children)</li>
+				}
+			</ul>
+		}
+	}
+}
+
+templ richInline(nodes []richtext.Node) {
+	for _, n := range nodes {
+		switch n.Kind {
+		case richtext.KindText:
+			{ n.Text }
+		case richtext.KindStrong:
+			<strong>@richInline(n.Children)</strong>
+		case richtext.KindEm:
+			<em>@richInline(n.Children)</em>
+		case richtext.KindHe:
+			<bdi class="he" lang="he" dir="rtl">{ n.Text }</bdi>
+			if n.Translit != "" {
+				<bdi class="he-tr" lang="he-Latn" dir="ltr">{ n.Translit }</bdi>
+			}
+		case richtext.KindLink:
+			if richtext.AllowHref(n.Href) {
+				<a href={ templ.SafeURL(n.Href) }>@richInline(n.Children)</a>
+			} else {
+				@richInline(n.Children)
+			}
+		}
+	}
+}

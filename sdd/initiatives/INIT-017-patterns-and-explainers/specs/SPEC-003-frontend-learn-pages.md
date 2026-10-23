@@ -7,7 +7,7 @@ spec_id: SPEC-003
 initiative_id: INIT-017
 title: "Learn pages and the lesson link"
 domain: frontend
-status: planned
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: [.claude/agents/security-specialist/AGENT.md]
 model: sonnet

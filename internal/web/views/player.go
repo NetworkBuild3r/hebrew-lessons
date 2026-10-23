@@ -62,6 +62,10 @@ type Activity struct {
 	// fewer than two flip cards.
 	MeaningsOpen bool
 	MeaningsHref string
+	// HowHref is the explainer page. HowSheet is the fragment the dialog loads.
+	// Both are set only on the first step of a unit whose pattern has a published explainer.
+	HowHref  string
+	HowSheet string
 }
 
 // Dialogue is a conversation between two people, shown line by line in order.
@@ -315,6 +319,11 @@ type Word struct {
 	New bool
 	// Open renders the card already flipped, for ?meanings=all.
 	Open bool
+	// Root is the consonantal root. RootHref is set only when that root has a page.
+	Root     string
+	RootHref string
+	// State is the learner's state of this word, on a root page.
+	State string
 }
 
 // shown returns value when the field is visible.

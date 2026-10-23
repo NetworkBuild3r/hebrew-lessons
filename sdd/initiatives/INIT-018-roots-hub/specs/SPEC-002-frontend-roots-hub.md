@@ -7,7 +7,7 @@ spec_id: SPEC-002
 initiative_id: INIT-018
 title: "Roots hub and the word-card link"
 domain: frontend
-status: planned
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet

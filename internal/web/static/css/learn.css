@@ -1,0 +1,71 @@
+.learn, .roots {
+  max-inline-size: var(--player-max);
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.learn h1, .roots h1, .learn h2, .roots h2 {
+  font-size: var(--fs-h2);
+  margin: 0;
+}
+.learn__list, .roots__list, .learn__used, .roots__lessons, .roots__verses {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.learn__row, .roots__row, .learn__used a, .roots__lessons a, .how, .how-sheet__close, .wcard__root {
+  min-block-size: var(--size-tap);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid var(--hairline);
+}
+.learn__summary, .roots__count, .roots__en, .he-tr {
+  color: var(--muted);
+  font-size: var(--fs-card-tr);
+}
+.he {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-md);
+  line-height: var(--lh-he-display);
+}
+.he-tr { display: block; }
+.learn__body p, .learn__body li { margin: 0; }
+.learn__body ul { margin: 0; padding-inline-start: var(--space-4); }
+.how {
+  align-self: center;
+  flex-direction: row;
+  align-items: center;
+}
+.how-sheet {
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--text);
+  max-inline-size: var(--player-max);
+  padding: var(--space-4);
+}
+.how-sheet::backdrop { background: color-mix(in oklch, var(--ink) 55%, transparent); }
+.roots__he { margin: 0; }
+.roots__ref { margin: 0; color: var(--muted); }
+.wcard__root {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-card-badge);
+  min-block-size: var(--size-tap);
+}
+.wcard__state {
+  font-size: var(--fs-card-badge);
+  color: var(--muted);
+}

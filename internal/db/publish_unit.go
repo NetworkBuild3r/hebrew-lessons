@@ -25,6 +25,8 @@ type UnitSnapshot struct {
 	Position        int
 	Scope           string
 	Status          string
+	Pattern         string
+	WorksheetType   string
 	Doc             units.Unit
 }
 
@@ -117,9 +119,11 @@ func readUnit(ctx context.Context, q unitQueryer, id int64, revision *int) (load
 		return loadedUnit{}, unitHead{}, fmt.Errorf("db: unit revision %d", *revision)
 	}
 	var current unitHead
+	var pattern, worksheet string
 	err := q.QueryRowContext(ctx, `
-		SELECT position, scope, status, rev, doc FROM units WHERE id = ?`, id,
-	).Scan(&current.position, &current.scope, &current.status, &current.rev, &current.doc)
+		SELECT position, scope, status, rev, doc, COALESCE(pattern_slug, ''), COALESCE(worksheet_type, '')
+		FROM units WHERE id = ?`, id,
+	).Scan(&current.position, &current.scope, &current.status, &current.rev, &current.doc, &pattern, &worksheet)
 	if errors.Is(err, sql.ErrNoRows) {
 		return loadedUnit{}, unitHead{}, ErrUnitNotFound
 	}
@@ -152,6 +156,8 @@ func readUnit(ctx context.Context, q unitQueryer, id int64, revision *int) (load
 			Position:        current.position,
 			Scope:           current.scope,
 			Status:          current.status,
+			Pattern:         pattern,
+			WorksheetType:   worksheet,
 			Doc:             doc,
 		},
 		body: body,

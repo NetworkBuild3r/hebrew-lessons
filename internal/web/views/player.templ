@@ -44,6 +44,13 @@ templ ActivityBlock(a Activity) {
 			} else if a.Prompt != "" {
 				<p class="lede" lang="en">@E(a.Prompt)</p>
 			}
+			if a.HowHref != "" {
+				<a class="how" href={ templ.SafeURL(a.HowHref) } hx-get={ a.HowSheet } hx-target="#how-body" hx-swap="innerHTML" hx-boost="false">How this works</a>
+				<dialog id="how-sheet" class="how-sheet" aria-labelledby="how-title">
+					<div id="how-body"></div>
+					<button type="button" class="how-sheet__close" data-close-sheet>Close</button>
+				</dialog>
+			}
 			if flipCount(a) > 0 {
 				@flipHint(a)
 			}
@@ -173,6 +180,9 @@ templ wordCard(w Word) {
 				if w.New {
 					<span class="wcard__new" lang="en">New</span>
 				}
+				if w.State != "" {
+					<span class="wcard__state" lang="en">{ w.State }</span>
+				}
 				if w.Target {
 					<mark class="target"><bdi class="wcard__he" lang="he" dir="rtl">{ w.Text }</bdi></mark>
 				} else {
@@ -208,6 +218,9 @@ templ wordCard(w Word) {
 			} else if w.Translit != "" {
 				<span class="wcard__sound" lang="he-Latn" dir="ltr">{ w.Translit }</span>
 				<span class="wcard__pos">@E("how it sounds")</span>
+			}
+			if w.RootHref != "" {
+				<a class="wcard__root" href={ templ.SafeURL(w.RootHref) } hx-boost="false">Root <bdi lang="he" dir="rtl">{ w.Root }</bdi></a>
 			}
 		</div>
 	</details>

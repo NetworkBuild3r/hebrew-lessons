@@ -7,7 +7,7 @@ spec_id: SPEC-004
 initiative_id: INIT-017
 title: "Worksheet-type templates and the unit's type"
 domain: api
-status: planned
+status: complete
 primary_prompt: .claude/agents/principal-backend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet

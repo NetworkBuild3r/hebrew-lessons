@@ -23,6 +23,7 @@ import (
 // into the next lesson's prompt, so a learner must not be able to write one (SPEC-021).
 var learnerTools = map[string]bool{
 	"get_context":       true,
+	"list_patterns":     true,
 	"get_learner_words": true,
 	"get_learner_model": true,
 	"get_progress":      true,

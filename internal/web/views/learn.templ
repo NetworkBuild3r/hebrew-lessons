@@ -1,0 +1,55 @@
+package views
+
+// LearnIndex lists published explainers in path order.
+templ LearnIndex(v LearnIndexView) {
+	@Layout(v.Page) {
+		<article class="learn">
+			<h1 lang="en">Learn</h1>
+			if len(v.Groups) == 0 {
+				<p class="learn__empty" lang="en">Grammar notes gather here as they are published.</p>
+			} else {
+				<ul class="learn__list">
+					for _, g := range v.Groups {
+						<li>
+							<a class="learn__row" href={ templ.SafeURL(v.Page.Href("/learn/" + g.Slug)) }>
+								<span class="learn__title">{ g.Title }</span>
+								if g.Example != "" {
+									<bdi class="he" lang="he" dir="rtl">{ g.Example }</bdi>
+								}
+								<span class="learn__summary">{ g.Summary }</span>
+							</a>
+						</li>
+					}
+				</ul>
+			}
+		</article>
+	}
+}
+
+// LearnPage is one explainer, with the lessons that teach it.
+templ LearnPage(v LearnPageView) {
+	@Layout(v.Page) {
+		<article class="learn">
+			<h1 lang="en">{ v.Title }</h1>
+			<div class="learn__body">
+				@Rich(v.Nodes)
+			</div>
+			if len(v.Used) > 0 {
+				<h2 lang="en">Used in</h2>
+				<ul class="learn__used">
+					for _, u := range v.Used {
+						<li><a href={ templ.SafeURL(u.Href) }>{ u.Title }</a></li>
+					}
+				</ul>
+			}
+		</article>
+	}
+}
+
+// LearnSheet is the fragment a lesson loads into the dialog.
+templ LearnSheet(v LearnSheetView) {
+	<h2 id="how-title" lang="en">{ v.Title }</h2>
+	<div class="learn__body">
+		@Rich(v.Nodes)
+	</div>
+}

@@ -1,6 +1,6 @@
 # INIT-017: Grammar patterns and explainers
 
-**Initiative ID:** INIT-017 · **Status:** planned · **Created:** 2026-10-23 · **Owner:** Brian Nelson
+**Initiative ID:** INIT-017 · **Status:** complete · **Created:** 2026-10-23 · **Owner:** Brian Nelson
 **Discipline Profile:** `software` · **Ticket:** none · **Branch:** `main`
 **Source:** [the hybrid model](../../../docs/design/learner-without-a-tutor.md), ADR-0019 (INIT-016/SPEC-001).
 

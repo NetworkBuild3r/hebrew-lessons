@@ -93,6 +93,11 @@ func (s *server) mountShell(mux *http.ServeMux, tokens CSRFToken, gate, secure b
 			fn(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
 		})
 	}
+	mux.HandleFunc("GET /learn", page(s.serveLearn))
+	mux.HandleFunc("GET /learn/{slug}", page(s.serveLearnOne))
+	mux.HandleFunc("GET /_hx/learn/{slug}", page(s.serveLearnSheet))
+	mux.HandleFunc("GET /roots", page(s.serveRoots))
+	mux.HandleFunc("GET /roots/{root}", page(s.serveRoot))
 	mux.HandleFunc("GET /lessons", page(s.serveLessons))
 	mux.HandleFunc("GET /me", page(s.serveMe))
 	mux.HandleFunc("GET /lessons/{id}/report", page(s.serveReportForm))

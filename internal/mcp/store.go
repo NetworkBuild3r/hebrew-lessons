@@ -255,6 +255,8 @@ type UnitView struct {
 	Position        int
 	Scope           string
 	Status          string
+	Pattern         string
+	WorksheetType   string
 	Doc             units.Unit
 }
 

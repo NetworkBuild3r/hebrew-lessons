@@ -7,7 +7,7 @@ spec_id: SPEC-002
 initiative_id: INIT-017
 title: "MCP: patterns, explainers, unit pattern, path-order check"
 domain: api
-status: planned
+status: complete
 primary_prompt: .claude/agents/principal-backend-developer/AGENT.md
 supplement_prompts: [.claude/agents/security-specialist/AGENT.md]
 model: sonnet

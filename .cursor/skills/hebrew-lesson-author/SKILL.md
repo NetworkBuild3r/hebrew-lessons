@@ -165,10 +165,16 @@ Every Hebrew text needs a clip for its exact pointed text. Do not change a text 
 | `unit.dialogue_lines` | block | A dialogue has under 2 or over 8 lines, it has `text`, or another type has `lines`. | Use 2 to 8 `lines` and no `text` on a dialogue, and no `lines` anywhere else. |
 | `unit.dialogue_speakers` | block | A speaker is not `a` or `b`, or one of them never speaks. | Use only `a` and `b`, and give each at least one line. |
 | `unit.no_markup` | block | A text, including a `translation`, has `<`, `>`, or `javascript:`. | Remove it. A unit is plain text. |
+| `unit.pattern_order` | block | A shared unit teaches a pattern before one it requires. The message names the later unit. A learner unit warns. | Teach the prerequisite earlier, or drop it from `prereqs`. |
+| `unit.worksheet_shape` | block | The worksheet type does not match the unit. A short story needs a story and at least three `listen_pick` items. | Match the shape, or omit `worksheetType`. |
 | `unit.translation_distractors` | warn | A unit with a sentence `listen_pick` has fewer than 4 different English lines, so the player cannot fill three other choices from this unit. Lines that match after lowercasing, stripping punctuation, and collapsing spaces count once. | Add a different `translation` on more activities or dialogue lines in this unit. |
 | `unit.translation_lang` | block | A `translation` contains Hebrew, or `<`, `>`, or `javascript:`. | Write it in English, with no markup. |
 | `unit.translation_length` | warn | A `translation` is longer than 120 characters. | Shorten it. |
 | `unit.translation_missing` | block | A `listen_pick` whose text has two or more words that are in the lexicon has no `translation`. A missing `translation` blocks a new save or publish, and it blocks an older revision. Only the current published revision warns when that same revision is checked again. | Set `translation` to the English of the whole line. |
+
+## Patterns
+
+A unit may name a pattern slug and a worksheet type beside the document. `list_patterns` shows the slugs. `upsert_patterns` and `upsert_explainer` are admin writes. `check_path_order` reports a shared unit that teaches a pattern before one it requires. The five worksheet shapes are `hebrew://templates/topic-conversation`, `hebrew://templates/review-sheet`, `hebrew://templates/verb-workshop`, `hebrew://templates/short-story`, and `hebrew://templates/foundations-reading`.
 
 ## Example 1: a struggle-heavy brief
 

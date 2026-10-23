@@ -178,6 +178,9 @@ func newMCPServer(opts Options) *mcp.Server {
 	if data, ok := opts.Course.(LearnerData); ok {
 		svc.learner = data
 	}
+	if pats, ok := opts.Course.(patternStore); ok {
+		svc.patterns = pats
+	}
 	registerTools(server, svc)
 	if opts.extraTools != nil {
 		opts.extraTools(server)
@@ -237,7 +240,7 @@ func registerResources(server *mcp.Server) error {
 		Description: "The steps every client follows to build a lesson for one learner: read the brief, write within it, validate, generate audio, publish, and leave a coach note.",
 		MIMEType:    "text/markdown",
 	}, authoringGuide)
-	return nil
+	return registerTemplateResources(server)
 }
 
 // authoringGuide is the text of hebrew://authoring. SPEC-022 replaces the file. The embed
