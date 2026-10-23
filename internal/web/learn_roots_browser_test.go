@@ -80,8 +80,8 @@ func startLearnRootsServer(t *testing.T) (origin, cookie, lesson, root string) {
 		t.Fatal(err)
 	}
 	const family = "שׁ־מ־ע"
-	hear := units.Normalize("שָׁמַע")
-	news := units.Normalize("שְׁמוּעָה")
+	hear := units.Normalize("שָׁמַע")
+	news := units.Normalize("שְׁמוּעָה")
 	for _, row := range []struct{ text, gloss string }{{hear, "hear"}, {news, "news"}} {
 		if _, err := store.ExecContext(ctx, `INSERT INTO lexemes (text_nfc, gloss_en, pos, root) VALUES (?, ?, 'verb', ?)`, row.text, row.gloss, family); err != nil {
 			t.Fatal(err)

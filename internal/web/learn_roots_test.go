@@ -89,8 +89,8 @@ func TestRootsHubAndCardLink(t *testing.T) {
 	store, h := openShell(t, fixedClock(now), nil, nil)
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	const family, lonely = "שׁ־מ־ע", "ל־ב"
-	hear := units.Normalize("שָׁמַע")
-	news := units.Normalize("שְׁמוּעָה")
+	hear := units.Normalize("שָׁמַע")
+	news := units.Normalize("שְׁמוּעָה")
 	heart := units.Normalize("לֵב")
 	for _, row := range []struct{ text, gloss, root string }{
 		{hear, "hear", family},
