@@ -94,6 +94,8 @@ func LessonLabel(typ string) string {
 		return "Pick the Hebrew"
 	case "cloze":
 		return "Fill the gap"
+	case "say":
+		return "Say it aloud"
 	}
 	return "Practice"
 }

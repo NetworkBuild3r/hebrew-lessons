@@ -118,7 +118,16 @@ func dialogueIssues(doc *Unit) []Issue {
 					out = append(out, issue(RuleUnitDialogueLines, SeverityBlock, base+"/lines",
 						fmt.Sprintf("lines belong to a dialogue activity, and this one is %q", act.Type)))
 				}
+				if strings.TrimSpace(act.Play) != "" {
+					out = append(out, issue(RuleDialoguePlay, SeverityBlock, base+"/play",
+						"play belongs to a dialogue"))
+				}
 				continue
+			}
+			play := strings.TrimSpace(act.Play)
+			if play != "" && play != SpeakerA && play != SpeakerB {
+				out = append(out, issue(RuleDialoguePlay, SeverityBlock, base+"/play",
+					fmt.Sprintf("play %q is not a or b", act.Play)))
 			}
 			if strings.TrimSpace(act.Text) != "" {
 				out = append(out, issue(RuleUnitDialogueLines, SeverityBlock, base+"/text",
@@ -137,6 +146,12 @@ func dialogueIssues(doc *Unit) []Issue {
 					continue
 				}
 				spoke[line.Speaker] = true
+				if play != "" && line.Speaker == play {
+					for _, is := range sayPromptIssues(base+"/lines/"+strconv.Itoa(k)+"/prompt_en", line.PromptEN) {
+						is.Rule = RuleDialoguePlay
+						out = append(out, is)
+					}
+				}
 			}
 			// One line cannot have two speakers, so unit.dialogue_lines already
 			// says what is wrong. Past that, both voices must be heard.

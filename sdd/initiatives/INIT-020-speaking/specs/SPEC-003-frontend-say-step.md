@@ -7,7 +7,7 @@ spec_id: SPEC-003
 initiative_id: INIT-020
 title: "Say-it-aloud step in the player"
 domain: frontend
-status: planned
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet

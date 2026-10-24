@@ -9,10 +9,13 @@
 //      never plays.
 // Taps are raw mouse clicks at the element's box, as in the other browser checks.
 import { chromium } from "playwright";
+import fs from "node:fs";
 
 const origin = process.env.ORIGIN;
 const cookie = process.env.SESSION_COOKIE;
 const unit = process.env.UNIT;
+const out = process.env.OUT || "";
+if (out) fs.mkdirSync(out, { recursive: true });
 const errors = [];
 
 const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
@@ -64,6 +67,7 @@ const run = async () => {
   // Nothing plays by itself.
   await page.waitForTimeout(600);
   const noAutoplay = reqs.length === 0;
+  if (out) await page.screenshot({ path: `${out}/dialogue-teach-390.png` });
 
   // Layout and tap size on a 390px phone.
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);

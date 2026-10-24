@@ -31,5 +31,5 @@
 
 ## Notes
 
-- One migration (next free number when it lands; 016 once INIT-020's migration 015 is in).
+- One migration (next free number when it lands; 017 once INIT-020's migration 016 is in).
 - Security: **required** for SPEC-002 — agent-written content reaches learners only through the human check, which needs an admin web session and CSRF.

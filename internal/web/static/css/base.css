@@ -1309,6 +1309,13 @@ h1 {
 .lesson-player { display: grid; gap: var(--space-5); }
 .lesson-player__head { display: grid; gap: var(--space-2); }
 .activity { display: grid; gap: var(--space-4); }
+.say-cue {
+  margin: 0;
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  line-height: var(--lh-he-body);
+  text-align: center;
+}
 .activity-word {
   display: flex;
   flex-direction: column;

@@ -39,6 +39,9 @@ templ ActivityBlock(a Activity) {
 			}
 			<a class="btn btn-primary" href={ templ.SafeURL(a.HomeHref) }>@E("Back to Today")</a>
 		} else {
+			if a.Cue != "" {
+				<p class="say-cue" lang="en">{ a.Cue }</p>
+			}
 			if a.PromptWord != "" {
 				<p class="lede" lang="en">@E("What does ")<bdi class="recall-prompt" lang="he" dir="rtl">{ a.PromptWord }</bdi>@E(" mean?")</p>
 			} else if a.Prompt != "" {
@@ -68,16 +71,16 @@ templ ActivityBlock(a Activity) {
 						}
 					</div>
 					if a.Audio != "" && (len(a.Words) > 1 || a.Words[0].Audio == "") {
-						@clip("line-clip", a.Audio, a.AudioLabel, true)
+						@lineClip(a)
 					}
 				</section>
 			} else {
 				if a.Stage && a.Audio != "" {
 					<div class="listen-stage">
-						@clip("line-clip", a.Audio, a.AudioLabel, true)
+						@lineClip(a)
 					</div>
 				} else if a.Audio != "" && !teachLine(a) {
-					@clip("line-clip", a.Audio, a.AudioLabel, true)
+						@lineClip(a)
 				}
 			}
 			if a.Dialogue == nil && flipCount(a) >= 2 {
@@ -91,7 +94,7 @@ templ ActivityBlock(a Activity) {
 				</div>
 				if teachLine(a) && a.Audio != "" {
 					<div class="wline-play">
-						@clip("line-clip", a.Audio, a.AudioLabel, true)
+						@lineClip(a)
 					</div>
 				}
 			}
@@ -107,7 +110,23 @@ templ ActivityBlock(a Activity) {
 			<form method="post" action={ templ.SafeURL(a.Post) } hx-post={ a.Post } hx-target="#lesson-frame" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
 				<input type="hidden" name="_csrf" value={ a.CSRF }/>
 				<input type="hidden" name="run" value={ a.Run }/>
-				if a.Asking {
+				if a.Dialogue != nil && a.Dialogue.Offer {
+					<div class="act__grades say-grades">
+						<button type="submit" class="act-grade" name="answer" value="side-a">@E("Say Dana's lines")</button>
+						<button type="submit" class="act-grade" name="answer" value="side-b">@E("Say Avi's lines")</button>
+					</div>
+				}
+				if a.LineNext {
+					<button type="submit" class="btn btn-primary" name="answer" value="next">@E("Next")</button>
+				} else if a.SayAsk {
+					<button type="submit" class="btn btn-primary" name="answer" value="said" autofocus>@E("I said it")</button>
+				} else if a.Say {
+					<p class="lede" lang="en" id="say-grade">@E("How did that go?")</p>
+					<div class="act__grades say-grades" role="group" aria-labelledby="say-grade">
+						<button type="submit" class="act-grade" name="answer" value="got">@E("Got it")</button>
+						<button type="submit" class="act-grade" name="answer" value="notyet">@E("Not yet")</button>
+					</div>
+				} else if a.Asking {
 					<div class="choices">
 						for _, choice := range a.Choices {
 							@choiceButton(choice)
@@ -322,6 +341,12 @@ templ wordClipRow(w Word, audioID string) {
 	</div>
 }
 
+// lineClip is the line recording. A say reveal sets Autoplay so the model
+// plays once after "I said it".
+templ lineClip(a Activity) {
+	@clipPlay("line-clip", a.Audio, a.AudioLabel, true, a.Autoplay)
+}
+
 // clip is one recording in the lesson player. The server always renders the
 // native audio (the no-JS bar) and a button.orb. The orb is display:none
 // until clips.js adds class js on html, which shows the orb and sets the bar
@@ -330,8 +355,16 @@ templ wordClipRow(w Word, audioID string) {
 // A recall word and a flip card do not use this: the orb stays in the line
 // and the bar is a wordClipRow, so the no-JS bar is not squeezed into the word column.
 templ clip(id, src, label string, hero bool) {
+	@clipPlay(id, src, label, hero, false)
+}
+
+templ clipPlay(id, src, label string, hero, auto bool) {
 	<div class={ clipClass(hero) }>
-		<audio id={ id } src={ templ.SafeURL(src) } preload="none" controls></audio>
+		if auto {
+			<audio id={ id } src={ templ.SafeURL(src) } preload="auto" controls autoplay data-autoplay></audio>
+		} else {
+			<audio id={ id } src={ templ.SafeURL(src) } preload="none" controls></audio>
+		}
 		@orbButton(orbClass(hero), label, src, "")
 	</div>
 }

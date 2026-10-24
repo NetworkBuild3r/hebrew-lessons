@@ -177,6 +177,9 @@ type Activity struct {
 	Target      string         `json:"target,omitempty" jsonschema:"The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, cloze, and say when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure."`
 	// PromptEN is the English cue for a say step. The learner sees it before the Hebrew.
 	PromptEN string `json:"prompt_en,omitempty" jsonschema:"English cue for a say step. Required on say. Plain English, no Hebrew and no markup, at most 200 characters. The learner says the Hebrew from this cue before the model is shown."`
+	// Play is which side of a dialogue the learner speaks: a or b. Empty means
+	// the dialogue is shown in full, and the learner can choose a side after that.
+	Play string `json:"play,omitempty" jsonschema:"Which side of a dialogue the learner speaks: a or b. Omit it to show the whole conversation first. The learner's lines then use each line's prompt_en as the English cue."`
 
 	// speaker is set only on the one-line views of a dialogue that the validator
 	// builds (see flatten). It is never read from or written to JSON.
@@ -190,6 +193,7 @@ type DialogueLine struct {
 	Speaker     string `json:"speaker"`
 	Text        string `json:"text"`
 	Translation string `json:"translation,omitempty" jsonschema:"Natural English translation of this line. Optional; used as a sentence-choice distractor and for future line reveals."`
+	PromptEN    string `json:"prompt_en,omitempty" jsonschema:"English cue for this line when the learner speaks it. Required on a line whose speaker is the dialogue's play side. Plain English, no Hebrew and no markup, at most 200 characters."`
 }
 
 // Texts returns every Hebrew string the activity speaks, in order: Text for an

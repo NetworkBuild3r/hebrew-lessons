@@ -188,7 +188,23 @@
   // afterSwap hides the new native bars. A second run of this file (the
   // swapped step includes the script again) returns at g.__clips above,
   // and these listeners from the first run stay in place.
+  // A say reveal marks its line clip data-autoplay. Play it once. The
+  // learner already pressed "I said it", which is the one explicit action.
+  // A clip without that attribute stays silent until they tap the orb.
+  function startAsked() {
+    Array.prototype.forEach.call(D.querySelectorAll("audio[data-autoplay]"), function (audio) {
+      if (audio.getAttribute("data-say-played") === "1") return;
+      audio.setAttribute("data-say-played", "1");
+      var orb = orbOf(audio);
+      if (orb) play(orb);
+    });
+  }
+
   upgrade();
+  startAsked();
   D.addEventListener("htmx:afterSwap", upgrade);
-  D.addEventListener("htmx:afterSettle", upgrade);
+  D.addEventListener("htmx:afterSettle", function () {
+    upgrade();
+    startAsked();
+  });
 })(window);

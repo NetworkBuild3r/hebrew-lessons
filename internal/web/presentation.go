@@ -24,7 +24,7 @@ func cardsIn(typ, phase string) bool {
 // card with its play control under it. That is a recall of one word, and a listening step once
 // the line is shown. A recall of a line names one word and lays its words in a row of cards.
 func spotlight(typ string, a views.Activity) bool {
-	if typ != units.ActivityRecall && typ != units.ActivityListenPick {
+	if typ != units.ActivityRecall && typ != units.ActivityListenPick && typ != units.ActivitySay {
 		return false
 	}
 	if a.PromptWord != "" || a.Dialogue != nil {

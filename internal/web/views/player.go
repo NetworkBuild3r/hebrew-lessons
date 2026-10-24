@@ -66,11 +66,21 @@ type Activity struct {
 	// Both are set only on the first step of a unit whose pattern has a published explainer.
 	HowHref  string
 	HowSheet string
+	// Say is a say-it-aloud step. SayAsk is the cue before "I said it".
+	// Cue is the English line. Autoplay starts the model clip once on the reveal.
+	Say      bool
+	SayAsk   bool
+	Cue      string
+	Autoplay bool
+	// LineNext is the other speaker's line in a your-turn dialogue.
+	LineNext bool
 }
 
 // Dialogue is a conversation between two people, shown line by line in order.
+// Offer is the choice to speak one side after the learner has seen the lines.
 type Dialogue struct {
 	Lines []DialogueLine
+	Offer bool
 }
 
 // DialogueLine is one line. Speaker is a or b, Name is the speaker's fixed name

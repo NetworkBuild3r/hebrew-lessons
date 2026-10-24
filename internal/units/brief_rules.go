@@ -235,10 +235,12 @@ func markupIssues(doc *Unit) []Issue {
 			check(at("lessons", i, "activities", j, "target"), act.Target)
 			check(at("lessons", i, "activities", j, "translation"), act.Translation)
 			check(at("lessons", i, "activities", j, "prompt_en"), act.PromptEN)
+			check(at("lessons", i, "activities", j, "play"), act.Play)
 			for k, line := range act.Lines {
 				check(at("lessons", i, "activities", j, "lines", k, "speaker"), line.Speaker)
 				check(at("lessons", i, "activities", j, "lines", k, "text"), line.Text)
 				check(at("lessons", i, "activities", j, "lines", k, "translation"), line.Translation)
+				check(at("lessons", i, "activities", j, "lines", k, "prompt_en"), line.PromptEN)
 			}
 		}
 	}

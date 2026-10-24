@@ -242,7 +242,7 @@ func TestMigrate006KeepsCardsIdsAndReviewHistory(t *testing.T) {
 	}
 
 	// Migrate applies every pending file, so 008 (INIT-015/SPEC-004) and 009 (INIT-015/SPEC-013) are recorded too.
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}) {
 		t.Fatalf("versions after = %v", got)
 	}
 	cols := columnNames(t, conn, "cards")
@@ -608,7 +608,7 @@ func TestMigrate006AtomicWhenCopyFails(t *testing.T) {
 		t.Fatalf("retry after fixing the data: %v", err)
 	}
 	// The retry applies 006, then 008 (INIT-015/SPEC-004), then 009 (INIT-015/SPEC-013).
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}) {
 		t.Fatalf("versions after retry = %v", got)
 	}
 	if got := m6Dump(t, conn, m6NewCards); !reflect.DeepEqual(got, m6MapDir(wantCards)) {

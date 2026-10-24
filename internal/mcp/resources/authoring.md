@@ -75,7 +75,7 @@ A `listen_pick` of one lexicon word may leave `translation` empty. The player us
 { "type": "listen_pick", "text": "אֲנִי שׁוֹתֶה מַיִם", "target": "מַיִם", "translation": "I drink water" }
 ```
 
-Any conversation between people is a `dialogue`, never a `story`. A story stays one narrator. In a dialogue, speaker `a` is the female voice and speaker `b` is the male voice, the same for the whole unit. Both must speak. The speaker is exactly `a` or `b`. A voice id never goes in a unit or a request.
+Any conversation between people is a `dialogue`, never a `story`. A story stays one narrator. In a dialogue, speaker `a` is the female voice and speaker `b` is the male voice, the same for the whole unit. Both must speak. The speaker is exactly `a` or `b`. A voice id never goes in a unit or a request. `play` is `a` or `b` when the learner speaks that side: each of that side's lines needs `prompt_en`, the English cue, and the other side is heard as usual. Omit `play` to show the whole conversation first.
 
 ## Reading a brief
 
@@ -142,6 +142,7 @@ Every Hebrew text needs a clip for its exact pointed text. Do not change a text 
 | `budget.unit` | block | The unit lists more than 8 new words. | Keep only the brief's new words. |
 | `coverage.listening` | block | Only without a `briefId`: a `listen_pick` passage is under 90% known. From 90% to under 95% it warns. | Use `briefId` so `brief.coverage` applies, or use more known words. |
 | `coverage.story` | block | Only without a `briefId`: a story passage is under 90% known. From 90% to under 95% it warns. | Use `briefId` so `brief.coverage` applies, or use more known words. |
+| `dialogue.play` | block | `play` is not `a` or `b`, or it is set on an activity that is not a dialogue, or a line of that side has no English `prompt_en`. | Set `play` to `a` or `b` and write a short English cue on each of that side's lines. |
 | `lexeme.unknown` | block | A new word, or a Hebrew word in an activity that is not a story, is not in the lexicon. | Call `lookup`. If it is missing and you are sure of the form, `upsert_lexemes`. Otherwise use another word. |
 | `noun.gender` | block | A new noun has no gender. | Call `upsert_lexemes` for it with `gender` set to `m`, `f`, or `both`. |
 | `noun.plural` | warn | A new noun has an irregular plural that the unit does not show. | Use the plural once (it needs its own lexicon entry), or leave it. |

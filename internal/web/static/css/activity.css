@@ -194,6 +194,9 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-2);
 }
+.act__grades.say-grades {
+  grid-template-columns: 1fr 1fr;
+}
 .act-grade {
   display: grid;
   place-items: center;

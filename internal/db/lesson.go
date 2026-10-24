@@ -54,9 +54,13 @@ type PlayerRun struct {
 	Pending    bool
 	Finished   bool
 	Score      float64
+	// LineIx is the dialogue line a your-turn play is on. Side is a or b
+	// when the learner is speaking that part, and empty on every other step.
+	LineIx int
+	Side   string
 }
 
-const playerRunColumns = `id, user_id, unit_id, lesson_ix, activity_ix, correct_n, phase, pending, finished_at, score`
+const playerRunColumns = `id, user_id, unit_id, lesson_ix, activity_ix, correct_n, phase, pending, finished_at, score, line_ix, side`
 
 // NextCourseLesson is the unfinished lesson of the earliest published unit
 // in this learner's scope. Scope is shared, or learner:<id> for this id.
@@ -458,6 +462,64 @@ func (s *Store) ContinuePlayerRun(ctx context.Context, userID, runID int64, acti
 	return s.stepPlayerRun(ctx, userID, runID, "continue", activity, false, total)
 }
 
+// SetDialogueSide records which side of a dialogue the learner is playing.
+// applied is false when a side is already chosen or the run has moved on.
+func (s *Store) SetDialogueSide(ctx context.Context, userID, runID int64, activity int, side string) (PlayerRun, bool, error) {
+	return s.patchDialogue(ctx, userID, runID, activity, `
+		UPDATE lesson_runs
+		SET side = ?, line_ix = 0, phase = 'ask', pending = 0
+		WHERE id = ? AND user_id = ? AND finished_at IS NULL AND activity_ix = ? AND phase = 'ask' AND side = ''`,
+		side, runID, userID, activity)
+}
+
+// AdvanceDialogueLine moves a your-turn dialogue from fromLine to toLine.
+// applied is false when the run is no longer on fromLine, which is a repeated post.
+func (s *Store) AdvanceDialogueLine(ctx context.Context, userID, runID int64, activity, fromLine, toLine int, phase string) (PlayerRun, bool, error) {
+	return s.patchDialogue(ctx, userID, runID, activity, `
+		UPDATE lesson_runs
+		SET line_ix = ?, phase = 'ask', pending = 0
+		WHERE id = ? AND user_id = ? AND finished_at IS NULL AND activity_ix = ? AND phase = ? AND line_ix = ?`,
+		toLine, runID, userID, activity, phase, fromLine)
+}
+
+func (s *Store) patchDialogue(ctx context.Context, userID, runID int64, activity int, query string, args ...any) (PlayerRun, bool, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return PlayerRun{}, false, err
+	}
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return PlayerRun{}, false, fmt.Errorf("db: begin dialogue step: %w", err)
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return PlayerRun{}, false, fmt.Errorf("db: dialogue step: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return PlayerRun{}, false, fmt.Errorf("db: dialogue step: %w", err)
+	}
+	run, err := playerRunTx(ctx, tx, userID, runID)
+	if err != nil {
+		return PlayerRun{}, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return PlayerRun{}, false, fmt.Errorf("db: commit dialogue step: %w", err)
+	}
+	if run.ActivityIx != activity {
+		return run, false, nil
+	}
+	return run, n == 1, nil
+}
+
+// SelfCheckPlayerRun finishes a say step from its reveal.
+// gotIt is the learner's "Got it". applied is false when the run is not on
+// that activity in the reveal phase, which is what a repeated post looks like.
+func (s *Store) SelfCheckPlayerRun(ctx context.Context, userID, runID int64, activity int, gotIt bool, total int) (PlayerRun, bool, error) {
+	return s.stepPlayerRun(ctx, userID, runID, "self", activity, gotIt, total)
+}
+
 func (s *Store) stepPlayerRun(ctx context.Context, userID, runID int64, kind string, activity int, correct bool, total int) (PlayerRun, bool, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -507,60 +569,28 @@ func (s *Store) stepPlayerRun(ctx context.Context, userID, runID int64, kind str
 		); err != nil {
 			return PlayerRun{}, false, fmt.Errorf("db: lesson answer: %w", err)
 		}
-	case "continue":
-		add := 0
-		switch run.Phase {
-		case "reveal":
-			if run.Pending {
-				add = 1
+	case "self":
+		if run.Phase != "reveal" {
+			if err := tx.Commit(); err != nil {
+				return PlayerRun{}, false, fmt.Errorf("db: commit lesson step: %w", err)
 			}
-		case "ask":
-			add = 1
+			return run, false, nil
+		}
+		run.Pending = correct
+		if err := s.advancePlayerRun(ctx, tx, run, userID, runID, activity, total); err != nil {
+			return PlayerRun{}, false, err
+		}
+	case "continue":
+		switch run.Phase {
+		case "reveal", "ask":
 		default:
 			if err := tx.Commit(); err != nil {
 				return PlayerRun{}, false, fmt.Errorf("db: commit lesson step: %w", err)
 			}
 			return run, false, nil
 		}
-		nextCorrect := run.CorrectN + add
-		if total <= 0 || activity+1 >= total {
-			score := 1.0
-			if total > 0 {
-				score = float64(nextCorrect) / float64(total)
-			}
-			if score < 0 {
-				score = 0
-			}
-			if score > 1 {
-				score = 1
-			}
-			res, err := tx.ExecContext(ctx, `
-				UPDATE lesson_runs
-				SET finished_at = ?, score = ?, correct_n = ?, phase = 'ask', pending = 0
-				WHERE id = ? AND user_id = ? AND finished_at IS NULL AND activity_ix = ? AND phase = ?`,
-				FormatTime(s.clock.Now()), score, nextCorrect, runID, userID, activity, run.Phase,
-			)
-			if err != nil {
-				return PlayerRun{}, false, fmt.Errorf("db: finish lesson: %w", err)
-			}
-			n, err := res.RowsAffected()
-			if err != nil {
-				return PlayerRun{}, false, fmt.Errorf("db: finish lesson: %w", err)
-			}
-			if n == 1 {
-				if err := enqueueNewWords(ctx, tx, userID, run.UnitID, run.LessonIx, s.clock.Now()); err != nil {
-					return PlayerRun{}, false, err
-				}
-			}
-		} else {
-			if _, err := tx.ExecContext(ctx, `
-				UPDATE lesson_runs
-				SET activity_ix = ?, correct_n = ?, phase = 'ask', pending = 0
-				WHERE id = ? AND user_id = ? AND finished_at IS NULL AND activity_ix = ? AND phase = ?`,
-				activity+1, nextCorrect, runID, userID, activity, run.Phase,
-			); err != nil {
-				return PlayerRun{}, false, fmt.Errorf("db: advance lesson: %w", err)
-			}
+		if err := s.advancePlayerRun(ctx, tx, run, userID, runID, activity, total); err != nil {
+			return PlayerRun{}, false, err
 		}
 	default:
 		return PlayerRun{}, false, fmt.Errorf("db: lesson step %q", kind)
@@ -574,6 +604,64 @@ func (s *Store) stepPlayerRun(ctx context.Context, userID, runID int64, kind str
 		return PlayerRun{}, false, fmt.Errorf("db: commit lesson step: %w", err)
 	}
 	return updated, true, nil
+}
+
+// advancePlayerRun moves off the current activity. The caller has already
+// checked the phase. From reveal it adds the pending grade. From ask it
+// counts the activity correct.
+func (s *Store) advancePlayerRun(ctx context.Context, tx *sql.Tx, run PlayerRun, userID, runID int64, activity, total int) error {
+	add := 0
+	switch run.Phase {
+	case "reveal":
+		if run.Pending {
+			add = 1
+		}
+	case "ask":
+		add = 1
+	default:
+		return fmt.Errorf("db: lesson step phase %q", run.Phase)
+	}
+	nextCorrect := run.CorrectN + add
+	if total <= 0 || activity+1 >= total {
+		score := 1.0
+		if total > 0 {
+			score = float64(nextCorrect) / float64(total)
+		}
+		if score < 0 {
+			score = 0
+		}
+		if score > 1 {
+			score = 1
+		}
+		res, err := tx.ExecContext(ctx, `
+			UPDATE lesson_runs
+			SET finished_at = ?, score = ?, correct_n = ?, phase = 'ask', pending = 0, line_ix = 0, side = ''
+			WHERE id = ? AND user_id = ? AND finished_at IS NULL AND activity_ix = ? AND phase = ?`,
+			FormatTime(s.clock.Now()), score, nextCorrect, runID, userID, activity, run.Phase,
+		)
+		if err != nil {
+			return fmt.Errorf("db: finish lesson: %w", err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("db: finish lesson: %w", err)
+		}
+		if n == 1 {
+			if err := enqueueNewWords(ctx, tx, userID, run.UnitID, run.LessonIx, s.clock.Now()); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE lesson_runs
+		SET activity_ix = ?, correct_n = ?, phase = 'ask', pending = 0, line_ix = 0, side = ''
+		WHERE id = ? AND user_id = ? AND finished_at IS NULL AND activity_ix = ? AND phase = ?`,
+		activity+1, nextCorrect, runID, userID, activity, run.Phase,
+	); err != nil {
+		return fmt.Errorf("db: advance lesson: %w", err)
+	}
+	return nil
 }
 
 // enqueueNewWords inserts a new read card and a new recall card for each
@@ -634,7 +722,7 @@ func scanPlayerRun(scan func(dest ...any) error) (PlayerRun, error) {
 	var score sql.NullFloat64
 	err := scan(
 		&run.ID, &run.UserID, &run.UnitID, &run.LessonIx, &run.ActivityIx, &run.CorrectN,
-		&run.Phase, &pending, &finished, &score,
+		&run.Phase, &pending, &finished, &score, &run.LineIx, &run.Side,
 	)
 	if err != nil {
 		return PlayerRun{}, err

@@ -85,6 +85,7 @@ const (
 	// Dialogue rules (INIT-015/SPEC-026).
 	RuleUnitDialogueLines    = "unit.dialogue_lines"
 	RuleUnitDialogueSpeakers = "unit.dialogue_speakers"
+	RuleDialoguePlay         = "dialogue.play"
 )
 
 // lexeme.unknown and story.unmapped are the same kind of miss, split by
@@ -135,6 +136,7 @@ var Rules = []Rule{
 	{ID: RuleBudgetUnit, Severity: SeverityBlock, Description: fmt.Sprintf("The unit lists more than %d new words.", MaxNewWordsPerUnit)},
 	{ID: RuleCoverageListening, Severity: SeverityBlock, Description: fmt.Sprintf("A listening passage (listen_pick) is below %d%% known. Block under %d%%; warn from %d%% up to but not including %d%%. Same thresholds as a story. Other activity types are not passages.", CoverageWarnBelow, CoverageBlockBelow, CoverageBlockBelow, CoverageWarnBelow)},
 	{ID: RuleCoverageStory, Severity: SeverityBlock, Description: fmt.Sprintf("A story passage is below %d%% known. Block under %d%%; warn from %d%% up to but not including %d%%.", CoverageWarnBelow, CoverageBlockBelow, CoverageBlockBelow, CoverageWarnBelow)},
+	{ID: RuleDialoguePlay, Severity: SeverityBlock, Description: "play on a dialogue is a or b, naming the side the learner speaks. Each of that side's lines needs prompt_en: plain English, no Hebrew and no markup, at most 200 characters. play on any other activity type is the same rule."},
 	{ID: RuleLexemeUnknown, Severity: SeverityBlock, Description: "A new word, or a Hebrew token in an activity other than story, is not in the lexicon. A story token is story.unmapped instead."},
 	{ID: RuleNounGender, Severity: SeverityBlock, Description: "A new noun has no gender (m, f, or both)."},
 	{ID: RuleNounPlural, Severity: SeverityWarn, Description: "A new noun with an irregular plural does not show that plural in the unit."},

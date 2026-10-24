@@ -129,9 +129,9 @@ func TestDialoguePlayerRendersLinesInTheirVoices(t *testing.T) {
 	if dana < 0 || avi < 0 || dana > avi {
 		t.Fatalf("speaker names missing or out of order (Dana at %d, Avi at %d):\n%s", dana, avi, act)
 	}
-	if strings.Count(act, "Dana") != 2 || strings.Count(act, "Avi") != 2 {
-		// A name appears once as the label and once in the orb's accessible name.
-		t.Fatalf("each name should be shown as a label and in the play control:\n%s", act)
+	if strings.Count(act, "Dana") != 3 || strings.Count(act, "Avi") != 3 {
+		// A name appears as the label, in the orb's accessible name, and in the offer to say that side.
+		t.Fatalf("each name should be shown as a label, in the play control, and in the offer:\n%s", act)
 	}
 	clipRe := regexp.MustCompile(`<audio id="dlg-clip-(\d+)" src="/audio/([0-9a-f]{64})\.mp3"`)
 	var order [][2]string

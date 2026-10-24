@@ -42,6 +42,10 @@ import (
 //     clip stays hidden. The choices are pointed Hebrew with no
 //     transliteration. After the answer, every word shows its pointed
 //     text, transliteration, and gloss. Choice values are lexeme ids.
+//   - say shows the English cue and "Say it in Hebrew". No Hebrew and no
+//     audio until the learner presses "I said it". The reveal is the model
+//     as cards, the line plays once, and "Got it" / "Not yet" record one
+//     self-check. The step then moves on.
 //   - any other type shows the words and a continue button.
 //
 // A step with no lexicon target is exposure, not a graded choice.
@@ -205,6 +209,14 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		serverError(w)
 		return
 	}
+	if act.Type == units.ActivityDialogue && (dialogueSide(act, run) != "" || answer == "side-a" || answer == "side-b") {
+		p.answerDialogue(w, r, page, userID, lesson, run, act, answer, total, partial)
+		return
+	}
+	if act.Type == units.ActivitySay {
+		p.answerSay(w, r, page, userID, lesson, run, act, target, answer, total, partial)
+		return
+	}
 	graded := gradedActivity(act.Type) && target.ID != 0
 	if graded && recallOrCloze(act.Type) {
 		n, countErr := p.askChoiceCount(r.Context(), userID, lesson, run, act, target)
@@ -230,6 +242,165 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		}
 	case answer == "continue" && (run.Phase == "reveal" || (run.Phase == "ask" && !graded)):
 		run, _, err = p.store.ContinuePlayerRun(r.Context(), userID, run.ID, run.ActivityIx, total)
+	}
+	if err != nil {
+		serverError(w)
+		return
+	}
+	screen, err := p.screenFor(r.Context(), page, lesson, run, lessonQueryFrom(r, page.Lang))
+	if err != nil {
+		serverError(w)
+		return
+	}
+	p.writeScreen(w, r, page, screen, partial)
+}
+
+func dialogueSide(act units.Activity, run db.PlayerRun) string {
+	if act.Play == units.SpeakerA || act.Play == units.SpeakerB {
+		return act.Play
+	}
+	if run.Side == units.SpeakerA || run.Side == units.SpeakerB {
+		return run.Side
+	}
+	return ""
+}
+
+// answerDialogue plays one side of a conversation, one line at a time.
+func (p player) answerDialogue(w http.ResponseWriter, r *http.Request, page views.Page, userID int64, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, answer string, total int, partial bool) {
+	var err error
+	side := dialogueSide(act, run)
+	switch {
+	case (answer == "side-a" || answer == "side-b") && side == "":
+		run, _, err = p.store.SetDialogueSide(r.Context(), userID, run.ID, run.ActivityIx, strings.TrimPrefix(answer, "side-"))
+	case side != "" && run.LineIx >= 0 && run.LineIx < len(act.Lines):
+		line := act.Lines[run.LineIx]
+		learner := line.Speaker == side
+		last := run.LineIx+1 >= len(act.Lines)
+		switch {
+		case learner && run.Phase == "ask" && answer == "said":
+			run, _, err = p.store.AnswerPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, false)
+		case learner && run.Phase == "reveal" && (answer == "got" || answer == "notyet"):
+			gotIt := answer == "got"
+			var applied bool
+			if last {
+				run, applied, err = p.store.SelfCheckPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, gotIt, total)
+			} else {
+				run, applied, err = p.store.AdvanceDialogueLine(r.Context(), userID, run.ID, run.ActivityIx, run.LineIx, run.LineIx+1, run.Phase)
+			}
+			if err == nil && applied {
+				err = p.recordLine(r.Context(), userID, lesson, line, gotIt)
+			}
+		case !learner && answer == "next":
+			if last {
+				run, _, err = p.store.ContinuePlayerRun(r.Context(), userID, run.ID, run.ActivityIx, total)
+			} else {
+				run, _, err = p.store.AdvanceDialogueLine(r.Context(), userID, run.ID, run.ActivityIx, run.LineIx, run.LineIx+1, run.Phase)
+			}
+		}
+	}
+	if err != nil {
+		serverError(w)
+		return
+	}
+	screen, err := p.screenFor(r.Context(), page, lesson, run, lessonQueryFrom(r, page.Lang))
+	if err != nil {
+		serverError(w)
+		return
+	}
+	p.writeScreen(w, r, page, screen, partial)
+}
+
+func (p player) recordLine(ctx context.Context, userID int64, lesson db.CourseLesson, line units.DialogueLine, gotIt bool) error {
+	lex, err := p.store.LexemesByText(ctx, units.Tokenize(line.Text))
+	if err != nil {
+		return err
+	}
+	target, err := targetFrom(units.Activity{Type: units.ActivitySay, Text: line.Text}, lex, lesson.NewWords)
+	if err != nil || target.ID == 0 {
+		return err
+	}
+	cue := strings.TrimSpace(line.PromptEN)
+	if cue == "" {
+		cue = strings.TrimSpace(line.Translation)
+	}
+	if cue == "" {
+		return nil
+	}
+	return evidence.New(p.store, nil, nil).SayCheck(ctx, userID, target.ID, lesson.UnitID, cue, gotIt)
+}
+
+// dialogueTurn is one line of a your-turn dialogue.
+func (p player) dialogueTurn(ctx context.Context, page views.Page, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, lex map[string]db.LexemeView, side string, q lessonQuery) (views.Activity, error) {
+	activity := p.step(page, lesson, run, act, db.LexemeView{}, lex, nil, nil, false, q)
+	activity.Dialogue = nil
+	activity.Prompt = ""
+	activity.PromptWord = ""
+	ix := run.LineIx
+	if ix < 0 || ix >= len(act.Lines) {
+		return activity, nil
+	}
+	line := act.Lines[ix]
+	learner := line.Speaker == side
+	ask := learner && run.Phase != "reveal"
+	if ask {
+		activity.Say = true
+		activity.SayAsk = true
+		activity.Cue = lineCue(line)
+		activity.Prompt = "Say it in Hebrew"
+		return activity, nil
+	}
+	words := wordsForText(line.Text, units.ActivitySay, lex, lesson.NewWords, "reveal", clipSet{}, false, "", q.meaningsAll)
+	src := ""
+	if p.store != nil {
+		if voice, err := p.voices.ForSpeaker(line.Speaker); err == nil {
+			asset, ok, err := p.store.AudioByTextVoice(ctx, units.Normalize(line.Text), voice)
+			if err != nil {
+				return views.Activity{}, err
+			}
+			if ok && asset.ID != "" {
+				src = "/audio/" + asset.ID + ".mp3"
+			}
+		}
+	}
+	activity.Words = words
+	activity.Audio = src
+	activity.Autoplay = src != ""
+	if src != "" {
+		activity.AudioLabel, activity.AudioHebrew = "Play the line", ""
+	}
+	activity.Spotlight = spotlight(units.ActivitySay, activity)
+	if learner {
+		activity.Say = true
+		activity.Cue = lineCue(line)
+	} else {
+		activity.LineNext = true
+		activity.Prompt = views.SpeakerName(line.Speaker) + " says:"
+	}
+	return activity, nil
+}
+
+func lineCue(line units.DialogueLine) string {
+	if cue := strings.TrimSpace(line.PromptEN); cue != "" {
+		return cue
+	}
+	return strings.TrimSpace(line.Translation)
+}
+
+// answerSay is the say step. "I said it" reveals the model. "Got it" and
+// "Not yet" write one self-check and move on. A repeated post does not
+// write a second attempt.
+func (p player) answerSay(w http.ResponseWriter, r *http.Request, page views.Page, userID int64, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView, answer string, total int, partial bool) {
+	var err error
+	switch {
+	case run.Phase == "ask" && answer == "said":
+		run, _, err = p.store.AnswerPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, false)
+	case run.Phase == "reveal" && (answer == "got" || answer == "notyet"):
+		gotIt := answer == "got"
+		var applied bool
+		run, applied, err = p.store.SelfCheckPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, gotIt, total)
+		if err == nil && applied && target.ID != 0 && strings.TrimSpace(act.PromptEN) != "" {
+			err = evidence.New(p.store, nil, nil).SayCheck(r.Context(), userID, target.ID, lesson.UnitID, act.PromptEN, gotIt)
+		}
 	}
 	if err != nil {
 		serverError(w)
@@ -418,11 +589,25 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		return views.Screen{}, err
 	}
 	if act.Type == units.ActivityDialogue {
+		if side := dialogueSide(act, run); side != "" {
+			screen.Activity, err = p.dialogueTurn(ctx, page, lesson, run, act, lex, side, q)
+			if err != nil {
+				return views.Screen{}, err
+			}
+			p.attachHow(ctx, lesson, run, &screen.Activity)
+			p.attachRoots(ctx, &screen.Activity)
+			return screen, nil
+		}
 		screen.Activity = p.step(page, lesson, run, act, target, lex, pool, nil, false, q)
 		screen.Activity.Dialogue, err = p.dialogueView(ctx, act, lex, lesson.NewWords, q.meaningsAll)
 		if err != nil {
 			return views.Screen{}, err
 		}
+		if screen.Activity.Dialogue != nil {
+			screen.Activity.Dialogue.Offer = true
+		}
+		p.attachHow(ctx, lesson, run, &screen.Activity)
+		p.attachRoots(ctx, &screen.Activity)
 		return screen, nil
 	}
 	var earlier []db.LexemeView
@@ -437,6 +622,12 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		return views.Screen{}, err
 	}
 	screen.Activity = p.step(page, lesson, run, act, target, lex, pool, earlier, false, q)
+	if act.Type == units.ActivitySay && run.Phase == "ask" {
+		screen.Activity.Audio = ""
+		screen.Activity.Words = nil
+		p.attachHow(ctx, lesson, run, &screen.Activity)
+		return screen, nil
+	}
 	phase := run.Phase
 	// A recall or cloze that cannot find three options is not a graded ask.
 	// Show the word the way a reveal does, and let Continue move on.
@@ -521,6 +712,18 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 		HomeHref:      page.Href("/"),
 		MeaningsOpen:  q.meaningsAll,
 		MeaningsHref:  q.meaningsHref,
+	}
+	if act.Type == units.ActivitySay {
+		activity.Say = true
+		activity.Cue = strings.TrimSpace(act.PromptEN)
+		activity.SayAsk = run.Phase != "reveal"
+		activity.Autoplay = !activity.SayAsk
+		activity.PromptWord = ""
+		if activity.SayAsk {
+			activity.Prompt = "Say it in Hebrew"
+		} else {
+			activity.Prompt = ""
+		}
 	}
 	if !empty && act.Type == units.ActivityListenPick && run.Phase != "ask" {
 		activity.Prompt = listenRevealPrompt
@@ -721,7 +924,7 @@ func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.
 // A cloze clip speaks the gapped word. It is split out so screenFor can set
 // Activity.Audio after wordsFor.
 func phraseAudio(act units.Activity, phase, src string) string {
-	if phase == "ask" && (act.Type == units.ActivityProduce || act.Type == units.ActivityCloze) {
+	if phase == "ask" && (act.Type == units.ActivityProduce || act.Type == units.ActivityCloze || act.Type == units.ActivitySay) {
 		return ""
 	}
 	return src
@@ -745,6 +948,9 @@ func visibleFields(typ, phase string) fieldVis {
 		// Before the answer the other words show pointed Hebrew and transliteration.
 		// After the answer every word, including the gap, shows transliteration and gloss.
 		return fieldVis{text: true, translit: true, gloss: revealed}
+	case units.ActivitySay:
+		// The ask screen is the English cue. The reveal shows the model.
+		return fieldVis{text: revealed, translit: revealed, gloss: revealed}
 	default:
 		return fieldVis{text: true, translit: true, gloss: true}
 	}
@@ -1292,6 +1498,8 @@ func activityPrompt(lesson db.CourseLesson, act units.Activity, target db.Lexeme
 		return "Pick the Hebrew."
 	case units.ActivityCloze:
 		return "Pick the missing word."
+	case units.ActivitySay:
+		return "Say it in Hebrew"
 	default:
 		return "Read this."
 	}

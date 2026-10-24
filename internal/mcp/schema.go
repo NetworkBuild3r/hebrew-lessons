@@ -121,6 +121,10 @@ func annotateUnitSchema(s *jsonschema.Schema) error {
 	if prompt := prop(act, "prompt_en"); prompt != nil {
 		prompt.Description = "English cue for a say step. Required on say. Plain English, no Hebrew and no markup, at most 200 characters."
 	}
+	if play := prop(act, "play"); play != nil {
+		play.Enum = []any{units.SpeakerA, units.SpeakerB}
+		play.Description = "Dialogue only. a or b, the side the learner speaks. Omit it to show the whole conversation first. Each line of that side needs prompt_en."
+	}
 	if target := prop(act, "target"); target != nil {
 		target.Description = "The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, cloze, and say when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure."
 	}

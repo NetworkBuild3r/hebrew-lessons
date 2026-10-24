@@ -448,8 +448,8 @@ func TestDialogueMarkupInEveryStringField(t *testing.T) {
 	base := populated()
 	var fields []reflect.Value
 	collect(reflect.ValueOf(&base).Elem(), &fields)
-	if len(fields) != 13 {
-		t.Fatalf("the unit has %d string fields with a dialogue, want 13. A new field needs a markup check.", len(fields))
+	if len(fields) != 15 {
+		t.Fatalf("the unit has %d string fields with a dialogue, want 15. A new field needs a markup check.", len(fields))
 	}
 	for i := range fields {
 		for _, bad := range []string{"<", ">", "javascript:alert(1)"} {
@@ -501,5 +501,34 @@ func TestDialogueRulesAreCatalogedAndDocumented(t *testing.T) {
 	}
 	if !ValidSpeaker("a") || !ValidSpeaker("b") || ValidSpeaker("A") || ValidSpeaker("") || ValidSpeaker("ab") || ValidSpeaker(" a") {
 		t.Fatal("ValidSpeaker is not exact")
+	}
+}
+
+// Playing one side needs an English cue on every line that side speaks.
+func TestDialoguePlayNeedsACue(t *testing.T) {
+	u, lk, f, li, ai := dialogueFixture()
+	u.Lessons[li].Activities[ai].Play = SpeakerB
+	var hits []string
+	for _, is := range validateBrief(&u, lk, &f) {
+		if is.Rule == RuleDialoguePlay {
+			hits = append(hits, is.Pointer)
+		}
+	}
+	if len(hits) != 1 || !strings.Contains(hits[0], "prompt_en") {
+		t.Fatalf("play without a cue: %v", hits)
+	}
+	u.Lessons[li].Activities[ai].Lines[1].PromptEN = "good morning"
+	if got := validateBrief(&u, lk, &f); len(got) != 0 {
+		t.Fatalf("play with a cue: %v", ruleSet(got))
+	}
+	u.Lessons[li].Activities[ai].Play = "c"
+	hits = nil
+	for _, is := range validateBrief(&u, lk, &f) {
+		if is.Rule == RuleDialoguePlay {
+			hits = append(hits, is.Pointer)
+		}
+	}
+	if len(hits) != 1 || !strings.HasSuffix(hits[0], "/play") {
+		t.Fatalf("play that is not a side: %v", hits)
 	}
 }

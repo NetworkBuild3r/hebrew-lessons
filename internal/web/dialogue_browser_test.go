@@ -41,8 +41,9 @@ func TestDialogueInBrowser(t *testing.T) {
 	srv.Start()
 	t.Cleanup(srv.Close)
 
+	shots := t.TempDir()
 	out := runNode(t, dir, "dialogue-browser.mjs",
-		"ORIGIN="+origin, "SESSION_COOKIE="+env.cookie.Value, "UNIT="+itoa(env.unitID))
+		"ORIGIN="+origin, "SESSION_COOKIE="+env.cookie.Value, "UNIT="+itoa(env.unitID), "OUT="+shots)
 	var got struct {
 		Decodable    bool     `json:"decodable"`
 		Conversation []string `json:"conversation"`
@@ -116,6 +117,9 @@ func TestDialogueInBrowser(t *testing.T) {
 	}
 	if got.OrbPx < 44 {
 		t.Errorf("a play control is %vpx, under the 44px tap size", got.OrbPx)
+	}
+	if _, err := os.Stat(filepath.Join(shots, "dialogue-teach-390.png")); err != nil {
+		t.Errorf("screenshot: %v", err)
 	}
 }
 
