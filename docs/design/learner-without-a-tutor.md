@@ -92,7 +92,7 @@ Tuning tools already there: `get_learner_model`, `get_learner_words`, `get_progr
 
 ## Dependencies
 
-- **Voice service.** Recorded audio needs the voice service, which is down to 3 credits, and there is no male voice set up. Until both are fixed, audio for every word and the say-it-aloud step cannot ship at scale. Dialogues with two speakers need the second voice.
+- **Voice service.** The account has 30,003 credits remaining of 40,000 (2026-10-23), which covers the next month of units. The male voice is chosen and is not in the deployment secret yet, so a dialogue still has no speaker b on production.
 - **Backfill.** Builds 3, 5, 6 and the personal mistakes list need it.
 - **Isaiah drafting.** An agent that knows the Masoretic text and the Jewish-reading side drafts one verse at a time, and a person who reads Hebrew checks it.
 
@@ -122,7 +122,7 @@ Six small initiatives, each with a one-screen plan under `sdd/initiatives/`. Eac
 | [INIT-020 Speaking](../../sdd/initiatives/INIT-020-speaking/INIT-020-speaking-initiative.md) | Say it aloud; play one side of a dialogue | 4 | 16h | INIT-017, voice service |
 | [INIT-021 Isaiah](../../sdd/initiatives/INIT-021-isaiah/INIT-021-isaiah-initiative.md) | Verse-by-verse reader with checked layers | 3 | 12h | INIT-016, 017, 018, human checking |
 
-Order: INIT-016 through INIT-019 are in the app. A say step plays: the English cue, then the model. A dialogue can be played as one side. The voice account still blocks new clips and the male voice. The class backfill has not started. INIT-021 still waits.
+Order: INIT-016 through INIT-019 are in the app. A say step plays: the English cue, then the model. A dialogue can be played as one side. The voice account has credits again. The male voice is still not in the cluster. The class backfill has not started. INIT-021 still waits.
 
 ## Not in scope here
 

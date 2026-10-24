@@ -23,7 +23,7 @@
 
 ## Depends on / unblocks
 
-- Depends on INIT-017/SPEC-002 (unit schema) and on SPEC-001, which is the operator's: **the voice service is down to 3 credits and has no male voice.**
+- Depends on INIT-017/SPEC-002 (unit schema) and on SPEC-001. The voice account has 30,003 credits remaining of 40,000 (2026-10-23). The male voice is chosen and is not in the deployment secret yet.
 - Unblocks later work: branching role-plays, then an AI conversation partner (not planned yet).
 
 ## Done when
@@ -36,4 +36,4 @@
 - No recording and no speech recognition in this initiative; both need a microphone permission design first.
 - Self-grading is used only because nothing can check speech yet (north star decision 3).
 - Security: new unit fields from MCP are enum- and length-checked; no new learner data beyond attempts.
-- SPEC-002, SPEC-003, and SPEC-004 are in the repo. A say step shows the English cue, then the model. A dialogue can be played as one side, line by line. SPEC-001 stays planned: the voice account still blocks new clips and the male voice.
+- SPEC-002, SPEC-003, and SPEC-004 are in the repo. A say step shows the English cue, then the model. A dialogue can be played as one side, line by line. SPEC-001 stays planned: the credit balance is recorded in `docs/ops/voice-service.md`, and the male voice is not in the cluster yet.
