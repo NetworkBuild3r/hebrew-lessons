@@ -1,10 +1,12 @@
 # Voice service
 
-Recorded 2026-10-23 for INIT-020/SPEC-001. No keys and no voice ids belong on this page.
+Recorded 2026-10-23 for INIT-020/SPEC-001, and updated 2026-10-24. No keys and no voice ids belong on this page.
 
 ## Balance
 
-The operator's voice account, shown that day: **30,003 credits remaining of 40,000**.
+The operator's voice account, shown 2026-10-24: **9,997 credits used of 40,000** (30,003 remaining before the speaker-b clip below). The plan renews on November 7. On 2026-10-23 the same account showed 30,003 remaining of 40,000.
+
+The API key the app sends has its own credit cap. That cap was 10,000, and ElevenLabs was refusing new clips while the plan still had credits. On 2026-10-24 the cap was raised to **40,000**, the same as the plan.
 
 The app calls the API with model `eleven_v3`. On the website, Eleven v3 costs 1 credit per character (letters, spaces, and punctuation). API calls are discounted against that rate. The estimate below uses 1 credit per character, so it is higher than the API will actually spend.
 
@@ -30,4 +32,4 @@ Clips already stored are skipped. Generating the same word again does not spend 
 
 Speaker a, narration, and every clip with no speaker use the female voice (`ELEVENLABS_VOICE_ID`, the code default). That is the voice for words and say steps. Speaker b uses the male voice (`ELEVENLABS_VOICE_ID_MALE`), and only so the two people in a dialogue stay distinct. There is no code default for the male voice. If it is unset, a speaker-b line fails and is never made in the female voice.
 
-The male voice is in Vault at `kv/apps/production/hebrew`, property `ELEVENLABS_VOICE_ID_MALE`, next to the API key. Both apps read that one property from the deployment secret.
+The male voice is in Vault at `kv/apps/production/hebrew`, property `ELEVENLABS_VOICE_ID_MALE`, next to the API key. Both apps read that one property from the deployment secret. On 2026-10-24 a production `generate_audio` call with speaker b stored a clip for בֹּקֶר טוֹב.

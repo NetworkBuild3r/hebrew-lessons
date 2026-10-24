@@ -7,7 +7,7 @@ spec_id: SPEC-001
 initiative_id: INIT-020
 title: "Voice service: credits and a male voice"
 domain: infrastructure
-status: planned
+status: complete
 primary_prompt: .claude/agents/devops-engineer/AGENT.md
 supplement_prompts: []
 model: sonnet

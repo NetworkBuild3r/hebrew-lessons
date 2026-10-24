@@ -1,6 +1,6 @@
 # INIT-020: Speaking — say it aloud, and play a side in a dialogue
 
-**Initiative ID:** INIT-020 · **Status:** planned · **Created:** 2026-10-23 · **Owner:** Brian Nelson
+**Initiative ID:** INIT-020 · **Status:** complete · **Created:** 2026-10-23 · **Owner:** Brian Nelson
 **Discipline Profile:** `software` · **Ticket:** none · **Branch:** `main`
 **Source:** [the hybrid model](../../../docs/design/learner-without-a-tutor.md), ADR-0019 (INIT-016/SPEC-001).
 
@@ -23,7 +23,7 @@
 
 ## Depends on / unblocks
 
-- Depends on INIT-017/SPEC-002 (unit schema) and on SPEC-001. The voice account has 30,003 credits remaining of 40,000 (2026-10-23). The male voice is in Vault.
+- Depends on INIT-017/SPEC-002 (unit schema) and on SPEC-001. The voice account has 9,997 credits used of 40,000 (2026-10-24), and the API key cap is 40,000. The male voice is in Vault.
 - Unblocks later work: branching role-plays, then an AI conversation partner (not planned yet).
 
 ## Done when
@@ -36,4 +36,4 @@
 - No recording and no speech recognition in this initiative; both need a microphone permission design first.
 - Self-grading is used only because nothing can check speech yet (north star decision 3).
 - Security: new unit fields from MCP are enum- and length-checked; no new learner data beyond attempts.
-- SPEC-002, SPEC-003, and SPEC-004 are in the repo. A say step shows the English cue, then the model. A dialogue can be played as one side, line by line. SPEC-001 stays planned until a production speaker-b clip exists. The credit balance is recorded in `docs/ops/voice-service.md`. The male voice is in Vault.
+- SPEC-001 through SPEC-004 are complete. A say step shows the English cue, then the model. A dialogue can be played as one side, line by line. A production speaker-b clip is stored. The credit balance and the 40,000 API key cap are recorded in `docs/ops/voice-service.md`. The male voice is in Vault.
