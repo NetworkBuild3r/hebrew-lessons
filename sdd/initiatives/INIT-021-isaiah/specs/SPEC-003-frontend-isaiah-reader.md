@@ -7,7 +7,7 @@ spec_id: SPEC-003
 initiative_id: INIT-021
 title: "Isaiah reader"
 domain: frontend
-status: planned
+status: complete
 primary_prompt: .claude/agents/principal-frontend-developer/AGENT.md
 supplement_prompts: []
 model: sonnet

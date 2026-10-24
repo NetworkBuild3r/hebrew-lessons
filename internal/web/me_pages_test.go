@@ -80,7 +80,20 @@ func TestMyStuffIsolationAndSections(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.ExecContext(ctx, `INSERT INTO verse_notes (ref, status) VALUES ('isaiah 6:1', 'checked')`); err != nil {
+	isaiahHe := units.Normalize("\u05e7\u05b8\u05d3\u05d5\u05b9\u05e9\u05c1")
+	if _, err := store.ExecContext(ctx, `
+		INSERT INTO tanakh_verses (book, chapter, verse, he, he_plain, en, source_version, license)
+		VALUES ('isaiah', 6, 1, ?, ?, 'Holy, holy, holy.', 'test', 'Public Domain')`,
+		isaiahHe, units.Plain(isaiahHe)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpsertVerseNotes(ctx, "isaiah", 6, 1, []db.VerseNoteInput{
+		{Layer: db.LayerRoots, Body: "In the temple."},
+		{Layer: db.LayerBridge, Body: "DRAFTNOTE stays hidden."},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CheckVerseNote(ctx, "isaiah", 6, 1, db.LayerRoots, a.user.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -135,8 +148,13 @@ func TestMyStuffIsolationAndSections(t *testing.T) {
 	if !strings.Contains(note, "Learners often say") || !strings.Contains(note, commonWrong) || strings.Contains(note, personal) || strings.Contains(note, "A draft.") {
 		t.Fatal("the explainer did not stay on published shared mistakes")
 	}
-	if !strings.Contains(getLearner(t, h, a, "/isaiah"), "Checked notes will open here.") {
-		t.Fatal("isaiah placeholder missing")
+	isaiah := getLearner(t, h, a, "/isaiah")
+	if !strings.Contains(isaiah, "Chapter 6") || strings.Contains(isaiah, "DRAFTNOTE") {
+		t.Fatal("isaiah chapter list showed a draft or hid the chapter")
+	}
+	verse := getLearner(t, h, a, "/isaiah/6/1")
+	if !strings.Contains(verse, isaiahHe) || !strings.Contains(verse, "In the temple.") || strings.Contains(verse, "DRAFTNOTE") {
+		t.Fatal("the reader showed a draft or hid the checked note")
 	}
 }
 

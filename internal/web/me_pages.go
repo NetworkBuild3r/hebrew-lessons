@@ -115,25 +115,6 @@ func (s *server) serveMistakes(w http.ResponseWriter, r *http.Request, lang, csr
 	render(w, r, views.MistakesPage(view))
 }
 
-func (s *server) serveIsaiah(w http.ResponseWriter, r *http.Request, lang, csrf string) {
-	if s == nil || s.store == nil {
-		http.NotFound(w, r)
-		return
-	}
-	n, err := s.store.CheckedVerseCount(r.Context())
-	if err != nil || n == 0 {
-		http.NotFound(w, r)
-		return
-	}
-	page, _, err := s.pageFor(r, lang, csrf, "isaiah")
-	if err != nil {
-		serverError(w)
-		return
-	}
-	page.Title = "Isaiah · " + views.AppName
-	render(w, r, views.IsaiahPage(views.IsaiahView{Page: page}))
-}
-
 func stateHref(page views.Page, path, state string) string {
 	if state != "" {
 		path += "?state=" + url.QueryEscape(state)

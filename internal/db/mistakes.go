@@ -292,7 +292,10 @@ func (s *Store) CheckedVerseCount(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	var n int
-	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM verse_notes WHERE status = 'checked'`).Scan(&n); err != nil {
+	if err := conn.QueryRowContext(ctx, `
+		SELECT
+			(SELECT COUNT(*) FROM verse_notes WHERE status = 'checked')
+			+ (SELECT COUNT(*) FROM verse_word_glosses WHERE status = 'checked')`).Scan(&n); err != nil {
 		return 0, fmt.Errorf("db: verse notes: %w", err)
 	}
 	return n, nil

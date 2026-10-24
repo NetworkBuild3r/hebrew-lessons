@@ -7,7 +7,7 @@ spec_id: SPEC-002
 initiative_id: INIT-021
 title: "MCP: verse notes, drafted and checked"
 domain: api
-status: planned
+status: complete
 primary_prompt: .claude/agents/principal-backend-developer/AGENT.md
 supplement_prompts: [.claude/agents/security-specialist/AGENT.md]
 model: sonnet

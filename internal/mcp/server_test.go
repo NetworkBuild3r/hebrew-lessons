@@ -55,8 +55,8 @@ func TestAuthRejectAndAccept(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 9 authoring tools, 5 learner tools from SPEC-021, 4 pattern tools, and 3 mistake and verb tools.
-	if len(tools.Tools) != 21 {
+	// 9 authoring tools, 5 learner tools from SPEC-021, 4 pattern tools, 3 mistake and verb tools, and 2 Isaiah tools.
+	if len(tools.Tools) != 23 {
 		t.Fatalf("tools = %d", len(tools.Tools))
 	}
 }
@@ -153,7 +153,8 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 		if tool.Annotations == nil || (!tool.Annotations.ReadOnlyHint && tool.Name != "put_unit" && tool.Name != "upsert_lexemes" && tool.Name != "publish_unit" && tool.Name != "generate_audio" &&
 			tool.Name != "get_lesson_brief" && tool.Name != "add_coach_note" && tool.Name != "unpublish_unit" &&
 			tool.Name != "upsert_patterns" && tool.Name != "upsert_explainer" &&
-			tool.Name != "record_mistakes" && tool.Name != "upsert_common_mistakes" && tool.Name != "upsert_verb_forms") {
+			tool.Name != "record_mistakes" && tool.Name != "upsert_common_mistakes" && tool.Name != "upsert_verb_forms" &&
+			tool.Name != "upsert_verse_notes") {
 			t.Fatalf("%s annotations %#v", tool.Name, tool.Annotations)
 		}
 	}

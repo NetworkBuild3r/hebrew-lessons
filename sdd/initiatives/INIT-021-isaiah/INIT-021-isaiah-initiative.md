@@ -1,6 +1,6 @@
 # INIT-021: Isaiah, verse by verse
 
-**Initiative ID:** INIT-021 · **Status:** planned · **Created:** 2026-10-23 · **Owner:** Brian Nelson
+**Initiative ID:** INIT-021 · **Status:** complete · **Created:** 2026-10-23 · **Owner:** Brian Nelson
 **Discipline Profile:** `software` · **Ticket:** none · **Branch:** `main`
 **Source:** [the hybrid model](../../../docs/design/learner-without-a-tutor.md), ADR-0019 (INIT-016/SPEC-001).
 
@@ -31,5 +31,5 @@
 
 ## Notes
 
-- One migration (next free number when it lands; 017 once INIT-020's migration 016 is in).
-- Security: **required** for SPEC-002 — agent-written content reaches learners only through the human check, which needs an admin web session and CSRF.
+- Migration 017 is in. Isaiah stays hidden until a verse is checked. No class notes were loaded.
+- Security: **required** for SPEC-002 — agent-written content reaches learners only through the human check, which needs an admin web session and CSRF. No security-review registry is in this repo. The check route refuses a non-admin, and the session middleware requires CSRF.

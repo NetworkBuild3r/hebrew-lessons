@@ -184,6 +184,9 @@ func newMCPServer(opts Options) *mcp.Server {
 	if mistakes, ok := opts.Course.(mistakeStore); ok {
 		svc.mistakes = mistakes
 	}
+	if verses, ok := opts.Course.(verseStore); ok {
+		svc.verses = verses
+	}
 	registerTools(server, svc)
 	if opts.extraTools != nil {
 		opts.extraTools(server)

@@ -1,0 +1,89 @@
+package views
+
+// IsaiahPage is the chapter list, or one verse with its checked layers.
+templ IsaiahPage(v IsaiahView) {
+	@Layout(v.Page) {
+		<article class="isaiah">
+			if v.Verse != nil {
+				<header class="isaiah-top">
+					<h1 lang="en">{ v.Verse.Heading }</h1>
+					if v.Verse.Audio != "" {
+						@orbButton("orb", "Play this verse", v.Verse.Audio, "")
+					}
+				</header>
+				<p class="isaiah-he" lang="he" dir="rtl">{ v.Verse.He }</p>
+				if len(v.Verse.Words) > 0 {
+					<div class="isaiah-words" dir="rtl">
+						for _, word := range v.Verse.Words {
+							<details class="wcard">
+								<summary class="wcard__hit">
+									<bdi class="wcard__he" lang="he" dir="rtl">{ word.Text }</bdi>
+								</summary>
+								<div class="wcard__face wcard__back" lang="en" dir="ltr">
+									<span class="wcard__gl">{ word.Gloss }</span>
+									if word.Root != "" {
+										if word.RootHref != "" {
+											<a class="wcard__root" href={ templ.SafeURL(word.RootHref) } hx-boost="false">Root <bdi lang="he" dir="rtl">{ word.Root }</bdi></a>
+										} else {
+											<span class="wcard__root">Root <bdi lang="he" dir="rtl">{ word.Root }</bdi></span>
+										}
+									}
+								</div>
+							</details>
+						}
+					</div>
+				}
+				for _, layer := range v.Verse.Layers {
+					<section class="isaiah-layer">
+						<h2 lang="en">{ layer.Title }</h2>
+						<div lang="en">@Rich(layer.Nodes)</div>
+					</section>
+				}
+				<details class="isaiah-en">
+					<summary lang="en">Show the English</summary>
+					<p lang="en" dir="ltr">{ v.Verse.En }</p>
+				</details>
+				<nav class="isaiah-nav" aria-label="Verses">
+					if v.Verse.PrevHref != "" {
+						<a href={ templ.SafeURL(v.Verse.PrevHref) }>Previous verse</a>
+					}
+					if v.Verse.NextHref != "" {
+						<a href={ templ.SafeURL(v.Verse.NextHref) }>Next verse</a>
+					}
+				</nav>
+			} else {
+				<h1 lang="en">Isaiah</h1>
+				<ul class="isaiah-chapters">
+					for _, ch := range v.Chapters {
+						<li><a href={ templ.SafeURL(ch.Href) }>{ ch.Label }</a></li>
+					}
+				</ul>
+			}
+		</article>
+	}
+}
+
+// AdminIsaiahPage is where a signed-in admin checks a verse. A learner never sees it.
+templ AdminIsaiahPage(v AdminIsaiahView) {
+	@Layout(v.Page) {
+		<article class="isaiah">
+			<h1 lang="en">{ v.Heading }</h1>
+			<p class="isaiah-he" lang="he" dir="rtl">{ v.He }</p>
+			for _, note := range v.Notes {
+				<section class="isaiah-layer">
+					<h2 lang="en">{ note.Layer } · { note.Status }</h2>
+					<p lang="en">{ note.Body }</p>
+				</section>
+			}
+			for _, gloss := range v.Glosses {
+				<p lang="en"><bdi lang="he" dir="rtl">{ gloss.Word }</bdi> { gloss.Gloss } · { gloss.Status }</p>
+			}
+			if v.CanCheck {
+				<form method="post">
+					<input type="hidden" name="_csrf" value={ v.Page.CSRF }/>
+					<button type="submit" class="btn btn-primary">Check this verse</button>
+				</form>
+			}
+		</article>
+	}
+}

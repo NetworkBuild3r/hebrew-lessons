@@ -32,6 +32,7 @@ type service struct {
 	units     UnitWriter
 	patterns  patternStore
 	mistakes  mistakeStore
+	verses    verseStore
 	audio     AudioGenerator
 	// learner is the store of the learner tools. It is the Course store when that store
 	// implements LearnerData, and nil otherwise.
@@ -610,4 +611,5 @@ func registerTools(server *mcp.Server, svc *service) {
 	registerGetUnit(server, svc)
 	registerPatternTools(server, svc)
 	registerMistakeTools(server, svc)
+	registerVerseTools(server, svc)
 }

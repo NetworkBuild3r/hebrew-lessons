@@ -66,7 +66,3 @@ type MistakesView struct {
 	Empty    string
 }
 
-// IsaiahView is the empty reader. It is only served when a checked note exists.
-type IsaiahView struct {
-	Page Page
-}

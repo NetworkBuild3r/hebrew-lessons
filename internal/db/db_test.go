@@ -52,8 +52,8 @@ func TestMigrateEmptyAndIdempotent(t *testing.T) {
 	}
 
 	s = openAt(t, dir, fixedClock{when})
-	if got := count(t, s, `SELECT COUNT(*) FROM schema_migrations`); got != 16 {
-		t.Fatalf("schema_migrations rows = %d, want 16", got)
+	if got := count(t, s, `SELECT COUNT(*) FROM schema_migrations`); got != 17 {
+		t.Fatalf("schema_migrations rows = %d, want 17", got)
 	}
 	wantApplied := FormatTime(when)
 	rows, err := s.conn.QueryContext(ctx, `SELECT version, applied_at FROM schema_migrations ORDER BY version`)
@@ -76,8 +76,8 @@ func TestMigrateEmptyAndIdempotent(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if len(versions) != 16 || versions[0] != 1 || versions[14] != 15 || versions[15] != 16 {
-		t.Fatalf("versions = %v, want 1..16", versions)
+	if len(versions) != 17 || versions[0] != 1 || versions[15] != 16 || versions[16] != 17 {
+		t.Fatalf("versions = %v, want 1..17", versions)
 	}
 	if got := count(t, s, `SELECT COUNT(*) FROM users`); got != 1 {
 		t.Fatalf("users = %d, want 1 after a second open", got)
@@ -142,6 +142,7 @@ func TestTables(t *testing.T) {
 		"users",
 		"verb_forms",
 		"verse_notes",
+		"verse_word_glosses",
 		"weekly_reports",
 	}
 	for _, name := range want {
