@@ -30,4 +30,4 @@ Clips already stored are skipped. Generating the same word again does not spend 
 
 Speaker a, narration, and every clip with no speaker use the female voice (`ELEVENLABS_VOICE_ID`, the code default). That is the voice for words and say steps. Speaker b uses the male voice (`ELEVENLABS_VOICE_ID_MALE`), and only so the two people in a dialogue stay distinct. There is no code default for the male voice. If it is unset, a speaker-b line fails and is never made in the female voice.
 
-The male voice is chosen. It is not in the deployment secret yet, so production still has no speaker b. The id stays in Vault at `kv/apps/production/hebrew`, property `ELEVENLABS_VOICE_ID_MALE`, next to the API key. Both apps read that one property.
+The male voice is in Vault at `kv/apps/production/hebrew`, property `ELEVENLABS_VOICE_ID_MALE`, next to the API key. Both apps read that one property from the deployment secret.

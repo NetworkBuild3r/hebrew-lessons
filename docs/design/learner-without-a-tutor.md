@@ -92,7 +92,7 @@ Tuning tools already there: `get_learner_model`, `get_learner_words`, `get_progr
 
 ## Dependencies
 
-- **Voice service.** The account has 30,003 credits remaining of 40,000 (2026-10-23), which covers the next month of units. The female voice is the default. The male voice is only the second person in a dialogue. It is chosen and is not in the deployment secret yet, so a dialogue still has no speaker b on production.
+- **Voice service.** The account has 30,003 credits remaining of 40,000 (2026-10-23), which covers the next month of units. The female voice is the default. The male voice is only the second person in a dialogue, and that id is in Vault.
 - **Backfill.** Builds 3, 5, 6 and the personal mistakes list need it.
 - **Isaiah drafting.** An agent that knows the Masoretic text and the Jewish-reading side drafts one verse at a time, and a person who reads Hebrew checks it.
 
@@ -122,7 +122,7 @@ Six small initiatives, each with a one-screen plan under `sdd/initiatives/`. Eac
 | [INIT-020 Speaking](../../sdd/initiatives/INIT-020-speaking/INIT-020-speaking-initiative.md) | Say it aloud; play one side of a dialogue | 4 | 16h | INIT-017, voice service |
 | [INIT-021 Isaiah](../../sdd/initiatives/INIT-021-isaiah/INIT-021-isaiah-initiative.md) | Verse-by-verse reader with checked layers | 3 | 12h | INIT-016, 017, 018, human checking |
 
-Order: INIT-016 through INIT-021 are in the app. A say step plays: the English cue, then the model. A dialogue can be played as one side. The female voice is the default, and the male voice is only the second person in a dialogue. That male voice is still not in the cluster. The class backfill has not started. Isaiah opens when a verse has been checked.
+Order: INIT-016 through INIT-021 are in the app. A say step plays: the English cue, then the model. A dialogue can be played as one side. The female voice is the default, and the male voice is only the second person in a dialogue. That male voice is in Vault. The class backfill has not started. Isaiah opens when a verse has been checked.
 
 ## Not in scope here
 
