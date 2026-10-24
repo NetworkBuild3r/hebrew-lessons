@@ -65,4 +65,3 @@ type MistakesView struct {
 	Mistakes []MistakeRow
 	Empty    string
 }
-
