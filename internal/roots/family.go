@@ -86,6 +86,9 @@ type Store interface {
 	RootLessons(ctx context.Context, root, learnerScope string) ([]db.RootLesson, error)
 	LessonUses(ctx context.Context, ids []int64) (map[int64]int, error)
 	VersesForWords(ctx context.Context, plains []string, limit int) ([]db.Verse, error)
+	// VerseGroupCounts is one pass over the Tanakh for every group.
+	// The count for a group stops at limit.
+	VerseGroupCounts(ctx context.Context, groups map[string][]string, limit int) (map[string]int, error)
 }
 
 // formReader is optional. A store with verb forms fills Page.Forms.
@@ -226,49 +229,92 @@ func indexOf(s, part string) int {
 }
 
 // List returns roots that have a page: at least two words, or one word and
-// at least one verse.
+// at least one verse. Verse totals come from one Tanakh pass.
 func List(ctx context.Context, store Store) ([]Summary, error) {
 	counts, err := store.RootCounts(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var out []Summary
+	words := map[string][]db.LexemeView{}
+	groups := map[string][]string{}
 	for root, n := range counts {
-		if n >= 2 {
-			gloss, err := coreGloss(ctx, store, root)
-			if err != nil {
-				return nil, err
-			}
-			verses, err := verseCount(ctx, store, root)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, Summary{Root: root, Words: n, Verses: verses, CoreGloss: gloss})
+		if n < 1 {
 			continue
 		}
-		if n == 1 {
-			verses, err := verseCount(ctx, store, root)
-			if err != nil {
-				return nil, err
-			}
-			if verses < 1 {
-				continue
-			}
-			gloss, err := coreGloss(ctx, store, root)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, Summary{Root: root, Words: n, Verses: verses, CoreGloss: gloss})
+		list, err := store.LexemesByRoot(ctx, root)
+		if err != nil {
+			return nil, err
 		}
+		words[root] = list
+		groups[root] = plainsOf(list)
+	}
+	hits, err := store.VerseGroupCounts(ctx, groups, VerseCap)
+	if err != nil {
+		return nil, err
+	}
+	var out []Summary
+	for root, n := range counts {
+		verses := hits[root]
+		if n < 2 && verses < 1 {
+			continue
+		}
+		gloss, err := coreGloss(ctx, store, words[root])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, Summary{Root: root, Words: n, Verses: verses, CoreGloss: gloss})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Root < out[j].Root })
 	return out, nil
 }
 
-func coreGloss(ctx context.Context, store Store, root string) (string, error) {
-	words, err := store.LexemesByRoot(ctx, root)
-	if err != nil || len(words) == 0 {
-		return "", err
+// Any reports whether any root has a page. A family of two or more words
+// answers yes before the Tanakh is read. The nav uses this. The index is List.
+func Any(ctx context.Context, store Store) (bool, error) {
+	counts, err := store.RootCounts(ctx)
+	if err != nil {
+		return false, err
+	}
+	singles := map[string][]string{}
+	for root, n := range counts {
+		if n >= 2 {
+			return true, nil
+		}
+		if n != 1 {
+			continue
+		}
+		words, err := store.LexemesByRoot(ctx, root)
+		if err != nil {
+			return false, err
+		}
+		singles[root] = plainsOf(words)
+	}
+	if len(singles) == 0 {
+		return false, nil
+	}
+	hits, err := store.VerseGroupCounts(ctx, singles, 1)
+	if err != nil {
+		return false, err
+	}
+	for _, n := range hits {
+		if n > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func plainsOf(words []db.LexemeView) []string {
+	out := make([]string, len(words))
+	for i, w := range words {
+		out[i] = units.Plain(w.Text)
+	}
+	return out
+}
+
+func coreGloss(ctx context.Context, store Store, words []db.LexemeView) (string, error) {
+	if len(words) == 0 {
+		return "", nil
 	}
 	ids := make([]int64, len(words))
 	for i, w := range words {
@@ -293,15 +339,11 @@ func verseCount(ctx context.Context, store Store, root string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	plains := make([]string, len(words))
-	for i, w := range words {
-		plains[i] = units.Plain(w.Text)
-	}
-	verses, err := store.VersesForWords(ctx, plains, VerseCap)
+	hits, err := store.VerseGroupCounts(ctx, map[string][]string{root: plainsOf(words)}, VerseCap)
 	if err != nil {
 		return 0, err
 	}
-	return len(verses), nil
+	return hits[root], nil
 }
 
 // Visible reports whether a root page exists.

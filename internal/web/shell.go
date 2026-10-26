@@ -161,11 +161,11 @@ func (s *server) sectionLinks(ctx context.Context, ui views.UI) ([]views.Section
 	if len(published) > 0 {
 		out = append(out, views.SectionLink{Href: ui.Href("/learn"), Label: "Learn", Icon: "book", ID: "learn"})
 	}
-	list, err := roots.List(ctx, s.store)
+	showRoots, err := roots.Any(ctx, s.store)
 	if err != nil {
 		return nil, err
 	}
-	if len(list) > 0 {
+	if showRoots {
 		out = append(out, views.SectionLink{Href: ui.Href("/roots"), Label: "Roots", Icon: "layers", ID: "roots"})
 	}
 	n, err := s.store.CheckedVerseCount(ctx)

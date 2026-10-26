@@ -146,6 +146,74 @@ func (s *Store) VersesForWords(ctx context.Context, plains []string, limit int) 
 	return matched, nil
 }
 
+// VerseGroupCounts counts, in one pass, how many verses contain any token of
+// each group. A verse counts once for a group even when several of that
+// group's tokens are in it, and the count stops at limit. A plain that is
+// not one token does not count, the same rule as VersesForWords. A group
+// with no such plain is 0. The home page and the roots index use this so
+// they do not read the whole Tanakh once per root.
+func (s *Store) VerseGroupCounts(ctx context.Context, groups map[string][]string, limit int) (map[string]int, error) {
+	if limit < 1 {
+		return nil, fmt.Errorf("db: tanakh limit must be positive")
+	}
+	out := make(map[string]int, len(groups))
+	owners := map[string][]string{}
+	open := 0
+	for key, plains := range groups {
+		out[key] = 0
+		seen := map[string]bool{}
+		for _, p := range plains {
+			n, ok := singleToken(p)
+			if !ok || seen[n] {
+				continue
+			}
+			seen[n] = true
+			owners[n] = append(owners[n], key)
+		}
+		if len(seen) > 0 {
+			open++
+		}
+	}
+	if open == 0 {
+		return out, nil
+	}
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `SELECT he_plain FROM tanakh_verses`)
+	if err != nil {
+		return nil, fmt.Errorf("db: tanakh search: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var plain string
+		if err := rows.Scan(&plain); err != nil {
+			return nil, fmt.Errorf("db: tanakh search: %w", err)
+		}
+		hit := map[string]bool{}
+		for _, tok := range plainTokens(plain) {
+			for _, key := range owners[tok] {
+				if hit[key] || out[key] >= limit {
+					continue
+				}
+				hit[key] = true
+				out[key]++
+				if out[key] == limit {
+					open--
+				}
+			}
+		}
+		if open == 0 {
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: tanakh search: %w", err)
+	}
+	return out, nil
+}
+
 // familyRank puts Isaiah ahead of the rest of the canon.
 func familyRank(book string) int {
 	if book == "isaiah" {

@@ -140,6 +140,51 @@ func must(t *testing.T, s *db.Store, q string, args ...any) {
 	}
 }
 
+func TestAnyAndOneVerseCountsOnce(t *testing.T) {
+	ctx := context.Background()
+	s := openRoots(t)
+	must(t, s, `INSERT INTO lexemes (text_nfc, gloss_en, root) VALUES ('שָׁמַע', 'hear', 'שׁ־מ־ע')`)
+	must(t, s, `INSERT INTO lexemes (text_nfc, gloss_en, root) VALUES ('שְׁמוּעָה', 'news', 'שׁ־מ־ע')`)
+	must(t, s, `INSERT INTO lexemes (text_nfc, gloss_en, root) VALUES ('לֵב', 'heart', 'ל־ב')`)
+	// Two words are a page before any verse is read.
+	any, err := Any(ctx, s)
+	if err != nil || !any {
+		t.Fatalf("Any = %v %v", any, err)
+	}
+	seedVerse(t, s, "isaiah", 1, 2, "שָׁמַע שְׁמוּעָה", "both")
+	list, err := List(ctx, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].Root != "שׁ־מ־ע" || list[0].Verses != 1 {
+		t.Fatalf("list %#v", list)
+	}
+	// A verse that holds both words of the family is one verse, and a
+	// one-word root with no verse stays off the index.
+	hits, err := s.VerseGroupCounts(ctx, map[string][]string{
+		"שׁ־מ־ע": {units.Plain("שָׁמַע"), units.Plain("שְׁמוּעָה")},
+		"ל־ב":    {units.Plain("לֵב")},
+	}, VerseCap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hits["שׁ־מ־ע"] != 1 || hits["ל־ב"] != 0 {
+		t.Fatalf("hits %#v", hits)
+	}
+
+	lonely := openRoots(t)
+	must(t, lonely, `INSERT INTO lexemes (text_nfc, gloss_en, root) VALUES ('לֵב', 'heart', 'ל־ב')`)
+	any, err = Any(ctx, lonely)
+	if err != nil || any {
+		t.Fatalf("lonely Any = %v %v", any, err)
+	}
+	seedVerse(t, lonely, "isaiah", 6, 10, "לֵב", "heart")
+	any, err = Any(ctx, lonely)
+	if err != nil || !any {
+		t.Fatalf("verse Any = %v %v", any, err)
+	}
+}
+
 func scanID(t *testing.T, s *db.Store, dest *int64, q string) {
 	t.Helper()
 	if err := connOf(t, s).QueryRowContext(context.Background(), q).Scan(dest); err != nil {
