@@ -37,7 +37,14 @@ templ ActivityBlock(a Activity) {
 			if a.Score != "" {
 				<p class="count"><bdi lang="en" dir="ltr">{ a.Score }</bdi></p>
 			}
-			<a class="btn btn-primary" href={ templ.SafeURL(a.HomeHref) }>@E("Back to Today")</a>
+			<div class="activity__done">
+				if a.NextHref != "" {
+					<a class="btn btn-primary" href={ templ.SafeURL(a.NextHref) }>@E("Next lesson")</a>
+					<a class="btn btn-tonal" href={ templ.SafeURL(a.HomeHref) }>@E("Back to Today")</a>
+				} else {
+					<a class="btn btn-primary" href={ templ.SafeURL(a.HomeHref) }>@E("Back to Today")</a>
+				}
+			</div>
 		} else {
 			if a.Cue != "" {
 				<p class="say-cue" lang="en">{ a.Cue }</p>

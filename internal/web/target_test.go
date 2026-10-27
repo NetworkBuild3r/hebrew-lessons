@@ -67,6 +67,35 @@ func TestTargetFromAndGapToken(t *testing.T) {
 	}
 }
 
+// A cloze whose target is written twice still has one blank. The second copy
+// stays on the line, so the learner is not asked to fill two gaps with one choice.
+func TestClozeGapsARepeatedTargetOnce(t *testing.T) {
+	const (
+		yesh = "יֵשׁ"
+		tov  = "טוֹב"
+		ra   = "רַע"
+	)
+	text := yesh + " " + tov + ", " + yesh + " " + ra + "."
+	lex := map[string]db.LexemeView{
+		yesh: {ID: 1, Text: yesh, Gloss: "there is", Translit: "yesh"},
+		tov:  {ID: 2, Text: tov, Gloss: "good", Translit: "tov"},
+		ra:   {ID: 3, Text: ra, Gloss: "bad", Translit: "ra"},
+	}
+	words := wordsForText(text, units.ActivityCloze, lex, []db.LexemeView{{ID: 1, Text: yesh}}, "ask", clipSet{}, true, yesh, false)
+	gaps, shown := 0, 0
+	for _, w := range words {
+		if w.Gap {
+			gaps++
+		}
+		if w.Text == yesh && w.ShowText {
+			shown++
+		}
+	}
+	if gaps != 1 || shown != 1 {
+		t.Fatalf("gaps = %d, visible copies = %d, words = %+v", gaps, shown, words)
+	}
+}
+
 func TestTargetFallsBackWhenItDoesNotResolve(t *testing.T) {
 	const (
 		ani = "אֲנִי"

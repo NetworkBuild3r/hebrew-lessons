@@ -54,6 +54,9 @@ type Activity struct {
 	Stage     bool
 	Spotlight bool
 	HomeHref  string
+	// NextHref is the next unfinished lesson. Empty when this was the last one,
+	// and the completion panel then offers only the way back to Today.
+	NextHref string
 	// Dialogue is set for a dialogue step. It replaces Words and Audio.
 	Dialogue *Dialogue
 	// MeaningsOpen is true when the teach step was opened with ?meanings=all,

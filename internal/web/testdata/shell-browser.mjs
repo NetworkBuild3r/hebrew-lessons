@@ -242,6 +242,22 @@ for (const width of [1023, 1024, 1280, 1440]) {
       check(`width ${width}: the rail is the token width`, Math.abs(lay.railWidth - 92) <= 1, lay.railWidth);
       check(`width ${width}: rail labels in full, one line, inside the rail`, JSON.stringify(dock.map((d) => d.text)) === JSON.stringify(expectLabels.en) && dock.every((d) => d.lines === 1 && d.textWidth <= d.right - d.left + 0.5), dock.map((d) => d.text + " " + d.textWidth.toFixed(1)).join("; "));
       check(`width ${width}: rail items stack down the page`, dock.every((d, i) => i === 0 || d.top >= dock[i - 1].bottom - 0.5));
+      const extra = await page.evaluate(() => {
+        const rail = document.querySelector(".rail").getBoundingClientRect();
+        const links = [...document.querySelectorAll(".rail-more .rail__link")].map((a) => {
+          const r = a.getBoundingClientRect();
+          return { text: a.textContent.trim(), left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+        });
+        const card = document.querySelector(".today-hero");
+        const cr = card ? card.getBoundingClientRect() : null;
+        const hitsCard = cr && links.some((l) => l.right > cr.left + 1 && l.left < cr.right - 1 && l.bottom > cr.top + 1 && l.top < cr.bottom - 1);
+        return {
+          links,
+          inside: links.every((l) => l.left >= rail.left - 1 && l.right <= rail.right + 1),
+          hitsCard,
+        };
+      });
+      check(`width ${width}: Learn and Roots stay inside the rail`, extra.links.length > 0 && extra.inside && !extra.hitsCard, JSON.stringify(extra));
     }
     check(`width ${width}: no sideways scroll`, lay.overflow <= 0, lay.overflow);
     await ctx.close();
@@ -257,7 +273,8 @@ for (const scheme of ["light", "dark"]) {
       const { ctx, page } = await open("full", { width, height, scheme });
       await page.goto(origin + "/", { waitUntil: "networkidle" });
       check(`${tag}: one gold action`, (await page.evaluate(goldInfo)) === 1, await page.evaluate(goldInfo));
-      check(`${tag}: the action is the reviews`, (await page.getAttribute(".today", "data-action")) === "reviews");
+      check(`${tag}: the action is the next lesson`, (await page.getAttribute(".today", "data-action")) === "next_lesson");
+      check(`${tag}: the reviews stay beside it`, (await page.locator(".today-review").count()) === 1);
       check(`${tag}: five words to watch`, (await page.locator(".watch__item").count()) === 5);
       check(`${tag}: the band alert has its button`, (await page.locator(".today-slip form button").count()) === 1);
       check(`${tag}: no sideways scroll`, (await page.evaluate(layoutInfo)).overflow <= 0);

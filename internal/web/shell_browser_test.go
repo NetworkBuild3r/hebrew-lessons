@@ -104,6 +104,18 @@ func startShellServerN(t *testing.T, n int) (origin string, cookies map[string]s
 		}}},
 	}, "shared")
 	publish(t, store, unit)
+	// A published explainer puts Learn in the rail, which is where the extra links were
+	// spilling onto the Today card.
+	if err := store.UpsertPatterns(ctx, []db.PatternInput{{
+		Slug: "present-tense", Title: "Present tense", Summary: "The verb agrees.",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpsertExplainer(ctx, db.Explainer{
+		Slug: "present-tense", Title: "Present tense", Body: "The verb agrees.", Status: "published",
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	// full: reviews due, five words to watch, a slipped band, and a next lesson.
 	full := learner("full")

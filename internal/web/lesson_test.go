@@ -272,7 +272,8 @@ func TestLessonPlayer(t *testing.T) {
 	}
 	done := postLesson(t, h, brianCookie, link, runID, "continue", true, "brian-csrf")
 	finished := done.Body.String()
-	if done.Code != http.StatusOK || !strings.Contains(finished, "Lesson complete.") || !strings.Contains(finished, "Score 50%") {
+	nextLink := "/lesson/" + itoa(laterID) + "/0"
+	if done.Code != http.StatusOK || !strings.Contains(finished, "Lesson complete.") || !strings.Contains(finished, "Score 50%") || !strings.Contains(finished, "Next lesson") || !strings.Contains(finished, `href="`+nextLink+`"`) {
 		t.Fatalf("finish = %d %s", done.Code, finished)
 	}
 	var score float64

@@ -223,7 +223,7 @@ func TestChooseTodayAction(t *testing.T) {
 		{"a lesson in progress continues", TodayInputs{LessonInProgress: true, Due: 9, HasLesson: true}, views.ActionContinueLesson},
 		{"the check-in never outranks a lesson in progress", TodayInputs{LessonInProgress: true, CheckinDue: true, Due: 9, HasLesson: true}, views.ActionContinueLesson},
 		{"the check-in outranks reviews", TodayInputs{CheckinDue: true, Due: 9, HasLesson: true}, views.ActionCheckin},
-		{"reviews outrank the next lesson", TodayInputs{Due: 1, HasLesson: true}, views.ActionReviews},
+		{"the next lesson outranks reviews", TodayInputs{Due: 1, HasLesson: true}, views.ActionNextLesson},
 		{"the next lesson", TodayInputs{HasLesson: true}, views.ActionNextLesson},
 		{"nothing to do", TodayInputs{}, views.ActionNone},
 	} {
@@ -286,13 +286,13 @@ func TestTodayStatesRenderOneGoldAction(t *testing.T) {
 			setup: func(store *db.Store, l learnerFix) {
 				finishPlacement(t, store, l.user.ID, now.Add(-time.Hour))
 				addCard(t, store, l.user.ID, addLexeme(t, store, helloHe, "hello", "shalom", "m", ""), fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
-				shellUnit(t, store, "Next", 1, "shared", 2)
 			},
 		},
 		{
 			name: "open the next lesson", action: "next_lesson",
 			setup: func(store *db.Store, l learnerFix) {
 				finishPlacement(t, store, l.user.ID, now.Add(-time.Hour))
+				addCard(t, store, l.user.ID, addLexeme(t, store, helloHe, "hello", "shalom", "m", ""), fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
 				id := shellUnit(t, store, "Next", 1, "shared", 2)
 				lessonLink = "/lesson/" + itoa(id) + "/0"
 			},

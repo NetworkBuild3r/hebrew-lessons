@@ -10,7 +10,7 @@ import templruntime "github.com/a-h/templ/runtime"
 
 // Today is the learner home. It offers one next action in gold, and nothing else is gold.
 // The action is chosen by web.ChooseTodayAction: resume a placement, start a placement,
-// continue a lesson, take the check-in, do the due reviews, or open the next lesson. The
+// continue a lesson, take the check-in, open the next lesson, or do the due reviews. The
 // cards beside it are quiet: what is due, the next lesson, a band slipping, and the words
 // to watch. There is no streak and no score.
 func Today(h Home) templ.Component {

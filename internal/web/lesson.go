@@ -37,7 +37,8 @@ import (
 //     The button value is the lexeme id, so the pointed word is not in the markup.
 //   - produce hides the Hebrew, the transliteration, and the clip until the
 //     answer. Choices show pointed Hebrew. The button value is the lexeme id.
-//   - cloze gaps the first new word. Until the answer, the other words show
+//   - cloze gaps the first new word, once. A later copy of that word stays
+//     on the line. Until the answer, the other words show
 //     pointed Hebrew and transliteration, with no gloss, and the sentence
 //     clip stays hidden. The choices are pointed Hebrew with no
 //     transliteration. After the answer, every word shows its pointed
@@ -107,7 +108,12 @@ func (p player) lessonAt(w http.ResponseWriter, r *http.Request, lang, csrf stri
 		return
 	}
 	if finished {
-		p.writeScreen(w, r, page, doneScreen(page, lesson, score), false)
+		screen, err := p.doneScreen(r.Context(), page, userID, lesson, score)
+		if err != nil {
+			serverError(w)
+			return
+		}
+		p.writeScreen(w, r, page, screen, false)
 		return
 	}
 	next, ok, err := p.store.NextCourseLesson(r.Context(), userID)
@@ -167,7 +173,12 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		return
 	}
 	if run.Finished {
-		p.writeScreen(w, r, page, doneScreen(page, lesson, run.Score), partial)
+		screen, err := p.doneScreen(r.Context(), page, userID, lesson, run.Score)
+		if err != nil {
+			serverError(w)
+			return
+		}
+		p.writeScreen(w, r, page, screen, partial)
 		return
 	}
 	score, finished, err := p.store.FinishedLessonScore(r.Context(), userID, unitID, lessonIx)
@@ -176,7 +187,12 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		return
 	}
 	if finished {
-		p.writeScreen(w, r, page, doneScreen(page, lesson, score), partial)
+		screen, err := p.doneScreen(r.Context(), page, userID, lesson, score)
+		if err != nil {
+			serverError(w)
+			return
+		}
+		p.writeScreen(w, r, page, screen, partial)
 		return
 	}
 
@@ -199,7 +215,12 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		return
 	}
 	if run.ActivityIx < 0 || run.ActivityIx >= total {
-		p.writeScreen(w, r, page, doneScreen(page, lesson, float64(run.CorrectN)/float64(total)), partial)
+		screen, err := p.doneScreen(r.Context(), page, userID, lesson, float64(run.CorrectN)/float64(total))
+		if err != nil {
+			serverError(w)
+			return
+		}
+		p.writeScreen(w, r, page, screen, partial)
 		return
 	}
 
@@ -560,7 +581,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	}
 	if run.Finished {
 		screen.Activity = doneActivity(page, run.Score)
-		return screen, nil
+		return p.withNextLesson(ctx, page, run.UserID, screen)
 	}
 	total := len(lesson.Activities)
 	if total == 0 {
@@ -573,7 +594,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 			score = float64(run.CorrectN) / float64(total)
 		}
 		screen.Activity = doneActivity(page, score)
-		return screen, nil
+		return p.withNextLesson(ctx, page, run.UserID, screen)
 	}
 	lex, err := p.store.LexemesByText(ctx, activityTexts(lesson))
 	if err != nil {
@@ -886,13 +907,17 @@ func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.
 	}
 	skipWordAudio := hebrewN == 1 && clips.phrase != ""
 	var words []views.Word
+	gapped := false
 	for _, tok := range tokens {
 		if !hebrewToken(tok) {
 			words = append(words, views.Word{Text: tok, Plain: true, Flip: flip})
 			continue
 		}
-		if tok == gap {
+		// One blank. A repeated target stays visible the next time, so the
+		// question is still one word and one choice.
+		if gap != "" && !gapped && tok == gap {
 			words = append(words, views.Word{Gap: true})
+			gapped = true
 			continue
 		}
 		// A token missing from the lexicon keeps an empty gloss. The
@@ -1529,13 +1554,28 @@ func continueLabel(ix, total int) string {
 	return "Continue"
 }
 
-func doneScreen(page views.Page, lesson db.CourseLesson, score float64) views.Screen {
-	return views.Screen{
+func (p player) doneScreen(ctx context.Context, page views.Page, userID int64, lesson db.CourseLesson, score float64) (views.Screen, error) {
+	screen := views.Screen{
 		Title:     lesson.Title,
 		Situation: lesson.Situation,
 		Activity:  doneActivity(page, score),
 		Frame:     frameFor(page, lesson, db.PlayerRun{Finished: true}, true),
 	}
+	return p.withNextLesson(ctx, page, userID, screen)
+}
+
+// withNextLesson points a finished lesson at the next unfinished one.
+// The last lesson in the course keeps only the way back to Today.
+func (p player) withNextLesson(ctx context.Context, page views.Page, userID int64, screen views.Screen) (views.Screen, error) {
+	if !screen.Activity.Done || p.store == nil {
+		return screen, nil
+	}
+	next, ok, err := p.store.NextCourseLesson(ctx, userID)
+	if err != nil || !ok {
+		return screen, err
+	}
+	screen.Activity.NextHref = page.Href(lessonPath(next.UnitID, next.LessonIx))
+	return screen, nil
 }
 
 func doneActivity(page views.Page, score float64) views.Activity {

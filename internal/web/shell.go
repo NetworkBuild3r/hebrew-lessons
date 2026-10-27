@@ -65,9 +65,11 @@ type TodayInputs struct {
 }
 
 // ChooseTodayAction is the one next action Today offers, in this order: resume a
-// placement, start a placement, continue a lesson, take the check-in, do the due reviews,
-// open the next lesson. A learner with none of these has ActionNone and no gold button.
-// The check-in sits below a lesson in progress, so it never takes a learner out of one.
+// placement, start a placement, continue a lesson, take the check-in, open the next
+// lesson, then do the due reviews. A learner with none of these has ActionNone and no
+// gold button. Reviews stay on the page beside a lesson, so a finished lesson can
+// continue. The check-in sits below a lesson in progress, so it never takes a learner
+// out of one.
 func ChooseTodayAction(in TodayInputs) views.TodayAction {
 	switch {
 	case in.PlacementActive:
@@ -78,10 +80,10 @@ func ChooseTodayAction(in TodayInputs) views.TodayAction {
 		return views.ActionContinueLesson
 	case in.CheckinDue:
 		return views.ActionCheckin
-	case in.Due > 0:
-		return views.ActionReviews
 	case in.HasLesson:
 		return views.ActionNextLesson
+	case in.Due > 0:
+		return views.ActionReviews
 	}
 	return views.ActionNone
 }
