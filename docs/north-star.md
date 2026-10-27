@@ -22,7 +22,7 @@ Six questions the app must be able to answer at any time:
 - **The code picks the words. The AI writes the lesson.** Choosing words is counting and scheduling. It must be repeatable and testable. Writing a story or dialogue around those words is the creative part, and the AI does it. The validator checks the AI's lesson against the code's word plan before it can be published.
 - **Measure, don't ask.** Wherever an answer can be checked (a picked meaning, a typed word), the app grades it. Self-rating ("Again / Hard / Good / Easy") stays only where nothing can be checked, and it uses plain words.
 - **One skill per question.** A listening question shows no Hebrew text. A reading question has no audio and no transliteration. Otherwise you can't tell what was tested.
-- **Teach with help, test without it.** Transliteration is hidden only while a word is being tested. Lessons, stories, and dialogues keep transliteration and a gloss on every word (section 6.1). Fading transliteration is an opt-in setting, never the default.
+- **Teach with help, test without it.** The face of a lesson word is pointed Hebrew. The Latin reading and the meaning are one tap away, and a word being tested shows neither until the answer (section 6.1, [ADR-0020](decisions/ADR-0020-lesson-word-face-and-speed.md)). Fading the reading once a word is known stays a later setting.
 - **Every Hebrew word can be heard.** No word reaches a listening question, a lesson, or the placement without an audio clip.
 - **Research rules run as code, not as prompt advice.** Spacing, both recall directions, the known-word coverage target (95% at full strength, staged for beginners, section 7.3), and limits on new words are checked by the validator and the scheduler.
 - **One look.** One action color, one set of components, the same layout on every learning screen (section 9).
@@ -95,7 +95,7 @@ CREATE TABLE exposures (            -- seen in a story or dialogue, no question 
 
 `cards.dir` becomes `cards.skill`. The migration maps `he_en` to `read` and `en_he` to `recall`. `listen` and `spell` cards are new. FSRS keeps scheduling cards. `attempts` is what the learner model and the AI read.
 
-**Grading checked answers.** Wrong is Again. Right after a replay or a hint is Hard. Right is Good. Right and faster than my own median for that activity is Easy. The latency rule is a product choice, not a research finding. It is tuned from my own data, not a fixed number.
+**Grading checked answers.** Wrong is Again. Right after a replay or a hint is Hard. Right is Good. Right and faster than my own median for that activity is Easy, once the card is already in review or relearning. Right and slower than twice that median is Hard. A fast answer on a word just taught stays Good, so the word comes back in minutes ([ADR-0020](decisions/ADR-0020-lesson-word-face-and-speed.md)). The latency rule is a product choice, not a research finding. It is tuned from my own data, not a fixed number.
 
 ### 4.3 Word states
 
@@ -234,7 +234,7 @@ Five bands of 20 words is too few for adaptive sampling without repeats. Target:
 
 | Where | Transliteration | Gloss |
 | --- | --- | --- |
-| Lessons, stories, dialogues (teaching) | Shown on every word | Every word has one. Tap shows it, and the tap is logged as an exposure signal |
+| Lessons, stories, dialogues (teaching) | On the back of the card. The face is pointed Hebrew ([ADR-0020](decisions/ADR-0020-lesson-word-face-and-speed.md)) | On the back. A help word in a line shows its meaning during the question |
 | A test or review question (`read`, `listen`, placement) | Hidden, so the skill is tested alone | Not shown |
 | Feedback after an answer, and the placement review screen | Shown with the pointed form | Shown |
 

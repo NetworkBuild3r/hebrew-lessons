@@ -25,6 +25,8 @@ func TestGrade(t *testing.T) {
 		{"right with hint beats fast", Attempt{Correct: true, HintUsed: true, Latency: time.Second}, median, fsrs.Hard},
 		{"right", Attempt{Correct: true, Latency: 3 * time.Second}, median, fsrs.Good},
 		{"right at the median", Attempt{Correct: true, Latency: median}, median, fsrs.Good},
+		{"right and twice the median stays good", Attempt{Correct: true, Latency: 4 * time.Second}, median, fsrs.Good},
+		{"right and slower than twice the median", Attempt{Correct: true, Latency: 4*time.Second + time.Millisecond}, median, fsrs.Hard},
 		{"right and faster than the median", Attempt{Correct: true, Latency: time.Second}, median, fsrs.Easy},
 		{"right and a millisecond faster", Attempt{Correct: true, Latency: median - time.Millisecond}, median, fsrs.Easy},
 		{"right and fast, no median yet", Attempt{Correct: true, Latency: time.Millisecond}, 0, fsrs.Good},
@@ -103,6 +105,30 @@ func TestLetterPair(t *testing.T) {
 			got, ok := letterPair(tc.a, tc.b)
 			if ok != tc.wantOK || got != tc.want {
 				t.Fatalf("letterPair = %q, %v; want %q, %v", got, ok, tc.want, tc.wantOK)
+			}
+		})
+	}
+}
+
+func TestRecallSpeed(t *testing.T) {
+	const median = 2 * time.Second
+	tests := []struct {
+		name    string
+		latency time.Duration
+		median  time.Duration
+		want    string
+	}{
+		{"untimed", 0, median, ""},
+		{"no median yet", time.Second, 0, ""},
+		{"just under the median", median - time.Millisecond, median, "fast"},
+		{"exactly the median", median, median, "steady"},
+		{"exactly twice the median", 2 * median, median, "steady"},
+		{"just over twice the median", 2*median + time.Millisecond, median, "slow"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RecallSpeed(tc.latency, tc.median); got != tc.want {
+				t.Fatalf("RecallSpeed = %q, want %q", got, tc.want)
 			}
 		})
 	}

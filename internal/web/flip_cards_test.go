@@ -135,11 +135,11 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 			t.Fatalf("card is missing a face:\n%s", card)
 		}
 		front, back, ok := strings.Cut(card, "</summary>")
-		if !ok || !strings.Contains(front, "wcard__he") || !strings.Contains(front, "wcard__tr") || strings.Contains(front, "wcard__gl") {
-			t.Fatalf("front/back split wrong:\n%s", card)
+		if !ok || !strings.Contains(front, "wcard__he") || strings.Contains(front, "wcard__tr") || strings.Contains(front, "wcard__gl") {
+			t.Fatalf("the front should be the Hebrew word:\n%s", card)
 		}
-		if !strings.Contains(back, "wcard__gl") {
-			t.Fatalf("meaning is not on the back:\n%s", card)
+		if !strings.Contains(back, "wcard__gl") || !strings.Contains(back, "wcard__tr") {
+			t.Fatalf("the reading and the meaning sit on the back:\n%s", card)
 		}
 		if strings.Contains(card, `wcard--new`) {
 			sawNew = true

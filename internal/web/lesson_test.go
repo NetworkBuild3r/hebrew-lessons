@@ -290,15 +290,20 @@ func TestLessonPlayer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(due) != 4 {
-		t.Fatalf("due cards = %d, want 4", len(due))
+	// The missed meaning question scheduled the read card, so it is not due at
+	// this instant. The other new-word cards are still due now.
+	if len(due) != 3 {
+		t.Fatalf("due cards = %d, want 3", len(due))
 	}
 	gotLex := map[int64]int{}
 	for _, card := range due {
 		gotLex[card.LexemeID]++
 	}
-	if gotLex[ids[hello]] != 2 || gotLex[ids[morning]] != 2 {
+	if gotLex[ids[hello]] != 1 || gotLex[ids[morning]] != 2 {
 		t.Fatalf("due lexemes = %v", gotLex)
+	}
+	if scalar(t, dbPath, `SELECT COUNT(*) FROM cards WHERE user_id = ? AND lexeme_id = ? AND skill = 'read' AND due > ?`, brian.ID, ids[hello], db.FormatTime(now)) != 1 {
+		t.Fatal("the missed word's read card was not scheduled past now")
 	}
 	if otherDue, err := store.ListDueCards(ctx, other.ID, now); err != nil || len(otherDue) != 0 {
 		t.Fatalf("other learner due = %d, %v", len(otherDue), err)
@@ -487,8 +492,8 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 	if strings.Contains(sentence, hello) || strings.Contains(sentence, "shalom") || strings.Contains(sentence, ">hello<") || strings.Contains(sentence, "wb__gl") {
 		t.Fatalf("cloze sentence shows the gap or a gloss:\n%s", sentence)
 	}
-	if !strings.Contains(sentence, morning) || !strings.Contains(sentence, "boker") || !strings.Contains(sentence, "___") {
-		t.Fatalf("cloze should show the other word with translit:\n%s", sentence)
+	if !strings.Contains(sentence, morning) || strings.Contains(sentence, "boker") || !strings.Contains(sentence, "___") {
+		t.Fatalf("cloze should show the other word in Hebrew, without its Latin reading:\n%s", sentence)
 	}
 	if strings.Contains(cloze, `/audio/`+phraseID+`.mp3`) || strings.Contains(cloze, helloID) {
 		t.Fatalf("cloze ask plays the gapped clip:\n%s", cloze)
@@ -620,7 +625,7 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	if strings.Count(head, `<details class="wcard`) < 3 {
 		t.Fatalf("every word of the line is not a card:\n%s", head)
 	}
-	for _, help := range []string{">ani<", ">I<", ">po<", ">here<", ani, po} { // help words: reading on the front, meaning on the back
+	for _, help := range []string{">I<", ">here<", ani, po} {
 		if !strings.Contains(head, help) {
 			t.Errorf("help word missing %s", help)
 		}

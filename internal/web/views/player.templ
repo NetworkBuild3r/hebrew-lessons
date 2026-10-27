@@ -196,9 +196,9 @@ templ activityWord(w Word, audioID string) {
 		</span>
 	}
 }
-// wordCard is one teach-step word. The summary is the front (Hebrew and
-// transliteration). The meaning sits in the details, so a tap flips it and
-// a browser without script still opens it. The play control stays outside.
+// wordCard is one teach-step word. The summary is the front: pointed Hebrew.
+// The Latin reading and the meaning sit on the back, so a tap opens them and
+// a browser without script still opens them. The play control stays outside.
 templ wordCard(w Word) {
 	<details class={ wcardClass(w) } open?={ w.Open }>
 		<summary class="wcard__hit">
@@ -214,13 +214,13 @@ templ wordCard(w Word) {
 				} else {
 					<bdi class="wcard__he" lang="he" dir="rtl">{ w.Text }</bdi>
 				}
-				if w.ShowTranslit && w.Translit != "" {
-					<bdi class="wcard__tr" lang="he-Latn" dir="ltr">{ w.Translit }</bdi>
-				}
 			</span>
 		</summary>
 		<div class="wcard__face wcard__back" lang="en" dir="ltr">
 			<bdi class="wcard__he-sm" lang="he" dir="rtl">{ w.Text }</bdi>
+			if w.ShowTranslit && w.Translit != "" {
+				<bdi class="wcard__tr" lang="he-Latn" dir="ltr">{ w.Translit }</bdi>
+			}
 			if w.ShowGloss {
 				if meaning, note, lemma := SplitGloss(w.Gloss); meaning != "" {
 					<span class="wcard__gl">{ meaning }</span>

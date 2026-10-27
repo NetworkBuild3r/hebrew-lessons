@@ -136,8 +136,13 @@ func (r *Recorder) ready() error {
 // know" is stored with no card. The returned rating is Good for a right
 // placement answer and Again otherwise.
 //
-// SkipSchedule stores the attempt and leaves every card alone. The lesson
-// player uses it: its new words get their cards when the lesson ends, as in v2.
+// SkipSchedule stores the attempt and leaves every card alone. A lesson's
+// meaning question does schedule. Its other checks wait, and the lesson still
+// gives each new word a card when it ends.
+//
+// A fast answer is Easy only once the card is already in review or relearning.
+// The first ratings of a new word stay at Good, so a word just taught is not
+// sent weeks away because the answer was quick.
 //
 // An unknown skill or source, an empty activity, a missing learner or word, a
 // negative latency, or an answer that is both right and "I don't know" is
@@ -185,6 +190,7 @@ func (r *Recorder) Attempt(ctx context.Context, a Attempt) (fsrs.Rating, error) 
 		}
 	default:
 		step = func(prev *db.Card) (db.Card, db.ReviewLog, bool, error) {
+			rating = holdEasyUntilReview(prev, rating)
 			card, log, err := r.review.ScheduleNext(prev, now, rating)
 			log.Chosen = chosenText
 			return card, log, err == nil, err
@@ -201,6 +207,18 @@ func (r *Recorder) Attempt(ctx context.Context, a Attempt) (fsrs.Rating, error) 
 		return 0, err
 	}
 	return rating, nil
+}
+
+// holdEasyUntilReview keeps a fast first answer at Good. Easy waits until the
+// card has left the short steps, which is state review or relearning.
+func holdEasyUntilReview(prev *db.Card, rating fsrs.Rating) fsrs.Rating {
+	if rating != fsrs.Easy {
+		return rating
+	}
+	if prev == nil || prev.State == "" || prev.State == "new" || prev.State == "learning" {
+		return fsrs.Good
+	}
+	return rating
 }
 
 // SelfGrade records a flashcard the learner graded themselves.

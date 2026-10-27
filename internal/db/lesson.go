@@ -58,9 +58,11 @@ type PlayerRun struct {
 	// when the learner is speaking that part, and empty on every other step.
 	LineIx int
 	Side   string
+	// AskedAt is when the current question was shown. Zero when it was not timed.
+	AskedAt time.Time
 }
 
-const playerRunColumns = `id, user_id, unit_id, lesson_ix, activity_ix, correct_n, phase, pending, finished_at, score, line_ix, side`
+const playerRunColumns = `id, user_id, unit_id, lesson_ix, activity_ix, correct_n, phase, pending, finished_at, score, line_ix, side, asked_at`
 
 // NextCourseLesson is the unfinished lesson of the earliest published unit
 // in this learner's scope. Scope is shared, or learner:<id> for this id.
@@ -393,9 +395,9 @@ func (s *Store) StartPlayerRun(ctx context.Context, userID, unitID int64, lesson
 		LIMIT 1`, userID, unitID, lessonIx).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		res, insErr := tx.ExecContext(ctx, `
-			INSERT INTO lesson_runs (user_id, unit_id, lesson_ix, started_at)
-			VALUES (?, ?, ?, ?)`,
-			userID, unitID, lessonIx, FormatTime(s.clock.Now()),
+			INSERT INTO lesson_runs (user_id, unit_id, lesson_ix, started_at, asked_at)
+			VALUES (?, ?, ?, ?, ?)`,
+			userID, unitID, lessonIx, FormatTime(s.clock.Now()), FormatTime(s.clock.Now()),
 		)
 		if isUniqueConstraint(insErr) {
 			err = tx.QueryRowContext(ctx, `
@@ -655,9 +657,9 @@ func (s *Store) advancePlayerRun(ctx context.Context, tx *sql.Tx, run PlayerRun,
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE lesson_runs
-		SET activity_ix = ?, correct_n = ?, phase = 'ask', pending = 0, line_ix = 0, side = ''
+		SET activity_ix = ?, correct_n = ?, phase = 'ask', pending = 0, line_ix = 0, side = '', asked_at = ?
 		WHERE id = ? AND user_id = ? AND finished_at IS NULL AND activity_ix = ? AND phase = ?`,
-		activity+1, nextCorrect, runID, userID, activity, run.Phase,
+		activity+1, nextCorrect, FormatTime(s.clock.Now()), runID, userID, activity, run.Phase,
 	); err != nil {
 		return fmt.Errorf("db: advance lesson: %w", err)
 	}
@@ -718,11 +720,11 @@ func playerRunTx(ctx context.Context, tx *sql.Tx, userID, runID int64) (PlayerRu
 func scanPlayerRun(scan func(dest ...any) error) (PlayerRun, error) {
 	var run PlayerRun
 	var pending int
-	var finished sql.NullString
+	var finished, asked sql.NullString
 	var score sql.NullFloat64
 	err := scan(
 		&run.ID, &run.UserID, &run.UnitID, &run.LessonIx, &run.ActivityIx, &run.CorrectN,
-		&run.Phase, &pending, &finished, &score, &run.LineIx, &run.Side,
+		&run.Phase, &pending, &finished, &score, &run.LineIx, &run.Side, &asked,
 	)
 	if err != nil {
 		return PlayerRun{}, err
@@ -736,6 +738,12 @@ func scanPlayerRun(scan func(dest ...any) error) (PlayerRun, error) {
 	}
 	if run.Phase == "" {
 		run.Phase = "ask"
+	}
+	if asked.Valid && asked.String != "" {
+		run.AskedAt, err = ParseTime(asked.String)
+		if err != nil {
+			return PlayerRun{}, fmt.Errorf("db: lesson run asked_at: %w", err)
+		}
 	}
 	return run, nil
 }

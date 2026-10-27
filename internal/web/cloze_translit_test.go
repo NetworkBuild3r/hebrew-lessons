@@ -22,8 +22,8 @@ var clozeChoiceTranslits = []string{"TL-lomed", "TL-kotev", "TL-okhel", "TL-shot
 
 // TestClozeHidesChoiceTranslitUntilGraded is the cloze leak: the buttons,
 // including the right one, must not show a transliteration before the answer.
-// The graded page shows the right one's reading. A full page and an htmx
-// swap both do this. The other words in the line still show their reading.
+// The line's other words are pointed Hebrew until the answer too. The graded
+// page shows the readings. A full page and an htmx swap both do this.
 func TestClozeHidesChoiceTranslitUntilGraded(t *testing.T) {
 	const (
 		ani    = "אֲנִי"
@@ -143,8 +143,8 @@ func assertUngradedCloze(t *testing.T, body string) {
 			t.Fatalf("ungraded cloze shows choice translit %s:\n%s", tr, choices)
 		}
 	}
-	if !strings.Contains(body, "TL-ivrit") || !strings.Contains(body, "TL-ani") {
-		t.Fatalf("ungraded cloze hid the other words' translit:\n%s", body)
+	if strings.Contains(body, "TL-ivrit") || strings.Contains(body, "TL-ani") {
+		t.Fatalf("ungraded cloze shows a Latin reading of a Hebrew word:\n%s", body)
 	}
 }
 

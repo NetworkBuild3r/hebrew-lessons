@@ -252,8 +252,8 @@ func TestEasyNeedsTenCorrectAndABeatenMedian(t *testing.T) {
 	if got := record(time.Second); got != fsrs.Easy {
 		t.Fatalf("faster than the median = %d, want Easy", got)
 	}
-	if got := record(5 * time.Second); got != fsrs.Good {
-		t.Fatalf("slower than the median = %d, want Good", got)
+	if got := record(5 * time.Second); got != fsrs.Hard {
+		t.Fatalf("slower than twice the median = %d, want Hard", got)
 	}
 	// Untimed answers are never Easy.
 	if got := record(0); got != fsrs.Good {
@@ -265,6 +265,55 @@ func TestEasyNeedsTenCorrectAndABeatenMedian(t *testing.T) {
 	a.Latency, a.HintUsed = time.Millisecond, true
 	if got, err := e.rec.Attempt(ctx, a); err != nil || got != fsrs.Hard {
 		t.Fatalf("fast with hint = %d, %v; want Hard", got, err)
+	}
+}
+
+// A word answered fast on the day it was taught stays close. Easy waits until
+// the card is already in review.
+func TestANewCardDoesNotJumpAheadForAFastAnswer(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	known := e.lexeme(kelev)
+	fresh := e.lexeme(shalom)
+	for i := 0; i < 10; i++ {
+		e.clk.Advance(time.Minute)
+		a := e.attempt(known)
+		a.Activity = "recall"
+		a.Latency = 2 * time.Second
+		if _, err := e.rec.Attempt(ctx, a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.clk.Advance(time.Minute)
+	shown := e.clk.Now()
+	a := e.attempt(fresh)
+	a.Activity = "recall"
+	a.Latency = 200 * time.Millisecond
+	got, err := e.rec.Attempt(ctx, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != fsrs.Good {
+		t.Fatalf("first fast answer = %d, want Good", got)
+	}
+	card, ok := e.card(fresh, fsrs.SkillRead)
+	if !ok {
+		t.Fatal("the fast answer created no card")
+	}
+	if wait := card.Due.Sub(shown); wait <= 0 || wait > 15*time.Minute {
+		t.Fatalf("new card due in %v, want within 15 minutes", wait)
+	}
+
+	if _, err := e.conn().ExecContext(ctx, `UPDATE cards SET state = 'review' WHERE id = ?`, card.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.clk.Advance(time.Minute)
+	again := e.attempt(fresh)
+	again.Activity = "recall"
+	again.Latency = 200 * time.Millisecond
+	got, err = e.rec.Attempt(ctx, again)
+	if err != nil || got != fsrs.Easy {
+		t.Fatalf("fast answer on a review card = %d, %v; want Easy", got, err)
 	}
 }
 

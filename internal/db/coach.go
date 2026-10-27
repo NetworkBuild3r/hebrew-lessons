@@ -49,6 +49,10 @@ type CoachCard struct {
 	HasRating   bool
 	LastReview  time.Time
 	LastText    string
+	// RecallMs is the latest timed meaning answer for this word. HasRecall is
+	// false when that question has not been timed.
+	RecallMs  int
+	HasRecall bool
 }
 
 // CoachPage is one page. NextCursor is empty on the last page.
@@ -125,6 +129,15 @@ func (s *Store) CoachCards(ctx context.Context, q CoachQuery) (CoachPage, error)
 				FROM review_log AS rl
 				WHERE rl.card_id = c.id
 				ORDER BY rl.reviewed_at DESC, rl.id DESC
+				LIMIT 1
+			),
+			(
+				SELECT a.latency_ms
+				FROM attempts AS a
+				WHERE a.user_id = c.user_id AND a.lexeme_id = c.lexeme_id
+				  AND a.skill = c.skill AND a.activity = 'recall'
+				  AND a.correct = 1 AND a.latency_ms > 0
+				ORDER BY a.created_at DESC, a.id DESC
 				LIMIT 1
 			)
 		FROM cards AS c
@@ -236,11 +249,11 @@ func (s *Store) CoachAccuracy(ctx context.Context, userID int64, now time.Time, 
 func scanCoachCard(scan func(dest ...any) error) (CoachCard, error) {
 	var card CoachCard
 	var translit, due, last sql.NullString
-	var rating sql.NullInt64
+	var rating, recall sql.NullInt64
 	err := scan(
 		&card.Lexeme, &translit, &card.POS, &card.Gloss,
 		&card.ID, &card.Skill, &card.State, &card.Stability, &card.Difficulty,
-		&due, &card.Lapses, &card.Reps, &last, &rating,
+		&due, &card.Lapses, &card.Reps, &last, &rating, &recall,
 	)
 	if err != nil {
 		return CoachCard{}, err
@@ -267,6 +280,10 @@ func scanCoachCard(scan func(dest ...any) error) (CoachCard, error) {
 	if rating.Valid {
 		card.HasRating = true
 		card.LastRating = int(rating.Int64)
+	}
+	if recall.Valid && recall.Int64 > 0 {
+		card.HasRecall = true
+		card.RecallMs = int(recall.Int64)
 	}
 	return card, nil
 }

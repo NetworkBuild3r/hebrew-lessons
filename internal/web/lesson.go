@@ -10,10 +10,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/choices"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
@@ -38,11 +40,11 @@ import (
 //   - produce hides the Hebrew, the transliteration, and the clip until the
 //     answer. Choices show pointed Hebrew. The button value is the lexeme id.
 //   - cloze gaps the first new word, once. A later copy of that word stays
-//     on the line. Until the answer, the other words show
-//     pointed Hebrew and transliteration, with no gloss, and the sentence
-//     clip stays hidden. The choices are pointed Hebrew with no
-//     transliteration. After the answer, every word shows its pointed
-//     text, transliteration, and gloss. Choice values are lexeme ids.
+//     on the line. Until the answer, the other words show pointed Hebrew
+//     and no Latin reading, and the sentence clip stays hidden. The choices
+//     are pointed Hebrew with no transliteration. After the answer, every
+//     word shows its pointed text, transliteration, and gloss. Choice values
+//     are lexeme ids.
 //   - say shows the English cue and "Say it in Hebrew". No Hebrew and no
 //     audio until the learner presses "I said it". The reveal is the model
 //     as cards, the line plays once, and "Got it" / "Not yet" record one
@@ -255,11 +257,12 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		// Grade the lexeme id on the button. Position and label are not the answer.
 		picked, parseErr := strconv.ParseInt(answer, 10, 64)
 		correct := parseErr == nil && picked == target.ID
+		asked := run.AskedAt
 		var applied bool
 		run, applied, err = p.store.AnswerPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, correct)
 		// A repeated post is not applied, and it is not a second answer.
 		if err == nil && applied {
-			err = p.recordAnswer(r.Context(), userID, lesson, act, target, answer, correct)
+			err = p.recordAnswer(r.Context(), userID, lesson, act, target, answer, correct, answerLatency(p.store.Clock(), asked))
 		}
 	case answer == "continue" && (run.Phase == "reveal" || (run.Phase == "ask" && !graded)):
 		run, _, err = p.store.ContinuePlayerRun(r.Context(), userID, run.ID, run.ActivityIx, total)
@@ -438,8 +441,10 @@ func (p player) answerSay(w http.ResponseWriter, r *http.Request, page views.Pag
 // recordAnswer writes one checked lesson answer through evidence.Recorder.
 // userID is the signed-in learner. answer is the lexeme id the learner picked.
 // The response stored is that word's pointed text, or the raw form value when
-// no such word exists. The recorder caps its length.
-func (p player) recordAnswer(ctx context.Context, userID int64, lesson db.CourseLesson, act units.Activity, target db.LexemeView, answer string, correct bool) error {
+// no such word exists. The recorder caps its length. latency is how long the
+// question was on screen. A meaning question schedules the word from that time:
+// a fast correct answer waits longer, and a slow one comes back sooner.
+func (p player) recordAnswer(ctx context.Context, userID int64, lesson db.CourseLesson, act units.Activity, target db.LexemeView, answer string, correct bool, latency time.Duration) error {
 	picked, _ := strconv.ParseInt(answer, 10, 64)
 	response := answer
 	if picked > 0 {
@@ -451,6 +456,9 @@ func (p player) recordAnswer(ctx context.Context, userID int64, lesson db.Course
 			response = face.TextNFC
 		}
 	}
+	if latency < 0 {
+		latency = 0
+	}
 	_, err := evidence.New(p.store, nil, nil).Attempt(ctx, evidence.Attempt{
 		UserID:         userID,
 		LexemeID:       target.ID,
@@ -461,12 +469,28 @@ func (p player) recordAnswer(ctx context.Context, userID int64, lesson db.Course
 		Prompt:         act.Text,
 		Response:       response,
 		Correct:        correct,
+		Latency:        latency,
 		ChosenLexemeID: picked,
-		// A lesson's new words get their cards when the lesson ends (v2).
-		// Scheduling from lesson answers is not part of this change.
-		SkipSchedule: true,
+		// A meaning question moves the card now. The other checks wait, and
+		// the lesson still gives each new word a card when it ends.
+		SkipSchedule: act.Type != units.ActivityRecall,
 	})
 	return err
+}
+
+// maxAnswer is the longest a meaning question can stay on screen and still
+// count as timed. A longer gap is a closed tab or a walk away, not a slow recall.
+const maxAnswer = 60 * time.Second
+
+func answerLatency(clk clock.Clock, asked time.Time) time.Duration {
+	if clk == nil || asked.IsZero() {
+		return 0
+	}
+	d := clk.Now().Sub(asked)
+	if d <= 0 || d > maxAnswer {
+		return 0
+	}
+	return d
 }
 
 // lessonSkill is the skill a graded lesson activity exercises.
@@ -970,9 +994,10 @@ func visibleFields(typ, phase string) fieldVis {
 	case units.ActivityListenPick, units.ActivityProduce:
 		return fieldVis{text: revealed, translit: revealed, gloss: revealed}
 	case units.ActivityCloze:
-		// Before the answer the other words show pointed Hebrew and transliteration.
-		// After the answer every word, including the gap, shows transliteration and gloss.
-		return fieldVis{text: true, translit: true, gloss: revealed}
+		// Before the answer the other words are pointed Hebrew, with no Latin
+		// reading and no gloss. After the answer every word, including the gap,
+		// shows its reading and its meaning.
+		return fieldVis{text: true, translit: revealed, gloss: revealed}
 	case units.ActivitySay:
 		// The ask screen is the English cue. The reveal shows the model.
 		return fieldVis{text: revealed, translit: revealed, gloss: revealed}
@@ -1447,9 +1472,11 @@ func dropBorrowedGloss(words []views.Word, targetText, targetGloss string) {
 
 // markRecallTarget applies the multi-word recall rule. The tested word keeps
 // its transliteration and gloss hidden until the answer, and is marked in the
-// line. Every other word is help, so both show during the ask. After the
-// answer, visibleFields has already turned both on for every word. A recall
-// of one lexeme is left exactly as visibleFields set it.
+// line. Every other word is help: its meaning shows, and its Latin reading
+// stays on the back of the card and on the no-script play bar. The face of
+// every card is pointed Hebrew. After the answer, visibleFields has already
+// turned both on for every word. A recall of one lexeme is left exactly as
+// visibleFields set it.
 func markRecallTarget(words []views.Word, n int, target, phase string) {
 	if n < 2 || target == "" {
 		return

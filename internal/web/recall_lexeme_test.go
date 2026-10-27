@@ -478,7 +478,7 @@ func checkRecallReveal(t *testing.T, revealed string, step recallStep, target db
 // v3AskWordBlock is the front of the card a one-word recall shows before the answer: the
 // pointed word, and no reading. The word is a card the learner can tap.
 func v3AskWordBlock(text string) string {
-	return `<bdi class="wcard__he" lang="he" dir="rtl">` + text + `</bdi> </span>`
+	return `<bdi class="wcard__he" lang="he" dir="rtl">` + text + `</bdi></span>`
 }
 
 // stripSound removes the card's back before the answer, which is only how the word sounds.
@@ -486,11 +486,12 @@ func stripSound(s string) string {
 	return regexp.MustCompile(`<span class="wcard__sound"[^>]*>[^<]*</span>`).ReplaceAllString(s, "")
 }
 
-// v3RevealWordBlock is the card after the answer: the word and its reading on the front, and
-// the meaning on the back.
+// v3RevealWordBlock is the card after the answer. The front stays the pointed
+// word. The Latin reading and the meaning are on the back.
 func v3RevealWordBlock(text, translit, gloss string) string {
-	return `<bdi class="wcard__he" lang="he" dir="rtl">` + text + `</bdi> <bdi class="wcard__tr" lang="he-Latn" dir="ltr">` + translit + `</bdi></span></summary>` +
-		`<div class="wcard__face wcard__back" lang="en" dir="ltr"><bdi class="wcard__he-sm" lang="he" dir="rtl">` + text + `</bdi> <span class="wcard__gl">` + gloss + `</span>`
+	return `<bdi class="wcard__he" lang="he" dir="rtl">` + text + `</bdi></span></summary>` +
+		`<div class="wcard__face wcard__back" lang="en" dir="ltr"><bdi class="wcard__he-sm" lang="he" dir="rtl">` + text + `</bdi> ` +
+		`<bdi class="wcard__tr" lang="he-Latn" dir="ltr">` + translit + `</bdi> <span class="wcard__gl">` + gloss + `</span>`
 }
 
 func markedWord(card string) string {

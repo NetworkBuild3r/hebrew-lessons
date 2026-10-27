@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
 )
 
@@ -31,6 +32,21 @@ func (s *Store) LearnerCards(ctx context.Context, q mcp.CardQuery) (mcp.CardPage
 	out := mcp.CardPage{Cards: make([]mcp.LearnerCard, 0, len(page.Cards)), NextCursor: page.NextCursor}
 	for _, row := range page.Cards {
 		out.Cards = append(out.Cards, coachCard(row))
+	}
+	latencies, err := s.db.CorrectLatencies(ctx, q.UserID, "recall", evidence.MedianWindow)
+	if err != nil {
+		return mcp.CardPage{}, err
+	}
+	median := evidence.Median(latencies)
+	for i := range out.Cards {
+		if out.Cards[i].RecallMs == nil {
+			continue
+		}
+		speed := evidence.RecallSpeed(time.Duration(*out.Cards[i].RecallMs)*time.Millisecond, median)
+		if speed == "" {
+			continue
+		}
+		out.Cards[i].RecallSpeed = &speed
 	}
 	return out, nil
 }
@@ -85,6 +101,10 @@ func coachCard(row db.CoachCard) mcp.LearnerCard {
 	if row.LastText != "" {
 		at := row.LastReview
 		card.LastReview = &at
+	}
+	if row.HasRecall {
+		ms := row.RecallMs
+		card.RecallMs = &ms
 	}
 	return card
 }

@@ -61,3 +61,50 @@ func TestCoachAdapterUsesClockAndNulls(t *testing.T) {
 		t.Fatalf("accuracy %+v", acc)
 	}
 }
+
+// recallSpeed stays empty until ten timed right answers exist, then names a slow one.
+func TestRecallSpeedNeedsTenRightAnswers(t *testing.T) {
+	when := time.Date(2026, 6, 2, 12, 0, 0, 0, time.UTC)
+	store, raw := openAdapter(t, fixedClock{when})
+	ctx := context.Background()
+	user := mustUser(t, raw)
+	res, err := raw.ExecContext(ctx, `INSERT INTO lexemes (text_nfc, pos, gloss_en) VALUES ('שָׁלוֹם', 'noun', 'hello')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lex, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.ExecContext(ctx, `INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, suspended)
+		VALUES (?, ?, 'read', 'review', ?, 1, 2, 1, 0, 0)`, user, lex, db.FormatTime(when)); err != nil {
+		t.Fatal(err)
+	}
+	insert := func(ms int, at time.Time) {
+		t.Helper()
+		if _, err := raw.ExecContext(ctx, `INSERT INTO attempts (
+			user_id, lexeme_id, skill, activity, source, prompt, response, correct, latency_ms, created_at
+		) VALUES (?, ?, 'read', 'recall', 'lesson', 'p', 'r', 1, ?, ?)`, user, lex, ms, db.FormatTime(at)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 8; i++ {
+		insert(2000, when.Add(-time.Duration(i+2)*time.Minute))
+	}
+	insert(9000, when.Add(-time.Minute))
+	page, err := store.LearnerCards(ctx, mcp.CardQuery{UserID: user, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Cards) != 1 || page.Cards[0].RecallMs == nil || *page.Cards[0].RecallMs != 9000 || page.Cards[0].RecallSpeed != nil {
+		t.Fatalf("before ten answers %+v", page.Cards)
+	}
+	insert(2000, when.Add(-90*time.Second))
+	page, err = store.LearnerCards(ctx, mcp.CardQuery{UserID: user, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Cards[0].RecallSpeed == nil || *page.Cards[0].RecallSpeed != "slow" {
+		t.Fatalf("speed %+v", page.Cards[0].RecallSpeed)
+	}
+}

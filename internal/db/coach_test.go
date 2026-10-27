@@ -130,6 +130,51 @@ func TestCoachCardsOrderPageAndAccuracy(t *testing.T) {
 	}
 }
 
+// A quick wrong guess is not a fast recall, and a meaning answer does not
+// show up on the card for the other skill.
+func TestCoachRecallTimeKeepsRightAnswersOnTheSameSkill(t *testing.T) {
+	s := openStore(t, nil)
+	user := insertUser(t, s, "speed@example.com", "sub-speed", "learner")
+	lex := insertLexeme(t, s, "שָׁלוֹם")
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	due := FormatTime(now)
+	readCard := insertCoachCard(t, s, user, lex, "read", "review", due, "", 0)
+	insertCoachCard(t, s, user, lex, "recall", "review", due, "", 0)
+	insertAttempt := func(skill string, correct, ms int, at time.Time) {
+		t.Helper()
+		mustExec(t, s, `INSERT INTO attempts (
+			user_id, lexeme_id, skill, activity, source, prompt, response, correct, latency_ms, created_at
+		) VALUES (?, ?, ?, 'recall', 'lesson', 'p', 'r', ?, ?, ?)`,
+			user, lex, skill, correct, ms, FormatTime(at))
+	}
+	insertAttempt("read", 0, 400, now.Add(-time.Minute))
+	page, err := s.CoachCards(context.Background(), CoachQuery{UserID: user, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, card := range page.Cards {
+		if card.HasRecall {
+			t.Fatalf("a wrong answer set recall time on card %d", card.ID)
+		}
+	}
+	insertAttempt("read", 1, 4500, now)
+	page, err = s.CoachCards(context.Background(), CoachQuery{UserID: user, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, card := range page.Cards {
+		if card.ID == readCard {
+			if !card.HasRecall || card.RecallMs != 4500 {
+				t.Fatalf("read card recall = %d has %v, want 4500", card.RecallMs, card.HasRecall)
+			}
+			continue
+		}
+		if card.HasRecall {
+			t.Fatalf("recall card inherited the read answer: %+v", card)
+		}
+	}
+}
+
 func insertCoachCard(t *testing.T, s *Store, user, lex int64, skill, state, due, last string, suspended int) int64 {
 	t.Helper()
 	var lastArg any
