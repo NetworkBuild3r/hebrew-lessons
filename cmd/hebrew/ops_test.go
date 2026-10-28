@@ -250,7 +250,7 @@ func TestBackupDoesNotChangeTheSource(t *testing.T) {
 	if opsDigest(t, src) != before {
 		t.Error("backup changed the source database")
 	}
-	if got := countRowsAt(t, src, `SELECT COUNT(*) FROM schema_migrations`); got != 14 {
+	if got := countRowsAt(t, src, `SELECT COUNT(*) FROM schema_migrations`); got != 15 {
 		t.Errorf("schema_migrations has %d rows, backup applied a migration", got)
 	}
 }
