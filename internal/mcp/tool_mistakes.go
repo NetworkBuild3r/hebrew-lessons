@@ -11,13 +11,17 @@ import (
 
 const maxMistakeBatch = 50
 
-// mistakeStore is the mistakes and verb-form half of the database.
+// mistakeStore is the mistakes and word-form half of the database.
 // A memory store does not implement it, and the tools then refuse to write.
+// INIT-023/SPEC-006 also reads verb and noun forms for lookup and generate_audio.
 type mistakeStore interface {
 	RecordMistakes(ctx context.Context, learnerID int64, rows []db.MistakeInput) error
 	MistakesFor(ctx context.Context, learnerID int64, limit int) ([]db.LearnerMistake, error)
 	UpsertCommonMistakes(ctx context.Context, rows []db.CommonMistakeInput) error
 	UpsertVerbForms(ctx context.Context, rows []db.VerbFormInput) error
+	UpsertNounForms(ctx context.Context, rows []db.NounFormInput) error
+	VerbFormsFor(ctx context.Context, lemmaID int64) ([]db.VerbForm, error)
+	NounFormsFor(ctx context.Context, lemmaID int64) ([]db.NounForm, error)
 }
 
 func (s *service) mistakeDB() (mistakeStore, error) {

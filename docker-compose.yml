@@ -1,0 +1,28 @@
+# Local Go app. The image is distroless and runs /usr/local/bin/hebrew.
+# Do not bind-mount the repo over /app: that was the old Node layout.
+services:
+  hebrew:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: local
+        BUILT_AT: ""
+    image: hebrew-hebrew
+    ports:
+      - "8080:8080"
+      - "8787:8787"
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /data
+      HTTP_ADDR: ":8080"
+      MCP_ADDR: ":8787"
+      PUBLIC_ORIGIN: http://localhost:8080
+      COOKIE_SECURE: "0"
+      MCP_PUBLIC_URL: http://127.0.0.1:8787
+    volumes:
+      # ./data is the old Node sqlite. Local Go uses its own tree so migrations
+      # do not fight that schema. Production data stays on the cluster PVC.
+      - ./data-local/go:/data
+    restart: unless-stopped

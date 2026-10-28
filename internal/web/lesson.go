@@ -459,6 +459,22 @@ func (p player) recordAnswer(ctx context.Context, userID int64, lesson db.Course
 	if latency < 0 {
 		latency = 0
 	}
+	// INIT-023/SPEC-002: a meaning (recall) or listening (listen_pick) check
+	// schedules that skill's card now. Other checks wait; finishing still
+	// enqueues read, recall, and (when the lesson listened to the word with
+	// audio) listen cards for each new word.
+	skip := act.Type != units.ActivityRecall && act.Type != units.ActivityListenPick
+	if act.Type == units.ActivityListenPick && !correct {
+		// ScheduleNext(nil, Again) would seed a failure card. A first miss
+		// stores the attempt only; a miss on an existing listen card rates Again.
+		_, hasCard, cardErr := p.store.CardID(ctx, userID, target.ID, fsrs.SkillListen)
+		if cardErr != nil {
+			return cardErr
+		}
+		if !hasCard {
+			skip = true
+		}
+	}
 	_, err := evidence.New(p.store, nil, nil).Attempt(ctx, evidence.Attempt{
 		UserID:         userID,
 		LexemeID:       target.ID,
@@ -471,9 +487,7 @@ func (p player) recordAnswer(ctx context.Context, userID int64, lesson db.Course
 		Correct:        correct,
 		Latency:        latency,
 		ChosenLexemeID: picked,
-		// A meaning question moves the card now. The other checks wait, and
-		// the lesson still gives each new word a card when it ends.
-		SkipSchedule: act.Type != units.ActivityRecall,
+		SkipSchedule:   skip,
 	})
 	return err
 }
@@ -598,10 +612,14 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	if err != nil {
 		return views.Screen{}, err
 	}
+	situation, err := p.hebrewSituation(ctx, lesson)
+	if err != nil {
+		return views.Screen{}, err
+	}
 	screen := views.Screen{
 		Title:     lesson.Title,
 		Gloss:     gloss,
-		Situation: lesson.Situation,
+		Situation: situation,
 	}
 	if run.Finished {
 		screen.Activity = doneActivity(page, run.Score)
@@ -736,7 +754,7 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 	total := len(lesson.Activities)
 	post := lessonPath(lesson.UnitID, lesson.LessonIx)
 	feedback, class := feedbackFor(run)
-	prompt := activityPrompt(lesson, act, target, lex, empty)
+	prompt := spellHebrew(activityPrompt(lesson, act, target, lex, empty), lex)
 	var promptWord string
 	if !empty && act.Type == units.ActivityRecall && lexemeTokenCount(act, lex) > 1 && target.Text != "" {
 		// The question is HTML (a bdi around the word), so the plain prompt
@@ -947,10 +965,18 @@ func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.
 		// A token missing from the lexicon keeps an empty gloss. The
 		// activity and the target are not a fallback for that field.
 		view := lex[tok]
+		_, phraseHe, phraseEn, note, _ := views.CardGloss(view.Gloss)
+		if phraseHe == "" && phraseEn != "" && note != "" {
+			if spelled := spellHebrew(note, lex); spelled != note && views.HasHebrew(spelled) {
+				phraseHe = spelled
+			}
+		}
 		word := views.Word{
 			Text:         tok,
 			Translit:     view.Translit,
 			Gloss:        view.Gloss,
+			Phrase:       phraseHe,
+			PhraseEn:     phraseEn,
 			Gender:       view.Gender,
 			POS:          view.POS,
 			Root:         view.Root,
@@ -960,6 +986,9 @@ func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.
 			Flip:         flip,
 			New:          fresh[tok],
 			Open:         open && flip,
+		}
+		if view.ID > 0 {
+			word.FormsHref = "/words/" + strconv.FormatInt(view.ID, 10)
 		}
 		if show.text && !skipWordAudio {
 			word.Audio = clips.words[tok]
@@ -1557,6 +1586,19 @@ func activityPrompt(lesson db.CourseLesson, act units.Activity, target db.Lexeme
 	}
 }
 
+// hebrewSituation writes the lesson's own words in pointed Hebrew when the
+// situation spells them in Latin.
+func (p player) hebrewSituation(ctx context.Context, lesson db.CourseLesson) (string, error) {
+	if p.store == nil || strings.TrimSpace(lesson.Situation) == "" {
+		return lesson.Situation, nil
+	}
+	lex, err := p.store.LexemesByText(ctx, activityTexts(lesson))
+	if err != nil {
+		return "", err
+	}
+	return spellHebrew(lesson.Situation, lex), nil
+}
+
 func feedbackFor(run db.PlayerRun) (string, string) {
 	if run.Finished || run.Phase != "reveal" {
 		return "", ""
@@ -1582,9 +1624,13 @@ func continueLabel(ix, total int) string {
 }
 
 func (p player) doneScreen(ctx context.Context, page views.Page, userID int64, lesson db.CourseLesson, score float64) (views.Screen, error) {
+	situation, err := p.hebrewSituation(ctx, lesson)
+	if err != nil {
+		return views.Screen{}, err
+	}
 	screen := views.Screen{
 		Title:     lesson.Title,
-		Situation: lesson.Situation,
+		Situation: situation,
 		Activity:  doneActivity(page, score),
 		Frame:     frameFor(page, lesson, db.PlayerRun{Finished: true}, true),
 	}

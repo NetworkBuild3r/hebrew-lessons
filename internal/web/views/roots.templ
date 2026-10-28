@@ -36,7 +36,10 @@ templ RootPage(v RootPageView) {
 			}
 			<div class="wline" dir="rtl">
 				for _, w := range v.Words {
-					@wordCard(w)
+					@wordCard(w, "")
+					if w.FormsHref != "" {
+						<a class="roots__forms" href={ templ.SafeURL(w.FormsHref) } lang="en">All forms</a>
+					}
 				}
 			</div>
 			if len(v.Forms) > 0 {

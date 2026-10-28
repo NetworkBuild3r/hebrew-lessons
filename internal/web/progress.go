@@ -51,8 +51,13 @@ const retentionBandLow = sessionlimits.TargetSuccess
 // skillTabLabels are the four tab names, in the order of learner.Skills.
 var skillTabLabels = map[string]string{"listen": "Listen", "read": "Read", "recall": "Recall", "spell": "Spell"}
 
-// chooseSkill is the skill of a request: one of learner.Skills, else the first.
+// chooseSkill is the skill of a request: one of learner.Skills, empty for the
+// overview (no ?skill=), or the first when the query is not a skill
+// (INIT-023/SPEC-004).
 func chooseSkill(q string) string {
+	if q == "" {
+		return ""
+	}
 	if slices.Contains(learner.Skills, q) {
 		return q
 	}
@@ -80,7 +85,7 @@ func (s *server) serveProgress(w http.ResponseWriter, r *http.Request, secure bo
 		SkillName: views.SkillLabel(skill),
 	}
 	for _, sk := range learner.Skills {
-		v.Tabs = append(v.Tabs, views.SkillTab{Skill: sk, Label: skillTabLabels[sk], Current: sk == skill})
+		v.Tabs = append(v.Tabs, views.SkillTab{Skill: sk, Label: skillTabLabels[sk], Current: skill != "" && sk == skill})
 	}
 	sections, err := s.withSections(r, v.Page)
 	if err != nil {
@@ -230,23 +235,24 @@ func (s *server) fillProgress(ctx context.Context, userID int64, v *views.Progre
 		return nil
 	}
 
-	s.fillSkillPanel(v, sum, days)
+	if err := s.fillSkillPanel(ctx, userID, v, sum, days); err != nil {
+		return err
+	}
 	if err := s.fillWeek(ctx, userID, v, days, ref); err != nil {
 		return err
 	}
 	return s.fillPlacementHistory(ctx, userID, v, now)
 }
 
-// fillSkillPanel fills the bar from the learner model now, and the two line charts from the
-// snapshots.
-func (s *server) fillSkillPanel(v *views.ProgressView, sum learner.Summary, days []snapDay) {
-	skill := v.Skill
-	var ss learner.SkillSummary
-	for _, c := range sum.Skills {
-		if c.Skill == skill {
-			ss = c
-		}
+// fillSkillPanel fills the overview (no ?skill=) or one skill's bar, and the two line
+// charts from the snapshots. On the overview the charts use the skill with the most
+// known words; stored snapshot values stay as recorded (INIT-023/SPEC-004).
+func (s *server) fillSkillPanel(ctx context.Context, userID int64, v *views.ProgressView, sum learner.Summary, days []snapDay) error {
+	if v.Skill == "" {
+		return s.fillOverview(ctx, userID, v, sum, days)
 	}
+	skill := v.Skill
+	ss := skillOfSummary(sum, skill)
 	v.Known = fmt.Sprintf("%.0f", ss.EstimatedKnown)
 
 	total := 0
@@ -276,6 +282,89 @@ func (s *server) fillSkillPanel(v *views.ProgressView, sum learner.Summary, days
 
 	v.Est = estChart(skill, v.SkillName, days)
 	v.Retention = retentionChart(skill, v.SkillName, days, ss.Retention)
+	return nil
+}
+
+// fillOverview is "What you know" with one row per skill and charts for the skill
+// that has the most known words.
+func (s *server) fillOverview(ctx context.Context, userID int64, v *views.ProgressView, sum learner.Summary, days []snapDay) error {
+	overall := sum.Words[learner.Known] + sum.Words[learner.Solid]
+	v.Known = strconv.Itoa(overall)
+	v.SkillName = ""
+
+	bestSkill := learner.Skills[0]
+	bestKnown := -1
+	for _, ss := range sum.Skills {
+		known := ss.Counts[learner.Known] + ss.Counts[learner.Solid]
+		row := views.SkillOverview{
+			Skill:    ss.Skill,
+			Label:    views.SkillLabel(ss.Skill),
+			Known:    known,
+			Learning: ss.Counts[learner.Learning],
+			Seen:     ss.Counts[learner.Seen],
+		}
+		if ss.Skill == "listen" {
+			noCard, err := s.listenAnswersNoCards(ctx, userID, ss)
+			if err != nil {
+				return err
+			}
+			row.NoCardHint = noCard
+		}
+		v.Overview = append(v.Overview, row)
+		if known > bestKnown {
+			bestKnown = known
+			bestSkill = ss.Skill
+		}
+	}
+
+	ss := skillOfSummary(sum, bestSkill)
+	name := views.SkillLabel(bestSkill)
+	v.Est = estChart(bestSkill, name, days)
+	v.Retention = retentionChart(bestSkill, name, days, ss.Retention)
+	return nil
+}
+
+// listenAnswersNoCards is true when listening has answered words and no listening
+// cards, so the overview shows the explanation instead of a zero bar.
+func (s *server) listenAnswersNoCards(ctx context.Context, userID int64, ss learner.SkillSummary) (bool, error) {
+	for _, st := range []learner.State{learner.Learning, learner.Known, learner.Solid, learner.Struggling, learner.Regressed} {
+		if ss.Counts[st] > 0 {
+			return false, nil
+		}
+	}
+	if ss.Counts[learner.Seen] == 0 {
+		return false, nil
+	}
+	words, _, err := s.model().List(ctx, userID, learner.Filter{
+		Skill: "listen", State: learner.Seen, Limit: learner.MaxPageSize,
+	})
+	if err != nil {
+		return false, err
+	}
+	answered, hasCard := false, false
+	for _, w := range words {
+		for _, sk := range w.Skills {
+			if sk.Skill != "listen" {
+				continue
+			}
+			if sk.HasCard {
+				hasCard = true
+			}
+			if sk.Attempts > 0 {
+				answered = true
+			}
+		}
+	}
+	return answered && !hasCard, nil
+}
+
+func skillOfSummary(sum learner.Summary, skill string) learner.SkillSummary {
+	for _, c := range sum.Skills {
+		if c.Skill == skill {
+			return c
+		}
+	}
+	return learner.SkillSummary{}
 }
 
 // estChart is the estimated words known over the snapshot days of one skill.

@@ -11,6 +11,16 @@ type mixedRun struct {
 	Text   string
 }
 
+// HasHebrew reports whether s contains a Hebrew letter.
+func HasHebrew(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Hebrew, r) {
+			return true
+		}
+	}
+	return false
+}
+
 // MixedRuns splits an English sentence so each Hebrew run can sit in its own bdi.
 // A comma between ב and כ stays outside those runs, which keeps the letters
 // from trading places.

@@ -83,6 +83,17 @@ func (s *server) publishedExplainer(r *http.Request, slug string) (db.Explainer,
 	return row, richtext.Sanitize(nodes), true
 }
 
+// guideCovers are the card pictures from the Guides board. They decorate
+// the list. A note does not have its own picture yet.
+var guideCovers = []string{
+	"/static/illustrations/cover-arches.svg",
+	"/static/illustrations/cover-cactus.svg",
+	"/static/illustrations/cover-pomegranate.svg",
+	"/static/illustrations/cover-waves.svg",
+	"/static/illustrations/cover-hills.svg",
+	"/static/illustrations/cover-night.svg",
+}
+
 func (s *server) learnGroups(r *http.Request) ([]views.LearnGroup, error) {
 	if s == nil || s.store == nil {
 		return nil, nil
@@ -112,7 +123,10 @@ func (s *server) learnGroups(r *http.Request) ([]views.LearnGroup, error) {
 	var groups []views.LearnGroup
 	for _, slug := range units.PatternSequence(slugs, course, prereqs) {
 		p := bySlug[slug]
-		groups = append(groups, views.LearnGroup{Slug: p.Slug, Title: p.Title, Summary: p.Summary, Example: p.Example})
+		groups = append(groups, views.LearnGroup{
+			Slug: p.Slug, Title: p.Title, Summary: p.Summary, Example: p.Example,
+			Cover: guideCovers[len(groups)%len(guideCovers)],
+		})
 	}
 	return groups, nil
 }

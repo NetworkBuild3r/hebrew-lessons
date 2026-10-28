@@ -52,7 +52,13 @@ templ ActivityBlock(a Activity) {
 			if a.PromptWord != "" {
 				<p class="lede" lang="en">@E("What does ")<bdi class="recall-prompt" lang="he" dir="rtl">{ a.PromptWord }</bdi>@E(" mean?")</p>
 			} else if a.Prompt != "" {
-				<p class="lede" lang="en">@E(a.Prompt)</p>
+				<p class="lede" lang="en">
+					if HasHebrew(a.Prompt) {
+						@MixedEN(a.Prompt)
+					} else {
+						@E(a.Prompt)
+					}
+				</p>
 			}
 			if a.HowHref != "" {
 				<a class="how" href={ templ.SafeURL(a.HowHref) } hx-get={ a.HowSheet } hx-target="#how-body" hx-swap="innerHTML" hx-boost="false">How this works</a>
@@ -160,10 +166,10 @@ templ ActivityBlock(a Activity) {
 	</div>
 }
 
-// activityWord is one token. A gap is the cloze blank. A word that is a card (Flip) is a
-// wordCard with its play control joined under it. Any other visible word is the shared word
-// block, with any hidden field passed empty. audioID names the clip element when the word
-// has one.
+// activityWord is one token. A gap is the cloze blank. A word that is a card (Flip)
+// keeps the pointed word on the tile and opens the meaning beside it. Any other
+// visible word is the shared word block, with any hidden field passed empty.
+// audioID names the clip element when the word has one.
 templ activityWord(w Word, audioID string) {
 	if w.Plain {
 		if w.Flip {
@@ -174,14 +180,7 @@ templ activityWord(w Word, audioID string) {
 	} else if w.Gap {
 		<span class="word-block word-block--gap">@E("___")</span>
 	} else if w.Flip {
-		<div class="wslot">
-			@wordCard(w)
-			if w.Audio != "" {
-				<div class="clip">
-					@orbButton(orbClass(false), "Play "+w.Text, w.Audio, audioID)
-				</div>
-			}
-		</div>
+		@wordCard(w, audioID)
 	} else {
 		<span class="activity-word">
 			if w.ShowText || w.ShowTranslit || w.ShowGloss {
@@ -196,10 +195,10 @@ templ activityWord(w Word, audioID string) {
 		</span>
 	}
 }
-// wordCard is one teach-step word. The summary is the front: pointed Hebrew.
-// The Latin reading and the meaning sit on the back, so a tap opens them and
-// a browser without script still opens them. The play control stays outside.
-templ wordCard(w Word) {
+// wordCard is one teach-step word. The tile stays the pointed word. A tap
+// opens the meaning beside it, and the word stays visible while the learner
+// reads. audioID names the no-JS bar for this word.
+templ wordCard(w Word, audioID string) {
 	<details class={ wcardClass(w) } open?={ w.Open }>
 		<summary class="wcard__hit">
 			<span class="wcard__face wcard__front">
@@ -216,46 +215,13 @@ templ wordCard(w Word) {
 				}
 			</span>
 		</summary>
-		<div class="wcard__face wcard__back" lang="en" dir="ltr">
-			<bdi class="wcard__he-sm" lang="he" dir="rtl">{ w.Text }</bdi>
-			if w.ShowTranslit && w.Translit != "" {
-				<bdi class="wcard__tr" lang="he-Latn" dir="ltr">{ w.Translit }</bdi>
-			}
-			if w.ShowGloss {
-				if meaning, note, lemma := SplitGloss(w.Gloss); meaning != "" {
-					<span class="wcard__gl">{ meaning }</span>
-					if note != "" || lemma != "" {
-						<span class="wcard__note">
-							if note != "" {
-								{ note }
-							}
-							if note != "" && lemma != "" {
-								{ " · " }
-							}
-							if lemma != "" {
-								<bdi lang="he" dir="rtl">{ lemma }</bdi>
-							}
-						</span>
-					}
-				}
-				if meta := CardMeta(w.POS, w.Gender); meta != "" {
-					<span class="wcard__pos">{ meta }</span>
-				}
-			} else if w.Translit != "" {
-				<span class="wcard__sound" lang="he-Latn" dir="ltr">{ w.Translit }</span>
-				<span class="wcard__pos">@E("how it sounds")</span>
-			}
-			if w.RootHref != "" {
-				<a class="wcard__root" href={ templ.SafeURL(w.RootHref) } hx-boost="false">Root <bdi lang="he" dir="rtl">{ w.Root }</bdi></a>
-			}
-		</div>
+		@renderWordPanel(w, audioID)
 	</details>
 }
 
 // flipHint is the quiet line under a teach prompt.
 templ flipHint(a Activity) {
 	<p class="wprompt-hint" lang="en">
-		@Icon("flip", "")
 		if a.Asking && a.PromptWord != "" {
 			<span>@E("Tap a word for help. The word you are asked about only shows how it sounds.")</span>
 		} else if a.Asking {

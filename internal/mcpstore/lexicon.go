@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
 )
 
@@ -17,7 +18,8 @@ import (
 // Suggestions are the nearest unpointed spellings, and only when hits is empty.
 // limit caps each list. Gender, plural, and translit come from the lexicon
 // columns added in migration 002. irregular_plural is on units.LexemeFacts
-// because mcp.Lexeme has no field for it.
+// because mcp.Lexeme has no field for it. Forms are attached for verbs,
+// nouns, and adjectives (INIT-023/SPEC-006).
 func (s *Store) SearchLexemes(ctx context.Context, query string, limit int) ([]mcp.Lexeme, []mcp.Lexeme, error) {
 	conn, err := s.conn(ctx)
 	if err != nil {
@@ -32,7 +34,7 @@ func (s *Store) SearchLexemes(ctx context.Context, query string, limit int) ([]m
 	// Clip texts are joined once. audio_assets has no index on text_nfc,
 	// voice, or model; adding one needs a migration.
 	rows, err := conn.QueryContext(ctx, `
-		SELECT l.text_nfc, l.bare, l.gloss_en, l.pos, l.gender, l.plural, l.translit, l.root, l.binyan,
+		SELECT l.id, l.text_nfc, l.bare, l.gloss_en, l.pos, l.gender, l.plural, l.translit, l.root, l.binyan,
 		       CASE WHEN a.text_nfc IS NOT NULL THEN 1 ELSE 0 END
 		FROM lexemes AS l
 		LEFT JOIN (
@@ -43,10 +45,10 @@ func (s *Store) SearchLexemes(ctx context.Context, query string, limit int) ([]m
 	}
 	defer rows.Close()
 
-	var hits, suggestions []mcp.Lexeme
+	var hits, suggestions []rankedLexeme
 	best := nearMissDistance + 1
 	for rows.Next() {
-		lx, storedBare, err := scanLexeme(rows)
+		lx, id, storedBare, err := scanLexeme(rows)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -56,8 +58,9 @@ func (s *Store) SearchLexemes(ctx context.Context, query string, limit int) ([]m
 		} else {
 			storedBare = normalize(storedBare)
 		}
+		row := rankedLexeme{lx: lx, id: id, pos: lx.POS}
 		if lexemeHit(storedPointed, storedBare, lx.Gloss, pointed, bare, glossQ) {
-			hits = append(hits, lx)
+			hits = append(hits, row)
 			continue
 		}
 		if bare == "" || storedBare == "" {
@@ -72,18 +75,97 @@ func (s *Store) SearchLexemes(ctx context.Context, query string, limit int) ([]m
 			suggestions = suggestions[:0]
 		}
 		if dist == best {
-			suggestions = append(suggestions, lx)
+			suggestions = append(suggestions, row)
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, nil, fmt.Errorf("mcpstore: search: %w", err)
 	}
-	slices.SortFunc(hits, func(a, b mcp.Lexeme) int { return cmp.Compare(a.TextNFC, b.TextNFC) })
-	slices.SortFunc(suggestions, func(a, b mcp.Lexeme) int { return cmp.Compare(a.TextNFC, b.TextNFC) })
+	slices.SortFunc(hits, func(a, b rankedLexeme) int { return cmp.Compare(a.lx.TextNFC, b.lx.TextNFC) })
+	slices.SortFunc(suggestions, func(a, b rankedLexeme) int { return cmp.Compare(a.lx.TextNFC, b.lx.TextNFC) })
 	if len(hits) > 0 {
 		suggestions = nil
 	}
-	return clipLexemes(hits, limit), clipLexemes(suggestions, limit), nil
+	outHits, err := s.attachForms(ctx, clipRanked(hits, limit))
+	if err != nil {
+		return nil, nil, err
+	}
+	outSug, err := s.attachForms(ctx, clipRanked(suggestions, limit))
+	if err != nil {
+		return nil, nil, err
+	}
+	return outHits, outSug, nil
+}
+
+// attachForms fills forms for verbs, nouns, and adjectives. INIT-023/SPEC-006
+func (s *Store) attachForms(ctx context.Context, rows []rankedLexeme) ([]mcp.Lexeme, error) {
+	out := make([]mcp.Lexeme, 0, len(rows))
+	for _, row := range rows {
+		lx := row.lx
+		switch row.pos {
+		case "verb":
+			forms, err := s.db.VerbFormsFor(ctx, row.id)
+			if err != nil {
+				return nil, err
+			}
+			lx.Forms = verbWordForms(forms)
+		case "noun", "adjective", "n", "adj":
+			forms, err := s.db.NounFormsFor(ctx, row.id)
+			if err != nil {
+				return nil, err
+			}
+			lx.Forms = nounWordForms(forms)
+		}
+		out = append(out, lx)
+	}
+	if out == nil {
+		out = []mcp.Lexeme{}
+	}
+	return out, nil
+}
+
+type rankedLexeme struct {
+	lx  mcp.Lexeme
+	id  int64
+	pos string
+}
+
+func clipRanked(in []rankedLexeme, n int) []rankedLexeme {
+	if len(in) == 0 {
+		return nil
+	}
+	if n > len(in) {
+		n = len(in)
+	}
+	return append([]rankedLexeme(nil), in[:n]...)
+}
+
+func verbWordForms(rows []db.VerbForm) []mcp.WordForm {
+	if len(rows) == 0 {
+		return nil
+	}
+	out := make([]mcp.WordForm, len(rows))
+	for i, row := range rows {
+		out[i] = mcp.WordForm{
+			Tense: row.Tense, Person: row.Person, Number: row.Number, Gender: row.Gender,
+			He: row.FormHe, Translit: row.Translit, HasAudio: row.AudioID != "",
+		}
+	}
+	return out
+}
+
+func nounWordForms(rows []db.NounForm) []mcp.WordForm {
+	if len(rows) == 0 {
+		return nil
+	}
+	out := make([]mcp.WordForm, len(rows))
+	for i, row := range rows {
+		out[i] = mcp.WordForm{
+			Kind: row.Kind, Number: row.Number, Person: row.Person, Gender: row.Gender,
+			OwnerNumber: row.OwnerNumber, He: row.FormHe, Translit: row.Translit, HasAudio: row.AudioID != "",
+		}
+	}
+	return out
 }
 
 func lexemeHit(pointed, bare, gloss, qPointed, qBare, qGloss string) bool {
@@ -100,15 +182,16 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanLexeme(rows rowScanner) (mcp.Lexeme, string, error) {
+func scanLexeme(rows rowScanner) (mcp.Lexeme, int64, string, error) {
 	var lx mcp.Lexeme
+	var id int64
 	var gender, plural, translit sql.NullString
 	var audio int
 	if err := rows.Scan(
-		&lx.TextNFC, &lx.Bare, &lx.Gloss, &lx.POS, &gender, &plural,
+		&id, &lx.TextNFC, &lx.Bare, &lx.Gloss, &lx.POS, &gender, &plural,
 		&translit, &lx.Root, &lx.Binyan, &audio,
 	); err != nil {
-		return mcp.Lexeme{}, "", fmt.Errorf("mcpstore: search: %w", err)
+		return mcp.Lexeme{}, 0, "", fmt.Errorf("mcpstore: search: %w", err)
 	}
 	if gender.Valid {
 		lx.Gender = gender.String
@@ -120,15 +203,5 @@ func scanLexeme(rows rowScanner) (mcp.Lexeme, string, error) {
 		lx.Translit = translit.String
 	}
 	lx.AudioPresent = audio != 0
-	return lx, lx.Bare, nil
-}
-
-func clipLexemes(in []mcp.Lexeme, n int) []mcp.Lexeme {
-	if len(in) == 0 {
-		return []mcp.Lexeme{}
-	}
-	if n > len(in) {
-		n = len(in)
-	}
-	return append([]mcp.Lexeme(nil), in[:n]...)
+	return lx, id, lx.Bare, nil
 }

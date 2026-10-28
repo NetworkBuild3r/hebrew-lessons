@@ -464,7 +464,7 @@ func todayHero(h Home) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = H(h.LessonTitle).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = LessonName(h.LessonTitle).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -762,7 +762,7 @@ func todayHero(h Home) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = H(h.LessonTitle).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = LessonName(h.LessonTitle).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1122,7 +1122,7 @@ func todayLessonCard(h Home) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = H(h.LessonTitle).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = LessonName(h.LessonTitle).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

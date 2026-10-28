@@ -98,6 +98,18 @@ type WeeklyCard struct {
 	Summary string
 }
 
+// SkillOverview is one skill's row on the Progress overview (no ?skill=).
+// Known is known plus solid. NoCardHint replaces the counts bar when the skill
+// has answers and no cards yet (INIT-023/SPEC-004).
+type SkillOverview struct {
+	Skill      string
+	Label      string
+	Known      int
+	Learning   int
+	Seen       int
+	NoCardHint bool
+}
+
 // ProgressView is the whole page.
 type ProgressView struct {
 	Page
@@ -111,7 +123,10 @@ type ProgressView struct {
 	Tabs        []SkillTab
 	Skill       string
 	SkillName   string
+	// Overview is one row per skill when no ?skill= is chosen. Empty on a skill tab.
+	Overview []SkillOverview
 	// Known is the estimated words known in the chosen skill now, as text.
+	// On the overview it is the overall words known (known plus solid).
 	Known     string
 	Legend    []LegendItem
 	BarSVG    string
@@ -139,6 +154,16 @@ type CanSayPanel struct {
 	AddedText string
 	Items     []CanSayWord
 	Next      []CanSayWord
+}
+
+// SkillTabHref is /progress?skill=…, keeping the Hebrew shell when needed.
+// Page.Href only appends ?lang=he, so a path that already has a query must not use it.
+func (v ProgressView) SkillTabHref(skill string) string {
+	path := "/progress?skill=" + skill
+	if v.Lang == "he" {
+		return path + "&lang=he"
+	}
+	return path
 }
 
 // SignedGain is "+9" for a gain, and "0" for none.

@@ -157,114 +157,198 @@ html:not(.js) .wslot > .clip { display: none; }
   align-self: center;
 }
 
-/* Stacked faces. Gated so an engine without ::details-content lays the
-   meaning out under the Hebrew instead of on top of it. */
+/* Isaiah verses still flip a gloss over the word. A lesson card does not:
+   the tile stays visible and the meaning opens beside it. */
 @supports selector(::details-content) {
-  .wcard__hit,
-  .wcard::details-content { grid-area: 1 / 1; }
-  .wcard::details-content {
+  .isaiah-words .wcard__hit,
+  .isaiah-words .wcard::details-content { grid-area: 1 / 1; }
+  .isaiah-words .wcard::details-content {
     display: grid;
     content-visibility: visible;
     pointer-events: none;
   }
-  .wcard__face { grid-area: 1 / 1; }
-  .wcard__back {
+  .isaiah-words .wcard__face { grid-area: 1 / 1; }
+  .isaiah-words .wcard__back {
     pointer-events: none;
     opacity: 0;
     visibility: hidden;
   }
-  .wcard__front { opacity: 1; }
-  .wcard[open] .wcard__front { opacity: 0; }
-  .wcard[open] .wcard__back { opacity: 1; visibility: visible; }
-  .wcard__hit:hover .wcard__front,
-  .wcard[open]:has(.wcard__hit:hover) .wcard__back {
-    box-shadow: var(--shadow-2);
-    border-color: color-mix(in oklab, var(--text) 30%, transparent);
-  }
-  .wcard[open]:has(.wcard__hit:focus-visible) .wcard__back {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
-  }
-  .wcard[open] .wcard__hit:focus-visible { outline: none; }
+  .isaiah-words .wcard__front { opacity: 1; }
+  .isaiah-words .wcard[open] .wcard__front { opacity: 0; }
+  .isaiah-words .wcard[open] .wcard__back { opacity: 1; visibility: visible; }
 }
 
 @supports not selector(::details-content) {
   .wcard__back { margin-block-start: var(--space-2); }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  @supports selector(::details-content) {
-    .wline .wcard .wcard__front,
-    .wline .wcard .wcard__back {
-      opacity: 1;
-      transition-property: transform, translate, scale, box-shadow, border-color, visibility;
-      transition-duration: var(--dur-slow), var(--dur-fast), var(--dur-fast), var(--dur-fast), var(--dur-fast), calc(var(--dur-stagger) * 0);
-      transition-timing-function: var(--ease-spring), var(--ease-out), var(--ease-out), var(--ease-out), var(--ease-out), linear;
-      transition-delay: calc(var(--dur-stagger) * 0), calc(var(--dur-stagger) * 0), calc(var(--dur-stagger) * 0), calc(var(--dur-stagger) * 0), calc(var(--dur-stagger) * 0), calc(var(--dur-slow) / 2);
-    }
-    .wline .wcard .wcard__front { transform: rotateY(0deg); }
-    .wline .wcard .wcard__back { transform: rotateY(180deg); }
-    .wline .wcard[open] .wcard__front { transform: rotateY(-180deg); }
-    .wline .wcard[open] .wcard__back {
-      transform: rotateY(0deg);
-      visibility: visible;
-      transition-delay: calc(var(--dur-stagger) * 0);
-    }
-    .wline .wcard .wcard__hit:hover .wcard__front,
-    .wline .wcard[open]:has(.wcard__hit:hover) .wcard__back {
-      translate: 0 -2px;
-    }
-    .wline .wcard .wcard__hit:active .wcard__front,
-    .wline .wcard[open]:has(.wcard__hit:active) .wcard__back {
-      scale: var(--motion-press);
-      translate: 0 0;
-    }
-  }
+/* Lesson tiles stay small. The blue outline marks the one that is open.
+   The meaning is a panel, not a second face on the tile. */
+.wline { position: relative; }
+.wline .wcard {
+  position: static;
+  display: block;
+  min-inline-size: 4.75rem;
+  max-inline-size: 8.5rem;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  @supports selector(::details-content) {
-    .wline .wcard .wcard__front,
-    .wline .wcard .wcard__back { transform: none; translate: none; scale: none; transition: none; }
-    .wline .wcard .wcard__front { opacity: 1; }
-    .wline .wcard .wcard__back { opacity: 0; }
-    .wline .wcard[open] .wcard__front,
-    .wline .wcard[open] .wcard__back { transition: opacity var(--dur-fast) linear; }
-    .wline .wcard[open] .wcard__front { opacity: 0; }
-    .wline .wcard[open] .wcard__back { opacity: 1; }
-  }
+.wline .wcard__face {
+  min-block-size: 5.25rem;
+  backface-visibility: visible;
 }
-
-/* The cards, bigger and centered, with the play control joined to them.
-   A single word is the one thing on screen: a large card. The control for a word is a disc
-   that straddles the card's bottom edge, so it reads as part of the card. The line's own
-   control sits under the row of cards. The back of a card leads with the meaning. */
-.wline-play { display: flex; justify-content: center; margin-block-start: var(--space-2); }
-.wslot { gap: 0; }
-.wslot > .clip {
-  margin-block-start: -22px;
-  position: relative;
-  z-index: 1;
+.wline .wcard[open] > .wcard__hit .wcard__front {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-color: var(--focus-ring);
 }
-.wline:has(.wslot:only-of-type) .wcard { min-inline-size: 12rem; max-inline-size: min(100%, 24rem); }
-.wline:has(.wslot:only-of-type) .wcard__face { min-block-size: 10rem; padding: var(--space-5); gap: var(--space-2); }
-.wline:has(.wslot:only-of-type) .wcard__he { font-size: var(--fs-he-hero); }
-.wline:has(.wslot:only-of-type) .wcard__tr { font-size: var(--fs-card-tr-lg); }
-.wcard__gl { font-size: var(--fs-card-gl); line-height: 1.2; }
-.wline:has(.wslot:only-of-type) .wcard__gl { font-size: var(--fs-card-gl-lg); }
+.wcard__detail { display: none; }
+.wline .wcard[open] > .wcard__detail {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: start;
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
+  box-sizing: border-box;
+  margin-block-start: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-1);
+  text-align: start;
+}
+.wline .wcard[open] {
+  flex-basis: 100%;
+  max-inline-size: 100%;
+}
+.wline .wcard__detail .wcard__he {
+  grid-column: 1 / -1;
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  white-space: normal;
+}
+.wcard__detail > .wcard__gl,
+.wcard__detail > .wcard__kicker,
+.wcard__detail > .wcard__phrase,
+.wcard__detail > .wcard__phrase-en,
+.wcard__detail > .wcard__more,
+.wcard__detail > .wcard__sound,
+.wcard__detail > .wcard__pos { grid-column: 1 / -1; }
+.wcard__detail:has(.wcard__soundline) > .orb--word {
+  grid-column: 2;
+  grid-row: 2;
+  margin-block-start: 0;
+}
+.wcard__soundline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+.wcard__gl {
+  margin: 0;
+  font-weight: 400;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.wcard__kicker {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.wcard__phrase,
+.wcard__phrase-en { margin: 0; }
+.wcard__phrase {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-lg);
+  font-weight: 600;
+  line-height: var(--lh-he-display);
+}
+.wcard__phrase-en {
+  font-size: var(--fs-body);
+  font-weight: 400;
+  line-height: var(--lh-body);
+}
+.wcard__more {
+  margin-block-start: var(--space-2);
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+.wcard__more > summary {
+  cursor: pointer;
+  min-block-size: var(--size-tap);
+  display: inline-flex;
+  align-items: center;
+}
 .wcard__note {
+  margin: 0;
   font-size: var(--fs-caption);
   color: var(--muted);
   line-height: 1.35;
   text-wrap: balance;
 }
+.wcard__pos { margin: 0; }
+html.js .wcard__detail > .orb--word {
+  display: inline-grid;
+  grid-template-columns: 1.25rem auto;
+  align-items: center;
+  column-gap: var(--space-2);
+  justify-self: start;
+  inline-size: auto;
+  block-size: auto;
+  min-block-size: var(--size-tap);
+  margin-block-start: var(--space-1);
+  padding-inline: var(--space-3);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-caption);
+}
+.wcard__detail > .orb--word::before { content: none; }
+.wcard__detail > .orb--word .orb__glyph {
+  grid-column: 1;
+  grid-row: 1;
+}
+.wcard__listen-label { grid-column: 2; grid-row: 1; }
+
+/* One open word sits beside its meaning on a wide screen. Several open
+   words (Show all) stack in the row instead of sharing one panel. */
+@media (min-width: 64rem) {
+  .activity > .wline:has(.wcard[open]):not(:has(.wcard[open] ~ .wcard[open])),
+  .spotlight--cards > .wline:has(.wcard[open]):not(:has(.wcard[open] ~ .wcard[open])),
+  .roots > .wline:has(.wcard[open]):not(:has(.wcard[open] ~ .wcard[open])) {
+    padding-inline-end: 24rem;
+    min-block-size: 16rem;
+  }
+  .activity > .wline:has(.wcard[open]):not(:has(.wcard[open] ~ .wcard[open])) .wcard[open],
+  .spotlight--cards > .wline:has(.wcard[open]):not(:has(.wcard[open] ~ .wcard[open])) .wcard[open],
+  .roots > .wline:has(.wcard[open]):not(:has(.wcard[open] ~ .wcard[open])) .wcard[open] {
+    flex-basis: auto;
+    max-inline-size: 8.5rem;
+  }
+  .activity > .wline:has(.wcard[open]):not(:has(.wcard[open] ~ .wcard[open])) .wcard[open] > .wcard__detail,
+  .spotlight--cards > .wline:has(.wcard[open]):not(:has(.wcard[open] ~ .wcard[open])) .wcard[open] > .wcard__detail,
+  .roots > .wline:has(.wcard[open]):not(:has(.wcard[open] ~ .wcard[open])) .wcard[open] > .wcard__detail {
+    position: absolute;
+    inset-inline-end: 0;
+    inset-block-start: 0;
+    inline-size: 22rem;
+    max-inline-size: 100%;
+    margin-block-start: 0;
+  }
+}
+
+.wline-play { display: flex; justify-content: center; margin-block-start: var(--space-2); }
 .wcard__he-sm { order: 2; }
 .wcard__back .wcard__pos { order: 3; }
-/* A recall word is a card too. Its section is only a place for the card, so it has no frame of
-   its own. Before the answer the back is how the word sounds, set as big as the meaning is. */
 .wcard__sound {
-  font-size: var(--fs-card-gl-lg);
+  font-size: var(--fs-body);
   font-style: italic;
-  font-weight: 700;
-  line-height: 1.2;
+  font-weight: 400;
+  line-height: 1.3;
 }

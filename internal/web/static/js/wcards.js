@@ -46,11 +46,15 @@
     for (var j = 0; j < nodes.length; j++) nodes[j].setAttribute("role", "button");
   }
 
+  var batch = false;
+
   function toggle(btn) {
     var root = rootOf(btn);
     var on = !allOpen(root);
     var cards = cardsIn(root);
+    batch = true;
     for (var i = 0; i < cards.length; i++) cards[i].open = on;
+    batch = false;
     sync(root);
   }
 
@@ -88,6 +92,12 @@
   D.addEventListener("toggle", function (ev) {
     var d = ev.target;
     if (!d || !d.matches || !d.matches("details.wcard")) return;
+    if (!batch && d.open) {
+      var cards = cardsIn(rootOf(d));
+      for (var i = 0; i < cards.length; i++) {
+        if (cards[i] !== d) cards[i].open = false;
+      }
+    }
     sync(rootOf(d));
   }, true);
 })(globalThis);

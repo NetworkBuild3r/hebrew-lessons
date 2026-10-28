@@ -31,50 +31,51 @@ async function shot(name) {
   await page.screenshot({ path: `${out}/teach-${tag}-${name}.png` });
 }
 
-// ---- Step 1, a single word: one large card, centered, the play control joined to it.
+// ---- Step 1, one word: a small tile. Opening it keeps the word and shows the meaning.
 await page.goto(origin + path, { waitUntil: "networkidle" });
 await page.waitForSelector(".wcard");
 const card = await page.locator(".wcard__front").boundingBox();
 const col = await page.locator(".activity").boundingBox();
-check("a single word is one large card", card && card.width >= 190 && card.height >= 150, card && `${card.width}x${card.height}`);
-check("the card is centered", card && col && Math.abs(center(card) - center(col)) <= 4, JSON.stringify({ card, col }));
+check("a single word stays a small tile", card && card.width < 200 && card.width >= 70 && card.height < 160, card && `${card.width}x${card.height}`);
+check("the tile is centered", card && col && Math.abs(center(card) - center(col)) <= 8, JSON.stringify({ card, col }));
 const hefs = await page.locator(".wcard__front .wcard__he").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-check("the Hebrew on the card is big", hefs >= 56, hefs);
+check("the Hebrew on the tile is the word", hefs >= 24 && hefs < 48, hefs);
 const lineOrb = await page.locator(".wline-play .orb").boundingBox();
-check("the line's play control is below the card", lineOrb && card && lineOrb.y >= card.y + card.height - 2, JSON.stringify({ lineOrb, card }));
-check("the line's play control is centered", lineOrb && col && Math.abs(center(lineOrb) - center(col)) <= 4, JSON.stringify({ lineOrb, col }));
+check("the line's play control is below the tile", lineOrb && card && lineOrb.y >= card.y + card.height - 2, JSON.stringify({ lineOrb, card }));
 await shot("single-closed");
 await page.locator(".wcard__hit").first().click();
-await page.waitForTimeout(700);
-const back = await page.locator(".wcard__back").boundingBox();
-const gl = await page.locator(".wcard__gl").first();
+await page.waitForTimeout(400);
+const frontOpacity = await page.locator(".wcard[open] .wcard__front").evaluate((el) => getComputedStyle(el).opacity);
+check("the word stays visible", frontOpacity === "1", frontOpacity);
+const gl = await page.locator(".wcard__detail .wcard__gl").first();
 const glText = await gl.innerText();
 check("the meaning leads, without the Hebrew note", glText.trim() === "choose(s)", glText);
 const glfs = await gl.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-check("the meaning is large", glfs >= 24, glfs);
+const glw = await gl.evaluate((el) => getComputedStyle(el).fontWeight);
+check("the meaning is body text", glfs >= 15 && glfs <= 20 && Number(glw) < 600, `${glfs} ${glw}`);
+await page.locator(".wcard__more summary").click();
 const note = await page.locator(".wcard__note").first().innerText();
-check("the grammar note is kept, small, under the meaning", note.includes("m.sg. present") && note.includes("לִבְחוֹר"), note);
-check("the back is the same size as the front", back && Math.abs(back.height - card.height) <= 2, `${back && back.height} vs ${card.height}`);
+check("the grammar note sits under Word details", note.includes("m.sg. present") && note.includes("לִבְחוֹר"), note);
+const listen = await page.locator(".wcard__detail .orb--word").boundingBox();
+const openTile = await page.locator(".wcard[open] .wcard__front").boundingBox();
+const detailBox = await page.locator(".wcard[open] .wcard__detail").boundingBox();
+const inPanel = listen && detailBox && listen.x >= detailBox.x - 1 && listen.y >= detailBox.y - 1 && listen.x + listen.width <= detailBox.x + detailBox.width + 1;
+const offTile = listen && openTile && (listen.y >= openTile.y + openTile.height - 2 || listen.x >= openTile.x + openTile.width - 2 || listen.x + listen.width <= openTile.x + 2);
+check("Listen sits in the meaning, not on the tile", inPanel && offTile, JSON.stringify({ listen, openTile, detailBox }));
 await shot("single-open");
 
-// ---- Step 2, a line: cards in a row, each play control joined to its card.
+// ---- Step 2, a line: small tiles. The open word carries Listen inside its panel.
 await page.goto(origin + path.replace(/\/0$/, "/0"), { waitUntil: "networkidle" });
 const cont = page.locator('button[name="answer"][value="continue"]');
 await cont.click();
-await page.waitForSelector(".wline .wslot");
+await page.waitForSelector(".wline details.wcard");
 await page.waitForTimeout(500);
-const slots = await page.locator(".wslot").count();
+const slots = await page.locator(".wline > details.wcard").count();
 check("a line has a card for each word", slots === 2, slots);
-const cards = await page.locator(".wslot .wcard__front").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON()));
-const orbs = await page.locator(".wslot > .clip .orb").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON()));
-const joined = orbs.length === cards.length && orbs.every((o, i) => {
-  const cardBottom = cards[i].y + cards[i].height;
-  return o.y + o.height / 2 >= cardBottom - 14 && o.y + o.height / 2 <= cardBottom + 24 && Math.abs(center(o) - center(cards[i])) <= 3;
-});
-check("each play control is joined to the bottom edge of its card", joined, JSON.stringify({ cards, orbs }));
-const lineOrb2 = await page.locator(".wline-play .orb").boundingBox();
-const lastBottom = Math.max(...orbs.map((o) => o.y + o.height));
-check("the line's play control is under the cards", lineOrb2 && lineOrb2.y >= lastBottom - 2, JSON.stringify({ lineOrb2, lastBottom }));
+await page.locator(".wline details.wcard summary").first().click();
+await page.waitForTimeout(300);
+const openListen = await page.locator(".wcard[open] .wcard__detail .orb--word").innerText();
+check("the open word has a labelled Listen control", openListen.includes("Listen"), openListen);
 check("no page scrolls sideways", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
 await shot("line");
 

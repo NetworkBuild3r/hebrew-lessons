@@ -313,6 +313,8 @@ func authoringGuidance() scopeGuidance {
 			"A custom unit, scope learner:<id>, recycles that learner's struggled words first, then learning lexemes from placement, then new words.",
 			"Confusion pairs make good minimal-pair distractors.",
 			"A shared unit assumes no learner data. Do not depend on struggle, placement, or which shared units a learner has finished.",
+			"When a unit introduces a verb, fill at least the present tense and the infinitive with upsert_verb_forms, then call generate_audio with that lemmaId.",
+			"When a unit introduces a noun, fill the plural and the construct singular with upsert_noun_forms, then call generate_audio with that lemmaId.",
 		},
 	}
 }

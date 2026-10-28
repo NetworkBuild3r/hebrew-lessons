@@ -580,8 +580,10 @@ func registerTools(server *mcp.Server, svc *service) {
 		Annotations: readOnly,
 	}, svc.getContext)
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "lookup",
-		Description: "Find a lexicon entry by pointed Hebrew, unpointed Hebrew, or an English gloss. Use an entry's text_nfc as the spelling in a unit. A miss returns suggestions and is not an error. Add a missing entry with upsert_lexemes.",
+		Name: "lookup",
+		Description: "Find a lexicon entry by pointed Hebrew, unpointed Hebrew, or an English gloss. Use an entry's text_nfc as the spelling in a unit. " +
+			"A hit includes forms when they are stored: a verb has tense, person, number, gender, he, translit, and hasAudio; a noun or adjective has kind, number, person, gender, ownerNumber, he, translit, and hasAudio. " +
+			"A miss returns suggestions and is not an error. Add a missing entry with upsert_lexemes. Write missing forms with upsert_verb_forms or upsert_noun_forms.",
 		Annotations: readOnly,
 	}, svc.lookup)
 	mcp.AddTool(server, &mcp.Tool{
@@ -611,5 +613,6 @@ func registerTools(server *mcp.Server, svc *service) {
 	registerGetUnit(server, svc)
 	registerPatternTools(server, svc)
 	registerMistakeTools(server, svc)
+	registerNounFormTools(server, svc)
 	registerVerseTools(server, svc)
 }

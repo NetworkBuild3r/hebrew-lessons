@@ -119,7 +119,7 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 	if !strings.Contains(act, "Read the story. Each word shows its sound and its meaning.") {
 		t.Fatalf("story prompt missing:\n%s", act)
 	}
-	if strings.Count(act, "Tap a word to see what it means.") != 1 || !strings.Contains(act, "icon-flip") {
+	if strings.Count(act, "Tap a word to see what it means.") != 1 {
 		t.Fatalf("flip hint should be the only tap sentence:\n%s", act)
 	}
 	cards := regexp.MustCompile(`(?s)<details class="wcard[^"]*".*?</details>`).FindAllString(act, -1)
@@ -128,8 +128,12 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 	}
 	var sawNew, sawPlain bool
 	for _, card := range cards {
-		if strings.Contains(card, "orb") || strings.Contains(card, "<button") || strings.Contains(card, "<audio") {
-			t.Fatalf("a card contains the play control:\n%s", card)
+		front, _, ok := strings.Cut(card, "</summary>")
+		if !ok {
+			t.Fatalf("card has no summary:\n%s", card)
+		}
+		if strings.Contains(front, "orb") || strings.Contains(front, "<button") || strings.Contains(front, "<audio") {
+			t.Fatalf("the word tile contains the play control:\n%s", card)
 		}
 		if !strings.Contains(card, "wcard__he") || !strings.Contains(card, "wcard__tr") || !strings.Contains(card, "wcard__gl") {
 			t.Fatalf("card is missing a face:\n%s", card)
@@ -223,7 +227,7 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 		t.Fatal("?meanings=all advanced the run")
 	}
 	opened := activityHTML(t, openAll)
-	openCards := regexp.MustCompile(`<details class="wcard[^"]*"[^>]*>`).FindAllString(opened, -1)
+	openCards := regexp.MustCompile(`<details class="wcard(?: |")[^>]*>`).FindAllString(opened, -1)
 	if len(openCards) != 3 {
 		t.Fatalf("open cards = %d:\n%s", len(openCards), opened)
 	}
@@ -237,7 +241,7 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 		t.Fatalf("open show-all href = %q\n%s", openHref, opened)
 	}
 	closedAgain := activityHTML(t, getAuthed(t, h, cookie, openHref))
-	for _, tag := range regexp.MustCompile(`<details class="wcard[^"]*"[^>]*>`).FindAllString(closedAgain, -1) {
+	for _, tag := range regexp.MustCompile(`<details class="wcard(?: |")[^>]*>`).FindAllString(closedAgain, -1) {
 		if strings.Contains(tag, " open") || strings.HasSuffix(tag, " open>") {
 			t.Fatalf("hide link left a card open: %s", tag)
 		}

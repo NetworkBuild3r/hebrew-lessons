@@ -89,28 +89,61 @@ func tabState(t SkillTab) AnswerState {
 	return AnswerDefault
 }
 
-// knowCard is the stacked bar of states for the skill, as of now, with its legend and table.
+// knowCard is the stacked bar of states for one skill, or the overview of every
+// skill when no ?skill= is chosen (INIT-023/SPEC-004).
 templ knowCard(v ProgressView) {
 	<section class="c-card pknow" aria-labelledby="know-h">
-		<p class="eyebrow" id="know-h">@E("What you know · " + v.SkillName)</p>
-		<p class="pknow__head">
-			<span class="count"><bdi lang="en" dir="ltr">{ v.Known }</bdi></span>
-			<span class="pknow__unit">@T(v.Lang, "", "words estimated known")</span>
-		</p>
-		<div class="pbar" dir="ltr">
-			@templ.Raw(v.BarSVG)
-		</div>
-		<ul class="pc__legend">
-			for _, item := range v.Legend {
-				<li class="pc__legend-item" data-state={ item.State }>
-					<span class="pc__sw" data-state={ item.State } aria-hidden="true"></span>
-					<span class="pc__legend-label">@E(item.Label)</span>
-					<span class="pc__legend-n"><bdi lang="en" dir="ltr">{ Num(item.Count) }</bdi></span>
-				</li>
-			}
-		</ul>
-		@chartTable(v, v.BarTable)
+		if len(v.Overview) > 0 {
+			@knowOverview(v)
+		} else {
+			<p class="eyebrow" id="know-h">@E("What you know · " + v.SkillName)</p>
+			<p class="pknow__head">
+				<span class="count"><bdi lang="en" dir="ltr">{ v.Known }</bdi></span>
+				<span class="pknow__unit">@T(v.Lang, "", "words estimated known")</span>
+			</p>
+			<div class="pbar" dir="ltr">
+				@templ.Raw(v.BarSVG)
+			</div>
+			<ul class="pc__legend">
+				for _, item := range v.Legend {
+					<li class="pc__legend-item" data-state={ item.State }>
+						<span class="pc__sw" data-state={ item.State } aria-hidden="true"></span>
+						<span class="pc__legend-label">@E(item.Label)</span>
+						<span class="pc__legend-n"><bdi lang="en" dir="ltr">{ Num(item.Count) }</bdi></span>
+					</li>
+				}
+			</ul>
+			@chartTable(v, v.BarTable)
+		}
 	</section>
+}
+
+// knowOverview is one row per skill: known plus solid, learning, and seen. A
+// skill with answers and no cards shows the explanation instead of a zero bar.
+templ knowOverview(v ProgressView) {
+	<p class="eyebrow" id="know-h">@T(v.Lang, "", "What you know")</p>
+	<p class="pknow__head">
+		<span class="count"><bdi lang="en" dir="ltr">{ v.Known }</bdi></span>
+		<span class="pknow__unit">@T(v.Lang, "", "words known")</span>
+	</p>
+	<ul class="pknow__skills">
+		for _, row := range v.Overview {
+			<li class="pknow__skill" data-skill={ row.Skill }>
+				<a class="pknow__skill-link" href={ templ.SafeURL(v.SkillTabHref(row.Skill)) }>
+					<span class="pknow__skill-label">@E(row.Label)</span>
+					if row.NoCardHint {
+						<span class="pknow__nocard">@T(v.Lang, "", "Listening counts once you have a listening card. Lessons make one when you answer a listening question.")</span>
+					} else {
+						<span class="pknow__skill-bar" dir="ltr">
+							<span class="pknow__n" data-count="known"><bdi lang="en" dir="ltr">{ Num(row.Known) }</bdi> @T(v.Lang, "", "known")</span>
+							<span class="pknow__n" data-count="learning"><bdi lang="en" dir="ltr">{ Num(row.Learning) }</bdi> @T(v.Lang, "", "learning")</span>
+							<span class="pknow__n" data-count="seen"><bdi lang="en" dir="ltr">{ Num(row.Seen) }</bdi> @T(v.Lang, "", "seen")</span>
+						</span>
+					}
+				</a>
+			</li>
+		}
+	</ul>
 }
 
 // chartCard is a line chart card: title, note, the chart or what to do, its summary, and a table.
@@ -309,15 +342,15 @@ templ canSaySection(v ProgressView) {
 				<span class="cansay__added">{ v.CanSay.AddedText }</span>
 			</p>
 			<ul class="cansay__list">
-				for _, w := range v.CanSay.Items {
-					@canSayItem(w)
+				for i, w := range v.CanSay.Items {
+					@canSayItem(w, i)
 				}
 			</ul>
 			if len(v.CanSay.Next) > 0 {
 				<h3 class="cansay__next">@T(v.Lang, "", "Almost there")</h3>
 				<ul class="cansay__list">
-					for _, w := range v.CanSay.Next {
-						@canSayItem(w)
+					for i, w := range v.CanSay.Next {
+						@canSayItem(w, len(v.CanSay.Items)+i)
 					}
 				</ul>
 			}
@@ -325,14 +358,15 @@ templ canSaySection(v ProgressView) {
 	</section>
 }
 
-templ canSayItem(w CanSayWord) {
+// canSayItem is one known word. The index builds a page-unique clip id (INIT-023/SPEC-001).
+templ canSayItem(w CanSayWord, i int) {
 	<li class="cansay__item">
 		<bdi class="cansay__he" lang="he" dir="rtl">{ w.He }</bdi>
 		if w.Gloss != "" {
 			<span class="cansay__gloss" lang="en" dir="ltr">{ w.Gloss }</span>
 		}
 		if w.Audio != "" {
-			@orbButton("orb", "Play "+w.Gloss, w.Audio, "")
+			@clip("cansay-"+Num(i), w.Audio, "Play "+w.Gloss, false)
 		}
 	</li>
 }

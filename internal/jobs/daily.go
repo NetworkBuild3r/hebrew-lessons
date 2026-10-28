@@ -13,6 +13,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 )
 
@@ -166,6 +167,9 @@ func (d *Daily) Run(ctx context.Context, day string) (Result, error) {
 	}
 	res := Result{Day: day}
 	err := d.locked(ctx, func() error {
+		if err := d.replayListenOnce(ctx); err != nil {
+			return err
+		}
 		ids, err := d.store.UserIDs(ctx)
 		if err != nil {
 			return err
@@ -197,6 +201,9 @@ func (d *Daily) Run(ctx context.Context, day string) (Result, error) {
 func (d *Daily) CatchUp(ctx context.Context) (Result, error) {
 	var res Result
 	err := d.locked(ctx, func() error {
+		if err := d.replayListenOnce(ctx); err != nil {
+			return err
+		}
 		yesterday := d.Yesterday()
 		ids, err := d.store.UserIDs(ctx)
 		if err != nil {
@@ -228,6 +235,32 @@ func (d *Daily) CatchUp(ctx context.Context) (Result, error) {
 		return errors.Join(errs...)
 	})
 	return res, err
+}
+
+// replayListenOnce runs the one-time listen-card replay from INIT-023/SPEC-003.
+// It logs a dry-run count, writes cards for past listen answers that have none,
+// and records completion under evidence.ListenReplayKey so a second run is a no-op.
+func (d *Daily) replayListenOnce(ctx context.Context) error {
+	_, done, err := d.store.JobState(ctx, evidence.ListenReplayKey)
+	if err != nil {
+		return err
+	}
+	if done {
+		return nil
+	}
+	dry, err := evidence.ReplayListenCards(ctx, d.store, nil, true)
+	if err != nil {
+		return err
+	}
+	d.log.Info("listen replay dry-run", "targets", dry.Targets, "cards", dry.Written)
+	res, err := evidence.ReplayListenCards(ctx, d.store, nil, false)
+	if err != nil {
+		return err
+	}
+	d.log.Info("listen replay done", "targets", res.Targets, "written", res.Written)
+	return d.store.InDailyTx(ctx, func(tx *db.DailyTx) error {
+		return tx.SetJobState(ctx, evidence.ListenReplayKey, strconv.Itoa(res.Written), d.clock.Now())
+	})
 }
 
 // missedDays lists the days after last up to and including through, oldest first, keeping

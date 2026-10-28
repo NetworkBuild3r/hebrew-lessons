@@ -19,3 +19,21 @@ func TestSplitGloss(t *testing.T) {
 		}
 	}
 }
+
+func TestCardGlossSeparatesAPhraseFromTheMeaning(t *testing.T) {
+	meaning, phraseHe, phraseEn, note, lemma := CardGloss("to me, for me (לָמָּה לִי = why should I)")
+	if meaning != "to me · for me" || phraseHe != "לָמָּה לִי…" || phraseEn != "Why should I…" || note != "" || lemma != "" {
+		t.Fatalf("phrase gloss = %q %q %q %q %q", meaning, phraseHe, phraseEn, note, lemma)
+	}
+	meaning, phraseHe, phraseEn, note, lemma = CardGloss("to me, for me (lama li = why should I)")
+	if meaning != "to me · for me" || phraseHe != "" || phraseEn != "Why should I…" || note != "lama li" {
+		t.Fatalf("latin phrase = %q %q %q %q", meaning, phraseHe, phraseEn, note)
+	}
+	meaning, _, _, note, lemma = CardGloss("choose(s) (m.sg. present of לִבְחוֹר)")
+	if meaning != "choose(s)" || note != "m.sg. present" || lemma != "לִבְחוֹר" {
+		t.Fatalf("form gloss = %q %q %q", meaning, note, lemma)
+	}
+	if got, _, _, _, _ := CardGloss("why"); got != "why" {
+		t.Fatalf("why = %q", got)
+	}
+}

@@ -13,6 +13,8 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcpstore"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
@@ -291,7 +293,17 @@ func stateWord(st learner.State) string {
 
 func TestProgressUnknownSkillShowsTheFirstTab(t *testing.T) {
 	_, _, _, _, get := progressApp(t)
-	for _, q := range []string{"/progress", "/progress?skill=bogus", "/progress?skill=", "/progress?skill=LISTEN"} {
+	// No ?skill= opens the overview (INIT-023/SPEC-004). An unknown skill still falls back to listen.
+	for _, q := range []string{"/progress", "/progress?skill="} {
+		body := get(q)
+		if !strings.Contains(body, `data-skill=""`) || !strings.Contains(body, `class="pknow__skills"`) {
+			t.Errorf("%s did not open the overview", q)
+		}
+		if strings.Contains(body, `aria-pressed="true"`) {
+			t.Errorf("%s pressed a skill tab on the overview", q)
+		}
+	}
+	for _, q := range []string{"/progress?skill=bogus", "/progress?skill=LISTEN"} {
 		if body := get(q); !strings.Contains(body, `data-skill="listen"`) {
 			t.Errorf("%s did not fall back to listening", q)
 		}
@@ -456,7 +468,7 @@ func TestChartColoursComeOnlyFromTokens(t *testing.T) {
 	}
 	// The struggling state carries a hatch in the markup (the fixture has a struggling word), and
 	// both hatch patterns are defined. The slipping hatch is covered in chart_test.go.
-	body := get("/progress")
+	body := get("/progress?skill=listen")
 	bar := regexp.MustCompile(`(?s)<svg class="pc pc--bar".*?</svg>`).FindString(body)
 	if !strings.Contains(bar, `<pattern id="pb-ha"`) || !strings.Contains(bar, `<pattern id="pb-hb"`) ||
 		!regexp.MustCompile(`data-state="struggling"[^>]*/><rect class="pc__seg-hatch"[^>]*fill="url\(#pb-ha\)"`).MatchString(bar) {
@@ -494,7 +506,7 @@ func TestEvidenceWithoutSnapshotsShowsTheBarAndAHintInPlaceOfEachLine(t *testing
 	l := addLearner(t, store, "a@example.com", "sub-a", progNow)
 	words := seedLexicon(t, store, progNow, 4, false, true)
 	strugglingWord(t, store, clk, l.user.ID, words[0].id, "listen", 4, 1)
-	body := getLearner(t, h, l, "/progress")
+	body := getLearner(t, h, l, "/progress?skill=listen")
 	if !strings.Contains(body, `data-empty="false"`) || strings.Count(body, `<svg class="pc pc--bar"`) != 1 {
 		t.Fatal("a learner with evidence should see the state bar")
 	}
@@ -518,7 +530,7 @@ func TestOneSnapshotDrawsADotAndNoLine(t *testing.T) {
 	l := addLearner(t, store, "a@example.com", "sub-a", progNow)
 	seedLexicon(t, store, progNow, 3, false, true)
 	seedProgressSnapshots(t, store, l.user.ID, 1, progEst)
-	body := getLearner(t, h, l, "/progress")
+	body := getLearner(t, h, l, "/progress?skill=listen")
 	est := section(t, body, "c-card pchart", `data-chart="est"`)
 	if !strings.Contains(est, `<circle`) || strings.Contains(est, "pc__line") {
 		t.Errorf("one day should be a dot with no line:\n%s", est)
@@ -708,6 +720,7 @@ func TestProgressShowsOnlyTheSignedInLearnersData(t *testing.T) {
 		if strings.Contains(body, words[5].he) {
 			t.Fatalf("%s shows the other learner's slip", q)
 		}
+		// Overview charts the skill with the most known words; with no evidence that is listen.
 		skill := "listen"
 		if strings.Contains(q, "skill=read") {
 			skill = "read"
@@ -735,7 +748,9 @@ func TestProgressInTheHebrewShellKeepsEachRunInItsOwnLanguage(t *testing.T) {
 		t.Error("a Hebrew word is not marked lang=he dir=rtl")
 	}
 	// The charts and tables stay left to right: time runs left to right on a chart.
-	if strings.Count(body, `class="pbar" dir="ltr"`) != 1 || strings.Count(body, `class="pchart__plot" dir="ltr"`) != 2 {
+	// The overview has no state bar; the skill tab does.
+	skillBody := get("/progress?skill=listen&lang=he")
+	if strings.Count(skillBody, `class="pbar" dir="ltr"`) != 1 || strings.Count(body, `class="pchart__plot" dir="ltr"`) != 2 {
 		t.Error("a chart is not dir=ltr")
 	}
 	if !strings.Contains(body, `<input type="hidden" name="lang" value="he">`) {
@@ -935,5 +950,215 @@ func insertPlacementLevel(t *testing.T, store *db.Store, userID int64, at time.T
 	}
 	if err := store.FinishPlacement(context.Background(), run, at, level, "exhausted", `{"bands":[]}`); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// ---- INIT-023/SPEC-004: Progress opens on every skill at once --------------------
+
+// overviewLexemes adds n pointed words the overview fixture can hang evidence on.
+func overviewLexemes(t *testing.T, store *db.Store, n int) []int64 {
+	t.Helper()
+	ids := make([]int64, n)
+	for i := range ids {
+		ids[i] = addLexeme(t, store, fmt.Sprintf("מִלָּה%d", i+1), fmt.Sprintf("word-%d", i+1), fmt.Sprintf("mila%d", i+1), "m", "")
+	}
+	return ids
+}
+
+// seedKnownSkill makes a word known in one skill: three right answers, a card
+// reviewed yesterday with three Good reviews, and enough stability to stay known.
+func seedKnownSkill(t *testing.T, store *db.Store, clk clock.Clock, userID, lexemeID int64, skill string) {
+	t.Helper()
+	now := clk.Now()
+	rec := evidence.New(store, fsrs.New(store, clk), clk)
+	for i := 0; i < 3; i++ {
+		_, err := rec.Attempt(context.Background(), evidence.Attempt{
+			UserID: userID, LexemeID: lexemeID, Skill: skill, Activity: "test",
+			Source: evidence.SourceReview, Prompt: "p", Response: "r", Correct: true, SkipSchedule: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	last := now.AddDate(0, 0, -1)
+	id, err := store.InsertCard(context.Background(), db.Card{
+		UserID: userID, LexemeID: lexemeID, Skill: skill, State: fsrs.StateReview,
+		Due: now, Stability: 10, Difficulty: 5, Reps: 3, LastReview: last,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		at := last.Add(-time.Duration(2-i) * 24 * time.Hour)
+		insertReview(t, store, id, int(fsrs.Good), at)
+	}
+}
+
+// seedListenAnswerNoCard stores a listening answer without making a card, so the
+// skill stays at seen (answers with no card).
+func seedListenAnswerNoCard(t *testing.T, store *db.Store, clk clock.Clock, userID, lexemeID int64) {
+	t.Helper()
+	rec := evidence.New(store, fsrs.New(store, clk), clk)
+	_, err := rec.Attempt(context.Background(), evidence.Attempt{
+		UserID: userID, LexemeID: lexemeID, Skill: "listen", Activity: "listen_pick",
+		Source: evidence.SourceLesson, Prompt: "p", Response: "r", Correct: true, SkipSchedule: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// overviewApp is the learner-1 shaped fixture for SPEC-004: Read 11 known, Recall 2,
+// Listen 0 with 29 answered words and no listen cards, Spell 0.
+func overviewApp(t *testing.T) (*db.Store, learnerFix, clock.Clock, func(path string) string) {
+	t.Helper()
+	clk := fixedClock(progNow)
+	store, h := openShell(t, clk, nil, nil)
+	l := addLearner(t, store, "a@example.com", "sub-a", progNow)
+	ids := overviewLexemes(t, store, 29)
+	for _, id := range ids {
+		seedListenAnswerNoCard(t, store, clk, l.user.ID, id)
+	}
+	for i := 0; i < 11; i++ {
+		seedKnownSkill(t, store, clk, l.user.ID, ids[i], "read")
+	}
+	for i := 0; i < 2; i++ {
+		seedKnownSkill(t, store, clk, l.user.ID, ids[i], "recall")
+	}
+	seedProgressSnapshots(t, store, l.user.ID, 90, progEst)
+	get := func(path string) string { return getLearner(t, h, l, path) }
+	return store, l, clk, get
+}
+
+func overviewRow(t *testing.T, body, skill string) string {
+	t.Helper()
+	re := regexp.MustCompile(`(?s)<li class="pknow__skill" data-skill="` + regexp.QuoteMeta(skill) + `">.*?</li>`)
+	row := re.FindString(body)
+	if row == "" {
+		t.Fatalf("no overview row for %s", skill)
+	}
+	return row
+}
+
+func overviewKnown(t *testing.T, row string) int {
+	t.Helper()
+	re := regexp.MustCompile(`data-count="known"><bdi[^>]*>([0-9]+)</bdi>`)
+	m := re.FindStringSubmatch(row)
+	if m == nil {
+		t.Fatalf("no known count in row:\n%s", row)
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// ac-1: /progress shows Read 11, Recall 2, Listen 0, Spell 0 known in the overview.
+func TestProgressOverviewShowsKnownPerSkill(t *testing.T) {
+	_, _, _, get := overviewApp(t)
+	body := get("/progress")
+	if !strings.Contains(body, `data-skill=""`) || !strings.Contains(body, `class="pknow__skills"`) {
+		t.Fatal(" /progress did not open the overview")
+	}
+	want := map[string]int{"read": 11, "recall": 2, "spell": 0}
+	for skill, n := range want {
+		row := overviewRow(t, body, skill)
+		if got := overviewKnown(t, row); got != n {
+			t.Errorf("%s known = %d, want %d", skill, got, n)
+		}
+		if !strings.Contains(row, `href="/progress?skill=`+skill+`"`) {
+			t.Errorf("%s row does not link to its tab:\n%s", skill, row)
+		}
+	}
+	listen := overviewRow(t, body, "listen")
+	if strings.Contains(listen, `data-count="known"`) {
+		t.Errorf("listen overview shows a counts bar instead of the explanation:\n%s", listen)
+	}
+}
+
+// ac-2: Listen with answered words and no card shows the explanation, not a bar.
+func TestProgressOverviewListenNoCardExplanation(t *testing.T) {
+	_, _, _, get := overviewApp(t)
+	row := overviewRow(t, get("/progress"), "listen")
+	want := "Listening counts once you have a listening card. Lessons make one when you answer a listening question."
+	if !strings.Contains(row, want) {
+		t.Fatalf("listen row lacks the explanation:\n%s", row)
+	}
+	if strings.Contains(row, `class="pknow__skill-bar"`) || strings.Contains(row, `data-count=`) {
+		t.Fatalf("listen row still has a counts bar:\n%s", row)
+	}
+	if !strings.Contains(row, `href="/progress?skill=listen"`) {
+		t.Fatalf("listen row does not link to its tab:\n%s", row)
+	}
+}
+
+// ac-3: /progress?skill=read still renders the Read tab as today.
+func TestProgressSkillTabStillShowsSingleSkill(t *testing.T) {
+	store, l, clk, get := overviewApp(t)
+	sum := summaryOf(t, store, clk, l.user.ID)
+	ss := skillSummary(sum, "read")
+	body := get("/progress?skill=read")
+	if !strings.Contains(body, `data-skill="read"`) {
+		t.Fatal("skill=read did not open the Read tab")
+	}
+	if strings.Contains(body, `class="pknow__skills"`) {
+		t.Fatal("skill=read still shows the overview")
+	}
+	if !strings.Contains(body, "What you know · Reading") {
+		t.Fatal("the Read tab heading is missing")
+	}
+	if got := strings.Count(body, `<svg class="pc pc--bar"`); got != 1 {
+		t.Fatalf("%d state bars, want 1", got)
+	}
+	headline := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`)
+	if m := headline.FindStringSubmatch(body); m == nil || m[1] != fmt.Sprintf("%.0f", ss.EstimatedKnown) {
+		t.Errorf("headline %v, want %.0f", m, ss.EstimatedKnown)
+	}
+	form := regexp.MustCompile(`(?s)<form class="ptabs".*?</form>`).FindString(body)
+	if !regexp.MustCompile(`value="read" class="c-answer" data-state="selected" aria-pressed="true"`).MatchString(form) {
+		t.Errorf("Read tab is not pressed:\n%s", form)
+	}
+}
+
+// ac-4: overview numbers match get_learner_model (Summary) counts for the same fixture.
+func TestProgressOverviewMatchesLearnerModel(t *testing.T) {
+	store, l, clk, get := overviewApp(t)
+	sum := summaryOf(t, store, clk, l.user.ID)
+	body := get("/progress")
+	overall := sum.Words[learner.Known] + sum.Words[learner.Solid]
+	if m := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`).FindStringSubmatch(body); m == nil || m[1] != strconv.Itoa(overall) {
+		t.Errorf("overall known %v, want %d from Summary.Words", m, overall)
+	}
+	for _, ss := range sum.Skills {
+		row := overviewRow(t, body, ss.Skill)
+		known := ss.Counts[learner.Known] + ss.Counts[learner.Solid]
+		learning := ss.Counts[learner.Learning]
+		seen := ss.Counts[learner.Seen]
+		if ss.Skill == "listen" {
+			if !strings.Contains(row, "Listening counts once you have a listening card") {
+				t.Errorf("listen should show the no-card explanation when Summary has %d seen and %d known", seen, known)
+			}
+			if known != 0 || learning != 0 || seen != 29 {
+				t.Errorf("fixture listen counts known=%d learning=%d seen=%d, want 0/0/29", known, learning, seen)
+			}
+			continue
+		}
+		if got := overviewKnown(t, row); got != known {
+			t.Errorf("%s known on page = %d, Summary = %d", ss.Skill, got, known)
+		}
+		reLearn := regexp.MustCompile(`data-count="learning"><bdi[^>]*>([0-9]+)</bdi>`)
+		reSeen := regexp.MustCompile(`data-count="seen"><bdi[^>]*>([0-9]+)</bdi>`)
+		if m := reLearn.FindStringSubmatch(row); m == nil || m[1] != strconv.Itoa(learning) {
+			t.Errorf("%s learning on page = %v, Summary = %d", ss.Skill, m, learning)
+		}
+		if m := reSeen.FindStringSubmatch(row); m == nil || m[1] != strconv.Itoa(seen) {
+			t.Errorf("%s seen on page = %v, Summary = %d", ss.Skill, m, seen)
+		}
+	}
+	// The estimated-words chart uses the skill with the most known words (read = 11).
+	est := tableRows(section(t, body, "c-card pchart", `data-chart="est"`))
+	if len(est) != 90 || est[0][1] != fmt.Sprintf("%.0f", progEst(0, "read")) || est[89][1] != fmt.Sprintf("%.0f", progEst(89, "read")) {
+		t.Fatalf("overview estimate chart is not read's snapshots: first=%v last=%v", est[0], est[len(est)-1])
 	}
 }

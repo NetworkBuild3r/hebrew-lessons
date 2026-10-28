@@ -147,6 +147,7 @@ func TestReadOnlyTokenDeniesWrites(t *testing.T) {
 		{name: "record_mistakes", args: map[string]any{"mistakes": []any{}}},
 		{name: "upsert_common_mistakes", args: map[string]any{"mistakes": []any{}}},
 		{name: "upsert_verb_forms", args: map[string]any{"forms": []any{}}},
+		{name: "upsert_noun_forms", args: map[string]any{"forms": []any{}}},
 		{name: "upsert_verse_notes", args: map[string]any{"chapter": 1, "verse": 1}},
 	}
 	for _, write := range writes {

@@ -18,7 +18,13 @@ templ WordsPage(v WordsView) {
 					for _, w := range v.Words {
 						<li>
 							<p>
-								<bdi class="he" lang="he" dir="rtl">{ w.Text }</bdi>
+								if w.WordHref != "" {
+									<a href={ templ.SafeURL(w.WordHref) }>
+										<bdi class="he" lang="he" dir="rtl">{ w.Text }</bdi>
+									</a>
+								} else {
+									<bdi class="he" lang="he" dir="rtl">{ w.Text }</bdi>
+								}
 								if w.Gloss != "" {
 									<span class="learn__summary" lang="en">{ w.Gloss }</span>
 								}
@@ -47,7 +53,13 @@ templ VerbsPage(v VerbsView) {
 			} else {
 				for _, verb := range v.Verbs {
 					<section class="c-card">
-						<h2><bdi class="he" lang="he" dir="rtl">{ verb.Lemma }</bdi></h2>
+						<h2>
+							if verb.Href != "" {
+								<a href={ templ.SafeURL(verb.Href) }><bdi class="he" lang="he" dir="rtl">{ verb.Lemma }</bdi></a>
+							} else {
+								<bdi class="he" lang="he" dir="rtl">{ verb.Lemma }</bdi>
+							}
+						</h2>
 						<div class="stuff-scroll">
 							<table>
 								<tbody>

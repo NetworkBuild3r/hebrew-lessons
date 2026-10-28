@@ -13,7 +13,9 @@ type StuffWord struct {
 	Gloss string
 	State string
 	Root  string
-	Href  string
+	Href  string // Roots page when the root is visible.
+	// WordHref is /words/{id} (INIT-023/SPEC-007).
+	WordHref string
 }
 
 // WordsView is the word bank.
@@ -39,6 +41,7 @@ type VerbCell struct {
 // VerbTable is one verb the learner knows a form of.
 type VerbTable struct {
 	Lemma string
+	Href  string // /words/{id} for the lemma (INIT-023/SPEC-007).
 	Rows  []VerbCell
 }
 

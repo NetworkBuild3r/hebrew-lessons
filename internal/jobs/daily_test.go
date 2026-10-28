@@ -1,9 +1,11 @@
 package jobs
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -732,5 +734,82 @@ func TestLearnersAreIsolated(t *testing.T) {
 	}
 	if n := len(e.events(other)); n != 0 {
 		t.Errorf("other learner events = %d, want 0", n)
+	}
+}
+
+// INIT-023/SPEC-003 ac-5: fixture mirroring אֲנִי — listen answers, no card;
+// after the daily replay the listen card exists and listen state is learning
+// or better. The production copy was not run (gate_actions / ac-5 manual check).
+func TestDailyReplayAniFixtureIsLearningOrBetter(t *testing.T) {
+	e := newEnv(t)
+	res, err := e.store.ExecContext(context.Background(),
+		`INSERT INTO lexemes (text_nfc, gloss_en) VALUES (?, ?)`, "אֲנִי", "I")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.attempts(e.user, id, fsrs.SkillListen, "RRR")
+	if n := e.count(`SELECT COUNT(*) FROM cards WHERE skill = 'listen'`); n != 0 {
+		t.Fatal("fixture already had a listen card")
+	}
+	e.run(day0)
+	if n := e.count(`SELECT COUNT(*) FROM cards WHERE user_id = ? AND lexeme_id = ? AND skill = 'listen'`, e.user, id); n != 1 {
+		t.Fatal("אֲנִי has no listen card after replay")
+	}
+	word, err := learner.New(e.store, e.clk).Word(context.Background(), e.user, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var listen learner.State
+	for _, sk := range word.Skills {
+		if sk.Skill == fsrs.SkillListen {
+			listen = sk.State
+			break
+		}
+	}
+	switch listen {
+	case learner.Learning, learner.Known, learner.Solid:
+	default:
+		t.Fatalf("אֲנִי listen state = %s, want learning or better", listen)
+	}
+}
+
+// INIT-023/SPEC-003: the daily job replays past listen answers once, records
+// replay.listen.v1, and a second run writes no card rows.
+func TestDailyJobReplaysListenOnce(t *testing.T) {
+	e := newEnv(t)
+	var logs bytes.Buffer
+	e.daily = e.newDaily("job-a", WithLogger(slog.New(slog.NewTextHandler(&logs, nil))))
+	id := e.lexeme()
+	e.attempts(e.user, id, fsrs.SkillListen, "RR")
+	if n := e.count(`SELECT COUNT(*) FROM cards WHERE skill = 'listen'`); n != 0 {
+		t.Fatal("fixture already had a listen card")
+	}
+
+	e.run(day0)
+	if n := e.count(`SELECT COUNT(*) FROM cards WHERE user_id = ? AND lexeme_id = ? AND skill = 'listen'`, e.user, id); n != 1 {
+		t.Fatalf("listen cards after first run = %d, want 1", n)
+	}
+	val, ok, err := e.store.JobState(context.Background(), "replay.listen.v1")
+	if err != nil || !ok || val != "1" {
+		t.Fatalf("job_state replay.listen.v1 = %q, ok=%v, err=%v; want \"1\"", val, ok, err)
+	}
+	if !strings.Contains(logs.String(), "listen replay dry-run") {
+		t.Fatalf("expected dry-run log, got:\n%s", logs.String())
+	}
+
+	cards := e.count(`SELECT COUNT(*) FROM cards`)
+	reviewLogs := e.count(`SELECT COUNT(*) FROM review_log`)
+	logs.Reset()
+	e.clk.advance(day)
+	e.run(e.daily.Today())
+	if e.count(`SELECT COUNT(*) FROM cards`) != cards || e.count(`SELECT COUNT(*) FROM review_log`) != reviewLogs {
+		t.Fatal("second daily run changed cards or review_log")
+	}
+	if strings.Contains(logs.String(), "listen replay dry-run") {
+		t.Fatal("second run re-ran the listen replay")
 	}
 }

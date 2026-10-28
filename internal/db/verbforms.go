@@ -23,6 +23,7 @@ type VerbFormInput struct {
 }
 
 // VerbForm is one stored cell, in tense then person order.
+// AudioID is the clip for this form's text when one exists (INIT-023/SPEC-005).
 type VerbForm struct {
 	ID           int64
 	LemmaID      int64
@@ -33,6 +34,7 @@ type VerbForm struct {
 	FormHe       string
 	Translit     string
 	FormLexemeID int64
+	AudioID      string
 }
 
 // UpsertVerbForms writes the batch in one transaction. If any lemma is missing
@@ -108,26 +110,32 @@ func (s *Store) UpsertVerbForms(ctx context.Context, rows []VerbFormInput) error
 }
 
 // VerbFormsFor returns one lemma's forms in tense order, then person order.
+// AudioID comes from the form lexeme's audio_id, or from audio_assets by form
+// text (MAX(id), same as AudioIDs), or empty when neither has a clip.
+// INIT-023/SPEC-005
 func (s *Store) VerbFormsFor(ctx context.Context, lemmaID int64) ([]VerbForm, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT id, lemma_lexeme_id, tense, person, number, gender, form_he, form_translit, COALESCE(form_lexeme_id, 0)
-		FROM verb_forms
-		WHERE lemma_lexeme_id = ?
-		ORDER BY CASE tense
+		SELECT vf.id, vf.lemma_lexeme_id, vf.tense, vf.person, vf.number, vf.gender, vf.form_he, vf.form_translit,
+			COALESCE(vf.form_lexeme_id, 0),
+			COALESCE(fl.audio_id, (SELECT MAX(a.id) FROM audio_assets AS a WHERE a.text_nfc = vf.form_he), '')
+		FROM verb_forms AS vf
+		LEFT JOIN lexemes AS fl ON fl.id = vf.form_lexeme_id
+		WHERE vf.lemma_lexeme_id = ?
+		ORDER BY CASE vf.tense
 			WHEN 'present' THEN 1
 			WHEN 'past' THEN 2
 			WHEN 'future' THEN 3
 			WHEN 'imperative' THEN 4
 			WHEN 'infinitive' THEN 5
 			ELSE 6 END,
-			CASE person WHEN '1' THEN 1 WHEN '2' THEN 2 WHEN '3' THEN 3 ELSE 4 END,
-			CASE number WHEN 'sg' THEN 1 WHEN 'pl' THEN 2 ELSE 3 END,
-			CASE gender WHEN 'm' THEN 1 WHEN 'f' THEN 2 ELSE 3 END,
-			id`, lemmaID)
+			CASE vf.person WHEN '1' THEN 1 WHEN '2' THEN 2 WHEN '3' THEN 3 ELSE 4 END,
+			CASE vf.number WHEN 'sg' THEN 1 WHEN 'pl' THEN 2 ELSE 3 END,
+			CASE vf.gender WHEN 'm' THEN 1 WHEN 'f' THEN 2 ELSE 3 END,
+			vf.id`, lemmaID)
 	if err != nil {
 		return nil, fmt.Errorf("db: verb forms: %w", err)
 	}
@@ -135,7 +143,7 @@ func (s *Store) VerbFormsFor(ctx context.Context, lemmaID int64) ([]VerbForm, er
 	var out []VerbForm
 	for rows.Next() {
 		var row VerbForm
-		if err := rows.Scan(&row.ID, &row.LemmaID, &row.Tense, &row.Person, &row.Number, &row.Gender, &row.FormHe, &row.Translit, &row.FormLexemeID); err != nil {
+		if err := rows.Scan(&row.ID, &row.LemmaID, &row.Tense, &row.Person, &row.Number, &row.Gender, &row.FormHe, &row.Translit, &row.FormLexemeID, &row.AudioID); err != nil {
 			return nil, fmt.Errorf("db: verb forms: %w", err)
 		}
 		out = append(out, row)
@@ -157,18 +165,21 @@ func (s *Store) VerbFormsAll(ctx context.Context) ([]VerbForm, error) {
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT id, lemma_lexeme_id, tense, person, number, gender, form_he, form_translit, COALESCE(form_lexeme_id, 0)
-		FROM verb_forms
-		ORDER BY lemma_lexeme_id,
-			CASE tense
+		SELECT vf.id, vf.lemma_lexeme_id, vf.tense, vf.person, vf.number, vf.gender, vf.form_he, vf.form_translit,
+			COALESCE(vf.form_lexeme_id, 0),
+			COALESCE(fl.audio_id, (SELECT MAX(a.id) FROM audio_assets AS a WHERE a.text_nfc = vf.form_he), '')
+		FROM verb_forms AS vf
+		LEFT JOIN lexemes AS fl ON fl.id = vf.form_lexeme_id
+		ORDER BY vf.lemma_lexeme_id,
+			CASE vf.tense
 				WHEN 'present' THEN 1
 				WHEN 'past' THEN 2
 				WHEN 'future' THEN 3
 				WHEN 'imperative' THEN 4
 				WHEN 'infinitive' THEN 5
 				ELSE 6 END,
-			CASE person WHEN '1' THEN 1 WHEN '2' THEN 2 WHEN '3' THEN 3 ELSE 4 END,
-			id`)
+			CASE vf.person WHEN '1' THEN 1 WHEN '2' THEN 2 WHEN '3' THEN 3 ELSE 4 END,
+			vf.id`)
 	if err != nil {
 		return nil, fmt.Errorf("db: verb forms: %w", err)
 	}
@@ -176,7 +187,7 @@ func (s *Store) VerbFormsAll(ctx context.Context) ([]VerbForm, error) {
 	var out []VerbForm
 	for rows.Next() {
 		var row VerbForm
-		if err := rows.Scan(&row.ID, &row.LemmaID, &row.Tense, &row.Person, &row.Number, &row.Gender, &row.FormHe, &row.Translit, &row.FormLexemeID); err != nil {
+		if err := rows.Scan(&row.ID, &row.LemmaID, &row.Tense, &row.Person, &row.Number, &row.Gender, &row.FormHe, &row.Translit, &row.FormLexemeID, &row.AudioID); err != nil {
 			return nil, fmt.Errorf("db: verb forms: %w", err)
 		}
 		out = append(out, row)

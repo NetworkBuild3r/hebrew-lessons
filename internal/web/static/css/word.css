@@ -1,0 +1,222 @@
+/* Word page (INIT-023/SPEC-007, SPEC-008): lemma header, verb/noun/adjective grids,
+   lesson lines. The page itself never scrolls sideways; only .word-page__scroll may. */
+
+.word-page {
+  display: grid;
+  gap: var(--space-5);
+  align-content: start;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow-x: hidden;
+}
+
+.word-page__head {
+  display: grid;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+.word-page__lemma {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+.word-page__he {
+  margin: 0;
+  font-size: var(--fs-h1);
+  line-height: var(--lh-he-display);
+  overflow-wrap: anywhere;
+}
+
+.word-page__tr {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-body);
+}
+
+.word-page__gl {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+.word-page__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.word-page__root {
+  text-decoration: none;
+}
+
+.word-page__skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+.word-page__skill-name {
+  font-weight: 700;
+  color: var(--text);
+  text-transform: capitalize;
+}
+
+.word-page__tense {
+  display: grid;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+.word-page__tense h2 {
+  margin: 0;
+  font-size: var(--fs-h3);
+}
+
+/* Grid scrolls inside its own box; the page does not. */
+.word-page__scroll {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.word-page__present,
+.word-page__persons,
+.word-page__noun-forms,
+.word-page__noun-poss {
+  border-collapse: collapse;
+  inline-size: max-content;
+  min-inline-size: 100%;
+}
+
+.word-page__present th,
+.word-page__present td,
+.word-page__persons th,
+.word-page__persons td,
+.word-page__noun-forms th,
+.word-page__noun-forms td,
+.word-page__noun-poss th,
+.word-page__noun-poss td {
+  padding: var(--space-2) var(--space-3);
+  text-align: start;
+  vertical-align: top;
+  border-block-end: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.word-page__present th,
+.word-page__noun-forms thead th,
+.word-page__noun-poss thead th {
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.word-page__persons th,
+.word-page__noun-forms tbody th,
+.word-page__noun-poss tbody th {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.word-page__adj-examples ul {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.word-page__adj-gender {
+  font-size: var(--fs-small);
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.word-page__forms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.word-page__cell {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+  min-inline-size: 0;
+}
+
+.word-page__form-he {
+  font-size: var(--fs-h3);
+  line-height: var(--lh-he-body);
+}
+
+.word-page__form-tr {
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+.word-page__known {
+  font-size: var(--fs-small);
+  color: var(--muted);
+}
+
+.word-page__cell[data-known="true"] {
+  position: relative;
+}
+
+.word-page__cell[data-known="true"]::before {
+  content: "";
+  inline-size: 0.55rem;
+  block-size: 0.55rem;
+  border-radius: 50%;
+  background: var(--text);
+  justify-self: start;
+}
+
+.word-page__lessons ul {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.word-page__lesson-he {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-he-body);
+}
+
+.word-page__lesson-he mark {
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+  color: inherit;
+  padding-inline: 0.1em;
+  border-radius: var(--radius-sm, 0.2rem);
+}
+
+.word-page__lesson-en {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+@media (max-width: 360px) {
+  .word-page {
+    overflow-x: hidden;
+  }
+  .word-page__he {
+    font-size: var(--fs-h2);
+  }
+}

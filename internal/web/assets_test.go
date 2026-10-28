@@ -517,6 +517,12 @@ var themeVars = []string{"--lamp", "--ink", "--surface-soft", "--lamp-ink"}
 // properties, so it keeps its own colours.
 var legacyIllustrations = map[string]string{
 	"hero-skyline-night.svg": "sign-in <img>; an image cannot read page tokens",
+	"cover-arches.svg":       "Learn card <img> from the Guides board; an image cannot read page tokens",
+	"cover-cactus.svg":       "Learn card <img> from the Guides board; an image cannot read page tokens",
+	"cover-pomegranate.svg":  "Learn card <img> from the Guides board; an image cannot read page tokens",
+	"cover-waves.svg":        "Learn card <img> from the Guides board; an image cannot read page tokens",
+	"cover-hills.svg":        "Learn card <img> from the Guides board; an image cannot read page tokens",
+	"cover-night.svg":        "Learn card <img> from the Guides board; an image cannot read page tokens",
 }
 
 var varFillRe = regexp.MustCompile(`^var\((--[a-z-]+)\)$`)
@@ -660,7 +666,23 @@ func TestIllustrationAllowlistIsReal(t *testing.T) {
 			}
 		}
 		if !used {
-			t.Errorf("%s is no longer used by a template; delete the file and the allowlist entry", f)
+			// A cover can be chosen in Go and passed into the template as src.
+			gos, err := filepath.Glob("*.go")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, p := range gos {
+				if strings.HasSuffix(p, "_test.go") {
+					continue
+				}
+				if strings.Contains(readFile(t, p), "/static/illustrations/"+f) {
+					used = true
+					break
+				}
+			}
+		}
+		if !used {
+			t.Errorf("%s is no longer used; delete the file and the allowlist entry", f)
 		}
 	}
 }

@@ -96,23 +96,24 @@ await page.locator('button[name="answer"][value="continue"]').click();
 await page.waitForSelector(".choices .c-answer");
 await page.waitForSelector(".spotlight");
 await page.waitForTimeout(500);
-const rw = await page.locator(".spotlight .wcard__he").first().boundingBox();
+const rw = await page.locator(".spotlight .wcard__front .wcard__he").first().boundingBox();
 const rbox = await page.locator(".spotlight").boundingBox();
-const rfs = await page.locator(".spotlight .wcard__he").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-check("the recall word is the biggest Hebrew on a prompt", rfs >= 64, rfs);
-check("the recall word is centered", rw && rbox && Math.abs(center(rw) - center(rbox)) <= 4, JSON.stringify({ rw, rbox }));
-const rplay = await page.locator(".spotlight .orb").first().boundingBox();
-check("the recall play control is below the word", rplay && rw && rplay.y >= rw.y + rw.height - 2, JSON.stringify({ rplay, rw }));
+const rfs = await page.locator(".spotlight .wcard__front .wcard__he").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+check("the recall tile is pointed Hebrew", rfs >= 24 && rfs < 56, rfs);
+check("the recall tile is centered", rw && rbox && Math.abs(center(rw) - center(rbox)) <= 8, JSON.stringify({ rw, rbox }));
 await shot("recall");
 
 // ---- The recall word is a card: tap it before answering and it shows how the word sounds, never what it means.
 await page.locator(".spotlight details.wcard summary").first().click();
 await page.waitForTimeout(400);
 const openBefore = await page.locator(".spotlight details.wcard[open]").count();
-const backBefore = (await page.locator(".spotlight .wcard__back").first().innerText()).trim();
+const soundBefore = (await page.locator(".spotlight .wcard__detail").first().innerText()).trim();
+const still = await page.locator(".spotlight details.wcard[open] .wcard__front").evaluate((el) => getComputedStyle(el).opacity);
 check("the recall card opens before answering", openBefore === 1, openBefore);
-check("the card shows the sound before answering", (await page.locator(".spotlight .wcard__sound").count()) === 1 && backBefore.length > 0, backBefore);
-check("the card does not give the meaning away", (await page.locator(".spotlight .wcard__gl").count()) === 0, backBefore);
+check("the word stays visible while it is open", still === "1", still);
+check("the card shows the sound before answering", (await page.locator(".spotlight .wcard__sound").count()) === 1 && soundBefore.length > 0, soundBefore);
+check("the card does not give the meaning away", (await page.locator(".spotlight .wcard__gl").count()) === 0, soundBefore);
+check("Listen is inside the open word", (await page.locator(".spotlight .wcard__detail .wcard__listen-label").innerText()).trim() === "Listen");
 await shot("recall-open");
 
 // ---- Answer: the same card is still tappable and now shows the meaning.

@@ -8,7 +8,7 @@ templ IsaiahPage(v IsaiahView) {
 				<header class="isaiah-top">
 					<h1 lang="en">{ v.Verse.Heading }</h1>
 					if v.Verse.Audio != "" {
-						@orbButton("orb", "Play this verse", v.Verse.Audio, "")
+						@clip("verse-clip", v.Verse.Audio, "Play this verse", false)
 					}
 				</header>
 				<p class="isaiah-he" lang="he" dir="rtl">{ v.Verse.He }</p>

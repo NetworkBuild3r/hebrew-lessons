@@ -126,7 +126,7 @@ func TestGenerateAudioHasNoVoiceInput(t *testing.T) {
 				t.Fatalf("the input schema has a voice field %s: %s", bad, raw)
 			}
 		}
-		for _, need := range []string{`"lines"`, `"speaker"`, `"texts"`, `"unitId"`} {
+		for _, need := range []string{`"lines"`, `"speaker"`, `"texts"`, `"unitId"`, `"lemmaId"`} {
 			if !strings.Contains(raw, need) {
 				t.Fatalf("the input schema is missing %s: %s", need, raw)
 			}
@@ -138,7 +138,7 @@ func TestGenerateAudioNeedsSomethingToSpeak(t *testing.T) {
 	rec := &recAudio{}
 	session := connectMCP(t, Handler(Options{AuthToken: testToken, Audio: rec}), testToken)
 	msg := callErr(t, session, "generate_audio", map[string]any{})
-	if !strings.Contains(msg, "texts, lines, or a unitId") || rec.n() != 0 {
+	if !strings.Contains(msg, "texts, lines, a unitId, or a lemmaId") || rec.n() != 0 {
 		t.Fatalf("empty call: %q (%d adapter calls)", msg, rec.n())
 	}
 }

@@ -329,7 +329,11 @@ func (s *server) applyCourseLesson(r *http.Request, home *views.Home) error {
 	home.LessonTitle = lesson.Title
 	home.LessonGloss = gloss
 	home.LessonHref = lessonPath(lesson.UnitID, lesson.LessonIx)
-	home.UI.Situation = lesson.Situation
+	lex, err := s.store.LexemesByText(r.Context(), activityTexts(lesson))
+	if err != nil {
+		return err
+	}
+	home.UI.Situation = spellHebrew(lesson.Situation, lex)
 	home.Words = chipsFor(lesson.NewWords)
 	// A lesson the learner has answered something in is one to continue, not to start.
 	run, started, err := s.store.InProgressLessonRun(r.Context(), user.ID, lesson.UnitID, lesson.LessonIx)

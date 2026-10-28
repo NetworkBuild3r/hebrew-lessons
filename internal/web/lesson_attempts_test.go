@@ -112,7 +112,7 @@ func TestLessonChecksWriteAttempts(t *testing.T) {
 		t.Fatalf("a repeated post wrote an attempt: %d", attempts())
 	}
 	post("continue")
-	post(itoa(ids[hello])) // listen_pick: right
+	post(itoa(ids[hello])) // listen_pick: right — INIT-023/SPEC-002 schedules listen
 	post("continue")
 	post(itoa(ids[morning])) // produce: wrong pick
 	post("continue")
@@ -123,13 +123,17 @@ func TestLessonChecksWriteAttempts(t *testing.T) {
 		t.Fatalf("attempts after four checked steps = %d, want 4", attempts())
 	}
 
-	// A meaning answer schedules that word. The other checks wait, and finishing
-	// still gives every new word a read card and a recall card.
-	if scalar(t, dbPath, `SELECT COUNT(*) FROM cards`) != 1 || scalar(t, dbPath, `SELECT COUNT(*) FROM review_log`) != 1 {
-		t.Fatal("only the meaning answer should have scheduled a card")
+	// A meaning answer schedules the read card. A right listen_pick schedules
+	// the listen card. Produce and cloze wait. Finishing still gives every new
+	// word a read card and a recall card (no listen here: these words have no clip).
+	if scalar(t, dbPath, `SELECT COUNT(*) FROM cards`) != 2 || scalar(t, dbPath, `SELECT COUNT(*) FROM review_log`) != 2 {
+		t.Fatal("only the meaning and listening answers should have scheduled cards")
+	}
+	if scalar(t, dbPath, `SELECT COUNT(*) FROM cards WHERE skill = 'listen'`) != 1 {
+		t.Fatal("a right listen_pick did not leave a listen card")
 	}
 	post("continue") // the story step ends the lesson
-	if scalar(t, dbPath, `SELECT COUNT(*) FROM cards WHERE user_id = ?`, brian.ID) != 4 {
+	if scalar(t, dbPath, `SELECT COUNT(*) FROM cards WHERE user_id = ?`, brian.ID) != 5 {
 		t.Fatal("finishing the lesson did not enqueue a read and a recall card for each new word")
 	}
 	if attempts() != 4 {

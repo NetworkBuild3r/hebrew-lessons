@@ -5,7 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 )
 
 func TestNoHistoryAccuracyIsTargetSuccess(t *testing.T) {
@@ -183,6 +185,39 @@ func TestSeedOrdersEqualDueTimes(t *testing.T) {
 	}
 	if len(a) != SessionCap {
 		t.Fatalf("len = %d", len(a))
+	}
+}
+
+// INIT-023/SPEC-002 ac-4: a due listen card is asked as an audio question and
+// graded as listen, never as a read face. mix.go already accepts listen; this
+// pins that annotate keeps AskSkill on listen (listen_pick), not read.
+func TestMixAsksDueListenCardAsAudio(t *testing.T) {
+	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+	c := Candidate{
+		ID: 7, LexemeID: 7, Skill: fsrs.SkillListen,
+		Due: now.Add(-time.Hour), HasRating: true, Latest: int(fsrs.Again),
+		Skills: []activity.SkillView{
+			{Skill: fsrs.SkillListen, State: learner.Learning, Accuracy: 0.25, Attempts: 8, HasCard: true},
+			{Skill: fsrs.SkillRead, State: learner.Known, Accuracy: 0.95, Attempts: 8, HasCard: true},
+			{Skill: fsrs.SkillRecall, State: learner.Known, Accuracy: 0.9, Attempts: 8, HasCard: true},
+			{Skill: fsrs.SkillSpell, State: learner.Known, Accuracy: 0.85, Attempts: 8, HasCard: true},
+		},
+		Facts:   activity.Facts{HasGloss: true, HasAudio: true, GlossedOthers: 40, VoicedOthers: 40},
+		Exposed: true,
+	}
+	got := mix([]Candidate{c}, TargetSuccess, now, 1)
+	if len(got) != 1 {
+		t.Fatalf("queue = %+v", got)
+	}
+	ref := got[0]
+	if ref.CardID != 7 || ref.Skill != fsrs.SkillListen {
+		t.Fatalf("ref = %+v, want the due listen card", ref)
+	}
+	if ref.Activity != activity.ListenPick || ref.AskSkill != fsrs.SkillListen {
+		t.Fatalf("ref = %+v, want listen_pick graded as listen", ref)
+	}
+	if ref.Activity == activity.ReadPick || ref.AskSkill == fsrs.SkillRead {
+		t.Fatalf("a listen card fell back to a read face: %+v", ref)
 	}
 }
 

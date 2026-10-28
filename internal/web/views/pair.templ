@@ -44,10 +44,25 @@ templ MixedEN(text string) {
 	}
 }
 
-// Situation is the English line under a Hebrew lesson title.
+// LessonName is a unit title. An English title stays left to right.
+// A title that contains Hebrew isolates each Hebrew run.
+templ LessonName(text string) {
+	if HasHebrew(text) {
+		@MixedEN(text)
+	} else {
+		@E(text)
+	}
+}
+
+// Situation is the English line under a lesson title.
 // The block itself is LTR so the sentence's punctuation stays at the end.
+// A Hebrew word inside the sentence sits in its own bdi.
 templ Situation(text string) {
 	<p class="situation" lang="en" dir="ltr">
-		@E(text)
+		if HasHebrew(text) {
+			@MixedEN(text)
+		} else {
+			@E(text)
+		}
 	</p>
 }

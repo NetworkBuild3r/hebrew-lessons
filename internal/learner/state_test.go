@@ -66,6 +66,8 @@ func TestSkillStateTable(t *testing.T) {
 
 		// learning: a card younger than its third successful review
 		{"2 successes is learning", withCard(history("RRR"), 2, 10, 0.95), Learning},
+		// INIT-023/SPEC-002 ac-5: listen answers plus a young listen card is learning.
+		{"listen answers plus a young listen card is learning", withCard(history("RR"), 1, 3, 0.9), Learning},
 		{"new card, no reviews", withCard(Evidence{}, 0, 0, 0), Learning},
 		{"3 successes but recall chance under known is learning", withCard(history("RRR"), 3, 10, 0.80), Learning},
 		{"3 successes, fine recall, but only 2 outcomes is learning", withCard(history("RR"), 3, 10, 0.95), Learning},

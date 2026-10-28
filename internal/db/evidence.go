@@ -158,6 +158,17 @@ func (s *Store) WriteAttempt(ctx context.Context, w AttemptWrite) (AttemptResult
 // recent correct attempts for one activity, newest first, at most limit.
 // An attempt with a latency of 0 was not timed and is left out.
 func (s *Store) CorrectLatencies(ctx context.Context, userID int64, activity string, limit int) ([]int64, error) {
+	return s.correctLatencies(ctx, userID, activity, 0, time.Time{}, limit)
+}
+
+// CorrectLatenciesBefore is CorrectLatencies limited to attempts strictly
+// before beforeID at beforeAt. INIT-023/SPEC-003 uses it when replaying a
+// stored attempt so the median matches what Attempt saw before that row.
+func (s *Store) CorrectLatenciesBefore(ctx context.Context, userID int64, activity string, beforeID int64, beforeAt time.Time, limit int) ([]int64, error) {
+	return s.correctLatencies(ctx, userID, activity, beforeID, beforeAt, limit)
+}
+
+func (s *Store) correctLatencies(ctx context.Context, userID int64, activity string, beforeID int64, beforeAt time.Time, limit int) ([]int64, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
@@ -165,12 +176,24 @@ func (s *Store) CorrectLatencies(ctx context.Context, userID int64, activity str
 	if err != nil {
 		return nil, err
 	}
-	rows, err := conn.QueryContext(ctx, `
-		SELECT latency_ms
-		FROM attempts
-		WHERE user_id = ? AND activity = ? AND correct = 1 AND latency_ms > 0
-		ORDER BY created_at DESC, id DESC
-		LIMIT ?`, userID, activity, limit)
+	var rows *sql.Rows
+	if beforeID > 0 {
+		at := FormatTime(beforeAt)
+		rows, err = conn.QueryContext(ctx, `
+			SELECT latency_ms
+			FROM attempts
+			WHERE user_id = ? AND activity = ? AND correct = 1 AND latency_ms > 0
+			  AND (created_at < ? OR (created_at = ? AND id < ?))
+			ORDER BY created_at DESC, id DESC
+			LIMIT ?`, userID, activity, at, at, beforeID, limit)
+	} else {
+		rows, err = conn.QueryContext(ctx, `
+			SELECT latency_ms
+			FROM attempts
+			WHERE user_id = ? AND activity = ? AND correct = 1 AND latency_ms > 0
+			ORDER BY created_at DESC, id DESC
+			LIMIT ?`, userID, activity, limit)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("db: correct latencies: %w", err)
 	}
@@ -189,18 +212,124 @@ func (s *Store) CorrectLatencies(ctx context.Context, userID int64, activity str
 	return out, nil
 }
 
-// ListAttempts returns the learner's attempts for one lexeme, oldest first.
-func (s *Store) ListAttempts(ctx context.Context, userID, lexemeID int64) ([]Attempt, error) {
+// LexemeSkill is one learner and one word, used when scanning evidence by skill.
+type LexemeSkill struct {
+	UserID   int64
+	LexemeID int64
+}
+
+// ListenReplayTargets returns every learner and word that has listen attempts
+// and no listen card. INIT-023/SPEC-003 replays those answers into cards once.
+func (s *Store) ListenReplayTargets(ctx context.Context) ([]LexemeSkill, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT id, user_id, lexeme_id, skill, activity, source, unit_id, prompt, response,
-			correct, dont_know, hint_used, latency_ms, created_at
-		FROM attempts
-		WHERE user_id = ? AND lexeme_id = ?
-		ORDER BY id`, userID, lexemeID)
+		SELECT DISTINCT a.user_id, a.lexeme_id
+		FROM attempts AS a
+		WHERE a.skill = 'listen'
+		  AND NOT EXISTS (
+		    SELECT 1 FROM cards AS c
+		    WHERE c.user_id = a.user_id AND c.lexeme_id = a.lexeme_id AND c.skill = 'listen'
+		  )
+		ORDER BY a.user_id, a.lexeme_id`)
+	if err != nil {
+		return nil, fmt.Errorf("db: listen replay targets: %w", err)
+	}
+	defer rows.Close()
+	var out []LexemeSkill
+	for rows.Next() {
+		var t LexemeSkill
+		if err := rows.Scan(&t.UserID, &t.LexemeID); err != nil {
+			return nil, fmt.Errorf("db: listen replay targets: %w", err)
+		}
+		out = append(out, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: listen replay targets: %w", err)
+	}
+	return out, nil
+}
+
+// WriteReplayedCard inserts a card and its review_log rows in one transaction.
+// INIT-023/SPEC-003: it writes nothing when a card for that user, lexeme, and
+// skill already exists, so a second run leaves an existing listen card alone.
+func (s *Store) WriteReplayedCard(ctx context.Context, card Card, logs []ReviewLog) (bool, error) {
+	if card.UserID == 0 || card.LexemeID == 0 || card.Skill == "" {
+		return false, errors.New("db: replayed card needs a learner, lexeme, and skill")
+	}
+	if len(logs) == 0 {
+		return false, nil
+	}
+	conn, err := s.connOrErr()
+	if err != nil {
+		return false, err
+	}
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("db: begin replayed card: %w", err)
+	}
+	defer tx.Rollback()
+
+	prev, err := cardTx(ctx, tx, card.UserID, card.LexemeID, card.Skill)
+	if err != nil {
+		return false, err
+	}
+	if prev != nil {
+		return false, nil
+	}
+	id, err := insertCardTx(ctx, tx, card)
+	if err != nil {
+		return false, err
+	}
+	for _, log := range logs {
+		log.CardID = id
+		if err := insertReviewTx(ctx, tx, log); err != nil {
+			return false, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("db: commit replayed card: %w", err)
+	}
+	return true, nil
+}
+
+// ListAttempts returns the learner's attempts for one lexeme, oldest first.
+func (s *Store) ListAttempts(ctx context.Context, userID, lexemeID int64) ([]Attempt, error) {
+	return s.listAttempts(ctx, userID, lexemeID, "")
+}
+
+// ListAttemptsBySkill returns the learner's attempts for one lexeme and skill, oldest first.
+// INIT-023/SPEC-003 reads listen attempts this way when replaying a word into a card.
+func (s *Store) ListAttemptsBySkill(ctx context.Context, userID, lexemeID int64, skill string) ([]Attempt, error) {
+	if skill == "" {
+		return nil, errors.New("db: list attempts by skill needs a skill")
+	}
+	return s.listAttempts(ctx, userID, lexemeID, skill)
+}
+
+func (s *Store) listAttempts(ctx context.Context, userID, lexemeID int64, skill string) ([]Attempt, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	var rows *sql.Rows
+	if skill == "" {
+		rows, err = conn.QueryContext(ctx, `
+			SELECT id, user_id, lexeme_id, skill, activity, source, unit_id, prompt, response,
+				correct, dont_know, hint_used, latency_ms, created_at
+			FROM attempts
+			WHERE user_id = ? AND lexeme_id = ?
+			ORDER BY id`, userID, lexemeID)
+	} else {
+		rows, err = conn.QueryContext(ctx, `
+			SELECT id, user_id, lexeme_id, skill, activity, source, unit_id, prompt, response,
+				correct, dont_know, hint_used, latency_ms, created_at
+			FROM attempts
+			WHERE user_id = ? AND lexeme_id = ? AND skill = ?
+			ORDER BY id`, userID, lexemeID, skill)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("db: list attempts: %w", err)
 	}

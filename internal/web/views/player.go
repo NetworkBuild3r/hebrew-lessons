@@ -1,8 +1,13 @@
 package views
 
 import (
+	"context"
+	"html"
+	"io"
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/a-h/templ"
 )
@@ -160,7 +165,11 @@ func teachLine(a Activity) bool {
 	return a.Dialogue == nil && hasFlipWords(a.Words)
 }
 
-var glossNoteRE = regexp.MustCompile(`^(.*\S)\s*\(([^()]*?)\s*\bof\s+([\x{0590}-\x{05FF}][\x{0590}-\x{05FF}\s]*)\)\s*$`)
+var (
+	glossNoteRE  = regexp.MustCompile(`^(.*\S)\s*\(([^()]*?)\s*\bof\s+([\x{0590}-\x{05FF}][\x{0590}-\x{05FF}\s]*)\)\s*$`)
+	glossParenRE = regexp.MustCompile(`^(.*\S)\s*\(([^()]*)\)\s*$`)
+	glossEqRE    = regexp.MustCompile(`^(.+?)\s*=\s*(.+)$`)
+)
 
 // SplitGloss separates a lexicon gloss from the grammar note some forms carry:
 // "choose(s) (m.sg. present of לִבְחוֹר)" is the meaning "choose(s)", the note
@@ -174,6 +183,86 @@ func SplitGloss(gloss string) (meaning, note, lemma string) {
 		return gloss, "", ""
 	}
 	return strings.TrimSpace(m[1]), strings.TrimSpace(m[2]), strings.TrimSpace(m[3])
+}
+
+// CardGloss splits a gloss into the short meaning, an example phrase, and a
+// grammar note. "to me, for me (לָמָּה לִי = why should I)" is the meaning
+// "to me · for me" and the phrase לָמָּה לִי / why should I. A form note such
+// as "choose(s) (m.sg. present of לִבְחוֹר)" stays a meaning plus a grammar note.
+func CardGloss(gloss string) (meaning, phraseHe, phraseEn, note, lemma string) {
+	meaning, note, lemma = SplitGloss(gloss)
+	if note != "" || lemma != "" {
+		return meaning, "", "", note, lemma
+	}
+	m := glossParenRE.FindStringSubmatch(strings.TrimSpace(gloss))
+	if m == nil {
+		return strings.TrimSpace(gloss), "", "", "", ""
+	}
+	inner := strings.TrimSpace(m[2])
+	if eq := glossEqRE.FindStringSubmatch(inner); eq != nil {
+		left, right := strings.TrimSpace(eq[1]), strings.TrimSpace(eq[2])
+		if HasHebrew(left) {
+			return tidySenses(m[1]), phraseTail(left), phraseEnOf(right), "", ""
+		}
+		return tidySenses(m[1]), "", phraseEnOf(right), left, ""
+	}
+	if HasHebrew(inner) {
+		return tidySenses(m[1]), phraseTail(inner), "", "", ""
+	}
+	return tidySenses(m[1]), "", "", inner, ""
+}
+
+// cardParts is CardGloss for one word. A phrase the lesson could point
+// replaces a Latin phrase that was only a reading.
+func cardParts(w Word) (meaning, phraseHe, phraseEn, note, lemma string) {
+	meaning, phraseHe, phraseEn, note, lemma = CardGloss(w.Gloss)
+	if w.Phrase == "" {
+		return meaning, phraseHe, phraseEn, note, lemma
+	}
+	phraseHe = phraseTail(w.Phrase)
+	if w.PhraseEn != "" {
+		phraseEn = w.PhraseEn
+	}
+	if !HasHebrew(note) {
+		note = ""
+	}
+	return meaning, phraseHe, phraseEn, note, lemma
+}
+
+func tidySenses(s string) string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return strings.Join(out, " · ")
+}
+
+func phraseEnOf(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	r, size := utf8.DecodeRuneInString(s)
+	if size > 0 && unicode.IsLower(r) {
+		s = string(unicode.ToUpper(r)) + s[size:]
+	}
+	return phraseTail(s)
+}
+
+func phraseTail(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	r, _ := utf8.DecodeLastRuneInString(s)
+	if strings.ContainsRune(".?!…׃", r) {
+		return s
+	}
+	return s + "…"
 }
 
 // flipCount is how many tap-to-flip cards the step renders.
@@ -310,9 +399,13 @@ func hasClip(a Activity) bool {
 // Gap is the cloze blank. Show* gates the three learner fields: pointed
 // Hebrew, transliteration, and the English gloss.
 type Word struct {
-	Text         string
-	Translit     string
-	Gloss        string
+	Text     string
+	Translit string
+	Gloss    string
+	// Phrase is a pointed example, when the gloss named one in Latin and the
+	// lesson could point it. PhraseEn is that example in English.
+	Phrase       string
+	PhraseEn     string
 	Gender       string
 	Audio        string
 	ShowText     bool
@@ -335,6 +428,8 @@ type Word struct {
 	// Root is the consonantal root. RootHref is set only when that root has a page.
 	Root     string
 	RootHref string
+	// FormsHref is /words/{id} when the word has a lexicon id (INIT-023/SPEC-007).
+	FormsHref string
 	// State is the learner's state of this word, on a root page.
 	State string
 }
@@ -345,6 +440,123 @@ func shown(ok bool, value string) string {
 		return ""
 	}
 	return value
+}
+
+// wordPanel is the open meaning of one word. The tile stays in the summary.
+// This is written by hand so a lesson can show it before templ generate runs.
+type wordPanel struct {
+	w       Word
+	audioID string
+}
+
+func renderWordPanel(w Word, audioID string) templ.Component {
+	return wordPanel{w: w, audioID: audioID}
+}
+
+func (p wordPanel) Render(ctx context.Context, wr io.Writer) error {
+	w := p.w
+	var b strings.Builder
+	b.WriteString(`<div class="wcard__detail">`)
+	b.WriteString(`<bdi class="wcard__he" lang="he" dir="rtl">`)
+	b.WriteString(html.EscapeString(w.Text))
+	b.WriteString(`</bdi>`)
+	if w.ShowTranslit && w.Translit != "" {
+		b.WriteString(`<p class="wcard__soundline"><bdi class="wcard__tr" lang="he-Latn" dir="ltr">`)
+		b.WriteString(html.EscapeString(w.Translit))
+		b.WriteString(`</bdi></p>`)
+	}
+	if w.ShowGloss {
+		meaning, phraseHe, phraseEn, note, lemma := cardParts(w)
+		if meaning != "" {
+			b.WriteString(`<p class="wcard__gl" lang="en" dir="ltr">`)
+			b.WriteString(html.EscapeString(meaning))
+			b.WriteString(`</p>`)
+			if phraseHe != "" || phraseEn != "" {
+				b.WriteString(`<p class="wcard__kicker" lang="en">In a phrase</p>`)
+				if phraseHe != "" {
+					b.WriteString(`<p class="wcard__phrase"><bdi lang="he" dir="rtl">`)
+					b.WriteString(html.EscapeString(phraseHe))
+					b.WriteString(`</bdi></p>`)
+				}
+				if phraseEn != "" {
+					b.WriteString(`<p class="wcard__phrase-en" lang="en" dir="ltr">`)
+					b.WriteString(html.EscapeString(phraseEn))
+					b.WriteString(`</p>`)
+				}
+			}
+			if note != "" || lemma != "" || CardMeta(w.POS, w.Gender) != "" || w.Root != "" || w.FormsHref != "" {
+				b.WriteString(`<details class="wcard__more"><summary lang="en">Word details</summary>`)
+				if meta := CardMeta(w.POS, w.Gender); meta != "" {
+					b.WriteString(`<p class="wcard__pos" lang="en">`)
+					b.WriteString(html.EscapeString(meta))
+					b.WriteString(`</p>`)
+				}
+				if note != "" || lemma != "" {
+					b.WriteString(`<p class="wcard__note" lang="en" dir="ltr">`)
+					if note != "" {
+						b.WriteString(html.EscapeString(note))
+					}
+					if note != "" && lemma != "" {
+						b.WriteString(" · ")
+					}
+					if lemma != "" {
+						b.WriteString(`<bdi lang="he" dir="rtl">`)
+						b.WriteString(html.EscapeString(lemma))
+						b.WriteString(`</bdi>`)
+					}
+					b.WriteString(`</p>`)
+				}
+				if w.RootHref != "" {
+					b.WriteString(`<a class="wcard__root" href="`)
+					b.WriteString(html.EscapeString(w.RootHref))
+					b.WriteString(`" hx-boost="false">Root <bdi lang="he" dir="rtl">`)
+					b.WriteString(html.EscapeString(w.Root))
+					b.WriteString(`</bdi></a>`)
+				} else if w.Root != "" {
+					b.WriteString(`<p class="wcard__root">Root <bdi lang="he" dir="rtl">`)
+					b.WriteString(html.EscapeString(w.Root))
+					b.WriteString(`</bdi></p>`)
+				}
+				if w.FormsHref != "" {
+					b.WriteString(`<a class="wcard__forms" href="`)
+					b.WriteString(html.EscapeString(w.FormsHref))
+					b.WriteString(`" lang="en" hx-boost="false">All forms</a>`)
+				}
+				b.WriteString(`</details>`)
+			}
+		}
+	} else if w.Translit != "" {
+		b.WriteString(`<span class="wcard__sound" lang="he-Latn" dir="ltr">`)
+		b.WriteString(html.EscapeString(w.Translit))
+		b.WriteString(`</span><span class="wcard__pos"><bdi lang="en" dir="ltr">how it sounds</bdi></span>`)
+	}
+	if _, err := io.WriteString(wr, b.String()); err != nil {
+		return err
+	}
+	if p.audioID != "" && w.Audio != "" {
+		label := "Play " + w.Text
+		var btn strings.Builder
+		btn.WriteString(`<button type="button" class="orb orb--word" lang="en" aria-label="`)
+		btn.WriteString(html.EscapeString(label))
+		btn.WriteString(`" data-label="`)
+		btn.WriteString(html.EscapeString(label))
+		btn.WriteString(`" data-src="`)
+		btn.WriteString(html.EscapeString(w.Audio))
+		btn.WriteString(`" data-audio="`)
+		btn.WriteString(html.EscapeString(p.audioID))
+		btn.WriteString(`" data-state="idle">`)
+		if _, err := io.WriteString(wr, btn.String()); err != nil {
+			return err
+		}
+		if err := orbGlyphs().Render(ctx, wr); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(wr, `<span class="wcard__listen-label">Listen</span></button>`); err != nil {
+			return err
+		}
+	}
+	_, err := io.WriteString(wr, `</div>`)
+	return err
 }
 
 // Choice is one answer button. Value is the lexeme id, never the pointed text.

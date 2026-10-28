@@ -1,6 +1,10 @@
 package views
 
-import "github.com/NetworkBuild3r/hebrew-lessons/internal/richtext"
+import (
+	"strconv"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/richtext"
+)
 
 // LearnGroup is one published explainer on the index, in path order.
 type LearnGroup struct {
@@ -8,6 +12,7 @@ type LearnGroup struct {
 	Title   string
 	Summary string
 	Example string
+	Cover   string
 }
 
 // LearnIndexView is the Learn index.
@@ -42,4 +47,11 @@ type LearnPageView struct {
 type LearnSheetView struct {
 	Title string
 	Nodes []richtext.Node
+}
+
+func learnCount(n int) string {
+	if n == 1 {
+		return "1 note"
+	}
+	return strconv.Itoa(n) + " notes"
 }

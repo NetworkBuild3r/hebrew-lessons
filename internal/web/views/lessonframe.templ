@@ -33,7 +33,7 @@ templ LessonFrameView(p Page, s Screen) {
 					<h1 class="lf-title" lang="en" dir="ltr">{ s.Frame.Kind }</h1>
 					if s.Frame.Step == 1 || s.Frame.Done {
 						<p class="lf-unit">
-							@H(s.Title)
+							@LessonName(s.Title)
 							if s.Gloss != "" {
 								<span class="unit-gloss">@E(s.Gloss)</span>
 							}

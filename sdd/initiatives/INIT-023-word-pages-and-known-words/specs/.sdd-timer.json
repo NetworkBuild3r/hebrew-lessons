@@ -1,0 +1,164 @@
+{
+  "timers": {
+    "SPEC-001": {
+      "spec_id": "SPEC-001",
+      "initiative": "INIT-023-word-pages-and-known-words",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-10-28T03:12:51.631064+00:00",
+          "stopped_at": "2026-10-28T04:18:59.115372+00:00",
+          "elapsed_minutes": 66,
+          "description": "Play buttons that carry their audio"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 66,
+      "status": "completed"
+    },
+    "SPEC-002": {
+      "spec_id": "SPEC-002",
+      "initiative": "INIT-023-word-pages-and-known-words",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-10-28T03:12:52.474241+00:00",
+          "stopped_at": "2026-10-28T04:18:59.959344+00:00",
+          "elapsed_minutes": 66,
+          "description": "Lesson listening answers build a listening card"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 66,
+      "status": "completed"
+    },
+    "SPEC-005": {
+      "spec_id": "SPEC-005",
+      "initiative": "INIT-023-word-pages-and-known-words",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-10-28T03:12:53.284874+00:00",
+          "stopped_at": "2026-10-28T04:19:00.821677+00:00",
+          "elapsed_minutes": 66,
+          "description": "Store noun and adjective forms"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 66,
+      "status": "completed"
+    },
+    "SPEC-003": {
+      "spec_id": "SPEC-003",
+      "initiative": "INIT-023-word-pages-and-known-words",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-10-28T04:19:01.646228+00:00",
+          "stopped_at": "2026-10-28T11:45:30.342553+00:00",
+          "elapsed_minutes": 446,
+          "description": "Replay past listening answers into cards once"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 446,
+      "status": "completed"
+    },
+    "SPEC-004": {
+      "spec_id": "SPEC-004",
+      "initiative": "INIT-023-word-pages-and-known-words",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-10-28T04:19:02.478531+00:00",
+          "stopped_at": "2026-10-28T11:45:30.928512+00:00",
+          "elapsed_minutes": 446,
+          "description": "Progress opens on every skill at once"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 446,
+      "status": "completed"
+    },
+    "SPEC-006": {
+      "spec_id": "SPEC-006",
+      "initiative": "INIT-023-word-pages-and-known-words",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-10-28T04:19:03.320276+00:00",
+          "stopped_at": "2026-10-28T11:45:31.411325+00:00",
+          "elapsed_minutes": 446,
+          "description": "Write and read word forms over MCP"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 446,
+      "status": "completed"
+    },
+    "SPEC-007": {
+      "spec_id": "SPEC-007",
+      "initiative": "INIT-023-word-pages-and-known-words",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-10-28T04:19:04.144314+00:00",
+          "stopped_at": "2026-10-28T11:45:31.944247+00:00",
+          "elapsed_minutes": 446,
+          "description": "Word page with the verb view"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 446,
+      "status": "completed"
+    },
+    "SPEC-008": {
+      "spec_id": "SPEC-008",
+      "initiative": "INIT-023-word-pages-and-known-words",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-10-28T11:45:32.392153+00:00",
+          "stopped_at": "2026-10-28T12:05:07.939683+00:00",
+          "elapsed_minutes": 20,
+          "description": "Noun and adjective views"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 20,
+      "status": "completed"
+    },
+    "SPEC-010": {
+      "spec_id": "SPEC-010",
+      "initiative": "INIT-023-word-pages-and-known-words",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-10-28T11:45:32.831931+00:00",
+          "stopped_at": "2026-10-28T12:05:08.546180+00:00",
+          "elapsed_minutes": 20,
+          "description": "Record the listening card and the word page"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 20,
+      "status": "completed"
+    },
+    "SPEC-009": {
+      "spec_id": "SPEC-009",
+      "initiative": "INIT-023-word-pages-and-known-words",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-10-28T12:05:09.141014+00:00",
+          "stopped_at": "2026-10-28T12:14:07.199084+00:00",
+          "elapsed_minutes": 9,
+          "description": "Forms and audio for the words already taught"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 9,
+      "status": "stopped"
+    }
+  }
+}

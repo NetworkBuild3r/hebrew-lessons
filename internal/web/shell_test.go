@@ -867,6 +867,7 @@ func TestLessonFrame(t *testing.T) {
 	for _, want := range []string{
 		`<progress class="c-progress" value="0" max="3" aria-label="Lesson progress">`,
 		`data-step="1" data-total="3"`, `<h1 class="lf-title" lang="en" dir="ltr">Read the story</h1>`, "Step 1 of 3",
+		`<bdi lang="en" dir="ltr">Greetings</bdi>`,
 		`href="/lessons/` + itoa(id) + `/report" hx-boost="false" data-sheet="report-sheet"`, `aria-label="Report a problem"`,
 		`<dialog id="report-sheet"`, `maxlength="500"`, `aria-label="Back to Today"`,
 	} {

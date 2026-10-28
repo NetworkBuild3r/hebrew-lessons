@@ -97,22 +97,40 @@ type Placement struct {
 	SuggestedStartPosition int
 }
 
+// WordForm is one stored form on a lookup hit.
+// A verb sets tense (and person, number, gender when they apply).
+// A noun or adjective sets kind (and number, person, gender, ownerNumber when they apply).
+// INIT-023/SPEC-006
+type WordForm struct {
+	Tense       string `json:"tense,omitempty"`
+	Kind        string `json:"kind,omitempty"`
+	Number      string `json:"number,omitempty"`
+	Person      string `json:"person,omitempty"`
+	Gender      string `json:"gender,omitempty"`
+	OwnerNumber string `json:"ownerNumber,omitempty"`
+	He          string `json:"he"`
+	Translit    string `json:"translit,omitempty"`
+	HasAudio    bool   `json:"hasAudio"`
+}
+
 // Lexeme is one dictionary row lookup returns.
 //
 // Gender, plural, and translit are not columns on lexemes yet. Gender and
 // plural are the fields units.LexemeFacts already uses. Translit is the
 // scheme player guidance T4 asks to store on the lexeme.
+// Forms is the verb or noun/adjective paradigm when one is stored (INIT-023/SPEC-006).
 type Lexeme struct {
-	TextNFC      string `json:"text_nfc"`
-	Bare         string `json:"bare"`
-	Gloss        string `json:"gloss"`
-	POS          string `json:"pos"`
-	Gender       string `json:"gender"`
-	Plural       string `json:"plural"`
-	Translit     string `json:"translit"`
-	Root         string `json:"root"`
-	Binyan       string `json:"binyan"`
-	AudioPresent bool   `json:"audioPresent"`
+	TextNFC      string     `json:"text_nfc"`
+	Bare         string     `json:"bare"`
+	Gloss        string     `json:"gloss"`
+	POS          string     `json:"pos"`
+	Gender       string     `json:"gender"`
+	Plural       string     `json:"plural"`
+	Translit     string     `json:"translit"`
+	Root         string     `json:"root"`
+	Binyan       string     `json:"binyan"`
+	AudioPresent bool       `json:"audioPresent"`
+	Forms        []WordForm `json:"forms,omitempty"`
 }
 
 // CourseReader is what get_context reads besides units.Lookup.

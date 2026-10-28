@@ -70,7 +70,7 @@ templ todayHero(h Home) {
 			<section class="ink-card today-hero" aria-labelledby="hero-title">
 				<p class="eyebrow">@E(StepText(h.Today.Step, h.Today.Steps))</p>
 				<h2 id="hero-title" class="unit-title today-hero__title">
-					@H(h.LessonTitle)
+					@LessonName(h.LessonTitle)
 					if h.LessonGloss != "" {
 						<span class="unit-gloss">@E(h.LessonGloss)</span>
 					}
@@ -117,7 +117,7 @@ templ todayHero(h Home) {
 			<section class="ink-card today-hero today-next" aria-labelledby="hero-title">
 				<p class="eyebrow" lang={ h.Lang }>{ h.NextKicker }</p>
 				<h2 id="hero-title" class="unit-title today-hero__title">
-					@H(h.LessonTitle)
+					@LessonName(h.LessonTitle)
 					if h.LessonGloss != "" {
 						<span class="unit-gloss">@E(h.LessonGloss)</span>
 					}
@@ -182,7 +182,7 @@ templ todayLessonCard(h Home) {
 			<section class="lesson-card today-next" aria-labelledby="next-title">
 				<p class="eyebrow" lang={ h.Lang }>{ h.NextKicker }</p>
 				<h2 id="next-title" class="unit-title">
-					@H(h.LessonTitle)
+					@LessonName(h.LessonTitle)
 					if h.LessonGloss != "" {
 						<span class="unit-gloss">@E(h.LessonGloss)</span>
 					}

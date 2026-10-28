@@ -486,12 +486,13 @@ func stripSound(s string) string {
 	return regexp.MustCompile(`<span class="wcard__sound"[^>]*>[^<]*</span>`).ReplaceAllString(s, "")
 }
 
-// v3RevealWordBlock is the card after the answer. The front stays the pointed
-// word. The Latin reading and the meaning are on the back.
+// v3RevealWordBlock is the card after the answer. The tile stays the pointed
+// word. The open panel repeats that word, then the reading, then the meaning.
 func v3RevealWordBlock(text, translit, gloss string) string {
 	return `<bdi class="wcard__he" lang="he" dir="rtl">` + text + `</bdi></span></summary>` +
-		`<div class="wcard__face wcard__back" lang="en" dir="ltr"><bdi class="wcard__he-sm" lang="he" dir="rtl">` + text + `</bdi> ` +
-		`<bdi class="wcard__tr" lang="he-Latn" dir="ltr">` + translit + `</bdi> <span class="wcard__gl">` + gloss + `</span>`
+		`<div class="wcard__detail"><bdi class="wcard__he" lang="he" dir="rtl">` + text + `</bdi>` +
+		`<p class="wcard__soundline"><bdi class="wcard__tr" lang="he-Latn" dir="ltr">` + translit + `</bdi></p>` +
+		`<p class="wcard__gl" lang="en" dir="ltr">` + gloss + `</p>`
 }
 
 func markedWord(card string) string {

@@ -106,6 +106,7 @@ func (s *server) mountShell(mux *http.ServeMux, tokens CSRFToken, gate, secure b
 	mux.HandleFunc("GET /me/words", page(s.serveWords))
 	mux.HandleFunc("GET /me/verbs", page(s.serveVerbs))
 	mux.HandleFunc("GET /me/mistakes", page(s.serveMistakes))
+	mux.HandleFunc("GET /words/{id}", page(s.serveWord))
 	mux.HandleFunc("GET /isaiah", page(s.serveIsaiah))
 	mux.HandleFunc("GET /isaiah/{chapter}/{verse}", page(s.serveIsaiahVerse))
 	mux.HandleFunc("GET /admin/isaiah/{chapter}/{verse}", page(s.serveAdminIsaiah))

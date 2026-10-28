@@ -97,9 +97,11 @@ CREATE TABLE exposures (            -- seen in a story or dialogue, no question 
 
 **Grading checked answers.** Wrong is Again. Right after a replay or a hint is Hard. Right is Good. Right and faster than my own median for that activity is Easy, once the card is already in review or relearning. Right and slower than twice that median is Hard. A fast answer on a word just taught stays Good, so the word comes back in minutes ([ADR-0020](decisions/ADR-0020-lesson-word-face-and-speed.md)). The latency rule is a product choice, not a research finding. It is tuned from my own data, not a fixed number.
 
+**When a lesson schedules a listening card.** A graded lesson `listen_pick` schedules that word's `listen` card the same way a meaning check schedules its skill: a first right answer creates the card, and a first wrong answer stores the attempt only ([ADR-0021](decisions/ADR-0021-listening-cards-and-word-page.md)). Finishing a lesson also inserts a new `listen` card for each of that lesson's new words that has a clip and that a `listen_pick` in the lesson targets, alongside the usual new `read` and `recall` cards.
+
 ### 4.3 Word states
 
-States are computed from cards, attempts, and exposures. They are never typed in by hand. Each skill has its own state, and the state belongs to the word's dictionary form (section 4.6). A word's overall state is its weakest *unlocked* core skill (`listen`, `read`, `recall`), using the order in the precedence list below. A locked skill (section 4.1) shows as `locked`, not `unseen`, and is left out of the overall state, the "words I know" count, and the vocabulary estimate. Before the letters gate opens, `read` is locked, so a word's overall state comes from `listen` and `recall` only. When the gate opens, `read` joins in as `unseen` for every word, and the overall states are recomputed. The known-word count can drop on that day, and the Progress screen says why.
+States are computed from cards, attempts, and exposures. They are never typed in by hand. Each skill has its own state, and the state belongs to the word's dictionary form (section 4.6). A word's overall state is its weakest *unlocked* core skill (`listen`, `read`, `recall`), using the order in the precedence list below. An answered skill with no card is `seen`, so a skill without a card holds the overall state at `seen`. A locked skill (section 4.1) shows as `locked`, not `unseen`, and is left out of the overall state, the "words I know" count, and the vocabulary estimate. Before the letters gate opens, `read` is locked, so a word's overall state comes from `listen` and `recall` only. When the gate opens, `read` joins in as `unseen` for every word, and the overall states are recomputed. The known-word count can drop on that day, and the Progress screen says why.
 
 **Precedence.** A word can meet several rules at once. Rules are checked top to bottom, and the first match wins:
 
@@ -328,6 +330,10 @@ The colors are inconsistent today. The tokens define both a gold action color an
 - **Every learning screen uses the same frame:** progress at top, prompt in the middle, answers in the thumb zone, and one main action.
 - **Motion follows RSCH-008:** short transitions that show what changed (card flip, answer feedback), off when reduced motion is set.
 - **Enforced by tests:** extend `csslint_test.go` so feedback tones can't be used outside feedback, and capture every learning screen in light and dark for review.
+
+**Progress overview.** `/progress` with no `?skill=` shows every skill at once: known plus solid, learning, and seen per skill, and the overall words known. A listening skill that has answers and no listening card shows an explanation instead of a zero bar. The four skill tabs (`?skill=listen|read|recall|spell`) stay; each opens that skill alone.
+
+**Word page.** `/words/{id}` is the page for one lexicon word. A verb shows the lemma with its clip, transliteration, meaning, part of speech, binyan, and root, the learner's state per skill, conjugation tables by tense (present, past, future, imperative, infinitive) with a clip on each form that has audio, and lines from the learner's lessons that use any of those forms. A noun shows gender, an irregular-plural chip when that flag is set, a singular/plural grid (the word, the definite form, the construct) when those forms exist, and a possessive grid; an empty construct or possessive block is omitted, and a noun with only `lexemes.plural` shows singular and plural. An adjective shows the four agreement cells. Each form plays when it has a clip ([ADR-0021](decisions/ADR-0021-listening-cards-and-word-page.md)).
 
 ## 10. Build order
 

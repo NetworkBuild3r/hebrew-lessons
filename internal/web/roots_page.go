@@ -82,6 +82,7 @@ func (s *server) serveRoot(w http.ResponseWriter, r *http.Request, lang, csrf st
 			Text: word.Text, Translit: word.Translit, Gloss: word.Gloss, POS: word.POS,
 			ShowText: true, ShowTranslit: word.Translit != "", ShowGloss: true,
 			Flip: true, State: word.State,
+			FormsHref: page.Href("/words/" + strconv.FormatInt(word.ID, 10)),
 		})
 	}
 	for _, les := range fam.Lessons {

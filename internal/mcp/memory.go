@@ -653,7 +653,8 @@ func (m *Memory) UpsertLexemes(ctx context.Context, entries []lexicon.Input) ([]
 		if row.Verified != nil {
 			verified = *row.Verified
 		}
-		if cur.lx == next && cur.verified == verified {
+		// Forms is a slice (INIT-023/SPEC-006) and is not part of upsert_lexemes.
+		if sameMemoryLexeme(cur.lx, next) && cur.verified == verified {
 			out = append(out, LexemeResult{TextNFC: row.TextNFC, ID: cur.id, Status: lexicon.StatusUnchanged})
 			continue
 		}
@@ -662,6 +663,12 @@ func (m *Memory) UpsertLexemes(ctx context.Context, entries []lexicon.Input) ([]
 		out = append(out, LexemeResult{TextNFC: row.TextNFC, ID: cur.id, Status: lexicon.StatusUpdated})
 	}
 	return out, []int64{}, nil
+}
+
+func sameMemoryLexeme(a, b Lexeme) bool {
+	return a.TextNFC == b.TextNFC && a.Bare == b.Bare && a.Gloss == b.Gloss && a.POS == b.POS &&
+		a.Gender == b.Gender && a.Plural == b.Plural && a.Translit == b.Translit &&
+		a.Root == b.Root && a.Binyan == b.Binyan && a.AudioPresent == b.AudioPresent
 }
 
 // memoryLexeme keeps omitted pos, gender, plural, translit, root, and binyan.

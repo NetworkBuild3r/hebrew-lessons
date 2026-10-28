@@ -33,3 +33,27 @@ func (s *Store) UpsertVerbForms(ctx context.Context, rows []db.VerbFormInput) er
 	}
 	return s.db.UpsertVerbForms(ctx, rows)
 }
+
+// UpsertNounForms writes noun and adjective forms. INIT-023/SPEC-006
+func (s *Store) UpsertNounForms(ctx context.Context, rows []db.NounFormInput) error {
+	if err := s.ready(ctx); err != nil {
+		return err
+	}
+	return s.db.UpsertNounForms(ctx, rows)
+}
+
+// VerbFormsFor returns one lemma's verb forms. INIT-023/SPEC-006
+func (s *Store) VerbFormsFor(ctx context.Context, lemmaID int64) ([]db.VerbForm, error) {
+	if err := s.ready(ctx); err != nil {
+		return nil, err
+	}
+	return s.db.VerbFormsFor(ctx, lemmaID)
+}
+
+// NounFormsFor returns one lemma's noun or adjective forms. INIT-023/SPEC-006
+func (s *Store) NounFormsFor(ctx context.Context, lemmaID int64) ([]db.NounForm, error) {
+	if err := s.ready(ctx); err != nil {
+		return nil, err
+	}
+	return s.db.NounFormsFor(ctx, lemmaID)
+}

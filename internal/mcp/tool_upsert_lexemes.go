@@ -11,7 +11,7 @@ import (
 type lexemeInput struct {
 	TextNFC  string  `json:"text_nfc" jsonschema:"Pointed Hebrew. Stored with the audio importer's normalization: format characters removed, Unicode NFC, trimmed, and spaces collapsed."`
 	Bare     *string `json:"bare,omitempty" jsonschema:"Unpointed spelling. Omit it and the consonant skeleton of text_nfc is stored. Shin and sin dots stay."`
-	GlossEN  string  `json:"gloss_en" jsonschema:"Short English gloss."`
+	GlossEN  string  `json:"gloss_en" jsonschema:"Short English meaning. Separate senses with commas. Put one example in parentheses as pointed Hebrew = English, for example: to me, for me (לָמָּה לִי = why should I). A form note stays (m.sg. present of לִבְחוֹר)."`
 	Translit *string `json:"translit,omitempty" jsonschema:"Required for a new lexeme. A missing or empty value rejects the batch. Omit it on an update to keep the stored value. Send an empty string on an update to clear it. Lowercase ASCII: kh for ח and for soft כ or ך, ts for צ or ץ, an apostrophe (') for a glottal stop. Hyphenate prefixes and give each its contextual vowel, e.g. ve-/u-, be-/bi-, mi-/me-, la-/ba- (with the article); these examples are illustrative, not a fixed list."`
 	POS      *string `json:"pos,omitempty" jsonschema:"Part of speech, such as noun, verb, pron, or adv. Omit it on an update to keep the stored value. Send an empty string to clear it."`
 	Gender   *string `json:"gender,omitempty" jsonschema:"m, f, or both. Omit it on an update to keep the stored value. Send an empty string to clear it. A new row has no gender when this is omitted."`

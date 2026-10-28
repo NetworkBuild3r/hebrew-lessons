@@ -55,6 +55,9 @@ func (s *server) serveWords(w http.ResponseWriter, r *http.Request, lang, csrf s
 		}
 		for _, word := range words {
 			row := views.StuffWord{Text: word.Text, Gloss: word.Gloss, State: string(word.State)}
+			if word.LexemeID > 0 {
+				row.WordHref = page.Href("/words/" + strconv.FormatInt(word.LexemeID, 10))
+			}
 			if lx, ok := lex[word.Text]; ok && lx.Root != "" && visible[lx.Root] {
 				row.Root = lx.Root
 				row.Href = page.Href("/roots/" + lx.Root)
@@ -214,7 +217,10 @@ func (s *server) verbTables(ctx context.Context, userID int64) ([]views.VerbTabl
 	}
 	var tables []views.VerbTable
 	for _, id := range lemmaIDs {
-		table := views.VerbTable{Lemma: texts[id].TextNFC}
+		table := views.VerbTable{
+			Lemma: texts[id].TextNFC,
+			Href:  "/words/" + strconv.FormatInt(id, 10),
+		}
 		for _, form := range byLemma[id] {
 			table.Rows = append(table.Rows, views.VerbCell{
 				Label: formLabel(form), He: form.FormHe, Translit: form.Translit,

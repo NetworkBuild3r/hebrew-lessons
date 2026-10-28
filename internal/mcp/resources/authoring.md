@@ -109,6 +109,10 @@ A word counts as covered when it is in the brief (new, struggle, or comfortable)
 - Each new word must be shown by a `story`, a `dialogue`, or a `shadow` before any question uses it.
 - Every Hebrew word you use outside the brief, and that the learner does not know, needs an English gloss in its lexicon entry.
 
+## Word forms
+
+When a unit introduces a verb, fill at least the present tense and the infinitive with `upsert_verb_forms`. When it introduces a noun, fill the plural and the construct singular with `upsert_noun_forms`. Then call `generate_audio` with that lemma's `lemmaId` so every form without a clip gets one. `lookup` returns the forms already stored, with `hasAudio` per form.
+
 ## Audio
 
 Every Hebrew text needs a clip for its exact pointed text. Do not change a text after you make its clip. A different vowel is a different clip.
@@ -117,6 +121,7 @@ Every Hebrew text needs a clip for its exact pointed text. Do not change a text 
 - Pass each dialogue line in `lines` as `{text, speaker}`. A clip counts only in its own speaker's voice, so the same Hebrew spoken as `a` and as `b` is two clips.
 - At most 40 items in a call, and a call stops starting new clips after about 22 seconds. Items it did not reach come back `failed` with `not attempted`. Call again, because stored clips are skipped. Ten items in a call is the safe size.
 - If speaker `b`'s voice is not set up on the server, each `b` line comes back `failed` with an error that says so. No clip is made in the other voice. Tell the operator, and do not publish a dialogue until it works.
+- For a new verb or noun whose forms you just wrote, also pass `lemmaId` so those forms are voiced.
 
 ## Rule ids and how to fix each
 

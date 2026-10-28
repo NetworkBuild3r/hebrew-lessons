@@ -65,7 +65,7 @@ func IsaiahPage(v IsaiahView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				if v.Verse.Audio != "" {
-					templ_7745c5c3_Err = orbButton("orb", "Play this verse", v.Verse.Audio, "").Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = clip("verse-clip", v.Verse.Audio, "Play this verse", false).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}

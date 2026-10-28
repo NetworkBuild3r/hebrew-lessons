@@ -667,9 +667,11 @@ func (s *Store) advancePlayerRun(ctx context.Context, tx *sql.Tx, run PlayerRun,
 }
 
 // enqueueNewWords inserts a new read card and a new recall card for each
-// new word in the lesson, due at now. A card the learner already has is
-// left unchanged. ListDueCards keeps these out until finished_at is set,
-// which this transaction has just done.
+// new word in the lesson, due at now. INIT-023/SPEC-002: it also inserts a
+// listen card when this lesson has a listen_pick that targets that word and
+// the word has a clip. A card the learner already has is left unchanged.
+// ListDueCards keeps these out until finished_at is set, which this
+// transaction has just done.
 func enqueueNewWords(ctx context.Context, tx *sql.Tx, userID, unitID int64, lessonIx int, now time.Time) error {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT lexeme_id FROM lesson_items
@@ -692,9 +694,18 @@ func enqueueNewWords(ctx context.Context, tx *sql.Tx, userID, unitID int64, less
 	}
 	rows.Close()
 
+	listen, err := listenTargetsWithAudio(ctx, tx, unitID, lessonIx, ids)
+	if err != nil {
+		return err
+	}
+
 	due := FormatTime(now)
 	for _, id := range ids {
-		for _, skill := range []string{"read", "recall"} {
+		skills := []string{"read", "recall"}
+		if listen[id] {
+			skills = append(skills, "listen")
+		}
+		for _, skill := range skills {
 			if _, err := tx.ExecContext(ctx, `
 				INSERT OR IGNORE INTO cards (
 					user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses
@@ -706,6 +717,90 @@ func enqueueNewWords(ctx context.Context, tx *sql.Tx, userID, unitID int64, less
 		}
 	}
 	return nil
+}
+
+// listenTargetsWithAudio is the set of new-word ids this lesson's listen_pick
+// activities grade that already have a clip. The target matches the player:
+// an explicit activity target when that token is in the lexicon, otherwise
+// the first new word on the line, otherwise the first lexicon word.
+func listenTargetsWithAudio(ctx context.Context, tx *sql.Tx, unitID int64, lessonIx int, newIDs []int64) (map[int64]bool, error) {
+	out := map[int64]bool{}
+	if len(newIDs) == 0 {
+		return out, nil
+	}
+	var docJSON string
+	err := tx.QueryRowContext(ctx, `SELECT doc FROM units WHERE id = ?`, unitID).Scan(&docJSON)
+	if err != nil {
+		return nil, fmt.Errorf("db: lesson cards: %w", err)
+	}
+	doc, err := parseLessonDoc(docJSON)
+	if err != nil {
+		return nil, fmt.Errorf("db: lesson cards: %w", err)
+	}
+	if lessonIx < 0 || lessonIx >= len(doc.Lessons) {
+		return out, nil
+	}
+	fresh := map[int64]bool{}
+	for _, id := range newIDs {
+		fresh[id] = true
+	}
+	for _, act := range doc.Lessons[lessonIx].Activities {
+		if act.Type != units.ActivityListenPick {
+			continue
+		}
+		id, err := listenPickTargetID(ctx, tx, act, fresh)
+		if err != nil {
+			return nil, err
+		}
+		if id == 0 || !fresh[id] {
+			continue
+		}
+		var audio sql.NullString
+		if err := tx.QueryRowContext(ctx, `SELECT audio_id FROM lexemes WHERE id = ?`, id).Scan(&audio); err != nil {
+			return nil, fmt.Errorf("db: lesson cards: %w", err)
+		}
+		if audio.Valid && audio.String != "" {
+			out[id] = true
+		}
+	}
+	return out, nil
+}
+
+// listenPickTargetID is the lexeme a listen_pick grades, using the same
+// target / first-new / first-lexicon order as the lesson player.
+func listenPickTargetID(ctx context.Context, tx *sql.Tx, act units.Activity, fresh map[int64]bool) (int64, error) {
+	tokens := lessonTokens(act.Text)
+	if want := units.Normalize(act.Target); want != "" {
+		for _, tok := range tokens {
+			if units.Normalize(tok) != want {
+				continue
+			}
+			id, ok, err := lookupLexemeID(ctx, tx, tok)
+			if err != nil {
+				return 0, err
+			}
+			if ok {
+				return id, nil
+			}
+		}
+	}
+	var first int64
+	for _, tok := range tokens {
+		id, ok, err := lookupLexemeID(ctx, tx, tok)
+		if err != nil {
+			return 0, err
+		}
+		if !ok {
+			continue
+		}
+		if first == 0 {
+			first = id
+		}
+		if fresh[id] {
+			return id, nil
+		}
+	}
+	return first, nil
 }
 
 func playerRunTx(ctx context.Context, tx *sql.Tx, userID, runID int64) (PlayerRun, error) {
