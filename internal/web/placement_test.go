@@ -513,7 +513,7 @@ func TestPlacementFullRun(t *testing.T) {
 	if len(misses) == 0 {
 		t.Fatal("the script left no misses to review")
 	}
-	for _, want := range []string{"Your starting point", "Start my first lesson", "Listening", "Reading", "We’ll work on first", "Review my " + strconv.Itoa(len(misses)) + " misses"} {
+	for _, want := range []string{"Your starting point", "Start my first lesson", "Listening", "Reading", "We’ll work on first", "Review my " + strconv.Itoa(len(misses)) + " misses", `class="pl__back" href="/">`} {
 		if !strings.Contains(results, want) {
 			t.Errorf("results are missing %q", want)
 		}
@@ -1057,7 +1057,7 @@ func TestPlacementReviewListsEveryMiss(t *testing.T) {
 	if !regexp.MustCompile(`<audio id="pl-miss-1" src="/audio/[0-9a-f]{64}\.mp3" preload="none">`).MatchString(page) {
 		t.Error("a review clip is not a /audio/<id>.mp3 source")
 	}
-	for _, want := range []string{"Listening", "Reading", "Typing", "You said “I don’t know”", "You picked “", "You typed", "Start my first lesson"} {
+	for _, want := range []string{"Listening", "Reading", "Typing", "You said “I don’t know”", "You picked “", "You typed", "Start my first lesson", `class="pl__back" href="/">`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the review is missing %q", want)
 		}

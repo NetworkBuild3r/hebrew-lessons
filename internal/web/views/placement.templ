@@ -46,6 +46,15 @@ templ plForm(v PlacementView, action string, attrs templ.Attributes) {
 	</form>
 }
 
+// plToday is the way back to Today. The shell dock stays hidden for the whole check, so a finished
+// screen carries this link itself.
+templ plToday(v PlacementView) {
+	<a class="pl__back" href={ templ.SafeURL(v.Href("/")) }>
+		@IconClass("arrow-left", "icon icon-directional", "")
+		<span lang="en">Today</span>
+	</a>
+}
+
 // plTop is the top of a screen: a way out, and on an item screen the progress and its count.
 templ plTop(v PlacementView, progress bool) {
 	<header class="pl__top">
@@ -334,9 +343,13 @@ templ plOffer(v PlacementView) {
 }
 
 // plResults is the end of the test: where the learner starts, by ear and by eye, what to work on first,
-// and one gold way into the first lesson.
+// and one gold way into the first lesson. The shell is hidden for the whole check, so this screen
+// keeps its own way back to Today.
 templ plResults(v PlacementView) {
 	<div class="pl__frame pl__frame--results">
+		<header class="pl__top">
+			@plToday(v)
+		</header>
 		<section class="pl-hero" aria-labelledby="pl-title">
 			<p class="pl__eyebrow pl__eyebrow--on-ink" lang="en">Your starting point</p>
 			<h1 class="pl-hero__title" id="pl-title" lang="en">{ v.Result.Headline }</h1>
@@ -415,6 +428,7 @@ templ plReview(v PlacementView) {
 				@IconClass("arrow-left", "icon icon-directional", "")
 				<span lang="en">Results</span>
 			</a>
+			@plToday(v)
 		</header>
 		<div class="pl__body">
 			<p class="pl__eyebrow" lang="en">After the test</p>
