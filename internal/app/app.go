@@ -233,6 +233,9 @@ type App struct {
 	web       http.Handler
 	mcp       http.Handler
 	stopSweep context.CancelFunc
+	// clipWG is the placement-manifest count. Close waits for it before
+	// store.Close, which clears Store.conn.
+	clipWG    sync.WaitGroup
 	closeOnce sync.Once
 	closeErr  error
 }
@@ -353,6 +356,10 @@ func NewApp(cfg Config) (*App, error) {
 	sweepCtx, stop := context.WithCancel(context.Background())
 	a.stopSweep = stop
 	go sweepOAuth(sweepCtx, svc, store, cfg.Clock)
+	// One count of manifest clips that have no row yet. It does not block
+	// NewApp. Close cancels this context, waits for the count, then closes
+	// the store.
+	logMissingPlacementAudio(sweepCtx, &a.clipWG, store)
 	return a, nil
 }
 
@@ -415,11 +422,14 @@ func (a *App) Placement() *placement.Service { return a.placement }
 func (a *App) PlacementEngine() *placement.Engine { return a.placementEngine }
 
 // Close releases the database. /healthz answers 503 after Close returns.
+// The placement-clip count is canceled and joined before the store is closed,
+// so it cannot read Store.conn after Close clears it.
 func (a *App) Close() error {
 	a.closeOnce.Do(func() {
 		if a.stopSweep != nil {
 			a.stopSweep()
 		}
+		a.clipWG.Wait()
 		if a.store != nil {
 			a.closeErr = a.store.Close()
 		}

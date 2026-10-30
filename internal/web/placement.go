@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -186,11 +187,13 @@ func (h *placementHTTP) start(w http.ResponseWriter, r *http.Request) {
 	}
 	runID, err := h.deck.Start(r.Context(), user.ID)
 	if err != nil {
+		warnPlacementStart(err)
 		failPlacement(w, err)
 		return
 	}
 	step, err := h.deck.Next(r.Context(), user.ID, runID)
 	if err != nil {
+		warnPlacementStart(err)
 		failPlacement(w, err)
 		return
 	}
@@ -487,6 +490,15 @@ func readForm(w http.ResponseWriter, r *http.Request) bool {
 func fail(w http.ResponseWriter, status int) {
 	w.Header().Set("Cache-Control", "no-store")
 	http.Error(w, http.StatusText(status), status)
+}
+
+// warnPlacementStart records a start that cannot deal. ErrNoAudio names the letter id
+// and not the clip text. ErrDeckShort names no word. Other errors are mapped to a
+// status with no log line, as they were.
+func warnPlacementStart(err error) {
+	if errors.Is(err, placement.ErrNoAudio) || errors.Is(err, placement.ErrDeckShort) {
+		slog.Warn("placement start", "err", err)
+	}
 }
 
 // failPlacement maps an engine error to a status. None of the messages names an answer.
