@@ -337,13 +337,40 @@ func TestCallBudgetStopsAndResumes(t *testing.T) {
 		texts[i] = Item{Text: strings.Repeat("\u05D0", i+1), Speaker: sp}
 	}
 	ctx := context.Background()
+	// One item is timed on its own, with the same 40ms provider delay, so the
+	// ceiling can include that item and nothing after it. Synthesize returns
+	// when the budget context ends. The store of a clip that already came
+	// back does not: it uses a context that outlives the budget, on purpose,
+	// so a made clip is not reported as failed. The budget is checked again
+	// before the next item. A late check that lets several more items run
+	// takes longer than one item and fails below.
+	probe, _ := dialogueGen(t, &voiceTTS{delay: fake.delay}, testMale)
+	probe.Budget = 0
+	probeStart := time.Now()
+	if _, err := probe.GenerateItems(ctx, []Item{{Text: "א", Speaker: "a"}}); err != nil {
+		t.Fatal(err)
+	}
+	oneItem := time.Since(probeStart)
 	start := time.Now()
 	first, err := g.GenerateItems(ctx, texts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if took := time.Since(start); took > 3*g.Budget {
-		t.Fatalf("a call with a %v budget took %v", g.Budget, took)
+	took := time.Since(start)
+	// The stop is the budget plus the one item already in flight, plus 2s to
+	// notice the timer. Locally under -race the call returns in about the
+	// budget (max 0.254s over 20 runs) and makes 5 items. On CI run
+	// 39483960583 the same call took 2.355s. That is -race on a slow runner
+	// stretching the in-flight store, which is not cancelled with the budget,
+	// not a 30s hang. A fixed 3x budget (750ms) is shorter than that one slow
+	// item, so it failed a call that had already stopped. A 30s ceiling would
+	// let a 29s stop pass. A call that runs several extra items after the
+	// budget exceeds one item plus 2s and fails here.
+	const budgetSlack = 2 * time.Second
+	ceiling := g.Budget + oneItem + budgetSlack
+	t.Logf("budget call took %v, one item %v, ceiling %v", took, oneItem, ceiling)
+	if took > ceiling {
+		t.Fatalf("a call with a %v budget took %v, one item took %v, ceiling is budget plus one item plus %v", g.Budget, took, oneItem, budgetSlack)
 	}
 	if len(first) != MaxTexts {
 		t.Fatalf("results = %d, want one per text", len(first))
@@ -365,6 +392,7 @@ func TestCallBudgetStopsAndResumes(t *testing.T) {
 	if made == 0 || cut == 0 {
 		t.Fatalf("made %d, cut %d: the budget did not bite, or nothing was made", made, cut)
 	}
+	t.Logf("budget call took %v, one item %v, ceiling %v, made %d, cut %d", took, oneItem, ceiling, made, cut)
 	if countRows(t, store) != made {
 		t.Fatalf("rows %d, made %d: a cut clip was stored", countRows(t, store), made)
 	}
