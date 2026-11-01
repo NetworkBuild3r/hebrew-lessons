@@ -1,8 +1,9 @@
-/* Show all meanings. The control is a plain link. This module gives it
-   role=button, toggles every teach-step card in place, and keeps the click
-   from navigating. The label follows the cards: closing one after Show all
-   reads "Show all meanings" again. There is no aria-pressed. One document
-   listener covers cards swapped in later. */
+/* Show all meanings, and a way to put a card away. The Show all control is a
+   plain link. This module gives it role=button, toggles every teach-step card
+   in place, and keeps the click from navigating. The label follows the cards:
+   closing one after Show all reads "Show all meanings" again. There is no
+   aria-pressed. A click that is not on an open card closes the open ones.
+   One document listener covers cards swapped in later. */
 (function (g) {
   "use strict";
   if (g.__wcards) return;
@@ -83,10 +84,22 @@
       return;
     }
     var btn = control(ev);
-    if (!btn) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    toggle(btn);
+    if (btn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      toggle(btn);
+      return;
+    }
+    // A click on the lesson, or on another word, leaves the open card.
+    if (!t || !t.closest || t.closest("details.wcard[open]")) return;
+    var open = D.querySelectorAll("details.wcard[open]");
+    var seen = [];
+    for (var i = 0; i < open.length; i++) {
+      var root = rootOf(open[i]);
+      open[i].open = false;
+      if (seen.indexOf(root) < 0) seen.push(root);
+    }
+    for (var j = 0; j < seen.length; j++) sync(seen[j]);
   }, true);
 
   D.addEventListener("keydown", function (ev) {

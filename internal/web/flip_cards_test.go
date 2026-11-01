@@ -703,8 +703,10 @@ function hasClass(node, name) { return (node.className || "").split(/\s+/).index
 function matches(node, sel) {
   if (sel === "#activity") return node.attrs.id === "activity";
   if (sel === "details.wcard") return node.tag === "details" && hasClass(node, "wcard");
+  if (sel === "details.wcard[open]") return node.tag === "details" && hasClass(node, "wcard") && !!node._open;
   if (sel === "[data-wcards-all]") return node.hasAttribute("data-wcards-all");
   if (sel === "[data-wcards-label]") return node.hasAttribute("data-wcards-label");
+  if (sel === "[data-wcard-close]") return node.hasAttribute("data-wcard-close");
   return false;
 }
 function query(root, sel) {
@@ -750,6 +752,27 @@ check(label.text === "Show all meanings", "a repeated Space changed the label");
 fire("keydown", btn, { key: " " });
 check(a.open && b.open, "Space did not open the remaining card");
 check(label.text === "Hide meanings", "Space left the label as " + label.text);
+
+const outside = add(activity, el("p"));
+fire("click", outside);
+check(!a.open && !b.open, "a click off the cards left one open");
+check(label.text === "Show all meanings", "a click off the cards left the label as " + label.text);
+
+a.open = true;
+const inside = add(a, el("div"));
+fire("click", inside);
+check(a.open, "a click on the open card closed it");
+fire("click", b);
+check(!a.open, "clicking another word left the open card open");
+
+a.open = true;
+const closer = add(a, el("button", { "data-wcard-close": "" }));
+fire("click", closer);
+check(!a.open, "Close left the card open");
+
+a.open = true;
+b.open = true;
+label.text = "Hide meanings";
 
 const swapped = add(activity, el("div"));
 const late = add(swapped, el("a", { "data-wcards-all": "" }));
