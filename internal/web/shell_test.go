@@ -24,6 +24,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/lexicon"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
@@ -97,6 +98,41 @@ var shellPaths = map[*db.Store]string{}
 func openShell(t *testing.T, clk clock.Clock, eng PlacementEngine, bands learner.BandSource) (*db.Store, http.Handler) {
 	t.Helper()
 	return openShellAt(t, clk, "https://learn.example", eng, bands)
+}
+
+// openShellWithAppZone is openShell with a fixed studyday app zone for learner-day
+// tests (INIT-026/SPEC-006). The store clock is the instant clock; the zone is
+// America/Denver or America/Chicago, never UTC as a learner day.
+func openShellWithAppZone(t *testing.T, clk clock.Clock, appZone string) (*db.Store, http.Handler) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "hebrew.sqlite")
+	store, err := db.Open(context.Background(), path, clk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shellPaths[store] = path
+	t.Cleanup(func() { _ = store.Close() })
+	svc, err := auth.New(auth.Config{
+		PublicOrigin:  "https://learn.example",
+		Clock:         clk,
+		Store:         store,
+		AllowedEmails: shellEmails(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	appLoc, err := time.LoadLocation(appZone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zones, err := studyday.NewResolver(store, appLoc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	study := session.New(store, clk, 1, session.WithGate(func(context.Context, int64) (activity.Gate, error) {
+		return activity.Gate{LettersPassed: false}, nil
+	}))
+	return store, NewOptions(nil, svc, Options{Store: store, Runs: store, study: study, Zones: zones})
 }
 
 // openShellAt is openShell for an origin: a browser test posts from its own server address.
@@ -450,6 +486,32 @@ func TestBandSlipShowsForSevenDays(t *testing.T) {
 	renew()
 	if body := getLearner(t, h, l, "/"); strings.Contains(body, "today-slip") {
 		t.Fatal("day 7 after the event: the alert is still there")
+	}
+}
+
+// TestLessonsListSlippedWindowUsesLearnerDay is ac-3 (INIT-026/SPEC-006): for a
+// Denver learner at 2026-11-01T05:30:00Z the slipped window starts
+// slipShowDays-1 days before 2026-10-31 (2026-10-25). A slip on that day shows;
+// a slip the day before does not. UTC today would have started on 2026-10-26.
+func TestLessonsListSlippedWindowUsesLearnerDay(t *testing.T) {
+	now := time.Date(2026, 11, 1, 5, 30, 0, 0, time.UTC)
+	store, h := openShellWithAppZone(t, fixedClock(now), "America/Chicago")
+	l := addLearner(t, store, "a@example.com", "sub-slip-day", now)
+	setLearnerZone(t, store, l.user.ID, "America/Denver")
+	finishPlacement(t, store, l.user.ID, now.Add(-time.Hour))
+
+	wantSince := addDaysStr("2026-10-31", -(slipShowDays - 1))
+	if wantSince != "2026-10-25" {
+		t.Fatalf("window start = %s, want 2026-10-25", wantSince)
+	}
+	slipEvent(t, store, l.user.ID, "2026-10-24", 1)
+	if strings.Contains(getLearner(t, h, l, "/"), "today-slip") {
+		t.Fatal("a slip before the learner-day window is shown")
+	}
+	slipEvent(t, store, l.user.ID, wantSince, 2)
+	body := getLearner(t, h, l, "/")
+	if !strings.Contains(body, `class="today-slip"`) || !strings.Contains(body, "Some level 3 words are slipping") {
+		t.Fatalf("slip on %s (window start) is missing:\n%s", wantSince, body)
 	}
 }
 

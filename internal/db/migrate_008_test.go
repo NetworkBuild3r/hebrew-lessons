@@ -131,7 +131,7 @@ func TestMigrate007AppliesOnEmptyDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}) {
 		t.Fatalf("versions = %v, want 1..12", got)
 	}
 	for _, table := range m7Tables {
@@ -152,7 +152,7 @@ func TestMigrate007AppliesOnEmptyDatabase(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("second migrate: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}) {
 		t.Fatalf("versions after rerun = %v", got)
 	}
 }
@@ -246,7 +246,7 @@ func TestMigrate007AtomicWhenAStatementFails(t *testing.T) {
 	if err := m6Migrate(conn); err != nil {
 		t.Fatalf("retry: %v", err)
 	}
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}) {
 		t.Fatalf("versions after retry = %v", got)
 	}
 }
@@ -530,7 +530,7 @@ func TestMigrate007IndexesAndColumnComments(t *testing.T) {
 		"daily_snapshots":   {"user_id", "day", "skill", "state", "count", "est_known", "retention"},
 		"regression_events": {"id", "user_id", "lexeme_id", "skill", "from_state", "to_state", "day", "cause", "kind"}, // kind was added by 010.
 		"lesson_briefs":     {"id", "user_id", "theme", "payload_json", "created_at", "used_by_unit_id"},
-		"coach_notes":       {"id", "user_id", "author", "body", "created_at"},
+		"coach_notes":       {"id", "user_id", "author", "body", "created_at", "author_role"},
 		"publish_audit":     {"id", "unit_id", "revision", "scope", "actor", "action", "brief_id", "issues_json", "created_at"},
 		"unit_reports":      {"id", "unit_id", "user_id", "reason", "note", "created_at"},
 		"weekly_reports":    {"user_id", "week_start", "payload_json", "summary", "created_at"},

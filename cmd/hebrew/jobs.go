@@ -18,26 +18,15 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/jobs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
-
-// defaultTimeZone is the server time zone when TZ is unset. The day boundary matches the
-// learner's evening study (INIT-015/SPEC-014 aud-1).
-const defaultTimeZone = "America/Chicago"
 
 const jobsUsage = "usage: hebrew jobs daily [--day YYYY-MM-DD] | hebrew jobs weekly [--week YYYY-MM-DD]"
 
-// jobsLocation reads the server time zone from the TZ value. An empty value is
-// America/Chicago.
+// jobsLocation is a thin wrapper over studyday.AppZone so existing tests keep
+// calling the same name. INIT-026/SPEC-003.
 func jobsLocation(tz string) (*time.Location, error) {
-	tz = strings.TrimSpace(tz)
-	if tz == "" {
-		tz = defaultTimeZone
-	}
-	loc, err := time.LoadLocation(tz)
-	if err != nil {
-		return nil, fmt.Errorf("TZ: %w", err)
-	}
-	return loc, nil
+	return studyday.AppZone(tz)
 }
 
 // jobsEnabled reads HEBREW_JOBS. Only off turns the scheduler off, and 0, false, and no
@@ -53,9 +42,9 @@ func jobsEnabled(raw string) (bool, error) {
 	}
 }
 
-// startJobs starts the scheduler for the server unless HEBREW_JOBS is off. It runs the daily
-// snapshot at 03:30 and the weekly report on Monday at 04:00. The returned stop function
-// cancels it and waits at most 5 seconds. It is safe to call when the scheduler is off.
+// startJobs starts the scheduler for the server unless HEBREW_JOBS is off. It runs an hourly
+// sweep of daily then weekly catch-up. The returned stop function cancels it and waits at
+// most 5 seconds. It is safe to call when the scheduler is off. INIT-026/SPEC-004.
 func startJobs(cfg app.Config, application *app.App) (stop func(), err error) {
 	on, err := jobsEnabled(os.Getenv("HEBREW_JOBS"))
 	if err != nil {
@@ -69,9 +58,13 @@ func startJobs(cfg app.Config, application *app.App) (stop func(), err error) {
 		slog.Info("daily and weekly jobs are off", "reason", "HEBREW_JOBS=off")
 		return func() {}, nil
 	}
-	daily := jobs.NewDaily(application.Store(), cfg.Clock, loc)
+	resolver, err := studyday.NewResolver(application.Store(), loc)
+	if err != nil {
+		return nil, err
+	}
+	daily := jobs.NewDaily(application.Store(), cfg.Clock, resolver, jobs.WithAppZone(loc))
 	sched := jobs.NewScheduler(daily, jobs.WithWeekly(jobs.NewWeekly(daily)))
-	slog.Info("jobs scheduled", "daily_at", "03:30", "weekly_at", "Monday 04:00", "zone", loc.String())
+	slog.Info("jobs scheduled", "sweep", "hourly", "zone", loc.String())
 	halt := sched.Start(context.Background())
 	return func() {
 		if err := halt(); err != nil {
@@ -90,6 +83,7 @@ func runJobs(args []string) error {
 // Without it, it catches up every missed day through yesterday, as the scheduler does at start.
 // With --week it writes the report of that finished week, a Monday, for every learner. Without
 // it, it writes the last finished week. Both print counts only, never a learner's words.
+// INIT-026/SPEC-004.
 func jobsCommand(args []string, clk clock.Clock) error {
 	if len(args) == 0 || (args[0] != "daily" && args[0] != "weekly") {
 		fmt.Fprintln(os.Stderr, jobsUsage)
@@ -156,7 +150,11 @@ func jobsCommand(args []string, clk clock.Clock) error {
 	}
 	defer store.Close()
 
-	daily := jobs.NewDaily(store, clk, loc)
+	resolver, err := studyday.NewResolver(store, loc)
+	if err != nil {
+		return err
+	}
+	daily := jobs.NewDaily(store, clk, resolver, jobs.WithAppZone(loc))
 	if name == "weekly" {
 		weekly := jobs.NewWeekly(daily)
 		var res jobs.WeeklyResult
@@ -167,7 +165,7 @@ func jobsCommand(args []string, clk clock.Clock) error {
 		}
 		slog.Info("weekly job", "week", res.Week, "learners", res.Learners, "written", res.Written,
 			"skipped", res.Skipped, "gained", res.Gained, "lost", res.Lost, "cleared", res.Cleared,
-			"band_slips", res.BandSlips)
+			"band_slips", res.BandSlips, "zone_learner", res.ZoneLearner, "zone_app", res.ZoneApp)
 		return err
 	}
 	var res jobs.Result
@@ -177,6 +175,7 @@ func jobsCommand(args []string, clk clock.Clock) error {
 		res, err = daily.CatchUp(ctx)
 	}
 	slog.Info("daily job", "day", res.Day, "learners", res.Learners, "written", res.Written,
-		"skipped", res.Skipped, "events", res.Events, "band_slips", res.BandSlips)
+		"skipped", res.Skipped, "events", res.Events, "band_slips", res.BandSlips,
+		"zone_learner", res.ZoneLearner, "zone_app", res.ZoneApp)
 	return err
 }

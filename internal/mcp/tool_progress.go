@@ -7,32 +7,37 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const progressDescription = "Read one learner's progress over a range of days: snapshots, regression events, what was gained and lost, retention against the target, placement history, and weekly reports. " +
 	"A learner account reads its own progress, and omitting learnerId uses its own id. Another id is forbidden. " +
 	"An admin, including the static token, must pass learnerId and may read any learner. A learner id that does not exist is an error. " +
-	"from and to are days written YYYY-MM-DD, both included, in UTC. to defaults to today and from defaults to 29 days before to. " +
+	"from and to are days written YYYY-MM-DD, both included, in the learner's zone (or the app zone when the learner has none). " +
+	"to defaults to the learner's today in that zone and from defaults to 29 days before to. " +
+	"The reply includes zone and zoneSource so the caller knows which zone those days use. " +
 	"from after to, a day that is not a real date, or a range of more than 366 days is an error. " +
 	"snapshots has one entry per day that has data, each with the words per state, estimatedKnown, and retention for each skill. " +
 	"changes has, for each skill, the known words at the first and last snapshot in the range and the net gained or lost. A week with no snapshot has no change. " +
 	"regressions lists the words that fell back, newest first and at most 200, and any band that slipped. " +
 	"retention is the real retention of the newest snapshot in the range, its gap from the target, and the day it is from. The target is 0.85. " +
 	"placements lists the finished placement runs, newest first and at most 20, whatever the range. " +
-	"weeklyReports lists the summaries of the weeks that start inside the range. " +
+	"weeklyReports lists the summaries of the weeks that start inside the range, each with its payload when the stored JSON decodes. " +
 	"A learner with no snapshots gets empty lists and a null actual retention, not an error. " +
 	"At most 60 calls a minute across the learner tools."
 
 type progressInput struct {
 	LearnerID *int64 `json:"learnerId,omitempty" jsonschema:"Required for an admin, including the static token. A learner account may omit it, and may only use its own id. A whole number is accepted, including 9.0. A fraction such as 9.5 is rejected."`
-	From      string `json:"from,omitempty" jsonschema:"First day, YYYY-MM-DD, UTC. Defaults to 29 days before to."`
-	To        string `json:"to,omitempty" jsonschema:"Last day, YYYY-MM-DD, UTC. Defaults to today. The range from to to is at most 366 days."`
+	From      string `json:"from,omitempty" jsonschema:"First day, YYYY-MM-DD, in the learner's zone. Defaults to 29 days before to."`
+	To        string `json:"to,omitempty" jsonschema:"Last day, YYYY-MM-DD, in the learner's zone. Defaults to the learner's today. The range from to to is at most 366 days."`
 }
 
 type progressOutput struct {
 	From          string           `json:"from"`
 	To            string           `json:"to"`
+	Zone          string           `json:"zone" jsonschema:"IANA zone used for from, to, and today."`
+	ZoneSource    string           `json:"zoneSource" jsonschema:"learner when the learner stored a zone, otherwise app."`
 	Snapshots     []SnapshotDay    `json:"snapshots"`
 	Changes       []SkillChange    `json:"changes"`
 	Regressions   []RegressionView `json:"regressions"`
@@ -47,7 +52,11 @@ func (s *service) getProgress(ctx context.Context, _ *mcp.CallToolRequest, in pr
 	if err != nil {
 		return nil, out, err
 	}
-	from, to, err := progressRange(in.From, in.To, s.now())
+	z, err := s.learnerZone(ctx, id)
+	if err != nil {
+		return nil, out, err
+	}
+	from, to, err := progressRange(in.From, in.To, s.now(), z)
 	if err != nil {
 		return nil, out, err
 	}
@@ -56,7 +65,7 @@ func (s *service) getProgress(ctx context.Context, _ *mcp.CallToolRequest, in pr
 		return nil, out, storeErr("The learner's progress could not be read.", err)
 	}
 	out = progressOutput{
-		From: from, To: to,
+		From: from, To: to, Zone: z.Name, ZoneSource: z.Source,
 		Snapshots: p.Snapshots, Changes: p.Changes, Regressions: p.Regressions,
 		Retention: p.Retention, Placements: p.Placements, WeeklyReports: p.WeeklyReports,
 	}
@@ -79,9 +88,15 @@ func (s *service) getProgress(ctx context.Context, _ *mcp.CallToolRequest, in pr
 }
 
 // progressRange checks the days and fills the defaults. A day is YYYY-MM-DD and a real date.
-func progressRange(fromIn, toIn string, now time.Time) (from, to string, err error) {
-	today := now.UTC().Truncate(24 * time.Hour)
-	toDay := today
+// Defaults use the learner's civil today in z, never a UTC invent-today.
+func progressRange(fromIn, toIn string, now time.Time, z studyday.Zone) (from, to string, err error) {
+	if z.Loc == nil {
+		return "", "", errors.New("The learner's time zone is not configured.")
+	}
+	toDay, err := parseDay(studyday.Today(now, z))
+	if err != nil {
+		return "", "", errors.New("The learner's today could not be read.")
+	}
 	if t := strings.TrimSpace(toIn); t != "" {
 		if toDay, err = parseDay(t); err != nil {
 			return "", "", errors.New("to must be a day written YYYY-MM-DD.")

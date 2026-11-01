@@ -490,7 +490,9 @@ func TestWeeklyRunRefusesBadWeeks(t *testing.T) {
 	}
 }
 
-// DueWeek and NextWeekly are the Monday 04:00 arithmetic in Chicago, across the clock changes.
+// DueWeek is the last full Monday–Sunday once the following Monday has started in the app
+// zone (no 04:00 gate). NextWeekly remains Monday 04:00 arithmetic for its own tests.
+// INIT-026/SPEC-004.
 func TestWeeklyDueWeekAndNextWake(t *testing.T) {
 	e := newEnv(t)
 	utc := func(y int, m time.Month, d, h, mi int) time.Time { return time.Date(y, m, d, h, mi, 0, 0, time.UTC) }
@@ -500,14 +502,14 @@ func TestWeeklyDueWeekAndNextWake(t *testing.T) {
 		due      string
 		nextWake string // In Chicago.
 	}{
-		{"Monday morning after 04:00", utc(2026, 10, 19, 12, 0), "2026-10-12", "2026-10-26 04:00 CDT"},
-		{"Monday 03:59 local", utc(2026, 10, 19, 8, 59), "2026-10-05", "2026-10-19 04:00 CDT"},
+		{"Monday morning", utc(2026, 10, 19, 12, 0), "2026-10-12", "2026-10-26 04:00 CDT"},
+		{"Monday just after midnight local", utc(2026, 10, 19, 5, 1), "2026-10-12", "2026-10-19 04:00 CDT"},
 		{"Monday 04:00 local exactly", utc(2026, 10, 19, 9, 0), "2026-10-12", "2026-10-26 04:00 CDT"},
 		{"Sunday evening", utc(2026, 10, 26, 2, 0), "2026-10-12", "2026-10-26 04:00 CDT"},
 		{"mid week", utc(2026, 10, 22, 12, 0), "2026-10-12", "2026-10-26 04:00 CDT"},
 		{"the week the clocks go back", utc(2026, 11, 2, 12, 0), "2026-10-26", "2026-11-09 04:00 CST"},
 		{"Monday 04:00 CST is 10:00 UTC", utc(2026, 11, 2, 10, 0), "2026-10-26", "2026-11-09 04:00 CST"},
-		{"Monday 03:59 CST", utc(2026, 11, 2, 9, 59), "2026-10-19", "2026-11-02 04:00 CST"},
+		{"Monday just after midnight CST", utc(2026, 11, 2, 6, 1), "2026-10-26", "2026-11-02 04:00 CST"},
 		{"the week the clocks go forward", utc(2027, 3, 15, 12, 0), "2027-03-08", "2027-03-22 04:00 CDT"},
 	}
 	for _, c := range cases {
@@ -562,7 +564,7 @@ func TestActiveMinutes(t *testing.T) {
 		{"rounds half up", []db.AttemptTime{at("2026-10-14T01:00:00Z", 30000)}, 1},
 	}
 	for _, c := range cases {
-		if got := activeMinutes(c.in); got != c.want {
+		if got := ActiveMinutes(c.in); got != c.want {
 			t.Errorf("%s: %d, want %d", c.name, got, c.want)
 		}
 	}
@@ -624,8 +626,9 @@ func TestWeeklySummaryIsThreePlainSentences(t *testing.T) {
 	}
 }
 
-// Through the scheduler: it writes the report at Monday 04:00 and not at 03:30, after the daily
-// snapshot of Sunday. The log says counts and never a learner's words.
+// Through the scheduler: an hourly sweep writes the report on the first wake after Monday
+// starts, after the daily catch-up has written Sunday. The log says counts and never a
+// learner's words. INIT-026/SPEC-004 (was Monday 04:00).
 func TestSchedulerWritesTheWeeklyReportMondayAtFour(t *testing.T) {
 	e := newEnv(t)
 	var logs bytes.Buffer
@@ -648,35 +651,30 @@ func TestSchedulerWritesTheWeeklyReportMondayAtFour(t *testing.T) {
 	if _, ok := e.report(e.user, "2026-10-19"); ok {
 		t.Fatal("the week that has not ended was written")
 	}
-	if first.d != 20*time.Hour+30*time.Minute {
-		t.Fatalf("first wait = %v, want 20h30m to Monday 03:30", first.d)
+	if first.d != time.Hour {
+		t.Fatalf("first wait = %v, want 1h to the next top of the hour", first.d)
+	}
+	if got := e.snapshotDays(e.user); got[len(got)-1] != "2026-10-24" {
+		// Sunday 07:00: yesterday is Saturday the 24th; Sunday's snapshot waits for Monday.
+		t.Fatalf("unexpected newest snapshot on Sunday morning: %v", got)
 	}
 
-	e.clk.advance(first.d) // Monday 03:30.
+	// Jump to Monday 00:00 Chicago (05:00 UTC) so the week of the 19th is due.
+	e.clk.set(time.Date(2026, 10, 26, 5, 0, 0, 0, time.UTC))
 	first.fire <- e.clk.Now()
 	second := nextReq(t, reqs)
-	if _, ok := e.report(e.user, "2026-10-19"); ok {
-		t.Fatal("the report was written at 03:30, before 04:00")
-	}
-	if got := e.snapshotDays(e.user); got[len(got)-1] != "2026-10-25" {
-		t.Fatalf("Sunday's snapshot is missing at 03:30: %v", got)
-	}
-	if second.d != 30*time.Minute {
-		t.Fatalf("second wait = %v, want 30m to Monday 04:00", second.d)
-	}
-
-	e.clk.advance(second.d) // Monday 04:00.
-	second.fire <- e.clk.Now()
-	third := nextReq(t, reqs)
 	r, ok := e.report(e.user, "2026-10-19")
 	if !ok {
-		t.Fatal("the report was not written at 04:00")
+		t.Fatal("the report was not written on the first Monday sweep")
 	}
 	if len(r.Payload.Lost) != 1 || r.Payload.Lost[0].Cause != "spelling" {
 		t.Fatalf("lost = %+v", r.Payload.Lost)
 	}
-	if third.d != 23*time.Hour+30*time.Minute {
-		t.Errorf("third wait = %v, want 23h30m to Tuesday 03:30", third.d)
+	if got := e.snapshotDays(e.user); got[len(got)-1] != "2026-10-25" {
+		t.Fatalf("Sunday's snapshot missing after Monday sweep: %v", got)
+	}
+	if second.d != time.Hour {
+		t.Errorf("second wait = %v, want 1h", second.d)
 	}
 	stopScheduler(t, stop)
 
@@ -724,5 +722,48 @@ func TestSchedulerWithoutWeeklyWritesNone(t *testing.T) {
 	stopScheduler(t, stop)
 	if n := e.count(`SELECT COUNT(*) FROM weekly_reports`); n != 0 {
 		t.Fatalf("%d weekly rows", n)
+	}
+}
+
+// ac-5: a Denver learner's week of 2026-10-26 is written on the first sweep after
+// 2026-11-02T00:00 Denver, with payload zone America/Denver and minutes only inside
+// that Denver week. INIT-026/SPEC-004.
+func TestWeeklyCatchUpUsesLearnerZone(t *testing.T) {
+	e := newEnv(t)
+	e.setZone(e.user, "America/Denver")
+	a := e.lexeme()
+
+	// Week of Oct 26 (Mon) – Nov 1 (Sun) Denver. MDT=UTC-6 until the Nov 1 fall-back; then MST=UTC-7.
+	// Inside the week: Tue Oct 27 12:00 MDT = 18:00 UTC.
+	e.answer(e.user, a, "2026-10-27T18:00:00.000000000Z", 60000)
+	// Just before the week: Sun Oct 25 23:30 MDT = Oct 26 05:30 UTC (window starts Oct 26 06:00 UTC).
+	e.answer(e.user, a, "2026-10-26T05:30:00.000000000Z", 60000)
+	// Just after the week: Mon Nov 2 00:30 MST = Nov 2 07:30 UTC (window ends Nov 2 07:00 UTC).
+	e.answer(e.user, a, "2026-11-02T07:30:00.000000000Z", 60000)
+
+	// Before Monday Denver: due week is Oct 19; Oct 26 must not appear.
+	e.clk.set(time.Date(2026, 11, 2, 6, 30, 0, 0, time.UTC)) // Sun Nov 1 23:30 MST.
+	if _, err := e.weekly().CatchUp(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := e.report(e.user, "2026-10-26"); ok {
+		t.Fatal("week of Oct 26 written before Monday Denver")
+	}
+
+	// First sweep after 2026-11-02T00:00 Denver (07:00 UTC).
+	e.clk.set(time.Date(2026, 11, 2, 7, 0, 0, 0, time.UTC))
+	res, err := e.weekly().CatchUp(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, ok := e.report(e.user, "2026-10-26")
+	if !ok {
+		t.Fatalf("week of Oct 26 not written; result=%+v", res)
+	}
+	if r.Payload.Zone != "America/Denver" {
+		t.Fatalf("zone = %q, want America/Denver", r.Payload.Zone)
+	}
+	if r.Payload.Minutes != 1 {
+		t.Fatalf("minutes = %d, want 1 (only the in-week attempt)", r.Payload.Minutes)
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
@@ -57,7 +58,8 @@ type env struct {
 }
 
 // newEnv opens a database with one learner. The learner model reads the env's bands map, which
-// the test fills as it adds words. Options go to the Builder.
+// the test fills as it adds words. Options go to the Builder. Every builder gets an app-zone
+// resolver (America/Chicago); there is no UTC day fallback. INIT-026/SPEC-003.
 func newEnv(t *testing.T, opts ...Option) *env {
 	t.Helper()
 	clk := &fakeClock{t: testNow}
@@ -70,9 +72,17 @@ func newEnv(t *testing.T, opts ...Option) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
+	app, err := studyday.AppZone("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	zones, err := studyday.NewResolver(store, app)
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := &env{t: t, store: store, clk: clk, bands: fakeBands{}, user: user, x: store}
 	model := learner.New(store, clk, learner.WithBands(e.bands))
-	e.b = New(store, model, clk, opts...)
+	e.b = New(store, model, clk, append([]Option{WithResolver(zones)}, opts...)...)
 	return e
 }
 
@@ -887,7 +897,7 @@ func TestSelectionIsSeededByDayUserAndSeed(t *testing.T) {
 	base := ids(f.build("").NewWords)
 	different := false
 	for seed := uint64(1); seed < 12 && !different; seed++ {
-		g := New(f.store, f.b.model, f.clk, WithSeed(seed))
+		g := New(f.store, f.b.model, f.clk, WithResolver(f.b.zones), WithSeed(seed))
 		br, err := g.Build(context.Background(), f.user, "")
 		if err != nil {
 			t.Fatal(err)
@@ -907,6 +917,59 @@ func TestSelectionIsSeededByDayUserAndSeed(t *testing.T) {
 	}
 	if differ != 50 {
 		t.Errorf("only %d of 50 ranks changed with the user", differ)
+	}
+}
+
+// ac-5: a Denver learner built at 2026-11-01T05:30:00Z uses civil day 2026-10-31.
+// INIT-026/SPEC-003.
+func TestBriefUsesLearnerCivilDay(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	if err := f.store.SetUserTimeZone(ctx, f.user, "America/Denver"); err != nil {
+		t.Fatal(err)
+	}
+	f.clk.t = time.Date(2026, 11, 1, 5, 30, 0, 0, time.UTC)
+
+	denver := f.build("")
+
+	utcApp, err := studyday.AppZone("UTC")
+	if err != nil {
+		t.Fatal(err)
+	}
+	utcResolver, err := studyday.NewResolver(f.store, utcApp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := f.store.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, `UPDATE users SET time_zone = NULL WHERE id = ?`, f.user); err != nil {
+		t.Fatal(err)
+	}
+	utcBuilder := New(f.store, f.b.model, f.clk, WithResolver(utcResolver))
+	utcBrief, err := utcBuilder.Build(ctx, f.user, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Equal(ids(denver.NewWords), ids(utcBrief.NewWords)) {
+		t.Fatal("Denver day 2026-10-31 and UTC day 2026-11-01 chose the same new words")
+	}
+
+	if err := f.store.SetUserTimeZone(ctx, f.user, "America/Denver"); err != nil {
+		t.Fatal(err)
+	}
+	again := f.build("")
+	if !slices.Equal(ids(denver.NewWords), ids(again.NewWords)) {
+		t.Fatal("two Denver builds at the same instant chose different new words")
+	}
+
+	loc, err := studyday.ParseZone("America/Denver")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := studyday.Today(f.clk.t, studyday.Zone{Name: "America/Denver", Loc: loc, Source: studyday.SourceLearner}); got != "2026-10-31" {
+		t.Fatalf("Today = %q, want 2026-10-31", got)
 	}
 }
 
@@ -1070,7 +1133,7 @@ func TestPayloadSchemaV1(t *testing.T) {
 	check("new_words", first("new_words"), "band", "gloss", "lexeme_id", "min_uses", "text", "theme_match")
 	check("struggle_words", first("struggle_words"), "activities", "cause", "gloss", "lexeme_id", "required_count", "score", "skill", "state", "text")
 	check("comfortable_words", first("comfortable_words"), "gloss", "lexeme_id", "text")
-	check("coach_notes", first("coach_notes"), "at", "author", "body")
+	check("coach_notes", first("coach_notes"), "at", "author", "authorRole", "body")
 	var tier, targets map[string]json.RawMessage
 	_ = json.Unmarshal(doc["tier"], &tier)
 	_ = json.Unmarshal(doc["targets"], &targets)

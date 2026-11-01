@@ -485,7 +485,7 @@ func TestAuthzRowsForTheLearnerTools(t *testing.T) {
 			return withID(map[string]any{"position": 0, "doc": doc, "briefId": "BRIEF7"}, id)
 		}},
 		{"get_lesson_brief", false, func(id *int64) map[string]any { return withID(map[string]any{}, id) }},
-		{"add_coach_note", false, func(id *int64) map[string]any { return withID(map[string]any{"body": "note"}, id) }},
+		{"add_coach_note", true, func(id *int64) map[string]any { return withID(map[string]any{"body": "note"}, id) }},
 	}
 	allowed := func(name string, res *http.Response) {
 		t.Helper()

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 	"unicode/utf8"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
@@ -17,8 +18,11 @@ const (
 )
 
 // MistakeInput is one personal mistake. A repeat of the same learner, wrong
-// form, and right form increments times and last_at. It never writes the
-// shared list.
+// form, and right form increments times and last_at. On is the learner's civil
+// day (YYYY-MM-DD). A new pair stores first_on = last_on = On. A repeat sets
+// first_on to the earlier day and last_on to the later one. A row with null
+// days takes On for both. An empty On leaves the day columns alone (legacy).
+// It never writes the shared list. INIT-026/SPEC-005.
 type MistakeInput struct {
 	Wrong    string
 	Right    string
@@ -26,6 +30,7 @@ type MistakeInput struct {
 	Pattern  string
 	LexemeID int64
 	Source   string
+	On       string
 }
 
 // LearnerMistake is one stored personal mistake.
@@ -39,6 +44,8 @@ type LearnerMistake struct {
 	Times    int
 	FirstAt  string
 	LastAt   string
+	FirstOn  string
+	LastOn   string
 	Source   string
 }
 
@@ -71,7 +78,10 @@ func (e MissingLemmaError) Error() string {
 
 // RecordMistakes writes one learner's mistakes in one transaction. learnerID
 // is the caller's. A pair that is already stored increments times and last_at.
-// More than 50, a field that is too long, or an unknown pattern writes nothing.
+// When On is set it must be YYYY-MM-DD; a new pair stores first_on = last_on =
+// On, a repeat keeps the earlier first_on and later last_on, and a row with
+// null days takes On for both. More than 50, a field that is too long, or an
+// unknown pattern writes nothing. INIT-026/SPEC-005.
 func (s *Store) RecordMistakes(ctx context.Context, learnerID int64, rows []MistakeInput) error {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -102,6 +112,11 @@ func (s *Store) RecordMistakes(ctx context.Context, learnerID int64, rows []Mist
 		if row.Source != "tutor" && row.Source != "app" {
 			return fmt.Errorf("db: source %d", i)
 		}
+		if row.On != "" {
+			if _, err := time.Parse(time.DateOnly, row.On); err != nil {
+				return fmt.Errorf("db: on %d is not YYYY-MM-DD", i)
+			}
+		}
 		clean[i] = row
 	}
 	tx, err := conn.BeginTx(ctx, nil)
@@ -126,16 +141,32 @@ func (s *Store) RecordMistakes(ctx context.Context, learnerID int64, rows []Mist
 		if row.LexemeID > 0 {
 			lexeme = row.LexemeID
 		}
+		var on any
+		if row.On != "" {
+			on = row.On
+		}
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO learner_mistakes (learner_id, wrong_he, right_he, note_en, pattern_slug, lexeme_id, times, first_at, last_at, source)
-			VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+			INSERT INTO learner_mistakes (learner_id, wrong_he, right_he, note_en, pattern_slug, lexeme_id, times, first_at, last_at, first_on, last_on, source)
+			VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
 			ON CONFLICT (learner_id, wrong_he, right_he) DO UPDATE SET
 				times = learner_mistakes.times + 1,
 				last_at = excluded.last_at,
 				note_en = CASE WHEN excluded.note_en <> '' THEN excluded.note_en ELSE learner_mistakes.note_en END,
 				pattern_slug = COALESCE(excluded.pattern_slug, learner_mistakes.pattern_slug),
-				lexeme_id = COALESCE(excluded.lexeme_id, learner_mistakes.lexeme_id)`,
-			learnerID, row.Wrong, row.Right, row.Note, pattern, lexeme, now, now, row.Source); err != nil {
+				lexeme_id = COALESCE(excluded.lexeme_id, learner_mistakes.lexeme_id),
+				first_on = CASE
+					WHEN excluded.first_on IS NULL THEN learner_mistakes.first_on
+					WHEN learner_mistakes.first_on IS NULL THEN excluded.first_on
+					WHEN excluded.first_on < learner_mistakes.first_on THEN excluded.first_on
+					ELSE learner_mistakes.first_on
+				END,
+				last_on = CASE
+					WHEN excluded.last_on IS NULL THEN learner_mistakes.last_on
+					WHEN learner_mistakes.last_on IS NULL THEN excluded.last_on
+					WHEN excluded.last_on > learner_mistakes.last_on THEN excluded.last_on
+					ELSE learner_mistakes.last_on
+				END`,
+			learnerID, row.Wrong, row.Right, row.Note, pattern, lexeme, now, now, on, on, row.Source); err != nil {
 			return fmt.Errorf("db: record mistake: %w", err)
 		}
 	}
@@ -160,7 +191,8 @@ func (s *Store) MistakesFor(ctx context.Context, learnerID int64, limit int) ([]
 		limit = 10
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT id, wrong_he, right_he, note_en, COALESCE(pattern_slug, ''), COALESCE(lexeme_id, 0), times, first_at, last_at, source
+		SELECT id, wrong_he, right_he, note_en, COALESCE(pattern_slug, ''), COALESCE(lexeme_id, 0), times, first_at, last_at,
+			COALESCE(first_on, ''), COALESCE(last_on, ''), source
 		FROM learner_mistakes
 		WHERE learner_id = ?
 		ORDER BY times DESC, last_at DESC, id
@@ -172,7 +204,7 @@ func (s *Store) MistakesFor(ctx context.Context, learnerID int64, limit int) ([]
 	var out []LearnerMistake
 	for rows.Next() {
 		var row LearnerMistake
-		if err := rows.Scan(&row.ID, &row.Wrong, &row.Right, &row.Note, &row.Pattern, &row.LexemeID, &row.Times, &row.FirstAt, &row.LastAt, &row.Source); err != nil {
+		if err := rows.Scan(&row.ID, &row.Wrong, &row.Right, &row.Note, &row.Pattern, &row.LexemeID, &row.Times, &row.FirstAt, &row.LastAt, &row.FirstOn, &row.LastOn, &row.Source); err != nil {
 			return nil, fmt.Errorf("db: mistakes: %w", err)
 		}
 		out = append(out, row)

@@ -18,40 +18,55 @@ import (
 // list, minus learnerWriteTools. A name that is not listed here is admin-only, which is the
 // default for every write tool added later.
 //
-// get_lesson_brief and add_coach_note are not here, so they are admin-only. A brief is
-// a stored row that only put_unit, which is admin-only, can use, and a coach note is read
-// into the next lesson's prompt, so a learner must not be able to write one (SPEC-021).
+// get_lesson_brief is not here, so it is admin-only: a brief is a stored row that only
+// put_unit (admin-only) can use. add_coach_note is learner-callable on the caller's own
+// id (ADR-0022 D4; revises INIT-015/SPEC-021). Learner notes are quoted in that learner's
+// brief only, capped at 20 per 24 hours.
 var learnerTools = map[string]bool{
-	"get_context":       true,
-	"list_patterns":     true,
-	"get_learner_words": true,
-	"get_learner_model": true,
-	"get_progress":      true,
-	"get_unit":          true,
-	"lookup":            true,
-	"get_verse":         true,
-	"record_mistakes":   true,
-	"validate_unit":     true,
-	"unpublish_unit":    true,
+	"get_context":         true,
+	"list_patterns":       true,
+	"get_learner_words":   true,
+	"get_learner_model":   true,
+	"get_progress":        true,
+	"get_study_digest":    true,
+	"get_unit":            true,
+	"lookup":              true,
+	"get_verse":           true,
+	"record_mistakes":     true,
+	"record_taught_words": true,
+	"remove_taught_words": true,
+	"add_coach_note":      true,
+	"validate_unit":       true,
+	"unpublish_unit":      true,
+	"set_time_zone":       true,
 }
 
 // learnerWriteTools are the learnerTools that change data. MCP_READONLY_TOKEN may not call them.
 var learnerWriteTools = map[string]bool{
-	"record_mistakes": true,
-	"unpublish_unit":  true,
+	"record_mistakes":     true,
+	"record_taught_words": true,
+	"remove_taught_words": true,
+	"add_coach_note":      true,
+	"unpublish_unit":      true,
+	"set_time_zone":       true,
 }
 
 // learnerOwnDataTools are the tools a learner may call only for their
 // own learnerId. Omitting the id uses that caller's id. Another id is
 // rejected before the handler runs. A tool that takes no learnerId does not belong here.
 var learnerOwnDataTools = map[string]bool{
-	"get_context":       true,
-	"get_learner_words": true,
-	"get_learner_model": true,
-	"get_progress":      true,
-	"record_mistakes":   true,
-	"validate_unit":     true,
-	"unpublish_unit":    true,
+	"get_context":         true,
+	"get_learner_words":   true,
+	"get_learner_model":   true,
+	"get_progress":        true,
+	"get_study_digest":    true,
+	"record_mistakes":     true,
+	"record_taught_words": true,
+	"remove_taught_words": true,
+	"add_coach_note":      true,
+	"validate_unit":       true,
+	"unpublish_unit":      true,
+	"set_time_zone":       true,
 }
 
 const (

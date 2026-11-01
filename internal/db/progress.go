@@ -12,21 +12,33 @@ import (
 // Every query here is keyed on user_id. There is no query that takes a learner from
 // anything but its caller, and none that reads across learners.
 
-// MaxCoachNotesPerDay is the most notes one learner can get in the 24 hours before a new
-// note. A coach note is read into the next lesson's prompt, so the table is not a log.
+// MaxCoachNotesPerDay is the most admin-authored notes one learner can get in the 24 hours
+// before a new admin note. A coach note is read into the next lesson's prompt, so the table
+// is not a log.
 const MaxCoachNotesPerDay = 100
 
-// ErrTooManyCoachNotes means the learner already has MaxCoachNotesPerDay notes from the
+// MaxLearnerCoachNotesPerDay is the most learner-authored notes one learner can write in
+// the 24 hours before a new learner note. INIT-026/SPEC-008; ADR-0022 D4.
+const MaxLearnerCoachNotesPerDay = 20
+
+// Author roles for coach_notes.author_role.
+const (
+	CoachNoteRoleAdmin   = "admin"
+	CoachNoteRoleLearner = "learner"
+)
+
+// ErrTooManyCoachNotes means the learner already has the role's daily cap of notes from the
 // last 24 hours.
 var ErrTooManyCoachNotes = errors.New("db: too many coach notes today")
 
 // CoachNote is one row of coach_notes.
 type CoachNote struct {
-	ID        int64
-	UserID    int64
-	Author    string
-	Body      string
-	CreatedAt time.Time
+	ID         int64
+	UserID     int64
+	Author     string
+	AuthorRole string
+	Body       string
+	CreatedAt  time.Time
 }
 
 // UserExists reports whether a user has the id.
@@ -50,12 +62,22 @@ func (s *Store) UserExists(ctx context.Context, id int64) (bool, error) {
 }
 
 // AddCoachNote stores a note for the learner and returns its id. The caller has checked
-// the length and the text. It refuses the note when the learner already has
-// MaxCoachNotesPerDay notes from the 24 hours before at, and writes nothing.
-func (s *Store) AddCoachNote(ctx context.Context, userID int64, author, body string, at time.Time) (int64, error) {
+// the length, the text, and authorRole (admin or learner). It refuses the note when that
+// role already has its daily cap from the 24 hours before at, and writes nothing.
+// INIT-026/SPEC-008; ADR-0022 D4.
+func (s *Store) AddCoachNote(ctx context.Context, userID int64, author, authorRole, body string, at time.Time) (int64, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return 0, err
+	}
+	cap := MaxCoachNotesPerDay
+	switch authorRole {
+	case CoachNoteRoleAdmin:
+		cap = MaxCoachNotesPerDay
+	case CoachNoteRoleLearner:
+		cap = MaxLearnerCoachNotesPerDay
+	default:
+		return 0, fmt.Errorf("db: author role %q", authorRole)
 	}
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
@@ -64,16 +86,16 @@ func (s *Store) AddCoachNote(ctx context.Context, userID int64, author, body str
 	defer tx.Rollback()
 	var recent int
 	if err := tx.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM coach_notes WHERE user_id = ? AND created_at > ?`,
-		userID, FormatTime(at.Add(-24*time.Hour))).Scan(&recent); err != nil {
+		`SELECT COUNT(*) FROM coach_notes WHERE user_id = ? AND author_role = ? AND created_at > ?`,
+		userID, authorRole, FormatTime(at.Add(-24*time.Hour))).Scan(&recent); err != nil {
 		return 0, fmt.Errorf("db: count coach notes: %w", err)
 	}
-	if recent >= MaxCoachNotesPerDay {
+	if recent >= cap {
 		return 0, ErrTooManyCoachNotes
 	}
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO coach_notes (user_id, author, body, created_at) VALUES (?, ?, ?, ?)`,
-		userID, author, body, FormatTime(at))
+		`INSERT INTO coach_notes (user_id, author, body, created_at, author_role) VALUES (?, ?, ?, ?, ?)`,
+		userID, author, body, FormatTime(at), authorRole)
 	if err != nil {
 		return 0, fmt.Errorf("db: insert coach note: %w", err)
 	}
@@ -97,7 +119,7 @@ func (s *Store) RecentCoachNotes(ctx context.Context, userID int64, limit int) (
 		return []CoachNote{}, nil
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT id, user_id, author, body, created_at FROM coach_notes
+		SELECT id, user_id, author, body, created_at, author_role FROM coach_notes
 		WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`, userID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("db: coach notes: %w", err)
@@ -107,7 +129,7 @@ func (s *Store) RecentCoachNotes(ctx context.Context, userID int64, limit int) (
 	for rows.Next() {
 		var n CoachNote
 		var at string
-		if err := rows.Scan(&n.ID, &n.UserID, &n.Author, &n.Body, &at); err != nil {
+		if err := rows.Scan(&n.ID, &n.UserID, &n.Author, &n.Body, &at, &n.AuthorRole); err != nil {
 			return nil, fmt.Errorf("db: coach notes: %w", err)
 		}
 		if n.CreatedAt, err = ParseTime(at); err != nil {

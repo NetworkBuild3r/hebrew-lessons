@@ -15,6 +15,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
@@ -185,8 +186,12 @@ func addDaysStr(day string, n int) string {
 // fillProgress reads everything the page shows for one learner. A failed read is the caller's
 // error: a chart that quietly leaves out a number would be a wrong picture.
 func (s *server) fillProgress(ctx context.Context, userID int64, v *views.ProgressView) error {
-	now := s.now().UTC()
-	today := now.Format(dayLayout)
+	now := s.now()
+	z, err := s.learnerZone(ctx, userID)
+	if err != nil {
+		return err
+	}
+	today := studyday.Today(now, z)
 
 	_, _, done, total, lessonsDone, lessonsTotal, err := s.unitProgress(ctx, userID)
 	if err != nil {
@@ -476,8 +481,12 @@ func (s *server) fillWeek(ctx context.Context, userID int64, v *views.ProgressVi
 	}
 
 	to := ref
-	if today := s.now().UTC().Format(dayLayout); today > to {
-		to = today
+	if z, err := s.learnerZone(ctx, userID); err == nil {
+		if today := studyday.Today(s.now(), z); today > to {
+			to = today
+		}
+	} else {
+		return err
 	}
 	events, err := s.store.RegressionRows(ctx, userID, addDaysStr(ref, -backWindowDays), to, eventCap)
 	if err != nil {

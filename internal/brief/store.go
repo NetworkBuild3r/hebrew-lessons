@@ -152,7 +152,7 @@ func (b *Builder) coachNotes(ctx context.Context, userID int64, now time.Time) (
 		return nil, fmt.Errorf("brief: %w", err)
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT author, body, created_at FROM coach_notes
+		SELECT author, body, created_at, author_role FROM coach_notes
 		WHERE user_id = ? AND created_at >= ?
 		ORDER BY created_at DESC, id DESC LIMIT ?`,
 		userID, db.FormatTime(now.AddDate(0, 0, -CoachNoteDays)), MaxCoachNotes)
@@ -164,7 +164,7 @@ func (b *Builder) coachNotes(ctx context.Context, userID int64, now time.Time) (
 	for rows.Next() {
 		var n CoachNote
 		var at string
-		if err := rows.Scan(&n.Author, &n.Body, &at); err != nil {
+		if err := rows.Scan(&n.Author, &n.Body, &at, &n.AuthorRole); err != nil {
 			return nil, fmt.Errorf("brief: coach notes: %w", err)
 		}
 		if n.At, err = db.ParseTime(at); err != nil {

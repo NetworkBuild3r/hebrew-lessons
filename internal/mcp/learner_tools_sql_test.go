@@ -147,6 +147,43 @@ func TestLearnerModelPagesOverSQLite(t *testing.T) {
 	}
 }
 
+// Three letter-pair confusions in the window become confusedWith on the word.
+func TestLearnerModelConfusedWithOverSQLite(t *testing.T) {
+	e := newAP(t)
+	e.attempts(e.a, apMayim, "listen", "WWW")
+	e.attempts(e.a, apShalom, "listen", "WWW") // struggling, no dominant pair
+	for i := range 3 {
+		e.exec(`INSERT INTO confusion_misses (learner_id, kind, key, lexeme_id, at) VALUES (?, 'letter_pair', 'ב/כ', ?, ?)`,
+			e.a, e.ids[apMayim], db.FormatTime(apNow.Add(-time.Duration(i+1)*time.Hour)))
+	}
+	admin := e.as("static", nil)
+	raw := mustOK(t, admin, "get_learner_model", map[string]any{"learnerId": e.a, "state": "struggling"})
+	type word struct {
+		Text         string `json:"text"`
+		ConfusedWith *struct {
+			Kind  string `json:"kind"`
+			Key   string `json:"key"`
+			Count int    `json:"count"`
+		} `json:"confusedWith"`
+	}
+	words := decodeInto[struct{ Words []word }](t, raw).Words
+	var mayim, shalom *word
+	for i := range words {
+		switch words[i].Text {
+		case apMayim:
+			mayim = &words[i]
+		case apShalom:
+			shalom = &words[i]
+		}
+	}
+	if mayim == nil || mayim.ConfusedWith == nil || mayim.ConfusedWith.Kind != "letter_pair" || mayim.ConfusedWith.Key != "ב/כ" || mayim.ConfusedWith.Count != 3 {
+		t.Fatalf("mayim confusedWith %+v in %s", mayim, raw)
+	}
+	if shalom == nil || shalom.ConfusedWith != nil {
+		t.Fatalf("shalom should omit confusedWith: %+v", shalom)
+	}
+}
+
 // A learner's words come from that learner's evidence only.
 func TestLearnerModelIsScopedOverSQLite(t *testing.T) {
 	e := newAP(t)
@@ -232,19 +269,21 @@ func TestCoachNotesOverSQLite(t *testing.T) {
 	if len(ctxB.CoachNotes) != 1 || ctxB.CoachNotes[0].Body != "BNOTE" {
 		t.Fatalf("b: %+v", ctxB)
 	}
-	// A learner cannot write a note, not even for itself.
-	for _, id := range []int64{e.a, e.b} {
-		if s := mustFail(t, a, "add_coach_note", map[string]any{"learnerId": id, "body": "x"}); s != "forbidden: admin only" {
-			t.Fatalf("learner a writing for %d: %q", id, s)
-		}
+	// A learner may write a note about itself (ADR-0022); another id is refused.
+	mustOK(t, a, "add_coach_note", map[string]any{"body": "I keep mixing ח and כ"})
+	if role := e.text(`SELECT author_role FROM coach_notes WHERE user_id = ? AND body = 'I keep mixing ח and כ'`, e.a); role != "learner" {
+		t.Fatalf("learner note role = %q", role)
 	}
-	if n := e.count(`SELECT COUNT(*) FROM coach_notes`); n != 2 {
+	if s := mustFail(t, a, "add_coach_note", map[string]any{"learnerId": e.b, "body": "x"}); s != "learnerId must be your own id." {
+		t.Fatalf("learner a writing for b: %q", s)
+	}
+	if n := e.count(`SELECT COUNT(*) FROM coach_notes`); n != 3 {
 		t.Fatalf("%d notes", n)
 	}
 	// A refused note leaves no row, and a note of 500 Hebrew letters is stored whole.
 	mustFail(t, admin, "add_coach_note", map[string]any{"learnerId": e.a, "body": strings.Repeat("ת", 501)})
 	mustOK(t, admin, "add_coach_note", map[string]any{"learnerId": e.a, "body": strings.Repeat("ת", 500)})
-	if n := e.count(`SELECT COUNT(*) FROM coach_notes WHERE user_id = ?`, e.a); n != 2 {
+	if n := e.count(`SELECT COUNT(*) FROM coach_notes WHERE user_id = ?`, e.a); n != 3 {
 		t.Fatalf("a has %d notes", n)
 	}
 	// Notes come back newest first, at most 5.
@@ -253,7 +292,7 @@ func TestCoachNotesOverSQLite(t *testing.T) {
 	}
 	got := decodeInto[notes](t, mustOK(t, a, "get_context", map[string]any{"position": 0}))
 	if len(got.CoachNotes) != 5 || got.CoachNotes[0].Body != "later 5" {
-		t.Fatalf("a after 9 notes: %+v", got)
+		t.Fatalf("a after more notes: %+v", got)
 	}
 }
 
@@ -262,26 +301,26 @@ func TestCoachNoteDailyCap(t *testing.T) {
 	e := newAP(t)
 	ctx := t.Context()
 	for i := range db.MaxCoachNotesPerDay {
-		if _, err := e.adapter.AddCoachNote(ctx, e.a, "mcp", fmt.Sprintf("n%d", i)); err != nil {
+		if _, err := e.adapter.AddCoachNote(ctx, e.a, "mcp", "admin", fmt.Sprintf("n%d", i)); err != nil {
 			t.Fatalf("note %d: %v", i, err)
 		}
 	}
-	if _, err := e.adapter.AddCoachNote(ctx, e.a, "mcp", "one too many"); err != mcp.ErrTooManyNotes {
+	if _, err := e.adapter.AddCoachNote(ctx, e.a, "mcp", "admin", "one too many"); err != mcp.ErrTooManyNotes {
 		t.Fatalf("note 101: %v", err)
 	}
 	if n := e.count(`SELECT COUNT(*) FROM coach_notes WHERE user_id = ?`, e.a); n != db.MaxCoachNotesPerDay {
 		t.Fatalf("%d notes", n)
 	}
-	if _, err := e.adapter.AddCoachNote(ctx, e.b, "mcp", "fine"); err != nil {
+	if _, err := e.adapter.AddCoachNote(ctx, e.b, "mcp", "admin", "fine"); err != nil {
 		t.Fatalf("learner b: %v", err)
 	}
 	mem := mcp.NewMemory()
 	for i := range db.MaxCoachNotesPerDay {
-		if _, err := mem.AddCoachNote(ctx, 1, "mcp", fmt.Sprintf("n%d", i)); err != nil {
+		if _, err := mem.AddCoachNote(ctx, 1, "mcp", "admin", fmt.Sprintf("n%d", i)); err != nil {
 			t.Fatalf("memory note %d: %v", i, err)
 		}
 	}
-	if _, err := mem.AddCoachNote(ctx, 1, "mcp", "one too many"); err != mcp.ErrTooManyNotes {
+	if _, err := mem.AddCoachNote(ctx, 1, "mcp", "admin", "one too many"); err != mcp.ErrTooManyNotes {
 		t.Fatalf("memory note 101: %v", err)
 	}
 	// The tool turns it into a fixed sentence.
@@ -308,7 +347,8 @@ func TestProgressOverSQLite(t *testing.T) {
 	e.snapshot(e.a, "2026-10-17", "read", "known", 1, 2, nil)
 	e.exec(`INSERT INTO regression_events (user_id, lexeme_id, skill, from_state, to_state, day, cause, kind) VALUES (?, ?, 'listen', 'known', 'struggling', '2026-10-15', 'decay', 'word')`, e.a, e.ids[apMayim])
 	e.exec(`INSERT INTO regression_events (user_id, day, cause, kind) VALUES (?, '2026-10-16', 'band_slip band=1 dropped 25', 'band_slip')`, e.a)
-	e.exec(`INSERT INTO weekly_reports (user_id, week_start, payload_json, summary, created_at) VALUES (?, '2026-10-12', '{"secret":"payload"}', 'A summary', ?)`, e.a, db.FormatTime(apNow))
+	aPayload := `{"gained":[{"text":"מַיִם","skill":"listen","from":"learning","to":"known"}],"lost":[{"text":"שָׁלוֹם","skill":"listen","from":"known","to":"struggling","cause":"decay","recovered":false}],"cleared":[],"retention":{"target":0.85,"actual":0.8},"minutesStudied":42,"bandSlips":[],"zone":"America/Denver"}`
+	e.exec(`INSERT INTO weekly_reports (user_id, week_start, payload_json, summary, created_at) VALUES (?, '2026-10-12', ?, 'A summary', ?)`, e.a, aPayload, db.FormatTime(apNow))
 	run, err := e.store.InsertPlacementRun(t.Context(), e.a, apNow.Add(-48*time.Hour), 1)
 	if err != nil {
 		t.Fatal(err)
@@ -319,7 +359,7 @@ func TestProgressOverSQLite(t *testing.T) {
 	// Learner B has data that must never show in A's.
 	e.snapshot(e.b, "2026-10-17", "listen", "known", 99, 987654, 0.1)
 	e.exec(`INSERT INTO regression_events (user_id, lexeme_id, skill, from_state, to_state, day, cause, kind) VALUES (?, ?, 'read', 'solid', 'regressed', '2026-10-15', 'BSECRET', 'word')`, e.b, e.ids[apShalom])
-	e.exec(`INSERT INTO weekly_reports (user_id, week_start, payload_json, summary, created_at) VALUES (?, '2026-10-12', '{}', 'BSUMMARY', ?)`, e.b, db.FormatTime(apNow))
+	e.exec(`INSERT INTO weekly_reports (user_id, week_start, payload_json, summary, created_at) VALUES (?, '2026-10-12', '{"secret":"B-payload-leak","gained":[{"text":"BWORD"}]}', 'BSUMMARY', ?)`, e.b, db.FormatTime(apNow))
 	runB, err := e.store.InsertPlacementRun(t.Context(), e.b, apNow.Add(-48*time.Hour), 2)
 	if err != nil {
 		t.Fatal(err)
@@ -366,10 +406,13 @@ func TestProgressOverSQLite(t *testing.T) {
 	}
 	admin, a, b := e.as("static", nil), e.as("learner-a", nil), e.as("learner-b", nil)
 	rawA := mustOK(t, a, "get_progress", map[string]any{"from": "2026-10-01", "to": "2026-10-19"})
-	for _, leak := range []string{"BSECRET", "BSUMMARY", "987654", "424242", `"payload"`, "secret"} {
+	for _, leak := range []string{"BSECRET", "BSUMMARY", "987654", "424242", "B-payload-leak", "BWORD", `"secret"`} {
 		if strings.Contains(rawA, leak) {
 			t.Fatalf("learner a's progress holds %q: %s", leak, rawA)
 		}
+	}
+	if !strings.Contains(rawA, `"minutesStudied":42`) || !strings.Contains(rawA, `"gained"`) || !strings.Contains(rawA, `"lost"`) {
+		t.Fatalf("learner a's payload missing fields: %s", rawA)
 	}
 	p := decodeInto[progress](t, rawA)
 	if len(p.Snapshots) != 2 || p.Snapshots[0].Day != "2026-10-10" || p.Snapshots[1].Day != "2026-10-17" || len(p.Snapshots[1].Skills) != 2 {

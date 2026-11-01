@@ -145,10 +145,13 @@ func TestReadOnlyTokenDeniesWrites(t *testing.T) {
 		{name: "get_lesson_brief", args: map[string]any{}},
 		{name: "add_coach_note", args: map[string]any{}},
 		{name: "record_mistakes", args: map[string]any{"mistakes": []any{}}},
+		{name: "record_taught_words", args: map[string]any{"words": []any{}}},
+		{name: "remove_taught_words", args: map[string]any{"on": "2026-11-01", "lexemeIds": []any{}}},
 		{name: "upsert_common_mistakes", args: map[string]any{"mistakes": []any{}}},
 		{name: "upsert_verb_forms", args: map[string]any{"forms": []any{}}},
 		{name: "upsert_noun_forms", args: map[string]any{"forms": []any{}}},
 		{name: "upsert_verse_notes", args: map[string]any{"chapter": 1, "verse": 1}},
+		{name: "set_time_zone", args: map[string]any{"zone": "America/Denver"}},
 	}
 	for _, write := range writes {
 		t.Run(write.name, func(t *testing.T) {

@@ -14,16 +14,18 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 // The weekly report (INIT-015/SPEC-023). It writes one weekly_reports row for each learner and
 // each finished week. The package doc says what a week holds and what it cannot know.
 
 const (
-	// WeeklyDay, WeeklyHour, and WeeklyMinute are when the scheduler writes the report of the
-	// week that just ended: Monday 04:00 in the server time zone. The daily job has written
-	// Sunday's snapshot at 03:30, half an hour before.
-	WeeklyDay    = time.Monday
+	// WeeklyDay is the weekday a week starts on.
+	WeeklyDay = time.Monday
+
+	// WeeklyHour and WeeklyMinute remain for NextWeekly tests; the scheduler is an hourly
+	// sweep and no longer wakes at Monday 04:00. INIT-026/SPEC-004.
 	WeeklyHour   = 4
 	WeeklyMinute = 0
 
@@ -37,7 +39,7 @@ const (
 	weeklyBaselineKey = "weekly.words."
 )
 
-// ErrWeekOpen means the week has not finished yet in the server time zone.
+// ErrWeekOpen means the week has not finished yet for every learner.
 var ErrWeekOpen = errors.New("jobs: the week is not over")
 
 // ErrNotMonday means the week does not start on a Monday.
@@ -45,7 +47,7 @@ var ErrNotMonday = errors.New("jobs: a week starts on a Monday")
 
 // WeeklyResult counts what a weekly run did. It holds counts only, never a learner's words.
 type WeeklyResult struct {
-	// Week is the first day of the week.
+	// Week is the first day of the week. CatchUp may leave it empty when learners differ.
 	Week string
 	// Learners is how many learners were looked at.
 	Learners int
@@ -53,15 +55,21 @@ type WeeklyResult struct {
 	Written int
 	// Skipped is how many learners already had a report for the week.
 	Skipped int
+	// NotYet is how many learners were skipped because their week is still open.
+	NotYet int
 	// Gained, Lost, and Cleared are the words named in the reports written by this run.
 	Gained, Lost, Cleared int
 	// BandSlips is the band slips in the reports written by this run.
 	BandSlips int
+	// ZoneLearner and ZoneApp count learners by studyday.Zone.Source. INIT-026/SPEC-004.
+	ZoneLearner int
+	ZoneApp     int
 }
 
 func (r *WeeklyResult) add(o WeeklyResult) {
 	r.Written += o.Written
 	r.Skipped += o.Skipped
+	r.NotYet += o.NotYet
 	r.Gained += o.Gained
 	r.Lost += o.Lost
 	r.Cleared += o.Cleared
@@ -89,20 +97,24 @@ func ParseWeek(s string) (string, error) {
 	return s, nil
 }
 
-// DueWeek is the week the scheduler should have reported on by now: the week before the
-// newest Monday 04:00 that has passed. Before Monday 04:00 the newest one is last week's, so
-// the due week is the one before that, which is already written. Using the moment, and not the
-// day, means a start at 02:00 on Monday does not write a report before Sunday's snapshot exists.
-func (w *Weekly) DueWeek() string {
-	now := w.d.clock.Now().In(w.d.loc)
-	monday := time.Date(now.Year(), now.Month(), now.Day()-int((now.Weekday()+6)%7), WeeklyHour, WeeklyMinute, 0, 0, w.d.loc)
-	if now.Before(monday) {
-		monday = monday.AddDate(0, 0, -7)
-	}
-	return monday.AddDate(0, 0, -7).Format(dayLayout)
+// dueWeekIn is the last full Monday–Sunday in z that has ended: the Monday of the week before
+// the learner's current week. Written on the first sweep after that following Monday starts.
+// INIT-026/SPEC-004.
+func dueWeekIn(now time.Time, z studyday.Zone) string {
+	local := now.In(z.Loc)
+	offset := int((local.Weekday() + 6) % 7) // days since Monday
+	thisMonday := time.Date(local.Year(), local.Month(), local.Day()-offset, 0, 0, 0, 0, z.Loc)
+	return thisMonday.AddDate(0, 0, -7).Format(dayLayout)
 }
 
-// NextWeekly is the first Monday 04:00 after now in the server time zone.
+// DueWeek is the last finished week in the app zone. Prefer CatchUp, which uses each
+// learner's own zone. INIT-026/SPEC-004.
+func (w *Weekly) DueWeek() string {
+	return dueWeekIn(w.d.clock.Now(), w.d.app)
+}
+
+// NextWeekly is the first Monday 04:00 after now in loc. Kept for tests; the scheduler is an
+// hourly sweep and does not call it. INIT-026/SPEC-004.
 func NextWeekly(now time.Time, loc *time.Location) time.Time {
 	local := now.In(loc)
 	days := (int(WeeklyDay) - int(local.Weekday()) + 7) % 7
@@ -113,39 +125,33 @@ func NextWeekly(now time.Time, loc *time.Location) time.Time {
 	return next
 }
 
-// CatchUp writes the report of DueWeek for every learner that has none. It is what the
-// scheduler runs at start and at each wake, so a server that was down on Monday writes the
-// last finished week when it comes back. Only that week is written: an older week cannot be
-// recomputed (the package doc says why).
+// CatchUp writes each learner's last finished week in their own zone when they have none. It
+// is what the scheduler runs at each hourly sweep after the daily catch-up. Only that week is
+// written: an older week cannot be recomputed (the package doc says why). INIT-026/SPEC-004.
 func (w *Weekly) CatchUp(ctx context.Context) (WeeklyResult, error) {
-	return w.Run(ctx, w.DueWeek())
-}
-
-// Run writes the report of one finished week for every learner. weekStart is the Monday. A
-// learner that already has a report for the week is skipped, so running a week twice changes
-// nothing. A week that has not ended is refused. A learner whose write fails does not stop the
-// others: the error is returned at the end, joined, and the next run retries only the
-// learners that have no report. Run returns ErrLocked when another process holds the lock.
-func (w *Weekly) Run(ctx context.Context, weekStart string) (WeeklyResult, error) {
-	res := WeeklyResult{Week: weekStart}
-	if _, err := ParseWeek(weekStart); err != nil {
-		return res, err
-	}
-	if end := addDays(weekStart, 6); end >= w.d.Today() {
-		return res, fmt.Errorf("%w: %s runs to %s and today is %s", ErrWeekOpen, weekStart, end, w.d.Today())
-	}
+	var res WeeklyResult
 	err := w.d.locked(ctx, func() error {
 		ids, err := w.d.store.UserIDs(ctx)
 		if err != nil {
 			return err
 		}
+		zones, err := w.d.resolver.All(ctx)
+		if err != nil {
+			return err
+		}
 		res.Learners = len(ids)
+		res.ZoneLearner, res.ZoneApp = countZoneSources(zones)
 		var errs []error
+		now := w.d.clock.Now()
+		weeks := map[string]int{}
 		for _, id := range ids {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			part, err := w.learnerWeek(ctx, id, weekStart)
+			z := zones[id]
+			week := dueWeekIn(now, z)
+			weeks[week]++
+			part, err := w.learnerWeek(ctx, id, week, z)
 			res.add(part)
 			if err != nil {
 				if ctx.Err() != nil {
@@ -153,6 +159,67 @@ func (w *Weekly) Run(ctx context.Context, weekStart string) (WeeklyResult, error
 				}
 				errs = append(errs, fmt.Errorf("learner %d: %w", id, err))
 			}
+		}
+		if len(weeks) == 1 {
+			for week := range weeks {
+				res.Week = week
+			}
+		}
+		return errors.Join(errs...)
+	})
+	return res, err
+}
+
+// Run writes the report of one finished week for every learner. weekStart is the Monday. A
+// learner that already has a report for the week is skipped, so running a week twice changes
+// nothing. A learner for whom the week is still open is skipped and counted in NotYet.
+// ErrWeekOpen is returned only when the week is open for every learner. A learner whose write
+// fails does not stop the others: the error is returned at the end, joined, and the next run
+// retries only the learners that have no report. Run returns ErrLocked when another process
+// holds the lock. INIT-026/SPEC-004.
+func (w *Weekly) Run(ctx context.Context, weekStart string) (WeeklyResult, error) {
+	res := WeeklyResult{Week: weekStart}
+	if _, err := ParseWeek(weekStart); err != nil {
+		return res, err
+	}
+	err := w.d.locked(ctx, func() error {
+		ids, err := w.d.store.UserIDs(ctx)
+		if err != nil {
+			return err
+		}
+		zones, err := w.d.resolver.All(ctx)
+		if err != nil {
+			return err
+		}
+		res.Learners = len(ids)
+		res.ZoneLearner, res.ZoneApp = countZoneSources(zones)
+		var errs []error
+		now := w.d.clock.Now()
+		end := addDays(weekStart, 6)
+		for _, id := range ids {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			z := zones[id]
+			today := studyday.Today(now, z)
+			if end >= today {
+				res.NotYet++
+				continue
+			}
+			part, err := w.learnerWeek(ctx, id, weekStart, z)
+			res.add(part)
+			if err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				errs = append(errs, fmt.Errorf("learner %d: %w", id, err))
+			}
+		}
+		if res.Learners > 0 && res.NotYet == res.Learners {
+			return fmt.Errorf("%w: %s runs to %s", ErrWeekOpen, weekStart, end)
+		}
+		if res.Learners == 0 && end >= studyday.Today(now, w.d.app) {
+			return fmt.Errorf("%w: %s runs to %s", ErrWeekOpen, weekStart, end)
 		}
 		return errors.Join(errs...)
 	})
@@ -240,7 +307,7 @@ func weekWindow(weekStart string, loc *time.Location) (from, to time.Time) {
 // learnerWeek writes one learner's report. The reads are done first, because the store has one
 // connection and a transaction waits for no other call. The transaction checks again that the
 // week has no report, writes it, and moves the baseline.
-func (w *Weekly) learnerWeek(ctx context.Context, userID int64, weekStart string) (WeeklyResult, error) {
+func (w *Weekly) learnerWeek(ctx context.Context, userID int64, weekStart string, z studyday.Zone) (WeeklyResult, error) {
 	var res WeeklyResult
 	has, err := w.d.store.HasWeeklyReport(ctx, userID, weekStart)
 	if err != nil {
@@ -251,7 +318,7 @@ func (w *Weekly) learnerWeek(ctx context.Context, userID int64, weekStart string
 		return res, nil
 	}
 	w.d.heartbeat(ctx)
-	in, err := w.read(ctx, userID, weekStart)
+	in, err := w.read(ctx, userID, weekStart, z)
 	if err != nil {
 		return res, err
 	}
@@ -305,6 +372,7 @@ func (w *Weekly) learnerWeek(ctx context.Context, userID int64, weekStart string
 // weekInput is everything a report is made from. buildWeekly is a pure function of it.
 type weekInput struct {
 	weekStart string
+	zoneName  string
 	loc       *time.Location
 	snapshots []db.SnapshotRow
 	events    []db.WeekEvent
@@ -317,9 +385,9 @@ type weekInput struct {
 	texts    map[int64]string
 }
 
-// read gathers the inputs of one learner and week.
-func (w *Weekly) read(ctx context.Context, userID int64, weekStart string) (weekInput, error) {
-	in := weekInput{weekStart: weekStart, loc: w.d.loc}
+// read gathers the inputs of one learner and week in that learner's zone. INIT-026/SPEC-004.
+func (w *Weekly) read(ctx context.Context, userID int64, weekStart string, z studyday.Zone) (weekInput, error) {
+	in := weekInput{weekStart: weekStart, zoneName: z.Name, loc: z.Loc}
 	weekEnd := addDays(weekStart, 6)
 	var err error
 	if in.snapshots, err = w.d.store.SnapshotRows(ctx, userID, weekStart, weekEnd); err != nil {
@@ -328,7 +396,7 @@ func (w *Weekly) read(ctx context.Context, userID int64, weekStart string) (week
 	if in.events, err = w.d.store.WeekEvents(ctx, userID, weekStart, weekEnd); err != nil {
 		return in, err
 	}
-	from, to := weekWindow(weekStart, w.d.loc)
+	from, to := weekWindow(weekStart, z.Loc)
 	if in.attempts, err = w.d.store.AttemptTimes(ctx, userID, from, to); err != nil {
 		return in, err
 	}
@@ -404,11 +472,15 @@ func changedIDs(base *weeklyBaseline, cur *wordsState) []int64 {
 
 // buildWeekly makes the payload. It reads no clock and no database.
 func buildWeekly(in weekInput) WeeklyPayload {
+	zone := in.zoneName
+	if zone == "" && in.loc != nil {
+		zone = in.loc.String()
+	}
 	p := WeeklyPayload{
-		Version: payloadVersion, WeekStart: in.weekStart, WeekEnd: addDays(in.weekStart, 6), Zone: in.loc.String(),
+		Version: payloadVersion, WeekStart: in.weekStart, WeekEnd: addDays(in.weekStart, 6), Zone: zone,
 		Gained: []WordSkill{}, Lost: []LostWord{}, Cleared: []WordSkill{}, BandSlips: []BandSlipEvent{},
 		Retention: retentionOf(in.snapshots),
-		Minutes:   activeMinutes(in.attempts),
+		Minutes:   ActiveMinutes(in.attempts),
 	}
 	if in.current != nil {
 		p.StateDay = in.current.Day
@@ -523,11 +595,12 @@ func retentionOf(rows []db.SnapshotRow) RetentionStat {
 	return r
 }
 
-// activeMinutes is the time spent answering, in whole minutes. Two answers closer than IdleGap
+// ActiveMinutes is the time spent answering, in whole minutes. Two answers closer than IdleGap
 // count for the time between them. An answer after a longer pause, and the first one, count for
 // the time the learner took to give it, at most IdleGap. Reading a story, or any time with no
 // answer, is not counted, and neither are flashcard grades that wrote no attempt.
-func activeMinutes(attempts []db.AttemptTime) int {
+// The weekly job and get_study_digest share this rule. INIT-026/SPEC-009.
+func ActiveMinutes(attempts []db.AttemptTime) int {
 	var total time.Duration
 	for i, a := range attempts {
 		if i > 0 {

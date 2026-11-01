@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -18,6 +19,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
@@ -172,9 +174,10 @@ type Targets struct {
 
 // CoachNote is a note a client left for the learner.
 type CoachNote struct {
-	Author string    `json:"author"` // Plain text. Escape it on output.
-	Body   string    `json:"body"`   // Plain text. Escape it on output.
-	At     time.Time `json:"at"`
+	Author     string    `json:"author"`     // Plain text. Escape it on output.
+	AuthorRole string    `json:"authorRole"` // admin or learner. INIT-026/SPEC-008; ADR-0022 D4.
+	Body       string    `json:"body"`       // Plain text. Escape it on output.
+	At         time.Time `json:"at"`
 }
 
 // Plan is the versioned payload of a brief: lesson_briefs.payload_json.
@@ -251,6 +254,12 @@ func WithUnlockedSkills(f func(ctx context.Context, userID int64) ([]string, err
 	return func(b *Builder) { b.unlocked = f }
 }
 
+// WithResolver sets the learner-day resolver. Build requires it; there is no UTC
+// day fallback. INIT-026/SPEC-003.
+func WithResolver(r *studyday.Resolver) Option {
+	return func(b *Builder) { b.zones = r }
+}
+
 // Builder builds briefs and reads them back. It holds no learner data and is safe for use by
 // several goroutines.
 type Builder struct {
@@ -262,6 +271,7 @@ type Builder struct {
 	rand     io.Reader
 	tags     TagSource
 	unlocked func(ctx context.Context, userID int64) ([]string, error)
+	zones    *studyday.Resolver
 
 	maxPayload int
 }
@@ -361,8 +371,15 @@ func (b *Builder) Build(ctx context.Context, userID int64, theme string) (Brief,
 	if err != nil {
 		return Brief{}, err
 	}
+	if b.zones == nil {
+		return Brief{}, errors.New("brief: study day resolver is not configured")
+	}
 	now := b.clock.Now().UTC()
-	day := now.Format(time.DateOnly)
+	z, err := b.zones.For(ctx, userID)
+	if err != nil {
+		return Brief{}, fmt.Errorf("brief: study day: %w", err)
+	}
+	day := studyday.Today(now, z)
 	var keywords []string
 	if given {
 		keywords = themeKeywords(theme)
@@ -425,6 +442,11 @@ func (b *Builder) Build(ctx context.Context, userID int64, theme string) (Brief,
 	plan.CoachNotes, err = b.coachNotes(ctx, userID, now)
 	if err != nil {
 		return Brief{}, err
+	}
+	for _, n := range plan.CoachNotes {
+		if n.AuthorRole == "learner" {
+			plan.Notes = append(plan.Notes, "The learner wrote: "+strconv.Quote(n.Body))
+		}
 	}
 
 	payload, err := b.fit(&plan)

@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -78,7 +79,19 @@ func newLT(t *testing.T) *ltEnv {
 	})
 	mem.SetBriefTemplate(learnerA, LessonBrief{Tier: BriefTier{Name: "beginner"}, NewWords: []BriefNewWord{{BriefWord: BriefWord{Text: hello, Gloss: "hello"}, MinUses: 3}}})
 	mem.SetBriefTemplate(learnerB, LessonBrief{Tier: BriefTier{Name: "beginner"}, NewWords: []BriefNewWord{{BriefWord: BriefWord{Text: coffee, Gloss: "coffee"}, MinUses: 3}}})
-	srv := httptest.NewServer(Handler(Options{Validator: triTokens{}, Course: mem, Lexicon: mem, Lookup: mem, Units: mem}))
+	app, err := studyday.AppZone("America/Chicago")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver, err := studyday.NewResolver(mem, app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(Handler(Options{
+		Validator: triTokens{}, Course: mem, Lexicon: mem, Lookup: mem, Units: mem,
+		StudyDay: resolver,
+		Now:      func() time.Time { return time.Date(2026, 11, 1, 5, 30, 0, 0, time.UTC) },
+	}))
 	t.Cleanup(srv.Close)
 	return &ltEnv{t: t, mem: mem, srv: srv}
 }
@@ -333,27 +346,108 @@ func TestLearnerIDSpellingsDoNotCrossLearners(t *testing.T) {
 	}
 }
 
+// ---- set_time_zone -----------------------------------------------------------------
+
+func TestSetTimeZoneStoresAndShowsInProgress(t *testing.T) {
+	e := newLT(t)
+	out := e.ok("learner-a", "set_time_zone", map[string]any{"zone": "America/Denver"})
+	if !strings.Contains(out, `"zone":"America/Denver"`) || !strings.Contains(out, `"today":"2026-10-31"`) {
+		t.Fatalf("set_time_zone: %s", out)
+	}
+	prog := e.ok("learner-a", "get_progress", map[string]any{})
+	if !strings.Contains(prog, `"zone":"America/Denver"`) || !strings.Contains(prog, `"zoneSource":"learner"`) {
+		t.Fatalf("get_progress after set: %s", prog)
+	}
+	if !strings.Contains(prog, `"to":"2026-10-31"`) {
+		t.Fatalf("get_progress to not Denver today: %s", prog)
+	}
+	if msg := e.fail("learner-a", "set_time_zone", map[string]any{"zone": "Not/AZone"}); msg == "" {
+		t.Fatal("bad zone must be a tool error")
+	}
+	zone, ok, err := e.mem.UserTimeZone(t.Context(), learnerA)
+	if err != nil || !ok || zone != "America/Denver" {
+		t.Fatalf("bad zone wrote %q ok=%v err=%v", zone, ok, err)
+	}
+}
+
+func TestSetTimeZoneSecurity(t *testing.T) {
+	e := newLT(t)
+	if msg := e.fail("learner-a", "set_time_zone", map[string]any{"zone": "America/Denver", "learnerId": learnerB}); msg != msgOtherLearner {
+		t.Fatalf("other learnerId: %q", msg)
+	}
+	admin := e.ok("admin", "set_time_zone", map[string]any{"zone": "Europe/London", "learnerId": learnerB})
+	if !strings.Contains(admin, `"zone":"Europe/London"`) {
+		t.Fatalf("admin set: %s", admin)
+	}
+	zone, ok, err := e.mem.UserTimeZone(t.Context(), learnerB)
+	if err != nil || !ok || zone != "Europe/London" {
+		t.Fatalf("admin write %q ok=%v err=%v", zone, ok, err)
+	}
+
+	// MCP_READONLY_TOKEN is RoleLearner but may not call write tools.
+	mem := NewMemory()
+	mem.AddLearner(learnerA)
+	app, err := studyday.AppZone("America/Chicago")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver, err := studyday.NewResolver(mem, app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(Handler(Options{
+		AuthToken:         "admin-token-admin-token-admin-tok",
+		ReadOnlyToken:     "smoke-token-smoke-token-smoke-tok",
+		ReadOnlyLearnerID: learnerA,
+		Course:            mem, Lexicon: mem, Lookup: mem, Units: mem,
+		StudyDay: resolver,
+	}))
+	t.Cleanup(srv.Close)
+	client := mcp.NewClient(&mcp.Implementation{Name: "ro", Version: "0"}, nil)
+	s, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{
+		Endpoint: srv.URL, DisableStandaloneSSE: true, MaxRetries: -1,
+		HTTPClient: &http.Client{Transport: bearerTrip{token: "smoke-token-smoke-token-smoke-tok"}},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	res, err := s.CallTool(t.Context(), &mcp.CallToolParams{Name: "set_time_zone", Arguments: map[string]any{"zone": "America/Denver"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.IsError || resultText(res) != msgAdminOnly {
+		t.Fatalf("readonly set_time_zone: isError=%v text=%q", res.IsError, resultText(res))
+	}
+}
+
 // ---- get_progress ------------------------------------------------------------------
 
 func TestProgressRange(t *testing.T) {
-	now := time.Date(2026, 10, 19, 15, 30, 0, 0, time.UTC)
+	denver, err := studyday.ParseZone("America/Denver")
+	if err != nil {
+		t.Fatal(err)
+	}
+	z := studyday.Zone{Name: "America/Denver", Loc: denver, Source: studyday.SourceLearner}
+	// 2026-11-01T05:30:00Z is still 2026-10-31 evening in Denver.
+	now := time.Date(2026, 11, 1, 5, 30, 0, 0, time.UTC)
 	ok := []struct{ from, to, wantFrom, wantTo string }{
-		{"", "", "2026-09-20", "2026-10-19"},
-		{"2026-10-01", "", "2026-10-01", "2026-10-19"},
+		{"", "", "2026-10-02", "2026-10-31"},
+		{"2026-10-01", "", "2026-10-01", "2026-10-31"},
 		{"", "2026-06-30", "2026-06-01", "2026-06-30"},
-		{"2025-10-18", "2026-10-19", "2025-10-18", "2026-10-19"}, // 366 days
-		{"2026-10-19", "2026-10-19", "2026-10-19", "2026-10-19"},
+		{"2025-10-30", "2026-10-31", "2025-10-30", "2026-10-31"}, // 366 days
+		{"2026-10-31", "2026-10-31", "2026-10-31", "2026-10-31"},
 	}
 	for _, c := range ok {
-		from, to, err := progressRange(c.from, c.to, now)
+		from, to, err := progressRange(c.from, c.to, now, z)
 		if err != nil || from != c.wantFrom || to != c.wantTo {
 			t.Errorf("range(%q,%q) = %q %q %v, want %q %q", c.from, c.to, from, to, err, c.wantFrom, c.wantTo)
 		}
 	}
 	bad := []struct{ from, to string }{
-		{"2025-10-17", "2026-10-19"}, // 367 days
-		{"2000-01-01", "2026-10-19"},
-		{"2026-10-20", "2026-10-19"}, // from after to
+		{"2025-10-29", "2026-10-31"}, // 367 days
+		{"2000-01-01", "2026-10-31"},
+		{"2026-11-01", "2026-10-31"}, // from after to
 		{"2026-1-5", ""},
 		{"2026-02-30", ""},
 		{"20261019", ""},
@@ -363,7 +457,7 @@ func TestProgressRange(t *testing.T) {
 		{"2026-10-01'; DROP TABLE users;--", ""},
 	}
 	for _, c := range bad {
-		if from, to, err := progressRange(c.from, c.to, now); err == nil {
+		if from, to, err := progressRange(c.from, c.to, now, z); err == nil {
 			t.Errorf("range(%q,%q) = %q %q, want an error", c.from, c.to, from, to)
 		}
 	}
@@ -731,7 +825,7 @@ func (failingData) Progress(context.Context, int64, string, string) (Progress, e
 func (failingData) BuildLessonBrief(context.Context, int64, string) (LessonBrief, error) {
 	return LessonBrief{}, errInternal
 }
-func (failingData) AddCoachNote(context.Context, int64, string, string) (CoachNote, error) {
+func (failingData) AddCoachNote(context.Context, int64, string, string, string) (CoachNote, error) {
 	return CoachNote{}, errInternal
 }
 func (failingData) RecentCoachNotes(context.Context, int64, int) ([]CoachNote, error) {
@@ -933,11 +1027,15 @@ func TestEveryLearnerIDToolIsGuarded(t *testing.T) {
 	if seen < 8 {
 		t.Fatalf("only %d tools take learnerId", seen)
 	}
-	// The write tools that feed the next prompt are not learner tools.
-	for _, name := range []string{"get_lesson_brief", "add_coach_note", "put_unit", "publish_unit", "generate_audio", "upsert_lexemes"} {
+	// Brief and authoring writes that feed the next prompt stay admin-only.
+	// add_coach_note is learner-callable on the caller's own id (ADR-0022).
+	for _, name := range []string{"get_lesson_brief", "put_unit", "publish_unit", "generate_audio", "upsert_lexemes"} {
 		if learnerTools[name] {
 			t.Errorf("%s must be admin-only", name)
 		}
+	}
+	if !learnerTools["add_coach_note"] || !learnerOwnDataTools["add_coach_note"] {
+		t.Error("add_coach_note must be a learner own-data tool (ADR-0022)")
 	}
 }
 
@@ -978,7 +1076,7 @@ func TestNewToolDescriptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	adminOnly := map[string]bool{"get_lesson_brief": true, "add_coach_note": true}
+	adminOnly := map[string]bool{"get_lesson_brief": true}
 	for _, name := range []string{"get_learner_model", "get_progress", "get_lesson_brief", "add_coach_note", "unpublish_unit"} {
 		d := tools.Tools[indexOf(tools, name)].Description
 		if adminOnly[name] != strings.Contains(d, "Admin only") {

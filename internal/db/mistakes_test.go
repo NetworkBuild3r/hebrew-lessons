@@ -75,6 +75,60 @@ func TestMistakesMigrationKeepsExistingRows(t *testing.T) {
 	}
 }
 
+// ac-6: same pair on 2026-10-28 then 2026-10-25 → first_on earlier, last_on later, times=2.
+func TestRecordMistakesDayBounds(t *testing.T) {
+	when := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	s := openStore(t, fixedClock{when})
+	ctx := context.Background()
+	a, err := s.InsertUser(ctx, "day@example.com", "sub-day", "learner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrong := units.Normalize("\u05d0\u05b2\u05e0\u05b4\u05d9 \u05d4\u05d5\u05b9\u05dc\u05b5\u05da\u05b0")
+	right := units.Normalize("\u05d0\u05b2\u05e0\u05b4\u05d9 \u05d4\u05d5\u05b9\u05dc\u05b6\u05db\u05b6\u05ea")
+	row := MistakeInput{Wrong: wrong, Right: right, Source: "tutor", On: "2026-10-28"}
+	if err := s.RecordMistakes(ctx, a, []MistakeInput{row}); err != nil {
+		t.Fatal(err)
+	}
+	row.On = "2026-10-25"
+	if err := s.RecordMistakes(ctx, a, []MistakeInput{row}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.MistakesFor(ctx, a, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Times != 2 || got[0].FirstOn != "2026-10-25" || got[0].LastOn != "2026-10-28" {
+		t.Fatalf("got %#v", got)
+	}
+}
+
+// Null first_on/last_on take On for both on a repeat.
+func TestRecordMistakesNullDaysTakeOn(t *testing.T) {
+	when := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	s := openStore(t, fixedClock{when})
+	ctx := context.Background()
+	a, err := s.InsertUser(ctx, "nullon@example.com", "sub-nullon", "learner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrong := units.Normalize("\u05d0\u05b2\u05e0\u05b4\u05d9 \u05d4\u05d5\u05b9\u05dc\u05b5\u05da\u05b0")
+	right := units.Normalize("\u05d0\u05b2\u05e0\u05b4\u05d9 \u05d4\u05d5\u05b9\u05dc\u05b6\u05db\u05b6\u05ea")
+	if err := s.RecordMistakes(ctx, a, []MistakeInput{{Wrong: wrong, Right: right, Source: "tutor"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RecordMistakes(ctx, a, []MistakeInput{{Wrong: wrong, Right: right, Source: "tutor", On: "2026-10-25"}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.MistakesFor(ctx, a, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Times != 2 || got[0].FirstOn != "2026-10-25" || got[0].LastOn != "2026-10-25" {
+		t.Fatalf("got %#v", got)
+	}
+}
+
 func TestMistakeRepeatStaysOneRowPerLearner(t *testing.T) {
 	when := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
 	s := openStore(t, fixedClock{when})

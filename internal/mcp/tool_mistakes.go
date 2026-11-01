@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
@@ -41,6 +42,7 @@ type mistakeIn struct {
 
 type recordMistakesInput struct {
 	LearnerID *int64      `json:"learnerId,omitempty" jsonschema:"Required for an admin, including the static token. A learner account may omit it and may only use its own id."`
+	On        string      `json:"on,omitempty" jsonschema:"Learner's civil day YYYY-MM-DD for first_on and last_on. Defaults to today in the learner's zone. After today or more than 30 days before today is refused."`
 	Mistakes  []mistakeIn `json:"mistakes" jsonschema:"At most 50. A repeat of the same wrong and right form increments how often it has come back."`
 }
 
@@ -85,8 +87,11 @@ func registerMistakeTools(server *mcp.Server, svc *service) {
 		ReadOnlyHint: false, IdempotentHint: true, DestructiveHint: &falseHint, OpenWorldHint: &falseHint,
 	}
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "record_mistakes",
-		Description: "Record personal mistakes for one learner. A learner account writes its own, and the learner id comes from the token. Naming another learner is refused. An admin, including the static token, must pass learnerId. At most 50. Each has wrong, right, and optional note, pattern, and lexemeId. A repeat of the same pair increments how often it returns. These rows are never copied into the shared list.",
+		Name: "record_mistakes",
+		Description: "Record personal mistakes for one learner. A learner account writes its own, and the learner id comes from the token. Naming another learner is refused. An admin, including the static token, must pass learnerId. " +
+			"At most 50. Each has wrong, right, and optional note, pattern, and lexemeId. A repeat of the same pair increments how often it returns. " +
+			"on is the learner's civil day YYYY-MM-DD for first_on and last_on; omit it for today in the learner's zone. A day after today, or more than 30 days before today, is refused and nothing is written. " +
+			"These rows are never copied into the shared list." + privacyWriteSuffix,
 		Annotations: write,
 	}, svc.recordMistakes)
 	mcp.AddTool(server, &mcp.Tool{
@@ -114,6 +119,14 @@ func (s *service) recordMistakes(ctx context.Context, _ *mcp.CallToolRequest, in
 	if len(in.Mistakes) == 0 || len(in.Mistakes) > maxMistakeBatch {
 		return nil, out, errors.New("Send 1 to 50 mistakes.")
 	}
+	z, err := s.learnerZone(ctx, id)
+	if err != nil {
+		return nil, out, err
+	}
+	on, err := resolveOnDay(strings.TrimSpace(in.On), s.now(), z)
+	if err != nil {
+		return nil, out, err
+	}
 	source := "tutor"
 	if caller.Role == RoleLearner {
 		source = "app"
@@ -124,7 +137,7 @@ func (s *service) recordMistakes(ctx context.Context, _ *mcp.CallToolRequest, in
 			return nil, out, errors.New("A form is at most 200 characters and a note is at most 300, so nothing was written.")
 		}
 		rows[i] = db.MistakeInput{
-			Wrong: row.Wrong, Right: row.Right, Note: row.Note, Pattern: row.Pattern, LexemeID: row.LexemeID, Source: source,
+			Wrong: row.Wrong, Right: row.Right, Note: row.Note, Pattern: row.Pattern, LexemeID: row.LexemeID, Source: source, On: on,
 		}
 	}
 	if err := store.RecordMistakes(ctx, id, rows); err != nil {

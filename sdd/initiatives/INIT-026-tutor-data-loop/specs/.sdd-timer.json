@@ -1,0 +1,148 @@
+{
+  "timers": {
+    "SPEC-001": {
+      "spec_id": "SPEC-001",
+      "initiative": "INIT-026-tutor-data-loop",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-11-01T21:12:24.818427+00:00",
+          "stopped_at": "2026-11-01T21:17:11.004349+00:00",
+          "elapsed_minutes": 5,
+          "description": "ADR-0022 and North Star notes"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 5,
+      "status": "completed"
+    },
+    "SPEC-002": {
+      "spec_id": "SPEC-002",
+      "initiative": "INIT-026-tutor-data-loop",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-11-01T21:12:24.879780+00:00",
+          "stopped_at": "2026-11-01T21:20:39.051384+00:00",
+          "elapsed_minutes": 8,
+          "description": "Migration 020 learner zone and taught words"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 8,
+      "status": "completed"
+    },
+    "SPEC-003": {
+      "spec_id": "SPEC-003",
+      "initiative": "INIT-026-tutor-data-loop",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-11-01T21:21:25.606288+00:00",
+          "stopped_at": "2026-11-01T21:31:43.233421+00:00",
+          "elapsed_minutes": 10,
+          "description": "Learner-day rule and the lesson brief"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 10,
+      "status": "completed"
+    },
+    "SPEC-004": {
+      "spec_id": "SPEC-004",
+      "initiative": "INIT-026-tutor-data-loop",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-11-01T21:31:43.285960+00:00",
+          "stopped_at": "2026-11-01T21:40:48.173464+00:00",
+          "elapsed_minutes": 9,
+          "description": "Jobs on each learner day"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 9,
+      "status": "completed"
+    },
+    "SPEC-005": {
+      "spec_id": "SPEC-005",
+      "initiative": "INIT-026-tutor-data-loop",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-11-01T21:31:43.339758+00:00",
+          "stopped_at": "2026-11-01T21:43:11.009444+00:00",
+          "elapsed_minutes": 11,
+          "description": "Taught words and dated corrections"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 11,
+      "status": "completed"
+    },
+    "SPEC-006": {
+      "spec_id": "SPEC-006",
+      "initiative": "INIT-026-tutor-data-loop",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-11-01T21:31:43.393372+00:00",
+          "stopped_at": "2026-11-01T21:48:47.046913+00:00",
+          "elapsed_minutes": 17,
+          "description": "Pages use the learner day"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 17,
+      "status": "completed"
+    },
+    "SPEC-007": {
+      "spec_id": "SPEC-007",
+      "initiative": "INIT-026-tutor-data-loop",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-11-01T21:31:43.447066+00:00",
+          "stopped_at": "2026-11-01T21:51:22.484405+00:00",
+          "elapsed_minutes": 20,
+          "description": "Zone, weekly payload, confusion pair"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 20,
+      "status": "completed"
+    },
+    "SPEC-008": {
+      "spec_id": "SPEC-008",
+      "initiative": "INIT-026-tutor-data-loop",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-11-01T21:51:22.537349+00:00",
+          "stopped_at": "2026-11-01T22:14:18.714279+00:00",
+          "elapsed_minutes": 23,
+          "description": "Tutor write tools"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 23,
+      "status": "completed"
+    },
+    "SPEC-009": {
+      "spec_id": "SPEC-009",
+      "initiative": "INIT-026-tutor-data-loop",
+      "tracker_issue_key": null,
+      "sessions": [
+        {
+          "started_at": "2026-11-01T22:14:18.767196+00:00",
+          "stopped_at": "2026-11-01T22:39:06.387898+00:00",
+          "elapsed_minutes": 25,
+          "description": "Study digest and tutor resource"
+        }
+      ],
+      "active_session": null,
+      "total_elapsed_minutes": 25,
+      "status": "completed"
+    }
+  }
+}

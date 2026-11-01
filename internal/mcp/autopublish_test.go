@@ -43,12 +43,13 @@ var (
 )
 
 type apEnv struct {
-	t       *testing.T
-	store   *db.Store
-	adapter *mcpstore.Store
-	session *sdkmcp.ClientSession
-	a, b    int64
-	ids     map[string]int64
+	t          *testing.T
+	store      *db.Store
+	adapter    *mcpstore.Store
+	session    *sdkmcp.ClientSession
+	a, b       int64
+	ids        map[string]int64
+	taughtOpts mcp.Options // set by taughtAP for StudyDay + Now
 }
 
 type apPut struct {

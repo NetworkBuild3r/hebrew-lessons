@@ -813,3 +813,95 @@ func TestDailyJobReplaysListenOnce(t *testing.T) {
 		t.Fatal("second run re-ran the listen replay")
 	}
 }
+
+// ac-2: at 2026-11-01T05:30:00Z CatchUp writes 2026-10-31 for Tokyo, not for Denver.
+// INIT-026/SPEC-004.
+func TestCatchUpSkipsDenverBeforeTheirDayEnds(t *testing.T) {
+	e := newEnv(t)
+	denver := e.user
+	tokyo := e.newUser("tokyo")
+	e.setZone(denver, "America/Denver")
+	e.setZone(tokyo, "Asia/Tokyo")
+	e.lexeme()
+
+	e.clk.set(time.Date(2026, 11, 1, 5, 30, 0, 0, time.UTC))
+	if _, err := e.daily.CatchUp(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.snapshotDays(tokyo); !reflect.DeepEqual(got, []string{"2026-10-31"}) {
+		t.Fatalf("tokyo days = %v, want 2026-10-31", got)
+	}
+	for _, d := range e.snapshotDays(denver) {
+		if d == "2026-10-31" {
+			t.Fatalf("denver has 2026-10-31 too early: %v", e.snapshotDays(denver))
+		}
+	}
+}
+
+// ac-1: one sweep at 2026-11-01T06:30:00Z writes 2026-10-31 once for Denver, Tokyo, and
+// the app-zone learner. INIT-026/SPEC-004.
+func TestCatchUpWritesEachLearnersYesterday(t *testing.T) {
+	e := newEnv(t)
+	denver := e.user
+	tokyo := e.newUser("tokyo")
+	chicago := e.newUser("chicago")
+	e.setZone(denver, "America/Denver")
+	e.setZone(tokyo, "Asia/Tokyo")
+	e.lexeme()
+
+	e.clk.set(time.Date(2026, 11, 1, 6, 30, 0, 0, time.UTC))
+	res, err := e.daily.CatchUp(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []int64{denver, tokyo, chicago} {
+		if got := e.snapshotDays(id); !reflect.DeepEqual(got, []string{"2026-10-31"}) {
+			t.Fatalf("learner %d days = %v, want only 2026-10-31", id, got)
+		}
+		if n := e.count(`SELECT COUNT(*) FROM daily_snapshots WHERE user_id = ? AND day = ?`, id, "2026-10-31"); n != 28 {
+			t.Fatalf("learner %d has %d rows for 2026-10-31, want 28", id, n)
+		}
+	}
+	if res.Written != 3 {
+		t.Fatalf("written = %d, want 3", res.Written)
+	}
+	if res.ZoneLearner != 2 || res.ZoneApp != 1 {
+		t.Fatalf("zone counts = learner %d app %d, want 2 and 1", res.ZoneLearner, res.ZoneApp)
+	}
+}
+
+// ac-3: changing a learner's zone between sweeps writes no duplicate day. INIT-026/SPEC-004.
+func TestCatchUpZoneChangeWritesNoDuplicateDay(t *testing.T) {
+	e := newEnv(t)
+	e.setZone(e.user, "Asia/Tokyo")
+	e.lexeme()
+	e.clk.set(time.Date(2026, 11, 1, 5, 30, 0, 0, time.UTC))
+	if _, err := e.daily.CatchUp(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.snapshotDays(e.user); !reflect.DeepEqual(got, []string{"2026-10-31"}) {
+		t.Fatalf("days = %v", got)
+	}
+	e.setZone(e.user, "America/Denver")
+	e.clk.set(time.Date(2026, 11, 1, 6, 30, 0, 0, time.UTC))
+	res, err := e.newDaily("job-a").CatchUp(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := e.snapshotDays(e.user); !reflect.DeepEqual(got, []string{"2026-10-31"}) {
+		t.Fatalf("days after zone change = %v, want no duplicate", got)
+	}
+	if res.Written != 0 {
+		t.Fatalf("result = %+v, want no new writes", res)
+	}
+}
+
+// ac-6: NewDaily without a resolver fails to build; no UTC default remains. INIT-026/SPEC-004.
+func TestNewDailyRequiresResolver(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("NewDaily(nil resolver) did not panic")
+		}
+	}()
+	_ = NewDaily(nil, nil, nil)
+}

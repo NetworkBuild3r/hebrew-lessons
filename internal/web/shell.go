@@ -15,6 +15,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/roots"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
@@ -551,7 +552,12 @@ func (s *server) fillModelCards(ctx context.Context, userID int64, t *views.Toda
 	} else {
 		t.Watch = watchWords(words, watchMax)
 	}
-	since := s.now().UTC().AddDate(0, 0, -(slipShowDays - 1)).Format("2006-01-02")
+	z, err := s.learnerZone(ctx, userID)
+	if err != nil {
+		slog.Warn("today: learner zone", "err", err)
+		return
+	}
+	since := addDaysStr(studyday.Today(s.now(), z), -(slipShowDays - 1))
 	slips, err := s.store.RecentBandSlips(ctx, userID, since)
 	if err != nil {
 		slog.Warn("today: band slips", "err", err)

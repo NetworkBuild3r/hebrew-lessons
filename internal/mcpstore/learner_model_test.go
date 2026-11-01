@@ -2,8 +2,11 @@ package mcpstore
 
 import (
 	"testing"
+	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
 )
 
@@ -61,6 +64,38 @@ func TestSnapshotRowsGroupByDayAndSkillInOrder(t *testing.T) {
 	}
 	if days[0].Skills[0].Counts["known"] != 1 || days[0].Skills[0].Counts["solid"] != 3 || days[0].Skills[1].Retention == nil {
 		t.Fatalf("counts %+v", days[0])
+	}
+}
+
+func TestLearnerModelConfusedWithFromDominantPair(t *testing.T) {
+	conf := func(n int) []learner.Confusion {
+		out := make([]learner.Confusion, n)
+		for i := range out {
+			out[i] = learner.Confusion{Kind: fsrs.MissLetterPair, Key: "ב/כ", At: time.Unix(int64(i), 0).UTC()}
+		}
+		return out
+	}
+	got := confusedWith(conf(3))
+	if got == nil || got.Kind != "letter_pair" || got.Key != "ב/כ" || got.Count != 3 {
+		t.Fatalf("got %+v", got)
+	}
+	if confusedWith(conf(2)) != nil {
+		t.Fatal("two confusions must omit confusedWith")
+	}
+	if confusedWith(nil) != nil {
+		t.Fatal("no confusions must omit confusedWith")
+	}
+}
+
+func TestProgressDecodeReportPayloadOmitsBadJSON(t *testing.T) {
+	if decodeReportPayload(`{"minutesStudied":7,"zone":"America/Denver"}`) == nil {
+		t.Fatal("good payload")
+	}
+	if decodeReportPayload(`not-json`) != nil {
+		t.Fatal("bad JSON must omit payload")
+	}
+	if decodeReportPayload(`[]`) != nil {
+		t.Fatal("array must omit payload")
 	}
 }
 

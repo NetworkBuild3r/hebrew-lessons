@@ -156,12 +156,15 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 			tool.Name != "upsert_patterns" && tool.Name != "upsert_explainer" &&
 			tool.Name != "record_mistakes" && tool.Name != "upsert_common_mistakes" && tool.Name != "upsert_verb_forms" &&
 			tool.Name != "upsert_noun_forms" &&
-			tool.Name != "upsert_verse_notes") {
+			tool.Name != "upsert_verse_notes" &&
+			tool.Name != "set_time_zone" &&
+			tool.Name != "record_taught_words" && tool.Name != "remove_taught_words") {
 			t.Fatalf("%s annotations %#v", tool.Name, tool.Annotations)
 		}
 	}
 	for _, name := range []string{"get_context", "lookup", "validate_unit", "put_unit", "upsert_lexemes", "generate_audio", "publish_unit", "get_learner_words", "get_unit",
-		"get_learner_model", "get_progress", "get_lesson_brief", "add_coach_note", "unpublish_unit"} {
+		"get_learner_model", "get_progress", "get_study_digest", "get_lesson_brief", "add_coach_note", "unpublish_unit", "set_time_zone",
+		"record_taught_words", "remove_taught_words"} {
 		if !gotNames[name] {
 			t.Fatalf("missing %s in %#v", name, gotNames)
 		}
@@ -199,7 +202,7 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resources.Resources) != 9 { // schema, catalog, rules, authoring, and five worksheet templates
+	if len(resources.Resources) != 10 { // schema, catalog, rules, authoring, tutor, and five worksheet templates
 		t.Fatalf("resources = %d", len(resources.Resources))
 	}
 	schemaText := readResource(t, session, resourceUnitSchema)

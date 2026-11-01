@@ -182,6 +182,14 @@ func TestResourcesAuthoringNamesEveryTool(t *testing.T) {
 			t.Errorf("the guide never names %s", name)
 		}
 	}
+	for _, name := range []string{"record_taught_words", "remove_taught_words"} {
+		if !slices.Contains(tools, name) {
+			t.Fatalf("%s is not a tool of the server", name)
+		}
+		if !strings.Contains(text, "`"+name+"`") {
+			t.Errorf("the guide never names %s", name)
+		}
+	}
 	numbered, order := resSteps(text, tools)
 	if numbered != 8 {
 		t.Errorf("the guide has %d numbered steps, want 8", numbered)

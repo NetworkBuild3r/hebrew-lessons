@@ -20,6 +20,43 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
+// seedLearnerDaySnapshots writes one snapshot row per skill per day from first
+// through last (inclusive). INIT-026/SPEC-006.
+func seedLearnerDaySnapshots(t *testing.T, store *db.Store, userID int64, first, last string) {
+	t.Helper()
+	start, err := time.Parse(dayLayout, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	end, err := time.Parse(dayLayout, last)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+		day := d.Format(dayLayout)
+		var rows []db.DailySnapshotRow
+		for i, skill := range learner.Skills {
+			ret := 0.8
+			for _, st := range learner.States {
+				n := 1
+				if st == learner.Known {
+					n = 10 + i
+				}
+				rows = append(rows, db.DailySnapshotRow{
+					Skill: skill, State: string(st), Count: n,
+					EstKnown: 100 + float64(i), Retention: &ret,
+				})
+			}
+		}
+		if err := store.InDailyTx(ctx, func(tx *db.DailyTx) error {
+			return tx.InsertSnapshot(ctx, userID, day, rows)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // Tests for the Progress page (INIT-015/SPEC-018). The fixture has 90 days of snapshots whose
 // numbers are known to the test, a learner model with real evidence, and the events, report,
 // and placements around them, so a number on the page is checked against the number that made it.
@@ -1160,5 +1197,45 @@ func TestProgressOverviewMatchesLearnerModel(t *testing.T) {
 	est := tableRows(section(t, body, "c-card pchart", `data-chart="est"`))
 	if len(est) != 90 || est[0][1] != fmt.Sprintf("%.0f", progEst(0, "read")) || est[89][1] != fmt.Sprintf("%.0f", progEst(89, "read")) {
 		t.Fatalf("overview estimate chart is not read's snapshots: first=%v last=%v", est[0], est[len(est)-1])
+	}
+}
+
+// TestProgressDenverLearnerDayEndsOct31 is ac-1 (INIT-026/SPEC-006): at
+// 2026-11-01T05:30:00Z a Denver learner's Progress chart and This week end on
+// 2026-10-31.
+func TestProgressDenverLearnerDayEndsOct31(t *testing.T) {
+	now := time.Date(2026, 11, 1, 5, 30, 0, 0, time.UTC)
+	store, h := openShellWithAppZone(t, fixedClock(now), "America/Chicago")
+	l := addLearner(t, store, "a@example.com", "sub-denver-progress", now)
+	setLearnerZone(t, store, l.user.ID, "America/Denver")
+	seedLearnerDaySnapshots(t, store, l.user.ID, "2026-10-25", "2026-11-01")
+
+	body := getLearner(t, h, l, "/progress?skill=listen")
+	est := tableRows(section(t, body, "c-card pchart", `data-chart="est"`))
+	if len(est) == 0 || est[len(est)-1][0] != "Oct 31" {
+		t.Fatalf("chart ends on %v, want Oct 31", est)
+	}
+	week := section(t, body, "c-card pweek", "")
+	if !strings.Contains(week, "to Oct 31") {
+		t.Fatalf("This week does not end on Oct 31:\n%s", week)
+	}
+}
+
+// TestProgressNoZoneUsesAppChicago is ac-2 (INIT-026/SPEC-006): a learner with
+// no zone uses the app zone. With Chicago, 2026-11-01T05:30:00Z is 2026-11-01.
+func TestProgressNoZoneUsesAppChicago(t *testing.T) {
+	now := time.Date(2026, 11, 1, 5, 30, 0, 0, time.UTC)
+	store, h := openShellWithAppZone(t, fixedClock(now), "America/Chicago")
+	l := addLearner(t, store, "a@example.com", "sub-app-progress", now)
+	seedLearnerDaySnapshots(t, store, l.user.ID, "2026-10-25", "2026-11-01")
+
+	body := getLearner(t, h, l, "/progress?skill=listen")
+	est := tableRows(section(t, body, "c-card pchart", `data-chart="est"`))
+	if len(est) == 0 || est[len(est)-1][0] != "Nov 1" {
+		t.Fatalf("chart ends on %v, want Nov 1 (Chicago app zone)", est)
+	}
+	week := section(t, body, "c-card pweek", "")
+	if !strings.Contains(week, "to Nov 1") {
+		t.Fatalf("This week does not end on Nov 1:\n%s", week)
 	}
 }

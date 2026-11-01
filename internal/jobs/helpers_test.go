@@ -13,6 +13,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 // fakeClock is a clock a test sets. It is safe to read from the scheduler goroutine.
@@ -84,10 +85,34 @@ func newEnv(t *testing.T, opts ...Option) *env {
 	return e
 }
 
+// newResolver builds a studyday.Resolver with the env's app zone (Chicago by default).
+// INIT-026/SPEC-004.
+func (e *env) newResolver() *studyday.Resolver {
+	e.t.Helper()
+	r, err := studyday.NewResolver(e.store, e.loc)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return r
+}
+
 // newDaily builds another job on the same database and clock, as a second process would.
+// INIT-026/SPEC-004.
 func (e *env) newDaily(owner string, opts ...Option) *Daily {
-	all := append([]Option{WithOwner(owner), WithLearnerOptions(learner.WithBands(e.bands))}, opts...)
-	return NewDaily(e.store, e.clk, e.loc, all...)
+	all := append([]Option{
+		WithOwner(owner),
+		WithAppZone(e.loc),
+		WithLearnerOptions(learner.WithBands(e.bands)),
+	}, opts...)
+	return NewDaily(e.store, e.clk, e.newResolver(), all...)
+}
+
+// setZone stores a learner's IANA zone. INIT-026/SPEC-004.
+func (e *env) setZone(user int64, zone string) {
+	e.t.Helper()
+	if err := e.store.SetUserTimeZone(context.Background(), user, zone); err != nil {
+		e.t.Fatal(err)
+	}
 }
 
 func (e *env) exec(query string, args ...any) {

@@ -15,6 +15,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 const (
@@ -43,7 +44,7 @@ const (
 // ErrLocked means another process holds the daily job lock.
 var ErrLocked = errors.New("jobs: the daily job is running elsewhere")
 
-// ErrFutureDay means the day has not started yet in the server time zone.
+// ErrFutureDay means the day has not started yet for every learner.
 var ErrFutureDay = errors.New("jobs: day is in the future")
 
 // Result counts what a run did.
@@ -56,27 +57,34 @@ type Result struct {
 	Written int
 	// Skipped is how many learner-days already had rows.
 	Skipped int
+	// NotYet is how many learners were skipped because the day is still in their future.
+	NotYet int
 	// Events is how many word regression events were written.
 	Events int
 	// BandSlips is how many band_slip events were written.
 	BandSlips int
+	// ZoneLearner and ZoneApp count learners by studyday.Zone.Source. INIT-026/SPEC-004.
+	ZoneLearner int
+	ZoneApp     int
 }
 
 func (r *Result) add(o Result) {
 	r.Written += o.Written
 	r.Skipped += o.Skipped
+	r.NotYet += o.NotYet
 	r.Events += o.Events
 	r.BandSlips += o.BandSlips
 }
 
 // Daily is the daily snapshot job.
 type Daily struct {
-	store *db.Store
-	model *learner.Model
-	clock clock.Clock
-	loc   *time.Location
-	owner string
-	log   *slog.Logger
+	store    *db.Store
+	model    *learner.Model
+	clock    clock.Clock
+	resolver *studyday.Resolver
+	app      studyday.Zone // app fallback zone the resolver was built with
+	owner    string
+	log      *slog.Logger
 }
 
 // Option changes how NewDaily builds a Daily.
@@ -86,6 +94,7 @@ type options struct {
 	owner   string
 	log     *slog.Logger
 	learner []learner.Option
+	appLoc  *time.Location
 }
 
 // WithOwner names this process in the lock. The default is the host name and process id.
@@ -99,19 +108,30 @@ func WithLearnerOptions(opts ...learner.Option) Option {
 	return func(o *options) { o.learner = append(o.learner, opts...) }
 }
 
+// WithAppZone records the app zone the resolver was built with. Required so Today and the
+// weekly DueWeek default share that zone when every learner has a personal zone.
+// INIT-026/SPEC-004.
+func WithAppZone(loc *time.Location) Option {
+	return func(o *options) { o.appLoc = loc }
+}
+
 // NewDaily builds the job. clk is the process clock and also the clock of the learner model,
-// so a snapshot and the state it holds agree on "now". loc is the server time zone and
-// decides where a day starts. A nil loc is UTC.
-func NewDaily(store *db.Store, clk clock.Clock, loc *time.Location, opts ...Option) *Daily {
+// so a snapshot and the state it holds agree on "now". resolver decides each learner's day.
+// A nil resolver fails to build. Pass WithAppZone with the same location given to
+// studyday.NewResolver. INIT-026/SPEC-004.
+func NewDaily(store *db.Store, clk clock.Clock, resolver *studyday.Resolver, opts ...Option) *Daily {
+	if resolver == nil {
+		panic("jobs: NewDaily requires a studyday.Resolver")
+	}
 	o := options{}
 	for _, f := range opts {
 		f(&o)
 	}
+	if o.appLoc == nil {
+		panic("jobs: NewDaily requires WithAppZone")
+	}
 	if clk == nil && store != nil {
 		clk = store.Clock()
-	}
-	if loc == nil {
-		loc = time.UTC
 	}
 	if o.owner == "" {
 		host, _ := os.Hostname()
@@ -121,19 +141,23 @@ func NewDaily(store *db.Store, clk clock.Clock, loc *time.Location, opts ...Opti
 		o.log = slog.Default()
 	}
 	return &Daily{
-		store: store,
-		model: learner.New(store, clk, o.learner...),
-		clock: clk,
-		loc:   loc,
-		owner: o.owner,
-		log:   o.log,
+		store:    store,
+		model:    learner.New(store, clk, o.learner...),
+		clock:    clk,
+		resolver: resolver,
+		app:      studyday.Zone{Name: o.appLoc.String(), Loc: o.appLoc, Source: studyday.SourceApp},
+		owner:    o.owner,
+		log:      o.log,
 	}
 }
 
-// Today is the current day in the server time zone, as YYYY-MM-DD.
-func (d *Daily) Today() string { return d.clock.Now().In(d.loc).Format(dayLayout) }
+// Today is the current day in the app zone, as YYYY-MM-DD. Learner-day work uses each
+// learner's own zone via the resolver. INIT-026/SPEC-004.
+func (d *Daily) Today() string {
+	return studyday.Today(d.clock.Now(), d.app)
+}
 
-// Yesterday is the day before Today.
+// Yesterday is the day before Today in the app zone.
 func (d *Daily) Yesterday() string { return addDays(d.Today(), -1) }
 
 // ParseDay checks a YYYY-MM-DD day and returns it unchanged.
@@ -154,16 +178,15 @@ func addDays(day string, n int) string {
 }
 
 // Run writes the snapshot of one day for every learner. A learner that already has rows for
-// the day is skipped, so running a day twice changes nothing. A day after today is refused.
+// the day is skipped, so running a day twice changes nothing. A learner for whom the day is
+// still in the future (today in their zone is before the day) is skipped and counted in
+// NotYet. ErrFutureDay is returned only when the day is in the future for every learner.
 // A learner whose write fails does not stop the others: the error is returned at the end,
 // joined, and the next run retries only the learners that have no rows. Run returns
-// ErrLocked when another process holds the lock.
+// ErrLocked when another process holds the lock. INIT-026/SPEC-004.
 func (d *Daily) Run(ctx context.Context, day string) (Result, error) {
 	if _, err := ParseDay(day); err != nil {
 		return Result{}, err
-	}
-	if day > d.Today() {
-		return Result{Day: day}, fmt.Errorf("%w: %s", ErrFutureDay, day)
 	}
 	res := Result{Day: day}
 	err := d.locked(ctx, func() error {
@@ -174,11 +197,23 @@ func (d *Daily) Run(ctx context.Context, day string) (Result, error) {
 		if err != nil {
 			return err
 		}
+		zones, err := d.resolver.All(ctx)
+		if err != nil {
+			return err
+		}
 		res.Learners = len(ids)
+		res.ZoneLearner, res.ZoneApp = countZoneSources(zones)
 		var errs []error
+		now := d.clock.Now()
 		for _, id := range ids {
 			if err := ctx.Err(); err != nil {
 				return err
+			}
+			z := zones[id]
+			today := studyday.Today(now, z)
+			if day > today {
+				res.NotYet++
+				continue
 			}
 			part, err := d.learnerDays(ctx, id, []string{day})
 			res.add(part)
@@ -189,23 +224,33 @@ func (d *Daily) Run(ctx context.Context, day string) (Result, error) {
 				errs = append(errs, fmt.Errorf("learner %d: %w", id, err))
 			}
 		}
+		if res.Learners > 0 && res.NotYet == res.Learners {
+			return fmt.Errorf("%w: %s", ErrFutureDay, day)
+		}
+		if res.Learners == 0 && day > studyday.Today(now, d.app) {
+			return fmt.Errorf("%w: %s", ErrFutureDay, day)
+		}
 		return errors.Join(errs...)
 	})
 	return res, err
 }
 
 // CatchUp fills the days each learner is missing, from the day after their newest snapshot
-// through yesterday, at most MaxCatchUpDays of the newest. A learner with no snapshot gets
-// yesterday only. It is what the scheduler runs at start and at 03:30, so a restart after
-// idle days fills every one of them. It returns ErrLocked when another process holds the lock.
+// through yesterday in that learner's zone, at most MaxCatchUpDays of the newest. A learner
+// with no snapshot gets yesterday only. It is what the scheduler runs at start and on each
+// hourly sweep, so a restart after idle days fills every one of them. It returns ErrLocked
+// when another process holds the lock. INIT-026/SPEC-004.
 func (d *Daily) CatchUp(ctx context.Context) (Result, error) {
 	var res Result
 	err := d.locked(ctx, func() error {
 		if err := d.replayListenOnce(ctx); err != nil {
 			return err
 		}
-		yesterday := d.Yesterday()
 		ids, err := d.store.UserIDs(ctx)
+		if err != nil {
+			return err
+		}
+		zones, err := d.resolver.All(ctx)
 		if err != nil {
 			return err
 		}
@@ -214,11 +259,15 @@ func (d *Daily) CatchUp(ctx context.Context) (Result, error) {
 			return err
 		}
 		res.Learners = len(ids)
+		res.ZoneLearner, res.ZoneApp = countZoneSources(zones)
 		var errs []error
+		now := d.clock.Now()
 		for _, id := range ids {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
+			z := zones[id]
+			yesterday := addDays(studyday.Today(now, z), -1)
 			days := missedDays(last[id], yesterday)
 			if len(days) == 0 {
 				continue
@@ -235,6 +284,18 @@ func (d *Daily) CatchUp(ctx context.Context) (Result, error) {
 		return errors.Join(errs...)
 	})
 	return res, err
+}
+
+func countZoneSources(zones map[int64]studyday.Zone) (learnerN, appN int) {
+	for _, z := range zones {
+		switch z.Source {
+		case studyday.SourceLearner:
+			learnerN++
+		default:
+			appN++
+		}
+	}
+	return learnerN, appN
 }
 
 // replayListenOnce runs the one-time listen-card replay from INIT-023/SPEC-003.

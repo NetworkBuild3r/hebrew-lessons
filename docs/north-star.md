@@ -99,6 +99,8 @@ CREATE TABLE exposures (            -- seen in a story or dialogue, no question 
 
 **When a lesson schedules a listening card.** A graded lesson `listen_pick` schedules that word's `listen` card the same way a meaning check schedules its skill: a first right answer creates the card, and a first wrong answer stores the attempt only ([ADR-0021](decisions/ADR-0021-listening-cards-and-word-page.md)). Finishing a lesson also inserts a new `listen` card for each of that lesson's new words that has a clip and that a `listen_pick` in the lesson targets, alongside the usual new `read` and `recall` cards.
 
+**Outside teaching.** Tutor sessions, Grok conversations, and worksheets enter only as taught words and dated corrections, written over MCP. A taught word gets new cards due at the next study-day cutoff. Outside teaching never grades a card and never moves an existing card. Undo removes only cards the same taught row created that have no review ([ADR-0022](decisions/ADR-0022-learner-day-and-outside-teaching.md)).
+
 ### 4.3 Word states
 
 States are computed from cards, attempts, and exposures. They are never typed in by hand. Each skill has its own state, and the state belongs to the word's dictionary form (section 4.6). A word's overall state is its weakest *unlocked* core skill (`listen`, `read`, `recall`), using the order in the precedence list below. An answered skill with no card is `seen`, so a skill without a card holds the overall state at `seen`. A locked skill (section 4.1) shows as `locked`, not `unseen`, and is left out of the overall state, the "words I know" count, and the vocabulary estimate. Before the letters gate opens, `read` is locked, so a word's overall state comes from `listen` and `recall` only. When the gate opens, `read` joins in as `unseen` for every word, and the overall states are recomputed. The known-word count can drop on that day, and the Progress screen says why.
@@ -313,7 +315,12 @@ Any MCP client with OAuth (Muse, Grok, Claude, Cursor) gets the same tools. A le
 | `get_progress` | Daily snapshots over a date range, regression events, words gained and lost, retention against target, placement history. |
 | `get_lesson_brief` | The word plan from section 7.1, with a `briefId`. |
 | `validate_unit` (extended) | Takes `briefId` and adds the brief checks from section 7.2. |
-| `add_coach_note` | A short note the AI leaves for the next session ("ח/כ keeps coming up in dictation"), read back in `get_context`. |
+| `add_coach_note` | A short note for the next session, from the AI or from the learner about themselves (`author_role`), quoted in that learner's brief and read back in `get_context` ([ADR-0022](decisions/ADR-0022-learner-day-and-outside-teaching.md)). |
+| `set_time_zone` | Sets the learner's IANA zone (`users.time_zone`) used for calendar day and study day. |
+| `get_study_digest` | The learner's study-day digest in their zone (or the app zone), with `zone` and `zoneSource` on every day it names. |
+| `record_taught_words` | Records words taught outside the app and schedules new cards for them, due at the next study-day cutoff. Dated corrections stay on `record_mistakes`. |
+| `remove_taught_words` | Undoes a taught-word row by removing only the cards that row created that have no review. |
+| `hebrew://tutor` | Resource: how outside teaching writes taught words and corrections without grading or moving existing cards. |
 
 **One authoring skill for every bot.** A single prompt document (served as an MCP resource and mirrored into the repo skill) gives every AI the same steps: read the brief, write within it, validate, generate audio, publish, and leave a coach note. Muse and Grok then build lessons the same way.
 

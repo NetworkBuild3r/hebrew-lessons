@@ -22,6 +22,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
@@ -45,6 +46,7 @@ type server struct {
 	runs     placementRuns
 	recheck  PlacementEngine
 	bands    learner.BandSource
+	zones    *studyday.Resolver
 
 	mu     sync.Mutex
 	queues map[string]*studyQueue
@@ -586,7 +588,11 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 	parts := splitDrillKey(key)
 	switch vm.Kind {
 	case session.KindLetter:
-		vm.Asked = pickPart(vm.CardID, studyDayCutoff(s.now()), parts)
+		z, err := s.learnerZone(ctx, userID)
+		if err != nil {
+			return err
+		}
+		vm.Asked = pickPart(vm.CardID, studyday.DueCutoff(s.now(), z), parts)
 		stored := make([]string, 0, len(parts))
 		sides := make([]views.DrillSide, 0, len(parts))
 		for _, part := range parts {
@@ -714,11 +720,20 @@ func (s *server) confusionExample(ctx context.Context, userID int64, kind, key s
 	return s.store.LexemeByID(ctx, id)
 }
 
+// learnerZone is the signed-in learner's civil-day zone (or the app zone).
+// INIT-026/SPEC-006.
+func (s *server) learnerZone(ctx context.Context, userID int64) (studyday.Zone, error) {
+	if s == nil || s.zones == nil {
+		return studyday.Zone{}, fmt.Errorf("web: study zones not configured")
+	}
+	return s.zones.For(ctx, userID)
+}
+
 // pickPart chooses one part of a pair. The seed is the card id plus the
-// learner's study-day cutoff, the next 4:00 America/Denver. The same study
-// day asks the same letter. The next study day can ask the other one.
-// One part is returned as itself. The cutoff comes from studyDayCutoff.
-// A reveal does not call this again: the posted letter is what the back shows.
+// learner's study-day cutoff from studyday.DueCutoff. The same study day
+// asks the same letter. The next study day can ask the other one.
+// One part is returned as itself. A reveal does not call this again: the
+// posted letter is what the back shows.
 func pickPart(cardID int64, cutoff time.Time, parts []string) string {
 	if len(parts) == 0 {
 		return ""

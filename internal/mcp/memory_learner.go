@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -32,6 +33,7 @@ type MemoryAudit struct {
 
 type memLearn struct {
 	learners   map[int64]bool
+	zones      map[int64]string
 	words      map[int64][]ModelWord
 	summary    map[int64]ModelSummary
 	progress   map[int64]Progress
@@ -235,6 +237,68 @@ func (m *Memory) Progress(ctx context.Context, id int64, from, to string) (Progr
 	return out, nil
 }
 
+// UserTimeZone implements LearnerData and studyday.ZoneStore.
+func (m *Memory) UserTimeZone(ctx context.Context, id int64) (string, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return "", false, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	zone, ok := m.learn.zones[id]
+	return zone, ok && zone != "", nil
+}
+
+// SetUserTimeZone implements LearnerData.
+func (m *Memory) SetUserTimeZone(ctx context.Context, id int64, zone string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if zone == "" {
+		return errors.New("time zone is required")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.learn.learners == nil || !m.learn.learners[id] {
+		return errors.New("no such learner")
+	}
+	if m.learn.zones == nil {
+		m.learn.zones = map[int64]string{}
+	}
+	m.learn.zones[id] = zone
+	return nil
+}
+
+// UserTimeZones implements studyday.ZoneStore.
+func (m *Memory) UserTimeZones(ctx context.Context) (map[int64]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := map[int64]string{}
+	for id, zone := range m.learn.zones {
+		if zone != "" {
+			out[id] = zone
+		}
+	}
+	return out, nil
+}
+
+// UserIDs implements studyday.ZoneStore.
+func (m *Memory) UserIDs(ctx context.Context) ([]int64, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]int64, 0, len(m.learn.learners))
+	for id := range m.learn.learners {
+		out = append(out, id)
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
 // BuildLessonBrief implements LearnerData. The brief is the learner's template with a new id.
 func (m *Memory) BuildLessonBrief(ctx context.Context, id int64, theme string) (LessonBrief, error) {
 	if err := ctx.Err(); err != nil {
@@ -272,26 +336,30 @@ func (m *Memory) BriefFacts(ctx context.Context, learnerID int64, briefID string
 	return m.learn.facts[briefID], nil
 }
 
-// AddCoachNote implements LearnerData. It refuses a note when the learner already has
-// maxCoachNotesPerDay from the last 24 hours.
-func (m *Memory) AddCoachNote(ctx context.Context, id int64, author, body string) (CoachNote, error) {
+// AddCoachNote implements LearnerData. It refuses a note when that authorRole already has
+// its daily cap from the last 24 hours.
+func (m *Memory) AddCoachNote(ctx context.Context, id int64, author, authorRole, body string) (CoachNote, error) {
 	if err := ctx.Err(); err != nil {
 		return CoachNote{}, err
+	}
+	cap := maxCoachNotesPerDay
+	if authorRole == "learner" {
+		cap = maxLearnerCoachNotesPerDay
 	}
 	now := time.Now().UTC()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	recent := 0
 	for _, n := range m.learn.notes {
-		if n.user == id && n.note.CreatedAt.After(now.Add(-24*time.Hour)) {
+		if n.user == id && n.note.AuthorRole == authorRole && n.note.CreatedAt.After(now.Add(-24*time.Hour)) {
 			recent++
 		}
 	}
-	if recent >= maxCoachNotesPerDay {
+	if recent >= cap {
 		return CoachNote{}, ErrTooManyNotes
 	}
 	m.learn.nextNote++
-	note := CoachNote{ID: m.learn.nextNote, Author: author, Body: body, CreatedAt: now}
+	note := CoachNote{ID: m.learn.nextNote, Author: author, AuthorRole: authorRole, Body: body, CreatedAt: now}
 	m.learn.notes = append(m.learn.notes, memNote{user: id, note: note})
 	return note, nil
 }

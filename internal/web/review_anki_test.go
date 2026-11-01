@@ -16,6 +16,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 	"github.com/a-h/templ"
@@ -604,16 +605,30 @@ func TestReviewFrontHasNoAnswerHeading(t *testing.T) {
 	}
 }
 
-// TestStudyDayCutoffIsTheNextFourDenver locks the local helper to the
-// DueCutoff rule: the next 4:00 America/Denver, and 4:00 itself belongs to
-// the new study day.
-func TestStudyDayCutoffIsTheNextFourDenver(t *testing.T) {
+// denverZone is America/Denver for DueCutoff cases moved off the deleted
+// internal/web/studyday.go helper. INIT-026/SPEC-006.
+func denverZone(t *testing.T) studyday.Zone {
+	t.Helper()
 	loc, err := time.LoadLocation("America/Denver")
 	if err != nil {
 		t.Fatal(err)
 	}
+	return studyday.Zone{Name: "America/Denver", Loc: loc, Source: studyday.SourceLearner}
+}
+
+func setLearnerZone(t *testing.T, store *db.Store, userID int64, zone string) {
+	t.Helper()
+	if err := store.SetUserTimeZone(context.Background(), userID, zone); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestStudyDayCutoffIsTheNextFourDenver locks studyday.DueCutoff for Denver:
+// the next 4:00 America/Denver, and 4:00 itself belongs to the new study day.
+func TestStudyDayCutoffIsTheNextFourDenver(t *testing.T) {
+	z := denverZone(t)
 	at := func(y int, m time.Month, d, hh, mm int) time.Time {
-		return time.Date(y, m, d, hh, mm, 0, 0, loc)
+		return time.Date(y, m, d, hh, mm, 0, 0, z.Loc)
 	}
 	for _, tc := range []struct{ now, want time.Time }{
 		{at(2026, 10, 21, 3, 59), at(2026, 10, 21, 4, 0)},
@@ -621,12 +636,12 @@ func TestStudyDayCutoffIsTheNextFourDenver(t *testing.T) {
 		{at(2026, 10, 20, 22, 0), at(2026, 10, 21, 4, 0)},
 		{at(2026, 10, 21, 3, 30), at(2026, 10, 21, 4, 0)},
 	} {
-		if got := studyDayCutoff(tc.now); !got.Equal(tc.want) {
+		if got := studyday.DueCutoff(tc.now, z); !got.Equal(tc.want) {
 			t.Fatalf("%s cutoff = %s, want %s", tc.now, got, tc.want)
 		}
 	}
 	early, late := at(2026, 10, 20, 17, 0), at(2026, 10, 20, 23, 0)
-	if !studyDayCutoff(early).Equal(studyDayCutoff(late)) {
+	if !studyday.DueCutoff(early, z).Equal(studyday.DueCutoff(late, z)) {
 		t.Fatal("17:00 and 23:00 Denver are one study day")
 	}
 	ey, em, ed := early.UTC().Date()
@@ -648,6 +663,7 @@ func TestReviewPairAskFollowsTheStudyDay(t *testing.T) {
 	start := time.Date(2026, 10, 18, 12, 0, 0, 0, loc)
 	store, h, clk := openStepped(t, start)
 	learner := addLearner(t, store, "a@example.com", "sub-pair-day", start.Add(400*24*time.Hour))
+	setLearnerZone(t, store, learner.user.ID, "America/Denver")
 	parts := []string{"ג", "פ"}
 	seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
 
@@ -718,16 +734,18 @@ func TestReviewPairAskSurvivesRollover(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	z := denverZone(t)
 	start := time.Date(2026, 10, 20, 22, 0, 0, 0, loc)
 	store, h, clk := openStepped(t, start)
 	learner := addLearner(t, store, "a@example.com", "sub-pair-roll", start.Add(400*24*time.Hour))
+	setLearnerZone(t, store, learner.user.ID, "America/Denver")
 	parts := []string{"ג", "פ"}
 	for i := 0; i < 40; i++ {
 		seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
 		front := getLearner(t, h, learner, "/review")
 		asked := attr(t, front, "data-pointed")
 		cardID := mustCardID(t, front)
-		later := pickPart(cardID, studyDayCutoff(clk.Now().Add(6*time.Hour)), parts)
+		later := pickPart(cardID, studyday.DueCutoff(clk.Now().Add(6*time.Hour), z), parts)
 		if later == asked {
 			clk.Advance(24 * time.Hour)
 			continue
@@ -762,16 +780,18 @@ func TestReviewPairGradeStaysTheAskedLetter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	z := denverZone(t)
 	start := time.Date(2026, 10, 21, 3, 30, 0, 0, loc)
 	store, h, clk := openStepped(t, start)
 	learner := addLearner(t, store, "a@example.com", "sub-pair-grade", start.Add(400*24*time.Hour))
+	setLearnerZone(t, store, learner.user.ID, "America/Denver")
 	parts := []string{"ג", "פ"}
 	for i := 0; i < 40; i++ {
 		seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
 		front := getLearner(t, h, learner, "/review")
 		asked := attr(t, front, "data-pointed")
 		cardID := mustCardID(t, front)
-		later := pickPart(cardID, studyDayCutoff(clk.Now().Add(31*time.Minute)), parts)
+		later := pickPart(cardID, studyday.DueCutoff(clk.Now().Add(31*time.Minute), z), parts)
 		if later == asked {
 			clk.Advance(24 * time.Hour)
 			continue
@@ -856,11 +876,12 @@ func assertAskedAnswer(t *testing.T, body, asked string) {
 // the other letter than 23:00 the same evening, and the study-day seed would not.
 func utcFlipEvening(cardID int64, from time.Time, parts []string) time.Time {
 	loc := from.Location()
+	z := studyday.Zone{Name: loc.String(), Loc: loc, Source: studyday.SourceLearner}
 	y, m, d := from.Date()
 	for i := 0; i < 40; i++ {
 		early := time.Date(y, m, d+i, 17, 0, 0, 0, loc)
 		late := time.Date(y, m, d+i, 23, 0, 0, 0, loc)
-		if pickPart(cardID, studyDayCutoff(early), parts) != pickPart(cardID, studyDayCutoff(late), parts) {
+		if pickPart(cardID, studyday.DueCutoff(early, z), parts) != pickPart(cardID, studyday.DueCutoff(late, z), parts) {
 			continue
 		}
 		if utcDatePick(cardID, early, parts) != utcDatePick(cardID, late, parts) {

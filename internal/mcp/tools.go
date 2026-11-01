@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -33,13 +34,20 @@ type service struct {
 	patterns  patternStore
 	mistakes  mistakeStore
 	verses    verseStore
+	digest    DigestReader
 	audio     AudioGenerator
 	// learner is the store of the learner tools. It is the Course store when that store
 	// implements LearnerData, and nil otherwise.
 	learner LearnerData
 	limiter *limiter
-	// now is the clock of get_progress defaults and the limiter. Tests replace it.
+	// now is the clock of get_progress defaults, set_time_zone today, get_study_digest, and the limiter.
+	// Tests replace it through Options.Now.
 	now func() time.Time
+	// studyDay resolves a learner's civil-day zone. Built from the Course store and
+	// AppZone(TZ), or set by Options.StudyDay in tests. Nil when the app zone is invalid.
+	studyDay *studyday.Resolver
+	// appZoneErr is why studyDay could not be built. Tools that need a day return it.
+	appZoneErr error
 }
 
 type getContextInput struct {
@@ -607,8 +615,11 @@ func registerTools(server *mcp.Server, svc *service) {
 	registerLearnerWords(server, svc)
 	registerLearnerModel(server, svc)
 	registerProgress(server, svc)
+	registerStudyDigest(server, svc)
+	registerTimeZone(server, svc)
 	registerLessonBrief(server, svc)
 	registerCoachNote(server, svc)
+	registerTaughtTools(server, svc)
 	registerUnpublishUnit(server, svc)
 	registerGetUnit(server, svc)
 	registerPatternTools(server, svc)

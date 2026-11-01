@@ -24,6 +24,8 @@ const (
 
 	// maxCoachNotesPerDay is db.MaxCoachNotesPerDay. A test in mcpstore keeps them equal.
 	maxCoachNotesPerDay = 100
+	// maxLearnerCoachNotesPerDay is db.MaxLearnerCoachNotesPerDay (INIT-026/SPEC-008).
+	maxLearnerCoachNotesPerDay = 20
 	// maxCoachNoteRunes is the longest note body, as coach_notes.body allows.
 	maxCoachNoteRunes = 500
 	// maxAuthorRunes is the longest note author, as coach_notes.author allows.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"slices"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 // The learner tools' store (INIT-015/SPEC-021). The app and the AI read the same functions:
@@ -75,6 +77,7 @@ func modelWord(w learner.WordState) mcp.ModelWord {
 		b := w.Band
 		out.Band = &b
 	}
+	out.ConfusedWith = confusedWith(w.Confusions)
 	for _, sk := range w.Skills {
 		out.Skills = append(out.Skills, mcp.ModelSkill{
 			Skill: sk.Skill, State: string(sk.State), Attempts: sk.Attempts, Accuracy: sk.Accuracy,
@@ -82,6 +85,26 @@ func modelWord(w learner.WordState) mcp.ModelWord {
 		})
 	}
 	return out
+}
+
+// confusedWith is the dominant confusion pair when DominantPair says there is one.
+// DominantPair returns the key and count only; the kind is recovered from the same window.
+func confusedWith(confusions []learner.Confusion) *mcp.ConfusedWith {
+	key, count, ok := learner.DominantPair(confusions)
+	if !ok {
+		return nil
+	}
+	type pair struct{ kind, key string }
+	counts := map[pair]int{}
+	for _, c := range confusions {
+		counts[pair{c.Kind, c.Key}]++
+	}
+	for p, n := range counts {
+		if p.key == key && n == count {
+			return &mcp.ConfusedWith{Kind: p.kind, Key: key, Count: count}
+		}
+	}
+	return &mcp.ConfusedWith{Key: key, Count: count}
 }
 
 func timePtr(t time.Time) *time.Time {
@@ -154,15 +177,83 @@ func (s *Store) Progress(ctx context.Context, id int64, from, to string) (mcp.Pr
 		out.Placements = append(out.Placements, placementView(r))
 	}
 
-	reports, err := s.db.WeeklyReportRows(ctx, id, from, to, progressReportCap)
+	reports, err := s.weeklyReports(ctx, id, from, to, progressReportCap)
 	if err != nil {
 		return mcp.Progress{}, err
 	}
-	out.WeeklyReports = make([]mcp.ReportView, 0, len(reports))
-	for _, r := range reports {
-		out.WeeklyReports = append(out.WeeklyReports, mcp.ReportView{WeekStart: r.WeekStart, Summary: r.Summary, CreatedAt: r.CreatedAt})
-	}
+	out.WeeklyReports = reports
 	return out, nil
+}
+
+// weeklyReports reads weekly_reports including payload_json. A row whose JSON does
+// not decode leaves Payload nil and is not an error (INIT-026/SPEC-007).
+func (s *Store) weeklyReports(ctx context.Context, id int64, from, to string, limit int) ([]mcp.ReportView, error) {
+	conn, err := s.conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT week_start, summary, created_at, payload_json FROM weekly_reports
+		WHERE user_id = ? AND week_start >= ? AND week_start <= ?
+		ORDER BY week_start DESC LIMIT ?`, id, from, to, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []mcp.ReportView{}
+	for rows.Next() {
+		var r mcp.ReportView
+		var at, payload string
+		if err := rows.Scan(&r.WeekStart, &r.Summary, &at, &payload); err != nil {
+			return nil, err
+		}
+		if r.CreatedAt, err = db.ParseTime(at); err != nil {
+			return nil, err
+		}
+		r.Payload = decodeReportPayload(payload)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func decodeReportPayload(raw string) *mcp.ReportPayload {
+	var p mcp.ReportPayload
+	if err := json.Unmarshal([]byte(raw), &p); err != nil {
+		return nil
+	}
+	return &p
+}
+
+// UserTimeZone implements mcp.LearnerData and studyday.ZoneStore.
+func (s *Store) UserTimeZone(ctx context.Context, id int64) (string, bool, error) {
+	if err := s.ready(ctx); err != nil {
+		return "", false, err
+	}
+	return s.db.UserTimeZone(ctx, id)
+}
+
+// SetUserTimeZone implements mcp.LearnerData.
+func (s *Store) SetUserTimeZone(ctx context.Context, id int64, zone string) error {
+	if err := s.ready(ctx); err != nil {
+		return err
+	}
+	return s.db.SetUserTimeZone(ctx, id, zone)
+}
+
+// UserTimeZones implements studyday.ZoneStore.
+func (s *Store) UserTimeZones(ctx context.Context) (map[int64]string, error) {
+	if err := s.ready(ctx); err != nil {
+		return nil, err
+	}
+	return s.db.UserTimeZones(ctx)
+}
+
+// UserIDs implements studyday.ZoneStore.
+func (s *Store) UserIDs(ctx context.Context) ([]int64, error) {
+	if err := s.ready(ctx); err != nil {
+		return nil, err
+	}
+	return s.db.UserIDs(ctx)
 }
 
 // snapshotDays groups snapshot rows (ordered by day, skill, state) into days, with the
@@ -299,8 +390,16 @@ func (s *Store) BuildLessonBrief(ctx context.Context, id int64, theme string) (m
 	if err := s.ready(ctx); err != nil {
 		return mcp.LessonBrief{}, err
 	}
+	app, err := studyday.AppZone(os.Getenv("TZ"))
+	if err != nil {
+		return mcp.LessonBrief{}, err
+	}
+	zones, err := studyday.NewResolver(s, app)
+	if err != nil {
+		return mcp.LessonBrief{}, err
+	}
 	model := learner.New(s.db, nil)
-	br, err := brief.New(s.db, model, nil).Build(ctx, id, theme)
+	br, err := brief.New(s.db, model, nil, brief.WithResolver(zones)).Build(ctx, id, theme)
 	if errors.Is(err, brief.ErrTheme) {
 		return mcp.LessonBrief{}, mcp.ErrBadTheme
 	}
@@ -342,7 +441,7 @@ func lessonBrief(br brief.Brief) mcp.LessonBrief {
 		out.ComfortableWords = append(out.ComfortableWords, word(w))
 	}
 	for _, n := range br.CoachNotes {
-		out.CoachNotes = append(out.CoachNotes, mcp.CoachNote{Author: n.Author, Body: n.Body, CreatedAt: n.At})
+		out.CoachNotes = append(out.CoachNotes, mcp.CoachNote{Author: n.Author, AuthorRole: n.AuthorRole, Body: n.Body, CreatedAt: n.At})
 	}
 	for _, m := range br.FixMistakes {
 		out.FixMistakes = append(out.FixMistakes, mcp.BriefFixMistake{Wrong: m.Wrong, Right: m.Right, Note: m.Note, Pattern: m.Pattern})
@@ -351,19 +450,19 @@ func lessonBrief(br brief.Brief) mcp.LessonBrief {
 }
 
 // AddCoachNote implements mcp.LearnerData.
-func (s *Store) AddCoachNote(ctx context.Context, id int64, author, body string) (mcp.CoachNote, error) {
+func (s *Store) AddCoachNote(ctx context.Context, id int64, author, authorRole, body string) (mcp.CoachNote, error) {
 	if err := s.ready(ctx); err != nil {
 		return mcp.CoachNote{}, err
 	}
 	at := s.now()
-	noteID, err := s.db.AddCoachNote(ctx, id, author, body, at)
+	noteID, err := s.db.AddCoachNote(ctx, id, author, authorRole, body, at)
 	if errors.Is(err, db.ErrTooManyCoachNotes) {
 		return mcp.CoachNote{}, mcp.ErrTooManyNotes
 	}
 	if err != nil {
 		return mcp.CoachNote{}, err
 	}
-	return mcp.CoachNote{ID: noteID, Author: author, Body: body, CreatedAt: at.UTC()}, nil
+	return mcp.CoachNote{ID: noteID, Author: author, AuthorRole: authorRole, Body: body, CreatedAt: at.UTC()}, nil
 }
 
 // RecentCoachNotes implements mcp.LearnerData.
@@ -377,7 +476,7 @@ func (s *Store) RecentCoachNotes(ctx context.Context, id int64, n int) ([]mcp.Co
 	}
 	out := make([]mcp.CoachNote, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, mcp.CoachNote{ID: r.ID, Author: r.Author, Body: r.Body, CreatedAt: r.CreatedAt})
+		out = append(out, mcp.CoachNote{ID: r.ID, Author: r.Author, AuthorRole: r.AuthorRole, Body: r.Body, CreatedAt: r.CreatedAt})
 	}
 	return out, nil
 }

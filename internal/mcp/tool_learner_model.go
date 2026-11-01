@@ -24,6 +24,7 @@ const learnerModelDescription = "Read what the app knows about one learner's wor
 	"The overall state is the weakest skill that has evidence: unseen, seen, struggling, regressed, learning, known, or solid. " +
 	"Each skill has attempts, accuracy over the newest answers, lastSeen, and stability in days. " +
 	"cause says why a struggling or regressed word is failing: decoding, production, spelling, confusion, or band_slip. It is left out when no pattern fits. " +
+	"confusedWith is the dominant letter or agreement pair when one exists, with kind, key, and count; it is left out otherwise. " +
 	"state keeps words whose overall state matches. With skill set, state is the state of that skill. band keeps one band. " +
 	"limit defaults to 50 and is cut to 200. limit in the reply is the page size that was used. " +
 	"nextCursor is null on the last page. Send it back as cursor, with the same filters, to read the next page. " +

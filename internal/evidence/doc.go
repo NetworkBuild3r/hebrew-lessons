@@ -32,10 +32,17 @@
 //
 // Recorder.Expose writes exposures: words shown with no question asked.
 //
-// The package depends on db, fsrs, and clock. It does not import session.
-// Time comes from the clock, so tests are deterministic. The learner id is a
-// field of Attempt that handlers fill from the signed-in session, never from a
-// form. Response text is cut to 200 characters before it is stored.
+// Outside teaching (tutor sessions, Grok conversations, worksheets) enters
+// only through Recorder.Taught and dated corrections: Taught inserts
+// taught_words and schedules new read/recall/(listen) cards due at the next
+// study-day cutoff, and never grades or moves an existing card. RemoveTaught
+// undoes only cards that same taught row created that still have no review.
+// ADR-0022 decision D2. INIT-026/SPEC-005.
 //
-// Provenance: INIT-015/SPEC-005.
+// The package depends on db, fsrs, clock, and studyday. It does not import
+// session. Time comes from the clock, so tests are deterministic. The learner
+// id is a field of Attempt that handlers fill from the signed-in session, never
+// from a form. Response text is cut to 200 characters before it is stored.
+//
+// Provenance: INIT-015/SPEC-005; outside teaching INIT-026/SPEC-005.
 package evidence

@@ -4,11 +4,14 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -97,6 +100,13 @@ type Options struct {
 	Lookup     units.Lookup
 	Units      UnitWriter
 	Audio      AudioGenerator
+	// Now, when set, replaces time.Now for progress defaults, set_time_zone today,
+	// and the learner-tool rate limiter. Production leaves it nil.
+	Now func() time.Time
+	// StudyDay, when set, is the learner-day resolver. When nil, Handler builds one
+	// from Course (if it implements studyday.ZoneStore) and studyday.AppZone(TZ).
+	// Tests set it so they do not depend on the process TZ. INIT-026/SPEC-007.
+	StudyDay *studyday.Resolver
 }
 
 // Handler returns the streamable HTTP handler for the authoring server.
@@ -172,6 +182,9 @@ func newMCPServer(opts Options) *mcp.Server {
 		audio:     opts.Audio,
 		now:       time.Now,
 	}
+	if opts.Now != nil {
+		svc.now = opts.Now
+	}
 	svc.limiter = newLimiter(func() time.Time { return svc.now() }, learnerToolsPerMinute, rateWindow)
 	// The learner tools read the course store when it has the learner model. No Options
 	// field is needed, and a store without it leaves the tools returning a tool error.
@@ -187,6 +200,10 @@ func newMCPServer(opts Options) *mcp.Server {
 	if verses, ok := opts.Course.(verseStore); ok {
 		svc.verses = verses
 	}
+	if digest, ok := opts.Course.(DigestReader); ok {
+		svc.digest = digest
+	}
+	attachStudyDay(svc, opts)
 	registerTools(server, svc)
 	if opts.extraTools != nil {
 		opts.extraTools(server)
@@ -197,6 +214,46 @@ func newMCPServer(opts Options) *mcp.Server {
 		panic(err)
 	}
 	return server
+}
+
+// attachStudyDay wires the learner-day resolver. Options.StudyDay wins for tests.
+// Otherwise the Course store must be a studyday.ZoneStore and TZ must load. A bad
+// TZ is kept as appZoneErr so tools fail loud instead of inventing UTC.
+func attachStudyDay(svc *service, opts Options) {
+	if opts.StudyDay != nil {
+		svc.studyDay = opts.StudyDay
+		return
+	}
+	zs, ok := opts.Course.(studyday.ZoneStore)
+	if !ok {
+		return
+	}
+	loc, err := studyday.AppZone(os.Getenv("TZ"))
+	if err != nil {
+		svc.appZoneErr = err
+		return
+	}
+	r, err := studyday.NewResolver(zs, loc)
+	if err != nil {
+		svc.appZoneErr = err
+		return
+	}
+	svc.studyDay = r
+}
+
+// learnerZone is the civil-day authority for one learner tool call.
+func (s *service) learnerZone(ctx context.Context, learnerID int64) (studyday.Zone, error) {
+	if s.studyDay == nil {
+		if s.appZoneErr != nil {
+			return studyday.Zone{}, errors.New("The app time zone is not configured.")
+		}
+		return studyday.Zone{}, errors.New("The learner day zone is not connected.")
+	}
+	z, err := s.studyDay.For(ctx, learnerID)
+	if err != nil {
+		return studyday.Zone{}, storeErr("The learner's time zone could not be read.", err)
+	}
+	return z, nil
 }
 
 func registerResources(server *mcp.Server) error {
@@ -246,6 +303,13 @@ func registerResources(server *mcp.Server) error {
 		Description: "The steps every client follows to build a lesson for one learner: read the brief, write within it, validate, generate audio, publish, and leave a coach note.",
 		MIMEType:    "text/markdown",
 	}, authoringGuide)
+	addTextResource(server, &mcp.Resource{
+		URI:         resourceTutor,
+		Name:        "tutor-guide",
+		Title:       "Tutor conversation guide",
+		Description: "How a tutor LLM reads get_study_digest and writes taught words and corrections without grading existing cards.",
+		MIMEType:    "text/markdown",
+	}, tutorGuide)
 	return registerTemplateResources(server)
 }
 

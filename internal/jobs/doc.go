@@ -47,16 +47,18 @@
 // regression events of the whole gap land on the first missed day (later days have nothing
 // to compare). A band_slip is not repeated for the same band within 7 days.
 //
-// All times come from internal/clock. The day boundary is the server time zone.
+// All times come from internal/clock. Each learner's day boundary is their studyday zone
+// (learner-stored or app fallback). INIT-026/SPEC-004.
 //
-// # The weekly report (INIT-015/SPEC-023)
+// # The weekly report (INIT-015/SPEC-023, learner day INIT-026/SPEC-004)
 //
 // Weekly.Run writes one weekly_reports row for each learner and each finished week. A week is
-// Monday to Sunday in the server time zone, the same zone the daily job files its days under,
-// so a regression event and a snapshot land in the week their local day says. Minutes studied
-// are counted over the same local days (Monday 00:00 to the next Monday 00:00 local), not over
-// UTC days, so an evening session is not moved a day. The scheduler writes the report on Monday
-// at 04:00, half an hour after the daily job wrote Sunday. A week that has not ended is refused.
+// Monday to Sunday in that learner's zone, so a regression event and a snapshot land in the
+// week their local day says. Minutes studied are counted over the same local days (Monday
+// 00:00 to the next Monday 00:00 in the learner zone), not over UTC days. The scheduler is an
+// hourly sweep: daily catch-up, then weekly catch-up. Each learner's due week is their last
+// full Monday–Sunday, written on the first sweep after that Monday starts. A week that has not
+// ended for a learner is skipped.
 //
 // What the payload holds:
 //

@@ -10,6 +10,7 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
@@ -19,6 +20,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 	"github.com/a-h/templ"
 )
@@ -70,6 +72,9 @@ type Options struct {
 	study *session.Service
 	// bands replaces where the learner model gets placement bands. For tests.
 	bands learner.BandSource
+	// Zones resolves the signed-in learner's civil day. Nil builds one from
+	// Store and studyday.AppZone(TZ) in NewOptions. INIT-026/SPEC-006.
+	Zones *studyday.Resolver
 }
 
 // NewOptions is New with the lesson store, the audio directory, and placement.
@@ -123,6 +128,18 @@ func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.
 			// sitting so a reload and a rebuilt queue stay on that seed.
 			srv.fixedReviewSeed = true
 		}
+	}
+	srv.zones = opts.Zones
+	if srv.zones == nil && opts.Store != nil {
+		appLoc, err := studyday.AppZone(os.Getenv("TZ"))
+		if err != nil {
+			panic("web: " + err.Error())
+		}
+		zones, err := studyday.NewResolver(opts.Store, appLoc)
+		if err != nil {
+			panic("web: " + err.Error())
+		}
+		srv.zones = zones
 	}
 	srv.audioDir = opts.AudioDir
 	srv.voices = opts.Voices

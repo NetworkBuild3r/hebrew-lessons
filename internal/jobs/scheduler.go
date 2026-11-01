@@ -10,27 +10,18 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 )
 
-const (
-	// DefaultHour and DefaultMinute are when the scheduler wakes: 03:30 server time.
-	DefaultHour   = 3
-	DefaultMinute = 30
-
-	// StopTimeout is the longest Stop waits for the scheduler to finish.
-	StopTimeout = 5 * time.Second
-)
+// StopTimeout is the longest Stop waits for the scheduler to finish.
+const StopTimeout = 5 * time.Second
 
 // ErrStopTimeout means the scheduler did not stop within StopTimeout.
 var ErrStopTimeout = errors.New("jobs: scheduler did not stop in time")
 
-// Scheduler runs the daily job at 03:30 in the server time zone, and once at start. With
-// WithWeekly it also writes the weekly report on Monday at 04:00 and at start.
+// Scheduler runs an hourly sweep: daily catch-up, then weekly catch-up, once at start and
+// at each top of the hour. Per-learner day and week logic stays in the jobs. INIT-026/SPEC-004.
 type Scheduler struct {
 	daily  *Daily
 	weekly *Weekly
 	clock  clock.Clock
-	loc    *time.Location
-	hour   int
-	min    int
 	after  func(time.Duration) <-chan time.Time
 	log    *slog.Logger
 	wait   time.Duration
@@ -39,16 +30,10 @@ type Scheduler struct {
 // SchedulerOption changes how NewScheduler builds a Scheduler.
 type SchedulerOption func(*Scheduler)
 
-// WithWeekly adds the weekly report. The scheduler then wakes for the earlier of the next
-// 03:30 and the next Monday 04:00, catches up the daily snapshots at each wake, and then
-// catches up the weekly report, so Sunday's snapshot is always written before the report that
-// needs it. The weekly job must be built on the same daily job as the scheduler.
+// WithWeekly adds the weekly report. Each hourly sweep catches up daily snapshots first,
+// then the weekly report, so Sunday's snapshot is written before the report that needs it.
+// The weekly job must be built on the same daily job as the scheduler. INIT-026/SPEC-004.
 func WithWeekly(w *Weekly) SchedulerOption { return func(s *Scheduler) { s.weekly = w } }
-
-// WithWakeTime sets the time of day the scheduler wakes, in the server time zone.
-func WithWakeTime(hour, minute int) SchedulerOption {
-	return func(s *Scheduler) { s.hour, s.min = hour, minute }
-}
 
 // WithTimer replaces the wait between runs. The function returns a channel that fires after
 // the duration. Tests use it with a fake clock. The default is time.After.
@@ -61,11 +46,10 @@ func WithStopTimeout(d time.Duration) SchedulerOption {
 	return func(s *Scheduler) { s.wait = d }
 }
 
-// NewScheduler builds a scheduler for the job. It uses the job's clock and time zone.
+// NewScheduler builds a scheduler for the job. It uses the job's clock.
 func NewScheduler(d *Daily, opts ...SchedulerOption) *Scheduler {
 	s := &Scheduler{
-		daily: d, clock: d.clock, loc: d.loc,
-		hour: DefaultHour, min: DefaultMinute,
+		daily: d, clock: d.clock,
 		after: time.After, log: d.log, wait: StopTimeout,
 	}
 	for _, o := range opts {
@@ -74,30 +58,20 @@ func NewScheduler(d *Daily, opts ...SchedulerOption) *Scheduler {
 	return s
 }
 
-// Next is the first wake time after now: the next 03:30 in the server time zone.
+// Next is the first wake time after now: the next top of the hour. INIT-026/SPEC-004.
 func (s *Scheduler) Next(now time.Time) time.Time {
-	local := now.In(s.loc)
-	next := time.Date(local.Year(), local.Month(), local.Day(), s.hour, s.min, 0, 0, s.loc)
-	if !next.After(now) {
-		next = time.Date(local.Year(), local.Month(), local.Day()+1, s.hour, s.min, 0, 0, s.loc)
-	}
-	return next
+	return now.Truncate(time.Hour).Add(time.Hour)
 }
 
-// Run catches up at once, then wakes at each 03:30 and catches up again, until ctx is
-// cancelled. It returns nil on cancel. A failed run is logged and retried at the next wake,
-// and a run that finds the lock held is skipped.
+// Run catches up at once, then wakes at each top of the hour and catches up again, until
+// ctx is cancelled. It returns nil on cancel. A failed run is logged and retried at the next
+// wake, and a run that finds the lock held is skipped. INIT-026/SPEC-004.
 func (s *Scheduler) Run(ctx context.Context) error {
 	s.tick(ctx)
 	s.tickWeekly(ctx)
 	for {
 		now := s.clock.Now()
 		wake := s.Next(now)
-		if s.weekly != nil {
-			if w := NextWeekly(now, s.loc); w.Before(wake) {
-				wake = w
-			}
-		}
 		select {
 		case <-ctx.Done():
 			return nil
@@ -127,7 +101,7 @@ func (s *Scheduler) tickWeekly(ctx context.Context) {
 	default:
 		s.log.Info("weekly job", "week", res.Week, "learners", res.Learners, "written", res.Written,
 			"skipped", res.Skipped, "gained", res.Gained, "lost", res.Lost, "cleared", res.Cleared,
-			"band_slips", res.BandSlips)
+			"band_slips", res.BandSlips, "zone_learner", res.ZoneLearner, "zone_app", res.ZoneApp)
 	}
 }
 
@@ -145,7 +119,8 @@ func (s *Scheduler) tick(ctx context.Context) {
 		s.log.Error("daily job failed", "err", err, "written", res.Written)
 	default:
 		s.log.Info("daily job", "learners", res.Learners, "written", res.Written, "skipped", res.Skipped,
-			"events", res.Events, "band_slips", res.BandSlips)
+			"events", res.Events, "band_slips", res.BandSlips,
+			"zone_learner", res.ZoneLearner, "zone_app", res.ZoneApp)
 	}
 }
 

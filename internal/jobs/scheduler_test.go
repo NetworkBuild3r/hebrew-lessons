@@ -55,6 +55,7 @@ func (e *env) scheduler(owner string, opts ...SchedulerOption) (*Scheduler, chan
 	return NewScheduler(e.newDaily(owner), append([]SchedulerOption{WithTimer(after)}, opts...)...), reqs
 }
 
+// ac-4: Scheduler.Next returns the next top of the hour. INIT-026/SPEC-004.
 func TestNextWake(t *testing.T) {
 	e := newEnv(t)
 	s, _ := e.scheduler("job-a")
@@ -62,25 +63,24 @@ func TestNextWake(t *testing.T) {
 	cases := []struct {
 		name string
 		now  time.Time
-		want string // In Chicago.
+		want time.Time
 	}{
-		{"morning", utc(2026, 10, 19, 12, 0), "2026-10-20 03:30 CDT"},        // 07:00 local.
-		{"before the wake", utc(2026, 10, 19, 7, 0), "2026-10-19 03:30 CDT"}, // 02:00 local.
-		{"at the wake", utc(2026, 10, 19, 8, 30), "2026-10-20 03:30 CDT"},    // 03:30 local exactly.
-		{"a second before", utc(2026, 10, 19, 8, 29), "2026-10-19 03:30 CDT"},
-		{"evening", utc(2026, 10, 20, 3, 0), "2026-10-20 03:30 CDT"},                     // 22:00 local on the 19th.
-		{"the night the clocks go back", utc(2026, 11, 1, 5, 0), "2026-11-01 03:30 CST"}, // 00:00 CDT.
-		{"after the clocks go back", utc(2026, 11, 1, 12, 0), "2026-11-02 03:30 CST"},
+		{"morning", utc(2026, 10, 19, 12, 0), utc(2026, 10, 19, 13, 0)},
+		{"before the hour", utc(2026, 10, 19, 7, 0), utc(2026, 10, 19, 8, 0)},
+		{"at the hour", utc(2026, 10, 19, 8, 0), utc(2026, 10, 19, 9, 0)},
+		{"a second before", utc(2026, 10, 19, 8, 59), utc(2026, 10, 19, 9, 0)},
+		{"evening", utc(2026, 10, 20, 3, 0), utc(2026, 10, 20, 4, 0)},
+		{"across midnight", utc(2026, 11, 1, 23, 30), utc(2026, 11, 2, 0, 0)},
 	}
 	for _, c := range cases {
-		if got := s.Next(c.now).In(e.loc).Format("2006-01-02 15:04 MST"); got != c.want {
-			t.Errorf("%s: Next(%s) = %s, want %s", c.name, c.now.Format(time.RFC3339), got, c.want)
+		if got := s.Next(c.now); !got.Equal(c.want) {
+			t.Errorf("%s: Next(%s) = %s, want %s", c.name, c.now.Format(time.RFC3339), got.Format(time.RFC3339), c.want.Format(time.RFC3339))
 		}
 	}
 }
 
-// ac-2 through the scheduler: after 5 idle days and a restart, every missed day has a snapshot,
-// and the wait that follows is until the next 03:30.
+// ac-4: after 5 idle days and a restart, every missed day has a snapshot,
+// and the wait that follows is until the next top of the hour. INIT-026/SPEC-004.
 func TestSchedulerCatchesUpAfterAnIdleRestart(t *testing.T) {
 	e := newEnv(t)
 	id := e.lexeme()
@@ -94,7 +94,7 @@ func TestSchedulerCatchesUpAfterAnIdleRestart(t *testing.T) {
 	}
 	stopScheduler(t, stop)
 
-	e.clk.advance(5 * 24 * time.Hour) // 2026-10-24 07:00 in Chicago.
+	e.clk.advance(5 * 24 * time.Hour) // 2026-10-24 07:00 in Chicago / 12:00 UTC.
 	second, reqs := e.scheduler("job-a")
 	stop = second.Start(context.Background())
 	r := nextReq(t, reqs)
@@ -102,30 +102,42 @@ func TestSchedulerCatchesUpAfterAnIdleRestart(t *testing.T) {
 	if got := e.snapshotDays(e.user); !reflect.DeepEqual(got, want) {
 		t.Fatalf("days after the restart = %v, want %v", got, want)
 	}
-	if r.d != 20*time.Hour+30*time.Minute {
-		t.Errorf("the wait after catching up = %v, want 20h30m to the next 03:30", r.d)
+	if r.d != time.Hour {
+		t.Errorf("the wait after catching up = %v, want 1h to the next top of the hour", r.d)
 	}
 	stopScheduler(t, stop)
 }
 
-// The scheduler wakes at 03:30 and writes the day that just ended.
+// The scheduler wakes at the top of each hour and writes the day that just ended.
+// INIT-026/SPEC-004 (was 03:30).
 func TestSchedulerWakesAtThreeThirty(t *testing.T) {
 	e := newEnv(t)
 	e.lexeme()
 	s, reqs := e.scheduler("job-a")
 	stop := s.Start(context.Background())
 	first := nextReq(t, reqs)
-	if first.d != 20*time.Hour+30*time.Minute {
-		t.Fatalf("first wait = %v, want 20h30m (07:00 to 03:30)", first.d)
+	if first.d != time.Hour {
+		t.Fatalf("first wait = %v, want 1h (12:00 UTC to 13:00)", first.d)
 	}
 	e.clk.advance(first.d)
 	first.fire <- e.clk.Now()
 	second := nextReq(t, reqs)
-	if got := e.snapshotDays(e.user); !reflect.DeepEqual(got, []string{"2026-10-18", "2026-10-19"}) {
-		t.Fatalf("days after the wake = %v", got)
+	// Still the same local day (07:00 → 08:00 Chicago); yesterday is still 2026-10-18.
+	if got := e.snapshotDays(e.user); !reflect.DeepEqual(got, []string{"2026-10-18"}) {
+		t.Fatalf("days after the first hourly wake = %v", got)
 	}
-	if second.d != 24*time.Hour {
-		t.Errorf("second wait = %v, want 24h", second.d)
+	if second.d != time.Hour {
+		t.Errorf("second wait = %v, want 1h", second.d)
+	}
+	// Advance to the next local day so CatchUp writes 2026-10-19.
+	e.clk.advance(23 * time.Hour) // 2026-10-20 12:00 UTC = 07:00 Chicago on the 20th.
+	second.fire <- e.clk.Now()
+	third := nextReq(t, reqs)
+	if got := e.snapshotDays(e.user); !reflect.DeepEqual(got, []string{"2026-10-18", "2026-10-19"}) {
+		t.Fatalf("days after the next-day wake = %v", got)
+	}
+	if third.d != time.Hour {
+		t.Errorf("third wait = %v, want 1h", third.d)
 	}
 	stopScheduler(t, stop)
 }
@@ -229,11 +241,11 @@ func TestSchedulerStopGivesUpAfterTheTimeout(t *testing.T) {
 }
 
 func TestDefaultStopTimeoutIsFiveSeconds(t *testing.T) {
-	if StopTimeout != 5*time.Second || DefaultHour != 3 || DefaultMinute != 30 {
-		t.Fatalf("StopTimeout %v, wake %d:%d", StopTimeout, DefaultHour, DefaultMinute)
+	if StopTimeout != 5*time.Second {
+		t.Fatalf("StopTimeout %v", StopTimeout)
 	}
 	e := newEnv(t)
-	if s := NewScheduler(e.daily); s.wait != 5*time.Second || s.hour != 3 || s.min != 30 {
-		t.Fatalf("defaults: wait %v, wake %d:%d", s.wait, s.hour, s.min)
+	if s := NewScheduler(e.daily); s.wait != 5*time.Second {
+		t.Fatalf("defaults: wait %v", s.wait)
 	}
 }
