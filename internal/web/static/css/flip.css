@@ -219,10 +219,10 @@ html:not(.js) .wslot > .clip { display: none; }
   text-align: start;
   position: fixed;
   z-index: 40;
-  left: 50%;
-  bottom: max(var(--space-4), env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  inline-size: min(28rem, calc(100vw - 2 * var(--space-4)));
+  inset-inline: 0;
+  margin-inline: auto;
+  inset-block-end: max(var(--space-4), env(safe-area-inset-bottom));
+  inline-size: min(28rem, calc(100% - 2 * var(--space-4)));
   max-block-size: min(70dvh, 32rem);
   overflow: auto;
 }
@@ -255,9 +255,9 @@ html:not(.js) .wslot > .clip { display: none; }
 }
 .wline:has(.wcard[open] ~ .wcard[open]) .wcard[open] > .wcard__detail {
   position: relative;
-  left: auto;
-  bottom: auto;
-  transform: none;
+  inset-inline: auto;
+  inset-block-end: auto;
+  margin-inline: 0;
   inline-size: auto;
   max-block-size: none;
   overflow: visible;
