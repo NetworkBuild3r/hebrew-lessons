@@ -237,6 +237,7 @@ func (s *server) lessonRows(ctx context.Context, userID int64) ([]views.LessonRo
 		switch {
 		case u.Finished >= u.Lessons:
 			row.State = "done"
+			row.Href = lessonPath(u.UnitID, 0) + "?again=1"
 		case hasNext && u.UnitID == next.UnitID:
 			row.State = "next"
 			row.Href = lessonPath(next.UnitID, next.LessonIx)

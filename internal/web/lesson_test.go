@@ -187,6 +187,7 @@ func TestLessonPlayer(t *testing.T) {
 		"/lesson/" + itoa(draftID) + "/0",
 		"/lesson/" + itoa(otherID) + "/0",
 		"/lesson/" + itoa(laterID) + "/0",
+		"/lesson/" + itoa(laterID) + "/0?again=1",
 		"/lesson/" + itoa(sharedID) + "/1",
 		"/lesson/0/0",
 	} {
@@ -273,7 +274,8 @@ func TestLessonPlayer(t *testing.T) {
 	done := postLesson(t, h, brianCookie, link, runID, "continue", true, "brian-csrf")
 	finished := done.Body.String()
 	nextLink := "/lesson/" + itoa(laterID) + "/0"
-	if done.Code != http.StatusOK || !strings.Contains(finished, "Lesson complete.") || !strings.Contains(finished, "Score 50%") || !strings.Contains(finished, "Next lesson") || !strings.Contains(finished, `href="`+nextLink+`"`) {
+	againLink := link + "?again=1"
+	if done.Code != http.StatusOK || !strings.Contains(finished, "Lesson complete.") || !strings.Contains(finished, "Score 50%") || !strings.Contains(finished, "Next lesson") || !strings.Contains(finished, `href="`+nextLink+`"`) || !strings.Contains(finished, "Do this lesson again") || !strings.Contains(finished, `href="`+againLink+`"`) {
 		t.Fatalf("finish = %d %s", done.Code, finished)
 	}
 	var score float64
@@ -322,6 +324,21 @@ func TestLessonPlayer(t *testing.T) {
 	}
 	if runValue(t, next) == runID {
 		t.Fatal("the next lesson reused the finished run")
+	}
+	redo := getAuthed(t, h, brianCookie, againLink)
+	if strings.Contains(redo, "Lesson complete.") || !strings.Contains(redo, hello) {
+		t.Fatalf("again did not reopen the lesson:\n%s", redo)
+	}
+	kept := getAuthed(t, h, brianCookie, link)
+	if strings.Contains(kept, "Lesson complete.") || !strings.Contains(kept, hello) {
+		t.Fatalf("refresh dropped the open practice:\n%s", kept)
+	}
+	practiced := postLesson(t, h, brianCookie, link, runValue(t, redo), "continue", true, "brian-csrf")
+	if practiced.Code != http.StatusOK || strings.Contains(practiced.Body.String(), "Lesson complete.") {
+		t.Fatalf("the first step of a practice ended the lesson: %d %s", practiced.Code, practiced.Body.String())
+	}
+	if scalar(t, dbPath, `SELECT COUNT(*) FROM lesson_runs WHERE user_id = ? AND unit_id = ?`, brian.ID, sharedID) != 2 {
+		t.Fatal("practicing a finished lesson did not open a new run")
 	}
 
 	foreign := postLesson(t, h, otherCookie, link, runID, "continue", true, "other-csrf")

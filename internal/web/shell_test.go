@@ -824,8 +824,11 @@ func TestLessonsList(t *testing.T) {
 			t.Errorf("row %d = %s %q, want %s %s", i, rows[i][1], rows[i][2], want.state, want.title)
 		}
 	}
-	if !strings.Contains(rows[1][2], `href="/lesson/`+itoa(next)+`/0"`) || strings.Contains(rows[2][2], "<a ") || strings.Contains(rows[0][2], "<a ") {
-		t.Error("only the next lesson opens")
+	if !strings.Contains(rows[1][2], `href="/lesson/`+itoa(next)+`/0"`) || strings.Contains(rows[2][2], "<a ") {
+		t.Error("only the next lesson, and a finished one, open")
+	}
+	if !strings.Contains(rows[0][2], `href="/lesson/`+itoa(done)+`/0?again=1"`) || !strings.Contains(rows[0][2], ">Again<") {
+		t.Error("a finished lesson cannot be opened again")
 	}
 	if !strings.Contains(rows[3][2], "Made for you") || strings.Contains(body, "Hers") {
 		t.Error("learner units: own is marked, another's is hidden")

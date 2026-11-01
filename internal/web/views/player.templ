@@ -40,9 +40,11 @@ templ ActivityBlock(a Activity) {
 			<div class="activity__done">
 				if a.NextHref != "" {
 					<a class="btn btn-primary" href={ templ.SafeURL(a.NextHref) }>@E("Next lesson")</a>
+					<a class="btn btn-tonal" href={ templ.SafeURL(a.AgainHref) }>@E("Do this lesson again")</a>
 					<a class="btn btn-tonal" href={ templ.SafeURL(a.HomeHref) }>@E("Back to Today")</a>
 				} else {
-					<a class="btn btn-primary" href={ templ.SafeURL(a.HomeHref) }>@E("Back to Today")</a>
+					<a class="btn btn-primary" href={ templ.SafeURL(a.AgainHref) }>@E("Do this lesson again")</a>
+					<a class="btn btn-tonal" href={ templ.SafeURL(a.HomeHref) }>@E("Back to Today")</a>
 				}
 			</div>
 		} else {
@@ -61,10 +63,10 @@ templ ActivityBlock(a Activity) {
 				</p>
 			}
 			if a.HowHref != "" {
-				<a class="how" href={ templ.SafeURL(a.HowHref) } hx-get={ a.HowSheet } hx-target="#how-body" hx-swap="innerHTML" hx-boost="false">How this works</a>
+				<a class="how" href={ templ.SafeURL(a.HowHref) } hx-get={ a.HowSheet } hx-target="#how-body" hx-swap="innerHTML" hx-select="unset" hx-boost="false">How this works</a>
 				<dialog id="how-sheet" class="how-sheet" aria-labelledby="how-title">
-					<div id="how-body"></div>
 					<button type="button" class="how-sheet__close" data-close-sheet>Close</button>
+					<div id="how-body"></div>
 				</dialog>
 			}
 			if flipCount(a) > 0 {

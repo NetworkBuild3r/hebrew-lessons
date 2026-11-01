@@ -104,12 +104,21 @@ func (p player) lessonAt(w http.ResponseWriter, r *http.Request, lang, csrf stri
 		serverError(w)
 		return
 	}
+	_, playing, err := p.store.OpenLessonRun(r.Context(), userID, unitID, lessonIx)
+	if err != nil {
+		serverError(w)
+		return
+	}
+	if playing {
+		p.writePlaying(w, r, page, userID, lesson, false)
+		return
+	}
 	score, finished, err := p.store.FinishedLessonScore(r.Context(), userID, unitID, lessonIx)
 	if err != nil {
 		serverError(w)
 		return
 	}
-	if finished {
+	if finished && r.URL.Query().Get("again") != "1" {
 		screen, err := p.doneScreen(r.Context(), page, userID, lesson, score)
 		if err != nil {
 			serverError(w)
@@ -118,14 +127,16 @@ func (p player) lessonAt(w http.ResponseWriter, r *http.Request, lang, csrf stri
 		p.writeScreen(w, r, page, screen, false)
 		return
 	}
-	next, ok, err := p.store.NextCourseLesson(r.Context(), userID)
-	if err != nil {
-		serverError(w)
-		return
-	}
-	if !ok || next.UnitID != lesson.UnitID || next.LessonIx != lesson.LessonIx {
-		notFound(w, r)
-		return
+	if !finished {
+		next, ok, err := p.store.NextCourseLesson(r.Context(), userID)
+		if err != nil {
+			serverError(w)
+			return
+		}
+		if !ok || next.UnitID != lesson.UnitID || next.LessonIx != lesson.LessonIx {
+			notFound(w, r)
+			return
+		}
 	}
 	p.writePlaying(w, r, page, userID, lesson, false)
 }
@@ -183,21 +194,6 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		p.writeScreen(w, r, page, screen, partial)
 		return
 	}
-	score, finished, err := p.store.FinishedLessonScore(r.Context(), userID, unitID, lessonIx)
-	if err != nil {
-		serverError(w)
-		return
-	}
-	if finished {
-		screen, err := p.doneScreen(r.Context(), page, userID, lesson, score)
-		if err != nil {
-			serverError(w)
-			return
-		}
-		p.writeScreen(w, r, page, screen, partial)
-		return
-	}
-
 	total := len(lesson.Activities)
 	answer := r.PostForm.Get("answer")
 	if total == 0 {
@@ -622,7 +618,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		Situation: situation,
 	}
 	if run.Finished {
-		screen.Activity = doneActivity(page, run.Score)
+		screen.Activity = doneActivity(page, lesson, run.Score)
 		return p.withNextLesson(ctx, page, run.UserID, screen)
 	}
 	total := len(lesson.Activities)
@@ -635,7 +631,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		if total > 0 {
 			score = float64(run.CorrectN) / float64(total)
 		}
-		screen.Activity = doneActivity(page, score)
+		screen.Activity = doneActivity(page, lesson, score)
 		return p.withNextLesson(ctx, page, run.UserID, screen)
 	}
 	lex, err := p.store.LexemesByText(ctx, activityTexts(lesson))
@@ -1631,7 +1627,7 @@ func (p player) doneScreen(ctx context.Context, page views.Page, userID int64, l
 	screen := views.Screen{
 		Title:     lesson.Title,
 		Situation: situation,
-		Activity:  doneActivity(page, score),
+		Activity:  doneActivity(page, lesson, score),
 		Frame:     frameFor(page, lesson, db.PlayerRun{Finished: true}, true),
 	}
 	return p.withNextLesson(ctx, page, userID, screen)
@@ -1651,12 +1647,23 @@ func (p player) withNextLesson(ctx context.Context, page views.Page, userID int6
 	return screen, nil
 }
 
-func doneActivity(page views.Page, score float64) views.Activity {
+func doneActivity(page views.Page, lesson db.CourseLesson, score float64) views.Activity {
 	return views.Activity{
-		Done:     true,
-		Score:    scoreText(score),
-		HomeHref: page.Href("/"),
+		Done:      true,
+		Score:     scoreText(score),
+		HomeHref:  page.Href("/"),
+		AgainHref: againPath(page, lesson),
 	}
+}
+
+// againPath opens a fresh run of a lesson the learner already finished.
+// A Hebrew shell keeps its language on the query, beside again.
+func againPath(page views.Page, lesson db.CourseLesson) string {
+	path := lessonPath(lesson.UnitID, lesson.LessonIx) + "?again=1"
+	if page.Lang == "he" {
+		return path + "&lang=he"
+	}
+	return path
 }
 
 func scoreText(score float64) string {

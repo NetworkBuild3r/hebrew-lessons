@@ -109,7 +109,9 @@ templ Lessons(v LessonsView) {
 									<span>@T(v.Lang, "", "Open")</span>
 								</a>
 							} else if row.State == "done" {
-								<span class="lesson-row__state">@T(v.Lang, "", "Done")</span>
+								<a class="btn btn-tonal lesson-row__go" href={ templ.SafeURL(row.Href) }>
+									<span>@T(v.Lang, "", "Again")</span>
+								</a>
 							} else {
 								<span class="lesson-row__state">@T(v.Lang, "", "Later")</span>
 							}

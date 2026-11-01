@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -71,8 +72,15 @@ func TestLearnPageAndFirstStepLink(t *testing.T) {
 	}
 	link := "/lesson/" + itoa(id) + "/0"
 	first := getLearner(t, h, learner, link)
-	if !strings.Contains(first, "How this works") || !strings.Contains(first, `href="/learn/present-tense"`) || !strings.Contains(first, `hx-get="/_hx/learn/present-tense"`) {
+	if !strings.Contains(first, "How this works") || !strings.Contains(first, `href="/learn/present-tense"`) || !strings.Contains(first, `hx-get="/_hx/learn/present-tense" hx-target="#how-body" hx-swap="innerHTML" hx-select="unset"`) {
 		t.Fatal("the first step has no explainer link")
+	}
+	css, err := os.ReadFile("static/css/learn.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(css), ".how-sheet {") || !strings.Contains(string(css), "margin: auto;") {
+		t.Fatal("the explainer dialog is not centered")
 	}
 	second := postLesson(t, h, learner.cookie, link, runValue(t, first), "continue", true, learner.csrf).Body.String()
 	if strings.Contains(second, "How this works") {

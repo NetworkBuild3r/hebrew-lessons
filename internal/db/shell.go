@@ -71,6 +71,27 @@ func slipBand(cause string) (int, bool) {
 	return n, true
 }
 
+// OpenLessonRun is the learner's unfinished run of this lesson, including one
+// they only just opened. ok is false when they have not started it, or every
+// run of it is already finished. A practice of a finished lesson is this row.
+func (s *Store) OpenLessonRun(ctx context.Context, userID, unitID int64, lessonIx int) (PlayerRun, bool, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return PlayerRun{}, false, err
+	}
+	run, err := scanPlayerRun(conn.QueryRowContext(ctx, `
+		SELECT `+playerRunColumns+` FROM lesson_runs
+		WHERE user_id = ? AND unit_id = ? AND lesson_ix = ? AND finished_at IS NULL
+		ORDER BY id DESC LIMIT 1`, userID, unitID, lessonIx).Scan)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PlayerRun{}, false, nil
+	}
+	if err != nil {
+		return PlayerRun{}, false, fmt.Errorf("db: open lesson: %w", err)
+	}
+	return run, true, nil
+}
+
 // InProgressLessonRun is the learner's open run of one lesson when they have already
 // answered something in it: past its first activity, or looking at an answer. A run that
 // was only opened is not in progress, because there is nothing to continue.

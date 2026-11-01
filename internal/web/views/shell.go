@@ -40,7 +40,7 @@ type LessonRow struct {
 	State   string
 	Lessons int
 	Done    int
-	Href    string // Where "next" opens. Empty for the rest.
+	Href    string // Where "next" opens, or where a finished unit starts again.
 }
 
 // LessonsView is the Lessons list. Rows are the learner's published units in order, with

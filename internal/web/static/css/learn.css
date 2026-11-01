@@ -107,7 +107,7 @@
   flex-direction: column;
   gap: var(--space-3);
 }
-.learn__row, .roots__row, .learn__used a, .roots__lessons a, .how, .how-sheet__close, .wcard__root {
+.learn__row, .roots__row, .learn__used a, .roots__lessons a, .how, .wcard__root {
   min-block-size: var(--size-tap);
   display: flex;
   flex-direction: column;
@@ -138,12 +138,30 @@
   align-items: center;
 }
 .how-sheet {
-  border: 0;
+  /* The shell resets margins, which would pin a modal dialog to the corner. */
+  margin: auto;
+  inline-size: min(calc(100% - var(--space-5)), var(--player-max));
+  max-block-size: min(80vh, 40rem);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-card);
   background: var(--surface);
   color: var(--text);
-  max-inline-size: var(--player-max);
   padding: var(--space-4);
+  box-shadow: var(--shadow-3);
+}
+.how-sheet__close {
+  align-self: end;
+  min-block-size: var(--size-tap);
+  padding-inline: var(--space-3);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
 }
 .how-sheet::backdrop { background: color-mix(in oklch, var(--ink) 55%, transparent); }
 .roots__he { margin: 0; }
