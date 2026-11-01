@@ -457,6 +457,7 @@ func (p wordPanel) Render(ctx context.Context, wr io.Writer) error {
 	w := p.w
 	var b strings.Builder
 	b.WriteString(`<div class="wcard__detail">`)
+	b.WriteString(`<button type="button" class="wcard__close" data-wcard-close lang="en">Close</button>`)
 	b.WriteString(`<bdi class="wcard__he" lang="he" dir="rtl">`)
 	b.WriteString(html.EscapeString(w.Text))
 	b.WriteString(`</bdi>`)

@@ -72,6 +72,16 @@
   });
 
   D.addEventListener("click", function (ev) {
+    var t = ev.target;
+    var close = t && t.closest && t.closest("[data-wcard-close]");
+    if (close) {
+      var card = close.closest("details.wcard");
+      if (!card) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      card.open = false;
+      return;
+    }
     var btn = control(ev);
     if (!btn) return;
     ev.preventDefault();

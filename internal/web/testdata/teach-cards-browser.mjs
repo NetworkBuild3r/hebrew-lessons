@@ -58,6 +58,9 @@ const note = await page.locator(".wcard__note").first().innerText();
 check("the grammar note sits under Word details", note.includes("m.sg. present") && note.includes("לִבְחוֹר"), note);
 const listen = await page.locator(".wcard__detail .orb--word").boundingBox();
 const openTile = await page.locator(".wcard[open] .wcard__front").boundingBox();
+check("the tile stays where it was", openTile && card && Math.abs(openTile.x - card.x) < 2 && Math.abs(openTile.y - card.y) < 2 && Math.abs(openTile.width - card.width) < 2, JSON.stringify({ card, openTile }));
+const detailPos = await page.locator(".wcard[open] .wcard__detail").evaluate((el) => getComputedStyle(el).position);
+check("the meaning pops up over the lesson", detailPos === "fixed", detailPos);
 const detailBox = await page.locator(".wcard[open] .wcard__detail").boundingBox();
 const inPanel = listen && detailBox && listen.x >= detailBox.x - 1 && listen.y >= detailBox.y - 1 && listen.x + listen.width <= detailBox.x + detailBox.width + 1;
 const offTile = listen && openTile && (listen.y >= openTile.y + openTile.height - 2 || listen.x >= openTile.x + openTile.width - 2 || listen.x + listen.width <= openTile.x + 2);
@@ -72,8 +75,26 @@ await page.waitForSelector(".wline details.wcard");
 await page.waitForTimeout(500);
 const slots = await page.locator(".wline > details.wcard").count();
 check("a line has a card for each word", slots === 2, slots);
+const lineBefore = await page.locator(".wline > details.wcard .wcard__front").evaluateAll((els) => els.map((el) => {
+  const b = el.getBoundingClientRect();
+  return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width) };
+}));
 await page.locator(".wline details.wcard summary").first().click();
 await page.waitForTimeout(300);
+const lineOpen = await page.locator(".wline > details.wcard .wcard__front").evaluateAll((els) => els.map((el) => {
+  const b = el.getBoundingClientRect();
+  return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width) };
+}));
+check("opening a word leaves the line where it was", JSON.stringify(lineBefore) === JSON.stringify(lineOpen), JSON.stringify({ lineBefore, lineOpen }));
+await page.locator("[data-wcard-close]").click();
+await page.waitForTimeout(200);
+const lineClosed = await page.locator(".wline > details.wcard .wcard__front").evaluateAll((els) => els.map((el) => {
+  const b = el.getBoundingClientRect();
+  return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width) };
+}));
+check("closing the card puts the line back", JSON.stringify(lineBefore) === JSON.stringify(lineClosed), JSON.stringify({ lineBefore, lineClosed }));
+await page.locator(".wline details.wcard summary").first().click();
+await page.waitForTimeout(200);
 const openListen = await page.locator(".wcard[open] .wcard__detail .orb--word").innerText();
 check("the open word has a labelled Listen control", openListen.includes("Listen"), openListen);
 check("no page scrolls sideways", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
