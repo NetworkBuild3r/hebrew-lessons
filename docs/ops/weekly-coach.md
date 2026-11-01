@@ -70,7 +70,7 @@ Roles are the roles the server enforces today. A learner-role session is a sign-
 | Authoring step 5, audio | `generate_audio` | no | yes |
 | Authoring step 6, the dry run | `validate_unit` | yes (own data only) | yes |
 | Authoring step 7, save and publish | `put_unit` | no | yes |
-| Step 3, the coach note | `add_coach_note` | no | yes |
+| Step 3, the coach note | `add_coach_note` | yes (own data only) | yes |
 
 The test `TestCoachDocRolesMatchTheServer` checks every row against the server's own role check, and calls the rows marked no as a learner to see the refusal.
 
@@ -86,15 +86,15 @@ The role is the role of the user who signs in. The server reads it when a call a
 
 ## Open decision
 
-**The spec says the automation uses an OAuth learner token. That token cannot do steps 2 and 3.**
+**The spec says the automation uses an OAuth learner token. That token still cannot publish.**
 
-In the shipped server, `get_lesson_brief` and `add_coach_note` are admin-only, and so are `put_unit`, `generate_audio`, and `upsert_lexemes`, which the authoring guide needs to publish a lesson. A learner-role session can call `get_progress`, `get_learner_model`, `get_context`, `lookup`, and `validate_unit` for its own data. It cannot fetch the brief, publish, or write the note. A call it makes to those tools is refused with `forbidden: admin only`, and the tests prove it.
+In the shipped server, `get_lesson_brief` is admin-only, and so are `put_unit`, `generate_audio`, and `upsert_lexemes`, which the authoring guide needs to publish a lesson. `add_coach_note` is allowed for a learner on their own id. A learner-role session can call `get_progress`, `get_learner_model`, `get_context`, `lookup`, `validate_unit`, and `add_coach_note` for its own data. It cannot fetch the brief or publish. A call it makes to those admin-only tools is refused with `forbidden: admin only`, and the tests prove it.
 
 So the choice is the operator's:
 
 1. **An admin-role OAuth session (works today).** Sign in as an admin user, and pass `learnerId` on every call. This is the only way to run all three steps without a code change. It is not the least-privilege sign-in the spec wanted. An admin session can read and write every learner, and can publish shared units. It is still not the static token: it has a user, it expires, it can be revoked, and its notes carry the user's id. Use a dedicated admin user for it if you can.
-2. **A learner-role OAuth session.** Safe, and not enough. It can read progress and dry-run a unit, and nothing more. The automation would stop at step 2 with `forbidden: admin only`.
-3. **Change the server's authorization** so a learner session can fetch its own brief, publish into its own scope, and leave its own coach note. That is a code change with a security review, and it is outside SPEC-023. This work did not change the authorization.
+2. **A learner-role OAuth session.** It can read progress, dry-run a unit, and leave its own coach note. The automation still stops at the brief and the publish with `forbidden: admin only`.
+3. **Change the server's authorization** so a learner session can fetch its own brief and publish into its own scope. Leaving its own coach note is already allowed. Publishing is a code change with a security review, and it is outside this page.
 
 My reading: do not turn the automation on until you pick 1 or 3. If you pick 1, say so in SPEC-025.
 
@@ -120,7 +120,7 @@ These are steps for the operator. They are not done.
 ## Limits
 
 - The server allows 60 calls a minute to the learner tools for one caller. The limit counts `get_learner_model`, `get_progress`, `get_lesson_brief`, `add_coach_note`, `unpublish_unit`, and `validate_unit` with a briefId. A normal run makes about 5 to 8 of those, so it is far under the limit. A run that retries in a loop is not, and the server answers `Too many requests. Try again in a minute.` The prompt caps the publish retries at 3.
-- The server stores at most 100 coach notes a day for one learner. The prompt asks for one note a week.
+- The server stores at most 100 coach notes a day for one learner from an admin. A learner writing their own note is capped at 20 in 24 hours. The prompt asks for one note a week.
 - A brief builds one unit and expires after 7 days. A second run on the same day makes a second brief, a second lesson, and a second note. Running the automation twice is harmless and it is not free of noise.
 - The report is written once for each week and never changed. If it is wrong, delete its row and run `hebrew jobs weekly --week YYYY-MM-DD` again.
 

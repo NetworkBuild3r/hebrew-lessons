@@ -56,8 +56,9 @@ func TestAuthRejectAndAccept(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 9 authoring tools, 5 learner tools from SPEC-021, 4 pattern tools, 3 mistake and verb tools,
-	// upsert_noun_forms (INIT-023/SPEC-006), and 2 Isaiah tools.
-	if len(tools.Tools) != 24 {
+	// upsert_noun_forms (INIT-023/SPEC-006), 2 Isaiah tools, and the four INIT-026 tools
+	// set_time_zone, record_taught_words, remove_taught_words, get_study_digest.
+	if len(tools.Tools) != 28 {
 		t.Fatalf("tools = %d", len(tools.Tools))
 	}
 }

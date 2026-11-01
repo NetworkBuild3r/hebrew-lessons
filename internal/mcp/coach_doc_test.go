@@ -351,8 +351,10 @@ func TestCoachDocRolesMatchTheServer(t *testing.T) {
 			e.ok("admin", r.name, map[string]any{"learnerId": 7})
 		}
 	}
-	if noRows < 5 || yesRows != 2 {
-		t.Fatalf("checked %d no rows and %d yes rows, want at least 5 and 2", noRows, yesRows)
+	// Four rows stay learner "no": get_lesson_brief, upsert_lexemes, generate_audio, put_unit.
+	// add_coach_note is learner "yes" (own id) and is not one of these refusals.
+	if noRows < 4 || yesRows != 2 {
+		t.Fatalf("checked %d no rows and %d yes rows, want at least 4 and 2", noRows, yesRows)
 	}
 }
 
@@ -434,7 +436,10 @@ func TestCoachDocChecksCanFail(t *testing.T) {
 			return strings.Replace(s, "| `get_lesson_brief` | no |", "| `get_lesson_brief` | yes |", 1)
 		}, "get_lesson_brief"},
 		{"an admin-only tool is said to be open to a learner", func(s string) string {
-			return strings.Replace(s, "| `add_coach_note` | no |", "| `add_coach_note` | yes |", 1)
+			return strings.Replace(s, "| `put_unit` | no |", "| `put_unit` | yes |", 1)
+		}, "put_unit"},
+		{"the coach note is said to be admin-only", func(s string) string {
+			return strings.Replace(s, "| `add_coach_note` | yes (own data only) |", "| `add_coach_note` | no |", 1)
 		}, "add_coach_note"},
 		{"a learner tool is said to be closed", func(s string) string {
 			return strings.Replace(s, "| `get_progress` | yes (own data only) |", "| `get_progress` | no |", 1)
