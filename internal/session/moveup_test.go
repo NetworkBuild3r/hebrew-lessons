@@ -60,7 +60,7 @@ func TestMoveUpBlockedWhenAnyConditionBreaks(t *testing.T) {
 			}
 		}},
 		{"implying again/hard", func(c *Candidate) { c.ImplyingRecentAgainOrHard = true }},
-		{"implying card queued", func(c *Candidate) {}}, // handled below with two cards
+		{"implying card queued", func(c *Candidate) {}},   // handled below with two cards
 		{"gate closed for recall", func(c *Candidate) {}}, // handled with mixGate
 	}
 	for _, tc := range cases {

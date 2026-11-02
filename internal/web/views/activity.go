@@ -195,11 +195,11 @@ func ReviewedLine(n int) string {
 
 // Review string table (INIT-027/SPEC-006). English is the key; Hebrew fills when present.
 var reviewHE = map[string]string{
-	"Done for now":       "זהו להיום",
-	"Back to Today":      "חזרה להיום",
-	"Don't know":         "לא יודע/ת",
-	"Cleared":            "נוקה",
-	"Continue":           "המשך",
+	"Done for now":              "זהו להיום",
+	"Back to Today":             "חזרה להיום",
+	"Don't know":                "לא יודע/ת",
+	"Cleared":                   "נוקה",
+	"Continue":                  "המשך",
 	"Also counts for reading":   "נספר גם לקריאה",
 	"Also counts for listening": "נספר גם להאזנה",
 	"Right, but slow. It will come back sooner.": "נכון, אבל לאט. זה יחזור מוקדם יותר.",

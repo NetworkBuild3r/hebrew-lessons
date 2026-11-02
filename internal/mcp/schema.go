@@ -50,7 +50,7 @@ func currentMixTarget() MixTarget {
 		NewPerSessionMid:     sessionlimits.NewPerSessionMid,
 		NewPerSessionHigh:    sessionlimits.NewPerSessionHigh,
 		NewTierLow:           sessionlimits.NewTierLow,
-		NewTierHigh:         sessionlimits.NewTierHigh,
+		NewTierHigh:          sessionlimits.NewTierHigh,
 	}
 }
 

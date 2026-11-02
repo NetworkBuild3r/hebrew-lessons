@@ -289,23 +289,23 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 			}
 		}
 		cands = append(cands, Candidate{
-			ID:                       card.ID,
-			LexemeID:                 card.LexemeID,
-			Skill:                    card.Skill,
-			Due:                      card.Due,
-			Lapses:                   card.Lapses,
-			Latest:                   card.LatestRating,
-			HasRating:                card.HasRating,
-			RecentLapse:              card.RecentLapse,
-			Confused:                 len(w.Review.ConfusionKeys) > 0,
-			KnownLexeme:              isKnown,
-			HasIntro:                 card.HasIntro,
-			IntroPosition:            card.IntroPosition,
-			IntroLesson:              card.IntroLesson,
-			Skills:                   activity.ViewsOf(w),
-			Facts:                    facts.of(card.LexemeID),
-			Exposed:                  w.Exposures > 0,
-			ImplyingCardID:           implyID,
+			ID:                        card.ID,
+			LexemeID:                  card.LexemeID,
+			Skill:                     card.Skill,
+			Due:                       card.Due,
+			Lapses:                    card.Lapses,
+			Latest:                    card.LatestRating,
+			HasRating:                 card.HasRating,
+			RecentLapse:               card.RecentLapse,
+			Confused:                  len(w.Review.ConfusionKeys) > 0,
+			KnownLexeme:               isKnown,
+			HasIntro:                  card.HasIntro,
+			IntroPosition:             card.IntroPosition,
+			IntroLesson:               card.IntroLesson,
+			Skills:                    activity.ViewsOf(w),
+			Facts:                     facts.of(card.LexemeID),
+			Exposed:                   w.Exposures > 0,
+			ImplyingCardID:            implyID,
 			ImplyingRecentAgainOrHard: implyBlocked,
 		})
 	}
@@ -643,7 +643,6 @@ func (s *Session) Answered(ctx context.Context, cardID int64, res activity.Resul
 	}
 	return out, nil
 }
-
 
 // Tally returns a copy of the sitting counters. INIT-027/SPEC-004.
 func (s *Session) Tally() Tally {

@@ -1384,7 +1384,6 @@ func TestLearner1ReviewIsShuffledPerSeed(t *testing.T) {
 	}
 }
 
-
 func assertLearner1Queue(t *testing.T, cards []CardRef, fix learner1) {
 	t.Helper()
 	if sessionLexemeCount(cards) < 2 {

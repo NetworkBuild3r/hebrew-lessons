@@ -99,7 +99,7 @@ func TestMixNeverAsksAFlashcardWhenACheckedActivityFits(t *testing.T) {
 	for round := 0; round < 300; round++ {
 		var cands []Candidate
 		n := 1 + rng.IntN(25)
-	ownFits := map[int64]bool{}
+		ownFits := map[int64]bool{}
 		for i := 0; i < n; i++ {
 			id := int64(i + 1)
 			var views []activity.SkillView

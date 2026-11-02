@@ -76,9 +76,9 @@ type ReviewLog struct {
 // from the earliest such lesson.
 type StudyCard struct {
 	Card
-	LatestRating  int
-	HasRating     bool
-	RecentLapse   bool
+	LatestRating int
+	HasRating    bool
+	RecentLapse  bool
 	// RecentAgainOrHard is true when an Again or Hard review_log row (implied = 0)
 	// was stored at or after the lapseSince passed to ListStudyCards.
 	// INIT-027/SPEC-004 uses it for move-up rule 4.
