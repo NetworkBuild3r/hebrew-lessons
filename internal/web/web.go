@@ -68,6 +68,9 @@ type Options struct {
 	// Placement is the placement engine, for the check-in on Today. Nil leaves the
 	// check-in off. See PlacementEngine.
 	Placement PlacementEngine
+	// Speech stores a missing story recording as one clip of the whole text.
+	// Nil, or a generator with no voice, leaves that story without the clip.
+	Speech *audio.Generator
 	// study replaces the review session service. It is for tests in this package.
 	study *session.Service
 	// bands replaces where the learner model gets placement bands. For tests.
@@ -143,6 +146,7 @@ func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.
 	}
 	srv.audioDir = opts.AudioDir
 	srv.voices = opts.Voices
+	srv.speech = opts.Speech
 	srv.deck = opts.Deck
 	srv.runs = opts.Runs
 	srv.recheck = opts.Placement
@@ -174,7 +178,7 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 		panic(err)
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(noDirFS{static}))))
-	play := player{store: s.store, audioDir: s.audioDir, voices: s.voices}
+	play := player{store: s.store, audioDir: s.audioDir, voices: s.voices, speech: s.speech}
 	mux.HandleFunc("GET /{$}", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
 		s.serveHome(w, r, secure, csrfValue(tokens, r))
 	}))

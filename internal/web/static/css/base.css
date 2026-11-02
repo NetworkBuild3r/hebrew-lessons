@@ -1447,6 +1447,11 @@ html.js .clip-rows {
   background: transparent;
   border: 1px dashed var(--hairline);
 }
+.word-block--gap.is-drop {
+  border-color: var(--focus-ring);
+  background: var(--surface);
+}
+.choices button[draggable="true"] { cursor: grab; }
 .choices { display: grid; gap: var(--space-2); }
 /* The lesson does not show 1/2/3 badges. The keys are for placement and drills. */
 .choices .c-answer__key { display: none; }

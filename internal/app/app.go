@@ -343,6 +343,16 @@ func NewApp(cfg Config) (*App, error) {
 		Runs:     store,
 		// A dialogue line is played from the clip in its speaker's voice.
 		Voices: cfg.Voices(),
+		// A story with no recording is sent to the provider as one text.
+		Speech: &audio.Generator{
+			TTS:       tts,
+			Store:     store,
+			Dir:       audioDir,
+			Voice:     cfg.ElevenLabsVoice,
+			VoiceMale: cfg.ElevenLabsVoiceMale,
+			Model:     cfg.ElevenLabsModel,
+			Budget:    audio.CallBudget,
+		},
 		// The activity item tokens are signed with a key derived from this secret.
 		SessionSecret: cfg.StateSecret,
 		// Today offers the check-in when the engine says it is due (INIT-015/SPEC-017).

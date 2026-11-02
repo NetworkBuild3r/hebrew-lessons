@@ -19,7 +19,6 @@
   justify-content: center;
   align-items: flex-start;
   gap: var(--space-4) var(--space-3);
-  perspective: 1000px;
   padding-block: var(--space-2);
 }
 .dlg__bubble .wline {
@@ -201,6 +200,7 @@ html:not(.js) .wslot > .clip { display: none; }
   border-color: var(--focus-ring);
 }
 .wcard__detail { display: none; }
+/* No script: the open card grows in the line so the word can be read. */
 .wline .wcard[open] > .wcard__detail {
   display: grid;
   grid-template-columns: auto auto;
@@ -209,7 +209,7 @@ html:not(.js) .wslot > .clip { display: none; }
   column-gap: var(--space-3);
   row-gap: var(--space-2);
   box-sizing: border-box;
-  margin-block-start: 0;
+  margin-block-start: var(--space-3);
   padding: var(--space-4);
   padding-block-start: calc(var(--space-4) + 2.25rem);
   border: 1px solid var(--hairline);
@@ -217,19 +217,62 @@ html:not(.js) .wslot > .clip { display: none; }
   background: var(--surface-raised);
   box-shadow: var(--shadow-2, var(--shadow-1));
   text-align: start;
-  position: fixed;
-  z-index: 40;
-  inset-inline: 0;
-  margin-inline: auto;
-  inset-block-end: max(var(--space-4), env(safe-area-inset-bottom));
-  inline-size: min(28rem, calc(100% - 2 * var(--space-4)));
-  max-block-size: min(70dvh, 32rem);
-  overflow: auto;
+  inline-size: min(28rem, 100%);
 }
 .wline .wcard[open] {
   flex-basis: auto;
-  max-inline-size: 8.5rem;
+  max-inline-size: min(28rem, 100%);
   z-index: 2;
+}
+/* Script: the tile stays the size of the word. The panel is moved onto the
+   page, so a spotlight cannot size it to the tile. */
+html.js .wline .wcard[open] {
+  max-inline-size: 8.5rem;
+}
+html.js .wline .wcard[open] > .wcard__detail { display: none; }
+.wcard__detail--pop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  justify-content: start;
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: var(--space-3);
+  box-sizing: border-box;
+  position: fixed;
+  z-index: 80;
+  inset-inline: 0;
+  inset-block-start: max(5rem, 12dvh);
+  margin-inline: auto;
+  inline-size: min(28rem, calc(100vw - 2rem));
+  max-block-size: min(70dvh, 32rem);
+  overflow: auto;
+  margin: 0;
+  padding: var(--space-5);
+  padding-block-start: calc(var(--space-4) + 2.75rem);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-2, var(--shadow-1));
+  text-align: start;
+}
+.wcard__detail--pop .wcard__he,
+.wcard__detail--pop .wcard__soundline,
+.wcard__detail--pop .wcard__sound,
+.wcard__detail--pop .wcard__gl,
+.wcard__detail--pop .wcard__kicker,
+.wcard__detail--pop .wcard__phrase,
+.wcard__detail--pop .wcard__phrase-en,
+.wcard__detail--pop .wcard__more {
+  grid-column: 1 / -1;
+}
+.wcard__detail--pop .wcard__he {
+  font-size: var(--fs-h1);
+  line-height: 1.2;
+}
+.wcard__detail--pop .wcard__sound {
+  font-size: var(--fs-card-tr-lg);
+  font-style: italic;
+  white-space: normal;
 }
 .wcard__close {
   position: absolute;
@@ -253,15 +296,17 @@ html:not(.js) .wslot > .clip { display: none; }
   flex-basis: 100%;
   max-inline-size: 100%;
 }
-.wline:has(.wcard[open] ~ .wcard[open]) .wcard[open] > .wcard__detail {
-  position: relative;
-  inset-inline: auto;
-  inset-block-end: auto;
+html.js .wline:has(.wcard[open] ~ .wcard[open]) .wcard[open] {
+  max-inline-size: 100%;
+}
+html.js .wline:has(.wcard[open] ~ .wcard[open]) .wcard[open] > .wcard__detail {
+  display: grid;
+  position: static;
+  inset: auto;
   margin-inline: 0;
   inline-size: auto;
   max-block-size: none;
   overflow: visible;
-  margin-block-start: var(--space-3);
 }
 .wline .wcard__detail .wcard__he {
   grid-column: 1 / -1;
@@ -358,7 +403,25 @@ html.js .wcard__detail > .orb--word {
 }
 .wcard__listen-label { grid-column: 2; grid-row: 1; }
 
-.wline-play { display: flex; justify-content: center; margin-block-start: var(--space-2); }
+.wline-play { display: flex; justify-content: center; align-items: center; gap: var(--space-3); margin-block-start: var(--space-2); }
+.follow {
+  min-block-size: var(--size-tap);
+  padding-inline: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  cursor: pointer;
+}
+.follow[aria-pressed="false"] { color: var(--muted); }
+.wcard.follow-on > .wcard__hit .wcard__front {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-color: var(--focus-ring);
+}
 .wcard__he-sm { order: 2; }
 .wcard__back .wcard__pos { order: 3; }
 .wcard__sound {

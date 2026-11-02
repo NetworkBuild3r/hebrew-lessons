@@ -116,7 +116,7 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 	}, true)
 	body := getAuthed(t, h, cookie, storyPath)
 	act := activityHTML(t, body)
-	if !strings.Contains(act, "Read the story. Each word shows its sound and its meaning.") {
+	if !strings.Contains(act, "Read the story. Play it to hear the whole thing.") {
 		t.Fatalf("story prompt missing:\n%s", act)
 	}
 	if strings.Count(act, "Tap a word to see what it means.") != 1 {

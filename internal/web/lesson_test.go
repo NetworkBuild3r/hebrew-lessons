@@ -209,7 +209,7 @@ func TestLessonPlayer(t *testing.T) {
 		t.Fatal("story step is missing its clips")
 	}
 	for _, want := range []string{
-		`class="orb orb--hero"`, `data-src="/audio/` + phraseID + `.mp3"`, `aria-label="Play the line"`,
+		`class="orb orb--hero"`, `data-src="/audio/` + phraseID + `.mp3"`, `aria-label="Play the story"`, `data-follow`,
 		`aria-label="Play ` + hello + `"`, `/static/js/clips.js`, `preload="none"`,
 		`<audio id="line-clip"`, ` controls`,
 	} {

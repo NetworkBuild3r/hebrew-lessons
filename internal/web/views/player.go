@@ -58,7 +58,10 @@ type Activity struct {
 	// Spotlight is a step whose Hebrew is the one thing on screen: big, centered, play below.
 	Stage     bool
 	Spotlight bool
-	HomeHref  string
+	// Follow is a story of more than one word that has one recording of the
+	// whole text. The player can highlight the word the recording has reached.
+	Follow   bool
+	HomeHref string
 	// NextHref is the next unfinished lesson. Empty when this was the last one,
 	// and the completion panel then offers only the way back to Today.
 	NextHref string
@@ -384,6 +387,19 @@ func clipClass(hero bool) string {
 	return "clip"
 }
 
+// dragCloze is a fill-the-gap ask: the missing word can be tapped or dropped on the blank.
+func dragCloze(a Activity) bool {
+	if !a.Asking {
+		return false
+	}
+	for _, w := range a.Words {
+		if w.Gap {
+			return true
+		}
+	}
+	return false
+}
+
 // hasClip reports whether the step has a line clip or a per-word clip.
 func hasClip(a Activity) bool {
 	if a.Audio != "" {
@@ -529,9 +545,12 @@ func (p wordPanel) Render(ctx context.Context, wr io.Writer) error {
 			}
 		}
 	} else if w.Translit != "" {
-		b.WriteString(`<span class="wcard__sound" lang="he-Latn" dir="ltr">`)
+		// Same sound line as the revealed card. The English meaning stays off
+		// until the answer. The class is wcard__sound so a recall can show the
+		// reading without the revealed-card transliteration class.
+		b.WriteString(`<p class="wcard__soundline"><span class="wcard__sound" lang="he-Latn" dir="ltr">`)
 		b.WriteString(html.EscapeString(w.Translit))
-		b.WriteString(`</span><span class="wcard__pos"><bdi lang="en" dir="ltr">how it sounds</bdi></span>`)
+		b.WriteString(`</span></p>`)
 	}
 	if _, err := io.WriteString(wr, b.String()); err != nil {
 		return err

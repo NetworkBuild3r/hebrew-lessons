@@ -62,6 +62,9 @@ type player struct {
 	store    *db.Store
 	audioDir string
 	voices   audio.Voices
+	// speech makes a missing story recording. Nil leaves a story that has no
+	// clip silent, and the words keep their own clips.
+	speech *audio.Generator
 }
 
 func (p player) lessonIndex(w http.ResponseWriter, r *http.Request, lang, csrf string) {
@@ -695,6 +698,9 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	}
 	screen.Activity.Audio = phraseAudio(act, phase, clips.phrase)
 	screen.Activity.Words = wordsFor(act, lex, lesson.NewWords, phase, clips, target, q.meaningsAll)
+	if act.Type == units.ActivityStory && screen.Activity.Audio != "" && storyWords(screen.Activity.Words) > 1 {
+		screen.Activity.Follow = true
+	}
 	if screen.Activity.Audio != "" {
 		screen.Activity.AudioLabel, screen.Activity.AudioHebrew = phrasePlayLabel(act, phase)
 	}
@@ -820,9 +826,17 @@ func (p player) clips(ctx context.Context, act units.Activity) (clipSet, error) 
 	if p.store == nil {
 		return out, nil
 	}
-	phrase, err := p.audioSrc(ctx, units.Normalize(act.Text))
+	text := units.Normalize(act.Text)
+	phrase, err := p.audioSrc(ctx, text)
 	if err != nil {
 		return clipSet{}, err
+	}
+	if phrase == "" && act.Type == units.ActivityStory && hebrewLine(text) {
+		p.ensureStoryClip(ctx, text)
+		phrase, err = p.audioSrc(ctx, text)
+		if err != nil {
+			return clipSet{}, err
+		}
 	}
 	out.phrase = phrase
 	tokens := units.Tokenize(act.Text)
@@ -849,6 +863,18 @@ func (p player) clips(ctx context.Context, act units.Activity) (clipSet, error) 
 		}
 	}
 	return out, nil
+}
+
+// ensureStoryClip stores one recording of the whole story when none is stored.
+// A missing voice, a provider error, or a full time budget leaves the story
+// without that clip. The page still renders.
+func (p player) ensureStoryClip(ctx context.Context, text string) {
+	if text == "" || p.speech == nil || p.speech.TTS == nil || p.speech.Store == nil {
+		return
+	}
+	gctx, cancel := context.WithTimeout(ctx, audio.CallBudget)
+	defer cancel()
+	_, _ = p.speech.Generate(gctx, []string{text})
 }
 
 func (p player) audioSrc(ctx context.Context, text string) (string, error) {
@@ -1542,7 +1568,29 @@ func phrasePlayLabel(act units.Activity, phase string) (label, hebrew string) {
 	if len(he) == 1 {
 		return "Play " + he[0], he[0]
 	}
+	if act.Type == units.ActivityStory {
+		return "Play the story", ""
+	}
 	return "Play the line", ""
+}
+
+func hebrewLine(text string) bool {
+	for _, tok := range units.Tokenize(text) {
+		if hebrewToken(tok) {
+			return true
+		}
+	}
+	return false
+}
+
+func storyWords(words []views.Word) int {
+	n := 0
+	for _, w := range words {
+		if !w.Plain && !w.Gap {
+			n++
+		}
+	}
+	return n
 }
 
 func activityPrompt(lesson db.CourseLesson, act units.Activity, target db.LexemeView, lex map[string]db.LexemeView, empty bool) string {
@@ -1551,7 +1599,7 @@ func activityPrompt(lesson db.CourseLesson, act units.Activity, target db.Lexeme
 	}
 	switch act.Type {
 	case units.ActivityStory:
-		return "Read the story. Each word shows its sound and its meaning."
+		return "Read the story. Play it to hear the whole thing."
 	case units.ActivityPattern:
 		if strings.TrimSpace(lesson.Concept) != "" {
 			return lesson.Concept

@@ -161,6 +161,12 @@ templ ActivityBlock(a Activity) {
 			if hasClip(a) {
 				<script src={ Asset("/static/js/clips.js") } defer></script>
 			}
+			if a.Follow {
+				<script src={ Asset("/static/js/follow.js") } defer></script>
+			}
+			if dragCloze(a) {
+				<script src={ Asset("/static/js/drag.js") } defer></script>
+			}
 			if flipCount(a) > 0 {
 				<script type="module" src={ Asset("/static/js/wcards.js") }></script>
 			}
@@ -320,6 +326,9 @@ templ wordClipRow(w Word, audioID string) {
 // plays once after "I said it".
 templ lineClip(a Activity) {
 	@clipPlay("line-clip", a.Audio, a.AudioLabel, true, a.Autoplay)
+	if a.Follow {
+		<button type="button" class="follow" data-follow lang="en">Follow along</button>
+	}
 }
 
 // clip is one recording in the lesson player. The server always renders the

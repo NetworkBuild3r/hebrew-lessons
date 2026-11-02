@@ -491,8 +491,7 @@ func stripSound(s string) string {
 // reading, then the meaning.
 func v3RevealWordBlock(text, translit, gloss string) string {
 	return `<bdi class="wcard__he" lang="he" dir="rtl">` + text + `</bdi></span></summary>` +
-		`<div class="wcard__detail"><button type="button" class="wcard__close" data-wcard-close lang="en">Close</button>` +
-		`<bdi class="wcard__he" lang="he" dir="rtl">` + text + `</bdi>` +
+		`<div class="wcard__detail"><button type="button" class="wcard__close" data-wcard-close lang="en">Close</button><bdi class="wcard__he" lang="he" dir="rtl">` + text + `</bdi>` +
 		`<p class="wcard__soundline"><bdi class="wcard__tr" lang="he-Latn" dir="ltr">` + translit + `</bdi></p>` +
 		`<p class="wcard__gl" lang="en" dir="ltr">` + gloss + `</p>`
 }

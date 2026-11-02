@@ -47,6 +47,7 @@ type server struct {
 	recheck  PlacementEngine
 	bands    learner.BandSource
 	zones    *studyday.Resolver
+	speech   *audio.Generator
 
 	mu     sync.Mutex
 	queues map[string]*studyQueue

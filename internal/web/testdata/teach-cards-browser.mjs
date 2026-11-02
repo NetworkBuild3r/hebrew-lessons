@@ -59,9 +59,12 @@ check("the grammar note sits under Word details", note.includes("m.sg. present")
 const listen = await page.locator(".wcard__detail .orb--word").boundingBox();
 const openTile = await page.locator(".wcard[open] .wcard__front").boundingBox();
 check("the tile stays where it was", openTile && card && Math.abs(openTile.x - card.x) < 2 && Math.abs(openTile.y - card.y) < 2 && Math.abs(openTile.width - card.width) < 2, JSON.stringify({ card, openTile }));
-const detailPos = await page.locator(".wcard[open] .wcard__detail").evaluate((el) => getComputedStyle(el).position);
-check("the meaning pops up over the lesson", detailPos === "fixed", detailPos);
-const detailBox = await page.locator(".wcard[open] .wcard__detail").boundingBox();
+const detailPos = await page.locator("body > .wcard__detail--pop").evaluate((el) => ({
+  w: el.getBoundingClientRect().width,
+  inBody: el.parentElement === document.body,
+}));
+check("the meaning pops up over the lesson", detailPos.inBody && detailPos.w >= 240, JSON.stringify(detailPos));
+const detailBox = await page.locator("body > .wcard__detail--pop").boundingBox();
 const inPanel = listen && detailBox && listen.x >= detailBox.x - 1 && listen.y >= detailBox.y - 1 && listen.x + listen.width <= detailBox.x + detailBox.width + 1;
 const offTile = listen && openTile && (listen.y >= openTile.y + openTile.height - 2 || listen.x >= openTile.x + openTile.width - 2 || listen.x + listen.width <= openTile.x + 2);
 check("Listen sits in the meaning, not on the tile", inPanel && offTile, JSON.stringify({ listen, openTile, detailBox }));
@@ -95,7 +98,7 @@ const lineClosed = await page.locator(".wline > details.wcard .wcard__front").ev
 check("closing the card puts the line back", JSON.stringify(lineBefore) === JSON.stringify(lineClosed), JSON.stringify({ lineBefore, lineClosed }));
 await page.locator(".wline details.wcard summary").first().click();
 await page.waitForTimeout(200);
-const openListen = await page.locator(".wcard[open] .wcard__detail .orb--word").innerText();
+const openListen = await page.locator("body > .wcard__detail--pop .orb--word").innerText();
 check("the open word has a labelled Listen control", openListen.includes("Listen"), openListen);
 check("no page scrolls sideways", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
 await shot("line");
