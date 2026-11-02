@@ -607,8 +607,9 @@ func TestStudyQueueMapIsBounded(t *testing.T) {
 	defer s.mu.Unlock()
 	for i := 0; i < maxStudyQueues+5; i++ {
 		s.queues[fmt.Sprintf("k%03d", i)] = &studyQueue{
-			userID:  learner.user.ID,
-			builtAt: now.Add(time.Duration(i) * time.Second),
+			userID:   learner.user.ID,
+			builtAt:  now.Add(time.Duration(i) * time.Second),
+			rollover: now.Add(24 * time.Hour),
 		}
 	}
 	s.queues["old"] = &studyQueue{userID: learner.user.ID, builtAt: now.Add(-48 * time.Hour)}
@@ -621,7 +622,7 @@ func TestStudyQueueMapIsBounded(t *testing.T) {
 		t.Fatal("the oldest queue stayed")
 	}
 	if _, ok := s.queues["old"]; ok {
-		t.Fatal("a queue from another UTC day stayed")
+		t.Fatal("a queue from another study day stayed")
 	}
 	if _, ok := s.queues["nil"]; ok {
 		t.Fatal("a nil queue stayed")

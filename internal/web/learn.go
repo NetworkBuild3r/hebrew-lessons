@@ -359,16 +359,18 @@ func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*st
 	if prev != nil && prev.userID == userID && !prev.done && prev.sameDay(now) {
 		return prev, nil
 	}
+	// No learner database: Review stays on the empty done state. That page is
+	// not a civil day, so it does not invent a zone.
+	if s.study == nil {
+		q := &studyQueue{userID: userID, done: true, builtAt: now}
+		s.rememberLocked(key, q, now)
+		return q, nil
+	}
 	z, err := s.learnerZone(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	rollover := studyday.DueCutoff(now, z)
-	if s.study == nil {
-		q := &studyQueue{userID: userID, done: true, builtAt: now, rollover: rollover}
-		s.rememberLocked(key, q, now)
-		return q, nil
-	}
 	seed, err := s.reviewSeedLocked()
 	if err != nil {
 		return nil, err
