@@ -60,9 +60,7 @@ func (s *Session) DrillAnswered(ctx context.Context, cardID int64, correct bool,
 	if correct && drillAnswerSlow(latency.Milliseconds(), medianMS) {
 		s.tally.Slow++
 	}
-	if !correct {
-		s.requeueLocked(cardID)
-	}
+	// A wrong drill step is not put back into this sitting (INIT-028/SPEC-002).
 	return out, nil
 }
 

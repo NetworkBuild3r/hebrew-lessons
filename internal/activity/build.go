@@ -116,8 +116,19 @@ func (e *Engine) ready() error {
 type BuildOption func(*buildConfig)
 
 type buildConfig struct {
-	source string
-	unit   int64
+	source  string
+	unit    int64
+	choices int
+}
+
+// WithChoices sets how many options a pick shows, including the answer.
+// Fewer than 2 is ignored. The default is OptionCount. INIT-028/SPEC-002.
+func WithChoices(n int) BuildOption {
+	return func(c *buildConfig) {
+		if n >= 2 {
+			c.choices = n
+		}
+	}
 }
 
 // WithSource sets where the question comes from: evidence.SourceReview, SourcePractice,
@@ -214,7 +225,11 @@ func (e *Engine) build(ctx context.Context, userID, lexemeID int64, kind Kind, o
 		if err != nil {
 			return built{}, err
 		}
-		dis, err := e.pick(anchor, words, OptionCount-1, Need{}, prefer, false)
+		n := OptionCount
+		if cfg.choices >= 2 {
+			n = cfg.choices
+		}
+		dis, err := e.pick(anchor, words, n-1, Need{}, prefer, false)
 		if err != nil {
 			return built{}, err
 		}

@@ -363,8 +363,8 @@ func TestPatternRecordGradesDrill(t *testing.T) {
 			break
 		}
 	}
-	if !found {
-		t.Fatal("Again on a pattern drill was not requeued")
+	if found {
+		t.Fatal("Again on a pattern drill was asked again in the same sitting")
 	}
 }
 

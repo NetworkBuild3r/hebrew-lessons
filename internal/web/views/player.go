@@ -352,6 +352,26 @@ func POSLabel(pos string) string {
 	}
 }
 
+// CardFace is the line on the open card, beside the meaning: "noun · masculine",
+// "feminine", or the part of speech when the word has no gender. INIT-028/SPEC-003.
+func CardFace(pos, gender string) string {
+	label := POSLabel(pos)
+	g := ""
+	switch gender {
+	case AddressMasculine:
+		g = "masculine"
+	case AddressFeminine:
+		g = "feminine"
+	}
+	if label != "" && g != "" {
+		return label + " · " + g
+	}
+	if g != "" {
+		return g
+	}
+	return label
+}
+
 // CardMeta is the caption under the meaning: a part of speech, a gender
 // mark, or both. Gender is the stored "m" or "f", and only when GenderLabel
 // would show a chip. An empty pair is omitted.
@@ -490,6 +510,13 @@ func (p wordPanel) Render(ctx context.Context, wr io.Writer) error {
 			b.WriteString(`<p class="wcard__gl" lang="en" dir="ltr">`)
 			b.WriteString(html.EscapeString(meaning))
 			b.WriteString(`</p>`)
+		}
+		if face := CardFace(w.POS, w.Gender); face != "" {
+			b.WriteString(`<p class="wcard__pos" lang="en">`)
+			b.WriteString(html.EscapeString(face))
+			b.WriteString(`</p>`)
+		}
+		if meaning != "" {
 			if phraseHe != "" || phraseEn != "" {
 				b.WriteString(`<p class="wcard__kicker" lang="en">In a phrase</p>`)
 				if phraseHe != "" {
@@ -503,13 +530,8 @@ func (p wordPanel) Render(ctx context.Context, wr io.Writer) error {
 					b.WriteString(`</p>`)
 				}
 			}
-			if note != "" || lemma != "" || CardMeta(w.POS, w.Gender) != "" || w.Root != "" || w.FormsHref != "" {
+			if note != "" || lemma != "" || w.Root != "" || w.FormsHref != "" {
 				b.WriteString(`<details class="wcard__more"><summary lang="en">Word details</summary>`)
-				if meta := CardMeta(w.POS, w.Gender); meta != "" {
-					b.WriteString(`<p class="wcard__pos" lang="en">`)
-					b.WriteString(html.EscapeString(meta))
-					b.WriteString(`</p>`)
-				}
 				if note != "" || lemma != "" {
 					b.WriteString(`<p class="wcard__note" lang="en" dir="ltr">`)
 					if note != "" {

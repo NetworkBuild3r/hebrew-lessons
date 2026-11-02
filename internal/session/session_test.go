@@ -301,7 +301,6 @@ func TestRequeueMissOnce(t *testing.T) {
 	}
 	revealAndRecord(t, sess, ctx, first.CardID, fsrs.Again)
 
-	between := 0
 	seen := 1
 	visits := []int64{first.CardID}
 	unique := map[int64]struct{}{first.CardID: {}}
@@ -313,35 +312,25 @@ func TestRequeueMissOnce(t *testing.T) {
 		visits = append(visits, card.CardID)
 		unique[card.CardID] = struct{}{}
 		if card.CardID != first.CardID {
-			if seen == 1 {
-				between++
-			}
 			continue
 		}
 		seen++
-		if seen == 2 && between < RequeueGap {
-			t.Fatalf("requeued after %d cards, want at least %d", between, RequeueGap)
-		}
-		if seen > 2 {
+		if seen > 1 {
 			t.Fatalf("card %d appeared %d times", first.CardID, seen)
 		}
-		revealAndRecord(t, sess, ctx, card.CardID, fsrs.Again)
 	}
-	if seen != 2 {
-		t.Fatalf("appearances = %d, want 2", seen)
+	if seen != 1 {
+		t.Fatalf("appearances = %d, want 1", seen)
 	}
-	if between < RequeueGap {
-		t.Fatalf("gap = %d, want at least %d", between, RequeueGap)
-	}
-	if len(unique) != SessionCap || len(visits) != SessionCap+1 {
-		t.Fatalf("unique=%d visits=%d, want the requeue to count once toward the cap", len(unique), len(visits))
+	if len(unique) != SessionCap || len(visits) != SessionCap {
+		t.Fatalf("unique=%d visits=%d, want one pass and no repeat", len(unique), len(visits))
 	}
 	logs, err = store.ReviewLogs(ctx, first.CardID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(logs) != 3 || logs[1].Rating != int(fsrs.Again) || logs[2].Rating != int(fsrs.Again) {
-		t.Fatalf("log = %+v, want the original grade plus two Again ratings", logs)
+	if len(logs) != 2 || logs[1].Rating != int(fsrs.Again) {
+		t.Fatalf("log = %+v, want the original grade plus one Again", logs)
 	}
 }
 
@@ -596,8 +585,8 @@ func TestConcurrentRecordWritesOnce(t *testing.T) {
 			requeues++
 		}
 	}
-	if requeues != 1 {
-		t.Fatalf("re-queues = %d, want at most 1 and the successful Again to insert once", requeues)
+	if requeues != 0 {
+		t.Fatalf("re-queues = %d, want 0", requeues)
 	}
 }
 
@@ -1478,19 +1467,12 @@ func TestAgainReturnsOnceAfterSeededGap(t *testing.T) {
 	}
 	for i, seed := range seeds {
 		again := measureAgain(t, sessions[i])
-		if again.appearances != 2 {
-			t.Fatalf("seed %d appearances = %d, want 2", seed, again.appearances)
-		}
-		if again.between != requeueSpan(seed) {
-			t.Fatalf("seed %d gap = %d, want %d", seed, again.between, requeueSpan(seed))
-		}
-		if again.between < 3 || again.between > 5 {
-			t.Fatalf("seed %d gap = %d, want 3..5", seed, again.between)
+		if again.appearances != 1 {
+			t.Fatalf("seed %d appearances = %d, want 1", seed, again.appearances)
 		}
 	}
-	// The same seed queues the miss the same distance away.
 	again := measureAgain(t, mustBuild(t, New(store, clk, seeds[0]), userID))
-	if again.between != requeueSpan(seeds[0]) || again.appearances != 2 {
+	if again.appearances != 1 {
 		t.Fatalf("repeat seed %+v", again)
 	}
 }
@@ -1512,12 +1494,8 @@ func TestAgainClampsToTheQueueEnd(t *testing.T) {
 	if !ok || next.CardID != second {
 		t.Fatalf("next = %+v ok=%v, want %d", next, ok, second)
 	}
-	back, ok := sess.Next()
-	if !ok || back.CardID != first {
-		t.Fatalf("requeue = %+v ok=%v, want the miss at the end", back, ok)
-	}
-	if _, ok := sess.Next(); ok {
-		t.Fatal("the clamped miss was queued again")
+	if back, ok := sess.Next(); ok {
+		t.Fatalf("miss returned as %+v", back)
 	}
 }
 
@@ -1641,8 +1619,8 @@ func TestDrillStillRequeuesInAOneLexemePool(t *testing.T) {
 			break
 		}
 	}
-	if !found {
-		t.Fatal("a missed drill in a one-lexeme pool was not queued again")
+	if found {
+		t.Fatal("a missed drill was asked again in the same sitting")
 	}
 }
 
@@ -1667,16 +1645,20 @@ func TestMissRequeuesWhenADrillSitsBetweenTwoWords(t *testing.T) {
 		t.Fatalf("first = %+v ok=%v, want %d", card, ok, first)
 	}
 	revealAndRecord(t, sess, ctx, first, fsrs.Again)
+	sawOther := false
 	for n := 0; n < DrillSteps+4; n++ {
 		next, ok := sess.Next()
 		if !ok {
-			t.Fatal("the miss was not put back")
+			break
 		}
 		if next.CardID == first {
-			return
+			t.Fatal("the miss was asked again")
 		}
+		sawOther = true
 	}
-	t.Fatal("the miss was not put back")
+	if !sawOther {
+		t.Fatal("the rest of the sitting was dropped")
+	}
 }
 
 type againMeasure struct {

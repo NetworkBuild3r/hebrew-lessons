@@ -256,8 +256,8 @@ func TestAnsweredImpliedCreditAndRequeue(t *testing.T) {
 			}
 		}
 	}
-	if !foundRetry {
-		t.Fatal("wrong moved-up answer did not requeue")
+	if foundRetry {
+		t.Fatal("wrong moved-up answer was asked again in the same sitting")
 	}
 
 	// Hard on a moved-up answer: no implied credit.

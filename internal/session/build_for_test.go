@@ -90,8 +90,7 @@ func TestBuildSessionForUsesTheServiceSeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	again := measureAgain(t, sess)
-	want := requeueSpan(svc.Seed())
-	if again.appearances != 2 || again.between != want {
-		t.Fatalf("band miss = %+v, want 2 appearances %d apart", again, want)
+	if again.appearances != 1 {
+		t.Fatalf("band miss = %+v, want 1 appearance", again)
 	}
 }

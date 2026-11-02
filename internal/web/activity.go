@@ -66,16 +66,44 @@ func (s *server) prepareItem(ctx context.Context, q *studyQueue) error {
 			return err
 		}
 	}
-	if ref.Activity == "" || ref.Activity == activity.Flashcard {
+	if ref.Activity != "" && ref.Activity != activity.Flashcard {
+		item, ok, err := s.buildItem(ctx, q.userID, ref)
+		if err != nil {
+			return err
+		}
+		if ok {
+			q.item = &item
+			return nil
+		}
+	}
+	// A visit the mix left as a flashcard, or whose checked activity the
+	// lexicon cannot fill, becomes a short meaning pick. Review does not
+	// ask the learner to grade themselves (INIT-028/SPEC-003).
+	return s.promoteFlashcard(ctx, q)
+}
+
+// promoteFlashcard builds a two-choice meaning question for a word the mix
+// could not ask any other way. No other gloss means the visit stays empty
+// and the caller skips it without a grade.
+func (s *server) promoteFlashcard(ctx context.Context, q *studyQueue) error {
+	ref := q.cur
+	if s.engine == nil || ref.LexemeID <= 0 {
 		return nil
 	}
-	item, ok, err := s.buildItem(ctx, q.userID, ref)
-	if err != nil {
+	item, err := s.engine.Build(ctx, q.userID, ref.LexemeID, activity.ReadPick,
+		activity.WithSource(evidence.SourceReview), activity.WithChoices(2))
+	switch {
+	case err == nil:
+	case errors.Is(err, activity.ErrNoGloss), errors.Is(err, activity.ErrNotEnoughWords),
+		errors.Is(err, activity.ErrUnknownWord), errors.Is(err, activity.ErrNoAudio):
+		return nil
+	default:
 		return err
 	}
-	if ok {
-		q.item = &item
+	if err := q.sess.UseChecked(ref.CardID, item.Kind, item.Skill); err != nil {
+		return err
 	}
+	q.item = &item
 	return nil
 }
 

@@ -508,10 +508,8 @@ func (s *Session) Record(ctx context.Context, cardID int64, rating fsrs.Rating) 
 	if rating == fsrs.Hard {
 		s.tally.Slow++
 	}
-	if rating != fsrs.Again {
-		return nil
-	}
-	s.requeueLocked(cardID)
+	// A miss is scheduled and the sitting moves on. It is not asked again
+	// in this sitting (INIT-028/SPEC-002, ADR-0024 D3).
 	return nil
 }
 
@@ -585,8 +583,8 @@ var ErrNotChecked = errors.New("session: visit has no checked activity")
 // Answered closes the visit of the card Next just served after the learner answered its
 // checked activity. activity.Engine.Check has already written the evidence for the asked
 // skill. When the visit was MovedUp and the answer is Correct with Good or Easy, Implied
-// schedules the own card as Good. A wrong answer puts the visit back once; a wrong
-// moved-up visit comes back on the own skill. INIT-027/SPEC-004.
+// schedules the own card as Good. A wrong answer is not asked again in this sitting.
+// INIT-027/SPEC-004, INIT-028/SPEC-002.
 func (s *Session) Answered(ctx context.Context, cardID int64, res activity.Result) (AnswerOutcome, error) {
 	if s == nil {
 		return AnswerOutcome{}, errors.New("session: session is not configured")
@@ -630,18 +628,30 @@ func (s *Session) Answered(ctx context.Context, cardID int64, res activity.Resul
 		out.Implied = true
 		s.tally.MovedUp++
 	}
-	if !res.Correct {
-		if s.last.MovedUp {
-			retry := s.last
-			retry.MovedUp = false
-			retry.AskSkill = s.last.Skill
-			retry.Activity = s.last.OwnActivity
-			s.requeueRefLocked(cardID, retry)
-		} else {
-			s.requeueLocked(cardID)
-		}
-	}
+	// A wrong answer, including a moved-up one, is not put back into this
+	// sitting (INIT-028/SPEC-002, ADR-0024 D3).
 	return out, nil
+}
+
+// UseChecked marks the served visit as a checked activity when the screen
+// could build one and the mix had left a flashcard. INIT-028/SPEC-002.
+func (s *Session) UseChecked(cardID int64, kind activity.Kind, skill string) error {
+	if s == nil {
+		return errors.New("session: session is not configured")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.hasLast || cardID != s.last.CardID {
+		return fmt.Errorf("session: card %d: %w", cardID, ErrNotServed)
+	}
+	if kind == "" || kind == activity.Flashcard {
+		return fmt.Errorf("session: card %d: %w", cardID, ErrNotChecked)
+	}
+	s.last.Activity = kind
+	if skill != "" {
+		s.last.AskSkill = skill
+	}
+	return nil
 }
 
 // Tally returns a copy of the sitting counters. INIT-027/SPEC-004.

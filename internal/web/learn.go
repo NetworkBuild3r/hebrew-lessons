@@ -468,11 +468,10 @@ func (s *server) now() time.Time {
 	return time.Now().UTC()
 }
 
-// advance serves the next card. For a word card it records the exposure of a new
-// word, and for a card the mix chose a checked activity for, it builds the item the
-// screen asks. When the lexicon cannot support the activity after all, the visit falls
-// back to a flashcard, which the session grades through the card's own skill.
-// A two-letter letter step pins asked and servedAt here for the timed pick.
+// advance serves the next card that can be asked. A word the lexicon cannot
+// turn into a checked question is skipped, and so is a letter step whose
+// example cannot hide the asked letter. Neither skip writes a grade
+// (INIT-028/SPEC-002). A pattern drill still uses the flashcard frame.
 func (s *server) advance(ctx context.Context, q *studyQueue) error {
 	if q != nil {
 		q.revealed = false
@@ -490,33 +489,77 @@ func (s *server) advance(ctx context.Context, q *studyQueue) error {
 		}
 		return nil
 	}
-	card, ok := q.sess.Next()
-	if !ok {
-		_, total, _ := q.sess.Place()
-		q.done = true
-		q.has = false
-		q.total = total
-		q.index = total
-		q.retry = false
-		q.snapshotTally()
-		return nil
-	}
-	q.cur = card
-	q.has = true
-	q.done = false
-	q.index, q.total, q.retry = q.sess.Place()
-	if err := s.prepareItem(ctx, q); err != nil {
-		return err
-	}
-	if parts := pairParts(q); parts != nil {
-		z, err := s.learnerZone(ctx, q.userID)
+	for n := 0; n < 64; n++ {
+		card, ok := q.sess.Next()
+		if !ok {
+			_, total, _ := q.sess.Place()
+			q.done = true
+			q.has = false
+			q.total = total
+			q.index = total
+			q.retry = false
+			q.snapshotTally()
+			return nil
+		}
+		q.cur = card
+		q.has = true
+		q.done = false
+		q.item = nil
+		q.asked = ""
+		q.servedAt = time.Time{}
+		q.index, q.total, q.retry = q.sess.Place()
+		if err := s.prepareItem(ctx, q); err != nil {
+			return err
+		}
+		if parts := pairParts(q); parts != nil {
+			z, err := s.learnerZone(ctx, q.userID)
+			if err != nil {
+				return err
+			}
+			q.asked = pickPart(q.cur.CardID, studyday.DueCutoff(s.now(), z), parts)
+			q.servedAt = s.now()
+		}
+		show, err := s.askable(ctx, q)
 		if err != nil {
 			return err
 		}
-		q.asked = pickPart(q.cur.CardID, studyday.DueCutoff(s.now(), z), parts)
-		q.servedAt = s.now()
+		if show {
+			return nil
+		}
 	}
+	q.done = true
+	q.has = false
+	q.snapshotTally()
 	return nil
+}
+
+// askable reports whether the served visit can be shown. A word with no
+// checked item is not shown. A letter pair with an example is shown only
+// when the asked letter is actually missing and the other choice is not
+// still written in that example.
+func (s *server) askable(ctx context.Context, q *studyQueue) (bool, error) {
+	if q == nil {
+		return false, nil
+	}
+	if q.item != nil {
+		return true, nil
+	}
+	if mode, ok := views.LookupReviewMode(q.cur.Kind); ok && !mode.Lexeme {
+		parts := pairParts(q)
+		if parts == nil {
+			return true, nil
+		}
+		ex, ok, err := s.confusionExample(ctx, q.userID, fsrs.MissLetterPair, q.cur.Key)
+		if err != nil {
+			return false, err
+		}
+		if !ok || ex.TextNFC == "" {
+			return true, nil
+		}
+		_, _, good := letterAsk(ex.TextNFC, q.asked, parts)
+		return good, nil
+	}
+	return false, nil
 }
 
 // snapshotTally stores the sitting's counters on the queue for the done screen.
@@ -582,13 +625,23 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 		case letterPair:
 			// Timed pick: blank the example (or letter clip/sound), two buttons.
 			vm.Pick = true
-			vm.PickLetters = parts
 			vm.Asked = q.asked
 			if vm.ExampleText != "" {
-				vm.BlankedExample = blankAskedLetter(vm.ExampleText, q.asked)
+				blanked, choices, good := letterAsk(vm.ExampleText, q.asked, parts)
 				vm.Pointed = ""
 				vm.Unpointed = ""
+				if good {
+					vm.BlankedExample = blanked
+					vm.PickLetters = choices
+				} else {
+					// The complete word is not a missing-letter prompt.
+					vm.ExampleText = ""
+					vm.ExampleGloss = ""
+					vm.BlankedExample = ""
+					vm.PickLetters = parts
+				}
 			} else {
+				vm.PickLetters = parts
 				// Prompt is the asked letter's clip or sound; the glyph stays off.
 				// Drop any other letter's clip fillDrill may have stored.
 				vm.Pointed = ""
@@ -774,6 +827,45 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 		vm.Unpointed = units.Plain(vm.Asked)
 	}
 	return nil
+}
+
+// letterAsk blanks the asked letter and keeps only choices that are not still
+// written in the prompt. ok is false when the letter cannot be removed or a
+// second choice is not available. INIT-028/SPEC-002.
+func letterAsk(example, asked string, parts []string) (blanked string, choices []string, ok bool) {
+	if example == "" || asked == "" {
+		return "", nil, false
+	}
+	blanked = blankAskedLetter(example, asked)
+	if blanked == example || !strings.Contains(blanked, "___") || letterIn(blanked, asked) {
+		return "", nil, false
+	}
+	for _, part := range parts {
+		if part == "" || letterIn(blanked, part) {
+			continue
+		}
+		choices = append(choices, part)
+	}
+	if len(choices) < 2 {
+		return "", nil, false
+	}
+	return blanked, choices, true
+}
+
+// letterIn reports whether letter is still visible in text, including when
+// the stored letter and the word differ only by vowel points.
+func letterIn(text, letter string) bool {
+	if text == "" || letter == "" {
+		return false
+	}
+	if strings.Contains(text, letter) {
+		return true
+	}
+	plain := units.Plain(letter)
+	if plain == "" || plain == letter {
+		return false
+	}
+	return strings.Contains(units.Plain(text), plain)
 }
 
 // blankAskedLetter replaces the first occurrence of asked in text with a cloze blank.
