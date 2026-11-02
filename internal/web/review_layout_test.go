@@ -16,9 +16,10 @@ import (
 
 // Runs in CI as a subtest of TestKeyboardNode until the Node 22 step's -run filter lists it (CI/CD follow-up).
 //
-// TestReviewGradesStayInView loads the pair back and the letter back at
-// 390×844 after the reveal. The question and the Easy button are both inside
-// the viewport, and the buttons do not cover the question.
+// TestReviewGradesStayInView loads a two-letter pick and a revealed
+// single-letter back at 390×844. The question and the lowest action stay
+// inside the viewport, and the action does not cover the question.
+// A two-letter step is a pick, so it is not revealed.
 func TestReviewGradesStayInView(t *testing.T) {
 	reviewGradesStayInView(t)
 }
@@ -38,12 +39,14 @@ func reviewGradesStayInView(t *testing.T) {
 	house := addLexeme(t, store, "בַּיִת", "house", "bayit", "m", "")
 	seedDrill(t, store, pair.user.ID, "pair", "ג/פ", rain)
 	seedDrill(t, store, letter.user.ID, "letter", "בּ", house)
-	for _, learner := range []learnerFix{pair, letter} {
-		page := getLearner(t, h, learner, "/review")
-		rec := getReveal(t, h, learner, mustCardID(t, page), attr(t, page, "data-pointed"))
-		if rec.Code != 200 {
-			t.Fatalf("reveal = %d\n%s", rec.Code, rec.Body.String())
-		}
+	pairPage := getLearner(t, h, pair, "/review")
+	if !strings.Contains(pairPage, `data-activity="letter-pick"`) {
+		t.Fatalf("pair review is not a letter pick")
+	}
+	letterPage := getLearner(t, h, letter, "/review")
+	rec := getReveal(t, h, letter, mustCardID(t, letterPage), attr(t, letterPage, "data-pointed"))
+	if rec.Code != 200 {
+		t.Fatalf("letter reveal = %d\n%s", rec.Code, rec.Body.String())
 	}
 
 	srv := httptest.NewServer(h)
@@ -189,8 +192,9 @@ await new Promise((resolve, reject) => {
 });
 
 const measure = '(() => {' +
-  'const q = document.getElementById("act-grade-lead");' +
-  'const easy = [...document.querySelectorAll(".act-grade")].find((b) => (b.textContent || "").trim() === "Easy");' +
+  'const pick = document.querySelector("[data-activity=letter-pick]");' +
+  'const q = document.getElementById("act-grade-lead") || (pick && pick.querySelector(".act__lead"));' +
+  'const easy = pick ? pick.querySelector("button[value=dont_know]") : [...document.querySelectorAll(".act-grade")].find((b) => (b.textContent || "").trim() === "Easy");' +
   'if (!q || !easy) return null;' +
   'const qr = q.getBoundingClientRect();' +
   'const er = easy.getBoundingClientRect();' +
