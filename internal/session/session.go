@@ -103,23 +103,25 @@ func (s *Service) ready() error {
 //
 // Activity is the activity the mix chose for the visit (activity.Kind) and AskSkill the
 // skill it asks through. They are empty on a drill. CardID and Skill stay the card the
-// mix selected, which is what a flashcard grades: AskSkill is the card's own skill only
-// when the word's weakest skill is that one. A checked activity is built with
-// activity.Engine.Build for LexemeID, answered with Check, and the visit is closed with
-// Session.Answered. Flashcard is graded with Record, as before. Intro is true on a new
-// card whose word has not been shown yet: the screen records Engine.Expose first.
+// mix selected. OwnActivity is the activity through the card's own skill; MovedUp is
+// true when AskSkill is the implying skill (INIT-027/SPEC-004). A checked activity is
+// built with activity.Engine.Build for LexemeID, answered with Check, and the visit is
+// closed with Session.Answered. Flashcard is graded with Record, as before. Intro is
+// true on a new card whose word has not been shown yet: the screen records Engine.Expose first.
 type CardRef struct {
-	CardID     int64
-	LexemeID   int64
-	Skill      string
-	Struggling bool
-	New        bool
-	Kind       string
-	Key        string
-	Step       int
-	Activity   activity.Kind
-	AskSkill   string
-	Intro      bool
+	CardID      int64
+	LexemeID    int64
+	Skill       string
+	Struggling  bool
+	New         bool
+	Kind        string
+	Key         string
+	Step        int
+	Activity    activity.Kind
+	AskSkill    string
+	Intro       bool
+	MovedUp     bool
+	OwnActivity activity.Kind
 }
 
 type gradeFunc func(context.Context, int64, fsrs.Rating, bool) error
@@ -135,6 +137,25 @@ var ErrNotRevealed = errors.New("session: card was not revealed")
 // Next and Record share mu. BuildSession returns a pointer because a mutex
 // must not be copied. The handler that built it checks UserID against the
 // signed-in learner, and it checks CSRF on every mutating request.
+// AnswerOutcome reports implied credit and a slow right Hard for a checked visit.
+// INIT-027/SPEC-004.
+type AnswerOutcome struct {
+	Implied bool
+	Slow    bool
+}
+
+// Tally is the sitting's counters. Updated under the session mutex by Record,
+// Answered, and DrillAnswered. NewMet counts visits with CardRef.New when Next
+// serves them (INIT-027/SPEC-004).
+type Tally struct {
+	Answered     int
+	Right        int
+	MovedUp      int
+	PairsCleared int
+	Slow         int
+	NewMet       int
+}
+
 type Session struct {
 	mu       sync.Mutex
 	userID   int64
@@ -146,6 +167,10 @@ type Session struct {
 	requeued map[int64]struct{}
 	grade    gradeFunc
 	span     int
+	store    *db.Store
+	clock    clock.Clock
+	record   *evidence.Recorder
+	tally    Tally
 }
 
 // UserID is the learner this queue was built for.
@@ -192,6 +217,25 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 		return nil, err
 	}
 	now := s.clock.Now()
+	ratings, err := s.store.RecentReviewRatings(ctx, userID, now, RecentReviews)
+	if err != nil {
+		return nil, err
+	}
+	accuracy := accuracyOf(ratings)
+	gate, err := s.gate(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	// Full builds seed placement-list words before ListStudyCards so the
+	// new cards join this sitting (INIT-027/SPEC-005). BuildSessionFor skips it.
+	if only == nil {
+		if err := s.seedNewFromDeck(ctx, userID, accuracy, now, gate); err != nil {
+			return nil, err
+		}
+		// Introduce dues cards at the recorder clock's now; pin the build to
+		// that same instant so the seeded cards classify as due new.
+		now = s.clock.Now()
+	}
 	cards, err := s.store.ListStudyCards(ctx, userID, now, now.Add(-ConfusionWindow))
 	if err != nil {
 		return nil, err
@@ -202,15 +246,7 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 			return !keep
 		})
 	}
-	ratings, err := s.store.RecentReviewRatings(ctx, userID, now, RecentReviews)
-	if err != nil {
-		return nil, err
-	}
 	knownIDs, err := s.store.KnownLexemeIDs(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	gate, err := s.gate(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -228,6 +264,10 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 	for _, id := range knownIDs {
 		known[id] = struct{}{}
 	}
+	byLexSkill := map[lexemeSkill]db.StudyCard{}
+	for _, card := range cards {
+		byLexSkill[lexemeSkill{card.LexemeID, card.Skill}] = card
+	}
 	words := map[int64]learner.WordState{}
 	cands := make([]Candidate, 0, len(cards))
 	for _, card := range cards {
@@ -240,44 +280,61 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 			words[card.LexemeID] = w
 		}
 		_, isKnown := known[card.LexemeID]
+		var implyID int64
+		var implyBlocked bool
+		if imply, ok := activity.Implies(card.Skill); ok {
+			if other, exists := byLexSkill[lexemeSkill{card.LexemeID, imply}]; exists {
+				implyID = other.ID
+				implyBlocked = other.RecentAgainOrHard
+			}
+		}
 		cands = append(cands, Candidate{
-			ID:            card.ID,
-			LexemeID:      card.LexemeID,
-			Skill:         card.Skill,
-			Due:           card.Due,
-			Lapses:        card.Lapses,
-			Latest:        card.LatestRating,
-			HasRating:     card.HasRating,
-			RecentLapse:   card.RecentLapse,
-			Confused:      len(w.Review.ConfusionKeys) > 0,
-			KnownLexeme:   isKnown,
-			HasIntro:      card.HasIntro,
-			IntroPosition: card.IntroPosition,
-			IntroLesson:   card.IntroLesson,
-			Skills:        activity.ViewsOf(w),
-			Facts:         facts.of(card.LexemeID),
-			Exposed:       w.Exposures > 0,
+			ID:                       card.ID,
+			LexemeID:                 card.LexemeID,
+			Skill:                    card.Skill,
+			Due:                      card.Due,
+			Lapses:                   card.Lapses,
+			Latest:                   card.LatestRating,
+			HasRating:                card.HasRating,
+			RecentLapse:              card.RecentLapse,
+			Confused:                 len(w.Review.ConfusionKeys) > 0,
+			KnownLexeme:              isKnown,
+			HasIntro:                 card.HasIntro,
+			IntroPosition:            card.IntroPosition,
+			IntroLesson:              card.IntroLesson,
+			Skills:                   activity.ViewsOf(w),
+			Facts:                    facts.of(card.LexemeID),
+			Exposed:                  w.Exposures > 0,
+			ImplyingCardID:           implyID,
+			ImplyingRecentAgainOrHard: implyBlocked,
 		})
 	}
 	if only == nil {
 		cands = append(cands, drillCandidates(pairs)...)
 	}
 	record := s.record
-	return &Session{
+	sess := &Session{
 		userID: userID,
-		cards:  mixGate(cands, accuracyOf(ratings), now, seed, gate),
+		cards:  mixGate(cands, accuracy, now, seed, gate),
 		span:   requeueSpan(seed),
-		grade: func(ctx context.Context, cardID int64, rating fsrs.Rating, _ bool) error {
-			if rating < fsrs.Again || rating > fsrs.Easy {
-				return fmt.Errorf("session: rating %d is outside 1..4", rating)
-			}
-			// A drill step has no FSRS card. The queue records the visit.
-			if cardID <= 0 {
-				return nil
-			}
-			return record.SelfGrade(ctx, cardID, rating)
-		},
-	}, nil
+		store:  s.store,
+		clock:  s.clock,
+		record: record,
+	}
+	sess.grade = func(ctx context.Context, cardID int64, rating fsrs.Rating, _ bool) error {
+		if rating < fsrs.Again || rating > fsrs.Easy {
+			return fmt.Errorf("session: rating %d is outside 1..4", rating)
+		}
+		// A drill step has no FSRS card. Grade it into drill_answers
+		// (INIT-027/SPEC-003). Restoring `return nil` here fails the
+		// pattern-Good test.
+		if cardID <= 0 {
+			_, err := sess.recordDrillAnswerLocked(ctx, rating >= fsrs.Good, 0)
+			return err
+		}
+		return record.SelfGrade(ctx, cardID, rating)
+	}
+	return sess, nil
 }
 
 // drillCandidates is one drill per confusion key that reached the miss
@@ -369,6 +426,7 @@ func (s *Session) Place() (index, total int, retry bool) {
 
 // Next returns the next card. The bool is false when the queue is finished.
 // The new serve starts unrevealed. Peeked is set only by Reveal.
+// NewMet on Tally counts a visit with CardRef.New when it is served here.
 func (s *Session) Next() (CardRef, bool) {
 	if s == nil {
 		return CardRef{}, false
@@ -382,6 +440,9 @@ func (s *Session) Next() (CardRef, bool) {
 	s.hasLast = true
 	s.peeked = false
 	s.i++
+	if s.last.New {
+		s.tally.NewMet++
+	}
 	return s.last, true
 }
 
@@ -440,6 +501,13 @@ func (s *Session) Record(ctx context.Context, cardID int64, rating fsrs.Rating) 
 		return err
 	}
 	s.peeked = false
+	s.tally.Answered++
+	if rating > fsrs.Again {
+		s.tally.Right++
+	}
+	if rating == fsrs.Hard {
+		s.tally.Slow++
+	}
 	if rating != fsrs.Again {
 		return nil
 	}
@@ -462,6 +530,12 @@ func requeueSpan(seed int64) int {
 // A queue of one study lexeme is not requeued: the same word would be the
 // next Continue. The caller holds mu.
 func (s *Session) requeueLocked(cardID int64) {
+	s.requeueRefLocked(cardID, s.last)
+}
+
+// requeueRefLocked is requeueLocked with an explicit visit copy (INIT-027/SPEC-004
+// uses it so a wrong moved-up answer comes back on the own skill).
+func (s *Session) requeueRefLocked(cardID int64, ref CardRef) {
 	if s.requeued == nil {
 		s.requeued = map[int64]struct{}{}
 	}
@@ -476,7 +550,7 @@ func (s *Session) requeueLocked(cardID int64) {
 	if at > len(s.cards) {
 		at = len(s.cards)
 	}
-	s.cards = slices.Insert(s.cards, at, s.last)
+	s.cards = slices.Insert(s.cards, at, ref)
 }
 
 // oneLexemeLocked reports whether every study visit in the queue is the same
@@ -509,27 +583,74 @@ func (s *Session) oneLexemeLocked() bool {
 var ErrNotChecked = errors.New("session: visit has no checked activity")
 
 // Answered closes the visit of the card Next just served after the learner answered its
-// checked activity. activity.Engine.Check has already written the evidence, so nothing is
-// graded here. A wrong answer puts the visit back once, the sitting's gap of
-// 3, 4, or 5 visits ahead, as an Again does for a flashcard. A single lexeme
-// is not put back. cardID is the card Next returned, and a second call for the
-// same serve is refused with ErrNotServed.
-func (s *Session) Answered(cardID int64, correct bool) error {
+// checked activity. activity.Engine.Check has already written the evidence for the asked
+// skill. When the visit was MovedUp and the answer is Correct with Good or Easy, Implied
+// schedules the own card as Good. A wrong answer puts the visit back once; a wrong
+// moved-up visit comes back on the own skill. INIT-027/SPEC-004.
+func (s *Session) Answered(ctx context.Context, cardID int64, res activity.Result) (AnswerOutcome, error) {
 	if s == nil {
-		return errors.New("session: session is not configured")
+		return AnswerOutcome{}, errors.New("session: session is not configured")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.hasLast || cardID != s.last.CardID {
-		return fmt.Errorf("session: card %d: %w", cardID, ErrNotServed)
+		return AnswerOutcome{}, fmt.Errorf("session: card %d: %w", cardID, ErrNotServed)
 	}
 	if s.last.Activity == "" || s.last.Activity == activity.Flashcard {
-		return fmt.Errorf("session: card %d: %w", cardID, ErrNotChecked)
+		return AnswerOutcome{}, fmt.Errorf("session: card %d: %w", cardID, ErrNotChecked)
+	}
+	out := AnswerOutcome{
+		Slow: res.Correct && res.Rating == fsrs.Hard && !res.NearMiss,
 	}
 	s.hasLast = false
 	s.peeked = false
-	if !correct {
-		s.requeueLocked(cardID)
+	s.tally.Answered++
+	if res.Correct {
+		s.tally.Right++
 	}
-	return nil
+	if out.Slow {
+		s.tally.Slow++
+	}
+	if s.last.MovedUp && res.Correct && (res.Rating == fsrs.Good || res.Rating == fsrs.Easy) {
+		if s.record == nil {
+			s.hasLast = true
+			return AnswerOutcome{}, errors.New("session: recorder is not configured")
+		}
+		if err := s.record.Implied(ctx, s.userID, cardID, fsrs.Good); err != nil {
+			s.hasLast = true
+			s.tally.Answered--
+			if res.Correct {
+				s.tally.Right--
+			}
+			if out.Slow {
+				s.tally.Slow--
+			}
+			return AnswerOutcome{}, err
+		}
+		out.Implied = true
+		s.tally.MovedUp++
+	}
+	if !res.Correct {
+		if s.last.MovedUp {
+			retry := s.last
+			retry.MovedUp = false
+			retry.AskSkill = s.last.Skill
+			retry.Activity = s.last.OwnActivity
+			s.requeueRefLocked(cardID, retry)
+		} else {
+			s.requeueLocked(cardID)
+		}
+	}
+	return out, nil
+}
+
+
+// Tally returns a copy of the sitting counters. INIT-027/SPEC-004.
+func (s *Session) Tally() Tally {
+	if s == nil {
+		return Tally{}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.tally
 }

@@ -7,7 +7,7 @@ spec_id: SPEC-002
 initiative_id: INIT-027
 title: "Migration 021: drill answers, cleared pairs, implied reviews"
 domain: data
-status: pending
+status: complete
 primary_prompt: none
 model: inherit
 autonomy_level: auto_tests

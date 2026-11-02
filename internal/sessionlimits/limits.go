@@ -3,30 +3,38 @@
 //
 // The package does not import the database. session.TargetSuccess is
 // this TargetSuccess, and BuildSession feeds that value to the mix when
-// the learner has no reviews. MaxNewPerSession, MinNewPerSession, and
-// MaxNewShare are the caps BuildSession applies to cards that have no
-// review yet. With reviews due, the new-card count is
-// min(MaxNewPerSession, max(MinNewPerSession, floor(MaxNewShare * sessionSize))),
-// where sessionSize is the reviewed cards plus the new cards. A session
-// with no reviews due still takes up to MaxNewPerSession.
+// the learner has no reviews. New-card caps follow recent accuracy
+// (INIT-027/SPEC-005, ADR-0023 D5): NewPerSessionLow below NewTierLow,
+// NewPerSessionMid from NewTierLow through NewTierHigh, and
+// NewPerSessionHigh above NewTierHigh. MaxNewPerSession is the high
+// tier. NoHistoryAccuracy uses the mid tier.
 package sessionlimits
 
 const (
 	// TargetSuccess is the session success rate the default mix aims at.
 	TargetSuccess = 0.85
 
-	// MaxNewPerSession is the most new cards one session should introduce.
-	MaxNewPerSession = 5
+	// NewPerSessionLow is how many new cards a sitting introduces when
+	// recent accuracy is below NewTierLow.
+	NewPerSessionLow = 2
 
-	// MinNewPerSession is the fewest new cards a session introduces when
-	// a review is due and that many unreviewed cards are waiting.
-	// floor(MaxNewShare * sessionSize) is 0 for one or two reviews, which
-	// would starve a learner who has almost no reviews yet.
-	MinNewPerSession = 2
+	// NewPerSessionMid is how many new cards a sitting introduces when
+	// recent accuracy is from NewTierLow through NewTierHigh, and when
+	// the learner has no review history.
+	NewPerSessionMid = 5
 
-	// MaxNewShare is the largest fraction of the reviewed cards plus the
-	// new cards that should be new. The allowance is still at least
-	// MinNewPerSession when reviews are due. A session with no reviews
-	// ignores this share and uses MaxNewPerSession.
-	MaxNewShare = 0.25
+	// NewPerSessionHigh is how many new cards a sitting introduces when
+	// recent accuracy is above NewTierHigh.
+	NewPerSessionHigh = 8
+
+	// MaxNewPerSession is the high-tier new-card cap (NewPerSessionHigh).
+	MaxNewPerSession = NewPerSessionHigh
+
+	// NewTierLow is the recent Good/Easy share below which the low new-card
+	// tier applies. It matches session.LowAccuracy.
+	NewTierLow = 0.80
+
+	// NewTierHigh is the recent Good/Easy share above which the high
+	// new-card tier applies. It matches session.HighAccuracy.
+	NewTierHigh = 0.90
 )

@@ -109,6 +109,10 @@ type FeedbackView struct {
 	TypedLabel string
 	Confusions []ConfusionView
 	Pairs      []PairView
+	// AlsoCounts is "Also counts for reading" or "for listening" when Implied.
+	AlsoCounts string
+	// SlowLine is set when a right answer was slow.
+	SlowLine string
 }
 
 // ActivityView is one checked activity, as a screen.
@@ -187,6 +191,54 @@ func ReviewedLine(n int) string {
 		return "You reviewed 1 card."
 	}
 	return "You reviewed " + strconv.Itoa(n) + " cards."
+}
+
+// Review string table (INIT-027/SPEC-006). English is the key; Hebrew fills when present.
+var reviewHE = map[string]string{
+	"Done for now":       "זהו להיום",
+	"Back to Today":      "חזרה להיום",
+	"Don't know":         "לא יודע/ת",
+	"Cleared":            "נוקה",
+	"Continue":           "המשך",
+	"Also counts for reading":   "נספר גם לקריאה",
+	"Also counts for listening": "נספר גם להאזנה",
+	"Right, but slow. It will come back sooner.": "נכון, אבל לאט. זה יחזור מוקדם יותר.",
+}
+
+// ReviewT is UI copy for the review screens. Missing Hebrew falls back to English.
+func ReviewT(lang, en string) templ.Component {
+	return T(lang, reviewHE[en], en)
+}
+
+// SlowComingBack is the slow-right feedback line.
+const SlowComingBack = "Right, but slow. It will come back sooner."
+
+// AlsoCountsLine names the easier skill that an implied Good covered.
+func AlsoCountsLine(skill string) string {
+	switch skill {
+	case "listen":
+		return "Also counts for listening"
+	default:
+		return "Also counts for reading"
+	}
+}
+
+// TallyLines are the non-zero done-screen rows for one sitting.
+func TallyLines(movedUp, pairsCleared, slow, newMet int) []string {
+	var lines []string
+	if movedUp > 0 {
+		lines = append(lines, strconv.Itoa(movedUp)+" moved up")
+	}
+	if pairsCleared > 0 {
+		lines = append(lines, strconv.Itoa(pairsCleared)+" letter pairs cleared")
+	}
+	if slow > 0 {
+		lines = append(lines, strconv.Itoa(slow)+" slow, coming back sooner")
+	}
+	if newMet > 0 {
+		lines = append(lines, strconv.Itoa(newMet)+" new words")
+	}
+	return lines
 }
 
 // lowerKey is the data-hotkey of a badge: digits stay, letters go lower case.
@@ -285,6 +337,34 @@ func flashDone(c ReviewCard) int {
 		return c.Index
 	}
 	return c.Index - 1
+}
+
+func letterPickPhase(c ReviewCard) string {
+	if c.AfterDrill || c.Revealed {
+		return ActFeedback
+	}
+	return ActAsk
+}
+
+func letterPickDone(c ReviewCard) int {
+	if c.AfterDrill || c.Revealed {
+		return c.Index
+	}
+	return c.Index - 1
+}
+
+func letterPickLead(c ReviewCard) string {
+	if c.AfterDrill || c.Revealed {
+		return PromptGrade
+	}
+	return "Which letter is missing?"
+}
+
+func letterPickFeedbackClass(c ReviewCard) string {
+	if c.DrillCorrect {
+		return "fb feedback-right"
+	}
+	return "fb feedback-wrong"
 }
 
 // One English question per card type. A Designer ruling changes one line.

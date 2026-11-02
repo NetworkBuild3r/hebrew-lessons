@@ -289,3 +289,36 @@ func TestViewsOf(t *testing.T) {
 		t.Fatal("HasEvidence is wrong")
 	}
 }
+
+func TestImplies(t *testing.T) {
+	if got, ok := Implies(fsrs.SkillRead); !ok || got != fsrs.SkillRecall {
+		t.Fatalf("Implies(read) = %q %v", got, ok)
+	}
+	if got, ok := Implies(fsrs.SkillListen); !ok || got != fsrs.SkillSpell {
+		t.Fatalf("Implies(listen) = %q %v", got, ok)
+	}
+	if _, ok := Implies(fsrs.SkillRecall); ok {
+		t.Fatal("recall is not implied by a harder skill")
+	}
+}
+
+func TestChooseSkill(t *testing.T) {
+	visits := map[string]int{}
+	c := ChooseSkill(fsrs.SkillRead, open, allFacts, visits)
+	if c.Kind != ReadPick || c.Skill != fsrs.SkillRead {
+		t.Fatalf("ChooseSkill = %+v, want read_pick", c)
+	}
+	visits[fsrs.SkillRead] = 2
+	c = ChooseSkill(fsrs.SkillRead, open, allFacts, visits)
+	if c.Kind != WordMatch {
+		t.Fatalf("third visit = %+v, want word_match", c)
+	}
+	c = ChooseSkill(fsrs.SkillRead, Gate{}, allFacts, nil)
+	if c.Kind != Flashcard || c.Skill != fsrs.SkillRead {
+		t.Fatalf("closed gate = %+v, want flashcard", c)
+	}
+	c = ChooseSkill(fsrs.SkillRecall, open, Facts{}, nil)
+	if c.Kind != Flashcard || c.Skill != fsrs.SkillRecall {
+		t.Fatalf("no fit = %+v, want flashcard", c)
+	}
+}

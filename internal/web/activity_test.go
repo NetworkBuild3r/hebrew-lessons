@@ -745,7 +745,9 @@ func nextForm(page string) url.Values {
 var (
 	pickRe   = regexp.MustCompile(`(?s)<button[^>]*data-pick="(\d)"[^>]*>.*?<bdi lang="en" dir="ltr">([^<]*)</bdi>`)
 	promptRe = regexp.MustCompile(`<audio id="act-prompt" src="/audio/([0-9a-f]{64})\.mp3"`)
+	hePrompt = regexp.MustCompile(`(?s)<div class="act__word">.*?<bdi class="wb__he[^"]*"[^>]*>([^<]+)</bdi>`)
 	clipRe   = regexp.MustCompile(`id="act-clip-(\d)" src="/audio/([0-9a-f]{64})\.mp3"`)
+	leftHeRe = regexp.MustCompile(`(?s)<button[^>]*data-index="(\d)"[^>]*data-tile="l"[^>]*>.*?<bdi lang="he" dir="rtl">([^<]+)</bdi>`)
 	rightRe  = regexp.MustCompile(`(?s)<button[^>]*data-index="(\d)"[^>]*data-tile="r"[^>]*>.*?<bdi lang="en" dir="ltr">([^<]*)</bdi>`)
 	glossRe  = regexp.MustCompile(`class="act__gloss" lang="en" dir="ltr">([^<]*)<`)
 )
@@ -758,6 +760,27 @@ func glossByAudio(words []lexWord) map[string]lexWord {
 	return m
 }
 
+func glossByHe(words []lexWord) map[string]lexWord {
+	m := map[string]lexWord{}
+	for _, w := range words {
+		m[w.he] = w
+	}
+	return m
+}
+
+func askedByHe(t *testing.T, page string, words []lexWord) lexWord {
+	t.Helper()
+	m := hePrompt.FindStringSubmatch(page)
+	if m == nil {
+		t.Fatalf("no Hebrew prompt in page:\n%s", page)
+	}
+	w, ok := glossByHe(words)[m[1]]
+	if !ok {
+		t.Fatalf("prompt %q not in lexicon", m[1])
+	}
+	return w
+}
+
 func mustAttempts(t *testing.T, store *db.Store, userID, lexemeID int64) []db.Attempt {
 	t.Helper()
 	got, err := store.ListAttempts(context.Background(), userID, lexemeID)
@@ -767,7 +790,7 @@ func mustAttempts(t *testing.T, store *db.Store, userID, lexemeID int64) []db.At
 	return got
 }
 
-// TestReviewCheckedActivityFlow walks listen_pick and audio_match through the real
+// TestReviewCheckedActivityFlow walks read_pick and word_match through the real
 // handlers: the item has no answer, a right answer is checked and shown, a wrong one
 // shows the right response and puts the visit back, Continue moves on, and the checked
 // visit cannot be graded as a flashcard.
@@ -777,17 +800,10 @@ func TestReviewCheckedActivityFlow(t *testing.T) {
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	words := seedLexicon(t, store, now, 8, true, true)
 	giveCards(t, store, learner.user.ID, now, words)
-	byAudio := glossByAudio(words)
-	ctx := context.Background()
 
 	page := getLearner(t, h, learner, "/review")
-	if attr(t, page, "data-activity") != "listen_pick" {
-		t.Fatalf("the first visit is not a listen_pick: %s", cardAttrs(page))
-	}
-	for _, w := range words {
-		if strings.Contains(page, w.he) {
-			t.Fatalf("the pointed Hebrew of %s is on a listening screen", w.gloss)
-		}
+	if attr(t, page, "data-activity") != "read_pick" {
+		t.Fatalf("the first visit is not a read_pick: %s", cardAttrs(page))
 	}
 	if strings.Contains(page, `data-state="correct"`) || strings.Contains(page, `data-state="wrong"`) || strings.Contains(page, `class="c-sheet"`) {
 		t.Fatal("the answer is marked before Check")
@@ -800,7 +816,7 @@ func TestReviewCheckedActivityFlow(t *testing.T) {
 	if strings.Count(page, gold) != 1 {
 		t.Fatalf("%d gold actions before the answer", strings.Count(page, gold))
 	}
-	first := byAudio[promptRe.FindStringSubmatch(page)[1]]
+	first := askedByHe(t, page, words)
 	options := pickRe.FindAllStringSubmatch(page, -1)
 	if len(options) != 4 {
 		t.Fatalf("%d options, want 4", len(options))
@@ -868,7 +884,7 @@ func TestReviewCheckedActivityFlow(t *testing.T) {
 		t.Fatalf("counts or transition rule missing: %s", cardAttrs(fb))
 	}
 	attempts := mustAttempts(t, store, learner.user.ID, first.id)
-	if len(attempts) != 1 || attempts[0].Activity != "listen_pick" || attempts[0].Source != "review" || !attempts[0].Correct || attempts[0].HintUsed {
+	if len(attempts) != 1 || attempts[0].Activity != "read_pick" || attempts[0].Source != "review" || !attempts[0].Correct || attempts[0].HintUsed {
 		t.Fatalf("attempts = %+v", attempts)
 	}
 	// A reload shows the same feedback, and the item cannot be answered twice.
@@ -894,10 +910,10 @@ func TestReviewCheckedActivityFlow(t *testing.T) {
 		t.Fatalf("next = %d", rec.Code)
 	}
 	page = rec.Body.String()
-	if attr(t, page, "data-phase") != "ask" || attr(t, page, "data-index") != "2" || attr(t, page, "data-activity") != "listen_pick" {
+	if attr(t, page, "data-phase") != "ask" || attr(t, page, "data-index") != "2" || attr(t, page, "data-activity") != "read_pick" {
 		t.Fatalf("the second visit: %s", cardAttrs(page))
 	}
-	second := byAudio[promptRe.FindStringSubmatch(page)[1]]
+	second := askedByHe(t, page, words)
 	if second.id == first.id {
 		t.Fatal("the same word came twice in a row")
 	}
@@ -939,20 +955,21 @@ func TestReviewCheckedActivityFlow(t *testing.T) {
 		t.Fatalf("attempts = %+v", attempts)
 	}
 
-	// The third visit through listening is audio_match (every third visit).
+	// The third visit through reading is word_match (every third visit).
 	rec = actPost(t, h, learner, "/_hx/review/next", nextForm(fb))
 	page = rec.Body.String()
-	if attr(t, page, "data-activity") != "audio_match" {
-		t.Fatalf("the third visit is not an audio_match: %s", cardAttrs(page))
+	if attr(t, page, "data-activity") != "word_match" {
+		t.Fatalf("the third visit is not a word_match: %s", cardAttrs(page))
 	}
-	clips := clipRe.FindAllStringSubmatch(page, -1)
+	lefts := leftHeRe.FindAllStringSubmatch(page, -1)
 	glosses := rightRe.FindAllStringSubmatch(page, -1)
-	if len(clips) != 4 || len(glosses) != 4 {
-		t.Fatalf("audio_match has %d clips and %d glosses, want 4 and 4", len(clips), len(glosses))
+	if len(lefts) != 5 || len(glosses) != 5 {
+		t.Fatalf("word_match has %d Hebrew tiles and %d glosses, want 5 and 5", len(lefts), len(glosses))
 	}
 	form := answerForm(page)
-	for _, c := range clips {
-		want := byAudio[c[2]].gloss
+	byHe := glossByHe(words)
+	for _, c := range lefts {
+		want := byHe[c[2]].gloss
 		for _, g := range glosses {
 			if g[2] == want {
 				form.Set("pair_"+c[1], g[1])
@@ -964,23 +981,21 @@ func TestReviewCheckedActivityFlow(t *testing.T) {
 		t.Fatalf("pairs = %d %s", rec.Code, rec.Body.String())
 	}
 	fb = rec.Body.String()
-	if strings.Count(fb, `data-state="correct"`) != 8 || strings.Contains(fb, `data-state="wrong"`) || !strings.Contains(fb, "Every pair is right") {
+	if strings.Count(fb, `data-state="correct"`) != 10 || strings.Contains(fb, `data-state="wrong"`) || !strings.Contains(fb, "Every pair is right") {
 		t.Fatalf("all pairs right is not shown: %s", fb)
 	}
 	if strings.Count(fb, gold) != 1 {
-		t.Fatal("audio_match feedback has no single gold action")
+		t.Fatal("word_match feedback has no single gold action")
 	}
-	// Pairs that are not a permutation are refused.
 	rec = actPost(t, h, learner, "/_hx/review/next", nextForm(fb))
 	page = rec.Body.String()
-	if attr(t, page, "data-activity") == "audio_match" {
+	if attr(t, page, "data-activity") == "word_match" {
 		t.Fatal("two match items in a row")
 	}
-	_ = ctx
 }
 
-// TestAudioMatchRefusesBadPairs and the other bad-input cases of the match item.
-func TestAudioMatchAnswerIsValidated(t *testing.T) {
+// TestWordMatchAnswerIsValidated checks bad-input cases of the match item.
+func TestWordMatchAnswerIsValidated(t *testing.T) {
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	store, h := openReview(t, fixedClock(now), "https://learn.example")
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
@@ -988,7 +1003,7 @@ func TestAudioMatchAnswerIsValidated(t *testing.T) {
 	giveCards(t, store, learner.user.ID, now, words)
 	page := getLearner(t, h, learner, "/review")
 	for i := 0; i < 2; i++ {
-		right := glossByAudio(words)[promptRe.FindStringSubmatch(page)[1]]
+		right := askedByHe(t, page, words)
 		ix := -1
 		for _, o := range pickRe.FindAllStringSubmatch(page, -1) {
 			if o[2] == right.gloss {
@@ -998,14 +1013,14 @@ func TestAudioMatchAnswerIsValidated(t *testing.T) {
 		rec := actPost(t, h, learner, "/_hx/review/answer", answerForm(page, "choice", strconv.Itoa(ix)))
 		page = actPost(t, h, learner, "/_hx/review/next", nextForm(rec.Body.String())).Body.String()
 	}
-	if attr(t, page, "data-activity") != "audio_match" {
-		t.Fatalf("not an audio_match: %s", cardAttrs(page))
+	if attr(t, page, "data-activity") != "word_match" {
+		t.Fatalf("not a word_match: %s", cardAttrs(page))
 	}
 	for name, kv := range map[string][]string{
-		"repeats a gloss": {"pair_0", "0", "pair_1", "0", "pair_2", "2", "pair_3", "3"},
-		"out of range":    {"pair_0", "0", "pair_1", "1", "pair_2", "2", "pair_3", "7"},
-		"missing a pair":  {"pair_0", "0", "pair_1", "1", "pair_2", "2"},
-		"not a number":    {"pair_0", "a", "pair_1", "1", "pair_2", "2", "pair_3", "3"},
+		"repeats a gloss": {"pair_0", "0", "pair_1", "0", "pair_2", "2", "pair_3", "3", "pair_4", "4"},
+		"out of range":    {"pair_0", "0", "pair_1", "1", "pair_2", "2", "pair_3", "3", "pair_4", "7"},
+		"missing a pair":  {"pair_0", "0", "pair_1", "1", "pair_2", "2", "pair_3", "3"},
+		"not a number":    {"pair_0", "a", "pair_1", "1", "pair_2", "2", "pair_3", "3", "pair_4", "4"},
 	} {
 		if rec := actPost(t, h, learner, "/_hx/review/answer", answerForm(page, kv...)); rec.Code != http.StatusBadRequest {
 			t.Errorf("%s = %d, want 400", name, rec.Code)
@@ -1016,8 +1031,8 @@ func TestAudioMatchAnswerIsValidated(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Here is the answer") || strings.Contains(rec.Body.String(), `data-state="correct"`) {
 		t.Fatalf("dont_know = %d %s", rec.Code, rec.Body.String())
 	}
-	if strings.Count(sheetOf(t, rec.Body.String()), `class="fb__pair"`) != 4 {
-		t.Fatalf("the sheet does not spell out the four pairs: %s", sheetOf(t, rec.Body.String()))
+	if strings.Count(sheetOf(t, rec.Body.String()), `class="fb__pair"`) != 5 {
+		t.Fatalf("the sheet does not spell out the five pairs: %s", sheetOf(t, rec.Body.String()))
 	}
 }
 
@@ -1031,7 +1046,13 @@ func TestReviewTypedActivities(t *testing.T) {
 			store, h := openReview(t, fixedClock(now), "https://learn.example")
 			learner := addLearner(t, store, "a@example.com", "sub-a", now)
 			words := seedLexicon(t, store, now, 2, kind == "dictation", kind == "type_it")
-			giveCards(t, store, learner.user.ID, now, words)
+			skill := fsrs.SkillRecall
+			if kind == "dictation" {
+				skill = fsrs.SkillSpell
+			}
+			for i := range words {
+				words[i].card = addCard(t, store, learner.user.ID, words[i].id, skill, now.Add(-time.Duration(len(words)-i)*time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
+			}
 			page := getLearner(t, h, learner, "/review")
 			if attr(t, page, "data-activity") != kind {
 				t.Fatalf("served %s, want %s: %s", attr(t, page, "data-activity"), kind, cardAttrs(page))
@@ -1146,7 +1167,9 @@ func TestReviewDictationHint(t *testing.T) {
 	store, h := openReview(t, fixedClock(now), "https://learn.example")
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	words := seedLexicon(t, store, now, 2, true, false)
-	giveCards(t, store, learner.user.ID, now, words)
+	for i := range words {
+		words[i].card = addCard(t, store, learner.user.ID, words[i].id, fsrs.SkillSpell, now.Add(-time.Duration(len(words)-i)*time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
+	}
 	page := getLearner(t, h, learner, "/review")
 	if attr(t, page, "data-activity") != "dictation" || !strings.Contains(page, `name="hinted" value="0"`) || !strings.Contains(page, `data-hint="replay"`) || !strings.Contains(page, `data-autoplay`) {
 		t.Fatalf("dictation screen: %s", cardAttrs(page))

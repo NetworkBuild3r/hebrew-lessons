@@ -7,7 +7,7 @@ spec_id: SPEC-006
 initiative_id: INIT-027
 title: "Letter pick drill, done-screen changes, and the study-day queue"
 domain: frontend
-status: pending
+status: complete
 primary_prompt: none
 model: inherit
 autonomy_level: auto_tests

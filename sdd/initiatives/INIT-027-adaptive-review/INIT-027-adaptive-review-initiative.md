@@ -1,6 +1,6 @@
 # INIT-027: Review that moves on when you know it
 
-**Initiative ID:** INIT-027 · **Status:** on_track · **Created:** 2026-11-01 · **Owner:** Brian Nelson
+**Initiative ID:** INIT-027 · **Status:** complete · **Created:** 2026-11-01 · **Owner:** Brian Nelson
 **Discipline Profile:** `software` · **Ticket:** none · **Branch:** `adaptive-review` (already created)
 **Source:** Brian, 2026-11-01: "review is the same shit over and over. It's not dynamic in learning. It keeps asking me if I know what letters mean. I clearly do but it keeps asking them over and over. It's not analyzing my response times or my response." He chose all four parts (drills that end, speed, move up, new words with accuracy) and the 5 PM fix in the same push. Evidence: [RSCH-003](../../research/RSCH-003-language-learning-science/RSCH-003-language-learning-science-report.md) — spacing and retrieval (High), longer gaps help delayed retention (Moderate), interleaving (Moderate), and "count a same-session repeat as practice, not as the review" (checklist line 173). RSCH-003 has no evidence on answer speed. The speed rules here are product rules, as in ADR-0020.
 
@@ -36,12 +36,12 @@ Speed already counts on checked activities: faster than your median is Easy (hel
 
 | Spec | Domain | Title | Blocked by | Effort | Status |
 | --- | --- | --- | --- | --- | --- |
-| [SPEC-001](specs/SPEC-001-docs-adaptive-review.md) | docs | ADR-0023: review that moves on when you know it | — | 1h | pending |
-| [SPEC-002](specs/SPEC-002-data-drill-answers-and-implied-reviews.md) | data | Migration 021: drill answers, cleared pairs, implied reviews | — | 2h | pending |
-| [SPEC-003](specs/SPEC-003-service-drills-that-end.md) | service | Drills that are graded, timed, capped, and end | SPEC-002 | 4h | pending |
-| [SPEC-004](specs/SPEC-004-service-due-cards-and-move-up.md) | service | Only due cards; a due card leaves; strong words move up | SPEC-002, SPEC-003 | 4h | pending |
-| [SPEC-005](specs/SPEC-005-service-new-words-follow-accuracy.md) | service | New words follow accuracy and come from the frequency list | SPEC-004 | 4h | pending |
-| [SPEC-006](specs/SPEC-006-frontend-review-screens.md) | frontend | Letter pick drill, done-screen changes, and the study-day queue | SPEC-003, SPEC-004, SPEC-005 | 4h | pending |
+| [SPEC-001](specs/SPEC-001-docs-adaptive-review.md) | docs | ADR-0023: review that moves on when you know it | — | 1h | complete |
+| [SPEC-002](specs/SPEC-002-data-drill-answers-and-implied-reviews.md) | data | Migration 021: drill answers, cleared pairs, implied reviews | — | 2h | complete |
+| [SPEC-003](specs/SPEC-003-service-drills-that-end.md) | service | Drills that are graded, timed, capped, and end | SPEC-002 | 4h | complete |
+| [SPEC-004](specs/SPEC-004-service-due-cards-and-move-up.md) | service | Only due cards; a due card leaves; strong words move up | SPEC-002, SPEC-003 | 4h | complete |
+| [SPEC-005](specs/SPEC-005-service-new-words-follow-accuracy.md) | service | New words follow accuracy and come from the frequency list | SPEC-004 | 4h | complete |
+| [SPEC-006](specs/SPEC-006-frontend-review-screens.md) | frontend | Letter pick drill, done-screen changes, and the study-day queue | SPEC-003, SPEC-004, SPEC-005 | 4h | complete |
 
 **Total:** 19h. **Critical path:** SPEC-002 → SPEC-003 → SPEC-004 → SPEC-005 → SPEC-006 = 18h. Realistic ×1.3 ≈ 23h.
 

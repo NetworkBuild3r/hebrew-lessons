@@ -1,7 +1,6 @@
 package session
 
 import (
-	"math"
 	"testing"
 	"time"
 
@@ -14,8 +13,11 @@ func TestNoHistoryAccuracyIsTargetSuccess(t *testing.T) {
 	if accuracyOf(nil) != TargetSuccess || NoHistoryAccuracy != TargetSuccess {
 		t.Fatalf("no-history %v target %v", accuracyOf(nil), TargetSuccess)
 	}
-	if MaxNewPerSession != 5 || MinNewPerSession != 2 || MaxNewShare != 0.25 {
-		t.Fatalf("new caps %d %d %v", MaxNewPerSession, MinNewPerSession, MaxNewShare)
+	if MaxNewPerSession != 8 || NewPerSessionLow != 2 || NewPerSessionMid != 5 || NewPerSessionHigh != 8 {
+		t.Fatalf("new caps %d %d %d %d", MaxNewPerSession, NewPerSessionLow, NewPerSessionMid, NewPerSessionHigh)
+	}
+	if LowAccuracy != 0.80 || HighAccuracy != 0.90 {
+		t.Fatalf("tiers %v %v", LowAccuracy, HighAccuracy)
 	}
 }
 
@@ -99,21 +101,22 @@ func TestMixCapAndDueFill(t *testing.T) {
 			}
 		}
 	})
-	t.Run("later known fill only the quota", func(t *testing.T) {
-		want := PlanFor(1).Known
+	t.Run("not-due known are never queued", func(t *testing.T) {
+		// INIT-027/SPEC-004 ac-1: 5 due known + 40 not-due known → only the 5.
 		var cands []Candidate
-		cands = append(cands, knownCand(1, now.Add(-2*time.Hour)))
-		cands = append(cands, knownCand(2, now.Add(-time.Hour)))
-		for i := 0; i < 30; i++ {
-			cands = append(cands, knownCand(int64(i+3), now.Add(time.Duration(i+1)*time.Minute)))
+		for i := 0; i < 5; i++ {
+			cands = append(cands, knownCand(int64(i+1), now.Add(time.Duration(i)*time.Minute-2*time.Hour)))
 		}
-		got := mix(cands, 1, now, 1)
-		if len(got) != want {
-			t.Fatalf("len = %d, want quota %d", len(got), want)
+		for i := 0; i < 40; i++ {
+			cands = append(cands, knownCand(int64(i+100), now.Add(24*time.Hour+time.Duration(i)*time.Minute)))
+		}
+		got := mix(cands, 0.78, now, 1)
+		if len(got) != 5 {
+			t.Fatalf("len = %d, want 5 due known only", len(got))
 		}
 		for i, card := range got {
-			if card.CardID != int64(i+1) {
-				t.Fatalf("card %d id = %d", i, card.CardID)
+			if card.CardID != int64(i+1) || card.Struggling {
+				t.Fatalf("card %d = %+v", i, card)
 			}
 		}
 	})
@@ -243,13 +246,13 @@ func TestClassify(t *testing.T) {
 		{name: "recent lapse", edit: func(c *Candidate) {
 			c.RecentLapse = true
 			c.Lapses = 1
-		}, want: kindSkip},
-		{name: "read outside the known set", edit: func(c *Candidate) { c.KnownLexeme = false }, want: kindSkip},
-		{name: "recall good", edit: func(c *Candidate) {
+		}, want: kindStruggle},
+		{name: "read outside the known set", edit: func(c *Candidate) { c.KnownLexeme = false }, want: kindKnown},
+		{name: "recall good later", edit: func(c *Candidate) {
 			c.Skill = fsrs.SkillRecall
 			c.KnownLexeme = false
 			c.Due = later
-		}, want: kindKnown},
+		}, want: kindSkip},
 		{name: "later lapses are not struggling", edit: func(c *Candidate) {
 			c.Due = later
 			c.Lapses = StruggleLapses
@@ -349,8 +352,8 @@ func TestNewCardsDoNotChangeThePlan(t *testing.T) {
 	if known != plan.Known || struggle != plan.Struggle {
 		t.Fatalf("known=%d struggle=%d, plan %+v", known, struggle, plan)
 	}
-	if fresh != MaxNewPerSession {
-		t.Fatalf("new = %d, want the session cap %d", fresh, MaxNewPerSession)
+	if fresh != NewPerSessionMid {
+		t.Fatalf("new = %d, want the mid-tier cap %d", fresh, NewPerSessionMid)
 	}
 	if letters != 1 {
 		t.Fatalf("letters = %d, want the one drill step", letters)
@@ -548,12 +551,10 @@ func TestNewCardOrderAndSmallQueueShare(t *testing.T) {
 	if reviewed != 3 {
 		t.Fatalf("reviewed = %d, want the three known cards", reviewed)
 	}
-	// 3 reviewed cards. sessionSize = 3 + newCount.
-	// newCount = min(5, max(2, floor(0.25 * sessionSize))).
-	// newCount = 2, sessionSize = 5, floor(0.25*5) = 1, and the floor of 2 wins.
-	// The two cards are the earliest unit position, then lesson, then rank, then id.
-	if len(fresh) != 2 || fresh[0] != 16 || fresh[1] != 15 {
-		t.Fatalf("new = %v, want [16 15]", fresh)
+	// TargetSuccess is the mid tier (5). Order is unit position, lesson, rank, id.
+	wantFresh := []int64{16, 15, 14, 13, 11}
+	if len(fresh) != len(wantFresh) || !sameIDs(fresh, wantFresh) {
+		t.Fatalf("new = %v, want %v", fresh, wantFresh)
 	}
 
 	only := mix([]Candidate{
@@ -572,52 +573,29 @@ func TestNewCardOrderAndSmallQueueShare(t *testing.T) {
 }
 
 func TestNewAllowance(t *testing.T) {
-	// Ten reviewed cards. sessionSize is those cards plus the new cards.
-	// newCount = min(5, max(2, floor(0.25 * sessionSize))).
-	// newCount = 3: sessionSize = 13, floor(0.25*13) = 3, min(5, max(2, 3)) = 3.
-	// Three reviewed cards used to admit 1 under the share alone
-	// (floor(0.25*4) = 1). The floor of 2 raises that to 2:
-	// sessionSize = 5, floor(0.25*5) = 1, min(5, max(2, 1)) = 2.
-	// Twenty reviewed cards still cap at 5: sessionSize = 25,
-	// floor(0.25*25) = 6, min(5, max(2, 6)) = 5.
+	// INIT-027/SPEC-005: tiers at 0.80 and 0.90; no-history uses mid.
 	cases := []struct {
 		name      string
-		planned   int
+		accuracy  float64
 		available int
 		want      int
 	}{
-		{name: "no reviews", planned: 0, available: 8, want: MaxNewPerSession},
-		{name: "one review", planned: 1, available: 8, want: 2},
-		{name: "two reviews", planned: 2, available: 8, want: 2},
-		{name: "three reviews", planned: 3, available: 8, want: 2},
-		{name: "ten reviews", planned: 10, available: 8, want: 3},
-		{name: "twelve reviews", planned: 12, available: 10, want: 4},
-		{name: "full queue", planned: 20, available: 8, want: MaxNewPerSession},
-		{name: "none available", planned: 3, available: 0, want: 0},
-		{name: "fewer than the floor", planned: 1, available: 1, want: 1},
+		{name: "below low", accuracy: 0.79, available: 8, want: 2},
+		{name: "just below low", accuracy: 0.7999, available: 8, want: 2},
+		{name: "at low", accuracy: 0.80, available: 8, want: 5},
+		{name: "mid", accuracy: 0.85, available: 8, want: 5},
+		{name: "at high", accuracy: 0.90, available: 8, want: 5},
+		{name: "just above high", accuracy: 0.9001, available: 8, want: 8},
+		{name: "above high", accuracy: 0.91, available: 8, want: 8},
+		{name: "no history", accuracy: NoHistoryAccuracy, available: 8, want: 5},
+		{name: "capped by available", accuracy: 0.95, available: 3, want: 3},
+		{name: "none available", accuracy: 0.95, available: 0, want: 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := newAllowance(tc.planned, tc.available)
+			got := newAllowance(tc.accuracy, tc.available)
 			if got != tc.want {
-				t.Fatalf("newAllowance(%d, %d) = %d, want %d", tc.planned, tc.available, got, tc.want)
-			}
-			// The pool bound the count when it is no larger than the allowance.
-			// The share formula is checked on the count the session actually took.
-			if tc.planned <= 0 || tc.available <= got {
-				return
-			}
-			sessionSize := tc.planned + got
-			floorShare := int(math.Floor(MaxNewShare * float64(sessionSize)))
-			formula := floorShare
-			if formula < MinNewPerSession {
-				formula = MinNewPerSession
-			}
-			if formula > MaxNewPerSession {
-				formula = MaxNewPerSession
-			}
-			if formula != got {
-				t.Fatalf("sessionSize %d: floor(%.2f * sessionSize) = %d, formula %d, allowance %d", sessionSize, MaxNewShare, floorShare, formula, got)
+				t.Fatalf("newAllowance(%v, %d) = %d, want %d", tc.accuracy, tc.available, got, tc.want)
 			}
 		})
 	}

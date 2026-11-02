@@ -40,6 +40,11 @@ type answerState struct {
 	// text is what the learner typed, trimmed. It reaches the page only through templ.
 	text string
 	res  activity.Result
+	// Implied and Slow come from session.AnswerOutcome for the feedback lines.
+	implied bool
+	slow    bool
+	// ownSkill is the due card's skill when Implied, so the line names reading or listening.
+	ownSkill string
 }
 
 // prepareItem records the exposure of a new word and builds the item the visit is asked
@@ -112,7 +117,7 @@ func (s *server) answer(w http.ResponseWriter, r *http.Request) {
 	q := s.queues[key]
 	if q == nil || q.userID != user.ID || q.sess == nil || q.sess.UserID() != user.ID || q.done || !q.has ||
 		q.cur.CardID != cardID || q.item == nil || q.fb != nil || token == "" || token != q.item.Token ||
-		!sameStudyDay(q.builtAt, s.now()) {
+		!q.sameDay(s.now()) {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -151,7 +156,8 @@ func (s *server) answer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	if err := q.sess.Answered(cardID, res.Correct); err != nil {
+	outcome, err := q.sess.Answered(r.Context(), cardID, res)
+	if err != nil {
 		s.mu.Unlock()
 		status := reviewStatus(err)
 		http.Error(w, http.StatusText(status), status)
@@ -163,7 +169,10 @@ func (s *server) answer(w http.ResponseWriter, r *http.Request) {
 	}
 	// A miss puts the visit back once, so the session is one longer.
 	_, q.total, _ = q.sess.Place()
-	q.fb = &answerState{item: *q.item, resp: resp, text: strings.TrimSpace(resp.Text), res: res}
+	q.fb = &answerState{
+		item: *q.item, resp: resp, text: strings.TrimSpace(resp.Text), res: res,
+		implied: outcome.Implied, slow: outcome.Slow, ownSkill: q.cur.Skill,
+	}
 	vm, err := s.cardVM(r.Context(), q)
 	s.mu.Unlock()
 	if err != nil {
@@ -173,7 +182,7 @@ func (s *server) answer(w http.ResponseWriter, r *http.Request) {
 	s.finishReview(w, r, lang, vm)
 }
 
-// next is Continue: it serves the card after a checked answer.
+// next is Continue: it serves the card after a checked answer or a letter pick.
 func (s *server) next(w http.ResponseWriter, r *http.Request) {
 	cardID, ok := reviewCardID(w, r)
 	if !ok {
@@ -187,8 +196,10 @@ func (s *server) next(w http.ResponseWriter, r *http.Request) {
 	lang := reviewLang(r)
 	s.mu.Lock()
 	q := s.queues[key]
+	checked := q != nil && q.item != nil && q.fb != nil
+	drilled := q != nil && q.drillFB != nil
 	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID ||
-		q.item == nil || q.fb == nil || !sameStudyDay(q.builtAt, s.now()) {
+		(!checked && !drilled) || !q.sameDay(s.now()) {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -368,6 +379,12 @@ func feedbackView(it activity.Item, st *answerState) *views.FeedbackView {
 	f := &views.FeedbackView{
 		Correct: res.Correct, NearMiss: res.NearMiss, DontKnow: st.resp.DontKnow,
 		Answer: res.Answer, Hebrew: res.Text, Gloss: res.Gloss, AudioURL: audioURL(res.AudioID),
+	}
+	if st.implied {
+		f.AlsoCounts = views.AlsoCountsLine(st.ownSkill)
+	}
+	if st.slow {
+		f.SlowLine = views.SlowComingBack
 	}
 	multi := it.Kind == activity.WordMatch || it.Kind == activity.AudioMatch
 	switch {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
 )
 
@@ -21,22 +22,18 @@ const (
 	// same value BuildSession uses.
 	TargetSuccess = sessionlimits.TargetSuccess
 
-	// MaxNewPerSession is how many new cards one session introduces.
-	// A new card has no review yet. BuildSession applies this cap.
-	// A session with no reviewed cards still introduces up to this many.
+	// MaxNewPerSession is the high-tier new-card cap (NewPerSessionHigh).
+	// A new card has no review yet. BuildSession applies the accuracy tier
+	// via newAllowance (INIT-027/SPEC-005, ADR-0023 D5).
 	MaxNewPerSession = sessionlimits.MaxNewPerSession
 
-	// MinNewPerSession is the fewest new cards admitted when the planned
-	// queue already has a reviewed card and that many new cards are waiting.
-	// floor(MaxNewShare * sessionSize) is 0 for one or two reviews.
-	MinNewPerSession = sessionlimits.MinNewPerSession
-
-	// MaxNewShare is the largest fraction of the reviewed cards plus the
-	// new cards that new cards may be. With reviews due, the allowance is
-	// min(MaxNewPerSession, max(MinNewPerSession, floor(MaxNewShare * sessionSize))).
-	// A session with no reviewed cards still introduces up to MaxNewPerSession,
-	// so a finished lesson is not an empty queue.
-	MaxNewShare = sessionlimits.MaxNewShare
+	// NewPerSessionLow is the new-card cap below NewTierLow.
+	NewPerSessionLow = sessionlimits.NewPerSessionLow
+	// NewPerSessionMid is the new-card cap from NewTierLow through NewTierHigh,
+	// and the no-history allowance.
+	NewPerSessionMid = sessionlimits.NewPerSessionMid
+	// NewPerSessionHigh is the new-card cap above NewTierHigh.
+	NewPerSessionHigh = sessionlimits.NewPerSessionHigh
 
 	// KnownSuccess is the success rate assumed for a stable known card
 	// when TargetSuccess is turned into a known-card share.
@@ -50,12 +47,12 @@ const (
 	RecentReviews = 50
 
 	// LowAccuracy is the recent Good/Easy share below which the known-card
-	// share rises.
-	LowAccuracy = 0.80
+	// share rises. It matches sessionlimits.NewTierLow (INIT-027/SPEC-005).
+	LowAccuracy = sessionlimits.NewTierLow
 
 	// HighAccuracy is the recent Good/Easy share above which the
-	// struggling-card share rises.
-	HighAccuracy = 0.90
+	// struggling-card share rises. It matches sessionlimits.NewTierHigh.
+	HighAccuracy = sessionlimits.NewTierHigh
 
 	// AccuracyShareShift is how far the known-card share moves when recent
 	// accuracy is below LowAccuracy or above HighAccuracy.
@@ -100,13 +97,31 @@ const (
 
 	// DrillSteps is the length of one confusion drill.
 	// A key produces one drill per session, not one drill per miss.
-	DrillSteps = 4
+	// INIT-027/SPEC-003: three steps, not four.
+	DrillSteps = 3
 
 	// DrillCap is the most drill steps one session weaves in.
-	// The old queue stopped every visit at MaxQueue, which was 20.
 	// Study cards still fill SessionCap and are not dropped to make room.
 	// Drill steps past this cap wait for a later session.
-	DrillCap = 20
+	// INIT-027/SPEC-003: six steps, not twenty.
+	DrillCap = 6
+
+	// DrillClearStreak is how many right, non-slow drill answers in a row
+	// clear a confusion pair. INIT-027/SPEC-003.
+	DrillClearStreak = 3
+
+	// DrillMedianMin is how many timed right drill answers must exist before
+	// a slow cut applies. INIT-027/SPEC-003.
+	DrillMedianMin = 10
+
+	// DrillMedianWindow is how many of the newest timed right drill answers
+	// make the median for the slow cut. INIT-027/SPEC-003.
+	DrillMedianWindow = 50
+
+	// DrillSlowFactor is how far past the drill median a right answer must be
+	// to break the clear streak. Same value as evidence.SlowFactor; written as
+	// a literal so mix does not import evidence. INIT-027/SPEC-003.
+	DrillSlowFactor = 2
 
 	// MinMissesForDrill is the 7-day count that adds a drill.
 	// The count is rows in confusion_misses, not a stored counter.
@@ -189,6 +204,12 @@ type Candidate struct {
 	Skills  []activity.SkillView
 	Facts   activity.Facts
 	Exposed bool
+	// ImplyingCardID is the word's card for the skill that Implies this card's
+	// skill, or 0 when there is none. ImplyingRecentAgainOrHard is that card's
+	// Again-or-Hard flag inside ConfusionWindow (implied rows excluded).
+	// build fills both from the cards it already loaded. INIT-027/SPEC-004.
+	ImplyingCardID            int64
+	ImplyingRecentAgainOrHard bool
 }
 
 type kind int
@@ -220,8 +241,8 @@ func mix(cands []Candidate, accuracy float64, now time.Time, seed int64) []CardR
 }
 
 // mixGate is mix for a learner whose skills are open as gate says. Choosing cards is
-// the old mix. Each card is then asked through the weakest skill of its word that has a
-// checked activity, as annotate does.
+// the old mix. Each card is then asked through its own skill, or moved up, as annotate
+// does (INIT-027/SPEC-004).
 func mixGate(cands []Candidate, accuracy float64, now time.Time, seed int64, gate activity.Gate) []CardRef {
 	queue := mixCards(cands, accuracy, now, seed)
 	byID := make(map[int64]Candidate, len(cands))
@@ -231,19 +252,24 @@ func mixGate(cands []Candidate, accuracy float64, now time.Time, seed int64, gat
 	return annotate(queue, byID, gate)
 }
 
-// annotate gives every study visit its activity. The card stays the one the mix chose: it
-// is what is due, and what a flashcard grades. The activity and the skill it asks through
-// come from the word's skills, so they can differ from the card's own skill.
+// annotate gives every study visit its activity. The visit is asked through the
+// card's own skill (ChooseSkill), or through the implying skill when every
+// move-up condition in INIT-027/SPEC-004 holds. OwnActivity keeps the own-skill
+// activity so a wrong moved-up answer can requeue as the own skill. CardID and
+// Skill stay the due card the mix chose.
 //
-// Visits are taken in queue order. A word that comes up twice is asked through a different
-// skill each time while it has one left. activity.Choose says how the everyday and the
-// match activity of a skill alternate. A new card whose word has never been shown opens
-// with an exposure: Intro is set, and the screen records Engine.Expose before the first
-// check. A visit with no checked activity that fits stays a flashcard through the card's
-// own skill.
+// Visits are taken in queue order. MatchEvery alternates through ChooseSkill's
+// visits count for the skill that is asked. A new card whose word has never
+// been shown opens with an exposure.
 func annotate(queue []CardRef, byID map[int64]Candidate, gate activity.Gate) []CardRef {
-	used := map[int64]map[string]bool{}
 	visits := map[string]int{}
+	queued := map[lexemeSkill]bool{}
+	for _, ref := range queue {
+		if ref.CardID <= 0 || ref.Kind == KindLetter || ref.Kind == KindPattern {
+			continue
+		}
+		queued[lexemeSkill{ref.LexemeID, ref.Skill}] = true
+	}
 	for i := range queue {
 		ref := &queue[i]
 		if ref.CardID <= 0 || ref.Kind == KindLetter || ref.Kind == KindPattern {
@@ -254,37 +280,78 @@ func annotate(queue []CardRef, byID map[int64]Candidate, gate activity.Gate) []C
 			continue
 		}
 		ref.Intro = ref.New && !c.Exposed
-		if len(c.Skills) == 0 {
-			ref.Activity, ref.AskSkill = activity.Flashcard, c.Skill
-			continue
+		own := activity.ChooseSkill(c.Skill, gate, c.Facts, visits)
+		ref.OwnActivity = own.Kind
+		ref.Activity, ref.AskSkill = own.Kind, c.Skill
+		ref.MovedUp = false
+		if canMoveUp(c, *ref, gate, queued) {
+			imply, _ := activity.Implies(c.Skill)
+			up := activity.ChooseSkill(imply, gate, c.Facts, visits)
+			if up.Kind != activity.Flashcard {
+				ref.MovedUp = true
+				ref.Activity, ref.AskSkill = up.Kind, up.Skill
+				visits[imply]++
+				continue
+			}
 		}
-		avoid := used[c.LexemeID]
-		choice := activity.Choose(c.Skills, gate, c.Facts, avoid, visits, c.Skill)
-		ref.Activity, ref.AskSkill = choice.Kind, choice.Skill
-		if choice.Kind == activity.Flashcard {
-			continue
+		if own.Kind != activity.Flashcard {
+			visits[c.Skill]++
 		}
-		if used[c.LexemeID] == nil {
-			used[c.LexemeID] = map[string]bool{}
-		}
-		used[c.LexemeID][choice.Skill] = true
-		visits[choice.Skill]++
 	}
 	return queue
+}
+
+type lexemeSkill struct {
+	lexeme int64
+	skill  string
+}
+
+// canMoveUp is true when every INIT-027/SPEC-004 move-up condition holds.
+func canMoveUp(c Candidate, ref CardRef, gate activity.Gate, queued map[lexemeSkill]bool) bool {
+	if ref.New || !c.HasRating {
+		return false
+	}
+	imply, ok := activity.Implies(c.Skill)
+	if !ok {
+		return false
+	}
+	if !ownSkillStrong(c) {
+		return false
+	}
+	if !gate.Open(imply) || len(activity.Fitting(imply, c.Facts)) == 0 {
+		return false
+	}
+	if c.ImplyingRecentAgainOrHard {
+		return false
+	}
+	if queued[lexemeSkill{c.LexemeID, imply}] {
+		return false
+	}
+	return true
+}
+
+func ownSkillStrong(c Candidate) bool {
+	for _, v := range c.Skills {
+		if v.Skill != c.Skill {
+			continue
+		}
+		return v.State == learner.Known || v.State == learner.Solid
+	}
+	return false
 }
 
 func mixCards(cands []Candidate, accuracy float64, now time.Time, seed int64) []CardRef {
 	study, letters, patterns := splitKinds(cands)
 	ordered := append([]Candidate(nil), study...)
 	sortCandidates(seed, ordered)
-	dueS, dueK, laterK, fresh := splitPools(ordered, now)
-	planned := assemble(dueS, dueK, laterK, accuracy)
+	dueS, dueK, fresh := splitPools(ordered, now)
+	planned := assemble(dueS, dueK, accuracy)
 	// New cards do not take a known or struggle slot or a drill step.
 	// They keep their order and are seeded through the woven queue, so
 	// they are not a block at the end. A pass then separates two visits
 	// of one lexeme when another card can stand between them.
 	fresh = orderNew(fresh)
-	n := newAllowance(len(planned), len(fresh))
+	n := newAllowance(accuracy, len(fresh))
 	woven := weave(planned, drillCards(letters), drillCards(patterns))
 	return separateLexemes(interleaveNew(woven, newRefs(take(fresh, n)), seed))
 }
@@ -487,24 +554,23 @@ func tieBreak(seed, id int64) uint64 {
 	return z ^ (z >> 31)
 }
 
-func splitPools(cands []Candidate, now time.Time) (dueS, dueK, laterK, fresh []Candidate) {
+func splitPools(cands []Candidate, now time.Time) (dueS, dueK, fresh []Candidate) {
 	for _, c := range cands {
 		switch classify(c, now) {
 		case kindStruggle:
 			dueS = append(dueS, c)
 		case kindKnown:
-			if c.Due.After(now) {
-				laterK = append(laterK, c)
-			} else {
-				dueK = append(dueK, c)
-			}
+			dueK = append(dueK, c)
 		case kindNew:
 			fresh = append(fresh, c)
 		}
 	}
-	return dueS, dueK, laterK, fresh
+	return dueS, dueK, fresh
 }
 
+// classify puts a reviewed due card into struggle or known. A reviewed card that
+// is not due is skipped: a known card that is not due is never queued
+// (INIT-027/SPEC-004, ADR-0023 D3). New-card rules are unchanged.
 func classify(c Candidate, now time.Time) kind {
 	switch c.Skill {
 	case fsrs.SkillRead, fsrs.SkillRecall, fsrs.SkillListen, fsrs.SkillSpell:
@@ -519,37 +585,25 @@ func classify(c Candidate, now time.Time) kind {
 		}
 		return kindNew
 	}
-	due := !c.Due.After(now)
-	weak := c.HasRating && (c.Latest == int(fsrs.Again) || c.Latest == int(fsrs.Hard))
-	if due && (c.Lapses >= StruggleLapses || weak || c.Confused) {
+	if c.Due.After(now) {
+		return kindSkip
+	}
+	weak := c.Latest == int(fsrs.Again) || c.Latest == int(fsrs.Hard)
+	if c.Lapses >= StruggleLapses || weak || c.Confused || c.RecentLapse {
 		return kindStruggle
-	}
-	strong := c.HasRating && (c.Latest == int(fsrs.Good) || c.Latest == int(fsrs.Easy))
-	if !strong || c.RecentLapse || c.Confused {
-		return kindSkip
-	}
-	// read known cards are the KnownLexemeIDs set. recall, listen and spell
-	// are known from their own latest Good or Easy rating.
-	if c.Skill == fsrs.SkillRead && !c.KnownLexeme {
-		return kindSkip
 	}
 	return kindKnown
 }
 
-func assemble(dueS, dueK, laterK []Candidate, accuracy float64) []CardRef {
+// assemble takes due struggling and due known cards only. A known card that is
+// not due is never added to fill the known share (INIT-027/SPEC-004). Room left
+// under SessionCap is filled from the other due side.
+func assemble(dueS, dueK []Candidate, accuracy float64) []CardRef {
 	plan := PlanFor(accuracy)
 	nS := min(len(dueS), plan.Struggle)
 	nK := min(len(dueK), plan.Known)
 	s := append([]Candidate{}, dueS[:nS]...)
 	k := append([]Candidate{}, dueK[:nK]...)
-	if len(k) < plan.Known {
-		k = append(k, take(laterK, plan.Known-len(k))...)
-	}
-	// A side that ran short leaves room under the cap. Due cards fill it.
-	// Not-yet-due cards do not: they were added only to meet the known quota.
-	// When that quota is already full of due known cards, k is a prefix of
-	// dueK, so the tail below is more due known cards. When the quota needed
-	// later cards, every due known card is already in k and the tail is empty.
 	room := SessionCap - len(s) - len(k)
 	if room > 0 {
 		extra := take(dueS[nS:], room)
@@ -572,34 +626,19 @@ func take(in []Candidate, n int) []Candidate {
 	return append([]Candidate{}, in[:n]...)
 }
 
-// newAllowance is how many of available new cards this session takes.
-// sessionSize is the reviewed cards already in the planned queue plus the
-// new cards admitted here. Drill steps are woven around that queue and
-// are not part of sessionSize.
-//
-// A planned queue of zero takes up to MaxNewPerSession. The share would
-// otherwise be zero and a finished lesson would never be reviewed.
-// With reviews due, and with MaxNewShare strictly between 0 and 1,
-// newCount = min(MaxNewPerSession, max(MinNewPerSession, floor(MaxNewShare * sessionSize))).
-// That count is the largest one at most MaxNewPerSession for which
-// floor(MaxNewShare * sessionSize) still allows it, and at least
-// MinNewPerSession when the floor would admit fewer.
-func newAllowance(planned, available int) int {
-	limit := MaxNewPerSession
-	if planned > 0 && MaxNewShare > 0 && MaxNewShare < 1 {
-		limit = MinNewPerSession
-		if limit > MaxNewPerSession {
-			limit = MaxNewPerSession
-		}
-		if limit < 0 {
-			limit = 0
-		}
-		for n := limit; n <= MaxNewPerSession; n++ {
-			sessionSize := planned + n
-			if int(math.Floor(MaxNewShare*float64(sessionSize))) >= n {
-				limit = n
-			}
-		}
+// newAllowance is how many of available new cards this session takes from
+// recent accuracy (INIT-027/SPEC-005, ADR-0023 D5). Below NewTierLow the cap
+// is NewPerSessionLow; from NewTierLow through NewTierHigh it is
+// NewPerSessionMid; above NewTierHigh it is NewPerSessionHigh. No-history
+// accuracy (NoHistoryAccuracy) lands in the mid tier. The planned-queue
+// size does not change the cap.
+func newAllowance(accuracy float64, available int) int {
+	limit := NewPerSessionMid
+	switch {
+	case accuracy < LowAccuracy:
+		limit = NewPerSessionLow
+	case accuracy > HighAccuracy:
+		limit = NewPerSessionHigh
 	}
 	if limit < 0 {
 		limit = 0

@@ -228,8 +228,87 @@ templ actFeedback(a ActivityView) {
 					<span lang="en">{ "." }</span>
 				</p>
 			}
+			if a.Feedback.AlsoCounts != "" {
+				<p class="fb__line" lang="en" dir="ltr">@E(a.Feedback.AlsoCounts)</p>
+			}
+			if a.Feedback.SlowLine != "" {
+				<p class="fb__line" lang="en" dir="ltr">@E(a.Feedback.SlowLine)</p>
+			}
 		</div>
 	}
+}
+
+// letterPickFrame is the timed two-option letter drill (INIT-027/SPEC-006).
+// Before the pick the page carries no name, sound, or cue of the asked letter
+// beyond the blanked example (or the letter's clip/sound when there is none).
+templ letterPickFrame(c ReviewCard) {
+	<section class="act act--flash" data-activity="letter-pick" data-phase={ letterPickPhase(c) } aria-label={ letterPickLead(c) }>
+		@actTop(c.Lang, letterPickDone(c), c.Total, c.Index)
+		if c.Revealed {
+			<div class="act__form">
+				<div class="act__stage">
+					@letterBack(c)
+				</div>
+				<div class="act__thumb">
+					@Sheet("Feedback") {
+						<div class={ letterPickFeedbackClass(c) }>
+							if c.DrillCorrect {
+								<h2 class="fb__title" lang="en">Correct</h2>
+							} else {
+								<h2 class="fb__title" lang="en">Not quite</h2>
+							}
+							if c.DrillCleared {
+								<p class="fb__line" lang="en" dir="ltr">@ReviewT(c.Lang, "Cleared")</p>
+							}
+						</div>
+						<form method="post" action="/_hx/review/next" hx-post="/_hx/review/next" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
+							<input type="hidden" name="_csrf" value={ c.CSRF }/>
+							<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
+							@ButtonWith(ButtonPrimary, submitAttrs(templ.Attributes{"data-act-primary": "", "aria-keyshortcuts": "Enter"})) {
+								@ReviewT(c.Lang, "Continue")
+							}
+						</form>
+					}
+				</div>
+			</div>
+		} else {
+			<form class="act__form" method="post" action="/_hx/review/drill" hx-post="/_hx/review/drill" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
+				<input type="hidden" name="_csrf" value={ c.CSRF }/>
+				<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
+				<div class="act__stage">
+					if c.BlankedExample != "" {
+						<div class="act__word">
+							@WordBlock(c.BlankedExample, "", c.ExampleGloss, "display", "", true)
+							if c.AudioURL != "" {
+								@clip("act-card-clip", c.AudioURL, "Play the word", true)
+							}
+						</div>
+					} else if c.AudioURL != "" {
+						<div class="act__orb">
+							@clip("act-card-clip", c.AudioURL, "Play the word", true)
+						</div>
+					} else if c.PickSound != "" {
+						<p class="act__sound" lang="en">{ c.PickSound }</p>
+					}
+					<p class="act__lead" lang="en">{ letterPickLead(c) }</p>
+				</div>
+				<div class="act__thumb">
+					<div class="act__grades" role="group" aria-label="Which letter">
+						for _, letter := range c.PickLetters {
+							@ButtonWith(ButtonQuiet, submitAttrs(templ.Attributes{"name": "pick", "value": letter})) {
+								@H(letter)
+							}
+						}
+					</div>
+					<div class="act__more">
+						@ButtonWith(ButtonQuiet, quietSubmit("pick", "dont_know")) {
+							@ReviewT(c.Lang, "Don't know")
+						}
+					</div>
+				</div>
+			</form>
+		}
+	</section>
 }
 
 // flashFrame is the one self-graded frame. Every review mode uses it.
@@ -237,6 +316,7 @@ templ actFeedback(a ActivityView) {
 // buttons are the actions, and they share one neutral style: a grade is the
 // learner's own report, and a colour would call it right or wrong.
 // A new mode does not add a frame, a route, or a grade button.
+// Two-letter letter steps use letterPickFrame instead.
 templ flashFrame(c ReviewCard) {
 	<section class="act act--flash" data-activity="flashcard" data-phase={ flashPhase(c) } aria-label={ flashLead(c) }>
 		@actTop(c.Lang, flashDone(c), c.Total, c.Index)

@@ -94,7 +94,7 @@ func (s *Store) StruggleStatsAt(ctx context.Context, userID int64, topN int, now
 			MAX(rl.reviewed_at)
 		FROM cards AS c
 		JOIN lexemes AS l ON l.id = c.lexeme_id
-		JOIN review_log AS rl ON rl.card_id = c.id
+		JOIN review_log AS rl ON rl.card_id = c.id AND rl.implied = 0
 		WHERE c.user_id = ?
 		GROUP BY l.id, l.text_nfc, l.gloss_en`, since, userID)
 	if err != nil {
@@ -202,11 +202,18 @@ func (s *Store) confusionPairs(ctx context.Context, userID int64, since string) 
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT kind, key, COUNT(*), MAX(at)
-		FROM confusion_misses
-		WHERE learner_id = ? AND at >= ?
-		GROUP BY kind, key
-		ORDER BY COUNT(*) DESC, MAX(at) DESC, key, kind`, userID, since)
+		SELECT m.kind, m.key, COUNT(*), MAX(m.at)
+		FROM confusion_misses AS m
+		WHERE m.learner_id = ? AND m.at >= ?
+		  AND NOT EXISTS (
+			SELECT 1 FROM confusion_clears AS c
+			WHERE c.learner_id = m.learner_id
+			  AND c.kind = m.kind
+			  AND c.key = m.key
+			  AND c.cleared_at >= m.at
+		  )
+		GROUP BY m.kind, m.key
+		ORDER BY COUNT(*) DESC, MAX(m.at) DESC, m.key, m.kind`, userID, since)
 	if err != nil {
 		return nil, fmt.Errorf("db: confusion pairs: %w", err)
 	}

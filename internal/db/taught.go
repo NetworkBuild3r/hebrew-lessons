@@ -91,20 +91,11 @@ func (s *Store) RecordTaught(ctx context.Context, learnerID int64, lexemeIDs []i
 
 		var created, hadCard []string
 		for _, skill := range skills {
-			res, err := tx.ExecContext(ctx, `
-				INSERT OR IGNORE INTO cards (
-					user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses
-				) VALUES (?, ?, ?, 'new', ?, 0, 0, 0, 0)`,
-				learnerID, lexemeID, skill, dueText,
-			)
+			inserted, err := insertNewCard(ctx, tx, learnerID, lexemeID, skill, dueText)
 			if err != nil {
 				return out, fmt.Errorf("db: taught card: %w", err)
 			}
-			n, err := res.RowsAffected()
-			if err != nil {
-				return out, fmt.Errorf("db: taught card: %w", err)
-			}
-			if n > 0 {
+			if inserted {
 				created = append(created, skill)
 			} else {
 				hadCard = append(hadCard, skill)

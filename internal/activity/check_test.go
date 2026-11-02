@@ -334,37 +334,38 @@ func TestTypedAnswersAreGradedAndRecorded(t *testing.T) {
 				t.Fatal("no card after the first attempt")
 			}
 
-			// ac-3: חלום is one letter off. It is rated Hard, and the letter pair is logged.
+			// חלום is one letter off (ם/ן). Rated Hard; unlike pairs are not logged
+			// (INIT-027/SPEC-003).
 			b = w.build(t, window, tc.kind)
 			res = w.check(t, b, Response{Text: "חלום"})
 			if !res.Correct || !res.NearMiss || res.Rating != fsrs.Hard {
 				t.Fatalf("near miss: %+v", res)
 			}
-			if cons := w.confusions(t); len(cons) != 1 || cons[0] != "letter_pair:ם/ן" {
-				t.Fatalf("confusions = %v, want the pair (ן, ם)", cons)
+			if cons := w.confusions(t); len(cons) != 0 {
+				t.Fatalf("confusions = %v, want none for unlike ם/ן", cons)
 			}
-			if len(res.Confused) != 1 || res.Confused[0].Key != "ם/ן" || res.Confused[0].Kind != fsrs.MissLetterPair {
-				t.Fatalf("result confused = %+v", res.Confused)
+			if len(res.Confused) != 0 {
+				t.Fatalf("result confused = %+v, want none", res.Confused)
 			}
 			if rs := w.ratings(t, card.ID); len(rs) != 2 || rs[1] != int(fsrs.Hard) {
 				t.Fatalf("ratings = %v", rs)
 			}
 
-			// Two letters off: wrong, and both pairs are logged.
+			// Two letters off: wrong; only the confusable pair ח/כ is logged.
 			b = w.build(t, window, tc.kind)
 			res = w.check(t, b, Response{Text: "כלום"})
 			if res.Correct || res.NearMiss || res.Rating != fsrs.Again {
 				t.Fatalf("two off: %+v", res)
 			}
 			cons := w.confusions(t)
-			if len(cons) != 3 || cons[1] != "letter_pair:ח/כ" || cons[2] != "letter_pair:ם/ן" {
-				t.Fatalf("confusions = %v", cons)
+			if len(cons) != 1 || cons[0] != "letter_pair:ח/כ" {
+				t.Fatalf("confusions = %v, want only ח/כ", cons)
 			}
 
 			// A different word, far off: wrong, and no letter pair.
 			b = w.build(t, window, tc.kind)
 			res = w.check(t, b, Response{Text: "שלום עולם"})
-			if res.Correct || res.Rating != fsrs.Again || len(res.Confused) != 0 || len(w.confusions(t)) != 3 {
+			if res.Correct || res.Rating != fsrs.Again || len(res.Confused) != 0 || len(w.confusions(t)) != 1 {
 				t.Fatalf("far off: %+v, confusions %v", res, w.confusions(t))
 			}
 			got = w.attempts(t, w.user, window)
@@ -384,6 +385,43 @@ func TestTypedAnswersAreGradedAndRecorded(t *testing.T) {
 			}
 		})
 	}
+}
+
+// INIT-027/SPEC-003 ac-5: typed slips log only confusable pairs; a wrong pick still logs.
+func TestTypedConfusableLetterPairs(t *testing.T) {
+	t.Run("vav to mem logs nothing", func(t *testing.T) {
+		w := newWorld(t)
+		id := addWord(t, w.store, "יום", "day", "noun", true)
+		b := w.build(t, id, TypeIt)
+		res := w.check(t, b, Response{Text: "ימם"})
+		if cons := w.confusions(t); len(cons) != 0 {
+			t.Fatalf("confusions = %v, want none for ו→מ (res=%+v)", cons, res)
+		}
+		if len(res.Confused) != 0 {
+			t.Fatalf("result confused = %+v, want none", res.Confused)
+		}
+	})
+	t.Run("bet to kaf logs bet/kaf", func(t *testing.T) {
+		w := newWorld(t)
+		id := addWord(t, w.store, "בת", "daughter", "noun", true)
+		b := w.build(t, id, TypeIt)
+		res := w.check(t, b, Response{Text: "כת"})
+		if cons := w.confusions(t); len(cons) != 1 || cons[0] != "letter_pair:ב/כ" {
+			t.Fatalf("confusions = %v, want letter_pair:ב/כ (res=%+v)", cons, res)
+		}
+		if len(res.Confused) != 1 || res.Confused[0].Key != "ב/כ" {
+			t.Fatalf("result confused = %+v", res.Confused)
+		}
+	})
+	t.Run("wrong pick still logs via confusedOf", func(t *testing.T) {
+		// confusedOf is unfiltered: a one-letter-off pick logs even unlike pairs.
+		asked := Word{ID: 1, Text: "יום", Gloss: "day"}
+		picked := Word{ID: 2, Text: "ימם", Gloss: "seas"}
+		got := confusedOf(asked, picked)
+		if got.Kind != fsrs.MissLetterPair || got.Key != "ו/מ" {
+			t.Fatalf("confusedOf = %+v, want letter_pair ו/מ", got)
+		}
+	})
 }
 
 // A typed answer that is exactly another word is a mix-up of two words, written once by the
@@ -412,15 +450,16 @@ func TestTypedAnotherWordIsAWordConfusion(t *testing.T) {
 	}
 	_ = other
 
-	// One letter away from another word: that word is also a partner for the next pick.
+	// One letter away from another word: still a near miss. Unlike ם/ן is not logged
+	// (INIT-027/SPEC-003); the earlier word mix-up remains the only confusion row.
 	near := addWord(t, w.store, "חלום", "dream", "noun", true)
 	b = w.build(t, window, TypeIt)
 	res = w.check(t, b, Response{Text: "חלום"})
 	if !res.Correct || !res.NearMiss {
 		t.Fatalf("a one-letter-off answer is a near miss even when it spells another word: %+v", res)
 	}
-	if cons := w.confusions(t); len(cons) != 2 || cons[1] != "letter_pair:ם/ן" {
-		t.Fatalf("confusions = %v", cons)
+	if cons := w.confusions(t); len(cons) != 1 {
+		t.Fatalf("confusions = %v, want only the earlier word mix-up", cons)
 	}
 	_ = near
 }

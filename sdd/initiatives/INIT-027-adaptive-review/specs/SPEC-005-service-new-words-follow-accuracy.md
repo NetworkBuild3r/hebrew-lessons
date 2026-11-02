@@ -7,7 +7,7 @@ spec_id: SPEC-005
 initiative_id: INIT-027
 title: "New words follow accuracy and come from the frequency list"
 domain: service
-status: pending
+status: complete
 primary_prompt: none
 model: inherit
 autonomy_level: auto_tests

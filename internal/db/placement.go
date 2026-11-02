@@ -284,14 +284,18 @@ func (s *Store) CommitPlacementRating(ctx context.Context, lexeme PlacementLexem
 	if log.Peeked {
 		peeked = 1
 	}
+	implied := 0
+	if log.Implied {
+		implied = 1
+	}
 	var chosen any
 	if log.Chosen != "" {
 		chosen = log.Chosen
 	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked, chosen)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		cardID, log.Rating, FormatTime(log.ReviewedAt), log.ElapsedDays, log.ScheduledDays, peeked, chosen,
+		INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked, chosen, implied)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		cardID, log.Rating, FormatTime(log.ReviewedAt), log.ElapsedDays, log.ScheduledDays, peeked, chosen, implied,
 	); err != nil {
 		return fmt.Errorf("db: insert review: %w", err)
 	}

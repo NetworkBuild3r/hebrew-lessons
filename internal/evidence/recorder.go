@@ -516,3 +516,32 @@ func baseLetters(s string) []rune {
 	}
 	return out
 }
+
+// Implied schedules Good credit for cardID with review_log.implied set and no
+// attempts row. rating must be Good. The card must belong to learnerID.
+// INIT-027/SPEC-004.
+func (r *Recorder) Implied(ctx context.Context, learnerID, cardID int64, rating fsrs.Rating) error {
+	if err := r.ready(); err != nil {
+		return err
+	}
+	if rating != fsrs.Good {
+		return fmt.Errorf("evidence: implied rating must be Good, got %d", rating)
+	}
+	if learnerID <= 0 {
+		return errors.New("evidence: implied has no learner")
+	}
+	card, err := r.store.GetCard(ctx, cardID)
+	if err != nil {
+		return err
+	}
+	if card.UserID != learnerID {
+		return fmt.Errorf("evidence: card %d belongs to another learner", cardID)
+	}
+	now := r.clock.Now()
+	next, log, err := r.review.ScheduleNext(&card, now, fsrs.Good)
+	if err != nil {
+		return err
+	}
+	log.Implied = true
+	return r.store.ApplyReview(ctx, next, log)
+}

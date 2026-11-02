@@ -936,3 +936,59 @@ func TestRecorderNeedsAStore(t *testing.T) {
 		t.Fatal("a recorder with no store graded a card")
 	}
 }
+
+func TestImpliedSchedulesGoodWithoutAttempt(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	lex := e.lexeme(kelev)
+	id, err := e.store.InsertCard(ctx, db.Card{
+		UserID: e.user, LexemeID: lex, Skill: fsrs.SkillRead, State: fsrs.StateReview,
+		Due: e.clk.Now().Add(-time.Hour), Stability: 2, Difficulty: 5, Reps: 2, LastReview: e.clk.Now().Add(-48 * time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, _ := e.store.GetCard(ctx, id)
+	if err := e.rec.Implied(ctx, e.user, id, fsrs.Good); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := e.store.GetCard(ctx, id)
+	if !after.Due.After(e.clk.Now()) || after.Due.Equal(before.Due) {
+		t.Fatalf("due before=%v after=%v", before.Due, after.Due)
+	}
+	logs, err := e.store.ReviewLogs(ctx, id)
+	if err != nil || len(logs) != 1 || !logs[0].Implied || logs[0].Rating != int(fsrs.Good) {
+		t.Fatalf("logs = %+v, %v", logs, err)
+	}
+	if e.count(`SELECT COUNT(*) FROM attempts`) != 0 {
+		t.Fatal("Implied wrote an attempts row")
+	}
+}
+
+func TestImpliedRefusesBadRatingAndOtherLearner(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	lex := e.lexeme(kelev)
+	id, err := e.store.InsertCard(ctx, db.Card{
+		UserID: e.user, LexemeID: lex, Skill: fsrs.SkillRead, State: fsrs.StateReview,
+		Due: e.clk.Now(), Stability: 1, Difficulty: 5, Reps: 1, LastReview: e.clk.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rating := range []fsrs.Rating{fsrs.Again, fsrs.Hard, fsrs.Easy} {
+		if err := e.rec.Implied(ctx, e.user, id, rating); err == nil {
+			t.Fatalf("rating %d was accepted", rating)
+		}
+	}
+	other, err := e.store.InsertUser(ctx, "b@example.com", "sub-b", "learner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.rec.Implied(ctx, other, id, fsrs.Good); err == nil {
+		t.Fatal("Implied accepted another learner")
+	}
+	if e.count(`SELECT COUNT(*) FROM review_log`) != 0 {
+		t.Fatal("refused Implied still wrote")
+	}
+}

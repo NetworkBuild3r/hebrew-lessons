@@ -223,6 +223,7 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 			FROM cards AS c
 			JOIN review_log AS rl ON rl.card_id = c.id
 			WHERE c.user_id = ?`+cardWhere+`
+			  AND rl.implied = 0
 			  AND NOT EXISTS (
 				SELECT 1 FROM attempts AS a
 				WHERE a.user_id = c.user_id AND a.lexeme_id = c.lexeme_id AND a.skill = c.skill
@@ -241,7 +242,7 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 				COALESCE(SUM(rl.rating = 1 AND rl.reviewed_at >= ?), 0),
 				MAX(rl.reviewed_at)
 			FROM cards AS c
-			LEFT JOIN review_log AS rl ON rl.card_id = c.id
+			LEFT JOIN review_log AS rl ON rl.card_id = c.id AND rl.implied = 0
 			WHERE c.user_id = ?`+cardWhere+`
 			GROUP BY c.id`, lexemeArg([]any{FormatTime(q.MissSince), userID})...)
 		if err != nil {
@@ -575,7 +576,7 @@ func (s *Store) DueRetention(ctx context.Context, userID int64, since time.Time)
 		SELECT c.skill, COUNT(*), COALESCE(SUM(rl.rating > 1), 0)
 		FROM review_log AS rl
 		JOIN cards AS c ON c.id = rl.card_id
-		WHERE c.user_id = ? AND rl.reviewed_at >= ? AND rl.elapsed_days >= 1
+		WHERE c.user_id = ? AND rl.reviewed_at >= ? AND rl.elapsed_days >= 1 AND rl.implied = 0
 		GROUP BY c.skill`, userID, FormatTime(since))
 	if err != nil {
 		return nil, fmt.Errorf("db: due retention: %w", err)

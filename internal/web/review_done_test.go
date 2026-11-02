@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 // progressOnly is the bare "7 / 8" the done screen used to show by itself.
@@ -92,28 +93,44 @@ func TestReviewDoneNamesTheSitting(t *testing.T) {
 }
 
 // reviewedSentence is the summary this test expects. It is not the handler.
-// TestFinishedSittingStaysOnItsStudyDay pins the keep guard. Yesterday's
-// count is a different UTC study day. Another learner's finished queue,
+// TestFinishedSittingStaysOnItsStudyDay pins the keep guard. A sitting past
+// its study-day rollover is not kept. Another learner's finished queue,
 // even under the same key, is not this learner's sitting.
 func TestFinishedSittingStaysOnItsStudyDay(t *testing.T) {
 	store, _, now := openApp(t)
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	other := addLearner(t, store, "b@example.com", "sub-b", now)
 	s := newServer(store)
-	yesterday := time.Date(2026, 10, 17, 23, 30, 0, 0, time.UTC)
+	appLoc, err := time.LoadLocation("UTC")
+	if err != nil {
+		t.Fatal(err)
+	}
+	zones, err := studyday.NewResolver(store, appLoc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.zones = zones
+	// Rollover already passed relative to now → rebuild, drop the old count.
+	expired := &studyQueue{
+		userID: learner.user.ID, done: true, answered: 4, builtAt: now.Add(-48 * time.Hour),
+		rollover: now.Add(-time.Hour),
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.queues["day"] = &studyQueue{userID: learner.user.ID, done: true, answered: 4, builtAt: yesterday}
+	s.queues["day"] = expired
 	kept, err := s.queueLocked(context.Background(), "day", learner.user.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if kept.answered != 0 || kept.userID != learner.user.ID {
-		t.Fatalf("yesterday's sitting stayed: user %d answered %d", kept.userID, kept.answered)
+		t.Fatalf("expired sitting stayed: user %d answered %d", kept.userID, kept.answered)
 	}
 
-	s.queues["other"] = &studyQueue{userID: other.user.ID, done: true, answered: 4, builtAt: now}
+	s.queues["other"] = &studyQueue{
+		userID: other.user.ID, done: true, answered: 4, builtAt: now,
+		rollover: now.Add(time.Hour),
+	}
 	fresh, err := s.queueLocked(context.Background(), "other", learner.user.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +149,7 @@ func reviewedSentence(n int) string {
 
 func assertReviewDone(t *testing.T, body, summary, href string) {
 	t.Helper()
-	if !strings.Contains(body, "Done for now") {
+	if !strings.Contains(body, "Done for now") && !strings.Contains(body, "זהו להיום") {
 		t.Fatalf("done screen has no heading:\n%s", body)
 	}
 	if !strings.Contains(body, summary) {
@@ -149,8 +166,12 @@ func assertReviewDone(t *testing.T, body, summary, href string) {
 
 func doneTodayLink(t *testing.T, body string) string {
 	t.Helper()
-	const marker = "Back to Today"
+	marker := "Back to Today"
 	i := strings.Index(body, marker)
+	if i < 0 {
+		marker = "חזרה להיום"
+		i = strings.Index(body, marker)
+	}
 	if i < 0 {
 		t.Fatalf("no Back to Today link:\n%s", body)
 	}

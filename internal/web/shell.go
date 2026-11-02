@@ -407,7 +407,11 @@ func (s *server) replaceQueue(ctx context.Context, key string, userID int64, bui
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.now()
-	q := &studyQueue{userID: userID, sess: built, builtAt: now}
+	z, err := s.learnerZone(ctx, userID)
+	if err != nil {
+		return err
+	}
+	q := &studyQueue{userID: userID, sess: built, builtAt: now, rollover: studyday.DueCutoff(now, z)}
 	if err := s.advance(ctx, q); err != nil {
 		return err
 	}

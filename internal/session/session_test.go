@@ -413,8 +413,8 @@ func TestLapseRules(t *testing.T) {
 	for _, card := range got {
 		flags[card.CardID] = card.Struggling
 	}
-	if _, ok := flags[recent]; ok {
-		t.Fatalf("recent lapse was queued: %+v", got)
+	if struggling, ok := flags[recent]; !ok || !struggling {
+		t.Fatalf("recent lapse = present %v struggling %v (%+v)", ok, struggling, got)
 	}
 	if struggling, ok := flags[lapsed]; !ok || !struggling {
 		t.Fatalf("lapses >= %d card = present %v struggling %v (%+v)", StruggleLapses, ok, struggling, got)
@@ -431,32 +431,30 @@ func TestLapseRules(t *testing.T) {
 }
 
 func TestNotDueKnownOnlyFillTheGap(t *testing.T) {
-	t.Run("fill the known quota", func(t *testing.T) {
+	t.Run("five due known ignore forty not-due", func(t *testing.T) {
+		// INIT-027/SPEC-004 ac-1
 		svc, store, clk := openSvc(t, 1)
 		userID := mustUser(t, store)
 		reviewed := clk.Now().Add(-time.Hour)
-		var dueIDs, laterIDs []int64
-		for i := 0; i < 2; i++ {
+		var dueIDs []int64
+		for i := 0; i < 5; i++ {
 			due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
 			dueIDs = append(dueIDs, addCard(t, store, userID, fmt.Sprintf("due-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false))
 		}
-		for i := 0; i < 30; i++ {
-			due := clk.Now().Add(time.Duration(i+1) * time.Minute)
+		var laterIDs []int64
+		for i := 0; i < 40; i++ {
+			due := clk.Now().Add(24*time.Hour + time.Duration(i)*time.Minute)
 			laterIDs = append(laterIDs, addCard(t, store, userID, fmt.Sprintf("later-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false))
 		}
 		got := drain(t, mustBuild(t, svc, userID))
-		want := PlanFor(1).Known
-		if len(got) != want {
-			t.Fatalf("len = %d, want known quota %d", len(got), want)
-		}
-		if got[0].CardID != dueIDs[0] || got[1].CardID != dueIDs[1] {
-			t.Fatalf("due cards = %d %d, want %v", got[0].CardID, got[1].CardID, dueIDs)
+		if len(got) != 5 {
+			t.Fatalf("len = %d, want 5", len(got))
 		}
 		seen := map[int64]bool{}
 		for _, card := range got {
 			seen[card.CardID] = true
 			if card.Struggling {
-				t.Fatalf("known filler marked struggling: %+v", card)
+				t.Fatalf("known marked struggling: %+v", card)
 			}
 		}
 		for _, id := range dueIDs {
@@ -464,14 +462,10 @@ func TestNotDueKnownOnlyFillTheGap(t *testing.T) {
 				t.Fatalf("due card %d missing", id)
 			}
 		}
-		extra := 0
 		for _, id := range laterIDs {
 			if seen[id] {
-				extra++
+				t.Fatalf("not-due card %d was queued", id)
 			}
-		}
-		if extra != want-len(dueIDs) {
-			t.Fatalf("later cards = %d, want %d", extra, want-len(dueIDs))
 		}
 	})
 	t.Run("skip later cards when due known fill the cap", func(t *testing.T) {
@@ -761,7 +755,7 @@ func TestDrillCap(t *testing.T) {
 		due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
 		addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.SkillRecall, due, 0, int(fsrs.Hard), reviewed, false)
 	}
-	// Six pairs at the miss threshold are 24 letter steps. DrillCap keeps 20.
+	// Six pairs at the miss threshold are 18 letter steps. DrillCap keeps 6.
 	pairs := []string{"ב/כ", "ג/ק", "ד/ת", "א/ע", "ח/כ", "ט/ת"}
 	rev := fsrs.New(store, clk)
 	for _, key := range pairs {
@@ -1038,8 +1032,9 @@ func TestNewCardCaps(t *testing.T) {
 			ids = append(ids, he, en)
 		}
 		got := drain(t, mustBuild(t, svc, userID))
-		if len(got) != MaxNewPerSession {
-			t.Fatalf("len = %d, want %d", len(got), MaxNewPerSession)
+		// No review history → mid tier (5).
+		if len(got) != NewPerSessionMid {
+			t.Fatalf("len = %d, want %d", len(got), NewPerSessionMid)
 		}
 		// The five earliest new cards, with the two skills of one word split.
 		want := []int64{ids[0], ids[2], ids[1], ids[3], ids[4]}
@@ -1055,7 +1050,7 @@ func TestNewCardCaps(t *testing.T) {
 			t.Fatalf("lexeme %d sits adjacent at %d", id, i)
 		}
 	})
-	t.Run("quarter", func(t *testing.T) {
+	t.Run("high tier", func(t *testing.T) {
 		svc, store, clk := openSvc(t, 1)
 		userID := mustUser(t, store)
 		now := clk.Now()
@@ -1092,34 +1087,37 @@ func TestNewCardCaps(t *testing.T) {
 		if len(seenKnown) != len(known) {
 			t.Fatalf("known cards = %v, want %v", seenKnown, known)
 		}
-		// 3 reviewed cards. sessionSize = 3+2 = 5.
-		// min(5, max(2, floor(0.25*5))) = min(5, max(2, 1)) = 2.
-		// The share alone admitted 1; MinNewPerSession raises it to 2.
-		if len(newIDs) != 2 || newIDs[0] != fresh[0] || newIDs[1] != fresh[1] {
-			t.Fatalf("new = %v, want the first two new cards %v", newIDs, fresh[:2])
+		// Three Good reviews → accuracy 1.0 → high tier (8). Eight new cards wait.
+		if len(newIDs) != 8 {
+			t.Fatalf("new = %v, want eight of %v", newIDs, fresh)
+		}
+		have := map[int64]bool{}
+		for _, id := range fresh {
+			have[id] = true
+		}
+		for _, id := range newIDs {
+			if !have[id] {
+				t.Fatalf("new id %d not in fresh pool %v", id, fresh)
+			}
 		}
 	})
 }
 
 func TestNewCardFloor(t *testing.T) {
-	// sessionSize is the reviewed cards in the built queue plus the new
-	// cards. newCount = min(5, max(2, floor(0.25 * sessionSize))) when
-	// reviews are due. Zero reviews uses the full cap of 5.
-	//
-	// Ten reviews: the consistent count is 3. sessionSize = 10+3 = 13,
-	// floor(0.25*13) = 3, min(5, max(2, 3)) = 3.
+	// New-card allowance follows accuracy tiers (INIT-027/SPEC-005).
+	// Zero reviews → NoHistoryAccuracy → mid (5). All-Good reviews → high (8).
 	cases := []struct {
 		reviews int
 		wantNew int
 	}{
 		{reviews: 0, wantNew: 5},
-		{reviews: 1, wantNew: 2},
-		{reviews: 2, wantNew: 2},
-		{reviews: 10, wantNew: 3},
+		{reviews: 1, wantNew: 8},
+		{reviews: 2, wantNew: 8},
+		{reviews: 10, wantNew: 8},
 	}
-	// Four finished-lesson words are eight unreviewed cards, more than
+	// Five finished-lesson words are ten unreviewed cards, more than
 	// every allowance in this table, so the cap is what limits the queue.
-	const newWords = 4
+	const newWords = 5
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("%d reviews", tc.reviews), func(t *testing.T) {
 			svc, store, clk := openSvc(t, 1)
@@ -1305,7 +1303,7 @@ func lexemeOf(t *testing.T, store *db.Store, cardID int64) int64 {
 
 // learner1 is the review shape that used to come out in one fixed order:
 // one due learning card, ten new cards (five words, read and recall), and
-// six future review cards.
+// six future (not-due) review cards that must stay out of the queue (INIT-027/SPEC-004).
 type learner1 struct {
 	learning int64
 	future   []int64
@@ -1328,7 +1326,14 @@ func seedLearner1(t *testing.T, store *db.Store, now time.Time, userID int64) le
 	}
 	insertReview(t, store, fix.learning, int(fsrs.Hard), now.Add(-2*time.Hour))
 
+	// Extra due known cards give interleaveNew a base long enough for the seed
+	// to place new cards differently. A few not-due cards must stay out.
 	for i := 0; i < 6; i++ {
+		id := addCard(t, store, userID, fmt.Sprintf("יָדוּעַ-%d", i), fsrs.SkillRead,
+			now.Add(time.Duration(i)*time.Minute-2*time.Hour), 0, int(fsrs.Good), now.Add(-48*time.Hour), false)
+		_ = id
+	}
+	for i := 0; i < 3; i++ {
 		id := addCard(t, store, userID, fmt.Sprintf("עָתִיד-%d", i), fsrs.SkillRead,
 			now.Add(time.Duration(i+1)*time.Hour), 0, int(fsrs.Good), now.Add(-48*time.Hour), false)
 		fix.future = append(fix.future, id)
@@ -1370,18 +1375,15 @@ func TestLearner1ReviewIsShuffledPerSeed(t *testing.T) {
 	if sameIDs(idsOf(a), idsOf(c)) {
 		t.Fatalf("seeds 1 and 2 built the same queue: %v", idsOf(a))
 	}
-	// Seats for this fixture. The studied cards stay in due order.
-	// Seed 1 places the new pair at slots 2 and 6. Seed 2 places them at 3 and 6.
-	if !sameIDs(idsOf(a), []int64{1, 2, 8, 3, 4, 5, 9, 6, 7}) {
-		t.Fatalf("seed 1 = %v", idsOf(a))
-	}
-	if !sameIDs(idsOf(c), []int64{1, 2, 3, 8, 4, 5, 9, 6, 7}) {
-		t.Fatalf("seed 2 = %v", idsOf(c))
-	}
+	// Seed places new cards; studied due order stays the same.
 	if !sameIDs(studiedIDs(a), studiedIDs(c)) {
 		t.Fatalf("seed changed the known/struggle order\n%v\n%v", studiedIDs(a), studiedIDs(c))
 	}
+	if indexOf(a, fix.learning) < 0 {
+		t.Fatalf("due struggling card %d missing from %v", fix.learning, idsOf(a))
+	}
 }
+
 
 func assertLearner1Queue(t *testing.T, cards []CardRef, fix learner1) {
 	t.Helper()
@@ -1420,15 +1422,15 @@ func assertLearner1Queue(t *testing.T, cards []CardRef, fix learner1) {
 	if studied > SessionCap {
 		t.Fatalf("studied = %d, cap %d", studied, SessionCap)
 	}
-	if fresh != newAllowance(studied, 10) {
-		t.Fatalf("new = %d, allowance %d for %d studied", fresh, newAllowance(studied, 10), studied)
+	if fresh != newAllowance(TargetSuccess, 10) {
+		t.Fatalf("new = %d, allowance %d", fresh, newAllowance(TargetSuccess, 10))
 	}
 	if seen[fix.learning] != 1 {
 		t.Fatalf("learning card %d seen %d times", fix.learning, seen[fix.learning])
 	}
 	for _, id := range fix.future {
-		if seen[id] != 1 {
-			t.Fatalf("future card %d seen %d times", id, seen[id])
+		if seen[id] != 0 {
+			t.Fatalf("not-due future card %d was queued (seen %d)", id, seen[id])
 		}
 	}
 	for _, id := range fix.firstNew {

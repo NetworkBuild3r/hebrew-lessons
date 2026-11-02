@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -26,6 +27,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
@@ -451,17 +453,42 @@ func TestReviewDrillKinds(t *testing.T) {
 	}
 	letter := gradeRevealed(t, h, learner, card, "3", "https://learn.example")
 	letterBody := letter.Body.String()
-	hasBet, hasKaf := strings.Contains(letterBody, "ב"), strings.Contains(letterBody, "כ")
-	if letter.Code != http.StatusOK || attr(t, letterBody, "data-kind") != session.KindLetter || hasBet == hasKaf || strings.Contains(letterBody, "ב/כ") {
+	if letter.Code != http.StatusOK || attr(t, letterBody, "data-kind") != session.KindLetter || strings.Contains(letterBody, "ב/כ") {
 		t.Fatalf("letter drill: %d %s", letter.Code, letterBody)
 	}
 	if strings.Contains(letter.Body.String(), "ג/ק") {
 		t.Fatal("a pair under the miss threshold was drilled")
 	}
-	letterID := attr(t, letter.Body.String(), "data-card")
-	pattern := gradeRevealed(t, h, learner, mustInt(t, letterID), "3", "https://learn.example", attr(t, letterBody, "data-pointed"))
-	if pattern.Code != http.StatusOK || attr(t, pattern.Body.String(), "data-kind") != session.KindPattern || !strings.Contains(pattern.Body.String(), "הוא/היא") {
-		t.Fatalf("pattern drill: %d %s", pattern.Code, pattern.Body.String())
+	if attr(t, letterBody, "data-activity") != "letter-pick" {
+		t.Fatalf("letter drill is not a pick: %s", cardAttrs(letterBody))
+	}
+	assertLetterPickFront(t, letterBody, []string{"ב", "כ"})
+	letterID := mustCardID(t, letterBody)
+	parts := []string{"ב", "כ"}
+	appLoc, err := studyday.AppZone("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	z := studyday.Zone{Name: "America/Chicago", Loc: appLoc, Source: studyday.SourceApp}
+	asked := pickPart(letterID, studyday.DueCutoff(now, z), parts)
+	picked := postDrill(t, h, learner, letterID, asked)
+	if picked.Code != http.StatusOK || !strings.Contains(picked.Body.String(), "Correct") {
+		t.Fatalf("letter pick = %d %s", picked.Code, picked.Body.String())
+	}
+	cont := actPost(t, h, learner, "/_hx/review/next", url.Values{
+		"_csrf": {learner.csrf}, "card_id": {strconv.FormatInt(letterID, 10)},
+	})
+	if cont.Code != http.StatusOK {
+		t.Fatalf("continue after letter = %d", cont.Code)
+	}
+	patternBody := cont.Body.String()
+	if attr(t, patternBody, "data-kind") != session.KindPattern || !strings.Contains(patternBody, "הוא/היא") {
+		t.Fatalf("pattern drill: %s", patternBody)
+	}
+	patternID := mustCardID(t, patternBody)
+	pattern := gradeRevealed(t, h, learner, patternID, "3", "https://learn.example")
+	if pattern.Code != http.StatusOK {
+		t.Fatalf("pattern grade: %d %s", pattern.Code, pattern.Body.String())
 	}
 	if n := len(mustLogs(t, store, card)); n != 2 {
 		t.Fatalf("drill grades wrote review_log, count %d", n)
@@ -534,7 +561,12 @@ func TestReviewDoneSessionRebuilds(t *testing.T) {
 }
 
 func TestReviewStaleSessionRebuilds(t *testing.T) {
-	start := time.Date(2026, 10, 18, 23, 0, 0, 0, time.UTC)
+	// Cross the study-day rollover (4:00 local), not a UTC midnight.
+	loc, err := time.LoadLocation("America/Chicago")
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Date(2026, 10, 18, 3, 30, 0, 0, loc)
 	store, h, clk := openStepped(t, start)
 	learner := addLearner(t, store, "a@example.com", "sub-a", start)
 	if _, err := store.ExecContext(context.Background(), `UPDATE sessions SET expires_at = ? WHERE user_id = ?`, db.FormatTime(start.Add(7*24*time.Hour)), learner.user.ID); err != nil {
@@ -548,7 +580,7 @@ func TestReviewStaleSessionRebuilds(t *testing.T) {
 		t.Fatalf("first serve = %s", cardAttrs(page))
 	}
 
-	clk.Advance(2 * time.Hour)
+	clk.Advance(31 * time.Minute) // 4:01 local — past DueCutoff
 	stale := postGrade(t, h, learner, first, "3", "https://learn.example")
 	if stale.Code != http.StatusBadRequest {
 		t.Fatalf("grade on a stale queue = %d", stale.Code)

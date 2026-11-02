@@ -215,7 +215,8 @@ func (s *Store) CoachAccuracy(ctx context.Context, userID int64, now time.Time, 
 		JOIN cards AS c ON c.id = rl.card_id
 		WHERE c.user_id = ?
 		  AND rl.reviewed_at >= ?
-		  AND rl.reviewed_at <= ?`, userID, start, end).Scan(&out.Reviews7d.Count, &out.Reviews7d.GoodOrEasy); err != nil {
+		  AND rl.reviewed_at <= ?
+		  AND rl.implied = 0`, userID, start, end).Scan(&out.Reviews7d.Count, &out.Reviews7d.GoodOrEasy); err != nil {
 		return CoachAccuracy{}, fmt.Errorf("db: coach accuracy: %w", err)
 	}
 	ratings, err := s.RecentReviewRatings(ctx, userID, now, lastN)

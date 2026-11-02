@@ -7,7 +7,7 @@ spec_id: SPEC-003
 initiative_id: INIT-027
 title: "Drills that are graded, timed, capped, and end"
 domain: service
-status: pending
+status: complete
 primary_prompt: none
 model: inherit
 autonomy_level: auto_tests
@@ -36,7 +36,7 @@ Expertise: `.claude/agents/` is absent. Nothing was manufactured. Execute inline
 - `internal/letters` (new, no imports from web or session):
   - `LookAlike` and `SoundAlike`, each a list of bare-letter pairs.
     - LookAlike is every pair of `alefbetPairs` with points removed, deduplicated, dropping pairs that become one letter (שׁ/שׂ), plus ו/י.
-    - SoundAlike is א/ע, ט/ת, כ/ק, ח/כ, ב/ו, ס/ש.
+    - SoundAlike is the ADR-0023 D2 pairs as base-letter keys, because a letter-pair key stores only U+05D0 through U+05EA: א/ע, ט/ת, כ/ק (כּ/ק), ח/כ, ב/ו, ס/ש (שׂ/ס).
   - `Confusable(key string) bool`: true when the `a/b` key, in either order, is in either set. Malformed keys are false.
   - A test in `internal/web/views` checks every bare pair of `alefbetPairs` is in `letters.LookAlike`, so the cue table and the set cannot drift.
 - `internal/activity/check.go` typed path: append a letter pair only when `letters.Confusable(key)`. The wrong-pick path (`confusedOf`) and the whole-word mix-up path are unchanged.

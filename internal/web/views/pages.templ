@@ -22,12 +22,17 @@ templ ReviewBody(c ReviewCard) {
 	}>
 		if c.Done {
 			<div class="review__done">
-				<h2>@E("Done for now")</h2>
+				<h2>@ReviewT(c.Lang, "Done for now")</h2>
 				<p class="lede" lang="en" dir="ltr">@E(ReviewedLine(c.Answered))</p>
-				<a class="btn btn-primary" href={ templ.SafeURL(homeHref(c.Lang)) }>@E("Back to Today")</a>
+				for _, line := range TallyLines(c.MovedUp, c.PairsCleared, c.Slow, c.NewMet) {
+					<p class="lede" lang="en" dir="ltr">@E(line)</p>
+				}
+				<a class="btn btn-primary" href={ templ.SafeURL(homeHref(c.Lang)) }>@ReviewT(c.Lang, "Back to Today")</a>
 			</div>
 		} else if c.Act != nil {
 			@ActivityFrame(*c.Act)
+		} else if c.Pick || c.AfterDrill {
+			@letterPickFrame(c)
 		} else {
 			@flashFrame(c)
 		}

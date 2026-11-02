@@ -6,9 +6,10 @@
 // card kinds in that same mix: a confusion with at least MinMissesForDrill
 // misses in the struggle window adds DrillSteps visits of that kind. Those
 // visits do not take a known or struggle slot, and they do not change PlanFor.
-// DrillCap is 20, the old queue's per-visit bound. Drill steps past that
-// cap are left for a later session. Study cards are not dropped to make room.
-// A drill is not an FSRS card. Record grades it in the queue only.
+// DrillCap is 6. Drill steps past that cap are left for a later session.
+// Study cards are not dropped to make room. A drill is not an FSRS card.
+// Record and DrillAnswered grade it into drill_answers; three right, non-slow
+// answers clear the pair (INIT-027/SPEC-003).
 //
 // The mix itself does not touch the database. BuildSession reads the clock
 // once and passes that instant to ListStudyCards, RecentReviewRatings, and
@@ -25,12 +26,10 @@
 // # Constants
 //
 // SessionCap is 20. TargetSuccess is 0.85, the sessionlimits value the
-// coach also reports. MaxNewPerSession is 5, MinNewPerSession is 2, and
-// MaxNewShare is 0.25. BuildSession applies them to cards that have no
-// review. With reviews due, the new-card count is
-// min(5, max(2, floor(0.25 * sessionSize))), where sessionSize is the
-// reviewed cards plus the new cards. A session with no reviews due takes
-// up to 5. RecentReviews is 50.
+// coach also reports. New-card caps follow recent accuracy
+// (INIT-027/SPEC-005): 2 below LowAccuracy (0.80), 5 from 0.80 through
+// HighAccuracy (0.90), and 8 above 0.90. MaxNewPerSession is the high tier
+// (8). No review history uses the mid tier (5). RecentReviews is 50.
 // LowAccuracy is 0.80 and HighAccuracy is 0.90. A recent Good/Easy share below
 // LowAccuracy uses LowAccuracyKnownShare. A share above HighAccuracy uses
 // HighAccuracyKnownShare. A share from LowAccuracy through HighAccuracy, and
@@ -50,33 +49,23 @@
 //
 // # Algorithm
 //
-// A due card (read, recall, listen or spell) is struggling when its lapse
-// count is at least StruggleLapses, or its latest rating is Again or Hard, or
-// the learner model lists a confusion key for its lexeme. The model
+// A due reviewed card (read, recall, listen or spell) is struggling when its
+// lapse count is at least StruggleLapses, or its latest rating is Again or Hard,
+// or it is Confused, or it has a RecentLapse. Every other due reviewed card is
+// known. A reviewed card that is not due is skipped: a known card that is not
+// due is never queued (INIT-027/SPEC-004, ADR-0023 D3). The model
 // (internal/learner) reads confusion_misses, of every kind including other,
 // over ConfusionWindow ending at the same instant as the rest of the build.
-// A card is stable known when its latest rating is Good or Easy and it has no
-// Again inside that same window.
-// A read card also has to sit in KnownLexemeIDs, which is the latest-Good
-// or Easy read set. A placement Good or Easy is that review. Finishing a
-// lesson does not add the lesson's new words.
-// Struggling wins when a card matches both. A not-yet-due card is never
-// struggling. Suspended cards, and words whose intro lesson is unfinished,
-// stay out.
+// Suspended cards, and words whose intro lesson is unfinished, stay out.
 //
-// Due cards are chosen before not-yet-due cards. The known quota is filled
-// from due known cards first. Not-yet-due known cards fill only the known
-// quota that is still short. They are not used to pad a shortfall of
-// struggling cards. When one side cannot fill its quota, remaining due cards
-// of the other side fill the cap. Each side is ordered by due time, then by
-// a pure mix of the injected seed and the card id. There is no math/rand
-// draw. The same clock, the same seed, and the same rows always build the
-// same queue.
+// Due struggling and due known cards fill their PlanFor shares. Room left under
+// SessionCap is filled from the other due side. Not-yet-due known cards are
+// never added. Each side is ordered by due time, then by a pure mix of the
+// injected seed and the card id. There is no math/rand draw. The same clock,
+// the same seed, and the same rows always build the same queue.
 //
 // The two lists are then interleaved. While a known card is still waiting,
-// a run of struggling cards stops at MaxStruggleRun. Within the known list,
-// every due card stands before every not-yet-due card, so the due known
-// cards are emitted first. Letter steps and pattern steps are woven in
+// a run of struggling cards stops at MaxStruggleRun. Letter steps and pattern steps are woven in
 // after that, one of each after each study card until the drill plan runs
 // out or DrillCap steps have been woven. Study-card order and the known
 // and struggle counts stay as planned.
@@ -85,17 +74,14 @@
 // a known slot, a struggle slot, or a drill step. New cards keep the order
 // from the intro lesson and are seeded through the woven queue, so they are
 // not a block at the end. When the woven queue is not empty, one of its
-// cards stands after the new cards. The allowance counts sessionSize as the reviewed
-// cards in the planned queue plus the new cards. Drill steps are not part
-// of that count. With no reviewed cards, the allowance is MaxNewPerSession.
-// With reviews due, it is min(MaxNewPerSession, max(MinNewPerSession,
-// floor(MaxNewShare * sessionSize))). MinNewPerSession is 2, so one or two
-// reviews still introduce two new cards when that many are waiting. New
-// cards are ordered by the intro unit's position, then that lesson's index,
-// then frequency rank when the card has one, then card id. A card with no
-// intro lesson sorts after every card that has one. A card with no frequency
-// rank sorts after every card that has one. The lexicon does not store a
-// rank, so ListStudyCards leaves that key unset.
+// cards stands after the new cards. The new-card allowance follows recent
+// accuracy (2 / 5 / 8). At or above TargetSuccess, a full build may also
+// seed verified placement-list words before ListStudyCards when fewer due
+// new cards wait than the tier. New cards are ordered by the intro unit's
+// position, then that lesson's index, then frequency rank when the card has
+// one, then card id. A card with no intro lesson sorts after every card that
+// has one. A card with no frequency rank sorts after every card that has one.
+// The lexicon does not store a rank, so ListStudyCards leaves that key unset.
 //
 // A pass then walks the queue. Two consecutive study visits that share a
 // lexeme are split when a later card can take the second visit's seat

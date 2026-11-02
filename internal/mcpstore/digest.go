@@ -357,7 +357,7 @@ func (s *Store) taughtCards(ctx context.Context, userID, lexemeID int64, on stri
 	}
 	rows, err := conn.QueryContext(ctx, `
 		SELECT c.skill, c.state,
-			(SELECT COUNT(*) FROM review_log AS r WHERE r.card_id = c.id AND r.reviewed_at >= ?)
+			(SELECT COUNT(*) FROM review_log AS r WHERE r.card_id = c.id AND r.reviewed_at >= ? AND r.implied = 0)
 		FROM cards AS c
 		WHERE c.user_id = ? AND c.lexeme_id = ?
 		ORDER BY c.skill`, db.FormatTime(start), userID, lexemeID)

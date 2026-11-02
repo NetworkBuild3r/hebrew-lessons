@@ -190,7 +190,7 @@ func m6Migrate(conn *sql.DB) error {
 const (
 	m6OldCards = `SELECT id, user_id, lexeme_id, dir, state, due, stability, difficulty, reps, lapses, last_review, suspended FROM cards ORDER BY id`
 	m6NewCards = `SELECT id, user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended FROM cards ORDER BY id`
-	m6Log      = `SELECT * FROM review_log ORDER BY id`
+	m6Log      = `SELECT id, card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked, chosen FROM review_log ORDER BY id`
 )
 
 // mapDir applies the spec's mapping to the dir column of a dumped row.
@@ -242,7 +242,7 @@ func TestMigrate006KeepsCardsIdsAndReviewHistory(t *testing.T) {
 	}
 
 	// Migrate applies every pending file, so 008 (INIT-015/SPEC-004) and 009 (INIT-015/SPEC-013) are recorded too.
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}) {
 		t.Fatalf("versions after = %v", got)
 	}
 	cols := columnNames(t, conn, "cards")
@@ -608,7 +608,7 @@ func TestMigrate006AtomicWhenCopyFails(t *testing.T) {
 		t.Fatalf("retry after fixing the data: %v", err)
 	}
 	// The retry applies 006, then 008 (INIT-015/SPEC-004), then 009 (INIT-015/SPEC-013).
-	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}) {
+	if got := m6Applied(t, conn); !reflect.DeepEqual(got, []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}) {
 		t.Fatalf("versions after retry = %v", got)
 	}
 	if got := m6Dump(t, conn, m6NewCards); !reflect.DeepEqual(got, m6MapDir(wantCards)) {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/letters"
 )
 
 // Check grades a response to a built item and records it through evidence.Recorder.
@@ -190,9 +191,13 @@ func gradeTyped(p *pending, resp Response, elapsed time.Duration, lookup func(st
 			}
 		}
 		// A typed answer that is exactly another word is logged by the recorder as a mix-up
-		// of two words. Otherwise each wrong letter is a letter pair.
+		// of two words. Otherwise each wrong letter is a letter pair when the pair is
+		// look-alike or sound-alike (INIT-027/SPEC-003).
 		if rating != fsrs.Good && chosen.ID == 0 {
 			for _, key := range LetterPairs(p.expected, text) {
+				if !letters.Confusable(key) {
+					continue
+				}
 				a.Confusions = append(a.Confusions, evidence.Confusion{Kind: fsrs.MissLetterPair, Key: key})
 				res.Confused = append(res.Confused, Confused{Kind: fsrs.MissLetterPair, Key: key, Word: anchor.Text})
 			}

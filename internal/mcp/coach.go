@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
 )
 
 const (
@@ -87,7 +85,11 @@ type MixTarget struct {
 	MaxNewWordsPerLesson int     `json:"maxNewWordsPerLesson"`
 	TargetSuccess        float64 `json:"targetSuccess"`
 	MaxNewPerSession     int     `json:"maxNewPerSession"`
-	MaxNewShare          float64 `json:"maxNewShare"`
+	NewPerSessionLow     int     `json:"newPerSessionLow"`
+	NewPerSessionMid     int     `json:"newPerSessionMid"`
+	NewPerSessionHigh    int     `json:"newPerSessionHigh"`
+	NewTierLow           float64 `json:"newTierLow"`
+	NewTierHigh          float64 `json:"newTierHigh"`
 }
 
 // RecentAccuracy is the learner's recent review and lesson record.
@@ -160,8 +162,11 @@ func validCardState(state string) bool {
 
 func coachContextDescription() string {
 	mix := currentMixTarget()
-	return fmt.Sprintf("When learnerId is set, cards lists that learner's FSRS cards, one per card, including suspended cards. Order is due soonest first, then most recently reviewed, then card id. The list is capped at %d. cardsTruncated is true when cards were left out; call get_learner_words to page the rest. Each card has lexeme (pointed NFC), translit, pos, gloss, skill, state, stability, difficulty, due, lapses, reps, lastRating, lastReview, recallMs, and recallSpeed. Times are UTC RFC3339. translit, lastRating, and lastReview are null when unknown. recallMs is how long the latest timed right meaning question for that word and skill took, in milliseconds, and is null when that question has not been timed. A wrong answer is not counted. recallSpeed is fast, steady, or slow against the learner's median for that question, and is null until ten timed correct answers exist. Recycle cards that are due. Reinforce words with high lapses, and bring a slow word back sooner than a fast one. recentAccuracy is null when learnerId is omitted. Otherwise the review half counts Good and Easy ratings over the last %d days and over the last %d reviews. The lesson half, lessons7d counts and meanScore, stays zero until the lesson player writes lesson_runs. Coach from the review half until then. rate and meanScore are null when the count is 0. mixTarget keeps the unit budgets, at most %d new words in a unit and %d to %d per lesson, and the session mix: targetSuccess %g, maxNewPerSession %d, and maxNewShare %g. With reviews due, new cards are min(maxNewPerSession, max(%d, floor(maxNewShare * sessionSize))), where sessionSize is the reviewed cards plus the new cards. No reviews still allows the full maxNewPerSession.",
+	return fmt.Sprintf("When learnerId is set, cards lists that learner's FSRS cards, one per card, including suspended cards. Order is due soonest first, then most recently reviewed, then card id. The list is capped at %d. cardsTruncated is true when cards were left out; call get_learner_words to page the rest. Each card has lexeme (pointed NFC), translit, pos, gloss, skill, state, stability, difficulty, due, lapses, reps, lastRating, lastReview, recallMs, and recallSpeed. Times are UTC RFC3339. translit, lastRating, and lastReview are null when unknown. recallMs is how long the latest timed right meaning question for that word and skill took, in milliseconds, and is null when that question has not been timed. A wrong answer is not counted. recallSpeed is fast, steady, or slow against the learner's median for that question, and is null until ten timed correct answers exist. Recycle cards that are due. Reinforce words with high lapses, and bring a slow word back sooner than a fast one. recentAccuracy is null when learnerId is omitted. Otherwise the review half counts Good and Easy ratings over the last %d days and over the last %d reviews. The lesson half, lessons7d counts and meanScore, stays zero until the lesson player writes lesson_runs. Coach from the review half until then. rate and meanScore are null when the count is 0. mixTarget keeps the unit budgets, at most %d new words in a unit and %d to %d per lesson, and the session mix: targetSuccess %g, maxNewPerSession %d (the high tier), newPerSessionLow %d below newTierLow %g, newPerSessionMid %d from %g through newTierHigh %g, and newPerSessionHigh %d above that. At or above targetSuccess, when fewer due new cards wait than the tier cap, review seeds verified placement-list words with a gloss, lowest band first.",
 		contextCardCap, AccuracyWindowDays, AccuracyReviewCap,
 		mix.MaxNewWordsPerUnit, mix.MinNewWordsPerLesson, mix.MaxNewWordsPerLesson,
-		mix.TargetSuccess, mix.MaxNewPerSession, mix.MaxNewShare, sessionlimits.MinNewPerSession)
+		mix.TargetSuccess, mix.MaxNewPerSession,
+		mix.NewPerSessionLow, mix.NewTierLow,
+		mix.NewPerSessionMid, mix.NewTierLow, mix.NewTierHigh,
+		mix.NewPerSessionHigh)
 }

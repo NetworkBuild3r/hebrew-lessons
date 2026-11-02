@@ -283,6 +283,24 @@ type ReviewCard struct {
 	PairNote        string
 	DageshNote      string
 	DageshHard      string
+	// Pick is a two-letter letter step before the learner chooses. BlankedExample
+	// is the confusion word with the asked letter replaced by ___. PickLetters
+	// are the two buttons in key order. PickSound is the asked letter's English
+	// sound when there is no example and no clip.
+	Pick           bool
+	BlankedExample string
+	PickLetters    []string
+	PickSound      string
+	// AfterDrill is set after a letter pick until Continue. DrillCorrect /
+	// DrillCleared are the outcome of that pick.
+	AfterDrill   bool
+	DrillCorrect bool
+	DrillCleared bool
+	// Done-screen tally rows (zero means omit).
+	MovedUp      int
+	PairsCleared int
+	Slow         int
+	NewMet       int
 }
 
 // DrillSide is one letter, or one agreement form, on the back of a drill card.

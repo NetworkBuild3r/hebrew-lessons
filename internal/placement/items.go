@@ -9,6 +9,33 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
+// DeckRow is one placement-list word as review seeding reads it
+// (INIT-027/SPEC-005, ADR-0023 D5).
+type DeckRow struct {
+	ID       string
+	Band     int
+	Verified bool
+	GlossEN  string
+}
+
+// Deck returns every items.json row in file order.
+func Deck() ([]DeckRow, error) {
+	items, err := catalog()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]DeckRow, len(items))
+	for i, it := range items {
+		out[i] = DeckRow{
+			ID:       it.ID,
+			Band:     it.Band,
+			Verified: it.Verified,
+			GlossEN:  it.GlossEN,
+		}
+	}
+	return out, nil
+}
+
 //go:embed items.json
 var itemsJSON []byte
 

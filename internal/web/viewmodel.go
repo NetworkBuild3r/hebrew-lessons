@@ -74,13 +74,15 @@ type ReviewCardVM struct {
 	// it has been checked. Both are nil for a flashcard and a drill.
 	Item   *activity.Item
 	Answer *answerState
+	// Drill is set after a two-letter letter pick until Continue.
+	Drill *drillState
 	// Sides and Example* are the letter or pattern answer. reviewView copies them
-	// onto the page only after the reveal.
+	// onto the page only after the reveal or pick feedback.
 	Sides           []views.DrillSide
 	ExampleText     string
 	ExampleTranslit string
 	ExampleGloss    string
-	// Asked is the one letter a pair card shows. TellApart and DageshNote are
+	// Asked is the one letter a pair card asks. TellApart and DageshNote are
 	// empty when the stored data has no cue and no sounds. LooksLike is the
 	// first cue of a single letter. PairNote sits under a pair cue. DageshHard
 	// is the word-initial line for a single ב, כ, or פ, and for a dagesh pair.
@@ -90,4 +92,14 @@ type ReviewCardVM struct {
 	PairNote   string
 	DageshNote string
 	DageshHard string
+	// Pick is true for an unanswered two-letter letter step. BlankedExample is
+	// the confusion word with the asked letter replaced by a blank.
+	Pick           bool
+	BlankedExample string
+	PickLetters    []string
+	// Tally rows for the done screen (non-zero counters from the finished sitting).
+	MovedUp      int
+	PairsCleared int
+	Slow         int
+	NewMet       int
 }

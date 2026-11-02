@@ -207,6 +207,7 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 	mux.HandleFunc("POST /_hx/review/reveal", gated(gate, secure, s.reveal))
 	mux.HandleFunc("POST /_hx/review/grade", gated(gate, secure, s.grade))
 	mux.HandleFunc("POST /_hx/review/answer", gated(gate, secure, s.answer))
+	mux.HandleFunc("POST /_hx/review/drill", gated(gate, secure, s.drill))
 	mux.HandleFunc("POST /_hx/review/next", gated(gate, secure, s.next))
 	mountPlacement(mux, tokens, gate, secure, s.deck, s.runs)
 	s.mountShell(mux, tokens, gate, secure)
@@ -440,7 +441,8 @@ func (s *server) reveal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A checked activity is answered through /_hx/review/answer, never self-graded.
-	if q == nil || q.sess == nil || !q.has || q.cur.CardID != cardID || q.item != nil {
+	// A two-letter letter step is a timed pick through /_hx/review/drill.
+	if q == nil || q.sess == nil || !q.has || q.cur.CardID != cardID || q.item != nil || pairParts(q) != nil {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -496,20 +498,11 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 	lang := reviewLang(r)
 	s.mu.Lock()
 	q := s.queues[key]
-	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID || q.item != nil || !sameStudyDay(q.builtAt, s.now()) {
+	// A two-letter letter step is graded through /_hx/review/drill, not self-grade.
+	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID || q.item != nil || pairParts(q) != nil || !q.sameDay(s.now()) {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
-	}
-	// A pair grades the letter the reveal accepted. Anything else, including
-	// the other letter of the pair, is not that letter and is not graded.
-	if parts := pairParts(q); parts != nil {
-		asked := postedAsked(r)
-		if !askedInPair(parts, asked) || asked != q.asked {
-			s.mu.Unlock()
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
 	}
 	// A positive id that belongs to someone else is not the card this
 	// session served. The id check above rejects it. Record then applies

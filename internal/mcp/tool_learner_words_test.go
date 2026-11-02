@@ -35,17 +35,26 @@ func TestMixTargetMatchesBuildSession(t *testing.T) {
 	if got.MaxNewPerSession != sessionlimits.MaxNewPerSession {
 		t.Fatalf("maxNewPerSession %d shared %d", got.MaxNewPerSession, sessionlimits.MaxNewPerSession)
 	}
-	if got.MaxNewPerSession != 5 {
+	if got.MaxNewPerSession != 8 {
 		t.Fatalf("maxNewPerSession %d", got.MaxNewPerSession)
 	}
-	if got.MaxNewShare != session.MaxNewShare {
-		t.Fatalf("maxNewShare %v session %v", got.MaxNewShare, session.MaxNewShare)
+	if got.NewPerSessionLow != sessionlimits.NewPerSessionLow || sessionlimits.NewPerSessionLow != 2 {
+		t.Fatalf("newPerSessionLow %d", got.NewPerSessionLow)
 	}
-	if got.MaxNewShare != sessionlimits.MaxNewShare {
-		t.Fatalf("maxNewShare %v shared %v", got.MaxNewShare, sessionlimits.MaxNewShare)
+	if got.NewPerSessionMid != sessionlimits.NewPerSessionMid || sessionlimits.NewPerSessionMid != 5 {
+		t.Fatalf("newPerSessionMid %d", got.NewPerSessionMid)
 	}
-	if got.MaxNewShare != 0.25 {
-		t.Fatalf("maxNewShare %v", got.MaxNewShare)
+	if got.NewPerSessionHigh != sessionlimits.NewPerSessionHigh || sessionlimits.NewPerSessionHigh != 8 {
+		t.Fatalf("newPerSessionHigh %d", got.NewPerSessionHigh)
+	}
+	if got.NewTierLow != sessionlimits.NewTierLow || sessionlimits.NewTierLow != 0.80 {
+		t.Fatalf("newTierLow %v", got.NewTierLow)
+	}
+	if got.NewTierHigh != sessionlimits.NewTierHigh || sessionlimits.NewTierHigh != 0.90 {
+		t.Fatalf("newTierHigh %v", got.NewTierHigh)
+	}
+	if session.LowAccuracy != sessionlimits.NewTierLow || session.HighAccuracy != sessionlimits.NewTierHigh {
+		t.Fatalf("session tiers %v %v shared %v %v", session.LowAccuracy, session.HighAccuracy, sessionlimits.NewTierLow, sessionlimits.NewTierHigh)
 	}
 	// BuildSession passes accuracyOf to mix. With no reviews that is
 	// NoHistoryAccuracy, which is TargetSuccess, and the in-band share is
@@ -98,7 +107,7 @@ func TestGetContextCoachFieldsKeepExistingShape(t *testing.T) {
 	if shared.Budgets != currentBudgets() || shared.MixTarget != currentMixTarget() || shared.RecentAccuracy != nil || len(shared.Cards) != 0 || shared.CardsTruncated || len(shared.Outline) != 0 || len(shared.KnownLexemes) != 0 || shared.Placement.Taken {
 		t.Fatalf("shared %+v", shared)
 	}
-	if shared.MixTarget.MaxNewWordsPerUnit != 8 || shared.MixTarget.MinNewWordsPerLesson != 2 || shared.MixTarget.MaxNewWordsPerLesson != 3 || shared.MixTarget.TargetSuccess != 0.85 || shared.MixTarget.MaxNewPerSession != 5 || shared.MixTarget.MaxNewShare != 0.25 {
+	if shared.MixTarget.MaxNewWordsPerUnit != 8 || shared.MixTarget.MinNewWordsPerLesson != 2 || shared.MixTarget.MaxNewWordsPerLesson != 3 || shared.MixTarget.TargetSuccess != 0.85 || shared.MixTarget.MaxNewPerSession != 8 || shared.MixTarget.NewPerSessionLow != 2 || shared.MixTarget.NewPerSessionMid != 5 || shared.MixTarget.NewPerSessionHigh != 8 || shared.MixTarget.NewTierLow != 0.80 || shared.MixTarget.NewTierHigh != 0.90 {
 		t.Fatalf("mix %+v", shared.MixTarget)
 	}
 

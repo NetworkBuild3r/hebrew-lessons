@@ -3,6 +3,7 @@ package activity
 import (
 	"slices"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 )
 
@@ -193,6 +194,37 @@ func Choose(views []SkillView, gate Gate, f Facts, avoid map[string]bool, visits
 		return Choice{Skill: cardSkill, Kind: Flashcard}
 	}
 	kinds := Fitting(skill, f)
+	kind := kinds[0]
+	if len(kinds) > 1 && (visits[skill]+1)%MatchEvery == 0 {
+		kind = kinds[1]
+	}
+	return Choice{Skill: skill, Kind: kind}
+}
+
+// Implies reports the harder skill that covers skill: recall covers read, and spell
+// covers listen. INIT-027/SPEC-004.
+func Implies(skill string) (string, bool) {
+	switch skill {
+	case fsrs.SkillRead:
+		return fsrs.SkillRecall, true
+	case fsrs.SkillListen:
+		return fsrs.SkillSpell, true
+	default:
+		return "", false
+	}
+}
+
+// ChooseSkill picks the everyday (or MatchEvery-th match) activity for one skill.
+// When the gate is closed for the skill or no checked activity fits the word, the
+// visit is a Flashcard through that skill. INIT-027/SPEC-004.
+func ChooseSkill(skill string, gate Gate, f Facts, visits map[string]int) Choice {
+	if skill == "" || !gate.Open(skill) {
+		return Choice{Skill: skill, Kind: Flashcard}
+	}
+	kinds := Fitting(skill, f)
+	if len(kinds) == 0 {
+		return Choice{Skill: skill, Kind: Flashcard}
+	}
 	kind := kinds[0]
 	if len(kinds) > 1 && (visits[skill]+1)%MatchEvery == 0 {
 		kind = kinds[1]

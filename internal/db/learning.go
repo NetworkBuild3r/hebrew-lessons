@@ -63,6 +63,7 @@ type ReviewLog struct {
 	ScheduledDays int
 	Peeked        bool
 	Chosen        string // Pointed NFC of the wrong option. Empty when the learner did not pick one.
+	Implied       bool   // True when this row is implied credit from another skill's answer.
 }
 
 // StudyCard is a learner's card, in any skill, plus the fields the
@@ -78,9 +79,13 @@ type StudyCard struct {
 	LatestRating  int
 	HasRating     bool
 	RecentLapse   bool
-	HasIntro      bool
-	IntroPosition int
-	IntroLesson   int
+	// RecentAgainOrHard is true when an Again or Hard review_log row (implied = 0)
+	// was stored at or after the lapseSince passed to ListStudyCards.
+	// INIT-027/SPEC-004 uses it for move-up rule 4.
+	RecentAgainOrHard bool
+	HasIntro          bool
+	IntroPosition     int
+	IntroLesson       int
 }
 
 func (s *Store) connOrErr() (*sql.DB, error) {
@@ -240,14 +245,18 @@ func (s *Store) ApplyReview(ctx context.Context, card Card, log ReviewLog) error
 	if log.Peeked {
 		peeked = 1
 	}
+	implied := 0
+	if log.Implied {
+		implied = 1
+	}
 	var chosen any
 	if log.Chosen != "" {
 		chosen = log.Chosen
 	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked, chosen)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		card.ID, log.Rating, FormatTime(log.ReviewedAt), log.ElapsedDays, log.ScheduledDays, peeked, chosen,
+		INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked, chosen, implied)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		card.ID, log.Rating, FormatTime(log.ReviewedAt), log.ElapsedDays, log.ScheduledDays, peeked, chosen, implied,
 	); err != nil {
 		return fmt.Errorf("db: insert review: %w", err)
 	}
@@ -329,7 +338,7 @@ func (s *Store) ReviewLogs(ctx context.Context, cardID int64) ([]ReviewLog, erro
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT id, card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked, chosen
+		SELECT id, card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked, chosen, implied
 		FROM review_log
 		WHERE card_id = ?
 		ORDER BY id`, cardID)
@@ -341,9 +350,9 @@ func (s *Store) ReviewLogs(ctx context.Context, cardID int64) ([]ReviewLog, erro
 	for rows.Next() {
 		var log ReviewLog
 		var reviewed string
-		var peeked int
+		var peeked, implied int
 		var chosen sql.NullString
-		if err := rows.Scan(&log.ID, &log.CardID, &log.Rating, &reviewed, &log.ElapsedDays, &log.ScheduledDays, &peeked, &chosen); err != nil {
+		if err := rows.Scan(&log.ID, &log.CardID, &log.Rating, &reviewed, &log.ElapsedDays, &log.ScheduledDays, &peeked, &chosen, &implied); err != nil {
 			return nil, fmt.Errorf("db: review log: %w", err)
 		}
 		log.ReviewedAt, err = ParseTime(reviewed)
@@ -351,6 +360,7 @@ func (s *Store) ReviewLogs(ctx context.Context, cardID int64) ([]ReviewLog, erro
 			return nil, fmt.Errorf("db: review log: %w", err)
 		}
 		log.Peeked = peeked != 0
+		log.Implied = implied != 0
 		if chosen.Valid {
 			log.Chosen = chosen.String
 		}
@@ -426,8 +436,10 @@ func (s *Store) InsertUser(ctx context.Context, email, sub, role string) (int64,
 // published in-scope intro lesson are left out, the same way ListDueCards leaves them out.
 // now caps the latest-rating lookup: a review_log row after now is ignored.
 // lapseSince is the start of the recent-lapse window. An Again at that
-// time or later sets RecentLapse. The clock that produced now and lapseSince
-// is the caller's; this query does not read the wall clock.
+// time or later sets RecentLapse. An Again or Hard at that time or later
+// with implied = 0 sets RecentAgainOrHard (INIT-027/SPEC-004). The clock
+// that produced now and lapseSince is the caller's; this query does not
+// read the wall clock.
 func (s *Store) ListStudyCards(ctx context.Context, userID int64, now, lapseSince time.Time) ([]StudyCard, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -449,6 +461,14 @@ func (s *Store) ListStudyCards(ctx context.Context, userID int64, now, lapseSinc
 				WHERE rl.card_id = c.id
 				  AND rl.rating = 1
 				  AND rl.reviewed_at >= ?
+			) THEN 1 ELSE 0 END,
+			CASE WHEN EXISTS (
+				SELECT 1
+				FROM review_log AS rl
+				WHERE rl.card_id = c.id
+				  AND rl.rating IN (1, 2)
+				  AND rl.reviewed_at >= ?
+				  AND rl.implied = 0
 			) THEN 1 ELSE 0 END,
 			(
 				SELECT u.position
@@ -489,7 +509,7 @@ func (s *Store) ListStudyCards(ctx context.Context, userID int64, now, lapseSinc
 		  AND c.suspended = 0
 		  AND c.skill IN ('read', 'recall', 'listen', 'spell')
 `+introNotFinished+`
-		ORDER BY c.due, c.id`, FormatTime(now), FormatTime(lapseSince), userID, LearnerScope(userID))
+		ORDER BY c.due, c.id`, FormatTime(now), FormatTime(lapseSince), FormatTime(lapseSince), userID, LearnerScope(userID))
 	if err != nil {
 		return nil, fmt.Errorf("db: study cards: %w", err)
 	}
@@ -510,18 +530,18 @@ func (s *Store) ListStudyCards(ctx context.Context, userID int64, now, lapseSinc
 
 func scanStudyCard(scan func(dest ...any) error) (StudyCard, error) {
 	var latest sql.NullInt64
-	var recent int
+	var recent, recentAH int
 	var position, lesson sql.NullInt64
 	card, err := scanCard(func(dest ...any) error {
-		args := make([]any, 0, len(dest)+4)
+		args := make([]any, 0, len(dest)+5)
 		args = append(args, dest...)
-		args = append(args, &latest, &recent, &position, &lesson)
+		args = append(args, &latest, &recent, &recentAH, &position, &lesson)
 		return scan(args...)
 	})
 	if err != nil {
 		return StudyCard{}, err
 	}
-	out := StudyCard{Card: card, RecentLapse: recent != 0}
+	out := StudyCard{Card: card, RecentLapse: recent != 0, RecentAgainOrHard: recentAH != 0}
 	if latest.Valid {
 		out.HasRating = true
 		out.LatestRating = int(latest.Int64)
@@ -550,7 +570,7 @@ func (s *Store) RecentReviewRatings(ctx context.Context, userID int64, now time.
 		SELECT rl.rating
 		FROM review_log AS rl
 		JOIN cards AS c ON c.id = rl.card_id
-		WHERE c.user_id = ? AND rl.reviewed_at <= ?
+		WHERE c.user_id = ? AND rl.reviewed_at <= ? AND rl.implied = 0
 		ORDER BY rl.reviewed_at DESC, rl.id DESC
 		LIMIT ?`, userID, FormatTime(now), limit)
 	if err != nil {

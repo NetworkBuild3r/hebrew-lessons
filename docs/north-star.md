@@ -101,6 +101,8 @@ CREATE TABLE exposures (            -- seen in a story or dialogue, no question 
 
 **Outside teaching.** Tutor sessions, Grok conversations, and worksheets enter only as taught words and dated corrections, written over MCP. A taught word gets new cards due at the next study-day cutoff. Outside teaching never grades a card and never moves an existing card. Undo removes only cards the same taught row created that have no review ([ADR-0022](decisions/ADR-0022-learner-day-and-outside-teaching.md)).
 
+**Drill answers and implied reviews.** Every drill answer is stored. When a harder skill answers for a due easier card, the due card is scheduled Good with a `review_log` row marked `implied` and no attempts row; accuracy counts skip implied rows ([ADR-0023](decisions/ADR-0023-review-that-moves-on.md)).
+
 ### 4.3 Word states
 
 States are computed from cards, attempts, and exposures. They are never typed in by hand. Each skill has its own state, and the state belongs to the word's dictionary form (section 4.6). A word's overall state is its weakest *unlocked* core skill (`listen`, `read`, `recall`), using the order in the precedence list below. An answered skill with no card is `seen`, so a skill without a card holds the overall state at `seen`. A locked skill (section 4.1) shows as `locked`, not `unseen`, and is left out of the overall state, the "words I know" count, and the vocabulary estimate. Before the letters gate opens, `read` is locked, so a word's overall state comes from `listen` and `recall` only. When the gate opens, `read` joins in as `unseen` for every word, and the overall states are recomputed. The known-word count can drop on that day, and the Progress screen says why.
@@ -139,7 +141,7 @@ The evidence by skill is what turns "you miss this word" into a reason:
 | `read` right, `listen` wrong | Hearing | Audio-first drills, similar-sounding pairs, more listening |
 | `listen` right, `read` wrong | Decoding | Letter and niqqud drills on the letters involved |
 | Recognizes it, can't recall it | Production | Typing and recall from English |
-| Typed one letter off, the same pair again and again (ט/ת, כ/ח, ס/ש, א/ע, and the new ב/ו, ק/כ, א/ה/ע) | Spelling | Letter-pair drill (already exists as `letter_pair`, with the new pairs added) |
+| Typed or picked a look-alike or sound-alike letter pair again and again | Spelling | Letter-pair drill: a timed two-option pick in a real word; three right in a row (none slow once ten timed drill answers exist) clears the pair ([ADR-0023](decisions/ADR-0023-review-that-moves-on.md)) |
 | Knows the word alone, misses it with a prefix (וְהַבַּיִת) | Prefix parsing | Prefix drill (section 6) |
 | Knows the singular or masculine, misses the plural or feminine, or picks the wrong agreeing form | Gender and number agreement | Agreement drill (section 6) |
 | Misses several words from one root | Root not noticed | Root-family practice (section 6) |
@@ -230,7 +232,7 @@ Five bands of 20 words is too few for adaptive sampling without repeats. Target:
 | Story question | `read` or `listen` | Checked |
 | Flashcard (self-graded) | the card's skill | Self-graded, with plain labels: "Forgot", "Hard", "Got it", "Easy" |
 
-**Letter pairs.** The `letter_pair` drill and dictation grading cover ט/ת, כ/ח, ס/ש, and א/ע today. Add three more: ב/ו (both can sound like *v*), ק/כ (both *k*), and א/ה/ע (often silent, so easy to drop or swap in dictation). The pair a learner confuses is logged with the letters involved, and the diagnosis in section 4.5 reads it from there.
+**Letter pairs.** A letter drill is a timed two-option pick of the letter in a real word the learner missed. Typing logs a pair only for look-alike letters (the drill cue table plus ו/י) or sound-alike letters (א/ע, ט/ת, כּ/ק, ח/כ, ב/ו, שׂ/ס); a wrong pick of a one-letter-off word still logs the pair. Three right in a row, none slow once ten timed drill answers exist, clears the pair until new misses after the clear ([ADR-0023](decisions/ADR-0023-review-that-moves-on.md)).
 
 **Typing help.** A Hebrew on-screen keyboard in the standard Israeli layout, the physical-key mapping shown during the first sessions, final letters handled, and niqqud ignored when grading (that is already in `GradeTyped`). Typing errors feed the letter-pair confusion log.
 
@@ -244,7 +246,7 @@ Five bands of 20 words is too few for adaptive sampling without repeats. Target:
 
 Transliteration fading is an opt-in learner setting (`fade_translit`, off by default). When it is on, it can hide transliteration on words that are `known` for `read`, and the learner can turn it back on at any time. The validator requires transliteration and a gloss for every Hebrew word in a lesson, so that the display setting can always show them.
 
-**The session mix picks the skill.** The existing mix chooses cards. It also chooses the activity: the weakest skill for that word gets the question, and a checked activity is used over a self-graded one wherever one exists.
+**The session mix.** A sitting queues due cards and new cards only; a known card that is not due waits. New cards are capped by the last fifty non-implied reviews (2 below 80%, 5 from 80% to 90%, 8 above 90%), and at the retention target review seeds the next verified placement-list words when fewer new cards wait than the cap. A due card is asked through its own skill, or moved up to the skill that implies it (recall for read, spell for listen) when the own skill is known or solid and the harder card is clean; a checked activity is used over a self-graded one wherever one exists ([ADR-0023](decisions/ADR-0023-review-that-moves-on.md)).
 
 ## 7. From static lessons to lessons built for me
 

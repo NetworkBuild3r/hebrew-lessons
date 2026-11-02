@@ -7,7 +7,7 @@ spec_id: SPEC-004
 initiative_id: INIT-027
 title: "Only due cards; a due card leaves; strong words move up"
 domain: service
-status: pending
+status: complete
 primary_prompt: none
 model: inherit
 autonomy_level: auto_tests
@@ -44,7 +44,7 @@ Expertise: `.claude/agents/` is absent. Nothing was manufactured. Execute inline
     1. the card is not new;
     2. the word's view of the card's own skill is `Known` or `Solid`;
     3. the gate is open for the implying skill and a checked activity fits it;
-    4. the word's card for the implying skill, if it exists, has a latest rating that is not Again or Hard and no `RecentLapse`;
+    4. the word's card for the implying skill, if it exists, has no Again or Hard in `review_log` in the last 7 days (`ConfusionWindow`), implied rows excluded. `build` fills that from the logs it can see, with no per-card query in the mix. A missing implying card passes this rule;
     5. that implying card is not itself queued in this session.
   - The candidate carries what rule 4 needs. `build` fills it from the cards it already loaded, with no new query.
   - `CardRef` gains `MovedUp bool` and `OwnActivity activity.Kind`, the activity through the card's own skill.
@@ -79,7 +79,7 @@ Expertise: `.claude/agents/` is absent. Nothing was manufactured. Execute inline
 
 - [ ] ac-1: A build with 5 due known cards and 40 known cards due tomorrow queues exactly those 5 study cards (plus new cards within the allowance and drills).
 - [ ] ac-2: A due reviewed card is never dropped by `classify`. One with `RecentLapse` or `Confused` is struggling; one that is strong is known.
-- [ ] ac-3: A due read card of a word whose read view is Known, whose recall card is reviewed Good with no recent lapse and not queued, is served as a recall activity with `MovedUp = true`.
+- [ ] ac-3: A due read card of a word whose read view is Known, whose recall card has no Again or Hard in the last 7 days and is not queued, is served as a recall activity with `MovedUp = true`. A Hard on that recall card inside the 7 days blocks the move-up even when the latest rating is Good.
 - [ ] ac-4: Breaking any single move-up condition serves the read card through a read activity.
 - [ ] ac-5: A right moved-up answer graded Good or Easy schedules the read card Good with a review_log row marked `implied = 1` and no attempts row for read. The recall card is graded by the engine as before.
 - [ ] ac-6: A wrong, or Hard, moved-up answer writes nothing for the read card. A wrong one requeues a visit that asks read.

@@ -43,50 +43,50 @@ func modelCand(id int64, skill string, due time.Time) Candidate {
 	return c
 }
 
-// ac-2: the mix asks a word through the skill where its accuracy is lowest.
-func TestMixPicksListenPickForTheWeakestListenAccuracy(t *testing.T) {
+// INIT-027/SPEC-004: the review mix asks through the card's own skill, not the weakest.
+func TestMixAsksThroughTheCardsOwnSkill(t *testing.T) {
 	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	got := mix([]Candidate{modelCand(1, fsrs.SkillRead, now.Add(-time.Hour))}, TargetSuccess, now, 1)
 	if len(got) != 1 {
 		t.Fatalf("queue = %+v", got)
 	}
 	ref := got[0]
-	if ref.Activity != activity.ListenPick || ref.AskSkill != fsrs.SkillListen {
-		t.Fatalf("ref = %+v, want listen_pick through listen", ref)
+	if ref.Activity != activity.ReadPick || ref.AskSkill != fsrs.SkillRead {
+		t.Fatalf("ref = %+v, want read_pick through read", ref)
 	}
-	// The card the mix chose is still the due read card, which is what a flashcard grades.
+	if ref.MovedUp || ref.OwnActivity != activity.ReadPick {
+		t.Fatalf("ref = %+v, own skill is not strong enough to move up", ref)
+	}
 	if ref.CardID != 1 || ref.Skill != fsrs.SkillRead || ref.LexemeID != 1 {
 		t.Fatalf("ref = %+v, want the due read card", ref)
 	}
 }
 
-func TestMixAsksEachWordThroughItsOwnWeakestSkill(t *testing.T) {
+func TestMixAsksEachCardThroughItsOwnSkill(t *testing.T) {
+	// INIT-027/SPEC-004: review asks the card skill, not the word's weakest skill.
 	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	due := now.Add(-time.Hour)
-	build := func(id int64, weakest string) Candidate {
+	build := func(id int64, skill string) Candidate {
 		var views []activity.SkillView
 		for _, s := range activity.Skills {
-			acc := 0.9
-			if s == weakest {
-				acc = 0.2
-			}
-			views = append(views, skillView(s, learner.Learning, acc, 8))
+			views = append(views, skillView(s, learner.Learning, 0.5, 8))
 		}
 		c := knownCand(id, due.Add(time.Duration(id)*time.Minute))
+		c.Skill = skill
 		c.Skills, c.Facts, c.Exposed = views, richFacts, true
 		return c
 	}
-	got := mix([]Candidate{build(1, "listen"), build(2, "read"), build(3, "recall"), build(4, "spell")}, TargetSuccess, now, 1)
+	got := mix([]Candidate{
+		build(1, fsrs.SkillListen), build(2, fsrs.SkillRead),
+		build(3, fsrs.SkillRecall), build(4, fsrs.SkillSpell),
+	}, TargetSuccess, now, 1)
 	want := map[int64]activity.Kind{1: activity.ListenPick, 2: activity.ReadPick, 3: activity.TypeIt, 4: activity.Dictation}
 	if len(got) != 4 {
 		t.Fatalf("queue = %+v", got)
 	}
 	for _, ref := range got {
-		if ref.Activity != want[ref.CardID] {
-			t.Errorf("card %d: activity %q, want %q", ref.CardID, ref.Activity, want[ref.CardID])
-		}
-		if spec, _ := activity.SpecOf(ref.Activity); spec.Skill != ref.AskSkill {
-			t.Errorf("card %d: skill %q does not match activity %q", ref.CardID, ref.AskSkill, ref.Activity)
+		if ref.Activity != want[ref.CardID] || ref.AskSkill != ref.Skill {
+			t.Errorf("card %d: %+v, want activity %q through %q", ref.CardID, ref, want[ref.CardID], ref.Skill)
 		}
 	}
 }
@@ -99,7 +99,7 @@ func TestMixNeverAsksAFlashcardWhenACheckedActivityFits(t *testing.T) {
 	for round := 0; round < 300; round++ {
 		var cands []Candidate
 		n := 1 + rng.IntN(25)
-		fitsAny := map[int64]bool{}
+	ownFits := map[int64]bool{}
 		for i := 0; i < n; i++ {
 			id := int64(i + 1)
 			var views []activity.SkillView
@@ -113,21 +113,17 @@ func TestMixNeverAsksAFlashcardWhenACheckedActivityFits(t *testing.T) {
 			c.Facts = activity.Facts{HasGloss: rng.IntN(5) > 0, HasAudio: rng.IntN(5) > 0, GlossedOthers: rng.IntN(7), VoicedOthers: rng.IntN(7)}
 			c.Exposed = true
 			cands = append(cands, c)
-			for _, s := range activity.Skills {
-				if len(activity.Fitting(s, c.Facts)) > 0 {
-					fitsAny[id] = true
-				}
-			}
+			ownFits[id] = len(activity.Fitting(c.Skill, c.Facts)) > 0
 		}
 		for _, ref := range mix(cands, TargetSuccess, now, int64(round)) {
 			if ref.Kind == KindLetter || ref.Kind == KindPattern {
 				continue
 			}
-			if fitsAny[ref.CardID] && ref.Activity == activity.Flashcard {
-				t.Fatalf("round %d: card %d is a flashcard although a checked activity fits", round, ref.CardID)
+			if ownFits[ref.CardID] && ref.Activity == activity.Flashcard && !ref.MovedUp {
+				t.Fatalf("round %d: card %d is a flashcard although its own skill fits", round, ref.CardID)
 			}
-			if !fitsAny[ref.CardID] && (ref.Activity != activity.Flashcard || ref.AskSkill != ref.Skill) {
-				t.Fatalf("round %d: card %d has %+v but nothing fits: want a flashcard through its own skill", round, ref.CardID, ref)
+			if !ownFits[ref.CardID] && !ref.MovedUp && (ref.Activity != activity.Flashcard || ref.AskSkill != ref.Skill) {
+				t.Fatalf("round %d: card %d has %+v but own skill fits nothing", round, ref.CardID, ref)
 			}
 		}
 	}
@@ -182,17 +178,17 @@ func TestMixRotatesTheEverydayAndTheMatchActivity(t *testing.T) {
 		kinds = append(kinds, ref.Activity)
 	}
 	want := []activity.Kind{
-		activity.ListenPick, activity.ListenPick, activity.AudioMatch,
-		activity.ListenPick, activity.ListenPick, activity.AudioMatch,
-		activity.ListenPick, activity.ListenPick, activity.AudioMatch,
+		activity.ReadPick, activity.ReadPick, activity.WordMatch,
+		activity.ReadPick, activity.ReadPick, activity.WordMatch,
+		activity.ReadPick, activity.ReadPick, activity.WordMatch,
 	}
 	if !reflect.DeepEqual(kinds, want) {
 		t.Fatalf("activities = %v, want %v", kinds, want)
 	}
 }
 
-// A word that comes up twice is asked through two skills, not the same one twice.
-func TestMixAsksARepeatedWordThroughAnotherSkill(t *testing.T) {
+// Two due cards of one word are each asked through their own skill.
+func TestMixAsksARepeatedWordThroughEachCardsSkill(t *testing.T) {
 	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	he := modelCand(1, fsrs.SkillRead, now.Add(-2*time.Hour))
 	en := modelCand(2, fsrs.SkillRecall, now.Add(-time.Hour))
@@ -201,35 +197,25 @@ func TestMixAsksARepeatedWordThroughAnotherSkill(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("queue = %+v", got)
 	}
-	if got[0].AskSkill == got[1].AskSkill {
-		t.Fatalf("one word asked through %q twice: %+v", got[0].AskSkill, got)
-	}
-	if got[0].AskSkill != fsrs.SkillListen || got[1].AskSkill != fsrs.SkillSpell {
-		t.Fatalf("skills = %q then %q, want weakest first: listen then spell", got[0].AskSkill, got[1].AskSkill)
+	if got[0].AskSkill != fsrs.SkillRead || got[1].AskSkill != fsrs.SkillRecall {
+		t.Fatalf("skills = %q then %q, want read then recall", got[0].AskSkill, got[1].AskSkill)
 	}
 }
 
 func TestMixHonoursTheGate(t *testing.T) {
 	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	c := modelCand(1, fsrs.SkillRecall, now.Add(-time.Hour))
-	// Read is the weakest skill, but the letters check has not been passed.
 	c.Skills = []activity.SkillView{
 		skillView("listen", learner.Known, 0.95, 8), skillView("read", learner.Struggling, 0.1, 8),
 		skillView("recall", learner.Struggling, 0.1, 8), skillView("spell", learner.Struggling, 0.1, 8),
 	}
 	closed := mixGate([]Candidate{c}, TargetSuccess, now, 1, activity.Gate{})
-	if closed[0].Activity != activity.ListenPick || closed[0].AskSkill != fsrs.SkillListen {
-		t.Fatalf("before the gate: %+v, want listening only", closed[0])
+	if closed[0].Activity != activity.Flashcard || closed[0].AskSkill != fsrs.SkillRecall {
+		t.Fatalf("closed gate: %+v, want a flashcard through recall", closed[0])
 	}
 	opened := mixGate([]Candidate{c}, TargetSuccess, now, 1, activity.OpenGate())
-	if opened[0].AskSkill == fsrs.SkillListen {
-		t.Fatalf("after the gate: %+v, want a failing skill", opened[0])
-	}
-	// With no clip, a closed gate leaves nothing to check: the card is a flashcard.
-	c.Facts.HasAudio = false
-	flash := mixGate([]Candidate{c}, TargetSuccess, now, 1, activity.Gate{})
-	if flash[0].Activity != activity.Flashcard || flash[0].AskSkill != fsrs.SkillRecall {
-		t.Fatalf("no clip, closed gate: %+v", flash[0])
+	if opened[0].Activity != activity.TypeIt || opened[0].AskSkill != fsrs.SkillRecall {
+		t.Fatalf("open gate: %+v, want type_it through recall", opened[0])
 	}
 }
 
@@ -291,12 +277,12 @@ func TestClassifyListenAndSpellCards(t *testing.T) {
 			want kind
 		}{
 			"good, known by its own rating": {func(*Candidate) {}, kindKnown},
-			"good later":                    {func(c *Candidate) { c.Due = later }, kindKnown},
+			"good later":                    {func(c *Candidate) { c.Due = later }, kindSkip},
 			"again":                         {func(c *Candidate) { c.Latest = int(fsrs.Again) }, kindStruggle},
 			"lapses":                        {func(c *Candidate) { c.Lapses = StruggleLapses }, kindStruggle},
 			"confused":                      {func(c *Candidate) { c.Confused = true }, kindStruggle},
 			"unreviewed":                    {func(c *Candidate) { c.HasRating = false }, kindNew},
-			"recent lapse":                  {func(c *Candidate) { c.RecentLapse = true }, kindSkip},
+			"recent lapse":                  {func(c *Candidate) { c.RecentLapse = true }, kindStruggle},
 		} {
 			c := base
 			tc.edit(&c)
@@ -376,16 +362,15 @@ func lessonAttempts(t *testing.T, svc *Service, userID, lexemeID int64, skill st
 	}
 }
 
-func TestBuildSessionAsksThroughTheWeakestSkill(t *testing.T) {
+func TestBuildSessionAsksThroughTheCardsOwnSkill(t *testing.T) {
+	// INIT-027/SPEC-004: weakest listen no longer steals the due read card.
 	svc, store, clk := openSvc(t, 1)
 	userID := mustUser(t, store)
 	fillPool(t, store, 30)
 	word := addVoicedLexeme(t, store, "ספר", "book", true)
 	due, reviewed := clk.Now().Add(-time.Hour), clk.Now().Add(-48*time.Hour)
 	readCard := addCardFor(t, store, userID, word, fsrs.SkillRead, due, int(fsrs.Good), reviewed)
-	// The recall card is not due yet. It has one good review, as the read card has.
 	addCardFor(t, store, userID, word, fsrs.SkillRecall, clk.Now().Add(time.Hour), int(fsrs.Good), reviewed)
-	// Reading and recall are fine. Listening is failing: one right of six.
 	lessonAttempts(t, svc, userID, word, fsrs.SkillRead, 6, 0)
 	lessonAttempts(t, svc, userID, word, fsrs.SkillRecall, 6, 0)
 	lessonAttempts(t, svc, userID, word, fsrs.SkillListen, 1, 5)
@@ -401,8 +386,8 @@ func TestBuildSessionAsksThroughTheWeakestSkill(t *testing.T) {
 	if ref == nil {
 		t.Fatalf("the due read card is not in the queue: %+v", got)
 	}
-	if ref.Activity != activity.ListenPick || ref.AskSkill != fsrs.SkillListen {
-		t.Fatalf("ref = %+v, want listen_pick through listen", *ref)
+	if ref.AskSkill == fsrs.SkillListen {
+		t.Fatalf("ref = %+v: review must not route to the weakest skill", *ref)
 	}
 	if ref.Skill != fsrs.SkillRead || ref.LexemeID != word || ref.Intro {
 		t.Fatalf("ref = %+v", *ref)
@@ -435,8 +420,8 @@ func TestBuildSessionFollowsTheGate(t *testing.T) {
 	addCardFor(t, st, userID, word, fsrs.SkillRecall, clk.Now().Add(-time.Hour), int(fsrs.Good), clk.Now().Add(-48*time.Hour))
 	lessonAttempts(t, svc, userID, word, fsrs.SkillRecall, 1, 5)
 	for _, ref := range drain(t, mustBuild(t, svc, userID)) {
-		if ref.LexemeID == word && (ref.Activity != activity.ListenPick || ref.AskSkill != fsrs.SkillListen) {
-			t.Fatalf("ref = %+v: before the letters check only listening is asked", ref)
+		if ref.LexemeID == word && (ref.Activity != activity.Flashcard || ref.AskSkill != fsrs.SkillRecall) {
+			t.Fatalf("ref = %+v: closed gate keeps a flashcard through the card skill", ref)
 		}
 	}
 	// WithGate is the way a caller gives the real gate.
@@ -549,13 +534,13 @@ func TestAnsweredClosesACheckedVisit(t *testing.T) {
 	if !ok || first.Activity == "" || first.Activity == activity.Flashcard {
 		t.Fatalf("first = %+v, %v: want a checked activity", first, ok)
 	}
-	if err := sess.Answered(first.CardID+1000, true); !errors.Is(err, ErrNotServed) {
+	if _, err := sess.Answered(ctx, first.CardID+1000, activity.Result{Correct: true}); !errors.Is(err, ErrNotServed) {
 		t.Fatalf("err = %v, want ErrNotServed for a card that was not served", err)
 	}
-	if err := sess.Answered(first.CardID, true); err != nil {
+	if _, err := sess.Answered(ctx, first.CardID, activity.Result{Correct: true, Rating: fsrs.Good}); err != nil {
 		t.Fatal(err)
 	}
-	if err := sess.Answered(first.CardID, true); !errors.Is(err, ErrNotServed) {
+	if _, err := sess.Answered(ctx, first.CardID, activity.Result{Correct: true, Rating: fsrs.Good}); !errors.Is(err, ErrNotServed) {
 		t.Fatalf("second Answered err = %v, want ErrNotServed", err)
 	}
 	_, total, _ := sess.Place()
@@ -565,7 +550,7 @@ func TestAnsweredClosesACheckedVisit(t *testing.T) {
 
 	// A wrong answer puts the visit back once.
 	second, _ := sess.Next()
-	if err := sess.Answered(second.CardID, false); err != nil {
+	if _, err := sess.Answered(ctx, second.CardID, activity.Result{Correct: false}); err != nil {
 		t.Fatal(err)
 	}
 	if _, total, _ = sess.Place(); total != len(ids)+1 {
@@ -591,7 +576,7 @@ func TestAnsweredClosesACheckedVisit(t *testing.T) {
 			break
 		}
 		visits[next.CardID]++
-		if err := sess2.Answered(next.CardID, false); err != nil {
+		if _, err := sess2.Answered(ctx, next.CardID, activity.Result{Correct: false}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -615,7 +600,7 @@ func TestAnsweredRefusesFlashcards(t *testing.T) {
 	if card.Activity != activity.Flashcard {
 		t.Fatalf("card = %+v", card)
 	}
-	if err := sess.Answered(card.CardID, true); !errors.Is(err, ErrNotChecked) {
+	if _, err := sess.Answered(context.Background(), card.CardID, activity.Result{Correct: true}); !errors.Is(err, ErrNotChecked) {
 		t.Fatalf("err = %v, want ErrNotChecked", err)
 	}
 	// The serve is untouched: the flashcard can still be graded as before.

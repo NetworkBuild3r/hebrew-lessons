@@ -7,7 +7,7 @@ spec_id: SPEC-001
 initiative_id: INIT-027
 title: "ADR-0023: review that moves on when you know it"
 domain: docs
-status: pending
+status: complete
 primary_prompt: none
 model: inherit
 autonomy_level: auto_tests

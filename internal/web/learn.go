@@ -34,8 +34,8 @@ const maxStudyQueues = 128
 // server holds the learner's database and the in-memory study queues.
 // Queues are keyed by the auth session id hash. A restart drops them.
 // An auth session can slide for 30 days. A study queue does not: it is
-// rebuilt when it is Done, and when the store clock's UTC date is no
-// longer the date it was built.
+// rebuilt when it is Done, and when the store clock passes the study-day
+// rollover (4:00 in the learner's zone).
 type server struct {
 	store    *db.Store
 	audioDir string
@@ -70,17 +70,42 @@ type studyQueue struct {
 	done     bool
 	revealed bool
 	builtAt  time.Time
+	// rollover is studyday.DueCutoff when the queue was built. Answers and the
+	// queue itself last until then (INIT-027/SPEC-006, ADR-0023 D6).
+	rollover time.Time
 	// seed is the mix seed for this sitting. It is drawn once, when the queue
-	// is built, and kept until the queue is Done or the UTC day changes, so a
+	// is built, and kept until the queue is Done or the study day ends, so a
 	// reload serves the same order.
 	seed int64
-	// asked is the pair letter the reveal posted. The back and the grade
-	// keep it, so a study-day rollover cannot switch the letter.
+	// asked is the letter a two-letter letter step asks. It is pinned when the
+	// step is served (and kept after a pick), so a study-day rollover cannot
+	// switch the letter mid-step.
 	asked string
+	// servedAt is when the current two-letter letter step was served. Drill
+	// latency is now.Sub(servedAt).
+	servedAt time.Time
 	// item is the checked activity the current card is asked through. It is nil for a
 	// flashcard and a drill. fb is set from the checked answer until Continue.
-	item *activity.Item
-	fb   *answerState
+	// drillFB is set from a letter pick until Continue.
+	item    *activity.Item
+	fb      *answerState
+	drillFB *drillState
+	// tally is a copy of Session.Tally when the sitting finished, so a reload
+	// of the done screen shows the same rows.
+	tally    session.Tally
+	hasTally bool
+}
+
+// sameDay reports whether now is still before this queue's study-day rollover.
+func (q *studyQueue) sameDay(now time.Time) bool {
+	return q != nil && !q.rollover.IsZero() && now.Before(q.rollover)
+}
+
+// drillState is a letter-pick answer kept until Continue so a reload of /review
+// shows the same feedback.
+type drillState struct {
+	correct bool
+	cleared bool
 }
 
 func newServer(store *db.Store) *server {
@@ -94,6 +119,12 @@ func newServer(store *db.Store) *server {
 		// draws a seed for the sitting and passes that to BuildSessionWithSeed.
 		s.study = session.New(store, store.Clock(), 1)
 		s.useActivityKey(nil)
+		appLoc, err := studyday.AppZone("")
+		if err == nil {
+			if zones, zerr := studyday.NewResolver(store, appLoc); zerr == nil {
+				s.zones = zones
+			}
+		}
 	}
 	return s
 }
@@ -318,17 +349,22 @@ func (s *server) sessionKey(r *http.Request) (string, *auth.User, bool) {
 }
 
 // queueLocked returns the study queue for this auth session.
-// A queue built on another UTC day is rebuilt. A finished sitting is kept
+// A queue past its study-day rollover is rebuilt. A finished sitting is kept
 // when the rebuild is also finished, so its count stays on the done screen.
 // The caller holds s.mu.
 func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*studyQueue, error) {
 	now := s.now()
 	prev := s.queues[key]
-	if prev != nil && prev.userID == userID && !prev.done && sameStudyDay(prev.builtAt, now) {
+	if prev != nil && prev.userID == userID && !prev.done && prev.sameDay(now) {
 		return prev, nil
 	}
+	z, err := s.learnerZone(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	rollover := studyday.DueCutoff(now, z)
 	if s.study == nil {
-		q := &studyQueue{userID: userID, done: true, builtAt: now}
+		q := &studyQueue{userID: userID, done: true, builtAt: now, rollover: rollover}
 		s.rememberLocked(key, q, now)
 		return q, nil
 	}
@@ -345,13 +381,13 @@ func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*st
 	if built.UserID() != userID {
 		return nil, fmt.Errorf("web: session belongs to learner %d, not %d", built.UserID(), userID)
 	}
-	q := &studyQueue{userID: userID, sess: built, builtAt: now, seed: seed}
+	q := &studyQueue{userID: userID, sess: built, builtAt: now, seed: seed, rollover: rollover}
 	if err := s.advance(ctx, q); err != nil {
 		return nil, err
 	}
 	// A finished sitting stays on the next read when nothing new is due, so the
 	// done screen can still name how many cards that sitting reviewed.
-	if q.done && prev != nil && prev.userID == userID && prev.done && prev.answered > 0 && sameStudyDay(prev.builtAt, now) {
+	if q.done && prev != nil && prev.userID == userID && prev.done && prev.answered > 0 && prev.sameDay(now) {
 		return prev, nil
 	}
 	s.rememberLocked(key, q, now)
@@ -359,7 +395,7 @@ func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*st
 }
 
 // rememberLocked stores q and keeps the map within maxStudyQueues.
-// Queues from another UTC day are dropped first. The caller holds s.mu.
+// Queues past their study-day rollover are dropped first. The caller holds s.mu.
 func (s *server) rememberLocked(key string, q *studyQueue, now time.Time) {
 	s.evictLocked(now)
 	delete(s.queues, key)
@@ -369,11 +405,11 @@ func (s *server) rememberLocked(key string, q *studyQueue, now time.Time) {
 	s.queues[key] = q
 }
 
-// evictLocked drops queues built on another UTC day, then the oldest
+// evictLocked drops queues past their study-day rollover, then the oldest
 // until the map is within maxStudyQueues. The caller holds s.mu.
 func (s *server) evictLocked(now time.Time) {
 	for key, q := range s.queues {
-		if q == nil || !sameStudyDay(q.builtAt, now) {
+		if q == nil || !q.sameDay(now) {
 			delete(s.queues, key)
 		}
 	}
@@ -429,32 +465,25 @@ func (s *server) now() time.Time {
 	return time.Now().UTC()
 }
 
-// sameStudyDay reports whether built and now fall on the same UTC date.
-// The study queue is rebuilt when the store clock crosses that date.
-func sameStudyDay(built, now time.Time) bool {
-	if built.IsZero() {
-		return false
-	}
-	by, bm, bd := built.UTC().Date()
-	ny, nm, nd := now.UTC().Date()
-	return by == ny && bm == nm && bd == nd
-}
-
 // advance serves the next card. For a word card it records the exposure of a new
 // word, and for a card the mix chose a checked activity for, it builds the item the
 // screen asks. When the lexicon cannot support the activity after all, the visit falls
 // back to a flashcard, which the session grades through the card's own skill.
+// A two-letter letter step pins asked and servedAt here for the timed pick.
 func (s *server) advance(ctx context.Context, q *studyQueue) error {
 	if q != nil {
 		q.revealed = false
 		q.asked = ""
+		q.servedAt = time.Time{}
 		q.item = nil
 		q.fb = nil
+		q.drillFB = nil
 	}
 	if q == nil || q.sess == nil {
 		if q != nil {
 			q.done = true
 			q.has = false
+			q.snapshotTally()
 		}
 		return nil
 	}
@@ -466,13 +495,34 @@ func (s *server) advance(ctx context.Context, q *studyQueue) error {
 		q.total = total
 		q.index = total
 		q.retry = false
+		q.snapshotTally()
 		return nil
 	}
 	q.cur = card
 	q.has = true
 	q.done = false
 	q.index, q.total, q.retry = q.sess.Place()
-	return s.prepareItem(ctx, q)
+	if err := s.prepareItem(ctx, q); err != nil {
+		return err
+	}
+	if parts := pairParts(q); parts != nil {
+		z, err := s.learnerZone(ctx, q.userID)
+		if err != nil {
+			return err
+		}
+		q.asked = pickPart(q.cur.CardID, studyday.DueCutoff(s.now(), z), parts)
+		q.servedAt = s.now()
+	}
+	return nil
+}
+
+// snapshotTally stores the sitting's counters on the queue for the done screen.
+func (q *studyQueue) snapshotTally() {
+	if q == nil || q.sess == nil {
+		return
+	}
+	q.tally = q.sess.Tally()
+	q.hasTally = true
 }
 
 func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error) {
@@ -488,6 +538,12 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 	vm.Done = q.done || !q.has
 	vm.Revealed = q.revealed
 	if vm.Done {
+		if q.hasTally {
+			vm.MovedUp = q.tally.MovedUp
+			vm.PairsCleared = q.tally.PairsCleared
+			vm.Slow = q.tally.Slow
+			vm.NewMet = q.tally.NewMet
+		}
 		return vm, nil
 	}
 	ref := q.cur
@@ -508,10 +564,41 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 		if err := s.fillDrill(ctx, q.userID, &vm); err != nil {
 			return ReviewCardVM{}, err
 		}
-		// A reveal posted the letter. Later renders, including one after the
-		// study day rolls, show that letter instead of picking again.
+		parts := splitDrillKey(ref.Key)
+		letterPair := ref.Kind == session.KindLetter && len(parts) >= 2
 		if q.asked != "" {
 			vm.Asked = q.asked
+		}
+		switch {
+		case letterPair && q.drillFB != nil:
+			// Pick feedback: show the full answer (sides, cues, example).
+			vm.Drill = q.drillFB
+			vm.Pointed = q.asked
+			vm.Unpointed = units.Plain(q.asked)
+			vm.Revealed = true
+		case letterPair:
+			// Timed pick: blank the example (or letter clip/sound), two buttons.
+			vm.Pick = true
+			vm.PickLetters = parts
+			vm.Asked = q.asked
+			if vm.ExampleText != "" {
+				vm.BlankedExample = blankAskedLetter(vm.ExampleText, q.asked)
+				vm.Pointed = ""
+				vm.Unpointed = ""
+			} else {
+				// Prompt is the asked letter's clip or sound; the glyph stays off.
+				// Drop any other letter's clip fillDrill may have stored.
+				vm.Pointed = ""
+				vm.Unpointed = ""
+				vm.AudioURL = ""
+				if url, err := s.clipURL(ctx, q.asked, ""); err != nil {
+					return ReviewCardVM{}, err
+				} else if url != "" {
+					vm.AudioURL = url
+				}
+			}
+		case q.asked != "":
+			// Single-letter reveal path: keep the posted letter.
 			vm.Pointed = q.asked
 			vm.Unpointed = units.Plain(q.asked)
 		}
@@ -662,7 +749,11 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 		}
 		vm.Sides = sides
 	}
-	if vm.AudioURL == "" && vm.Kind == session.KindLetter {
+	// A two-letter pick that has an example word uses that word's clip only.
+	// A missing example clip must not fall back to a pair letter, or the
+	// asked letter's sound is on the page before the pick.
+	pairWithExample := vm.Kind == session.KindLetter && len(parts) >= 2 && vm.ExampleText != ""
+	if vm.AudioURL == "" && vm.Kind == session.KindLetter && !pairWithExample {
 		for _, part := range parts {
 			url, err := s.clipURL(ctx, part, "")
 			if err != nil {
@@ -674,12 +765,29 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 			}
 		}
 	}
-	// The front shows the asked letter. The pair key was the lookup above.
-	if vm.Kind == session.KindLetter && vm.Asked != "" {
+	// A single-letter front shows that letter. Pair picks set Pointed in cardVM.
+	if vm.Kind == session.KindLetter && vm.Asked != "" && len(parts) < 2 {
 		vm.Pointed = vm.Asked
 		vm.Unpointed = units.Plain(vm.Asked)
 	}
 	return nil
+}
+
+// blankAskedLetter replaces the first occurrence of asked in text with a cloze blank.
+func blankAskedLetter(text, asked string) string {
+	if text == "" || asked == "" {
+		return text
+	}
+	if i := strings.Index(text, asked); i >= 0 {
+		return text[:i] + "___" + text[i+len(asked):]
+	}
+	plainAsked := units.Plain(asked)
+	if plainAsked != "" && plainAsked != asked {
+		if i := strings.Index(text, plainAsked); i >= 0 {
+			return text[:i] + "___" + text[i+len(plainAsked):]
+		}
+	}
+	return text
 }
 
 // letterSound is a Latin reading stored for this exact letter.
@@ -859,9 +967,31 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 		Revealed:      vm.Revealed,
 		Answered:      vm.Answered,
 		Correct:       vm.Correct,
+		MovedUp:       vm.MovedUp,
+		PairsCleared:  vm.PairsCleared,
+		Slow:          vm.Slow,
+		NewMet:        vm.NewMet,
 	}
 	if vm.Item != nil {
 		card.Act = activityView(lang, csrf, vm)
+		return card
+	}
+	if vm.Pick {
+		card.Pick = true
+		card.PickLetters = vm.PickLetters
+		card.BlankedExample = vm.BlankedExample
+		card.ExampleGloss = vm.ExampleGloss
+		card.AudioURL = vm.AudioURL
+		if vm.ExampleText == "" {
+			// No example: surface the asked letter's English sound as the prompt,
+			// never its name or the tell-apart cue.
+			for _, side := range vm.Sides {
+				if side.Hebrew == vm.Asked && side.Sound != "" {
+					card.PickSound = side.Sound
+					break
+				}
+			}
+		}
 		return card
 	}
 	card.Sides = vm.Sides
@@ -873,6 +1003,13 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 	card.PairNote = vm.PairNote
 	card.DageshNote = vm.DageshNote
 	card.DageshHard = vm.DageshHard
+	if vm.Drill != nil {
+		card.AfterDrill = true
+		card.DrillCorrect = vm.Drill.correct
+		card.DrillCleared = vm.Drill.cleared
+		card.Revealed = true
+		return card
+	}
 	// The mode's hold decides what the front may carry. A revealed card passes through.
 	return views.ConcealFront(card)
 }

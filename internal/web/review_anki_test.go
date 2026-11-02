@@ -251,6 +251,30 @@ func testAnkiKind(t *testing.T, kind string) {
 
 	front := getLearner(t, h, hx, "/review")
 	assertAnkiFront(t, front, spec)
+	if kind == "pair" {
+		assertLetterPickFront(t, front, spec.pair)
+		cardID := mustCardID(t, front)
+		if rec := getReveal(t, h, hx, cardID); rec.Code != http.StatusBadRequest {
+			t.Fatalf("pair reveal = %d, want 400", rec.Code)
+		}
+		if rec := postGrade(t, h, hx, cardID, "3", "https://learn.example"); rec.Code != http.StatusBadRequest {
+			t.Fatalf("pair grade = %d, want 400", rec.Code)
+		}
+		fb := postDrill(t, h, hx, cardID, spec.pair[0])
+		if fb.Code != http.StatusOK {
+			t.Fatalf("pair pick = %d\n%s", fb.Code, fb.Body.String())
+		}
+		assertAnkiBack(t, fb.Body.String(), spec, clipID, false)
+		plainFront := getLearner(t, h, plain, "/review")
+		assertLetterPickFront(t, plainFront, spec.pair)
+		plainID := mustCardID(t, plainFront)
+		plainFB := postDrill(t, h, plain, plainID, spec.pair[1])
+		if plainFB.Code != http.StatusOK {
+			t.Fatalf("plain pair pick = %d\n%s", plainFB.Code, plainFB.Body.String())
+		}
+		assertAnkiBack(t, plainFB.Body.String(), spec, clipID, false)
+		return
+	}
 	if again := getLearner(t, h, hx, "/review"); attr(t, again, "data-pointed") != attr(t, front, "data-pointed") {
 		t.Fatalf("refresh changed the prompt from %s to %s", attr(t, front, "data-pointed"), attr(t, again, "data-pointed"))
 	}
@@ -311,12 +335,8 @@ func TestReviewDageshPairUsesStoredSounds(t *testing.T) {
 	if strings.Contains(front, "With the dot") || strings.Contains(front, "pe-sound") || strings.Contains(front, "fe-sound") || strings.Contains(front, dot+"/פ") {
 		t.Fatalf("dagesh answer leaked onto the front\n%s", front)
 	}
-	hasDot := strings.Contains(front, dot)
-	hasBare := strings.Contains(front, "פ") && !hasDot
-	if hasDot == hasBare {
-		t.Fatalf("front should show exactly one of the dagesh pair\n%s", front)
-	}
-	shown := getReveal(t, h, learner, mustCardID(t, front), attr(t, front, "data-pointed"))
+	assertLetterPickFront(t, front, []string{dot, "פ"})
+	shown := postDrill(t, h, learner, mustCardID(t, front), "פ")
 	body := shown.Body.String()
 	if shown.Code != http.StatusOK || !strings.Contains(body, "With the dot: p. Without: f.") || !strings.Contains(body, dot) || !strings.Contains(body, "פ") {
 		t.Fatalf("dagesh back = %d\n%s", shown.Code, body)
@@ -373,10 +393,10 @@ func seedAnkiLexeme(t *testing.T, store *db.Store, now time.Time, kind string) (
 		clipText = "גֶּשֶׁם"
 		spec.key = "ג/פ"
 		spec.pair = []string{"ג", "פ"}
-		spec.prompt = views.PromptLetter
-		spec.front = []string{spec.prompt}
-		spec.banned = []string{views.LetterName("ג"), views.LetterName("פ"), gimelName, feName, "gimel", "g as in go", "f as in fun", "rain-shower", "geshem-ex", "/audio/", "ג/פ", "Tell them apart"}
-		spec.answers = []string{gimelName, "gimel", "g as in go", feName, "fe", "f as in fun", "ג", "פ", "rain-shower", "geshem-ex", clipText}
+		spec.prompt = "Which letter is missing?"
+		spec.front = []string{spec.prompt, "___"}
+		spec.banned = []string{views.LetterName("ג"), views.LetterName("פ"), gimelName, feName, "gimel", "g as in go", "f as in fun", "rain-shower", "geshem-ex", "ג/פ", "Tell them apart"}
+		spec.answers = []string{gimelName, "gimel", "g as in go", feName, "fe", "f as in fun", "ג", "פ", "rain-shower", "geshem-ex", clipText, "Tell them apart"}
 		word.exampleID = addLexeme(t, store, clipText, "rain-shower", "geshem-ex", "m", "")
 	case "pattern":
 		clipText = "הוא"
@@ -439,17 +459,20 @@ func assertAnkiFront(t *testing.T, body string, spec ankiSpec) {
 			t.Fatalf("front missing %q\n%s", want, body)
 		}
 	}
-	if !strings.Contains(body, "Show answer") || !strings.Contains(body, "autofocus") || !strings.Contains(body, `method="get"`) || !strings.Contains(body, `hx-get="/_hx/review/reveal"`) {
-		t.Fatal("front has no autofocused GET Show answer")
-	}
-	if strings.Contains(body, "<details") {
-		t.Fatal("show answer used details")
-	}
 	if len(spec.pair) == 2 {
-		a, b := spec.pair[0], spec.pair[1]
-		hasA, hasB := strings.Contains(body, a), strings.Contains(body, b)
-		if hasA == hasB {
-			t.Fatalf("front should show exactly one of %s/%s\n%s", a, b, body)
+		assertLetterPickFront(t, body, spec.pair)
+	} else {
+		if !strings.Contains(body, "Show answer") || !strings.Contains(body, "autofocus") || !strings.Contains(body, `method="get"`) || !strings.Contains(body, `hx-get="/_hx/review/reveal"`) {
+			t.Fatal("front has no autofocused GET Show answer")
+		}
+		if strings.Contains(body, "<details") {
+			t.Fatal("show answer used details")
+		}
+		if !spec.clipOn && strings.Contains(body, "/audio/") {
+			t.Fatal("front played the answer clip")
+		}
+		if spec.clipOn && !strings.Contains(body, "/audio/") {
+			t.Fatal("prompt clip missing")
 		}
 	}
 	if strings.Contains(body, `name="rating"`) || strings.Contains(body, "Forgot") || strings.Contains(body, "Got it") {
@@ -461,16 +484,24 @@ func assertAnkiFront(t *testing.T, body string, spec ankiSpec) {
 			t.Fatalf("front contains answer %q", banned)
 		}
 	}
-	if !spec.clipOn && strings.Contains(body, "/audio/") {
-		t.Fatal("front played the answer clip")
-	}
-	if spec.clipOn && !strings.Contains(body, "/audio/") {
-		t.Fatal("prompt clip missing")
-	}
 }
 
 func assertAnkiBack(t *testing.T, body string, spec ankiSpec, clipID string, fullPage bool) {
 	t.Helper()
+	if len(spec.pair) == 2 {
+		if !strings.Contains(body, `data-activity="letter-pick"`) || !strings.Contains(body, `data-phase="feedback"`) {
+			t.Fatalf("pair feedback missing pick phase\n%s", body)
+		}
+		if !strings.Contains(body, "Continue") || !strings.Contains(body, `action="/_hx/review/next"`) {
+			t.Fatalf("pair feedback missing Continue\n%s", body)
+		}
+		for _, want := range spec.answers {
+			if !strings.Contains(body, want) {
+				t.Fatalf("pair feedback missing %q\n%s", want, body)
+			}
+		}
+		return
+	}
 	if !strings.Contains(body, `name="rating"`) || !strings.Contains(body, "Forgot") || !strings.Contains(body, "Easy") || !strings.Contains(body, `data-revealed="true"`) {
 		t.Fatalf("back is missing the grades\n%s", body)
 	}
@@ -562,23 +593,39 @@ func TestReviewFrontHasNoAnswerHeading(t *testing.T) {
 			}
 			assertNoAnswerHeading(t, page)
 			id := mustCardID(t, page)
-			asked := ""
+			var body string
 			if kind == "pair" {
-				asked = attr(t, page, "data-pointed")
+				fb := postDrill(t, h, hx, id, "ג")
+				if fb.Code != http.StatusOK {
+					t.Fatalf("pair pick = %d\n%s", fb.Code, fb.Body.String())
+				}
+				next := actPost(t, h, hx, "/_hx/review/next", url.Values{
+					"_csrf": {hx.csrf}, "card_id": {strconv.FormatInt(id, 10)},
+				})
+				if next.Code != http.StatusOK {
+					t.Fatalf("pair continue = %d\n%s", next.Code, next.Body.String())
+				}
+				body = next.Body.String()
+			} else {
+				asked := ""
+				if shown := getReveal(t, h, hx, id, asked); shown.Code != http.StatusOK {
+					t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
+				}
+				next := postGrade(t, h, hx, id, "3", "https://learn.example", asked)
+				if next.Code != http.StatusOK {
+					t.Fatalf("next front = %d\n%s", next.Code, next.Body.String())
+				}
+				body = next.Body.String()
 			}
-			if shown := getReveal(t, h, hx, id, asked); shown.Code != http.StatusOK {
-				t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
-			}
-			next := postGrade(t, h, hx, id, "3", "https://learn.example", asked)
-			if next.Code != http.StatusOK {
-				t.Fatalf("next front = %d\n%s", next.Code, next.Body.String())
-			}
-			body := next.Body.String()
 			if strings.Contains(body, "<!doctype html>") {
 				t.Fatal("htmx front rendered a full page")
 			}
 			assertNoAnswerHeading(t, body)
-			if !strings.Contains(body, "Show answer") || strings.Contains(body, `name="rating"`) {
+			if kind == "pair" {
+				if !strings.Contains(body, `data-activity="letter-pick"`) || strings.Contains(body, `name="rating"`) {
+					t.Fatalf("htmx response was not the next pick front\n%s", body)
+				}
+			} else if !strings.Contains(body, "Show answer") || strings.Contains(body, `name="rating"`) {
 				t.Fatalf("htmx response was not the next front\n%s", body)
 			}
 			// Read and listen clear the gloss before the HTTP render, so a
@@ -654,12 +701,13 @@ func TestStudyDayCutoffIsTheNextFourDenver(t *testing.T) {
 // TestReviewPairAskFollowsTheStudyDay asks both letters across ten study
 // days, and keeps one letter from 17:00 to 23:00 Denver. Those two times
 // are one study day and two UTC dates, so a rebuilt queue still asks the
-// same letter.
+// same letter. The front is a pick: asked is computed from the study-day seed.
 func TestReviewPairAskFollowsTheStudyDay(t *testing.T) {
 	loc, err := time.LoadLocation("America/Denver")
 	if err != nil {
 		t.Fatal(err)
 	}
+	z := denverZone(t)
 	start := time.Date(2026, 10, 18, 12, 0, 0, 0, loc)
 	store, h, clk := openStepped(t, start)
 	learner := addLearner(t, store, "a@example.com", "sub-pair-day", start.Add(400*24*time.Hour))
@@ -676,14 +724,12 @@ func TestReviewPairAskFollowsTheStudyDay(t *testing.T) {
 			seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
 		}
 		front := getLearner(t, h, learner, "/review")
-		letter := attr(t, front, "data-pointed")
+		id := mustCardID(t, front)
+		letter := pickPart(id, studyday.DueCutoff(clk.Now(), z), parts)
 		if letter != "ג" && letter != "פ" {
 			t.Fatalf("day %d asked %q", i, letter)
 		}
-		if !strings.Contains(front, `name="asked" value="`+letter+`"`) {
-			t.Fatalf("day %d front hid a different letter\n%s", i, front)
-		}
-		id := mustCardID(t, front)
+		assertLetterPickFront(t, front, parts)
 		if i == 0 {
 			if id >= 0 {
 				t.Fatalf("drill card id = %d", id)
@@ -700,9 +746,11 @@ func TestReviewPairAskFollowsTheStudyDay(t *testing.T) {
 		if sameLocalDate(clk.Now(), flipDay) {
 			noon := letter
 			clk.Advance(5 * time.Hour)
-			at17 := attr(t, getLearner(t, h, learner, "/review"), "data-pointed")
+			at17 := pickPart(cardID, studyday.DueCutoff(clk.Now(), z), parts)
+			getLearner(t, h, learner, "/review")
 			clk.Advance(6 * time.Hour)
-			at23 := attr(t, getLearner(t, h, learner, "/review"), "data-pointed")
+			at23 := pickPart(cardID, studyday.DueCutoff(clk.Now(), z), parts)
+			getLearner(t, h, learner, "/review")
 			early, late := clk.Now().Add(-6*time.Hour), clk.Now()
 			ey, em, ed := early.UTC().Date()
 			ly, lm, ld := late.UTC().Date()
@@ -726,127 +774,87 @@ func TestReviewPairAskFollowsTheStudyDay(t *testing.T) {
 	}
 }
 
-// TestReviewPairAskSurvivesRollover posts the 22:00 letter on the reveal
-// after 4:00. The back shows that letter and its answer, not the letter the
-// new study day would ask.
-func TestReviewPairAskSurvivesRollover(t *testing.T) {
+// TestStudyDayAnswerAfterRolloverRefused serves a letter pick before 4:00 and
+// refuses the pick after the study-day rollover (queue rebuilt).
+func TestStudyDayAnswerAfterRolloverRefused(t *testing.T) {
 	loc, err := time.LoadLocation("America/Denver")
 	if err != nil {
 		t.Fatal(err)
 	}
-	z := denverZone(t)
-	start := time.Date(2026, 10, 20, 22, 0, 0, 0, loc)
+	start := time.Date(2026, 10, 21, 3, 30, 0, 0, loc)
 	store, h, clk := openStepped(t, start)
 	learner := addLearner(t, store, "a@example.com", "sub-pair-roll", start.Add(400*24*time.Hour))
 	setLearnerZone(t, store, learner.user.ID, "America/Denver")
-	parts := []string{"ג", "פ"}
-	for i := 0; i < 40; i++ {
-		seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
-		front := getLearner(t, h, learner, "/review")
-		asked := attr(t, front, "data-pointed")
-		cardID := mustCardID(t, front)
-		later := pickPart(cardID, studyday.DueCutoff(clk.Now().Add(6*time.Hour), z), parts)
-		if later == asked {
-			clk.Advance(24 * time.Hour)
-			continue
-		}
-		if !strings.Contains(front, `name="asked" value="`+asked+`"`) {
-			t.Fatalf("front hid %q\n%s", asked, front)
-		}
-		clk.Advance(6 * time.Hour)
-		back := getReveal(t, h, learner, cardID, asked)
-		if back.Code != http.StatusOK {
-			t.Fatalf("reveal = %d\n%s", back.Code, back.Body.String())
-		}
-		body := back.Body.String()
-		if attr(t, body, "data-pointed") != asked {
-			t.Fatalf("reveal after 4:00 asked %s, front asked %s, new day asks %s", attr(t, body, "data-pointed"), asked, later)
-		}
-		assertAskedAnswer(t, body, asked)
-		if !strings.Contains(body, `name="asked" value="`+asked+`"`) {
-			t.Fatalf("grade form hid %q\n%s", asked, body)
-		}
-		return
+	seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
+	front := getLearner(t, h, learner, "/review")
+	cardID := mustCardID(t, front)
+	asked := pickPart(cardID, studyday.DueCutoff(clk.Now(), denverZone(t)), []string{"ג", "פ"})
+	assertLetterPickFront(t, front, []string{"ג", "פ"})
+
+	clk.Advance(31 * time.Minute) // past 4:00
+	got := postDrill(t, h, learner, cardID, asked)
+	if got.Code != http.StatusBadRequest {
+		t.Fatalf("pick after rollover = %d, want 400\n%s", got.Code, got.Body.String())
 	}
-	t.Fatal("no night where 4:00 changes the asked letter")
+	page := getLearner(t, h, learner, "/review")
+	if !strings.Contains(page, `data-activity="letter-pick"`) {
+		t.Fatalf("after rollover the queue was not rebuilt to a pick: %s", cardAttrs(page))
+	}
 }
 
-// TestReviewPairGradeStaysTheAskedLetter reveals before 4:00 America/Denver
-// and grades after it. The grade is the letter the reveal accepted. The
-// other letter of the pair, and a letter outside the pair, are rejected,
-// and the card does not move.
-func TestReviewPairGradeStaysTheAskedLetter(t *testing.T) {
-	loc, err := time.LoadLocation("America/Denver")
-	if err != nil {
-		t.Fatal(err)
+// TestReviewPairRevealAndGradeRefuse returns 400 for reveal and grade on a
+// two-letter letter step. The pick path is the only way to answer.
+func TestReviewPairRevealAndGradeRefuse(t *testing.T) {
+	store, h, now := openApp(t)
+	learner := addLearner(t, store, "a@example.com", "sub-pair-refuse", now)
+	seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
+	front := getLearner(t, h, learner, "/review")
+	cardID := mustCardID(t, front)
+	assertLetterPickFront(t, front, []string{"ג", "פ"})
+	if rec := getReveal(t, h, learner, cardID, "ג"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("reveal = %d, want 400", rec.Code)
 	}
-	z := denverZone(t)
-	start := time.Date(2026, 10, 21, 3, 30, 0, 0, loc)
-	store, h, clk := openStepped(t, start)
-	learner := addLearner(t, store, "a@example.com", "sub-pair-grade", start.Add(400*24*time.Hour))
-	setLearnerZone(t, store, learner.user.ID, "America/Denver")
-	parts := []string{"ג", "פ"}
-	for i := 0; i < 40; i++ {
-		seedDrill(t, store, learner.user.ID, "pair", "ג/פ", 0)
-		front := getLearner(t, h, learner, "/review")
-		asked := attr(t, front, "data-pointed")
-		cardID := mustCardID(t, front)
-		later := pickPart(cardID, studyday.DueCutoff(clk.Now().Add(31*time.Minute), z), parts)
-		if later == asked {
-			clk.Advance(24 * time.Hour)
-			continue
-		}
-		other := parts[0]
-		if other == asked {
-			other = parts[1]
-		}
-		forged := getReveal(t, h, learner, cardID, "ק")
-		if forged.Code != http.StatusBadRequest {
-			t.Fatalf("forged reveal = %d\n%s", forged.Code, forged.Body.String())
-		}
-		held := getLearner(t, h, learner, "/review")
-		if strings.Contains(held, `data-revealed="true"`) || attr(t, held, "data-pointed") != asked || mustCardID(t, held) != cardID {
-			t.Fatalf("forged reveal changed the card: %s", cardAttrs(held))
-		}
-		shown := getReveal(t, h, learner, cardID, asked)
-		if shown.Code != http.StatusOK {
-			t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
-		}
-		assertAskedAnswer(t, shown.Body.String(), asked)
+	if rec := postGrade(t, h, learner, cardID, "3", "https://learn.example", "ג"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("grade = %d, want 400", rec.Code)
+	}
+}
 
-		clk.Advance(31 * time.Minute)
-		page := getLearner(t, h, learner, "/review")
-		if mustCardID(t, page) != cardID || attr(t, page, "data-pointed") != asked || !strings.Contains(page, `data-revealed="true"`) {
-			t.Fatalf("after 4:00 the card left %s: %s", asked, cardAttrs(page))
-		}
-		assertAskedAnswer(t, page, asked)
-		if strings.Contains(page, pairAnswerLine(later)) {
-			t.Fatalf("after 4:00 the answer became %s\n%s", later, page)
-		}
-
-		for _, bad := range []string{other, "ק"} {
-			got := postGrade(t, h, learner, cardID, "3", "https://learn.example", bad)
-			if got.Code != http.StatusBadRequest {
-				t.Fatalf("grade %s = %d, want 400\n%s", bad, got.Code, got.Body.String())
+func assertLetterPickFront(t *testing.T, body string, parts []string) {
+	t.Helper()
+	if attr(t, body, "data-activity") != "letter-pick" {
+		t.Fatalf("want letter-pick front: %s", cardAttrs(body))
+	}
+	if strings.Contains(body, "Tell them apart") || strings.Contains(body, "Asked") || strings.Contains(body, "גימל") || strings.Contains(body, "פא") {
+		t.Fatalf("pick front leaked the answer:\n%s", body)
+	}
+	for _, p := range parts {
+		if !strings.Contains(body, `name="pick" type="submit" value="`+p+`"`) && !strings.Contains(body, `value="`+p+`" name="pick"`) {
+			// ButtonWith may order attributes differently.
+			if !strings.Contains(body, `value="`+p+`"`) || !strings.Contains(body, `name="pick"`) {
+				t.Fatalf("pick front missing button for %q:\n%s", p, body)
 			}
 		}
-		still := getLearner(t, h, learner, "/review")
-		if mustCardID(t, still) != cardID || attr(t, still, "data-pointed") != asked || !strings.Contains(still, `data-revealed="true"`) {
-			t.Fatalf("rejected grade moved the card: %s", cardAttrs(still))
-		}
-		assertAskedAnswer(t, still, asked)
-
-		ok := postGrade(t, h, learner, cardID, "3", "https://learn.example", asked)
-		if ok.Code != http.StatusOK {
-			t.Fatalf("grade %s = %d\n%s", asked, ok.Code, ok.Body.String())
-		}
-		next := ok.Body.String()
-		if mustCardID(t, next) == cardID && !strings.Contains(next, `data-done="true"`) {
-			t.Fatalf("grading %s left the card in place\n%s", asked, cardAttrs(next))
-		}
-		return
 	}
-	t.Fatal("no morning where 4:00 changes the asked letter")
+	if !strings.Contains(body, `value="dont_know"`) {
+		t.Fatalf("pick front missing Don't know:\n%s", body)
+	}
+	if attr(t, body, "data-pointed") != "" {
+		t.Fatalf("pick front showed the asked letter in data-pointed")
+	}
+}
+
+func postDrill(t *testing.T, h http.Handler, l learnerFix, cardID int64, pick string) *httptest.ResponseRecorder {
+	t.Helper()
+	form := url.Values{"_csrf": {l.csrf}, "card_id": {strconv.FormatInt(cardID, 10)}, "pick": {pick}}
+	req := httptest.NewRequest(http.MethodPost, "/_hx/review/drill", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("Origin", "https://learn.example")
+	req.Host = "learn.example"
+	req.AddCookie(l.cookie)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
 }
 
 func pairAnswerLine(letter string) string {
@@ -1073,29 +1081,21 @@ func TestReviewLetterBackUsesTheNewestMiss(t *testing.T) {
 	}
 }
 
-// TestReviewGradeIgnoresQueryAsked grades the asked letter in the POST body.
-// The same letter on the query string does not satisfy the check.
-func TestReviewGradeIgnoresQueryAsked(t *testing.T) {
+// TestReviewDrillIgnoresQueryPick takes pick from the POST body only.
+func TestReviewDrillIgnoresQueryPick(t *testing.T) {
 	store, h, now := openApp(t)
 	_, _, word := seedAnkiLexeme(t, store, now, "pair")
 	learner := addLearner(t, store, "a@example.com", "sub-asked-query", now)
 	seedDrill(t, store, learner.user.ID, "pair", "ג/פ", word.exampleID)
 	front := getLearner(t, h, learner, "/review")
-	asked := attr(t, front, "data-pointed")
 	cardID := mustCardID(t, front)
-	if asked != "ג" && asked != "פ" {
-		t.Fatalf("front asked %q", asked)
-	}
-	shown := getReveal(t, h, learner, cardID, asked)
-	if shown.Code != http.StatusOK {
-		t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
-	}
+	assertLetterPickFront(t, front, []string{"ג", "פ"})
 
 	form := url.Values{}
-	form.Set("rating", "3")
 	form.Set("card_id", strconv.FormatInt(cardID, 10))
 	form.Set("_csrf", learner.csrf)
-	req := httptest.NewRequest(http.MethodPost, "/_hx/review/grade?asked="+url.QueryEscape(asked), strings.NewReader(form.Encode()))
+	// pick only on the query string — body has none.
+	req := httptest.NewRequest(http.MethodPost, "/_hx/review/drill?pick="+url.QueryEscape("ג"), strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Origin", "https://learn.example")
 	req.Header.Set("HX-Request", "true")
@@ -1103,11 +1103,11 @@ func TestReviewGradeIgnoresQueryAsked(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("grade read asked from the query: %d\n%s", rec.Code, rec.Body.String())
+		t.Fatalf("drill read pick from the query: %d\n%s", rec.Code, rec.Body.String())
 	}
 	page := getLearner(t, h, learner, "/review")
-	if mustCardID(t, page) != cardID || attr(t, page, "data-pointed") != asked {
-		t.Fatalf("query asked moved the card: %s", cardAttrs(page))
+	if mustCardID(t, page) != cardID || attr(t, page, "data-activity") != "letter-pick" {
+		t.Fatalf("query pick moved the card: %s", cardAttrs(page))
 	}
 }
 

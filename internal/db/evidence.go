@@ -457,9 +457,9 @@ func insertReviewTx(ctx context.Context, tx *sql.Tx, log ReviewLog) error {
 		chosen = log.Chosen
 	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked, chosen)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		log.CardID, log.Rating, FormatTime(log.ReviewedAt), log.ElapsedDays, log.ScheduledDays, evidenceBool(log.Peeked), chosen,
+		INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, peeked, chosen, implied)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		log.CardID, log.Rating, FormatTime(log.ReviewedAt), log.ElapsedDays, log.ScheduledDays, evidenceBool(log.Peeked), chosen, evidenceBool(log.Implied),
 	); err != nil {
 		return fmt.Errorf("db: insert review: %w", err)
 	}
