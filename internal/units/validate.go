@@ -84,6 +84,7 @@ func collect(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue {
 	// pass asks the lexicon.
 	issues = append(issues, targetIssues(ctx, doc, lk, mode)...)
 	issues = append(issues, translationIssues(ctx, doc, lk, mode)...)
+	issues = append(issues, orderIssues(doc)...) // INIT-029/SPEC-002
 	return dedupeLookup(issues)
 }
 
@@ -479,7 +480,7 @@ func genderOK(g string) bool {
 
 func knownActivity(typ string) bool {
 	switch typ {
-	case ActivityListenPick, ActivityRecall, ActivityProduce, ActivityCloze, ActivityPattern, ActivityStory, ActivityShadow, ActivityDialogue, ActivitySay:
+	case ActivityListenPick, ActivityRecall, ActivityProduce, ActivityCloze, ActivityPattern, ActivityStory, ActivityShadow, ActivityDialogue, ActivitySay, ActivityOrder:
 		return true
 	default:
 		return false

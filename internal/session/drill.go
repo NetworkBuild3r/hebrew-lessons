@@ -22,9 +22,10 @@ type DrillOutcome struct {
 }
 
 // DrillAnswered grades the served letter or pattern drill step. It writes one
-// drill_answers row for the session's learner, requeues once on a wrong answer,
-// and clears the pair after DrillClearStreak right, non-slow answers.
-// INIT-027/SPEC-003.
+// drill_answers row for the session's learner and clears the pair after
+// DrillClearStreak right, non-slow answers. A wrong answer is not asked again
+// in that sitting (INIT-028/SPEC-002). Pattern pairs use the same speed rule
+// as letter picks (INIT-029/SPEC-005). INIT-027/SPEC-003.
 func (s *Session) DrillAnswered(ctx context.Context, cardID int64, correct bool, latency time.Duration) (DrillOutcome, error) {
 	if s == nil {
 		return DrillOutcome{}, errors.New("session: session is not configured")

@@ -51,6 +51,7 @@ const (
 	RuleBriefIntro                 = "brief.new_intro_before_test"
 	RuleBriefNewMinUses            = "brief.new_min_uses"
 	RuleBriefNotFound              = "brief.not_found"
+	RuleBriefOrderKnown            = "brief.order_known" // INIT-029/SPEC-002
 	RuleBriefStruggle              = "brief.struggle_reuse"
 	RuleBriefTextTooLong           = "brief.text_too_long"
 	RuleBriefUsed                  = "brief.used"
@@ -75,6 +76,9 @@ const (
 	RuleStoryUnmapped              = "story.unmapped"
 	RuleStoryUnpointed             = "story.unpointed"
 	RuleUnitNoMarkup               = "unit.no_markup"
+	RuleUnitOrderAccept            = "unit.order_accept"      // INIT-029/SPEC-002
+	RuleUnitOrderTokens            = "unit.order_tokens"      // INIT-029/SPEC-002
+	RuleUnitOrderTranslation       = "unit.order_translation" // INIT-029/SPEC-002
 	RulePatternOrder               = "unit.pattern_order"
 	RuleUnitTranslationDistractors = "unit.translation_distractors"
 	RuleUnitTranslationLang        = "unit.translation_lang"
@@ -128,6 +132,7 @@ var Rules = []Rule{
 	{ID: RuleBriefIntro, Severity: SeverityBlock, Description: "Brief check. A new word of the brief, or a unit newWord that coverage credited, reaches its first checked activity with no story, dialogue, or shadow step that shows it earlier."},
 	{ID: RuleBriefNewMinUses, Severity: SeverityBlock, Description: fmt.Sprintf("Brief check. A new word of the brief appears fewer times in the unit than the brief asks, and at least %d. A unit newWord that coverage credited and that is not in the brief uses that same floor.", DefaultNewWordMinUses)},
 	{ID: RuleBriefNotFound, Severity: SeverityBlock, Description: "Brief check. The brief id is missing, malformed, unknown, or belongs to another learner. The cases are not told apart."},
+	{ID: RuleBriefOrderKnown, Severity: SeverityBlock, Description: "Brief check. An order token is not a known word for this learner and was not introduced by an earlier story, dialogue, or shadow step in the same unit. INIT-029/SPEC-002."},
 	{ID: RuleBriefStruggle, Severity: SeverityBlock, Description: "Brief check. A struggle word appears fewer times than the brief requires, or never in an activity of its failing skill."},
 	{ID: RuleBriefTextTooLong, Severity: SeverityBlock, Description: "Brief check. A story or listen_pick passage has more Hebrew tokens than the tier's limit, when the tier sets one."},
 	{ID: RuleBriefUsed, Severity: SeverityBlock, Description: "Brief check. The brief already built a unit. A brief can be used once."},
@@ -144,7 +149,7 @@ var Rules = []Rule{
 	{ID: RuleRecycleSpread, Severity: SeverityWarn, Description: fmt.Sprintf("A new word appears in fewer than %d later lessons.", RecycleMinLessons)},
 	{ID: RuleSayAudio, Severity: SeverityBlock, Description: "A say step has no audio clip for its exact pointed text. The learner hears that clip only after they say the line."},
 	{ID: RuleSayPrompt, Severity: SeverityBlock, Description: fmt.Sprintf("A say step needs prompt_en: plain English, no Hebrew and no markup, at most %d characters. It is the cue the learner sees before the Hebrew.", PromptMaxRunes)},
-	{ID: RuleSchemaActivity, Severity: SeverityBlock, Description: "An activity type is not one of the nine lesson types."},
+	{ID: RuleSchemaActivity, Severity: SeverityBlock, Description: "An activity type is not one of the ten lesson types."},
 	{ID: RuleSchemaCheckpoint, Severity: SeverityBlock, Description: "A checkpoint introduces a new word."},
 	{ID: RuleSchemaKind, Severity: SeverityBlock, Description: "A lesson kind is not lesson or checkpoint."},
 	{ID: RuleSchemaLookup, Severity: SeverityBlock, Description: "The lexicon or audio lookup failed."},
@@ -154,7 +159,10 @@ var Rules = []Rule{
 	{ID: RuleStoryUnpointed, Severity: SeverityBlock, Description: "A story contains a Hebrew word with no niqqud. Names, numbers, and punctuation are ignored. A number is digits or gematria in rank order with U+05F3/U+05F4. Acronyms are words, except spellings that are also valid numerals (ת״א, ש״ס), which are treated as numerals. ASCII quotes are split into letters and flagged. Homographs are not exempt."},
 	{ID: RuleUnitDialogueLines, Severity: SeverityBlock, Description: fmt.Sprintf("A dialogue has fewer than %d or more than %d lines, a dialogue carries text instead of lines, or an activity that is not a dialogue carries lines.", MinDialogueLines, MaxDialogueLines)},
 	{ID: RuleUnitDialogueSpeakers, Severity: SeverityBlock, Description: "A dialogue line has a speaker other than a (female voice) or b (male voice), or one of the two speakers has no line."},
-	{ID: RuleUnitNoMarkup, Severity: SeverityBlock, Description: "Brief check. A text field of the unit (title, situation, concept, a new word, a lesson kind, an activity type, text, target, or translation, a dialogue line's speaker, text, or translation) contains <, >, or javascript: in any letter case. The unit is plain text and the templates escape it again on output."},
+	{ID: RuleUnitNoMarkup, Severity: SeverityBlock, Description: "Brief check. A text field of the unit (title, situation, concept, a new word, a lesson kind, an activity type, text, target, translation, or accept, a dialogue line's speaker, text, or translation) contains <, >, or javascript: in any letter case. The unit is plain text and the templates escape it again on output."},
+	{ID: RuleUnitOrderAccept, Severity: SeverityBlock, Description: "An order accept entry must use exactly the same tokens as text, in a different order. A duplicate of text, or an entry that adds, drops, or repeats a token, is a block. INIT-029/SPEC-002."},
+	{ID: RuleUnitOrderTokens, Severity: SeverityBlock, Description: fmt.Sprintf("An order line must have %d to %d tokens. INIT-029/SPEC-002.", MinOrderTokens, MaxOrderTokens)},
+	{ID: RuleUnitOrderTranslation, Severity: SeverityBlock, Description: fmt.Sprintf("An order line needs an English translation of at most %d characters, with no Hebrew and no markup. INIT-029/SPEC-002.", TranslationMaxLen)},
 	{ID: RulePatternOrder, Severity: SeverityBlock, Description: "A shared unit teaches a pattern before a pattern it requires. The issue names the unit that teaches the prerequisite later. A learner-scoped unit reports the same finding as a warning."},
 	{ID: RuleUnitTranslationDistractors, Severity: SeverityWarn, Description: fmt.Sprintf("A unit with a listen_pick of two or more words that are in the lexicon has fewer than %d different English lines. A line is an activity translation or a dialogue line translation. Lines that match after lowercasing, stripping punctuation, and collapsing spaces count once, and the sentence's own translation counts.", MinTranslatedLines)},
 	{ID: RuleUnitTranslationLang, Severity: SeverityBlock, Description: "A translation contains a Hebrew character (U+0590 through U+05FF) or markup (<, >, or javascript:). A translation is English plain text. unit.no_markup also flags the markup."},

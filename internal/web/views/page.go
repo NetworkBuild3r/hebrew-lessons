@@ -283,11 +283,14 @@ type ReviewCard struct {
 	PairNote        string
 	DageshNote      string
 	DageshHard      string
-	// Pick is a two-letter letter step before the learner chooses. BlankedExample
-	// is the confusion word with the asked letter replaced by ___. PickLetters
-	// are the two buttons in key order. PickSound is the asked letter's English
-	// sound when there is no example and no clip.
+	// Pick is a two-letter letter step or pattern pick before the learner chooses.
+	// BlankedExample is the confusion word/example with the asked form replaced
+	// by ___. Cue is the English gloss when a pattern pair is asked by gloss
+	// (INIT-029/SPEC-005). PickLetters are the two buttons in key order.
+	// PickSound is the asked letter's English sound when there is no example
+	// and no clip.
 	Pick           bool
+	Cue            string
 	BlankedExample string
 	PickLetters    []string
 	PickSound      string

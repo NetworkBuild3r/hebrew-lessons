@@ -78,6 +78,10 @@ templ ActivityBlock(a Activity) {
 			if a.Dialogue != nil {
 				@dialogueBlock(a.Dialogue)
 			}
+			// INIT-029/SPEC-004: learner's order row on reveal, before the right line.
+			if orderRevealAnswer(a) {
+				@orderAnswerRow(a)
+			}
 			if a.Spotlight && len(a.Words) > 0 {
 				<section class="spotlight spotlight--cards">
 					<div class="wline" dir="rtl">
@@ -102,6 +106,9 @@ templ ActivityBlock(a Activity) {
 				@showMeanings(a)
 			}
 			if len(a.Words) > 0 && !a.Spotlight {
+				if orderWrong(a) {
+					<p class="order-right-label" lang="en">@E("Right order")</p>
+				}
 				<div class={ wordBlocksClass(a) } dir="rtl">
 					for i, word := range a.Words {
 						@activityWord(word, "word-clip-"+Num(i))
@@ -141,6 +148,8 @@ templ ActivityBlock(a Activity) {
 						<button type="submit" class="act-grade" name="answer" value="got">@E("Got it")</button>
 						<button type="submit" class="act-grade" name="answer" value="notyet">@E("Not yet")</button>
 					</div>
+				} else if orderAsk(a) {
+					@orderAskBlock(a)
 				} else if a.Asking {
 					<div class="choices">
 						for _, choice := range a.Choices {
@@ -167,9 +176,74 @@ templ ActivityBlock(a Activity) {
 			if dragCloze(a) {
 				<script src={ Asset("/static/js/drag.js") } defer></script>
 			}
+			if orderAsk(a) {
+				<script src={ Asset("/static/js/order.js") } defer></script>
+			}
 			if flipCount(a) > 0 {
 				<script type="module" src={ Asset("/static/js/wcards.js") }></script>
 			}
+		}
+	</div>
+}
+
+// orderAskBlock is the build-the-sentence ask: empty RTL row, shuffled chips,
+// Check once every chip is placed. Without script the chips are position
+// selects. INIT-029/SPEC-004.
+templ orderAskBlock(a Activity) {
+	<div class="order" data-order>
+		<div
+			class="order-row"
+			dir="rtl"
+			role="listbox"
+			aria-label="Your sentence"
+			aria-describedby="order-hint"
+			data-order-row
+			tabindex="0"
+		></div>
+		<p class="order-hint" id="order-hint" lang="en">@E("Drag or tap a word into the row. Tap a placed word to send it back.")</p>
+		<div class="order-bank" role="group" aria-label="Word bank" data-order-bank>
+			for i, chip := range a.OrderChips {
+				<button
+					type="button"
+					class="order-chip"
+					draggable="true"
+					data-order-chip
+					data-order-i={ Num(i) }
+					aria-grabbed="false"
+				>
+					<bdi lang="he" dir="rtl">{ chip }</bdi>
+				</button>
+			}
+		</div>
+		<div data-order-fields hidden></div>
+		<noscript>
+			<div class="order-noscript">
+				<p class="order-noscript__lead" lang="en">@E("Choose each word from right to left.")</p>
+				for range a.OrderChips {
+					<label class="order-noscript__slot" lang="en">
+						<span class="order-noscript__n">@E("Word")</span>
+						<select name="order" required>
+							<option value="">@E("—")</option>
+							for i, chip := range a.OrderChips {
+								<option value={ Num(i) }>{ chip }</option>
+							}
+						</select>
+					</label>
+				}
+			</div>
+		</noscript>
+		<button type="submit" class="btn btn-primary" name="answer" value="check" data-order-check>@E("Check")</button>
+	</div>
+}
+
+// orderAnswerRow is the learner's built line on reveal, marked right or wrong.
+// INIT-029/SPEC-004.
+templ orderAnswerRow(a Activity) {
+	<div class={ orderAnswerClass(a) } dir="rtl" role="list" aria-label="Your answer">
+		for _, tok := range a.OrderAnswer {
+			<span class="order-chip order-chip--placed" role="listitem">
+				<bdi lang="he" dir="rtl">{ tok }</bdi>
+			</span>
 		}
 	</div>
 }

@@ -92,9 +92,12 @@ type ReviewCardVM struct {
 	PairNote   string
 	DageshNote string
 	DageshHard string
-	// Pick is true for an unanswered two-letter letter step. BlankedExample is
-	// the confusion word with the asked letter replaced by a blank.
+	// Pick is true for an unanswered two-letter letter step or pattern pick.
+	// BlankedExample is the confusion word/example with the asked form replaced
+	// by a blank. Cue is the English gloss when a pattern pair is asked by gloss
+	// (INIT-029/SPEC-005). PickLetters are the two options.
 	Pick           bool
+	Cue            string
 	BlankedExample string
 	PickLetters    []string
 	// Tally rows for the done screen (non-zero counters from the finished sitting).

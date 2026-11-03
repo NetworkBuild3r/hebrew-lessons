@@ -30,8 +30,8 @@ Gender on an open word card is the stored `m` or `f`, and only inside Word detai
 | Spec | Domain | Title | Blocked by | Effort | Status |
 | --- | --- | --- | --- | --- | --- |
 | [SPEC-001](specs/SPEC-001-docs-review-is-a-test.md) | docs | ADR: review is a checked test | — | 1h | complete |
-| [SPEC-002](specs/SPEC-002-service-one-question-real-blank.md) | service | One question per word, and a blank that is really blank | SPEC-001 | 4h | planned |
-| [SPEC-003](specs/SPEC-003-frontend-checked-review.md) | frontend | Checked review screens, and gender on the word card | SPEC-001, SPEC-002 | 5h | planned |
+| [SPEC-002](specs/SPEC-002-service-one-question-real-blank.md) | service | One question per word, and a blank that is really blank | SPEC-001 | 4h | complete |
+| [SPEC-003](specs/SPEC-003-frontend-checked-review.md) | frontend | Checked review screens, and gender on the word card | SPEC-001, SPEC-002 | 5h | complete |
 
 **Total:** 10h. **Critical path:** SPEC-001 → SPEC-002 → SPEC-003 = 10h.
 

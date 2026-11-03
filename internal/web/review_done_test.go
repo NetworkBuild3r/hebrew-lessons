@@ -26,27 +26,26 @@ func TestReviewDoneNamesTheSitting(t *testing.T) {
 		secondLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
 		first := addCard(t, store, learner.user.ID, firstLex, fsrs.SkillRead, now.Add(-2*time.Hour), 1, int(fsrs.Good), reviewed)
 		second := addCard(t, store, learner.user.ID, secondLex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+		byHe := map[string]string{"שָׁלוֹם": "hello", "מַיִם": "water"}
 		page := getLearner(t, h, learner, "/review")
 		if mustCardID(t, page) != first && mustCardID(t, page) != second {
 			t.Fatalf("first card %d not in the sitting: %s", first, cardAttrs(page))
 		}
-		// Hard is a review and not a correct one, so a summary that counts
-		// only right answers is short by one. Again would put the card back.
-		opened := mustCardID(t, page)
-		mid := gradeRevealed(t, h, learner, opened, "2", "https://learn.example")
-		if mid.Code != 200 || strings.Contains(mid.Body.String(), `data-done="true"`) {
-			t.Fatalf("first grade ended the sitting: %d %s", mid.Code, cardAttrs(mid.Body.String()))
+		// A wrong answer still counts as reviewed. It is not asked again in this sitting.
+		openedGloss := glossOnPage(t, page, byHe)
+		midFB := answerChecked(t, h, learner, page, wrongPickIndex(t, page, openedGloss))
+		mid := continueChecked(t, h, learner, midFB.Body.String())
+		if strings.Contains(mid, `data-done="true"`) {
+			t.Fatalf("first answer ended the sitting: %s", cardAttrs(mid))
 		}
 		grades := 1
-		last := mustCardID(t, mid.Body.String())
-		done := gradeRevealed(t, h, learner, last, "3", "https://learn.example")
+		lastGloss := glossOnPage(t, mid, byHe)
+		lastFB := answerChecked(t, h, learner, mid, rightPickIndex(t, mid, lastGloss))
+		done := continueChecked(t, h, learner, lastFB.Body.String())
 		grades++
-		if done.Code != 200 {
-			t.Fatalf("last grade = %d\n%s", done.Code, done.Body.String())
-		}
 		want := reviewedSentence(grades)
-		assertReviewDone(t, done.Body.String(), want, "/")
-		if strings.Contains(done.Body.String(), "<html") {
+		assertReviewDone(t, done, want, "/")
+		if strings.Contains(done, "<html") {
 			t.Fatal("the htmx done response is a full page")
 		}
 
@@ -68,10 +67,12 @@ func TestReviewDoneNamesTheSitting(t *testing.T) {
 		store, h, now := openApp(t)
 		learner := addLearner(t, store, "a@example.com", "sub-a", now)
 		lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
-		card := addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
-		getLearner(t, h, learner, "/review")
-		done := gradeRevealed(t, h, learner, card, "3", "https://learn.example")
-		assertReviewDone(t, done.Body.String(), reviewedSentence(1), "/")
+		seedFillerLexemes(t, store, 1)
+		addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
+		page := getLearner(t, h, learner, "/review")
+		fb := answerChecked(t, h, learner, page, rightPickIndex(t, page, "hello"))
+		done := continueChecked(t, h, learner, fb.Body.String())
+		assertReviewDone(t, done, reviewedSentence(1), "/")
 	})
 
 	t.Run("zero cards", func(t *testing.T) {

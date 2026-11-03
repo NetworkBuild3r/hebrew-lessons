@@ -445,7 +445,8 @@ func (s *server) reveal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A checked activity is answered through /_hx/review/answer, never self-graded.
-	// A two-letter letter step is a timed pick through /_hx/review/drill.
+	// A two-letter letter or pattern step is a timed pick through /_hx/review/drill.
+	// INIT-029/SPEC-005: pattern pairs do not use Show answer / self-grade.
 	if q == nil || q.sess == nil || !q.has || q.cur.CardID != cardID || q.item != nil || pairParts(q) != nil {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -502,7 +503,8 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 	lang := reviewLang(r)
 	s.mu.Lock()
 	q := s.queues[key]
-	// A two-letter letter step is graded through /_hx/review/drill, not self-grade.
+	// A two-letter letter or pattern step is graded through /_hx/review/drill, not self-grade.
+	// INIT-029/SPEC-005: Forgot/Hard/Got it/Easy reject a pattern card.
 	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || q.cur.CardID != cardID || q.item != nil || pairParts(q) != nil || !q.sameDay(s.now()) {
 		s.mu.Unlock()
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -535,10 +537,16 @@ func (s *server) grade(w http.ResponseWriter, r *http.Request) {
 	s.finishReview(w, r, lang, vm)
 }
 
-// pairParts is the two letters of a letter drill. A single letter and
+// pairParts is the two sides of a letter or pattern drill. A single letter and
 // every other card return nil, and those requests do not carry asked.
+// INIT-029/SPEC-005: pattern pairs use the same pick path as letter pairs.
 func pairParts(q *studyQueue) []string {
-	if q == nil || q.cur.Kind != session.KindLetter {
+	if q == nil {
+		return nil
+	}
+	switch q.cur.Kind {
+	case session.KindLetter, session.KindPattern:
+	default:
 		return nil
 	}
 	parts := splitDrillKey(q.cur.Key)

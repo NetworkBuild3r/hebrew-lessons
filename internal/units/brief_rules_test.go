@@ -48,9 +48,9 @@ func TestBriefRulesAreCatalogedAndDocumented(t *testing.T) {
 		t.Fatal(err)
 	}
 	ids := []string{RuleBriefAudioAll, RuleBriefCoverage, RuleBriefExpired, RuleBriefGloss, RuleBriefIntro,
-		RuleBriefNewMinUses, RuleBriefNotFound, RuleBriefStruggle, RuleBriefTextTooLong, RuleBriefUsed, RuleUnitNoMarkup}
+		RuleBriefNewMinUses, RuleBriefNotFound, RuleBriefOrderKnown, RuleBriefStruggle, RuleBriefTextTooLong, RuleBriefUsed, RuleUnitNoMarkup}
 	want := []string{"brief.audio_all", "brief.coverage", "brief.expired", "brief.gloss_out_of_brief",
-		"brief.new_intro_before_test", "brief.new_min_uses", "brief.not_found", "brief.struggle_reuse",
+		"brief.new_intro_before_test", "brief.new_min_uses", "brief.not_found", "brief.order_known", "brief.struggle_reuse",
 		"brief.text_too_long", "brief.used", "unit.no_markup"}
 	if !slices.Equal(ids, want) {
 		t.Fatalf("rule ids changed: %v", ids)

@@ -1455,6 +1455,110 @@ html.js .clip-rows {
 .choices { display: grid; gap: var(--space-2); }
 /* The lesson does not show 1/2/3 badges. The keys are for placement and drills. */
 .choices .c-answer__key { display: none; }
+
+/* Build-the-sentence (INIT-029/SPEC-004). Chips wrap at 360px; no sideways scroll. */
+.order {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+.order-row,
+.order-answer,
+.order-bank {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+.order-row {
+  min-block-size: calc(var(--tap) + var(--space-4));
+  padding: var(--space-3);
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+.order-row.is-drop {
+  border-color: var(--focus-ring);
+  background: var(--surface-soft);
+}
+.order-row:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.order-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-small);
+  line-height: var(--lh-body);
+  text-align: center;
+}
+.order-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--tap);
+  min-inline-size: var(--tap);
+  max-inline-size: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  background: var(--surface-soft);
+  color: var(--text);
+  font-family: var(--font-he);
+  font-size: var(--fs-he-md);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  cursor: grab;
+}
+.order-chip:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.order-chip[aria-grabbed="true"] { opacity: 0.7; cursor: grabbing; }
+.order-chip--placed { cursor: pointer; }
+.order-answer {
+  padding: var(--space-3);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--hairline);
+}
+.order-answer--right {
+  border-color: var(--go);
+  background: color-mix(in oklch, var(--go) 12%, transparent);
+}
+.order-answer--wrong {
+  border-color: var(--stop);
+  background: color-mix(in oklch, var(--stop) 12%, transparent);
+}
+.order-right-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-small);
+  text-align: center;
+}
+.order-noscript {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.order-noscript__lead { margin: 0; color: var(--muted); font-size: var(--fs-small); }
+.order-noscript__slot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.order-noscript__slot select {
+  flex: 1 1 12rem;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  min-block-size: var(--tap);
+}
 .choice {
   display: flex;
   flex-direction: column;

@@ -238,16 +238,18 @@ templ actFeedback(a ActivityView) {
 	}
 }
 
-// letterPickFrame is the timed two-option letter drill (INIT-027/SPEC-006).
-// Before the pick the page carries no name, sound, or cue of the asked letter
-// beyond the blanked example (or the letter's clip/sound when there is none).
+// letterPickFrame is the timed two-option pick for a letter or pattern drill
+// (INIT-027/SPEC-006; INIT-029/SPEC-006). Before the pick the page carries no
+// answer beyond the blanked example, the English gloss cue, or the letter's
+// clip/sound when there is none. After the pick a pattern shows both forms
+// with their glosses and the clip; a letter shows the letter back.
 templ letterPickFrame(c ReviewCard) {
 	<section class="act act--flash" data-activity="letter-pick" data-phase={ letterPickPhase(c) } aria-label={ letterPickLead(c) }>
 		@actTop(c.Lang, letterPickDone(c), c.Total, c.Index)
 		if c.Revealed {
 			<div class="act__form">
 				<div class="act__stage">
-					@letterBack(c)
+					@pickFeedbackFace(c)
 				</div>
 				<div class="act__thumb">
 					@Sheet("Feedback") {
@@ -283,6 +285,8 @@ templ letterPickFrame(c ReviewCard) {
 								@clip("act-card-clip", c.AudioURL, "Play the word", true)
 							}
 						</div>
+					} else if c.Cue != "" {
+						<p class="act__gloss" lang="en" dir="ltr">@E(c.Cue)</p>
 					} else if c.AudioURL != "" {
 						<div class="act__orb">
 							@clip("act-card-clip", c.AudioURL, "Play the word", true)
@@ -293,7 +297,7 @@ templ letterPickFrame(c ReviewCard) {
 					<p class="act__lead" lang="en">{ letterPickLead(c) }</p>
 				</div>
 				<div class="act__thumb">
-					<div class="act__grades" role="group" aria-label="Which letter">
+					<div class="act__grades" role="group" aria-label={ pickOptionsLabel(c) }>
 						for _, letter := range c.PickLetters {
 							@ButtonWith(ButtonQuiet, submitAttrs(templ.Attributes{"name": "pick", "value": letter})) {
 								@H(letter)
@@ -311,12 +315,11 @@ templ letterPickFrame(c ReviewCard) {
 	</section>
 }
 
-// flashFrame is the one self-graded frame. Every review mode uses it.
+// flashFrame is the self-graded frame for the flashcard sitting only
+// (INIT-029/SPEC-006). Review modes use ActivityFrame or letterPickFrame.
 // Before the reveal the gold action is Show answer. After it the four grade
 // buttons are the actions, and they share one neutral style: a grade is the
 // learner's own report, and a colour would call it right or wrong.
-// A new mode does not add a frame, a route, or a grade button.
-// Two-letter letter steps use letterPickFrame instead.
 templ flashFrame(c ReviewCard) {
 	<section class="act act--flash" data-activity="flashcard" data-phase={ flashPhase(c) } aria-label={ flashLead(c) }>
 		@actTop(c.Lang, flashDone(c), c.Total, c.Index)

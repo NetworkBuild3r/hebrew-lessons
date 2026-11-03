@@ -792,8 +792,8 @@ func mustAttempts(t *testing.T, store *db.Store, userID, lexemeID int64) []db.At
 
 // TestReviewCheckedActivityFlow walks read_pick and word_match through the real
 // handlers: the item has no answer, a right answer is checked and shown, a wrong one
-// shows the right response and puts the visit back, Continue moves on, and the checked
-// visit cannot be graded as a flashcard.
+// shows the right response and moves on without a same-sitting retry (ADR-0024 D3),
+// Continue advances, and the checked visit cannot be graded as a flashcard.
 func TestReviewCheckedActivityFlow(t *testing.T) {
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	store, h := openReview(t, fixedClock(now), "https://learn.example")
@@ -919,7 +919,7 @@ func TestReviewCheckedActivityFlow(t *testing.T) {
 	}
 	total, _ := strconv.Atoi(attr(t, page, "data-total"))
 
-	// A wrong answer shows the right response and puts the visit back once.
+	// A wrong answer shows the right response. The miss is not asked again in this sitting.
 	options = pickRe.FindAllStringSubmatch(page, -1)
 	wrongIx, pickedGloss := -1, ""
 	for _, o := range options {
@@ -944,8 +944,8 @@ func TestReviewCheckedActivityFlow(t *testing.T) {
 	if !strings.Contains(sheet, "You picked") || !strings.Contains(sheet, ">"+pickedGloss+"<") || !strings.Contains(sheet, "That&#39;s") {
 		t.Fatalf("a confusion is not named: %s", sheet)
 	}
-	if got, _ := strconv.Atoi(attr(t, fb, "data-total")); got != total+1 {
-		t.Fatalf("a miss did not put the visit back: total %d, was %d", got, total)
+	if got, _ := strconv.Atoi(attr(t, fb, "data-total")); got != total {
+		t.Fatalf("a miss changed the sitting length: total %d, was %d", got, total)
 	}
 	if !strings.Contains(fb, `data-answered="2"`) || !strings.Contains(fb, `data-correct="1"`) {
 		t.Fatalf("counts after a miss: %s", cardAttrs(fb))
@@ -954,12 +954,16 @@ func TestReviewCheckedActivityFlow(t *testing.T) {
 	if len(attempts) != 1 || attempts[0].Correct {
 		t.Fatalf("attempts = %+v", attempts)
 	}
+	missedCard := second.card
 
 	// The third visit through reading is word_match (every third visit).
 	rec = actPost(t, h, learner, "/_hx/review/next", nextForm(fb))
 	page = rec.Body.String()
 	if attr(t, page, "data-activity") != "word_match" {
 		t.Fatalf("the third visit is not a word_match: %s", cardAttrs(page))
+	}
+	if attr(t, page, "data-retry") == "true" || attr(t, page, "data-card") == strconv.FormatInt(missedCard, 10) {
+		t.Fatalf("the missed word came back in the same sitting: %s", cardAttrs(page))
 	}
 	lefts := leftHeRe.FindAllStringSubmatch(page, -1)
 	glosses := rightRe.FindAllStringSubmatch(page, -1)
@@ -1151,10 +1155,10 @@ func TestReviewTypedActivities(t *testing.T) {
 			if rec.Code != http.StatusOK || !strings.Contains(fb, "Almost") || !strings.Contains(sheetOf(t, fb), `<u class="fb__bad">`+string(swap)+`</u>`) || !strings.Contains(sheetOf(t, fb), "feedback-right") {
 				t.Fatalf("near miss = %d %s", rec.Code, sheetOf(t, fb))
 			}
-			// The queue puts the missed first word back after the second.
+			// A near-miss still closes the visit. The sitting ends; the miss is not requeued.
 			page = actPost(t, h, learner, "/_hx/review/next", nextForm(fb)).Body.String()
-			if attr(t, page, "data-retry") != "true" {
-				t.Fatalf("the missed word did not come back: %s", cardAttrs(page))
+			if attr(t, page, "data-done") != "true" || attr(t, page, "data-retry") == "true" {
+				t.Fatalf("a miss was asked again in the same sitting: %s", cardAttrs(page))
 			}
 		})
 	}

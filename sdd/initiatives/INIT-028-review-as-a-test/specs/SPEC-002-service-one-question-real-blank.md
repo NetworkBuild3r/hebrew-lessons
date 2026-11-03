@@ -7,7 +7,7 @@ spec_id: SPEC-002
 initiative_id: INIT-028
 title: "One question per word, and a blank that is really blank"
 domain: service
-status: planned
+status: complete
 primary_prompt: none
 model: inherit
 autonomy_level: auto_tests

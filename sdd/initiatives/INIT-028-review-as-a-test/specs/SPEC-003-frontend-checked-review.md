@@ -7,7 +7,7 @@ spec_id: SPEC-003
 initiative_id: INIT-028
 title: "Checked review screens, and gender on the word card"
 domain: frontend
-status: planned
+status: complete
 primary_prompt: none
 model: inherit
 autonomy_level: auto_tests

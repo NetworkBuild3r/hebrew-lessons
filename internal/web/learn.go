@@ -78,16 +78,16 @@ type studyQueue struct {
 	// is built, and kept until the queue is Done or the study day ends, so a
 	// reload serves the same order.
 	seed int64
-	// asked is the letter a two-letter letter step asks. It is pinned when the
-	// step is served (and kept after a pick), so a study-day rollover cannot
-	// switch the letter mid-step.
+	// asked is the side a two-part letter or pattern step asks. It is pinned
+	// when the step is served (and kept after a pick), so a study-day rollover
+	// cannot switch the side mid-step. INIT-029/SPEC-005.
 	asked string
-	// servedAt is when the current two-letter letter step was served. Drill
+	// servedAt is when the current letter or pattern pick was served. Drill
 	// latency is now.Sub(servedAt).
 	servedAt time.Time
 	// item is the checked activity the current card is asked through. It is nil for a
 	// flashcard and a drill. fb is set from the checked answer until Continue.
-	// drillFB is set from a letter pick until Continue.
+	// drillFB is set from a letter or pattern pick until Continue.
 	item    *activity.Item
 	fb      *answerState
 	drillFB *drillState
@@ -470,8 +470,9 @@ func (s *server) now() time.Time {
 
 // advance serves the next card that can be asked. A word the lexicon cannot
 // turn into a checked question is skipped, and so is a letter step whose
-// example cannot hide the asked letter. Neither skip writes a grade
-// (INIT-028/SPEC-002). A pattern drill still uses the flashcard frame.
+// example cannot hide the asked letter, and a pattern pair with neither a
+// gloss cue nor a blankable agreement example. Neither skip writes a grade
+// (INIT-028/SPEC-002, INIT-029/SPEC-005).
 func (s *server) advance(ctx context.Context, q *studyQueue) error {
 	if q != nil {
 		q.revealed = false
@@ -536,7 +537,9 @@ func (s *server) advance(ctx context.Context, q *studyQueue) error {
 // askable reports whether the served visit can be shown. A word with no
 // checked item is not shown. A letter pair with an example is shown only
 // when the asked letter is actually missing and the other choice is not
-// still written in that example.
+// still written in that example. A pattern pair is shown only when a real
+// cue exists: different glosses, or a shared gloss with a blankable
+// agreement example (INIT-029/SPEC-005).
 func (s *server) askable(ctx context.Context, q *studyQueue) (bool, error) {
 	if q == nil {
 		return false, nil
@@ -548,6 +551,10 @@ func (s *server) askable(ctx context.Context, q *studyQueue) (bool, error) {
 		parts := pairParts(q)
 		if parts == nil {
 			return true, nil
+		}
+		if q.cur.Kind == session.KindPattern {
+			_, _, _, good, err := s.patternPick(ctx, q.userID, q.cur.Key, q.asked, parts)
+			return good, err
 		}
 		ex, ok, err := s.confusionExample(ctx, q.userID, fsrs.MissLetterPair, q.cur.Key)
 		if err != nil {
@@ -612,16 +619,41 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 		}
 		parts := splitDrillKey(ref.Key)
 		letterPair := ref.Kind == session.KindLetter && len(parts) >= 2
+		patternPair := ref.Kind == session.KindPattern && len(parts) >= 2
 		if q.asked != "" {
 			vm.Asked = q.asked
 		}
 		switch {
-		case letterPair && q.drillFB != nil:
+		case (letterPair || patternPair) && q.drillFB != nil:
 			// Pick feedback: show the full answer (sides, cues, example).
 			vm.Drill = q.drillFB
 			vm.Pointed = q.asked
 			vm.Unpointed = units.Plain(q.asked)
 			vm.Revealed = true
+		case patternPair:
+			// Timed pattern pick: gloss cue or blanked agreement example.
+			// INIT-029/SPEC-005.
+			vm.Pick = true
+			vm.Asked = q.asked
+			cue, blank, choices, good, err := s.patternPick(ctx, q.userID, ref.Key, q.asked, parts)
+			if err != nil {
+				return ReviewCardVM{}, err
+			}
+			vm.Pointed = ""
+			vm.Unpointed = ""
+			vm.AudioURL = ""
+			if good {
+				vm.Cue = cue
+				vm.BlankedExample = blank
+				vm.PickLetters = choices
+				if blank != "" {
+					vm.ExampleText = ""
+					// Keep ExampleGloss off the ask front; the blank is the cue.
+					vm.ExampleGloss = ""
+				}
+			} else {
+				vm.PickLetters = parts
+			}
 		case letterPair:
 			// Timed pick: blank the example (or letter clip/sound), two buttons.
 			vm.Pick = true
@@ -779,9 +811,15 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 			vm.AudioURL = url
 		}
 	case session.KindPattern:
+		// Pattern pairs ask one side (pickPart) as a checked two-choice pick.
+		// INIT-029/SPEC-005.
+		z, err := s.learnerZone(ctx, userID)
+		if err != nil {
+			return err
+		}
+		vm.Asked = pickPart(vm.CardID, studyday.DueCutoff(s.now(), z), parts)
 		var found map[string]db.LexemeView
 		if s != nil && s.store != nil {
-			var err error
 			found, err = s.store.LexemesByText(ctx, parts)
 			if err != nil {
 				return err
@@ -795,15 +833,31 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 				side.Gloss = row.Gloss
 			}
 			sides = append(sides, side)
-			if vm.AudioURL == "" {
-				url, err := s.clipURL(ctx, part, "")
-				if err != nil {
-					return err
-				}
-				vm.AudioURL = url
-			}
 		}
 		vm.Sides = sides
+		ex, ok, err := s.confusionExample(ctx, userID, fsrs.MissAgreement, key)
+		if err != nil {
+			return err
+		}
+		if ok {
+			vm.ExampleText = ex.TextNFC
+			vm.ExampleTranslit = ex.Translit
+			vm.ExampleGloss = ex.Gloss
+			url, err := s.clipURL(ctx, ex.TextNFC, ex.AudioID)
+			if err != nil {
+				return err
+			}
+			vm.AudioURL = url
+		}
+		// Feedback plays a clip: the example when there is one, else the asked form
+		// (INIT-029/SPEC-006). The ask front clears AudioURL for a gloss cue.
+		if vm.AudioURL == "" && vm.Asked != "" {
+			url, err := s.clipURL(ctx, vm.Asked, "")
+			if err != nil {
+				return err
+			}
+			vm.AudioURL = url
+		}
 	}
 	// A two-letter pick that has an example word uses that word's clip only.
 	// A missing example clip must not fall back to a pair letter, or the
@@ -827,6 +881,70 @@ func (s *server) fillDrill(ctx context.Context, userID int64, vm *ReviewCardVM) 
 		vm.Unpointed = units.Plain(vm.Asked)
 	}
 	return nil
+}
+
+// patternPick builds the cue for a pattern pair. When the two sides have
+// different glosses, cue is the asked side's English gloss. When they share a
+// gloss, blank is the learner's agreement-miss example with the asked form
+// removed. options are always the two Hebrew forms. ok is false when neither
+// cue exists. INIT-029/SPEC-005.
+func (s *server) patternPick(ctx context.Context, userID int64, key, asked string, parts []string) (cue, blank string, options []string, ok bool, err error) {
+	if len(parts) < 2 || asked == "" {
+		return "", "", nil, false, nil
+	}
+	options = append([]string(nil), parts...)
+	var found map[string]db.LexemeView
+	if s != nil && s.store != nil {
+		found, err = s.store.LexemesByText(ctx, parts)
+		if err != nil {
+			return "", "", nil, false, err
+		}
+	}
+	gloss := make([]string, len(parts))
+	for i, part := range parts {
+		if row, hit := found[part]; hit {
+			gloss[i] = row.Gloss
+		}
+	}
+	askedGloss := ""
+	for i, part := range parts {
+		if part == asked {
+			askedGloss = gloss[i]
+			break
+		}
+	}
+	if gloss[0] != gloss[1] {
+		if askedGloss == "" {
+			return "", "", nil, false, nil
+		}
+		return askedGloss, "", options, true, nil
+	}
+	ex, hit, err := s.confusionExample(ctx, userID, fsrs.MissAgreement, key)
+	if err != nil {
+		return "", "", nil, false, err
+	}
+	if !hit || ex.TextNFC == "" {
+		return "", "", nil, false, nil
+	}
+	blanked, good := patternBlank(ex.TextNFC, asked)
+	if !good {
+		return "", "", nil, false, nil
+	}
+	return "", blanked, options, true, nil
+}
+
+// patternBlank blanks the asked form from an agreement example. ok is false
+// when the form cannot be removed, matching letterAsk / ADR-0024 D4.
+// INIT-029/SPEC-005.
+func patternBlank(example, asked string) (blanked string, ok bool) {
+	if example == "" || asked == "" {
+		return "", false
+	}
+	blanked = blankAskedLetter(example, asked)
+	if blanked == example || !strings.Contains(blanked, "___") || letterIn(blanked, asked) {
+		return "", false
+	}
+	return blanked, true
 }
 
 // letterAsk blanks the asked letter and keeps only choices that are not still
@@ -1013,32 +1131,41 @@ func (s *server) clipURL(ctx context.Context, text, audioID string) (string, err
 	return "", nil
 }
 
-// attachReviewClips fills a checked activity's answer clips from audio_assets
-// when the lexicon column is empty. The prompt of a reading item stays without
-// a clip: the Hebrew is the question, and the sound belongs on the answer.
+// attachReviewClips resolves each feedback clip the way clipURL does for
+// flashcards and lessons: AudioByText first, then the lexeme audio_id.
+// The prompt of a reading item stays without a clip.
 func (s *server) attachReviewClips(ctx context.Context, card *views.ReviewCard) error {
 	if card == nil || card.Act == nil || card.Act.Feedback == nil {
 		return nil
 	}
 	fb := card.Act.Feedback
-	if fb.AudioURL == "" {
-		url, err := s.clipURL(ctx, fb.Hebrew, "")
+	if fb.Hebrew != "" {
+		url, err := s.clipURL(ctx, fb.Hebrew, audioIDOf(fb.AudioURL))
 		if err != nil {
 			return err
 		}
 		fb.AudioURL = url
 	}
 	for i := range fb.Pairs {
-		if fb.Pairs[i].AudioURL != "" || fb.Pairs[i].Hebrew == "" {
+		if fb.Pairs[i].Hebrew == "" {
 			continue
 		}
-		url, err := s.clipURL(ctx, fb.Pairs[i].Hebrew, "")
+		url, err := s.clipURL(ctx, fb.Pairs[i].Hebrew, audioIDOf(fb.Pairs[i].AudioURL))
 		if err != nil {
 			return err
 		}
 		fb.Pairs[i].AudioURL = url
 	}
 	return nil
+}
+
+// audioIDOf pulls the asset id out of /audio/<id>.mp3, or "".
+func audioIDOf(url string) string {
+	const prefix, suffix = "/audio/", ".mp3"
+	if !strings.HasPrefix(url, prefix) || !strings.HasSuffix(url, suffix) {
+		return ""
+	}
+	return strings.TrimSuffix(strings.TrimPrefix(url, prefix), suffix)
 }
 
 func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
@@ -1073,11 +1200,12 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 	}
 	if vm.Pick {
 		card.Pick = true
+		card.Cue = vm.Cue
 		card.PickLetters = vm.PickLetters
 		card.BlankedExample = vm.BlankedExample
 		card.ExampleGloss = vm.ExampleGloss
 		card.AudioURL = vm.AudioURL
-		if vm.ExampleText == "" {
+		if vm.ExampleText == "" && vm.Cue == "" {
 			// No example: surface the asked letter's English sound as the prompt,
 			// never its name or the tell-apart cue.
 			for _, side := range vm.Sides {

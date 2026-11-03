@@ -96,6 +96,8 @@ func LessonLabel(typ string) string {
 		return "Fill the gap"
 	case "say":
 		return "Say it aloud"
+	case "order":
+		return "Put the words in order" // INIT-029/SPEC-004
 	}
 	return "Practice"
 }

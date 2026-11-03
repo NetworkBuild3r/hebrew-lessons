@@ -331,7 +331,8 @@ func TestDrillReturnsOnlyAfterTwoNewMisses(t *testing.T) {
 	}
 }
 
-// ac-7: pattern Good writes a right drill answer; Again writes wrong and requeues.
+// ac-7: pattern DrillAnswered writes a right or wrong drill answer; a wrong
+// answer is not asked again in that sitting. INIT-029/SPEC-005.
 func TestPatternRecordGradesDrill(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	ctx := context.Background()
@@ -339,18 +340,22 @@ func TestPatternRecordGradesDrill(t *testing.T) {
 	seedAgreementMisses(t, store, clk, userID, "הוא/היא", MinMissesForDrill)
 	sess := mustBuild(t, svc, userID)
 	drill := nextDrill(t, sess, KindPattern)
-	revealAndRecord(t, sess, ctx, drill.CardID, fsrs.Good)
+	if _, err := sess.DrillAnswered(ctx, drill.CardID, true, 200*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
 	answers, err := store.DrillAnswersSince(ctx, userID, fsrs.MissAgreement, "הוא/היא", time.Time{})
-	if err != nil || len(answers) != 1 || !answers[0].Correct || answers[0].LatencyMS != 0 {
+	if err != nil || len(answers) != 1 || !answers[0].Correct || answers[0].LatencyMS != 200 {
 		t.Fatalf("good answers = %+v, %v", answers, err)
 	}
 
 	sess = mustBuild(t, svc, userID)
 	drill = nextDrill(t, sess, KindPattern)
-	revealAndRecord(t, sess, ctx, drill.CardID, fsrs.Again)
+	if _, err := sess.DrillAnswered(ctx, drill.CardID, false, 400*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
 	answers, err = store.DrillAnswersSince(ctx, userID, fsrs.MissAgreement, "הוא/היא", time.Time{})
 	if err != nil || len(answers) < 2 || answers[len(answers)-1].Correct {
-		t.Fatalf("again answers = %+v, %v", answers, err)
+		t.Fatalf("wrong answers = %+v, %v", answers, err)
 	}
 	found := false
 	for i := 0; i < DrillSteps+4; i++ {
@@ -364,7 +369,7 @@ func TestPatternRecordGradesDrill(t *testing.T) {
 		}
 	}
 	if found {
-		t.Fatal("Again on a pattern drill was asked again in the same sitting")
+		t.Fatal("a wrong pattern pick was asked again in the same sitting")
 	}
 }
 

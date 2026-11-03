@@ -243,6 +243,7 @@ func TestResourcesAuthoringNamesEveryActivityType(t *testing.T) {
 	types := []string{
 		units.ActivityListenPick, units.ActivityRecall, units.ActivityProduce, units.ActivityCloze,
 		units.ActivityPattern, units.ActivityStory, units.ActivityShadow, units.ActivityDialogue, units.ActivitySay,
+		units.ActivityOrder, // INIT-029/SPEC-008
 	}
 	for _, typ := range types {
 		if !strings.Contains(text, "| `"+typ+"` |") {

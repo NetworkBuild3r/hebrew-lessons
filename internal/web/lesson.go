@@ -2,12 +2,16 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +53,10 @@ import (
 //     audio until the learner presses "I said it". The reveal is the model
 //     as cards, the line plays once, and "Got it" / "Not yet" record one
 //     self-check. The step then moves on.
+//   - order shows the English line and pointed-Hebrew chips in a seeded
+//     shuffle that is never the answer. The learner posts chip positions.
+//     One try. The reveal shows the reading, the English, and the clip.
+//     INIT-029/SPEC-003.
 //   - any other type shows the words and a continue button.
 //
 // A step with no lexicon target is exposure, not a graded choice.
@@ -237,6 +245,11 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 	}
 	if act.Type == units.ActivitySay {
 		p.answerSay(w, r, page, userID, lesson, run, act, target, answer, total, partial)
+		return
+	}
+	// INIT-029/SPEC-003: order posts chip positions, not a lexeme id.
+	if act.Type == units.ActivityOrder {
+		p.answerOrder(w, r, page, userID, lesson, run, act, target, answer, total, partial)
 		return
 	}
 	graded := gradedActivity(act.Type) && target.ID != 0
@@ -437,6 +450,163 @@ func (p player) answerSay(w http.ResponseWriter, r *http.Request, page views.Pag
 	p.writeScreen(w, r, page, screen, partial)
 }
 
+// answerOrder grades a build-the-sentence step. The learner posts order=N
+// values that are indices into the served chip list. The server rebuilds
+// that list from the run seed and does not trust a client-supplied key.
+// A post that misses, repeats, or names an unknown chip is 400 and writes
+// nothing. One try. INIT-029/SPEC-003.
+func (p player) answerOrder(w http.ResponseWriter, r *http.Request, page views.Page, userID int64, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView, answer string, total int, partial bool) {
+	var err error
+	var justBuilt []string
+	switch {
+	case run.Phase == "ask" && answer != "continue":
+		positions, ok := parseOrderPositions(r.PostForm["order"])
+		if !ok {
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+		served := orderServed(run, act)
+		built, correct, ok := orderGrade(served, positions, act)
+		if !ok {
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+		justBuilt = built
+		asked := run.AskedAt
+		var applied bool
+		run, applied, err = p.store.AnswerPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, correct)
+		if err == nil && applied && target.ID != 0 {
+			err = p.recordAnswer(r.Context(), userID, lesson, act, target, strings.Join(built, " "), correct, answerLatency(p.store.Clock(), asked))
+		}
+	case answer == "continue" && run.Phase == "reveal":
+		run, _, err = p.store.ContinuePlayerRun(r.Context(), userID, run.ID, run.ActivityIx, total)
+	}
+	if err != nil {
+		serverError(w)
+		return
+	}
+	screen, err := p.screenFor(r.Context(), page, lesson, run, lessonQueryFrom(r, page.Lang))
+	if err != nil {
+		serverError(w)
+		return
+	}
+	// Prefer the tokens just graded so the reveal row does not wait on a
+	// store round-trip. INIT-029/SPEC-004.
+	if len(justBuilt) > 0 {
+		screen.Activity.OrderAnswer = justBuilt
+	}
+	p.writeScreen(w, r, page, screen, partial)
+}
+
+// orderAnswerTokens is the learner's last order response for this unit, split
+// into pointed tokens for the reveal row. Empty when none is stored.
+// INIT-029/SPEC-004.
+func (p player) orderAnswerTokens(ctx context.Context, userID, unitID, lexemeID int64) []string {
+	if p.store == nil || lexemeID == 0 {
+		return nil
+	}
+	attempts, err := p.store.ListAttempts(ctx, userID, lexemeID)
+	if err != nil {
+		return nil
+	}
+	for i := len(attempts) - 1; i >= 0; i-- {
+		a := attempts[i]
+		if a.Activity != units.ActivityOrder || a.UnitID != unitID {
+			continue
+		}
+		toks := units.Tokenize(a.Response)
+		if len(toks) > 0 {
+			return toks
+		}
+	}
+	return nil
+}
+
+// parseOrderPositions reads the posted chip indices. Non-integer values are
+// refused. Length and uniqueness are checked in orderGrade against the served
+// bank. INIT-029/SPEC-003.
+func parseOrderPositions(raw []string) ([]int, bool) {
+	if len(raw) == 0 {
+		return nil, false
+	}
+	out := make([]int, len(raw))
+	for i, s := range raw {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, false
+		}
+		out[i] = n
+	}
+	return out, true
+}
+
+// orderServed is the chip bank for one order ask. It shuffles the line's
+// tokens with a seed of the run id and the step index, the same way
+// choiceSeed seeds choices. If that shuffle equals text or any accept
+// entry, it rotates by one token. INIT-029/SPEC-003.
+func orderServed(run db.PlayerRun, act units.Activity) []string {
+	tokens := units.Tokenize(act.Text)
+	if len(tokens) == 0 {
+		return nil
+	}
+	out := append([]string(nil), tokens...)
+	rng := orderRNG(run)
+	rng.Shuffle(len(out), func(i, j int) { out[i], out[j] = out[j], out[i] })
+	if orderMatchesAnswer(out, act) {
+		out = append(append([]string(nil), out[1:]...), out[0])
+	}
+	return out
+}
+
+// orderRNG seeds a PCG the same way choices.newPCG does, from run id and
+// step, with Attempt and TargetID zero. INIT-029/SPEC-003.
+func orderRNG(run db.PlayerRun) *rand.Rand {
+	seed := choices.ChoiceSeed{RunID: run.ID, Step: run.ActivityIx}
+	var buf [32]byte
+	binary.LittleEndian.PutUint64(buf[0:8], uint64(seed.RunID))
+	binary.LittleEndian.PutUint64(buf[8:16], uint64(seed.Step))
+	binary.LittleEndian.PutUint64(buf[16:24], uint64(seed.Attempt))
+	binary.LittleEndian.PutUint64(buf[24:32], uint64(seed.TargetID))
+	sum := sha256.Sum256(buf[:])
+	return rand.New(rand.NewPCG(
+		binary.LittleEndian.Uint64(sum[0:8]),
+		binary.LittleEndian.Uint64(sum[8:16]),
+	))
+}
+
+// orderMatchesAnswer reports whether toks equals text or an accept entry,
+// token by token in NFC. INIT-029/SPEC-003.
+func orderMatchesAnswer(toks []string, act units.Activity) bool {
+	if slices.Equal(toks, units.Tokenize(act.Text)) {
+		return true
+	}
+	for _, entry := range act.Accept {
+		if slices.Equal(toks, units.Tokenize(entry)) {
+			return true
+		}
+	}
+	return false
+}
+
+// orderGrade maps posted positions through the served bank. ok is false when
+// a position is missing, repeated, or out of range. INIT-029/SPEC-003.
+func orderGrade(served []string, positions []int, act units.Activity) (built []string, correct bool, ok bool) {
+	n := len(served)
+	if n == 0 || len(positions) != n {
+		return nil, false, false
+	}
+	seen := make([]bool, n)
+	built = make([]string, n)
+	for i, p := range positions {
+		if p < 0 || p >= n || seen[p] {
+			return nil, false, false
+		}
+		seen[p] = true
+		built[i] = served[p]
+	}
+	return built, orderMatchesAnswer(built, act), true
+}
+
 // recordAnswer writes one checked lesson answer through evidence.Recorder.
 // userID is the signed-in learner. answer is the lexeme id the learner picked.
 // The response stored is that word's pointed text, or the raw form value when
@@ -508,12 +678,13 @@ func answerLatency(clk clock.Clock, asked time.Time) time.Duration {
 
 // lessonSkill is the skill a graded lesson activity exercises.
 // recall and cloze show Hebrew and ask for meaning or the missing word (read).
-// listen_pick plays a clip (listen). produce shows the meaning and asks for the Hebrew (recall).
+// listen_pick plays a clip (listen). produce and order show English and ask
+// for the Hebrew (recall). INIT-029/SPEC-003.
 func lessonSkill(typ string) string {
 	switch typ {
 	case units.ActivityListenPick:
 		return fsrs.SkillListen
-	case units.ActivityProduce:
+	case units.ActivityProduce, units.ActivityOrder:
 		return fsrs.SkillRecall
 	default:
 		return fsrs.SkillRead
@@ -698,6 +869,17 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	}
 	screen.Activity.Audio = phraseAudio(act, phase, clips.phrase)
 	screen.Activity.Words = wordsFor(act, lex, lesson.NewWords, phase, clips, target, q.meaningsAll)
+	// INIT-029/SPEC-003: ask chips are OrderChips, not the line in answer order.
+	if act.Type == units.ActivityOrder && phase == "ask" {
+		screen.Activity.Words = nil
+	}
+	// INIT-029/SPEC-004: reveal shows the learner's built line and plays the clip.
+	if act.Type == units.ActivityOrder && phase == "reveal" {
+		screen.Activity.OrderAnswer = p.orderAnswerTokens(ctx, run.UserID, lesson.UnitID, target.ID)
+		if screen.Activity.Audio != "" {
+			screen.Activity.Autoplay = true
+		}
+	}
 	if act.Type == units.ActivityStory && screen.Activity.Audio != "" && storyWords(screen.Activity.Words) > 1 {
 		screen.Activity.Follow = true
 	}
@@ -789,6 +971,17 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 		} else {
 			activity.Prompt = ""
 		}
+	}
+	// INIT-029/SPEC-003: English cue on ask and reveal; chips only on ask.
+	if act.Type == units.ActivityOrder {
+		activity.Cue = strings.TrimSpace(act.Translation)
+		if !empty && run.Phase == "ask" {
+			activity.OrderChips = orderServed(run, act)
+			activity.Asking = len(activity.OrderChips) > 0
+		} else if run.Phase == "reveal" {
+			activity.Prompt = "" // INIT-029/SPEC-004: ask prompt stays off the reveal
+		}
+		return activity
 	}
 	if !empty && act.Type == units.ActivityListenPick && run.Phase != "ask" {
 		activity.Prompt = listenRevealPrompt
@@ -1020,11 +1213,11 @@ func wordsForText(text, typ string, lex map[string]db.LexemeView, newWords []db.
 	return words
 }
 
-// phraseAudio hides the sentence clip until the answer for produce and cloze.
-// A cloze clip speaks the gapped word. It is split out so screenFor can set
-// Activity.Audio after wordsFor.
+// phraseAudio hides the sentence clip until the answer for produce, cloze,
+// say, and order. A cloze clip speaks the gapped word. It is split out so
+// screenFor can set Activity.Audio after wordsFor. INIT-029/SPEC-003 adds order.
 func phraseAudio(act units.Activity, phase, src string) string {
-	if phase == "ask" && (act.Type == units.ActivityProduce || act.Type == units.ActivityCloze || act.Type == units.ActivitySay) {
+	if phase == "ask" && (act.Type == units.ActivityProduce || act.Type == units.ActivityCloze || act.Type == units.ActivitySay || act.Type == units.ActivityOrder) {
 		return ""
 	}
 	return src
@@ -1044,10 +1237,10 @@ func visibleFields(typ, phase string) fieldVis {
 		return fieldVis{text: true, translit: revealed, gloss: revealed}
 	case units.ActivityListenPick, units.ActivityProduce:
 		return fieldVis{text: revealed, translit: revealed, gloss: revealed}
-	case units.ActivityCloze:
-		// Before the answer the other words are pointed Hebrew, with no Latin
-		// reading and no gloss. After the answer every word, including the gap,
-		// shows its reading and its meaning.
+	case units.ActivityCloze, units.ActivityOrder:
+		// Before the answer the chips (or other words) are pointed Hebrew,
+		// with no Latin reading and no gloss. After the answer every word
+		// shows its reading and its meaning. INIT-029/SPEC-003.
 		return fieldVis{text: true, translit: revealed, gloss: revealed}
 	case units.ActivitySay:
 		// The ask screen is the English cue. The reveal shows the model.
@@ -1059,8 +1252,8 @@ func visibleFields(typ, phase string) fieldVis {
 
 func gradedActivity(typ string) bool {
 	switch typ {
-	case units.ActivityRecall, units.ActivityListenPick, units.ActivityProduce, units.ActivityCloze:
-		return true
+	case units.ActivityRecall, units.ActivityListenPick, units.ActivityProduce, units.ActivityCloze, units.ActivityOrder:
+		return true // order: INIT-029/SPEC-003
 	default:
 		return false
 	}
@@ -1625,6 +1818,8 @@ func activityPrompt(lesson db.CourseLesson, act units.Activity, target db.Lexeme
 		return "Pick the missing word."
 	case units.ActivitySay:
 		return "Say it in Hebrew"
+	case units.ActivityOrder:
+		return "Put the words in order." // INIT-029/SPEC-003
 	default:
 		return "Read this."
 	}

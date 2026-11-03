@@ -93,8 +93,8 @@ func shellEmails() []string {
 // shellPaths is where each test store lives, so a test can read it with a second connection.
 var shellPaths = map[*db.Store]string{}
 
-// openShell is the app with a closed letters gate, so reviews are flashcards (as openAt),
-// plus the placement engine and the band seam the shell reads.
+// openShell is the app with a closed letters gate (word visits promote to a meaning
+// pick, as openAt), plus the placement engine and the band seam the shell reads.
 func openShell(t *testing.T, clk clock.Clock, eng PlacementEngine, bands learner.BandSource) (*db.Store, http.Handler) {
 	t.Helper()
 	return openShellAt(t, clk, "https://learn.example", eng, bands)
@@ -608,16 +608,18 @@ func TestBandSlipLinksToAReviewSetOfThatBand(t *testing.T) {
 	}
 
 	// The queue now holds exactly the two struggling band-0 words.
+	byHe := map[string]string{}
+	for _, c := range w {
+		byHe[c.he] = c.gloss
+	}
 	got := map[int64]bool{}
 	page := getLearner(t, h, l, "/review")
 	for i := 0; i < 10 && !strings.Contains(cardAttrs(page), `data-done="true"`); i++ {
 		card := mustInt(t, attr(t, cardAttrs(page), "data-card"))
 		got[card] = true
-		rec := gradeRevealed(t, h, l, card, "3", "https://learn.example")
-		if rec.Code != http.StatusOK {
-			t.Fatalf("grade = %d %s", rec.Code, rec.Body.String())
-		}
-		page = rec.Body.String()
+		gloss := glossOnPage(t, page, byHe)
+		fb := answerChecked(t, h, l, page, rightPickIndex(t, page, gloss))
+		page = continueChecked(t, h, l, fb.Body.String())
 	}
 	cards := map[int64]bool{}
 	for _, c := range []lexWord{w[0], w[1]} {

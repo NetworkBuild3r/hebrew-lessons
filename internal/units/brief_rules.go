@@ -236,6 +236,9 @@ func markupIssues(doc *Unit) []Issue {
 			check(at("lessons", i, "activities", j, "translation"), act.Translation)
 			check(at("lessons", i, "activities", j, "prompt_en"), act.PromptEN)
 			check(at("lessons", i, "activities", j, "play"), act.Play)
+			for k, entry := range act.Accept {
+				check(at("lessons", i, "activities", j, "accept", k), entry)
+			}
 			for k, line := range act.Lines {
 				check(at("lessons", i, "activities", j, "lines", k, "speaker"), line.Speaker)
 				check(at("lessons", i, "activities", j, "lines", k, "text"), line.Text)
@@ -350,8 +353,46 @@ func briefIssuesFlat(ctx context.Context, doc *Unit, lk Lookup, f *BriefFacts) [
 	out = append(out, struggleIssues(acts, f)...)
 	out = append(out, b.glossIssues(acts, f)...)
 	out = append(out, fixContrastIssues(doc, acts, f)...)
+	out = append(out, orderKnownIssues(acts, f)...) // INIT-029/SPEC-002
 	if s.err != nil {
 		return []Issue{lookupIssue(s.err)}
+	}
+	return out
+}
+
+// orderKnownIssues applies brief.order_known: every Hebrew token on an order
+// line is a known word for this learner, or a word an earlier story, dialogue,
+// or shadow step introduced. Introduction matches brief.new_intro_before_test:
+// an exposure activity that shows the word. INIT-029/SPEC-002.
+func orderKnownIssues(acts []actTokens, f *BriefFacts) []Issue {
+	if f == nil {
+		return nil
+	}
+	introduced := map[int64]bool{}
+	var out []Issue
+	for _, a := range acts {
+		if a.typ == ActivityOrder {
+			seen := map[string]bool{}
+			for _, t := range a.toks {
+				key := normalize(t.tok)
+				if key == "" || seen[key] {
+					continue
+				}
+				seen[key] = true
+				if t.ref.ok && (f.KnownLexemeIDs[t.ref.id] || introduced[t.ref.id]) {
+					continue
+				}
+				out = append(out, issue(RuleBriefOrderKnown, SeverityBlock, a.pointer(),
+					fmt.Sprintf("order token %s is not known and was not introduced earlier", t.tok)))
+			}
+		}
+		if exposureActivity(a.typ) {
+			for _, t := range a.toks {
+				if t.ref.ok {
+					introduced[t.ref.id] = true
+				}
+			}
+		}
 	}
 	return out
 }

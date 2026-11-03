@@ -357,7 +357,31 @@ func letterPickLead(c ReviewCard) string {
 	if c.AfterDrill || c.Revealed {
 		return PromptGrade
 	}
+	// Pattern picks ask which form fits the gloss or blank (INIT-029/SPEC-006).
+	if c.Kind == "pattern" {
+		if c.BlankedExample != "" {
+			return "Which form is missing?"
+		}
+		return "Which form matches?"
+	}
 	return "Which letter is missing?"
+}
+
+// pickOptionsLabel is the aria-label on the two option buttons.
+func pickOptionsLabel(c ReviewCard) string {
+	if c.Kind == "pattern" {
+		return "Which form"
+	}
+	return "Which letter"
+}
+
+// pickFeedbackFace is the answer face after a timed pick: pattern forms with
+// glosses, or the letter back (INIT-029/SPEC-006).
+func pickFeedbackFace(c ReviewCard) templ.Component {
+	if c.Kind == "pattern" {
+		return patternBack(c)
+	}
+	return letterBack(c)
 }
 
 func letterPickFeedbackClass(c ReviewCard) string {

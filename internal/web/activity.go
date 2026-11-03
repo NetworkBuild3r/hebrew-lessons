@@ -195,7 +195,7 @@ func (s *server) answer(w http.ResponseWriter, r *http.Request) {
 	if res.Correct {
 		q.correct++
 	}
-	// A miss puts the visit back once, so the session is one longer.
+	// Place stays the same length: a miss is not put back (ADR-0024 D3).
 	_, q.total, _ = q.sess.Place()
 	q.fb = &answerState{
 		item: *q.item, resp: resp, text: strings.TrimSpace(resp.Text), res: res,

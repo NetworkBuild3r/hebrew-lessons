@@ -112,13 +112,19 @@ func annotateUnitSchema(s *jsonschema.Schema) error {
 		units.ActivityShadow,
 		units.ActivityDialogue,
 		units.ActivitySay,
+		units.ActivityOrder, // INIT-029/SPEC-002
 	}
-	typ.Description = "One of the nine activity types."
+	typ.Description = "One of the ten activity types."
 	text.Description = "Pointed Hebrew this screen speaks or asks about. Audio is looked up from this exact text. Every type has it except dialogue, which has lines instead."
 	// translation stays out of the required array. The validator requires it
-	// on a listen_pick of two or more words that are in the lexicon, and nowhere else.
+	// on a listen_pick of two or more words that are in the lexicon, on order,
+	// and nowhere else.
 	if tr := prop(act, "translation"); tr != nil {
-		tr.Description = "Natural English translation of the whole text, written by the author. Required on a listen_pick whose text has two or more words that are in the lexicon. Optional on every other type. English only, no markup, at most 120 characters."
+		tr.Description = "Natural English translation of the whole text, written by the author. Required on a listen_pick whose text has two or more words that are in the lexicon, and on order. Optional on every other type. English only, no markup, at most 120 characters."
+	}
+	// accept is order-only; the jsonschema tag on Activity.Accept describes it. INIT-029/SPEC-002.
+	if acc := prop(act, "accept"); acc != nil {
+		acc.Description = "Other full orders of the same tokens that are also right. Empty means only text is right. Each entry must use exactly the same tokens as text, in a different order."
 	}
 	// target stays out of the required array. recall, produce, cloze, and say must
 	// set it when the line has two or more lexicon words. listen_pick may omit it.
@@ -293,6 +299,25 @@ func activityCatalog() []activityInfo {
 					Name:        "lines",
 					Required:    true,
 					Description: "2 to 8 objects {speaker: a or b, text: pointed Hebrew in NFC, translation: optional English of that line}. A dialogue has no text field.",
+				},
+			},
+		},
+		// INIT-029/SPEC-002
+		{
+			Type:    units.ActivityOrder,
+			Purpose: "The learner builds a pointed Hebrew sentence from chips. translation is the English cue. text is the right order. accept lists other full orders of the same tokens that are also right.",
+			Fields: []activityField{
+				typ("order"),
+				text,
+				{
+					Name:        "translation",
+					Required:    true,
+					Description: "English cue for the sentence. Required. English only, no markup, at most 120 characters.",
+				},
+				{
+					Name:        "accept",
+					Required:    false,
+					Description: "Other full orders of the same tokens that are also right. Empty means only text is right.",
 				},
 			},
 		},

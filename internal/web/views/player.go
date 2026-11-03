@@ -81,12 +81,43 @@ type Activity struct {
 	HowSheet string
 	// Say is a say-it-aloud step. SayAsk is the cue before "I said it".
 	// Cue is the English line. Autoplay starts the model clip once on the reveal.
+	// Order also sets Cue to the line's English translation (INIT-029/SPEC-003).
 	Say      bool
 	SayAsk   bool
 	Cue      string
 	Autoplay bool
 	// LineNext is the other speaker's line in a your-turn dialogue.
 	LineNext bool
+	// OrderChips is the shuffled pointed-Hebrew bank on an order ask.
+	// Empty on reveal. Indices into this slice are what the learner posts.
+	// INIT-029/SPEC-003.
+	OrderChips []string
+	// OrderAnswer is the learner's built line on an order reveal, pointed
+	// Hebrew only. Empty on ask. INIT-029/SPEC-004.
+	OrderAnswer []string
+}
+
+// orderAsk is the build-the-sentence step before Check. INIT-029/SPEC-004.
+func orderAsk(a Activity) bool {
+	return len(a.OrderChips) > 0
+}
+
+// orderRevealAnswer is the learner's row after Check. INIT-029/SPEC-004.
+func orderRevealAnswer(a Activity) bool {
+	return len(a.OrderAnswer) > 0
+}
+
+// orderWrong is a graded wrong order reveal. INIT-029/SPEC-004.
+func orderWrong(a Activity) bool {
+	return strings.Contains(a.FeedbackClass, "feedback--wrong")
+}
+
+// orderRightClass marks the learner's reveal row. INIT-029/SPEC-004.
+func orderAnswerClass(a Activity) string {
+	if orderWrong(a) {
+		return "order-answer order-answer--wrong"
+	}
+	return "order-answer order-answer--right"
 }
 
 // Dialogue is a conversation between two people, shown line by line in order.

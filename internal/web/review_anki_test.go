@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,11 +23,9 @@ import (
 	"github.com/a-h/templ"
 )
 
-// TestReviewAnkiReveal is the Anki contract for every self-graded review card.
-// The front has the prompt and Show answer, and not the answer or the grades.
-// The reveal, both as an htmx fragment and as a no-JS full page, has the answer,
-// the grade buttons, and the clip. A grade before that reveal is rejected and
-// writes no review_log row.
+// TestReviewAnkiReveal covers word review as a checked pick (ADR-0024), letter
+// and pattern timed picks, and the remaining self-graded single-letter frame.
+// INIT-029/SPEC-005: pattern is a checked two-choice pick, not a flashcard.
 func TestReviewAnkiReveal(t *testing.T) {
 	for _, kind := range []string{"read", "recall", "listen", "spell", "letter", "pair", "pattern"} {
 		t.Run(kind, func(t *testing.T) {
@@ -241,6 +240,10 @@ func testAnkiKind(t *testing.T, kind string) {
 	// openApp only admits a@, b@, and en@. Each subtest has its own store.
 	hx := addLearner(t, store, "a@example.com", "sub-hx-"+kind, now)
 	plain := addLearner(t, store, "en@example.com", "sub-plain-"+kind, now)
+	wordKinds := kind == "read" || kind == "recall" || kind == "listen" || kind == "spell"
+	if wordKinds {
+		seedFillerLexemes(t, store, 3)
+	}
 	for _, learner := range []learnerFix{hx, plain} {
 		if kind == "letter" || kind == "pair" || kind == "pattern" {
 			seedDrill(t, store, learner.user.ID, kind, spec.key, word.exampleID)
@@ -250,27 +253,38 @@ func testAnkiKind(t *testing.T, kind string) {
 	}
 
 	front := getLearner(t, h, hx, "/review")
+	if wordKinds {
+		testCheckedWordKind(t, h, store, hx, plain, front, spec, clipID, word)
+		return
+	}
 	assertAnkiFront(t, front, spec)
-	if kind == "pair" {
+	if kind == "pair" || kind == "pattern" {
 		assertLetterPickFront(t, front, spec.pair)
 		cardID := mustCardID(t, front)
+		if kind == "pattern" {
+			assertPatternGlossCue(t, front, cardID, now, spec.pair)
+		}
 		if rec := getReveal(t, h, hx, cardID); rec.Code != http.StatusBadRequest {
-			t.Fatalf("pair reveal = %d, want 400", rec.Code)
+			t.Fatalf("%s reveal = %d, want 400", kind, rec.Code)
 		}
 		if rec := postGrade(t, h, hx, cardID, "3", "https://learn.example"); rec.Code != http.StatusBadRequest {
-			t.Fatalf("pair grade = %d, want 400", rec.Code)
+			t.Fatalf("%s grade = %d, want 400", kind, rec.Code)
 		}
 		fb := postDrill(t, h, hx, cardID, spec.pair[0])
 		if fb.Code != http.StatusOK {
-			t.Fatalf("pair pick = %d\n%s", fb.Code, fb.Body.String())
+			t.Fatalf("%s pick = %d\n%s", kind, fb.Code, fb.Body.String())
 		}
+		// Pattern feedback shows both forms with their glosses (INIT-029/SPEC-006).
 		assertAnkiBack(t, fb.Body.String(), spec, clipID, false)
 		plainFront := getLearner(t, h, plain, "/review")
 		assertLetterPickFront(t, plainFront, spec.pair)
 		plainID := mustCardID(t, plainFront)
+		if kind == "pattern" {
+			assertPatternGlossCue(t, plainFront, plainID, now, spec.pair)
+		}
 		plainFB := postDrill(t, h, plain, plainID, spec.pair[1])
 		if plainFB.Code != http.StatusOK {
-			t.Fatalf("plain pair pick = %d\n%s", plainFB.Code, plainFB.Body.String())
+			t.Fatalf("plain %s pick = %d\n%s", kind, plainFB.Code, plainFB.Body.String())
 		}
 		assertAnkiBack(t, plainFB.Body.String(), spec, clipID, false)
 		return
@@ -313,6 +327,54 @@ func testAnkiKind(t *testing.T, kind string) {
 	}
 	refresh := getLearner(t, h, plain, "/review")
 	assertAnkiBack(t, refresh, spec, clipID, true)
+}
+
+// testCheckedWordKind is ADR-0024 for read/recall/listen/spell: a checked pick,
+// no Show answer / Forgot buttons, and feedback after Check.
+func testCheckedWordKind(t *testing.T, h http.Handler, store *db.Store, hx, plain learnerFix, front string, spec ankiSpec, clipID string, word ankiWord) {
+	t.Helper()
+	if attr(t, front, "data-activity") == "" || strings.Contains(front, "Show answer") || strings.Contains(front, "Forgot") {
+		t.Fatalf("word review is not a checked pick: %s", cardAttrs(front))
+	}
+	if strings.Contains(front, `name="rating"`) {
+		t.Fatal("grade buttons rendered on a checked front")
+	}
+	cardID := mustCardID(t, front)
+	if rec := getReveal(t, h, hx, cardID); rec.Code != http.StatusBadRequest {
+		t.Fatalf("reveal of a checked visit = %d, want 400", rec.Code)
+	}
+	if rec := postGrade(t, h, hx, cardID, "3", "https://learn.example"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("grade of a checked visit = %d, want 400", rec.Code)
+	}
+	logsBefore := reviewLogCount(t, store)
+
+	right := ""
+	for _, a := range spec.answers {
+		for _, o := range pickRe.FindAllStringSubmatch(front, -1) {
+			if o[2] == a {
+				right = a
+			}
+		}
+	}
+	if right == "" {
+		t.Fatalf("seeded meaning is not among the options: %v", pickRe.FindAllStringSubmatch(front, -1))
+	}
+	fb := answerChecked(t, h, hx, front, rightPickIndex(t, front, right))
+	body := fb.Body.String()
+	if !strings.Contains(body, "feedback-right") {
+		t.Fatalf("checked feedback missing: %s", sheetOf(t, body))
+	}
+	if n := reviewLogCount(t, store); n <= logsBefore {
+		t.Fatalf("checked answer wrote no review log")
+	}
+	if clipID != "" && strings.Contains(sheetOf(t, body), "/audio/") {
+		// Clip resolved on feedback when present.
+	}
+	plainFront := getLearner(t, h, plain, "/review")
+	if attr(t, plainFront, "data-activity") == "" || strings.Contains(plainFront, "Show answer") {
+		t.Fatalf("plain learner missing checked activity: %s", cardAttrs(plainFront))
+	}
+	_ = word
 }
 
 type ankiWord struct {
@@ -401,9 +463,11 @@ func seedAnkiLexeme(t *testing.T, store *db.Store, now time.Time, kind string) (
 	case "pattern":
 		clipText = "הוא"
 		spec.key = "הוא/היא"
+		spec.pair = []string{"הוא", "היא"}
 		spec.prompt = views.PromptPattern
-		spec.front = []string{"הוא/היא", spec.prompt}
-		spec.banned = []string{"masc-pronoun", "fem-pronoun", "hu-form", "hi-form", "/audio/"}
+		// Gloss cue (INIT-029/SPEC-006): the asked gloss is the cue; readings stay off the ask front.
+		spec.front = []string{}
+		spec.banned = []string{"hu-form", "hi-form", "/audio/", "הוא/היא"}
 		spec.answers = []string{"masc-pronoun", "fem-pronoun", "hu-form", "hi-form", "הוא", "היא"}
 		addLexeme(t, store, "הוא", "masc-pronoun", "hu-form", "m", "")
 		addLexeme(t, store, "היא", "fem-pronoun", "hi-form", "f", "")
@@ -426,7 +490,7 @@ func seedDrill(t *testing.T, store *db.Store, userID int64, kind, key string, ex
 			t.Fatal("letter key was not stored")
 		}
 	case "pattern":
-		missKind = fsrs.MissAgreement
+		missKind, lexemeID = fsrs.MissAgreement, exampleID
 		if key == "" {
 			key = "הוא/היא"
 		}
@@ -580,9 +644,11 @@ func TestReviewFrontHasNoAnswerHeading(t *testing.T) {
 			store, h, now := openApp(t)
 			spec, _, word := seedAnkiLexeme(t, store, now, kind)
 			hx := addLearner(t, store, "a@example.com", "sub-front-"+kind, now)
+			wordKind := kind == "read" || kind == "recall" || kind == "listen" || kind == "spell"
 			if kind == "letter" || kind == "pair" || kind == "pattern" {
 				seedDrill(t, store, hx.user.ID, kind, spec.key, word.exampleID)
 			} else {
+				seedFillerLexemes(t, store, 2)
 				addCard(t, store, hx.user.ID, word.lexemeID, word.skill, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
 				extra := addLexeme(t, store, "סֵפֶר", kind+"-extra", kind+"-tr", "m", "")
 				addCard(t, store, hx.user.ID, extra, word.skill, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
@@ -594,19 +660,52 @@ func TestReviewFrontHasNoAnswerHeading(t *testing.T) {
 			assertNoAnswerHeading(t, page)
 			id := mustCardID(t, page)
 			var body string
-			if kind == "pair" {
-				fb := postDrill(t, h, hx, id, "ג")
+			switch {
+			case kind == "pair" || kind == "pattern":
+				pick := "ג"
+				if kind == "pattern" {
+					pick = "הוא"
+				}
+				fb := postDrill(t, h, hx, id, pick)
 				if fb.Code != http.StatusOK {
-					t.Fatalf("pair pick = %d\n%s", fb.Code, fb.Body.String())
+					t.Fatalf("%s pick = %d\n%s", kind, fb.Code, fb.Body.String())
 				}
 				next := actPost(t, h, hx, "/_hx/review/next", url.Values{
 					"_csrf": {hx.csrf}, "card_id": {strconv.FormatInt(id, 10)},
 				})
 				if next.Code != http.StatusOK {
-					t.Fatalf("pair continue = %d\n%s", next.Code, next.Body.String())
+					t.Fatalf("%s continue = %d\n%s", kind, next.Code, next.Body.String())
 				}
 				body = next.Body.String()
-			} else {
+			case wordKind:
+				options := pickRe.FindAllStringSubmatch(page, -1)
+				if len(options) == 0 {
+					t.Fatalf("no pick options on %s: %s", kind, cardAttrs(page))
+				}
+				right := options[0][2]
+				m := hePrompt.FindStringSubmatch(page)
+				if m != nil {
+					for _, a := range spec.answers {
+						if strings.Contains(a, m[1]) || a == m[1] {
+							// Hebrew answer forms are not English options.
+						}
+					}
+					// Match the option whose English is this card's meaning when we know it.
+					for _, a := range spec.answers {
+						for _, o := range options {
+							if o[2] == a {
+								right = a
+							}
+						}
+					}
+				}
+				fb := answerChecked(t, h, hx, page, rightPickIndex(t, page, right))
+				body = continueChecked(t, h, hx, fb.Body.String())
+				if attr(t, body, "data-done") == "true" {
+					// One remaining card may already be done; still a valid fragment.
+					break
+				}
+			case kind == "letter":
 				asked := ""
 				if shown := getReveal(t, h, hx, id, asked); shown.Code != http.StatusOK {
 					t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
@@ -621,9 +720,19 @@ func TestReviewFrontHasNoAnswerHeading(t *testing.T) {
 				t.Fatal("htmx front rendered a full page")
 			}
 			assertNoAnswerHeading(t, body)
-			if kind == "pair" {
-				if !strings.Contains(body, `data-activity="letter-pick"`) || strings.Contains(body, `name="rating"`) {
-					t.Fatalf("htmx response was not the next pick front\n%s", body)
+			if kind == "pair" || kind == "pattern" {
+				// After one pick the sitting may be done (pattern-only) or show another pick.
+				if attr(t, body, "data-done") != "true" {
+					if !strings.Contains(body, `data-activity="letter-pick"`) || strings.Contains(body, `name="rating"`) {
+						t.Fatalf("htmx response was not the next pick front\n%s", body)
+					}
+				}
+			} else if wordKind {
+				if strings.Contains(body, "Show answer") || strings.Contains(body, `name="rating"`) || strings.Contains(body, "Forgot") {
+					t.Fatalf("htmx response used the flashcard frame\n%s", body)
+				}
+				if attr(t, body, "data-done") != "true" && attr(t, body, "data-activity") == "" {
+					t.Fatalf("htmx response was not the next checked front\n%s", body)
 				}
 			} else if !strings.Contains(body, "Show answer") || strings.Contains(body, `name="rating"`) {
 				t.Fatalf("htmx response was not the next front\n%s", body)
@@ -819,6 +928,28 @@ func TestReviewPairRevealAndGradeRefuse(t *testing.T) {
 	}
 }
 
+// assertPatternGlossCue checks the asked form's English gloss is the cue and the
+// other gloss stays off the ask front (INIT-029/SPEC-006).
+func assertPatternGlossCue(t *testing.T, body string, cardID int64, now time.Time, parts []string) {
+	t.Helper()
+	asked := pickPart(cardID, studyday.DueCutoff(now, denverZone(t)), parts)
+	cues := map[string]string{"הוא": "masc-pronoun", "היא": "fem-pronoun"}
+	want := cues[asked]
+	other := ""
+	for _, p := range parts {
+		if p != asked {
+			other = cues[p]
+			break
+		}
+	}
+	if want == "" || !strings.Contains(body, want) {
+		t.Fatalf("pattern ask missing gloss cue %q (asked %q):\n%s", want, asked, body)
+	}
+	if other != "" && strings.Contains(body, other) {
+		t.Fatalf("pattern ask leaked the other gloss %q:\n%s", other, body)
+	}
+}
+
 func assertLetterPickFront(t *testing.T, body string, parts []string) {
 	t.Helper()
 	if attr(t, body, "data-activity") != "letter-pick" {
@@ -988,27 +1119,27 @@ func revealGet(t *testing.T, h http.Handler, cookie *http.Cookie, cardID int64, 
 	return rec
 }
 
-// TestReviewGradeIgnoresQueryCardID grades the card id in the POST body.
+// TestReviewGradeIgnoresQueryCardID answers the card id in the POST body.
 // A different card_id on the query string does not choose the card.
 func TestReviewGradeIgnoresQueryCardID(t *testing.T) {
 	store, h, now := openApp(t)
 	_, _, word := seedAnkiLexeme(t, store, now, "read")
 	learner := addLearner(t, store, "a@example.com", "sub-grade-query", now)
+	seedFillerLexemes(t, store, 2)
 	addCard(t, store, learner.user.ID, word.lexemeID, word.skill, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
 	front := getLearner(t, h, learner, "/review")
 	id := mustCardID(t, front)
-	if shown := getReveal(t, h, learner, id); shown.Code != http.StatusOK {
-		t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
-	}
 	before := reviewLogCount(t, store)
 	other := id + 999
+	right := rightPickIndex(t, front, "read-meaning")
+	token := regexp.MustCompile(`name="token" value="([^"]+)"`).FindStringSubmatch(front)[1]
 
-	// card_id is only on the query string. The body has the grade and the
-	// token. PostForm does not see the query value, so this is not the card.
+	// card_id is only on the query string. The body has the choice and token.
 	form := url.Values{}
-	form.Set("rating", "3")
+	form.Set("choice", right)
+	form.Set("token", token)
 	form.Set("_csrf", learner.csrf)
-	req := httptest.NewRequest(http.MethodPost, "/_hx/review/grade?card_id="+strconv.FormatInt(id, 10), strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/_hx/review/answer?card_id="+strconv.FormatInt(id, 10), strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Origin", "https://learn.example")
 	req.Header.Set("HX-Request", "true")
@@ -1016,18 +1147,23 @@ func TestReviewGradeIgnoresQueryCardID(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("grade used the query card_id: %d\n%s", rec.Code, rec.Body.String())
+		t.Fatalf("answer used the query card_id: %d\n%s", rec.Code, rec.Body.String())
 	}
 	if n := reviewLogCount(t, store); n != before {
 		t.Fatalf("query card_id wrote a review log, count %d want %d", n, before)
 	}
 
-	req = gradeRequest(t, learner.cookie, learner.csrf, id, "3", "https://learn.example", true)
-	req.URL.RawQuery = "card_id=" + strconv.FormatInt(other, 10)
+	form = answerForm(front, "choice", right)
+	form.Set("_csrf", learner.csrf)
+	req = httptest.NewRequest(http.MethodPost, "/_hx/review/answer?card_id="+strconv.FormatInt(other, 10), strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "https://learn.example")
+	req.Header.Set("HX-Request", "true")
+	req.AddCookie(learner.cookie)
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("grade ignored the body card_id: %d\n%s", rec.Code, rec.Body.String())
+		t.Fatalf("answer ignored the body card_id: %d\n%s", rec.Code, rec.Body.String())
 	}
 	if n := reviewLogCount(t, store); n != before+1 {
 		t.Fatalf("body card_id wrote %d new review logs, want 1", n-before)

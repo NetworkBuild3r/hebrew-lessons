@@ -191,21 +191,21 @@ func TestReviewBuildsSession(t *testing.T) {
 	first := addLexeme(t, store, firstText, "hello", "shalom", "m", audio)
 	second := addLexeme(t, store, secondText, "morning", "boker", "f", "")
 	reviewed := now.Add(-48 * time.Hour)
-	addCard(t, store, learner.user.ID, first, fsrs.SkillRead, now.Add(-2*time.Hour), 1, int(fsrs.Good), reviewed)
+	firstCard := addCard(t, store, learner.user.ID, first, fsrs.SkillRead, now.Add(-2*time.Hour), 1, int(fsrs.Good), reviewed)
 	addCard(t, store, learner.user.ID, second, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 
 	body := getLearner(t, h, learner, "/review")
-	if !strings.Contains(body, `data-kind="read"`) || !strings.Contains(body, `data-pointed="`+firstText+`"`) || !strings.Contains(body, `data-show-unpointed="false"`) || !strings.Contains(body, `data-translit="shalom"`) || !strings.Contains(body, `data-index="1"`) || !strings.Contains(body, `data-total="2"`) || !strings.Contains(body, `data-revealed="false"`) {
+	if attr(t, body, "data-activity") != "read_pick" || attr(t, body, "data-kind") != "read" || attr(t, body, "data-card") != fmt.Sprint(firstCard) || attr(t, body, "data-index") != "1" || attr(t, body, "data-total") != "2" {
 		t.Fatalf("first card: %s", cardAttrs(body))
 	}
-	if !strings.Contains(body, `data-src="/audio/`+audio+`.mp3"`) || !strings.Contains(body, "shalom") || !strings.Contains(body, `action="/_hx/review/reveal"`) {
-		t.Fatal("prompt, audio, or reveal form missing")
+	if !strings.Contains(body, firstText) || !strings.Contains(body, `action="/_hx/review/answer"`) {
+		t.Fatal("Hebrew prompt or answer form missing")
 	}
-	if strings.Contains(body, "hello") || strings.Contains(body, "ז׳") || strings.Contains(body, `name="rating"`) {
-		t.Fatal("the answer or the grade buttons rendered before reveal")
+	if strings.Contains(body, "Show answer") || strings.Contains(body, `name="rating"`) || strings.Contains(body, "Forgot") {
+		t.Fatal("a word review used the flashcard frame")
 	}
-	if strings.Contains(cardAttrs(body), secondText) {
-		t.Fatal("the second card rendered first")
+	if strings.Contains(body, `data-state="correct"`) || strings.Contains(body, `class="c-sheet"`) {
+		t.Fatal("the answer is marked before Check")
 	}
 	again := getLearner(t, h, learner, "/review")
 	if cardAttrs(again) != cardAttrs(body) {
@@ -213,56 +213,54 @@ func TestReviewBuildsSession(t *testing.T) {
 	}
 
 	en := addLearner(t, store, "en@example.com", "sub-en", now)
-	enAudio := strings.Repeat("cd", 32)
 	enText := "כִּסֵּא"
-	if _, err := store.ExecContext(context.Background(), `
-		INSERT INTO audio_assets (id, text_nfc, voice, model, bytes, created_at)
-		VALUES (?, ?, 'voice', 'model', 3, ?)`, enAudio, enText, db.FormatTime(now)); err != nil {
-		t.Fatal(err)
-	}
-	word := addLexeme(t, store, enText, "chair", "kise", "m", enAudio)
+	word := addLexeme(t, store, enText, "chair", "kise", "m", "")
+	addLexeme(t, store, "שֻׁלְחָן", "table", "shulchan", "m", "")
 	enCard := addCard(t, store, en.user.ID, word, fsrs.SkillRecall, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 	prod := getLearner(t, h, en, "/review")
-	if !strings.Contains(prod, `data-kind="recall"`) || strings.Contains(prod, enText) || !strings.Contains(prod, "chair") || !strings.Contains(prod, `data-revealed="false"`) {
-		t.Fatalf("recall card leaked the answer: %s", cardAttrs(prod))
+	if attr(t, prod, "data-activity") == "" || attr(t, prod, "data-card") != fmt.Sprint(enCard) {
+		t.Fatalf("recall visit: %s", cardAttrs(prod))
 	}
-	if strings.Contains(prod, "data-translit") || strings.Contains(prod, "kise") || strings.Contains(prod, "/audio/") {
-		t.Fatalf("recall leaked translit or audio before reveal: %s", prod)
+	if strings.Contains(prod, "Show answer") || strings.Contains(prod, `name="rating"`) {
+		t.Fatal("a recall visit used the flashcard frame")
 	}
-	shown := postReveal(t, h, en, enCard, "https://learn.example")
-	shownBody := shown.Body.String()
-	if shown.Code != http.StatusOK || !strings.Contains(shownBody, `data-pointed="`+enText+`"`) || !strings.Contains(shownBody, "chair") || !strings.Contains(shownBody, `data-revealed="true"`) || !strings.Contains(shownBody, `name="rating"`) || !strings.Contains(shownBody, `data-translit="kise"`) || !strings.Contains(shownBody, "kise") || !strings.Contains(shownBody, `data-src="/audio/`+enAudio+`.mp3"`) {
-		t.Fatalf("recall reveal = %d %s", shown.Code, shownBody)
+	fb := answerChecked(t, h, en, prod, rightPickIndex(t, prod, "chair"))
+	sheet := sheetOf(t, fb.Body.String())
+	if !strings.Contains(sheet, enText) || !strings.Contains(sheet, "chair") || !strings.Contains(sheet, "feedback-right") {
+		t.Fatalf("checked feedback lacks the word: %s", sheet)
 	}
 }
 
 func TestReviewShowUnpointed(t *testing.T) {
+	// Word review is a checked pick (ADR-0024). A stable read card still shows the
+	// pointed Hebrew on the question; unpointed flashcard faces are not used here.
 	store, h, now := openApp(t)
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	text := "שָׁלוֹם"
 	lex := addLexeme(t, store, text, "hello", "shalom", "m", "")
+	seedFillerLexemes(t, store, 1)
 	reviewed := now.Add(-48 * time.Hour)
 	id := addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, now.Add(-time.Hour), 21, int(fsrs.Good), reviewed)
 	insertReview(t, store, id, int(fsrs.Good), reviewed.Add(time.Minute))
 	insertReview(t, store, id, int(fsrs.Good), reviewed.Add(2*time.Minute))
 	body := getLearner(t, h, learner, "/review")
-	plain := units.Plain(text)
-	if !strings.Contains(body, `data-show-unpointed="true"`) || !strings.Contains(body, `data-pointed="`+text+`"`) || !strings.Contains(body, `data-unpointed="`+plain+`"`) {
-		t.Fatalf("unpointed card: %s", cardAttrs(body))
+	if attr(t, body, "data-activity") != "read_pick" || attr(t, body, "data-card") != fmt.Sprint(id) {
+		t.Fatalf("stable card: %s", cardAttrs(body))
 	}
 	count := regexp.MustCompile(`(?s)<div class="act__word">.*?</div>`).FindString(body)
-	if !strings.Contains(count, plain) || strings.Contains(count, text) {
-		t.Fatalf("prompt = %s, want the unpointed form", count)
+	if !strings.Contains(count, text) {
+		t.Fatalf("prompt = %s, want the pointed form", count)
 	}
 
 	store2, h2, now2 := openApp(t)
 	learner2 := addLearner(t, store2, "a@example.com", "sub-a", now2)
 	lex2 := addLexeme(t, store2, text, "hello", "shalom", "m", "")
+	seedFillerLexemes(t, store2, 1)
 	lapsed := addCard(t, store2, learner2.user.ID, lex2, fsrs.SkillRead, now2.Add(-time.Hour), 40, int(fsrs.Good), reviewed)
 	insertReview(t, store2, lapsed, int(fsrs.Good), reviewed.Add(time.Minute))
 	insertReview(t, store2, lapsed, int(fsrs.Again), reviewed.Add(2*time.Minute))
 	pointed := getLearner(t, h2, learner2, "/review")
-	if !strings.Contains(pointed, `data-show-unpointed="false"`) || !strings.Contains(pointed, `data-pointed="`+text+`"`) {
+	if attr(t, pointed, "data-activity") != "read_pick" {
 		t.Fatalf("lapsed card: %s", cardAttrs(pointed))
 	}
 	count = regexp.MustCompile(`(?s)<div class="act__word">.*?</div>`).FindString(pointed)
@@ -295,64 +293,48 @@ func TestReviewGrade(t *testing.T) {
 
 	page := getLearner(t, h, learner, "/review")
 	cardID := attr(t, page, "data-card")
-	if cardID != fmt.Sprint(first) {
-		t.Fatalf("served %s, want %d", cardID, first)
+	if cardID != fmt.Sprint(first) || attr(t, page, "data-activity") != "read_pick" {
+		t.Fatalf("served %s, want checked card %d", cardAttrs(page), first)
 	}
 
-	bad := postGrade(t, h, learner, first, "9", "https://learn.example")
-	if bad.Code != http.StatusBadRequest {
-		t.Fatalf("bad rating = %d", bad.Code)
+	// Flashcard grade routes refuse a checked visit.
+	if rec := postGrade(t, h, learner, first, "3", "https://learn.example"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("grade of a checked visit = %d, want 400", rec.Code)
+	}
+	if rec := postReveal(t, h, learner, first, "https://learn.example"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("reveal of a checked visit = %d, want 400", rec.Code)
 	}
 	if n := len(mustLogs(t, store, first)); n != 1 {
-		t.Fatalf("bad rating wrote a log, count %d", n)
+		t.Fatalf("refused posts wrote a log, count %d", n)
 	}
-	still := getLearner(t, h, learner, "/review")
-	if attr(t, still, "data-card") != fmt.Sprint(first) {
-		t.Fatal("a rejected grade advanced the queue")
+	if attr(t, getLearner(t, h, learner, "/review"), "data-card") != fmt.Sprint(first) {
+		t.Fatal("a refused post advanced the queue")
 	}
 
-	unknown := postGrade(t, h, learner, 99999, "3", "https://learn.example")
-	if unknown.Code != http.StatusBadRequest {
-		t.Fatalf("unknown card = %d", unknown.Code)
+	bad := answerForm(page, "choice", "9")
+	if rec := actPost(t, h, learner, "/_hx/review/answer", bad); rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad choice = %d", rec.Code)
 	}
-	stolen := postGrade(t, h, learner, foreign, "3", "https://learn.example")
-	if stolen.Code != http.StatusBadRequest {
-		t.Fatalf("foreign card = %d", stolen.Code)
+	stolen := answerForm(page, "choice", rightPickIndex(t, page, "hello"))
+	stolen.Set("card_id", fmt.Sprint(foreign))
+	if rec := actPost(t, h, learner, "/_hx/review/answer", stolen); rec.Code != http.StatusBadRequest {
+		t.Fatalf("foreign card = %d", rec.Code)
 	}
 	if n := len(mustLogs(t, store, foreign)); n != 1 {
 		t.Fatalf("foreign card log count %d", n)
 	}
-
-	noToken := postGradeRaw(t, h, learner.cookie, "", first, "3", "https://learn.example")
-	if noToken.Code != http.StatusForbidden {
-		t.Fatalf("missing csrf = %d", noToken.Code)
-	}
-	evil := postGrade(t, h, learner, first, "3", "https://evil.example")
-	if evil.Code != http.StatusForbidden {
-		t.Fatalf("bad origin = %d", evil.Code)
+	noCSRF := answerForm(page, "choice", rightPickIndex(t, page, "hello"))
+	if rec := actPostAs(t, h, learner.cookie, "", "/_hx/review/answer", noCSRF); rec.Code == http.StatusOK {
+		t.Fatal("answer without CSRF was accepted")
 	}
 
-	hidden := postGrade(t, h, learner, first, "3", "https://learn.example")
-	if hidden.Code != http.StatusBadRequest {
-		t.Fatalf("unrevealed grade = %d, want 400", hidden.Code)
-	}
-	if n := len(mustLogs(t, store, first)); n != 1 {
-		t.Fatalf("unrevealed grade wrote a log, count %d", n)
-	}
-	if attr(t, getLearner(t, h, learner, "/review"), "data-card") != fmt.Sprint(first) {
-		t.Fatal("a rejected grade advanced the queue")
-	}
-	next := gradeRevealed(t, h, learner, first, "3", "https://learn.example")
-	if next.Code != http.StatusOK {
-		t.Fatalf("good grade = %d\n%s", next.Code, next.Body.String())
-	}
-	body := next.Body.String()
-	if !strings.Contains(body, `data-card="`+fmt.Sprint(second)+`"`) || !strings.Contains(body, "בֹּקֶר") || !strings.Contains(body, `data-answered="1"`) || !strings.Contains(body, `data-correct="1"`) {
-		t.Fatalf("next card: %s", body)
+	fb := answerChecked(t, h, learner, page, rightPickIndex(t, page, "hello"))
+	if !strings.Contains(fb.Body.String(), `data-answered="1"`) || !strings.Contains(fb.Body.String(), `data-correct="1"`) {
+		t.Fatalf("counts after a right answer: %s", cardAttrs(fb.Body.String()))
 	}
 	logs := mustLogs(t, store, first)
-	if len(logs) != 2 || logs[1].Rating != int(fsrs.Good) || !logs[1].Peeked {
-		t.Fatalf("log = %+v, want a revealed Good", logs)
+	if len(logs) != 2 || logs[1].Rating != int(fsrs.Good) {
+		t.Fatalf("log = %+v, want a Good from the speed rule", logs)
 	}
 	after, err := store.GetCard(ctx, first)
 	if err != nil {
@@ -361,26 +343,25 @@ func TestReviewGrade(t *testing.T) {
 	if after.Stability == before.Stability || after.Due.Equal(before.Due) {
 		t.Fatalf("schedule unchanged: before %+v after %+v", before, after)
 	}
-	secondGrade := postGrade(t, h, learner, first, "3", "https://learn.example")
-	if secondGrade.Code != http.StatusBadRequest {
-		t.Fatalf("second grade of the same card = %d", secondGrade.Code)
+	if rec := actPost(t, h, learner, "/_hx/review/answer", answerForm(page, "choice", rightPickIndex(t, page, "hello"))); rec.Code != http.StatusBadRequest {
+		t.Fatalf("second answer = %d, want 400", rec.Code)
 	}
-	if n := len(mustLogs(t, store, first)); n != 2 {
-		t.Fatalf("second grade wrote another log, count %d", n)
+	next := continueChecked(t, h, learner, fb.Body.String())
+	if attr(t, next, "data-card") != fmt.Sprint(second) || !strings.Contains(next, "בֹּקֶר") {
+		t.Fatalf("next card: %s", cardAttrs(next))
 	}
 
-	// One lexeme ends the session. The grade is stored and the card is not served again.
+	// One lexeme ends the sitting. A miss is scheduled and not asked again.
 	againStore, againH, againNow := openApp(t)
 	one := addLearner(t, againStore, "a@example.com", "sub-a", againNow)
 	lex := addLexeme(t, againStore, "שָׁלוֹם", "hello", "shalom", "m", "")
+	addLexeme(t, againStore, "בֹּקֶר", "morning", "boker", "m", "")
 	card := addCard(t, againStore, one.user.ID, lex, fsrs.SkillRead, againNow.Add(-time.Hour), 1, int(fsrs.Good), againNow.Add(-48*time.Hour))
-	getLearner(t, againH, one, "/review")
-	retry := gradeRevealed(t, againH, one, card, "1", "https://learn.example")
-	if retry.Code != http.StatusOK {
-		t.Fatalf("again = %d\n%s", retry.Code, retry.Body.String())
-	}
-	if !strings.Contains(retry.Body.String(), `data-done="true"`) || strings.Contains(retry.Body.String(), `data-retry="true"`) {
-		t.Fatalf("one lexeme should end, not come back: %s", retry.Body.String())
+	missPage := getLearner(t, againH, one, "/review")
+	missFB := answerChecked(t, againH, one, missPage, wrongPickIndex(t, missPage, "hello"))
+	done := continueChecked(t, againH, one, missFB.Body.String())
+	if attr(t, done, "data-done") != "true" || attr(t, done, "data-retry") == "true" {
+		t.Fatalf("one lexeme should end, not come back: %s", cardAttrs(done))
 	}
 	againLogs := mustLogs(t, againStore, card)
 	if len(againLogs) != 2 || againLogs[1].Rating != int(fsrs.Again) {
@@ -402,6 +383,7 @@ func TestReviewLearnersAreIsolated(t *testing.T) {
 	reviewed := now.Add(-48 * time.Hour)
 	aLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
 	bLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
+	addLexeme(t, store, "בֹּקֶר", "morning", "boker", "m", "")
 	aCard := addCard(t, store, a.user.ID, aLex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 	bCard := addCard(t, store, b.user.ID, bLex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 
@@ -413,10 +395,8 @@ func TestReviewLearnersAreIsolated(t *testing.T) {
 	if !strings.Contains(bPage, "מַיִם") || strings.Contains(bPage, "שָׁלוֹם") {
 		t.Fatal("learner B saw the other queue")
 	}
-	graded := gradeRevealed(t, h, a, aCard, "3", "https://learn.example")
-	if graded.Code != http.StatusOK {
-		t.Fatalf("grade A = %d", graded.Code)
-	}
+	fb := answerChecked(t, h, a, aPage, rightPickIndex(t, aPage, "hello"))
+	_ = continueChecked(t, h, a, fb.Body.String())
 	if n := len(mustLogs(t, store, bCard)); n != 1 {
 		t.Fatalf("B log count = %d", n)
 	}
@@ -434,6 +414,9 @@ func TestReviewDrillKinds(t *testing.T) {
 	ctx := context.Background()
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	addLexeme(t, store, "הוא", "he", "hu", "m", "")
+	addLexeme(t, store, "היא", "she", "hi", "f", "")
+	seedFillerLexemes(t, store, 1)
 	card := addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
 	rev := fsrs.New(store, store.Clock())
 	for i := 0; i < session.MinMissesForDrill; i++ {
@@ -448,15 +431,15 @@ func TestReviewDrillKinds(t *testing.T) {
 		t.Fatal(err)
 	}
 	page := getLearner(t, h, learner, "/review")
-	if attr(t, page, "data-kind") != fsrs.SkillRead || attr(t, page, "data-card") != fmt.Sprint(card) {
+	if attr(t, page, "data-kind") != fsrs.SkillRead || attr(t, page, "data-card") != fmt.Sprint(card) || attr(t, page, "data-activity") != "read_pick" {
 		t.Fatalf("drill replaced the study card: %s", cardAttrs(page))
 	}
-	letter := gradeRevealed(t, h, learner, card, "3", "https://learn.example")
-	letterBody := letter.Body.String()
-	if letter.Code != http.StatusOK || attr(t, letterBody, "data-kind") != session.KindLetter || strings.Contains(letterBody, "ב/כ") {
-		t.Fatalf("letter drill: %d %s", letter.Code, letterBody)
+	fb := answerChecked(t, h, learner, page, rightPickIndex(t, page, "hello"))
+	letterBody := continueChecked(t, h, learner, fb.Body.String())
+	if attr(t, letterBody, "data-kind") != session.KindLetter || strings.Contains(letterBody, "ב/כ") {
+		t.Fatalf("letter drill: %s", letterBody)
 	}
-	if strings.Contains(letter.Body.String(), "ג/ק") {
+	if strings.Contains(letterBody, "ג/ק") {
 		t.Fatal("a pair under the miss threshold was drilled")
 	}
 	if attr(t, letterBody, "data-activity") != "letter-pick" {
@@ -482,60 +465,61 @@ func TestReviewDrillKinds(t *testing.T) {
 		t.Fatalf("continue after letter = %d", cont.Code)
 	}
 	patternBody := cont.Body.String()
-	if attr(t, patternBody, "data-kind") != session.KindPattern || !strings.Contains(patternBody, "הוא/היא") {
+	if attr(t, patternBody, "data-kind") != session.KindPattern {
 		t.Fatalf("pattern drill: %s", patternBody)
 	}
+	if strings.Contains(patternBody, "Show answer") || strings.Contains(patternBody, `name="rating"`) {
+		t.Fatal("pattern drill used the self-grade flashcard frame")
+	}
+	assertLetterPickFront(t, patternBody, []string{"הוא", "היא"})
 	patternID := mustCardID(t, patternBody)
-	pattern := gradeRevealed(t, h, learner, patternID, "3", "https://learn.example")
-	if pattern.Code != http.StatusOK {
-		t.Fatalf("pattern grade: %d %s", pattern.Code, pattern.Body.String())
+	patternAsked := pickPart(patternID, studyday.DueCutoff(now, z), []string{"הוא", "היא"})
+	pattern := postDrill(t, h, learner, patternID, patternAsked)
+	if pattern.Code != http.StatusOK || !strings.Contains(pattern.Body.String(), "Correct") {
+		t.Fatalf("pattern pick: %d %s", pattern.Code, pattern.Body.String())
 	}
 	if n := len(mustLogs(t, store, card)); n != 2 {
-		t.Fatalf("drill grades wrote review_log, count %d", n)
+		t.Fatalf("study card log count %d, want the checked answer only", n)
 	}
 }
 
 func TestReviewReveal(t *testing.T) {
+	// Checked word visits and pattern picks refuse reveal. INIT-029/SPEC-005.
 	store, h, now := openApp(t)
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
-	reviewed := now.Add(-48 * time.Hour)
 	lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
-	card := addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	seedFillerLexemes(t, store, 1)
+	card := addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
 	page := getLearner(t, h, learner, "/review")
-	if strings.Contains(page, "hello") || strings.Contains(page, "ז׳") || strings.Contains(page, `name="rating"`) {
-		t.Fatal("the back rendered before reveal")
+	if attr(t, page, "data-activity") != "read_pick" {
+		t.Fatalf("word review: %s", cardAttrs(page))
+	}
+	if rec := postReveal(t, h, learner, card, "https://learn.example"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("reveal of a checked visit = %d, want 400", rec.Code)
 	}
 
-	noToken := postRevealRaw(t, h, learner.cookie, "", card, "https://learn.example", true)
-	if noToken.Code != http.StatusForbidden {
-		t.Fatalf("missing csrf = %d", noToken.Code)
+	store2, h2, now2 := openApp(t)
+	learner2 := addLearner(t, store2, "a@example.com", "sub-a", now2)
+	addLexeme(t, store2, "הוא", "he", "hu", "m", "")
+	addLexeme(t, store2, "היא", "she", "hi", "f", "")
+	rev := fsrs.New(store2, store2.Clock())
+	for i := 0; i < session.MinMissesForDrill; i++ {
+		if err := rev.RecordMiss(context.Background(), learner2.user.ID, fsrs.MissAgreement, "הוא/היא", 0); err != nil {
+			t.Fatal(err)
+		}
 	}
-	evil := postRevealRaw(t, h, learner.cookie, learner.csrf, card, "https://evil.example", true)
-	if evil.Code != http.StatusForbidden {
-		t.Fatalf("bad origin = %d", evil.Code)
+	patternPage := getLearner(t, h2, learner2, "/review")
+	if attr(t, patternPage, "data-kind") != session.KindPattern {
+		t.Fatalf("pattern front: %s", cardAttrs(patternPage))
 	}
-	still := getLearner(t, h, learner, "/review")
-	if strings.Contains(still, "hello") || strings.Contains(still, `data-revealed="true"`) {
-		t.Fatal("a rejected reveal showed the back")
+	patternID := mustCardID(t, patternPage)
+	if rec := postReveal(t, h2, learner2, patternID, "https://learn.example"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("pattern reveal = %d, want 400", rec.Code)
 	}
-
-	shown := postReveal(t, h, learner, card, "https://learn.example")
-	if shown.Code != http.StatusOK {
-		t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
+	if rec := postGrade(t, h2, learner2, patternID, "3", "https://learn.example"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("pattern self-grade = %d, want 400", rec.Code)
 	}
-	body := shown.Body.String()
-	if !strings.Contains(body, "hello") || !strings.Contains(body, "ז׳") || !strings.Contains(body, `name="rating"`) || !strings.Contains(body, `data-revealed="true"`) || !strings.Contains(body, `data-card="`+fmt.Sprint(card)+`"`) {
-		t.Fatalf("revealed card: %s", body)
-	}
-
-	graded := postGrade(t, h, learner, card, "3", "https://learn.example")
-	if graded.Code != http.StatusOK {
-		t.Fatalf("grade after reveal = %d\n%s", graded.Code, graded.Body.String())
-	}
-	logs := mustLogs(t, store, card)
-	if len(logs) != 2 || !logs[1].Peeked || logs[1].Rating != int(fsrs.Good) {
-		t.Fatalf("log = %+v, want peeked true", logs)
-	}
+	_ = now2
 }
 
 func TestReviewDoneSessionRebuilds(t *testing.T) {
@@ -543,18 +527,20 @@ func TestReviewDoneSessionRebuilds(t *testing.T) {
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	reviewed := now.Add(-48 * time.Hour)
 	firstLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	seedFillerLexemes(t, store, 1)
 	first := addCard(t, store, learner.user.ID, firstLex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
-	getLearner(t, h, learner, "/review")
-	done := gradeRevealed(t, h, learner, first, "3", "https://learn.example")
-	if done.Code != http.StatusOK || !strings.Contains(done.Body.String(), `data-done="true"`) {
-		t.Fatalf("done = %d %s", done.Code, done.Body.String())
+	page := getLearner(t, h, learner, "/review")
+	fb := answerChecked(t, h, learner, page, rightPickIndex(t, page, "hello"))
+	done := continueChecked(t, h, learner, fb.Body.String())
+	if attr(t, done, "data-done") != "true" {
+		t.Fatalf("done = %s", cardAttrs(done))
 	}
 	if err := store.SetCardSuspended(context.Background(), first, true); err != nil {
 		t.Fatal(err)
 	}
 	secondLex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
 	second := addCard(t, store, learner.user.ID, secondLex, fsrs.SkillRead, now.Add(-time.Minute), 1, int(fsrs.Good), reviewed)
-	page := getLearner(t, h, learner, "/review")
+	page = getLearner(t, h, learner, "/review")
 	if attr(t, page, "data-card") != fmt.Sprint(second) || strings.Contains(page, "שָׁלוֹם") || !strings.Contains(page, "מַיִם") || strings.Contains(page, `data-done="true"`) {
 		t.Fatalf("rebuilt session: %s", cardAttrs(page))
 	}
@@ -574,6 +560,7 @@ func TestReviewStaleSessionRebuilds(t *testing.T) {
 	}
 	reviewed := start.Add(-48 * time.Hour)
 	firstLex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
+	seedFillerLexemes(t, store, 1)
 	first := addCard(t, store, learner.user.ID, firstLex, fsrs.SkillRead, start.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 	page := getLearner(t, h, learner, "/review")
 	if attr(t, page, "data-card") != fmt.Sprint(first) {
@@ -581,12 +568,12 @@ func TestReviewStaleSessionRebuilds(t *testing.T) {
 	}
 
 	clk.Advance(31 * time.Minute) // 4:01 local — past DueCutoff
-	stale := postGrade(t, h, learner, first, "3", "https://learn.example")
+	stale := actPost(t, h, learner, "/_hx/review/answer", answerForm(page, "choice", rightPickIndex(t, page, "hello")))
 	if stale.Code != http.StatusBadRequest {
-		t.Fatalf("grade on a stale queue = %d", stale.Code)
+		t.Fatalf("answer on a stale queue = %d", stale.Code)
 	}
 	if n := len(mustLogs(t, store, first)); n != 1 {
-		t.Fatalf("stale grade wrote a log, count %d", n)
+		t.Fatalf("stale answer wrote a log, count %d", n)
 	}
 	if err := store.SetCardSuspended(context.Background(), first, true); err != nil {
 		t.Fatal(err)
@@ -643,16 +630,25 @@ func TestStudyQueueMapIsBounded(t *testing.T) {
 }
 
 func TestReviewGradeDBError(t *testing.T) {
+	// A single-letter drill still self-grades. Closing the store after reveal makes Record 500.
 	store, h, now := openApp(t)
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
-	lex := addLexeme(t, store, "שָׁלוֹם", "hello", "shalom", "m", "")
-	card := addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
-	getLearner(t, h, learner, "/review")
+	rev := fsrs.New(store, store.Clock())
+	for i := 0; i < session.MinMissesForDrill; i++ {
+		if err := rev.RecordMiss(context.Background(), learner.user.ID, fsrs.MissLetterPair, "ג", 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page := getLearner(t, h, learner, "/review")
+	if attr(t, page, "data-kind") != session.KindLetter {
+		t.Fatalf("want single-letter drill: %s", cardAttrs(page))
+	}
+	card := mustCardID(t, page)
 	shown := postReveal(t, h, learner, card, "https://learn.example")
 	if shown.Code != http.StatusOK {
 		t.Fatalf("reveal = %d", shown.Code)
 	}
-	if _, err := store.ExecContext(context.Background(), `DELETE FROM cards WHERE id = ?`, card); err != nil {
+	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
 	got := postGrade(t, h, learner, card, "3", "https://learn.example")
@@ -669,39 +665,41 @@ func TestReviewGradeWithoutHTMX(t *testing.T) {
 	secondLex := addLexeme(t, store, "בֹּקֶר", "morning", "boker", "m", "")
 	first := addCard(t, store, learner.user.ID, firstLex, fsrs.SkillRead, now.Add(-2*time.Hour), 1, int(fsrs.Good), reviewed)
 	second := addCard(t, store, learner.user.ID, secondLex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
-	getLearner(t, h, learner, "/review")
+	page := getLearner(t, h, learner, "/review")
 
-	shown := postRevealRaw(t, h, learner.cookie, learner.csrf, first, "https://learn.example", false)
-	if shown.Code != http.StatusSeeOther || shown.Header().Get("Location") != "/review" || strings.Contains(shown.Body.String(), `id="review-card"`) {
-		t.Fatalf("plain reveal = %d location %q body %s", shown.Code, shown.Header().Get("Location"), shown.Body.String())
+	form := answerForm(page, "choice", rightPickIndex(t, page, "hello"))
+	answered := actPostPlain(t, h, learner, "/_hx/review/answer", form)
+	if answered.Code != http.StatusSeeOther || answered.Header().Get("Location") != "/review" || strings.Contains(answered.Body.String(), `id="review-card"`) {
+		t.Fatalf("plain answer = %d location %q body %s", answered.Code, answered.Header().Get("Location"), answered.Body.String())
 	}
-	revealed := getLearner(t, h, learner, "/review")
-	if !strings.Contains(revealed, "<!doctype html>") || !strings.Contains(revealed, "hello") || !strings.Contains(revealed, `name="rating"`) || !strings.Contains(revealed, `data-revealed="true"`) {
-		t.Fatal("the follow-up GET did not render the revealed card")
-	}
-
-	graded := postGradeRawHX(t, h, learner.cookie, learner.csrf, first, "3", "https://learn.example", false)
-	if graded.Code != http.StatusSeeOther || graded.Header().Get("Location") != "/review" || strings.Contains(graded.Body.String(), `id="review-card"`) {
-		t.Fatalf("plain grade = %d location %q body %s", graded.Code, graded.Header().Get("Location"), graded.Body.String())
+	feedback := getLearner(t, h, learner, "/review")
+	if !strings.Contains(feedback, "<!doctype html>") || !strings.Contains(feedback, "feedback-right") || !strings.Contains(feedback, "שָׁלוֹם") {
+		t.Fatal("the follow-up GET did not render checked feedback")
 	}
 	logs := mustLogs(t, store, first)
-	if len(logs) != 2 || !logs[1].Peeked {
-		t.Fatalf("plain grade log = %+v", logs)
+	if len(logs) != 2 || logs[1].Rating != int(fsrs.Good) {
+		t.Fatalf("plain answer log = %+v", logs)
+	}
+	nextFormVals := nextForm(feedback)
+	cont := actPostPlain(t, h, learner, "/_hx/review/next", nextFormVals)
+	if cont.Code != http.StatusSeeOther || cont.Header().Get("Location") != "/review" {
+		t.Fatalf("plain continue = %d location %q", cont.Code, cont.Header().Get("Location"))
 	}
 	next := getLearner(t, h, learner, "/review")
-	if !strings.Contains(next, "<!doctype html>") || attr(t, next, "data-card") != fmt.Sprint(second) || !strings.Contains(next, "בֹּקֶר") || strings.Contains(next, `data-revealed="true"`) {
+	if !strings.Contains(next, "<!doctype html>") || attr(t, next, "data-card") != fmt.Sprint(second) || !strings.Contains(next, "בֹּקֶר") {
 		t.Fatalf("next page: %s", cardAttrs(next))
 	}
-	revealedSecond := postRevealRaw(t, h, learner.cookie, learner.csrf, second, "https://learn.example", false)
-	if revealedSecond.Code != http.StatusSeeOther || revealedSecond.Header().Get("Location") != "/review" {
-		t.Fatalf("plain reveal of the next card = %d location %q", revealedSecond.Code, revealedSecond.Header().Get("Location"))
-	}
-	req := gradeRequest(t, learner.cookie, learner.csrf, second, "3", "https://learn.example", false)
+	form2 := answerForm(next, "choice", rightPickIndex(t, next, "morning"))
+	form2.Set("_csrf", learner.csrf)
+	req := httptest.NewRequest(http.MethodPost, "/_hx/review/answer", strings.NewReader(form2.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "https://learn.example")
+	req.AddCookie(learner.cookie)
 	req.AddCookie(&http.Cookie{Name: "hebrew_lang", Value: "he"})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/review?lang=he" {
-		t.Fatalf("hebrew plain grade = %d location %q", rec.Code, rec.Header().Get("Location"))
+		t.Fatalf("hebrew plain answer = %d location %q", rec.Code, rec.Header().Get("Location"))
 	}
 }
 
@@ -759,9 +757,9 @@ func openAt(t *testing.T, clk clock.Clock) (*db.Store, http.Handler) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// These tests are about the self-graded card. A closed gate leaves only the
-	// listening skill, and these lexicons are too small to build a pick from, so every
-	// visit is a flashcard. The checked activities have their own tests (activity_test.go).
+	// A closed letters gate leaves word visits as flashcards in the mix; promoteFlashcard
+	// turns each into a two-choice meaning pick when the lexicon has another gloss
+	// (ADR-0024). Pattern drills are a checked two-choice pick (INIT-029/SPEC-005).
 	study := session.New(store, clk, 1, session.WithGate(func(context.Context, int64) (activity.Gate, error) {
 		return activity.Gate{LettersPassed: false}, nil
 	}))
@@ -870,6 +868,72 @@ func gradeRevealed(t *testing.T, h http.Handler, learner learnerFix, cardID int6
 		t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
 	}
 	return postGrade(t, h, learner, cardID, rating, origin, asked...)
+}
+
+// rightPickIndex is the data-pick value for gloss on a meaning-pick page.
+func rightPickIndex(t *testing.T, page, gloss string) string {
+	t.Helper()
+	for _, o := range pickRe.FindAllStringSubmatch(page, -1) {
+		if o[2] == gloss {
+			return o[1]
+		}
+	}
+	t.Fatalf("gloss %q is not among the options on the page", gloss)
+	return ""
+}
+
+// wrongPickIndex is any data-pick value that is not gloss.
+func wrongPickIndex(t *testing.T, page, gloss string) string {
+	t.Helper()
+	for _, o := range pickRe.FindAllStringSubmatch(page, -1) {
+		if o[2] != gloss {
+			return o[1]
+		}
+	}
+	t.Fatalf("no wrong option against %q", gloss)
+	return ""
+}
+
+// answerChecked posts a meaning-pick answer for the open checked visit.
+func answerChecked(t *testing.T, h http.Handler, learner learnerFix, page, choice string) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := actPost(t, h, learner, "/_hx/review/answer", answerForm(page, "choice", choice))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("answer = %d\n%s", rec.Code, rec.Body.String())
+	}
+	return rec
+}
+
+// continueChecked posts Continue after checked feedback and returns the next body.
+func continueChecked(t *testing.T, h http.Handler, learner learnerFix, fb string) string {
+	t.Helper()
+	rec := actPost(t, h, learner, "/_hx/review/next", nextForm(fb))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("next = %d\n%s", rec.Code, rec.Body.String())
+	}
+	return rec.Body.String()
+}
+
+// glossOnPage maps pointed Hebrew on a read_pick prompt to its English gloss.
+func glossOnPage(t *testing.T, page string, byHe map[string]string) string {
+	t.Helper()
+	m := hePrompt.FindStringSubmatch(page)
+	if m == nil {
+		t.Fatalf("no Hebrew prompt:\n%s", page)
+	}
+	g, ok := byHe[m[1]]
+	if !ok {
+		t.Fatalf("prompt %q has no gloss in the fixture", m[1])
+	}
+	return g
+}
+
+// seedFillerLexemes adds extra glossed words so a two-choice meaning pick can build.
+func seedFillerLexemes(t *testing.T, store *db.Store, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		addLexeme(t, store, fmt.Sprintf("מילוי-%d", i), fmt.Sprintf("filler-%d", i), fmt.Sprintf("fill%d", i), "m", "")
+	}
 }
 
 func postGradeRaw(t *testing.T, h http.Handler, cookie *http.Cookie, csrf string, cardID int64, rating, origin string, asked ...string) *httptest.ResponseRecorder {

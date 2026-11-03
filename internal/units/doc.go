@@ -29,10 +29,14 @@
 //	brief.new_intro_before_test A new word of the brief, or a unit newWord that coverage credited, is checked before any intro or exposure step (block).
 //	brief.new_min_uses          A new word appears fewer times than the brief asks. A credited newWord outside the brief uses the same floor (block).
 //	brief.not_found             The brief is missing, malformed, or another learner's (block).
+//	brief.order_known           An order token is not a known word for this learner and was not introduced by an earlier story, dialogue, or shadow step (block). INIT-029/SPEC-002.
 //	brief.struggle_reuse        A struggle word is reused too few times, or not in its failing skill (block).
 //	brief.text_too_long         A passage has more tokens than the tier allows (block).
 //	brief.used                  The brief already built a unit (block).
 //	unit.no_markup               A text field contains <, >, or javascript: (block).
+//	unit.order_accept            An accept entry is not a different order of the same tokens as text (block). INIT-029/SPEC-002.
+//	unit.order_tokens            An order line has fewer than 3 or more than 8 tokens (block). INIT-029/SPEC-002.
+//	unit.order_translation       An order line has no English translation, or it is not English, or it is longer than 120 characters (block). INIT-029/SPEC-002.
 //	unit.translation_distractors A unit with a sentence listen_pick has fewer than 4 different English lines (warn). Lines that fold to the same English count once.
 //	unit.translation_lang        A translation contains Hebrew or markup (block).
 //	unit.translation_length      A translation is longer than 120 characters (warn).
@@ -102,9 +106,15 @@ const (
 	ActivityShadow     = "shadow"
 	ActivityDialogue   = "dialogue"
 	ActivitySay        = "say"
+	// ActivityOrder is a build-the-sentence step: English cue, pointed Hebrew chips. INIT-029/SPEC-002.
+	ActivityOrder = "order"
 
 	// PromptMaxRunes is the longest English cue on a say step.
 	PromptMaxRunes = 200
+
+	// MinOrderTokens and MaxOrderTokens bound an order line. INIT-029/SPEC-002.
+	MinOrderTokens = 3
+	MaxOrderTokens = 8
 )
 
 // The two speakers of a dialogue. A is the female voice and B is the male voice.
@@ -168,11 +178,14 @@ type Lesson struct {
 // Translation is the author's English for the whole text. A listen_pick
 // whose text has two or more words that are in the lexicon must set it on
 // a new write and on an older revision. Rechecking the current published
-// revision warns instead. Every other activity may omit it.
+// revision warns instead. An order activity must set it (unit.order_translation).
+// Every other activity may omit it.
+// Accept, on order only, lists other full orders of the same tokens that are
+// also right. Empty means only text is right. INIT-029/SPEC-002.
 type Activity struct {
 	Type        string         `json:"type"`
 	Text        string         `json:"text,omitempty"`
-	Translation string         `json:"translation,omitempty" jsonschema:"Natural English translation of the whole text, written by the author. Required on a listen_pick whose text has two or more words that are in the lexicon. Optional on every other type. English only, no markup, at most 120 characters."`
+	Translation string         `json:"translation,omitempty" jsonschema:"Natural English translation of the whole text, written by the author. Required on a listen_pick whose text has two or more words that are in the lexicon, and on order. Optional on every other type. English only, no markup, at most 120 characters."`
 	Lines       []DialogueLine `json:"lines,omitempty"`
 	Target      string         `json:"target,omitempty" jsonschema:"The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, cloze, and say when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure."`
 	// PromptEN is the English cue for a say step. The learner sees it before the Hebrew.
@@ -180,6 +193,9 @@ type Activity struct {
 	// Play is which side of a dialogue the learner speaks: a or b. Empty means
 	// the dialogue is shown in full, and the learner can choose a side after that.
 	Play string `json:"play,omitempty" jsonschema:"Which side of a dialogue the learner speaks: a or b. Omit it to show the whole conversation first. The learner's lines then use each line's prompt_en as the English cue."`
+	// Accept lists other full orders of the same tokens as text that are also
+	// right. Order only. INIT-029/SPEC-002.
+	Accept []string `json:"accept,omitempty" jsonschema:"Other full orders of the same tokens that are also right. Empty means only text is right. Each entry must use exactly the same tokens as text, in a different order."`
 
 	// speaker is set only on the one-line views of a dialogue that the validator
 	// builds (see flatten). It is never read from or written to JSON.

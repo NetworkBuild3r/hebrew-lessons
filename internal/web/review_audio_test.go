@@ -29,13 +29,12 @@ import (
 // audio_assets and the mp3, and the lesson player finds the clip with
 // AudioByText. A review that only read audio_id rendered no <audio> and no orb.
 func TestReviewClipFromAudioAsset(t *testing.T) {
+	// Checked review puts the clip on the feedback sheet (AudioByText), not the prompt.
 	store, h, now, audioDir := openReviewAudio(t)
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	text := "שָׁלוֹם"
 	mp3 := reviewMP3(8)
 	id := putReviewClip(t, store, audioDir, text, mp3)
-	// audio_id is a foreign key, so the stale clip is a real row for a different
-	// string. AudioByText of this word must still win, the way the lesson player does.
 	stale := strings.Repeat("ab", 32)
 	if _, err := store.InsertAudio(context.Background(), db.Asset{
 		ID: stale, TextNFC: "not-this-word", Voice: "voice", Model: "legacy", Bytes: 1,
@@ -43,24 +42,24 @@ func TestReviewClipFromAudioAsset(t *testing.T) {
 		t.Fatal(err)
 	}
 	lex := addLexeme(t, store, text, "hello", "shalom", "m", stale)
+	seedFillerLexemes(t, store, 1)
 	reviewed := now.Add(-48 * time.Hour)
 	addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 
-	body := getLearner(t, h, learner, "/review")
-	assertReviewClip(t, body, id, true)
-	if strings.Contains(body, "/audio/"+stale+".mp3") {
-		t.Fatal("review played the empty-in-production lexeme audio_id instead of the audio_assets clip")
+	page := getLearner(t, h, learner, "/review")
+	if strings.Contains(page, "/audio/") || strings.Contains(page, "<audio") {
+		t.Fatal("a reading prompt rendered a clip")
 	}
-	if strings.Contains(body, "onclick=") || strings.Contains(body, "hx-on") {
-		t.Fatal("review clip uses an inline handler")
+	fb := answerChecked(t, h, learner, page, rightPickIndex(t, page, "hello"))
+	assertFBClip(t, store, sheetOf(t, fb.Body.String()), "fb-clip", text)
+	if strings.Contains(fb.Body.String(), "/audio/"+stale+".mp3") {
+		t.Fatal("review played the empty-in-production lexeme audio_id instead of the audio_assets clip")
 	}
 	getAudio(t, h, id, mp3)
 }
 
-// TestReviewRecallRevealClip checks the htmx card swap. Recall hides the
-// answer clip until reveal. The fragment is what replaces #review-card, so
-// it carries the orb and a non-empty src, and it does not carry clips.js:
-// that script stays on the page and upgrades the swap.
+// TestReviewRecallRevealClip checks that a meaning pick hides the answer clip
+// until the answer is checked. The feedback fragment carries fb-clip.
 func TestReviewRecallRevealClip(t *testing.T) {
 	store, h, now, audioDir := openReviewAudio(t)
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
@@ -68,23 +67,21 @@ func TestReviewRecallRevealClip(t *testing.T) {
 	mp3 := reviewMP3(4)
 	id := putReviewClip(t, store, audioDir, text, mp3)
 	lex := addLexeme(t, store, text, "morning", "boker", "f", "")
+	seedFillerLexemes(t, store, 1)
 	reviewed := now.Add(-48 * time.Hour)
-	cardID := addCard(t, store, learner.user.ID, lex, fsrs.SkillRecall, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	addCard(t, store, learner.user.ID, lex, fsrs.SkillRecall, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 
 	page := getLearner(t, h, learner, "/review")
 	if strings.Count(page, "/static/js/clips.js") != 1 {
 		t.Fatalf("clips.js included %d times", strings.Count(page, "/static/js/clips.js"))
 	}
 	if strings.Contains(page, "/audio/") || strings.Contains(page, "<audio") || strings.Contains(page, `class="orb`) {
-		t.Fatal("recall showed the answer clip before reveal")
+		t.Fatal("the question showed the answer clip before Check")
 	}
 
-	shown := postReveal(t, h, learner, cardID, "https://learn.example")
-	if shown.Code != http.StatusOK {
-		t.Fatalf("reveal = %d\n%s", shown.Code, shown.Body.String())
-	}
-	frag := shown.Body.String()
-	assertReviewClip(t, frag, id, false)
+	fb := answerChecked(t, h, learner, page, rightPickIndex(t, page, "morning"))
+	frag := fb.Body.String()
+	assertFBClip(t, store, sheetOf(t, frag), "fb-clip", text)
 	if strings.Contains(frag, "<script") || strings.Contains(frag, "onclick=") || strings.Contains(frag, "hx-on") {
 		t.Fatal("the swapped card includes a script or an inline handler")
 	}
@@ -92,7 +89,7 @@ func TestReviewRecallRevealClip(t *testing.T) {
 }
 
 // TestReviewClipFallsBackToLexemeAudioID keeps a fixture that sets audio_id
-// and does not insert audio_assets playable. The file is still served.
+// and does not insert audio_assets for the word text. Feedback still plays audio_id.
 func TestReviewClipFallsBackToLexemeAudioID(t *testing.T) {
 	store, h, now, audioDir := openReviewAudio(t)
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
@@ -102,19 +99,22 @@ func TestReviewClipFallsBackToLexemeAudioID(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(audioDir, id+".mp3"), mp3, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// The row exists so the lexeme foreign key holds, but its text is not this
-	// word, so AudioByText misses and the card uses audio_id.
 	if _, err := store.InsertAudio(context.Background(), db.Asset{
 		ID: id, TextNFC: "not-mayim", Voice: "voice", Model: "legacy", Bytes: int64(len(mp3)),
 	}); err != nil {
 		t.Fatal(err)
 	}
 	lex := addLexeme(t, store, "מַיִם", "water", "mayim", "m", id)
+	seedFillerLexemes(t, store, 1)
 	reviewed := now.Add(-48 * time.Hour)
 	addCard(t, store, learner.user.ID, lex, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
 
-	body := getLearner(t, h, learner, "/review")
-	assertReviewClip(t, body, id, true)
+	page := getLearner(t, h, learner, "/review")
+	fb := answerChecked(t, h, learner, page, rightPickIndex(t, page, "water"))
+	sheet := sheetOf(t, fb.Body.String())
+	if !strings.Contains(sheet, `data-src="/audio/`+id+`.mp3"`) && !strings.Contains(sheet, `/audio/`+id+`.mp3`) {
+		t.Fatalf("feedback missing lexeme audio_id clip:\n%s", sheet)
+	}
 	getAudio(t, h, id, mp3)
 }
 

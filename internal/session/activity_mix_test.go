@@ -548,13 +548,14 @@ func TestAnsweredClosesACheckedVisit(t *testing.T) {
 		t.Fatalf("total = %d after a right answer, want %d", total, len(ids))
 	}
 
-	// A wrong answer puts the visit back once.
+	// A wrong answer closes the visit. It is not asked again in this sitting
+	// (ADR-0024 D3).
 	second, _ := sess.Next()
 	if _, err := sess.Answered(ctx, second.CardID, activity.Result{Correct: false}); err != nil {
 		t.Fatal(err)
 	}
-	if _, total, _ = sess.Place(); total != len(ids)+1 {
-		t.Fatalf("total = %d after a wrong answer, want one more visit", total)
+	if _, total, _ = sess.Place(); total != len(ids) {
+		t.Fatalf("total = %d after a wrong answer, want %d (no requeue)", total, len(ids))
 	}
 	rest := drainAll(t, sess)
 	again := 0
@@ -563,11 +564,10 @@ func TestAnsweredClosesACheckedVisit(t *testing.T) {
 			again++
 		}
 	}
-	if again != 1 {
-		t.Fatalf("the missed card came back %d times, want once", again)
+	if again != 0 {
+		t.Fatalf("the missed card came back %d times, want 0", again)
 	}
-	// Answering it wrong a second time does not queue it again: in a fresh queue the card is
-	// served twice at most, however often it is answered wrong.
+	// In a fresh queue each card is asked once, however often it is answered wrong.
 	sess2 := mustBuild(t, svc, userID)
 	visits := map[int64]int{}
 	for {
@@ -581,8 +581,8 @@ func TestAnsweredClosesACheckedVisit(t *testing.T) {
 		}
 	}
 	for id, n := range visits {
-		if n != 2 {
-			t.Fatalf("card %d was served %d times when always answered wrong, want 2", id, n)
+		if n != 1 {
+			t.Fatalf("card %d was served %d times when always answered wrong, want 1", id, n)
 		}
 	}
 	if len(visits) != len(ids) {

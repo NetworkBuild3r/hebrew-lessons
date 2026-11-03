@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
@@ -44,6 +46,9 @@ type memLearn struct {
 	nextNote   int64
 	nextBrief  int
 	audits     []MemoryAudit
+	// practiceResults seeds LaterDayResults for get_context tests.
+	// INIT-029/SPEC-008.
+	practiceResults map[int64][]evidence.PracticeResult
 }
 
 type memNote struct {
@@ -297,6 +302,31 @@ func (m *Memory) UserIDs(ctx context.Context) ([]int64, error) {
 	}
 	slices.Sort(out)
 	return out, nil
+}
+
+// SetPracticeResults seeds LaterDayResults for one learner. INIT-029/SPEC-008.
+func (m *Memory) SetPracticeResults(learnerID int64, rows []evidence.PracticeResult) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.learn.practiceResults == nil {
+		m.learn.practiceResults = map[int64][]evidence.PracticeResult{}
+	}
+	m.learn.practiceResults[learnerID] = append([]evidence.PracticeResult(nil), rows...)
+}
+
+// LaterDayResults implements laterDayResultsReader for get_context tests.
+// INIT-029/SPEC-008.
+func (m *Memory) LaterDayResults(ctx context.Context, learnerID int64, _ time.Time, _ studyday.Zone) ([]evidence.PracticeResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	rows := m.learn.practiceResults[learnerID]
+	if rows == nil {
+		return []evidence.PracticeResult{}, nil
+	}
+	return append([]evidence.PracticeResult(nil), rows...), nil
 }
 
 // BuildLessonBrief implements LearnerData. The brief is the learner's template with a new id.

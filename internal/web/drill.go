@@ -4,9 +4,9 @@ import (
 	"net/http"
 )
 
-// drill is POST /_hx/review/drill: a timed two-option pick for a letter pair.
-// CSRF and Origin are the checks on /_hx/ in front of this handler.
-// INIT-027/SPEC-006, ADR-0023 D1.
+// drill is POST /_hx/review/drill: a timed two-option pick for a letter or
+// pattern pair. CSRF and Origin are the checks on /_hx/ in front of this handler.
+// INIT-027/SPEC-006, ADR-0023 D1. Pattern pairs: INIT-029/SPEC-005.
 func (s *server) drill(w http.ResponseWriter, r *http.Request) {
 	cardID, ok := reviewCardID(w, r)
 	if !ok {
