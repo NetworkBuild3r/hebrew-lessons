@@ -239,7 +239,7 @@ templ orderAskBlock(a Activity) {
 // orderAnswerRow is the learner's built line on reveal, marked right or wrong.
 // INIT-029/SPEC-004.
 templ orderAnswerRow(a Activity) {
-	<div class={ orderAnswerClass(a) } dir="rtl" role="list" aria-label="Your answer">
+	<div class={ orderAnswerClass(a) } data-state={ orderAnswerState(a) } dir="rtl" role="list" aria-label="Your answer">
 		for _, tok := range a.OrderAnswer {
 			<span class="order-chip order-chip--placed" role="listitem">
 				<bdi lang="he" dir="rtl">{ tok }</bdi>

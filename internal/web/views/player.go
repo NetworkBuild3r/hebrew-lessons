@@ -120,6 +120,14 @@ func orderAnswerClass(a Activity) string {
 	return "order-answer order-answer--right"
 }
 
+// orderAnswerState is the feedback state the colour lint allows on that row.
+func orderAnswerState(a Activity) string {
+	if orderWrong(a) {
+		return "wrong"
+	}
+	return "correct"
+}
+
 // Dialogue is a conversation between two people, shown line by line in order.
 // Offer is the choice to speak one side after the learner has seen the lines.
 type Dialogue struct {

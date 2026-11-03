@@ -1527,11 +1527,11 @@ html.js .clip-rows {
   border-radius: var(--radius-control);
   border: 1px solid var(--hairline);
 }
-.order-answer--right {
+.order-answer--right[data-state=correct] {
   border-color: var(--go);
   background: color-mix(in oklch, var(--go) 12%, transparent);
 }
-.order-answer--wrong {
+.order-answer--wrong[data-state=wrong] {
   border-color: var(--stop);
   background: color-mix(in oklch, var(--stop) 12%, transparent);
 }
