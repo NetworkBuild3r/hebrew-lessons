@@ -358,27 +358,27 @@ func TestCoachDocRolesMatchTheServer(t *testing.T) {
 	}
 }
 
-// The prompt points at things in the real guide: step 7 is the publish, step 8 is the note,
+// The prompt points at things in the real guide: step 6 is the publish, step 7 is the note,
 // and the section it sends the model to for the activities names exists and says what the
 // prompt says about it.
 func TestCoachDocPromptFollowsTheRealGuide(t *testing.T) {
 	e := newLT(t)
 	guide := coachLF(readResource(t, e.session("admin"), resourceAuthoring))
 	steps := coachSection(guide, "Steps")
-	var seven, eight string
+	var six, seven string
 	for _, l := range strings.Split(steps, "\n") {
 		switch {
+		case strings.HasPrefix(l, "6. "):
+			six = l
 		case strings.HasPrefix(l, "7. "):
 			seven = l
-		case strings.HasPrefix(l, "8. "):
-			eight = l
 		}
 	}
-	if !strings.Contains(seven, "`put_unit`") || !strings.Contains(seven, "publish") {
-		t.Errorf("step 7 of the guide is no longer the publish: %q", seven)
+	if !strings.Contains(six, "`put_unit`") || !strings.Contains(six, "publish") {
+		t.Errorf("step 6 of the guide is no longer the publish: %q", six)
 	}
-	if !strings.Contains(eight, "`add_coach_note`") {
-		t.Errorf("step 8 of the guide is no longer the coach note: %q", eight)
+	if !strings.Contains(seven, "`add_coach_note`") {
+		t.Errorf("step 7 of the guide is no longer the coach note: %q", seven)
 	}
 	if !strings.Contains(guide, "### Reading a brief") && !strings.Contains(guide, "## Reading a brief") {
 		t.Error("the guide has no section named Reading a brief")
@@ -387,7 +387,7 @@ func TestCoachDocPromptFollowsTheRealGuide(t *testing.T) {
 		t.Error("the guide no longer says the brief's activity names are unit types")
 	}
 	prompt := coachPrompt(coachDoc(t))
-	for _, want := range []string{"step 7", "Step 8 of hebrew://authoring is add_coach_note", "unit types", "section Reading a brief"} {
+	for _, want := range []string{"Step 7 of hebrew://authoring is add_coach_note", "unit types", "section Reading a brief"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("the prompt does not say %q", want)
 		}
@@ -460,7 +460,7 @@ func TestCoachDocChecksCanFail(t *testing.T) {
 			return strings.Replace(s, "The activities in the brief are unit types validate_unit accepts.", "", 1)
 		}, "unit types"},
 		{"the prompt loses the order", func(s string) string {
-			return strings.Replace(s, "3. Leave one coach note. Step 8 of hebrew://authoring is add_coach_note.", "3. Leave one coach note.", 1)
+			return strings.Replace(s, "3. Leave one coach note. Step 7 of hebrew://authoring is add_coach_note.", "3. Leave one coach note.", 1)
 		}, "in that order"},
 		{"the schedule changes", func(s string) string { return strings.Replace(s, "`0 7 * * 1`", "`0 4 * * 1`", 1) }, "0 7 * * 1"},
 		{"a key is pasted", func(s string) string {

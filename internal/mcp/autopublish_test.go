@@ -223,16 +223,23 @@ func apDoc(title string) units.Unit {
 		}
 		return a
 	}
+	// The story stays at activity index 7. The copies after it keep six single-word
+	// drills at 6 of 16, under the 40% cap.
+	story := act(units.ActivityStory, apShalom+" "+apBoker+" "+apToda)
+	lesson := []units.Activity{
+		act(units.ActivityShadow, apShalom), act(units.ActivityShadow, apBoker), act(units.ActivityShadow, apToda),
+		act(units.ActivityRecall, apShalom), act(units.ActivityRecall, apBoker), act(units.ActivityRecall, apToda),
+		act(units.ActivityListenPick, apShalom+" "+apBoker),
+		story,
+	}
+	for range 8 {
+		lesson = append(lesson, story)
+	}
 	doc := units.Unit{
 		Title: title, Situation: "A cafe", Concept: "Greetings",
 		NewWords: []string{apShalom, apBoker, apToda},
 		Lessons: []units.Lesson{
-			{Kind: units.KindLesson, Activities: []units.Activity{
-				act(units.ActivityShadow, apShalom), act(units.ActivityShadow, apBoker), act(units.ActivityShadow, apToda),
-				act(units.ActivityRecall, apShalom), act(units.ActivityRecall, apBoker), act(units.ActivityRecall, apToda),
-				act(units.ActivityListenPick, apShalom+" "+apBoker),
-				act(units.ActivityStory, apShalom+" "+apBoker+" "+apToda),
-			}},
+			{Kind: units.KindLesson, Activities: lesson},
 			{Kind: units.KindCheckpoint, Activities: []units.Activity{
 				act(units.ActivityRecall, apShalom), act(units.ActivityRecall, apBoker), act(units.ActivityRecall, apToda),
 				act(units.ActivityListenPick, apMayim), act(units.ActivityListenPick, apMayim), act(units.ActivityListenPick, apMayim),

@@ -94,14 +94,22 @@ func docFromBrief(t *testing.T, b mcp.LessonBrief) (units.Unit, []string) {
 	for _, w := range words {
 		first = append(first, act(units.ActivityRecall, w))
 	}
-	passage := strings.Join(words, " ")
+	line := strings.Join(words, " ")
+	// Five copies of the new words clear the beginner story floor of 12 Hebrew words
+	// and stay under the 20-word passage cap.
+	passage := strings.Join([]string{line, line, line, line, line}, " ")
 	pair := strings.Join(words[:min(2, len(words))], " ")
 	pick := act(units.ActivityListenPick, pair)
 	if len(words) > 1 {
 		pick.Target = words[0]
 		pick.Translation = "a short line"
 	}
-	first = append(first, pick, act(units.ActivityStory, passage))
+	story := act(units.ActivityStory, passage)
+	first = append(first, pick, story)
+	// Six single-word drills stay at 6 of 16, under the 40% cap.
+	for range 8 {
+		first = append(first, story)
+	}
 	check := []units.Activity{}
 	for _, w := range words {
 		check = append(check, act(units.ActivityRecall, w))
