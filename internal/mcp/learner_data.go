@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
@@ -25,7 +26,28 @@ var (
 	ErrBadTheme = errors.New("The theme must be plain text of 200 characters or fewer.")
 	// ErrTooManyNotes is a learner with too many notes in the last day.
 	ErrTooManyNotes = errors.New("Too many coach notes were added for this learner today.")
+	// ErrReviseShared is get_lesson_brief with a unitId that is a shared unit. INIT-030/SPEC-005.
+	ErrReviseShared = errors.New("That unit is shared and cannot be revised.")
+	// ErrReviseStartedUnit is get_lesson_brief with a unitId the learner has started. INIT-030/SPEC-005.
+	ErrReviseStartedUnit = errors.New("That unit is started and cannot be revised.")
+	// ErrReviseFinished is get_lesson_brief with a unitId the learner has finished. INIT-030/SPEC-005.
+	ErrReviseFinished = errors.New("That unit is finished and cannot be revised.")
+	// ErrReviseOtherLearner is get_lesson_brief with a unitId that is missing or another learner's.
+	// The cases are not told apart. INIT-030/SPEC-005.
+	ErrReviseOtherLearner = errors.New("That unit is another learner's and cannot be revised.")
 )
+
+// ErrUntouchedBacklog is get_lesson_brief without unitId when the learner already has
+// three or more untouched learner-scoped units. The message names the earliest unit id.
+// INIT-030/SPEC-005.
+type ErrUntouchedBacklog struct {
+	UnitID int64
+}
+
+func (e ErrUntouchedBacklog) Error() string {
+	return "The learner has three or more untouched units. Revise unit " +
+		strconv.FormatInt(e.UnitID, 10) + " before requesting a new brief."
+}
 
 // LearnerData is what the learner tools read and write.
 type LearnerData interface {
@@ -45,7 +67,14 @@ type LearnerData interface {
 	// SetUserTimeZone stores an IANA zone name the caller has already validated.
 	SetUserTimeZone(ctx context.Context, learnerID int64, zone string) error
 	// BuildLessonBrief builds and stores a brief for the learner. A bad theme is ErrBadTheme.
+	// Without a unitId on get_lesson_brief, the store refuses when three or more
+	// untouched learner-scoped units exist (ErrUntouchedBacklog). INIT-030/SPEC-005.
 	BuildLessonBrief(ctx context.Context, learnerID int64, theme string) (LessonBrief, error)
+	// BuildRevisionBrief builds a revision brief for an untouched learner-scoped unit.
+	// The unit must be scope learner:<learnerID> and untouched. Otherwise it returns
+	// ErrReviseShared, ErrReviseStartedUnit, ErrReviseFinished, or ErrReviseOtherLearner.
+	// INIT-030/SPEC-005.
+	BuildRevisionBrief(ctx context.Context, learnerID int64, theme string, unitID int64) (LessonBrief, error)
 	// AddCoachNote stores a note for the learner and returns its id. authorRole is admin
 	// or learner. Too many notes in a day for that role is ErrTooManyNotes.
 	AddCoachNote(ctx context.Context, learnerID int64, author, authorRole, body string) (CoachNote, error)

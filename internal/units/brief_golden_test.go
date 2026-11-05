@@ -48,6 +48,8 @@ func briefBase() (Unit, map[string]glex, BriefFacts) {
 			shadows = append(shadows, Activity{Type: ActivityShadow, Text: words[wi]})
 		}
 		u.Lessons[li].Activities = append(shadows, u.Lessons[li].Activities...)
+		// Re-pad after shadows so unit.drill_share stays ≤ 40%. INIT-030/SPEC-004.
+		u.Lessons[li].Activities = padDrillShareActs(u.Lessons[li].Activities)
 	}
 	for k := 0; k < 3; k++ {
 		addAct(&u, ActivityListenPick, kos)

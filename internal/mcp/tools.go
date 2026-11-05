@@ -313,6 +313,9 @@ func (s *service) getContext(ctx context.Context, _ *mcp.CallToolRequest, in get
 	if err := s.attachPracticeResults(ctx, &out, in.LearnerID); err != nil {
 		return nil, getContextOutput{}, err
 	}
+	if err := s.attachUnitProgress(ctx, &out, in.LearnerID); err != nil {
+		return nil, getContextOutput{}, err
+	}
 	return nil, out, nil
 }
 

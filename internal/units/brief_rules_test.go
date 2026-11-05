@@ -47,11 +47,18 @@ func TestBriefRulesAreCatalogedAndDocumented(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ids := []string{RuleBriefAudioAll, RuleBriefCoverage, RuleBriefExpired, RuleBriefGloss, RuleBriefIntro,
-		RuleBriefNewMinUses, RuleBriefNotFound, RuleBriefOrderKnown, RuleBriefStruggle, RuleBriefTextTooLong, RuleBriefUsed, RuleUnitNoMarkup}
-	want := []string{"brief.audio_all", "brief.coverage", "brief.expired", "brief.gloss_out_of_brief",
-		"brief.new_intro_before_test", "brief.new_min_uses", "brief.not_found", "brief.order_known", "brief.struggle_reuse",
-		"brief.text_too_long", "brief.used", "unit.no_markup"}
+	ids := []string{
+		RuleBriefAudioAll, RuleBriefConsolidation, RuleBriefCoverage, RuleBriefExpired, RuleBriefGloss, RuleBriefIntro,
+		RuleBriefNewMinUses, RuleBriefNotFound, RuleBriefOrderKnown, RuleBriefPattern, RuleBriefRecyclePrevious,
+		RuleBriefStoryLength, RuleBriefStruggle, RuleBriefTextTooLong, RuleBriefUsed,
+		RuleUnitDrillShare, RuleUnitNoMarkup, RuleUnitSameShape,
+	}
+	want := []string{
+		"brief.audio_all", "brief.consolidation", "brief.coverage", "brief.expired", "brief.gloss_out_of_brief",
+		"brief.new_intro_before_test", "brief.new_min_uses", "brief.not_found", "brief.order_known", "brief.pattern",
+		"brief.recycle_previous", "brief.story_length", "brief.struggle_reuse",
+		"brief.text_too_long", "brief.used", "unit.drill_share", "unit.no_markup", "unit.same_shape",
+	}
 	if !slices.Equal(ids, want) {
 		t.Fatalf("rule ids changed: %v", ids)
 	}
@@ -66,8 +73,15 @@ func TestBriefRulesAreCatalogedAndDocumented(t *testing.T) {
 	}
 	for _, id := range ids {
 		r, ok := catalog[id]
-		if !ok || r.Severity != SeverityBlock || r.Description == "" {
+		if !ok || r.Description == "" {
 			t.Fatalf("catalog row for %s: %+v", id, r)
+		}
+		wantSev := SeverityBlock
+		if id == RuleUnitSameShape {
+			wantSev = SeverityWarn
+		}
+		if r.Severity != wantSev {
+			t.Fatalf("catalog severity for %s: %s", id, r.Severity)
 		}
 		if !strings.Contains(string(doc), id) {
 			t.Fatalf("%s is not documented in doc.go", id)
@@ -155,8 +169,8 @@ func TestNoMarkupCoversEveryStringField(t *testing.T) {
 	base := populated()
 	var fields []reflect.Value
 	collect(reflect.ValueOf(&base).Elem(), &fields)
-	if len(fields) != 11 {
-		t.Fatalf("the unit has %d string fields, want 11. A new field needs a markup check.", len(fields))
+	if len(fields) != 12 {
+		t.Fatalf("the unit has %d string fields, want 12. A new field needs a markup check.", len(fields))
 	}
 	for i := range fields {
 		for _, bad := range []string{"<", ">", "javascript:alert(1)", "JAVASCRIPT:x"} {
@@ -728,10 +742,14 @@ func TestOutOfBriefNewWordNeedsIntroAndUses(t *testing.T) {
 	}
 
 	// Two uses, introduced: the only block is the floor of 3.
+	// Numeric stories pad the drill share without adding uses of the word. INIT-030/SPEC-004.
 	short := tested
 	short.Lessons = []Lesson{{Kind: KindLesson, Activities: []Activity{
 		{Type: ActivityShadow, Text: word},
 		{Type: ActivityListenPick, Text: word},
+		{Type: ActivityStory, Text: "12 12"},
+		{Type: ActivityStory, Text: "12 12"},
+		{Type: ActivityStory, Text: "12 12"},
 	}}}
 	got = validateBrief(&short, lk, &f)
 	if blocks := blockRules(got); len(blocks) != 1 || blocks[0] != RuleBriefNewMinUses {
@@ -740,11 +758,11 @@ func TestOutOfBriefNewWordNeedsIntroAndUses(t *testing.T) {
 
 	// Three uses, but the first step tests the word and the intro comes after.
 	late := tested
-	late.Lessons = []Lesson{{Kind: KindLesson, Activities: []Activity{
+	late.Lessons = []Lesson{{Kind: KindLesson, Activities: padDrillShareActs([]Activity{
 		{Type: ActivityListenPick, Text: word},
 		{Type: ActivityShadow, Text: word},
 		{Type: ActivityRecall, Text: word},
-	}}}
+	})}}
 	got = validateBrief(&late, lk, &f)
 	if blocks := blockRules(got); len(blocks) != 1 || blocks[0] != RuleBriefIntro {
 		t.Fatalf("intro after the test, blocks %v, issues %v", blocks, ruleSet(got))

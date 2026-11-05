@@ -10,6 +10,29 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcp"
 )
 
+// UnitProgress maps db.UnitProgress onto the rows get_context attaches to the outline.
+// INIT-030/SPEC-005.
+func (s *Store) UnitProgress(ctx context.Context, userID int64) ([]mcp.UnitProgressRow, error) {
+	if err := s.ready(ctx); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.UnitProgress(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]mcp.UnitProgressRow, len(rows))
+	for i, row := range rows {
+		out[i] = mcp.UnitProgressRow{
+			UnitID:          row.UnitID,
+			State:           row.State,
+			LessonsFinished: row.LessonsFinished,
+			LessonsTotal:    row.LessonsTotal,
+			LastFinishedAt:  row.LastFinishedAt,
+		}
+	}
+	return out, nil
+}
+
 // UnitsInScope maps db.UnitsInScope onto the outline get_context returns.
 // A nil learnerID is shared units only. db.UnitsInScope takes an int64 and
 // always includes that learner's private units, so the nil case drops them.

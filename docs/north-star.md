@@ -258,6 +258,11 @@ A new service function, `LessonBrief(learner, theme?)`, returns the word plan fo
 - **New words:** 5 to 8 (3 to 4 while I know fewer than 100 words, so a short passage can stay mostly known; section 7.3), from the lowest frequency band that still has `unseen` words, fitting the theme. Never a word that is currently `struggling`. Existing unit budgets still apply.
 - **Struggle words:** the top 3 to 5 from the struggle list. Each one must appear at least 3 times, practiced through the skill that is failing (section 4.5).
 - **Comfortable words:** `known` and `solid` words that the AI uses to write the story and dialogue, so that the running text meets the coverage target for my vocabulary size (section 7.3; 95% at full strength, RSCH-003, RSCH-004). The brief states the tier and the maximum text length.
+- **Next pattern:** one new grammar pattern whose prerequisites are already taught, chosen in a fixed order from the pattern catalog ([ADR-0026](decisions/ADR-0026-lessons-that-build.md)).
+- **Reuse patterns:** the two most recent patterns, named so the story can use them again.
+- **Previous units:** the earlier units' stories and new words, so the next story can continue from them.
+- **Pace:** new-word count from the same accuracy bands as review (ADR-0023): fewer when the last 50 reviews are weak, the tier's count when they are strong.
+- **Consolidation:** when too many words are still in learning, or accuracy is low, the brief asks for a unit with no new words and a longer story made of words I am learning.
 - **Skill focus:** the weakest skill overall gets the most activities.
 - **Activities:** chosen from section 6 to cover the skill focus.
 - **Recall later:** every new word is due for recall on a later day, which FSRS already schedules (spacing is High in RSCH-003).
@@ -269,6 +274,9 @@ The AI reads the brief and writes a learner-scoped unit: a short story or dialog
 - coverage in reading and listening passages meets the tier's rule (section 7.3), with every token matched to a lemma and form (section 4.6);
 - every new word introduced before it is tested, and appearing at least 3 times;
 - every struggle word reused as many times as the brief asks, in the right skill;
+- the story or dialogue meets the brief's story floor for the tier (at least `minStoryTokens`, capped by `maxTextTokens`);
+- at most 40% of the unit's activities are single-word drills (bare-word `shadow`, `listen_pick`, `recall`, or `produce`);
+- at least four of the previous two units' new words appear again in this unit's stories, dialogues, sentence questions, or `order` steps;
 - no word outside the brief without a gloss;
 - transliteration and a gloss for every Hebrew word (section 6.1);
 - audio for every Hebrew text (the AI calls `generate_audio`, which already exists).

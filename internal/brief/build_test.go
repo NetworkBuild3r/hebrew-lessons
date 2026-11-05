@@ -1109,13 +1109,14 @@ func TestPayloadSchemaV1(t *testing.T) {
 		slices.Sort(out)
 		return out
 	}
+	// INIT-030/SPEC-003 added pace (and optional nextPattern / reusePatterns / previousUnits).
 	want := []string{"activities", "coach_notes", "comfortable_words", "focus_cause", "load", "new_words", "notes",
-		"recentAccuracy", "skill_focus", "struggle_words", "targets", "theme", "tier", "v"}
+		"pace", "recentAccuracy", "skill_focus", "struggle_words", "targets", "theme", "tier", "v"}
 	if got := keys(doc); !slices.Equal(got, want) {
 		t.Errorf("payload keys = %v, want %v", got, want)
 	}
-	if string(doc["v"]) != "2" {
-		t.Errorf(`"v" = %s, want 2`, doc["v"])
+	if string(doc["v"]) != "3" {
+		t.Errorf(`"v" = %s, want 3`, doc["v"])
 	}
 	first := func(name string) map[string]json.RawMessage {
 		var list []map[string]json.RawMessage
@@ -1138,7 +1139,10 @@ func TestPayloadSchemaV1(t *testing.T) {
 	_ = json.Unmarshal(doc["tier"], &tier)
 	_ = json.Unmarshal(doc["targets"], &targets)
 	check("tier", tier, "known_words", "max_text_tokens", "min_known_share", "name")
-	check("targets", targets, "coverage", "new_word_min_uses")
+	check("targets", targets, "coverage", "minStoryTokens", "new_word_min_uses")
+	var pace map[string]json.RawMessage
+	_ = json.Unmarshal(doc["pace"], &pace)
+	check("pace", pace, "accuracy", "consolidate", "learningWordCount", "newWordCount", "reason")
 
 	// The brief a client sees adds the id and the times, and never the learner id.
 	raw, _ := json.Marshal(br)

@@ -77,6 +77,8 @@ func collect(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue {
 	flat, refs := flatten(doc)
 	issues := schemaIssues(doc)
 	issues = append(issues, dialogueIssues(doc)...)
+	// unit.drill_share warns without a brief; ValidateWithBrief upgrades to block.
+	issues = append(issues, drillShareIssues(doc, SeverityWarn)...) // INIT-030/SPEC-004
 	issues = append(issues, remapIssues(textIssues(ctx, flat, lk), refs)...)
 	// Target and translation are checked on the real activities. A flattened
 	// dialogue would drop the fields, and remapping those pointers would

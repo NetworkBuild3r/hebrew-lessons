@@ -29,7 +29,7 @@ func TestLimitsArePinned(t *testing.T) {
 		"NewWordMinUses":      {brief.NewWordMinUses, 3},
 		"MaxThemeRunes":       {brief.MaxThemeRunes, 200},
 		"MaxPayloadBytes":     {brief.MaxPayloadBytes, 65536},
-		"Version":             {brief.Version, 2},
+		"Version":             {brief.Version, 3},
 	} {
 		if c[0] != c[1] {
 			t.Errorf("%s = %d, want %d", name, c[0], c[1])

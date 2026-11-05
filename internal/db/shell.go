@@ -114,8 +114,9 @@ func (s *Store) InProgressLessonRun(ctx context.Context, userID, unitID int64, l
 	return run, true, nil
 }
 
-// UnitProgress is how far a learner is through one published unit in their scope.
-type UnitProgress struct {
+// ShellUnitProgress is how far a learner is through one published unit in their scope.
+// Named apart from UnitProgress (INIT-030/SPEC-002), which carries state and scores.
+type ShellUnitProgress struct {
 	UnitID   int64
 	Position int
 	Title    string
@@ -127,7 +128,7 @@ type UnitProgress struct {
 // LearnerUnitProgress lists the published units in the learner's scope, by position, with
 // the lessons finished in each. A unit the learner reported is left out: it is hidden
 // for them (unit_reports). A unit with no lessons is skipped, as the player skips it.
-func (s *Store) LearnerUnitProgress(ctx context.Context, userID int64) ([]UnitProgress, error) {
+func (s *Store) LearnerUnitProgress(ctx context.Context, userID int64) ([]ShellUnitProgress, error) {
 	if userID <= 0 {
 		return nil, ErrNoLearner
 	}
@@ -147,7 +148,7 @@ func (s *Store) LearnerUnitProgress(ctx context.Context, userID int64) ([]UnitPr
 	if err != nil {
 		return nil, err
 	}
-	var out []UnitProgress
+	var out []ShellUnitProgress
 	for _, row := range rows {
 		if row.Status != "published" || gone[row.ID] {
 			continue
@@ -164,7 +165,7 @@ func (s *Store) LearnerUnitProgress(ctx context.Context, userID int64) ([]UnitPr
 				done++
 			}
 		}
-		out = append(out, UnitProgress{
+		out = append(out, ShellUnitProgress{
 			UnitID: row.ID, Position: row.Position, Title: row.Title, Scope: row.Scope,
 			Lessons: len(doc.Lessons), Finished: done,
 		})

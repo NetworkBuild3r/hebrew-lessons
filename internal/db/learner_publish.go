@@ -62,6 +62,10 @@ func LearnerScope(learnerID int64) string {
 	return "learner:" + strconv.FormatInt(learnerID, 10)
 }
 
+// ErrReviseStarted means a revision brief's unit already has a lesson_runs row
+// for this learner, so the publish was refused. INIT-030/SPEC-005.
+var ErrReviseStarted = errors.New("db: unit has been started")
+
 // AutoPublish asks AutoPublishLearnerUnit to publish one revision of a learner's
 // unit against a brief.
 type AutoPublish struct {
@@ -80,6 +84,10 @@ type AutoPublish struct {
 	// IssuesJSON is the validator's issues, warnings included, as a JSON array.
 	// Empty means [].
 	IssuesJSON string
+	// RequireUntouched, when true, refuses with ErrReviseStarted if this learner
+	// already has any lesson_runs row for the unit. Checked inside the publish
+	// transaction via IsUntouchedTx. INIT-030/SPEC-005.
+	RequireUntouched bool
 }
 
 // AutoPublishLearnerUnit publishes revision of the unit, marks the brief used by
@@ -131,6 +139,15 @@ func (s *Store) AutoPublishLearnerUnit(ctx context.Context, p AutoPublish) (PutR
 	}
 	if scope != LearnerScope(p.LearnerID) {
 		return PutResult{}, ErrUnitNotInScope
+	}
+	if p.RequireUntouched {
+		ok, err := IsUntouchedTx(ctx, tx, p.LearnerID, p.UnitID)
+		if err != nil {
+			return PutResult{}, err
+		}
+		if !ok {
+			return PutResult{}, ErrReviseStarted
+		}
 	}
 	if err := claimBrief(ctx, tx, p.BriefID, p.LearnerID, p.UnitID, p.BriefNotBefore); err != nil {
 		return PutResult{}, err

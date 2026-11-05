@@ -365,6 +365,7 @@ func recycleIntro(withTitle bool) goldenCase {
 	reps[0][0], reps[1][0], reps[2][0] = 0, 0, 0
 	u := assemble(words, pairs(4), reps)
 	prependRecalls(&u, 0, words[0], 8)
+	u.Lessons[0].Activities = padDrillShareActs(u.Lessons[0].Activities) // INIT-030/SPEC-004
 	name := "V7 eight repeats in the introducing lesson do not count, and there are no later appearances."
 	file := "bad_recycle_intro.json"
 	issues := []Issue{
@@ -435,7 +436,9 @@ func coverageDetail() goldenCase {
 
 func unknownLexeme() goldenCase {
 	u, _ := base()
-	ai := addActAt(&u, 0, ActivityRecall, gelida)
+	addActAt(&u, 0, ActivityRecall, gelida)
+	u.Lessons[0].Activities = padDrillShareActs(u.Lessons[0].Activities) // INIT-030/SPEC-004
+	ai := indexOfAct(u.Lessons[0].Activities, ActivityRecall, gelida)
 	return goldenCase{
 		file:   "bad_lexeme_unknown.json",
 		name:   "V13 an activity references a pointed word that is not in the lexicon.",
@@ -459,7 +462,9 @@ func extraSpaces() goldenCase {
 func missingAudio() goldenCase {
 	u, _ := base()
 	text := vocab8[0].text + "."
-	ai := addActAt(&u, 0, ActivityRecall, text)
+	addActAt(&u, 0, ActivityRecall, text)
+	u.Lessons[0].Activities = padDrillShareActs(u.Lessons[0].Activities) // INIT-030/SPEC-004
+	ai := indexOfAct(u.Lessons[0].Activities, ActivityRecall, text)
 	lk := lookupFor(vocab8, u, nil)
 	audio := lk.Audio[:0]
 	for _, a := range lk.Audio {
@@ -676,6 +681,8 @@ func assemble(words []string, groups [][]int, repeats [][]int) Unit {
 				Activity{Type: ActivityStory, Text: text},
 			)
 		}
+		// Numeric stories keep unit.drill_share ≤ 40% without Hebrew uses. INIT-030/SPEC-004.
+		acts = padDrillShareActs(acts)
 		lessons = append(lessons, Lesson{Kind: KindLesson, Activities: acts})
 	}
 	for _, row := range repeats {
@@ -704,6 +711,30 @@ func joinIdx(words []string, idx []int) string {
 		parts[i] = words[wi]
 	}
 	return strings.Join(parts, " ")
+}
+
+// padDrillShareActs appends numeric stories until single-word drills are at most
+// MaxDrillShare of the lesson activities. INIT-030/SPEC-004.
+func padDrillShareActs(acts []Activity) []Activity {
+	drills := 0
+	for _, a := range acts {
+		if singleWordDrill(a) {
+			drills++
+		}
+	}
+	for drills > 0 && float64(drills)/float64(len(acts)) > MaxDrillShare {
+		acts = append(acts, Activity{Type: ActivityStory, Text: "12 12"})
+	}
+	return acts
+}
+
+func indexOfAct(acts []Activity, typ, text string) int {
+	for i, a := range acts {
+		if a.Type == typ && a.Text == text {
+			return i
+		}
+	}
+	return -1
 }
 
 func prependRecalls(u *Unit, lesson int, text string, n int) {

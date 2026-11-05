@@ -21,7 +21,14 @@ var (
 	ErrUnitNotInScope = errors.New("unit not found in the learner's scope")
 	// ErrNoLearner is a principal with no learner id, so it has no scope.
 	ErrNoLearner = errors.New("no learner")
+	// ErrReviseStarted is a revision brief whose unit already has a lesson run.
+	// INIT-030/SPEC-005.
+	ErrReviseStarted = errors.New("unit has been started")
 )
+
+// RuleBriefReviseStarted is the put_unit block when a revision brief's unit
+// already has a lesson_runs row. INIT-030/SPEC-005.
+const RuleBriefReviseStarted = "brief.revise_started"
 
 // LearnerUnits is the learner auto-publish surface (INIT-015/SPEC-020). A UnitWriter
 // may also implement it. publishLearnerDraft looks for it with a type assertion,

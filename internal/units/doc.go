@@ -23,6 +23,7 @@
 // may match on them, so a rename needs a new id.
 //
 //	brief.audio_all             A Hebrew field has no audio clip for its exact pointed text (block).
+//	brief.consolidation         The brief asks for consolidation and the unit lists new words (block). INIT-030/SPEC-004.
 //	brief.coverage              A story or listen_pick passage has too few known words (block). The unit's own newWords count when each is an exact pointed lexicon entry.
 //	brief.expired               The brief is older than its time to live (block).
 //	brief.gloss_out_of_brief    A word outside the brief and outside known or solid has no gloss (block).
@@ -30,17 +31,31 @@
 //	brief.new_min_uses          A new word appears fewer times than the brief asks. A credited newWord outside the brief uses the same floor (block).
 //	brief.not_found             The brief is missing, malformed, or another learner's (block).
 //	brief.order_known           An order token is not a known word for this learner and was not introduced by an earlier story, dialogue, or shadow step (block). INIT-029/SPEC-002.
+//	brief.pattern               The unit's pattern is not the brief's nextPattern, or on a consolidation brief is not empty and not a reuse slug (block). INIT-030/SPEC-004.
+//	brief.recycle_previous      Too few of the previous units' new words appear in this unit's meaning steps (block). INIT-030/SPEC-004.
+//	brief.story_length          A lesson has no story or dialogue that reaches the brief's minStoryTokens Hebrew words (block). INIT-030/SPEC-004.
 //	brief.struggle_reuse        A struggle word is reused too few times, or not in its failing skill (block).
 //	brief.text_too_long         A passage has more tokens than the tier allows (block).
 //	brief.used                  The brief already built a unit (block).
+//	unit.drill_share            More than 40% of the unit's non-checkpoint activities are single-word drills (block with a brief, warn without). INIT-030/SPEC-004.
 //	unit.no_markup               A text field contains <, >, or javascript: (block).
 //	unit.order_accept            An accept entry is not a different order of the same tokens as text (block). INIT-029/SPEC-002.
 //	unit.order_tokens            An order line has fewer than 3 or more than 8 tokens (block). INIT-029/SPEC-002.
 //	unit.order_translation       An order line has no English translation, or it is not English, or it is longer than 120 characters (block). INIT-029/SPEC-002.
+//	unit.same_shape             The sequence of activity types matches the first previous unit below 80% by edit distance (warn). INIT-030/SPEC-004.
 //	unit.translation_distractors A unit with a sentence listen_pick has fewer than 4 different English lines (warn). Lines that fold to the same English count once.
 //	unit.translation_lang        A translation contains Hebrew or markup (block).
 //	unit.translation_length      A translation is longer than 120 characters (warn).
 //	unit.translation_missing     A listen_pick of two or more words that are in the lexicon has no translation (block on a new write and on an older revision, warning on the current published revision).
+//
+// # Progressive lessons (INIT-030/SPEC-004)
+//
+// BriefFacts carries the progression fields of a v3 brief that the shape rules
+// need: minStoryTokens, nextPattern, reuse pattern slugs, consolidate, and
+// previous units (their newWords and activity type lists). The publish path
+// fills them from the brief; this package does not import internal/brief.
+// budget.lesson.few is suppressed when consolidate is true. Pattern is set on
+// Unit by the caller (json:"-"), the same way as Position.
 //
 // brief.coverage deliberately enforces the staged tier.min_known_share of the
 // brief (0.60 under 100 known words, 0.90 for 100 to 299, 0.95 from 300), not
@@ -151,6 +166,9 @@ type Unit struct {
 	NewWords  []string `json:"newWords"`
 	Lessons   []Lesson `json:"lessons"`
 	Position  int      `json:"-"`
+	// Pattern is the grammar-pattern slug stored on the unit row, not in the
+	// document. The caller sets it before ValidateWithBrief. INIT-030/SPEC-004.
+	Pattern string `json:"-"`
 }
 
 // Lesson is one lesson or checkpoint inside a unit.

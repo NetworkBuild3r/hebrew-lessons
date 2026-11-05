@@ -825,6 +825,9 @@ func (failingData) Progress(context.Context, int64, string, string) (Progress, e
 func (failingData) BuildLessonBrief(context.Context, int64, string) (LessonBrief, error) {
 	return LessonBrief{}, errInternal
 }
+func (failingData) BuildRevisionBrief(context.Context, int64, string, int64) (LessonBrief, error) {
+	return LessonBrief{}, errInternal
+}
 func (failingData) AddCoachNote(context.Context, int64, string, string, string) (CoachNote, error) {
 	return CoachNote{}, errInternal
 }

@@ -56,6 +56,18 @@ type UnitOutline struct {
 	Title    string `json:"title"`
 	Status   string `json:"status"`
 	Scope    string `json:"scope"`
+	// Progress is this learner's progress through the unit. Set only when
+	// get_context is called with learnerId. INIT-030/SPEC-005.
+	Progress *UnitOutlineProgress `json:"progress,omitempty"`
+}
+
+// UnitOutlineProgress is one learner's progress on one outline row.
+// State is untouched, started, or finished. INIT-030/SPEC-005.
+type UnitOutlineProgress struct {
+	State           string     `json:"state"`
+	LessonsFinished int        `json:"lessonsFinished"`
+	LessonsTotal    int        `json:"lessonsTotal"`
+	LastFinishedAt  *time.Time `json:"lastFinishedAt,omitempty"`
 }
 
 // BandScore is one frequency band on a placement run.

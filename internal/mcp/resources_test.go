@@ -192,7 +192,7 @@ func TestResourcesAuthoringNamesEveryTool(t *testing.T) {
 	}
 	numbered, order := resSteps(text, tools)
 	if numbered != 8 {
-		t.Errorf("the guide has %d numbered steps, want 8", numbered)
+		t.Errorf("the guide has %d numbered steps, want 8", numbered) // INIT-030/SPEC-006: steps 0–7
 	}
 	if !slices.Equal(order, resStepTools) {
 		t.Errorf("the steps name the tools in this order:\n  %v\nwant:\n  %v", order, resStepTools)
@@ -213,10 +213,18 @@ func TestResourcesAuthoringNamesEveryRule(t *testing.T) {
 			t.Errorf("the rule table says %s is %s, and the validator says %s", r.ID, got, r.Severity)
 		}
 	}
+	// brief.revise_started is an MCP put_unit block, not a units.Rules entry. INIT-030/SPEC-006.
+	mcpOnly := map[string]bool{mcp.RuleBriefReviseStarted: true}
 	for id := range rows {
+		if mcpOnly[id] {
+			continue
+		}
 		if !slices.ContainsFunc(units.Rules, func(r units.Rule) bool { return r.ID == id }) {
 			t.Errorf("the rule table has a row for %s, which is not a rule", id)
 		}
+	}
+	if _, ok := rows[mcp.RuleBriefReviseStarted]; !ok {
+		t.Errorf("the rule table has no row for %s", mcp.RuleBriefReviseStarted)
 	}
 
 	// The same ids are in the catalog the server serves at hebrew://rules.
@@ -233,8 +241,8 @@ func TestResourcesAuthoringNamesEveryRule(t *testing.T) {
 			t.Errorf("hebrew://rules serves %s and the guide does not explain it", r.ID)
 		}
 	}
-	if len(served.Rules) != len(units.Rules) || len(rows) != len(units.Rules) {
-		t.Errorf("rules: %d served, %d in the validator, %d in the guide", len(served.Rules), len(units.Rules), len(rows))
+	if len(served.Rules) != len(units.Rules) || len(rows) != len(units.Rules)+len(mcpOnly) {
+		t.Errorf("rules: %d served, %d in the validator, %d in the guide (want validator+%d mcp-only)", len(served.Rules), len(units.Rules), len(rows), len(mcpOnly))
 	}
 }
 
@@ -305,6 +313,56 @@ func TestResourcesAuthoringSkillMirror(t *testing.T) {
 	}
 }
 
+// TestResourcesReviserSkill covers the hebrew-lesson-reviser skill. INIT-030/SPEC-006.
+func TestResourcesReviserSkill(t *testing.T) {
+	const path = "../../.cursor/skills/hebrew-lesson-reviser/SKILL.md"
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("the reviser skill is missing: %v", err)
+	}
+	skill := resLF(string(raw))
+	if !strings.HasPrefix(skill, "---\n") {
+		t.Fatal("reviser SKILL.md has no front matter")
+	}
+	end := strings.Index(skill[4:], "\n---\n")
+	if end < 0 {
+		t.Fatal("reviser SKILL.md front matter is not closed")
+	}
+	front := skill[4 : 4+end]
+	body := skill[4+end+len("\n---\n"):]
+	if !strings.Contains("\n"+front+"\n", "\nname: hebrew-lesson-reviser\n") {
+		t.Errorf("front matter has no name: hebrew-lesson-reviser\n%s", front)
+	}
+	_, desc, ok := strings.Cut(front, "\ndescription:")
+	if !ok || len(strings.TrimSpace(desc)) < 40 {
+		t.Errorf("front matter has no description\n%s", front)
+	}
+	order := []string{"get_context", "get_unit", "get_lesson_brief", "validate_unit", "generate_audio", "put_unit", "add_coach_note"}
+	var found []string
+	for _, line := range strings.Split(body, "\n") {
+		if !resStepLine.MatchString(line) {
+			continue
+		}
+		for _, m := range resBackticked.FindAllStringSubmatch(line, -1) {
+			if !slices.Contains(order, m[1]) {
+				continue
+			}
+			if len(found) > 0 && found[len(found)-1] == m[1] {
+				continue
+			}
+			found = append(found, m[1])
+		}
+	}
+	if !slices.Equal(found, order) {
+		t.Errorf("reviser steps name tools %v, want %v", found, order)
+	}
+	for _, want := range []string{"started", "finished", "not revised", "untouched"} {
+		if !strings.Contains(strings.ToLower(body), want) {
+			t.Errorf("reviser skill does not say %q", want)
+		}
+	}
+}
+
 // ---- security: no secret, host, address, or credential in the text -------------------
 
 func TestResourcesAuthoringHoldsNoSecret(t *testing.T) {
@@ -370,6 +428,21 @@ type resBriefDoc struct {
 		MaxTextTokens int     `json:"maxTextTokens"`
 		MinKnownShare float64 `json:"minKnownShare"`
 	} `json:"tier"`
+	MinStoryTokens int      `json:"minStoryTokens"` // INIT-030/SPEC-006
+	NextPattern    string   `json:"nextPattern"`    // INIT-030/SPEC-006
+	ReusePatterns  []string `json:"reusePatterns"`  // INIT-030/SPEC-006
+	Pace           struct {
+		NewWordCount int    `json:"newWordCount"`
+		Consolidate  bool   `json:"consolidate"`
+		Reason       string `json:"reason"`
+	} `json:"pace"` // INIT-030/SPEC-006
+	PreviousUnits []struct {
+		Title         string   `json:"title"`
+		Situation     string   `json:"situation"`
+		Pattern       string   `json:"pattern"`
+		NewWords      []string `json:"newWords"`
+		ActivityTypes []string `json:"activityTypes"`
+	} `json:"previousUnits"` // INIT-030/SPEC-006
 	NewWords []struct {
 		Text    string `json:"text"`
 		Gloss   string `json:"gloss"`
@@ -472,6 +545,10 @@ func resFacts(t *testing.T, b resBriefDoc, lk *resLookup) units.BriefFacts {
 	}
 	f := units.BriefFacts{
 		Tier: b.Tier.Name, MinKnownShare: b.Tier.MinKnownShare, MaxTextTokens: b.Tier.MaxTextTokens,
+		MinStoryTokens: b.MinStoryTokens, // INIT-030/SPEC-006
+		NextPattern:    b.NextPattern,    // INIT-030/SPEC-006
+		ReusePatterns:  slices.Clone(b.ReusePatterns),
+		Consolidate:    b.Pace.Consolidate,
 		BriefLexemeIDs: map[int64]bool{}, KnownLexemeIDs: map[int64]bool{},
 	}
 	for _, w := range b.NewWords {
@@ -486,7 +563,24 @@ func resFacts(t *testing.T, b resBriefDoc, lk *resLookup) units.BriefFacts {
 		f.BriefLexemeIDs[id(w.Text)] = true
 		f.KnownLexemeIDs[id(w.Text)] = true
 	}
+	for _, p := range b.PreviousUnits {
+		f.PreviousUnits = append(f.PreviousUnits, units.BriefPreviousUnit{
+			NewWords:      slices.Clone(p.NewWords),
+			ActivityTypes: slices.Clone(p.ActivityTypes),
+		})
+	}
 	return f
+}
+
+// resApplyPattern sets the unit's pattern from the brief the way put_unit does. INIT-030/SPEC-006.
+func resApplyPattern(u *units.Unit, b resBriefDoc) {
+	if b.Pace.Consolidate {
+		if len(b.ReusePatterns) > 0 {
+			u.Pattern = b.ReusePatterns[0]
+		}
+		return
+	}
+	u.Pattern = b.NextPattern
 }
 
 func resRules(issues []units.Issue, severity string) []string {
@@ -523,7 +617,9 @@ func TestResourcesAuthoringExamplesValidate(t *testing.T) {
 			ex := resParse(t, text, n)
 			lk := newResLookup(true)
 			facts := resFacts(t, ex.brief, lk)
-			issues := units.ValidateWithBrief(t.Context(), &ex.unit, lk, &facts)
+			unit := ex.unit
+			resApplyPattern(&unit, ex.brief) // INIT-030/SPEC-006
+			issues := units.ValidateWithBrief(t.Context(), &unit, lk, &facts)
 			resCheckPasses(t, issues)
 
 			// The brief asks for what the example does: every new word is in newWords and the
@@ -550,13 +646,18 @@ func TestResourcesAuthoringExamplesValidate(t *testing.T) {
 		})
 	}
 
-	// Example 1 is built around a story, and example 2 around a dialogue with two speakers.
+	// INIT-030/SPEC-006: example 1 continues a previous unit; example 2 consolidates.
 	one, two := resParse(t, text, 1), resParse(t, text, 2)
-	if len(one.brief.StruggleWords) < 3 || len(one.brief.NewWords) > 4 {
-		t.Errorf("example 1 is not struggle-heavy: %d struggle words, %d new words", len(one.brief.StruggleWords), len(one.brief.NewWords))
+	if one.brief.Pace.Consolidate || len(one.brief.PreviousUnits) == 0 || one.brief.MinStoryTokens < 12 {
+		t.Errorf("example 1 is not a continuing unit: consolidate=%v previous=%d minStory=%d",
+			one.brief.Pace.Consolidate, len(one.brief.PreviousUnits), one.brief.MinStoryTokens)
 	}
-	if len(two.brief.StruggleWords) != 0 || len(two.brief.NewWords) < 3 {
-		t.Errorf("example 2 is not a new-words brief: %d struggle words, %d new words", len(two.brief.StruggleWords), len(two.brief.NewWords))
+	if len(one.brief.StruggleWords) < 3 || len(one.brief.NewWords) == 0 {
+		t.Errorf("example 1 should teach new words with struggles: %d struggle, %d new", len(one.brief.StruggleWords), len(one.brief.NewWords))
+	}
+	if !two.brief.Pace.Consolidate || len(two.brief.NewWords) != 0 || len(two.unit.NewWords) != 0 {
+		t.Errorf("example 2 is not consolidation: pace.consolidate=%v brief new=%d unit new=%d",
+			two.brief.Pace.Consolidate, len(two.brief.NewWords), len(two.unit.NewWords))
 	}
 	speakers := map[string]bool{}
 	dialogues := 0
@@ -645,9 +746,9 @@ func TestResourcesAuthoringExamplesFailWhenBroken(t *testing.T) {
 			dropWhere(u, func(a units.Activity) bool { return a.Type == units.ActivityStory })
 		}, units.RuleBriefIntro},
 		{"a markup character", 1, true, func(u *units.Unit) { u.Title += "<b>" }, units.RuleUnitNoMarkup},
-		{"one lesson introduces four new words", 2, true, func(u *units.Unit) {
-			u.Lessons[0].Activities = append(u.Lessons[1].Activities[:1:1], u.Lessons[0].Activities...)
-		}, units.RuleBudgetLesson},
+		{"consolidation lists a new word", 2, true, func(u *units.Unit) {
+			u.NewWords = []string{"תֵּה"}
+		}, units.RuleBriefConsolidation}, // INIT-030/SPEC-006
 		{"speaker c", 2, true, func(u *units.Unit) { u.Lessons[0].Activities[0].Lines[1].Speaker = "c" }, units.RuleUnitDialogueSpeakers},
 		{"only one speaker speaks", 2, true, func(u *units.Unit) {
 			for i := range u.Lessons[0].Activities[0].Lines {
@@ -674,6 +775,7 @@ func TestResourcesAuthoringExamplesFailWhenBroken(t *testing.T) {
 			if err := json.Unmarshal(raw, &copyOf); err != nil {
 				t.Fatal(err)
 			}
+			resApplyPattern(&copyOf, ex.brief) // INIT-030/SPEC-006
 			c.edit(&copyOf)
 			issues := units.ValidateWithBrief(t.Context(), &copyOf, lk, &facts)
 			found := false
@@ -776,12 +878,46 @@ func resEnv(t *testing.T, ex resExample) (*apEnv, *sdkmcp.ClientSession, *resTTS
 	for _, w := range ex.brief.ComfortableWords {
 		resKnow(e, e.a, insert(w.Text))
 	}
-	// The newest attempts set the brief's load. This seen word at 80% right keeps it steady, so the
-	// brief stays the one the guide prints.
-	anchor := units.Normalize("עֹגֶן")
-	e.exec(`INSERT INTO lexemes (text_nfc, bare, gloss_en, translit) VALUES (?, ?, 'anchor', 'ogen')`, anchor, units.Plain(anchor))
-	e.ids[anchor] = int64(e.count(`SELECT id FROM lexemes WHERE text_nfc = ?`, anchor))
-	e.attempts(e.a, anchor, "listen", strings.Repeat("W", 8)+strings.Repeat("R", 32))
+	if ex.brief.Pace.Consolidate {
+		// INIT-030/SPEC-006: Pace consolidates when review accuracy is under 75%.
+		// Each comfortable word has 3 Good reviews; add enough Again ratings to drop below.
+		goods := 3 * len(ex.brief.ComfortableWords)
+		needAgain := goods // 50% < 75%, and reviews > 0
+		conn, err := e.store.DB()
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows, err := conn.QueryContext(t.Context(), `SELECT id FROM cards WHERE user_id = ? ORDER BY id`, e.a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var cardIDs []int64
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				t.Fatal(err)
+			}
+			cardIDs = append(cardIDs, id)
+		}
+		rows.Close()
+		if len(cardIDs) == 0 {
+			t.Fatal("consolidation example needs known-word cards for Again reviews")
+		}
+		for i := 0; i < needAgain; i++ {
+			card := cardIDs[i%len(cardIDs)]
+			at := apNow.Add(-time.Duration(i+1) * time.Minute)
+			e.exec(`INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days) VALUES (?, 1, ?, 0, 1)`,
+				card, db.FormatTime(at))
+		}
+	} else {
+		// The newest attempts set the brief's load. This seen word at 80% right keeps it steady, so the
+		// brief stays the one the guide prints.
+		anchor := units.Normalize("עֹגֶן")
+		e.exec(`INSERT INTO lexemes (text_nfc, bare, gloss_en, translit) VALUES (?, ?, 'anchor', 'ogen')`, anchor, units.Plain(anchor))
+		e.ids[anchor] = int64(e.count(`SELECT id FROM lexemes WHERE text_nfc = ?`, anchor))
+		e.attempts(e.a, anchor, "listen", strings.Repeat("W", 8)+strings.Repeat("R", 32))
+	}
 
 	tts := &resTTS{}
 	gen := &audio.Generator{
@@ -875,7 +1011,7 @@ func resDryRun(t *testing.T, n int) {
 		},
 		"get_lesson_brief": func() {
 			args := map[string]any{"learnerId": e.a}
-			if n == 2 {
+			if n == 2 && !ex.brief.Pace.Consolidate {
 				args["theme"] = "cafe"
 			}
 			brief = decodeInto[mcp.LessonBrief](t, mustOK(t, client, "get_lesson_brief", args))
@@ -883,7 +1019,7 @@ func resDryRun(t *testing.T, n int) {
 				t.Fatal("no briefId")
 			}
 			resCompareBrief(t, ex.brief, brief)
-			// Step 3 is the client's own writing. It writes the guide's example.
+			// Writing the unit is the client's own step. It writes the guide's example.
 			if len(unit.Lessons) == 0 {
 				t.Fatal("the example has no lessons")
 			}

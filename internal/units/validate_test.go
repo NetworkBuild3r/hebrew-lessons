@@ -166,10 +166,12 @@ func TestRulesCatalog(t *testing.T) {
 	}
 	for _, id := range []string{
 		RuleAudioMissing, RuleBudgetLesson, RuleBudgetLessonFew, RuleBudgetUnit,
+		RuleBriefConsolidation, RuleBriefPattern, RuleBriefRecyclePrevious, RuleBriefStoryLength,
 		RuleCoverageListening, RuleCoverageStory, RuleLexemeUnknown,
 		RuleNounGender, RuleNounPlural, RuleRecycleCount, RuleRecycleSpread,
 		RuleSchemaActivity, RuleSchemaCheckpoint, RuleSchemaKind,
 		RuleSchemaLookup, RuleSchemaRef, RuleSchemaRequired, RuleStoryUnmapped, RuleStoryUnpointed,
+		RuleUnitDrillShare, RuleUnitSameShape,
 	} {
 		if !seen[id] {
 			t.Fatalf("catalog missing %s", id)
@@ -240,7 +242,7 @@ func TestFewNewWordsWarnsAndCheckpointsAreExempt(t *testing.T) {
 	u, lk := v1()
 	start := len(u.Lessons)
 	u.Lessons = append(u.Lessons,
-		Lesson{Kind: KindLesson, Activities: []Activity{{Type: ActivityRecall, Text: vocab8[0].text}}},
+		Lesson{Kind: KindLesson, Activities: padDrillShareActs([]Activity{{Type: ActivityRecall, Text: vocab8[0].text}})},
 		Lesson{Kind: KindCheckpoint, Activities: []Activity{{Type: ActivityRecall, Text: vocab8[0].text}}},
 	)
 	got := Validate(context.Background(), &u, lk)
@@ -259,14 +261,20 @@ func TestKnownLexemesUsesPosition(t *testing.T) {
 	const sefer = "סֵפֶר"
 	lk.lex[normalize(sefer)] = glex{ID: 99, POS: "noun", Gender: "m", Bare: stripNiqqud(sefer)}
 	var storyAt int
+	found := false
 	for i, act := range u.Lessons[0].Activities {
-		if act.Type != ActivityStory {
-			continue
+		if act.Type != ActivityStory || hebrewTokenCount(act.Text) == 0 {
+			continue // skip numeric drill-share pads. INIT-030/SPEC-004.
 		}
 		storyAt = i
 		text := act.Text + " " + sefer
 		u.Lessons[0].Activities[i].Text = text
 		lk.audio[normalize(text)] = true
+		found = true
+		break
+	}
+	if !found {
+		t.Fatal("no Hebrew story in fixture")
 	}
 	rec := &posLookup{fakeLookup: lk, flags: map[string]bool{sefer: false}}
 	got := Validate(context.Background(), &u, rec)

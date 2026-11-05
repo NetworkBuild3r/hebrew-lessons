@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/brief"
@@ -81,6 +82,9 @@ func factsFromBrief(br brief.Brief, known map[int64]bool) units.BriefFacts {
 		Tier:           br.Tier.Name,
 		MinKnownShare:  br.Tier.MinKnownShare,
 		MaxTextTokens:  br.Tier.MaxTextTokens,
+		MinStoryTokens: br.Targets.MinStoryTokens, // INIT-030/SPEC-006
+		NextPattern:    br.NextPattern,            // INIT-030/SPEC-006
+		Consolidate:    br.Pace.Consolidate,       // INIT-030/SPEC-006
 		Used:           br.UsedByUnitID != nil,
 		BriefLexemeIDs: map[int64]bool{},
 		KnownLexemeIDs: known,
@@ -111,11 +115,24 @@ func factsFromBrief(br brief.Brief, known map[int64]bool) units.BriefFacts {
 	for _, m := range br.FixMistakes {
 		f.FixMistakes = append(f.FixMistakes, units.BriefFix{Right: m.Right})
 	}
+	// INIT-030/SPEC-006: progression fields the shape rules read.
+	for _, p := range br.ReusePatterns {
+		if slug := strings.TrimSpace(p.Slug); slug != "" {
+			f.ReusePatterns = append(f.ReusePatterns, slug)
+		}
+	}
+	for _, p := range br.PreviousUnits {
+		f.PreviousUnits = append(f.PreviousUnits, units.BriefPreviousUnit{
+			NewWords: slices.Clone(p.NewWords),
+		})
+	}
 	return f
 }
 
 // AutoPublishLearner implements mcp.LearnerUnits. The publish, the brief claim, and
-// the audit row are one transaction in db.AutoPublishLearnerUnit.
+// the audit row are one transaction in db.AutoPublishLearnerUnit. A revision brief
+// must target this unitId and the unit must still be untouched inside that
+// transaction. INIT-030/SPEC-005.
 func (s *Store) AutoPublishLearner(ctx context.Context, req mcp.AutoPublishRequest) (mcp.PutResult, error) {
 	if err := s.ready(ctx); err != nil {
 		return mcp.PutResult{}, err
@@ -132,14 +149,19 @@ func (s *Store) AutoPublishLearner(ctx context.Context, req mcp.AutoPublishReque
 	if actor == "" {
 		actor = defaultActor
 	}
+	requireUntouched, err := s.revisionPublishGate(ctx, req.LearnerID, req.BriefID, req.UnitID)
+	if err != nil {
+		return mcp.PutResult{}, err
+	}
 	res, err := s.db.AutoPublishLearnerUnit(ctx, db.AutoPublish{
-		UnitID:         req.UnitID,
-		Revision:       req.Revision,
-		LearnerID:      req.LearnerID,
-		BriefID:        req.BriefID,
-		BriefNotBefore: s.now().Add(-brief.TTL),
-		Actor:          actor,
-		IssuesJSON:     string(raw),
+		UnitID:           req.UnitID,
+		Revision:         req.Revision,
+		LearnerID:        req.LearnerID,
+		BriefID:          req.BriefID,
+		BriefNotBefore:   s.now().Add(-brief.TTL),
+		Actor:            actor,
+		IssuesJSON:       string(raw),
+		RequireUntouched: requireUntouched,
 	})
 	switch {
 	case errors.Is(err, db.ErrBriefUsed):
@@ -148,6 +170,8 @@ func (s *Store) AutoPublishLearner(ctx context.Context, req mcp.AutoPublishReque
 		return mcp.PutResult{}, mcp.ErrBriefNotFound
 	case errors.Is(err, db.ErrBriefExpired):
 		return mcp.PutResult{}, mcp.ErrBriefExpired
+	case errors.Is(err, db.ErrReviseStarted):
+		return mcp.PutResult{}, mcp.ErrReviseStarted
 	case errors.Is(err, db.ErrUnitNotInScope):
 		return mcp.PutResult{}, mcp.ErrUnitNotInScope
 	case errors.Is(err, db.ErrNoLearner):
@@ -160,6 +184,29 @@ func (s *Store) AutoPublishLearner(ctx context.Context, req mcp.AutoPublishReque
 		return mcp.PutResult{}, err
 	}
 	return mcp.PutResult{UnitID: res.UnitID, Revision: res.Revision, Unchanged: res.Unchanged}, nil
+}
+
+// revisionPublishGate reads whether the brief revises a unit. A revision brief for
+// a different unitId is ErrBriefNotFound. A matching revision brief requires the
+// untouched check inside the publish transaction. INIT-030/SPEC-005.
+func (s *Store) revisionPublishGate(ctx context.Context, learnerID int64, briefID string, unitID int64) (bool, error) {
+	model := learner.New(s.db, nil)
+	br, err := brief.New(s.db, model, nil).Get(ctx, learnerID, briefID)
+	switch {
+	case errors.Is(err, brief.ErrNotFound):
+		return false, mcp.ErrBriefNotFound
+	case errors.Is(err, brief.ErrExpired):
+		return false, mcp.ErrBriefExpired
+	case err != nil:
+		return false, err
+	}
+	if br.ReviseUnitID == nil {
+		return false, nil
+	}
+	if *br.ReviseUnitID != unitID {
+		return false, mcp.ErrBriefNotFound
+	}
+	return true, nil
 }
 
 // UnpublishLearner implements mcp.LearnerUnits. The scope is learner:<p.UserID>,

@@ -6,17 +6,20 @@
 // model and returns a Brief with:
 //
 //   - new words: unseen words from the lowest band that still has any, themed words first,
-//     never a struggling word. 5 to 8 words, or 3 to 4 while the learner knows fewer than
-//     BeginnerKnownBelow words.
+//     never a struggling word. Pace sets the count from recent review accuracy and the
+//     learning backlog (INIT-030/SPEC-003); consolidation yields none.
 //   - struggle words: the top MaxStruggleWords struggling or regressed words by StruggleScore.
 //     Each carries the skill that is failing, the likely cause, and a required use count of 3
 //     or more.
 //   - comfortable words: up to MaxComfortableWords known or solid words that carry the story,
 //     themed ones first, then the most recently seen.
+//   - next pattern, the two most recently taught patterns to reuse, and up to two previous
+//     units with their stories (INIT-030/SPEC-003).
+//   - pace: new-word count, consolidation, reason, review accuracy, and learning-word count.
 //   - skill focus: the weakest unlocked skill overall, and the activity types that train it
 //     and each struggle word's failing skill.
-//   - targets, the staged coverage tier for the learner's vocabulary size, and the newest
-//     coach notes.
+//   - targets (including minStoryTokens), the staged coverage tier for the learner's
+//     vocabulary size, and the newest coach notes.
 //
 // # Payload
 //

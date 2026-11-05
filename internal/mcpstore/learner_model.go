@@ -385,9 +385,13 @@ func placementView(r db.PlacementHistoryRow) mcp.PlacementView {
 }
 
 // BuildLessonBrief implements mcp.LearnerData with brief.Builder.Build, which stores the
-// brief under the learner id and returns it without that id.
+// brief under the learner id and returns it without that id. Refuses when the learner
+// already has three or more untouched learner-scoped units. INIT-030/SPEC-005.
 func (s *Store) BuildLessonBrief(ctx context.Context, id int64, theme string) (mcp.LessonBrief, error) {
 	if err := s.ready(ctx); err != nil {
+		return mcp.LessonBrief{}, err
+	}
+	if err := s.refuseNewBriefBacklog(ctx, id); err != nil {
 		return mcp.LessonBrief{}, err
 	}
 	app, err := studyday.AppZone(os.Getenv("TZ"))
@@ -407,6 +411,103 @@ func (s *Store) BuildLessonBrief(ctx context.Context, id int64, theme string) (m
 		return mcp.LessonBrief{}, err
 	}
 	return lessonBrief(br), nil
+}
+
+// BuildRevisionBrief implements mcp.LearnerData: a revision brief for one untouched
+// learner-scoped unit, built as of that unit's position. INIT-030/SPEC-005.
+func (s *Store) BuildRevisionBrief(ctx context.Context, id int64, theme string, unitID int64) (mcp.LessonBrief, error) {
+	if err := s.ready(ctx); err != nil {
+		return mcp.LessonBrief{}, err
+	}
+	snap, err := s.db.LoadUnit(ctx, unitID, nil)
+	if errors.Is(err, db.ErrUnitNotFound) {
+		return mcp.LessonBrief{}, mcp.ErrReviseOtherLearner
+	}
+	if err != nil {
+		return mcp.LessonBrief{}, err
+	}
+	switch {
+	case snap.Scope == mcp.ScopeShared:
+		return mcp.LessonBrief{}, mcp.ErrReviseShared
+	case snap.Scope != db.LearnerScope(id):
+		return mcp.LessonBrief{}, mcp.ErrReviseOtherLearner
+	}
+	ok, err := s.db.IsUntouched(ctx, id, unitID)
+	if err != nil {
+		return mcp.LessonBrief{}, err
+	}
+	if !ok {
+		progress, err := s.db.UnitProgress(ctx, id)
+		if err != nil {
+			return mcp.LessonBrief{}, err
+		}
+		for _, p := range progress {
+			if p.UnitID != unitID {
+				continue
+			}
+			if p.State == db.UnitFinished {
+				return mcp.LessonBrief{}, mcp.ErrReviseFinished
+			}
+			return mcp.LessonBrief{}, mcp.ErrReviseStartedUnit
+		}
+		return mcp.LessonBrief{}, mcp.ErrReviseStartedUnit
+	}
+	app, err := studyday.AppZone(os.Getenv("TZ"))
+	if err != nil {
+		return mcp.LessonBrief{}, err
+	}
+	zones, err := studyday.NewResolver(s, app)
+	if err != nil {
+		return mcp.LessonBrief{}, err
+	}
+	model := learner.New(s.db, nil)
+	br, err := brief.New(s.db, model, nil, brief.WithResolver(zones)).BuildAt(ctx, id, theme, snap.Position, unitID)
+	if errors.Is(err, brief.ErrTheme) {
+		return mcp.LessonBrief{}, mcp.ErrBadTheme
+	}
+	if err != nil {
+		return mcp.LessonBrief{}, err
+	}
+	return lessonBrief(br), nil
+}
+
+// refuseNewBriefBacklog refuses a new brief when three or more untouched learner-scoped
+// units already sit on Today. INIT-030/SPEC-005; ADR-0026 D8.
+func (s *Store) refuseNewBriefBacklog(ctx context.Context, learnerID int64) error {
+	units, err := s.db.UnitsInScope(ctx, learnerID)
+	if err != nil {
+		return err
+	}
+	progress, err := s.db.UnitProgress(ctx, learnerID)
+	if err != nil {
+		return err
+	}
+	byID := make(map[int64]db.UnitProgress, len(progress))
+	for _, p := range progress {
+		byID[p.UnitID] = p
+	}
+	scope := db.LearnerScope(learnerID)
+	var earliest int64
+	var earliestPos int
+	count := 0
+	for _, u := range units {
+		if u.Scope != scope {
+			continue
+		}
+		p, ok := byID[u.ID]
+		if !ok || p.State != db.UnitUntouched {
+			continue
+		}
+		count++
+		if earliest == 0 || u.Position < earliestPos || (u.Position == earliestPos && u.ID < earliest) {
+			earliest = u.ID
+			earliestPos = u.Position
+		}
+	}
+	if count >= 3 {
+		return mcp.ErrUntouchedBacklog{UnitID: earliest}
+	}
+	return nil
 }
 
 func lessonBrief(br brief.Brief) mcp.LessonBrief {

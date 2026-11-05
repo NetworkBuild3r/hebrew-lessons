@@ -49,6 +49,16 @@ type memLearn struct {
 	// practiceResults seeds LaterDayResults for get_context tests.
 	// INIT-029/SPEC-008.
 	practiceResults map[int64][]evidence.PracticeResult
+	// unitProgress seeds UnitProgress for get_context outline rows. INIT-030/SPEC-005.
+	unitProgress map[int64][]UnitProgressRow
+	// reviseOK is the set of unit ids BuildRevisionBrief accepts as untouched.
+	// INIT-030/SPEC-005.
+	reviseOK map[int64]bool
+	// reviseRefuse maps unit id to the error BuildRevisionBrief returns.
+	reviseRefuse map[int64]error
+	// untouchedLearnerUnits are learner-scoped untouched unit ids in position order,
+	// used by the new-brief backlog cap. INIT-030/SPEC-005.
+	untouchedLearnerUnits map[int64][]int64
 }
 
 type memNote struct {
@@ -329,6 +339,56 @@ func (m *Memory) LaterDayResults(ctx context.Context, learnerID int64, _ time.Ti
 	return append([]evidence.PracticeResult(nil), rows...), nil
 }
 
+// SetUnitProgress seeds UnitProgress for get_context. INIT-030/SPEC-005.
+func (m *Memory) SetUnitProgress(learnerID int64, rows []UnitProgressRow) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.learn.unitProgress == nil {
+		m.learn.unitProgress = map[int64][]UnitProgressRow{}
+	}
+	m.learn.unitProgress[learnerID] = slices.Clone(rows)
+}
+
+// UnitProgress implements unitProgressReader. INIT-030/SPEC-005.
+func (m *Memory) UnitProgress(ctx context.Context, userID int64) ([]UnitProgressRow, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.learn.unitProgress[userID]), nil
+}
+
+// SetUntouchedLearnerUnits seeds the backlog-cap list for BuildLessonBrief. INIT-030/SPEC-005.
+func (m *Memory) SetUntouchedLearnerUnits(learnerID int64, unitIDs []int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.learn.untouchedLearnerUnits == nil {
+		m.learn.untouchedLearnerUnits = map[int64][]int64{}
+	}
+	m.learn.untouchedLearnerUnits[learnerID] = slices.Clone(unitIDs)
+}
+
+// SetReviseUnitOK marks a unit as an allowed revision target. INIT-030/SPEC-005.
+func (m *Memory) SetReviseUnitOK(unitID int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.learn.reviseOK == nil {
+		m.learn.reviseOK = map[int64]bool{}
+	}
+	m.learn.reviseOK[unitID] = true
+}
+
+// SetReviseUnitRefuse makes BuildRevisionBrief return err for unitID. INIT-030/SPEC-005.
+func (m *Memory) SetReviseUnitRefuse(unitID int64, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.learn.reviseRefuse == nil {
+		m.learn.reviseRefuse = map[int64]error{}
+	}
+	m.learn.reviseRefuse[unitID] = err
+}
+
 // BuildLessonBrief implements LearnerData. The brief is the learner's template with a new id.
 func (m *Memory) BuildLessonBrief(ctx context.Context, id int64, theme string) (LessonBrief, error) {
 	if err := ctx.Err(); err != nil {
@@ -336,6 +396,38 @@ func (m *Memory) BuildLessonBrief(ctx context.Context, id int64, theme string) (
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if ids := m.learn.untouchedLearnerUnits[id]; len(ids) >= 3 {
+		return LessonBrief{}, ErrUntouchedBacklog{UnitID: ids[0]}
+	}
+	b := m.learn.template[id]
+	m.learn.nextBrief++
+	b.BriefID = fmt.Sprintf("M%021d", m.learn.nextBrief)
+	b.Theme = theme
+	if b.Theme == "" {
+		b.Theme = "general"
+	}
+	if m.learn.briefOwner == nil {
+		m.learn.briefOwner = map[string]int64{}
+		m.learn.facts = map[string]units.BriefFacts{}
+	}
+	m.learn.briefOwner[b.BriefID] = id
+	m.learn.facts[b.BriefID] = units.BriefFacts{}
+	return b, nil
+}
+
+// BuildRevisionBrief implements LearnerData for in-memory tests. INIT-030/SPEC-005.
+func (m *Memory) BuildRevisionBrief(ctx context.Context, id int64, theme string, unitID int64) (LessonBrief, error) {
+	if err := ctx.Err(); err != nil {
+		return LessonBrief{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err, ok := m.learn.reviseRefuse[unitID]; ok {
+		return LessonBrief{}, err
+	}
+	if !m.learn.reviseOK[unitID] {
+		return LessonBrief{}, ErrReviseOtherLearner
+	}
 	b := m.learn.template[id]
 	m.learn.nextBrief++
 	b.BriefID = fmt.Sprintf("M%021d", m.learn.nextBrief)

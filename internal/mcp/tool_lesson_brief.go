@@ -12,6 +12,8 @@ import (
 
 const lessonBriefDescription = "Build the word plan for one learner's next lesson and store it under a briefId. Admin only, including the static token: a learner call is a tool error, forbidden: admin only. " +
 	"learnerId is required. A learner id that does not exist is an error. " +
+	"Pass optional unitId to build a revision brief for that learner-scoped unit: it must be untouched (no lesson run yet). A started, finished, shared, or another learner's unit is a tool error. " + // INIT-030/SPEC-005
+	"Without unitId, a new brief is refused when the learner already has three or more untouched learner-scoped units; the error names the earliest unit id so you can revise it first. " + // INIT-030/SPEC-005
 	"The code picks the words and you write the lesson. The brief lists newWords to teach (each used at least minUses times), struggleWords to bring back (each used at least requiredCount times, practised through the skill that is failing), and comfortableWords the learner already knows, to build the text from. " +
 	"load says how hard the lesson pushes, from the learner's recent accuracy over their newest checked attempts: ease when they are missing more (fewer new words, at most 3 struggle words, and the full list of comfortable words), stretch when they are getting almost everything right (more new words, fewer comfortable words), and steady in between. recentAccuracy is that share. A lesson stays steady until there are 15 attempts, and it does not flip between loads on a small swing. " +
 	"fixMistakes lists up to three personal mistakes, most repeated first. Practise each right form, and show the wrong form beside it once. " +
@@ -19,12 +21,14 @@ const lessonBriefDescription = "Build the word plan for one learner's next lesso
 	"theme is optional plain text of at most 200 characters. It steers which new words are chosen and is never required to match. " +
 	"The same learner on the same day with the same theme gets the same words, but each call stores a new brief with a new briefId. A brief builds one unit and expires after 7 days. " +
 	"Workflow: call get_lesson_brief, write the unit from the brief, call validate_unit with briefId and learnerId, call generate_audio, call put_unit with scope learner:<id>, publish true, and the same briefId, and then call add_coach_note. " +
+	"To revise an untouched unit, call get_lesson_brief with that unitId, then put_unit with the same unitId, publish true, and the revision briefId. " + // INIT-030/SPEC-005
 	"A briefId belongs to the learner it was built for. Another learner's id, a missing id, and a malformed id all give the same brief.not_found issue, so a brief cannot be probed. " +
 	"At most 60 calls a minute across the learner tools."
 
 type lessonBriefInput struct {
 	LearnerID *int64 `json:"learnerId,omitempty" jsonschema:"Required. The learner the lesson is for. A whole number is accepted, including 9.0. A fraction such as 9.5 is rejected."`
 	Theme     string `json:"theme,omitempty" jsonschema:"Optional plain text of at most 200 characters, such as cafe or family."`
+	UnitID    *int64 `json:"unitId,omitempty" jsonschema:"Optional. When set, build a revision brief for this untouched learner-scoped unit at its current position. Started, finished, shared, and another learner's units are refused."` // INIT-030/SPEC-005
 }
 
 func (s *service) getLessonBrief(ctx context.Context, _ *mcp.CallToolRequest, in lessonBriefInput) (*mcp.CallToolResult, LessonBrief, error) {
@@ -37,11 +41,25 @@ func (s *service) getLessonBrief(ctx context.Context, _ *mcp.CallToolRequest, in
 	if utf8.RuneCountInString(theme) > maxThemeRunes || !validPlain(theme, false) {
 		return nil, out, ErrBadTheme
 	}
-	brief, err := data.BuildLessonBrief(ctx, id, theme)
-	if errors.Is(err, ErrBadTheme) {
-		return nil, out, ErrBadTheme
+	if in.UnitID != nil && *in.UnitID <= 0 {
+		return nil, out, errors.New("unitId must be a positive id from put_unit.")
 	}
-	if err != nil {
+	var brief LessonBrief
+	if in.UnitID != nil {
+		brief, err = data.BuildRevisionBrief(ctx, id, theme, *in.UnitID)
+	} else {
+		brief, err = data.BuildLessonBrief(ctx, id, theme)
+	}
+	var backlog ErrUntouchedBacklog
+	switch {
+	case errors.Is(err, ErrBadTheme):
+		return nil, out, ErrBadTheme
+	case errors.Is(err, ErrReviseShared), errors.Is(err, ErrReviseStartedUnit),
+		errors.Is(err, ErrReviseFinished), errors.Is(err, ErrReviseOtherLearner):
+		return nil, out, err
+	case errors.As(err, &backlog):
+		return nil, out, backlog
+	case err != nil:
 		return nil, out, storeErr("The lesson brief could not be built.", err)
 	}
 	return nil, fillBrief(brief), nil

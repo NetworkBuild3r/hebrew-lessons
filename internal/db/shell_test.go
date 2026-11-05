@@ -99,7 +99,7 @@ func TestLearnerUnitProgress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []UnitProgress{
+	want := []ShellUnitProgress{
 		{UnitID: done, Position: 1, Title: "Done", Scope: "shared", Lessons: 2, Finished: 2},
 		{UnitID: partway, Position: 2, Title: "Partway", Scope: "shared", Lessons: 3, Finished: 1},
 		{UnitID: own, Position: 4, Title: "Own", Scope: LearnerScope(e.a), Lessons: 1, Finished: 0},

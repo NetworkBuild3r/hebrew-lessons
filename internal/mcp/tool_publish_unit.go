@@ -195,6 +195,10 @@ func (s *service) publishLearnerDraft(ctx context.Context, scope, briefID string
 	case errors.Is(err, ErrBriefExpired):
 		out := sortIssues(append(append([]units.Issue(nil), checked...), blockIssue(units.RuleBriefExpired, "this brief is too old to use")))
 		return saved, false, out, blockedReason(out), nil
+	case errors.Is(err, ErrReviseStarted):
+		// INIT-030/SPEC-005: a run started after the revision brief was built.
+		out := sortIssues(append(append([]units.Issue(nil), checked...), blockIssue(RuleBriefReviseStarted, "this unit has been started and cannot be revised")))
+		return saved, false, out, blockedReason(out), nil
 	case errors.Is(err, ErrUnitNotInScope):
 		slog.Warn("mcp auto publish refused", "unit", saved.UnitID, "learner", learnerID)
 		return saved, false, checked, "The unit is not in that learner's scope, so the draft was kept.", nil

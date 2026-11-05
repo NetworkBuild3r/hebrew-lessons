@@ -104,7 +104,14 @@ func TestPreviousVersionStillReads(t *testing.T) {
 	if err != nil || got.V != 1 {
 		t.Fatalf("v1 brief: v=%d %v", got.V, err)
 	}
-	e.exec(`UPDATE lesson_briefs SET payload_json = '{"v":3}' WHERE id = ?`, br.ID)
+	// INIT-030/SPEC-003 raised Version to 3; a v2 payload must still load.
+	v2 := `{"v":2,"theme":"cafe","tier":{"name":"beginner","known_words":0,"max_text_tokens":20,"min_known_share":0.6},"new_words":[],"struggle_words":[],"comfortable_words":[],"focus_cause":"","skill_focus":"recall","activities":[],"targets":{"coverage":0.95,"new_word_min_uses":3},"notes":[],"coach_notes":[],"recentAccuracy":0.8,"load":"steady"}`
+	e.exec(`UPDATE lesson_briefs SET payload_json = ? WHERE id = ?`, v2, br.ID)
+	got, err = e.b.Get(context.Background(), e.user, br.ID)
+	if err != nil || got.V != 2 {
+		t.Fatalf("v2 brief: v=%d %v", got.V, err)
+	}
+	e.exec(`UPDATE lesson_briefs SET payload_json = '{"v":4}' WHERE id = ?`, br.ID)
 	if _, err := e.b.Get(context.Background(), e.user, br.ID); err == nil {
 		t.Fatal("a future version was accepted")
 	}

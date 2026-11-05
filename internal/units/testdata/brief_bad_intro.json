@@ -74,6 +74,7 @@
       }
     },
     "audio": [
+      "12 12",
       "בֹּקֶר",
       "חָלָב",
       "כּוֹס",
@@ -200,6 +201,22 @@
           {
             "type": "story",
             "text": "שָׁלוֹם בֹּקֶר"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
           }
         ]
       },
@@ -231,6 +248,22 @@
           {
             "type": "story",
             "text": "תּוֹדָה מַיִם"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
           }
         ]
       },
@@ -262,6 +295,22 @@
           {
             "type": "story",
             "text": "לֶחֶם חָלָב"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
           }
         ]
       },
@@ -293,6 +342,22 @@
           {
             "type": "story",
             "text": "סוּס פָּרָה"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
           }
         ]
       },

@@ -43,6 +43,7 @@ const (
 		"Warnings do not block publishing. Publishing the same revision again reports unchanged. " +
 		"Send unitId when you save again so an unchanged document, position, and scope do not create a revision. " +
 		"To build a lesson for one learner, read hebrew://authoring, then call get_lesson_brief with learnerId, write the unit from the brief, call validate_unit with briefId and learnerId, call generate_audio, call put_unit with scope learner:<id>, publish true, and the briefId, and call add_coach_note. " +
+		"Revise untouched learner units before adding a new one. " + // INIT-030/SPEC-005
 		"Call get_learner_model to page a learner's words by state and skill, and get_progress for their history. " +
 		"Call unpublish_unit to take a learner's own unit off their Today. " +
 		"Call get_unit with a unit id to read that unit's published document, plus its id, status, and revision. A draft is not returned. A learner, including the read-only smoke token, may read a shared published unit or their own learner unit, and not another learner's. " +

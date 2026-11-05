@@ -34,6 +34,9 @@ type BriefFacts struct {
 	MinKnownShare float64 `json:"minKnownShare"`
 	// MaxTextTokens is the most Hebrew tokens one passage may have. Zero is no limit.
 	MaxTextTokens int `json:"maxTextTokens,omitempty"`
+	// MinStoryTokens is the fewest Hebrew words a lesson's story or dialogue must
+	// have. Zero means brief.story_length does not run. INIT-030/SPEC-004.
+	MinStoryTokens int `json:"minStoryTokens,omitempty"`
 	// Used reports that a unit was already built from this brief.
 	Used bool `json:"used,omitempty"`
 	// UsedByUnitID is that unit, when Used is set. ValidateWithBrief does not read
@@ -48,6 +51,25 @@ type BriefFacts struct {
 	KnownLexemeIDs map[int64]bool `json:"knownLexemeIds,omitempty"`
 	// FixMistakes are the right forms the brief asked the lesson to practise, at most three.
 	FixMistakes []BriefFix `json:"fixMistakes,omitempty"`
+
+	// NextPattern is the pattern slug the unit should teach. Empty when consolidating.
+	// INIT-030/SPEC-004.
+	NextPattern string `json:"nextPattern,omitempty"`
+	// ReusePatterns are the slugs a consolidation unit may name instead of a new pattern.
+	// INIT-030/SPEC-004.
+	ReusePatterns []string `json:"reusePatterns,omitempty"`
+	// PreviousUnits are up to two earlier units. INIT-030/SPEC-004.
+	PreviousUnits []BriefPreviousUnit `json:"previousUnits,omitempty"`
+	// Consolidate is true when the brief asks for no new words and a longer story.
+	// INIT-030/SPEC-004.
+	Consolidate bool `json:"consolidate,omitempty"`
+}
+
+// BriefPreviousUnit is one earlier unit the shape rules read. NewWords feed
+// brief.recycle_previous. ActivityTypes feed unit.same_shape. INIT-030/SPEC-004.
+type BriefPreviousUnit struct {
+	NewWords      []string `json:"newWords,omitempty"`
+	ActivityTypes []string `json:"activityTypes,omitempty"`
 }
 
 // BriefFix is one contrast the lesson must practise. Right is the pointed form.
@@ -170,7 +192,7 @@ func ValidateWithBriefIn(ctx context.Context, doc *Unit, lk Lookup, facts *Brief
 	if doc == nil {
 		return sortedIssues(issues)
 	}
-	issues = withoutRules(issues, RuleCoverageStory, RuleCoverageListening)
+	issues = withoutRules(issues, RuleCoverageStory, RuleCoverageListening, RuleUnitDrillShare)
 	issues = append(issues, markupIssues(doc)...)
 	if facts == nil {
 		issues = append(issues, issue(RuleBriefNotFound, SeverityBlock, briefPointer, "no brief was found for this unit"))
@@ -179,8 +201,14 @@ func ValidateWithBriefIn(ctx context.Context, doc *Unit, lk Lookup, facts *Brief
 	if facts.Used {
 		issues = append(issues, issue(RuleBriefUsed, SeverityBlock, briefPointer, "this brief already built a unit, and a brief can be used once"))
 	}
+	if facts.Consolidate {
+		// INIT-030/SPEC-004: a consolidation unit may introduce no new words.
+		issues = withoutRules(issues, RuleBudgetLessonFew)
+	}
 	if lk != nil && !hasRule(issues, RuleSchemaLookup) {
 		issues = append(issues, briefIssues(ctx, doc, lk, facts)...)
+	} else {
+		issues = append(issues, shapeIssues(doc, facts)...)
 	}
 	return sortedIssues(issues)
 }
@@ -224,6 +252,7 @@ func markupIssues(doc *Unit) []Issue {
 	check("/title", doc.Title)
 	check("/situation", doc.Situation)
 	check("/concept", doc.Concept)
+	check("/pattern", doc.Pattern) // json:"-"; still plain text. INIT-030/SPEC-004.
 	for i, w := range doc.NewWords {
 		check(at("newWords", i), w)
 	}
@@ -320,9 +349,12 @@ func (a actTokens) count(id int64) int {
 // briefIssues reads the flattened document, so a dialogue line is one passage
 // for coverage and length, and its words count toward uses exactly like a
 // story's. The pointers are mapped back to the real document on the way out.
+// Shape rules (INIT-030/SPEC-004) read the real document after that remap.
 func briefIssues(ctx context.Context, doc *Unit, lk Lookup, f *BriefFacts) []Issue {
 	flat, refs := flatten(doc)
-	return remapIssues(briefIssuesFlat(ctx, flat, lk, f), refs)
+	out := remapIssues(briefIssuesFlat(ctx, flat, lk, f), refs)
+	out = append(out, shapeIssues(doc, f)...)
+	return out
 }
 
 func briefIssuesFlat(ctx context.Context, doc *Unit, lk Lookup, f *BriefFacts) []Issue {

@@ -24,7 +24,8 @@ import (
 )
 
 // Version is the version of the payload shape, the "v" field of Plan.
-const Version = 2
+// Raised for INIT-030/SPEC-003 (next pattern, pace, previous units, mistake rotation).
+const Version = 3
 
 // The hard limits. The word counts are north-star section 7.1 and SPEC-019.
 const (
@@ -98,6 +99,31 @@ const (
 	maxScanWords = 5000
 	// maxPoolPerBand bounds the unseen candidates read for one band.
 	maxPoolPerBand = 1000
+
+	// Pace and consolidation thresholds. INIT-030/SPEC-003; ADR-0026 D3–D4.
+	// PaceReviewWindow is how many of the newest non-implied reviews Pace.Accuracy reads.
+	PaceReviewWindow = 50
+	// PaceAccuracyLow / PaceAccuracyHigh are the new-word bands (ADR-0023 D5).
+	PaceAccuracyLow  = 0.80
+	PaceAccuracyHigh = 0.90
+	// PaceNewWordsLow is the new-word count below PaceAccuracyLow.
+	PaceNewWordsLow = 2
+	// PaceNewWordsMid is the new-word count from PaceAccuracyLow through PaceAccuracyHigh.
+	PaceNewWordsMid = 5
+	// ConsolidateLearningAbove asks for consolidation when learning words exceed this.
+	ConsolidateLearningAbove = 40
+	// ConsolidateAccuracyBelow asks for consolidation when recent review accuracy is under this.
+	ConsolidateAccuracyBelow = 0.75
+	// MinStoryTokens* are the story/dialogue floors by tier, capped by MaxTextTokens.
+	MinStoryTokensBeginner    = 12
+	MinStoryTokensDeveloping  = 30
+	MinStoryTokensEstablished = 50
+	// MaxFixMistakes is how many personal mistake pairs a brief carries.
+	MaxFixMistakes = 3
+	// FixMistakeRetireRights retires a pair after this many right answers since its date.
+	FixMistakeRetireRights = 3
+	// fixMistakeScan is how many mistake rows to read before filtering and capping.
+	fixMistakeScan = 50
 )
 
 // skillActivities is the unit activity types that train a skill, in the order a brief
@@ -170,6 +196,36 @@ type Tier struct {
 type Targets struct {
 	Coverage       float64 `json:"coverage"`
 	NewWordMinUses int     `json:"new_word_min_uses"`
+	// MinStoryTokens is the fewest Hebrew words a story or dialogue must have.
+	// INIT-030/SPEC-003; ADR-0026 D4.
+	MinStoryTokens int `json:"minStoryTokens,omitempty"`
+}
+
+// ReusePattern is one recently taught pattern to bring back in the story.
+// INIT-030/SPEC-003.
+type ReusePattern struct {
+	Slug  string `json:"slug"`
+	Title string `json:"title"`
+}
+
+// PreviousUnit is one earlier unit the next story can continue from.
+// INIT-030/SPEC-003.
+type PreviousUnit struct {
+	Title     string   `json:"title"`
+	Situation string   `json:"situation"`
+	Pattern   string   `json:"pattern"`
+	NewWords  []string `json:"newWords"`
+	// Texts are every story and dialogue line from that unit, in document order.
+	Texts []string `json:"texts"`
+}
+
+// Pace is how hard this lesson pushes on new words. INIT-030/SPEC-003; ADR-0026 D3.
+type Pace struct {
+	NewWordCount      int     `json:"newWordCount"`
+	Consolidate       bool    `json:"consolidate"`
+	Reason            string  `json:"reason"`
+	Accuracy          float64 `json:"accuracy"`
+	LearningWordCount int     `json:"learningWordCount"`
 }
 
 // CoachNote is a note a client left for the learner.
@@ -205,7 +261,21 @@ type Plan struct {
 	CoachNotes []CoachNote `json:"coach_notes"`
 	// FixMistakes are up to three personal mistakes to practise, most repeated first.
 	// Each carries the wrong form and the right form. Empty when the learner has none.
+	// INIT-030/SPEC-003 rotates them: skip a pair in both previous units' final
+	// checkpoints, and retire a pair answered right three times since its date.
 	FixMistakes []FixMistake `json:"fixMistakes,omitempty"`
+	// NextPattern is the next grammar pattern to teach, or empty when consolidating.
+	// INIT-030/SPEC-003; ADR-0026 D2.
+	NextPattern string `json:"nextPattern,omitempty"`
+	// ReusePatterns are the two most recently taught patterns, each with its title.
+	ReusePatterns []ReusePattern `json:"reusePatterns,omitempty"`
+	// PreviousUnits are up to two units before this position.
+	PreviousUnits []PreviousUnit `json:"previousUnits,omitempty"`
+	// Pace plans new-word count and consolidation from review accuracy and the learning backlog.
+	Pace Pace `json:"pace"`
+	// ReviseUnitID is set when this brief revises an untouched learner unit.
+	// put_unit must publish that same unitId. INIT-030/SPEC-005.
+	ReviseUnitID *int64 `json:"reviseUnitId,omitempty"`
 }
 
 // FixMistake is one contrast the next lesson should practise.
@@ -321,6 +391,58 @@ func NewWordCount(t Tier, struggleWords int) int {
 	return max(lo, hi-max(0, struggleWords-MinStruggleWords))
 }
 
+// MinStoryTokensFor is the story floor for a tier, never above MaxTextTokens when that is set.
+// INIT-030/SPEC-003.
+func MinStoryTokensFor(t Tier) int {
+	floor := MinStoryTokensEstablished
+	switch t.Name {
+	case TierBeginner:
+		floor = MinStoryTokensBeginner
+	case TierDeveloping:
+		floor = MinStoryTokensDeveloping
+	}
+	if t.MaxTextTokens > 0 && floor > t.MaxTextTokens {
+		return t.MaxTextTokens
+	}
+	return floor
+}
+
+// PaceFor plans new-word count and consolidation from review accuracy and the learning
+// backlog. When there are no reviews yet, newWordCount keeps the load-tuned tier count so
+// existing Load behaviour still drives a first lesson. INIT-030/SPEC-003.
+func PaceFor(accuracy float64, reviews, learning int, tierCount int) Pace {
+	p := Pace{Accuracy: accuracy, LearningWordCount: learning}
+	lowAcc := reviews > 0 && accuracy < ConsolidateAccuracyBelow
+	heavy := learning > ConsolidateLearningAbove
+	switch {
+	case lowAcc && heavy:
+		p.Consolidate = true
+		p.NewWordCount = 0
+		p.Reason = "Recent accuracy is under 75% and more than 40 words are still learning, so this lesson consolidates with no new words."
+	case lowAcc:
+		p.Consolidate = true
+		p.NewWordCount = 0
+		p.Reason = "Recent accuracy is under 75%, so this lesson consolidates with no new words."
+	case heavy:
+		p.Consolidate = true
+		p.NewWordCount = 0
+		p.Reason = "More than 40 words are still learning, so this lesson consolidates with no new words."
+	case reviews == 0:
+		p.NewWordCount = tierCount
+		p.Reason = "No recent reviews yet, so this lesson uses the usual new-word count."
+	case accuracy < PaceAccuracyLow:
+		p.NewWordCount = PaceNewWordsLow
+		p.Reason = "Recent accuracy is under 80%, so this lesson takes 2 new words."
+	case accuracy <= PaceAccuracyHigh:
+		p.NewWordCount = PaceNewWordsMid
+		p.Reason = "Recent accuracy is between 80% and 90%, so this lesson takes 5 new words."
+	default:
+		p.NewWordCount = tierCount
+		p.Reason = "Recent accuracy is above 90%, so this lesson takes the tier's new-word count."
+	}
+	return p
+}
+
 // StruggleScore says how badly a word is going. Higher is worse.
 //
 //	score = 100 * (1 - accuracy) + 10 * misses in 7 days + 5 * confusion keys in 7 days
@@ -357,9 +479,29 @@ func FailingSkill(w learner.WordState) string {
 	return best
 }
 
-// Build makes a brief for the learner and stores it. theme may be empty. It never reads
-// another learner's evidence, and the learner id is the caller's, taken from the principal.
+// Build makes a brief for the learner's next unit and stores it. theme may be empty. It
+// never reads another learner's evidence, and the learner id is the caller's, taken from
+// the principal. The position is one past the highest unit in the learner's scope.
 func (b *Builder) Build(ctx context.Context, userID int64, theme string) (Brief, error) {
+	return b.build(ctx, userID, theme, nil, 0)
+}
+
+// BuildAt makes a revision brief for the unit at position and stores it. Earlier units are
+// those strictly before position; units at or after it are ignored. reviseUnitID is stored
+// on the plan so put_unit can publish only that unit. INIT-030/SPEC-003, SPEC-005.
+func (b *Builder) BuildAt(ctx context.Context, userID int64, theme string, position int, reviseUnitID int64) (Brief, error) {
+	if position < 0 {
+		return Brief{}, errors.New("brief: position is negative")
+	}
+	if reviseUnitID <= 0 {
+		return Brief{}, errors.New("brief: revise unit id is required")
+	}
+	return b.build(ctx, userID, theme, &position, reviseUnitID)
+}
+
+// build makes and stores a brief. A nil position means the next open slot in scope.
+// reviseUnitID is stored on the plan when non-zero (revision briefs). INIT-030/SPEC-005.
+func (b *Builder) build(ctx context.Context, userID int64, theme string, position *int, reviseUnitID int64) (Brief, error) {
 	if err := b.ready(); err != nil {
 		return Brief{}, err
 	}
@@ -396,7 +538,11 @@ func (b *Builder) Build(ctx context.Context, userID int64, theme string) (Brief,
 		return Brief{}, err
 	}
 	plan := Plan{V: Version, Theme: theme, Tier: tier, Notes: []string{}, Activities: []string{},
-		Targets: Targets{Coverage: CoverageTarget, NewWordMinUses: NewWordMinUses}}
+		Targets: Targets{Coverage: CoverageTarget, NewWordMinUses: NewWordMinUses, MinStoryTokens: MinStoryTokensFor(tier)}}
+	if reviseUnitID > 0 {
+		id := reviseUnitID
+		plan.ReviseUnitID = &id
+	}
 	plan.SkillFocus = skillFocus(sum, skills)
 
 	rate, checked, err := b.recentAccuracy(ctx, userID)
@@ -420,10 +566,42 @@ func (b *Builder) Build(ctx context.Context, userID int64, theme string) (Brief,
 	plan.StruggleWords = struggle
 	plan.FocusCause = focusCause(struggle)
 
-	want := TunedNewWords(tier, len(struggle), plan.Load)
-	newWords, notes, err := b.newWords(ctx, userID, day, want, keywords)
+	reviewAcc, reviewN, err := b.reviewAccuracy(ctx, userID, now)
 	if err != nil {
 		return Brief{}, err
+	}
+	learning := sum.Words[learner.Learning]
+	tierWant := TunedNewWords(tier, len(struggle), plan.Load)
+	plan.Pace = PaceFor(reviewAcc, reviewN, learning, tierWant)
+
+	before, err := b.resolvePosition(ctx, userID, position)
+	if err != nil {
+		return Brief{}, err
+	}
+	earlier, err := b.earlierUnits(ctx, userID, before)
+	if err != nil {
+		return Brief{}, err
+	}
+	plan.PreviousUnits = previousUnitViews(earlier)
+	plan.ReusePatterns, err = b.reusePatterns(ctx, earlier)
+	if err != nil {
+		return Brief{}, err
+	}
+	if !plan.Pace.Consolidate {
+		plan.NextPattern, err = b.nextPattern(ctx, earlier)
+		if err != nil {
+			return Brief{}, err
+		}
+	}
+
+	want := plan.Pace.NewWordCount
+	var newWords []NewWord
+	var notes []string
+	if want > 0 {
+		newWords, notes, err = b.newWords(ctx, userID, day, want, keywords)
+		if err != nil {
+			return Brief{}, err
+		}
 	}
 	plan.NewWords = newWords
 	plan.Notes = append(plan.Notes, notes...)
@@ -435,7 +613,7 @@ func (b *Builder) Build(ctx context.Context, userID int64, theme string) (Brief,
 	plan.ComfortableWords = comfortable
 
 	plan.Activities = activitiesFor(plan.SkillFocus, struggle)
-	plan.FixMistakes, err = b.fixMistakes(ctx, userID)
+	plan.FixMistakes, err = b.fixMistakes(ctx, userID, earlier)
 	if err != nil {
 		return Brief{}, err
 	}
