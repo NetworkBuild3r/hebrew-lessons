@@ -54,6 +54,27 @@ func (s *Store) SetUserTimeZone(ctx context.Context, id int64, zone string) erro
 	return nil
 }
 
+// SetUserTimeZoneIfUnset stores the zone only while time_zone is NULL.
+// A row that already has a zone is left alone; that is not an error.
+// It refuses an empty value and more than 64 characters. It does not validate IANA.
+// INIT-032/SPEC-007 · ADR-0027 D6.
+func (s *Store) SetUserTimeZoneIfUnset(ctx context.Context, id int64, zone string) error {
+	if err := s.ready(); err != nil {
+		return err
+	}
+	if zone == "" {
+		return errors.New("db: time zone is required")
+	}
+	if len(zone) > 64 {
+		return fmt.Errorf("db: time zone length %d exceeds 64", len(zone))
+	}
+	_, err := s.exec(ctx, `UPDATE users SET time_zone = ? WHERE id = ? AND time_zone IS NULL`, zone, id)
+	if err != nil {
+		return fmt.Errorf("db: set user time zone if unset: %w", err)
+	}
+	return nil
+}
+
 // UserTimeZones returns every user id whose time_zone is non-null and non-empty.
 // Used by scheduled jobs that need a civil day per learner.
 func (s *Store) UserTimeZones(ctx context.Context) (map[int64]string, error) {

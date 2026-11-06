@@ -77,6 +77,9 @@ templ Layout(p Page) {
 			<script src={ Asset("/static/js/htmx.min.js") }></script>
 			<script src={ Asset("/static/js/shell.js") } defer></script>
 			<script src={ Asset("/static/js/motion.js") } defer></script>
+			if p.CSRF != "" {
+				<script src={ Asset("/static/js/zone.js") } defer></script>
+			}
 		</body>
 	</html>
 }

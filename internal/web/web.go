@@ -213,6 +213,7 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 	mux.HandleFunc("POST /_hx/review/answer", gated(gate, secure, s.answer))
 	mux.HandleFunc("POST /_hx/review/drill", gated(gate, secure, s.drill))
 	mux.HandleFunc("POST /_hx/review/next", gated(gate, secure, s.next))
+	mux.HandleFunc("POST /_hx/zone", gated(gate, secure, s.observeZone))
 	mountPlacement(mux, tokens, gate, secure, s.deck, s.runs)
 	s.mountShell(mux, tokens, gate, secure)
 	mux.HandleFunc("GET /signin", func(w http.ResponseWriter, r *http.Request) {
