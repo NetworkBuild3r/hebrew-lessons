@@ -97,6 +97,15 @@ type DailySnapshotRow struct {
 	EstKnown float64
 	// Retention is null when there was not enough data.
 	Retention *float64
+	// RuleVersion is which learner-model rules produced the row. 0 means 1.
+	RuleVersion int
+}
+
+// DailyTotal is one row of daily_totals.
+type DailyTotal struct {
+	Day           string
+	KnownAnySkill int
+	RuleVersion   int
 }
 
 // RegressionEvent is one row of regression_events. A word row has a LexemeID, a Skill, and
@@ -150,10 +159,11 @@ func (t *DailyTx) HasSnapshot(ctx context.Context, userID int64, day string) (bo
 
 // InsertSnapshot writes the rows of one learner and one day. A row that exists is an error,
 // so a second write of the same day fails and the caller's transaction rolls back.
+// RuleVersion 0 is stored as 1.
 func (t *DailyTx) InsertSnapshot(ctx context.Context, userID int64, day string, rows []DailySnapshotRow) error {
 	stmt, err := t.tx.PrepareContext(ctx, `
-		INSERT INTO daily_snapshots (user_id, day, skill, state, count, est_known, retention)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		INSERT INTO daily_snapshots (user_id, day, skill, state, count, est_known, retention, rule_version)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("db: insert snapshot: %w", err)
 	}
@@ -163,11 +173,79 @@ func (t *DailyTx) InsertSnapshot(ctx context.Context, userID int64, day string, 
 		if r.Retention != nil {
 			retention = *r.Retention
 		}
-		if _, err := stmt.ExecContext(ctx, userID, day, r.Skill, r.State, r.Count, r.EstKnown, retention); err != nil {
+		rv := r.RuleVersion
+		if rv == 0 {
+			rv = 1
+		}
+		if _, err := stmt.ExecContext(ctx, userID, day, r.Skill, r.State, r.Count, r.EstKnown, retention, rv); err != nil {
 			return fmt.Errorf("db: insert snapshot %s %s: %w", r.Skill, r.State, err)
 		}
 	}
 	return nil
+}
+
+// InsertTotals writes one daily_totals row. ruleVersion 0 is stored as 1.
+func (t *DailyTx) InsertTotals(ctx context.Context, userID int64, day string, knownAny, ruleVersion int) error {
+	if ruleVersion == 0 {
+		ruleVersion = 1
+	}
+	if _, err := t.tx.ExecContext(ctx, `
+		INSERT INTO daily_totals (user_id, day, known_any_skill, rule_version)
+		VALUES (?, ?, ?, ?)`, userID, day, knownAny, ruleVersion); err != nil {
+		return fmt.Errorf("db: insert totals: %w", err)
+	}
+	return nil
+}
+
+// ReplaceDay deletes the learner's snapshot and totals rows for the day and inserts the
+// new ones inside the caller's transaction. ruleVersion stamps every inserted row; 0 means 1.
+func (t *DailyTx) ReplaceDay(ctx context.Context, userID int64, day string, rows []DailySnapshotRow, knownAny, ruleVersion int) error {
+	if ruleVersion == 0 {
+		ruleVersion = 1
+	}
+	if _, err := t.tx.ExecContext(ctx, `DELETE FROM daily_snapshots WHERE user_id = ? AND day = ?`, userID, day); err != nil {
+		return fmt.Errorf("db: replace day snapshots: %w", err)
+	}
+	if _, err := t.tx.ExecContext(ctx, `DELETE FROM daily_totals WHERE user_id = ? AND day = ?`, userID, day); err != nil {
+		return fmt.Errorf("db: replace day totals: %w", err)
+	}
+	stamped := make([]DailySnapshotRow, len(rows))
+	copy(stamped, rows)
+	for i := range stamped {
+		stamped[i].RuleVersion = ruleVersion
+	}
+	if err := t.InsertSnapshot(ctx, userID, day, stamped); err != nil {
+		return err
+	}
+	return t.InsertTotals(ctx, userID, day, knownAny, ruleVersion)
+}
+
+// ListTotals returns the learner's daily_totals rows for from through to, both inclusive, by day.
+func (s *Store) ListTotals(ctx context.Context, userID int64, from, to string) ([]DailyTotal, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT day, known_any_skill, rule_version FROM daily_totals
+		WHERE user_id = ? AND day >= ? AND day <= ?
+		ORDER BY day`, userID, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("db: list totals: %w", err)
+	}
+	defer rows.Close()
+	out := []DailyTotal{}
+	for rows.Next() {
+		var r DailyTotal
+		if err := rows.Scan(&r.Day, &r.KnownAnySkill, &r.RuleVersion); err != nil {
+			return nil, fmt.Errorf("db: list totals: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: list totals: %w", err)
+	}
+	return out, nil
 }
 
 // InsertRegression writes one regression event.

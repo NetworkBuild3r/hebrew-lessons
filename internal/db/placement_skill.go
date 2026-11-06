@@ -6,10 +6,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // Placement skills that may carry band tallies. Spell is never included.
 var placementSkillKeys = []string{"listen", "read", "recall"}
+
+// PlacementSkillResult is one skill's band tallies and the time of the finished
+// run that supplied them (TakenAt / finished_at). Authored-by-spec: INIT-033/SPEC-002
+type PlacementSkillResult struct {
+	Bands []BandScore
+	RunAt time.Time
+}
 
 // PlacementSkillBands returns per-skill band tallies for a learner.
 //
@@ -17,6 +25,8 @@ var placementSkillKeys = []string{"listen", "read", "recall"}
 // answered at least one band item of that skill (letters and typing left out).
 // An unfinished newest run is ignored. Band numbers 1–5 map to 0–4.
 // GoodPlusRate uses the same guessing-corrected share as v3BandScores (v3Share).
+// RunAt is that run's finished_at (TakenAt). When asOf is non-zero, only runs
+// finished by then are considered; a zero asOf leaves the unbound selection.
 //
 // A v2 run (no placement_v3_runs row) is self-rated read only: its result.bands
 // map to read unchanged. A skill no finished run has tested has no map entry.
@@ -24,34 +34,36 @@ var placementSkillKeys = []string{"listen", "read", "recall"}
 //
 // PlacementBands is unchanged: callers that need the stored run result keep using it.
 //
-// Authored-by-spec: INIT-032/SPEC-002
-func (s *Store) PlacementSkillBands(ctx context.Context, userID int64) (map[string][]BandScore, error) {
-	out := make(map[string][]BandScore)
+// Authored-by-spec: INIT-032/SPEC-002, INIT-033/SPEC-002
+func (s *Store) PlacementSkillBands(ctx context.Context, userID int64, asOf time.Time) (map[string]PlacementSkillResult, error) {
+	out := make(map[string]PlacementSkillResult)
 	for _, skill := range placementSkillKeys {
-		bands, ok, err := s.placementSkillBandsFor(ctx, userID, skill)
+		bands, runAt, ok, err := s.placementSkillBandsFor(ctx, userID, skill, asOf)
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
 			continue
 		}
-		out[skill] = bands
+		out[skill] = PlacementSkillResult{Bands: bands, RunAt: runAt}
 	}
 	return out, nil
 }
 
-func (s *Store) placementSkillBandsFor(ctx context.Context, userID int64, skill string) ([]BandScore, bool, error) {
+func (s *Store) placementSkillBandsFor(ctx context.Context, userID int64, skill string, asOf time.Time) ([]BandScore, time.Time, bool, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
-		return nil, false, err
+		return nil, time.Time{}, false, err
 	}
 	var runID int64
 	var isV2 int
 	var result sql.NullString
-	err = conn.QueryRowContext(ctx, `
+	var finished string
+	query := `
 		SELECT r.id,
 		       CASE WHEN v.run_id IS NULL THEN 1 ELSE 0 END,
-		       r.result
+		       r.result,
+		       r.finished_at
 		FROM placement_runs AS r
 		LEFT JOIN placement_v3_runs AS v ON v.run_id = r.id
 		WHERE r.user_id = ?
@@ -66,33 +78,45 @@ func (s *Store) placementSkillBandsFor(ctx context.Context, userID int64, skill 
 		        AND i.part IN ('listening', 'reading')
 		        AND i.band BETWEEN 1 AND 5
 		    )
-		  )
+		  )`
+	args := []any{userID, skill, skill}
+	if !asOf.IsZero() {
+		query += `
+		  AND r.finished_at <= ?`
+		args = append(args, FormatTime(asOf))
+	}
+	query += `
 		ORDER BY r.id DESC
-		LIMIT 1`, userID, skill, skill).Scan(&runID, &isV2, &result)
+		LIMIT 1`
+	err = conn.QueryRowContext(ctx, query, args...).Scan(&runID, &isV2, &result, &finished)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, false, nil
+		return nil, time.Time{}, false, nil
 	}
 	if err != nil {
-		return nil, false, fmt.Errorf("db: placement skill bands for user %d skill %s: %w", userID, skill, err)
+		return nil, time.Time{}, false, fmt.Errorf("db: placement skill bands for user %d skill %s: %w", userID, skill, err)
+	}
+	runAt, err := ParseTime(finished)
+	if err != nil {
+		return nil, time.Time{}, false, fmt.Errorf("db: placement skill bands for user %d: %w", userID, err)
 	}
 	if isV2 == 1 {
 		var body placementResultJSON
 		if !result.Valid || result.String == "" {
-			return nil, false, nil
+			return nil, time.Time{}, false, nil
 		}
 		if err := json.Unmarshal([]byte(result.String), &body); err != nil {
-			return nil, false, fmt.Errorf("db: placement skill bands for user %d: %w", userID, err)
+			return nil, time.Time{}, false, fmt.Errorf("db: placement skill bands for user %d: %w", userID, err)
 		}
-		return body.Bands, true, nil
+		return body.Bands, runAt, true, nil
 	}
 	bands, err := s.tallyPlacementSkillBands(ctx, runID, skill)
 	if err != nil {
-		return nil, false, err
+		return nil, time.Time{}, false, err
 	}
 	if len(bands) == 0 {
-		return nil, false, nil
+		return nil, time.Time{}, false, nil
 	}
-	return bands, true, nil
+	return bands, runAt, true, nil
 }
 
 // tallyPlacementSkillBands pools answered listening/reading items of one skill

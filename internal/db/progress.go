@@ -145,12 +145,13 @@ func (s *Store) RecentCoachNotes(ctx context.Context, userID int64, limit int) (
 
 // SnapshotRow is one row of daily_snapshots, with its day.
 type SnapshotRow struct {
-	Day       string
-	Skill     string
-	State     string
-	Count     int
-	EstKnown  float64
-	Retention *float64
+	Day         string
+	Skill       string
+	State       string
+	Count       int
+	EstKnown    float64
+	Retention   *float64
+	RuleVersion int
 }
 
 // SnapshotRows returns the learner's snapshot rows for the days from through to, both
@@ -161,7 +162,7 @@ func (s *Store) SnapshotRows(ctx context.Context, userID int64, from, to string)
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT day, skill, state, count, est_known, retention FROM daily_snapshots
+		SELECT day, skill, state, count, est_known, retention, rule_version FROM daily_snapshots
 		WHERE user_id = ? AND day >= ? AND day <= ?
 		ORDER BY day, skill, state`, userID, from, to)
 	if err != nil {
@@ -172,7 +173,7 @@ func (s *Store) SnapshotRows(ctx context.Context, userID int64, from, to string)
 	for rows.Next() {
 		var r SnapshotRow
 		var ret sql.NullFloat64
-		if err := rows.Scan(&r.Day, &r.Skill, &r.State, &r.Count, &r.EstKnown, &ret); err != nil {
+		if err := rows.Scan(&r.Day, &r.Skill, &r.State, &r.Count, &r.EstKnown, &ret, &r.RuleVersion); err != nil {
 			return nil, fmt.Errorf("db: snapshot rows: %w", err)
 		}
 		if ret.Valid {

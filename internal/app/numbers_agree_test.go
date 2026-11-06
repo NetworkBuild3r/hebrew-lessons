@@ -228,12 +228,12 @@ func TestNumbersAgreeOldFormulasDiffer(t *testing.T) {
 	}
 
 	// 3) Applying listen bands to every skill would inflate spell; spell is evidence-only.
-	bands, err := fx.app.Store().PlacementSkillBands(context.Background(), fx.userID)
+	bands, err := fx.app.Store().PlacementSkillBands(context.Background(), fx.userID, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	listen, ok := bands[fsrs.SkillListen]
-	if !ok || len(listen) == 0 {
+	if !ok || len(listen.Bands) == 0 {
 		t.Fatal("fixture missing listen PlacementSkillBands")
 	}
 	var spellKnown int
@@ -245,7 +245,7 @@ func TestNumbersAgreeOldFormulasDiffer(t *testing.T) {
 			}
 		}
 	}
-	mutated := learner.EstimateKnown(listen, true, [5]int{}, spellKnown)
+	mutated := learner.EstimateKnown(listen.Bands, true, [5]int{}, spellKnown)
 	if math.Abs(mutated-float64(spellKnown)) < 1e-9 {
 		t.Fatal("listen bands applied to spell still equal evidence-only estimate")
 	}

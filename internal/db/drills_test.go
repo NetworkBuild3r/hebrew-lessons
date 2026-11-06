@@ -202,7 +202,7 @@ func TestImpliedReviewsExcludedFromAccuracy(t *testing.T) {
 		t.Fatalf("LastReviews = %+v, want count 1", acc.LastReviews)
 	}
 
-	ret, err := s.DueRetention(ctx, user, when.Add(-24*time.Hour))
+	ret, err := s.DueRetention(ctx, user, when.Add(-24*time.Hour), time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}

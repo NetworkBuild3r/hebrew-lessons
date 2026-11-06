@@ -29,7 +29,7 @@ func TestPlacementSkillBandsListeningOnly(t *testing.T) {
 	claimItem(t, s, runID, 4, PartTyping, "recall", 1, "w-1-type", "right", lex, when)
 	finishV3Zeros(t, s, runID, when.Add(time.Minute))
 
-	got, err := s.PlacementSkillBands(ctx, userID)
+	got, err := s.PlacementSkillBands(ctx, userID, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,16 +72,16 @@ func TestPlacementSkillBandsReadFromOlderListenFromNewer(t *testing.T) {
 	claimItem(t, s, listenRun, 2, PartListening, "listen", 1, "l-2", "dont_know", lex, when.Add(2*time.Minute))
 	finishV3Zeros(t, s, listenRun, when.Add(3*time.Minute))
 
-	got, err := s.PlacementSkillBands(ctx, userID)
+	got, err := s.PlacementSkillBands(ctx, userID, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	listen, ok := got["listen"]
-	if !ok || len(listen) != 1 || listen[0].Band != 0 || listen[0].Rated != 2 || listen[0].Good != 1 || listen[0].DontKnow != 1 {
+	if !ok || len(listen.Bands) != 1 || listen.Bands[0].Band != 0 || listen.Bands[0].Rated != 2 || listen.Bands[0].Good != 1 || listen.Bands[0].DontKnow != 1 {
 		t.Fatalf("listen %+v, want band 0 from the newer run (1 right, 1 don't-know)", listen)
 	}
 	read, ok := got["read"]
-	if !ok || len(read) != 1 || read[0].Band != 1 || read[0].Rated != 2 || read[0].Good != 1 || read[0].Again != 1 {
+	if !ok || len(read.Bands) != 1 || read.Bands[0].Band != 1 || read.Bands[0].Rated != 2 || read.Bands[0].Good != 1 || read.Bands[0].Again != 1 {
 		t.Fatalf("read %+v, want band 1 from the older run (1 right, 1 wrong)", read)
 	}
 	if _, ok := got["recall"]; ok {
@@ -110,12 +110,12 @@ func TestPlacementSkillBandsV2MapsToReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := s.PlacementSkillBands(ctx, userID)
+	got, err := s.PlacementSkillBands(ctx, userID, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	read, ok := got["read"]
-	if !ok || len(read) != 1 || read[0].Band != 0 || read[0].Rated != 4 || read[0].Good != 3 || read[0].GoodPlusRate != 0.75 {
+	if !ok || len(read.Bands) != 1 || read.Bands[0].Band != 0 || read.Bands[0].Rated != 4 || read.Bands[0].Good != 3 || read.Bands[0].GoodPlusRate != 0.75 {
 		t.Fatalf("read %+v, want the stored v2 bands", read)
 	}
 	for _, skill := range []string{"listen", "recall", "spell"} {
@@ -146,12 +146,12 @@ func TestPlacementSkillBandsIgnoresUnfinishedNewest(t *testing.T) {
 	}
 	claimItem(t, s, openID, 1, PartListening, "listen", 3, "open-1", "wrong", lex, when.Add(2*time.Minute))
 
-	got, err := s.PlacementSkillBands(ctx, userID)
+	got, err := s.PlacementSkillBands(ctx, userID, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	listen, ok := got["listen"]
-	if !ok || len(listen) != 1 || listen[0].Band != 0 || listen[0].Rated != 2 || listen[0].Good != 2 || listen[0].Again != 0 {
+	if !ok || len(listen.Bands) != 1 || listen.Bands[0].Band != 0 || listen.Bands[0].Rated != 2 || listen.Bands[0].Good != 2 || listen.Bands[0].Again != 0 {
 		t.Fatalf("listen %+v, want the finished run (2 right in band 1), not the open band-3 wrong", listen)
 	}
 }
@@ -195,7 +195,7 @@ func TestPlacementSkillBandsLearner1Run4Shape(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := s.PlacementSkillBands(ctx, userID)
+	got, err := s.PlacementSkillBands(ctx, userID, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,25 +203,25 @@ func TestPlacementSkillBandsLearner1Run4Shape(t *testing.T) {
 	if !ok {
 		t.Fatal("listen absent")
 	}
-	if len(listen) != 3 {
+	if len(listen.Bands) != 3 {
 		t.Fatalf("listen bands %+v, want 3", listen)
 	}
 	rawRates := []float64{8.0 / 12.0, 5.0 / 6.0, 5.0 / 12.0}
 	for i, want := range wantRates {
-		if listen[i].Band != i {
-			t.Fatalf("band[%d]=%d, want %d", i, listen[i].Band, i)
+		if listen.Bands[i].Band != i {
+			t.Fatalf("band[%d]=%d, want %d", i, listen.Bands[i].Band, i)
 		}
-		if math.Abs(listen[i].GoodPlusRate-want) > 1e-12 {
-			t.Fatalf("band %d GoodPlusRate=%v, want corrected %v", i, listen[i].GoodPlusRate, want)
+		if math.Abs(listen.Bands[i].GoodPlusRate-want) > 1e-12 {
+			t.Fatalf("band %d GoodPlusRate=%v, want corrected %v", i, listen.Bands[i].GoodPlusRate, want)
 		}
-		if math.Abs(listen[i].GoodPlusRate-rawRates[i]) < 1e-12 {
-			t.Fatalf("band %d rate %v equals raw right/rated; must use v3Share", i, listen[i].GoodPlusRate)
+		if math.Abs(listen.Bands[i].GoodPlusRate-rawRates[i]) < 1e-12 {
+			t.Fatalf("band %d rate %v equals raw right/rated; must use v3Share", i, listen.Bands[i].GoodPlusRate)
 		}
-		if math.Abs(listen[i].GoodPlusRate-stored[i].GoodPlusRate) > 1e-12 {
-			t.Fatalf("band %d rate %v != stored result.bands rate %v", i, listen[i].GoodPlusRate, stored[i].GoodPlusRate)
+		if math.Abs(listen.Bands[i].GoodPlusRate-stored[i].GoodPlusRate) > 1e-12 {
+			t.Fatalf("band %d rate %v != stored result.bands rate %v", i, listen.Bands[i].GoodPlusRate, stored[i].GoodPlusRate)
 		}
-		if listen[i].Rated != stored[i].Rated || listen[i].Good != stored[i].Good || listen[i].Again != stored[i].Again {
-			t.Fatalf("band %d tally %+v, want rated/good/again matching stored %+v", i, listen[i], stored[i])
+		if listen.Bands[i].Rated != stored[i].Rated || listen.Bands[i].Good != stored[i].Good || listen.Bands[i].Again != stored[i].Again {
+			t.Fatalf("band %d tally %+v, want rated/good/again matching stored %+v", i, listen.Bands[i], stored[i])
 		}
 	}
 }
@@ -259,4 +259,61 @@ func seedListenBand(t *testing.T, s *Store, runID int64, seq *int, band, right, 
 
 func itemID(kind string, band, i int) string {
 	return fmt.Sprintf("%s-b%d-%d", kind, band, i)
+}
+
+func TestPlacementSkillBandsRunAtFromOlderReading(t *testing.T) {
+	when := time.Date(2026, 11, 6, 15, 0, 0, 0, time.UTC)
+	s := openStore(t, fixedClock{when})
+	ctx := context.Background()
+	userID := insertUser(t, s, "runat@example.com", "sub-runat", "learner")
+	lex := mustLexemeText(t, s, "סֵפֶר")
+
+	readFinish := when.Add(time.Minute)
+	readRun, err := s.StartPlacementV3(ctx, userID, when, 2, RunInitial, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimItem(t, s, readRun, 1, PartReading, "read", 2, "r-1", "right", lex, when)
+	claimItem(t, s, readRun, 2, PartReading, "read", 2, "r-2", "wrong", lex, when)
+	finishV3Zeros(t, s, readRun, readFinish)
+
+	listenFinish := when.Add(3 * time.Minute)
+	listenRun, err := s.StartPlacementV3(ctx, userID, when.Add(2*time.Minute), 3, RunInitial, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimItem(t, s, listenRun, 1, PartListening, "listen", 1, "l-1", "right", lex, when.Add(2*time.Minute))
+	finishV3Zeros(t, s, listenRun, listenFinish)
+
+	got, err := s.PlacementSkillBands(ctx, userID, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	read, ok := got["read"]
+	if !ok {
+		t.Fatal("read absent")
+	}
+	if !read.RunAt.Equal(readFinish) {
+		t.Fatalf("read RunAt = %s, want older reading finish %s", read.RunAt, readFinish)
+	}
+	listen, ok := got["listen"]
+	if !ok {
+		t.Fatal("listen absent")
+	}
+	if !listen.RunAt.Equal(listenFinish) {
+		t.Fatalf("listen RunAt = %s, want newer listen finish %s", listen.RunAt, listenFinish)
+	}
+
+	// AsOf between the two finishes sees only reading.
+	mid := when.Add(2 * time.Minute)
+	past, err := s.PlacementSkillBands(ctx, userID, mid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := past["listen"]; ok {
+		t.Fatalf("listen present as of %s: %+v", mid, past["listen"])
+	}
+	if r, ok := past["read"]; !ok || !r.RunAt.Equal(readFinish) {
+		t.Fatalf("read as of mid = %+v, want older reading", past["read"])
+	}
 }

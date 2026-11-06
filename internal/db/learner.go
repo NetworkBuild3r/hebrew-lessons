@@ -30,6 +30,9 @@ type LearnerQuery struct {
 	RecentWindow   int       // Outcomes in the "last N right" count.
 	MissSince      time.Time // Again ratings at or after this time count in RecentAgains.
 	ConfusionSince time.Time // Confusion rows at or after this time are returned.
+	// AsOf, when non-zero, keeps only attempts with created_at <= AsOf and review_log
+	// rows with reviewed_at <= AsOf. A zero AsOf leaves the live query text unchanged.
+	AsOf time.Time
 }
 
 // LearnerSkill is what one learner has for one word in one skill.
@@ -84,6 +87,23 @@ type LearnerEvidence struct {
 	Skills     []LearnerSkill
 	Exposures  map[int64]LearnerExposure
 	Confusions []LearnerConfusion
+}
+
+// CardReview is one review_log row of a card, in replay order.
+type CardReview struct {
+	Rating        int
+	ReviewedAt    time.Time
+	ElapsedDays   int
+	ScheduledDays int
+	Implied       bool
+}
+
+// CardHistory is one card's ordered review_log up to an AsOf bound.
+type CardHistory struct {
+	CardID   int64
+	Skill    string
+	LexemeID int64
+	Reviews  []CardReview
 }
 
 // LearnerEvidence reads the learner's evidence. It never returns another learner's rows.
@@ -149,6 +169,24 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 	if q.LexemeID != 0 {
 		attemptWhere, cardWhere = " AND lexeme_id = ?", " AND c.lexeme_id = ?"
 	}
+	// AsOf bounds are appended only when set, so the live (zero AsOf) SQL stays unchanged.
+	attemptAsOf, reviewAsOf, attemptExistsAsOf := "", "", ""
+	var asOfBound string
+	if !q.AsOf.IsZero() {
+		asOfBound = FormatTime(q.AsOf)
+		attemptAsOf = " AND created_at <= ?"
+		reviewAsOf = " AND rl.reviewed_at <= ?"
+		attemptExistsAsOf = " AND a.created_at <= ?"
+	}
+	withAsOf := func(args []any, n int) []any {
+		if asOfBound == "" {
+			return args
+		}
+		for i := 0; i < n; i++ {
+			args = append(args, asOfBound)
+		}
+		return args
+	}
 	aggregate := fmt.Sprintf(`
 		SELECT lexeme_id, skill, COUNT(*),
 			SUM(rn <= %[1]d), SUM(rn <= %[1]d AND ok = 1),
@@ -167,8 +205,9 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 		rows, err := conn.QueryContext(ctx, `
 			SELECT lexeme_id, skill, correct, created_at
 			FROM attempts INDEXED BY attempts_user_lexeme_skill_id
-			WHERE user_id = ?`+attemptWhere+`
-			ORDER BY lexeme_id DESC, skill DESC, created_at DESC, id DESC`, lexemeArg([]any{userID})...)
+			WHERE user_id = ?`+attemptWhere+attemptAsOf+`
+			ORDER BY lexeme_id DESC, skill DESC, created_at DESC, id DESC`,
+			withAsOf(lexemeArg([]any{userID}), 1)...)
 		if err != nil {
 			return fmt.Errorf("db: learner attempts: %w", err)
 		}
@@ -223,17 +262,22 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 			FROM cards AS c
 			JOIN review_log AS rl ON rl.card_id = c.id
 			WHERE c.user_id = ?`+cardWhere+`
-			  AND rl.implied = 0
+			  AND rl.implied = 0`+reviewAsOf+`
 			  AND NOT EXISTS (
 				SELECT 1 FROM attempts AS a
-				WHERE a.user_id = c.user_id AND a.lexeme_id = c.lexeme_id AND a.skill = c.skill
+				WHERE a.user_id = c.user_id AND a.lexeme_id = c.lexeme_id AND a.skill = c.skill`+attemptExistsAsOf+`
 			  )
-		)`+aggregate, lexemeArg([]any{userID})); err != nil {
+		)`+aggregate, withAsOf(lexemeArg([]any{userID}), 2)); err != nil {
 		return LearnerEvidence{}, err
 	}
 
 	// Cards, with their review_log totals.
 	if err := func() error {
+		cardArgs := []any{FormatTime(q.MissSince)}
+		if !q.AsOf.IsZero() {
+			cardArgs = append(cardArgs, FormatTime(q.AsOf))
+		}
+		cardArgs = append(cardArgs, userID)
 		rows, err := conn.QueryContext(ctx, `
 			SELECT c.lexeme_id, c.skill, c.state, c.stability, c.last_review, c.reps, c.lapses,
 				COUNT(rl.id),
@@ -242,9 +286,9 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 				COALESCE(SUM(rl.rating = 1 AND rl.reviewed_at >= ?), 0),
 				MAX(rl.reviewed_at)
 			FROM cards AS c
-			LEFT JOIN review_log AS rl ON rl.card_id = c.id AND rl.implied = 0
+			LEFT JOIN review_log AS rl ON rl.card_id = c.id AND rl.implied = 0`+reviewAsOf+`
 			WHERE c.user_id = ?`+cardWhere+`
-			GROUP BY c.id`, lexemeArg([]any{FormatTime(q.MissSince), userID})...)
+			GROUP BY c.id`, lexemeArg(cardArgs)...)
 		if err != nil {
 			return fmt.Errorf("db: learner cards: %w", err)
 		}
@@ -555,6 +599,61 @@ func (s *Store) PlacementBands(ctx context.Context, userID int64) (bands []BandS
 	return body.Bands, true, nil
 }
 
+// CardHistories returns each of the learner's cards with its review_log rows in
+// reviewed_at, id order. When asOf is non-zero, only rows with reviewed_at <= asOf
+// are included. A zero asOf returns the full history.
+func (s *Store) CardHistories(ctx context.Context, userID int64, asOf time.Time) ([]CardHistory, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	if userID <= 0 {
+		return nil, errors.New("db: card histories needs a learner")
+	}
+	query := `
+		SELECT c.id, c.skill, c.lexeme_id, rl.rating, rl.reviewed_at, rl.elapsed_days, rl.scheduled_days, rl.implied
+		FROM cards AS c
+		JOIN review_log AS rl ON rl.card_id = c.id
+		WHERE c.user_id = ?`
+	args := []any{userID}
+	if !asOf.IsZero() {
+		query += ` AND rl.reviewed_at <= ?`
+		args = append(args, FormatTime(asOf))
+	}
+	query += `
+		ORDER BY c.id, rl.reviewed_at, rl.id`
+	rows, err := conn.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("db: card histories: %w", err)
+	}
+	defer rows.Close()
+	var out []CardHistory
+	var cur *CardHistory
+	for rows.Next() {
+		var cardID, lexeme int64
+		var skill, at string
+		var rating, elapsed, scheduled, implied int
+		if err := rows.Scan(&cardID, &skill, &lexeme, &rating, &at, &elapsed, &scheduled, &implied); err != nil {
+			return nil, fmt.Errorf("db: card histories: %w", err)
+		}
+		if cur == nil || cur.CardID != cardID {
+			out = append(out, CardHistory{CardID: cardID, Skill: skill, LexemeID: lexeme})
+			cur = &out[len(out)-1]
+		}
+		reviewed, err := ParseTime(at)
+		if err != nil {
+			return nil, fmt.Errorf("db: card histories: %w", err)
+		}
+		cur.Reviews = append(cur.Reviews, CardReview{
+			Rating: rating, ReviewedAt: reviewed, ElapsedDays: elapsed, ScheduledDays: scheduled, Implied: implied == 1,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: card histories: %w", err)
+	}
+	return out, nil
+}
+
 // RetentionRow is the due reviews of one skill. Due is how many were reviewed in the
 // window after at least a day away from the card, and Right is how many of those were
 // not rated Again.
@@ -566,18 +665,26 @@ type RetentionRow struct {
 
 // DueRetention counts the learner's due reviews since a time, per skill. A due review is
 // a review_log row with elapsed_days of 1 or more: the card was reviewed after waiting,
-// not again in the same sitting.
-func (s *Store) DueRetention(ctx context.Context, userID int64, since time.Time) ([]RetentionRow, error) {
+// not again in the same sitting. When asOf is non-zero, only rows with reviewed_at <= asOf
+// are counted. A zero asOf leaves the unbound query unchanged.
+func (s *Store) DueRetention(ctx context.Context, userID int64, since, asOf time.Time) ([]RetentionRow, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
 	}
-	rows, err := conn.QueryContext(ctx, `
+	query := `
 		SELECT c.skill, COUNT(*), COALESCE(SUM(rl.rating > 1), 0)
 		FROM review_log AS rl
 		JOIN cards AS c ON c.id = rl.card_id
-		WHERE c.user_id = ? AND rl.reviewed_at >= ? AND rl.elapsed_days >= 1 AND rl.implied = 0
-		GROUP BY c.skill`, userID, FormatTime(since))
+		WHERE c.user_id = ? AND rl.reviewed_at >= ? AND rl.elapsed_days >= 1 AND rl.implied = 0`
+	args := []any{userID, FormatTime(since)}
+	if !asOf.IsZero() {
+		query += ` AND rl.reviewed_at <= ?`
+		args = append(args, FormatTime(asOf))
+	}
+	query += `
+		GROUP BY c.skill`
+	rows, err := conn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("db: due retention: %w", err)
 	}

@@ -62,7 +62,7 @@ func (m *Model) Snapshot(ctx context.Context, userID int64) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	words := m.evaluate(ev, bands, now)
-	skillBands, err := m.store.PlacementSkillBands(ctx, userID)
+	skillBands, err := m.store.PlacementSkillBands(ctx, userID, time.Time{})
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -72,7 +72,7 @@ func (m *Model) Snapshot(ctx context.Context, userID int64) (Snapshot, error) {
 	} else if ok && place.Finished {
 		placementAt = place.TakenAt
 	}
-	retention, err := m.store.DueRetention(ctx, userID, now.AddDate(0, 0, -RetentionWindowDays))
+	retention, err := m.store.DueRetention(ctx, userID, now.AddDate(0, 0, -RetentionWindowDays), time.Time{})
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -121,7 +121,7 @@ func (m *Model) Snapshot(ctx context.Context, userID int64) (Snapshot, error) {
 			}
 		}
 		placed, havePlacement := skillBands[skill]
-		ss.EstimatedKnown = estimateKnown(placed, havePlacement, evidenced, known)
+		ss.EstimatedKnown = estimateKnown(placed.Bands, havePlacement, evidenced, known)
 		if havePlacement {
 			ss.EstimateSource = EstimateSourcePlacement
 			ss.PlacementRunAt = placementAt

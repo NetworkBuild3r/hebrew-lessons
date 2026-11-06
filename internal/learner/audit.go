@@ -7,6 +7,7 @@ package learner
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
@@ -73,11 +74,11 @@ func (m *Model) Recompute(ctx context.Context, userID int64) (Numbers, error) {
 	}
 	words := m.evaluate(ev, bands, now)
 
-	skillBands, err := m.store.PlacementSkillBands(ctx, userID)
+	skillBands, err := m.store.PlacementSkillBands(ctx, userID, time.Time{})
 	if err != nil {
 		return Numbers{}, err
 	}
-	retention, err := m.store.DueRetention(ctx, userID, now.AddDate(0, 0, -RetentionWindowDays))
+	retention, err := m.store.DueRetention(ctx, userID, now.AddDate(0, 0, -RetentionWindowDays), time.Time{})
 	if err != nil {
 		return Numbers{}, err
 	}
@@ -119,7 +120,7 @@ func (m *Model) Recompute(ctx context.Context, userID int64) (Numbers, error) {
 			}
 		}
 		placed, have := skillBands[skill]
-		est := EstimateKnown(placed, have, evidenced, known)
+		est := EstimateKnown(placed.Bands, have, evidenced, known)
 		src := EstimateSourceEvidence
 		if have {
 			src = EstimateSourcePlacement
