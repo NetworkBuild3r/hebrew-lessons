@@ -240,11 +240,11 @@ type PlacementPartView struct {
 
 // PlacementView is one finished placement run.
 type PlacementView struct {
-	Kind        string    `json:"kind" jsonschema:"initial, recheck, or v2 for a run made before the adaptive placement."`
-	FinishedAt  time.Time `json:"finishedAt"`
-	Level       int       `json:"level" jsonschema:"Run band level stored on the placement row. Not the per-part listening or reading level."`
-	Listening   *int      `json:"listeningEstimate" jsonschema:"Estimated words known by listening. Null when that part was not taken."`
-	Reading     *int      `json:"readingEstimate" jsonschema:"Estimated words known by reading. Null when that part was not taken."`
+	Kind       string    `json:"kind" jsonschema:"initial, recheck, or v2 for a run made before the adaptive placement."`
+	FinishedAt time.Time `json:"finishedAt"`
+	Level      int       `json:"level" jsonschema:"Run band level stored on the placement row. Not the per-part listening or reading level."`
+	Listening  *int      `json:"listeningEstimate" jsonschema:"Estimated words known by listening. Null when that part was not taken."`
+	Reading    *int      `json:"readingEstimate" jsonschema:"Estimated words known by reading. Null when that part was not taken."`
 	// ListeningPart is the run result's listening object {tested, level, estimate}.
 	ListeningPart *PlacementPartView `json:"listening,omitempty" jsonschema:"Listening part from the run result. level is the per-part level, not placement.level."`
 	// ReadingPart is the run result's reading object {tested, level, estimate}.

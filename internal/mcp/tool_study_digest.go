@@ -43,9 +43,9 @@ type studyDigestInput struct {
 
 // StudyDigest is the get_study_digest reply. INIT-026/SPEC-009; live now counts INIT-032/SPEC-005.
 type StudyDigest struct {
-	Zone       string `json:"zone"`
-	ZoneSource string `json:"zoneSource"`
-	Today      string `json:"today"`
+	Zone       string    `json:"zone"`
+	ZoneSource string    `json:"zoneSource"`
+	Today      string    `json:"today"`
 	NextCutoff time.Time `json:"nextCutoff"`
 	// AsOf is the request instant for knownSolidNow, strugglingNow, and knownAnySkill (ADR-0027 D4).
 	AsOf time.Time `json:"asOf" jsonschema:"UTC RFC3339 instant when the live skill counts were read."`

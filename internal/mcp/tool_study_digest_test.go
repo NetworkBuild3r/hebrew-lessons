@@ -158,10 +158,10 @@ func (e *apEnv) attemptsAt(user int64, text, skill, history string, end time.Tim
 }
 
 type digestOut struct {
-	Zone       string `json:"zone"`
-	ZoneSource string `json:"zoneSource"`
-	Today      string `json:"today"`
-	NextCutoff string `json:"nextCutoff"`
+	Zone          string `json:"zone"`
+	ZoneSource    string `json:"zoneSource"`
+	Today         string `json:"today"`
+	NextCutoff    string `json:"nextCutoff"`
 	AsOf          string `json:"asOf"`
 	KnownAnySkill int    `json:"knownAnySkill"`
 	Skills        []struct {
