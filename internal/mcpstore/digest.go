@@ -51,7 +51,7 @@ func (s *Store) StudyDigest(ctx context.Context, id int64, now time.Time, z stud
 
 	out := mcp.StudyDigest{
 		Zone: z.Name, ZoneSource: z.Source, Today: today, NextCutoff: cutoff.UTC(),
-		Skills: []mcp.DigestSkill{}, Struggle: []mcp.DigestStruggleWord{},
+		AsOf: now.UTC(), Skills: []mcp.DigestSkill{}, Struggle: []mcp.DigestStruggleWord{},
 		Corrections: []mcp.DigestCorrection{}, Taught: []mcp.DigestTaughtWord{},
 		CoachNotes: []mcp.CoachNote{},
 		ClosedLoop: mcp.DigestClosedLoop{Since: day30ago},
@@ -61,12 +61,18 @@ func (s *Store) StudyDigest(ctx context.Context, id int64, now time.Time, z stud
 		},
 	}
 
+	live, err := learner.New(s.db, nil).Summary(ctx, id)
+	if err != nil {
+		return out, err
+	}
+	out.KnownAnySkill = live.KnownAnySkill
+
 	snaps, err := s.db.SnapshotRows(ctx, id, ago7, today)
 	if err != nil {
 		return out, err
 	}
 	days := snapshotDays(snaps)
-	out.Skills = digestSkills(days, today, ago7)
+	out.Skills = digestSkills(days, ago7, live)
 	out.Retention.Skills = digestRetention(days, day7ago, today)
 
 	fromMin, toMin, err := civilWindow(day7ago, today, z)
@@ -121,31 +127,27 @@ func (s *Store) StudyDigest(ctx context.Context, id int64, now time.Time, z stud
 	return out, nil
 }
 
-func digestSkills(days []mcp.SnapshotDay, today, ago7 string) []mcp.DigestSkill {
-	var nowDay, agoDay *mcp.SnapshotDay
+// digestSkills fills live knownSolidNow / strugglingNow from the model and
+// knownSolid7dAgo from the snapshot on ago7 (ADR-0027 D4 / INIT-032/SPEC-005).
+func digestSkills(days []mcp.SnapshotDay, ago7 string, live learner.Summary) []mcp.DigestSkill {
+	var agoDay *mcp.SnapshotDay
 	for i := range days {
-		if days[i].Day == today {
-			nowDay = &days[i]
-		}
 		if days[i].Day == ago7 {
 			agoDay = &days[i]
 		}
 	}
 	out := make([]mcp.DigestSkill, 0, len(learner.Skills))
-	for _, skill := range learner.Skills {
-		row := mcp.DigestSkill{Skill: skill}
-		if nowDay != nil {
-			for _, sk := range nowDay.Skills {
-				if sk.Skill == skill {
-					row.KnownSolidNow = knownOf(sk)
-					row.StrugglingNow = sk.Counts[string(learner.Struggling)]
-				}
-			}
+	for _, sk := range live.Skills {
+		row := mcp.DigestSkill{
+			Skill:         sk.Skill,
+			KnownSolidNow: sk.Counts[learner.Known] + sk.Counts[learner.Solid],
+			StrugglingNow: sk.Counts[learner.Struggling],
+			AgoDay:        ago7,
 		}
 		if agoDay != nil {
-			for _, sk := range agoDay.Skills {
-				if sk.Skill == skill {
-					row.KnownSolid7dAgo = knownOf(sk)
+			for _, snap := range agoDay.Skills {
+				if snap.Skill == sk.Skill {
+					row.KnownSolid7dAgo = knownOf(snap)
 				}
 			}
 		}
@@ -176,7 +178,9 @@ func digestRetention(days []mcp.SnapshotDay, from, to string) []mcp.DigestRetent
 			if value == nil {
 				continue // omit empty days to keep the digest under the 16 KB cap
 			}
-			row.Days = append(row.Days, mcp.DigestRetentionDay{Day: d, Value: value})
+			row.Days = append(row.Days, mcp.DigestRetentionDay{
+				Day: d, Value: value, Window: mcp.RetentionWindow30d, AsOf: d,
+			})
 		}
 		if latest != nil {
 			switch {
@@ -397,6 +401,7 @@ func (s *Store) newestWeeklyReport(ctx context.Context, id int64) (*mcp.ReportVi
 		return nil, err
 	}
 	r.Payload = decodeReportPayload(payload)
+	labelWeeklyRetention(r.Payload)
 	return &r, nil
 }
 

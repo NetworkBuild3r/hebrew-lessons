@@ -40,13 +40,13 @@ func TestSkillChangesGainedAndLostAreNetAndNeverBothSet(t *testing.T) {
 
 func TestRetentionIsAgainstTheTarget(t *testing.T) {
 	r := func(v float64) *float64 { return &v }
-	if v := retentionOf(nil); v.Actual != nil || v.Gap != nil || v.Target != 0.85 {
+	if v := retentionOf(nil); v.Actual != nil || v.Gap != nil || v.Target != 0.85 || v.Window != mcp.RetentionWindow30d {
 		t.Fatalf("no data %+v", v)
 	}
 	// The newest day with any retention is used, and a day with none is skipped.
 	days := []mcp.SnapshotDay{day("2026-10-01", "listen", 1, 0, r(0.5)), day("2026-10-02", "listen", 1, 0, r(0.9)), day("2026-10-03", "listen", 1, 0, nil)}
 	v := retentionOf(days)
-	if v.Actual == nil || *v.Actual != 0.9 || v.Day != "2026-10-02" || v.Gap == nil || *v.Gap < 0.049 || *v.Gap > 0.051 {
+	if v.Actual == nil || *v.Actual != 0.9 || v.Day != "2026-10-02" || v.AsOf != "2026-10-02" || v.Window != mcp.RetentionWindow30d || v.Gap == nil || *v.Gap < 0.049 || *v.Gap > 0.051 {
 		t.Fatalf("retention %+v", v)
 	}
 }
@@ -100,12 +100,18 @@ func TestProgressDecodeReportPayloadOmitsBadJSON(t *testing.T) {
 }
 
 func TestPlacementViewReadsV3AndV2Results(t *testing.T) {
-	v3 := placementView(db.PlacementHistoryRow{Kind: "initial", Level: 3, Result: `{"v":3,"listening":{"tested":true,"estimate":410},"reading":{"tested":false,"estimate":0},"estimated_known_words":410}`})
+	v3 := placementView(db.PlacementHistoryRow{Kind: "initial", Level: 3, Result: `{"v":3,"listening":{"tested":true,"level":2,"estimate":410},"reading":{"tested":false,"level":0,"estimate":0},"estimated_known_words":410}`})
 	if v3.Kind != "initial" || v3.Listening == nil || *v3.Listening != 410 || v3.Reading != nil {
 		t.Fatalf("v3 %+v", v3)
 	}
+	if v3.ListeningPart == nil || !v3.ListeningPart.Tested || v3.ListeningPart.Level != 2 || v3.ListeningPart.Estimate != 410 {
+		t.Fatalf("v3 listening part %+v", v3.ListeningPart)
+	}
+	if v3.ReadingPart == nil || v3.ReadingPart.Tested || v3.ReadingPart.Level != 0 {
+		t.Fatalf("v3 reading part %+v", v3.ReadingPart)
+	}
 	v2 := placementView(db.PlacementHistoryRow{Level: -1, Result: `{"bands":[],"estimated_known_words":80}`})
-	if v2.Kind != "v2" || v2.EstimatedKW != 80 || v2.Listening != nil {
+	if v2.Kind != "v2" || v2.EstimatedKW != 80 || v2.Listening != nil || v2.ListeningPart != nil {
 		t.Fatalf("v2 %+v", v2)
 	}
 	// A result that is not JSON gives a view with no estimates, not an error.

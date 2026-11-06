@@ -14,18 +14,19 @@ import (
 
 const resourceTutor = "hebrew://tutor"
 
-const studyDigestDescription = "Read one learner's study digest for a tutor conversation: zone, today, next study-day cutoff, skill counts from snapshots, retention against the 85–90% band, minutes in app, struggle words, dated corrections with closed-loop status, recently taught words, due cards, coach notes, and the newest weekly report. " +
+const studyDigestDescription = "Read one learner's study digest for a tutor conversation: zone, today, next study-day cutoff, live skill counts, retention against the 85–90% band, minutes in app, struggle words, dated corrections with closed-loop status, recently taught words, due cards, coach notes, and the newest weekly report. " +
 	"Every number is computed by the app. Do not recompute these numbers. " +
 	"A learner account reads its own digest, and omitting learnerId uses its own id. Another id is forbidden. " +
 	"An admin, including the static token, must pass learnerId and may read any learner. A learner id that does not exist is an error. " +
 	"zone and zoneSource name the IANA zone used for today and every day in the reply (learner when stored, otherwise app). There is no UTC invent-today. " +
-	"skills holds, per skill, known plus solid now and seven learner days ago, and struggling now, from daily snapshots. " +
-	"retention holds, per skill, the last seven learner days against the 85–90% band. " +
+	"asOf is the request instant for the live counts. knownAnySkill is words known or solid in at least one skill. " +
+	"skills holds, per skill, knownSolidNow and strugglingNow from the live learner model, knownSolid7dAgo from the snapshot on agoDay (seven learner days back), and agoDay names that day. " +
+	"retention holds, per skill, the last seven learner days against the 85–90% band; each day value has window 30d due reviews and asOf for that day. " +
 	"minutesInApp is the last seven learner days of answering time, using the same idle-gap rule as the weekly job. " +
 	"struggle is at most ten struggling words with cause and confusedWith. " +
 	"corrections is at most twenty from the last thirty learner days by last_on; status is right_since with a count once an in-app correct recall or spell happens after the end of last_on in the learner zone, otherwise open. closedLoop summarises those rows. " +
 	"taught is at most thirty from the last fourteen learner days. due is cards due now and by nextCutoff. " +
-	"coachNotes is the newest five with authorRole. lastWeek is the newest weekly payload when one exists. " +
+	"coachNotes is the newest five with authorRole. lastWeek is the newest weekly payload when one exists; its retention uses window week. " +
 	"At most 60 calls a minute across the learner tools."
 
 //go:embed resources/tutor.md
@@ -40,30 +41,36 @@ type studyDigestInput struct {
 	LearnerID *int64 `json:"learnerId,omitempty" jsonschema:"Required for an admin, including the static token. A learner account may omit it, and may only use its own id. A whole number is accepted, including 9.0. A fraction such as 9.5 is rejected."`
 }
 
-// StudyDigest is the get_study_digest reply. INIT-026/SPEC-009.
+// StudyDigest is the get_study_digest reply. INIT-026/SPEC-009; live now counts INIT-032/SPEC-005.
 type StudyDigest struct {
-	Zone         string               `json:"zone"`
-	ZoneSource   string               `json:"zoneSource"`
-	Today        string               `json:"today"`
-	NextCutoff   time.Time            `json:"nextCutoff"`
-	Skills       []DigestSkill        `json:"skills"`
-	Retention    DigestRetention      `json:"retention"`
-	MinutesInApp int                  `json:"minutesInApp"`
-	Struggle     []DigestStruggleWord `json:"struggle"`
-	Corrections  []DigestCorrection   `json:"corrections"`
-	ClosedLoop   DigestClosedLoop     `json:"closedLoop"`
-	Taught       []DigestTaughtWord   `json:"taught"`
-	Due          DigestDue            `json:"due"`
-	CoachNotes   []CoachNote          `json:"coachNotes"`
-	LastWeek     *ReportView          `json:"lastWeek,omitempty"`
+	Zone       string `json:"zone"`
+	ZoneSource string `json:"zoneSource"`
+	Today      string `json:"today"`
+	NextCutoff time.Time `json:"nextCutoff"`
+	// AsOf is the request instant for knownSolidNow, strugglingNow, and knownAnySkill (ADR-0027 D4).
+	AsOf time.Time `json:"asOf" jsonschema:"UTC RFC3339 instant when the live skill counts were read."`
+	// KnownAnySkill is words known or solid in at least one skill (ADR-0027 D1).
+	KnownAnySkill int                  `json:"knownAnySkill" jsonschema:"Words known or solid in at least one skill."`
+	Skills        []DigestSkill        `json:"skills"`
+	Retention     DigestRetention      `json:"retention"`
+	MinutesInApp  int                  `json:"minutesInApp"`
+	Struggle      []DigestStruggleWord `json:"struggle"`
+	Corrections   []DigestCorrection   `json:"corrections"`
+	ClosedLoop    DigestClosedLoop     `json:"closedLoop"`
+	Taught        []DigestTaughtWord   `json:"taught"`
+	Due           DigestDue            `json:"due"`
+	CoachNotes    []CoachNote          `json:"coachNotes"`
+	LastWeek      *ReportView          `json:"lastWeek,omitempty"`
 }
 
-// DigestSkill is known+solid and struggling counts for one skill from snapshots.
+// DigestSkill is known+solid and struggling counts for one skill.
+// knownSolidNow and strugglingNow are live; knownSolid7dAgo is from the agoDay snapshot.
 type DigestSkill struct {
 	Skill           string `json:"skill"`
-	KnownSolidNow   int    `json:"knownSolidNow"`
-	KnownSolid7dAgo int    `json:"knownSolid7dAgo"`
-	StrugglingNow   int    `json:"strugglingNow"`
+	KnownSolidNow   int    `json:"knownSolidNow" jsonschema:"Live known plus solid for this skill from the learner model."`
+	KnownSolid7dAgo int    `json:"knownSolid7dAgo" jsonschema:"Known plus solid on agoDay from the daily snapshot."`
+	StrugglingNow   int    `json:"strugglingNow" jsonschema:"Live struggling count for this skill from the learner model."`
+	AgoDay          string `json:"agoDay" jsonschema:"The learner civil day seven days before today that knownSolid7dAgo is from."`
 }
 
 // DigestRetention is per-skill retention over the last seven learner days against 85–90%.
@@ -82,8 +89,10 @@ type DigestRetentionSkill struct {
 
 // DigestRetentionDay is one day's retention for a skill.
 type DigestRetentionDay struct {
-	Day   string   `json:"day"`
-	Value *float64 `json:"value"`
+	Day    string   `json:"day"`
+	Value  *float64 `json:"value"`
+	Window string   `json:"window" jsonschema:"30d due reviews."`
+	AsOf   string   `json:"asOf" jsonschema:"The learner civil day this share is as of (same as day)."`
 }
 
 // DigestStruggleWord is one struggling word for a tutor.

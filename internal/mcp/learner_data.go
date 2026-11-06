@@ -145,21 +145,42 @@ type ModelPage struct {
 	NextCursor string
 }
 
+// RetentionWindow30d is the window label for the live 30-day due-review share (ADR-0027 D5).
+const RetentionWindow30d = "30d due reviews"
+
+// RetentionWindowWeek is the window label for the weekly report's retention (ADR-0027 D5).
+const RetentionWindowWeek = "week"
+
+// RetentionLabeled is a retention share that names its window and day (ADR-0027 D5 / INIT-032/SPEC-005).
+type RetentionLabeled struct {
+	Share  *float64 `json:"share" jsonschema:"Share of due reviews (elapsed_days >= 1, not implied) rated above Again. Null when there were none."`
+	Window string   `json:"window" jsonschema:"30d due reviews for the live model and progress; week for the weekly report."`
+	AsOf   string   `json:"asOf" jsonschema:"The learner civil day this share is as of."`
+}
+
 // ModelSkillSummary is the counts of one skill.
 type ModelSkillSummary struct {
-	Skill          string         `json:"skill"`
-	Counts         map[string]int `json:"counts"`
-	EstimatedKnown float64        `json:"estimatedKnown"`
-	Retention      *float64       `json:"retention" jsonschema:"Share of due reviews in the last 30 days not rated Again. Null when there were none."`
-	DueReviews     int            `json:"dueReviews"`
+	Skill          string            `json:"skill"`
+	Counts         map[string]int    `json:"counts"`
+	EstimatedKnown float64           `json:"estimatedKnown"`
+	EstimateSource string            `json:"estimateSource,omitempty" jsonschema:"placement when this skill has PlacementSkillBands; evidence when the estimate is this skill's own known and solid words."`
+	PlacementRunAt *time.Time        `json:"placementRunAt,omitempty" jsonschema:"Finished time of the placement run that supplied this skill's bands. Null when estimateSource is evidence."`
+	Retention      *RetentionLabeled `json:"retention" jsonschema:"30-day due-review share for this skill, with window and asOf. Null when there were none."`
+	DueReviews     int               `json:"dueReviews"`
 }
 
 // ModelSummary is the learner's picture across all words.
 type ModelSummary struct {
-	Words      map[string]int      `json:"words" jsonschema:"Words per overall state."`
-	Skills     []ModelSkillSummary `json:"skills"`
-	Retention  *float64            `json:"retention"`
-	DueReviews int                 `json:"dueReviews"`
+	// Words is the strict weakest-skill overall: known only when every practiced skill is
+	// known or solid. It is not the headline; use KnownAnySkill (ADR-0027 D1).
+	Words map[string]int `json:"words" jsonschema:"Strict count: words known in every practiced skill (weakest-skill overall). Not the headline; use knownAnySkill for words known or solid in at least one skill."`
+	// KnownAnySkill is words known or solid in at least one skill, counted once (ADR-0027 D1).
+	KnownAnySkill int                 `json:"knownAnySkill" jsonschema:"Words known or solid in at least one skill. The headline shared with Home and Progress."`
+	Skills        []ModelSkillSummary `json:"skills"`
+	Retention     *RetentionLabeled   `json:"retention" jsonschema:"30-day due-review share over all skills, with window and asOf. Null when there were none."`
+	DueReviews    int                 `json:"dueReviews"`
+	// AsOf is the request instant for these live counts (ADR-0027 D4).
+	AsOf time.Time `json:"asOf" jsonschema:"UTC RFC3339 instant when these live model counts were read."`
 }
 
 // SkillDay is one skill on one day of a snapshot.
@@ -204,16 +225,31 @@ type RetentionView struct {
 	Day    string   `json:"day,omitempty"`
 	// Gap is Actual minus Target. Null when Actual is null.
 	Gap *float64 `json:"gap"`
+	// Window names the retention definition (ADR-0027 D5).
+	Window string `json:"window" jsonschema:"30d due reviews."`
+	// AsOf is the learner civil day of Actual (ADR-0027 D5). Empty when Actual is null.
+	AsOf string `json:"asOf,omitempty"`
+}
+
+// PlacementPartView is one tested skill part of a placement run (ADR-0027 D2 / INIT-032/SPEC-005).
+type PlacementPartView struct {
+	Tested   bool `json:"tested"`
+	Level    int  `json:"level" jsonschema:"Per-part level from the run result. Not the run band level on placement.level."`
+	Estimate int  `json:"estimate"`
 }
 
 // PlacementView is one finished placement run.
 type PlacementView struct {
 	Kind        string    `json:"kind" jsonschema:"initial, recheck, or v2 for a run made before the adaptive placement."`
 	FinishedAt  time.Time `json:"finishedAt"`
-	Level       int       `json:"level" jsonschema:"Highest band passed, or -1."`
+	Level       int       `json:"level" jsonschema:"Run band level stored on the placement row. Not the per-part listening or reading level."`
 	Listening   *int      `json:"listeningEstimate" jsonschema:"Estimated words known by listening. Null when that part was not taken."`
 	Reading     *int      `json:"readingEstimate" jsonschema:"Estimated words known by reading. Null when that part was not taken."`
-	EstimatedKW int       `json:"estimatedKnownWords"`
+	// ListeningPart is the run result's listening object {tested, level, estimate}.
+	ListeningPart *PlacementPartView `json:"listening,omitempty" jsonschema:"Listening part from the run result. level is the per-part level, not placement.level."`
+	// ReadingPart is the run result's reading object {tested, level, estimate}.
+	ReadingPart *PlacementPartView `json:"reading,omitempty" jsonschema:"Reading part from the run result. level is the per-part level, not placement.level."`
+	EstimatedKW int                `json:"estimatedKnownWords"`
 }
 
 // ReportWordSkill is one word in one skill inside a weekly payload.
@@ -246,6 +282,8 @@ type ReportRetention struct {
 	Actual *float64 `json:"actual"`
 	Gap    *float64 `json:"gap,omitempty"`
 	Day    string   `json:"day,omitempty"`
+	Window string   `json:"window" jsonschema:"week for the weekly report (ADR-0027 D5)."`
+	AsOf   string   `json:"asOf,omitempty" jsonschema:"The learner civil day this week share is as of."`
 }
 
 // ReportPayload is the decoded weekly_reports.payload_json the tool returns.
@@ -270,12 +308,14 @@ type ReportView struct {
 
 // Progress is the learner's history for a range of days.
 type Progress struct {
-	Snapshots     []SnapshotDay    `json:"snapshots"`
-	Changes       []SkillChange    `json:"changes"`
-	Regressions   []RegressionView `json:"regressions"`
-	Retention     RetentionView    `json:"retention"`
-	Placements    []PlacementView  `json:"placements"`
-	WeeklyReports []ReportView     `json:"weeklyReports"`
+	Snapshots []SnapshotDay `json:"snapshots"`
+	// SnapshotsThrough is the last snapshot day in the range. Live values are in get_context.model (ADR-0027 D4).
+	SnapshotsThrough string           `json:"snapshotsThrough,omitempty" jsonschema:"Last snapshot day in this range. Live known and solid counts are in get_context.model."`
+	Changes          []SkillChange    `json:"changes"`
+	Regressions      []RegressionView `json:"regressions"`
+	Retention        RetentionView    `json:"retention"`
+	Placements       []PlacementView  `json:"placements"`
+	WeeklyReports    []ReportView     `json:"weeklyReports"`
 }
 
 // CoachNote is one note a client left for the learner. Body and Author are plain text from

@@ -174,12 +174,46 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 	if !strings.Contains(contextTool.Description, "cardsTruncated") || !strings.Contains(contextTool.Description, "get_learner_words") || !strings.Contains(contextTool.Description, "mixTarget") || !strings.Contains(contextTool.Description, "lapses") || !strings.Contains(contextTool.Description, "lesson player") || !strings.Contains(contextTool.Description, "review half") {
 		t.Fatalf("get_context description %s", contextTool.Description)
 	}
+	if !strings.Contains(contextTool.Description, "knownAnySkill") || !strings.Contains(contextTool.Description, "estimateSource") || !strings.Contains(contextTool.Description, "30d due reviews") {
+		t.Fatalf("get_context description missing INIT-032/SPEC-005 labels: %s", contextTool.Description)
+	}
 	outSchema, err := json.Marshal(contextTool.OutputSchema)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(outSchema), "recentAccuracy") || !strings.Contains(string(outSchema), "lesson player") || !strings.Contains(string(outSchema), "review half") {
 		t.Fatalf("recentAccuracy description %s", outSchema)
+	}
+	for _, name := range []string{"knownAnySkill", "estimateSource", "placementRunAt", "asOf", "window"} {
+		if !strings.Contains(string(outSchema), name) {
+			t.Fatalf("get_context output schema missing %q: %s", name, outSchema)
+		}
+	}
+	digestTool := tools.Tools[indexOf(tools, "get_study_digest")]
+	if !strings.Contains(digestTool.Description, "knownAnySkill") || !strings.Contains(digestTool.Description, "agoDay") || !strings.Contains(digestTool.Description, "asOf") {
+		t.Fatalf("get_study_digest description %s", digestTool.Description)
+	}
+	digestOut, err := json.Marshal(digestTool.OutputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"knownAnySkill", "agoDay", "asOf", "window", "knownSolidNow"} {
+		if !strings.Contains(string(digestOut), name) {
+			t.Fatalf("get_study_digest output schema missing %q: %s", name, digestOut)
+		}
+	}
+	progressTool := tools.Tools[indexOf(tools, "get_progress")]
+	if !strings.Contains(progressTool.Description, "snapshotsThrough") || !strings.Contains(progressTool.Description, "30d due reviews") {
+		t.Fatalf("get_progress description %s", progressTool.Description)
+	}
+	progressOut, err := json.Marshal(progressTool.OutputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"snapshotsThrough", "window", "asOf", "listening", "reading"} {
+		if !strings.Contains(string(progressOut), name) {
+			t.Fatalf("get_progress output schema missing %q: %s", name, progressOut)
+		}
 	}
 	wordsTool := tools.Tools[indexOf(tools, "get_learner_words")]
 	if !strings.Contains(wordsTool.Description, "nextCursor") || !strings.Contains(wordsTool.Description, "due") || !strings.Contains(wordsTool.Description, "lapses") {

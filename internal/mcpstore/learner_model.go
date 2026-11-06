@@ -24,9 +24,10 @@ import (
 // below is keyed on it.
 
 var (
-	_ mcp.LearnerData     = (*Store)(nil)
-	_ mcp.BriefReader     = (*Store)(nil)
-	_ mcp.UnitUnpublisher = (*Store)(nil)
+	_ mcp.LearnerData          = (*Store)(nil)
+	_ mcp.BriefReader          = (*Store)(nil)
+	_ mcp.UnitUnpublisher      = (*Store)(nil)
+	_ mcp.PlacementPartsReader = (*Store)(nil)
 )
 
 const (
@@ -120,13 +121,19 @@ func (s *Store) LearnerModelSummary(ctx context.Context, id int64) (mcp.ModelSum
 	if err := s.ready(ctx); err != nil {
 		return mcp.ModelSummary{}, err
 	}
+	now := s.now()
 	sum, err := learner.New(s.db, nil).Summary(ctx, id)
+	if err != nil {
+		return mcp.ModelSummary{}, err
+	}
+	asOfDay, err := s.learnerCivilDay(ctx, id, now)
 	if err != nil {
 		return mcp.ModelSummary{}, err
 	}
 	out := mcp.ModelSummary{
 		Words: map[string]int{}, Skills: make([]mcp.ModelSkillSummary, 0, len(sum.Skills)),
-		Retention: sum.Retention, DueReviews: sum.DueReviews,
+		KnownAnySkill: sum.KnownAnySkill, DueReviews: sum.DueReviews, AsOf: now.UTC(),
+		Retention: labelRetention(sum.Retention, asOfDay),
 	}
 	for st, n := range sum.Words {
 		out.Words[string(st)] = n
@@ -136,12 +143,44 @@ func (s *Store) LearnerModelSummary(ctx context.Context, id int64) (mcp.ModelSum
 		for st, n := range sk.Counts {
 			counts[string(st)] = n
 		}
-		out.Skills = append(out.Skills, mcp.ModelSkillSummary{
+		row := mcp.ModelSkillSummary{
 			Skill: sk.Skill, Counts: counts, EstimatedKnown: sk.EstimatedKnown,
-			Retention: sk.Retention, DueReviews: sk.DueReviews,
-		})
+			EstimateSource: sk.EstimateSource, DueReviews: sk.DueReviews,
+			Retention: labelRetention(sk.Retention, asOfDay),
+		}
+		if sk.EstimateSource == learner.EstimateSourcePlacement && !sk.PlacementRunAt.IsZero() {
+			at := sk.PlacementRunAt.UTC()
+			row.PlacementRunAt = &at
+		}
+		out.Skills = append(out.Skills, row)
 	}
 	return out, nil
+}
+
+// learnerCivilDay is the learner's today in their effective zone (learner or app).
+// It never substitutes UTC for a missing zone (ADR-0022 / ADR-0027).
+func (s *Store) learnerCivilDay(ctx context.Context, id int64, now time.Time) (string, error) {
+	app, err := studyday.AppZone(os.Getenv("TZ"))
+	if err != nil {
+		return "", err
+	}
+	zones, err := studyday.NewResolver(s, app)
+	if err != nil {
+		return "", err
+	}
+	z, err := zones.For(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return studyday.Today(now, z), nil
+}
+
+func labelRetention(share *float64, asOfDay string) *mcp.RetentionLabeled {
+	if share == nil {
+		return nil
+	}
+	v := *share
+	return &mcp.RetentionLabeled{Share: &v, Window: mcp.RetentionWindow30d, AsOf: asOfDay}
 }
 
 // Progress implements mcp.LearnerData. The snapshots are the daily job's rows, so the call
@@ -156,6 +195,9 @@ func (s *Store) Progress(ctx context.Context, id int64, from, to string) (mcp.Pr
 	}
 	days := snapshotDays(rows)
 	out := mcp.Progress{Snapshots: days, Changes: skillChanges(days), Retention: retentionOf(days)}
+	if len(days) > 0 {
+		out.SnapshotsThrough = days[len(days)-1].Day
+	}
 
 	events, err := s.db.RegressionRows(ctx, id, from, to, progressRegressionCap)
 	if err != nil {
@@ -185,6 +227,22 @@ func (s *Store) Progress(ctx context.Context, id int64, from, to string) (mcp.Pr
 	return out, nil
 }
 
+// LatestPlacementParts implements mcp.PlacementPartsReader for get_context.placement.
+func (s *Store) LatestPlacementParts(ctx context.Context, userID int64) (listening, reading *mcp.PlacementPartView, err error) {
+	if err := s.ready(ctx); err != nil {
+		return nil, nil, err
+	}
+	runs, err := s.db.PlacementHistory(ctx, userID, 1)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(runs) == 0 {
+		return nil, nil, nil
+	}
+	v := placementView(runs[0])
+	return v.ListeningPart, v.ReadingPart, nil
+}
+
 // weeklyReports reads weekly_reports including payload_json. A row whose JSON does
 // not decode leaves Payload nil and is not an error (INIT-026/SPEC-007).
 func (s *Store) weeklyReports(ctx context.Context, id int64, from, to string, limit int) ([]mcp.ReportView, error) {
@@ -211,6 +269,7 @@ func (s *Store) weeklyReports(ctx context.Context, id int64, from, to string, li
 			return nil, err
 		}
 		r.Payload = decodeReportPayload(payload)
+		labelWeeklyRetention(r.Payload)
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -222,6 +281,17 @@ func decodeReportPayload(raw string) *mcp.ReportPayload {
 		return nil
 	}
 	return &p
+}
+
+// labelWeeklyRetention sets window week and asOf on a weekly payload (ADR-0027 D5).
+func labelWeeklyRetention(p *mcp.ReportPayload) {
+	if p == nil {
+		return
+	}
+	p.Retention.Window = mcp.RetentionWindowWeek
+	if p.Retention.AsOf == "" {
+		p.Retention.AsOf = p.Retention.Day
+	}
 }
 
 // UserTimeZone implements mcp.LearnerData and studyday.ZoneStore.
@@ -329,7 +399,7 @@ func skillChanges(days []mcp.SnapshotDay) []mcp.SkillChange {
 // retentionOf is the mean of the skills' retention on the newest snapshot day that has any,
 // against the target. The snapshot has no due counts, so the skills are weighted equally.
 func retentionOf(days []mcp.SnapshotDay) mcp.RetentionView {
-	v := mcp.RetentionView{Target: sessionlimits.TargetSuccess}
+	v := mcp.RetentionView{Target: sessionlimits.TargetSuccess, Window: mcp.RetentionWindow30d}
 	for i := len(days) - 1; i >= 0; i-- {
 		var sum float64
 		n := 0
@@ -344,7 +414,7 @@ func retentionOf(days []mcp.SnapshotDay) mcp.RetentionView {
 		}
 		actual := sum / float64(n)
 		gap := actual - v.Target
-		v.Actual, v.Gap, v.Day = &actual, &gap, days[i].Day
+		v.Actual, v.Gap, v.Day, v.AsOf = &actual, &gap, days[i].Day, days[i].Day
 		break
 	}
 	return v
@@ -356,10 +426,12 @@ type placementResult struct {
 	EstimatedKnownWords int `json:"estimated_known_words"`
 	Listening           *struct {
 		Tested   bool `json:"tested"`
+		Level    int  `json:"level"`
 		Estimate int  `json:"estimate"`
 	} `json:"listening"`
 	Reading *struct {
 		Tested   bool `json:"tested"`
+		Level    int  `json:"level"`
 		Estimate int  `json:"estimate"`
 	} `json:"reading"`
 }
@@ -372,13 +444,23 @@ func placementView(r db.PlacementHistoryRow) mcp.PlacementView {
 	var res placementResult
 	if r.Result != "" && json.Unmarshal([]byte(r.Result), &res) == nil {
 		v.EstimatedKW = res.EstimatedKnownWords
-		if res.Listening != nil && res.Listening.Tested {
-			n := res.Listening.Estimate
-			v.Listening = &n
+		if res.Listening != nil {
+			v.ListeningPart = &mcp.PlacementPartView{
+				Tested: res.Listening.Tested, Level: res.Listening.Level, Estimate: res.Listening.Estimate,
+			}
+			if res.Listening.Tested {
+				n := res.Listening.Estimate
+				v.Listening = &n
+			}
 		}
-		if res.Reading != nil && res.Reading.Tested {
-			n := res.Reading.Estimate
-			v.Reading = &n
+		if res.Reading != nil {
+			v.ReadingPart = &mcp.PlacementPartView{
+				Tested: res.Reading.Tested, Level: res.Reading.Level, Estimate: res.Reading.Estimate,
+			}
+			if res.Reading.Tested {
+				n := res.Reading.Estimate
+				v.Reading = &n
+			}
 		}
 	}
 	return v

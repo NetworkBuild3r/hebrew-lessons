@@ -162,11 +162,14 @@ type digestOut struct {
 	ZoneSource string `json:"zoneSource"`
 	Today      string `json:"today"`
 	NextCutoff string `json:"nextCutoff"`
-	Skills     []struct {
+	AsOf          string `json:"asOf"`
+	KnownAnySkill int    `json:"knownAnySkill"`
+	Skills        []struct {
 		Skill           string `json:"skill"`
 		KnownSolidNow   int    `json:"knownSolidNow"`
 		KnownSolid7dAgo int    `json:"knownSolid7dAgo"`
 		StrugglingNow   int    `json:"strugglingNow"`
+		AgoDay          string `json:"agoDay"`
 	} `json:"skills"`
 	Retention struct {
 		BandLow  float64 `json:"bandLow"`
@@ -175,8 +178,10 @@ type digestOut struct {
 			Skill      string `json:"skill"`
 			BandStatus string `json:"bandStatus"`
 			Days       []struct {
-				Day   string   `json:"day"`
-				Value *float64 `json:"value"`
+				Day    string   `json:"day"`
+				Value  *float64 `json:"value"`
+				Window string   `json:"window"`
+				AsOf   string   `json:"asOf"`
 			} `json:"days"`
 		} `json:"skills"`
 	} `json:"retention"`
@@ -258,9 +263,29 @@ func TestStudyDigestSectionsAndClosedLoop(t *testing.T) {
 	if len(d.Skills) != 4 {
 		t.Fatalf("skills = %d", len(d.Skills))
 	}
+	if d.AsOf == "" {
+		t.Fatal("asOf missing")
+	}
+	// Live now counts (ADR-0027 D4): fixture has no known/solid cards, three listen struggles.
 	for _, sk := range d.Skills {
-		if sk.KnownSolidNow != 15 || sk.KnownSolid7dAgo != 10 || sk.StrugglingNow != 3 {
-			t.Fatalf("skill %+v", sk)
+		if sk.KnownSolid7dAgo != 10 || sk.AgoDay != "2026-10-24" {
+			t.Fatalf("7d ago skill %+v", sk)
+		}
+		if sk.Skill == "listen" {
+			if sk.KnownSolidNow != 0 || sk.StrugglingNow != 3 {
+				t.Fatalf("live listen %+v", sk)
+			}
+			continue
+		}
+		if sk.KnownSolidNow != 0 || sk.StrugglingNow != 0 {
+			t.Fatalf("live skill %+v", sk)
+		}
+	}
+	for _, sk := range d.Retention.Skills {
+		for _, day := range sk.Days {
+			if day.Window != "30d due reviews" || day.AsOf != day.Day {
+				t.Fatalf("retention day %+v", day)
+			}
 		}
 	}
 	if d.Retention.BandLow != 0.85 || d.Retention.BandHigh != 0.90 {

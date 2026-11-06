@@ -19,11 +19,12 @@ const progressDescription = "Read one learner's progress over a range of days: s
 	"The reply includes zone and zoneSource so the caller knows which zone those days use. " +
 	"from after to, a day that is not a real date, or a range of more than 366 days is an error. " +
 	"snapshots has one entry per day that has data, each with the words per state, estimatedKnown, and retention for each skill. " +
+	"snapshotsThrough is the last snapshot day; live known and solid counts are in get_context.model, not in a same-day snapshot. " +
 	"changes has, for each skill, the known words at the first and last snapshot in the range and the net gained or lost. A week with no snapshot has no change. " +
 	"regressions lists the words that fell back, newest first and at most 200, and any band that slipped. " +
-	"retention is the real retention of the newest snapshot in the range, its gap from the target, and the day it is from. The target is 0.85. " +
-	"placements lists the finished placement runs, newest first and at most 20, whatever the range. " +
-	"weeklyReports lists the summaries of the weeks that start inside the range, each with its payload when the stored JSON decodes. " +
+	"retention is the real retention of the newest snapshot in the range, its gap from the target, window 30d due reviews, and asOf for that day. The target is 0.85. " +
+	"placements lists the finished placement runs, newest first and at most 20, whatever the range; each has listening and reading {tested, level, estimate} from the run result, and level is the run band level not the per-part level. " +
+	"weeklyReports lists the summaries of the weeks that start inside the range, each with its payload when the stored JSON decodes; weekly retention uses window week. " +
 	"A learner with no snapshots gets empty lists and a null actual retention, not an error. " +
 	"At most 60 calls a minute across the learner tools."
 
@@ -34,16 +35,17 @@ type progressInput struct {
 }
 
 type progressOutput struct {
-	From          string           `json:"from"`
-	To            string           `json:"to"`
-	Zone          string           `json:"zone" jsonschema:"IANA zone used for from, to, and today."`
-	ZoneSource    string           `json:"zoneSource" jsonschema:"learner when the learner stored a zone, otherwise app."`
-	Snapshots     []SnapshotDay    `json:"snapshots"`
-	Changes       []SkillChange    `json:"changes"`
-	Regressions   []RegressionView `json:"regressions"`
-	Retention     RetentionView    `json:"retention"`
-	Placements    []PlacementView  `json:"placements"`
-	WeeklyReports []ReportView     `json:"weeklyReports"`
+	From             string           `json:"from"`
+	To               string           `json:"to"`
+	Zone             string           `json:"zone" jsonschema:"IANA zone used for from, to, and today."`
+	ZoneSource       string           `json:"zoneSource" jsonschema:"learner when the learner stored a zone, otherwise app."`
+	Snapshots        []SnapshotDay    `json:"snapshots"`
+	SnapshotsThrough string           `json:"snapshotsThrough,omitempty" jsonschema:"Last snapshot day in this range. Live values are in get_context.model."`
+	Changes          []SkillChange    `json:"changes"`
+	Regressions      []RegressionView `json:"regressions"`
+	Retention        RetentionView    `json:"retention"`
+	Placements       []PlacementView  `json:"placements"`
+	WeeklyReports    []ReportView     `json:"weeklyReports"`
 }
 
 func (s *service) getProgress(ctx context.Context, _ *mcp.CallToolRequest, in progressInput) (*mcp.CallToolResult, progressOutput, error) {
@@ -66,7 +68,8 @@ func (s *service) getProgress(ctx context.Context, _ *mcp.CallToolRequest, in pr
 	}
 	out = progressOutput{
 		From: from, To: to, Zone: z.Name, ZoneSource: z.Source,
-		Snapshots: p.Snapshots, Changes: p.Changes, Regressions: p.Regressions,
+		Snapshots: p.Snapshots, SnapshotsThrough: p.SnapshotsThrough,
+		Changes: p.Changes, Regressions: p.Regressions,
 		Retention: p.Retention, Placements: p.Placements, WeeklyReports: p.WeeklyReports,
 	}
 	if out.Snapshots == nil {
