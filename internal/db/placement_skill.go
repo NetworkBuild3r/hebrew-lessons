@@ -16,11 +16,11 @@ var placementSkillKeys = []string{"listen", "read", "recall"}
 // For each of listen, read, and recall it takes the newest finished run that
 // answered at least one band item of that skill (letters and typing left out).
 // An unfinished newest run is ignored. Band numbers 1–5 map to 0–4.
-// GoodPlusRate is right ÷ rated.
+// GoodPlusRate uses the same guessing-corrected share as v3BandScores (v3Share).
 //
 // A v2 run (no placement_v3_runs row) is self-rated read only: its result.bands
-// map to read. A skill no finished run has tested has no map entry. Spell never
-// has an entry.
+// map to read unchanged. A skill no finished run has tested has no map entry.
+// Spell never has an entry.
 //
 // PlacementBands is unchanged: callers that need the stored run result keep using it.
 //
@@ -96,7 +96,8 @@ func (s *Store) placementSkillBandsFor(ctx context.Context, userID int64, skill 
 }
 
 // tallyPlacementSkillBands pools answered listening/reading items of one skill
-// into deck bands 0–4. Letters and typing are excluded. GoodPlusRate is right ÷ rated.
+// into deck bands 0–4. Letters and typing are excluded. GoodPlusRate is v3Share,
+// matching production result.bands and v3BandScores.
 func (s *Store) tallyPlacementSkillBands(ctx context.Context, runID int64, skill string) ([]BandScore, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -153,7 +154,7 @@ func (s *Store) tallyPlacementSkillBands(ctx context.Context, runID int64, skill
 			Again:        t.again,
 			Good:         t.good,
 			DontKnow:     t.dont,
-			GoodPlusRate: float64(t.good) / float64(t.rated),
+			GoodPlusRate: v3Share(t.good, t.again, t.rated),
 		})
 	}
 	return out, nil

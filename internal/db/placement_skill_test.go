@@ -175,10 +175,17 @@ func TestPlacementSkillBandsLearner1Run4Shape(t *testing.T) {
 	seedListenBand(t, s, runID, &seq, 2, 5, 1, 0, lex, when)
 	seedListenBand(t, s, runID, &seq, 3, 5, 7, 0, lex, when)
 
+	// Production stores the guessing-corrected share (v3Share), not right/rated.
+	// 8/4 of 12 → ~0.556; 5/1 of 6 → ~0.778; 5/7 of 12 → ~0.222.
+	wantRates := []float64{
+		v3Share(8, 4, 12),
+		v3Share(5, 1, 6),
+		v3Share(5, 7, 12),
+	}
 	stored := []BandScore{
-		{Band: 0, Rated: 12, Good: 8, Again: 4, GoodPlusRate: 8.0 / 12.0},
-		{Band: 1, Rated: 6, Good: 5, Again: 1, GoodPlusRate: 5.0 / 6.0},
-		{Band: 2, Rated: 12, Good: 5, Again: 7, GoodPlusRate: 5.0 / 12.0},
+		{Band: 0, Rated: 12, Good: 8, Again: 4, GoodPlusRate: wantRates[0]},
+		{Band: 1, Rated: 6, Good: 5, Again: 1, GoodPlusRate: wantRates[1]},
+		{Band: 2, Rated: 12, Good: 5, Again: 7, GoodPlusRate: wantRates[2]},
 	}
 	body, err := json.Marshal(placementResultJSON{Bands: stored})
 	if err != nil {
@@ -199,13 +206,16 @@ func TestPlacementSkillBandsLearner1Run4Shape(t *testing.T) {
 	if len(listen) != 3 {
 		t.Fatalf("listen bands %+v, want 3", listen)
 	}
-	wantRates := []float64{8.0 / 12.0, 5.0 / 6.0, 5.0 / 12.0}
+	rawRates := []float64{8.0 / 12.0, 5.0 / 6.0, 5.0 / 12.0}
 	for i, want := range wantRates {
 		if listen[i].Band != i {
 			t.Fatalf("band[%d]=%d, want %d", i, listen[i].Band, i)
 		}
 		if math.Abs(listen[i].GoodPlusRate-want) > 1e-12 {
-			t.Fatalf("band %d GoodPlusRate=%v, want %v", i, listen[i].GoodPlusRate, want)
+			t.Fatalf("band %d GoodPlusRate=%v, want corrected %v", i, listen[i].GoodPlusRate, want)
+		}
+		if math.Abs(listen[i].GoodPlusRate-rawRates[i]) < 1e-12 {
+			t.Fatalf("band %d rate %v equals raw right/rated; must use v3Share", i, listen[i].GoodPlusRate)
 		}
 		if math.Abs(listen[i].GoodPlusRate-stored[i].GoodPlusRate) > 1e-12 {
 			t.Fatalf("band %d rate %v != stored result.bands rate %v", i, listen[i].GoodPlusRate, stored[i].GoodPlusRate)
