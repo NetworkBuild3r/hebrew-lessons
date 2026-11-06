@@ -62,6 +62,8 @@ func run(args []string) error {
 			return runBackup(args[1:])
 		case "backfill-spell":
 			return runBackfillSpell(args[1:])
+		case "audit":
+			return runAudit(args[1:])
 		default:
 			return fmt.Errorf("unknown command %q", args[0])
 		}
