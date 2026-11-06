@@ -2,6 +2,7 @@ package learner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -651,7 +652,7 @@ func TestConfusionPairThroughTheModel(t *testing.T) {
 	}
 }
 
-// ac-4: Summary's estimated words known, against a fixture worked by hand.
+// ac-4 (INIT-032/SPEC-003): Summary's estimated words known, against a fixture worked by hand.
 //
 // Seven words, with the bands the placement deck would give them:
 //
@@ -659,8 +660,9 @@ func TestConfusionPairThroughTheModel(t *testing.T) {
 //	L4 band 1, struggling in read L5 band 2, solid in read      L6 no band, known in read
 //	L7 band 1, no evidence
 //
-// The finished placement run says: band 0 rated Good 3 and Easy 1 (4 known words), band 1
-// rate 0.5, band 2 rate 0.25, band 3 rate 0.1, band 4 rate 0. Band widths are 500, 500, 1000, 2000.
+// A finished v2 placement run (no placement_v3_runs row) maps its result.bands to read only
+// via PlacementSkillBands. Band 0 rated Good 3 and Easy 1 (4 known words), band 1 rate 0.5,
+// band 2 rate 0.25, band 3 rate 0.1, band 4 rate 0. Band widths are 500, 500, 1000, 2000.
 //
 // read: evidenced words per band: band 0 has 2, band 1 has 2, band 2 has 1.
 //
@@ -672,7 +674,8 @@ func TestConfusionPairThroughTheModel(t *testing.T) {
 //	known and solid words: L1, L3, L5, L6 =   4
 //	estimate                              = 479.75
 //
-// listen has no evidence at all: 4 + 250 + 125 + 100 + 0 + 0 = 479.
+// listen, recall, and spell have no placement bands: their estimates equal their own
+// known+solid (0 here) with EstimateSource "evidence".
 func TestSummaryEstimatedKnownMatchesHandComputedFixture(t *testing.T) {
 	e := newEnv(t)
 	l1, l2, l3, l4, l5, l6, l7 := e.lexeme(), e.lexeme(), e.lexeme(), e.lexeme(), e.lexeme(), e.lexeme(), e.lexeme()
@@ -687,8 +690,9 @@ func TestSummaryEstimatedKnownMatchesHandComputedFixture(t *testing.T) {
 	e.known(e.user, l5, fsrs.SkillRead, 40)
 	e.known(e.user, l6, fsrs.SkillRead, 10)
 
+	finishedAt := testNow.Add(-47 * time.Hour)
 	e.exec(`INSERT INTO placement_runs (user_id, started_at, finished_at, level, stop_reason, result, seed, sitting_no)
-		VALUES (?, ?, ?, 2, NULL, ?, 1, 1)`, e.user, db.FormatTime(testNow.Add(-48*time.Hour)), db.FormatTime(testNow.Add(-47*time.Hour)),
+		VALUES (?, ?, ?, 2, NULL, ?, 1, 1)`, e.user, db.FormatTime(testNow.Add(-48*time.Hour)), db.FormatTime(finishedAt),
 		`{"estimated_known_words": 999, "bands": [
 			{"band": 0, "rated": 10, "good": 3, "easy": 1, "good_plus_rate": 0.4},
 			{"band": 1, "rated": 20, "good": 10, "good_plus_rate": 0.5},
@@ -713,8 +717,22 @@ func TestSummaryEstimatedKnownMatchesHandComputedFixture(t *testing.T) {
 	if got, want := byName[fsrs.SkillRead].EstimatedKnown, 479.75; math.Abs(got-want) > 1e-9 {
 		t.Errorf("read estimate = %v, want %v", got, want)
 	}
-	if got, want := byName[fsrs.SkillListen].EstimatedKnown, 479.0; math.Abs(got-want) > 1e-9 {
-		t.Errorf("listen estimate = %v, want %v", got, want)
+	if byName[fsrs.SkillRead].EstimateSource != EstimateSourcePlacement {
+		t.Errorf("read EstimateSource = %q, want %q", byName[fsrs.SkillRead].EstimateSource, EstimateSourcePlacement)
+	}
+	if !byName[fsrs.SkillRead].PlacementRunAt.Equal(finishedAt) {
+		t.Errorf("read PlacementRunAt = %v, want %v", byName[fsrs.SkillRead].PlacementRunAt, finishedAt)
+	}
+	for _, skill := range []string{fsrs.SkillListen, fsrs.SkillRecall, fsrs.SkillSpell} {
+		if got := byName[skill].EstimatedKnown; got != 0 {
+			t.Errorf("%s estimate = %v, want 0 (no bands for this skill)", skill, got)
+		}
+		if byName[skill].EstimateSource != EstimateSourceEvidence {
+			t.Errorf("%s EstimateSource = %q, want %q", skill, byName[skill].EstimateSource, EstimateSourceEvidence)
+		}
+		if !byName[skill].PlacementRunAt.IsZero() {
+			t.Errorf("%s PlacementRunAt = %v, want zero", skill, byName[skill].PlacementRunAt)
+		}
 	}
 
 	// Counts per skill and state. L7 and no one else is unseen in read.
@@ -734,8 +752,12 @@ func TestSummaryEstimatedKnownMatchesHandComputedFixture(t *testing.T) {
 			t.Errorf("words %s = %d, want %d", s, sum.Words[s], wantWords[s])
 		}
 	}
+	// Four words known or solid in read; none in other skills → KnownAnySkill = 4.
+	if sum.KnownAnySkill != 4 {
+		t.Errorf("KnownAnySkill = %d, want 4", sum.KnownAnySkill)
+	}
 
-	// Without a finished placement the estimate is only the model's count.
+	// Without a finished placement the estimate is only the model's count (AC4).
 	e.exec(`DELETE FROM placement_runs`)
 	sum, err = e.model.Summary(ctx, e.user)
 	if err != nil {
@@ -745,6 +767,9 @@ func TestSummaryEstimatedKnownMatchesHandComputedFixture(t *testing.T) {
 		want := map[string]float64{fsrs.SkillRead: 4}[s.Skill]
 		if s.EstimatedKnown != want {
 			t.Errorf("%s estimate without placement = %v, want %v", s.Skill, s.EstimatedKnown, want)
+		}
+		if s.EstimateSource != EstimateSourceEvidence {
+			t.Errorf("%s EstimateSource without placement = %q, want %q", s.Skill, s.EstimateSource, EstimateSourceEvidence)
 		}
 	}
 	// An unfinished run adds nothing either.
@@ -835,5 +860,202 @@ func TestBandRankWidthsMatchPlacement(t *testing.T) {
 	}
 	if bandRankWidth[0] != 0 {
 		t.Errorf("band 0 width = %v, want 0", bandRankWidth[0])
+	}
+}
+
+// Learner-1 run-4 listening rates: guessing-corrected v3Share, not right/rated.
+// 8 right / 4 wrong / 12 → ~0.556; 5/1/6 → ~0.778; 5/7/12 → ~0.222.
+// Authored-by-spec: INIT-032/SPEC-003
+func run4ListenRates() [3]float64 {
+	return [3]float64{
+		math.Max(0, (8.0-4.0/3.0)/12.0),
+		math.Max(0, (5.0-1.0/3.0)/6.0),
+		math.Max(0, (5.0-7.0/3.0)/12.0),
+	}
+}
+
+// seedListeningRun4 inserts a finished v3 listening-only placement shaped like learner 1
+// run 4. GoodPlusRate comes from PlacementSkillBands (v3Share), not from right/rated.
+// Authored-by-spec: INIT-032/SPEC-003
+func (e *env) seedListeningRun4(finishedAt time.Time) {
+	e.t.Helper()
+	ctx := context.Background()
+	started := finishedAt.Add(-time.Minute)
+	runID, err := e.store.StartPlacementV3(ctx, e.user, started, 4, db.RunInitial, "", 0)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	lex, err := e.store.UpsertPlacementLexeme(ctx, "אֶרֶץ", "land", "noun", "eretz", "")
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	seq := 1
+	claimPlacement(e, runID, seq, db.PartLetters, "", 0, "letter", "right", 0, started)
+	seq++
+	seedListenBandItems(e, runID, &seq, 1, 8, 4, lex, started)
+	seedListenBandItems(e, runID, &seq, 2, 5, 1, lex, started)
+	seedListenBandItems(e, runID, &seq, 3, 5, 7, lex, started)
+	rates := run4ListenRates()
+	body, err := json.Marshal(map[string]any{
+		"bands": []map[string]any{
+			{"band": 0, "rated": 12, "good": 8, "again": 4, "good_plus_rate": rates[0]},
+			{"band": 1, "rated": 6, "good": 5, "again": 1, "good_plus_rate": rates[1]},
+			{"band": 2, "rated": 12, "good": 5, "again": 7, "good_plus_rate": rates[2]},
+		},
+	})
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	if err := e.store.FinishPlacement(ctx, runID, finishedAt, 1, "band_stop", string(body)); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
+func claimPlacement(e *env, runID int64, seq int, part, skill string, band int, itemID, outcome string, lexemeID int64, at time.Time) {
+	e.t.Helper()
+	ctx := context.Background()
+	it := db.PlacementItem{
+		RunID: runID, Seq: seq, Part: part, Skill: skill, Band: band, ItemID: itemID,
+		Options: `{"options":[]}`, ShownAt: at,
+	}
+	if err := e.store.InsertPlacementItem(ctx, it); err != nil {
+		e.t.Fatal(err)
+	}
+	ok, err := e.store.ClaimPlacementItem(ctx, runID, seq, outcome, "", lexemeID, at, 0)
+	if err != nil || !ok {
+		e.t.Fatalf("claim %s: ok=%v err=%v", itemID, ok, err)
+	}
+}
+
+func seedListenBandItems(e *env, runID int64, seq *int, band, right, wrong int, lex int64, at time.Time) {
+	e.t.Helper()
+	for i := 0; i < right; i++ {
+		claimPlacement(e, runID, *seq, db.PartListening, "listen", band, fmt.Sprintf("r-b%d-%d", band, i), "right", lex, at)
+		*seq++
+	}
+	for i := 0; i < wrong; i++ {
+		claimPlacement(e, runID, *seq, db.PartListening, "listen", band, fmt.Sprintf("w-b%d-%d", band, i), "wrong", lex, at)
+		*seq++
+	}
+}
+
+// Listening-only placement (learner 1 run 4 rates): listen ≈ 500 + listen known+solid;
+// read/recall/spell equal their own known+solid with EstimateSource evidence.
+// A mutation that applied listen bands to every skill would inflate spell — that must fail.
+// Authored-by-spec: INIT-032/SPEC-003
+func TestListeningOnlyPlacementEstimatesPerSkill(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	finishedAt := testNow.Add(-time.Hour)
+
+	// listen 10 known / 1 solid; read 8/10; recall 2/1; spell none. Words are unbanded so
+	// placement band widths are not cut by evidence.
+	for range 10 {
+		e.known(e.user, e.lexeme(), fsrs.SkillListen, 10)
+	}
+	e.known(e.user, e.lexeme(), fsrs.SkillListen, 40) // solid
+	for range 8 {
+		e.known(e.user, e.lexeme(), fsrs.SkillRead, 10)
+	}
+	for range 10 {
+		e.known(e.user, e.lexeme(), fsrs.SkillRead, 40)
+	}
+	for range 2 {
+		e.known(e.user, e.lexeme(), fsrs.SkillRecall, 10)
+	}
+	e.known(e.user, e.lexeme(), fsrs.SkillRecall, 40)
+
+	e.seedListeningRun4(finishedAt)
+
+	sum, err := e.model.Summary(ctx, e.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]SkillSummary{}
+	for _, s := range sum.Skills {
+		byName[s.Skill] = s
+	}
+
+	rates := run4ListenRates()
+	// Hand-computed: band0 Good+Easy (8) + rate1*500 + rate2*500 + listen known+solid (11).
+	wantListen := 8 + rates[1]*500 + rates[2]*500 + 11
+	if math.Abs(byName[fsrs.SkillListen].EstimatedKnown-wantListen) > 1e-9 {
+		t.Errorf("listen estimate = %v, want %v", byName[fsrs.SkillListen].EstimatedKnown, wantListen)
+	}
+	if byName[fsrs.SkillListen].EstimateSource != EstimateSourcePlacement {
+		t.Errorf("listen source = %q, want %q", byName[fsrs.SkillListen].EstimateSource, EstimateSourcePlacement)
+	}
+	if !byName[fsrs.SkillListen].PlacementRunAt.Equal(finishedAt) {
+		t.Errorf("listen PlacementRunAt = %v, want %v", byName[fsrs.SkillListen].PlacementRunAt, finishedAt)
+	}
+
+	wantEvidence := map[string]float64{
+		fsrs.SkillRead:   18, // 8 known + 10 solid
+		fsrs.SkillRecall: 3,  // 2 known + 1 solid
+		fsrs.SkillSpell:  0,
+	}
+	for skill, want := range wantEvidence {
+		got := byName[skill]
+		if math.Abs(got.EstimatedKnown-want) > 1e-9 {
+			t.Errorf("%s estimate = %v, want %v (own known+solid only)", skill, got.EstimatedKnown, want)
+		}
+		if got.EstimateSource != EstimateSourceEvidence {
+			t.Errorf("%s EstimateSource = %q, want %q", skill, got.EstimateSource, EstimateSourceEvidence)
+		}
+		if !got.PlacementRunAt.IsZero() {
+			t.Errorf("%s PlacementRunAt = %v, want zero", skill, got.PlacementRunAt)
+		}
+	}
+	// Mutation fence: applying listen bands to spell would yield ~508, not 0.
+	mutatedSpell := estimateKnown([]db.BandScore{
+		{Band: 0, Good: 8, GoodPlusRate: rates[0]},
+		{Band: 1, GoodPlusRate: rates[1]},
+		{Band: 2, GoodPlusRate: rates[2]},
+	}, true, [5]int{}, 0)
+	if math.Abs(mutatedSpell-0) < 1e-9 {
+		t.Fatal("mutation fixture collapsed: listen bands applied to spell still give 0")
+	}
+	if math.Abs(byName[fsrs.SkillSpell].EstimatedKnown-mutatedSpell) < 1e-9 {
+		t.Fatalf("spell estimate %v equals listen-bands mutation %v; per-skill bands are broken",
+			byName[fsrs.SkillSpell].EstimatedKnown, mutatedSpell)
+	}
+}
+
+// KnownAnySkill counts a word solid in reading and learning in recall as one.
+// Authored-by-spec: INIT-032/SPEC-003
+func TestKnownAnySkillSolidReadLearningRecallCountsOnce(t *testing.T) {
+	e := newEnv(t)
+	id := e.lexeme()
+	e.known(e.user, id, fsrs.SkillRead, 40) // solid
+	e.attempts(e.user, id, fsrs.SkillRecall, "RR")
+	e.card(e.user, id, fsrs.SkillRecall, 2, 1, 3, 3) // learning
+
+	sum, err := e.model.Summary(context.Background(), e.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.KnownAnySkill != 1 {
+		t.Fatalf("KnownAnySkill = %d, want 1", sum.KnownAnySkill)
+	}
+	// Strict Words overall is learning (weakest practiced skill), not the headline.
+	if sum.Words[Learning] != 1 || sum.Words[Solid] != 0 {
+		t.Fatalf("Words = %+v, want learning=1 (strict overall), not solid", sum.Words)
+	}
+}
+
+// A word known in two skills counts once in KnownAnySkill.
+// Authored-by-spec: INIT-032/SPEC-003
+func TestKnownAnySkillKnownInTwoSkillsCountsOnce(t *testing.T) {
+	e := newEnv(t)
+	id := e.lexeme()
+	e.known(e.user, id, fsrs.SkillListen, 10)
+	e.known(e.user, id, fsrs.SkillRead, 10)
+
+	sum, err := e.model.Summary(context.Background(), e.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.KnownAnySkill != 1 {
+		t.Fatalf("KnownAnySkill = %d, want 1", sum.KnownAnySkill)
 	}
 }

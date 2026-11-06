@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 )
@@ -734,6 +736,95 @@ func TestLearnersAreIsolated(t *testing.T) {
 	}
 	if n := len(e.events(other)); n != 0 {
 		t.Errorf("other learner events = %d, want 0", n)
+	}
+}
+
+// Listening-only placement writes the placement estimate for listen only; spell
+// est_known stays 0 when there is no spelling evidence (INIT-032/SPEC-003 AC5).
+func TestDailyListeningPlacementSpellEstKnownIsZero(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	finishedAt := start.Add(-time.Hour)
+
+	for range 3 {
+		e.known(e.user, e.lexeme(), fsrs.SkillListen, 10)
+	}
+	e.known(e.user, e.lexeme(), fsrs.SkillRead, 10)
+
+	runID, err := e.store.StartPlacementV3(ctx, e.user, finishedAt.Add(-time.Minute), 4, db.RunInitial, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lex, err := e.store.UpsertPlacementLexeme(ctx, "שָׁלוֹם", "hello", "noun", "shalom", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Learner-1 run-4 corrected rates (~0.556, ~0.778, ~0.222), not right/rated.
+	rates := []float64{
+		math.Max(0, (8.0-4.0/3.0)/12.0),
+		math.Max(0, (5.0-1.0/3.0)/6.0),
+		math.Max(0, (5.0-7.0/3.0)/12.0),
+	}
+	seq := 1
+	insertClaim := func(part, skill string, band int, itemID, outcome string, lexemeID int64) {
+		t.Helper()
+		it := db.PlacementItem{
+			RunID: runID, Seq: seq, Part: part, Skill: skill, Band: band, ItemID: itemID,
+			Options: `{"options":[]}`, ShownAt: finishedAt.Add(-time.Minute),
+		}
+		if err := e.store.InsertPlacementItem(ctx, it); err != nil {
+			t.Fatal(err)
+		}
+		ok, err := e.store.ClaimPlacementItem(ctx, runID, seq, outcome, "", lexemeID, finishedAt.Add(-time.Minute), 0)
+		if err != nil || !ok {
+			t.Fatalf("claim %s: ok=%v err=%v", itemID, ok, err)
+		}
+		seq++
+	}
+	insertClaim(db.PartLetters, "", 0, "letter", "right", 0)
+	for i := 0; i < 8; i++ {
+		insertClaim(db.PartListening, "listen", 1, fmt.Sprintf("r1-%d", i), "right", lex)
+	}
+	for i := 0; i < 4; i++ {
+		insertClaim(db.PartListening, "listen", 1, fmt.Sprintf("w1-%d", i), "wrong", lex)
+	}
+	for i := 0; i < 5; i++ {
+		insertClaim(db.PartListening, "listen", 2, fmt.Sprintf("r2-%d", i), "right", lex)
+	}
+	insertClaim(db.PartListening, "listen", 2, "w2-0", "wrong", lex)
+	for i := 0; i < 5; i++ {
+		insertClaim(db.PartListening, "listen", 3, fmt.Sprintf("r3-%d", i), "right", lex)
+	}
+	for i := 0; i < 7; i++ {
+		insertClaim(db.PartListening, "listen", 3, fmt.Sprintf("w3-%d", i), "wrong", lex)
+	}
+	body := fmt.Sprintf(`{"bands":[
+		{"band":0,"rated":12,"good":8,"again":4,"good_plus_rate":%g},
+		{"band":1,"rated":6,"good":5,"again":1,"good_plus_rate":%g},
+		{"band":2,"rated":12,"good":5,"again":7,"good_plus_rate":%g}]}`, rates[0], rates[1], rates[2])
+	if err := e.store.FinishPlacement(ctx, runID, finishedAt, 1, "band_stop", body); err != nil {
+		t.Fatal(err)
+	}
+
+	e.run(day0)
+
+	spellRows := e.query(`SELECT DISTINCT est_known FROM daily_snapshots WHERE user_id = ? AND day = ? AND skill = ?`, e.user, day0, "spell")
+	if len(spellRows) != 1 || spellRows[0] != "0" {
+		t.Fatalf("spell est_known = %v, want 0", spellRows)
+	}
+	listenRows := e.query(`SELECT DISTINCT est_known FROM daily_snapshots WHERE user_id = ? AND day = ? AND skill = ?`, e.user, day0, "listen")
+	if len(listenRows) != 1 {
+		t.Fatalf("listen est_known rows = %v", listenRows)
+	}
+	var listenEst float64
+	fmt.Sscan(listenRows[0], &listenEst)
+	wantListen := 8 + rates[1]*500 + rates[2]*500 + 3 // 3 listen known, unbanded
+	if math.Abs(listenEst-wantListen) > 1e-9 {
+		t.Fatalf("listen est_known = %v, want %v", listenEst, wantListen)
+	}
+	readRows := e.query(`SELECT DISTINCT est_known FROM daily_snapshots WHERE user_id = ? AND day = ? AND skill = ?`, e.user, day0, "read")
+	if len(readRows) != 1 || readRows[0] != "1" {
+		t.Fatalf("read est_known = %v, want 1 (evidence only)", readRows)
 	}
 }
 

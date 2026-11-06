@@ -144,6 +144,15 @@ func decodeCursor(c Cursor) (int64, error) {
 	return id, nil
 }
 
+// EstimateSource says how EstimatedKnown was produced for a skill.
+// "placement" means estimateKnown used that skill's PlacementSkillBands.
+// "evidence" means the skill had no placement bands, so the estimate is known+solid only.
+// Authored-by-spec: INIT-032/SPEC-003
+const (
+	EstimateSourcePlacement = "placement"
+	EstimateSourceEvidence  = "evidence"
+)
+
 // SkillSummary is the counts of one skill.
 type SkillSummary struct {
 	Skill string
@@ -151,8 +160,16 @@ type SkillSummary struct {
 	Counts map[State]int
 	// EstimatedKnown is the estimated number of words known in this skill. The placement
 	// estimate stands for words with no evidence, and the model counts (known plus solid)
-	// replace it for words with evidence. See estimateKnown.
+	// replace it for words with evidence. See estimateKnown. Only this skill's placement
+	// bands are used (INIT-032/SPEC-003 / ADR-0027 D2).
 	EstimatedKnown float64
+	// EstimateSource is "placement" when this skill has bands from PlacementSkillBands,
+	// otherwise "evidence". Authored-by-spec: INIT-032/SPEC-003
+	EstimateSource string
+	// PlacementRunAt is the finished_at of the newest finished placement when
+	// EstimateSource is "placement". Zero when the estimate is evidence-only.
+	// Authored-by-spec: INIT-032/SPEC-003
+	PlacementRunAt time.Time
 	// Retention is the share of due reviews in the last RetentionWindowDays not rated Again.
 	// Nil when there were none.
 	Retention  *float64
@@ -162,8 +179,14 @@ type SkillSummary struct {
 // Summary is the learner's picture across all words.
 type Summary struct {
 	Skills []SkillSummary // In the order of Skills.
-	// Words counts the overall states over every word in the lexicon.
+	// Words counts the overall states over every word in the lexicon. It is the strict
+	// weakest-skill overall (known only when every practiced skill is known or solid).
+	// It is not the headline "words you know" count; use KnownAnySkill for that
+	// (INIT-032/SPEC-003 / ADR-0027 D1).
 	Words map[State]int
+	// KnownAnySkill is the number of lexemes known or solid in at least one skill,
+	// counted once. Authored-by-spec: INIT-032/SPEC-003
+	KnownAnySkill int
 	// Retention and DueReviews are over all skills.
 	Retention  *float64
 	DueReviews int

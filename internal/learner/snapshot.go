@@ -2,6 +2,7 @@ package learner
 
 import (
 	"context"
+	"time"
 )
 
 // BandCount is how many words of one placement band the learner knows.
@@ -39,6 +40,10 @@ type Snapshot struct {
 // Snapshot evaluates the learner once and returns the summary together with the state of
 // every word that has evidence. It reads the same data as Summary, and Summary returns the
 // Summary of a Snapshot.
+//
+// Estimates use PlacementSkillBands (INIT-032/SPEC-003 / ADR-0027 D2): each skill's
+// estimateKnown takes only that skill's bands. A skill with no bands gets known+solid and
+// EstimateSource "evidence". PlacementBands is left for get_context.placement.
 func (m *Model) Snapshot(ctx context.Context, userID int64) (Snapshot, error) {
 	if err := m.ready(userID); err != nil {
 		return Snapshot{}, err
@@ -57,9 +62,15 @@ func (m *Model) Snapshot(ctx context.Context, userID int64) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	words := m.evaluate(ev, bands, now)
-	placed, havePlacement, err := m.store.PlacementBands(ctx, userID)
+	skillBands, err := m.store.PlacementSkillBands(ctx, userID)
 	if err != nil {
 		return Snapshot{}, err
+	}
+	var placementAt time.Time
+	if place, ok, err := m.store.LatestPlacement(ctx, userID); err != nil {
+		return Snapshot{}, err
+	} else if ok && place.Finished {
+		placementAt = place.TakenAt
 	}
 	retention, err := m.store.DueRetention(ctx, userID, now.AddDate(0, 0, -RetentionWindowDays))
 	if err != nil {
@@ -109,7 +120,14 @@ func (m *Model) Snapshot(ctx context.Context, userID int64) (Snapshot, error) {
 				evidenced[w.Band]++
 			}
 		}
+		placed, havePlacement := skillBands[skill]
 		ss.EstimatedKnown = estimateKnown(placed, havePlacement, evidenced, known)
+		if havePlacement {
+			ss.EstimateSource = EstimateSourcePlacement
+			ss.PlacementRunAt = placementAt
+		} else {
+			ss.EstimateSource = EstimateSourceEvidence
+		}
 		for _, r := range retention {
 			if r.Skill == skill {
 				ss.DueReviews = r.Due
@@ -128,6 +146,13 @@ func (m *Model) Snapshot(ctx context.Context, userID int64) (Snapshot, error) {
 		out.Summary.Words[w.State]++
 		if w.Band >= 0 && w.Band < len(out.Bands) && (w.State == Known || w.State == Solid) {
 			out.Bands[w.Band].Known++
+		}
+		// KnownAnySkill: known or solid in at least one skill, counted once (ADR-0027 D1).
+		for _, sk := range w.Skills {
+			if sk.State == Known || sk.State == Solid {
+				out.Summary.KnownAnySkill++
+				break
+			}
 		}
 	}
 	out.Summary.DueReviews = due
