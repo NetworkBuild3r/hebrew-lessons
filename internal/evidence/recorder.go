@@ -58,6 +58,9 @@ const (
 // NearMiss marks a right answer that was one letter off, which the typed grader
 // rates Hard (north-star section 6). Confusions are further confusion rows to write
 // with the attempt, for example the letter pairs found by aligning a typed answer.
+// LettersPassed is the letters gate (activity.Gate.LettersPassed). A correct or
+// near-miss type_it on recall writes a spell attempt always; a spelling card is
+// created only when the gate is open (ADR-0027 D3).
 type Attempt struct {
 	UserID         int64
 	LexemeID       int64
@@ -74,6 +77,7 @@ type Attempt struct {
 	ChosenLexemeID int64
 	SkipSchedule   bool
 	NearMiss       bool
+	LettersPassed  bool
 	Confusions     []Confusion
 }
 
@@ -204,6 +208,10 @@ func (r *Recorder) Attempt(ctx context.Context, a Attempt) (fsrs.Rating, error) 
 		Extra:     a.Confusions,
 	})
 	if err != nil {
+		return 0, err
+	}
+	// ADR-0027 D3: a typed recall answer also credits spelling (INIT-032/SPEC-004).
+	if err := r.creditTypedSpelling(ctx, a); err != nil {
 		return 0, err
 	}
 	return rating, nil

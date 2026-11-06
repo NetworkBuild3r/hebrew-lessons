@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
@@ -1778,4 +1779,30 @@ func describeQueue(cards []CardRef) string {
 		parts[i] = fmt.Sprintf("%d:%s/%d", card.CardID, mark, card.LexemeID)
 	}
 	return strings.Join(parts, " ")
+}
+
+// AC7 (INIT-032/SPEC-004): a due spelling card with the letters gate open is
+// served as dictation. The mix is unchanged; this pins the existing path.
+func TestDueSpellCardServedAsDictation(t *testing.T) {
+	svc, store, clk := openSvc(t, 1)
+	svc = New(store, clk, 1, WithGate(func(context.Context, int64) (activity.Gate, error) {
+		return activity.OpenGate(), nil
+	}))
+	userID := mustUser(t, store)
+	word := addVoicedLexeme(t, store, "איות", "spelling", true)
+	due, reviewed := clk.Now().Add(-time.Hour), clk.Now().Add(-48*time.Hour)
+	spellID := addCardFor(t, store, userID, word, fsrs.SkillSpell, due, int(fsrs.Good), reviewed)
+	found := false
+	for _, ref := range drain(t, mustBuild(t, svc, userID)) {
+		if ref.CardID != spellID {
+			continue
+		}
+		found = true
+		if ref.Activity != activity.Dictation || ref.AskSkill != fsrs.SkillSpell {
+			t.Fatalf("ref = %+v, want dictation through spell", ref)
+		}
+	}
+	if !found {
+		t.Fatal("due spelling card was not served")
+	}
 }

@@ -63,10 +63,19 @@ func (e *Engine) Check(ctx context.Context, userID int64, token string, resp Res
 		return Result{}, err
 	}
 
+	// Letters gate for typed spelling credit (ADR-0027 D3 / INIT-032/SPEC-004).
+	// Fail before any write when the gate cannot be resolved.
+	gate, err := e.gate(ctx, userID)
+	if err != nil {
+		e.pending.release(p)
+		return Result{}, err
+	}
+
 	for i := p.wrote; i < len(g.attempts); i++ {
 		a := g.attempts[i]
 		a.UserID, a.Source, a.UnitID = p.user, p.source, p.unit
 		a.SkipSchedule = p.source == evidence.SourceLesson
+		a.LettersPassed = gate.LettersPassed
 		rating, err := e.rec.Attempt(ctx, a)
 		if err != nil {
 			e.pending.release(p)

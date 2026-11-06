@@ -321,7 +321,8 @@ func TestTypedAnswersAreGradedAndRecorded(t *testing.T) {
 			if !res.Correct || res.NearMiss || res.Rating != fsrs.Good || res.Answer != "חַלּוֹן" || len(res.Confused) != 0 {
 				t.Fatalf("exact: %+v", res)
 			}
-			got := w.attempts(t, w.user, window)
+			got, err := w.store.ListAttemptsBySkill(context.Background(), w.user, window, tc.skill)
+			mustf(t, err, "attempts by skill")
 			if len(got) != 1 || got[0].Skill != tc.skill || got[0].Activity != string(tc.kind) || !got[0].Correct ||
 				got[0].Prompt != tc.shown || got[0].Response != "חלון" {
 				t.Fatalf("attempts = %+v", got)
@@ -368,7 +369,8 @@ func TestTypedAnswersAreGradedAndRecorded(t *testing.T) {
 			if res.Correct || res.Rating != fsrs.Again || len(res.Confused) != 0 || len(w.confusions(t)) != 1 {
 				t.Fatalf("far off: %+v, confusions %v", res, w.confusions(t))
 			}
-			got = w.attempts(t, w.user, window)
+			got, err = w.store.ListAttemptsBySkill(context.Background(), w.user, window, tc.skill)
+			mustf(t, err, "attempts by skill")
 			if last := got[len(got)-1]; last.Correct || last.Response != "שלום עולם" {
 				t.Fatalf("attempt = %+v", last)
 			}
@@ -379,7 +381,8 @@ func TestTypedAnswersAreGradedAndRecorded(t *testing.T) {
 			if res.Correct || res.Rating != fsrs.Again {
 				t.Fatalf("give up: %+v", res)
 			}
-			got = w.attempts(t, w.user, window)
+			got, err = w.store.ListAttemptsBySkill(context.Background(), w.user, window, tc.skill)
+			mustf(t, err, "attempts by skill")
 			if last := got[len(got)-1]; !last.DontKnow {
 				t.Fatalf("attempt = %+v", last)
 			}
@@ -484,6 +487,73 @@ func TestTypedResponsesAreValidated(t *testing.T) {
 	if res := w.check(t, b, Response{Text: a.Text}); !res.Correct {
 		t.Fatalf("result = %+v", res)
 	}
+}
+
+// INIT-032/SPEC-004: Engine.Check sets Attempt.LettersPassed from its gate so a
+// correct type_it can create a spelling card when the gate is open.
+func TestCheckTypedSpellingHonoursLettersGate(t *testing.T) {
+	t.Run("default open gate creates spell card and implied Good", func(t *testing.T) {
+		w := newWorld(t) // New defaults to OpenGate
+		window := addWord(t, w.store, "חַלּוֹן", "window", "noun", true)
+		b := w.build(t, window, TypeIt)
+		res := w.check(t, b, Response{Text: "חלון"})
+		if !res.Correct || res.NearMiss || res.Rating != fsrs.Good {
+			t.Fatalf("result = %+v", res)
+		}
+		spellAttempts, err := w.store.ListAttemptsBySkill(context.Background(), w.user, window, fsrs.SkillSpell)
+		mustf(t, err, "spell attempts")
+		if len(spellAttempts) != 1 || spellAttempts[0].Activity != string(TypeIt) || !spellAttempts[0].Correct {
+			t.Fatalf("spell attempts = %+v", spellAttempts)
+		}
+		spell, ok := w.card(t, w.user, window, fsrs.SkillSpell)
+		if !ok {
+			t.Fatal("expected a spelling card with the default open gate")
+		}
+		logs, err := w.store.ReviewLogs(context.Background(), spell.ID)
+		mustf(t, err, "spell logs")
+		if len(logs) != 1 || !logs[0].Implied || logs[0].Rating != int(fsrs.Good) {
+			t.Fatalf("spell logs = %+v, want one implied Good", logs)
+		}
+	})
+	t.Run("closed gate writes spell attempt and no card", func(t *testing.T) {
+		e, store, clk := openEngine(t, WithGate(func(context.Context, int64) (Gate, error) {
+			return Gate{LettersPassed: false}, nil
+		}))
+		w := &world{e: e, store: store, clk: clk, user: addUser(t, store, "closed"), lex: fillLexicon(t, store, 40, nil)}
+		window := addWord(t, w.store, "חַלּוֹן", "window", "noun", true)
+		b := w.build(t, window, TypeIt)
+		res := w.check(t, b, Response{Text: "חלון"})
+		if !res.Correct || res.Rating != fsrs.Good {
+			t.Fatalf("result = %+v", res)
+		}
+		spellAttempts, err := w.store.ListAttemptsBySkill(context.Background(), w.user, window, fsrs.SkillSpell)
+		mustf(t, err, "spell attempts")
+		if len(spellAttempts) != 1 {
+			t.Fatalf("spell attempts = %d, want 1", len(spellAttempts))
+		}
+		if _, ok := w.card(t, w.user, window, fsrs.SkillSpell); ok {
+			t.Fatal("closed gate must not create a spelling card")
+		}
+		if n := countRows(t, w.store, `SELECT COUNT(*) FROM review_log WHERE implied = 1`); n != 0 {
+			t.Fatalf("implied reviews = %d, want 0", n)
+		}
+	})
+	t.Run("gate error refuses before any write", func(t *testing.T) {
+		gateErr := errors.New("gate down")
+		e, store, clk := openEngine(t, WithGate(func(context.Context, int64) (Gate, error) {
+			return Gate{}, gateErr
+		}))
+		w := &world{e: e, store: store, clk: clk, user: addUser(t, store, "gate-err"), lex: fillLexicon(t, store, 40, nil)}
+		window := addWord(t, w.store, "חַלּוֹן", "window", "noun", true)
+		b := w.build(t, window, TypeIt)
+		_, err := w.e.Check(context.Background(), w.user, b.item.Token, Response{Text: "חלון"})
+		if !errors.Is(err, gateErr) {
+			t.Fatalf("err = %v, want gate error", err)
+		}
+		if n := len(w.attempts(t, w.user, window)); n != 0 {
+			t.Fatalf("%d attempts written after a gate failure", n)
+		}
+	})
 }
 
 func TestPickResponsesAreValidated(t *testing.T) {

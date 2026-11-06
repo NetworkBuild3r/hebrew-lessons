@@ -53,6 +53,7 @@ type Engine struct {
 	key   []byte
 	bands BandSource
 	ttl   time.Duration
+	gate  func(ctx context.Context, userID int64) (Gate, error)
 
 	rngMu sync.Mutex
 	rng   *rand.Rand
@@ -77,6 +78,13 @@ func WithBands(b BandSource) Option { return func(e *Engine) { e.bands = b } }
 // WithTTL sets how long an item can be answered. The default is TokenTTL.
 func WithTTL(d time.Duration) Option { return func(e *Engine) { e.ttl = d } }
 
+// WithGate sets how Check learns whether the letters gate is open for a learner.
+// The default is OpenGate, matching session.New: no code decides the letters check
+// yet, so typed spelling credit may create a card (ADR-0027 D3 / INIT-032/SPEC-004).
+func WithGate(gate func(ctx context.Context, userID int64) (Gate, error)) Option {
+	return func(e *Engine) { e.gate = gate }
+}
+
 // New builds an engine. A nil clk uses the clock the store was opened with, and a nil rec is
 // a recorder on that clock. Without WithKey the token key is random for this process.
 func New(store *db.Store, clk clock.Clock, rec *evidence.Recorder, opts ...Option) *Engine {
@@ -87,11 +95,14 @@ func New(store *db.Store, clk clock.Clock, rec *evidence.Recorder, opts ...Optio
 		rec = evidence.New(store, nil, clk)
 	}
 	e := &Engine{
-		store:   store,
-		rec:     rec,
-		clock:   clk,
-		bands:   PlacementBands(store),
-		ttl:     TokenTTL,
+		store: store,
+		rec:   rec,
+		clock: clk,
+		bands: PlacementBands(store),
+		ttl:   TokenTTL,
+		gate: func(context.Context, int64) (Gate, error) {
+			return OpenGate(), nil
+		},
 		rng:     rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
 		pending: newPendingSet(),
 	}
