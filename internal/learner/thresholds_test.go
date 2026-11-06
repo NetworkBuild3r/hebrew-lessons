@@ -24,6 +24,10 @@ func TestThresholdsArePinned(t *testing.T) {
 		{"MaxPageSize", MaxPageSize, 200},
 		{"RetentionWindowDays", RetentionWindowDays, 30},
 		{"MissWindowDays", MissWindowDays, 7},
+		{"HelpMinAnswers", HelpMinAnswers, 10},
+		{"StrongMinAnswers", StrongMinAnswers, 20},
+		{"StandingWindowDays", StandingWindowDays, 14},
+		{"StandingTop", StandingTop, 5},
 	}
 	for _, c := range ints {
 		if c.got != c.want {
@@ -37,6 +41,8 @@ func TestThresholdsArePinned(t *testing.T) {
 		{"KnownRetrievability", KnownRetrievability, 0.85},
 		{"SolidStabilityDays", SolidStabilityDays, 21},
 		{"RegressedRetrievability", RegressedRetrievability, 0.70},
+		{"HelpAccuracy", HelpAccuracy, 0.75},
+		{"StrongAccuracy", StrongAccuracy, 0.85},
 	}
 	for _, c := range floats {
 		if c.got != c.want {
