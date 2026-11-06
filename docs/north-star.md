@@ -50,7 +50,7 @@ Each word is tracked separately in each skill. Knowing a word when reading it sa
 | `listen` | Audio only | Pick or type the meaning | I recognize the word in speech |
 | `read` | Pointed Hebrew, no audio, no transliteration | Pick or type the meaning | I can decode it and know it |
 | `recall` | English meaning or a picture | Type or pick the Hebrew | I can produce it |
-| `spell` | Audio only | Type the Hebrew | I can write what I hear (dictation) |
+| `spell` | English (`type_it`) or sound (dictation) | Type the Hebrew from memory | I write the Hebrew from memory. A correct typed answer credits spelling |
 
 **Unlock order.** `listen` is open from the start, and so is `recall` by picking, with audio options (below). `read` and `spell` are held back until the letters check is passed: five or more of six in placement Part 0, or the letters unit completed. Dictation asks for script I can't yet read, so it would measure the alphabet, not the word.
 
@@ -101,11 +101,13 @@ CREATE TABLE exposures (            -- seen in a story or dialogue, no question 
 
 **Outside teaching.** Tutor sessions, Grok conversations, and worksheets enter only as taught words and dated corrections, written over MCP. A taught word gets new cards due at the next study-day cutoff. Outside teaching never grades a card and never moves an existing card. Undo removes only cards the same taught row created that have no review ([ADR-0022](decisions/ADR-0022-learner-day-and-outside-teaching.md)).
 
-**Drill answers and implied reviews.** Every drill answer is stored. When a harder skill answers for a due easier card, the due card is scheduled Good with a `review_log` row marked `implied` and no attempts row; accuracy counts skip implied rows ([ADR-0023](decisions/ADR-0023-review-that-moves-on.md)).
+**Drill answers and implied reviews.** Every drill answer is stored. When a harder skill answers for a due easier card, the due card is scheduled Good with a `review_log` row marked `implied` and no attempts row; accuracy counts skip implied rows ([ADR-0023](decisions/ADR-0023-review-that-moves-on.md)). A correct typed Hebrew answer also credits spelling as an implied review, Good when exact and Hard when one letter is off, through its own helper. The move-up implied review stays Good ([ADR-0027](decisions/ADR-0027-numbers-you-can-trust.md)).
 
 ### 4.3 Word states
 
-States are computed from cards, attempts, and exposures. They are never typed in by hand. Each skill has its own state, and the state belongs to the word's dictionary form (section 4.6). A word's overall state is its weakest *unlocked* core skill (`listen`, `read`, `recall`), using the order in the precedence list below. An answered skill with no card is `seen`, so a skill without a card holds the overall state at `seen`. A locked skill (section 4.1) shows as `locked`, not `unseen`, and is left out of the overall state, the "words I know" count, and the vocabulary estimate. Before the letters gate opens, `read` is locked, so a word's overall state comes from `listen` and `recall` only. When the gate opens, `read` joins in as `unseen` for every word, and the overall states are recomputed. The known-word count can drop on that day, and the Progress screen says why.
+States are computed from cards, attempts, and exposures. They are never typed in by hand. Each skill has its own state, and the state belongs to the word's dictionary form (section 4.6). A word's overall state is its weakest *unlocked* core skill (`listen`, `read`, `recall`), using the order in the precedence list below. An answered skill with no card is `seen`, so a skill without a card holds the overall state at `seen`. A locked skill (section 4.1) shows as `locked`, not `unseen`, and is left out of the overall state, the words-you-know count, and the vocabulary estimate. Before the letters gate opens, `read` is locked, so a word's overall state comes from `listen` and `recall` only. When the gate opens, `read` joins in as `unseen` for every word, and the overall states are recomputed. The strict overall count can drop on that day, and the Progress screen says why. A lemma that is `known` or `solid` in another skill stays in the words-you-know headline.
+
+**Words you know.** The headline counts a lemma that is `known` or `solid` in at least one skill. The per-skill counts sit beside it. Home, Progress, and the AI share that count. The overall state above stays the weakest unlocked core skill, and that strict count is not the headline. A read card rated Good or Easy stays the reading set for the lesson brief and for `knownLexemes`. It is the reading row, not the headline.
 
 **Precedence.** A word can meet several rules at once. Rules are checked top to bottom, and the first match wins:
 
@@ -125,7 +127,7 @@ States are computed from cards, attempts, and exposures. They are never typed in
 
 ### 4.4 Progression and regression
 
-A daily snapshot table stores, per skill: the count in each state, the estimated vocabulary size, the real retention rate (share of due reviews answered right), and mean stability. That gives a week-over-week chart without re-reading the whole history.
+A daily snapshot table stores, per skill: the count in each state, the estimated vocabulary size, retention, and mean stability. That gives a week-over-week chart without re-reading the whole history. Retention is one figure: the share of due reviews with elapsed days of at least 1, excluding implied reviews, rated above Again, over a 30-day window. Every retention value names its window and its date. The weekly report labels its figure "this week". A stored snapshot is history, keeps the day it was written, and is not rewritten. A figure on the page or in the AI comes from the live model and names its date. A snapshot series names its last day.
 
 **One retention target.** A per-learner setting, `desired_retention`, defaults to 85% and can be set between 80% and 95%. The FSRS scheduler, the session mix, and every "near target" check in this document read the same setting. Nothing hard-codes 85% or 90%. Higher means more reviews and fewer forgotten words. Lower means fewer reviews and more lapses.
 
@@ -195,7 +197,7 @@ A vocabulary-size test, adaptive by frequency band, with separate listening and 
 - A word is never asked in both listening and reading in the same placement, because the second answer would be contaminated by the first.
 - Roughly 40 to 60 items in total, about 10 to 12 minutes, with a break offered at the end of each part.
 
-**Scoring.** With four options, a known share per band is corrected for guessing: (right − wrong ÷ 3) ÷ asked. "I don't know" counts as neither right nor wrong, which is why it exists: it replaces guessing. Estimated words known = sum over bands of (known share × band width). Listening and reading get separate estimates.
+**Scoring.** With four options, a known share per band is corrected for guessing: (right − wrong ÷ 3) ÷ asked. "I don't know" counts as neither right nor wrong, which is why it exists: it replaces guessing. Estimated words known = sum over bands of (known share × band width). Listening and reading get separate estimates. A run estimates only the parts it tested. A skill the run did not test takes its estimate from its own known and solid words. Spelling is not a placement part.
 
 **No right/wrong feedback during the test.** That keeps it fast and avoids teaching mid-test. A tapped answer shows a neutral "picked" state and moves on. At the end, a review screen lists each miss with the right answer, its audio, and its pointed form (section 12, decision 1).
 
@@ -222,7 +224,7 @@ Five bands of 20 words is too few for adaptive sampling without repeats. Target:
 | Word match (Hebrew ↔ English pairs) | `read` | Checked. Each wrong pairing is logged as a confusion |
 | Audio match (clip ↔ English) | `listen` | Checked |
 | Pick the Hebrew (English or picture → one of four) | `recall` | Checked. Options are audio clips before the letters gate, pointed Hebrew after it (section 4.1) |
-| Type it (English → Hebrew) | `recall` | Checked with the existing typed grader (exact is Good, one letter off is Hard). Held back until the letters check is passed |
+| Type it (English → Hebrew) | `recall` | Checked with the existing typed grader (exact is Good, one letter off is Hard). A correct answer also credits spelling. Held back until the letters check is passed |
 | Dictation (audio → type) | `spell` | Checked. The wrong letter is logged as a letter pair. Held back until the letters check is passed (section 4.1) |
 | Build the sentence (`order`) | `recall` | Checked. From an English cue, the learner puts known pointed-Hebrew chips in order; the server grades the order ([ADR-0025](decisions/ADR-0025-practice-that-teaches.md)) |
 | Prefix drill: split and build (וְהַבַּיִת → and + the + house; or pick the form for "in the house") | `read`, form `prefix:*` | Checked. Passing a prefix makes that prefix free for coverage (section 4.6) |
@@ -333,6 +335,8 @@ Any MCP client with OAuth (Muse, Grok, Claude, Cursor) gets the same tools. A le
 | `remove_taught_words` | Undoes a taught-word row by removing only the cards that row created that have no review. |
 | `hebrew://tutor` | Resource: how outside teaching writes taught words and corrections without grading or moving existing cards. |
 
+**Study day.** The device zone is stored on `users.time_zone` when none is set, and a stated zone wins. `set_time_zone` overwrites the stored zone. A later device report does not replace a zone already stored. An invalid or missing device zone stores nothing, and the app zone remains. A missing zone is not filled with UTC. A device report of UTC is stored as UTC.
+
 **One authoring skill for every bot.** A single prompt document (served as an MCP resource and mirrored into the repo skill) gives every AI the same steps: read the brief, write within it, validate, generate audio, publish, and leave a coach note. Muse and Grok then build lessons the same way.
 
 **Later: a scheduled coach.** Once a week an automation asks the AI to read `get_progress`, write a short report, and draft the next lesson. It starts manual ("build my next lesson") until the briefs are trusted.
@@ -349,7 +353,7 @@ The colors are inconsistent today. The tokens define both a gold action color an
 - **Motion follows RSCH-008:** short transitions that show what changed (card flip, answer feedback), off when reduced motion is set.
 - **Enforced by tests:** extend `csslint_test.go` so feedback tones can't be used outside feedback, and capture every learning screen in light and dark for review.
 
-**Progress overview.** `/progress` with no `?skill=` shows every skill at once: known plus solid, learning, and seen per skill, and the overall words known. A listening skill that has answers and no listening card shows an explanation instead of a zero bar. The four skill tabs (`?skill=listen|read|recall|spell`) stay; each opens that skill alone.
+**Progress overview.** `/progress` with no `?skill=` shows every skill at once: known plus solid, learning, and seen per skill. The headline is the count of words known or solid in at least one skill. A listening skill that has answers and no listening card shows an explanation instead of a zero bar. The four skill tabs (`?skill=listen|read|recall|spell`) stay; each opens that skill alone.
 
 **Word page.** `/words/{id}` is the page for one lexicon word. A verb shows the lemma with its clip, transliteration, meaning, part of speech, binyan, and root, the learner's state per skill, conjugation tables by tense (present, past, future, imperative, infinitive) with a clip on each form that has audio, and lines from the learner's lessons that use any of those forms. A noun shows gender, an irregular-plural chip when that flag is set, a singular/plural grid (the word, the definite form, the construct) when those forms exist, and a possessive grid; an empty construct or possessive block is omitted, and a noun with only `lexemes.plural` shows singular and plural. An adjective shows the four agreement cells. Each form plays when it has a clip ([ADR-0021](decisions/ADR-0021-listening-cards-and-word-page.md)).
 
