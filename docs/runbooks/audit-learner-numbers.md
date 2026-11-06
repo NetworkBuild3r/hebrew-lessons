@@ -40,3 +40,7 @@ Record the production table (counts only) in the initiative completion summary. 
 PATH="/tmp/go/bin:$PATH" GOTOOLCHAIN=go1.26.9 \
   go test -count=1 -run 'NumbersAgree|Audit' ./internal/app ./internal/web ./cmd/hebrew
 ```
+
+## History and standing
+
+The rows `history_rule1_days`, `history_last_day`, `replay_mismatch`, per-direction verdict and `accuracy14`, and `review_skipped_no_audio` are added by INIT-033 SPEC-008.

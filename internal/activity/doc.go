@@ -4,14 +4,17 @@
 // # Activities
 //
 //	kind         skill   shows                          answered by             wrong pick / typo is logged as
-//	listen_pick  listen  audio only                     one of four glosses     a confusion with the word picked
+//	listen_pick  listen  audio only (clip required)     one of four glosses     a confusion with the word picked
 //	read_pick    read    pointed Hebrew, no audio       one of four glosses     a confusion with the word picked
 //	word_match   read    five Hebrew cues, five glosses pairing each cue        a confusion per wrong pair
-//	audio_match  listen  four clips, four glosses       pairing each clip       a confusion per wrong pair
+//	audio_match  listen  four clips (clip required)     pairing each clip       a confusion per wrong pair
 //	type_it      recall  the English gloss              typed Hebrew            letter pairs (and a word confusion)
-//	dictation    spell   audio only                     typed Hebrew            letter pairs (and a word confusion)
+//	type_it      spell   the English gloss (no clip)    typed Hebrew            letter pairs (and a word confusion)
+//	dictation    spell   audio only (clip required)     typed Hebrew            letter pairs (and a word confusion)
 //	flashcard    -       self-graded                    Forgot/Hard/Got it/Easy session.Record, not this package
 //
+// Spelling is asked by dictation when the word has a clip and by type_it when it has none.
+// Listening review needs a clip; without one, listen activities are not dealt.
 // A flashcard has no item: it is what a visit becomes when no checked activity fits.
 //
 // # Build and Check
