@@ -16,6 +16,10 @@ templ Today(h Home) {
 		}>
 			<header class="today__head">
 				<h1 lang={ h.Lang }>{ h.Heading }</h1>
+				<p class="today__sub today-known">
+					<span class="count"><bdi lang="en" dir="ltr">{ h.KnownText }</bdi></span>
+					<span class="today-known__label">@ProgressT(h.Lang, "Words you know")</span>
+				</p>
 				if h.Today.DailyLine != "" {
 					<p class="today__sub today-line">@E(h.Today.DailyLine)</p>
 				}

@@ -259,6 +259,10 @@ func (s *server) fillSkillPanel(ctx context.Context, userID int64, v *views.Prog
 	skill := v.Skill
 	ss := skillOfSummary(sum, skill)
 	v.Known = fmt.Sprintf("%.0f", ss.EstimatedKnown)
+	v.EstimateSource = ss.EstimateSource
+	if ss.EstimateSource == learner.EstimateSourcePlacement && !ss.PlacementRunAt.IsZero() {
+		v.PlacementDay = dateText(ss.PlacementRunAt, s.now())
+	}
 
 	total := 0
 	for _, st := range learner.States {
@@ -291,22 +295,26 @@ func (s *server) fillSkillPanel(ctx context.Context, userID int64, v *views.Prog
 }
 
 // fillOverview is "What you know" with one row per skill and charts for the skill
-// that has the most known words.
+// that has the most known words. The headline is KnownAnySkill (ADR-0027 D1).
 func (s *server) fillOverview(ctx context.Context, userID int64, v *views.ProgressView, sum learner.Summary, days []snapDay) error {
-	overall := sum.Words[learner.Known] + sum.Words[learner.Solid]
-	v.Known = strconv.Itoa(overall)
+	v.Known = strconv.Itoa(sum.KnownAnySkill)
 	v.SkillName = ""
 
 	bestSkill := learner.Skills[0]
 	bestKnown := -1
+	now := s.now()
 	for _, ss := range sum.Skills {
 		known := ss.Counts[learner.Known] + ss.Counts[learner.Solid]
 		row := views.SkillOverview{
-			Skill:    ss.Skill,
-			Label:    views.SkillLabel(ss.Skill),
-			Known:    known,
-			Learning: ss.Counts[learner.Learning],
-			Seen:     ss.Counts[learner.Seen],
+			Skill:          ss.Skill,
+			Label:          views.SkillLabel(ss.Skill),
+			Known:          known,
+			Learning:       ss.Counts[learner.Learning],
+			Seen:           ss.Counts[learner.Seen],
+			EstimateSource: ss.EstimateSource,
+		}
+		if ss.EstimateSource == learner.EstimateSourcePlacement && !ss.PlacementRunAt.IsZero() {
+			row.PlacementDay = dateText(ss.PlacementRunAt, now)
 		}
 		if ss.Skill == "listen" {
 			noCard, err := s.listenAnswersNoCards(ctx, userID, ss)
@@ -314,6 +322,9 @@ func (s *server) fillOverview(ctx context.Context, userID int64, v *views.Progre
 				return err
 			}
 			row.NoCardHint = noCard
+		}
+		if ss.Skill == "spell" && !skillHasEvidence(ss) {
+			row.NoPracticeHint = true
 		}
 		v.Overview = append(v.Overview, row)
 		if known > bestKnown {
@@ -327,6 +338,19 @@ func (s *server) fillOverview(ctx context.Context, userID int64, v *views.Progre
 	v.Est = estChart(bestSkill, name, days)
 	v.Retention = retentionChart(bestSkill, name, days, ss.Retention)
 	return nil
+}
+
+// skillHasEvidence is true when the skill has any word past unseen.
+func skillHasEvidence(ss learner.SkillSummary) bool {
+	for _, st := range []learner.State{
+		learner.Seen, learner.Learning, learner.Known, learner.Solid,
+		learner.Struggling, learner.Regressed,
+	} {
+		if ss.Counts[st] > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // listenAnswersNoCards is true when listening has answered words and no listening
@@ -395,7 +419,7 @@ func estChart(skill, name string, days []snapDay) views.ChartView {
 		Min: minY, Max: maxY, Ticks: ticks,
 	})
 	first, last := pts[0], pts[len(pts)-1]
-	c.Note = "From the daily snapshots, " + shortDay(first.Day) + " to " + shortDay(last.Day) + "."
+	c.Through = shortDay(last.Day)
 	switch {
 	case len(pts) == 1:
 		c.Summary = fmt.Sprintf("%.0f words on %s. A line needs a second day.", first.Value, shortDay(first.Day))
@@ -449,6 +473,7 @@ func retentionChart(skill, name string, days []snapDay, live *float64) views.Cha
 	})
 	c.Key = []string{"Shaded band between dashed lines: the " + percent(retentionBandLow) + " to " + percent(retentionBandHigh) + " target"}
 	last := pts[len(pts)-1]
+	c.Through = shortDay(last.Day)
 	where := "inside the target"
 	switch {
 	case last.Value < retentionBandLow:
@@ -628,11 +653,17 @@ func (s *server) fillPlacementHistory(ctx context.Context, userID int64, v *view
 			}
 			parts = append(parts, p+", about "+views.CountText(estimate, "word", "words"))
 		}
+		listeningTested := res.Listening != nil && res.Listening.Tested
+		readingTested := res.Reading != nil && res.Reading.Tested
 		if res.Listening != nil {
 			skill("Listening", res.Listening.Tested, res.Listening.Level, res.Listening.Estimate)
 		}
 		if res.Reading != nil {
 			skill("Reading", res.Reading.Tested, res.Reading.Level, res.Reading.Estimate)
+		}
+		// Listening-only (or any run that left reading untested) says so (INIT-032/SPEC-006).
+		if listeningTested && !readingTested {
+			parts = append(parts, "Reading not tested")
 		}
 		switch {
 		case r.Level < 0:

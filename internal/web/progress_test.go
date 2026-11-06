@@ -707,8 +707,11 @@ func TestPlacementHistoryListsEachRunWithItsLevels(t *testing.T) {
 			t.Errorf("no %q", w)
 		}
 	}
-	if !strings.Contains(check, "Oct 2") || !strings.Contains(check, "Check-in") || !strings.Contains(check, "Listening level 3, about 164 words") || strings.Contains(check, "Reading") {
+	if !strings.Contains(check, "Oct 2") || !strings.Contains(check, "Check-in") || !strings.Contains(check, "Listening level 3, about 164 words") || !strings.Contains(check, "Reading not tested") {
 		t.Errorf("check-in row:\n%s", check)
+	}
+	if strings.Contains(check, "Reading level") {
+		t.Errorf("check-in should not claim a reading level:\n%s", check)
 	}
 	if !strings.Contains(first, "Sep 4") || !strings.Contains(first, "First placement") || !strings.Contains(first, "Listening level 3, about 142 words") || !strings.Contains(first, "Reading level 2, about 90 words") {
 		t.Errorf("first placement row:\n%s", first)
@@ -1091,14 +1094,14 @@ func overviewKnown(t *testing.T, row string) int {
 	return n
 }
 
-// ac-1: /progress shows Read 11, Recall 2, Listen 0, Spell 0 known in the overview.
+// ac-1: /progress shows Read 11, Recall 2, Listen explanation, Spell not practiced.
 func TestProgressOverviewShowsKnownPerSkill(t *testing.T) {
 	_, _, _, get := overviewApp(t)
 	body := get("/progress")
 	if !strings.Contains(body, `data-skill=""`) || !strings.Contains(body, `class="pknow__skills"`) {
 		t.Fatal(" /progress did not open the overview")
 	}
-	want := map[string]int{"read": 11, "recall": 2, "spell": 0}
+	want := map[string]int{"read": 11, "recall": 2}
 	for skill, n := range want {
 		row := overviewRow(t, body, skill)
 		if got := overviewKnown(t, row); got != n {
@@ -1111,6 +1114,13 @@ func TestProgressOverviewShowsKnownPerSkill(t *testing.T) {
 	listen := overviewRow(t, body, "listen")
 	if strings.Contains(listen, `data-count="known"`) {
 		t.Errorf("listen overview shows a counts bar instead of the explanation:\n%s", listen)
+	}
+	spell := overviewRow(t, body, "spell")
+	if !strings.Contains(spell, "Not practiced yet: type the Hebrew in review to start") {
+		t.Errorf("spell row lacks the not-practiced hint:\n%s", spell)
+	}
+	if strings.Contains(spell, `data-count="known"`) {
+		t.Errorf("spell overview shows a 0 bar instead of the hint:\n%s", spell)
 	}
 }
 
@@ -1163,9 +1173,14 @@ func TestProgressOverviewMatchesLearnerModel(t *testing.T) {
 	store, l, clk, get := overviewApp(t)
 	sum := summaryOf(t, store, clk, l.user.ID)
 	body := get("/progress")
-	overall := sum.Words[learner.Known] + sum.Words[learner.Solid]
-	if m := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`).FindStringSubmatch(body); m == nil || m[1] != strconv.Itoa(overall) {
-		t.Errorf("overall known %v, want %d from Summary.Words", m, overall)
+	if m := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`).FindStringSubmatch(body); m == nil || m[1] != strconv.Itoa(sum.KnownAnySkill) {
+		t.Errorf("headline %v, want %d from Summary.KnownAnySkill", m, sum.KnownAnySkill)
+	}
+	if !strings.Contains(body, "Words you know") {
+		t.Error("overview missing Words you know label")
+	}
+	if sum.KnownAnySkill == 0 {
+		t.Fatal("fixture KnownAnySkill is 0; reading-known words should count")
 	}
 	for _, ss := range sum.Skills {
 		row := overviewRow(t, body, ss.Skill)
@@ -1178,6 +1193,12 @@ func TestProgressOverviewMatchesLearnerModel(t *testing.T) {
 			}
 			if known != 0 || learning != 0 || seen != 29 {
 				t.Errorf("fixture listen counts known=%d learning=%d seen=%d, want 0/0/29", known, learning, seen)
+			}
+			continue
+		}
+		if ss.Skill == "spell" {
+			if !strings.Contains(row, "Not practiced yet: type the Hebrew in review to start") {
+				t.Errorf("spell should show the not-practiced hint when Summary has no evidence")
 			}
 			continue
 		}
@@ -1197,6 +1218,14 @@ func TestProgressOverviewMatchesLearnerModel(t *testing.T) {
 	est := tableRows(section(t, body, "c-card pchart", `data-chart="est"`))
 	if len(est) != 90 || est[0][1] != fmt.Sprintf("%.0f", progEst(0, "read")) || est[89][1] != fmt.Sprintf("%.0f", progEst(89, "read")) {
 		t.Fatalf("overview estimate chart is not read's snapshots: first=%v last=%v", est[0], est[len(est)-1])
+	}
+	estCard := section(t, body, "c-card pchart", `data-chart="est"`)
+	retCard := section(t, body, "c-card pchart", `data-chart="ret"`)
+	day := shortDay(progLast)
+	for _, card := range []string{estCard, retCard} {
+		if !strings.Contains(card, "Through") || !strings.Contains(card, day) {
+			t.Errorf("chart missing Through %s:\n%s", day, card)
+		}
 	}
 }
 
@@ -1237,5 +1266,158 @@ func TestProgressNoZoneUsesAppChicago(t *testing.T) {
 	week := section(t, body, "c-card pweek", "")
 	if !strings.Contains(week, "to Nov 1") {
 		t.Fatalf("This week does not end on Nov 1:\n%s", week)
+	}
+}
+
+// ---- INIT-032/SPEC-006: Home and Progress share KnownAnySkill ------------------
+
+// claimProgressPlacement deals and answers one placement item (web test helper).
+func claimProgressPlacement(t *testing.T, store *db.Store, runID int64, seq int, part, skill string, band int, itemID, outcome string, lexemeID int64, at time.Time) {
+	t.Helper()
+	ctx := context.Background()
+	it := db.PlacementItem{
+		RunID: runID, Seq: seq, Part: part, Skill: skill, Band: band, ItemID: itemID,
+		Options: `{"options":[]}`, ShownAt: at,
+	}
+	if err := store.InsertPlacementItem(ctx, it); err != nil {
+		t.Fatal(err)
+	}
+	ok, err := store.ClaimPlacementItem(ctx, runID, seq, outcome, "", lexemeID, at, 0)
+	if err != nil || !ok {
+		t.Fatalf("claim %s: ok=%v err=%v", itemID, ok, err)
+	}
+}
+
+// TestProgressKnownAnySkillHeadlineAboveZero is AC2: solid in reading and learning
+// in recall still makes a headline above 0.
+func TestProgressKnownAnySkillHeadlineAboveZero(t *testing.T) {
+	clk := fixedClock(progNow)
+	store, h := openShell(t, clk, nil, nil)
+	l := addLearner(t, store, "a@example.com", "sub-any-skill", progNow)
+	id := addLexeme(t, store, "כֶּלֶב", "dog", "kelev", "m", "")
+	seedKnownSkill(t, store, clk, l.user.ID, id, "read") // solid-capable known/solid
+	// Learning in recall: card younger than three successes.
+	last := progNow.AddDate(0, 0, -1)
+	cardID, err := store.InsertCard(context.Background(), db.Card{
+		UserID: l.user.ID, LexemeID: id, Skill: "recall", State: fsrs.StateReview,
+		Due: progNow, Stability: 2, Difficulty: 5, Reps: 1, LastReview: last,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	insertReview(t, store, cardID, int(fsrs.Good), last)
+
+	sum := summaryOf(t, store, clk, l.user.ID)
+	if sum.KnownAnySkill == 0 {
+		t.Fatal("KnownAnySkill is 0 for solid/known read + learning recall")
+	}
+	body := getLearner(t, h, l, "/progress")
+	if m := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`).FindStringSubmatch(body); m == nil || m[1] != strconv.Itoa(sum.KnownAnySkill) {
+		t.Fatalf("headline %v, want %d KnownAnySkill", m, sum.KnownAnySkill)
+	}
+	if !strings.Contains(body, "Words you know") {
+		t.Fatal("missing Words you know label")
+	}
+}
+
+// TestProgressListeningOnlyPlacementMarksEvidenceSkills is AC3: after a
+// listening-only placement, read/recall/spell say Not tested by placement.
+func TestProgressListeningOnlyPlacementMarksEvidenceSkills(t *testing.T) {
+	clk := fixedClock(progNow)
+	store, h := openShell(t, clk, nil, nil)
+	l := addLearner(t, store, "a@example.com", "sub-listen-only", progNow)
+	ctx := context.Background()
+	lex, err := store.UpsertPlacementLexeme(ctx, "שָׁלוֹם", "hello", "noun", "shalom", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runID, err := store.StartPlacementV3(ctx, l.user.ID, progNow.Add(-time.Hour), 1, db.RunInitial, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimProgressPlacement(t, store, runID, 1, db.PartListening, "listen", 1, "w-1", "right", lex, progNow.Add(-time.Hour))
+	claimProgressPlacement(t, store, runID, 2, db.PartListening, "listen", 1, "w-2", "wrong", lex, progNow.Add(-time.Hour))
+	result := `{"estimated_known_words":50,"listening":{"tested":true,"level":2,"estimate":50},"reading":{"tested":false,"level":0,"estimate":0}}`
+	if err := store.FinishPlacement(ctx, runID, progNow.Add(-30*time.Minute), 2, "exhausted", result); err != nil {
+		t.Fatal(err)
+	}
+	seedProgressSnapshots(t, store, l.user.ID, 2, progEst)
+
+	body := getLearner(t, h, l, "/progress")
+	for _, skill := range []string{"read", "recall", "spell"} {
+		row := overviewRow(t, body, skill)
+		if !strings.Contains(row, "Not tested by placement") {
+			t.Errorf("%s row missing Not tested by placement:\n%s", skill, row)
+		}
+	}
+	listen := overviewRow(t, body, "listen")
+	if !strings.Contains(listen, "From placement on") {
+		t.Errorf("listen row missing From placement on:\n%s", listen)
+	}
+	place := section(t, body, "c-card pplace", "")
+	if !strings.Contains(place, "Listening level 2, about 50 words") || !strings.Contains(place, "Reading not tested") {
+		t.Errorf("placement history:\n%s", place)
+	}
+}
+
+// TestProgressSpellNotPracticedThenLearningAfterTypeIt is AC4: empty spelling
+// shows the not-practiced hint; one correct typed answer shows learning 1.
+func TestProgressSpellNotPracticedThenLearningAfterTypeIt(t *testing.T) {
+	clk := fixedClock(progNow)
+	store, h := openShell(t, clk, nil, nil)
+	l := addLearner(t, store, "a@example.com", "sub-spell-practice", progNow)
+	lex := addLexeme(t, store, "כֶּלֶב", "dog", "kelev", "m", "")
+	seedProgressSnapshots(t, store, l.user.ID, 2, progEst)
+
+	before := getLearner(t, h, l, "/progress")
+	spell := overviewRow(t, before, "spell")
+	if !strings.Contains(spell, "Not practiced yet: type the Hebrew in review to start") {
+		t.Fatalf("before typed answer:\n%s", spell)
+	}
+
+	ctx := context.Background()
+	_, err := store.InsertCard(ctx, db.Card{
+		UserID: l.user.ID, LexemeID: lex, Skill: fsrs.SkillRecall, State: fsrs.StateReview,
+		Due: progNow.Add(-time.Hour), Stability: 2, Difficulty: 5, Reps: 2,
+		LastReview: progNow.Add(-48 * time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := evidence.New(store, fsrs.New(store, clk), clk)
+	_, err = rec.Attempt(ctx, evidence.Attempt{
+		UserID: l.user.ID, LexemeID: lex, Skill: fsrs.SkillRecall, Activity: "type_it",
+		Source: evidence.SourceReview, Prompt: "dog", Response: "כֶּלֶב", Correct: true,
+		LettersPassed: true, Latency: 3 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	after := getLearner(t, h, l, "/progress")
+	row := overviewRow(t, after, "spell")
+	if strings.Contains(row, "Not practiced yet") {
+		t.Fatalf("still shows not-practiced after typed answer:\n%s", row)
+	}
+	reLearn := regexp.MustCompile(`data-count="learning"><bdi[^>]*>([0-9]+)</bdi>`)
+	if m := reLearn.FindStringSubmatch(row); m == nil || m[1] != "1" {
+		t.Fatalf("spell learning = %v, want 1:\n%s", m, row)
+	}
+}
+
+// TestProgressChartsSayThroughLastSnapshotDay is AC5.
+func TestProgressChartsSayThroughLastSnapshotDay(t *testing.T) {
+	_, _, _, _, get := progressApp(t)
+	body := get("/progress?skill=read")
+	day := shortDay(progLast)
+	est := section(t, body, "c-card pchart", `data-chart="est"`)
+	ret := section(t, body, "c-card pchart", `data-chart="ret"`)
+	for name, card := range map[string]string{"estimate": est, "retention": ret} {
+		if !strings.Contains(card, "Through") || !strings.Contains(card, day) {
+			t.Errorf("%s chart missing Through %s:\n%s", name, day, card)
+		}
+		if !strings.Contains(card, `class="pchart__note pchart__through"`) {
+			t.Errorf("%s chart missing through note class", name)
+		}
 	}
 }

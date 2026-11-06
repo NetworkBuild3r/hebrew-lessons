@@ -101,6 +101,7 @@ templ knowCard(v ProgressView) {
 				<span class="count"><bdi lang="en" dir="ltr">{ v.Known }</bdi></span>
 				<span class="pknow__unit">@T(v.Lang, "", "words estimated known")</span>
 			</p>
+			@estimateSourceNote(v.Lang, v.EstimateSource, v.PlacementDay)
 			<div class="pbar" dir="ltr">
 				@templ.Raw(v.BarSVG)
 			</div>
@@ -120,19 +121,23 @@ templ knowCard(v ProgressView) {
 
 // knowOverview is one row per skill: known plus solid, learning, and seen. A
 // skill with answers and no cards shows the explanation instead of a zero bar.
+// Spelling with no evidence says to type Hebrew in review (INIT-032/SPEC-006).
 templ knowOverview(v ProgressView) {
 	<p class="eyebrow" id="know-h">@T(v.Lang, "", "What you know")</p>
 	<p class="pknow__head">
 		<span class="count"><bdi lang="en" dir="ltr">{ v.Known }</bdi></span>
-		<span class="pknow__unit">@T(v.Lang, "", "words known")</span>
+		<span class="pknow__unit">@ProgressT(v.Lang, "Words you know")</span>
 	</p>
 	<ul class="pknow__skills">
 		for _, row := range v.Overview {
 			<li class="pknow__skill" data-skill={ row.Skill }>
 				<a class="pknow__skill-link" href={ templ.SafeURL(v.SkillTabHref(row.Skill)) }>
 					<span class="pknow__skill-label">@E(row.Label)</span>
+					@estimateSourceNote(v.Lang, row.EstimateSource, row.PlacementDay)
 					if row.NoCardHint {
 						<span class="pknow__nocard">@T(v.Lang, "", "Listening counts once you have a listening card. Lessons make one when you answer a listening question.")</span>
+					} else if row.NoPracticeHint {
+						<span class="pknow__nocard">@ProgressT(v.Lang, "Not practiced yet: type the Hebrew in review to start")</span>
 					} else {
 						<span class="pknow__skill-bar" dir="ltr">
 							<span class="pknow__n" data-count="known"><bdi lang="en" dir="ltr">{ Num(row.Known) }</bdi> @T(v.Lang, "", "known")</span>
@@ -146,10 +151,22 @@ templ knowOverview(v ProgressView) {
 	</ul>
 }
 
+// estimateSourceNote labels how the skill's estimate was made (INIT-032/SPEC-006).
+templ estimateSourceNote(lang, source, day string) {
+	if source == "evidence" {
+		<span class="pknow__nocard">@ProgressT(lang, "Not tested by placement")</span>
+	} else if source == "placement" && day != "" {
+		<span class="pknow__nocard">@ProgressT(lang, "From placement on")@E(" " + day)</span>
+	}
+}
+
 // chartCard is a line chart card: title, note, the chart or what to do, its summary, and a table.
 templ chartCard(v ProgressView, c ChartView) {
 	<section class="c-card pchart" aria-labelledby={ c.ID + "-h" } data-chart={ c.ID }>
 		<h2 id={ c.ID + "-h" } class="pchart__title">@E(c.Title)</h2>
+		if c.Through != "" {
+			<p class="pchart__note pchart__through">@ProgressT(v.Lang, "Through")@E(" " + c.Through)</p>
+		}
 		if c.Note != "" {
 			<p class="pchart__note">@E(c.Note)</p>
 		}

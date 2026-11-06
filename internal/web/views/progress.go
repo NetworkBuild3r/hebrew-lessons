@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/a-h/templ"
 )
 
 // The Progress page (INIT-015/SPEC-018). web/progress.go fills these from the learner model,
@@ -34,11 +36,13 @@ type ChartTable struct {
 
 // ChartView is one chart with its words. SVG is markup built in web/chart.go: every dynamic
 // value in it is escaped there, and it names no colour. When SVG is empty the chart has nothing
-// to draw, and Hint says what to do.
+// to draw, and Hint says what to do. Through is the last snapshot day ("Oct 17") when the
+// series has points (INIT-032/SPEC-006 / ADR-0027 D4).
 type ChartView struct {
 	ID      string
 	Title   string
 	Note    string
+	Through string
 	SVG     string
 	Table   ChartTable
 	Summary string
@@ -100,14 +104,19 @@ type WeeklyCard struct {
 
 // SkillOverview is one skill's row on the Progress overview (no ?skill=).
 // Known is known plus solid. NoCardHint replaces the counts bar when the skill
-// has answers and no cards yet (INIT-023/SPEC-004).
+// has answers and no cards yet (INIT-023/SPEC-004). NoPracticeHint replaces the
+// bar when spelling has no evidence (INIT-032/SPEC-006). EstimateSource is
+// "evidence" or "placement"; PlacementDay is set when the estimate is from placement.
 type SkillOverview struct {
-	Skill      string
-	Label      string
-	Known      int
-	Learning   int
-	Seen       int
-	NoCardHint bool
+	Skill          string
+	Label          string
+	Known          int
+	Learning       int
+	Seen           int
+	NoCardHint     bool
+	NoPracticeHint bool
+	EstimateSource string
+	PlacementDay   string
 }
 
 // ProgressView is the whole page.
@@ -126,16 +135,19 @@ type ProgressView struct {
 	// Overview is one row per skill when no ?skill= is chosen. Empty on a skill tab.
 	Overview []SkillOverview
 	// Known is the estimated words known in the chosen skill now, as text.
-	// On the overview it is the overall words known (known plus solid).
-	Known     string
-	Legend    []LegendItem
-	BarSVG    string
-	BarTable  ChartTable
-	Total     int
-	Est       ChartView
-	Retention ChartView
-	Week      WeekView
-	Placement []PlacementRow
+	// On the overview it is Summary.KnownAnySkill (ADR-0027 D1).
+	Known string
+	// EstimateSource and PlacementDay label the skill-tab estimate (INIT-032/SPEC-006).
+	EstimateSource string
+	PlacementDay   string
+	Legend         []LegendItem
+	BarSVG         string
+	BarTable       ChartTable
+	Total          int
+	Est            ChartView
+	Retention      ChartView
+	Week           WeekView
+	Placement      []PlacementRow
 	// CanSay is what the learner can produce from memory. Nil when there is no signed-in learner.
 	CanSay *CanSayPanel
 }
@@ -229,4 +241,19 @@ func StateLabel(state string) string {
 		return "Solid"
 	}
 	return state
+}
+
+// Progress string table (INIT-032/SPEC-006). English is the key; Hebrew fills when present.
+var progressHE = map[string]string{
+	"Words you know":          "מִלִּים שֶׁיְּדוּעוֹת",
+	"Not tested by placement": "לֹא נִבְדַּק בִּבְדִיקַת רָמָה",
+	"From placement on":       "מִבְּדִיקַת רָמָה ב־",
+	"Not practiced yet: type the Hebrew in review to start": "עֲדַיִן לֹא תֻּרְגַּל: הַקְלֵד אֶת הָעִבְרִית בַּחֲזָרָה כְּדֵי לְהַתְחִיל",
+	"Reading not tested": "קְרִיאָה לֹא נִבְדְּקָה",
+	"Through":            "עַד",
+}
+
+// ProgressT is UI copy for the Progress and Home number labels. Missing Hebrew falls back to English.
+func ProgressT(lang, en string) templ.Component {
+	return T(lang, progressHE[en], en)
 }

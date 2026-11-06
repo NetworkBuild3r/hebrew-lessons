@@ -26,6 +26,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
@@ -45,7 +46,8 @@ func TestHomeFromRealData(t *testing.T) {
 	later := addLexeme(t, store, "עֶרֶב", "evening", "erev", "m", "")
 	foreign := addLexeme(t, store, "מַיִם", "water", "mayim", "m", "")
 	reviewed := now.Add(-48 * time.Hour)
-	addCard(t, store, learner.user.ID, known, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
+	// KnownAnySkill needs known/solid (stability + three Goods), not only a Good rating.
+	seedKnownSkill(t, store, fixedClock(now), learner.user.ID, known, fsrs.SkillRead)
 	addCard(t, store, learner.user.ID, hard, fsrs.SkillRead, now.Add(-time.Minute), 1, int(fsrs.Hard), reviewed)
 	addCard(t, store, learner.user.ID, later, fsrs.SkillRead, now.Add(24*time.Hour), 1, 0, time.Time{})
 	addCard(t, store, other.ID, foreign, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), reviewed)
@@ -73,6 +75,9 @@ func TestHomeFromRealData(t *testing.T) {
 	body := getLearner(t, h, learner, "/")
 	if !strings.Contains(body, `data-due="2"`) || !strings.Contains(body, `data-known="1"`) {
 		t.Fatalf("due/known: %s", articleAttrs(body))
+	}
+	if !strings.Contains(body, "Words you know") {
+		t.Fatal("Home missing Words you know label")
 	}
 	if !strings.Contains(body, "Cafe") || !strings.Contains(body, "At the cafe") || strings.Contains(body, ">Draft<") || strings.Contains(body, ">Done<") {
 		t.Fatal("next unit is not the first unfinished published unit")
@@ -1042,4 +1047,57 @@ func cardAttrs(body string) string {
 		return body
 	}
 	return m
+}
+
+// TestHomeAndProgressShareKnownAnySkill is INIT-032/SPEC-006 AC1: Home's
+// "Words you know" equals the Progress headline equals Summary.KnownAnySkill.
+func TestHomeAndProgressShareKnownAnySkill(t *testing.T) {
+	clk := fixedClock(progNow)
+	store, h := openShell(t, clk, nil, nil)
+	l := addLearner(t, store, "a@example.com", "sub-home-progress-known", progNow)
+	ids := overviewLexemes(t, store, 5)
+	for i := 0; i < 3; i++ {
+		seedKnownSkill(t, store, clk, l.user.ID, ids[i], fsrs.SkillRead)
+	}
+	// One more word solid in read, learning in recall — still one in the headline.
+	seedKnownSkill(t, store, clk, l.user.ID, ids[3], fsrs.SkillRead)
+	last := progNow.AddDate(0, 0, -1)
+	cardID, err := store.InsertCard(context.Background(), db.Card{
+		UserID: l.user.ID, LexemeID: ids[3], Skill: fsrs.SkillRecall, State: fsrs.StateReview,
+		Due: progNow, Stability: 2, Difficulty: 5, Reps: 1, LastReview: last,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	insertReview(t, store, cardID, int(fsrs.Good), last)
+	seedProgressSnapshots(t, store, l.user.ID, 2, progEst)
+
+	sum, err := learner.New(store, clk).Summary(context.Background(), l.user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.KnownAnySkill == 0 {
+		t.Fatal("KnownAnySkill is 0")
+	}
+	want := strconv.Itoa(sum.KnownAnySkill)
+
+	home := getLearner(t, h, l, "/")
+	if !strings.Contains(home, `data-known="`+want+`"`) {
+		t.Fatalf("Home data-known: %s, want %s", articleAttrs(home), want)
+	}
+	if !strings.Contains(home, "Words you know") {
+		t.Fatal("Home missing Words you know")
+	}
+	reCount := regexp.MustCompile(`(?s)today-known.*?class="count"><bdi[^>]*>([0-9]+)</bdi>`)
+	if m := reCount.FindStringSubmatch(home); m == nil || m[1] != want {
+		t.Fatalf("Home visible count %v, want %s", m, want)
+	}
+
+	progress := getLearner(t, h, l, "/progress")
+	if m := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`).FindStringSubmatch(progress); m == nil || m[1] != want {
+		t.Fatalf("Progress headline %v, want %s", m, want)
+	}
+	if !strings.Contains(progress, "Words you know") {
+		t.Fatal("Progress missing Words you know")
+	}
 }
