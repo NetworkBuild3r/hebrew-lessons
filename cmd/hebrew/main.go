@@ -60,6 +60,8 @@ func run(args []string) error {
 			return runMigrate(args[1:])
 		case "backup":
 			return runBackup(args[1:])
+		case "backfill-spell":
+			return runBackfillSpell(args[1:])
 		default:
 			return fmt.Errorf("unknown command %q", args[0])
 		}
