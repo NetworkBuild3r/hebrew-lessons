@@ -708,9 +708,9 @@ func enqueueNewWords(ctx context.Context, tx *sql.Tx, userID, unitID int64, less
 		for _, skill := range skills {
 			if _, err := tx.ExecContext(ctx, `
 				INSERT OR IGNORE INTO cards (
-					user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses
-				) VALUES (?, ?, ?, 'new', ?, 0, 0, 0, 0)`,
-				userID, id, skill, due,
+					user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, created_at
+				) VALUES (?, ?, ?, 'new', ?, 0, 0, 0, 0, ?)`,
+				userID, id, skill, due, due,
 			); err != nil {
 				return fmt.Errorf("db: lesson cards: %w", err)
 			}

@@ -51,6 +51,9 @@ type Card struct {
 	Lapses     int
 	LastReview time.Time // Zero when the card has never been reviewed.
 	Suspended  bool
+	// CreatedAt is when the card row was inserted (FormatTime). Zero means unset
+	// on write (InsertCard fills from the store clock) or NULL when read.
+	CreatedAt time.Time
 }
 
 // ReviewLog is one row of review_log.
@@ -174,6 +177,7 @@ func (s *Store) GetCard(ctx context.Context, id int64) (Card, error) {
 
 // InsertCard inserts a card and returns its id.
 // An empty State is stored as new. A zero LastReview is stored as NULL.
+// A zero CreatedAt is stored as FormatTime of the store clock.
 func (s *Store) InsertCard(ctx context.Context, card Card) (int64, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -186,16 +190,20 @@ func (s *Store) InsertCard(ctx context.Context, card Card) (int64, error) {
 	if !card.LastReview.IsZero() {
 		last = FormatTime(card.LastReview)
 	}
+	created := card.CreatedAt
+	if created.IsZero() {
+		created = s.Clock().Now()
+	}
 	suspended := 0
 	if card.Suspended {
 		suspended = 1
 	}
 	res, err := conn.ExecContext(ctx, `
 		INSERT INTO cards (
-			user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		card.UserID, card.LexemeID, card.Skill, card.State, FormatTime(card.Due),
-		card.Stability, card.Difficulty, card.Reps, card.Lapses, last, suspended,
+		card.Stability, card.Difficulty, card.Reps, card.Lapses, last, suspended, FormatTime(created),
 	)
 	if err != nil {
 		return 0, fmt.Errorf("db: insert card: %w", err)

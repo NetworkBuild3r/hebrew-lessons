@@ -98,12 +98,31 @@ type CardReview struct {
 	Implied       bool
 }
 
-// CardHistory is one card's ordered review_log up to an AsOf bound.
+// CardHistory is one card with its review_log rows up to an AsOf bound, plus the
+// stored schedule columns used for live ReplayMismatch without a second GetCard.
+// CreatedAt is zero when cards.created_at is NULL.
 type CardHistory struct {
-	CardID   int64
-	Skill    string
-	LexemeID int64
-	Reviews  []CardReview
+	CardID     int64
+	Skill      string
+	LexemeID   int64
+	State      string
+	Due        time.Time
+	Stability  float64
+	Difficulty float64
+	Reps       int
+	Lapses     int
+	LastReview time.Time
+	CreatedAt  time.Time
+	Reviews    []CardReview
+}
+
+// StoredCard returns the schedule fields as stored on the cards row.
+func (h CardHistory) StoredCard() Card {
+	return Card{
+		ID: h.CardID, LexemeID: h.LexemeID, Skill: h.Skill,
+		State: h.State, Due: h.Due, Stability: h.Stability, Difficulty: h.Difficulty,
+		Reps: h.Reps, Lapses: h.Lapses, LastReview: h.LastReview, CreatedAt: h.CreatedAt,
+	}
 }
 
 // LearnerEvidence reads the learner's evidence. It never returns another learner's rows.
@@ -271,13 +290,26 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 		return LearnerEvidence{}, err
 	}
 
-	// Cards, with their review_log totals.
+	// Cards, with their review_log totals. When AsOf is set, omit cards that did
+	// not exist yet (created_at after AsOf, or NULL created_at with no review by then).
 	if err := func() error {
 		cardArgs := []any{FormatTime(q.MissSince)}
 		if !q.AsOf.IsZero() {
 			cardArgs = append(cardArgs, FormatTime(q.AsOf))
 		}
 		cardArgs = append(cardArgs, userID)
+		cardExist := ""
+		if !q.AsOf.IsZero() {
+			cardExist = `
+			  AND (
+			    (c.created_at IS NOT NULL AND c.created_at <= ?)
+			    OR EXISTS (
+			      SELECT 1 FROM review_log AS r2
+			      WHERE r2.card_id = c.id AND r2.reviewed_at <= ?
+			    )
+			  )`
+			cardArgs = append(cardArgs, FormatTime(q.AsOf), FormatTime(q.AsOf))
+		}
 		rows, err := conn.QueryContext(ctx, `
 			SELECT c.lexeme_id, c.skill, c.state, c.stability, c.last_review, c.reps, c.lapses,
 				COUNT(rl.id),
@@ -287,7 +319,7 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 				MAX(rl.reviewed_at)
 			FROM cards AS c
 			LEFT JOIN review_log AS rl ON rl.card_id = c.id AND rl.implied = 0`+reviewAsOf+`
-			WHERE c.user_id = ?`+cardWhere+`
+			WHERE c.user_id = ?`+cardExist+cardWhere+`
 			GROUP BY c.id`, lexemeArg(cardArgs)...)
 		if err != nil {
 			return fmt.Errorf("db: learner cards: %w", err)
@@ -322,17 +354,21 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 		return LearnerEvidence{}, err
 	}
 
-	// Exposures.
+	// Exposures. AsOf bounds created_at the same way as attempts when set.
 	if err := func() error {
 		where := ""
 		if q.LexemeID != 0 {
 			where = " AND lexeme_id = ?"
 		}
+		exposureAsOf := ""
+		if !q.AsOf.IsZero() {
+			exposureAsOf = " AND created_at <= ?"
+		}
 		rows, err := conn.QueryContext(ctx, `
 			SELECT lexeme_id, COUNT(*), MAX(created_at)
 			FROM exposures
-			WHERE user_id = ?`+where+`
-			GROUP BY lexeme_id`, lexemeArg([]any{userID})...)
+			WHERE user_id = ?`+where+exposureAsOf+`
+			GROUP BY lexeme_id`, withAsOf(lexemeArg([]any{userID}), 1)...)
 		if err != nil {
 			return fmt.Errorf("db: learner exposures: %w", err)
 		}
@@ -599,9 +635,12 @@ func (s *Store) PlacementBands(ctx context.Context, userID int64) (bands []BandS
 	return body.Bands, true, nil
 }
 
-// CardHistories returns each of the learner's cards with its review_log rows in
-// reviewed_at, id order. When asOf is non-zero, only rows with reviewed_at <= asOf
-// are included. A zero asOf returns the full history.
+// CardHistories returns each of the learner's cards (LEFT JOIN review_log) with
+// stored schedule columns and review rows in reviewed_at, id order.
+// When asOf is non-zero, only review_log rows with reviewed_at <= asOf are joined,
+// and cards that did not exist yet are omitted: created_at > asOf, or created_at
+// IS NULL with no review at or before asOf. A zero asOf returns every card and
+// its full history.
 func (s *Store) CardHistories(ctx context.Context, userID int64, asOf time.Time) ([]CardHistory, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -611,14 +650,30 @@ func (s *Store) CardHistories(ctx context.Context, userID int64, asOf time.Time)
 		return nil, errors.New("db: card histories needs a learner")
 	}
 	query := `
-		SELECT c.id, c.skill, c.lexeme_id, rl.rating, rl.reviewed_at, rl.elapsed_days, rl.scheduled_days, rl.implied
+		SELECT c.id, c.skill, c.lexeme_id, c.state, c.due, c.stability, c.difficulty, c.reps, c.lapses,
+			c.last_review, c.created_at,
+			rl.rating, rl.reviewed_at, rl.elapsed_days, rl.scheduled_days, rl.implied
 		FROM cards AS c
-		JOIN review_log AS rl ON rl.card_id = c.id
-		WHERE c.user_id = ?`
-	args := []any{userID}
+		LEFT JOIN review_log AS rl ON rl.card_id = c.id`
+	args := []any{}
 	if !asOf.IsZero() {
 		query += ` AND rl.reviewed_at <= ?`
 		args = append(args, FormatTime(asOf))
+	}
+	query += `
+		WHERE c.user_id = ?`
+	args = append(args, userID)
+	if !asOf.IsZero() {
+		query += `
+		  AND (
+		    (c.created_at IS NOT NULL AND c.created_at <= ?)
+		    OR EXISTS (
+		      SELECT 1 FROM review_log AS r2
+		      WHERE r2.card_id = c.id AND r2.reviewed_at <= ?
+		    )
+		  )`
+		bound := FormatTime(asOf)
+		args = append(args, bound, bound)
 	}
 	query += `
 		ORDER BY c.id, rl.reviewed_at, rl.id`
@@ -631,21 +686,48 @@ func (s *Store) CardHistories(ctx context.Context, userID int64, asOf time.Time)
 	var cur *CardHistory
 	for rows.Next() {
 		var cardID, lexeme int64
-		var skill, at string
-		var rating, elapsed, scheduled, implied int
-		if err := rows.Scan(&cardID, &skill, &lexeme, &rating, &at, &elapsed, &scheduled, &implied); err != nil {
+		var skill, state, due string
+		var last, created sql.NullString
+		var stability, difficulty float64
+		var reps, lapses int
+		var rating, elapsed, scheduled, implied sql.NullInt64
+		var reviewedAt sql.NullString
+		if err := rows.Scan(&cardID, &skill, &lexeme, &state, &due, &stability, &difficulty, &reps, &lapses,
+			&last, &created, &rating, &reviewedAt, &elapsed, &scheduled, &implied); err != nil {
 			return nil, fmt.Errorf("db: card histories: %w", err)
 		}
 		if cur == nil || cur.CardID != cardID {
-			out = append(out, CardHistory{CardID: cardID, Skill: skill, LexemeID: lexeme})
+			h := CardHistory{
+				CardID: cardID, Skill: skill, LexemeID: lexeme,
+				State: state, Stability: stability, Difficulty: difficulty, Reps: reps, Lapses: lapses,
+			}
+			h.Due, err = ParseTime(due)
+			if err != nil {
+				return nil, fmt.Errorf("db: card histories: %w", err)
+			}
+			if last.Valid {
+				if h.LastReview, err = ParseTime(last.String); err != nil {
+					return nil, fmt.Errorf("db: card histories: %w", err)
+				}
+			}
+			if created.Valid {
+				if h.CreatedAt, err = ParseTime(created.String); err != nil {
+					return nil, fmt.Errorf("db: card histories: %w", err)
+				}
+			}
+			out = append(out, h)
 			cur = &out[len(out)-1]
 		}
-		reviewed, err := ParseTime(at)
+		if !rating.Valid || !reviewedAt.Valid {
+			continue
+		}
+		reviewed, err := ParseTime(reviewedAt.String)
 		if err != nil {
 			return nil, fmt.Errorf("db: card histories: %w", err)
 		}
 		cur.Reviews = append(cur.Reviews, CardReview{
-			Rating: rating, ReviewedAt: reviewed, ElapsedDays: elapsed, ScheduledDays: scheduled, Implied: implied == 1,
+			Rating: int(rating.Int64), ReviewedAt: reviewed,
+			ElapsedDays: int(elapsed.Int64), ScheduledDays: int(scheduled.Int64), Implied: implied.Int64 == 1,
 		})
 	}
 	if err := rows.Err(); err != nil {

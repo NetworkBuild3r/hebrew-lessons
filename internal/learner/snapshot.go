@@ -3,6 +3,8 @@ package learner
 import (
 	"context"
 	"time"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 )
 
 // BandCount is how many words of one placement band the learner knows.
@@ -35,49 +37,88 @@ type Snapshot struct {
 	// Bands has one entry per placement band 0 to 4, in order. A band with no words in it
 	// has Words of 0.
 	Bands [5]BandCount
+	// ReplayMismatch is how many cards disagree with an FSRS replay of their review_log
+	// at "now". It is set only on a live snapshot (Snapshot, or SnapshotAt with at not
+	// before the clock); past SnapshotAt results leave it 0. See replay.go.
+	ReplayMismatch int
 }
 
-// Snapshot evaluates the learner once and returns the summary together with the state of
-// every word that has evidence. It reads the same data as Summary, and Summary returns the
-// Summary of a Snapshot.
-//
-// Estimates use PlacementSkillBands (INIT-032/SPEC-003 / ADR-0027 D2): each skill's
-// estimateKnown takes only that skill's bands. A skill with no bands gets known+solid and
-// EstimateSource "evidence". PlacementBands is left for get_context.placement.
+// Snapshot evaluates the learner once at the model clock, live: stored card state
+// and uncapped evidence reads. ReplayMismatch still compares a full replay to the
+// stored cards.
 func (m *Model) Snapshot(ctx context.Context, userID int64) (Snapshot, error) {
 	if err := m.ready(userID); err != nil {
 		return Snapshot{}, err
 	}
-	now := m.clock.Now()
+	return m.evaluateSnapshot(ctx, userID, m.clock.Now(), time.Time{}, true)
+}
+
+// SnapshotAt evaluates the learner as of moment at under the current rules
+// (ADR-0028 D3). Windows (miss, confusion, retention, accuracy) are measured
+// back from at. Any at before the clock, even by a moment, is the past: evidence
+// and placement reads use AsOf=at, and each card's review_log is replayed up to
+// at with the same go-fsrs parameters as Grade (see replay.go). Nothing that
+// happened after at is counted. An at that is not before the clock is now, and
+// is evaluated live like Snapshot.
+func (m *Model) SnapshotAt(ctx context.Context, userID int64, at time.Time) (Snapshot, error) {
+	if err := m.ready(userID); err != nil {
+		return Snapshot{}, err
+	}
+	if !at.Before(m.clock.Now()) {
+		return m.evaluateSnapshot(ctx, userID, at, time.Time{}, true)
+	}
+	return m.evaluateSnapshot(ctx, userID, at, at, false)
+}
+
+// evaluateSnapshot is the shared body of Snapshot and SnapshotAt.
+// at is the evaluation moment (window anchor and retrievability "now").
+// asOf bounds evidence reads (zero = live unbound query).
+// live selects stored card fields and fills ReplayMismatch.
+func (m *Model) evaluateSnapshot(ctx context.Context, userID int64, at, asOf time.Time, live bool) (Snapshot, error) {
 	ids, err := m.store.LexemeIDs(ctx)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	ev, err := m.store.LearnerEvidence(ctx, userID, m.query(now, 0))
+	ev, err := m.store.LearnerEvidence(ctx, userID, m.queryAt(at, 0, asOf))
 	if err != nil {
 		return Snapshot{}, err
 	}
-	bands, err := m.bands.LexemeBands(ctx)
-	if err != nil {
-		return Snapshot{}, err
+	if !asOf.IsZero() {
+		ev.Confusions = confusionsUpTo(ev.Confusions, asOf)
 	}
-	words := m.evaluate(ev, bands, now)
-	skillBands, err := m.store.PlacementSkillBands(ctx, userID, time.Time{})
-	if err != nil {
-		return Snapshot{}, err
-	}
-	var placementAt time.Time
-	if place, ok, err := m.store.LatestPlacement(ctx, userID); err != nil {
-		return Snapshot{}, err
-	} else if ok && place.Finished {
-		placementAt = place.TakenAt
-	}
-	retention, err := m.store.DueRetention(ctx, userID, now.AddDate(0, 0, -RetentionWindowDays), time.Time{})
+
+	histories, err := m.store.CardHistories(ctx, userID, asOf)
 	if err != nil {
 		return Snapshot{}, err
 	}
 
-	out := Snapshot{Words: words}
+	mismatch := 0
+	if live {
+		mismatch, err = countReplayMismatches(histories)
+		if err != nil {
+			return Snapshot{}, err
+		}
+	} else if err := applyPastCardHistories(&ev, histories); err != nil {
+		return Snapshot{}, err
+	}
+
+	bands, err := m.bands.LexemeBands(ctx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	words := m.evaluate(ev, bands, at)
+
+	skillBands, err := m.store.PlacementSkillBands(ctx, userID, asOf)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	retentionSince := at.AddDate(0, 0, -RetentionWindowDays)
+	retention, err := m.store.DueRetention(ctx, userID, retentionSince, asOf)
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	out := Snapshot{Words: words, ReplayMismatch: mismatch}
 	out.Summary.Words = map[State]int{}
 	for _, s := range States {
 		out.Summary.Words[s] = 0
@@ -124,7 +165,7 @@ func (m *Model) Snapshot(ctx context.Context, userID int64) (Snapshot, error) {
 		ss.EstimatedKnown = estimateKnown(placed.Bands, havePlacement, evidenced, known)
 		if havePlacement {
 			ss.EstimateSource = EstimateSourcePlacement
-			ss.PlacementRunAt = placementAt
+			ss.PlacementRunAt = placed.RunAt
 		} else {
 			ss.EstimateSource = EstimateSourceEvidence
 		}
@@ -158,4 +199,14 @@ func (m *Model) Snapshot(ctx context.Context, userID int64) (Snapshot, error) {
 	out.Summary.DueReviews = due
 	out.Summary.Retention = ratio(right, due)
 	return out, nil
+}
+
+func confusionsUpTo(in []db.LearnerConfusion, asOf time.Time) []db.LearnerConfusion {
+	out := in[:0]
+	for _, c := range in {
+		if !c.At.After(asOf) {
+			out = append(out, c)
+		}
+	}
+	return out
 }

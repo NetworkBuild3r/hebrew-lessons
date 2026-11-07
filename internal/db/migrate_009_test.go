@@ -181,8 +181,12 @@ func m22Aside(st m7State) m7State {
 	delete(st.rowCnts, "daily_totals")
 	delete(st.tables, "daily_snapshots")
 	delete(st.rowCnts, "daily_snapshots")
+	// 022 adds cards.created_at and may backfill it; row dumps and schema change.
+	delete(st.tables, "cards")
+	delete(st.rowCnts, "cards")
 	st.schema = m8SchemaWithout(st.schema, "daily_totals")
 	st.schema = m8SchemaWithout(st.schema, "daily_snapshots")
+	st.schema = m8SchemaWithout(st.schema, "cards")
 	return st
 }
 

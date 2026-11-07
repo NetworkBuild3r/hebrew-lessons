@@ -91,7 +91,7 @@ func (s *Store) RecordTaught(ctx context.Context, learnerID int64, lexemeIDs []i
 
 		var created, hadCard []string
 		for _, skill := range skills {
-			inserted, err := insertNewCard(ctx, tx, learnerID, lexemeID, skill, dueText)
+			inserted, err := insertNewCard(ctx, tx, learnerID, lexemeID, skill, dueText, createdAt)
 			if err != nil {
 				return out, fmt.Errorf("db: taught card: %w", err)
 			}

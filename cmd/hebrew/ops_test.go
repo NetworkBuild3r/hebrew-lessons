@@ -86,8 +86,8 @@ func TestMigrateCheckReportsAFullyMigratedDatabase(t *testing.T) {
 	}
 	got := out.String()
 	for _, want := range []string{
-		"migrate-check: files=21 applied=21 pending=0\n",
-		"applied: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21\n",
+		"migrate-check: files=22 applied=22 pending=0\n",
+		"applied: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22\n",
 		"pending: (none)\n",
 		"integrity: ok\n",
 		"result: ok\n",
@@ -108,8 +108,8 @@ func TestMigrateCheckListsPendingMigrationsOnTheDeployedDatabase(t *testing.T) {
 	}
 	got := out.String()
 	for _, want := range []string{
-		"applied=12 pending=9",
-		"applied: 1 2 3 4 5 7 16 17 18 19 20 21\n",
+		"applied=13 pending=9",
+		"applied: 1 2 3 4 5 7 16 17 18 19 20 21 22\n",
 		"pending: 006_evidence.sql 008_learner_model.sql 009_confusion_other.sql 010_daily_job.sql 011_placement_v3.sql 012_attempt_list_index.sql 013_patterns.sql 014_mistakes_verbs.sql 015_attempt_source_self.sql\n",
 		"pending-below-applied: 6 ",
 		"result: ok\n",
@@ -250,7 +250,7 @@ func TestBackupDoesNotChangeTheSource(t *testing.T) {
 	if opsDigest(t, src) != before {
 		t.Error("backup changed the source database")
 	}
-	if got := countRowsAt(t, src, `SELECT COUNT(*) FROM schema_migrations`); got != 17 {
+	if got := countRowsAt(t, src, `SELECT COUNT(*) FROM schema_migrations`); got != 18 {
 		t.Errorf("schema_migrations has %d rows, backup applied a migration", got)
 	}
 }

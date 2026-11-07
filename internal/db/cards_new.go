@@ -22,13 +22,14 @@ type NewCardsResult struct {
 
 // insertNewCard inserts one new-state card with INSERT OR IGNORE.
 // It returns whether this call created the row. Shared by RecordTaught and
-// CreateNewCards (INIT-027/SPEC-005).
-func insertNewCard(ctx context.Context, tx *sql.Tx, learnerID, lexemeID int64, skill, dueText string) (bool, error) {
+// CreateNewCards (INIT-027/SPEC-005). createdAtText is FormatTime of the clock
+// moment this insert represents.
+func insertNewCard(ctx context.Context, tx *sql.Tx, learnerID, lexemeID int64, skill, dueText, createdAtText string) (bool, error) {
 	res, err := tx.ExecContext(ctx, `
 		INSERT OR IGNORE INTO cards (
-			user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses
-		) VALUES (?, ?, ?, 'new', ?, 0, 0, 0, 0)`,
-		learnerID, lexemeID, skill, dueText,
+			user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, created_at
+		) VALUES (?, ?, ?, 'new', ?, 0, 0, 0, 0, ?)`,
+		learnerID, lexemeID, skill, dueText, createdAtText,
 	)
 	if err != nil {
 		return false, err
@@ -76,7 +77,7 @@ func (s *Store) CreateNewCards(ctx context.Context, learnerID int64, lexemeIDs [
 			if skill == "" {
 				continue
 			}
-			inserted, err := insertNewCard(ctx, tx, learnerID, lexemeID, skill, dueText)
+			inserted, err := insertNewCard(ctx, tx, learnerID, lexemeID, skill, dueText, dueText)
 			if err != nil {
 				return out, fmt.Errorf("db: new card: %w", err)
 			}

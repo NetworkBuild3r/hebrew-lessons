@@ -166,9 +166,10 @@ type SkillSummary struct {
 	// EstimateSource is "placement" when this skill has bands from PlacementSkillBands,
 	// otherwise "evidence". Authored-by-spec: INIT-032/SPEC-003
 	EstimateSource string
-	// PlacementRunAt is the finished_at of the newest finished placement when
-	// EstimateSource is "placement". Zero when the estimate is evidence-only.
-	// Authored-by-spec: INIT-032/SPEC-003
+	// PlacementRunAt is the finished_at of the placement run that supplied this
+	// skill's bands (PlacementSkillBands[skill].RunAt) when EstimateSource is
+	// "placement". Zero when the estimate is evidence-only.
+	// Authored-by-spec: INIT-032/SPEC-003, INIT-033/SPEC-003 / ADR-0028 D7
 	PlacementRunAt time.Time
 	// Retention is the share of due reviews in the last RetentionWindowDays not rated Again.
 	// Nil when there were none.
@@ -449,13 +450,20 @@ func (w WordState) skill(name string) SkillState {
 func weak(s State) bool { return s == Struggling || s == Regressed }
 
 func (m *Model) query(now time.Time, lexemeID int64) db.LearnerQuery {
+	return m.queryAt(now, lexemeID, time.Time{})
+}
+
+// queryAt builds a LearnerQuery whose miss/confusion windows are measured from at.
+// asOf is passed through to LearnerEvidence (zero = live unbound query).
+func (m *Model) queryAt(at time.Time, lexemeID int64, asOf time.Time) db.LearnerQuery {
 	return db.LearnerQuery{
 		LexemeID:       lexemeID,
 		AgainWindow:    StruggleAgainWindow,
 		AccuracyWindow: AccuracyWindow,
 		RecentWindow:   KnownRecentRight,
-		MissSince:      now.AddDate(0, 0, -MissWindowDays),
-		ConfusionSince: now.AddDate(0, 0, -ConfusionWindowDays),
+		MissSince:      at.AddDate(0, 0, -MissWindowDays),
+		ConfusionSince: at.AddDate(0, 0, -ConfusionWindowDays),
+		AsOf:           asOf,
 	}
 }
 

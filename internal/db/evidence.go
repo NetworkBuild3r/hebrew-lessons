@@ -421,12 +421,19 @@ func insertCardTx(ctx context.Context, tx *sql.Tx, card Card) (int64, error) {
 	if !card.LastReview.IsZero() {
 		last = FormatTime(card.LastReview)
 	}
+	created := card.CreatedAt
+	if created.IsZero() {
+		created = card.LastReview
+	}
+	if created.IsZero() {
+		created = card.Due
+	}
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO cards (
-			user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		card.UserID, card.LexemeID, card.Skill, card.State, FormatTime(card.Due),
-		card.Stability, card.Difficulty, card.Reps, card.Lapses, last, evidenceBool(card.Suspended),
+		card.Stability, card.Difficulty, card.Reps, card.Lapses, last, evidenceBool(card.Suspended), FormatTime(created),
 	)
 	if err != nil {
 		return 0, fmt.Errorf("db: insert card: %w", err)

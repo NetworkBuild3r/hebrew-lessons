@@ -118,9 +118,10 @@ func TestMigrate022FreshMatchesMigrated(t *testing.T) {
 	}
 	snap := func(conn *sql.DB) map[string]any {
 		return map[string]any{
-			"snap_cols": m6Dump(t, conn, `SELECT name, type, "notnull", dflt_value, pk FROM pragma_table_info('daily_snapshots') ORDER BY cid`),
-			"tot_cols":  m6Dump(t, conn, `SELECT name, type, "notnull", dflt_value, pk FROM pragma_table_info('daily_totals') ORDER BY cid`),
-			"tot_sql":   m6SQLOf(t, conn, "daily_totals"),
+			"snap_cols":    m6Dump(t, conn, `SELECT name, type, "notnull", dflt_value, pk FROM pragma_table_info('daily_snapshots') ORDER BY cid`),
+			"tot_cols":     m6Dump(t, conn, `SELECT name, type, "notnull", dflt_value, pk FROM pragma_table_info('daily_totals') ORDER BY cid`),
+			"tot_sql":      m6SQLOf(t, conn, "daily_totals"),
+			"card_created": m6Dump(t, conn, `SELECT name, type, "notnull", dflt_value, pk FROM pragma_table_info('cards') WHERE name = 'created_at'`),
 		}
 	}
 	got, want := snap(migrated), snap(fresh)
@@ -141,4 +142,53 @@ func TestMigrate022Constraints(t *testing.T) {
 		`INSERT INTO daily_totals (user_id, day, known_any_skill, rule_version) VALUES (1, '2026-11-03', 1, 0)`)
 	rejectSQL(t, conn, "bad day",
 		`INSERT INTO daily_totals (user_id, day, known_any_skill, rule_version) VALUES (1, '2026-13-01', 1, 1)`)
+}
+
+func TestMigrate022BackfillsCardCreatedAt(t *testing.T) {
+	conn := m22At021(t)
+	mustSQL(t, conn, `INSERT INTO lexemes (text_nfc, gloss_en) VALUES ('מַיִם', 'water')`)
+	mustSQL(t, conn, `INSERT INTO lexemes (text_nfc, gloss_en) VALUES ('אֶרֶץ', 'land')`)
+	// Card with a review: created_at backfills from review_log.
+	mustSQL(t, conn, `INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, suspended)
+		VALUES (1, 1, 'read', 'review', ?, 1, 5, 1, 0, 0)`, "2026-11-01T12:00:00Z")
+	mustSQL(t, conn, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, implied)
+		VALUES (1, 3, ?, 1, 2, 0)`, "2026-11-01T10:00:00Z")
+	mustSQL(t, conn, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, implied)
+		VALUES (1, 3, ?, 1, 3, 0)`, "2026-11-02T10:00:00Z")
+	// An exposure and an attempt days before the first review must not backdate the card.
+	mustSQL(t, conn, `INSERT INTO exposures (user_id, lexeme_id, context, created_at) VALUES (1, 1, 'lesson_intro', ?)`, "2026-10-20T10:00:00Z")
+	mustSQL(t, conn, `INSERT INTO attempts (user_id, lexeme_id, skill, activity, source, prompt, response, correct, latency_ms, created_at) VALUES (1, 1, 'read', 'read_pick', 'lesson', 'water', 'water', 1, 900, ?)`, "2026-10-21T10:00:00Z")
+	// Card with no review: created_at is the migration's own time, so it is left out of
+	// every earlier day and kept in every later one.
+	mustSQL(t, conn, `INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, suspended)
+		VALUES (1, 2, 'read', 'new', ?, 0, 0, 0, 0, 0)`, "2026-11-03T12:00:00Z")
+
+	if err := m22Migrate(conn); err != nil {
+		t.Fatal(err)
+	}
+	got := m6Dump(t, conn, `SELECT id, created_at FROM cards WHERE id = 1`)
+	if want := [][]string{{"int64:1", "string:2026-11-01T10:00:00Z"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("reviewed card created_at = %v, want %v (first review, not the earlier exposure)", got, want)
+	}
+	var unreviewed sql.NullString
+	if err := conn.QueryRow(`SELECT created_at FROM cards WHERE id = 2`).Scan(&unreviewed); err != nil {
+		t.Fatal(err)
+	}
+	if !unreviewed.Valid {
+		t.Fatal("unreviewed card created_at is NULL; every as-of read, including later days, would leave it out")
+	}
+	at, err := ParseTime(unreviewed.String)
+	if err != nil {
+		t.Fatalf("unreviewed card created_at %q is not in the FormatTime layout: %v", unreviewed.String, err)
+	}
+	if FormatTime(at) != unreviewed.String {
+		t.Fatalf("unreviewed card created_at %q does not round-trip FormatTime (%q)", unreviewed.String, FormatTime(at))
+	}
+	if !at.After(time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)) {
+		t.Fatalf("unreviewed card created_at %s is not the migration time", at)
+	}
+	cols := m6Dump(t, conn, `SELECT name FROM pragma_table_info('cards') WHERE name = 'created_at'`)
+	if len(cols) != 1 {
+		t.Fatalf("cards.created_at missing: %v", cols)
+	}
 }

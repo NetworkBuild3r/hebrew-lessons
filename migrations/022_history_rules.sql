@@ -16,3 +16,19 @@ CREATE TABLE daily_totals (
     rule_version INTEGER NOT NULL CHECK (rule_version >= 1), -- Which edition of the learner-model rules wrote this total.
     PRIMARY KEY (user_id, day)
 );
+
+-- When the card row was created (INIT-033/SPEC-003 as-of replay), in the
+-- db.FormatTime layout. New rows are stamped by the code that inserts them.
+ALTER TABLE cards ADD COLUMN created_at TEXT;
+
+-- Backfill: a reviewed card existed by its first review, so it takes that moment.
+-- Exposures and attempts are not used: either can exist before the card does, and
+-- backdating a card would show it as learning on days before it was made. A card with
+-- no review has no recoverable creation moment, so it takes the time this migration
+-- runs: it is left out of earlier days rather than invented into them, and kept in
+-- later ones (a NULL would leave it out of every as-of read).
+UPDATE cards
+SET created_at = COALESCE(
+    (SELECT MIN(rl.reviewed_at) FROM review_log AS rl WHERE rl.card_id = cards.id),
+    strftime('%Y-%m-%dT%H:%M:%S', 'now') || '.000000000Z'
+);

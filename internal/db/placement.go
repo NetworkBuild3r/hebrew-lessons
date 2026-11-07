@@ -266,12 +266,22 @@ func (s *Store) CommitPlacementRating(ctx context.Context, lexeme PlacementLexem
 	if !card.LastReview.IsZero() {
 		last = FormatTime(card.LastReview)
 	}
+	created := card.CreatedAt
+	if created.IsZero() {
+		created = card.LastReview
+	}
+	if created.IsZero() {
+		created = log.ReviewedAt
+	}
+	if created.IsZero() {
+		created = s.Clock().Now()
+	}
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO cards (
-			user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+			user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
 		card.UserID, lexemeID, card.Skill, card.State, FormatTime(card.Due),
-		card.Stability, card.Difficulty, card.Reps, card.Lapses, last,
+		card.Stability, card.Difficulty, card.Reps, card.Lapses, last, FormatTime(created),
 	)
 	if err != nil {
 		return fmt.Errorf("db: insert card: %w", err)
