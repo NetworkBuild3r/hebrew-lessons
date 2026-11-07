@@ -252,24 +252,23 @@ func TestReviewWordMatchFeedbackClipFromAudioAsset(t *testing.T) {
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	words := seedAssetLexicon(t, store, learner.user.ID, now)
 	page := getLearner(t, h, learner, "/review")
-	for visit := 1; visit <= 2; visit++ {
-		if attr(t, page, "data-activity") != "read_pick" {
-			t.Fatalf("visit %d is %s, want read_pick: %s", visit, attr(t, page, "data-activity"), cardAttrs(page))
-		}
-		asked := hebrewOnPage(t, page, words)
-		rec := actPost(t, h, learner, "/_hx/review/answer", answerForm(page, "choice", pickChoice(t, page, asked.gloss)))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("visit %d answer = %d\n%s", visit, rec.Code, rec.Body.String())
-		}
-		page = actPost(t, h, learner, "/_hx/review/next", nextForm(rec.Body.String())).Body.String()
+	// Review alternates everyday and match within a skill: visit 1 read_pick, visit 2 word_match.
+	if attr(t, page, "data-activity") != "read_pick" {
+		t.Fatalf("visit 1 is %s, want read_pick: %s", attr(t, page, "data-activity"), cardAttrs(page))
 	}
+	asked := hebrewOnPage(t, page, words)
+	rec := actPost(t, h, learner, "/_hx/review/answer", answerForm(page, "choice", pickChoice(t, page, asked.gloss)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("visit 1 answer = %d\n%s", rec.Code, rec.Body.String())
+	}
+	page = actPost(t, h, learner, "/_hx/review/next", nextForm(rec.Body.String())).Body.String()
 	if attr(t, page, "data-activity") != "word_match" {
-		t.Fatalf("third visit is %s, want word_match: %s", attr(t, page, "data-activity"), cardAttrs(page))
+		t.Fatalf("visit 2 is %s, want word_match: %s", attr(t, page, "data-activity"), cardAttrs(page))
 	}
 	if strings.Contains(page, "/audio/") || strings.Contains(page, "<audio") {
 		t.Fatal("a word_match question rendered a clip")
 	}
-	rec := actPost(t, h, learner, "/_hx/review/answer", swappedWordMatch(t, page, words))
+	rec = actPost(t, h, learner, "/_hx/review/answer", swappedWordMatch(t, page, words))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("word_match = %d\n%s", rec.Code, rec.Body.String())
 	}

@@ -214,6 +214,10 @@ func (r *Recorder) Attempt(ctx context.Context, a Attempt) (fsrs.Rating, error) 
 	if err := r.creditTypedSpelling(ctx, a); err != nil {
 		return 0, err
 	}
+	// ADR-0028 D6: an exact typed spelling answer also credits recall.
+	if err := r.creditTypedRecall(ctx, a); err != nil {
+		return 0, err
+	}
 	return rating, nil
 }
 

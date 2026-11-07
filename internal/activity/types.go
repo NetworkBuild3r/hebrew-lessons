@@ -43,16 +43,32 @@ var specs = []Spec{
 	{Kind: AudioMatch, Skill: fsrs.SkillListen, Checked: true, Multi: true},
 	{Kind: TypeIt, Skill: fsrs.SkillRecall, Checked: true, Typed: true},
 	{Kind: Dictation, Skill: fsrs.SkillSpell, Checked: true, Typed: true},
+	// TypeIt also asks spelling when the word has no clip (ADR-0028 D6).
+	{Kind: TypeIt, Skill: fsrs.SkillSpell, Checked: true, Typed: true},
 	{Kind: Flashcard},
 }
 
 // Specs lists every activity, in table order.
 func Specs() []Spec { return append([]Spec(nil), specs...) }
 
-// SpecOf is the spec of a kind.
+// SpecOf is the first spec of a kind. TypeIt has two rows (recall, then spell);
+// SpecOf returns the recall row. Prefer SpecFor when the skill is known.
 func SpecOf(k Kind) (Spec, bool) {
 	for _, s := range specs {
 		if s.Kind == k {
+			return s, true
+		}
+	}
+	return Spec{}, false
+}
+
+// SpecFor is the spec of a kind for a skill. An empty skill falls back to SpecOf.
+func SpecFor(k Kind, skill string) (Spec, bool) {
+	if skill == "" {
+		return SpecOf(k)
+	}
+	for _, s := range specs {
+		if s.Kind == k && s.Skill == skill {
 			return s, true
 		}
 	}

@@ -26,7 +26,7 @@ type Facts struct {
 //   - read_pick: the word's gloss, and three other glossed words
 //   - word_match: the word's gloss, and four other glossed words
 //   - audio_match: the word's clip and gloss, and three other words with clip and gloss
-//   - type_it: the word's gloss
+//   - type_it: the word's gloss (recall, or spelling when there is no clip)
 //   - dictation: the word's clip
 func (f Facts) Fits(k Kind) bool {
 	switch k {
@@ -48,11 +48,20 @@ func (f Facts) Fits(k Kind) bool {
 }
 
 // Fitting lists the checked activities of a skill that can ask the word, in table order.
+// Spelling prefers dictation when a clip exists; type_it is only the no-clip fallback
+// (ADR-0028 D6), so it is not listed beside dictation as a match rotation.
 func Fitting(skill string, f Facts) []Kind {
 	var out []Kind
 	for _, k := range kindsFor(skill) {
 		if f.Fits(k) {
 			out = append(out, k)
+		}
+	}
+	if skill == fsrs.SkillSpell {
+		for _, k := range out {
+			if k == Dictation {
+				return []Kind{Dictation}
+			}
 		}
 	}
 	return out
@@ -214,9 +223,11 @@ func Implies(skill string) (string, bool) {
 	}
 }
 
-// ChooseSkill picks the everyday (or MatchEvery-th match) activity for one skill.
-// When the gate is closed for the skill or no checked activity fits the word, the
-// visit is a Flashcard through that skill. INIT-027/SPEC-004.
+// ChooseSkill picks the activity for one skill in a review visit (ADR-0028 D6).
+// Within a skill the everyday kind and the match kind alternate by position in
+// that skill's run (visits already counted for the skill). When the gate is
+// closed or no checked activity fits, the visit is a Flashcard through that skill.
+// Lesson planning still uses Choose, which keeps MatchEvery.
 func ChooseSkill(skill string, gate Gate, f Facts, visits map[string]int) Choice {
 	if skill == "" || !gate.Open(skill) {
 		return Choice{Skill: skill, Kind: Flashcard}
@@ -226,7 +237,7 @@ func ChooseSkill(skill string, gate Gate, f Facts, visits map[string]int) Choice
 		return Choice{Skill: skill, Kind: Flashcard}
 	}
 	kind := kinds[0]
-	if len(kinds) > 1 && (visits[skill]+1)%MatchEvery == 0 {
+	if len(kinds) > 1 && visits[skill]%2 == 1 {
 		kind = kinds[1]
 	}
 	return Choice{Skill: skill, Kind: kind}

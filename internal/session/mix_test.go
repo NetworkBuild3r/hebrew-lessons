@@ -279,6 +279,9 @@ func knownCand(id int64, due time.Time) Candidate {
 	return Candidate{
 		ID: id, LexemeID: id, Skill: fsrs.SkillRead, Due: due,
 		HasRating: true, Latest: int(fsrs.Good), KnownLexeme: true,
+		// Gloss facts so review can ask read_pick (ADR-0028 D6: no flashcard stand-in).
+		Facts:   activity.Facts{HasGloss: true, GlossedOthers: 40},
+		Exposed: true,
 	}
 }
 
@@ -286,6 +289,8 @@ func struggleCand(id int64, due time.Time) Candidate {
 	return Candidate{
 		ID: id, LexemeID: id, Skill: fsrs.SkillRead, Due: due,
 		HasRating: true, Latest: int(fsrs.Hard),
+		Facts:   activity.Facts{HasGloss: true, GlossedOthers: 40},
+		Exposed: true,
 	}
 }
 
@@ -606,6 +611,8 @@ func newCand(id int64, due time.Time, position, lesson int, ranked bool, rank in
 		ID: id, LexemeID: id, Skill: fsrs.SkillRead, Due: due,
 		HasIntro: true, IntroPosition: position, IntroLesson: lesson,
 		HasFreq: ranked, FreqRank: rank,
+		Facts:   activity.Facts{HasGloss: true, GlossedOthers: 40},
+		Exposed: true,
 	}
 }
 

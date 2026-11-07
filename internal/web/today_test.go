@@ -937,7 +937,17 @@ func glossOnPage(t *testing.T, page string, byHe map[string]string) string {
 func seedFillerLexemes(t *testing.T, store *db.Store, n int) {
 	t.Helper()
 	for i := 0; i < n; i++ {
-		addLexeme(t, store, fmt.Sprintf("מילוי-%d", i), fmt.Sprintf("filler-%d", i), fmt.Sprintf("fill%d", i), "m", "")
+		he := fmt.Sprintf("מילוי-%d", i)
+		audio := ""
+		// Clips so listen_pick has voiced distractors (ADR-0028 D6).
+		sum := sha256.Sum256([]byte("filler-clip:" + he))
+		audio = hex.EncodeToString(sum[:])
+		if _, err := store.InsertAudio(context.Background(), db.Asset{
+			ID: audio, TextNFC: he, Voice: "voice", Model: "model", Bytes: 2, CreatedAt: time.Now().UTC(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		addLexeme(t, store, he, fmt.Sprintf("filler-%d", i), fmt.Sprintf("fill%d", i), "m", audio)
 	}
 }
 

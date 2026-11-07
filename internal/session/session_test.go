@@ -62,7 +62,14 @@ func mustUser(t *testing.T, store *db.Store) int64 {
 
 func mustLexeme(t *testing.T, store *db.Store, text string) int64 {
 	t.Helper()
-	id, err := testharness.InsertLexeme(context.Background(), store, text)
+	// Gloss so the mix can ask a checked activity; bare (no-gloss) words are
+	// seeded explicitly when a test needs the flashcard sentinel.
+	res, err := store.ExecContext(context.Background(),
+		`INSERT INTO lexemes (text_nfc, gloss_en) VALUES (?, ?)`, text, "en:"+text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,21 +346,22 @@ func TestConfusionMarksStruggling(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	ctx := context.Background()
 	userID := mustUser(t, store)
+	fillPool(t, store, 30)
 	reviewed := clk.Now().Add(-time.Hour)
 	due := clk.Now().Add(-time.Minute)
-	he := addCard(t, store, userID, "בלבול", fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
-	// Same lexeme, other direction. Insert directly so the text stays unique.
-	lexemeID := lexemeOf(t, store, he)
+	heLex := addVoicedLexeme(t, store, "בלבול", "confusion", false)
+	he := addCardFor(t, store, userID, heLex, fsrs.SkillRead, due, int(fsrs.Good), reviewed)
 	en, err := store.InsertCard(ctx, db.Card{
-		UserID: userID, LexemeID: lexemeID, Skill: fsrs.SkillRecall, State: fsrs.StateReview,
+		UserID: userID, LexemeID: heLex, Skill: fsrs.SkillRecall, State: fsrs.StateReview,
 		Due: due, Stability: 1, Difficulty: 5, Reps: 1, LastReview: reviewed,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	insertReview(t, store, en, int(fsrs.Good), reviewed)
-	other := addCard(t, store, userID, "יציב", fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
-	if err := fsrs.New(store, clk).RecordMiss(ctx, userID, fsrs.MissLetterPair, "ב/כ", lexemeID); err != nil {
+	otherLex := addVoicedLexeme(t, store, "יציב", "stable", false)
+	other := addCardFor(t, store, userID, otherLex, fsrs.SkillRead, due, int(fsrs.Good), reviewed)
+	if err := fsrs.New(store, clk).RecordMiss(ctx, userID, fsrs.MissLetterPair, "ב/כ", heLex); err != nil {
 		t.Fatal(err)
 	}
 
@@ -594,9 +602,11 @@ func TestConcurrentRecordWritesOnce(t *testing.T) {
 func TestRecordRestoresClaimWhenGradeFails(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	userID := mustUser(t, store)
+	fillPool(t, store, 30)
 	reviewed := clk.Now().Add(-time.Hour)
 	due := clk.Now().Add(-time.Minute)
-	id := addCard(t, store, userID, "נכשל", fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
+	lex := addVoicedLexeme(t, store, "נכשל", "failed", false)
+	id := addCardFor(t, store, userID, lex, fsrs.SkillRead, due, int(fsrs.Good), reviewed)
 	sess := mustBuild(t, svc, userID)
 	card, ok := sess.Next()
 	if !ok || card.CardID != id {
@@ -852,8 +862,10 @@ func TestRecordRejectsUnrevealed(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	ctx := context.Background()
 	userID := mustUser(t, store)
+	fillPool(t, store, 30)
 	reviewed := clk.Now().Add(-48 * time.Hour)
-	first := addCard(t, store, userID, "נסתר", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+	lex := addVoicedLexeme(t, store, "נסתר", "hidden", false)
+	first := addCardFor(t, store, userID, lex, fsrs.SkillRead, clk.Now().Add(-time.Hour), int(fsrs.Good), reviewed)
 	sess := mustBuild(t, svc, userID)
 	card, ok := sess.Next()
 	if !ok || card.CardID != first {
@@ -891,8 +903,10 @@ func TestRevealThenGrade(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	ctx := context.Background()
 	userID := mustUser(t, store)
+	fillPool(t, store, 30)
 	reviewed := clk.Now().Add(-48 * time.Hour)
-	first := addCard(t, store, userID, "גלוי", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+	lex := addVoicedLexeme(t, store, "גלוי2", "visible", false)
+	first := addCardFor(t, store, userID, lex, fsrs.SkillRead, clk.Now().Add(-time.Hour), int(fsrs.Good), reviewed)
 	sess := mustBuild(t, svc, userID)
 	shown, ok := sess.Next()
 	if !ok || shown.CardID != first {
@@ -963,6 +977,7 @@ func TestFinishedLessonWordsEnterReview(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	ctx := context.Background()
 	userID := mustUser(t, store)
+	fillPool(t, store, 30)
 	now := clk.Now()
 	// The later unit is enqueued first, so its card ids are lower.
 	// Lesson position has to win over that id order.
@@ -1482,9 +1497,12 @@ func TestAgainClampsToTheQueueEnd(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	ctx := context.Background()
 	userID := mustUser(t, store)
+	fillPool(t, store, 30)
 	reviewed := clk.Now().Add(-48 * time.Hour)
-	first := addCard(t, store, userID, "רִאשׁוֹן", fsrs.SkillRead, clk.Now().Add(-2*time.Hour), 0, int(fsrs.Good), reviewed, false)
-	second := addCard(t, store, userID, "שֵׁנִי", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+	firstLex := addVoicedLexeme(t, store, "ראשון", "first", false)
+	secondLex := addVoicedLexeme(t, store, "שני", "second", false)
+	first := addCardFor(t, store, userID, firstLex, fsrs.SkillRead, clk.Now().Add(-2*time.Hour), int(fsrs.Good), reviewed)
+	second := addCardFor(t, store, userID, secondLex, fsrs.SkillRead, clk.Now().Add(-time.Hour), int(fsrs.Good), reviewed)
 	sess := mustBuild(t, svc, userID)
 	card, ok := sess.Next()
 	if !ok || card.CardID != first {
@@ -1504,7 +1522,9 @@ func TestOneLexemePoolEnds(t *testing.T) {
 	t.Run("one card", func(t *testing.T) {
 		svc, store, clk := openSvc(t, 1)
 		userID := mustUser(t, store)
-		id := addCard(t, store, userID, "יָחִיד", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), clk.Now().Add(-48*time.Hour), false)
+		fillPool(t, store, 30)
+		lex := addVoicedLexeme(t, store, "יחיד", "alone", false)
+		id := addCardFor(t, store, userID, lex, fsrs.SkillRead, clk.Now().Add(-time.Hour), int(fsrs.Good), clk.Now().Add(-48*time.Hour))
 		sess := mustBuild(t, svc, userID)
 		card, ok := sess.Next()
 		if !ok || card.CardID != id {
@@ -1519,7 +1539,8 @@ func TestOneLexemePoolEnds(t *testing.T) {
 		svc, store, clk := openSvc(t, 1)
 		ctx := context.Background()
 		userID := mustUser(t, store)
-		lex := mustLexeme(t, store, "זּוּג")
+		fillPool(t, store, 30)
+		lex := addVoicedLexeme(t, store, "זוג", "pair", false)
 		reviewed := clk.Now().Add(-48 * time.Hour)
 		read, err := store.InsertCard(ctx, db.Card{
 			UserID: userID, LexemeID: lex, Skill: fsrs.SkillRead, State: fsrs.StateReview,
@@ -1555,7 +1576,9 @@ func TestOneLexemePoolEnds(t *testing.T) {
 		svc, store, clk := openSvc(t, 1)
 		ctx := context.Background()
 		userID := mustUser(t, store)
-		id := addCard(t, store, userID, "בּוֹדֵד", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), clk.Now().Add(-48*time.Hour), false)
+		fillPool(t, store, 30)
+		lex := addVoicedLexeme(t, store, "בודד", "lonely", false)
+		id := addCardFor(t, store, userID, lex, fsrs.SkillRead, clk.Now().Add(-time.Hour), int(fsrs.Good), clk.Now().Add(-48*time.Hour))
 		rev := fsrs.New(store, clk)
 		for i := 0; i < MinMissesForDrill; i++ {
 			if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, "ב/כ", 0); err != nil {
@@ -1591,7 +1614,9 @@ func TestDrillStillRequeuesInAOneLexemePool(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	ctx := context.Background()
 	userID := mustUser(t, store)
-	id := addCard(t, store, userID, "קֶדֶם", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), clk.Now().Add(-48*time.Hour), false)
+	fillPool(t, store, 30)
+	lex := addVoicedLexeme(t, store, "קדם", "before", false)
+	id := addCardFor(t, store, userID, lex, fsrs.SkillRead, clk.Now().Add(-time.Hour), int(fsrs.Good), clk.Now().Add(-48*time.Hour))
 	rev := fsrs.New(store, clk)
 	for i := 0; i < MinMissesForDrill; i++ {
 		if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, "ב/כ", 0); err != nil {
@@ -1631,9 +1656,12 @@ func TestMissRequeuesWhenADrillSitsBetweenTwoWords(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	ctx := context.Background()
 	userID := mustUser(t, store)
+	fillPool(t, store, 30)
 	reviewed := clk.Now().Add(-48 * time.Hour)
-	first := addCard(t, store, userID, "רִאשׁוֹן", fsrs.SkillRead, clk.Now().Add(-2*time.Hour), 0, int(fsrs.Good), reviewed, false)
-	addCard(t, store, userID, "שֵׁנִי", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), reviewed, false)
+	firstLex := addVoicedLexeme(t, store, "ראשון2", "first2", false)
+	secondLex := addVoicedLexeme(t, store, "שני2", "second2", false)
+	first := addCardFor(t, store, userID, firstLex, fsrs.SkillRead, clk.Now().Add(-2*time.Hour), int(fsrs.Good), reviewed)
+	addCardFor(t, store, userID, secondLex, fsrs.SkillRead, clk.Now().Add(-time.Hour), int(fsrs.Good), reviewed)
 	rev := fsrs.New(store, clk)
 	for i := 0; i < MinMissesForDrill; i++ {
 		if err := rev.RecordMiss(ctx, userID, fsrs.MissLetterPair, "ב/כ", 0); err != nil {

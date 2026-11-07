@@ -474,7 +474,16 @@ func seedAnkiLexeme(t *testing.T, store *db.Store, now time.Time, kind string) (
 	default:
 		t.Fatalf("unknown kind %s", kind)
 	}
-	return spec, seedAnkiClip(t, store, clipText, now), word
+	clipID := seedAnkiClip(t, store, clipText, now)
+	// Listening review needs lexemes.audio_id (ADR-0028 D6); AudioByText alone
+	// does not keep the card askable.
+	if kind == "listen" && word.lexemeID > 0 {
+		if _, err := store.ExecContext(context.Background(),
+			`UPDATE lexemes SET audio_id = ? WHERE id = ?`, clipID, word.lexemeID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return spec, clipID, word
 }
 
 func seedDrill(t *testing.T, store *db.Store, userID int64, kind, key string, exampleID int64) {

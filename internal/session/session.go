@@ -171,6 +171,9 @@ type Session struct {
 	clock    clock.Clock
 	record   *evidence.Recorder
 	tally    Tally
+	// SkippedNoAudio is how many due listening cards this sitting left out
+	// because the word has no clip (ADR-0028 D6). They stay due.
+	SkippedNoAudio int
 }
 
 // UserID is the learner this queue was built for.
@@ -313,13 +316,15 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 		cands = append(cands, drillCandidates(pairs)...)
 	}
 	record := s.record
+	queue, skippedNoAudio := mixGate(cands, accuracy, now, seed, gate)
 	sess := &Session{
-		userID: userID,
-		cards:  mixGate(cands, accuracy, now, seed, gate),
-		span:   requeueSpan(seed),
-		store:  s.store,
-		clock:  s.clock,
-		record: record,
+		userID:         userID,
+		cards:          queue,
+		span:           requeueSpan(seed),
+		store:          s.store,
+		clock:          s.clock,
+		record:         record,
+		SkippedNoAudio: skippedNoAudio,
 	}
 	sess.grade = func(ctx context.Context, cardID int64, rating fsrs.Rating, _ bool) error {
 		if rating < fsrs.Again || rating > fsrs.Easy {

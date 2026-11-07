@@ -17,6 +17,10 @@ const (
 	// A re-queued miss is another visit of a card already counted.
 	SessionCap = 20
 
+	// MaxKindRun is the longest run of the same activity kind across the
+	// session while another kind is still waiting (ADR-0028 D6).
+	MaxKindRun = 3
+
 	// TargetSuccess is the session success rate the default mix aims at.
 	// The literal lives in sessionlimits so the authoring coach reads the
 	// same value BuildSession uses.
@@ -237,19 +241,43 @@ func accuracyOf(ratings []int) float64 {
 // mix orders candidates and returns the queue. accuracy is the recent
 // Good/Easy share, now is the clock, and seed breaks due-time ties.
 func mix(cands []Candidate, accuracy float64, now time.Time, seed int64) []CardRef {
-	return mixGate(cands, accuracy, now, seed, activity.OpenGate())
+	cards, _ := mixGate(cands, accuracy, now, seed, activity.OpenGate())
+	return cards
 }
 
 // mixGate is mix for a learner whose skills are open as gate says. Choosing cards is
 // the old mix. Each card is then asked through its own skill, or moved up, as annotate
-// does (INIT-027/SPEC-004).
-func mixGate(cands []Candidate, accuracy float64, now time.Time, seed int64, gate activity.Gate) []CardRef {
-	queue := mixCards(cands, accuracy, now, seed)
-	byID := make(map[int64]Candidate, len(cands))
-	for _, c := range cands {
+// does (INIT-027/SPEC-004). SkippedNoAudio counts due listen cards left out because
+// they have no clip (ADR-0028 D6).
+func mixGate(cands []Candidate, accuracy float64, now time.Time, seed int64, gate activity.Gate) ([]CardRef, int) {
+	askable, skipped := filterReviewAskable(cands, now)
+	queue := mixCards(askable, accuracy, now, seed)
+	byID := make(map[int64]Candidate, len(askable))
+	for _, c := range askable {
 		byID[c.ID] = c
 	}
-	return annotate(queue, byID, gate)
+	// Kind weave can put the same lexeme side by side; separate again after it.
+	return separateLexemes(limitKindRuns(annotate(queue, byID, gate))), skipped
+}
+
+// filterReviewAskable drops due listening cards that have no clip (ADR-0028 D6).
+// Those stay due and are counted in SkippedNoAudio. A closed letters gate is not
+// an omission: ChooseSkill keeps the flashcard sentinel so promoteFlashcard can
+// serve a two-choice read_pick. Drills pass through. Lessons do not use this path.
+func filterReviewAskable(cands []Candidate, now time.Time) (kept []Candidate, skippedNoAudio int) {
+	kept = make([]Candidate, 0, len(cands))
+	for _, c := range cands {
+		if c.Kind == KindLetter || c.Kind == KindPattern {
+			kept = append(kept, c)
+			continue
+		}
+		if c.Skill == fsrs.SkillListen && !c.Facts.HasAudio && !c.Due.After(now) {
+			skippedNoAudio++
+			continue
+		}
+		kept = append(kept, c)
+	}
+	return kept, skippedNoAudio
 }
 
 // annotate gives every study visit its activity. The visit is asked through the
@@ -258,8 +286,8 @@ func mixGate(cands []Candidate, accuracy float64, now time.Time, seed int64, gat
 // activity so a wrong moved-up answer can requeue as the own skill. CardID and
 // Skill stay the due card the mix chose.
 //
-// Visits are taken in queue order. MatchEvery alternates through ChooseSkill's
-// visits count for the skill that is asked. A new card whose word has never
+// Visits are taken in queue order. ChooseSkill alternates the everyday and
+// match kinds by position in that skill's run. A new card whose word has never
 // been shown opens with an exposure.
 func annotate(queue []CardRef, byID map[int64]Candidate, gate activity.Gate) []CardRef {
 	visits := map[string]int{}
@@ -596,24 +624,208 @@ func classify(c Candidate, now time.Time) kind {
 }
 
 // assemble takes due struggling and due known cards only. A known card that is
-// not due is never added to fill the known share (INIT-027/SPEC-004). Room left
-// under SessionCap is filled from the other due side.
+// not due is never added to fill the known share (INIT-027/SPEC-004). After
+// PlanFor sets the known/struggle cap, each pool shares its seats among skills
+// in proportion to that pool's due counts (largest remainder, at least one
+// each). Room left under SessionCap is filled from the other due side under
+// the overall skill shares. Inside a skill the soonest-due order is kept
+// (ADR-0028 D6).
 func assemble(dueS, dueK []Candidate, accuracy float64) []CardRef {
 	plan := PlanFor(accuracy)
-	nS := min(len(dueS), plan.Struggle)
-	nK := min(len(dueK), plan.Known)
-	s := append([]Candidate{}, dueS[:nS]...)
-	k := append([]Candidate{}, dueK[:nK]...)
+	typedTaken := map[int64]bool{}
+	take := func(pool []Candidate, n int, shares, used map[string]int) []Candidate {
+		if n <= 0 {
+			return nil
+		}
+		var out []Candidate
+		for _, c := range pool {
+			if len(out) >= n {
+				break
+			}
+			if share, ok := shares[c.Skill]; ok && used[c.Skill] >= share {
+				continue
+			}
+			if (c.Skill == fsrs.SkillRecall || c.Skill == fsrs.SkillSpell) && typedTaken[c.LexemeID] {
+				continue
+			}
+			out = append(out, c)
+			used[c.Skill]++
+			if c.Skill == fsrs.SkillRecall || c.Skill == fsrs.SkillSpell {
+				typedTaken[c.LexemeID] = true
+			}
+		}
+		return out
+	}
+	shareS := skillShares(countBySkill(dueS), plan.Struggle)
+	shareK := skillShares(countBySkill(dueK), plan.Known)
+	usedS, usedK := map[string]int{}, map[string]int{}
+	s := take(dueS, plan.Struggle, shareS, usedS)
+	k := take(dueK, plan.Known, shareK, usedK)
 	room := SessionCap - len(s) - len(k)
-	if room > 0 {
-		extra := take(dueS[nS:], room)
-		s = append(s, extra...)
-		room -= len(extra)
+	overall := skillShares(countBySkill(append(append([]Candidate{}, dueS...), dueK...)), SessionCap)
+	usedAll := map[string]int{}
+	for skill, n := range usedS {
+		usedAll[skill] += n
+	}
+	for skill, n := range usedK {
+		usedAll[skill] += n
 	}
 	if room > 0 {
-		k = append(k, take(dueK[nK:], room)...)
+		s = append(s, take(skipTaken(dueS, s), room, overall, usedAll)...)
+		room = SessionCap - len(s) - len(k)
+	}
+	if room > 0 {
+		k = append(k, take(skipTaken(dueK, k), room, overall, usedAll)...)
 	}
 	return interleave(refs(k, false), refs(s, true))
+}
+
+func countBySkill(cands []Candidate) map[string]int {
+	out := map[string]int{}
+	for _, c := range cands {
+		out[c.Skill]++
+	}
+	return out
+}
+
+func skipTaken(pool, taken []Candidate) []Candidate {
+	have := map[int64]bool{}
+	for _, c := range taken {
+		have[c.ID] = true
+	}
+	var out []Candidate
+	for _, c := range pool {
+		if !have[c.ID] {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// skillShares splits slots among skills with due cards by largest remainder.
+// Each skill with due cards gets at least one slot when slots allow.
+func skillShares(dueBySkill map[string]int, slots int) map[string]int {
+	type part struct {
+		skill string
+		due   int
+		exact float64
+		got   int
+	}
+	var parts []part
+	totalDue := 0
+	for _, skill := range activity.Skills {
+		n := dueBySkill[skill]
+		if n <= 0 {
+			continue
+		}
+		parts = append(parts, part{skill: skill, due: n})
+		totalDue += n
+	}
+	out := map[string]int{}
+	if len(parts) == 0 || slots <= 0 || totalDue == 0 {
+		return out
+	}
+	if slots < len(parts) {
+		slices.SortFunc(parts, func(a, b part) int {
+			if n := cmp.Compare(b.due, a.due); n != 0 {
+				return n
+			}
+			return slices.Index(activity.Skills, a.skill) - slices.Index(activity.Skills, b.skill)
+		})
+		for i := 0; i < slots; i++ {
+			out[parts[i].skill] = 1
+		}
+		return out
+	}
+	remain := slots - len(parts)
+	for i := range parts {
+		parts[i].got = 1
+		if remain > 0 {
+			parts[i].exact = float64(remain) * float64(parts[i].due) / float64(totalDue)
+			parts[i].got += int(parts[i].exact)
+		}
+	}
+	used := 0
+	for _, p := range parts {
+		used += p.got
+	}
+	leftover := slots - used
+	if leftover > 0 {
+		slices.SortFunc(parts, func(a, b part) int {
+			fa, fb := a.exact-float64(int(a.exact)), b.exact-float64(int(b.exact))
+			if n := cmp.Compare(fb, fa); n != 0 {
+				return n
+			}
+			if n := cmp.Compare(b.due, a.due); n != 0 {
+				return n
+			}
+			return slices.Index(activity.Skills, a.skill) - slices.Index(activity.Skills, b.skill)
+		})
+		for i := 0; i < leftover; i++ {
+			parts[i%len(parts)].got++
+		}
+	}
+	for _, p := range parts {
+		out[p.skill] = p.got
+	}
+	return out
+}
+
+// limitKindRuns reorders study visits so the same activity kind does not run
+// longer than MaxKindRun while another kind is still waiting. Cards are never
+// dropped (ADR-0028 D6). Drill steps keep their seats.
+func limitKindRuns(queue []CardRef) []CardRef {
+	out := append([]CardRef(nil), queue...)
+	var study []CardRef
+	var seats []int
+	for i, ref := range out {
+		if studyKind(ref) {
+			study = append(study, ref)
+			seats = append(seats, i)
+		}
+	}
+	if len(study) == 0 {
+		return out
+	}
+	spread := spreadKinds(study)
+	for i, seat := range seats {
+		out[seat] = spread[i]
+	}
+	return out
+}
+
+func spreadKinds(cards []CardRef) []CardRef {
+	pending := append([]CardRef(nil), cards...)
+	out := make([]CardRef, 0, len(cards))
+	run := 0
+	var prev activity.Kind
+	for len(pending) > 0 {
+		pick := 0
+		if run >= MaxKindRun && prev != "" {
+			for i, c := range pending {
+				if c.Activity != prev {
+					pick = i
+					break
+				}
+			}
+		}
+		c := pending[pick]
+		pending = append(pending[:pick], pending[pick+1:]...)
+		if c.Activity == prev {
+			run++
+		} else {
+			prev, run = c.Activity, 1
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
+func studyKind(ref CardRef) bool {
+	if ref.Kind == KindLetter || ref.Kind == KindPattern || ref.CardID <= 0 {
+		return false
+	}
+	return ref.Activity != "" && ref.Activity != activity.Flashcard
 }
 
 func take(in []Candidate, n int) []Candidate {

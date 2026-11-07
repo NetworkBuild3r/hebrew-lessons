@@ -62,6 +62,27 @@ func (r *Recorder) creditTypedSpelling(ctx context.Context, a Attempt) error {
 	return r.spellImplied(ctx, a.UserID, id, rating)
 }
 
+// creditTypedRecall applies ADR-0028 D6 after an exact type_it answer on a
+// spelling card: an implied Good on the recall card when one exists. A near
+// miss, wrong answer, or don't-know is a no-op for recall. The spelling card
+// was already rated by Attempt.
+func (r *Recorder) creditTypedRecall(ctx context.Context, a Attempt) error {
+	if a.Activity != activityTypeIt || a.Skill != fsrs.SkillSpell {
+		return nil
+	}
+	if a.DontKnow || !a.Correct || a.NearMiss {
+		return nil
+	}
+	id, ok, err := r.store.CardID(ctx, a.UserID, a.LexemeID, fsrs.SkillRecall)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	return r.Implied(ctx, a.UserID, id, fsrs.Good)
+}
+
 // spellImplied schedules an implied spelling review on cardID. rating is Good
 // or Hard (ADR-0027 D3). The card must belong to learnerID. Recorder.Implied
 // stays Good-only; this is the spelling path.

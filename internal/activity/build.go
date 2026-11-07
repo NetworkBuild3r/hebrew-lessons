@@ -130,6 +130,7 @@ type buildConfig struct {
 	source  string
 	unit    int64
 	choices int
+	skill   string
 }
 
 // WithChoices sets how many options a pick shows, including the answer.
@@ -150,6 +151,10 @@ func WithSource(source string) BuildOption { return func(c *buildConfig) { c.sou
 
 // WithUnit sets the unit a lesson item belongs to.
 func WithUnit(unitID int64) BuildOption { return func(c *buildConfig) { c.unit = unitID } }
+
+// WithSkill sets the skill the item trains. Required when Kind is TypeIt and the
+// visit is spelling (ADR-0028 D6): SpecOf(TypeIt) alone would train recall.
+func WithSkill(skill string) BuildOption { return func(c *buildConfig) { c.skill = skill } }
 
 // built is an item with the answer the server keeps for it. Tests read the answer.
 type built struct {
@@ -186,7 +191,7 @@ func (e *Engine) build(ctx context.Context, userID, lexemeID int64, kind Kind, o
 	default:
 		return built{}, ErrBadSource
 	}
-	spec, ok := SpecOf(kind)
+	spec, ok := SpecFor(kind, cfg.skill)
 	if !ok {
 		return built{}, ErrUnknownActivity
 	}

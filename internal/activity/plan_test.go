@@ -38,6 +38,10 @@ func TestSpecTable(t *testing.T) {
 			t.Errorf("SpecOf(%s) = %+v, %v", w.kind, s, ok)
 		}
 	}
+	spellType, ok := SpecFor(TypeIt, fsrs.SkillSpell)
+	if !ok || !spellType.Checked || !spellType.Typed || spellType.Skill != fsrs.SkillSpell {
+		t.Errorf("SpecFor(type_it, spell) = %+v, %v", spellType, ok)
+	}
 	if s, ok := SpecOf(Flashcard); !ok || s.Checked || s.Skill != "" {
 		t.Errorf("flashcard = %+v, %v", s, ok)
 	}
@@ -158,8 +162,9 @@ func TestWeakestSkills(t *testing.T) {
 				view("listen", learner.Learning, 0.9, 8), view("read", learner.Learning, 0.1, 8),
 				view("recall", learner.Learning, 0.5, 8), view("spell", learner.Learning, 0.5, 8),
 			},
-			gate: open, facts: Facts{HasGloss: true}, // no clip and no other words: only typing fits
-			want: []string{"recall"},
+			// No clip and too few other glosses: listen/read need options; typing (recall+spell) fits.
+			gate: open, facts: Facts{HasGloss: true},
+			want: []string{"recall", "spell"},
 		},
 		{
 			name:  "no model data ranks every skill as unseen",
@@ -264,7 +269,7 @@ func TestChoose(t *testing.T) {
 				t.Fatalf("%+v chosen although nothing fits", c)
 			}
 			if c.Kind != Flashcard {
-				if spec, _ := SpecOf(c.Kind); spec.Skill != c.Skill || !facts.Fits(c.Kind) || !gate.Open(c.Skill) {
+				if spec, ok := SpecFor(c.Kind, c.Skill); !ok || spec.Skill != c.Skill || !facts.Fits(c.Kind) || !gate.Open(c.Skill) {
 					t.Fatalf("choice %+v does not fit: facts %+v gate %+v", c, facts, gate)
 				}
 			}
@@ -308,10 +313,11 @@ func TestChooseSkill(t *testing.T) {
 	if c.Kind != ReadPick || c.Skill != fsrs.SkillRead {
 		t.Fatalf("ChooseSkill = %+v, want read_pick", c)
 	}
-	visits[fsrs.SkillRead] = 2
+	// Review alternates everyday and match by position (ADR-0028 D6).
+	visits[fsrs.SkillRead] = 1
 	c = ChooseSkill(fsrs.SkillRead, open, allFacts, visits)
 	if c.Kind != WordMatch {
-		t.Fatalf("third visit = %+v, want word_match", c)
+		t.Fatalf("second visit = %+v, want word_match", c)
 	}
 	c = ChooseSkill(fsrs.SkillRead, Gate{}, allFacts, nil)
 	if c.Kind != Flashcard || c.Skill != fsrs.SkillRead {
@@ -320,5 +326,14 @@ func TestChooseSkill(t *testing.T) {
 	c = ChooseSkill(fsrs.SkillRecall, open, Facts{}, nil)
 	if c.Kind != Flashcard || c.Skill != fsrs.SkillRecall {
 		t.Fatalf("no fit = %+v, want flashcard", c)
+	}
+	// Spelling without a clip is type_it; with a clip, dictation only.
+	c = ChooseSkill(fsrs.SkillSpell, open, Facts{HasGloss: true, GlossedOthers: 10}, nil)
+	if c.Kind != TypeIt || c.Skill != fsrs.SkillSpell {
+		t.Fatalf("spell without clip = %+v, want type_it", c)
+	}
+	c = ChooseSkill(fsrs.SkillSpell, open, allFacts, nil)
+	if c.Kind != Dictation {
+		t.Fatalf("spell with clip = %+v, want dictation", c)
 	}
 }

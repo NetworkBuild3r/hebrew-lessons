@@ -910,61 +910,11 @@ func TestReviewCheckedActivityFlow(t *testing.T) {
 		t.Fatalf("next = %d", rec.Code)
 	}
 	page = rec.Body.String()
-	if attr(t, page, "data-phase") != "ask" || attr(t, page, "data-index") != "2" || attr(t, page, "data-activity") != "read_pick" {
+	// Review alternates everyday and match within a skill (ADR-0028 D6): visit 2 is word_match.
+	if attr(t, page, "data-phase") != "ask" || attr(t, page, "data-index") != "2" || attr(t, page, "data-activity") != "word_match" {
 		t.Fatalf("the second visit: %s", cardAttrs(page))
 	}
-	second := askedByHe(t, page, words)
-	if second.id == first.id {
-		t.Fatal("the same word came twice in a row")
-	}
 	total, _ := strconv.Atoi(attr(t, page, "data-total"))
-
-	// A wrong answer shows the right response. The miss is not asked again in this sitting.
-	options = pickRe.FindAllStringSubmatch(page, -1)
-	wrongIx, pickedGloss := -1, ""
-	for _, o := range options {
-		if o[2] != second.gloss {
-			wrongIx, _ = strconv.Atoi(o[1])
-			pickedGloss = o[2]
-			break
-		}
-	}
-	rec = actPost(t, h, learner, "/_hx/review/answer", answerForm(page, "choice", strconv.Itoa(wrongIx)))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("wrong answer = %d", rec.Code)
-	}
-	fb = rec.Body.String()
-	sheet = sheetOf(t, fb)
-	if strings.Count(fb, `data-state="wrong"`) != 1 || strings.Count(fb, `data-state="correct"`) != 1 {
-		t.Fatalf("a wrong answer does not mark the pick Wrong and the answer Correct: %s", fb)
-	}
-	if !strings.Contains(sheet, "feedback-wrong") || !strings.Contains(sheet, ">"+second.gloss+"<") || !strings.Contains(sheet, second.he) || !strings.Contains(sheet, `data-src="/audio/`+second.audio+`.mp3"`) {
-		t.Fatalf("the sheet lacks the right gloss, the pointed Hebrew, or the clip: %s", sheet)
-	}
-	if !strings.Contains(sheet, "You picked") || !strings.Contains(sheet, ">"+pickedGloss+"<") || !strings.Contains(sheet, "That&#39;s") {
-		t.Fatalf("a confusion is not named: %s", sheet)
-	}
-	if got, _ := strconv.Atoi(attr(t, fb, "data-total")); got != total {
-		t.Fatalf("a miss changed the sitting length: total %d, was %d", got, total)
-	}
-	if !strings.Contains(fb, `data-answered="2"`) || !strings.Contains(fb, `data-correct="1"`) {
-		t.Fatalf("counts after a miss: %s", cardAttrs(fb))
-	}
-	attempts = mustAttempts(t, store, learner.user.ID, second.id)
-	if len(attempts) != 1 || attempts[0].Correct {
-		t.Fatalf("attempts = %+v", attempts)
-	}
-	missedCard := second.card
-
-	// The third visit through reading is word_match (every third visit).
-	rec = actPost(t, h, learner, "/_hx/review/next", nextForm(fb))
-	page = rec.Body.String()
-	if attr(t, page, "data-activity") != "word_match" {
-		t.Fatalf("the third visit is not a word_match: %s", cardAttrs(page))
-	}
-	if attr(t, page, "data-retry") == "true" || attr(t, page, "data-card") == strconv.FormatInt(missedCard, 10) {
-		t.Fatalf("the missed word came back in the same sitting: %s", cardAttrs(page))
-	}
 	lefts := leftHeRe.FindAllStringSubmatch(page, -1)
 	glosses := rightRe.FindAllStringSubmatch(page, -1)
 	if len(lefts) != 5 || len(glosses) != 5 {
@@ -991,10 +941,68 @@ func TestReviewCheckedActivityFlow(t *testing.T) {
 	if strings.Count(fb, gold) != 1 {
 		t.Fatal("word_match feedback has no single gold action")
 	}
+	if got, _ := strconv.Atoi(attr(t, fb, "data-total")); got != total {
+		t.Fatalf("word_match changed the sitting length: total %d, was %d", got, total)
+	}
+	if !strings.Contains(fb, `data-answered="2"`) || !strings.Contains(fb, `data-correct="2"`) {
+		t.Fatalf("counts after word_match: %s", cardAttrs(fb))
+	}
+
+	// The third visit is read_pick again; a wrong pick shows the answer and is not requeued.
 	rec = actPost(t, h, learner, "/_hx/review/next", nextForm(fb))
 	page = rec.Body.String()
+	if attr(t, page, "data-activity") != "read_pick" {
+		t.Fatalf("the third visit is not a read_pick: %s", cardAttrs(page))
+	}
 	if attr(t, page, "data-activity") == "word_match" {
 		t.Fatal("two match items in a row")
+	}
+	second := askedByHe(t, page, words)
+	if second.id == first.id {
+		t.Fatal("the same word came twice without another between")
+	}
+	options = pickRe.FindAllStringSubmatch(page, -1)
+	wrongIx, pickedGloss := -1, ""
+	for _, o := range options {
+		if o[2] != second.gloss {
+			wrongIx, _ = strconv.Atoi(o[1])
+			pickedGloss = o[2]
+			break
+		}
+	}
+	rec = actPost(t, h, learner, "/_hx/review/answer", answerForm(page, "choice", strconv.Itoa(wrongIx)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("wrong answer = %d", rec.Code)
+	}
+	fb = rec.Body.String()
+	sheet = sheetOf(t, fb)
+	if strings.Count(fb, `data-state="wrong"`) != 1 || strings.Count(fb, `data-state="correct"`) != 1 {
+		t.Fatalf("a wrong answer does not mark the pick Wrong and the answer Correct: %s", fb)
+	}
+	if !strings.Contains(sheet, "feedback-wrong") || !strings.Contains(sheet, ">"+second.gloss+"<") || !strings.Contains(sheet, second.he) || !strings.Contains(sheet, `data-src="/audio/`+second.audio+`.mp3"`) {
+		t.Fatalf("the sheet lacks the right gloss, the pointed Hebrew, or the clip: %s", sheet)
+	}
+	if !strings.Contains(sheet, "You picked") || !strings.Contains(sheet, ">"+pickedGloss+"<") || !strings.Contains(sheet, "That&#39;s") {
+		t.Fatalf("a confusion is not named: %s", sheet)
+	}
+	if !strings.Contains(fb, `data-answered="3"`) || !strings.Contains(fb, `data-correct="2"`) {
+		t.Fatalf("counts after a miss: %s", cardAttrs(fb))
+	}
+	attempts = mustAttempts(t, store, learner.user.ID, second.id)
+	var miss []db.Attempt
+	for _, a := range attempts {
+		if a.Activity == "read_pick" && !a.Correct {
+			miss = append(miss, a)
+		}
+	}
+	if len(miss) != 1 {
+		t.Fatalf("read_pick miss attempts = %+v (all %+v)", miss, attempts)
+	}
+	missedCard := second.card
+	rec = actPost(t, h, learner, "/_hx/review/next", nextForm(fb))
+	page = rec.Body.String()
+	if attr(t, page, "data-retry") == "true" || attr(t, page, "data-card") == strconv.FormatInt(missedCard, 10) {
+		t.Fatalf("the missed word came back in the same sitting: %s", cardAttrs(page))
 	}
 }
 
@@ -1006,17 +1014,16 @@ func TestWordMatchAnswerIsValidated(t *testing.T) {
 	words := seedLexicon(t, store, now, 8, true, true)
 	giveCards(t, store, learner.user.ID, now, words)
 	page := getLearner(t, h, learner, "/review")
-	for i := 0; i < 2; i++ {
-		right := askedByHe(t, page, words)
-		ix := -1
-		for _, o := range pickRe.FindAllStringSubmatch(page, -1) {
-			if o[2] == right.gloss {
-				ix, _ = strconv.Atoi(o[1])
-			}
+	// One read_pick, then the skill alternates to word_match (ADR-0028 D6).
+	right := askedByHe(t, page, words)
+	ix := -1
+	for _, o := range pickRe.FindAllStringSubmatch(page, -1) {
+		if o[2] == right.gloss {
+			ix, _ = strconv.Atoi(o[1])
 		}
-		rec := actPost(t, h, learner, "/_hx/review/answer", answerForm(page, "choice", strconv.Itoa(ix)))
-		page = actPost(t, h, learner, "/_hx/review/next", nextForm(rec.Body.String())).Body.String()
 	}
+	rec := actPost(t, h, learner, "/_hx/review/answer", answerForm(page, "choice", strconv.Itoa(ix)))
+	page = actPost(t, h, learner, "/_hx/review/next", nextForm(rec.Body.String())).Body.String()
 	if attr(t, page, "data-activity") != "word_match" {
 		t.Fatalf("not a word_match: %s", cardAttrs(page))
 	}
@@ -1031,7 +1038,7 @@ func TestWordMatchAnswerIsValidated(t *testing.T) {
 		}
 	}
 	// "I don't know" is an answer: it shows the pairs and writes the attempts.
-	rec := actPost(t, h, learner, "/_hx/review/answer", answerForm(page, "dont_know", "1"))
+	rec = actPost(t, h, learner, "/_hx/review/answer", answerForm(page, "dont_know", "1"))
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Here is the answer") || strings.Contains(rec.Body.String(), `data-state="correct"`) {
 		t.Fatalf("dont_know = %d %s", rec.Code, rec.Body.String())
 	}

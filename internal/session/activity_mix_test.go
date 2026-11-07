@@ -129,19 +129,31 @@ func TestMixNeverAsksAFlashcardWhenACheckedActivityFits(t *testing.T) {
 	}
 }
 
-func TestMixKeepsTheFlashcardWhereNothingCanBeChecked(t *testing.T) {
+func TestMixOmitsListenWithoutClipKeepsFlashcardSentinel(t *testing.T) {
+	// ADR-0028 D6: only listen-without-clip is omitted. Other unaskable skills
+	// keep the flashcard sentinel for promoteFlashcard.
 	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	c := modelCand(1, fsrs.SkillRecall, now.Add(-time.Hour))
 	c.Facts = activity.Facts{} // no gloss and no clip
-	noModel := knownCand(2, now.Add(-time.Minute))
-	got := mix([]Candidate{c, noModel}, TargetSuccess, now, 1)
-	if len(got) != 2 {
-		t.Fatalf("queue = %+v", got)
+	listen := modelCand(2, fsrs.SkillListen, now.Add(-time.Minute))
+	listen.Facts = activity.Facts{HasGloss: true, GlossedOthers: 40} // no clip
+	askable := modelCand(3, fsrs.SkillRead, now.Add(-2*time.Minute))
+	got, skipped := mixGate([]Candidate{c, listen, askable}, TargetSuccess, now, 1, activity.OpenGate())
+	if skipped != 1 {
+		t.Fatalf("SkippedNoAudio = %d, want 1 listen without clip", skipped)
 	}
+	byID := map[int64]CardRef{}
 	for _, ref := range got {
-		if ref.Activity != activity.Flashcard || ref.AskSkill != ref.Skill {
-			t.Fatalf("ref = %+v, want a flashcard through the card's skill", ref)
-		}
+		byID[ref.CardID] = ref
+	}
+	if _, ok := byID[2]; ok {
+		t.Fatalf("listen without clip stayed in the queue: %+v", got)
+	}
+	if ref, ok := byID[1]; !ok || ref.Activity != activity.Flashcard || ref.AskSkill != fsrs.SkillRecall {
+		t.Fatalf("no-fit recall = %+v, want flashcard sentinel", ref)
+	}
+	if ref, ok := byID[3]; !ok || ref.Activity == activity.Flashcard {
+		t.Fatalf("askable read = %+v", ref)
 	}
 }
 
@@ -177,10 +189,11 @@ func TestMixRotatesTheEverydayAndTheMatchActivity(t *testing.T) {
 	for _, ref := range got {
 		kinds = append(kinds, ref.Activity)
 	}
+	// Review alternates everyday and match within the skill run (ADR-0028 D6).
 	want := []activity.Kind{
-		activity.ReadPick, activity.ReadPick, activity.WordMatch,
-		activity.ReadPick, activity.ReadPick, activity.WordMatch,
-		activity.ReadPick, activity.ReadPick, activity.WordMatch,
+		activity.ReadPick, activity.WordMatch, activity.ReadPick, activity.WordMatch,
+		activity.ReadPick, activity.WordMatch, activity.ReadPick, activity.WordMatch,
+		activity.ReadPick,
 	}
 	if !reflect.DeepEqual(kinds, want) {
 		t.Fatalf("activities = %v, want %v", kinds, want)
@@ -209,13 +222,13 @@ func TestMixHonoursTheGate(t *testing.T) {
 		skillView("listen", learner.Known, 0.95, 8), skillView("read", learner.Struggling, 0.1, 8),
 		skillView("recall", learner.Struggling, 0.1, 8), skillView("spell", learner.Struggling, 0.1, 8),
 	}
-	closed := mixGate([]Candidate{c}, TargetSuccess, now, 1, activity.Gate{})
-	if closed[0].Activity != activity.Flashcard || closed[0].AskSkill != fsrs.SkillRecall {
-		t.Fatalf("closed gate: %+v, want a flashcard through recall", closed[0])
+	closed, _ := mixGate([]Candidate{c}, TargetSuccess, now, 1, activity.Gate{})
+	if len(closed) != 1 || closed[0].Activity != activity.Flashcard || closed[0].AskSkill != fsrs.SkillRecall {
+		t.Fatalf("closed gate: %+v, want a flashcard through recall", closed)
 	}
-	opened := mixGate([]Candidate{c}, TargetSuccess, now, 1, activity.OpenGate())
-	if opened[0].Activity != activity.TypeIt || opened[0].AskSkill != fsrs.SkillRecall {
-		t.Fatalf("open gate: %+v, want type_it through recall", opened[0])
+	opened, _ := mixGate([]Candidate{c}, TargetSuccess, now, 1, activity.OpenGate())
+	if len(opened) != 1 || opened[0].Activity != activity.TypeIt || opened[0].AskSkill != fsrs.SkillRecall {
+		t.Fatalf("open gate: %+v, want type_it through recall", opened)
 	}
 }
 
@@ -398,17 +411,25 @@ func TestBuildSessionKeepsFlashcardsWhereTheLexiconCannotCheck(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	userID := mustUser(t, store)
 	due, reviewed := clk.Now().Add(-time.Hour), clk.Now().Add(-48*time.Hour)
-	// Words with no gloss and no clip, as every v2 word is.
-	var cards []int64
+	// Words with no gloss and no clip: flashcard sentinel for promoteFlashcard
+	// (not omitted — only listen-without-clip is).
+	ctx := context.Background()
 	for i := 0; i < 5; i++ {
-		cards = append(cards, addCard(t, store, userID, fmt.Sprintf("bare-%d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false))
+		res, err := store.ExecContext(ctx, `INSERT INTO lexemes (text_nfc) VALUES (?)`, fmt.Sprintf("bare-%d", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		lex, err := res.LastInsertId()
+		if err != nil {
+			t.Fatal(err)
+		}
+		addCardFor(t, store, userID, lex, fsrs.SkillRead, due, int(fsrs.Good), reviewed)
 	}
 	for _, ref := range drain(t, mustBuild(t, svc, userID)) {
 		if ref.Activity != activity.Flashcard || ref.AskSkill != fsrs.SkillRead {
 			t.Fatalf("ref = %+v, want a flashcard through read", ref)
 		}
 	}
-	_ = cards
 }
 
 func TestBuildSessionFollowsTheGate(t *testing.T) {
@@ -451,11 +472,13 @@ func TestBuildSessionReadsConfusionsFromTheLearnerModel(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	ctx := context.Background()
 	userID := mustUser(t, store)
+	fillPool(t, store, 30)
 	due, reviewed := clk.Now().Add(-time.Minute), clk.Now().Add(-time.Hour)
-	he := addCard(t, store, userID, "מבולבל", fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
-	steady := addCard(t, store, userID, "יציב", fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
-	lexeme := lexemeOf(t, store, he)
-	if err := store.InsertConfusionMiss(ctx, userID, fsrs.MissOther, "אחר/מבולבל", lexeme, clk.Now().Add(-time.Hour)); err != nil {
+	heLex := addVoicedLexeme(t, store, "מבולבל", "confused", false)
+	steadyLex := addVoicedLexeme(t, store, "יציב2", "steady", false)
+	he := addCardFor(t, store, userID, heLex, fsrs.SkillRead, due, int(fsrs.Good), reviewed)
+	steady := addCardFor(t, store, userID, steadyLex, fsrs.SkillRead, due, int(fsrs.Good), reviewed)
+	if err := store.InsertConfusionMiss(ctx, userID, fsrs.MissOther, "אחר/מבולבל", heLex, clk.Now().Add(-time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	flags := map[int64]bool{}
@@ -483,17 +506,24 @@ func TestBuildSessionQueuesListenAndSpellCards(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	userID := mustUser(t, store)
 	due, reviewed := clk.Now().Add(-time.Hour), clk.Now().Add(-48*time.Hour)
-	listen := addCard(t, store, userID, "שמיעה", fsrs.SkillListen, due, 0, int(fsrs.Again), reviewed, false)
-	spell := addCard(t, store, userID, "איות", fsrs.SkillSpell, due, 0, int(fsrs.Good), reviewed, false)
+	fillPool(t, store, 30)
+	listenWord := addVoicedLexeme(t, store, "שמיעה", "hearing", true)
+	spellWord := addVoicedLexeme(t, store, "איות", "spelling", true)
+	listen := addCardFor(t, store, userID, listenWord, fsrs.SkillListen, due, int(fsrs.Again), reviewed)
+	spell := addCardFor(t, store, userID, spellWord, fsrs.SkillSpell, due, int(fsrs.Good), reviewed)
+	sess := mustBuild(t, svc, userID)
 	got := map[int64]CardRef{}
-	for _, ref := range drain(t, mustBuild(t, svc, userID)) {
+	for _, ref := range drain(t, sess) {
 		got[ref.CardID] = ref
 	}
 	if got[listen].Skill != fsrs.SkillListen || !got[listen].Struggling {
 		t.Fatalf("listen card = %+v, want queued as struggling", got[listen])
 	}
-	if got[spell].Skill != fsrs.SkillSpell || got[spell].Struggling {
-		t.Fatalf("spell card = %+v", got[spell])
+	if got[spell].Skill != fsrs.SkillSpell || got[spell].Struggling || got[spell].Activity != activity.Dictation {
+		t.Fatalf("spell card = %+v, want dictation", got[spell])
+	}
+	if sess.SkippedNoAudio != 0 {
+		t.Fatalf("SkippedNoAudio = %d, want 0 when clips exist", sess.SkippedNoAudio)
 	}
 }
 
@@ -501,10 +531,13 @@ func TestBuildSessionMarksIntroForNewWordsNotYetShown(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	ctx := context.Background()
 	userID := mustUser(t, store)
+	fillPool(t, store, 30)
 	due := clk.Now().Add(-time.Hour)
-	fresh := addCard(t, store, userID, "חדש", fsrs.SkillRead, due, 0, 0, time.Time{}, false)
-	shownCard := addCard(t, store, userID, "מוכר", fsrs.SkillRead, due, 0, 0, time.Time{}, false)
-	if err := svc.record.Expose(ctx, userID, []int64{lexemeOf(t, store, shownCard)}, evidence.ContextLessonIntro, 0); err != nil {
+	freshLex := addVoicedLexeme(t, store, "חדש", "new", false)
+	shownLex := addVoicedLexeme(t, store, "מוכר", "familiar", false)
+	fresh := addCardFor(t, store, userID, freshLex, fsrs.SkillRead, due, 0, time.Time{})
+	shownCard := addCardFor(t, store, userID, shownLex, fsrs.SkillRead, due, 0, time.Time{})
+	if err := svc.record.Expose(ctx, userID, []int64{shownLex}, evidence.ContextLessonIntro, 0); err != nil {
 		t.Fatal(err)
 	}
 	got := map[int64]CardRef{}
@@ -592,19 +625,19 @@ func TestAnsweredClosesACheckedVisit(t *testing.T) {
 }
 
 func TestAnsweredRefusesFlashcards(t *testing.T) {
-	svc, store, clk := openSvc(t, 1)
-	userID := mustUser(t, store)
-	addCard(t, store, userID, "בלי-תשובה", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), clk.Now().Add(-48*time.Hour), false)
-	sess := mustBuild(t, svc, userID)
-	card, _ := sess.Next()
-	if card.Activity != activity.Flashcard {
-		t.Fatalf("card = %+v", card)
+	// Review omits unaskable cards (ADR-0028 D6). Answered still refuses a
+	// flashcard visit if one is present on the session.
+	sess := &Session{
+		userID: 1,
+		last: CardRef{
+			CardID: 7, LexemeID: 7, Skill: fsrs.SkillRead,
+			Activity: activity.Flashcard, AskSkill: fsrs.SkillRead,
+		},
+		hasLast: true,
 	}
-	if _, err := sess.Answered(context.Background(), card.CardID, activity.Result{Correct: true}); !errors.Is(err, ErrNotChecked) {
+	if _, err := sess.Answered(context.Background(), 7, activity.Result{Correct: true}); !errors.Is(err, ErrNotChecked) {
 		t.Fatalf("err = %v, want ErrNotChecked", err)
 	}
-	// The serve is untouched: the flashcard can still be graded as before.
-	revealAndRecord(t, sess, context.Background(), card.CardID, fsrs.Good)
 }
 
 // A checked ref can still be graded as a flashcard, so a screen that does not know the

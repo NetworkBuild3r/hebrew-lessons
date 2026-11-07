@@ -378,7 +378,9 @@ func TestDrillAnsweredRefusals(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	ctx := context.Background()
 	userID := mustUser(t, store)
-	cardID := addCard(t, store, userID, "סֵפֶר", fsrs.SkillRead, clk.Now().Add(-time.Hour), 0, int(fsrs.Good), clk.Now().Add(-48*time.Hour), false)
+	fillPool(t, store, 30)
+	lex := addVoicedLexeme(t, store, "ספר-drill", "book-drill", false)
+	cardID := addCardFor(t, store, userID, lex, fsrs.SkillRead, clk.Now().Add(-time.Hour), int(fsrs.Good), clk.Now().Add(-48*time.Hour))
 	seedLetterMisses(t, store, clk, userID, "ב/כ", MinMissesForDrill)
 	sess := mustBuild(t, svc, userID)
 

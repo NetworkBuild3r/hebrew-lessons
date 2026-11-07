@@ -110,7 +110,8 @@ func (s *server) promoteFlashcard(ctx context.Context, q *studyQueue) error {
 // buildItem builds the item for a card. ok is false when the lexicon cannot support the
 // activity, which is not an error: the visit becomes a flashcard.
 func (s *server) buildItem(ctx context.Context, userID int64, ref session.CardRef) (activity.Item, bool, error) {
-	item, err := s.engine.Build(ctx, userID, ref.LexemeID, ref.Activity, activity.WithSource(evidence.SourceReview))
+	item, err := s.engine.Build(ctx, userID, ref.LexemeID, ref.Activity,
+		activity.WithSource(evidence.SourceReview), activity.WithSkill(ref.AskSkill))
 	switch {
 	case err == nil:
 		return item, true, nil

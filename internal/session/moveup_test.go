@@ -94,9 +94,9 @@ func TestMoveUpBlockedWhenAnyConditionBreaks(t *testing.T) {
 	})
 	t.Run("gate closed for recall", func(t *testing.T) {
 		c := moveUpCand(1, due)
-		got := mixGate([]Candidate{c}, TargetSuccess, now, 1, activity.Gate{})
-		if got[0].MovedUp || got[0].AskSkill != fsrs.SkillRead {
-			t.Fatalf("ref = %+v, want own skill when recall is closed", got[0])
+		got, _ := mixGate([]Candidate{c}, TargetSuccess, now, 1, activity.Gate{})
+		if len(got) != 1 || got[0].MovedUp || got[0].AskSkill != fsrs.SkillRead {
+			t.Fatalf("ref = %+v, want own skill when recall is closed", got)
 		}
 	})
 	t.Run("no checked activity on imply", func(t *testing.T) {
