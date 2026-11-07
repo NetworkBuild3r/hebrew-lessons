@@ -310,15 +310,17 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 			  )`
 			cardArgs = append(cardArgs, FormatTime(q.AsOf), FormatTime(q.AsOf))
 		}
+		// ReviewSuccesses also counts implied Good+ on spell cards ('spell' =
+		// fsrs.SkillSpell; importing fsrs here would cycle with db).
 		rows, err := conn.QueryContext(ctx, `
 			SELECT c.lexeme_id, c.skill, c.state, c.stability, c.last_review, c.reps, c.lapses,
-				COUNT(rl.id),
-				COALESCE(SUM(rl.rating = 1), 0),
-				COALESCE(SUM(rl.rating > 1), 0),
-				COALESCE(SUM(rl.rating = 1 AND rl.reviewed_at >= ?), 0),
-				MAX(rl.reviewed_at)
+				COUNT(CASE WHEN rl.implied = 0 THEN rl.id END),
+				COALESCE(SUM(rl.implied = 0 AND rl.rating = 1), 0),
+				COALESCE(SUM(rl.rating > 1 AND (rl.implied = 0 OR c.skill = 'spell')), 0),
+				COALESCE(SUM(rl.implied = 0 AND rl.rating = 1 AND rl.reviewed_at >= ?), 0),
+				MAX(CASE WHEN rl.implied = 0 THEN rl.reviewed_at END)
 			FROM cards AS c
-			LEFT JOIN review_log AS rl ON rl.card_id = c.id AND rl.implied = 0`+reviewAsOf+`
+			LEFT JOIN review_log AS rl ON rl.card_id = c.id`+reviewAsOf+`
 			WHERE c.user_id = ?`+cardExist+cardWhere+`
 			GROUP BY c.id`, lexemeArg(cardArgs)...)
 		if err != nil {

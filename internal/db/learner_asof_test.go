@@ -131,6 +131,138 @@ func TestLearnerEvidenceAsOfFiltersExposures(t *testing.T) {
 	}
 }
 
+func TestLearnerEvidenceSpellCountsImpliedSuccesses(t *testing.T) {
+	when := time.Date(2026, 11, 7, 10, 0, 0, 0, time.UTC)
+	s := openStore(t, fixedClock{when})
+	ctx := context.Background()
+	user := insertUser(t, s, "spell-implied@example.com", "sub-spell-implied", "learner")
+	lex := mustLexemeText(t, s, "כְּתִיבָה")
+	cardID, err := s.InsertCard(ctx, Card{
+		UserID: user, LexemeID: lex, Skill: "spell", State: "review",
+		Due: when, Stability: 1, Difficulty: 5, Reps: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		mustExec(t, s, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, implied)
+			VALUES (?, 3, ?, 1, 2, 1)`, cardID, FormatTime(when.Add(time.Duration(i)*time.Hour)))
+	}
+
+	ev, err := s.LearnerEvidence(ctx, user, testLearnerQuery())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ev.Skills) != 1 {
+		t.Fatalf("skills = %+v, want one spell card", ev.Skills)
+	}
+	got := ev.Skills[0]
+	if got.ReviewSuccesses != 3 || got.Reviews != 0 || got.ReviewAgains != 0 {
+		t.Fatalf("spell implied-only = %+v, want Successes=3 Reviews=0 Agains=0", got)
+	}
+}
+
+func TestLearnerEvidenceReadIgnoresImpliedSuccesses(t *testing.T) {
+	when := time.Date(2026, 11, 7, 11, 0, 0, 0, time.UTC)
+	s := openStore(t, fixedClock{when})
+	ctx := context.Background()
+	user := insertUser(t, s, "read-implied@example.com", "sub-read-implied", "learner")
+	lex := mustLexemeText(t, s, "קְרִיאָה")
+	cardID, err := s.InsertCard(ctx, Card{
+		UserID: user, LexemeID: lex, Skill: "read", State: "review",
+		Due: when, Stability: 1, Difficulty: 5, Reps: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		mustExec(t, s, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, implied)
+			VALUES (?, 3, ?, 1, 2, 1)`, cardID, FormatTime(when.Add(time.Duration(i)*time.Hour)))
+	}
+
+	ev, err := s.LearnerEvidence(ctx, user, testLearnerQuery())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ev.Skills) != 1 || ev.Skills[0].ReviewSuccesses != 0 {
+		t.Fatalf("read implied = %+v, want ReviewSuccesses=0", ev.Skills)
+	}
+}
+
+func TestLearnerEvidenceSpellMixesImpliedAndNonImplied(t *testing.T) {
+	when := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
+	s := openStore(t, fixedClock{when})
+	ctx := context.Background()
+	user := insertUser(t, s, "spell-mix@example.com", "sub-spell-mix", "learner")
+	lex := mustLexemeText(t, s, "עֵרֶב")
+	cardID, err := s.InsertCard(ctx, Card{
+		UserID: user, LexemeID: lex, Skill: "spell", State: "review",
+		Due: when, Stability: 1, Difficulty: 5, Reps: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	againAt := when
+	goodAt := when.Add(time.Hour)
+	mustExec(t, s, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, implied)
+		VALUES (?, 1, ?, 1, 1, 0)`, cardID, FormatTime(againAt))
+	mustExec(t, s, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, implied)
+		VALUES (?, 3, ?, 1, 2, 0)`, cardID, FormatTime(goodAt))
+	mustExec(t, s, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, implied)
+		VALUES (?, 3, ?, 1, 2, 1)`, cardID, FormatTime(when.Add(2*time.Hour)))
+	mustExec(t, s, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, implied)
+		VALUES (?, 3, ?, 1, 2, 1)`, cardID, FormatTime(when.Add(3*time.Hour)))
+
+	ev, err := s.LearnerEvidence(ctx, user, testLearnerQuery())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ev.Skills) != 1 {
+		t.Fatalf("skills = %+v, want one spell card", ev.Skills)
+	}
+	got := ev.Skills[0]
+	if got.ReviewSuccesses != 3 || got.Reviews != 2 || got.ReviewAgains != 1 {
+		t.Fatalf("spell mix = %+v, want Successes=3 Reviews=2 Agains=1", got)
+	}
+	if !got.LastReviewLog.Equal(goodAt) {
+		t.Fatalf("LastReviewLog = %v, want newest non-implied %v", got.LastReviewLog, goodAt)
+	}
+}
+
+func TestLearnerEvidenceSpellAsOfCountsImpliedSuccesses(t *testing.T) {
+	when := time.Date(2026, 11, 7, 13, 0, 0, 0, time.UTC)
+	s := openStore(t, fixedClock{when})
+	ctx := context.Background()
+	user := insertUser(t, s, "spell-asof@example.com", "sub-spell-asof", "learner")
+	lex := mustLexemeText(t, s, "בֹּקֶר")
+	cardID, err := s.InsertCard(ctx, Card{
+		UserID: user, LexemeID: lex, Skill: "spell", State: "review",
+		Due: when, Stability: 1, Difficulty: 5, Reps: 1, CreatedAt: when,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t1 := when
+	t2 := when.Add(time.Hour)
+	t3 := when.Add(2 * time.Hour)
+	mustExec(t, s, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, implied)
+		VALUES (?, 3, ?, 1, 2, 1)`, cardID, FormatTime(t1))
+	mustExec(t, s, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, implied)
+		VALUES (?, 3, ?, 1, 2, 1)`, cardID, FormatTime(t2))
+	mustExec(t, s, `INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, implied)
+		VALUES (?, 3, ?, 1, 2, 1)`, cardID, FormatTime(t3))
+
+	q := testLearnerQuery()
+	q.AsOf = t2.Add(30 * time.Minute) // between 2nd and 3rd implied Good
+	ev, err := s.LearnerEvidence(ctx, user, q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ev.Skills) != 1 || ev.Skills[0].ReviewSuccesses != 2 {
+		t.Fatalf("spell AsOf implied = %+v, want ReviewSuccesses=2", ev.Skills)
+	}
+}
+
 func TestCardHistoriesIncludesUnreviewedAndStoredFields(t *testing.T) {
 	when := time.Date(2026, 11, 6, 13, 0, 0, 0, time.UTC)
 	s := openStore(t, fixedClock{when})
