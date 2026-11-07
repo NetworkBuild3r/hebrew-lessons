@@ -31,17 +31,18 @@ type Standing struct {
 
 // DirectionStanding is one skill's help and strong picture.
 type DirectionStanding struct {
-	Skill                      string // "read"
-	Direction                  string // "Reading (Hebrew → English)" — ADR-0028 D4
-	Known, Solid, Learning     int
-	Struggling, Regressed, Due int
-	Answers14, Right14         int
-	Accuracy14                 *float64 // nil below 1 answer
-	Verdict                    string   // "needs_help" | "strong" | "building" | "not_askable"
-	Reason                     string   // one plain sentence
-	Help                       []WordNote
-	Strong                     []WordNote
-	Askable                    bool
+	Skill                  string // "read"
+	Direction              string // "Reading (Hebrew → English)" — ADR-0028 D4
+	Known, Solid, Learning int
+	Struggling, Regressed  int
+	Due                    int // cards in this skill due for review now (unsuspended, intro done)
+	Answers14, Right14     int
+	Accuracy14             *float64 // nil below 1 answer
+	Verdict                string   // "needs_help" | "strong" | "building" | "not_askable"
+	Reason                 string   // one plain sentence
+	Help                   []WordNote
+	Strong                 []WordNote
+	Askable                bool
 }
 
 // WordNote is one word on a help or strong list.
@@ -113,6 +114,15 @@ func (m *Model) Standing(ctx context.Context, userID int64) (Standing, error) {
 		return Standing{}, err
 	}
 
+	dueCards, err := m.store.ListDueCards(ctx, userID, now)
+	if err != nil {
+		return Standing{}, err
+	}
+	dueBy := map[string]int{}
+	for _, c := range dueCards {
+		dueBy[c.Skill]++
+	}
+
 	out := Standing{
 		AsOf:          now,
 		KnownAnySkill: snap.Summary.KnownAnySkill,
@@ -120,6 +130,7 @@ func (m *Model) Standing(ctx context.Context, userID int64) (Standing, error) {
 	}
 	for _, skill := range Skills {
 		d := buildDirection(skill, snap, bySkill[skill], audioN, texts)
+		d.Due = dueBy[skill]
 		out.Directions = append(out.Directions, d)
 	}
 	return out, nil
@@ -140,7 +151,6 @@ func buildDirection(skill string, snap Snapshot, tallies map[int64]db.AttemptTal
 		d.Learning = ss.Counts[Learning]
 		d.Struggling = ss.Counts[Struggling]
 		d.Regressed = ss.Counts[Regressed]
-		d.Due = ss.DueReviews
 		break
 	}
 	for _, row := range tallies {

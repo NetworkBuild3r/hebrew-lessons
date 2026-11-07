@@ -180,7 +180,7 @@ type DirectionStandingView struct {
 	Learning   int            `json:"learning"`
 	Struggling int            `json:"struggling"`
 	Regressed  int            `json:"regressed"`
-	Due        int            `json:"due"`
+	Due        int            `json:"due" jsonschema:"Cards in this direction due for review now."`
 	Answers14  int            `json:"answers14"`
 	Right14    int            `json:"right14"`
 	Accuracy14 *float64       `json:"accuracy14"`

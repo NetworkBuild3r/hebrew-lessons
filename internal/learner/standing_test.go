@@ -96,8 +96,8 @@ func TestStandingKnownAnySkillMatchesSummary(t *testing.T) {
 		}
 		if d.Known != ss.Counts[Known] || d.Solid != ss.Counts[Solid] ||
 			d.Learning != ss.Counts[Learning] || d.Struggling != ss.Counts[Struggling] ||
-			d.Regressed != ss.Counts[Regressed] || d.Due != ss.DueReviews {
-			t.Fatalf("%s counts standing=%+v summary=%+v due=%d", d.Skill, d, ss.Counts, ss.DueReviews)
+			d.Regressed != ss.Counts[Regressed] {
+			t.Fatalf("%s counts standing=%+v summary=%+v", d.Skill, d, ss.Counts)
 		}
 	}
 }
@@ -279,4 +279,27 @@ func noteIDs(notes []WordNote) []int64 {
 		out[i] = n.LexemeID
 	}
 	return out
+}
+
+// Due on a direction is cards due for review now, not the retention window's count of
+// reviews taken after waiting.
+func TestStandingDueIsCardsDueNow(t *testing.T) {
+	e := newEnv(t)
+	e.card(e.user, e.lexeme(), fsrs.SkillSpell, 1, 0)
+	later := e.card(e.user, e.lexeme(), fsrs.SkillSpell, 1, 0)
+	e.exec(`UPDATE cards SET due = ? WHERE id = ?`, db.FormatTime(testNow.Add(48*time.Hour)), later)
+
+	got, err := e.model.Standing(context.Background(), e.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range got.Directions {
+		want := 0
+		if d.Skill == fsrs.SkillSpell {
+			want = 1
+		}
+		if d.Due != want {
+			t.Fatalf("%s Due = %d, want %d cards due now", d.Skill, d.Due, want)
+		}
+	}
 }
