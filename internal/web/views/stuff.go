@@ -22,6 +22,7 @@ type StuffWord struct {
 type WordsView struct {
 	Page           Page
 	State          string
+	SkillLabel     string // direction the list is filtered to, or ""
 	AllHref        string
 	LearningHref   string
 	KnownHref      string

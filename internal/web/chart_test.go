@@ -74,7 +74,7 @@ func TestChartMarkupEscapesWhatItIsGiven(t *testing.T) {
 	hostile := `"><script>alert(1)</script>`
 	for name, svg := range map[string]string{
 		"bar":  stackedBarSVG(hostile, hostile, []barSeg{{"known", 3}, {hostile, 2}}),
-		"line": lineChartSVG(lineSpec{ID: hostile, Label: hostile, Points: []linePoint{{"2026-10-01", 1}, {"2026-10-02", 2}}, Min: 0, Max: 3, Ticks: []float64{0, 3}}),
+		"line": lineChartSVG(lineSpec{ID: hostile, Label: hostile, Points: []linePoint{{Day: "2026-10-01", Value: 1}, {Day: "2026-10-02", Value: 2}}, Min: 0, Max: 3, Ticks: []float64{0, 3}}),
 	} {
 		if strings.Contains(svg, "<script") || strings.Contains(svg, `"><`+"script") {
 			t.Errorf("%s: a script tag got through:\n%s", name, svg)
@@ -149,7 +149,7 @@ func TestLineChartStaysInsideTheViewBoxForAnyData(t *testing.T) {
 // no height does not divide by zero.
 func TestLineChartClampsToItsAxisAndSurvivesAFlatOne(t *testing.T) {
 	over := lineChartSVG(lineSpec{
-		ID: "l", Label: "over", Points: []linePoint{{"2026-10-01", 50}, {"2026-10-02", -20}, {"2026-10-03", 5}},
+		ID: "l", Label: "over", Points: []linePoint{{Day: "2026-10-01", Value: 50}, {Day: "2026-10-02", Value: -20}, {Day: "2026-10-03", Value: 5}},
 		Min: 0, Max: 10, Ticks: []float64{0, 10},
 	})
 	for _, m := range regexp.MustCompile(`\b(?:cy|y1|y2)="(-?[0-9.]+)"`).FindAllStringSubmatch(over, -1) {
@@ -158,7 +158,7 @@ func TestLineChartClampsToItsAxisAndSurvivesAFlatOne(t *testing.T) {
 			t.Errorf("%s is off the plot area (%d to %d)", m[0], padTop, lineH-padBottom)
 		}
 	}
-	flat := lineChartSVG(lineSpec{ID: "f", Label: "flat", Points: []linePoint{{"2026-10-01", 5}, {"2026-10-02", 5}}, Min: 5, Max: 5, Ticks: []float64{5}})
+	flat := lineChartSVG(lineSpec{ID: "f", Label: "flat", Points: []linePoint{{Day: "2026-10-01", Value: 5}, {Day: "2026-10-02", Value: 5}}, Min: 5, Max: 5, Ticks: []float64{5}})
 	if flat == "" || strings.Contains(flat, "NaN") || strings.Contains(flat, "Inf") {
 		t.Errorf("a flat axis broke the chart:\n%s", flat)
 	}
@@ -167,7 +167,7 @@ func TestLineChartClampsToItsAxisAndSurvivesAFlatOne(t *testing.T) {
 func TestLineChartBandSitsBetweenItsTwoValues(t *testing.T) {
 	b := [2]float64{0.85, 0.90}
 	svg := lineChartSVG(lineSpec{
-		ID: "r", Label: "Retention", Points: []linePoint{{"2026-10-01", 0.8}, {"2026-10-02", 0.9}},
+		ID: "r", Label: "Retention", Points: []linePoint{{Day: "2026-10-01", Value: 0.8}, {Day: "2026-10-02", Value: 0.9}},
 		Min: 0.7, Max: 1, Ticks: []float64{0.7, 0.85, 1}, Format: percent, Band: &b,
 	})
 	m := regexp.MustCompile(`<rect class="pc__band" x="[0-9.]+" y="([0-9.]+)" width="[0-9.]+" height="([0-9.]+)"`).FindStringSubmatch(svg)

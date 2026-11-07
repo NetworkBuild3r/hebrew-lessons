@@ -111,11 +111,12 @@ type snapDay struct {
 }
 
 // snapSkill is one skill on one day. est_known and retention repeat on every state row of the
-// skill, so any row gives them.
+// skill, so any row gives them. RuleVersion is the day's stamp (0 means 1).
 type snapSkill struct {
-	Counts    map[string]int
-	EstKnown  float64
-	Retention *float64
+	Counts      map[string]int
+	EstKnown    float64
+	Retention   *float64
+	RuleVersion int
 }
 
 // groupDays groups snapshot rows (ordered by day, skill, state) into days, oldest first.
@@ -134,6 +135,13 @@ func groupDays(rows []db.SnapshotRow) []snapDay {
 		sk.EstKnown = math.Max(sk.EstKnown, r.EstKnown)
 		if r.Retention != nil {
 			sk.Retention = r.Retention
+		}
+		rv := r.RuleVersion
+		if rv == 0 {
+			rv = 1
+		}
+		if rv > sk.RuleVersion {
+			sk.RuleVersion = rv
 		}
 		d.Skills[r.Skill] = sk
 	}
@@ -243,15 +251,14 @@ func (s *server) fillProgress(ctx context.Context, userID int64, v *views.Progre
 	if err := s.fillSkillPanel(ctx, userID, v, sum, days); err != nil {
 		return err
 	}
-	if err := s.fillWeek(ctx, userID, v, days, ref); err != nil {
+	if err := s.fillWeek(ctx, userID, v, days, ref, sum); err != nil {
 		return err
 	}
 	return s.fillPlacementHistory(ctx, userID, v, now)
 }
 
 // fillSkillPanel fills the overview (no ?skill=) or one skill's bar, and the two line
-// charts from the snapshots. On the overview the charts use the skill with the most
-// known words; stored snapshot values stay as recorded (INIT-023/SPEC-004).
+// charts from the snapshots plus today's live point (ADR-0028 D2).
 func (s *server) fillSkillPanel(ctx context.Context, userID int64, v *views.ProgressView, sum learner.Summary, days []snapDay) error {
 	if v.Skill == "" {
 		return s.fillOverview(ctx, userID, v, sum, days)
@@ -261,7 +268,11 @@ func (s *server) fillSkillPanel(ctx context.Context, userID int64, v *views.Prog
 	v.Known = fmt.Sprintf("%.0f", ss.EstimatedKnown)
 	v.EstimateSource = ss.EstimateSource
 	if ss.EstimateSource == learner.EstimateSourcePlacement && !ss.PlacementRunAt.IsZero() {
-		v.PlacementDay = dateText(ss.PlacementRunAt, s.now())
+		z, err := s.learnerZone(ctx, userID)
+		if err != nil {
+			return err
+		}
+		v.PlacementDay = dateText(ss.PlacementRunAt, s.now(), z)
 	}
 
 	total := 0
@@ -289,55 +300,170 @@ func (s *server) fillSkillPanel(ctx context.Context, userID int64, v *views.Prog
 	v.BarTable = table
 	v.BarSVG = stackedBarSVG("pb", "Words by state for "+v.SkillName+": "+strings.Join(desc, ", "), segs)
 
-	v.Est = estChart(skill, v.SkillName, days)
-	v.Retention = retentionChart(skill, v.SkillName, days, ss.Retention)
+	today, err := s.learnerToday(ctx, userID)
+	if err != nil {
+		return err
+	}
+	liveKnown := float64(ss.Counts[learner.Known] + ss.Counts[learner.Solid])
+	v.Est = skillKnownChart(skill, learner.DirectionLabel(skill), days, today, liveKnown)
+	v.Retention = retentionChart(skill, learner.DirectionLabel(skill), days, today, ss.Retention)
 	return nil
 }
 
-// fillOverview is "What you know" with one row per skill and charts for the skill
-// that has the most known words. The headline is KnownAnySkill (ADR-0027 D1).
+// fillOverview is the Progress overview: headline, words-over-time (known_any + directions),
+// direction grid, help and strong (ADR-0028 D1–D5, D7).
 func (s *server) fillOverview(ctx context.Context, userID int64, v *views.ProgressView, sum learner.Summary, days []snapDay) error {
-	v.Known = strconv.Itoa(sum.KnownAnySkill)
+	standing, err := s.model().Standing(ctx, userID)
+	if err != nil {
+		return err
+	}
+	z, err := s.learnerZone(ctx, userID)
+	if err != nil {
+		return err
+	}
+	now := s.now()
+	today := studyday.Today(now, z)
+	v.Known = strconv.Itoa(standing.KnownAnySkill)
 	v.SkillName = ""
 
-	bestSkill := learner.Skills[0]
-	bestKnown := -1
-	now := s.now()
+	bySkill := map[string]learner.SkillSummary{}
 	for _, ss := range sum.Skills {
-		known := ss.Counts[learner.Known] + ss.Counts[learner.Solid]
-		row := views.SkillOverview{
-			Skill:          ss.Skill,
-			Label:          views.SkillLabel(ss.Skill),
-			Known:          known,
-			Learning:       ss.Counts[learner.Learning],
-			Seen:           ss.Counts[learner.Seen],
+		bySkill[ss.Skill] = ss
+	}
+	for _, d := range standing.Directions {
+		ss := bySkill[d.Skill]
+		row := views.DirectionRow{
+			Skill:        d.Skill,
+			Label:        d.Direction,
+			Known:        d.Known,
+			Solid:        d.Solid,
+			Learning:     d.Learning,
+			Struggling:   d.Struggling + d.Regressed,
+			Due:          d.Due,
+			Verdict:      d.Verdict,
+			VerdictLabel: views.VerdictLabel(d.Verdict),
+			Reason:       d.Reason,
+			NoAudio:      d.Verdict == "not_askable",
+			PracticeHref: strugglingPracticeHref(v.Page, d.Skill),
+			Href:         v.SkillTabHref(d.Skill),
+		}
+		if d.Accuracy14 != nil {
+			row.AccuracyText = fmt.Sprintf("%s · %d answers", percent(*d.Accuracy14), d.Answers14)
+			row.AccuracyHE = views.AnswersTextHE(percent(*d.Accuracy14), d.Answers14)
+		}
+		if ss.EstimateSource == learner.EstimateSourcePlacement && !ss.PlacementRunAt.IsZero() {
+			day := dateText(ss.PlacementRunAt, now, z)
+			row.PlacementLine = fmt.Sprintf("Placement estimate: about %.0f (%s, %s)",
+				ss.EstimatedKnown, strings.ToLower(directionShort(d.Skill)), day)
+			row.PlacementHE = views.PlacementLineHE(ss.EstimatedKnown, views.ProgressHE(d.Direction), day)
+		}
+		v.Directions = append(v.Directions, row)
+
+		// Keep Overview rows for older tests that still read known/learning/seen.
+		ov := views.SkillOverview{
+			Skill: d.Skill, Label: d.Direction,
+			Known: d.Known + d.Solid, Learning: d.Learning, Seen: ss.Counts[learner.Seen],
 			EstimateSource: ss.EstimateSource,
 		}
 		if ss.EstimateSource == learner.EstimateSourcePlacement && !ss.PlacementRunAt.IsZero() {
-			row.PlacementDay = dateText(ss.PlacementRunAt, now)
+			ov.PlacementDay = dateText(ss.PlacementRunAt, now, z)
 		}
-		if ss.Skill == "listen" {
+		if d.Skill == "listen" {
 			noCard, err := s.listenAnswersNoCards(ctx, userID, ss)
 			if err != nil {
 				return err
 			}
-			row.NoCardHint = noCard
+			ov.NoCardHint = noCard
 		}
-		if ss.Skill == "spell" && !skillHasEvidence(ss) {
-			row.NoPracticeHint = true
+		if d.Skill == "spell" && !skillHasEvidence(ss) {
+			ov.NoPracticeHint = true
 		}
-		v.Overview = append(v.Overview, row)
-		if known > bestKnown {
-			bestKnown = known
-			bestSkill = ss.Skill
+		v.Overview = append(v.Overview, ov)
+
+		if d.Verdict == "needs_help" {
+			v.Help = append(v.Help, standingBlock(v.Page, d, true))
+		}
+		if d.Verdict == "strong" {
+			v.Strong = append(v.Strong, standingBlock(v.Page, d, false))
 		}
 	}
 
+	from := addDaysStr(today, -progressWindowDays)
+	totals, err := s.store.ListTotals(ctx, userID, from, addDaysStr(today, -1))
+	if err != nil {
+		return err
+	}
+	v.Est = knownOverTimeChart(totals, days, standing, today)
+	// Retention keeps the skill with the most known+solid evidence, plus today's live point.
+	bestSkill := learner.Skills[0]
+	bestKnown := -1
+	for _, d := range standing.Directions {
+		n := d.Known + d.Solid
+		if n > bestKnown {
+			bestKnown = n
+			bestSkill = d.Skill
+		}
+	}
 	ss := skillOfSummary(sum, bestSkill)
-	name := views.SkillLabel(bestSkill)
-	v.Est = estChart(bestSkill, name, days)
-	v.Retention = retentionChart(bestSkill, name, days, ss.Retention)
+	v.Retention = retentionChart(bestSkill, learner.DirectionLabel(bestSkill), days, today, ss.Retention)
 	return nil
+}
+
+func directionShort(skill string) string {
+	switch skill {
+	case "listen":
+		return "listening"
+	case "read":
+		return "reading"
+	case "recall":
+		return "English → Hebrew"
+	case "spell":
+		return "spelling"
+	}
+	return skill
+}
+
+func strugglingPracticeHref(page views.Page, skill string) string {
+	path := "/me/words?state=struggling&skill=" + skill
+	if page.Lang == "he" {
+		return path + "&lang=he"
+	}
+	return path
+}
+
+func standingBlock(page views.Page, d learner.DirectionStanding, help bool) views.StandingBlock {
+	b := views.StandingBlock{
+		Skill: d.Skill, Label: d.Direction, Reason: d.Reason,
+	}
+	if help {
+		b.PracticeHref = strugglingPracticeHref(page, d.Skill)
+	}
+	notes := d.Strong
+	if help {
+		notes = d.Help
+	}
+	for _, n := range notes {
+		w := views.StandingWord{
+			Hebrew: n.Hebrew, English: n.English,
+			Cause:   views.HelpCauseText(n.Cause, n.Pair, n.ConfusedWith),
+			CauseHE: views.HelpCauseTextHE(n.Cause, n.Pair, n.ConfusedWith),
+			Href:    page.Href("/words/" + strconv.FormatInt(n.LexemeID, 10)),
+		}
+		if help && n.Answers14 > 0 {
+			w.MissText = fmt.Sprintf("missed %d of %d", n.Misses14, n.Answers14)
+			w.MissHE = views.MissTextHE(n.Misses14, n.Answers14)
+		}
+		b.Words = append(b.Words, w)
+	}
+	return b
+}
+
+func (s *server) learnerToday(ctx context.Context, userID int64) (string, error) {
+	z, err := s.learnerZone(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	return studyday.Today(s.now(), z), nil
 }
 
 // skillHasEvidence is true when the skill has any word past unseen.
@@ -396,16 +522,122 @@ func skillOfSummary(sum learner.Summary, skill string) learner.SkillSummary {
 	return learner.SkillSummary{}
 }
 
-// estChart is the estimated words known over the snapshot days of one skill.
-func estChart(skill, name string, days []snapDay) views.ChartView {
-	c := views.ChartView{ID: "est", Title: "Estimated words known"}
+// knownOverTimeChart is the overview "Words you know over time": known_any from
+// daily_totals, plus a thinner line per askable direction, each ending on today's
+// live point (ADR-0028 D1, D2).
+func knownOverTimeChart(totals []db.DailyTotal, days []snapDay, standing learner.Standing, today string) views.ChartView {
+	c := views.ChartView{ID: "est", Title: "Words you know over time", ThroughToday: true}
+	var series []lineSeries
+	var knownPts []linePoint
+	for _, t := range totals {
+		if t.Day >= today {
+			continue
+		}
+		rv := t.RuleVersion
+		if rv == 0 {
+			rv = 1
+		}
+		knownPts = append(knownPts, linePoint{Day: t.Day, Value: float64(t.KnownAnySkill), OldRule: rv < 2})
+	}
+	knownPts = append(knownPts, linePoint{Day: today, Value: float64(standing.KnownAnySkill)})
+	series = append(series, lineSeries{ID: "known", Label: "Words you know", Points: knownPts})
+
+	for _, d := range standing.Directions {
+		if !d.Askable {
+			continue
+		}
+		var pts []linePoint
+		for _, day := range days {
+			if day.Day >= today {
+				continue
+			}
+			sk, ok := day.Skills[d.Skill]
+			if !ok {
+				continue
+			}
+			rv := sk.RuleVersion
+			if rv == 0 {
+				rv = 1
+			}
+			pts = append(pts, linePoint{Day: day.Day, Value: float64(knownOf(sk)), OldRule: rv < 2})
+		}
+		pts = append(pts, linePoint{Day: today, Value: float64(d.Known + d.Solid)})
+		series = append(series, lineSeries{ID: d.Skill, Label: d.Direction, Thin: true, Points: pts})
+	}
+
+	old := false
+	lo, hi := knownPts[0].Value, knownPts[0].Value
+	for _, s := range series {
+		for _, p := range s.Points {
+			lo, hi = math.Min(lo, p.Value), math.Max(hi, p.Value)
+			if p.OldRule {
+				old = true
+			}
+		}
+		c.Key = append(c.Key, s.Label)
+	}
+	c.OldRuleNote = old
+	if old {
+		c.Key = append(c.Key, "Dashed: old rule")
+	}
+	minY, maxY, ticks := niceCount(lo, hi)
+	c.SVG = lineChartSVG(lineSpec{
+		ID: "est", Label: "Words you know over time", Series: series,
+		Min: minY, Max: maxY, Ticks: ticks,
+	})
+	first, last := knownPts[0], knownPts[len(knownPts)-1]
+	switch {
+	case len(knownPts) == 1:
+		c.Summary = fmt.Sprintf("%.0f words today. A line needs a second day.", last.Value)
+	default:
+		delta := int(math.Round(last.Value)) - int(math.Round(first.Value))
+		move := "no change"
+		switch {
+		case delta > 0:
+			move = "up " + views.CountText(delta, "word", "words")
+		case delta < 0:
+			move = "down " + views.CountText(-delta, "word", "words")
+		}
+		c.Summary = fmt.Sprintf("%.0f to %.0f · %s", first.Value, last.Value, move)
+	}
+	c.Table = views.ChartTable{
+		Caption: "Words you know over time, by day",
+		Head:    []string{"Day", "Words you know"},
+	}
+	for _, p := range knownPts {
+		row := []string{shortDay(p.Day), fmt.Sprintf("%.0f", p.Value)}
+		if p.OldRule {
+			row[0] += " (old rule)"
+		}
+		c.Table.Rows = append(c.Table.Rows, row)
+	}
+	return c
+}
+
+// skillKnownChart is one skill tab's known+solid history, ending on today's live point.
+func skillKnownChart(skill, name string, days []snapDay, today string, live float64) views.ChartView {
+	c := views.ChartView{ID: "est", Title: "Words you know", ThroughToday: true}
 	var pts []linePoint
 	for _, d := range days {
+		if d.Day >= today {
+			continue
+		}
 		if sk, ok := d.Skills[skill]; ok {
-			pts = append(pts, linePoint{Day: d.Day, Value: sk.EstKnown})
+			rv := sk.RuleVersion
+			if rv == 0 {
+				rv = 1
+			}
+			pts = append(pts, linePoint{Day: d.Day, Value: float64(knownOf(sk)), OldRule: rv < 2})
 		}
 	}
-	if len(pts) == 0 {
+	pts = append(pts, linePoint{Day: today, Value: live})
+	for _, p := range pts {
+		if p.OldRule {
+			c.OldRuleNote = true
+			break
+		}
+	}
+	if len(pts) == 1 && live == 0 && len(days) == 0 {
 		c.Hint = "Practice a few days and your chart starts here."
 		return c
 	}
@@ -415,36 +647,43 @@ func estChart(skill, name string, days []snapDay) views.ChartView {
 	}
 	minY, maxY, ticks := niceCount(lo, hi)
 	c.SVG = lineChartSVG(lineSpec{
-		ID: "est", Label: "Estimated words known, " + name, Points: pts,
+		ID: "est", Label: "Words you know, " + name, Points: pts,
 		Min: minY, Max: maxY, Ticks: ticks,
 	})
 	first, last := pts[0], pts[len(pts)-1]
-	c.Through = shortDay(last.Day)
 	switch {
 	case len(pts) == 1:
 		c.Summary = fmt.Sprintf("%.0f words on %s. A line needs a second day.", first.Value, shortDay(first.Day))
 	default:
-		d := int(math.Round(last.Value)) - int(math.Round(first.Value))
+		delta := int(math.Round(last.Value)) - int(math.Round(first.Value))
 		move := "no change"
 		switch {
-		case d > 0:
-			move = "up " + views.CountText(d, "word", "words")
-		case d < 0:
-			move = "down " + views.CountText(-d, "word", "words")
+		case delta > 0:
+			move = "up " + views.CountText(delta, "word", "words")
+		case delta < 0:
+			move = "down " + views.CountText(-delta, "word", "words")
 		}
 		c.Summary = fmt.Sprintf("%.0f to %.0f · %s", first.Value, last.Value, move)
 	}
-	c.Table = views.ChartTable{Caption: "Estimated words known, " + name + ", by day", Head: []string{"Day", "Estimated words known"}}
+	if c.OldRuleNote {
+		c.Key = []string{"Dashed: old rule"}
+	}
+	c.Table = views.ChartTable{Caption: "Words you know, " + name + ", by day", Head: []string{"Day", "Words you know"}}
 	for _, p := range pts {
-		c.Table.Rows = append(c.Table.Rows, []string{shortDay(p.Day), fmt.Sprintf("%.0f", p.Value)})
+		day := shortDay(p.Day)
+		if p.OldRule {
+			day += " (old rule)"
+		}
+		c.Table.Rows = append(c.Table.Rows, []string{day, fmt.Sprintf("%.0f", p.Value)})
 	}
 	return c
 }
 
 // retentionChart is the share of due reviews remembered, over the snapshot days, with the
-// target band. live is the model's retention over the last 30 days, or nil.
-func retentionChart(skill, name string, days []snapDay, live *float64) views.ChartView {
-	c := views.ChartView{ID: "ret", Title: "Retention"}
+// target band and today's live point (ADR-0028 D2). live is the model's retention over
+// the last 30 days, or nil.
+func retentionChart(skill, name string, days []snapDay, today string, live *float64) views.ChartView {
+	c := views.ChartView{ID: "ret", Title: "Retention", ThroughToday: true}
 	band := "The target is " + percent(retentionBandLow) + " to " + percent(retentionBandHigh) + "."
 	if live != nil {
 		c.Note = "Last 30 days: " + percent(*live) + ". " + band
@@ -453,9 +692,15 @@ func retentionChart(skill, name string, days []snapDay, live *float64) views.Cha
 	}
 	var pts []linePoint
 	for _, d := range days {
+		if d.Day >= today {
+			continue
+		}
 		if sk, ok := d.Skills[skill]; ok && sk.Retention != nil {
 			pts = append(pts, linePoint{Day: d.Day, Value: *sk.Retention})
 		}
+	}
+	if live != nil {
+		pts = append(pts, linePoint{Day: today, Value: *live})
 	}
 	if len(pts) == 0 {
 		c.Hint = "Retention starts once you have due reviews to answer."
@@ -473,7 +718,6 @@ func retentionChart(skill, name string, days []snapDay, live *float64) views.Cha
 	})
 	c.Key = []string{"Shaded band between dashed lines: the " + percent(retentionBandLow) + " to " + percent(retentionBandHigh) + " target"}
 	last := pts[len(pts)-1]
-	c.Through = shortDay(last.Day)
 	where := "inside the target"
 	switch {
 	case last.Value < retentionBandLow:
@@ -481,7 +725,7 @@ func retentionChart(skill, name string, days []snapDay, live *float64) views.Cha
 	case last.Value > retentionBandHigh:
 		where = "above the target"
 	}
-	c.Summary = "Newest snapshot " + percent(last.Value) + " on " + shortDay(last.Day) + ", " + where + "."
+	c.Summary = "Today " + percent(last.Value) + ", " + where + "."
 	c.Table = views.ChartTable{Caption: "Retention, " + name + ", by day", Head: []string{"Day", "Retention"}}
 	for _, p := range pts {
 		c.Table.Rows = append(c.Table.Rows, []string{shortDay(p.Day), percent(p.Value)})
@@ -489,30 +733,43 @@ func retentionChart(skill, name string, days []snapDay, live *float64) views.Cha
 	return c
 }
 
-// fillWeek fills "This week": gained and lost per skill from the week's snapshots, the words that
-// slipped (with cause), the bands that slipped, and the words that came back.
-func (s *server) fillWeek(ctx context.Context, userID int64, v *views.ProgressView, days []snapDay, ref string) error {
+// fillWeek fills "This week": gained and lost per skill from the week's snapshots ending on
+// today's live counts (ADR-0028 D2), the words that slipped (with cause), the bands that
+// slipped, and the words that came back.
+func (s *server) fillWeek(ctx context.Context, userID int64, v *views.ProgressView, days []snapDay, ref string, sum learner.Summary) error {
+	z, err := s.learnerZone(ctx, userID)
+	if err != nil {
+		return err
+	}
+	today := studyday.Today(s.now(), z)
 	from := addDaysStr(ref, -weekDays)
 	var week []snapDay
 	for _, d := range days {
-		if d.Day >= from && d.Day <= ref {
+		if d.Day >= from && d.Day < today {
 			week = append(week, d)
 		}
 	}
+	// Today's live column: known+solid and struggle counts from the live summary.
+	live := snapDay{Day: today, Skills: map[string]snapSkill{}}
+	for _, ss := range sum.Skills {
+		live.Skills[ss.Skill] = snapSkill{Counts: map[string]int{
+			string(learner.Known):      ss.Counts[learner.Known],
+			string(learner.Solid):      ss.Counts[learner.Solid],
+			string(learner.Struggling): ss.Counts[learner.Struggling],
+			string(learner.Regressed):  ss.Counts[learner.Regressed],
+		}}
+	}
+	week = append(week, live)
 	if len(week) >= 2 {
 		v.Week.Compared = true
-		v.Week.From, v.Week.To = week[0].Day, week[len(week)-1].Day
+		v.Week.From, v.Week.To = week[0].Day, today
 		v.Week.Skills = weekChanges(week)
+		for i := range v.Week.Skills {
+			v.Week.Skills[i].Label = learner.DirectionLabel(v.Week.Skills[i].Skill)
+		}
 	}
 
-	to := ref
-	if z, err := s.learnerZone(ctx, userID); err == nil {
-		if today := studyday.Today(s.now(), z); today > to {
-			to = today
-		}
-	} else {
-		return err
-	}
+	to := today
 	events, err := s.store.RegressionRows(ctx, userID, addDaysStr(ref, -backWindowDays), to, eventCap)
 	if err != nil {
 		return err
@@ -630,8 +887,12 @@ func (s *server) fillPlacementHistory(ctx context.Context, userID int64, v *view
 	if err != nil {
 		return err
 	}
+	z, err := s.learnerZone(ctx, userID)
+	if err != nil {
+		return err
+	}
 	for _, r := range runs {
-		row := views.PlacementRow{Date: dateText(r.FinishedAt, now), Kind: "Placement"}
+		row := views.PlacementRow{Date: dateText(r.FinishedAt, now, z), Kind: "Placement"}
 		switch r.Kind {
 		case "initial":
 			row.Kind = "First placement"
@@ -681,8 +942,9 @@ func (s *server) fillPlacementHistory(ctx context.Context, userID int64, v *view
 }
 
 // dateText is "Oct 2", with the year when it is not this year.
-func dateText(t, now time.Time) string {
-	t = t.UTC()
+// dateText is the learner's civil day for an instant, in their study zone.
+func dateText(t, now time.Time, z studyday.Zone) string {
+	t, now = t.In(z.Loc), now.In(z.Loc)
 	if t.Year() != now.Year() {
 		return t.Format("Jan 2, 2006")
 	}

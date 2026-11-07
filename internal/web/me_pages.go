@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,14 +28,22 @@ func (s *server) serveWords(w http.ResponseWriter, r *http.Request, lang, csrf s
 		http.Error(w, "unknown state", http.StatusBadRequest)
 		return
 	}
+	skill := r.URL.Query().Get("skill")
+	if skill != "" && !slices.Contains(learner.Skills, skill) {
+		http.Error(w, "unknown skill", http.StatusBadRequest)
+		return
+	}
 	page.Title = "Words · " + views.AppName
 	view := views.WordsView{
 		Page: page, State: state, Empty: "Words you have met appear here.",
 		AllHref: stateHref(page, "/me/words", ""), LearningHref: stateHref(page, "/me/words", "learning"),
 		KnownHref: stateHref(page, "/me/words", "known"), StrugglingHref: stateHref(page, "/me/words", "struggling"),
 	}
+	if skill != "" {
+		view.SkillLabel = learner.DirectionLabel(skill)
+	}
 	if user != nil && s != nil && s.store != nil {
-		words, err := s.metWords(r.Context(), user.ID, state)
+		words, err := s.metWords(r.Context(), user.ID, skill, state)
 		if err != nil {
 			serverError(w)
 			return
@@ -131,13 +140,16 @@ func stateHref(page views.Page, path, state string) string {
 	return path + "?lang=he"
 }
 
-func (s *server) metWords(ctx context.Context, userID int64, filter string) ([]learner.WordState, error) {
+// metWords lists the learner's met words in one state group. With a skill, the state is that
+// skill's; without one, the word's overall state. "struggling" includes slipping words, as the
+// Progress struggling count does.
+func (s *server) metWords(ctx context.Context, userID int64, skill, filter string) ([]learner.WordState, error) {
 	states := []learner.State{learner.Seen, learner.Learning, learner.Struggling, learner.Regressed, learner.Known, learner.Solid}
 	switch filter {
 	case "learning":
 		states = []learner.State{learner.Learning}
 	case "struggling":
-		states = []learner.State{learner.Struggling}
+		states = []learner.State{learner.Struggling, learner.Regressed}
 	case "known":
 		states = []learner.State{learner.Known, learner.Solid}
 	}
@@ -146,7 +158,7 @@ func (s *server) metWords(ctx context.Context, userID int64, filter string) ([]l
 	for _, st := range states {
 		cursor := learner.Cursor("")
 		for pages := 0; pages < 20; pages++ {
-			page, next, err := model.List(ctx, userID, learner.Filter{State: st, Limit: learner.MaxPageSize, After: cursor})
+			page, next, err := model.List(ctx, userID, learner.Filter{Skill: skill, State: st, Limit: learner.MaxPageSize, After: cursor})
 			if err != nil {
 				return nil, err
 			}
@@ -174,11 +186,11 @@ func (s *server) visibleRoots(ctx context.Context) (map[string]bool, error) {
 }
 
 func (s *server) verbTables(ctx context.Context, userID int64) ([]views.VerbTable, error) {
-	met, err := s.metWords(ctx, userID, "known")
+	met, err := s.metWords(ctx, userID, "", "known")
 	if err != nil {
 		return nil, err
 	}
-	learning, err := s.metWords(ctx, userID, "learning")
+	learning, err := s.metWords(ctx, userID, "", "learning")
 	if err != nil {
 		return nil, err
 	}

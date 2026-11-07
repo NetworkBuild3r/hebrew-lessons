@@ -11,6 +11,9 @@ templ WordsPage(v WordsView) {
 				<a href={ templ.SafeURL(v.KnownHref) } if v.State == "known" { aria-current="true" }>Known</a>
 				<a href={ templ.SafeURL(v.StrugglingHref) } if v.State == "struggling" { aria-current="true" }>Struggling</a>
 			</nav>
+			if v.SkillLabel != "" {
+				<p class="stuff__skill" lang="en" data-skill-filter>{ v.SkillLabel }</p>
+			}
 			if len(v.Words) == 0 {
 				<p class="stuff__empty" lang="en">{ v.Empty }</p>
 			} else {

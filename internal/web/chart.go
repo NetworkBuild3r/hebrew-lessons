@@ -96,19 +96,31 @@ func stackedBarSVG(id, label string, segs []barSeg) string {
 	return b.String()
 }
 
-// linePoint is one snapshot day on a line chart.
+// linePoint is one day on a line chart. OldRule is true when the day was written
+// under rule_version < 2 (ADR-0028 D3); those segments are drawn dashed.
 type linePoint struct {
-	Day   string // YYYY-MM-DD
-	Value float64
+	Day     string // YYYY-MM-DD
+	Value   float64
+	OldRule bool
+}
+
+// lineSeries is one named line on a multi-series chart (ADR-0028 D1).
+type lineSeries struct {
+	ID     string // "known", "read", …
+	Label  string
+	Thin   bool
+	Points []linePoint
 }
 
 // lineSpec describes a line chart. Min and Max are the ends of the y axis. Ticks are the
 // values labelled on it. Format writes a value as text. Band, when set, is the target band:
-// a shaded stripe with dashed edges between its two values.
+// a shaded stripe with dashed edges between its two values. Series, when set, draws several
+// lines; Points is then ignored.
 type lineSpec struct {
 	ID     string
 	Label  string
 	Points []linePoint
+	Series []lineSeries
 	Min    float64
 	Max    float64
 	Ticks  []float64
@@ -117,9 +129,20 @@ type lineSpec struct {
 }
 
 // lineChartSVG draws spec. It returns "" when there are no points. One point is a lone dot, with no
-// path: a line needs two days.
+// path: a line needs two days. Old-rule runs are dashed (ADR-0028 D3).
 func lineChartSVG(spec lineSpec) string {
-	if len(spec.Points) == 0 {
+	series := spec.Series
+	if len(series) == 0 && len(spec.Points) > 0 {
+		series = []lineSeries{{ID: "main", Label: spec.Label, Points: spec.Points}}
+	}
+	if len(series) == 0 {
+		return ""
+	}
+	var all []linePoint
+	for _, s := range series {
+		all = append(all, s.Points...)
+	}
+	if len(all) == 0 {
 		return ""
 	}
 	format := spec.Format
@@ -136,22 +159,36 @@ func lineChartSVG(spec lineSpec) string {
 		v = math.Min(math.Max(v, spec.Min), spec.Max)
 		return float64(padTop) + plotH*(1-(v-spec.Min)/span)
 	}
-	t0, _ := time.Parse("2006-01-02", spec.Points[0].Day)
-	t1, _ := time.Parse("2006-01-02", spec.Points[len(spec.Points)-1].Day)
+	// X axis spans the earliest and latest day across every series.
+	dayLo, dayHi := all[0].Day, all[0].Day
+	for _, p := range all {
+		if p.Day < dayLo {
+			dayLo = p.Day
+		}
+		if p.Day > dayHi {
+			dayHi = p.Day
+		}
+	}
+	t0, _ := time.Parse("2006-01-02", dayLo)
+	t1, _ := time.Parse("2006-01-02", dayHi)
 	x := func(day string) float64 {
-		if len(spec.Points) == 1 || !t1.After(t0) {
+		if dayLo == dayHi || !t1.After(t0) {
 			return float64(padLeft) + plotW/2
 		}
 		t, _ := time.Parse("2006-01-02", day)
 		return float64(padLeft) + plotW*float64(t.Sub(t0))/float64(t1.Sub(t0))
 	}
 
-	first, last := spec.Points[0], spec.Points[len(spec.Points)-1]
 	desc := spec.Label + ": "
-	if len(spec.Points) == 1 {
+	first, last := all[0], all[len(all)-1]
+	// Prefer the primary series' ends for the accessible summary when present.
+	if len(series[0].Points) > 0 {
+		first, last = series[0].Points[0], series[0].Points[len(series[0].Points)-1]
+	}
+	if len(series) == 1 && len(series[0].Points) == 1 {
 		desc += fmt.Sprintf("%s on %s, one daily snapshot.", format(first.Value), first.Day)
 	} else {
-		desc += fmt.Sprintf("%s on %s, then %s on %s, from %d daily snapshots.", format(first.Value), first.Day, format(last.Value), last.Day, len(spec.Points))
+		desc += fmt.Sprintf("%s on %s, then %s on %s, from %d daily snapshots.", format(first.Value), first.Day, format(last.Value), last.Day, len(series[0].Points))
 	}
 
 	var b strings.Builder
@@ -168,37 +205,54 @@ func lineChartSVG(spec lineSpec) string {
 			fmt.Fprintf(&b, `<line class="pc__band-edge" x1="%d" x2="%d" y1="%s" y2="%s"/>`, padLeft, chartW-padRight, num(by), num(by))
 		}
 	}
-	if len(spec.Points) > 1 {
-		var d strings.Builder
-		for i, p := range spec.Points {
-			cmd := "L"
-			if i == 0 {
-				cmd = "M"
-			}
-			fmt.Fprintf(&d, "%s%s %s ", cmd, num(x(p.Day)), num(y(p.Value)))
-		}
-		fmt.Fprintf(&b, `<path class="pc__line" d="%s"/>`, strings.TrimSpace(d.String()))
-	}
-	// Every day gets a dot while there are few enough to tell apart, else only the newest does.
-	for i, p := range spec.Points {
-		if len(spec.Points) <= 31 || i == len(spec.Points)-1 {
-			cls := "pc__dot"
-			if i == len(spec.Points)-1 {
-				cls = "pc__dot pc__dot--last"
-			}
-			fmt.Fprintf(&b, `<circle class="%s" cx="%s" cy="%s" r="%d"/>`, cls, num(x(p.Day)), num(y(p.Value)), dotR(i == len(spec.Points)-1))
-		}
+	for _, s := range series {
+		writeLineSeries(&b, s, x, y)
 	}
 	anchor := "start"
-	if len(spec.Points) == 1 {
+	if dayLo == dayHi {
 		anchor = "middle"
 	}
-	fmt.Fprintf(&b, `<text class="pc__tick" x="%s" y="%d" text-anchor="%s">%s</text>`, num(x(first.Day)), lineH-6, anchor, esc(shortDay(first.Day)))
-	if len(spec.Points) > 1 {
-		fmt.Fprintf(&b, `<text class="pc__tick" x="%s" y="%d" text-anchor="end">%s</text>`, num(x(last.Day)), lineH-6, esc(shortDay(last.Day)))
+	fmt.Fprintf(&b, `<text class="pc__tick" x="%s" y="%d" text-anchor="%s">%s</text>`, num(x(dayLo)), lineH-6, anchor, esc(shortDay(dayLo)))
+	if dayLo != dayHi {
+		fmt.Fprintf(&b, `<text class="pc__tick" x="%s" y="%d" text-anchor="end">%s</text>`, num(x(dayHi)), lineH-6, esc(shortDay(dayHi)))
 	}
 	b.WriteString(`</svg>`)
 	return b.String()
+}
+
+// writeLineSeries draws one series. A segment is dashed when either end is an
+// OldRule day (ADR-0028 D3 / SPEC-007).
+func writeLineSeries(b *strings.Builder, s lineSeries, x func(string) float64, y func(float64) float64) {
+	if len(s.Points) == 0 {
+		return
+	}
+	cls := "pc__line"
+	if s.Thin {
+		cls += " pc__line--thin"
+	}
+	for i := 1; i < len(s.Points); i++ {
+		a, c := s.Points[i-1], s.Points[i]
+		segCls := cls
+		if a.OldRule || c.OldRule {
+			segCls += " pc__line--old"
+		}
+		fmt.Fprintf(b, `<path class="%s" data-series="%s" d="M%s %s L%s %s"/>`,
+			segCls, esc(s.ID), num(x(a.Day)), num(y(a.Value)), num(x(c.Day)), num(y(c.Value)))
+	}
+	n := len(s.Points)
+	for i, p := range s.Points {
+		if n <= 31 || i == n-1 {
+			dotCls := "pc__dot"
+			if i == n-1 {
+				dotCls = "pc__dot pc__dot--last"
+			}
+			if s.Thin {
+				dotCls += " pc__dot--thin"
+			}
+			fmt.Fprintf(b, `<circle class="%s" data-series="%s" cx="%s" cy="%s" r="%d"/>`,
+				dotCls, esc(s.ID), num(x(p.Day)), num(y(p.Value)), dotR(i == n-1 && !s.Thin))
+		}
+	}
 }
 
 func dotR(last bool) int {

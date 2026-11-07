@@ -37,6 +37,12 @@ templ Progress(v ProgressView) {
 				<div class="progress__grid" data-motion="stagger">
 					@knowCard(v)
 					@chartCard(v, v.Est)
+					if len(v.Help) > 0 {
+						@helpCard(v)
+					}
+					if len(v.Strong) > 0 {
+						@strongCard(v)
+					}
 					@chartCard(v, v.Retention)
 					@weekCard(v)
 					@placementCard2(v)
@@ -89,11 +95,11 @@ func tabState(t SkillTab) AnswerState {
 	return AnswerDefault
 }
 
-// knowCard is the stacked bar of states for one skill, or the overview of every
-// skill when no ?skill= is chosen (INIT-023/SPEC-004).
+// knowCard is the stacked bar of states for one skill, or the overview directions
+// grid when no ?skill= is chosen (INIT-023/SPEC-004, INIT-033/SPEC-007).
 templ knowCard(v ProgressView) {
 	<section class="c-card pknow" aria-labelledby="know-h">
-		if len(v.Overview) > 0 {
+		if len(v.Directions) > 0 {
 			@knowOverview(v)
 		} else {
 			<p class="eyebrow" id="know-h">@E("What you know · " + v.SkillName)</p>
@@ -119,9 +125,8 @@ templ knowCard(v ProgressView) {
 	</section>
 }
 
-// knowOverview is one row per skill: known plus solid, learning, and seen. A
-// skill with answers and no cards shows the explanation instead of a zero bar.
-// Spelling with no evidence says to type Hebrew in review (INIT-032/SPEC-006).
+// knowOverview is the directions grid: known, solid, learning, struggling, due,
+// 14-day accuracy, and a verdict chip (ADR-0028 D4, D5).
 templ knowOverview(v ProgressView) {
 	<p class="eyebrow" id="know-h">@T(v.Lang, "", "What you know")</p>
 	<p class="pknow__head">
@@ -129,26 +134,42 @@ templ knowOverview(v ProgressView) {
 		<span class="pknow__unit">@ProgressT(v.Lang, "Words you know")</span>
 	</p>
 	<ul class="pknow__skills">
-		for _, row := range v.Overview {
-			<li class="pknow__skill" data-skill={ row.Skill }>
-				<a class="pknow__skill-link" href={ templ.SafeURL(v.SkillTabHref(row.Skill)) }>
-					<span class="pknow__skill-label">@E(row.Label)</span>
-					@estimateSourceNote(v.Lang, row.EstimateSource, row.PlacementDay)
-					if row.NoCardHint {
-						<span class="pknow__nocard">@T(v.Lang, "", "Listening counts once you have a listening card. Lessons make one when you answer a listening question.")</span>
-					} else if row.NoPracticeHint {
-						<span class="pknow__nocard">@ProgressT(v.Lang, "Not practiced yet: type the Hebrew in review to start")</span>
+		for _, row := range v.Directions {
+			<li class="pknow__skill" data-skill={ row.Skill } data-verdict={ row.Verdict }>
+				<a class="pknow__skill-link" href={ templ.SafeURL(row.Href) }>
+					<span class="pknow__skill-label">@ProgressT(v.Lang, row.Label)</span>
+					@verdictChip(v.Lang, row.Verdict, row.VerdictLabel)
+					if row.NoAudio {
+						<span class="pknow__nocard">@ProgressT(v.Lang, "No audio yet — practiced in lessons only")</span>
 					} else {
 						<span class="pknow__skill-bar" dir="ltr">
-							<span class="pknow__n" data-count="known"><bdi lang="en" dir="ltr">{ Num(row.Known) }</bdi> @T(v.Lang, "", "known")</span>
-							<span class="pknow__n" data-count="learning"><bdi lang="en" dir="ltr">{ Num(row.Learning) }</bdi> @T(v.Lang, "", "learning")</span>
-							<span class="pknow__n" data-count="seen"><bdi lang="en" dir="ltr">{ Num(row.Seen) }</bdi> @T(v.Lang, "", "seen")</span>
+							<span class="pknow__n" data-count="known"><bdi lang="en" dir="ltr">{ Num(row.Known) }</bdi> @ProgressT(v.Lang, "known")</span>
+							<span class="pknow__n" data-count="solid"><bdi lang="en" dir="ltr">{ Num(row.Solid) }</bdi> @ProgressT(v.Lang, "solid")</span>
+							<span class="pknow__n" data-count="learning"><bdi lang="en" dir="ltr">{ Num(row.Learning) }</bdi> @ProgressT(v.Lang, "learning")</span>
+							<span class="pknow__n" data-count="struggling"><bdi lang="en" dir="ltr">{ Num(row.Struggling) }</bdi> @ProgressT(v.Lang, "struggling")</span>
+							<span class="pknow__n" data-count="due"><bdi lang="en" dir="ltr">{ Num(row.Due) }</bdi> @ProgressT(v.Lang, "due")</span>
 						</span>
+						if row.AccuracyText != "" {
+							<span class="pknow__acc">@T(v.Lang, row.AccuracyHE, row.AccuracyText)</span>
+						}
+					}
+					if row.PlacementLine != "" {
+						<span class="pknow__place">@T(v.Lang, row.PlacementHE, row.PlacementLine)</span>
 					}
 				</a>
 			</li>
 		}
 	</ul>
+}
+
+templ verdictChip(lang, verdict, label string) {
+	if verdict == "needs_help" {
+		<span class="c-chip pdir__verdict feedback-wrong">@ProgressT(lang, label)</span>
+	} else if verdict == "strong" {
+		<span class="c-chip pdir__verdict feedback-right">@ProgressT(lang, label)</span>
+	} else if label != "" {
+		<span class="c-chip pdir__verdict">@ProgressT(lang, label)</span>
+	}
 }
 
 // estimateSourceNote labels how the skill's estimate was made (INIT-032/SPEC-006).
@@ -163,9 +184,14 @@ templ estimateSourceNote(lang, source, day string) {
 // chartCard is a line chart card: title, note, the chart or what to do, its summary, and a table.
 templ chartCard(v ProgressView, c ChartView) {
 	<section class="c-card pchart" aria-labelledby={ c.ID + "-h" } data-chart={ c.ID }>
-		<h2 id={ c.ID + "-h" } class="pchart__title">@E(c.Title)</h2>
-		if c.Through != "" {
+		<h2 id={ c.ID + "-h" } class="pchart__title">@ProgressT(v.Lang, c.Title)</h2>
+		if c.ThroughToday {
+			<p class="pchart__note pchart__through">@ProgressT(v.Lang, "Through today")</p>
+		} else if c.Through != "" {
 			<p class="pchart__note pchart__through">@ProgressT(v.Lang, "Through")@E(" " + c.Through)</p>
+		}
+		if c.OldRuleNote {
+			<p class="pchart__note pchart__old">@ProgressT(v.Lang, "old rule")</p>
 		}
 		if c.Note != "" {
 			<p class="pchart__note">@E(c.Note)</p>
@@ -177,7 +203,7 @@ templ chartCard(v ProgressView, c ChartView) {
 			if len(c.Key) > 0 {
 				<ul class="pchart__key">
 					for _, k := range c.Key {
-						<li>@E(k)</li>
+						<li>@ProgressT(v.Lang, k)</li>
 					}
 				</ul>
 			}
@@ -192,6 +218,65 @@ templ chartCard(v ProgressView, c ChartView) {
 			</div>
 		}
 	</section>
+}
+
+templ helpCard(v ProgressView) {
+	<section class="c-card pstand" aria-labelledby="help-h" data-stand="help">
+		<h2 id="help-h" class="pchart__title">@ProgressT(v.Lang, "Where you need help")</h2>
+		for _, b := range v.Help {
+			@standingBlock(v, b, true)
+		}
+	</section>
+}
+
+templ strongCard(v ProgressView) {
+	<section class="c-card pstand" aria-labelledby="strong-h" data-stand="strong">
+		<h2 id="strong-h" class="pchart__title">@ProgressT(v.Lang, "Where you're strong")</h2>
+		for _, b := range v.Strong {
+			@standingBlock(v, b, false)
+		}
+	</section>
+}
+
+templ standingBlock(v ProgressView, b StandingBlock, help bool) {
+	<div class="pstand__dir" data-skill={ b.Skill }>
+		<h3 class="pstand__h3">@ProgressT(v.Lang, b.Label)</h3>
+		if b.Reason != "" {
+			<p class="pstand__reason">@E(b.Reason)</p>
+		}
+		if len(b.Words) > 0 {
+			<ul class="pstand__list">
+				for _, w := range b.Words {
+					<li class="pstand__item">
+						if w.Href != "" {
+							<a class="pstand__word" href={ templ.SafeURL(w.Href) }>
+								<span class="pstand__he">@H(w.Hebrew)</span>
+								if w.English != "" {
+									<span class="pstand__en">@E(w.English)</span>
+								}
+							</a>
+						} else {
+							<span class="pstand__he">@H(w.Hebrew)</span>
+							if w.English != "" {
+								<span class="pstand__en">@E(w.English)</span>
+							}
+						}
+						if w.MissText != "" {
+							<span class="pstand__miss">@T(v.Lang, w.MissHE, w.MissText)</span>
+						}
+						if w.Cause != "" {
+							<span class="pstand__cause">@T(v.Lang, w.CauseHE, w.Cause)</span>
+						}
+					</li>
+				}
+			</ul>
+		}
+		if help && b.PracticeHref != "" {
+			<a class="btn btn-tonal pstand__practice" href={ templ.SafeURL(b.PracticeHref) }>
+				<span>@ProgressT(v.Lang, "practice these")</span>
+			</a>
+		}
+	</div>
 }
 
 // chartTable is the same values as the chart, for a screen reader and for anyone who wants the numbers.
@@ -234,7 +319,7 @@ templ weekCard(v ProgressView) {
 	<section class="c-card pweek" aria-labelledby="week-h">
 		<h2 id="week-h" class="pchart__title">@T(v.Lang, "", "This week")</h2>
 		if v.Week.Compared {
-			<p class="pchart__note">@E("Words known, from " + shortDayOf(v.Week.From) + " to " + shortDayOf(v.Week.To) + ".")</p>
+			<p class="pchart__note">@E("Words known, from " + shortDayOf(v.Week.From) + " to today.")</p>
 			<div class="pc-table__scroll" role="region" tabindex="0" aria-label="Words gained and lost this week, by skill">
 				<table class="pweek__table">
 					<caption class="vh">@E("Words gained and lost this week, by skill")</caption>
