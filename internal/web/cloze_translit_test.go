@@ -69,7 +69,7 @@ func TestClozeHidesChoiceTranslitUntilGraded(t *testing.T) {
 		NewWords: []string{lomed},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityStory, Text: ani},
-			{Type: units.ActivityCloze, Text: line, Target: lomed},
+			{Type: units.ActivityCloze, Text: line, Target: lomed, Translation: "I study Hebrew."},
 			{Type: units.ActivityStory, Text: kotev + " " + okhel + " " + shoteh},
 		}}},
 	}, "shared")
@@ -145,6 +145,10 @@ func assertUngradedCloze(t *testing.T, body string) {
 	}
 	if strings.Contains(body, "TL-ivrit") || strings.Contains(body, "TL-ani") {
 		t.Fatalf("ungraded cloze shows a Latin reading of a Hebrew word:\n%s", body)
+	}
+	// The English line is the cue: the other verbs fit "I __ Hebrew" too.
+	if !strings.Contains(body, `<p class="say-cue" lang="en">I study Hebrew.</p>`) {
+		t.Fatalf("ungraded cloze has no English cue:\n%s", body)
 	}
 }
 

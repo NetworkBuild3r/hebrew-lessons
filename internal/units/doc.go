@@ -37,7 +37,10 @@
 //	brief.struggle_reuse        A struggle word is reused too few times, or not in its failing skill (block).
 //	brief.text_too_long         A passage has more tokens than the tier allows (block).
 //	brief.used                  The brief already built a unit (block).
+//	unit.cloze_context           A cloze line has fewer than 2 tokens (block on a new write and on an older revision, warning on the current published revision).
+//	unit.cloze_translation       A cloze has no translation, which is the learner's cue (block on a new write and on an older revision, warning on the current published revision).
 //	unit.drill_share            More than 40% of the unit's non-checkpoint activities are single-word drills (block with a brief, warn without). INIT-030/SPEC-004.
+//	unit.lesson_repeat           A lesson repeats an earlier lesson of the unit step for step; checkpoints are not compared (block on a new write and on an older revision, warning on the current published revision).
 //	unit.no_markup               A text field contains <, >, or javascript: (block).
 //	unit.order_accept            An accept entry is not a different order of the same tokens as text (block). INIT-029/SPEC-002.
 //	unit.order_tokens            An order line has fewer than 3 or more than 8 tokens (block). INIT-029/SPEC-002.
@@ -130,6 +133,9 @@ const (
 	// MinOrderTokens and MaxOrderTokens bound an order line. INIT-029/SPEC-002.
 	MinOrderTokens = 3
 	MaxOrderTokens = 8
+
+	// MinClozeTokens is the gap plus at least one word of the sentence.
+	MinClozeTokens = 2
 )
 
 // The two speakers of a dialogue. A is the female voice and B is the male voice.

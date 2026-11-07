@@ -82,6 +82,9 @@ func TestLearnPageAndFirstStepLink(t *testing.T) {
 	if !strings.Contains(string(css), ".how-sheet {") || !strings.Contains(string(css), "margin: auto;") {
 		t.Fatal("the explainer dialog is not centered")
 	}
+	if !strings.Contains(string(css), ".how-sheet:not([open]) { display: none; }") {
+		t.Fatal("the closed explainer dialog is not hidden")
+	}
 	second := postLesson(t, h, learner.cookie, link, runValue(t, first), "continue", true, learner.csrf).Body.String()
 	if strings.Contains(second, "How this works") {
 		t.Fatal("a later step still links the explainer")

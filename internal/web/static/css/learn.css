@@ -153,6 +153,8 @@
   padding: var(--space-4);
   box-shadow: var(--shadow-3);
 }
+/* display: flex above beats the browser's hidden closed dialog. */
+.how-sheet:not([open]) { display: none; }
 .how-sheet__close {
   align-self: end;
   min-block-size: var(--size-tap);

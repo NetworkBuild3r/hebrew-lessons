@@ -82,7 +82,10 @@ const (
 	RuleSchemaRequired             = "schema.required"
 	RuleStoryUnmapped              = "story.unmapped"
 	RuleStoryUnpointed             = "story.unpointed"
+	RuleUnitClozeContext           = "unit.cloze_context"
+	RuleUnitClozeTranslation       = "unit.cloze_translation"
 	RuleUnitDrillShare             = "unit.drill_share" // INIT-030/SPEC-004
+	RuleUnitLessonRepeat           = "unit.lesson_repeat"
 	RuleUnitNoMarkup               = "unit.no_markup"
 	RuleUnitOrderAccept            = "unit.order_accept"      // INIT-029/SPEC-002
 	RuleUnitOrderTokens            = "unit.order_tokens"      // INIT-029/SPEC-002
@@ -170,9 +173,12 @@ var Rules = []Rule{
 	{ID: RuleSchemaRequired, Severity: SeverityBlock, Description: "A required field is missing or empty."},
 	{ID: RuleStoryUnmapped, Severity: SeverityBlock, Description: "A story content word does not map to a lexicon entry. Names and numbers are exempt. A number is digits or gematria in rank order with U+05F3/U+05F4. Acronyms are words, except spellings that are also valid numerals (ת״א, ש״ס), which are treated as numerals. ASCII quotes are split into letters and flagged. The same token is not also lexeme.unknown."},
 	{ID: RuleStoryUnpointed, Severity: SeverityBlock, Description: "A story contains a Hebrew word with no niqqud. Names, numbers, and punctuation are ignored. A number is digits or gematria in rank order with U+05F3/U+05F4. Acronyms are words, except spellings that are also valid numerals (ת״א, ש״ס), which are treated as numerals. ASCII quotes are split into letters and flagged. Homographs are not exempt."},
+	{ID: RuleUnitClozeContext, Severity: SeverityBlock, Description: fmt.Sprintf("A cloze line has fewer than %d tokens, so the gap has no sentence around it. Use produce for a single word. On a new save or publish this is a block, and so is publishing an older revision. Checking the current published revision reports it as a warning.", MinClozeTokens)},
+	{ID: RuleUnitClozeTranslation, Severity: SeverityBlock, Description: "A cloze has no translation. The player shows the English of the whole line as the cue, so only the target fits the gap and a word of the same part of speech is plainly wrong. On a new save or publish this is a block, and so is publishing an older revision. Checking the current published revision reports it as a warning."},
 	{ID: RuleUnitDialogueLines, Severity: SeverityBlock, Description: fmt.Sprintf("A dialogue has fewer than %d or more than %d lines, a dialogue carries text instead of lines, or an activity that is not a dialogue carries lines.", MinDialogueLines, MaxDialogueLines)},
 	{ID: RuleUnitDialogueSpeakers, Severity: SeverityBlock, Description: "A dialogue line has a speaker other than a (female voice) or b (male voice), or one of the two speakers has no line."},
 	{ID: RuleUnitDrillShare, Severity: SeverityBlock, Description: fmt.Sprintf("More than %.0f%% of a unit's non-checkpoint activities are single-word drills (a shadow, listen_pick, recall, or produce whose text is one Hebrew token). With a brief this blocks; without a brief it warns. INIT-030/SPEC-004.", MaxDrillShare*100)},
+	{ID: RuleUnitLessonRepeat, Severity: SeverityBlock, Description: "A lesson has the same activities, in the same order, as an earlier lesson of the unit. Checkpoints are not compared. On a new save or publish this is a block, and so is publishing an older revision. Checking the current published revision reports it as a warning."},
 	{ID: RuleUnitNoMarkup, Severity: SeverityBlock, Description: "Brief check. A text field of the unit (title, situation, concept, a new word, a lesson kind, an activity type, text, target, translation, or accept, a dialogue line's speaker, text, or translation) contains <, >, or javascript: in any letter case. The unit is plain text and the templates escape it again on output."},
 	{ID: RuleUnitOrderAccept, Severity: SeverityBlock, Description: "An order accept entry must use exactly the same tokens as text, in a different order. A duplicate of text, or an entry that adds, drops, or repeats a token, is a block. INIT-029/SPEC-002."},
 	{ID: RuleUnitOrderTokens, Severity: SeverityBlock, Description: fmt.Sprintf("An order line must have %d to %d tokens. INIT-029/SPEC-002.", MinOrderTokens, MaxOrderTokens)},

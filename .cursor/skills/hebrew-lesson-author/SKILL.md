@@ -75,7 +75,7 @@ A unit is plain JSON. It has no audio, gloss, or choices fields. Audio is the cl
 | `listen_pick` | The pointed text the learner hears. The question is "What did you hear?" and the buttons are lines of Hebrew: the real line, and the same line with the practised word (`target`) swapped for another word of the unit. The spelling is shown only as those buttons. Set `translation` to the English of a multi-word line; it is kept and checked, and the player does not show it yet. | listen | A question. Judged for coverage and length. Every word of the unit needs a use in some activity, or there are too few words to swap in, and the step then asks for the meaning instead. |
 | `recall` | The pointed Hebrew prompt. The answer is the lexicon gloss. | recall | A question. |
 | `produce` | The pointed Hebrew the learner types. The prompt is the gloss. | spell | A question. |
-| `cloze` | The whole pointed sentence. When it has two or more words that are in the lexicon, `target` is the gap. | read | A question. |
+| `cloze` | The whole pointed sentence, at least two words. When it has two or more words that are in the lexicon, `target` is the gap. `translation` is the English of the whole line, and the learner sees it as the cue, so only the target fits the gap. | read | A question. A single word is a `produce`, never a cloze. |
 | `pattern` | One pointed example of a pattern. The concept is the rule. | read | A question. |
 | `order` | The right pointed Hebrew order. `translation` is the short English cue. `accept` lists other full orders of the same tokens that are also right. | recall | A question. The learner builds the sentence from pointed chips. |
 
@@ -201,9 +201,12 @@ Every Hebrew text needs a clip for its exact pointed text. Do not change a text 
 | `schema.required` | block | A required field is missing or empty: title, situation, concept, lessons, kind, activities, type, text, or a dialogue line's text. | Fill the field at the pointer. |
 | `story.unmapped` | block | A word in a story or dialogue line is not a lexicon entry as written. Names and numbers are exempt. | Call `lookup` and use its `text_nfc`. If the form is missing and you are sure of it, `upsert_lexemes`. Otherwise reword. |
 | `story.unpointed` | block | A word in a story or dialogue line has no niqqud. | Point the word. |
+| `unit.cloze_context` | block | A `cloze` line has fewer than 2 tokens, so the gap has no sentence around it. The current published revision warns. | Write the whole sentence, or use `produce` for one word. |
+| `unit.cloze_translation` | block | A `cloze` has no `translation`. Without the English cue, every word of the same part of speech fits the gap. The current published revision warns. | Write the English of the whole line. |
 | `unit.dialogue_lines` | block | A dialogue has under 2 or over 8 lines, it has `text`, or another type has `lines`. | Use 2 to 8 `lines` and no `text` on a dialogue, and no `lines` anywhere else. |
 | `unit.dialogue_speakers` | block | A speaker is not `a` or `b`, or one of them never speaks. | Use only `a` and `b`, and give each at least one line. |
 | `unit.drill_share` | block | More than 40% of the unit's non-checkpoint activities are single-word drills (a bare-word `shadow`, `listen_pick`, `recall`, or `produce`). With a brief this blocks; without a brief it warns. | Turn bare-word drills into sentence questions, or add more multi-word meaning steps. |
+| `unit.lesson_repeat` | block | A lesson has the same activities, in the same order, as an earlier lesson of the unit. Checkpoints are not compared. The current published revision warns. | Write new lines that use the words in a different way. |
 | `unit.no_markup` | block | A text, including a `translation`, has `<`, `>`, or `javascript:`. | Remove it. A unit is plain text. |
 | `unit.order_accept` | block | An `order` `accept` entry is not a different full order of the same tokens as `text`. | List only rearrangements of the same tokens, not duplicates of `text`. |
 | `unit.order_tokens` | block | An `order` line has fewer than 3 or more than 8 tokens. | Use 3 to 8 pointed Hebrew tokens. |
@@ -287,7 +290,7 @@ Sentence questions follow the story. Bare-word drills are only the milk `produce
         { "type": "story", "text": "בֹּקֶר טוֹב. אֲנִי אוֹכֵל לֶחֶם. אֲנִי שׁוֹתֶה תֵּה חַם. אֲנִי שׁוֹתֶה מַיִם טוֹב.", "translation": "Good morning. I eat bread. I drink hot tea. I drink good water." },
         { "type": "listen_pick", "text": "אֲנִי שׁוֹתֶה מַיִם", "target": "מַיִם", "translation": "I drink water" },
         { "type": "listen_pick", "text": "אֲנִי אוֹכֵל לֶחֶם", "target": "לֶחֶם", "translation": "I eat bread" },
-        { "type": "cloze", "text": "אֲנִי אוֹכֵל לֶחֶם טוֹב", "target": "לֶחֶם" },
+        { "type": "cloze", "text": "אֲנִי אוֹכֵל לֶחֶם טוֹב", "target": "לֶחֶם", "translation": "I eat good bread" },
         { "type": "order", "text": "אֲנִי שׁוֹתֶה מַיִם", "translation": "I drink water", "accept": ["מַיִם אֲנִי שׁוֹתֶה"] },
         { "type": "say", "text": "אֲנִי שׁוֹתֶה תֵּה", "target": "תֵּה", "prompt_en": "Say: I drink tea" },
         { "type": "recall", "text": "אֲנִי שׁוֹתֶה קָפֶה", "target": "קָפֶה" },
@@ -379,7 +382,7 @@ The story reuses the breakfast situation with no new language. Dialogue lines to
           ]
         },
         { "type": "listen_pick", "text": "אֲנִי שׁוֹתֶה תֵּה", "target": "תֵּה", "translation": "I drink tea" },
-        { "type": "cloze", "text": "אֲנִי אוֹכֵל לֶחֶם טוֹב", "target": "לֶחֶם" },
+        { "type": "cloze", "text": "אֲנִי אוֹכֵל לֶחֶם טוֹב", "target": "לֶחֶם", "translation": "I eat good bread" },
         { "type": "order", "text": "אֲנִי שׁוֹתֶה מַיִם", "translation": "I drink water", "accept": ["מַיִם אֲנִי שׁוֹתֶה"] },
         { "type": "say", "text": "אֲנִי שׁוֹתֶה קָפֶה", "target": "קָפֶה", "prompt_en": "Say: I drink coffee" },
         { "type": "listen_pick", "text": "לֶחֶם אוֹ מַיִם", "target": "לֶחֶם", "translation": "bread or water" },

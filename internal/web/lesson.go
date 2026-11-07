@@ -983,6 +983,11 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 		}
 		return activity
 	}
+	if act.Type == units.ActivityCloze {
+		// The gap is asked by meaning. Without the English, every word of the
+		// same part of speech fits the line and still grades wrong.
+		activity.Cue = strings.TrimSpace(act.Translation)
+	}
 	if !empty && act.Type == units.ActivityListenPick && run.Phase != "ask" {
 		activity.Prompt = listenRevealPrompt
 	}
@@ -1815,6 +1820,9 @@ func activityPrompt(lesson db.CourseLesson, act units.Activity, target db.Lexeme
 		}
 		return "Pick the Hebrew."
 	case units.ActivityCloze:
+		if strings.TrimSpace(act.Translation) != "" {
+			return "Pick the word that makes the Hebrew say this."
+		}
 		return "Pick the missing word."
 	case units.ActivitySay:
 		return "Say it in Hebrew"

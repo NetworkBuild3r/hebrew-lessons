@@ -87,6 +87,8 @@ func collect(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue {
 	issues = append(issues, targetIssues(ctx, doc, lk, mode)...)
 	issues = append(issues, translationIssues(ctx, doc, lk, mode)...)
 	issues = append(issues, orderIssues(doc)...) // INIT-029/SPEC-002
+	issues = append(issues, clozeIssues(doc, mode)...)
+	issues = append(issues, lessonRepeatIssues(doc, mode)...)
 	return dedupeLookup(issues)
 }
 
