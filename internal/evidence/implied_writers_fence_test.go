@@ -18,9 +18,9 @@ import (
 //
 // Other hits must be read before adding. Do not silently widen this list.
 var impliedWriterAllowlist = map[string]string{
-	"internal/evidence/spell.go": "spellImplied writes typed English→Hebrew credit onto spelling cards",
+	"internal/evidence/spell.go":    "spellImplied writes typed English→Hebrew credit onto spelling cards",
 	"internal/evidence/recorder.go": "Recorder.Implied sets the flag for move-up on non-spell cards only",
-	"cmd/hebrew/backfill_spell.go": "one-time backfill of historical typed spelling credit",
+	"cmd/hebrew/backfill_spell.go":  "one-time backfill of historical typed spelling credit",
 	// Sets AnswerOutcome.Implied after Recorder.Implied; never writes review_log.
 	"internal/session/session.go": "AnswerOutcome flag only; cannot target a spell card via review_log",
 }
