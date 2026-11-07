@@ -21,7 +21,7 @@ const studyDigestDescription = "Read one learner's study digest for a tutor conv
 	"zone and zoneSource name the IANA zone used for today and every day in the reply (learner when stored, otherwise app). There is no UTC invent-today. " +
 	"asOf is the request instant for the live counts. knownAnySkill is words known or solid in at least one skill. " +
 	"skills holds, per skill, direction (ADR-0028 D4 label), knownSolidNow and strugglingNow from the live learner model, knownSolid7dAgo from the snapshot on agoDay (seven learner days back), and agoDay names that day. Skill keys stay listen, read, recall, spell. " +
-	"history is the last 14 daily_totals days plus today's live knownAnySkill point, each with ruleVersion (2 under current rules). The last point equals knownAnySkill. " +
+	"history is the last 14 daily_totals days plus today's live knownAnySkill point, each with ruleVersion (3 under current rules; today's live point uses the current RuleVersion). The last point equals knownAnySkill. " +
 	"retention holds, per skill, the last seven learner days against the 85–90% band; each day value has window 30d due reviews and asOf for that day. " +
 	"minutesInApp is the last seven learner days of answering time, using the same idle-gap rule as the weekly job. " +
 	"struggle is at most ten struggling words with cause and confusedWith. " +

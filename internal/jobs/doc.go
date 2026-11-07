@@ -40,7 +40,7 @@
 // # As-of history (INIT-033/SPEC-004 / ADR-0028 D3)
 //
 // Each missed day is evaluated with SnapshotAt at EndOfDay for that day in the learner's
-// zone, under the current rules, and stamped rule_version 2 with a matching daily_totals
+// zone, under the current rules, and stamped with RuleVersion with a matching daily_totals
 // row (KnownAnySkill). Word and band state keys advance from each day's own snapshot, so a
 // regression lands on the day it happened. hebrew history rebuild rewrites past days the
 // same way; it never rebuilds regression events. A band_slip is not repeated for the same

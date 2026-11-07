@@ -97,7 +97,7 @@ func stackedBarSVG(id, label string, segs []barSeg) string {
 }
 
 // linePoint is one day on a line chart. OldRule is true when the day was written
-// under rule_version < 2 (ADR-0028 D3); those segments are drawn dashed.
+// below the current rule version (ADR-0028 D3 / ADR-0030 D4); those segments are drawn dashed.
 type linePoint struct {
 	Day     string // YYYY-MM-DD
 	Value   float64
@@ -221,7 +221,7 @@ func lineChartSVG(spec lineSpec) string {
 }
 
 // writeLineSeries draws one series. A segment is dashed when either end is an
-// OldRule day (ADR-0028 D3 / SPEC-007).
+// OldRule day (ADR-0028 D3 / ADR-0030 D4 / SPEC-007).
 func writeLineSeries(b *strings.Builder, s lineSeries, x func(string) float64, y func(float64) float64) {
 	if len(s.Points) == 0 {
 		return

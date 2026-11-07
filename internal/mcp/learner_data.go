@@ -228,7 +228,7 @@ type CompactHelp struct {
 type DigestHistoryPoint struct {
 	Day           string `json:"day"`
 	KnownAnySkill int    `json:"knownAnySkill"`
-	RuleVersion   int    `json:"ruleVersion" jsonschema:"1 for unrebuilt days, 2 under current rules. Today's live point uses 2."`
+	RuleVersion   int    `json:"ruleVersion" jsonschema:"1 for unrebuilt days, 3 under current rules. Today's live point uses the current RuleVersion."`
 	Live          bool   `json:"live,omitempty" jsonschema:"True for today's live point appended after stored days."`
 }
 

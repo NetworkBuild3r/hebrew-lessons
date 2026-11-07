@@ -992,3 +992,38 @@ func TestImpliedRefusesBadRatingAndOtherLearner(t *testing.T) {
 		t.Fatal("refused Implied still wrote")
 	}
 }
+
+// INIT-035/SPEC-003: move-up Implied must never write onto a spelling card.
+func TestImpliedRefusesSpellCard(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	lex := e.lexeme(kelev)
+	id, err := e.store.InsertCard(ctx, db.Card{
+		UserID: e.user, LexemeID: lex, Skill: fsrs.SkillSpell, State: fsrs.StateReview,
+		Due: e.clk.Now().Add(-time.Hour), Stability: 2, Difficulty: 5, Reps: 2,
+		LastReview: e.clk.Now().Add(-48 * time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.rec.Implied(ctx, e.user, id, fsrs.Good); err == nil {
+		t.Fatal("Implied accepted a spelling card")
+	}
+	if e.count(`SELECT COUNT(*) FROM review_log`) != 0 {
+		t.Fatal("refused Implied on spell still wrote")
+	}
+	before, err := e.store.GetCard(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.rec.Implied(ctx, e.user, id, fsrs.Good); err == nil {
+		t.Fatal("Implied accepted a spelling card on retry")
+	}
+	after, err := e.store.GetCard(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Due != before.Due || after.Reps != before.Reps || after.Stability != before.Stability {
+		t.Fatalf("spell card changed after refused Implied: before=%+v after=%+v", before, after)
+	}
+}

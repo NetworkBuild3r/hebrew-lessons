@@ -35,12 +35,44 @@ func TestAuditFixtureMatchesAndExits0(t *testing.T) {
 	}
 	for _, name := range []string{
 		"known_any_skill", "spell_cards", "zone",
-		"history_rule1_days", "history_last_day", "replay_mismatch",
+		"history_rule1_days", "history_old_rule_days", "history_last_day", "replay_mismatch",
 		"review_skipped_no_audio", "read.verdict", "recall.accuracy14",
 	} {
 		if !strings.Contains(out, name) {
 			t.Fatalf("missing row %s:\n%s", name, out)
 		}
+	}
+}
+
+func TestAuditOldRuleDaysExits1(t *testing.T) {
+	fx := auditFixture(t)
+	ctx := context.Background()
+	store, err := db.Open(ctx, fx.path, fixedClock{time.Date(2026, 11, 6, 18, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	day := "2026-11-03"
+	if err := store.InDailyTx(ctx, func(tx *db.DailyTx) error {
+		return tx.InsertTotals(ctx, fx.user, day, 1, 2) // rule_version 2 < jobs.RuleVersion 3
+	}); err != nil {
+		store.Close()
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	err = auditCommand([]string{"--learner", strconv.FormatInt(fx.user, 10), "--db", fx.path}, &stdout, &stderr)
+	if err == nil {
+		t.Fatalf("want exit 1 with old-rule row; stdout:\n%s", stdout.String())
+	}
+	qe, ok := err.(interface{ ExitCode() int })
+	if !ok || qe.ExitCode() != 1 {
+		t.Fatalf("err=%v, want exit 1", err)
+	}
+	if !strings.Contains(err.Error(), "history_old_rule_days") {
+		t.Fatalf("error %q does not name history_old_rule_days", err)
 	}
 }
 

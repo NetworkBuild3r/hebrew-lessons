@@ -13,6 +13,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/jobs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
@@ -537,7 +538,7 @@ func knownOverTimeChart(totals []db.DailyTotal, days []snapDay, standing learner
 		if rv == 0 {
 			rv = 1
 		}
-		knownPts = append(knownPts, linePoint{Day: t.Day, Value: float64(t.KnownAnySkill), OldRule: rv < 2})
+		knownPts = append(knownPts, linePoint{Day: t.Day, Value: float64(t.KnownAnySkill), OldRule: rv < jobs.RuleVersion})
 	}
 	knownPts = append(knownPts, linePoint{Day: today, Value: float64(standing.KnownAnySkill)})
 	series = append(series, lineSeries{ID: "known", Label: "Words you know", Points: knownPts})
@@ -559,7 +560,7 @@ func knownOverTimeChart(totals []db.DailyTotal, days []snapDay, standing learner
 			if rv == 0 {
 				rv = 1
 			}
-			pts = append(pts, linePoint{Day: day.Day, Value: float64(knownOf(sk)), OldRule: rv < 2})
+			pts = append(pts, linePoint{Day: day.Day, Value: float64(knownOf(sk)), OldRule: rv < jobs.RuleVersion})
 		}
 		pts = append(pts, linePoint{Day: today, Value: float64(d.Known + d.Solid)})
 		series = append(series, lineSeries{ID: d.Skill, Label: d.Direction, Thin: true, Points: pts})
@@ -627,7 +628,7 @@ func skillKnownChart(skill, name string, days []snapDay, today string, live floa
 			if rv == 0 {
 				rv = 1
 			}
-			pts = append(pts, linePoint{Day: d.Day, Value: float64(knownOf(sk)), OldRule: rv < 2})
+			pts = append(pts, linePoint{Day: d.Day, Value: float64(knownOf(sk)), OldRule: rv < jobs.RuleVersion})
 		}
 	}
 	pts = append(pts, linePoint{Day: today, Value: live})

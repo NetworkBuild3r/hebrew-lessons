@@ -1,6 +1,6 @@
 # Rebuild daily history
 
-Operator command for ADR-0028 D3 / INIT-033 SPEC-004. Rewrites `daily_snapshots` and `daily_totals` as of each day under the current rules (`rule_version = 2`). It never touches regression events, attempts, reviews, or cards.
+Operator command for ADR-0028 D3 / ADR-0030 D4 / INIT-035 SPEC-004. Rewrites `daily_snapshots` and `daily_totals` as of each day under the current rules (`rule_version = 3`). It never touches regression events, attempts, reviews, or cards.
 
 Dry run is the default and opens the database with `PRAGMA query_only`. `--apply` writes one transaction per day and takes the same `daily.lock` as the scheduled job.
 

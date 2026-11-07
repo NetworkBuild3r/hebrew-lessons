@@ -31,6 +31,7 @@ Record the production table (counts only) in the initiative completion summary. 
 | `spell_cards` | Spelling card count |
 | `zone` | Stored `users.time_zone` (`none` when unset; never invents UTC) |
 | `history_rule1_days` | Count of `daily_totals` days still on `rule_version = 1`. Expected `0` after `hebrew history rebuild --apply` |
+| `history_old_rule_days` | Count of `daily_totals` days stamped below the current `jobs.RuleVersion` (3 under ADR-0030). Expected `0` after rebuild under the current rules |
 | `history_last_day` | Last stored `daily_totals.known_any_skill` versus `SnapshotAt(end of that day)`, in the zone the daily job used (the learner's zone, else the app zone from `TZ`) |
 | `replay_mismatch` | Live `Snapshot.ReplayMismatch` (stored cards that differ from a replay of `review_log`); mismatches unless `0` |
 | `{skill}.verdict` / `{skill}.accuracy14` | Standing versus an independent AttemptTally recompute (ADR-0028 D5) |
@@ -54,4 +55,4 @@ kubectl -n hebrew exec "$POD" -c hebrew -- /usr/local/bin/hebrew history rebuild
 kubectl -n hebrew exec "$POD" -c hebrew -- /usr/local/bin/hebrew audit --learner 1
 ```
 
-The audit must exit `0`: `history_rule1_days = 0`, `history_last_day` agreeing with `SnapshotAt`, `replay_mismatch = 0`, and per-direction verdict / accuracy14 rows matching Standing.
+The audit must exit `0`: `history_rule1_days = 0`, `history_old_rule_days = 0`, `history_last_day` agreeing with `SnapshotAt`, `replay_mismatch = 0`, and per-direction verdict / accuracy14 rows matching Standing.

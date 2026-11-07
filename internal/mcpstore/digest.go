@@ -165,7 +165,7 @@ func digestSkills(days []mcp.SnapshotDay, ago7 string, live learner.Summary) []m
 }
 
 // digestHistory is the last DigestHistoryDays daily_totals rows through yesterday,
-// plus today's live knownAnySkill point stamped rule_version 2 (ADR-0028 D2/D3).
+// plus today's live knownAnySkill point stamped with jobs.RuleVersion (ADR-0030 D4).
 func (s *Store) digestHistory(ctx context.Context, id int64, from, today string, liveKnown int) ([]mcp.DigestHistoryPoint, error) {
 	yesterday := civilAdd(today, -1)
 	var stored []db.DailyTotal

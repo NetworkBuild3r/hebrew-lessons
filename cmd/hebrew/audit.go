@@ -136,7 +136,7 @@ func runAuditDB(ctx context.Context, store *db.Store, learnerID int64) ([]auditR
 	if err != nil {
 		return nil, err
 	}
-	extra, err := auditHistoryStanding(ctx, model, zones, learnerID)
+	extra, err := auditHistoryStanding(ctx, store, model, zones, learnerID)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func runAuditDB(ctx context.Context, store *db.Store, learnerID int64) ([]auditR
 
 // auditHistoryStanding recomputes the last stored day in the zone the daily job used for
 // this learner (studyday.Resolver: the learner's zone, else the app zone from TZ).
-func auditHistoryStanding(ctx context.Context, model *learner.Model, zones *studyday.Resolver, learnerID int64) ([]auditRow, error) {
+func auditHistoryStanding(ctx context.Context, store *db.Store, model *learner.Model, zones *studyday.Resolver, learnerID int64) ([]auditRow, error) {
 	zone, err := zones.For(ctx, learnerID)
 	if err != nil {
 		return nil, err
@@ -156,6 +156,10 @@ func auditHistoryStanding(ctx context.Context, model *learner.Model, zones *stud
 		return nil, err
 	}
 	dirs, err := model.RecomputeDirections(ctx, learnerID)
+	if err != nil {
+		return nil, err
+	}
+	oldRule, err := learner.CountOlderRuleDays(ctx, store, learnerID, jobs.RuleVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +181,8 @@ func auditHistoryStanding(ctx context.Context, model *learner.Model, zones *stud
 
 	// Expected after rebuild: zero rule-1 days. Surface is the live count.
 	add("history_rule1_days", "0", strconv.Itoa(facts.HistoryRule1Days))
+	// Expected after rebuild under current rules: no days stamped below jobs.RuleVersion.
+	add("history_old_rule_days", "0", strconv.Itoa(oldRule))
 
 	if facts.HistoryLastDay != "" {
 		add("history_last_day",

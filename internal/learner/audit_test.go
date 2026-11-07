@@ -65,6 +65,33 @@ func TestCountRule1Days(t *testing.T) {
 	}
 }
 
+func TestCountOlderRuleDays(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	n, err := CountOlderRuleDays(ctx, e.store, e.user, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("older=%d, want 0", n)
+	}
+	if err := e.store.InDailyTx(ctx, func(tx *db.DailyTx) error {
+		if err := tx.InsertTotals(ctx, e.user, "2026-11-01", 1, 2); err != nil {
+			return err
+		}
+		return tx.InsertTotals(ctx, e.user, "2026-11-02", 2, 3)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	n, err = CountOlderRuleDays(ctx, e.store, e.user, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("older=%d, want 1 (the rule-2 day)", n)
+	}
+}
+
 func TestHistoryFactsLastDayMatchesSnapshotAt(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -88,9 +115,9 @@ func TestHistoryFactsLastDayMatchesSnapshotAt(t *testing.T) {
 		rows := []db.DailySnapshotRow{{
 			Skill: "read", State: "known",
 			Count: snap.Summary.KnownAnySkill, EstKnown: float64(snap.Summary.KnownAnySkill),
-			RuleVersion: 2,
+			RuleVersion: 3,
 		}}
-		return tx.ReplaceDay(ctx, e.user, day, rows, snap.Summary.KnownAnySkill, 2)
+		return tx.ReplaceDay(ctx, e.user, day, rows, snap.Summary.KnownAnySkill, 3)
 	}); err != nil {
 		t.Fatal(err)
 	}

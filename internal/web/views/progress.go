@@ -45,7 +45,7 @@ type ChartView struct {
 	Note         string
 	Through      string
 	ThroughToday bool
-	OldRuleNote  bool // any point still on rule_version < 2
+	OldRuleNote  bool // any point still below the current rule version
 	SVG          string
 	Table        ChartTable
 	Summary      string

@@ -14,6 +14,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/jobs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcpstore"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
@@ -45,7 +46,7 @@ func seedLearnerDaySnapshots(t *testing.T, store *db.Store, userID int64, first,
 				}
 				rows = append(rows, db.DailySnapshotRow{
 					Skill: skill, State: string(st), Count: n,
-					EstKnown: 100 + float64(i), Retention: &ret, RuleVersion: 2,
+					EstKnown: 100 + float64(i), Retention: &ret, RuleVersion: jobs.RuleVersion,
 				})
 			}
 			if 10+i+1 > knownAny { // known + solid(1)
@@ -56,7 +57,7 @@ func seedLearnerDaySnapshots(t *testing.T, store *db.Store, userID int64, first,
 			if err := tx.InsertSnapshot(ctx, userID, day, rows); err != nil {
 				return err
 			}
-			return tx.InsertTotals(ctx, userID, day, knownAny, 2)
+			return tx.InsertTotals(ctx, userID, day, knownAny, jobs.RuleVersion)
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -123,7 +124,7 @@ func seedProgressSnapshots(t *testing.T, store *db.Store, userID int64, days int
 			for _, st := range learner.States {
 				rows = append(rows, db.DailySnapshotRow{
 					Skill: skill, State: string(st), Count: counts[string(st)],
-					EstKnown: est(i, skill), Retention: &ret, RuleVersion: 2,
+					EstKnown: est(i, skill), Retention: &ret, RuleVersion: jobs.RuleVersion,
 				})
 			}
 		}
@@ -132,7 +133,7 @@ func seedProgressSnapshots(t *testing.T, store *db.Store, userID int64, days int
 			if err := tx.InsertSnapshot(ctx, userID, day, rows); err != nil {
 				return err
 			}
-			return tx.InsertTotals(ctx, userID, day, knownAny, 2)
+			return tx.InsertTotals(ctx, userID, day, knownAny, jobs.RuleVersion)
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -1618,6 +1619,33 @@ func TestProgressOldRuleDaysAreDashed(t *testing.T) {
 	}
 	if !strings.Contains(est, "Through today") {
 		t.Fatal("missing Through today")
+	}
+
+	// A day stamped rule_version 2 (literal) is below current and must also render dashed.
+	// Assert the table cell for that day so a leftover rule_version=1 dash cannot mask a miss.
+	day2 := "2026-10-17"
+	var rows2 []db.DailySnapshotRow
+	for _, skill := range learner.Skills {
+		for _, st := range learner.States {
+			rows2 = append(rows2, db.DailySnapshotRow{
+				Skill: skill, State: string(st), Count: 2,
+				EstKnown: 11, Retention: &ret, RuleVersion: 2, // literal 2: below jobs.RuleVersion
+			})
+		}
+	}
+	if err := store.InDailyTx(ctx, func(tx *db.DailyTx) error {
+		if err := tx.InsertSnapshot(ctx, l.user.ID, day2, rows2); err != nil {
+			return err
+		}
+		return tx.InsertTotals(ctx, l.user.ID, day2, 5, 2)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body = getLearner(t, h, l, "/progress")
+	est = section(t, body, "c-card pchart", `data-chart="est"`)
+	if !strings.Contains(est, "Oct 17 (old rule)") || !strings.Contains(est, "pc__line--old") {
+		t.Fatalf("rule_version=2 day (below current %d) should be dashed with old rule text:\n%s",
+			jobs.RuleVersion, est)
 	}
 }
 

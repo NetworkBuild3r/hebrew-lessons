@@ -467,7 +467,7 @@ func TestCatchUpFillsEveryMissedDay(t *testing.T) {
 }
 
 // INIT-033/SPEC-004: a learner who misses three days then catches up gets three DIFFERENT
-// snapshots, each equal to SnapshotAt(end of that day), with rule_version 2 and
+// snapshots, each equal to SnapshotAt(end of that day), with the current RuleVersion and
 // daily_totals.known_any_skill == Summary.KnownAnySkill.
 func TestEndOfDayIsMidnightInZone(t *testing.T) {
 	chi, err := time.LoadLocation("America/Chicago")

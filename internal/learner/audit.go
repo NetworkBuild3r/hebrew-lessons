@@ -220,6 +220,27 @@ func CountRule1Days(ctx context.Context, store *db.Store, userID int64) (int, er
 	return n, nil
 }
 
+// CountOlderRuleDays counts distinct daily_totals days stamped below current
+// (ADR-0030 D4 / INIT-035/SPEC-003). current is passed in so this package does
+// not import jobs (jobs already imports learner).
+func CountOlderRuleDays(ctx context.Context, store *db.Store, userID int64, current int) (int, error) {
+	totals, err := store.ListTotals(ctx, userID, "0001-01-01", "9999-12-31")
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, row := range totals {
+		rv := row.RuleVersion
+		if rv == 0 {
+			rv = 1
+		}
+		if rv < current {
+			n++
+		}
+	}
+	return n, nil
+}
+
 // CountReviewSkippedNoAudio counts due listen cards whose lexeme has no audio_id
 // (ADR-0028 D6 / session SkippedNoAudio).
 func (m *Model) CountReviewSkippedNoAudio(ctx context.Context, userID int64) (int, error) {

@@ -211,7 +211,8 @@ func Choose(views []SkillView, gate Gate, f Facts, avoid map[string]bool, visits
 }
 
 // Implies reports the harder skill that covers skill: recall covers read, and spell
-// covers listen. INIT-027/SPEC-004.
+// covers listen. Spelling is never a due skill for move-up (ADR-0030 D3 /
+// INIT-035/SPEC-003): Implies(SkillSpell) is always false. INIT-027/SPEC-004.
 func Implies(skill string) (string, bool) {
 	switch skill {
 	case fsrs.SkillRead:

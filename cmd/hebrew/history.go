@@ -4,7 +4,7 @@ package main
 //
 // Rebuilds daily_snapshots and daily_totals as of each day under the current rules
 // (ADR-0028 D3 / INIT-033/SPEC-004). Dry run is the default and opens the DB query-only.
-// --apply writes with ReplaceDay at rule_version 2. Never touches regression events,
+// --apply writes with ReplaceDay at rule_version 3. Never touches regression events,
 // attempts, reviews, or cards.
 
 import (
@@ -47,7 +47,7 @@ func historyRebuildCommand(args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "usage: hebrew history rebuild --learner N [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--db <file>] [--apply]\n")
-		fmt.Fprintf(fs.Output(), "  Rebuilds daily snapshots as of each day under the current rules (rule_version 2).\n")
+		fmt.Fprintf(fs.Output(), "  Rebuilds daily snapshots as of each day under the current rules (rule_version 3).\n")
 		fmt.Fprintf(fs.Output(), "  Dry run is the default (PRAGMA query_only). --apply writes one transaction per day.\n")
 		fs.PrintDefaults()
 	}

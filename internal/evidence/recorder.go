@@ -531,7 +531,9 @@ func baseLetters(s string) []rune {
 
 // Implied schedules Good credit for cardID with review_log.implied set and no
 // attempts row. rating must be Good. The card must belong to learnerID.
-// INIT-027/SPEC-004.
+// Spelling cards are refused: only spellImplied (typed spelling) and the
+// one-time backfill write implied rows onto spelling (ADR-0030 D3).
+// INIT-027/SPEC-004, INIT-035/SPEC-003.
 func (r *Recorder) Implied(ctx context.Context, learnerID, cardID int64, rating fsrs.Rating) error {
 	if err := r.ready(); err != nil {
 		return err
@@ -548,6 +550,9 @@ func (r *Recorder) Implied(ctx context.Context, learnerID, cardID int64, rating 
 	}
 	if card.UserID != learnerID {
 		return fmt.Errorf("evidence: card %d belongs to another learner", cardID)
+	}
+	if card.Skill == fsrs.SkillSpell {
+		return fmt.Errorf("evidence: implied must not write onto a spelling card")
 	}
 	now := r.clock.Now()
 	next, log, err := r.review.ScheduleNext(&card, now, fsrs.Good)

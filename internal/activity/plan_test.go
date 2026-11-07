@@ -307,6 +307,20 @@ func TestImplies(t *testing.T) {
 	}
 }
 
+// INIT-035/SPEC-003: spelling is never a due skill for move-up.
+func TestImpliesNeverDueSpell(t *testing.T) {
+	if _, ok := Implies(fsrs.SkillSpell); ok {
+		t.Fatal("Implies(spell) must return ok=false")
+	}
+	for _, s := range Skills {
+		if target, ok := Implies(s); ok {
+			if s == fsrs.SkillSpell {
+				t.Fatalf("Implies(%q) ok with target %q; spell must not be a due skill", s, target)
+			}
+		}
+	}
+}
+
 func TestChooseSkill(t *testing.T) {
 	visits := map[string]int{}
 	c := ChooseSkill(fsrs.SkillRead, open, allFacts, visits)
