@@ -17,7 +17,7 @@ const (
 	learnerModelMaxLimit = 200
 )
 
-const learnerModelDescription = "Read what the app knows about one learner's words, one page at a time. " +
+const learnerModelDescription = "Read what the app knows about one learner's words, one page at a time, plus the learner's standing across the four directions. " +
 	"A learner account reads its own words, and omitting learnerId uses its own id. Another id is forbidden. " +
 	"An admin, including the static token, must pass learnerId and may read any learner. A learner id that does not exist is an error. " +
 	"Each word has its pointed text, gloss, band (0 to 4, or null when the word is not in the placement deck), its overall state, and a state for each of the four skills: listen, read, recall, and spell. " +
@@ -29,6 +29,12 @@ const learnerModelDescription = "Read what the app knows about one learner's wor
 	"limit defaults to 50 and is cut to 200. limit in the reply is the page size that was used. " +
 	"nextCursor is null on the last page. Send it back as cursor, with the same filters, to read the next page. " +
 	"An unknown state, skill, or band, a cursor that this server did not issue, or a cursor longer than 256 characters is an error. " +
+	"summary.knownAnySkill is words known or solid in at least one skill, the same headline Progress shows. " +
+	"standing is the same Standing the Progress page uses: knownAnySkill, and directions[] for listen, read, recall, and spell. " +
+	"Each direction has skill, direction (ADR-0028 D4 label), counts, accuracy14, answers14, verdict, reason, help[], and strong[]. " +
+	"verdict is needs_help when accuracy is below 75% over at least 10 checked answers in 14 days or the direction has struggling or regressed words; " +
+	"strong when accuracy is at least 85% over at least 20 answers; building otherwise; not_askable when no checked review can ask that skill (listening without audio). " +
+	"help and strong word notes carry lexemeId, hebrew, english, misses14, answers14, cause, pair, and confusedWith. confusedWith is never a typed response. " +
 	"Workflow: call get_lesson_brief for the word plan, and call this tool to look at the words behind it. " +
 	"mistakes is that learner's top 10 personal mistakes, most repeated first and the latest of those first. Each has wrong, right, times, and lastAt, and note and pattern when they were recorded. Another learner's mistakes are not included. " +
 	"At most 60 calls a minute across the learner tools."
@@ -52,11 +58,18 @@ type ModelMistake struct {
 	LastAt  string `json:"lastAt"`
 }
 
+// LearnerModelSummaryLite is the headline counts on get_learner_model.
+type LearnerModelSummaryLite struct {
+	KnownAnySkill int `json:"knownAnySkill" jsonschema:"Words known or solid in at least one skill. Equals standing.knownAnySkill and the Progress headline."`
+}
+
 type learnerModelOutput struct {
-	Words      []ModelWord    `json:"words"`
-	NextCursor *string        `json:"nextCursor"`
-	Limit      int            `json:"limit" jsonschema:"The page size that was used."`
-	Mistakes   []ModelMistake `json:"mistakes" jsonschema:"This learner's top 10 personal mistakes, most repeated first. Never another learner's."`
+	Words      []ModelWord             `json:"words"`
+	NextCursor *string                 `json:"nextCursor"`
+	Limit      int                     `json:"limit" jsonschema:"The page size that was used."`
+	Mistakes   []ModelMistake          `json:"mistakes" jsonschema:"This learner's top 10 personal mistakes, most repeated first. Never another learner's."`
+	Summary    LearnerModelSummaryLite `json:"summary" jsonschema:"Headline counts shared with Progress."`
+	Standing   StandingView            `json:"standing" jsonschema:"Per-direction standing from the same function Progress uses."`
 }
 
 func (s *service) getLearnerModel(ctx context.Context, _ *mcp.CallToolRequest, in learnerModelInput) (*mcp.CallToolResult, learnerModelOutput, error) {
@@ -102,6 +115,12 @@ func (s *service) getLearnerModel(ctx context.Context, _ *mcp.CallToolRequest, i
 			})
 		}
 	}
+	standing, err := data.LearnerStanding(ctx, id)
+	if err != nil {
+		return nil, out, storeErr("The learner's standing could not be read.", err)
+	}
+	out.Standing = standing
+	out.Summary = LearnerModelSummaryLite{KnownAnySkill: standing.KnownAnySkill}
 	return nil, out, nil
 }
 

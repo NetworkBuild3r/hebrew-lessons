@@ -12,7 +12,9 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/jobs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 // INIT-032/SPEC-009: hebrew audit. Temp databases only.
@@ -31,9 +33,101 @@ func TestAuditFixtureMatchesAndExits0(t *testing.T) {
 			t.Fatalf("mismatch line: %s\nfull:\n%s", line, out)
 		}
 	}
-	if !strings.Contains(out, "known_any_skill") || !strings.Contains(out, "spell_cards") || !strings.Contains(out, "zone") {
-		t.Fatalf("missing rows:\n%s", out)
+	for _, name := range []string{
+		"known_any_skill", "spell_cards", "zone",
+		"history_rule1_days", "history_last_day", "replay_mismatch",
+		"review_skipped_no_audio", "read.verdict", "recall.accuracy14",
+	} {
+		if !strings.Contains(out, name) {
+			t.Fatalf("missing row %s:\n%s", name, out)
+		}
 	}
+}
+
+func TestAuditRule1DaysThenRebuild(t *testing.T) {
+	fx := auditFixture(t)
+	ctx := context.Background()
+	store, err := db.Open(ctx, fx.path, fixedClock{time.Date(2026, 11, 6, 18, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	day := "2026-11-04"
+	if err := store.InDailyTx(ctx, func(tx *db.DailyTx) error {
+		if err := tx.InsertSnapshot(ctx, fx.user, day, []db.DailySnapshotRow{
+			{Skill: "read", State: "known", Count: 1, EstKnown: 1, RuleVersion: 1},
+		}); err != nil {
+			return err
+		}
+		return tx.InsertTotals(ctx, fx.user, day, 1, 1)
+	}); err != nil {
+		store.Close()
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	err = auditCommand([]string{"--learner", strconv.FormatInt(fx.user, 10), "--db", fx.path}, &stdout, &stderr)
+	if err == nil {
+		t.Fatalf("want exit 1 with rule-1 row; stdout:\n%s", stdout.String())
+	}
+	qe, ok := err.(interface{ ExitCode() int })
+	if !ok || qe.ExitCode() != 1 {
+		t.Fatalf("err=%v, want exit 1", err)
+	}
+	if !strings.Contains(err.Error(), "history_rule1_days") {
+		t.Fatalf("error %q does not name history_rule1_days", err)
+	}
+
+	store, err = db.Open(ctx, fx.path, fixedClock{time.Date(2026, 11, 6, 18, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := learner.New(store, store.Clock())
+	loc, err := time.LoadLocation("America/Denver")
+	if err != nil {
+		t.Fatal(err)
+	}
+	z := mustAuditZone(t, "America/Denver", loc)
+	at, err := jobs.EndOfDay(day, z)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap, err := model.SnapshotAt(ctx, fx.user, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := make([]db.DailySnapshotRow, 0, len(learner.Skills))
+	for _, sk := range snap.Summary.Skills {
+		rows = append(rows, db.DailySnapshotRow{
+			Skill: sk.Skill, State: "known",
+			Count:    sk.Counts[learner.Known] + sk.Counts[learner.Solid],
+			EstKnown: sk.EstimatedKnown, RuleVersion: jobs.RuleVersion,
+		})
+	}
+	if err := store.InDailyTx(ctx, func(tx *db.DailyTx) error {
+		return tx.ReplaceDay(ctx, fx.user, day, rows, snap.Summary.KnownAnySkill, jobs.RuleVersion)
+	}); err != nil {
+		store.Close()
+		t.Fatal(err)
+	}
+	// Also restamp yesterday from the fixture if it lacked totals rule version 2.
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	err = auditCommand([]string{"--learner", strconv.FormatInt(fx.user, 10), "--db", fx.path}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("after rebuild: %v\nstdout:\n%s", err, stdout.String())
+	}
+}
+
+func mustAuditZone(t *testing.T, name string, loc *time.Location) studyday.Zone {
+	t.Helper()
+	return studyday.Zone{Name: name, Loc: loc, Source: studyday.SourceLearner}
 }
 
 func TestAuditPlantedMismatchExits1NamesRow(t *testing.T) {
@@ -162,14 +256,13 @@ func auditFixture(t *testing.T) auditFix {
 	seedAuditKnown(t, store, user.ID, typed, fsrs.SkillRecall, when)
 	insertTypedRecall(t, store, user.ID, typed, "bread", "לֶחֶם", true, false, when.Add(-time.Hour))
 	// Apply spelling credit the same way the product does: spell attempt + card.
-	if _, err := store.InsertCard(ctx, db.Card{
-		UserID: user.ID, LexemeID: typed, Skill: fsrs.SkillSpell, State: fsrs.StateReview,
-		Due: when, Stability: 10, Difficulty: 5, Reps: 3, LastReview: when.AddDate(0, 0, -1),
-	}); err != nil {
+	spellAt := []time.Time{when.AddDate(0, 0, -3), when.AddDate(0, 0, -2), when.AddDate(0, 0, -1)}
+	spell := replayedCard(t, spellAt)
+	spell.UserID, spell.LexemeID, spell.Skill = user.ID, typed, fsrs.SkillSpell
+	if _, err := store.InsertCard(ctx, spell); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 3; i++ {
-		at := when.AddDate(0, 0, -(3 - i))
+	for _, at := range spellAt {
 		if _, err := store.ExecContext(ctx, `
 			INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, implied)
 			VALUES ((SELECT id FROM cards WHERE user_id = ? AND lexeme_id = ? AND skill = 'spell'), 3, ?, 1, 1, 0)`,
@@ -204,19 +297,34 @@ type fixedClock struct{ t time.Time }
 
 func (f fixedClock) Now() time.Time { return f.t }
 
+// replayedCard is what FSRS makes of Good reviews at these times, so a card stored with it
+// agrees with a replay of its review_log (replay_mismatch 0).
+func replayedCard(t *testing.T, reviews []time.Time) db.Card {
+	t.Helper()
+	sched := fsrs.New(nil, nil)
+	var card *db.Card
+	for _, at := range reviews {
+		next, _, err := sched.ScheduleNext(card, at, fsrs.Rating(3))
+		if err != nil {
+			t.Fatal(err)
+		}
+		card = &next
+	}
+	return *card
+}
+
 func seedAuditKnown(t *testing.T, store *db.Store, user, lexeme int64, skill string, now time.Time) {
 	t.Helper()
 	ctx := context.Background()
 	last := now.AddDate(0, 0, -1)
-	id, err := store.InsertCard(ctx, db.Card{
-		UserID: user, LexemeID: lexeme, Skill: skill, State: fsrs.StateReview,
-		Due: now, Stability: 10, Difficulty: 5, Reps: 3, LastReview: last,
-	})
+	reviews := []time.Time{last.Add(-48 * time.Hour), last.Add(-24 * time.Hour), last}
+	card := replayedCard(t, reviews)
+	card.UserID, card.LexemeID, card.Skill = user, lexeme, skill
+	id, err := store.InsertCard(ctx, card)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 3; i++ {
-		at := last.Add(-time.Duration(2-i) * 24 * time.Hour)
+	for _, at := range reviews {
 		if _, err := store.ExecContext(ctx, `
 			INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days, implied)
 			VALUES (?, 3, ?, 1, 1, 0)`, id, db.FormatTime(at)); err != nil {
@@ -228,5 +336,56 @@ func seedAuditKnown(t *testing.T, store *db.Store, user, lexeme int64, skill str
 			user, lexeme, skill, db.FormatTime(at)); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestAuditReplayMismatchExits1(t *testing.T) {
+	fx := auditFixture(t)
+	ctx := context.Background()
+	store, err := db.Open(ctx, fx.path, fixedClock{time.Date(2026, 11, 6, 18, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ExecContext(ctx, `
+		UPDATE cards SET stability = stability + 1
+		WHERE id = (SELECT MIN(card_id) FROM review_log)`); err != nil {
+		store.Close()
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	err = auditCommand([]string{"--learner", strconv.FormatInt(fx.user, 10), "--db", fx.path}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "replay_mismatch") {
+		t.Fatalf("a card that disagrees with its replay should fail on replay_mismatch; err=%v\n%s", err, stdout.String())
+	}
+}
+
+func TestAuditZonelessLearnerStillRecomputesHistory(t *testing.T) {
+	fx := auditFixture(t)
+	t.Setenv("TZ", "America/Denver")
+	ctx := context.Background()
+	store, err := db.Open(ctx, fx.path, fixedClock{time.Date(2026, 11, 6, 18, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ExecContext(ctx, `UPDATE users SET time_zone = NULL WHERE id = ?`, fx.user); err != nil {
+		store.Close()
+		t.Fatal(err)
+	}
+	if err := store.InDailyTx(ctx, func(tx *db.DailyTx) error {
+		return tx.InsertTotals(ctx, fx.user, "2026-11-04", 999, jobs.RuleVersion)
+	}); err != nil {
+		store.Close()
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	err = auditCommand([]string{"--learner", strconv.FormatInt(fx.user, 10), "--db", fx.path}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "history_last_day") {
+		t.Fatalf("a stored day of 999 must not agree with itself when the learner has no zone; err=%v\n%s", err, stdout.String())
 	}
 }

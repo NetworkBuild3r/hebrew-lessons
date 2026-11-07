@@ -38,6 +38,7 @@ type memLearn struct {
 	zones      map[int64]string
 	words      map[int64][]ModelWord
 	summary    map[int64]ModelSummary
+	standing   map[int64]StandingView
 	progress   map[int64]Progress
 	template   map[int64]LessonBrief
 	briefOwner map[string]int64
@@ -94,7 +95,23 @@ func (m *Memory) SetLearnerModel(id int64, words []ModelWord, summary *ModelSumm
 	m.learn.words[id] = slices.Clone(words)
 	if summary != nil {
 		m.learn.summary[id] = *summary
+		if m.learn.standing == nil {
+			m.learn.standing = map[int64]StandingView{}
+		}
+		if _, ok := m.learn.standing[id]; !ok {
+			m.learn.standing[id] = StandingView{KnownAnySkill: summary.KnownAnySkill, Directions: []DirectionStandingView{}}
+		}
 	}
+}
+
+// SetLearnerStanding stores the standing get_learner_model returns for a learner.
+func (m *Memory) SetLearnerStanding(id int64, standing StandingView) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.learn.standing == nil {
+		m.learn.standing = map[int64]StandingView{}
+	}
+	m.learn.standing[id] = standing
 }
 
 // SetProgress stores a learner's progress. Progress reads the days inside the range.
@@ -221,7 +238,44 @@ func (m *Memory) LearnerModelSummary(ctx context.Context, id int64) (ModelSummar
 	if s.Skills == nil {
 		s.Skills = []ModelSkillSummary{}
 	}
+	if s.Standing == nil {
+		if st, ok := m.learn.standing[id]; ok {
+			s.Standing = compactStandingFromView(st)
+		}
+	}
 	return s, nil
+}
+
+// LearnerStanding implements LearnerData.
+func (m *Memory) LearnerStanding(ctx context.Context, id int64) (StandingView, error) {
+	if err := ctx.Err(); err != nil {
+		return StandingView{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if st, ok := m.learn.standing[id]; ok {
+		return st, nil
+	}
+	sum := m.learn.summary[id]
+	return StandingView{KnownAnySkill: sum.KnownAnySkill, Directions: []DirectionStandingView{}}, nil
+}
+
+func compactStandingFromView(s StandingView) *CompactStanding {
+	out := &CompactStanding{Directions: make([]CompactDirection, 0, len(s.Directions))}
+	for _, d := range s.Directions {
+		row := CompactDirection{
+			Skill: d.Skill, Direction: d.Direction, Verdict: d.Verdict, Reason: d.Reason,
+			Help: make([]CompactHelp, 0, CompactStandingHelpCap),
+		}
+		for i, n := range d.Help {
+			if i >= CompactStandingHelpCap {
+				break
+			}
+			row.Help = append(row.Help, CompactHelp{LexemeID: n.LexemeID, Cause: n.Cause})
+		}
+		out.Directions = append(out.Directions, row)
+	}
+	return out
 }
 
 // Progress implements LearnerData. It keeps the snapshot days, regression days, and report

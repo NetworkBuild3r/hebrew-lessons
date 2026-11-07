@@ -18,7 +18,7 @@ const progressDescription = "Read one learner's progress over a range of days: s
 	"to defaults to the learner's today in that zone and from defaults to 29 days before to. " +
 	"The reply includes zone and zoneSource so the caller knows which zone those days use. " +
 	"from after to, a day that is not a real date, or a range of more than 366 days is an error. " +
-	"snapshots has one entry per day that has data, each with the words per state, estimatedKnown, and retention for each skill. " +
+	"snapshots has one entry per day that has data, each with the words per state, estimatedKnown, retention, and direction (ADR-0028 D4 label) for each skill. Skill keys stay listen, read, recall, spell. " +
 	"snapshotsThrough is the last snapshot day; live known and solid counts are in get_context.model, not in a same-day snapshot. " +
 	"changes has, for each skill, the known words at the first and last snapshot in the range and the net gained or lost. A week with no snapshot has no change. " +
 	"regressions lists the words that fell back, newest first and at most 200, and any band that slipped. " +

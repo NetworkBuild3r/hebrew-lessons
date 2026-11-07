@@ -819,6 +819,9 @@ func (failingData) LearnerModel(context.Context, int64, ModelQuery) (ModelPage, 
 func (failingData) LearnerModelSummary(context.Context, int64) (ModelSummary, error) {
 	return ModelSummary{}, errInternal
 }
+func (failingData) LearnerStanding(context.Context, int64) (StandingView, error) {
+	return StandingView{}, errInternal
+}
 func (failingData) Progress(context.Context, int64, string, string) (Progress, error) {
 	return Progress{}, errInternal
 }

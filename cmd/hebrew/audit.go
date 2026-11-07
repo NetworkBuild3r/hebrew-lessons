@@ -3,7 +3,8 @@ package main
 // hebrew audit --learner N [--db file]
 //
 // Read-only operator check that live learner numbers agree with an independent
-// recompute (ADR-0027 / INIT-032/SPEC-009). PRAGMA query_only. Counts only.
+// recompute (ADR-0027 / INIT-032/SPEC-009, ADR-0028 / INIT-033/SPEC-008).
+// PRAGMA query_only. Counts only.
 
 import (
 	"context"
@@ -15,10 +16,13 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/jobs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 type auditRow struct {
@@ -123,7 +127,84 @@ func runAuditDB(ctx context.Context, store *db.Store, learnerID int64) ([]auditR
 	}
 	surface.Zone, surface.ZoneOK = zone, zoneOK
 
-	return compareAudit(recomputed, surface), nil
+	rows := compareAudit(recomputed, surface)
+	loc, err := jobsLocation(os.Getenv("TZ"))
+	if err != nil {
+		return nil, err
+	}
+	zones, err := studyday.NewResolver(store, loc)
+	if err != nil {
+		return nil, err
+	}
+	extra, err := auditHistoryStanding(ctx, model, zones, learnerID)
+	if err != nil {
+		return nil, err
+	}
+	return append(rows, extra...), nil
+}
+
+// auditHistoryStanding recomputes the last stored day in the zone the daily job used for
+// this learner (studyday.Resolver: the learner's zone, else the app zone from TZ).
+func auditHistoryStanding(ctx context.Context, model *learner.Model, zones *studyday.Resolver, learnerID int64) ([]auditRow, error) {
+	zone, err := zones.For(ctx, learnerID)
+	if err != nil {
+		return nil, err
+	}
+	endOfDay := func(day string) (time.Time, error) { return jobs.EndOfDay(day, zone) }
+	facts, err := model.HistoryFacts(ctx, learnerID, endOfDay)
+	if err != nil {
+		return nil, err
+	}
+	dirs, err := model.RecomputeDirections(ctx, learnerID)
+	if err != nil {
+		return nil, err
+	}
+
+	var rows []auditRow
+	add := func(name, recompute, surf string) {
+		match := recompute == surf
+		src := "agree"
+		val := recompute
+		if !match {
+			src = "mismatch"
+			val = "recompute=" + recompute + " surface=" + surf
+		}
+		rows = append(rows, auditRow{
+			Name: name, Value: val, Source: src, Match: match,
+			Recompute: recompute, Surface: surf,
+		})
+	}
+
+	// Expected after rebuild: zero rule-1 days. Surface is the live count.
+	add("history_rule1_days", "0", strconv.Itoa(facts.HistoryRule1Days))
+
+	if facts.HistoryLastDay != "" {
+		add("history_last_day",
+			strconv.Itoa(facts.SnapshotAtKnownAny),
+			strconv.Itoa(facts.HistoryLastKnownAny))
+	} else {
+		add("history_last_day", "none", "none")
+	}
+
+	// Stored cards must match a replay of review_log (SPEC-003): expected zero.
+	add("replay_mismatch", "0", strconv.Itoa(facts.ReplayMismatch))
+
+	bySkill := map[string]learner.DirectionAudit{}
+	for _, d := range facts.Directions {
+		bySkill[d.Skill] = d
+	}
+	for _, d := range dirs {
+		surf := bySkill[d.Skill]
+		add(d.Skill+".verdict", d.Verdict, surf.Verdict)
+		add(d.Skill+".accuracy14", learner.FormatAccuracy(d.Accuracy14), learner.FormatAccuracy(surf.Accuracy14))
+	}
+
+	// A count to read, not a comparison: listening cards with no clip are skipped by design (D6).
+	rows = append(rows, auditRow{
+		Name: "review_skipped_no_audio", Value: strconv.Itoa(facts.ReviewSkippedNoAudio),
+		Source: "count", Match: true,
+	})
+	return rows, nil
 }
 
 func compareAudit(recomputed, surface learner.Numbers) []auditRow {

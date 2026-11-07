@@ -90,11 +90,23 @@ func TestNumbersAgreeAcrossSurfaces(t *testing.T) {
 	}
 
 	// ---- per-skill known+solid, estimate, source ----
+	standingEarly, err := learner.New(fx.app.Store(), fixedClock{fx.when}).Standing(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	askable := map[string]bool{}
+	for _, d := range standingEarly.Directions {
+		askable[d.Skill] = d.Askable
+	}
 	for _, sk := range fx.sum.Skills {
 		wantKS := sk.Counts[learner.Known] + sk.Counts[learner.Solid]
 		row := overviewRow(t, progress, sk.Skill)
-		if got := overviewKnownCount(t, row); got != wantKS {
-			t.Errorf("progress %s known+solid=%d want %d", sk.Skill, got, wantKS)
+		if askable[sk.Skill] {
+			if got := overviewKnownCount(t, row); got != wantKS {
+				t.Errorf("progress %s known+solid=%d want %d", sk.Skill, got, wantKS)
+			}
+		} else if !strings.Contains(row, "No audio yet") {
+			t.Errorf("%s not_askable row missing No audio yet:\n%s", sk.Skill, row)
 		}
 		var dig mcp.DigestSkill
 		for _, d := range digest.Skills {
@@ -104,6 +116,9 @@ func TestNumbersAgreeAcrossSurfaces(t *testing.T) {
 		}
 		if dig.KnownSolidNow != wantKS {
 			t.Errorf("digest %s knownSolidNow=%d want %d", sk.Skill, dig.KnownSolidNow, wantKS)
+		}
+		if dig.Direction != learner.DirectionLabel(sk.Skill) {
+			t.Errorf("digest %s direction=%q", sk.Skill, dig.Direction)
 		}
 		var mod mcp.ModelSkillSummary
 		for _, m := range modelSum.Skills {
@@ -121,11 +136,11 @@ func TestNumbersAgreeAcrossSurfaces(t *testing.T) {
 		if mod.EstimateSource != sk.EstimateSource {
 			t.Errorf("model %s estimateSource=%q want %q", sk.Skill, mod.EstimateSource, sk.EstimateSource)
 		}
-		if sk.EstimateSource == learner.EstimateSourceEvidence && !strings.Contains(row, "Not tested by placement") {
-			t.Errorf("%s row missing Not tested by placement:\n%s", sk.Skill, row)
-		}
-		if sk.EstimateSource == learner.EstimateSourcePlacement && !strings.Contains(row, "From placement on") {
-			t.Errorf("%s row missing From placement on:\n%s", sk.Skill, row)
+		if sk.EstimateSource == learner.EstimateSourcePlacement && !strings.Contains(row, "Placement estimate") && !strings.Contains(row, "From placement on") {
+			// Listening still surfaces the placement estimate on the overview row.
+			if sk.Skill == fsrs.SkillListen {
+				t.Errorf("%s row missing placement estimate:\n%s", sk.Skill, row)
+			}
 		}
 		// Skill tab headline is the estimate for that skill.
 		tab := skillPages[sk.Skill]
@@ -191,12 +206,160 @@ func TestNumbersAgreeAcrossSurfaces(t *testing.T) {
 		t.Fatalf("snapshotsThrough=%q is today; fixture has no today snapshot", progMCP.SnapshotsThrough)
 	}
 
-	// Word page from get_learner_model: at least one known/solid word appears.
-	page := callAgree[struct {
-		Words []mcp.ModelWord `json:"words"`
-	}](t, session, "get_learner_model", map[string]any{"learnerId": id, "limit": 200})
-	if len(page.Words) == 0 {
+	// INIT-033/SPEC-008: chart, headline, verdicts, MCP standing, compact context, and
+	// digest history all say the same thing as Model.Standing.
+	surf := readStandingSurfaces(t, fx, session, progress, digest, ctxFull.Model.Standing)
+	if len(surf.words) == 0 {
 		t.Fatal("get_learner_model returned no words")
+	}
+	for _, d := range standingDisagreements(t, surf, standingEarly) {
+		t.Error(d)
+	}
+}
+
+// standingSurfaces is what each learner-facing surface says about the learner's standing.
+type standingSurfaces struct {
+	progress string // /progress HTML: headline, chart table, data-verdict per direction
+	digest   []mcp.DigestHistoryPoint
+	summary  mcp.LearnerModelSummaryLite
+	standing mcp.StandingView
+	compact  *mcp.CompactStanding
+	words    []mcp.ModelWord
+}
+
+func readStandingSurfaces(t *testing.T, fx agreeFix, session *mcpsdk.ClientSession, progress string, digest mcp.StudyDigest, compact *mcp.CompactStanding) standingSurfaces {
+	t.Helper()
+	page := callAgree[struct {
+		Words    []mcp.ModelWord             `json:"words"`
+		Summary  mcp.LearnerModelSummaryLite `json:"summary"`
+		Standing mcp.StandingView            `json:"standing"`
+	}](t, session, "get_learner_model", map[string]any{"learnerId": fx.userID, "limit": 200})
+	return standingSurfaces{
+		progress: progress, digest: digest.History, summary: page.Summary,
+		standing: page.Standing, compact: compact, words: page.Words,
+	}
+}
+
+// standingDisagreements names every surface that differs from Model.Standing. Empty means
+// they agree.
+func standingDisagreements(t *testing.T, s standingSurfaces, model learner.Standing) []string {
+	t.Helper()
+	var out []string
+	want := model.KnownAnySkill
+	if got := chartKnownLast(t, s.progress); got != want {
+		out = append(out, fmt.Sprintf("progress chart last point=%d, model knownAnySkill=%d", got, want))
+	}
+	if got := progressHeadline(t, s.progress); got != want {
+		out = append(out, fmt.Sprintf("progress headline=%d, model knownAnySkill=%d", got, want))
+	}
+	if s.summary.KnownAnySkill != want {
+		out = append(out, fmt.Sprintf("get_learner_model summary knownAnySkill=%d, model=%d", s.summary.KnownAnySkill, want))
+	}
+	if s.standing.KnownAnySkill != want {
+		out = append(out, fmt.Sprintf("get_learner_model standing knownAnySkill=%d, model=%d", s.standing.KnownAnySkill, want))
+	}
+	if len(s.digest) == 0 {
+		out = append(out, "digest history is empty")
+	} else if last := s.digest[len(s.digest)-1]; last.KnownAnySkill != want || !last.Live {
+		out = append(out, fmt.Sprintf("digest history last=%+v, want live knownAnySkill=%d", last, want))
+	}
+	if len(s.standing.Directions) != len(model.Directions) {
+		out = append(out, fmt.Sprintf("get_learner_model directions=%d, model=%d", len(s.standing.Directions), len(model.Directions)))
+	}
+	for i, d := range model.Directions {
+		if i < len(s.standing.Directions) {
+			if got := s.standing.Directions[i]; got.Skill != d.Skill || got.Verdict != d.Verdict || got.Direction != d.Direction {
+				out = append(out, fmt.Sprintf("get_learner_model direction %s=%+v, model=%+v", d.Skill, got, d))
+			}
+		}
+		if v := overviewVerdict(t, overviewRow(t, s.progress, d.Skill)); v != d.Verdict {
+			out = append(out, fmt.Sprintf("progress %s data-verdict=%q, model %q", d.Skill, v, d.Verdict))
+		}
+		if s.compact == nil {
+			continue
+		}
+		var compact mcp.CompactDirection
+		for _, c := range s.compact.Directions {
+			if c.Skill == d.Skill {
+				compact = c
+			}
+		}
+		if compact.Verdict != d.Verdict {
+			out = append(out, fmt.Sprintf("get_context standing %s verdict=%q, model %q", d.Skill, compact.Verdict, d.Verdict))
+		}
+	}
+	if s.compact == nil {
+		out = append(out, "get_context.model.standing is nil")
+	}
+	return out
+}
+
+// TestNumbersAgreePlantedMismatch reads the real surfaces, changes exactly one of them, and
+// requires the agreement check to name it. The unedited surfaces must agree.
+func TestNumbersAgreePlantedMismatch(t *testing.T) {
+	fx := seedAgreeFixture(t)
+	progress := getAgree(t, fx, "/progress")
+	session := connectAppMCP(t, fx.app.MCP(), agreeToken)
+	digest := callAgree[mcp.StudyDigest](t, session, "get_study_digest", map[string]any{"learnerId": fx.userID})
+	var ctxFull struct {
+		Model *mcp.ModelSummary `json:"model"`
+	}
+	decodeStructured(t, callAppTool(t, session, "get_context", map[string]any{"position": 0, "learnerId": fx.userID}), &ctxFull)
+	if ctxFull.Model == nil {
+		t.Fatal("get_context.model is nil")
+	}
+	model, err := learner.New(fx.app.Store(), fixedClock{fx.when}).Standing(context.Background(), fx.userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	real := readStandingSurfaces(t, fx, session, progress, digest, ctxFull.Model.Standing)
+	if d := standingDisagreements(t, real, model); len(d) != 0 {
+		t.Fatalf("unedited surfaces disagree: %v", d)
+	}
+
+	want := strconv.Itoa(model.KnownAnySkill)
+	chart := regexp.MustCompile(`(?s)<section class="c-card pchart"[^>]*data-chart="est".*?</section>`).FindStringIndex(progress)
+	if chart == nil {
+		t.Fatal("no est chart")
+	}
+	card := progress[chart[0]:chart[1]]
+	cut := strings.LastIndex(card, ">"+want+"<")
+	if cut < 0 {
+		t.Fatalf("chart has no cell %s", want)
+	}
+	editedCard := card[:cut] + ">" + strconv.Itoa(model.KnownAnySkill+1) + "<" + card[cut+len(want)+2:]
+	verdictSkill := model.Directions[0].Skill
+	verdictOld := `data-skill="` + verdictSkill + `" data-verdict="` + model.Directions[0].Verdict + `"`
+	if !strings.Contains(progress, verdictOld) {
+		t.Fatalf("progress has no %s", verdictOld)
+	}
+	editedDigest := append([]mcp.DigestHistoryPoint(nil), digest.History...)
+	editedDigest[len(editedDigest)-1].KnownAnySkill++
+
+	for _, tc := range []struct {
+		name, mention string
+		edit          func(s standingSurfaces) standingSurfaces
+	}{
+		{"chart last point", "progress chart", func(s standingSurfaces) standingSurfaces {
+			s.progress = progress[:chart[0]] + editedCard + progress[chart[1]:]
+			return s
+		}},
+		{"one data-verdict", "data-verdict", func(s standingSurfaces) standingSurfaces {
+			s.progress = strings.Replace(progress, verdictOld,
+				`data-skill="`+verdictSkill+`" data-verdict="planted"`, 1)
+			return s
+		}},
+		{"digest last point", "digest history", func(s standingSurfaces) standingSurfaces {
+			s.digest = editedDigest
+			return s
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := standingDisagreements(t, tc.edit(real), model)
+			if len(got) != 1 || !strings.Contains(got[0], tc.mention) {
+				t.Fatalf("planted %s: disagreements=%v, want exactly one naming %q", tc.name, got, tc.mention)
+			}
+		})
 	}
 }
 
@@ -418,9 +581,19 @@ func assertProgressHeadline(t *testing.T, body string, want int) {
 	}
 }
 
+func progressHeadline(t *testing.T, body string) int {
+	t.Helper()
+	m := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatal("Progress has no headline count")
+	}
+	n, _ := strconv.Atoi(m[1])
+	return n
+}
+
 func overviewRow(t *testing.T, body, skill string) string {
 	t.Helper()
-	re := regexp.MustCompile(`(?s)<li class="pknow__skill" data-skill="` + regexp.QuoteMeta(skill) + `">.*?</li>`)
+	re := regexp.MustCompile(`(?s)<li class="pknow__skill" data-skill="` + regexp.QuoteMeta(skill) + `"[^>]*>.*?</li>`)
 	row := re.FindString(body)
 	if row == "" {
 		t.Fatalf("no overview row for %s", skill)
@@ -428,13 +601,43 @@ func overviewRow(t *testing.T, body, skill string) string {
 	return row
 }
 
+func overviewVerdict(t *testing.T, row string) string {
+	t.Helper()
+	m := regexp.MustCompile(`data-verdict="([^"]*)"`).FindStringSubmatch(row)
+	if m == nil {
+		t.Fatalf("no data-verdict in row:\n%s", row)
+	}
+	return m[1]
+}
+
+func chartKnownLast(t *testing.T, body string) int {
+	t.Helper()
+	// Words-you-know chart table: last numeric cell of the known series equals the headline.
+	card := regexp.MustCompile(`(?s)<section class="c-card pchart"[^>]*data-chart="est".*?</section>`).FindString(body)
+	if card == "" {
+		t.Fatal("missing Words you know over time chart")
+	}
+	rows := regexp.MustCompile(`(?s)<tr[^>]*>.*?</tr>`).FindAllString(card, -1)
+	if len(rows) < 2 {
+		t.Fatalf("chart table rows=%d", len(rows))
+	}
+	last := rows[len(rows)-1]
+	nums := regexp.MustCompile(`>([0-9]+)<`).FindAllStringSubmatch(last, -1)
+	if len(nums) == 0 {
+		t.Fatalf("no numbers in last chart row:\n%s", last)
+	}
+	n, _ := strconv.Atoi(nums[len(nums)-1][1])
+	return n
+}
+
 func overviewKnownCount(t *testing.T, row string) int {
 	t.Helper()
 	re := regexp.MustCompile(`data-count="known"><bdi[^>]*>([0-9]+)</bdi>`)
 	m := re.FindStringSubmatch(row)
 	if m == nil {
-		// No-card / not-practiced rows have no known count — treat as 0 when hinted.
-		if strings.Contains(row, "Not practiced") || strings.Contains(row, "Listening counts") {
+		// No-card / not-askable rows have no known count — treat as 0 when hinted.
+		if strings.Contains(row, "Not practiced") || strings.Contains(row, "Listening counts") ||
+			strings.Contains(row, "No audio yet") {
 			return 0
 		}
 		t.Fatalf("no known count in row:\n%s", row)

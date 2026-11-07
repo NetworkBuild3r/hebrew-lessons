@@ -51,7 +51,8 @@ func (s *Store) StudyDigest(ctx context.Context, id int64, now time.Time, z stud
 
 	out := mcp.StudyDigest{
 		Zone: z.Name, ZoneSource: z.Source, Today: today, NextCutoff: cutoff.UTC(),
-		AsOf: now.UTC(), Skills: []mcp.DigestSkill{}, Struggle: []mcp.DigestStruggleWord{},
+		AsOf: now.UTC(), Skills: []mcp.DigestSkill{}, History: []mcp.DigestHistoryPoint{},
+		Struggle:    []mcp.DigestStruggleWord{},
 		Corrections: []mcp.DigestCorrection{}, Taught: []mcp.DigestTaughtWord{},
 		CoachNotes: []mcp.CoachNote{},
 		ClosedLoop: mcp.DigestClosedLoop{Since: day30ago},
@@ -73,6 +74,12 @@ func (s *Store) StudyDigest(ctx context.Context, id int64, now time.Time, z stud
 	}
 	days := snapshotDays(snaps)
 	out.Skills = digestSkills(days, ago7, live)
+	historyFrom := civilAdd(today, -(mcp.DigestHistoryDays - 1))
+	hist, err := s.digestHistory(ctx, id, historyFrom, today, live.KnownAnySkill)
+	if err != nil {
+		return out, err
+	}
+	out.History = hist
 	out.Retention.Skills = digestRetention(days, day7ago, today)
 
 	fromMin, toMin, err := civilWindow(day7ago, today, z)
@@ -140,6 +147,7 @@ func digestSkills(days []mcp.SnapshotDay, ago7 string, live learner.Summary) []m
 	for _, sk := range live.Skills {
 		row := mcp.DigestSkill{
 			Skill:         sk.Skill,
+			Direction:     learner.DirectionLabel(sk.Skill),
 			KnownSolidNow: sk.Counts[learner.Known] + sk.Counts[learner.Solid],
 			StrugglingNow: sk.Counts[learner.Struggling],
 			AgoDay:        ago7,
@@ -154,6 +162,30 @@ func digestSkills(days []mcp.SnapshotDay, ago7 string, live learner.Summary) []m
 		out = append(out, row)
 	}
 	return out
+}
+
+// digestHistory is the last DigestHistoryDays daily_totals rows through yesterday,
+// plus today's live knownAnySkill point stamped rule_version 2 (ADR-0028 D2/D3).
+func (s *Store) digestHistory(ctx context.Context, id int64, from, today string, liveKnown int) ([]mcp.DigestHistoryPoint, error) {
+	yesterday := civilAdd(today, -1)
+	var stored []db.DailyTotal
+	var err error
+	if from <= yesterday {
+		stored, err = s.db.ListTotals(ctx, id, from, yesterday)
+		if err != nil {
+			return nil, err
+		}
+	}
+	out := make([]mcp.DigestHistoryPoint, 0, len(stored)+1)
+	for _, row := range stored {
+		out = append(out, mcp.DigestHistoryPoint{
+			Day: row.Day, KnownAnySkill: row.KnownAnySkill, RuleVersion: row.RuleVersion,
+		})
+	}
+	out = append(out, mcp.DigestHistoryPoint{
+		Day: today, KnownAnySkill: liveKnown, RuleVersion: jobs.RuleVersion, Live: true,
+	})
+	return out, nil
 }
 
 func digestRetention(days []mcp.SnapshotDay, from, to string) []mcp.DigestRetentionSkill {

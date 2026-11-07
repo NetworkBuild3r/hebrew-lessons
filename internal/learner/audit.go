@@ -6,6 +6,7 @@ package learner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -179,4 +180,182 @@ func FormatRetention(v *float64) string {
 		return "null"
 	}
 	return FormatFloat(*v)
+}
+
+// FormatAccuracy formats a nullable 14-day accuracy share for audit rows.
+func FormatAccuracy(v *float64) string {
+	return FormatRetention(v)
+}
+
+// DirectionAudit is one direction's verdict and accuracy for hebrew audit.
+type DirectionAudit struct {
+	Skill      string
+	Verdict    string
+	Accuracy14 *float64
+}
+
+// HistoryStanding is the INIT-033/SPEC-008 audit rows beyond the ADR-0027 set.
+type HistoryStanding struct {
+	HistoryRule1Days     int
+	HistoryLastDay       string // empty when no stored totals day
+	HistoryLastKnownAny  int    // daily_totals.known_any_skill for HistoryLastDay
+	SnapshotAtKnownAny   int    // SnapshotAt(end of HistoryLastDay).Summary.KnownAnySkill
+	ReplayMismatch       int
+	Directions           []DirectionAudit // Skills order
+	ReviewSkippedNoAudio int
+}
+
+// CountRule1Days counts distinct daily_totals days still stamped rule_version 1.
+func CountRule1Days(ctx context.Context, store *db.Store, userID int64) (int, error) {
+	totals, err := store.ListTotals(ctx, userID, "0001-01-01", "9999-12-31")
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, row := range totals {
+		if row.RuleVersion == 1 {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// CountReviewSkippedNoAudio counts due listen cards whose lexeme has no audio_id
+// (ADR-0028 D6 / session SkippedNoAudio).
+func (m *Model) CountReviewSkippedNoAudio(ctx context.Context, userID int64) (int, error) {
+	if err := m.ready(userID); err != nil {
+		return 0, err
+	}
+	due, err := m.store.ListDueCards(ctx, userID, m.clock.Now())
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, c := range due {
+		if c.Skill != fsrs.SkillListen {
+			continue
+		}
+		ref, ok, err := m.store.LexemeByID(ctx, c.LexemeID)
+		if err != nil {
+			return 0, err
+		}
+		if !ok || ref.AudioID == "" {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// RecomputeDirections builds per-direction verdict and accuracy14 from AttemptTally
+// and Snapshot without calling Standing, so the audit can name a Standing drift.
+func (m *Model) RecomputeDirections(ctx context.Context, userID int64) ([]DirectionAudit, error) {
+	if err := m.ready(userID); err != nil {
+		return nil, err
+	}
+	now := m.clock.Now()
+	snap, err := m.Snapshot(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	since := now.AddDate(0, 0, -StandingWindowDays)
+	tallies, err := m.store.AttemptTally(ctx, userID, since, now)
+	if err != nil {
+		return nil, err
+	}
+	audioN, err := m.store.CountLexemesWithAudio(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bySkill := map[string]struct{ answers, right, weak int }{}
+	for _, row := range tallies {
+		s := bySkill[row.Skill]
+		s.answers += row.Answers
+		s.right += row.Answers - row.Misses
+		bySkill[row.Skill] = s
+	}
+	for _, w := range snap.Words {
+		for _, skill := range Skills {
+			st := w.stateOf(skill)
+			if st == Struggling || st == Regressed {
+				s := bySkill[skill]
+				s.weak++
+				bySkill[skill] = s
+			}
+		}
+	}
+	out := make([]DirectionAudit, 0, len(Skills))
+	for _, skill := range Skills {
+		askable := skillAskable(skill, snap, audioN)
+		s := bySkill[skill]
+		verdict := directionVerdict(askable, s.answers, s.right, s.weak,
+			HelpAccuracy, HelpMinAnswers, StrongAccuracy, StrongMinAnswers)
+		var acc *float64
+		if s.answers > 0 {
+			v := float64(s.right) / float64(s.answers)
+			acc = &v
+		}
+		out = append(out, DirectionAudit{Skill: skill, Verdict: verdict, Accuracy14: acc})
+	}
+	return out, nil
+}
+
+// HistoryFacts loads stored totals, SnapshotAt for the last day, live ReplayMismatch,
+// Standing directions, and review_skipped_no_audio for the audit surface/recompute pair.
+// endOfDay turns a stored day into the instant that ended it, in the zone the daily job
+// used for this learner; the caller resolves that zone.
+func (m *Model) HistoryFacts(ctx context.Context, userID int64, endOfDay func(day string) (time.Time, error)) (HistoryStanding, error) {
+	if endOfDay == nil {
+		return HistoryStanding{}, errors.New("learner: HistoryFacts needs endOfDay")
+	}
+	if err := m.ready(userID); err != nil {
+		return HistoryStanding{}, err
+	}
+	rule1, err := CountRule1Days(ctx, m.store, userID)
+	if err != nil {
+		return HistoryStanding{}, err
+	}
+	out := HistoryStanding{HistoryRule1Days: rule1}
+
+	totals, err := m.store.ListTotals(ctx, userID, "0001-01-01", "9999-12-31")
+	if err != nil {
+		return HistoryStanding{}, err
+	}
+	if len(totals) > 0 {
+		last := totals[len(totals)-1]
+		out.HistoryLastDay = last.Day
+		out.HistoryLastKnownAny = last.KnownAnySkill
+		at, err := endOfDay(last.Day)
+		if err != nil {
+			return HistoryStanding{}, err
+		}
+		snap, err := m.SnapshotAt(ctx, userID, at)
+		if err != nil {
+			return HistoryStanding{}, err
+		}
+		out.SnapshotAtKnownAny = snap.Summary.KnownAnySkill
+	}
+
+	live, err := m.Snapshot(ctx, userID)
+	if err != nil {
+		return HistoryStanding{}, err
+	}
+	out.ReplayMismatch = live.ReplayMismatch
+
+	standing, err := m.Standing(ctx, userID)
+	if err != nil {
+		return HistoryStanding{}, err
+	}
+	out.Directions = make([]DirectionAudit, 0, len(standing.Directions))
+	for _, d := range standing.Directions {
+		out.Directions = append(out.Directions, DirectionAudit{
+			Skill: d.Skill, Verdict: d.Verdict, Accuracy14: d.Accuracy14,
+		})
+	}
+
+	skipped, err := m.CountReviewSkippedNoAudio(ctx, userID)
+	if err != nil {
+		return HistoryStanding{}, err
+	}
+	out.ReviewSkippedNoAudio = skipped
+	return out, nil
 }

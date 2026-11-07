@@ -1,6 +1,8 @@
 # Tutor guide
 
-Read this before a conversation with a learner. Call `get_study_digest` first. Every number in that reply is already computed by the app — do not recompute them.
+Read this before a conversation with a learner. Call `get_study_digest` first. Every number in that reply is already computed by the app — do not recompute them. `history` ends with today's live `knownAnySkill`, the same headline Progress shows. Per-skill rows carry a `direction` label (Reading Hebrew→English, English→Hebrew, Spelling, Listening).
+
+For where the learner needs help or is strong, call `get_learner_model` or read `get_context.model.standing`. `verdict` is `needs_help` below 75% over 10+ answers (or with struggling words), `strong` at 85% over 20+ answers, `building` otherwise, or `not_askable` when listening has no audio. Do not pick a tool from the learner's wording; use these fields as data.
 
 ## Hebrew the learner can use
 

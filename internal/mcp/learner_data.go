@@ -59,6 +59,8 @@ type LearnerData interface {
 	LearnerModel(ctx context.Context, learnerID int64, q ModelQuery) (ModelPage, error)
 	// LearnerModelSummary counts the learner's words per state and skill.
 	LearnerModelSummary(ctx context.Context, learnerID int64) (ModelSummary, error)
+	// LearnerStanding is the per-direction help and strong picture (ADR-0028 D5).
+	LearnerStanding(ctx context.Context, learnerID int64) (StandingView, error)
 	// Progress reads the learner's history for the days from through to (YYYY-MM-DD, both
 	// inclusive). The caller has checked the range.
 	Progress(ctx context.Context, learnerID int64, from, to string) (Progress, error)
@@ -151,6 +153,85 @@ const RetentionWindow30d = "30d due reviews"
 // RetentionWindowWeek is the window label for the weekly report's retention (ADR-0027 D5).
 const RetentionWindowWeek = "week"
 
+// contextJSONBudget is the largest get_context JSON a coach call may return when the
+// card list is empty. Compact standing must keep the reply under this (INIT-033/SPEC-008).
+const contextJSONBudget = 32 * 1024
+
+// CompactStandingHelpCap is how many help lexeme ids get_context.model.standing keeps.
+const CompactStandingHelpCap = 3
+
+// DigestHistoryDays is how many stored daily_totals days get_study_digest.history lists
+// before appending today's live point.
+const DigestHistoryDays = 14
+
+// StandingView is Standing as JSON for get_learner_model (ADR-0028 D4/D5).
+type StandingView struct {
+	AsOf          time.Time               `json:"asOf" jsonschema:"UTC RFC3339 instant when this standing was computed."`
+	KnownAnySkill int                     `json:"knownAnySkill" jsonschema:"Words known or solid in at least one skill. Equals the Progress headline."`
+	Directions    []DirectionStandingView `json:"directions"`
+}
+
+// DirectionStandingView is one skill's standing row.
+type DirectionStandingView struct {
+	Skill      string         `json:"skill"`
+	Direction  string         `json:"direction" jsonschema:"ADR-0028 D4 label for the skill."`
+	Known      int            `json:"known"`
+	Solid      int            `json:"solid"`
+	Learning   int            `json:"learning"`
+	Struggling int            `json:"struggling"`
+	Regressed  int            `json:"regressed"`
+	Due        int            `json:"due"`
+	Answers14  int            `json:"answers14"`
+	Right14    int            `json:"right14"`
+	Accuracy14 *float64       `json:"accuracy14"`
+	Verdict    string         `json:"verdict" jsonschema:"needs_help when accuracy is below 75% over at least 10 answers or there are struggling or regressed words; strong when accuracy is at least 85% over at least 20 answers; building otherwise; not_askable when no checked activity can ask the skill."`
+	Reason     string         `json:"reason"`
+	Help       []WordNoteView `json:"help"`
+	Strong     []WordNoteView `json:"strong"`
+	Askable    bool           `json:"askable"`
+}
+
+// WordNoteView is one word on a help or strong list. Cause and pair come from stored
+// diagnosis keys; ConfusedWith is never the learner's typed response.
+type WordNoteView struct {
+	LexemeID     int64  `json:"lexemeId"`
+	Hebrew       string `json:"hebrew"`
+	English      string `json:"english"`
+	Misses14     int    `json:"misses14"`
+	Answers14    int    `json:"answers14"`
+	Cause        string `json:"cause,omitempty"`
+	Pair         string `json:"pair,omitempty"`
+	ConfusedWith string `json:"confusedWith,omitempty"`
+}
+
+// CompactStanding is the get_context.model.standing shape: verdict, reason, top help ids.
+type CompactStanding struct {
+	Directions []CompactDirection `json:"directions"`
+}
+
+// CompactDirection is one direction in CompactStanding.
+type CompactDirection struct {
+	Skill     string        `json:"skill"`
+	Direction string        `json:"direction"`
+	Verdict   string        `json:"verdict"`
+	Reason    string        `json:"reason"`
+	Help      []CompactHelp `json:"help"`
+}
+
+// CompactHelp is one help lexeme id and its cause.
+type CompactHelp struct {
+	LexemeID int64  `json:"lexemeId"`
+	Cause    string `json:"cause,omitempty"`
+}
+
+// DigestHistoryPoint is one day in get_study_digest.history.
+type DigestHistoryPoint struct {
+	Day           string `json:"day"`
+	KnownAnySkill int    `json:"knownAnySkill"`
+	RuleVersion   int    `json:"ruleVersion" jsonschema:"1 for unrebuilt days, 2 under current rules. Today's live point uses 2."`
+	Live          bool   `json:"live,omitempty" jsonschema:"True for today's live point appended after stored days."`
+}
+
 // RetentionLabeled is a retention share that names its window and day (ADR-0027 D5 / INIT-032/SPEC-005).
 type RetentionLabeled struct {
 	Share  *float64 `json:"share" jsonschema:"Share of due reviews (elapsed_days >= 1, not implied) rated above Again. Null when there were none."`
@@ -161,6 +242,7 @@ type RetentionLabeled struct {
 // ModelSkillSummary is the counts of one skill.
 type ModelSkillSummary struct {
 	Skill          string            `json:"skill"`
+	Direction      string            `json:"direction,omitempty" jsonschema:"ADR-0028 D4 label for the skill. Skill keys do not change."`
 	Counts         map[string]int    `json:"counts"`
 	EstimatedKnown float64           `json:"estimatedKnown"`
 	EstimateSource string            `json:"estimateSource,omitempty" jsonschema:"placement when this skill has PlacementSkillBands; evidence when the estimate is this skill's own known and solid words."`
@@ -181,11 +263,14 @@ type ModelSummary struct {
 	DueReviews    int                 `json:"dueReviews"`
 	// AsOf is the request instant for these live counts (ADR-0027 D4).
 	AsOf time.Time `json:"asOf" jsonschema:"UTC RFC3339 instant when these live model counts were read."`
+	// Standing is the compact per-direction verdict picture (ADR-0028 D5). Null without standing data.
+	Standing *CompactStanding `json:"standing,omitempty" jsonschema:"Per direction: verdict, reason, and top help lexeme ids with cause. Verdict needs_help below 75% over 10+ answers or with struggling words; strong at 85% over 20+ answers."`
 }
 
 // SkillDay is one skill on one day of a snapshot.
 type SkillDay struct {
 	Skill          string         `json:"skill"`
+	Direction      string         `json:"direction,omitempty" jsonschema:"ADR-0028 D4 label for the skill."`
 	Counts         map[string]int `json:"counts" jsonschema:"Words per state that day."`
 	EstimatedKnown float64        `json:"estimatedKnown"`
 	Retention      *float64       `json:"retention"`

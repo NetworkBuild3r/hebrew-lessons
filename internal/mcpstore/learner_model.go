@@ -122,7 +122,8 @@ func (s *Store) LearnerModelSummary(ctx context.Context, id int64) (mcp.ModelSum
 		return mcp.ModelSummary{}, err
 	}
 	now := s.now()
-	sum, err := learner.New(s.db, nil).Summary(ctx, id)
+	model := learner.New(s.db, nil)
+	sum, err := model.Summary(ctx, id)
 	if err != nil {
 		return mcp.ModelSummary{}, err
 	}
@@ -144,7 +145,8 @@ func (s *Store) LearnerModelSummary(ctx context.Context, id int64) (mcp.ModelSum
 			counts[string(st)] = n
 		}
 		row := mcp.ModelSkillSummary{
-			Skill: sk.Skill, Counts: counts, EstimatedKnown: sk.EstimatedKnown,
+			Skill: sk.Skill, Direction: learner.DirectionLabel(sk.Skill),
+			Counts: counts, EstimatedKnown: sk.EstimatedKnown,
 			EstimateSource: sk.EstimateSource, DueReviews: sk.DueReviews,
 			Retention: labelRetention(sk.Retention, asOfDay),
 		}
@@ -154,7 +156,76 @@ func (s *Store) LearnerModelSummary(ctx context.Context, id int64) (mcp.ModelSum
 		}
 		out.Skills = append(out.Skills, row)
 	}
+	standing, err := model.Standing(ctx, id)
+	if err != nil {
+		return mcp.ModelSummary{}, err
+	}
+	out.Standing = compactStanding(standing)
 	return out, nil
+}
+
+// LearnerStanding implements mcp.LearnerData with learner.Model.Standing.
+func (s *Store) LearnerStanding(ctx context.Context, id int64) (mcp.StandingView, error) {
+	if err := s.ready(ctx); err != nil {
+		return mcp.StandingView{}, err
+	}
+	standing, err := learner.New(s.db, nil).Standing(ctx, id)
+	if err != nil {
+		return mcp.StandingView{}, err
+	}
+	return standingView(standing), nil
+}
+
+func standingView(s learner.Standing) mcp.StandingView {
+	out := mcp.StandingView{
+		AsOf: s.AsOf.UTC(), KnownAnySkill: s.KnownAnySkill,
+		Directions: make([]mcp.DirectionStandingView, 0, len(s.Directions)),
+	}
+	for _, d := range s.Directions {
+		row := mcp.DirectionStandingView{
+			Skill: d.Skill, Direction: d.Direction,
+			Known: d.Known, Solid: d.Solid, Learning: d.Learning,
+			Struggling: d.Struggling, Regressed: d.Regressed, Due: d.Due,
+			Answers14: d.Answers14, Right14: d.Right14, Accuracy14: d.Accuracy14,
+			Verdict: d.Verdict, Reason: d.Reason, Askable: d.Askable,
+			Help:   make([]mcp.WordNoteView, 0, len(d.Help)),
+			Strong: make([]mcp.WordNoteView, 0, len(d.Strong)),
+		}
+		for _, n := range d.Help {
+			row.Help = append(row.Help, wordNoteView(n))
+		}
+		for _, n := range d.Strong {
+			row.Strong = append(row.Strong, wordNoteView(n))
+		}
+		out.Directions = append(out.Directions, row)
+	}
+	return out
+}
+
+func wordNoteView(n learner.WordNote) mcp.WordNoteView {
+	return mcp.WordNoteView{
+		LexemeID: n.LexemeID, Hebrew: n.Hebrew, English: n.English,
+		Misses14: n.Misses14, Answers14: n.Answers14,
+		Cause: n.Cause, Pair: n.Pair, ConfusedWith: n.ConfusedWith,
+	}
+}
+
+func compactStanding(s learner.Standing) *mcp.CompactStanding {
+	out := &mcp.CompactStanding{Directions: make([]mcp.CompactDirection, 0, len(s.Directions))}
+	for _, d := range s.Directions {
+		row := mcp.CompactDirection{
+			Skill: d.Skill, Direction: d.Direction, Verdict: d.Verdict, Reason: d.Reason,
+			Help: make([]mcp.CompactHelp, 0, mcp.CompactStandingHelpCap),
+		}
+		for i, n := range d.Help {
+			if i >= mcp.CompactStandingHelpCap {
+				break
+			}
+			row.Help = append(row.Help, mcp.CompactHelp{LexemeID: n.LexemeID, Cause: n.Cause})
+		}
+		out.Directions = append(out.Directions, row)
+	}
+	return out
 }
 
 // learnerCivilDay is the learner's today in their effective zone (learner or app).
@@ -343,7 +414,9 @@ func snapshotDays(rows []db.SnapshotRow) []mcp.SnapshotDay {
 			}
 		}
 		if sk == nil {
-			day.Skills = append(day.Skills, mcp.SkillDay{Skill: r.Skill, Counts: map[string]int{}})
+			day.Skills = append(day.Skills, mcp.SkillDay{
+				Skill: r.Skill, Direction: learner.DirectionLabel(r.Skill), Counts: map[string]int{},
+			})
 			sk = &day.Skills[len(day.Skills)-1]
 		}
 		sk.Counts[r.State] = r.Count

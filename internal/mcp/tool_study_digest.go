@@ -14,13 +14,14 @@ import (
 
 const resourceTutor = "hebrew://tutor"
 
-const studyDigestDescription = "Read one learner's study digest for a tutor conversation: zone, today, next study-day cutoff, live skill counts, retention against the 85–90% band, minutes in app, struggle words, dated corrections with closed-loop status, recently taught words, due cards, coach notes, and the newest weekly report. " +
+const studyDigestDescription = "Read one learner's study digest for a tutor conversation: zone, today, next study-day cutoff, live skill counts, retention against the 85–90% band, minutes in app, struggle words, dated corrections with closed-loop status, recently taught words, due cards, coach notes, history of words-you-know, and the newest weekly report. " +
 	"Every number is computed by the app. Do not recompute these numbers. " +
 	"A learner account reads its own digest, and omitting learnerId uses its own id. Another id is forbidden. " +
 	"An admin, including the static token, must pass learnerId and may read any learner. A learner id that does not exist is an error. " +
 	"zone and zoneSource name the IANA zone used for today and every day in the reply (learner when stored, otherwise app). There is no UTC invent-today. " +
 	"asOf is the request instant for the live counts. knownAnySkill is words known or solid in at least one skill. " +
-	"skills holds, per skill, knownSolidNow and strugglingNow from the live learner model, knownSolid7dAgo from the snapshot on agoDay (seven learner days back), and agoDay names that day. " +
+	"skills holds, per skill, direction (ADR-0028 D4 label), knownSolidNow and strugglingNow from the live learner model, knownSolid7dAgo from the snapshot on agoDay (seven learner days back), and agoDay names that day. Skill keys stay listen, read, recall, spell. " +
+	"history is the last 14 daily_totals days plus today's live knownAnySkill point, each with ruleVersion (2 under current rules). The last point equals knownAnySkill. " +
 	"retention holds, per skill, the last seven learner days against the 85–90% band; each day value has window 30d due reviews and asOf for that day. " +
 	"minutesInApp is the last seven learner days of answering time, using the same idle-gap rule as the weekly job. " +
 	"struggle is at most ten struggling words with cause and confusedWith. " +
@@ -52,6 +53,7 @@ type StudyDigest struct {
 	// KnownAnySkill is words known or solid in at least one skill (ADR-0027 D1).
 	KnownAnySkill int                  `json:"knownAnySkill" jsonschema:"Words known or solid in at least one skill."`
 	Skills        []DigestSkill        `json:"skills"`
+	History       []DigestHistoryPoint `json:"history" jsonschema:"Last 14 daily_totals days plus today's live knownAnySkill point, each with ruleVersion."`
 	Retention     DigestRetention      `json:"retention"`
 	MinutesInApp  int                  `json:"minutesInApp"`
 	Struggle      []DigestStruggleWord `json:"struggle"`
@@ -67,6 +69,7 @@ type StudyDigest struct {
 // knownSolidNow and strugglingNow are live; knownSolid7dAgo is from the agoDay snapshot.
 type DigestSkill struct {
 	Skill           string `json:"skill"`
+	Direction       string `json:"direction,omitempty" jsonschema:"ADR-0028 D4 label for the skill."`
 	KnownSolidNow   int    `json:"knownSolidNow" jsonschema:"Live known plus solid for this skill from the learner model."`
 	KnownSolid7dAgo int    `json:"knownSolid7dAgo" jsonschema:"Known plus solid on agoDay from the daily snapshot."`
 	StrugglingNow   int    `json:"strugglingNow" jsonschema:"Live struggling count for this skill from the learner model."`
@@ -167,6 +170,9 @@ func (s *service) getStudyDigest(ctx context.Context, _ *mcp.CallToolRequest, in
 	}
 	if out.Skills == nil {
 		out.Skills = []DigestSkill{}
+	}
+	if out.History == nil {
+		out.History = []DigestHistoryPoint{}
 	}
 	if out.Retention.Skills == nil {
 		out.Retention.Skills = []DigestRetentionSkill{}
