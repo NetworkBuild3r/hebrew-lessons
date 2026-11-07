@@ -200,8 +200,41 @@ func (e *env) expose(user, lexeme int64) {
 }
 
 // run writes one day and fails the test on an error.
+// pastDay moves the clock to the instant day has ended for every learner, as the
+// scheduler only writes finished days, and returns a func that puts the clock back.
+// At that instant nothing has happened after the day's end, so the stored card rows
+// these fixtures write are the state as of it. The replay of an earlier end is
+// covered by the catch-up tests. INIT-033/SPEC-004.
+func (e *env) pastDay(day string) (restore func()) {
+	e.t.Helper()
+	zones, err := e.newResolver().All(context.Background())
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	app := studyday.Zone{Name: e.loc.String(), Loc: e.loc}
+	latest, err := EndOfDay(day, app)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	for _, z := range zones {
+		end, err := EndOfDay(day, z)
+		if err != nil {
+			e.t.Fatal(err)
+		}
+		if end.After(latest) {
+			latest = end
+		}
+	}
+	before := e.clk.Now()
+	if latest.After(before) {
+		e.clk.set(latest)
+	}
+	return func() { e.clk.set(before) }
+}
+
 func (e *env) run(day string) Result {
 	e.t.Helper()
+	defer e.pastDay(day)()
 	res, err := e.daily.Run(context.Background(), day)
 	if err != nil {
 		e.t.Fatalf("Run(%s): %v", day, err)

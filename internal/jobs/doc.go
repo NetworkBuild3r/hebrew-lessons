@@ -37,15 +37,14 @@
 // CatchUp fills every day since each learner's newest snapshot, up to yesterday and at most
 // 14 days. A learner with no snapshot gets only yesterday, so history starts with a real day.
 //
-// # A limit that is disclosed, not hidden
+// # As-of history (INIT-033/SPEC-004 / ADR-0028 D3)
 //
-// The model reads the evidence as it is now. Cards keep their current stability and nothing
-// keeps old card states, so a day cannot be recomputed after it has passed. A snapshot is
-// therefore the state at the time the job ran, filed under the day it was run for. For a
-// day caught up late, that is the state at catch-up time. When a gap of several days is
-// caught up, the learner is evaluated once, every missed day gets that state, and the
-// regression events of the whole gap land on the first missed day (later days have nothing
-// to compare). A band_slip is not repeated for the same band within 7 days.
+// Each missed day is evaluated with SnapshotAt at EndOfDay for that day in the learner's
+// zone, under the current rules, and stamped rule_version 2 with a matching daily_totals
+// row (KnownAnySkill). Word and band state keys advance from each day's own snapshot, so a
+// regression lands on the day it happened. hebrew history rebuild rewrites past days the
+// same way; it never rebuilds regression events. A band_slip is not repeated for the same
+// band within 7 days.
 //
 // All times come from internal/clock. Each learner's day boundary is their studyday zone
 // (learner-stored or app fallback). INIT-026/SPEC-004.

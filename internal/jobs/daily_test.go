@@ -16,6 +16,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 const day = 24 * time.Hour
@@ -133,7 +134,7 @@ func TestRunTwiceLeavesTheSameRows(t *testing.T) {
 	if second := dump(); !reflect.DeepEqual(first, second) {
 		t.Fatalf("rows changed on a second run\nfirst:  %v\nsecond: %v", first, second)
 	}
-	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = 'daily.lock'`); n != 0 {
+	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = ?`, DailyLockKey); n != 0 {
 		t.Fatal("the lock was left behind")
 	}
 }
@@ -465,6 +466,221 @@ func TestCatchUpFillsEveryMissedDay(t *testing.T) {
 	}
 }
 
+// INIT-033/SPEC-004: a learner who misses three days then catches up gets three DIFFERENT
+// snapshots, each equal to SnapshotAt(end of that day), with rule_version 2 and
+// daily_totals.known_any_skill == Summary.KnownAnySkill.
+func TestEndOfDayIsMidnightInZone(t *testing.T) {
+	chi, err := time.LoadLocation("America/Chicago")
+	if err != nil {
+		t.Fatal(err)
+	}
+	z := studyday.Zone{Name: "America/Chicago", Loc: chi}
+	for _, tc := range []struct {
+		day  string
+		want time.Time
+	}{
+		{"2026-10-18", time.Date(2026, 10, 19, 5, 0, 0, 0, time.UTC)},
+		{"2026-10-31", time.Date(2026, 11, 1, 5, 0, 0, 0, time.UTC)}, // DST ends on Nov 1
+		{"2026-11-01", time.Date(2026, 11, 2, 6, 0, 0, 0, time.UTC)},
+	} {
+		got, err := EndOfDay(tc.day, z)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !got.Equal(tc.want) {
+			t.Errorf("EndOfDay(%s) = %s, want %s", tc.day, got.UTC(), tc.want)
+		}
+	}
+	if _, err := EndOfDay("2026-10-18", studyday.Zone{}); err == nil {
+		t.Error("EndOfDay with no location: want error")
+	}
+}
+
+// Just after midnight the day before is over: an answer at 00:30 belongs to the new
+// day and must not be frozen into yesterday's row.
+func TestCatchUpJustAfterMidnightLeavesTheNewDayOut(t *testing.T) {
+	// Chicago midnight into the 19th is 05:00 UTC. The hourly sweep lands moments after it.
+	t.Run("an hour later", func(t *testing.T) {
+		catchUpAfterMidnight(t, time.Date(2026, 10, 19, 5, 30, 0, 0, time.UTC), time.Date(2026, 10, 19, 6, 0, 0, 0, time.UTC))
+	})
+	t.Run("half a second later", func(t *testing.T) {
+		catchUpAfterMidnight(t, time.Date(2026, 10, 19, 5, 0, 0, 200e6, time.UTC), time.Date(2026, 10, 19, 5, 0, 0, 500e6, time.UTC))
+	})
+}
+
+func catchUpAfterMidnight(t *testing.T, answerAt, sweepAt time.Time) {
+	t.Helper()
+	e := newEnv(t)
+	ctx := context.Background()
+	z, err := e.newResolver().For(ctx, e.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lex := e.lexeme()
+	rev := fsrs.New(e.store, e.clk)
+
+	e.clk.set(time.Date(2026, 10, 17, 17, 0, 0, 0, time.UTC))
+	cardID, err := e.store.InsertCard(ctx, db.Card{
+		UserID: e.user, LexemeID: lex, Skill: fsrs.SkillRead,
+		State: fsrs.StateNew, Due: e.clk.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rev.Grade(ctx, cardID, fsrs.Good, false); err != nil {
+		t.Fatal(err)
+	}
+	e.clk.set(time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC))
+	if _, err := e.daily.Run(ctx, "2026-10-17"); err != nil {
+		t.Fatal(err)
+	}
+	e.clk.set(time.Date(2026, 10, 18, 17, 0, 0, 0, time.UTC))
+	if err := rev.Grade(ctx, cardID, fsrs.Good, false); err != nil {
+		t.Fatal(err)
+	}
+
+	e.clk.set(answerAt)
+	for i := range 3 {
+		e.exec(`INSERT INTO attempts (user_id, lexeme_id, skill, activity, source, prompt, response, correct, dont_know, hint_used, latency_ms, created_at)
+			VALUES (?, ?, ?, 'test', 'review', '', '', 0, 0, 0, 0, ?)`,
+			e.user, lex, fsrs.SkillRead, db.FormatTime(answerAt.Add(time.Duration(i)*time.Millisecond)))
+	}
+
+	e.clk.set(sweepAt)
+	if _, err := e.newDaily("job-a").CatchUp(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	at, err := EndOfDay("2026-10-18", z)
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := learner.New(e.store, e.clk, learner.WithBands(e.bands))
+	atEnd, err := model.SnapshotAt(ctx, e.user, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	atNow, err := model.SnapshotAt(ctx, e.user, e.clk.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := func(s learner.Snapshot) map[string]map[string]int {
+		out := map[string]map[string]int{}
+		for _, c := range s.Summary.Skills {
+			out[c.Skill] = map[string]int{}
+			for _, st := range learner.States {
+				out[c.Skill][string(st)] = c.Counts[st]
+			}
+		}
+		return out
+	}
+	if reflect.DeepEqual(counts(atEnd), counts(atNow)) {
+		t.Fatal("fixture does not separate midnight from 01:00; the 00:30 misses should change the read state")
+	}
+	got := e.snapshotMap(e.user, "2026-10-18")
+	want := counts(atEnd)
+	for _, skill := range learner.Skills {
+		for _, st := range learner.States {
+			if got[skill][string(st)] != want[skill][string(st)] {
+				t.Errorf("2026-10-18 %s %s = %d, want %d (as of midnight)", skill, st, got[skill][string(st)], want[skill][string(st)])
+			}
+		}
+	}
+}
+
+func TestCatchUpWritesAsOfEachDay(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	z, err := e.newResolver().For(ctx, e.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lex := e.lexeme()
+	rev := fsrs.New(e.store, e.clk)
+
+	// Seed a card on day 1, then grade across days so as-of states diverge.
+	e.clk.set(time.Date(2026, 10, 17, 17, 0, 0, 0, time.UTC))
+	cardID, err := e.store.InsertCard(ctx, db.Card{
+		UserID: e.user, LexemeID: lex, Skill: fsrs.SkillRead,
+		State: fsrs.StateNew, Due: e.clk.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rev.Grade(ctx, cardID, fsrs.Good, false); err != nil {
+		t.Fatal(err)
+	}
+	// Snapshot day 2026-10-17 so CatchUp has a last day; clock is still the 17th evening UTC.
+	e.clk.set(time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC)) // afternoon Chicago 17th → morning 18th
+	if _, err := e.daily.Run(ctx, "2026-10-17"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Second success on calendar 2026-10-18 (still learning after two Goods).
+	e.clk.set(time.Date(2026, 10, 18, 17, 0, 0, 0, time.UTC))
+	if err := rev.Grade(ctx, cardID, fsrs.Good, false); err != nil {
+		t.Fatal(err)
+	}
+	// Third success on 2026-10-19 → known by end of that day.
+	e.clk.set(time.Date(2026, 10, 19, 17, 0, 0, 0, time.UTC))
+	if err := rev.Grade(ctx, cardID, fsrs.Good, false); err != nil {
+		t.Fatal(err)
+	}
+	// Wrong answers on 2026-10-20 → struggling by end of that day.
+	e.clk.set(time.Date(2026, 10, 20, 17, 0, 0, 0, time.UTC))
+	e.attempts(e.user, lex, fsrs.SkillRead, "WWW")
+
+	// Catch up on 2026-10-21: fills 18, 19, 20.
+	e.clk.set(time.Date(2026, 10, 21, 17, 0, 0, 0, time.UTC))
+	res, err := e.newDaily("job-a").CatchUp(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Written != 3 {
+		t.Fatalf("written = %d, want 3 (days %v)", res.Written, e.snapshotDays(e.user))
+	}
+	for _, d := range []string{"2026-10-18", "2026-10-19", "2026-10-20"} {
+		at, err := EndOfDay(d, z)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, err := learner.New(e.store, e.clk, learner.WithBands(e.bands)).SnapshotAt(ctx, e.user, at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		gotMap := e.snapshotMap(e.user, d)
+		for _, skill := range learner.Skills {
+			var ss learner.SkillSummary
+			for _, c := range want.Summary.Skills {
+				if c.Skill == skill {
+					ss = c
+				}
+			}
+			for _, st := range learner.States {
+				if gotMap[skill][string(st)] != ss.Counts[st] {
+					t.Errorf("%s %s %s = %d, want SnapshotAt count %d", d, skill, st, gotMap[skill][string(st)], ss.Counts[st])
+				}
+			}
+		}
+		rvs := e.query(`SELECT DISTINCT rule_version FROM daily_snapshots WHERE user_id = ? AND day = ?`, e.user, d)
+		if !reflect.DeepEqual(rvs, []string{fmt.Sprint(RuleVersion)}) {
+			t.Errorf("%s rule_version = %v, want %d", d, rvs, RuleVersion)
+		}
+		totals := e.query(`SELECT known_any_skill, rule_version FROM daily_totals WHERE user_id = ? AND day = ?`, e.user, d)
+		wantTot := fmt.Sprintf("%d|%d", want.Summary.KnownAnySkill, RuleVersion)
+		if !reflect.DeepEqual(totals, []string{wantTot}) {
+			t.Errorf("%s totals = %v, want %s", d, totals, wantTot)
+		}
+	}
+
+	m18 := e.snapshotMap(e.user, "2026-10-18")
+	m19 := e.snapshotMap(e.user, "2026-10-19")
+	m20 := e.snapshotMap(e.user, "2026-10-20")
+	if reflect.DeepEqual(m18, m19) || reflect.DeepEqual(m19, m20) || reflect.DeepEqual(m18, m20) {
+		t.Fatalf("caught-up days are not distinct:\n18=%v\n19=%v\n20=%v", m18, m19, m20)
+	}
+}
+
 // A gap of more than 14 days fills the newest 14, and a learner that joined later gets only yesterday.
 func TestCatchUpIsCappedAtFourteenDays(t *testing.T) {
 	e := newEnv(t)
@@ -512,8 +728,10 @@ func TestMissedDays(t *testing.T) {
 	}
 }
 
-// A regression inside a gap is recorded once, on the first missed day.
-func TestRegressionInAGapLandsOnTheFirstMissedDay(t *testing.T) {
+// A regression inside a gap lands on the day SnapshotAt first shows the weak state
+// (INIT-033/SPEC-004): answers on 2026-10-21 Chicago morning land on that day, not the
+// first missed day.
+func TestRegressionInAGapLandsOnTheDayItHappened(t *testing.T) {
 	e := newEnv(t)
 	id := e.lexeme()
 	e.known(e.user, id, fsrs.SkillListen, 100)
@@ -527,8 +745,8 @@ func TestRegressionInAGapLandsOnTheFirstMissedDay(t *testing.T) {
 		t.Fatal(err)
 	}
 	ev := e.events(e.user)
-	if len(ev) != 1 || ev[0].Day != "2026-10-19" || ev[0].To.String != "struggling" {
-		t.Fatalf("events = %+v, want one on 2026-10-19", ev)
+	if len(ev) != 1 || ev[0].Day != "2026-10-21" || ev[0].To.String != "struggling" {
+		t.Fatalf("events = %+v, want one on 2026-10-21", ev)
 	}
 }
 
@@ -606,7 +824,9 @@ func TestOneLearnerFailingDoesNotStopTheRest(t *testing.T) {
 	fb := &failingBands{failOn: 2}
 	flaky := e.newDaily("job-a", WithLearnerOptions(learner.WithBands(fb)))
 
+	restore := e.pastDay(day0)
 	res, err := flaky.Run(context.Background(), day0)
+	restore()
 	if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("learner %d", u2)) {
 		t.Fatalf("err = %v, want a failure of learner %d", err, u2)
 	}
@@ -616,7 +836,7 @@ func TestOneLearnerFailingDoesNotStopTheRest(t *testing.T) {
 	if len(e.snapshotDays(e.user)) != 1 || len(e.snapshotDays(u2)) != 0 || len(e.snapshotDays(u3)) != 1 {
 		t.Fatalf("days: %v %v %v", e.snapshotDays(e.user), e.snapshotDays(u2), e.snapshotDays(u3))
 	}
-	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = 'daily.lock'`); n != 0 {
+	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = ?`, DailyLockKey); n != 0 {
 		t.Error("the lock was left behind after a failure")
 	}
 	// Resume.
@@ -639,14 +859,16 @@ func TestCancelledRunKeepsFinishedLearnersAndResumes(t *testing.T) {
 	fb := &failingBands{failOn: 2, cancel: cancel}
 	stopping := e.newDaily("job-a", WithLearnerOptions(learner.WithBands(fb)))
 
+	restore := e.pastDay(day0)
 	res, err := stopping.Run(ctx, day0)
+	restore()
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
 	}
 	if res.Written != 1 || len(e.snapshotDays(e.user)) != 1 || len(e.snapshotDays(u2)) != 0 || len(e.snapshotDays(u3)) != 0 {
 		t.Fatalf("result %+v, days: %v %v %v", res, e.snapshotDays(e.user), e.snapshotDays(u2), e.snapshotDays(u3))
 	}
-	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = 'daily.lock'`); n != 0 {
+	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = ?`, DailyLockKey); n != 0 {
 		t.Error("the lock was left behind after a cancel")
 	}
 	res = e.run(day0)
@@ -660,7 +882,7 @@ func TestLock(t *testing.T) {
 	e := newEnv(t)
 	e.lexeme()
 	ctx := context.Background()
-	ok, err := e.store.TryLockJob(ctx, lockKey, "job-b", e.clk.Now(), LockTTL)
+	ok, err := e.store.TryLockJob(ctx, DailyLockKey, "job-b", e.clk.Now(), LockTTL)
 	if err != nil || !ok {
 		t.Fatalf("job-b lock = %v, %v", ok, err)
 	}
@@ -674,7 +896,7 @@ func TestLock(t *testing.T) {
 		t.Fatalf("%d rows written while another process held the lock", n)
 	}
 	// The other holder's lock is not released by this job's failed attempt.
-	if v := e.query(`SELECT value FROM job_state WHERE key = 'daily.lock'`); !reflect.DeepEqual(v, []string{"job-b"}) {
+	if v := e.query(`SELECT value FROM job_state WHERE key = ?`, DailyLockKey); !reflect.DeepEqual(v, []string{"job-b"}) {
 		t.Fatalf("lock row = %v, want job-b to still hold it", v)
 	}
 	// A holder that is still within the TTL keeps it a while longer.
@@ -684,21 +906,23 @@ func TestLock(t *testing.T) {
 	}
 	// A holder silent for longer than the TTL has died. Its lock is taken over.
 	e.clk.advance(2 * time.Minute)
-	res, err := e.daily.Run(ctx, e.daily.Today())
+	restore := e.pastDay(day0)
+	res, err := e.daily.Run(ctx, day0)
+	restore()
 	if err != nil || res.Written != 1 {
 		t.Fatalf("Run after the TTL = %+v, %v", res, err)
 	}
-	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = 'daily.lock'`); n != 0 {
+	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = ?`, DailyLockKey); n != 0 {
 		t.Error("the lock was left behind after a normal run")
 	}
 	// UnlockJob never releases a lock held by someone else.
-	if ok, _ := e.store.TryLockJob(ctx, lockKey, "job-b", e.clk.Now(), LockTTL); !ok {
+	if ok, _ := e.store.TryLockJob(ctx, DailyLockKey, "job-b", e.clk.Now(), LockTTL); !ok {
 		t.Fatal("job-b could not lock a free lock")
 	}
-	if err := e.store.UnlockJob(ctx, lockKey, "job-a"); err != nil {
+	if err := e.store.UnlockJob(ctx, DailyLockKey, "job-a"); err != nil {
 		t.Fatal(err)
 	}
-	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = 'daily.lock'`); n != 1 {
+	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = ?`, DailyLockKey); n != 1 {
 		t.Error("job-a released job-b's lock")
 	}
 }

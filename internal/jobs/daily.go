@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,10 +35,16 @@ const (
 	// UnknownCause is the cause of a regression when no diagnosis rule fits.
 	UnknownCause = "unexplained"
 
+	// RuleVersion is the learner-model stamp on daily_snapshots and daily_totals written
+	// by the daily job and by hebrew history rebuild (ADR-0028 D3 / INIT-033/SPEC-004).
+	RuleVersion = 2
+
+	// DailyLockKey is the job_state key for the daily job and history rebuild lock.
+	DailyLockKey = "daily.lock"
+
 	// bandHistoryDays is how many days of band shares are kept.
 	bandHistoryDays = 14
 
-	lockKey   = "daily.lock"
 	dayLayout = "2006-01-02"
 )
 
@@ -57,7 +64,7 @@ type Result struct {
 	Written int
 	// Skipped is how many learner-days already had rows.
 	Skipped int
-	// NotYet is how many learners were skipped because the day is still in their future.
+	// NotYet is how many learners were skipped because the day has not ended in their zone.
 	NotYet int
 	// Events is how many word regression events were written.
 	Events int
@@ -178,9 +185,10 @@ func addDays(day string, n int) string {
 }
 
 // Run writes the snapshot of one day for every learner. A learner that already has rows for
-// the day is skipped, so running a day twice changes nothing. A learner for whom the day is
-// still in the future (today in their zone is before the day) is skipped and counted in
-// NotYet. ErrFutureDay is returned only when the day is in the future for every learner.
+// the day is skipped, so running a day twice changes nothing. A learner for whom the day has
+// not ended yet (midnight after it has not come in their zone) is skipped and counted in
+// NotYet, so an unfinished day is never frozen. ErrFutureDay is returned only when the day
+// has not ended for every learner.
 // A learner whose write fails does not stop the others: the error is returned at the end,
 // joined, and the next run retries only the learners that have no rows. Run returns
 // ErrLocked when another process holds the lock. INIT-026/SPEC-004.
@@ -210,12 +218,13 @@ func (d *Daily) Run(ctx context.Context, day string) (Result, error) {
 				return err
 			}
 			z := zones[id]
-			today := studyday.Today(now, z)
-			if day > today {
+			if end, err := EndOfDay(day, z); err != nil {
+				return err
+			} else if end.After(now) {
 				res.NotYet++
 				continue
 			}
-			part, err := d.learnerDays(ctx, id, []string{day})
+			part, err := d.learnerDays(ctx, id, []string{day}, z)
 			res.add(part)
 			if err != nil {
 				if ctx.Err() != nil {
@@ -227,7 +236,7 @@ func (d *Daily) Run(ctx context.Context, day string) (Result, error) {
 		if res.Learners > 0 && res.NotYet == res.Learners {
 			return fmt.Errorf("%w: %s", ErrFutureDay, day)
 		}
-		if res.Learners == 0 && day > studyday.Today(now, d.app) {
+		if res.Learners == 0 && day >= studyday.Today(now, d.app) {
 			return fmt.Errorf("%w: %s", ErrFutureDay, day)
 		}
 		return errors.Join(errs...)
@@ -272,7 +281,7 @@ func (d *Daily) CatchUp(ctx context.Context) (Result, error) {
 			if len(days) == 0 {
 				continue
 			}
-			part, err := d.learnerDays(ctx, id, days)
+			part, err := d.learnerDays(ctx, id, days, z)
 			res.add(part)
 			if err != nil {
 				if ctx.Err() != nil {
@@ -343,7 +352,7 @@ func missedDays(last, through string) []string {
 // locked runs fn holding the daily lock. The lock is released with a fresh context, so a
 // cancelled run still lets go of it.
 func (d *Daily) locked(ctx context.Context, fn func() error) error {
-	ok, err := d.store.TryLockJob(ctx, lockKey, d.owner, d.clock.Now(), LockTTL)
+	ok, err := d.store.TryLockJob(ctx, DailyLockKey, d.owner, d.clock.Now(), LockTTL)
 	if err != nil {
 		return err
 	}
@@ -353,7 +362,7 @@ func (d *Daily) locked(ctx context.Context, fn func() error) error {
 	defer func() {
 		rel, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		if err := d.store.UnlockJob(rel, lockKey, d.owner); err != nil {
+		if err := d.store.UnlockJob(rel, DailyLockKey, d.owner); err != nil {
 			d.log.Warn("daily job: release lock", "err", err)
 		}
 	}()
@@ -362,14 +371,52 @@ func (d *Daily) locked(ctx context.Context, fn func() error) error {
 
 // heartbeat refreshes the lock so a long run is not taken over.
 func (d *Daily) heartbeat(ctx context.Context) {
-	if ok, err := d.store.TryLockJob(ctx, lockKey, d.owner, d.clock.Now(), LockTTL); err != nil || !ok {
+	if ok, err := d.store.TryLockJob(ctx, DailyLockKey, d.owner, d.clock.Now(), LockTTL); err != nil || !ok {
 		d.log.Warn("daily job: refresh lock", "held", ok, "err", err)
 	}
 }
 
-// learnerDays writes the given days for one learner, oldest first. The learner is evaluated
-// once for all of them, and only when some day has no rows yet.
-func (d *Daily) learnerDays(ctx context.Context, userID int64, days []string) (Result, error) {
+// EndOfDay is the instant day ends in z: midnight that starts the next calendar
+// day, the same boundary studyday.Today uses. The 4:00 review cutoff is not a day
+// boundary. day must be YYYY-MM-DD. DST-safe via time.Date in z.Loc.
+// INIT-033/SPEC-004 / ADR-0028 D3.
+func EndOfDay(day string, z studyday.Zone) (time.Time, error) {
+	if z.Loc == nil {
+		return time.Time{}, errors.New("jobs: EndOfDay requires a zone location")
+	}
+	t, err := time.ParseInLocation(dayLayout, day, z.Loc)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("jobs: end of day %q: %w", day, err)
+	}
+	y, m, d := t.Date()
+	return time.Date(y, m, d+1, 0, 0, 0, 0, z.Loc), nil
+}
+
+// DailyLockHolder reports whether a live process holds the daily lock (within LockTTL)
+// and names that holder. A missing or stale lock is not held. INIT-033/SPEC-004.
+func DailyLockHolder(ctx context.Context, store *db.Store, now time.Time) (holder string, held bool, err error) {
+	conn, err := store.DB()
+	if err != nil {
+		return "", false, err
+	}
+	var updated string
+	err = conn.QueryRowContext(ctx, `SELECT value, updated_at FROM job_state WHERE key = ?`, DailyLockKey).Scan(&holder, &updated)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("jobs: daily lock: %w", err)
+	}
+	at, perr := db.ParseTime(updated)
+	if perr == nil && now.Sub(at) >= LockTTL {
+		return holder, false, nil
+	}
+	return holder, true, nil
+}
+
+// learnerDays writes the given days for one learner, oldest first. Each missing day is
+// evaluated as of EndOfDay in the learner's zone under the current rules (ADR-0028 D3).
+func (d *Daily) learnerDays(ctx context.Context, userID int64, days []string, z studyday.Zone) (Result, error) {
 	var res Result
 	var todo []string
 	for _, day := range days {
@@ -386,12 +433,25 @@ func (d *Daily) learnerDays(ctx context.Context, userID int64, days []string) (R
 	if len(todo) == 0 {
 		return res, nil
 	}
-	d.heartbeat(ctx)
-	snap, err := d.model.Snapshot(ctx, userID)
-	if err != nil {
-		return res, err
-	}
 	for _, day := range todo {
+		if err := ctx.Err(); err != nil {
+			return res, err
+		}
+		d.heartbeat(ctx)
+		at, err := EndOfDay(day, z)
+		if err != nil {
+			return res, err
+		}
+		// A day that has not ended is not history yet. Writing it now would freeze a
+		// partial row that HasSnapshot then keeps.
+		if at.After(d.clock.Now()) {
+			res.Skipped++
+			continue
+		}
+		snap, err := d.model.SnapshotAt(ctx, userID, at)
+		if err != nil {
+			return res, err
+		}
 		part, err := d.writeDay(ctx, userID, day, snap)
 		res.add(part)
 		if err != nil {
@@ -477,6 +537,9 @@ func (d *Daily) writeDay(ctx context.Context, userID int64, day string, snap lea
 		if err := tx.InsertSnapshot(ctx, userID, day, rows); err != nil {
 			return err
 		}
+		if err := tx.InsertTotals(ctx, userID, day, snap.Summary.KnownAnySkill, RuleVersion); err != nil {
+			return err
+		}
 		for _, e := range events {
 			if err := tx.InsertRegression(ctx, e); err != nil {
 				return err
@@ -497,6 +560,7 @@ func (d *Daily) writeDay(ctx context.Context, userID int64, day string, snap lea
 }
 
 // snapshotRows is one row per skill and state, so a learner always has 28 rows for a day.
+// Rows are stamped with RuleVersion (ADR-0028 D3).
 func snapshotRows(s learner.Summary) []db.DailySnapshotRow {
 	rows := make([]db.DailySnapshotRow, 0, len(learner.Skills)*len(learner.States))
 	for _, skill := range learner.Skills {
@@ -508,11 +572,12 @@ func snapshotRows(s learner.Summary) []db.DailySnapshotRow {
 		}
 		for _, state := range learner.States {
 			rows = append(rows, db.DailySnapshotRow{
-				Skill:     skill,
-				State:     string(state),
-				Count:     ss.Counts[state],
-				EstKnown:  ss.EstimatedKnown,
-				Retention: ss.Retention,
+				Skill:       skill,
+				State:       string(state),
+				Count:       ss.Counts[state],
+				EstKnown:    ss.EstimatedKnown,
+				Retention:   ss.Retention,
+				RuleVersion: RuleVersion,
 			})
 		}
 	}

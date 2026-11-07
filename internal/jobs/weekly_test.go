@@ -300,7 +300,7 @@ func TestWeeklyRunTwiceLeavesOneRow(t *testing.T) {
 	if err != nil || res.Written != 0 || res.Skipped != 2 {
 		t.Fatalf("CatchUp = %+v, %v", res, err)
 	}
-	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = 'daily.lock'`); n != 0 {
+	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = ?`, DailyLockKey); n != 0 {
 		t.Fatal("the lock was left behind")
 	}
 }
@@ -387,14 +387,18 @@ func TestWeeklyBackfilledWeekLeavesTheBaselineAlone(t *testing.T) {
 
 // Through the real daily job: week one is reported, a word then regresses (hears it, cannot read
 // it), another word is learned, and a struggle word is cleared. The next report names exactly those.
+// Evidence for Sunday 2026-10-18 must land before EndOfDay (midnight Chicago into the 19th), because
+// the daily job writes each day as of that instant (INIT-033/SPEC-004).
 func TestWeeklyThroughTheDailyJob(t *testing.T) {
 	e := newEnv(t)
 	ids := e.lexemes(3)
 	known, struggle, fresh := ids[0], ids[1], ids[2]
+	e.clk.set(time.Date(2026, 10, 18, 20, 0, 0, 0, time.UTC)) // afternoon Chicago on the 18th
 	e.known(e.user, known, fsrs.SkillListen, 10)
 	e.known(e.user, known, fsrs.SkillRead, 10)
 	e.attempts(e.user, struggle, fsrs.SkillListen, "WWW")
 
+	e.clk.set(start)
 	e.run("2026-10-18")
 	e.runWeek(week1) // The first report: no gains, and it keeps the states.
 	r1, _ := e.report(e.user, week1)
@@ -409,6 +413,7 @@ func TestWeeklyThroughTheDailyJob(t *testing.T) {
 	e.attempts(e.user, struggle, fsrs.SkillListen, "RRRRRRRRRR")
 	e.known(e.user, struggle, fsrs.SkillListen, 10)
 	e.known(e.user, fresh, fsrs.SkillListen, 10)
+	e.clk.set(time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)) // the 23rd is over in Chicago
 	e.run("2026-10-23")
 
 	// Monday the 26th: Sunday's snapshot, then the report of week two.
@@ -687,7 +692,7 @@ func TestSchedulerWritesTheWeeklyReportMondayAtFour(t *testing.T) {
 			t.Errorf("the log holds learner data (%q):\n%s", banned, out)
 		}
 	}
-	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = 'daily.lock'`); n != 0 {
+	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = ?`, DailyLockKey); n != 0 {
 		t.Error("the lock was left behind")
 	}
 }
@@ -697,14 +702,14 @@ func TestWeeklyHonoursTheDailyLock(t *testing.T) {
 	e := newEnv(t)
 	e.lexeme()
 	ctx := context.Background()
-	if ok, err := e.store.TryLockJob(ctx, lockKey, "job-b", e.clk.Now(), LockTTL); err != nil || !ok {
+	if ok, err := e.store.TryLockJob(ctx, DailyLockKey, "job-b", e.clk.Now(), LockTTL); err != nil || !ok {
 		t.Fatalf("job-b lock = %v, %v", ok, err)
 	}
 	res, err := e.weekly().Run(ctx, week1)
 	if !errors.Is(err, ErrLocked) || res.Written != 0 {
 		t.Fatalf("run while locked = %+v, %v", res, err)
 	}
-	if err := e.store.UnlockJob(ctx, lockKey, "job-b"); err != nil {
+	if err := e.store.UnlockJob(ctx, DailyLockKey, "job-b"); err != nil {
 		t.Fatal(err)
 	}
 	if res := e.runWeek(week1); res.Written != 1 {

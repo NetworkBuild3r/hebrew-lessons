@@ -147,7 +147,7 @@ func TestSchedulerSkipsWhileAnotherProcessHoldsTheLock(t *testing.T) {
 	e := newEnv(t)
 	e.lexeme()
 	ctx := context.Background()
-	if ok, err := e.store.TryLockJob(ctx, lockKey, "job-b", e.clk.Now(), LockTTL); err != nil || !ok {
+	if ok, err := e.store.TryLockJob(ctx, DailyLockKey, "job-b", e.clk.Now(), LockTTL); err != nil || !ok {
 		t.Fatalf("job-b lock = %v, %v", ok, err)
 	}
 	s, reqs := e.scheduler("job-a")
@@ -156,7 +156,7 @@ func TestSchedulerSkipsWhileAnotherProcessHoldsTheLock(t *testing.T) {
 	if n := e.count(`SELECT COUNT(*) FROM daily_snapshots`); n != 0 {
 		t.Fatalf("%d rows written while another process held the lock", n)
 	}
-	if err := e.store.UnlockJob(ctx, lockKey, "job-b"); err != nil {
+	if err := e.store.UnlockJob(ctx, DailyLockKey, "job-b"); err != nil {
 		t.Fatal(err)
 	}
 	first.fire <- e.clk.Now()
@@ -176,7 +176,7 @@ func TestSchedulerStopsCleanly(t *testing.T) {
 	nextReq(t, reqs)
 	stopScheduler(t, stop)
 	stopScheduler(t, stop)
-	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = 'daily.lock'`); n != 0 {
+	if n := e.count(`SELECT COUNT(*) FROM job_state WHERE key = ?`, DailyLockKey); n != 0 {
 		t.Error("the lock was left behind")
 	}
 
@@ -232,7 +232,7 @@ func TestSchedulerStopGivesUpAfterTheTimeout(t *testing.T) {
 	// Let the job finish and wait for it to let go of the lock, so the store outlives it.
 	close(bb.release)
 	deadline := time.Now().Add(10 * time.Second)
-	for e.count(`SELECT COUNT(*) FROM job_state WHERE key = 'daily.lock'`) != 0 {
+	for e.count(`SELECT COUNT(*) FROM job_state WHERE key = ?`, DailyLockKey) != 0 {
 		if time.Now().After(deadline) {
 			t.Fatal("the job never released the lock")
 		}
