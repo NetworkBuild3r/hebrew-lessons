@@ -36,7 +36,7 @@
       "root": "ידה"
     },
     {
-      "textNfc": "בְבַקָּשָׁה",
+      "textNfc": "בְּבַקָּשָׁה",
       "bare": "בבקשה",
       "glossEn": "please",
       "pos": "interjection",
@@ -113,7 +113,7 @@
       "root": ""
     },
     {
-      "textNfc": "חֶשְבּוֹן",
+      "textNfc": "חֶשְׁבּוֹן",
       "bare": "חשבון",
       "glossEn": "bill",
       "pos": "noun",
@@ -183,7 +183,7 @@
       "root": "בת"
     },
     {
-      "textNfc": "מִשְפָּחָה",
+      "textNfc": "מִשְׁפָּחָה",
       "bare": "משפחה",
       "glossEn": "family",
       "pos": "noun",
@@ -218,7 +218,7 @@
       "root": "אחד"
     },
     {
-      "textNfc": "שְנַיִם",
+      "textNfc": "שְׁנַיִם",
       "bare": "שנים",
       "glossEn": "two",
       "pos": "numeral",
@@ -260,7 +260,7 @@
       "root": "שבע"
     },
     {
-      "textNfc": "שְמוֹנֶה",
+      "textNfc": "שְׁמוֹנֶה",
       "bare": "שמונה",
       "glossEn": "eight",
       "pos": "numeral",
