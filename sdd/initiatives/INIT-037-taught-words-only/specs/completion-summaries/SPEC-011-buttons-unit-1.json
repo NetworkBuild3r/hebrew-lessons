@@ -1,0 +1,13 @@
+{
+  "unitId": 1,
+  "position": 0,
+  "title": "Hi, I live here",
+  "activity": "cloze",
+  "target": "גָּר",
+  "runs": [
+    {"runId": 101, "buttons": ["עוֹבֵד", "לוֹמֵד", "גָּר", "אֲנִי"]},
+    {"runId": 202, "buttons": ["עוֹבֵד", "עִבְרִית", "לוֹמֵד", "גָּר"]},
+    {"runId": 303, "buttons": ["עוֹבֵד", "גָּר", "אֵיפֹה", "לוֹמֵד"]}
+  ],
+  "check": "Each button is a card of learner 1 or a word of a finished unit. The same choice function the lesson page uses, against a copy of the production database taken after the deploy."
+}

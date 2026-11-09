@@ -1,6 +1,6 @@
 # INIT-037: A lesson asks only about words you were taught, and a bad lesson can't be copied forward
 
-**Initiative ID:** INIT-037 · **Status:** in progress (SPEC-011 deploying) · **Created:** 2026-11-08 · **Owner:** Brian Nelson
+**Initiative ID:** INIT-037 · **Status:** complete · **Created:** 2026-11-08 · **Owner:** Brian Nelson
 **Discipline Profile:** `software` · **Ticket:** none · **Branch:** `main` (deliberately not a worktree: the checkout carries many line-ending-only modified files, and this repo's initiatives, such as INIT-032 and INIT-036, work in place on `main`)
 **Source:** [ASMT-004](../../assessments/ASMT-004-hebrew-web-app/ASMT-004-hebrew-web-app-assessment-report.md), its spec skeleton (SPEC-A to SPEC-H). Brian, 2026-11-08, on https://hebrew.ibhacked.us/lesson/12/1: "I didn't even have some of the option i just failed on … I want to make sure it cleans up all the old and the new." His answers to the handoff questions, the same day: take units 12 to 34 off Today now, and create this initiative.
 
@@ -58,8 +58,8 @@ A fifth fault means nothing catches them afterwards: a published unit only warns
 | [SPEC-008](specs/SPEC-008-docs-reviser-next-units-only.md) | docs | The reviser rebuilds only the next one or two units | SPEC-005, SPEC-006, SPEC-007 | 2h | complete |
 | [SPEC-009](specs/SPEC-009-mcp-published-unit-health.md) | mcp | Published-unit block counts and a read-only sweep | SPEC-005, SPEC-006 | 3h | complete |
 | [SPEC-010](specs/SPEC-010-web-today-skips-blocked-units.md) | web | Today skips an untouched unit that blocks | SPEC-009 | 2h | complete |
-| [SPEC-011](specs/SPEC-011-ops-deploy-and-sweep.md) | ops | Deploy, sweep, and check a lesson's buttons | SPEC-003, SPEC-004, SPEC-007, SPEC-008, SPEC-010 | 2h | in_progress |
-| [SPEC-012](specs/SPEC-012-content-rebuild-next-units.md) | content | Rebuild learner 1's next units one or two at a time | SPEC-011 | 4h | planned |
+| [SPEC-011](specs/SPEC-011-ops-deploy-and-sweep.md) | ops | Deploy, sweep, and check a lesson's buttons | SPEC-003, SPEC-004, SPEC-007, SPEC-008, SPEC-010 | 2h | complete |
+| [SPEC-012](specs/SPEC-012-content-rebuild-next-units.md) | content | Rebuild learner 1's next units one or two at a time | SPEC-011 | 4h | complete |
 
 **Total:** 34h, about 26h of it new. The rest: SPEC-011 and SPEC-012 take over INIT-032 SPEC-007 and SPEC-008's listing and rewrite, and add a deploy of this initiative. ASMT-004's SPEC-G and SPEC-H each split into two specs here to keep one domain per spec.
 

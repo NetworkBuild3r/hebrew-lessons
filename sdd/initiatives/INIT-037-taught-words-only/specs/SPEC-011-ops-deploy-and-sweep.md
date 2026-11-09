@@ -7,7 +7,7 @@ spec_id: SPEC-011
 initiative_id: INIT-037
 title: "Deploy, sweep, and check a lesson's buttons"
 domain: ops
-status: in_progress
+status: complete
 primary_prompt: none
 complexity: low
 complexity_reason: the normal deploy plus two read-only checks
@@ -34,9 +34,9 @@ This spec takes over INIT-032 SPEC-007 (list the bad lessons) and deploys this i
 
 ## Acceptance criteria
 
-- [ ] `/version` reports the deployed commit.
-- [ ] The sweep lists every published unit on learner 1's path with its block count, and none of units 12 to 34 is published.
-- [ ] The recorded buttons are all words learner 1 has a card for, or words of a finished unit.
+- [x] `/version` reports the deployed commit.
+- [x] The sweep lists every published unit on learner 1's path with its block count, and none of units 12 to 34 is published.
+- [x] The recorded buttons are all words learner 1 has a card for, or words of a finished unit.
 
 ## Verification Strategy
 

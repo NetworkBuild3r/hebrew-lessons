@@ -1,0 +1,123 @@
+[
+  {
+    "id": 1,
+    "position": 0,
+    "state": "finished",
+    "blocks": 20,
+    "rules": [
+      "activity.target",
+      "unit.cloze_translation",
+      "unit.translation_missing"
+    ]
+  },
+  {
+    "id": 2,
+    "position": 1,
+    "state": "finished",
+    "blocks": 29,
+    "rules": [
+      "activity.target",
+      "unit.cloze_translation",
+      "unit.translation_missing"
+    ]
+  },
+  {
+    "id": 3,
+    "position": 2,
+    "state": "finished",
+    "blocks": 17,
+    "rules": [
+      "coverage.listening",
+      "coverage.story",
+      "unit.cloze_translation",
+      "unit.translation_missing"
+    ]
+  },
+  {
+    "id": 4,
+    "position": 3,
+    "state": "finished",
+    "blocks": 21,
+    "rules": [
+      "coverage.listening",
+      "coverage.story",
+      "unit.cloze_translation",
+      "unit.translation_missing"
+    ]
+  },
+  {
+    "id": 5,
+    "position": 4,
+    "state": "finished",
+    "blocks": 15,
+    "rules": [
+      "coverage.listening",
+      "coverage.story",
+      "unit.cloze_translation"
+    ]
+  },
+  {
+    "id": 6,
+    "position": 5,
+    "state": "finished",
+    "blocks": 13,
+    "rules": [
+      "activity.target",
+      "unit.cloze_translation"
+    ]
+  },
+  {
+    "id": 7,
+    "position": 6,
+    "state": "finished",
+    "blocks": 11,
+    "rules": [
+      "activity.target",
+      "unit.cloze_translation"
+    ]
+  },
+  {
+    "id": 8,
+    "position": 7,
+    "state": "finished",
+    "blocks": 13,
+    "rules": [
+      "activity.target",
+      "unit.cloze_translation",
+      "unit.same_shape"
+    ]
+  },
+  {
+    "id": 9,
+    "position": 8,
+    "state": "finished",
+    "blocks": 13,
+    "rules": [
+      "activity.target",
+      "unit.cloze_translation",
+      "unit.same_shape"
+    ]
+  },
+  {
+    "id": 10,
+    "position": 9,
+    "state": "finished",
+    "blocks": 14,
+    "rules": [
+      "activity.target",
+      "unit.cloze_translation",
+      "unit.same_shape"
+    ]
+  },
+  {
+    "id": 11,
+    "position": 10,
+    "state": "finished",
+    "blocks": 13,
+    "rules": [
+      "activity.target",
+      "unit.cloze_translation",
+      "unit.same_shape"
+    ]
+  }
+]

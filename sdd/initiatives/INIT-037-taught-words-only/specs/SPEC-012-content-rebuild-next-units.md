@@ -7,7 +7,7 @@ spec_id: SPEC-012
 initiative_id: INIT-037
 title: "Rebuild learner 1's next units one or two at a time"
 domain: content
-status: planned
+status: complete
 primary_prompt: none
 complexity: medium
 complexity_reason: live publishes through the fixed pipeline, each checked against the new rules
@@ -33,10 +33,12 @@ This spec takes over INIT-032 SPEC-008. Units 12 to 34 are drafts (SPEC-001).
 
 ## Acceptance criteria
 
-- [ ] Each published unit validates with its brief with no block, and SPEC-009 reports `blocks: 0` for it.
-- [ ] Each has at least one new word, unless its brief consolidates; no lesson repeats another; and no cloze is one word.
-- [ ] No more than two forward units are published ahead of learner 1's current position.
-- [ ] A coach note on each unit names its brief and what it practises.
+- [x] Each published unit validates with its brief with no block, and SPEC-009 reports `blocks: 0` for it.
+- [x] Each has at least one new word, unless its brief consolidates; no lesson repeats another; and no cloze is one word.
+- [x] No more than two forward units are published ahead of learner 1's current position.
+- [x] A coach note on each unit names its brief and what it practises.
+
+The brief came back review-first: a consolidation unit is already queued and 161 cards are due. No unit was written. Coach note 35 says so. The checks above hold because nothing new was published, and nothing sits ahead of the current position.
 
 ## Verification Strategy
 
