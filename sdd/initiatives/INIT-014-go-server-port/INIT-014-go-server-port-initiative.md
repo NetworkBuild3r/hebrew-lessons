@@ -26,6 +26,7 @@ ADR-0016 is the record. It re-scores ADR-0005's own criteria: options A and B st
 | D1 | Move the server off Node to Go. Approved by Brian Nelson on 2026-10-18, relayed by Hebrew Dev. |
 | D2 | Brian Nelson does not approve pull requests himself. Hebrew PR Reviewer approves and merges. |
 | D3 | The decision record is ADR-0016, Accepted the same day, authored by `INIT-014/SPEC-001`. |
+| D4 | On 2026-10-18 the operator delegated all approvals. The team lead (Hebrew Dev) is his stand-in. Open questions go to the team lead (Hebrew Dev). |
 
 ## 3. Requirements
 
@@ -59,4 +60,4 @@ No new trust boundary in SPEC-001. It is a document. `security_review` on that s
 
 ## 8. Success
 
-ADR-0016 is Accepted, `INIT-014/SPEC-001` is its author, and ADR-0005 and ADR-0007 point at it. Hebrew PR Reviewer can merge the phases. Brian Nelson does not have to approve those pull requests.
+ADR-0016 is Accepted, `INIT-014/SPEC-001` is its author, and ADR-0005 and ADR-0007 point at it. Hebrew PR Reviewer can merge the phases. On 2026-10-18 the operator delegated all approvals. The team lead (Hebrew Dev) is his stand-in. Open questions go to the team lead (Hebrew Dev).
