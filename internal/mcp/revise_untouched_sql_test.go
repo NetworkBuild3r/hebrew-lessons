@@ -191,4 +191,20 @@ func TestLessonBriefBacklogSQL(t *testing.T) {
 	if !strings.Contains(fail, fmt.Sprintf("%d", u1)) || !strings.Contains(strings.ToLower(fail), "untouched") {
 		t.Fatalf("three untouched must name %d: %s", u1, fail)
 	}
+
+	// Drafts are not on Today. Three untouched drafts do not block a new brief.
+	drafts, err := store.InsertUser(ctx, "drafts@example.com", "sub-drafts", "learner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for pos := 0; pos < 3; pos++ {
+		doc := units.Unit{Title: "Draft", Situation: "s", Concept: "c", Position: pos, Lessons: []units.Lesson{{Kind: units.KindLesson}}}
+		if _, err := adapter.PutUnit(ctx, nil, &doc, db.LearnerScope(drafts)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, isErr = toolJSON(t, e.session, "get_lesson_brief", map[string]any{"learnerId": drafts})
+	if isErr && strings.Contains(strings.ToLower(raw), "untouched") {
+		t.Fatalf("untouched drafts must not refuse a new brief: %s", raw)
+	}
 }

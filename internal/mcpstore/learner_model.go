@@ -628,7 +628,8 @@ func (s *Store) BuildRevisionBrief(ctx context.Context, id int64, theme string, 
 }
 
 // refuseNewBriefBacklog refuses a new brief when three or more untouched learner-scoped
-// units already sit on Today. INIT-030/SPEC-005; ADR-0026 D8.
+// units already sit on Today. A draft is not on Today, so it does not count.
+// INIT-030/SPEC-005; ADR-0026 D8; INIT-037/SPEC-012.
 func (s *Store) refuseNewBriefBacklog(ctx context.Context, learnerID int64) error {
 	units, err := s.db.UnitsInScope(ctx, learnerID)
 	if err != nil {
@@ -647,7 +648,7 @@ func (s *Store) refuseNewBriefBacklog(ctx context.Context, learnerID int64) erro
 	var earliestPos int
 	count := 0
 	for _, u := range units {
-		if u.Scope != scope {
+		if u.Scope != scope || u.Status != "published" {
 			continue
 		}
 		p, ok := byID[u.ID]
