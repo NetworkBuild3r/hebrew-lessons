@@ -105,7 +105,8 @@ func fair(answer, w Word) bool {
 // Need says what an extra constraint of a pick is: the words must have audio, so a
 // listening item can offer them as clips.
 type Need struct {
-	// Audio keeps only words with a clip.
+	// Audio keeps only words whose AudioID is set. The engine fills that from
+	// the clip resolved for the word, not from a second lookup here.
 	Audio bool
 }
 

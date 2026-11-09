@@ -11,9 +11,12 @@ import (
 // decides what is fair: internal/activity does.
 
 // PoolWord is one dictionary entry as the activity engine sees it.
-// AudioID is empty when the word has no clip. Gloss and POS are empty when the
-// lexicon has not filled them in. Seen is true when the learner has an attempt or a
-// card for the word, so a match item can prefer words the learner already met.
+// AudioID is lexemes.audio_id, empty when that column is null. A clip that
+// exists only as an audio_assets row for the word's text is not copied here;
+// ResolveLexemeAudio is the lookup that finds it. Gloss and POS are empty when
+// the lexicon has not filled them in. Seen is true when the learner has an
+// attempt or a card for the word, so a match item can prefer words the learner
+// already met.
 type PoolWord struct {
 	ID      int64
 	TextNFC string
