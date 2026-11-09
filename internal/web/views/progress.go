@@ -392,12 +392,12 @@ const LabelLearnedTodayCheckTomorrow = "learned today, check tomorrow"
 const LabelKnownExplain = "A word counts as known once you get it right on a second day."
 
 var progressHE = map[string]string{
-	"Words you know":                   "מִלִּים שֶׁיְּדוּעוֹת",
-	LabelLearnedTodayCheckTomorrow:     "נִלְמְדוּ הַיּוֹם, בְּדִיקָה מָחָר",
-	LabelKnownExplain:                  "מִלָּה נֶחְשֶׁבֶת כִּידוּעָה כְּשֶׁעוֹנִים עָלֶיהָ נָכוֹן בְּיוֹם שֵׁנִי.",
-	"Words you know over time":         "מִלִּים שֶׁיְּדוּעוֹת לְאֹרֶךְ הַזְּמַן",
-	"Not tested by placement":          "לֹא נִבְדַּק בִּבְדִיקַת רָמָה",
-	"From placement on":                "מִבְּדִיקַת רָמָה ב־",
+	"Words you know":               "מִלִּים שֶׁיְּדוּעוֹת",
+	LabelLearnedTodayCheckTomorrow: "נִלְמְדוּ הַיּוֹם, בְּדִיקָה מָחָר",
+	LabelKnownExplain:              "מִלָּה נֶחְשֶׁבֶת כִּידוּעָה כְּשֶׁעוֹנִים עָלֶיהָ נָכוֹן בְּיוֹם שֵׁנִי.",
+	"Words you know over time":     "מִלִּים שֶׁיְּדוּעוֹת לְאֹרֶךְ הַזְּמַן",
+	"Not tested by placement":      "לֹא נִבְדַּק בִּבְדִיקַת רָמָה",
+	"From placement on":            "מִבְּדִיקַת רָמָה ב־",
 	"Not practiced yet: type the Hebrew in review to start": "עֲדַיִן לֹא תֻּרְגַּל: הַקְלֵד אֶת הָעִבְרִית בַּחֲזָרָה כְּדֵי לְהַתְחִיל",
 	"Reading not tested":  "קְרִיאָה לֹא נִבְדְּקָה",
 	"Through":             "עַד",

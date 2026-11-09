@@ -57,15 +57,15 @@ type StudyDigest struct {
 	WaitingForSecondDay int                  `json:"waitingForSecondDay" jsonschema:"Same as Progress/Today \"learned today, check tomorrow\": words that pass the old same-day known rule but have only one checked-success study day."`
 	Skills              []DigestSkill        `json:"skills"`
 	History             []DigestHistoryPoint `json:"history" jsonschema:"Last 14 daily_totals days plus today's live knownAnySkill point, each with ruleVersion."`
-	Retention     DigestRetention      `json:"retention"`
-	MinutesInApp  int                  `json:"minutesInApp"`
-	Struggle      []DigestStruggleWord `json:"struggle"`
-	Corrections   []DigestCorrection   `json:"corrections"`
-	ClosedLoop    DigestClosedLoop     `json:"closedLoop"`
-	Taught        []DigestTaughtWord   `json:"taught"`
-	Due           DigestDue            `json:"due"`
-	CoachNotes    []CoachNote          `json:"coachNotes"`
-	LastWeek      *ReportView          `json:"lastWeek,omitempty"`
+	Retention           DigestRetention      `json:"retention"`
+	MinutesInApp        int                  `json:"minutesInApp"`
+	Struggle            []DigestStruggleWord `json:"struggle"`
+	Corrections         []DigestCorrection   `json:"corrections"`
+	ClosedLoop          DigestClosedLoop     `json:"closedLoop"`
+	Taught              []DigestTaughtWord   `json:"taught"`
+	Due                 DigestDue            `json:"due"`
+	CoachNotes          []CoachNote          `json:"coachNotes"`
+	LastWeek            *ReportView          `json:"lastWeek,omitempty"`
 }
 
 // DigestSkill is known+solid and struggling counts for one skill.

@@ -74,7 +74,7 @@ type blockCacheEntry struct {
 // revision, and rule-catalog version. Path shape checks (story_repeat)
 // are not cached here; they are cheap and depend on earlier units.
 type healthCache struct {
-	mu   sync.Mutex
+	mu    sync.Mutex
 	byKey map[string]blockCacheEntry
 }
 

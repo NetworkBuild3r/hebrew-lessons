@@ -39,7 +39,7 @@ func TestLearnerEvidenceCheckedSuccessDays(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		setup         func(t *testing.T, s *Store, user, lex int64) 
+		setup         func(t *testing.T, s *Store, user, lex int64)
 		wantSuccesses int
 		wantDays      int
 		wantRecent    int
@@ -57,7 +57,7 @@ func TestLearnerEvidenceCheckedSuccessDays(t *testing.T) {
 				}
 				base := when.Add(-2 * time.Hour)
 				insertCheckedSuccesses(t, s, cardID, []time.Time{
-					base, base.Add(30*time.Minute), base.Add(time.Hour),
+					base, base.Add(30 * time.Minute), base.Add(time.Hour),
 				}, 3)
 			},
 			wantSuccesses: 3, wantDays: 1, wantRecent: 3, wantRight: 3,
@@ -271,7 +271,7 @@ func TestWaitingForSecondDayCount(t *testing.T) {
 	}
 	base := when.Add(-2 * time.Hour)
 	insertCheckedSuccesses(t, s, cardID, []time.Time{
-		base, base.Add(20*time.Minute), base.Add(40*time.Minute),
+		base, base.Add(20 * time.Minute), base.Add(40 * time.Minute),
 	}, 3)
 
 	seedStrictReadCard(t, s, user, known, when)
@@ -284,7 +284,7 @@ func TestWaitingForSecondDayCount(t *testing.T) {
 		t.Fatal(err)
 	}
 	insertCheckedSuccesses(t, s, otherCard, []time.Time{
-		base, base.Add(20*time.Minute), base.Add(40*time.Minute),
+		base, base.Add(20 * time.Minute), base.Add(40 * time.Minute),
 	}, 3)
 
 	ev, err := s.LearnerEvidence(ctx, user, testLearnerQuery())
