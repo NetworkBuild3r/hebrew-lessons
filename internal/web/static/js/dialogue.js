@@ -49,6 +49,8 @@
   }
   function start(a, onFail) {
     var p;
+    // INIT-036/SPEC-007: shared pace helper sets playbackRate from the learner's choice.
+    if (g.HebrewSlow && g.HebrewSlow.apply) g.HebrewSlow.apply(a);
     try { a.currentTime = 0; p = a.play(); } catch (e) { if (onFail) onFail(); return; }
     if (p && p.catch) p.catch(function () { if (onFail) onFail(); });
   }
@@ -99,6 +101,21 @@
   D.addEventListener("click", function (ev) {
     var n = ev.target && ev.target.closest ? ev.target : ev.target && ev.target.parentElement;
     if (!n || !n.closest) return;
+    // INIT-036/SPEC-007: per-line Replay / Slower (shared setting via HebrewSlow).
+    var pace = n.closest("[data-replay], [data-slow]");
+    if (pace) {
+      var paceRoot = pace.closest("[data-dialogue]");
+      var paceClip = null;
+      var aid = pace.getAttribute("data-audio") || (pace.closest("[data-pace]") && pace.closest("[data-pace]").getAttribute("data-pace-audio"));
+      if (aid) paceClip = D.getElementById(aid);
+      if (paceRoot && paceClip) {
+        if (pace.hasAttribute("data-slow") && g.HebrewSlow && g.HebrewSlow.setOn) {
+          g.HebrewSlow.setOn(!g.HebrewSlow.on());
+        }
+        playLine(paceRoot, paceClip);
+      }
+      return;
+    }
     var line = n.closest("[data-dlg-line]");
     if (line) {
       var root = line.closest("[data-dialogue]");

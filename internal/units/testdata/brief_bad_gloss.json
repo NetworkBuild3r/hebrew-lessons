@@ -1,5 +1,5 @@
 {
-  "case": "brief.gloss_out_of_brief: a recall step uses a word outside the brief and the learner's known words, and its lexicon entry has no gloss.",
+  "case": "brief.gloss_out_of_brief: a recall step uses a word outside the brief and the learner's known words, and its lexicon entry has no gloss. unit.target_untaught also fires because that word is not taught (INIT-037/SPEC-006).",
   "lookup": {
     "lexemes": {
       "בֹּקֶר": {
@@ -157,9 +157,14 @@
   },
   "issues": [
     {
+      "rule": "unit.target_untaught",
+      "severity": "block",
+      "pointer": "/lessons/0/activities/10"
+    },
+    {
       "rule": "brief.gloss_out_of_brief",
       "severity": "block",
-      "pointer": "/lessons/6/activities/11/text"
+      "pointer": "/lessons/0/activities/10/text"
     }
   ],
   "unit": {
@@ -213,6 +218,18 @@
           {
             "type": "story",
             "text": "12 12"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
+          },
+          {
+            "type": "story",
+            "text": "12 12"
+          },
+          {
+            "type": "recall",
+            "text": "נַעַל"
           },
           {
             "type": "story",
@@ -517,10 +534,6 @@
           {
             "type": "listen_pick",
             "text": "כּוֹס"
-          },
-          {
-            "type": "recall",
-            "text": "נַעַל"
           }
         ]
       }

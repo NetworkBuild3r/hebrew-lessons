@@ -45,11 +45,13 @@ type ChartView struct {
 	Note         string
 	Through      string
 	ThroughToday bool
-	OldRuleNote  bool // any point still below the current rule version
-	SVG          string
-	Table        ChartTable
-	Summary      string
-	Hint         string
+	// OldRuleNote is true when the chart spans both an older rule_version stamp and the
+	// current one (INIT-036/SPEC-006). A range that is only old or only current leaves it off.
+	OldRuleNote bool
+	SVG         string
+	Table       ChartTable
+	Summary     string
+	Hint        string
 	// Key is the legend under a chart: a line of text per mark.
 	Key []string
 }
@@ -185,6 +187,9 @@ type ProgressView struct {
 	// Known is the estimated words known in the chosen skill now, as text.
 	// On the overview it is Standing.KnownAnySkill (ADR-0027 D1 / ADR-0028 D1).
 	Known string
+	// WaitingText is Summary.WaitingForSecondDay as text on the overview when the
+	// count is above zero (ADR-0031 D5 / INIT-036/SPEC-006). Empty hides the figure.
+	WaitingText string
 	// EstimateSource and PlacementDay label the skill-tab estimate (INIT-032/SPEC-006).
 	EstimateSource string
 	PlacementDay   string
@@ -379,11 +384,20 @@ func StateLabel(state string) string {
 }
 
 // Progress string table (INIT-032/SPEC-006, INIT-033/SPEC-007). English is the key; Hebrew fills when present.
+// LabelLearnedTodayCheckTomorrow is the Progress/Today/digest name for
+// Summary.WaitingForSecondDay (ADR-0031 D5 / INIT-036/SPEC-006).
+const LabelLearnedTodayCheckTomorrow = "learned today, check tomorrow"
+
+// LabelKnownExplain is the one-line explanation under the Progress headline counts.
+const LabelKnownExplain = "A word counts as known once you get it right on a second day."
+
 var progressHE = map[string]string{
-	"Words you know":           "מִלִּים שֶׁיְּדוּעוֹת",
-	"Words you know over time": "מִלִּים שֶׁיְּדוּעוֹת לְאֹרֶךְ הַזְּמַן",
-	"Not tested by placement":  "לֹא נִבְדַּק בִּבְדִיקַת רָמָה",
-	"From placement on":        "מִבְּדִיקַת רָמָה ב־",
+	"Words you know":                   "מִלִּים שֶׁיְּדוּעוֹת",
+	LabelLearnedTodayCheckTomorrow:     "נִלְמְדוּ הַיּוֹם, בְּדִיקָה מָחָר",
+	LabelKnownExplain:                  "מִלָּה נֶחְשֶׁבֶת כִּידוּעָה כְּשֶׁעוֹנִים עָלֶיהָ נָכוֹן בְּיוֹם שֵׁנִי.",
+	"Words you know over time":         "מִלִּים שֶׁיְּדוּעוֹת לְאֹרֶךְ הַזְּמַן",
+	"Not tested by placement":          "לֹא נִבְדַּק בִּבְדִיקַת רָמָה",
+	"From placement on":                "מִבְּדִיקַת רָמָה ב־",
 	"Not practiced yet: type the Hebrew in review to start": "עֲדַיִן לֹא תֻּרְגַּל: הַקְלֵד אֶת הָעִבְרִית בַּחֲזָרָה כְּדֵי לְהַתְחִיל",
 	"Reading not tested":  "קְרִיאָה לֹא נִבְדְּקָה",
 	"Through":             "עַד",
@@ -420,4 +434,14 @@ func ProgressHE(en string) string {
 // ProgressT is UI copy for the Progress and Home number labels. Missing Hebrew falls back to English.
 func ProgressT(lang, en string) templ.Component {
 	return T(lang, progressHE[en], en)
+}
+
+// ProgressLabel is the plain Progress/Home string for aria-label and data attributes.
+func ProgressLabel(lang, en string) string {
+	if lang == "he" {
+		if he := progressHE[en]; he != "" {
+			return he
+		}
+	}
+	return en
 }

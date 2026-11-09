@@ -816,34 +816,18 @@ func TestSelfGrade(t *testing.T) {
 	}
 }
 
-func TestSayCheckWritesAttemptAndReview(t *testing.T) {
+func TestSayCheckWritePathRemoved(t *testing.T) {
+	// INIT-036/SPEC-004 / ADR-0031 D4: Recorder.SayCheck is gone; historical
+	// ActivitySay rows may still exist, but nothing writes new ones here.
 	e := newEnv(t)
-	lex := e.lexeme(kelev)
-	ctx := context.Background()
-	if err := e.rec.SayCheck(ctx, e.user, lex, 0, "a dog", true); err != nil {
-		t.Fatal(err)
+	if n := e.count(`SELECT COUNT(*) FROM attempts WHERE activity = ?`, ActivitySay); n != 0 {
+		t.Fatalf("fixture already has say attempts: %d", n)
 	}
-	rows, err := e.store.ListAttempts(ctx, e.user, lex)
-	if err != nil || len(rows) != 1 {
-		t.Fatalf("ListAttempts = %v, %v", rows, err)
+	if n := e.count(`SELECT COUNT(*) FROM cards`); n != 0 {
+		t.Fatalf("fixture already has cards: %d", n)
 	}
-	row := rows[0]
-	if row.Activity != ActivitySay || row.Source != SourceSelf || row.Skill != fsrs.SkillRecall || !row.Correct || row.Response != "got it" || row.Prompt != "a dog" {
-		t.Fatalf("attempt = %+v", row)
-	}
-	card, ok := e.card(lex, fsrs.SkillRecall)
-	if !ok {
-		t.Fatal("no recall card")
-	}
-	logs, err := e.store.ReviewLogs(ctx, card.ID)
-	if err != nil || len(logs) != 1 || logs[0].Rating != int(fsrs.Good) || !logs[0].Peeked {
-		t.Fatalf("review_log = %+v, %v", logs, err)
-	}
-	if err := e.rec.SayCheck(ctx, e.user, lex, 0, "a dog", false); err != nil {
-		t.Fatal(err)
-	}
-	if n := e.count(`SELECT COUNT(*) FROM attempts WHERE activity = 'say' AND source = 'self' AND correct = 0`); n != 1 {
-		t.Fatalf("not-yet rows = %d", n)
+	if n := e.count(`SELECT COUNT(*) FROM review_log`); n != 0 {
+		t.Fatalf("fixture already has review_log: %d", n)
 	}
 }
 

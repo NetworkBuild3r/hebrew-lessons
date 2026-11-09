@@ -2,7 +2,10 @@ package brief
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -262,8 +265,8 @@ func TestFixMistakesSkipAndRetire(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// Three pairs that appear in both previous units' final checkpoints (to skip),
-	// plus fresher pairs that should fill the brief.
+	// Three pairs that appear in a previous unit's final checkpoint (skipped within three
+	// units), plus fresher pairs that should fill the brief. INIT-037/SPEC-007.
 	skip := [][2]string{
 		{"wrong-a", "right-a"},
 		{"wrong-b", "right-b"},
@@ -344,6 +347,265 @@ func TestFixMistakesSkipAndRetire(t *testing.T) {
 			t.Fatalf("missing kept pair %s in %#v", pair[0], br.FixMistakes)
 		}
 	}
+}
+
+// INIT-037/SPEC-007: with 60 learning words and no queued consolidation, Build consolidates.
+func TestConsolidateWithSixtyLearningNoQueue(t *testing.T) {
+	e := newEnv(t)
+	for range 8 {
+		e.word("pool", 0)
+	}
+	seedReviews(t, e, 45, 5)
+	seedLearningWords(t, e, 60)
+	br := e.build("")
+	if !br.Pace.Consolidate || br.Pace.NewWordCount != 0 || len(br.NewWords) != 0 {
+		t.Fatalf("pace = %+v newWords=%d, want consolidate with no new words", br.Pace, len(br.NewWords))
+	}
+}
+
+// INIT-037/SPEC-007: with 60 learning words and one untouched consolidation queued, Build
+// returns ErrReviewFirst naming review and the due count, and stores no brief.
+func TestConsolidateQueuedReturnsReviewFirst(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	for range 8 {
+		e.word("pool", 0)
+	}
+	seedReviews(t, e, 45, 5)
+	seedLearningWords(t, e, 60)
+	// One due card so the error message carries a non-zero count.
+	dueLex := e.word("due card", 0)
+	e.exec(`INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended)
+		VALUES (?, ?, ?, ?, ?, 2, 5, 1, 0, ?, 0)`,
+		e.user, dueLex, fsrs.SkillRecall, fsrs.StateReview, db.FormatTime(testNow.Add(-time.Hour)), db.FormatTime(testNow.Add(-time.Hour)))
+
+	if err := e.store.UpsertPatterns(ctx, []db.PatternInput{
+		{Slug: "pat-cons", Title: "C", Summary: "c"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	addFullUnit(t, e, 1, "pat-cons", "Queued consolidate", "s", nil,
+		[]units.Activity{{Type: units.ActivityStory, Text: "אָ"}}, nil)
+
+	_, err := e.b.Build(ctx, e.user, "")
+	var review ErrReviewFirst
+	if !errors.As(err, &review) {
+		t.Fatalf("Build error = %v, want ErrReviewFirst", err)
+	}
+	if review.DueCount < 1 {
+		t.Fatalf("DueCount = %d, want at least 1", review.DueCount)
+	}
+	msg := review.Error()
+	if !strings.Contains(strings.ToLower(msg), "review") || !strings.Contains(msg, fmt.Sprintf("%d", review.DueCount)) {
+		t.Fatalf("error %q must name review and due count", msg)
+	}
+	conn, err := e.store.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM lesson_briefs WHERE user_id = ?`, e.user).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("stored %d briefs, want none", n)
+	}
+}
+
+// INIT-037/SPEC-007: a pair used in any of the previous three units is skipped; when every
+// pair was used in that window the brief has no fixMistakes.
+func TestFixMistakesSkipAnyOfPreviousThree(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	if err := e.store.UpsertPatterns(ctx, []db.PatternInput{
+		{Slug: "pat-a", Title: "A", Summary: "a"},
+		{Slug: "pat-b", Title: "B", Summary: "b"},
+		{Slug: "pat-c", Title: "C", Summary: "c"},
+		{Slug: "pat-d", Title: "D", Summary: "d"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	pairs := [][2]string{
+		{"wrong-1", "right-1"},
+		{"wrong-2", "right-2"},
+		{"wrong-3", "right-3"},
+		{"wrong-4", "right-4"},
+	}
+	for _, pair := range pairs {
+		for range 3 {
+			if err := e.store.RecordMistakes(ctx, e.user, []db.MistakeInput{
+				{Wrong: pair[0], Right: pair[1], Note: "n", Source: "app"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	// Three units cover three rights; the fourth pair is still free.
+	for i, pair := range pairs[:3] {
+		addFullUnit(t, e, i+1, fmt.Sprintf("pat-%c", 'a'+i), fmt.Sprintf("U%d", i+1), "s", nil,
+			[]units.Activity{{Type: units.ActivityStory, Text: "אָ"}},
+			[]units.Activity{{Type: units.ActivityRecall, Text: pair[1]}})
+	}
+	br := e.build("")
+	if len(br.FixMistakes) != 1 || br.FixMistakes[0].Right != "right-4" {
+		t.Fatalf("fixMistakes = %#v, want only right-4", br.FixMistakes)
+	}
+
+	// Rebuild the last three checkpoints so every pair sits in that window.
+	addFullUnit(t, e, 4, "pat-d", "U4a", "s", nil,
+		[]units.Activity{{Type: units.ActivityStory, Text: "בָּ"}},
+		[]units.Activity{
+			{Type: units.ActivityRecall, Text: "right-1"},
+			{Type: units.ActivityRecall, Text: "right-2"},
+		})
+	addFullUnit(t, e, 5, "pat-a", "U5", "s", nil,
+		[]units.Activity{{Type: units.ActivityStory, Text: "גָּ"}},
+		[]units.Activity{{Type: units.ActivityRecall, Text: "right-3"}})
+	addFullUnit(t, e, 6, "pat-b", "U6", "s", nil,
+		[]units.Activity{{Type: units.ActivityStory, Text: "דָּ"}},
+		[]units.Activity{{Type: units.ActivityRecall, Text: "right-4"}})
+	empty, err := e.b.Build(ctx, e.user, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(empty.FixMistakes) != 0 {
+		t.Fatalf("fixMistakes = %#v, want none when every pair was used in the last three", empty.FixMistakes)
+	}
+}
+
+// INIT-037/SPEC-007 verification: ten positions, at most one queued consolidation at a time,
+// and no mistake pair repeats inside any window of three.
+func TestTenPositionConsolidationAndMistakeRotation(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	for range 8 {
+		e.word("pool", 0)
+	}
+	seedReviews(t, e, 45, 5)
+	seedLearningWords(t, e, 60)
+
+	patterns := make([]db.PatternInput, 10)
+	for i := range patterns {
+		patterns[i] = db.PatternInput{Slug: fmt.Sprintf("pat-%d", i+1), Title: fmt.Sprintf("P%d", i+1), Summary: "s"}
+	}
+	if err := e.store.UpsertPatterns(ctx, patterns); err != nil {
+		t.Fatal(err)
+	}
+	pairs := [][2]string{
+		{"w1", "r1"}, {"w2", "r2"}, {"w3", "r3"}, {"w4", "r4"},
+	}
+	for _, pair := range pairs {
+		for range 4 {
+			if err := e.store.RecordMistakes(ctx, e.user, []db.MistakeInput{
+				{Wrong: pair[0], Right: pair[1], Note: "n", Source: "app"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	var rightsByPos [][]string
+	queued := 0
+	nextPos := 1
+	for step := 0; step < 10; step++ {
+		br, err := e.b.Build(ctx, e.user, "")
+		if err != nil {
+			var review ErrReviewFirst
+			if !errors.As(err, &review) {
+				t.Fatalf("step %d: Build = %v", step, err)
+			}
+			if queued != 1 {
+				t.Fatalf("step %d: ErrReviewFirst with queued=%d, want 1", step, queued)
+			}
+			startQueuedConsolidation(t, e)
+			queued = 0
+			br, err = e.b.Build(ctx, e.user, "")
+			if err != nil {
+				t.Fatalf("step %d after start: %v", step, err)
+			}
+		}
+		if !br.Pace.Consolidate {
+			t.Fatalf("step %d: expected consolidate, got %+v", step, br.Pace)
+		}
+		if queued > 0 {
+			t.Fatalf("step %d: built while queued=%d", step, queued)
+		}
+		var rights []string
+		for _, m := range br.FixMistakes {
+			rights = append(rights, m.Right)
+		}
+		checkActs := make([]units.Activity, 0, len(rights))
+		for _, right := range rights {
+			checkActs = append(checkActs, units.Activity{Type: units.ActivityRecall, Text: right})
+		}
+		addFullUnit(t, e, nextPos, fmt.Sprintf("pat-%d", nextPos), fmt.Sprintf("U%d", nextPos), "s", nil,
+			[]units.Activity{{Type: units.ActivityStory, Text: "אָ"}}, checkActs)
+		rightsByPos = append(rightsByPos, rights)
+		queued = 1
+		nextPos++
+
+		if queued > 1 {
+			t.Fatalf("step %d: queued=%d", step, queued)
+		}
+		n := len(rightsByPos)
+		start := n - 3
+		if start < 0 {
+			start = 0
+		}
+		seen := map[string]int{}
+		for _, window := range rightsByPos[start:] {
+			for _, right := range window {
+				seen[right]++
+				if seen[right] > 1 {
+					t.Fatalf("step %d: pair %q appears twice in window of three: %#v", step, right, rightsByPos[start:])
+				}
+			}
+		}
+	}
+}
+
+func seedLearningWords(t *testing.T, e *env, n int) {
+	t.Helper()
+	for i := range n {
+		id := e.word(fmt.Sprintf("learning %d", i), 0)
+		e.attempts(e.user, id, fsrs.SkillRecall, "RR", time.Hour)
+		e.card(e.user, id, fsrs.SkillRecall, 2, 1, 3, 3)
+	}
+}
+
+func startQueuedConsolidation(t *testing.T, e *env) {
+	t.Helper()
+	ctx := context.Background()
+	rows, err := e.store.UnitsInScope(ctx, e.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := db.LearnerScope(e.user)
+	for _, row := range rows {
+		if row.Scope != scope {
+			continue
+		}
+		ok, err := e.store.IsUntouched(ctx, e.user, row.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok {
+			continue
+		}
+		var doc units.Unit
+		if row.Doc != "" {
+			if err := json.Unmarshal([]byte(row.Doc), &doc); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if len(doc.NewWords) > 0 {
+			continue
+		}
+		e.exec(`INSERT INTO lesson_runs (user_id, unit_id, lesson_ix, started_at) VALUES (?, ?, 0, ?)`,
+			e.user, row.ID, db.FormatTime(testNow))
+		return
+	}
+	t.Fatal("no untouched consolidation unit to start")
 }
 
 func TestRevisionBriefIgnoresUnitsAtOrAfterPosition(t *testing.T) {

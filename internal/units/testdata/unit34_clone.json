@@ -1,0 +1,48 @@
+{
+  "case": "INIT-037/SPEC-005 fixture shaped like learner unit 34: same activity-type sequence and identical first story as unit 27.",
+  "unit": {
+    "title": "Unit 34",
+    "situation": "At the cafe",
+    "concept": "Review forms again",
+    "newWords": [],
+    "lessons": [
+      {
+        "kind": "lesson",
+        "activities": [
+          {
+            "type": "story",
+            "text": "דָּנִי שׁוֹתֶה קָפֶה בַּבֹּקֶר וְאוֹכֵל לֶחֶם עִם חָלָב"
+          },
+          {
+            "type": "shadow",
+            "text": "חָלָב"
+          },
+          {
+            "type": "listen_pick",
+            "text": "דָּנִי אוֹכֵל לֶחֶם",
+            "translation": "Dani eats bread."
+          },
+          {
+            "type": "recall",
+            "text": "חָלָב"
+          },
+          {
+            "type": "cloze",
+            "text": "דָּנִי שׁוֹתֶה קָפֶה",
+            "target": "קָפֶה",
+            "translation": "Dani drinks coffee."
+          },
+          {
+            "type": "say",
+            "text": "דָּנִי אוֹכֵל לֶחֶם",
+            "prompt_en": "Say: Dani eats bread."
+          },
+          {
+            "type": "pattern",
+            "text": "אוֹכֵל — אוֹכֶלֶת"
+          }
+        ]
+      }
+    ]
+  }
+}

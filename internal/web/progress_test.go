@@ -18,6 +18,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcpstore"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
 // seedLearnerDaySnapshots writes one snapshot row per skill per day from first
@@ -1621,31 +1622,40 @@ func TestProgressOldRuleDaysAreDashed(t *testing.T) {
 		t.Fatal("missing Through today")
 	}
 
-	// A day stamped rule_version 2 (literal) is below current and must also render dashed.
-	// Assert the table cell for that day so a leftover rule_version=1 dash cannot mask a miss.
-	day2 := "2026-10-17"
-	var rows2 []db.DailySnapshotRow
-	for _, skill := range learner.Skills {
-		for _, st := range learner.States {
-			rows2 = append(rows2, db.DailySnapshotRow{
-				Skill: skill, State: string(st), Count: 2,
-				EstKnown: 11, Retention: &ret, RuleVersion: 2, // literal 2: below jobs.RuleVersion
-			})
+	// Days stamped 2 and 3 (literal) are below current and must also render dashed.
+	// Assert each day's label so a leftover rule_version=1 dash cannot mask a miss.
+	for _, old := range []struct {
+		day string
+		rv  int
+		lbl string
+	}{
+		{"2026-10-17", 2, "Oct 17 (old rule)"},
+		// Before today (progNow is 2026-10-18): a same-day total would be replaced by the live point.
+		{"2026-10-15", 3, "Oct 15 (old rule)"}, // INIT-036/SPEC-003: v3 still renders under rule 4
+	} {
+		var rowsOld []db.DailySnapshotRow
+		for _, skill := range learner.Skills {
+			for _, st := range learner.States {
+				rowsOld = append(rowsOld, db.DailySnapshotRow{
+					Skill: skill, State: string(st), Count: 2,
+					EstKnown: 11, Retention: &ret, RuleVersion: old.rv,
+				})
+			}
 		}
-	}
-	if err := store.InDailyTx(ctx, func(tx *db.DailyTx) error {
-		if err := tx.InsertSnapshot(ctx, l.user.ID, day2, rows2); err != nil {
-			return err
+		if err := store.InDailyTx(ctx, func(tx *db.DailyTx) error {
+			if err := tx.InsertSnapshot(ctx, l.user.ID, old.day, rowsOld); err != nil {
+				return err
+			}
+			return tx.InsertTotals(ctx, l.user.ID, old.day, 5, old.rv)
+		}); err != nil {
+			t.Fatal(err)
 		}
-		return tx.InsertTotals(ctx, l.user.ID, day2, 5, 2)
-	}); err != nil {
-		t.Fatal(err)
-	}
-	body = getLearner(t, h, l, "/progress")
-	est = section(t, body, "c-card pchart", `data-chart="est"`)
-	if !strings.Contains(est, "Oct 17 (old rule)") || !strings.Contains(est, "pc__line--old") {
-		t.Fatalf("rule_version=2 day (below current %d) should be dashed with old rule text:\n%s",
-			jobs.RuleVersion, est)
+		body = getLearner(t, h, l, "/progress")
+		est = section(t, body, "c-card pchart", `data-chart="est"`)
+		if !strings.Contains(est, old.lbl) || !strings.Contains(est, "pc__line--old") {
+			t.Fatalf("rule_version=%d day (below current %d) should be dashed with %q:\n%s",
+				old.rv, jobs.RuleVersion, old.lbl, est)
+		}
 	}
 }
 
@@ -1672,5 +1682,232 @@ func TestProgressHelpReadsInHebrew(t *testing.T) {
 		if strings.Contains(help, english) {
 			t.Fatalf("Hebrew help section still says %q:\n%s", english, help)
 		}
+	}
+}
+
+// seedWaitingSkill makes a word pass the old same-day known rule on one study day
+// only, so Summary.WaitingForSecondDay counts it (INIT-036/SPEC-006).
+func seedWaitingSkill(t *testing.T, store *db.Store, clk clock.Clock, userID, lexemeID int64, skill string) {
+	t.Helper()
+	now := clk.Now()
+	day1 := now.AddDate(0, 0, -1)
+	ctx := context.Background()
+	conn, err := store.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range 3 {
+		at := day1.Add(time.Duration(i) * time.Minute)
+		if _, err := conn.ExecContext(ctx, `
+			INSERT INTO attempts (user_id, lexeme_id, skill, activity, source, prompt, response, correct, dont_know, hint_used, latency_ms, created_at)
+			VALUES (?, ?, ?, 'test', 'review', '', '', 1, 0, 0, 0, ?)`,
+			userID, lexemeID, skill, db.FormatTime(at)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cardID, err := store.InsertCard(ctx, db.Card{
+		UserID: userID, LexemeID: lexemeID, Skill: skill, State: fsrs.StateReview,
+		Due: now, Stability: 10, Difficulty: 5, Reps: 3, LastReview: day1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range 3 {
+		insertReview(t, store, cardID, int(fsrs.Good), day1.Add(time.Duration(i)*time.Minute))
+	}
+}
+
+// TestProgressWaitingShowsBesideKnown is INIT-036/SPEC-006: Progress shows
+// "Words you know" and "learned today, check tomorrow" as separate figures.
+func TestProgressWaitingShowsBesideKnown(t *testing.T) {
+	clk := fixedClock(progNow)
+	store, h := openShell(t, clk, nil, nil)
+	l := addLearner(t, store, "a@example.com", "sub-waiting-progress", progNow)
+	ids := overviewLexemes(t, store, 3)
+	seedKnownSkill(t, store, clk, l.user.ID, ids[0], fsrs.SkillRead)
+	seedWaitingSkill(t, store, clk, l.user.ID, ids[1], fsrs.SkillRead)
+	seedProgressSnapshots(t, store, l.user.ID, 2, progEst)
+
+	sum, err := learner.New(store, clk).Summary(context.Background(), l.user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.WaitingForSecondDay != 1 {
+		t.Fatalf("WaitingForSecondDay = %d, want 1", sum.WaitingForSecondDay)
+	}
+	if sum.KnownAnySkill < 1 {
+		t.Fatalf("KnownAnySkill = %d, want ≥1", sum.KnownAnySkill)
+	}
+
+	body := getLearner(t, h, l, "/progress")
+	know := section(t, body, "c-card pknow", "")
+	if !strings.Contains(know, `aria-label="Words you know"`) {
+		t.Fatalf("missing Words you know figure:\n%s", know)
+	}
+	if !strings.Contains(know, `aria-label="`+views.LabelLearnedTodayCheckTomorrow+`"`) {
+		t.Fatalf("missing waiting figure:\n%s", know)
+	}
+	if !strings.Contains(know, views.LabelLearnedTodayCheckTomorrow) {
+		t.Fatalf("missing waiting label copy:\n%s", know)
+	}
+	if !strings.Contains(know, views.LabelKnownExplain) {
+		t.Fatalf("missing known explanation:\n%s", know)
+	}
+	if !strings.Contains(know, `>`+strconv.Itoa(sum.WaitingForSecondDay)+`<`) {
+		t.Fatalf("waiting count %d missing:\n%s", sum.WaitingForSecondDay, know)
+	}
+	// Two separate role=group figures, not one mashed string.
+	if n := strings.Count(know, `role="group"`); n < 2 {
+		t.Fatalf("want ≥2 role=group figures, got %d:\n%s", n, know)
+	}
+}
+
+// TestProgressWaitingAbsentWhenNoneWait hides the second count when zero.
+func TestProgressWaitingAbsentWhenNoneWait(t *testing.T) {
+	clk := fixedClock(progNow)
+	store, h := openShell(t, clk, nil, nil)
+	l := addLearner(t, store, "a@example.com", "sub-waiting-zero", progNow)
+	ids := overviewLexemes(t, store, 2)
+	seedKnownSkill(t, store, clk, l.user.ID, ids[0], fsrs.SkillRead)
+	seedProgressSnapshots(t, store, l.user.ID, 2, progEst)
+
+	sum, err := learner.New(store, clk).Summary(context.Background(), l.user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.WaitingForSecondDay != 0 {
+		t.Fatalf("WaitingForSecondDay = %d, want 0", sum.WaitingForSecondDay)
+	}
+
+	body := getLearner(t, h, l, "/progress")
+	know := section(t, body, "c-card pknow", "")
+	if strings.Contains(know, views.LabelLearnedTodayCheckTomorrow) {
+		t.Fatalf("waiting label should be absent when none wait:\n%s", know)
+	}
+	if !strings.Contains(know, views.LabelKnownExplain) {
+		t.Fatalf("explanation should still show:\n%s", know)
+	}
+	home := getLearner(t, h, l, "/")
+	if strings.Contains(home, views.LabelLearnedTodayCheckTomorrow) {
+		t.Fatalf("Today should omit waiting when none wait:\n%s", home)
+	}
+}
+
+// TestProgressRuleChangeMarkerOnlyOnMixedVersion is INIT-036/SPEC-006: the
+// old-rule chart marker appears only when the range mixes rule versions.
+func TestProgressRuleChangeMarkerOnlyOnMixedVersion(t *testing.T) {
+	clk := fixedClock(progNow)
+	store, h := openShell(t, clk, nil, nil)
+	l := addLearner(t, store, "a@example.com", "sub-rule-marker", progNow)
+	seedLexicon(t, store, progNow, 3, false, true)
+	ctx := context.Background()
+	ret := 0.8
+
+	// Current-rule-only history: no change marker.
+	dayCur := "2026-10-16"
+	var rowsCur []db.DailySnapshotRow
+	for _, skill := range learner.Skills {
+		for _, st := range learner.States {
+			rowsCur = append(rowsCur, db.DailySnapshotRow{
+				Skill: skill, State: string(st), Count: 2,
+				EstKnown: 10, Retention: &ret, RuleVersion: jobs.RuleVersion,
+			})
+		}
+	}
+	if err := store.InDailyTx(ctx, func(tx *db.DailyTx) error {
+		if err := tx.InsertSnapshot(ctx, l.user.ID, dayCur, rowsCur); err != nil {
+			return err
+		}
+		return tx.InsertTotals(ctx, l.user.ID, dayCur, 4, jobs.RuleVersion)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	est := section(t, getLearner(t, h, l, "/progress"), "c-card pchart", `data-chart="est"`)
+	if strings.Contains(est, `class="pchart__note pchart__old"`) || strings.Contains(est, "Dashed: old rule") {
+		t.Fatalf("current-rule-only chart must not show the change marker:\n%s", est)
+	}
+
+	// Mix in a rule-version-3 day: marker must appear.
+	dayOld := "2026-10-15"
+	var rowsOld []db.DailySnapshotRow
+	for _, skill := range learner.Skills {
+		for _, st := range learner.States {
+			rowsOld = append(rowsOld, db.DailySnapshotRow{
+				Skill: skill, State: string(st), Count: 2,
+				EstKnown: 9, Retention: &ret, RuleVersion: 3,
+			})
+		}
+	}
+	if err := store.InDailyTx(ctx, func(tx *db.DailyTx) error {
+		if err := tx.InsertSnapshot(ctx, l.user.ID, dayOld, rowsOld); err != nil {
+			return err
+		}
+		return tx.InsertTotals(ctx, l.user.ID, dayOld, 3, 3)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	est = section(t, getLearner(t, h, l, "/progress"), "c-card pchart", `data-chart="est"`)
+	if !strings.Contains(est, `class="pchart__note pchart__old"`) || !strings.Contains(est, "Dashed: old rule") {
+		t.Fatalf("mixed v3/v4 chart must show the change marker:\n%s", est)
+	}
+	if !strings.Contains(est, "Oct 15 (old rule)") {
+		t.Fatalf("v3 day should be labeled old rule:\n%s", est)
+	}
+}
+
+// TestProgressTodayAndDigestShareWaitingCounts is INIT-036/SPEC-006: Progress,
+// Today, and get_study_digest share KnownAnySkill and WaitingForSecondDay.
+func TestProgressTodayAndDigestShareWaitingCounts(t *testing.T) {
+	clk := fixedClock(progNow)
+	store, h := openShell(t, clk, nil, nil)
+	l := addLearner(t, store, "a@example.com", "sub-waiting-agree", progNow)
+	setLearnerZone(t, store, l.user.ID, "America/Denver")
+	ids := overviewLexemes(t, store, 4)
+	seedKnownSkill(t, store, clk, l.user.ID, ids[0], fsrs.SkillRead)
+	seedKnownSkill(t, store, clk, l.user.ID, ids[1], fsrs.SkillRead)
+	seedWaitingSkill(t, store, clk, l.user.ID, ids[2], fsrs.SkillRead)
+	seedProgressSnapshots(t, store, l.user.ID, 2, progEst)
+
+	sum, err := learner.New(store, clk).Summary(context.Background(), l.user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.WaitingForSecondDay != 1 || sum.KnownAnySkill < 2 {
+		t.Fatalf("summary known=%d waiting=%d", sum.KnownAnySkill, sum.WaitingForSecondDay)
+	}
+	wantKnown := strconv.Itoa(sum.KnownAnySkill)
+	wantWait := strconv.Itoa(sum.WaitingForSecondDay)
+
+	progress := getLearner(t, h, l, "/progress")
+	know := section(t, progress, "c-card pknow", "")
+	reFigure := regexp.MustCompile(`(?s)aria-label="([^"]+)"[^>]*>\s*<span class="count"><bdi[^>]*>([0-9]+)</bdi>`)
+	figures := map[string]string{}
+	for _, m := range reFigure.FindAllStringSubmatch(know, -1) {
+		figures[m[1]] = m[2]
+	}
+	if figures["Words you know"] != wantKnown {
+		t.Fatalf("Progress known figure = %q, want %s (%v)", figures["Words you know"], wantKnown, figures)
+	}
+	if figures[views.LabelLearnedTodayCheckTomorrow] != wantWait {
+		t.Fatalf("Progress waiting figure = %q, want %s (%v)", figures[views.LabelLearnedTodayCheckTomorrow], wantWait, figures)
+	}
+
+	home := getLearner(t, h, l, "/")
+	homeFigs := map[string]string{}
+	for _, m := range reFigure.FindAllStringSubmatch(home, -1) {
+		homeFigs[m[1]] = m[2]
+	}
+	if homeFigs["Words you know"] != wantKnown || homeFigs[views.LabelLearnedTodayCheckTomorrow] != wantWait {
+		t.Fatalf("Today figures = %v, want known=%s waiting=%s", homeFigs, wantKnown, wantWait)
+	}
+
+	z := denverZone(t)
+	digest, err := mcpstore.New(store).StudyDigest(context.Background(), l.user.ID, progNow, z)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digest.KnownAnySkill != sum.KnownAnySkill || digest.WaitingForSecondDay != sum.WaitingForSecondDay {
+		t.Fatalf("digest known=%d waiting=%d, want known=%d waiting=%d",
+			digest.KnownAnySkill, digest.WaitingForSecondDay, sum.KnownAnySkill, sum.WaitingForSecondDay)
 	}
 }

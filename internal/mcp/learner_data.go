@@ -49,6 +49,18 @@ func (e ErrUntouchedBacklog) Error() string {
 		strconv.FormatInt(e.UnitID, 10) + " before requesting a new brief."
 }
 
+// ErrReviewFirst is get_lesson_brief without unitId when Pace would consolidate but the
+// learner already has an untouched consolidation unit queued ahead. The message names
+// review and the due-card count. INIT-037/SPEC-007; ADR-0032 D4.
+type ErrReviewFirst struct {
+	DueCount int
+}
+
+func (e ErrReviewFirst) Error() string {
+	return "Review first. The learner already has a consolidation unit queued and has " +
+		strconv.Itoa(e.DueCount) + " cards due."
+}
+
 // LearnerData is what the learner tools read and write.
 type LearnerData interface {
 	// LearnerExists reports whether a learner has the id. Only an admin names an id, so the
@@ -71,6 +83,8 @@ type LearnerData interface {
 	// BuildLessonBrief builds and stores a brief for the learner. A bad theme is ErrBadTheme.
 	// Without a unitId on get_lesson_brief, the store refuses when three or more
 	// untouched learner-scoped units exist (ErrUntouchedBacklog). INIT-030/SPEC-005.
+	// When Pace would consolidate and an untouched consolidation unit is already queued,
+	// it returns ErrReviewFirst with the due-card count. INIT-037/SPEC-007.
 	BuildLessonBrief(ctx context.Context, learnerID int64, theme string) (LessonBrief, error)
 	// BuildRevisionBrief builds a revision brief for an untouched learner-scoped unit.
 	// The unit must be scope learner:<learnerID> and untouched. Otherwise it returns
@@ -228,7 +242,7 @@ type CompactHelp struct {
 type DigestHistoryPoint struct {
 	Day           string `json:"day"`
 	KnownAnySkill int    `json:"knownAnySkill"`
-	RuleVersion   int    `json:"ruleVersion" jsonschema:"1 for unrebuilt days, 3 under current rules. Today's live point uses the current RuleVersion."`
+	RuleVersion   int    `json:"ruleVersion" jsonschema:"1 for unrebuilt days, 4 under current rules. Today's live point uses the current RuleVersion."`
 	Live          bool   `json:"live,omitempty" jsonschema:"True for today's live point appended after stored days."`
 }
 
@@ -257,10 +271,12 @@ type ModelSummary struct {
 	// known or solid. It is not the headline; use KnownAnySkill (ADR-0027 D1).
 	Words map[string]int `json:"words" jsonschema:"Strict count: words known in every practiced skill (weakest-skill overall). Not the headline; use knownAnySkill for words known or solid in at least one skill."`
 	// KnownAnySkill is words known or solid in at least one skill, counted once (ADR-0027 D1).
-	KnownAnySkill int                 `json:"knownAnySkill" jsonschema:"Words known or solid in at least one skill. The headline shared with Home and Progress."`
-	Skills        []ModelSkillSummary `json:"skills"`
-	Retention     *RetentionLabeled   `json:"retention" jsonschema:"30-day due-review share over all skills, with window and asOf. Null when there were none."`
-	DueReviews    int                 `json:"dueReviews"`
+	KnownAnySkill int `json:"knownAnySkill" jsonschema:"Words known or solid in at least one skill. The headline shared with Home and Progress."`
+	// WaitingForSecondDay is words that pass the old same-day known rule but need a later study day (ADR-0031 D5).
+	WaitingForSecondDay int                 `json:"waitingForSecondDay,omitempty" jsonschema:"Words that pass the old same-day known rule but have only one checked-success study day."`
+	Skills              []ModelSkillSummary `json:"skills"`
+	Retention           *RetentionLabeled   `json:"retention" jsonschema:"30-day due-review share over all skills, with window and asOf. Null when there were none."`
+	DueReviews          int                 `json:"dueReviews"`
 	// AsOf is the request instant for these live counts (ADR-0027 D4).
 	AsOf time.Time `json:"asOf" jsonschema:"UTC RFC3339 instant when these live model counts were read."`
 	// Standing is the compact per-direction verdict picture (ADR-0028 D5). Null without standing data.

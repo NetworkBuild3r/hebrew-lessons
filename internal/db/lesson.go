@@ -224,11 +224,67 @@ func (s *Store) UnitLexemes(ctx context.Context, unitID int64) ([]LexemeView, er
 	return scanLexemeViews(rows)
 }
 
-// EarlierUnitLexemes returns the distinct lexicon rows taught by published
-// units this learner can open whose position is lower than beforePosition.
-// The learner can open a shared unit and their own learner:<id> unit.
-// Drafts, later units, and another learner's units are left out. The order
-// is pointed text, then id. pos is the same column UnitLexemes loads.
+// TaughtUnitLexemes is the unit-tier button pool for one learner (ADR-0032 D1):
+// this unit's newWords (role new on any lesson), plus any other unit word the
+// learner already has a card for. cardIDs comes from LearnerCardLexemeIDs;
+// callers load that set once per request and pass it here and to
+// TaughtEarlierUnitLexemes. INIT-037/SPEC-004.
+func (s *Store) TaughtUnitLexemes(ctx context.Context, unitID int64, cardIDs map[int64]struct{}) ([]LexemeView, error) {
+	rows, err := s.UnitLexemes(ctx, unitID)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return rows, nil
+	}
+	newIDs, err := s.unitNewLexemeIDs(ctx, unitID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LexemeView, 0, len(rows))
+	for _, row := range rows {
+		if _, ok := newIDs[row.ID]; ok {
+			out = append(out, row)
+			continue
+		}
+		if _, ok := cardIDs[row.ID]; ok {
+			out = append(out, row)
+		}
+	}
+	return out, nil
+}
+
+func (s *Store) unitNewLexemeIDs(ctx context.Context, unitID int64) (map[int64]struct{}, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT DISTINCT lexeme_id FROM lesson_items
+		WHERE unit_id = ? AND role = 'new'`, unitID)
+	if err != nil {
+		return nil, fmt.Errorf("db: unit new lexemes: %w", err)
+	}
+	defer rows.Close()
+	out := map[int64]struct{}{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("db: unit new lexemes: %w", err)
+		}
+		out[id] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: unit new lexemes: %w", err)
+	}
+	return out, nil
+}
+
+// EarlierUnitLexemes returns every distinct lexicon row from published units
+// this learner can open whose position is lower than beforePosition. It does
+// not check whether the learner finished those units or holds a card. Prefer
+// TaughtEarlierUnitLexemes for graded asks (ADR-0032 D1). Drafts, later units,
+// and another learner's units are left out. The order is pointed text, then id.
 func (s *Store) EarlierUnitLexemes(ctx context.Context, learnerID int64, beforePosition int) ([]LexemeView, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -248,6 +304,78 @@ func (s *Store) EarlierUnitLexemes(ctx context.Context, learnerID int64, beforeP
 	}
 	defer rows.Close()
 	return scanLexemeViews(rows)
+}
+
+// TaughtEarlierUnitLexemes is the earlier-tier button pool for one learner
+// (ADR-0032 D1): words from earlier published units the learner finished
+// (finishedUnits from UnitProgress), plus any other earlier-unit word they
+// have a card for. An earlier published unit they never finished, with no
+// card for the word, never supplies a button. cardIDs is the same set passed
+// to TaughtUnitLexemes. INIT-037/SPEC-004.
+func (s *Store) TaughtEarlierUnitLexemes(ctx context.Context, learnerID int64, beforePosition int, finishedUnits, cardIDs map[int64]struct{}) ([]LexemeView, error) {
+	if len(finishedUnits) == 0 && len(cardIDs) == 0 {
+		return nil, nil
+	}
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	args := []any{beforePosition, fmt.Sprintf("learner:%d", learnerID)}
+	var filter string
+	switch {
+	case len(finishedUnits) > 0 && len(cardIDs) > 0:
+		finQ, finArgs := inClause(mapKeys(finishedUnits))
+		cardQ, cardArgs := inClause(mapKeys(cardIDs))
+		filter = ` AND (u.id IN (` + finQ + `) OR l.id IN (` + cardQ + `))`
+		args = append(args, finArgs...)
+		args = append(args, cardArgs...)
+	case len(finishedUnits) > 0:
+		finQ, finArgs := inClause(mapKeys(finishedUnits))
+		filter = ` AND u.id IN (` + finQ + `)`
+		args = append(args, finArgs...)
+	default:
+		cardQ, cardArgs := inClause(mapKeys(cardIDs))
+		filter = ` AND l.id IN (` + cardQ + `)`
+		args = append(args, cardArgs...)
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT DISTINCT l.id, l.text_nfc, l.gloss_en, l.translit, l.gender, l.pos, l.root, l.binyan
+		FROM lesson_items AS li
+		JOIN lexemes AS l ON l.id = li.lexeme_id
+		JOIN units AS u ON u.id = li.unit_id
+		WHERE u.position < ?
+		  AND u.status = 'published'
+		  AND (u.scope = 'shared' OR u.scope = ?)`+filter+`
+		ORDER BY l.text_nfc, l.id`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("db: taught earlier lexemes: %w", err)
+	}
+	defer rows.Close()
+	return scanLexemeViews(rows)
+}
+
+// FinishedUnitIDs is the set of unit ids whose UnitProgress state is finished
+// for this learner. INIT-037/SPEC-004.
+func (s *Store) FinishedUnitIDs(ctx context.Context, userID int64) (map[int64]struct{}, error) {
+	progress, err := s.UnitProgress(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := map[int64]struct{}{}
+	for _, p := range progress {
+		if p.State == UnitFinished {
+			out[p.UnitID] = struct{}{}
+		}
+	}
+	return out, nil
+}
+
+func mapKeys(m map[int64]struct{}) []int64 {
+	out := make([]int64, 0, len(m))
+	for id := range m {
+		out = append(out, id)
+	}
+	return out
 }
 
 // LexemesByText returns views for the exact pointed texts that are in the lexicon.

@@ -95,11 +95,14 @@ async function flow(spec) {
 
     const beforeSaid = spec.mode === "noscript" ? 0 : await page.evaluate(() => (window.__plays || []).length);
     await press(page, spec, "said");
-    await page.waitForSelector('button[name="answer"][value="got"]');
+    await page.waitForSelector('button[name="answer"][value="continue"]');
     const rev = await page.locator("#activity").innerText();
     check(tag + " reveal shows the Hebrew", hebrew.test(rev));
-    check(tag + " reveal has the grades", rev.includes("Got it") && rev.includes("Not yet"));
+    check(tag + " reveal has Continue", rev.includes("Continue") || rev.includes("Finish"));
+    check(tag + " reveal has no Got it", !rev.includes("Got it"));
+    check(tag + " reveal has no Not yet", !rev.includes("Not yet"));
     check(tag + " reveal has one clip", (await page.locator("#activity audio[data-autoplay]").count()) === 1);
+    check(tag + " reveal has Slower", (await page.locator('#activity [data-slow]').count()) >= 1);
     if (spec.mode !== "noscript") {
       await page.waitForTimeout(400);
       const n = await page.evaluate(() => (window.__plays || []).length);
@@ -108,7 +111,7 @@ async function flow(spec) {
     check(tag + " reveal does not scroll sideways", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
     await shot(page, `side-reveal-${tag}`);
     // The course opens one lesson at a time, so this one has to finish before the next path.
-    await press(page, spec, "got");
+    await press(page, spec, "continue");
     await page.waitForSelector("text=Lesson complete");
   } catch (e) {
     let where = "";

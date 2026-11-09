@@ -49,10 +49,10 @@ import (
 //     are pointed Hebrew with no transliteration. After the answer, every
 //     word shows its pointed text, transliteration, and gloss. Choice values
 //     are lexeme ids.
-//   - say shows the English cue and "Say it in Hebrew". No Hebrew and no
-//     audio until the learner presses "I said it". The reveal is the model
-//     as cards, the line plays once, and "Got it" / "Not yet" record one
-//     self-check. The step then moves on.
+//   - say shows the English cue and "Say it out loud, then hear it." No
+//     Hebrew and no audio until the learner presses "I said it". The reveal
+//     is the model as cards, the line plays once, and Continue advances.
+//     The step writes no attempt, review, or card (INIT-036/SPEC-004–005).
 //   - order shows the English line and pointed-Hebrew chips in a seeded
 //     shuffle that is never the answer. The learner posts chip positions.
 //     One try. The reveal shows the reading, the English, and the clip.
@@ -253,13 +253,14 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		return
 	}
 	graded := gradedActivity(act.Type) && target.ID != 0
-	if graded && recallOrCloze(act.Type) {
+	if graded {
 		n, countErr := p.askChoiceCount(r.Context(), userID, lesson, run, act, target)
 		if countErr != nil {
 			serverError(w)
 			return
 		}
-		// Fewer than three options is a reveal, not a question. Continue advances.
+		// Fewer than three taught options is a reveal, not a question.
+		// Continue advances; the post path grades nothing. INIT-037/SPEC-004.
 		if n < lessonMinChoices {
 			graded = false
 		}
@@ -315,16 +316,12 @@ func (p player) answerDialogue(w http.ResponseWriter, r *http.Request, page view
 		switch {
 		case learner && run.Phase == "ask" && answer == "said":
 			run, _, err = p.store.AnswerPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, false)
-		case learner && run.Phase == "reveal" && (answer == "got" || answer == "notyet"):
-			gotIt := answer == "got"
-			var applied bool
+		case learner && run.Phase == "reveal" && answer == "continue":
+			// INIT-036/SPEC-005: one Continue; pending stays false from "I said it".
 			if last {
-				run, applied, err = p.store.SelfCheckPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, gotIt, total)
+				run, _, err = p.store.ContinuePlayerRun(r.Context(), userID, run.ID, run.ActivityIx, total)
 			} else {
-				run, applied, err = p.store.AdvanceDialogueLine(r.Context(), userID, run.ID, run.ActivityIx, run.LineIx, run.LineIx+1, run.Phase)
-			}
-			if err == nil && applied {
-				err = p.recordLine(r.Context(), userID, lesson, line, gotIt)
+				run, _, err = p.store.AdvanceDialogueLine(r.Context(), userID, run.ID, run.ActivityIx, run.LineIx, run.LineIx+1, run.Phase)
 			}
 		case !learner && answer == "next":
 			if last {
@@ -344,25 +341,6 @@ func (p player) answerDialogue(w http.ResponseWriter, r *http.Request, page view
 		return
 	}
 	p.writeScreen(w, r, page, screen, partial)
-}
-
-func (p player) recordLine(ctx context.Context, userID int64, lesson db.CourseLesson, line units.DialogueLine, gotIt bool) error {
-	lex, err := p.store.LexemesByText(ctx, units.Tokenize(line.Text))
-	if err != nil {
-		return err
-	}
-	target, err := targetFrom(units.Activity{Type: units.ActivitySay, Text: line.Text}, lex, lesson.NewWords)
-	if err != nil || target.ID == 0 {
-		return err
-	}
-	cue := strings.TrimSpace(line.PromptEN)
-	if cue == "" {
-		cue = strings.TrimSpace(line.Translation)
-	}
-	if cue == "" {
-		return nil
-	}
-	return evidence.New(p.store, nil, nil).SayCheck(ctx, userID, target.ID, lesson.UnitID, cue, gotIt)
 }
 
 // dialogueTurn is one line of a your-turn dialogue.
@@ -422,21 +400,17 @@ func lineCue(line units.DialogueLine) string {
 	return strings.TrimSpace(line.Translation)
 }
 
-// answerSay is the say step. "I said it" reveals the model. "Got it" and
-// "Not yet" write one self-check and move on. A repeated post does not
-// write a second attempt.
+// answerSay is the say step. "I said it" reveals the model. Continue
+// advances via ContinuePlayerRun: pending stays false from the ask, so the
+// step adds no point and writes no attempt, review, or card
+// (INIT-036/SPEC-004–005, ADR-0031 D4).
 func (p player) answerSay(w http.ResponseWriter, r *http.Request, page views.Page, userID int64, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView, answer string, total int, partial bool) {
 	var err error
 	switch {
 	case run.Phase == "ask" && answer == "said":
 		run, _, err = p.store.AnswerPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, false)
-	case run.Phase == "reveal" && (answer == "got" || answer == "notyet"):
-		gotIt := answer == "got"
-		var applied bool
-		run, applied, err = p.store.SelfCheckPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, gotIt, total)
-		if err == nil && applied && target.ID != 0 && strings.TrimSpace(act.PromptEN) != "" {
-			err = evidence.New(p.store, nil, nil).SayCheck(r.Context(), userID, target.ID, lesson.UnitID, act.PromptEN, gotIt)
-		}
+	case run.Phase == "reveal" && answer == "continue":
+		run, _, err = p.store.ContinuePlayerRun(r.Context(), userID, run.ID, run.ActivityIx, total)
 	}
 	if err != nil {
 		serverError(w)
@@ -812,10 +786,6 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	if err != nil {
 		return views.Screen{}, err
 	}
-	pool, err := p.store.UnitLexemes(ctx, lesson.UnitID)
-	if err != nil {
-		return views.Screen{}, err
-	}
 	act := lesson.Activities[run.ActivityIx]
 	target, err := targetFrom(act, lex, lesson.NewWords)
 	if err != nil {
@@ -831,7 +801,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 			p.attachRoots(ctx, &screen.Activity)
 			return screen, nil
 		}
-		screen.Activity = p.step(page, lesson, run, act, target, lex, pool, nil, false, q)
+		screen.Activity = p.step(page, lesson, run, act, target, lex, nil, nil, false, q)
 		screen.Activity.Dialogue, err = p.dialogueView(ctx, act, lex, lesson.NewWords, q.meaningsAll)
 		if err != nil {
 			return views.Screen{}, err
@@ -843,9 +813,9 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		p.attachRoots(ctx, &screen.Activity)
 		return screen, nil
 	}
-	var earlier []db.LexemeView
+	var pool, earlier []db.LexemeView
 	if run.Phase == "ask" && gradedActivity(act.Type) && target.ID != 0 {
-		earlier, err = p.store.EarlierUnitLexemes(ctx, run.UserID, lesson.Position)
+		pool, earlier, err = p.taughtChoicePools(ctx, run.UserID, lesson.UnitID, lesson.Position)
 		if err != nil {
 			return views.Screen{}, err
 		}
@@ -967,7 +937,7 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 		activity.Autoplay = !activity.SayAsk
 		activity.PromptWord = ""
 		if activity.SayAsk {
-			activity.Prompt = "Say it in Hebrew"
+			activity.Prompt = "Say it out loud, then hear it."
 		} else {
 			activity.Prompt = ""
 		}
@@ -1334,22 +1304,47 @@ func recallOrCloze(typ string) bool {
 	return typ == units.ActivityRecall || typ == units.ActivityCloze
 }
 
+// taughtChoicePools loads the learner's card set once, then the unit and
+// earlier button tiers filtered to taught words (ADR-0032 D1). INIT-037/SPEC-004.
+func (p player) taughtChoicePools(ctx context.Context, userID, unitID int64, beforePosition int) (unit, earlier []db.LexemeView, err error) {
+	cards, err := p.store.LearnerCardLexemeIDs(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	finished, err := p.store.FinishedUnitIDs(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	unit, err = p.store.TaughtUnitLexemes(ctx, unitID, cards)
+	if err != nil {
+		return nil, nil, err
+	}
+	earlier, err = p.store.TaughtEarlierUnitLexemes(ctx, userID, beforePosition, finished, cards)
+	if err != nil {
+		return nil, nil, err
+	}
+	return unit, earlier, nil
+}
+
 // askChoiceCount is how many buttons this ask would render. The post path
-// uses it so a recall or cloze that cannot reach three options is not graded.
+// uses it so a graded ask that cannot reach three taught options is not graded.
 func (p player) askChoiceCount(ctx context.Context, userID int64, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView) (int, error) {
 	lex, err := p.store.LexemesByText(ctx, actTokens(act))
 	if err != nil {
 		return 0, err
 	}
-	pool, err := p.store.UnitLexemes(ctx, lesson.UnitID)
+	pool, earlier, err := p.taughtChoicePools(ctx, userID, lesson.UnitID, lesson.Position)
 	if err != nil {
 		return 0, err
 	}
-	earlier, err := p.store.EarlierUnitLexemes(ctx, userID, lesson.Position)
-	if err != nil {
-		return 0, err
+	seed, block := choiceSeed(run, target), lineMateExclude(act, lex, target)
+	buttons := askChoices(act.Type, pool, earlier, target, seed, block)
+	if act.Type == units.ActivityListenPick {
+		if lines := listenLines(act, pool, earlier, target, seed, block); lines != nil {
+			return len(lines), nil
+		}
 	}
-	return len(askChoices(act.Type, pool, earlier, target, choiceSeed(run, target), lineMateExclude(act, lex, target))), nil
+	return len(buttons), nil
 }
 
 func choiceSeed(run db.PlayerRun, target db.LexemeView) choices.ChoiceSeed {
@@ -1825,7 +1820,7 @@ func activityPrompt(lesson db.CourseLesson, act units.Activity, target db.Lexeme
 		}
 		return "Pick the missing word."
 	case units.ActivitySay:
-		return "Say it in Hebrew"
+		return "Say it out loud, then hear it."
 	case units.ActivityOrder:
 		return "Put the words in order." // INIT-029/SPEC-003
 	default:

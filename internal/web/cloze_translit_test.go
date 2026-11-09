@@ -66,7 +66,7 @@ func TestClozeHidesChoiceTranslitUntilGraded(t *testing.T) {
 	line := ani + " " + lomed + " " + ivrit
 	unitID := putLesson(t, store, nil, units.Unit{
 		Title: "Studies", Situation: "Class.", Position: 1,
-		NewWords: []string{lomed},
+		NewWords: []string{lomed, kotev, okhel, shoteh},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityStory, Text: ani},
 			{Type: units.ActivityCloze, Text: line, Target: lomed, Translation: "I study Hebrew."},

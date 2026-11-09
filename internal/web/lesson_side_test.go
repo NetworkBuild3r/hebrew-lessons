@@ -9,7 +9,6 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
-	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/lexicon"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
@@ -40,6 +39,9 @@ func TestDialogueSideHidesTheLearnersLine(t *testing.T) {
 		if row.TextNFC == dlgMorning {
 			morningID = row.ID
 		}
+	}
+	if morningID == 0 {
+		t.Fatal("morning lexeme missing")
 	}
 	for _, c := range []struct{ id, text, voice string }{
 		{strings.Repeat("a1", 32), dlgHello, dlgFemale},
@@ -90,15 +92,26 @@ func TestDialogueSideHidesTheLearnersLine(t *testing.T) {
 		t.Fatalf("leaving did not resume on the learner's line:\n%s", back)
 	}
 	revealed := activityHTML(t, postLesson(t, h, cookie, path, runID, "said", true, "brian-csrf").Body.String())
-	if !strings.Contains(revealed, dlgMorning) || !strings.Contains(revealed, "<audio ") || !strings.Contains(revealed, `value="got"`) {
+	if !strings.Contains(revealed, dlgMorning) || !strings.Contains(revealed, "<audio ") || !strings.Contains(revealed, `value="continue"`) {
 		t.Fatalf("reveal is missing the line:\n%s", revealed)
 	}
-	done := postLesson(t, h, cookie, path, runID, "got", true, "brian-csrf")
+	for _, banned := range []string{`value="got"`, `value="notyet"`, "Got it", "Not yet", "How did that go?"} {
+		if strings.Contains(revealed, banned) {
+			t.Fatalf("reveal still has self-grade %q:\n%s", banned, revealed)
+		}
+	}
+	if !strings.Contains(revealed, `data-pace-audio="line-clip"`) || !strings.Contains(revealed, "Slower") {
+		t.Fatalf("reveal is missing PaceControls:\n%s", revealed)
+	}
+	done := postLesson(t, h, cookie, path, runID, "continue", true, "brian-csrf")
 	if done.Code != 200 || !strings.Contains(done.Body.String(), "Lesson complete") {
 		t.Fatalf("the dialogue did not finish:\n%s", done.Body.String())
 	}
 	rows, err := store.ListAttempts(ctx, user.ID, morningID)
-	if err != nil || len(rows) != 1 || rows[0].Activity != evidence.ActivitySay || rows[0].Source != evidence.SourceSelf || rows[0].Prompt != "good morning" {
-		t.Fatalf("attempts = %+v, %v", rows, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("dialogue say wrote attempts = %+v", rows)
 	}
 }

@@ -82,8 +82,10 @@ func TestLessonPlayer(t *testing.T) {
 			{Type: units.ActivityStory, Text: hello},
 		}}},
 	}, "shared")
+	// Other morning must pass ModeWrite (blocks 0) so Today still offers it:
+	// SPEC-010 skips an untouched learner unit with blocks > 0.
 	otherID := putLesson(t, store, nil, units.Unit{
-		Title: "Other morning", Position: 1,
+		Title: "Other morning", Situation: "Morning greeting.", Concept: "Greeting", Position: 1,
 		NewWords: []string{morning},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityRecall, Text: morning},
@@ -98,7 +100,7 @@ func TestLessonPlayer(t *testing.T) {
 		}}},
 	}, "shared")
 	laterID := putLesson(t, store, nil, units.Unit{
-		Title: "Brian later", Position: 3,
+		Title: "Brian later", Situation: "A later lesson.", Concept: "Practice", Position: 3,
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityStory, Text: "OK"},
 		}}},
@@ -113,6 +115,7 @@ func TestLessonPlayer(t *testing.T) {
 
 	phraseID := strings.Repeat("ab", 32)
 	wordID := strings.Repeat("cd", 32)
+	morningID := strings.Repeat("ef", 32)
 	if _, err := store.InsertAudio(ctx, db.Asset{
 		ID: phraseID, TextNFC: units.Normalize(hello + " " + morning + " " + evening), Voice: "voice", Model: "eleven_v4", Bytes: 4,
 	}); err != nil {
@@ -123,6 +126,11 @@ func TestLessonPlayer(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.InsertAudio(ctx, db.Asset{
+		ID: morningID, TextNFC: morning, Voice: "voice", Model: "eleven_v4", Bytes: 4,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(audioDir, wordID+".mp3"), []byte("word"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -130,6 +138,15 @@ func TestLessonPlayer(t *testing.T) {
 		INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses)
 		VALUES (?, ?, 'read', 'new', ?, 0, 0, 0, 0)`,
 		brian.ID, ids[hello], db.FormatTime(now),
+	); err != nil {
+		t.Fatal(err)
+	}
+	// Evening is a recycle word on the story line; a far-due card makes it
+	// taught for recall buttons without counting as a newWord or a due card.
+	if _, err := store.ExecContext(ctx, `
+		INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses)
+		VALUES (?, ?, 'recall', 'review', ?, 1, 1, 1, 0)`,
+		brian.ID, ids[evening], db.FormatTime(now.Add(365*24*time.Hour)),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +418,7 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 	line := hello + " " + morning
 	unitID := putLesson(t, store, nil, units.Unit{
 		Title: "Greetings", Situation: "Saying hello.", Position: 1,
-		NewWords: []string{hello, morning},
+		NewWords: []string{hello, morning, evening, night},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityListenPick, Text: line},
 			{Type: units.ActivityProduce, Text: hello},
@@ -582,7 +599,7 @@ func TestMultiTokenRecallNamesTheTarget(t *testing.T) {
 	line := ani + " " + gar + " " + po
 	unitID := putLesson(t, store, nil, units.Unit{
 		Title: "At home", Situation: "Saying where you live.", Position: 1,
-		NewWords: []string{gar},
+		NewWords: []string{gar, kotev, mayim},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityRecall, Text: line},
 			{Type: units.ActivityRecall, Text: gar},
@@ -816,7 +833,7 @@ func TestRecallLineDoesNotShowTheTargetGloss(t *testing.T) {
 			}
 			unitID := putLesson(t, store, nil, units.Unit{
 				Title: "At home", Situation: "Saying where you live.", Position: 1,
-				NewWords: []string{gar},
+				NewWords: []string{gar, kotev, okhel},
 				Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 					{Type: units.ActivityRecall, Text: line, Target: gar},
 					{Type: units.ActivityRecall, Text: kotev},
@@ -949,7 +966,7 @@ func TestChoicesSkipVisibleHelperGlosses(t *testing.T) {
 			// part of speech and must not fill a button.
 			unitID := putLesson(t, store, nil, units.Unit{
 				Title: "At home", Situation: "Saying where you live.", Position: 1,
-				NewWords: []string{gar},
+				NewWords: []string{gar, kotev},
 				Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 					{Type: typ, Text: line},
 					{Type: units.ActivityRecall, Text: anokhi},
@@ -1046,7 +1063,7 @@ func TestRecallTargetMarksALaterWord(t *testing.T) {
 	}
 	line := ani + " " + gar + " " + po
 	unitID := putLesson(t, fx.store, nil, units.Unit{
-		Title: "At home", Position: 1, NewWords: []string{gar},
+		Title: "At home", Position: 1, NewWords: []string{gar, po, kotev, mayim},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityRecall, Text: line, Target: po},
 			{Type: units.ActivityRecall, Text: kotev},

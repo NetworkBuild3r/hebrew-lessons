@@ -611,91 +611,90 @@ func (s *Store) AudioIDByText(ctx context.Context, textNFC string) (string, bool
 	return id, true, nil
 }
 
-// knownLexemeUnion is the learner's known set.
-// A word is known when its read card's latest review is Good or Easy.
-// That review is a successful recall. Placement Good and Easy are the
-// same kind of review: Rate writes the read card and its log.
-// A latest Again or Hard is learning. A recall card does not count.
-// Finishing a lesson does not mark its new words known.
-const knownLexemeUnion = `
-	SELECT c.lexeme_id AS lexeme_id
-	FROM cards AS c
-	JOIN review_log AS rl ON rl.card_id = c.id
-	WHERE c.user_id = ? AND c.skill = 'read'
-	  AND rl.rating IN (3, 4)
-	  AND rl.id = (
-	      SELECT rl2.id
-	      FROM review_log AS rl2
-	      WHERE rl2.card_id = c.id
-	      ORDER BY rl2.reviewed_at DESC, rl2.id DESC
-	      LIMIT 1
-	  )`
-
-// KnownLexemeIDs returns the sorted ids of read cards whose latest
-// rating is Good or Easy. A finished lesson does not add its new words.
+// KnownLexemeIDs returns the sorted ids of words whose skill is known under
+// ADR-0031: checked successes on at least two study days, plus the existing
+// known thresholds (enough successes, newest three right, recall chance).
+// A single right read answer does not qualify. Finishing a lesson does not
+// add its new words. INIT-036/SPEC-002.
 func (s *Store) KnownLexemeIDs(ctx context.Context, userID int64) ([]int64, error) {
-	conn, err := s.connOrErr()
-	if err != nil {
-		return nil, err
-	}
-	rows, err := conn.QueryContext(ctx, `
-		SELECT lexeme_id FROM (
-			`+knownLexemeUnion+`
-		)
-		ORDER BY lexeme_id`, userID)
-	if err != nil {
-		return nil, fmt.Errorf("db: known lexemes: %w", err)
-	}
-	defer rows.Close()
-	var out []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("db: known lexemes: %w", err)
-		}
-		out = append(out, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("db: known lexemes: %w", err)
-	}
-	return out, nil
+	ids, _, err := s.strictKnownLexemes(ctx, userID)
+	return ids, err
 }
 
 // LearnerKnownLexemes returns the pointed NFC text of KnownLexemeIDs, sorted by that text.
-// It is the read cards whose latest rating is Good or Easy, including a
-// placement rating of Good or Easy. A finished lesson does not add its
-// new words. There is no learner_lexemes table.
+// The set is ADR-0031 strict known (INIT-036/SPEC-002). There is no learner_lexemes table.
 func (s *Store) LearnerKnownLexemes(ctx context.Context, userID int64) ([]string, error) {
-	conn, err := s.connOrErr()
+	_, texts, err := s.strictKnownLexemes(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := conn.QueryContext(ctx, `
-		SELECT l.text_nfc
-		FROM lexemes AS l
-		WHERE l.id IN (
-			`+knownLexemeUnion+`
-		)
-		ORDER BY l.text_nfc`, userID)
+	if texts == nil {
+		texts = []string{}
+	}
+	return texts, nil
+}
+
+// strictKnownLexemes is the shared ADR-0031 known set for KnownLexemeIDs,
+// LearnerKnownLexemes, knownTexts, and suggestedStart. INIT-036/SPEC-002.
+func (s *Store) strictKnownLexemes(ctx context.Context, userID int64) ([]int64, []string, error) {
+	now := s.Clock().Now()
+	ev, err := s.LearnerEvidence(ctx, userID, LearnerQuery{
+		AgainWindow:    8,
+		AccuracyWindow: 20,
+		RecentWindow:   knownRecentRight,
+		MissSince:      now.AddDate(0, 0, -7),
+		ConfusionSince: now.AddDate(0, 0, -30),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("db: learner known lexemes: %w", err)
+		return nil, nil, err
+	}
+	seen := map[int64]struct{}{}
+	var ids []int64
+	for _, sk := range ev.Skills {
+		if !skillStrictKnown(sk, now) {
+			continue
+		}
+		if _, ok := seen[sk.LexemeID]; ok {
+			continue
+		}
+		seen[sk.LexemeID] = struct{}{}
+		ids = append(ids, sk.LexemeID)
+	}
+	slices.Sort(ids)
+	if len(ids) == 0 {
+		return ids, []string{}, nil
+	}
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, nil, err
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT id, text_nfc FROM lexemes
+		WHERE id IN (`+strings.Join(placeholders, ",")+`)
+		ORDER BY text_nfc`, args...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("db: known lexemes: %w", err)
 	}
 	defer rows.Close()
-	var out []string
+	var texts []string
 	for rows.Next() {
+		var id int64
 		var text string
-		if err := rows.Scan(&text); err != nil {
-			return nil, fmt.Errorf("db: learner known lexemes: %w", err)
+		if err := rows.Scan(&id, &text); err != nil {
+			return nil, nil, fmt.Errorf("db: known lexemes: %w", err)
 		}
-		out = append(out, text)
+		texts = append(texts, text)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("db: learner known lexemes: %w", err)
+		return nil, nil, fmt.Errorf("db: known lexemes: %w", err)
 	}
-	if out == nil {
-		out = []string{}
-	}
-	return out, nil
+	return ids, texts, nil
 }
 
 // LatestPlacement returns the learner's newest run.
@@ -1082,32 +1081,16 @@ func (s *Store) suggestedStart(ctx context.Context, userID int64) (int, error) {
 	return maxPos + 1, nil
 }
 
-// knownTexts is the pointed NFC text of the KnownLexemeIDs union.
+// knownTexts is the pointed NFC text of the ADR-0031 strict known set.
+// INIT-036/SPEC-002.
 func (s *Store) knownTexts(ctx context.Context, userID int64) (map[string]struct{}, error) {
-	conn, err := s.connOrErr()
+	_, texts, err := s.strictKnownLexemes(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := conn.QueryContext(ctx, `
-		SELECT l.text_nfc
-		FROM lexemes AS l
-		WHERE l.id IN (
-			`+knownLexemeUnion+`
-		)`, userID)
-	if err != nil {
-		return nil, fmt.Errorf("db: known texts: %w", err)
-	}
-	defer rows.Close()
 	out := map[string]struct{}{}
-	for rows.Next() {
-		var text string
-		if err := rows.Scan(&text); err != nil {
-			return nil, fmt.Errorf("db: known texts: %w", err)
-		}
+	for _, text := range texts {
 		out[text] = struct{}{}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("db: known texts: %w", err)
 	}
 	return out, nil
 }

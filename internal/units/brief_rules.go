@@ -49,6 +49,9 @@ type BriefFacts struct {
 	BriefLexemeIDs map[int64]bool `json:"briefLexemeIds,omitempty"`
 	// KnownLexemeIDs is every word the learner knows now: known or solid.
 	KnownLexemeIDs map[int64]bool `json:"knownLexemeIds,omitempty"`
+	// LearningLexemeIDs is every word the learner is still learning. unit.target_untaught
+	// and brief.checkpoint_coverage treat these as taught. INIT-037/SPEC-006.
+	LearningLexemeIDs map[int64]bool `json:"learningLexemeIds,omitempty"`
 	// FixMistakes are the right forms the brief asked the lesson to practise, at most three.
 	FixMistakes []BriefFix `json:"fixMistakes,omitempty"`
 
@@ -66,10 +69,13 @@ type BriefFacts struct {
 }
 
 // BriefPreviousUnit is one earlier unit the shape rules read. NewWords feed
-// brief.recycle_previous. ActivityTypes feed unit.same_shape. INIT-030/SPEC-004.
+// brief.recycle_previous. ActivityTypes feed unit.same_shape. FirstStory feeds
+// unit.story_repeat. INIT-030/SPEC-004; FirstStory INIT-037/SPEC-005.
 type BriefPreviousUnit struct {
 	NewWords      []string `json:"newWords,omitempty"`
 	ActivityTypes []string `json:"activityTypes,omitempty"`
+	// FirstStory is the first story activity text of that earlier unit.
+	FirstStory string `json:"firstStory,omitempty"`
 }
 
 // BriefFix is one contrast the lesson must practise. Right is the pointed form.
@@ -151,10 +157,11 @@ func ActivitiesForSkill(skill string) []string {
 }
 
 // exposureActivity reports an activity that shows a word without checking it.
-// A story or a dialogue is read and a shadow is repeated aloud; none takes an
-// answer, so any of them can introduce a new word. Every other type is checked.
+// A story or a dialogue is read, and a shadow or say is repeated aloud; none
+// takes a checked answer, so any of them can introduce a new word. Every other
+// type is checked. say counts like shadow (INIT-036/SPEC-004, ADR-0031 D4).
 func exposureActivity(typ string) bool {
-	return typ == ActivityStory || typ == ActivityShadow || typ == ActivityDialogue
+	return typ == ActivityStory || typ == ActivityShadow || typ == ActivityDialogue || typ == ActivitySay
 }
 
 // passageActivity reports the types that hold running text, which coverage and
@@ -188,6 +195,15 @@ func ValidateWithBriefIn(ctx context.Context, doc *Unit, lk Lookup, facts *Brief
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	// INIT-037/SPEC-005: unit.story_repeat reads earlier first stories from the
+	// brief when the caller did not set Unit.EarlierFirstStories.
+	if doc != nil && facts != nil && len(doc.EarlierFirstStories) == 0 {
+		if stories := previousFirstStories(facts); len(stories) > 0 {
+			cp := *doc
+			cp.EarlierFirstStories = stories
+			doc = &cp
+		}
+	}
 	issues := collect(ctx, doc, lk, mode)
 	if doc == nil {
 		return sortedIssues(issues)
@@ -207,6 +223,9 @@ func ValidateWithBriefIn(ctx context.Context, doc *Unit, lk Lookup, facts *Brief
 	}
 	if lk != nil && !hasRule(issues, RuleSchemaLookup) {
 		issues = append(issues, briefIssues(ctx, doc, lk, facts)...)
+		// INIT-037/SPEC-006: taught-target and checkpoint coverage need the brief.
+		issues = append(issues, targetUntaughtIssues(ctx, doc, lk, facts, mode)...)
+		issues = append(issues, checkpointCoverageIssues(ctx, doc, lk, facts, mode)...)
 	} else {
 		issues = append(issues, shapeIssues(doc, facts)...)
 	}
@@ -658,7 +677,7 @@ func (b *briefScan) oneNewWord(doc *Unit, acts []actTokens, id int64, text strin
 		}
 		if !exposed {
 			out = append(out, issue(RuleBriefIntro, SeverityBlock, a.pointer(),
-				fmt.Sprintf("new word %s is checked here before any story or shadow step shows it", text)))
+				fmt.Sprintf("new word %s is checked here before any story, shadow, or say step shows it", text)))
 		}
 		break
 	}

@@ -7,6 +7,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/brief"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -14,6 +15,7 @@ const lessonBriefDescription = "Build the word plan for one learner's next lesso
 	"learnerId is required. A learner id that does not exist is an error. " +
 	"Pass optional unitId to build a revision brief for that learner-scoped unit: it must be untouched (no lesson run yet). A started, finished, shared, or another learner's unit is a tool error. " + // INIT-030/SPEC-005
 	"Without unitId, a new brief is refused when the learner already has three or more untouched learner-scoped units; the error names the earliest unit id so you can revise it first. " + // INIT-030/SPEC-005
+	"Without unitId, a new brief is also refused when Pace would consolidate and an untouched consolidation unit is already queued; the error says to review first and gives the due-card count. " + // INIT-037/SPEC-007
 	"The code picks the words and you write the lesson. The brief lists newWords to teach (each used at least minUses times), struggleWords to bring back (each used at least requiredCount times, practised through the skill that is failing), and comfortableWords the learner already knows, to build the text from. " +
 	"load says how hard the lesson pushes, from the learner's recent accuracy over their newest checked attempts: ease when they are missing more (fewer new words, at most 3 struggle words, and the full list of comfortable words), stretch when they are getting almost everything right (more new words, fewer comfortable words), and steady in between. recentAccuracy is that share. A lesson stays steady until there are 15 attempts, and it does not flip between loads on a small swing. " +
 	"fixMistakes lists up to three personal mistakes, most repeated first. Practise each right form, and show the wrong form beside it once. " +
@@ -44,13 +46,15 @@ func (s *service) getLessonBrief(ctx context.Context, _ *mcp.CallToolRequest, in
 	if in.UnitID != nil && *in.UnitID <= 0 {
 		return nil, out, errors.New("unitId must be a positive id from put_unit.")
 	}
-	var brief LessonBrief
+	var built LessonBrief
 	if in.UnitID != nil {
-		brief, err = data.BuildRevisionBrief(ctx, id, theme, *in.UnitID)
+		built, err = data.BuildRevisionBrief(ctx, id, theme, *in.UnitID)
 	} else {
-		brief, err = data.BuildLessonBrief(ctx, id, theme)
+		built, err = data.BuildLessonBrief(ctx, id, theme)
 	}
 	var backlog ErrUntouchedBacklog
+	var reviewFirst ErrReviewFirst
+	var briefReview brief.ErrReviewFirst
 	switch {
 	case errors.Is(err, ErrBadTheme):
 		return nil, out, ErrBadTheme
@@ -59,10 +63,14 @@ func (s *service) getLessonBrief(ctx context.Context, _ *mcp.CallToolRequest, in
 		return nil, out, err
 	case errors.As(err, &backlog):
 		return nil, out, backlog
+	case errors.As(err, &reviewFirst):
+		return nil, out, reviewFirst
+	case errors.As(err, &briefReview):
+		return nil, out, ErrReviewFirst{DueCount: briefReview.DueCount}
 	case err != nil:
 		return nil, out, storeErr("The lesson brief could not be built.", err)
 	}
-	return nil, fillBrief(brief), nil
+	return nil, fillBrief(built), nil
 }
 
 // fillBrief makes every list an empty list, not null.

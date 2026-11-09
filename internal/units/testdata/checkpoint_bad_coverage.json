@@ -1,0 +1,30 @@
+{
+  "case": "INIT-037/SPEC-006 brief.checkpoint_coverage: a checkpoint whose pattern lines are mostly untaught words.",
+  "unit": {
+    "title": "Checkpoint coverage miss",
+    "situation": "Kitchen",
+    "concept": "Review",
+    "newWords": [],
+    "lessons": [
+      {
+        "kind": "checkpoint",
+        "activities": [
+          {
+            "type": "pattern",
+            "text": "זָר אֶחָד — זָר שְׁנַיִם"
+          },
+          {
+            "type": "pattern",
+            "text": "זָר שְׁלוֹשָׁה — זָר אַרְבַּע"
+          },
+          {
+            "type": "cloze",
+            "text": "זָר חָמֵשׁ",
+            "target": "זָר",
+            "translation": "A stranger five."
+          }
+        ]
+      }
+    ]
+  }
+}

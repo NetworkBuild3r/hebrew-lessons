@@ -1,10 +1,42 @@
 package views
 
 import (
+	"context"
+	"html"
+	"io"
 	"strconv"
 
 	"github.com/a-h/templ"
 )
+
+// PaceControls is Replay plus Slower beside a clip (INIT-036/SPEC-007).
+// audioID names the <audio> Replay plays. Slower is a toggle: pressed means
+// 0.75×, and the choice lives in localStorage via slow.js. Hand-written so
+// callers in .templ and word.go share one helper without a generate step for
+// this control alone.
+func PaceControls(audioID string) templ.Component {
+	return paceControlsComp{audioID: audioID}
+}
+
+type paceControlsComp struct{ audioID string }
+
+func (c paceControlsComp) Render(ctx context.Context, w io.Writer) error {
+	id := html.EscapeString(c.audioID)
+	if _, err := io.WriteString(w, `<div class="pace" data-pace data-pace-audio="`+id+`"><button type="button" class="pace-chip" data-replay data-audio="`+id+`" aria-label="Replay">`); err != nil {
+		return err
+	}
+	if err := IconClass("replay", "icon icon-sm", "").Render(ctx, w); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(w, `<span lang="en">Replay</span></button><button type="button" class="pace-chip" data-slow aria-pressed="false" aria-label="Slower">`); err != nil {
+		return err
+	}
+	if err := IconClass("slower", "icon icon-sm", "").Render(ctx, w); err != nil {
+		return err
+	}
+	_, err := io.WriteString(w, `<span lang="en">Slower</span></button></div>`)
+	return err
+}
 
 // ButtonKind is the Figma Button variant. Primary is the one main action on a
 // screen (--action-bg). Quiet is every secondary action: outlined, no fill.

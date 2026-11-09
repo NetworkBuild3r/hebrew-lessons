@@ -27,7 +27,8 @@ const (
 // ActivityFlashcard is the activity SelfGrade writes.
 const ActivityFlashcard = "flashcard"
 
-// ActivitySay is the activity SayCheck writes.
+// ActivitySay is the activity id on historical say self-check rows.
+// New say steps write nothing (INIT-036/SPEC-004, ADR-0031 D4).
 const ActivitySay = "say"
 
 // Contexts an exposure can come from. They match the exposures.context check.
@@ -273,48 +274,6 @@ func (r *Recorder) SelfGrade(ctx context.Context, cardID int64, rating fsrs.Rati
 		Correct:  rating > fsrs.Again,
 	}
 	_, err = r.store.WriteAttempt(ctx, db.AttemptWrite{
-		Attempt: a.row(now),
-		Step: func(prev *db.Card) (db.Card, db.ReviewLog, bool, error) {
-			next, log, err := r.review.ScheduleNext(prev, now, rating)
-			log.Peeked = true
-			return next, log, err == nil, err
-		},
-	})
-	return err
-}
-
-// SayCheck records one say-it-aloud self-check.
-// gotIt is the learner's "Got it". The attempt is activity say, skill recall,
-// source self, and the rating is applied as given: Good when they got it, Again
-// when they did not. The review log is peeked, because the model was shown first.
-// A card for that word and skill is created when there is none.
-func (r *Recorder) SayCheck(ctx context.Context, userID, lexemeID, unitID int64, prompt string, gotIt bool) error {
-	if err := r.ready(); err != nil {
-		return err
-	}
-	prompt = strings.TrimSpace(prompt)
-	if prompt == "" || len([]rune(prompt)) > 200 {
-		return errors.New("evidence: say prompt is empty or too long")
-	}
-	rating := fsrs.Again
-	response := "not yet"
-	if gotIt {
-		rating = fsrs.Good
-		response = "got it"
-	}
-	now := r.clock.Now()
-	a := Attempt{
-		UserID:   userID,
-		LexemeID: lexemeID,
-		Skill:    fsrs.SkillRecall,
-		Activity: ActivitySay,
-		Source:   SourceSelf,
-		UnitID:   unitID,
-		Prompt:   prompt,
-		Response: response,
-		Correct:  gotIt,
-	}
-	_, err := r.store.WriteAttempt(ctx, db.AttemptWrite{
 		Attempt: a.row(now),
 		Step: func(prev *db.Card) (db.Card, db.ReviewLog, bool, error) {
 			next, log, err := r.review.ScheduleNext(prev, now, rating)

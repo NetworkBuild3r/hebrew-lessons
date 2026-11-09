@@ -56,6 +56,10 @@ type UnitOutline struct {
 	Title    string `json:"title"`
 	Status   string `json:"status"`
 	Scope    string `json:"scope"`
+	// Blocks is how many block-severity issues the unit's published document
+	// gets under ModeWrite with no brief. A draft is 0. A unit that passes
+	// is 0. INIT-037/SPEC-009.
+	Blocks int `json:"blocks"`
 	// Progress is this learner's progress through the unit. Set only when
 	// get_context is called with learnerId. INIT-030/SPEC-005.
 	Progress *UnitOutlineProgress `json:"progress,omitempty"`

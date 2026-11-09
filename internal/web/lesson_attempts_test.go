@@ -60,6 +60,12 @@ func TestLessonChecksWriteAttempts(t *testing.T) {
 		ids[row.TextNFC] = row.ID
 	}
 	line := hello + " " + morning
+	earlierID := putLesson(t, store, nil, units.Unit{
+		Title: "Earlier fillers", Position: 0, NewWords: []string{evening, night},
+		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
+			{Type: units.ActivityStory, Text: evening + " " + night},
+		}}},
+	}, "shared")
 	unitID := putLesson(t, store, nil, units.Unit{
 		Title: "Greetings", Situation: "Saying hello.", Position: 1,
 		NewWords: []string{hello, morning},
@@ -71,7 +77,13 @@ func TestLessonChecksWriteAttempts(t *testing.T) {
 			{Type: units.ActivityStory, Text: line + " " + evening + " " + night},
 		}}},
 	}, "shared")
-	publish(t, store, unitID)
+	publish(t, store, earlierID, unitID)
+	when := db.FormatTime(now)
+	if _, err := store.ExecContext(ctx, `
+		INSERT INTO lesson_runs (user_id, unit_id, lesson_ix, started_at, finished_at, score)
+		VALUES (?, ?, 0, ?, ?, 1)`, brian.ID, earlierID, when, when); err != nil {
+		t.Fatal(err)
+	}
 
 	svc, err := auth.New(auth.Config{
 		PublicOrigin:  "https://learn.example",
@@ -212,7 +224,7 @@ func TestLessonRecallStoresResponseTime(t *testing.T) {
 		}
 	}
 	unitID := putLesson(t, store, nil, units.Unit{
-		Title: "Greetings", Position: 1, NewWords: []string{hello},
+		Title: "Greetings", Position: 1, NewWords: []string{hello, "בֹּקֶר", "עֶרֶב", "לַיְלָה"},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityRecall, Text: hello},
 			{Type: units.ActivityStory, Text: "בֹּקֶר עֶרֶב לַיְלָה"},
@@ -365,7 +377,7 @@ func openRecallTiming(t *testing.T) recallTiming {
 		}
 	}
 	unitID := putLesson(t, store, nil, units.Unit{
-		Title: "Greetings", Position: 1, NewWords: []string{hello},
+		Title: "Greetings", Position: 1, NewWords: []string{hello, "בֹּקֶר", "עֶרֶב", "לַיְלָה"},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityRecall, Text: hello},
 			{Type: units.ActivityStory, Text: "בֹּקֶר עֶרֶב לַיְלָה"},
@@ -420,7 +432,7 @@ func TestLessonForgedAnswerIsStoredBounded(t *testing.T) {
 		t.Fatal(err)
 	}
 	unitID := putLesson(t, store, nil, units.Unit{
-		Title: "Greetings", Position: 1, NewWords: []string{hello},
+		Title: "Greetings", Position: 1, NewWords: []string{hello, other, evening},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityRecall, Text: hello},
 			{Type: units.ActivityRecall, Text: other},

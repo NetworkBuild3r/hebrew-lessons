@@ -89,6 +89,9 @@ templ actPrompt(a ActivityView) {
 		case KindListenPick, KindDictation:
 			<div class="act__orb">
 				@actClip("act-prompt", a.AudioURL, true, true, "Play the word")
+				if a.AudioURL != "" {
+					@PaceControls("act-prompt")
+				}
 			</div>
 		case KindWordMatch:
 			<p class="act__hint" lang="en">Tap a word, then its meaning. A made pair stays.</p>
@@ -183,6 +186,9 @@ templ actFeedback(a ActivityView) {
 									@H(p.Hebrew)
 									<span class="fb__gloss">@E(p.Gloss)</span>
 									@actClip("fb-clip-" + Num(i), p.AudioURL, false, false, "Play the word")
+									if p.AudioURL != "" {
+										@PaceControls("fb-clip-" + Num(i))
+									}
 								</li>
 							}
 						</ul>
@@ -195,6 +201,9 @@ templ actFeedback(a ActivityView) {
 						<span class="fb__word">@H(a.Feedback.Hebrew)</span>
 						<span class="fb__gloss">@E(a.Feedback.Gloss)</span>
 						@actClip("fb-clip", a.Feedback.AudioURL, false, false, "Play the word")
+						if a.Feedback.AudioURL != "" {
+							@PaceControls("fb-clip")
+						}
 					</div>
 			}
 			if len(a.Feedback.Typed) > 0 {
@@ -283,6 +292,7 @@ templ letterPickFrame(c ReviewCard) {
 							@WordBlock(c.BlankedExample, "", c.ExampleGloss, "display", "", true)
 							if c.AudioURL != "" {
 								@clip("act-card-clip", c.AudioURL, "Play the word", true)
+								@PaceControls("act-card-clip")
 							}
 						</div>
 					} else if c.Cue != "" {
@@ -290,6 +300,7 @@ templ letterPickFrame(c ReviewCard) {
 					} else if c.AudioURL != "" {
 						<div class="act__orb">
 							@clip("act-card-clip", c.AudioURL, "Play the word", true)
+							@PaceControls("act-card-clip")
 						</div>
 					} else if c.PickSound != "" {
 						<p class="act__sound" lang="en">{ c.PickSound }</p>
@@ -537,9 +548,11 @@ templ answerHeading() {
 // The same clip as a lesson step: a native bar for no-JS, and button.orb
 // that clips.js plays. The bar is display:none only after that script adds
 // class js, so the card never hides the audio without a control.
+// PaceControls (INIT-036/SPEC-007) sits beside Replay surfaces on ask and reveal.
 templ flashAudio(c ReviewCard) {
 	if answerSide(c) && c.AudioURL != "" {
 		@clip("act-card-clip", c.AudioURL, "Play the word", true)
+		@PaceControls("act-card-clip")
 	}
 }
 

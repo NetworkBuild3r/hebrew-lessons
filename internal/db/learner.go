@@ -7,8 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
+	gofsrs "github.com/open-spaced-repetition/go-fsrs/v3"
 )
 
 // This file is the query layer of internal/learner (INIT-015/SPEC-013). It reads
@@ -63,9 +67,13 @@ type LearnerSkill struct {
 	Lapses          int
 	Reviews         int // review_log rows of the card.
 	ReviewAgains    int
-	ReviewSuccesses int       // Rows rated Hard, Good, or Easy.
-	RecentAgains    int       // Again rows at or after MissSince.
-	LastReviewLog   time.Time // Newest review_log row. Zero when none.
+	ReviewSuccesses int // Checked Hard/Good/Easy rows (not peeked, not say; spell implied counts).
+	// SuccessDays is how many distinct study days carry a checked success.
+	// Day = studyDay of reviewed_at in the learner's stored zone (4:00 rollover).
+	// INIT-036/SPEC-002; ADR-0031 D1.
+	SuccessDays   int
+	RecentAgains  int       // Again rows at or after MissSince.
+	LastReviewLog time.Time // Newest review_log row. Zero when none.
 }
 
 // LearnerExposure is how often a word was shown with no question asked.
@@ -87,6 +95,10 @@ type LearnerEvidence struct {
 	Skills     []LearnerSkill
 	Exposures  map[int64]LearnerExposure
 	Confusions []LearnerConfusion
+	// WaitingForSecondDay is how many words pass every part of the old same-day
+	// known rule but have only one checked-success study day (ADR-0031 D5).
+	// INIT-036/SPEC-002.
+	WaitingForSecondDay int
 }
 
 // CardReview is one review_log row of a card, in replay order.
@@ -220,9 +232,11 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 	// newest first with no sort, and the counts are made in one pass here. A window
 	// function would make SQLite sort every row, which is the slowest part at 50,000 rows.
 	// The ORDER BY includes id. The index has to include id too, or SQLite sorts.
+	// Say self-checks and flashcard peeks are skipped: they never count as outcomes
+	// toward the newest-three rule (INIT-036/SPEC-002; ADR-0031 D2).
 	if err := func() error {
 		rows, err := conn.QueryContext(ctx, `
-			SELECT lexeme_id, skill, correct, created_at
+			SELECT lexeme_id, skill, correct, created_at, activity
 			FROM attempts INDEXED BY attempts_user_lexeme_skill_id
 			WHERE user_id = ?`+attemptWhere+attemptAsOf+`
 			ORDER BY lexeme_id DESC, skill DESC, created_at DESC, id DESC`,
@@ -239,10 +253,14 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 		)
 		for rows.Next() {
 			var lexeme int64
-			var skill, at sql.RawBytes
+			var skill, at, activity sql.RawBytes
 			var correct int
-			if err := rows.Scan(&lexeme, &skill, &correct, &at); err != nil {
+			if err := rows.Scan(&lexeme, &skill, &correct, &at, &activity); err != nil {
 				return fmt.Errorf("db: learner attempts: %w", err)
+			}
+			act := string(activity)
+			if act == "say" || act == "flashcard" {
+				continue
 			}
 			if cur == nil || lexeme != curLex || !bytes.Equal(skill, curSkill) {
 				cur = get(lexeme, string(skill))
@@ -273,7 +291,8 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 	}(); err != nil {
 		return LearnerEvidence{}, err
 	}
-	// The review_log of a card that has no attempts at all.
+	// The review_log of a card that has no checked attempts at all.
+	// Peeked and say self-check rows are left out of the newest-three (ADR-0031 D2).
 	if err := outcomes(`
 		WITH r AS (
 			SELECT c.lexeme_id AS lexeme_id, c.skill AS skill, rl.rating > 1 AS ok, rl.reviewed_at AS at,
@@ -281,10 +300,11 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 			FROM cards AS c
 			JOIN review_log AS rl ON rl.card_id = c.id
 			WHERE c.user_id = ?`+cardWhere+`
-			  AND rl.implied = 0`+reviewAsOf+`
+			  AND rl.implied = 0 AND rl.peeked = 0`+reviewAsOf+`
 			  AND NOT EXISTS (
 				SELECT 1 FROM attempts AS a
-				WHERE a.user_id = c.user_id AND a.lexeme_id = c.lexeme_id AND a.skill = c.skill`+attemptExistsAsOf+`
+				WHERE a.user_id = c.user_id AND a.lexeme_id = c.lexeme_id AND a.skill = c.skill
+				  AND a.activity NOT IN ('say', 'flashcard')`+attemptExistsAsOf+`
 			  )
 		)`+aggregate, withAsOf(lexemeArg([]any{userID}), 2)); err != nil {
 		return LearnerEvidence{}, err
@@ -310,13 +330,14 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 			  )`
 			cardArgs = append(cardArgs, FormatTime(q.AsOf), FormatTime(q.AsOf))
 		}
-		// ReviewSuccesses also counts implied Good+ on spell cards ('spell' =
-		// fsrs.SkillSpell; importing fsrs here would cycle with db).
+		// ReviewSuccesses counts checked Hard+ only: peeked and say self-checks
+		// (always peeked) are out; implied Good+ still counts on spell cards
+		// (ADR-0030; ADR-0031 D2). INIT-036/SPEC-002.
 		rows, err := conn.QueryContext(ctx, `
 			SELECT c.lexeme_id, c.skill, c.state, c.stability, c.last_review, c.reps, c.lapses,
 				COUNT(CASE WHEN rl.implied = 0 THEN rl.id END),
 				COALESCE(SUM(rl.implied = 0 AND rl.rating = 1), 0),
-				COALESCE(SUM(rl.rating > 1 AND (rl.implied = 0 OR c.skill = 'spell')), 0),
+				COALESCE(SUM(rl.rating > 1 AND rl.peeked = 0 AND (rl.implied = 0 OR c.skill = 'spell')), 0),
 				COALESCE(SUM(rl.implied = 0 AND rl.rating = 1 AND rl.reviewed_at >= ?), 0),
 				MAX(CASE WHEN rl.implied = 0 THEN rl.reviewed_at END)
 			FROM cards AS c
@@ -352,6 +373,54 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 			}
 		}
 		return rows.Err()
+	}(); err != nil {
+		return LearnerEvidence{}, err
+	}
+
+	// Distinct study days that carry a checked success, in the learner's zone.
+	// INIT-036/SPEC-002; ADR-0031 D1.
+	zone, err := s.learnerStudyZone(ctx, userID)
+	if err != nil {
+		return LearnerEvidence{}, err
+	}
+	if err := func() error {
+		rows, err := conn.QueryContext(ctx, `
+			SELECT c.lexeme_id, c.skill, rl.reviewed_at
+			FROM cards AS c
+			JOIN review_log AS rl ON rl.card_id = c.id
+			WHERE c.user_id = ?`+cardWhere+reviewAsOf+`
+			  AND rl.rating > 1 AND rl.peeked = 0
+			  AND (rl.implied = 0 OR c.skill = 'spell')`,
+			withAsOf(lexemeArg([]any{userID}), 1)...)
+		if err != nil {
+			return fmt.Errorf("db: learner success days: %w", err)
+		}
+		defer rows.Close()
+		days := map[skillKey]map[string]struct{}{}
+		for rows.Next() {
+			var lexeme int64
+			var skill, atStr string
+			if err := rows.Scan(&lexeme, &skill, &atStr); err != nil {
+				return fmt.Errorf("db: learner success days: %w", err)
+			}
+			at, err := ParseTime(atStr)
+			if err != nil {
+				return fmt.Errorf("db: learner success days: %w", err)
+			}
+			k := skillKey{lexeme, skill}
+			if days[k] == nil {
+				days[k] = map[string]struct{}{}
+			}
+			days[k][studyDay(at, zone)] = struct{}{}
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("db: learner success days: %w", err)
+		}
+		for k, set := range days {
+			p := get(k.lexeme, k.skill)
+			p.SuccessDays = len(set)
+		}
+		return nil
 	}(); err != nil {
 		return LearnerEvidence{}, err
 	}
@@ -433,12 +502,125 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 	for _, k := range order {
 		out.Skills = append(out.Skills, *byKey[k])
 	}
+	now := s.Clock().Now()
+	if !q.AsOf.IsZero() {
+		now = q.AsOf
+	}
+	out.WaitingForSecondDay = waitingForSecondDay(out.Skills, now)
 	return out, nil
 }
 
 type skillKey struct {
 	lexeme int64
 	skill  string
+}
+
+// Thresholds mirrored from internal/learner so db can build the known set
+// without importing that package (fsrs → db cycle). INIT-036/SPEC-002.
+const (
+	knownLearningSuccesses = 3
+	knownRecentRight       = 3
+	knownRetrievability    = 0.85
+	knownStudyDays         = 2
+	studyRolloverHour      = 4
+)
+
+// studyDay is the learner's study day YYYY-MM-DD for at in z.
+// The study day rolls at 04:00 local (ADR-0022); before then it is the previous
+// calendar day. INIT-036/SPEC-002.
+func studyDay(at time.Time, z studyday.Zone) string {
+	local := at.In(z.Loc)
+	y, m, d := local.Date()
+	rollover := time.Date(y, m, d, studyRolloverHour, 0, 0, 0, z.Loc)
+	if local.Before(rollover) {
+		prev := time.Date(y, m, d-1, 12, 0, 0, 0, z.Loc)
+		return prev.Format(time.DateOnly)
+	}
+	return local.Format(time.DateOnly)
+}
+
+// learnerStudyZone is the learner's stored zone, or the app default when unset.
+func (s *Store) learnerStudyZone(ctx context.Context, userID int64) (studyday.Zone, error) {
+	name, ok, err := s.UserTimeZone(ctx, userID)
+	if err != nil {
+		return studyday.Zone{}, err
+	}
+	if !ok {
+		loc, err := studyday.AppZone("")
+		if err != nil {
+			return studyday.Zone{}, err
+		}
+		return studyday.Zone{Name: loc.String(), Loc: loc, Source: studyday.SourceApp}, nil
+	}
+	loc, err := studyday.ParseZone(name)
+	if err != nil {
+		return studyday.Zone{}, fmt.Errorf("db: learner %d zone: %w", userID, err)
+	}
+	return studyday.Zone{Name: name, Loc: loc, Source: studyday.SourceLearner}, nil
+}
+
+// skillOldKnown is the same-day known rule: enough checked successes, newest
+// three right, and recall chance at least 0.85. It does not require a second
+// study day (ADR-0031 D5 "old rule").
+func skillOldKnown(sk LearnerSkill, now time.Time) bool {
+	if !sk.HasCard || sk.ReviewSuccesses < knownLearningSuccesses {
+		return false
+	}
+	if sk.Recent < knownRecentRight || sk.RecentRight < knownRecentRight {
+		return false
+	}
+	elapsed := 0.0
+	if !sk.LastReview.IsZero() {
+		elapsed = now.Sub(sk.LastReview).Hours() / 24
+	}
+	return cardRetrievability(sk.Stability, elapsed) >= knownRetrievability
+}
+
+// skillStrictKnown is ADR-0031 known: old known plus checked successes on at
+// least two study days.
+func skillStrictKnown(sk LearnerSkill, now time.Time) bool {
+	return skillOldKnown(sk, now) && sk.SuccessDays >= knownStudyDays
+}
+
+// waitingForSecondDay counts words that pass the old known rule on some skill
+// with only one success day, and are not strictly known on any skill.
+func waitingForSecondDay(skills []LearnerSkill, now time.Time) int {
+	type flags struct{ waiting, known bool }
+	byLex := map[int64]*flags{}
+	for _, sk := range skills {
+		f := byLex[sk.LexemeID]
+		if f == nil {
+			f = &flags{}
+			byLex[sk.LexemeID] = f
+		}
+		if skillStrictKnown(sk, now) {
+			f.known = true
+			continue
+		}
+		if skillOldKnown(sk, now) && sk.SuccessDays == 1 {
+			f.waiting = true
+		}
+	}
+	n := 0
+	for _, f := range byLex {
+		if f.waiting && !f.known {
+			n++
+		}
+	}
+	return n
+}
+
+// cardRetrievability mirrors fsrs.Retrievability without importing fsrs
+// (fsrs imports db). Same DefaultParam curve.
+func cardRetrievability(stability, elapsedDays float64) float64 {
+	if stability <= 0 || math.IsNaN(stability) || math.IsNaN(elapsedDays) {
+		return 0
+	}
+	if elapsedDays < 0 {
+		elapsedDays = 0
+	}
+	p := gofsrs.DefaultParam()
+	return math.Pow(1+p.Factor*elapsedDays/stability, p.Decay)
 }
 
 // LexemeText is the part of a lexeme the learner model shows.

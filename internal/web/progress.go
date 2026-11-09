@@ -325,6 +325,9 @@ func (s *server) fillOverview(ctx context.Context, userID int64, v *views.Progre
 	now := s.now()
 	today := studyday.Today(now, z)
 	v.Known = strconv.Itoa(standing.KnownAnySkill)
+	if sum.WaitingForSecondDay > 0 {
+		v.WaitingText = strconv.Itoa(sum.WaitingForSecondDay)
+	}
 	v.SkillName = ""
 
 	bySkill := map[string]learner.SkillSummary{}
@@ -566,19 +569,22 @@ func knownOverTimeChart(totals []db.DailyTotal, days []snapDay, standing learner
 		series = append(series, lineSeries{ID: d.Skill, Label: d.Direction, Thin: true, Points: pts})
 	}
 
-	old := false
+	hasOld, hasNew := false, false
 	lo, hi := knownPts[0].Value, knownPts[0].Value
 	for _, s := range series {
 		for _, p := range s.Points {
 			lo, hi = math.Min(lo, p.Value), math.Max(hi, p.Value)
 			if p.OldRule {
-				old = true
+				hasOld = true
+			} else {
+				hasNew = true
 			}
 		}
 		c.Key = append(c.Key, s.Label)
 	}
-	c.OldRuleNote = old
-	if old {
+	// Marker only when the range mixes rule versions (INIT-036/SPEC-006).
+	c.OldRuleNote = hasOld && hasNew
+	if c.OldRuleNote {
 		c.Key = append(c.Key, "Dashed: old rule")
 	}
 	minY, maxY, ticks := niceCount(lo, hi)
@@ -632,12 +638,15 @@ func skillKnownChart(skill, name string, days []snapDay, today string, live floa
 		}
 	}
 	pts = append(pts, linePoint{Day: today, Value: live})
+	hasOld, hasNew := false, false
 	for _, p := range pts {
 		if p.OldRule {
-			c.OldRuleNote = true
-			break
+			hasOld = true
+		} else {
+			hasNew = true
 		}
 	}
+	c.OldRuleNote = hasOld && hasNew
 	if len(pts) == 1 && live == 0 && len(days) == 0 {
 		c.Hint = "Practice a few days and your chart starts here."
 		return c

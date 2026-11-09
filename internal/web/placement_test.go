@@ -1172,7 +1172,7 @@ func TestPlacementCSS(t *testing.T) {
 	// The layout loads the stylesheet, and the page loads the script, once each.
 	h, _, a, _ := newPlacementRouter(t)
 	body := getSignedIn(t, h, a.cookie, "/placement")
-	if strings.Count(body, "/static/css/placement.css") != 1 || strings.Count(body, "/static/js/placement.js") != 1 {
+	if strings.Count(body, "/static/css/placement.css") != 1 || strings.Count(body, "/static/js/placement.js") != 1 || strings.Count(body, "/static/js/slow.js") != 1 {
 		t.Error("the page does not load the placement stylesheet and script once each")
 	}
 }

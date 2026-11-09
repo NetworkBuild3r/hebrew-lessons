@@ -136,7 +136,7 @@ func annotateUnitSchema(s *jsonschema.Schema) error {
 		play.Description = "Dialogue only. a or b, the side the learner speaks. Omit it to show the whole conversation first. Each line of that side needs prompt_en."
 	}
 	if target := prop(act, "target"); target != nil {
-		target.Description = "The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, cloze, and say when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure."
+		target.Description = "The exact pointed token this activity grades, in NFC, and one token of its text. That token's exact pointed spelling must be a lexicon entry. The unpointed spelling does not count. Required on recall, produce, or cloze when the line has two or more words that are in the lexicon. A line with fewer may omit it, and an empty value is the same as omitting it. On listen_pick, target is optional. If target is set, only that word gets credit. If not, a line with exactly one lexicon word credits that word. With no target on a line with two or more lexicon words, the player grades the first new word on the line, or the first lexicon word if there is no new word, and logs no exposure. Planned with #139 and migration 015: such a step credits nothing and logs a lesson_listen exposure."
 	}
 	// text is not marked required here, because a dialogue has lines instead. The
 	// validator enforces it for every other type (schema.required) and enforces
@@ -278,7 +278,7 @@ func activityCatalog() []activityInfo {
 		},
 		{
 			Type:    units.ActivitySay,
-			Purpose: "The learner says the Hebrew from an English cue, then hears the model. prompt_en is the cue. text is the pointed answer. No Hebrew is shown before they say it. They mark got it or not yet.",
+			Purpose: "The learner says the Hebrew from an English cue, then hears the model. prompt_en is the cue. text is the pointed line. No Hebrew is shown before they say it. Exposure only: not graded and does not feed the scheduler.",
 			Fields: []activityField{
 				typ("say"),
 				{
@@ -287,7 +287,6 @@ func activityCatalog() []activityInfo {
 					Description: "English cue, plain text, at most 200 characters. No Hebrew and no markup.",
 				},
 				text,
-				target,
 			},
 		},
 		{

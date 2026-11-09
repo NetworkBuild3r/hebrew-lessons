@@ -496,6 +496,9 @@ func TestDialogueRulesAreCatalogedAndDocumented(t *testing.T) {
 	if RuleUnitDialogueLines != "unit.dialogue_lines" || RuleUnitDialogueSpeakers != "unit.dialogue_speakers" {
 		t.Fatal("the dialogue rule ids are part of the contract")
 	}
+	if !exposureActivity(ActivitySay) {
+		t.Fatal("say should count as exposure like shadow (INIT-036/SPEC-004)")
+	}
 	if !knownActivity(ActivityDialogue) || SkillOfActivity(ActivityDialogue) != SkillRead || !exposureActivity(ActivityDialogue) || !passageActivity(ActivityDialogue) {
 		t.Fatal("dialogue is not wired as a read-skill passage that exposes words")
 	}

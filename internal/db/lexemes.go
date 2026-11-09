@@ -236,8 +236,24 @@ func verifiedBit(v *bool) int {
 // text_nfc and the bare form. Tokenizing is lessonTokens, the same split
 // replaceLessonItems uses to resolve a word. The lookup inside that
 // rebuild is still the exact text_nfc.
+// A nil keys map is the all-units entry point: every stored unit is rebuilt.
 func rebuildReferencedUnits(ctx context.Context, tx *sql.Tx, keys map[string]bool) ([]int64, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT id, doc FROM units ORDER BY id`)
+	return rebuildUnits(ctx, tx, keys, 0)
+}
+
+// rebuildUnits replaces lesson_items for matching units inside tx.
+// onlyID, when non-zero, rebuilds that unit alone (used for one-transaction-
+// per-unit rebuilds). When onlyID is zero and keys is nil, every unit is
+// rebuilt. When onlyID is zero and keys is set, units are filtered by
+// docReferences as before.
+func rebuildUnits(ctx context.Context, tx *sql.Tx, keys map[string]bool, onlyID int64) ([]int64, error) {
+	var rows *sql.Rows
+	var err error
+	if onlyID != 0 {
+		rows, err = tx.QueryContext(ctx, `SELECT id, doc FROM units WHERE id = ?`, onlyID)
+	} else {
+		rows, err = tx.QueryContext(ctx, `SELECT id, doc FROM units ORDER BY id`)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("db: list units: %w", err)
 	}
@@ -254,7 +270,7 @@ func rebuildReferencedUnits(ctx context.Context, tx *sql.Tx, keys map[string]boo
 		if err := json.Unmarshal([]byte(raw), &doc); err != nil {
 			return nil, fmt.Errorf("db: unit %d doc: %w", id, err)
 		}
-		if !docReferences(doc, keys) {
+		if onlyID == 0 && keys != nil && !docReferences(doc, keys) {
 			continue
 		}
 		ids = append(ids, id)
@@ -273,6 +289,56 @@ func rebuildReferencedUnits(ctx context.Context, tx *sql.Tx, keys map[string]boo
 	}
 	slices.Sort(ids)
 	return ids, nil
+}
+
+// RebuildAllLessonItems re-derives lesson_items for every stored unit,
+// published or draft. Each unit is rebuilt in its own transaction through
+// the all-units rebuild path. A second call is a no-op when derivation is
+// unchanged. INIT-037 SPEC-003 / ADR-0032 D2.
+func (s *Store) RebuildAllLessonItems(ctx context.Context) ([]int64, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `SELECT id FROM units ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("db: list units: %w", err)
+	}
+	var unitIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("db: list units: %w", err)
+		}
+		unitIDs = append(unitIDs, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, fmt.Errorf("db: list units: %w", err)
+	}
+
+	var out []int64
+	for _, id := range unitIDs {
+		tx, err := conn.BeginTx(ctx, nil)
+		if err != nil {
+			return nil, fmt.Errorf("db: begin rebuild: %w", err)
+		}
+		rebuilt, err := rebuildUnits(ctx, tx, nil, id)
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, fmt.Errorf("db: commit rebuild: %w", err)
+		}
+		out = append(out, rebuilt...)
+	}
+	if out == nil {
+		out = []int64{}
+	}
+	return out, nil
 }
 
 // docReferences reports whether doc mentions any key. Activity text is

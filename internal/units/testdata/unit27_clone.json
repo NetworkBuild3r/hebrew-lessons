@@ -1,0 +1,48 @@
+{
+  "case": "INIT-037/SPEC-005 fixture shaped like learner unit 27: consolidation clone sequence with a shared story.",
+  "unit": {
+    "title": "Unit 27",
+    "situation": "At the cafe",
+    "concept": "Review forms",
+    "newWords": [],
+    "lessons": [
+      {
+        "kind": "lesson",
+        "activities": [
+          {
+            "type": "story",
+            "text": "דָּנִי שׁוֹתֶה קָפֶה בַּבֹּקֶר וְאוֹכֵל לֶחֶם עִם חָלָב"
+          },
+          {
+            "type": "shadow",
+            "text": "קָפֶה"
+          },
+          {
+            "type": "listen_pick",
+            "text": "דָּנִי שׁוֹתֶה קָפֶה",
+            "translation": "Dani drinks coffee."
+          },
+          {
+            "type": "recall",
+            "text": "לֶחֶם"
+          },
+          {
+            "type": "cloze",
+            "text": "דָּנִי אוֹכֵל לֶחֶם",
+            "target": "לֶחֶם",
+            "translation": "Dani eats bread."
+          },
+          {
+            "type": "say",
+            "text": "דָּנִי שׁוֹתֶה קָפֶה",
+            "prompt_en": "Say: Dani drinks coffee."
+          },
+          {
+            "type": "pattern",
+            "text": "שׁוֹתֶה — שׁוֹתָה"
+          }
+        ]
+      }
+    ]
+  }
+}

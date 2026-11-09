@@ -126,13 +126,22 @@ templ knowCard(v ProgressView) {
 }
 
 // knowOverview is the directions grid: known, solid, learning, struggling, due,
-// 14-day accuracy, and a verdict chip (ADR-0028 D4, D5).
+// 14-day accuracy, and a verdict chip (ADR-0028 D4, D5). Waiting is ADR-0031 D5.
 templ knowOverview(v ProgressView) {
 	<p class="eyebrow" id="know-h">@T(v.Lang, "", "What you know")</p>
 	<p class="pknow__head">
-		<span class="count"><bdi lang="en" dir="ltr">{ v.Known }</bdi></span>
-		<span class="pknow__unit">@ProgressT(v.Lang, "Words you know")</span>
+		<span class="pknow__figure" role="group" aria-label={ ProgressLabel(v.Lang, "Words you know") }>
+			<span class="count"><bdi lang="en" dir="ltr">{ v.Known }</bdi></span>
+			<span class="pknow__unit">@ProgressT(v.Lang, "Words you know")</span>
+		</span>
+		if v.WaitingText != "" {
+			<span class="pknow__figure" role="group" aria-label={ ProgressLabel(v.Lang, LabelLearnedTodayCheckTomorrow) }>
+				<span class="count"><bdi lang="en" dir="ltr">{ v.WaitingText }</bdi></span>
+				<span class="pknow__unit">@ProgressT(v.Lang, LabelLearnedTodayCheckTomorrow)</span>
+			</span>
+		}
 	</p>
+	<p class="pknow__explain">@ProgressT(v.Lang, LabelKnownExplain)</p>
 	<ul class="pknow__skills">
 		for _, row := range v.Directions {
 			<li class="pknow__skill" data-skill={ row.Skill } data-verdict={ row.Verdict }>

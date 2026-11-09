@@ -225,6 +225,11 @@ func deriveLessonItems(ctx context.Context, tx *sql.Tx, doc units.Unit) ([]lesso
 		for _, act := range lesson.Activities {
 			// A dialogue has one text per line; every other activity has one text.
 			for _, text := range act.Texts() {
+				// ADR-0032 D2: on a pattern line, only the right side is a unit
+				// word. The player still shows the whole Texts() string.
+				if act.Type == units.ActivityPattern {
+					text = patternRightText(text)
+				}
 				for _, tok := range lessonTokens(text) {
 					id, ok, err := lookupLexemeID(ctx, tx, tok)
 					if err != nil {
@@ -249,6 +254,19 @@ func deriveLessonItems(ctx context.Context, tx *sql.Tx, doc units.Unit) ([]lesso
 		}
 	}
 	return out, nil
+}
+
+// patternWrongSep marks the wrong side of a contrast on a pattern line
+// (U+2014 em dash with a space on each side). ADR-0032 D2 / INIT-037 SPEC-003.
+const patternWrongSep = " — "
+
+// patternRightText returns the text before the first patternWrongSep.
+// A line with no separator is returned whole.
+func patternRightText(text string) string {
+	if i := strings.Index(text, patternWrongSep); i >= 0 {
+		return text[:i]
+	}
+	return text
 }
 
 func lookupLexemeID(ctx context.Context, tx *sql.Tx, text string) (int64, bool, error) {

@@ -683,12 +683,16 @@ func TestAutoPublishCountsTheLearnersKnownWords(t *testing.T) {
 	e.audio(doc)
 
 	// Learner A does not know the word: the passage is all unknown, and the word has a
-	// gloss in the lexicon, so coverage is the one block.
+	// gloss in the lexicon, so coverage blocks. unit.target_untaught also blocks the
+	// graded listen_pick (INIT-037/SPEC-006).
 	blocked := e.put(db.LearnerScope(e.a), nil, doc, apBriefA, true)
 	if blocked.Published || !apHas(blocked.Issues, units.RuleBriefCoverage, "/lessons/1/activities/6") {
 		t.Fatalf("learner A: %+v", blocked)
 	}
-	if got := apBlocks(blocked.Issues); len(got) != 1 {
+	if !apHas(blocked.Issues, units.RuleUnitTargetUntaught, "/lessons/1/activities/6") {
+		t.Fatalf("learner A missing target_untaught: %v", apBlocks(blocked.Issues))
+	}
+	if got := apBlocks(blocked.Issues); len(got) != 2 {
 		t.Fatalf("blocks for learner A: %v", got)
 	}
 	// Learner B knows it, so the same document publishes.

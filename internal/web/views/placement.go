@@ -46,6 +46,7 @@ const (
 // navigation does not flash unstyled. The script is loaded by the page.
 const (
 	PlacementCSS = "/static/css/placement.css"
+	SlowJS       = "/static/js/slow.js" // INIT-036/SPEC-007
 	PlacementJS  = "/static/js/placement.js"
 )
 

@@ -151,6 +151,18 @@ var (
 	ErrTooLarge = errors.New("brief: payload too large")
 )
 
+// ErrReviewFirst is returned by Build when Pace would consolidate but the learner already
+// has an untouched consolidation unit queued ahead. The message names review and the due
+// card count. INIT-037/SPEC-007; ADR-0032 D4.
+type ErrReviewFirst struct {
+	DueCount int
+}
+
+func (e ErrReviewFirst) Error() string {
+	return "Review first. The learner already has a consolidation unit queued and has " +
+		strconv.Itoa(e.DueCount) + " cards due."
+}
+
 // Word is a lexeme in a brief.
 type Word struct {
 	LexemeID int64  `json:"lexeme_id"`
@@ -573,6 +585,21 @@ func (b *Builder) build(ctx context.Context, userID int64, theme string, positio
 	learning := sum.Words[learner.Learning]
 	tierWant := TunedNewWords(tier, len(struggle), plan.Load)
 	plan.Pace = PaceFor(reviewAcc, reviewN, learning, tierWant)
+	// At most one consolidation unit may sit untouched ahead. Beyond that, point to review.
+	// INIT-037/SPEC-007; ADR-0032 D4. Revision briefs keep building for the named unit.
+	if plan.Pace.Consolidate && reviseUnitID == 0 {
+		queued, err := b.untouchedConsolidationQueued(ctx, userID)
+		if err != nil {
+			return Brief{}, err
+		}
+		if queued {
+			due, err := b.store.ListDueCards(ctx, userID, now)
+			if err != nil {
+				return Brief{}, fmt.Errorf("brief: due cards: %w", err)
+			}
+			return Brief{}, ErrReviewFirst{DueCount: len(due)}
+		}
+	}
 
 	before, err := b.resolvePosition(ctx, userID, position)
 	if err != nil {

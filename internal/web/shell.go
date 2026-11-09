@@ -7,15 +7,18 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcpstore"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/roots"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
@@ -87,6 +90,91 @@ func ChooseTodayAction(in TodayInputs) views.TodayAction {
 		return views.ActionReviews
 	}
 	return views.ActionNone
+}
+
+// nextTodayLesson is the unfinished lesson Today offers. An untouched learner
+// unit with ModeWrite blocks > 0 (SPEC-009's WriteModeBlocks count, including
+// path shape checks) is skipped; a started unit with blocks is still offered
+// so the learner can finish it. Shared units are never skipped for blocks.
+// Reported units stay hidden as before. When every forward unit is skipped,
+// ok is false and Today falls through to review. INIT-037/SPEC-010.
+func (s *server) nextTodayLesson(ctx context.Context, userID int64) (db.CourseLesson, bool, error) {
+	if s == nil || s.store == nil {
+		return db.CourseLesson{}, false, nil
+	}
+	rows, err := s.store.UnitsInScope(ctx, userID)
+	if err != nil {
+		return db.CourseLesson{}, false, err
+	}
+	hidden, err := s.store.HiddenUnitIDs(ctx, userID)
+	if err != nil {
+		return db.CourseLesson{}, false, err
+	}
+	hiddenSet := map[int64]bool{}
+	for _, id := range hidden {
+		hiddenSet[id] = true
+	}
+	finished, err := s.store.FinishedLessons(ctx, userID)
+	if err != nil {
+		return db.CourseLesson{}, false, err
+	}
+	lk := mcpstore.New(s.store).WithVoices(s.voices)
+	var earlierStories []string
+	var prevTypes []string
+	for _, row := range rows {
+		if row.Status != "published" || hiddenSet[row.ID] {
+			continue
+		}
+		snap, err := s.store.LoadUnit(ctx, row.ID, nil)
+		if err != nil {
+			return db.CourseLesson{}, false, err
+		}
+		if snap.Status != "published" {
+			continue
+		}
+		doc := snap.Doc
+		blocks, _ := units.WriteModeBlocks(ctx, &doc, lk, earlierStories, prevTypes)
+		done := finished[row.ID]
+		unfinishedIx := -1
+		for ix := range doc.Lessons {
+			if _, ok := done[ix]; ok {
+				continue
+			}
+			unfinishedIx = ix
+			break
+		}
+		if unfinishedIx >= 0 {
+			skip, err := s.skipBlockedUntouchedLearnerUnit(ctx, userID, row.Scope, row.ID, blocks)
+			if err != nil {
+				return db.CourseLesson{}, false, err
+			}
+			if !skip {
+				lesson, err := s.store.CourseLesson(ctx, userID, row.ID, unfinishedIx)
+				if err != nil {
+					return db.CourseLesson{}, false, err
+				}
+				return lesson, true, nil
+			}
+		}
+		if story := units.FirstStoryText(&doc); story != "" {
+			earlierStories = append(earlierStories, story)
+		}
+		prevTypes = units.ActivityTypes(&doc)
+	}
+	return db.CourseLesson{}, false, nil
+}
+
+// skipBlockedUntouchedLearnerUnit is true when Today must not start this unit:
+// learner-scoped, never opened, and ModeWrite blocks > 0. INIT-037/SPEC-010.
+func (s *server) skipBlockedUntouchedLearnerUnit(ctx context.Context, userID int64, scope string, unitID int64, blocks int) (bool, error) {
+	if blocks <= 0 || !strings.HasPrefix(scope, "learner:") {
+		return false, nil
+	}
+	untouched, err := s.store.IsUntouched(ctx, userID, unitID)
+	if err != nil {
+		return false, err
+	}
+	return untouched, nil
 }
 
 // mountShell registers the shell's routes. All of them need a signed-in learner, and every

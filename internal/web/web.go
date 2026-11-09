@@ -325,7 +325,8 @@ func (s *server) serveHome(w http.ResponseWriter, r *http.Request, secure bool, 
 
 // applyCourseLesson puts the next published lesson in this learner's scope
 // on the Today card. The due count, known count, and placement stay on the
-// scheduler's page. No lesson leaves the empty card.
+// scheduler's page. No lesson leaves the empty card. An untouched learner
+// unit with ModeWrite blocks is skipped (INIT-037/SPEC-010).
 func (s *server) applyCourseLesson(r *http.Request, home *views.Home) error {
 	if home == nil || s == nil || s.store == nil {
 		return nil
@@ -335,7 +336,7 @@ func (s *server) applyCourseLesson(r *http.Request, home *views.Home) error {
 		home.Lesson = false
 		return nil
 	}
-	lesson, found, err := s.store.NextCourseLesson(r.Context(), user.ID)
+	lesson, found, err := s.nextTodayLesson(r.Context(), user.ID)
 	if err != nil {
 		return err
 	}

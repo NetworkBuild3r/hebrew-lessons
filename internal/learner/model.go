@@ -188,6 +188,10 @@ type Summary struct {
 	// KnownAnySkill is the number of lexemes known or solid in at least one skill,
 	// counted once. Authored-by-spec: INIT-032/SPEC-003
 	KnownAnySkill int
+	// WaitingForSecondDay is how many words pass every part of the old same-day
+	// known rule but have only one checked-success study day (ADR-0031 D5).
+	// Authored-by-spec: INIT-036/SPEC-003
+	WaitingForSecondDay int
 	// Retention and DueReviews are over all skills.
 	Retention  *float64
 	DueReviews int
@@ -515,6 +519,7 @@ func (m *Model) evaluate(ev db.LearnerEvidence, bands map[int64]int, now time.Ti
 			Outcomes: ls.Outcomes, Window: ls.Window, WindowCorrect: ls.WindowCorrect,
 			AgainOf: ls.AgainOf, Agains: ls.Agains, Recent: ls.Recent, RecentRight: ls.RecentRight,
 			HasCard: ls.HasCard, Successes: ls.ReviewSuccesses, Stability: ls.Stability,
+			SuccessDays: ls.SuccessDays,
 		}
 		if ls.HasCard && !ls.LastReview.IsZero() {
 			e.Retrievability = fsrs.Retrievability(ls.Stability, now.Sub(ls.LastReview).Hours()/24)

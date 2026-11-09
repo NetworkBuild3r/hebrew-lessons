@@ -1,0 +1,30 @@
+{
+  "case": "INIT-037/SPEC-006: English lines from finished units 1–11. None should trip unit.meta_text.",
+  "lines": [
+    "I live.",
+    "I drink coffee.",
+    "Dani eats bread.",
+    "Good morning.",
+    "I have a ticket.",
+    "Where is the station?",
+    "I prefer fish.",
+    "Can we sit here?",
+    "Next weekend I am going.",
+    "Last weekend I went.",
+    "He said that he lives.",
+    "She works in the morning.",
+    "You say: I live.",
+    "I say: I live.",
+    "We need milk.",
+    "The coffee is hot.",
+    "Please bring the bread.",
+    "I want water.",
+    "They eat together.",
+    "Do you understand?",
+    "Yes, I understand.",
+    "No, I do not know.",
+    "See you tomorrow.",
+    "What are you doing?",
+    "I am preparing dinner."
+  ]
+}

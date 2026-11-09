@@ -1,0 +1,26 @@
+{
+  "case": "INIT-037/SPEC-006 unit.target_untaught: unit 12 steak checkpoint grades לְהָכִין; the learner has no card for it.",
+  "unit": {
+    "title": "Unit 12",
+    "situation": "At the steakhouse",
+    "concept": "Prepare a steak",
+    "newWords": [],
+    "lessons": [
+      {
+        "kind": "checkpoint",
+        "activities": [
+          {
+            "type": "pattern",
+            "text": "לְהָכִין סְטֵייק — לַעֲשׂוֹת סְטֵייק"
+          },
+          {
+            "type": "cloze",
+            "text": "אֲנִי לְהָכִין סְטֵייק",
+            "target": "לְהָכִין",
+            "translation": "I prepare a steak."
+          }
+        ]
+      }
+    ]
+  }
+}

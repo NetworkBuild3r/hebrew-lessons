@@ -236,10 +236,11 @@ func TestKnownLexemeIDsUsesLatestHeEnRating(t *testing.T) {
 	userID := insertUser(t, s, "latest@example.com", "sub-latest", "learner")
 	rose := insertLexeme(t, s, "וֶרֶד")
 	olive := insertLexeme(t, s, "זַיִת")
+	// Strict known, then an Again: newest three are not all right → out of the set.
 	roseCard := insertKnownCard(t, s, userID, rose, "read", Good, when.Add(-time.Hour))
 	insertReview(t, s, roseCard, Again, when)
-	oliveCard := insertKnownCard(t, s, userID, olive, "read", Again, when.Add(-time.Hour))
-	insertReview(t, s, oliveCard, Easy, when)
+	// Strict known and left alone → stays in the set. INIT-036/SPEC-002.
+	insertKnownCard(t, s, userID, olive, "read", Easy, when)
 
 	got, err := s.KnownLexemeIDs(ctx, userID)
 	if err != nil {
@@ -335,15 +336,31 @@ func rateAnswer(t *testing.T, s *Store, runID int64, itemID string, lexemeID int
 
 func insertKnownCard(t *testing.T, s *Store, userID, lexemeID int64, skill string, rating int, at time.Time) int64 {
 	t.Helper()
-	cardID, err := s.InsertCard(context.Background(), Card{
-		UserID:   userID,
-		LexemeID: lexemeID,
-		Skill:    skill,
-		State:    "new",
-		Due:      at,
-	})
+	// Good/Easy on a read card seeds ADR-0031 strict known (3 checked
+	// successes across 2 study days, stability high enough for recall chance).
+	// Other ratings or skills get a single review so they stay out of the set.
+	// INIT-036/SPEC-002.
+	ctx := context.Background()
+	card := Card{
+		UserID: userID, LexemeID: lexemeID, Skill: skill,
+		State: "new", Due: at,
+	}
+	if rating >= Good && skill == "read" {
+		card.State = "review"
+		card.Stability = 10
+		card.LastReview = at
+		card.Reps = 3
+	}
+	cardID, err := s.InsertCard(ctx, card)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if rating >= Good && skill == "read" {
+		day1 := at.Add(-48 * time.Hour)
+		insertReview(t, s, cardID, rating, day1)
+		insertReview(t, s, cardID, rating, day1.Add(time.Hour))
+		insertReview(t, s, cardID, rating, at)
+		return cardID
 	}
 	insertReview(t, s, cardID, rating, at)
 	return cardID

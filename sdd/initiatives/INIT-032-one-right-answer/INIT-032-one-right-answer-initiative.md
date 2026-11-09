@@ -32,8 +32,8 @@
 | [SPEC-004](specs/SPEC-004-web-cloze-english-cue.md) | web | Show the English line on a cloze | SPEC-001 | 1h | built, uncommitted |
 | [SPEC-005](specs/SPEC-005-web-cloze-also-right.md) | web | A word that also fits is never a wrong button | SPEC-003, SPEC-004 | 4h | planned |
 | [SPEC-006](specs/SPEC-006-ops-deploy-and-check.md) | ops | Deploy and check lesson 12 on the live site | SPEC-002, SPEC-005 | 2h | planned |
-| [SPEC-007](specs/SPEC-007-ops-list-the-bad-lessons.md) | ops | List every published unit the new rules warn on | SPEC-006 | 2h | planned |
-| [SPEC-008](specs/SPEC-008-content-rewrite-the-bad-lessons.md) | content | Rewrite the listed units | SPEC-007, INIT-031/SPEC-004 | 4h | planned |
+| [SPEC-007](specs/SPEC-007-ops-list-the-bad-lessons.md) | ops | List every published unit the new rules warn on | SPEC-006 | 2h | superseded by [INIT-037](../INIT-037-taught-words-only/INIT-037-taught-words-only-initiative.md) SPEC-009 and SPEC-011 |
+| [SPEC-008](specs/SPEC-008-content-rewrite-the-bad-lessons.md) | content | Rewrite the listed units | SPEC-007, INIT-031/SPEC-004 | 4h | superseded by INIT-037 SPEC-012 (units 12 to 34 unpublished 2026-11-08, INIT-037 SPEC-001) |
 
 **Total:** 17h. **Critical path:** SPEC-001 → SPEC-003 → SPEC-005 → SPEC-006 → SPEC-007 → SPEC-008 = 15h.
 

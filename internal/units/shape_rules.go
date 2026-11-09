@@ -12,7 +12,8 @@ const (
 	// be single-word drills. ADR-0026 D4.
 	MaxDrillShare = 0.40
 	// SameShapeMin is the lowest activity-type similarity to the first previous
-	// unit that does not warn. Compared by edit distance over the type list.
+	// unit that warns. Compared by edit distance over the type list.
+	// INIT-030/SPEC-004; restored by INIT-037/SPEC-005 (ADR-0032 D5).
 	SameShapeMin = 0.80
 	// RecyclePreviousMin is how many distinct previous-unit newWords must appear
 	// in meaning steps, unless the previous units have fewer.
@@ -233,18 +234,19 @@ func consolidationIssues(doc *Unit, f *BriefFacts) []Issue {
 }
 
 // sameShapeIssues is unit.same_shape. Warns when the activity-type sequence is
-// under SameShapeMin similar to the first previous unit by edit distance.
+// at least SameShapeMin similar to the first previous unit by edit distance.
+// INIT-037/SPEC-005; ADR-0032 D5.
 func sameShapeIssues(doc *Unit, f *BriefFacts) []Issue {
 	if len(f.PreviousUnits) == 0 || len(f.PreviousUnits[0].ActivityTypes) == 0 {
 		return nil
 	}
 	prev := f.PreviousUnits[0].ActivityTypes
 	cur := activityTypeSeq(doc)
-	if shapeSimilarity(cur, prev) >= SameShapeMin {
+	if shapeSimilarity(cur, prev) < SameShapeMin {
 		return nil
 	}
 	return []Issue{issue(RuleUnitSameShape, SeverityWarn, "/lessons",
-		fmt.Sprintf("activity types are under %.0f%% the same as the previous unit", SameShapeMin*100))}
+		fmt.Sprintf("activity types are at least %.0f%% the same as the previous unit", SameShapeMin*100))}
 }
 
 func activityTypeSeq(doc *Unit) []string {
@@ -255,6 +257,101 @@ func activityTypeSeq(doc *Unit) []string {
 		}
 	}
 	return out
+}
+
+// FirstStoryText is the text of the first story activity in doc, or "".
+// INIT-037/SPEC-005.
+func FirstStoryText(doc *Unit) string {
+	if doc == nil {
+		return ""
+	}
+	for _, les := range doc.Lessons {
+		for _, act := range les.Activities {
+			if act.Type != ActivityStory {
+				continue
+			}
+			if t := strings.TrimSpace(act.Text); t != "" {
+				return t
+			}
+		}
+	}
+	return ""
+}
+
+// StoryRepeatIssues is unit.story_repeat. A story or dialogue whose normalized
+// text equals any earlier first story blocks in ModeWrite and warns in
+// ModePublished. Normalized means NFC, niqqud kept, whitespace collapsed
+// (Normalize). It runs with and without a brief: the caller supplies earlier
+// first-story texts from the path or from BriefPreviousUnit.FirstStory.
+// INIT-037/SPEC-005; ADR-0032 D5.
+func StoryRepeatIssues(doc *Unit, earlierFirstStories []string, mode Mode) []Issue {
+	if doc == nil || len(earlierFirstStories) == 0 {
+		return nil
+	}
+	earlier := map[string]bool{}
+	for _, s := range earlierFirstStories {
+		if n := normalize(s); n != "" {
+			earlier[n] = true
+		}
+	}
+	if len(earlier) == 0 {
+		return nil
+	}
+	sev := SeverityBlock
+	if mode == ModePublished {
+		sev = SeverityWarn
+	}
+	var out []Issue
+	for i, les := range doc.Lessons {
+		for j, act := range les.Activities {
+			text := ""
+			switch act.Type {
+			case ActivityStory:
+				text = act.Text
+			case ActivityDialogue:
+				text = dialogueJoinedText(act.Lines)
+			default:
+				continue
+			}
+			n := normalize(text)
+			if n == "" || !earlier[n] {
+				continue
+			}
+			out = append(out, issue(RuleUnitStoryRepeat, sev, at("lessons", i, "activities", j),
+				"this story or dialogue repeats the first story of an earlier unit on the path"))
+		}
+	}
+	return out
+}
+
+func dialogueJoinedText(lines []DialogueLine) string {
+	parts := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if t := strings.TrimSpace(line.Text); t != "" {
+			parts = append(parts, t)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+func previousFirstStories(f *BriefFacts) []string {
+	if f == nil {
+		return nil
+	}
+	var out []string
+	for _, p := range f.PreviousUnits {
+		if s := strings.TrimSpace(p.FirstStory); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func storyRepeatIssues(doc *Unit, mode Mode) []Issue {
+	if doc == nil {
+		return nil
+	}
+	return StoryRepeatIssues(doc, doc.EarlierFirstStories, mode)
 }
 
 // shapeSimilarity is 1 - editDistance/max(len), or 1 when both are empty.

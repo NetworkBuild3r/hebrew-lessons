@@ -198,7 +198,7 @@ func (b wordPageBody) Render(ctx context.Context, w io.Writer) error {
 			return err
 		}
 	}
-	if err := write(`</article><script src="` + html.EscapeString(string(Asset("/static/js/clips.js"))) + `" defer></script>`); err != nil {
+	if err := write(`</article><script src="` + html.EscapeString(string(Asset("/static/js/slow.js"))) + `" defer></script><script src="` + html.EscapeString(string(Asset("/static/js/clips.js"))) + `" defer></script>`); err != nil {
 		return err
 	}
 	return nil
@@ -216,6 +216,10 @@ func renderWordHeader(ctx context.Context, w io.Writer, v WordPageView) error {
 	}
 	if h.Audio != "" {
 		if err := clip(h.AudioID, h.Audio, "Play "+h.He, false).Render(ctx, w); err != nil {
+			return err
+		}
+		// INIT-036/SPEC-007: Replay + Slower beside the lemma clip.
+		if err := PaceControls(h.AudioID).Render(ctx, w); err != nil {
 			return err
 		}
 	}

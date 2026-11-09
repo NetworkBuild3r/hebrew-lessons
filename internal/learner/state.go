@@ -58,6 +58,10 @@ const (
 	KnownRetrievability = 0.85
 	KnownRecentRight    = 3
 
+	// KnownStudyDays is how many distinct study days must carry a checked success
+	// before a skill is known (ADR-0031 D1 / INIT-036/SPEC-003).
+	KnownStudyDays = 2
+
 	// SolidStabilityDays is the card stability a solid word needs, on top of being known.
 	SolidStabilityDays = 21.0
 
@@ -91,6 +95,9 @@ type Evidence struct {
 	Successes      int     // Reviews of that card rated Hard, Good, or Easy.
 	Stability      float64 // Card stability in days. 0 with no card.
 	Retrievability float64 // Chance of recall now, 0 to 1. 0 with no card.
+	// SuccessDays is how many distinct study days carry a checked success
+	// (INIT-036/SPEC-002; filled by the query layer).
+	SuccessDays int
 
 	Exposed bool // The word was shown with no question asked.
 }
@@ -145,10 +152,12 @@ func IsStruggling(e Evidence) bool { return StrugglingByAgain(e) || StrugglingBy
 // because no per-word history of states is kept yet.
 func WasLearned(e Evidence) bool { return e.HasCard && e.Successes >= LearningSuccesses }
 
-// IsKnown is the known rule: recall chance at least 85%, and the newest 3 outcomes all right.
+// IsKnown is the known rule: recall chance at least 85%, the newest 3 outcomes all
+// right, and checked successes on at least KnownStudyDays study days (ADR-0031 D1).
 func IsKnown(e Evidence) bool {
 	return e.Retrievability >= KnownRetrievability &&
-		e.Recent >= KnownRecentRight && e.RecentRight >= KnownRecentRight
+		e.Recent >= KnownRecentRight && e.RecentRight >= KnownRecentRight &&
+		e.SuccessDays >= KnownStudyDays
 }
 
 // StateOf is the state of one word in one skill. The rules are checked in this
@@ -159,9 +168,9 @@ func IsKnown(e Evidence) bool {
 //  3. regressed: the card was learned, and recall chance is under 70%
 //  4. no card: seen (answered, but nothing is scheduled yet)
 //  5. a card younger than its third successful review: learning
-//  6. known and stable for 21 days or more: solid
+//  6. known (including two study days of checked success) and stable for 21 days or more: solid
 //  7. known: known
-//  8. anything else: learning
+//  8. anything else: learning (including old same-day known that still needs a later day)
 //
 // Struggling comes before regressed, as north-star 4.3 says: a word that is both is struggling.
 func StateOf(e Evidence) State {

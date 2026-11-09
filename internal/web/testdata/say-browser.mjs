@@ -62,7 +62,7 @@ async function flow(spec) {
     await page.goto(origin + spec.path, { waitUntil: "domcontentloaded" });
     await page.waitForSelector(".say-cue");
     const ask = await page.locator("#activity").innerText();
-    check(tag + " cue is the English", ask.includes("good morning") && ask.includes("Say it in Hebrew"), ask.slice(0, 120));
+    check(tag + " cue is the English", ask.includes("good morning") && ask.includes("Say it out loud, then hear it."), ask.slice(0, 120));
     check(tag + " ask has no Hebrew", !hebrew.test(ask), ask.slice(0, 120));
     check(tag + " ask has no audio", (await page.locator("#activity audio").count()) === 0);
     const fs = await page.locator(".say-cue").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
@@ -81,12 +81,15 @@ async function flow(spec) {
       await said.evaluate((el) => el.scrollIntoView({ block: "center" }));
       await said.click();
     }
-    await page.waitForSelector('button[name="answer"][value="got"]');
+    await page.waitForSelector('button[name="answer"][value="continue"]');
     const rev = await page.locator("#activity").innerText();
     check(tag + " reveal shows the Hebrew", hebrew.test(rev));
-    check(tag + " reveal has the grades", rev.includes("Got it") && rev.includes("Not yet"));
+    check(tag + " reveal has Continue", rev.includes("Continue") || rev.includes("Finish"));
+    check(tag + " reveal has no Got it", !rev.includes("Got it"));
+    check(tag + " reveal has no Not yet", !rev.includes("Not yet"));
     check(tag + " reveal has audio", (await page.locator("#activity audio").count()) >= 1);
     check(tag + " reveal asks to play once", (await page.locator("#activity audio[data-autoplay]").count()) === 1);
+    check(tag + " reveal has Slower", (await page.locator('#activity [data-slow]').count()) >= 1);
     if (spec.mode !== "noscript") {
       await page.waitForTimeout(500);
       const n = await page.evaluate(() => (window.__plays || []).length);
@@ -96,19 +99,19 @@ async function flow(spec) {
     } else {
       check(tag + " native audio bar", (await page.locator("#activity audio[controls]").count()) >= 1);
     }
-    const grade = await page.locator('button[name="answer"][value="got"]').boundingBox();
-    check(tag + " Got it is tappable", !!(grade && grade.height >= 44), grade && `${Math.round(grade.height)}`);
+    const cont = await page.locator('button[name="answer"][value="continue"]').boundingBox();
+    check(tag + " Continue is tappable", !!(cont && cont.height >= 44), cont && `${Math.round(cont.height)}`);
     const wide2 = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
     check(tag + " reveal does not scroll sideways", wide2);
     await shot(page, `say-reveal-${tag}`);
     // The course opens one lesson at a time, so this one has to finish before the next path.
     if (spec.mode === "keyboard") {
-      check(tag + " keyboard reaches Got it", await reach(page, "got"));
+      check(tag + " keyboard reaches Continue", await reach(page, "continue"));
       await page.keyboard.press("Enter");
     } else {
-      const got = page.locator('button[name="answer"][value="got"]');
-      await got.evaluate((el) => el.scrollIntoView({ block: "center" }));
-      await got.click();
+      const continueBtn = page.locator('button[name="answer"][value="continue"]');
+      await continueBtn.evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await continueBtn.click();
     }
     await page.waitForSelector("text=Lesson complete");
   } catch (e) {
@@ -120,12 +123,13 @@ async function flow(spec) {
 }
 
 const views = [
-  { width: 390, height: 844, scheme: "light", mode: "pointer", path: paths[0] },
-  { width: 390, height: 844, scheme: "dark", mode: "pointer", path: paths[1] },
-  { width: 1440, height: 900, scheme: "light", mode: "pointer", path: paths[2] },
-  { width: 1440, height: 900, scheme: "dark", mode: "pointer", path: paths[3] },
-  { width: 390, height: 844, scheme: "light", mode: "keyboard", path: paths[4] },
-  { width: 1440, height: 900, scheme: "dark", mode: "noscript", path: paths[5] },
+  { width: 360, height: 800, scheme: "light", mode: "keyboard", path: paths[0] },
+  { width: 390, height: 844, scheme: "light", mode: "pointer", path: paths[1] },
+  { width: 390, height: 844, scheme: "dark", mode: "pointer", path: paths[2] },
+  { width: 1440, height: 900, scheme: "light", mode: "pointer", path: paths[3] },
+  { width: 1440, height: 900, scheme: "dark", mode: "pointer", path: paths[4] },
+  { width: 390, height: 844, scheme: "light", mode: "keyboard", path: paths[5] },
+  { width: 1440, height: 900, scheme: "dark", mode: "noscript", path: paths[6] },
 ];
 for (const spec of views) {
   spec.tag = `${spec.width}-${spec.scheme}-${spec.mode}`;

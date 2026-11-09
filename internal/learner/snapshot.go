@@ -198,6 +198,9 @@ func (m *Model) evaluateSnapshot(ctx context.Context, userID int64, at, asOf tim
 	}
 	out.Summary.DueReviews = due
 	out.Summary.Retention = ratio(right, due)
+	// WaitingForSecondDay comes from the evidence query (INIT-036/SPEC-002);
+	// do not re-count study days here.
+	out.Summary.WaitingForSecondDay = ev.WaitingForSecondDay
 	return out, nil
 }
 

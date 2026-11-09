@@ -84,7 +84,7 @@ func startSayServer(t *testing.T) (origin, cookie string, paths []string) {
 	if err := os.WriteFile(filepath.Join(audioDir, clipID+".mp3"), silentMP3(8), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 7; i++ {
 		unitID := putLesson(t, store, nil, units.Unit{
 			Title: "Greeting", Situation: "A hello.", Concept: "Say hello.", Position: i + 1,
 			NewWords: []string{word},

@@ -297,14 +297,7 @@ func walkRecallUnit(t *testing.T, fx recallFixture, cookie *http.Cookie, csrf st
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	unitLex, err := fx.store.UnitLexemes(ctx, unitID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	earlier, err := fx.store.EarlierUnitLexemes(ctx, userID, position)
-	if err != nil {
-		t.Fatal(err)
-	}
+	unitLex, earlier := loadTaughtPools(t, fx.store, ctx, userID, unitID, position)
 	byID := map[int64]db.LexemeView{}
 	for _, view := range fx.lex {
 		byID[view.ID] = view

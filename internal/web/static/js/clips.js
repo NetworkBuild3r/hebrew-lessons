@@ -98,6 +98,11 @@
     return name === "AbortError" || name === "NotAllowedError";
   }
 
+  // INIT-036/SPEC-007: shared pace helper sets playbackRate (0.75 when slow is on).
+  function applyPace(audio) {
+    if (g.HebrewSlow && g.HebrewSlow.apply) g.HebrewSlow.apply(audio);
+  }
+
   function play(orb) {
     var audio = audioOf(orb);
     if (!audio) {
@@ -126,6 +131,7 @@
       else {
         try { audio.currentTime = 0; } catch (seekErr) { /* not seekable yet */ }
       }
+      applyPace(audio);
       pending = audio.play();
     } catch (e) {
       if (playIgnored(e)) {

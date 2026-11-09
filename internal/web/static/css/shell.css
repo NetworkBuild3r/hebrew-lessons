@@ -75,6 +75,9 @@
 /* Today */
 .today__head { display: grid; gap: var(--space-1); }
 .today__sub { color: var(--muted); font-size: var(--fs-body); line-height: var(--lh-he-body); }
+.today-known { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
+.today-known__figure { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1); min-inline-size: 0; }
+.today-known__label { font-weight: 600; }
 .today-say a { color: var(--text); font-weight: 700; text-decoration: underline; text-underline-offset: .15em; }
 .today__grid { display: grid; gap: var(--space-5); align-items: stretch; }
 .today__side { display: grid; gap: var(--space-5); align-content: start; }

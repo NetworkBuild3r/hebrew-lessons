@@ -19,9 +19,10 @@ const studyDigestDescription = "Read one learner's study digest for a tutor conv
 	"A learner account reads its own digest, and omitting learnerId uses its own id. Another id is forbidden. " +
 	"An admin, including the static token, must pass learnerId and may read any learner. A learner id that does not exist is an error. " +
 	"zone and zoneSource name the IANA zone used for today and every day in the reply (learner when stored, otherwise app). There is no UTC invent-today. " +
-	"asOf is the request instant for the live counts. knownAnySkill is words known or solid in at least one skill. " +
+	"asOf is the request instant for the live counts. knownAnySkill is words known or solid in at least one skill (Progress \"Words you know\"). " +
+	"waitingForSecondDay is the Progress/Today \"learned today, check tomorrow\" count: words that pass the old same-day known rule but have only one checked-success study day (ADR-0031 D5). " +
 	"skills holds, per skill, direction (ADR-0028 D4 label), knownSolidNow and strugglingNow from the live learner model, knownSolid7dAgo from the snapshot on agoDay (seven learner days back), and agoDay names that day. Skill keys stay listen, read, recall, spell. " +
-	"history is the last 14 daily_totals days plus today's live knownAnySkill point, each with ruleVersion (3 under current rules; today's live point uses the current RuleVersion). The last point equals knownAnySkill. " +
+	"history is the last 14 daily_totals days plus today's live knownAnySkill point, each with ruleVersion (4 under current rules; today's live point uses the current RuleVersion). The last point equals knownAnySkill. " +
 	"retention holds, per skill, the last seven learner days against the 85–90% band; each day value has window 30d due reviews and asOf for that day. " +
 	"minutesInApp is the last seven learner days of answering time, using the same idle-gap rule as the weekly job. " +
 	"struggle is at most ten struggling words with cause and confusedWith. " +
@@ -50,10 +51,12 @@ type StudyDigest struct {
 	NextCutoff time.Time `json:"nextCutoff"`
 	// AsOf is the request instant for knownSolidNow, strugglingNow, and knownAnySkill (ADR-0027 D4).
 	AsOf time.Time `json:"asOf" jsonschema:"UTC RFC3339 instant when the live skill counts were read."`
-	// KnownAnySkill is words known or solid in at least one skill (ADR-0027 D1).
-	KnownAnySkill int                  `json:"knownAnySkill" jsonschema:"Words known or solid in at least one skill."`
-	Skills        []DigestSkill        `json:"skills"`
-	History       []DigestHistoryPoint `json:"history" jsonschema:"Last 14 daily_totals days plus today's live knownAnySkill point, each with ruleVersion."`
+	// KnownAnySkill is words known or solid in at least one skill (ADR-0027 D1). Same as Progress "Words you know".
+	KnownAnySkill int `json:"knownAnySkill" jsonschema:"Words known or solid in at least one skill. Same as Progress \"Words you know\"."`
+	// WaitingForSecondDay is Summary.WaitingForSecondDay (ADR-0031 D5). Same as Progress/Today "learned today, check tomorrow".
+	WaitingForSecondDay int                  `json:"waitingForSecondDay" jsonschema:"Same as Progress/Today \"learned today, check tomorrow\": words that pass the old same-day known rule but have only one checked-success study day."`
+	Skills              []DigestSkill        `json:"skills"`
+	History             []DigestHistoryPoint `json:"history" jsonschema:"Last 14 daily_totals days plus today's live knownAnySkill point, each with ruleVersion."`
 	Retention     DigestRetention      `json:"retention"`
 	MinutesInApp  int                  `json:"minutesInApp"`
 	Struggle      []DigestStruggleWord `json:"struggle"`

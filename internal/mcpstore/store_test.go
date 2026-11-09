@@ -470,17 +470,17 @@ func TestLearnerKnownLexemes(t *testing.T) {
 	fishID := mustLexeme(t, raw, fish)
 	houseID := mustLexeme(t, raw, house)
 
-	helloCard := mustCard(t, raw, userID, helloID, 0)
-	insertReviews(t, raw, helloCard, when.Add(-time.Hour), 1)
-	insertReviews(t, raw, helloCard, when, 4)
+	// ADR-0031 / INIT-036: LearnerKnownLexemes is the strict known set
+	// (checked successes on two study days), not one Easy read.
+	seedStrictKnownRead(t, raw, userID, helloID, when)
 	coffeeCard := mustCard(t, raw, userID, coffeeID, 0)
-	insertReviews(t, raw, coffeeCard, when, 1)
+	insertReviews(t, raw, coffeeCard, when, 1) // Again — not known
 	enHe := db.Card{UserID: userID, LexemeID: coffeeID, Skill: "recall", State: "review", Due: when, LastReview: when}
 	enHeID, err := raw.InsertCard(ctx, enHe)
 	if err != nil {
 		t.Fatal(err)
 	}
-	insertReviews(t, raw, enHeID, when, 4)
+	insertReviews(t, raw, enHeID, when, 4) // Easy on recall only — not enough
 
 	doneID, err := testharness.InsertUnit(ctx, raw, "Done", "published")
 	if err != nil {
@@ -519,8 +519,7 @@ func TestLearnerKnownLexemes(t *testing.T) {
 	}
 
 	otherID := mustOtherUser(t, raw)
-	fishCard := mustCard(t, raw, otherID, fishID, 0)
-	insertReviews(t, raw, fishCard, when, 4)
+	seedStrictKnownRead(t, raw, otherID, fishID, when)
 	other, err := store.LearnerKnownLexemes(ctx, otherID)
 	if err != nil {
 		t.Fatal(err)
@@ -911,6 +910,23 @@ func mustCard(t *testing.T, raw *db.Store, userID, lexemeID int64, lapses int) i
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	return id
+}
+
+// seedStrictKnownRead plants ADR-0031 known: three checked Goods across two study days.
+func seedStrictKnownRead(t *testing.T, raw *db.Store, userID, lexemeID int64, when time.Time) int64 {
+	t.Helper()
+	id, err := raw.InsertCard(context.Background(), db.Card{
+		UserID: userID, LexemeID: lexemeID, Skill: "read", State: "review",
+		Due: when, Stability: 10, Difficulty: 5, Reps: 3, LastReview: when,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	day1 := when.Add(-48 * time.Hour)
+	for _, at := range []time.Time{day1, day1.Add(time.Hour), when} {
+		insertReviews(t, raw, id, at, 3)
 	}
 	return id
 }

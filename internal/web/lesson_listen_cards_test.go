@@ -81,8 +81,9 @@ func (fx listenCardFix) publishListenLesson(t *testing.T, title, target string, 
 		story += " " + w
 	}
 	acts = append(acts, units.Activity{Type: units.ActivityStory, Text: story})
+	newWords := append([]string{target}, fillers...)
 	unitID = putLesson(t, fx.store, nil, units.Unit{
-		Title: title, Position: 1, NewWords: []string{target},
+		Title: title, Position: 1, NewWords: newWords,
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: acts}},
 	}, "shared")
 	publish(t, fx.store, unitID)

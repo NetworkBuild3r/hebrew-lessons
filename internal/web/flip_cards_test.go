@@ -340,20 +340,21 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 		}
 	}
 	distractors := []units.Activity{{Type: units.ActivityStory, Text: pool}}
+	taughtPool := []string{flipHello, flipMorning, flipEvening, flipNight, flipWater}
 	assertNoAnswerLeak("recall", units.Unit{
-		Title: "Recall", Position: 1, NewWords: []string{flipHello},
+		Title: "Recall", Position: 1, NewWords: taughtPool,
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: append([]units.Activity{
 			{Type: units.ActivityRecall, Text: flipHello},
 		}, distractors...)}},
 	}, ">hello<", "shalom")
 	assertNoAnswerLeak("listen_pick", units.Unit{
-		Title: "Listen", Position: 1, NewWords: []string{flipHello},
+		Title: "Listen", Position: 1, NewWords: taughtPool,
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: append([]units.Activity{
 			{Type: units.ActivityListenPick, Text: flipHello},
 		}, distractors...)}},
 	}, ">hello<", "shalom")
 	assertNoAnswerLeak("cloze", units.Unit{
-		Title: "Cloze", Position: 1, NewWords: []string{flipHello},
+		Title: "Cloze", Position: 1, NewWords: taughtPool,
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: append([]units.Activity{
 			{Type: units.ActivityCloze, Text: flipHello + " " + flipMorning, Target: flipHello},
 		}, distractors...)}},

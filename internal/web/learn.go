@@ -172,13 +172,15 @@ func (s *server) learnerHome(ctx context.Context, userID int64, name string) (Ho
 	}
 	vm.DueCount = len(due)
 
-	// Headline is KnownAnySkill (ADR-0027 D1 / INIT-032/SPEC-006). KnownLexemeIDs
-	// stays the reading set for the lesson brief and get_context.knownLexemes.
+	// Headline is KnownAnySkill (ADR-0027 D1 / INIT-032/SPEC-006). WaitingWords is
+	// WaitingForSecondDay (ADR-0031 D5). KnownLexemeIDs stays the reading set for
+	// the lesson brief and get_context.knownLexemes.
 	sum, err := s.model().Summary(ctx, userID)
 	if err != nil {
 		return HomeVM{}, "", err
 	}
 	vm.KnownWords = sum.KnownAnySkill
+	vm.WaitingWords = sum.WaitingForSecondDay
 
 	next, situation, _, _, _, _, err := s.unitProgress(ctx, userID)
 	if err != nil {
@@ -293,6 +295,9 @@ func homeToView(lang, csrf, gender, situation string, vm HomeVM) views.Home {
 		DueText:   strconv.Itoa(vm.DueCount),
 		KnownText: strconv.Itoa(vm.KnownWords),
 		Words:     []views.Chip{},
+	}
+	if vm.WaitingWords > 0 {
+		home.WaitingText = strconv.Itoa(vm.WaitingWords)
 	}
 	fillPlacement(&home, vm.Placement)
 	return home

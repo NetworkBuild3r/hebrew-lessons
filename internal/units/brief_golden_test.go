@@ -107,13 +107,19 @@ func briefCases() []briefCase {
 			f.StruggleWords[0].RequiredCount = 4
 			return []Issue{iss(RuleBriefStruggle, SeverityBlock, "/lessons")}
 		})
-	add("brief_bad_gloss.json", "brief.gloss_out_of_brief: a recall step uses a word outside the brief and the learner's known words, and its lexicon entry has no gloss.",
+	add("brief_bad_gloss.json", "brief.gloss_out_of_brief: a recall step uses a word outside the brief and the learner's known words, and its lexicon entry has no gloss. unit.target_untaught also fires because that word is not taught (INIT-037/SPEC-006).",
 		func(u *Unit, lex map[string]glex, _ *BriefFacts) []Issue {
 			e := lex[normalize(naal)]
 			e.Gloss = ""
 			lex[normalize(naal)] = e
-			li, ai := addAct(u, ActivityRecall, naal)
-			return []Issue{iss(RuleBriefGloss, SeverityBlock, at("lessons", li, "activities", ai, "text"))}
+			// Lesson 0, not the checkpoint, so brief.checkpoint_coverage stays quiet.
+			// Re-pad after the extra recall so unit.drill_share stays quiet.
+			ai := addActAt(u, 0, ActivityRecall, naal)
+			u.Lessons[0].Activities = padDrillShareActs(u.Lessons[0].Activities)
+			return []Issue{
+				iss(RuleUnitTargetUntaught, SeverityBlock, at("lessons", 0, "activities", ai)),
+				iss(RuleBriefGloss, SeverityBlock, at("lessons", 0, "activities", ai, "text")),
+			}
 		})
 	add("brief_bad_audio_all.json", "brief.audio_all: the title is Hebrew and no clip exists for it.",
 		func(u *Unit, _ map[string]glex, _ *BriefFacts) []Issue {
@@ -226,7 +232,8 @@ func TestBriefGoldenPerRule(t *testing.T) {
 			t.Errorf("no failing fixture for %s", rule)
 		}
 	}
-	if len(covered) != 10 {
+	// unit.target_untaught also appears on the gloss fixture (INIT-037/SPEC-006).
+	if len(covered) != 11 {
 		t.Errorf("fixtures cover %d rules: %v", len(covered), covered)
 	}
 }

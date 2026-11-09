@@ -206,7 +206,7 @@ func openReadOnly(ctx context.Context, path string) (*sql.DB, error) {
 	if !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("db: %s is not a regular file", abs)
 	}
-	u := url.URL{Scheme: "file", Path: filepath.ToSlash(abs)}
+	u := url.URL{Scheme: "file", Path: fileURLPath(abs)}
 	q := url.Values{}
 	q.Set("mode", "ro")
 	q.Set("_busy_timeout", strconv.Itoa(busyTimeoutMS))

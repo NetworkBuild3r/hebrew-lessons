@@ -162,9 +162,10 @@ type digestOut struct {
 	ZoneSource    string `json:"zoneSource"`
 	Today         string `json:"today"`
 	NextCutoff    string `json:"nextCutoff"`
-	AsOf          string `json:"asOf"`
-	KnownAnySkill int    `json:"knownAnySkill"`
-	Skills        []struct {
+	AsOf                string `json:"asOf"`
+	KnownAnySkill       int    `json:"knownAnySkill"`
+	WaitingForSecondDay int    `json:"waitingForSecondDay"`
+	Skills              []struct {
 		Skill           string `json:"skill"`
 		KnownSolidNow   int    `json:"knownSolidNow"`
 		KnownSolid7dAgo int    `json:"knownSolid7dAgo"`
@@ -397,6 +398,51 @@ func TestStudyDigestSizeCap(t *testing.T) {
 	raw := mustOK(t, e.asDigest("learner-a"), "get_study_digest", map[string]any{})
 	if len(raw) > 16*1024 {
 		t.Fatalf("digest JSON is %d bytes, want <= 16384", len(raw))
+	}
+}
+
+// INIT-036/SPEC-006: waitingForSecondDay is the Progress "learned today, check tomorrow" count.
+func TestStudyDigestWaitingForSecondDay(t *testing.T) {
+	e := digestAP(t)
+	if err := e.store.SetUserTimeZone(context.Background(), e.a, "America/Denver"); err != nil {
+		t.Fatal(err)
+	}
+	denver := mustLoc(t, "America/Denver")
+	day1 := time.Date(2026, 10, 30, 15, 0, 0, 0, denver)
+	lex := e.ids[apShalom]
+	e.exec(`INSERT INTO cards (user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended)
+		VALUES (?, ?, 'read', 'review', ?, 10, 5, 3, 0, ?, 0)`,
+		e.a, lex, db.FormatTime(digestNow), db.FormatTime(day1))
+	cardID := int64(e.count(`SELECT id FROM cards WHERE user_id = ? AND lexeme_id = ? AND skill = 'read'`, e.a, lex))
+	for i := range 3 {
+		at := day1.Add(time.Duration(i) * time.Minute)
+		e.exec(`INSERT INTO review_log (card_id, rating, reviewed_at, elapsed_days, scheduled_days) VALUES (?, 3, ?, 0, 1)`,
+			cardID, db.FormatTime(at))
+		e.exec(`INSERT INTO attempts (user_id, lexeme_id, skill, activity, source, prompt, response, correct, dont_know, hint_used, latency_ms, created_at)
+			VALUES (?, ?, 'read', 'test', 'review', '', '', 1, 0, 0, 0, ?)`, e.a, lex, db.FormatTime(at))
+	}
+
+	sess := e.asDigest("learner-a")
+	raw := mustOK(t, sess, "get_study_digest", map[string]any{})
+	d := decodeInto[digestOut](t, raw)
+	if d.WaitingForSecondDay != 1 {
+		t.Fatalf("waitingForSecondDay = %d, want 1 (knownAnySkill=%d)", d.WaitingForSecondDay, d.KnownAnySkill)
+	}
+	if d.KnownAnySkill != 0 {
+		t.Fatalf("knownAnySkill = %d, want 0 while waiting", d.KnownAnySkill)
+	}
+	tools, err := sess.ListTools(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	desc := ""
+	for _, tool := range tools.Tools {
+		if tool.Name == "get_study_digest" {
+			desc = tool.Description
+		}
+	}
+	if !strings.Contains(desc, "learned today, check tomorrow") {
+		t.Fatalf("get_study_digest description missing page label:\n%s", desc)
 	}
 }
 

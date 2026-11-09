@@ -25,6 +25,12 @@ func withCard(e Evidence, successes int, stability, retrievability float64) Evid
 	return e
 }
 
+// withDays sets how many distinct study days carry a checked success.
+func withDays(e Evidence, days int) Evidence {
+	e.SuccessDays = days
+	return e
+}
+
 func repeat(s string, n int) string {
 	out := ""
 	for range n {
@@ -73,25 +79,30 @@ func TestSkillStateTable(t *testing.T) {
 		{"3 successes, fine recall, but only 2 outcomes is learning", withCard(history("RR"), 3, 10, 0.95), Learning},
 		{"last 3 not all right is learning", withCard(history("RRWRR"), 3, 10, 0.95), Learning},
 
-		// known: retrievability at least 0.85 and the last 3 right
-		{"exactly 0.85 is known", withCard(history("RRR"), 3, 10, 0.85), Known},
-		{"just under 0.85 is not known", withCard(history("RRR"), 3, 10, 0.8499), Learning},
-		{"known after an old miss", withCard(history("WRRR"), 3, 10, 0.9), Known},
+		// known: retrievability at least 0.85, the last 3 right, and two study days
+		{"exactly 0.85 is known", withDays(withCard(history("RRR"), 3, 10, 0.85), 2), Known},
+		{"just under 0.85 is not known", withDays(withCard(history("RRR"), 3, 10, 0.8499), 2), Learning},
+		{"known after an old miss", withDays(withCard(history("WRRR"), 3, 10, 0.9), 2), Known},
+		// INIT-036/SPEC-003: three same-day rights stay learning
+		{"three same-day rights are learning", withDays(withCard(history("RRR"), 3, 10, 0.9), 1), Learning},
+		{"zero success days are learning", withCard(history("RRR"), 3, 10, 0.9), Learning},
 
-		// solid: stability at least 21 days, and known
-		{"exactly 21 days is solid", withCard(history("RRR"), 5, 21, 0.9), Solid},
-		{"just under 21 days is known", withCard(history("RRR"), 5, 20.99, 0.9), Known},
-		{"long stability but not known is learning", withCard(history("RRW"), 5, 60, 0.9), Learning},
+		// solid: stability at least 21 days, and known (needs two study days)
+		{"exactly 21 days is solid", withDays(withCard(history("RRR"), 5, 21, 0.9), 2), Solid},
+		{"just under 21 days is known", withDays(withCard(history("RRR"), 5, 20.99, 0.9), 2), Known},
+		{"21 days but one study day is learning", withDays(withCard(history("RRR"), 5, 21, 0.9), 1), Learning},
+		{"long stability but not known is learning", withDays(withCard(history("RRW"), 5, 60, 0.9), 2), Learning},
 
 		// regressed: was learned and recall chance is under 0.70
 		{"learned and recall chance 0.69 is regressed", withCard(history("RRR"), 3, 5, 0.69), Regressed},
-		{"exactly 0.70 is not regressed", withCard(history("RRR"), 3, 5, 0.70), Learning},
+		{"exactly 0.70 is not regressed", withDays(withCard(history("RRR"), 3, 5, 0.70), 2), Learning},
 		{"recall chance 0.69 on a young card is learning", withCard(history("RRR"), 2, 5, 0.69), Learning},
 		{"regressed needs a card", Evidence{Outcomes: 3, Exposed: true}, Seen},
 
-		// struggling beats regressed, as north-star 4.3 says
+		// struggling beats regressed, as north-star 4.3 says; both still beat the day rule
 		{"struggling and faded is struggling", withCard(history("RRRRWWW"), 5, 5, 0.10), Struggling},
 		{"regressed with a miss or two is still regressed", withCard(history("RRRRWW"), 5, 5, 0.10), Regressed},
+		{"struggling wins over a day-one known shape", withDays(withCard(history("RRRRWWW"), 5, 10, 0.9), 1), Struggling},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -110,8 +121,8 @@ func TestEverySkillStateIsReachable(t *testing.T) {
 		{Exposed: true},
 		withCard(history("RRR"), 2, 10, 0.95),
 		history("WWW"),
-		withCard(history("RRR"), 3, 10, 0.9),
-		withCard(history("RRR"), 5, 30, 0.9),
+		withDays(withCard(history("RRR"), 3, 10, 0.9), 2),
+		withDays(withCard(history("RRR"), 5, 30, 0.9), 2),
 		withCard(history("RRR"), 3, 5, 0.5),
 	} {
 		reached[StateOf(e)] = true

@@ -75,6 +75,9 @@ func TestReviewRecallRevealClip(t *testing.T) {
 	if strings.Count(page, "/static/js/clips.js") != 1 {
 		t.Fatalf("clips.js included %d times", strings.Count(page, "/static/js/clips.js"))
 	}
+	if strings.Count(page, "/static/js/slow.js") != 1 {
+		t.Fatalf("slow.js included %d times", strings.Count(page, "/static/js/slow.js"))
+	}
 	if strings.Contains(page, "/audio/") || strings.Contains(page, "<audio") || strings.Contains(page, `class="orb`) {
 		t.Fatal("the question showed the answer clip before Check")
 	}

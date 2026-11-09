@@ -203,6 +203,7 @@ func TestHistoryRebuildApplyTwiceIdempotentAndEventsUntouched(t *testing.T) {
 	ctx := context.Background()
 
 	eventsBefore := countRegressions(t, fx.path)
+	logN0, logSum0 := tableChecksum(t, fx.path, "review_log")
 
 	var first, second bytes.Buffer
 	args := historyRangeArgs(fx, true)
@@ -214,17 +215,25 @@ func TestHistoryRebuildApplyTwiceIdempotentAndEventsUntouched(t *testing.T) {
 	}
 	snapN1, snapSum1 := tableChecksum(t, fx.path, "daily_snapshots")
 	totN1, totSum1 := tableChecksum(t, fx.path, "daily_totals")
+	logN1, logSum1 := tableChecksum(t, fx.path, "review_log")
+	if logN1 != logN0 || logSum1 != logSum0 {
+		t.Fatalf("review_log changed on first apply: count %d→%d sum %s→%s", logN0, logN1, logSum0, logSum1)
+	}
 
 	if err := historyCommand(args, &second, &bytes.Buffer{}); err != nil {
 		t.Fatalf("second apply: %v\n%s", err, second.String())
 	}
 	snapN2, snapSum2 := tableChecksum(t, fx.path, "daily_snapshots")
 	totN2, totSum2 := tableChecksum(t, fx.path, "daily_totals")
+	logN2, logSum2 := tableChecksum(t, fx.path, "review_log")
 	if snapN1 != snapN2 || snapSum1 != snapSum2 {
 		t.Fatalf("daily_snapshots changed on second apply")
 	}
 	if totN1 != totN2 || totSum1 != totSum2 {
 		t.Fatalf("daily_totals changed on second apply")
+	}
+	if logN2 != logN0 || logSum2 != logSum0 {
+		t.Fatalf("review_log changed on second apply: count %d→%d sum %s→%s", logN0, logN2, logSum0, logSum2)
 	}
 	// New-side of the printed table is identical across applies.
 	if historyNewSide(first.String()) != historyNewSide(second.String()) {

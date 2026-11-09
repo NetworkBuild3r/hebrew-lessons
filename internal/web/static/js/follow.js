@@ -56,6 +56,8 @@
     }
     for (var j = 0; j < nodes.length; j++) {
       var audio = nodes[j];
+      // INIT-036/SPEC-007: line clip follows the shared slow setting.
+      if (g.HebrewSlow && g.HebrewSlow.apply) g.HebrewSlow.apply(audio);
       if (audio.__follow) continue;
       audio.__follow = 1;
       audio.addEventListener("timeupdate", function (ev) { mark(ev.currentTarget); });

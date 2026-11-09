@@ -143,11 +143,10 @@ templ ActivityBlock(a Activity) {
 				} else if a.SayAsk {
 					<button type="submit" class="btn btn-primary" name="answer" value="said" autofocus>@E("I said it")</button>
 				} else if a.Say {
-					<p class="lede" lang="en" id="say-grade">@E("How did that go?")</p>
-					<div class="act__grades say-grades" role="group" aria-labelledby="say-grade">
-						<button type="submit" class="act-grade" name="answer" value="got">@E("Got it")</button>
-						<button type="submit" class="act-grade" name="answer" value="notyet">@E("Not yet")</button>
-					</div>
+					if a.Audio != "" {
+						@PaceControls("line-clip")
+					}
+					<button type="submit" class="btn btn-primary" name="answer" value="continue" autofocus>@E(a.Continue)</button>
 				} else if orderAsk(a) {
 					@orderAskBlock(a)
 				} else if a.Asking {
@@ -160,6 +159,9 @@ templ ActivityBlock(a Activity) {
 					<div class="lf-result">
 						@Sheet("Answer") {
 							<p class={ a.FeedbackClass } lang="en">@E(a.Feedback)</p>
+							if a.Audio != "" {
+								@PaceControls("line-clip")
+							}
 							<button type="submit" class="btn btn-primary" name="answer" value="continue" autofocus>@E(a.Continue)</button>
 						}
 					</div>
@@ -168,6 +170,7 @@ templ ActivityBlock(a Activity) {
 				}
 			</form>
 			if hasClip(a) {
+				<script src={ Asset("/static/js/slow.js") } defer></script>
 				<script src={ Asset("/static/js/clips.js") } defer></script>
 			}
 			if a.Follow {
@@ -367,12 +370,14 @@ templ dialogueBlock(d *Dialogue) {
 						if line.Audio != "" {
 							<audio id={ dialogueClipID(line.Index) } src={ templ.SafeURL(line.Audio) } preload="none" data-dlg-clip={ Num(line.Index) }></audio>
 							@AudioOrb("Play line "+Num(line.Index+1)+", "+line.Name, dialogueOrbAttrs(line.Index))
+							@PaceControls(dialogueClipID(line.Index))
 						}
 					</div>
 				</li>
 			}
 		</ol>
 	</div>
+	<script src={ Asset("/static/js/slow.js") } defer></script>
 	<script src={ Asset("/static/js/dialogue.js") } defer></script>
 }
 

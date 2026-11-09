@@ -38,7 +38,9 @@ type HomeVM struct {
 	DueCount   int
 	NextUnit   *UnitRefVM
 	KnownWords int
-	Placement  *PlacementVM
+	// WaitingWords is Summary.WaitingForSecondDay (ADR-0031 D5 / INIT-036/SPEC-006).
+	WaitingWords int
+	Placement    *PlacementVM
 }
 
 // CardBackVM is the revealed face of a review card.

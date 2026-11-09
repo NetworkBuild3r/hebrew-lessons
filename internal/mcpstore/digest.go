@@ -67,6 +67,7 @@ func (s *Store) StudyDigest(ctx context.Context, id int64, now time.Time, z stud
 		return out, err
 	}
 	out.KnownAnySkill = live.KnownAnySkill
+	out.WaitingForSecondDay = live.WaitingForSecondDay
 
 	snaps, err := s.db.SnapshotRows(ctx, id, ago7, today)
 	if err != nil {

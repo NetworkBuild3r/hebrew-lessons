@@ -68,4 +68,23 @@ if (!/<div class="clip">[\s\S]*<audio id="noun-10-0"/.test(possessiveSample)) {
   process.exit(1);
 }
 
+// INIT-036/SPEC-007: PaceControls beside a lemma clip; slow.js applies 0.75×.
+const paceSample = `
+<article class="word-page">
+  <div class="pace" data-pace data-pace-audio="lemma-clip">
+    <button type="button" class="pace-chip" data-replay data-audio="lemma-clip" aria-label="Replay"><span lang="en">Replay</span></button>
+    <button type="button" class="pace-chip" data-slow aria-pressed="false" aria-label="Slower"><span lang="en">Slower</span></button>
+  </div>
+</article>`;
+if (!paceSample.includes('data-slow') || !paceSample.includes('data-replay') || !paceSample.includes('aria-pressed="false"')) {
+  console.error("word page pace controls sample missing Replay/Slower markup");
+  process.exit(1);
+}
+const slowPath = path.join(here, "../static/js/slow.js");
+const slow = fs.readFileSync(slowPath, "utf8");
+if (!slow.includes("playbackRate") || !slow.includes("0.75") || !slow.includes("hebrew-slow")) {
+  console.error("slow.js missing shared pace helper pieces");
+  process.exit(1);
+}
+
 console.log("word-page-browser: CSS and clip HTML shape ok; live tap not run");

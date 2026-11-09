@@ -35,6 +35,8 @@
     // Setting currentTime while readyState is HAVE_NOTHING throws (HTML spec).
     // A throw must not skip play(): that is what starts the load.
     try { a.currentTime = 0; } catch (e) { /* not seekable yet */ }
+    // INIT-036/SPEC-007: shared pace helper; autoplay stays 1× until slow is on.
+    if (g.HebrewSlow && g.HebrewSlow.apply) g.HebrewSlow.apply(a);
     try { p = a.play(); } catch (e) { return; }
     if (p && p.then) {
       p.then(function () {

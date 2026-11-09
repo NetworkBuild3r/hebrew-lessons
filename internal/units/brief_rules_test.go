@@ -48,16 +48,16 @@ func TestBriefRulesAreCatalogedAndDocumented(t *testing.T) {
 		t.Fatal(err)
 	}
 	ids := []string{
-		RuleBriefAudioAll, RuleBriefConsolidation, RuleBriefCoverage, RuleBriefExpired, RuleBriefGloss, RuleBriefIntro,
+		RuleBriefAudioAll, RuleBriefCheckpointCoverage, RuleBriefConsolidation, RuleBriefCoverage, RuleBriefExpired, RuleBriefGloss, RuleBriefIntro,
 		RuleBriefNewMinUses, RuleBriefNotFound, RuleBriefOrderKnown, RuleBriefPattern, RuleBriefRecyclePrevious,
 		RuleBriefStoryLength, RuleBriefStruggle, RuleBriefTextTooLong, RuleBriefUsed,
-		RuleUnitDrillShare, RuleUnitNoMarkup, RuleUnitSameShape,
+		RuleUnitDrillShare, RuleUnitMetaText, RuleUnitNoMarkup, RuleUnitSameShape, RuleUnitStoryRepeat, RuleUnitTargetUntaught,
 	}
 	want := []string{
-		"brief.audio_all", "brief.consolidation", "brief.coverage", "brief.expired", "brief.gloss_out_of_brief",
+		"brief.audio_all", "brief.checkpoint_coverage", "brief.consolidation", "brief.coverage", "brief.expired", "brief.gloss_out_of_brief",
 		"brief.new_intro_before_test", "brief.new_min_uses", "brief.not_found", "brief.order_known", "brief.pattern",
 		"brief.recycle_previous", "brief.story_length", "brief.struggle_reuse",
-		"brief.text_too_long", "brief.used", "unit.drill_share", "unit.no_markup", "unit.same_shape",
+		"brief.text_too_long", "brief.used", "unit.drill_share", "unit.meta_text", "unit.no_markup", "unit.same_shape", "unit.story_repeat", "unit.target_untaught",
 	}
 	if !slices.Equal(ids, want) {
 		t.Fatalf("rule ids changed: %v", ids)
@@ -219,8 +219,10 @@ func TestNoMarkupPointersAndVariants(t *testing.T) {
 func TestBriefCoverageIsStaged(t *testing.T) {
 	u, lk, f := briefFixture()
 	// 20 tokens: 12 words of the brief and 8 the learner does not know. 60.0%.
+	// Use a lesson, not the checkpoint: brief.checkpoint_coverage is separate (INIT-037/SPEC-006).
 	text := repeatJoin(vocab8[0].text, 12) + " " + repeatJoin(naal, 8)
-	li, ai := addAct(&u, ActivityListenPick, text)
+	li := 0
+	ai := addActAt(&u, li, ActivityListenPick, text)
 	lk = goldenLookup{Lexemes: lk.lexMap(), Audio: audiosOf(u)}.fake()
 	f.Tier, f.MinKnownShare = "beginner", 0.60
 	if got := validateBrief(&u, lk, &f); len(got) != 0 {
@@ -245,10 +247,10 @@ func TestBriefCoverageIsStaged(t *testing.T) {
 	}
 	// Exactly at the line passes: 19 of 20 at 0.95, 18 of 20 at 0.90.
 	f.Tier, f.MinKnownShare = "established", 0.95
-	li2, ai2 := addAct(&u, ActivityListenPick, repeatJoin(vocab8[0].text, 19)+" "+naal)
+	ai2 := addActAt(&u, li, ActivityListenPick, repeatJoin(vocab8[0].text, 19)+" "+naal)
 	lk = goldenLookup{Lexemes: lk.lexMap(), Audio: audiosOf(u)}.fake()
 	for _, is := range validateBrief(&u, lk, &f) {
-		if is.Pointer == at("lessons", li2, "activities", ai2) {
+		if is.Pointer == at("lessons", li, "activities", ai2) {
 			t.Fatalf("19 of 20 at 0.95 failed: %v", is)
 		}
 	}
@@ -482,11 +484,18 @@ func TestBriefGlossRule(t *testing.T) {
 	e := lex[normalize(naal)]
 	e.Gloss = "  "
 	lex[normalize(naal)] = e
-	li, ai := addAct(&u, ActivityRecall, naal+" "+naal)
+	ai := addActAt(&u, 0, ActivityRecall, naal+" "+naal)
+	u.Lessons[0].Activities = padDrillShareActs(u.Lessons[0].Activities)
 	lk = goldenLookup{Lexemes: lex, Audio: audiosOf(u)}.fake()
 	got := validateBrief(&u, lk, &f)
-	if len(got) != 1 || got[0].Rule != RuleBriefGloss || got[0].Pointer != at("lessons", li, "activities", ai, "text") {
+	// INIT-037/SPEC-006: an untaught graded word also blocks unit.target_untaught.
+	if !hasRule(got, RuleBriefGloss) || !hasRule(got, RuleUnitTargetUntaught) {
 		t.Fatalf("blank gloss: %v", ruleSet(got))
+	}
+	for _, is := range got {
+		if is.Rule == RuleBriefGloss && is.Pointer != at("lessons", 0, "activities", ai, "text") {
+			t.Fatalf("gloss pointer: %v", is)
+		}
 	}
 	// Known words need no gloss, and neither do words of the brief.
 	f.KnownLexemeIDs[50] = true
@@ -764,8 +773,10 @@ func TestOutOfBriefNewWordNeedsIntroAndUses(t *testing.T) {
 		{Type: ActivityRecall, Text: word},
 	})}}
 	got = validateBrief(&late, lk, &f)
-	if blocks := blockRules(got); len(blocks) != 1 || blocks[0] != RuleBriefIntro {
-		t.Fatalf("intro after the test, blocks %v, issues %v", blocks, ruleSet(got))
+	// The first graded step also trips unit.target_untaught: the newWord was not
+	// introduced earlier (INIT-037/SPEC-006).
+	if !hasRule(got, RuleBriefIntro) || !hasRule(got, RuleUnitTargetUntaught) {
+		t.Fatalf("intro after the test, blocks %v, issues %v", blockRules(got), ruleSet(got))
 	}
 }
 

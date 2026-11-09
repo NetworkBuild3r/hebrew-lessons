@@ -186,16 +186,9 @@ func TestLessonChoiceGradeAndReload(t *testing.T) {
 	}
 	unitID := putLesson(t, fx.store, nil, doc, "shared")
 	publish(t, fx.store, unitID)
-	pool, err := fx.store.UnitLexemes(ctx, unitID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	pool, earlier := loadTaughtPools(t, fx.store, ctx, fx.userID, unitID, doc.Position)
 	if len(pool) < 8 {
 		t.Fatalf("unit lexemes = %d", len(pool))
-	}
-	earlier, err := fx.store.EarlierUnitLexemes(ctx, fx.userID, doc.Position)
-	if err != nil {
-		t.Fatal(err)
 	}
 	sorted := slices.Clone(pool)
 	slices.SortFunc(sorted, func(a, b db.LexemeView) int {
@@ -260,14 +253,7 @@ func TestLessonChoicesUseEarlierLexemes(t *testing.T) {
 	if !slices.Equal(got, choiceValues(t, again)) {
 		t.Fatalf("reload order %v then %v", got, choiceValues(t, again))
 	}
-	pool, err := fx.store.UnitLexemes(ctx, currentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	earlier, err := fx.store.EarlierUnitLexemes(ctx, fx.userID, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	pool, earlier := loadTaughtPools(t, fx.store, ctx, fx.userID, currentID, 1)
 	target := viewByText(t, append(append([]db.LexemeView{}, pool...), earlier...), "ד")
 	runID := mustRunID(t, again)
 	want := choiceIDs(askChoices(units.ActivityRecall, pool, earlier, target, choices.ChoiceSeed{
@@ -300,6 +286,28 @@ type lessonFixture struct {
 	ctx    context.Context
 	userID int64
 	now    time.Time
+}
+
+// loadTaughtPools mirrors player.taughtChoicePools for fixture assertions.
+func loadTaughtPools(t *testing.T, store *db.Store, ctx context.Context, userID, unitID int64, position int) (unit, earlier []db.LexemeView) {
+	t.Helper()
+	cards, err := store.LearnerCardLexemeIDs(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finished, err := store.FinishedUnitIDs(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit, err = store.TaughtUnitLexemes(ctx, unitID, cards)
+	if err != nil {
+		t.Fatal(err)
+	}
+	earlier, err = store.TaughtEarlierUnitLexemes(ctx, userID, position, finished, cards)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return unit, earlier
 }
 
 const lessonCSRF = "brian-csrf"

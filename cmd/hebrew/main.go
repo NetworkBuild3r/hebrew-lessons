@@ -66,6 +66,8 @@ func run(args []string) error {
 			return runAudit(args[1:])
 		case "history":
 			return runHistory(args[1:])
+		case "rebuild-lesson-items":
+			return runRebuildLessonItems(args[1:])
 		default:
 			return fmt.Errorf("unknown command %q", args[0])
 		}

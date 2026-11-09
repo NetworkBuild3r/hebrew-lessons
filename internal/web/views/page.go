@@ -218,14 +218,16 @@ type PlacementVM struct {
 // lesson's unit title. LessonGloss is the transliteration and English
 // meaning, including the parentheses. LessonHref is the path of that lesson,
 // without a language query. Words are its new-word chips.
-// KnownText is the known-word count. Placement is nil when the learner has
-// never taken the check. PlacementState is "", "active", or "finished".
+// KnownText is the known-word count. WaitingText is Summary.WaitingForSecondDay
+// when above zero (ADR-0031 D5); empty hides the second figure. Placement is nil
+// when the learner has never taken the check. PlacementState is "", "active", or "finished".
 type Home struct {
 	UI
 	CSRF           string
 	Due            int
 	DueText        string
 	KnownText      string
+	WaitingText    string
 	Lesson         bool
 	LessonTitle    string
 	LessonGloss    string

@@ -220,3 +220,36 @@
   border-radius: var(--radius-pill);
   background: var(--hairline-strong);
 }
+
+/* Pace chips: Replay + Slower beside a clip (INIT-036/SPEC-007). */
+.pace {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+.pace-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--size-tap);
+  padding-inline: var(--space-4);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-size: var(--fs-small);
+  font-weight: 700;
+  cursor: pointer;
+}
+.pace-chip:hover { background: var(--surface-soft); }
+.pace-chip[aria-pressed="true"] {
+  background: var(--surface-soft);
+  border-color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--text);
+}
+.pace-chip:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}

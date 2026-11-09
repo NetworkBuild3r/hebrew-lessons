@@ -110,10 +110,21 @@ func openConn(ctx context.Context, path string) (*sql.DB, error) {
 	return conn, nil
 }
 
+// fileURLPath is abs as a file: URL path. Windows volumes need a leading
+// slash so url.URL yields file:///C:/... (empty host); file://C:/... is
+// parsed as host "C:" and modernc/sqlite rejects it.
+func fileURLPath(abs string) string {
+	path := filepath.ToSlash(abs)
+	if filepath.VolumeName(abs) != "" && !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return path
+}
+
 func sqliteDSN(abs string) string {
 	u := url.URL{
 		Scheme: "file",
-		Path:   filepath.ToSlash(abs),
+		Path:   fileURLPath(abs),
 	}
 	q := url.Values{}
 	q.Set("mode", "rwc")

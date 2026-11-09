@@ -42,6 +42,38 @@ func (b *Builder) resolvePosition(ctx context.Context, userID int64, want *int) 
 	return next, nil
 }
 
+// untouchedConsolidationQueued reports whether the learner already has a learner-scoped
+// unit with no new words that they have not started. INIT-037/SPEC-007; ADR-0032 D4.
+func (b *Builder) untouchedConsolidationQueued(ctx context.Context, userID int64) (bool, error) {
+	rows, err := b.store.UnitsInScope(ctx, userID)
+	if err != nil {
+		return false, fmt.Errorf("brief: units in scope: %w", err)
+	}
+	scope := db.LearnerScope(userID)
+	for _, row := range rows {
+		if row.Scope != scope {
+			continue
+		}
+		var doc units.Unit
+		if row.Doc != "" {
+			if err := json.Unmarshal([]byte(row.Doc), &doc); err != nil {
+				return false, fmt.Errorf("brief: unit %d doc: %w", row.ID, err)
+			}
+		}
+		if len(doc.NewWords) > 0 {
+			continue
+		}
+		ok, err := b.store.IsUntouched(ctx, userID, row.ID)
+		if err != nil {
+			return false, fmt.Errorf("brief: is untouched: %w", err)
+		}
+		if ok {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // earlierUnits are the learner-scoped units strictly before position, oldest first.
 // INIT-030/SPEC-003.
 func (b *Builder) earlierUnits(ctx context.Context, userID int64, before int) ([]earlierUnit, error) {
@@ -210,9 +242,10 @@ func (b *Builder) reviewAccuracy(ctx context.Context, userID int64, now time.Tim
 	return float64(good) / float64(len(ratings)), len(ratings), nil
 }
 
-// fixMistakes reads personal mistakes, skips a pair whose right form is in each of the
-// previous two units' final checkpoints, retires a pair answered right three times since
-// its date, and returns at most MaxFixMistakes, most repeated first. INIT-030/SPEC-003.
+// fixMistakes reads personal mistakes, skips a pair whose right form is in any of the
+// previous three units' final checkpoints, retires a pair answered right three times since
+// its date, and returns at most MaxFixMistakes, most repeated first. When none remain, the
+// brief carries no fixMistakes. INIT-030/SPEC-003; INIT-037/SPEC-007; ADR-0032 D4.
 func (b *Builder) fixMistakes(ctx context.Context, userID int64, earlier []earlierUnit) ([]FixMistake, error) {
 	rows, err := b.store.MistakesFor(ctx, userID, fixMistakeScan)
 	if err != nil {
@@ -245,22 +278,25 @@ func (b *Builder) fixMistakes(ctx context.Context, userID int64, earlier []earli
 	return out, nil
 }
 
-// skipRightForms are right forms that appear in the final checkpoint of each of the two
-// units immediately before the brief's position.
+// skipRightForms are right forms that appear in the final checkpoint of any of the three
+// units immediately before the brief's position. INIT-037/SPEC-007; ADR-0032 D4.
 func skipRightForms(earlier []earlierUnit) map[string]bool {
-	if len(earlier) < 2 {
+	n := len(earlier)
+	if n == 0 {
 		return nil
 	}
-	a := finalCheckpointForms(earlier[len(earlier)-2].Doc)
-	c := finalCheckpointForms(earlier[len(earlier)-1].Doc)
-	if len(a) == 0 || len(c) == 0 {
-		return nil
+	start := n - 3
+	if start < 0 {
+		start = 0
 	}
 	out := map[string]bool{}
-	for form := range a {
-		if c[form] {
+	for _, u := range earlier[start:] {
+		for form := range finalCheckpointForms(u.Doc) {
 			out[form] = true
 		}
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }

@@ -2,6 +2,9 @@ package units
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -145,21 +148,98 @@ func TestConsolidationPassAndFail(t *testing.T) {
 func TestSameShapePassAndFail(t *testing.T) {
 	types := []string{ActivityShadow, ActivityStory, ActivityListenPick, ActivityRecall, ActivityCloze}
 	f := BriefFacts{PreviousUnits: []BriefPreviousUnit{{ActivityTypes: types}}}
-	pass := Unit{Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{
+	// Identical sequence → warn (INIT-037/SPEC-005; ADR-0032 D5).
+	fail := Unit{Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{
 		{Type: ActivityShadow}, {Type: ActivityStory}, {Type: ActivityListenPick},
 		{Type: ActivityRecall}, {Type: ActivityCloze},
 	}}}}
-	if got := sameShapeIssues(&pass, &f); len(got) != 0 {
+	if got := sameShapeIssues(&fail, &f); len(got) != 1 || got[0].Rule != RuleUnitSameShape || got[0].Severity != SeverityWarn {
 		t.Fatalf("identical: %v", ruleSet(got))
 	}
-	// Replace every type → similarity 0.
-	fail := Unit{Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{
+	// Replace every type → similarity 0 → no warn.
+	pass := Unit{Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{
 		{Type: ActivityProduce}, {Type: ActivityProduce}, {Type: ActivityProduce},
 		{Type: ActivityProduce}, {Type: ActivityProduce},
 	}}}}
-	if got := sameShapeIssues(&fail, &f); len(got) != 1 || got[0].Rule != RuleUnitSameShape || got[0].Severity != SeverityWarn {
+	if got := sameShapeIssues(&pass, &f); len(got) != 0 {
 		t.Fatalf("different shape: %v", ruleSet(got))
 	}
+}
+
+func TestUnits27And34SameShapeAndStoryRepeat(t *testing.T) {
+	// INIT-037/SPEC-005: fixtures shaped like units 27 and 34 warn unit.same_shape
+	// against each other; unit 34's story against unit 27's blocks unit.story_repeat.
+	u27 := loadCloneFixture(t, "unit27_clone.json")
+	u34 := loadCloneFixture(t, "unit34_clone.json")
+	seq27 := activityTypeSeq(&u27)
+	seq34 := activityTypeSeq(&u34)
+	if len(seq27) == 0 || len(seq27) != len(seq34) {
+		t.Fatalf("fixture sequences: 27=%v 34=%v", seq27, seq34)
+	}
+	for i := range seq27 {
+		if seq27[i] != seq34[i] {
+			t.Fatalf("fixture sequences differ at %d: %q vs %q", i, seq27[i], seq34[i])
+		}
+	}
+	story27 := FirstStoryText(&u27)
+	story34 := FirstStoryText(&u34)
+	if story27 == "" || normalize(story27) != normalize(story34) {
+		t.Fatalf("fixture stories must match: %q vs %q", story27, story34)
+	}
+
+	f34 := BriefFacts{PreviousUnits: []BriefPreviousUnit{{
+		ActivityTypes: seq27,
+		FirstStory:    story27,
+	}}}
+	if got := sameShapeIssues(&u34, &f34); len(got) != 1 || got[0].Rule != RuleUnitSameShape {
+		t.Fatalf("unit 34 vs 27 same_shape: %v", ruleSet(got))
+	}
+	if got := sameShapeIssues(&u27, &BriefFacts{PreviousUnits: []BriefPreviousUnit{{ActivityTypes: seq34}}}); len(got) != 1 || got[0].Rule != RuleUnitSameShape {
+		t.Fatalf("unit 27 vs 34 same_shape: %v", ruleSet(got))
+	}
+	varied := Unit{Lessons: []Lesson{{Kind: KindLesson, Activities: []Activity{
+		{Type: ActivityProduce}, {Type: ActivityProduce}, {Type: ActivityProduce},
+		{Type: ActivityProduce}, {Type: ActivityProduce}, {Type: ActivityProduce},
+		{Type: ActivityProduce},
+	}}}}
+	if got := sameShapeIssues(&varied, &f34); len(got) != 0 {
+		t.Fatalf("varied sequence: %v", ruleSet(got))
+	}
+
+	got := StoryRepeatIssues(&u34, []string{story27}, ModeWrite)
+	if len(got) != 1 || got[0].Rule != RuleUnitStoryRepeat || got[0].Severity != SeverityBlock {
+		t.Fatalf("story_repeat ModeWrite: %v", got)
+	}
+	pub := StoryRepeatIssues(&u34, []string{story27}, ModePublished)
+	if len(pub) != 1 || pub[0].Severity != SeverityWarn {
+		t.Fatalf("story_repeat ModePublished: %v", pub)
+	}
+	// Without a brief: EarlierFirstStories on the unit still fires.
+	u34.EarlierFirstStories = []string{story27}
+	if issues := storyRepeatIssues(&u34, ModeWrite); len(issues) != 1 || issues[0].Rule != RuleUnitStoryRepeat {
+		t.Fatalf("without brief: %v", issues)
+	}
+	// With a brief: FirstStory on PreviousUnits feeds the same check.
+	u34.EarlierFirstStories = nil
+	got = ValidateWithBriefIn(context.Background(), &u34, nil, &f34, ModeWrite)
+	if !hasRule(got, RuleUnitStoryRepeat) {
+		t.Fatalf("with brief story_repeat: %v", ruleSet(got))
+	}
+}
+
+func loadCloneFixture(t *testing.T, name string) Unit {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Unit Unit `json:"unit"`
+	}
+	if err := json.Unmarshal(raw, &file); err != nil {
+		t.Fatal(err)
+	}
+	return file.Unit
 }
 
 func TestConsolidationBriefBlocksNewWordsAndPassesEmptyWithStory(t *testing.T) {

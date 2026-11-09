@@ -59,7 +59,10 @@
     if (!a || a.hasAttribute("data-pl-failed")) return;
     var p;
     try {
-      a.playbackRate = rate || 1;
+      // INIT-036/SPEC-007: shared helper applies rate + preservesPitch.
+      // Placement Replay/Slower keep their one-shot rates (browser test unchanged).
+      if (g.HebrewSlow && g.HebrewSlow.apply) g.HebrewSlow.apply(a, rate || 1);
+      else a.playbackRate = rate || 1;
       a.currentTime = 0;
       p = a.play();
     } catch (e) { return; }
@@ -206,6 +209,8 @@
       if (a.error) failed(a);
       else {
         var p;
+        // Autoplay follows the shared setting (1× until the learner turned slow on).
+        if (g.HebrewSlow && g.HebrewSlow.apply) g.HebrewSlow.apply(a);
         try { p = a.play(); } catch (e) { p = null; }
         if (p && p.then) p.then(null, refused);
       }

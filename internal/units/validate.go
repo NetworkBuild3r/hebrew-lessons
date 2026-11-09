@@ -89,6 +89,8 @@ func collect(ctx context.Context, doc *Unit, lk Lookup, mode Mode) []Issue {
 	issues = append(issues, orderIssues(doc)...) // INIT-029/SPEC-002
 	issues = append(issues, clozeIssues(doc, mode)...)
 	issues = append(issues, lessonRepeatIssues(doc, mode)...)
+	issues = append(issues, storyRepeatIssues(doc, mode)...) // INIT-037/SPEC-005
+	issues = append(issues, metaTextIssues(doc, mode)...)    // INIT-037/SPEC-006
 	return dedupeLookup(issues)
 }
 

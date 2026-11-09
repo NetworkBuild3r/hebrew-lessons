@@ -133,7 +133,8 @@ func (s *Store) LearnerModelSummary(ctx context.Context, id int64) (mcp.ModelSum
 	}
 	out := mcp.ModelSummary{
 		Words: map[string]int{}, Skills: make([]mcp.ModelSkillSummary, 0, len(sum.Skills)),
-		KnownAnySkill: sum.KnownAnySkill, DueReviews: sum.DueReviews, AsOf: now.UTC(),
+		KnownAnySkill: sum.KnownAnySkill, WaitingForSecondDay: sum.WaitingForSecondDay,
+		DueReviews: sum.DueReviews, AsOf: now.UTC(),
 		Retention: labelRetention(sum.Retention, asOfDay),
 	}
 	for st, n := range sum.Words {

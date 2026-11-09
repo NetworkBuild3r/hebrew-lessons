@@ -2,6 +2,8 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -22,6 +24,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/lexicon"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcpstore"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
@@ -920,7 +923,7 @@ func TestLessonFrame(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := putLesson(t, store, nil, units.Unit{
-		Title: "Greetings", Position: 1, NewWords: []string{hello, morning},
+		Title: "Greetings", Position: 1, NewWords: []string{hello, morning, evening},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityStory, Text: hello + " " + morning + " " + evening},
 			{Type: units.ActivityRecall, Text: hello},
@@ -1136,5 +1139,135 @@ func TestTodayHebrewShellKeepsDirections(t *testing.T) {
 	}
 	if !strings.Contains(body, "בְּדִיקַת רָמָה") {
 		t.Fatal("the placement action has no Hebrew title")
+	}
+}
+
+// ---- INIT-037/SPEC-010: Today skips an untouched learner unit that blocks ----
+
+// shellWordClip stores a clip for text so ModeWrite audio.missing stays clear.
+func shellWordClip(t *testing.T, store *db.Store, text string) {
+	t.Helper()
+	sum := sha256.Sum256([]byte("shell-clip:" + text))
+	id := hex.EncodeToString(sum[:])
+	if _, err := store.InsertAudio(context.Background(), db.Asset{
+		ID: id, TextNFC: units.Normalize(text), Voice: "voice", Model: "model", Bytes: 2,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// shellCleanLearnerUnit publishes a learner unit that ModeWrite accepts (blocks 0).
+func shellCleanLearnerUnit(t *testing.T, store *db.Store, title string, position int, scope, word string) int64 {
+	t.Helper()
+	addLexeme(t, store, word, "hello", "shalom", "m", "")
+	shellWordClip(t, store, word)
+	doc := units.Unit{
+		Title: title, Situation: "Meeting a friend", Concept: "Greeting",
+		Position: position, NewWords: []string{word},
+		Lessons: []units.Lesson{{
+			Kind: units.KindLesson,
+			Activities: []units.Activity{
+				{Type: units.ActivityListenPick, Text: word},
+				{Type: units.ActivityRecall, Text: word},
+			},
+		}},
+	}
+	id := putLesson(t, store, nil, doc, scope)
+	publish(t, store, id)
+	blocks, rules := units.WriteModeBlocks(context.Background(), &doc, mcpstore.New(store), nil, nil)
+	if blocks != 0 {
+		t.Fatalf("clean fixture blocks=%d rules=%v", blocks, rules)
+	}
+	return id
+}
+
+// shellBlockedLearnerUnit publishes a learner unit with blocks >= 1 (one-word cloze).
+func shellBlockedLearnerUnit(t *testing.T, store *db.Store, title string, position int, scope, word string) int64 {
+	t.Helper()
+	addLexeme(t, store, word, "hello", "shalom", "m", "")
+	shellWordClip(t, store, word)
+	doc := units.Unit{
+		Title: title, Situation: "Meeting a friend", Concept: "Greeting",
+		Position: position, NewWords: []string{word},
+		Lessons: []units.Lesson{{
+			Kind: units.KindLesson,
+			Activities: []units.Activity{
+				{Type: units.ActivityListenPick, Text: word},
+				{Type: units.ActivityCloze, Text: word, Target: word, Translation: "hello"},
+			},
+		}},
+	}
+	id := putLesson(t, store, nil, doc, scope)
+	publish(t, store, id)
+	blocks, rules := units.WriteModeBlocks(context.Background(), &doc, mcpstore.New(store), nil, nil)
+	if blocks < 1 {
+		t.Fatalf("blocked fixture blocks=%d rules=%v, want >= 1", blocks, rules)
+	}
+	return id
+}
+
+func TestTodaySkipsUntouchedBlockedLearnerUnit(t *testing.T) {
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	store, h := openShell(t, fixedClock(now), nil, nil)
+	l := addLearner(t, store, "a@example.com", "sub-skip-block", now)
+	finishPlacement(t, store, l.user.ID, now.Add(-time.Hour))
+	scope := "learner:" + itoa(l.user.ID)
+	blocked := shellBlockedLearnerUnit(t, store, "Blocked", 1, scope, helloHe)
+	clean := shellCleanLearnerUnit(t, store, "Clean", 2, scope, morningHe)
+
+	body := getLearner(t, h, l, "/")
+	if todayAction(t, body) != "next_lesson" {
+		t.Fatalf("action = %q, want next_lesson", todayAction(t, body))
+	}
+	if strings.Contains(body, "/lesson/"+itoa(blocked)+"/0") || strings.Contains(body, "Blocked") {
+		t.Fatalf("untouched blocked unit offered on Today:\n%s", articleAttrs(body))
+	}
+	if !strings.Contains(body, "/lesson/"+itoa(clean)+"/0") || !strings.Contains(body, "Clean") {
+		t.Fatalf("clean unit not offered:\n%s", articleAttrs(body))
+	}
+}
+
+func TestTodayContinuesStartedBlockedLearnerUnit(t *testing.T) {
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	ctx := context.Background()
+	store, h := openShell(t, fixedClock(now), nil, nil)
+	l := addLearner(t, store, "a@example.com", "sub-cont-block", now)
+	finishPlacement(t, store, l.user.ID, now.Add(-time.Hour))
+	scope := "learner:" + itoa(l.user.ID)
+	blocked := shellBlockedLearnerUnit(t, store, "Started blocked", 1, scope, helloHe)
+	_ = shellCleanLearnerUnit(t, store, "Later clean", 2, scope, morningHe)
+
+	run, err := store.StartPlayerRun(ctx, l.user.ID, blocked, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.ContinuePlayerRun(ctx, l.user.ID, run.ID, 0, 2); err != nil {
+		t.Fatal(err)
+	}
+
+	body := getLearner(t, h, l, "/")
+	if todayAction(t, body) != "continue_lesson" {
+		t.Fatalf("action = %q, want continue_lesson", todayAction(t, body))
+	}
+	if !strings.Contains(body, "/lesson/"+itoa(blocked)+"/0") {
+		t.Fatalf("started blocked unit not continued:\n%s", articleAttrs(body))
+	}
+}
+
+func TestTodayReviewsWhenEveryForwardUnitIsBlocked(t *testing.T) {
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	store, h := openShell(t, fixedClock(now), nil, nil)
+	l := addLearner(t, store, "a@example.com", "sub-all-block", now)
+	finishPlacement(t, store, l.user.ID, now.Add(-time.Hour))
+	scope := "learner:" + itoa(l.user.ID)
+	blocked := shellBlockedLearnerUnit(t, store, "Only blocked", 1, scope, helloHe)
+	addCard(t, store, l.user.ID, addLexeme(t, store, eveningHe, "evening", "erev", "m", ""), fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
+
+	body := getLearner(t, h, l, "/")
+	if todayAction(t, body) != "reviews" {
+		t.Fatalf("action = %q, want reviews when every forward unit is skipped", todayAction(t, body))
+	}
+	if strings.Contains(body, "/lesson/"+itoa(blocked)+"/0") || strings.Contains(body, "Only blocked") {
+		t.Fatalf("blocked unit still on Today:\n%s", articleAttrs(body))
 	}
 }
